@@ -51,6 +51,12 @@ export interface TabWalkOptions {
    * for this; `loep taborder` makes that comparison itself.
    */
   continueAfterFocusLoss?: boolean;
+  /**
+   * Where to write the numbered picture of the order. It is taken here, as soon as the walk
+   * is done, so it shows the page in the state the stops were counted in: a probe after the
+   * walk can press keys that change the page, such as an arrow key that turns a slide.
+   */
+  orderPicture?: string;
 }
 
 const MAX_FRAME_DEPTH = 5;
@@ -269,6 +275,7 @@ export async function tabWalk(page: Page, options: TabWalkOptions): Promise<Reco
       stop.focusScreenshot = `${focusPath}/${name}`;
     }
   }
+  if (options.orderPicture) await tabOrderScreenshot(page, stops, options.orderPicture);
   return { outcome, stopCount: stops.length, initialFocus, stops, ...(thrownAway.length > 0 ? { focusThrownAwayBy: thrownAway } : {}) };
 }
 
@@ -326,12 +333,18 @@ export async function tabOrderScreenshot(page: Page, stops: Record<string, unkno
       frame.append(label);
       layer.append(frame);
     });
+    layer.setAttribute("data-loep-tab-order", "");
     document.body.append(layer);
     // The boxes were measured from the top of the page. After the walk the page is scrolled
     // down, and a sticky side menu would be drawn there, away from its numbers.
     window.scrollTo(0, 0);
   }, stops.map((stop) => stop.box as { x: number; y: number; width: number; height: number }));
-  await page.screenshot({ path, fullPage: true, animations: "disabled" });
+  try {
+    await page.screenshot({ path, fullPage: true, animations: "disabled" });
+  } finally {
+    // The numbers are no part of the page: what is measured after the picture must not find them.
+    await page.evaluate(() => document.querySelector("[data-loep-tab-order]")?.remove()).catch(() => undefined);
+  }
 }
 
 const SKIP_LINK = /sla over|direct naar|naar (de )?(hoofd)?inhoud|skip|ga naar/i;

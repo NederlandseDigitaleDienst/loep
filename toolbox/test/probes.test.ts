@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp } from "node:fs/promises";
+import { mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, test } from "node:test";
@@ -14,7 +14,7 @@ import { boundaryOf, fateOf, forcedColoursProbe, type ForcedProbe } from "../src
 import { uiContrast } from "../src/lib/extractors.ts";
 import type { RunData } from "../src/lib/rundata.ts";
 import { collectFacts, frameListeners } from "../src/instruments/facts.ts";
-import { skipLinkProbe, tabOrderScreenshot } from "../src/instruments/keyboard.ts";
+import { arrowReach, skipLinkProbe, tabOrderScreenshot, tabWalk } from "../src/instruments/keyboard.ts";
 import { probeHoverTarget } from "../src/instruments/hover.ts";
 import { firstKeyReaction, KEYS, leaveTextEntry } from "../src/instruments/keys.ts";
 import { spacingEffect, spacingFromLoad } from "../src/instruments/overflow.ts";
@@ -406,5 +406,23 @@ test("the numbered tab-order picture is taken from the top, so a sticky side men
   const path = join(await mkdtemp(join(tmpdir(), "loep-taborder-")), "tabwalk.png");
   await tabOrderScreenshot(page, [{ box: { x: 8, y: 8, width: 60, height: 20 } }], path);
   assert.equal(await page.evaluate(() => window.scrollY), 0);
+  await page.context().close();
+});
+
+test("the numbered tab-order picture shows the slide the stops were counted on, also when the arrow keys turn the slide after the walk", async () => {
+  const page = await open("/deck.html");
+  const dir = await mkdtemp(join(tmpdir(), "loep-deck-"));
+  const path = join(dir, "tabwalk.png");
+  // As the sweep goes: the walk with its picture, then the arrow keys from every stop.
+  const walk = (await tabWalk(page, { continueAfterFocusLoss: true, focusDir: join(dir, "focus"), focusPath: "focus", orderPicture: path })) as { stops: { path: string[]; tag: string; text: string }[] };
+  assert.deepEqual(walk.stops.map((stop) => stop.text), ["Sluiten", "Menu"]);
+  await arrowReach(page, walk.stops);
+  assert.notEqual(await page.locator("#counter").textContent(), "1 / 3", "the arrow keys turned the slide");
+  // The picture holds the first slide, on which Tab went round, with the numbers.
+  const picture = PNG.sync.read(await readFile(path));
+  const at = (x: number, y: number): number[] => [...picture.data.subarray((y * picture.width + x) * 4, (y * picture.width + x) * 4 + 3)];
+  assert.deepEqual(at(Math.floor(picture.width / 2), Math.floor(picture.height / 2)), [0xb0, 0, 0]);
+  // The numbers were drawn for the picture only; they are gone from the page.
+  assert.equal(await page.locator("[data-loep-tab-order]").count(), 0);
   await page.context().close();
 });
