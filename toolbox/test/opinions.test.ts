@@ -599,7 +599,8 @@ test("tools lists every method with its version and writes them into the manifes
   // The lines per question stay short: about a hundred characters each, and they grow only when a method is added.
   // VoiceOver as a second method for speech took them from under 1500 to under 1550.
   // What is missing on this machine comes on top, one line with a hint per method, so it is not part of the budget.
-  assert.ok(size({ tools: tools.tools }) < 1550, `tools printed ${size({ tools: tools.tools })} characters per question`);
+  const perQuestionSize = JSON.stringify({ tools: tools.tools }).length;
+  assert.ok(perQuestionSize < 1550, `tools printed ${perQuestionSize} characters per question`);
   // The known systematic errors are data: every one names a method that exists.
   for (const known of KNOWN_ERRORS) assert.ok(METHODS.some((method) => method.id === known.method), known.method);
   assert.equal((await loep("wait")).note, "er liep niets op de achtergrond");
