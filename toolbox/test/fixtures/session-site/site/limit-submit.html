@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="nl">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Aanvragen - Testsite sessie</title><link rel="stylesheet" href="/site.css"></head>
+<body>
+<main><h1>Aanvragen</h1>
+<p id="melding">Vul het formulier in.</p>
+<form id="aanvraag">
+<p><label for="naam">Naam</label> <input id="naam" name="naam" type="text"></p>
+<p><label for="soort">Soort</label> <select id="soort" name="soort"><option>Vraag</option><option>Klacht</option></select></p>
+<p><button type="submit">Aanvraag versturen</button> <button type="button">Annuleren</button></p>
+</form>
+<div id="uitkomst" role="status"></div>
+<h2>Bericht opslaan</h2>
+<form id="bericht-formulier" method="post" action="/opslaan">
+<p><label for="bericht">Bericht</label> <input id="bericht" name="bericht" type="text"></p>
+<p><button>Opslaan</button></p>
+</form>
+</main>
+<script>
+// A timer the page starts by itself on load: it only swaps a sentence.
+setTimeout(() => { document.querySelector("#melding").textContent = "U kunt het formulier nog steeds invullen."; }, 10 * 1000);
+// Sending stays on the page. It shows the outcome, and after ten minutes the outcome is taken away and the form emptied.
+document.querySelector("#aanvraag").addEventListener("submit", (event) => {
+  event.preventDefault();
+  const outcome = document.querySelector("#uitkomst");
+  outcome.textContent = "Uw aanvraag is ontvangen. Uw nummer is 4711.";
+  setTimeout(() => {
+    outcome.textContent = "";
+    document.querySelector("#aanvraag").reset();
+    document.querySelector("#naam").value = "";
+  }, 10 * 60 * 1000);
+});
+</script>
+</body>
+</html>

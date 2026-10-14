@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="nl">
+<head><meta charset="utf-8"><title>Plakken en drukken - Testsite sessie</title><link rel="stylesheet" href="/site.css">
+<style>button:active { background: #dddddd; }</style></head>
+<body>
+<main id="inhoud"><h1>Plakken en drukken</h1>
+<p><label for="open-field">Veld dat plakken toelaat</label> <input id="open-field" type="password" autocomplete="current-password"></p>
+<p><label for="no-paste">Veld dat plakken weigert</label> <input id="no-paste" type="password" autocomplete="current-password" onpaste="return false"></p>
+<p><label for="no-input">Veld dat invoer door plakken weigert</label> <input id="no-input" type="text"></p>
+<p><label for="read-only">Veld dat alleen te lezen is</label> <input id="read-only" type="text" readonly value="vast"></p>
+<p id="paste-status" role="status"></p>
+<p><button id="on-down" type="button">Bestel bij indrukken</button> <button id="on-click" type="button">Bestel bij loslaten</button></p>
+<p id="order-status" role="status"></p></main>
+<script>
+document.getElementById("no-input").addEventListener("beforeinput", (event) => { if (event.inputType === "insertFromPaste") event.preventDefault(); });
+document.getElementById("no-paste").addEventListener("paste", () => { document.getElementById("paste-status").textContent = "Plakken is hier niet toegestaan."; });
+document.getElementById("on-down").addEventListener("mousedown", () => { document.getElementById("order-status").textContent = "Besteld bij indrukken."; });
+document.getElementById("on-click").addEventListener("click", () => { document.getElementById("order-status").textContent = "Besteld bij loslaten."; });
+</script>
+</body>
+</html>

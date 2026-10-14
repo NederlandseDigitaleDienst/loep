@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="nl">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="color-scheme" content="light dark"><title>Tweede meningen - Testsite sessie</title>
+<style>
+:root { color-scheme: light dark; }
+body { font-family: Arial, sans-serif; margin: 0; padding: 16px 24px; background: light-dark(#ffffff, #121212); color: light-dark(#1a1a1a, #eeeeee); }
+a { color: light-dark(#0b4f9e, #9cc4ff); }
+.ld { color: light-dark(#333333, #444444); }
+.mq { color: #333333; }
+@media (prefers-color-scheme: dark) { .mq { color: #3a3a3a; } }
+.plain-low { color: #999999; background: #ffffff; }
+.tiny-row { display: flex; gap: 0; }
+.tiny { width: 14px; height: 14px; padding: 0; border: 1px solid #333333; font-size: 8px; line-height: 12px; }
+#scroller { overflow: auto; height: 60px; width: 260px; border: 1px solid #767676; }
+#scroller p { height: 240px; margin: 0; }
+#faint-focus:focus-visible { outline: 1px solid #fdfdfd; }
+.wrap:focus-within { background: #ffe08a; }
+#parent-focus:focus { outline: none; }
+#no-focus:focus { outline: none; }
+#hover-low:hover { color: #b0b0b0; background: #ffffff; }
+.photo { background: #777777 url(/chart.png); color: #ffffff; padding: 8px; width: 380px; }
+</style></head>
+<body>
+<main id="inhoud">
+<h1>Tweede meningen</h1>
+<h2>Naam</h2>
+<form id="zoekform" method="get" action="/opinions.html"><label for="zoek">Zoekterm</label> <input id="zoek" name="q"> <input type="image" id="imgbtn" src="/dot.svg" width="24" height="24"></form>
+<p><button id="twopart" type="button" aria-labelledby="part-one part-two">X</button> <span id="part-one">Sluit</span><span id="part-two" hidden>venster</span></p>
+<p><textarea id="placeholder-only" placeholder="Uw vraag"></textarea></p>
+<p><button id="plain-button" type="button">Gewone knop</button></p>
+<h2>Contrast</h2>
+<p class="ld" id="ld">Tekst met light-dark die alleen in donker te weinig contrast heeft.</p>
+<p class="mq" id="mq">Tekst met een mediaquery die alleen in donker te weinig contrast heeft.</p>
+<p class="plain-low" id="plain-low">Grijze tekst op wit met te weinig contrast.</p>
+<p><a id="hover-low" href="#inhoud">Link die bij aanwijzen te licht wordt</a></p>
+<p class="photo" id="over-photo">Tekst over een afbeelding als achtergrond.</p>
+<h2>Doelgrootte</h2>
+<div class="tiny-row"><button class="tiny" id="tiny1" type="button">a</button><button class="tiny" id="tiny2" type="button">b</button></div>
+<p><input type="checkbox" id="check-one" aria-label="Eerste keuze"><input type="checkbox" id="check-two" aria-label="Tweede keuze"></p>
+<h2>Toetsenbord</h2>
+<div id="scroller"><p>Scrollbaar vlak zonder tabindex, met meer tekst dan er in het vak past.</p></div>
+<p><a id="faint-focus" href="#inhoud">Link met een bijna onzichtbare focusrand</a></p>
+<p class="wrap"><a id="parent-focus" href="#inhoud">Link waarvan de omgeving kleurt bij focus</a></p>
+<p><a id="no-focus" href="#inhoud">Link zonder focusindicator</a></p>
+<h2>Beweging</h2>
+<marquee id="marquee">Lopende tekst die blijft bewegen</marquee>
+<h2>Taal</h2>
+<p id="english">This paragraph is written entirely in English but carries no language attribute at all.</p>
+<p id="short" lang="en">Contact</p>
+<p id="german" lang="de">Sie können bei der Gemeinde einen Termin für die Beantragung eines Führerscheins vereinbaren.</p>
+<p id="dutch">U kunt bij de gemeente een afspraak maken voor het aanvragen van een rijbewijs of identiteitskaart.</p>
+<h2>Afbeeldingen</h2>
+<p><img id="textimg" src="/textimg.png" alt="" width="400" height="60"></p>
+<p><img id="textimg-alt" src="/textimg.png" alt="Aanvraag indienen voor 1 maart" width="400" height="60"></p>
+<p><img id="chart" src="/chart.png" alt="Grafiek van de aanvragen" width="200" height="80"></p>
+<h2>Bron</h2>
+<p><span id="dup">a</span> <span id="dup">b</span></span></p>
+<ul><div>Geen li in ul</div></ul>
+<div role="buton" id="bad-role">Blok met een rol die niet bestaat</div>
+<h2>Kader en schaduwboom</h2>
+<iframe id="defect-frame" src="/frame-defects.html" title="Kader met gebreken" width="400" height="140"></iframe>
+<loep-defects></loep-defects>
+</main>
+<script>
+customElements.define("loep-defects", class extends HTMLElement {
+  connectedCallback() {
+    const root = this.attachShadow({ mode: "open" });
+    root.innerHTML = '<style>.low{color:#aaaaaa;background:#ffffff}.b{width:30px;height:30px}</style><h3>Kaart met gebreken</h3><p class="low" id="shadow-low">Laag contrast in de schaduwboom.</p><img src="/chart.png" id="shadow-noalt" width="50" height="20"><button class="b" id="shadow-noname" type="button"></button>';
+  }
+});
+</script>
+</body>
+</html>

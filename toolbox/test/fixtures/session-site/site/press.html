@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="nl">
+<head><meta charset="utf-8"><title>Indrukken - Testsite sessie</title><link rel="stylesheet" href="/site.css"><style>#plain:active { background: #1a1a1a; color: #ffffff; }</style></head>
+<body>
+<main><h1>Indrukken</h1>
+<p><button id="on-down" type="button" title="Telt meteen">Ja, dit hielp</button> <span id="thanks" role="status"></span></p>
+<p><button id="preview" type="button">Voorbeeld tonen</button> <span id="shown"></span></p>
+<p><button id="plain" type="button">Gewone knop</button> <span id="clicked"></span></p>
+</main>
+<script>
+document.getElementById("on-down").addEventListener("pointerdown", () => { document.getElementById("thanks").textContent = "Bedankt voor uw oordeel."; });
+document.getElementById("preview").addEventListener("pointerdown", () => { document.getElementById("shown").textContent = "Dit is het voorbeeld."; });
+document.addEventListener("pointerup", () => { document.getElementById("shown").textContent = ""; });
+document.getElementById("plain").addEventListener("pointerdown", () => undefined);
+document.getElementById("plain").addEventListener("click", () => { document.getElementById("clicked").textContent = "Aangeklikt."; });
+</script>
+</body>
+</html>

@@ -1,0 +1,32 @@
+<h1>Zoeken</h1>
+<div class="zoekpagina">
+  <form class="zoekformulier" action="/zoeken.html" method="get">
+    <div>
+      <label for="zoekterm">Zoekwoord</label>
+      <input type="search" id="zoekterm" name="q">
+    </div>
+    <button type="submit"><!--@bad 3.2.4-zoekknop-->Vind<!--@good-->Zoeken<!--@end--></button>
+  </form>
+  <!--@bad 1.3.2-zoekvolgorde--><ul class="zoekresultaten"></ul>
+  <img class="zoek-plaatje" src="/beeld/vergrootglas.svg" width="120" height="120" alt="">
+  <p class="zoek-info"><span class="zoek-aantal"></span></p>
+  <nav class="zoek-suggesties" aria-label="Veel gezocht">
+    <h2>Veel gezocht</h2>
+    <ul>
+      <li><a href="/zoeken.html?q=afval">afval</a></li>
+      <li><a href="/zoeken.html?q=paspoort">paspoort</a></li>
+      <li><a href="/zoeken.html?q=parkeren">parkeren</a></li>
+    </ul>
+  </nav><!--@good--><p class="zoek-info"><span class="zoek-aantal"></span></p>
+  <nav class="zoek-suggesties" aria-label="Veel gezocht">
+    <h2>Veel gezocht</h2>
+    <ul>
+      <li><a href="/zoeken.html?q=afval">afval</a></li>
+      <li><a href="/zoeken.html?q=paspoort">paspoort</a></li>
+      <li><a href="/zoeken.html?q=parkeren">parkeren</a></li>
+    </ul>
+  </nav>
+  <img class="zoek-plaatje" src="/beeld/vergrootglas.svg" width="120" height="120" alt="">
+  <h2 class="zoek-kop" hidden>Zoekresultaten</h2>
+  <ul class="zoekresultaten"></ul><!--@end-->
+</div>

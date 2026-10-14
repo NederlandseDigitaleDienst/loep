@@ -1,0 +1,886 @@
+{
+  "source": "https://www.w3.org/Translations/WCAG22-nl/",
+  "principles": {
+    "1": "Waarneembaar",
+    "2": "Bedienbaar",
+    "3": "Begrijpelijk",
+    "4": "Robuust"
+  },
+  "guidelines": {
+    "1.1": "Tekstalternatieven",
+    "1.2": "Op tijd gebaseerde media",
+    "1.3": "Aanpasbaar",
+    "1.4": "Onderscheidbaar",
+    "2.1": "Toetsenbordtoegankelijk",
+    "2.2": "Genoeg tijd",
+    "2.3": "Toevallen en fysieke reacties",
+    "2.4": "Navigeerbaar",
+    "2.5": "Input modaliteiten",
+    "3.1": "Leesbaar",
+    "3.2": "Voorspelbaar",
+    "3.3": "Assistentie bij invoer",
+    "4.1": "Compatibel"
+  },
+  "criteria": [
+    {
+      "id": "1.1.1",
+      "slug": "non-text-content",
+      "titleNl": "Niet-tekstuele content",
+      "level": "A",
+      "versions": [
+        "2.1",
+        "2.2"
+      ]
+    },
+    {
+      "id": "1.2.1",
+      "slug": "audio-only-and-video-only-prerecorded",
+      "titleNl": "Louter-geluid en louter-videobeeld (vooraf opgenomen)",
+      "level": "A",
+      "versions": [
+        "2.1",
+        "2.2"
+      ]
+    },
+    {
+      "id": "1.2.2",
+      "slug": "captions-prerecorded",
+      "titleNl": "Ondertitels voor doven en slechthorenden (vooraf opgenomen)",
+      "level": "A",
+      "versions": [
+        "2.1",
+        "2.2"
+      ]
+    },
+    {
+      "id": "1.2.3",
+      "slug": "audio-description-or-media-alternative-prerecorded",
+      "titleNl": "Audiodescriptie of media-alternatief (vooraf opgenomen)",
+      "level": "A",
+      "versions": [
+        "2.1",
+        "2.2"
+      ]
+    },
+    {
+      "id": "1.2.4",
+      "slug": "captions-live",
+      "titleNl": "Ondertitels voor doven en slechthorenden (live)",
+      "level": "AA",
+      "versions": [
+        "2.1",
+        "2.2"
+      ]
+    },
+    {
+      "id": "1.2.5",
+      "slug": "audio-description-prerecorded",
+      "titleNl": "Audiodescriptie (vooraf opgenomen)",
+      "level": "AA",
+      "versions": [
+        "2.1",
+        "2.2"
+      ]
+    },
+    {
+      "id": "1.2.6",
+      "slug": "sign-language-prerecorded",
+      "titleNl": "Gebarentaal (vooraf opgenomen)",
+      "level": "AAA",
+      "versions": [
+        "2.1",
+        "2.2"
+      ]
+    },
+    {
+      "id": "1.2.7",
+      "slug": "extended-audio-description-prerecorded",
+      "titleNl": "Verlengde audiodescriptie (vooraf opgenomen)",
+      "level": "AAA",
+      "versions": [
+        "2.1",
+        "2.2"
+      ]
+    },
+    {
+      "id": "1.2.8",
+      "slug": "media-alternative-prerecorded",
+      "titleNl": "Media-alternatief (vooraf opgenomen)",
+      "level": "AAA",
+      "versions": [
+        "2.1",
+        "2.2"
+      ]
+    },
+    {
+      "id": "1.2.9",
+      "slug": "audio-only-live",
+      "titleNl": "Louter-geluid (live)",
+      "level": "AAA",
+      "versions": [
+        "2.1",
+        "2.2"
+      ]
+    },
+    {
+      "id": "1.3.1",
+      "slug": "info-and-relationships",
+      "titleNl": "Info en relaties",
+      "level": "A",
+      "versions": [
+        "2.1",
+        "2.2"
+      ]
+    },
+    {
+      "id": "1.3.2",
+      "slug": "meaningful-sequence",
+      "titleNl": "Betekenisvolle volgorde",
+      "level": "A",
+      "versions": [
+        "2.1",
+        "2.2"
+      ]
+    },
+    {
+      "id": "1.3.3",
+      "slug": "sensory-characteristics",
+      "titleNl": "Zintuiglijke eigenschappen",
+      "level": "A",
+      "versions": [
+        "2.1",
+        "2.2"
+      ]
+    },
+    {
+      "id": "1.3.4",
+      "slug": "orientation",
+      "titleNl": "Weergavestand",
+      "level": "AA",
+      "versions": [
+        "2.1",
+        "2.2"
+      ]
+    },
+    {
+      "id": "1.3.5",
+      "slug": "identify-input-purpose",
+      "titleNl": "Identificeer het doel van de input",
+      "level": "AA",
+      "versions": [
+        "2.1",
+        "2.2"
+      ]
+    },
+    {
+      "id": "1.3.6",
+      "slug": "identify-purpose",
+      "titleNl": "Identificeer het doel",
+      "level": "AAA",
+      "versions": [
+        "2.1",
+        "2.2"
+      ]
+    },
+    {
+      "id": "1.4.1",
+      "slug": "use-of-color",
+      "titleNl": "Gebruik van kleur",
+      "level": "A",
+      "versions": [
+        "2.1",
+        "2.2"
+      ]
+    },
+    {
+      "id": "1.4.2",
+      "slug": "audio-control",
+      "titleNl": "Geluidsbediening",
+      "level": "A",
+      "versions": [
+        "2.1",
+        "2.2"
+      ]
+    },
+    {
+      "id": "1.4.3",
+      "slug": "contrast-minimum",
+      "titleNl": "Contrast (minimum)",
+      "level": "AA",
+      "versions": [
+        "2.1",
+        "2.2"
+      ]
+    },
+    {
+      "id": "1.4.4",
+      "slug": "resize-text",
+      "titleNl": "Herschalen van tekst",
+      "level": "AA",
+      "versions": [
+        "2.1",
+        "2.2"
+      ]
+    },
+    {
+      "id": "1.4.5",
+      "slug": "images-of-text",
+      "titleNl": "Afbeeldingen van tekst",
+      "level": "AA",
+      "versions": [
+        "2.1",
+        "2.2"
+      ]
+    },
+    {
+      "id": "1.4.6",
+      "slug": "contrast-enhanced",
+      "titleNl": "Contrast (versterkt)",
+      "level": "AAA",
+      "versions": [
+        "2.1",
+        "2.2"
+      ]
+    },
+    {
+      "id": "1.4.7",
+      "slug": "low-or-no-background-audio",
+      "titleNl": "Weinig of geen achtergrondgeluid",
+      "level": "AAA",
+      "versions": [
+        "2.1",
+        "2.2"
+      ]
+    },
+    {
+      "id": "1.4.8",
+      "slug": "visual-presentation",
+      "titleNl": "Visuele weergave",
+      "level": "AAA",
+      "versions": [
+        "2.1",
+        "2.2"
+      ]
+    },
+    {
+      "id": "1.4.9",
+      "slug": "images-of-text-no-exception",
+      "titleNl": "Afbeeldingen van tekst (geen uitzondering)",
+      "level": "AAA",
+      "versions": [
+        "2.1",
+        "2.2"
+      ]
+    },
+    {
+      "id": "1.4.10",
+      "slug": "reflow",
+      "titleNl": "Reflow",
+      "level": "AA",
+      "versions": [
+        "2.1",
+        "2.2"
+      ]
+    },
+    {
+      "id": "1.4.11",
+      "slug": "non-text-contrast",
+      "titleNl": "Contrast van niet-tekstuele content",
+      "level": "AA",
+      "versions": [
+        "2.1",
+        "2.2"
+      ]
+    },
+    {
+      "id": "1.4.12",
+      "slug": "text-spacing",
+      "titleNl": "Tekstafstand",
+      "level": "AA",
+      "versions": [
+        "2.1",
+        "2.2"
+      ]
+    },
+    {
+      "id": "1.4.13",
+      "slug": "content-on-hover-or-focus",
+      "titleNl": "Content bij hover of focus",
+      "level": "AA",
+      "versions": [
+        "2.1",
+        "2.2"
+      ]
+    },
+    {
+      "id": "2.1.1",
+      "slug": "keyboard",
+      "titleNl": "Toetsenbord",
+      "level": "A",
+      "versions": [
+        "2.1",
+        "2.2"
+      ]
+    },
+    {
+      "id": "2.1.2",
+      "slug": "no-keyboard-trap",
+      "titleNl": "Geen toetsenbordval",
+      "level": "A",
+      "versions": [
+        "2.1",
+        "2.2"
+      ]
+    },
+    {
+      "id": "2.1.3",
+      "slug": "keyboard-no-exception",
+      "titleNl": "Toetsenbord (geen uitzondering)",
+      "level": "AAA",
+      "versions": [
+        "2.1",
+        "2.2"
+      ]
+    },
+    {
+      "id": "2.1.4",
+      "slug": "character-key-shortcuts",
+      "titleNl": "Enkel teken sneltoetsen",
+      "level": "A",
+      "versions": [
+        "2.1",
+        "2.2"
+      ]
+    },
+    {
+      "id": "2.2.1",
+      "slug": "timing-adjustable",
+      "titleNl": "Timing aanpasbaar",
+      "level": "A",
+      "versions": [
+        "2.1",
+        "2.2"
+      ]
+    },
+    {
+      "id": "2.2.2",
+      "slug": "pause-stop-hide",
+      "titleNl": "Pauzeren, stoppen, verbergen",
+      "level": "A",
+      "versions": [
+        "2.1",
+        "2.2"
+      ]
+    },
+    {
+      "id": "2.2.3",
+      "slug": "no-timing",
+      "titleNl": "Geen timing",
+      "level": "AAA",
+      "versions": [
+        "2.1",
+        "2.2"
+      ]
+    },
+    {
+      "id": "2.2.4",
+      "slug": "interruptions",
+      "titleNl": "Onderbrekingen",
+      "level": "AAA",
+      "versions": [
+        "2.1",
+        "2.2"
+      ]
+    },
+    {
+      "id": "2.2.5",
+      "slug": "re-authenticating",
+      "titleNl": "Herauthentisering",
+      "level": "AAA",
+      "versions": [
+        "2.1",
+        "2.2"
+      ]
+    },
+    {
+      "id": "2.2.6",
+      "slug": "timeouts",
+      "titleNl": "Time-outs",
+      "level": "AAA",
+      "versions": [
+        "2.1",
+        "2.2"
+      ]
+    },
+    {
+      "id": "2.3.1",
+      "slug": "three-flashes-or-below-threshold",
+      "titleNl": "Drie flitsen of beneden drempelwaarde",
+      "level": "A",
+      "versions": [
+        "2.1",
+        "2.2"
+      ]
+    },
+    {
+      "id": "2.3.2",
+      "slug": "three-flashes",
+      "titleNl": "Drie flitsen",
+      "level": "AAA",
+      "versions": [
+        "2.1",
+        "2.2"
+      ]
+    },
+    {
+      "id": "2.3.3",
+      "slug": "animation-from-interactions",
+      "titleNl": "Animatie uit interacties",
+      "level": "AAA",
+      "versions": [
+        "2.1",
+        "2.2"
+      ]
+    },
+    {
+      "id": "2.4.1",
+      "slug": "bypass-blocks",
+      "titleNl": "Blokken omzeilen",
+      "level": "A",
+      "versions": [
+        "2.1",
+        "2.2"
+      ]
+    },
+    {
+      "id": "2.4.2",
+      "slug": "page-titled",
+      "titleNl": "Paginatitel",
+      "level": "A",
+      "versions": [
+        "2.1",
+        "2.2"
+      ]
+    },
+    {
+      "id": "2.4.3",
+      "slug": "focus-order",
+      "titleNl": "Focus volgorde",
+      "level": "A",
+      "versions": [
+        "2.1",
+        "2.2"
+      ]
+    },
+    {
+      "id": "2.4.4",
+      "slug": "link-purpose-in-context",
+      "titleNl": "Linkdoel (in context)",
+      "level": "A",
+      "versions": [
+        "2.1",
+        "2.2"
+      ]
+    },
+    {
+      "id": "2.4.5",
+      "slug": "multiple-ways",
+      "titleNl": "Meerdere manieren",
+      "level": "AA",
+      "versions": [
+        "2.1",
+        "2.2"
+      ]
+    },
+    {
+      "id": "2.4.6",
+      "slug": "headings-and-labels",
+      "titleNl": "Koppen en labels",
+      "level": "AA",
+      "versions": [
+        "2.1",
+        "2.2"
+      ]
+    },
+    {
+      "id": "2.4.7",
+      "slug": "focus-visible",
+      "titleNl": "Focus zichtbaar",
+      "level": "AA",
+      "versions": [
+        "2.1",
+        "2.2"
+      ]
+    },
+    {
+      "id": "2.4.8",
+      "slug": "location",
+      "titleNl": "Locatie",
+      "level": "AAA",
+      "versions": [
+        "2.1",
+        "2.2"
+      ]
+    },
+    {
+      "id": "2.4.9",
+      "slug": "link-purpose-link-only",
+      "titleNl": "Linkdoel (alleen link)",
+      "level": "AAA",
+      "versions": [
+        "2.1",
+        "2.2"
+      ]
+    },
+    {
+      "id": "2.4.10",
+      "slug": "section-headings",
+      "titleNl": "Paragraafkoppen",
+      "level": "AAA",
+      "versions": [
+        "2.1",
+        "2.2"
+      ]
+    },
+    {
+      "id": "2.4.11",
+      "slug": "focus-not-obscured-minimum",
+      "titleNl": "Focus niet bedekt (minimum)",
+      "level": "AA",
+      "versions": [
+        "2.2"
+      ]
+    },
+    {
+      "id": "2.4.12",
+      "slug": "focus-not-obscured-enhanced",
+      "titleNl": "Focus niet bedekt (uitgebreid)",
+      "level": "AAA",
+      "versions": [
+        "2.2"
+      ]
+    },
+    {
+      "id": "2.4.13",
+      "slug": "focus-appearance",
+      "titleNl": "Focusweergave",
+      "level": "AAA",
+      "versions": [
+        "2.2"
+      ]
+    },
+    {
+      "id": "2.5.1",
+      "slug": "pointer-gestures",
+      "titleNl": "Aanwijzergebaren",
+      "level": "A",
+      "versions": [
+        "2.1",
+        "2.2"
+      ]
+    },
+    {
+      "id": "2.5.2",
+      "slug": "pointer-cancellation",
+      "titleNl": "Aanwijzerannulering",
+      "level": "A",
+      "versions": [
+        "2.1",
+        "2.2"
+      ]
+    },
+    {
+      "id": "2.5.3",
+      "slug": "label-in-name",
+      "titleNl": "Label in naam",
+      "level": "A",
+      "versions": [
+        "2.1",
+        "2.2"
+      ]
+    },
+    {
+      "id": "2.5.4",
+      "slug": "motion-actuation",
+      "titleNl": "Bewegingsactivering",
+      "level": "A",
+      "versions": [
+        "2.1",
+        "2.2"
+      ]
+    },
+    {
+      "id": "2.5.5",
+      "slug": "target-size-enhanced",
+      "titleNl": "Grootte van het aanwijsgebied (uitgebreid)",
+      "level": "AAA",
+      "versions": [
+        "2.1",
+        "2.2"
+      ]
+    },
+    {
+      "id": "2.5.6",
+      "slug": "concurrent-input-mechanisms",
+      "titleNl": "Input gelijktijdige invoermechanismen",
+      "level": "AAA",
+      "versions": [
+        "2.1",
+        "2.2"
+      ]
+    },
+    {
+      "id": "2.5.7",
+      "slug": "dragging-movements",
+      "titleNl": "Sleepbewegingen",
+      "level": "AA",
+      "versions": [
+        "2.2"
+      ]
+    },
+    {
+      "id": "2.5.8",
+      "slug": "target-size-minimum",
+      "titleNl": "Grootte van het aanwijsgebied (minimum)",
+      "level": "AA",
+      "versions": [
+        "2.2"
+      ]
+    },
+    {
+      "id": "3.1.1",
+      "slug": "language-of-page",
+      "titleNl": "Taal van de pagina",
+      "level": "A",
+      "versions": [
+        "2.1",
+        "2.2"
+      ]
+    },
+    {
+      "id": "3.1.2",
+      "slug": "language-of-parts",
+      "titleNl": "Taal van onderdelen",
+      "level": "AA",
+      "versions": [
+        "2.1",
+        "2.2"
+      ]
+    },
+    {
+      "id": "3.1.3",
+      "slug": "unusual-words",
+      "titleNl": "Ongebruikelijke woorden",
+      "level": "AAA",
+      "versions": [
+        "2.1",
+        "2.2"
+      ]
+    },
+    {
+      "id": "3.1.4",
+      "slug": "abbreviations",
+      "titleNl": "Afkortingen",
+      "level": "AAA",
+      "versions": [
+        "2.1",
+        "2.2"
+      ]
+    },
+    {
+      "id": "3.1.5",
+      "slug": "reading-level",
+      "titleNl": "Leesniveau",
+      "level": "AAA",
+      "versions": [
+        "2.1",
+        "2.2"
+      ]
+    },
+    {
+      "id": "3.1.6",
+      "slug": "pronunciation",
+      "titleNl": "Uitspraak",
+      "level": "AAA",
+      "versions": [
+        "2.1",
+        "2.2"
+      ]
+    },
+    {
+      "id": "3.2.1",
+      "slug": "on-focus",
+      "titleNl": "Bij focus",
+      "level": "A",
+      "versions": [
+        "2.1",
+        "2.2"
+      ]
+    },
+    {
+      "id": "3.2.2",
+      "slug": "on-input",
+      "titleNl": "Bij input",
+      "level": "A",
+      "versions": [
+        "2.1",
+        "2.2"
+      ]
+    },
+    {
+      "id": "3.2.3",
+      "slug": "consistent-navigation",
+      "titleNl": "Consistente navigatie",
+      "level": "AA",
+      "versions": [
+        "2.1",
+        "2.2"
+      ]
+    },
+    {
+      "id": "3.2.4",
+      "slug": "consistent-identification",
+      "titleNl": "Consistente identificatie",
+      "level": "AA",
+      "versions": [
+        "2.1",
+        "2.2"
+      ]
+    },
+    {
+      "id": "3.2.5",
+      "slug": "change-on-request",
+      "titleNl": "Verandering op verzoek",
+      "level": "AAA",
+      "versions": [
+        "2.1",
+        "2.2"
+      ]
+    },
+    {
+      "id": "3.2.6",
+      "slug": "consistent-help",
+      "titleNl": "Consistente hulp",
+      "level": "A",
+      "versions": [
+        "2.2"
+      ]
+    },
+    {
+      "id": "3.3.1",
+      "slug": "error-identification",
+      "titleNl": "Foutidentificatie",
+      "level": "A",
+      "versions": [
+        "2.1",
+        "2.2"
+      ]
+    },
+    {
+      "id": "3.3.2",
+      "slug": "labels-or-instructions",
+      "titleNl": "Labels of instructies",
+      "level": "A",
+      "versions": [
+        "2.1",
+        "2.2"
+      ]
+    },
+    {
+      "id": "3.3.3",
+      "slug": "error-suggestion",
+      "titleNl": "Foutsuggestie",
+      "level": "AA",
+      "versions": [
+        "2.1",
+        "2.2"
+      ]
+    },
+    {
+      "id": "3.3.4",
+      "slug": "error-prevention-legal-financial-data",
+      "titleNl": "Foutpreventie (wettelijk, financieel, gegevens)",
+      "level": "AA",
+      "versions": [
+        "2.1",
+        "2.2"
+      ]
+    },
+    {
+      "id": "3.3.5",
+      "slug": "help",
+      "titleNl": "Hulp",
+      "level": "AAA",
+      "versions": [
+        "2.1",
+        "2.2"
+      ]
+    },
+    {
+      "id": "3.3.6",
+      "slug": "error-prevention-all",
+      "titleNl": "Foutpreventie (alle)",
+      "level": "AAA",
+      "versions": [
+        "2.1",
+        "2.2"
+      ]
+    },
+    {
+      "id": "3.3.7",
+      "slug": "redundant-entry",
+      "titleNl": "Overbodige invoer",
+      "level": "A",
+      "versions": [
+        "2.2"
+      ]
+    },
+    {
+      "id": "3.3.8",
+      "slug": "accessible-authentication-minimum",
+      "titleNl": "Toegankelijke authenticatie (minimum)",
+      "level": "AA",
+      "versions": [
+        "2.2"
+      ]
+    },
+    {
+      "id": "3.3.9",
+      "slug": "accessible-authentication-enhanced",
+      "titleNl": "Toegankelijke authenticatie (uitgebreid)",
+      "level": "AAA",
+      "versions": [
+        "2.2"
+      ]
+    },
+    {
+      "id": "4.1.1",
+      "slug": "parsing",
+      "titleNl": "Parsen",
+      "level": "A",
+      "versions": [
+        "2.1"
+      ]
+    },
+    {
+      "id": "4.1.2",
+      "slug": "name-role-value",
+      "titleNl": "Naam, rol, waarde",
+      "level": "A",
+      "versions": [
+        "2.1",
+        "2.2"
+      ]
+    },
+    {
+      "id": "4.1.3",
+      "slug": "status-messages",
+      "titleNl": "Statusberichten",
+      "level": "AA",
+      "versions": [
+        "2.1",
+        "2.2"
+      ]
+    }
+  ]
+}

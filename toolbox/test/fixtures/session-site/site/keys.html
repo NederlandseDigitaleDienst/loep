@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="nl">
+<head><meta charset="utf-8"><title>Sneltoetsen - Testsite sessie</title><link rel="stylesheet" href="/site.css"></head>
+<body>
+<main><h1>Sneltoetsen</h1>
+<p>Het is nu <span id="clock">0</span> tienden van een seconde.</p>
+<button id="mute" type="button" aria-pressed="false">Geluid uit</button>
+<div id="chat" hidden><p>Chat met ons: waarmee kunnen wij helpen?</p></div>
+</main>
+<script>
+let ticks = 0;
+setInterval(() => { document.getElementById("clock").textContent = String(++ticks); }, 100);
+document.addEventListener("keydown", (event) => {
+  if (event.key === "c") document.getElementById("chat").hidden = false;
+  if (event.key === "m") document.getElementById("mute").setAttribute("aria-pressed", "true");
+});
+</script>
+</body>
+</html>

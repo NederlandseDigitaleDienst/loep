@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="nl">
+<head><meta charset="utf-8"><title>Wisselend blok - Testsite sessie</title><link rel="stylesheet" href="/site.css">
+<style>#second-news { text-decoration: none; }</style></head>
+<body>
+<main id="inhoud"><h1>Een blok dat zichzelf vervangt</h1>
+<div id="carousel"><p><a href="/form.html">Eerste bericht</a></p></div>
+<div id="steady"><p><a href="/widgets.html">Vaste link</a></p></div>
+<p><button id="rotate" type="button">Volgende bericht</button> <button id="redraw" type="button">Teken opnieuw</button></p></main>
+<script>
+// The page replaces its own elements: a carousel puts another link at the same place, a redraw puts the same link back as a new element.
+document.getElementById("rotate").addEventListener("click", () => {
+  document.getElementById("carousel").innerHTML = '<p><a id="second-news" href="/frames.html">Tweede bericht</a></p>';
+});
+document.getElementById("redraw").addEventListener("click", () => {
+  document.getElementById("steady").innerHTML = '<p><a href="/widgets.html">Vaste link</a></p>';
+});
+</script>
+</body>
+</html>

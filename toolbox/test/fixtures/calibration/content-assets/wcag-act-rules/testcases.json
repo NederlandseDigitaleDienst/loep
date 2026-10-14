@@ -1,0 +1,79 @@
+{
+  "name": "Eigen testgevallen voor de test van de ijkmeting",
+  "license": "EUPL-1.2",
+  "count": 9,
+  "testcases": [
+    {
+      "ruleId": "97a4e1",
+      "ruleName": "Knop heeft een naam",
+      "expected": "failed",
+      "testcaseId": "knop-zonder-naam",
+      "relativePath": "testcases/knop/knop-zonder-naam.html",
+      "approved": true
+    },
+    {
+      "ruleId": "97a4e1",
+      "ruleName": "Knop heeft een naam",
+      "expected": "passed",
+      "testcaseId": "knop-met-naam",
+      "relativePath": "testcases/knop/knop-met-naam.html",
+      "approved": true
+    },
+    {
+      "ruleId": "97a4e1",
+      "ruleName": "Knop heeft een naam",
+      "expected": "inapplicable",
+      "testcaseId": "geen-knop",
+      "relativePath": "testcases/knop/geen-knop.html",
+      "approved": true
+    },
+    {
+      "ruleId": "c487ae",
+      "ruleName": "Link heeft een naam",
+      "expected": "inapplicable",
+      "testcaseId": "geen-knop",
+      "relativePath": "testcases/knop/geen-knop.html",
+      "approved": true
+    },
+    {
+      "ruleId": "afw4f7",
+      "ruleName": "Tekst heeft genoeg contrast",
+      "expected": "failed",
+      "testcaseId": "weinig-contrast",
+      "relativePath": "testcases/contrast/weinig-contrast.html",
+      "approved": true
+    },
+    {
+      "ruleId": "afw4f7",
+      "ruleName": "Tekst heeft genoeg contrast",
+      "expected": "passed",
+      "testcaseId": "genoeg-contrast",
+      "relativePath": "testcases/contrast/genoeg-contrast.html",
+      "approved": true
+    },
+    {
+      "ruleId": "ucwvc8",
+      "ruleName": "Taal van de pagina klopt",
+      "expected": "failed",
+      "testcaseId": "taal-klopt-niet",
+      "relativePath": "testcases/taal/taal-klopt-niet.html",
+      "approved": false
+    },
+    {
+      "ruleId": "ucwvc8",
+      "ruleName": "Taal van de pagina klopt",
+      "expected": "passed",
+      "testcaseId": "taal-klopt",
+      "relativePath": "testcases/taal/taal-klopt.html",
+      "approved": false
+    },
+    {
+      "ruleId": "zzzzzz",
+      "ruleName": "Een regel waar geen instrument iets over zegt",
+      "expected": "failed",
+      "testcaseId": "knop-met-naam",
+      "relativePath": "testcases/knop/knop-met-naam.html",
+      "approved": false
+    }
+  ]
+}

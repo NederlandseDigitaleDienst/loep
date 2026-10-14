@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="nl">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Voorlezen - Testsite sessie</title><link rel="stylesheet" href="/site.css"></head>
+<body>
+<main>
+<h1>Voorlezen</h1>
+<p><button id="save" type="button" aria-pressed="false" aria-describedby="save-help">Opslaan</button></p>
+<p id="save-help">Bewaart het concept.</p>
+<form id="newsletter" novalidate>
+<label for="mail">E-mailadres</label><input id="mail" name="mail" type="email" required aria-describedby="mail-error">
+<p id="mail-error"></p>
+<p><button id="subscribe" type="submit">Aanmelden</button></p>
+</form>
+<h2>Bedankmelding</h2>
+<p><button id="send-hidden" type="button">Verstuur, melding eerst verborgen</button> <button id="send-shown" type="button">Verstuur, melding al in de pagina</button> <button id="send-unseen" type="button">Verstuur, melding blijft verborgen</button></p>
+<p id="thanks-hidden" role="status" hidden></p>
+<p id="thanks-shown" role="status"></p>
+<p id="thanks-unseen" role="status" hidden></p>
+<h2>In een schaduwboom</h2>
+<speech-card></speech-card>
+<p><speech-switch tabindex="0">Donker</speech-switch></p>
+<h2>In een ingesloten venster</h2>
+<iframe src="/speech-frame.html" title="Ingesloten melding" width="400" height="120"></iframe>
+<details><summary>Meer uitleg</summary><p>Deze tekst is dichtgeklapt.</p></details>
+</main>
+<script>
+document.getElementById("newsletter").addEventListener("submit", (event) => {
+  event.preventDefault();
+  const mail = document.getElementById("mail");
+  const valid = /^[^@ ]+@[^@ ]+\.[a-z]+$/.test(mail.value);
+  mail.setAttribute("aria-invalid", String(!valid));
+  document.getElementById("mail-error").textContent = valid ? "" : "Vul een geldig e-mailadres in.";
+  // The error is tied to the field and is in no live region: it is heard when focus comes to the field.
+  if (!valid) mail.focus();
+});
+document.getElementById("send-hidden").addEventListener("click", () => {
+  const thanks = document.getElementById("thanks-hidden");
+  thanks.textContent = "Bedankt voor uw bericht.";
+  thanks.hidden = false;
+});
+document.getElementById("send-shown").addEventListener("click", () => {
+  document.getElementById("thanks-shown").textContent = "Bedankt voor uw bericht.";
+});
+document.getElementById("send-unseen").addEventListener("click", () => {
+  document.getElementById("thanks-unseen").textContent = "Bedankt voor uw bericht.";
+});
+customElements.define("speech-card", class extends HTMLElement {
+  connectedCallback() {
+    const root = this.attachShadow({ mode: "open" });
+    root.innerHTML = '<label for="card-name">Naam op de kaart</label><input id="card-name" aria-describedby="card-help"><p id="card-help">Zoals op uw pas.</p><p><button id="card-save" type="button">Bewaar de kaart</button></p><p id="card-status" role="status"></p>';
+    root.getElementById("card-save").addEventListener("click", () => (root.getElementById("card-status").textContent = "De kaart is bewaard."));
+  }
+});
+// A component that sets its role, name and state outside the code: the browser passes them on, a reader of the code does not see them.
+customElements.define("speech-switch", class extends HTMLElement {
+  constructor() {
+    super();
+    const internals = this.attachInternals();
+    internals.role = "switch";
+    internals.ariaChecked = "true";
+    internals.ariaLabel = "Donkere weergave";
+  }
+});
+</script>
+</body>
+</html>

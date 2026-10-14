@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="nl"><head><meta charset="utf-8"><title>Geforceerde kleuren</title>
+<style>
+body { font-family: Arial, Helvetica, sans-serif; margin: 32px; background: #ffffff; color: #1f2937; }
+p { margin: 0 0 40px; }
+button { font: inherit; padding: 8px 16px; background: #ffffff; color: #1f2937; border-radius: 0; }
+/* A focus ring made with box-shadow: forced colours drop the shadow, and the outline was taken away. */
+#shadow-ring { border: 2px solid #1f2937; }
+#shadow-ring:focus-visible { outline: none; box-shadow: 0 0 0 4px #b91c1c; }
+/* A focus ring made with outline: forced colours keep it, in a colour of their own. */
+#outline-ring { border: 2px solid #1f2937; }
+#outline-ring:focus-visible { outline: 4px solid #b91c1c; outline-offset: 2px; }
+/* A boundary made with box-shadow only, next to one made with a border. */
+#shadow-edge { border: 0; box-shadow: 0 0 0 2px #1f2937; }
+#shadow-edge:focus-visible, #border-edge:focus-visible, .icon:focus-visible { outline: 3px solid #1d4ed8; outline-offset: 3px; }
+#border-edge { border: 2px solid #1f2937; }
+/* A drawing made with a mask and a background colour, next to one that is an image with the colour of the text. */
+.icon { width: 44px; height: 44px; padding: 0; border: 2px solid #1f2937; }
+.icon span { display: block; width: 24px; height: 24px; margin: auto; background-color: #1f2937; mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M3 3h18v18H3z'/%3E%3C/svg%3E") center / 20px 20px no-repeat; -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M3 3h18v18H3z'/%3E%3C/svg%3E") center / 20px 20px no-repeat; }
+.icon svg { display: block; margin: auto; }
+</style></head>
+<body>
+<main>
+<h1>Geforceerde kleuren</h1>
+<p><button id="shadow-ring" type="button">Focus met schaduw</button></p>
+<p><button id="outline-ring" type="button">Focus met outline</button></p>
+<p><button id="shadow-edge" type="button">Grens met schaduw</button></p>
+<p><button id="border-edge" type="button">Grens met rand</button></p>
+<p><button id="mask-icon" class="icon" type="button" aria-label="Sluiten"><span></span></button></p>
+<p><button id="svg-icon" class="icon" type="button" aria-label="Zoeken"><svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3h18v18H3z" fill="currentColor"/></svg></button></p>
+</main>
+</body></html>

@@ -1,0 +1,34 @@
+<h1>Veelgestelde vragen</h1>
+<p>Hieronder staan de vragen die inwoners ons het vaakst stellen. Kies een vraag om het antwoord te lezen.</p>
+
+<!--@bad 4.1.2-uitklapper--><button type="button" class="vraag" data-paneel="antwoord-1">Hoe geef ik een verhuizing door?</button><!--@good--><h2 class="vraagkop"><button type="button" class="vraag" data-paneel="antwoord-1" aria-expanded="false" aria-controls="antwoord-1">Hoe geef ik een verhuizing door?</button></h2><!--@end-->
+<div class="antwoord" id="antwoord-1" hidden>
+  <p>U geeft uw verhuizing door binnen vier weken voor of vijf dagen na de verhuisdatum. Dat kan aan de balie. Neem een geldig identiteitsbewijs mee en kijk eerst bij <a href="/openingstijden.html">de openingstijden van de balie</a>.</p>
+</div>
+
+<!--@bad 4.1.2-uitklapper--><button type="button" class="vraag" data-paneel="antwoord-2">Wat kost een paspoort of rijbewijs?</button><!--@good--><h2 class="vraagkop"><button type="button" class="vraag" data-paneel="antwoord-2" aria-expanded="false" aria-controls="antwoord-2">Wat kost een paspoort of rijbewijs?</button></h2><!--@end-->
+<div class="antwoord" id="antwoord-2" hidden>
+  <p>De tarieven voor dit jaar staan in het overzicht.</p>
+  <!--@bad 1.1.1-tarieven--><img src="/beeld/tarieven.svg" width="420" height="180" alt=""><!--@good--><table class="rooster">
+    <caption>Tarieven in 2026</caption>
+    <tr><th scope="col">Document</th><th scope="col">Prijs</th></tr>
+    <tr><td>Paspoort</td><td>77,85 euro</td></tr>
+    <tr><td>Identiteitskaart</td><td>70,35 euro</td></tr>
+    <tr><td>Rijbewijs</td><td>51,10 euro</td></tr>
+  </table><!--@end-->
+</div>
+
+<!--@bad 4.1.2-uitklapper--><button type="button" class="vraag" data-paneel="antwoord-3">Wanneer wordt mijn afval opgehaald?</button><!--@good--><h2 class="vraagkop"><button type="button" class="vraag" data-paneel="antwoord-3" aria-expanded="false" aria-controls="antwoord-3">Wanneer wordt mijn afval opgehaald?</button></h2><!--@end-->
+<div class="antwoord" id="antwoord-3" hidden>
+  <!--@bad 1.3.1-tussenkop-uitklapper--><p><b>Restafval en papier</b></p><!--@good--><h3>Restafval en papier</h3><!--@end-->
+  <p>De ophaaldag hangt af van uw wijk. Kies uw wijk op de pagina <a href="/afval.html">afval en grondstoffen</a>.</p>
+  <!--@bad 1.3.1-tussenkop-uitklapper--><p><b>Grofvuil</b></p><!--@good--><h3>Grofvuil</h3><!--@end-->
+  <p>Grofvuil halen wij op afspraak op. Bel daarvoor 14 0345.</p>
+</div>
+
+<div class="feedback">
+  <p>Heeft u aan deze pagina iets gehad?</p>
+  <button type="button" class="knop-rustig">Ja</button>
+  <button type="button" class="knop-rustig">Nee</button>
+  <p class="feedback-dank"<!--@bad 4.1.3-bedankt--><!--@good--> role="status"<!--@end-->></p>
+</div>

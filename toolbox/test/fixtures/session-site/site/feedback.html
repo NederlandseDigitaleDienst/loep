@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="nl">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Terugkoppeling - Testsite sessie</title><link rel="stylesheet" href="/site.css"></head>
+<body>
+<main><h1>Terugkoppeling</h1>
+<p>Twee formulieren met een verplicht bericht en een link die leeg mag blijven. Het eerste verstuurt niets en meldt niets als de link leeg is; het tweede controleert de link alleen als die is ingevuld.</p>
+<form id="silent" method="post" action="/submit" novalidate>
+<label for="silent-message">Bericht (verplicht)</label><textarea id="silent-message" name="message" required aria-describedby="silent-error"></textarea>
+<p id="silent-error" role="alert"></p>
+<label for="silent-link">Link naar de pagina (niet verplicht)</label><input id="silent-link" name="link">
+<p><button id="silent-send" type="submit">Verstuur</button></p>
+</form>
+<form id="sound" method="post" action="/submit" novalidate>
+<label for="sound-message">Bericht (verplicht)</label><textarea id="sound-message" name="message" required aria-describedby="sound-error"></textarea>
+<p id="sound-error" role="alert"></p>
+<label for="sound-link">Link naar de pagina (niet verplicht)</label><input id="sound-link" name="link">
+<p><button id="sound-send" type="submit">Verstuur de tweede</button></p>
+<p id="sound-status" role="status"></p>
+</form>
+</main>
+<script>
+const ADDRESS = /^https?:\/\/\S+$/;
+for (const [id, checkEmptyLink] of [["silent", true], ["sound", false]]) {
+  document.getElementById(id).addEventListener("submit", (event) => {
+    event.preventDefault();
+    const message = document.getElementById(`${id}-message`);
+    const link = document.getElementById(`${id}-link`).value;
+    const missing = message.value.trim() === "";
+    message.setAttribute("aria-invalid", String(missing));
+    document.getElementById(`${id}-error`).textContent = missing ? "Vul een bericht in." : "";
+    if (missing) return;
+    // The defect: the check on the link also runs when the field is empty, and its refusal says nothing.
+    if ((checkEmptyLink || link !== "") && !ADDRESS.test(link)) return;
+    fetch("/submit", { method: "POST", body: new FormData(event.target) }).then(
+      () => (document.getElementById("sound-status").textContent = "Bedankt voor uw bericht."),
+      () => (document.getElementById("sound-status").textContent = "Versturen is niet gelukt."),
+    );
+  });
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,12 @@
+<h1>Inloggen bij Mijn {{naam}}</h1>
+<p>In Mijn {{naam}} ziet u uw aanvragen en uw berichten van de gemeente.</p>
+<form class="formulier" action="/inloggen" method="post">
+  <label for="gebruikersnaam">Gebruikersnaam</label>
+  <input type="text" id="gebruikersnaam" name="gebruikersnaam" autocomplete="username">
+  <label for="wachtwoord">Wachtwoord</label>
+  <!--@bad 3.3.8-wachtwoord--><input type="password" id="wachtwoord" name="wachtwoord" autocomplete="off" onpaste="return false">
+  <label for="geheim">Typ de derde en de zesde letter van uw geheime woord</label>
+  <input type="text" id="geheim" name="geheim" autocomplete="off" maxlength="2"><!--@good--><input type="password" id="wachtwoord" name="wachtwoord" autocomplete="current-password"><!--@end-->
+  <div class="verzendrij"><button type="submit">Inloggen</button></div>
+</form>
+<p>Bent u uw wachtwoord vergeten? Neem dan <a href="/contact.html">contact op met de gemeente</a>.</p>

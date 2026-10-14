@@ -1,0 +1,32 @@
+<h1>Openingstijden</h1>
+<p>Bij de balie van het gemeentehuis werkt u op afspraak. De milieustraat kunt u zonder afspraak bezoeken.</p>
+
+<h2>Gemeentehuis en milieustraat
+  <!--@bad 1.4.13-uitleg--><span class="info" tabindex="0" role="img" aria-label="Uitleg bij de tijden">i<span class="uitleg">Op feestdagen zijn het gemeentehuis en de milieustraat dicht. Op de dag voor een feestdag sluiten wij om 16 uur.</span></span><!--@good--><!--@end-->
+</h2>
+<!--@bad 1.4.13-uitleg--><!--@good--><p><button type="button" class="info knop-rustig" aria-expanded="false" aria-controls="tijden-uitleg">Uitleg bij de tijden</button></p>
+<p class="uitleg" id="tijden-uitleg" hidden>Op feestdagen zijn het gemeentehuis en de milieustraat dicht. Op de dag voor een feestdag sluiten wij om 16 uur.</p><!--@end-->
+<p class="draai">Draai uw toestel een kwartslag om de tabel met tijden te bekijken.</p>
+<div class="tabelkader" tabindex="0" role="region" aria-label="Tabel met openingstijden">
+  <!--@bad 1.3.1-tabelkoppen--><table class="rooster">
+    <tr><td class="kopcel">Dag</td><td class="kopcel">Gemeentehuis</td><td class="kopcel">Milieustraat</td></tr>
+    <tr><td class="kopcel">Maandag</td><td>9 tot 17 uur</td><td>Gesloten</td></tr>
+    <tr><td class="kopcel">Dinsdag</td><td>9 tot 17 uur</td><td>10 tot 16 uur</td></tr>
+    <tr><td class="kopcel">Woensdag</td><td>9 tot 20 uur</td><td>10 tot 16 uur</td></tr>
+    <tr><td class="kopcel">Donderdag</td><td>9 tot 17 uur</td><td>10 tot 16 uur</td></tr>
+    <tr><td class="kopcel">Vrijdag</td><td>9 tot 12 uur</td><td>10 tot 16 uur</td></tr>
+    <tr><td class="kopcel">Zaterdag</td><td>Gesloten</td><td>9 tot 15 uur</td></tr>
+  </table><!--@good--><table class="rooster">
+    <caption>Tijden per dag</caption>
+    <tr><th scope="col">Dag</th><th scope="col">Gemeentehuis</th><th scope="col">Milieustraat</th></tr>
+    <tr><th scope="row">Maandag</th><td>9 tot 17 uur</td><td>Gesloten</td></tr>
+    <tr><th scope="row">Dinsdag</th><td>9 tot 17 uur</td><td>10 tot 16 uur</td></tr>
+    <tr><th scope="row">Woensdag</th><td>9 tot 20 uur</td><td>10 tot 16 uur</td></tr>
+    <tr><th scope="row">Donderdag</th><td>9 tot 17 uur</td><td>10 tot 16 uur</td></tr>
+    <tr><th scope="row">Vrijdag</th><td>9 tot 12 uur</td><td>10 tot 16 uur</td></tr>
+    <tr><th scope="row">Zaterdag</th><td>Gesloten</td><td>9 tot 15 uur</td></tr>
+  </table><!--@end-->
+</div>
+
+<h2>Afspraak maken</h2>
+<p>Een afspraak maakt u telefonisch via 14 0345 of met <a href="/contact.html">het contactformulier</a>.</p>

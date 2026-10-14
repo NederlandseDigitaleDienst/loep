@@ -1,0 +1,15 @@
+Tekst van het World Wide Web Consortium (W3C)
+
+Dit bestand bevat tekst die letterlijk is overgenomen uit een document van het
+W3C: de titels van de succescriteria uit de geautoriseerde Nederlandse vertaling
+van de Web Content Accessibility Guidelines (WCAG) 2.2,
+https://www.w3.org/Translations/WCAG22-nl/ .
+
+Het auteursrecht op die tekst berust bij het W3C. De tekst valt niet onder de
+licentie van de rest van de repository, maar onder de W3C Document License:
+https://www.w3.org/copyright/document-license/ . Die staat kopiëren en
+verspreiden toe met bronvermelding en zonder wijziging van de tekst.
+
+De titels staan hier letterlijk, zodat een rapport de geautoriseerde
+bewoording aanhaalt. De structuur eromheen (nummers, niveaus, verwijzingen) is
+werk van deze repository en valt onder de EUPL-1.2.

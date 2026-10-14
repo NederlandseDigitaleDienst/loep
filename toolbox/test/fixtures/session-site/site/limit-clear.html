@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="nl">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Aanvraag - Testsite sessie</title><link rel="stylesheet" href="/site.css"></head>
+<body>
+<main><h1>Aanvraag</h1>
+<form id="aanvraag" action="/limit-clear.html" method="get">
+<p><label for="naam">Naam</label> <input id="naam" name="naam" type="text"></p>
+<p><label for="toelichting">Toelichting</label> <textarea id="toelichting" name="toelichting"></textarea></p>
+<p><button>Versturen</button></p>
+</form>
+</main>
+<script>
+// After fifteen minutes everything typed is gone, without a word.
+setTimeout(() => {
+  for (const field of document.querySelectorAll("#aanvraag input, #aanvraag textarea")) field.value = "";
+}, 15 * 60 * 1000);
+</script>
+</body>
+</html>

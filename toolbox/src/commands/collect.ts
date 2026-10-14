@@ -1,0 +1,282 @@
+import { sayingItRuns } from "../instruments/limit.ts";
+import { join } from "node:path";
+import type { Browser, Page } from "playwright";
+import { call } from "../browser/call.ts";
+import { confirmLogin, INPAGE_PATH, launchBrowser, loadSampled, newContext, RENDERING, type ColorScheme } from "../browser/session.ts";
+import { readJson, sha256, writeFileAtomic, writeJson } from "../lib/canonical.ts";
+import { runEngines } from "../lib/engines.ts";
+import { stepStart, writeManifest } from "../lib/manifest.ts";
+import { collectFacts, collectNamed } from "../instruments/facts.ts";
+import { arrowReach, skipLinkProbe, tabOrderScreenshot, tabWalk } from "../instruments/keyboard.ts";
+import { mediaReport } from "../instruments/media.ts";
+import { pageOperables } from "../instruments/operables.ts";
+import { controlsOnlyWithSpacing, overflowProbe, textSpacing, visibleControlKeys, VIEWPORT_PROBES } from "../instruments/overflow.ts";
+import { pageKey, pageStampPath, readStamp, type PageStamp } from "../lib/sweepstamp.ts";
+import { languagesOf } from "../instruments/languages.ts";
+import { visualOrder } from "../instruments/order.ts";
+import { picturesWithText } from "../instruments/pictures.ts";
+import { betweenWidths } from "../instruments/widths.ts";
+import { timeLimits } from "../instruments/timelimits.ts";
+import { ModelSweep } from "./modelsweep.ts";
+import { SESSION_WATCH_FILE, startSessionWatch } from "./watch-session.ts";
+import type { Sample, SampleItem } from "./sample.ts";
+
+/** The narrow window of the sweep: the width of a small phone. */
+export const NARROW = { width: 360, height: 740 };
+/** The smallest width WCAG speaks of (1.4.10). Sizes, names and text spacing are measured here too: a menu, a header and a button differ most at this width. */
+export const SMALLEST = { width: 320, height: 640 };
+
+export interface CollectOptions {
+  run: string;
+  /** Substring filter on the URL, for working on one page. */
+  only?: string | undefined;
+  /** Measure everything again, also what an earlier sweep measured and is still valid. */
+  fresh?: boolean | undefined;
+}
+
+/** Hash of the text and structure of the page as it is now: what tells a later sweep whether the page changed. */
+const contentHash = async (page: Page): Promise<string> => sha256(await call<string>(page, "contentSnapshot"));
+
+/** Load a page the way the sweep measures it first, with the blockers closed, only to see whether it is still the page that was measured. */
+async function contentNow(browser: Browser, entry: SampleItem, sweep: ModelSweep): Promise<string | null> {
+  const mark = sweep.mark();
+  const context = await newContext(browser, { colorScheme: "light" }, sweep.guard);
+  try {
+    await context.addInitScript({ path: INPAGE_PATH });
+    await sweep.install(context);
+    const { page } = await loadSampled(await context.newPage(), entry, (tab) => sweep.dismiss(context, tab, "collect:check", "light"));
+    return await contentHash(page);
+  } catch {
+    return null;
+  } finally {
+    await context.close().catch(() => undefined);
+    // This load is no measurement: what it noted is not part of the sweep.
+    sweep.rewind(mark);
+  }
+}
+
+/** `sweep` closes what covers the page before anything is measured. */
+async function collectPage(browser: Browser, entry: SampleItem, runDir: string, sweep: ModelSweep, noted: { contentSha256?: string } = {}): Promise<Record<string, unknown>> {
+  const dir = join(runDir, "pages", entry.slug);
+  const summary: Record<string, unknown> = { url: entry.url, slug: entry.slug };
+
+  for (const scheme of ["light", "dark"] as ColorScheme[]) {
+    const context = await newContext(browser, { colorScheme: scheme }, sweep.guard);
+    await context.addInitScript({ path: INPAGE_PATH });
+    await sweep.install(context);
+    try {
+      const { page, placement } = await loadSampled(await context.newPage(), entry, (tab) => sweep.dismiss(context, tab, `collect:${scheme}`, scheme));
+      if (scheme === "light") noted.contentSha256 = await contentHash(page);
+      // Where an embedded window was measured: on the page it stands on, or on its own and why.
+      if (scheme === "light" && placement) {
+        await writeJson(join(dir, "probes", "placement.json"), placement);
+        summary.placement = placement;
+      }
+      if (scheme === "light") await writeJson(join(dir, "probes", "overlays.json"), await sweep.overlays(page));
+      await page.screenshot({ path: join(dir, `screenshot-${scheme}.png`), fullPage: true, animations: "disabled" });
+      const engines = await runEngines(page);
+      await writeJson(join(dir, `engines-${scheme}.json`), engines);
+      summary[`engines-${scheme}`] = engines.summary;
+      if (scheme === "light") {
+        const facts = await collectFacts(page);
+        await writeJson(join(dir, "facts.json"), facts);
+        await writeFileAtomic(join(dir, "aria.yaml"), `${await page.locator("body").ariaSnapshot()}\n`);
+        await writeJson(join(dir, "probes", "targetsize.json"), await call(page, "targetSizes"));
+        // What there is to operate, for the gate to lay next to the site model.
+        await writeJson(join(dir, "probes", "operables.json"), await pageOperables(page));
+        await writeJson(join(dir, "probes", "scrollregions.json"), await call(page, "scrollRegions"));
+        await writeFileAtomic(join(dir, "text.txt"), `${await call<string>(page, "bodyText")}\n`);
+        // Headings, images and blocks of text in the default window: what each other size is compared with.
+        await writeJson(join(dir, "probes", "content.json"), await call(page, "contentInventory"));
+        // The order of the code against the order on screen, and text laid out with spaces or line breaks (1.3.2).
+        await writeJson(join(dir, "probes", "order.json"), await visualOrder(page));
+        await writeJson(join(dir, "probes", "spacedtext.json"), { candidates: await call(page, "spacedText") });
+        // The language of text alternatives and names, which the text of the page does not hold (3.1.2).
+        await writeJson(join(dir, "probes", "languages.json"), await languagesOf(page, { blocks: false }));
+        const walk = await tabWalk(page, { continueAfterFocusLoss: true, focusDir: join(dir, "probes", "focus"), focusPath: "probes/focus" });
+        walk.arrowReach = await arrowReach(page, walk.stops as { path: string[]; tag: string }[]);
+        await writeJson(join(dir, "probes", "tabwalk.json"), walk);
+        await tabOrderScreenshot(page, walk.stops as Record<string, unknown>[], join(dir, "probes", "tabwalk.png"));
+        summary.tabwalk = { outcome: walk.outcome, stops: walk.stopCount };
+        // Every picture cut out and read with text recognition (1.4.5); this scrolls, so it comes last.
+        const pictures = await picturesWithText(page, join(dir, "probes", "pictures"), "probes/pictures", sweep.pictureCache);
+        await writeJson(join(dir, "probes", "pictures.json"), pictures);
+        summary.pictures = { found: pictures.pictures.length, recognised: pictures.recognised };
+        // What can be a time limit (2.2.1): every timer with what it did, waiting timers set off now. This changes the page, so it is last.
+        const limits = await timeLimits(page, sweep.seededCookies);
+        await writeJson(join(dir, "probes", "timelimits.json"), limits);
+        summary.timeLimits = { timers: limits.timers.length, forced: limits.timers.filter((timer) => timer.forced).length };
+      } else {
+        // The focus indicator is measured again on the dark scheme: its colours differ.
+        await writeJson(join(dir, "probes", "tabwalk-dark.json"), await tabWalk(page, { continueAfterFocusLoss: true, focusDir: join(dir, "probes", "focus-dark"), focusPath: "probes/focus-dark" }));
+      }
+    } finally {
+      await context.close().catch(() => undefined);
+    }
+  }
+
+  for (const probe of VIEWPORT_PROBES) {
+    const context = await newContext(browser, { viewport: probe.viewport, deviceScaleFactor: probe.deviceScaleFactor }, sweep.guard);
+    await context.addInitScript({ path: INPAGE_PATH });
+    await sweep.install(context);
+    try {
+      const { page } = await loadSampled(await context.newPage(), entry, (tab) => sweep.dismiss(context, tab, `collect:${probe.name}`));
+      const { report, visibleControls, clickables, content } = await overflowProbe(page, join(dir, "probes", `${probe.name}.png`));
+      await writeJson(join(dir, "probes", `${probe.name}.json`), { ...probe, ...report, visibleControls, clickables, content });
+      summary[probe.name] = { horizontalScroll: report.horizontalScroll, offenders: (report.offenders as unknown[]).length, clipped: (report.clipped as unknown[]).length };
+    } finally {
+      await context.close().catch(() => undefined);
+    }
+  }
+
+  // The page at 320 pixels wide: target sizes, names against visible text, and last the wider text spacing, which the page keeps.
+  {
+    const context = await newContext(browser, { viewport: SMALLEST }, sweep.guard);
+    await context.addInitScript({ path: INPAGE_PATH });
+    await sweep.install(context);
+    try {
+      const { page } = await loadSampled(await context.newPage(), entry, (tab) => sweep.dismiss(context, tab, "collect:smallest"));
+      const targets = await call(page, "targetSizes");
+      const named = await collectNamed(page);
+      // The order of the code against the order on screen at this width, where blocks can change places (1.3.2).
+      await writeJson(join(dir, "probes", "order-320.json"), await visualOrder(page));
+      const before = await visibleControlKeys(page);
+      const spacing = await textSpacing(page, join(dir, "probes", "smallest-textspacing.png"));
+      // A button that only exists with the wider spacing is opened while the spacing is in force.
+      const controls = await controlsOnlyWithSpacing(page, before, (index) => ({ path: join(dir, "probes", `smallest-textspacing-opened-${index}.png`), relative: `probes/smallest-textspacing-opened-${index}.png` }));
+      await writeJson(join(dir, "probes", "smallest.json"), { viewport: SMALLEST, targets, ...named, textspacing: { ...spacing, controls } });
+      summary.smallest = { targets: (targets as unknown[]).length, newlyClipped: spacing.newlyClipped.length };
+    } finally {
+      await context.close().catch(() => undefined);
+    }
+  }
+
+  // The page in a narrow window, where a menu sits behind a button and the order can differ.
+  {
+    const context = await newContext(browser, { viewport: NARROW }, sweep.guard);
+    await context.addInitScript({ path: INPAGE_PATH });
+    await sweep.install(context);
+    try {
+      const { page } = await loadSampled(await context.newPage(), entry, (tab) => sweep.dismiss(context, tab, "collect:narrow"));
+      await page.screenshot({ path: join(dir, "screenshot-narrow.png"), fullPage: true, animations: "disabled" });
+      await writeJson(join(dir, "probes", "overlays-narrow.json"), await sweep.overlays(page));
+      await writeJson(join(dir, "probes", "operables-narrow.json"), await pageOperables(page));
+      // What there is to reach with Tab in this window: the walk below is laid next to it.
+      await writeJson(join(dir, "probes", "named-narrow.json"), await collectNamed(page));
+      const walk = await tabWalk(page, { continueAfterFocusLoss: true, focusDir: join(dir, "probes", "focus-narrow"), focusPath: "probes/focus-narrow" });
+      await writeJson(join(dir, "probes", "tabwalk-narrow.json"), walk);
+      await tabOrderScreenshot(page, walk.stops as Record<string, unknown>[], join(dir, "probes", "tabwalk-narrow.png"));
+      summary["tabwalk-narrow"] = { outcome: walk.outcome, stops: walk.stopCount };
+    } finally {
+      await context.close().catch(() => undefined);
+    }
+  }
+
+  // Controls that show at none of the widths above, and the page at a width where they do (1.1.1, 1.3.1).
+  {
+    const context = await newContext(browser, {}, sweep.guard);
+    await context.addInitScript({ path: INPAGE_PATH });
+    await sweep.install(context);
+    try {
+      const { page } = await loadSampled(await context.newPage(), entry, (tab) => sweep.dismiss(context, tab, "collect:widths"));
+      // A page that cannot be laid out again, such as an embedded window measured in its place, says why.
+      const found = await betweenWidths(page, join(dir, "probes"), "probes").catch((error: Error) => ({ widthsTried: [], breakpoints: [], controls: [], measuredAt: [], failedNl: error.message.split("\n")[0]! }));
+      await writeJson(join(dir, "probes", "widths.json"), found);
+      summary.widths = { tried: found.widthsTried.length, onlyBetween: found.controls.length, measuredAt: found.measuredAt.map((entry) => entry.width) };
+    } finally {
+      await context.close().catch(() => undefined);
+    }
+  }
+
+  // Skip link and moving content, each on a fresh page; motion is measured with animations allowed.
+  for (const [name, reducedMotion] of [["skiplink", "reduce"], ["motion", "no-preference"]] as const) {
+    const context = await newContext(browser, { reducedMotion }, sweep.guard);
+    await context.addInitScript({ path: INPAGE_PATH });
+    await sweep.install(context);
+    try {
+      const { page } = await loadSampled(await context.newPage(), entry, (tab) => sweep.dismiss(context, tab, `collect:${name}`));
+      if (name === "skiplink") await writeJson(join(dir, "probes", "skiplink.json"), await skipLinkProbe(page));
+      else {
+        await page.waitForTimeout(1500);
+        await writeJson(join(dir, "probes", "motion.json"), await call(page, "motionReport"));
+        // This page is thrown away, so the controls that may stop a sound can be tried here.
+        await writeJson(join(dir, "probes", "media.json"), await mediaReport(page, { tryControls: true }));
+      }
+    } finally {
+      await context.close().catch(() => undefined);
+    }
+  }
+
+  // Text spacing: measure clipping before and after, on a page that is then thrown away.
+  const context = await newContext(browser, {}, sweep.guard);
+  await context.addInitScript({ path: INPAGE_PATH });
+  await sweep.install(context);
+  try {
+    const { page } = await loadSampled(await context.newPage(), entry, (tab) => sweep.dismiss(context, tab, "collect:textspacing"));
+    const before = await visibleControlKeys(page);
+    const spacing = await textSpacing(page, join(dir, "probes", "textspacing.png"));
+    const controls = await controlsOnlyWithSpacing(page, before, (index) => ({ path: join(dir, "probes", `textspacing-opened-${index}.png`), relative: `probes/textspacing-opened-${index}.png` }));
+    await writeJson(join(dir, "probes", "textspacing.json"), { ...spacing, controls });
+    summary.textspacing = { newlyClipped: spacing.newlyClipped.length };
+  } finally {
+    await context.close().catch(() => undefined);
+  }
+  return summary;
+}
+
+export async function collect(options: CollectOptions): Promise<void> {
+  const startedAt = stepStart();
+  const sample = await readJson<Sample>(join(options.run, "sample.json"));
+  const pages = sample.items.filter((item) => !options.only || item.url.includes(options.only));
+  const browser = await launchBrowser();
+  const summaries: Record<string, unknown>[] = [];
+  try {
+    // In a run with a login: stop before anything is measured when the session ran out.
+    await confirmLogin(browser);
+    // The watch on the session of a run with a login starts with the sweep and runs alone until evaluate (2.2.1).
+    const watch = startSessionWatch(options.run);
+    if (watch) process.stderr.write(watch.status === "running" ? `sessieproef loopt (proces ${watch.pid}); de stand staat in ${SESSION_WATCH_FILE}\n` : `sessieproef draait niet: ${watch.reasonNl ?? watch.status}\n`);
+    const sweep = await ModelSweep.load(options.run, browser);
+    let reused = 0;
+    for (const [index, entry] of pages.entries()) {
+      const started = Date.now();
+      // A page an earlier sweep measured under the same blockers, and that still has the same content, is not measured again.
+      const key = pageKey(sweep.blockersKey, entry);
+      const stamp = options.fresh ? null : await readStamp<PageStamp>(pageStampPath(options.run, entry.slug));
+      if (stamp && stamp.key === key && (await contentNow(browser, entry, sweep)) === stamp.contentSha256) {
+        sweep.restore(stamp as Parameters<ModelSweep["restore"]>[0]);
+        summaries.push(stamp.summary);
+        reused++;
+        process.stderr.write(`collect ${index + 1}/${pages.length} ${entry.url} niet veranderd, niet opnieuw gemeten (${Date.now() - started}ms)\n`);
+        continue;
+      }
+      const mark = sweep.mark();
+      const noted: { contentSha256?: string } = {};
+      // A page gets one retry: a crashed renderer must not cost the whole run.
+      // A page with many measurements takes more than a minute: say every half minute that it still runs.
+      const summary = await sayingItRuns(`collect ${index + 1}/${pages.length} ${entry.url}`, () =>
+        collectPage(browser, entry, options.run, sweep, noted).catch((error: Error) => {
+          process.stderr.write(`retry ${entry.url}: ${error.message.split("\n")[0]}\n`);
+          return collectPage(browser, entry, options.run, sweep, noted);
+        }),
+      );
+      summaries.push(summary);
+      if (noted.contentSha256) await writeJson(pageStampPath(options.run, entry.slug), { key, contentSha256: noted.contentSha256, summary, ...sweep.since(mark) } satisfies PageStamp);
+      process.stderr.write(`collect ${index + 1}/${pages.length} ${entry.url} ${Date.now() - started}ms\n`);
+    }
+    if (!options.only) await writeJson(join(options.run, "collect.json"), { rendering: RENDERING, pages: summaries });
+    // Each blocker as it stands on a page, and each component and process as its recipe opens it.
+    const captured = !options.only
+      ? await sayingItRuns("collect toestanden uit het sitemodel", async () => {
+          const states = await sweep.captureStates({ fresh: options.fresh === true });
+          // A state that did not open because the session ran out is not written down as one that cannot be reached.
+          await confirmLogin(browser);
+          return sweep.write(states);
+        })
+      : null;
+    const kept = reused + sweep.reusedStates.length > 0 ? { reusedPages: reused, reusedStates: sweep.reusedStates.length } : {};
+    await writeManifest(options.run, { command: "collect", startedAt, pages: pages.length, only: options.only ?? null, ...(captured ? { siteStates: captured.states.length, siteStatesReached: captured.states.filter((state) => state.reached).length } : {}), ...kept }, browser.version());
+  } finally {
+    await browser.close();
+  }
+}

@@ -1,0 +1,105 @@
+# Twee controles. De snelle draait bij elke push en kost een paar minuten: licenties, types,
+# procedures en de tests die geen browser nodig hebben. De volledige doet wat een nieuwe
+# gebruiker doet (installeren op een schone machine, zeggen wat er staat, alle tests) en
+# duurt ongeveer 25 minuten; die draait op een voorstel, één keer per nacht als er die dag
+# iets is veranderd, en met de hand. Een besloten repository heeft een beperkt aantal
+# minuten per maand, gedeeld met de rest van de organisatie.
+name: Controle
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "17 2 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: controle-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  snel:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: toolbox/package-lock.json
+      - uses: extractions/setup-just@v3
+      - uses: astral-sh/setup-uv@v6
+      - name: Elk bestand heeft een rechthebbende en een licentie
+        run: just reuse
+      - name: Pakketten, zonder browsers
+        run: cd toolbox && npm ci
+      - name: Types
+        run: just check
+      - name: Procedures
+        run: just procedures
+      - name: Tests zonder browser
+        run: just test-quick
+
+  volledig:
+    if: github.event_name != 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 50
+
+      - name: Is er vandaag iets veranderd
+        id: nieuw
+        run: |
+          if [ "${{ github.event_name }}" != "schedule" ] || [ -n "$(git log --since='25 hours ago' --format=%h -1)" ]; then echo "ja=true" >> "$GITHUB_OUTPUT"; else echo "ja=false" >> "$GITHUB_OUTPUT"; fi
+
+      - uses: actions/setup-node@v4
+        if: steps.nieuw.outputs.ja == 'true'
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: toolbox/package-lock.json
+
+      - uses: extractions/setup-just@v3
+        if: steps.nieuw.outputs.ja == 'true'
+
+      - uses: astral-sh/setup-uv@v6
+        if: steps.nieuw.outputs.ja == 'true'
+
+      - uses: typst-community/setup-typst@v4
+        if: steps.nieuw.outputs.ja == 'true'
+
+      - name: Elk bestand heeft een rechthebbende en een licentie
+        if: steps.nieuw.outputs.ja == 'true'
+        run: just reuse
+
+      - name: Pakketten en browsers
+        if: steps.nieuw.outputs.ja == 'true'
+        run: just install
+
+      - name: Hulpprogramma's
+        if: steps.nieuw.outputs.ja == 'true'
+        run: just tools
+
+      - name: Wat staat er op deze machine
+        if: steps.nieuw.outputs.ja == 'true'
+        run: just doctor
+
+      - name: Types
+        if: steps.nieuw.outputs.ja == 'true'
+        run: just check
+
+      - name: Procedures
+        if: steps.nieuw.outputs.ja == 'true'
+        run: just procedures
+
+      - name: Tests
+        if: steps.nieuw.outputs.ja == 'true'
+        run: just test

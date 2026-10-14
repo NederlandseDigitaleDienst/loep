@@ -1,0 +1,838 @@
+{
+  "kind": "answer-key",
+  "wcagVersion": "2.2",
+  "sampleNote": "De testsite Lindewaard heeft 17 paginatypen. De sleutel noemt per gebrek de pagina's waarop het zit.",
+  "outcomeNote": "De sleutel bevat 79 ingebouwde gebreken onder 51 criteria. Wat de sleutel niet noemt, is niet met opzet fout gemaakt.",
+  "failed": [
+    "1.1.1",
+    "1.2.1",
+    "1.2.2",
+    "1.2.3",
+    "1.2.5",
+    "1.3.1",
+    "1.3.2",
+    "1.3.3",
+    "1.3.4",
+    "1.3.5",
+    "1.4.1",
+    "1.4.2",
+    "1.4.3",
+    "1.4.4",
+    "1.4.5",
+    "1.4.10",
+    "1.4.11",
+    "1.4.12",
+    "1.4.13",
+    "2.1.1",
+    "2.1.2",
+    "2.1.4",
+    "2.2.1",
+    "2.2.2",
+    "2.4.1",
+    "2.4.2",
+    "2.4.3",
+    "2.4.4",
+    "2.4.6",
+    "2.4.7",
+    "2.4.11",
+    "2.5.1",
+    "2.5.2",
+    "2.5.3",
+    "2.5.7",
+    "2.5.8",
+    "3.1.1",
+    "3.1.2",
+    "3.2.1",
+    "3.2.2",
+    "3.2.3",
+    "3.2.4",
+    "3.2.6",
+    "3.3.1",
+    "3.3.2",
+    "3.3.3",
+    "3.3.4",
+    "3.3.7",
+    "3.3.8",
+    "4.1.2",
+    "4.1.3"
+  ],
+  "failedOnlyInDocuments": [],
+  "problemCount": 79,
+  "findings": [
+    {
+      "id": "1.1.1-logo-melding",
+      "criterion": "1.1.1",
+      "page": "alle",
+      "descriptionNl": "Het logo in de cookiemelding heeft als tekstalternatief het woord \"logo\".",
+      "where": "#cookiemelding img[alt=\"logo\"] (Het schildje links in de cookiemelding.)",
+      "state": "Direct na het laden, zolang de cookiemelding open is.",
+      "medium": "web"
+    },
+    {
+      "id": "1.1.1-artikelfoto",
+      "criterion": "1.1.1",
+      "page": "/nieuws/nieuwe-fietsenstalling.html",
+      "descriptionNl": "De foto van de fietsenstalling heeft geen alt-attribuut.",
+      "where": "img.artikel-foto:not([alt]) (De foto bovenaan het nieuwsbericht.)",
+      "state": "Direct na het laden.",
+      "medium": "web"
+    },
+    {
+      "id": "1.1.1-bestandsnaam",
+      "criterion": "1.1.1",
+      "page": "/",
+      "descriptionNl": "Het logo van het waterschap heeft een bestandsnaam als tekstalternatief.",
+      "where": ".partners img[alt=\"IMG_2041.jpg\"] (Het eerste logo onder \"Wij werken samen met\".)",
+      "state": "Direct na het laden.",
+      "medium": "web"
+    },
+    {
+      "id": "1.1.1-tarieven",
+      "criterion": "1.1.1",
+      "page": "/veelgestelde-vragen.html",
+      "descriptionNl": "De tarieven staan alleen in een afbeelding van een tabel, met een leeg alt.",
+      "where": "#antwoord-2 img[alt=\"\"] (In het antwoord op \"Wat kost een paspoort of rijbewijs?\".)",
+      "state": "Na het openen van de tweede vraag.",
+      "medium": "web",
+      "alsoCriteria": [
+        "1.3.1",
+        "1.4.5"
+      ]
+    },
+    {
+      "id": "1.2.1-gesprek",
+      "criterion": "1.2.1",
+      "page": "/nieuws/nieuwe-fietsenstalling.html",
+      "descriptionNl": "Het gesprek met de wethouder is alleen te beluisteren; er is geen uitgeschreven tekst.",
+      "where": "audio[src=\"/media/gesprek.ogg\"] (Het geluidsfragment onder de tweede kop \"Informatie\".)",
+      "state": "Direct na het laden.",
+      "medium": "web"
+    },
+    {
+      "id": "1.2.2-ondertitels",
+      "criterion": "1.2.2",
+      "page": "/raadsvergadering.html",
+      "descriptionNl": "De video heeft gesproken tekst en geen ondertitels.",
+      "where": "video:not(:has(track)) (De video onder \"Samenvatting van de vergadering\".)",
+      "state": "Direct na het laden; de video moet worden afgespeeld om het te horen.",
+      "medium": "web"
+    },
+    {
+      "id": "1.2.3-beschrijving",
+      "criterion": "1.2.3",
+      "page": "/raadsvergadering.html",
+      "descriptionNl": "De dia in beeld toont de agenda en de uitslag van de stemming (14 voor, 5 tegen). De spreker noemt die niet en er is geen uitgeschreven tekst.",
+      "where": "video[src=\"/media/raadsvergadering.webm\"] (De video onder \"Samenvatting van de vergadering\".)",
+      "state": "De video moet worden bekeken en beluisterd.",
+      "medium": "web"
+    },
+    {
+      "id": "1.2.5-audiodescriptie",
+      "criterion": "1.2.5",
+      "page": "/raadsvergadering.html",
+      "descriptionNl": "Er is geen audiodescriptie voor de informatie die alleen in beeld staat.",
+      "where": "video[src=\"/media/raadsvergadering.webm\"] (De video onder \"Samenvatting van de vergadering\".)",
+      "state": "De video moet worden bekeken en beluisterd.",
+      "medium": "web"
+    },
+    {
+      "id": "1.3.1-vette-tussenkop",
+      "criterion": "1.3.1",
+      "page": "/nieuws/nieuwe-fietsenstalling.html",
+      "descriptionNl": "Een tussenkop is opgemaakt als vette alinea in plaats van als kop.",
+      "where": "main p > strong:only-child (\"Wat verandert er voor u?\" in het nieuwsbericht.)",
+      "state": "Direct na het laden.",
+      "medium": "web"
+    },
+    {
+      "id": "1.3.1-lijst-als-alinea",
+      "criterion": "1.3.1",
+      "page": "/nieuws/nieuwe-fietsenstalling.html",
+      "descriptionNl": "Een opsomming is gemaakt met streepjes en regeleinden in één alinea.",
+      "where": "main p:has(br) (De drie regels met streepjes over de openingstijden en prijzen van de stalling.)",
+      "state": "Direct na het laden.",
+      "medium": "web"
+    },
+    {
+      "id": "1.3.1-tussenkop-uitklapper",
+      "criterion": "1.3.1",
+      "page": "/veelgestelde-vragen.html",
+      "descriptionNl": "Twee tussenkoppen in een dichte uitklapper zijn vette alinea's.",
+      "where": "#antwoord-3 p > b:only-child (\"Restafval en papier\" en \"Grofvuil\" in het antwoord op de derde vraag.)",
+      "state": "Na het openen van de derde vraag.",
+      "medium": "web"
+    },
+    {
+      "id": "1.3.1-tabelkoppen",
+      "criterion": "1.3.1",
+      "page": "/openingstijden.html",
+      "descriptionNl": "De kopcellen van de rijen en kolommen zijn gewone cellen met een vette opmaak.",
+      "where": "table.rooster:not(:has(th)) (De tabel met openingstijden.)",
+      "state": "Direct na het laden.",
+      "medium": "web"
+    },
+    {
+      "id": "1.3.1-voetkop",
+      "criterion": "1.3.1",
+      "page": "alle",
+      "descriptionNl": "De titels boven de kolommen in de voet zijn spans en geen koppen.",
+      "where": ".voet span.voet-titel (\"Bezoekadres\", \"Over deze website\" en \"Volg ons\" in de voet.)",
+      "state": "Direct na het laden.",
+      "medium": "web"
+    },
+    {
+      "id": "1.3.1-keuzegroep",
+      "criterion": "1.3.1",
+      "page": "/contact.html",
+      "descriptionNl": "De groep keuzerondjes heeft geen fieldset en legend; de vraag is een losse alinea.",
+      "where": "#contactformulier p.groepslabel (De drie keuzerondjes onder \"Waar gaat uw bericht over?\".)",
+      "state": "Direct na het laden.",
+      "medium": "web"
+    },
+    {
+      "id": "1.3.2-zoekvolgorde",
+      "criterion": "1.3.2",
+      "page": "/zoeken.html, /zoeken.html?q=afval",
+      "descriptionNl": "Het aantal resultaten en de links onder \"Veel gezocht\" staan in de code na de resultaten en zijn met CSS order naar boven gezet.",
+      "where": ".zoekresultaten ~ .zoek-info (Het aantal resultaten en het blok \"Veel gezocht\" op de zoekpagina.)",
+      "state": "Direct na het laden.",
+      "medium": "web",
+      "alsoCriteria": [
+        "2.4.3"
+      ]
+    },
+    {
+      "id": "1.3.2-kaart-omgekeerd",
+      "criterion": "1.3.2",
+      "page": "/nieuws/",
+      "descriptionNl": "In de code staat eerst de samenvatting, dan de datum en als laatste de kop. Op het scherm is de volgorde omgedraaid.",
+      "where": ".kaartenlijst .kaart > h2:last-child (De kaarten op de nieuwspagina.)",
+      "state": "Direct na het laden.",
+      "medium": "web"
+    },
+    {
+      "id": "1.3.3-ronde-knop",
+      "criterion": "1.3.3",
+      "page": "/contact.html",
+      "descriptionNl": "De instructie verwijst naar \"de ronde groene knop rechtsonder\" en noemt de naam van de knop niet.",
+      "where": ".tijdslimiet + p (De zin boven het contactformulier.)",
+      "state": "Direct na het laden.",
+      "medium": "web"
+    },
+    {
+      "id": "1.3.4-draai",
+      "criterion": "1.3.4",
+      "page": "/openingstijden.html",
+      "descriptionNl": "Op een scherm in staande stand tot 900 pixels breed is de tabel verborgen en staat er dat de bezoeker het toestel moet draaien.",
+      "where": ".tabelkader (De tabel met openingstijden.)",
+      "state": "Op een scherm van hooguit 900 pixels breed in staande stand.",
+      "medium": "web"
+    },
+    {
+      "id": "1.3.5-autocomplete",
+      "criterion": "1.3.5",
+      "page": "/contact.html",
+      "descriptionNl": "De velden voor persoonsgegevens hebben geen autocomplete-attribuut.",
+      "where": "#naam:not([autocomplete]) (De velden voor naam, e-mailadres en telefoonnummer in het contactformulier.)",
+      "state": "Direct na het laden.",
+      "medium": "web"
+    },
+    {
+      "id": "1.4.1-tekstlink",
+      "criterion": "1.4.1",
+      "page": "alle",
+      "descriptionNl": "Links in de tekst zijn niet onderstreept en verschillen alleen in kleur van de tekst eromheen (donkerblauw naast bijna zwart, contrast onder 3 op 1).",
+      "where": "main p a (Links in lopende tekst.)",
+      "state": "Direct na het laden.",
+      "medium": "web"
+    },
+    {
+      "id": "1.4.1-verplicht",
+      "criterion": "1.4.1",
+      "page": "/contact.html",
+      "descriptionNl": "Verplichte velden zijn alleen aan de rode kleur van het label te herkennen.",
+      "where": "label.verplicht-label[for=\"naam\"] (De labels van de verplichte velden in het contactformulier.)",
+      "state": "Direct na het laden.",
+      "medium": "web",
+      "alsoCriteria": [
+        "3.3.2"
+      ]
+    },
+    {
+      "id": "1.4.2-melodie",
+      "criterion": "1.4.2",
+      "page": "/",
+      "descriptionNl": "Bij het openen van de startpagina begint een melodie die blijft herhalen. Er is geen knop om het geluid te stoppen.",
+      "where": "audio[autoplay] (Een onzichtbaar geluidsfragment op de startpagina.)",
+      "state": "Direct na het laden; een browser kan het afspelen tegenhouden.",
+      "medium": "web"
+    },
+    {
+      "id": "1.4.3-datum",
+      "criterion": "1.4.3",
+      "page": "alle",
+      "descriptionNl": "De datum is lichtgrijs op wit (ongeveer 2,6 op 1).",
+      "where": ".datum (De datum bij nieuwsberichten.)",
+      "state": "Direct na het laden.",
+      "medium": "web"
+    },
+    {
+      "id": "1.4.3-tekst-op-foto",
+      "criterion": "1.4.3",
+      "page": "/",
+      "descriptionNl": "Witte tekst staat direct op de foto. Het linkerdeel van de foto is licht, daar is het contrast te laag.",
+      "where": ".held-inhoud p (De kop en de inleiding over de foto bovenaan de startpagina.)",
+      "state": "Direct na het laden.",
+      "medium": "web"
+    },
+    {
+      "id": "1.4.3-menu-aanwijzen",
+      "criterion": "1.4.3",
+      "page": "alle",
+      "descriptionNl": "Bij aanwijzen met de muis wordt een menulink grijs op lichtgrijs (ongeveer 2 op 1).",
+      "where": ".hoofdmenu a (De links in het hoofdmenu.)",
+      "state": "Bij aanwijzen met de muis, op een breed scherm.",
+      "medium": "web"
+    },
+    {
+      "id": "1.4.4-zoom-uit",
+      "criterion": "1.4.4",
+      "page": "alle",
+      "descriptionNl": "De pagina verbiedt inzoomen op een aanraakscherm (user-scalable=no, maximum-scale=1).",
+      "where": "meta[name=\"viewport\"][content*=\"user-scalable=no\"] (De viewport-instelling in de head.)",
+      "state": "Direct na het laden.",
+      "medium": "web"
+    },
+    {
+      "id": "1.4.4-inleiding",
+      "criterion": "1.4.4",
+      "page": "/producten.html",
+      "descriptionNl": "De alinea heeft een vaste hoogte. Bij 200% vergroten valt het einde van de tekst weg.",
+      "where": ".inleiding (De inleidende alinea op de productenpagina.)",
+      "state": "Bij 200% vergroten op een scherm van 1280 pixels (640 pixels breed).",
+      "medium": "web"
+    },
+    {
+      "id": "1.4.5-zomerfeest",
+      "criterion": "1.4.5",
+      "page": "/",
+      "descriptionNl": "De aankondiging is een afbeelding van tekst. Het alt geeft de tekst wel weer.",
+      "where": ".feestblok img[src=\"/beeld/zomerfeest.svg\"] (De aankondiging van het zomerfeest op de startpagina.)",
+      "state": "Direct na het laden.",
+      "medium": "web"
+    },
+    {
+      "id": "1.4.10-weigerknop",
+      "criterion": "1.4.10",
+      "page": "alle",
+      "descriptionNl": "Op 320 pixels breed staan de knoppen op één rij en valt \"Weigeren\" buiten beeld.",
+      "where": "#cookiemelding button[data-keuze=\"weigeren\"] (De knop \"Weigeren\" in de cookiemelding.)",
+      "state": "Op 320 pixels breed, met de cookiemelding open.",
+      "medium": "web"
+    },
+    {
+      "id": "1.4.10-rooster",
+      "criterion": "1.4.10",
+      "page": "/producten.html",
+      "descriptionNl": "Het rooster heeft een vaste breedte van 720 pixels. Op 320 pixels breed moet de bezoeker opzij schuiven.",
+      "where": ".kaartrooster (Het rooster met productkaarten.)",
+      "state": "Op 320 pixels breed.",
+      "medium": "web"
+    },
+    {
+      "id": "1.4.11-veldrand",
+      "criterion": "1.4.11",
+      "page": "alle",
+      "descriptionNl": "De rand van de invoervelden is lichtgrijs op wit (ongeveer 1,4 op 1).",
+      "where": "main input (De invoervelden in de inhoud van de pagina.)",
+      "state": "Direct na het laden.",
+      "medium": "web"
+    },
+    {
+      "id": "1.4.12-tegel",
+      "criterion": "1.4.12",
+      "page": "/",
+      "descriptionNl": "De tegels hebben een vaste hoogte. Met ruimere tekstafstand past de tekst niet meer en valt de laatste regel weg.",
+      "where": ".tegels a (De tegels onder \"Snel regelen\".)",
+      "state": "Met de tekstafstand uit het criterium ingesteld.",
+      "medium": "web"
+    },
+    {
+      "id": "1.4.13-uitleg",
+      "criterion": "1.4.13",
+      "page": "/openingstijden.html",
+      "descriptionNl": "De uitleg verschijnt bij aanwijzen of focus. Hij is niet met Escape te sluiten en verdwijnt als de muis naar de uitleg zelf gaat.",
+      "where": "span.info .uitleg (Het rondje met de letter i naast de kop \"Gemeentehuis en milieustraat\".)",
+      "state": "Bij aanwijzen of bij focus op het rondje.",
+      "medium": "web"
+    },
+    {
+      "id": "2.1.1-nieuwskaart",
+      "criterion": "2.1.1",
+      "page": "/nieuws/",
+      "descriptionNl": "Een kaart opent het bericht bij een klik, maar is geen link. De klik wordt afgehandeld op de lijst eromheen. Met het toetsenbord is het bericht niet te openen.",
+      "where": ".kaartenlijst div.kaart[data-doel] (De drie kaarten op de nieuwspagina.)",
+      "state": "Zichtbaar na het laden; dat een kaart klikbaar is, blijkt pas bij klikken.",
+      "medium": "web",
+      "alsoCriteria": [
+        "4.1.2",
+        "2.4.4"
+      ]
+    },
+    {
+      "id": "2.1.1-productkaart",
+      "criterion": "2.1.1",
+      "page": "/producten.html",
+      "descriptionNl": "Een kaart opent een venster met uitleg bij een klik, maar is geen knop en krijgt geen focus.",
+      "where": ".kaartrooster div.product[data-product] (De zes kaarten op de productenpagina.)",
+      "state": "Zichtbaar na het laden; dat een kaart klikbaar is, blijkt pas bij klikken.",
+      "medium": "web",
+      "alsoCriteria": [
+        "4.1.2"
+      ]
+    },
+    {
+      "id": "2.1.1-vinkje",
+      "criterion": "2.1.1",
+      "page": "/contact.html",
+      "descriptionNl": "Het echte selectievakje is verborgen met display:none en vervangen door een getekend vakje. Het is niet met Tab te bereiken.",
+      "where": "label.vinkje input[type=\"checkbox\"] (Het vinkje \"Stuur mij een kopie van dit bericht\".)",
+      "state": "Direct na het laden.",
+      "medium": "web",
+      "alsoCriteria": [
+        "4.1.2",
+        "2.4.7"
+      ]
+    },
+    {
+      "id": "2.1.1-naar-boven",
+      "criterion": "2.1.1",
+      "page": "alle",
+      "descriptionNl": "De link heeft geen href en werkt alleen met de muis.",
+      "where": "a.naar-boven:not([href]) (\"Naar boven\" onderaan de voet.)",
+      "state": "Direct na het laden.",
+      "medium": "web"
+    },
+    {
+      "id": "2.1.1-chat-sluit",
+      "criterion": "2.1.1",
+      "page": "alle",
+      "descriptionNl": "Het kruisje om de chat te sluiten is een div die alleen op een klik reageert.",
+      "where": "div.chat-sluit (Het kruisje in het chatvenster.)",
+      "state": "Na het openen van de chat.",
+      "medium": "web",
+      "alsoCriteria": [
+        "4.1.2"
+      ]
+    },
+    {
+      "id": "2.1.2-chat",
+      "criterion": "2.1.2",
+      "page": "alle",
+      "descriptionNl": "Staat de focus in het invoerveld van de chat, dan doet Tab niets meer. Escape sluit de chat niet.",
+      "where": "#chat-invoer (Het invoerveld van de chat.)",
+      "state": "Na het openen van de chat met de knop \"Chat met ons\".",
+      "medium": "web"
+    },
+    {
+      "id": "2.1.4-sneltoets",
+      "criterion": "2.1.4",
+      "page": "alle",
+      "descriptionNl": "De letter z zet de focus in het zoekveld en de letter c opent de chat. De sneltoetsen zijn niet uit te zetten of te wijzigen.",
+      "where": ".zoekbalk input (De hele pagina.)",
+      "state": "Bij het indrukken van z of c terwijl de focus niet in een invoerveld staat.",
+      "medium": "web"
+    },
+    {
+      "id": "2.2.1-tijdslimiet",
+      "criterion": "2.2.1",
+      "page": "/contact.html",
+      "descriptionNl": "Na tien minuten gaat de pagina vanzelf terug naar de startpagina. De tijd is niet te verlengen of uit te zetten.",
+      "where": ".tijdslimiet (De gele balk boven het contactformulier.)",
+      "state": "De melding staat er direct; het terugsturen gebeurt na tien minuten.",
+      "medium": "web"
+    },
+    {
+      "id": "2.2.2-uitgelicht",
+      "criterion": "2.2.2",
+      "page": "/",
+      "descriptionNl": "Het blok wisselt elke vier seconden vanzelf van bericht. Er is geen knop om het te pauzeren.",
+      "where": ".uitgelicht (Het blok \"Uitgelicht\" op de startpagina.)",
+      "state": "Na vier seconden wachten.",
+      "medium": "web"
+    },
+    {
+      "id": "2.4.1-skiplink",
+      "criterion": "2.4.1",
+      "page": "alle",
+      "descriptionNl": "De skiplink wijst naar #inhoud, maar dat id bestaat niet. Er gebeurt niets bij activeren.",
+      "where": "main#hoofddeel (De link \"Direct naar de inhoud\" bovenaan elke pagina.)",
+      "state": "Bij de eerste Tab en daarna Enter.",
+      "medium": "web"
+    },
+    {
+      "id": "2.4.2-sjabloonrest",
+      "criterion": "2.4.2",
+      "page": "/",
+      "descriptionNl": "De titel is \"Home - Gemeente Lindewaard - Gemeente Lindewaard % % %\": de naam staat er dubbel en er staan resten van een sjabloon in.",
+      "where": "title (De titel van de startpagina.)",
+      "state": "Direct na het laden.",
+      "medium": "web"
+    },
+    {
+      "id": "2.4.2-zelfde-titel",
+      "criterion": "2.4.2",
+      "page": "/veelgestelde-vragen.html, /afval.html",
+      "descriptionNl": "Beide pagina's hebben alleen \"Gemeente Lindewaard\" als titel.",
+      "where": "title (De titels van de pagina's Veelgestelde vragen en Afval.)",
+      "state": "Direct na het laden.",
+      "medium": "web"
+    },
+    {
+      "id": "2.4.3-tabindex",
+      "criterion": "2.4.3",
+      "page": "/contact.html",
+      "descriptionNl": "De velden hebben tabindex 1, 3 en 2. De focus begint midden op de pagina en gaat van naam naar telefoonnummer naar e-mailadres.",
+      "where": "#naam[tabindex=\"1\"] (De velden naam, e-mailadres en telefoonnummer in het contactformulier.)",
+      "state": "Bij het doorlopen met Tab.",
+      "medium": "web"
+    },
+    {
+      "id": "2.4.3-mobiel-menu",
+      "criterion": "2.4.3",
+      "page": "alle",
+      "descriptionNl": "Het menu staat in de code na de voet. Na het openen moet de bezoeker met Tab eerst door de hele pagina voordat de focus in het menu komt.",
+      "where": ".pagina ~ .mobiel-menu (Het menu dat op een smal scherm opent met de menuknop.)",
+      "state": "Op hooguit 720 pixels breed, na het openen van het menu.",
+      "medium": "web"
+    },
+    {
+      "id": "2.4.4-klik-hier",
+      "criterion": "2.4.4",
+      "page": "/nieuws/nieuwe-fietsenstalling.html",
+      "descriptionNl": "De link naar de parkeervergunning heet \"Klik hier\" en staat alleen in een eigen alinea.",
+      "where": "main p > a[href=\"/vergunning.html\"]:only-child (De laatste alinea van het nieuwsbericht.)",
+      "state": "Direct na het laden.",
+      "medium": "web"
+    },
+    {
+      "id": "2.4.4-sociaal",
+      "criterion": "2.4.4",
+      "page": "alle",
+      "descriptionNl": "De links bestaan alleen uit een pictogram en hebben geen naam.",
+      "where": ".sociaal a:not([aria-label]) (De twee ronde pictogrammen onder \"Volg ons\" in de voet.)",
+      "state": "Direct na het laden.",
+      "medium": "web",
+      "alsoCriteria": [
+        "4.1.2",
+        "1.1.1"
+      ]
+    },
+    {
+      "id": "2.4.6-informatie",
+      "criterion": "2.4.6",
+      "page": "/nieuws/nieuwe-fietsenstalling.html",
+      "descriptionNl": "Twee verschillende onderdelen hebben allebei de kop \"Informatie\".",
+      "where": "blockquote.citaat + h2 (De koppen boven de video en boven het geluidsfragment in het nieuwsbericht.)",
+      "state": "Direct na het laden.",
+      "medium": "web"
+    },
+    {
+      "id": "2.4.7-menu",
+      "criterion": "2.4.7",
+      "page": "alle",
+      "descriptionNl": "De focusrand is weggehaald (outline: none) en er is niets voor in de plaats gekomen.",
+      "where": ".hoofdmenu a (De links in het hoofdmenu en in het menu op een smal scherm.)",
+      "state": "Bij focus met het toetsenbord.",
+      "medium": "web"
+    },
+    {
+      "id": "2.4.11-melding",
+      "criterion": "2.4.11",
+      "page": "alle",
+      "descriptionNl": "De cookiemelding ligt als vaste laag over de onderkant van de pagina en houdt de focus niet vast. Een element dat focus krijgt onderaan het scherm ligt helemaal achter de melding. De melding zelf komt pas als laatste in de Tab-volgorde.",
+      "where": "#cookiemelding:not([role]) (De cookiemelding onderaan het scherm.)",
+      "state": "Met de cookiemelding open, bij het doorlopen met Tab.",
+      "medium": "web",
+      "alsoCriteria": [
+        "2.4.3",
+        "4.1.2"
+      ]
+    },
+    {
+      "id": "2.5.1-galerij",
+      "criterion": "2.5.1",
+      "page": "/nieuws/nieuwe-fietsenstalling.html",
+      "descriptionNl": "De volgende foto is alleen te bereiken door te vegen. Er zijn geen knoppen.",
+      "where": ".galerij (De fotoserie onderaan het nieuwsbericht.)",
+      "state": "Zichtbaar na het laden; dat vegen de enige manier is, blijkt bij proberen.",
+      "medium": "web",
+      "alsoCriteria": [
+        "2.1.1"
+      ]
+    },
+    {
+      "id": "2.5.2-feedback",
+      "criterion": "2.5.2",
+      "page": "/veelgestelde-vragen.html",
+      "descriptionNl": "De knoppen werken al bij het indrukken van de muisknop. Wegschuiven en loslaten maakt het niet ongedaan.",
+      "where": ".feedback button (De knoppen \"Ja\" en \"Nee\" onderaan de pagina met vragen.)",
+      "state": "Bij het indrukken van de muisknop op een van de knoppen.",
+      "medium": "web"
+    },
+    {
+      "id": "2.5.3-zoekknop",
+      "criterion": "2.5.3",
+      "page": "alle",
+      "descriptionNl": "Op de knop staat \"Zoeken\", de toegankelijke naam is \"Opdracht versturen\".",
+      "where": ".zoekbalk button[aria-label] (De knop \"Zoeken\" in de kop van elke pagina.)",
+      "state": "Direct na het laden.",
+      "medium": "web"
+    },
+    {
+      "id": "2.5.7-schuif",
+      "criterion": "2.5.7",
+      "page": "/producten.html",
+      "descriptionNl": "De schuif werkt alleen door het bolletje te slepen. Klikken op de balk doet niets en het bolletje krijgt geen focus.",
+      "where": ".schuif-knop (De schuif \"Hoogste prijs\" boven de productkaarten.)",
+      "state": "Zichtbaar na het laden; dat alleen slepen werkt, blijkt bij proberen.",
+      "medium": "web",
+      "alsoCriteria": [
+        "2.1.1",
+        "4.1.2"
+      ]
+    },
+    {
+      "id": "2.5.8-paginering",
+      "criterion": "2.5.8",
+      "page": "/nieuws/",
+      "descriptionNl": "De links zijn 18 bij 18 pixels en staan 3 pixels uit elkaar.",
+      "where": ".paginering a (De paginanummers onder de nieuwsberichten.)",
+      "state": "Direct na het laden.",
+      "medium": "web"
+    },
+    {
+      "id": "3.1.1-taal",
+      "criterion": "3.1.1",
+      "page": "alle",
+      "descriptionNl": "De pagina heeft geen taalcode.",
+      "where": "html:not([lang]) (Het html-element van de nieuwsberichten en van de pagina voor een onbekend adres.)",
+      "state": "Direct na het laden.",
+      "medium": "web"
+    },
+    {
+      "id": "3.1.2-engels",
+      "criterion": "3.1.2",
+      "page": "/nieuws/nieuwe-fietsenstalling.html",
+      "descriptionNl": "Een Engelse zin heeft geen taalcode.",
+      "where": "blockquote.citaat p:first-child:not([lang]) (Het Engelse citaat van de jury in het nieuwsbericht.)",
+      "state": "Direct na het laden.",
+      "medium": "web"
+    },
+    {
+      "id": "3.2.1-voetlink",
+      "criterion": "3.2.1",
+      "page": "alle",
+      "descriptionNl": "Zodra de link focus krijgt, haalt een script de focus weer weg. De link is daardoor niet met het toetsenbord te gebruiken.",
+      "where": ".voet a[onfocus] (De link \"Openingstijden\" onder het bezoekadres in de voet.)",
+      "state": "Bij focus met het toetsenbord.",
+      "medium": "web",
+      "alsoCriteria": [
+        "2.4.7",
+        "2.1.1"
+      ]
+    },
+    {
+      "id": "3.2.2-wijk",
+      "criterion": "3.2.2",
+      "page": "/afval.html",
+      "descriptionNl": "Bij het kiezen van een wijk laadt de pagina direct opnieuw, zonder waarschuwing en zonder knop.",
+      "where": "div.wijkkeuze select#wijk (De keuzelijst \"Uw wijk\".)",
+      "state": "Bij het kiezen van een waarde in de lijst.",
+      "medium": "web"
+    },
+    {
+      "id": "3.2.3-menuvolgorde",
+      "criterion": "3.2.3",
+      "page": "/contact.html",
+      "descriptionNl": "Op de contactpagina staat \"Contact\" vooraan in het menu. Op alle andere pagina's staat het achteraan.",
+      "where": ".hoofdmenu li:first-child a[href=\"/contact.html\"] (Het hoofdmenu op de contactpagina.)",
+      "state": "Te zien door het menu van twee pagina's te vergelijken.",
+      "medium": "web"
+    },
+    {
+      "id": "3.2.4-zoekknop",
+      "criterion": "3.2.4",
+      "page": "/zoeken.html",
+      "descriptionNl": "De knop heet hier \"Vind\". Dezelfde functie heet in de kop en op de pagina voor een onbekend adres \"Zoeken\".",
+      "where": ".zoekformulier button (De knop van het zoekformulier op de zoekpagina.)",
+      "state": "Te zien door de zoekknoppen te vergelijken.",
+      "medium": "web"
+    },
+    {
+      "id": "3.2.6-hulp",
+      "criterion": "3.2.6",
+      "page": "alle",
+      "descriptionNl": "Op de nieuwspagina's staat het hulpblok in de kop, vóór het menu. Op alle andere pagina's staat het in de voet.",
+      "where": ".kop .hulp (Het blok \"Hulp nodig?\" met het telefoonnummer.)",
+      "state": "Te zien door twee pagina's te vergelijken.",
+      "medium": "web"
+    },
+    {
+      "id": "3.3.1-rode-rand",
+      "criterion": "3.3.1",
+      "page": "/contact.html",
+      "descriptionNl": "Een verplicht veld dat leeg is, krijgt alleen een rode rand. Er staat geen tekst die zegt wat er mis is.",
+      "where": "#contactformulier (Het contactformulier na versturen met lege verplichte velden.)",
+      "state": "Na versturen van het lege formulier.",
+      "medium": "web",
+      "alsoCriteria": [
+        "1.4.1",
+        "4.1.3"
+      ]
+    },
+    {
+      "id": "3.3.2-plaatshouder",
+      "criterion": "3.3.2",
+      "page": "/contact.html",
+      "descriptionNl": "De velden hebben geen label, alleen een voorbeeldtekst in het veld die verdwijnt bij typen.",
+      "where": "#email[placeholder] (De velden voor e-mailadres en telefoonnummer.)",
+      "state": "Direct na het laden.",
+      "medium": "web",
+      "alsoCriteria": [
+        "1.3.1",
+        "4.1.2"
+      ]
+    },
+    {
+      "id": "3.3.3-datum",
+      "criterion": "3.3.3",
+      "page": "/contact.html",
+      "descriptionNl": "Bij een datum in de verkeerde vorm staat er alleen \"Ongeldige invoer.\" De gewenste vorm wordt nergens genoemd.",
+      "where": "#datum:not([aria-describedby]) (Het veld \"Datum waarop het gebeurde\".)",
+      "state": "Na versturen met een datum als 3 november.",
+      "medium": "web",
+      "alsoCriteria": [
+        "3.3.2"
+      ]
+    },
+    {
+      "id": "3.3.4-controle",
+      "criterion": "3.3.4",
+      "page": "/vergunning.html",
+      "descriptionNl": "De aanvraag met betaalverplichting wordt na stap 2 direct verstuurd. Er is geen stap om de gegevens te controleren of te wijzigen.",
+      "where": "#vergunningformulier:not(:has(.overzicht)) (De aanvraag van een parkeervergunning.)",
+      "state": "Na doorgaan naar stap 2.",
+      "medium": "web"
+    },
+    {
+      "id": "3.3.7-adres",
+      "criterion": "3.3.7",
+      "page": "/vergunning.html",
+      "descriptionNl": "Het adres uit stap 1 moet in stap 2 opnieuw worden getypt voor de rekening.",
+      "where": "#factuurstraat:not([autocomplete]) (Stap 2 van de aanvraag van een parkeervergunning.)",
+      "state": "Na doorgaan naar stap 2.",
+      "medium": "web"
+    },
+    {
+      "id": "3.3.8-wachtwoord",
+      "criterion": "3.3.8",
+      "page": "/inloggen.html",
+      "descriptionNl": "Plakken in het wachtwoordveld is geblokkeerd en automatisch invullen staat uit. Daarnaast moet de bezoeker twee letters van een geheim woord uit het hoofd typen.",
+      "where": "#wachtwoord[onpaste] (Het inlogformulier.)",
+      "state": "Direct na het laden.",
+      "medium": "web"
+    },
+    {
+      "id": "4.1.2-tabs",
+      "criterion": "4.1.2",
+      "page": "/afval.html",
+      "descriptionNl": "De tabbladen zijn divs met een klikhandler, zonder rol, zonder toestand en zonder focus.",
+      "where": ".tabs:not([role]) div.tab (De tabbladen onder \"Wat hoort waar?\".)",
+      "state": "Direct na het laden.",
+      "medium": "web",
+      "alsoCriteria": [
+        "2.1.1"
+      ]
+    },
+    {
+      "id": "4.1.2-uitklapper",
+      "criterion": "4.1.2",
+      "page": "/veelgestelde-vragen.html",
+      "descriptionNl": "De knoppen melden niet of het antwoord open of dicht is.",
+      "where": "button.vraag:not([aria-expanded]) (De drie vragen.)",
+      "state": "Direct na het laden.",
+      "medium": "web"
+    },
+    {
+      "id": "4.1.2-menuknop",
+      "criterion": "4.1.2",
+      "page": "alle",
+      "descriptionNl": "De knop heeft geen naam en meldt niet of het menu open is.",
+      "where": "button.menuknop:not([aria-expanded]) (De menuknop met drie streepjes op een smal scherm.)",
+      "state": "Op hooguit 720 pixels breed.",
+      "medium": "web"
+    },
+    {
+      "id": "4.1.2-rol-logo",
+      "criterion": "4.1.2",
+      "page": "alle",
+      "descriptionNl": "De afbeelding heeft role=\"logo\". Die rol bestaat niet.",
+      "where": ".voet img[role=\"logo\"] (Het logo onderaan de voet.)",
+      "state": "Direct na het laden.",
+      "medium": "web"
+    },
+    {
+      "id": "4.1.2-kadertitel",
+      "criterion": "4.1.2",
+      "page": "/nieuws/nieuwe-fietsenstalling.html, /raadsvergadering.html",
+      "descriptionNl": "Het venster van de videospeler heeft geen titel.",
+      "where": "iframe.spelerkader:not([title]) (Het ingesloten venster met de videospeler.)",
+      "state": "Direct na het laden.",
+      "medium": "web",
+      "alsoCriteria": [
+        "2.4.1"
+      ]
+    },
+    {
+      "id": "4.1.2-venster",
+      "criterion": "4.1.2",
+      "page": "/producten.html",
+      "descriptionNl": "Het venster heeft geen rol dialog en geen naam. De focus gaat er niet heen en het kruisje is een div.",
+      "where": "div.venster (Het venster met uitleg dat opent bij een klik op een productkaart.)",
+      "state": "Na een klik op een productkaart.",
+      "medium": "web",
+      "alsoCriteria": [
+        "2.4.3",
+        "2.1.2"
+      ]
+    },
+    {
+      "id": "4.1.3-bedankt",
+      "criterion": "4.1.3",
+      "page": "/veelgestelde-vragen.html",
+      "descriptionNl": "\"Bedankt voor uw reactie.\" verschijnt zonder dat hulpsoftware het meldt.",
+      "where": ".feedback-dank:not([role]) (De tekst die verschijnt na \"Ja\" of \"Nee\".)",
+      "state": "Na een klik op Ja of Nee.",
+      "medium": "web"
+    },
+    {
+      "id": "4.1.3-aantal",
+      "criterion": "4.1.3",
+      "page": "/producten.html",
+      "descriptionNl": "Bij typen in het zoekveld verandert het aantal gevonden producten zonder dat hulpsoftware het meldt.",
+      "where": "p.aantal:not([role]) (De regel met het aantal gevonden producten.)",
+      "state": "Na typen in \"Zoek in de producten\".",
+      "medium": "web"
+    },
+    {
+      "id": "4.1.3-chat",
+      "criterion": "4.1.3",
+      "page": "alle",
+      "descriptionNl": "Nieuwe berichten in de chat worden niet gemeld aan hulpsoftware.",
+      "where": ".chat-berichten:not([role]) (De berichten in het chatvenster.)",
+      "state": "Na het openen van de chat.",
+      "medium": "web"
+    }
+  ]
+}

@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="nl">
+<head><meta charset="utf-8"><title>Terugbellen - Testsite sessie</title><link rel="stylesheet" href="/site.css"></head>
+<body>
+<main><h1>Terugbellen</h1>
+<p>Dit formulier wordt alleen door de server gecontroleerd.</p>
+<form id="callback" method="post" action="/callback" novalidate>
+<label for="phone">Telefoonnummer</label><input id="phone" name="phone" type="tel" autocomplete="tel">
+<label for="when">Wanneer</label><input id="when" name="when">
+<p><button id="call" type="submit">Verstuur</button></p>
+</form>
+<h2>Via een andere server</h2>
+<form id="detour" method="post" action="/submit-redirect"><input type="hidden" name="x" value="1"><label for="note">Notitie</label><input id="note" name="note"><button id="detour-send" type="submit">Verstuur via omweg</button></form>
+<form id="abroad" method="post" action="__OTHER_ORIGIN__/submit"><label for="other">Elders</label><input id="other" name="other"><button id="abroad-send" type="submit">Verstuur naar elders</button></form>
+</main>
+</body>
+</html>

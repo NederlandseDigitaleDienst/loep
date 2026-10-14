@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="nl">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Reageren - Testsite sessie</title><link rel="stylesheet" href="/site.css"></head>
+<body>
+<main><h1>Reageren</h1>
+<h2>Met een bedankje dat verborgen klaarstaat</h2>
+<form id="verborgen">
+<p><label for="verborgen-bericht">Bericht</label> <input id="verborgen-bericht" name="bericht" type="text"></p>
+<p><button type="submit">Bericht versturen</button></p>
+</form>
+<!-- The defect: the region has the role, but stands hidden until sending; VoiceOver with Safari says nothing when it is shown. -->
+<div id="verborgen-bedankt" role="status" hidden>Bedankt, uw bericht is verstuurd.</div>
+<h2>Met een leeg statusgebied</h2>
+<form id="leeg">
+<p><label for="leeg-bericht">Bericht</label> <input id="leeg-bericht" name="bericht" type="text"></p>
+<p><button type="submit">Reactie versturen</button></p>
+</form>
+<!-- The way that works: the region stands empty in the page from the start and is filled on sending. -->
+<div id="leeg-bedankt" role="status"></div>
+</main>
+<script>
+document.querySelector("#verborgen").addEventListener("submit", (event) => {
+  event.preventDefault();
+  document.querySelector("#verborgen-bedankt").hidden = false;
+});
+document.querySelector("#leeg").addEventListener("submit", (event) => {
+  event.preventDefault();
+  document.querySelector("#leeg-bedankt").textContent = "Bedankt, uw reactie is verstuurd.";
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,50 @@
+<h1>Afval en grondstoffen</h1>
+<p>Wij halen restafval, papier en groente- en tuinafval aan huis op. Kies uw wijk om uw ophaaldag te zien.</p>
+
+<!--@bad 3.2.2-wijk--><div class="wijkkeuze">
+  <div>
+    <label for="wijk">Uw wijk</label>
+    <select id="wijk" name="wijk">
+      <option value="">Kies een wijk</option>
+      <option value="centrum">Centrum</option>
+      <option value="noord">Noord</option>
+      <option value="zuid">Zuid</option>
+    </select>
+  </div>
+</div><!--@good--><form class="wijkkeuze" action="/afval.html" method="get">
+  <div>
+    <label for="wijk">Uw wijk</label>
+    <select id="wijk" name="wijk">
+      <option value="">Kies een wijk</option>
+      <option value="centrum">Centrum</option>
+      <option value="noord">Noord</option>
+      <option value="zuid">Zuid</option>
+    </select>
+  </div>
+  <button type="submit">Toon mijn ophaaldag</button>
+</form><!--@end-->
+<p class="ophaaldag"></p>
+
+<h2>Wat hoort waar?</h2>
+<!--@bad 4.1.2-tabs--><div class="tabs">
+  <div class="tab actief" data-paneel="paneel-rest">Restafval</div>
+  <div class="tab" data-paneel="paneel-papier">Papier</div>
+  <div class="tab" data-paneel="paneel-gft">Groente en tuin</div>
+</div>
+<div class="tabpaneel" id="paneel-rest"><!--@good--><div class="tabs" role="tablist" aria-label="Soorten afval">
+  <button type="button" class="tab actief" role="tab" id="tab-rest" aria-selected="true" aria-controls="paneel-rest" data-paneel="paneel-rest">Restafval</button>
+  <button type="button" class="tab" role="tab" id="tab-papier" aria-selected="false" aria-controls="paneel-papier" data-paneel="paneel-papier" tabindex="-1">Papier</button>
+  <button type="button" class="tab" role="tab" id="tab-gft" aria-selected="false" aria-controls="paneel-gft" data-paneel="paneel-gft" tabindex="-1">Groente en tuin</button>
+</div>
+<div class="tabpaneel" id="paneel-rest" role="tabpanel" aria-labelledby="tab-rest" tabindex="0"><!--@end-->
+  <p>In de grijze container hoort alles wat u niet kunt scheiden, zoals luiers, stofzuigerzakken en kattengrit.</p>
+  <p>De grijze container legen wij eens per twee weken.</p>
+</div>
+<div class="tabpaneel" id="paneel-papier"<!--@bad 4.1.2-tabs--><!--@good--> role="tabpanel" aria-labelledby="tab-papier" tabindex="0"<!--@end--> hidden>
+  <p>In de blauwe container horen kranten, folders, dozen en eierdozen. Geen pizzadozen met etensresten.</p>
+  <p>De blauwe container legen wij eens per vier weken. Grote dozen kunt u brengen naar <a href="/openingstijden.html">de milieustraat</a>.</p>
+</div>
+<div class="tabpaneel" id="paneel-gft"<!--@bad 4.1.2-tabs--><!--@good--> role="tabpanel" aria-labelledby="tab-gft" tabindex="0"<!--@end--> hidden>
+  <p>In de groene container horen schillen, etensresten, gras en bladeren.</p>
+  <p>De groene container legen wij elke week.</p>
+</div>

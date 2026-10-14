@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="420" height="180" viewBox="0 0 420 180" font-family="Arial, Helvetica, sans-serif" font-weight="bold">
+<rect width="420" height="180" fill="#ffffff"/>
+<text x="16" y="34" font-size="20" fill="#1f2937">Energielabel van de woning</text>
+<text x="16" y="62" font-size="20" fill="#1f2937">Zuinig tot onzuinig verbruik</text>
+<g font-size="32" fill="#ffffff" text-anchor="middle">
+<rect x="16" y="96" width="60" height="60" fill="#14532d"/><text x="46" y="138">A</text>
+<rect x="96" y="96" width="60" height="60" fill="#2e7d32"/><text x="126" y="138">B</text>
+<rect x="176" y="96" width="60" height="60" fill="#f59e0b"/><text x="206" y="138">C</text>
+<rect x="256" y="96" width="60" height="60" fill="#c2410c"/><text x="286" y="138">D</text>
+<rect x="336" y="96" width="60" height="60" fill="#b91c1c"/><text x="366" y="138">E</text>
+</g>
+</svg>

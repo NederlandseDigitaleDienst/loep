@@ -1,0 +1,86 @@
+version = 1
+
+# Standaard: code en tekst in deze repository vallen onder de EUPL-1.2.
+#
+# De lijst noemt bestandstypes, geen "**". Een beeld, een lettertype of een
+# bestandstype dat hier niet staat krijgt daardoor geen licentie vanzelf:
+# `reuse lint` faalt tot het bestand hieronder een eigen regel heeft. Dat is de
+# bedoeling: van een lettertype of een beeld is de rechthebbende zelden dezelfde
+# als die van de code eromheen, en dat moet iemand opzoeken, niet aannemen.
+[[annotations]]
+path = [
+  "**.css",
+  "**.html",
+  "**.js",
+  "**.json",
+  "**.md",
+  "**.ts",
+  "**.txt",
+  "**.typ",
+  "**.vtt",
+  "**.xml",
+  "**.yaml",
+  "**.yml",
+  "**.toml",
+  "**.py",
+  "**.sh",
+  "**.applescript",
+  "**.gitignore",
+  "**.npmrc",
+  "justfile",
+]
+SPDX-FileCopyrightText = "Staat der Nederlanden (Ministerie van Economische Zaken en Klimaat)"
+SPDX-License-Identifier = "EUPL-1.2"
+
+# De testsite en de testbestanden zijn voor deze toolbox gemaakt: de tekeningen,
+# de korte video's en geluidsfragmenten (zie toolbox/fixtures/README.md) en de
+# testdocumenten.
+[[annotations]]
+path = [
+  "toolbox/fixtures/**.svg",
+  "toolbox/fixtures/**.ogg",
+  "toolbox/fixtures/**.webm",
+  "toolbox/test/fixtures/**.svg",
+  "toolbox/test/fixtures/**.png",
+  "toolbox/test/fixtures/**.pdf",
+  "toolbox/test/fixtures/**.docx",
+  "toolbox/test/fixtures/**.odt",
+  "toolbox/test/fixtures/**.pptx",
+  "toolbox/test/fixtures/**.xlsx",
+]
+SPDX-FileCopyrightText = "Staat der Nederlanden (Ministerie van Economische Zaken en Klimaat)"
+SPDX-License-Identifier = "EUPL-1.2"
+
+# Voorbeeldrapporten die de toolbox zelf heeft gemaakt.
+[[annotations]]
+path = "voorbeelden/**.pdf"
+SPDX-FileCopyrightText = "Staat der Nederlanden (Ministerie van Economische Zaken en Klimaat)"
+SPDX-License-Identifier = "EUPL-1.2"
+
+# De lettertypes Atkinson Hyperlegible Next en Mono voor de pdf van het rapport.
+[[annotations]]
+path = ["templates/fonts/AtkinsonHyperlegibleNext-*.otf", "templates/fonts/OFL-AtkinsonHyperlegibleNext.txt"]
+precedence = "override"
+SPDX-FileCopyrightText = "2020-2024 The Atkinson Hyperlegible Next Project Authors (https://github.com/googlefonts/atkinson-hyperlegible-next)"
+SPDX-License-Identifier = "OFL-1.1"
+
+[[annotations]]
+path = ["templates/fonts/AtkinsonHyperlegibleMono-*.otf", "templates/fonts/OFL-AtkinsonHyperlegibleMono.txt"]
+precedence = "override"
+SPDX-FileCopyrightText = "The Atkinson Hyperlegible Mono Project Authors (https://github.com/googlefonts/atkinson-hyperlegible-next-mono)"
+SPDX-License-Identifier = "OFL-1.1"
+
+# De titels van de succescriteria zijn letterlijk overgenomen uit de
+# geautoriseerde Nederlandse vertaling van WCAG 2.2 van het W3C.
+[[annotations]]
+path = "toolbox/data/wcag22-nl.json"
+precedence = "override"
+SPDX-FileCopyrightText = "World Wide Web Consortium (W3C), voor de titels van de succescriteria; Staat der Nederlanden (Ministerie van Economische Zaken en Klimaat), voor de structuur"
+SPDX-License-Identifier = "LicenseRef-W3C-Document AND EUPL-1.2"
+
+# De mappen onder validatie/ per site bevatten feiten over bestaande, openbare
+# onderzoeken van anderen: welke criteria zijn afgekeurd, welke pagina's zijn
+# onderzocht, het adres en de hash van het rapport. De rapporten zelf staan niet
+# in de repository (zie .gitignore). Rechthebbende en licentie hierboven gelden
+# voor de vastlegging en de vergelijking; wie een bevinding uit zo'n onderzoek
+# wil aanhalen, gaat naar het rapport waar bron.json naar verwijst.

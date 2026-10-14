@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>http://127.0.0.1:4711/</loc></url>
+  <url><loc>http://127.0.0.1:4711/nieuws/</loc></url>
+  <url><loc>http://127.0.0.1:4711/nieuws/nieuwe-fietsenstalling.html</loc></url>
+  <url><loc>http://127.0.0.1:4711/nieuws/zomerfeest.html</loc></url>
+  <url><loc>http://127.0.0.1:4711/nieuws/werkzaamheden-dorpsstraat.html</loc></url>
+  <url><loc>http://127.0.0.1:4711/producten.html</loc></url>
+  <url><loc>http://127.0.0.1:4711/vergunning.html</loc></url>
+  <url><loc>http://127.0.0.1:4711/afval.html</loc></url>
+  <url><loc>http://127.0.0.1:4711/openingstijden.html</loc></url>
+  <url><loc>http://127.0.0.1:4711/raadsvergadering.html</loc></url>
+  <url><loc>http://127.0.0.1:4711/veelgestelde-vragen.html</loc></url>
+  <url><loc>http://127.0.0.1:4711/zoeken.html</loc></url>
+  <url><loc>http://127.0.0.1:4711/contact.html</loc></url>
+  <url><loc>http://127.0.0.1:4711/inloggen.html</loc></url>
+  <url><loc>http://127.0.0.1:4711/sitemap.html</loc></url>
+</urlset>

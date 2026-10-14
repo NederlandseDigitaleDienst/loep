@@ -1,0 +1,14 @@
+<!doctype html>
+<html lang="nl">
+<head><meta charset="utf-8"><title>Controle VoiceOver</title></head>
+<body>
+<h1>Controle VoiceOver</h1>
+<p><button type="button" id="b">Toon bedankje</button></p>
+<div role="status" id="s"></div>
+<script>
+document.getElementById('b').addEventListener('click', function () {
+  document.getElementById('s').textContent = 'Bedankt, uw bericht is verzonden';
+});
+</script>
+</body>
+</html>

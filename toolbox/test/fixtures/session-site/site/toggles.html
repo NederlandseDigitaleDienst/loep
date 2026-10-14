@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="nl">
+<head><meta charset="utf-8"><title>Schakelaars - Testsite sessie</title><link rel="stylesheet" href="/site.css">
+<style>
+#pale { color: #1a1a1a; }
+#pale:hover { color: #c8c8c8; }
+#pale:focus { color: #1a1a1a; }
+#schakelaar { display: inline-block; padding: 6px 12px; border: 2px solid #1a1a1a; }
+</style></head>
+<body>
+<main><h1>Schakelaars</h1>
+<p>Een alinea met gewone tekst, om de tekstafstand aan af te lezen.</p>
+<p><label for="q">Zoekterm</label> <input id="q" type="text"></p>
+<fieldset><legend>Onderwerpen</legend>
+<label id="lab1"><input id="cb1" type="checkbox"> Afval</label>
+<label id="lab2"><input id="cb2" type="checkbox"> Nieuws</label>
+</fieldset>
+<p><span id="schakelaar" role="switch" tabindex="0" aria-checked="false">Meldingen</span></p>
+<p><a id="pale" href="#top">Bleek bij aanwijzen</a></p>
+</main>
+<script>
+// A label that ticks its box on the press, without waiting for the click.
+for (const label of document.querySelectorAll("fieldset label")) {
+  label.addEventListener("pointerdown", (event) => { const box = label.querySelector("input"); box.checked = !box.checked; event.preventDefault(); });
+  label.addEventListener("click", (event) => event.preventDefault());
+}
+// A switch that only a listener on the document hears.
+document.addEventListener("pointerdown", (event) => {
+  const toggle = event.target.closest("[role=switch]");
+  if (toggle) toggle.setAttribute("aria-checked", toggle.getAttribute("aria-checked") === "true" ? "false" : "true");
+});
+</script>
+</body>
+</html>

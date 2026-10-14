@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="nl">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Vensters om te bedienen - Testsite sessie</title><link rel="stylesheet" href="/site.css"></head>
+<body>
+<main id="inhoud"><h1>Vensters om te bedienen</h1>
+<p><button id="outside" type="button">Knop op de pagina</button></p>
+<h2>Eigen speler</h2>
+<iframe id="own" src="/player.html" title="Eigen speler" width="420" height="230"></iframe>
+<h2>Speler van een dienst</h2>
+<iframe id="third" src="__OTHER_ORIGIN__/player.html" title="Speler van een dienst" width="420" height="230" style="border:4px solid #767676;padding:6px"></iframe>
+<h2>Een venster in een venster</h2>
+<iframe id="nest" src="__OTHER_ORIGIN__/nested.html" title="Omhulsel van een dienst" width="460" height="300"></iframe>
+<p id="heard" role="status"></p>
+</main>
+<script>
+window.addEventListener("message", (event) => {
+  if (event.data === "speelt") document.getElementById("heard").textContent = "De pagina hoort dat er iets speelt.";
+});
+</script>
+</body>
+</html>

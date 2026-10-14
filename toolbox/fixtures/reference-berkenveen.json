@@ -1,0 +1,10 @@
+{
+  "kind": "answer-key",
+  "wcagVersion": "2.2",
+  "sampleNote": "De testsite Berkenveen heeft 17 paginatypen. De sleutel noemt per gebrek de pagina's waarop het zit.",
+  "outcomeNote": "In deze tweeling zijn dezelfde plekken goed gedaan. Geen enkel criterium hoort te worden afgekeurd.",
+  "failed": [],
+  "failedOnlyInDocuments": [],
+  "problemCount": 0,
+  "findings": []
+}

@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="nl">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Kopiëren - Testsite sessie</title><link rel="stylesheet" href="/site.css"></head>
+<body>
+<main><h1>Kopiëren</h1>
+<p>Knoppen die een regel code naar het klembord kopiëren en zeggen hoe dat ging. Eén knop zegt het alleen: die roept het klembord niet aan. Een andere leest het klembord terug.</p>
+<pre><code id="code">npm install voorbeeld</code></pre>
+<p><button id="copy" type="button">Kopieer de code</button> <button id="copy-old" type="button">Kopieer op de oude manier</button> <button id="copy-items" type="button">Kopieer als opgemaakte tekst</button> <button id="copy-fake" type="button" title="Kopieer het adres">Adres</button> <button id="read" type="button">Lees het klembord</button></p>
+<p id="copy-status" role="status"></p>
+</main>
+<script>
+const say = (text) => (document.getElementById("copy-status").textContent = text);
+const code = () => document.getElementById("code").textContent;
+document.getElementById("copy").addEventListener("click", () => {
+  if (!navigator.clipboard) return say("Kopiëren mislukt");
+  navigator.clipboard.writeText(code()).then(() => say("Gekopieerd"), () => say("Kopiëren mislukt"));
+});
+// The way from before the clipboard object: select the text in a field and run the copy command.
+document.getElementById("copy-old").addEventListener("click", () => {
+  const holder = document.createElement("textarea");
+  holder.value = code();
+  document.body.append(holder);
+  holder.select();
+  const copied = document.execCommand("copy");
+  holder.remove();
+  say(copied ? "Gekopieerd op de oude manier" : "Kopiëren mislukt");
+});
+document.getElementById("copy-items").addEventListener("click", () => {
+  if (!navigator.clipboard || !window.ClipboardItem) return say("Kopiëren mislukt");
+  const item = new ClipboardItem({ "text/plain": new Blob([code()], { type: "text/plain" }), "text/html": new Blob([`<code>${code()}</code>`], { type: "text/html" }) });
+  navigator.clipboard.write([item]).then(() => say("Gekopieerd met opmaak"), () => say("Kopiëren mislukt"));
+});
+// The defect: the message says it was copied, and nothing was written.
+document.getElementById("copy-fake").addEventListener("click", () => say("Adres gekopieerd"));
+document.getElementById("read").addEventListener("click", () => {
+  if (!navigator.clipboard) return say("Het klembord lezen is mislukt");
+  navigator.clipboard.readText().then((text) => say(`Op het klembord: ${text}`), () => say("Het klembord lezen is mislukt"));
+});
+</script>
+</body>
+</html>

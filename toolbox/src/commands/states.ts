@@ -1,0 +1,777 @@
+import { join } from "node:path";
+import type { Browser, BrowserContext, Page } from "playwright";
+import { call } from "../browser/call.ts";
+import { confirmLogin, INPAGE_PATH, launchBrowser, loadPage, loadSampled, newContext, settlePage, type WriteGuard } from "../browser/session.ts";
+import { isLogout, runLoginMark, throwIfLoginExpired } from "../lib/login.ts";
+import { canonicalJson, sha256, slugForUrl, writeJson } from "../lib/canonical.ts";
+import { measuredPages, pageKey, readStamp, STATES_STAMP } from "../lib/sweepstamp.ts";
+import { stepStart, writeManifest } from "../lib/manifest.ts";
+import { loadRun, type FormErrorState, type PageData, type States } from "../lib/rundata.ts";
+import type { Described } from "../instruments/activate.ts";
+import { DESKTOP, probeTrigger } from "../instruments/dialog.ts";
+import { probeForms } from "../instruments/forms.ts";
+import { probeHoverTarget } from "../instruments/hover.ts";
+import { browserListeners, firstKeyReaction, KEYS, leaveTextEntry, probeArrowFocus } from "../instruments/keys.ts";
+import { progressLine, sayingItRuns, STILL_RUNNING_MS, withinTime as limited } from "../instruments/limit.ts";
+import { DELEGATING, DOWN_EVENTS, downEventTargets, downKind, probeDownEvent } from "../instruments/pointer.ts";
+import { probeSettings } from "../instruments/settings.ts";
+import { holds } from "../session/recipe.ts";
+import { ModelSweep, type StateOpener } from "./modelsweep.ts";
+
+/** One guard for the whole command: nothing a probe submits may reach a server. */
+const guard: WriteGuard = { active: false, blocked: 0 };
+const socketMessagesBlocked = (): number => guard.blocked;
+/**
+ * The most controls the hover probe points at in the pages of the sample. It counts kinds of control, not controls:
+ * of each kind a few are pointed at, so the number that is reached follows the design of a site and not its size.
+ * Far above what a site has; when it is reached all the same, the output names the kinds that were left out.
+ */
+const MAX_HOVER_TARGETS = 400;
+/** How many controls of one kind are pointed at. The second one shows whether the first was an exception. */
+const HOVER_EXAMPLES_PER_KIND = 2;
+const MOBILE = { width: 360, height: 740 };
+/**
+ * How many kinds of control the press probe tries on the pages; the output names what was left out. A link counts as a
+ * kind per name, so a site of thirty pages reaches three hundred. The states of the model are not held to it: they are
+ * few, they come last, and a form that only exists in a state has the controls where a press matters most.
+ */
+const MAX_DOWN_TARGETS = 600;
+/** A probe in a state of the model opens the state again when what it did closed it, at most this often. */
+const MAX_REOPENINGS = 12;
+/** A state with many controls takes longer than one step on a page. */
+const STATE_PROBE_TIMEOUT_MS = 600_000;
+/** What is found in the narrow window is counted apart from the same control in the default window: it can look and behave differently there. */
+const NARROW_KEY = "smal|";
+const DEFAULT_WIDTH = 1280;
+/** A state that was recorded in a window narrower than this is a state of the narrow layout. */
+const NARROW_BELOW = 768;
+const MAX_KEY_REACTIONS_IN_STATE = 8;
+const EXAMPLES_NOT_EXAMINED = 25;
+
+const STEP_TIMEOUT_MS = 180_000;
+const skippedSteps: { page: string; step: string }[] = [];
+/** Each kind of setting is changed once in a run. */
+const seenSettings = new Set<string>();
+/** Set when the run has a site model: closes what covers a page before a probe acts on it. */
+let sweep: ModelSweep | null = null;
+
+/**
+ * Run one probe step with a time limit. A page that never settles must not stall the
+ * whole run; the step is recorded as not examined instead.
+ */
+async function withinTime<T>(page: string, step: string, fallback: T, work: () => Promise<T>, limitMs = STEP_TIMEOUT_MS): Promise<T> {
+  const outcome = await sayingItRuns(`states ${page} ${step}`, () => limited(limitMs, work));
+  if (outcome.ok) return outcome.value;
+  // A session that ran out is no step that was skipped: the command stops.
+  throwIfLoginExpired();
+  skippedSteps.push({ page, step: `${step}: ${outcome.reason}` });
+  process.stderr.write(`states ${page} ${step} overgeslagen: ${outcome.reason}\n`);
+  return fallback;
+}
+
+/** Say which probe starts on which page or state, and how far along it is. */
+const say = (probe: string, index: number, total: number, what: string): void => void process.stderr.write(progressLine("states", probe, index, total, what));
+/** One page or state of a probe: a line when it starts, and a line every half minute while it is busy. */
+const step = <T>(probe: string, index: number, total: number, what: string, work: () => Promise<T>): Promise<T> => {
+  say(probe, index, total, what);
+  return sayingItRuns(`states ${probe} ${index + 1}/${total} ${what}`, work);
+};
+
+/** Where the probes reached each embedded window of the sample: on the page it stands on, or on its own and why. */
+const windows = new Map<string, NonNullable<States["embedded"]>[number]>();
+
+/**
+ * Load a page of the sample normally, then silence its sockets: from here on only probes act on it.
+ * An embedded window is opened the way the sweep measures it: on the page it stands on, with the
+ * frame handed to the probe as a page. When it is not there it is opened on its own, and that is kept.
+ */
+async function freshPage(context: BrowserContext, data: PageData): Promise<Page> {
+  guard.active = false;
+  const { page, placement } = await loadSampled(await context.newPage(), data.item, async (tab) => void (await sweep?.dismiss(context, tab, "states")));
+  if (placement) {
+    const known = windows.get(data.label) ?? { page: data.label, url: data.item.url, inPlaceOn: placement.inPlaceOn, apartNl: placement.apartNl, failedNl: [] };
+    // Once on its own is what the reader has to know, also when other probes found the window in place.
+    if (placement.apartNl) Object.assign(known, { inPlaceOn: null, apartNl: placement.apartNl });
+    windows.set(data.label, known);
+  }
+  guard.active = true;
+  return page;
+}
+
+/** Bring a page that a probe navigated away from back to the page under test, as a fresh page is. */
+const restore = (context: BrowserContext, data: PageData) => async (page: Page): Promise<void> => {
+  guard.active = false;
+  const frame = page.mainFrame();
+  if (frame.parentFrame()) {
+    // An embedded window that went elsewhere goes back to its own address; the page around it stays as it is.
+    await frame.goto(data.item.url, { waitUntil: "load" });
+    await settlePage(page);
+  } else {
+    await loadPage(page, data.item.url);
+    await sweep?.dismiss(context, page, "states");
+  }
+  guard.active = true;
+};
+
+/**
+ * One probe on one page. Inside an embedded window a probe that fails is written down as not
+ * done there and the rest goes on; on a page of the site a failure stops the command, as it did.
+ */
+async function inWindow<T>(data: PageData, probeNl: string, fallback: T, work: () => Promise<T>): Promise<T> {
+  if (!data.item.embeddedOn?.length) return work();
+  try {
+    return await work();
+  } catch (error) {
+    throwIfLoginExpired();
+    const reason = ((error as Error).message ?? String(error)).split("\n")[0]!;
+    const known = windows.get(data.label) ?? { page: data.label, url: data.item.url, inPlaceOn: null, apartNl: null, failedNl: [] };
+    known.failedNl.push(`${probeNl}: ${reason}`);
+    windows.set(data.label, known);
+    skippedSteps.push({ page: data.label, step: `${probeNl} in het ingesloten venster: ${reason}` });
+    process.stderr.write(`states ${data.label} ${probeNl} in het ingesloten venster overgeslagen: ${reason}\n`);
+    return fallback;
+  }
+}
+
+async function triggerOnFreshPage(context: BrowserContext, data: PageData, trigger: Described, runDir: string, viewport: string): ReturnType<typeof probeTrigger> {
+  const page = await freshPage(context, data);
+  try {
+    return await probeTrigger(page, trigger, { label: data.label, url: data.item.url, outDir: runDir, viewport, socketMessagesBlocked, seenSettings });
+  } finally {
+    await page.close();
+  }
+}
+
+async function probeSingleKeys(context: BrowserContext, pages: PageData[]): Promise<States["singleKeys"]> {
+  const reactions: States["singleKeys"]["reactions"] = [];
+  for (const [index, data] of pages.entries()) {
+    await step("toetsen", index, pages.length, data.label, () => inWindow(data, "losse toetsen", undefined, async () => {
+      let page = await freshPage(context, data);
+      let rest = KEYS;
+      for (;;) {
+        const reaction = await firstKeyReaction(page, rest);
+        if (!reaction) break;
+        reactions.push({ page: data.label, key: reaction.key, change: reaction.change, details: reaction.details });
+        rest = rest.slice(reaction.index + 1);
+        await page.close();
+        page = await freshPage(context, data);
+      }
+      await page.close();
+    }));
+  }
+  return { pagesExamined: pages.length, keysPressed: KEYS, reactions };
+}
+
+type StateKeys = NonNullable<States["singleKeys"]["states"]>[number];
+
+/** The single keys in one state of the model. After a reaction the state is opened again and the rest of the keys follow. */
+async function keysInState(opener: StateOpener & { open: NonNullable<StateOpener["open"]> }): Promise<StateKeys> {
+  const row: StateKeys = { state: opener.base.id, examined: false, reasonNl: null, focusAfterOpening: null, focusTakenOutOfTextField: false, keysPressed: 0, reactions: [] };
+  let rest = KEYS;
+  for (let round = 0; round <= MAX_KEY_REACTIONS_IN_STATE; round++) {
+    const opened = await opener.open();
+    try {
+      if (!opened.reached || !opened.surface) return { ...row, reasonNl: opened.reasonNl ?? "de toestand is niet bereikt" };
+      const { page } = opened.surface;
+      const focus = await leaveTextEntry(page);
+      row.focusAfterOpening = focus.focusWas;
+      row.focusTakenOutOfTextField = focus.moved;
+      if (focus.moved && opened.post && !(await holds(page, opened.post)).holds) return { ...row, reasonNl: "na het openen stond de focus in een invoerveld, waar een letter invoer is; toen de focus eruit werd gehaald, sloot het onderdeel" };
+      const reaction = await firstKeyReaction(page, rest);
+      row.examined = true;
+      if (!reaction) return { ...row, keysPressed: KEYS.length };
+      row.reactions.push({ key: reaction.key, change: reaction.change });
+      rest = rest.slice(reaction.index + 1);
+      row.keysPressed = KEYS.length - rest.length;
+    } finally {
+      await opened.surface?.context.close().catch(() => undefined);
+    }
+  }
+  return rest.length > 0 ? { ...row, reasonNl: `gestopt na ${row.reactions.length} reacties`, keysNotPressed: rest } : row;
+}
+
+/** The single keys in every state of the model: a shortcut that only works while a dialog or panel is open is found there. */
+export async function probeSingleKeysInStates(model: ModelSweep, kept: (opener: StateOpener) => StateKeys | null = () => null): Promise<StateKeys[]> {
+  const rows: StateKeys[] = [];
+  // A blocker is the same at every size and scheme; its first variant stands for it.
+  const openers = model.openers().filter((entry) => entry.primary);
+  for (const [index, opener] of openers.entries()) {
+    const known = kept(opener);
+    if (known) {
+      rows.push(known);
+      continue;
+    }
+    const notExamined = (reasonNl: string): StateKeys => ({ state: opener.base.id, examined: false, reasonNl, focusAfterOpening: null, focusTakenOutOfTextField: false, keysPressed: 0, reactions: [] });
+    const open = opener.open;
+    if (!open) rows.push(notExamined(`de verkenner kon het niet openen: ${opener.notOpenedNl ?? ""}`));
+    else {
+      say("toetsen in toestand", index, openers.length, opener.base.id);
+      rows.push(await withinTime(opener.base.id, "toetsen in toestand", notExamined(`geen antwoord binnen ${STEP_TIMEOUT_MS / 1000} seconden`), () => keysInState({ ...opener, open })));
+    }
+  }
+  return rows;
+}
+
+type HoverTarget = Described & { kind?: string; iconOnly?: boolean; showsMore?: string[]; title?: string | null; describedBy?: string | null; nonControl?: boolean };
+type HoverCoverage = NonNullable<States["hoverCoverage"]>;
+type DownCoverage = NonNullable<States["downEventCoverage"]>;
+type HoverInState = NonNullable<HoverCoverage["states"]>[number];
+type DownInState = NonNullable<DownCoverage["states"]>[number];
+
+const controlNl = (target: Described): string => `${target.tag} "${target.text.slice(0, 40)}" [${target.region ?? "-"}]`;
+
+/** Where a probe looks: a page of the sample in the default window or in the narrow one, or a state of the model. */
+interface Place {
+  /** Label of the page, or the name of the state. */
+  label: string;
+  narrow: boolean;
+  state?: string;
+  /** Start of the file name of a screenshot made here. */
+  shot: string;
+}
+
+/** The page a probe works on: the same one as long as it is as it was, a fresh one after `fresh`. Null when there is none any more. */
+type PageSource = (fresh?: boolean) => Promise<Page | null>;
+
+/**
+ * Point at controls and give them focus, a few of each kind. Controls that are the same
+ * element in the same place with the same classes, attributes and colours are one kind; a
+ * control with only a pictogram or with a title or description is always pointed at itself.
+ * What was seen in an earlier place is not pointed at again in a later one.
+ */
+export class HoverRun {
+  readonly hover: States["hover"] = [];
+  readonly contrast: NonNullable<States["hoverContrast"]> = [];
+  readonly iconOnly: NonNullable<HoverCoverage["iconOnly"]> = [];
+  private readonly kinds = new Map<string, { controls: Set<string>; examined: number; example: { page: string; control: string } }>();
+  examined = 0;
+  /** How many of the examined ones are no control. */
+  nonControls = 0;
+  private readonly runDir: string;
+
+  constructor(runDir: string) {
+    this.runDir = runDir;
+  }
+
+  /** Go over the controls of one place. Returns how many controls and kinds were new here and how many were pointed at. */
+  async on(place: Place, source: PageSource, progress: (done: number, of: number) => void = () => undefined): Promise<{ controls: number; kinds: number; pointedAt: number; complete: boolean }> {
+    const first = await source();
+    if (!first) return { controls: 0, kinds: 0, pointedAt: 0, complete: false };
+    // The controls, and after them what is no control but announces more for whoever points at it: an abbreviation, an icon with a description.
+    const targets = [...(await call<HoverTarget[]>(first, "hoverTargets")), ...(await call<HoverTarget[]>(first, "hoverHints").catch(() => []))];
+    const prefix = place.narrow ? NARROW_KEY : "";
+    const found = { controls: 0, kinds: 0, pointedAt: 0, complete: true };
+    for (const [index, target] of targets.entries()) {
+      const control = `${prefix}${target.nonControl ? "geen bediening|" : ""}${target.tag}|${target.text.slice(0, 40)}|${target.region}`;
+      const key = `${prefix}${target.kind ?? control}`;
+      const named = { page: place.label, control: controlNl(target) };
+      let kind = this.kinds.get(key);
+      if (!kind) {
+        kind = { controls: new Set(), examined: 0, example: named };
+        this.kinds.set(key, kind);
+        found.kinds++;
+      }
+      if (kind.controls.has(control)) continue;
+      kind.controls.add(control);
+      found.controls++;
+      if (kind.examined >= HOVER_EXAMPLES_PER_KIND || this.examined >= MAX_HOVER_TARGETS) continue;
+      const page = await source();
+      if (!page) {
+        found.complete = false;
+        break;
+      }
+      kind.examined++;
+      this.examined++;
+      found.pointedAt++;
+      progress(index, targets.length);
+      const number = this.examined;
+      const measured: NonNullable<States["hoverContrast"]> = [];
+      const rows = await probeHoverTarget(page, target, { label: place.label, outDir: this.runDir, contrast: measured, screenshot: (trigger) => join("states", `${place.shot}-${trigger}-${number}.png`) });
+      const where = { ...(place.state ? { state: place.state } : {}), ...(place.narrow ? { viewport: "smal" as const } : {}) };
+      for (const row of rows) this.hover.push({ ...row, ...where });
+      for (const row of measured) this.contrast.push({ ...row, ...where });
+      // A button with only a pictogram, or a control with a title or description: say what pointing at it showed, also when that is nothing.
+      if (target.nonControl) this.nonControls++;
+      if (target.iconOnly || target.nonControl || (target.showsMore ?? []).length > 0) this.iconOnly.push({ ...named, ...where, ...(target.nonControl ? { nonControl: true } : {}), iconOnly: target.iconOnly === true, title: target.title ?? null, describedBy: target.describedBy ?? null, contentAppeared: rows.map((row) => row.trigger) });
+    }
+    return found;
+  }
+
+  coverage(): Pick<HoverCoverage, "limit" | "perKind" | "found" | "kinds" | "examined" | "notExamined" | "sameKindNotExamined" | "notExaminedExamples" | "nonControlsExamined"> {
+    const all = [...this.kinds.values()];
+    const left = all.filter((kind) => kind.examined === 0);
+    return {
+      limit: MAX_HOVER_TARGETS,
+      perKind: HOVER_EXAMPLES_PER_KIND,
+      found: all.reduce((sum, kind) => sum + kind.controls.size, 0),
+      kinds: all.length,
+      examined: this.examined,
+      notExamined: left.length,
+      sameKindNotExamined: all.filter((kind) => kind.examined > 0).reduce((sum, kind) => sum + kind.controls.size - kind.examined, 0),
+      notExaminedExamples: left.map((kind) => kind.example).slice(0, EXAMPLES_NOT_EXAMINED),
+      nonControlsExamined: this.nonControls,
+    };
+  }
+}
+
+/**
+ * Press and release elsewhere, once for every kind of control a down-event can reach a
+ * listener through. A page is used for the next control as long as the press changed nothing;
+ * after a press that did something the next one gets a fresh page.
+ */
+export class DownRun {
+  readonly results: NonNullable<States["downEvents"]> = [];
+  readonly seen = new Set<string>();
+  readonly left = new Map<string, { page: string; control: string }>();
+  readonly gone: { page: string; control: string }[] = [];
+
+  readonly limit: number;
+
+  constructor(limit = MAX_DOWN_TARGETS) {
+    this.limit = limit;
+  }
+
+  async on(place: Place, source: PageSource, listening: Set<string>, delegated: boolean, progress: (done: number, of: number) => void = () => undefined): Promise<{ kindsFound: number; pressed: number; complete: boolean }> {
+    const first = await source();
+    if (!first) return { kindsFound: 0, pressed: 0, complete: false };
+    const targets = await downEventTargets(first, listening, delegated);
+    const prefix = place.narrow ? NARROW_KEY : "";
+    const found = { kindsFound: 0, pressed: 0, complete: true };
+    let fresh = false;
+    for (const [index, target] of targets.entries()) {
+      const key = `${prefix}${downKind(target)}`;
+      const named = { page: place.label, control: controlNl(target) };
+      if (this.seen.has(key) || this.left.has(key)) continue;
+      found.kindsFound++;
+      if (!place.state && this.seen.size >= this.limit) {
+        this.left.set(key, named);
+        continue;
+      }
+      this.seen.add(key);
+      const page = await source(fresh);
+      if (!page) {
+        found.complete = false;
+        break;
+      }
+      progress(index, targets.length);
+      const before = page.url();
+      const result = await probeDownEvent(page, target, { label: place.label, listening: new Set([...listening, ...(delegated ? ["document of window"] : [])]) });
+      if (result) {
+        this.results.push({ ...result, ...(place.state ? { state: place.state } : {}), ...(place.narrow ? { viewport: "smal" as const } : {}) });
+        found.pressed++;
+      } else this.gone.push(named);
+      // Only a page on which the press did nothing is the page the next control is pressed on.
+      fresh = !result || result.changeOnDown !== null || result.changeAfterReleaseElsewhere !== null || page.url() !== before;
+    }
+    return found;
+  }
+}
+
+/** A page of the sample for a probe that goes over many controls: loaded once, and again when the probe asks for a fresh one. */
+function pageSource(context: BrowserContext, data: PageData): { source: PageSource; close: () => Promise<void> } {
+  let page: Page | null = null;
+  const close = async (): Promise<void> => {
+    await page?.close().catch(() => undefined);
+    page = null;
+  };
+  return {
+    close,
+    source: async (fresh = false) => {
+      if (page && !fresh) {
+        await page.mouse.move(0, 0).catch(() => undefined);
+        return page;
+      }
+      await close();
+      page = await freshPage(context, data);
+      return page;
+    },
+  };
+}
+
+type OpenableState = StateOpener & { open: NonNullable<StateOpener["open"]> };
+
+/**
+ * A state of the model for a probe that goes over the controls in it. The state is opened by its
+ * recipe; when a step of the probe closed it (Escape after a tooltip, a press that acted), it is
+ * opened again from a clean page and the probe goes on with the next control.
+ */
+export async function inState<T extends { complete: boolean }>(opener: OpenableState, work: (source: PageSource, narrow: boolean) => Promise<T>): Promise<{ examined: boolean; reasonNl: string | null; viewport: string | null; found: T | null }> {
+  const now: { opened: Awaited<ReturnType<OpenableState["open"]>> | null; openings: number; reasonNl: string | null; viewport: string | null } = { opened: null, openings: 0, reasonNl: null, viewport: null };
+  const close = async (): Promise<void> => {
+    await now.opened?.surface?.context.close().catch(() => undefined);
+    now.opened = null;
+  };
+  const source: PageSource = async (fresh = false) => {
+    const current = now.opened;
+    if (current?.surface && !fresh && (!current.post || (await holds(current.surface.page, current.post)).holds)) {
+      await current.surface.page.mouse.move(0, 0).catch(() => undefined);
+      return current.surface.page;
+    }
+    await close();
+    if (now.openings >= MAX_REOPENINGS) {
+      now.reasonNl = `gestopt nadat de toestand ${MAX_REOPENINGS} keer was geopend`;
+      return null;
+    }
+    now.openings++;
+    const next = await opener.open();
+    if (!next.reached || !next.surface) {
+      now.reasonNl = next.reasonNl ?? "de toestand is niet bereikt";
+      await next.surface?.context.close().catch(() => undefined);
+      return null;
+    }
+    now.opened = next;
+    const size = next.surface.page.viewportSize();
+    now.viewport = size ? `${size.width}x${size.height}` : null;
+    return next.surface.page;
+  };
+  try {
+    const first = await source();
+    if (!first) return { examined: false, reasonNl: now.reasonNl, viewport: now.viewport, found: null };
+    const narrow = (first.viewportSize()?.width ?? DEFAULT_WIDTH) < NARROW_BELOW;
+    const found = await work(source, narrow);
+    return { examined: found.complete, reasonNl: found.complete ? null : now.reasonNl, viewport: now.viewport, found };
+  } finally {
+    await close();
+  }
+}
+
+/** Whether the document or the window of a page as it is now listens for a press, apart from what the browser itself registers. */
+async function documentListens(page: Page, ownOfBrowser: Record<string, Record<string, number>>): Promise<boolean> {
+  const counts = await call<Record<string, Record<string, number>>>(page, "listenerCounts").catch(() => ({}) as Record<string, Record<string, number>>);
+  return DOWN_EVENTS.some((event) => DELEGATING.some((target) => (counts[event]?.[target] ?? 0) > (ownOfBrowser[event]?.[target] ?? 0)));
+}
+
+/** The pointer probes in one state of the model: what is in the state and was not on a page is pointed at and pressed. */
+export async function pointerInState(opener: OpenableState, hovering: HoverRun, pressing: DownRun, ownOfBrowser: Record<string, Record<string, number>>): Promise<{ hover: HoverInState; down: DownInState }> {
+  const id = opener.base.id;
+  const pointed = await inState(opener, (source, narrow) => hovering.on({ label: id, narrow, state: id, shot: `state-${id}` }, source));
+  const pressed = await inState(opener, async (source, narrow) => {
+    const page = await source();
+    return pressing.on({ label: id, narrow, state: id, shot: `state-${id}` }, source, new Set(), page ? await documentListens(page, ownOfBrowser) : false);
+  });
+  return {
+    hover: { state: id, viewport: pointed.viewport, examined: pointed.examined, reasonNl: pointed.reasonNl, controls: pointed.found?.controls ?? 0, kinds: pointed.found?.kinds ?? 0, pointedAt: pointed.found?.pointedAt ?? 0 },
+    down: { state: id, viewport: pressed.viewport, examined: pressed.examined, reasonNl: pressed.reasonNl, kindsFound: pressed.found?.kindsFound ?? 0, pressed: pressed.found?.pressed ?? 0 },
+  };
+}
+
+/** One page of each page type, for the probes that are repeated in the narrow window. */
+function onePagePerType(model: ModelSweep, pages: PageData[]): PageData[] {
+  const chosen: PageData[] = [];
+  for (const type of model.model.pageTypes) {
+    const page = pages.find((entry) => entry.item.url === type.representative) ?? pages.find((entry) => type.pages.includes(entry.item.url));
+    if (page && !chosen.includes(page)) chosen.push(page);
+  }
+  return chosen;
+}
+
+/** The hover probe on every page of the sample in the default window, and on one page of each page type in the narrow one. */
+async function probeHover(context: BrowserContext, narrowContext: BrowserContext, pages: PageData[], narrowPages: PageData[], run: HoverRun): Promise<string[]> {
+  const narrowDone: string[] = [];
+  for (const [narrow, list, browserContext] of [[false, pages, context], [true, narrowPages, narrowContext]] as const) {
+    for (const [index, data] of list.entries()) {
+      const probe = narrow ? "aanwijzen smal" : "aanwijzen";
+      say(probe, index, list.length, data.label);
+      const quiet = { since: Date.now() };
+      const { source, close } = pageSource(browserContext, data);
+      await inWindow(data, narrow ? "aanwijzen op een smal scherm" : "aanwijzen", undefined, async () => {
+        try {
+          await run.on({ label: data.label, narrow, shot: `${slugForUrl(data.item.url)}${narrow ? "-smal" : ""}` }, source, (done, of) => {
+            // A page with many elements to point at takes minutes: say how far it is.
+            if (Date.now() - quiet.since <= STILL_RUNNING_MS) return;
+            quiet.since = Date.now();
+            process.stderr.write(`states ${probe} ${index + 1}/${list.length} ${data.label} loopt nog (element ${done + 1} van ${of})\n`);
+          });
+          if (narrow) narrowDone.push(data.label);
+        } finally {
+          await close();
+        }
+      });
+    }
+  }
+  return narrowDone;
+}
+
+/**
+ * The press probe on every page of the sample that listens for a press, and on one page of each
+ * page type in the narrow window. `ownOfBrowser` is what the test browser itself registers on an
+ * empty page: a listener on the document that is the browser's own makes no control a candidate.
+ */
+async function probeDownEvents(context: BrowserContext, narrowContext: BrowserContext, pages: PageData[], narrowPages: PageData[], ownOfBrowser: Record<string, Record<string, number>>, run: DownRun): Promise<Pick<DownCoverage, "pagesWithOwnListener" | "pagesWithOnlyDelegatedListener" | "pagesWithoutListener" | "narrowPages">> {
+  const pagesWith = { own: [] as string[], delegated: [] as string[], none: 0 };
+  const narrowDone: string[] = [];
+  for (const [narrow, list, browserContext] of [[false, pages, context], [true, narrowPages, narrowContext]] as const) {
+    for (const [index, data] of list.entries()) {
+      const ofSite = DOWN_EVENTS.flatMap((event) => Object.entries(data.facts.listeners[event] ?? {}).filter(([target, count]) => count > (ownOfBrowser[event]?.[target] ?? 0)).map(([target]) => target));
+      const listening = new Set(ofSite.filter((target) => !DELEGATING.includes(target)));
+      const delegated = ofSite.some((target) => DELEGATING.includes(target));
+      if (listening.size === 0 && !delegated) {
+        if (narrow) narrowDone.push(data.label);
+        else pagesWith.none++;
+        continue;
+      }
+      if (!narrow) (listening.size > 0 ? pagesWith.own : pagesWith.delegated).push(data.label);
+      const probe = narrow ? "indrukken smal" : "indrukken";
+      say(probe, index, list.length, data.label);
+      const quiet = { since: Date.now() };
+      const { source, close } = pageSource(browserContext, data);
+      await inWindow(data, narrow ? "indrukken en elders loslaten op een smal scherm" : "indrukken en elders loslaten", undefined, async () => {
+        try {
+          await run.on({ label: data.label, narrow, shot: slugForUrl(data.item.url) }, source, listening, delegated, (done, of) => {
+            if (Date.now() - quiet.since <= STILL_RUNNING_MS) return;
+            quiet.since = Date.now();
+            process.stderr.write(`states ${probe} ${index + 1}/${list.length} ${data.label} loopt nog (element ${done + 1} van ${of})\n`);
+          });
+          if (narrow) narrowDone.push(data.label);
+        } finally {
+          await close();
+        }
+      });
+    }
+  }
+  return { pagesWithOwnListener: pagesWith.own, pagesWithOnlyDelegatedListener: pagesWith.delegated, pagesWithoutListener: pagesWith.none, narrowPages: narrowDone };
+}
+
+/**
+ * The pointer probes in every state of the model, each state once: a blocker in its first variant.
+ * A state for which `kept` says yes is left alone: an earlier sweep probed it with the same recipe.
+ */
+export async function probePointerInStates(model: ModelSweep, hovering: HoverRun, pressing: DownRun, ownOfBrowser: Record<string, Record<string, number>>, kept: (opener: StateOpener) => boolean = () => false): Promise<{ hover: HoverInState[]; down: DownInState[] }> {
+  const rows = { hover: [] as HoverInState[], down: [] as DownInState[] };
+  const openers = model.openers().filter((entry) => entry.primary);
+  for (const [index, opener] of openers.entries()) {
+    if (kept(opener)) continue;
+    const id = opener.base.id;
+    const notExamined = (reasonNl: string): { hover: HoverInState; down: DownInState } => ({ hover: { state: id, viewport: null, examined: false, reasonNl, controls: 0, kinds: 0, pointedAt: 0 }, down: { state: id, viewport: null, examined: false, reasonNl, kindsFound: 0, pressed: 0 } });
+    const open = opener.open;
+    let row: { hover: HoverInState; down: DownInState };
+    if (!open) row = notExamined(`de verkenner kon het niet openen: ${opener.notOpenedNl ?? ""}`);
+    else {
+      say("aanwijzen en indrukken in toestand", index, openers.length, id);
+      row = await withinTime(id, "aanwijzen en indrukken in toestand", notExamined(`geen antwoord binnen ${STATE_PROBE_TIMEOUT_MS / 1000} seconden`), () => pointerInState({ ...opener, open }, hovering, pressing, ownOfBrowser), STATE_PROBE_TIMEOUT_MS);
+    }
+    rows.hover.push(row.hover);
+    rows.down.push(row.down);
+  }
+  return rows;
+}
+
+/** Repeat every arrow-key walk from the keyboard probe and watch whether focus alone changes the context. */
+async function arrowFocus(context: BrowserContext, pages: PageData[]): Promise<NonNullable<States["arrowFocus"]>> {
+  const results: NonNullable<States["arrowFocus"]> = [];
+  for (const [index, data] of pages.entries()) {
+    if ((data.tabwalk.arrowReach ?? []).length > 0) say("pijltoetsen", index, pages.length, data.label);
+    for (const walk of data.tabwalk.arrowReach ?? []) {
+      await inWindow(data, "pijltoetsen", undefined, async () => {
+        const page = await freshPage(context, data);
+        try {
+          const result = await probeArrowFocus(page, walk, data.label);
+          if (result) results.push(result);
+        } finally {
+          await page.close();
+        }
+      });
+    }
+  }
+  return results;
+}
+
+async function listenersOnEmptyPage(context: BrowserContext): Promise<Record<string, Record<string, number>>> {
+  guard.active = false;
+  const page = await context.newPage();
+  try {
+    return await browserListeners(page);
+  } finally {
+    await page.close();
+  }
+}
+
+interface StatesStamp {
+  /** Hash over every page of the sample as `collect` measured it: the probe goes over all pages and keeps what it saw first, so one changed page makes the whole of it stale. */
+  pages: string | null;
+  /** Per state of the model the key its keys were pressed against. */
+  states: Record<string, string>;
+}
+
+/**
+ * Everything that only shows after interaction: dialogs, form errors, key shortcuts and hover content.
+ * When no page changed since the last time and the blockers are the same, what was found on
+ * the pages is kept and only the keys in the states whose recipe changed are pressed again;
+ * with `fresh` everything is done again.
+ */
+export async function states(runDir: string, options: { fresh?: boolean } = {}): Promise<States> {
+  const startedAt = stepStart();
+  const run = await loadRun(runDir);
+  const browser: Browser = await launchBrowser();
+  sweep = await confirmLogin(browser)
+    .then(() => ModelSweep.load(runDir, browser, guard))
+    .catch(async (error: Error) => {
+      await browser.close();
+      throw error;
+    });
+  // In a run with a login a control that logs out is never activated: one click ends the session for every probe after it.
+  const loggedIn = runLoginMark() !== null;
+  const logsOut = (page: string, trigger: Described): boolean => {
+    if (!loggedIn || !isLogout({ text: trigger.text || String(trigger.ariaLabel ?? "") })) return false;
+    skippedSteps.push({ page, step: `knop "${trigger.text.slice(0, 30)}": logt uit, niet bediend` });
+    return true;
+  };
+  const measured = await measuredPages(runDir, run.sample.items);
+  const blockers = sweep.blockersKey;
+  const pagesNow = run.sample.items.every((item) => measured[item.slug]?.key === pageKey(blockers, item)) ? sha256(canonicalJson(run.sample.items.map((item) => [item.slug, measured[item.slug]]))) : null;
+  const stateKeys = Object.fromEntries(sweep.openers().filter((opener) => opener.primary).map((opener) => [opener.base.id, opener.key]));
+  const stamp = options.fresh ? null : await readStamp<StatesStamp>(join(runDir, STATES_STAMP));
+  if (stamp && run.states && pagesNow !== null && stamp.pages === pagesNow) {
+    try {
+      const before = run.states.singleKeys.states ?? [];
+      let pressedAgain = 0;
+      run.states.singleKeys.states = await probeSingleKeysInStates(sweep, (opener) => {
+        const row = before.find((entry) => entry.state === opener.base.id);
+        if (row && (row.examined || !opener.open) && stamp.states[opener.base.id] === opener.key) return row;
+        pressedAgain++;
+        return null;
+      });
+      // The pointer probes in the states whose recipe changed: what an earlier sweep found in the other states stands.
+      const hoverBefore = run.states.hoverCoverage?.states;
+      const downBefore = run.states.downEventCoverage?.states;
+      if (hoverBefore && downBefore) {
+        const hovering = new HoverRun(runDir);
+        const pressing = new DownRun();
+        const again = await probePointerInStates(sweep, hovering, pressing, run.states.browserListeners ?? {}, (opener) => stamp.states[opener.base.id] === opener.key && hoverBefore.some((row) => row.state === opener.base.id && (row.examined || !opener.open)));
+        const stands = (row: { state?: string }): boolean => row.state === undefined || (row.state in stateKeys && !again.hover.some((entry) => entry.state === row.state));
+        run.states.hover = [...run.states.hover.filter(stands), ...hovering.hover];
+        run.states.hoverContrast = [...(run.states.hoverContrast ?? []).filter(stands), ...hovering.contrast];
+        run.states.downEvents = [...(run.states.downEvents ?? []).filter(stands), ...pressing.results];
+        run.states.hoverCoverage = { ...run.states.hoverCoverage!, iconOnly: [...(run.states.hoverCoverage!.iconOnly ?? []).filter(stands), ...hovering.iconOnly], states: [...hoverBefore.filter(stands), ...again.hover] };
+        run.states.downEventCoverage = { ...run.states.downEventCoverage!, states: [...downBefore.filter(stands), ...again.down] };
+      }
+      process.stderr.write(`states: geen pagina is veranderd; overgenomen wat op de pagina's is gevonden, en in ${pressedAgain} toestanden de toetsen opnieuw ingedrukt\n`);
+      await writeJson(join(runDir, "states.json"), run.states);
+      await writeJson(join(runDir, STATES_STAMP), { pages: pagesNow, states: stateKeys } satisfies StatesStamp);
+      await writeManifest(runDir, { command: "states", startedAt, ...run.states.examined, reused: true, statesProbedAgain: pressedAgain }, browser.version());
+      return run.states;
+    } finally {
+      await browser.close();
+    }
+  }
+  const context = await newContext(browser, {}, guard);
+  await context.addInitScript({ path: INPAGE_PATH });
+  await sweep?.install(context);
+  const result: States = { dialogs: [], formErrors: [], singleKeys: { pagesExamined: 0, keysPressed: KEYS, reactions: [] }, hover: [], examined: { triggers: 0, forms: 0, hoverTargets: 0 } };
+  try {
+    // Each distinct trigger is activated once, on the first page that has it.
+    const allSettings: NonNullable<States["settings"]> = [];
+    seenSettings.clear();
+    const seenTriggers = new Set<string>();
+    const seenForms = new Set<string>();
+    skippedSteps.length = 0;
+    windows.clear();
+    for (const [index, data] of run.pages.entries()) {
+      say("formulieren en knoppen", index, run.pages.length, `${data.label} ${data.item.url}`);
+      const { triggers, inPageForms } = await withinTime(data.label, "formulieren", { triggers: [] as Described[], inPageForms: [] as FormErrorState[] }, async () => {
+        const page = await freshPage(context, data);
+        const found = await call<Described[]>(page, "triggers");
+        const forms = await probeForms(page, { label: data.label, url: data.item.url, outDir: runDir, openedVia: null, socketMessagesBlocked, restore: restore(context, data) });
+        await page.close();
+        return { triggers: found, inPageForms: forms };
+      });
+      allSettings.push(
+        ...(await withinTime(data.label, "instellingen", [] as NonNullable<States["settings"]>, async () => {
+          const settingsPage = await freshPage(context, data);
+          const changed = await probeSettings(settingsPage, { label: data.label, openedVia: null, seen: seenSettings });
+          await settingsPage.close();
+          return changed;
+        })),
+      );
+      for (const form of inPageForms) {
+        const key = `${form.fields.map((field) => field.name).join("|")}`;
+        if (seenForms.has(key)) continue;
+        seenForms.add(key);
+        result.formErrors.push(form);
+      }
+      for (const trigger of triggers) {
+        const key = `${trigger.tag}|${trigger.text.slice(0, 40)}|${trigger.ariaLabel}|${trigger.region}`;
+        if (seenTriggers.has(key)) continue;
+        seenTriggers.add(key);
+        if (logsOut(data.label, trigger)) continue;
+        const probed = await withinTime(data.label, `knop "${trigger.text.slice(0, 30)}"`, null, () => triggerOnFreshPage(context, data, trigger, runDir, DESKTOP));
+        if (!probed) continue;
+        result.dialogs.push(probed.dialog);
+        allSettings.push(...probed.settings);
+        for (const form of probed.forms) {
+          const formKey = `${form.fields.map((field) => field.name).join("|")}`;
+          if (seenForms.has(formKey)) continue;
+          seenForms.add(formKey);
+          result.formErrors.push(form);
+        }
+        process.stderr.write(`states ${data.label} "${probed.dialog.trigger}" -> ${probed.dialog.kind ?? "geen reactie"}\n`);
+      }
+    }
+    // Some controls only exist on a narrow screen, such as a menu button. Activate those there.
+    const mobile = await newContext(browser, { viewport: MOBILE }, guard);
+    await mobile.addInitScript({ path: INPAGE_PATH });
+    await sweep?.install(mobile);
+    for (const [index, data] of run.pages.entries()) {
+      say("knoppen smal", index, run.pages.length, data.label);
+      const triggers = await inWindow(data, "knoppen op een smal scherm", [] as Described[], async () => {
+        const page = await freshPage(mobile, data);
+        const found = await call<Described[]>(page, "triggers");
+        await page.close();
+        return found;
+      });
+      for (const trigger of triggers) {
+        const key = `${trigger.tag}|${trigger.text.slice(0, 40)}|${trigger.ariaLabel}|${trigger.region}`;
+        if (seenTriggers.has(key)) continue;
+        seenTriggers.add(key);
+        if (logsOut(data.label, trigger)) continue;
+        const probed = await withinTime(data.label, `knop "${trigger.text.slice(0, 30)}" (smal)`, null, () => triggerOnFreshPage(mobile, data, trigger, runDir, `${MOBILE.width}x${MOBILE.height}`));
+        if (!probed) continue;
+        result.dialogs.push(probed.dialog);
+        process.stderr.write(`states ${data.label} smal "${probed.dialog.trigger}" -> ${probed.dialog.kind ?? "geen reactie"}\n`);
+      }
+    }
+    await mobile.close();
+    result.examined.triggers = seenTriggers.size;
+    result.examined.forms = result.formErrors.length;
+    result.singleKeys = await probeSingleKeys(context, run.pages);
+    if (sweep) result.singleKeys.states = await probeSingleKeysInStates(sweep);
+    // What the test browser itself listens for on an empty page: to be subtracted from every page's count.
+    result.browserListeners = await listenersOnEmptyPage(context);
+    // The pointer probes: every page in the default window, one page of each page type in the narrow one, and every state of the model.
+    const narrowPages = sweep ? onePagePerType(sweep, run.pages) : [];
+    const narrow = await newContext(browser, { viewport: MOBILE }, guard);
+    await narrow.addInitScript({ path: INPAGE_PATH });
+    await sweep?.install(narrow);
+    const hovering = new HoverRun(runDir);
+    const pressing = new DownRun();
+    const hoveredNarrow = await probeHover(context, narrow, run.pages, narrowPages, hovering);
+    const pressedOn = await probeDownEvents(context, narrow, run.pages, narrowPages, result.browserListeners, pressing);
+    await narrow.close();
+    // The counts are those of the pages; what a state added is in its own row.
+    const pagesHover = hovering.coverage();
+    const pagesDown = { kindsFound: pressing.seen.size + pressing.left.size, examined: pressing.results.length };
+    const inStates = sweep ? await probePointerInStates(sweep, hovering, pressing, result.browserListeners) : null;
+    result.hover = hovering.hover;
+    result.examined.hoverTargets = hovering.examined;
+    result.hoverContrast = hovering.contrast;
+    // A kind that the limit left out is named wherever it was found, on a page or in a state.
+    const leftOut = hovering.coverage();
+    result.hoverCoverage = { ...pagesHover, notExamined: leftOut.notExamined, notExaminedExamples: leftOut.notExaminedExamples, nonControlsExamined: leftOut.nonControlsExamined, iconOnly: hovering.iconOnly, narrowPages: hoveredNarrow, ...(inStates ? { states: inStates.hover } : {}) };
+    result.downEvents = pressing.results;
+    result.examined.downEventTargets = pressing.results.length;
+    result.downEventCoverage = { limit: pressing.limit, ...pagesDown, goneBeforePress: pressing.gone, notExamined: pressing.left.size, notExaminedExamples: [...pressing.left.values()].slice(0, EXAMPLES_NOT_EXAMINED), ...pressedOn, ...(inStates ? { states: inStates.down } : {}) };
+    result.settings = allSettings;
+    result.arrowFocus = await arrowFocus(context, run.pages);
+    result.skipped = [...skippedSteps];
+    if (windows.size > 0) result.embedded = [...windows.values()];
+    // What a probe did not reach because the session ran out is not written down as not there.
+    await confirmLogin(browser);
+    if (sweep) result.blockers = { closedOnPage: sweep.dismissals.filter((entry) => entry.dismissed).length, notClosed: sweep.dismissals.filter((entry) => !entry.dismissed).map((entry) => ({ url: entry.url, blocker: entry.blocker, reasonNl: entry.reasonNl })) };
+    await writeJson(join(runDir, "states.json"), result);
+    await writeJson(join(runDir, STATES_STAMP), { pages: pagesNow, states: stateKeys } satisfies StatesStamp);
+    await writeManifest(runDir, { command: "states", startedAt, ...result.examined }, browser.version());
+  } finally {
+    await browser.close();
+  }
+  return result;
+}

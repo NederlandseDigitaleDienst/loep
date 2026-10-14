@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="nl">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Feedback - Testsite sessie</title><link rel="stylesheet" href="/site.css"><script src="voiceover.js" defer></script></head>
+<body>
+<main><h1>Feedback</h1>
+<p>Een venster met een formulier, zoals het terugkoppelformulier van een site. De eigen code van de pagina staat in voiceover.js.</p>
+<p><button id="open-feedback" type="button">Feedback geven</button> <a id="mail-link" href="mailto:test@example.com">Mail ons</a></p>
+<dialog id="feedback" aria-labelledby="feedback-title">
+<h2 id="feedback-title">Feedback geven</h2>
+<form id="feedback-form" method="post" action="/submit">
+<label for="kind">Soort feedback</label>
+<select id="kind" name="kind"><option value="">Kies een soort</option><option>Compliment</option><option>Probleem</option></select>
+<label for="message">Uw feedback</label>
+<textarea id="message" name="message"></textarea>
+<p id="error" role="alert" hidden></p>
+<p><button id="send" type="submit">Versturen</button> <button id="by-mail" type="button">Via e-mail</button> <button id="by-issue" type="button">Via een nieuw venster</button></p>
+<p id="thanks" role="status" hidden></p>
+</form>
+</dialog>
+</main>
+</body>
+</html>

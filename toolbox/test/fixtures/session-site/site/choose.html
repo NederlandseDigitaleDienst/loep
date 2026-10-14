@@ -1,0 +1,14 @@
+<!doctype html>
+<html lang="nl">
+<head><meta charset="utf-8"><title>Kiezen - Testsite sessie</title><link rel="stylesheet" href="/site.css"></head>
+<body>
+<main id="inhoud"><h1>Kiezen en zoeken</h1>
+<form id="slow-search" role="search" method="get" action="/slow-result"><label for="term">Zoekterm</label> <input id="term" name="q" type="search"> <button type="submit">Zoek</button></form>
+<p><label for="topic">Onderwerp</label> <select id="topic" name="topic"><option value="">Maak een keuze</option><option value="afval">Afval</option><option value="parkeren">Parkeren</option><option value="oud" disabled>Niet meer beschikbaar</option></select></p>
+<p id="chosen" role="status"></p>
+<div id="custom" role="listbox" tabindex="0" aria-label="Eigen keuzelijst"><div role="option">Een</div><div role="option">Twee</div></div></main>
+<script>
+document.getElementById("topic").addEventListener("change", (event) => { document.getElementById("chosen").textContent = event.target.value ? "Gekozen: " + event.target.selectedOptions[0].textContent : ""; });
+</script>
+</body>
+</html>

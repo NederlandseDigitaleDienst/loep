@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<title>Menu dat zijn items opnieuw maakt</title>
+<style>body { font: 16px/1.3 sans-serif; margin: 2rem; }</style>
+</head>
+<body>
+<main>
+<h1>Menu dat zijn items opnieuw maakt</h1>
+<p>De knop opent een menu. Elk item is een eigen onderdeel met een shadow root dat bij elk openen opnieuw wordt gemaakt.</p>
+<x-menu></x-menu>
+</main>
+<script>
+  // The way a component library does it: a root, and right after creating it a list of sheets assigned to it, which replaces whatever was there.
+  const itemSheet = new CSSStyleSheet();
+  itemSheet.replaceSync("span { letter-spacing: normal; word-spacing: normal; line-height: 1.2; display: block; padding: 4px 8px; }");
+  customElements.define("x-item", class extends HTMLElement {
+    constructor() {
+      super();
+      const root = this.attachShadow({ mode: "open" });
+      root.adoptedStyleSheets = [itemSheet];
+      const label = document.createElement("span");
+      label.textContent = this.getAttribute("label") ?? "";
+      root.append(label);
+    }
+    connectedCallback() {
+      this.shadowRoot.querySelector("span").textContent = this.getAttribute("label") ?? "";
+    }
+  });
+  const menuSheet = new CSSStyleSheet();
+  menuSheet.replaceSync("ul { list-style: none; margin: 0; padding: 0; border: 1px solid #333; width: 16rem; } ul[hidden] { display: none; }");
+  customElements.define("x-menu", class extends HTMLElement {
+    constructor() {
+      super();
+      const root = this.attachShadow({ mode: "open" });
+      root.adoptedStyleSheets = [menuSheet];
+      const button = document.createElement("button");
+      button.textContent = "Meer opties";
+      button.setAttribute("aria-expanded", "false");
+      const list = document.createElement("ul");
+      list.hidden = true;
+      button.addEventListener("click", () => {
+        const open = list.hidden;
+        list.hidden = !open;
+        button.setAttribute("aria-expanded", String(open));
+        // Each opening makes the items anew.
+        list.replaceChildren();
+        if (!open) return;
+        for (const label of ["Over deze site", "Feedback", "Broncode"]) {
+          const entry = document.createElement("li");
+          const item = document.createElement("x-item");
+          item.setAttribute("label", label);
+          entry.append(item);
+          list.append(entry);
+        }
+      });
+      root.append(button, list);
+    }
+  });
+</script>
+</body>
+</html>

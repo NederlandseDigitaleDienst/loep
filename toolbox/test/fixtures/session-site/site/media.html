@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="nl">
+<head><meta charset="utf-8"><title>Geluid en beeld - Testsite sessie</title><link rel="stylesheet" href="/site.css"></head>
+<body>
+<main><h1>Geluid en beeld</h1>
+<audio id="tune" src="/tone.wav" autoplay loop></audio>
+<section><h2>Met een knop</h2>
+<audio id="jingle" src="/tone.wav" autoplay loop></audio>
+<button id="quiet" type="button">Pauzeer het geluid</button>
+<button id="other" type="button">Iets anders</button>
+</section>
+<section><h2>Met eigen bediening</h2>
+<video id="film" src="/tone.wav" controls muted width="320" height="60"><track kind="captions" srclang="nl" label="Nederlands" src="/captions.vtt" default></video>
+</section>
+<iframe src="/frame-media.html" title="Speler in een venster" width="320" height="80"></iframe>
+</main>
+<script>
+document.getElementById("quiet").addEventListener("click", () => document.getElementById("jingle").pause());
+</script>
+</body>
+</html>

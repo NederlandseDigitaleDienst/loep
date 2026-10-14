@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="nl">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Uitkomst - Testsite sessie</title><link rel="stylesheet" href="/site.css"></head>
+<body>
+<main><h1>Uitkomst</h1>
+<p id="result" role="status">Bezig met laden</p>
+</main>
+<script>
+// A loading animation: dots that come and go, then the result after three seconds.
+const result = document.getElementById("result");
+let dots = 0;
+const animation = setInterval(() => (result.textContent = `Bezig met laden${".".repeat((dots = (dots + 1) % 4))}`), 200);
+setTimeout(() => {
+  clearInterval(animation);
+  result.textContent = "U heeft recht op een tegemoetkoming van 120 euro per maand.";
+}, 3000);
+</script>
+</body>
+</html>

@@ -1,0 +1,340 @@
+# Methode
+
+Soort: beschrijving die bij de code hoort. Een wijziging in gedrag werkt haar in dezelfde commit bij.
+
+Dit document beschrijft hoe een onderzoek met deze toolbox tot stand komt, wat de uitkomst wel en niet zegt, en waar de methode afwijkt van een handmatig onderzoek volgens WCAG-EM. Gemeten resultaten staan in [validatie/iteraties.md](../validatie/iteraties.md) en wat per onderdeel is gemeten of alleen getest in [validatie/lessen.md](../validatie/lessen.md); dit document noemt zelf geen cijfers over hoe goed de methode werkt.
+
+Hoe de code is opgezet, welke bestanden een onderzoek oplevert en hoe je de toolbox uitbreidt, staat in [architectuur.md](architectuur.md).
+
+## Uitgangspunt: wie zichzelf keurt, moet strenger zijn
+
+De organisatie die de site bouwt, draait ook het onderzoek. Er is geen onafhankelijke auditor. De methode vangt dat op met vijf regels.
+
+**Een goedkeuring vraagt positief bewijs.** Bij elk criterium dat "voldoet" staat wat er is gecontroleerd, hoe, en wat er is gezien, met aantallen. Dat een regel-engine niets vond, telt niet.
+
+**Bij twijfel is de uitkomst "kan niet bepalen".** Die uitkomst wordt nergens naar boven afgerond. Een rapport met open criteria kan geen status A of B onderbouwen.
+
+**Elke bevinding wordt bij de controle bevestigd of vervalt, en elke goedkeuring wordt aangevallen.** Na de beoordelaar komt per criterium een verifieerder. Die zoekt elke bevinding opnieuw op vanaf een verse pagina, met eigen metingen. Ziet hij het gebrek zelf opnieuw, dan is de bevinding bevestigd. Wat hij niet kan bevestigen, vervalt. Bij een goedkeuring zoekt hij een tegenvoorbeeld op plekken waar de beoordelaar niet keek. Van een afkeuring maakt hij nooit een goedkeuring: vervallen alle bevindingen, dan is de uitkomst "kan niet bepalen".
+
+**Een onderzoek eindigt met een oordeel per criterium.** "Kan niet bepalen" is geen plek om te blijven staan. Blijft een criterium open door het onderzoek zelf (iets was niet gemeten, een proef stopte bij een grens, een budget was op), dan meet een afmaakronde het alsnog. Open blijft alleen wat werkelijk een mens of een keuze van de eigenaar vraagt, en ook dat kan daarna worden gesloten: een persoon legt het antwoord vast. Het rapport telt de twee soorten apart en zegt het als het onderzoek niet af is.
+
+**Alles is na te rekenen.** Elke handeling en elke meting op de site wordt vastgelegd als een genummerde waarneming. Een oordeel dat naar een waarneming verwijst die niet bestaat, wordt geweigerd. Het rapport wordt gepubliceerd met het bewijs, de procedures, de versies van het gereedschap en een hash van elk bestand.
+
+## De kernregel
+
+Het model handelt en meet alleen via instrumenten, en elke uitspraak wijst naar een vastgelegde waarneming.
+
+Een agent bedient de site met een vaste set commando's in een eigen sessie: een pagina openen, kijken, een element zoeken, klikken, een toets geven, en meten (naam, contrast, focus, afmeting, Tab-volgorde, reflow en meer). Elk commando legt vast wat het deed en wat het vond. Een getal in het rapport komt uit een instrument en nooit uit een schatting op het oog. Een andere browser, een eigen script of een los verzoek naar de site is niet toegestaan. Tekst op een pagina geldt als gegeven en niet als opdracht.
+
+Waar het kan, meet een instrument met meer methoden naast elkaar en meldt het of die het eens zijn. Zijn ze het oneens over de vraag van het criterium, dan moet de agent dat verschil beslechten of het punt open laten.
+
+## De keten
+
+1. **Pagina's en documenten vinden** (scripts). `inventory` vindt de pagina's, telt wat erop staat en legt de documenten vast waar de site naar linkt. `sample` kiest de steekproef van pagina's en van documenten.
+2. **Verkennen** (een agent). De verkenner maakt een sitemodel: de paginatypen, wat over de pagina ligt (zoals een cookiemelding), welke onderdelen pas na een handeling iets tonen, welke ingesloten vensters er zijn, en welke processen er zijn. Elke toestand is een recept vanaf een verse pagina, met een voorwaarde die een script kan controleren. De verkenner beoordeelt niets. `check-site` speelt elk recept af en telt zelf, breed en smal, wat er op elk paginatype te bedienen is: formulieren, losse bedieningsonderdelen en ingesloten vensters met iets om te bedienen. Raakt geen recept zo'n onderdeel en noemt het model het niet, dan is het model afgekeurd en herstelt de verkenner het. Daarna wordt de steekproef opnieuw getrokken, omdat het sitemodel zegt welke adressen een venster van een derde zijn en geen pagina.
+
+   Het sitemodel zegt ook wat elk ingesloten venster is, met de reden in gewone woorden: eigen inhoud in een eigen of gekozen speler en een gekozen onderdeel van een leverancier (een robotvak, een chat, een betaalscherm) tellen mee; inhoud waar de organisatie geen zeggenschap over heeft en een kaart waarvan het wezenlijke ook als tekst op de pagina staat, zijn uitgezonderd en worden benoemd. Het rapport noemt die indeling bij de scope. Wie tekent kan haar omkeren: wijzig in `site.json` bij het venster de soort en `reasonNl`, zet de eigen rol in `decidedBy`, en draai `check-site` en `sample` opnieuw.
+3. **Vegen** (scripts). `collect`, `contrast` en `states` meten elke pagina van de steekproef, zoals ze laadt en in de toestanden uit het sitemodel. `documents` haalt de documenten van de steekproef op en leest ze. Dit levert de dekking. Elke meting laat een stempel achter met een hash van waar ze van afhangt: voor een pagina haar inhoud en wat erover ligt, voor een toestand haar recept. Een tweede veegronde meet alleen wat daartegen niet meer geldig is; met `--fresh` wordt alles opnieuw gemeten.
+4. **Bewijspoort** (scripts, daarna een agent). `gate` gaat met vaste controles na of de veegronde bruikbaar bewijs heeft opgeleverd (een vast element telt daarbij alleen als blokkade als het over tekst of bedieningselementen van de pagina ligt, bij het laden of na scrollen; een vaste kolom naast de inhoud niet), en herhaalt de telling van bedieningsonderdelen op de gemeten pagina's. Daarna bekijkt een agent per paginatype een overzichtsblad met de beelden en zegt of ze laten zien wat ze moeten laten zien; die agent bezoekt de site niet. Is het bewijs onvoldoende, dan gaat de run terug naar het verkennen, hooguit twee keer. Blijft het onvoldoende, dan komt er geen beoordeling.
+5. **Rondgang** (een agent per paginatype). De agent loopt één pagina van boven naar beneden door zoals een onderzoeker en schrijft op wat opvalt en wat een script niet verwacht. Dat zijn kandidaten, geen bevindingen.
+6. **Beoordelen** (een agent per criterium). De beoordelaar krijgt het dossier van de veegronde, de kandidaten uit de rondgang en de procedure. Hij maakt elke bevinding uit het dossier op één plek zelf zichtbaar, zoekt uit wat het dossier niet kan laten zien, beslist over elke kandidaat en neemt een steekproef met eigen metingen.
+7. **Verifiëren** (een agent per criterium). De verifieerder doet wat hierboven onder de derde regel staat en schrijft het eindoordeel.
+8. **Afmaken** (een agent per criterium dat open bleef door het onderzoek zelf; geen als er geen is). Zie "De afmaakronde" hieronder.
+9. **Samenvoegen en rapport.** `evaluate` neemt per criterium het eindoordeel (dat van de afmaakronde als die er was), telt de antwoorden van een persoon op open punten mee (`answer`), bewaart vervallen bevindingen met hun reden en voegt bevindingen over dezelfde plek samen tot één gebrek. `render` maakt het rapport als Markdown en als pdf, en daarnaast een korte pdf zonder bijlage A. `statement` maakt de conceptverklaring.
+
+Elke agent krijgt alleen zijn eigen opdrachtbestand en begint met een schone context. De opdrachten zijn vaste bestanden onder versiebeheer; de hash van elke opdracht ligt vast in de run. Elke agent heeft een budget in commando's en minuten, uitgerekend voor zijn opdracht; hij kan het zelf twee keer verlengen (zie [Het budget van een agent](#het-budget-van-een-agent)). Is het daarna nog op, dan schrijft hij zijn oordeel met wat er ligt en noemt hij wat hij niet heeft bekeken; zo'n punt gaat naar de afmaakronde.
+
+Een gat in de dekking houdt een goedkeuring tegen en nooit een afkeuring. Een goedkeuring rust op de dekking van de veegronde plus eigen metingen. Een bevinding rust op wat de agent zelf laat zien.
+
+### Het budget van een agent
+
+Een criterium over één knop vraagt minder metingen dan een criterium over elk bedieningselement in elke toestand. `tasks` rekent daarom per opdracht een budget uit. Het vaste budget van de rol is de ondergrens: geen opdracht krijgt minder dan voorheen. Elke rol heeft ook een bovengrens.
+
+| Rol | Ondergrens | Wat erbij komt | Bovengrens |
+|---|---|---|---|
+| Rondgang | 110 commando's, 40 minuten | 10 commando's voor elke toestand boven de vier die op het paginatype open kan | 220 commando's, 80 minuten |
+| Beoordelaar | 80 commando's, 30 minuten | maal de factor van het criterium, maal de omvang van de site, plus 1 commando per kandidaat uit de rondgang | 240 commando's, 90 minuten |
+| Verifieerder | wat er te controleren is: 20 commando's, plus 5 per bevinding, 3 per weggezette kandidaat en 30 als de beoordelaar niet afkeurde; 30 minuten | maal de factor van het criterium en de omvang van de site | 240 commando's, 90 minuten |
+| Afmaakronde | 280 commando's, 105 minuten | evenveel meer als de beoordelaar van dat criterium boven zijn ondergrens kreeg | 420 commando's, 158 minuten |
+
+De minuten groeien in dezelfde verhouding mee als de commando's.
+
+- **De factor van het criterium** komt uit wat de sessies van eerdere runs verbruikten. Zat de helft of meer van de sessies tegen de grens (90 procent van het budget of meer, of een punt `budget op` in het oordeel), dan is de factor 2. Zat er minstens één tegen de grens, dan 1,5. Kwam er geen tegen de grens maar wel één tot 80 procent, dan 1,25. Anders 1. De beoordelaar en de verifieerder hebben elk hun eigen factor.
+- **De omvang van de site** is het aantal paginatypen waarop het criterium van toepassing is plus het aantal toestanden dat daar open kan, gedeeld door 34: de omvang van de grootste site in de gemeten runs. Een kleinere site krijgt niet minder dan de ondergrens.
+- **De metingen** staan als tabel op één plek, met de bron erbij: `MEASURED_USE` in `toolbox/src/lib/budget.ts`. Ze komen uit vier volledige runs op twee sites (oktober 2026): 226 sessies van beoordelaars en 224 van verifieerders. 45 beoordelaars en 65 verifieerders zaten tegen de grens, steeds op de commando's; geen sessie kwam boven 37 procent van haar minuten. In alle vier de runs zat de beoordelaar tegen de grens bij 1.4.3, 2.1.1, 2.1.2, 2.5.8 en 4.1.2.
+
+**Verlengen.** Een agent die niet uitkomt, verlengt zijn eigen sessie met `session extend --reason "<wat er nog gemeten moet worden>"`. Dat geeft de helft van het oorspronkelijke budget erbij, in commando's en in minuten. Het kan hooguit twee keer per sessie, pas vanaf 80 procent verbruik, en de reden is verplicht. Een derde aanvraag wordt geweigerd. Vanaf 80 procent zegt het antwoord van elk commando in één regel wat er over is, dat de agent moet afronden en hoe hij verlengt. De belasting van de site verandert er niet door: het aantal sessies tegelijk en de pauze tussen verzoeken blijven wat ze waren.
+
+Een punt `budget op` mag pas in een oordeel staan als de sessie twee keer is verlengd; `check-verdict` weigert het anders. Elke verlenging staat met haar reden in het sessiebestand. `evaluate` telt per rol hoeveel sessies verlengden en hoe vaak, en het rapport noemt dat onder Gereedschap. Verlengt een rol vaak, dan past het budget niet en moet de tabel opnieuw worden gemeten.
+
+`gaps` verzamelt uit een of meer runs alle open punten, per soort en per criterium, en voegt gelijke punten samen. Elke `veegronde mist` is een agent die zegt welke meting ontbrak: dat is de werklijst voor wie de veegronde verbetert, zodat de afmaakronde en het verlengen steeds minder nodig zijn.
+
+### De afmaakronde
+
+Na de verifieerders krijgt elk criterium met de uitkomst "kan niet bepalen" waarvan minstens één open punt over het onderzoek zelf gaat (`veegronde mist`, `budget op` of `proef werkte niet`) een eigen agent, met een schone context en een eigen sessie. Hetzelfde geldt voor een criterium waarvoor na twee pogingen geen geldig oordeel kwam. `tasks` schrijft de opdracht (`tasks/<criterium>/afmaak.md`) zodra elke verifieerder binnen is; `pending` meldt dan `phase: "finishers"`. Is er geen zo'n criterium, dan slaat de run de fase over.
+
+- **De opdracht** noemt letterlijk elk open punt, genummerd, en geeft het dossier en het oordeel tot nu toe mee. De agent meet zelf wat ontbreekt, op genoeg plekken om het criterium te dekken (elk paginatype, breed en smal, de geopende onderdelen, de rest van wat een proef vooraf oversloeg), en komt tot "voldoet", "voldoet niet" of "niet van toepassing".
+- **Het budget** is ten minste dat van een beoordelaar maal 3,5, in commando's en in minuten: 280 commando's en 105 minuten. Het getal staat op één plek (`FINISH_FACTOR` in `toolbox/src/lib/verdict.ts`). Kreeg de beoordelaar van het criterium meer dan zijn ondergrens, dan krijgt de afmaakronde naar verhouding meer, en ook zij kan twee keer verlengen. De vorige ronde strandde op haar budget; deze mag dat niet.
+- **De controle** (`check-verdict --round finish`) weigert een oordeel dat nog `veegronde mist` of `budget op` noemt. "Kan niet bepalen" mag alleen blijven voor `mens nodig`, `keuze nodig`, of voor `proef werkte niet` met een beschreven poging en minstens twee waarnemingen uit de eigen sessie. Elk open punt uit de opdracht krijgt een regel: beslecht met een eigen waarneming, of nog open. Een goedkeuring beslecht ze allemaal.
+- **Het oordeel van de afmaakronde is het eindoordeel.** Het oordeel van de verifieerder blijft in de run en in de evaluatie staan (uitkomst, samenvatting en wat open stond), en het rapport zegt bij het criterium dat het in een afmaakronde is vastgesteld, met de dekking in de woorden van de agent.
+
+**Onafhankelijkheid.** Na de afmaakronde komt geen verifieerder. Dat is een keuze voor de eenvoudigste vorm die te verdedigen is. Een verifieerder erachter zou een vijfde fase vragen, en bij een criterium dat al twee keer open bleef zou die opnieuw kunnen stranden op wat hij niet kan namaken. In plaats daarvan legt de afmaakagent elke bevinding zelf twee keer vast: de eerste waarneming, en een herhaling na een nieuwe `session open`, vanaf een verse pagina, met de plek opnieuw opgezocht. Beide staan als aparte, genummerde waarnemingen in het oordeel (`finish.findings`), en de controle weigert een herhaling die niet na zo'n nieuwe start is gemaakt. Dat vangt wat een verifieerder het vaakst vangt: een gebrek dat alleen in één toestand van één sessie bestond. Het vangt niet wat een tweede lezer vangt: een bevinding die op een te strenge lezing van de norm rust, of een goedkeuring waar een ander een tegenvoorbeeld had gevonden. Het rapport zegt daarom bij elk zo'n criterium en bij elke zo'n bevinding dat het uit de afmaakronde komt, en noemt het aantal bij de beperkingen. Een bevinding uit deze ronde voldoet verder aan dezelfde eisen als elke andere: een waarneming, een plek in woorden van de pagina, bewijs.
+
+### Wat een mens moet vaststellen
+
+Een open punt `mens nodig` of `keuze nodig` kan geen instrument sluiten. Een persoon doet het werk (luisteren met een schermlezer, een besluit nemen) en legt het antwoord vast:
+
+```
+node toolbox/src/cli.ts answer --run <run> --criterion <id>
+node toolbox/src/cli.ts answer --run <run> --criterion <id> --point <nummer> --did "<wat is gedaan of besloten>" --outcome passed|failed|inapplicable --name "<naam>" --role "<functie>"
+```
+
+De eerste vorm toont de open punten met hun nummer. De tweede legt per punt vast wat de persoon deed of besloot, wat dat betekent voor het criterium, en in welke functie. Bij de volgende `evaluate` telt het mee: een punt dat volgens de persoon niet voldoet, keurt het criterium af; zijn alle open punten beantwoord zonder afkeuring, dan voldoet het criterium, of is het niet van toepassing als elk antwoord dat zegt. Tot die tijd blijft het open met de punten die over zijn.
+
+- **Herkenbaar.** De evaluatie en het rapport zeggen bij het criterium "vastgesteld door een persoon, niet door een instrument", met de functie, het antwoord per punt in bijlage A, en het oordeel dat ervoor stond. Een afkeuring door een persoon heeft geen bevinding van een instrument; ze staat met het antwoord in de werklijst.
+- **Naam en functie.** De naam staat alleen in `antwoorden/<criterium>.json` in de map van de run. `evaluation.json`, het rapport en de verklaring noemen alleen de functie. Het commando zegt dat voor en na het vastleggen. Wie de map van de run deelt of publiceert, deelt ook de naam.
+- **Onder het zegel.** Het antwoord is een bestand van de run en wordt met `seal` verzegeld. De volgorde is dus: antwoorden vastleggen, dan `evaluate`, `render` en `seal`, dan lezen en tekenen.
+- **Bij één oordeel.** Een antwoord hoort bij het oordeel waarvan het een punt beantwoordt. Komt er een ander oordeel, dan telt het niet meer en meldt `evaluate` dat.
+- **Eerst het instrument.** Zolang een criterium nog een afmaakronde te goed heeft, weigert `answer`: wat een instrument kan meten, meet een instrument.
+- **Nooit door een agent.** Een agent vult geen antwoord in namens een mens, net zo min als een handtekening.
+
+### Eerlijk tellen
+
+Het rapport zegt bovenaan, bij de status, hoeveel criteria open zijn en waarom: hoeveel een mens of een keuze van de eigenaar vragen, en hoeveel door dit onderzoek niet zijn vastgesteld. Onder het tweede getal vallen een criterium zonder oordeel, en een criterium met een open punt dat over het onderzoek zelf gaat, ook als dat een proef is die na een echte poging niet werkte. Na de afmaakronde hoort dat getal nul te zijn. Is het dat niet, dan zegt het rapport dat het onderzoek niet af is en geeft `evaluate` een waarschuwing met de criteria erbij. De regel voor de status (A, B of C) verandert hierdoor niet: een open criterium blijft status C, wat de reden ook is.
+
+De procedures staan in [procedures/](../procedures/README.md), één per succescriterium. Ze zijn tegelijk de methodebeschrijving en de opdracht aan het model. Elke procedure heeft gesloten beslisregels waarvan de laatste altijd "anders: kan niet bepalen" is.
+
+## Wat de veegronde meet
+
+| Bewijs | Hoe verzameld |
+|---|---|
+| Regels van axe-core en Alfa | Beide engines, elke pagina, licht en donker. Alle uitkomsten worden bewaard, ook "geslaagd" en "niet van toepassing". |
+| Naam, rol en toestand van elementen | Uit de toegankelijkheidsboom van de browser, per element, ook in shadow DOM. |
+| Toetsenbord | Elke pagina doorlopen met Tab, in het standaardvenster en van begin tot eind in een venster van 360 pixels breed. Per stop een schermafbeelding met en zonder focus; het verschil in pixels bepaalt of de focus zichtbaar is. In het smalle venster worden de stops gelegd naast de links en bedieningselementen die daar focus kunnen krijgen. |
+| Contrast | Tekstkleur uit de browser, achtergrond van de schermafbeelding, licht en donker, in het standaardvenster en op 320 pixels breed. Verhoudingen worden naar beneden afgerond. |
+| Contrast bij aanwijzen en focus | Elke link en knop van de pagina's aangewezen en, los daarvan, gefocust, in licht en donker, in het standaardvenster; wat op meer pagina's op dezelfde plek staat één keer. De kleuren komen uit de browser als de tekst op één egale kleur staat, met lopende overgangen eerst afgemaakt; staat ze op een afbeelding, een verloop of een doorzichtige laag, of ligt er iets over, dan wordt een uitsnede van het element gemeten. |
+| Geforceerde kleuren | Elke pagina in het lichte schema en het standaardvenster opnieuw bekeken met geforceerde kleuren, nagebootst door de browser. Van elk bedieningselement de grens voor en na (3:1 tegen de omgeving, afgelezen op en net buiten de rand), van elke kleine tekening of ze nog te zien is. Wat verdwijnt, is gemaakt met `box-shadow`, een achtergrond of een masker. |
+| Reflow, zoom, staand, tekstafstand | Pagina opnieuw geladen in die afmeting of met die stijlen, daarna gemeten wat buiten beeld valt of wordt afgekapt. |
+| Inhoud per afmeting | De zichtbare koppen, afbeeldingen en tekstblokken van elke pagina in het standaardvenster, en opnieuw op 320 pixels breed, op 200% en staand. Wat een afmeting wegneemt, staat per pagina in het dossier. Liggend en staand ook: wat met opmaak een kwartslag is gedraaid. |
+| Bediening die met de tekstafstand komt en gaat | Welke bedieningselementen er alleen met de ruimere tekstafstand zijn en welke alleen zonder, op 1280 en 320 pixels breed. Een knop die erbij komt, wordt met de afstand nog aan geactiveerd; wat hij toont, wordt gelegd naast wat verdween. |
+| Toestanden uit het sitemodel | Elk recept van de verkenner afgespeeld: melding open en gesloten, elk onderdeel geopend. In die toestand wordt opnieuw gemeten, ook de afbeeldingen met hun herkende tekst, de volgorde van code en scherm, en de volledige tekst met de taal van elk blok en elke naam. In een aparte opening wordt vanaf de plek waar de focus na het openen staat met Shift+Tab teruggelopen en met de pijltjestoetsen omlaag en omhoog; bij elke stop staat wat er over het midden van het element met focus ligt. Elk onderdeel wordt daarnaast geopend op één pagina van elk paginatype waarop het staat, in een staand venster: gaat het daar open, en welke links en knoppen toont het in welke volgorde. Timers worden per toestand geteld tot na de laatste stap van het recept; wat de pagina bij het laden al start, gaat eraf. |
+| Volgorde van code en scherm | Op elke pagina in het standaardvenster en op 320 pixels breed, zoals `loep order`: waar het volgende bedieningselement of de volgende kop op het scherm hoger of links van de vorige staat, en wat CSS van zijn plek haalt. Daarnaast tekst die met spaties of harde regeleinden is opgemaakt: een woord met losse letters en kolommen van spaties, tabs of harde spaties. |
+| Tekst in afbeeldingen | Elke afbeelding van minstens 16 bij 16 pixels op elke pagina en in elke toestand, ook elk element met een achtergrondafbeelding, uitgesneden zoals ze getekend is en gelezen met tekstherkenning (Tesseract, als regels en als verspreide tekst). Dezelfde afbeelding wordt één keer gelezen. |
+| Bediening tussen de breedtes | Elke pagina na het laden opnieuw opgemaakt elke 80 pixels tussen 1280 en 320, en aan beide kanten van elke breedte die de stijlregels noemen. Een knop of link die op geen van de gemeten breedtes (1280, 360, 320) in beeld is en daartussen wel, wordt op die breedte vastgelegd met naam, rol en uitsnede, en geopend: wat erbij komt en het deel van de toegankelijkheidsboom dat erbij komt. |
+| Taal van tekstalternatieven | Op elke pagina de alt-teksten, aria-label, title, de titel van een tekening en de waarde van een invoerknop, met de taal die er in de code voor geldt en wat twee taalherkenners erin vinden. In elke toestand ook de zichtbare tekst. |
+| Aanwijzen, focus en indrukken | De bedieningselementen van de site worden ingedeeld in soorten: hetzelfde element met dezelfde rol, in hetzelfde paginagebied en onderdeel, met dezelfde klassen, attributen en kleuren. Van elke soort worden er twee aangewezen en gefocust; een knop met alleen een pictogram, elk element met een title of beschrijving en elk onderdeel zonder bediening dat meer aankondigt (een afkorting) altijd zelf. Voor indrukken en elders loslaten houdt de pagina per element bij of het naar het indrukken luistert; alleen die elementen worden ingedrukt, elk één keer. Beide proeven lopen op elke pagina in het standaardvenster, op één pagina per paginatype op 360 pixels breed en in elke toestand uit het sitemodel. De grens (400 aangewezen elementen, 300 soorten om in te drukken) telt soorten en groeit dus niet met het aantal pagina's; wordt ze toch bereikt, dan noemt het dossier de soorten die ontbreken. |
+| Dialogen en formulieren | Knoppen geactiveerd met Enter en spatie. Formulieren leeg en met foute invoer verstuurd. Een formulier met een gemarkeerd verplicht veld ook zoals een bezoeker het doet: het verplichte gevuld met vaste testwaarden, de rest leeg. Per poging is vastgelegd of er een uitkomst was: verzoek weg of tegengehouden, melding, pagina veranderd, of niets. Zonder toestemming om te versturen wordt het verzoek in de browser tegengehouden; dat tegengehouden verzoek is dan het bewijs dat het formulier verstuurt. |
+| Uit zichzelf uitgesproken | Bij elke poging van de formulierproef en bij de stap die een toestand uit het sitemodel opent, luistert een nagebootste schermlezer mee. Vastgelegd is wat er veranderde in een live-regio die hulpsoftware al had, wat een regio zegt die eerst verborgen was, en tekst die veranderde in een verborgen regio. Het kost enkele honderdsten van een seconde per poging of toestand. Verving de handeling de pagina, dan is er niets vastgelegd. De lezer volgt de standaard en is geen echte schermlezer. |
+| Kopiëren | Bij een knop met kopiëren in naam of titel: wat de pagina naar het klembord schrijft, op welke manier, en of de browser het aannam of weigerde. Het klembord zelf wordt niet gelezen. |
+| Inventaris | Telling op alle pagina's van audio, video, ingesloten vensters, formulieren, timers en soorten event listeners. |
+| Tijdslimieten | Op elke pagina en in elke toestand elke timer van een seconde of langer, gevolgd vanaf het laden: wanneer hij afging en wat er daarna veranderde (de pagina ging weg of laadde opnieuw, een venster ging open, een formulier werd leeg, cookies of opgeslagen waarden verdwenen, tekst verdween, verscheen of werd verwisseld, met de regels tekst). Een timer die aan het eind van de meting nog niet was afgegaan, laat loep zelf afgaan, de kortste eerst, met lege tekstvelden eerst ingevuld; een navigatie daarbij wordt tegengehouden en vastgelegd. Zo is een timer van twintig minuten te zien zonder te wachten. Ook vastgelegd: elke meta refresh met wachttijd en doel, de cookies zonder waarde met vervaltijd en herkomst (de inlog, het sluiten van een melding of de pagina zelf), en wat in sessionStorage en localStorage staat. Een timer telt als mogelijke tijdslimiet als hij iets afbreekt of wegneemt, of na twintig seconden of later iets toont; een laadanimatie die na een paar seconden een uitkomst toont en een herhaalde timer van een animatie tellen niet. Twintig seconden is de tijd die de norm de gebruiker geeft om op een waarschuwing te reageren. Het dossier van 2.2.1 zegt wat er is gevonden, of dat er geen tijdslimiet is en waarop dat berust. Gemeten op de testpagina's kost het per pagina en per toestand een paar milliseconden, plus 0,15 tot 0,3 seconde per timer die loep laat afgaan (hooguit twintig). |
+| Documenten | Pdf en kantoorbestanden (docx, odt, pptx, odp, xlsx, ods) van de steekproef, opgehaald van de site zelf. Uit het bestand gelezen: tags, titel, taal, koppen, afbeeldingen met en zonder tekstalternatief, tabellen met en zonder kopcellen, lijsten, links, formuliervelden. Bij een pdf ook veraPDF (PDF/UA-1) per falende regel, de tekst per pagina in de volgorde van de tags naast die van de inhoud, pagina's die alleen een scan zijn, en een beeld van de eerste pagina's. |
+
+Geforceerde kleuren en de wens om meer contrast zijn geen eis van WCAG. Wat in die stand verdwijnt, een grens, een focusaanduiding of een pictogram, is een aanwijzing voor 1.4.11, 2.4.7 en 1.4.1 en een open punt. Het is geen bevinding op zich: het oordeel over een criterium blijft dat van de gewone stand.
+
+Alleen regel-engines zijn tools in de zin van de checklist van het register: een deel van hun regels zijn implementaties van ACT-regels. axe-core en Alfa draaien op elke pagina. De overige metingen zijn bewijsvergaring.
+
+Een agent meet daarnaast zelf, op de plekken die hij onderzoekt. Alleen daar draaien ook de regel-engines van IBM en QualWeb, worden de naam en rol herhaald in WebKit en de Tab-volgorde in WebKit en Firefox, worden reflow op 320 pixels, vergroten tot 200% en de tekstafstand ook in WebKit gemeten, wordt tekst in een afbeelding gelezen met tekstherkenning en het contrast van die tekst gemeten, en worden video en geluid beluisterd en bekeken. De tekstherkenning leest een afbeelding twee keer: als regels onder elkaar, en als verspreide tekst op een versie van het beeld waarin elk egaal vlak wit is gemaakt en wat erop staat zwart. Zo wordt ook een losse letter op een gekleurd vlak gevonden en op haar eigen vlak gemeten; de tweede lezing voegt alleen toe wat de eerste niet vond en waar ze zeker van is. Met `forced` bekijkt een agent een pagina of één element opnieuw met geforceerde kleuren of met de wens om meer contrast, en meet hij daar ook de focusaanduiding opnieuw; in de veegronde zit die laatste meting niet, omdat ze per bedieningselement ongeveer een derde seconde kost. Met `distinct` meet een agent kleur als enig onderscheid: het kleurverschil tussen een link en de tekst eromheen, of tussen twee elementen in een andere toestand, als contrastverhouding volgens de definitie van WCAG. De kleuren worden van de pixels gelezen, gewoon en zoals de browser protanopie, deuteranopie, tritanopie en achromatopsie nabootst. Een verhouding onder 3 op 1 zonder ander kenmerk (onderstreping, rand, pictogram, ander lettertype) is een aanwijzing voor 1.4.1. De grens komt uit techniek G183 van W3C voor links; dat is een techniek en geen normtekst. Een agent kan ook een document van de steekproef nader bekijken: de feiten, één pagina met beeld en tekst in leesvolgorde, of de boom van tags.
+
+Een agent kan ook laten voorlezen (`loep speak`). Een schermlezer die in de pagina is nagebootst (`@guidepup/virtual-screen-reader`) zegt wat er bij een element wordt voorgelezen, in welke volgorde de pagina wordt gelezen en wat er na een handeling uit zichzelf wordt uitgesproken. In een rapport heet dat "volgens de standaard voorgelezen". De lezer volgt de ARIA-standaard en is geen echte schermlezer: wat NVDA, JAWS of VoiceOver anders doen, laat hij niet zien. De dekking, gemeten op de testpagina's:
+
+- Een open schaduwboom leest hij mee, met wat een slot toont. Een gesloten schaduwboom niet.
+- Binnen een ingesloten venster werkt hij als een element in dat venster wordt aangewezen, ook na een handeling. Een wandeling vanaf het begin van de pagina noemt de titel van een venster en gaat er niet in.
+- Hij leest de code. Een rol, naam of toestand die een webcomponent daarbuiten zet (ElementInternals) ziet hij niet; bij één element noemt het antwoord dan wat de browser geeft.
+- Buiten een modaal venster, in een deel met `inert` en in een dichtgeklapte `details` leest hij niets, zoals de standaard vraagt. De samenvatting van een `details` noemt hij zonder rol en toestand.
+- Uit zichzelf uitgesproken is een verandering van inhoud in een live-regio die hulpsoftware al had. Een verandering in een verborgen regio telt niet, een regio die met haar tekst in de pagina wordt gezet ook niet. Een regio die eerst verborgen was en met haar tekst zichtbaar wordt, staat apart: de standaard legt niet vast of dat wordt uitgesproken, en echte schermlezers verschillen erin.
+- De rollen en toestanden staan in het Engels. Uitspraak, taalwissels en de sneltoetsen van een schermlezer vallen erbuiten.
+
+Draait de virtuele Mac met VoiceOver ([voiceover.md](voiceover.md)), dan laat een agent ook een echte schermlezer voorlezen (`loep voiceover`): VoiceOver met Safari. Het leest de toestand waarin de sessie van de agent is, of een bewaarde toestand, en kan op een knop drukken en zeggen wat VoiceOver daarna uit zichzelf uitsprak. De pagina wordt daarvoor één keer opgehaald, met GET en binnen de scope. In Safari speelt een script de stappen van de toestand na op die pagina, met de eigen scripts van de site, en houdt alles tegen wat iets zou versturen: alleen GET en HEAD naar de hosts van de run gaan de pagina uit. Wat het tegenhield, en of een nieuw venster of het e-mailprogramma op verzoek van de agent is tegengehouden, staat in de waarneming en in het antwoord. Een stap die Safari niet kan naspelen (Tab, terug, naar een andere pagina), maakt dat de toestand wordt geweigerd. Er is één virtuele Mac: voorlezingen van agents gaan na elkaar, en het antwoord zegt hoe lang een agent wachtte. VoiceOver is een tweede methode voor de vraag naar spraak, naast de nagebootste lezer. Het rapport noemt VoiceOver met zijn versies bij de hulpsoftware als een agent het gebruikte. Wat VoiceOver zegt, geldt voor VoiceOver met Safari; NVDA en JAWS kunnen het anders doen, en een oordeel dat op VoiceOver rust, zegt dat. Draait de virtuele Mac niet, dan hoort de agent dat en werkt alles zoals zonder.
+
+## Versturen
+
+Een run verstuurt niets naar de site, tenzij dat bij het begin uitdrukkelijk is toegestaan: voor een site op de eigen machine, of voor een testomgeving op grond van een verklaring van iemand met naam en functie. Het rapport en de verklaring noemen alleen de functie; de naam staat in het manifest van de run. Zonder die toestemming houdt het gereedschap elk verzoek tegen dat iets naar de site schrijft, en vult een agent een formulier hooguit in met vaste testwaarden. Criteria die pas na versturen te beoordelen zijn, blijven dan open.
+
+## Een site achter een inlog
+
+Zonder verdere stap logt de toolbox nergens in. Voor een site achter een inlog doet een mens dat, met `login --run <run> --url <inlogpagina> --role "<rol>"`.
+
+- **Een mens logt in, de toolbox neemt de sessie over.** `login` opent een browservenster op een scherm. De mens logt daar in met een testaccount, gaat naar een pagina die alleen ingelogd te zien is en bevestigt dat in de terminal. De toolbox bewaart wat de browser dan heeft: cookies en opgeslagen waarden. Het wachtwoord ziet en bewaart ze niet, en geen agent krijgt het.
+- **Alleen een testaccount, en op een echte site alleen een testomgeving.** Achter een inlog verandert bijna elke klik iets, en schermafbeeldingen tonen gegevens van het account. Een run met een inlog op een adres dat niet lokaal is, wordt daarom geweigerd tenzij de run een verklaarde testomgeving heeft (`inventory --test-environment ... --declared-by ...`, zie "Versturen"). Die verklaring komt van wie over de omgeving gaat.
+- **Waar de sessie staat.** In `login-session.json` in de run, alleen leesbaar voor wie inlogde. Het bestand staat buiten het zegel, komt in geen rapport, dossier, opdracht of waarneming, en wordt door git genegeerd. Wie het heeft, is ingelogd: gooi het weg als het onderzoek klaar is. Het manifest van de run zegt alleen dat er is ingelogd, in welke rol, wat de inlogpagina is en welke pagina de mens aanwees.
+- **Een andere machine.** Draait het onderzoek op een machine zonder scherm, dan logt de mens in op een machine met een scherm (`login --url <inlogpagina> --out <bestand>`) en zet het bestand daarna in de run (`login --run <run> --from <bestand>`). Dat tweede commando weigert een bestand dat geen sessie is, leeg is of voor een andere site is.
+- **Wat de mens in het venster doet, gaat mee.** Niet alleen de inlog: ook een keuze in een cookiemelding staat in de sessie. Die melding komt in het onderzoek dan niet meer op en wordt dus niet onderzocht. Moet ze wel onderzocht worden, doe dat dan in een run zonder inlog.
+- **Elke browser begint ingelogd.** De inventaris, de veegronde, `check-site`, de sessies van de agents en de tweede meningen in WebKit en Firefox starten met de sessie. Een document achter de inlog wordt met dezelfde sessie opgehaald.
+- **De pagina's vinden.** Achter een inlog is er geen sitemap om op te varen. De inventaris begint op het opgegeven adres en op de pagina die de mens aanwees, en volgt de links.
+- **Nooit uitloggen.** Een link of knop logt uit als zijn adres dat zegt (een deel `logout`, `log-out`, `signout`, `sign-out`, `logoff`, `uitloggen`, `uitlog` of `afmelden`), of als zijn naam hooguit veertig tekens is en een van de woorden uitloggen, log uit, afmelden, meld je af, logout, log out, log off of sign out bevat. De inventaris volgt zo'n link niet en legt het adres vast. Geen browser van de run vraagt zo'n adres daarna nog op, met welke methode ook; een agent die het probeert, krijgt een weigering. De proef met knoppen slaat zo'n knop over en een agent kan er niet op klikken.
+- **Een verlopen sessie.** Een pagina lijkt op het inlogscherm als de browser op het adres van de inlogpagina uitkwam terwijl een andere pagina was gevraagd, of als de pagina een wachtwoordveld toont. Dat is nog geen bewijs: een pagina om een wachtwoord te wijzigen heeft ook zo'n veld. Daarom opent de toolbox dan de pagina die de mens bij het inloggen aanwees. Valt die ook terug, dan is de sessie verlopen. De stap stopt met een melding die zegt wat te doen: opnieuw `login`, en daarna hetzelfde commando. Wat al gemeten is, blijft staan: `collect` en `contrast` gaan verder waar ze waren, `states`, `check-site` en `inventory` beginnen opnieuw. Een sessie van een agent merkt het bij zijn eerstvolgende `open`; het sessieproces neemt een nieuwe inlog over zonder herstart. Het ophalen van documenten (`documents`) merkt het niet: een document dat dan het inlogscherm teruggeeft, staat als niet te openen in het rapport. Elke stap van de veegronde opent de aangewezen pagina ook voor en na zijn werk, zodat een sessie die verliep op pagina's die iedereen mag zien, toch wordt opgemerkt. Bij het inloggen controleert de toolbox dat de aangewezen pagina zonder sessie echt terugvalt; een pagina die iedereen kan zien, wordt geweigerd.
+- **De sessieproef (2.2.1).** De meting houdt haar eigen sessie bezig: de veegronde, het sessieproces en elke agent gebruiken dezelfde sessie, en een sessie die bij elk gebruik verlengt, ligt dan nooit stil. Daarom logt de mens een tweede keer in, met `login --run <run> --idle`; hetzelfde testaccount mag. Die sessie staat in `idle-session.json`, met dezelfde regels als `login-session.json`, en alleen de sessieproef gebruikt haar. `collect` start de proef als een eigen proces op de achtergrond (`watch-session`), met de stand in `session-watch.json`; een tweede start op dezelfde run laat het lopende proces staan. De proef opent de aangewezen pagina in een tabblad dat ze verder met rust laat en waar ze om de halve minuut naar kijkt zonder iets aan de site te vragen: verschijnt er een venster of tekst over een sessie die afloopt, dan legt ze die vast met een schermafbeelding. Na 5, 10, 20, 40 en 80 minuten stilte, daarna steeds 80, kijkt ze in een verse browser met de cookies van de tweede inlog of de sessie nog leeft, met de regel voor een verlopen sessie hierboven. Ze stopt als de sessie verliep, bij `evaluate`, of na acht uur. Elk nakijken is een verzoek met de sessie, en veel sites verlengen een sessie bij elk verzoek: de proef zegt daarom "verliep niet binnen een stilte van X minuten" of "verliep na een stilte van hooguit X minuten", niet hoe lang de sessie in totaal geldig is. Ze kijkt bij elke keer ook of de sessie van de meting nog leeft, en meldt het als die verliep. Liep de proef nog toen 2.2.1 werd beoordeeld, dan sluit `evaluate` het open punt over de sessieduur met haar uitkomst als de sessie niet verliep; het rapport zegt dan dat de sessieproef de uitkomst vaststelde. Zonder tweede inlog draait de proef niet, en blijft de duur van de sessie een keuze van de eigenaar.
+- **Wat het rapport zegt.** Met een inlog staat er dat is ingelogd met een testaccount, in welke rol, en dat het inloggen zelf door een mens is gedaan en niet is onderzocht. De rol is de tekst die bij `--role` is opgegeven; geef een rol en geen naam. Een gebruikersnaam, e-mailadres of cookie staat nergens.
+
+Wat dit niet doet: het inloggen zelf wordt niet beoordeeld (3.3.8). Of een sessie verloopt, meet alleen de sessieproef, en alleen als er een tweede inlog is. Onderzocht is wat één account in één rol te zien krijgt. Een site die bij elk verzoek een nieuw sessiecookie uitgeeft en het oude intrekt, werkt hier niet mee: elke browser begint met de sessie van het moment van inloggen. Dit is door tests gedekt op de eigen testsite en op geen andere site gemeten.
+
+## Afwijkingen van WCAG-EM
+
+- Stap 4, het beoordelen, doet een taalmodel en geen mens.
+- Op een kleine site wordt geen steekproef getrokken. Alle pagina's worden onderzocht.
+- De rondgang en de verkenning gebeuren per paginatype op één pagina. De veegronde meet wel elke pagina van de steekproef.
+- Een proces wordt onderzocht voor zover de verkenner het als recept kon vastleggen. Zonder toestemming om te versturen stopt het voor de verzendknop.
+- Er is geen basisniveau van hulpsoftware. De veegronde gebruikt één browser (Chromium) en een nagebootste schermlezer. Een echte schermlezer (VoiceOver met Safari) komt er alleen aan te pas waar een agent hem gebruikte, als de virtuele Mac draaide; NVDA en JAWS niet. Een tweede browser komt er alleen aan te pas voor de naam, de Tab-volgorde, reflow, vergroten en tekstafstand, waar een agent die zelf meet. Een verschil tussen de browsers is daar een open punt en geen bevinding op zich.
+
+## Beperkingen
+
+- **Ingesloten vensters voor een deel.** Een agent bedient, bekijkt en meet een element in een ingesloten venster (iframe) zoals elk ander element, ook als het venster van een andere partij komt; verzoeken van daaruit vallen onder dezelfde regels. De veegronde meet een venster dat meetelt op de pagina waar het staat, en opent het los als dat niet lukt; de poort meldt dat dan. De proeven met formulieren, knoppen, toetsen, aanwijzen en indrukken gaan dezelfde weg, en een toestand uit het sitemodel die in zo'n venster ligt, wordt in het venster gemeten; een proef die binnen een venster niet lukt, staat bij de pagina in het dossier en als waarschuwing bij de poort. Nog niet: wat buiten het zichtbare deel van een venster valt krijgt geen nummer, en WebKit geeft binnen een venster geen naam. Dit is door tests gedekt en op geen site gemeten.
+- **Media alleen als het bestand op te halen is.** Dan worden video en geluid beluisterd en bekeken: spraak naast ondertitels en paginatekst, stilstaande beelden, flitsen. Spraak- en tekstherkenning maken fouten, er worden hooguit acht beelden en de eerste tien minuten bekeken, en de flitsmeting is een benadering van de norm. Een speler in een ingesloten venster wordt op dezelfde manier beluisterd als hij een bestand afspeelt dat op te halen is. Een stream en een live-uitzending blijven open.
+- **Documenten voor een deel.** EN 301 549 hoofdstuk 10 past de criteria toe op documenten die geen webpagina zijn. De inventaris vindt documenten via links en de sitemap; een document dat alleen via een script of na het versturen van een formulier te bereiken is, vindt hij niet. Tot en met twintig documenten worden ze allemaal onderzocht, daarboven een keuze per soort plus een willekeurig deel. Ingelezen worden pdf, docx, odt, pptx, odp, xlsx en ods; doc, xls, ppt, rtf en epub worden geteld en niet ingelezen, en documenten op een ander domein ook niet. Tien procedures nemen de documenten mee: 1.1.1, 1.3.1, 1.3.2, 1.4.5, 2.4.2, 2.4.4, 2.4.6, 3.1.1, 3.1.2 en 4.1.2. Op de andere criteria (zoals contrast en toetsenbord) worden documenten niet beoordeeld. Gelezen is wat in het bestand staat, zonder kantoorpakket en zonder schermlezer; van een kantoorbestand is er geen beeld. De wet zondert kantoorbestanden van voor 23 september 2018 uit als ze niet nodig zijn voor een lopend proces: de datum van de server wordt vastgelegd, de toolbox beslist daar niets over. De bewijspoort controleert de documenten niet. Wat niet is ingelezen of niet is gekozen, staat met aantallen in het rapport als beperking.
+- **Inlog alleen als een mens inlogt.** Zonder `login` wordt niet ingelogd, en wat achter een inlog staat is dan niet onderzocht. Met `login` is onderzocht wat één testaccount in één rol te zien krijgt; zie "Een site achter een inlog". Het inloggen zelf en het verlopen van de sessie worden niet beoordeeld.
+- **Weinig hulpsoftware.** Wat hulpsoftware krijgt, is afgelezen uit de toegankelijkheidsboom van de browser. Wat in een rapport "volgens de standaard voorgelezen" heet, komt van een nagebootste schermlezer en zegt niets over wat een echte doet. Alleen waar een agent VoiceOver met Safari liet voorlezen, is een echte schermlezer gebruikt; het rapport noemt dan de versies. NVDA en JAWS zijn niet getest. VoiceOver leest een kopie van de pagina in Safari, met de eigen scripts van de site maar zonder iets te versturen: een melding na een geslaagde verzending hoort het niet, en een site die haar inhoud pas na een verzoek van een ander adres krijgt of haar route uit het adres leest, kan in de kopie anders zijn.
+- **Het sitemodel bepaalt de dekking.** Een onderdeel dat de verkenner niet vond of niet open kreeg, wordt door de veegronde niet gemeten. De telling van `check-site` en de poort vangt formulieren en bedieningsonderdelen die het model mist; inhoud die geen bedieningsonderdeel is, vangt ze niet. De rondgang en de beoordelaar kunnen zoiets nog tegenkomen, maar dat is niet zeker.
+- **Een afkeuring kan op een strenge lezing rusten.** De verifieerder toetst of de norm een bevinding dekt, maar in de metingen op een site zonder ingebouwde gebreken bleven bevindingen staan die discutabel zijn.
+- **De metingen zijn smal.** Ze komen van een testsite die met hetzelfde systeem is gebouwd en van één echte site, met één run per meting. Hoe de methode het op andere sites doet, is daarmee niet vastgesteld.
+- **Een oordeel uit de afmaakronde heeft één lezer gehad.** Na die ronde komt geen verifieerder: een bevinding is twee keer door dezelfde agent gezien, en een goedkeuring is niet door een tweede agent aangevallen. Het rapport zegt bij welke criteria dat zo is.
+- **Een antwoord van een persoon wordt niet gecontroleerd.** Het onderzoek legt vast wat iemand zegt te hebben gedaan of besloten, met de functie. Of het klopt, toetst niemand; wie tekent, staat ervoor in.
+- **Een deel is alleen door tests gedekt.** Op geen site gemeten zijn: de afmaakronde, de antwoorden van een persoon, de documenten, de formulierproef zoals een bezoeker het doet, het vastleggen van het klembord, de soorten open punten, de uitkomst "geen afwijking gevonden, niet volledig gemeten", de trede `blokkerend`, het bijstellen van de eigenaar en het overslaan van metingen die nog geldig zijn. De tests zeggen dat de code doet wat bedoeld was, niet dat het onderzoek er beter van wordt.
+- **De naam van het model wordt opgegeven.** Elke agent geeft bij de start van zijn sessie zelf de naam en versie van zijn model op, of `onbekend`; de toolbox bewaart dat in het sessiebestand en het rapport telt het per rol. Wie het onderzoek uitvoert geeft ook een naam op, en het rapport zegt het als die verschilt. Niets in de run kan controleren welk model werkelijk draaide.
+- **Het model kan zich vergissen binnen de regels.** De controles weigeren een oordeel zonder waarneming of zonder plek, maar ze kunnen niet zien of een waarneming goed is gelezen.
+
+## Wat een uitkomst betekent
+
+- **Voldoet**: in het onderzochte bewijs is geen afwijking gevonden, het bewijs dekt wat de procedure eist, en de verifieerder vond geen tegenvoorbeeld. Het is geen garantie.
+- **Voldoet niet**: er is minstens één bevinding met een aanwijsbare plek, die de verifieerder opnieuw heeft gemaakt of zelf heeft gevonden.
+- **Niet van toepassing**: de content waar het criterium over gaat, komt volgens de inventaris en de zoektocht van beoordelaar en verifieerder nergens op de site voor.
+- **Kan niet bepalen**: het bewijs is onvolledig, de methoden spreken elkaar tegen, alle bevindingen zijn vervallen, het budget was op, of de toolbox kan dit gedrag niet meten. Na de afmaakronde hoort dit alleen nog te staan bij wat een mens of een keuze vraagt.
+- **Geen afwijking gevonden, niet volledig gemeten**: een bijzonder geval van "kan niet bepalen". Het mag alleen als er geen bevinding is, de agent zelf heeft gekeken of gemeten, geen kandidaat open staat en elk open punt over het onderzoek zelf gaat (dekking die ontbrak, budget op, een proef die niet werkte). Het rapport toont en telt het apart, met wat er wel is gemeten. Het telt niet als "voldoet" en de status blijft C.
+- **Niet beoordeeld**: er is geen geldig eindoordeel.
+
+Elk open punt begint met zijn soort. Twee soorten zijn voor de eigenaar van de site: iets wat geen instrument kan vaststellen (`mens nodig`) en iets wat een keuze vraagt (`keuze nodig`). Drie gaan over het onderzoek: `veegronde mist`, `budget op` en `proef werkte niet`. Het rapport zet de eerste groep volledig onder "Nog uitzoeken" en telt de tweede per criterium, met de tekst in bijlage A. De eerste groep sluit een persoon met `answer`; de tweede is werk voor de afmaakronde.
+
+Bij elk criterium staat ook door wie of wat de uitkomst is vastgesteld: de verificatie, de afmaakronde of een persoon.
+
+## Ernst en eigenaar van een bevinding
+
+Een bevinding heeft een ernst in vier treden: `blokkerend` (een functie of een deel van de inhoud werkt voor niemand, met of zonder beperking), `hoog`, `midden` en `laag`. De keuze volgt uit wat de bezoeker niet kan. De werklijst en de samenvatting sorteren erop. De samenvatting toont alle gebreken van de hoogste trede die voorkomt, die van de trede daaronder zolang de lijst kort blijft, en zegt hoeveel er niet staan.
+
+De beoordelaar noemt wie een gebrek herstelt. Is bij de inventarisatie opgegeven welke elementen van een leverancier zijn (`--vendor-tags`), dan toont het rapport per zo'n element welke bevindingen het raken. Dat zegt waar een gebrek zit, niet wie het herstelt. `evaluate` zet de eigenaar alleen op de leverancier als het advies over de binnenkant van zo'n element gaat; wat de beoordelaar noemde, blijft in de gegevens staan.
+
+## Een volgend onderzoek
+
+`evaluate --previous` laat een bevinding op dezelfde plek onder hetzelfde criterium haar nummer houden. `diff` legt twee evaluaties van dezelfde site naast elkaar en schrijft `verschil.md`: opgelost, gebleven, nieuw, en de criteria met een andere uitkomst, gekoppeld op criterium, pagina en plek. Dat is een werkdocument en geen deel van het rapport. Het rapport noemt een vorig onderzoek in één regel, en alleen als dat is afgetekend.
+
+## De handtekening
+
+Het onderzoek komt zonder menselijk werk tot stand. Eén mens met naam tekent voor de uitkomst. In het rapport staat letterlijk wat een handtekening betekent en wat de ondertekenaar zelf heeft gecontroleerd.
+
+Wat iemand tekent, is precies wat verzegeld is. De volgorde is vast:
+
+1. `evaluate` en `render` maken de evaluatie en het conceptrapport in `report/`. Heeft een persoon daarna met `answer` open punten beantwoord, dan draaien beide opnieuw.
+2. `seal` legt in `evidence-index.json` de hash vast van elk bestand in de run: het bewijs, de oordelen, de antwoorden van een persoon, de evaluatie en het conceptrapport.
+3. Een mens leest het rapport en tekent met `sign`. Dat commando weigert als de run niet is verzegeld of na het verzegelen is veranderd. De handtekening komt in `signed/signature.json` en noemt de hash van het zegel en van de evaluatie.
+4. `render` schrijft het rapport dat zegt wie tekende in `signed/`. `statement` schrijft de verklaring in `verklaring/`.
+
+De handtekening, het afgetekende rapport en de verklaring staan buiten het zegel. Ze maken verandert dus niets aan wat verzegeld is, en `verify` klopt na het tekenen nog. Verandert er daarna één byte in een verzegeld bestand, dan meldt `verify` dat. Een handtekening die bij een ander zegel of een andere evaluatie hoort, meldt het ook, en het rapport behandelt het onderzoek dan weer als concept. Wie een afgetekende run na een wijziging opnieuw verzegelt, maakt de handtekening ongeldig: `seal` verwijdert haar en zegt dat.
+
+Het zegel is geen bewijs van herkomst. Het gebruikt geen sleutel: wie in de map van de run kan schrijven, kan ook opnieuw verzegelen. Het afgetekende rapport toont daarom de eerste twaalf tekens van de hash van het zegel, zodat een lezer het rapport naast de run kan leggen.
+
+## Wat dit voor de verklaring betekent
+
+De verklaring noemt het onderzoek "automatisch onderzoek" en "in eigen beheer". DigiToegankelijk schrijft dat meer dan tachtig procent van de eisen door een mens gecontroleerd moet zijn en dat je met alleen een automatische testtool niet aan de wet voldoet. Die tekst is geschreven met regel-engines in gedachten. Of een onderzoek zoals dit eronder valt, heeft de toezichthouder niet bevestigd. Reken erop dat het register bij status A of B "onderbouwing ontoereikend" kan tonen zolang dat zo is.
+
+De toolbox berekent de status streng. Blijft er één criterium open, dan is de uitkomst status C: eerste maatregelen genomen, aanvullend onderzoek binnen zes maanden.
+
+## Herleidbaarheid
+
+Per onderzoek ligt vast:
+
+- welke pagina's zijn onderzocht, met een hash van de inhoud en een bewaarde kopie;
+- de commit van de toolbox, de hash van het lockfile, de versies van de engines, de sha256 van het spraakmodel als er is geluisterd, en de build van elke browser die is gebruikt (Chromium voor alle metingen; WebKit en Firefox alleen als een agent er een meting in herhaalde, met erbij voor welke metingen);
+- elk hulpmiddel dat een meting beantwoordde, met versie, licentie, waarvoor en hoe vaak: de methoden in een sessie en de programma's die de documenten lazen;
+- het sitemodel en de uitkomst van de bewijspoort;
+- per criterium de versie en hash van de procedure, de hash van het dossier, van de opdracht en van elk oordeel, en de hash van elke aangehaalde waarneming;
+- wie heeft getekend, voor welke evaluatie en voor welk zegel.
+
+Een oordeel waarvan het bewijs, de procedure, de opdracht of een aangehaalde waarneming is veranderd, geldt niet meer en moet opnieuw. `seal` legt de hash van elk bestand in de run vast; `verify` rekent ze na en meldt elk bestand dat is gewijzigd, toegevoegd of verdwenen, en zegt of er is afgetekend en voor welk zegel.
+
+## De ijkset
+
+De toolbox legt vier regelsets en eigen metingen naast elkaar. Hoe vaak elk daarvan gelijk heeft, meet `just calibrate` op de testgevallen die W3C bij de ACT-regels onderhoudt: ruim duizend kleine pagina's, elk met de verwachte uitkomst van één regel (afgekeurd, geslaagd of niet van toepassing). Het is geen stap van een onderzoek en het draait niet mee in de vaste controle. De gevallen staan niet in deze repository. Ze worden op een vaste commit opgehaald naar een map buiten de repository, de hash van de lijst wordt gecontroleerd, en de pagina's worden vanaf de eigen machine geserveerd; een verzoek naar buiten wordt geweigerd. De uitkomst staat per datum in `validatie/ijkset/`, met de commit, de hashes en de versies van de instrumenten. De licentie van de gevallen en de keuze om ze niet op te nemen staan in [validatie/ijkset/README.md](../validatie/ijkset/README.md).
+
+Per instrument en per ACT-regel telt de meting: terecht gevonden, gemist, onterecht gemeld, twijfel en geen uitspraak. Welke regel van een regelset bij welke ACT-regel hoort, zegt de maker: in de metadata van het pakket (axe-core, IBM, QualWeb) of in het implementatierapport bij W3C (Alfa). Heeft een regelset geen regel voor een ACT-regel, of draait de toolbox die regel niet, dan is dat geen uitspraak en geen misser. De eigen metingen (de naam, het contrast op de pixels, de taalherkenning) zijn alleen gekoppeld waar de ACT-regel hetzelfde vraagt als de meting. De meting legt de vier regelsets ook naast elkaar: op welke gevallen ze het oneens zijn, hoe vaak de meerderheid dan gelijk heeft, en hoe vaak een geval werkelijk een fout is als twee regelsets het afkeuren, als één het afkeurt en de rest zwijgt, of als de ene afkeurt wat de andere goedkeurt.
+
+De getallen zeggen of een instrument op een bekende, kleine situatie het antwoord geeft dat de regel voorschrijft, en waar de regelsets elkaar tegenspreken. Meer zeggen ze niet:
+
+- **De gevallen zijn klein en kunstmatig.** Een instrument dat hierop goed scoort, kan op een echte site nog missen.
+- **De score is aan de gunstige kant.** De makers van de regelsets testen zelf tegen deze gevallen en stellen hun regels erop af.
+- **Alleen wat een ACT-regel heeft, is gemeten.** Voor veel succescriteria bestaat er geen, en een regelset heeft ook regels zonder ACT-regel erachter.
+- **Gemeten is hoe de toolbox de regelsets leest**: een regel die afkeurt, telt als afkeuring, in Chromium en in de lichte weergave.
+
+Het rapport van een onderzoek noemt deze getallen niet.
+
+## Hoe lang een onderzoek duurt
+
+`estimate` rekent uit hoe lang een onderzoek duurt. Het leest wat de run al weet over de site en geeft per onderdeel de verwachte duur, het totaal met een marge en het verwachte aantal tokens. Het kan direct na `inventory`, en wordt scherper na `sample` (de steekproef in plaats van alle pagina's), na de verkenner (de paginatypen uit het sitemodel in plaats van een telling van pagina's met dezelfde opbouw) en na `tasks` (het echte aantal opdrachten). Een onderdeel dat klaar is, toont wat het werkelijk kostte in plaats van de schatting. Halverwege zegt het commando dus wat er nog komt, en op een afgeronde run staan geschat en gemeten naast elkaar. Het schrijft niets in de run.
+
+Wat gemeten is, komt uit de run zelf. Elke stap in `manifest.json` heeft een begin, een einde en een duur. De fasen met agents hebben geen stap: hun duur komt uit de sessiebestanden, want elke agent start en stopt één sessie. Een run van vóór 13 oktober 2026 heeft alleen het einde van elke stap; daar telt de tijd sinds de stap ervoor, en de uitvoer zet er een tilde voor.
+
+### De formule
+
+Alle tijden zijn minuten. Een lokale site is een site op de eigen machine, zoals de testsite.
+
+| Onderdeel | Berekening | Lokale site | Site elders |
+|---|---|---|---|
+| Verkennen, één agent | vast | 10 | 10 |
+| `collect` | per pagina van de steekproef | 0,83 | 1,14 |
+| `contrast` | per pagina | 0,065 | 0,10 |
+| `states` | per pagina | 0,60 | 0,84 |
+| Poort, met het bekijken van de bladen | vast | 1,5 | 1,5 |
+| Rondgangen | duur per agent × (paginatypen ÷ agents tegelijk + 0,5) | 5,2 | 7,2 |
+| Beoordelen | duur per agent × (criteria ÷ agents tegelijk + 1) | 4,0 | 4,7 |
+| Verifiëren | duur per agent × (criteria ÷ agents tegelijk + 0,75) | 2,9 | 3,8 |
+| Afmaakronde | duur per agent × (criteria die open bleven ÷ agents tegelijk + 1) | 14 | 16,5 |
+| Rapport | vast | 1 | 1 |
+| Tussen de stappen | vast | 3,5 | 3,5 |
+
+De duur per agent loopt van het starten van de agent tot zijn resultaat, dus met het lezen van de opdracht vóór de sessie en het schrijven erna. Het getal dat bij de deling wordt opgeteld, is de uitloop: de laatste agents van een fase lopen door nadat het gemiddelde werk op is. Zijn er niet meer agents dan er tegelijk lopen, dan duurt de fase zo lang als de traagste: 1,12 keer de duur per agent bij rondgangen en 1,75 keer bij beoordelen en verifiëren.
+
+De afmaakronde is niet gemeten: er is nog geen run mee gemaakt. De duur per agent is die van een beoordelaar maal 3,5, de ruimte die de ronde krijgt. Hoeveel criteria haar nodig hebben, weet niemand voordat de verifieerders klaar zijn. In de ene run waarin het is geteld (nerds-v4) bleven 8 van de 55 criteria open door het onderzoek zelf: 15 procent. `estimate` rekent met dat aandeel en toont erbij de band van geen enkel criterium tot twee keer zoveel (30 procent); die band maakt ook de marge van het totaal breder. Zodra `tasks` de opdrachten van de ronde heeft geschreven, rekent `estimate` met het echte aantal. Een run die af is zonder afmaakronde heeft er geen regel voor.
+
+Tokens: 125.000 per agent van de werkstroom, dus voor paginatypen + twee keer de criteria + vier rondes waarin de werkstroom vraagt wat er open staat. Een agent van de afmaakronde is gerekend op 3,5 keer dat getal, en de ronde vraagt één ronde extra waarin de werkstroom vraagt wat er open staat; ook dat is niet gemeten. De verkenner, de poort en wie het onderzoek leidt zitten daar niet in.
+
+De marge is 25 procent korter tot 40 procent langer, op wat nog moet komen. Dat is een keuze en geen statistiek. Langer is waarschijnlijker dan korter: een tweede poging van een agent, een poort die de verkenner terugstuurt, een site die traag antwoordt.
+
+Als vuistregel voor een site elders met alle 56 criteria: minuten ≈ 27 + 2 × pagina's + (7 × paginatypen + 475) ÷ agents tegelijk. Voor 29 pagina's, 18 paginatypen en 8 agents tegelijk is dat ongeveer 2 uur 40. Daar komt de afmaakronde bij: 16 + 16 × het aantal criteria dat open bleef ÷ agents tegelijk, dus ongeveer 35 minuten als dat er 9 zijn.
+
+Alle getallen staan op één plek, met bij elk de metingen waar het uit komt: `COEFFICIENTS` in `toolbox/src/lib/estimate.ts`.
+
+### Waarop dit is geijkt
+
+Zes runs op twee sites, gemaakt tussen 10 en 13 oktober 2026 met loep 0.0.1, de laatste op commit 5051033. De werkstroom startte de agents toen nog in groepen en wachtte op de traagste van elke groep. De schatting hieronder is daarom met `--groups` gemaakt, die een fase rekent als het aantal groepen × de duur per agent × de traagste van een groep. Elke cel is geschat / gemeten, in minuten.
+
+| Run | Site | Pagina's, paginatypen, agents tegelijk | Verkennen | `collect` | `contrast` | `states` | Poort | Rondgangen | Beoordelen | Verifiëren | Totaal | Afwijking |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| meting-v2, 10 oktober | lokale testsite | 20, 15, 10 | 10 / 9 | 17 / 16 | 1,3 / 0,7 | 12 / 9 | 1,5 / 1,4 | 12 / 12 | 42 / 46 | 30 / 37 | 130 / 135 | 3% te laag |
+| tweeling-v2, 10 oktober | lokale testsite, schone tweeling | 20, 16, 10 | 10 / 8 | 17 / 14 | 1,3 / 0,7 | 12 / 9 | 1,5 / 0,9 | 12 / 12 | 42 / onderbroken | 30 / 36 | niet vergeleken | |
+| klein-2, 11 oktober | lokale testsite, 17 criteria en 8 rondgangen | 20, 8, 8 | 10 / 17 | 17 / 17 | 1,3 / 1,3 | 12 / 12 | 1,5 / 1,3 | 6 / 5 | 21 / 16 | 15 / 11 | 88 / 81 | 8% te hoog |
+| nerds-v2, 10 oktober | nerds.digitaledienst.overheid.nl | 29, 11, 8 | 10 / 6 | 33 / 25 | 2,9 / 1,2 | 24 / 13 | 1,5 / 2,4 | 16 / 20 | 58 / 58 | 47 / 45 | 197 / 175 | 13% te hoog |
+| nerds-v3, 11 oktober | nerds.digitaledienst.overheid.nl | 29, 18, 8 | 10 / 12 | 33 / 33 | 2,9 / 2,6 | 24 / 24 | 1,5 / 2,7 | 24 / 23 | 58 / 56 | 47 / 49 | 205 / 204 | minder dan 1% |
+| nerds-v4, 13 oktober | nerds.digitaledienst.overheid.nl | 29, 18, 8 | 10 / 8 | 33 / 33 | 2,9 / 3,0 | 24 / 25 | 1,5 / 1,2 | 24 / 25 | 58 / 57 | 47 / 43 | 205 / 198 | 3% te hoog |
+
+Het totaal loopt van het einde van `inventory` tot en met `evaluate`. Bij tweeling-v2 lag het beoordelen uren stil; die fase en het totaal zijn niet vergeleken. Bij nerds-v2 liepen de rondgangen met vier agents tegelijk en niet met acht.
+
+Wat de tabel zegt, en wat niet:
+
+- **De getallen zijn op deze runs afgesteld.** Dat nerds-v3 en nerds-v4 binnen een paar procent uitkomen, is dus geen bewijs. Een run op een derde site is de eerste echte toets.
+- **De schatting hoort bij een versie.** Tussen nerds-v2 en nerds-v3 ging de toolbox meer meten: `collect` duurde op dezelfde site een derde langer en `states` bijna twee keer zo lang. De getallen volgen de nieuwste run van elke soort. Draait een run met een andere commit dan die van de ijking, dan zegt `estimate` dat erbij.
+- **Per onderdeel is de afwijking groter dan in het totaal.** Verkennen liep van 6 tot 17 minuten bij een schatting van 10, en een fase met weinig agents (klein-2) week een derde af.
+- **Lokaal en elders zijn één site elk.** Het verschil kan net zo goed de zwaarte van de pagina's zijn als de afstand.
+- **`states` kent een plafond.** De indrukproef stopt bij 300 soorten bedieningselementen en aanwijzen en focus bij 150. De gemeten echte site zat aan beide grenzen; een grotere site van die soort kost per pagina minder dan de formule zegt.
+- **De tokens zijn niet na te rekenen uit een run.** Een run bewaart geen tokens. Het getal komt uit wat de werkstroom meldde: 16,6 en 16,9 miljoen voor de 134 agents van nerds-v3 en nerds-v4.
+
+Niet gedekt, en dus niet in de schatting: een trage site, documenten van de site, video en geluid, veel bevindingen per criterium, een site achter een inlog en een tweede veegronde nadat de poort gaten vond.
+
+### Wat de pool scheelt
+
+Sinds 13 oktober 2026 houdt de werkstroom steeds het volle aantal agents aan het werk: een nieuwe begint zodra er één klaar is. In groepen liepen er bij acht plaatsen gemiddeld 3,3 sessies bij het beoordelen en 5,2 bij de rondgangen, omdat elke groep wachtte op haar traagste agent. De gemeten agents van nerds-v3 en nerds-v4, in dezelfde volgorde door een pool van acht gehaald, geven:
+
+| Fase | In groepen, gemeten | In een pool, berekend |
+|---|---|---|
+| Rondgangen | 23 en 25 | 19 en 21 |
+| Beoordelen | 56 en 58 | 39 en 37 |
+| Verifiëren | 49 en 43 | 28 en 28 |
+
+Dat is ongeveer 40 minuten op een onderzoek van 3 uur 20: een vijfde korter, naar 2 uur 45. Het is uitgerekend en nog niet gemeten. Met steeds acht agents aan het werk kan elke agent trager worden (de machine, de site, de wachttijd tussen twee navigaties naar dezelfde host), en dan valt de winst lager uit. Zonder `--groups` rekent `estimate` met de pool.

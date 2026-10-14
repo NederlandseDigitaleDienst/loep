@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="nl">
+<head><meta charset="utf-8"><title>Buiten de scope - Testsite sessie</title><link rel="stylesheet" href="/site.css"></head>
+<body>
+<main id="inhoud"><h1>Inhoud van elders</h1>
+<p><a id="first-link" href="/">Start</a> <button id="post" type="button">Verstuur iets</button></p>
+<iframe src="__OTHER_ORIGIN__/elsewhere.html" title="Een andere website" width="300" height="80"></iframe>
+<p id="status" role="status"></p></main>
+<script>
+document.getElementById("post").addEventListener("click", () => {
+  fetch("/api/chat", { method: "POST", body: "hallo via post" }).catch(() => undefined);
+  const socket = new WebSocket("ws://" + location.host + "/chat");
+  socket.addEventListener("open", () => socket.send("hallo via socket"));
+  document.getElementById("status").textContent = "Aangeboden.";
+});
+</script>
+</body>
+</html>

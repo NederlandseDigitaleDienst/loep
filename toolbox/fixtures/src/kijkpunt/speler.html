@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kijkpunt videospeler</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: system-ui, sans-serif; background: #111111; color: #ffffff; }
+  .beeld { height: 220px; display: flex; align-items: center; justify-content: center; background: #1d2b3a; font-size: 1.1rem; text-align: center; padding: 1rem; }
+  .balk { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; padding: 0.5rem; background: #000000; }
+  button, a.merk { font: inherit; color: #ffffff; background: #2b2b2b; border: 1px solid #8c8c8c; border-radius: 4px; min-height: 36px; padding: 0.25rem 0.75rem; }
+  button[aria-pressed="true"] { background: #ffffff; color: #000000; }
+  label { display: inline-flex; align-items: center; gap: 0.4rem; }
+  :focus-visible { outline: 3px solid #ffd166; outline-offset: 2px; }
+  .tijd { margin-left: auto; font-variant-numeric: tabular-nums; }
+</style>
+</head>
+<body>
+<div class="beeld"><p id="filmtitel">Video</p></div>
+<div class="balk">
+  <button type="button" id="speel">Afspelen</button>
+  <button type="button" id="geluid" aria-pressed="false">Geluid uit</button>
+  <label for="volume">Volume <input type="range" id="volume" min="0" max="100" value="80"></label>
+  <button type="button" id="ondertitels" aria-pressed="false">Ondertitels</button>
+  <button type="button" id="scherm">Volledig scherm</button>
+  <a class="merk" href="/" target="_blank" rel="noopener">Bekijk bij Kijkpunt (opent in een nieuw venster)</a>
+  <span class="tijd" id="tijd">0:00</span>
+</div>
+<script>
+(function () {
+  var titles = { raad: 'De hele raadsvergadering van 12 maart', stalling: 'De bouw van de fietsenstalling' };
+  var film = new URLSearchParams(location.search).get('film');
+  document.getElementById('filmtitel').textContent = titles[film] || 'Video';
+  var play = document.getElementById('speel');
+  var seconds = 0;
+  var timer = null;
+  function toggle(button) {
+    var pressed = button.getAttribute('aria-pressed') !== 'true';
+    button.setAttribute('aria-pressed', String(pressed));
+    return pressed;
+  }
+  var playing = false;
+  // The play button tells its state by its name alone; the other toggles keep one name and report pressed.
+  function togglePlay() {
+    playing = !playing;
+    play.textContent = playing ? 'Pauzeren' : 'Afspelen';
+    clearInterval(timer);
+    if (playing) timer = setInterval(function () {
+      seconds++;
+      document.getElementById('tijd').textContent = Math.floor(seconds / 60) + ':' + String(seconds % 60).padStart(2, '0');
+    }, 1000);
+  }
+  play.addEventListener('click', togglePlay);
+  document.getElementById('geluid').addEventListener('click', function () { toggle(this); });
+  document.getElementById('ondertitels').addEventListener('click', function () { toggle(this); });
+  document.getElementById('scherm').addEventListener('click', function () {
+    if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(function () {});
+  });
+  document.addEventListener('keydown', function (event) {
+    if (event.target.tagName === 'INPUT' || event.ctrlKey || event.metaKey || event.altKey) return;
+    if (event.key === 'k') togglePlay();
+    if (event.key === 'm') toggle(document.getElementById('geluid'));
+  });
+})();
+</script>
+</body>
+</html>

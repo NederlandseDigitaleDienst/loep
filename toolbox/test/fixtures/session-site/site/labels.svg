@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="400" height="150" viewBox="0 0 400 150" font-family="Arial, Helvetica, sans-serif" font-size="20" font-weight="bold">
+<rect width="400" height="50" fill="#14532d"/><text x="16" y="32" fill="#ffffff">Aanvraag goedgekeurd</text>
+<rect y="50" width="400" height="50" fill="#f59e0b"/><text x="16" y="82" fill="#ffffff">Besluit volgt later</text>
+<rect y="100" width="400" height="50" fill="#ffffff"/><text x="16" y="132" fill="#1f2937">Geen aanvraag gevonden</text>
+</svg>

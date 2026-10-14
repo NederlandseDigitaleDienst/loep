@@ -1,0 +1,30 @@
+# Voorstellen voor nieuwe versies, één keer per week. De controle draait op elk voorstel.
+# Een nieuwe versie van een regel-engine (axe-core, Alfa, QualWeb, de IBM-checker) kan
+# uitkomsten veranderen zonder dat een test faalt: neem zo'n voorstel pas over na een kleine
+# meting op de testsite.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /toolbox
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      regel-engines:
+        patterns:
+          - "axe-core"
+          - "@siteimprove/*"
+          - "@qualweb/*"
+          - "accessibility-checker*"
+      overig:
+        patterns:
+          - "*"
+        exclude-patterns:
+          - "axe-core"
+          - "@siteimprove/*"
+          - "@qualweb/*"
+          - "accessibility-checker*"
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly

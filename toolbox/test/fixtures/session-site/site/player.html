@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="nl">
+<head><meta charset="utf-8"><title>Speler</title>
+<style>
+body { font-family: Arial, sans-serif; margin: 8px; color: #1a1a1a; background: #ffffff; }
+button { font: inherit; }
+#play { background: #ffffff; color: #9a9a9a; border: 1px solid #1a1a1a; padding: 6px 10px; }
+#small { width: 16px; height: 16px; padding: 0; margin-left: 2px; border: 1px solid #1a1a1a; background: #ffffff; font-size: 10px; line-height: 1; }
+#below { margin-top: 400px; }
+</style></head>
+<body>
+<h1>Speler</h1>
+<video id="film" src="/tone.wav" muted width="200" height="40"><track kind="captions" srclang="nl" label="Nederlands" src="/captions.vtt" default></video>
+<p><button id="play" type="button" aria-pressed="false" aria-label="Afspelen">Speel af</button><button id="small" type="button" aria-label="Geluid uit">x</button></p>
+<form id="reactie" method="post" action="/submit"><label for="naam">Naam</label> <input id="naam" name="naam"> <button id="stuur" type="submit">Verstuur</button></form>
+<p><button id="meld" type="button">Meld iets</button> <a id="weg" href="/redirect-third">Verder bij een ander</a></p>
+<p id="status" role="status"></p>
+<p><button id="below" type="button">Knop onderaan</button></p>
+<script>
+const play = document.getElementById("play");
+play.addEventListener("click", () => {
+  const on = play.getAttribute("aria-pressed") !== "true";
+  play.setAttribute("aria-pressed", String(on));
+  play.setAttribute("aria-label", on ? "Pauzeren" : "Afspelen");
+  if (on) parent.postMessage("speelt", "*");
+});
+document.addEventListener("keydown", (event) => {
+  if (event.key === "k") play.click();
+});
+document.getElementById("meld").addEventListener("click", () => {
+  fetch("/api/meld", { method: "POST", body: "gemeld" }).catch(() => undefined);
+  document.getElementById("status").textContent = "Melding aangeboden.";
+});
+</script>
+</body>
+</html>

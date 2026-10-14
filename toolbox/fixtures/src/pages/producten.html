@@ -1,0 +1,82 @@
+<h1>Producten en diensten</h1>
+<p class="inleiding">Hier vindt u wat u bij de gemeente kunt aanvragen. Voor de meeste producten maakt u eerst een afspraak. Neem naar de afspraak altijd een geldig identiteitsbewijs mee. Betalen kan aan de balie met uw pinpas. Kies een product om te lezen wat u nodig heeft en hoe lang het duurt.</p>
+
+<div class="filters">
+  <div>
+    <label for="productfilter">Zoek in de producten</label>
+    <input type="text" id="productfilter">
+  </div>
+  <!--@bad 2.5.7-schuif--><div class="schuif">
+    <p class="groepslabel">Hoogste prijs: <span class="schuif-waarde">150 euro</span></p>
+    <div class="schuif-spoor"><div class="schuif-knop" style="left: 100%"></div></div>
+  </div><!--@good--><div class="schuif">
+    <label for="maxprijs">Hoogste prijs: <span class="schuif-waarde">150 euro</span></label>
+    <input type="range" id="maxprijs" min="0" max="150" step="10" value="150">
+  </div><!--@end-->
+</div>
+<p class="aantal"<!--@bad 4.1.3-aantal--><!--@good--> role="status"<!--@end-->>6 producten gevonden</p>
+
+<!--@bad 2.1.1-productkaart--><div class="kaartrooster">
+  <div class="product" data-product="paspoort" data-prijs="78" data-uitleg="U vraagt een paspoort zelf aan bij de balie. Neem een pasfoto en uw oude paspoort mee. Na vijf werkdagen ligt het klaar.">
+    <h2>Paspoort</h2>
+    <p>Vanaf 77,85 euro</p>
+  </div>
+  <div class="product" data-product="identiteitskaart" data-prijs="71" data-uitleg="U vraagt een identiteitskaart zelf aan bij de balie. Neem een pasfoto mee. Na vijf werkdagen ligt de kaart klaar.">
+    <h2>Identiteitskaart</h2>
+    <p>Vanaf 70,35 euro</p>
+  </div>
+  <div class="product" data-product="rijbewijs" data-prijs="52" data-uitleg="U verlengt uw rijbewijs bij de balie. Neem een pasfoto en uw oude rijbewijs mee.">
+    <h2>Rijbewijs</h2>
+    <p>51,10 euro</p>
+  </div>
+  <div class="product" data-product="uittreksel" data-prijs="17" data-uitleg="Een uittreksel laat zien waar u staat ingeschreven. U krijgt het direct mee aan de balie.">
+    <h2>Uittreksel uit de basisregistratie</h2>
+    <p>16,60 euro</p>
+  </div>
+  <div class="product" data-product="parkeren" data-prijs="53" data-uitleg="Met een parkeervergunning parkeert u als bewoner in uw eigen straat. De vergunning geldt een jaar.">
+    <h2>Parkeervergunning voor bewoners</h2>
+    <p>52,40 euro per jaar</p>
+  </div>
+  <div class="product" data-product="grofvuil" data-prijs="0" data-uitleg="Wij halen grofvuil gratis bij u op. Bel 14 0345 om een dag af te spreken.">
+    <h2>Grofvuil laten ophalen</h2>
+    <p>Gratis</p>
+  </div>
+</div>
+<div class="sluier" hidden></div>
+<div class="venster" hidden>
+  <div class="venster-sluit">×</div>
+  <h2 class="venster-titel"></h2>
+  <p class="venster-tekst"></p>
+  <p><a href="/contact.html">Maak een afspraak</a></p>
+</div><!--@good--><ul class="kaartrooster">
+  <li class="product" data-prijs="78" data-uitleg="U vraagt een paspoort zelf aan bij de balie. Neem een pasfoto en uw oude paspoort mee. Na vijf werkdagen ligt het klaar.">
+    <h2><button type="button" class="kaart-knop">Paspoort</button></h2>
+    <p>Vanaf 77,85 euro</p>
+  </li>
+  <li class="product" data-prijs="71" data-uitleg="U vraagt een identiteitskaart zelf aan bij de balie. Neem een pasfoto mee. Na vijf werkdagen ligt de kaart klaar.">
+    <h2><button type="button" class="kaart-knop">Identiteitskaart</button></h2>
+    <p>Vanaf 70,35 euro</p>
+  </li>
+  <li class="product" data-prijs="52" data-uitleg="U verlengt uw rijbewijs bij de balie. Neem een pasfoto en uw oude rijbewijs mee.">
+    <h2><button type="button" class="kaart-knop">Rijbewijs</button></h2>
+    <p>51,10 euro</p>
+  </li>
+  <li class="product" data-prijs="17" data-uitleg="Een uittreksel laat zien waar u staat ingeschreven. U krijgt het direct mee aan de balie.">
+    <h2><button type="button" class="kaart-knop">Uittreksel uit de basisregistratie</button></h2>
+    <p>16,60 euro</p>
+  </li>
+  <li class="product" data-prijs="53" data-uitleg="Met een parkeervergunning parkeert u als bewoner in uw eigen straat. De vergunning geldt een jaar.">
+    <h2><button type="button" class="kaart-knop">Parkeervergunning voor bewoners</button></h2>
+    <p>52,40 euro per jaar</p>
+  </li>
+  <li class="product" data-prijs="0" data-uitleg="Wij halen grofvuil gratis bij u op. Bel 14 0345 om een dag af te spreken.">
+    <h2><button type="button" class="kaart-knop">Grofvuil laten ophalen</button></h2>
+    <p>Gratis</p>
+  </li>
+</ul>
+<dialog class="venster" aria-labelledby="venster-titel">
+  <h2 class="venster-titel" id="venster-titel"></h2>
+  <p class="venster-tekst"></p>
+  <p><a href="/contact.html">Maak een afspraak</a></p>
+  <button type="button" class="venster-sluit">Sluiten</button>
+</dialog><!--@end-->

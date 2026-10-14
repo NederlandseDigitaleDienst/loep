@@ -1,0 +1,14 @@
+<!doctype html>
+<html lang="nl">
+<head><meta charset="utf-8"><title>Wisselend - Testsite sessie</title><link rel="stylesheet" href="/site.css"></head>
+<body>
+<main><h1>Wisselende pagina</h1><p id="text" style="color: __VARIANT_COLOUR__">__VARIANT_TEXT__</p><button id="toggle" type="button" aria-expanded="false">Toon meer</button><p id="extra" hidden>Extra tekst.</p></main>
+<script>
+document.getElementById("toggle").addEventListener("click", (event) => {
+  const open = event.currentTarget.getAttribute("aria-expanded") !== "true";
+  event.currentTarget.setAttribute("aria-expanded", String(open));
+  document.getElementById("extra").hidden = !open;
+});
+</script>
+</body>
+</html>

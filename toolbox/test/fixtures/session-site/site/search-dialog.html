@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="nl">
+<head><meta charset="utf-8"><title>Zoekvenster</title></head>
+<body>
+<main>
+<h1>Zoekvenster</h1>
+<button id="open" type="button">Zoeken</button>
+<dialog id="search" aria-label="Zoeken">
+  <button id="close" type="button">Sluit</button>
+  <label for="q">Zoekterm</label>
+  <input id="q" type="text">
+</dialog>
+</main>
+<script>
+  const dialog = document.getElementById("search");
+  document.getElementById("open").addEventListener("click", () => {
+    dialog.showModal();
+    document.getElementById("q").focus();
+  });
+  document.getElementById("close").addEventListener("click", () => dialog.close());
+</script>
+</body>
+</html>

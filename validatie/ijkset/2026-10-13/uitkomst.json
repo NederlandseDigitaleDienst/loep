@@ -1,0 +1,7254 @@
+{
+  "kind": "calibration",
+  "version": 1,
+  "date": "2026-10-13",
+  "source": {
+    "repository": "w3c/wcag-act-rules",
+    "commit": "f39b7f81cee60efe1f23205a893e031a7a02821b",
+    "archive": "https://codeload.github.com/w3c/wcag-act-rules/tar.gz/f39b7f81cee60efe1f23205a893e031a7a02821b",
+    "testcasesSha256": "49051da603afa6d28b94ef3e758146dafcbe72bade7202a24636bab3ea4c0036",
+    "filesSha256": "d0d69801e164cb7de0f0ea2ba12958d5c6b7bd9b1fa150ec706c576d8ff87588",
+    "files": 1593,
+    "licence": "https://act-rules.github.io/pages/license/",
+    "testcases": 1211,
+    "pages": 1098,
+    "rules": 87
+  },
+  "toolbox": {
+    "commit": "f653610bb7d31c3a1e68917321ca0f15eadb9eb9",
+    "dirty": false,
+    "lockfileSha256": "f4791be823f17a17d98b91fcd1f2edaea60d3672fb3af8f8cdb7e0656c118b64",
+    "version": "0.0.1"
+  },
+  "browser": "chromium 153.0.8010.12",
+  "instruments": [
+    {
+      "id": "axe-core",
+      "kind": "ruleset",
+      "version": "4.13.0",
+      "mapping": "de metadata van het pakket zelf (actIds per regel)"
+    },
+    {
+      "id": "alfa",
+      "kind": "ruleset",
+      "version": "0.119.0",
+      "mapping": "het implementatierapport dat W3C publiceert (_data/wcag-act-rules/implementations/alfa.json op dezelfde commit, gemaakt met Alfa 0.118.0); het pakket zelf noemt geen ACT-regels"
+    },
+    {
+      "id": "ibm",
+      "kind": "ruleset",
+      "version": "4.0.34",
+      "mapping": "de metadata van het pakket zelf (act per regel)"
+    },
+    {
+      "id": "qualweb",
+      "kind": "ruleset",
+      "version": "0.8.6",
+      "mapping": "de metadata van het pakket zelf (mapping per regel)"
+    },
+    {
+      "id": "chromium",
+      "kind": "own",
+      "version": "chromium 153.0.8010.12",
+      "mapping": "een tabel in de toolbox (OWN_MAPPINGS), alleen waar de ACT-regel hetzelfde vraagt"
+    },
+    {
+      "id": "alfa-aria",
+      "kind": "own",
+      "version": "0.119.0",
+      "mapping": "een tabel in de toolbox (OWN_MAPPINGS), alleen waar de ACT-regel hetzelfde vraagt"
+    },
+    {
+      "id": "axe-name",
+      "kind": "own",
+      "version": "4.13.0",
+      "mapping": "een tabel in de toolbox (OWN_MAPPINGS), alleen waar de ACT-regel hetzelfde vraagt"
+    },
+    {
+      "id": "playwright",
+      "kind": "own",
+      "version": "1.63.0",
+      "mapping": "een tabel in de toolbox (OWN_MAPPINGS), alleen waar de ACT-regel hetzelfde vraagt"
+    },
+    {
+      "id": "dom-accessibility-api",
+      "kind": "own",
+      "version": "0.7.1",
+      "mapping": "een tabel in de toolbox (OWN_MAPPINGS), alleen waar de ACT-regel hetzelfde vraagt"
+    },
+    {
+      "id": "pixels",
+      "kind": "own",
+      "version": "0.0.1 chromium 153.0.8010.12",
+      "mapping": "een tabel in de toolbox (OWN_MAPPINGS), alleen waar de ACT-regel hetzelfde vraagt"
+    },
+    {
+      "id": "eld",
+      "kind": "own",
+      "version": "2.1.0",
+      "mapping": "een tabel in de toolbox (OWN_MAPPINGS), alleen waar de ACT-regel hetzelfde vraagt"
+    },
+    {
+      "id": "cld3",
+      "kind": "own",
+      "version": "4.0.0",
+      "mapping": "een tabel in de toolbox (OWN_MAPPINGS), alleen waar de ACT-regel hetzelfde vraagt"
+    },
+    {
+      "id": "eld+cld3",
+      "kind": "own",
+      "version": "2.1.0 en 4.0.0",
+      "mapping": "een tabel in de toolbox (OWN_MAPPINGS), alleen waar de ACT-regel hetzelfde vraagt"
+    }
+  ],
+  "ownMappings": [
+    {
+      "act": "afw4f7",
+      "kind": "contrast",
+      "why": "de regel vraagt de contrastverhouding van zichtbare tekst tegen 4,5 op 1 of 3 op 1 voor grote tekst; dat is wat de contrastmeting op de pixels meet"
+    },
+    {
+      "act": "ucwvc8",
+      "kind": "language-page",
+      "why": "de regel vraagt of de taal van de pagina klopt met de taal die op het html-element is opgegeven; dat is de vraag van de taalherkenning voor de pagina"
+    },
+    {
+      "act": "off6ek",
+      "kind": "language-parts",
+      "why": "de regel vraagt of de taal van een element met een eigen lang-attribuut klopt met de tekst erin; dat is de vraag van de taalherkenning voor een deel"
+    },
+    {
+      "act": "97a4e1",
+      "kind": "name",
+      "roles": [
+        "button"
+      ],
+      "imageInput": false,
+      "why": "de regel vraagt of een knop een toegankelijke naam heeft die niet leeg is"
+    },
+    {
+      "act": "59796f",
+      "kind": "name",
+      "roles": [
+        "button"
+      ],
+      "imageInput": true,
+      "why": "de regel vraagt of een afbeeldingsknop een toegankelijke naam heeft die niet leeg is"
+    },
+    {
+      "act": "c487ae",
+      "kind": "name",
+      "roles": [
+        "link"
+      ],
+      "why": "de regel vraagt of een link een toegankelijke naam heeft die niet leeg is"
+    },
+    {
+      "act": "ffd0e9",
+      "kind": "name",
+      "roles": [
+        "heading"
+      ],
+      "why": "de regel vraagt of een kop een toegankelijke naam heeft die niet leeg is"
+    },
+    {
+      "act": "m6b1q3",
+      "kind": "name",
+      "roles": [
+        "menuitem"
+      ],
+      "why": "de regel vraagt of een menu-item een toegankelijke naam heeft die niet leeg is"
+    },
+    {
+      "act": "e086e5",
+      "kind": "name",
+      "roles": [
+        "checkbox",
+        "combobox",
+        "listbox",
+        "menuitemcheckbox",
+        "menuitemradio",
+        "radio",
+        "searchbox",
+        "slider",
+        "spinbutton",
+        "switch",
+        "textbox"
+      ],
+      "why": "de regel vraagt of een formulierveld een toegankelijke naam heeft die niet leeg is"
+    }
+  ],
+  "run": {
+    "seconds": 268.8,
+    "concurrency": 4,
+    "pagesMeasured": 1098,
+    "pagesNotLoaded": 0,
+    "requestsRefused": 30,
+    "only": null
+  },
+  "totals": {
+    "axe-core": {
+      "cases": 1211,
+      "noOpinion": 524,
+      "error": 0,
+      "judged": 687,
+      "failures": 209,
+      "found": 162,
+      "missed": 22,
+      "unsureOnFailure": 25,
+      "falseAlarm": 10,
+      "rightlySilent": 436,
+      "unsureOnOther": 32,
+      "hitRate": {
+        "count": 162,
+        "of": 209,
+        "share": 0.775
+      },
+      "falseReports": {
+        "count": 10,
+        "of": 172,
+        "share": 0.058
+      },
+      "falseAlarmRate": {
+        "count": 10,
+        "of": 478,
+        "share": 0.021
+      }
+    },
+    "alfa": {
+      "cases": 1211,
+      "noOpinion": 445,
+      "error": 0,
+      "judged": 766,
+      "failures": 245,
+      "found": 212,
+      "missed": 12,
+      "unsureOnFailure": 21,
+      "falseAlarm": 15,
+      "rightlySilent": 480,
+      "unsureOnOther": 26,
+      "hitRate": {
+        "count": 212,
+        "of": 245,
+        "share": 0.865
+      },
+      "falseReports": {
+        "count": 15,
+        "of": 227,
+        "share": 0.066
+      },
+      "falseAlarmRate": {
+        "count": 15,
+        "of": 521,
+        "share": 0.029
+      }
+    },
+    "ibm": {
+      "cases": 1211,
+      "noOpinion": 677,
+      "error": 0,
+      "judged": 534,
+      "failures": 172,
+      "found": 151,
+      "missed": 10,
+      "unsureOnFailure": 11,
+      "falseAlarm": 13,
+      "rightlySilent": 344,
+      "unsureOnOther": 5,
+      "hitRate": {
+        "count": 151,
+        "of": 172,
+        "share": 0.878
+      },
+      "falseReports": {
+        "count": 13,
+        "of": 164,
+        "share": 0.079
+      },
+      "falseAlarmRate": {
+        "count": 13,
+        "of": 362,
+        "share": 0.036
+      }
+    },
+    "qualweb": {
+      "cases": 1211,
+      "noOpinion": 267,
+      "error": 12,
+      "judged": 932,
+      "failures": 314,
+      "found": 221,
+      "missed": 3,
+      "unsureOnFailure": 90,
+      "falseAlarm": 2,
+      "rightlySilent": 502,
+      "unsureOnOther": 114,
+      "hitRate": {
+        "count": 221,
+        "of": 314,
+        "share": 0.704
+      },
+      "falseReports": {
+        "count": 2,
+        "of": 223,
+        "share": 0.009
+      },
+      "falseAlarmRate": {
+        "count": 2,
+        "of": 618,
+        "share": 0.003
+      }
+    },
+    "chromium": {
+      "cases": 1211,
+      "noOpinion": 1109,
+      "error": 0,
+      "judged": 102,
+      "failures": 38,
+      "found": 33,
+      "missed": 5,
+      "unsureOnFailure": 0,
+      "falseAlarm": 0,
+      "rightlySilent": 64,
+      "unsureOnOther": 0,
+      "hitRate": {
+        "count": 33,
+        "of": 38,
+        "share": 0.868
+      },
+      "falseReports": {
+        "count": 0,
+        "of": 33,
+        "share": 0
+      },
+      "falseAlarmRate": {
+        "count": 0,
+        "of": 64,
+        "share": 0
+      }
+    },
+    "alfa-aria": {
+      "cases": 1211,
+      "noOpinion": 1109,
+      "error": 0,
+      "judged": 102,
+      "failures": 38,
+      "found": 33,
+      "missed": 5,
+      "unsureOnFailure": 0,
+      "falseAlarm": 1,
+      "rightlySilent": 63,
+      "unsureOnOther": 0,
+      "hitRate": {
+        "count": 33,
+        "of": 38,
+        "share": 0.868
+      },
+      "falseReports": {
+        "count": 1,
+        "of": 34,
+        "share": 0.029
+      },
+      "falseAlarmRate": {
+        "count": 1,
+        "of": 64,
+        "share": 0.016
+      }
+    },
+    "axe-name": {
+      "cases": 1211,
+      "noOpinion": 1109,
+      "error": 0,
+      "judged": 102,
+      "failures": 38,
+      "found": 33,
+      "missed": 5,
+      "unsureOnFailure": 0,
+      "falseAlarm": 1,
+      "rightlySilent": 63,
+      "unsureOnOther": 0,
+      "hitRate": {
+        "count": 33,
+        "of": 38,
+        "share": 0.868
+      },
+      "falseReports": {
+        "count": 1,
+        "of": 34,
+        "share": 0.029
+      },
+      "falseAlarmRate": {
+        "count": 1,
+        "of": 64,
+        "share": 0.016
+      }
+    },
+    "playwright": {
+      "cases": 1211,
+      "noOpinion": 1109,
+      "error": 0,
+      "judged": 102,
+      "failures": 38,
+      "found": 33,
+      "missed": 5,
+      "unsureOnFailure": 0,
+      "falseAlarm": 2,
+      "rightlySilent": 62,
+      "unsureOnOther": 0,
+      "hitRate": {
+        "count": 33,
+        "of": 38,
+        "share": 0.868
+      },
+      "falseReports": {
+        "count": 2,
+        "of": 35,
+        "share": 0.057
+      },
+      "falseAlarmRate": {
+        "count": 2,
+        "of": 64,
+        "share": 0.031
+      }
+    },
+    "dom-accessibility-api": {
+      "cases": 1211,
+      "noOpinion": 1109,
+      "error": 0,
+      "judged": 102,
+      "failures": 38,
+      "found": 33,
+      "missed": 5,
+      "unsureOnFailure": 0,
+      "falseAlarm": 4,
+      "rightlySilent": 60,
+      "unsureOnOther": 0,
+      "hitRate": {
+        "count": 33,
+        "of": 38,
+        "share": 0.868
+      },
+      "falseReports": {
+        "count": 4,
+        "of": 37,
+        "share": 0.108
+      },
+      "falseAlarmRate": {
+        "count": 4,
+        "of": 64,
+        "share": 0.063
+      }
+    },
+    "pixels": {
+      "cases": 1211,
+      "noOpinion": 1177,
+      "error": 0,
+      "judged": 34,
+      "failures": 11,
+      "found": 9,
+      "missed": 1,
+      "unsureOnFailure": 1,
+      "falseAlarm": 4,
+      "rightlySilent": 15,
+      "unsureOnOther": 4,
+      "hitRate": {
+        "count": 9,
+        "of": 11,
+        "share": 0.818
+      },
+      "falseReports": {
+        "count": 4,
+        "of": 13,
+        "share": 0.308
+      },
+      "falseAlarmRate": {
+        "count": 4,
+        "of": 23,
+        "share": 0.174
+      }
+    },
+    "eld": {
+      "cases": 1211,
+      "noOpinion": 1182,
+      "error": 0,
+      "judged": 29,
+      "failures": 9,
+      "found": 5,
+      "missed": 1,
+      "unsureOnFailure": 3,
+      "falseAlarm": 2,
+      "rightlySilent": 12,
+      "unsureOnOther": 6,
+      "hitRate": {
+        "count": 5,
+        "of": 9,
+        "share": 0.556
+      },
+      "falseReports": {
+        "count": 2,
+        "of": 7,
+        "share": 0.286
+      },
+      "falseAlarmRate": {
+        "count": 2,
+        "of": 20,
+        "share": 0.1
+      }
+    },
+    "cld3": {
+      "cases": 1211,
+      "noOpinion": 1182,
+      "error": 0,
+      "judged": 29,
+      "failures": 9,
+      "found": 5,
+      "missed": 1,
+      "unsureOnFailure": 3,
+      "falseAlarm": 1,
+      "rightlySilent": 13,
+      "unsureOnOther": 6,
+      "hitRate": {
+        "count": 5,
+        "of": 9,
+        "share": 0.556
+      },
+      "falseReports": {
+        "count": 1,
+        "of": 6,
+        "share": 0.167
+      },
+      "falseAlarmRate": {
+        "count": 1,
+        "of": 20,
+        "share": 0.05
+      }
+    },
+    "eld+cld3": {
+      "cases": 1211,
+      "noOpinion": 1182,
+      "error": 0,
+      "judged": 29,
+      "failures": 9,
+      "found": 5,
+      "missed": 1,
+      "unsureOnFailure": 3,
+      "falseAlarm": 0,
+      "rightlySilent": 9,
+      "unsureOnOther": 11,
+      "hitRate": {
+        "count": 5,
+        "of": 9,
+        "share": 0.556
+      },
+      "falseReports": {
+        "count": 0,
+        "of": 5,
+        "share": 0
+      },
+      "falseAlarmRate": {
+        "count": 0,
+        "of": 20,
+        "share": 0
+      }
+    }
+  },
+  "approvedTotals": {
+    "axe-core": {
+      "cases": 558,
+      "noOpinion": 79,
+      "error": 0,
+      "judged": 479,
+      "failures": 156,
+      "found": 137,
+      "missed": 12,
+      "unsureOnFailure": 7,
+      "falseAlarm": 9,
+      "rightlySilent": 304,
+      "unsureOnOther": 10,
+      "hitRate": {
+        "count": 137,
+        "of": 156,
+        "share": 0.878
+      },
+      "falseReports": {
+        "count": 9,
+        "of": 146,
+        "share": 0.062
+      },
+      "falseAlarmRate": {
+        "count": 9,
+        "of": 323,
+        "share": 0.028
+      }
+    },
+    "alfa": {
+      "cases": 558,
+      "noOpinion": 38,
+      "error": 0,
+      "judged": 520,
+      "failures": 167,
+      "found": 162,
+      "missed": 2,
+      "unsureOnFailure": 3,
+      "falseAlarm": 9,
+      "rightlySilent": 339,
+      "unsureOnOther": 5,
+      "hitRate": {
+        "count": 162,
+        "of": 167,
+        "share": 0.97
+      },
+      "falseReports": {
+        "count": 9,
+        "of": 171,
+        "share": 0.053
+      },
+      "falseAlarmRate": {
+        "count": 9,
+        "of": 353,
+        "share": 0.025
+      }
+    },
+    "ibm": {
+      "cases": 558,
+      "noOpinion": 125,
+      "error": 0,
+      "judged": 433,
+      "failures": 141,
+      "found": 127,
+      "missed": 5,
+      "unsureOnFailure": 9,
+      "falseAlarm": 9,
+      "rightlySilent": 278,
+      "unsureOnOther": 5,
+      "hitRate": {
+        "count": 127,
+        "of": 141,
+        "share": 0.901
+      },
+      "falseReports": {
+        "count": 9,
+        "of": 136,
+        "share": 0.066
+      },
+      "falseAlarmRate": {
+        "count": 9,
+        "of": 292,
+        "share": 0.031
+      }
+    },
+    "qualweb": {
+      "cases": 558,
+      "noOpinion": 50,
+      "error": 7,
+      "judged": 501,
+      "failures": 164,
+      "found": 160,
+      "missed": 1,
+      "unsureOnFailure": 3,
+      "falseAlarm": 0,
+      "rightlySilent": 330,
+      "unsureOnOther": 7,
+      "hitRate": {
+        "count": 160,
+        "of": 164,
+        "share": 0.976
+      },
+      "falseReports": {
+        "count": 0,
+        "of": 160,
+        "share": 0
+      },
+      "falseAlarmRate": {
+        "count": 0,
+        "of": 337,
+        "share": 0
+      }
+    },
+    "chromium": {
+      "cases": 558,
+      "noOpinion": 474,
+      "error": 0,
+      "judged": 84,
+      "failures": 29,
+      "found": 25,
+      "missed": 4,
+      "unsureOnFailure": 0,
+      "falseAlarm": 0,
+      "rightlySilent": 55,
+      "unsureOnOther": 0,
+      "hitRate": {
+        "count": 25,
+        "of": 29,
+        "share": 0.862
+      },
+      "falseReports": {
+        "count": 0,
+        "of": 25,
+        "share": 0
+      },
+      "falseAlarmRate": {
+        "count": 0,
+        "of": 55,
+        "share": 0
+      }
+    },
+    "alfa-aria": {
+      "cases": 558,
+      "noOpinion": 474,
+      "error": 0,
+      "judged": 84,
+      "failures": 29,
+      "found": 25,
+      "missed": 4,
+      "unsureOnFailure": 0,
+      "falseAlarm": 1,
+      "rightlySilent": 54,
+      "unsureOnOther": 0,
+      "hitRate": {
+        "count": 25,
+        "of": 29,
+        "share": 0.862
+      },
+      "falseReports": {
+        "count": 1,
+        "of": 26,
+        "share": 0.038
+      },
+      "falseAlarmRate": {
+        "count": 1,
+        "of": 55,
+        "share": 0.018
+      }
+    },
+    "axe-name": {
+      "cases": 558,
+      "noOpinion": 474,
+      "error": 0,
+      "judged": 84,
+      "failures": 29,
+      "found": 25,
+      "missed": 4,
+      "unsureOnFailure": 0,
+      "falseAlarm": 1,
+      "rightlySilent": 54,
+      "unsureOnOther": 0,
+      "hitRate": {
+        "count": 25,
+        "of": 29,
+        "share": 0.862
+      },
+      "falseReports": {
+        "count": 1,
+        "of": 26,
+        "share": 0.038
+      },
+      "falseAlarmRate": {
+        "count": 1,
+        "of": 55,
+        "share": 0.018
+      }
+    },
+    "playwright": {
+      "cases": 558,
+      "noOpinion": 474,
+      "error": 0,
+      "judged": 84,
+      "failures": 29,
+      "found": 25,
+      "missed": 4,
+      "unsureOnFailure": 0,
+      "falseAlarm": 2,
+      "rightlySilent": 53,
+      "unsureOnOther": 0,
+      "hitRate": {
+        "count": 25,
+        "of": 29,
+        "share": 0.862
+      },
+      "falseReports": {
+        "count": 2,
+        "of": 27,
+        "share": 0.074
+      },
+      "falseAlarmRate": {
+        "count": 2,
+        "of": 55,
+        "share": 0.036
+      }
+    },
+    "dom-accessibility-api": {
+      "cases": 558,
+      "noOpinion": 474,
+      "error": 0,
+      "judged": 84,
+      "failures": 29,
+      "found": 25,
+      "missed": 4,
+      "unsureOnFailure": 0,
+      "falseAlarm": 4,
+      "rightlySilent": 51,
+      "unsureOnOther": 0,
+      "hitRate": {
+        "count": 25,
+        "of": 29,
+        "share": 0.862
+      },
+      "falseReports": {
+        "count": 4,
+        "of": 29,
+        "share": 0.138
+      },
+      "falseAlarmRate": {
+        "count": 4,
+        "of": 55,
+        "share": 0.073
+      }
+    },
+    "pixels": {
+      "cases": 558,
+      "noOpinion": 526,
+      "error": 0,
+      "judged": 32,
+      "failures": 10,
+      "found": 9,
+      "missed": 1,
+      "unsureOnFailure": 0,
+      "falseAlarm": 3,
+      "rightlySilent": 15,
+      "unsureOnOther": 4,
+      "hitRate": {
+        "count": 9,
+        "of": 10,
+        "share": 0.9
+      },
+      "falseReports": {
+        "count": 3,
+        "of": 12,
+        "share": 0.25
+      },
+      "falseAlarmRate": {
+        "count": 3,
+        "of": 22,
+        "share": 0.136
+      }
+    },
+    "eld": {
+      "cases": 558,
+      "noOpinion": 558,
+      "error": 0,
+      "judged": 0,
+      "failures": 0,
+      "found": 0,
+      "missed": 0,
+      "unsureOnFailure": 0,
+      "falseAlarm": 0,
+      "rightlySilent": 0,
+      "unsureOnOther": 0,
+      "hitRate": {
+        "count": 0,
+        "of": 0,
+        "share": null
+      },
+      "falseReports": {
+        "count": 0,
+        "of": 0,
+        "share": null
+      },
+      "falseAlarmRate": {
+        "count": 0,
+        "of": 0,
+        "share": null
+      }
+    },
+    "cld3": {
+      "cases": 558,
+      "noOpinion": 558,
+      "error": 0,
+      "judged": 0,
+      "failures": 0,
+      "found": 0,
+      "missed": 0,
+      "unsureOnFailure": 0,
+      "falseAlarm": 0,
+      "rightlySilent": 0,
+      "unsureOnOther": 0,
+      "hitRate": {
+        "count": 0,
+        "of": 0,
+        "share": null
+      },
+      "falseReports": {
+        "count": 0,
+        "of": 0,
+        "share": null
+      },
+      "falseAlarmRate": {
+        "count": 0,
+        "of": 0,
+        "share": null
+      }
+    },
+    "eld+cld3": {
+      "cases": 558,
+      "noOpinion": 558,
+      "error": 0,
+      "judged": 0,
+      "failures": 0,
+      "found": 0,
+      "missed": 0,
+      "unsureOnFailure": 0,
+      "falseAlarm": 0,
+      "rightlySilent": 0,
+      "unsureOnOther": 0,
+      "hitRate": {
+        "count": 0,
+        "of": 0,
+        "share": null
+      },
+      "falseReports": {
+        "count": 0,
+        "of": 0,
+        "share": null
+      },
+      "falseAlarmRate": {
+        "count": 0,
+        "of": 0,
+        "share": null
+      }
+    }
+  },
+  "rules": [
+    {
+      "rule": "674b10",
+      "name": "Role attribute has valid value",
+      "approved": true,
+      "expected": {
+        "failed": 2,
+        "passed": 3,
+        "inapplicable": 6
+      },
+      "instruments": {
+        "axe-core": {
+          "rules": [
+            "aria-deprecated-role",
+            "aria-roles"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 11,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 11,
+            "failures": 2,
+            "found": 2,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 9,
+            "unsureOnOther": 0
+          }
+        },
+        "alfa": {
+          "rules": [
+            "sia-r110"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 11,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 11,
+            "failures": 2,
+            "found": 2,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 9,
+            "unsureOnOther": 0
+          }
+        },
+        "ibm": {
+          "rules": [
+            "aria_role_allowed"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 11,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 11,
+            "failures": 2,
+            "found": 2,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 8,
+            "unsureOnOther": 1
+          }
+        },
+        "qualweb": {
+          "rules": [
+            "QW-ACT-R20"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 11,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 11,
+            "failures": 2,
+            "found": 2,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 9,
+            "unsureOnOther": 0
+          }
+        }
+      }
+    },
+    {
+      "rule": "6a7281",
+      "name": "ARIA state or property has valid value",
+      "approved": true,
+      "expected": {
+        "failed": 7,
+        "passed": 10,
+        "inapplicable": 4
+      },
+      "instruments": {
+        "axe-core": {
+          "rules": [
+            "aria-valid-attr-value"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 21,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 21,
+            "failures": 7,
+            "found": 7,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 13,
+            "unsureOnOther": 1
+          }
+        },
+        "alfa": {
+          "rules": [
+            "sia-r19"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 21,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 21,
+            "failures": 7,
+            "found": 7,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 14,
+            "unsureOnOther": 0
+          }
+        },
+        "ibm": {
+          "rules": [
+            "aria_attribute_exists",
+            "aria_attribute_value_valid",
+            "aria_id_unique"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 21,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 21,
+            "failures": 7,
+            "found": 7,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 1,
+            "rightlySilent": 13,
+            "unsureOnOther": 0
+          }
+        },
+        "qualweb": {
+          "rules": [
+            "QW-ACT-R34"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 21,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 21,
+            "failures": 7,
+            "found": 7,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 14,
+            "unsureOnOther": 0
+          }
+        }
+      }
+    },
+    {
+      "rule": "5f99a7",
+      "name": "ARIA attribute is defined in WAI-ARIA",
+      "approved": true,
+      "expected": {
+        "failed": 2,
+        "passed": 5,
+        "inapplicable": 1
+      },
+      "instruments": {
+        "axe-core": {
+          "rules": [
+            "aria-valid-attr"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 8,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 8,
+            "failures": 2,
+            "found": 2,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 6,
+            "unsureOnOther": 0
+          }
+        },
+        "alfa": {
+          "rules": [
+            "sia-r20"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 8,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 8,
+            "failures": 2,
+            "found": 2,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 6,
+            "unsureOnOther": 0
+          }
+        },
+        "ibm": {
+          "rules": [
+            "aria_attribute_allowed"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 8,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 8,
+            "failures": 2,
+            "found": 2,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 6,
+            "unsureOnOther": 0
+          }
+        },
+        "qualweb": {
+          "rules": [
+            "QW-ACT-R27"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 8,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 8,
+            "failures": 2,
+            "found": 2,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 6,
+            "unsureOnOther": 0
+          }
+        }
+      }
+    },
+    {
+      "rule": "de46e4",
+      "name": "Element with lang attribute has valid language tag",
+      "approved": true,
+      "expected": {
+        "failed": 9,
+        "passed": 5,
+        "inapplicable": 5
+      },
+      "instruments": {
+        "axe-core": {
+          "rules": [
+            "valid-lang"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 19,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 19,
+            "failures": 9,
+            "found": 9,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 10,
+            "unsureOnOther": 0
+          }
+        },
+        "alfa": {
+          "rules": [
+            "sia-r7"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 19,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 19,
+            "failures": 9,
+            "found": 9,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 10,
+            "unsureOnOther": 0
+          }
+        },
+        "ibm": {
+          "rules": [
+            "element_lang_valid"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 19,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 19,
+            "failures": 9,
+            "found": 9,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 1,
+            "rightlySilent": 9,
+            "unsureOnOther": 0
+          }
+        },
+        "qualweb": {
+          "rules": [
+            "QW-ACT-R22"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 19,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 19,
+            "failures": 9,
+            "found": 9,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 10,
+            "unsureOnOther": 0
+          }
+        }
+      }
+    },
+    {
+      "rule": "m6b1q3",
+      "name": "Menuitem has non-empty accessible name",
+      "approved": true,
+      "expected": {
+        "failed": 2,
+        "passed": 4,
+        "inapplicable": 2
+      },
+      "instruments": {
+        "axe-core": {
+          "rules": [
+            "button-name"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 8,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 8,
+            "failures": 2,
+            "found": 2,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 6,
+            "unsureOnOther": 0
+          }
+        },
+        "alfa": {
+          "rules": [
+            "sia-r94"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 8,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 8,
+            "failures": 2,
+            "found": 2,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 6,
+            "unsureOnOther": 0
+          }
+        },
+        "ibm": {
+          "rules": [
+            "aria_widget_labelled"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 8,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 8,
+            "failures": 2,
+            "found": 2,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 6,
+            "unsureOnOther": 0
+          }
+        },
+        "qualweb": {
+          "rules": [
+            "QW-ACT-R66"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 8,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 8,
+            "failures": 2,
+            "found": 2,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 6,
+            "unsureOnOther": 0
+          }
+        },
+        "chromium": {
+          "rules": [
+            "name"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 8,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 8,
+            "failures": 2,
+            "found": 2,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 6,
+            "unsureOnOther": 0
+          }
+        },
+        "alfa-aria": {
+          "rules": [
+            "name"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 8,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 8,
+            "failures": 2,
+            "found": 2,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 6,
+            "unsureOnOther": 0
+          }
+        },
+        "axe-name": {
+          "rules": [
+            "name"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 8,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 8,
+            "failures": 2,
+            "found": 2,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 6,
+            "unsureOnOther": 0
+          }
+        },
+        "playwright": {
+          "rules": [
+            "name"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 8,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 8,
+            "failures": 2,
+            "found": 2,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 6,
+            "unsureOnOther": 0
+          }
+        },
+        "dom-accessibility-api": {
+          "rules": [
+            "name"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 8,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 8,
+            "failures": 2,
+            "found": 2,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 6,
+            "unsureOnOther": 0
+          }
+        }
+      }
+    },
+    {
+      "rule": "akn7bn",
+      "name": "Iframe with interactive elements is not excluded from tab-order",
+      "approved": true,
+      "expected": {
+        "failed": 1,
+        "passed": 2,
+        "inapplicable": 7
+      },
+      "instruments": {
+        "axe-core": {
+          "rules": [
+            "frame-focusable-content"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 10,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 10,
+            "failures": 1,
+            "found": 1,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 2,
+            "rightlySilent": 7,
+            "unsureOnOther": 0
+          }
+        },
+        "alfa": {
+          "rules": [
+            "sia-r95"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 10,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 10,
+            "failures": 1,
+            "found": 1,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 3,
+            "rightlySilent": 6,
+            "unsureOnOther": 0
+          }
+        },
+        "ibm": {
+          "rules": [
+            "iframe_interactive_tabbable"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 10,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 10,
+            "failures": 1,
+            "found": 1,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 9,
+            "unsureOnOther": 0
+          }
+        },
+        "qualweb": {
+          "rules": [
+            "QW-ACT-R70"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 10,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 10,
+            "failures": 1,
+            "found": 1,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 9,
+            "unsureOnOther": 0
+          }
+        }
+      }
+    },
+    {
+      "rule": "24afc2",
+      "name": "Important letter spacing in style attributes is wide enough",
+      "approved": true,
+      "expected": {
+        "failed": 4,
+        "passed": 6,
+        "inapplicable": 9
+      },
+      "instruments": {
+        "axe-core": {
+          "rules": [
+            "avoid-inline-spacing"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 19,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 19,
+            "failures": 4,
+            "found": 4,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 2,
+            "rightlySilent": 13,
+            "unsureOnOther": 0
+          }
+        },
+        "alfa": {
+          "rules": [
+            "sia-r91"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 19,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 19,
+            "failures": 4,
+            "found": 4,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 15,
+            "unsureOnOther": 0
+          }
+        },
+        "ibm": {
+          "rules": [
+            "text_spacing_valid"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 19,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 19,
+            "failures": 4,
+            "found": 4,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 15,
+            "unsureOnOther": 0
+          }
+        },
+        "qualweb": {
+          "rules": [
+            "QW-ACT-R67"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 19,
+            "noOpinion": 0,
+            "error": 1,
+            "judged": 18,
+            "failures": 4,
+            "found": 4,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 14,
+            "unsureOnOther": 0
+          }
+        }
+      }
+    },
+    {
+      "rule": "9e45ec",
+      "name": "Important word spacing in style attributes is wide enough",
+      "approved": true,
+      "expected": {
+        "failed": 4,
+        "passed": 6,
+        "inapplicable": 9
+      },
+      "instruments": {
+        "axe-core": {
+          "rules": [
+            "avoid-inline-spacing"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 19,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 19,
+            "failures": 4,
+            "found": 4,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 3,
+            "rightlySilent": 12,
+            "unsureOnOther": 0
+          }
+        },
+        "alfa": {
+          "rules": [
+            "sia-r92"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 19,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 19,
+            "failures": 4,
+            "found": 4,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 15,
+            "unsureOnOther": 0
+          }
+        },
+        "ibm": {
+          "rules": [
+            "text_spacing_valid"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 19,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 19,
+            "failures": 4,
+            "found": 4,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 15,
+            "unsureOnOther": 0
+          }
+        },
+        "qualweb": {
+          "rules": [
+            "QW-ACT-R69"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 19,
+            "noOpinion": 0,
+            "error": 1,
+            "judged": 18,
+            "failures": 4,
+            "found": 4,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 14,
+            "unsureOnOther": 0
+          }
+        }
+      }
+    },
+    {
+      "rule": "78fd32",
+      "name": "Important line height in style attributes is wide enough",
+      "approved": true,
+      "expected": {
+        "failed": 6,
+        "passed": 8,
+        "inapplicable": 10
+      },
+      "instruments": {
+        "axe-core": {
+          "rules": [
+            "avoid-inline-spacing"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 24,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 24,
+            "failures": 6,
+            "found": 5,
+            "missed": 1,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 18,
+            "unsureOnOther": 0
+          }
+        },
+        "alfa": {
+          "rules": [
+            "sia-r93"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 24,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 24,
+            "failures": 6,
+            "found": 6,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 1,
+            "rightlySilent": 17,
+            "unsureOnOther": 0
+          }
+        },
+        "ibm": {
+          "rules": [
+            "text_spacing_valid"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 24,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 24,
+            "failures": 6,
+            "found": 6,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 18,
+            "unsureOnOther": 0
+          }
+        },
+        "qualweb": {
+          "rules": [
+            "QW-ACT-R68"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 24,
+            "noOpinion": 0,
+            "error": 1,
+            "judged": 23,
+            "failures": 6,
+            "found": 6,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 17,
+            "unsureOnOther": 0
+          }
+        }
+      }
+    },
+    {
+      "rule": "73f2c2",
+      "name": "`autocomplete` attribute has valid value",
+      "approved": true,
+      "expected": {
+        "failed": 10,
+        "passed": 9,
+        "inapplicable": 11
+      },
+      "instruments": {
+        "axe-core": {
+          "rules": [
+            "autocomplete-valid"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 30,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 30,
+            "failures": 10,
+            "found": 10,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 20,
+            "unsureOnOther": 0
+          }
+        },
+        "alfa": {
+          "rules": [
+            "sia-r10"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 30,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 30,
+            "failures": 10,
+            "found": 10,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 20,
+            "unsureOnOther": 0
+          }
+        },
+        "ibm": {
+          "rules": [
+            "input_autocomplete_valid"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 30,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 30,
+            "failures": 10,
+            "found": 10,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 1,
+            "rightlySilent": 19,
+            "unsureOnOther": 0
+          }
+        },
+        "qualweb": {
+          "rules": [
+            "QW-ACT-R24"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 30,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 30,
+            "failures": 10,
+            "found": 10,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 20,
+            "unsureOnOther": 0
+          }
+        }
+      }
+    },
+    {
+      "rule": "97a4e1",
+      "name": "Button has non-empty accessible name",
+      "approved": true,
+      "expected": {
+        "failed": 5,
+        "passed": 7,
+        "inapplicable": 5
+      },
+      "instruments": {
+        "axe-core": {
+          "rules": [
+            "aria-command-name",
+            "button-name",
+            "input-button-name"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 17,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 17,
+            "failures": 5,
+            "found": 5,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 12,
+            "unsureOnOther": 0
+          }
+        },
+        "alfa": {
+          "rules": [
+            "sia-r12"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 17,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 17,
+            "failures": 5,
+            "found": 5,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 12,
+            "unsureOnOther": 0
+          }
+        },
+        "ibm": {
+          "rules": [
+            "input_label_exists"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 17,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 17,
+            "failures": 5,
+            "found": 5,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 12,
+            "unsureOnOther": 0
+          }
+        },
+        "qualweb": {
+          "rules": [
+            "QW-ACT-R11"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 17,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 17,
+            "failures": 5,
+            "found": 5,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 12,
+            "unsureOnOther": 0
+          }
+        },
+        "chromium": {
+          "rules": [
+            "name"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 17,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 17,
+            "failures": 5,
+            "found": 5,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 12,
+            "unsureOnOther": 0
+          }
+        },
+        "alfa-aria": {
+          "rules": [
+            "name"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 17,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 17,
+            "failures": 5,
+            "found": 5,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 12,
+            "unsureOnOther": 0
+          }
+        },
+        "axe-name": {
+          "rules": [
+            "name"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 17,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 17,
+            "failures": 5,
+            "found": 5,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 12,
+            "unsureOnOther": 0
+          }
+        },
+        "playwright": {
+          "rules": [
+            "name"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 17,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 17,
+            "failures": 5,
+            "found": 5,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 12,
+            "unsureOnOther": 0
+          }
+        },
+        "dom-accessibility-api": {
+          "rules": [
+            "name"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 17,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 17,
+            "failures": 5,
+            "found": 5,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 12,
+            "unsureOnOther": 0
+          }
+        }
+      }
+    },
+    {
+      "rule": "46ca7f",
+      "name": "Element marked as decorative is not exposed",
+      "approved": true,
+      "expected": {
+        "failed": 3,
+        "passed": 6,
+        "inapplicable": 1
+      },
+      "instruments": {
+        "axe-core": {
+          "rules": [],
+          "off": [
+            "presentation-role-conflict"
+          ],
+          "tally": {
+            "cases": 0,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 0,
+            "failures": 0,
+            "found": 0,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 0,
+            "unsureOnOther": 0
+          }
+        },
+        "alfa": {
+          "rules": [
+            "sia-r86"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 10,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 10,
+            "failures": 3,
+            "found": 3,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 7,
+            "unsureOnOther": 0
+          }
+        },
+        "ibm": {
+          "rules": [
+            "aria_attribute_valid",
+            "img_alt_null"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 10,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 10,
+            "failures": 3,
+            "found": 0,
+            "missed": 3,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 7,
+            "unsureOnOther": 0
+          }
+        },
+        "qualweb": {
+          "rules": [
+            "QW-ACT-R48"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 10,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 10,
+            "failures": 3,
+            "found": 3,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 7,
+            "unsureOnOther": 0
+          }
+        }
+      }
+    },
+    {
+      "rule": "e086e5",
+      "name": "Form field has non-empty accessible name",
+      "approved": true,
+      "expected": {
+        "failed": 9,
+        "passed": 10,
+        "inapplicable": 3
+      },
+      "instruments": {
+        "axe-core": {
+          "rules": [
+            "aria-input-field-name",
+            "aria-toggle-field-name",
+            "label",
+            "select-name"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 22,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 22,
+            "failures": 9,
+            "found": 9,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 13,
+            "unsureOnOther": 0
+          }
+        },
+        "alfa": {
+          "rules": [
+            "sia-r8"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 22,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 22,
+            "failures": 9,
+            "found": 8,
+            "missed": 1,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 13,
+            "unsureOnOther": 0
+          }
+        },
+        "ibm": {
+          "rules": [
+            "input_label_exists"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 22,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 22,
+            "failures": 9,
+            "found": 8,
+            "missed": 1,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 13,
+            "unsureOnOther": 0
+          }
+        },
+        "qualweb": {
+          "rules": [
+            "QW-ACT-R16"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 22,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 22,
+            "failures": 9,
+            "found": 9,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 13,
+            "unsureOnOther": 0
+          }
+        },
+        "chromium": {
+          "rules": [
+            "name"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 22,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 22,
+            "failures": 9,
+            "found": 8,
+            "missed": 1,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 13,
+            "unsureOnOther": 0
+          }
+        },
+        "alfa-aria": {
+          "rules": [
+            "name"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 22,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 22,
+            "failures": 9,
+            "found": 8,
+            "missed": 1,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 13,
+            "unsureOnOther": 0
+          }
+        },
+        "axe-name": {
+          "rules": [
+            "name"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 22,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 22,
+            "failures": 9,
+            "found": 8,
+            "missed": 1,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 13,
+            "unsureOnOther": 0
+          }
+        },
+        "playwright": {
+          "rules": [
+            "name"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 22,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 22,
+            "failures": 9,
+            "found": 8,
+            "missed": 1,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 13,
+            "unsureOnOther": 0
+          }
+        },
+        "dom-accessibility-api": {
+          "rules": [
+            "name"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 22,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 22,
+            "failures": 9,
+            "found": 8,
+            "missed": 1,
+            "unsureOnFailure": 0,
+            "falseAlarm": 1,
+            "rightlySilent": 12,
+            "unsureOnOther": 0
+          }
+        }
+      }
+    },
+    {
+      "rule": "bf051a",
+      "name": "HTML page `lang` attribute has valid language tag",
+      "approved": true,
+      "expected": {
+        "failed": 4,
+        "passed": 2,
+        "inapplicable": 1
+      },
+      "instruments": {
+        "axe-core": {
+          "rules": [
+            "html-lang-valid"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 7,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 7,
+            "failures": 4,
+            "found": 4,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 3,
+            "unsureOnOther": 0
+          }
+        },
+        "alfa": {
+          "rules": [
+            "sia-r5"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 7,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 7,
+            "failures": 4,
+            "found": 4,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 3,
+            "unsureOnOther": 0
+          }
+        },
+        "ibm": {
+          "rules": [
+            "html_lang_valid"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 7,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 7,
+            "failures": 4,
+            "found": 4,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 1,
+            "rightlySilent": 2,
+            "unsureOnOther": 0
+          }
+        },
+        "qualweb": {
+          "rules": [
+            "QW-ACT-R5"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 7,
+            "noOpinion": 0,
+            "error": 1,
+            "judged": 6,
+            "failures": 4,
+            "found": 4,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 2,
+            "unsureOnOther": 0
+          }
+        }
+      }
+    },
+    {
+      "rule": "2779a5",
+      "name": "HTML page has non-empty title",
+      "approved": true,
+      "expected": {
+        "failed": 6,
+        "passed": 6,
+        "inapplicable": 1
+      },
+      "instruments": {
+        "axe-core": {
+          "rules": [
+            "document-title"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 13,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 13,
+            "failures": 6,
+            "found": 6,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 7,
+            "unsureOnOther": 0
+          }
+        },
+        "alfa": {
+          "rules": [
+            "sia-r1"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 13,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 13,
+            "failures": 6,
+            "found": 6,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 7,
+            "unsureOnOther": 0
+          }
+        },
+        "ibm": {
+          "rules": [
+            "page_title_exists"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 13,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 13,
+            "failures": 6,
+            "found": 6,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 7,
+            "unsureOnOther": 0
+          }
+        },
+        "qualweb": {
+          "rules": [
+            "QW-ACT-R1"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 13,
+            "noOpinion": 0,
+            "error": 1,
+            "judged": 12,
+            "failures": 6,
+            "found": 6,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 6,
+            "unsureOnOther": 0
+          }
+        }
+      }
+    },
+    {
+      "rule": "59796f",
+      "name": "Image button has non-empty accessible name",
+      "approved": true,
+      "expected": {
+        "failed": 3,
+        "passed": 4,
+        "inapplicable": 5
+      },
+      "instruments": {
+        "axe-core": {
+          "rules": [
+            "input-image-alt"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 12,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 12,
+            "failures": 3,
+            "found": 3,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 9,
+            "unsureOnOther": 0
+          }
+        },
+        "alfa": {
+          "rules": [
+            "sia-r28"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 12,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 12,
+            "failures": 3,
+            "found": 3,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 9,
+            "unsureOnOther": 0
+          }
+        },
+        "ibm": {
+          "rules": [
+            "aria_id_unique",
+            "imagebutton_alt_exists"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 12,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 12,
+            "failures": 3,
+            "found": 3,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 9,
+            "unsureOnOther": 0
+          }
+        },
+        "qualweb": {
+          "rules": [
+            "QW-ACT-R6"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 12,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 12,
+            "failures": 3,
+            "found": 3,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 9,
+            "unsureOnOther": 0
+          }
+        },
+        "chromium": {
+          "rules": [
+            "name"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 12,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 12,
+            "failures": 3,
+            "found": 0,
+            "missed": 3,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 9,
+            "unsureOnOther": 0
+          }
+        },
+        "alfa-aria": {
+          "rules": [
+            "name"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 12,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 12,
+            "failures": 3,
+            "found": 0,
+            "missed": 3,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 9,
+            "unsureOnOther": 0
+          }
+        },
+        "axe-name": {
+          "rules": [
+            "name"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 12,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 12,
+            "failures": 3,
+            "found": 0,
+            "missed": 3,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 9,
+            "unsureOnOther": 0
+          }
+        },
+        "playwright": {
+          "rules": [
+            "name"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 12,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 12,
+            "failures": 3,
+            "found": 0,
+            "missed": 3,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 9,
+            "unsureOnOther": 0
+          }
+        },
+        "dom-accessibility-api": {
+          "rules": [
+            "name"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 12,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 12,
+            "failures": 3,
+            "found": 0,
+            "missed": 3,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 9,
+            "unsureOnOther": 0
+          }
+        }
+      }
+    },
+    {
+      "rule": "23a2a8",
+      "name": "Image has non-empty accessible name",
+      "approved": true,
+      "expected": {
+        "failed": 5,
+        "passed": 8,
+        "inapplicable": 5
+      },
+      "instruments": {
+        "axe-core": {
+          "rules": [
+            "image-alt",
+            "role-img-alt"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 18,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 18,
+            "failures": 5,
+            "found": 5,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 13,
+            "unsureOnOther": 0
+          }
+        },
+        "alfa": {
+          "rules": [
+            "sia-r2"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 18,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 18,
+            "failures": 5,
+            "found": 5,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 13,
+            "unsureOnOther": 0
+          }
+        },
+        "ibm": {
+          "rules": [
+            "img_alt_valid"
+          ],
+          "off": [
+            "aria_accessiblename_exists",
+            "aria_img_labelled"
+          ],
+          "tally": {
+            "cases": 18,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 18,
+            "failures": 5,
+            "found": 4,
+            "missed": 1,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 13,
+            "unsureOnOther": 0
+          }
+        },
+        "qualweb": {
+          "rules": [
+            "QW-ACT-R17"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 18,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 18,
+            "failures": 5,
+            "found": 5,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 13,
+            "unsureOnOther": 0
+          }
+        }
+      }
+    },
+    {
+      "rule": "c487ae",
+      "name": "Link has non-empty accessible name",
+      "approved": true,
+      "expected": {
+        "failed": 11,
+        "passed": 11,
+        "inapplicable": 6
+      },
+      "instruments": {
+        "axe-core": {
+          "rules": [
+            "area-alt",
+            "link-name"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 28,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 28,
+            "failures": 11,
+            "found": 11,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 17,
+            "unsureOnOther": 0
+          }
+        },
+        "alfa": {
+          "rules": [
+            "sia-r11"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 28,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 28,
+            "failures": 11,
+            "found": 11,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 17,
+            "unsureOnOther": 0
+          }
+        },
+        "ibm": {
+          "rules": [
+            "a_text_purpose"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 28,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 28,
+            "failures": 11,
+            "found": 11,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 17,
+            "unsureOnOther": 0
+          }
+        },
+        "qualweb": {
+          "rules": [
+            "QW-ACT-R12"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 28,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 28,
+            "failures": 11,
+            "found": 10,
+            "missed": 1,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 17,
+            "unsureOnOther": 0
+          }
+        },
+        "chromium": {
+          "rules": [
+            "name"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 28,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 28,
+            "failures": 11,
+            "found": 10,
+            "missed": 1,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 17,
+            "unsureOnOther": 0
+          }
+        },
+        "alfa-aria": {
+          "rules": [
+            "name"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 28,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 28,
+            "failures": 11,
+            "found": 10,
+            "missed": 1,
+            "unsureOnFailure": 0,
+            "falseAlarm": 1,
+            "rightlySilent": 16,
+            "unsureOnOther": 0
+          }
+        },
+        "axe-name": {
+          "rules": [
+            "name"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 28,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 28,
+            "failures": 11,
+            "found": 10,
+            "missed": 1,
+            "unsureOnFailure": 0,
+            "falseAlarm": 1,
+            "rightlySilent": 16,
+            "unsureOnOther": 0
+          }
+        },
+        "playwright": {
+          "rules": [
+            "name"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 28,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 28,
+            "failures": 11,
+            "found": 10,
+            "missed": 1,
+            "unsureOnFailure": 0,
+            "falseAlarm": 2,
+            "rightlySilent": 15,
+            "unsureOnOther": 0
+          }
+        },
+        "dom-accessibility-api": {
+          "rules": [
+            "name"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 28,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 28,
+            "failures": 11,
+            "found": 10,
+            "missed": 1,
+            "unsureOnFailure": 0,
+            "falseAlarm": 3,
+            "rightlySilent": 14,
+            "unsureOnOther": 0
+          }
+        }
+      }
+    },
+    {
+      "rule": "7d6734",
+      "name": "SVG element with explicit role has non-empty accessible name",
+      "approved": true,
+      "expected": {
+        "failed": 4,
+        "passed": 3,
+        "inapplicable": 3
+      },
+      "instruments": {
+        "axe-core": {
+          "rules": [
+            "svg-img-alt"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 10,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 10,
+            "failures": 4,
+            "found": 4,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 6,
+            "unsureOnOther": 0
+          }
+        },
+        "alfa": {
+          "rules": [
+            "sia-r43"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 10,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 10,
+            "failures": 4,
+            "found": 4,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 6,
+            "unsureOnOther": 0
+          }
+        },
+        "ibm": {
+          "rules": [
+            "svg_graphics_labelled"
+          ],
+          "off": [
+            "aria_graphic_labelled",
+            "aria_img_labelled"
+          ],
+          "tally": {
+            "cases": 10,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 10,
+            "failures": 4,
+            "found": 3,
+            "missed": 1,
+            "unsureOnFailure": 0,
+            "falseAlarm": 3,
+            "rightlySilent": 3,
+            "unsureOnOther": 0
+          }
+        },
+        "qualweb": {
+          "rules": [
+            "QW-ACT-R21"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 10,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 10,
+            "failures": 4,
+            "found": 4,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 6,
+            "unsureOnOther": 0
+          }
+        }
+      }
+    },
+    {
+      "rule": "307n5z",
+      "name": "Element with presentational children has no focusable content",
+      "approved": true,
+      "expected": {
+        "failed": 5,
+        "passed": 4,
+        "inapplicable": 3
+      },
+      "instruments": {
+        "axe-core": {
+          "rules": [
+            "nested-interactive"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 12,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 12,
+            "failures": 5,
+            "found": 5,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 7,
+            "unsureOnOther": 0
+          }
+        },
+        "alfa": {
+          "rules": [
+            "sia-r90"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 12,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 12,
+            "failures": 5,
+            "found": 5,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 7,
+            "unsureOnOther": 0
+          }
+        },
+        "ibm": {
+          "rules": [
+            "aria_descendant_valid"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 12,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 12,
+            "failures": 5,
+            "found": 1,
+            "missed": 0,
+            "unsureOnFailure": 4,
+            "falseAlarm": 0,
+            "rightlySilent": 7,
+            "unsureOnOther": 0
+          }
+        },
+        "qualweb": {
+          "rules": [
+            "QW-ACT-R65"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 12,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 12,
+            "failures": 5,
+            "found": 5,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 7,
+            "unsureOnOther": 0
+          }
+        }
+      }
+    },
+    {
+      "rule": "a25f45",
+      "name": "Headers attribute specified on a cell refers to cells in the same table element",
+      "approved": true,
+      "expected": {
+        "failed": 4,
+        "passed": 8,
+        "inapplicable": 7
+      },
+      "instruments": {
+        "axe-core": {
+          "rules": [
+            "td-headers-attr"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 19,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 19,
+            "failures": 4,
+            "found": 4,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 15,
+            "unsureOnOther": 0
+          }
+        },
+        "alfa": {
+          "rules": [
+            "sia-r45"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 19,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 19,
+            "failures": 4,
+            "found": 4,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 15,
+            "unsureOnOther": 0
+          }
+        },
+        "ibm": {
+          "rules": [
+            "table_headers_ref_valid"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 19,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 19,
+            "failures": 4,
+            "found": 4,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 15,
+            "unsureOnOther": 0
+          }
+        },
+        "qualweb": {
+          "rules": [
+            "QW-ACT-R36"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 19,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 19,
+            "failures": 4,
+            "found": 4,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 15,
+            "unsureOnOther": 0
+          }
+        }
+      }
+    },
+    {
+      "rule": "6cfa84",
+      "name": "Element with aria-hidden has no content in sequential focus navigation",
+      "approved": true,
+      "expected": {
+        "failed": 6,
+        "passed": 6,
+        "inapplicable": 3
+      },
+      "instruments": {
+        "axe-core": {
+          "rules": [
+            "aria-hidden-focus"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 15,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 15,
+            "failures": 6,
+            "found": 5,
+            "missed": 0,
+            "unsureOnFailure": 1,
+            "falseAlarm": 0,
+            "rightlySilent": 8,
+            "unsureOnOther": 1
+          }
+        },
+        "alfa": {
+          "rules": [
+            "sia-r17"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 15,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 15,
+            "failures": 6,
+            "found": 6,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 1,
+            "rightlySilent": 8,
+            "unsureOnOther": 0
+          }
+        },
+        "ibm": {
+          "rules": [
+            "aria_hidden_nontabbable"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 15,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 15,
+            "failures": 6,
+            "found": 6,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 1,
+            "rightlySilent": 8,
+            "unsureOnOther": 0
+          }
+        },
+        "qualweb": {
+          "rules": [
+            "QW-ACT-R13"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 15,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 15,
+            "failures": 6,
+            "found": 6,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 9,
+            "unsureOnOther": 0
+          }
+        }
+      }
+    },
+    {
+      "rule": "bc659a",
+      "name": "Meta element has no refresh delay",
+      "approved": true,
+      "expected": {
+        "failed": 4,
+        "passed": 3,
+        "inapplicable": 8
+      },
+      "instruments": {
+        "axe-core": {
+          "rules": [
+            "meta-refresh"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 15,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 15,
+            "failures": 4,
+            "found": 4,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 1,
+            "rightlySilent": 10,
+            "unsureOnOther": 0
+          }
+        },
+        "alfa": {
+          "rules": [
+            "sia-r9"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 15,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 15,
+            "failures": 4,
+            "found": 4,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 11,
+            "unsureOnOther": 0
+          }
+        },
+        "ibm": {
+          "rules": [
+            "meta_refresh_delay"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 15,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 15,
+            "failures": 4,
+            "found": 0,
+            "missed": 0,
+            "unsureOnFailure": 4,
+            "falseAlarm": 0,
+            "rightlySilent": 10,
+            "unsureOnOther": 1
+          }
+        },
+        "qualweb": {
+          "rules": [
+            "QW-ACT-R4"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 15,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 15,
+            "failures": 4,
+            "found": 4,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 11,
+            "unsureOnOther": 0
+          }
+        }
+      }
+    },
+    {
+      "rule": "b4f0c3",
+      "name": "Meta viewport allows for zoom",
+      "approved": true,
+      "expected": {
+        "failed": 7,
+        "passed": 5,
+        "inapplicable": 4
+      },
+      "instruments": {
+        "axe-core": {
+          "rules": [
+            "meta-viewport"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 16,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 16,
+            "failures": 7,
+            "found": 5,
+            "missed": 2,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 9,
+            "unsureOnOther": 0
+          }
+        },
+        "alfa": {
+          "rules": [
+            "sia-r47"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 16,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 16,
+            "failures": 7,
+            "found": 7,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 9,
+            "unsureOnOther": 0
+          }
+        },
+        "ibm": {
+          "rules": [],
+          "off": [
+            "meta_viewport_zoomable"
+          ],
+          "tally": {
+            "cases": 0,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 0,
+            "failures": 0,
+            "found": 0,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 0,
+            "unsureOnOther": 0
+          }
+        },
+        "qualweb": {
+          "rules": [
+            "QW-ACT-R14"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 16,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 16,
+            "failures": 7,
+            "found": 7,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 9,
+            "unsureOnOther": 0
+          }
+        }
+      }
+    },
+    {
+      "rule": "8fc3b6",
+      "name": "Object element rendering non-text content has non-empty accessible name",
+      "approved": true,
+      "expected": {
+        "failed": 6,
+        "passed": 4,
+        "inapplicable": 8
+      },
+      "instruments": {
+        "axe-core": {
+          "rules": [
+            "object-alt"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 18,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 18,
+            "failures": 6,
+            "found": 6,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 12,
+            "unsureOnOther": 0
+          }
+        },
+        "alfa": {
+          "rules": [
+            "sia-r63"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 18,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 18,
+            "failures": 6,
+            "found": 6,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 12,
+            "unsureOnOther": 0
+          }
+        },
+        "ibm": {
+          "rules": [
+            "object_text_exists"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 18,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 18,
+            "failures": 6,
+            "found": 6,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 12,
+            "unsureOnOther": 0
+          }
+        },
+        "qualweb": {
+          "rules": [
+            "QW-ACT-R42"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 18,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 18,
+            "failures": 6,
+            "found": 6,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 12,
+            "unsureOnOther": 0
+          }
+        }
+      }
+    },
+    {
+      "rule": "b5c3f8",
+      "name": "HTML page has lang attribute",
+      "approved": true,
+      "expected": {
+        "failed": 4,
+        "passed": 1,
+        "inapplicable": 2
+      },
+      "instruments": {
+        "axe-core": {
+          "rules": [
+            "html-has-lang"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 7,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 7,
+            "failures": 4,
+            "found": 4,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 1,
+            "rightlySilent": 2,
+            "unsureOnOther": 0
+          }
+        },
+        "alfa": {
+          "rules": [
+            "sia-r4"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 7,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 7,
+            "failures": 4,
+            "found": 4,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 1,
+            "rightlySilent": 2,
+            "unsureOnOther": 0
+          }
+        },
+        "ibm": {
+          "rules": [
+            "html_lang_exists",
+            "html_lang_valid"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 7,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 7,
+            "failures": 4,
+            "found": 4,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 1,
+            "rightlySilent": 2,
+            "unsureOnOther": 0
+          }
+        },
+        "qualweb": {
+          "rules": [
+            "QW-ACT-R2"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 7,
+            "noOpinion": 0,
+            "error": 2,
+            "judged": 5,
+            "failures": 4,
+            "found": 4,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 1,
+            "unsureOnOther": 0
+          }
+        }
+      }
+    },
+    {
+      "rule": "c4a8a4",
+      "name": "HTML page title is descriptive",
+      "approved": true,
+      "expected": {
+        "failed": 3,
+        "passed": 3,
+        "inapplicable": 1
+      },
+      "instruments": {
+        "alfa": {
+          "rules": [],
+          "off": [
+            "sia-r114"
+          ],
+          "tally": {
+            "cases": 0,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 0,
+            "failures": 0,
+            "found": 0,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 0,
+            "unsureOnOther": 0
+          }
+        }
+      }
+    },
+    {
+      "rule": "qt1vmo",
+      "name": "Image accessible name is descriptive",
+      "approved": true,
+      "expected": {
+        "failed": 3,
+        "passed": 3,
+        "inapplicable": 10
+      },
+      "instruments": {}
+    },
+    {
+      "rule": "0ssw9k",
+      "name": "Scrollable content can be reached with sequential focus navigation",
+      "approved": true,
+      "expected": {
+        "failed": 2,
+        "passed": 4,
+        "inapplicable": 9
+      },
+      "instruments": {
+        "axe-core": {
+          "rules": [
+            "scrollable-region-focusable"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 15,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 15,
+            "failures": 2,
+            "found": 2,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 13,
+            "unsureOnOther": 0
+          }
+        },
+        "alfa": {
+          "rules": [
+            "sia-r84"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 15,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 15,
+            "failures": 2,
+            "found": 2,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 2,
+            "rightlySilent": 11,
+            "unsureOnOther": 0
+          }
+        },
+        "ibm": {
+          "rules": [],
+          "off": [
+            "element_scrollable_tabbable"
+          ],
+          "tally": {
+            "cases": 0,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 0,
+            "failures": 0,
+            "found": 0,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 0,
+            "unsureOnOther": 0
+          }
+        },
+        "qualweb": {
+          "rules": [
+            "QW-ACT-R43"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 15,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 15,
+            "failures": 2,
+            "found": 2,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 13,
+            "unsureOnOther": 0
+          }
+        }
+      }
+    },
+    {
+      "rule": "oj04fd",
+      "name": "Element in sequential focus order has visible focus",
+      "approved": true,
+      "expected": {
+        "failed": 1,
+        "passed": 5,
+        "inapplicable": 3
+      },
+      "instruments": {
+        "alfa": {
+          "rules": [
+            "sia-r65"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 9,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 9,
+            "failures": 1,
+            "found": 0,
+            "missed": 0,
+            "unsureOnFailure": 1,
+            "falseAlarm": 0,
+            "rightlySilent": 5,
+            "unsureOnOther": 3
+          }
+        },
+        "qualweb": {
+          "rules": [
+            "QW-ACT-R62"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 9,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 9,
+            "failures": 1,
+            "found": 0,
+            "missed": 0,
+            "unsureOnFailure": 1,
+            "falseAlarm": 0,
+            "rightlySilent": 3,
+            "unsureOnOther": 5
+          }
+        }
+      }
+    },
+    {
+      "rule": "afw4f7",
+      "name": "Text has minimum contrast",
+      "approved": true,
+      "expected": {
+        "failed": 11,
+        "passed": 12,
+        "inapplicable": 11
+      },
+      "instruments": {
+        "axe-core": {
+          "rules": [
+            "color-contrast"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 34,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 34,
+            "failures": 11,
+            "found": 8,
+            "missed": 0,
+            "unsureOnFailure": 3,
+            "falseAlarm": 0,
+            "rightlySilent": 18,
+            "unsureOnOther": 5
+          }
+        },
+        "alfa": {
+          "rules": [
+            "sia-r69"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 34,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 34,
+            "failures": 11,
+            "found": 8,
+            "missed": 1,
+            "unsureOnFailure": 2,
+            "falseAlarm": 2,
+            "rightlySilent": 19,
+            "unsureOnOther": 2
+          }
+        },
+        "ibm": {
+          "rules": [
+            "text_contrast_sufficient"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 34,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 34,
+            "failures": 11,
+            "found": 7,
+            "missed": 1,
+            "unsureOnFailure": 3,
+            "falseAlarm": 1,
+            "rightlySilent": 19,
+            "unsureOnOther": 3
+          }
+        },
+        "qualweb": {
+          "rules": [
+            "QW-ACT-R37"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 34,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 34,
+            "failures": 11,
+            "found": 9,
+            "missed": 0,
+            "unsureOnFailure": 2,
+            "falseAlarm": 0,
+            "rightlySilent": 21,
+            "unsureOnOther": 2
+          }
+        },
+        "pixels": {
+          "rules": [
+            "contrast"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 34,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 34,
+            "failures": 11,
+            "found": 9,
+            "missed": 1,
+            "unsureOnFailure": 1,
+            "falseAlarm": 4,
+            "rightlySilent": 15,
+            "unsureOnOther": 4
+          }
+        }
+      }
+    },
+    {
+      "rule": "09o5cg",
+      "name": "Text has enhanced contrast",
+      "approved": true,
+      "expected": {
+        "failed": 13,
+        "passed": 11,
+        "inapplicable": 11
+      },
+      "instruments": {
+        "axe-core": {
+          "rules": [
+            "color-contrast"
+          ],
+          "off": [
+            "color-contrast-enhanced"
+          ],
+          "tally": {
+            "cases": 35,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 35,
+            "failures": 13,
+            "found": 1,
+            "missed": 9,
+            "unsureOnFailure": 3,
+            "falseAlarm": 0,
+            "rightlySilent": 18,
+            "unsureOnOther": 4
+          }
+        },
+        "alfa": {
+          "rules": [
+            "sia-r66"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 35,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 35,
+            "failures": 13,
+            "found": 11,
+            "missed": 1,
+            "unsureOnFailure": 1,
+            "falseAlarm": 2,
+            "rightlySilent": 19,
+            "unsureOnOther": 1
+          }
+        },
+        "qualweb": {
+          "rules": [
+            "QW-ACT-R76"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 35,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 35,
+            "failures": 13,
+            "found": 12,
+            "missed": 0,
+            "unsureOnFailure": 1,
+            "falseAlarm": 0,
+            "rightlySilent": 21,
+            "unsureOnOther": 1
+          }
+        }
+      }
+    },
+    {
+      "rule": "0va7u6",
+      "name": "HTML images contain no text",
+      "approved": true,
+      "expected": {
+        "failed": 5,
+        "passed": 8,
+        "inapplicable": 2
+      },
+      "instruments": {}
+    },
+    {
+      "rule": "bisz58",
+      "name": "Meta element has no refresh delay (no exception)",
+      "approved": true,
+      "expected": {
+        "failed": 3,
+        "passed": 2,
+        "inapplicable": 8
+      },
+      "instruments": {
+        "axe-core": {
+          "rules": [
+            "meta-refresh"
+          ],
+          "off": [
+            "meta-refresh-no-exceptions"
+          ],
+          "tally": {
+            "cases": 13,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 13,
+            "failures": 3,
+            "found": 1,
+            "missed": 2,
+            "unsureOnFailure": 0,
+            "falseAlarm": 1,
+            "rightlySilent": 9,
+            "unsureOnOther": 0
+          }
+        },
+        "alfa": {
+          "rules": [
+            "sia-r96"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 13,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 13,
+            "failures": 3,
+            "found": 3,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 10,
+            "unsureOnOther": 0
+          }
+        },
+        "ibm": {
+          "rules": [],
+          "off": [
+            "meta_redirect_optional"
+          ],
+          "tally": {
+            "cases": 0,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 0,
+            "failures": 0,
+            "found": 0,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 0,
+            "unsureOnOther": 0
+          }
+        },
+        "qualweb": {
+          "rules": [
+            "QW-ACT-R71"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 13,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 13,
+            "failures": 3,
+            "found": 3,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 10,
+            "unsureOnOther": 0
+          }
+        }
+      }
+    },
+    {
+      "rule": "b33eff",
+      "name": "Orientation of the page is not restricted using CSS transforms",
+      "approved": true,
+      "expected": {
+        "failed": 4,
+        "passed": 3,
+        "inapplicable": 6
+      },
+      "instruments": {
+        "axe-core": {
+          "rules": [],
+          "off": [
+            "css-orientation-lock"
+          ],
+          "tally": {
+            "cases": 0,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 0,
+            "failures": 0,
+            "found": 0,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 0,
+            "unsureOnOther": 0
+          }
+        },
+        "alfa": {
+          "rules": [
+            "sia-r44"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 13,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 13,
+            "failures": 4,
+            "found": 4,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 9,
+            "unsureOnOther": 0
+          }
+        },
+        "ibm": {
+          "rules": [
+            "element_orientation_unlocked"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 13,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 13,
+            "failures": 4,
+            "found": 4,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 9,
+            "unsureOnOther": 0
+          }
+        },
+        "qualweb": {
+          "rules": [
+            "QW-ACT-R7"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 13,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 13,
+            "failures": 4,
+            "found": 4,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 9,
+            "unsureOnOther": 0
+          }
+        }
+      }
+    },
+    {
+      "rule": "4e8ab6",
+      "name": "Element with role attribute has required states and properties",
+      "approved": true,
+      "expected": {
+        "failed": 5,
+        "passed": 7,
+        "inapplicable": 4
+      },
+      "instruments": {
+        "axe-core": {
+          "rules": [
+            "aria-required-attr"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 16,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 16,
+            "failures": 5,
+            "found": 5,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 11,
+            "unsureOnOther": 0
+          }
+        },
+        "alfa": {
+          "rules": [
+            "sia-r16"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 16,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 16,
+            "failures": 5,
+            "found": 5,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 11,
+            "unsureOnOther": 0
+          }
+        },
+        "ibm": {
+          "rules": [
+            "aria_attribute_required",
+            "combobox_popup_reference"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 16,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 16,
+            "failures": 5,
+            "found": 5,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 11,
+            "unsureOnOther": 0
+          }
+        },
+        "qualweb": {
+          "rules": [
+            "QW-ACT-R28"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 16,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 16,
+            "failures": 5,
+            "found": 5,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 11,
+            "unsureOnOther": 0
+          }
+        }
+      }
+    },
+    {
+      "rule": "2t702h",
+      "name": "Summary element has non-empty accessible name",
+      "approved": true,
+      "expected": {
+        "failed": 3,
+        "passed": 5,
+        "inapplicable": 4
+      },
+      "instruments": {
+        "alfa": {
+          "rules": [
+            "sia-r116"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 12,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 12,
+            "failures": 3,
+            "found": 3,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 9,
+            "unsureOnOther": 0
+          }
+        }
+      }
+    },
+    {
+      "rule": "kb1m8s",
+      "name": "ARIA global properties not used where prohibited",
+      "approved": false,
+      "expected": {
+        "failed": 5,
+        "passed": 3,
+        "inapplicable": 1
+      },
+      "instruments": {
+        "alfa": {
+          "rules": [
+            "sia-r18"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 9,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 9,
+            "failures": 5,
+            "found": 3,
+            "missed": 2,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 4,
+            "unsureOnOther": 0
+          }
+        }
+      }
+    },
+    {
+      "rule": "ff89c9",
+      "name": "ARIA required context role",
+      "approved": false,
+      "expected": {
+        "failed": 4,
+        "passed": 6,
+        "inapplicable": 5
+      },
+      "instruments": {
+        "axe-core": {
+          "rules": [
+            "aria-required-children",
+            "aria-required-parent"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 15,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 15,
+            "failures": 4,
+            "found": 4,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 11,
+            "unsureOnOther": 0
+          }
+        },
+        "alfa": {
+          "rules": [
+            "sia-r42"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 15,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 15,
+            "failures": 4,
+            "found": 4,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 11,
+            "unsureOnOther": 0
+          }
+        },
+        "ibm": {
+          "rules": [
+            "aria_parent_required"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 15,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 15,
+            "failures": 4,
+            "found": 4,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 11,
+            "unsureOnOther": 0
+          }
+        },
+        "qualweb": {
+          "rules": [
+            "QW-ACT-R33"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 15,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 15,
+            "failures": 4,
+            "found": 4,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 11,
+            "unsureOnOther": 0
+          }
+        }
+      }
+    },
+    {
+      "rule": "bc4a75",
+      "name": "ARIA required owned elements",
+      "approved": false,
+      "expected": {
+        "failed": 10,
+        "passed": 10,
+        "inapplicable": 4
+      },
+      "instruments": {
+        "axe-core": {
+          "rules": [
+            "aria-required-children"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 24,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 24,
+            "failures": 10,
+            "found": 9,
+            "missed": 1,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 14,
+            "unsureOnOther": 0
+          }
+        },
+        "alfa": {
+          "rules": [
+            "sia-r68"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 24,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 24,
+            "failures": 10,
+            "found": 8,
+            "missed": 2,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 14,
+            "unsureOnOther": 0
+          }
+        },
+        "ibm": {
+          "rules": [],
+          "off": [
+            "aria_child_valid"
+          ],
+          "tally": {
+            "cases": 0,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 0,
+            "failures": 0,
+            "found": 0,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 0,
+            "unsureOnOther": 0
+          }
+        },
+        "qualweb": {
+          "rules": [
+            "QW-ACT-R38"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 24,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 24,
+            "failures": 10,
+            "found": 10,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 14,
+            "unsureOnOther": 0
+          }
+        }
+      }
+    },
+    {
+      "rule": "5c01ea",
+      "name": "ARIA state or property is permitted",
+      "approved": false,
+      "expected": {
+        "failed": 2,
+        "passed": 13,
+        "inapplicable": 2
+      },
+      "instruments": {
+        "axe-core": {
+          "rules": [
+            "aria-allowed-attr",
+            "aria-conditional-attr",
+            "aria-prohibited-attr"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 17,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 17,
+            "failures": 2,
+            "found": 2,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 15,
+            "unsureOnOther": 0
+          }
+        },
+        "alfa": {
+          "rules": [
+            "sia-r18"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 17,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 17,
+            "failures": 2,
+            "found": 2,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 15,
+            "unsureOnOther": 0
+          }
+        },
+        "ibm": {
+          "rules": [
+            "aria_attribute_valid"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 17,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 17,
+            "failures": 2,
+            "found": 0,
+            "missed": 2,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 15,
+            "unsureOnOther": 0
+          }
+        },
+        "qualweb": {
+          "rules": [
+            "QW-ACT-R25"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 17,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 17,
+            "failures": 2,
+            "found": 2,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 15,
+            "unsureOnOther": 0
+          }
+        }
+      }
+    },
+    {
+      "rule": "afb423",
+      "name": "Audio element content is media alternative for text",
+      "approved": false,
+      "expected": {
+        "failed": 4,
+        "passed": 1,
+        "inapplicable": 2
+      },
+      "instruments": {
+        "axe-core": {
+          "rules": [],
+          "off": [
+            "audio-caption"
+          ],
+          "tally": {
+            "cases": 0,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 0,
+            "failures": 0,
+            "found": 0,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 0,
+            "unsureOnOther": 0
+          }
+        },
+        "qualweb": {
+          "rules": [
+            "QW-ACT-R59"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 7,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 7,
+            "failures": 4,
+            "found": 0,
+            "missed": 0,
+            "unsureOnFailure": 4,
+            "falseAlarm": 0,
+            "rightlySilent": 0,
+            "unsureOnOther": 3
+          }
+        }
+      }
+    },
+    {
+      "rule": "80f0bf",
+      "name": "Audio or video element avoids automatically playing audio",
+      "approved": false,
+      "expected": {
+        "failed": 2,
+        "passed": 3,
+        "inapplicable": 3
+      },
+      "instruments": {
+        "axe-core": {
+          "rules": [
+            "no-autoplay-audio"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 8,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 8,
+            "failures": 2,
+            "found": 0,
+            "missed": 0,
+            "unsureOnFailure": 2,
+            "falseAlarm": 0,
+            "rightlySilent": 4,
+            "unsureOnOther": 2
+          }
+        },
+        "qualweb": {
+          "rules": [
+            "QW-ACT-R15"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 8,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 8,
+            "failures": 2,
+            "found": 2,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 6,
+            "unsureOnOther": 0
+          }
+        }
+      }
+    },
+    {
+      "rule": "e7aa44",
+      "name": "Audio element content has text alternative",
+      "approved": false,
+      "expected": {
+        "failed": 2,
+        "passed": 3,
+        "inapplicable": 3
+      },
+      "instruments": {
+        "qualweb": {
+          "rules": [
+            "QW-ACT-R29"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 8,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 8,
+            "failures": 2,
+            "found": 0,
+            "missed": 0,
+            "unsureOnFailure": 2,
+            "falseAlarm": 0,
+            "rightlySilent": 1,
+            "unsureOnOther": 5
+          }
+        }
+      }
+    },
+    {
+      "rule": "2eb176",
+      "name": "Audio element content has transcript",
+      "approved": false,
+      "expected": {
+        "failed": 6,
+        "passed": 3,
+        "inapplicable": 2
+      },
+      "instruments": {
+        "axe-core": {
+          "rules": [],
+          "off": [
+            "audio-caption"
+          ],
+          "tally": {
+            "cases": 0,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 0,
+            "failures": 0,
+            "found": 0,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 0,
+            "unsureOnOther": 0
+          }
+        },
+        "qualweb": {
+          "rules": [
+            "QW-ACT-R58"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 11,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 11,
+            "failures": 6,
+            "found": 0,
+            "missed": 0,
+            "unsureOnFailure": 6,
+            "falseAlarm": 0,
+            "rightlySilent": 0,
+            "unsureOnOther": 5
+          }
+        }
+      }
+    },
+    {
+      "rule": "aaa1bf",
+      "name": "Audio or video element that plays automatically has no audio that lasts more than 3 seconds",
+      "approved": false,
+      "expected": {
+        "failed": 2,
+        "passed": 2,
+        "inapplicable": 3
+      },
+      "instruments": {
+        "qualweb": {
+          "rules": [
+            "QW-ACT-R49"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 7,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 7,
+            "failures": 2,
+            "found": 2,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 5,
+            "unsureOnOther": 0
+          }
+        }
+      }
+    },
+    {
+      "rule": "4c31df",
+      "name": "Audio or video element that plays automatically has a control mechanism",
+      "approved": false,
+      "expected": {
+        "failed": 5,
+        "passed": 3,
+        "inapplicable": 3
+      },
+      "instruments": {
+        "qualweb": {
+          "rules": [
+            "QW-ACT-R50"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 11,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 11,
+            "failures": 5,
+            "found": 5,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 6,
+            "unsureOnOther": 0
+          }
+        }
+      }
+    },
+    {
+      "rule": "efbfc7",
+      "name": "Text content that changes automatically can be paused, stopped or hidden",
+      "approved": false,
+      "expected": {
+        "failed": 1,
+        "passed": 5,
+        "inapplicable": 5
+      },
+      "instruments": {}
+    },
+    {
+      "rule": "3e12e1",
+      "name": "Block of repeated content is collapsible",
+      "approved": false,
+      "expected": {
+        "failed": 3,
+        "passed": 4,
+        "inapplicable": 1
+      },
+      "instruments": {
+        "axe-core": {
+          "rules": [
+            "bypass"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 8,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 8,
+            "failures": 3,
+            "found": 0,
+            "missed": 0,
+            "unsureOnFailure": 3,
+            "falseAlarm": 0,
+            "rightlySilent": 1,
+            "unsureOnOther": 4
+          }
+        },
+        "qualweb": {
+          "rules": [
+            "QW-ACT-R73"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 8,
+            "noOpinion": 0,
+            "error": 1,
+            "judged": 7,
+            "failures": 3,
+            "found": 0,
+            "missed": 0,
+            "unsureOnFailure": 3,
+            "falseAlarm": 0,
+            "rightlySilent": 0,
+            "unsureOnOther": 4
+          }
+        }
+      }
+    },
+    {
+      "rule": "cf77f2",
+      "name": "Bypass Blocks of Repeated Content",
+      "approved": false,
+      "expected": {
+        "failed": 1,
+        "passed": 12,
+        "inapplicable": 1
+      },
+      "instruments": {
+        "axe-core": {
+          "rules": [
+            "bypass"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 14,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 14,
+            "failures": 1,
+            "found": 0,
+            "missed": 0,
+            "unsureOnFailure": 1,
+            "falseAlarm": 0,
+            "rightlySilent": 9,
+            "unsureOnOther": 4
+          }
+        },
+        "qualweb": {
+          "rules": [
+            "QW-ACT-R75"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 14,
+            "noOpinion": 0,
+            "error": 1,
+            "judged": 13,
+            "failures": 1,
+            "found": 0,
+            "missed": 0,
+            "unsureOnFailure": 1,
+            "falseAlarm": 0,
+            "rightlySilent": 0,
+            "unsureOnOther": 12
+          }
+        }
+      }
+    },
+    {
+      "rule": "c249d5",
+      "name": "Device motion based changes to the content can be disabled",
+      "approved": false,
+      "expected": {
+        "failed": 1,
+        "passed": 3,
+        "inapplicable": 1
+      },
+      "instruments": {}
+    },
+    {
+      "rule": "7677a9",
+      "name": "Device motion based changes to the content can also be created from the user interface",
+      "approved": false,
+      "expected": {
+        "failed": 1,
+        "passed": 4,
+        "inapplicable": 1
+      },
+      "instruments": {}
+    },
+    {
+      "rule": "047fe0",
+      "name": "Document has heading for non-repeated content",
+      "approved": false,
+      "expected": {
+        "failed": 4,
+        "passed": 9,
+        "inapplicable": 1
+      },
+      "instruments": {
+        "axe-core": {
+          "rules": [
+            "bypass"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 14,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 14,
+            "failures": 4,
+            "found": 0,
+            "missed": 2,
+            "unsureOnFailure": 2,
+            "falseAlarm": 0,
+            "rightlySilent": 10,
+            "unsureOnOther": 0
+          }
+        },
+        "qualweb": {
+          "rules": [
+            "QW-ACT-R64"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 14,
+            "noOpinion": 0,
+            "error": 1,
+            "judged": 13,
+            "failures": 4,
+            "found": 0,
+            "missed": 0,
+            "unsureOnFailure": 4,
+            "falseAlarm": 0,
+            "rightlySilent": 1,
+            "unsureOnOther": 8
+          }
+        }
+      }
+    },
+    {
+      "rule": "ye5d6e",
+      "name": "Document has an instrument to move focus to non-repeated content",
+      "approved": false,
+      "expected": {
+        "failed": 3,
+        "passed": 8,
+        "inapplicable": 1
+      },
+      "instruments": {
+        "axe-core": {
+          "rules": [
+            "bypass"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 12,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 12,
+            "failures": 3,
+            "found": 0,
+            "missed": 2,
+            "unsureOnFailure": 1,
+            "falseAlarm": 0,
+            "rightlySilent": 8,
+            "unsureOnOther": 1
+          }
+        },
+        "qualweb": {
+          "rules": [
+            "QW-ACT-R74"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 12,
+            "noOpinion": 0,
+            "error": 1,
+            "judged": 11,
+            "failures": 3,
+            "found": 0,
+            "missed": 0,
+            "unsureOnFailure": 3,
+            "falseAlarm": 0,
+            "rightlySilent": 0,
+            "unsureOnOther": 8
+          }
+        }
+      }
+    },
+    {
+      "rule": "b40fd1",
+      "name": "Document has a landmark with non-repeated content",
+      "approved": false,
+      "expected": {
+        "failed": 3,
+        "passed": 4,
+        "inapplicable": 1
+      },
+      "instruments": {
+        "axe-core": {
+          "rules": [
+            "bypass"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 8,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 8,
+            "failures": 3,
+            "found": 0,
+            "missed": 0,
+            "unsureOnFailure": 3,
+            "falseAlarm": 0,
+            "rightlySilent": 5,
+            "unsureOnOther": 0
+          }
+        },
+        "qualweb": {
+          "rules": [
+            "QW-ACT-R63"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 8,
+            "noOpinion": 0,
+            "error": 1,
+            "judged": 7,
+            "failures": 3,
+            "found": 0,
+            "missed": 0,
+            "unsureOnFailure": 3,
+            "falseAlarm": 0,
+            "rightlySilent": 1,
+            "unsureOnOther": 3
+          }
+        }
+      }
+    },
+    {
+      "rule": "off6ek",
+      "name": "HTML element language subtag matches language",
+      "approved": false,
+      "expected": {
+        "failed": 4,
+        "passed": 5,
+        "inapplicable": 5
+      },
+      "instruments": {
+        "eld": {
+          "rules": [
+            "language-parts"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 14,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 14,
+            "failures": 4,
+            "found": 2,
+            "missed": 1,
+            "unsureOnFailure": 1,
+            "falseAlarm": 1,
+            "rightlySilent": 7,
+            "unsureOnOther": 2
+          }
+        },
+        "cld3": {
+          "rules": [
+            "language-parts"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 14,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 14,
+            "failures": 4,
+            "found": 2,
+            "missed": 1,
+            "unsureOnFailure": 1,
+            "falseAlarm": 1,
+            "rightlySilent": 7,
+            "unsureOnOther": 2
+          }
+        },
+        "eld+cld3": {
+          "rules": [
+            "language-parts"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 14,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 14,
+            "failures": 4,
+            "found": 2,
+            "missed": 1,
+            "unsureOnFailure": 1,
+            "falseAlarm": 0,
+            "rightlySilent": 6,
+            "unsureOnOther": 4
+          }
+        }
+      }
+    },
+    {
+      "rule": "80af7b",
+      "name": "Focusable element has no keyboard trap",
+      "approved": false,
+      "expected": {
+        "failed": 5,
+        "passed": 7,
+        "inapplicable": 4
+      },
+      "instruments": {}
+    },
+    {
+      "rule": "ebe86a",
+      "name": "Focusable element has no keyboard trap via non-standard navigation",
+      "approved": false,
+      "expected": {
+        "failed": 3,
+        "passed": 3,
+        "inapplicable": 1
+      },
+      "instruments": {}
+    },
+    {
+      "rule": "a1b64e",
+      "name": "Focusable element has no keyboard trap via standard navigation",
+      "approved": false,
+      "expected": {
+        "failed": 3,
+        "passed": 4,
+        "inapplicable": 4
+      },
+      "instruments": {}
+    },
+    {
+      "rule": "cc0f0a",
+      "name": "Form field label is descriptive",
+      "approved": false,
+      "expected": {
+        "failed": 6,
+        "passed": 7,
+        "inapplicable": 3
+      },
+      "instruments": {}
+    },
+    {
+      "rule": "b49b2e",
+      "name": "Heading is descriptive",
+      "approved": false,
+      "expected": {
+        "failed": 4,
+        "passed": 6,
+        "inapplicable": 2
+      },
+      "instruments": {
+        "alfa": {
+          "rules": [],
+          "off": [
+            "sia-r115"
+          ],
+          "tally": {
+            "cases": 0,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 0,
+            "failures": 0,
+            "found": 0,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 0,
+            "unsureOnOther": 0
+          }
+        }
+      }
+    },
+    {
+      "rule": "ffd0e9",
+      "name": "Heading has non-empty accessible name",
+      "approved": false,
+      "expected": {
+        "failed": 8,
+        "passed": 5,
+        "inapplicable": 2
+      },
+      "instruments": {
+        "axe-core": {
+          "rules": [],
+          "off": [
+            "empty-heading"
+          ],
+          "tally": {
+            "cases": 0,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 0,
+            "failures": 0,
+            "found": 0,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 0,
+            "unsureOnOther": 0
+          }
+        },
+        "alfa": {
+          "rules": [
+            "sia-r64"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 15,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 15,
+            "failures": 8,
+            "found": 8,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 7,
+            "unsureOnOther": 0
+          }
+        },
+        "qualweb": {
+          "rules": [
+            "QW-ACT-R35"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 15,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 15,
+            "failures": 8,
+            "found": 8,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 7,
+            "unsureOnOther": 0
+          }
+        },
+        "chromium": {
+          "rules": [
+            "name"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 15,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 15,
+            "failures": 8,
+            "found": 8,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 7,
+            "unsureOnOther": 0
+          }
+        },
+        "alfa-aria": {
+          "rules": [
+            "name"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 15,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 15,
+            "failures": 8,
+            "found": 8,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 7,
+            "unsureOnOther": 0
+          }
+        },
+        "axe-name": {
+          "rules": [
+            "name"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 15,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 15,
+            "failures": 8,
+            "found": 8,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 7,
+            "unsureOnOther": 0
+          }
+        },
+        "playwright": {
+          "rules": [
+            "name"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 15,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 15,
+            "failures": 8,
+            "found": 8,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 7,
+            "unsureOnOther": 0
+          }
+        },
+        "dom-accessibility-api": {
+          "rules": [
+            "name"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 15,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 15,
+            "failures": 8,
+            "found": 8,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 7,
+            "unsureOnOther": 0
+          }
+        }
+      }
+    },
+    {
+      "rule": "ucwvc8",
+      "name": "HTML page language subtag matches default language",
+      "approved": false,
+      "expected": {
+        "failed": 5,
+        "passed": 4,
+        "inapplicable": 6
+      },
+      "instruments": {
+        "alfa": {
+          "rules": [],
+          "off": [
+            "sia-r109"
+          ],
+          "tally": {
+            "cases": 0,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 0,
+            "failures": 0,
+            "found": 0,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 0,
+            "unsureOnOther": 0
+          }
+        },
+        "eld": {
+          "rules": [
+            "language-page"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 15,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 15,
+            "failures": 5,
+            "found": 3,
+            "missed": 0,
+            "unsureOnFailure": 2,
+            "falseAlarm": 1,
+            "rightlySilent": 5,
+            "unsureOnOther": 4
+          }
+        },
+        "cld3": {
+          "rules": [
+            "language-page"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 15,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 15,
+            "failures": 5,
+            "found": 3,
+            "missed": 0,
+            "unsureOnFailure": 2,
+            "falseAlarm": 0,
+            "rightlySilent": 6,
+            "unsureOnOther": 4
+          }
+        },
+        "eld+cld3": {
+          "rules": [
+            "language-page"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 15,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 15,
+            "failures": 5,
+            "found": 3,
+            "missed": 0,
+            "unsureOnFailure": 2,
+            "falseAlarm": 0,
+            "rightlySilent": 3,
+            "unsureOnOther": 7
+          }
+        }
+      }
+    },
+    {
+      "rule": "4b1c6c",
+      "name": "Iframe elements with identical accessible names have equivalent purpose",
+      "approved": false,
+      "expected": {
+        "failed": 4,
+        "passed": 10,
+        "inapplicable": 9
+      },
+      "instruments": {
+        "axe-core": {
+          "rules": [
+            "frame-title-unique"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 23,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 23,
+            "failures": 4,
+            "found": 0,
+            "missed": 2,
+            "unsureOnFailure": 2,
+            "falseAlarm": 0,
+            "rightlySilent": 11,
+            "unsureOnOther": 8
+          }
+        },
+        "alfa": {
+          "rules": [
+            "sia-r15"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 23,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 23,
+            "failures": 4,
+            "found": 0,
+            "missed": 0,
+            "unsureOnFailure": 4,
+            "falseAlarm": 0,
+            "rightlySilent": 14,
+            "unsureOnOther": 5
+          }
+        },
+        "qualweb": {
+          "rules": [
+            "QW-ACT-R10"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 23,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 23,
+            "failures": 4,
+            "found": 0,
+            "missed": 0,
+            "unsureOnFailure": 4,
+            "falseAlarm": 0,
+            "rightlySilent": 9,
+            "unsureOnOther": 10
+          }
+        }
+      }
+    },
+    {
+      "rule": "cae760",
+      "name": "Iframe element has non-empty accessible name",
+      "approved": false,
+      "expected": {
+        "failed": 4,
+        "passed": 3,
+        "inapplicable": 4
+      },
+      "instruments": {
+        "axe-core": {
+          "rules": [
+            "frame-title"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 11,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 11,
+            "failures": 4,
+            "found": 4,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 7,
+            "unsureOnOther": 0
+          }
+        },
+        "alfa": {
+          "rules": [
+            "sia-r13"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 11,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 11,
+            "failures": 4,
+            "found": 4,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 7,
+            "unsureOnOther": 0
+          }
+        },
+        "ibm": {
+          "rules": [
+            "frame_title_exists"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 11,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 11,
+            "failures": 4,
+            "found": 4,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 1,
+            "rightlySilent": 6,
+            "unsureOnOther": 0
+          }
+        },
+        "qualweb": {
+          "rules": [
+            "QW-ACT-R19"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 11,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 11,
+            "failures": 4,
+            "found": 4,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 7,
+            "unsureOnOther": 0
+          }
+        }
+      }
+    },
+    {
+      "rule": "e88epe",
+      "name": "Image not in the accessibility tree is decorative",
+      "approved": false,
+      "expected": {
+        "failed": 5,
+        "passed": 5,
+        "inapplicable": 10
+      },
+      "instruments": {}
+    },
+    {
+      "rule": "36b590",
+      "name": "Error message describes invalid form field value",
+      "approved": false,
+      "expected": {
+        "failed": 5,
+        "passed": 3,
+        "inapplicable": 1
+      },
+      "instruments": {
+        "qualweb": {
+          "rules": [
+            "QW-ACT-R41"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 9,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 9,
+            "failures": 5,
+            "found": 0,
+            "missed": 0,
+            "unsureOnFailure": 5,
+            "falseAlarm": 0,
+            "rightlySilent": 1,
+            "unsureOnOther": 3
+          }
+        }
+      }
+    },
+    {
+      "rule": "aizyf1",
+      "name": "Link is descriptive",
+      "approved": false,
+      "expected": {
+        "failed": 5,
+        "passed": 4,
+        "inapplicable": 3
+      },
+      "instruments": {}
+    },
+    {
+      "rule": "5effbb",
+      "name": "Link in context is descriptive",
+      "approved": false,
+      "expected": {
+        "failed": 6,
+        "passed": 9,
+        "inapplicable": 3
+      },
+      "instruments": {}
+    },
+    {
+      "rule": "b20e66",
+      "name": "Links with identical accessible names have equivalent purpose",
+      "approved": false,
+      "expected": {
+        "failed": 6,
+        "passed": 12,
+        "inapplicable": 3
+      },
+      "instruments": {
+        "axe-core": {
+          "rules": [],
+          "off": [
+            "identical-links-same-purpose"
+          ],
+          "tally": {
+            "cases": 0,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 0,
+            "failures": 0,
+            "found": 0,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 0,
+            "unsureOnOther": 0
+          }
+        },
+        "alfa": {
+          "rules": [
+            "sia-r41"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 21,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 21,
+            "failures": 6,
+            "found": 0,
+            "missed": 0,
+            "unsureOnFailure": 6,
+            "falseAlarm": 0,
+            "rightlySilent": 8,
+            "unsureOnOther": 7
+          }
+        },
+        "qualweb": {
+          "rules": [
+            "QW-ACT-R9"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 21,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 21,
+            "failures": 6,
+            "found": 0,
+            "missed": 0,
+            "unsureOnFailure": 6,
+            "falseAlarm": 0,
+            "rightlySilent": 8,
+            "unsureOnOther": 7
+          }
+        }
+      }
+    },
+    {
+      "rule": "fd3a94",
+      "name": "Links with identical accessible names and same context serve equivalent purpose",
+      "approved": false,
+      "expected": {
+        "failed": 8,
+        "passed": 9,
+        "inapplicable": 7
+      },
+      "instruments": {
+        "alfa": {
+          "rules": [
+            "sia-r81"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 24,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 24,
+            "failures": 8,
+            "found": 0,
+            "missed": 1,
+            "unsureOnFailure": 7,
+            "falseAlarm": 0,
+            "rightlySilent": 8,
+            "unsureOnOther": 8
+          }
+        },
+        "qualweb": {
+          "rules": [
+            "QW-ACT-R44"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 24,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 24,
+            "failures": 8,
+            "found": 0,
+            "missed": 0,
+            "unsureOnFailure": 8,
+            "falseAlarm": 0,
+            "rightlySilent": 8,
+            "unsureOnOther": 8
+          }
+        }
+      }
+    },
+    {
+      "rule": "9bd38c",
+      "name": "Content has alternative for visual reference",
+      "approved": false,
+      "expected": {
+        "failed": 4,
+        "passed": 15,
+        "inapplicable": 2
+      },
+      "instruments": {}
+    },
+    {
+      "rule": "ffbc54",
+      "name": "No keyboard shortcut uses only printable characters",
+      "approved": false,
+      "expected": {
+        "failed": 2,
+        "passed": 6,
+        "inapplicable": 2
+      },
+      "instruments": {}
+    },
+    {
+      "rule": "d0f69e",
+      "name": "Table header cell has assigned cells",
+      "approved": false,
+      "expected": {
+        "failed": 3,
+        "passed": 6,
+        "inapplicable": 7
+      },
+      "instruments": {
+        "axe-core": {
+          "rules": [
+            "th-has-data-cells"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 16,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 16,
+            "failures": 3,
+            "found": 0,
+            "missed": 1,
+            "unsureOnFailure": 2,
+            "falseAlarm": 0,
+            "rightlySilent": 13,
+            "unsureOnOther": 0
+          }
+        },
+        "alfa": {
+          "rules": [
+            "sia-r46"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 16,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 16,
+            "failures": 3,
+            "found": 2,
+            "missed": 1,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 13,
+            "unsureOnOther": 0
+          }
+        },
+        "qualweb": {
+          "rules": [
+            "QW-ACT-R39"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 16,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 16,
+            "failures": 3,
+            "found": 3,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 13,
+            "unsureOnOther": 0
+          }
+        }
+      }
+    },
+    {
+      "rule": "eac66b",
+      "name": "Video element auditory content has accessible alternative",
+      "approved": false,
+      "expected": {
+        "failed": 2,
+        "passed": 2,
+        "inapplicable": 2
+      },
+      "instruments": {
+        "axe-core": {
+          "rules": [
+            "video-caption"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 6,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 6,
+            "failures": 2,
+            "found": 0,
+            "missed": 0,
+            "unsureOnFailure": 2,
+            "falseAlarm": 0,
+            "rightlySilent": 2,
+            "unsureOnOther": 2
+          }
+        },
+        "qualweb": {
+          "rules": [
+            "QW-ACT-R26"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 6,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 6,
+            "failures": 2,
+            "found": 0,
+            "missed": 0,
+            "unsureOnFailure": 2,
+            "falseAlarm": 0,
+            "rightlySilent": 1,
+            "unsureOnOther": 3
+          }
+        }
+      }
+    },
+    {
+      "rule": "c5a4ea",
+      "name": "Video element visual content has accessible alternative",
+      "approved": false,
+      "expected": {
+        "failed": 4,
+        "passed": 3,
+        "inapplicable": 2
+      },
+      "instruments": {
+        "qualweb": {
+          "rules": [
+            "QW-ACT-R23"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 9,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 9,
+            "failures": 4,
+            "found": 0,
+            "missed": 0,
+            "unsureOnFailure": 4,
+            "falseAlarm": 0,
+            "rightlySilent": 1,
+            "unsureOnOther": 4
+          }
+        }
+      }
+    },
+    {
+      "rule": "ab4d13",
+      "name": "Video element content is media alternative for text",
+      "approved": false,
+      "expected": {
+        "failed": 4,
+        "passed": 1,
+        "inapplicable": 2
+      },
+      "instruments": {
+        "qualweb": {
+          "rules": [
+            "QW-ACT-R56"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 7,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 7,
+            "failures": 4,
+            "found": 0,
+            "missed": 0,
+            "unsureOnFailure": 4,
+            "falseAlarm": 0,
+            "rightlySilent": 1,
+            "unsureOnOther": 2
+          }
+        }
+      }
+    },
+    {
+      "rule": "1ea59c",
+      "name": "Video element visual content has audio description",
+      "approved": false,
+      "expected": {
+        "failed": 3,
+        "passed": 2,
+        "inapplicable": 2
+      },
+      "instruments": {
+        "qualweb": {
+          "rules": [
+            "QW-ACT-R55"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 7,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 7,
+            "failures": 3,
+            "found": 0,
+            "missed": 0,
+            "unsureOnFailure": 3,
+            "falseAlarm": 0,
+            "rightlySilent": 1,
+            "unsureOnOther": 3
+          }
+        }
+      }
+    },
+    {
+      "rule": "f51b46",
+      "name": "Video element auditory content has captions",
+      "approved": false,
+      "expected": {
+        "failed": 4,
+        "passed": 2,
+        "inapplicable": 2
+      },
+      "instruments": {
+        "qualweb": {
+          "rules": [
+            "QW-ACT-R60"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 8,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 8,
+            "failures": 4,
+            "found": 0,
+            "missed": 0,
+            "unsureOnFailure": 4,
+            "falseAlarm": 0,
+            "rightlySilent": 1,
+            "unsureOnOther": 3
+          }
+        }
+      }
+    },
+    {
+      "rule": "c3232f",
+      "name": "Video element visual-only content has accessible alternative",
+      "approved": false,
+      "expected": {
+        "failed": 4,
+        "passed": 3,
+        "inapplicable": 2
+      },
+      "instruments": {
+        "qualweb": {
+          "rules": [
+            "QW-ACT-R31"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 9,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 9,
+            "failures": 4,
+            "found": 0,
+            "missed": 0,
+            "unsureOnFailure": 4,
+            "falseAlarm": 0,
+            "rightlySilent": 2,
+            "unsureOnOther": 3
+          }
+        }
+      }
+    },
+    {
+      "rule": "fd26cf",
+      "name": "Video element visual-only content is media alternative for text",
+      "approved": false,
+      "expected": {
+        "failed": 4,
+        "passed": 1,
+        "inapplicable": 2
+      },
+      "instruments": {
+        "qualweb": {
+          "rules": [
+            "QW-ACT-R51"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 7,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 7,
+            "failures": 4,
+            "found": 0,
+            "missed": 0,
+            "unsureOnFailure": 4,
+            "falseAlarm": 0,
+            "rightlySilent": 2,
+            "unsureOnOther": 1
+          }
+        }
+      }
+    },
+    {
+      "rule": "d7ba54",
+      "name": "Video element visual-only content has audio track alternative",
+      "approved": false,
+      "expected": {
+        "failed": 2,
+        "passed": 1,
+        "inapplicable": 2
+      },
+      "instruments": {
+        "qualweb": {
+          "rules": [
+            "QW-ACT-R54"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 5,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 5,
+            "failures": 2,
+            "found": 0,
+            "missed": 0,
+            "unsureOnFailure": 2,
+            "falseAlarm": 0,
+            "rightlySilent": 2,
+            "unsureOnOther": 1
+          }
+        }
+      }
+    },
+    {
+      "rule": "ee13b5",
+      "name": "Video element visual-only content has transcript",
+      "approved": false,
+      "expected": {
+        "failed": 3,
+        "passed": 3,
+        "inapplicable": 2
+      },
+      "instruments": {
+        "qualweb": {
+          "rules": [
+            "QW-ACT-R53"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 8,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 8,
+            "failures": 3,
+            "found": 0,
+            "missed": 0,
+            "unsureOnFailure": 3,
+            "falseAlarm": 0,
+            "rightlySilent": 2,
+            "unsureOnOther": 3
+          }
+        }
+      }
+    },
+    {
+      "rule": "1ec09b",
+      "name": "Video element visual content has strict accessible alternative",
+      "approved": false,
+      "expected": {
+        "failed": 3,
+        "passed": 2,
+        "inapplicable": 2
+      },
+      "instruments": {
+        "qualweb": {
+          "rules": [
+            "QW-ACT-R32"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 7,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 7,
+            "failures": 3,
+            "found": 0,
+            "missed": 0,
+            "unsureOnFailure": 3,
+            "falseAlarm": 0,
+            "rightlySilent": 1,
+            "unsureOnOther": 3
+          }
+        }
+      }
+    },
+    {
+      "rule": "1a02b0",
+      "name": "Audio and visuals of video element have transcript",
+      "approved": false,
+      "expected": {
+        "failed": 4,
+        "passed": 4,
+        "inapplicable": 1
+      },
+      "instruments": {
+        "qualweb": {
+          "rules": [
+            "QW-ACT-R61"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 9,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 9,
+            "failures": 4,
+            "found": 0,
+            "missed": 0,
+            "unsureOnFailure": 4,
+            "falseAlarm": 0,
+            "rightlySilent": 1,
+            "unsureOnOther": 4
+          }
+        }
+      }
+    },
+    {
+      "rule": "2ee8b8",
+      "name": "Visible label is part of accessible name",
+      "approved": false,
+      "expected": {
+        "failed": 16,
+        "passed": 16,
+        "inapplicable": 4
+      },
+      "instruments": {
+        "axe-core": {
+          "rules": [],
+          "off": [
+            "label-content-name-mismatch"
+          ],
+          "tally": {
+            "cases": 0,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 0,
+            "failures": 0,
+            "found": 0,
+            "missed": 0,
+            "unsureOnFailure": 0,
+            "falseAlarm": 0,
+            "rightlySilent": 0,
+            "unsureOnOther": 0
+          }
+        },
+        "alfa": {
+          "rules": [
+            "sia-r14"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 36,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 36,
+            "failures": 16,
+            "found": 13,
+            "missed": 3,
+            "unsureOnFailure": 0,
+            "falseAlarm": 3,
+            "rightlySilent": 17,
+            "unsureOnOther": 0
+          }
+        },
+        "ibm": {
+          "rules": [
+            "label_name_visible"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 36,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 36,
+            "failures": 16,
+            "found": 15,
+            "missed": 1,
+            "unsureOnFailure": 0,
+            "falseAlarm": 2,
+            "rightlySilent": 18,
+            "unsureOnOther": 0
+          }
+        },
+        "qualweb": {
+          "rules": [
+            "QW-ACT-R30"
+          ],
+          "off": [],
+          "tally": {
+            "cases": 36,
+            "noOpinion": 0,
+            "error": 0,
+            "judged": 36,
+            "failures": 16,
+            "found": 14,
+            "missed": 2,
+            "unsureOnFailure": 0,
+            "falseAlarm": 2,
+            "rightlySilent": 18,
+            "unsureOnOther": 0
+          }
+        }
+      }
+    },
+    {
+      "rule": "59br37",
+      "name": "Zoomed text node is not clipped with CSS overflow",
+      "approved": false,
+      "expected": {
+        "failed": 5,
+        "passed": 4,
+        "inapplicable": 5
+      },
+      "instruments": {}
+    }
+  ],
+  "together": {
+    "all": {
+      "engines": [
+        "axe-core",
+        "alfa",
+        "ibm",
+        "qualweb"
+      ],
+      "compared": 700,
+      "unanimous": {
+        "cases": 639,
+        "right": 636
+      },
+      "split": {
+        "cases": 61,
+        "majorityRight": 50,
+        "majorityWrong": 5,
+        "tie": 6
+      },
+      "rightWhenSplit": {
+        "axe-core": {
+          "count": 24,
+          "of": 49,
+          "share": 0.49
+        },
+        "alfa": {
+          "count": 39,
+          "of": 60,
+          "share": 0.65
+        },
+        "ibm": {
+          "count": 17,
+          "of": 37,
+          "share": 0.459
+        },
+        "qualweb": {
+          "count": 57,
+          "of": 60,
+          "share": 0.95
+        }
+      },
+      "flags": {
+        "agree": {
+          "cases": 196,
+          "failures": 192
+        },
+        "alone": {
+          "cases": 24,
+          "failures": 16
+        },
+        "contradiction": {
+          "cases": 41,
+          "failures": 22
+        },
+        "cantTell": {
+          "cases": 214,
+          "failures": 89
+        },
+        "passed": {
+          "cases": 490,
+          "failures": 3
+        }
+      }
+    },
+    "sweep": {
+      "engines": [
+        "axe-core",
+        "alfa"
+      ],
+      "compared": 583,
+      "unanimous": {
+        "cases": 551,
+        "right": 547
+      },
+      "split": {
+        "cases": 32,
+        "majorityRight": 0,
+        "majorityWrong": 0,
+        "tie": 32
+      },
+      "rightWhenSplit": {
+        "axe-core": {
+          "count": 10,
+          "of": 32,
+          "share": 0.313
+        },
+        "alfa": {
+          "count": 22,
+          "of": 32,
+          "share": 0.688
+        }
+      },
+      "flags": {
+        "agree": {
+          "cases": 161,
+          "failures": 158
+        },
+        "alone": {
+          "cases": 54,
+          "failures": 42
+        },
+        "contradiction": {
+          "cases": 23,
+          "failures": 16
+        },
+        "cantTell": {
+          "cases": 85,
+          "failures": 36
+        },
+        "passed": {
+          "cases": 513,
+          "failures": 11
+        }
+      }
+    }
+  },
+  "disagreements": [
+    {
+      "rule": "6a7281",
+      "id": "e4b47e094d44a9f3b5b3fd5c157f3ef6679bede0",
+      "expected": "passed",
+      "said": {
+        "axe-core": "passed",
+        "alfa": "passed",
+        "ibm": "failed",
+        "qualweb": "passed"
+      }
+    },
+    {
+      "rule": "de46e4",
+      "id": "034e1e1a46cfa6d3fe3bcc69ac45ffb6c5d55148",
+      "expected": "passed",
+      "said": {
+        "axe-core": "passed",
+        "alfa": "passed",
+        "ibm": "failed",
+        "qualweb": "passed"
+      }
+    },
+    {
+      "rule": "akn7bn",
+      "id": "63cd20ec8886f4c59ff54f406a0e5933847bce75",
+      "expected": "inapplicable",
+      "said": {
+        "axe-core": "inapplicable",
+        "alfa": "failed",
+        "ibm": "inapplicable",
+        "qualweb": "inapplicable"
+      }
+    },
+    {
+      "rule": "akn7bn",
+      "id": "c88fcaf4d90e2156de75a1cdad8734a3d75c49e4",
+      "expected": "inapplicable",
+      "said": {
+        "axe-core": "failed",
+        "alfa": "failed",
+        "ibm": "inapplicable",
+        "qualweb": "inapplicable"
+      }
+    },
+    {
+      "rule": "24afc2",
+      "id": "d6d5bf7c081939e64d10022dd29f5e31d2153d50",
+      "expected": "passed",
+      "said": {
+        "axe-core": "failed",
+        "alfa": "passed",
+        "ibm": "passed",
+        "qualweb": "passed"
+      }
+    },
+    {
+      "rule": "24afc2",
+      "id": "9af5662e9957191c22c558a1a8511bae709a2b36",
+      "expected": "inapplicable",
+      "said": {
+        "axe-core": "failed",
+        "alfa": "inapplicable",
+        "ibm": "inapplicable",
+        "qualweb": "inapplicable"
+      }
+    },
+    {
+      "rule": "9e45ec",
+      "id": "15905a239d6755102be6a60aa152ad963d5b1dbb",
+      "expected": "passed",
+      "said": {
+        "axe-core": "failed",
+        "alfa": "passed",
+        "ibm": "inapplicable",
+        "qualweb": "passed"
+      }
+    },
+    {
+      "rule": "9e45ec",
+      "id": "8d2baed183149375922c23a9a5f42b52b627d713",
+      "expected": "passed",
+      "said": {
+        "axe-core": "failed",
+        "alfa": "passed",
+        "ibm": "inapplicable",
+        "qualweb": "passed"
+      }
+    },
+    {
+      "rule": "9e45ec",
+      "id": "fdd3c30f28464b32eb8a1397f70a41dfd3b2cb1c",
+      "expected": "inapplicable",
+      "said": {
+        "axe-core": "failed",
+        "alfa": "inapplicable",
+        "ibm": "inapplicable",
+        "qualweb": "inapplicable"
+      }
+    },
+    {
+      "rule": "78fd32",
+      "id": "67159173d21bc9cf00d1bb5a7ec817696ccee05c",
+      "expected": "failed",
+      "said": {
+        "axe-core": "passed",
+        "alfa": "failed",
+        "ibm": "failed",
+        "qualweb": "failed"
+      }
+    },
+    {
+      "rule": "78fd32",
+      "id": "bc3e59c1292a265135ed7043d2cdcaa62cdfac66",
+      "expected": "inapplicable",
+      "said": {
+        "axe-core": "passed",
+        "alfa": "failed",
+        "ibm": "inapplicable",
+        "qualweb": "inapplicable"
+      }
+    },
+    {
+      "rule": "73f2c2",
+      "id": "35d0948a2cb309923e9a7cc5dd99a8ffc975088b",
+      "expected": "passed",
+      "said": {
+        "axe-core": "passed",
+        "alfa": "passed",
+        "ibm": "failed",
+        "qualweb": "passed"
+      }
+    },
+    {
+      "rule": "46ca7f",
+      "id": "e136a03c52c01c1b190c7372d83463f3c6502de9",
+      "expected": "failed",
+      "said": {
+        "alfa": "failed",
+        "ibm": "inapplicable",
+        "qualweb": "failed"
+      }
+    },
+    {
+      "rule": "46ca7f",
+      "id": "96c1f58088f1e32c965f38ddc50d4b88f6a0f022",
+      "expected": "failed",
+      "said": {
+        "alfa": "failed",
+        "ibm": "inapplicable",
+        "qualweb": "failed"
+      }
+    },
+    {
+      "rule": "46ca7f",
+      "id": "b4329d21bd80d961408bf066a70998417234f200",
+      "expected": "failed",
+      "said": {
+        "alfa": "failed",
+        "ibm": "inapplicable",
+        "qualweb": "failed"
+      }
+    },
+    {
+      "rule": "bf051a",
+      "id": "a49f11c86ad81c4d42700dfca58a7eeec377f02e",
+      "expected": "passed",
+      "said": {
+        "axe-core": "passed",
+        "alfa": "passed",
+        "ibm": "failed",
+        "qualweb": "passed"
+      }
+    },
+    {
+      "rule": "23a2a8",
+      "id": "496963cfd35d4873c010469c47c84d4358fba035",
+      "expected": "failed",
+      "said": {
+        "axe-core": "failed",
+        "alfa": "failed",
+        "ibm": "inapplicable",
+        "qualweb": "failed"
+      }
+    },
+    {
+      "rule": "c487ae",
+      "id": "c1570fd31970f22abcca6f32d75c1906058c1535",
+      "expected": "failed",
+      "said": {
+        "axe-core": "failed",
+        "alfa": "failed",
+        "ibm": "failed",
+        "qualweb": "inapplicable",
+        "chromium": "failed",
+        "alfa-aria": "failed",
+        "axe-name": "failed",
+        "playwright": "failed",
+        "dom-accessibility-api": "failed"
+      }
+    },
+    {
+      "rule": "7d6734",
+      "id": "8ad324fd8d3f5113f72ac40f978a85e1777d43d1",
+      "expected": "passed",
+      "said": {
+        "axe-core": "passed",
+        "alfa": "passed",
+        "ibm": "failed",
+        "qualweb": "passed"
+      }
+    },
+    {
+      "rule": "7d6734",
+      "id": "94396aaa5928a68aba7320ea3690ca6c302fdcab",
+      "expected": "failed",
+      "said": {
+        "axe-core": "failed",
+        "alfa": "failed",
+        "ibm": "passed",
+        "qualweb": "failed"
+      }
+    },
+    {
+      "rule": "7d6734",
+      "id": "1f2223805c79c21fade3ebf0d9a29f979c16f581",
+      "expected": "inapplicable",
+      "said": {
+        "axe-core": "inapplicable",
+        "alfa": "inapplicable",
+        "ibm": "failed",
+        "qualweb": "inapplicable"
+      }
+    },
+    {
+      "rule": "7d6734",
+      "id": "ec2a7a47c3850e8aacd971a445b90390b2ab73bb",
+      "expected": "inapplicable",
+      "said": {
+        "axe-core": "inapplicable",
+        "alfa": "inapplicable",
+        "ibm": "failed",
+        "qualweb": "inapplicable"
+      }
+    },
+    {
+      "rule": "6cfa84",
+      "id": "d343bc6a2877b62d80153453c3781debc33e0b1d",
+      "expected": "passed",
+      "said": {
+        "axe-core": "cantTell",
+        "alfa": "failed",
+        "ibm": "failed",
+        "qualweb": "passed"
+      }
+    },
+    {
+      "rule": "bc659a",
+      "id": "d48be8e9b638b9c27714cb3118a335376ed65f0f",
+      "expected": "passed",
+      "said": {
+        "axe-core": "failed",
+        "alfa": "passed",
+        "ibm": "passed",
+        "qualweb": "passed"
+      }
+    },
+    {
+      "rule": "0ssw9k",
+      "id": "5d06e0832a2a97d6dd2e5657f00dcb93c584135b",
+      "expected": "inapplicable",
+      "said": {
+        "axe-core": "inapplicable",
+        "alfa": "failed",
+        "qualweb": "inapplicable"
+      }
+    },
+    {
+      "rule": "0ssw9k",
+      "id": "8f9b5bf5fc8345b8e7aa016621fb5dee6c13c8f2",
+      "expected": "inapplicable",
+      "said": {
+        "axe-core": "inapplicable",
+        "alfa": "failed",
+        "qualweb": "inapplicable"
+      }
+    },
+    {
+      "rule": "afw4f7",
+      "id": "2845a8409b1c07caa856d1bfbf42ed244b0de9c2",
+      "expected": "passed",
+      "said": {
+        "axe-core": "inapplicable",
+        "alfa": "failed",
+        "ibm": "inapplicable",
+        "qualweb": "passed",
+        "pixels": "failed"
+      }
+    },
+    {
+      "rule": "afw4f7",
+      "id": "bf47c65f2854b6ac100a6f700d354b243b069231",
+      "expected": "failed",
+      "said": {
+        "axe-core": "cantTell",
+        "alfa": "passed",
+        "ibm": "cantTell",
+        "qualweb": "failed",
+        "pixels": "failed"
+      }
+    },
+    {
+      "rule": "09o5cg",
+      "id": "2845a8409b1c07caa856d1bfbf42ed244b0de9c2",
+      "expected": "passed",
+      "said": {
+        "axe-core": "inapplicable",
+        "alfa": "failed",
+        "qualweb": "passed"
+      }
+    },
+    {
+      "rule": "09o5cg",
+      "id": "67fe402a5de9743bf9882d7d52deb9749005d16c",
+      "expected": "failed",
+      "said": {
+        "axe-core": "passed",
+        "alfa": "failed",
+        "qualweb": "failed"
+      }
+    },
+    {
+      "rule": "09o5cg",
+      "id": "04344f745bd9bad51292748e7893f146c045aae4",
+      "expected": "failed",
+      "said": {
+        "axe-core": "passed",
+        "alfa": "failed",
+        "qualweb": "failed"
+      }
+    },
+    {
+      "rule": "09o5cg",
+      "id": "aed692e9f0a1be5c87ef1de56afa8e23e14cc3ba",
+      "expected": "failed",
+      "said": {
+        "axe-core": "passed",
+        "alfa": "failed",
+        "qualweb": "failed"
+      }
+    },
+    {
+      "rule": "09o5cg",
+      "id": "4e1ec35a2908dbb52d9d50bb60b9110316584799",
+      "expected": "failed",
+      "said": {
+        "axe-core": "passed",
+        "alfa": "failed",
+        "qualweb": "failed"
+      }
+    },
+    {
+      "rule": "09o5cg",
+      "id": "d5e21eae8aa28290befa06cfe68b5032ed05b7a5",
+      "expected": "failed",
+      "said": {
+        "axe-core": "passed",
+        "alfa": "failed",
+        "qualweb": "failed"
+      }
+    },
+    {
+      "rule": "09o5cg",
+      "id": "4c47eeaeb5dd826b90c8a9efb081962f04f5d339",
+      "expected": "failed",
+      "said": {
+        "axe-core": "passed",
+        "alfa": "failed",
+        "qualweb": "failed"
+      }
+    },
+    {
+      "rule": "09o5cg",
+      "id": "1882d796de0dcb4b85924f3abfbf565eeef2d963",
+      "expected": "failed",
+      "said": {
+        "axe-core": "cantTell",
+        "alfa": "passed",
+        "qualweb": "failed"
+      }
+    },
+    {
+      "rule": "09o5cg",
+      "id": "a34d15d4bb754339339996802d1bc32d464643da",
+      "expected": "failed",
+      "said": {
+        "axe-core": "passed",
+        "alfa": "failed",
+        "qualweb": "failed"
+      }
+    },
+    {
+      "rule": "09o5cg",
+      "id": "316b0c7fccdbe8a47716447a9fe2ca197c8358af",
+      "expected": "failed",
+      "said": {
+        "axe-core": "passed",
+        "alfa": "failed",
+        "qualweb": "failed"
+      }
+    },
+    {
+      "rule": "09o5cg",
+      "id": "2e81c3e60722202d2e92089a0695d74e8b49cdaa",
+      "expected": "failed",
+      "said": {
+        "axe-core": "passed",
+        "alfa": "failed",
+        "qualweb": "failed"
+      }
+    },
+    {
+      "rule": "bisz58",
+      "id": "24a98a3ff6a69e073f768bb198671ea6a1c4568a",
+      "expected": "passed",
+      "said": {
+        "axe-core": "failed",
+        "alfa": "passed",
+        "qualweb": "passed"
+      }
+    },
+    {
+      "rule": "bisz58",
+      "id": "d0672e81d17313f7ef156f3bc6e43c68143a5f45",
+      "expected": "failed",
+      "said": {
+        "axe-core": "passed",
+        "alfa": "failed",
+        "qualweb": "failed"
+      }
+    },
+    {
+      "rule": "bisz58",
+      "id": "b8aad77e3ff2fa8d0272fac5362566ff79afad7f",
+      "expected": "failed",
+      "said": {
+        "axe-core": "passed",
+        "alfa": "failed",
+        "qualweb": "failed"
+      }
+    },
+    {
+      "rule": "bc4a75",
+      "id": "5e0e88f9ed776c89735d7db606c1381a7a1fb877",
+      "expected": "failed",
+      "said": {
+        "axe-core": "failed",
+        "alfa": "passed",
+        "qualweb": "failed"
+      }
+    },
+    {
+      "rule": "bc4a75",
+      "id": "52c725e462af074a3559cf4bf4d4dd2386168938",
+      "expected": "failed",
+      "said": {
+        "axe-core": "failed",
+        "alfa": "passed",
+        "qualweb": "failed"
+      }
+    },
+    {
+      "rule": "bc4a75",
+      "id": "8b65672c9aefc4957b09a338eb85ad7dff6e53de",
+      "expected": "failed",
+      "said": {
+        "axe-core": "inapplicable",
+        "alfa": "failed",
+        "qualweb": "failed"
+      }
+    },
+    {
+      "rule": "5c01ea",
+      "id": "5e4eedbbef33766005c6f92c3dede1b1b40a2dac",
+      "expected": "failed",
+      "said": {
+        "axe-core": "failed",
+        "alfa": "failed",
+        "ibm": "inapplicable",
+        "qualweb": "failed"
+      }
+    },
+    {
+      "rule": "5c01ea",
+      "id": "1449cc0526959d274a89345e9b479846577aac5c",
+      "expected": "failed",
+      "said": {
+        "axe-core": "failed",
+        "alfa": "failed",
+        "ibm": "inapplicable",
+        "qualweb": "failed"
+      }
+    },
+    {
+      "rule": "e086e5",
+      "id": "1d9a4d0eba21c8bb02580c46142ec75842bd3557",
+      "expected": "failed",
+      "said": {
+        "axe-core": "failed",
+        "alfa": "inapplicable",
+        "ibm": "inapplicable",
+        "qualweb": "failed",
+        "chromium": "inapplicable",
+        "alfa-aria": "inapplicable",
+        "axe-name": "inapplicable",
+        "playwright": "inapplicable",
+        "dom-accessibility-api": "inapplicable"
+      }
+    },
+    {
+      "rule": "cae760",
+      "id": "77075e0f50c9b77457d90450bc31c0fae372dbaf",
+      "expected": "inapplicable",
+      "said": {
+        "axe-core": "inapplicable",
+        "alfa": "inapplicable",
+        "ibm": "failed",
+        "qualweb": "inapplicable"
+      }
+    },
+    {
+      "rule": "akn7bn",
+      "id": "a13349ef619df6256bd52acb8008760c3711f5dd",
+      "expected": "inapplicable",
+      "said": {
+        "axe-core": "failed",
+        "alfa": "failed",
+        "ibm": "inapplicable",
+        "qualweb": "inapplicable"
+      }
+    },
+    {
+      "rule": "b4f0c3",
+      "id": "c94a59f8c3b17d722781af36da3556ff4b418776",
+      "expected": "failed",
+      "said": {
+        "axe-core": "passed",
+        "alfa": "failed",
+        "qualweb": "failed"
+      }
+    },
+    {
+      "rule": "b4f0c3",
+      "id": "9f288c284df9ade53aa33e50ec50c879d5aba4ef",
+      "expected": "failed",
+      "said": {
+        "axe-core": "passed",
+        "alfa": "failed",
+        "qualweb": "failed"
+      }
+    },
+    {
+      "rule": "d0f69e",
+      "id": "1a0ee1b5549d2f1eebd337e85cae8487331ab723",
+      "expected": "failed",
+      "said": {
+        "axe-core": "inapplicable",
+        "alfa": "inapplicable",
+        "qualweb": "failed"
+      }
+    },
+    {
+      "rule": "afw4f7",
+      "id": "eb4bfbbeba4e803fef10ebad17427f32e306ae82",
+      "expected": "passed",
+      "said": {
+        "axe-core": "cantTell",
+        "alfa": "failed",
+        "ibm": "failed",
+        "qualweb": "passed",
+        "pixels": "failed"
+      }
+    },
+    {
+      "rule": "afw4f7",
+      "id": "8c33a0af471cc3c1abbb9f709afa6629b13daf3a",
+      "expected": "failed",
+      "said": {
+        "axe-core": "failed",
+        "alfa": "cantTell",
+        "ibm": "passed",
+        "qualweb": "cantTell",
+        "pixels": "cantTell"
+      }
+    },
+    {
+      "rule": "09o5cg",
+      "id": "5cd71d7ee71bddaed9ff5fbd349ce0809141e425",
+      "expected": "passed",
+      "said": {
+        "axe-core": "passed",
+        "alfa": "failed",
+        "qualweb": "passed"
+      }
+    },
+    {
+      "rule": "2ee8b8",
+      "id": "79af5d3e531aecd27961f0b9ed260d95f39440c0",
+      "expected": "passed",
+      "said": {
+        "alfa": "failed",
+        "ibm": "passed",
+        "qualweb": "passed"
+      }
+    },
+    {
+      "rule": "2ee8b8",
+      "id": "efa9543339cdad5412c7719b266a633a29ce149e",
+      "expected": "passed",
+      "said": {
+        "alfa": "failed",
+        "ibm": "passed",
+        "qualweb": "passed"
+      }
+    },
+    {
+      "rule": "2ee8b8",
+      "id": "5fccc3aa980834bf0889dbd79fba656eeb208fe4",
+      "expected": "passed",
+      "said": {
+        "alfa": "passed",
+        "ibm": "failed",
+        "qualweb": "failed"
+      }
+    },
+    {
+      "rule": "2ee8b8",
+      "id": "e117393d6711d6bdf32821005219c9d9474dfeb8",
+      "expected": "failed",
+      "said": {
+        "alfa": "passed",
+        "ibm": "failed",
+        "qualweb": "passed"
+      }
+    },
+    {
+      "rule": "2ee8b8",
+      "id": "40838e577307be46e8de7e090faf04da7787f8b0",
+      "expected": "failed",
+      "said": {
+        "alfa": "passed",
+        "ibm": "failed",
+        "qualweb": "failed"
+      }
+    }
+  ]
+}

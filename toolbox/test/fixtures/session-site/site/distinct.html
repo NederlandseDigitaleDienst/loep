@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="nl"><head><meta charset="utf-8"><title>Kleur als enig onderscheid</title>
+<style>
+body { font-family: Arial, Helvetica, sans-serif; font-size: 20px; margin: 32px; background: #ffffff; color: #000000; }
+p { margin: 0 0 32px; }
+a { color: #e00000; text-decoration: none; }
+#underlined { text-decoration: underline; }
+ul { list-style: none; margin: 0; padding: 0; display: flex; gap: 32px; }
+li a { display: block; padding: 8px 4px; color: #1f2937; }
+#chosen { color: #1d4ed8; }
+#chosen-marked { color: #1d4ed8; border-bottom: 3px solid #1d4ed8; }
+</style></head>
+<body>
+<main>
+<h1>Kleur als enig onderscheid</h1>
+<p id="plain">Lees de <a id="colour-only" href="/form.html">voorwaarden</a> voordat u de aanvraag verstuurt.</p>
+<p id="marked">Lees de <a id="underlined" href="/form.html">toelichting</a> voordat u de aanvraag verstuurt.</p>
+<ul>
+<li><a id="chosen" href="#overzicht" aria-current="page">Overzicht</a></li>
+<li><a id="other" href="#details">Details</a></li>
+<li><a id="chosen-marked" href="#contact">Contact</a></li>
+</ul>
+</main>
+</body></html>

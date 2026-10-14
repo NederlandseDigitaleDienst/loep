@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="nl">
+<head><meta charset="utf-8"><title>Soorten bedieningselementen - Testsite sessie</title><link rel="stylesheet" href="/site.css">
+<style>
+.lijst a { color: #1a1a1a; }
+.lijst a:hover { color: #5a5a5a; }
+.los { color: #003366; }
+.pictogram { width: 32px; height: 32px; position: relative; }
+.ballon { display: none; position: absolute; top: 36px; left: 0; background: #1a1a1a; color: #ffffff; padding: 4px 8px; white-space: nowrap; }
+.pictogram:hover .ballon, .pictogram:focus .ballon { display: block; }
+#paneel a { color: #1a1a1a; }
+</style></head>
+<body>
+<main><h1>Soorten bedieningselementen</h1>
+<ul class="lijst">
+<li><a href="#een">Eerste onderwerp</a></li>
+<li><a href="#twee">Tweede onderwerp</a></li>
+<li><a href="#drie">Derde onderwerp</a></li>
+<li><a href="#vier">Vierde onderwerp</a></li>
+<li><a href="#vijf">Vijfde onderwerp</a></li>
+<li><a href="#zes">Zesde onderwerp</a></li>
+</ul>
+<p><a class="los" href="#anders">Een link van een andere soort</a>. De <abbr title="Algemene verordening gegevensbescherming">AVG</abbr> geldt.</p>
+<p><button type="button" class="pictogram" id="wissen" aria-label="Wissen"><svg width="16" height="16" aria-hidden="true"><circle cx="8" cy="8" r="6"></circle></svg><span class="ballon" role="tooltip">Wis het zoekveld</span></button>
+<button type="button" class="pictogram" id="delen" aria-label="Delen"><svg width="16" height="16" aria-hidden="true"><rect width="12" height="12"></rect></svg></button>
+<button type="button" id="uitleg" title="Uitleg van de browser zelf">Uitleg</button></p>
+<p><button type="button" id="opener" aria-expanded="false">Meer onderwerpen</button></p>
+<div id="paneel" hidden>
+<p><a href="#zeven">Zevende onderwerp</a> <button type="button" id="in-paneel">Kiezen</button> <span id="gekozen" role="status"></span></p>
+</div>
+</main>
+<script>
+const opener = document.getElementById("opener");
+const panel = document.getElementById("paneel");
+opener.addEventListener("click", () => { panel.hidden = false; opener.setAttribute("aria-expanded", "true"); });
+// The panel closes on Escape, as a dialog does.
+document.addEventListener("keydown", (event) => { if (event.key === "Escape") { panel.hidden = true; opener.setAttribute("aria-expanded", "false"); } });
+// A control that only starts to listen for a press once its panel has been opened.
+opener.addEventListener("click", () => document.getElementById("in-paneel").addEventListener("pointerdown", () => { document.getElementById("gekozen").textContent = "Gekozen."; }), { once: true });
+</script>
+</body>
+</html>

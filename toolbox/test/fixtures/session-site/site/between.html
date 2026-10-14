@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="nl">
+<head><meta charset="utf-8"><title>Tussen de breedtes - Testsite sessie</title>
+<style>
+body { margin: 0; font-family: sans-serif; background: #ffffff; color: #1a1a1a; }
+header { position: fixed; top: 0; left: 0; right: 0; height: 80px; background: #003366; color: #ffffff; display: flex; align-items: center; gap: 16px; padding: 0 16px; z-index: 10; }
+header a { color: #ffffff; }
+#meer { display: none; }
+#meer-menu { position: absolute; top: 80px; right: 16px; background: #ffffff; border: 1px solid #1a1a1a; padding: 8px; }
+#meer-menu a { color: #003366; }
+/* The button only shows between the widths a phone and a desktop have. */
+@media (min-width: 600px) and (max-width: 1000px) { #meer { display: inline-block; } }
+main { padding: 100px 16px 16px; }
+.lijst a { color: #0a4a8a; }
+.lijst a:hover { color: #00264d; }
+@media (prefers-color-scheme: dark) {
+  body { background: #121212; color: #f0f0f0; }
+  .lijst a { color: #8ab4f8; }
+  /* Under the pointer the link turns almost as dark as the page: only in the dark scheme. */
+  .lijst a:hover { color: #2a2a2a; }
+}
+pre.tabel { font-family: monospace; }
+</style></head>
+<body>
+<header>
+<a href="#start">Start</a>
+<a href="#nieuws">Nieuws</a>
+<button type="button" id="meer" aria-label="Meer opties" aria-expanded="false"><svg width="16" height="16" aria-hidden="true"><circle cx="3" cy="8" r="2"></circle><circle cx="8" cy="8" r="2"></circle><circle cx="13" cy="8" r="2"></circle></svg></button>
+<ul id="meer-menu" hidden><li><a href="#over">Over ons</a></li><li><a href="#contact">Contact</a></li></ul>
+</header>
+<main>
+<h1>Tussen de breedtes</h1>
+<p id="welkom">W e l k o m op deze pagina.</p>
+<pre class="tabel">Dag        Open     Dicht
+Maandag    09:00    17:00
+Dinsdag    09:00    17:00</pre>
+<p><img id="foto" src="/textimg.png" alt="The town hall seen from the market square at night" width="400" height="60"></p>
+<ul class="lijst">
+<li><a href="#een">Eerste onderwerp</a></li>
+<li><a href="#twee">Tweede onderwerp</a></li>
+</ul>
+<p><button type="button" id="lijstknop" aria-expanded="false">Alle onderwerpen</button></p>
+<ul id="alle" hidden>
+<li><a href="#a1">Onderwerp 1</a></li><li><a href="#a2">Onderwerp 2</a></li><li><a href="#a3">Onderwerp 3</a></li><li><a href="#a4">Onderwerp 4</a></li><li><a href="#a5">Onderwerp 5</a></li>
+<li><a href="#a6">Onderwerp 6</a></li><li><a href="#a7">Onderwerp 7</a></li><li><a href="#a8">Onderwerp 8</a></li><li><a href="#a9">Onderwerp 9</a></li><li><a href="#a10">Onderwerp 10</a></li>
+</ul>
+<div style="height: 1600px"></div>
+</main>
+<script>
+const meer = document.getElementById("meer");
+const menu = document.getElementById("meer-menu");
+meer.addEventListener("click", () => { menu.hidden = !menu.hidden; meer.setAttribute("aria-expanded", String(!menu.hidden)); });
+const knop = document.getElementById("lijstknop");
+const alle = document.getElementById("alle");
+knop.addEventListener("click", () => { alle.hidden = false; knop.setAttribute("aria-expanded", "true"); });
+document.addEventListener("keydown", (event) => { if (event.key === "Escape") { menu.hidden = true; meer.setAttribute("aria-expanded", "false"); } });
+</script>
+</body>
+</html>

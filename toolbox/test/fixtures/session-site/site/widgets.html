@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="nl">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Onderdelen - Testsite sessie</title><link rel="stylesheet" href="/site.css"></head>
+<body>
+<a class="skip" href="#inhoud">Direct naar de inhoud</a>
+<header>
+<nav aria-label="Hoofdnavigatie"><ul>
+<li><a href="/">Start</a></li>
+<li><a href="/form.html">Formulier</a></li>
+<li><a href="/widgets.html">Onderdelen</a></li>
+<li class="last-in-code"><a href="/frames.html">Ingesloten</a></li>
+</ul></nav>
+</header>
+<main id="inhoud" tabindex="-1">
+<h1>Onderdelen</h1>
+<h2>Kaart in een schaduwboom</h2>
+<loep-card heading="Kaart"><p>Tekst die in het slot van de kaart staat.</p></loep-card>
+<h2>Tabbladen</h2>
+<div role="tablist" aria-label="Voorbeeld">
+<button role="tab" id="tab-one" aria-selected="true" aria-controls="panel-one" type="button">Eerste</button>
+<button role="tab" id="tab-two" aria-selected="false" aria-controls="panel-two" type="button">Tweede</button>
+</div>
+<div role="tabpanel" id="panel-one" aria-labelledby="tab-one"><p>Inhoud van het eerste tabblad.</p></div>
+<div role="tabpanel" id="panel-two" aria-labelledby="tab-two" hidden><p>Inhoud van het tweede tabblad.</p></div>
+<h2>Klikbaar blok</h2>
+<div class="clickable" id="fake-button">Meer tonen</div>
+<p id="fake-output"></p>
+<h2>Uitleg bij aanwijzen</h2>
+<p><button class="has-tip pale-button" id="tip-button" type="button">Uitleg</button><span class="tip" role="tooltip">Dit is de uitleg.</span></p>
+<h2>Omgekeerde rij</h2>
+<div class="reversed"><a href="/">Eerste in de code</a><a href="/form.html">Tweede in de code</a><a href="/frames.html">Derde in de code</a></div>
+<h2>Chat</h2>
+<button id="chat-send" type="button">Stuur een chatbericht</button>
+<p id="chat-status" role="status"></p>
+</main>
+<footer><p>Voettekst van de testsite</p></footer>
+<script>
+customElements.define("loep-card", class extends HTMLElement {
+  connectedCallback() {
+    const root = this.attachShadow({ mode: "open" });
+    root.innerHTML = '<style>.box{border:1px solid #767676;padding:12px;max-width:420px}button{font:inherit;color:#8a8a8a;background:#ffffff;border:1px solid #8a8a8a}</style><div class="box"><h3></h3><slot></slot><button id="inner" type="button">Knop in de kaart</button><span id="count"></span></div>';
+    root.querySelector("h3").textContent = this.getAttribute("heading");
+    root.getElementById("inner").addEventListener("click", () => { root.getElementById("count").textContent = " aangeklikt"; });
+  }
+});
+const tabs = [...document.querySelectorAll("[role=tab]")];
+for (const tab of tabs) tab.addEventListener("click", () => {
+  for (const other of tabs) {
+    other.setAttribute("aria-selected", String(other === tab));
+    document.getElementById(other.getAttribute("aria-controls")).hidden = other !== tab;
+  }
+});
+document.getElementById("fake-button").addEventListener("click", () => { document.getElementById("fake-output").textContent = "Er is meer getoond."; });
+document.getElementById("chat-send").addEventListener("click", () => {
+  fetch("/api/chat", { method: "POST", body: "hallo via post" }).catch(() => undefined);
+  const socket = new WebSocket("ws://" + location.host + "/chat");
+  socket.addEventListener("open", () => socket.send("hallo via socket"));
+  document.getElementById("chat-status").textContent = "Bericht aangeboden.";
+});
+</script>
+</body>
+</html>

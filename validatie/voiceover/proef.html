@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<title>Proef VoiceOver</title>
+</head>
+<body>
+<h1>Proef VoiceOver</h1>
+<p><button type="button" id="send">Verstuur</button></p>
+<p>
+  <label for="email">E-mailadres</label>
+  <input type="text" id="email" aria-describedby="email-error" aria-invalid="true">
+  <span id="email-error">Vul een geldig e-mailadres in</span>
+</p>
+<p><button type="button" id="thanks-button">Toon bedankje</button></p>
+<div role="status" id="thanks" hidden>Bedankt, uw bericht is verzonden</div>
+<script>
+document.getElementById('thanks-button').addEventListener('click', function () {
+  document.getElementById('thanks').hidden = false;
+});
+</script>
+</body>
+</html>

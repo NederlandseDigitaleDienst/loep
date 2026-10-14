@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="nl">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Start - Testsite sessie</title><link rel="stylesheet" href="/site.css"></head>
+<body>
+<a class="skip" href="#inhoud">Direct naar de inhoud</a>
+<header>
+<nav aria-label="Hoofdnavigatie"><ul>
+<li><a href="/">Start</a></li>
+<li><a href="/form.html">Formulier</a></li>
+<li><a href="/widgets.html">Onderdelen</a></li>
+<li class="last-in-code"><a href="/frames.html">Ingesloten</a></li>
+</ul></nav>
+</header>
+<main id="inhoud" tabindex="-1">
+<h1>Testsite voor de sessie</h1>
+<p>Deze pagina heeft een uitklapper, een venster en een paar ingebouwde gebreken.</p>
+<p class="muted" id="pale">Deze grijze tekst heeft te weinig contrast.</p>
+<p><a id="good-link" href="/form.html">Naar het formulier</a> of <a id="no-focus-link" class="no-focus" href="/widgets.html">naar de onderdelen</a>.</p>
+<p><a id="elsewhere" href="__OTHER_ORIGIN__/elsewhere.html">Een andere website</a></p>
+<div class="floating">Los geplaatst blok</div>
+<h2>Meer weten</h2>
+<details id="more"><summary>Wat doet deze site?</summary><p>Niets: de site bestaat alleen om instrumenten op te proeven.</p></details>
+<h2>Venster</h2>
+<button id="open-dialog" type="button">Open het venster</button>
+<dialog id="dialog" aria-labelledby="dialog-title">
+<h2 id="dialog-title">Een venster</h2>
+<p class="muted">Ook hier staat grijze tekst.</p>
+<img src="/dot.svg" width="40" height="40">
+<button id="close-dialog" type="button">Sluiten</button>
+</dialog>
+<h2>Kleine knoppen</h2>
+<div class="icon-row"><button class="icon" type="button" aria-label="Vorige">&lt;</button><button class="icon" type="button" aria-label="Volgende">&gt;</button></div>
+<h2>Breed blok</h2>
+<div class="wide">Dit blok is zeshonderd pixels breed en past niet op een smal scherm.</div>
+<p class="tight">Deze regel zit in een vak met een vaste hoogte.</p>
+</main>
+<footer><p>Voettekst van de testsite</p></footer>
+<script>
+const dialog = document.getElementById("dialog");
+document.getElementById("open-dialog").addEventListener("click", () => dialog.showModal());
+document.getElementById("close-dialog").addEventListener("click", () => dialog.close());
+</script>
+</body>
+</html>

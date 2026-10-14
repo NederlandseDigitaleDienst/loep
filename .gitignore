@@ -1,0 +1,12 @@
+# Zonder schuine streep: ook een koppeling naar node_modules in een tweede werkboom telt, anders heet de toolbox daar gewijzigd
+node_modules
+runs/
+*.tmp
+.DS_Store
+# Bestaande rapporten van derden bevatten namen; we bewaren alleen bron en hash.
+validatie/*/bestaand-rapport.*
+# Werkbomen van agents tijdens een sessie
+.claude/
+# De sessie van een inlog is een geheim, waar een run ook staat en hoe het bestand ook heet
+*login-session.json
+*idle-session.json

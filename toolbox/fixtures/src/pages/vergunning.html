@@ -1,0 +1,45 @@
+<h1>Parkeervergunning aanvragen</h1>
+<p>Met een parkeervergunning parkeert u als bewoner in uw eigen straat. De vergunning kost 52,40 euro per jaar. Na uw aanvraag krijgt u een rekening en bent u verplicht te betalen.</p>
+
+<form class="formulier" id="vergunningformulier" action="/vergunning/aanvragen" method="post">
+  <div class="stap">
+    <h2>Stap 1: uw gegevens</h2>
+    <label for="aanvrager">Naam</label>
+    <input type="text" id="aanvrager" name="naam" autocomplete="name">
+    <label for="straat">Straat en huisnummer</label>
+    <input type="text" id="straat" name="straat" autocomplete="address-line1">
+    <label for="postcode">Postcode</label>
+    <input type="text" id="postcode" name="postcode" autocomplete="postal-code">
+    <label for="kenteken">Kenteken van uw auto</label>
+    <input type="text" id="kenteken" name="kenteken">
+    <div class="verzendrij"><button type="button" data-stap="1">Volgende stap</button></div>
+  </div>
+
+  <div class="stap" hidden>
+    <h2>Stap 2: adres voor de rekening</h2>
+    <!--@bad 3.3.7-adres--><p>Vul het adres in waar wij de rekening naartoe sturen.</p><!--@good--><label class="keuze"><input type="checkbox" id="zelfde-adres" checked> De rekening gaat naar het adres uit stap 1</label><!--@end-->
+    <label for="factuurstraat">Straat en huisnummer</label>
+    <input type="text" id="factuurstraat" name="factuurstraat"<!--@bad 3.3.7-adres--><!--@good--> autocomplete="address-line1"<!--@end-->>
+    <label for="factuurpostcode">Postcode</label>
+    <input type="text" id="factuurpostcode" name="factuurpostcode"<!--@bad 3.3.7-adres--><!--@good--> autocomplete="postal-code"<!--@end-->>
+    <div class="verzendrij">
+      <!--@bad 3.3.4-controle--><button type="submit">Aanvragen en betalen</button><!--@good--><button type="button" data-stap="2">Controleer uw aanvraag</button><!--@end-->
+    </div>
+  </div>
+  <!--@bad 3.3.4-controle--><!--@good-->
+  <div class="stap" hidden>
+    <h2>Stap 3: controleer uw aanvraag</h2>
+    <dl class="overzicht">
+      <dt>Naam</dt><dd data-toon="aanvrager"></dd>
+      <dt>Adres</dt><dd data-toon="straat"></dd>
+      <dt>Postcode</dt><dd data-toon="postcode"></dd>
+      <dt>Kenteken</dt><dd data-toon="kenteken"></dd>
+      <dt>Adres voor de rekening</dt><dd data-toon="factuurstraat"></dd>
+      <dt>Postcode voor de rekening</dt><dd data-toon="factuurpostcode"></dd>
+    </dl>
+    <div class="verzendrij">
+      <button type="button" class="knop-rustig" data-stap="0">Gegevens wijzigen</button>
+      <button type="submit">Aanvragen en betalen</button>
+    </div>
+  </div><!--@end-->
+</form>

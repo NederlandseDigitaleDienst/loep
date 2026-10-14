@@ -1,0 +1,10 @@
+<!doctype html>
+<html lang="nl">
+<head><meta charset="utf-8"><title>Ingesloten melding</title><link rel="stylesheet" href="/site.css"></head>
+<body>
+<main><h1>In het venster</h1><p><button id="frame-load" type="button">Laad de kaart</button></p><p id="frame-status" role="status"></p></main>
+<script>
+document.getElementById("frame-load").addEventListener("click", () => (document.getElementById("frame-status").textContent = "De kaart is geladen."));
+</script>
+</body>
+</html>

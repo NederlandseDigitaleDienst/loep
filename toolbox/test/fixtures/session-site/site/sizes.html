@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="nl">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Inhoud per afmeting - Testsite sessie</title><link rel="stylesheet" href="/site.css">
+<style>
+header nav a { margin-right: 12px; }
+#meer, #meer-menu { display: none; }
+@media (max-width: 700px) {
+  .alleen-breed { display: none; }
+}
+@media (orientation: portrait) and (min-width: 701px) {
+  #gedraaid { transform: rotate(90deg); transform-origin: top left; width: 700px; height: 400px; }
+}
+</style></head>
+<body>
+<header><nav aria-label="Hoofdmenu"><a href="/">Start</a> <a id="feedback" href="/feedback.html">Feedback</a> <a id="code" href="/index.html">Broncode</a>
+<button type="button" id="meer" aria-expanded="false" aria-label="Meer opties">...</button></nav>
+<div id="meer-menu"><a href="/feedback.html">Feedback</a> <a href="/index.html">Broncode</a></div></header>
+<main><h1>Inhoud per afmeting</h1>
+<h2 class="alleen-breed">Alleen op een breed scherm</h2>
+<p class="alleen-breed">Deze alinea verdwijnt op een smal scherm.</p>
+<p><img class="alleen-breed" src="/chart.png" alt="Grafiek van het aantal bezoekers" width="200" height="100"></p>
+<h2>Altijd zichtbaar</h2>
+<p>Deze alinea blijft op elke afmeting staan.</p>
+<div id="gedraaid"><p>Een blok dat in een staand venster een kwartslag draait.</p></div>
+</main>
+<script>
+// A header that moves two links behind a button once the text no longer fits: here, once the letters stand wider.
+const more = document.getElementById("meer");
+const menu = document.getElementById("meer-menu");
+const arrange = () => {
+  const wide = Number.parseFloat(getComputedStyle(document.querySelector("header nav")).letterSpacing) > 0;
+  for (const id of ["feedback", "code"]) document.getElementById(id).style.display = wide ? "none" : "";
+  more.style.display = wide ? "inline-block" : "none";
+  // The menu closes whenever the header is arranged again.
+  if (!wide) { menu.style.display = "none"; more.setAttribute("aria-expanded", "false"); }
+};
+let was = null;
+setInterval(() => { const now = getComputedStyle(document.querySelector("header nav")).letterSpacing; if (now !== was) { was = now; arrange(); } }, 50);
+more.addEventListener("click", () => { const open = more.getAttribute("aria-expanded") !== "true"; more.setAttribute("aria-expanded", String(open)); menu.style.display = open ? "block" : "none"; });
+// A timer that only starts after the visitor did something.
+more.addEventListener("click", () => setTimeout(() => undefined, 60000), { once: true });
+</script>
+</body>
+</html>

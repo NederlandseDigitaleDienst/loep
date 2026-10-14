@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="nl">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Formulier - Testsite sessie</title><link rel="stylesheet" href="/site.css"></head>
+<body>
+<a class="skip" href="#inhoud">Direct naar de inhoud</a>
+<header>
+<nav aria-label="Hoofdnavigatie"><ul>
+<li><a href="/">Start</a></li>
+<li><a href="/form.html">Formulier</a></li>
+<li><a href="/widgets.html">Onderdelen</a></li>
+<li class="last-in-code"><a href="/frames.html">Ingesloten</a></li>
+</ul></nav>
+</header>
+<main id="inhoud" tabindex="-1">
+<h1>Formulier</h1>
+<form id="contact" method="post" action="/submit" novalidate>
+<label for="name">Naam</label><input id="name" name="name" autocomplete="name">
+<label for="email">E-mailadres (verplicht)</label><input id="email" name="email" type="email" required aria-describedby="email-error">
+<p id="email-error" role="alert"></p>
+<label for="topic">Onderwerp</label><select id="topic" name="topic"><option>Vraag</option><option>Klacht</option></select>
+<label><input id="news" name="news" type="checkbox"> Ik wil de nieuwsbrief</label>
+<label for="message">Bericht</label><textarea id="message" name="message" placeholder="Typ hier uw bericht"></textarea>
+<p><button id="send" type="submit">Verstuur</button></p>
+</form>
+<h2>Zoeken</h2>
+<form id="search" role="search" method="get" action="/form.html">
+<label for="q">Zoekterm</label><input id="q" name="q" type="search">
+<button type="submit">Zoek</button>
+</form>
+</main>
+<footer><p>Voettekst van de testsite</p></footer>
+<script>
+document.getElementById("contact").addEventListener("submit", (event) => {
+  const email = document.getElementById("email");
+  const valid = /^[^@ ]+@[^@ ]+\.[a-z]+$/.test(email.value);
+  email.setAttribute("aria-invalid", String(!valid));
+  document.getElementById("email-error").textContent = valid ? "" : "Vul een geldig e-mailadres in.";
+  if (!valid) event.preventDefault();
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,28 @@
+{
+  "name": "Koppeling voor de test, in de vorm van het rapport van W3C",
+  "version": "test",
+  "actRuleMapping": [
+    {
+      "ruleId": "97a4e1",
+      "procedureNames": [
+        "sia-r12"
+      ]
+    },
+    {
+      "ruleId": "c487ae",
+      "procedureNames": [
+        "sia-r11"
+      ]
+    },
+    {
+      "ruleId": "afw4f7",
+      "procedureNames": [
+        "sia-r69"
+      ]
+    },
+    {
+      "ruleId": "zzzzzz",
+      "procedureNames": []
+    }
+  ]
+}
