@@ -33,7 +33,7 @@ jobs:
           node-version: 24
           cache: npm
           cache-dependency-path: toolbox/package-lock.json
-      - uses: extractions/setup-just@v3
+      - uses: extractions/setup-just@v4
       - uses: astral-sh/setup-uv@v6
       - name: Elk bestand heeft een rechthebbende en een licentie
         run: just reuse
@@ -67,7 +67,7 @@ jobs:
           cache: npm
           cache-dependency-path: toolbox/package-lock.json
 
-      - uses: extractions/setup-just@v3
+      - uses: extractions/setup-just@v4
         if: steps.nieuw.outputs.ja == 'true'
 
       - uses: astral-sh/setup-uv@v6
