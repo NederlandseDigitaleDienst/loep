@@ -80,7 +80,7 @@ const effects = (change: Change): string[] => [
 ];
 
 /** What counts as the control doing something. Its own style and focus do not: a button may look pressed and takes focus on the press. */
-const ACTED: ChangeAspect[] = ["url", "dialogs", "text", "states", "scroll"];
+const ACTED: ChangeAspect[] = ["url", "dialogs", "text", "states", "scroll", "fullscreen"];
 const PAUSE_MS = 350;
 
 /**

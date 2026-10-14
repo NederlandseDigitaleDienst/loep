@@ -14,7 +14,7 @@ import { boundaryOf, fateOf, forcedColoursProbe, type ForcedProbe } from "../src
 import { uiContrast } from "../src/lib/extractors.ts";
 import type { RunData } from "../src/lib/rundata.ts";
 import { collectFacts, frameListeners } from "../src/instruments/facts.ts";
-import { MOVED, skipLinkProbe, tabOrderScreenshot, tabWalk } from "../src/instruments/keyboard.ts";
+import { arrowReach, MOVED, skipLinkProbe, tabWalk } from "../src/instruments/keyboard.ts";
 import { probeHoverTarget } from "../src/instruments/hover.ts";
 import { firstKeyReaction, KEYS, leaveTextEntry } from "../src/instruments/keys.ts";
 import { spacingEffect, spacingFromLoad } from "../src/instruments/overflow.ts";
@@ -64,6 +64,14 @@ test("the key probe sees a key that shows a panel or flips a state without movin
   const rest = await open("/keys.html");
   assert.equal(await firstKeyReaction(rest, KEYS.slice(KEYS.indexOf("m") + 1)), null);
   await rest.context().close();
+});
+
+test("the key probe sees a key that asks for full screen, which a headless browser does not show", async () => {
+  const page = await open("/keys-fullscreen.html");
+  const reaction = await firstKeyReaction(page, KEYS);
+  assert.equal(reaction?.key, "f");
+  assert.match(reaction!.change, /^volledig scherm aangevraagd/);
+  await page.context().close();
 });
 
 test("the press probe records what happens on pointer down and whether releasing elsewhere takes it back", async () => {
@@ -394,13 +402,12 @@ test("a boundary is read on and just outside the edge of a control, and its fate
 test("the numbered tab-order picture frames a sticky table of contents and a fixed bar where the picture shows them", async () => {
   const page = await open("/sticky-toc.html");
   const dir = await mkdtemp(join(tmpdir(), "loep-taborder-"));
-  const walk = (await tabWalk(page, { focusDir: join(dir, "focus"), focusPath: "focus" })) as { stops: { text: string; scroll: [number, number] }[] };
+  const path = join(dir, "tabwalk.png");
+  const walk = (await tabWalk(page, { focusDir: join(dir, "focus"), focusPath: "focus", orderPicture: path })) as { stops: { text: string; scroll: [number, number] }[] };
   const pinned = ["Een", "Twee", "Drie", "Naar boven"];
   // The table of contents follows the long main column in the code, so the walk reaches it with the page scrolled down.
   for (const text of pinned) assert.ok(walk.stops.find((stop) => stop.text === text)!.scroll[1] > 1000, `${text} measured while scrolled`);
-  const path = join(dir, "tabwalk.png");
-  // The page scrolls smoothly again after the walk: the way up to the top must still be done before the picture is taken.
-  await tabOrderScreenshot(page, walk.stops as unknown as Record<string, unknown>[], path);
+  // The picture was taken from the top of the page, where it is left.
   assert.equal(await page.evaluate(() => window.scrollY), 0);
   const png = PNG.sync.read(await readFile(path));
   const pixel = (x: number, y: number): number[] => [...png.data.subarray((png.width * Math.round(y) + Math.round(x)) * 4, (png.width * Math.round(y) + Math.round(x)) * 4 + 3)];
@@ -427,5 +434,23 @@ test("the tab walk measures every focus indicator on a page that scrolls smoothl
   );
   for (const stop of walk.stops) assert.equal(stop.clipVerified, true, `clip of ${stop.text}`);
   assert.equal(await page.evaluate(() => getComputedStyle(document.documentElement).scrollBehavior), "smooth");
+  await page.context().close();
+});
+
+test("the numbered tab-order picture shows the slide the stops were counted on, also when the arrow keys turn the slide after the walk", async () => {
+  const page = await open("/deck.html");
+  const dir = await mkdtemp(join(tmpdir(), "loep-deck-"));
+  const path = join(dir, "tabwalk.png");
+  // As the sweep goes: the walk with its picture, then the arrow keys from every stop.
+  const walk = (await tabWalk(page, { continueAfterFocusLoss: true, focusDir: join(dir, "focus"), focusPath: "focus", orderPicture: path })) as { stops: { path: string[]; tag: string; text: string }[] };
+  assert.deepEqual(walk.stops.map((stop) => stop.text), ["Sluiten", "Menu"]);
+  await arrowReach(page, walk.stops);
+  assert.notEqual(await page.locator("#counter").textContent(), "1 / 3", "the arrow keys turned the slide");
+  // The picture holds the first slide, on which Tab went round, with the numbers.
+  const picture = PNG.sync.read(await readFile(path));
+  const at = (x: number, y: number): number[] => [...picture.data.subarray((y * picture.width + x) * 4, (y * picture.width + x) * 4 + 3)];
+  assert.deepEqual(at(Math.floor(picture.width / 2), Math.floor(picture.height / 2)), [0xb0, 0, 0]);
+  // The numbers were drawn for the picture only; they are gone from the page.
+  assert.equal(await page.locator("[data-loep-tab-order]").count(), 0);
   await page.context().close();
 });

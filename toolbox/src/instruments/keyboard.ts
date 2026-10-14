@@ -51,6 +51,12 @@ export interface TabWalkOptions {
    * for this; `loep taborder` makes that comparison itself.
    */
   continueAfterFocusLoss?: boolean;
+  /**
+   * Where to write the numbered picture of the order. It is taken here, as soon as the walk
+   * is done, so it shows the page in the state the stops were counted in: a probe after the
+   * walk can press keys that change the page, such as an arrow key that turns a slide.
+   */
+  orderPicture?: string;
 }
 
 const MAX_FRAME_DEPTH = 5;
@@ -300,6 +306,7 @@ async function walkWithTab(page: Page, options: TabWalkOptions): Promise<Record<
       stop.focusScreenshot = `${focusPath}/${name}`;
     }
   }
+  if (options.orderPicture) await tabOrderScreenshot(page, stops, options.orderPicture);
   return { outcome, stopCount: stops.length, initialFocus, stops, ...(thrownAway.length > 0 ? { focusThrownAwayBy: thrownAway } : {}) };
 }
 
@@ -381,6 +388,7 @@ export async function tabOrderScreenshot(page: Page, stops: Record<string, unkno
     scrollTo(0, 0);
     const layer = document.createElement("div");
     layer.style.cssText = "position:absolute;left:0;top:0;width:0;height:0;z-index:2147483647;pointer-events:none";
+    layer.setAttribute("data-loep-tab-order", "");
     document.body.append(layer);
     // A positioned body with a margin moves the layer away from the top left corner of the page.
     const origin = layer.getBoundingClientRect();
@@ -394,7 +402,12 @@ export async function tabOrderScreenshot(page: Page, stops: Record<string, unkno
       layer.append(frame);
     });
   }, stops.map((stop) => ({ box: stop.box, scroll: stop.scroll, ref: stop.ref }) as DrawnStop));
-  await page.screenshot({ path, fullPage: true, animations: "disabled" });
+  try {
+    await page.screenshot({ path, fullPage: true, animations: "disabled" });
+  } finally {
+    // The numbers are no part of the page: what is measured after the picture must not find them.
+    await page.evaluate(() => document.querySelector("[data-loep-tab-order]")?.remove()).catch(() => undefined);
+  }
 }
 
 const SKIP_LINK = /sla over|direct naar|naar (de )?(hoofd)?inhoud|skip|ga naar/i;

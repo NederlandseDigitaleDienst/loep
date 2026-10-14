@@ -11,7 +11,7 @@ import { PNG } from "pngjs";
 import { INPAGE_PATH, launchBrowser, loadPage, newContext } from "../src/browser/session.ts";
 import { collect } from "../src/commands/collect.ts";
 import { checkSite, explore, exploreContext } from "../src/commands/explore.ts";
-import { checkGate, commonBlock, contactSheet, gate, gateChecks, MIN_TAB_REACH, openedBetweenWidths, reviewGaps, reviewParts, SHEETS_PER_TASK, sheetGaps, tile, validateAnswers, type Answers, type Sheet } from "../src/commands/gate.ts";
+import { checkGate, commonBlock, contactSheet, gate, gateChecks, keysOn, MIN_TAB_REACH, reviewedAs, openedBetweenWidths, reviewGaps, reviewParts, SHEETS_PER_TASK, sheetGaps, tile, validateAnswers, type Answers, type Sheet } from "../src/commands/gate.ts";
 import { inventory, type Inventory, type InventoryPage } from "../src/commands/inventory.ts";
 import { ModelSweep, type SiteStates } from "../src/commands/modelsweep.ts";
 import { DownRun, HoverRun, probePointerInStates } from "../src/commands/states.ts";
@@ -854,4 +854,16 @@ test("explore, check-site, the sweep and the gate work together on a site with a
   const followUp = readFileSync(again.task, "utf8");
   assert.match(followUp, /Dit is een vervolgronde/);
   assert.ok(!followUp.includes("sweep-complete"), "a measurement the sweep still owes is not a task for the explorer");
+});
+
+test("a sheet names the single-key shortcuts the sweep measured on its page, so the review does not count them as missing", () => {
+  const long = `adres gewijzigd naar ${"x".repeat(200)}`;
+  const states = { singleKeys: { pagesExamined: 2, keysPressed: ["p", "s"], reactions: [{ page: "P10", key: "p", change: "presentatiemodus" }, { page: "P10", key: "s", change: long }, { page: "P11", key: "b", change: "pauze" }] } } as unknown as RunData["states"];
+  const keys = keysOn({ label: "P10" }, { states });
+  assert.deepEqual(keys.map((entry) => entry.slice(0, 4)), ['"p":', '"s":']);
+  assert.equal(keys[1]!.length, '"s": '.length + 160, "a long change is cut off");
+  assert.deepEqual(keysOn({ label: "P01" }, { states }), []);
+  assert.deepEqual(keysOn({ label: "P10" }, { states: null }), [], "a run without states names no keys");
+  const sheet = { pageType: "presentatie", page: "P10", url: "https://site.nl/deck/", file: "gate/sheet-presentatie.png", sha256: "abc", tiles: [], componentsNl: [], keysNl: [] } as Sheet;
+  assert.notEqual(reviewedAs({ ...sheet, keysNl: keys }), reviewedAs(sheet), "the same picture with another list asks for a new review");
 });

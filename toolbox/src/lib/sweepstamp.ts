@@ -24,9 +24,11 @@ import type { Blocker, Postcondition } from "./sitemodel.ts";
  * 9: per page and per state every timer with what it did (waiting ones set off at the end), the meta refreshes, the cookies
  * and the stored values (2.2.1). 10: the wider text spacing stays on shadow roots that appear later, so a menu that makes
  * its items anew is measured with it; per state that fills a form, the timers that start after sending it (2.2.1). 11: on that same sending, the
- * messages that appear, with their region, how the region was before (hidden, empty, absent) and the focus (4.1.3).
+ * messages that appear, with their region, how the region was before (hidden, empty, absent) and the focus (4.1.3). 12: a key
+ * or a press that asks for full screen is a reaction (2.1.4, 2.5.2). 13: the numbered Tab picture is taken right after the
+ * walk, before the arrow keys move a slide.
  */
-export const SWEEP_STAMP_VERSION = 11;
+export const SWEEP_STAMP_VERSION = 13;
 
 interface RecipeSteps {
   start?: unknown;

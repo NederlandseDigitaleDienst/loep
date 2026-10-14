@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="nl">
+<head><meta charset="utf-8"><title>Presentatie - Testsite sessie</title>
+<style>
+  body { margin: 0; font: 16px sans-serif; }
+  header { height: 60px; display: flex; gap: 16px; align-items: center; padding: 0 16px; }
+  section { position: absolute; top: 60px; left: 0; right: 0; bottom: 0; color: #fff; font-size: 48px; padding: 32px; }
+  section[hidden] { display: none; }
+</style>
+</head>
+<body>
+<header><button type="button">Sluiten</button><span id="counter">1 / 3</span><button type="button">Menu</button></header>
+<section style="background: #b00000">Dia een</section>
+<section style="background: #007000" hidden>Dia twee</section>
+<section style="background: #0000b0" hidden>Dia drie</section>
+<script>
+// A slide deck as presentation tools make them: the arrow keys turn the slide wherever focus is, Tab does not.
+const slides = [...document.querySelectorAll("section")];
+let current = 0;
+document.addEventListener("keydown", (event) => {
+  if (!["ArrowRight", "ArrowDown", "PageDown", " "].includes(event.key)) return;
+  current = Math.min(current + 1, slides.length - 1);
+  slides.forEach((slide, index) => { slide.hidden = index !== current; });
+  document.getElementById("counter").textContent = `${current + 1} / ${slides.length}`;
+});
+</script>
+</body>
+</html>
