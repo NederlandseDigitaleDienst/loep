@@ -75,6 +75,8 @@ export interface Sheet {
   contentNl?: string[];
   /** The embedded windows on this page that the site model classifies under `frames`, of whatever class. */
   framesNl?: string[];
+  /** The single-character keys the page reacted to in the sweep, with what changed. Absent in older runs. */
+  keysNl?: string[];
 }
 
 export interface Gate {
@@ -537,9 +539,15 @@ async function buildSheets(run: RunData, runDir: string, outDir: string): Promis
     const file = join("gate", `sheet-${type.id}.png`);
     const bytes = PNG.sync.write(contactSheet(tiles.map((entry) => tile(PNG.sync.read(readFileSync(join(runDir, entry.file)))))));
     await writeFileAtomic(join(outDir, file), bytes);
-    sheets.push({ pageType: type.id, page: type.page.label, url: type.page.item.url, file, sha256: sha256(bytes), tiles, componentsNl: components, contentNl: (model?.content ?? []).filter((content) => content.pageTypes.includes(type.id)).map((content) => `${content.id} (${content.kind}): ${content.descriptionNl}`), framesNl: framesOn(type.page, model) });
+    sheets.push({ pageType: type.id, page: type.page.label, url: type.page.item.url, file, sha256: sha256(bytes), tiles, componentsNl: components, contentNl: (model?.content ?? []).filter((content) => content.pageTypes.includes(type.id)).map((content) => `${content.id} (${content.kind}): ${content.descriptionNl}`), framesNl: framesOn(type.page, model), keysNl: keysOn(type.page, run) });
   }
   return sheets;
+}
+
+/** What the single-key probe of the sweep recorded on a page: a shortcut it measured is known, not missing. */
+export function keysOn(page: Pick<PageData, "label">, run: Pick<RunData, "states">): string[] {
+  const reactions = (run.states?.singleKeys.reactions ?? []).filter((reaction) => reaction.page === page.label);
+  return reactions.map((reaction) => `"${reaction.key}": ${reaction.change.length > 160 ? `${reaction.change.slice(0, 157)}...` : reaction.change}`);
 }
 
 /** The frames of the site model that stand on a page, by the address of each iframe element. */
@@ -745,6 +753,8 @@ export async function gate(runDir: string, outDir: string = runDir): Promise<Gat
       (sheet.contentNl ?? []).length > 0 ? `Inhoud zonder handeling (spelers, blokken die vanzelf bewegen) volgens het sitemodel: ${sheet.contentNl!.join("; ")}.` : "Het sitemodel noemt voor dit paginatype geen spelers of inhoud die vanzelf beweegt.",
       "",
       (sheet.framesNl ?? []).length > 0 ? `Ingesloten vensters op deze pagina volgens het sitemodel: ${sheet.framesNl!.join("; ")}.` : "Het sitemodel noemt op deze pagina geen ingesloten vensters.",
+      "",
+      (sheet.keysNl ?? []).length > 0 ? `Toetsen van één teken waarop deze pagina reageerde in de veegronde: ${sheet.keysNl!.join("; ")}.` : "De veegronde vond op deze pagina geen toets van één teken waarop de pagina reageert.",
     ].join("\n");
   // One task per SHEETS_PER_TASK sheets, so the task of one agent stays the same size however many page types a site has.
   const parts = reviewParts(sheets);
