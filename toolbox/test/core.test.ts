@@ -5,6 +5,7 @@ import { parseSitemap, type Inventory, type InventoryPage } from "../src/command
 import { progressLine, sayingItRuns } from "../src/instruments/limit.ts";
 import { canonicalJson, sha256, slugForUrl, stableId } from "../src/lib/canonical.ts";
 import { complianceStatus, evaluationHash, resolveCriterion } from "../src/lib/evaluation.ts";
+import type { SiteModel } from "../src/lib/sitemodel.ts";
 import type { Finding, Verdict } from "../src/lib/verdict.ts";
 import { compareCriterionIds, criteriaFor, criterionById, criterionIdFromAxeTag, en301549Clause } from "../src/lib/wcag.ts";
 import { exampleEvaluation } from "./fixtures/example-evaluation.ts";
@@ -62,6 +63,16 @@ test("a large site gets a structured sample plus a seeded random tenth", () => {
   assert.equal(first.items.filter((item) => item.kind === "random").length, 1);
   assert.notDeepEqual(first.items.filter((item) => item.kind === "random"), other.items.filter((item) => item.kind === "random"));
   assert.deepEqual(seededOrder(pages, "x").map((entry) => entry.url), seededOrder([...pages].reverse(), "x").map((entry) => entry.url));
+});
+
+test("every page type of the site model gets a page in the sample, also when it shares a template", () => {
+  const pages = Array.from({ length: CENSUS_LIMIT + 40 }, (_, index) => page(index, "t"));
+  const urls = pages.map((entry) => entry.url);
+  const type = (id: string, members: string[]) => ({ id, descriptionNl: id, representative: members[0]!, pages: members });
+  const model = { version: 1, baseUrl: "https://a.nl/", pageTypes: [type("overzicht", [urls[50]!]), type("artikel", urls.filter((_, index) => index !== 50))], blockers: [], components: [], processes: [], frames: [], notesNl: [] } as SiteModel;
+  assert.equal(buildSample(inventory(pages), "seed").items.filter((item) => item.kind === "structured").length, 1, "one template, one structured page");
+  const structured = buildSample(inventory(pages), "seed", model).items.filter((item) => item.kind === "structured").map((item) => item.url);
+  assert.deepEqual(structured, [urls[0], urls[50]]);
 });
 
 const observation = { checkedNl: "Alle afbeeldingen", howNl: "Tabel images", observedNl: "37 van 37 hebben een naam", evidence: ["images"] };
