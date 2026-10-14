@@ -28,7 +28,7 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: npm
@@ -60,7 +60,7 @@ jobs:
         run: |
           if [ "${{ github.event_name }}" != "schedule" ] || [ -n "$(git log --since='25 hours ago' --format=%h -1)" ]; then echo "ja=true" >> "$GITHUB_OUTPUT"; else echo "ja=false" >> "$GITHUB_OUTPUT"; fi
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         if: steps.nieuw.outputs.ja == 'true'
         with:
           node-version: 24
