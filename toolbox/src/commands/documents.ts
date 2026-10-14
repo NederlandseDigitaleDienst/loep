@@ -14,8 +14,8 @@ const DOWNLOAD_MS = 60_000;
 /** Pause between two downloads from the same site. */
 const POLITE_MS = 500;
 
-/** Measure one file that is already on disk. `dir` is where its facts live, relative to the run. */
-export async function measureDocument(runDir: string, document: SampleDocument, file: string, bytes: number): Promise<DocumentFacts> {
+/** Measure one file that is already on disk. `dir` is where its facts live, relative to the run. `contentType` is what the server said when it was fetched. */
+export async function measureDocument(runDir: string, document: SampleDocument, file: string, bytes: number, contentType: string | null = null): Promise<DocumentFacts> {
   const dir = documentDir(document);
   const facts = emptyFacts(document.label, document.url, document.kind, "read", null);
   facts.bytes = bytes;
@@ -36,6 +36,12 @@ export async function measureDocument(runDir: string, document: SampleDocument, 
         if (picture) facts.files.pageImages.push(join(dir, `page-${page}.png`));
       }
       if (facts.files.pageImages.length === 0 && (facts.pages ?? 0) > 0) facts.notMeasuredNl.push("pdftoppm (poppler) is niet geïnstalleerd of kon de pagina's niet tekenen: er is geen beeld van de eerste pagina's.");
+    } else if (document.kind === "text") {
+      const { measureText } = await import("../instruments/documents/text.ts");
+      const measured = await measureText(file, document.url, contentType);
+      Object.assign(facts, measured.facts);
+      await writeFileAtomic(join(runDir, dir, "text.txt"), measured.text);
+      facts.files.text = join(dir, "text.txt");
     } else {
       const { measureOffice } = await import("../instruments/documents/office.ts");
       const measured = await measureOffice(file, document.kind);
@@ -64,7 +70,7 @@ async function fetchAndMeasure(runDir: string, document: SampleDocument, scope: 
     await rm(file, { force: true });
     return emptyFacts(document.label, document.url, document.kind, "failed", fetched.truncated === "size" ? `het bestand is groter dan ${MAX_DOCUMENT_BYTES / 1024 / 1024} MB` : "het bestand kwam niet binnen de tijd binnen");
   }
-  return measureDocument(runDir, document, file, fetched.bytes);
+  return measureDocument(runDir, document, file, fetched.bytes, fetched.contentType);
 }
 
 export interface DocumentsResult {

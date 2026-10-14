@@ -187,6 +187,9 @@ export const DOCUMENT_CENSUS_LIMIT = 20;
 /** Of each kind this many are chosen on purpose: the one most pages link to, and the newest. */
 const STRUCTURED_PER_KIND = 2;
 
+/** "het pdf-bestand", "het tekstbestand": a file of one kind in the reason for choosing it. */
+const fileOfKindNl = (kind: DocumentKind): string => (kind === "text" ? "tekstbestand" : kind === "other" ? "bestand van een andere soort" : `${kind}-bestand`);
+
 /**
  * Which documents are examined. Few: all of them. Many: per kind the document most pages
  * link to and the newest one, filled up to the limit with a random choice by the seed.
@@ -201,8 +204,8 @@ export function chooseDocuments(found: InventoryDocument[], seed: string): Sampl
       const ofKind = sorted.filter((document) => document.kind === kind);
       const mostLinked = [...ofKind].sort((a, b) => pages(b) - pages(a) || a.url.localeCompare(b.url))[0];
       const newest = [...ofKind].filter((document) => document.lastModified).sort((a, b) => b.lastModified!.localeCompare(a.lastModified!) || a.url.localeCompare(b.url))[0];
-      if (mostLinked) chosen.set(mostLinked.url, { document: mostLinked, reason: `gericht gekozen: het ${kind}-bestand waar de meeste pagina's naar linken` });
-      if (newest && !chosen.has(newest.url) && [...chosen.values()].filter((entry) => entry.document.kind === kind).length < STRUCTURED_PER_KIND) chosen.set(newest.url, { document: newest, reason: `gericht gekozen: het nieuwste ${kind}-bestand` });
+      if (mostLinked) chosen.set(mostLinked.url, { document: mostLinked, reason: `gericht gekozen: het ${fileOfKindNl(kind)} waar de meeste pagina's naar linken` });
+      if (newest && !chosen.has(newest.url) && [...chosen.values()].filter((entry) => entry.document.kind === kind).length < STRUCTURED_PER_KIND) chosen.set(newest.url, { document: newest, reason: `gericht gekozen: het nieuwste ${fileOfKindNl(kind)}` });
     }
     // The random part is taken from the kinds that are read: a file that cannot be opened teaches nothing more than its kind.
     const rest = seededOrder(sorted.filter((document) => !chosen.has(document.url) && READ_KINDS.includes(document.kind)), seed);
