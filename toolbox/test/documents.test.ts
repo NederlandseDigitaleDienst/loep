@@ -517,7 +517,9 @@ const MARKDOWN = "# Één regeling\n\nDit is één pagina als Markdown, met [een
 const TEXT_SITE: Record<string, { type: string; body: string }> = {
   "/": { type: "text/html; charset=utf-8", body: `<!doctype html><html lang="nl"><head><title>Regeling</title></head><body><h1>Regeling</h1><h2>Download deze pagina</h2>
     <p><a href="/regeling/index.export.md" download="Regeling.md">Markdown</a> <a href="/lees-mij.txt">Lees mij</a> <a href="/export?id=3" download>Export</a>
-    <a href="/kaal">Kale tekst</a> <a href="/tweede">Tweede pagina</a></p></body></html>` },
+    <a href="/kaal">Kale tekst</a> <a href="/tweede">Tweede pagina</a> <a href="/bewaar" download="bewaar.html">Bewaar als HTML</a></p></body></html>` },
+  // HTML offered with `download` stays a page: what is saved is a web page.
+  "/bewaar": { type: "text/html; charset=utf-8", body: `<!doctype html><html lang="nl"><head><title>Bewaar</title></head><body><h1>Bewaar</h1></body></html>` },
   "/tweede": { type: "text/html; charset=utf-8", body: `<!doctype html><html lang="nl"><head><title>Tweede</title></head><body><h1>Tweede</h1><p><a href="/regeling/index.export.md">Ook als tekst</a></p></body></html>` },
   // No character set in the header: a browser has to guess, and shows "Ã©" for "é".
   "/regeling/index.export.md": { type: "text/markdown", body: MARKDOWN },
@@ -552,7 +554,7 @@ test("plain text offered for download is a document, not a page: inventory count
       throw error;
     }
     const path = (url: string): string => new URL(url).pathname + new URL(url).search;
-    assert.deepEqual(stock.pages.map((page) => path(page.url)).sort(), ["/", "/deze-pagina-bestaat-niet-toegankelijkheidsonderzoek", "/tweede"], "no plain text file is evaluated as a page");
+    assert.deepEqual(stock.pages.map((page) => path(page.url)).sort(), ["/", "/bewaar", "/deze-pagina-bestaat-niet-toegankelijkheidsonderzoek", "/tweede"], "no plain text file is evaluated as a page, and HTML offered with download stays one");
     const byPath = new Map(stock.documents!.map((document) => [path(document.url), document]));
     assert.deepEqual([...byPath.keys()].sort(), ["/export?id=3", "/kaal", "/lees-mij.txt", "/regeling/index.export.md"]);
     assert.deepEqual([...byPath.values()].map((document) => document.kind), ["text", "text", "text", "text"]);
