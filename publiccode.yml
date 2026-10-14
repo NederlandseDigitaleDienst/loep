@@ -1,6 +1,6 @@
 # Describes this repository for public-sector software catalogs.
 # Standard: https://yml.publiccode.tools
-publiccodeYmlVersion: '0'
+publiccodeYmlVersion: '0.7'
 
 name: loep
 url: https://github.com/NederlandseDigitaleDienst/loep
