@@ -73,7 +73,7 @@ jobs:
       - uses: astral-sh/setup-uv@v6
         if: steps.nieuw.outputs.ja == 'true'
 
-      - uses: typst-community/setup-typst@v4
+      - uses: typst-community/setup-typst@v5
         if: steps.nieuw.outputs.ja == 'true'
 
       - name: Elk bestand heeft een rechthebbende en een licentie
