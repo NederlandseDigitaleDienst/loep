@@ -7,7 +7,7 @@ import { browserUse, repeatedInBrowsersNl, secondBrowserUse } from "../src/comma
 import { render } from "../src/commands/render.ts";
 import { canonicalJson } from "../src/lib/canonical.ts";
 import { mergeFindings } from "../src/lib/defects.ts";
-import { closeCutQuote, evaluationHash, markVendor, quoteStart, vendorTagsOf, type Evaluation, type ReportFinding } from "../src/lib/evaluation.ts";
+import { closeCutQuote, evaluationHash, idsAcrossVersionsNl, markVendor, quoteStart, summarise, vendorTagsOf, type Evaluation, type ReportFinding } from "../src/lib/evaluation.ts";
 import { reportedModels } from "../src/lib/models.ts";
 import { deriveReport, renderMarkdown } from "../src/lib/report-markdown.ts";
 import { tool } from "../src/lib/typst.ts";
@@ -810,4 +810,19 @@ test("the list of tools names every browser with the version that ran and what i
   assert.ok(!/Firefox \d/.test(line), "no version is shown for a browser that did not run");
   // An evaluation from before the browsers were kept names the one browser of its manifest, with a capital as a name has.
   assert.ok(renderMarkdown(exampleEvaluation()).includes("\n- Browser: Chromium 153.0.8010.12\n"));
+});
+
+test("the open count across both WCAG versions names the criteria in one version only, so it adds up with the summary sentence", () => {
+  const evaluation = exampleEvaluation();
+  const OPEN = ["2.5.2", "3.3.8", "4.1.1"];
+  const criteria = evaluation.criteria.map((criterion) => ({ ...criterion, outcome: OPEN.includes(criterion.id) ? ("untested" as const) : ("passed" as const), missingNl: [] }));
+  assert.deepEqual(
+    OPEN.map((id) => criteria.find((criterion) => criterion.id === id)?.versions),
+    [["2.1", "2.2"], ["2.2"], ["2.1"]],
+  );
+  const derived = deriveReport({ ...evaluation, criteria, summary: summarise(criteria) });
+  // Three open across both versions; the summary sentence speaks of WCAG 2.2 alone, where 4.1.1 does not exist.
+  assert.match(derived.statusLine.openNl, /^Open criteria: 3, door dit onderzoek niet vastgesteld \(2\.5\.2, 3\.3\.8 alleen in WCAG 2\.2, 4\.1\.1 alleen in WCAG 2\.1\)\. /);
+  assert.match(derived.statusSentenceNl, /van de \d+ criteria van WCAG 2\.2 niveau A en AA, maar 2 criteria zijn nog open\./);
+  assert.equal(idsAcrossVersionsNl(["1.1.1"], criteria), "1.1.1", "a criterion in both versions stays as it is");
 });

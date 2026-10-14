@@ -1,6 +1,6 @@
 import { KIND_NAME_NL, kindsNl } from "./documents.ts";
 import { pageIndex, type Defect } from "./defects.ts";
-import { closeCutQuote, complianceStatus, evaluationHash, madeWith, openCriteria, OUTCOME_LABEL, type ComplianceStatus, type CriterionOutcome, type CriterionResult, type Evaluation, type ReportFinding, type Signature } from "./evaluation.ts";
+import { closeCutQuote, complianceStatus, evaluationHash, idsAcrossVersionsNl, madeWith, openCriteria, OUTCOME_LABEL, type ComplianceStatus, type CriterionOutcome, type CriterionResult, type Evaluation, type ReportFinding, type Signature } from "./evaluation.ts";
 import { modelOf } from "../instruments/methods/registry.ts";
 import { signatureIsCurrent } from "../commands/sign.ts";
 import { extensionsNl } from "./budget.ts";
@@ -479,7 +479,8 @@ function openCount(evaluation: Evaluation): { openNl: string; unfinished: boolea
   const open = openCriteria(evaluation.criteria);
   const total = open.owner.length + open.evaluation.length;
   if (total === 0) return { openNl: "Open criteria: geen. Elk criterium heeft een oordeel.", unfinished: false };
-  const list = (ids: string[]): string => ` (${ids.join(", ")})`;
+  // The count is across WCAG 2.1 and 2.2 together, the summary sentence counts WCAG 2.2 alone: an id in one version says so, or the two numbers seem to disagree.
+  const list = (ids: string[]): string => ` (${idsAcrossVersionsNl(ids, evaluation.criteria)})`;
   const ownerReason = `een mens of een keuze van de eigenaar${list(open.owner)}`;
   const evaluationReason = `door dit onderzoek niet vastgesteld${list(open.evaluation)}`;
   // With one reason the count is not repeated, and a reason that holds for no criterion is left out: "0 vragen een mens" says nothing.

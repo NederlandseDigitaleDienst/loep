@@ -2,7 +2,7 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { frameStanding } from "../lib/sitemodel.ts";
 import { readJson, sha256File } from "../lib/canonical.ts";
-import { allCriteriaSorted, carryFindingIds, ESTABLISHED_BY_NL, evaluationHash, OUTCOME_LABEL, markVendor, openCriteria, quoteStart, resolveCriterion, summarise, type BrowserUse, type CriterionResult, type Evaluation, type PointAnswer, type RoundVerdicts } from "../lib/evaluation.ts";
+import { allCriteriaSorted, carryFindingIds, ESTABLISHED_BY_NL, evaluationHash, idsAcrossVersionsNl, OUTCOME_LABEL, markVendor, openCriteria, quoteStart, resolveCriterion, summarise, type BrowserUse, type CriterionResult, type Evaluation, type PointAnswer, type RoundVerdicts } from "../lib/evaluation.ts";
 import { matchFindings, sideOf } from "../lib/difference.ts";
 import { documentScopeNl, evaluationDocuments } from "../lib/documents.ts";
 import { type Manifest, stepStart, writeManifest } from "../lib/manifest.ts";
@@ -323,8 +323,8 @@ export async function evaluate(options: EvaluateOptions): Promise<Evaluation> {
   const without = criteria.filter((criterion) => !criterion.established);
   if (without.length > 0) process.stderr.write(`zonder oordeel (${without.length}): ${without.map((criterion) => criterion.id).join("; ")}\n`);
   const open = openCriteria(criteria);
-  if (open.owner.length > 0) process.stderr.write(`open, vraagt een mens of een keuze: ${open.owner.join(", ")}. Een persoon legt het antwoord vast met answer; daarna opnieuw evaluate.\n`);
-  if (open.evaluation.length > 0) process.stderr.write(`LET OP: het onderzoek is niet af. Door dit onderzoek niet vastgesteld: ${open.evaluation.join(", ")}. Draai tasks en pending: de afmaakronde meet wat ontbrak. Is die al geweest, dan kan alleen een persoon het punt nog sluiten, met answer.\n`);
+  if (open.owner.length > 0) process.stderr.write(`open, vraagt een mens of een keuze: ${idsAcrossVersionsNl(open.owner, criteria)}. Een persoon legt het antwoord vast met answer; daarna opnieuw evaluate.\n`);
+  if (open.evaluation.length > 0) process.stderr.write(`LET OP: het onderzoek is niet af. Door dit onderzoek niet vastgesteld: ${idsAcrossVersionsNl(open.evaluation, criteria)}. Draai tasks en pending: de afmaakronde meet wat ontbrak. Is die al geweest, dan kan alleen een persoon het punt nog sluiten, met answer.\n`);
   // The phases with agents leave no step of their own: what their sessions say about begin, end and time per agent is kept here.
   await writeManifest(options.run, { command: "evaluate", startedAt, criteria: criteria.length, rejectedVerdicts: rejected.length, defects: merged.defects, mergeProposal: merged.proposal, establishedBy: { verification: by("verification").length, finishing: finished.length, person: byPerson.length }, open, extensions, agentPhases: agentPhaseTimings(options.run) });
   return evaluation;
