@@ -66,6 +66,14 @@ test("the key probe sees a key that shows a panel or flips a state without movin
   await rest.context().close();
 });
 
+test("the key probe sees a key that asks for full screen, which a headless browser does not show", async () => {
+  const page = await open("/keys-fullscreen.html");
+  const reaction = await firstKeyReaction(page, KEYS);
+  assert.equal(reaction?.key, "f");
+  assert.match(reaction!.change, /^volledig scherm aangevraagd/);
+  await page.context().close();
+});
+
 test("the press probe records what happens on pointer down and whether releasing elsewhere takes it back", async () => {
   const listening = new Set(["button"]);
   const probe = async (id: string): Promise<NonNullable<Awaited<ReturnType<typeof probeDownEvent>>>> => {

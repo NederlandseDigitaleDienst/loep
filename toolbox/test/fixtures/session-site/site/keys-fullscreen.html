@@ -1,0 +1,14 @@
+<!doctype html>
+<html lang="nl">
+<head><meta charset="utf-8"><title>Presentatie - Testsite sessie</title><link rel="stylesheet" href="/site.css"></head>
+<body>
+<main><h1>Presentatie</h1>
+<p>Druk op F voor volledig scherm.</p>
+</main>
+<script>
+document.addEventListener("keydown", (event) => {
+  if (event.key === "f") document.documentElement.requestFullscreen().catch(() => undefined);
+});
+</script>
+</body>
+</html>

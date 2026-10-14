@@ -17,6 +17,8 @@ export interface ChangeState {
   states: Record<string, string>;
   /** The computed properties with which a state is usually shown, of the element the action is about. */
   style: Record<string, string> | null;
+  /** How often the page asked for full screen since the first reading, and whether it is in full screen now. A headless browser shows no change for it. Absent in older readings. */
+  fullscreen?: { requests: number; active: boolean };
 }
 
 /**
@@ -30,6 +32,21 @@ export async function readChangeState(page: Page, place: string | null = null): 
     const library = (window as unknown as { __loep: { visibleDialogs: () => unknown[]; textChunks: () => string[]; liveRegionTexts: () => string[]; deepActiveElement: () => Element | null } }).__loep;
     const helpers = (window as unknown as { __loepm: { controlStates: () => Record<string, string>; shownStyles: (place: string) => Record<string, string> | null; where: (element: Element) => string | null } }).__loepm;
     const active = library.deepActiveElement();
+    // Asking for full screen changes nothing a headless browser shows: count the requests instead.
+    const own = window as unknown as { __loepFullscreen?: { requests: number } };
+    if (!own.__loepFullscreen) {
+      const counter = { requests: 0 };
+      own.__loepFullscreen = counter;
+      const proto = Element.prototype as unknown as Record<string, unknown>;
+      for (const name of ["requestFullscreen", "webkitRequestFullscreen"]) {
+        const original = proto[name];
+        if (typeof original !== "function") continue;
+        proto[name] = function (this: Element, ...args: unknown[]) {
+          counter.requests++;
+          return (original as (...rest: unknown[]) => unknown).apply(this, args);
+        };
+      }
+    }
     return {
       url: location.href,
       doc: String(performance.timeOrigin),
@@ -40,6 +57,7 @@ export async function readChangeState(page: Page, place: string | null = null): 
       focus: active && active !== document.body && active !== document.documentElement ? helpers.where(active) : null,
       states: helpers.controlStates(),
       style: target ? helpers.shownStyles(target) : null,
+      fullscreen: { requests: own.__loepFullscreen.requests, active: document.fullscreenElement !== null },
     };
   }, place);
 }
@@ -76,6 +94,8 @@ export interface Change {
   scrolled: string | null;
   focus: string | null;
   style: Record<string, string>;
+  /** The page asked for full screen, or left it. Absent in older changes. */
+  fullscreen?: string | null;
 }
 
 /** A piece of text with its digits taken out: a clock or a counter is the same text a second later. */
@@ -102,7 +122,16 @@ export function compareChange(before: ChangeState, after: ChangeState, volatile:
     scrolled: navigated ? null : scrollChange(before.scroll, after.scroll),
     focus: !navigated && before.focus !== after.focus ? `${before.focus ?? "de pagina"} -> ${after.focus ?? "de pagina"}` : null,
     style: navigated ? {} : styleChanges(before.style, after.style),
+    fullscreen: navigated ? null : fullscreenChange(before.fullscreen, after.fullscreen),
   };
+}
+
+/** Whether the page asked for full screen or left it between two readings; null when neither. */
+function fullscreenChange(before: ChangeState["fullscreen"], after: ChangeState["fullscreen"]): string | null {
+  if (!before || !after) return null;
+  if (after.requests > before.requests) return "volledig scherm aangevraagd";
+  if (before.active !== after.active) return after.active ? "volledig scherm aan" : "volledig scherm uit";
+  return null;
 }
 
 /**
@@ -124,8 +153,8 @@ export function volatileText(first: ChangeState, second: ChangeState): Set<strin
   return new Set([...idle.appeared, ...idle.disappeared, ...idle.live].map(pattern));
 }
 
-export type ChangeAspect = "url" | "dialogs" | "text" | "states" | "scroll" | "focus" | "style";
-const ALL: ChangeAspect[] = ["url", "dialogs", "text", "states", "scroll", "focus", "style"];
+export type ChangeAspect = "url" | "dialogs" | "text" | "states" | "scroll" | "focus" | "style" | "fullscreen";
+const ALL: ChangeAspect[] = ["url", "dialogs", "text", "states", "scroll", "focus", "style", "fullscreen"];
 
 /** Whether anything changed, looking only at the given aspects. */
 export function hasChange(change: Change, aspects: ChangeAspect[] = ALL): boolean {
@@ -137,6 +166,7 @@ export function hasChange(change: Change, aspects: ChangeAspect[] = ALL): boolea
     scroll: change.scrolled !== null,
     focus: change.focus !== null,
     style: Object.keys(change.style).length > 0,
+    fullscreen: Boolean(change.fullscreen),
   };
   return aspects.some((aspect) => present[aspect]);
 }
@@ -151,6 +181,7 @@ export function changeNl(change: Change, aspects: ChangeAspect[] = ALL): string 
   const wanted = (aspect: ChangeAspect): boolean => aspects.includes(aspect);
   if (wanted("url") && change.url !== null) parts.push(`adres gewijzigd naar ${change.url}`);
   else if (wanted("url") && change.navigated) parts.push("pagina opnieuw geladen");
+  if (wanted("fullscreen") && change.fullscreen) parts.push(change.fullscreen);
   if (wanted("dialogs") && change.dialogs !== null) parts.push(`dialoog of paneel geopend of gesloten (${change.dialogs})`);
   if (wanted("focus") && change.focus !== null) parts.push(`focus verplaatst: ${change.focus}`);
   if (wanted("states") && change.states.length > 0) parts.push(`toestand gewijzigd: ${change.states.slice(0, MAX_LISTED).join("; ")}${change.states.length > MAX_LISTED ? ` (+${change.states.length - MAX_LISTED})` : ""}`);

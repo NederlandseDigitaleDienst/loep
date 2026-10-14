@@ -38,7 +38,7 @@ export async function firstKeyReaction(page: Page, keys: string[]): Promise<KeyR
     const details = compareChange(before, after, volatile);
     if (!hasChange(details)) continue;
     // Only text changed: make sure it was the key. A page that also changes while nothing is pressed gets that text set aside.
-    if (!hasChange(details, ["url", "dialogs", "states", "scroll", "focus"])) {
+    if (!hasChange(details, ["url", "dialogs", "states", "scroll", "focus", "fullscreen"])) {
       // A countdown that ticked while the key was pressed.
       if (onlyDigitsChanged(details)) {
         for (const entry of patternsOf(details)) volatile.add(entry);
