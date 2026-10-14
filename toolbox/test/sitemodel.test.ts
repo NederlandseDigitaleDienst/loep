@@ -11,7 +11,7 @@ import { PNG } from "pngjs";
 import { INPAGE_PATH, launchBrowser, loadPage, newContext } from "../src/browser/session.ts";
 import { collect } from "../src/commands/collect.ts";
 import { checkSite, explore, exploreContext } from "../src/commands/explore.ts";
-import { checkGate, commonBlock, contactSheet, gate, gateChecks, keysOn, MIN_TAB_REACH, openedBetweenWidths, reviewGaps, reviewParts, SHEETS_PER_TASK, sheetGaps, tile, validateAnswers, type Answers, type Sheet } from "../src/commands/gate.ts";
+import { checkGate, commonBlock, contactSheet, gate, gateChecks, keysOn, MIN_TAB_REACH, reviewedAs, openedBetweenWidths, reviewGaps, reviewParts, SHEETS_PER_TASK, sheetGaps, tile, validateAnswers, type Answers, type Sheet } from "../src/commands/gate.ts";
 import { inventory, type Inventory, type InventoryPage } from "../src/commands/inventory.ts";
 import { ModelSweep, type SiteStates } from "../src/commands/modelsweep.ts";
 import { DownRun, HoverRun, probePointerInStates } from "../src/commands/states.ts";
@@ -864,4 +864,6 @@ test("a sheet names the single-key shortcuts the sweep measured on its page, so 
   assert.equal(keys[1]!.length, '"s": '.length + 160, "a long change is cut off");
   assert.deepEqual(keysOn({ label: "P01" }, { states }), []);
   assert.deepEqual(keysOn({ label: "P10" }, { states: null }), [], "a run without states names no keys");
+  const sheet = { pageType: "presentatie", page: "P10", url: "https://site.nl/deck/", file: "gate/sheet-presentatie.png", sha256: "abc", tiles: [], componentsNl: [], keysNl: [] } as Sheet;
+  assert.notEqual(reviewedAs({ ...sheet, keysNl: keys }), reviewedAs(sheet), "the same picture with another list asks for a new review");
 });

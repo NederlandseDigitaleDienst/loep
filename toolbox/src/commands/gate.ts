@@ -703,8 +703,13 @@ export async function checkGate(runDir: string): Promise<string[]> {
       problems.push(`${part.answers} is niet te lezen: ${(error as Error).message.split("\n")[0]}`);
     }
   }
-  if (problems.length === 0) await writeJson(join(runDir, STAMP_FILE), { answersSha256: await answersDigest(runDir, parts), sheets: Object.fromEntries(review.sheets.map((sheet) => [sheet.pageType, sheet.sha256])), stampedAt: new Date().toISOString() });
+  if (problems.length === 0) await writeJson(join(runDir, STAMP_FILE), { answersSha256: await answersDigest(runDir, parts), sheets: Object.fromEntries(review.sheets.map((sheet) => [sheet.pageType, reviewedAs(sheet)])), stampedAt: new Date().toISOString() });
   return problems;
+}
+
+/** What a reviewer was shown of a sheet: the picture and the lists beside it. A change in either asks for a new review. */
+export function reviewedAs(sheet: Sheet): string {
+  return sha256(JSON.stringify([sheet.sha256, sheet.componentsNl, sheet.contentNl ?? [], sheet.framesNl ?? [], sheet.keysNl ?? []]));
 }
 
 async function currentAnswers(runDir: string, sheets: Sheet[]): Promise<Answers | null> {
@@ -712,8 +717,8 @@ async function currentAnswers(runDir: string, sheets: Sheet[]): Promise<Answers 
   if (!existsSync(join(runDir, STAMP_FILE)) || parts.some((part) => !existsSync(join(runDir, part.answers)))) return null;
   const stamp = await readJson<{ answersSha256: string; sheets: Record<string, string> }>(join(runDir, STAMP_FILE));
   if (stamp.answersSha256 !== (await answersDigest(runDir, parts))) return null;
-  // Answers count only for the pictures they were given for.
-  if (sheets.length !== Object.keys(stamp.sheets).length || sheets.some((sheet) => stamp.sheets[sheet.pageType] !== sheet.sha256)) return null;
+  // Answers count only for the pictures and the lists they were given for.
+  if (sheets.length !== Object.keys(stamp.sheets).length || sheets.some((sheet) => stamp.sheets[sheet.pageType] !== reviewedAs(sheet))) return null;
   const all: Answers = { sheets: [] };
   for (const part of parts) all.sheets.push(...(await readJson<Answers>(join(runDir, part.answers))).sheets);
   return all;
