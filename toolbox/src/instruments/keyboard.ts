@@ -146,7 +146,7 @@ export async function tabWalk(page: Page, options: TabWalkOptions): Promise<Reco
   const initialFocus = await call<Record<string, unknown> | null>(page, "focusState");
   if (options.from) {
     await page.evaluate((chain) => (window as unknown as { __loep: { resolve: (chain: string[]) => HTMLElement | null } }).__loep.resolve(chain)?.focus(), options.from);
-  } else await page.evaluate(() => window.scrollTo(0, 0));
+  } else await page.evaluate(() => window.scrollTo({ left: 0, top: 0, behavior: "instant" }));
   const startUrl = page.url();
   const stops: Record<string, unknown>[] = [];
   const focused: (Buffer | null)[] = [];
@@ -251,7 +251,7 @@ export async function tabWalk(page: Page, options: TabWalkOptions): Promise<Reco
     stop.focusPixelShare = null;
     if (withFocus) {
       const [x, y] = stop.scroll as [number, number];
-      await page.evaluate(([left, top]) => window.scrollTo(left!, top!), [x, y]);
+      await page.evaluate(([left, top]) => window.scrollTo({ left: left!, top: top!, behavior: "instant" }), [x, y]);
       const without = await page.screenshot({ clip: focusClip(stop.viewportBox as Clip, viewport)!, animations: "disabled" });
       const painted = await call<Painted | null>(page, "paintedBox", stop.ref);
       if (stop.clipVerified && !(painted !== null && sameBox(painted.viewportBox, stop.viewportBox as Clip))) {
@@ -312,25 +312,57 @@ export async function arrowReach(page: Page, stops: { path: string[]; tag: strin
   return reach;
 }
 
-/** Number every tab stop on a screenshot, so the order can be judged at a glance. */
+/** A tab stop as the numbered picture needs it: where it was measured, at which scroll position, and the element itself. */
+interface DrawnStop {
+  box: Clip;
+  scroll?: [number, number];
+  ref?: number;
+}
+
+/**
+ * Number every tab stop on a screenshot, so the order can be judged at a glance.
+ *
+ * The full-page picture shows the page as it lies at scroll position 0. Each box was measured
+ * during the walk, with the page scrolled to wherever focus was. For most elements that makes
+ * no difference, but a sticky or fixed element moves with the scroll position: measured halfway
+ * down, its box lies halfway down, while the picture shows it at the top. So every box is moved
+ * by as much as its element moves between the scroll position it was measured at and the top.
+ * An element that moved for another reason, such as a skip link that only shows with focus,
+ * keeps the box it had with focus.
+ */
 export async function tabOrderScreenshot(page: Page, stops: Record<string, unknown>[], path: string): Promise<void> {
-  await page.evaluate((boxes) => {
+  await page.evaluate((drawn) => {
+    // Instant: a page with scroll-behavior:smooth would otherwise still be on its way up when the picture is taken.
+    const scrollTo = (left: number, top: number): void => window.scrollTo({ left, top, behavior: "instant" });
+    const registry = (window as unknown as { __loep?: { registry: Element[] } }).__loep?.registry ?? [];
+    const at = (element: Element, left: number, top: number): { x: number; y: number } => {
+      scrollTo(left, top);
+      const rect = element.getBoundingClientRect();
+      return { x: rect.x + window.scrollX, y: rect.y + window.scrollY };
+    };
+    const boxes = drawn.map(({ box, scroll, ref }) => {
+      const element = ref === undefined ? undefined : registry[ref];
+      if (!element?.isConnected || !scroll) return box;
+      const then = at(element, scroll[0], scroll[1]);
+      const top = at(element, 0, 0);
+      return { ...box, x: box.x + Math.round(top.x - then.x), y: box.y + Math.round(top.y - then.y) };
+    });
+    scrollTo(0, 0);
     const layer = document.createElement("div");
     layer.style.cssText = "position:absolute;left:0;top:0;width:0;height:0;z-index:2147483647;pointer-events:none";
+    document.body.append(layer);
+    // A positioned body with a margin moves the layer away from the top left corner of the page.
+    const origin = layer.getBoundingClientRect();
     boxes.forEach((box, index) => {
       const frame = document.createElement("div");
-      frame.style.cssText = `position:absolute;left:${box.x}px;top:${box.y}px;width:${box.width}px;height:${box.height}px;outline:2px solid #c4008f;`;
+      frame.style.cssText = `position:absolute;left:${box.x - origin.x}px;top:${box.y - origin.y}px;width:${box.width}px;height:${box.height}px;outline:2px solid #c4008f;`;
       const label = document.createElement("span");
       label.textContent = String(index + 1);
       label.style.cssText = "position:absolute;left:-2px;top:-2px;background:#c4008f;color:#fff;font:bold 12px/1.3 sans-serif;padding:0 4px;";
       frame.append(label);
       layer.append(frame);
     });
-    document.body.append(layer);
-    // The boxes were measured from the top of the page. After the walk the page is scrolled
-    // down, and a sticky side menu would be drawn there, away from its numbers.
-    window.scrollTo(0, 0);
-  }, stops.map((stop) => stop.box as { x: number; y: number; width: number; height: number }));
+  }, stops.map((stop) => ({ box: stop.box, scroll: stop.scroll, ref: stop.ref }) as DrawnStop));
   await page.screenshot({ path, fullPage: true, animations: "disabled" });
 }
 
@@ -338,7 +370,7 @@ const SKIP_LINK = /sla over|direct naar|naar (de )?(hoofd)?inhoud|skip|ga naar/i
 
 /** Activate the first tab stop if it is a skip link and record where that takes the user (WCAG 2.4.1). */
 export async function skipLinkProbe(page: Page): Promise<Record<string, unknown>> {
-  await page.evaluate(() => window.scrollTo(0, 0));
+  await page.evaluate(() => window.scrollTo({ left: 0, top: 0, behavior: "instant" }));
   await page.keyboard.press("Tab");
   const first = await call<(Record<string, unknown> & { text: string }) | null>(page, "focusState");
   if (!first || !SKIP_LINK.test(first.text)) return { firstTabStop: first, isSkipLink: false };

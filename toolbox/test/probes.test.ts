@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp } from "node:fs/promises";
+import { mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, test } from "node:test";
@@ -14,7 +14,7 @@ import { boundaryOf, fateOf, forcedColoursProbe, type ForcedProbe } from "../src
 import { uiContrast } from "../src/lib/extractors.ts";
 import type { RunData } from "../src/lib/rundata.ts";
 import { collectFacts, frameListeners } from "../src/instruments/facts.ts";
-import { skipLinkProbe, tabOrderScreenshot } from "../src/instruments/keyboard.ts";
+import { skipLinkProbe, tabOrderScreenshot, tabWalk } from "../src/instruments/keyboard.ts";
 import { probeHoverTarget } from "../src/instruments/hover.ts";
 import { firstKeyReaction, KEYS, leaveTextEntry } from "../src/instruments/keys.ts";
 import { spacingEffect, spacingFromLoad } from "../src/instruments/overflow.ts";
@@ -391,12 +391,27 @@ test("a boundary is read on and just outside the edge of a control, and its fate
   assert.deepEqual([fateOf(14.6, 21), fateOf(14.6, 1), fateOf(14.6, null), fateOf(1, 21), fateOf(1.2, 1), fateOf(14.6, undefined), fateOf(14.6, 1, false)], ["stays", "disappears", "disappears", "appears", "absent", "unknown", "unknown"]);
 });
 
-test("the numbered tab-order picture is taken from the top, so a sticky side menu stays by its numbers", async () => {
-  const page = await open("/keys.html");
-  await page.setContent(`<aside style="position:sticky;top:0;float:left;width:200px"><a href="#a">Menu</a></aside><main style="height:4000px"><a href="#b">Inhoud</a></main>`);
-  await page.evaluate(() => window.scrollTo(0, 3000));
-  const path = join(await mkdtemp(join(tmpdir(), "loep-taborder-")), "tabwalk.png");
-  await tabOrderScreenshot(page, [{ box: { x: 8, y: 8, width: 60, height: 20 } }], path);
+test("the numbered tab-order picture frames a sticky table of contents and a fixed bar where the picture shows them", async () => {
+  const page = await open("/sticky-toc.html");
+  const dir = await mkdtemp(join(tmpdir(), "loep-taborder-"));
+  const walk = (await tabWalk(page, { focusDir: join(dir, "focus"), focusPath: "focus" })) as { stops: { text: string; scroll: [number, number] }[] };
+  const pinned = ["Een", "Twee", "Drie", "Naar boven"];
+  // The table of contents follows the long main column in the code, so the walk reaches it with the page scrolled down.
+  for (const text of pinned) assert.ok(walk.stops.find((stop) => stop.text === text)!.scroll[1] > 1000, `${text} measured while scrolled`);
+  const path = join(dir, "tabwalk.png");
+  // Smooth scrolling from here on: the way up to the top must still be done before the picture is taken.
+  await page.addStyleTag({ content: "html { scroll-behavior: smooth; }" });
+  await tabOrderScreenshot(page, walk.stops as unknown as Record<string, unknown>[], path);
   assert.equal(await page.evaluate(() => window.scrollY), 0);
+  const png = PNG.sync.read(await readFile(path));
+  const pixel = (x: number, y: number): number[] => [...png.data.subarray((png.width * Math.round(y) + Math.round(x)) * 4, (png.width * Math.round(y) + Math.round(x)) * 4 + 3)];
+  const where = await page.evaluate((texts) => texts.map((text) => [...document.querySelectorAll(".toc a, .bar a")].find((link) => link.textContent === text)!.getBoundingClientRect().toJSON() as DOMRect), pinned);
+  for (const [index, text] of pinned.entries()) {
+    const box = where[index]!;
+    // The picture shows the link here, at the top of the page (read in its padding, clear of the text) ...
+    assert.deepEqual(pixel(box.right - 2, box.y + box.height / 2), text === "Naar boven" ? [0, 0, 220] : [0, 200, 0], `${text} in the picture`);
+    // ... and its numbered frame is drawn around it (on the right, where the number does not cover the link).
+    assert.deepEqual(pixel(box.right + 1, box.y + box.height / 2), [196, 0, 143], `frame of ${text}`);
+  }
   await page.context().close();
 });
