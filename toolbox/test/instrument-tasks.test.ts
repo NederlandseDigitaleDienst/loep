@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, test } from "node:test";
@@ -53,6 +53,14 @@ function observe(session: string, command: string): string {
 }
 
 write("sample.json", { items: [{ url: HOME }, { url: CONTACT }] });
+
+/** A task names the work folder of its own session, and the command that wrote the task made it. */
+function namesItsWorkDir(prompt: string, session: string): void {
+  const workDir = join(dir, "werk", session);
+  assert.ok(prompt.includes(`werkmap: \`${workDir}\``), `the task names ${workDir} as its work folder`);
+  assert.ok(prompt.includes(`--session ${session}\` erin`), "the task says to give the session in full");
+  assert.ok(existsSync(workDir), `${workDir} is there before the agent starts`);
+}
 write(join("recipes", "process-contact.json"), { start: { url: HOME }, steps: [{ command: "goto", args: [CONTACT] }] });
 
 const finding = (key: string, evidence: string[]): Verdict["findings"][number] => ({ key, titleNl: "Kop te licht op de foto", observedNl: "Wit op lichtgroen, 1,2 op 1.", impactNl: "Slechtzienden lezen de kop niet.", fixNl: "Leg een donkere laag onder de tekst.", severity: "hoog", owner: "design", component: null, locations: [{ page: "P1", where: "#kop > h1", wholePage: true }], pagesAffected: "gemeten op P1", evidence });
@@ -69,8 +77,11 @@ test("a run with a site model starts with a walk per page type and a judge task 
   assert.match(start, /`component-menu`.*--width 360/);
   assert.doesNotMatch(start, /process-contact/, "a process belongs to the walk of the page type it goes to");
   assert.match(contact, /`process-contact`/);
+  namesItsWorkDir(start, "r-start");
+  namesItsWorkDir(contact, "r-contact");
   const judge = readFileSync(join(dir, "tasks", "1.4.3", "beoordeel.md"), "utf8");
   assert.doesNotMatch(judge, /\{\{\w+\}\}/);
+  namesItsWorkDir(judge, "b-143");
   // 1.4.3 is a criterion whose judges ended on their budget in every measured run: it gets twice the floor.
   assert.equal(useFactor("judge", "1.4.3"), 2);
   assert.match(judge, /session start --run \S+ --session b-143 --max-commands 160 --max-minutes 60 /, "the budget in the prompt is the computed one, and the one the session is started with");
@@ -123,6 +134,7 @@ test("verifier tasks come when every judge is in, with what other judges handed 
   const verify = index.tasks.find((task) => task.criterion === "1.4.3")!.verify!;
   assert.equal(verify.maxCommands, (20 + 2 * 5) * useFactor("verify", "1.4.3"), "twenty, and five for each finding to reproduce, times what the verifiers of this criterion used before");
   assert.match(readFileSync(join(dir, verify.prompt), "utf8"), /--session v-143 --max-commands 60 /);
+  namesItsWorkDir(readFileSync(join(dir, verify.prompt), "utf8"), "v-143");
   const pending = await instrumentPending(dir);
   assert.equal(pending.phase, "verifiers");
   assert.deepEqual(pending.verifiers.map((entry) => entry.criterion), ["1.4.3"]);
@@ -187,6 +199,7 @@ test("a task that has to be done again gets a session of its own", async () => {
   const task = index.tasks.find((entry) => entry.criterion === "1.4.3")!;
   assert.equal(task.judge.session, "b-143-2");
   assert.match(readFileSync(join(dir, task.judge.prompt), "utf8"), /--session b-143-2 /);
+  namesItsWorkDir(readFileSync(join(dir, task.judge.prompt), "utf8"), "b-143-2");
   assert.equal(index.walks.find((walk) => walk.pageType === "start")!.session, "r-start", "a walk that still stands keeps its session");
   assert.equal(index.tasks.find((entry) => entry.criterion === "1.4.11")!.judge.session, "b-1411-2");
   // The old verdict cannot be passed off as the new attempt: its findings rest on the old session.

@@ -29,6 +29,8 @@ Vul bij `--model` de exacte naam en versie in van het model waarop je draait, zo
 
 Daarna is elk commando: `node {{cli}} session <commando> --run {{run}} --session {{session}}`
 
+Hulpbestanden en hulpscripts zet je alleen in je eigen werkmap: `{{workDir}}`. Een script met een sessienaam erin hoort nergens anders: een andere agent in dezelfde run kan het overschrijven met het zijne, en dan meet jij onder zijn sessie. Geef liever elk commando volledig, zoals hierboven.
+
 | Commando | Wat het doet |
 |---|---|
 | `open <adres> [--width 360] [--state <naam>]` | Verse pagina. Met `--state` wordt eerst het bewaarde recept afgespeeld en daarna de pagina geopend |

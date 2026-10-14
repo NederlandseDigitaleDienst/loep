@@ -12,6 +12,8 @@ Zet daarna deze regel vooraan in elke shell-aanroep; dan is elk commando `loep <
 loep() { node {{cli}} session "$@" --run {{run}} --session {{session}}; }
 ```
 
+Andere agents werken tegelijk in dezelfde run. Hulpbestanden en hulpscripts zet je alleen in je eigen werkmap: `{{workDir}}`. Een script met een sessienaam erin hoort nergens anders: een andere agent kan het overschrijven met het zijne, en dan meet jij onder zijn sessie. Geef liever elk commando volledig, met de regel hierboven of met `--session {{session}}` erin.
+
 | Commando | Wat het doet |
 |---|---|
 | `open <label of adres> [--width 320] [--scheme dark] [--state <naam>] [--with-blockers]` | Verse pagina, met de meldingen al gesloten. Een label van een pagina werkt (`P03`). Met `--state` wordt eerst een bewaarde toestand afgespeeld: een onderdeel open. Met `--with-blockers` blijft de cookiemelding staan. Een nieuwe `open` gooit de toestand weg waarin je was |
