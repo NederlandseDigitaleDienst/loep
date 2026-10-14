@@ -101,10 +101,12 @@ export function applyFrameClasses(pages: InventoryPage[], model: SiteModel): { p
   return { pages: kept, repeats, excluded: [...excluded.values()] };
 }
 
-export function buildSample(inventory: Inventory, seed: string, model: SiteModel | null = null): Sample {
+export function buildSample(inventory: Inventory, seed: string, model: SiteModel | null = null, typeOf: Map<string, string> = new Map()): Sample {
   if (model) {
     const framed = applyFrameClasses(inventory.pages, model);
-    const sample = buildSample({ ...inventory, pages: framed.pages }, seed);
+    // Every page type of the model gets a page of its own, also when it shares a template with another type.
+    const types = new Map(model.pageTypes.flatMap((type) => type.pages.map((url) => [url, type.id] as const)));
+    const sample = buildSample({ ...inventory, pages: framed.pages }, seed, null, types);
     for (const item of sample.items) item.aliases = [...item.aliases, ...(framed.repeats.get(item.url) ?? [])].sort();
     const copies = framed.excluded.reduce((sum, frame) => sum + frame.copies, 0);
     const note = copies > 0 ? ` ${copies} ingesloten ${copies === 1 ? "venster telt" : "vensters tellen"} volgens het sitemodel niet mee als pagina (${framed.excluded.map((frame) => `${frame.descriptionNl}: ${frame.kindNl}`).join("; ")}).` : "";
@@ -153,15 +155,18 @@ export function buildSample(inventory: Inventory, seed: string, model: SiteModel
 
   const chosen = new Map<string, SampleItem>();
   const seenTemplates = new Set<string>();
+  const seenTypes = new Set<string>();
   for (const entry of unique) {
+    const type = typeOf.get(entry.page.url);
     const path = new URL(entry.page.url).pathname;
     const common = COMMON_PAGES.find(([pattern]) => pattern.test(path === "/" ? "" : path));
     const isFrame = entry.page.foundVia.every((via) => via.startsWith("iframe:"));
     if (isFrame) chosen.set(entry.page.url, toItem(entry, "embedded", "ingesloten venster"));
     else if (entry.page.url === inventory.notFoundProbe) chosen.set(entry.page.url, toItem(entry, "structured", "foutpagina (404)"));
     else if (common) chosen.set(entry.page.url, toItem(entry, "structured", common[1]));
-    else if (!seenTemplates.has(entry.page.templateHash)) chosen.set(entry.page.url, toItem(entry, "structured", "eerste pagina van dit paginatype"));
+    else if (!seenTemplates.has(entry.page.templateHash) || (type !== undefined && !seenTypes.has(type))) chosen.set(entry.page.url, toItem(entry, "structured", "eerste pagina van dit paginatype"));
     seenTemplates.add(entry.page.templateHash);
+    if (type !== undefined && chosen.has(entry.page.url)) seenTypes.add(type);
   }
   const structuredCount = chosen.size;
   const randomCount = Math.max(1, Math.ceil(structuredCount * RANDOM_SHARE));
