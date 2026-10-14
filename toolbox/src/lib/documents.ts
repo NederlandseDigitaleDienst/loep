@@ -3,16 +3,21 @@ import { join } from "node:path";
 
 /**
  * Documents a site publishes next to its pages: PDF, word processor, presentation and
- * spreadsheet files. EN 301 549 chapter 10 applies the WCAG criteria to them. This file
- * holds what every step of the chain shares: the kinds, how a link is recognised as one,
- * and the shape of what is found, chosen and measured.
+ * spreadsheet files, and plain text (Markdown, txt, csv) offered as a file. EN 301 549
+ * chapter 10 applies the WCAG criteria to them. This file holds what every step of the chain
+ * shares: the kinds, how a link is recognised as one, and the shape of what is found, chosen
+ * and measured.
  */
 
-export const DOCUMENT_KINDS = ["pdf", "docx", "odt", "rtf", "pptx", "odp", "xlsx", "ods", "epub", "doc", "xls", "ppt"] as const;
+/**
+ * "text" is plain text: Markdown, txt and csv. "other" is a file a link offers for download
+ * (the `download` attribute) whose kind is none of these: counted as a document, not read.
+ */
+export const DOCUMENT_KINDS = ["pdf", "docx", "odt", "rtf", "pptx", "odp", "xlsx", "ods", "text", "epub", "doc", "xls", "ppt", "other"] as const;
 export type DocumentKind = (typeof DOCUMENT_KINDS)[number];
 
 /** The kinds the toolbox opens and measures. The others are recorded as not read. */
-export const READ_KINDS: readonly DocumentKind[] = ["pdf", "docx", "odt", "pptx", "odp", "xlsx", "ods"];
+export const READ_KINDS: readonly DocumentKind[] = ["pdf", "docx", "odt", "pptx", "odp", "xlsx", "ods", "text"];
 
 /** Why a kind is not read, in Dutch: it goes into the facts and the report. */
 export const NOT_READ_REASON_NL: Partial<Record<DocumentKind, string>> = {
@@ -21,6 +26,7 @@ export const NOT_READ_REASON_NL: Partial<Record<DocumentKind, string>> = {
   ppt: "het oude binaire formaat van PowerPoint wordt niet ingelezen; daar is een kantoorpakket voor nodig",
   rtf: "rtf wordt niet ingelezen; het formaat kent geen koppen, tekstalternatieven of tabelkoppen die betrouwbaar uit het bestand te lezen zijn",
   epub: "epub wordt niet ingelezen; een epub is een pakket webpagina's dat een eigen onderzoek vraagt",
+  other: "het bestand wordt als download aangeboden en is van een soort die de toolbox niet kent; het wordt niet ingelezen",
 };
 
 export const KIND_NAME_NL: Record<DocumentKind, string> = {
@@ -32,11 +38,16 @@ export const KIND_NAME_NL: Record<DocumentKind, string> = {
   odp: "OpenDocument-presentatie (odp)",
   xlsx: "Excel (xlsx)",
   ods: "OpenDocument-rekenblad (ods)",
+  text: "platte tekst (md, txt, csv)",
   epub: "epub",
   doc: "Word (doc)",
   xls: "Excel (xls)",
   ppt: "PowerPoint (ppt)",
+  other: "ander bestand",
 };
+
+/** Extensions that name a kind other than themselves. */
+const BY_EXTENSION: Record<string, DocumentKind> = { md: "text", markdown: "text", txt: "text", csv: "text" };
 
 const BY_CONTENT_TYPE: Record<string, DocumentKind> = {
   "application/pdf": "pdf",
@@ -52,6 +63,10 @@ const BY_CONTENT_TYPE: Record<string, DocumentKind> = {
   "application/msword": "doc",
   "application/vnd.ms-excel": "xls",
   "application/vnd.ms-powerpoint": "ppt",
+  "text/plain": "text",
+  "text/markdown": "text",
+  "text/x-markdown": "text",
+  "text/csv": "text",
 };
 
 /** The kind of document an address points at, by its extension; null when it is none. */
@@ -62,8 +77,9 @@ export function documentKind(url: string): DocumentKind | null {
   } catch {
     return null;
   }
-  const extension = /\.([a-z0-9]+)$/i.exec(path)?.[1]?.toLowerCase();
-  return (DOCUMENT_KINDS as readonly string[]).includes(extension ?? "") ? (extension as DocumentKind) : null;
+  const extension = /\.([a-z0-9]+)$/i.exec(path)?.[1]?.toLowerCase() ?? "";
+  if (extension in BY_EXTENSION) return BY_EXTENSION[extension]!;
+  return extension !== "text" && extension !== "other" && (DOCUMENT_KINDS as readonly string[]).includes(extension) ? (extension as DocumentKind) : null;
 }
 
 /** The kind of document a server says it sends; null when it is none. */
@@ -76,8 +92,8 @@ export interface InventoryDocument {
   url: string;
   kind: DocumentKind;
   slug: string;
-  /** The pages that link to it, each with the text of the link. Empty for a document that is only in the sitemap. */
-  linkedFrom: { page: string; text: string }[];
+  /** The pages that link to it, each with the text of the link and, for a link with a `download` attribute, the file name it offers ("" when it names none). Empty for a document that is only in the sitemap. */
+  linkedFrom: { page: string; text: string; download?: string }[];
   /** What the server said to one HEAD request; null when it was not asked or did not answer. */
   bytes: number | null;
   /** `Last-Modified` as an ISO date. Office files from before 23 September 2018 can be exempt; this only records the date. */
@@ -214,6 +230,38 @@ export interface PdfFacts {
   counts: { headings: number; images: number; tables: number; links: number; fields: number };
 }
 
+export interface PlainTextFacts {
+  /** By the type the server names, or else by the extension. */
+  format: "markdown" | "csv" | "plain";
+  /** The `Content-Type` header of the download; null when the server sent none. */
+  contentType: string | null;
+  /** The character set that header names; null when it names none. A browser that shows the file then guesses, and can show "Ã©" for "é". */
+  charset: string | null;
+  /** Whether the bytes are valid UTF-8. */
+  validUtf8: boolean;
+  /** Whether there is any byte beyond ASCII: only then does a missing character set change what a reader sees. */
+  nonAscii: boolean;
+  /** How the text was decoded for the facts: the named character set, UTF-8 when the bytes are valid UTF-8, or windows-1252. */
+  decodedAs: string;
+  lines: number;
+}
+
+/** What the character set of a plain text file means for a reader, in Dutch; null when nothing is amiss. */
+export function charsetNoteNl(plain: PlainTextFacts): string | null {
+  if (plain.charset && /^utf-?8$/.test(plain.charset) && !plain.validUtf8) return `De server noemt de tekenset ${plain.charset}, maar de bytes zijn geen geldige UTF-8: letters met accenten komen verkeerd over.`;
+  if (plain.charset || !plain.nonAscii) return null;
+  return `De server noemt geen tekenset (Content-Type: ${plain.contentType ?? "geen"}) en het bestand bevat tekens buiten ASCII. Een browser die het bestand opent, moet de tekenset raden en kan letters met accenten verkeerd tonen ("Ã©" voor "é"). De bytes zijn ${plain.validUtf8 ? "geldige" : "geen geldige"} UTF-8${plain.validUtf8 ? ": een teksteditor die UTF-8 aanneemt, toont ze goed" : ""}.`;
+}
+
+/**
+ * Plain text has no property for a title or a language. WCAG2ICT replaces 2.4.2 for documents
+ * by one that applies only to formats with a title property; for 3.1.1 it makes no such
+ * exception for documents, but the format offers no way to meet it. Both are given to the
+ * judge as not applicable to the file, not as a gap, with the reason in the facts.
+ */
+export const PLAIN_TITLE_NOT_APPLICABLE_NL = "Platte tekst heeft geen titeleigenschap. WCAG2ICT vervangt 2.4.2 voor documenten door '2.4.2 Non-web Document Titled', dat alleen geldt voor formaten met een titeleigenschap die in de gangbare programma's te bewerken is. Voor dit bestand is 2.4.2 daarom niet van toepassing; de bestandsnaam en de eerste kop zijn een waarneming.";
+export const PLAIN_LANGUAGE_NOT_APPLICABLE_NL = "Platte tekst kan geen taal opgeven: het formaat heeft daar geen eigenschap of opmaak voor. WCAG2ICT maakt daarvoor bij documenten geen uitzondering; bij software merkt het op dat techniek waarin hulpsoftware de taal niet kan bepalen, het criterium niet kan halen. De toolbox telt 3.1.1 en 3.1.2 voor dit bestand als niet van toepassing, niet als fout en niet als open punt. Een andere onderzoeker kan dat anders wegen.";
+
 export interface OfficeFacts {
   /** Paragraphs that are short and wholly bold but have no heading style. */
   fakeHeadings: FakeHeading[];
@@ -248,6 +296,7 @@ export interface DocumentFacts {
   fields: DocumentField[];
   pdf?: PdfFacts;
   office?: OfficeFacts;
+  plain?: PlainTextFacts;
   /** Files next to facts.json, relative to the run: the text and the pictures of the first pages. */
   files: { text: string | null; tagTree: string | null; pageImages: string[] };
   /** Programs that were missing, and what was therefore not measured. */
@@ -331,13 +380,13 @@ export function evaluationDocuments(documents: DocumentData[], population: { onS
 
 /** What holds for documents in this evaluation, as sentences for the scope and the limitations. */
 export function documentScopeNl(documents: EvaluationDocuments | null, origin: string, elsewhere: number): { includedNl: string[]; excludedNl: string[]; limitationsNl: string[] } {
-  const readKinds = listNl(READ_KINDS.map((kind) => kind));
+  const readKinds = listNl(READ_KINDS.map((kind) => (kind === "text" ? "platte tekst" : kind)));
   const otherOrigins = elsewhere > 0 ? `Documenten op andere domeinen waarnaar de site linkt (${elsewhere} geteld)` : "Documenten op andere domeinen waarnaar de site linkt";
   if (!documents) {
     return {
       includedNl: [],
       excludedNl: [otherOrigins],
-      limitationsNl: [`Documenten: op de site zijn geen documenten gevonden (pdf, kantoorbestanden of epub). Gezocht is naar links op de pagina's en in de sitemap. Een document dat alleen via een script of na het versturen van een formulier te bereiken is, is niet gevonden.${elsewhere > 0 ? ` ${plural(elsewhere, "document staat", "documenten staan")} op een ander domein en ${elsewhere === 1 ? "is" : "zijn"} niet onderzocht.` : ""}`],
+      limitationsNl: [`Documenten: op de site zijn geen documenten gevonden (pdf, kantoorbestanden, platte tekst of epub). Gezocht is naar links op de pagina's en in de sitemap. Een document dat alleen via een script of na het versturen van een formulier te bereiken is, is niet gevonden.${elsewhere > 0 ? ` ${plural(elsewhere, "document staat", "documenten staan")} op een ander domein en ${elsewhere === 1 ? "is" : "zijn"} niet onderzocht.` : ""}`],
     };
   }
   const read = documents.items.filter((item) => item.status === "read");
@@ -355,7 +404,7 @@ export function documentScopeNl(documents: EvaluationDocuments | null, origin: s
     "Gezocht is naar documenten via links op de pagina's en in de sitemap. Een document dat alleen via een script of na het versturen van een formulier te bereiken is, is niet gevonden.",
   ];
   return {
-    includedNl: [`Documenten op ${origin} (pdf en kantoorbestanden): ${documents.items.length} van ${documents.onSite} in de steekproef, ${read.length} ingelezen`],
+    includedNl: [`Documenten op ${origin} (pdf, kantoorbestanden en platte tekst): ${documents.items.length} van ${documents.onSite} in de steekproef, ${read.length} ingelezen`],
     excludedNl: [otherOrigins, ...(notRead.length > 0 ? [`Documenten van een soort die niet wordt ingelezen (${kindsNl(countByKind(notRead))})`] : [])],
     limitationsNl: limitations,
   };

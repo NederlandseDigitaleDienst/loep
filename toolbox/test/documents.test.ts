@@ -12,6 +12,7 @@ import { inventory, type Inventory } from "../src/commands/inventory.ts";
 import { buildSample, chooseDocuments, DOCUMENT_CENSUS_LIMIT, withDocuments } from "../src/commands/sample.ts";
 import { measureOffice } from "../src/instruments/documents/office.ts";
 import { compareOrder, measurePdf, parseStructText } from "../src/instruments/documents/pdf.ts";
+import { readMarkdown } from "../src/instruments/documents/text.ts";
 import { openZip, parseXml } from "../src/instruments/documents/zipxml.ts";
 import { readJson, writeJson } from "../src/lib/canonical.ts";
 import { documents as documentsExtractor } from "../src/lib/document-evidence.ts";
@@ -167,6 +168,22 @@ test("a link is recognised as a document by its extension or by what the server 
   assert.equal(documentKind("https://a.test/foto.png"), null);
   assert.equal(kindOfContentType("application/pdf; charset=binary"), "pdf");
   assert.equal(kindOfContentType("text/html"), null);
+  // Plain text is a document too: a browser shows it as a bare page without language or title.
+  assert.equal(documentKind("https://a.test/pagina/index.export.md"), "text");
+  assert.equal(documentKind("https://a.test/lees.TXT"), "text");
+  assert.equal(documentKind("https://a.test/cijfers.csv"), "text");
+  assert.equal(documentKind("https://a.test/bestand.text"), null, "a kind's own name is no extension");
+  assert.equal(kindOfContentType("text/markdown"), "text");
+  assert.equal(kindOfContentType("text/x-markdown; charset=utf-8"), "text");
+  assert.equal(kindOfContentType("text/plain"), "text");
+});
+
+test("Markdown writes its structure out: headings, links, pictures and tables, not inside fenced code", () => {
+  const read = readMarkdown("# Één titel\n\nTekst met [een link](https://a.test/x) en ![Logo](logo.png) en ![](leeg.png).\n\nOnderkop\n--------\n\n```\n# geen kop\n```\n\n| Naam | Waarde |\n| --- | --- |\n| a | 1 |\n| b | 2 |\n\n### Slot ###\n");
+  assert.deepEqual(read.headings.map((heading) => [heading.level, heading.text]), [[1, "Één titel"], [2, "Onderkop"], [3, "Slot"]]);
+  assert.deepEqual(read.links.map((link) => [link.text, link.href]), [["een link", "https://a.test/x"]]);
+  assert.deepEqual(read.images.map((image) => [image.alt, image.context]), [["Logo", "logo.png"], [null, "leeg.png"]]);
+  assert.deepEqual(read.tables.map((table) => [table.rows, table.hasHeader, table.firstRow]), [[3, true, ["Naam", "Waarde"]]]);
 });
 
 const found = (index: number, kind: InventoryDocument["kind"], extra: Partial<InventoryDocument> = {}): InventoryDocument => ({ url: `https://a.test/d${String(index).padStart(3, "0")}.${kind}`, kind, slug: `d${index}`, linkedFrom: [{ page: "https://a.test/", text: `Document ${index}` }], bytes: 1000, lastModified: null, contentType: null, status: 200, ...extra });
@@ -494,6 +511,99 @@ test("inventory finds the documents, sample labels them, documents measures them
   }
 });
 
+// ------------------------------------------------- plain text offered for download
+
+const MARKDOWN = "# Één regeling\n\nDit is één pagina als Markdown, met [een link](https://a.test/meer).\n\n## Wie kan meedoen\n\nIedereen.\n";
+const TEXT_SITE: Record<string, { type: string; body: string }> = {
+  "/": { type: "text/html; charset=utf-8", body: `<!doctype html><html lang="nl"><head><title>Regeling</title></head><body><h1>Regeling</h1><h2>Download deze pagina</h2>
+    <p><a href="/regeling/index.export.md" download="Regeling.md">Markdown</a> <a href="/lees-mij.txt">Lees mij</a> <a href="/export?id=3" download>Export</a>
+    <a href="/kaal">Kale tekst</a> <a href="/tweede">Tweede pagina</a> <a href="/bewaar" download="bewaar.html">Bewaar als HTML</a></p></body></html>` },
+  // HTML offered with `download` stays a page: what is saved is a web page.
+  "/bewaar": { type: "text/html; charset=utf-8", body: `<!doctype html><html lang="nl"><head><title>Bewaar</title></head><body><h1>Bewaar</h1></body></html>` },
+  "/tweede": { type: "text/html; charset=utf-8", body: `<!doctype html><html lang="nl"><head><title>Tweede</title></head><body><h1>Tweede</h1><p><a href="/regeling/index.export.md">Ook als tekst</a></p></body></html>` },
+  // No character set in the header: a browser has to guess, and shows "Ã©" for "é".
+  "/regeling/index.export.md": { type: "text/markdown", body: MARKDOWN },
+  "/lees-mij.txt": { type: "text/plain; charset=utf-8", body: "Lees mij.\n" },
+  "/export": { type: "text/markdown", body: "# Export\n" },
+  // Plain text behind an address without an extension: only what the server says tells it from a page.
+  "/kaal": { type: "text/plain; charset=utf-8", body: "Alleen tekst.\n" },
+};
+
+test("plain text offered for download is a document, not a page: inventory counts it, documents reads it", async (context) => {
+  const textServer = createServer((request, response) => {
+    const path = new URL(request.url!, "http://x").pathname;
+    const file = TEXT_SITE[path];
+    if (file) {
+      const body = Buffer.from(file.body, "utf8");
+      response.writeHead(200, { "content-type": file.type, "content-length": body.length });
+      response.end(request.method === "HEAD" ? undefined : body);
+    } else {
+      response.writeHead(404, { "content-type": "text/html; charset=utf-8" });
+      response.end("<!doctype html><html lang=nl><head><title>Niet gevonden</title></head><body><h1>Niet gevonden</h1></body></html>");
+    }
+  });
+  await new Promise<void>((resolve) => textServer.listen(0, "127.0.0.1", resolve));
+  const site = `http://127.0.0.1:${(textServer.address() as { port: number }).port}`;
+  try {
+    const run = join(scratch, "run-text");
+    let stock: Inventory;
+    try {
+      stock = await inventory({ baseUrl: `${site}/`, out: run, maxPages: 20 });
+    } catch (error) {
+      if (/Executable doesn't exist|browserType.launch/.test((error as Error).message)) return context.skip("no browser available");
+      throw error;
+    }
+    const path = (url: string): string => new URL(url).pathname + new URL(url).search;
+    assert.deepEqual(stock.pages.map((page) => path(page.url)).sort(), ["/", "/bewaar", "/deze-pagina-bestaat-niet-toegankelijkheidsonderzoek", "/tweede"], "no plain text file is evaluated as a page, and HTML offered with download stays one");
+    const byPath = new Map(stock.documents!.map((document) => [path(document.url), document]));
+    assert.deepEqual([...byPath.keys()].sort(), ["/export?id=3", "/kaal", "/lees-mij.txt", "/regeling/index.export.md"]);
+    assert.deepEqual([...byPath.values()].map((document) => document.kind), ["text", "text", "text", "text"]);
+    assert.deepEqual(byPath.get("/regeling/index.export.md")!.linkedFrom, [{ page: `${site}/`, text: "Markdown", download: "Regeling.md" }, { page: `${site}/tweede`, text: "Ook als tekst" }]);
+    assert.deepEqual(byPath.get("/export?id=3")!.linkedFrom, [{ page: `${site}/`, text: "Export", download: "" }], "a download without an extension takes its kind from what the server says");
+    assert.deepEqual(byPath.get("/kaal")!.linkedFrom, [{ page: `${site}/`, text: "Kale tekst" }], "a document found by what the server sent keeps the links to it");
+    assert.deepEqual(stock.documentTotals!.byKind, { text: 4 });
+
+    const sample = withDocuments(buildSample(stock, "seed"), stock, "seed");
+    await writeJson(join(run, "sample.json"), sample);
+    assert.match(sample.note, /4 platte tekst \(md, txt, csv\)/);
+    const result = await measureDocuments(run);
+    assert.deepEqual(result, { documents: 4, read: 4, notRead: 0, failed: 0 });
+    const loaded = loadDocuments(run, sample.documents);
+    const facts = new Map(loaded.map((document) => [new URL(document.item.url).pathname, document.facts!]));
+    const markdown = facts.get("/regeling/index.export.md")!;
+    assert.equal(markdown.status, "read");
+    assert.deepEqual(markdown.plain, { format: "markdown", contentType: "text/markdown", charset: null, validUtf8: true, nonAscii: true, decodedAs: "utf-8", lines: 8 });
+    assert.deepEqual(markdown.headings.map((heading) => [heading.level, heading.text]), [[1, "Één regeling"], [2, "Wie kan meedoen"]]);
+    assert.deepEqual(markdown.links.map((link) => link.href), ["https://a.test/meer"]);
+    assert.equal(markdown.title, null);
+    assert.equal(markdown.language, null);
+    assert.match(readFileSync(join(run, markdown.files.text!), "utf8"), /^=== pagina 1 ===\n# Één regeling/);
+    assert.deepEqual(facts.get("/lees-mij.txt")!.plain!.charset, "utf-8");
+    assert.equal(facts.get("/lees-mij.txt")!.plain!.format, "plain");
+
+    // The dossier: no title and no language is not a gap but does not apply, and the missing character set is a fact.
+    const data = { dir: run, inventory: stock, sample, pages: [], states: null, contrast: null, documents: loaded } as unknown as RunData;
+    const label = loaded.find((document) => document.item.url.endsWith(".md"))!.label;
+    const language = documentsExtractor(data, "3.1.1") as { read: string[]; notRead: unknown[]; documents: { document: string; languageProperty?: boolean; notApplicableNl?: string; plainText?: { charset: string | null; charsetNoteNl?: string; downloadNames: string[] } }[] };
+    assert.equal(language.read.length, 4);
+    assert.deepEqual(language.notRead, []);
+    const ours = language.documents.find((document) => document.document === label)!;
+    assert.equal(ours.languageProperty, false);
+    assert.match(ours.notApplicableNl!, /niet van toepassing/);
+    assert.deepEqual(ours.plainText!.downloadNames, ["Regeling.md"]);
+    assert.match(ours.plainText!.charsetNoteNl!, /geen tekenset.*geldige UTF-8/);
+    const titles = documentsExtractor(data, "2.4.2") as { documents: { document: string; titleProperty?: boolean; notApplicableNl?: string; firstHeading: string | null }[] };
+    const titled = titles.documents.find((document) => document.document === label)!;
+    assert.equal(titled.titleProperty, false);
+    assert.match(titled.notApplicableNl!, /Non-web Document Titled/);
+    assert.equal(titled.firstHeading, "Één regeling");
+    const look = await documentOutcome(run, [label], { page: "1" }, new Images(run, "observations/main/0101"));
+    assert.match(String(look.print.text), /Wie kan meedoen/);
+  } finally {
+    await new Promise<void>((resolve) => void textServer.close(() => resolve()));
+  }
+});
+
 test("an observation of a document counts as one that can be made again, without a page being open", () => {
   const index = indexObservations([
     { id: "main-0001", command: "document", error: null, state: { start: null }, result: {} },
@@ -532,10 +642,10 @@ const REPORTED: EvaluationDocuments = {
 
 test("the scope and the limitations say which documents were read, which were not, and what was not looked at", () => {
   const scope = documentScopeNl(REPORTED, "https://voorbeeld.overheid.example", 4);
-  assert.deepEqual(scope.includedNl, ["Documenten op https://voorbeeld.overheid.example (pdf en kantoorbestanden): 3 van 30 in de steekproef, 1 ingelezen"]);
+  assert.deepEqual(scope.includedNl, ["Documenten op https://voorbeeld.overheid.example (pdf, kantoorbestanden en platte tekst): 3 van 30 in de steekproef, 1 ingelezen"]);
   assert.deepEqual(scope.excludedNl, ["Documenten op andere domeinen waarnaar de site linkt (4 geteld)", "Documenten van een soort die niet wordt ingelezen (1 Word (doc))"]);
   const text = scope.limitationsNl.join("\n");
-  assert.match(text, /op de site staan 30 documenten \(27 pdf, 2 Word \(docx\), 1 Word \(doc\)\)\. De toolbox leest de soorten pdf, docx, odt, pptx, odp, xlsx en ods in\. 1 document is ingelezen en beoordeeld \(D01\)/);
+  assert.match(text, /op de site staan 30 documenten \(27 pdf, 2 Word \(docx\), 1 Word \(doc\)\)\. De toolbox leest de soorten pdf, docx, odt, pptx, odp, xlsx, ods en platte tekst in\. 1 document is ingelezen en beoordeeld \(D01\)/);
   assert.match(text, /beoordeeld op de criteria 1\.1\.1, 1\.3\.1 en 2\.4\.2/);
   assert.match(text, /1 document is van een soort die niet wordt ingelezen \(1 Word \(doc\): D02\) en is niet onderzocht\. Dat is een open punt, geen goedkeuring\./);
   assert.match(text, /1 document was niet op te halen of niet te openen en is niet onderzocht: D03 \(niet op te halen: de server antwoordt met 404\)\./);

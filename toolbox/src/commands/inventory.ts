@@ -83,10 +83,17 @@ export function normaliseUrl(url: string): string {
 
 const NON_PAGE = /\.(pdf|png|jpe?g|gif|svg|webp|ico|css|js|json|xml|txt|zip|woff2?|ttf|mp4|mp3|docx?|xlsx?|pptx?|odt|csv)$/i;
 
+/** A link on a page: where it leads, its text, and the file name of its `download` attribute (null without one, "" when it names none). */
+interface Anchor {
+  href: string;
+  text: string;
+  download: string | null;
+}
+
 /** Every link on the page with its text, through shadow roots. Which of them lead to a document is decided outside the page. */
-function linksWithText(page: Page): Promise<{ href: string; text: string }[]> {
+function linksWithText(page: Page): Promise<Anchor[]> {
   return page.evaluate(() => {
-    const found: { href: string; text: string }[] = [];
+    const found: { href: string; text: string; download: string | null }[] = [];
     const visit = (root: Document | ShadowRoot): void => {
       for (const element of root.querySelectorAll("*")) {
         if (element.shadowRoot) visit(element.shadowRoot);
@@ -98,7 +105,7 @@ function linksWithText(page: Page): Promise<{ href: string; text: string }[]> {
           if (url.protocol !== "http:" && url.protocol !== "https:") continue;
           url.hash = "";
           const text = element.getAttribute("aria-label") || element.textContent?.trim() || element.querySelector("img")?.getAttribute("alt") || element.getAttribute("alt") || "";
-          found.push({ href: url.href, text: text.replace(/\s+/g, " ").trim().slice(0, 200) });
+          found.push({ href: url.href, text: text.replace(/\s+/g, " ").trim().slice(0, 200), download: element.getAttribute("download") });
         } catch {
           // Not a URL; nothing to follow.
         }
@@ -143,8 +150,21 @@ export async function probeDocument(url: string, origin: string): Promise<Pick<I
   }
 }
 
-async function inspect(page: Page, url: string): Promise<Omit<InventoryPage, "foundVia" | "slug"> & { links: string[]; frames: string[]; snapshot: string; html: string; linksWithText: { href: string; text: string }[] }> {
+/** Whether a `Content-Type` says HTML: only such an answer is a page. */
+export const isHtml = (contentType: string | null): boolean => /^\s*(text\/html|application\/xhtml\+xml)\s*(;|$)/i.test(contentType ?? "");
+
+type Inspected = Omit<InventoryPage, "foundVia" | "slug"> & { links: string[]; frames: string[]; snapshot: string; html: string; linksWithText: Anchor[]; contentType: string | null };
+
+/**
+ * A page as the browser shows it, or the kind of document the server sent instead of HTML.
+ * `offered`: a link offers the address as a download; then anything but HTML is a document.
+ */
+async function inspect(page: Page, url: string, mayBeDocument: boolean, offered: boolean): Promise<Inspected | { document: DocumentKind }> {
   const loaded = await loadPage(page, url);
+  // A browser shows plain text as a page of its own, a bare `<pre>` without language or title. It is a document, not a page.
+  const sent = mayBeDocument ? kindOfContentType(loaded.contentType) : null;
+  if (sent) return { document: sent };
+  if (mayBeDocument && offered && loaded.contentType !== null && !isHtml(loaded.contentType)) return { document: "other" };
   const html = await page.content();
   const result = await page.evaluate(() => {
     const loep = (window as unknown as { __loep: Record<string, () => unknown> }).__loep;
@@ -174,6 +194,7 @@ async function inspect(page: Page, url: string): Promise<Omit<InventoryPage, "fo
     snapshot: result.snapshot,
     html,
     linksWithText: await linksWithText(page),
+    contentType: loaded.contentType,
   };
 }
 
@@ -211,15 +232,21 @@ export async function inventory(options: InventoryOptions): Promise<Inventory> {
   const pages: InventoryPage[] = [];
   const skipped: Inventory["skipped"] = [];
   const done = new Set<string>();
-  // Documents: found by a link or in the sitemap, never loaded here.
-  const documents = new Map<string, { kind: DocumentKind; linkedFrom: InventoryDocument["linkedFrom"] }>();
+  // Documents: found by a link or in the sitemap, never loaded here. A kind of null is decided by what the server says it sends.
+  const documents = new Map<string, DocumentKind | null>();
   const elsewhere = new Map<string, DocumentKind>();
-  const noteDocument = (url: string, kind: DocumentKind): { kind: DocumentKind; linkedFrom: InventoryDocument["linkedFrom"] } => {
-    if (!documents.has(url)) documents.set(url, { kind, linkedFrom: [] });
-    return documents.get(url)!;
+  const noteDocument = (url: string, kind: DocumentKind | null): void => {
+    if (!documents.get(url)) documents.set(url, kind);
   };
+  // Every link to the origin with the pages it stands on: a document's `linkedFrom` is taken from it once all pages are known.
+  const linksTo = new Map<string, InventoryDocument["linkedFrom"]>();
+  // Addresses a link offers as a download (the `download` attribute): documents of any kind but HTML, which stays a page.
+  const downloads = new Set<string>();
+  // What the server said each page was, to tell a page from a download once every link is known.
+  const pageTypes = new Map<string, string | null>();
   /** Addresses without a telling extension that turned out to be a document when the browser could not show them. */
   const probedAsDocument = new Map<string, Awaited<ReturnType<typeof probeDocument>>>();
+  // HEAD requests during the crawl: for an address the browser could not show, or one a link offers as a download.
   let failedLoadsProbed = 0;
   const logoutLinks = new Set<string>();
   try {
@@ -240,6 +267,15 @@ export async function inventory(options: InventoryOptions): Promise<Inventory> {
         noteDocument(next, kind);
         continue;
       }
+      // Offered as a download: a document unless the server sends HTML. A type that stays unknown because nothing answered is a document too.
+      if (downloads.has(next) && failedLoadsProbed++ < MAX_DOCUMENT_PROBES) {
+        const probe = await probeDocument(next, origin);
+        if (!isHtml(probe.contentType)) {
+          noteDocument(next, kindOfContentType(probe.contentType));
+          probedAsDocument.set(next, probe);
+          continue;
+        }
+      }
       if (NON_PAGE.test(new URL(next).pathname)) {
         skipped.push({ url: next, reason: "not an HTML page" });
         continue;
@@ -249,23 +285,33 @@ export async function inventory(options: InventoryOptions): Promise<Inventory> {
         continue;
       }
       try {
-        const result = await inspect(page, next);
+        const result = await inspect(page, next, next !== notFoundProbe, downloads.has(next));
+        if ("document" in result) {
+          noteDocument(next, result.document);
+          continue;
+        }
         const slug = slugForUrl(next);
         await writeFileAtomic(join(options.out, "pages", slug, "snapshot.txt"), result.snapshot);
         await writeFileAtomic(join(options.out, "pages", slug, "page.html"), result.html);
-        const { links, frames, snapshot: _snapshot, html: _html, linksWithText: anchors, ...record } = result;
+        const { links, frames, snapshot: _snapshot, html: _html, linksWithText: anchors, contentType, ...record } = result;
+        pageTypes.set(next, contentType);
         for (const anchor of login ? anchors.filter(isLogout) : []) {
           logoutLinks.add(normaliseUrl(anchor.href));
           noteLogoutUrl(anchor.href);
         }
         for (const anchor of anchors) {
           const linked = documentKind(anchor.href);
-          if (!linked) continue;
-          if (new URL(anchor.href).origin !== origin) elsewhere.set(anchor.href, linked);
-          else {
-            const entry = noteDocument(normaliseUrl(anchor.href), linked);
-            if (!entry.linkedFrom.some((link) => link.page === next && link.text === anchor.text)) entry.linkedFrom.push({ page: next, text: anchor.text });
+          if (new URL(anchor.href).origin !== origin) {
+            if (linked) elsewhere.set(anchor.href, linked);
+            continue;
           }
+          const target = normaliseUrl(anchor.href);
+          if (linked) noteDocument(target, linked);
+          // A browser honours `download` only on its own origin; there it makes the target a file to save, not a page.
+          if (anchor.download !== null) downloads.add(target);
+          const from = linksTo.get(target) ?? [];
+          if (!from.some((link) => link.page === next && link.text === anchor.text)) from.push({ page: next, text: anchor.text, ...(anchor.download !== null ? { download: anchor.download } : {}) });
+          linksTo.set(target, from);
         }
         const via = [...foundVia.get(next)!].sort();
         pages.push({ ...record, slug, foundVia: via });
@@ -279,7 +325,7 @@ export async function inventory(options: InventoryOptions): Promise<Inventory> {
         // A download behind an address without an extension: the browser cannot show it, the server says what it is.
         const probe = new URL(next).origin === origin && failedLoadsProbed++ < MAX_DOCUMENT_PROBES ? await probeDocument(next, origin) : null;
         const probedKind = kindOfContentType(probe?.contentType ?? null);
-        if (probe && probedKind) {
+        if (probe && (probedKind || (downloads.has(next) && !isHtml(probe.contentType)))) {
           noteDocument(next, probedKind);
           probedAsDocument.set(next, probe);
         } else skipped.push({ url: next, reason: `failed to load: ${(error as Error).message.split("\n")[0]}` });
@@ -288,6 +334,16 @@ export async function inventory(options: InventoryOptions): Promise<Inventory> {
     await confirmLogin(browser);
   } finally {
     await browser.close();
+  }
+
+  // A download that was visited as a page before the link that offers it was seen (from the sitemap, say) is a document all the same, unless it is HTML.
+  const sentOtherThanHtml = (url: string): boolean => {
+    const type = pageTypes.get(url) ?? null;
+    return type !== null && !isHtml(type);
+  };
+  for (const entry of pages.filter((candidate) => downloads.has(candidate.url) && sentOtherThanHtml(candidate.url))) {
+    noteDocument(entry.url, documentKind(entry.url));
+    pages.splice(pages.indexOf(entry), 1);
   }
 
   const totals: Record<string, number> = {};
@@ -299,9 +355,11 @@ export async function inventory(options: InventoryOptions): Promise<Inventory> {
 
   const found: InventoryDocument[] = [];
   let probes = 0;
-  for (const [url, entry] of [...documents.entries()].sort(([a], [b]) => a.localeCompare(b))) {
+  for (const [url, kind] of [...documents.entries()].sort(([a], [b]) => a.localeCompare(b))) {
     const probe = probedAsDocument.get(url) ?? (probes++ < MAX_DOCUMENT_PROBES ? await probeDocument(url, origin) : { bytes: null, lastModified: null, contentType: null, status: null, notAsked: `meer dan ${MAX_DOCUMENT_PROBES} documenten: grootte en datum zijn alleen van de eerste ${MAX_DOCUMENT_PROBES} gevraagd` });
-    found.push({ url, kind: entry.kind, slug: slugForUrl(url), linkedFrom: entry.linkedFrom.sort((a, b) => a.page.localeCompare(b.page) || a.text.localeCompare(b.text)), ...probe });
+    const linkedFrom = [...(linksTo.get(url) ?? [])].sort((a, b) => a.page.localeCompare(b.page) || a.text.localeCompare(b.text));
+    // A download whose address and answer name no kind the toolbox knows is counted all the same.
+    found.push({ url, kind: kind ?? kindOfContentType(probe.contentType) ?? "other", slug: slugForUrl(url), linkedFrom, ...probe });
   }
   const documentTotals: DocumentTotals = { onSite: found.length, byKind: countByKind(found), elsewhere: elsewhere.size, elsewhereByKind: countByKind([...elsewhere.values()].map((kind) => ({ kind }))) };
 

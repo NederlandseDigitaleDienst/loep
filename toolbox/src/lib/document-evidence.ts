@@ -1,4 +1,4 @@
-import { KIND_NAME_NL, type DocumentFacts } from "./documents.ts";
+import { charsetNoteNl, KIND_NAME_NL, PLAIN_LANGUAGE_NOT_APPLICABLE_NL, PLAIN_TITLE_NOT_APPLICABLE_NL, type DocumentFacts } from "./documents.ts";
 import type { RunData } from "./rundata.ts";
 
 /**
@@ -51,6 +51,7 @@ const order: Part = (facts) => ({
   ...(facts.pdf ? { tagged: facts.pdf.tagged, orderPerPage: capped(facts.pdf.pageText.map((page) => ({ page: page.page, tagsAgainstContent: page.order }))), orderNote: "Per pagina is de tekst in de volgorde van de tags naast de tekst in de volgorde van de inhoud gelegd, op woorden. Dat is een benadering: 'gelijk' zegt niet dat de volgorde logisch is, 'verschilt' zegt niet dat ze fout is. Zonder tags leest hulpsoftware de volgorde van de inhoud." } : {}),
   ...(facts.office?.slides ? { slides: capped(facts.office.slides), orderNote: "Per dia de teksten in de volgorde waarin ze in het bestand staan; dat is de volgorde waarin hulpsoftware ze voorleest." } : {}),
   ...(facts.office && !facts.office.slides && !facts.office.sheets ? { orderNote: "Een tekstdocument leest in de volgorde van het bestand. Tekstvakken en zwevende kaders zijn niet apart gelezen." } : {}),
+  ...(facts.plain ? { orderNote: "Platte tekst leest in de volgorde van het bestand; er is geen andere volgorde." } : {}),
 });
 
 const imagesOfText: Part = (facts) => ({
@@ -59,7 +60,7 @@ const imagesOfText: Part = (facts) => ({
   note: "Of een afbeelding tekst bevat, is niet per afbeelding gemeten. Bekijk de pagina's met `document <label> --page n`.",
 });
 
-const title: Part = (facts) => ({ title: facts.title, fileName: decodeURIComponent(new URL(facts.url).pathname.split("/").pop() ?? ""), ...(facts.pdf ? { titleShownInTitleBar: facts.pdf.displayDocTitle } : {}), firstHeading: facts.headings[0]?.text ?? facts.office?.slides?.[0]?.title ?? null });
+const title: Part = (facts) => ({ title: facts.title, fileName: decodeURIComponent(new URL(facts.url).pathname.split("/").pop() ?? ""), ...(facts.pdf ? { titleShownInTitleBar: facts.pdf.displayDocTitle } : {}), firstHeading: facts.headings[0]?.text ?? facts.office?.slides?.[0]?.title ?? null, ...(facts.plain ? { titleProperty: false, notApplicableNl: PLAIN_TITLE_NOT_APPLICABLE_NL } : {}) });
 
 const links: Part = (facts) => ({ links: capped(facts.links), ...(facts.pdf ? { linkAnnotationsOnPages: facts.pdf.linkAnnotations, linksInTags: facts.pdf.counts.links, tagTextRead: facts.pdf.tagTextRead } : {}) });
 
@@ -71,7 +72,7 @@ const headings: Part = (facts) => ({
   fieldNames: capped(facts.fields.map((field) => ({ page: field.page, type: field.type, name: field.name }))),
 });
 
-const language: Part = (facts) => ({ language: facts.language, partsWithOwnLanguage: capped(facts.pdf?.languageParts ?? facts.office?.languageParts ?? []) });
+const language: Part = (facts) => ({ language: facts.language, partsWithOwnLanguage: capped(facts.pdf?.languageParts ?? facts.office?.languageParts ?? []), ...(facts.plain ? { languageProperty: false, notApplicableNl: PLAIN_LANGUAGE_NOT_APPLICABLE_NL } : {}) });
 
 const nameRoleValue: Part = (facts) => ({
   fields: { total: facts.fields.length, withoutName: capped(facts.fields.filter((field) => !field.name)), withName: capped(facts.fields.filter((field) => field.name)) },
@@ -102,6 +103,7 @@ export function documents(run: RunData, criterion: string): unknown {
           pages: facts.pages,
           linkTexts: [...new Set(document.item.linkedFrom.map((link) => link.text))].slice(0, 4),
           ...(part ? part(facts) : {}),
+          ...(facts.plain ? { plainText: { format: facts.plain.format, contentType: facts.plain.contentType, charset: facts.plain.charset, validUtf8: facts.plain.validUtf8, downloadNames: [...new Set(document.item.linkedFrom.flatMap((link) => (link.download ? [link.download] : [])))], ...(charsetNoteNl(facts.plain) ? { charsetNoteNl: charsetNoteNl(facts.plain) } : {}) } } : {}),
           ...pdfUa(facts, criterion),
           ...(criterion === "3.1.1" || criterion === "3.1.2" ? { textFile: facts.files.text } : {}),
           ...(facts.notMeasuredNl.length > 0 ? { notMeasuredNl: facts.notMeasuredNl } : {}),
