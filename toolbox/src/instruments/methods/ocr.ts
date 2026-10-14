@@ -178,6 +178,27 @@ export function levelled(source: PNG): PNG {
 
 const OCR_LIMIT_MS = 30_000;
 
+/**
+ * Tesseract built with OpenMP (the Debian and Ubuntu package) starts a thread per core for every
+ * run. The passes of one reading run side by side, next to browsers and other measurements: the
+ * threads then spin waiting for each other. Measured on four cores with the pictures of the test
+ * site: three passes take 1.8 s with the default and 0.2 s with one thread each, with the same
+ * output; with three cores busy 4.4 s against 0.4 s. On a busy CI machine a pass ran past its limit.
+ */
+const OCR_ENV = { ...process.env, OMP_THREAD_LIMIT: "1" };
+
+/** One pass of Tesseract; a pass that runs out of time says so, instead of the command line that was killed. */
+async function tesseractTsv(args: string[]): Promise<string> {
+  try {
+    return (await run(binaryCommand("tesseract"), args, { timeout: OCR_LIMIT_MS, maxBuffer: 16 * 1024 * 1024, env: OCR_ENV })).stdout;
+  } catch (error) {
+    const failed = error as { killed?: boolean; signal?: string | null; stderr?: string; message?: string };
+    if (failed.killed) throw new Error(`geen antwoord binnen ${OCR_LIMIT_MS / 1000} seconden: Tesseract (--psm ${args[args.indexOf("--psm") + 1]}) is afgebroken`);
+    const said = (failed.stderr ?? "").trim().split("\n").at(-1);
+    throw new Error(`Tesseract faalde${said ? `: ${said}` : `: ${(failed.message ?? String(error)).split("\n")[0]}`}`);
+  }
+}
+
 interface Box {
   x: number;
   y: number;
@@ -229,7 +250,7 @@ async function recognise(imagePath: string, passes: Pass[] = [BLOCK]): Promise<{
   const languages = tesseract.languages ?? "eng";
   const words = await Promise.all(
     passes.map(async (pass) => {
-      const { stdout } = await run(binaryCommand("tesseract"), [pass.levelled ? flat! : input, "-", "-l", languages, "--psm", pass.psm, ...(pass.extra ?? []), "tsv"], { timeout: OCR_LIMIT_MS, maxBuffer: 16 * 1024 * 1024 });
+      const stdout = await tesseractTsv([pass.levelled ? flat! : input, "-", "-l", languages, "--psm", pass.psm, ...(pass.extra ?? []), "tsv"]);
       const found: Word[] = [];
       for (const row of stdout.split("\n").slice(1)) {
         const cells = row.split("\t");

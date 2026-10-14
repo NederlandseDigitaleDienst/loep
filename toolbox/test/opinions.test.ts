@@ -744,7 +744,7 @@ test("contrast says what it cannot measure: text on a picture, a picture without
     const image = await loep("contrast", ["css:#textimg"], { wait: true });
     assert.equal(image.methods, "0 met een uitspraak, 1 zonder antwoord");
     assert.match((image.noAnswer as string[])[0]!, /^image-text: niet beschikbaar, installeer Tesseract/);
-    assert.match(image.note as string, /^dit is een afbeelding: de tekst in het beeld is niet gemeten/);
+    assert.match(image.note as string, /^dit is een afbeelding: de tekst in het beeld is niet gemeten \(image-text: niet beschikbaar, installeer Tesseract/);
     assert.equal(image.imageText, undefined);
     assert.equal((observation(image.id).result as unknown as Measured).agreement, "none");
   } finally {
@@ -787,7 +787,9 @@ test("contrast measures the text inside a picture: lines from text recognition, 
   assert.deepEqual(computed.map((ratio) => Math.round(ratio * 100) / 100), [2.15, 9.11, 14.68]);
   for (const target of ["css:#labels", "css:#labels-bg"]) {
     const measured = await loep("contrast", [target], { wait: true });
-    const lines = measured.imageText as ImageLine[];
+    const lines = measured.imageText as ImageLine[] | undefined;
+    // Without lines the print says why: a method that failed, ran out of time or is still running.
+    assert.ok(lines, `${target}: no imageText: ${JSON.stringify(measured)}`);
     // The lowest ratio comes first.
     assert.equal(lines.length, 3, JSON.stringify(lines));
     lines.forEach((line, index) => {

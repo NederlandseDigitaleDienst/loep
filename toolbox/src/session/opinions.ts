@@ -562,9 +562,12 @@ export const contrastWith = (raw: Handler, single: Handler): Handler =>
     const picture = state !== null && (PICTURE_TAGS.has(state.tag) || (state.backgroundImage && !state.hasText));
     const slows: Slow[] = [];
     let imagePath: string | null = null;
+    // Why the text in a picture was not read, when it was not: a measurement that did not run says so.
+    let notRead: string | null = picture && !context.services.jobs ? "geen achtergrondtaken in deze sessie" : null;
     if (picture && context.services.jobs) {
       const box = context.target!.box;
-      if (box.width >= 4 && box.height >= 4) {
+      if (box.width < 4 || box.height < 4) notRead = `het element is ${Math.round(box.width)}x${Math.round(box.height)} pixels, te klein voor tekstherkenning`;
+      else {
         const path = context.images.image();
         const clip = { x: Math.max(0, box.x), y: Math.max(0, box.y), width: box.width, height: box.height };
         await page.screenshot({ path, fullPage: true, clip, animations: "disabled" });
@@ -607,7 +610,7 @@ export const contrastWith = (raw: Handler, single: Handler): Handler =>
               ? "dit is een afbeelding en de tekstherkenning vindt er geen tekst in; bekijk haar met crop <ref>"
               : pending.length > 0
                 ? "dit is een afbeelding: de tekst in het beeld wordt nog gemeten"
-                : "dit is een afbeelding: de tekst in het beeld is niet gemeten; bekijk haar met crop <ref>"
+                : `dit is een afbeelding: de tekst in het beeld is niet gemeten (${inPicture.failed[0] ? `image-text: ${inPicture.failed[0].kind === "unavailable" ? "niet beschikbaar, " : ""}${short(inPicture.failed[0].reason, 140)}` : (notRead ?? "reden onbekend")}); bekijk haar met crop <ref>`
             : measured.agreement === "none"
               ? "geen enkele methode vond hier tekst om te meten"
               : overPicture
