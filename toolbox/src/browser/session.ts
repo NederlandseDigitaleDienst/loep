@@ -1,6 +1,6 @@
 import { fileURLToPath } from "node:url";
 import { chromium, type Browser, type BrowserContext, type Page, type Route } from "playwright";
-import { confirmLoginOn, logsOut, runLoginMark, runLoginState, throwIfLoginExpired, watchLogin } from "../lib/login.ts";
+import { confirmLoginOn, LoginExpired, logsOut, runLoginMark, runLoginState, throwIfLoginExpired, watchLogin } from "../lib/login.ts";
 import { isWriteOrigin, runWrites, type WriteAccess } from "../lib/writes.ts";
 import { refusedByBrowser, type ClipboardWrite } from "./clipboard.ts";
 import { frameAsPage } from "./frame.ts";
@@ -176,6 +176,24 @@ export async function loadPage(page: Page, url: string): Promise<LoadResult> {
     contentType: response?.headers()["content-type"] ?? null,
   };
 }
+
+/**
+ * Run the work on one page, and once more when it fails: a page that loads too slowly once, or a
+ * renderer that crashed, must not cost the whole run. A session that ran out is not tried again.
+ * A second failure is thrown: the command decides whether it notes the page as not measured and goes on.
+ */
+export async function retryOnce<T>(what: string, work: () => Promise<T>): Promise<T> {
+  try {
+    return await work();
+  } catch (error) {
+    if (error instanceof LoginExpired) throw error;
+    process.stderr.write(`retry ${what}: ${firstLineOf(error)}\n`);
+    return work();
+  }
+}
+
+/** The first line of an error: Playwright appends its call log below it. */
+export const firstLineOf = (error: unknown): string => ((error as Error)?.message ?? String(error)).split("\n")[0]!;
 
 /**
  * In a run with a login: open the page that only shows with a session and stop with a

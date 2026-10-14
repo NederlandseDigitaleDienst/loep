@@ -1,8 +1,8 @@
 import { join } from "node:path";
 import type { Browser, BrowserContext, Page } from "playwright";
 import { call } from "../browser/call.ts";
-import { confirmLogin, INPAGE_PATH, launchBrowser, loadPage, loadSampled, newContext, settlePage, type WriteGuard } from "../browser/session.ts";
-import { isLogout, runLoginMark, throwIfLoginExpired } from "../lib/login.ts";
+import { confirmLogin, firstLineOf, INPAGE_PATH, launchBrowser, loadPage, loadSampled, newContext, retryOnce, settlePage, type WriteGuard } from "../browser/session.ts";
+import { isLogout, LoginExpired, runLoginMark, throwIfLoginExpired } from "../lib/login.ts";
 import { canonicalJson, sha256, slugForUrl, writeJson } from "../lib/canonical.ts";
 import { measuredPages, pageKey, readStamp, STATES_STAMP } from "../lib/sweepstamp.ts";
 import { stepStart, writeManifest } from "../lib/manifest.ts";
@@ -80,14 +80,33 @@ const step = <T>(probe: string, index: number, total: number, what: string, work
 /** Where the probes reached each embedded window of the sample: on the page it stands on, or on its own and why. */
 const windows = new Map<string, NonNullable<States["embedded"]>[number]>();
 
+/** A page of the sample that did not load, also not the second time: the probe that wanted it is noted as not done and the command goes on. */
+class PageNotLoaded extends Error {}
+
 /**
  * Load a page of the sample normally, then silence its sockets: from here on only probes act on it.
  * An embedded window is opened the way the sweep measures it: on the page it stands on, with the
  * frame handed to the probe as a page. When it is not there it is opened on its own, and that is kept.
+ * A page that does not load is tried once more, as `collect` and `contrast` do.
  */
 async function freshPage(context: BrowserContext, data: PageData): Promise<Page> {
   guard.active = false;
-  const { page, placement } = await loadSampled(await context.newPage(), data.item, async (tab) => void (await sweep?.dismiss(context, tab, "states")));
+  const mark = sweep?.mark();
+  const { page, placement } = await retryOnce(`states ${data.label} ${data.item.url}`, async () => {
+    // A try that failed leaves no closed blocker behind.
+    if (mark) sweep?.rewind(mark);
+    const tab = await context.newPage();
+    try {
+      return await loadSampled(tab, data.item, async (loaded) => void (await sweep?.dismiss(context, loaded, "states")));
+    } catch (error) {
+      await tab.close().catch(() => undefined);
+      throw error;
+    }
+  }).catch((error: Error) => {
+    throwIfLoginExpired();
+    if (error instanceof LoginExpired) throw error;
+    throw new PageNotLoaded(`de pagina laadde ook bij de tweede poging niet (${firstLineOf(error)})`);
+  });
   if (placement) {
     const known = windows.get(data.label) ?? { page: data.label, url: data.item.url, inPlaceOn: placement.inPlaceOn, apartNl: placement.apartNl, failedNl: [] };
     // Once on its own is what the reader has to know, also when other probes found the window in place.
@@ -115,15 +134,21 @@ const restore = (context: BrowserContext, data: PageData) => async (page: Page):
 
 /**
  * One probe on one page. Inside an embedded window a probe that fails is written down as not
- * done there and the rest goes on; on a page of the site a failure stops the command, as it did.
+ * done there and the rest goes on; on a page of the site a failure stops the command, as it did,
+ * unless the page did not load twice: then the probe is written down as not done there.
  */
 async function inWindow<T>(data: PageData, probeNl: string, fallback: T, work: () => Promise<T>): Promise<T> {
-  if (!data.item.embeddedOn?.length) return work();
   try {
     return await work();
   } catch (error) {
     throwIfLoginExpired();
-    const reason = ((error as Error).message ?? String(error)).split("\n")[0]!;
+    const reason = firstLineOf(error);
+    if (!data.item.embeddedOn?.length) {
+      if (!(error instanceof PageNotLoaded)) throw error;
+      skippedSteps.push({ page: data.label, step: `${probeNl}: ${reason}` });
+      process.stderr.write(`states ${data.label} ${probeNl} overgeslagen: ${reason}\n`);
+      return fallback;
+    }
     const known = windows.get(data.label) ?? { page: data.label, url: data.item.url, inPlaceOn: null, apartNl: null, failedNl: [] };
     known.failedNl.push(`${probeNl}: ${reason}`);
     windows.set(data.label, known);
