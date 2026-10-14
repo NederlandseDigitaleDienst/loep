@@ -29,7 +29,7 @@ node toolbox/src/cli.ts voiceover stop
 
 - `start` start de virtuele Mac, wacht tot hij rustig is en warmt hem op. Voortgang met tijden komt op stderr. Laat hem daarna draaien zolang het onderzoek duurt.
 - `read` opent de pagina in Safari, gaat de webinhoud in en geeft per stap de zin die VoiceOver uitsprak. Een bestand op de eigen machine wordt naar de virtuele Mac gekopieerd. Een adres op localhost van de eigen machine weigert het commando: in de virtuele Mac is dat een andere machine.
-- Met `--press` drukt VoiceOver het eerste onderdeel in waarvan de naam die tekst bevat, met de toetsen VO-spatie. Het antwoord bewaart wat VoiceOver in de 6 seconden daarna uit zichzelf zei.
+- Met `--press` drukt VoiceOver het eerste onderdeel in waarvan de uitgesproken zin die tekst bevat, met de toetsen VO-spatie. Geef daarom de naam met de rol erbij (`--press "Verstuur button"`). Het antwoord bewaart wat VoiceOver in de 6 seconden daarna uit zichzelf zei.
 - `--out` bewaart het volledige antwoord, met de versies van macOS, Safari en node in de virtuele Mac en de voorkeuren waarmee VoiceOver draaide.
 - `stop` sluit de virtuele Mac af.
 

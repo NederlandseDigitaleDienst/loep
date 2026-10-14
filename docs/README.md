@@ -23,7 +23,7 @@ Buiten deze map:
 | [../PLAN.md](../PLAN.md) | Wat er loopt, wat hierna komt en welke besluiten openstaan |
 | [../procedures/README.md](../procedures/README.md) | Hoe een procedure per succescriterium is opgebouwd |
 | [../validatie/README.md](../validatie/README.md) | De metingen: [iteraties.md](../validatie/iteraties.md) is het logboek met de cijfers, [lessen.md](../validatie/lessen.md) zegt per les of iets is gemeten of alleen getest. De terugkoppeling van het team van de eerste echte site staat in `validatie/nerds.digitaledienst.overheid.nl/` |
-| `skills/nldd-a11y-audit/onderzoek.workflow.js` | De werkstroom die rondgangen, beoordelaars en verifieerders start |
+| `skills/nldd-a11y-audit/onderzoek.workflow.js` | De werkstroom die rondgangen, beoordelaars, verifieerders en de afmaakronde start |
 | [../toolbox/fixtures/README.md](../toolbox/fixtures/README.md) | De testsite met ingebouwde gebreken, met een deel achter een inlog |
 | [../toolbox/THIRD-PARTY.md](../toolbox/THIRD-PARTY.md) | Software van derden in de toolbox, met versie en licentie |
 | [../voorbeelden/LEESMIJ.md](../voorbeelden/LEESMIJ.md) | Het conceptrapport van de derde meting op de eigen site (11 oktober 2026), niet afgetekend en niet nagelopen door het team |

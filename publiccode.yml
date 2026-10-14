@@ -1,0 +1,126 @@
+# Describes this repository for public-sector software catalogs.
+# Standard: https://yml.publiccode.tools
+publiccodeYmlVersion: '0.7'
+
+name: loep
+url: https://github.com/NederlandseDigitaleDienst/loep
+landingURL: https://github.com/NederlandseDigitaleDienst/loep
+
+organisation:
+  name: Nederlandse Digitale Dienst
+  uri: https://github.com/NederlandseDigitaleDienst
+
+developmentStatus: development
+softwareType: standalone/other
+platforms:
+  - linux
+  - mac
+
+categories:
+  - compliance-management
+  - it-development
+
+intendedAudience:
+  countries:
+    - NL
+  scope:
+    - government
+
+description:
+  nl:
+    shortDescription: >-
+      Maakt een toegankelijkheidsonderzoek van een website volgens WCAG-EM, en
+      de toegankelijkheidsverklaring die erop steunt.
+    longDescription: |
+      Een overheidssite moet een toegankelijkheidsverklaring hebben met een
+      onderzoek eronder. Zo'n onderzoek gebeurt meestal eens in de drie jaar,
+      op een steekproef van een pagina of vijftien. loep draait het zo vaak
+      als je wilt, op alle pagina's van een kleine site, en toetst op WCAG 2.2
+      en WCAG 2.1, niveau A en AA.
+
+      Scripts verzamelen het bewijs: axe-core en Alfa op elke pagina, de
+      toegankelijkheidsboom van de browser, de Tab-volgorde, het contrast van
+      elk stuk tekst, reflow, vergroten, tekstafstand, formulieren en
+      documenten. Daarna beoordeelt een taalmodel elk succescriterium volgens
+      een vaste procedure en met de meetinstrumenten van de toolbox, en een
+      tweede ronde maakt elke bevinding opnieuw vanaf een verse pagina. Wat
+      niet vast te stellen was, staat in het rapport als "kan niet bepalen".
+
+      Het oordeel is van de mens die het rapport aftekent. Elk bestand van
+      het onderzoek krijgt een hash; een wijziging achteraf is zichtbaar.
+
+      loep is experimenteel. Geen toezichthouder heeft zich over de methode
+      uitgesproken. Lees docs/methode.md voordat je een rapport ergens voor
+      gebruikt.
+    documentation: https://github.com/NederlandseDigitaleDienst/loep/tree/main/docs
+    features:
+      - Onderzoek volgens WCAG-EM op WCAG 2.2 en 2.1, niveau A en AA
+      - Alle pagina's van een kleine site, ook de documenten waar ze naar linken
+      - Een regel bewijs bij elke goedkeuring
+      - Rapport in Markdown en pdf, en een conceptverklaring met het invulblad voor het register
+      - Een tweede onderzoek meet alleen wat veranderd is
+      - Verzegeld en afgetekend door een mens
+      - Plugin voor Claude Code
+  en:
+    shortDescription: >-
+      Produces an accessibility evaluation of a website following WCAG-EM, and
+      the accessibility statement that rests on it.
+    longDescription: |
+      A Dutch government website must publish an accessibility statement
+      backed by an evaluation. That evaluation usually happens once every
+      three years, on a sample of about fifteen pages. loep runs it as often
+      as you like, on every page of a small site, against WCAG 2.2 and
+      WCAG 2.1, levels A and AA.
+
+      Scripts collect the evidence: axe-core and Alfa on every page, the
+      browser's accessibility tree, the tab order, the contrast of every
+      piece of text, reflow, zoom, text spacing, forms and documents. A
+      language model then judges each success criterion following a fixed
+      procedure and with the toolbox's own measuring instruments, and a
+      second round reproduces every finding from a fresh page. What could not
+      be determined is reported as such.
+
+      The judgment belongs to the person who signs the report. Every file of
+      the evaluation is hashed, so any later change is visible.
+
+      loep is experimental and its reports and documentation are in Dutch.
+      No supervisory authority has reviewed the method.
+    documentation: https://github.com/NederlandseDigitaleDienst/loep/tree/main/docs
+    features:
+      - WCAG-EM evaluation against WCAG 2.2 and 2.1, levels A and AA
+      - Every page of a small site, including linked documents
+      - A line of evidence with every pass
+      - Report in Markdown and PDF, plus a draft accessibility statement
+      - A repeat evaluation only measures what changed
+      - Sealed and signed by a person
+      - Claude Code plugin
+
+legal:
+  license: EUPL-1.2
+  mainCopyrightOwner: Staat der Nederlanden (Ministerie van Economische Zaken en Klimaat)
+
+maintenance:
+  type: internal
+  contacts:
+    - name: Nederlandse Digitale Dienst
+      email: opensource@minbzk.nl
+
+localisation:
+  localisationReady: false
+  availableLanguages:
+    - nl
+
+dependsOn:
+  open:
+    - name: Node.js
+      versionMin: '22.18'
+    - name: just
+    - name: Chromium
+      optional: false
+    - name: typst
+      versionMin: '0.14'
+      optional: true
+    - name: veraPDF
+      optional: true
+    - name: whisper.cpp
+      optional: true

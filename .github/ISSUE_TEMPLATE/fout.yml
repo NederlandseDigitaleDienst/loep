@@ -1,0 +1,41 @@
+name: Fout
+description: De toolbox doet iets anders dan verwacht, of een rapport klopt niet
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Een kwetsbaarheid meld je niet hier; zie SECURITY.md. Zet geen run, rapport of manifest van een echte site in een issue zonder te kijken wat erin staat: er kan een naam of een sessie in zitten.
+  - type: textarea
+    id: wat
+    attributes:
+      label: Wat ging er mis?
+      description: Wat verwachtte je, en wat gebeurde er?
+    validations:
+      required: true
+  - type: textarea
+    id: hoe
+    attributes:
+      label: Hoe is het na te doen?
+      description: Het commando of de stap, en op welke site of pagina. Kan het op de testsite (`just testsite`), zeg dat dan.
+      render: shell
+    validations:
+      required: true
+  - type: input
+    id: versie
+    attributes:
+      label: Commit of versie
+      description: Uitvoer van `git rev-parse --short HEAD`, of de versie van de plugin.
+    validations:
+      required: true
+  - type: textarea
+    id: machine
+    attributes:
+      label: Wat staat er op je machine
+      description: De uitvoer van `just doctor`.
+      render: text
+  - type: input
+    id: criterium
+    attributes:
+      label: Succescriterium
+      description: Als het om een oordeel gaat, het nummer, bijvoorbeeld 1.4.3.
