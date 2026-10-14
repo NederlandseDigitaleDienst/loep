@@ -2,8 +2,7 @@
 # procedures en de tests die geen browser nodig hebben. De volledige doet wat een nieuwe
 # gebruiker doet (installeren op een schone machine, zeggen wat er staat, alle tests) en
 # duurt ongeveer 25 minuten; die draait op een voorstel, één keer per nacht als er die dag
-# iets is veranderd, en met de hand. Een besloten repository heeft een beperkt aantal
-# minuten per maand, gedeeld met de rest van de organisatie.
+# iets is veranderd, en met de hand. Een nacht zonder wijziging draait niets.
 name: Controle
 
 on:

@@ -107,7 +107,7 @@ De volledige lijst van beperkingen, en wat alleen door tests is gedekt, staat in
 
 ## Meewerken
 
-De afspraken voor wie aan de toolbox werkt, en wat nooit mag, staan in [CONTRIBUTING.md](CONTRIBUTING.md); wat er loopt, wat hierna komt en welke besluiten openstaan in [PLAN.md](PLAN.md).
+De afspraken voor wie aan de toolbox werkt, en wat nooit mag, staan in [CONTRIBUTING.md](CONTRIBUTING.md); wat er loopt, wat hierna komt en welke besluiten openstaan in [PLAN.md](PLAN.md). Hoe besluiten vallen staat in [GOVERNANCE.md](GOVERNANCE.md), waar je met een vraag terechtkunt in [SUPPORT.md](SUPPORT.md), en hoe je een kwetsbaarheid meldt in [SECURITY.md](SECURITY.md). Voor iedereen die meedoet geldt de [gedragscode van de Nederlandse Digitale Dienst](https://github.com/NederlandseDigitaleDienst/.github/blob/main/CODE_OF_CONDUCT.md).
 
 ## Licentie
 

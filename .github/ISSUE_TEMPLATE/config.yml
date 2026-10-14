@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Een kwetsbaarheid melden
+    url: https://github.com/NederlandseDigitaleDienst/loep/security/advisories/new
+    about: Alleen de beheerders zien deze melding. Zie SECURITY.md.
+  - name: Een vraag over de wet of de toegankelijkheidsverklaring
+    url: https://www.digitoegankelijk.nl
+    about: Daarover gaat DigiToegankelijk, niet het team van loep.

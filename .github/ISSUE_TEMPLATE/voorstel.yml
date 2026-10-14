@@ -1,0 +1,21 @@
+name: Voorstel
+description: Iets wat loep zou moeten kunnen, of anders zou moeten doen
+labels: [enhancement]
+body:
+  - type: textarea
+    id: wat
+    attributes:
+      label: Wat stel je voor?
+    validations:
+      required: true
+  - type: textarea
+    id: waarom
+    attributes:
+      label: Waarom?
+      description: Welk probleem lost het op, en voor wie? Gaat het om een oordeel, noem dan de tekst van de norm waarop je je baseert.
+    validations:
+      required: true
+  - type: textarea
+    id: anders
+    attributes:
+      label: Wat doe je nu in plaats daarvan?
