@@ -1,7 +1,7 @@
 import { progressLine, sayingItRuns } from "../instruments/limit.ts";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { confirmLogin, INPAGE_PATH, launchBrowser, loadSampled, newContext, type ColorScheme } from "../browser/session.ts";
+import { confirmLogin, firstLineOf, INPAGE_PATH, launchBrowser, loadSampled, newContext, retryOnce, type ColorScheme } from "../browser/session.ts";
 import { readJson, writeJson } from "../lib/canonical.ts";
 import { LoginExpired } from "../lib/login.ts";
 import { stepStart, writeManifest } from "../lib/manifest.ts";
@@ -16,6 +16,15 @@ export { FLAT_BACKGROUND_SHARE, measure, measureControl, measureGraphic, NON_TEX
 export type { ContrastMeasurement, ControlContrast, GraphicContrast, PageContrast } from "../instruments/contrast.ts";
 
 type Measured = Record<string, { key: string; contentSha256: string } | null>;
+
+/** A page that did not load, or could not be measured, after its second try: it has no row in contrast.json, which the gate counts as a gap. */
+export interface NotMeasured {
+  url: string;
+  slug: string;
+  scheme: ColorScheme;
+  width: number | null;
+  reasonNl: string;
+}
 
 /**
  * Measure the contrast of every piece of visible text against what is actually painted behind it.
@@ -40,6 +49,7 @@ export async function contrast(runDir: string, options: { fresh?: boolean } = {}
     };
     let reused = 0;
     let done = 0;
+    const notMeasured: NotMeasured[] = [];
     const total = sample.items.length * 4;
     await confirmLogin(browser);
     try {
@@ -61,23 +71,41 @@ export async function contrast(runDir: string, options: { fresh?: boolean } = {}
               reused++;
               continue;
             }
-            const tab = await context.newPage();
             const what = `${item.url} ${scheme === "dark" ? "donker" : "licht"}${viewport ? ` ${viewport.width} breed` : ""}`;
             const started = Date.now();
-            try {
-              await sayingItRuns(`contrast ${nr + 1}/${total} ${what}`, async () => {
+            // A try that failed leaves nothing behind: the blockers it closed and the links it measured are forgotten before the next.
+            const mark = sweep.mark();
+            const seenBefore = [...seen];
+            const forget = (): void => {
+              sweep.rewind(mark);
+              seen.clear();
+              for (const key of seenBefore) seen.add(key);
+            };
+            const measureOnce = async (): Promise<PageContrast> => {
+              forget();
+              const tab = await context.newPage();
+              try {
                 const { page } = await loadSampled(tab, item, (loaded) => sweep.dismiss(context, loaded, `contrast:${scheme}${viewport ? `:${viewport.width}` : ""}`, scheme));
                 const measured = await pageContrast(page);
                 // Forced colours take the colour scheme and the window as they are: once per page is enough to see what a page builds from shadows and backgrounds.
                 const forced = scheme === "light" && !viewport ? { forced: await forcedColoursProbe(page) } : {};
                 // The colours of links and buttons under the pointer and with focus, in both schemes, in the default window.
                 const hoverFocus = !viewport ? { hoverFocus: await hoverFocusContrast(page, seen) } : {};
-                results.push({ url: item.url, slug: item.slug, scheme, ...(viewport ? { width: viewport.width } : {}), ...measured, ...forced, ...hoverFocus });
-              });
-            } finally {
-              await tab.close();
+                return { url: item.url, slug: item.slug, scheme, ...(viewport ? { width: viewport.width } : {}), ...measured, ...forced, ...hoverFocus };
+              } finally {
+                await tab.close().catch(() => undefined);
+              }
+            };
+            try {
+              results.push(await sayingItRuns(`contrast ${nr + 1}/${total} ${what}`, () => retryOnce(what, measureOnce)));
+              process.stderr.write(progressLine("contrast", null, nr, total, `${what} ${Date.now() - started}ms`));
+            } catch (error) {
+              if (error instanceof LoginExpired) throw error;
+              // A page that fails twice is left out and named; the rest of the pages are measured.
+              forget();
+              notMeasured.push({ url: item.url, slug: item.slug, scheme, width: viewport?.width ?? null, reasonNl: firstLineOf(error) });
+              process.stderr.write(progressLine("contrast", null, nr, total, `${what} niet gemeten: ${firstLineOf(error)}`));
             }
-            process.stderr.write(progressLine("contrast", null, nr, total, `${what} ${Date.now() - started}ms`));
           }
           await context.close();
         }
@@ -94,8 +122,9 @@ export async function contrast(runDir: string, options: { fresh?: boolean } = {}
     await writeJson(join(runDir, "contrast.json"), results);
     await writeJson(join(runDir, CONTRAST_STAMP), { pages: now });
     if (reused > 0) process.stderr.write(`contrast: ${reused} van ${results.length} metingen overgenomen van pagina's die niet zijn veranderd\n`);
+    if (notMeasured.length > 0) process.stderr.write(`contrast: ${notMeasured.length} van ${total} metingen niet gedaan, ook niet bij de tweede poging (${[...new Set(notMeasured.map((entry) => entry.url))].join(", ")}). De bewijspoort telt ze als gat. Draai contrast opnieuw: wat wel is gemeten, wordt overgenomen.\n`);
     const dismissals = { blockersClosedOnPage: sweep.dismissals.filter((entry) => entry.dismissed).length, blockersNotClosed: sweep.dismissals.filter((entry) => !entry.dismissed).length };
-    await writeManifest(runDir, { command: "contrast", startedAt, pages: sample.items.length, measurements: results.reduce((sum, page) => sum + page.measurements.length, 0), ...dismissals, ...(reused > 0 ? { reused } : {}) }, browser.version());
+    await writeManifest(runDir, { command: "contrast", startedAt, pages: sample.items.length, measurements: results.reduce((sum, page) => sum + page.measurements.length, 0), ...dismissals, ...(reused > 0 ? { reused } : {}), ...(notMeasured.length > 0 ? { notMeasured } : {}) }, browser.version());
   } finally {
     await browser.close();
   }

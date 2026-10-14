@@ -2,7 +2,7 @@ import { sayingItRuns } from "../instruments/limit.ts";
 import { join } from "node:path";
 import type { Browser, Page } from "playwright";
 import { call } from "../browser/call.ts";
-import { confirmLogin, INPAGE_PATH, launchBrowser, loadSampled, newContext, RENDERING, type ColorScheme } from "../browser/session.ts";
+import { confirmLogin, INPAGE_PATH, launchBrowser, loadSampled, newContext, RENDERING, retryOnce, type ColorScheme } from "../browser/session.ts";
 import { readJson, sha256, writeFileAtomic, writeJson } from "../lib/canonical.ts";
 import { runEngines } from "../lib/engines.ts";
 import { stepStart, writeManifest } from "../lib/manifest.ts";
@@ -252,14 +252,9 @@ export async function collect(options: CollectOptions): Promise<void> {
       }
       const mark = sweep.mark();
       const noted: { contentSha256?: string } = {};
-      // A page gets one retry: a crashed renderer must not cost the whole run.
+      // A page gets one retry: a page that loaded too slowly once, or a crashed renderer, must not cost the whole run.
       // A page with many measurements takes more than a minute: say every half minute that it still runs.
-      const summary = await sayingItRuns(`collect ${index + 1}/${pages.length} ${entry.url}`, () =>
-        collectPage(browser, entry, options.run, sweep, noted).catch((error: Error) => {
-          process.stderr.write(`retry ${entry.url}: ${error.message.split("\n")[0]}\n`);
-          return collectPage(browser, entry, options.run, sweep, noted);
-        }),
-      );
+      const summary = await sayingItRuns(`collect ${index + 1}/${pages.length} ${entry.url}`, () => retryOnce(entry.url, () => collectPage(browser, entry, options.run, sweep, noted)));
       summaries.push(summary);
       if (noted.contentSha256) await writeJson(pageStampPath(options.run, entry.slug), { key, contentSha256: noted.contentSha256, summary, ...sweep.since(mark) } satisfies PageStamp);
       process.stderr.write(`collect ${index + 1}/${pages.length} ${entry.url} ${Date.now() - started}ms\n`);
