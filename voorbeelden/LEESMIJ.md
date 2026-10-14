@@ -10,7 +10,7 @@ De toolbox heet nu loep. Toen dit rapport werd gemaakt, heette ze opendeur en be
 |---|---|
 | Site | nerds.digitaledienst.overheid.nl, 29 pagina's |
 | Datum van het onderzoek | 11 oktober 2026 |
-| Stand van de code | commit `ac91dd9`, een bevroren kopie zonder lokale wijzigingen |
+| Stand van de code | commit `ac91dd9`, een bevroren kopie zonder lokale wijzigingen; die commit is van vóór deze openbare repository en hier niet op te vragen |
 | Kenmerk van de evaluatie | `50a291e12689` |
 | Norm | WCAG 2.2 niveau A en AA, 55 criteria |
 | Voldoet | 29 |

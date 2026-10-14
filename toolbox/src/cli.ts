@@ -26,7 +26,7 @@ const USAGE = `loep <command> [options]
                                          with the same recipe. --fresh measures everything again
   contrast --run <run> [--fresh]         Measure text contrast on screenshots, in light and dark
   states --run <run> [--fresh]           Probe what only shows after interaction: dialogs, form errors, keys, hover
-  documents --run <run>                  Fetch and measure the documents of the sample (pdf and office files): tags, title,
+  documents --run <run>                  Fetch and measure the documents of the sample (pdf, office and plain text files): tags, title,
                                          language, headings, text alternatives, tables, links, PDF/UA-1 with veraPDF
   gate --run <run> [--out <dir>]         Decide whether the evidence is fit to judge on; exit 1 when it is not, 2 when
                                          only the agent's look at the pictures is still missing. --out leaves the run untouched
