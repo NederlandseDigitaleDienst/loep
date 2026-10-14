@@ -34,7 +34,7 @@ jobs:
           cache: npm
           cache-dependency-path: toolbox/package-lock.json
       - uses: extractions/setup-just@v3
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@v7
       - name: Elk bestand heeft een rechthebbende en een licentie
         run: just reuse
       - name: Pakketten, zonder browsers
@@ -70,7 +70,7 @@ jobs:
       - uses: extractions/setup-just@v3
         if: steps.nieuw.outputs.ja == 'true'
 
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@v7
         if: steps.nieuw.outputs.ja == 'true'
 
       - uses: typst-community/setup-typst@v4
