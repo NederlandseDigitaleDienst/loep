@@ -1,6 +1,6 @@
 # Hoe besluiten vallen
 
-loep is een project van de Nederlandse Digitale Dienst en is experimenteel. Er is geen release en geen belofte over onderhoud of ondersteuning op termijn; `main` is de versie.
+loep is een project van de Nederlandse Digitale Dienst en is experimenteel. Er is geen belofte over onderhoud of ondersteuning op termijn. Wat een versie is en hoe die uitkomt, staat in [CONTRIBUTING.md](CONTRIBUTING.md#versies); wat er per versie veranderde in [CHANGELOG.md](CHANGELOG.md).
 
 ## Wie wat doet
 
