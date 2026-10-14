@@ -6,6 +6,8 @@ De map `ijkset/` is van een andere soort: daar staat hoe vaak de regelsets en de
 
 De toolbox heet nu loep. De verslagen in deze map zijn geschreven toen ze nog opendeur heette en een commando in een sessie met `tg` begon; ze blijven staan zoals ze zijn.
 
+De verslagen noemen de commit waarmee is gemeten. Tot en met 11 oktober 2026 is dat een commit uit de ontwikkelgeschiedenis van vóór deze repository, die met één commit (`76495d6`) openbaar is gemaakt; zo'n commit is hier niet op te vragen. De code van toen is daarmee niet meer precies na te gaan, alleen wat het verslag erover zegt.
+
 ## Bestanden per site
 
 | Bestand | Inhoud |

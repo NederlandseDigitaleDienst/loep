@@ -28,7 +28,7 @@ De eis aan elk stuk gereedschap: open broncode met een licentie die naast EUPL-1
 | `lingua` in Python (taalherkenning) | Beste score (18 van 20), maar ruim vier seconden opstarten en een tweede taalomgeving voor één vraag |
 | `aria-api` 0.9.1, Google `accname` 1.1.0 | Voegen naast de opgenomen naamberekeningen weinig toe; de laatste uitgave van `accname` is van 2022 |
 | Het filter `photosensitivity` van ffmpeg | Onderscheidde een opname van een stilstaande pagina niet van een flitsende. De flitsmeting rekent daarom zelf met de helderheid per beeld |
-| Een regel-engine in een tweede browser | axe-core, Alfa en de engine van IBM gaven in Chromium, Firefox en WebKit precies dezelfde uitkomsten: ze lezen de DOM en de berekende stijl. Alleen de naam en de Tab-volgorde worden daarom in een andere browser herhaald |
+| Een regel-engine in een tweede browser | axe-core, Alfa en de engine van IBM gaven in Chromium, Firefox en WebKit precies dezelfde uitkomsten: ze lezen de DOM en de berekende stijl. Alleen de naam, de Tab-volgorde en de layout bij herschikken, vergroten en tekstafstand worden daarom in een andere browser herhaald |
 | De toegankelijkheidsboom van Firefox via `geckodriver` | Werkte in de proef, maar vraagt een aparte sessie naast Playwright. De boom van WebKit is wel opgenomen, via een niet-openbare ingang van Playwright die bij een nieuwe versie kan breken |
 
 Niet gedraaid omdat ze een engine bundelen die al meedoet: Lighthouse, `accessibility-insights-scan`, kayle, a11ywatch, oobee, Unlighthouse en de coach van sitespeed.io.

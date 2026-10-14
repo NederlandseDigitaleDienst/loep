@@ -26,10 +26,12 @@ Je maakt de verklaring uit een onderzoek dat al bestaat. Heeft de gebruiker nog 
    {
      "organisation": "naam van de overheidsinstantie",
      "dashboardOrganisationNumber": "nummer op dashboard.digitoegankelijk.nl",
+     "subdomains": ["subdomeinen en andere domeinen die bij de website horen"],
      "reportUrl": "rechtstreeks openbaar adres van het rapport",
      "contactUrl": "...",
      "complaintsUrl": "...",
      "ombudsmanUrl": "...",
+     "additionalInformationNl": "...",
      "targetDate": "2027-03-01",
      "plannedEvaluationDate": "2027-01-15",
      "alternativesNl": "...",

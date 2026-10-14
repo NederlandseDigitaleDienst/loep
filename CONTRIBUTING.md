@@ -22,7 +22,7 @@ Wat je bijdraagt valt onder de EUPL-1.2, zoals de rest van de repository.
   ```
   cd toolbox && npx tsc --noEmit && node --test 'test/**/*.test.ts' && node src/cli.ts procedures
   ```
-  en `just reuse` na een nieuw bestandstype. Bij elke push draait op GitHub een snelle controle (licenties, types, procedures, de tests zonder browser; `just test-quick`). De volledige controle op een schone machine duurt ongeveer 25 minuten en draait op een voorstel, één keer per nacht als er die dag iets is veranderd, en met de hand. Push daarom in één keer wat bij elkaar hoort: elke push naar een voorstel start die 25 minuten opnieuw.
+  en `just reuse` na een nieuw bestandstype. Bij elke push naar `main` draait op GitHub een snelle controle (licenties, types, procedures, de tests zonder browser; `just test-quick`). De volledige controle op een schone machine duurt ongeveer 25 minuten en draait op een voorstel, één keer per nacht als er die dag iets is veranderd, en met de hand. Push daarom in één keer wat bij elkaar hoort: elke push naar een voorstel start die 25 minuten opnieuw.
 - **Beschrijving in dezelfde commit.** Een wijziging in gedrag werkt in dezelfde commit de beschrijving bij: de methode, de README, de skill, de procedure.
 - **Meten voor bouwen.** Tests zeggen dat de code doet wat bedoeld was, niet dat het onderzoek beter wordt. Na een reeks wijzigingen eerst een kleine meting op de criteria die geraakt zijn (`tasks --only`), dan verder. Zet de uitkomst in `validatie/` en werk `validatie/lessen.md` bij: wat er nu is, en of het is gemeten.
 - **Een meting draait op een bevroren kopie.** Een eigen werkboom op een vaste commit, zodat verder bouwen de meting niet raakt en het rapport zegt met welke code het is gemaakt.

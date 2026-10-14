@@ -19,7 +19,7 @@ Stand: 14 oktober 2026.
 6. Alles wat sinds de derde meting is gebouwd is nog op geen echte site gemeten: de instrumenten voor kleur en contrastmodus, de nagebootste schermlezer, de tweede mening in WebKit, de inlog.
 7. Een volledige meting op de testsite, op de variant met gebreken en op de schone, vanaf één bevroren commit. En twee volledige metingen op dezelfde site naast elkaar, om te weten hoeveel een tweede meting anders vindt.
 8. De drie sites van de ontwikkelset opnieuw. Dan de methode bevriezen op een tag en de toetsset één keer draaien. Daarna de betrouwbaarheid beschrijven.
-9. Afronden: `statement` op de keten van nu, `publiccode.yml` en `SECURITY.md`.
+9. Afronden: `statement` op de keten van nu.
 10. Mobiele apps: uitgesteld. Android kan met open gereedschap (emulator zonder beeld, Appium, het Accessibility Test Framework, TalkBack); iOS vraagt een build van de eigenaar.
 
 11. Achter een inlog: een meting met agents op het ingelogde deel van de testsite, en daarna op een testomgeving van een echte site. Het inloggen en overnemen van de sessie is gebouwd en door tests gedekt, net als de sessieproef voor 2.2.1 (een tweede inlog die met rust wordt gelaten en met oplopende tussenpozen wordt nagekeken, [docs/methode.md](docs/methode.md#een-site-achter-een-inlog)). Te meten: of de proef op een echte testomgeving een verlopen sessie ziet, en hoe vaak het nakijken de sessie zelf verlengt. Nog niet gebouwd is één instrument:
@@ -36,5 +36,4 @@ Bij de opdrachtgever, niet bij wie bouwt:
 - 2.1.4: tellen lettertoetsen in een videospeler als uitzondering (de speler is één onderdeel) of niet. Nu: niet.
 - Of na de afmaakronde toch een verifieerder moet komen. Nu: nee; een bevinding wordt twee keer door dezelfde agent vastgelegd en het rapport zegt dat erbij. Een meting moet uitwijzen of dat genoeg is.
 - Of bewijsbeelden openbaar mogen.
-- De opname in de marketplace ([docs/plugin.md](docs/plugin.md)).
 - De schrijfwijze van de rechthebbende in `REUSE.toml`.

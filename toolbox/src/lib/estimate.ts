@@ -34,9 +34,9 @@ export const COEFFICIENTS = {
   /** `contrast` per page: 0.03, 0.03, 0.065 local and 0.04, 0.09, 0.10 remote; again the newest. */
   contrastMinutesPerPage: { local: 0.065, remote: 0.1 },
   /**
-   * `states` per page: 0.46, 0.45, 0.60 local and 0.44, 0.82, 0.86 remote. On the remote site the
-   * press probe stopped at its limit of 300 kinds of controls and hover and focus at 150, so a
-   * larger site of that kind takes less per page than this.
+   * `states` per page: 0.46, 0.45, 0.60 local and 0.44, 0.82, 0.86 remote. In those runs on the remote
+   * site the press probe stopped at its then limit of 300 kinds of controls and hover and focus at 150;
+   * the limits are now 600 and 400, and what that does to the time per page has not been measured.
    */
   statesMinutesPerPage: { local: 0.6, remote: 0.84 },
   /** The gate with the agent that looks at the sheets, from the first to the last verdict: 1.4, 0.9, 1.3, 2.4, 2.7, 1.2. The two highest sent the explorer back once. */
