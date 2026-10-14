@@ -49,7 +49,14 @@ De overige commando's:
 
 ## Gebruik
 
-Eén keer, na het ophalen van de repository:
+De skills haal je in Claude Code binnen via de [marketplace van NLDD](https://github.com/NederlandseDigitaleDienst/ai-plugins):
+
+```
+/plugin marketplace add NederlandseDigitaleDienst/ai-plugins
+/plugin install nldd-a11y@nldd
+```
+
+De plugin bevat de hele repository, ook de toolbox. Eén keer, in de map van de plugin of van je eigen kopie van de repository:
 
 ```
 just install        # pakketten en browsers
