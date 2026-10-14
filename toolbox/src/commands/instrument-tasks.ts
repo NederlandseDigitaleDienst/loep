@@ -26,6 +26,7 @@ import { CRITERIA, criterionById } from "../lib/wcag.ts";
 import { agentLoginNl } from "../lib/login.ts";
 import { WRITES_BLOCKED_NL, writesAllowedNl } from "../lib/writes.ts";
 import { sweepCandidates } from "../lib/statusmessages.ts";
+import { makeWorkDir } from "../lib/workdir.ts";
 
 /*
  * The flow of a run with a site model: an agent walks every page type and leaves candidates,
@@ -376,10 +377,11 @@ export async function instrumentTasks(runDir: string, options: TaskOptions = {})
     const stateLines = stateLinesFor(run, type.id, recipes);
     const walkLimits = walkBudget(BUDGETS.walk, stateLines.length);
     const walk: WalkTask = { pageType: type.id, page: page.label, prompt: join("rondgang", `${type.id}.md`), output: join("rondgang", `${type.id}.json`), session, maxCommands: walkLimits.commands, maxMinutes: walkLimits.minutes };
-    const writeWalk = (): Promise<void> => writeFileAtomic(
+    const writeWalk = async (): Promise<void> => writeFileAtomic(
       join(runDir, walk.prompt),
       fill(templates.rondgang, {
         ...base,
+        workDir: await makeWorkDir(runDir, walk.session),
         site: new URL(run.inventory.baseUrl).hostname,
         pageType: type.id,
         pageTypeDescription: type.descriptionNl.replace(/\.$/, ""),
@@ -439,9 +441,9 @@ export async function instrumentTasks(runDir: string, options: TaskOptions = {})
     const judge = { prompt: join(dir, "beoordeel.md"), output: join("verdicts", procedure.id, "oordeel.json"), candidates: join(dir, "kandidaten.json"), session: judgeSession, maxCommands: judgeLimits.commands, maxMinutes: judgeLimits.minutes };
     await writeJson(join(runDir, judge.candidates), judgeCandidates);
     const shared = { ...base, id: criterion.id, title: criterion.titleNl, level: criterion.level, dossier: join(absoluteRun, dossierPath), gate: join(absoluteRun, "gate.json"), writes: writesNl, procedure: procedure.body };
-    const writeJudge = (): Promise<void> => writeFileAtomic(
+    const writeJudge = async (): Promise<void> => writeFileAtomic(
       join(runDir, judge.prompt),
-      fill(templates.beoordeel, { ...shared, session: judge.session, maxCommands: String(judge.maxCommands), maxMinutes: String(judge.maxMinutes), candidates: join(absoluteRun, judge.candidates), notWalked: join(absoluteRun, NOT_WALKED), output: join(absoluteRun, judge.output), check: `node ${cli} check-verdict --run ${absoluteRun} --criterion ${criterion.id} --round judge` }),
+      fill(templates.beoordeel, { ...shared, session: judge.session, workDir: await makeWorkDir(runDir, judge.session), maxCommands: String(judge.maxCommands), maxMinutes: String(judge.maxMinutes), candidates: join(absoluteRun, judge.candidates), notWalked: join(absoluteRun, NOT_WALKED), output: join(absoluteRun, judge.output), check: `node ${cli} check-verdict --run ${absoluteRun} --criterion ${criterion.id} --round judge` }),
     );
     const task: InstrumentTask = { criterion: criterion.id, titleNl: criterion.titleNl, procedureVersion: procedure.version, procedureSha256: procedure.sha256, dossier: dossierPath, dossierSha256, passCommands: procedure.passCommands, decisiveCommands: procedure.decisiveCommands, judge, verify: null };
     await writeJudge();
@@ -477,10 +479,11 @@ export async function instrumentTasks(runDir: string, options: TaskOptions = {})
       const verifyLimits = verifyBudget({ commands: maxCommands, minutes: budget.minutes }, task.criterion, coverage.get(task.criterion)!);
       const verify = { prompt: join(dir, "verifieer.md"), output: join("verdicts", task.criterion, "final.json"), candidates: join(dir, "kandidaten-verificatie.json"), session: was?.verify?.session ?? `v-${task.criterion.replaceAll(".", "")}`, maxCommands: verifyLimits.commands, maxMinutes: verifyLimits.minutes };
       await writeJson(join(runDir, verify.candidates), candidates);
-      const writeVerify = (): Promise<void> => writeFileAtomic(
+      const writeVerify = async (): Promise<void> => writeFileAtomic(
         join(runDir, verify.prompt),
         fill(templates.verifieer, {
           ...base,
+          workDir: await makeWorkDir(runDir, verify.session),
           id: criterion.id,
           title: criterion.titleNl,
           level: criterion.level,
@@ -535,10 +538,11 @@ export async function instrumentTasks(runDir: string, options: TaskOptions = {})
           : standing.round === "judge"
             ? `Het oordeel van de beoordelaar: \`${join(absoluteRun, task.judge.output)}\`. Een verifieerder heeft het niet gecontroleerd: neem er niets uit over zonder het zelf te meten.`
             : "Er is geen eerder oordeel: de beoordeling leverde geen geldig resultaat. Je begint bij de procedure en het dossier.";
-      const writeFinish = (): Promise<void> => writeFileAtomic(
+      const writeFinish = async (): Promise<void> => writeFileAtomic(
         join(runDir, finish.prompt),
         fill(templates.afmaak, {
           ...base,
+          workDir: await makeWorkDir(runDir, finish.session),
           id: criterion.id,
           title: criterion.titleNl,
           level: criterion.level,

@@ -127,6 +127,7 @@ test("a run with open criteria of every kind gets a finishing task for what the 
   assert.deepEqual(mixed.points, [PERSON, SWEEP], "every open point is listed, also the one that asks a person");
   const prompt = readFileSync(join(dir, mixed.prompt), "utf8");
   assert.doesNotMatch(prompt, /\{\{\w+\}\}/, "no placeholder is left");
+  assert.ok(prompt.includes(`werkmap: \`${join(dir, "werk", mixed.session)}\``) && existsSync(join(dir, "werk", mixed.session)), "the finisher has a work folder of its own session");
   assert.ok(prompt.includes(`1. ${PERSON}`) && prompt.includes(`2. ${SWEEP}`));
   assert.ok(prompt.includes(join(dir, "verdicts", CRITERIA.mixed, "final.json")) && prompt.includes(join(dir, "tasks", CRITERIA.mixed, "dossier.json")));
   assert.deepEqual([BUDGETS.finish.commands, BUDGETS.finish.minutes], [BUDGETS.judge.commands * FINISH_FACTOR, BUDGETS.judge.minutes * FINISH_FACTOR]);

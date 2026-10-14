@@ -6,6 +6,7 @@ import { readJson, sha256, sha256File, writeFileAtomic, writeJson } from "../lib
 import { type Manifest, stepStart, writeManifest } from "../lib/manifest.ts";
 import { TEMPLATES_DIR } from "../lib/procedures.ts";
 import { agentLoginNl, loginForRun } from "../lib/login.ts";
+import { makeWorkDir } from "../lib/workdir.ts";
 import { frameAddress, readSiteModel, SITE_CHECK_FILE, SITE_MODEL_FILE, validateSiteModel, type ModelContext, type PageType, type Postcondition, type SiteCheck, type SiteModel } from "../lib/sitemodel.ts";
 import { holds, loadRecipes, MAX_RECIPE_STEPS, replayEnv, replayFromClean, replaySteps } from "../session/recipe.ts";
 import { openSurface, type Env } from "../session/surface.ts";
@@ -106,6 +107,8 @@ export async function explore(runDir: string): Promise<{ task: string; pages: nu
       ].join("\n");
 
   const taskPath = join("explore", "verken.md");
+  // Every round its own session, and so its own budget and its own numbering of observations.
+  const session = round === 1 ? EXPLORE_SESSION : `${EXPLORE_SESSION}${round}`;
   const prompt = fill(template, {
     site: new URL(inventory.baseUrl).hostname,
     baseUrl: inventory.baseUrl,
@@ -114,8 +117,8 @@ export async function explore(runDir: string): Promise<{ task: string; pages: nu
     context: join(absoluteRun, contextPath),
     output: join(absoluteRun, SITE_MODEL_FILE),
     check: `node ${cli} check-site --run ${absoluteRun}`,
-    // Every round its own session, and so its own budget and its own numbering of observations.
-    session: round === 1 ? EXPLORE_SESSION : `${EXPLORE_SESSION}${round}`,
+    session,
+    workDir: await makeWorkDir(runDir, session),
     maxCommands: String(EXPLORE_MAX_COMMANDS),
     maxMinutes: String(EXPLORE_MAX_MINUTES),
     pageCount: String(pageCount),

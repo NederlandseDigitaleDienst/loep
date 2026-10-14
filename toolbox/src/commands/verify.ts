@@ -25,7 +25,9 @@ export const SIGNATURE_FILE = `${SIGNED_DIR}/signature.json`;
 /**
  * What the seal never covers, besides itself: the signature that refers to it, and the documents
  * that are made after signing (the signed report, the statement and what the organisation filled
- * in for it). Everything else in the run is evidence and is sealed.
+ * in for it). Everything else in the run is evidence and is sealed. That includes the work folder
+ * of each session (`werk/<session>/`): a helper script there shows how an agent called the
+ * toolbox, and so how its observations came about. Nothing writes there after the agents are done.
  */
 const OUTSIDE_SEAL = { files: ["verklaring-invoer.json"], dirs: [SIGNED_DIR, "verklaring"] };
 const outsideSeal = (name: string): boolean => OUTSIDE_SEAL.files.includes(name) || OUTSIDE_SEAL.dirs.some((dir) => name.startsWith(`${dir}/`));

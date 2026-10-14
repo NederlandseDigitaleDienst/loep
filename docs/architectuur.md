@@ -116,7 +116,7 @@ Elke stap leest bestanden uit de run en schrijft er nieuwe bij. De namen hierond
 
 **Verzegelen en aftekenen** (`seal`, `sign`, `verify`), in die volgorde. `seal` schrijft `evidence-index.json` met de sha256 van elk bestand in de run, ook van de evaluatie, het conceptrapport en de antwoorden van een persoon. `sign` weigert een evaluatie met een criterium zonder oordeel, een run zonder zegel en een run die na het verzegelen is veranderd. Het schrijft de handtekening naar `signed/signature.json`, met de hash van het zegel en van de evaluatie. `verify` rekent elke hash na en meldt wat is gewijzigd, toegevoegd of verdwenen, en een handtekening die bij een ander zegel of een andere evaluatie hoort.
 
-De sessiebestanden van een inlog (`login-session.json` en `idle-session.json`) slaan het zegel helemaal over: het is een geheim en geen bewijs, en het weggooien ervan breekt het zegel niet. Verder staat buiten het zegel alleen wat na het tekenen wordt gemaakt: `signed/` (de handtekening en het afgetekende rapport), `verklaring/` en `verklaring-invoer.json` (`OUTSIDE_SEAL` in `toolbox/src/commands/verify.ts`). Daardoor breekt tekenen het zegel niet, en ook `render` en `statement` daarna niet. Wordt een afgetekende run na een wijziging opnieuw verzegeld, dan verwijdert `seal` de map `signed/`: de handtekening hoorde bij het vorige zegel.
+De sessiebestanden van een inlog (`login-session.json` en `idle-session.json`) slaan het zegel helemaal over: het is een geheim en geen bewijs, en het weggooien ervan breekt het zegel niet. De werkmappen van de agents (`werk/<sessie>/`) vallen er wel onder: een hulpscript laat zien hoe een agent de toolbox aanriep, en dus hoe zijn waarnemingen tot stand kwamen. Verder staat buiten het zegel alleen wat na het tekenen wordt gemaakt: `signed/` (de handtekening en het afgetekende rapport), `verklaring/` en `verklaring-invoer.json` (`OUTSIDE_SEAL` in `toolbox/src/commands/verify.ts`). Daardoor breekt tekenen het zegel niet, en ook `render` en `statement` daarna niet. Wordt een afgetekende run na een wijziging opnieuw verzegeld, dan verwijdert `seal` de map `signed/`: de handtekening hoorde bij het vorige zegel.
 
 ## 3. Wie wat mag
 
@@ -130,6 +130,8 @@ Een agent krijgt alleen zijn opdrachtbestand en begint met een schone context. D
 | Beoordelaar | `tasks/<criterium>/beoordeel.md` met de procedure erin, het dossier, `kandidaten.json`, `gate.json`; de site via een sessie `b-<nummer>` | `verdicts/<criterium>/oordeel.json` | 80 commando's, 30 minuten als ondergrens; hooguit 240 en 90 | `check-verdict --round judge`: zie onder de tabel |
 | Verifieerder | `tasks/<criterium>/verifieer.md`, het oordeel van de beoordelaar, het dossier, `kandidaten-verificatie.json`; de site via een sessie `v-<nummer>` | `verdicts/<criterium>/final.json` | 20 commando's, plus 5 per bevinding, 3 per weggezette kandidaat en 30 als de beoordelaar niet afkeurde; 30 minuten. Dat is de ondergrens; hooguit 240 en 90 | `check-verdict --round final`: zie onder de tabel |
 | Afmaakagent | `tasks/<criterium>/afmaak.md` met de open punten en de procedure erin, de oordelen tot nu toe, het dossier, `kandidaten-afmaak.json`; de site via een sessie `a-<nummer>` | `verdicts/<criterium>/afmaak.json` | 280 commando's, 105 minuten: dat van een beoordelaar maal 3,5 (`FINISH_FACTOR`), als ondergrens; hooguit 420 en 158 | `check-verdict --round finish`: zie onder de tabel |
+
+Elke agent met een sessie krijgt ook een eigen werkmap, `werk/<sessie>/`, die het commando dat de opdracht schrijft (`explore` of `tasks`) aanmaakt. Hulpbestanden en hulpscripts horen daar en nergens anders. Agents werken tegelijk in één run; twee agents schreven eens een hulpscript met dezelfde naam op een gedeelde plek, elk met zijn eigen sessie erin, en daarna mat de een onder de sessie van de ander. De sessie kan dat zelf niet zien: een agent heeft geen kenmerk dat de sessie kan controleren, en een sleutel per sessie zou in hetzelfde gedeelde script belanden.
 
 Wat `check-verdict` weigert, staat in `toolbox/src/lib/verdict.ts`; alleen de regel over `budget op` staat in `budgetPointProblems` in `toolbox/src/commands/instrument-tasks.ts`. De belangrijkste regels:
 
@@ -293,6 +295,7 @@ Alles van één onderzoek staat in één map. Elk JSON-bestand wordt geschreven 
   gate.json                uitkomst van de poort, met de gaten
   gate/                    bladen, opdracht, antwoorden en hun stempel
   observations/<sessie>/   session.json, en per commando <nr>.json met beelden
+  werk/<sessie>/           hulpbestanden en hulpscripts van de agent van die sessie
   rondgang/                opdracht en kandidaten per paginatype
   tasks/index.json         alle opdrachten met hun hashes
   tasks/<criterium>/       dossier.json, opdrachten, kandidaten
