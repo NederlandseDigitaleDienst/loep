@@ -7,7 +7,7 @@ import { readJson, sha256, writeFileAtomic, writeJson } from "../lib/canonical.t
 import { runEngines } from "../lib/engines.ts";
 import { stepStart, writeManifest } from "../lib/manifest.ts";
 import { collectFacts, collectNamed } from "../instruments/facts.ts";
-import { arrowReach, skipLinkProbe, tabOrderScreenshot, tabWalk } from "../instruments/keyboard.ts";
+import { arrowReach, skipLinkProbe, tabWalk } from "../instruments/keyboard.ts";
 import { mediaReport } from "../instruments/media.ts";
 import { pageOperables } from "../instruments/operables.ts";
 import { controlsOnlyWithSpacing, overflowProbe, textSpacing, visibleControlKeys, VIEWPORT_PROBES } from "../instruments/overflow.ts";
@@ -93,15 +93,17 @@ async function collectPage(browser: Browser, entry: SampleItem, runDir: string, 
         await writeJson(join(dir, "probes", "spacedtext.json"), { candidates: await call(page, "spacedText") });
         // The language of text alternatives and names, which the text of the page does not hold (3.1.2).
         await writeJson(join(dir, "probes", "languages.json"), await languagesOf(page, { blocks: false }));
-        const walk = await tabWalk(page, { continueAfterFocusLoss: true, focusDir: join(dir, "probes", "focus"), focusPath: "probes/focus" });
-        walk.arrowReach = await arrowReach(page, walk.stops as { path: string[]; tag: string }[]);
-        await writeJson(join(dir, "probes", "tabwalk.json"), walk);
-        await tabOrderScreenshot(page, walk.stops as Record<string, unknown>[], join(dir, "probes", "tabwalk.png"));
+        // The walk draws its numbered picture itself, before any other key is pressed.
+        const walk = await tabWalk(page, { continueAfterFocusLoss: true, focusDir: join(dir, "probes", "focus"), focusPath: "probes/focus", orderPicture: join(dir, "probes", "tabwalk.png") });
         summary.tabwalk = { outcome: walk.outcome, stops: walk.stopCount };
-        // Every picture cut out and read with text recognition (1.4.5); this scrolls, so it comes last.
+        // Every picture cut out and read with text recognition (1.4.5); this scrolls, so it comes after what is measured in place.
         const pictures = await picturesWithText(page, join(dir, "probes", "pictures"), "probes/pictures", sweep.pictureCache);
         await writeJson(join(dir, "probes", "pictures.json"), pictures);
         summary.pictures = { found: pictures.pictures.length, recognised: pictures.recognised };
+        // The arrow keys can change the page itself: a slide deck turns to the next slide on every
+        // stop. So they come after everything that shows the page as it loaded.
+        walk.arrowReach = await arrowReach(page, walk.stops as { path: string[]; tag: string }[]);
+        await writeJson(join(dir, "probes", "tabwalk.json"), walk);
         // What can be a time limit (2.2.1): every timer with what it did, waiting timers set off now. This changes the page, so it is last.
         const limits = await timeLimits(page, sweep.seededCookies);
         await writeJson(join(dir, "probes", "timelimits.json"), limits);
@@ -163,9 +165,8 @@ async function collectPage(browser: Browser, entry: SampleItem, runDir: string, 
       await writeJson(join(dir, "probes", "operables-narrow.json"), await pageOperables(page));
       // What there is to reach with Tab in this window: the walk below is laid next to it.
       await writeJson(join(dir, "probes", "named-narrow.json"), await collectNamed(page));
-      const walk = await tabWalk(page, { continueAfterFocusLoss: true, focusDir: join(dir, "probes", "focus-narrow"), focusPath: "probes/focus-narrow" });
+      const walk = await tabWalk(page, { continueAfterFocusLoss: true, focusDir: join(dir, "probes", "focus-narrow"), focusPath: "probes/focus-narrow", orderPicture: join(dir, "probes", "tabwalk-narrow.png") });
       await writeJson(join(dir, "probes", "tabwalk-narrow.json"), walk);
-      await tabOrderScreenshot(page, walk.stops as Record<string, unknown>[], join(dir, "probes", "tabwalk-narrow.png"));
       summary["tabwalk-narrow"] = { outcome: walk.outcome, stops: walk.stopCount };
     } finally {
       await context.close().catch(() => undefined);
