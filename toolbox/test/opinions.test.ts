@@ -596,9 +596,10 @@ test("tools lists every method with its version and writes them into the manifes
   const manifest = JSON.parse(readFileSync(join(run, "manifest.json"), "utf8")) as { tools: { id: string; version: string; principle: string; available: boolean; licence: string }[]; steps: unknown[] };
   assert.deepEqual(manifest.tools.map((tool) => tool.id), METHODS.map((method) => method.id));
   assert.ok(manifest.tools.every((tool) => tool.version && tool.principle && tool.licence && typeof tool.available === "boolean"));
-  // The answer stays short: about a hundred characters per question, and it grows only when a method is added.
-  // VoiceOver as a second method for speech took it from under 1500 to under 1550.
-  assert.ok(size(tools) < 1550, `tools printed ${size(tools)} characters`);
+  // The lines per question stay short: about a hundred characters each, and they grow only when a method is added.
+  // VoiceOver as a second method for speech took them from under 1500 to under 1550.
+  // What is missing on this machine comes on top, one line with a hint per method, so it is not part of the budget.
+  assert.ok(size({ tools: tools.tools }) < 1550, `tools printed ${size({ tools: tools.tools })} characters per question`);
   // The known systematic errors are data: every one names a method that exists.
   for (const known of KNOWN_ERRORS) assert.ok(METHODS.some((method) => method.id === known.method), known.method);
   assert.equal((await loep("wait")).note, "er liep niets op de achtergrond");
@@ -1217,7 +1218,10 @@ test("rules with a filter prints only what the filter matches", async () => {
   const all = await loep("rules");
   const narrowed = await loep("rules", [], { criterion: "2.5.8" });
   assert.equal(narrowed.filter, "criterium 2.5.8");
-  assert.deepEqual(narrowed.engines, { "axe-core": "4.13.0: 4 failed, 0 cantTell, 8 passed", alfa: "0.119.0: 2 failed, 0 cantTell, 8 passed", ibm: "4.0.34: 2 failed, 0 cantTell, 14 passed", qualweb: "0.8.6: 0 failed, 0 cantTell, 0 passed" });
+  // Each line starts with the version of its engine; the counts are what the filter decides, so an update of an engine keeps this test.
+  const engines = narrowed.engines as Record<string, string>;
+  assert.ok(Object.values(engines).every((line) => /^\d+\.\d+\.\d+: /.test(line)), JSON.stringify(engines));
+  assert.deepEqual(Object.fromEntries(Object.entries(engines).map(([engine, line]) => [engine, line.replace(/^\S+: /, "")])), { "axe-core": "4 failed, 0 cantTell, 8 passed", alfa: "2 failed, 0 cantTell, 8 passed", ibm: "2 failed, 0 cantTell, 14 passed", qualweb: "0 failed, 0 cantTell, 0 passed" });
   assert.notDeepEqual(narrowed.engines, all.engines);
   assert.equal(narrowed.passed, undefined);
   assert.equal(narrowed.matched, undefined);
