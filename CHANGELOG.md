@@ -4,6 +4,8 @@ Wat er per versie van loep is veranderd. De versie staat op het voorblad en onde
 
 ## Nog niet uitgebracht
 
+## 0.1.0 (2026-10-14)
+
 ### Wat een uitkomst kan veranderen
 
 - Elk paginatype uit het sitemodel krijgt een pagina in de steekproef, ook als het dezelfde opbouw heeft als een ander type (#13).
