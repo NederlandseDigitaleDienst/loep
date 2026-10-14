@@ -483,6 +483,21 @@ export function openCriteria(criteria: Pick<CriterionResult, "id" | "outcome" | 
   return { owner: open.filter((criterion) => !own(criterion)).map((criterion) => criterion.id), evaluation: open.filter(own).map((criterion) => criterion.id) };
 }
 
+/**
+ * Criterion ids for a list that counts across WCAG 2.1 and 2.2 together: an id in only one of
+ * the two says which, so a count per version elsewhere in the report adds up. "2.5.2, 3.3.8
+ * alleen in WCAG 2.2, 4.1.1 alleen in WCAG 2.1".
+ */
+export function idsAcrossVersionsNl(ids: string[], criteria: Pick<CriterionResult, "id" | "versions">[]): string {
+  const versions = new Map(criteria.map((criterion) => [criterion.id, criterion.versions]));
+  return ids
+    .map((id) => {
+      const own = versions.get(id) ?? [];
+      return own.length === 1 ? `${id} alleen in WCAG ${own[0]}` : id;
+    })
+    .join(", ");
+}
+
 export function summarise(criteria: CriterionResult[]): Evaluation["summary"] {
   const count = (version: WcagVersion): Evaluation["summary"][WcagVersion] => {
     const relevant = criteria.filter((criterion) => criterion.versions.includes(version));
