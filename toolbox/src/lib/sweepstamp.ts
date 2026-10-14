@@ -26,9 +26,10 @@ import type { Blocker, Postcondition } from "./sitemodel.ts";
  * its items anew is measured with it; per state that fills a form, the timers that start after sending it (2.2.1). 11: on that same sending, the
  * messages that appear, with their region, how the region was before (hidden, empty, absent) and the focus (4.1.3). 12: a key
  * or a press that asks for full screen is a reaction (2.1.4, 2.5.2). 13: the numbered Tab picture is taken right after the
- * walk, before the arrow keys move a slide.
+ * walk, before the arrow keys move a slide. 14: the boxes on that picture follow sticky and fixed elements to where the
+ * picture shows them, and the Tab walks run without smooth scrolling, so a focus clip is no longer taken on the way there.
  */
-export const SWEEP_STAMP_VERSION = 13;
+export const SWEEP_STAMP_VERSION = 14;
 
 interface RecipeSteps {
   start?: unknown;
