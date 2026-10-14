@@ -25,10 +25,10 @@ updates:
           - "@qualweb/*"
           - "accessibility-checker*"
     ignore:
-      # De types volgen de laagste Node die de toolbox ondersteunt (22.18, zie de README).
-      # Met types van een nieuwere Node compileert code die op 22 niet draait.
+      # De types volgen precies de laagste Node die de toolbox ondersteunt (22.18, zie de README).
+      # Met types van een nieuwere Node, ook 22.20, compileert code die op 22.18 niet draait.
+      # Verhoog ze met de hand, samen met de laagste Node.
       - dependency-name: "@types/node"
-        update-types: ["version-update:semver-major"]
       # Playwright 1.64 laat in Chromium een klik eindeloos wachten op een navigatie die
       # met 204 No Content is tegengehouden; zo houdt de toolbox navigaties tegen.
       # microsoft/playwright#43279 is gesloten, maar 1.64.1 heeft het nog. Haal dit weg
