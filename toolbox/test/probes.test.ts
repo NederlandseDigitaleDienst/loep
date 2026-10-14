@@ -14,7 +14,7 @@ import { boundaryOf, fateOf, forcedColoursProbe, type ForcedProbe } from "../src
 import { uiContrast } from "../src/lib/extractors.ts";
 import type { RunData } from "../src/lib/rundata.ts";
 import { collectFacts, frameListeners } from "../src/instruments/facts.ts";
-import { skipLinkProbe, tabOrderScreenshot, tabWalk } from "../src/instruments/keyboard.ts";
+import { MOVED, skipLinkProbe, tabOrderScreenshot, tabWalk } from "../src/instruments/keyboard.ts";
 import { probeHoverTarget } from "../src/instruments/hover.ts";
 import { firstKeyReaction, KEYS, leaveTextEntry } from "../src/instruments/keys.ts";
 import { spacingEffect, spacingFromLoad } from "../src/instruments/overflow.ts";
@@ -399,8 +399,7 @@ test("the numbered tab-order picture frames a sticky table of contents and a fix
   // The table of contents follows the long main column in the code, so the walk reaches it with the page scrolled down.
   for (const text of pinned) assert.ok(walk.stops.find((stop) => stop.text === text)!.scroll[1] > 1000, `${text} measured while scrolled`);
   const path = join(dir, "tabwalk.png");
-  // Smooth scrolling from here on: the way up to the top must still be done before the picture is taken.
-  await page.addStyleTag({ content: "html { scroll-behavior: smooth; }" });
+  // The page scrolls smoothly again after the walk: the way up to the top must still be done before the picture is taken.
   await tabOrderScreenshot(page, walk.stops as unknown as Record<string, unknown>[], path);
   assert.equal(await page.evaluate(() => window.scrollY), 0);
   const png = PNG.sync.read(await readFile(path));
@@ -413,5 +412,20 @@ test("the numbered tab-order picture frames a sticky table of contents and a fix
     // ... and its numbered frame is drawn around it (on the right, where the number does not cover the link).
     assert.deepEqual(pixel(box.right + 1, box.y + box.height / 2), [196, 0, 143], `frame of ${text}`);
   }
+  await page.context().close();
+});
+
+test("the tab walk measures every focus indicator on a page that scrolls smoothly, and gives the page its smooth scrolling back", async () => {
+  const page = await open("/sticky-toc.html");
+  const dir = await mkdtemp(join(tmpdir(), "loep-smooth-"));
+  const walk = (await tabWalk(page, { focusDir: join(dir, "focus"), focusPath: "focus" })) as { stops: { text: string; clipVerified?: boolean; focusNotMeasured?: string; focusPixelShare: number | null }[] };
+  // Links far down the page: focus scrolls to them, and smoothly the picture would be taken on the way there.
+  assert.ok(walk.stops.some((stop) => stop.text === "Link in het derde deel"));
+  assert.deepEqual(
+    walk.stops.filter((stop) => stop.focusNotMeasured === MOVED).map((stop) => stop.text),
+    [],
+  );
+  for (const stop of walk.stops) assert.equal(stop.clipVerified, true, `clip of ${stop.text}`);
+  assert.equal(await page.evaluate(() => getComputedStyle(document.documentElement).scrollBehavior), "smooth");
   await page.context().close();
 });

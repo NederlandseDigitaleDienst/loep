@@ -138,8 +138,39 @@ async function focusThrownAway(page: Page, stops: { path: string[] }[]): Promise
   }
 }
 
+const NO_SMOOTH_SCROLLING = "loep-no-smooth-scrolling";
+
+/**
+ * Run a walk with smooth scrolling switched off, and give the page its own setting back afterwards.
+ * With scroll-behavior:smooth the page is still on its way to the focused element when the walk
+ * reads where it is and takes its picture; the clip then shows another part of the page and the
+ * focus indicator is not measured. Nested walks leave the switch to the outermost one.
+ */
+export async function withoutSmoothScrolling<T>(page: Page, walk: () => Promise<T>): Promise<T> {
+  const added = await page
+    .evaluate((id) => {
+      if (document.getElementById(id)) return false;
+      const style = document.createElement("style");
+      style.id = id;
+      style.textContent = "html, html * { scroll-behavior: auto !important; }";
+      (document.head ?? document.documentElement).append(style);
+      return true;
+    }, NO_SMOOTH_SCROLLING)
+    .catch(() => false);
+  try {
+    return await walk();
+  } finally {
+    // The walk can have left the page; then there is nothing to give back.
+    if (added) await page.evaluate((id) => document.getElementById(id)?.remove(), NO_SMOOTH_SCROLLING).catch(() => undefined);
+  }
+}
+
 /** Walk the page with Tab and record where focus goes, what it looks like and whether anything hides it. */
-export async function tabWalk(page: Page, options: TabWalkOptions): Promise<Record<string, unknown>> {
+export function tabWalk(page: Page, options: TabWalkOptions): Promise<Record<string, unknown>> {
+  return withoutSmoothScrolling(page, () => walkWithTab(page, options));
+}
+
+async function walkWithTab(page: Page, options: TabWalkOptions): Promise<Record<string, unknown>> {
   const { focusDir, focusPath, maxStops = MAX_TAB_STOPS } = options;
   const viewport = page.viewportSize() ?? RENDERING.viewport;
   // A page can put focus somewhere itself on load; that element is reachable although Tab never lands on it first.
@@ -422,7 +453,11 @@ type FocusNow = { path: string[]; tag: string; text: string; region: string | nu
  * Walk with one key from where focus is now and note at each stop what lies over the middle
  * of the focused element (WCAG 2.4.11). Covered stops get a picture. Focus is not put anywhere first.
  */
-export async function coverWalk(page: Page, key: CoverWalk["key"], options: { max: number; dir: string; relative: string; prefix: string }): Promise<CoverWalk> {
+export function coverWalk(page: Page, key: CoverWalk["key"], options: { max: number; dir: string; relative: string; prefix: string }): Promise<CoverWalk> {
+  return withoutSmoothScrolling(page, () => walkWithKey(page, key, options));
+}
+
+async function walkWithKey(page: Page, key: CoverWalk["key"], options: { max: number; dir: string; relative: string; prefix: string }): Promise<CoverWalk> {
   const viewport = page.viewportSize() ?? RENDERING.viewport;
   const start = await call<FocusNow | null>(page, "focusState");
   const stops: CoverStop[] = [];
