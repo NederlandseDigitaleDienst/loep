@@ -37,6 +37,25 @@ Wat je bijdraagt valt onder de EUPL-1.2, zoals de rest van de repository.
 - **Tekenen namens iemand.** `sign` doet een mens.
 - **Een run delen of publiceren zonder te kijken wat erin staat.** Het manifest van een run kan een naam bevatten.
 
+## Versies
+
+De toolbox en de plugin hebben één versie, want de plugin is de hele repository. Ze staat in `toolbox/package.json` en in de drie manifesten van de plugin; een test faalt als die verschillen. Het rapport noemt de versie op het voorblad en onderaan elke pagina, met de commit erbij.
+
+Een versie zegt iets over de methode. Twee rapporten met dezelfde versie zijn met dezelfde procedures, instrumenten en regel-engines gemaakt.
+
+| Ophogen | Wanneer |
+|---|---|
+| Het middelste getal (0.2.0) | Er verandert iets dat een uitkomst kan veranderen: een procedure, een instrument, een grens, een regel-engine, de steekproef of de poort. |
+| Het laatste getal (0.1.1) | Een reparatie of tekst die geen uitkomst raakt: documentatie, een melding, de opmaak van het rapport. |
+| Het eerste getal (1.0.0) | Pas als de methode door de eindmeting of een toezichthouder is gedragen. |
+
+Wat een wijziging doet, schrijf je in dezelfde commit onder "Nog niet uitgebracht" in [CHANGELOG.md](CHANGELOG.md), bij een uitkomst onder "Wat een uitkomst kan veranderen". Uitbrengen gaat in twee stappen, omdat `main` alleen voorstellen aanneemt:
+
+1. Op een branch: `just release-prepare 0.2.0`. Dat zet de versie overal, sluit het deel in de CHANGELOG af en legt het vast als één commit. Open daarmee een voorstel.
+2. Na de merge, op `main`: `just release-tag`. Dat zet de tag (`v0.2.0`) op GitHub en maakt de release met de tekst uit de CHANGELOG.
+
+Daarna zet een beheerder de nieuwe tag in de marketplace; zie [docs/plugin.md](docs/plugin.md). Wie de plugin heeft, krijgt de nieuwe versie bij de eerstvolgende update. Tussen twee versies verandert er niets aan de plugin, ook niet als `main` verder gaat.
+
 ## Agents aan het werk zetten
 
 Een agent krijgt alleen zijn opdrachtbestand en de regels hierboven. De werkstroom voor rondgangen, beoordelaars en verifieerders staat bij de skill. Op een echte site hooguit vier sessies tegelijk: drie agents naast de sessie van wie het onderzoek leidt, tenzij de eigenaar van de site meer toestaat.
