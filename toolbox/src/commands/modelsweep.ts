@@ -195,7 +195,7 @@ async function textBehindSomething(page: Page, places: string[]): Promise<(strin
         if (!top || related(top, element) || top.shadowRoot) return null;
         // Only something that sits over the page counts: a sibling that overlaps in the normal flow is layout, not a layer.
         for (let node: Element | null = top; node; node = node.parentElement) {
-          const position = getComputedStyle(node).position;
+          const position: string = getComputedStyle(node).position;
           if (position === "fixed" || position === "sticky" || node.localName === "dialog" || node.matches(":modal")) return loep.describe(top).path.join(" >>> ");
         }
         return null;

@@ -37,11 +37,11 @@
     "playwright": "1.63.0",
     "pngjs": "7.0.0",
     "tabbable": "6.5.0",
-    "vnu-jar": "26.10.9",
+    "vnu-jar": "26.10.11",
     "yaml": "2.9.1"
   },
   "devDependencies": {
     "@types/node": "22.18.0",
-    "typescript": "5.9.2"
+    "typescript": "7.0.2"
   }
 }

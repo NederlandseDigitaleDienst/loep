@@ -399,7 +399,7 @@ export async function measureOffice(file: string, kind: DocumentKind): Promise<O
   out.notMeasured.push("Gelezen is wat in het bestand staat. Hoe een kantoorpakket het aan hulpsoftware geeft, en hoe het eruitziet, is niet gemeten: er is geen kantoorpakket gebruikt en er is geen beeld van het document.");
   return {
     facts: {
-      title: ((measured as { title?: string | null }).title ?? null) ?? core.title,
+      title: (measured as { title?: string | null }).title ?? core.title,
       language: measured.language ?? core.language,
       pages: measured.pages,
       headings: cap(out.headings),
