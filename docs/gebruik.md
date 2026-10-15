@@ -15,7 +15,7 @@ Installeer de plugin uit de marketplace van NLDD en draai één keer de installa
 
 Daarna, in de map van de plugin: `just install` voor de pakketten en browsers, en `just doctor` om te zien welke hulpprogramma's ontbreken. Ontbreekt er een, dan werkt de rest gewoon. Het criterium dat die meting nodig had, blijft dan open. Vraag je de assistent om een onderzoek op een machine waar dit nog niet is gebeurd, dan doet hij het als eerste stap zelf.
 
-Reken op een middag. Voor een site elders met 30 pagina's en vier paginatypen, met drie agents tegelijk, komt de formule achter `estimate` op ruim vier uur, met een marge van ruim drie tot bijna zes uur. Blijven er na de verificatie criteria open, dan komt daar een afmaakronde bij, bij acht open criteria ongeveer een uur. Een volledige meting kostte 9 tot 14 miljoen tokens. Hoe die getallen tot stand komen, staat in [methode.md](methode.md#hoe-lang-een-onderzoek-duurt). Houd de sessie van de assistent open en de machine wakker zolang het loopt.
+Reken op een middag. Voor een site elders met 30 pagina's en vier paginatypen, met drie agents tegelijk, komt de formule achter `estimate` op ruim vier uur, met een marge van ruim drie tot bijna zes uur. Blijven er na de verificatie criteria open, dan komt daar een afmaakronde bij, bij acht open criteria ongeveer een uur. De laatste twee volledige metingen kostten 16,6 en 16,9 miljoen tokens, voor 134 agents elk. Hoe die getallen tot stand komen, staat in [methode.md](methode.md#hoe-lang-een-onderzoek-duurt). Houd de sessie van de assistent open en de machine wakker zolang het loopt.
 
 ## Drie skills
 
@@ -76,7 +76,7 @@ Per criterium de uitkomst, met erbij of de verificatie, de afmaakronde of een pe
 
 - **Open punten beantwoorden.** Sommige punten kan geen instrument sluiten, zoals luisteren met een echte schermlezer of een besluit van de eigenaar. De assistent laat je de punten zien met hun nummer. Het antwoord leg je zelf vast met `answer`, met wat je deed, wat het betekent en in welke functie; de assistent typt het niet voor je, ook niet als je het dicteert. Sla je dit over, dan blijven die criteria open.
 - **Lezen en tekenen.** Het rapport is een concept tot iemand het leest en tekent met `sign`. Tekenen doet een mens, nooit de assistent.
-- **Terugmelden aan loep.** Bleef een criterium open door een gebrek in loep, dan schrijft de assistent een tekst per issue, zonder adres of naam van de site. Je leest ze eerst; er gaat niets weg zonder jouw ja. Bestaat het issue al, dan komt de tekst eronder als reactie.
+- **Terugmelden aan loep.** Bleef een criterium open door een gebrek in loep, dan schrijft de assistent een tekst per issue, zonder adres of naam van de site. Je leest ze eerst; er gaat niets weg zonder jouw ja. Staat het issue al open, dan komt de tekst eronder als reactie; is het gesloten, dan komt er een nieuw issue dat het oude noemt.
 
 ## Achter een inlog
 
