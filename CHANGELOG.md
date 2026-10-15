@@ -4,6 +4,8 @@ Wat er per versie van loep is veranderd. De versie staat op het voorblad en onde
 
 ## Nog niet uitgebracht
 
+Deze versie is uitgebracht zonder nieuwe meting op de testsite. De twee wijzigingen die een uitkomst kunnen veranderen, zijn dus nog niet vergeleken met 0.1.2.
+
 ### Wat een uitkomst kan veranderen
 
 - Een verifieerder die een bevinding laat vervallen omdat de norm het geen fout noemt, zegt welke tekst van de norm dat toestaat, en mag dezelfde vraag niet als `keuze nodig` doorgeven aan wie het rapport tekent. `check-verdict --round final` weigert na een afkeuring een eindoordeel "kan niet bepalen" met zo'n vervallen bevinding en een nieuw punt `keuze nodig`. `keuze nodig` is alleen voor een besluit dat de norm of de procedure bij de eigenaar legt (#35).
