@@ -12,6 +12,56 @@ Een overheidssite moet een toegankelijkheidsverklaring hebben met een onderzoek 
 
 Deze toolbox draait het onderzoek zo vaak als je wilt, op alle pagina's van een kleine site, en legt bij elk criterium vast wat er is onderzocht en waarmee. Een goedkeuring krijgt een regel bewijs. Wat niet vast te stellen was, staat in het rapport als "kan niet bepalen".
 
+## Gebruik met een AI-assistent
+
+loep is gemaakt om door een AI-assistent te worden bediend. Je vraagt in gewone taal om een onderzoek; de assistent stelt een paar vragen, draait de stappen, start de agents en geeft je het rapport. In Claude Code haal je de skills binnen via de [marketplace van NLDD](https://github.com/NederlandseDigitaleDienst/ai-plugins):
+
+```
+/plugin marketplace add NederlandseDigitaleDienst/ai-plugins
+/plugin install nldd-a11y@nldd
+```
+
+De plugin bevat de hele repository, ook de toolbox. Eén keer, in de map van de plugin of van je eigen kopie van de repository:
+
+```
+just install        # pakketten en browsers
+just tools          # met Homebrew alles; op Debian en Ubuntu wat de pakketbron heeft
+just doctor         # wat staat er in welke versie, wat ontbreekt, wat is te oud
+```
+
+Zonder een hulpprogramma werkt de rest gewoon. De meting die het nodig heeft, meldt zich dan als niet beschikbaar en het criterium blijft open.
+
+### Een onderzoek laten maken
+
+Een adres is genoeg. Bijvoorbeeld:
+
+- "Toets https://voorbeeld.nl op toegankelijkheid."
+- "Maak een WCAG-onderzoek van onze site, als onderbouwing voor de toegankelijkheidsverklaring."
+- "Toets de site die op http://localhost:4321 draait. Het is mijn eigen site, zet er tien agents tegelijk op."
+- "Doe een heronderzoek van voorbeeld.nl; het vorige staat in `toegankelijkheid/onderzoeken/2026-04-01`."
+
+De skill `nldd-a11y-audit` neemt het dan over. Voordat er iets draait, stelt de assistent in één bericht de vragen die alleen jij kunt beantwoorden, want daarna loopt het uren zonder jou:
+
+- Staat de site, of een deel ervan, achter een inlog? Inloggen doe je straks zelf in een browservenster, met een testaccount. Geef de assistent nooit een wachtwoord.
+- Mag het onderzoek formulieren of chatberichten versturen? Alleen op een testomgeving, en die verklaring geef je zelf, met naam en functie.
+- Ben je eigenaar van de site, of mag het van de eigenaar met meer dan drie agents tegelijk?
+- Hoort alles op het domein erbij, en zijn er sites die geen agent mag openen?
+- Hoe heet de site in het rapport, van welke organisatie is ze, en is ze gebouwd met een designsysteem?
+
+Wat je in je vraag al zei, vraagt hij niet opnieuw. Daarna zegt hij hoeveel pagina's er zijn en hoe lang het duurt volgens `estimate`: voor een site van 30 pagina's met drie agents tegelijk ruim vier uur. Dan werkt hij zelf door, in de volgorde van [Hoe het werkt](#hoe-het-werkt). Hij onderbreekt je alleen als iets van jou afhangt, zoals een inlogsessie die verloopt.
+
+Je krijgt per criterium de uitkomst, wie of wat haar vaststelde, en wat nog open is en waarom. Het rapport staat als concept in de map van de run. Wat daarna van jou is:
+
+- Open punten die geen instrument kan sluiten (luisteren met een echte schermlezer, een besluit van de eigenaar), beantwoord je zelf met `answer`. De assistent toont de punten, maar typt het antwoord niet voor je.
+- Je leest het rapport en tekent met `sign`. Tekenen doet nooit de assistent.
+- Bleef een criterium open door een gebrek in loep, dan schrijft de assistent een tekst voor een issue op deze repository, zonder adres of naam van de site. Er gaat niets weg zonder jouw ja.
+
+### De verklaring laten maken
+
+Na het tekenen: "Maak de toegankelijkheidsverklaring bij het onderzoek in `toegankelijkheid/onderzoeken/2026-10-15`." De skill `nldd-a11y-statement` controleert of het onderzoek getekend en ongewijzigd is, vraagt de gegevens van de organisatie (contact, klachten, ombudsman, maatregelen en data), en schrijft de verklaring volgens het wettelijke model met een invulblad voor het register. Wat je niet weet, blijft staan als `[nog invullen: ...]`. De status rekent de toolbox uit; publiceren doe je zelf.
+
+De derde skill, `nldd-a11y`, wijst bij een algemene vraag ("hoe laat ik zien dat onze site toegankelijk is?") de weg naar deze twee. Het hele verloop, met de vragen en wat je terugkrijgt, staat in [docs/gebruik.md](docs/gebruik.md).
+
 ## Hoe het werkt
 
 1. `inventory` vindt alle pagina's, ook via links in shadow DOM, en telt per pagina wat erop staat. Het legt ook de documenten vast waar de site naar linkt (pdf, kantoorbestanden, platte tekst, epub, en elk ander bestand dat geen HTML is en dat een link met het download-attribuut aanbiedt): die op de site zelf met linktekst, grootte en datum, die op een ander domein alleen als telling.
@@ -50,26 +100,9 @@ De overige commando's:
 
 `node toolbox/src/cli.ts --help` toont elk commando met zijn opties.
 
-## Gebruik
+## Zonder assistent
 
-De skills haal je in Claude Code binnen via de [marketplace van NLDD](https://github.com/NederlandseDigitaleDienst/ai-plugins):
-
-```
-/plugin marketplace add NederlandseDigitaleDienst/ai-plugins
-/plugin install nldd-a11y@nldd
-```
-
-De plugin bevat de hele repository, ook de toolbox. Eén keer, in de map van de plugin of van je eigen kopie van de repository:
-
-```
-just install        # pakketten en browsers
-just tools          # met Homebrew alles; op Debian en Ubuntu wat de pakketbron heeft
-just doctor         # wat staat er in welke versie, wat ontbreekt, wat is te oud
-```
-
-Zonder een hulpprogramma werkt de rest gewoon. De meting die het nodig heeft, meldt zich dan als niet beschikbaar en het criterium blijft open.
-
-Een onderzoek, in volgorde:
+Dezelfde stappen draai je ook met de hand. Een onderzoek, in volgorde:
 
 ```
 just explore https://voorbeeld.nl runs/voorbeeld   # pagina's vinden, opdracht voor de verkenner
