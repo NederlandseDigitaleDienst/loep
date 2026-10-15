@@ -6,6 +6,8 @@ Wat er per versie van loep is veranderd. De versie staat op het voorblad en onde
 
 ## 0.3.0 (2026-10-15)
 
+Deze versie is uitgebracht zonder nieuwe meting op de testsite, net als 0.2.0. De wijzigingen die een uitkomst kunnen veranderen, zijn dus nog niet vergeleken met 0.2.0.
+
 ### Wat een uitkomst kan veranderen
 
 - 1.3.2 (Betekenisvolle volgorde): een datum, label of nummer vóór de titel van een kaart, in dezelfde volgorde op het scherm, is geen bevinding meer maar aanbeveling A1. De leesvolgorde klopt daar, en de norm vraagt niet meer; de regel was strenger dan de letter van het criterium en zette het criterium op "voldoet niet".
