@@ -7,7 +7,7 @@ De toolbox zelf valt onder EUPL-1.2. Dit overzicht noemt wat de toolbox van ande
 | Pakket | Versie | Licentie | Waarvoor |
 |---|---|---|---|
 | `playwright` | 1.63.0 | Apache-2.0 | Browsers aansturen; eigen naamberekening (`ariaSnapshot`) |
-| `axe-core` | 4.13.0 | MPL-2.0 | Regel-engine; naamberekening |
+| `axe-core` | 4.14.0 | MPL-2.0 | Regel-engine; naamberekening |
 | `@siteimprove/alfa-act` | 0.119.0 | MIT | Regel-engine Alfa |
 | `@siteimprove/alfa-rules` | 0.119.0 | MIT | Regels van Alfa |
 | `@siteimprove/alfa-playwright` | 0.84.2 | MIT | Kopie van de pagina voor Alfa |
@@ -25,11 +25,11 @@ De toolbox zelf valt onder EUPL-1.2. Dit overzicht noemt wat de toolbox van ande
 | `eld` | 2.1.0 | Apache-2.0 | Taalherkenning |
 | `cld3-asm` | 4.0.0 | MIT | Taalherkenning (CLD3 van Google, Apache-2.0, als WebAssembly) |
 | `html-validate` | 11.16.2 | MIT | Validatie van de bron |
-| `vnu-jar` | 26.10.9 | MIT | Nu Html Checker; vraagt Java op de machine |
+| `vnu-jar` | 26.10.11 | MIT | Nu Html Checker; vraagt Java op de machine |
 | `pngjs` | 7.0.0 | MIT | Schermafbeeldingen lezen en schrijven |
 | `yaml` | 2.9.1 | ISC | Procedures lezen |
 | `@types/pngjs` | 6.0.5 | MIT | Typen |
-| `typescript` (alleen ontwikkeling) | 5.9.2 | Apache-2.0 | Typecontrole |
+| `typescript` (alleen ontwikkeling) | 7.0.2 | Apache-2.0 | Typecontrole |
 | `@types/node` (alleen ontwikkeling) | 22.18.0 | MIT | Typen |
 
 De vijf pakketten van QualWeb hebben geen licentiebestand in het pakket; de licentie komt uit `package.json`. Het pakket `@qualweb/core` gebruiken we niet.
@@ -51,7 +51,7 @@ Alle 138 pakketten die bij een installatie zonder ontwikkelpakketten in `node_mo
 | Firefox (via Playwright) | 155 | MPL-2.0 | Alleen voor tweede metingen; `npx playwright install firefox` |
 | Java-runtime | 17 | afhankelijk van de leverancier | Alleen voor de Nu Html Checker; ontbreekt hij, dan meldt `loep tools` dat |
 | Tesseract met taaldata `nld` en `eng` | 5.5.1 | Apache-2.0 | Voor `loep ocr` en voor scans in pdf-bestanden van de site; ontbreekt hij, dan meldt `loep tools` dat |
-| poppler (`pdfinfo`, `pdftotext`, `pdftoppm`) | 25.06.0 | GPL-2.0 of GPL-3.0 | Als los programma aangeroepen, voor pdf-bestanden van de site (`documents`) en de controle van het eigen rapport; ontbreekt het, dan staat in de feiten van het document wat niet is gemeten |
+| poppler (`pdfinfo`, `pdftotext`, `pdftoppm`) | 25.06.0 | GPL-2.0-or-later | Als los programma aangeroepen, voor pdf-bestanden van de site (`documents`) en de controle van het eigen rapport; ontbreekt het, dan staat in de feiten van het document wat niet is gemeten |
 | qpdf | 12.2.0 | Apache-2.0 | Als los programma aangeroepen, voor de tags en objecten van pdf-bestanden van de site |
 | veraPDF | 1.30 | GPL-3.0-or-later of MPL-2.0 | Als los programma aangeroepen, voor PDF/UA-1 van pdf-bestanden van de site en van het eigen rapport |
 

@@ -58,5 +58,5 @@ In wat wordt geserveerd staat niets dat het antwoord verraadt: geen aanwijzing i
 
 - "Voldoet" voor Berkenveen is de bedoeling, geen bewezen feit. Een bevinding daar kan terecht zijn.
 - De sleutel noemt alleen wat met opzet fout is gemaakt. Lindewaard kan meer gebreken hebben.
-- De testsite heeft geen pdf of kantoorbestanden. Het meten van documenten is alleen getest op losse bestanden in `toolbox/test/fixtures/documents/`.
+- De testsite heeft geen documenten: geen pdf, geen kantoorbestanden en geen platte tekst. Het meten van documenten is alleen getest in `toolbox/test/documents.test.ts`: pdf op bestanden in `toolbox/test/fixtures/documents/`, kantoorbestanden en platte tekst op inhoud die de test zelf opbouwt.
 - Drie criteria zijn in beide sites niet van toepassing (1.2.4, 2.3.1, 2.5.4) en twee zijn in beide goed (2.4.5, 4.1.1). Die meten valse meldingen.

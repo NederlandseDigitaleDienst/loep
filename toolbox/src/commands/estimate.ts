@@ -24,7 +24,7 @@ export interface EstimateOptions {
 export function voiceoverNoteNl(state: EstimateOptions["voiceover"]): string | null {
   const reading = "elke voorlezing door VoiceOver duurt ongeveer een minuut en ze gaan één voor één; die tijd valt binnen het budget van de agents en is niet apart meegeteld. Stop de virtuele Mac na de laatste fase met agents (loep voiceover stop)";
   if (state === "running") return `de virtuele Mac met VoiceOver draait: beoordelaars, verifieerders en de afmaakronde lezen er zelf mee voor; ${reading}`;
-  if (state === "stopped") return `de virtuele Mac met VoiceOver is ingericht: start hem tegelijk met de veegronde (loep voiceover start, 9 tot 20 minuten), dan kost het opstarten geen extra tijd; ${reading}`;
+  if (state === "stopped") return `de virtuele Mac met VoiceOver is ingericht: start hem tegelijk met de veegronde (loep voiceover start, 9 minuten, of 20 tot 30 met een herstart), dan kost het opstarten geen extra tijd; ${reading}`;
   return null;
 }
 

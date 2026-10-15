@@ -123,7 +123,7 @@ test("with the virtual Mac for VoiceOver set up, the estimate says to start it w
   assert.deepEqual(estimateRun(run, { voiceover: null }).notesNl, []);
   const stopped = estimateRun(run, { voiceover: "stopped" }).notesNl;
   assert.equal(stopped.length, 1);
-  assert.match(stopped[0]!, /start hem tegelijk met de veegronde \(loep voiceover start, 9 tot 20 minuten\).*loep voiceover stop/);
+  assert.match(stopped[0]!, /start hem tegelijk met de veegronde \(loep voiceover start, 9 minuten, of 20 tot 30 met een herstart\).*loep voiceover stop/);
   assert.match(estimateRun(run, { voiceover: "running" }).notesNl[0]!, /draait: beoordelaars, verifieerders en de afmaakronde/);
 });
 

@@ -12,7 +12,7 @@ export const VOICEOVER_USAGE = `loep voiceover <command>
 
   start                                  Boot the virtual Mac and warm it up: three spoken sentences, then VoiceOver on and off
                                          once. A boot whose warm-up fails is shut down and done again, at most three boots.
-                                         Progress with times on stderr; 9 to 20 minutes. Leave it running during an evaluation
+                                         Progress with times on stderr; 9 minutes, 20 to 30 with a restart. Leave it running during an evaluation
   read --url <address or file> [--steps <n>] [--press <name>] [--out <file>]
                                          Open the page in Safari in the virtual Mac, go into the web content, and give what
                                          VoiceOver says per step (default 15). A file on this machine is copied into the virtual
