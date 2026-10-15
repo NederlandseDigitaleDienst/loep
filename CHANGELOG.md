@@ -4,6 +4,13 @@ Wat er per versie van loep is veranderd. De versie staat op het voorblad en onde
 
 ## Nog niet uitgebracht
 
+## 0.1.1 (2026-10-15)
+
+### Verder
+
+- Elke sessie van een agent krijgt een eigen werkmap `<run>/werk/<sessie>/`, zodat agents geen hulpscripts delen en geen commando's in elkaars sessie terechtkomen (#22).
+- Bij open criteria noemt het rapport voor welke WCAG-versie een criterium geldt dat maar in één versie bestaat, zodat de telling klopt met de samenvatting (#26).
+
 ## 0.1.0 (2026-10-14)
 
 ### Wat een uitkomst kan veranderen
