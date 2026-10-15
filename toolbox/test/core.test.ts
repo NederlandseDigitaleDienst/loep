@@ -123,6 +123,21 @@ test("a criterion only gets an outcome from the verifier", () => {
   assert.equal(new Set(result.findings.map((entry) => entry.id)).size, 2, "finding identifiers are unique");
 });
 
+test("two defects in one component get identifiers that do not read as one defect twice", () => {
+  const criterion = criterionById("1.4.11")!;
+  const base = { criterion, procedure: null, provenance: { dossierSha256: null, verdictSha256: {} } };
+  const inSearch = { ...finding, component: "zoekveld" };
+  const twoDefects = { ...passed, criterion: "1.4.11", outcome: "failed" as const, findings: [{ ...inSearch, titleNl: "Vage pijl" }, { ...inSearch, titleNl: "Te donker kruisje" }] };
+  const ids = resolveCriterion({ ...base, verdicts: { a: passed, final: twoDefects } }, "X").findings.map((entry) => entry.id);
+  assert.equal(new Set(ids).size, 2);
+  assert.ok(ids.every((id) => /^X-1\.4\.11-[0-9a-f]{4}$/.test(id)), `no suffix: ${ids.join(", ")}`);
+  const sameDefectTwice = { ...twoDefects, findings: [inSearch, inSearch] };
+  const twice = resolveCriterion({ ...base, verdicts: { a: passed, final: sameDefectTwice } }, "X").findings.map((entry) => entry.id);
+  assert.equal(twice[1], `${twice[0]}-2`, "only the same title in the same place gets a suffix");
+  const alone = resolveCriterion({ ...base, verdicts: { a: passed, final: { ...twoDefects, findings: [inSearch] } } }, "X").findings[0]!.id;
+  assert.notEqual(alone, ids[0], "a finding alone in its place keeps the identifier of its place");
+});
+
 test("status follows the outcomes and needs a signature", () => {
   const evaluation = exampleEvaluation();
   assert.equal(complianceStatus(evaluation, "2.2").status, "geen");

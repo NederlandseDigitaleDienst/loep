@@ -341,8 +341,13 @@ export interface CriterionInput {
 
 const normalise = (text: string): string => text.toLowerCase().replace(/\s+/g, " ").trim();
 
-export function findingId(sitePrefix: string, criterion: string, finding: Finding): string {
-  const anchor = finding.component ? normalise(finding.component) : normalise(finding.locations[0]?.where ?? finding.titleNl);
+/**
+ * The identifier of a finding: its criterion and a short hash of its place. With `byTitle`, the title is
+ * part of the hash too, for findings of one criterion that share a place but are different defects.
+ */
+export function findingId(sitePrefix: string, criterion: string, finding: Finding, byTitle = false): string {
+  const place = finding.component ? normalise(finding.component) : normalise(finding.locations[0]?.where ?? finding.titleNl);
+  const anchor = byTitle ? `${place}\u0000${normalise(finding.titleNl)}` : place;
   return `${sitePrefix}-${criterion}-${stableId("x", criterion, anchor).slice(2, 6)}`;
 }
 
@@ -408,10 +413,15 @@ export function resolveCriterion(input: CriterionInput, sitePrefix: string): Cri
         : { by: "verification", noteNl: "Vastgesteld door de verificatie: een tweede agent heeft het oordeel van de beoordelaar gecontroleerd." };
   const [principleKey, guidelineKey] = [criterion.id.split(".")[0]!, criterion.id.split(".").slice(0, 2).join(".")];
   const used = new Set<string>();
-  const findings: ReportFinding[] = (final?.outcome === "failed" ? final.findings : []).map((finding) => {
-    let id = findingId(sitePrefix, criterion.id, finding);
-    // Two findings in the same place get distinct identifiers.
-    for (let suffix = 2; used.has(id); suffix++) id = `${findingId(sitePrefix, criterion.id, finding)}-${suffix}`;
+  const failedFindings = final?.outcome === "failed" ? final.findings : [];
+  const byPlace = failedFindings.map((finding) => findingId(sitePrefix, criterion.id, finding));
+  const findings: ReportFinding[] = failedFindings.map((finding, index) => {
+    // Two findings in the same place are different defects: the title tells them apart, so neither reads as
+    // the other one repeated. A suffix is left only for findings that share their title as well.
+    const shared = byPlace.filter((id) => id === byPlace[index]).length > 1;
+    const base = shared ? findingId(sitePrefix, criterion.id, finding, true) : byPlace[index]!;
+    let id = base;
+    for (let suffix = 2; used.has(id); suffix++) id = `${base}-${suffix}`;
     used.add(id);
     // A judge may leave out an optional field; the report relies on every field being there.
     return { ...finding, component: finding.component ?? null, id, criterion: criterion.id };

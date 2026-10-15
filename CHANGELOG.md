@@ -10,6 +10,11 @@ Wat er per versie van loep is veranderd. De versie staat op het voorblad en onde
 - 3.2.4 (Consistente identificatie): een knop die "Terug" heet als de bezoeker van de site kwam en "Naar de site" als die van buiten kwam, heeft twee functies en is geen inconsistentie. Een bevinding beschrijft elke naam die het onderdeel kan krijgen, niet alleen de naam die de beoordelaar zag.
 - Een naam die er is maar de functie onvolledig noemt, zoals een logo-link met alleen de naam van de organisatie, krijgt niet de ernst `hoog` van "geen naam".
 
+### Verder
+
+- Twee bevindingen onder hetzelfde criterium op dezelfde plek die verschillende gebreken zijn, krijgen elk een eigen nummer, met de titel in de hash. Eerder kreeg de tweede het nummer van de eerste met `-2` erachter, wat las als hetzelfde gebrek op een andere plek. Alleen dezelfde titel op dezelfde plek krijgt nog een achtervoegsel.
+- De zin op het voorblad noemt het aantal criteria als het geheel waaruit geteld wordt: "voldoet niet aan WCAG 2.2 niveau A en AA: van de 55 criteria zijn er 11 niet gehaald". Eerder stond er "voldoet niet aan de 55 criteria", wat las alsof alle 55 niet gehaald waren.
+
 ## 0.2.0 (2026-10-15)
 
 Deze versie is uitgebracht zonder nieuwe meting op de testsite. De twee wijzigingen die een uitkomst kunnen veranderen, zijn dus nog niet vergeleken met 0.1.2.
