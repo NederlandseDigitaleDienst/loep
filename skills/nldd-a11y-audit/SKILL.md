@@ -161,14 +161,20 @@ Een criterium dat open blijft door loep zelf, is een fout in loep en geen uitkom
 2. Laat de gebruiker de teksten lezen voordat er iets weggaat. Zeg erbij dat een issue openbaar is, en dat de punten door een agent zijn geschreven: er kan nog in staan welke site het is, zoals de naam van een dienst of een uniek stuk tekst. Haal weg wat de gebruiker niet openbaar wil. Verstuur niets zonder ja van de gebruiker.
 3. Zoek per tekst of het issue er al is. De titel blijft van run tot run gelijk, dus zoek op die titel:
    ```
-   gh issue list --repo NederlandseDigitaleDienst/loep --state open --search "\"<titel>\" in:title"
+   gh issue list --repo NederlandseDigitaleDienst/loep --state all --search "\"<titel>\" in:title"
    ```
-   Staat het er, zet de tekst dan als reactie onder dat issue (`gh issue comment <nummer> --repo NederlandseDigitaleDienst/loep --body-file <bestand>`): zo is te zien hoe vaak het voorkomt. Staat het er niet, maak het dan (`gh issue create --repo NederlandseDigitaleDienst/loep --title "<titel>" --label bug --body-file <bestand>`). Zonder `gh` geef je de gebruiker per tekst de titel, het bestand en de link https://github.com/NederlandseDigitaleDienst/loep/issues/new?labels=bug om het zelf te plakken.
+   Staat het er open, zet de tekst dan als reactie onder dat issue (`gh issue comment <nummer> --repo NederlandseDigitaleDienst/loep --body-file <bestand>`): zo is te zien hoe vaak het voorkomt. Is het gesloten, maak dan een nieuw issue en zet `Eerder: #<nummer>` bovenaan de tekst. Staat het er niet, maak het dan (`gh issue create --repo NederlandseDigitaleDienst/loep --title "<titel>" --label bug --body-file <bestand>`). Zonder `gh` geef je de gebruiker per tekst de titel, het bestand en de link https://github.com/NederlandseDigitaleDienst/loep/issues/new?labels=bug om het zelf te plakken.
 
 Ook dit meld je, met hetzelfde ja van de gebruiker en zonder het adres van de site tenzij de gebruiker dat wil:
 
 - **Een oordeel dat niet klopt.** Zegt de gebruiker dat loep een afwijking zag die er niet is, of er een miste, dan is dat een fout in loep: het formulier "Fout", met het criterium, wat loep zei en wat het had moeten zijn.
 - **Een punt `mens nodig` dat een instrument had kunnen meten.** Denk je dat, dan is dat een voorstel: het formulier "Voorstel", met wat er gemeten had moeten worden.
+
+**Eerst zoeken, dan pas een nieuw issue.** Dat geldt voor elke melding, ook voor een fout of een voorstel zonder vaste titel. Zoek op het criterium en een paar woorden die het gedrag beschrijven, in open en gesloten issues: `gh issue list --repo NederlandseDigitaleDienst/loep --state all --search "<criterium> <woorden>"`. Lees wat je vindt.
+
+- Een open issue over hetzelfde: zet een reactie eronder met wat deze run toevoegt (de versie van loep, wat er anders of nieuw is). Maak geen tweede issue.
+- Een gesloten issue dat terugkomt: maak een nieuw issue en noem het oude erin (`Eerder: #<nummer>`). De oplossing van toen was dan niet genoeg.
+- Twijfel je of het hetzelfde is, laat de gebruiker dan kiezen: de gevonden issues met hun titel, en wat jij zou doen.
 
 ## Als iets niet lukt
 
