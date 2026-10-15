@@ -298,6 +298,44 @@ test("what stays open only because the run may not send stands apart, with the d
   assert.equal(deriveReport(exampleEvaluation()).todo.investigate.notSent, null);
 });
 
+/** The example evaluation with one recommendation under a criterion that passed. */
+function withRecommendation() {
+  const evaluation = exampleEvaluation();
+  const host = evaluation.criteria.find((criterion) => criterion.outcome === "passed")!;
+  host.recommendations = [{ id: `X-${host.id}-A1b2c`, criterion: host.id, rule: "A1", titleNl: "Datum na de titel van een kaart", observedNl: "Bij elk nieuwsbericht staat de datum in de code vóór de titel.", recommendationNl: "Zet de datum in de code na de titel, of neem haar op in de kop.", component: null, locations: [{ page: "P01", where: ".kaart time", heading: "Nieuws" }], evidence: ["images"] }];
+  return { evaluation, host };
+}
+
+test("a recommendation stands apart, after what is wrong and open, and changes nothing in the outcome", () => {
+  const { evaluation, host } = withRecommendation();
+  const before = deriveReport(exampleEvaluation());
+  const derived = deriveReport(evaluation);
+  assert.deepEqual(derived.recommendations.map((item) => [item.id, item.criterion, item.rule, item.placesNl]), [[`X-${host.id}-A1b2c`, host.id, "A1", ["P01: onder de kop “Nieuws”"]]]);
+  assert.deepEqual(derived.status, before.status, "the status does not change");
+  assert.equal(derived.statusSentenceNl, before.statusSentenceNl);
+  const markdown = renderMarkdown(evaluation);
+  const work = markdown.split("## Wat nu")[1]!.split("\n## ")[0]!;
+  assert.ok(work.indexOf("### Nog uitzoeken") < work.indexOf("### Aanbevelingen"), "after what is open");
+  assert.ok(work.includes("is geen eis van WCAG en telt niet mee voor de uitkomst of de status"));
+  assert.ok(work.includes(`aanbeveling A1 van de procedure`));
+  assert.ok(work.includes("  - Aanbeveling: Zet de datum in de code na de titel, of neem haar op in de kop."));
+  assert.ok(!renderMarkdown(exampleEvaluation()).includes("### Aanbevelingen"), "no part without a recommendation");
+});
+
+test("the PDF shows the recommendations in their own part", async (context) => {
+  const dir = mkdtempSync(join(tmpdir(), "render-recommendation-"));
+  writeFileSync(join(dir, "evaluation.json"), canonicalJson(withRecommendation().evaluation));
+  const result = await render(dir);
+  if (result.pdf === null) return context.skip("Typst is not installed");
+  assert.deepEqual(result.pdfChecks.filter((problem) => !problem.includes("is niet geïnstalleerd")), []);
+  const text = await tool("pdftotext", [result.pdf, "-"]);
+  if (!text.found) return context.skip("pdftotext is not installed");
+  const flat = text.stdout.replace(/\s+/g, " ");
+  assert.ok(flat.includes("Aanbevelingen"));
+  assert.ok(flat.includes("Datum na de titel van een kaart"));
+  assert.ok(flat.includes("aanbeveling A1 van de procedure"));
+});
+
 test("the PDF shows the part for what waits for sending, with the flags of inventory", async (context) => {
   const dir = mkdtempSync(join(tmpdir(), "render-not-sent-"));
   writeFileSync(join(dir, "evaluation.json"), canonicalJson(withNotSent().evaluation));

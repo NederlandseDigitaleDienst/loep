@@ -6,12 +6,14 @@ Wat er per versie van loep is veranderd. De versie staat op het voorblad en onde
 
 ### Wat een uitkomst kan veranderen
 
+- 1.3.2 (Betekenisvolle volgorde): een datum, label of nummer vóór de titel van een kaart, in dezelfde volgorde op het scherm, is geen bevinding meer maar aanbeveling A1. De leesvolgorde klopt daar, en de norm vraagt niet meer; de regel was strenger dan de letter van het criterium en zette het criterium op "voldoet niet".
 - Inloggen bij DigiD, eHerkenning of eIDAS valt buiten het bereik, net als andere websites van derden, en het bereik in het rapport zegt dat. 3.3.8 (Toegankelijke authenticatie) blijft daardoor niet meer open bij een site waar alleen via zo'n dienst wordt ingelogd: zonder eigen inlog is het criterium niet van toepassing. Een andere inlogdienst op een ander domein, ook van een leverancier, hoort nog steeds bij de site. Eerder zette zo'n inlog de status op C, terwijl het bereik websites van derden uitsloot.
 - 3.2.4 (Consistente identificatie): een knop die "Terug" heet als de bezoeker van de site kwam en "Naar de site" als die van buiten kwam, heeft twee functies en is geen inconsistentie. Een bevinding beschrijft elke naam die het onderdeel kan krijgen, niet alleen de naam die de beoordelaar zag.
 - Een naam die er is maar de functie onvolledig noemt, zoals een logo-link met alleen de naam van de organisatie, krijgt niet de ernst `hoog` van "geen naam".
 
 ### Verder
 
+- Aanbevelingen: wat de site beter maakt en wat de norm niet vraagt, staat apart in het rapport, onder "Aanbevelingen" bij "Wat nu". Een aanbeveling telt niet mee voor de uitkomst, de status of de verklaring. Alleen een procedure geeft er een, met een regel in een eigen sectie (A1, A2). `check-verdict` weigert een aanbeveling zonder zo'n regel, zonder waarneming, op een plek met een bevinding, of op de plek van een bevinding die de verifieerder liet vervallen omdat ze niet opnieuw te zien was of bij een ander criterium hoort. `just procedures` weigert een regel voor een aanbeveling die een uitkomst noemt.
 - Twee bevindingen onder hetzelfde criterium op dezelfde plek die verschillende gebreken zijn, krijgen elk een eigen nummer, met de titel in de hash. Eerder kreeg de tweede het nummer van de eerste met `-2` erachter, wat las als hetzelfde gebrek op een andere plek. Alleen dezelfde titel op dezelfde plek krijgt nog een achtervoegsel.
 - De zin op het voorblad noemt het aantal criteria als het geheel waaruit geteld wordt: "voldoet niet aan WCAG 2.2 niveau A en AA: van de 55 criteria zijn er 11 niet gehaald". Eerder stond er "voldoet niet aan de 55 criteria", wat las alsof alle 55 niet gehaald waren.
 

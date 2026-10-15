@@ -76,6 +76,8 @@ export interface InstrumentTask {
   dossierSha256: string;
   passCommands: string[];
   decisiveCommands: string[];
+  /** The recommendation rules of the procedure. Absent in an index from before recommendations existed: then none. */
+  recommendationRules?: string[];
   judge: { prompt: string; output: string; candidates: string; session: string; maxCommands: number; maxMinutes: number };
   /** Written once every judge verdict of the run is in: only then is it known what other criteria hand over. */
   verify: { prompt: string; output: string; candidates: string; session: string; maxCommands: number; maxMinutes: number } | null;
@@ -446,7 +448,7 @@ export async function instrumentTasks(runDir: string, options: TaskOptions = {})
       join(runDir, judge.prompt),
       fill(templates.beoordeel, { ...shared, session: judge.session, workDir: await makeWorkDir(runDir, judge.session), maxCommands: String(judge.maxCommands), maxMinutes: String(judge.maxMinutes), candidates: join(absoluteRun, judge.candidates), notWalked: join(absoluteRun, NOT_WALKED), output: join(absoluteRun, judge.output), check: `node ${cli} check-verdict --run ${absoluteRun} --criterion ${criterion.id} --round judge` }),
     );
-    const task: InstrumentTask = { criterion: criterion.id, titleNl: criterion.titleNl, procedureVersion: procedure.version, procedureSha256: procedure.sha256, dossier: dossierPath, dossierSha256, passCommands: procedure.passCommands, decisiveCommands: procedure.decisiveCommands, judge, verify: null };
+    const task: InstrumentTask = { criterion: criterion.id, titleNl: criterion.titleNl, procedureVersion: procedure.version, procedureSha256: procedure.sha256, dossier: dossierPath, dossierSha256, passCommands: procedure.passCommands, decisiveCommands: procedure.decisiveCommands, recommendationRules: procedure.recommendationRules, judge, verify: null };
     await writeJudge();
     if (sessionStarted(runDir, judge.session) && !(await instrumentVerdictIsCurrent(runDir, task, "judge", observations))) {
       judge.session = nextSession(runDir, `b-${digits}`);
@@ -712,6 +714,7 @@ export async function checkInstrumentVerdict(runDir: string, criterionId: string
     candidateIds: (await readJson<Candidate[]>(join(runDir, part.candidates))).map((candidate) => candidate.id),
     passCommands: task.passCommands,
     decisiveCommands: task.decisiveCommands,
+    recommendationRules: task.recommendationRules ?? [],
     fileExists: (ref: string) => !ref.includes("..") && existsSync(join(runDir, ref)),
     sourceText: sourceTexts(runDir, observations.records, dossier),
     ...(dossier.site?.baseUrl ? { siteHost: new URL(dossier.site.baseUrl).host } : {}),

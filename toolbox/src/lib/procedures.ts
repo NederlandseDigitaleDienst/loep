@@ -32,6 +32,8 @@ export interface Procedure {
   passCommands: string[];
   /** Commands whose method agreement matters for this criterion: a pass must settle a disagreement in these. Defaults to `passCommands`. */
   decisiveCommands: string[];
+  /** The rules of the section "Aanbevelingen" ("A1", "A2"): the only recommendations a verdict may give. Empty without that section. */
+  recommendationRules: string[];
   body: string;
   /** Hash of the whole file: recorded with every verdict that was reached with it. */
   sha256: string;
@@ -60,6 +62,15 @@ export function parseProcedure(text: string, expectedId?: string): Procedure {
   else for (const name of decisive ?? []) if (!SHOWING_COMMANDS.includes(name)) problems.push(`decisive: "${name}" is not a look or measure command`);
   for (const section of REQUIRED_SECTIONS) if (!body.includes(`## ${section}`)) problems.push(`missing section "## ${section}"`);
   if (!/kan niet bepalen|cantTell/i.test(body.split("## Beslisregels")[1] ?? "")) problems.push('the decision rules must end in "kan niet bepalen"');
+  const recommendations = recommendationSection(body);
+  const recommendationRules = recommendations === null ? [] : [...recommendations.matchAll(/^- (A\d+)\. /gm)].map((match) => match[1]!);
+  if (recommendations !== null) {
+    if (recommendationRules.length === 0) problems.push('the section "## Aanbevelingen" has no rules ("- A1. ...")');
+    if (new Set(recommendationRules).size !== recommendationRules.length) problems.push('the section "## Aanbevelingen" names a recommendation rule twice');
+    // A recommendation rule never decides: an outcome comes from the decision rules alone.
+    const outcome = /\b(failed|passed|cantTell|inapplicable)\b|voldoet niet|niet van toepassing|kan niet bepalen/i.exec(recommendations);
+    if (outcome) problems.push(`the section "## Aanbevelingen" names an outcome ("${outcome[0]}"); a recommendation never changes the outcome, so its rules do not mention one`);
+  }
   if (problems.length > 0) throw new Error(problems.join("; "));
   return {
     id,
@@ -70,9 +81,16 @@ export function parseProcedure(text: string, expectedId?: string): Procedure {
     limitsNl: (front.limits as string | undefined) ?? null,
     passCommands: Array.isArray(passCommands) ? passCommands : [],
     decisiveCommands: Array.isArray(decisive) ? decisive : Array.isArray(passCommands) ? passCommands : [],
+    recommendationRules,
     body,
     sha256: sha256(text),
   };
+}
+
+/** The text of the section "## Aanbevelingen", up to the next section; null when the procedure has none. */
+export function recommendationSection(body: string): string | null {
+  const match = /^## Aanbevelingen\n([\s\S]*?)(?=^## |(?![\s\S]))/m.exec(body);
+  return match ? match[1]! : null;
 }
 
 export function loadProcedure(id: string): Procedure {

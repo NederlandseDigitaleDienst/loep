@@ -50,7 +50,7 @@ De skill `nldd-a11y-audit` neemt het dan over. Voordat er iets draait, stelt de 
 
 Wat je in je vraag al zei, vraagt hij niet opnieuw. Daarna zegt hij hoeveel pagina's er zijn en hoe lang het duurt volgens `estimate`: voor een site van 30 pagina's met drie agents tegelijk ruim vier uur. Dan werkt hij zelf door, in de volgorde van [Hoe het werkt](#hoe-het-werkt). Hij onderbreekt je alleen als iets van jou afhangt, zoals een inlogsessie die verloopt.
 
-Je krijgt per criterium de uitkomst, wie of wat haar vaststelde, en wat nog open is en waarom. Het rapport staat als concept in de map van de run. Wat daarna van jou is:
+Je krijgt per criterium de uitkomst, wie of wat haar vaststelde, en wat nog open is en waarom. Apart staan aanbevelingen: wat de site beter maakt maar de norm niet vraagt; ze tellen niet mee voor de uitkomst. Het rapport staat als concept in de map van de run. Wat daarna van jou is:
 
 - Open punten die geen instrument kan sluiten (luisteren met een echte schermlezer, een besluit van de eigenaar), beantwoord je zelf met `answer`. De assistent toont de punten, maar typt het antwoord niet voor je.
 - Je leest het rapport en tekent met `sign`. Tekenen doet nooit de assistent.

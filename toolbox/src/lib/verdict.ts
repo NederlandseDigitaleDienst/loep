@@ -53,6 +53,25 @@ export interface Finding {
   key?: string;
 }
 
+/**
+ * A recommendation: a pattern that makes the site better and that the norm does not require. It
+ * never changes the outcome. Only a rule in the section "Aanbevelingen" of the procedure can give
+ * it, so the agent cannot decide on its own that something is "only a recommendation": what a
+ * decision rule calls wrong is a finding, and a finding that was dropped does not come back as a
+ * recommendation.
+ */
+export interface Recommendation {
+  /** The recommendation rule of the procedure it rests on, such as "A1". */
+  rule: string;
+  titleNl: string;
+  observedNl: string;
+  /** What to do, as a pattern to follow. */
+  recommendationNl: string;
+  component?: string | null;
+  locations: Location[];
+  evidence: string[];
+}
+
 export const CANDIDATE_RULINGS = ["finding", "noIssue", "otherCriterion", "open"] as const;
 
 /** What the judge decided about one lead of the walk-through. */
@@ -115,6 +134,8 @@ export interface Verdict {
   summaryNl: string;
   observations: Observation[];
   findings: Finding[];
+  /** Recommendations under a rule of the section "Aanbevelingen" of the procedure; next to any outcome, and they never change it. */
+  recommendations?: Recommendation[];
   missingNl?: string[];
   /**
    * Only with "cantTell": nothing wrong was found, and all that is open is a limit of the
@@ -384,6 +405,8 @@ interface InstrumentContext {
   passCommands: string[];
   /** Commands whose method agreement matters for this criterion (`decisive`, or else `pass_observations`). */
   decisiveCommands: string[];
+  /** The recommendation rules of the procedure ("A1", "A2"). Without them a verdict gives no recommendations. */
+  recommendationRules?: string[];
   /** Whether a path that a verdict cites exists in the run. Without it, no file counts as evidence. */
   fileExists?: (ref: string) => boolean;
   /** The text of a cited observation, a dossier part or the saved copy of a page (by its label), or null when the reference has none. Without it, quotations are not checked. */
@@ -605,6 +628,51 @@ function quoteProblems(finding: Partial<Finding>, at: string, sourceText: (ref: 
   return problems;
 }
 
+const normalisePlace = (text: string): string => text.toLowerCase().replace(/\s+/g, " ").trim();
+
+/** The places a finding or a recommendation points at: its component, and each page with its spot. */
+export function placesOf(item: { component?: string | null; locations?: Location[] }): string[] {
+  const places = (Array.isArray(item.locations) ? item.locations : []).filter((location) => typeof location?.where === "string").map((location) => `${location.page} ${normalisePlace(location.where)}`);
+  return typeof item.component === "string" && item.component.trim() ? [`component ${normalisePlace(item.component)}`, ...places] : places;
+}
+
+/**
+ * A recommendation comes only from the procedure: a rule of its section "Aanbevelingen", an
+ * observation that shows it, and a place a reader can find. It never stands where this verdict has a finding:
+ * one place is either wrong or open to improvement, not both.
+ */
+function recommendationProblems(verdict: Partial<Verdict>, context: InstrumentContext, showsOwn: (ref: string) => boolean, whose: string): string[] {
+  const recommendations = verdict.recommendations;
+  if (recommendations === undefined) return [];
+  if (!Array.isArray(recommendations)) return ["recommendations must be a list"];
+  const rules = context.recommendationRules ?? [];
+  if (recommendations.length > 0 && rules.length === 0) return ["recommendations: the procedure of this criterion has no section \"Aanbevelingen\", so this verdict gives no recommendations. Something that is wrong is a finding; something that is not wrong needs no entry"];
+  const findingPlaces = new Set((Array.isArray(verdict.findings) ? verdict.findings : []).flatMap(placesOf));
+  const problems: string[] = [];
+  recommendations.forEach((entry, position) => {
+    const at = `recommendations[${position}]`;
+    if (!rules.includes(entry?.rule)) problems.push(`${at}: rule must be a recommendation rule of the procedure (${rules.join(", ")}); a recommendation for which the procedure has no rule is not given`);
+    for (const field of ["titleNl", "observedNl", "recommendationNl"] as const) if (!isText(entry?.[field], 10)) problems.push(`${at}: ${field} is missing`);
+    const locations = Array.isArray(entry?.locations) ? entry.locations : [];
+    if (locations.length === 0) problems.push(`${at}: at least one location is required`);
+    locations.forEach((location, place) => {
+      if (!context.pageLabels.includes(location?.page)) problems.push(`${at}.locations[${place}]: page "${location?.page}" is not in the legend`);
+      if (!isText(location?.where, 3)) problems.push(`${at}.locations[${place}]: where is missing`);
+      if (!(location?.wholePage === true || isText(location?.heading, 2) || isText(location?.text, 2))) problems.push(`${at}.locations[${place}]: give "heading" or "text" as the page has it, so a reader finds the place without the selector`);
+    });
+    const refs = Array.isArray(entry?.evidence) ? entry.evidence.filter((ref): ref is string => typeof ref === "string") : [];
+    if (!refs.some(showsOwn)) problems.push(`${at}: a recommendation needs at least one observation${whose} of a look or measure command that shows it`);
+    for (const ref of refs) {
+      const problem = refProblem(ref, context);
+      if (problem) problems.push(`${at}: ${problem}`);
+    }
+    if (context.sourceText) problems.push(...quoteProblems(entry as unknown as Partial<Finding>, at, context.sourceText));
+    const shared = placesOf(entry).find((place) => findingPlaces.has(place));
+    if (shared) problems.push(`${at}: this verdict has a finding at the same place (${shared}). A place that is wrong gets a finding and no recommendation; a recommendation is only for what no decision rule calls wrong`);
+  });
+  return problems;
+}
+
 /**
  * The rules that tie a verdict to the observation log.
  * `ownSession`: when given, only observations of that session count as showing a finding.
@@ -643,6 +711,8 @@ function instrumentRules(verdict: Partial<Verdict>, context: InstrumentContext, 
     problems.push(...adviceProblems(finding, at, context));
     problems.push(...inputProblems(finding, at, context));
   });
+
+  problems.push(...recommendationProblems(verdict, context, (ref) => shows(ref) && own(ref), whose));
 
   // Every open point says of what kind it is, and is written for a reader who does not know the toolbox.
   (Array.isArray(verdict.missingNl) ? verdict.missingNl : []).forEach((point, position) => {
@@ -807,6 +877,13 @@ export function validateVerification(input: unknown, context: VerificationContex
   if (judge.outcome === "failed" && verdict.outcome === "cantTell" && checks.some((check) => check.dropped === "notSupported") && choices(verdict.missingNl) > choices(judge.missingNl)) {
     problems.push('a finding dropped as notSupported is your own reading of the norm; a new "keuze nodig:" point next to it hands that reading to whoever signs. Keep the finding, or drop it and name in reasonNl the text of the norm or the procedure that allows it. "keuze nodig:" is only for a choice the norm or the procedure leaves to the owner of the site');
   }
+  // A finding the verifier could not see again, or that belongs elsewhere, does not come back as a recommendation at the same place.
+  const goneFindings = judge.findings.filter((finding, position) => checks.some((check) => check.key === (finding.key ?? `F${position + 1}`) && (check.dropped === "notReproduced" || check.dropped === "wrongCriterion")));
+  const gonePlaces = new Map(goneFindings.flatMap((finding) => placesOf(finding).map((place): [string, string] => [place, finding.key ?? "?"])));
+  (Array.isArray(verdict.recommendations) ? verdict.recommendations : []).forEach((entry, position) => {
+    const place = placesOf(entry).find((candidate) => gonePlaces.has(candidate));
+    if (place) problems.push(`recommendations[${position}]: finding ${gonePlaces.get(place)} of the judge at this place (${place}) was dropped; it does not come back as a recommendation. If it is wrong, keep it as a finding; if it was not seen again, leave it out`);
+  });
   if (judge.outcome !== "failed") {
     if (!isText(verification.attackNl, 30)) problems.push(judge.outcome === "cantTell" ? "verification.attackNl: say what you tried to settle what the judge left open" : `verification.attackNl: say what you tried to find a counterexample against "${judge.outcome}"`);
     if (!(Array.isArray(verification.attackEvidence) && verification.attackEvidence.some(ownShowing))) problems.push(`verification.attackEvidence: attacking "${judge.outcome}" needs at least one look or measure observation of session "${context.session}"`);

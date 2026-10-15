@@ -422,3 +422,38 @@ test("severity has four steps, the highest for a function that works for nobody"
   for (const severity of ["blokkerend", "hoog", "midden", "laag"] as const) assert.deepEqual(validateJudgeVerdict({ ...failed, findings: [{ ...finding, severity }] }, context), []);
   assert.match(validateJudgeVerdict({ ...failed, findings: [{ ...finding, severity: "kritiek" as "hoog" }] }, context).join(), /severity must be one of blokkerend, hoog, midden, laag/);
 });
+
+const recommendation = { rule: "A1", titleNl: "Datum na de titel zetten", observedNl: "Bij elk nieuwsbericht staat de datum in de code vóór de titel.", recommendationNl: "Zet de datum in de code na de titel, of neem haar op in de kop.", component: null, locations: [{ page: "P02", where: ".nieuws .kaart", heading: "Nieuws" }], evidence: ["j143-0002"] };
+const recommending: JudgeContext = { ...context, recommendationRules: ["A1"] };
+
+test("a recommendation rests on a rule of the procedure, never changes the outcome and is not given where something is wrong", () => {
+  // Next to a pass and next to a failure elsewhere: accepted.
+  assert.deepEqual(validateJudgeVerdict({ ...passed, recommendations: [recommendation] }, recommending), []);
+  assert.deepEqual(validateJudgeVerdict({ ...failed, recommendations: [recommendation] }, recommending), []);
+  // A procedure without a section "Aanbevelingen" gives none, and a rule it does not have gives none.
+  assert.match(validateJudgeVerdict({ ...passed, recommendations: [recommendation] }, context).join(), /has no section "Aanbevelingen"/);
+  assert.match(validateJudgeVerdict({ ...passed, recommendations: [{ ...recommendation, rule: "A2" }] }, recommending).join(), /must be a recommendation rule of the procedure \(A1\)/);
+  // Without an observation that shows it, or without words of the page for the place: refused.
+  assert.match(validateJudgeVerdict({ ...passed, recommendations: [{ ...recommendation, evidence: ["contrast"] }] }, recommending).join(), /a recommendation needs at least one observation of a look or measure command/);
+  assert.match(validateJudgeVerdict({ ...passed, recommendations: [{ ...recommendation, locations: [{ page: "P02", where: ".kaart" }] }] }, recommending).join(), /give "heading" or "text"/);
+  // One place is wrong or open to improvement, not both.
+  assert.match(validateJudgeVerdict({ ...failed, recommendations: [{ ...recommendation, locations: finding.locations }] }, recommending).join(), /has a finding at the same place/);
+});
+
+test("a finding the verifier drops does not come back as a recommendation at its place", () => {
+  const notSeenAgain: Verdict = {
+    ...passed,
+    outcome: "cantTell",
+    rule: "R3",
+    missingNl: ["proef werkte niet: de datum op P01 gaf bij een nieuwe meting 4,6 op 1; de bevinding is niet gereproduceerd."],
+    observations: [{ ...seen, evidence: ["v143-0002"] }],
+    recommendations: [{ ...recommendation, locations: finding.locations, evidence: ["v143-0003"] }],
+    verification: { judgeOutcome: "failed", findings: [{ key: "F1", reproduced: false, evidence: [], dropped: "notReproduced", reasonNl: "Op een verse pagina meet de datum 4,6 op 1." }] },
+  };
+  const recommendingVerifier: VerificationContext = { ...verifierContext, recommendationRules: ["A1"] };
+  assert.match(validateVerification(notSeenAgain, recommendingVerifier).join(), /finding F1 of the judge at this place .* was dropped; it does not come back as a recommendation/);
+  // Elsewhere on the site, and seen by the verifier itself: accepted.
+  assert.deepEqual(validateVerification({ ...notSeenAgain, recommendations: [{ ...recommendation, evidence: ["v143-0003"] }] }, recommendingVerifier), []);
+  // The verifier shows a recommendation with its own observation, like a finding.
+  assert.match(validateVerification({ ...notSeenAgain, recommendations: [recommendation] }, recommendingVerifier).join(), /a recommendation needs at least one observation of session "v143"/);
+});

@@ -22,6 +22,7 @@ limits: "..."                          # optioneel
 ## Werkwijze
 ## Zelf nagaan
 ## Beslisregels
+## Aanbevelingen                        # optioneel
 ## Bewijs bij goedkeuring
 ## Valkuilen
 ## Wat de veegronde moet leveren
@@ -49,6 +50,7 @@ limits: "..."                          # optioneel
 4. **Beslisregels**: gesloten regels R1, R2, enzovoort, in de volgorde waarin ze worden toegepast. Eerst de regels die tot `failed` leiden, dan `passed`, dan `inapplicable` als dat kan. De laatste regel is altijd "Anders: kan niet bepalen (`cantTell`)". Die regel stuurt de beoordelaar eerst naar "Zelf nagaan" en noemt daarna alleen wat geen instrument kan vaststellen, een onderdeel dat na een echte poging niet openging, methoden die het oneens blijven, een dekking die de veegronde had moeten leveren, en een budget dat op is. Wat pas na het versturen van een formulier verschijnt, is alleen buiten bereik als de run niet mag versturen; dan begint het punt met `versturen niet toegestaan:`.
 5. **Bewijs bij goedkeuring**: wat er minimaal in de waarnemingen moet staan voordat een goedkeuring telt, uit het dossier en uit wat de beoordelaar zelf heeft gemeten. Altijd met aantallen, en in lijn met `pass_observations`.
 6. **Wat de veegronde moet leveren**: de laatste sectie. Eén regel per dekking die het dossier moet bevatten voordat een goedkeuring kan: welk onderdeel, op welke pagina's, in welke toestanden, breedtes en kleurenschema's, en of het dossier dit nu al heeft ("nieuw" als de veegronde het nog moet gaan leveren). Een goedkeuring rust op die dekking plus een steekproef van de beoordelaar. Mist het dossier een dekking, dan schrijft de beoordelaar `veegronde mist: ...` in `missingNl`. Elk open punt daar begint met zijn soort: `mens nodig:`, `keuze nodig:` of `versturen niet toegestaan:` voor wat de eigenaar van de site moet nagaan, kiezen of toestaan, en `veegronde mist:`, `budget op:` of `proef werkte niet:` voor wat over het onderzoek zelf gaat. Zijn er alleen punten van de tweede groep en is er niets fout gevonden, dan kan het oordeel zeggen "geen afwijking gevonden, niet volledig gemeten"; de uitkomst blijft `cantTell`.
+8. **Aanbevelingen** (optioneel, na de beslisregels): regels A1, A2, enzovoort, voor een patroon dat de site beter maakt en dat de norm niet vraagt, elk met de bron (de gangbare onderzoekspraktijk, een patroon uit een designsysteem). Een aanbeveling verandert de uitkomst nooit, en een regel hier noemt er geen. Wat de norm fout noemt, hoort onder een beslisregel; een regel die strenger is dan de letter van het criterium, hoort hier. Een agent geeft alleen een aanbeveling onder een regel uit deze sectie.
 7. **Valkuilen** (staat in het bestand vóór de vorige sectie): bekende valse meldingen van engines, methoden waarvan bekend is dat ze hier fout meten, en waar dit criterium ophoudt en een ander begint.
 
 Een goedkeuring vraagt positief bewijs. Kan het dossier een deel van het criterium niet aantonen, schrijf dan onder "Zelf nagaan" met welk commando de beoordelaar het wel aantoont. Kan geen instrument het aantonen, schrijf dan een beslisregel die in dat geval op `cantTell` uitkomt, en zet de beperking in `limits`. Een procedure die een criterium laat slagen omdat er niets gevonden is, is fout.
@@ -59,4 +61,4 @@ Een goedkeuring vraagt positief bewijs. Kan het dossier een deel van het criteri
 just procedures
 ```
 
-De controle faalt als `id`, `version`, `class` of `evidence` ontbreekt of ongeldig is, als een procedure een onbekende extractor vraagt, een verplicht kopje mist (ook "Zelf nagaan"), in `pass_observations` of `decisive` een commando noemt dat geen kijk- of meetcommando is, als de beslisregels nergens "kan niet bepalen" noemen, of als er een procedure ontbreekt of te veel is.
+De controle faalt als `id`, `version`, `class` of `evidence` ontbreekt of ongeldig is, als een procedure een onbekende extractor vraagt, een verplicht kopje mist (ook "Zelf nagaan"), in `pass_observations` of `decisive` een commando noemt dat geen kijk- of meetcommando is, als de beslisregels nergens "kan niet bepalen" noemen, als de sectie "Aanbevelingen" geen regel heeft, een regel twee keer noemt of een uitkomst noemt, of als er een procedure ontbreekt of te veel is.

@@ -68,7 +68,7 @@ Hij onderbreekt je alleen als iets van jou afhangt: een pagina met een wachtwoor
 
 ### Wat je terugkrijgt
 
-Per criterium de uitkomst, met erbij of de verificatie, de afmaakronde of een persoon die heeft vastgesteld, en de beperkingen. Bovenaan staat hoeveel criteria nog open zijn en waarom: wachten op een mens, wachten op een keuze van de eigenaar, wachten op toestemming om te versturen, of niet vastgesteld door dit onderzoek. Dat laatste getal hoort nul te zijn. Is het dat niet, dan zegt de assistent dat het onderzoek niet af is.
+Per criterium de uitkomst, met erbij of de verificatie, de afmaakronde of een persoon die heeft vastgesteld, en de beperkingen. Bovenaan staat hoeveel criteria nog open zijn en waarom: wachten op een mens, wachten op een keuze van de eigenaar, wachten op toestemming om te versturen, of niet vastgesteld door dit onderzoek. Dat laatste getal hoort nul te zijn. Is het dat niet, dan zegt de assistent dat het onderzoek niet af is. Apart staan aanbevelingen: patronen die de site beter maken en die de norm niet vraagt. Ze tellen niet mee voor de uitkomst of de status, en komen alleen uit een regel van de procedure.
 
 "Voldoet" betekent hier: in het onderzochte bewijs is geen afwijking gevonden. Wat de toolbox niet kan, staat in [methode.md](methode.md#beperkingen).
 

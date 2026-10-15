@@ -109,6 +109,8 @@ export const REPORT_TEXT = {
   answers: "Vastgesteld door een persoon, niet door een instrument",
   before: "Het oordeel dat hiervoor stond",
   establishedBy: "Vastgesteld door",
+  recommendations: "Aanbevelingen",
+  recommendationsIntro: "Wat hier staat, is geen eis van WCAG en telt niet mee voor de uitkomst of de status. Het zijn patronen die de procedure van een criterium aanraadt, en alleen waar de procedure een regel voor een aanbeveling heeft. Een gebrek staat nooit hier: wat de norm fout noemt, staat onder Oplossen.",
   investigateIntro: "Wat het onderzoek open laat, staat hier in delen. Het eerste deel is werk voor de eigenaar van de site. Het laatste deel gaat over grenzen van dit onderzoek: daar hoeft de eigenaar niets mee te doen.",
   investigate: {
     owner: "Dit moet een mens nagaan",
@@ -218,6 +220,32 @@ export interface NotSent {
   originNl: string;
 }
 
+/** One recommendation as the report lists it. */
+export interface RecommendationItem {
+  id: string;
+  criterion: string;
+  /** The recommendation rule of the procedure, such as "A1". */
+  rule: string;
+  titleNl: string;
+  observedNl: string;
+  recommendationNl: string;
+  /** Each place with its page, in words of the page where there are any. */
+  placesNl: string[];
+}
+
+/** Where a recommendation is, as plain text for both reports: words of the page first, as with a finding, and the spot as described when there are none. */
+function recommendationPlaceNl(location: { page: string; where: string; heading?: string; text?: string; wholePage?: boolean }): string {
+  if (location.wholePage) return `${location.page}: de hele pagina`;
+  const words = [location.heading ? `onder de kop \u201c${location.heading}\u201d` : "", location.text ? `bij \u201c${location.text}\u201d` : ""].filter((part) => part !== "");
+  return `${location.page}: ${words.length > 0 ? words.join(", ") : location.where}`;
+}
+
+export function recommendationItems(evaluation: Evaluation): RecommendationItem[] {
+  return [...evaluation.criteria]
+    .sort((a, b) => compareCriterionIds(a.id, b.id))
+    .flatMap((criterion) => (criterion.recommendations ?? []).map((entry) => ({ id: entry.id, criterion: criterion.id, rule: entry.rule, titleNl: entry.titleNl, observedNl: entry.observedNl, recommendationNl: entry.recommendationNl, placesNl: entry.locations.map(recommendationPlaceNl) })));
+}
+
 export interface ReportDerived {
   hash: string;
   hashShort: string;
@@ -268,6 +296,8 @@ export interface ReportDerived {
   briefs: Record<string, CriterionBrief>;
   /** Criteria with nothing to act on and nothing to look into: one row in a table, no block of their own. */
   quiet: string[];
+  /** The recommendations of every criterion, in the order of the criteria: never part of an outcome. Empty when there is none. */
+  recommendations: RecommendationItem[];
   todo: { /** Criteria a person found failing: there is no finding of an instrument behind them, so they stand here by name. */ person: { criterion: string; textNl: string }[]; fix: { owner: string; findingIds: string[] }[]; /** Findings that touch an element of the vendor, per element; null when no vendor was given. */ vendor: { nameNl: string; elements: { tag: string; findingIds: string[] }[] } | null; /** Every open point of the evaluation by whose work it is. The owner's points and those without a kind stand here in full; those about the evaluation itself are counted here and stand in appendix A. */ investigate: { owner: OpenGroup[]; /** The points that stay open only because the run may not send, with the declaration that would have let it; null when there are none. */ notSent: NotSent | null; unsorted: OpenGroup[]; toolbox: { criterion: string; outcomeNl: string; countNl: string; kindsNl: string; /** What was measured, for a criterion without a deviation that was not fully measured. */ coverageNl: string | null; anchor: boolean }[] } };
   /** The findings grouped into things to repair; null for an evaluation from before that step existed. */
   defects: DefectsDerived | null;
@@ -834,6 +864,7 @@ export function deriveReport(input: Evaluation): ReportDerived {
     disagreementNl: chain.agreementNl,
     briefs: Object.fromEntries(evaluation.criteria.map((criterion) => [criterion.id, brief(criterion)])),
     quiet: evaluation.criteria.filter(isQuiet).map((criterion) => criterion.id),
+    recommendations: recommendationItems(evaluation),
     todo: work,
     defects: deriveDefects(evaluation, pageLabels(evaluation)),
     generalLimitationsNl: evaluation.limitationsNl.filter((limitation) => !procedureLimits.has(limitation)).map(closeCutQuote),
@@ -1201,6 +1232,19 @@ export function renderMarkdown(input: Evaluation): string {
       for (const item of open.toolbox) lines.push(`${head(item)}: ${item.countNl} (${item.kindsNl}), zie [bijlage A](#${appendixAnchor(item.criterion)})${item.coverageNl ? `. ${REPORT_TEXT.measured}: ${esc(item.coverageNl)}` : ""}`);
       lines.push("");
     }
+  }
+
+  if (derived.recommendations.length > 0) {
+    lines.push(`### ${REPORT_TEXT.recommendations}`, "", REPORT_TEXT.recommendationsIntro, "");
+    for (const item of derived.recommendations) {
+      const criterion = evaluation.criteria.find((entry) => entry.id === item.criterion)!;
+      lines.push(`- <a id="${item.id}"></a>**${esc(item.titleNl)}** (${item.id})`);
+      lines.push(`  - Bij [${criterion.id} ${esc(criterion.titleNl)}](#${criterionAnchor(criterion.id)}), aanbeveling ${item.rule} van de procedure.`);
+      lines.push(`  - Gezien: ${esc(item.observedNl)}`);
+      lines.push(`  - Aanbeveling: ${esc(item.recommendationNl)}`);
+      lines.push(`  - Waar: ${item.placesNl.map(esc).join("; ")}`);
+    }
+    lines.push("");
   }
 
   section("Onderzoeksgegevens");

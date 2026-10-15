@@ -218,6 +218,19 @@ Een bevinding heeft een ernst in vier treden: `blokkerend` (een functie of een d
 
 De beoordelaar noemt wie een gebrek herstelt. Is bij de inventarisatie opgegeven welke elementen van een leverancier zijn (`--vendor-tags`), dan toont het rapport per zo'n element welke bevindingen het raken. Dat zegt waar een gebrek zit, niet wie het herstelt. `evaluate` zet de eigenaar alleen op de leverancier als het advies over de binnenkant van zo'n element gaat; wat de beoordelaar noemde, blijft in de gegevens staan.
 
+## Aanbevelingen
+
+Niet alles wat een site beter maakt, eist de norm. Een aanbeveling is een patroon dat helpt en dat WCAG niet vraagt: bijvoorbeeld de datum van een kaart in de code na haar titel, zodat wie met een schermlezer van kop naar kop springt haar hoort. Het rapport zet aanbevelingen apart, onder "Aanbevelingen" bij "Wat nu", na wat fout of open is. Ze tellen niet mee voor de uitkomst van een criterium, niet voor de status en niet in de verklaring.
+
+Een aanbeveling mag geen uitweg worden voor wat fout is. Daarom:
+
+- Alleen de procedure geeft een aanbeveling, in een eigen sectie met regels A1, A2. Een agent kan niet zelf besluiten dat iets "maar een aanbeveling" is: zonder regel in de procedure weigert `check-verdict` haar.
+- Een regel voor een aanbeveling noemt geen uitkomst; `just procedures` weigert er een die dat doet. Wat de norm fout noemt, staat onder een beslisregel en wordt een bevinding.
+- Op een plek met een bevinding staat geen aanbeveling, en een bevinding die de verifieerder laat vervallen omdat hij haar niet opnieuw zag of omdat ze bij een ander criterium hoort, komt op die plek niet terug als aanbeveling.
+- Een aanbeveling heeft een waarneming van een kijk- of meetcommando nodig, en bij de verifieerder en de afmaakronde een uit de eigen sessie.
+
+Een regel die strenger is dan de letter van het criterium, hoort hier en niet onder de beslisregels. Zo is de regel voor kaarten bij 1.3.2 sinds 0.3.0 aanbeveling A1: daar klopt de leesvolgorde, en de norm vraagt niet meer.
+
 ## Een volgend onderzoek
 
 `evaluate --previous` laat een bevinding op dezelfde plek onder hetzelfde criterium haar nummer houden. `diff` legt twee evaluaties van dezelfde site naast elkaar en schrijft `verschil.md`: opgelost, gebleven, nieuw, en de criteria met een andere uitkomst, gekoppeld op criterium, pagina en plek. Dat is een werkdocument en geen deel van het rapport. Het rapport noemt een vorig onderzoek in één regel, en alleen als dat is afgetekend.

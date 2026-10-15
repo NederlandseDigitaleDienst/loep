@@ -112,6 +112,9 @@ Stop je sessie als je klaar bent: `node {{cli}} session stop --run {{run}} --ses
   "crossCandidates": [
     { "criterion": "2.4.11", "page": "P03", "where": "link 'Naar boven' in de voet", "evidence": ["{{session}}-0021"], "noteNl": "Eén zin: wat je zag dat bij dat criterium hoort." }
   ],
+  "recommendations": [
+    { "rule": "A1", "titleNl": "...", "observedNl": "...", "recommendationNl": "...", "component": null, "locations": [ { "page": "P03", "where": "...", "heading": "..." } ], "evidence": ["{{session}}-0018"] }
+  ],
   "resolved": [
     { "observations": ["{{session}}-0009"], "by": ["{{session}}-0010"], "howNl": "Wat het verschil tussen de methoden was en waarmee je het hebt beslecht." }
   ],
@@ -127,6 +130,7 @@ Stop je sessie als je klaar bent: `node {{cli}} session stop --run {{run}} --ses
 - `candidates`: één regel per kandidaat uit het bestand, niet meer en niet minder. Bij `finding` noem je de `key` van de bevinding. Bij `otherCriterion` noem je het criterium. Bij `noIssue` zet je in `evidence` de waarneming waarmee je het hebt nagekeken. `open` kan niet samen met `passed` of `inapplicable`.
 - `crossCandidates`: wat je zag dat bij een ander criterium hoort, elk met een waarneming van een kijk- of meetcommando en één zin van hooguit 40 woorden. Laat het veld weg als er niets is.
 - `resolved`: alleen nodig als je voor `passed` of `inapplicable` verwijst naar een meting waarvan de methoden het oneens waren over de vraag van dit criterium. Eén regel per soort verschil: in `observations` alle metingen met dat verschil, in `by` de waarneming waarmee je het hebt beslecht (een andere dan de metingen zelf), in `howNl` wat het verschil was.
+- `recommendations`: alleen onder een regel uit de sectie "Aanbevelingen" van de procedure, met die regel in `rule` (`A1`). Verder `titleNl`, `observedNl`, `recommendationNl` (wat de site kan doen), de plekken in `locations` zoals bij een bevinding, en in `evidence` minstens één waarneming van een kijk- of meetcommando. Laat het veld weg als er niets is, of als de procedure geen aanbevelingen kent.
 {{findingRules}}
 - `missingNl`: de open punten, elk met zijn soort ervoor (`mens nodig:`, `keuze nodig:`, `versturen niet toegestaan:`, `veegronde mist:`, `budget op:` of `proef werkte niet:`); wat elke soort betekent en hoe je een punt schrijft, staat hierboven bij de regels voor bevindingen en open punten.
 - `nothingFound`: alleen bij `cantTell`, als er niets fout is gevonden en elk open punt over dit onderzoek gaat (`veegronde mist:`, `budget op:` of `proef werkte niet:`). Het rapport toont het criterium dan als "geen afwijking gevonden, niet volledig gemeten"; de uitkomst blijft `cantTell` en telt niet als voldoet. Zet in `coverageNl` wat wel is gemeten, met aantallen. Staat er ook maar één punt `mens nodig:`, `keuze nodig:` of `versturen niet toegestaan:`, staat er een kandidaat op `open`, of is er iets gezien dat op een fout kan wijzen, laat het veld dan weg: dan is de vraag echt open.
