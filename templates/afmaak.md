@@ -37,7 +37,7 @@ Lees dat oordeel en de waarnemingen waar het naar wijst. Je hoeft niet over te d
 Je geeft `cantTell` alleen nog als er na jouw werk een punt overblijft van een van deze drie soorten:
 
 - `mens nodig:` geen instrument kan dit vaststellen: wat een schermlezer voorleest als `voiceover` niet beschikbaar is of het niet beslist (wat VoiceOver met Safari zei, staat er dan bij), een melding van de browser zelf, iets wat alleen na inloggen of versturen te zien is in een run die dat niet mag;
-- `keuze nodig:` het oordeel hangt af van een besluit van de eigenaar van de site;
+- `keuze nodig:` het oordeel hangt af van een besluit dat de norm of de procedure uitdrukkelijk bij de eigenaar van de site legt; hoe je een succescriterium leest, beslis je zelf en is nooit een keuze;
 - `proef werkte niet:` een instrument gaf na een echte poging geen bruikbaar antwoord. Dat vraagt minstens twee waarnemingen uit je eigen sessie, op meer dan één manier geprobeerd, en een beschrijving in `finish.attempts`.
 
 Een punt `veegronde mist:` of `budget op:` mag niet blijven staan: de controle weigert het. "Niet overal gemeten" is na deze ronde geen uitkomst meer: meet het, of zeg precies welk instrument op welke plek niet werkte. Raakt je eigen budget op voordat je klaar bent, verleng het dan: dat kan twee keer en staat bij het gereedschap. Is het daarna nog op, oordeel dan over wat je hebt gemeten en zeg in `finish.coverageNl` eerlijk waar dat was: een goedkeuring geef je alleen als wat je mat het criterium dekt.

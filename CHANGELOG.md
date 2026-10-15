@@ -4,6 +4,10 @@ Wat er per versie van loep is veranderd. De versie staat op het voorblad en onde
 
 ## Nog niet uitgebracht
 
+### Wat een uitkomst kan veranderen
+
+- Een verifieerder die een bevinding laat vervallen omdat de norm het geen fout noemt, zegt welke tekst van de norm dat toestaat, en mag dezelfde vraag niet als `keuze nodig` doorgeven aan wie het rapport tekent. `check-verdict --round final` weigert na een afkeuring een eindoordeel "kan niet bepalen" met zo'n vervallen bevinding en een nieuw punt `keuze nodig`. `keuze nodig` is alleen voor een besluit dat de norm of de procedure bij de eigenaar legt.
+
 ### Verder
 
 - De skill zoekt voor elke melding aan loep eerst in open en gesloten issues: een open issue krijgt een reactie, een gesloten issue dat terugkomt een nieuw issue dat het oude noemt (#34).
