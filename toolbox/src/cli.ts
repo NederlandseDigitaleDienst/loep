@@ -49,6 +49,9 @@ const USAGE = `loep <command> [options]
   gaps --run <run> [<run> ...] [--json]  Every open point of one or more runs, per kind (veegronde mist, budget op, proef
                                          werkte niet, mens nodig, keuze nodig) and per criterion, equal points taken together
                                          and counted: the work list for whoever improves the sweep. Writes nothing
+  feedback --run <run> [--out <dir>] [--json]
+                                         Draft issues for the makers of loep: one per criterion and kind that stayed open
+                                         because of loep itself, without the address or name of the site. Sends nothing
   procedures                             Validate the procedure catalogue
   evaluate --run <run> --name <site> [--organisation <name>] [--model <id>] [--previous <evaluation.json>]
                                          Combine the verdicts into evaluation.json; --model is the model the operator names,
@@ -164,14 +167,15 @@ async function main(): Promise<void> {
   if (command !== "inventory" && (values["allow-writes"] || values["test-environment"] !== undefined || values["declared-by"] !== undefined)) {
     throw new Error("--allow-writes, --test-environment en --declared-by horen bij inventory: daar wordt voor de hele run vastgelegd of er verstuurd mag worden");
   }
-  // `gaps` reads the verdicts and the evaluation of finished runs and nothing else of them: it needs no permission to write and no login.
-  if (command !== "inventory" && command !== "gaps" && values.run) {
+  // `gaps` and `feedback` read the verdicts and the evaluation of finished runs and nothing else of them: they need no permission to write and no login.
+  const readsOnly = command === "gaps" || command === "feedback";
+  if (command !== "inventory" && !readsOnly && values.run) {
     const permission = writesForRun(values.run);
     if (permission) setRunWrites(writeAccess(values.run, permission, command));
   }
   // A run for which a person logged in starts every browser with that session; any other run is left as it was.
   const { setRunLogin } = await import("./lib/login.ts");
-  if (command !== "inventory" && command !== "login" && command !== "gaps" && values.run) setRunLogin(values.run);
+  if (command !== "inventory" && command !== "login" && !readsOnly && values.run) setRunLogin(values.run);
   if (NEEDS_SITE_MODEL.includes(command) && values.run && !existsSync(join(values.run, "site.json"))) throw new Error(NOT_EXPLORED_NL);
   switch (command) {
     case "login": {
@@ -353,6 +357,12 @@ async function main(): Promise<void> {
       if (runs.length === 0) throw new Error("gaps needs --run <run> [<run> ...]");
       const { gapsOutput } = await import("./commands/gaps.ts");
       process.stdout.write(gapsOutput(runs, { json: values.json }));
+      return;
+    }
+    case "feedback": {
+      if (!values.run) throw new Error("feedback needs --run <run>");
+      const { feedbackOutput } = await import("./commands/feedback.ts");
+      process.stdout.write(feedbackOutput(values.run, { out: values.out, json: values.json }));
       return;
     }
     case "procedures": {

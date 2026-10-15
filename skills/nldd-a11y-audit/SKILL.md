@@ -145,13 +145,30 @@ Een agent starten betekent steeds: een aparte agent die alleen dit krijgt: "Lees
 
    Wordt een afgetekende run opnieuw verzegeld nadat er iets is veranderd, dan vervalt de handtekening: `seal` verwijdert `RUN/signed/` en zegt dat. Er moet dan opnieuw worden gelezen en getekend.
 
+## Terugmelden aan loep
+
+Een criterium dat open blijft door loep zelf, is een fout in loep en geen uitkomst voor de site. Wie loep maakt, moet dat horen, anders gebeurt het bij de volgende site weer. Doe dit na stap 8, ook als de gebruiker stap 9 en 10 overslaat.
+
+1. Draai `LOEP feedback --run RUN --out <map buiten de run>`. Buiten de run, want wat er na het zegel bij komt, ziet `verify` als afwijking. Het schrijft per criterium en per soort één tekst voor een issue: elk criterium dat door dit onderzoek niet is vastgesteld (`veegronde mist`, `budget op`, `proef werkte niet`, of geen oordeel), met de versie van loep en van de procedure. Adressen, de naam en de organisatie van de site zijn eruit gehaald. Zegt het "Niets terug te melden", dan is dit klaar.
+2. Laat de gebruiker de teksten lezen voordat er iets weggaat. Zeg erbij dat een issue openbaar is, en dat de punten door een agent zijn geschreven: er kan nog in staan welke site het is, zoals de naam van een dienst of een uniek stuk tekst. Haal weg wat de gebruiker niet openbaar wil. Verstuur niets zonder ja van de gebruiker.
+3. Zoek per tekst of het issue er al is. De titel blijft van run tot run gelijk, dus zoek op die titel:
+   ```
+   gh issue list --repo NederlandseDigitaleDienst/loep --state open --search "\"<titel>\" in:title"
+   ```
+   Staat het er, zet de tekst dan als reactie onder dat issue (`gh issue comment <nummer> --repo NederlandseDigitaleDienst/loep --body-file <bestand>`): zo is te zien hoe vaak het voorkomt. Staat het er niet, maak het dan (`gh issue create --repo NederlandseDigitaleDienst/loep --title "<titel>" --label bug --body-file <bestand>`). Zonder `gh` geef je de gebruiker per tekst de titel, het bestand en de link https://github.com/NederlandseDigitaleDienst/loep/issues/new?labels=bug om het zelf te plakken.
+
+Ook dit meld je, met hetzelfde ja van de gebruiker en zonder het adres van de site tenzij de gebruiker dat wil:
+
+- **Een oordeel dat niet klopt.** Zegt de gebruiker dat loep een afwijking zag die er niet is, of er een miste, dan is dat een fout in loep: het formulier "Fout", met het criterium, wat loep zei en wat het had moeten zijn.
+- **Een punt `mens nodig` dat een instrument had kunnen meten.** Denk je dat, dan is dat een voorstel: het formulier "Voorstel", met wat er gemeten had moeten worden.
+
 ## Als iets niet lukt
 
 - `LOEP collect`, `contrast`, `states`, `gate` of `tasks` meldt dat de run geen sitemodel heeft: stap 3 is overgeslagen. Zonder verkenning wordt er niet gemeten en niet beoordeeld; ga terug naar stap 3.
 - Een pagina laadt niet: de toolbox probeert het één keer opnieuw en meldt het. Onderzoek de pagina niet op een andere manier.
 - Een agent levert geen geldig resultaat: start die ene opdracht opnieuw met hetzelfde opdrachtbestand. Na twee pogingen: `LOEP skip`.
 - Een agent meldt "budget op": dat hoort niet meer voor te komen zonder twee verlengingen. Een agent verlengt zijn eigen sessie met `session extend --reason "<wat er nog gemeten moet worden>"`, hooguit twee keer, en `LOEP check-verdict` weigert een punt `budget op` van een sessie die dat niet deed. Stopt een agent toch op zijn budget zonder te verlengen, start die opdracht dan opnieuw met hetzelfde opdrachtbestand. Staat `budget op` in een geldig oordeel, dan is het een uitkomst en geen fout: het oordeel zegt wat niet is bekeken, en het criterium krijgt daarna een afmaakronde. Verhoog nooit zelf een budget en verleng nooit de sessie van een agent.
-- Na het onderzoek: `LOEP gaps --run RUN` zet alle open punten per soort en per criterium op een rij. Elke `veegronde mist` zegt welke meting de veegronde had moeten leveren; geef die lijst aan wie de toolbox onderhoudt.
+- Na het onderzoek: `LOEP gaps --run RUN` zet alle open punten per soort en per criterium op een rij, ook die de afmaakronde nog sloot. Wat open bleef door loep zelf, meld je zoals onder "Terugmelden aan loep".
 - `LOEP evaluate` meldt dat het onderzoek niet af is: draai `LOEP tasks --run RUN` en `LOEP pending --run RUN`. Staat de run op `finishers`, start dan de afmaakronde. Staat hij op `done`, dan is de afmaakronde al geweest of overgeslagen: het punt kan alleen nog door een mens worden gesloten (stap 9).
 - Een sessie blijft hangen: `LOEP session list --run RUN` toont de sessies, `LOEP session stop --run RUN --session <naam>` stopt er één.
 - Een agent meldt dat er al te veel sessies lopen: er zijn meer agents tegelijk gestart dan het sessieproces toelaat, of een eerdere agent heeft zijn sessie niet gestopt. Start minder agents tegelijk (het maximum min één) en stop sessies die zijn blijven hangen. Verhoog het maximum alleen als de eigenaar van de site dat toestaat.
