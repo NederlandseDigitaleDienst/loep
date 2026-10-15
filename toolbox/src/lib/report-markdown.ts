@@ -405,15 +405,17 @@ const isAre = (count: number): string => (count === 1 ? "is" : "zijn");
 function statusSentence(evaluation: Evaluation): string {
   const tally = evaluation.summary["2.2"];
   const open = tally.cantTell + tally.untested;
-  const norm = `de ${tally.total} criteria van WCAG 2.2 niveau A en AA`;
+  const norm = "WCAG 2.2 niveau A en AA";
+  const ofAll = `van de ${tally.total} criteria`;
   const partly = shownTally(evaluation, "2.2").nothingFound;
   const partlyNl = partly > 0 ? ` (bij ${partly} daarvan is geen afwijking gevonden, maar is niet alles gemeten)` : "";
+  // The count comes with the criteria it is taken from: "voldoet niet aan de 55 criteria" reads as if all 55 failed.
   if (tally.failed > 0) {
-    const openPart = open > 0 ? ` en ${criteriaCount(open)} ${isAre(open)} nog open${partlyNl}` : "";
-    return `${evaluation.site.name} voldoet niet aan ${norm}: ${criteriaCount(tally.failed)} ${isAre(tally.failed)} niet gehaald${openPart}.`;
+    const openPart = open > 0 ? ` en ${open} nog open${partlyNl}` : "";
+    return `${evaluation.site.name} voldoet niet aan ${norm}: ${ofAll} ${isAre(tally.failed)} er ${tally.failed} niet gehaald${openPart}.`;
   }
-  if (open > 0) return `Bij ${evaluation.site.name} is geen afwijking gevonden van ${norm}, maar ${criteriaCount(open)} ${isAre(open)} nog open${partlyNl}. Daarom staat niet vast dat de site voldoet.`;
-  return `Bij ${evaluation.site.name} is geen afwijking gevonden van ${norm}.`;
+  if (open > 0) return `Bij ${evaluation.site.name} is geen afwijking gevonden van ${norm}, maar ${ofAll} ${isAre(open)} er ${open} nog open${partlyNl}. Daarom staat niet vast dat de site voldoet.`;
+  return `Bij ${evaluation.site.name} is geen afwijking gevonden van de ${tally.total} criteria van ${norm}.`;
 }
 
 /**
