@@ -166,17 +166,45 @@ const isText = (value: unknown, minimum = 1): value is string => typeof value ==
  * The kinds of open point. A point in `missingNl` starts with the fixed words of its kind
  * and a colon ("veegronde mist: ..."), so the list stays a list of texts and a verdict from
  * before the kinds existed can still be read. `reader` says whose work the point is: the
- * owner of the site (something no instrument can establish, or a choice), or the toolbox
- * (coverage that was missing, a budget that ran out, a probe that did not work).
+ * owner of the site (something no instrument can establish, a choice, or what only shows after
+ * sending in a run that may not send), or the toolbox (coverage that was missing, a budget that
+ * ran out, a probe that did not work). Sending is the owner's choice: a run sends only after
+ * somebody declared a test environment at inventory, and then an instrument measures the point.
  */
 export const OPEN_POINT_KINDS = [
   { prefix: "mens nodig", reader: "owner", labelNl: "geen instrument kan dit vaststellen" },
   { prefix: "keuze nodig", reader: "owner", labelNl: "vraagt een keuze" },
+  { prefix: "versturen niet toegestaan", reader: "owner", labelNl: "pas te meten als het onderzoek mag versturen" },
   { prefix: "veegronde mist", reader: "toolbox", labelNl: "dekking ontbrak" },
   { prefix: "budget op", reader: "toolbox", labelNl: "budget was op" },
   { prefix: "proef werkte niet", reader: "toolbox", labelNl: "een proef werkte niet" },
 ] as const;
 export type OpenPointKind = (typeof OPEN_POINT_KINDS)[number];
+/** The kind of a point that stays open only because the run may not send: no person is needed, a declared test environment is. */
+export const NOT_SENT = "versturen niet toegestaan";
+
+/** Whether every open point is of the kind "versturen niet toegestaan": then one declaration at inventory is all the criterion waits for. */
+export const waitsOnlyOnSending = (points: string[]): boolean => points.length > 0 && points.every((point) => openPoint(point).kind?.prefix === NOT_SENT);
+
+/**
+ * The origins named in points "versturen niet toegestaan", in the order they first appear: the
+ * address an agent saw a message go to, or the address of the embedded frame it was in.
+ */
+export function notSentOrigins(points: string[]): string[] {
+  const origins: string[] = [];
+  for (const point of points) {
+    if (openPoint(point).kind?.prefix !== NOT_SENT) continue;
+    for (const [address] of point.matchAll(/\bhttps?:\/\/[^\s)>\]"',;]+/gi)) {
+      try {
+        const origin = new URL(address.replace(/[.:]+$/, "")).origin;
+        if (!origins.includes(origin)) origins.push(origin);
+      } catch {
+        // Not an address after all.
+      }
+    }
+  }
+  return origins;
+}
 
 /** An open point split into its kind and its text. The kind is null for a point from before the kinds existed. */
 export function openPoint(point: string): { kind: OpenPointKind | null; textNl: string } {
@@ -185,6 +213,20 @@ export function openPoint(point: string): { kind: OpenPointKind | null; textNl: 
   if (!kind) return { kind, textNl: clean };
   const text = clean.slice(kind.prefix.length + 1).trim();
   return { kind, textNl: `${text.charAt(0).toUpperCase()}${text.slice(1)}` };
+}
+
+/**
+ * A run that may send to one origin has no point "versturen niet toegestaan" about that origin:
+ * there the agent sends and measures. The point stays only for a message that goes elsewhere,
+ * and then it names the address, so the report can say which declaration would have closed it.
+ */
+export function notSentPointProblems(missingNl: unknown, permission: { origin: string } | null): string[] {
+  if (!permission || !Array.isArray(missingNl)) return [];
+  return missingNl.flatMap((point, position) =>
+    typeof point === "string" && openPoint(point).kind?.prefix === NOT_SENT && !notSentOrigins([point]).some((origin) => origin !== permission.origin)
+      ? [`missingNl[${position}]: this run may send to ${permission.origin} (writes.allowed in the dossier), so "${NOT_SENT}:" is only for a message that goes to another origin. Send it there and measure; or, when the message goes elsewhere, name in the point the address it goes to`]
+      : [],
+  );
 }
 
 interface ShapeContext {
@@ -794,8 +836,8 @@ export interface FinishContext extends InstrumentContext {
  */
 export const FINISH_FACTOR = 3.5;
 
-/** The kinds of open point a finishing round may still leave: what asks a person or a choice, and an instrument that did not work after a real attempt. */
-export const KINDS_AFTER_FINISH = ["mens nodig", "keuze nodig", "proef werkte niet"] as const;
+/** The kinds of open point a finishing round may still leave: what asks a person or a choice, what only shows after sending in a run that may not send, and an instrument that did not work after a real attempt. */
+export const KINDS_AFTER_FINISH = ["mens nodig", "keuze nodig", NOT_SENT, "proef werkte niet"] as const;
 /** A real attempt is more than one try: at least this many observations of the finisher's own session. */
 export const MIN_ATTEMPT_OBSERVATIONS = 2;
 

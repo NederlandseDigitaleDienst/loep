@@ -47,8 +47,9 @@ const USAGE = `loep <command> [options]
                                          The expected time per part and in total, computed from the inventory (sharper after
                                          sample, explore and the sweep), next to what the run measured so far. Writes nothing
   gaps --run <run> [<run> ...] [--json]  Every open point of one or more runs, per kind (veegronde mist, budget op, proef
-                                         werkte niet, mens nodig, keuze nodig) and per criterion, equal points taken together
-                                         and counted: the work list for whoever improves the sweep. Writes nothing
+                                         werkte niet, versturen niet toegestaan, mens nodig, keuze nodig) and per criterion,
+                                         equal points taken together and counted: the work list for whoever improves the
+                                         sweep. Writes nothing
   feedback --run <run> [--out <dir>] [--json]
                                          Draft issues for the makers of loep: one per criterion and kind that stayed open
                                          because of loep itself, without the address or name of the site. Sends nothing
@@ -387,6 +388,8 @@ async function main(): Promise<void> {
       const { answer, ANSWER_PRIVACY_NL } = await import("./commands/answer.ts");
       const result = await answer({ run: values.run, criterion: values.criterion, point: values.point === undefined ? undefined : Number(values.point), did: values.did, outcome: values.outcome, name: values.name, role: values.role });
       for (const point of result.points) process.stdout.write(`${point.number}. [${point.kindNl}] ${point.textNl}${point.answered ? ` (beantwoord: ${point.answered})` : ""}\n`);
+      const { NOT_SENT } = await import("./lib/verdict.ts");
+      if (result.written === null && result.points.some((point) => point.kindNl === NOT_SENT && point.answered === null)) process.stdout.write(`Een punt [${NOT_SENT}] heeft geen persoon nodig: een nieuw onderzoek met een testomgeving, verklaard bij inventory (--test-environment <origin> --declared-by "<naam>, <functie>"), meet het met een instrument. Die origin mag die van alleen het ingesloten venster zijn. Legt een persoon het toch vast, dan zegt --did wat er is verstuurd en waar.\n`);
       if (result.written === null) process.stdout.write(`${result.left} van de ${result.points.length} open punten zonder antwoord. Een antwoord vastleggen: --point <nummer> --did "<wat is gedaan of besloten>" --outcome passed|failed|inapplicable --name "<naam>" --role "<functie>". Let op: ${ANSWER_PRIVACY_NL}.\n`);
       else process.stdout.write(`antwoord vastgelegd in ${result.written}; nog ${result.left} open ${result.left === 1 ? "punt" : "punten"} bij dit criterium. Draai evaluate, render en seal opnieuw: dan telt het antwoord mee. Let op: ${ANSWER_PRIVACY_NL}.\n`);
       return;

@@ -562,15 +562,22 @@
   if item.anchor [#name #label("open-" + criterion.id)] else { name }
   [ #text(fill: muted)[(#item.outcomeNl)]]
 }
-#if open-points.owner.len() + open-points.unsorted.len() + open-points.toolbox.len() == 0 [Er zijn geen open punten.] else {
+// What waits only for permission to send: its own part, with the one declaration that would have let the evaluation send.
+#let not-sent = open-points.at("notSent", default: none)
+#let open-groups = (
+  (t.investigate.owner, (t.investigate.ownerIntro,), open-points.owner),
+  ..if not-sent != none { ((t.investigate.notSent, (t.investigate.notSentIntro, [#not-sent.declarationNl #mono(not-sent.flags)], not-sent.originNl), not-sent.items),) },
+  (t.investigate.unsorted, (t.investigate.unsortedIntro,), open-points.unsorted),
+)
+#if open-groups.map(group => group.at(2).len()).sum() + open-points.toolbox.len() == 0 [Er zijn geen open punten.] else {
   par(t.investigateIntro)
-  for (title, intro, items) in ((t.investigate.owner, t.investigate.ownerIntro, open-points.owner), (t.investigate.unsorted, t.investigate.unsortedIntro, open-points.unsorted)) {
+  for (title, intro, items) in open-groups {
     if items.len() > 0 {
       // Over the full width: these lists are long, and a narrow column would double their length.
       heading(level: 3, title)
       set text(size: 9.5pt)
       set par(leading: 0.55em)
-      par(intro)
+      for paragraph in intro { par(paragraph) }
       for item in items {
         block(above: 11pt, below: 6pt, sticky: true, width: 100%, stroke: (top: 0.5pt + hairline), inset: (top: 5pt), open-head(item))
         plain-list(item.pointsNl)

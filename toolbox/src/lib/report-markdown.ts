@@ -5,7 +5,7 @@ import { modelOf } from "../instruments/methods/registry.ts";
 import { signatureIsCurrent } from "../commands/sign.ts";
 import { extensionsNl } from "./budget.ts";
 import { modelsNl } from "./models.ts";
-import { OPEN_POINT_KINDS, openPoint, type Outcome } from "./verdict.ts";
+import { NOT_SENT, notSentOrigins, OPEN_POINT_KINDS, openPoint, waitsOnlyOnSending, type Outcome } from "./verdict.ts";
 import { compareCriterionIds, type WcagVersion } from "./wcag.ts";
 
 /**
@@ -102,6 +102,8 @@ export const REPORT_TEXT = {
   defectPageIntro: "Een gebrek staat hier bij elke pagina waar een van zijn bevindingen een plek aanwijst. Het kan op meer pagina's spelen; dat staat in de werklijst.",
   unfinished: "Het onderzoek is daarmee niet af: wat een instrument kan meten, hoort gemeten te zijn. De afmaakronde meet het alsnog; blijft er daarna iets over, dan kan alleen een persoon het nog vaststellen.",
   ownerOpen: "Daar kan geen instrument verder mee: een persoon legt het antwoord vast, en daarna telt het mee in de uitkomst.",
+  ownerOpenNotSent: "Daar is geen persoon voor nodig: een instrument meet het in een nieuw onderzoek dat mag versturen, zie \"Nog uitzoeken\".",
+  ownerOpenMixed: "Die meet een instrument in een nieuw onderzoek dat mag versturen, zie \"Nog uitzoeken\". Bij de andere kan geen instrument verder: een persoon legt het antwoord vast, en daarna telt het mee in de uitkomst.",
   personFailed: "Door een persoon vastgesteld",
   personFailedIntro: "Bij deze criteria heeft een persoon vastgesteld dat de site niet voldoet. Er staat geen bevinding van een instrument achter: wat er mis is, staat in het antwoord van die persoon.",
   answers: "Vastgesteld door een persoon, niet door een instrument",
@@ -111,6 +113,9 @@ export const REPORT_TEXT = {
   investigate: {
     owner: "Dit moet een mens nagaan",
     ownerIntro: "Wat geen instrument kan vaststellen, of wat een keuze vraagt. Achter elk criterium staat de uitkomst die het nu heeft.",
+    notSent: "Pas te meten als het onderzoek mag versturen",
+    notSentIntro:
+      "Wat pas verschijnt nadat een bericht of formulier is verstuurd, zoals het antwoord van een chat, is hier niet gemeten: dit onderzoek mocht daar niets versturen. Een persoon is er niet voor nodig. Een instrument meet het zodra versturen mag, en dat is een keuze van de eigenaar van de site. Achter elk criterium staat de uitkomst die het nu heeft.",
     unsorted: "Open punten zonder soort",
     unsortedIntro: "Bij deze punten is niet vastgelegd of ze werk zijn voor de eigenaar van de site of over het onderzoek gaan. Ze staan hier volledig.",
     toolbox: "Dit meet de toolbox een volgende keer",
@@ -200,6 +205,19 @@ export interface OpenGroup {
   anchor: boolean;
 }
 
+/** The points that stay open only because the run may not send, and the one declaration at inventory that would have let it. */
+export interface NotSent {
+  items: OpenGroup[];
+  /** The criteria whose every open point is of this kind: one declaration is all they wait for. */
+  onlyCriteria: string[];
+  /** The sentence before the flags. */
+  declarationNl: string;
+  /** The flags of inventory, with the origin when the points name exactly one. */
+  flags: string;
+  /** Which origin to declare, and that it can be the origin of an embedded frame alone. */
+  originNl: string;
+}
+
 export interface ReportDerived {
   hash: string;
   hashShort: string;
@@ -250,7 +268,7 @@ export interface ReportDerived {
   briefs: Record<string, CriterionBrief>;
   /** Criteria with nothing to act on and nothing to look into: one row in a table, no block of their own. */
   quiet: string[];
-  todo: { /** Criteria a person found failing: there is no finding of an instrument behind them, so they stand here by name. */ person: { criterion: string; textNl: string }[]; fix: { owner: string; findingIds: string[] }[]; /** Findings that touch an element of the vendor, per element; null when no vendor was given. */ vendor: { nameNl: string; elements: { tag: string; findingIds: string[] }[] } | null; /** Every open point of the evaluation by whose work it is. The owner's points and those without a kind stand here in full; those about the evaluation itself are counted here and stand in appendix A. */ investigate: { owner: OpenGroup[]; unsorted: OpenGroup[]; toolbox: { criterion: string; outcomeNl: string; countNl: string; kindsNl: string; /** What was measured, for a criterion without a deviation that was not fully measured. */ coverageNl: string | null; anchor: boolean }[] } };
+  todo: { /** Criteria a person found failing: there is no finding of an instrument behind them, so they stand here by name. */ person: { criterion: string; textNl: string }[]; fix: { owner: string; findingIds: string[] }[]; /** Findings that touch an element of the vendor, per element; null when no vendor was given. */ vendor: { nameNl: string; elements: { tag: string; findingIds: string[] }[] } | null; /** Every open point of the evaluation by whose work it is. The owner's points and those without a kind stand here in full; those about the evaluation itself are counted here and stand in appendix A. */ investigate: { owner: OpenGroup[]; /** The points that stay open only because the run may not send, with the declaration that would have let it; null when there are none. */ notSent: NotSent | null; unsorted: OpenGroup[]; toolbox: { criterion: string; outcomeNl: string; countNl: string; kindsNl: string; /** What was measured, for a criterion without a deviation that was not fully measured. */ coverageNl: string | null; anchor: boolean }[] } };
   /** The findings grouped into things to repair; null for an evaluation from before that step existed. */
   defects: DefectsDerived | null;
   /** Limitations of the evaluation as a whole; those of a single procedure are in the appendix. */
@@ -496,10 +514,14 @@ function openCount(evaluation: Evaluation): { openNl: string; unfinished: boolea
       : open.owner.length === 0
         ? `${total}, ${evaluationReason}.`
         : `${total}. ${open.owner.length} ${open.owner.length === 1 ? "vraagt" : "vragen"} ${ownerReason}; ${open.evaluation.length} ${isAre(open.evaluation.length)} ${evaluationReason}.`;
+  // A criterion that waits only for permission to send needs no person: it is counted apart, so the reader is not sent to one.
+  const notSent = open.owner.filter((id) => waitsOnlyOnSending(evaluation.criteria.find((criterion) => criterion.id === id)?.missingNl ?? []));
+  const notSentNl = notSent.length > 0 ? ` Van de criteria voor de eigenaar ${notSent.length === 1 ? "wacht" : "wachten"} er ${notSent.length} alleen op toestemming om te versturen${list(notSent)}.` : "";
+  const ownerNl = notSent.length === 0 ? REPORT_TEXT.ownerOpen : notSent.length === open.owner.length ? REPORT_TEXT.ownerOpenNotSent : REPORT_TEXT.ownerOpenMixed;
   return {
     openNl:
-      `Open criteria: ${reasonsNl}` +
-      (open.evaluation.length > 0 ? ` ${REPORT_TEXT.unfinished}` : ` ${REPORT_TEXT.ownerOpen}`),
+      `Open criteria: ${reasonsNl}${notSentNl}` +
+      (open.evaluation.length > 0 ? ` ${REPORT_TEXT.unfinished}` : ` ${ownerNl}`),
     unfinished: open.evaluation.length > 0,
   };
 }
@@ -617,22 +639,51 @@ function todo(evaluation: Evaluation): ReportDerived["todo"] {
   };
 }
 
+/**
+ * The declaration that would have closed the points "versturen niet toegestaan": a test
+ * environment at inventory. `--test-environment` takes one origin, and that may be the origin of
+ * an embedded frame alone, so nothing is sent to the rest of the site. When the points name
+ * exactly one origin, the flags carry it.
+ */
+function notSentDeclaration(evaluation: Evaluation, items: OpenGroup[]): NotSent {
+  const origins = notSentOrigins(evaluation.criteria.flatMap((criterion) => criterion.missingNl));
+  const named =
+    origins.length === 1
+      ? `In de open punten staat als adres ${origins[0]}. `
+      : origins.length > 1
+        ? `In de open punten staan ${origins.length} adressen: ${origins.join(", ")}. Per onderzoek kan er één worden verklaard. `
+        : "";
+  const already = evaluation.chain?.writes.allowed ? "Dit onderzoek mocht alleen versturen naar de testomgeving die bij de onderzoeksgegevens staat; deze punten gaan over een ander adres. " : "";
+  return {
+    items,
+    onlyCriteria: items.map((item) => item.criterion).filter((id) => waitsOnlyOnSending(evaluation.criteria.find((criterion) => criterion.id === id)?.missingNl ?? [])),
+    declarationNl: "Een nieuw onderzoek meet deze punten als bij inventory een testomgeving wordt verklaard, door iemand met naam en functie:",
+    flags: `--test-environment ${origins.length === 1 ? origins[0] : "<origin>"} --declared-by "<naam>, <functie>"`,
+    originNl:
+      `${already}${named}Er kan één origin worden verklaard, en dat mag de origin van alleen een ingesloten venster zijn, zoals een chat of een formulier van een andere partij: dan gaat alleen daarheen iets weg en wordt naar de rest van de site niets verstuurd. ` +
+      "Neem de origin waar het bericht naartoe gaat; meestal is dat die van het venster zelf. Verklaar het alleen als versturen daar geen gevolgen heeft. Het rapport noemt dan de functie van wie het verklaarde; de naam staat in het dossier van het onderzoek.",
+  };
+}
+
 /** Every open point of the evaluation, also the ones next to a verdict that did come: by whose work it is. */
 function investigate(evaluation: Evaluation): ReportDerived["todo"]["investigate"] {
   const isOpen = (criterion: CriterionResult): boolean => criterion.outcome === "cantTell" || criterion.outcome === "untested";
   // The criteria without a verdict first: those are what the status waits for.
   const criteria = [...evaluation.criteria.filter(isOpen), ...evaluation.criteria.filter((criterion) => !isOpen(criterion))];
-  const result: ReportDerived["todo"]["investigate"] = { owner: [], unsorted: [], toolbox: [] };
+  const result: ReportDerived["todo"]["investigate"] = { owner: [], notSent: null, unsorted: [], toolbox: [] };
   const placed = new Set<string>();
   const anchor = (id: string): boolean => !placed.has(id) && placed.add(id).has(id);
-  const full = (reader: "owner" | null): OpenGroup[] =>
+  const full = (wanted: (point: ReturnType<typeof openPoint>) => boolean): OpenGroup[] =>
     criteria.flatMap((criterion) => {
-      const points = openPoints(criterion).filter((point) => (point.kind?.reader ?? null) === reader);
+      const points = openPoints(criterion).filter(wanted);
       if (points.length === 0) return [];
       return [{ criterion: criterion.id, outcomeNl: SHOWN_LABEL[shownOutcome(criterion)].toLowerCase(), pointsNl: points.map((point) => (point.kind?.prefix === "keuze nodig" ? `Keuze: ${point.textNl}` : point.textNl)), anchor: anchor(criterion.id) }];
     });
-  result.owner = full("owner");
-  result.unsorted = full(null);
+  // What waits only for permission to send stands apart: no person is needed for it, one declaration is.
+  result.owner = full((point) => point.kind?.reader === "owner" && point.kind.prefix !== NOT_SENT);
+  const notSent = full((point) => point.kind?.prefix === NOT_SENT);
+  result.notSent = notSent.length > 0 ? notSentDeclaration(evaluation, notSent) : null;
+  result.unsorted = full((point) => point.kind === null);
   result.toolbox = criteria.flatMap((criterion) => {
     const points = openPoints(criterion).filter((point) => point.kind?.reader === "toolbox");
     if (points.length === 0) return [];
@@ -1125,16 +1176,21 @@ export function renderMarkdown(input: Evaluation): string {
   }
   lines.push("### Nog uitzoeken", "");
   const open = derived.todo.investigate;
-  if (open.owner.length + open.unsorted.length + open.toolbox.length === 0) lines.push("Er zijn geen open punten.", "");
+  if (open.owner.length + (open.notSent?.items.length ?? 0) + open.unsorted.length + open.toolbox.length === 0) lines.push("Er zijn geen open punten.", "");
   else {
     lines.push(REPORT_TEXT.investigateIntro, "");
     const head = (item: { criterion: string; outcomeNl: string; anchor: boolean }): string => {
       const criterion = evaluation.criteria.find((entry) => entry.id === item.criterion)!;
       return `- ${item.anchor ? `<a id="${openAnchor(criterion.id)}"></a>` : ""}[${criterion.id} ${esc(criterion.titleNl)}](#${criterionAnchor(criterion.id)}) (${item.outcomeNl})`;
     };
-    for (const [title, intro, items] of [[REPORT_TEXT.investigate.owner, REPORT_TEXT.investigate.ownerIntro, open.owner], [REPORT_TEXT.investigate.unsorted, REPORT_TEXT.investigate.unsortedIntro, open.unsorted]] as const) {
+    const groups: [string, string[], OpenGroup[]][] = [
+      [REPORT_TEXT.investigate.owner, [REPORT_TEXT.investigate.ownerIntro], open.owner],
+      ...(open.notSent ? [[REPORT_TEXT.investigate.notSent, [REPORT_TEXT.investigate.notSentIntro, `${open.notSent.declarationNl} ${code(open.notSent.flags)}`, esc(open.notSent.originNl)], open.notSent.items] as [string, string[], OpenGroup[]]] : []),
+      [REPORT_TEXT.investigate.unsorted, [REPORT_TEXT.investigate.unsortedIntro], open.unsorted],
+    ];
+    for (const [title, intro, items] of groups) {
       if (items.length === 0) continue;
-      lines.push(`**${title}**`, "", intro, "");
+      lines.push(`**${title}**`, "", ...intro.flatMap((paragraph) => [paragraph, ""]));
       for (const item of items) lines.push(head(item), ...item.pointsNl.map((text) => `  - ${esc(text)}`));
       lines.push("");
     }

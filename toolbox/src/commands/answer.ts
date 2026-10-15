@@ -9,6 +9,8 @@ import { instrumentVerdictIsCurrent, isInstrumentRun, loadInstrumentIndex, loadO
  * What only a person can establish, a person records. An open point of the kind "mens nodig"
  * or "keuze nodig" is no work for an instrument: somebody listens with a screen reader, or the
  * owner decides. This command keeps that answer in the run, next to the verdict it belongs to.
+ * A point "versturen niet toegestaan" needs no person: a run with a declared test environment
+ * measures it. A person may still answer it, by sending by hand and saying what was sent where.
  * Nothing here is ever filled in by an agent.
  */
 

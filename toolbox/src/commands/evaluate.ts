@@ -13,7 +13,7 @@ import { extensionUse } from "../lib/budget.ts";
 import { loadAllProcedures } from "../lib/procedures.ts";
 import { reportedModels } from "../lib/models.ts";
 import { loadRun } from "../lib/rundata.ts";
-import type { Verdict } from "../lib/verdict.ts";
+import { waitsOnlyOnSending, type Verdict } from "../lib/verdict.ts";
 import { loginNl, NOT_LOGGED_IN_NL } from "../lib/login.ts";
 import { WRITES_BLOCKED_NL, writesAllowedNl } from "../lib/writes.ts";
 import { METHODS } from "../instruments/methods/registry.ts";
@@ -328,7 +328,11 @@ export async function evaluate(options: EvaluateOptions): Promise<Evaluation> {
   const without = criteria.filter((criterion) => !criterion.established);
   if (without.length > 0) process.stderr.write(`zonder oordeel (${without.length}): ${without.map((criterion) => criterion.id).join("; ")}\n`);
   const open = openCriteria(criteria);
-  if (open.owner.length > 0) process.stderr.write(`open, vraagt een mens of een keuze: ${idsAcrossVersionsNl(open.owner, criteria)}. Een persoon legt het antwoord vast met answer; daarna opnieuw evaluate.\n`);
+  // What waits only for permission to send needs no person: said apart, with the declaration that would close it.
+  const notSent = open.owner.filter((id) => waitsOnlyOnSending(criteria.find((criterion) => criterion.id === id)!.missingNl));
+  const person = open.owner.filter((id) => !notSent.includes(id));
+  if (person.length > 0) process.stderr.write(`open, vraagt een mens of een keuze: ${idsAcrossVersionsNl(person, criteria)}. Een persoon legt het antwoord vast met answer; daarna opnieuw evaluate.\n`);
+  if (notSent.length > 0) process.stderr.write(`open, alleen omdat het onderzoek niet mocht versturen: ${idsAcrossVersionsNl(notSent, criteria)}. Geen persoon nodig: een nieuw onderzoek met een testomgeving, verklaard bij inventory (--test-environment <origin> --declared-by "<naam>, <functie>"), meet het met een instrument. Die origin mag die van alleen het ingesloten venster zijn.\n`);
   if (open.evaluation.length > 0) process.stderr.write(`LET OP: het onderzoek is niet af. Door dit onderzoek niet vastgesteld: ${idsAcrossVersionsNl(open.evaluation, criteria)}. Draai tasks en pending: de afmaakronde meet wat ontbrak. Is die al geweest, dan kan alleen een persoon het punt nog sluiten, met answer.\n`);
   // The phases with agents leave no step of their own: what their sessions say about begin, end and time per agent is kept here.
   await writeManifest(options.run, { command: "evaluate", startedAt, criteria: criteria.length, rejectedVerdicts: rejected.length, defects: merged.defects, mergeProposal: merged.proposal, establishedBy: { verification: by("verification").length, finishing: finished.length, person: byPerson.length }, open, extensions, agentPhases: agentPhaseTimings(options.run) });
