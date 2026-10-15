@@ -150,6 +150,31 @@ test("a finding that is not reproduced is dropped with a reason, and never becom
   assert.match(validateVerification({ ...dropped, verification: { ...dropped.verification!, findings: [{ key: "F1", reproduced: true, evidence: ["v143-0002"] }] } }, verifierContext).join(), /a reproduced finding makes the outcome "failed"/);
 });
 
+test("how to read the norm is the verifier's own judgment, never a choice handed to the owner", () => {
+  const choice = "keuze nodig: wie het rapport tekent, beslist of de datum op P01 te licht is.";
+  const notSupported = { key: "F1", reproduced: false, evidence: ["v143-0002"], dropped: "notSupported" as const, reasonNl: "De datum is een logo; 1.4.3 zondert tekst in een logo uit." };
+  const handedOn: Verdict = {
+    ...passed,
+    outcome: "cantTell",
+    rule: "R3",
+    missingNl: [choice],
+    observations: [{ ...seen, evidence: ["v143-0002"], ruling: "open" }],
+    verification: { judgeOutcome: "failed", findings: [notSupported] },
+  };
+  // A finding the verifier saw again keeps the criterion failed, whatever point stands next to it.
+  assert.match(validateVerification({ ...handedOn, verification: { judgeOutcome: "failed", findings: [{ key: "F1", reproduced: true, evidence: ["v143-0002"] }] } }, verifierContext).join(), /a reproduced finding makes the outcome "failed"/);
+  // Dropped as not covered by the norm, and then handed to whoever signs as a choice.
+  assert.match(validateVerification(handedOn, verifierContext).join(), /a new "keuze nodig:" point next to it hands that reading to whoever signs/);
+  // Every finding dropped with a reason, and what stays open is not a choice: accepted.
+  const decided: Verdict = { ...handedOn, missingNl: ["mens nodig: wat een schermlezer voorleest bij de datum op P01."] };
+  assert.deepEqual(validateVerification(decided, verifierContext), []);
+  // A choice the judge already left to the owner may stay.
+  const judgeChose: VerificationContext = { ...verifierContext, judge: { ...failed, missingNl: ["keuze nodig: of de tekst in de kop een logo is, bepaalt de eigenaar."] } };
+  assert.deepEqual(validateVerification(handedOn, judgeChose), []);
+  // A finding that was not reproduced is not a reading of the norm; the rule does not reach it.
+  assert.deepEqual(validateVerification({ ...handedOn, verification: { judgeOutcome: "failed", findings: [{ ...notSupported, dropped: "notReproduced", reasonNl: "Op een verse pagina meet de datum 4,6 op 1." }] } }, verifierContext), []);
+});
+
 test("a pass survives only an attack that used instruments, and a counterexample fails it", () => {
   const afterPass: VerificationContext = { ...verifierContext, judge: passed };
   const upheld: Verdict = { ...passed, observations: [{ ...seen, evidence: ["j143-0003", "v143-0002"] }], verification: { judgeOutcome: "passed", findings: [], attackNl: "Het menu geopend en de lichtste tekst daarin gemeten: 7,2 op 1.", attackEvidence: ["v143-0002"] } };

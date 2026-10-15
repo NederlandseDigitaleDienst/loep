@@ -759,6 +759,12 @@ export function validateVerification(input: unknown, context: VerificationContex
   for (const key of finalKeys) if (typeof key === "string" && /^F\d+$/.test(key) && !judgeKeys.includes(key)) problems.push(`findings: "${key}" is not a finding of the judge; a finding of your own gets a key "V1"`);
 
   if (judge.outcome === "failed" && verdict.outcome === "cantTell" && checks.some((check) => check.reproduced === true)) problems.push('a reproduced finding makes the outcome "failed"');
+  // Dropping a finding as notSupported is a reading of the norm. A new "keuze nodig:" next to it
+  // hands that reading on to whoever signs the report; the judge's own choices may stay.
+  const choices = (points: unknown): number => (Array.isArray(points) ? points.filter((point) => typeof point === "string" && openPoint(point).kind?.prefix === "keuze nodig").length : 0);
+  if (judge.outcome === "failed" && verdict.outcome === "cantTell" && checks.some((check) => check.dropped === "notSupported") && choices(verdict.missingNl) > choices(judge.missingNl)) {
+    problems.push('a finding dropped as notSupported is your own reading of the norm; a new "keuze nodig:" point next to it hands that reading to whoever signs. Keep the finding, or drop it and name in reasonNl the text of the norm or the procedure that allows it. "keuze nodig:" is only for a choice the norm or the procedure leaves to the owner of the site');
+  }
   if (judge.outcome !== "failed") {
     if (!isText(verification.attackNl, 30)) problems.push(judge.outcome === "cantTell" ? "verification.attackNl: say what you tried to settle what the judge left open" : `verification.attackNl: say what you tried to find a counterexample against "${judge.outcome}"`);
     if (!(Array.isArray(verification.attackEvidence) && verification.attackEvidence.some(ownShowing))) problems.push(`verification.attackEvidence: attacking "${judge.outcome}" needs at least one look or measure observation of session "${context.session}"`);
