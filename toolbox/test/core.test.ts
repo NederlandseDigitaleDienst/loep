@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { buildSample, CENSUS_LIMIT, seededOrder } from "../src/commands/sample.ts";
-import { parseSitemap, type Inventory, type InventoryPage } from "../src/commands/inventory.ts";
+import { parseSitemap, passwordPagesNl, type Inventory, type InventoryPage } from "../src/commands/inventory.ts";
 import { progressLine, sayingItRuns } from "../src/instruments/limit.ts";
 import { canonicalJson, sha256, slugForUrl, stableId } from "../src/lib/canonical.ts";
 import { complianceStatus, evaluationHash, resolveCriterion } from "../src/lib/evaluation.ts";
@@ -44,6 +44,16 @@ function page(index: number, template = "t", content = `c${index}`): InventoryPa
 function inventory(pages: InventoryPage[]): Inventory {
   return { baseUrl: "https://a.nl/", origin: "https://a.nl", sitemapUrls: pages.length, notFoundProbe: "https://a.nl/404", pages, skipped: [], totals: {} };
 }
+
+test("inventory says when pages show a password field and nobody logged in", () => {
+  const withField = { ...page(2), counts: { passwordFields: 1 } };
+  assert.equal(passwordPagesNl([page(1)], false), null, "no password field, nothing to say");
+  assert.equal(passwordPagesNl([page(1), withField], true), null, "a run with a login has password fields on purpose");
+  const one = passwordPagesNl([page(1), withField], false);
+  assert.match(one!, /één pagina toont een wachtwoordveld \(https:\/\/a\.nl\/p002\)/);
+  assert.match(one!, /loep login/);
+  assert.match(passwordPagesNl([withField, { ...page(3), counts: { passwordFields: 2 } }], false)!, /2 pagina's tonen een wachtwoordveld \(https:\/\/a\.nl\/p002 en 1 meer\)/);
+});
 
 test("a small site is evaluated in full and identical pages once", () => {
   const sample = buildSample(inventory([page(1), page(2), page(3, "t", "c2")]), "seed");

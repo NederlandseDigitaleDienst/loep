@@ -155,7 +155,7 @@ Een run verstuurt niets naar de site, tenzij dat bij het begin uitdrukkelijk is 
 
 ## Een site achter een inlog
 
-Zonder verdere stap logt de toolbox nergens in. Voor een site achter een inlog doet een mens dat, met `login --run <run> --url <inlogpagina> --role "<rol>"`.
+Zonder verdere stap logt de toolbox nergens in. Voor een site achter een inlog doet een mens dat, met `login --run <run> --url <inlogpagina> --role "<rol>"`. Dat gebeurt vóór `inventory`: wie later inlogt, begint opnieuw. De skill vraagt daarom vooraf of een deel van de site achter een inlog staat, en `inventory` zegt het in een run zonder inlog als pagina's een wachtwoordveld tonen. Een inlog op een ander domein ziet `inventory` niet.
 
 - **Een mens logt in, de toolbox neemt de sessie over.** `login` opent een browservenster op een scherm. De mens logt daar in met een testaccount, gaat naar een pagina die alleen ingelogd te zien is en bevestigt dat in de terminal. De toolbox bewaart wat de browser dan heeft: cookies en opgeslagen waarden. Het wachtwoord ziet en bewaart ze niet, en geen agent krijgt het.
 - **Alleen een testaccount, en op een echte site alleen een testomgeving.** Achter een inlog verandert bijna elke klik iets, en schermafbeeldingen tonen gegevens van het account. Een run met een inlog op een adres dat niet lokaal is, wordt daarom geweigerd tenzij de run een verklaarde testomgeving heeft (`inventory --test-environment ... --declared-by ...`, zie "Versturen"). Die verklaring komt van wie over de omgeving gaat.

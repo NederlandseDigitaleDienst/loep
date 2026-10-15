@@ -71,6 +71,19 @@ export async function fetchSitemapUrls(origin: string): Promise<string[]> {
   return [...urls].sort();
 }
 
+/**
+ * In a run without a login: the pages that show a password field, said right after the inventory.
+ * A part behind a login is otherwise found only by the explorer or the gate, after hours of work
+ * that has to be done again once a person has logged in. Null when there is nothing to say.
+ */
+export function passwordPagesNl(pages: Pick<InventoryPage, "url" | "counts">[], loggedIn: boolean): string | null {
+  if (loggedIn) return null;
+  const found = pages.filter((entry) => typeof entry.counts.passwordFields === "number" && entry.counts.passwordFields > 0).map((entry) => entry.url);
+  if (found.length === 0) return null;
+  const named = found.length === 1 ? found[0] : `${found[0]} en ${found.length - 1} meer`;
+  return `let op: ${found.length === 1 ? "één pagina toont" : `${found.length} pagina's tonen`} een wachtwoordveld (${named}), en er is niet ingelogd. Staat een deel van de site achter een inlog, dan wordt dat deel niet onderzocht. Hoort het erbij, laat dan een mens inloggen met loep login en begin opnieuw met inventory, in een nieuwe map`;
+}
+
 export function parseSitemap(xml: string): string[] {
   return [...xml.matchAll(/<loc>\s*([^<\s]+)\s*<\/loc>/g)].map((match) => match[1]!.replaceAll("&amp;", "&"));
 }
