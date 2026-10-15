@@ -929,6 +929,6 @@ test("the open count across both WCAG versions names the criteria in one version
   const derived = deriveReport({ ...evaluation, criteria, summary: summarise(criteria) });
   // Three open across both versions; the summary sentence speaks of WCAG 2.2 alone, where 4.1.1 does not exist.
   assert.match(derived.statusLine.openNl, /^Open criteria: 3, door dit onderzoek niet vastgesteld \(2\.5\.2, 3\.3\.8 alleen in WCAG 2\.2, 4\.1\.1 alleen in WCAG 2\.1\)\. /);
-  assert.match(derived.statusSentenceNl, /van de \d+ criteria van WCAG 2\.2 niveau A en AA, maar 2 criteria zijn nog open\./);
+  assert.match(derived.statusSentenceNl, /van WCAG 2\.2 niveau A en AA, maar van de \d+ criteria zijn er 2 nog open\./);
   assert.equal(idsAcrossVersionsNl(["1.1.1"], criteria), "1.1.1", "a criterion in both versions stays as it is");
 });
