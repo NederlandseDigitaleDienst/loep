@@ -2,8 +2,13 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   citedObservations,
+  KINDS_AFTER_FINISH,
+  NOT_SENT,
+  notSentOrigins,
+  notSentPointProblems,
   OPEN_POINT_KINDS,
   openPoint,
+  waitsOnlyOnSending,
   indexObservations,
   validateCandidates,
   validateJudgeVerdict,
@@ -363,6 +368,32 @@ test("an open point names its kind and is written for a reader who does not know
   assert.deepEqual(openPoint("Het menu ging niet open op P01."), { kind: null, textNl: "Het menu ging niet open op P01." });
   assert.equal(openPoint("Veegronde mist:  contrast op 320 pixels.").kind!.reader, "toolbox");
   assert.equal(openPoint("keuze nodig: is het label een logo?").textNl, "Is het label een logo?");
+});
+
+test("a point that stays open only because the run may not send is the owner's choice, not work for a person", () => {
+  const point = "versturen niet toegestaan: wat de chat in het venster van https://chat.voorbeeld.nl/widget?id=3 op P02 antwoordt na een bericht.";
+  const kind = openPoint(point).kind!;
+  assert.equal(kind.prefix, NOT_SENT);
+  assert.equal(kind.reader, "owner");
+  assert.equal(validateJudgeVerdict({ ...passed, outcome: "cantTell", missingNl: [point] }, context).join("\n"), "");
+  // It is never "no deviation found, not fully measured": that is for limits of the evaluation alone.
+  const partly: Verdict = { ...passed, outcome: "cantTell", missingNl: [point], nothingFound: { coverageNl: "gemeten op 9 van 29 pagina's en in 4 van 12 toestanden; geen verschil gevonden" } };
+  assert.match(validateJudgeVerdict(partly, context).join(), /the outcome is a plain "cantTell"/);
+  // The finishing round may leave it: it may not send either.
+  assert.ok((KINDS_AFTER_FINISH as readonly string[]).includes(NOT_SENT));
+
+  assert.equal(waitsOnlyOnSending([point]), true);
+  assert.equal(waitsOnlyOnSending([point, "mens nodig: wat NVDA voorleest bij het menu op P01."]), false);
+  assert.equal(waitsOnlyOnSending([]), false);
+  // The report names the origin the points name, once each, and only from points of this kind.
+  assert.deepEqual(notSentOrigins([point, `${point} Ook https://chat.voorbeeld.nl/send.`, "mens nodig: zie https://www.voorbeeld.nl/contact.", "versturen niet toegestaan: het formulier naar https://api.voorbeeld.nl:8443/v1, dan het antwoord."]), ["https://chat.voorbeeld.nl", "https://api.voorbeeld.nl:8443"]);
+  assert.deepEqual(notSentOrigins(["versturen niet toegestaan: het antwoord van de chat op P02, zonder adres."]), []);
+
+  // A run that may send to an origin has no such point about that origin; elsewhere it may stand, with the address.
+  assert.deepEqual(notSentPointProblems([point], null), []);
+  assert.deepEqual(notSentPointProblems([point], { origin: "https://www.voorbeeld.nl" }), []);
+  assert.match(notSentPointProblems([point], { origin: "https://chat.voorbeeld.nl" }).join(), /missingNl\[0\]: this run may send to https:\/\/chat\.voorbeeld\.nl/);
+  assert.match(notSentPointProblems(["versturen niet toegestaan: het antwoord van de chat op P02, zonder adres."], { origin: "https://www.voorbeeld.nl" }).join(), /name in the point the address it goes to/);
 });
 
 test("no deviation found but not fully measured stays cantTell, and only when every open point is a limit of the evaluation", () => {

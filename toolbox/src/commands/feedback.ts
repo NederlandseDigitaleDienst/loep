@@ -2,7 +2,8 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
 import { madeWith, openCriteria, type CriterionResult, type Evaluation } from "../lib/evaluation.ts";
 import { SHOWN_LABEL, shownOutcome } from "../lib/report-markdown.ts";
-import { OPEN_POINT_KINDS, openPoint } from "../lib/verdict.ts";
+import { NOT_SENT, OPEN_POINT_KINDS, openPoint } from "../lib/verdict.ts";
+import { compareCriterionIds } from "../lib/wcag.ts";
 
 /*
  * What a finished run has to tell the makers of loep. A criterion that stayed open because of
@@ -12,7 +13,8 @@ import { OPEN_POINT_KINDS, openPoint } from "../lib/verdict.ts";
  * first look whether the issue is already there. It sends nothing: an issue is public, and the
  * person who ran the evaluation decides what leaves the machine. The address, the name and the
  * organisation of the site are left out; the points themselves are written by an agent and are
- * shown to be read.
+ * shown to be read. A point "versturen niet toegestaan" gets no draft: the run measured all it
+ * was allowed to, and whether it may send is the owner's choice. Those criteria are named apart.
  */
 
 export const REPOSITORY = "NederlandseDigitaleDienst/loep";
@@ -38,6 +40,12 @@ export interface Feedback {
   repository: string;
   madeWithNl: string;
   drafts: Draft[];
+  /**
+   * Open criteria with a point "versturen niet toegestaan": the run was not allowed to send.
+   * That is a choice of the owner and no fault of loep, so it gets no draft; it is named so the
+   * person who runs this knows one declaration at inventory would have closed them.
+   */
+  notSent: string[];
 }
 
 const escape = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -113,19 +121,26 @@ export function feedback(runDir: string, options: { out?: string | undefined } =
       drafts.push(draft);
     }
   }
-  return { run: basename(resolve(runDir)), repository: REPOSITORY, madeWithNl: madeWith(evaluation, true), drafts };
+  const open = openCriteria(evaluation.criteria);
+  const notSent = [...open.owner, ...open.evaluation].filter((id) => evaluation.criteria.find((criterion) => criterion.id === id)!.missingNl.some((point) => openPoint(point).kind?.prefix === NOT_SENT)).sort(compareCriterionIds);
+  return { run: basename(resolve(runDir)), repository: REPOSITORY, madeWithNl: madeWith(evaluation, true), drafts, notSent };
 }
 
 /** The drafts as a text to read: what to check first, then per draft the title and the body or where it is. */
 export function feedbackTextNl(result: Feedback): string {
-  if (result.drafts.length === 0) return `Niets terug te melden uit ${result.run}: geen criterium is open door loep zelf.\n`;
+  // Not sending is the owner's choice: said once, so nobody takes it for a fault of loep or for work for a person.
+  const notSent =
+    result.notSent.length > 0
+      ? `\nNiet terug te melden: ${result.notSent.length === 1 ? "criterium" : "criteria"} ${result.notSent.join(", ")} ${result.notSent.length === 1 ? "bleef" : "bleven"} ook open omdat het onderzoek niet mocht versturen. Dat is een keuze van de eigenaar van de site, geen fout in loep. Een testomgeving, verklaard bij inventory met --test-environment, laat een instrument het meten; LOEP gaps telt deze punten onder "${NOT_SENT}".\n`
+      : "";
+  if (result.drafts.length === 0) return `Niets terug te melden uit ${result.run}: geen criterium is open door loep zelf.\n${notSent}`;
   const criteria = new Set(result.drafts.map((draft) => draft.criterion)).size;
   const lines = [
     `Terug te melden aan ${result.repository} uit ${result.run} (${result.madeWithNl}): ${result.drafts.length} ${result.drafts.length === 1 ? "melding" : "meldingen"} bij ${criteria} ${criteria === 1 ? "criterium" : "criteria"}.`,
     "Een issue is openbaar. Het adres, de naam en de organisatie van de site zijn weggelaten, maar de punten zijn door een agent geschreven: lees ze voordat er iets wordt verstuurd.",
   ];
   for (const draft of result.drafts) lines.push("", `### ${draft.title}`, draft.file ? `Tekst: ${draft.file}` : `\n${draft.bodyMd.trimEnd()}`);
-  return `${lines.join("\n")}\n`;
+  return `${lines.join("\n")}\n${notSent}`;
 }
 
 export function feedbackOutput(runDir: string, options: { out?: string | undefined; json?: boolean | undefined } = {}): string {

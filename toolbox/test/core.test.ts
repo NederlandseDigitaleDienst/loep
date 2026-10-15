@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { buildSample, CENSUS_LIMIT, seededOrder } from "../src/commands/sample.ts";
-import { parseSitemap, passwordPagesNl, type Inventory, type InventoryPage } from "../src/commands/inventory.ts";
+import { formPagesNl, parseSitemap, passwordPagesNl, type Inventory, type InventoryPage } from "../src/commands/inventory.ts";
 import { progressLine, sayingItRuns } from "../src/instruments/limit.ts";
 import { canonicalJson, sha256, slugForUrl, stableId } from "../src/lib/canonical.ts";
 import { changedSinceCommit, complianceStatus, evaluationHash, knownCommit, resolveCriterion } from "../src/lib/evaluation.ts";
@@ -58,6 +58,24 @@ test("inventory says when pages show a password field and nobody logged in", () 
   assert.match(one!, /één pagina toont een wachtwoordveld \(https:\/\/a\.nl\/p002\)/);
   assert.match(one!, /loep login/);
   assert.match(passwordPagesNl([withField, { ...page(3), counts: { passwordFields: 2 } }], false)!, /2 pagina's tonen een wachtwoordveld \(https:\/\/a\.nl\/p002 en 1 meer\)/);
+});
+
+test("inventory says when pages have a form or a frame on another origin has one, and the run may not send", () => {
+  // A search in the header is on every page: that alone says nothing.
+  const search = (index: number): InventoryPage => ({ ...page(index), counts: { forms: 1 } });
+  const contact = { ...page(3), counts: { forms: 2 } };
+  const chat: InventoryPage = { ...page(4), url: "https://chat.b.nl/widget", foundVia: ["iframe:https://a.nl/p003"], counts: { forms: 1 } };
+  assert.equal(formPagesNl([search(1), search(2)], "https://a.nl", false), null, "only the form every page has");
+  assert.equal(formPagesNl([search(1), contact, chat], "https://a.nl", true), null, "a run that may send has nothing to fear");
+  const both = formPagesNl([search(1), search(2), contact, chat], "https://a.nl", false)!;
+  assert.match(both, /^let op: dit onderzoek mag niet versturen, en één pagina heeft een formulier dat niet op elke pagina staat \(https:\/\/a\.nl\/p003\), en één ingesloten venster op een ander adres heeft een formulier \(https:\/\/chat\.b\.nl\/widget\)\./);
+  assert.match(both, /blijft open als "versturen niet toegestaan"/);
+  assert.match(both, /--test-environment <origin> --declared-by "<naam>, <functie>"; voor een venster op een ander adres kan dat de origin van alleen dat venster zijn$/);
+  // With only the frame, its origin is the one to declare.
+  assert.match(formPagesNl([search(1), search(2), chat], "https://a.nl", false)!, /--test-environment https:\/\/chat\.b\.nl --declared-by/);
+  // A frame on the site's own origin is a page like any other.
+  assert.equal(formPagesNl([search(1), { ...chat, url: "https://a.nl/chat" }], "https://a.nl", false), null);
+  assert.match(formPagesNl([page(1), contact, { ...page(5), counts: { forms: 3 } }], "https://a.nl", false)!, /2 pagina's hebben een formulier dat niet op elke pagina staat \(https:\/\/a\.nl\/p003 en 1 meer\)/);
 });
 
 test("a small site is evaluated in full and identical pages once", () => {

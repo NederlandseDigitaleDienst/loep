@@ -108,3 +108,24 @@ test("gaps on the command line: readable text, --json for who reckons on, and it
   assert.throws(() => gaps([join(scratch, "leeg")]), /heeft geen oordelen \(verdicts\/\) en geen evaluatie \(evaluation\.json\)/);
   await assert.rejects(run(), /gaps needs --run <run> \[<run> \.\.\.\]/);
 });
+
+test("gaps counts what stayed open only because the run may not send apart, between the limits of the evaluation and the work for a person", () => {
+  const NOT_SENT = "versturen niet toegestaan: wat de chat in het ingesloten venster antwoordt na een verstuurd bericht.";
+  const chat = join(scratch, "site-chat");
+  write(join(chat, "evaluation.json"), {
+    criteria: [
+      { id: "3.3.1", missingNl: [NOT_SENT] },
+      { id: "4.1.3", missingNl: [NOT_SENT, "mens nodig: wat NVDA voorleest bij een nieuw bericht in de chat."] },
+      { id: "2.2.1", missingNl: [NOT_SENT, SWEEP] },
+    ],
+  });
+  const result = gaps([chat]);
+  assert.deepEqual(result.kinds.map((kind) => [kind.kind, kind.reader, kind.points, kind.distinct, kind.criteria.length, kind.standing]), [
+    ["veegronde mist", "toolbox", 1, 1, 1, 1],
+    ["versturen niet toegestaan", "owner", 3, 3, 3, 3],
+    ["mens nodig", "owner", 1, 1, 1, 1],
+  ]);
+  const text = gapsTextNl(result);
+  assert.match(text, /^versturen niet toegestaan +3 +3 +3 +3$/m);
+  assert.match(text, /^## versturen niet toegestaan: pas te meten als het onderzoek mag versturen \(3 punten, 3 verschillend, 3 criteria\)\nElk punt is iets wat pas na versturen te zien is, in een run die niet mocht versturen\. Geen persoon nodig: .*--test-environment.*ingesloten venster zijn\.$/m);
+});

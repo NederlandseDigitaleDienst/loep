@@ -475,7 +475,11 @@ export function closeCutQuote(limitation: string): string {
   return quote.length === QUOTE_LIMIT ? `${limitation.slice(0, start + opening.length)}${endAtWord(quote)}"` : limitation;
 }
 
-/** The open criteria of an evaluation, split by what they wait for: a person or a choice, or the evaluation itself. */
+/**
+ * The open criteria of an evaluation, split by what they wait for: the owner (a person, a choice,
+ * or a declared test environment so that the run may send), or the evaluation itself. A point
+ * "versturen niet toegestaan" is the owner's: the run measured all it was allowed to.
+ */
 export function openCriteria(criteria: Pick<CriterionResult, "id" | "outcome" | "missingNl">[]): { owner: string[]; evaluation: string[] } {
   const open = criteria.filter((criterion) => criterion.outcome === "cantTell" || criterion.outcome === "untested");
   // One point about the evaluation itself is enough: then the evaluation is what the criterion waits for.

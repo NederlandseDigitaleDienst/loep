@@ -68,6 +68,7 @@ Een "kan niet bepalen" is geen eindpunt. Herhaal de metingen van de beoordelaar 
 
 - Neem elk punt uit zijn `missingNl`, ook elke regel "veegronde mist:". Vraag per punt: welk feit ontbreekt er? Staat dat feit al vast in de code, in het dossier of in een van zijn eigen waarnemingen (een attribuut, een meting, een `appeared` in het antwoord van een handeling)? Kun je het met een ander instrument of in een andere toestand alsnog vaststellen? Doe dat, binnen je budget.
 - Gaat een punt `mens nodig:` over wat een schermlezer voorleest of uit zichzelf uitspreekt, en heeft de beoordelaar `voiceover` niet gebruikt: doe het dan zelf, op dezelfde toestand (zie het gereedschap). Wat VoiceOver met Safari zei, sluit het punt voor VoiceOver met Safari; wat NVDA of JAWS doen, blijft dan het open punt.
+- Blijft een punt van de beoordelaar alleen open omdat de run niet mag versturen (het antwoord van een chat, wat een formulier na versturen toont of laat voorlezen), dan heet het in jouw oordeel `versturen niet toegestaan:`, ook als hij `mens nodig:` schreef. Er is geen persoon voor nodig: met een verklaarde testomgeving meet een instrument het. Noem het adres van het venster of van waar het bericht naartoe gaat, zoals de regels voor bevindingen en open punten hieronder zeggen.
 - Lees de beslisregels opnieuw met de feiten die er liggen. Liet hij een feit liggen dat een regel naar `failed` vervult, dan is dat een bevinding (sleutel `V1`), met je eigen waarneming.
 - Beslis over elke kandidaat die hij open liet.
 
@@ -132,7 +133,7 @@ Dezelfde vorm als het oordeel van de beoordelaar, door jou opnieuw geschreven, m
     { "criterion": "1.3.2", "page": "P07", "where": "kop onder de tekst waar hij bij hoort", "evidence": ["{{session}}-0013"], "noteNl": "Eén zin: wat je zag dat bij dat criterium hoort." }
   ],
   "nothingFound": { "coverageNl": "Alleen bij cantTell zonder afwijking: wat wel is gemeten, met aantallen." },
-  "missingNl": ["Bij cantTell en bij open punten: de soort, een dubbele punt en wat er nodig is, zoals: mens nodig: wat een schermlezer voorleest na het versturen van het formulier op P03."],
+  "missingNl": ["Bij cantTell en bij open punten: de soort, een dubbele punt en wat er nodig is, zoals: mens nodig: wat NVDA en JAWS voorlezen bij het uitklapmenu op P03; VoiceOver met Safari las de naam en de toestand voor."],
   "verification": {
     "judgeOutcome": "failed",
     "findings": [

@@ -84,6 +84,36 @@ export function passwordPagesNl(pages: Pick<InventoryPage, "url" | "counts">[], 
   return `let op: ${found.length === 1 ? "één pagina toont" : `${found.length} pagina's tonen`} een wachtwoordveld (${named}), en er is niet ingelogd. Staat een deel van de site achter een inlog, dan wordt dat deel niet onderzocht. Hoort het erbij, laat dan een mens inloggen met loep login en begin opnieuw met inventory, in een nieuwe map`;
 }
 
+/**
+ * In a run that may not send: the pages with a form, and the embedded frames on another origin
+ * with one, said right after the inventory. What only shows after sending then stays open as
+ * "versturen niet toegestaan", and only a new inventory can declare a test environment. A form
+ * that every page has, such as a search in the header, is left out: it is mostly a search that
+ * asks with GET, which is always allowed. Null when there is nothing to say. A chat without a
+ * form element is not counted.
+ */
+export function formPagesNl(pages: Pick<InventoryPage, "url" | "counts" | "foundVia">[], origin: string, writesAllowed: boolean): string | null {
+  if (writesAllowed) return null;
+  const forms = (entry: (typeof pages)[number]): number => (typeof entry.counts.forms === "number" ? entry.counts.forms : 0);
+  const isFrame = (entry: (typeof pages)[number]): boolean => entry.foundVia.length > 0 && entry.foundVia.every((via) => via.startsWith("iframe:"));
+  const own = pages.filter((entry) => !isFrame(entry));
+  const everywhere = own.length > 0 ? Math.min(...own.map(forms)) : 0;
+  const withForm = own.filter((entry) => forms(entry) > everywhere).map((entry) => entry.url);
+  const frames = pages.filter((entry) => isFrame(entry) && new URL(entry.url).origin !== origin && forms(entry) > 0).map((entry) => entry.url);
+  if (withForm.length === 0 && frames.length === 0) return null;
+  const named = (urls: string[]): string => (urls.length === 1 ? urls[0]! : `${urls[0]} en ${urls.length - 1} meer`);
+  const parts = [
+    withForm.length > 0 ? `${withForm.length === 1 ? "één pagina heeft" : `${withForm.length} pagina's hebben`} een formulier dat niet op elke pagina staat (${named(withForm)})` : null,
+    frames.length > 0 ? `${frames.length === 1 ? "één ingesloten venster op een ander adres heeft" : `${frames.length} ingesloten vensters op een ander adres hebben`} een formulier (${named(frames)})` : null,
+  ].filter(Boolean);
+  const frameOrigins = [...new Set(frames.map((url) => new URL(url).origin))];
+  const declare = `--test-environment ${withForm.length === 0 && frameOrigins.length === 1 ? frameOrigins[0] : "<origin>"} --declared-by "<naam>, <functie>"`;
+  return (
+    `let op: dit onderzoek mag niet versturen, en ${parts.join(", en ")}. Wat pas na versturen verschijnt (een melding van de server, een bevestiging, het antwoord van een chat), blijft open als "versturen niet toegestaan". ` +
+    `Is er een testomgeving, begin dan opnieuw met inventory, in een nieuwe map, met ${declare}${frames.length > 0 ? "; voor een venster op een ander adres kan dat de origin van alleen dat venster zijn" : ""}`
+  );
+}
+
 export function parseSitemap(xml: string): string[] {
   return [...xml.matchAll(/<loc>\s*([^<\s]+)\s*<\/loc>/g)].map((match) => match[1]!.replaceAll("&amp;", "&"));
 }

@@ -34,10 +34,11 @@ Lees dat oordeel en de waarnemingen waar het naar wijst. Je hoeft niet over te d
 
 ## Wat "kan niet bepalen" nog mag zijn
 
-Je geeft `cantTell` alleen nog als er na jouw werk een punt overblijft van een van deze drie soorten:
+Je geeft `cantTell` alleen nog als er na jouw werk een punt overblijft van een van deze vier soorten:
 
-- `mens nodig:` geen instrument kan dit vaststellen: wat een schermlezer voorleest als `voiceover` niet beschikbaar is of het niet beslist (wat VoiceOver met Safari zei, staat er dan bij), een melding van de browser zelf, iets wat alleen na inloggen of versturen te zien is in een run die dat niet mag;
+- `mens nodig:` geen instrument kan dit vaststellen: wat een schermlezer voorleest als `voiceover` niet beschikbaar is of het niet beslist (wat VoiceOver met Safari zei, staat er dan bij), een melding van de browser zelf, iets wat alleen na inloggen te zien is in een run die dat niet mag;
 - `keuze nodig:` het oordeel hangt af van een besluit dat de norm of de procedure uitdrukkelijk bij de eigenaar van de site legt; hoe je een succescriterium leest, beslis je zelf en is nooit een keuze;
+- `versturen niet toegestaan:` het antwoord komt pas nadat er iets is verstuurd (een bericht in een chat, een formulier), en deze run mag daar niet versturen. Dat is nooit `mens nodig:`: met een verklaarde testomgeving meet een instrument het. Noem het adres van het ingesloten venster of van waar het bericht naartoe gaat;
 - `proef werkte niet:` een instrument gaf na een echte poging geen bruikbaar antwoord. Dat vraagt minstens twee waarnemingen uit je eigen sessie, op meer dan één manier geprobeerd, en een beschrijving in `finish.attempts`.
 
 Een punt `veegronde mist:` of `budget op:` mag niet blijven staan: de controle weigert het. "Niet overal gemeten" is na deze ronde geen uitkomst meer: meet het, of zeg precies welk instrument op welke plek niet werkte. Raakt je eigen budget op voordat je klaar bent, verleng het dan: dat kan twee keer en staat bij het gereedschap. Is het daarna nog op, oordeel dan over wat je hebt gemeten en zeg in `finish.coverageNl` eerlijk waar dat was: een goedkeuring geef je alleen als wat je mat het criterium dekt.
@@ -101,7 +102,7 @@ Stop je sessie als je klaar bent: `node {{cli}} session stop --run {{run}} --ses
   "crossCandidates": [
     { "criterion": "1.3.2", "page": "P07", "where": "kop onder de tekst waar hij bij hoort", "evidence": ["{{session}}-0013"], "noteNl": "Eén zin: wat je zag dat bij dat criterium hoort." }
   ],
-  "missingNl": ["Alleen wat na jouw werk nog open is, met de soort ervoor: mens nodig, keuze nodig of proef werkte niet."],
+  "missingNl": ["Alleen wat na jouw werk nog open is, met de soort ervoor: mens nodig, keuze nodig, versturen niet toegestaan of proef werkte niet."],
   "finish": {
     "points": [
       { "point": 1, "settled": true, "howNl": "Wat je mat, waar, en wat eruit kwam.", "evidence": ["{{session}}-0004"] },

@@ -248,6 +248,69 @@ test("open points are split into work for the owner of the site and limits of th
   for (const id of [first!.id, second!.id, passed.id]) assert.equal(main!.split(`<a id="open-${id}"></a>`).length - 1, 1);
 });
 
+/** An evaluation with a chat in an embedded frame that answers only after a message: one criterion waits for sending alone, one also for a person. */
+function withNotSent(): { evaluation: Evaluation; only: string; mixed: string } {
+  const evaluation = exampleEvaluation();
+  const [first, second] = evaluation.criteria.filter((entry) => entry.outcome === "cantTell");
+  first!.missingNl = ["versturen niet toegestaan: wat de chat in het venster van https://chat.voorbeeld.nl/widget op P02 antwoordt na een verstuurd bericht."];
+  second!.missingNl = ["versturen niet toegestaan: of de chat op P02 een nieuw bericht laat voorlezen.", "mens nodig: wat NVDA voorleest bij het menu op P01."];
+  // Every other criterion has an outcome: the evaluation itself is done.
+  for (const criterion of evaluation.criteria) {
+    if (criterion === first || criterion === second || (criterion.outcome !== "cantTell" && criterion.outcome !== "untested")) continue;
+    criterion.outcome = "passed";
+    criterion.missingNl = [];
+  }
+  return { evaluation, only: first!.id, mixed: second!.id };
+}
+
+test("what stays open only because the run may not send stands apart, with the declaration that would have closed it", () => {
+  const { evaluation, only, mixed } = withNotSent();
+  const { todo, statusLine } = deriveReport(evaluation);
+  // The owner's part keeps what a person has to do; the points about sending are not in it.
+  assert.deepEqual(todo.investigate.owner.map((item) => [item.criterion, item.pointsNl]), [[mixed, ["Wat NVDA voorleest bij het menu op P01."]]]);
+  const notSent = todo.investigate.notSent!;
+  assert.deepEqual(notSent.items.map((item) => [item.criterion, item.pointsNl.length]), [[only, 1], [mixed, 1]]);
+  assert.deepEqual(notSent.onlyCriteria, [only]);
+  // The one origin the points name goes into the flags; the frame alone may be declared.
+  assert.equal(notSent.flags, '--test-environment https://chat.voorbeeld.nl --declared-by "<naam>, <functie>"');
+  assert.match(notSent.originNl, /^In de open punten staat als adres https:\/\/chat\.voorbeeld\.nl\. Er kan één origin worden verklaard, en dat mag de origin van alleen een ingesloten venster zijn/);
+  // The count at the top says which criteria wait for sending alone, and sends nobody to a person for them.
+  assert.ok(statusLine.openNl.includes(`Van de criteria voor de eigenaar wacht er 1 alleen op toestemming om te versturen (${only}).`), statusLine.openNl);
+  assert.ok(statusLine.openNl.endsWith("Bij de andere kan geen instrument verder: een persoon legt het antwoord vast, en daarna telt het mee in de uitkomst."), statusLine.openNl);
+
+  const worklist = renderMarkdown(evaluation).split("### Nog uitzoeken")[1]!.split("\n## ")[0]!;
+  assert.ok(worklist.indexOf("**Dit moet een mens nagaan**") < worklist.indexOf("**Pas te meten als het onderzoek mag versturen**"));
+  assert.ok(worklist.includes('Een nieuw onderzoek meet deze punten als bij inventory een testomgeving wordt verklaard, door iemand met naam en functie: `--test-environment https://chat.voorbeeld.nl --declared-by "<naam>, <functie>"`'));
+  const part = worklist.split("**Pas te meten als het onderzoek mag versturen**")[1]!;
+  assert.ok(part.includes("  - Of de chat op P02 een nieuw bericht laat voorlezen."));
+  assert.ok(!/mens nodig|versturen niet toegestaan:/.test(worklist));
+
+  // Without an address in the points the flags keep the place to fill in; with two they say one can be declared.
+  for (const criterion of evaluation.criteria) criterion.missingNl = criterion.missingNl.map((point) => point.replace(/ in het venster van https:\/\/\S+/, ""));
+  assert.equal(deriveReport(evaluation).todo.investigate.notSent!.flags, '--test-environment <origin> --declared-by "<naam>, <functie>"');
+  evaluation.criteria.find((entry) => entry.id === mixed)!.missingNl = ["versturen niet toegestaan: het formulier naar https://formulier.voorbeeld.nl/aanvraag."];
+  evaluation.criteria.find((entry) => entry.id === only)!.missingNl = ["versturen niet toegestaan: de chat van https://chat.voorbeeld.nl."];
+  const two = deriveReport(evaluation);
+  assert.match(two.todo.investigate.notSent!.originNl, /^In de open punten staan 2 adressen: https:\/\/chat\.voorbeeld\.nl, https:\/\/formulier\.voorbeeld\.nl\. Per onderzoek kan er één worden verklaard\./);
+  // When every open criterion of the owner waits for sending alone, no person is named at all.
+  assert.ok(two.statusLine.openNl.endsWith("Daar is geen persoon voor nodig: een instrument meet het in een nieuw onderzoek dat mag versturen, zie \"Nog uitzoeken\"."), two.statusLine.openNl);
+  // An evaluation without such points has no part for them.
+  assert.equal(deriveReport(exampleEvaluation()).todo.investigate.notSent, null);
+});
+
+test("the PDF shows the part for what waits for sending, with the flags of inventory", async (context) => {
+  const dir = mkdtempSync(join(tmpdir(), "render-not-sent-"));
+  writeFileSync(join(dir, "evaluation.json"), canonicalJson(withNotSent().evaluation));
+  const result = await render(dir);
+  if (result.pdf === null) return context.skip("Typst is not installed");
+  assert.deepEqual(result.pdfChecks.filter((problem) => !problem.includes("is niet geïnstalleerd")), []);
+  const text = await tool("pdftotext", [result.pdf, "-"]);
+  if (!text.found) return context.skip("pdftotext is not installed");
+  const flat = text.stdout.replace(/\s+/g, " ");
+  assert.ok(flat.includes("Pas te meten als het onderzoek mag versturen"));
+  assert.ok(flat.includes("--test-environment https://chat.voorbeeld.nl"), "the flags stand in the PDF");
+});
+
 test("the report says it was made with loep, and that the judgment is of who signs it", () => {
   const evaluation = exampleEvaluation();
   const markdown = renderMarkdown(evaluation);

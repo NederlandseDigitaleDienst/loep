@@ -90,3 +90,24 @@ test("feedback on the command line: --out writes one body per draft, --json give
   assert.throws(() => feedback(join(scratch, "leeg")), /heeft geen evaluation\.json/);
   await assert.rejects(cli(), /feedback needs --run <run>/);
 });
+
+test("a criterion open because the run may not send is the owner's choice: no draft, but named apart", () => {
+  const NOT_SENT = "versturen niet toegestaan: wat de chat in het venster van https://chat.voorbeeldstad.nl antwoordt na een bericht.";
+  const chat = run("site-chat", [
+    criterion("3.3.1", "cantTell", [NOT_SENT]),
+    criterion("4.1.3", "cantTell", [NOT_SENT, "mens nodig: wat NVDA voorleest bij een nieuw bericht."]),
+    // Open by loep as well: only the sweep point becomes a draft.
+    criterion("2.2.1", "cantTell", [NOT_SENT, "veegronde mist: de timers van de chat zijn niet gemeten."]),
+    criterion("1.1.1", "passed", []),
+  ]);
+  const result = feedback(chat);
+  assert.deepEqual(result.drafts.map((draft) => draft.title), [`${TITLE_PREFIX} 2.2.1 veegronde mist`]);
+  assert.ok(!result.drafts[0]!.bodyMd.includes("chat in het venster"), "the point about sending stays out of the draft");
+  assert.deepEqual(result.notSent, ["2.2.1", "3.3.1", "4.1.3"]);
+  const text = feedbackTextNl(result);
+  assert.match(text, /^Niet terug te melden: criteria 2\.2\.1, 3\.3\.1, 4\.1\.3 bleven ook open omdat het onderzoek niet mocht versturen\. Dat is een keuze van de eigenaar van de site, geen fout in loep\./m);
+  // With nothing else to report, the line still says why those criteria are open.
+  const only = feedback(run("site-chat-only", [criterion("3.3.1", "cantTell", [NOT_SENT])]));
+  assert.deepEqual(only.drafts, []);
+  assert.match(feedbackTextNl(only), /^Niets terug te melden uit site-chat-only: geen criterium is open door loep zelf\.\n\nNiet terug te melden: criterium 3\.3\.1 bleef ook open omdat/);
+});

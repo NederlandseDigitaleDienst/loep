@@ -10,6 +10,7 @@ import {
   citedObservations,
   FINISH_FACTOR,
   indexObservations,
+  notSentPointProblems,
   openPoint,
   searchableText,
   validateCandidates,
@@ -24,7 +25,7 @@ import {
 } from "../lib/verdict.ts";
 import { CRITERIA, criterionById } from "../lib/wcag.ts";
 import { agentLoginNl } from "../lib/login.ts";
-import { WRITES_BLOCKED_NL, writesAllowedNl } from "../lib/writes.ts";
+import { WRITES_BLOCKED_NL, writesAllowedNl, writesForRun } from "../lib/writes.ts";
 import { sweepCandidates } from "../lib/statusmessages.ts";
 import { makeWorkDir } from "../lib/workdir.ts";
 
@@ -722,6 +723,7 @@ export async function checkInstrumentVerdict(runDir: string, criterionId: string
   else if (!(await instrumentVerdictIsCurrent(runDir, task, "judge", observations))) problems = ["the verdict of the judge must be validated, and unchanged since, before the verification"];
   else problems = validateVerification(verdict, { ...context, session: part.session, judge: await readJson<Verdict>(join(runDir, task.judge.output)) });
   problems.push(...budgetPointProblems(runDir, verdict, part.session));
+  problems.push(...notSentPointProblems(verdict.missingNl, writesForRun(runDir)));
   if (problems.length === 0) await stampNow(runDir, part.output, (await verdictStamp(runDir, task, round, observations))!);
   return problems;
 }
