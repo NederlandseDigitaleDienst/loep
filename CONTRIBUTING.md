@@ -39,7 +39,7 @@ Wat je bijdraagt valt onder de EUPL-1.2, zoals de rest van de repository.
 
 ## Versies
 
-De toolbox en de plugin hebben één versie, want de plugin is de hele repository. Ze staat in `toolbox/package.json` en in de drie manifesten van de plugin; een test faalt als die verschillen. Het rapport noemt de versie op het voorblad en onderaan elke pagina, met de commit erbij.
+De toolbox en de plugin hebben één versie, want de plugin is de hele repository. Ze staat in `toolbox/package.json` en in de drie manifesten van de plugin; een test faalt als die verschillen. Het rapport noemt de versie op het voorblad en onderaan elke pagina, en op het voorblad de commit als die bekend is: een run uit de geïnstalleerde plugin staat niet in een git-repository en heeft er geen.
 
 Een versie zegt iets over de methode. Twee rapporten met dezelfde versie zijn met dezelfde procedures, instrumenten en regel-engines gemaakt.
 

@@ -2,7 +2,7 @@
 
 Wat er nu loopt en wat hierna komt, in volgorde. Wat de toolbox al doet staat in [docs/methode.md](docs/methode.md), de cijfers in [validatie/iteraties.md](validatie/iteraties.md), de lessen met hun status in [validatie/lessen.md](validatie/lessen.md). Dit bestand wordt bijgewerkt bij elke afgeronde stap.
 
-Stand: 14 oktober 2026.
+Stand: 15 oktober 2026. Sinds 14 oktober uitgebracht in 0.1.2 en 0.2.0: terugmelden aan loep met `feedback`, de vragen vooraf in de skill, en de soort open punt `versturen niet toegestaan`. Alle drie zijn door tests gedekt en nog in geen meting gebruikt.
 
 ## Loopt
 
