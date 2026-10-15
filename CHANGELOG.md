@@ -13,6 +13,10 @@ Wat er per versie van loep is veranderd. De versie staat op het voorblad en onde
 - Een run vanuit de geïnstalleerde plugin, buiten een git-repository, noemt in het rapport alleen de versie van loep. Bij het gereedschap en de herleidbaarheid staat dat de commit onbekend is, en het rapport zegt niets meer over niet vastgelegde wijzigingen. Een oudere run met de tekst `no commit yet` wordt net zo weergegeven (#36).
 - Een open punt dat alleen open blijft omdat de run niet mocht versturen, heet `versturen niet toegestaan` en niet meer `mens nodig`. Het telt als keuze van de eigenaar: het rapport zet die punten apart onder "Nog uitzoeken", met de verklaring bij `inventory` die ze had gesloten (`--test-environment <origin>`, ook de origin van alleen een ingesloten venster), `loep gaps` telt ze apart en `loep feedback` maakt er geen issue van (#37).
 
+### Verder
+
+- De skill vraagt vooraf apart of het onderzoek mag versturen: op de hele site, alleen naar het adres dat het bericht ontvangt, of niet. `inventory` zegt het in een run die niet mag versturen als pagina's een eigen formulier hebben of een ingesloten venster op een ander adres er een heeft (#37).
+
 ## 0.1.2 (2026-10-15)
 
 ### Verder

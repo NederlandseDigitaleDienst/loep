@@ -199,7 +199,7 @@ async function main(): Promise<void> {
       if (permission) setRunWrites(writeAccess(values.out, permission, "inventory"));
       // What this command was given decides whether a session may be used: the manifest only holds it afterwards.
       setRunLogin(values.out, { writes: permission });
-      const { inventory, passwordPagesNl } = await import("./commands/inventory.ts");
+      const { formPagesNl, inventory, passwordPagesNl } = await import("./commands/inventory.ts");
       const fixedUrls = values.urls ? (await import("node:fs")).readFileSync(values.urls, "utf8").split("\n").map((line) => line.trim()).filter(Boolean) : undefined;
       const tagPrefixes = (values["vendor-tags"] ?? "").split(",").map((prefix) => prefix.trim().toLowerCase()).filter(Boolean);
       if (tagPrefixes.some((prefix) => !/^[a-z][a-z0-9]*-[a-z0-9-]*$/.test(prefix))) throw new Error('--vendor-tags: elke prefix is het begin van een elementnaam met een streepje, zoals "nldd-"');
@@ -217,6 +217,8 @@ async function main(): Promise<void> {
       if (totals && totals.onSite + totals.elsewhere > 0) process.stdout.write(`${totals.onSite} documents on the site, ${totals.elsewhere} on other origins (counted only)\n`);
       const behindLogin = passwordPagesNl(result.pages, runLoginMark() !== null);
       if (behindLogin) process.stdout.write(`${behindLogin}\n`);
+      const notSent = formPagesNl(result.pages, result.origin, permission !== null);
+      if (notSent) process.stdout.write(`${notSent}\n`);
       return;
     }
     case "sample": {

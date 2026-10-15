@@ -155,6 +155,8 @@ Een run verstuurt niets naar de site, tenzij dat bij het begin uitdrukkelijk is 
 
 De verklaring geldt voor één origin (`--test-environment <origin>`). Dat mag de origin van alleen een ingesloten venster zijn, zoals een chat van een andere partij op een eigen adres: dan gaat alleen daarheen iets weg en wordt naar de rest van de site niets verstuurd. Het gereedschap kijkt naar het adres van elk verzoek, dus de origin is die waar het bericht naartoe gaat; meestal is dat die van het venster zelf.
 
+De verklaring ligt vast bij `inventory`. De skill vraagt daarom vooraf of het onderzoek mag versturen, met drie antwoorden: de hele site is een testomgeving, alleen het adres dat het bericht ontvangt, of niets. In een run die niet mag versturen zegt `inventory` het als pagina's een eigen formulier hebben, of als een ingesloten venster op een ander adres er een heeft. Een formulier dat op elke pagina staat, zoals een zoekveld in de kop, telt daarbij niet mee, en een chat zonder formulierelement ziet `inventory` niet.
+
 ## Een site achter een inlog
 
 Zonder verdere stap logt de toolbox nergens in. Voor een site achter een inlog doet een mens dat, met `login --run <run> --url <inlogpagina> --role "<rol>"`. Dat gebeurt vóór `inventory`: wie later inlogt, begint opnieuw. De skill vraagt daarom vooraf of een deel van de site achter een inlog staat, en `inventory` zegt het in een run zonder inlog als pagina's een wachtwoordveld tonen. Een inlog op een ander domein ziet `inventory` niet.
