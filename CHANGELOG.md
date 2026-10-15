@@ -4,6 +4,8 @@ Wat er per versie van loep is veranderd. De versie staat op het voorblad en onde
 
 ## Nog niet uitgebracht
 
+## 0.2.0 (2026-10-15)
+
 Deze versie is uitgebracht zonder nieuwe meting op de testsite. De twee wijzigingen die een uitkomst kunnen veranderen, zijn dus nog niet vergeleken met 0.1.2.
 
 ### Wat een uitkomst kan veranderen
