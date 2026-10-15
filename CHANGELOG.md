@@ -4,6 +4,10 @@ Wat er per versie van loep is veranderd. De versie staat op het voorblad en onde
 
 ## Nog niet uitgebracht
 
+### Verder
+
+- De skill zoekt voor elke melding aan loep eerst in open en gesloten issues: een open issue krijgt een reactie, een gesloten issue dat terugkomt een nieuw issue dat het oude noemt.
+
 ## 0.1.2 (2026-10-15)
 
 ### Verder
