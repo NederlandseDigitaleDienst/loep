@@ -10,6 +10,7 @@ import { progressLine, sayingItRuns } from "../src/instruments/limit.ts";
 import { canonicalJson, sha256, slugForUrl, stableId } from "../src/lib/canonical.ts";
 import { changedSinceCommit, complianceStatus, evaluationHash, knownCommit, resolveCriterion } from "../src/lib/evaluation.ts";
 import { toolboxSource } from "../src/lib/manifest.ts";
+import { loadProcedure, parseProcedure } from "../src/lib/procedures.ts";
 import type { SiteModel } from "../src/lib/sitemodel.ts";
 import type { Finding, Verdict } from "../src/lib/verdict.ts";
 import { compareCriterionIds, criteriaFor, criterionById, criterionIdFromAxeTag, en301549Clause } from "../src/lib/wcag.ts";
@@ -136,6 +137,30 @@ test("two defects in one component get identifiers that do not read as one defec
   assert.equal(twice[1], `${twice[0]}-2`, "only the same title in the same place gets a suffix");
   const alone = resolveCriterion({ ...base, verdicts: { a: passed, final: { ...twoDefects, findings: [inSearch] } } }, "X").findings[0]!.id;
   assert.notEqual(alone, ids[0], "a finding alone in its place keeps the identifier of its place");
+});
+
+test("a recommendation comes only from a rule of the procedure, and never decides an outcome", () => {
+  assert.deepEqual(loadProcedure("1.3.2").recommendationRules, ["A1"], "the cards rule of 1.3.2 is a recommendation, not a decision rule");
+  assert.deepEqual(loadProcedure("1.1.1").recommendationRules, []);
+  const base = loadProcedure("1.1.1");
+  const text = (section: string): string => `---\nid: "1.1.1"\nversion: 1\nclass: oordeel\nevidence: [images]\n---\n${base.body}\n\n${section}\n`;
+  assert.deepEqual(parseProcedure(text("## Aanbevelingen\n\n- A1. Een patroon.\n- A2. Nog een."), "1.1.1").recommendationRules, ["A1", "A2"]);
+  assert.throws(() => parseProcedure(text("## Aanbevelingen\n\nGeen regels."), "1.1.1"), /has no rules/);
+  assert.throws(() => parseProcedure(text("## Aanbevelingen\n\n- A1. Anders `failed`."), "1.1.1"), /names an outcome/);
+  assert.throws(() => parseProcedure(text("## Aanbevelingen\n\n- A1. Dan voldoet niet de site."), "1.1.1"), /names an outcome/);
+});
+
+test("a recommendation goes into the evaluation with its own identifier, and leaves the outcome alone", () => {
+  const criterion = criterionById("1.3.2")!;
+  const base = { criterion, procedure: null, provenance: { dossierSha256: null, verdictSha256: {} } };
+  const recommendation = { rule: "A1", titleNl: "Datum na de titel", observedNl: "De datum staat in de code vóór de titel.", recommendationNl: "Zet de datum na de titel.", locations: [{ page: "P01", where: ".kaart", heading: "Nieuws" }], evidence: ["images"] };
+  const withRecommendation = { ...passed, criterion: "1.3.2", recommendations: [recommendation] };
+  const result = resolveCriterion({ ...base, verdicts: { a: withRecommendation, final: withRecommendation } }, "X");
+  assert.equal(result.outcome, "passed");
+  assert.equal(result.findings.length, 0);
+  assert.match(result.recommendations![0]!.id, /^X-1\.3\.2-A[0-9a-f]{4}$/);
+  assert.equal(result.recommendations![0]!.component, null);
+  assert.equal(resolveCriterion({ ...base, verdicts: { a: passed, final: passed } }, "X").recommendations, undefined, "no field without a recommendation");
 });
 
 test("status follows the outcomes and needs a signature", () => {

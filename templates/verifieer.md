@@ -132,6 +132,9 @@ Dezelfde vorm als het oordeel van de beoordelaar, door jou opnieuw geschreven, m
   "crossCandidates": [
     { "criterion": "1.3.2", "page": "P07", "where": "kop onder de tekst waar hij bij hoort", "evidence": ["{{session}}-0013"], "noteNl": "Eén zin: wat je zag dat bij dat criterium hoort." }
   ],
+  "recommendations": [
+    { "rule": "A1", "titleNl": "...", "observedNl": "...", "recommendationNl": "...", "component": null, "locations": [ { "page": "P03", "where": "...", "heading": "..." } ], "evidence": ["{{session}}-0018"] }
+  ],
   "nothingFound": { "coverageNl": "Alleen bij cantTell zonder afwijking: wat wel is gemeten, met aantallen." },
   "missingNl": ["Bij cantTell en bij open punten: de soort, een dubbele punt en wat er nodig is, zoals: mens nodig: wat NVDA en JAWS voorlezen bij het uitklapmenu op P03; VoiceOver met Safari las de naam en de toestand voor."],
   "verification": {
@@ -153,6 +156,7 @@ Dezelfde vorm als het oordeel van de beoordelaar, door jou opnieuw geschreven, m
 - `candidates`: één regel per kandidaat. Neem een uitspraak alleen over als je haar zelf hebt nagekeken. Bij `noIssue` staat in `evidence` een waarneming van een kijk- of meetcommando uit je eigen sessie; zonder die waarneming is de uitspraak `open`. Een kandidaat die een vervallen bevinding was, wordt `noIssue`, `otherCriterion` of `open`.
 - `crossCandidates`: wat jij of de beoordelaar zag dat bij een ander criterium hoort, elk met een waarneming uit je eigen sessie en één zin van hooguit 40 woorden. Zo gaat het niet verloren: de beoordelaar van dat criterium krijgt het als kandidaat.
 - `nothingFound`: alleen bij `cantTell`, als na jouw toetsing niets fout is gevonden en elk open punt over dit onderzoek gaat (`veegronde mist:`, `budget op:` of `proef werkte niet:`). Het rapport toont het criterium dan als "geen afwijking gevonden, niet volledig gemeten"; de uitkomst blijft `cantTell` en telt niet als voldoet. Jij beslist dit zelf: ken het toe als de beoordelaar het wegliet en het klopt, en laat het weg als er een punt `mens nodig:` of `keuze nodig:` staat, een kandidaat open blijft of iets op een fout kan wijzen. `coverageNl` zegt wat samen is gemeten, met aantallen.
+- `recommendations`: alleen onder een regel uit de sectie "Aanbevelingen" van de procedure, met die regel in `rule` (`A1`). Verder `titleNl`, `observedNl`, `recommendationNl` (wat de site kan doen), de plekken in `locations` zoals bij een bevinding, en in `evidence` minstens één waarneming van een kijk- of meetcommando uit je eigen sessie. Laat het veld weg als er niets is, of als de procedure geen aanbevelingen kent. Lees elke aanbeveling van de beoordelaar na: valt ze onder een beslisregel, dan maak je er een bevinding van (`V1`). Neem een aanbeveling alleen over als je haar zelf opnieuw zag.
 {{findingRules}}
 - Wees kort: `summaryNl` hooguit 40 woorden, hooguit zes waarnemingen van elk hooguit 70 woorden, en per bevinding hooguit 50 woorden voor `observedNl`, `impactNl` en `fixNl`. Nederlands op B1-niveau in de velden voor lezers; vaktermen alleen in `fixNl`.
 

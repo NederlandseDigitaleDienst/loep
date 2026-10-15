@@ -5,7 +5,7 @@ import type { Defect, MergeRecord } from "./defects.ts";
 import type { Manifest } from "./manifest.ts";
 import type { RoleExtensions } from "./budget.ts";
 import type { RoleModels } from "./models.ts";
-import { openPoint, shadowPartOf, vendorElementsIn, WITHIN_REACH, type Finding, type Observation, type Outcome, type Verdict } from "./verdict.ts";
+import { openPoint, shadowPartOf, vendorElementsIn, WITHIN_REACH, type Recommendation, type Finding, type Observation, type Outcome, type Verdict } from "./verdict.ts";
 import { compareCriterionIds, CRITERIA, en301549Clause, GUIDELINES, PRINCIPLES, understandingUrl, type Criterion, type WcagVersion } from "./wcag.ts";
 
 /** "untested" means no verdict was reached at all; it is never rounded up to anything else. */
@@ -148,6 +148,13 @@ export interface Established {
   before?: { roundNl: string; outcome: Outcome | null; summaryNl: string; missingNl: string[] };
 }
 
+/** A recommendation as the report has it: with an identifier of its own, under the criterion whose procedure gave it. It never counts for the outcome. */
+export interface ReportRecommendation extends Recommendation {
+  id: string;
+  criterion: string;
+  component: string | null;
+}
+
 export interface CriterionResult {
   id: string;
   titleNl: string;
@@ -162,6 +169,8 @@ export interface CriterionResult {
   summaryNl: string;
   observations: Observation[];
   findings: ReportFinding[];
+  /** Recommendations under a rule of the procedure, with any outcome. Absent when there is none, and in an evaluation from before recommendations existed. */
+  recommendations?: ReportRecommendation[];
   missingNl: string[];
   /**
    * With "cantTell": no deviation was found, but not everything was measured; `coverageNl` says
@@ -426,6 +435,15 @@ export function resolveCriterion(input: CriterionInput, sitePrefix: string): Cri
     // A judge may leave out an optional field; the report relies on every field being there.
     return { ...finding, component: finding.component ?? null, id, criterion: criterion.id };
   });
+  // A recommendation is kept whatever the outcome: it is never part of it.
+  const recommendations: ReportRecommendation[] = (final?.recommendations ?? []).map((entry) => {
+    const place = entry.component ? normalise(entry.component) : normalise(entry.locations[0]?.where ?? entry.titleNl);
+    const base = `${sitePrefix}-${criterion.id}-A${stableId("x", criterion.id, "recommendation", entry.rule, place, normalise(entry.titleNl)).slice(2, 6)}`;
+    let id = base;
+    for (let suffix = 2; used.has(id); suffix++) id = `${base}-${suffix}`;
+    used.add(id);
+    return { ...entry, component: entry.component ?? null, id, criterion: criterion.id };
+  });
   return {
     id: criterion.id,
     titleNl: criterion.titleNl,
@@ -443,6 +461,7 @@ export function resolveCriterion(input: CriterionInput, sitePrefix: string): Cri
       : (final?.summaryNl ?? "Voor dit criterium is geen eindoordeel vastgesteld."),
     observations: final?.observations ?? [],
     findings,
+    ...(recommendations.length > 0 ? { recommendations } : {}),
     missingNl: answered ? answered.remainingNl : (final?.missingNl ?? []),
     ...(outcome === "cantTell" && final?.nothingFound ? { nothingFound: { coverageNl: final.nothingFound.coverageNl } } : {}),
     rounds: { a: verdicts.a?.outcome ?? null, b: null, final: verified?.outcome ?? null, ...(finish ? { finish: finish.outcome } : {}) },

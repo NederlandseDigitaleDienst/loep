@@ -598,6 +598,26 @@
   }
 }
 
+// A recommendation is no part of an outcome: its own part, after everything that is wrong or open.
+#if derived.recommendations.len() > 0 [
+  == #t.recommendations
+
+  #par(t.recommendationsIntro)
+  #for item in derived.recommendations {
+    let criterion = criteria.find(c => c.id == item.criterion)
+    block(above: 11pt, below: 6pt, sticky: true, width: 100%, stroke: (top: 0.5pt + hairline), inset: (top: 5pt), {
+      [#text(weight: 700, prose(item.titleNl)) #label(item.id)]
+      linebreak()
+      set text(size: 8.5pt, fill: muted)
+      [#id-text(item.id) · bij #criterion-link(criterion.id)[#criterion.id #criterion.titleNl], aanbeveling #item.rule van de procedure]
+    })
+    {
+      set text(size: 9.5pt)
+      plain-list(("Gezien: " + item.observedNl, "Aanbeveling: " + item.recommendationNl, "Waar: " + item.placesNl.join("; ")))
+    }
+  }
+]
+
 // ---------------------------------------------------------------- facts
 
 #pagebreak(weak: true)

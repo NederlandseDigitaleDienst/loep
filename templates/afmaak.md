@@ -102,6 +102,9 @@ Stop je sessie als je klaar bent: `node {{cli}} session stop --run {{run}} --ses
   "crossCandidates": [
     { "criterion": "1.3.2", "page": "P07", "where": "kop onder de tekst waar hij bij hoort", "evidence": ["{{session}}-0013"], "noteNl": "Eén zin: wat je zag dat bij dat criterium hoort." }
   ],
+  "recommendations": [
+    { "rule": "A1", "titleNl": "...", "observedNl": "...", "recommendationNl": "...", "component": null, "locations": [ { "page": "P03", "where": "...", "heading": "..." } ], "evidence": ["{{session}}-0018"] }
+  ],
   "missingNl": ["Alleen wat na jouw werk nog open is, met de soort ervoor: mens nodig, keuze nodig, versturen niet toegestaan of proef werkte niet."],
   "finish": {
     "points": [
@@ -126,6 +129,7 @@ Stop je sessie als je klaar bent: `node {{cli}} session stop --run {{run}} --ses
 - `observations`: wat nu vaststaat. Elke waarneming zegt in `ruling` wat eruit volgt: `noIssue`, `finding` (met de `key` in `finding`), `open` (met het punt in `missingNl`) of `otherCriterion` (met een regel in `crossCandidates`). Bij `passed` gelden de eisen van de procedure onder "Bewijs bij goedkeuring", en `resolved` voor elke meting waarvan de methoden het oneens waren over de vraag van dit criterium: `{ "observations": [de metingen], "by": [de waarneming die het beslecht], "howNl": "wat het verschil was" }`.
 - `candidates`: één regel per kandidaat uit je kandidatenbestand. Bij `noIssue` staat in `evidence` een waarneming van een kijk- of meetcommando uit je eigen sessie.
 - `findings`: sleutels `F1`, `F2`. Laat `verification` en `nothingFound` weg.
+- `recommendations`: alleen onder een regel uit de sectie "Aanbevelingen" van de procedure, met die regel in `rule` (`A1`). Verder `titleNl`, `observedNl`, `recommendationNl` (wat de site kan doen), de plekken in `locations` zoals bij een bevinding, en in `evidence` minstens één waarneming van een kijk- of meetcommando uit je eigen sessie. Laat het veld weg als er niets is, of als de procedure geen aanbevelingen kent.
 {{findingRules}}
 - Wees kort: `summaryNl` hooguit 40 woorden, hooguit acht waarnemingen van elk hooguit 70 woorden, en per bevinding hooguit 50 woorden voor `observedNl`, `impactNl` en `fixNl`. Nederlands op B1-niveau in de velden voor lezers; vaktermen alleen in `fixNl`.
 
