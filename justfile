@@ -81,7 +81,7 @@ test:
 
 # Draai alleen de tests die geen browser starten: een paar seconden, voor tussendoor en voor de snelle controle bij een push
 test-quick:
-    cd {{toolbox}} && node --test test/compare-findings.test.ts test/contrast.test.ts test/core.test.ts test/defects.test.ts test/docs.test.ts test/estimate.test.ts test/release.test.ts test/extractors.test.ts test/instrument-tasks.test.ts test/render.test.ts test/sequence.test.ts test/statement.test.ts test/sweepstamp.test.ts test/timing.test.ts test/verdict.test.ts test/voiceover.test.ts
+    cd {{toolbox}} && node --test test/compare-findings.test.ts test/contrast.test.ts test/core.test.ts test/defects.test.ts test/docs.test.ts test/estimate.test.ts test/release.test.ts test/extractors.test.ts test/feedback.test.ts test/instrument-tasks.test.ts test/render.test.ts test/sequence.test.ts test/statement.test.ts test/sweepstamp.test.ts test/timing.test.ts test/verdict.test.ts test/voiceover.test.ts
 
 # Controleer de types
 check:
@@ -123,6 +123,10 @@ estimate run *flags:
 # Verzamel de open punten van een of meer runs per soort en per criterium: de werklijst voor wie de veegronde verbetert. Schrijft niets; met --json voor wie verder rekent
 gaps run *meer:
     {{cli}} gaps --run {{run}} {{meer}}
+
+# Schrijf voor elk criterium dat open bleef door loep zelf een tekst voor een issue op de repository van loep, zonder adres of naam van de site. Verstuurt niets; met --out <map> een bestand per tekst, --json voor wie verder rekent
+feedback run *flags:
+    {{cli}} feedback --run {{run}} {{flags}}
 
 # Maak de evaluatie en het rapport van een run waarvan alle opdrachten klaar zijn, en verzegel de run
 report run naam organisatie model:

@@ -69,6 +69,8 @@ Een punt `budget op` mag pas in een oordeel staan als de sessie twee keer is ver
 
 `gaps` verzamelt uit een of meer runs alle open punten, per soort en per criterium, en voegt gelijke punten samen. Elke `veegronde mist` is een agent die zegt welke meting ontbrak: dat is de werklijst voor wie de veegronde verbetert, zodat de afmaakronde en het verlengen steeds minder nodig zijn.
 
+Wat na de afmaakronde nog open staat door loep zelf, gaat terug naar wie loep maakt. `feedback` schrijft daarvoor per criterium en per soort een tekst voor een issue, met de versies van loep en van de procedure en zonder adres, naam of organisatie van de site. De titel (`Open door loep: 2.4.4 veegronde mist`) blijft van run tot run gelijk, zodat een tweede melding een reactie wordt onder het eerste issue en het aantal laat zien hoe vaak het voorkomt. Versturen doet de gebruiker of een agent met diens ja: een issue is openbaar.
+
 ### De afmaakronde
 
 Na de verifieerders krijgt elk criterium met de uitkomst "kan niet bepalen" waarvan minstens één open punt over het onderzoek zelf gaat (`veegronde mist`, `budget op` of `proef werkte niet`) een eigen agent, met een schone context en een eigen sessie. Hetzelfde geldt voor een criterium waarvoor na twee pogingen geen geldig oordeel kwam. `tasks` schrijft de opdracht (`tasks/<criterium>/afmaak.md`) zodra elke verifieerder binnen is; `pending` meldt dan `phase: "finishers"`. Is er geen zo'n criterium, dan slaat de run de fase over.

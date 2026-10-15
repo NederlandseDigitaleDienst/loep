@@ -38,6 +38,7 @@ De overige commando's:
 | `pending` | Zegt in welke fase de run is en welke opdrachten nog open staan |
 | `estimate` | Rekent uit hoe lang de run naar verwachting duurt, per onderdeel en in totaal, met een marge en het aantal tokens; toont wat al gemeten is ernaast. Zie [docs/methode.md](docs/methode.md#hoe-lang-een-onderzoek-duurt) |
 | `gaps` | Verzamelt de open punten van een of meer runs, per soort en per criterium, voegt gelijke punten samen en telt ze: de werklijst voor wie de veegronde verbetert. `just gaps <run> [<run> ...]`; met `--json` voor wie verder rekent |
+| `feedback` | Schrijft per criterium dat open bleef door loep zelf een tekst voor een issue op deze repository, zonder adres of naam van de site, met een titel die van run tot run gelijk blijft. Verstuurt niets. `just feedback <run> --out <map>` |
 | `check-walk`, `check-verdict` | Controleren de kandidaten van een rondgang en een oordeel; de agent die het schreef draait ze zelf |
 | `skip` | Legt vast dat een rondgang of oordeel niet komt, zodat de volgende fase kan beginnen |
 | `answer` | Legt het antwoord van een persoon vast op een open punt dat geen instrument kan sluiten: wat is gedaan of besloten, wat dat betekent voor het criterium, en in welke functie. De naam blijft in een bestand van de run; het rapport noemt de functie. Zie [docs/methode.md](docs/methode.md#wat-een-mens-moet-vaststellen) |
