@@ -4,6 +4,12 @@ Wat er per versie van loep is veranderd. De versie staat op het voorblad en onde
 
 ## Nog niet uitgebracht
 
+### Wat een uitkomst kan veranderen
+
+- Inloggen bij DigiD, eHerkenning of eIDAS valt buiten het bereik, net als andere websites van derden, en het bereik in het rapport zegt dat. 3.3.8 (Toegankelijke authenticatie) blijft daardoor niet meer open bij een site waar alleen via zo'n dienst wordt ingelogd: zonder eigen inlog is het criterium niet van toepassing. Een andere inlogdienst op een ander domein, ook van een leverancier, hoort nog steeds bij de site. Eerder zette zo'n inlog de status op C, terwijl het bereik websites van derden uitsloot.
+- 3.2.4 (Consistente identificatie): een knop die "Terug" heet als de bezoeker van de site kwam en "Naar de site" als die van buiten kwam, heeft twee functies en is geen inconsistentie. Een bevinding beschrijft elke naam die het onderdeel kan krijgen, niet alleen de naam die de beoordelaar zag.
+- Een naam die er is maar de functie onvolledig noemt, zoals een logo-link met alleen de naam van de organisatie, krijgt niet de ernst `hoog` van "geen naam".
+
 ### Verder
 
 - Twee bevindingen onder hetzelfde criterium op dezelfde plek die verschillende gebreken zijn, krijgen elk een eigen nummer, met de titel in de hash. Eerder kreeg de tweede het nummer van de eerste met `-2` erachter, wat las als hetzelfde gebrek op een andere plek. Alleen dezelfde titel op dezelfde plek krijgt nog een achtervoegsel.
