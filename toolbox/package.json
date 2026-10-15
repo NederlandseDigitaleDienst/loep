@@ -1,6 +1,6 @@
 {
   "name": "loep",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "loep: the deterministic toolbox behind the nldd-a11y skills: inventory, sampling, rule engines, probes and evidence for WCAG evaluations.",
   "license": "EUPL-1.2",
   "private": true,

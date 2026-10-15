@@ -4,6 +4,8 @@ Wat er per versie van loep is veranderd. De versie staat op het voorblad en onde
 
 ## Nog niet uitgebracht
 
+## 0.1.2 (2026-10-15)
+
 ### Verder
 
 - `loep feedback` schrijft voor elk criterium dat open bleef door loep zelf een tekst voor een issue, zonder adres of naam van de site; de skill zegt hoe een agent dat met een ja van de gebruiker terugmeldt (#28).
