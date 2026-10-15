@@ -22,7 +22,8 @@ export interface ManifestStep {
 }
 
 export interface Manifest {
-  toolbox: { commit: string; dirty: boolean; lockfileSha256: string; version: string };
+  /** `commit` is null when the toolbox did not run from a git repository, as from the plugin cache; `dirty` is then false. */
+  toolbox: { commit: string | null; dirty: boolean; lockfileSha256: string; version: string };
   runtime: { node: string; platform: string; osRelease: string; arch: string };
   packages: Record<string, string>;
   browser: { name: string; version: string | null };
@@ -36,12 +37,25 @@ export interface Manifest {
   login?: LoginMark;
 }
 
-function git(...args: string[]): string | null {
+function git(root: string, ...args: string[]): string | null {
   try {
-    return execFileSync("git", ["-C", TOOLBOX_ROOT, ...args], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
+    return execFileSync("git", ["-C", root, ...args], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
   } catch {
     return null;
   }
+}
+
+/**
+ * The commit the toolbox at `root` runs from, and whether its files differ from that commit.
+ * Outside a git repository, as in the plugin cache, there is no commit and nothing to compare with:
+ * the commit is then null and the toolbox is never called dirty. A copy that sits inside some other
+ * repository, or in one without a first commit, is treated the same: its commit says nothing about this code.
+ */
+export function toolboxSource(root: string = TOOLBOX_ROOT): { commit: string | null; dirty: boolean } {
+  const tracked = git(root, "ls-files", "--error-unmatch", "--", "package.json") !== null;
+  const commit = tracked ? git(root, "rev-parse", "HEAD") : null;
+  // A dirty tree means the commit does not describe the code that ran.
+  return { commit, dirty: commit !== null && (git(root, "status", "--porcelain", "--", ".") ?? "") !== "" };
 }
 
 function installedVersion(name: string): string {
@@ -59,9 +73,7 @@ export function toolchain(browserVersion: string | null): Omit<Manifest, "steps"
   const lockfile = join(TOOLBOX_ROOT, "package-lock.json");
   return {
     toolbox: {
-      commit: git("rev-parse", "HEAD") ?? "no commit yet",
-      // A dirty tree means the commit does not describe the code that ran.
-      dirty: (git("status", "--porcelain", "--", ".") ?? "") !== "",
+      ...toolboxSource(),
       lockfileSha256: existsSync(lockfile) ? sha256(readFileSync(lockfile)) : "no lockfile",
       version: (JSON.parse(readFileSync(join(TOOLBOX_ROOT, "package.json"), "utf8")) as { version: string }).version,
     },

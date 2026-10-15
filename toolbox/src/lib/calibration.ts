@@ -1,4 +1,5 @@
 import { ENGINE_IDS, flagOf, type EngineId, type Flag } from "../instruments/methods/rules.ts";
+import { changedSinceCommit, knownCommit } from "./evaluation.ts";
 
 /**
  * Calibration against the test cases of the ACT rules: per instrument and per ACT rule how
@@ -395,7 +396,8 @@ export interface CalibrationReport extends Omit<Calibration, "cases"> {
   version: 1;
   date: string;
   source: Source;
-  toolbox: { commit: string; dirty: boolean; version: string; lockfileSha256: string };
+  /** `commit` is null when the toolbox did not run from a git repository. */
+  toolbox: { commit: string | null; dirty: boolean; version: string; lockfileSha256: string };
   browser: string;
   instruments: InstrumentInfo[];
   ownMappings: OwnMapping[];
@@ -460,7 +462,7 @@ export function calibrationMarkdown(report: CalibrationReport): string {
     "",
     "## Waarmee gemeten",
     "",
-    `Toolbox op commit \`${report.toolbox.commit}\`${report.toolbox.dirty ? " (met niet vastgelegde wijzigingen)" : ""}, lockfile sha256 \`${report.toolbox.lockfileSha256}\`, ${report.browser}. ${report.run.pagesMeasured} pagina's gemeten in ${Math.round(report.run.seconds)} seconden met ${report.run.concurrency} tegelijk; ${report.run.pagesNotLoaded} laadden niet. ${report.run.requestsRefused} verzoeken naar buiten de lokale server zijn geweigerd.`,
+    `Toolbox ${knownCommit(report.toolbox) ? `op commit \`${knownCommit(report.toolbox)}\`${changedSinceCommit(report.toolbox) ? " (met niet vastgelegde wijzigingen)" : ""}` : "zonder bekende commit (niet gemaakt vanuit een git-repository)"}, lockfile sha256 \`${report.toolbox.lockfileSha256}\`, ${report.browser}. ${report.run.pagesMeasured} pagina's gemeten in ${Math.round(report.run.seconds)} seconden met ${report.run.concurrency} tegelijk; ${report.run.pagesNotLoaded} laadden niet. ${report.run.requestsRefused} verzoeken naar buiten de lokale server zijn geweigerd.`,
     "",
     ...table(["Instrument", "Soort", "Versie", "Waar de koppeling met een ACT-regel vandaan komt"], report.instruments.map((instrument) => [instrument.id, instrument.kind === "ruleset" ? "regelset" : "eigen meting", instrument.version, instrument.mapping]), 9),
     "",

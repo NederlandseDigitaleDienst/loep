@@ -259,6 +259,49 @@ test("the report says it was made with loep, and that the judgment is of who sig
   assert.equal(deriveReport(evaluation).madeWithNl, "Gemaakt met loep 0.0.1, commit 000000000000 met niet vastgelegde wijzigingen");
 });
 
+test("a toolbox without a commit gives the version only, and says nothing about uncommitted changes", () => {
+  // null is what a run outside a git repository writes; "no commit yet" is what one wrote before 0.1.3, here with the dirty flag it could get.
+  for (const commit of [null, "no commit yet"]) {
+    const evaluation = exampleEvaluation();
+    evaluation.toolchain.toolbox.commit = commit;
+    evaluation.toolchain.toolbox.dirty = true;
+    const derived = deriveReport(evaluation);
+    assert.equal(derived.madeWithNl, "Gemaakt met loep 0.0.1", String(commit));
+    assert.equal(derived.toolboxCommit, null);
+    assert.equal(derived.toolboxChanged, false);
+    const markdown = renderMarkdown(evaluation);
+    assert.ok(markdown.includes("- Gemaakt met loep 0.0.1\n"), String(commit));
+    assert.ok(markdown.includes("- Toolbox: loep, versie 0.0.1, commit onbekend (niet gemaakt vanuit een git-repository)\n"), String(commit));
+    assert.ok(markdown.includes("- Commit van de toolbox: onbekend (niet gemaakt vanuit een git-repository)\n"), String(commit));
+    assert.ok(!markdown.includes("no commit"), String(commit));
+    assert.ok(!markdown.includes("niet vastgelegde wijzigingen"), String(commit));
+    assert.ok(!markdown.includes("niet in deze commit staan"), String(commit));
+  }
+});
+
+test("the PDF of a toolbox without a commit gives the version only, and says nothing about uncommitted changes", async (context) => {
+  for (const commit of [null, "no commit yet"]) {
+    const evaluation = exampleEvaluation();
+    evaluation.toolchain.toolbox.commit = commit;
+    evaluation.toolchain.toolbox.dirty = true;
+    const dir = mkdtempSync(join(tmpdir(), "render-nocommit-"));
+    writeFileSync(join(dir, "evaluation.json"), canonicalJson(evaluation));
+    const result = await render(dir);
+    if (result.pdf === null) return context.skip("Typst is not installed");
+    const text = await tool("pdftotext", ["-layout", result.pdf, "-"]);
+    if (!text.found) return context.skip("pdftotext is not installed");
+    // A line may break after the hyphen of "git-repository".
+    const flat = text.stdout.replace(/-\n\s*/g, "-").replace(/\s+/g, " ");
+    assert.ok(flat.includes("Gemaakt met loep 0.0.1"), String(commit));
+    assert.ok(!flat.includes("Gemaakt met loep 0.0.1, commit"), String(commit));
+    assert.ok(flat.includes("commit onbekend (niet gemaakt vanuit een git-repository)"), String(commit));
+    assert.ok(flat.includes("Commit van de toolbox onbekend (niet gemaakt vanuit een git-repository)"), String(commit));
+    assert.ok(!flat.includes("no commit"), String(commit));
+    assert.ok(!flat.includes("niet vastgelegde wijzigingen"), String(commit));
+    assert.ok(!flat.includes("niet in deze commit staan"), String(commit));
+  }
+});
+
 test("the version shown is the first 12 characters of the evaluation hash", () => {
   const evaluation = exampleEvaluation();
   assert.ok(renderMarkdown(evaluation).includes(`Versie van de evaluatie: \`${evaluationHash(evaluation).slice(0, 12)}\``));

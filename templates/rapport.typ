@@ -739,7 +739,7 @@
   let rendering = toolchain.rendering
   let agent-models = derived.at("agentModels", default: none)
   facts(
-    ("Toolbox", [loep, versie #toolchain.toolbox.version, commit #short-hash(toolchain.toolbox.commit, length: 12)]),
+    ("Toolbox", [loep, versie #toolchain.toolbox.version, commit #if derived.toolboxCommit == none { t.commitUnknown } else { short-hash(derived.toolboxCommit, length: 12) }]),
     ("Lockfile", short-hash(toolchain.toolbox.lockfileSha256)),
     ("Runtime", [Node #toolchain.runtime.node op #toolchain.runtime.platform #toolchain.runtime.osRelease (#toolchain.runtime.arch)]),
     ("Pakketten", toolchain.packages.keys().sorted().map(name => [#mono(name) #toolchain.packages.at(name)]).join(linebreak())),
@@ -777,7 +777,7 @@
       ..instruments.enumerate().map(((index, tool)) => (mono(tool.implementation, size: 8.4pt), derived.instrumentVersions.at(index), tool.usedForNl.join(", "), str(tool.measurements))).flatten(),
     )
   }
-  if toolchain.toolbox.dirty { callout(fill: panel, bar: ink, text(weight: 600, t.dirty)) }
+  if derived.toolboxChanged { callout(fill: panel, bar: ink, text(weight: 600, t.dirty)) }
 }
 
 #chain.enginesNl
@@ -1193,7 +1193,7 @@
   ("Hash van de evaluatie", full-hash(derived.hash)),
   (
     "Commit van de toolbox",
-    [#full-hash(evaluation.toolchain.toolbox.commit)#if evaluation.toolchain.toolbox.dirty [ (met niet vastgelegde wijzigingen)]],
+    if derived.toolboxCommit == none { t.commitUnknown } else [#full-hash(derived.toolboxCommit)#if derived.toolboxChanged [ (met niet vastgelegde wijzigingen)]],
   ),
   ("Hash van de lockfile", full-hash(evaluation.toolchain.toolbox.lockfileSha256)),
   ..derived.speechModels.map(model => ([Hash van het spraakmodel #model.name], full-hash(model.sha256))),

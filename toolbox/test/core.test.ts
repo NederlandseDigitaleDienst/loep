@@ -1,10 +1,15 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { test } from "node:test";
 import { buildSample, CENSUS_LIMIT, seededOrder } from "../src/commands/sample.ts";
 import { parseSitemap, passwordPagesNl, type Inventory, type InventoryPage } from "../src/commands/inventory.ts";
 import { progressLine, sayingItRuns } from "../src/instruments/limit.ts";
 import { canonicalJson, sha256, slugForUrl, stableId } from "../src/lib/canonical.ts";
-import { complianceStatus, evaluationHash, resolveCriterion } from "../src/lib/evaluation.ts";
+import { changedSinceCommit, complianceStatus, evaluationHash, knownCommit, resolveCriterion } from "../src/lib/evaluation.ts";
+import { toolboxSource } from "../src/lib/manifest.ts";
 import type { SiteModel } from "../src/lib/sitemodel.ts";
 import type { Finding, Verdict } from "../src/lib/verdict.ts";
 import { compareCriterionIds, criteriaFor, criterionById, criterionIdFromAxeTag, en301549Clause } from "../src/lib/wcag.ts";
@@ -230,4 +235,28 @@ test("a step that takes long says that it still runs, and a short one says nothi
   await assert.rejects(sayingItRuns("collect 1/1 https://site.nl/", async () => Promise.reject(new Error("mislukt")), 50, (line) => quick.push(line)), /mislukt/);
   await new Promise((resolve) => setTimeout(resolve, 80));
   assert.deepEqual(quick, [], "nothing is said during a short step, and nothing after a step ended");
+});
+
+test("a toolbox outside a git repository has no commit and is never called dirty", () => {
+  const plain = mkdtempSync(join(tmpdir(), "loep-nogit-"));
+  writeFileSync(join(plain, "package.json"), "{}");
+  assert.deepEqual(toolboxSource(plain), { commit: null, dirty: false });
+  // A repository without a first commit: git status lists files, but there is no commit to compare them with.
+  const empty = mkdtempSync(join(tmpdir(), "loep-nocommit-"));
+  execFileSync("git", ["init", "-q", empty]);
+  writeFileSync(join(empty, "package.json"), "{}");
+  execFileSync("git", ["-C", empty, "add", "package.json"]);
+  assert.deepEqual(toolboxSource(empty), { commit: null, dirty: false });
+  // The toolbox in this repository has a commit.
+  assert.match(toolboxSource().commit ?? "", /^[0-9a-f]{40}$/);
+});
+
+test("the placeholder an older run wrote for a missing commit is read as no commit", () => {
+  assert.equal(knownCommit({ commit: "no commit yet" }), null);
+  assert.equal(knownCommit({ commit: null }), null);
+  assert.equal(knownCommit(undefined), null);
+  assert.equal(knownCommit({ commit: "a".repeat(40) }), "a".repeat(40));
+  assert.equal(changedSinceCommit({ commit: "no commit yet", dirty: true }), false);
+  assert.equal(changedSinceCommit({ commit: null, dirty: true }), false);
+  assert.equal(changedSinceCommit({ commit: "a".repeat(40), dirty: true }), true);
 });
