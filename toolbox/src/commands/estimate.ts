@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
 import { CALIBRATION, type Estimate, type EstimateBasis, estimate, estimateTextNl, type Progress, type RowId, type Scheduling } from "../lib/estimate.ts";
+import { knownCommit } from "../lib/evaluation.ts";
 import type { ManifestStep } from "../lib/manifest.ts";
 import { BUDGETS } from "./instrument-tasks.ts";
 import { loadAllProcedures } from "../lib/procedures.ts";
@@ -46,7 +47,7 @@ export function estimateRun(runDir: string, options: EstimateOptions = {}): RunE
   const site = readIfThere<{ pageTypes?: unknown[] }>(join(runDir, "site.json"));
   const index = readIfThere<{ walks?: unknown[]; tasks?: { finish?: unknown; judge?: { maxCommands?: number } }[]; finishDecided?: boolean }>(join(runDir, "tasks", "index.json"));
   // Only the steps and the toolchain are read from the manifest; what else it holds is not the estimate's to read.
-  const manifest = readIfThere<{ steps?: ManifestStep[]; toolbox?: { commit?: string } }>(join(runDir, "manifest.json"));
+  const manifest = readIfThere<{ steps?: ManifestStep[]; toolbox?: { commit?: string | null } }>(join(runDir, "manifest.json"));
   const steps = manifest?.steps ?? [];
 
   const limit = sessionLimit(runDir);
@@ -107,7 +108,8 @@ export function estimateRun(runDir: string, options: EstimateOptions = {}): RunE
   if (roomier > 0) notesNl.push(`${roomier} van de ${index!.tasks!.length} beoordelaars ${roomier === 1 ? "heeft" : "hebben"} een ruimer budget dan het vaste van ${BUDGETS.judge.commands} commando's: de schatting rekent met de gemeten tijd per agent, niet met het budget per opdracht, en telt een verlenging niet mee`);
   const voiceover = voiceoverNoteNl(options.voiceover);
   if (voiceover) notesNl.push(voiceover);
-  const commit = manifest?.toolbox?.commit;
+  // Without a known commit, as from the plugin, there is nothing to hold against the calibration.
+  const commit = knownCommit(manifest?.toolbox);
   if (commit && !commit.startsWith(CALIBRATION.commit)) notesNl.push(`deze run is gemaakt met commit ${commit.slice(0, 7)}, de schatting is geijkt tot en met ${CALIBRATION.commit}: meet de toolbox sindsdien meer of minder, dan wijkt de veegronde af`);
   return { run: basename(resolve(runDir)), ...estimate(basis, progress), notesNl };
 }

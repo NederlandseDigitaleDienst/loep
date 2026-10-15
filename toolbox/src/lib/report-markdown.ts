@@ -1,6 +1,6 @@
 import { KIND_NAME_NL, kindsNl } from "./documents.ts";
 import { pageIndex, type Defect } from "./defects.ts";
-import { closeCutQuote, complianceStatus, evaluationHash, idsAcrossVersionsNl, madeWith, openCriteria, OUTCOME_LABEL, type ComplianceStatus, type CriterionOutcome, type CriterionResult, type Evaluation, type ReportFinding, type Signature } from "./evaluation.ts";
+import { changedSinceCommit, closeCutQuote, complianceStatus, evaluationHash, idsAcrossVersionsNl, knownCommit, madeWith, openCriteria, OUTCOME_LABEL, type ComplianceStatus, type CriterionOutcome, type CriterionResult, type Evaluation, type ReportFinding, type Signature } from "./evaluation.ts";
 import { modelOf } from "../instruments/methods/registry.ts";
 import { signatureIsCurrent } from "../commands/sign.ts";
 import { extensionsNl } from "./budget.ts";
@@ -83,6 +83,8 @@ export const REPORT_TEXT = {
   noAssistiveTechnology: "Er is geen hulpsoftware gebruikt.",
   browserNotUsed: "niet gebruikt in dit onderzoek",
   dirty: "Let op: de toolbox bevatte wijzigingen die niet in deze commit staan. De commit beschrijft dus niet precies de code die is gebruikt.",
+  // A toolbox installed as a plugin is no git repository: there is no commit to name.
+  commitUnknown: "onbekend (niet gemaakt vanuit een git-repository)",
   overviewIntro: "Elke regel verwijst naar het deel waar de uitkomst wordt onderbouwd.",
   componentIntro: "Bevindingen in hetzelfde onderdeel zijn vaak met één aanpassing op te lossen. Daarom staan ze hier bij elkaar, elk met het nummer dat naar de bevinding verwijst.",
   quietTitle: "Zonder bevinding en zonder open punt",
@@ -207,6 +209,10 @@ export interface ReportDerived {
   madeWithShortNl: string;
   /** The one sentence that says what the toolbox is and whose the judgment is. */
   instrumentNl: string;
+  /** The commit of the toolbox; null when it did not run from a git repository, also for the placeholder an older run wrote. */
+  toolboxCommit: string | null;
+  /** Whether the toolbox had changes outside its commit. Always false without a known commit. */
+  toolboxChanged: boolean;
   signedDateNl: string | null;
   /** A signature for an earlier version does not count: the report is then a concept again. */
   signed: boolean;
@@ -750,6 +756,8 @@ export function deriveReport(input: Evaluation): ReportDerived {
     madeWithNl: `${REPORT_TEXT.madeWith} ${madeWith(evaluation, true)}`,
     madeWithShortNl: `${REPORT_TEXT.madeWith} ${madeWith(evaluation)}`,
     instrumentNl: `${madeWith(evaluation)}, ${REPORT_TEXT.instrument}.`,
+    toolboxCommit: knownCommit(evaluation.toolchain.toolbox),
+    toolboxChanged: changedSinceCommit(evaluation.toolchain.toolbox),
     signedDateNl: evaluation.signature ? dateNl(evaluation.signature.signedAt) : null,
     signed: evaluation.signature !== null,
     signature: evaluation.signature,
@@ -1198,7 +1206,7 @@ export function renderMarkdown(input: Evaluation): string {
   section("Gereedschap");
   lines.push(
     ...bullets([
-      `Toolbox: loep, versie ${esc(toolchain.toolbox.version)}, commit ${code(toolchain.toolbox.commit.slice(0, 12))}`,
+      `Toolbox: loep, versie ${esc(toolchain.toolbox.version)}, commit ${derived.toolboxCommit ? code(derived.toolboxCommit.slice(0, 12)) : REPORT_TEXT.commitUnknown}`,
       `Lockfile: ${shortHash(toolchain.toolbox.lockfileSha256)}`,
       `Runtime: Node ${esc(toolchain.runtime.node)} op ${esc(toolchain.runtime.platform)} ${esc(toolchain.runtime.osRelease)} (${esc(toolchain.runtime.arch)})`,
       `Pakketten: ${Object.keys(toolchain.packages).sort().map((name) => `${code(name)} ${esc(toolchain.packages[name]!)}`).join(", ")}`,
@@ -1225,7 +1233,7 @@ export function renderMarkdown(input: Evaluation): string {
         ]
       : []),
   );
-  if (toolchain.toolbox.dirty) lines.push(`> ${REPORT_TEXT.dirty}`, "");
+  if (derived.toolboxChanged) lines.push(`> ${REPORT_TEXT.dirty}`, "");
   lines.push(derived.chain.enginesNl, "");
 
   section("Resultaten per criterium");
@@ -1300,7 +1308,7 @@ export function renderMarkdown(input: Evaluation): string {
   lines.push(REPORT_TEXT.traceIntro, "");
   // The verdict of a finishing round gets a column only in an evaluation that had such a round.
   const withFinish = evaluation.criteria.some((criterion) => criterion.rounds.finish !== undefined);
-  lines.push(...bullets([`Hash van de evaluatie: ${code(derived.hash)}`, `Commit van de toolbox: ${code(toolchain.toolbox.commit)}${toolchain.toolbox.dirty ? " (met niet vastgelegde wijzigingen)" : ""}`, `Hash van de lockfile: ${code(toolchain.toolbox.lockfileSha256)}`, ...derived.speechModels.map((model) => `Hash van het spraakmodel ${esc(model.name)}: ${code(model.sha256)}`)]), "");
+  lines.push(...bullets([`Hash van de evaluatie: ${code(derived.hash)}`, `Commit van de toolbox: ${derived.toolboxCommit ? `${code(derived.toolboxCommit)}${derived.toolboxChanged ? " (met niet vastgelegde wijzigingen)" : ""}` : REPORT_TEXT.commitUnknown}`, `Hash van de lockfile: ${code(toolchain.toolbox.lockfileSha256)}`, ...derived.speechModels.map((model) => `Hash van het spraakmodel ${esc(model.name)}: ${code(model.sha256)}`)]), "");
   lines.push(
     ...table(
       // One judge and a verifier: the two verdicts that exist.

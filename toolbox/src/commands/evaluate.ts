@@ -2,7 +2,7 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { frameStanding } from "../lib/sitemodel.ts";
 import { readJson, sha256File } from "../lib/canonical.ts";
-import { allCriteriaSorted, carryFindingIds, ESTABLISHED_BY_NL, evaluationHash, idsAcrossVersionsNl, OUTCOME_LABEL, markVendor, openCriteria, quoteStart, resolveCriterion, summarise, type BrowserUse, type CriterionResult, type Evaluation, type PointAnswer, type RoundVerdicts } from "../lib/evaluation.ts";
+import { allCriteriaSorted, carryFindingIds, ESTABLISHED_BY_NL, evaluationHash, idsAcrossVersionsNl, knownCommit, OUTCOME_LABEL, markVendor, openCriteria, quoteStart, resolveCriterion, summarise, type BrowserUse, type CriterionResult, type Evaluation, type PointAnswer, type RoundVerdicts } from "../lib/evaluation.ts";
 import { matchFindings, sideOf } from "../lib/difference.ts";
 import { documentScopeNl, evaluationDocuments } from "../lib/documents.ts";
 import { type Manifest, stepStart, writeManifest } from "../lib/manifest.ts";
@@ -55,14 +55,19 @@ export interface GatheredVerdicts {
  * counts only with a stamp that matches the current dossier, procedure and prompt: one that was
  * never validated, or was reached with other evidence, is treated as absent.
  */
-/** Sessions that measured with other code than the run was made with, so the report does not name one version for all of it. */
-export function otherCodeNl(runDir: string, commit: string): string[] {
+/**
+ * Sessions that measured with other code than the run was made with, so the report does not name one version for all of it.
+ * Only known commits are compared: a toolbox outside a git repository has none, and then nothing can be said to differ.
+ */
+export function otherCodeNl(runDir: string, runCommit: string | null): string[] {
+  const commit = knownCommit({ commit: runCommit });
+  if (commit === null) return [];
   const root = join(runDir, "observations");
   const byCommit = new Map<string, string[]>();
   for (const name of existsSync(root) ? readdirSync(root).sort() : []) {
     const file = join(root, name, "session.json");
     if (!existsSync(file)) continue;
-    const used = (JSON.parse(readFileSync(file, "utf8")) as { toolbox?: { commit: string } }).toolbox?.commit;
+    const used = knownCommit((JSON.parse(readFileSync(file, "utf8")) as { toolbox?: { commit: string | null } }).toolbox);
     if (used && used !== commit) byCommit.set(used, [...(byCommit.get(used) ?? []), name]);
   }
   return [...byCommit].map(([used, sessions]) => `${sessions.length === 1 ? "De sessie" : "De sessies"} ${sessions.join(", ")} ${sessions.length === 1 ? "is" : "zijn"} gedaan met loep commit ${used.slice(0, 12)}, de rest van het onderzoek met commit ${commit.slice(0, 12)}.`);

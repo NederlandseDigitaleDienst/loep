@@ -515,10 +515,29 @@ export function allCriteriaSorted(): Criterion[] {
 /** Hash of everything that was evaluated, excluding the signature that refers to it. */
 /** The name of the toolbox, as a report says where it came from. */
 export const TOOL_NAME = "loep";
-/** The toolbox and its version behind an evaluation: "loep 0.0.1". With the commit: "loep 0.0.1, commit 187eeba4c2d1". */
+/** What a run from before 0.1.3 wrote as commit when the toolbox did not run from a git repository. */
+const NO_COMMIT = "no commit yet";
+
+/** The commit the toolbox ran from, or null when that is not known. Reads the placeholder of older runs as not known too. */
+export function knownCommit(toolbox: { commit?: string | null } | null | undefined): string | null {
+  const commit = toolbox?.commit;
+  return commit && commit !== NO_COMMIT ? commit : null;
+}
+
+/** Whether the code that ran differs from its commit. Without a known commit there is nothing to differ from. */
+export function changedSinceCommit(toolbox: { commit?: string | null; dirty?: boolean } | null | undefined): boolean {
+  return knownCommit(toolbox) !== null && toolbox?.dirty === true;
+}
+
+/**
+ * The toolbox and its version behind an evaluation: "loep 0.0.1". With the commit: "loep 0.0.1, commit 187eeba4c2d1".
+ * A toolbox that did not run from a git repository has no commit to name, so the version stands alone.
+ */
 export function madeWith(evaluation: Evaluation, withCommit = false): string {
-  const { version, commit, dirty } = evaluation.toolchain.toolbox;
-  return `${TOOL_NAME} ${version}${withCommit ? `, commit ${commit.slice(0, 12)}${dirty ? " met niet vastgelegde wijzigingen" : ""}` : ""}`;
+  const { version } = evaluation.toolchain.toolbox;
+  const commit = knownCommit(evaluation.toolchain.toolbox);
+  if (!withCommit || commit === null) return `${TOOL_NAME} ${version}`;
+  return `${TOOL_NAME} ${version}, commit ${commit.slice(0, 12)}${changedSinceCommit(evaluation.toolchain.toolbox) ? " met niet vastgelegde wijzigingen" : ""}`;
 }
 
 export function evaluationHash(evaluation: Evaluation): string {

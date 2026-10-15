@@ -7,6 +7,7 @@ Wat er per versie van loep is veranderd. De versie staat op het voorblad en onde
 ### Verder
 
 - De skill zoekt voor elke melding aan loep eerst in open en gesloten issues: een open issue krijgt een reactie, een gesloten issue dat terugkomt een nieuw issue dat het oude noemt (#34).
+- Een run vanuit de geïnstalleerde plugin, buiten een git-repository, noemt in het rapport alleen de versie van loep. Bij het gereedschap en de herleidbaarheid staat dat de commit onbekend is, en het rapport zegt niets meer over niet vastgelegde wijzigingen. Een oudere run met de tekst `no commit yet` wordt net zo weergegeven (#36).
 
 ## 0.1.2 (2026-10-15)
 
