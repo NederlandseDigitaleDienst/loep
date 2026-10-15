@@ -7,6 +7,7 @@ Wat er per versie van loep is veranderd. De versie staat op het voorblad en onde
 ### Verder
 
 - `loep feedback` schrijft voor elk criterium dat open bleef door loep zelf een tekst voor een issue, zonder adres of naam van de site; de skill zegt hoe een agent dat met een ja van de gebruiker terugmeldt (#28).
+- De skill stelt vóór het onderzoek één ronde vragen: over een inlog of een testomgeving, hoeveel agents tegelijk mogen, wat erbij hoort, en de naam en organisatie voor het rapport. `inventory` zegt het als pagina's een wachtwoordveld tonen terwijl er niet is ingelogd (#29).
 
 ## 0.1.1 (2026-10-15)
 
