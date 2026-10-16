@@ -4,6 +4,14 @@ Wat er per versie van loep is veranderd. De versie staat op het voorblad en onde
 
 ## Nog niet uitgebracht
 
+### Wat een uitkomst kan veranderen
+
+- `states` opent voor toetsen, aanwijzen, indrukken en pijltoetsen elke pagina in een eigen browsercontext, ook met één tegelijk. Eerder deelden de pagina's van een groep één context, en zag een latere pagina wat een eerdere in de opslag van de browser had achtergelaten. Bij aanwijzen en indrukken kiest een pagina eerst alle bedieningselementen die ze probeert en probeert ze daarna. Laadt een pagina halverwege niet meer, dan tellen de soorten die ze nog niet had geprobeerd toch als gebruikt; eerder kon een latere pagina met dezelfde soort ze nog proberen.
+
+### Verder
+
+- `states --at-once <n>` laat binnen de groepen toetsen, aanwijzen, indrukken en pijltoetsen ook de pagina's tegelijk lopen, met samen nooit meer dan n browsers en met dezelfde tijd tussen twee navigaties (#60). De grenzen van aanwijzen (400 soorten) en indrukken (600) raken op in de volgorde van de pagina's: een pagina kiest pas als de pagina's vóór haar hebben gekozen. Wat er wordt weggeschreven, is hetzelfde als met één tegelijk; de test op de testsite toetst dat nu ook met lagere grenzen die halverwege opraken. Op tien pagina's van de testsite ging `states` met vier tegelijk van 192 naar 104 seconden (met één tegelijk 372), en met acht naar 92. `estimate --at-once` rekent `states` daarom met een winst van 0,45 per browser, tot acht.
+
 ## 0.4.0 (2026-10-16)
 
 Deze versie is uitgebracht zonder nieuwe meting op de testsite, net als 0.3.0. De wijzigingen die een uitkomst kunnen veranderen, zijn dus nog niet vergeleken met 0.3.0. Op de testsite van de repository slagen alle tests op één na; de vergelijking van een veegronde met één en met vier pagina's tegelijk slaagde los wel en faalde één keer onder zware belasting van dezelfde machine.

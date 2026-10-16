@@ -39,10 +39,10 @@ describe("the sweep with four at once writes what it writes with one at a time",
     rmSync(scratch, { recursive: true, force: true });
   });
 
-  /** An explored run: four pages, a cookie notice as blocker and the chat as component, both recorded through a real session. */
+  /** An explored run: five pages, one of them with buttons that listen for a press, a cookie notice as blocker and the chat as component, both recorded through a real session. */
   async function explored(): Promise<string> {
     const run = join(scratch, "explored");
-    const paths = ["/afval.html", "/openingstijden.html", "/nieuws/zomerfeest.html", "/vergunning.html"];
+    const paths = ["/afval.html", "/openingstijden.html", "/nieuws/zomerfeest.html", "/vergunning.html", "/veelgestelde-vragen.html"];
     await inventory({ baseUrl: `${origin}/`, out: run, maxPages: paths.length, fixedUrls: paths.map((path) => `${origin}${path}`) });
     const daemon = await Daemon.create(run, { hosts: ["127.0.0.1"], baseUrl: `${origin}/`, strict: false }, { navigationDelayMs: 20 });
     const loep = async (command: string, args: string[] = [], options: Record<string, string | boolean> = {}): Promise<Record<string, unknown>> => {
@@ -81,6 +81,13 @@ describe("the sweep with four at once writes what it writes with one at a time",
     await sample(run, "seed");
     return run;
   }
+
+  /**
+   * Limits for the hover and press probes that the pages of the sample reach. With four at once the
+   * pages within a group of `states` run at the same time, and the kinds of control must be shared out
+   * over them in the order of the pages, as with one after the other, also when a later page is ready first.
+   */
+  const LIMITS = { hover: 30, down: 3 };
 
   /**
    * What records a moment or a duration, which two runs with one at a time do not share either: when a
@@ -139,7 +146,7 @@ describe("the sweep with four at once writes what it writes with one at a time",
       for (const [name, step] of [
         ["collect", () => collect({ run, atOnce })],
         ["contrast", () => contrast(run, { atOnce })],
-        ["states", () => states(run, { atOnce })],
+        ["states", () => states(run, { atOnce, limits: LIMITS })],
       ] as const) {
         const started = Date.now();
         await step();
@@ -157,6 +164,14 @@ describe("the sweep with four at once writes what it writes with one at a time",
     const siteStates = JSON.parse(one.get("site-states.json")!) as { seeded: { blockers: string[] }; states: { id: string; reached: boolean }[] };
     assert.deepEqual(siteStates.seeded.blockers, ["cookies"]);
     assert.ok(siteStates.states.find((state) => state.id === "component-chat")?.reached, "the chat was captured");
+    // Both limits ran out after the first place, so that how they were shared out over the places counted. The hover
+    // limit runs out in the narrow window, after every page in the default one: the kinds it left out are on several pages.
+    // The press limit runs out on the page with the buttons in the narrow window, after the same page in the default one.
+    const found = JSON.parse(one.get("states.json")!) as { hoverCoverage: { limit: number; examined: number; notExaminedExamples: { page: string }[] }; downEventCoverage: { limit: number; examined: number; notExamined: number } };
+    const { hoverCoverage: hover, downEventCoverage: down } = found;
+    assert.deepEqual([hover.limit, hover.examined], [LIMITS.hover, LIMITS.hover], "the hover limit was reached");
+    assert.ok(new Set(hover.notExaminedExamples.map((example) => example.page).filter((page) => /^P\d+$/.test(page))).size > 1, "the kinds the hover probe left out are on more than one page");
+    assert.deepEqual([down.limit, down.examined, down.notExamined], [LIMITS.down, LIMITS.down, 1], "the press limit was reached with one kind left");
 
     // The manifest says the same about each step, apart from the times and how many ran at once.
     const steps = async (atOnce: number): Promise<Record<string, unknown>[]> =>

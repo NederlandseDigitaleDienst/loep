@@ -272,18 +272,19 @@ test("the estimate names no path and no person, and keeps its numbers in one pla
   assert.ok(!/\d\.\d/.test(source("commands/estimate.ts")), "commands/estimate.ts bevat een coëfficiënt; die hoort in lib/estimate.ts");
 });
 
-test("with --at-once the sweep is reckoned with as many at the same time: collect by pages, contrast by its four passes, states by its groups", () => {
+test("with --at-once the sweep is reckoned with as many at the same time: collect by pages, contrast by its four passes, states by its groups and pages", () => {
   const one = estimate(REMOTE);
   const four = estimate({ ...REMOTE, sweepAtOnce: 4 });
   near(row(four, "collect").estimatedSeconds, 1984 / (1 + 3 * COEFFICIENTS.sweepAtOnce.collect.gain), "collect");
   near(row(four, "contrast").estimatedSeconds, 174 / (1 + 3 * COEFFICIENTS.sweepAtOnce.contrast.gain), "contrast");
   near(row(four, "states").estimatedSeconds, 1462 / (1 + 3 * COEFFICIENTS.sweepAtOnce.states.gain), "states");
-  // The agents are not touched, and contrast and states gain nothing above their number of passes and groups.
+  // The agents are not touched; contrast gains nothing above its number of passes, states nothing above what was measured.
   assert.equal(row(four, "judges").estimatedSeconds, row(one, "judges").estimatedSeconds);
   const eight = estimate({ ...REMOTE, sweepAtOnce: 8 });
   assert.ok(row(eight, "collect").estimatedSeconds! < row(four, "collect").estimatedSeconds!);
   assert.equal(row(eight, "contrast").estimatedSeconds, row(four, "contrast").estimatedSeconds);
-  assert.equal(row(eight, "states").estimatedSeconds, row(four, "states").estimatedSeconds);
+  assert.ok(row(eight, "states").estimatedSeconds! < row(four, "states").estimatedSeconds!);
+  assert.equal(row(estimate({ ...REMOTE, sweepAtOnce: 12 }), "states").estimatedSeconds, row(eight, "states").estimatedSeconds);
   assert.match(estimateTextNl(four, "run"), /in een pool, veegronde 4 tegelijk, site elders/);
   assert.doesNotMatch(estimateTextNl(one, "run"), /veegronde \d+ tegelijk/);
 
