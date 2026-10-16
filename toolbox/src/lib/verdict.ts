@@ -197,7 +197,7 @@ export const OPEN_POINT_KINDS = [
   { prefix: "keuze nodig", reader: "owner", labelNl: "vraagt een keuze" },
   { prefix: "versturen niet toegestaan", reader: "owner", labelNl: "pas te meten als het onderzoek mag versturen" },
   { prefix: "veegronde mist", reader: "toolbox", labelNl: "dekking ontbrak" },
-  { prefix: "budget op", reader: "toolbox", labelNl: "budget was op" },
+  { prefix: "budget op", reader: "toolbox", labelNl: "de tijd voor het meten was op" },
   { prefix: "proef werkte niet", reader: "toolbox", labelNl: "een proef werkte niet" },
 ] as const;
 export type OpenPointKind = (typeof OPEN_POINT_KINDS)[number];

@@ -103,7 +103,7 @@ export const REPORT_TEXT = {
   samplePageTypes:
     "Per paginatype uit het sitemodel: hoeveel unieke pagina's het heeft, hoeveel daarvan in de steekproef staan en waarom die. Een groot paginatype krijgt naast de voorbeeldpagina van de verkenner extra pagina's, gekozen op wat hun inhoud toevoegt aan de pagina's van dat type die er al in staan: afbeeldingen, tabellen, formulieren, video, geluid, ingesloten vensters, koppen, lijsten en lengte. Bij elke pagina hierboven staat wat ze toevoegt.",
   defectPageIntro: "Een gebrek staat hier bij elke pagina waar een van zijn bevindingen een plek aanwijst. Het kan op meer pagina's spelen; dat staat in de werklijst.",
-  unfinished: "Het onderzoek is daarmee niet af: wat een instrument kan meten, hoort gemeten te zijn. De afmaakronde meet het alsnog; blijft er daarna iets over, dan kan alleen een persoon het nog vaststellen.",
+  unfinished: "Zolang er een criterium open is, is status A of B niet mogelijk. Wat dit onderzoek niet heeft vastgesteld, sluit een nieuwe meting of een persoon die het vaststelt.",
   ownerOpen: "Daar kan geen instrument verder mee: een persoon legt het antwoord vast, en daarna telt het mee in de uitkomst.",
   ownerOpenNotSent: "Daar is geen persoon voor nodig: een instrument meet het in een nieuw onderzoek dat mag versturen, zie \"Nog uitzoeken\".",
   ownerOpenMixed: "Die meet een instrument in een nieuw onderzoek dat mag versturen, zie \"Nog uitzoeken\". Bij de andere kan geen instrument verder: een persoon legt het antwoord vast, en daarna telt het mee in de uitkomst.",
@@ -124,7 +124,7 @@ export const REPORT_TEXT = {
     unsorted: "Open punten zonder soort",
     unsortedIntro: "Bij deze punten is niet vastgelegd of ze werk zijn voor de eigenaar van de site of over het onderzoek gaan. Ze staan hier volledig.",
     toolbox: "Dit meet de toolbox een volgende keer",
-    toolboxIntro: "Dekking die ontbrak, budget dat op was of een proef die niet werkte. Per criterium staat hier hoeveel punten er zijn; de punten zelf staan volledig in bijlage A. Staat hier een criterium zonder oordeel, dan is het onderzoek niet af: dat hoort eerst in een afmaakronde te worden gemeten.",
+    toolboxIntro: "Wat niet is gemeten, waar de tijd voor op was, of een proef die niet werkte. Per criterium staat hier hoeveel punten er zijn; de punten zelf staan volledig in bijlage A. Staat hier een criterium zonder oordeel, dan is het onderzoek onvolledig: een nieuwe meting of een persoon moet het nog vaststellen.",
     appendix: "Open, voor een volgende meting",
   },
   vendorIntro: "Deze bevindingen raken een element van de leverancier. Dat zegt waar het gebrek zit, niet wie het moet herstellen: de oorzaak kan in het component liggen of in de manier waarop de site het gebruikt. Ga per bevinding na welke van de twee het is.",
@@ -475,7 +475,7 @@ const roundLabel = (outcome: Outcome | null): string => (outcome ? OUTCOME_LABEL
 
 const findingsCount = (count: number): string => plural(count, "bevinding", "bevindingen");
 
-const ESTABLISHED_SHORT_NL = { verification: "verificatie", finishing: "afmaakronde", person: "een persoon", sessionWatch: "sessieproef" } as const;
+const ESTABLISHED_SHORT_NL = { verification: "controle", finishing: "aanvullende meting", person: "een persoon", sessionWatch: "meting van de sessieduur" } as const;
 
 /** Who or what established the outcome, for a table. An evaluation from before this was kept had only the verifier. */
 function establishedShort(criterion: CriterionResult): string {
@@ -495,11 +495,11 @@ function certainty(criterion: CriterionResult): string {
   const reproduced = criterion.findings.filter((finding) => finding.verification?.status === "reproduced").length;
   const added = criterion.findings.filter((finding) => finding.verification?.status === "unverified").length;
   const dropped = criterion.dropped?.length ?? criterion.droppedNl.length;
-  const verdict = a === null ? `Alleen de verificatie heeft geoordeeld: ${roundLabel(final)}.` : a === final ? "Beoordelaar en verificatie komen op dezelfde uitkomst." : `De beoordelaar kwam op ${roundLabel(a)}, de verificatie op ${roundLabel(final)}.`;
+  const verdict = a === null ? `Alleen de controle heeft geoordeeld: ${roundLabel(final)}.` : a === final ? "De eerste beoordeling en de controle komen op dezelfde uitkomst." : `De eerste beoordeling kwam op ${roundLabel(a)}, de controle op ${roundLabel(final)}.`;
   const parts = [
     reproduced > 0 ? `${findingsCount(reproduced)} bij de controle bevestigd` : null,
-    added > 0 ? `${findingsCount(added)} toegevoegd door de verificatie` : null,
-    dropped > 0 ? `${findingsCount(dropped)} van de beoordelaar vervallen, zie bijlage A` : null,
+    added > 0 ? `${findingsCount(added)} toegevoegd bij de controle` : null,
+    dropped > 0 ? `${findingsCount(dropped)} uit de eerste beoordeling vervallen, zie bijlage A` : null,
   ].filter(Boolean);
   return parts.length > 0 ? `${verdict} ${parts.join(", ").replace(/^./, (letter) => letter.toUpperCase())}.` : verdict;
 }
@@ -510,15 +510,15 @@ function roundsLine(criterion: CriterionResult): string {
   const { a, final, finish } = criterion.rounds;
   const by = criterion.established?.by ?? "verification";
   const last = "tevens eindoordeel";
-  const parts = [`Beoordelaar: ${roundName(a)}.`, `Verificatie${by === "verification" ? `, ${last}` : ""}: ${roundName(final)}.`];
-  if (finish !== undefined) parts.push(`Afmaakronde${by === "finishing" ? `, ${last}` : ""}: ${roundName(finish)}.`);
+  const parts = [`Eerste beoordeling: ${roundName(a)}.`, `Controle${by === "verification" ? `, ${last}` : ""}: ${roundName(final)}.`];
+  if (finish !== undefined) parts.push(`Aanvullende meting${by === "finishing" ? `, ${last}` : ""}: ${roundName(finish)}.`);
   if (by === "person") parts.push(`Een persoon, niet een instrument, ${last}: ${OUTCOME_LABEL[criterion.outcome]}.`);
-  if (by === "sessionWatch") parts.push(`Sessieproef, ${last}: ${OUTCOME_LABEL[criterion.outcome]}.`);
+  if (by === "sessionWatch") parts.push(`Meting van de sessieduur, ${last}: ${OUTCOME_LABEL[criterion.outcome]}.`);
   return parts.join(" ");
 }
 
 const answerLine = (answer: NonNullable<CriterionResult["answers"]>[number]): string =>
-  `${openPoint(answer.pointNl).textNl.replace(/[.:]+$/, "")}. ${answer.instrument ? "Antwoord van de sessieproef" : "Antwoord van een persoon"} (${answer.instrument ? "" : "functie: "}${answer.role}, ${dateNl(answer.answeredAt)}): ${answer.didNl.replace(/\.$/, "")}. Uitkomst op dit punt: ${OUTCOME_LABEL[answer.outcome].toLowerCase()}.`;
+  `${openPoint(answer.pointNl).textNl.replace(/[.:]+$/, "")}. ${answer.instrument ? "Antwoord van de meting van de sessieduur" : "Antwoord van een persoon"} (${answer.instrument ? "" : "functie: "}${answer.role}, ${dateNl(answer.answeredAt)}): ${answer.didNl.replace(/\.$/, "")}. Uitkomst op dit punt: ${OUTCOME_LABEL[answer.outcome].toLowerCase()}.`;
 
 /** The status the outcomes lead to, shown also when nobody has signed yet. */
 function statusLine(evaluation: Evaluation, stale: boolean): StatusLine {
@@ -584,11 +584,11 @@ function chainText(evaluation: Evaluation): ChainText {
     honestNl:
       "Dit is een automatisch onderzoek. Scripts hebben de site gemeten. Een taalmodel heeft daarna elk paginatype bekeken, per criterium geoordeeld met meetinstrumenten, en in een tweede ronde elk oordeel gecontroleerd. \"Voldoet\" betekent dat in het onderzochte bewijs geen afwijking is gevonden, ook niet toen de controle ernaar zocht. Het is geen garantie dat er geen probleem bestaat. \"Kan niet bepalen\" betekent dat de vraag nog open is.",
     agreementNl:
-      (finishedCount > 0 ? `Bij ${criteriaCount(finishedCount)} bleef het oordeel na de verificatie open door het onderzoek zelf; daar heeft een afmaakronde het eindoordeel vastgesteld. Na die ronde komt geen verificatie: ${repeated === 0 ? "ze leverde geen bevinding op" : `de ${findingsCount(repeated)} uit die ronde ${repeated === 1 ? "is" : "zijn"} twee keer door dezelfde agent vastgelegd, de tweede keer vanaf een verse pagina`}, en een goedkeuring uit die ronde is niet door een tweede agent aangevallen. ` : "") +
+      (finishedCount > 0 ? `Bij ${criteriaCount(finishedCount)} bleef het oordeel na de controle open door een beperking van het onderzoek; daar heeft een aanvullende meting het eindoordeel vastgesteld. Die wordt niet nog eens gecontroleerd: ${repeated === 0 ? "ze leverde geen bevinding op" : `de ${findingsCount(repeated)} uit die meting ${repeated === 1 ? "is" : "zijn"} twee keer door dezelfde beoordelaar vastgelegd, de tweede keer vanaf een verse pagina`}, en een goedkeuring uit die meting is niet door een tweede beoordelaar aangevallen. ` : "") +
       (personCount > 0 ? `Bij ${criteriaCount(personCount)} is de uitkomst vastgesteld door een persoon, niet door een instrument; dat staat bij het criterium, met de functie van die persoon. ` : "") +
-      `Elk oordeel is in een tweede ronde gecontroleerd: de verificatie. Die ronde begint met een schone context en kent het oordeel van de beoordelaar: ze is een controle, geen tweede blinde beoordeling. Bij ${criteriaCount(changed)} kwam de verificatie op een andere uitkomst dan de beoordelaar; de uitkomst van de verificatie telt. ` +
-      `Van de ${findingsCount(findings.length)} in dit rapport ${reproduced === 1 ? "is" : "zijn"} er ${reproduced} bij de controle bevestigd (een tweede agent zag het gebrek zelf opnieuw, vanaf een verse pagina) en ${added} toegevoegd door de verificatie zelf; die laatste zijn dus één keer gezien. ` +
-      `${dropped === 0 ? "Geen bevinding van de beoordelaar is vervallen." : `${findingsCount(dropped).replace(/^./, (letter) => letter.toUpperCase())} van de beoordelaar ${dropped === 1 ? "is" : "zijn"} vervallen; de reden staat per criterium in bijlage A.`}`,
+      `Elk oordeel is in een tweede ronde gecontroleerd: de controle. Die ronde begint met een schone context en kent de eerste beoordeling: ze is een controle, geen tweede blinde beoordeling. Bij ${criteriaCount(changed)} kwam de controle op een andere uitkomst dan de eerste beoordeling; de uitkomst van de controle telt. ` +
+      `Van de ${findingsCount(findings.length)} in dit rapport ${reproduced === 1 ? "is" : "zijn"} er ${reproduced} bij de controle bevestigd (een tweede beoordelaar zag het gebrek zelf opnieuw, vanaf een verse pagina) en ${added} bij de controle toegevoegd; die laatste zijn dus één keer gezien. ` +
+      `${dropped === 0 ? "Geen bevinding uit de eerste beoordeling is vervallen." : `${findingsCount(dropped).replace(/^./, (letter) => letter.toUpperCase())} uit de eerste beoordeling ${dropped === 1 ? "is" : "zijn"} vervallen; de reden staat per criterium in bijlage A.`}`,
     enginesNl:
       `Hulpmiddelen in de zin van de methode zijn de regel-engines ${engines.join(" en ") || "axe-core en Alfa"}: zij draaien op elke pagina van de steekproef. ${sessionEngines.length > 0 ? `In de metingen van de agents draaiden daarnaast ${sessionEngines.join(" en ")} mee, als extra mening. ` : ""}Regel-engines voeren toetsregels voor WCAG uit; een deel daarvan zijn ACT-regels, de gepubliceerde toetsregels. ` +
       "De andere instrumenten van de toolbox verzamelen bewijs en zijn zelf geen toetsregel: de Tab-proef, de metingen van contrast, vergroten, tekstafstand en smal scherm, het openen van menu's, vensters en formulieren, tekstherkenning in afbeeldingen, en het beluisteren en bekijken van video en geluid. Het model handelt en meet alleen via die instrumenten; elke aanroep is vastgelegd als waarneming en kan worden nagespeeld.",
@@ -607,17 +607,17 @@ function chainText(evaluation: Evaluation): ChainText {
           ]
         : []),
       { nameNl: "Rondgang", textNl: "Het model bekijkt elk paginatype en noteert wat nader onderzoek vraagt. Dat zijn aanwijzingen voor de beoordelaar, nog geen oordeel." },
-      { nameNl: "Beoordelen", textNl: "Per criterium oordeelt een beoordelaar volgens een vaste procedure, met het verzamelde bewijs en met eigen metingen." },
-      { nameNl: "Verifiëren", textNl: "Een tweede ronde controleert elke bevinding vanaf een verse pagina en probeert elke goedkeuring onderuit te halen. Een bevinding is bevestigd als de tweede agent het gebrek zelf opnieuw zag. Wat niet is bevestigd, vervalt. Het oordeel van deze ronde is het eindoordeel." },
-      ...(finishedCount > 0 ? [{ nameNl: "Afmaken", textNl: "Bleef een criterium na de verificatie open door het onderzoek zelf (iets was niet gemeten, een proef stopte bij een grens, het budget was op), dan meet een aparte agent met een ruimer budget wat ontbrak en komt tot een oordeel. Dat oordeel is dan het eindoordeel; het eerdere blijft bewaard." }] : []),
+      { nameNl: "Beoordelen", textNl: "Per criterium oordeelt een beoordelaar volgens een vaste procedure, met het verzamelde bewijs en met eigen metingen. In het rapport heet dit de eerste beoordeling." },
+      { nameNl: "Verifiëren", textNl: "Een tweede ronde controleert elke bevinding vanaf een verse pagina en probeert elke goedkeuring onderuit te halen. Een bevinding is bevestigd als de tweede beoordelaar het gebrek zelf opnieuw zag. Wat niet is bevestigd, vervalt. Het oordeel van deze ronde is het eindoordeel. In het rapport heet dit de controle." },
+      ...(finishedCount > 0 ? [{ nameNl: "Afmaken", textNl: "Bleef een criterium na de controle open door een beperking van het onderzoek (iets was niet gemeten, een proef stopte bij een grens, de tijd was op), dan meet een aparte beoordelaar met meer tijd wat ontbrak en komt tot een oordeel. Dat oordeel is dan het eindoordeel; het eerdere blijft bewaard. In het rapport heet dit de aanvullende meting." }] : []),
       ...(answeredCount > 0 ? [{ nameNl: "Antwoord van een persoon", textNl: "Wat geen instrument kan vaststellen, of wat een keuze van de eigenaar vraagt, heeft een persoon vastgelegd: wat is gedaan of besloten, en wat dat betekent voor het criterium. Zo'n uitkomst is vastgesteld door een persoon, niet door een instrument." }] : []),
       ...(evaluation.defects ? [{ nameNl: "Samenvoegen", textNl: "Bevindingen over dezelfde plek worden één gebrek. De bevindingen en de uitkomst per criterium blijven zoals ze zijn." }] : []),
     ],
     writesNl: evaluation.chain ? (evaluation.chain.writes.allowed ? `Toegestaan: ${evaluation.chain.writes.noteNl}.` : `Niet toegestaan: ${evaluation.chain.writes.noteNl}.`) : null,
     readsNl: evaluation.chain?.reads && evaluation.chain.reads.length > 0 ? `${readsAllowedNl(evaluation.chain.reads)}.` : null,
     challengeLabel: "Poging om het oordeel onderuit te halen",
-    droppedLabel: "Vervallen bij de verificatie",
-    verification: { reproduced: "Bij de controle bevestigd", unverified: "Toegevoegd door de verificatie, één keer gezien", repeated: "Uit de afmaakronde, twee keer gezien door dezelfde agent" },
+    droppedLabel: "Vervallen bij de controle",
+    verification: { reproduced: "Bij de controle bevestigd", unverified: "Toegevoegd bij de controle, één keer gezien", repeated: "Uit de aanvullende meting, twee keer gezien door één beoordelaar" },
   };
 }
 
@@ -1142,7 +1142,7 @@ export function renderMarkdown(input: Evaluation): string {
     "",
     `> **${derived.statusLine.headingNl}**${derived.statusLine.noteNl ? `. ${derived.statusLine.noteNl}` : ""}`,
     "",
-    `> ${derived.statusLine.unfinished ? "**Het onderzoek is niet af.** " : ""}${derived.statusLine.openNl}`,
+    `> ${derived.statusLine.unfinished ? "**Het onderzoek is onvolledig.** " : ""}${derived.statusLine.openNl}`,
     "",
   );
   lines.push(

@@ -133,7 +133,7 @@ test("the main part is compact and the full reasoning is in appendix A", () => {
   assert.ok(!main.includes("- Hoe: "));
   assert.ok(!main.includes("Poging om het oordeel onderuit te halen: ") && appendix.includes("Poging om het oordeel onderuit te halen: "));
   assert.ok(appendix.includes("- Hoe: "));
-  assert.ok(main.includes("Zekerheid: Beoordelaar en verificatie komen op dezelfde uitkomst."));
+  assert.ok(main.includes("Zekerheid: De eerste beoordeling en de controle komen op dezelfde uitkomst."));
   // Finding cards stay in the main part.
   assert.ok(main.includes("**Oplossing**") && !appendix.includes("**Oplossing**"));
 });
@@ -224,7 +224,7 @@ test("open points are split into work for the owner of the site and limits of th
   const { todo, briefs } = deriveReport(evaluation);
   assert.deepEqual(todo.investigate.owner, [{ criterion: first!.id, outcomeNl: "kan niet bepalen", pointsNl: ["Wat een schermlezer voorleest na het versturen van het formulier op P03.", "Keuze: Is het label op P02 een logo?"], anchor: true }]);
   assert.deepEqual(todo.investigate.toolbox.map((item) => [item.criterion, item.countNl, item.kindsNl, item.anchor]), [
-    [first!.id, "2 punten", "1 keer dekking ontbrak, 1 keer budget was op", false],
+    [first!.id, "2 punten", "1 keer dekking ontbrak, 1 keer de tijd voor het meten was op", false],
     [second!.id, "2 punten", "2 keer dekking ontbrak", true],
     [passed.id, "1 punt", "1 keer een proef werkte niet", true],
   ]);
@@ -243,7 +243,7 @@ test("open points are split into work for the owner of the site and limits of th
   // Every point stands in full somewhere: those about the evaluation in the appendix.
   assert.ok(appendix!.includes("Open, voor een volgende meting:\n\n- Dekking ontbrak: De toetsenproef in de geopende vensters.\n- Dekking ontbrak: De toetsenproef op het smalle scherm."));
   assert.ok(appendix!.includes("- Een proef werkte niet: De kaart op P02 laadde niet."));
-  assert.ok(appendix!.includes("- Budget was op: Het menu op P04 is niet geopend."));
+  assert.ok(appendix!.includes("- De tijd voor het meten was op: Het menu op P04 is niet geopend."));
   // Every anchor exists once, so no link to open points is dead.
   for (const id of [first!.id, second!.id, passed.id]) assert.equal(main!.split(`<a id="open-${id}"></a>`).length - 1, 1);
 });
@@ -576,7 +576,7 @@ test("verification and measured states are shown only when the evaluation has th
   evaluation.measuredStates = { P01: ["menu-open", "zoekvenster"], P02: [] };
   const markdown = renderMarkdown(evaluation);
   assert.equal((markdown.match(/^- Controle: Bij de controle bevestigd$/gm) ?? []).length, 1);
-  assert.equal((markdown.match(/^- Controle: Toegevoegd door de verificatie, één keer gezien$/gm) ?? []).length, 1);
+  assert.equal((markdown.match(/^- Controle: Toegevoegd bij de controle, één keer gezien$/gm) ?? []).length, 1);
   assert.equal((markdown.match(/Gemeten toestanden: /g) ?? []).length, 1);
   assert.ok(markdown.includes("  - Gemeten toestanden: menu-open, zoekvenster"));
 });
@@ -801,7 +801,7 @@ test("an evaluation is described as it was made: a judge and a verifier, both wi
   assert.deepEqual(derived.chain.stepsNl.map((step) => step.nameNl), ["Verkennen", "Meten", "Bewijspoort", "Rondgang", "Beoordelen", "Verifiëren", "Samenvoegen"]);
   assert.ok(markdown.includes("2. **Meten.** Scripts meten elke pagina van de steekproef, zoals ze laadt, ook op 320 pixels breed en in het donkere kleurenschema, en in de toestanden die de verkenner heeft vastgelegd (2 toestanden; bij de steekproef staat per pagina welke)."));
   // The second round is not called independent: it knows the first verdict and runs on the same model.
-  assert.ok(!markdown.includes("tweede, onafhankelijke") && markdown.includes("Die ronde begint met een schone context en kent het oordeel van de beoordelaar: ze is een controle, geen tweede blinde beoordeling."));
+  assert.ok(!markdown.includes("tweede, onafhankelijke") && markdown.includes("Die ronde begint met een schone context en kent de eerste beoordeling: ze is een controle, geen tweede blinde beoordeling."));
   // The name of the model is what somebody typed in; the report says so.
   assert.ok(markdown.includes("- Beoordelend model, zoals opgegeven: ") && markdown.includes("de toolbox legt niet zelf vast welk model draaide)"));
   // One judge and a verifier: the trace has no column for a second judge.
@@ -821,17 +821,17 @@ test("an evaluation is described as it was made: a judge and a verifier, both wi
   assert.ok(renderMarkdown(searched).includes("- Leesverzoeken: één adres is toegelaten voor leesverzoeken: POST https://zoek.example.nl/multi\\_search, zoekvraag aan Typesense (Het zoekveld stuurt de zoekvraag naar de zoekdienst). Een verzoek daarheen ging alleen door als loep de body herkende als zoekvraag aan die dienst; elk ander verzoek dat iets kan wijzigen is tegengehouden."), renderMarkdown(searched).split("\n").find((line) => line.includes("Leesverzoeken")));
   // The rule engines are the tools, by name and version; the rest gathers evidence.
   assert.ok(markdown.includes("Hulpmiddelen in de zin van de methode zijn de regel-engines axe-core 4.13.0 en Alfa 0.119.0: zij draaien op elke pagina van de steekproef."));
-  assert.ok(markdown.includes("Bij 1 criterium kwam de verificatie op een andere uitkomst dan de beoordelaar"));
-  assert.ok(markdown.includes("Van de 7 bevindingen in dit rapport zijn er 6 bij de controle bevestigd (een tweede agent zag het gebrek zelf opnieuw, vanaf een verse pagina) en 1 toegevoegd door de verificatie zelf"));
-  assert.ok(markdown.includes("1 bevinding van de beoordelaar is vervallen; de reden staat per criterium in bijlage A."));
+  assert.ok(markdown.includes("Bij 1 criterium kwam de controle op een andere uitkomst dan de eerste beoordeling"));
+  assert.ok(markdown.includes("Van de 7 bevindingen in dit rapport zijn er 6 bij de controle bevestigd (een tweede beoordelaar zag het gebrek zelf opnieuw, vanaf een verse pagina) en 1 bij de controle toegevoegd"));
+  assert.ok(markdown.includes("1 bevinding uit de eerste beoordeling is vervallen; de reden staat per criterium in bijlage A."));
   // Per criterion and per finding.
-  assert.equal(derived.briefs["2.1.1"]!.certaintyNl, "De beoordelaar kwam op voldoet, de verificatie op kan niet bepalen.");
-  assert.equal(derived.briefs["4.1.2"]!.certaintyNl, "Beoordelaar en verificatie komen op dezelfde uitkomst. 1 bevinding bij de controle bevestigd, 1 bevinding toegevoegd door de verificatie, 1 bevinding van de beoordelaar vervallen, zie bijlage A.");
-  assert.ok(markdown.includes("- Controle: Bij de controle bevestigd") && markdown.includes("- Controle: Toegevoegd door de verificatie, één keer gezien"));
+  assert.equal(derived.briefs["2.1.1"]!.certaintyNl, "De eerste beoordeling kwam op voldoet, de controle op kan niet bepalen.");
+  assert.equal(derived.briefs["4.1.2"]!.certaintyNl, "De eerste beoordeling en de controle komen op dezelfde uitkomst. 1 bevinding bij de controle bevestigd, 1 bevinding toegevoegd bij de controle, 1 bevinding uit de eerste beoordeling vervallen, zie bijlage A.");
+  assert.ok(markdown.includes("- Controle: Bij de controle bevestigd") && markdown.includes("- Controle: Toegevoegd bij de controle, één keer gezien"));
   const appendix = markdown.split("## Bijlage A: onderbouwing per criterium")[1]!;
-  assert.ok(appendix.includes("Beoordelaar: Voldoet. Verificatie, tevens eindoordeel: Kan niet bepalen."));
+  assert.ok(appendix.includes("Eerste beoordeling: Voldoet. Controle, tevens eindoordeel: Kan niet bepalen."));
   assert.ok(appendix.includes("Poging om het oordeel onderuit te halen: Met de Tab-toets is gezocht"));
-  assert.ok(appendix.includes("Vervallen bij de verificatie:\n\n- Knop zonder naam (P02): niet opnieuw gezien."));
+  assert.ok(appendix.includes("Vervallen bij de controle:\n\n- Knop zonder naam (P02): niet opnieuw gezien."));
 });
 
 test("a finding that touches an element of the vendor keeps its owner and is listed per element", () => {
@@ -907,7 +907,7 @@ test("no deviation found but not fully measured is shown as an outcome of its ow
   // In the work list it stands with what the toolbox measures next time, with what was measured.
   const worklist = markdown.split("### Nog uitzoeken")[1]!.split("\n## ")[0]!;
   const toolboxPart = worklist.split("**Dit meet de toolbox een volgende keer**")[1]!;
-  assert.ok(toolboxPart.includes(`](#sc-${criterion.id}) (geen afwijking gevonden, niet volledig gemeten): 2 punten (1 keer dekking ontbrak, 1 keer budget was op), zie [bijlage A](#bijlage-${criterion.id}). Dekking: gemeten op 9 van 29`));
+  assert.ok(toolboxPart.includes(`](#sc-${criterion.id}) (geen afwijking gevonden, niet volledig gemeten): 2 punten (1 keer dekking ontbrak, 1 keer de tijd voor het meten was op), zie [bijlage A](#bijlage-${criterion.id}). Dekking: gemeten op 9 van 29`));
   // An evaluation without the field reads as before.
   const before = renderMarkdown(plain);
   assert.ok(!before.includes("niet volledig gemeten") && !before.includes("◐"));
