@@ -4,6 +4,8 @@ Wat er per versie van loep is veranderd. De versie staat op het voorblad en onde
 
 ## Nog niet uitgebracht
 
+## 0.6.0 (2026-10-16)
+
 Deze versie is uitgebracht zonder nieuwe meting op de testsite, net als 0.5.0. De wijzigingen die een uitkomst kunnen veranderen, zijn dus nog niet vergeleken met 0.5.0. Met een echte Vimeo-speler is nagegaan dat de speler in een sessie tot de bediening laadt en dat zijn videostroom wordt opgehaald; dat de video in de browser van loep ook afspeelt, is niet vastgesteld.
 
 ### Wat een uitkomst kan veranderen
