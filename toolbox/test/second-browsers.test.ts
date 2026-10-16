@@ -36,6 +36,16 @@ after(async () => {
 
 type Print = Record<string, unknown> & { id: string };
 
+/** Politeness that keeps every address it was asked to wait for. */
+class AskedPoliteness extends Politeness {
+  readonly asked: string[] = [];
+
+  override async before(url: string): Promise<void> {
+    this.asked.push(url);
+    await super.before(url);
+  }
+}
+
 function raw(command: string, args: (string | number)[] = [], options: Record<string, string | boolean> = {}): Promise<Response> {
   return daemon.handle({ op: "command", session: "main", command, args: args.map(String), options });
 }
@@ -230,16 +240,14 @@ test("the second browsers send no POST, no socket message and nothing outside th
   const next = await loep("status");
   const refused = [...observation(order.id).blocked, ...observation(next.id).blocked].map((entry) => `${entry.kind} ${entry.method}`);
   for (const kind of ["method POST", "socket SEND", "scope GET"]) assert.ok(refused.filter((entry) => entry === kind).length >= 2, `${kind}: ${refused.join(", ")}`);
-  // The pause between two navigations to the same host holds across the browsers.
-  const times = loads.map((request) => request.at).sort((a, b) => a - b);
-  for (let index = 1; index < times.length; index++) assert.ok(times[index]! - times[index - 1]! >= NAVIGATION_DELAY_MS - 30, `loads ${times[index]! - times[index - 1]!} ms apart`);
 });
 
 test("a redirect out of the scope is refused in WebKit and Firefox before it is followed", async (context) => {
   if (!installed) return context.skip("WebKit of Firefox is niet geïnstalleerd");
   site.requests.length = 0;
   const chromium = await launchBrowser();
-  const env: Env = { browser: chromium, runDir: run, scope: { hosts: ["127.0.0.1"], baseUrl: `${site.origin}/`, strict: false }, limits: { ...DEFAULT_DAEMON_LIMITS, navigationDelayMs: 0 }, politeness: new Politeness(0) };
+  const politeness = new AskedPoliteness(0);
+  const env: Env = { browser: chromium, runDir: run, scope: { hosts: ["127.0.0.1"], baseUrl: `${site.origin}/`, strict: false }, limits: { ...DEFAULT_DAEMON_LIMITS, navigationDelayMs: 0 }, politeness };
   const second = new SecondBrowsers(env, runSteps);
   try {
     for (const name of ["webkit", "firefox"] as const) {
@@ -253,6 +261,8 @@ test("a redirect out of the scope is refused in WebKit and Firefox before it is 
     }
     assert.deepEqual(site.requests.filter((request) => request.host === "localhost"), [], "nothing reached the other host");
     assert.equal(site.requests.filter((request) => request.path === "/redirect-out").length, 2);
+    // WebKit and Firefox wait for the same pause between navigations as Chromium: they ask the politeness of the process.
+    assert.equal(politeness.asked.filter((url) => url === `${site.origin}/form.html`).length, 2);
   } finally {
     await second.close();
     await chromium.close();

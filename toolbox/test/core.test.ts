@@ -11,6 +11,7 @@ import { canonicalJson, sha256, slugForUrl, stableId } from "../src/lib/canonica
 import { changedSinceCommit, complianceStatus, evaluationHash, knownCommit, resolveCriterion } from "../src/lib/evaluation.ts";
 import { toolboxSource } from "../src/lib/manifest.ts";
 import { loadProcedure, parseProcedure } from "../src/lib/procedures.ts";
+import { Politeness } from "../src/session/safety.ts";
 import type { SiteModel } from "../src/lib/sitemodel.ts";
 import type { Finding, Verdict } from "../src/lib/verdict.ts";
 import { compareCriterionIds, criteriaFor, criterionById, criterionIdFromAxeTag, en301549Clause } from "../src/lib/wcag.ts";
@@ -317,4 +318,26 @@ test("the placeholder an older run wrote for a missing commit is read as no comm
   assert.equal(changedSinceCommit({ commit: "no commit yet", dirty: true }), false);
   assert.equal(changedSinceCommit({ commit: null, dirty: true }), false);
   assert.equal(changedSinceCommit({ commit: "a".repeat(40), dirty: true }), true);
+});
+
+test("navigations to one host are spaced out, also when they are asked for at the same moment", async (context) => {
+  context.mock.timers.enable({ apis: ["Date", "setTimeout"], now: 1_000_000 });
+  const politeness = new Politeness(400);
+  const at = new Map<string, number>();
+  const navigate = (name: string, url: string): void => void politeness.before(url).then(() => at.set(name, Date.now() - 1_000_000));
+  // Chromium and the two second browsers open the same site at once; another host does not wait for them.
+  navigate("chromium", "https://a.nl/");
+  navigate("webkit", "https://a.nl/");
+  navigate("firefox", "https://a.nl/other");
+  navigate("elsewhere", "https://b.nl/");
+  const settle = (): Promise<void> => new Promise((resolve) => setImmediate(resolve));
+  for (let step = 0; step < 4; step++) {
+    await settle();
+    context.mock.timers.tick(200);
+  }
+  await settle();
+  assert.deepEqual(Object.fromEntries(at), { chromium: 0, elsewhere: 0, webkit: 400, firefox: 800 });
+  // A navigation nobody announced, such as a click on a link, starts the pause too.
+  politeness.seen("https://b.nl/next");
+  assert.equal(politeness.remaining("https://b.nl/"), 400);
 });
