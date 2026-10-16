@@ -4,6 +4,8 @@ Wat er per versie van loep is veranderd. De versie staat op het voorblad en onde
 
 ## Nog niet uitgebracht
 
+## 0.5.0 (2026-10-16)
+
 ### Wat een uitkomst kan veranderen
 
 - Met een sitemodel krijgt een groot paginatype extra pagina's in de steekproef: één per 40 pagina's van dat type, hooguit 5, naast de voorbeeldpagina van de verkenner. Ze worden vast gekozen op variatie in inhoud: steeds de pagina die de meeste soorten inhoud toevoegt die het type in de steekproef nog niet had (afbeeldingen, tabellen, formulieren, video, geluid, ingesloten vensters, koppen, lijsten, lengte), en bij gelijke stand op de seed. Het willekeurige deel blijft 10% van het gerichte deel en groeit dus mee. `sample.json` zegt per pagina de reden ("gekozen op variatie: tabel, video") en per paginatype hoeveel pagina's er zijn en hoeveel er zijn bekeken; het rapport toont dat in een tabel. Een site van 562 pagina's in 11 typen krijgt zo 11 pagina's meer: 10 op variatie en een willekeurige. Een kleine site, een site zonder sitemodel en een vaste lijst blijven zoals ze waren. De keuze van de getallen staat in de methode, met WCAG-EM 2.0 §6.3 en §6.3.1 (#62).
