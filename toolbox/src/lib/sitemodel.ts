@@ -212,7 +212,7 @@ export interface ModelContext {
   /** Per page address: how many audio and video elements the inventory counted there. Absent when not checked. */
   media?: Record<string, { audio: number; video: number }>;
   /** Per observation that a read request names: the requests it held back or let through as a read. Absent when not checked. */
-  requestsSeen?: Record<string, { method: string; url: string }[]>;
+  requestsSeen?: Record<string, { method: string; url: string; /** The search services whose form loep recognised in the body. */ search?: string[] }[]>;
 }
 
 const ID = /^[a-z0-9][a-z0-9-]{0,40}$/;
@@ -466,9 +466,11 @@ export function validateSiteModel(value: unknown, context: ModelContext): string
         seenRules.add(key);
         if (context.observations && !context.observations.has(read.observation)) problems.push(`${where}: waarneming ${read.observation} bestaat niet in deze run`);
         else if (context.requestsSeen) {
-          const seen = context.requestsSeen[read.observation] ?? [];
-          if (!seen.some((request) => readMatches(read, request.method, request.url))) {
-            problems.push(`${where}: in waarneming ${read.observation} is geen ${read.method} naar ${read.origin}${read.path} tegengehouden; geef het id van het commando waarvan het antwoord dit verzoek onder blocked noemt`);
+          const seen = (context.requestsSeen[read.observation] ?? []).filter((request) => readMatches(read, request.method, request.url));
+          if (seen.length === 0) problems.push(`${where}: in waarneming ${read.observation} is geen ${read.method} naar ${read.origin}${read.path} tegengehouden; geef het id van het commando waarvan het antwoord dit verzoek onder blocked noemt`);
+          else if (!seen.some((request) => (request.search ?? []).includes(read.service))) {
+            const found = [...new Set(seen.flatMap((request) => request.search ?? []))];
+            problems.push(`${where}: loep herkende de body van dat verzoek in waarneming ${read.observation} niet als zoekvraag aan ${read.service}${found.length > 0 ? ` (wel als ${found.join(", ")})` : ""}; een verzoek waarvan loep de body niet herkent, blijft tegengehouden en kan geen leesverzoek worden`);
           }
         }
         // A request that may pass is not also a request a component cannot do without.

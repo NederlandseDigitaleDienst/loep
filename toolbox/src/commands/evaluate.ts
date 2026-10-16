@@ -307,7 +307,7 @@ export async function evaluate(options: EvaluateOptions): Promise<Evaluation> {
     limitationsNl: limitations,
     ...(measuredStates ? { measuredStates } : {}),
     ...(documents ? { documents } : {}),
-    chain: { kind: "instruments", gate: gateSummary, writes: { allowed: Boolean(run.writes), noteNl: run.writes ? writesAllowedNl(run.writes) : WRITES_BLOCKED_NL }, ...((run.reads ?? []).length > 0 ? { reads: run.reads!.map((rule) => ({ method: rule.method, origin: rule.origin, path: rule.path, reasonNl: rule.reasonNl })) } : {}) },
+    chain: { kind: "instruments", gate: gateSummary, writes: { allowed: Boolean(run.writes), noteNl: run.writes ? writesAllowedNl(run.writes) : WRITES_BLOCKED_NL }, ...((run.reads ?? []).length > 0 ? { reads: run.reads!.map((rule) => ({ method: rule.method, origin: rule.origin, path: rule.path, service: rule.service, reasonNl: rule.reasonNl })) } : {}) },
     signature: null,
   };
   if (earlier) {

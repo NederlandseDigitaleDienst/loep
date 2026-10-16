@@ -1,7 +1,7 @@
 import { fileURLToPath } from "node:url";
 import { chromium, type Browser, type BrowserContext, type Page, type Route } from "playwright";
 import { confirmLoginOn, LoginExpired, logsOut, runLoginMark, runLoginState, throwIfLoginExpired, watchLogin } from "../lib/login.ts";
-import { readRuleFor, runReads, type ReadRequest } from "../lib/reads.ts";
+import { addressOf, noteRefusedRead, readDecision, readRuleFor, runReads, type ReadRequest } from "../lib/reads.ts";
 import { isWriteOrigin, runWrites, type WriteAccess } from "../lib/writes.ts";
 import { refusedByBrowser, type ClipboardWrite } from "./clipboard.ts";
 import { frameAsPage } from "./frame.ts";
@@ -83,6 +83,15 @@ export async function passOn(route: Route, mayRepeat: (url: string) => boolean, 
   }
 }
 
+/** The body of a request as text, or null when it has none or it cannot be read as text. */
+export function bodyOf(request: { postData(): string | null }): string | null {
+  try {
+    return request.postData();
+  } catch {
+    return null;
+  }
+}
+
 export async function launchBrowser(): Promise<Browser> {
   return chromium.launch({ args: ["--font-render-hinting=none", "--disable-lcd-text"] });
 }
@@ -147,7 +156,10 @@ export async function newContext(browser: Browser, options: ContextOptions = {},
     // Logging out ends the session for everything that comes after: such a request never leaves, whatever its method.
     if (logsOut(route.request().url())) return route.request().isNavigationRequest() ? route.fulfill({ status: 204, body: "" }) : route.abort("blockedbyclient");
     if (method === "GET" || method === "HEAD") return route.continue();
-    if (reads.length > 0 && readRuleFor(reads, method, route.request().url(), route.request().headers())) return passOn(route, (target) => readRuleFor(reads, method, target) !== null).then(() => undefined);
+    // A read request passes only when a rule covers it and its body is a question to the service of that rule; a covered request with another body is noted.
+    const read = readDecision(reads, method, route.request().url(), route.request().headers(), bodyOf(route.request()));
+    if (read?.pass) return passOn(route, (target) => readRuleFor(reads, method, target)?.service === read.rule.service).then(() => undefined);
+    if (read) noteRefusedRead({ method, address: addressOf(route.request().url()), rule: read.rule.id, reasonNl: read.reasonNl });
     // An aborted navigation replaces the page with an error page. "No content" leaves the page as it was.
     if (!isWriteOrigin(writes, route.request().url())) return route.request().isNavigationRequest() ? route.fulfill({ status: 204, body: "" }) : route.abort("blockedbyclient");
     writes!.record(method, route.request().url());

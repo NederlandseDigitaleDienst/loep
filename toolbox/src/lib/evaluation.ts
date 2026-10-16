@@ -331,7 +331,7 @@ export interface EvaluationChain {
   /** Whether requests that can change something were let through, and on what ground. */
   writes: { allowed: boolean; noteNl: string };
   /** POST requests that only read and were let through, such as a question to a search service. Absent when there were none, and in older evaluations. */
-  reads?: { method: string; origin: string; path: string; reasonNl: string }[];
+  reads?: { method: string; origin: string; path: string; /** The search service whose form a body had to have; absent in evaluations from before it was asked. */ service?: string; reasonNl: string }[];
 }
 
 /** The verdict of the judge (`a`), that of the verifier (`final`) and that of the finishing round, for a criterion that had one. */

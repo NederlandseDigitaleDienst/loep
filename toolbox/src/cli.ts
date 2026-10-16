@@ -174,9 +174,9 @@ async function main(): Promise<void> {
     const permission = writesForRun(values.run);
     if (permission) setRunWrites(writeAccess(values.run, permission, command));
     // A read request of the site model, such as a question to a search service, passes once check-site passed the model as it is now.
-    const { setRunReads } = await import("./lib/reads.ts");
+    const { refusedReadsLog, setRunReads } = await import("./lib/reads.ts");
     const { approvedReads } = await import("./lib/sitemodel.ts");
-    setRunReads(approvedReads(values.run));
+    setRunReads(approvedReads(values.run), refusedReadsLog(values.run, command));
   }
   // A run for which a person logged in starts every browser with that session; any other run is left as it was.
   const { runLoginMark, setRunLogin } = await import("./lib/login.ts");

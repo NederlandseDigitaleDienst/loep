@@ -175,20 +175,23 @@ async function staticProblems(runDir: string, inventory: Inventory): Promise<str
 }
 
 /** For every observation a read request of the model names: what that command held back, and what it let through as a read. */
-export async function requestsSeen(runDir: string): Promise<Record<string, { method: string; url: string }[]>> {
+export async function requestsSeen(runDir: string): Promise<Record<string, { method: string; url: string; search: string[] }[]>> {
   let rules: unknown = null;
   try {
     rules = (JSON.parse(readFileSync(join(runDir, SITE_MODEL_FILE), "utf8")) as { readRequests?: unknown }).readRequests;
   } catch {
     rules = null;
   }
-  const seen: Record<string, { method: string; url: string }[]> = {};
+  const seen: Record<string, { method: string; url: string; search: string[] }[]> = {};
   for (const rule of Array.isArray(rules) ? (rules as unknown[]) : []) {
     const id = (rule as { observation?: unknown } | null)?.observation;
     if (typeof id !== "string" || id in seen) continue;
     const observation = await readObservation(runDir, id).catch(() => null);
     if (!observation) continue;
-    seen[id] = [...observation.blocked.filter((entry) => entry.kind === "method"), ...(observation.reads ?? [])].map((entry) => ({ method: entry.method, url: entry.url }));
+    seen[id] = [
+      ...observation.blocked.filter((entry) => entry.kind === "method").map((entry) => ({ method: entry.method, url: entry.url, search: entry.search ?? [] })),
+      ...(observation.reads ?? []).map((entry) => ({ method: entry.method, url: entry.url, search: entry.service ? [entry.service] : [] })),
+    ];
   }
   return seen;
 }
