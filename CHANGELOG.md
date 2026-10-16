@@ -4,6 +4,10 @@ Wat er per versie van loep is veranderd. De versie staat op het voorblad en onde
 
 ## Nog niet uitgebracht
 
+### Wat een uitkomst kan veranderen
+
+- `inventory` verdeelt de grens van `--max-pages` over de gedeelten van de site (het eerste deel van het pad, en daarbinnen een niveau dieper), in plaats van de pagina's in alfabetische volgorde te bezoeken. Eerder vulde een gedeelte dat vooraan in het alfabet staat de grens, zoals een blog vol tagpagina's, en bleef de rest van de site buiten de steekproef. Wordt de grens bereikt, dan zegt `inventory` luid per gedeelte hoeveel pagina's zijn bezocht en hoeveel weggelaten, en de skill laat die melding in stap 2 controleren (#51).
+
 ## 0.3.0 (2026-10-15)
 
 Deze versie is uitgebracht zonder nieuwe meting op de testsite, net als 0.2.0. De wijzigingen die een uitkomst kunnen veranderen, zijn dus nog niet vergeleken met 0.2.0.
