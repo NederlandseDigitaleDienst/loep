@@ -50,7 +50,7 @@ const COMMON_PAGES: [RegExp, string][] = [
   [/zoek|search/i, "zoekpagina"],
   [/privacy|cookie/i, "juridische pagina"],
   [/sitemap/i, "sitemap"],
-  [/help|veelgestelde|faq/i, "hulppagina"],
+  [/\bhelp\b|veelgestelde|faq/i, "hulppagina"],
 ];
 
 /** Deterministic order derived from the seed: the same seed always selects the same pages. */
@@ -101,12 +101,12 @@ export function applyFrameClasses(pages: InventoryPage[], model: SiteModel): { p
   return { pages: kept, repeats, excluded: [...excluded.values()] };
 }
 
-export function buildSample(inventory: Inventory, seed: string, model: SiteModel | null = null, typeOf: Map<string, string> = new Map()): Sample {
+export function buildSample(inventory: Inventory, seed: string, model: SiteModel | null = null, typeOf: Map<string, string> = new Map(), representatives: Map<string, string> = new Map()): Sample {
   if (model) {
     const framed = applyFrameClasses(inventory.pages, model);
     // Every page type of the model gets a page of its own, also when it shares a template with another type.
     const types = new Map(model.pageTypes.flatMap((type) => type.pages.map((url) => [url, type.id] as const)));
-    const sample = buildSample({ ...inventory, pages: framed.pages }, seed, null, types);
+    const sample = buildSample({ ...inventory, pages: framed.pages }, seed, null, types, new Map(model.pageTypes.map((type) => [type.id, type.representative] as const)));
     for (const item of sample.items) item.aliases = [...item.aliases, ...(framed.repeats.get(item.url) ?? [])].sort();
     const copies = framed.excluded.reduce((sum, frame) => sum + frame.copies, 0);
     const note = copies > 0 ? ` ${copies} ingesloten ${copies === 1 ? "venster telt" : "vensters tellen"} volgens het sitemodel niet mee als pagina (${framed.excluded.map((frame) => `${frame.descriptionNl}: ${frame.kindNl}`).join("; ")}).` : "";
@@ -156,15 +156,30 @@ export function buildSample(inventory: Inventory, seed: string, model: SiteModel
   const chosen = new Map<string, SampleItem>();
   const seenTemplates = new Set<string>();
   const seenTypes = new Set<string>();
-  for (const entry of unique) {
+  // The page the explorer chose to stand for its type comes first, so that type is represented by that page.
+  const first = new Set(representatives.values());
+  const ordered = [...unique.filter((entry) => first.has(entry.page.url)), ...unique.filter((entry) => !first.has(entry.page.url))];
+  // WCAG-EM asks for the start page, the contact page and the like once each, not for every page whose path holds the word:
+  // per kind the page highest up in the site, so /toegankelijkheid and not a tag page or a blog post that names it.
+  const depth = (url: string): number => new URL(url).pathname.split("/").filter(Boolean).length;
+  const commonOf = new Map<string, string>();
+  for (const [pattern, label] of COMMON_PAGES) {
+    const candidates = unique.filter((entry) => {
+      const path = new URL(entry.page.url).pathname;
+      return entry.page.url !== inventory.notFoundProbe && !entry.page.foundVia.every((via) => via.startsWith("iframe:")) && !commonOf.has(entry.page.url) && pattern.test(path === "/" ? "" : path);
+    });
+    const best = candidates.sort((a, b) => depth(a.page.url) - depth(b.page.url) || a.page.url.length - b.page.url.length || a.page.url.localeCompare(b.page.url))[0];
+    if (best) commonOf.set(best.page.url, label);
+  }
+  for (const entry of ordered) {
     const type = typeOf.get(entry.page.url);
-    const path = new URL(entry.page.url).pathname;
-    const common = COMMON_PAGES.find(([pattern]) => pattern.test(path === "/" ? "" : path));
+    const common = commonOf.get(entry.page.url);
     const isFrame = entry.page.foundVia.every((via) => via.startsWith("iframe:"));
     if (isFrame) chosen.set(entry.page.url, toItem(entry, "embedded", "ingesloten venster"));
     else if (entry.page.url === inventory.notFoundProbe) chosen.set(entry.page.url, toItem(entry, "structured", "foutpagina (404)"));
-    else if (common) chosen.set(entry.page.url, toItem(entry, "structured", common[1]));
-    else if (!seenTemplates.has(entry.page.templateHash) || (type !== undefined && !seenTypes.has(type))) chosen.set(entry.page.url, toItem(entry, "structured", "eerste pagina van dit paginatype"));
+    else if (common) chosen.set(entry.page.url, toItem(entry, "structured", common));
+    // With a site model the page types say what is the same: a template hash that differs per page does not add one.
+    else if (type !== undefined ? !seenTypes.has(type) : !seenTemplates.has(entry.page.templateHash)) chosen.set(entry.page.url, toItem(entry, "structured", "eerste pagina van dit paginatype"));
     seenTemplates.add(entry.page.templateHash);
     if (type !== undefined && chosen.has(entry.page.url)) seenTypes.add(type);
   }

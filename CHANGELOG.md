@@ -4,6 +4,10 @@ Wat er per versie van loep is veranderd. De versie staat op het voorblad en onde
 
 ## Nog niet uitgebracht
 
+### Wat een uitkomst kan veranderen
+
+- De steekproef van een grote site met een sitemodel heeft per paginatype één pagina, de pagina die de verkenner voor dat type koos, plus de vaste pagina's en een willekeurig tiende. Eerder kreeg elke pagina met een eigen opbouw (template-hash) er een plek in, ook als het sitemodel haar bij een bekend paginatype zette. Op een site waar die hash per pagina verschilt, kwamen zo 223 pagina's in de steekproef bij 11 paginatypen, en duurde de veegronde bijna tien uur. Ook kwam elke pagina met "privacy", "contact" of "toegankelijkheid" in het pad erin, tot tagpagina's en blogberichten aan toe; nu komt elke soort vaste pagina één keer, de pagina die het hoogst in de site staat. "Hulppagina" telt alleen het hele woord "help" (#48).
+
 ## 0.3.0 (2026-10-15)
 
 Deze versie is uitgebracht zonder nieuwe meting op de testsite, net als 0.2.0. De wijzigingen die een uitkomst kunnen veranderen, zijn dus nog niet vergeleken met 0.2.0.
