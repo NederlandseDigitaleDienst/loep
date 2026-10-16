@@ -122,9 +122,10 @@ const MAX_HOVER_TARGETS = 400;
 const HOVER_EXAMPLES_PER_KIND = 2;
 const MOBILE = { width: 360, height: 740 };
 /**
- * How many kinds of control the press probe tries on the pages; the output names what was left out. A link counts as a
- * kind per name, so a site of thirty pages reaches three hundred. The states of the model are not held to it: they are
- * few, they come last, and a form that only exists in a state has the controls where a press matters most.
+ * How many kinds of control the press probe tries on the pages; the output names what was left out. A kind is a look,
+ * a place and the code that hears the press, not a name, so the number follows the design of a site and not its size.
+ * The states of the model are not held to it: they are few, they come last, and a form that only exists in a state has
+ * the controls where a press matters most.
  */
 const MAX_DOWN_TARGETS = 600;
 /** A probe in a state of the model opens the state again when what it did closed it, at most this often. */
@@ -371,9 +372,10 @@ interface HoverRows {
 }
 
 /**
- * Point at controls and give them focus, a few of each kind. Controls that are the same
- * element in the same place with the same classes, attributes and colours are one kind; a
- * control with only a pictogram or with a title or description is always pointed at itself.
+ * Point at controls and give them focus, a few of each kind. Controls that look and behave
+ * alike are one kind: the same role, region, component, size and look, the same change under
+ * the pointer and with focus, and the same listeners (see `hoverKind` in the in-page library).
+ * A control with only a pictogram or with a title or description is always pointed at itself.
  * What was seen in an earlier place is not pointed at again in a later one.
  */
 export class HoverRun implements HoverRows {

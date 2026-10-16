@@ -10,7 +10,7 @@ import { INPAGE_PATH, launchBrowser, loadPage, newContext } from "../src/browser
 import { DownRun, HoverRun, inState } from "../src/commands/states.ts";
 import type { StateOpener } from "../src/commands/modelsweep.ts";
 import { controlsOnlyWithSpacing, overflowProbe, textSpacing, visibleControlKeys, type ContentInventory } from "../src/instruments/overflow.ts";
-import { downEventTargets } from "../src/instruments/pointer.ts";
+import { downEventTargets, downKind } from "../src/instruments/pointer.ts";
 import { holds } from "../src/session/recipe.ts";
 import type { Surface } from "../src/session/surface.ts";
 import { startServer, type FixtureServer } from "./fixtures/session-site/server.ts";
@@ -94,6 +94,42 @@ test("the hover probe points at a few controls of each kind, at every button wit
   assert.ok(run.hover.some((row) => row.viewport === "smal"));
   await narrow.context().close();
   await page.context().close();
+});
+
+test("controls that look and behave alike are one kind, whatever their classes and attributes; a control that looks or behaves otherwise stays apart", async () => {
+  const page = await open("/same-kinds.html");
+  const run = new HoverRun(out);
+  await run.on({ label: "P1", narrow: false, shot: "same-kinds" }, async () => page);
+  const coverage = run.coverage();
+  // Before, every class and attribute counted: seven card links with seven sets of classes were seven kinds.
+  const classSets = await page.evaluate(() => new Set([...document.querySelectorAll(".kaart a")].map((link) => link.className)).size);
+  assert.equal(classSets, 7);
+  // Now: the six card links that change alike under the pointer, the one that turns pale, the two large buttons, the small one, and the four answers.
+  assert.equal(coverage.found, 14);
+  assert.equal(coverage.kinds, 5);
+  assert.equal(coverage.examined, 8);
+  const pointedAt = new Set(run.contrast.map((entry) => entry.control));
+  assert.ok([...pointedAt].some((control) => control.includes("Uitgelicht")), "the link with its own style under the pointer is a kind of its own, and is pointed at");
+  assert.ok(run.contrast.some((entry) => entry.control.includes("Uitgelicht") && entry.trigger === "hover" && entry.texts.some((text) => text.ratio !== null && text.ratio < text.required)), "its pale text under the pointer is measured");
+  assert.ok([...pointedAt].some((control) => control.includes("Meer")), "a button of another size is a kind of its own");
+
+  // The press probe: three answers with the same code on the press are one kind, the button with other code another.
+  const targets = await downEventTargets(page, new Set());
+  const kinds = new Set(targets.map(downKind));
+  assert.deepEqual([targets.length, kinds.size], [4, 2]);
+  const pressing = new DownRun();
+  let current: Page | null = page;
+  const source = async (fresh = false): Promise<Page> => {
+    if (current && !fresh) return current;
+    await current?.context().close();
+    current = await open("/same-kinds.html");
+    return current;
+  };
+  const found = await pressing.on({ label: "P1", narrow: false, shot: "same-kinds" }, source, new Set(), false);
+  assert.deepEqual([found.kindsFound, found.pressed], [2, 2]);
+  const answered = pressing.results.find((entry) => entry.changeOnDown !== null)!;
+  assert.equal(answered.undoneByReleasingElsewhere, false, "the answer that counts on the press is still found");
+  await current?.context().close();
 });
 
 test("in an opened state the probes take what is new there, and open the state again when a step closed it", async () => {

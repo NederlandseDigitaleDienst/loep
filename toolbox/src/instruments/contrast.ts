@@ -236,7 +236,7 @@ export async function elementContrast(page: Page, target: string[], options: { t
     const same = (item: { path: string[] }): boolean => item.path.join(" >>> ") === chain.join(" >>> ");
     return {
       runs,
-      control: textOnly ? null : ((library.hoverTargets as () => { path: string[] }[])().find(same) ?? null),
+      control: textOnly ? null : ((library.hoverTargets as (options: { kinds: boolean }) => { path: string[] }[])({ kinds: false }).find(same) ?? null),
       graphic: textOnly ? null : ((library.graphicBoxes as () => { path: string[] }[])().find(same) ?? null),
       scroll: [window.scrollX, window.scrollY] as [number, number],
       original,
