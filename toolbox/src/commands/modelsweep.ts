@@ -10,11 +10,12 @@ import { timeLimits, timeLimitsAfterSubmit } from "../instruments/timelimits.ts"
 import { pageContrast } from "../instruments/contrast.ts";
 import { focusCoveredInState, tabWalk } from "../instruments/keyboard.ts";
 import { languagesOf } from "../instruments/languages.ts";
-import { picturesWithText, type PictureCache } from "../instruments/pictures.ts";
+import { picturesWithText, recountRecognised, type PictureCache, type PictureReport } from "../instruments/pictures.ts";
 import { visualOrder } from "../instruments/order.ts";
 import { controlKey, overflowAtSize, spacingEffect, spacingFromLoad, TEXT_SPACING_NOTE, type ContentInventory, type Control } from "../instruments/overflow.ts";
 import { withinTime } from "../instruments/limit.ts";
-import { sha256File, writeFileAtomic, writeJson } from "../lib/canonical.ts";
+import { readJson, sha256File, writeFileAtomic, writeJson } from "../lib/canonical.ts";
+import { inOrder } from "../lib/atonce.ts";
 import { runEngines } from "../lib/engines.ts";
 import { frameStanding, loadSiteModel, SITE_MODEL_FILE, type Postcondition, type SiteModel } from "../lib/sitemodel.ts";
 import { blockersKey, readStamp, STATE_STAMP, stateKey } from "../lib/sweepstamp.ts";
@@ -235,20 +236,39 @@ export class ModelSweep {
   private readonly env: Env;
   private readonly runDir: string;
   private readonly recipes: Record<string, Recipe>;
-  private readonly storage: Storage = { cookies: [], origins: [] };
-  private readonly seededBlockers: string[] = [];
+  private readonly storage: Storage;
+  private readonly seededBlockers: string[];
   private readonly refusedWrites = new Map<string, NonNullable<SiteStates["refusedWrites"]>[number]>();
   /** Ids of the states an earlier sweep captured and this one kept, because their recipes did not change. */
   readonly reusedStates: string[] = [];
   /** What text recognition read per picture in this sweep: the same picture on another page or in a state is read once. */
-  readonly pictureCache: PictureCache = new Map();
+  readonly pictureCache: PictureCache;
 
-  private constructor(runDir: string, env: Env, model: SiteModel, recipes: Record<string, Recipe>, guard: WriteGuard) {
+  private constructor(runDir: string, env: Env, model: SiteModel, recipes: Record<string, Recipe>, guard: WriteGuard, shared?: { storage: Storage; seededBlockers: string[]; pictureCache: PictureCache }) {
     this.runDir = runDir;
     this.env = env;
     this.model = model;
     this.recipes = recipes;
     this.guard = guard;
+    this.storage = shared?.storage ?? { cookies: [], origins: [] };
+    this.seededBlockers = shared?.seededBlockers ?? [];
+    this.pictureCache = shared?.pictureCache ?? new Map();
+  }
+
+  /**
+   * The same sweep for one page, pass or group of probes that runs next to others: the same model,
+   * recipes, seeded cookies and pictures read, but a guard of its own, so that one page that silences
+   * its sockets does not let another speak, and notes of its own. `absorb` takes the notes over, in
+   * the order the pages have, so that they read as they do with one page after the other.
+   */
+  fork(): ModelSweep {
+    return new ModelSweep(this.runDir, this.env, this.model, this.recipes, { active: false, blocked: 0 }, { storage: this.storage, seededBlockers: this.seededBlockers, pictureCache: this.pictureCache });
+  }
+
+  /** Take over what a fork noted: the blockers it closed, the write requests it refused and the socket messages it held back. */
+  absorb(fork: ModelSweep): void {
+    this.restore(fork.since({ dismissals: 0, refused: new Map() }));
+    this.guard.blocked += fork.guard.blocked;
   }
 
   /** Throws when the run has no site model, or has one that was not checked. */
@@ -716,48 +736,59 @@ export class ModelSweep {
   /**
    * Capture every state of the model once. A state an earlier sweep captured with the same
    * recipe and postcondition is kept as it is; with `fresh` every state is captured again.
+   * With `atOnce` more than one state is captured at the same time; what is written is the same.
+   * `seenPictures` holds the pictures the pages of this sweep read: a state counts a picture as read only when no page did.
    */
-  async captureStates(options: { fresh?: boolean } = {}): Promise<CapturedState[]> {
-    const states: CapturedState[] = [];
+  async captureStates(options: { fresh?: boolean; atOnce?: number; seenPictures?: Set<string> } = {}): Promise<CapturedState[]> {
     const openers = this.openers();
     const root = join(this.runDir, "site-states");
     // What an earlier sweep captured under names the model no longer has must not linger next to the new states.
     if (options.fresh) await rm(root, { recursive: true, force: true });
     else for (const name of existsSync(root) ? await readdir(root) : []) if (!openers.some((opener) => opener.base.id === name)) await rm(join(root, name), { recursive: true, force: true });
-    for (const opener of openers) {
-      if (!opener.open) {
-        states.push({ ...opener.base, refused: [], url: null, viewport: null, reached: false, reasonNl: `de verkenner kon het niet openen: ${opener.notOpenedNl ?? ""}`, stillReachedAfterMeasuring: null, dir: null, files: {}, engineSummary: null, contrast: null, largestOverlayShare: null });
-        continue;
-      }
-      const stampPath = join(root, opener.base.id, STATE_STAMP);
-      const stamp = await readStamp<{ key: string; state: CapturedState }>(stampPath);
-      let state: CapturedState;
-      if (stamp && stamp.key === opener.key && stamp.state.reached) {
-        // The measurement stands; what the model says about the state (the page types it belongs to) is taken from the model as it is now.
-        state = { ...stamp.state, ...opener.base };
-        this.reusedStates.push(state.id);
-        process.stderr.write(`sitemodel: ${state.id} al vastgelegd met dit recept, niet opnieuw gemeten\n`);
-      } else {
-        await rm(join(root, opener.base.id), { recursive: true, force: true });
-        state = await this.capture({ ...opener, open: opener.open });
-        // A state that did not open is tried again by the next sweep.
-        if (state.reached) await writeJson(stampPath, { key: opener.key, state });
-      }
-      // A component on each page type it stands on; the measurement of the state itself stands as it is.
-      if (state.reached && state.kind === "component") {
-        const before = JSON.stringify(state.perPageType ?? null);
-        state.perPageType = await this.instances(opener, state);
-        if (JSON.stringify(state.perPageType) !== before) await writeJson(stampPath, { key: opener.key, state });
-      }
-      // A process belongs to the page type it ends on, or else the one it started on.
-      if (state.pageTypes.length === 0) {
-        const typeOf = (url: string | null | undefined): string | undefined => this.model.pageTypes.find((type) => url !== null && url !== undefined && type.pages.includes(url))?.id;
-        const type = typeOf(state.url) ?? typeOf(opener.startUrl);
-        if (type) state.pageTypes = [type];
-      }
-      states.push(state);
+    const captured = await inOrder(openers.length, options.atOnce ?? 1, (index) => this.captureOne(openers[index]!, root), (_, entry) => void (entry.reused && this.reusedStates.push(entry.state.id)));
+    // A picture that two states read at the same time counts where it would have with one state after the other.
+    const seen = options.seenPictures ?? new Set<string>();
+    for (const { state, reused } of captured) {
+      const path = state.files.pictures;
+      if (reused || !path || !existsSync(join(this.runDir, path))) continue;
+      const report = await readJson<PictureReport & Record<string, unknown>>(join(this.runDir, path));
+      if (recountRecognised([report], seen).length > 0) await writeJson(join(this.runDir, path), report);
     }
-    return states;
+    return captured.map((entry) => entry.state);
+  }
+
+  /** One state: kept from an earlier sweep, or captured now. */
+  private async captureOne(opener: StateOpener, root: string): Promise<{ state: CapturedState; reused: boolean }> {
+    if (!opener.open) {
+      return { state: { ...opener.base, refused: [], url: null, viewport: null, reached: false, reasonNl: `de verkenner kon het niet openen: ${opener.notOpenedNl ?? ""}`, stillReachedAfterMeasuring: null, dir: null, files: {}, engineSummary: null, contrast: null, largestOverlayShare: null }, reused: false };
+    }
+    const stampPath = join(root, opener.base.id, STATE_STAMP);
+    const stamp = await readStamp<{ key: string; state: CapturedState }>(stampPath);
+    let state: CapturedState;
+    const reused = stamp !== null && stamp.key === opener.key && stamp.state.reached;
+    if (reused) {
+      // The measurement stands; what the model says about the state (the page types it belongs to) is taken from the model as it is now.
+      state = { ...stamp.state, ...opener.base };
+      process.stderr.write(`sitemodel: ${state.id} al vastgelegd met dit recept, niet opnieuw gemeten\n`);
+    } else {
+      await rm(join(root, opener.base.id), { recursive: true, force: true });
+      state = await this.capture({ ...opener, open: opener.open });
+      // A state that did not open is tried again by the next sweep.
+      if (state.reached) await writeJson(stampPath, { key: opener.key, state });
+    }
+    // A component on each page type it stands on; the measurement of the state itself stands as it is.
+    if (state.reached && state.kind === "component") {
+      const before = JSON.stringify(state.perPageType ?? null);
+      state.perPageType = await this.instances(opener, state);
+      if (JSON.stringify(state.perPageType) !== before) await writeJson(stampPath, { key: opener.key, state });
+    }
+    // A process belongs to the page type it ends on, or else the one it started on.
+    if (state.pageTypes.length === 0) {
+      const typeOf = (url: string | null | undefined): string | undefined => this.model.pageTypes.find((type) => url !== null && url !== undefined && type.pages.includes(url))?.id;
+      const type = typeOf(state.url) ?? typeOf(opener.startUrl);
+      if (type) state.pageTypes = [type];
+    }
+    return { state, reused };
   }
 
   async write(states: CapturedState[]): Promise<SiteStates> {

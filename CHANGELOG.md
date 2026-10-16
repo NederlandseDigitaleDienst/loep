@@ -18,6 +18,13 @@ Wat er per versie van loep is veranderd. De versie staat op het voorblad en onde
 ### Wat een uitkomst kan veranderen
 
 - Een zoekvraag die als POST naar een zoekdienst gaat (zoals `POST /multi_search` of `POST /1/indexes/<naam>/queries`), telt niet meer als versturen. Of een POST een zoekvraag is, beslist loep aan de vorm van de body, per verzoek, voor Typesense, Algolia, Elasticsearch en OpenSearch, Meilisearch en GraphQL met alleen query's. De verkenner legt zo'n verzoek vast in het sitemodel onder `readRequests`, met methode, origin, pad, dienst, een reden en de waarneming waarin het werd tegengehouden. `check-site` toetst de regel: alleen POST, hooguit één jokerteken en nooit aan het eind, geen woord in het pad dat op schrijven wijst, en een waarneming waarin loep de body als zoekvraag aan die dienst herkende. Na een geslaagde controle laat de bewaking een POST naar dat adres alleen door als de body een zoekvraag aan die dienst is; een andere body wordt tegengehouden en vastgelegd met de reden. Al het andere blijft tegengehouden, en een formulier versturen blijft verboden zonder verklaarde testomgeving. Een zoekfunctie met een body die loep niet herkent, blijft tegengehouden. Zoekresultaten zijn dan te onderzoeken, met de melding met het aantal (4.1.3), de focus na zoeken (2.4.3) en zoeken als tweede manier (2.4.5). Het manifest, het dossier en het rapport noemen welke adressen voor leesverzoeken zijn toegelaten (#49).
+### Wat een uitkomst kan veranderen
+
+- `states` doet zijn proeven in vijf groepen (formulieren en knoppen, toetsen op de pagina's, toetsen in de toestanden, aanwijzen en indrukken, pijltoetsen), elk in een eigen browsercontext. Eerder deelden de groepen één context, en zag een latere groep wat een eerdere in de opslag van de browser had achtergelaten, zoals een instelling die de proef had gewijzigd.
+
+### Verder
+
+- De veegronde kan pagina's tegelijk meten: `collect`, `contrast` en `states` met `--at-once <n>`, ook via `just sweep RUN --at-once <n>` (#48). `collect` meet dan n pagina's en n toestanden uit het sitemodel tegelijk, `contrast` zijn vier rondes en `states` zijn vijf groepen proeven. Nooit meer dan het sessieproces van de run sessies toelaat, en met dezelfde tijd tussen twee navigaties naar de site als de sessies. Wat er wordt weggeschreven, in dezelfde volgorde en met dezelfde stempels, is hetzelfde als met één tegelijk. Op vier pagina's van de testsite ging `collect` van 209 naar 59 seconden, `contrast` van 30 naar 9 en `states` van 200 naar 118. Standaard blijft het één tegelijk; de skill gebruikt het alleen als de eigenaar meer agents toestaat. `estimate --at-once <n>` rekent de veegronde dan ook met n tegelijk.
 
 ## 0.3.0 (2026-10-15)
 

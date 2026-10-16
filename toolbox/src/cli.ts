@@ -20,12 +20,18 @@ const USAGE = `loep <command> [options]
   explore --run <run>                    Write the task for the agent that maps the site before it is measured
   check-site --run <run>                 Validate site.json and replay every recipe in it; non-zero exit on problems
   sample --run <run> [--seed <text>]     Choose the pages to evaluate (all of them on a small site)
-  collect --run <run> [--fresh]          Gather facts, engine results and probe evidence per page. The sweep (collect, contrast,
+  collect --run <run> [--fresh] [--at-once <n>]
+                                         Gather facts, engine results and probe evidence per page. The sweep (collect, contrast,
                                          states, gate) needs the site model of explore. A second run of collect, contrast or
                                          states keeps what is still valid: a page with the same content and blockers, a state
-                                         with the same recipe. --fresh measures everything again
-  contrast --run <run> [--fresh]         Measure text contrast on screenshots, in light and dark
-  states --run <run> [--fresh]           Probe what only shows after interaction: dialogs, form errors, keys, hover
+                                         with the same recipe. --fresh measures everything again. --at-once measures n pages
+                                         (contrast: passes, states: groups of probes) at the same time, never more than the
+                                         session process of the run allows sessions, with the same time between navigations;
+                                         what is written is the same as with one at a time (default 1)
+  contrast --run <run> [--fresh] [--at-once <n>]
+                                         Measure text contrast on screenshots, in light and dark
+  states --run <run> [--fresh] [--at-once <n>]
+                                         Probe what only shows after interaction: dialogs, form errors, keys, hover
   documents --run <run>                  Fetch and measure the documents of the sample (pdf, office and plain text files): tags, title,
                                          language, headings, text alternatives, tables, links, PDF/UA-1 with veraPDF
   gate --run <run> [--out <dir>]         Decide whether the evidence is fit to judge on; exit 1 when it is not, 2 when
@@ -45,7 +51,8 @@ const USAGE = `loep <command> [options]
   pending --run <run>                    The phase the run is in and the tasks that are still open, as JSON
   estimate --run <run> [--at-once <n>] [--groups] [--json]
                                          The expected time per part and in total, computed from the inventory (sharper after
-                                         sample, explore and the sweep), next to what the run measured so far. Writes nothing
+                                         sample, explore and the sweep), next to what the run measured so far. --at-once is the
+                                         number of agents at the same time, and of pages in the sweep. Writes nothing
   gaps --run <run> [<run> ...] [--json]  Every open point of one or more runs, per kind (veegronde mist, budget op, proef
                                          werkte niet, versturen niet toegestaan, mens nodig, keuze nodig) and per criterion,
                                          equal points taken together and counted: the work list for whoever improves the
@@ -93,6 +100,14 @@ Options:
 Comparing per finding has its own steps: loep compare --findings --help
 A browser session for an agent has its own commands: loep session --help
 `;
+
+/** The number after `--at-once`: a whole number of 1 or more, of what the command does at the same time. */
+function parseAtOnce(text: string | undefined, what: string): number | undefined {
+  if (text === undefined) return undefined;
+  const value = Number(text);
+  if (!Number.isInteger(value) || value < 1) throw new Error(`--at-once is een geheel aantal ${what}, 1 of meer`);
+  return value;
+}
 
 const NOT_EXPLORED_NL = "deze run heeft geen sitemodel (site.json): verken de site eerst met explore en check-site, en draai daarna collect, contrast, states en gate";
 /** The commands that measure or judge a site that was mapped first. */
@@ -280,13 +295,14 @@ async function main(): Promise<void> {
     case "collect": {
       if (!values.run) throw new Error("collect needs --run <run>");
       const { collect } = await import("./commands/collect.ts");
-      await collect({ run: values.run, only: values.only, fresh: values.fresh });
+      await collect({ run: values.run, only: values.only, fresh: values.fresh, atOnce: parseAtOnce(values["at-once"], "pagina's") });
       return;
     }
     case "contrast": {
       if (!values.run) throw new Error("contrast needs --run <run>");
       const { contrast } = await import("./commands/contrast.ts");
-      const pages = await contrast(values.run, { fresh: values.fresh });
+      const atOnce = parseAtOnce(values["at-once"], "rondes");
+      const pages = await contrast(values.run, { fresh: values.fresh, ...(atOnce ? { atOnce } : {}) });
       const all = pages.flatMap((page) => page.measurements);
       const count = (outcome: string): number => all.filter((entry) => entry.outcome === outcome).length;
       process.stdout.write(`${all.length} stukken tekst (standaardvenster en 320 breed, licht en donker): ${count("passed")} voldoende, ${count("failed")} onvoldoende, ${count("cantTell")} niet te meten, ${count("exempt")} uitgezonderd\n`);
@@ -295,7 +311,8 @@ async function main(): Promise<void> {
     case "states": {
       if (!values.run) throw new Error("states needs --run <run>");
       const { states } = await import("./commands/states.ts");
-      const result = await states(values.run, { fresh: values.fresh });
+      const atOnce = parseAtOnce(values["at-once"], "groepen proeven");
+      const result = await states(values.run, { fresh: values.fresh, ...(atOnce ? { atOnce } : {}) });
       process.stdout.write(`${result.examined.triggers} triggers, ${result.dialogs.filter((dialog) => dialog.opened).length} opened something, ${result.examined.forms} forms, ${result.singleKeys.reactions.length} key reactions, ${result.hover.length} hover appearances\n`);
       // A limit that cut something off is said here too, not only in the dossier.
       const press = result.downEventCoverage;
@@ -354,8 +371,7 @@ async function main(): Promise<void> {
     }
     case "estimate": {
       if (!values.run) throw new Error("estimate needs --run <run>");
-      const atOnce = values["at-once"] === undefined ? undefined : Number(values["at-once"]);
-      if (atOnce !== undefined && (!Number.isInteger(atOnce) || atOnce < 1)) throw new Error("--at-once is een geheel aantal agents, 1 of meer");
+      const atOnce = parseAtOnce(values["at-once"], "agents");
       const { estimateOutput } = await import("./commands/estimate.ts");
       // Whether the virtual Mac for VoiceOver is there: then the estimate says when to start it.
       const { lumeGuest } = await import("./lib/voiceover.ts");

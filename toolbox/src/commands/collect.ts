@@ -15,7 +15,8 @@ import { controlsOnlyWithSpacing, overflowProbe, textSpacing, visibleControlKeys
 import { CONTENT_VERSION, pageContentPath, pageKey, pageStampPath, readStamp, remeasureReason, SWEEP_STAMP_VERSION, type ContentNow, type PageStamp } from "../lib/sweepstamp.ts";
 import { languagesOf } from "../instruments/languages.ts";
 import { visualOrder } from "../instruments/order.ts";
-import { picturesWithText } from "../instruments/pictures.ts";
+import { picturesWithText, recountRecognised, type PictureReport } from "../instruments/pictures.ts";
+import { inOrder, sweepAtOnce, withSpacing } from "../lib/atonce.ts";
 import { betweenWidths } from "../instruments/widths.ts";
 import { timeLimits } from "../instruments/timelimits.ts";
 import { ModelSweep } from "./modelsweep.ts";
@@ -33,6 +34,14 @@ export interface CollectOptions {
   only?: string | undefined;
   /** Measure everything again, also what an earlier sweep measured and is still valid. */
   fresh?: boolean | undefined;
+  /** Pages measured at the same time, at most what the session process of the run allows sessions. Default 1. */
+  atOnce?: number | undefined;
+}
+
+/** What measuring a page noted besides its files: the hash of its content and the pictures it read. */
+interface Noted {
+  content?: ContentNow;
+  pictures?: PictureReport;
 }
 
 /** How long the content of a page may keep changing after it loaded, and how often it is read meanwhile. */
@@ -73,7 +82,7 @@ async function contentNow(browser: Browser, entry: SampleItem, sweep: ModelSweep
 }
 
 /** `sweep` closes what covers the page before anything is measured. */
-async function collectPage(browser: Browser, entry: SampleItem, runDir: string, sweep: ModelSweep, noted: { content?: ContentNow } = {}): Promise<Record<string, unknown>> {
+async function collectPage(browser: Browser, entry: SampleItem, runDir: string, sweep: ModelSweep, noted: Noted = {}): Promise<Record<string, unknown>> {
   const dir = join(runDir, "pages", entry.slug);
   const summary: Record<string, unknown> = { url: entry.url, slug: entry.slug };
 
@@ -116,6 +125,7 @@ async function collectPage(browser: Browser, entry: SampleItem, runDir: string, 
         // Every picture cut out and read with text recognition (1.4.5); this scrolls, so it comes after what is measured in place.
         const pictures = await picturesWithText(page, join(dir, "probes", "pictures"), "probes/pictures", sweep.pictureCache);
         await writeJson(join(dir, "probes", "pictures.json"), pictures);
+        noted.pictures = pictures;
         summary.pictures = { found: pictures.pictures.length, recognised: pictures.recognised };
         // The arrow keys can change the page itself: a slide deck turns to the next slide on every
         // stop. So they come after everything that shows the page as it loaded.
@@ -246,6 +256,8 @@ export async function collect(options: CollectOptions): Promise<void> {
   const startedAt = stepStart();
   const sample = await readJson<Sample>(join(options.run, "sample.json"));
   const pages = sample.items.filter((item) => !options.only || item.url.includes(options.only));
+  const settings = sweepAtOnce(options.run, options.atOnce ?? 1);
+  if (settings.noteNl) process.stderr.write(`collect: ${settings.noteNl}\n`);
   const browser = await launchBrowser();
   const summaries: Record<string, unknown>[] = [];
   try {
@@ -255,53 +267,78 @@ export async function collect(options: CollectOptions): Promise<void> {
     const watch = startSessionWatch(options.run);
     if (watch) process.stderr.write(watch.status === "running" ? `sessieproef loopt (proces ${watch.pid}); de stand staat in ${SESSION_WATCH_FILE}\n` : `sessieproef draait niet: ${watch.reasonNl ?? watch.status}\n`);
     const sweep = await ModelSweep.load(options.run, browser);
+    if (settings.atOnce > 1) process.stderr.write(`collect: ${settings.atOnce} pagina's tegelijk, ${settings.navigationDelayMs} ms tussen twee navigaties naar dezelfde site\n`);
     let reused = 0;
-    for (const [index, entry] of pages.entries()) {
-      const started = Date.now();
-      // A page an earlier sweep measured under the same blockers, and that still has the same content, is not measured again.
-      const key = pageKey(sweep.blockersKey, entry);
-      const stamp = options.fresh ? null : await readStamp<PageStamp>(pageStampPath(options.run, entry.slug));
-      const reason = options.fresh
-        ? "met --fresh wordt alles opnieuw gemeten"
-        : await remeasureReason(
-            stamp,
-            key,
-            sweep.blockersKey,
-            () => contentNow(browser, entry, sweep),
-            () => readFile(pageContentPath(options.run, entry.slug), "utf8").then((text) => text.replace(/\n$/, ""), () => null),
-          );
-      if (stamp && reason === null) {
-        sweep.restore(stamp as Parameters<ModelSweep["restore"]>[0]);
-        summaries.push(stamp.summary);
-        reused++;
-        process.stderr.write(`collect ${index + 1}/${pages.length} ${entry.url} niet veranderd, niet opnieuw gemeten (${Date.now() - started}ms)\n`);
-        continue;
-      }
-      process.stderr.write(`collect ${index + 1}/${pages.length} ${entry.url} opnieuw gemeten: ${reason}\n`);
-      const mark = sweep.mark();
-      const noted: { content?: ContentNow } = {};
-      // A page gets one retry: a page that loaded too slowly once, or a crashed renderer, must not cost the whole run.
-      // A page with many measurements takes more than a minute: say every half minute that it still runs.
-      const summary = await sayingItRuns(`collect ${index + 1}/${pages.length} ${entry.url}`, () => retryOnce(entry.url, () => collectPage(browser, entry, options.run, sweep, noted)));
-      summaries.push(summary);
-      if (noted.content) {
-        await writeFileAtomic(pageContentPath(options.run, entry.slug), `${noted.content.snapshot}\n`);
-        await writeJson(pageStampPath(options.run, entry.slug), { key, version: SWEEP_STAMP_VERSION, contentVersion: CONTENT_VERSION, blockers: sweep.blockersKey, contentSha256: noted.content.sha256, summary, ...sweep.since(mark) } satisfies PageStamp);
-      }
-      process.stderr.write(`collect ${index + 1}/${pages.length} ${entry.url} ${Date.now() - started}ms\n`);
-    }
+    // The pictures read on the pages before: a picture counts as read on the first page that has it, as with one page after the other.
+    const seenPictures = new Set<string>();
+    type Measured = { summary: Record<string, unknown>; key: string; noted: Noted; reused: boolean; reason: string | null; started: number; scope: ModelSweep };
+    await withSpacing(settings, () =>
+      inOrder(
+        pages.length,
+        settings.atOnce,
+        async (index): Promise<Measured> => {
+          const entry = pages[index]!;
+          const started = Date.now();
+          // Each page notes the blockers it closed and the writes it refused apart; they are taken over in the order of the pages.
+          const scope = sweep.fork();
+          // A page an earlier sweep measured under the same blockers, and that still has the same content, is not measured again.
+          const key = pageKey(sweep.blockersKey, entry);
+          const stamp = options.fresh ? null : await readStamp<PageStamp>(pageStampPath(options.run, entry.slug));
+          const reason = options.fresh
+            ? "met --fresh wordt alles opnieuw gemeten"
+            : await remeasureReason(
+                stamp,
+                key,
+                sweep.blockersKey,
+                () => contentNow(browser, entry, scope),
+                () => readFile(pageContentPath(options.run, entry.slug), "utf8").then((text) => text.replace(/\n$/, ""), () => null),
+              );
+          if (stamp && reason === null) {
+            scope.restore(stamp as Parameters<ModelSweep["restore"]>[0]);
+            return { summary: stamp.summary, key, noted: {}, reused: true, reason, started, scope };
+          }
+          const noted: Noted = {};
+          // A page gets one retry: a page that loaded too slowly once, or a crashed renderer, must not cost the whole run.
+          // A page with many measurements takes more than a minute: say every half minute that it still runs.
+          const summary = await sayingItRuns(`collect ${index + 1}/${pages.length} ${entry.url}`, () => retryOnce(entry.url, () => collectPage(browser, entry, options.run, scope, noted)));
+          return { summary, key, noted, reused: false, reason, started, scope };
+        },
+        async (index, measured) => {
+          const entry = pages[index]!;
+          sweep.absorb(measured.scope);
+          summaries.push(measured.summary);
+          if (measured.reused) {
+            reused++;
+            process.stderr.write(`collect ${index + 1}/${pages.length} ${entry.url} niet veranderd, niet opnieuw gemeten (${Date.now() - measured.started}ms)\n`);
+            return;
+          }
+          process.stderr.write(`collect ${index + 1}/${pages.length} ${entry.url} opnieuw gemeten: ${measured.reason}\n`);
+          const pictures = measured.noted.pictures;
+          if (pictures && recountRecognised([pictures], seenPictures).length > 0) {
+            await writeJson(join(options.run, "pages", entry.slug, "probes", "pictures.json"), pictures);
+            measured.summary.pictures = { found: pictures.pictures.length, recognised: pictures.recognised };
+          }
+          const content = measured.noted.content;
+          if (content) {
+            await writeFileAtomic(pageContentPath(options.run, entry.slug), `${content.snapshot}\n`);
+            await writeJson(pageStampPath(options.run, entry.slug), { key: measured.key, version: SWEEP_STAMP_VERSION, contentVersion: CONTENT_VERSION, blockers: sweep.blockersKey, contentSha256: content.sha256, summary: measured.summary, ...measured.scope.since({ dismissals: 0, refused: new Map() }) } satisfies PageStamp);
+          }
+          process.stderr.write(`collect ${index + 1}/${pages.length} ${entry.url} ${Date.now() - measured.started}ms\n`);
+        },
+      ),
+    );
     if (!options.only) await writeJson(join(options.run, "collect.json"), { rendering: RENDERING, pages: summaries });
     // Each blocker as it stands on a page, and each component and process as its recipe opens it.
     const captured = !options.only
       ? await sayingItRuns("collect toestanden uit het sitemodel", async () => {
-          const states = await sweep.captureStates({ fresh: options.fresh === true });
+          const states = await withSpacing(settings, () => sweep.captureStates({ fresh: options.fresh === true, atOnce: settings.atOnce, seenPictures }));
           // A state that did not open because the session ran out is not written down as one that cannot be reached.
           await confirmLogin(browser);
           return sweep.write(states);
         })
       : null;
     const kept = reused + sweep.reusedStates.length > 0 ? { reusedPages: reused, reusedStates: sweep.reusedStates.length } : {};
-    await writeManifest(options.run, { command: "collect", startedAt, pages: pages.length, only: options.only ?? null, ...(captured ? { siteStates: captured.states.length, siteStatesReached: captured.states.filter((state) => state.reached).length } : {}), ...kept }, browser.version());
+    await writeManifest(options.run, { command: "collect", startedAt, pages: pages.length, only: options.only ?? null, ...(settings.atOnce > 1 ? { atOnce: settings.atOnce } : {}), ...(captured ? { siteStates: captured.states.length, siteStatesReached: captured.states.filter((state) => state.reached).length } : {}), ...kept }, browser.version());
   } finally {
     await browser.close();
   }

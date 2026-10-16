@@ -39,6 +39,20 @@ export const COEFFICIENTS = {
    * the limits are now 600 and 400, and what that does to the time per page has not been measured.
    */
   statesMinutesPerPage: { local: 0.6, remote: 0.84 },
+  /**
+   * The sweep with more than one at a time (`--at-once` of collect, contrast and states): how much faster
+   * each command is, as `1 + (at once − 1) × gain`, with at once no higher than `most`. `collect` measures
+   * pages at the same time, `contrast` its four passes and `states` its five groups of probes, of which
+   * the longest sets the pace. Measured three times on four pages of the local test site, four at once
+   * against one: `collect` 3.1, 3.8 and 3.5 times as fast (287 and 93 seconds, 215 and 57, 209 and 59),
+   * `contrast` 2.8, 2.8 and 3.3, `states` 1.6, 1.7 and 1.7. Not measured on a site elsewhere, where a
+   * page waits more on the network and less on this machine, nor with more than four at once.
+   */
+  sweepAtOnce: {
+    collect: { gain: 0.8, most: null },
+    contrast: { gain: 0.6, most: 4 },
+    states: { gain: 0.2, most: 4 },
+  },
   /** The gate with the agent that looks at the sheets, from the first to the last verdict: 1.4, 0.9, 1.3, 2.4, 2.7, 1.2. The two highest sent the explorer back once. */
   gateMinutes: 1.5,
   /**
@@ -119,6 +133,8 @@ export interface EstimateBasis {
   criteriaSource: "tasks" | "catalogue";
   atOnce: number;
   atOnceSource: "option" | "session" | "default";
+  /** Pages (passes, groups of probes) the sweep measures at the same time, when more than one: the number given with `--at-once`. Absent is one. */
+  sweepAtOnce?: number;
   local: boolean;
   scheduling: Scheduling;
   /** The criteria that get a finishing round, once the tasks say so. Absent while nobody knows: then the estimate reckons with a share of the criteria and shows a band. */
@@ -194,6 +210,13 @@ export function phaseMinutes(phase: AgentPhaseId, agents: number, basis: Pick<Es
   return agents <= atOnce ? each * slowest : each * (agents / atOnce + COEFFICIENTS.poolTail[phase]);
 }
 
+/** How many times faster a command of the sweep is with `atOnce` at the same time than with one. */
+export function sweepSpeedup(command: keyof typeof COEFFICIENTS.sweepAtOnce, atOnce: number): number {
+  const { gain, most } = COEFFICIENTS.sweepAtOnce[command];
+  const used = Math.min(Math.max(1, Math.floor(atOnce)), most ?? Number.POSITIVE_INFINITY);
+  return 1 + (used - 1) * gain;
+}
+
 const AGENTS_OF = (basis: EstimateBasis): Record<AgentPhaseId, number> => ({ walks: basis.pageTypes, judges: basis.criteria, verifiers: basis.criteria, finishers: basis.finishers ?? Math.ceil(basis.criteria * COEFFICIENTS.finishShare.expected) });
 const PHASE_IDS: readonly RowId[] = ["walks", "judges", "verifiers", "finishers"];
 
@@ -216,9 +239,9 @@ export function estimate(basis: EstimateBasis, progress: Progress = { stages: {}
     : null;
   const minutes: Record<Exclude<RowId, "inventory">, number> = {
     explore: COEFFICIENTS.exploreMinutes,
-    collect: COEFFICIENTS.collectMinutesPerPage[site] * basis.pages,
-    contrast: COEFFICIENTS.contrastMinutesPerPage[site] * basis.pages,
-    states: COEFFICIENTS.statesMinutesPerPage[site] * basis.pages,
+    collect: (COEFFICIENTS.collectMinutesPerPage[site] * basis.pages) / sweepSpeedup("collect", basis.sweepAtOnce ?? 1),
+    contrast: (COEFFICIENTS.contrastMinutesPerPage[site] * basis.pages) / sweepSpeedup("contrast", basis.sweepAtOnce ?? 1),
+    states: (COEFFICIENTS.statesMinutesPerPage[site] * basis.pages) / sweepSpeedup("states", basis.sweepAtOnce ?? 1),
     gate: COEFFICIENTS.gateMinutes,
     walks: phaseMinutes("walks", agents.walks, basis),
     judges: phaseMinutes("judges", agents.judges, basis),
@@ -304,7 +327,7 @@ export function estimateTextNl(result: Estimate, runName: string, notesNl: strin
   const source = { sample: "steekproef", inventory: "inventaris", tasks: "opdrachten", site: "sitemodel", catalogue: "catalogus", option: "opgegeven", session: "sessieproces", default: "standaard" } as const;
   const lines = [
     `Duur van ${runName}: ${basis.pages} pagina's (${source[basis.pagesSource]}), ${basis.pageTypes} paginatypen (${source[basis.pageTypesSource]}), ${basis.criteria} criteria (${source[basis.criteriaSource]}),`,
-    `${basis.atOnce} agents tegelijk (${source[basis.atOnceSource]}), ${basis.scheduling === "pool" ? "in een pool" : "in groepen"}, ${basis.local ? "site op deze machine" : "site elders"}`,
+    `${basis.atOnce} agents tegelijk (${source[basis.atOnceSource]}), ${basis.scheduling === "pool" ? "in een pool" : "in groepen"}, ${(basis.sweepAtOnce ?? 1) > 1 ? `veegronde ${basis.sweepAtOnce} tegelijk, ` : ""}${basis.local ? "site op deze machine" : "site elders"}`,
     "",
   ];
   const table = [["onderdeel", "geschat", "gemeten", ""]];
