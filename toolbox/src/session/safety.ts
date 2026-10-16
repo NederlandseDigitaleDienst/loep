@@ -1,9 +1,10 @@
 import { createWriteStream, existsSync } from "node:fs";
 import { join } from "node:path";
 import type { BrowserContext, CDPSession, Frame, Page } from "playwright";
-import { passWrite } from "../browser/session.ts";
+import { passOn, passWrite } from "../browser/session.ts";
 import { readJson } from "../lib/canonical.ts";
 import { loginCookieHeader, logsOut } from "../lib/login.ts";
+import { readRuleFor, type ReadRequest } from "../lib/reads.ts";
 import { isWriteOrigin, runWrites, writeAccess, writesForRun, type PassedWrite, type WriteAccess } from "../lib/writes.ts";
 
 /** Limits of the process that holds the browser; set once, when it starts. */
@@ -91,6 +92,16 @@ export interface Guard {
   outsideScopeLoaded: Record<string, number>;
   /** Writes that were let through to the test environment; absent until the first one. */
   passed?: PassedWrite[];
+  /** Read requests of the site model that were let through, without their body; absent until the first one. */
+  reads?: PassedRead[];
+}
+
+export interface PassedRead {
+  at: string;
+  method: string;
+  url: string;
+  /** Id of the rule in the site model that let it through. */
+  rule: string;
 }
 
 const inScope = (scope: Scope, url: string): boolean => {
@@ -107,11 +118,13 @@ export const urlInScope = inScope;
 /**
  * Everything a session page may not do, enforced where requests leave the browser: no
  * method other than GET or HEAD, nothing to a host outside the scope, and no message over
- * a WebSocket. Each refusal is recorded. The one exception is the origin of a test environment
+ * a WebSocket. Each refusal is recorded. One exception is the origin of a test environment
  * that the run was given at inventory: writes and socket messages to it pass, and each is
- * recorded too. Registered after the context's own routes, so it decides first.
+ * recorded too. The other is a read request of a checked site model: exactly that method,
+ * origin and path, also on a host outside the scope, recorded as a read. Registered after the
+ * context's own routes, so it decides first.
  */
-export async function guardContext(context: BrowserContext, scope: Scope, guard: Guard): Promise<void> {
+export async function guardContext(context: BrowserContext, scope: Scope, guard: Guard, reads: readonly ReadRequest[] = []): Promise<void> {
   const note = (kind: Blocked["kind"], method: string, url: string, resourceType: string): void => {
     guard.blocked.push({ at: new Date().toISOString(), kind, method, url: url.slice(0, MAX_URL), resourceType });
   };
@@ -128,6 +141,12 @@ export async function guardContext(context: BrowserContext, scope: Scope, guard:
       return refuse();
     }
     if (method !== "GET" && method !== "HEAD") {
+      const read = reads.length > 0 ? readRuleFor(reads, method, url, request.headers()) : null;
+      if (read) {
+        (guard.reads ??= []).push({ at: new Date().toISOString(), method, url: url.slice(0, MAX_URL), rule: read.id });
+        // Repeated only to an address a rule covers; otherwise followed only inside the scope or on the origin of the rule.
+        return passOn(route, (target) => readRuleFor(reads, method, target) !== null, (target) => inScope(scope, target) || target.startsWith(`${read.origin}/`)).then(() => undefined);
+      }
       if (isWriteOrigin(scope.writes, url)) {
         (guard.passed ??= []).push(scope.writes!.record(method, url));
         // Where the server sends the browser next is not asked here again: it has to be inside the scope.

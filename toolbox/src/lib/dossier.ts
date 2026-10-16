@@ -3,6 +3,7 @@ import type { Procedure } from "./procedures.ts";
 import type { RunData } from "./rundata.ts";
 import { criterionById } from "./wcag.ts";
 import { loginNl } from "./login.ts";
+import { readsAllowedNl } from "./reads.ts";
 import { WRITES_BLOCKED_NL, writesAllowedNl } from "./writes.ts";
 
 /** Everything the scripts gathered that bears on one criterion. Nothing here judges anything. */
@@ -23,6 +24,8 @@ export function buildDossier(run: RunData, procedure: Procedure): Record<string,
     writes: run.writes
       ? { allowed: true, origin: run.writes.origin, declaredBy: run.writes.declaredBy ? run.writes.declaredBy.role : null, noteNl: writesAllowedNl(run.writes) }
       : { allowed: false, origin: null, declaredBy: null, noteNl: WRITES_BLOCKED_NL },
+    // Requests that only read and go through, such as a question to a search service: what they show was there to see, also when nothing may be sent.
+    ...((run.reads ?? []).length > 0 ? { reads: { requests: run.reads!.map((rule) => `${rule.method} ${rule.origin}${rule.path}`), noteNl: readsAllowedNl(run.reads!) } } : {}),
     // Only in a run with a login: the role of the test account, never who it is or how it got in.
     ...(run.login ? { login: { role: run.login.role, noteNl: `${loginNl(run.login)}.` } } : {}),
     legend: EXTRACTORS.legend!(run, procedure.id),

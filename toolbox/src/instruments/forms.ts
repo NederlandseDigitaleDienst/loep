@@ -2,6 +2,7 @@ import { join } from "node:path";
 import type { Frame, Page, Request, Response } from "playwright";
 import { axInfo, call, handleFor } from "../browser/call.ts";
 import { loadPage } from "../browser/session.ts";
+import { readRuleFor, runReads } from "../lib/reads.ts";
 import { isWriteOrigin, runWrites } from "../lib/writes.ts";
 import { slugForUrl } from "../lib/canonical.ts";
 import { REGULAR_PATH, type FormErrorState } from "../lib/rundata.ts";
@@ -142,7 +143,8 @@ async function attemptSubmit(page: Page, input: Input, formIndex: number, state:
   let leaving: Request | null = null;
   let navigations = 0;
   let blocked = 0;
-  const isWrite = (request: Request): boolean => request.method() !== "GET" && request.method() !== "HEAD";
+  // A read request of the site model (a question to a search service) passes and is no write.
+  const isWrite = (request: Request): boolean => request.method() !== "GET" && request.method() !== "HEAD" && readRuleFor(runReads(), request.method(), request.url(), request.headers()) === null;
   const onRequest = (request: Request): void => {
     if (isWrite(request)) writesTried++;
     if (request.isNavigationRequest() && request.frame() === page.mainFrame()) leaving = request;

@@ -6,8 +6,10 @@ import { readJson, sha256, sha256File, writeFileAtomic, writeJson } from "../lib
 import { type Manifest, stepStart, writeManifest } from "../lib/manifest.ts";
 import { TEMPLATES_DIR } from "../lib/procedures.ts";
 import { agentLoginNl, loginForRun } from "../lib/login.ts";
+import { recordReads } from "../lib/reads.ts";
 import { makeWorkDir } from "../lib/workdir.ts";
 import { frameAddress, readSiteModel, SITE_CHECK_FILE, SITE_MODEL_FILE, validateSiteModel, type ModelContext, type PageType, type Postcondition, type SiteCheck, type SiteModel } from "../lib/sitemodel.ts";
+import { readObservation } from "../session/observations.ts";
 import { holds, loadRecipes, MAX_RECIPE_STEPS, replayEnv, replayFromClean, replaySteps } from "../session/recipe.ts";
 import { openSurface, type Env } from "../session/surface.ts";
 import { pageOperables } from "../instruments/operables.ts";
@@ -158,6 +160,7 @@ async function modelContext(runDir: string, inventory: Inventory): Promise<Model
     frames: inventory.pages.filter(isFrame).map((page) => page.url),
     recipes: Object.fromEntries(Object.entries(recipes).map(([name, recipe]) => [name, { width: recipe.start?.width ?? 0, steps: recipe.steps.length, url: recipe.start?.url ?? "" }])),
     observations: await observationIds(runDir),
+    requestsSeen: await requestsSeen(runDir),
     media: Object.fromEntries(inventory.pages.filter((page) => !isFrame(page)).map((page) => [page.url, { audio: Number(page.counts.audio ?? 0), video: Number(page.counts.video ?? 0) }])),
   };
 }
@@ -169,6 +172,25 @@ async function staticProblems(runDir: string, inventory: Inventory): Promise<str
   } catch {
     return [`${SITE_MODEL_FILE} is geen geldige JSON`];
   }
+}
+
+/** For every observation a read request of the model names: what that command held back, and what it let through as a read. */
+export async function requestsSeen(runDir: string): Promise<Record<string, { method: string; url: string }[]>> {
+  let rules: unknown = null;
+  try {
+    rules = (JSON.parse(readFileSync(join(runDir, SITE_MODEL_FILE), "utf8")) as { readRequests?: unknown }).readRequests;
+  } catch {
+    rules = null;
+  }
+  const seen: Record<string, { method: string; url: string }[]> = {};
+  for (const rule of Array.isArray(rules) ? (rules as unknown[]) : []) {
+    const id = (rule as { observation?: unknown } | null)?.observation;
+    if (typeof id !== "string" || id in seen) continue;
+    const observation = await readObservation(runDir, id).catch(() => null);
+    if (!observation) continue;
+    seen[id] = [...observation.blocked.filter((entry) => entry.kind === "method"), ...(observation.reads ?? [])].map((entry) => ({ method: entry.method, url: entry.url }));
+  }
+  return seen;
 }
 
 async function observationIds(runDir: string): Promise<Set<string>> {
@@ -283,7 +305,8 @@ export async function checkSite(runDir: string, options: { navigationDelayMs?: n
     try {
       // In a run with a login: a recipe that fails because the session ran out says nothing about the model.
       await confirmLogin(browser);
-      const env = await replayEnv(browser, runDir, options.navigationDelayMs === undefined ? {} : { navigationDelayMs: options.navigationDelayMs });
+      // The read requests of the model passed the validator above; a recipe that searches is replayed with them, as the sweep will.
+      const env: Env = { ...(await replayEnv(browser, runDir, options.navigationDelayMs === undefined ? {} : { navigationDelayMs: options.navigationDelayMs })), reads: model.readRequests ?? [] };
       for (const entry of entries) {
         const recipe = recipes[entry.recipe]!;
         let reasonNl: string | null = null;
@@ -329,6 +352,8 @@ export async function checkSite(runDir: string, options: { navigationDelayMs?: n
   }
   const check: SiteCheck = { ok: problems.length === 0, siteSha256: await sha256File(path), checkedAt: new Date().toISOString(), problems, replays, unusedRecipes, ...(operables ? { operables } : {}), ...(hintsNl.length > 0 ? { hintsNl } : {}) };
   await writeJson(join(runDir, SITE_CHECK_FILE), check);
+  // Which read requests the run lets through is part of its record, as the permission to write is.
+  if (check.ok) await recordReads(runDir, (await readSiteModel(runDir))?.readRequests ?? []);
   await writeManifest(runDir, { command: "check-site", startedAt, ok: check.ok, problems: problems.length, replays: replays.length });
   return check;
 }

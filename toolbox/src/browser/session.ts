@@ -1,6 +1,7 @@
 import { fileURLToPath } from "node:url";
 import { chromium, type Browser, type BrowserContext, type Page, type Route } from "playwright";
 import { confirmLoginOn, LoginExpired, logsOut, runLoginMark, runLoginState, throwIfLoginExpired, watchLogin } from "../lib/login.ts";
+import { readRuleFor, runReads, type ReadRequest } from "../lib/reads.ts";
 import { isWriteOrigin, runWrites, type WriteAccess } from "../lib/writes.ts";
 import { refusedByBrowser, type ClipboardWrite } from "./clipboard.ts";
 import { frameAsPage } from "./frame.ts";
@@ -35,6 +36,8 @@ export interface ContextOptions {
    * permission of the run applies (see `setRunWrites`); null refuses every write whatever the run says.
    */
   writes?: WriteAccess | null;
+  /** The read requests that may pass although they are a POST (see `ReadRequest`). Left out, those of the run apply (see `setRunReads`). */
+  reads?: readonly ReadRequest[];
   /** Start with these cookies and stored values instead of the session of the run: the watch on the session keeps the copy it began with. */
   storageState?: Awaited<ReturnType<BrowserContext["storageState"]>>;
 }
@@ -46,6 +49,16 @@ export interface ContextOptions {
  * one that `mayFollow` rejects. Returns the address of a write the browser will repeat, for the log.
  */
 export async function passWrite(route: Route, writes: WriteAccess, mayFollow: (url: string) => boolean = () => true): Promise<string | null> {
+  return passOn(route, (target) => isWriteOrigin(writes, target), mayFollow);
+}
+
+/**
+ * Let a request through that may pass although it is not a GET: a write to the test environment,
+ * or a read request of the site model. A redirect that would repeat it (307, 308) is only followed
+ * to an address `mayRepeat` allows; any other redirect only where `mayFollow` allows. Returns the
+ * address of a request the browser will repeat.
+ */
+export async function passOn(route: Route, mayRepeat: (url: string) => boolean, mayFollow: (url: string) => boolean = () => true): Promise<string | null> {
   const request = route.request();
   const refuse = (): Promise<void> => (request.isNavigationRequest() ? route.fulfill({ status: 204, body: "" }) : route.abort("blockedbyclient"));
   try {
@@ -55,7 +68,7 @@ export async function passWrite(route: Route, writes: WriteAccess, mayFollow: (u
     if (response.status() >= 300 && response.status() < 400 && location) {
       const target = new URL(location, request.url()).href;
       const keepsMethod = response.status() === 307 || response.status() === 308;
-      if (keepsMethod ? !isWriteOrigin(writes, target) : !mayFollow(target)) {
+      if (keepsMethod ? !mayRepeat(target) : !mayFollow(target)) {
         await refuse();
         return null;
       }
@@ -125,13 +138,16 @@ export async function newContext(browser: Browser, options: ContextOptions = {},
   // only writing is allowed: what is on a clipboard is no business of a page under test.
   if (hasClipboardPermission(browser)) await context.grantPermissions(["clipboard-write"]);
   const writes = options.writes === undefined ? runWrites() : options.writes;
-  // An evaluation must never change the site under test: only safe requests pass. The one
-  // exception is the origin of a test environment that the run was given at inventory.
+  const reads = options.reads ?? runReads();
+  // An evaluation must never change the site under test: only safe requests pass. The
+  // exceptions are the origin of a test environment that the run was given at inventory, and
+  // the read requests of a checked site model: a question to a search service, by method, origin and path.
   await context.route("**/*", (route) => {
     const method = route.request().method();
     // Logging out ends the session for everything that comes after: such a request never leaves, whatever its method.
     if (logsOut(route.request().url())) return route.request().isNavigationRequest() ? route.fulfill({ status: 204, body: "" }) : route.abort("blockedbyclient");
     if (method === "GET" || method === "HEAD") return route.continue();
+    if (reads.length > 0 && readRuleFor(reads, method, route.request().url(), route.request().headers())) return passOn(route, (target) => readRuleFor(reads, method, target) !== null).then(() => undefined);
     // An aborted navigation replaces the page with an error page. "No content" leaves the page as it was.
     if (!isWriteOrigin(writes, route.request().url())) return route.request().isNavigationRequest() ? route.fulfill({ status: 204, body: "" }) : route.abort("blockedbyclient");
     writes!.record(method, route.request().url());

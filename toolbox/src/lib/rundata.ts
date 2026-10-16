@@ -12,6 +12,7 @@ import type { AfterSubmit, TimeLimitProbe, WatchState } from "./timelimits.ts";
 import type { ClipboardWrite } from "../browser/clipboard.ts";
 import type { Placement } from "../browser/session.ts";
 import { loginForRun, type LoginMark } from "./login.ts";
+import { readsForRun, type ReadRequest } from "./reads.ts";
 import { writesForRun, type WritePermission } from "./writes.ts";
 import { existsSync } from "node:fs";
 import { readdir } from "node:fs/promises";
@@ -464,6 +465,8 @@ export interface RunData {
    * environment. Null: every such request was held back, so nothing that only appears after submitting was examined.
    */
   writes?: WritePermission | null;
+  /** The read requests `check-site` let through, such as a question to a search service. Empty or absent: none. */
+  reads?: ReadRequest[];
   /** Set when a person logged in for this run: the role and the pages that tell logged in from logged out. Never the session. */
   login?: LoginMark | null;
   /** What the exploring agent recorded about the site; null in a run without it. Absent in data built by hand. */
@@ -560,5 +563,5 @@ export async function loadRun(dir: string): Promise<RunData> {
   if (existsSync(join(dir, "recipes"))) for (const file of (await readdir(join(dir, "recipes"))).filter((name) => name.endsWith(".json")).sort()) recipes[file.slice(0, -5)] = await readJson<RecipeSteps>(join(dir, "recipes", file));
   const watchPath = join(dir, "session-watch.json");
   const sessionWatch = existsSync(watchPath) ? await readJson<WatchState>(watchPath).catch(() => null) : null;
-  return { states, contrast, dir, inventory, sample, pages, sessionWatch, writes: writesForRun(dir), login: loginForRun(dir), siteModel: await readSiteModel(dir), siteStates, stateEvidence, documents: loadDocuments(dir, sample.documents), recipes };
+  return { states, contrast, dir, inventory, sample, pages, sessionWatch, writes: writesForRun(dir), reads: readsForRun(dir), login: loginForRun(dir), siteModel: await readSiteModel(dir), siteStates, stateEvidence, documents: loadDocuments(dir, sample.documents), recipes };
 }

@@ -635,6 +635,7 @@
   ("Uitgevoerd door", t.performedBy),
   ..if derived.followsUpNl != none { ((t.followsUp, derived.followsUpNl),) },
   ..if chain.writesNl != none { (("Versturen van formulieren", chain.writesNl),) },
+  ..if chain.at("readsNl", default: none) != none { (("Leesverzoeken", chain.readsNl),) },
   (
     "Afgetekend door",
     if unsigned { text(weight: 700, t.notSigned) + if stale-note != none [. #stale-note] } else [#signature.name, #signature.role, #signature.organisation, op #derived.signedDateNl],

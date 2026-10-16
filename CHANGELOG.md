@@ -4,6 +4,10 @@ Wat er per versie van loep is veranderd. De versie staat op het voorblad en onde
 
 ## Nog niet uitgebracht
 
+### Wat een uitkomst kan veranderen
+
+- Een zoekvraag die als POST naar een zoekdienst gaat (zoals `POST /multi_search` of `POST /1/indexes/<naam>/queries`), telt niet meer als versturen. De verkenner legt zo'n verzoek vast in het sitemodel onder `readRequests`, met methode, origin, pad, een reden en de waarneming waarin het werd tegengehouden. `check-site` toetst de regel: alleen POST, een pad dat op zoeken wijst en niet op schrijven, hooguit één jokerteken en nooit aan het eind. Na een geslaagde controle laat de bewaking precies die verzoeken door, in de veegronde en in elke sessie; al het andere blijft tegengehouden, en een formulier versturen blijft verboden zonder verklaarde testomgeving. Zoekresultaten zijn dan te onderzoeken, met de melding met het aantal (4.1.3), de focus na zoeken (2.4.3) en zoeken als tweede manier (2.4.5). Het manifest, het dossier en het rapport noemen welke leesverzoeken zijn toegelaten (#49).
+
 ## 0.3.0 (2026-10-15)
 
 Deze versie is uitgebracht zonder nieuwe meting op de testsite, net als 0.2.0. De wijzigingen die een uitkomst kunnen veranderen, zijn dus nog niet vergeleken met 0.2.0.
