@@ -4,6 +4,10 @@ Wat er per versie van loep is veranderd. De versie staat op het voorblad en onde
 
 ## Nog niet uitgebracht
 
+### Verder
+
+- `estimate` rekent de veegronde per pagina, uit de laadtijd en de links en bedieningselementen die `inventory` nu per pagina vastlegt, en na `collect` uit de metingen zelf: wat een pagina toevoegt aan de pagina's ervoor, of ze naar indrukken luistert en hoeveel tochten met de pijltoetsen erop staan. Aanwijzen en indrukken stoppen in de schatting bij de grenzen van `states` (400 en 600). De schatting volgt de opbouw van `--at-once`: `collect` verdeelt zijn pagina's, `contrast` doet hooguit vier rondes en `states` hooguit vijf groepen tegelijk, en `states` duurt zo lang als zijn traagste groep. Zonder `--at-once` neemt `estimate` het aantal van de laatste stap van de veegronde. `collect`, `contrast` en `states` schrijven tijdens het werk hun voortgang in `progress/<stap>.json`; `estimate` rekent een stap die loopt door met het tempo tot nu toe, en zegt het als een stap een kwartier niets schreef. Na afloop staat in het manifest hoe lang elke ronde of groep duurde (`laneSeconds`). Een trage site staat niet meer onder "niet gedekt": de laadtijd telt mee. Op een site elders met 19 pagina's en zes tegelijk schatte `estimate` `states` op 10 minuten en duurde het 30; nu 30. Op 223 pagina's één tegelijk zat de veegronde 22 procent te laag, nu 2 procent te hoog. Op de testsite schat het met vier tegelijk te hoog; zie [docs/methode.md](docs/methode.md#de-veegronde-naast-gemeten-runs) (#61).
+
 ## 0.4.0 (2026-10-16)
 
 Deze versie is uitgebracht zonder nieuwe meting op de testsite, net als 0.3.0. De wijzigingen die een uitkomst kunnen veranderen, zijn dus nog niet vergeleken met 0.3.0. Op de testsite van de repository slagen alle tests op één na; de vergelijking van een veegronde met één en met vier pagina's tegelijk slaagde los wel en faalde één keer onder zware belasting van dezelfde machine.

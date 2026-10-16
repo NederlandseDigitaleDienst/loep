@@ -15,6 +15,7 @@ import { probeForms } from "../instruments/forms.ts";
 import { probeHoverTarget } from "../instruments/hover.ts";
 import { browserListeners, firstKeyReaction, KEYS, leaveTextEntry, probeArrowFocus } from "../instruments/keys.ts";
 import { progressLine, sayingItRuns, STILL_RUNNING_MS, withinTime as limited } from "../instruments/limit.ts";
+import { ProgressFile } from "../lib/progress.ts";
 import { DELEGATING, DOWN_EVENTS, downEventTargets, downKind, probeDownEvent } from "../instruments/pointer.ts";
 import { probeSettings } from "../instruments/settings.ts";
 import { holds } from "../session/recipe.ts";
@@ -35,7 +36,15 @@ interface Lane {
   sweep: ModelSweep | null;
   skipped: { page: string; step: string }[];
   windows: Map<string, Embedded>;
+  /** The group of probes this lane runs, for the progress of the step. */
+  group?: StatesGroup;
 }
+
+/** The five groups of probes, in the order their findings are taken. `estimate` reckons with the same five. */
+export const STATES_GROUPS = ["forms", "keys", "keysInStates", "pointer", "arrows"] as const;
+export type StatesGroup = (typeof STATES_GROUPS)[number];
+/** How far each group is while the command runs; null outside it. */
+let progress: ProgressFile | null = null;
 
 /** The group of the whole command, and of every probe that runs outside a group. */
 const mainLane: Lane = { guard: { active: false, blocked: 0 }, sweep: null, skipped: [], windows: new Map() };
@@ -47,7 +56,7 @@ const socketMessagesBlocked = (): number => lane().guard.blocked;
  * of each kind a few are pointed at, so the number that is reached follows the design of a site and not its size.
  * Far above what a site has; when it is reached all the same, the output names the kinds that were left out.
  */
-const MAX_HOVER_TARGETS = 400;
+export const MAX_HOVER_TARGETS = 400;
 /** How many controls of one kind are pointed at. The second one shows whether the first was an exception. */
 const HOVER_EXAMPLES_PER_KIND = 2;
 const MOBILE = { width: 360, height: 740 };
@@ -56,7 +65,7 @@ const MOBILE = { width: 360, height: 740 };
  * kind per name, so a site of thirty pages reaches three hundred. The states of the model are not held to it: they are
  * few, they come last, and a form that only exists in a state has the controls where a press matters most.
  */
-const MAX_DOWN_TARGETS = 600;
+export const MAX_DOWN_TARGETS = 600;
 /** A probe in a state of the model opens the state again when what it did closed it, at most this often. */
 const MAX_REOPENINGS = 12;
 /** A state with many controls takes longer than one step on a page. */
@@ -88,7 +97,11 @@ async function withinTime<T>(page: string, step: string, fallback: T, work: () =
 }
 
 /** Say which probe starts on which page or state, and how far along it is. */
-const say = (probe: string, index: number, total: number, what: string): void => void process.stderr.write(progressLine("states", probe, index, total, what));
+const say = (probe: string, index: number, total: number, what: string): void => {
+  const group = lane().group;
+  if (group) progress?.tick(group, probe, index, total);
+  process.stderr.write(progressLine("states", probe, index, total, what));
+};
 /** One page or state of a probe: a line when it starts, and a line every half minute while it is busy. */
 const step = <T>(probe: string, index: number, total: number, what: string, work: () => Promise<T>): Promise<T> => {
   say(probe, index, total, what);
@@ -833,17 +846,25 @@ export async function states(runDir: string, options: { fresh?: boolean; atOnce?
     };
     // Five groups, each in browser contexts of its own. They run one after the other or, with atOnce, at the same time; what they found is taken in this order.
     const groups: (() => Promise<unknown>)[] = [triggersAndForms, keysOnPages, keysInStates, pointer, arrows];
-    const own: Lane[] = groups.map(() => {
+    const own: Lane[] = groups.map((_, index) => {
       const fork = sweep.fork();
-      return { guard: fork.guard, sweep: fork, skipped: [], windows: new Map() };
+      return { guard: fork.guard, sweep: fork, skipped: [], windows: new Map(), group: STATES_GROUPS[index]! };
     });
     const atOnce = Math.min(settings.atOnce, groups.length);
+    progress = new ProgressFile(runDir, "states", [...STATES_GROUPS], atOnce);
+    const tracked = progress;
     if (atOnce > 1) process.stderr.write(`states: ${atOnce} groepen proeven tegelijk, ${settings.navigationDelayMs} ms tussen twee navigaties naar dezelfde site\n`);
     const found = await withSpacing({ ...settings, atOnce }, () =>
       inOrder<unknown>(
         groups.length,
         atOnce,
-        (index) => lanes.run(own[index]!, () => groups[index]!()),
+        (index) =>
+          lanes.run(own[index]!, async () => {
+            tracked.start(STATES_GROUPS[index]!);
+            const value = await groups[index]!();
+            tracked.end(STATES_GROUPS[index]!);
+            return value;
+          }),
         (index) => {
           const done = own[index]!;
           sweep.absorb(done.sweep!);
@@ -879,8 +900,9 @@ export async function states(runDir: string, options: { fresh?: boolean; atOnce?
     result.blockers = { closedOnPage: sweep.dismissals.filter((entry) => entry.dismissed).length, notClosed: sweep.dismissals.filter((entry) => !entry.dismissed).map((entry) => ({ url: entry.url, blocker: entry.blocker, reasonNl: entry.reasonNl })) };
     await writeJson(join(runDir, "states.json"), result);
     await writeJson(join(runDir, STATES_STAMP), { pages: pagesNow, states: stateKeys } satisfies StatesStamp);
-    await writeManifest(runDir, { command: "states", startedAt, ...result.examined, ...(atOnce > 1 ? { atOnce } : {}) }, browser.version());
+    await writeManifest(runDir, { command: "states", startedAt, ...result.examined, ...(atOnce > 1 ? { atOnce } : {}), laneSeconds: tracked.finish() }, browser.version());
   } finally {
+    progress = null;
     await browser.close();
   }
   return result;

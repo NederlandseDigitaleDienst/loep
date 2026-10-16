@@ -290,7 +290,7 @@ Het rapport van een onderzoek noemt deze getallen niet.
 
 ## Hoe lang een onderzoek duurt
 
-`estimate` rekent uit hoe lang een onderzoek duurt. Het leest wat de run al weet over de site en geeft per onderdeel de verwachte duur, het totaal met een marge en het verwachte aantal tokens. Het kan direct na `inventory`, en wordt scherper na `sample` (de steekproef in plaats van alle pagina's), na de verkenner (de paginatypen uit het sitemodel in plaats van een telling van pagina's met dezelfde opbouw) en na `tasks` (het echte aantal opdrachten). Een onderdeel dat klaar is, toont wat het werkelijk kostte in plaats van de schatting. Halverwege zegt het commando dus wat er nog komt, en op een afgeronde run staan geschat en gemeten naast elkaar. Het schrijft niets in de run.
+`estimate` rekent uit hoe lang een onderzoek duurt. Het leest wat de run al weet over de site en geeft per onderdeel de verwachte duur, het totaal met een marge en het verwachte aantal tokens. Het kan direct na `inventory`, en wordt scherper na `sample` (de steekproef in plaats van alle pagina's), na de verkenner (de paginatypen uit het sitemodel in plaats van een telling van pagina's met dezelfde opbouw), na `collect` (wat er per pagina te bedienen is, zoals gemeten) en na `tasks` (het echte aantal opdrachten). Een onderdeel dat klaar is, toont wat het werkelijk kostte in plaats van de schatting. Een stap van de veegronde die nog loopt, rekent het door met het tempo dat die stap tot nu toe haalde. Halverwege zegt het commando dus wat er nog komt, en op een afgeronde run staan geschat en gemeten naast elkaar. Het schrijft niets in de run.
 
 Wat gemeten is, komt uit de run zelf. Elke stap in `manifest.json` heeft een begin, een einde en een duur. De fasen met agents hebben geen stap: hun duur komt uit de sessiebestanden, want elke agent start en stopt één sessie. Een run van vóór 13 oktober 2026 heeft alleen het einde van elke stap; daar telt de tijd sinds de stap ervoor, en de uitvoer zet er een tilde voor.
 
@@ -301,9 +301,7 @@ Alle tijden zijn minuten. Een lokale site is een site op de eigen machine, zoals
 | Onderdeel | Berekening | Lokale site | Site elders |
 |---|---|---|---|
 | Verkennen, één agent | vast | 10 | 10 |
-| `collect` | per pagina van de steekproef | 0,83 | 1,14 |
-| `contrast` | per pagina | 0,065 | 0,10 |
-| `states` | per pagina | 0,60 | 0,84 |
+| `collect`, `contrast`, `states` | per pagina van de steekproef, zie hieronder | | |
 | Poort, met het bekijken van de bladen | vast | 1,5 | 1,5 |
 | Rondgangen | duur per agent × (paginatypen ÷ agents tegelijk + 0,5) | 5,2 | 7,2 |
 | Beoordelen | duur per agent × (criteria ÷ agents tegelijk + 1) | 4,0 | 4,7 |
@@ -312,7 +310,38 @@ Alle tijden zijn minuten. Een lokale site is een site op de eigen machine, zoals
 | Rapport | vast | 1 | 1 |
 | Tussen de stappen | vast | 3,5 | 3,5 |
 
-Meet de veegronde meer tegelijk (`--at-once`, zie hieronder), dan deelt `estimate --at-once <n>` de tijd van `collect`, `contrast` en `states` door 1 + (n − 1) × de winst: 0,8 voor `collect`, 0,6 voor `contrast` (hooguit vier tegelijk) en 0,2 voor `states` (hooguit vier). Dat is drie keer gemeten, op vier pagina's van de testsite, met vier tegelijk tegen één: `collect` werd 3,1 tot 3,8 keer zo snel (de laatste keer 209 en 59 seconden), `contrast` 2,8 tot 3,3 keer (30 en 9) en `states` 1,6 tot 1,7 keer (200 en 118). Op een site elders, waar een pagina meer op het netwerk wacht en minder op de eigen machine, is het niet gemeten. Zonder `--at-once` rekent `estimate` de veegronde met één pagina tegelijk.
+### De veegronde per pagina
+
+De veegronde rekent `estimate` per pagina van de steekproef, uit wat de run van die pagina weet: hoe lang ze in de inventaris deed over laden (tot de pagina stil was), en hoeveel links en andere bedieningselementen erop staan. `inventory` legt beide per pagina vast. Na `collect` komen de aantallen uit de metingen zelf, met de blokkades gesloten, en weet `estimate` ook welke links en bedieningselementen een pagina toevoegt aan de pagina's ervoor, of de pagina luistert naar indrukken en hoeveel tochten met de pijltoetsen erop staan. Een pagina kost zo vaak haar laadtijd als de stap haar laadt, plus het werk van de stap op die pagina. Een trage site telt zo mee in de schatting. Alle tijden hieronder zijn seconden.
+
+| Stap | Per pagina |
+|---|---|
+| `collect` | 11 × de laadtijd + 2 + 1,15 per link + 0,2 per ander bedieningselement; daarna per toestand uit het sitemodel 0,45 × een gemiddelde pagina |
+| `contrast` | per ronde de laadtijd + 0,4; in de twee rondes in het standaardvenster 0,15 per link of bedieningselement, een derde daarvan op een pagina waarvan de opbouw (template) al eerder in de steekproef stond |
+| `states`, formulieren en knoppen | 2 × de laadtijd + 1,5 + 1,6 per formulier, en per nieuwe knop de laadtijd + 9; smal de laadtijd + 0,5 |
+| `states`, toetsen | de laadtijd + 4,5; per toestand uit het sitemodel de laadtijd + 8 |
+| `states`, aanwijzen en indrukken | twee keer de laadtijd + 0,5, ook voor één pagina per paginatype in een smal venster; 1,2 per aangewezen element en 1 + 0,2 × de laadtijd per ingedrukt element; per toestand uit het sitemodel 2 × de laadtijd + 6 |
+| `states`, pijltoetsen | per tocht met de pijltoetsen de laadtijd + 3; vóór `collect` 0,3 tocht per pagina |
+
+`collect` loopt elke link drie keer langs met Tab (licht, donker en smal), met een afbeelding van de focus bij elke stap. Op 83 pagina's van een site elders kostte dat 1,19 seconde per link (r² 0,97, van 30 tot 176 links per pagina), en op de testsite 1,21. Een ander bedieningselement weegt minder: lang niet elk is een eigen stap.
+
+De proeven van `states` voor aanwijzen en indrukken handelen een bedieningselement één keer af, op de eerste pagina die het heeft. Ze werken dus op wat een pagina toevoegt aan de pagina's ervoor, en dat is na `collect` per pagina te tellen (element, tekst en gebied, zoals de proef zelf telt). Op twee sites elders drukte de proef bijna precies die elementen in: 122 van de 123 nieuwe op de eerste pagina, daarna 49 van 49, 47 van 50, 74 van 74, tot haar grens. Vóór `collect` rekent `estimate` met alles van de eerste pagina en een derde van elke pagina daarna (gemeten: 574 van 1497, 81 van 183 en op de testsite 116 van 893). De helft van de nieuwe wordt aangewezen. Indrukken stopt bij 600 soorten en aanwijzen bij 400, zoals in `states`; daarna kost een pagina alleen nog het laden en kijken. Een pagina die niet naar indrukken luistert, slaat de proef over.
+
+### De opbouw van `--at-once`
+
+`estimate --at-once <n>` rekent de veegronde zoals de commando's haar met `--at-once <n>` doen. Zonder `--at-once` neemt het het aantal waarmee de veegronde van de run het laatst meer dan één tegelijk deed, en anders één. Nooit meer dan het sessieproces van de run toelaat.
+
+- `collect` verdeelt de pagina's over n banen: een baan neemt de volgende pagina zodra ze vrij is. Daarna de toestanden uit het sitemodel, ook n tegelijk.
+- `contrast` doet zijn vier rondes tegelijk, hooguit vier.
+- `states` doet zijn vijf groepen tegelijk, hooguit vijf. Binnen een groep gaan de pagina's na elkaar, dus duurt `states` zo lang als de traagste groep: bij een site met veel bedieningselementen aanwijzen en indrukken. De uitvoer noemt die groep. Gaat `states` ooit ook de pagina's binnen een groep spreiden ([#60](https://github.com/NederlandseDigitaleDienst/loep/issues/60)), dan past één getal de schatting aan: `pagesAtOnceInGroup` in `toolbox/src/lib/estimate-sweep.ts`.
+
+Een pagina, ronde of groep die naast andere loopt, is iets trager: 1 + (n − 1) × 0,1 voor `collect`, × 0,08 voor `contrast` en × 0,06 voor `states`. En met meer dan één tegelijk zit er tussen twee navigaties naar de site de wachttijd van het sessieproces (standaard een seconde), dus duurt `collect` nooit korter dan 11 × de pagina's × die wachttijd.
+
+### Een stap die loopt
+
+`collect`, `contrast` en `states` schrijven tijdens het werk in `progress/<stap>.json` hoe ver elke baan is: de pagina's van `collect` en daarna zijn toestanden, elke ronde van `contrast`, elke groep van `states` met per proef hoeveel pagina's of toestanden af zijn. `estimate` legt dat naast de schatting voor hetzelfde werk. Een baan die minstens een halve minuut loopt, gaat verder in het tempo dat ze tot nu toe haalde; wat een baan sinds haar laatste regel deed, gaat eraf. Een baan die nog niet begon, gaat zoals geschat: de groepen van `states` en de rondes van `contrast` lijken te weinig op elkaar om elkaars tempo over te nemen. Alleen de toestanden van `collect` volgen het tempo van de pagina's. De regel van de stap zegt hoe ver hij is, welke baan het langst duurt en hoeveel trager of sneller hij gaat dan geschat. Schreef een stap een kwartier niets, dan vraagt `estimate` of hij nog loopt.
+
+Is de stap klaar, dan verdwijnt het bestand en zet de stap in het manifest hoe lang elke baan duurde (`laneSeconds`). Zo is de volgende ijking per groep te maken.
 
 ### De veegronde met meer tegelijk
 
@@ -328,9 +357,9 @@ Tokens: 125.000 per agent van de werkstroom, dus voor paginatypen + twee keer de
 
 De marge is 25 procent korter tot 40 procent langer, op wat nog moet komen. Dat is een keuze en geen statistiek. Langer is waarschijnlijker dan korter: een tweede poging van een agent, een poort die de verkenner terugstuurt, een site die traag antwoordt.
 
-Als vuistregel voor een site elders met alle 56 criteria: minuten ≈ 27 + 2 × pagina's + (7 × paginatypen + 475) ÷ agents tegelijk. Voor 29 pagina's, 18 paginatypen en 8 agents tegelijk is dat ongeveer 2 uur 40. Daar komt de afmaakronde bij: 16 + 16 × het aantal criteria dat open bleef ÷ agents tegelijk, dus ongeveer 35 minuten als dat er 9 zijn.
+Als vuistregel voor een site elders met alle 56 criteria: minuten ≈ 27 + V + (7 × paginatypen + 475) ÷ agents tegelijk, met V de veegronde met één pagina tegelijk: per pagina een minuut plus 1,2 seconde per link, en daarbij tot 20 minuten voor aanwijzen en indrukken in `states`. Voor 29 pagina's met elk 40 links, 18 paginatypen en 8 agents tegelijk is dat ongeveer 3 uur. Daar komt de afmaakronde bij: 16 + 16 × het aantal criteria dat open bleef ÷ agents tegelijk, dus ongeveer 35 minuten als dat er 9 zijn.
 
-Alle getallen staan op één plek, met bij elk de metingen waar het uit komt: `COEFFICIENTS` in `toolbox/src/lib/estimate.ts`.
+Alle getallen staan op één plek, met bij elk de metingen waar het uit komt: `COEFFICIENTS` in `toolbox/src/lib/estimate.ts`, en die van de veegronde in `SWEEP_COEFFICIENTS` in `toolbox/src/lib/estimate-sweep.ts`.
 
 ### Waarop dit is geijkt
 
@@ -353,10 +382,31 @@ Wat de tabel zegt, en wat niet:
 - **De schatting hoort bij een versie.** Tussen nerds-v2 en nerds-v3 ging de toolbox meer meten: `collect` duurde op dezelfde site een derde langer en `states` bijna twee keer zo lang. De getallen volgen de nieuwste run van elke soort. Is de commit van een run bekend en anders dan die van de ijking, dan zegt `estimate` dat erbij.
 - **Per onderdeel is de afwijking groter dan in het totaal.** Verkennen liep van 6 tot 17 minuten bij een schatting van 10, en een fase met weinig agents (klein-2) week een derde af.
 - **Lokaal en elders zijn één site elk.** Het verschil kan net zo goed de zwaarte van de pagina's zijn als de afstand.
-- **`states` kende een plafond.** In de gemeten runs stopte de indrukproef bij 300 soorten bedieningselementen en aanwijzen en focus bij 150, en de gemeten echte site zat aan beide grenzen. Sindsdien liggen de grenzen op 600 soorten om in te drukken en 400 aangewezen elementen, gekozen per soort. Hoe dat de duur van `states` per pagina verandert, is niet gemeten.
+- **De veegronde komt niet meer uit deze tabel.** Ze wordt per pagina gerekend; zie hieronder.
 - **De tokens zijn niet na te rekenen uit een run.** Een run bewaart geen tokens. Het getal komt uit wat de werkstroom meldde: 16,6 en 16,9 miljoen voor de 134 agents van nerds-v3 en nerds-v4.
 
-Niet gedekt, en dus niet in de schatting: een trage site, documenten van de site, video en geluid, veel bevindingen per criterium, een site achter een inlog en een tweede veegronde nadat de poort gaten vond.
+Niet gedekt, en dus niet in de schatting: documenten van de site, video en geluid, veel bevindingen per criterium, een site achter een inlog, een tweede veegronde nadat de poort gaten vond, en een site die tijdens het onderzoek trager wordt dan bij de inventaris of die meer pagina's tegelijk slecht verdraagt. Een trage site telt wel mee, via de laadtijd per pagina uit de inventaris. Een inventaris van vóór deze versie heeft die laadtijd en de tellingen per pagina niet; dan rekent `estimate` met een gewone pagina en een laadtijd van een seconde, en zegt het dat erbij.
+
+### De veegronde naast gemeten runs
+
+Het model per pagina is op 16 oktober 2026 afgesteld op vijf gemeten veegrondes: twee op een site elders, met 223 pagina's één tegelijk en met 19 pagina's zes tegelijk, één op een tweede site elders met 11 pagina's, en twee op de testsite met 19 pagina's, één en vier tegelijk. Elke cel is geschat / gemeten, in minuten; de schatting is die na `collect`, met de tellingen uit de metingen. De laatste kolom is wat de oude schatting met een vast getal per pagina zei voor de hele veegronde.
+
+| Run | `collect` | `contrast` | `states` | Veegronde | Afwijking | Oude schatting |
+|---|---|---|---|---|---|---|
+| Site elders, 223 pagina's, één tegelijk | 402 / 408 | 111 / 116 | 91 / 68 | 603 / 592 | 2% te hoog | 464, 22% te laag |
+| Dezelfde site, 19 pagina's, zes tegelijk | 12 / 12 | 5 / 5 | 30 / 30 | 46 / 47 | minder dan 1% te laag | 15, 68% te laag |
+| Tweede site elders, 11 pagina's, één tegelijk | 6 / 7 | 2 / 1,6 | 8 / 7 | 16 / 15 | 8% te hoog | 23, 50% te hoog |
+| Testsite, 19 pagina's, één tegelijk | 16 / 14 | 4 / 2 | 10 / 10 | 30 / 26 | 16% te hoog | 28, 9% te hoog |
+| Testsite, 19 pagina's, vier tegelijk | 6 / 3 | 2 / 0,6 | 6 / 4 | 14 / 8 | 84% te hoog | 12, 61% te hoog |
+
+Wat de tabel zegt, en wat niet:
+
+- **Afgesteld, dus geen bewijs.** De getallen zijn op deze runs gezet; dat de twee runs op de eerste site binnen een paar procent uitkomen, zegt vooral dat het model ze kan beschrijven. De tweede site elders is maar half een toets: het indrukken en aanwijzen per pagina is mede op haar gezien.
+- **`states` hangt af van wat een pagina toevoegt.** Op de site met 19 pagina's en tot 180 links per pagina duurde `states` 30 minuten, waarvan aanwijzen en indrukken bijna alles; de oude schatting gaf 10. Vóór `collect` rekent `estimate` met een derde nieuwe elementen per pagina; op de testsite is dat een achtste, en daar schat het `states` vóór `collect` dan ook twee keer te hoog (22 minuten tegen 10). Na `collect` telt het de nieuwe elementen zelf.
+- **De testsite met vier tegelijk.** `collect` ging daar met vier tegelijk vijf keer zo snel als met één, ook bij een tweede meting (835 en 858 seconden met één, 167 en 187 met vier). Meer dan vier keer is niet uit het werk te verklaren, en waarom een pagina met één tegelijk langer duurt, is nog niet uitgezocht. Het model rekent met hooguit n keer zo snel en schat hier te hoog.
+- **`contrast` op de testsite** is twee keer zo kort als geschat: de pagina's delen bijna al hun links, ook als hun opbouw verschilt. Het gaat om twee minuten.
+- **De laadtijd is op de sites elders niet gemeten.** Hun inventaris was van vóór deze versie; de schatting rekende met een seconde, de inventaris deed er gemiddeld 0,84 over. Hoe de schatting een echt trage site volgt, is nog niet aan een run getoetst.
+- **Het tempo van een stap die loopt** is getoetst door de metingen op de testsite na te spelen: op een kwart, de helft en drie kwart van de stap. Bij `collect` met vier tegelijk zat de rest eerst 38 procent te hoog, op de helft 8 procent en op drie kwart 2 procent te laag. Met één tegelijk 7 tot 11 procent te hoog. Bij `states` met één tegelijk 24 procent te laag tot 39 procent te hoog, omdat een groep die nog niet begon blijft zoals geschat.
 
 ### Wat de pool scheelt
 

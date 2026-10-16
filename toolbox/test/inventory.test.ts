@@ -134,6 +134,9 @@ test("at the limit the inventory covers the site in its breadth and says per par
     throw error;
   }
   assert.equal(found.pages.length, maxPages);
+  // What estimate reckons the sweep with: how long each page took to load, and what there is to operate on it.
+  assert.ok(found.pages.every((page) => typeof page.loadMs === "number" && page.loadMs > 0 && typeof page.operable?.links === "number" && typeof page.operable.controls === "number"));
+  assert.ok(found.pages.some((page) => page.operable!.links > 0), "the pages link to each other");
   const visited = found.pages.map((page) => new URL(page.url).pathname);
   const knowledge = visited.filter((path) => path.startsWith("/kennisbank/"));
   const blog = visited.filter((path) => path.startsWith("/blog/"));

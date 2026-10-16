@@ -158,11 +158,11 @@ describe("the sweep with four at once writes what it writes with one at a time",
     assert.deepEqual(siteStates.seeded.blockers, ["cookies"]);
     assert.ok(siteStates.states.find((state) => state.id === "component-chat")?.reached, "the chat was captured");
 
-    // The manifest says the same about each step, apart from the times and how many ran at once.
+    // The manifest says the same about each step, apart from the times (also those of each lane) and how many ran at once.
     const steps = async (atOnce: number): Promise<Record<string, unknown>[]> =>
       (await readJson<Manifest>(join(scratch, `at-once-${atOnce}`, "manifest.json"))).steps
         .filter((step) => ["collect", "contrast", "states"].includes(step.command))
-        .map(({ at: _at, startedAt: _startedAt, seconds: _seconds, atOnce: _atOnce, ...rest }) => rest);
+        .map(({ at: _at, startedAt: _startedAt, seconds: _seconds, atOnce: _atOnce, laneSeconds: _laneSeconds, ...rest }) => rest);
     assert.deepEqual(await steps(4), await steps(1));
     const sweptAtOnce = (await readJson<Manifest>(join(scratch, "at-once-4", "manifest.json"))).steps.filter((step) => step.atOnce !== undefined).map((step) => [step.command, step.atOnce]);
     assert.deepEqual(sweptAtOnce, [["collect", 4], ["contrast", 4], ["states", 4]]);
