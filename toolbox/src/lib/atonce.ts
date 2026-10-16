@@ -103,3 +103,59 @@ export async function inOrder<T>(count: number, atOnce: number, work: (index: nu
   if (failure) throw (failure as { error: unknown }).error;
   return settled.map((entry) => (entry as { value: T }).value);
 }
+
+/**
+ * A fixed number of browsers that pieces of work share: `run` waits until one is free and gives it
+ * back when the work is done, whether it succeeded or not. Whoever asked first gets the next one, so
+ * that a piece of work never waits on a later piece that took its place.
+ */
+export class Slots {
+  private free: number;
+  private readonly waiting: (() => void)[] = [];
+
+  constructor(count: number) {
+    if (!Number.isInteger(count) || count < 1) throw new Error(`slots: ${count} is no number of browsers`);
+    this.free = count;
+  }
+
+  /** Asks for a slot at once, before anything is awaited: the order of the calls is the order in which slots are given. */
+  async run<T>(work: () => Promise<T>): Promise<T> {
+    if (this.free > 0) this.free--;
+    else await new Promise<void>((resolve) => this.waiting.push(resolve));
+    try {
+      return await work();
+    } finally {
+      const next = this.waiting.shift();
+      if (next) next();
+      else this.free++;
+    }
+  }
+}
+
+/**
+ * Turns in the order of the indexes, for work that runs at the same time but must decide something
+ * in order. `turn(i)` resolves once every index before `i` said `done`; `done(i)` may come early,
+ * for a piece of work that failed before its turn, and may come more than once.
+ */
+export class Turns {
+  private readonly gates: Promise<void>[] = [];
+  private readonly releases: (() => void)[] = [];
+
+  constructor(count: number) {
+    let before = Promise.resolve();
+    for (let index = 0; index < count; index++) {
+      this.gates.push(before);
+      const own = new Promise<void>((resolve) => this.releases.push(resolve));
+      const previous = before;
+      before = previous.then(() => own);
+    }
+  }
+
+  turn(index: number): Promise<void> {
+    return this.gates[index]!;
+  }
+
+  done(index: number): void {
+    this.releases[index]!();
+  }
+}

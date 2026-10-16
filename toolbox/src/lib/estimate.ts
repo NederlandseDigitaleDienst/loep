@@ -42,16 +42,19 @@ export const COEFFICIENTS = {
   /**
    * The sweep with more than one at a time (`--at-once` of collect, contrast and states): how much faster
    * each command is, as `1 + (at once − 1) × gain`, with at once no higher than `most`. `collect` measures
-   * pages at the same time, `contrast` its four passes and `states` its five groups of probes, of which
-   * the longest sets the pace. Measured three times on four pages of the local test site, four at once
+   * pages at the same time, `contrast` its four passes and `states` its five groups of probes and the
+   * pages within a group. Measured three times on four pages of the local test site, four at once
    * against one: `collect` 3.1, 3.8 and 3.5 times as fast (287 and 93 seconds, 215 and 57, 209 and 59),
-   * `contrast` 2.8, 2.8 and 3.3, `states` 1.6, 1.7 and 1.7. Not measured on a site elsewhere, where a
-   * page waits more on the network and less on this machine, nor with more than four at once.
+   * `contrast` 2.8, 2.8 and 3.3. `states` on three and four pages of the test site 2.5, 2.5 and 3.8 times
+   * (175 and 70, 100 and 40, 182 and 48), on ten pages 3.6 times with four (372 and 104) and 4.0 with
+   * eight (92): the forms and buttons go page after page and set the pace from there. Not measured on a
+   * site elsewhere, where a page waits more on the network and less on this machine, nor with more than
+   * eight at once.
    */
   sweepAtOnce: {
     collect: { gain: 0.8, most: null },
     contrast: { gain: 0.6, most: 4 },
-    states: { gain: 0.2, most: 4 },
+    states: { gain: 0.45, most: 8 },
   },
   /** The gate with the agent that looks at the sheets, from the first to the last verdict: 1.4, 0.9, 1.3, 2.4, 2.7, 1.2. The two highest sent the explorer back once. */
   gateMinutes: 1.5,
