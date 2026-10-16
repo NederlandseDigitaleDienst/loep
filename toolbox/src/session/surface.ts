@@ -1,4 +1,5 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { Browser, BrowserContext, ElementHandle, Frame, Page, Response } from "playwright";
 import { frameAsPage, frameRecord } from "../browser/frame.ts";
@@ -112,6 +113,20 @@ export function topSurface(fields: Omit<Surface, "top" | "frame">): Surface {
   return surface;
 }
 
+/**
+ * The page that embeds an address, when the inventory found the address only as an embedded
+ * window. A visitor's browser names that page when it loads the window; a player that may only
+ * play on the site refuses an address opened on its own without it.
+ */
+export function embeddingPage(runDir: string, url: string): string | undefined {
+  const path = join(runDir, "inventory.json");
+  if (!existsSync(path)) return undefined;
+  const inventory = JSON.parse(readFileSync(path, "utf8")) as { pages: { url: string; foundVia: string[] }[] };
+  const via = inventory.pages.find((page) => page.url === url)?.foundVia ?? [];
+  if (via.length === 0 || !via.every((entry) => entry.startsWith("iframe:"))) return undefined;
+  return via[0]!.slice("iframe:".length);
+}
+
 /** Open a fresh browser context on the start URL, with every safety limit of a session in place. */
 export async function openSurface(env: Env, start: StartState, onContext?: (context: BrowserContext) => void): Promise<{ surface: Surface; load: LoadResult }> {
   const guard: Guard = { blocked: [], outsideScopeLoaded: {} };
@@ -165,7 +180,7 @@ export async function openSurface(env: Env, start: StartState, onContext?: (cont
       }
     });
     await env.politeness.before(start.url);
-    const load = await loadPage(page, start.url);
+    const load = await loadPage(page, start.url, embeddingPage(env.runDir, start.url));
     await leftScope(env, surface);
     return { surface, load };
   } catch (error) {

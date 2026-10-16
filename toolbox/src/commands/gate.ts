@@ -391,7 +391,7 @@ export function gateChecks(run: RunData): { checks: Check[]; gaps: Gap[]; warnin
   for (const entry of (run.siteStates?.refusedWrites ?? []).filter((candidate) => own(candidate.address))) writesByPage.set(entry.url, [...(writesByPage.get(entry.url) ?? []), `${entry.method} ${entry.address}`]);
   for (const [url, requests] of writesByPage) {
     const page = run.pages.find((candidate) => candidate.item.url === url);
-    limitations.push({ check: "needs-write-request", page: page?.label ?? null, url, state: "default", missingNl: `Niet onderzoekbaar zonder schrijfverzoek: de pagina vroeg zelf om ${[...new Set(requests)].slice(0, 3).join(", ")}. Dat is tegengehouden; inhoud die zo laadt ontbreekt, en een laadscherm kan zijn blijven staan. De schermafbeeldingen tonen dan niet de pagina zoals een bezoeker haar krijgt.` });
+    limitations.push({ check: "needs-write-request", page: page?.label ?? null, url, state: "default", missingNl: `Niet onderzoekbaar zonder schrijfverzoek: de pagina vroeg zelf om ${[...new Set(requests)].slice(0, 3).join(", ")}. Dat is tegengehouden; inhoud die zo laadt ontbreekt, en een laadscherm kan zijn blijven staan. De schermafbeeldingen tonen dan niet de pagina zoals een bezoeker haar krijgt. Niemand verstuurde hier iets: blijft een criterium daardoor open, dan is dat een proef die niet werkte, niet "versturen niet toegestaan".` });
   }
   // Movement the sweep measured on a page type for which the model names no moving content.
   if (model) {

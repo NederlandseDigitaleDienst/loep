@@ -20,6 +20,8 @@ export interface ReceivedRequest {
   /** When the request arrived, in milliseconds since the epoch. */
   at: number;
   userAgent: string;
+  /** The page the browser named as where the request came from; empty when it named none. */
+  referer: string;
 }
 
 export interface FixtureServer {
@@ -72,7 +74,7 @@ export async function startServer(port = 0): Promise<FixtureServer> {
   let otherOrigin = "";
   const note = (request: IncomingMessage): string => {
     const path = new URL(request.url ?? "/", "http://fixture").pathname;
-    requests.push({ method: request.method ?? "GET", host: (request.headers.host ?? "").split(":")[0]!, path, at: Date.now(), userAgent: String(request.headers["user-agent"] ?? "") });
+    requests.push({ method: request.method ?? "GET", host: (request.headers.host ?? "").split(":")[0]!, path, at: Date.now(), userAgent: String(request.headers["user-agent"] ?? ""), referer: String(request.headers.referer ?? "") });
     return path;
   };
   const server: Server = createServer(async (request, response) => {
@@ -156,7 +158,9 @@ export async function startServer(port = 0): Promise<FixtureServer> {
       if (extname(file) === ".html") {
         body = body.toString("utf8").replaceAll("__OTHER_ORIGIN__", otherOrigin).replaceAll("__VARIANT_TEXT__", VARIANTS[variant]!.text).replaceAll("__VARIANT_COLOUR__", VARIANTS[variant]!.colour);
       }
-      response.writeHead(200, { "content-type": TYPES[extname(file)] ?? "application/octet-stream", "cache-control": "no-store" }).end(body);
+      // A page asked for with ?cloudflare comes back as Cloudflare serves a page, with the header it adds to each response.
+      const viaCloudflare = new URL(request.url ?? "/", "http://fixture").searchParams.has("cloudflare") ? { "cf-ray": "8f0000000000abcd-AMS" } : {};
+      response.writeHead(200, { "content-type": TYPES[extname(file)] ?? "application/octet-stream", "cache-control": "no-store", ...viaCloudflare }).end(body);
     } catch {
       response.writeHead(404, { "content-type": "text/html; charset=utf-8" }).end('<!doctype html><html lang="nl"><head><meta charset="utf-8"><title>Niet gevonden - Testsite sessie</title></head><body><main><h1>Pagina niet gevonden</h1><p><a href="/">Naar de startpagina</a></p></main></body></html>');
     }
