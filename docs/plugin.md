@@ -22,7 +22,7 @@ De plugin staat in de marketplace `NederlandseDigitaleDienst/ai-plugins` (naam `
   "displayName": "NLDD loep",
   "description": "Experimenteel. loep maakt een toegankelijkheidsonderzoek van een website (WCAG 2.2 en 2.1, niveau A en AA, WCAG-EM) en de toegankelijkheidsverklaring die erop steunt. Drie skills: nldd-a11y wijst de weg, nldd-a11y-audit maakt het onderzoek (scripts meten, agents beoordelen elk criterium met meetinstrumenten en maken elke bevinding opnieuw vanaf een verse pagina, een mens tekent) en nldd-a11y-statement maakt van een getekend onderzoek de verklaring. Vereist Node en just; zie de README.",
   "author": { "name": "Nederlandse Digitale Dienst" },
-  "source": { "source": "github", "repo": "NederlandseDigitaleDienst/loep", "ref": "v0.7.0" },
+  "source": { "source": "github", "repo": "NederlandseDigitaleDienst/loep", "ref": "v0.8.0" },
   "category": "productivity",
   "tags": ["experimental", "overheid", "toegankelijkheid", "wcag", "wcag-em", "toegankelijkheidsverklaring", "rijksoverheid"]
 }

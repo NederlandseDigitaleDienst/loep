@@ -6,6 +6,8 @@ Wat er per versie van loep is veranderd. De versie staat op het voorblad en onde
 
 ## 0.8.0 (2026-10-16)
 
+Ook deze versie is uitgebracht zonder nieuwe meting op de testsite. Een onderzoek over meer origins is getest met eigen tests, niet in een volledige run.
+
 ### Wat een uitkomst kan veranderen
 
 - Een site die over meer dan één origin verdeeld is, zoals een landingspagina op `https://example.nl` en de documentatie op `https://docs.example.nl`, kan één onderzoek met één rapport zijn: `inventory <url> --also-origin <url>` (herhaalbaar). Per origin leest `inventory` de sitemap, begint bij de startpagina, vraagt de pagina voor een adres dat niet bestaat en telt en bevraagt de documenten; links tussen de origins tellen als eigen links. `inventory.json` noemt de origins onder `origins` en de foutpagina's onder `notFoundProbes`. De grens van `--max-pages` gaat eerst over de origins, en de melding bij de grens noemt per gedeelte de origin en het eerste deel van het pad. De steekproef kiest de startpagina en de andere vaste pagina's per origin. Het rapport noemt alle origins in de scope en bij de gegevens van het onderzoek, de verklaring noemt de andere origins als domeinen van de website, documenten op elke opgegeven origin worden onderzocht, en de controle van een oordeel keurt een advies met een adres op een van de origins niet meer af. Een origin die niet is opgegeven, zoals een ander subdomein, blijft erbuiten. Een run op één origin, ook een oude zonder `origins`, verandert niet, op één ding na: op een site met een poort in het adres, zoals de testsite, keurt de controle een advies met een adres van de site zelf niet meer af; de poort hoort nu bij de host die wordt vergeleken (#84).
