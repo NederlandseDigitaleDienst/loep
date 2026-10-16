@@ -6,6 +6,7 @@ import { signatureIsCurrent } from "../commands/sign.ts";
 import { extensionsNl } from "./budget.ts";
 import { modelsNl } from "./models.ts";
 import { NOT_SENT, notSentOrigins, OPEN_POINT_KINDS, openPoint, waitsOnlyOnSending, type Outcome } from "./verdict.ts";
+import { siteOrigins } from "./origins.ts";
 import { readsAllowedNl } from "./reads.ts";
 import { compareCriterionIds, type WcagVersion } from "./wcag.ts";
 
@@ -912,6 +913,12 @@ const openAnchor = (id: string): string => `open-${id}`;
 const findingLink = (finding: ReportFinding): string => `[${finding.id}](#${finding.id})`;
 const bullets = (items: string[]): string[] => items.map((item) => `- ${item}`);
 
+/** The line under the address for a site on more than one origin: the further origins it covers. Nothing for a site on one. */
+const alsoOnNl = (evaluation: Evaluation): string[] => {
+  const further = siteOrigins(evaluation.site).slice(1);
+  return further.length > 0 ? [`Ook onderdeel van de site: ${further.map((origin) => `<${origin}>`).join(", ")}`] : [];
+};
+
 function table(header: string[], rows: string[][], numeric: number[] = []): string[] {
   const align = header.map((_cell, index) => (numeric.includes(index) ? "---:" : "---"));
   return [header, align, ...rows].map((row) => `| ${row.join(" | ")} |`);
@@ -1149,6 +1156,7 @@ export function renderMarkdown(input: Evaluation): string {
     ...bullets([
       `Website: ${esc(evaluation.site.name)}`,
       `URL: <${evaluation.site.baseUrl}>`,
+      ...alsoOnNl(evaluation),
       `Organisatie: ${evaluation.site.organisation ? esc(evaluation.site.organisation) : "niet opgegeven"}`,
       `Datum van het onderzoek: ${derived.dateNl}`,
       `Versie van de evaluatie: ${code(derived.hashShort)}`,
@@ -1258,6 +1266,7 @@ export function renderMarkdown(input: Evaluation): string {
     ...bullets([
       `Site: ${esc(evaluation.site.name)}`,
       `URL: <${evaluation.site.baseUrl}>`,
+      ...alsoOnNl(evaluation),
       `Organisatie: ${evaluation.site.organisation ? esc(evaluation.site.organisation) : "niet opgegeven"}`,
       `Datum: ${derived.dateNl}`,
       `Norm: ${[...evaluation.standards.wcag, evaluation.standards.en301549].map(esc).join("; ")}`,

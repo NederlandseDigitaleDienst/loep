@@ -267,7 +267,14 @@ export interface BrowserUse {
 export interface Evaluation {
   schema: "loep/evaluation/1";
   /** `descriptionNl`: what the site is and who it is for, as the explorer wrote it down. Absent when the site model has none. */
-  site: { name: string; baseUrl: string; organisation: string | null; descriptionNl?: string };
+  site: {
+    name: string;
+    baseUrl: string;
+    /** Every origin of the site, the one of `baseUrl` first. Only when the site is spread over more than one (`inventory --also-origin`); read it with `siteOrigins`. */
+    origins?: string[];
+    organisation: string | null;
+    descriptionNl?: string;
+  };
   /** Whose components the site is built with; absent when nobody said. */
   vendor?: Vendor;
   evaluatedAt: string;

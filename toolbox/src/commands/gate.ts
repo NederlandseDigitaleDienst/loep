@@ -7,6 +7,7 @@ import { expectedFocusable, pageCoverage, reachedByKeyboard, representativePages
 import { type Manifest, stepStart, writeManifest } from "../lib/manifest.ts";
 import { readTemplate } from "../lib/templates.ts";
 import { makeWorkDir } from "../lib/workdir.ts";
+import { notFoundProbes, siteHosts, siteLabel } from "../lib/origins.ts";
 import { uncoveredOperables, type CountedPage } from "../lib/operables.ts";
 import { loadRun, type PageData, type RunData } from "../lib/rundata.ts";
 import { frameAddress, frameEntry, frameStanding, type Component } from "../lib/sitemodel.ts";
@@ -162,7 +163,8 @@ export function gateChecks(run: RunData): { checks: Check[]; gaps: Gap[]; warnin
   };
 
   // 1. Pages that did not load: what was recorded for them is an error page.
-  const notFound = (page: PageData): boolean => page.item.url === run.inventory.notFoundProbe || /404/.test(page.item.reason);
+  const probes = notFoundProbes(run.inventory);
+  const notFound = (page: PageData): boolean => probes.includes(page.item.url) || /404/.test(page.item.reason);
   const loadFailed = run.pages.filter((page) => !notFound(page) && (page.item.status === null || page.item.status >= 400));
   // An embedded window that the model names as a component nobody can operate (no recipe, with the reason) does not load for
   // the tools either: that is the same limitation as frame-not-operated below, not a gap the explorer can close.
@@ -371,13 +373,12 @@ export function gateChecks(run: RunData): { checks: Check[]; gaps: Gap[]; warnin
   }
   // Only what the site itself is asked for counts: a measuring beacon of a third party that is refused takes no content away.
   const ownHosts = new Set(run.pages.filter((page) => page.item.kind !== "embedded").map((page) => new URL(page.item.url).host));
-  let siteHost: string | null = null;
+  // Every origin of the site counts, also one without a page in the sample.
   try {
-    siteHost = new URL(run.inventory.baseUrl).host;
+    for (const host of siteHosts(run.inventory)) ownHosts.add(host);
   } catch {
-    siteHost = null;
+    // An inventory without a usable address: only the hosts of the pages count.
   }
-  if (siteHost) ownHosts.add(siteHost);
   const own = (address: string): boolean => ownHosts.has(address.split("/")[0]!);
   // Hosts outside the run that are refused on a plain page load as well say nothing about a component: those are left out for its state.
   const states = run.siteStates?.states ?? [];
@@ -795,7 +796,7 @@ export async function gate(runDir: string, outDir: string = runDir): Promise<Gat
     await writeFileAtomic(
       join(outDir, part.task),
       fill(template, {
-        site: new URL(run.inventory.baseUrl).hostname,
+        site: siteLabel(run.inventory),
         run: absoluteRun,
         sheets: part.sheets.map(sheetText).join("\n\n") || "Er zijn geen bladen: de run heeft geen schermafbeeldingen.",
         questions: [...QUESTIONS.map((question) => `- \`${question.id}\`: ${question.questionNl}`), `- \`stateTiles\`: ${STATE_QUESTION_NL}`].join("\n"),

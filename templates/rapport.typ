@@ -626,6 +626,8 @@
 #facts(
   ("Site", site.name),
   ("URL", url-link(site.baseUrl)),
+  // A site on more than one origin (inventory --also-origin): the further origins it covers.
+  ..if site.at("origins", default: ()).len() > 1 { (("Ook onderdeel van de site", site.origins.slice(1).map(url-link).join(linebreak())),) },
   ("Organisatie", or-none(site.organisation, "Niet opgegeven")),
   ("Datum", derived.dateNl),
   ("Norm", (..evaluation.standards.wcag, evaluation.standards.en301549).join(linebreak())),

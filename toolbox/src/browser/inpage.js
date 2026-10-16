@@ -1140,14 +1140,19 @@
     return lines.join("\n");
   }
 
-  function sameOriginLinks() {
+  /**
+   * The links to follow: those on the origin of the page, and on the other origins of the site
+   * when it has more than one (`origins`, given with --also-origin at inventory).
+   */
+  function sameOriginLinks(origins = []) {
+    const own = new Set([location.origin, ...origins]);
     const urls = new Set();
     for (const element of deepElements()) {
       const raw = element.getAttribute?.("href");
       if (!raw || element.localName === "link") continue;
       try {
         const url = new URL(raw, document.baseURI);
-        if (url.origin !== location.origin) continue;
+        if (!own.has(url.origin)) continue;
         url.hash = "";
         urls.add(url.href);
       } catch {

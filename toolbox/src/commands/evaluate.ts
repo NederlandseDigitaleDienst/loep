@@ -5,6 +5,7 @@ import { readJson, sha256File } from "../lib/canonical.ts";
 import { allCriteriaSorted, carryFindingIds, ESTABLISHED_BY_NL, evaluationHash, idsAcrossVersionsNl, knownCommit, OUTCOME_LABEL, markVendor, openCriteria, quoteStart, resolveCriterion, summarise, type BrowserUse, type CriterionResult, type Evaluation, type PointAnswer, type RoundVerdicts } from "../lib/evaluation.ts";
 import { matchFindings, sideOf } from "../lib/difference.ts";
 import { documentScopeNl, evaluationDocuments } from "../lib/documents.ts";
+import { pagesInScopeNl, siteOrigins } from "../lib/origins.ts";
 import { type Manifest, stepStart, writeManifest } from "../lib/manifest.ts";
 import { agentPhaseTimings } from "../lib/timing.ts";
 import { sessionWatchAnswers } from "../lib/timelimits.ts";
@@ -196,9 +197,11 @@ export async function evaluate(options: EvaluateOptions): Promise<Evaluation> {
 
   // Documents: what was found, what was read and what was not. An inventory from before documents were looked for says what it said then.
   const searchedForDocuments = run.inventory.documents !== undefined;
+  // The origins of the site: one in most runs, more when the inventory was given --also-origin.
+  const origins = siteOrigins(run.inventory);
   const population = run.sample.documentPopulation;
   const documents = population ? evaluationDocuments(run.documents ?? [], population, procedures.filter((procedure) => procedure.evidence.includes("documents")).map((procedure) => procedure.id)) : null;
-  const documentScope = searchedForDocuments ? documentScopeNl(documents, run.inventory.origin, run.inventory.documentTotals?.elsewhere ?? 0) : null;
+  const documentScope = searchedForDocuments ? documentScopeNl(documents, origins, run.inventory.documentTotals?.elsewhere ?? 0) : null;
 
   const limitations = [
     browsersNl,
@@ -266,7 +269,7 @@ export async function evaluate(options: EvaluateOptions): Promise<Evaluation> {
 
   const evaluation: Evaluation = {
     schema: "loep/evaluation/1",
-    site: { name: options.name, baseUrl: run.inventory.baseUrl, organisation: options.organisation, ...(description ? { descriptionNl: description } : {}) },
+    site: { name: options.name, baseUrl: run.inventory.baseUrl, ...(origins.length > 1 ? { origins } : {}), organisation: options.organisation, ...(description ? { descriptionNl: description } : {}) },
     ...(run.inventory.vendor ? { vendor: run.inventory.vendor } : {}),
     evaluatedAt: manifest.steps.find((step) => step.command === "collect")?.at ?? new Date().toISOString(),
     method: {
@@ -284,7 +287,7 @@ export async function evaluate(options: EvaluateOptions): Promise<Evaluation> {
     },
     standards: { wcag: ["WCAG 2.2 niveau A en AA", "WCAG 2.1 niveau A en AA"], en301549: documents ? "EN 301 549 v3.2.1, hoofdstuk 9 (webpagina's) en hoofdstuk 10 (documenten)" : "EN 301 549 v3.2.1, hoofdstuk 9" },
     scope: {
-      includedNl: [`Alle pagina's op ${run.inventory.origin}`, ...(documentScope?.includedNl ?? [])],
+      includedNl: [pagesInScopeNl(origins), ...(documentScope?.includedNl ?? [])],
       excludedNl: ["Websites van derden waarnaar wordt gelinkt, ook inloggen bij DigiD, eHerkenning of eIDAS: die diensten hebben een eigen toegankelijkheidsverklaring", ...(documentScope ? documentScope.excludedNl : ["Pdf-bestanden en andere documenten die geen webpagina zijn, ook als ze op de site zelf staan"])],
       ...(scopeFrames.length > 0 ? { frames: scopeFrames } : {}),
     },

@@ -2,6 +2,7 @@ import { join } from "node:path";
 import { readJson, sha256, stableId, writeJson } from "../lib/canonical.ts";
 import { countByKind, DOCUMENT_KINDS, documentLabels, kindsNl, READ_KINDS, type DocumentKind, type InventoryDocument, type SampleDocument } from "../lib/documents.ts";
 import { stepStart, writeManifest } from "../lib/manifest.ts";
+import { notFoundProbes, siteOrigins } from "../lib/origins.ts";
 import { frameAddress, frameEntry, frameStanding, loadSiteModel, type SiteModel } from "../lib/sitemodel.ts";
 import type { Inventory, InventoryPage } from "./inventory.ts";
 
@@ -231,7 +232,10 @@ export function buildSample(inventory: Inventory, seed: string, model: SiteModel
     return { ...sample, note: `${sample.note}${note}`, excludedFrames: framed.excluded, ...perType };
   }
   const unique = deduplicate(inventory.pages);
-  const toItem = (entry: { page: InventoryPage; aliases: string[] }, kind: SampleKind, reason: string): SampleItem => {
+  // The page for a missing address on every origin of the site, and the origins themselves.
+  const probes = new Set(notFoundProbes(inventory));
+  const origins = siteOrigins(inventory);
+  const toItem =(entry: { page: InventoryPage; aliases: string[] }, kind: SampleKind, reason: string): SampleItem => {
     const frameOf = entry.page.foundVia.filter((via) => via.startsWith("iframe:")).map((via) => via.slice("iframe:".length));
     const embedded = frameOf.length > 0 && frameOf.length === entry.page.foundVia.length;
     return embedded ? { ...build(entry, "embedded", `ingesloten venster op ${frameOf.join(", ")}`), embeddedOn: frameOf } : build(entry, kind, reason);
@@ -266,7 +270,7 @@ export function buildSample(inventory: Inventory, seed: string, model: SiteModel
       populationSize: unique.length,
       note: `De site telt ${unique.length} unieke pagina's. Ze zijn allemaal onderzocht, dus er is geen steekproeffout.`,
       items: unique.map((entry) =>
-        toItem(entry, "structured", entry.page.url === inventory.notFoundProbe ? "foutpagina (404)" : "volledige site onderzocht"),
+        toItem(entry, "structured", probes.has(entry.page.url) ? "foutpagina (404)" : "volledige site onderzocht"),
       ),
     };
   }
@@ -280,21 +284,25 @@ export function buildSample(inventory: Inventory, seed: string, model: SiteModel
   // WCAG-EM asks for the start page, the contact page and the like once each, not for every page whose path holds the word:
   // per kind the page highest up in the site, so /toegankelijkheid and not a tag page or a blog post that names it.
   const depth = (url: string): number => new URL(url).pathname.split("/").filter(Boolean).length;
+  // On a site with more than one origin each origin keeps its own: the documentation on a subdomain has a start page of its own.
   const commonOf = new Map<string, string>();
-  for (const [pattern, label] of COMMON_PAGES) {
-    const candidates = unique.filter((entry) => {
-      const path = new URL(entry.page.url).pathname;
-      return entry.page.url !== inventory.notFoundProbe && !entry.page.foundVia.every((via) => via.startsWith("iframe:")) && !commonOf.has(entry.page.url) && pattern.test(path === "/" ? "" : path);
-    });
-    const best = candidates.sort((a, b) => depth(a.page.url) - depth(b.page.url) || a.page.url.length - b.page.url.length || a.page.url.localeCompare(b.page.url))[0];
-    if (best) commonOf.set(best.page.url, label);
+  for (const group of origins.length > 1 ? origins : [null]) {
+    for (const [pattern, label] of COMMON_PAGES) {
+      const candidates = unique.filter((entry) => {
+        const url = new URL(entry.page.url);
+        const path = url.pathname;
+        return (group === null || url.origin === group) && !probes.has(entry.page.url) && !entry.page.foundVia.every((via) => via.startsWith("iframe:")) && !commonOf.has(entry.page.url) && pattern.test(path === "/" ? "" : path);
+      });
+      const best = candidates.sort((a, b) => depth(a.page.url) - depth(b.page.url) || a.page.url.length - b.page.url.length || a.page.url.localeCompare(b.page.url))[0];
+      if (best) commonOf.set(best.page.url, group === null || group === origins[0] ? label : `${label} van ${new URL(group).hostname}`);
+    }
   }
   for (const entry of ordered) {
     const type = typeOf.get(entry.page.url);
     const common = commonOf.get(entry.page.url);
     const isFrame = entry.page.foundVia.every((via) => via.startsWith("iframe:"));
     if (isFrame) chosen.set(entry.page.url, toItem(entry, "embedded", "ingesloten venster"));
-    else if (entry.page.url === inventory.notFoundProbe) chosen.set(entry.page.url, toItem(entry, "structured", "foutpagina (404)"));
+    else if (probes.has(entry.page.url)) chosen.set(entry.page.url, toItem(entry, "structured", "foutpagina (404)"));
     else if (common) chosen.set(entry.page.url, toItem(entry, "structured", common));
     // With a site model the page types say what is the same: a template hash that differs per page does not add one.
     else if (type !== undefined ? !seenTypes.has(type) : !seenTemplates.has(entry.page.templateHash)) chosen.set(entry.page.url, toItem(entry, "structured", "eerste pagina van dit paginatype"));
@@ -314,7 +322,7 @@ export function buildSample(inventory: Inventory, seed: string, model: SiteModel
     const kindsOf = contentKindsOfType(members.map((entry) => entry.page));
     const covered = members.filter((entry) => chosen.has(entry.page.url)).flatMap((entry) => kindsOf.get(entry.page.url) ?? []);
     const pool = members
-      .filter((entry) => !chosen.has(entry.page.url) && entry.page.url !== inventory.notFoundProbe && !entry.page.foundVia.every((via) => via.startsWith("iframe:")))
+      .filter((entry) => !chosen.has(entry.page.url) && !probes.has(entry.page.url) && !entry.page.foundVia.every((via) => via.startsWith("iframe:")))
       .map((entry) => ({ ...entry, url: entry.page.url, kinds: kindsOf.get(entry.page.url) ?? [] }));
     for (const { candidate, added } of chooseOnVariation(pool, covered, wanted, seed)) {
       const reason = added.length > 0 ? `${VARIATION_REASON}${added.join(", ")}` : `${SEED_EXTRA_REASON}, gekozen met seed ${seed}: geen pagina voegt nog een soort inhoud toe`;

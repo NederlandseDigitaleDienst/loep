@@ -14,7 +14,7 @@ const USAGE = `loep <command> [options]
   watch-session --run <run> [--gaps 5,10,20,40,80] [--max-hours 8]
                                          The watch on the session of a run with a login. collect starts it in the background
                                          and evaluate stops it; a second start on the same run leaves the running one alone
-  inventory <url> --out <run> [--allow-writes | --test-environment <origin> --declared-by "<name>, <role>"]
+  inventory <url> --out <run> [--also-origin <url>]... [--allow-writes | --test-environment <origin> --declared-by "<name>, <role>"]
                                          Find every page and count what is on it. In a run with a login the pages are found
                                          by following links from the page the person pointed at; a link that logs out is never followed
   explore --run <run>                    Write the task for the agent that maps the site before it is measured
@@ -92,6 +92,9 @@ Options:
                     The report lists per such element the findings that touch it; the owner of a finding stays as judged
   --vendor-name <n> With --vendor-tags: what the report calls the vendor, such as "designsysteem" (default "leverancier")
   --urls <file>     With inventory: evaluate exactly the URLs in this file, one per line
+  --also-origin <u> With inventory, repeatable: a further origin of the same site, such as its documentation on
+                    https://docs.example.nl. Its sitemap, start page, links, page for a missing address and documents
+                    count as the site's own; one report covers all origins. An origin not given stays outside
   --allow-writes    With inventory, for a site on this machine or a .test or .localhost name only: let the run
                     submit forms and send other requests that change something. On any other site, name the test
                     environment and who declares it to be one: --test-environment <origin> --declared-by "<name>, <role>"
@@ -137,6 +140,7 @@ async function main(): Promise<void> {
       "vendor-name": { type: "string" },
       only: { type: "string" },
       urls: { type: "string" },
+      "also-origin": { type: "string", multiple: true },
       seed: { type: "string", default: "toegankelijk" },
       criterion: { type: "string" },
       name: { type: "string" },
@@ -183,6 +187,7 @@ async function main(): Promise<void> {
   if (command !== "inventory" && (values["allow-writes"] || values["test-environment"] !== undefined || values["declared-by"] !== undefined)) {
     throw new Error("--allow-writes, --test-environment en --declared-by horen bij inventory: daar wordt voor de hele run vastgelegd of er verstuurd mag worden");
   }
+  if (command !== "inventory" && values["also-origin"] !== undefined) throw new Error("--also-origin hoort bij inventory: daar wordt vastgelegd welke origins samen de site zijn");
   // `gaps` and `feedback` read the verdicts and the evaluation of finished runs and nothing else of them: they need no permission to write and no login.
   const readsOnly = command === "gaps" || command === "feedback";
   if (command !== "inventory" && !readsOnly && values.run) {
@@ -219,18 +224,23 @@ async function main(): Promise<void> {
       // What this command was given decides whether a session may be used: the manifest only holds it afterwards.
       setRunLogin(values.out, { writes: permission });
       const { formPagesNl, inventory, pageLimitNl, passwordPagesNl } = await import("./commands/inventory.ts");
+      const { originsNl, originsOfRun, siteOrigins } = await import("./lib/origins.ts");
+      // Checked before the browser starts: a mistyped origin should not cost a whole inventory.
+      const origins = originsOfRun(target, values["also-origin"]);
+      if ((values["also-origin"]?.length ?? 0) > 0 && origins.length === 1) throw new Error(`--also-origin noemt alleen de origin van het startadres (${origins[0]}); een tweede origin is bijvoorbeeld https://docs.example.nl`);
       const fixedUrls = values.urls ? (await import("node:fs")).readFileSync(values.urls, "utf8").split("\n").map((line) => line.trim()).filter(Boolean) : undefined;
       const tagPrefixes = (values["vendor-tags"] ?? "").split(",").map((prefix) => prefix.trim().toLowerCase()).filter(Boolean);
       if (tagPrefixes.some((prefix) => !/^[a-z][a-z0-9]*-[a-z0-9-]*$/.test(prefix))) throw new Error('--vendor-tags: elke prefix is het begin van een elementnaam met een streepje, zoals "nldd-"');
       if (values["vendor-name"] !== undefined && tagPrefixes.length === 0) throw new Error("--vendor-name hoort bij --vendor-tags");
       const vendor = tagPrefixes.length > 0 ? { tagPrefixes, nameNl: values["vendor-name"]?.trim() || "leverancier" } : undefined;
-      const result = await inventory({ baseUrl: target, out: values.out, maxPages: Number(values["max-pages"]), fixedUrls, vendor });
+      const result = await inventory({ baseUrl: target, out: values.out, maxPages: Number(values["max-pages"]), fixedUrls, vendor, alsoOrigins: values["also-origin"] });
       await recordWrites(values.out, permission);
       if (permission) {
         process.stdout.write(`versturen toegestaan naar ${permission.origin}${permission.declaredBy ? `, verklaard door ${permission.declaredBy.name} (${permission.declaredBy.role})` : ""}\n`);
         // Say where the declaration ends up, so nobody finds their name somewhere they did not expect.
         if (permission.declaredBy) process.stdout.write(`let op: de naam staat in manifest.json van deze run; het rapport en de verklaring noemen alleen de functie (${permission.declaredBy.role}). Wie de map van de run deelt of publiceert, deelt ook de naam.\n`);
       }
+      if (origins.length > 1) process.stdout.write(`één site op ${origins.length} origins: ${originsNl(origins)}\n`);
       process.stdout.write(`${result.pages.length} pages, ${result.skipped.length} skipped, ${result.sitemapUrls} in sitemap\n`);
       // Right below the totals: a limit that goes unnoticed changes which site is evaluated.
       const limited = pageLimitNl(result, Number(values["max-pages"]));
@@ -239,7 +249,7 @@ async function main(): Promise<void> {
       if (totals && totals.onSite + totals.elsewhere > 0) process.stdout.write(`${totals.onSite} documents on the site, ${totals.elsewhere} on other origins (counted only)\n`);
       const behindLogin = passwordPagesNl(result.pages, runLoginMark() !== null);
       if (behindLogin) process.stdout.write(`${behindLogin}\n`);
-      const notSent = formPagesNl(result.pages, result.origin, permission !== null);
+      const notSent = formPagesNl(result.pages, siteOrigins(result), permission !== null);
       if (notSent) process.stdout.write(`${notSent}\n`);
       return;
     }

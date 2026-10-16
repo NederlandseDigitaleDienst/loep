@@ -6,6 +6,7 @@ import { countByKind, documentKind, kindOfContentType, type DocumentKind, type D
 import type { Vendor } from "../lib/evaluation.ts";
 import { isLogout, loginCookieHeader, LoginExpired, noteLogoutUrl, runLoginMark } from "../lib/login.ts";
 import { stepStart, writeManifest } from "../lib/manifest.ts";
+import { notFoundProbes, originsOfRun, siteOrigins } from "../lib/origins.ts";
 
 export interface InventoryPage {
   url: string;
@@ -31,16 +32,22 @@ export interface InventoryPage {
 
 export interface Inventory {
   baseUrl: string;
+  /** The origin of the start address. */
   origin: string;
+  /** Every origin of the site, `origin` first, then each one given with `--also-origin`. Absent in older runs, which have only `origin`; read it with `siteOrigins`. */
+  origins?: string[];
   sitemapUrls: number;
+  /** The address asked for to see the page for a missing address, on `origin`. */
   notFoundProbe: string;
+  /** The same address on every origin of the site, `notFoundProbe` first. Absent in older runs; read it with `notFoundProbes`. */
+  notFoundProbes?: string[];
   pages: InventoryPage[];
   skipped: { url: string; reason: string }[];
   /** Site-wide totals of the features whose absence makes a criterion "not applicable". */
   totals: Record<string, number>;
   /** Whose components the site is built with, when the one who started the run said so. */
   vendor?: Vendor;
-  /** Documents on the origin of the run that a page links to or the sitemap names. Absent in older runs. */
+  /** Documents on the origins of the run that a page links to or the sitemap names. Absent in older runs. */
   documents?: InventoryDocument[];
   /** How many documents there are, here and on other origins. Absent in older runs. */
   documentTotals?: DocumentTotals;
@@ -52,6 +59,8 @@ export interface InventoryOptions {
   baseUrl: string;
   out: string;
   maxPages: number;
+  /** Further origins of the same site, such as its documentation on a subdomain (`--also-origin`). */
+  alsoOrigins?: string[] | undefined;
   /** Evaluate exactly these URLs and follow no links: used to repeat the sample of an existing audit. */
   fixedUrls?: string[] | undefined;
   vendor?: Vendor | undefined;
@@ -98,14 +107,15 @@ export function passwordPagesNl(pages: Pick<InventoryPage, "url" | "counts">[], 
  * asks with GET, which is always allowed. Null when there is nothing to say. A chat without a
  * form element is not counted.
  */
-export function formPagesNl(pages: Pick<InventoryPage, "url" | "counts" | "foundVia">[], origin: string, writesAllowed: boolean): string | null {
+export function formPagesNl(pages: Pick<InventoryPage, "url" | "counts" | "foundVia">[], origins: string | readonly string[], writesAllowed: boolean): string | null {
   if (writesAllowed) return null;
+  const ownOrigins = typeof origins === "string" ? [origins] : origins;
   const forms = (entry: (typeof pages)[number]): number => (typeof entry.counts.forms === "number" ? entry.counts.forms : 0);
   const isFrame = (entry: (typeof pages)[number]): boolean => entry.foundVia.length > 0 && entry.foundVia.every((via) => via.startsWith("iframe:"));
   const own = pages.filter((entry) => !isFrame(entry));
   const everywhere = own.length > 0 ? Math.min(...own.map(forms)) : 0;
   const withForm = own.filter((entry) => forms(entry) > everywhere).map((entry) => entry.url);
-  const frames = pages.filter((entry) => isFrame(entry) && new URL(entry.url).origin !== origin && forms(entry) > 0).map((entry) => entry.url);
+  const frames = pages.filter((entry) => isFrame(entry) && !ownOrigins.includes(new URL(entry.url).origin) && forms(entry) > 0).map((entry) => entry.url);
   if (withForm.length === 0 && frames.length === 0) return null;
   const named = (urls: string[]): string => (urls.length === 1 ? urls[0]! : `${urls[0]} en ${urls.length - 1} meer`);
   const parts = [
@@ -132,9 +142,21 @@ export function addressLevels(url: string): string[] {
 
 const levelKey = (levels: string[], depth: number): string => levels.slice(0, depth).join("\n");
 
+/**
+ * The levels by which the order takes turns. On a site with more than one origin the origin is
+ * the first level, so each origin of the site gets its share before the parts within it do. An
+ * address on another origin (an embedded frame) counts as one of the first origin, as it always
+ * did, so a site with one origin is visited in the same order as before.
+ */
+function visitLevels(url: string, origins: readonly string[]): string[] {
+  if (origins.length <= 1) return addressLevels(url);
+  const origin = new URL(url).origin;
+  return [origins.includes(origin) ? origin : origins[0]!, ...addressLevels(url)];
+}
+
 /** Record that an address was visited: every part of the site it sits in has one more page. */
-export function noteVisited(visited: Map<string, number>, url: string): void {
-  const levels = addressLevels(url);
+export function noteVisited(visited: Map<string, number>, url: string, origins: readonly string[] = []): void {
+  const levels = visitLevels(url, origins);
   for (let depth = 1; depth <= levels.length; depth++) {
     const key = levelKey(levels, depth);
     visited.set(key, (visited.get(key) ?? 0) + 1);
@@ -148,12 +170,13 @@ export function noteVisited(visited: Map<string, number>, url: string): void {
  * and so on down the path. A shallower address goes before a deeper one with the same counts,
  * and the address itself decides a tie, so the order never depends on timing. A part full of
  * tag pages or pages of a list (`/blog/tag/x/page/2`) thus gets its turn like any other part,
- * instead of filling the limit because its addresses come first in the alphabet.
+ * instead of filling the limit because its addresses come first in the alphabet. With more than
+ * one origin, the origin comes before the first path segment (see visitLevels).
  */
-export function nextAddress(candidates: Iterable<string>, visited: Map<string, number>): string | undefined {
+export function nextAddress(candidates: Iterable<string>, visited: Map<string, number>, origins: readonly string[] = []): string | undefined {
   let best: { url: string; counts: number[] } | undefined;
   for (const url of candidates) {
-    const levels = addressLevels(url);
+    const levels = visitLevels(url, origins);
     const counts = levels.map((_, index) => visited.get(levelKey(levels, index + 1)) ?? 0);
     const order = best === undefined ? -1 : compareCounts(counts, best.counts) || (url < best.url ? -1 : 1);
     if (order < 0) best = { url, counts };
@@ -169,12 +192,17 @@ function compareCounts(a: number[], b: number[]): number {
 /** The reason recorded for an address left out because the limit on pages was reached. */
 export const pageLimitReason = (maxPages: number): string => `page limit of ${maxPages} reached`;
 
-/** The part of the site an address belongs to, as `pageLimitNl` names it: the first path segment, or the origin of another site. */
-function sectionOf(url: string, origin: string): string {
+/**
+ * The part of the site an address belongs to, as `pageLimitNl` names it: the first path segment,
+ * or the origin of another site. On a site with more than one origin, the origin and the first
+ * path segment ("https://docs.example.nl/handleiding").
+ */
+function sectionOf(url: string, origins: readonly string[]): string {
   const parsed = new URL(url);
-  if (parsed.origin !== origin) return parsed.origin;
+  if (!origins.includes(parsed.origin)) return parsed.origin;
   const first = parsed.pathname.split("/").filter(Boolean)[0];
-  return first === undefined ? "/" : `/${first}`;
+  const path = first === undefined ? "/" : `/${first}`;
+  return origins.length > 1 ? `${parsed.origin}${path}` : path;
 }
 
 /** At most this many parts of the site are named one by one in the warning about the limit. */
@@ -185,17 +213,19 @@ const SECTIONS_NAMED = 12;
  * many pages were visited and how many were left out. What is left out never reaches the sample,
  * and the line with the totals does not say which part is missing. Null when the limit was not reached.
  */
-export function pageLimitNl(found: Pick<Inventory, "origin" | "notFoundProbe" | "pages" | "skipped">, maxPages: number): string | null {
+export function pageLimitNl(found: Pick<Inventory, "origin" | "notFoundProbe" | "pages" | "skipped"> & Partial<Pick<Inventory, "origins" | "notFoundProbes">>, maxPages: number): string | null {
   const omitted = found.skipped.filter((entry) => entry.reason === pageLimitReason(maxPages));
   if (omitted.length === 0) return null;
+  const origins = siteOrigins(found);
+  const probes = notFoundProbes(found);
   const sections = new Map<string, { visited: number; omitted: number }>();
   const count = (url: string, field: "visited" | "omitted"): void => {
-    const section = sectionOf(url, found.origin);
+    const section = sectionOf(url, origins);
     const entry = sections.get(section) ?? { visited: 0, omitted: 0 };
     entry[field]++;
     sections.set(section, entry);
   };
-  for (const entry of found.pages) if (entry.url !== found.notFoundProbe) count(entry.url, "visited");
+  for (const entry of found.pages) if (!probes.includes(entry.url)) count(entry.url, "visited");
   for (const entry of omitted) count(entry.url, "omitted");
   const ranked = [...sections.entries()].sort(([a, x], [b, y]) => y.visited + y.omitted - (x.visited + x.omitted) || a.localeCompare(b));
   const named = ranked.slice(0, SECTIONS_NAMED);
@@ -207,7 +237,7 @@ export function pageLimitNl(found: Pick<Inventory, "origin" | "notFoundProbe" | 
     lines.push(`  en ${rest.length} ${rest.length === 1 ? "ander gedeelte" : "andere gedeelten"}: samen ${sum("visited")} bezocht, ${sum("omitted")} weggelaten`);
   }
   return [
-    `LET OP: de grens van ${maxPages} pagina's (--max-pages) is bereikt. ${omitted.length === 1 ? "Eén gevonden pagina is" : `${omitted.length} gevonden pagina's zijn`} niet bezocht, en wat alleen via die pagina's te vinden is, ontbreekt ook in deze telling. De bezochte pagina's zijn over de gedeelten van de site verdeeld. Per gedeelte (het eerste deel van het pad):`,
+    `LET OP: de grens van ${maxPages} pagina's (--max-pages) is bereikt. ${omitted.length === 1 ? "Eén gevonden pagina is" : `${omitted.length} gevonden pagina's zijn`} niet bezocht, en wat alleen via die pagina's te vinden is, ontbreekt ook in deze telling. De bezochte pagina's zijn over de gedeelten van de site verdeeld. Per gedeelte (${origins.length > 1 ? "de origin en het eerste deel van het pad" : "het eerste deel van het pad"}):`,
     ...lines,
     "Wat niet is bezocht, komt niet in de steekproef. Ontbreekt een gedeelte dat erbij hoort, of is het aandeel van een gedeelte veel kleiner dan op de site, begin dan opnieuw met inventory in een nieuwe map, met een hogere --max-pages of met --urls.",
   ].join("\n");
@@ -262,13 +292,14 @@ function linksWithText(page: Page): Promise<Anchor[]> {
 export const MAX_DOCUMENT_PROBES = 300;
 const PROBE_TIMEOUT_MS = 8000;
 
-/** One HEAD request: size, date and type as the server gives them. Redirects are followed only inside the origin. */
-export async function probeDocument(url: string, origin: string): Promise<Pick<InventoryDocument, "bytes" | "lastModified" | "contentType" | "status" | "notAsked">> {
+/** One HEAD request: size, date and type as the server gives them. Redirects are followed only inside the origins of the site. */
+export async function probeDocument(url: string, origins: string | readonly string[]): Promise<Pick<InventoryDocument, "bytes" | "lastModified" | "contentType" | "status" | "notAsked">> {
+  const own = typeof origins === "string" ? [origins] : origins;
   const nothing = { bytes: null, lastModified: null, contentType: null, status: null };
   let address = url;
   try {
     for (let hop = 0; hop < 4; hop++) {
-      if (new URL(address).origin !== origin) return { ...nothing, notAsked: "het adres verwijst door naar een ander domein" };
+      if (!own.includes(new URL(address).origin)) return { ...nothing, notAsked: "het adres verwijst door naar een ander domein" };
       // A document behind a login is asked about with the session of the run.
       const cookie = loginCookieHeader(address);
       const response = await fetch(address, { method: "HEAD", redirect: "manual", signal: AbortSignal.timeout(PROBE_TIMEOUT_MS), ...(cookie ? { headers: { cookie } } : {}) });
@@ -301,7 +332,7 @@ type Inspected = Omit<InventoryPage, "foundVia" | "slug"> & { links: string[]; f
  * A page as the browser shows it, or the kind of document the server sent instead of HTML.
  * `offered`: a link offers the address as a download; then anything but HTML is a document.
  */
-async function inspect(page: Page, url: string, mayBeDocument: boolean, offered: boolean): Promise<Inspected | { document: DocumentKind }> {
+async function inspect(page: Page, url: string, mayBeDocument: boolean, offered: boolean, origins: readonly string[]): Promise<Inspected | { document: DocumentKind }> {
   const began = performance.now();
   const loaded = await loadPage(page, url);
   const loadMs = Math.round(performance.now() - began);
@@ -310,8 +341,8 @@ async function inspect(page: Page, url: string, mayBeDocument: boolean, offered:
   if (sent) return { document: sent };
   if (mayBeDocument && offered && loaded.contentType !== null && !isHtml(loaded.contentType)) return { document: "other" };
   const html = await page.content();
-  const result = await page.evaluate(() => {
-    const loep = (window as unknown as { __loep: Record<string, () => unknown> }).__loep;
+  const result = await page.evaluate((own) => {
+    const loep = (window as unknown as { __loep: Record<string, (...args: unknown[]) => unknown> }).__loep;
     const facts = loep.collectFacts!() as { title: string; lang: string | null; counts: Record<string, unknown>; links: unknown[]; controls: unknown[] };
     return {
       title: facts.title,
@@ -320,7 +351,7 @@ async function inspect(page: Page, url: string, mayBeDocument: boolean, offered:
       operable: { links: facts.links.length, controls: facts.controls.length },
       template: loep.templateSignature!() as string,
       snapshot: loep.contentSnapshot!() as string,
-      links: loep.sameOriginLinks!() as string[],
+      links: loep.sameOriginLinks!(own) as string[],
       frames: loep.frameSources!() as string[],
       breakpoints: loep.layoutBreakpoints!() as number[],
       words: (loep.flatText as unknown as (node: Node) => string[])((loep.deepQueryAll as unknown as (selector: string) => Element[])("main,[role=main]")[0] ?? document.body)
@@ -328,7 +359,7 @@ async function inspect(page: Page, url: string, mayBeDocument: boolean, offered:
         .split(/\s+/)
         .filter(Boolean).length,
     };
-  });
+  }, [...origins]);
   return {
     url,
     status: loaded.status,
@@ -352,15 +383,21 @@ async function inspect(page: Page, url: string, mayBeDocument: boolean, offered:
 
 export async function inventory(options: InventoryOptions): Promise<Inventory> {
   const startedAt = stepStart();
-  const origin = new URL(options.baseUrl).origin;
+  // The origins of the site: the one of the start address first, then each further one given (--also-origin).
+  const origins = originsOfRun(options.baseUrl, options.alsoOrigins);
+  const origin = origins[0]!;
+  const ownOrigin = (url: string): boolean => origins.includes(new URL(url).origin);
   const start = normaliseUrl(options.baseUrl);
   const fixed = options.fixedUrls?.map(normaliseUrl);
   // A run with a login: the session a person left behind, and the page that person pointed at.
   const login = runLoginMark();
   if (login && login.origin !== origin) throw new Error(`de inlogsessie van deze run is voor ${login.origin}, niet voor ${origin}`);
   // Behind a login there is no sitemap to go by: the pages are found by following links with the session.
-  const sitemap = fixed || login ? [] : await fetchSitemapUrls(origin);
-  const notFoundProbe = `${origin}${NOT_FOUND_PATH}`;
+  const sitemap: string[] = [];
+  if (!fixed && !login) for (const each of origins) sitemap.push(...(await fetchSitemapUrls(each)));
+  // The page for a missing address, asked for on every origin: each can have its own.
+  const missingPages = origins.map((each) => `${each}${NOT_FOUND_PATH}`);
+  const notFoundProbe = missingPages[0]!;
 
   const foundVia = new Map<string, Set<string>>();
   const note = (url: string, via: string): void => {
@@ -371,8 +408,10 @@ export async function inventory(options: InventoryOptions): Promise<Inventory> {
   else {
     note(start, "start");
     if (login) note(normaliseUrl(login.landingUrl), "start");
+    // Every further origin starts at its own start page.
+    for (const each of origins.slice(1)) note(normaliseUrl(`${each}/`), "start");
     for (const url of sitemap) note(url, "sitemap");
-    note(notFoundProbe, "404-probe");
+    for (const probe of missingPages) note(probe, "404-probe");
   }
 
   const browser = await launchBrowser();
@@ -390,7 +429,7 @@ export async function inventory(options: InventoryOptions): Promise<Inventory> {
   const noteDocument = (url: string, kind: DocumentKind | null): void => {
     if (!documents.get(url)) documents.set(url, kind);
   };
-  // Every link to the origin with the pages it stands on: a document's `linkedFrom` is taken from it once all pages are known.
+  // Every link to an origin of the site with the pages it stands on: a document's `linkedFrom` is taken from it once all pages are known.
   const linksTo = new Map<string, InventoryDocument["linkedFrom"]>();
   // Addresses a link offers as a download (the `download` attribute): documents of any kind but HTML, which stays a page.
   const downloads = new Set<string>();
@@ -409,7 +448,7 @@ export async function inventory(options: InventoryOptions): Promise<Inventory> {
     for (;;) {
       const open = [...foundVia.keys()].filter((url) => !done.has(url));
       // Once the limit is reached, what is left is only sorted out (documents, skipped), and the order no longer matters.
-      const next = pages.length >= options.maxPages ? open.sort()[0] : nextAddress(open, visited);
+      const next = pages.length >= options.maxPages ? open.sort()[0] : nextAddress(open, visited, origins);
       if (next === undefined) break;
       done.add(next);
       // A link that logs out is never followed: it would end the session for every page after it.
@@ -425,7 +464,7 @@ export async function inventory(options: InventoryOptions): Promise<Inventory> {
       }
       // Offered as a download: a document unless the server sends HTML. A type that stays unknown because nothing answered is a document too.
       if (downloads.has(next) && failedLoadsProbed++ < MAX_DOCUMENT_PROBES) {
-        const probe = await probeDocument(next, origin);
+        const probe = await probeDocument(next, origins);
         if (!isHtml(probe.contentType)) {
           noteDocument(next, kindOfContentType(probe.contentType));
           probedAsDocument.set(next, probe);
@@ -442,9 +481,9 @@ export async function inventory(options: InventoryOptions): Promise<Inventory> {
         skipped.push({ url: next, reason: pageLimitReason(options.maxPages) });
         continue;
       }
-      noteVisited(visited, next);
+      noteVisited(visited, next, origins);
       try {
-        const result = await inspect(page, next, next !== notFoundProbe, downloads.has(next));
+        const result = await inspect(page, next, !missingPages.includes(next), downloads.has(next), origins);
         if ("document" in result) {
           noteDocument(next, result.document);
           continue;
@@ -460,7 +499,7 @@ export async function inventory(options: InventoryOptions): Promise<Inventory> {
         }
         for (const anchor of anchors) {
           const linked = documentKind(anchor.href);
-          if (new URL(anchor.href).origin !== origin) {
+          if (!ownOrigin(anchor.href)) {
             if (linked) elsewhere.set(anchor.href, linked);
             continue;
           }
@@ -477,12 +516,12 @@ export async function inventory(options: InventoryOptions): Promise<Inventory> {
         // An embedded frame is evaluated as a page of its own, but its own links are not followed.
         const embedded = via.every((entry) => entry.startsWith("iframe:"));
         if (!embedded) for (const frame of frames) note(normaliseUrl(frame), `iframe:${next}`);
-        if (!fixed && !embedded && next !== notFoundProbe) for (const link of links) note(normaliseUrl(link), "link");
+        if (!fixed && !embedded && !missingPages.includes(next)) for (const link of links) note(normaliseUrl(link), "link");
         process.stderr.write(`inventory ${pages.length} ${next}\n`);
       } catch (error) {
         if (error instanceof LoginExpired) throw error;
         // A download behind an address without an extension: the browser cannot show it, the server says what it is.
-        const probe = new URL(next).origin === origin && failedLoadsProbed++ < MAX_DOCUMENT_PROBES ? await probeDocument(next, origin) : null;
+        const probe = ownOrigin(next) && failedLoadsProbed++ < MAX_DOCUMENT_PROBES ? await probeDocument(next, origins) : null;
         const probedKind = kindOfContentType(probe?.contentType ?? null);
         if (probe && (probedKind || (downloads.has(next) && !isHtml(probe.contentType)))) {
           noteDocument(next, probedKind);
@@ -515,7 +554,7 @@ export async function inventory(options: InventoryOptions): Promise<Inventory> {
   const found: InventoryDocument[] = [];
   let probes = 0;
   for (const [url, kind] of [...documents.entries()].sort(([a], [b]) => a.localeCompare(b))) {
-    const probe = probedAsDocument.get(url) ?? (probes++ < MAX_DOCUMENT_PROBES ? await probeDocument(url, origin) : { bytes: null, lastModified: null, contentType: null, status: null, notAsked: `meer dan ${MAX_DOCUMENT_PROBES} documenten: grootte en datum zijn alleen van de eerste ${MAX_DOCUMENT_PROBES} gevraagd` });
+    const probe = probedAsDocument.get(url) ?? (probes++ < MAX_DOCUMENT_PROBES ? await probeDocument(url, origins) : { bytes: null, lastModified: null, contentType: null, status: null, notAsked: `meer dan ${MAX_DOCUMENT_PROBES} documenten: grootte en datum zijn alleen van de eerste ${MAX_DOCUMENT_PROBES} gevraagd` });
     const linkedFrom = [...(linksTo.get(url) ?? [])].sort((a, b) => a.page.localeCompare(b.page) || a.text.localeCompare(b.text));
     // A download whose address and answer name no kind the toolbox knows is counted all the same.
     found.push({ url, kind: kind ?? kindOfContentType(probe.contentType) ?? "other", slug: slugForUrl(url), linkedFrom, ...probe });
@@ -525,8 +564,10 @@ export async function inventory(options: InventoryOptions): Promise<Inventory> {
   const result: Inventory = {
     baseUrl: start,
     origin,
+    origins,
     sitemapUrls: sitemap.length,
     notFoundProbe,
+    notFoundProbes: missingPages,
     pages: pages.sort((a, b) => a.url.localeCompare(b.url)),
     skipped: skipped.sort((a, b) => a.url.localeCompare(b.url)),
     totals,
@@ -536,6 +577,6 @@ export async function inventory(options: InventoryOptions): Promise<Inventory> {
     ...(login ? { logoutLinks: [...logoutLinks].sort() } : {}),
   };
   await writeJson(join(options.out, "inventory.json"), result);
-  await writeManifest(options.out, { command: "inventory", startedAt, baseUrl: start, maxPages: options.maxPages, fixedUrls: fixed?.length ?? null, ...(login ? { loggedIn: true } : {}) }, browserVersion);
+  await writeManifest(options.out, { command: "inventory", startedAt, baseUrl: start, maxPages: options.maxPages, fixedUrls: fixed?.length ?? null, ...(origins.length > 1 ? { alsoOrigins: origins.slice(1) } : {}), ...(login ? { loggedIn: true } : {}) }, browserVersion);
   return result;
 }

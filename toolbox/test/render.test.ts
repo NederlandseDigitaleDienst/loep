@@ -375,6 +375,24 @@ test("the PDF names the read requests that were let through among the facts of t
   assert.ok(flat.includes("zoekvraag aan Typesense"), flat.slice(flat.indexOf("Leesverzoeken"), flat.indexOf("Leesverzoeken") + 400));
 });
 
+test("a site on two origins names the second under the address, in the Markdown and in the PDF; a site on one says nothing more", async (context) => {
+  const one = exampleEvaluation();
+  assert.ok(!renderMarkdown(one).includes("Ook onderdeel van de site"));
+  const two = exampleEvaluation();
+  const main = new URL(two.site.baseUrl).origin;
+  two.site.origins = [main, "https://docs.example.nl"];
+  assert.match(renderMarkdown(two), /\n- URL: <[^>]+>\n- Ook onderdeel van de site: <https:\/\/docs\.example\.nl>\n/);
+  const dir = mkdtempSync(join(tmpdir(), "render-origins-"));
+  writeFileSync(join(dir, "evaluation.json"), canonicalJson(two));
+  const result = await render(dir);
+  if (result.pdf === null) return context.skip("Typst is not installed");
+  const text = await tool("pdftotext", [result.pdf, "-"]);
+  if (!text.found) return context.skip("pdftotext is not installed");
+  const flat = text.stdout.replace(/\s+/g, " ");
+  assert.ok(flat.includes("Ook onderdeel van de site"), "the facts of the evaluation name the second origin");
+  assert.ok(flat.includes("https://docs.example.nl"));
+});
+
 test("the PDF shows the part for what waits for sending, with the flags of inventory", async (context) => {
   const dir = mkdtempSync(join(tmpdir(), "render-not-sent-"));
   writeFileSync(join(dir, "evaluation.json"), canonicalJson(withNotSent().evaluation));

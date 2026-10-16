@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
 import { madeWith, openCriteria, type CriterionResult, type Evaluation } from "../lib/evaluation.ts";
+import { siteOrigins } from "../lib/origins.ts";
 import { SHOWN_LABEL, shownOutcome } from "../lib/report-markdown.ts";
 import { NOT_SENT, OPEN_POINT_KINDS, openPoint } from "../lib/verdict.ts";
 import { compareCriterionIds } from "../lib/wcag.ts";
@@ -52,15 +53,12 @@ const escape = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, "\\
 
 /** A function that takes out of a text what says which site it is: every address, the host, the name and the organisation. */
 export function redactor(site: Evaluation["site"]): (text: string) => string {
-  const host = (() => {
-    try {
-      return new URL(site.baseUrl).hostname;
-    } catch {
-      return null;
-    }
-  })();
+  // Every host of the site: a site on more than one origin is named by each of them.
+  const hosts = siteOrigins(site).map((origin) => new URL(origin).hostname);
   const replacements: [RegExp, string][] = [[/\bhttps?:\/\/[^\s)>\]"']+/gi, "<adres>"]];
-  for (const name of [host, host?.replace(/^www\./, "")]) if (name) replacements.push([new RegExp(escape(name), "gi"), "<site>"]);
+  // The longer names first, so docs.example.nl goes as a whole before example.nl.
+  const hostNames = [...new Set(hosts.flatMap((host) => [host, host.replace(/^www\./, "")]))].sort((a, b) => b.length - a.length);
+  for (const name of hostNames) replacements.push([new RegExp(escape(name), "gi"), "<site>"]);
   // The longer of the two first: a name that holds the organisation ("Gemeente Voorbeeldstad") goes as a whole.
   const names = [
     { text: site.name.trim(), by: "<site>" },

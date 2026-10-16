@@ -3,6 +3,7 @@ import type { Procedure } from "./procedures.ts";
 import type { RunData } from "./rundata.ts";
 import { criterionById } from "./wcag.ts";
 import { loginNl } from "./login.ts";
+import { siteOrigins } from "./origins.ts";
 import { readsAllowedNl } from "./reads.ts";
 import { WRITES_BLOCKED_NL, writesAllowedNl } from "./writes.ts";
 
@@ -19,7 +20,8 @@ export function buildDossier(run: RunData, procedure: Procedure): Record<string,
   const zero = procedure.inapplicableIfZero.map((key) => ({ key, total: run.inventory.totals[key] ?? 0, onPages: run.inventory.pages.filter((page) => typeof page.counts[key] === "number" && (page.counts[key] as number) > 0).length, ofPages: counted }));
   return {
     criterion: { id: criterion.id, titleNl: criterion.titleNl, level: criterion.level },
-    site: { baseUrl: run.inventory.baseUrl, pagesInSample: run.pages.length, sampleMethod: run.sample.method, sampleNote: run.sample.note },
+    // A site on more than one origin names each: an address on any of them is one of the site.
+    site: { baseUrl: run.inventory.baseUrl, ...(siteOrigins(run.inventory).length > 1 ? { origins: siteOrigins(run.inventory) } : {}), pagesInSample: run.pages.length, sampleMethod: run.sample.method, sampleNote: run.sample.note },
     // Whether the run may submit: what only shows after sending is out of reach only when it may not.
     writes: run.writes
       ? { allowed: true, origin: run.writes.origin, declaredBy: run.writes.declaredBy ? run.writes.declaredBy.role : null, noteNl: writesAllowedNl(run.writes) }

@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { originsNl } from "./origins.ts";
 
 /**
  * Documents a site publishes next to its pages: PDF, word processor, presentation and
@@ -379,7 +380,8 @@ export function evaluationDocuments(documents: DocumentData[], population: { onS
 }
 
 /** What holds for documents in this evaluation, as sentences for the scope and the limitations. */
-export function documentScopeNl(documents: EvaluationDocuments | null, origin: string, elsewhere: number): { includedNl: string[]; excludedNl: string[]; limitationsNl: string[] } {
+export function documentScopeNl(documents: EvaluationDocuments | null, origins: string | readonly string[], elsewhere: number): { includedNl: string[]; excludedNl: string[]; limitationsNl: string[] } {
+  const origin = originsNl(typeof origins === "string" ? [origins] : origins);
   const readKinds = listNl(READ_KINDS.map((kind) => (kind === "text" ? "platte tekst" : kind)));
   const otherOrigins = elsewhere > 0 ? `Documenten op andere domeinen waarnaar de site linkt (${elsewhere} geteld)` : "Documenten op andere domeinen waarnaar de site linkt";
   if (!documents) {

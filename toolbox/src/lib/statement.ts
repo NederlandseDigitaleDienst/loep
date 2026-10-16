@@ -1,4 +1,5 @@
 import { complianceStatus, evaluationHash, madeWith, type ComplianceStatus, type Evaluation } from "./evaluation.ts";
+import { siteOrigins } from "./origins.ts";
 import type { WcagVersion } from "./wcag.ts";
 
 /**
@@ -102,6 +103,14 @@ function provisionalStatusNl(evaluation: Evaluation): string {
   return status === "geen" ? "Het onderzoek dekt nog niet alle eisen, dus er is ook geen voorlopige status." : `De voorlopige status volgens het onderzoek is ${status} (${STATUS_NAME[status]}); die telt pas na aftekening.`;
 }
 
+/**
+ * The subdomains and other domains that belong to the website: the further origins the
+ * evaluation covered (`inventory --also-origin`), then what the input names, each once.
+ */
+export function otherDomains(evaluation: Pick<Evaluation, "site">, input: Pick<StatementInput, "subdomains">): string[] {
+  return [...new Set([...siteOrigins(evaluation.site).slice(1), ...(input.subdomains ?? [])])];
+}
+
 export function buildStatement(evaluation: Evaluation, input: StatementInput, options: { concept: boolean }): StatementModel {
   const { status, reasonNl } = complianceStatus(evaluation, LEGAL_VERSION);
   const site = evaluation.site.name;
@@ -133,7 +142,7 @@ export function buildStatement(evaluation: Evaluation, input: StatementInput, op
   paragraph(`Deze toegankelijkheidsverklaring is van toepassing op de website ${site}:`);
   list(
     `hoofddomein: <${evaluation.site.baseUrl}>`,
-    `subdomeinen en andere domeinen die behoren tot de website: ${input.subdomains?.length ? input.subdomains.map((domain) => `<${domain}>`).join(", ") : "(niet van toepassing)"}`,
+    `subdomeinen en andere domeinen die behoren tot de website: ${otherDomains(evaluation, input).length ? otherDomains(evaluation, input).map((domain) => `<${domain}>`).join(", ") : "(niet van toepassing)"}`,
   );
   paragraph(
     `Een overzicht van alle websites, mobiele applicaties en bijbehorende verklaringen van ${organisation} is beschikbaar via ${
@@ -366,7 +375,7 @@ export function renderAnswerSheet(evaluation: Evaluation, input: StatementInput)
     "## 2. Locatie",
     "",
     `- Hoofddomein: ${evaluation.site.baseUrl}`,
-    `- Subdomeinen en andere domeinen: ${input.subdomains?.join(", ") || "geen"}`,
+    `- Subdomeinen en andere domeinen: ${otherDomains(evaluation, input).join(", ") || "geen"}`,
     "",
     "## 3. Status bepalen",
     "",
