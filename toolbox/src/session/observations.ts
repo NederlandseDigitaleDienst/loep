@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { readJson, sha256File, writeJson } from "../lib/canonical.ts";
 import type { FrameRecord } from "../browser/frame.ts";
 import type { PassedWrite } from "../lib/writes.ts";
-import type { Blocked, PassedRead } from "./safety.ts";
+import type { Blocked, PassedChallenge, PassedRead } from "./safety.ts";
 
 export interface StartState {
   url: string;
@@ -97,6 +97,8 @@ export interface Observation {
   writes?: PassedWrite[];
   /** Read requests of the site model that were let through while the command ran; absent when there were none. */
   reads?: PassedRead[];
+  /** Requests of Cloudflare's check whether the browser is a robot that were let through while the command ran and would otherwise have been refused; absent when there were none. */
+  challenges?: PassedChallenge[];
   /** Windows the page tried to open, and browser dialogs it showed; both are closed at once. */
   popups: string[];
   alerts: { type: string; message: string }[];

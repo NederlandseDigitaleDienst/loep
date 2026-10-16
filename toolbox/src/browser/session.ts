@@ -1,5 +1,6 @@
 import { fileURLToPath } from "node:url";
 import { chromium, type Browser, type BrowserContext, type Page, type Route } from "playwright";
+import { CLOUDFLARE_HEADER, isChallenge } from "../lib/challenge.ts";
 import { confirmLoginOn, LoginExpired, logsOut, runLoginMark, runLoginState, throwIfLoginExpired, watchLogin } from "../lib/login.ts";
 import { addressOf, noteRefusedRead, readDecision, readRuleFor, runReads, type ReadRequest } from "../lib/reads.ts";
 import { isWriteOrigin, runWrites, type WriteAccess } from "../lib/writes.ts";
@@ -152,6 +153,12 @@ const loadsTab = (route: Route): boolean => {
   }
 };
 
+/** Per browser context: the hosts that answered through Cloudflare, so that only there a path of Cloudflare's own check passes. */
+const cloudflareHosts = new WeakMap<BrowserContext, Set<string>>();
+
+/** Whether a host answered through Cloudflare in this context. */
+export const answeredByCloudflare = (context: BrowserContext, host: string): boolean => cloudflareHosts.get(context)?.has(host) ?? false;
+
 export async function newContext(browser: Browser, options: ContextOptions = {}, guard?: WriteGuard): Promise<BrowserContext> {
   // A run with a login starts every context with the session a person left behind; any other run starts clean, as it did.
   const login = options.storageState ?? runLoginState();
@@ -168,6 +175,15 @@ export async function newContext(browser: Browser, options: ContextOptions = {},
     serviceWorkers: "block",
   });
   context.setDefaultNavigationTimeout(RENDERING.navigationTimeoutMs);
+  const viaCloudflare = new Set<string>();
+  cloudflareHosts.set(context, viaCloudflare);
+  context.on("response", (response) => {
+    try {
+      if (response.headers()[CLOUDFLARE_HEADER]) viaCloudflare.add(new URL(response.url()).hostname);
+    } catch {
+      // A response without an address with a host, such as one for data: or blob:.
+    }
+  });
   // A copy button writes to the clipboard. A browser that was not given permission refuses, and the page then reports a
   // failure no visitor gets. Only Chromium knows this permission (in WebKit and Firefox asking for it is an error), and
   // only writing is allowed: what is on a clipboard is no business of a page under test.
@@ -186,6 +202,8 @@ export async function newContext(browser: Browser, options: ContextOptions = {},
       if (spaced && loadsTab(route)) return spaced.before(route.request().url()).then(() => route.continue().catch(() => undefined));
       return route.continue();
     }
+    // Cloudflare's check whether the browser is a robot is answered by Cloudflare and never reaches the site.
+    if (isChallenge(route.request().url(), (host) => viaCloudflare.has(host))) return route.continue().catch(() => undefined);
     // A read request passes only when a rule covers it and its body is a question to the service of that rule; a covered request with another body is noted.
     const read = readDecision(reads, method, route.request().url(), route.request().headers(), bodyOf(route.request()));
     if (read?.pass) return passOn(route, (target) => readRuleFor(reads, method, target)?.service === read.rule.service).then(() => undefined);
@@ -217,15 +235,21 @@ export interface LoadResult {
   contentType: string | null;
 }
 
-/** Navigate and wait until the page has stopped changing: network idle, fonts and custom elements ready. */
-export async function loadPage(page: Page, url: string): Promise<LoadResult> {
+/**
+ * Navigate and wait until the page has stopped changing: network idle, fonts and custom elements ready.
+ * `referer` is the page that embeds the address, when an embedded window is opened on its own: a
+ * visitor's browser names that page when it loads the window, and a player that may only play on
+ * the site refuses without it.
+ */
+export async function loadPage(page: Page, url: string, referer?: string): Promise<LoadResult> {
   // A session that ran out is not tried again page after page.
   throwIfLoginExpired();
-  let response = await page.goto(url, { waitUntil: "load" });
+  const options = { waitUntil: "load" as const, ...(referer ? { referer } : {}) };
+  let response = await page.goto(url, options);
   await settlePage(page);
   // In a run with a login: a page that looks like the login screen is checked, and the page is loaded again when the session still holds.
   if (await watchLogin(page, url)) {
-    response = await page.goto(url, { waitUntil: "load" });
+    response = await page.goto(url, options);
     await settlePage(page);
   }
   return {
@@ -306,7 +330,7 @@ export async function loadSampled(tab: Page, item: { url: string; embeddedOn?: s
   const frame = tab.frames().find((entry) => entry !== tab.mainFrame() && entry.url() === item.url) ?? tab.frames().find((entry) => entry !== tab.mainFrame() && sameDocument(entry.url(), item.url));
   const readable = frame ? await frame.evaluate(() => typeof (window as unknown as { __loep?: unknown }).__loep === "object" && document.body !== null).catch(() => false) : false;
   if (frame && readable) return { page: await frameAsPage(tab, frame), placement: { inPlaceOn: on, apartNl: null } };
-  await loadPage(tab, item.url);
+  await loadPage(tab, item.url, on);
   await settle(tab);
   return { page: tab, placement: { inPlaceOn: null, apartNl: frame ? `het venster op ${on} was niet te lezen` : `op ${on} stond bij het meten geen venster met dit adres, of het laadde daar niet` } };
 }

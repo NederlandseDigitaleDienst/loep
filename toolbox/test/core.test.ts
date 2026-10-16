@@ -8,6 +8,7 @@ import { buildSample, CENSUS_LIMIT, chooseOnVariation, contentKindsOfType, extra
 import { formPagesNl, parseSitemap, passwordPagesNl, type Inventory, type InventoryPage } from "../src/commands/inventory.ts";
 import { progressLine, sayingItRuns } from "../src/instruments/limit.ts";
 import { canonicalJson, sha256, slugForUrl, stableId } from "../src/lib/canonical.ts";
+import { isChallenge } from "../src/lib/challenge.ts";
 import { changedSinceCommit, complianceStatus, evaluationHash, knownCommit, resolveCriterion } from "../src/lib/evaluation.ts";
 import { toolboxSource } from "../src/lib/manifest.ts";
 import { loadProcedure, parseProcedure } from "../src/lib/procedures.ts";
@@ -455,4 +456,18 @@ test("navigations to one host are spaced out, also when they are asked for at th
   // A navigation nobody announced, such as a click on a link, starts the pause too.
   politeness.seen("https://b.nl/next");
   assert.equal(politeness.remaining("https://b.nl/"), 400);
+});
+
+test("only Cloudflare's own check counts as its check, and on a site only when Cloudflare answers there", () => {
+  const behind = (host: string): boolean => host === "player.vimeo.com";
+  assert.equal(isChallenge("https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/g/turnstile/if/ov2/av0/rcv/abc", () => false), true);
+  assert.equal(isChallenge("https://player.vimeo.com/cdn-cgi/challenge-platform/h/b/jsd/r/0.1:123:abc", behind), true);
+  // The same path on a site that Cloudflare does not serve reaches the site itself.
+  assert.equal(isChallenge("https://www.voorbeeld.nl/cdn-cgi/challenge-platform/h/b/jsd/r/0.1:123:abc", behind), false);
+  // Other paths of Cloudflare, and other paths on a site it serves, are no check.
+  assert.equal(isChallenge("https://player.vimeo.com/cdn-cgi/rum", behind), false);
+  assert.equal(isChallenge("https://player.vimeo.com/video/1/config", behind), false);
+  assert.equal(isChallenge("https://player.vimeo.com/challenge-platform/x", behind), false);
+  assert.equal(isChallenge("https://challenges.cloudflare.com.voorbeeld.nl/x", behind), false);
+  assert.equal(isChallenge("ws://player.vimeo.com/cdn-cgi/challenge-platform/x", behind), false);
 });

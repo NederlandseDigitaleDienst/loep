@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<title>Controle - Testsite sessie</title>
+</head>
+<body>
+<main>
+<h1>Controle</h1>
+<p id="check">Controle bezig.</p>
+<p id="form">Formulier bezig.</p>
+<script>
+  // What Cloudflare's script does on a page it serves, and a form of the site next to it.
+  const post = (path) => fetch(path, { method: "POST", body: "x" }).then((response) => response.text(), () => "tegengehouden");
+  post("/cdn-cgi/challenge-platform/h/b/flow/test").then((text) => (document.getElementById("check").textContent = `Controle: ${text}.`));
+  post("/submit").then((text) => (document.getElementById("form").textContent = `Formulier: ${text}.`));
+</script>
+</main>
+</body>
+</html>

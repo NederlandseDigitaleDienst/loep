@@ -1,8 +1,9 @@
 import { createWriteStream, existsSync } from "node:fs";
 import { join } from "node:path";
 import type { BrowserContext, CDPSession, Frame, Page } from "playwright";
-import { bodyOf, passOn, passWrite } from "../browser/session.ts";
+import { answeredByCloudflare, bodyOf, passOn, passWrite } from "../browser/session.ts";
 import { readJson } from "../lib/canonical.ts";
+import { isChallenge } from "../lib/challenge.ts";
 import { loginCookieHeader, logsOut } from "../lib/login.ts";
 import { readDecision, readRuleFor, type ReadRequest } from "../lib/reads.ts";
 import { searchServicesOf, type SearchServiceId } from "../lib/searchbody.ts";
@@ -99,6 +100,14 @@ export interface Guard {
   passed?: PassedWrite[];
   /** Read requests of the site model that were let through, without their body; absent until the first one. */
   reads?: PassedRead[];
+  /** Requests of Cloudflare's check whether the browser is a robot that were let through and would otherwise have been refused; absent until the first one. */
+  challenges?: PassedChallenge[];
+}
+
+export interface PassedChallenge {
+  at: string;
+  method: string;
+  url: string;
 }
 
 export interface PassedRead {
@@ -128,8 +137,10 @@ export const urlInScope = inScope;
  * a WebSocket. Each refusal is recorded. One exception is the origin of a test environment
  * that the run was given at inventory: writes and socket messages to it pass, and each is
  * recorded too. The other is a read request of a checked site model: exactly that method,
- * origin and path, also on a host outside the scope, recorded as a read. Registered after the
- * context's own routes, so it decides first.
+ * origin and path, also on a host outside the scope, recorded as a read. Cloudflare's check
+ * whether the browser is a robot passes as well, because Cloudflare answers it and the site never
+ * gets it (see `isChallenge`); what would otherwise have been refused is recorded. Registered
+ * after the context's own routes, so it decides first.
  */
 export async function guardContext(context: BrowserContext, scope: Scope, guard: Guard, reads: readonly ReadRequest[] = []): Promise<void> {
   const note = (kind: Blocked["kind"], method: string, url: string, resourceType: string): void => {
@@ -146,6 +157,11 @@ export async function guardContext(context: BrowserContext, scope: Scope, guard:
     if (logsOut(url)) {
       note("logout", method, url, type);
       return refuse();
+    }
+    // Cloudflare's own host lies outside every scope: a strict scope keeps it out.
+    if (isChallenge(url, (host) => answeredByCloudflare(context, host)) && (inScope(scope, url) || !scope.strict)) {
+      if ((method !== "GET" && method !== "HEAD") || !inScope(scope, url)) (guard.challenges ??= []).push({ at: new Date().toISOString(), method, url: url.slice(0, MAX_URL) });
+      return route.continue();
     }
     if (method !== "GET" && method !== "HEAD") {
       const body = bodyOf(request);

@@ -119,7 +119,7 @@ test("writes to a second origin stay blocked, also when the test environment pas
   await page.waitForURL(`${site.origin}/elsewhere.html`, { timeout: 5000 });
   site.requests.length = 0;
   rmSync(join(run, "writes.jsonl"), { force: true });
-  site.requests.push({ method: "POST", host: "127.0.0.1", path: "/submit-redirect", at: Date.now(), userAgent: "" });
+  site.requests.push({ method: "POST", host: "127.0.0.1", path: "/submit-redirect", at: Date.now(), userAgent: "", referer: "" });
   // The same for a request a script makes, and for a socket of another origin.
   await loadPage(page, `${site.origin}/callback.html`);
   const outcome = await page.evaluate(async (other) => {

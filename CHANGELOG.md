@@ -4,6 +4,12 @@ Wat er per versie van loep is veranderd. De versie staat op het voorblad en onde
 
 ## Nog niet uitgebracht
 
+### Wat een uitkomst kan veranderen
+
+- De controle van Cloudflare of de browser een robot is, gaat door, in de veegronde en in elke sessie. Cloudflare beantwoordt die verzoeken zelf en de site krijgt ze niet. Het gaat om alles op `challenges.cloudflare.com` en om een pad onder `/cdn-cgi/challenge-platform/` op een host die al via Cloudflare antwoordde (met de kop `cf-ray`); op een andere host blijft hetzelfde pad tegengehouden. Eerder hield loep de controle tegen als schrijfverzoek, vroeg Cloudflare daarna om een zwaardere controle, en bleven ingesloten Vimeo-spelers op een laadteken staan: vier criteria bleven daardoor open door loep zelf. Een sessie legt de doorgelaten verzoeken vast onder `challenges` in de waarneming (#69).
+- Een ingesloten venster dat los wordt geopend (in de veegronde als het in de pagina niet te meten was, of met `open` in een sessie) krijgt de pagina waarin het staat mee als herkomst. Een speler die alleen op de eigen site mag spelen, toonde los geopend een foutscherm over privacy-instellingen (#69).
+- Wat een pagina of venster bij het laden zelf vraagt en loep tegenhoudt, is geen `versturen niet toegestaan` maar `proef werkte niet`: niemand verstuurde iets, en een testomgeving van de site lost het niet op. De opdrachten van beoordelaar, verifieerder en afmaakronde en de beperking in het dossier zeggen dat (#69).
+
 ## 0.5.0 (2026-10-16)
 
 Deze versie is uitgebracht zonder nieuwe meting op de testsite, net als 0.4.0. De wijzigingen die een uitkomst kunnen veranderen, zijn dus nog niet vergeleken met 0.4.0; alleen de grovere soorten van aanwijzen en indrukken zijn los op beide testsites nagegaan, zonder volledige veegronde (zie `validatie/testsite/2026-10-16-soorten/`). Op de testsite van de repository slagen alle tests. In de eerste volledige ronde faalden er twee: de vergelijking van een veegronde met één en met vier tegelijk, omdat de grens van indrukken in die test na de grovere soorten niet meer opraakte (de test is aangepast), en een test van schrijfverzoeken in WebKit, die los en in de tweede ronde wel slaagde.

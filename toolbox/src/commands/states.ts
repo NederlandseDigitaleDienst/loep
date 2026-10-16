@@ -224,10 +224,10 @@ const restore = (context: BrowserContext, data: PageData) => async (page: Page):
   const frame = page.mainFrame();
   if (frame.parentFrame()) {
     // An embedded window that went elsewhere goes back to its own address; the page around it stays as it is.
-    await frame.goto(data.item.url, { waitUntil: "load" });
+    await frame.goto(data.item.url, { waitUntil: "load", ...(data.item.embeddedOn?.[0] ? { referer: data.item.embeddedOn[0] } : {}) });
     await settlePage(page);
   } else {
-    await loadPage(page, data.item.url);
+    await loadPage(page, data.item.url, data.item.embeddedOn?.[0]);
     await sweep?.dismiss(context, page, "states");
   }
   guard.active = true;
