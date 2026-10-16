@@ -31,6 +31,14 @@ import type { Blocker, Postcondition } from "./sitemodel.ts";
  */
 export const SWEEP_STAMP_VERSION = 14;
 
+/**
+ * How the content of a page is read for its stamp. Raise when that changes: an older hash can then never match,
+ * and the stamp says why the page is measured again. 2: what a visitor meets (`visitorSnapshot`), without the
+ * head, class names, ids, data attributes, states, tokens in addresses and dates and times, once the page stopped
+ * changing; before, every attribute counted.
+ */
+export const CONTENT_VERSION = 2;
+
 interface RecipeSteps {
   start?: unknown;
   steps: Step[];
@@ -63,6 +71,10 @@ export const STATES_STAMP = "states.stamp.json";
 /** What `collect` leaves with the measurements of one page. */
 export interface PageStamp {
   key: string;
+  /** `SWEEP_STAMP_VERSION`, `CONTENT_VERSION` and the blockers part of the key: what a later sweep says why it measures again with. Absent in an older stamp. */
+  version?: number;
+  contentVersion?: number;
+  blockers?: string;
   /** Hash of the text and structure of the page as it was measured, with the blockers closed. */
   contentSha256: string;
   /** What this page added to the files that are about every page: its line in collect.json, and the blockers closed and write requests refused on it. */
@@ -82,6 +94,40 @@ export async function readStamp<T>(path: string): Promise<T | null> {
 }
 
 export const pageStampPath = (runDir: string, slug: string): string => join(runDir, "pages", slug, PAGE_STAMP);
+/** The content the hash of a page stamp was made of: what a later sweep shows the first difference with. */
+export const pageContentPath = (runDir: string, slug: string): string => join(runDir, "pages", slug, "sweep.content.txt");
+
+/** The page as a later sweep sees it before measuring: the hash and what it was made of, or null when it did not load. */
+export interface ContentNow {
+  sha256: string;
+  snapshot: string;
+}
+
+/** The first line where two snapshots of a page differ, shortened, so that a person can see what changed. */
+export function firstDifference(before: string, now: string): string {
+  const [old, current] = [before.split("\n"), now.split("\n")];
+  const index = old.findIndex((line, at) => line !== current[at]);
+  const at = index === -1 ? old.length : index;
+  // A line is a tag or a text in quotes, as it stands in the file next to the stamp.
+  const shown = (line: string | undefined): string => (line === undefined ? "(niets)" : line.trim().length > 80 ? `${line.trim().slice(0, 77)}...` : line.trim());
+  return `regel ${at + 1}: ${shown(old[at])} werd ${shown(current[at])}`;
+}
+
+/**
+ * Why a page of the sample is measured again instead of keeping what an earlier sweep measured, in one
+ * line for the person who runs it; null when the earlier measurement still holds. `now` is only asked
+ * for when the stamp and the key agree: loading the page costs time.
+ */
+export async function remeasureReason(stamp: PageStamp | null, key: string, blockers: string, now: () => Promise<ContentNow | null>, before: () => Promise<string | null>): Promise<string | null> {
+  if (!stamp) return "geen stempel van een eerdere meting";
+  if (stamp.version !== SWEEP_STAMP_VERSION || stamp.contentVersion !== CONTENT_VERSION) return "stempel van een andere versie van loep";
+  if (stamp.key !== key) return stamp.blockers !== blockers ? "blokkades of hoe ze worden gesloten anders" : "pagina anders in de steekproef (soort of ingesloten venster)";
+  const current = await now();
+  if (!current) return "pagina niet te laden om de inhoud te vergelijken";
+  if (current.sha256 === stamp.contentSha256) return null;
+  const earlier = await before();
+  return earlier === null ? "inhoud anders" : `inhoud anders, ${firstDifference(earlier, current.snapshot)}`;
+}
 
 /** The pages of the sample as `collect` last measured them: what `contrast` and `states` hold their own measurements against. */
 export async function measuredPages(runDir: string, items: { slug: string }[]): Promise<Record<string, { key: string; contentSha256: string } | null>> {

@@ -4,6 +4,8 @@ Wat er per versie van loep is veranderd. De versie staat op het voorblad en onde
 
 ## Nog niet uitgebracht
 
+- `collect` hergebruikt een eerdere meting van een pagina weer als een bezoeker dezelfde pagina ziet. De hash van de inhoud telde de kop van het document, elke klassenaam, id en data-attribuut, toestanden van een carrousel, tokens in adressen en datums in de tekst mee, en werd genomen voordat een blok van een ander adres binnen was. Daardoor gold na een vervolgronde bijna elke pagina als veranderd. Nu telt alleen wat een bezoeker leest en bedient, gelezen als de pagina niet meer verandert. Per pagina die opnieuw wordt gemeten, zegt `collect` waarom: geen stempel, een andere versie van loep, andere blokkades, of andere inhoud met de eerste regel die verschilt (#47). Een run van een eerdere versie wordt de eerste keer nog helemaal opnieuw gemeten.
+
 ## 0.3.0 (2026-10-15)
 
 Deze versie is uitgebracht zonder nieuwe meting op de testsite, net als 0.2.0. De wijzigingen die een uitkomst kunnen veranderen, zijn dus nog niet vergeleken met 0.2.0.
