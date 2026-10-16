@@ -30,6 +30,7 @@ import { readsAllowedNl } from "../lib/reads.ts";
 import { WRITES_BLOCKED_NL, writesAllowedNl, writesForRun } from "../lib/writes.ts";
 import { sweepCandidates } from "../lib/statusmessages.ts";
 import { makeWorkDir } from "../lib/workdir.ts";
+import { siteHosts, siteLabel } from "../lib/origins.ts";
 
 /*
  * The flow of a run with a site model: an agent walks every page type and leaves candidates,
@@ -386,7 +387,7 @@ export async function instrumentTasks(runDir: string, options: TaskOptions = {})
         ...base,
         workDir: await makeWorkDir(runDir, walk.session),
         workName: walk.session,
-        site: new URL(run.inventory.baseUrl).hostname,
+        site: siteLabel(run.inventory),
         pageType: type.id,
         pageTypeDescription: type.descriptionNl.replace(/\.$/, ""),
         page: page.label,
@@ -699,7 +700,7 @@ export async function checkInstrumentVerdict(runDir: string, criterionId: string
   const part = partOf(task, round);
   if (!part) return [round === "finish" ? "this criterion has no task for the finishing round: it comes only for a criterion the evaluation itself left open, once every verifier is in (run tasks again)" : "the task for the verification is not written yet; run tasks again once every judge verdict is in"];
   const observations = loadObservations(runDir);
-  const dossier = await readJson<{ evidence: Record<string, unknown>; legend: Record<string, unknown>; site?: { baseUrl?: string } }>(join(runDir, task.dossier));
+  const dossier = await readJson<{ evidence: Record<string, unknown>; legend: Record<string, unknown>; site?: { baseUrl?: string; origins?: string[] } }>(join(runDir, task.dossier));
   let verdict: Verdict;
   try {
     verdict = await readJson<Verdict>(join(runDir, part.output));
@@ -720,7 +721,7 @@ export async function checkInstrumentVerdict(runDir: string, criterionId: string
     recommendationRules: task.recommendationRules ?? [],
     fileExists: (ref: string) => !ref.includes("..") && existsSync(join(runDir, ref)),
     sourceText: sourceTexts(runDir, observations.records, dossier),
-    ...(dossier.site?.baseUrl ? { siteHost: new URL(dossier.site.baseUrl).host } : {}),
+    ...(dossier.site?.baseUrl ? { siteHosts: siteHosts(dossier.site) } : {}),
     ...(vendorPrefixes ? { vendorPrefixes } : {}),
   };
   let problems: string[];

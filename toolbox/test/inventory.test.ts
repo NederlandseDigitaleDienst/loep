@@ -155,3 +155,75 @@ test("at the limit the inventory covers the site in its breadth and says per par
   assert.equal(Number(line("/blog")![1]), blog.length);
   assert.equal(Number(line("/blog")![2]) + Number(line("/kennisbank")![2]), omitted.length, "every page left out is counted in its part");
 });
+
+/** A small site on its own port: a page per path, a sitemap, a 404 page, and a pdf that answers HEAD. */
+async function serveSite(pages: (origin: string) => Record<string, string>, sitemap: string[] = []): Promise<{ origin: string; asked: string[]; close: () => Promise<void> }> {
+  const asked: string[] = [];
+  let origin = "";
+  const site = createServer((request, response) => {
+    const path = new URL(request.url!, "http://x").pathname;
+    asked.push(path);
+    const known = pages(origin);
+    if (path === "/sitemap.xml") {
+      response.writeHead(200, { "content-type": "application/xml" });
+      response.end(`<?xml version="1.0"?><urlset>${sitemap.map((key) => `<url><loc>${origin}${key}</loc></url>`).join("")}</urlset>`);
+    } else if (path.endsWith(".pdf")) {
+      response.writeHead(200, { "content-type": "application/pdf", "content-length": "1234" });
+      response.end(request.method === "HEAD" ? undefined : "%PDF-1.4");
+    } else if (known[path]) {
+      response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+      response.end(known[path]);
+    } else {
+      response.writeHead(404, { "content-type": "text/html; charset=utf-8" });
+      response.end(html(`Niet gevonden op ${origin}`, ["/"]));
+    }
+  });
+  await new Promise<void>((resolve) => site.listen(0, "127.0.0.1", resolve));
+  origin = `http://127.0.0.1:${(site.address() as { port: number }).port}`;
+  return { origin, asked, close: () => new Promise<void>((resolve) => void site.close(() => resolve())) };
+}
+
+test("a site on two origins is one inventory: both start pages, both sitemaps, links between them, a 404 page and documents on each, and nothing of an origin not given", async (context) => {
+  // Three ports are three origins: the site, its documentation, and a blog that is not part of the site.
+  const blog = await serveSite(() => ({ "/": html("Blog", []), "/bericht": html("Bericht", []) }));
+  let docsOrigin = "";
+  const site = await serveSite((origin) => ({
+    "/": html("Start", ["/over", `${docsOrigin}/handleiding/`, `${blog.origin}/bericht`, "/jaarverslag.pdf"]),
+    "/over": html("Over", [`${origin}/`]),
+  }));
+  const docs = await serveSite(
+    () => ({
+      "/": html("Documentatie", ["/handleiding/", `${site.origin}/over`]),
+      "/handleiding/": html("Handleiding", ["/handleiding/installeren", "/handleiding/naslag.pdf"]),
+      "/handleiding/installeren": html("Installeren", ["/"]),
+      "/alleen-in-sitemap": html("Alleen in de sitemap", []),
+    }),
+    ["/alleen-in-sitemap"],
+  );
+  docsOrigin = docs.origin;
+  context.after(async () => {
+    await Promise.all([blog.close(), site.close(), docs.close()]);
+  });
+  let found: Inventory;
+  try {
+    found = await inventory({ baseUrl: `${site.origin}/`, out: join(scratch, "two-origins"), maxPages: 50, alsoOrigins: [`${docs.origin}/handleiding/`] });
+  } catch (error) {
+    if (/Executable doesn't exist|browserType.launch/.test((error as Error).message)) return context.skip("no browser available");
+    throw error;
+  }
+  assert.equal(found.origin, site.origin);
+  assert.deepEqual(found.origins, [site.origin, docs.origin], "the origins of the site, the start address first; a path given with --also-origin is dropped");
+  const urls = found.pages.map((page) => page.url);
+  for (const url of [`${site.origin}/`, `${site.origin}/over`, `${docs.origin}/`, `${docs.origin}/handleiding/`, `${docs.origin}/handleiding/installeren`, `${docs.origin}/alleen-in-sitemap`]) assert.ok(urls.includes(url), `${url} is a page of the site`);
+  assert.ok(!urls.some((url) => url.startsWith(blog.origin)), "an origin that was not given stays outside");
+  assert.deepEqual(blog.asked, [], "nothing is asked of an origin that was not given");
+  assert.deepEqual(found.notFoundProbes, [found.notFoundProbe, `${docs.origin}/deze-pagina-bestaat-niet-toegankelijkheidsonderzoek`]);
+  assert.ok(found.notFoundProbes!.every((probe) => urls.includes(probe)), "the page for a missing address is visited on each origin");
+  assert.ok(found.pages.find((page) => page.url === `${docs.origin}/`)!.foundVia.includes("start"), "each further origin starts at its own start page");
+  assert.ok(found.pages.find((page) => page.url === `${docs.origin}/handleiding/installeren`)!.foundVia.includes("link"), "links within a further origin are followed");
+  assert.ok(found.pages.find((page) => page.url === `${docs.origin}/alleen-in-sitemap`)!.foundVia.includes("sitemap"), "the sitemap of each origin is read");
+  assert.equal(found.sitemapUrls, 1);
+  assert.deepEqual(found.documents!.map((document) => document.url).sort(), [`${docs.origin}/handleiding/naslag.pdf`, `${site.origin}/jaarverslag.pdf`].sort(), "documents on either origin are documents of the site");
+  assert.ok(found.documents!.every((document) => document.bytes === 1234), "each was asked for its size");
+  assert.equal(found.documentTotals!.elsewhere, 0);
+});

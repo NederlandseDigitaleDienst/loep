@@ -8,6 +8,7 @@ import { readTemplate } from "../lib/templates.ts";
 import { agentLoginNl, loginForRun } from "../lib/login.ts";
 import { recordReads } from "../lib/reads.ts";
 import { makeWorkDir } from "../lib/workdir.ts";
+import { siteLabel } from "../lib/origins.ts";
 import { frameAddress, readSiteModel, SITE_CHECK_FILE, SITE_MODEL_FILE, validateSiteModel, type ModelContext, type PageType, type Postcondition, type SiteCheck, type SiteModel } from "../lib/sitemodel.ts";
 import { readObservation } from "../session/observations.ts";
 import { holds, loadRecipes, MAX_RECIPE_STEPS, replayEnv, replayFromClean, replaySteps } from "../session/recipe.ts";
@@ -112,7 +113,7 @@ export async function explore(runDir: string): Promise<{ task: string; pages: nu
   // Every round its own session, and so its own budget and its own numbering of observations.
   const session = round === 1 ? EXPLORE_SESSION : `${EXPLORE_SESSION}${round}`;
   const prompt = fill(template, {
-    site: new URL(inventory.baseUrl).hostname,
+    site: siteLabel(inventory),
     baseUrl: inventory.baseUrl,
     run: absoluteRun,
     cli,

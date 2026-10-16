@@ -411,8 +411,8 @@ interface InstrumentContext {
   fileExists?: (ref: string) => boolean;
   /** The text of a cited observation, a dossier part or the saved copy of a page (by its label), or null when the reference has none. Without it, quotations are not checked. */
   sourceText?: (ref: string) => string | null;
-  /** Host of the site that is evaluated: an address in an advice is one of the site itself. Without it, addresses are not checked. */
-  siteHost?: string;
+  /** Hosts of the site that is evaluated, one per origin (`siteHosts`): an address in an advice is one of the site itself. Without them, addresses are not checked. */
+  siteHosts?: string[];
   /** Prefixes of the custom elements a vendor makes, as given at inventory. Without them nothing is known to be someone else's, and an advice is not checked for reaching into it. */
   vendorPrefixes?: string[];
 }
@@ -585,10 +585,11 @@ function adviceProblems(finding: Partial<Finding>, at: string, context: Instrume
   const overridden = /<(ul|ol|dl|table|h[1-6])\b[^>]*\srole\s*=/i.exec(fix);
   if (overridden) problems.push(`${at}.fixNl: the advice puts a role on <${overridden[1]!.toLowerCase()}>; that takes away what the element is (a list without items, a table without cells, a heading that is none). Keep the element and name or group it another way, such as aria-labelledby`);
   if (SPACE_CRITERIA.includes(context.criterion) && !/\b320\b/.test(fix)) problems.push(`${at}.fixNl: an advice about room names the narrowest width to measure again: say that the result must be measured at 320 pixels and at a width in between`);
-  if (context.siteHost) {
-    for (const [, host] of fix.matchAll(/https?:\/\/([a-z0-9.-]+)/gi)) {
+  if (context.siteHosts && context.siteHosts.length > 0) {
+    const own = context.siteHosts.map((host) => host.toLowerCase());
+    for (const [, host] of fix.matchAll(/https?:\/\/([a-z0-9.-]+(?::\d+)?)/gi)) {
       const name = host!.toLowerCase().replace(/\.$/, "");
-      if (name !== context.siteHost && !REFERENCE_HOSTS.test(name)) problems.push(`${at}.fixNl: the address with "${name}" is not an address of this site; an example uses the site itself (${context.siteHost})`);
+      if (!own.includes(name) && !REFERENCE_HOSTS.test(name)) problems.push(`${at}.fixNl: the address with "${name}" is not an address of this site; an example uses the site itself (${own.join(" or ")})`);
     }
   }
   // An advice inside someone else's shadow tree is an advice to the vendor. Kept narrow: only what is known to be the vendor's.

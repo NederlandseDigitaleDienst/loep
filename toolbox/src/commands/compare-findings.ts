@@ -4,6 +4,7 @@ import { parseArgs } from "node:util";
 import { canonicalJson, pageLabels, readJson, sha256, sha256File, writeFileAtomic, writeJson } from "../lib/canonical.ts";
 import { documentDir, documentKind, KIND_NAME_NL, READ_KINDS, type DocumentKind } from "../lib/documents.ts";
 import { OUTCOME_LABEL, type CriterionOutcome, type Evaluation } from "../lib/evaluation.ts";
+import { siteOrigins } from "../lib/origins.ts";
 import { loadAllProcedures, TEMPLATES_DIR } from "../lib/procedures.ts";
 import { compareCriterionIds } from "../lib/wcag.ts";
 import { compare, type Comparison, type ReferenceAudit, type ReferenceFinding } from "./compare.ts";
@@ -126,14 +127,14 @@ function documentCriteria(evaluation: Evaluation): string[] {
  * read, and a criterion documents are not judged on. Whether this run chose and read the
  * document is not decided here: that is evidence, and the classifier looks for it.
  */
-export function documentOutOfReach(finding: ReferenceFinding, baseUrl: string, criteria: string[]): string | null {
+export function documentOutOfReach(finding: ReferenceFinding, baseUrl: string, criteria: string[], origins: readonly string[] = [new URL(baseUrl).origin]): string | null {
   let url: URL | null = null;
   try {
     url = new URL(finding.page, baseUrl);
   } catch {
     // Not an address: a description of the place. Only the criterion can decide then.
   }
-  if (url && url.origin !== new URL(baseUrl).origin) return "Het document staat op een ander domein. De toolbox leest alleen documenten op het eigen domein in.";
+  if (url && !origins.includes(url.origin)) return "Het document staat op een ander domein. De toolbox leest alleen documenten op het eigen domein in.";
   const kind = url ? documentKind(url.href) : null;
   if (kind && !READ_KINDS.includes(kind)) return `Het document is van de soort ${KIND_NAME_NL[kind]}. De toolbox telt die soort en leest haar niet in.`;
   const asked = [finding.criterion, ...(finding.alsoCriteria ?? [])];
@@ -185,7 +186,7 @@ export function buildInput(runDir: string, evaluation: Evaluation, reference: Re
     reference: findings.map((finding) => {
       const criteria = new Set([finding.criterion, ...(finding.alsoCriteria ?? [])]);
       // A document on the site itself, of a kind that is read, on a criterion documents are judged on, is a finding like any other.
-      const outOfReach = finding.medium === "document" ? documentOutOfReach(finding, evaluation.site.baseUrl, criteriaForDocuments) : null;
+      const outOfReach = finding.medium === "document" ? documentOutOfReach(finding, evaluation.site.baseUrl, criteriaForDocuments, siteOrigins(evaluation.site)) : null;
       return {
         ...finding,
         ourOutcome: outcomes.get(finding.criterion) ?? null,

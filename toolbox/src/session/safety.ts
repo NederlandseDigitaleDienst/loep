@@ -4,6 +4,7 @@ import type { BrowserContext, CDPSession, Frame, Page, Request } from "playwrigh
 import { answeredByCloudflare, bodyOf, passOn, passWrite } from "../browser/session.ts";
 import { readJson } from "../lib/canonical.ts";
 import { isChallenge } from "../lib/challenge.ts";
+import { siteOrigins } from "../lib/origins.ts";
 import { loginCookieHeader, logsOut } from "../lib/login.ts";
 import { readDecision, readRuleFor, type ReadRequest } from "../lib/reads.ts";
 import { searchServicesOf, type SearchServiceId } from "../lib/searchbody.ts";
@@ -59,9 +60,10 @@ export async function scopeForRun(runDir: string, extra: { scopeUrl?: string | u
   let baseUrl: string | null = null;
   const inventoryPath = join(runDir, "inventory.json");
   if (existsSync(inventoryPath)) {
-    const inventory = await readJson<{ baseUrl: string; origin: string; pages: { url: string }[] }>(inventoryPath);
+    const inventory = await readJson<{ baseUrl: string; origin: string; origins?: string[]; pages: { url: string }[] }>(inventoryPath);
     baseUrl = inventory.baseUrl;
-    hosts.add(new URL(inventory.origin).hostname);
+    // Every origin of the site, also one where no page was found.
+    for (const origin of siteOrigins(inventory)) hosts.add(new URL(origin).hostname);
     for (const page of inventory.pages) hosts.add(new URL(page.url).hostname);
   }
   if (extra.scopeUrl) {

@@ -285,14 +285,21 @@ test("a location carries words of the page a reader can search for", () => {
 });
 
 test("an advice that would do harm when carried out to the letter is refused", () => {
-  const advising = (fixNl: string, extra: Partial<JudgeContext> = {}): string[] => validateJudgeVerdict({ ...failed, findings: [{ ...finding, fixNl }] }, { ...context, siteHost: "www.voorbeeldgemeente.nl", ...extra });
+  const advising = (fixNl: string, extra: Partial<JudgeContext> = {}): string[] => validateJudgeVerdict({ ...failed, findings: [{ ...finding, fixNl }] }, { ...context, siteHosts: ["www.voorbeeldgemeente.nl"], ...extra });
   assert.deepEqual(advising("Geef de lijst een naam met aria-labelledby naar de kop."), []);
   assert.match(advising('Maak er <ul role="group"> van.').join(), /puts a role on <ul>/);
   assert.match(advising('Gebruik <h2 class="titel" role="presentation">.').join(), /puts a role on <h2>/);
   assert.deepEqual(advising('Zet om de lijst een <div role="group">.'), []);
   assert.match(advising("Toon als voorbeeld https://nerds.nl/pagina in het veld.").join(), /"nerds.nl" is not an address of this site/);
   assert.deepEqual(advising("Toon https://www.voorbeeldgemeente.nl/pagina; zie https://www.w3.org/WAI/WCAG22/Techniques/html/H90."), []);
-  assert.deepEqual(advising("Toon als voorbeeld https://nerds.nl/pagina in het veld.", { siteHost: undefined }), [], "without a site, addresses are not checked");
+  assert.deepEqual(advising("Toon als voorbeeld https://nerds.nl/pagina in het veld.", { siteHosts: undefined }), [], "without a site, addresses are not checked");
+  // A site on two origins: an address on either is one of the site, another subdomain is not.
+  const twoOrigins = { siteHosts: ["example.nl", "docs.example.nl"] };
+  assert.deepEqual(advising("Zie https://docs.example.nl/handleiding en https://example.nl/contact.", twoOrigins), []);
+  assert.match(advising("Zie https://blog.example.nl/bericht.", twoOrigins).join(), /"blog.example.nl" is not an address of this site; an example uses the site itself \(example.nl or docs.example.nl\)/);
+  // A site on this machine has a port in its host: the address with that port is the site's, another port is not.
+  assert.deepEqual(advising("Zie http://127.0.0.1:4710/contact.html.", { siteHosts: ["127.0.0.1:4710", "127.0.0.1:4711"] }), []);
+  assert.match(advising("Zie http://127.0.0.1:4712/speler.html.", { siteHosts: ["127.0.0.1:4710", "127.0.0.1:4711"] }).join(), /"127.0.0.1:4712" is not an address of this site/);
   assert.match(advising("Laat het label zichtbaar bij 640 pixels.", { criterion: "1.4.4" }).join(), /measured at 320 pixels/);
 });
 
