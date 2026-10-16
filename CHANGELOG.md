@@ -4,6 +4,8 @@ Wat er per versie van loep is veranderd. De versie staat op het voorblad en onde
 
 ## Nog niet uitgebracht
 
+## 0.4.0 (2026-10-16)
+
 ### Wat een uitkomst kan veranderen
 
 - De poort telt een ingesloten venster dat niet laadt (status 401, 403 of een andere fout) niet meer als gat bij `pages-loaded`, als het sitemodel het noemt als onderdeel zonder recept. Dat is dezelfde beperking als `frame-not-operated`, nu onder `frame-not-loaded`. Eerder bleef een run met een videospeler achter een controle tegen robots, zoals Vimeo met Cloudflare, steken op "bewijs onvoldoende": de verkenner kon het gat niet sluiten, want `acceptedGaps` neemt alleen pagina's van de run aan.
