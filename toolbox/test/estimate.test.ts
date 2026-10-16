@@ -271,3 +271,25 @@ test("the estimate names no path and no person, and keeps its numbers in one pla
   // A number of the estimate lives in COEFFICIENTS; the command only reads the run.
   assert.ok(!/\d\.\d/.test(source("commands/estimate.ts")), "commands/estimate.ts bevat een coëfficiënt; die hoort in lib/estimate.ts");
 });
+
+test("with --at-once the sweep is reckoned with as many at the same time: collect by pages, contrast by its four passes, states by its groups", () => {
+  const one = estimate(REMOTE);
+  const four = estimate({ ...REMOTE, sweepAtOnce: 4 });
+  near(row(four, "collect").estimatedSeconds, 1984 / (1 + 3 * COEFFICIENTS.sweepAtOnce.collect.gain), "collect");
+  near(row(four, "contrast").estimatedSeconds, 174 / (1 + 3 * COEFFICIENTS.sweepAtOnce.contrast.gain), "contrast");
+  near(row(four, "states").estimatedSeconds, 1462 / (1 + 3 * COEFFICIENTS.sweepAtOnce.states.gain), "states");
+  // The agents are not touched, and contrast and states gain nothing above their number of passes and groups.
+  assert.equal(row(four, "judges").estimatedSeconds, row(one, "judges").estimatedSeconds);
+  const eight = estimate({ ...REMOTE, sweepAtOnce: 8 });
+  assert.ok(row(eight, "collect").estimatedSeconds! < row(four, "collect").estimatedSeconds!);
+  assert.equal(row(eight, "contrast").estimatedSeconds, row(four, "contrast").estimatedSeconds);
+  assert.equal(row(eight, "states").estimatedSeconds, row(four, "states").estimatedSeconds);
+  assert.match(estimateTextNl(four, "run"), /in een pool, veegronde 4 tegelijk, site elders/);
+  assert.doesNotMatch(estimateTextNl(one, "run"), /veegronde \d+ tegelijk/);
+
+  // From a run: the number given with --at-once counts for the sweep too; without it the sweep goes one page at a time.
+  const run = makeRun({ baseUrl: "https://voorbeeld.example/", templates: ["a", "b"], sample: 10, pageTypes: 2 });
+  assert.equal(estimateRun(run).basis.sweepAtOnce, undefined);
+  assert.equal(estimateRun(run, { atOnce: 6 }).basis.sweepAtOnce, 6);
+  assert.ok(row(estimateRun(run, { atOnce: 6 }), "collect").estimatedSeconds! < row(estimateRun(run), "collect").estimatedSeconds!);
+});

@@ -42,8 +42,37 @@ export interface PictureReport {
   unavailableNl?: string;
 }
 
-/** What recognition found per hash of a picture, kept for the whole sweep. */
-export type PictureCache = Map<string, PictureOcr>;
+/**
+ * What recognition found per hash of a picture, kept for the whole sweep. A reading that is still
+ * under way is there as a promise: a page measured at the same time waits for it instead of reading the picture again.
+ * The promise gives null when recognition is not available on this machine: the page that waited then finds that out itself.
+ */
+export type PictureCache = Map<string, PictureOcr | Promise<PictureOcr | null>>;
+
+/**
+ * Set `recognised` of each report to what it would have been with one page after the other, in the
+ * order given: a picture counts on the first report that has it, and a picture read before (`seen`)
+ * counts on none. Pages measured at the same time read a shared picture once, but not always on the
+ * page that comes first. Returns the indexes of the reports that changed; `seen` is extended.
+ */
+export function recountRecognised(reports: PictureReport[], seen: Set<string>): number[] {
+  const changed: number[] = [];
+  for (const [index, report] of reports.entries()) {
+    // Without text recognition nothing is read and nothing is kept for a later page.
+    if (report.unavailableNl) continue;
+    let recognised = 0;
+    for (const picture of report.pictures) {
+      if (picture.sha256 === null || seen.has(picture.sha256)) continue;
+      seen.add(picture.sha256);
+      if (!("notReadNl" in picture.ocr)) recognised++;
+    }
+    if (recognised !== report.recognised) {
+      report.recognised = recognised;
+      changed.push(index);
+    }
+  }
+  return changed;
+}
 
 /**
  * Every picture on the page as it is now, cut out as it is drawn and read with text recognition
@@ -80,20 +109,26 @@ export async function picturesWithText(page: Page, dir: string, relative: string
         await mkdir(dir, { recursive: true });
         await writeFile(join(dir, name), shot);
       }
-      let read = cache.get(hash);
+      let read: PictureOcr | undefined = (await cache.get(hash)) ?? undefined;
       if (!read && unavailableNl) read = { notReadNl: unavailableNl };
       if (!read) {
         const path = join(work, name);
         await writeFile(path, shot);
-        try {
-          const answer = await ocr(path, { sparse: true });
-          read = { hasText: answer.hasText, text: answer.text, words: answer.words, confidence: answer.confidence, ...(answer.sparseWords !== undefined ? { sparseWords: answer.sparseWords } : {}) };
-          recognised++;
-        } catch (error) {
-          if (error instanceof Unavailable) unavailableNl = `tekstherkenning is op deze machine niet beschikbaar: ${error.message}`;
-          read = { notReadNl: unavailableNl ?? `tekstherkenning gaf geen antwoord: ${(error as Error).message.split("\n")[0]}` };
+        const reading = ocr(path, { sparse: true }).then(
+          (answer): PictureOcr => ({ hasText: answer.hasText, text: answer.text, words: answer.words, confidence: answer.confidence, ...(answer.sparseWords !== undefined ? { sparseWords: answer.sparseWords } : {}) }),
+          (error: Error): PictureOcr => {
+            if (error instanceof Unavailable) unavailableNl = `tekstherkenning is op deze machine niet beschikbaar: ${error.message}`;
+            return { notReadNl: unavailableNl ?? `tekstherkenning gaf geen antwoord: ${(error.message ?? String(error)).split("\n")[0]}` };
+          },
+        );
+        // Whoever asks for the same picture in the meantime waits for this reading.
+        cache.set(hash, reading.then((answer) => (unavailableNl ? null : answer)));
+        read = await reading;
+        if (unavailableNl) cache.delete(hash);
+        else {
+          cache.set(hash, read);
+          if (!("notReadNl" in read)) recognised++;
         }
-        if (!unavailableNl) cache.set(hash, read);
       }
       pictures.push({ ...base, sha256: hash, crop: `${relative}/${name}`, ocr: read });
     }

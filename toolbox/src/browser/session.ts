@@ -104,6 +104,32 @@ export function clipboardNote(texts: string[], canWrite: boolean, writes: Clipbo
   return `de melding over kopiëren of het klembord kan aan de testbrowser liggen: ${canWrite ? "die mag het klembord vullen maar niet lezen, en op een pagina zonder https bestaat het klembord niet" : "deze browser kent geen toestemming voor het klembord"}. Schrijf dit er letterlijk bij en meld de mislukking niet als gebrek van de site`;
 }
 
+/** Something that spaces navigations to the same host: `Politeness` of the session process. */
+export interface NavigationSpacing {
+  before(url: string): Promise<void>;
+}
+
+let spacing: NavigationSpacing | null = null;
+
+/**
+ * Space every navigation of a top frame in every browser context of this process from here on, or
+ * stop doing so with null. The sweep sets this while it measures pages at the same time: the site then
+ * gets no more navigations per second than the sessions of the agents may give it.
+ */
+export function spaceNavigations(next: NavigationSpacing | null): void {
+  spacing = next;
+}
+
+/** Whether a request loads the document of a tab, not of a frame inside it. */
+const loadsTab = (route: Route): boolean => {
+  try {
+    return route.request().isNavigationRequest() && route.request().frame().parentFrame() === null;
+  } catch {
+    // A request without a frame, such as one of a worker: no navigation.
+    return false;
+  }
+};
+
 export async function newContext(browser: Browser, options: ContextOptions = {}, guard?: WriteGuard): Promise<BrowserContext> {
   // A run with a login starts every context with the session a person left behind; any other run starts clean, as it did.
   const login = options.storageState ?? runLoginState();
@@ -131,7 +157,11 @@ export async function newContext(browser: Browser, options: ContextOptions = {},
     const method = route.request().method();
     // Logging out ends the session for everything that comes after: such a request never leaves, whatever its method.
     if (logsOut(route.request().url())) return route.request().isNavigationRequest() ? route.fulfill({ status: 204, body: "" }) : route.abort("blockedbyclient");
-    if (method === "GET" || method === "HEAD") return route.continue();
+    if (method === "GET" || method === "HEAD") {
+      const spaced = spacing;
+      if (spaced && loadsTab(route)) return spaced.before(route.request().url()).then(() => route.continue().catch(() => undefined));
+      return route.continue();
+    }
     // An aborted navigation replaces the page with an error page. "No content" leaves the page as it was.
     if (!isWriteOrigin(writes, route.request().url())) return route.request().isNavigationRequest() ? route.fulfill({ status: 204, body: "" }) : route.abort("blockedbyclient");
     writes!.record(method, route.request().url());

@@ -12,7 +12,10 @@ import { isLocalHost } from "../lib/writes.ts";
 const DEFAULT_AT_ONCE = 3;
 
 export interface EstimateOptions {
-  /** Agents at the same time; without it the limit of the session process minus the session of whoever leads, or the default of the workflow. */
+  /**
+   * Agents at the same time; without it the limit of the session process minus the session of whoever leads, or the default of the workflow.
+   * Given, it is also the number of pages the sweep measures at once (`collect --at-once`); without it the sweep is reckoned one page at a time.
+   */
   atOnce?: number | undefined;
   /** Count the phases with agents in groups that each wait for their slowest agent, as the workflow did before it had a pool. */
   groups?: boolean | undefined;
@@ -63,6 +66,8 @@ export function estimateRun(runDir: string, options: EstimateOptions = {}): RunE
     // One session is that of whoever leads the audit.
     atOnce: options.atOnce ?? (limit ? Math.max(1, limit - 1) : DEFAULT_AT_ONCE),
     atOnceSource: options.atOnce ? "option" : limit ? "session" : "default",
+    // The sweep measures as many at once as it is told; the skill tells it the number of agents the owner allows.
+    ...(options.atOnce && options.atOnce > 1 ? { sweepAtOnce: options.atOnce } : {}),
     local: isLocalHost(new URL(inventory.baseUrl).hostname),
     scheduling: (options.groups ? "groups" : "pool") satisfies Scheduling,
     // Known only once every verifier is in: then the tasks say which criteria the evaluation itself left open.

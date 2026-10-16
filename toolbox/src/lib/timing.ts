@@ -34,7 +34,7 @@ export interface AgentPhaseTiming {
 interface SessionFile {
   startedAt?: string;
   stoppedAt?: string;
-  limits?: { maxSessions?: number };
+  limits?: { maxSessions?: number; navigationDelayMs?: number };
 }
 
 const median = (values: number[]): number => {
@@ -107,15 +107,21 @@ export function agentPhaseTimings(runDir: string): AgentPhaseTiming[] {
   return timings;
 }
 
-/** How many sessions the session process of this run allows, as its latest session file says; null when no session was started. */
-export function sessionLimit(runDir: string): number | null {
-  let latest: { start: number; max: number } | null = null;
+/** The limits of the session process of this run, as its latest session file says; null when no session was started. */
+export function sessionLimits(runDir: string): { maxSessions: number; navigationDelayMs: number | null } | null {
+  let latest: { start: number; maxSessions: number; navigationDelayMs: number | null } | null = null;
   for (const { file } of readSessions(runDir)) {
     const start = Date.parse(file.startedAt ?? "");
     const max = file.limits?.maxSessions;
-    if (Number.isFinite(start) && typeof max === "number" && (!latest || start > latest.start)) latest = { start, max };
+    const delay = file.limits?.navigationDelayMs;
+    if (Number.isFinite(start) && typeof max === "number" && (!latest || start > latest.start)) latest = { start, maxSessions: max, navigationDelayMs: typeof delay === "number" ? delay : null };
   }
-  return latest?.max ?? null;
+  return latest ? { maxSessions: latest.maxSessions, navigationDelayMs: latest.navigationDelayMs } : null;
+}
+
+/** How many sessions the session process of this run allows, as its latest session file says; null when no session was started. */
+export function sessionLimit(runDir: string): number | null {
+  return sessionLimits(runDir)?.maxSessions ?? null;
 }
 
 /** The parts of an audit the steps of the manifest can be counted under. */

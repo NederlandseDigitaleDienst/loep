@@ -4,6 +4,14 @@ Wat er per versie van loep is veranderd. De versie staat op het voorblad en onde
 
 ## Nog niet uitgebracht
 
+### Wat een uitkomst kan veranderen
+
+- `states` doet zijn proeven in vijf groepen (formulieren en knoppen, toetsen op de pagina's, toetsen in de toestanden, aanwijzen en indrukken, pijltoetsen), elk in een eigen browsercontext. Eerder deelden de groepen één context, en zag een latere groep wat een eerdere in de opslag van de browser had achtergelaten, zoals een instelling die de proef had gewijzigd.
+
+### Verder
+
+- De veegronde kan pagina's tegelijk meten: `collect`, `contrast` en `states` met `--at-once <n>`, ook via `just sweep RUN --at-once <n>` (#48). `collect` meet dan n pagina's en n toestanden uit het sitemodel tegelijk, `contrast` zijn vier rondes en `states` zijn vijf groepen proeven. Nooit meer dan het sessieproces van de run sessies toelaat, en met dezelfde tijd tussen twee navigaties naar de site als de sessies. Wat er wordt weggeschreven, in dezelfde volgorde en met dezelfde stempels, is hetzelfde als met één tegelijk. Op vier pagina's van de testsite ging `collect` van 209 naar 59 seconden, `contrast` van 30 naar 9 en `states` van 200 naar 118. Standaard blijft het één tegelijk; de skill gebruikt het alleen als de eigenaar meer agents toestaat. `estimate --at-once <n>` rekent de veegronde dan ook met n tegelijk.
+
 ## 0.3.0 (2026-10-15)
 
 Deze versie is uitgebracht zonder nieuwe meting op de testsite, net als 0.2.0. De wijzigingen die een uitkomst kunnen veranderen, zijn dus nog niet vergeleken met 0.2.0.
