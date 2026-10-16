@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="nl">
+<head><meta charset="utf-8"><title>Gelijke soorten - Testsite sessie</title><link rel="stylesheet" href="/site.css">
+<style>
+.kaart a { color: #1a1a1a; display: inline-block; padding: 4px 0; }
+.kaart a:hover, .kaart a:focus { color: #003366; text-decoration: underline; }
+.kaart a.uitgelicht:hover { color: #c8c8c8; }
+.knop { display: inline-block; border: 2px solid #1a1a1a; background: #ffffff; color: #1a1a1a; padding: 0 8px; }
+.knop-groot { height: 48px; }
+.knop-klein { height: 20px; line-height: 16px; }
+.mening button { border: 2px solid #1a1a1a; background: #ffffff; color: #1a1a1a; }
+</style></head>
+<body>
+<main><h1>Gelijke soorten</h1>
+<ul>
+<li class="kaart kaart--nieuws k-3fa9b"><a class="kaart__link css-1x9a2b" data-id="17" data-track="kaart-1" href="#a1">Nieuw park geopend</a></li>
+<li class="kaart kaart--agenda k-77c01"><a class="kaart__link css-9q2b7c" data-id="18" data-track="kaart-2" jsname="Vr4tq" href="#a2">Raadsvergadering in juni</a></li>
+<li class="kaart kaart--nieuws k-a01ff"><a class="kaart__link css-0p3m1z" data-id="19" data-track="kaart-3" _ngcontent-ng-c412="" href="#a3">Werk aan de weg</a></li>
+<li class="kaart kaart--agenda k-b2210"><a class="kaart__link css-5t6y7u" data-id="20" data-track="kaart-4" href="#a4">Inloopavond over afval</a></li>
+<li class="kaart kaart--nieuws k-c9d31"><a class="kaart__link css-8i9o0p" data-id="21" data-track="kaart-5" href="#a5">Nieuwe bibliotheek</a></li>
+<li class="kaart kaart--agenda k-e4f5a"><a class="kaart__link css-2w3e4r" data-id="22" data-track="kaart-6" href="#a6">Markt op zaterdag</a></li>
+<li class="kaart kaart--nieuws k-f0a1b"><a class="kaart__link uitgelicht css-7u8i9o" data-id="23" data-track="kaart-7" href="#a7">Uitgelicht: het jaarverslag</a></li>
+</ul>
+<p><button type="button" class="knop knop-groot" id="groot-1">Bewaren</button> <button type="button" class="knop knop-groot" id="groot-2">Delen</button> <button type="button" class="knop knop-klein" id="klein">Meer</button></p>
+<p class="mening"><button type="button" data-keuze="ja" data-vraag="q-101">Ja</button> <button type="button" data-keuze="nee" data-vraag="q-101">Nee</button> <button type="button" data-keuze="weet-niet" data-vraag="q-102">Weet ik niet</button> <button type="button" id="later">Later vragen</button> <span id="mening-gegeven" role="status"></span></p>
+</main>
+<script>
+// The answers run the same code on the press: one kind. The last button runs other code, and acts on the click.
+for (const button of document.querySelectorAll(".mening button[data-keuze]")) {
+  button.addEventListener("pointerdown", () => { document.getElementById("mening-gegeven").textContent = "Bedankt voor uw mening."; });
+}
+document.getElementById("later").addEventListener("pointerdown", () => undefined);
+</script>
+</body>
+</html>

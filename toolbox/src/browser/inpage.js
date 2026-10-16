@@ -101,6 +101,20 @@
   // The same for a press of the pointer: which elements hear it, so the press probe tries those and not every element of the same tag.
   const DOWN_EVENT_TYPES = ["mousedown", "pointerdown", "touchstart"];
   const downTargets = new WeakSet();
+  // What a control does when it is pointed at, gets focus or is pressed, as far as its own code says:
+  // per element and event the code of each listener, as a short hash. Two controls whose listeners
+  // have the same code behave alike; that is what makes them one kind for the pointer probes.
+  const HOVER_FOCUS_TYPES = ["mouseover", "mouseenter", "mouseout", "mouseleave", "pointerover", "pointerenter", "pointerout", "pointerleave", "focus", "focusin", "blur", "focusout"];
+  const listenerCode = new WeakMap();
+  const functionSource = Function.prototype.toString;
+  const codeOf = (listener) => {
+    try {
+      const handler = typeof listener === "function" ? listener : typeof listener?.handleEvent === "function" ? listener.handleEvent : null;
+      return handler ? shortHash(functionSource.call(handler)) : "-";
+    } catch {
+      return "?";
+    }
+  };
   let frozenListeners = null;
   const addEventListener = EventTarget.prototype.addEventListener;
   EventTarget.prototype.addEventListener = function (type, ...rest) {
@@ -110,6 +124,11 @@
     if (type === "click" && frozenListeners === null && this instanceof Element) clickTargets.add(this);
     // Also after the counts were frozen: a component that only starts to listen when it is first drawn or opened is found in the state it is opened in.
     if (DOWN_EVENT_TYPES.includes(type) && this instanceof Element) downTargets.add(this);
+    if ((DOWN_EVENT_TYPES.includes(type) || HOVER_FOCUS_TYPES.includes(type)) && this instanceof Element) {
+      const known = listenerCode.get(this) ?? new Set();
+      known.add(`${type}:${codeOf(rest[0])}`);
+      listenerCode.set(this, known);
+    }
     return addEventListener.call(this, type, ...rest);
   };
   // Every timer of a second or more is kept with what it did when it went off (WCAG 2.2.1): whether
@@ -1729,36 +1748,210 @@
       .map((element) => ({ ...describe(element), type: element.getAttribute("type"), options: element.localName === "select" ? element.options.length : null }));
   }
 
-  /** Attributes that say nothing about how a control behaves under the pointer or with focus: they differ per control of one kind. */
-  const NOT_OF_A_KIND = ["id", "href", "value", "name", "for", "style", "aria-label", "aria-labelledby", "aria-controls", "aria-current", "aria-expanded", "aria-selected", "aria-pressed", "aria-checked", "tabindex", "target", "rel", "hreflang", "lang", "download", "placeholder", "autocomplete", "checked", "open"];
   /** Attributes that point at content shown on hover or focus: a control with one of these is never one of many. */
   const SHOWS_MORE = ["title", "aria-describedby", "aria-details", "aria-haspopup", "popovertarget", "data-tooltip", "data-tip", "data-title"];
 
+  /** A short hash of a text, to compare code and style declarations without keeping them. */
+  function shortHash(value) {
+    let hash = 5381;
+    const length = Math.min(value.length, 4000);
+    for (let index = 0; index < length; index++) hash = ((hash << 5) + hash + value.charCodeAt(index)) | 0;
+    return `${(hash >>> 0).toString(36)}.${value.length}`;
+  }
+
+  /** The pseudo-classes of a pointer that rests on an element, of focus and of a press. */
+  const INTERACTION_STATE = /:(?:hover|focus-visible|focus-within|focus|active)(?![\w-])/g;
+
+  /** A selector list split at its top-level commas: the commas inside :is() or :not() stay. */
+  function selectorParts(selector) {
+    const parts = [];
+    let depth = 0;
+    let start = 0;
+    for (let index = 0; index < selector.length; index++) {
+      const char = selector[index];
+      if (char === "(" || char === "[") depth++;
+      else if (char === ")" || char === "]") depth--;
+      else if (char === "," && depth === 0) {
+        parts.push(selector.slice(start, index).trim());
+        start = index + 1;
+      }
+    }
+    parts.push(selector.slice(start).trim());
+    return parts.filter(Boolean);
+  }
+
   /**
-   * What makes two controls the same kind for a probe that points at them: the element and its
-   * role, where it stands, the component it is part of, its classes and other attributes by name,
-   * and the colours it has at rest. Two links in one list that differ in text and address only
-   * share every rule of the stylesheet and every listener that was set on their kind. A control
-   * with only a pictogram, or with an attribute that announces more content, is a kind of its own.
+   * For one selector with an interaction state in it: the element that has to be pointed at, focused
+   * or pressed for the rule to apply, as a selector without that state, and which states. For
+   * `.card:hover .title` that is `.card`: pointing at a link inside the card applies the rule.
    */
-  function hoverKind(element) {
+  function stateHolder(part) {
+    INTERACTION_STATE.lastIndex = 0;
+    const first = INTERACTION_STATE.exec(part);
+    if (!first) return null;
+    let end = first.index + first[0].length;
+    let depth = 0;
+    for (; end < part.length; end++) {
+      const char = part[end];
+      if (char === "(" || char === "[") depth++;
+      else if (char === ")" || char === "]") depth--;
+      else if (depth === 0 && /[\s>+~]/.test(char)) break;
+    }
+    const holder = part.slice(0, end).replace(INTERACTION_STATE, "").replace(/::?(?:before|after|marker|placeholder|selection|first-line|first-letter)\b/g, "").trim();
+    const selector = holder === "" || /[\s>+~]$/.test(holder) ? `${holder}*` : holder;
+    try {
+      document.createDocumentFragment().querySelector(selector);
+    } catch {
+      return null;
+    }
+    return { selector, states: [...new Set(part.match(INTERACTION_STATE))].sort().join("") };
+  }
+
+  /**
+   * What the style sheets change when an element is pointed at, focused or pressed. Per element
+   * the declarations of every rule with :hover, :focus, :focus-visible, :focus-within or :active
+   * that would apply, by their content: two elements that change in the same way under the pointer
+   * and with focus have the same answer, whatever their classes. `opaque` is set when a style sheet
+   * could not be read (one of another origin): then what changes is not known from the rules.
+   */
+  function interactionStyles() {
+    const byHolder = new Map();
+    let opaque = false;
+    const roots = new Set([document]);
+    for (const element of deepElements()) if (element.shadowRoot) roots.add(element.shadowRoot);
+    for (const root of roots) {
+      const sheets = [...(root.styleSheets ?? []), ...(root.adoptedStyleSheets ?? [])];
+      const add = (rule, selector) => {
+        for (const part of selectorParts(selector)) {
+          const holder = stateHolder(part);
+          if (!holder) continue;
+          const declared = `${holder.states}{${shortHash(rule.style.cssText)}}`;
+          let holders;
+          try {
+            holders = root.querySelectorAll(holder.selector);
+          } catch {
+            continue;
+          }
+          for (const node of holders) {
+            const known = byHolder.get(node) ?? new Set();
+            known.add(declared);
+            byHolder.set(node, known);
+          }
+        }
+      };
+      const walk = (rules, parent) => {
+        for (const rule of rules) {
+          if (rule instanceof CSSMediaRule && !matchMedia(rule.media.mediaText).matches) continue;
+          if (rule instanceof CSSStyleRule) {
+            // A nested rule stands for its parent at the & or, without one, inside it.
+            const selector = parent === null ? rule.selectorText : rule.selectorText.includes("&") ? rule.selectorText.replaceAll("&", `:is(${parent})`) : `:is(${parent}) ${rule.selectorText}`;
+            add(rule, selector);
+            if (rule.cssRules?.length) walk(rule.cssRules, selector);
+          } else if (rule.cssRules) walk(rule.cssRules, parent);
+        }
+      };
+      for (const sheet of sheets) {
+        if (sheet.disabled || (sheet.media?.mediaText && !matchMedia(sheet.media.mediaText).matches)) continue;
+        let rules;
+        try {
+          rules = sheet.cssRules;
+        } catch {
+          opaque = true;
+          continue;
+        }
+        walk(rules, null);
+      }
+    }
+    return {
+      opaque,
+      /** The rules that apply when this element is pointed at, focused or pressed: those on it and on what holds it. */
+      of(element) {
+        const found = new Set();
+        for (let node = element; node; node = composedParent(node)) for (const declared of byHolder.get(node) ?? []) found.add(declared);
+        return [...found].sort().join(" ");
+      },
+    };
+  }
+
+  /** The code of the listeners of a set of event types on an element and on what holds it, short of the page itself; with `labels` also on its labels. */
+  function listenerSignature(element, types, labels = false) {
+    const parts = [];
+    const handlers = types.map((type) => `on${type}`);
+    const of = (node, as) => {
+      const own = [...(listenerCode.get(node) ?? [])].filter((entry) => types.includes(entry.slice(0, entry.indexOf(":"))));
+      // A handler set as an attribute or a property: onfocus="..." or element.onmousedown = ...
+      for (const name of handlers) if (typeof node[name] === "function") own.push(`${name}:${codeOf(node[name])}`);
+      if (own.length > 0) parts.push(`${as}:${own.sort().join(",")}`);
+    };
+    for (let node = element; node && node !== document.body && node !== document.documentElement; node = composedParent(node)) of(node, node === element ? "self" : node.localName);
+    if (labels) for (const label of element.labels ?? []) of(label, "label");
+    return parts.join(";");
+  }
+
+  /** What is known before the press about what pressing an element does: the code of the listeners for a press that reach it. */
+  function downSignature(element) {
+    return listenerSignature(element, DOWN_EVENT_TYPES, true);
+  }
+
+  /** The element that holds a control as one part of the page: a list, a form, a table, a card, a component of its own. */
+  const COMPONENT = "form,fieldset,dialog,details,table,ul,ol,dl,menu,figure,article,blockquote,p,label,[role=dialog],[role=menu],[role=menubar],[role=tablist],[role=toolbar],[role=grid],[role=listbox],[role=tree],[role=radiogroup]";
+
+  function componentOf(element) {
+    for (let node = composedParent(element); node && node !== document.body; node = composedParent(node)) {
+      if (node.localName.includes("-") || node.matches(COMPONENT)) return `${node.localName}${node.getAttribute("role") ? `[${node.getAttribute("role")}]` : ""}`;
+    }
+    return "";
+  }
+
+  /** A class that names one element and not a look: a number in it, or a name a build tool made up. */
+  const idLikeClass = (name) => /\d/.test(name) || /^(?:css|sc|jsx|svelte|astro|emotion)-/.test(name) || name.startsWith("_");
+
+  /**
+   * The size of a target within a margin. The height in three bands: below 24 pixels (the size that
+   * matters for a target, WCAG 2.5.8), from 24 to 44 pixels, and 44 or more (WCAG 2.5.5). The width
+   * only as narrower than 24 pixels or not: above that it follows the length of the text, not the look.
+   */
+  function sizeBand(rect) {
+    const band = (value) => (value < 24 ? "s" : value < 44 ? "m" : "l");
+    return `${rect.width < 24 ? "s" : "-"}${band(rect.height)}`;
+  }
+
+  /**
+   * What makes two controls the same kind for the probes that point at them and press them: they
+   * look and behave alike (WCAG-EM 2.0, 4.1). The element and its role, the region of the page and
+   * the component it stands in, the size of the target within a margin, how it looks at rest, what
+   * the style sheets change when it is pointed at, focused or pressed, and the code of its listeners
+   * for pointing and focus. Classes, ids, data attributes and names a build tool made up do not
+   * count: two links that differ only in those look and behave the same. When a style sheet cannot
+   * be read, the classes that are no identifier count instead of the rules. A control with only a
+   * pictogram, or with an attribute that announces more content, is a kind of its own.
+   */
+  function hoverKind(element, styles) {
     const shown = shownAs(element) ?? element;
     const style = getComputedStyle(shown);
     const root = element.getRootNode();
     const host = root instanceof ShadowRoot ? root.host.localName : "";
-    const names = [...element.attributes].map((attribute) => attribute.name).filter((name) => !NOT_OF_A_KIND.includes(name) && name !== "class" && !name.startsWith("data-") && !SHOWS_MORE.includes(name)).sort();
     const visibleText = text(element, 40);
     const iconOnly = visibleText === "" && element.localName !== "input" && element.localName !== "select" && element.localName !== "textarea";
     const showsMore = SHOWS_MORE.filter((name) => element.hasAttribute(name));
-    const parent = composedParent(element);
-    const kind = [element.localName, element.getAttribute("role") ?? element.getAttribute("type") ?? "", region(element) ?? "-", host, parent ? parent.localName : "", [...element.classList].sort().join("."), names.join(","), style.color, style.backgroundColor, style.textDecorationLine, style.cursor].join("|");
+    const atRest = [style.color, style.backgroundColor, style.backgroundImage === "none" ? "" : "image", style.textDecorationLine, style.cursor, style.fontSize, style.fontWeight, `${style.borderTopWidth} ${style.borderTopStyle} ${style.borderTopColor}`].join(" ");
+    const changes = styles.opaque ? `${styles.of(element)} ${[...element.classList].filter((name) => !idLikeClass(name)).sort().join(".")}` : styles.of(element);
+    const editable = ["contenteditable", "draggable"].filter((name) => element.hasAttribute(name)).join(",");
+    // A link in running text that wraps is as high as one line, not as the two together.
+    const lines = style.display === "inline" ? shown.getClientRects() : [];
+    const size = sizeBand(lines.length > 0 ? lines[0] : shown.getBoundingClientRect());
+    const look = [element.localName, element.getAttribute("role") ?? element.getAttribute("type") ?? "", region(element) ?? "-", host, componentOf(element), size, atRest, shortHash(changes), listenerSignature(element, HOVER_FOCUS_TYPES), editable].join("|");
     // The name of a control of its own kind is part of the kind: each one is pointed at.
     const own = iconOnly || showsMore.length > 0 ? `|${element.getAttribute("aria-label") ?? element.getAttribute("title") ?? visibleText}|${path(element).join(" ")}` : "";
-    return { kind: kind + own, iconOnly, showsMore, title: element.getAttribute("title"), describedBy: element.getAttribute("aria-describedby") };
+    return { kind: look + own, look, iconOnly, showsMore, title: element.getAttribute("title"), describedBy: element.getAttribute("aria-describedby") };
   }
 
-  function hoverTargets() {
-    return deepQueryAll(INTERACTIVE).filter((element) => shownAs(element) !== null && !element.disabled).map((element) => ({ ...describe(element), ...hoverKind(element) }));
+  /** Every control a pointer or focus can reach, with its kind; with `kinds: false` without, for who only looks one up. */
+  function hoverTargets({ kinds = true } = {}) {
+    const found = deepQueryAll(INTERACTIVE).filter((element) => shownAs(element) !== null && !element.disabled);
+    if (!kinds) return found.map(describe);
+    const styles = interactionStyles();
+    return found.map((element) => ({ ...describe(element), ...hoverKind(element, styles) }));
   }
 
   const HINTED = "abbr,dfn,[title],[aria-describedby],[aria-details],[data-tooltip],[data-tip],[data-title]";
@@ -1766,14 +1959,16 @@
   /**
    * Elements that are no control and yet announce more content for whoever points at them: an
    * abbreviation, a term with an explanation, an icon with a description. One kind per element,
-   * place and set of classes; the hover probe points at a few of each.
+   * place and look, as for a control; the hover probe points at a few of each.
    */
   function hoverHints() {
+    const styles = interactionStyles();
     return deepQueryAll(HINTED)
       .filter((element) => isVisible(element) && !element.matches(INTERACTIVE) && !closestComposed(composedParent(element) ?? element, INTERACTIVE) && !["html", "body", "iframe", "svg", "img"].includes(element.localName) && !closestComposed(element, "svg"))
       .map((element) => {
-        const kind = hoverKind(element);
-        return { ...describe(element), kind: `geen bediening|${kind.kind.split("|").slice(0, 7).join("|")}`, iconOnly: false, showsMore: kind.showsMore, title: kind.title, describedBy: kind.describedBy, nonControl: true };
+        const kind = hoverKind(element, styles);
+        // Not the name: an abbreviation is one of many, of which a few are pointed at.
+        return { ...describe(element), kind: `geen bediening|${kind.look}`, iconOnly: false, showsMore: kind.showsMore, title: kind.title, describedBy: kind.describedBy, nonControl: true };
       });
   }
 
@@ -2154,6 +2349,7 @@
     hoverTargets,
     hoverHints,
     hearsDown,
+    downSignature,
     contentInventory,
     interactiveWithin: (ref) => composedWithin(registry[ref], INTERACTIVE).map(describe),
     freezeListeners,

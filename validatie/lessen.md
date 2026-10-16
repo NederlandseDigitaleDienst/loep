@@ -101,6 +101,12 @@ Na de uitbreiding van de veegronde bleven in de oordelen van dezelfde site 26 ve
 | In geopende vensters en menu's was alleen vooruit getabd; of iets onder een vaste balk schoof bij Shift+Tab of de pijltjestoetsen, mat de beoordelaar zelf (2.4.11). | Elke toestand gaat nog een keer open; vanaf de focus na het openen wordt teruggelopen met Shift+Tab en gelopen met de pijltjestoetsen, ook vanaf de items van een menu of lijst. Het dossier noemt per toestand elke stop waar iets over het midden lag, met een uitsnede. | hersteld, nog niet gemeten op een echte site |
 | Tekstalternatieven, namen en de tekst van geopende onderdelen stonden niet als eigen onderdeel in het dossier (3.1.2). | Per pagina de alt-teksten, aria-label, title en dergelijke met de taal die ervoor geldt en wat twee taalherkenners vinden; per toestand de volledige tekst in een bestand en de blokken en namen die alleen daar staan, met hun taal. | hersteld, nog niet gemeten op een echte site |
 
+## Uit een meting met 19 pagina's in de steekproef (16 oktober 2026)
+
+| Les | Wat er nu is | Status |
+|---|---|---|
+| De proeven met aanwijzen, focus en indrukken deelden de bedieningselementen in per klasse en attribuut. Bijna elke kaart of link was een eigen soort: 633 soorten om aan te wijzen en 997 om in te drukken, beide grenzen vol, en `states` was het traagste deel van de veegronde (#63). | De soorten volgen uiterlijk en gedrag (WCAG-EM 2.0, §4.1): rol, paginagebied en onderdeel, grootte binnen een marge, uiterlijk in rust, de stijlregels bij aanwijzen, focus en indrukken, en de code van de listeners. Klassen, id's en attributen tellen niet mee. Op de testsite daalt het aantal soorten iets en blijft elk gebrek van deze proeven gevonden ([meting](testsite/2026-10-16-soorten/uitkomst.md)). | hersteld, nog niet gemeten op een echte site |
+
 ## Over het werken zelf
 
 - **Meten voor bouwen.** Tests zeggen dat de code doet wat bedoeld was, niet dat het onderzoek beter wordt. Na elke reeks wijzigingen eerst een kleine meting op de criteria die geraakt zijn, pas daarna verder bouwen.
