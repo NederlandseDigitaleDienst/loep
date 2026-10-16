@@ -213,7 +213,7 @@ test("a valid finishing verdict is the final outcome, the earlier verdict is kep
   assert.equal(sweep.outcome, "passed");
   assert.deepEqual(sweep.rounds, { a: "cantTell", b: null, final: "cantTell", finish: "passed" });
   assert.equal(sweep.established?.by, "finishing");
-  assert.deepEqual(sweep.established?.before, { roundNl: "verificatie", outcome: "cantTell", summaryNl: "Ook bij de controle is niet alles vastgesteld.", missingNl: [SWEEP] });
+  assert.deepEqual(sweep.established?.before, { roundNl: "controle", outcome: "cantTell", summaryNl: "Ook bij de controle is niet alles vastgesteld.", missingNl: [SWEEP] });
   assert.deepEqual(sweep.missingNl, []);
   assert.ok(existsSync(join(dir, "verdicts", CRITERIA.sweep, "final.json")), "the verdict of the verifier stays in the run");
   assert.ok(typeof sweep.provenance.verdictSha256.finish === "string" && typeof sweep.provenance.verdictSha256.final === "string");
@@ -230,15 +230,15 @@ test("a valid finishing verdict is the final outcome, the earlier verdict is kep
   evaluation.criteria.find((criterion) => criterion.id === CRITERIA.budget)!.findings[0]!.verification = { status: "repeated", evidence: [] };
   const markdown = renderMarkdown(evaluation);
   const derived = deriveReport(evaluation);
-  assert.equal(derived.briefs[CRITERIA.sweep]!.establishedNl, "afmaakronde");
-  assert.equal(derived.briefs[CRITERIA.passed]!.establishedNl, "verificatie");
-  assert.match(derived.briefs[CRITERIA.sweep]!.certaintyNl, /^Vastgesteld in een afmaakronde: .* Daarvoor kwam de verificatie op kan niet bepalen\.$/);
+  assert.equal(derived.briefs[CRITERIA.sweep]!.establishedNl, "aanvullende meting");
+  assert.equal(derived.briefs[CRITERIA.passed]!.establishedNl, "controle");
+  assert.match(derived.briefs[CRITERIA.sweep]!.certaintyNl, /^Vastgesteld in een aanvullende meting: .* Daarvoor kwam de controle op kan niet bepalen\.$/);
   assert.equal(derived.briefs[CRITERIA.sweep]!.coverageNl, "Gemeten op 2 van de 2 pagina's, breed en op 320 pixels, met het menu open.");
-  assert.match(markdown, /^\| \[1\.3\.4 [^|]+\| AA \| ● Voldoet \| afmaakronde \| 0 \|$/m);
-  assert.ok(markdown.includes("Beoordelaar: Kan niet bepalen. Verificatie: Kan niet bepalen. Afmaakronde, tevens eindoordeel: Voldoet."));
+  assert.match(markdown, /^\| \[1\.3\.4 [^|]+\| AA \| ● Voldoet \| aanvullende meting \| 0 \|$/m);
+  assert.ok(markdown.includes("Eerste beoordeling: Kan niet bepalen. Controle: Kan niet bepalen. Aanvullende meting, tevens eindoordeel: Voldoet."));
   assert.ok(markdown.includes(`- Stond open: ${SWEEP.replace(/\.$/, "")}`), "what stood open before the round is kept in the appendix");
-  assert.ok(markdown.includes("Controle: Uit de afmaakronde, twee keer gezien door dezelfde agent"));
-  assert.match(markdown, /\*\*Afmaken\.\*\* Bleef een criterium na de verificatie open door het onderzoek zelf/);
+  assert.ok(markdown.includes("Controle: Uit de aanvullende meting, twee keer gezien door één beoordelaar"));
+  assert.match(markdown, /\*\*Afmaken\.\*\* Bleef een criterium na de controle open door een beperking van het onderzoek/);
   assert.ok(!derived.quiet.includes(CRITERIA.sweep), "an outcome from the finishing round keeps its block in the main part");
 });
 
@@ -251,9 +251,9 @@ test("the report counts honestly: what asks a person apart from what the evaluat
   assert.ok(!open.owner.includes(CRITERIA.sweep) && !open.evaluation.includes(CRITERIA.sweep), "what the finishing round settled is not open");
   const line = deriveReport(evaluation).statusLine;
   assert.equal(line.unfinished, true);
-  assert.match(line.openNl, new RegExp(`^Open criteria: ${open.owner.length + open.evaluation.length}\\. ${open.owner.length} vra(agt|gen) een mens of een keuze van de eigenaar \\([^)]*1\\.4\\.5[^)]*\\); ${open.evaluation.length} (is|zijn) door dit onderzoek niet vastgesteld \\([^)]*1\\.4\\.12[^)]*\\)\\. Het onderzoek is daarmee niet af`));
+  assert.match(line.openNl, new RegExp(`^Open criteria: ${open.owner.length + open.evaluation.length}\\. ${open.owner.length} vra(agt|gen) een mens of een keuze van de eigenaar \\([^)]*1\\.4\\.5[^)]*\\); ${open.evaluation.length} (is|zijn) door dit onderzoek niet vastgesteld \\([^)]*1\\.4\\.12[^)]*\\)\\. Zolang er een criterium open is, is status A of B niet mogelijk\\.`));
   const markdown = renderMarkdown(evaluation);
-  assert.ok(markdown.indexOf("**Het onderzoek is niet af.** Open criteria:") < markdown.indexOf("## Samenvatting"), "it stands at the top, with the status");
+  assert.ok(markdown.indexOf("**Het onderzoek is onvolledig.** Open criteria:") < markdown.indexOf("## Samenvatting"), "it stands at the top, with the status");
   // With nothing open through the evaluation itself the report says what is left for a person, and nothing about unfinished.
   const closed = evaluation.criteria.map((criterion) => (open.evaluation.includes(criterion.id) ? { ...criterion, outcome: "passed" as const, missingNl: [] } : criterion));
   const done = deriveReport({ ...evaluation, criteria: closed, summary: summarise(closed) }).statusLine;
@@ -306,7 +306,7 @@ test("the answer of a person closes a criterion, stands in the report and under 
   assert.deepEqual(await checkInstrumentVerdict(dir, CRITERIA.mixed, "finish"), []);
   await answer({ run: dir, criterion: CRITERIA.mixed, point: 1, did: "Met NVDA in Firefox het formulier verstuurd; de melding wordt niet voorgelezen.", outcome: "failed", name: PERSON_NAME, role: "Toetser" });
   const failed = await resolved(CRITERIA.mixed);
-  assert.deepEqual([failed.outcome, failed.established?.by, failed.established?.before?.roundNl, failed.rounds.finish], ["failed", "person", "afmaakronde", "cantTell"]);
+  assert.deepEqual([failed.outcome, failed.established?.by, failed.established?.before?.roundNl, failed.rounds.finish], ["failed", "person", "aanvullende meting", "cantTell"]);
 
   // In the report: who established it, by function; and in the run: sealed with everything else.
   const evaluation = await evaluationOfRun();

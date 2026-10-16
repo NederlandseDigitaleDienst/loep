@@ -131,10 +131,10 @@ export interface PointAnswer {
 
 /** Who or what established the outcome of a criterion: the verifier, the finishing round, or a person. */
 export const ESTABLISHED_BY_NL = {
-  verification: "de verificatie",
-  finishing: "de afmaakronde",
+  verification: "de controle",
+  finishing: "de aanvullende meting",
   person: "een persoon",
-  sessionWatch: "de sessieproef",
+  sessionWatch: "de meting van de sessieduur",
 } as const;
 export type EstablishedBy = keyof typeof ESTABLISHED_BY_NL;
 
@@ -403,25 +403,25 @@ export function resolveCriterion(input: CriterionInput, sitePrefix: string): Cri
     : byWatch
       ? {
           by: "sessionWatch",
-          noteNl: "Vastgesteld door de sessieproef van loep: het oordeel liet de duur van de sessie achter de inlog open, en de proef die een tweede inlog met rust liet, heeft die gemeten. De uitkomst staat in bijlage A.",
-          before: { roundNl: finish ? "afmaakronde" : "verificatie", outcome: final.outcome, summaryNl: final.summaryNl, missingNl: final.missingNl ?? [] },
+          noteNl: "Vastgesteld door de meting van de sessieduur: het oordeel liet de duur van de sessie achter de inlog open, en een meting die een tweede inlog met rust liet, heeft die vastgesteld. De uitkomst staat in bijlage A.",
+          before: { roundNl: finish ? "aanvullende meting" : "controle", outcome: final.outcome, summaryNl: final.summaryNl, missingNl: final.missingNl ?? [] },
         }
       : byPerson
       ? {
           by: "person",
           noteNl: `Vastgesteld door een persoon, niet door een instrument (functie: ${rolesNl(answered.counted)}). Het onderzoek liet ${answered.counted.length === 1 ? "één punt" : `${answered.counted.length} punten`} open; het antwoord daarop staat in bijlage A.`,
-          before: { roundNl: finish ? "afmaakronde" : "verificatie", outcome: final.outcome, summaryNl: final.summaryNl, missingNl: final.missingNl ?? [] },
+          before: { roundNl: finish ? "aanvullende meting" : "controle", outcome: final.outcome, summaryNl: final.summaryNl, missingNl: final.missingNl ?? [] },
         }
       : finish
         ? {
             by: "finishing",
             noteNl: beforeFinish
-              ? `Vastgesteld in een afmaakronde: het oordeel bleef eerst open door het onderzoek zelf, en een aparte agent heeft daarna gemeten wat ontbrak. Na deze ronde komt geen verificatie${finish.outcome === "failed" ? "; elke bevinding is twee keer vastgelegd, de tweede keer vanaf een verse pagina" : ""}.`
-              : "Vastgesteld in een afmaakronde: de beoordeling leverde eerst geen geldig oordeel. Na deze ronde komt geen verificatie.",
+              ? `Vastgesteld in een aanvullende meting: het oordeel bleef eerst open door een beperking van het onderzoek, en een aparte beoordelaar heeft daarna gemeten wat ontbrak. Daarna is het oordeel niet nog eens gecontroleerd${finish.outcome === "failed" ? "; elke bevinding is twee keer vastgelegd, de tweede keer vanaf een verse pagina" : ""}.`
+              : "Vastgesteld in een aanvullende meting: de eerste beoordeling leverde geen geldig oordeel. Daarna is het oordeel niet nog eens gecontroleerd.",
             ...(finish.finish?.coverageNl ? { coverageNl: finish.finish.coverageNl } : {}),
-            ...(beforeFinish ? { before: { roundNl: verified ? "verificatie" : "beoordeling", outcome: beforeFinish.outcome, summaryNl: beforeFinish.summaryNl, missingNl: beforeFinish.missingNl ?? [] } } : {}),
+            ...(beforeFinish ? { before: { roundNl: verified ? "controle" : "eerste beoordeling", outcome: beforeFinish.outcome, summaryNl: beforeFinish.summaryNl, missingNl: beforeFinish.missingNl ?? [] } } : {}),
           }
-        : { by: "verification", noteNl: "Vastgesteld door de verificatie: een tweede agent heeft het oordeel van de beoordelaar gecontroleerd." };
+        : { by: "verification", noteNl: "Vastgesteld bij de controle: een tweede beoordelaar heeft het oordeel van de eerste beoordeling nagegaan." };
   const [principleKey, guidelineKey] = [criterion.id.split(".")[0]!, criterion.id.split(".").slice(0, 2).join(".")];
   const used = new Set<string>();
   const failedFindings = final?.outcome === "failed" ? final.findings : [];

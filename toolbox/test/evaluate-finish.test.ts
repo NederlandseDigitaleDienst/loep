@@ -155,7 +155,7 @@ test("evaluate on a run with a finishing round: its verdict is the outcome, what
   ]);
   // The earlier rounds are kept next to the one that counts.
   assert.deepEqual(of(CRITERIA.finishedPass).rounds, { a: "cantTell", b: null, final: "cantTell", finish: "passed" });
-  assert.deepEqual(of(CRITERIA.finishedPass).established?.before, { roundNl: "verificatie", outcome: "cantTell", summaryNl: "Ook bij de controle is niet alles vastgesteld.", missingNl: [SWEEP] });
+  assert.deepEqual(of(CRITERIA.finishedPass).established?.before, { roundNl: "controle", outcome: "cantTell", summaryNl: "Ook bij de controle is niet alles vastgesteld.", missingNl: [SWEEP] });
   assert.deepEqual(of(CRITERIA.finishedPass).missingNl, []);
   // A finding of the finishing round was seen twice by the same agent; nobody verified it.
   const finding = of(CRITERIA.finishedFail).findings[0]!;
@@ -165,7 +165,7 @@ test("evaluate on a run with a finishing round: its verdict is the outcome, what
   // Every criterion outside the four has no task and so no verdict.
   assert.equal(evaluation.criteria.filter((criterion) => criterion.outcome === "untested").length, evaluation.criteria.length - 4);
   assert.ok(evaluation.judgment.rounds.includes("afmaakronde voor wat het onderzoek zelf open liet"));
-  assert.match(evaluation.limitationsNl.join("\n"), /Bij 2 criteria \(1\.3\.4, 1\.4\.4\) is het oordeel vastgesteld in een afmaakronde, nadat het eerst open bleef door het onderzoek zelf\./);
+  assert.match(evaluation.limitationsNl.join("\n"), /Bij 2 criteria \(1\.3\.4, 1\.4\.4\) is het oordeel vastgesteld in een aanvullende meting, nadat het eerst open bleef door een beperking van het onderzoek\./);
   assert.equal(evaluation.judgment.model, "voorbeeld-model-1");
 
   // The extensions, per role: one judge of four, one verifier of four, one finisher of two.
@@ -186,7 +186,7 @@ test("evaluate on a run with a finishing round: its verdict is the outcome, what
   const report = readFileSync((await render(run)).markdown, "utf8");
   assert.match(report, /Afmaken/);
   assert.match(report, /^- Verlengd budget: beoordelaar: 1 van de 4 sessies \(2 keer\); verifieerder: 1 van de 4 sessies \(2 keer\); afmaakronde: 1 van de 2 sessies \(1 keer\)\. /m);
-  assert.match(report, /Uit de afmaakronde, twee keer gezien door dezelfde agent/);
+  assert.match(report, /Uit de aanvullende meting, twee keer gezien door één beoordelaar/);
 
   // The open points of the run, for whoever improves the sweep: what the rounds wrote, and what still stands.
   const list = gaps([run]);

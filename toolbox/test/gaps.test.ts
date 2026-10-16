@@ -87,7 +87,7 @@ test("gaps takes several runs together, also one that only has an evaluation, an
   assert.match(text, /^veegronde mist +4 +2 +2 +2$/m);
   assert.match(text, /^## veegronde mist: dekking ontbrak \(4 punten, 2 verschillend, 2 criteria\)\nElk punt is een agent die zegt welke meting de veegronde had moeten leveren\.$/m);
   assert.match(text, /^1\.4\.3 Contrast \(minimum\)\n- \[3x, nog open; site-a: beoordelaar; site-a: verifieerder; site-b: evaluatie\] Het geopende menu is niet op 320 pixels gemeten op de contactpagina\.$/m);
-  assert.match(text, /^## budget op: budget was op \(2 punten, 2 verschillend, 2 criteria\)$/m);
+  assert.match(text, /^## budget op: de tijd voor het meten was op \(2 punten, 2 verschillend, 2 criteria\)$/m);
 });
 
 test("gaps on the command line: readable text, --json for who reckons on, and it writes nothing in the runs", async () => {
