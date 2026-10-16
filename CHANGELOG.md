@@ -4,11 +4,15 @@ Wat er per versie van loep is veranderd. De versie staat op het voorblad en onde
 
 ## Nog niet uitgebracht
 
+## 0.6.0 (2026-10-16)
+
+Deze versie is uitgebracht zonder nieuwe meting op de testsite, net als 0.5.0. De wijzigingen die een uitkomst kunnen veranderen, zijn dus nog niet vergeleken met 0.5.0. Met een echte Vimeo-speler is nagegaan dat de speler in een sessie tot de bediening laadt en dat zijn videostroom wordt opgehaald; dat de video in de browser van loep ook afspeelt, is niet vastgesteld.
+
 ### Wat een uitkomst kan veranderen
 
 - De controle van Cloudflare of de browser een robot is, gaat door, in de veegronde en in elke sessie. Cloudflare beantwoordt die verzoeken zelf en de site krijgt ze niet. Het gaat om alles op `challenges.cloudflare.com` en om een pad onder `/cdn-cgi/challenge-platform/` op een host die al via Cloudflare antwoordde (met de kop `cf-ray`); op een andere host blijft hetzelfde pad tegengehouden. Eerder hield loep de controle tegen als schrijfverzoek, vroeg Cloudflare daarna om een zwaardere controle, en bleven ingesloten Vimeo-spelers op een laadteken staan: vier criteria bleven daardoor open door loep zelf. Een sessie legt de doorgelaten verzoeken vast onder `challenges` in de waarneming (#69).
 - Een ingesloten venster dat los wordt geopend (in de veegronde als het in de pagina niet te meten was, of met `open` in een sessie) krijgt de pagina waarin het staat mee als herkomst. Een speler die alleen op de eigen site mag spelen, toonde los geopend een foutscherm over privacy-instellingen (#69).
-- Een ingesloten venster dat bij de run hoort, zoals een videospeler, mag in een sessie met GET gegevens ophalen bij een host buiten de run (`fetch` en XHR), tenzij de scope streng is. Een Vimeo-speler haalde zijn videostroom bij `vimeocdn.com`, en dat werd tegengehouden. De pagina zelf mag dat nog steeds niet. Wat zo is opgehaald, telt de sessie per host onder `outsideScopeLoaded`.
+- Een ingesloten venster dat bij de run hoort, zoals een videospeler, mag in een sessie met GET gegevens ophalen bij een host buiten de run (`fetch` en XHR), tenzij de scope streng is. Een Vimeo-speler haalde zijn videostroom bij `vimeocdn.com`, en dat werd tegengehouden. De pagina zelf mag dat nog steeds niet. Wat zo is opgehaald, telt de sessie per host onder `outsideScopeLoaded` (#77).
 - Wat een pagina of venster bij het laden zelf vraagt en loep tegenhoudt, is geen `versturen niet toegestaan` maar `proef werkte niet`: niemand verstuurde iets, en een testomgeving van de site lost het niet op. De opdrachten van beoordelaar, verifieerder en afmaakronde en de beperking in het dossier zeggen dat (#69).
 
 ### Verder
