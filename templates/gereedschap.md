@@ -12,7 +12,9 @@ Zet daarna deze regel vooraan in elke shell-aanroep; dan is elk commando `loep <
 loep() { node {{cli}} session "$@" --run {{run}} --session {{session}}; }
 ```
 
-Andere agents werken tegelijk in dezelfde run. Hulpbestanden en hulpscripts zet je alleen in je eigen werkmap: `{{workDir}}`. Een script met een sessienaam erin hoort nergens anders: een andere agent kan het overschrijven met het zijne, en dan meet jij onder zijn sessie. Geef liever elk commando volledig, met de regel hierboven of met `--session {{session}}` erin.
+{{workRules}}
+
+Geef in elk commando je eigen sessienaam mee, `--session {{session}}`: met de regel hierboven of voluit, ook in een hulpscript. Een script met de sessienaam van een ander erin laat jou onder zijn sessie meten, en een `open` van jou gooit dan zijn toestand weg.
 
 | Commando | Wat het doet |
 |---|---|

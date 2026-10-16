@@ -4,7 +4,8 @@ import { EXTENSION, extensionsOf, finishBudget, judgeBudget, verifyBudget, walkB
 import { canonicalJson, pageLabels, readJson, sha256, sha256File, writeFileAtomic, writeJson } from "../lib/canonical.ts";
 import { buildDossier } from "../lib/dossier.ts";
 import { stepStart, writeManifest } from "../lib/manifest.ts";
-import { loadAllProcedures, TEMPLATES_DIR, type Procedure } from "../lib/procedures.ts";
+import { loadAllProcedures, type Procedure } from "../lib/procedures.ts";
+import { readTemplate } from "../lib/templates.ts";
 import { loadRun, type RunData } from "../lib/rundata.ts";
 import {
   citedObservations,
@@ -361,10 +362,7 @@ export async function instrumentTasks(runDir: string, options: TaskOptions = {})
 
   const absoluteRun = resolve(runDir);
   const cli = resolve(new URL("../cli.ts", import.meta.url).pathname);
-  // What holds for every role is written once and inserted before the placeholders are filled, so the hash of a template covers it.
-  const includes = { findingRules: "bevinding.md", tools: "gereedschap.md" };
-  const insert = (template: string): string => Object.entries(includes).reduce((text, [key, file]) => text.replace(`{{${key}}}`, () => readFileSync(join(TEMPLATES_DIR, file), "utf8").trim()), template);
-  const templates = Object.fromEntries(["rondgang", "beoordeel", "verifieer", "afmaak"].map((name) => [name, insert(readFileSync(join(TEMPLATES_DIR, `${name}.md`), "utf8"))])) as Record<"rondgang" | "beoordeel" | "verifieer" | "afmaak", string>;
+  const templates = Object.fromEntries(["rondgang", "beoordeel", "verifieer", "afmaak"].map((name) => [name, readTemplate(name)])) as Record<"rondgang" | "beoordeel" | "verifieer" | "afmaak", string>;
   const base = { run: absoluteRun, cli, siteModel: join(absoluteRun, "site.json"), login: agentLoginNl(run.login) };
   const readsNl = readsAllowedNl(run.reads ?? []);
   const writesNl = `${run.writes ? `ja, ${writesAllowedNl(run.writes)}` : `nee, ${WRITES_BLOCKED_NL}`}${readsNl ? `. Wel gaat door: ${readsNl} (in het dossier onder \`reads\`)` : ""}`;
@@ -387,6 +385,7 @@ export async function instrumentTasks(runDir: string, options: TaskOptions = {})
       fill(templates.rondgang, {
         ...base,
         workDir: await makeWorkDir(runDir, walk.session),
+        workName: walk.session,
         site: new URL(run.inventory.baseUrl).hostname,
         pageType: type.id,
         pageTypeDescription: type.descriptionNl.replace(/\.$/, ""),
@@ -448,7 +447,7 @@ export async function instrumentTasks(runDir: string, options: TaskOptions = {})
     const shared = { ...base, id: criterion.id, title: criterion.titleNl, level: criterion.level, dossier: join(absoluteRun, dossierPath), gate: join(absoluteRun, "gate.json"), writes: writesNl, procedure: procedure.body };
     const writeJudge = async (): Promise<void> => writeFileAtomic(
       join(runDir, judge.prompt),
-      fill(templates.beoordeel, { ...shared, session: judge.session, workDir: await makeWorkDir(runDir, judge.session), maxCommands: String(judge.maxCommands), maxMinutes: String(judge.maxMinutes), candidates: join(absoluteRun, judge.candidates), notWalked: join(absoluteRun, NOT_WALKED), output: join(absoluteRun, judge.output), check: `node ${cli} check-verdict --run ${absoluteRun} --criterion ${criterion.id} --round judge` }),
+      fill(templates.beoordeel, { ...shared, session: judge.session, workDir: await makeWorkDir(runDir, judge.session), workName: judge.session, maxCommands: String(judge.maxCommands), maxMinutes: String(judge.maxMinutes), candidates: join(absoluteRun, judge.candidates), notWalked: join(absoluteRun, NOT_WALKED), output: join(absoluteRun, judge.output), check: `node ${cli} check-verdict --run ${absoluteRun} --criterion ${criterion.id} --round judge` }),
     );
     const task: InstrumentTask = { criterion: criterion.id, titleNl: criterion.titleNl, procedureVersion: procedure.version, procedureSha256: procedure.sha256, dossier: dossierPath, dossierSha256, passCommands: procedure.passCommands, decisiveCommands: procedure.decisiveCommands, recommendationRules: procedure.recommendationRules, judge, verify: null };
     await writeJudge();
@@ -489,6 +488,7 @@ export async function instrumentTasks(runDir: string, options: TaskOptions = {})
         fill(templates.verifieer, {
           ...base,
           workDir: await makeWorkDir(runDir, verify.session),
+          workName: verify.session,
           id: criterion.id,
           title: criterion.titleNl,
           level: criterion.level,
@@ -548,6 +548,7 @@ export async function instrumentTasks(runDir: string, options: TaskOptions = {})
         fill(templates.afmaak, {
           ...base,
           workDir: await makeWorkDir(runDir, finish.session),
+          workName: finish.session,
           id: criterion.id,
           title: criterion.titleNl,
           level: criterion.level,

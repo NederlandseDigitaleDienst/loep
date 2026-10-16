@@ -1,17 +1,20 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { canonicalJson, readJson, sha256, sha256File, writeFileAtomic, writeJson } from "../lib/canonical.ts";
 import { applyProposal, carryDefectIds, MERGE_RULES_VERSION, mergeFindings, proposalInput, validateProposal, type Defect, type MergeProposal } from "../lib/defects.ts";
 import type { Evaluation } from "../lib/evaluation.ts";
 import { stepStart, writeManifest } from "../lib/manifest.ts";
-import { TEMPLATES_DIR } from "../lib/procedures.ts";
+import { readTemplate } from "../lib/templates.ts";
+import { makeWorkDir } from "../lib/workdir.ts";
 import { readEvaluation, signatureIsCurrent, writeEvaluation } from "./sign.ts";
 
 const TASK = join("tasks", "samenvoeg", "taak.md");
 const INPUT = join("tasks", "samenvoeg", "invoer.json");
 const PROPOSAL = join("verdicts", "samenvoeg.json");
 const STAMP = join("verdicts", "samenvoeg.stamp.json");
+/** The work folder of the agent that proposes the merge. */
+const MERGE_WORK = "samenvoeg";
 
 /** Proof of what a proposal was validated against; one that no longer matches is not applied. */
 interface MergeStamp {
@@ -33,7 +36,7 @@ export interface MergeResult {
 }
 
 function template(): string {
-  return readFileSync(join(TEMPLATES_DIR, "samenvoeg.md"), "utf8");
+  return readTemplate("samenvoeg");
 }
 
 async function currentStamp(runDir: string, inputSha256: string): Promise<Omit<MergeStamp, "stampedAt"> | null> {
@@ -60,6 +63,8 @@ async function writeTask(runDir: string, evaluation: Evaluation, byRules: Defect
     check: `node ${cli} check-merge --run ${absoluteRun}`,
     findings: String(evaluation.criteria.reduce((total, criterion) => total + criterion.findings.length, 0)),
     defects: String(byRules.length),
+    workDir: await makeWorkDir(runDir, MERGE_WORK),
+    workName: MERGE_WORK,
   };
   const text = template().replace(/\{\{(\w+)\}\}/g, (_match, key: string) => {
     if (!(key in values)) throw new Error(`template placeholder {{${key}}} has no value`);

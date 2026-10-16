@@ -4,7 +4,7 @@ import { join, resolve } from "node:path";
 import { confirmLogin, launchBrowser } from "../browser/session.ts";
 import { readJson, sha256, sha256File, writeFileAtomic, writeJson } from "../lib/canonical.ts";
 import { type Manifest, stepStart, writeManifest } from "../lib/manifest.ts";
-import { TEMPLATES_DIR } from "../lib/procedures.ts";
+import { readTemplate } from "../lib/templates.ts";
 import { agentLoginNl, loginForRun } from "../lib/login.ts";
 import { recordReads } from "../lib/reads.ts";
 import { makeWorkDir } from "../lib/workdir.ts";
@@ -67,7 +67,7 @@ export async function explore(runDir: string): Promise<{ task: string; pages: nu
   const context = exploreContext(inventory);
   const absoluteRun = resolve(runDir);
   const cli = resolve(new URL("../cli.ts", import.meta.url).pathname);
-  const template = readFileSync(join(TEMPLATES_DIR, "verken.md"), "utf8");
+  const template = readTemplate("verken");
   const contextPath = join("explore", "context.json");
   await writeJson(join(runDir, contextPath), context);
 
@@ -121,6 +121,7 @@ export async function explore(runDir: string): Promise<{ task: string; pages: nu
     check: `node ${cli} check-site --run ${absoluteRun}`,
     session,
     workDir: await makeWorkDir(runDir, session),
+    workName: session,
     maxCommands: String(EXPLORE_MAX_COMMANDS),
     maxMinutes: String(EXPLORE_MAX_MINUTES),
     pageCount: String(pageCount),
