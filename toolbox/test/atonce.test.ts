@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, test } from "node:test";
 import { recountRecognised, type PictureReport } from "../src/instruments/pictures.ts";
-import { inOrder, sweepAtOnce } from "../src/lib/atonce.ts";
+import { inOrder, Slots, sweepAtOnce, Turns } from "../src/lib/atonce.ts";
 import { DEFAULT_DAEMON_LIMITS } from "../src/session/safety.ts";
 
 const pause = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
@@ -75,6 +75,72 @@ describe("pieces of work at the same time, committed in order", () => {
     );
     assert.deepEqual(committed, [0, 1], "nothing after the first failure in order is committed");
     assert.ok(Math.max(...started) < 6, `no new work after the failure (${started.join(", ")})`);
+  });
+});
+
+describe("browsers shared by groups, and pages that choose in turn", () => {
+  test("never more slots in use than there are, and whoever asked first gets the next one", async () => {
+    const slots = new Slots(2);
+    const started: string[] = [];
+    let running = 0;
+    let most = 0;
+    const work = (name: string, ms: number) => () =>
+      slots.run(async () => {
+        started.push(name);
+        running++;
+        most = Math.max(most, running);
+        await pause(ms);
+        running--;
+        return name;
+      });
+    // Two groups that ask in turn, the one with long pieces of work and the other with short ones.
+    const results = await Promise.all([work("a1", 20)(), work("b1", 2)(), work("a2", 20)(), work("b2", 2)(), work("b3", 2)()]);
+    assert.deepEqual(results, ["a1", "b1", "a2", "b2", "b3"]);
+    assert.deepEqual(started, ["a1", "b1", "a2", "b2", "b3"], "in the order they asked");
+    assert.equal(most, 2);
+    // A failure gives the slot back.
+    await assert.rejects(slots.run(async () => Promise.reject(new Error("weg"))), /weg/);
+    assert.equal(await Promise.all([slots.run(async () => 1), slots.run(async () => 2)]).then((all) => all.length), 2);
+  });
+
+  test("pages that choose from one limit at their turn choose what they choose one after the other, whichever loads first", async () => {
+    // Each page has kinds of control; a kind is tried once, and at most five are tried in all.
+    const pages = [["a", "b", "c"], ["b", "d"], ["e", "a", "f"], ["g", "h"], ["d", "i"]];
+    const choose = (seen: Set<string>, kinds: string[]): string[] =>
+      kinds.filter((kind) => {
+        if (seen.has(kind) || seen.size >= 5) return false;
+        seen.add(kind);
+        return true;
+      });
+    const seenAlone = new Set<string>();
+    const alone = pages.map((kinds) => choose(seenAlone, kinds));
+
+    for (const atOnce of [1, 3, 5]) {
+      const slots = new Slots(atOnce);
+      const turns = new Turns(pages.length);
+      const seen = new Set<string>();
+      const order: string[] = [];
+      const chosen = await inOrder(pages.length, atOnce, (index) =>
+        slots.run(async () => {
+          try {
+            // The later pages load first; page 3 does not load at all.
+            await pause((pages.length - index) * 4);
+            if (index === 3) return [];
+            await turns.turn(index);
+            const mine = choose(seen, pages[index]!);
+            turns.done(index);
+            await pause(index * 3);
+            order.push(`tried ${index}`);
+            return mine;
+          } finally {
+            turns.done(index);
+          }
+        }),
+      );
+      assert.deepEqual(chosen, alone.map((kinds, index) => (index === 3 ? [] : kinds)), `${atOnce} at once`);
+      if (atOnce === 1) assert.deepEqual(order, ["tried 0", "tried 1", "tried 2", "tried 4"]);
+    }
+    assert.deepEqual(alone, [["a", "b", "c"], ["d"], ["e"], [], []], "the limit runs out on the third page");
   });
 });
 

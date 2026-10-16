@@ -1,4 +1,5 @@
 import { progressLine, sayingItRuns } from "../instruments/limit.ts";
+import { ProgressFile } from "../lib/progress.ts";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { confirmLogin, firstLineOf, INPAGE_PATH, launchBrowser, loadSampled, newContext, retryOnce, type ColorScheme } from "../browser/session.ts";
@@ -64,10 +65,13 @@ export async function contrast(runDir: string, options: { fresh?: boolean; atOnc
     await confirmLogin(browser);
     // Each pass notes the blockers it closed apart; they are taken over in the order of the passes.
     const scopes = passes.map(() => sweep.fork());
+    const laneOf = (index: number): string => `${passes[index]!.scheme}${passes[index]!.viewport ? `-${passes[index]!.viewport!.width}` : ""}`;
+    const progress = new ProgressFile(runDir, "contrast", passes.map((_, index) => laneOf(index)), atOnce);
     const pass = async (index: number): Promise<void> => {
       const { viewport, scheme } = passes[index]!;
       const scope = scopes[index]!;
       const own = measuredIn[index]!;
+      progress.start(laneOf(index));
       // Each page in the default window and at 320 pixels wide, where a menu and a header can have other colours.
       const context = await newContext(browser, { colorScheme: scheme, ...(viewport ? { viewport } : {}) }, scope.guard);
       await context.addInitScript({ path: INPAGE_PATH });
@@ -78,6 +82,7 @@ export async function contrast(runDir: string, options: { fresh?: boolean; atOnc
         for (const [position, item] of sample.items.entries()) {
           const known = kept(item, scheme, viewport?.width ?? null);
           const nr = index * sample.items.length + position;
+          progress.tick(laneOf(index), "pages", position, sample.items.length);
           // A measurement from before the pointer and focus were measured on every page is not kept in the default window.
           if (known && (viewport || known.hoverFocus)) {
             own.results.push(known);
@@ -121,6 +126,7 @@ export async function contrast(runDir: string, options: { fresh?: boolean; atOnc
             process.stderr.write(progressLine("contrast", null, nr, total, `${what} niet gemeten: ${firstLineOf(error)}`));
           }
         }
+        progress.end(laneOf(index));
       } finally {
         await context.close().catch(() => undefined);
       }
@@ -144,7 +150,7 @@ export async function contrast(runDir: string, options: { fresh?: boolean; atOnc
     if (reused > 0) process.stderr.write(`contrast: ${reused} van ${all.length} metingen overgenomen van pagina's die niet zijn veranderd\n`);
     if (notMeasured.length > 0) process.stderr.write(`contrast: ${notMeasured.length} van ${total} metingen niet gedaan, ook niet bij de tweede poging (${[...new Set(notMeasured.map((entry) => entry.url))].join(", ")}). De bewijspoort telt ze als gat. Draai contrast opnieuw: wat wel is gemeten, wordt overgenomen.\n`);
     const dismissals = { blockersClosedOnPage: sweep.dismissals.filter((entry) => entry.dismissed).length, blockersNotClosed: sweep.dismissals.filter((entry) => !entry.dismissed).length };
-    await writeManifest(runDir, { command: "contrast", startedAt, pages: sample.items.length, measurements: all.reduce((sum, page) => sum + page.measurements.length, 0), ...dismissals, ...(atOnce > 1 ? { atOnce } : {}), ...(reused > 0 ? { reused } : {}), ...(notMeasured.length > 0 ? { notMeasured } : {}) }, browser.version());
+    await writeManifest(runDir, { command: "contrast", startedAt, pages: sample.items.length, measurements: all.reduce((sum, page) => sum + page.measurements.length, 0), ...dismissals, ...(atOnce > 1 ? { atOnce } : {}), laneSeconds: progress.finish(), ...(reused > 0 ? { reused } : {}), ...(notMeasured.length > 0 ? { notMeasured } : {}) }, browser.version());
     return all;
   } finally {
     await browser.close();

@@ -1,13 +1,16 @@
 import { BUDGETS } from "../src/commands/instrument-tasks.ts";
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { estimateOutput, estimateRun, type RunEstimate } from "../src/commands/estimate.ts";
-import { CALIBRATION, COEFFICIENTS, durationNl, type EstimateBasis, estimate, estimateTextNl, phaseMinutes, type RowId } from "../src/lib/estimate.ts";
+import { CALIBRATION, COEFFICIENTS, durationNl, type EstimateBasis, estimate, estimateTextNl, phaseMinutes, type RowId, typicalSweep } from "../src/lib/estimate.ts";
+import { makespan, type PageWork, runningStep, slowestLane, SWEEP_COEFFICIENTS, sweepPlans, type SweepWork } from "../src/lib/estimate-sweep.ts";
+import { ProgressFile, readProgress, type StepProgress } from "../src/lib/progress.ts";
 import type { ManifestStep } from "../src/lib/manifest.ts";
+import { MAX_DOWN_TARGETS, MAX_HOVER_TARGETS, STATES_GROUPS } from "../src/commands/states.ts";
 import { FINISH_FACTOR } from "../src/lib/verdict.ts";
 
 const REMOTE: EstimateBasis = { pages: 29, pagesSource: "sample", pageTypes: 18, pageTypesSource: "tasks", criteria: 56, criteriaSource: "tasks", atOnce: 8, atOnceSource: "option", local: false, scheduling: "pool" };
@@ -19,15 +22,24 @@ const row = (result: { rows: { id: RowId }[] }, id: RowId) => {
 };
 const at = (minutes: number): string => new Date(Date.parse("2026-10-13T08:00:00.000Z") + minutes * 60_000).toISOString();
 
+/** The sweep of the fixed basis: so many typical pages, nothing timed. */
+const SWEEP_OF_REMOTE = sweepPlans(typicalSweep(REMOTE), 1, false);
+const SWEEP_SECONDS = SWEEP_OF_REMOTE.collect.seconds + SWEEP_OF_REMOTE.contrast.seconds + SWEEP_OF_REMOTE.states.seconds;
+/** Every part of the fixed basis but the sweep and the finishing round: explore, gate, walks, judges, verifiers, report and between. */
+const OTHER_SECONDS = 600 + 90 + 1188 + 2256 + 1767 + 60 + 210;
+
+/** A page as the inventory of this version writes it: its template, how long it loaded and what there is to operate. */
+const inventoryPage = (templateHash: string, index: number, page: { loadMs?: number; links?: number; controls?: number } = {}) => ({ slug: `p${index}`, templateHash, loadMs: page.loadMs ?? 600, operable: { links: page.links ?? 30, controls: page.controls ?? 15 }, counts: { forms: 1 } });
+
 /** A run directory with what the commands leave behind, as far as the estimate reads it. */
-function makeRun(files: { baseUrl: string; templates: string[]; sample?: number; documents?: number; pageTypes?: number; tasks?: { walks: number; criteria: number }; steps?: ManifestStep[]; totals?: Record<string, number> }): string {
+function makeRun(files: { baseUrl: string; templates: string[]; sample?: number; documents?: number; pageTypes?: number; tasks?: { walks: number; criteria: number }; steps?: ManifestStep[]; totals?: Record<string, number>; pages?: Record<string, unknown>[] }): string {
   const run = mkdtempSync(join(tmpdir(), "estimate-"));
   const write = (name: string, value: unknown): void => {
     mkdirSync(join(run, name, ".."), { recursive: true });
     writeFileSync(join(run, name), JSON.stringify(value));
   };
-  write("inventory.json", { baseUrl: files.baseUrl, pages: files.templates.map((templateHash) => ({ templateHash })), totals: files.totals ?? {} });
-  if (files.sample !== undefined) write("sample.json", { items: Array.from({ length: files.sample }, () => ({})), ...(files.documents ? { documents: Array.from({ length: files.documents }, () => ({})) } : {}) });
+  write("inventory.json", { baseUrl: files.baseUrl, pages: files.pages ?? files.templates.map((templateHash, index) => inventoryPage(templateHash, index)), totals: files.totals ?? {} });
+  if (files.sample !== undefined) write("sample.json", { items: Array.from({ length: files.sample }, (_, index) => ({ slug: `p${index}` })), ...(files.documents ? { documents: Array.from({ length: files.documents }, () => ({})) } : {}) });
   if (files.pageTypes !== undefined) write("site.json", { pageTypes: Array.from({ length: files.pageTypes }, () => ({})) });
   if (files.tasks) write("tasks/index.json", { walks: Array.from({ length: files.tasks.walks }, () => ({})), tasks: Array.from({ length: files.tasks.criteria }, () => ({})) });
   // A manifest holds more than its steps; the estimate must not need any of it.
@@ -46,17 +58,18 @@ test("the estimate on a fixed basis: every part, the total with its range, and t
   const seconds = Object.fromEntries(result.rows.map((entry) => [entry.id, entry.estimatedSeconds]));
   // 29 pages on a site elsewhere, 18 page types, 56 criteria, 8 agents at a time in a pool. How many criteria need a
   // finishing round nobody knows yet: reckoned with 15 percent of them, 9, at the time of a judge times the room the round gets.
-  assert.deepEqual(seconds, { explore: 600, collect: 1984, contrast: 174, states: 1462, gate: 90, walks: 1188, judges: 2256, verifiers: 1767, finishers: 2097, report: 60, between: 210 });
+  assert.deepEqual(seconds, { explore: 600, collect: SWEEP_OF_REMOTE.collect.seconds, contrast: SWEEP_OF_REMOTE.contrast.seconds, states: SWEEP_OF_REMOTE.states.seconds, gate: 90, walks: 1188, judges: 2256, verifiers: 1767, finishers: 2097, report: 60, between: 210 });
   near(row(result, "finishers").estimatedSeconds, 4.7 * FINISH_FACTOR * (9 / 8 + 1) * 60, "afmaakronde");
-  assert.equal(result.totals.estimatedSeconds, 9791 + 2097);
-  assert.equal(result.totals.remainingSeconds, 9791 + 2097, "nothing is done, so everything is still to come");
+  const counted = OTHER_SECONDS + SWEEP_SECONDS;
+  assert.equal(result.totals.estimatedSeconds, counted + 2097);
+  assert.equal(result.totals.remainingSeconds, counted + 2097, "nothing is done, so everything is still to come");
   assert.equal(result.totals.finished, false);
   assert.ok(result.rows.every((entry) => entry.status === "todo" && entry.measuredSeconds === null));
   // The band of the round, from no criterion to 30 percent of them, widens the margin on both sides.
   const band = row(result, "finishers").bandSeconds!;
   assert.equal(band[0], 0);
   near(band[1], 4.7 * FINISH_FACTOR * (17 / 8 + 1) * 60, "afmaakronde op haar meest");
-  assert.deepEqual(result.totals.estimatedRange, [Math.round(9791 * 0.75), Math.round((9791 + band[1]) * 1.4)]);
+  assert.deepEqual(result.totals.estimatedRange, [Math.round(counted * 0.75), Math.round((counted + band[1]) * 1.4)]);
   assert.match(row(result, "finishers").noteNl!, /^aantal vooraf onbekend: gerekend met 9 van 56 criteria, 0 s \(geen\) tot 51 min \(17\); niet gemeten$/);
   assert.match(estimateTextNl(result, "run"), /^afmaakronde +35 min +aantal vooraf onbekend/m);
   assert.match(estimateTextNl(result, "run"), /40 procent langer, en de afmaakronde van niets tot haar meeste\)/);
@@ -65,8 +78,8 @@ test("the estimate on a fixed basis: every part, the total with its range, and t
   // Once the tasks say how many criteria the evaluation left open, the round is a number: none here, and the estimate is the one from before the round existed.
   const none = estimate({ ...REMOTE, finishers: 0 });
   assert.deepEqual([row(none, "finishers").estimatedSeconds, row(none, "finishers").bandSeconds, row(none, "finishers").noteNl], [0, undefined, "niet nodig: geen criterium bleef open door het onderzoek zelf"]);
-  assert.equal(none.totals.estimatedSeconds, 9791);
-  assert.deepEqual(none.totals.estimatedRange, [7343, 13707]);
+  assert.equal(none.totals.estimatedSeconds, counted);
+  assert.deepEqual(none.totals.estimatedRange, [Math.round(counted * 0.75), Math.round(counted * 1.4)]);
   assert.deepEqual(none.tokens, { agents: 18 + 56 + 56 + 4, estimated: 16_750_000, range: [14_237_500, 20_100_000] });
   const eight = estimate({ ...REMOTE, finishers: 8 });
   near(row(eight, "finishers").estimatedSeconds, 4.7 * FINISH_FACTOR * 1.75 * 60, "acht agents op acht plaatsen: zo lang als de traagste");
@@ -74,7 +87,7 @@ test("the estimate on a fixed basis: every part, the total with its range, and t
 
   // The same site on this machine is quicker, and fewer agents at a time take longer.
   const local = estimate({ ...REMOTE, local: true });
-  assert.ok(row(local, "collect").estimatedSeconds! < 1984 && row(local, "judges").estimatedSeconds! < 2256);
+  assert.ok(row(local, "collect").estimatedSeconds! < SWEEP_OF_REMOTE.collect.seconds && row(local, "judges").estimatedSeconds! < 2256);
   assert.ok(estimate({ ...REMOTE, atOnce: 3 }).totals.estimatedSeconds > result.totals.estimatedSeconds);
   // In groups every group waits for its slowest agent: that is what the calibration runs did.
   const groups = estimate({ ...REMOTE, scheduling: "groups" });
@@ -146,7 +159,7 @@ test("halfway a run the estimate shows what was measured and what is still to co
   assert.equal(row(sweep, "inventory").estimatedSeconds, null, "the inventory is over before there is anything to estimate from");
   assert.equal(row(sweep, "states").measuredSeconds, null);
   assert.equal(row(sweep, "collect").remainingSeconds, 0);
-  near(row(sweep, "states").remainingSeconds, 20 * 0.6 * 60, "states");
+  assert.equal(row(sweep, "states").remainingSeconds, sweep.sweep.steps.states.seconds, "states is still to come as a whole");
   near(row(sweep, "walks").remainingSeconds, 5.2 * (5 / 3 + 0.5) * 60, "rondgangen");
   const open = ["states", "gate", "walks", "judges", "verifiers", "finishers", "report", "between"] as const;
   assert.equal(sweep.totals.remainingSeconds, open.reduce((sum, id) => sum + row(sweep, id).remainingSeconds, 0));
@@ -157,11 +170,13 @@ test("halfway a run the estimate shows what was measured and what is still to co
   assert.deepEqual(sweep.totals.remainingRange, [Math.round((sweep.totals.remainingSeconds - finish.remainingSeconds) * 0.75), Math.round((sweep.totals.remainingSeconds - finish.remainingSeconds + finish.bandSeconds![1]) * 1.4)]);
   assert.deepEqual(sweep.notesNl, []);
   const text = estimateTextNl(sweep, sweep.run, sweep.notesNl);
-  assert.match(text, /^collect +17 min +15 min +klaar$/m);
-  assert.match(text, /^states +12 min$/m);
+  assert.match(text, /^collect +\d+ min +15 min +klaar$/m);
+  assert.match(text, /^states +\d+ min$/m, "one group at a time: nothing to say about the slowest");
+  assert.match(text, /^Veegronde per pagina gerekend uit de tellingen van de inventaris, 45 tot 45 links en bedieningselementen per pagina, laadtijd gemiddeld 0,6 s \(traagste 0,6 s\)\.$/m);
   assert.match(text, /Nog te gaan: ongeveer \d u \d\d \(marge /);
   assert.match(text, /Geijkt op 6 runs op twee sites .*commit 5051033/);
-  assert.match(text, /Niet gedekt: een trage site/);
+  assert.match(text, /Niet gedekt: .*een site die tijdens het onderzoek trager wordt dan bij de inventaris/);
+  assert.doesNotMatch(text, /laadtijd van de pagina's niet gemeten/, "the inventory timed every page");
   assert.ok(!text.includes("~"), "every step of this run has its own begin");
 
   // The walks run: two of five agents are done, one is busy, two have not started.
@@ -206,14 +221,15 @@ test("a finished run from before begin times shows estimated next to measured fo
   session(run, "v-111", at(154), at(196), 9);
   const result = estimateRun(run, { groups: true });
   assert.equal(result.totals.finished, true);
-  assert.deepEqual(result.basis, { ...REMOTE, atOnceSource: "session", scheduling: "groups" });
+  const { sweep: _sweep, ...basis } = result.basis;
+  assert.deepEqual(basis, { ...REMOTE, atOnceSource: "session", scheduling: "groups" });
   assert.ok(result.rows.every((entry) => entry.status === "done" && entry.remainingSeconds === 0 && entry.measuredSeconds !== null && entry.estimatedSeconds !== null), "every part has both numbers; the inventory, which this run could not time, is left out");
   assert.deepEqual(Object.fromEntries(result.rows.map((entry) => [entry.id, entry.measuredSeconds! / 60])), { explore: 8, collect: 33, contrast: 3, states: 25, gate: 1, walks: 23, judges: 56, verifiers: 42, report: 1, between: 6 });
   assert.deepEqual(result.rows.filter((entry) => entry.derived).map((entry) => entry.id), ["collect", "contrast", "states", "gate", "report"]);
   assert.equal(result.totals.measuredSeconds, 198 * 60);
   assert.equal(result.totals.remainingSeconds, 0);
   const text = estimateTextNl(result, result.run, result.notesNl);
-  assert.match(text, /^collect +33 min +~33 min +klaar$/m);
+  assert.match(text, /^collect +\d+ min +~33 min +klaar$/m);
   assert.match(text, /^beoordelen +58 min +56 min +klaar$/m);
   assert.match(text, /^totaal +3 u \d\d +3 u 18 +klaar$/m);
   assert.match(text, /gemeten 3 u 18: \d+ (min|s) (korter|langer) dan geschat, binnen de marge\./);
@@ -265,31 +281,283 @@ test("the finishing round: a band while nobody knows, a number once the tasks sa
 
 test("the estimate names no path and no person, and keeps its numbers in one place", () => {
   const source = (name: string): string => readFileSync(fileURLToPath(new URL(`../src/${name}`, import.meta.url)), "utf8");
-  for (const name of ["lib/estimate.ts", "commands/estimate.ts", "lib/timing.ts"]) {
+  for (const name of ["lib/estimate.ts", "lib/estimate-sweep.ts", "lib/progress.ts", "commands/estimate.ts", "lib/timing.ts"]) {
     assert.ok(!/\/Users\/|\/home\/|declaredBy/.test(source(name)), `${name} noemt een thuismap of leest wie iets verklaarde`);
   }
   // A number of the estimate lives in COEFFICIENTS; the command only reads the run.
   assert.ok(!/\d\.\d/.test(source("commands/estimate.ts")), "commands/estimate.ts bevat een coëfficiënt; die hoort in lib/estimate.ts");
 });
 
-test("with --at-once the sweep is reckoned with as many at the same time: collect by pages, contrast by its four passes, states by its groups", () => {
-  const one = estimate(REMOTE);
-  const four = estimate({ ...REMOTE, sweepAtOnce: 4 });
-  near(row(four, "collect").estimatedSeconds, 1984 / (1 + 3 * COEFFICIENTS.sweepAtOnce.collect.gain), "collect");
-  near(row(four, "contrast").estimatedSeconds, 174 / (1 + 3 * COEFFICIENTS.sweepAtOnce.contrast.gain), "contrast");
-  near(row(four, "states").estimatedSeconds, 1462 / (1 + 3 * COEFFICIENTS.sweepAtOnce.states.gain), "states");
-  // The agents are not touched, and contrast and states gain nothing above their number of passes and groups.
-  assert.equal(row(four, "judges").estimatedSeconds, row(one, "judges").estimatedSeconds);
-  const eight = estimate({ ...REMOTE, sweepAtOnce: 8 });
-  assert.ok(row(eight, "collect").estimatedSeconds! < row(four, "collect").estimatedSeconds!);
-  assert.equal(row(eight, "contrast").estimatedSeconds, row(four, "contrast").estimatedSeconds);
-  assert.equal(row(eight, "states").estimatedSeconds, row(four, "states").estimatedSeconds);
-  assert.match(estimateTextNl(four, "run"), /in een pool, veegronde 4 tegelijk, site elders/);
-  assert.doesNotMatch(estimateTextNl(one, "run"), /veegronde \d+ tegelijk/);
 
-  // From a run: the number given with --at-once counts for the sweep too; without it the sweep goes one page at a time.
-  const run = makeRun({ baseUrl: "https://voorbeeld.example/", templates: ["a", "b"], sample: 10, pageTypes: 2 });
-  assert.equal(estimateRun(run).basis.sweepAtOnce, undefined);
-  assert.equal(estimateRun(run, { atOnce: 6 }).basis.sweepAtOnce, 6);
-  assert.ok(row(estimateRun(run, { atOnce: 6 }), "collect").estimatedSeconds! < row(estimateRun(run), "collect").estimatedSeconds!);
+/** Synthetic work for the sweep: `pages` pages with these links and controls and this load, on a site elsewhere. */
+function work(pages: number, page: Partial<PageWork> = {}, rest: Partial<SweepWork> = {}): SweepWork {
+  return {
+    pages: Array.from({ length: pages }, (_, index) => ({ loadSeconds: 1, links: 40, controls: 5, forms: 0, newTemplate: index < 5, arrowWalks: null, newOperable: null, pressable: null, ...page })),
+    source: "inventory",
+    narrowPages: 5,
+    modelStates: 5,
+    capturedStates: 5,
+    navigationDelaySeconds: 1,
+    limits: { press: 600, hover: 400 },
+    ...rest,
+  };
+}
+
+const laneTotal = (plan: { lanes: { id: string; parts: { units: number[] }[] }[] }, id: string): number => plan.lanes.find((entry) => entry.id === id)!.parts.reduce((total, part) => total + part.units.reduce((a, b) => a + b, 0), 0);
+
+test("makespan: jobs taken in order by whichever lane is free first", () => {
+  assert.equal(makespan([], 3), 0);
+  assert.equal(makespan([5, 5, 5, 5], 1), 20);
+  assert.equal(makespan([5, 5, 5, 5], 2), 10);
+  assert.equal(makespan([10, 1, 1, 1], 4), 10, "the slowest job sets the end");
+  assert.equal(makespan([4, 4], 2, [6]), 8, "a lane that is busy takes on later");
+});
+
+test("the sweep per page: more to operate and a slower load take longer, and the probes of states stop at their limits", () => {
+  const plain = sweepPlans(work(20), 1, false);
+  const busy = sweepPlans(work(20, { links: 160, controls: 20 }), 1, false);
+  const slow = sweepPlans(work(20, { loadSeconds: 6 }), 1, false);
+  for (const command of ["collect", "contrast", "states"] as const) {
+    assert.ok(busy[command].seconds >= plain[command].seconds, `${command}: meer te bedienen duurt niet korter`);
+    assert.ok(slow[command].seconds > plain[command].seconds, `${command}: een trage site duurt langer`);
+  }
+  assert.ok(busy.collect.seconds > plain.collect.seconds * 2, "collect walks every link with Tab");
+  // Every load of collect waits on the site: five seconds more per load is that times the loads of each page, and of each state of the model.
+  near(slow.collect.seconds - plain.collect.seconds, (20 + 5 * SWEEP_COEFFICIENTS.collect.capturedStateShare) * SWEEP_COEFFICIENTS.collect.loads * 5, "collect op een trage site");
+  // Past the limits a page costs its loads and a look: the pointer group grows less with the 300th page than with the 20th.
+  const many = sweepPlans(work(300, { links: 160, controls: 20 }), 1, false);
+  const more = sweepPlans(work(301, { links: 160, controls: 20 }), 1, false);
+  near(laneTotal(more.states, "pointer") - laneTotal(many.states, "pointer"), 2 * (1 + SWEEP_COEFFICIENTS.states.pointer.perPage), "één pagina na de grenzen");
+  assert.ok(laneTotal(busy.states, "pointer") - laneTotal(plain.states, "pointer") > 100, "before the limits every kind is pointed at and pressed");
+});
+
+test("the sweep with --at-once: collect spreads its pages, contrast its four passes, states its five groups and the pages within them", () => {
+  const sites = work(20);
+  const one = sweepPlans(sites, 1, false);
+  const four = sweepPlans(sites, 4, false);
+  const groups = (plan: ReturnType<typeof sweepPlans>["states"]): number[] => plan.lanes.map((lane) => laneTotal(plan, lane.id));
+  const lane = (plan: ReturnType<typeof sweepPlans>["states"], id: string) => plan.lanes.find((entry) => entry.id === id)!;
+  // One at a time every lane follows the other.
+  near(one.states.seconds, groups(one.states).reduce((a, b) => a + b, 0), "states één tegelijk");
+  near(one.collect.seconds, one.collect.lanes.flatMap((lane) => lane.parts.flatMap((part) => part.units)).reduce((a, b) => a + b, 0), "collect één tegelijk");
+  // Four pages at once: about a quarter, each page the slower for the others, and never faster than the navigations allow.
+  const spread = (units: number[]): number => makespan(units.map((unit) => unit * four.collect.slowdown), 4);
+  near(four.collect.seconds, Math.max(four.collect.floorSeconds, spread(four.collect.lanes[0]!.parts[0]!.units) + spread(four.collect.lanes[1]!.parts[0]!.units)), "collect vier tegelijk");
+  assert.ok(four.collect.seconds < one.collect.seconds / 2);
+  // Contrast has four passes: more than four at once gains nothing.
+  assert.equal(sweepPlans(sites, 8, false).contrast.seconds, four.contrast.seconds);
+  // States: the five groups start together and share the browsers with the pages within them. The keys, pointing and
+  // pressing and the arrow keys spread their pages over the browsers; forms and buttons go page after page, and the
+  // states of the site model one after the other.
+  const five = sweepPlans(sites, 5, false);
+  assert.equal(five.states.atOnce, 5);
+  near(laneTotal(five.states, "keys"), makespan(lane(one.states, "keys").parts[0]!.units, 5), "toetsen over vijf browsers");
+  assert.deepEqual(lane(five.states, "forms"), lane(one.states, "forms"), "forms and buttons page after page");
+  assert.deepEqual(lane(five.states, "keysInStates"), lane(one.states, "keysInStates"), "the keys in the states one after the other");
+  assert.deepEqual(lane(five.states, "pointer").parts.at(-1), lane(one.states, "pointer").parts.at(-1), "pointing and pressing in the states one after the other");
+  // The step lasts as long as its slowest group, and no less than all the work shared over the browsers.
+  near(five.states.floorSeconds, (groups(one.states).reduce((a, b) => a + b, 0) * five.states.slowdown) / 5, "al het werk over vijf browsers");
+  near(five.states.seconds, Math.max(Math.max(...groups(five.states)) * five.states.slowdown, five.states.floorSeconds), "states vijf tegelijk");
+  const two = sweepPlans(sites, 2, false);
+  near(two.states.seconds, two.states.floorSeconds, "two browsers are full the whole time");
+  // More browsers gain until one group sets the pace: pointing and pressing on the first page, where every control is
+  // new, or forms and buttons page after page.
+  const eight = sweepPlans(sites, 8, false);
+  assert.ok(eight.states.seconds < five.states.seconds && five.states.seconds < four.states.seconds && four.states.seconds < two.states.seconds);
+  near(eight.states.seconds, Math.max(...groups(eight.states)) * eight.states.slowdown, "de traagste groep bepaalt de duur");
+  assert.equal(sweepPlans(sites, 12, false).states.seconds, eight.states.seconds, "past that more at once gains nothing");
+  assert.equal(slowestLane(sweepPlans(work(20, { forms: 2 }), 8, false).states)?.id, "forms");
+  // Many at once wait for the time between two navigations to the same site.
+  const quick = sweepPlans(work(20, { loadSeconds: 0, links: 0, controls: 0 }, { navigationDelaySeconds: 10, modelStates: 0, capturedStates: 0 }), 4, false);
+  assert.equal(quick.collect.floorSeconds, 20 * SWEEP_COEFFICIENTS.collect.loads * 10);
+  assert.equal(quick.collect.seconds, quick.collect.floorSeconds);
+});
+
+test("a step that runs is carried on at the pace each lane kept, and a lane that did not begin goes as planned", () => {
+  const sites = work(19, { links: 140, controls: 5 });
+  const plans = sweepPlans(sites, 5, false);
+  const when = (minutes: number): string => new Date(Date.parse("2026-10-16T07:00:00.000Z") + minutes * 60_000).toISOString();
+  const lanes = (entries: StepProgress["lanes"]): StepProgress => ({ command: "states", startedAt: when(0), updatedAt: when(20), atOnce: 5, lanes: entries });
+  const pointer = plans.states.lanes.find((lane) => lane.id === "pointer")!;
+  const sumOf = (units: number[]): number => units.reduce((a, b) => a + b, 0);
+  // With five at once the pages of a part are spread over the browsers: the plan has one unit for the part, and four of 19 pages are that share of it.
+  const doneSeconds = sumOf(pointer.parts[0]!.units) + sumOf(pointer.parts[1]!.units) + (sumOf(pointer.parts[2]!.units) * 4) / 19;
+  const total = laneTotal(plans.states, "pointer");
+  // Twenty minutes in: four groups are done, pressing is at page 4 of 19.
+  const progress = lanes({
+    forms: { startedAt: when(0), endedAt: when(6), parts: { "formulieren en knoppen": { done: 19, total: 19 }, "knoppen smal": { done: 19, total: 19 } } },
+    keys: { startedAt: when(0), endedAt: when(4), parts: { toetsen: { done: 19, total: 19 } } },
+    keysInStates: { startedAt: when(0), endedAt: when(3), parts: { "toetsen in toestand": { done: 5, total: 5 } } },
+    pointer: { startedAt: when(0), endedAt: null, parts: { aanwijzen: { done: 19, total: 19 }, "aanwijzen smal": { done: 5, total: 5 }, indrukken: { done: 4, total: 19 } } },
+    arrows: { startedAt: when(0), endedAt: when(2), parts: { pijltoetsen: { done: 19, total: 19 } } },
+  });
+  const step = runningStep(plans.states, progress);
+  assert.equal(step.elapsedSeconds, 1200);
+  assert.deepEqual([step.lanesDone, step.lanes], [4, 5]);
+  assert.deepEqual(step.slowest && [step.slowest.id, step.slowest.part, step.slowest.done, step.slowest.total], ["pointer", "indrukken", 4, 19]);
+  // The pointer group goes on at its own pace: twenty minutes for what the plan gave `doneSeconds`.
+  near(step.remainingSeconds, (total - doneSeconds) * (1200 / doneSeconds), "de rest van aanwijzen en indrukken");
+  assert.ok(step.pace !== null && step.pace > 0);
+  // A group that has not begun goes as planned, however slow the others are: the groups differ too much to take each other's pace.
+  const formsDone = sumOf(plans.states.lanes[0]!.parts[0]!.units.slice(0, 2));
+  const waiting = runningStep(plans.states, lanes({ forms: { startedAt: when(0), endedAt: null, parts: { "formulieren en knoppen": { done: 2, total: 19 } } } }));
+  const others = plans.states.lanes.slice(1).map((lane) => laneTotal(plans.states, lane.id) * plans.states.slowdown);
+  near(waiting.remainingSeconds, Math.max((laneTotal(plans.states, "forms") - formsDone) * (1200 / formsDone), ...others), "de traagste van de lopende en de wachtende groepen");
+  // Asked a minute after the last line of progress: that minute of work is off what is left.
+  near(runningStep(plans.states, progress, when(21)).remainingSeconds, step.remainingSeconds - 60, "een minuut later");
+  // Nothing done yet: the plan stands.
+  const fresh = runningStep(plans.states, lanes({ pointer: { startedAt: when(0), endedAt: null, parts: {} } }));
+  assert.equal(fresh.pace, null);
+  near(fresh.remainingSeconds, plans.states.seconds, "zonder tempo de schatting");
+
+  // collect with six at once: eight of nineteen pages in ten minutes, then the states of the site model.
+  const collectPlan = sweepPlans(sites, 6, false).collect;
+  const pages = collectPlan.lanes[0]!.parts[0]!.units;
+  const collecting = runningStep(collectPlan, { command: "collect", startedAt: when(0), updatedAt: when(10), atOnce: 6, lanes: { pages: { startedAt: when(0), endedAt: null, parts: { pages: { done: 8, total: 19 } } }, siteStates: { startedAt: null, endedAt: null, parts: {} } } });
+  const pace = 600 / sumOf(pages.slice(0, 8));
+  const statesLeft = makespan(collectPlan.lanes[1]!.parts[0]!.units.map((unit) => unit * collectPlan.slowdown), 6) * (pace / (collectPlan.slowdown / 6));
+  near(collecting.remainingSeconds, sumOf(pages.slice(8)) * pace + statesLeft, "de rest van collect");
+  assert.deepEqual(collecting.pages, { done: 8, total: 19 });
+});
+
+test("from a run: the counts per page of the inventory, the at-once of the sweep so far, a step that runs, and a step that stopped", () => {
+  const pages = Array.from({ length: 6 }, (_, index) => inventoryPage(`t${index % 2}`, index, { loadMs: 2000 + index * 100, links: 100, controls: 10 }));
+  const steps: ManifestStep[] = [
+    { command: "inventory", startedAt: at(0), at: at(5), seconds: 300 },
+    { command: "check-site", startedAt: at(9), at: at(10), seconds: 60, ok: true },
+    { command: "collect", startedAt: at(11), at: at(31), seconds: 1200, atOnce: 4 },
+  ];
+  const run = makeRun({ baseUrl: "https://voorbeeld.example/", templates: [], pages, sample: 6, pageTypes: 2, steps });
+  const before = estimateRun(run, { now: new Date(at(32)) });
+  assert.equal(before.basis.sweepAtOnce, 4, "without --at-once the sweep goes on as its last step went");
+  assert.equal(before.sweep.source, "inventory");
+  assert.deepEqual(before.sweep.loadSeconds, { mean: 2.3, most: 2.5 });
+  assert.equal(before.notCoveredNl.filter((line) => /trage/.test(line)).length, 1);
+  assert.match(estimateTextNl(before, before.run), /laadtijd gemiddeld 2,3 s \(traagste 2,5 s\)/);
+  // contrast runs: one of its four passes is done, the others are halfway.
+  const progress: StepProgress = {
+    command: "contrast",
+    startedAt: at(31),
+    updatedAt: at(41),
+    atOnce: 4,
+    lanes: Object.fromEntries(["light", "dark", "light-320", "dark-320"].map((lane, index) => [lane, { startedAt: at(31), endedAt: index === 0 ? at(39) : null, parts: { pages: { done: index === 0 ? 6 : 3, total: 6 } } }])),
+  };
+  mkdirSync(join(run, "progress"), { recursive: true });
+  writeFileSync(join(run, "progress", "contrast.json"), JSON.stringify(progress));
+  const running = estimateRun(run, { now: new Date(at(41)) });
+  const contrastRow = row(running, "contrast");
+  assert.deepEqual([contrastRow.status, contrastRow.measuredSeconds], ["running", 600]);
+  assert.match(contrastRow.noteNl!, /^1 van 4 rondes klaar; (licht|donker)( 320 breed)? bij pagina 3 van 6; .*(keer zo lang als geschat|procent van de geschatte tijd)$/);
+  // Three passes halfway after ten minutes: about ten more; the pages still to come load a little slower.
+  assert.ok(contrastRow.remainingSeconds >= 600 && contrastRow.remainingSeconds < 700, `nog ${contrastRow.remainingSeconds} s`);
+  assert.equal(running.totals.measuredSeconds, 41 * 60, "the run went on until the progress was written");
+  assert.match(estimateTextNl(running, running.run), /^contrast +\d+ (s|min) +10 min +loopt, 1 van 4 rondes klaar; .*, nog 1[01] min$/m);
+  assert.equal(running.notesNl.some((note) => /voortgang/.test(note)), false);
+  // Half an hour without a word: the estimate asks whether the step still runs.
+  const quiet = estimateRun(run, { now: new Date(at(80)) });
+  assert.ok(quiet.notesNl.some((note) => /^contrast schreef zijn voortgang 39 min geleden voor het laatst; loopt de stap nog\?/.test(note)));
+  // Once contrast is done after it began, its progress is no longer read.
+  writeFileSync(join(run, "manifest.json"), JSON.stringify({ toolbox: { commit: `${CALIBRATION.commit}abc`, version: "0.0.1" }, steps: [...steps, { command: "contrast", startedAt: at(31), at: at(50), seconds: 1140 }] }));
+  assert.equal(row(estimateRun(run), "contrast").status, "done");
+  // An inventory from before the counts: a typical page, said so, and the slow site not covered.
+  const older = estimateRun(makeRun({ baseUrl: "https://voorbeeld.example/", templates: [], pages: [{ slug: "p0", templateHash: "a" }], sample: 1, pageTypes: 1 }));
+  assert.equal(older.sweep.source, "typical");
+  assert.equal(older.sweep.loadSeconds, null);
+  assert.ok(older.notesNl.some((note) => /telt de links en bedieningselementen per pagina nog niet/.test(note)));
+  assert.match(older.notCoveredNl[0]!, /^een trage site: deze inventaris heeft de laadtijd/);
+});
+
+test("after collect the counts come from its measurements: links and controls with the blockers closed, and the walks with the arrow keys", () => {
+  const run = makeRun({ baseUrl: "https://voorbeeld.example/", templates: ["a", "b"], sample: 2, pageTypes: 2 });
+  const inventoryOnly = estimateRun(run);
+  for (const slug of ["p0", "p1"]) {
+    mkdirSync(join(run, "pages", slug, "probes"), { recursive: true });
+    writeFileSync(join(run, "pages", slug, "facts.json"), JSON.stringify({ links: Array.from({ length: 200 }, () => ({})), controls: [{}], counts: { forms: 0 } }));
+    writeFileSync(join(run, "pages", slug, "probes", "tabwalk.json"), JSON.stringify({ arrowReach: [{}, {}] }));
+  }
+  const measured = estimateRun(run);
+  assert.equal(measured.sweep.source, "collect");
+  assert.deepEqual(
+    measured.basis.sweep!.pages.map((page) => [page.links, page.controls, page.arrowWalks]),
+    [
+      [200, 1, 2],
+      [200, 1, 2],
+    ],
+  );
+  assert.ok(measured.sweep.steps.states.seconds > inventoryOnly.sweep.steps.states.seconds);
+  assert.match(estimateTextNl(measured, measured.run), /^Veegronde per pagina gerekend uit de metingen van collect, 201 tot 201 links/m);
+});
+
+test("the plan names its lanes and parts as the commands name them in their progress, so that a running step can be read", () => {
+  const source = readFileSync(fileURLToPath(new URL("../src/commands/states.ts", import.meta.url)), "utf8");
+  const plans = sweepPlans(work(2), 1, false);
+  assert.deepEqual(plans.states.lanes.map((lane) => lane.id), [...STATES_GROUPS], "the groups of states, in their order");
+  assert.deepEqual(plans.contrast.lanes.map((lane) => lane.id), ["light", "dark", "light-320", "dark-320"], "the passes of contrast, as it names them");
+  // A pointer probe names its part in the narrow window after itself: "aanwijzen" and "aanwijzen smal".
+  const named = (id: string): boolean => source.includes(`"${id}"`) || (id.endsWith(" smal") && source.includes("`${probe} smal`") && source.includes(`"${id.slice(0, -" smal".length)}"`));
+  for (const lane of plans.states.lanes) {
+    for (const part of lane.parts) assert.ok(named(part.id), `states.ts noemt het deel "${part.id}" niet: de voortgang en de schatting lopen uit elkaar`);
+  }
+});
+
+test("a step writes how far it is while it runs, and on finishing gives the seconds of each lane and removes the file", () => {
+  const run = mkdtempSync(join(tmpdir(), "estimate-"));
+  let clock = Date.parse("2026-10-16T08:00:00.000Z");
+  const now = (): Date => new Date(clock);
+  const file = new ProgressFile(run, "states", ["forms", "pointer"], 5, now);
+  assert.deepEqual(readProgress(run, "states")?.lanes.forms, { startedAt: null, endedAt: null, parts: {} });
+  file.start("forms");
+  file.start("pointer");
+  clock += 60_000;
+  file.tick("pointer", "aanwijzen", 3, 19);
+  clock += 1000;
+  // Within two seconds of the last write a tick is kept in memory only; a lane that ends is written at once.
+  file.tick("pointer", "aanwijzen", 4, 19);
+  assert.deepEqual(readProgress(run, "states")?.lanes.pointer?.parts, { aanwijzen: { done: 3, total: 19 } });
+  clock += 29_000;
+  file.end("forms");
+  const written = readProgress(run, "states")!;
+  assert.deepEqual(written.lanes.pointer?.parts, { aanwijzen: { done: 4, total: 19 } });
+  assert.equal(written.lanes.forms?.endedAt, "2026-10-16T08:01:30.000Z");
+  assert.equal(written.updatedAt, "2026-10-16T08:01:30.000Z");
+  clock += 30_000;
+  file.end("pointer");
+  assert.deepEqual(file.finish(), { forms: 90, pointer: 120 });
+  assert.equal(readProgress(run, "states"), null);
+  assert.ok(!existsSync(join(run, "progress")), "no empty folder is left in the run");
+});
+
+test("the two runs elsewhere that the old estimate missed: collect at the pace of its links, and states as long as its slowest group with the pages within it one after the other", () => {
+  // 223 pages one at a time, about 87 links a page: collect took 112 seconds a page, where the fixed estimate said 68.
+  const many = sweepPlans(work(223, { links: 85, controls: 8, loadSeconds: null }, { narrowPages: 11, modelStates: 17, capturedStates: 17 }), 1, false);
+  const perPage = many.collect.lanes[0]!.parts[0]!.units[0]!;
+  assert.ok(perPage > 100 && perPage < 125, `collect per pagina ${perPage} s`);
+  // 19 pages six at once, with these links and controls per page and these new to the probes, as collect measured them.
+  const operable = [126, 177, 118, 108, 146, 169, 156, 45, 118, 35, 30, 118, 47, 32, 40, 32, 0, 0, 0];
+  const fresh = [123, 49, 50, 74, 18, 34, 103, 10, 42, 0, 0, 50, 13, 1, 6, 1, 0, 0, 0];
+  const pages = operable.map((count, index) => ({ loadSeconds: null, links: count, controls: 0, forms: 0, newTemplate: index < 17, arrowWalks: 0, newOperable: fresh[index]!, pressable: count > 0 }));
+  const site = { pages, source: "collect" as const, narrowPages: 11, modelStates: 18, capturedStates: 18, navigationDelaySeconds: 1, limits: { press: 600, hover: 400 } };
+  // That run had the five groups at the same time and the pages within a group one after the other, as `states` did
+  // before it spread them too: its slowest group is the whole group of one page after the other, as slow as five groups at once make it.
+  const six = sweepPlans(site, 6, false);
+  // It took 30 minutes, nearly all of it pointing and pressing; the fixed estimate said 10.
+  const pointing = laneTotal(sweepPlans(site, 1, false).states, "pointer") * six.states.slowdown;
+  assert.ok(pointing > 25 * 60 && pointing < 35 * 60, `aanwijzen en indrukken ${durationNl(pointing)}`);
+  assert.equal(slowestLane(sweepPlans(site, 1, false).states)?.id, "pointer");
+  // Now that the pages within a group run at the same time too, the same site with six at once is reckoned well under that.
+  assert.ok(six.states.seconds < pointing / 2, `states nu ${durationNl(six.states.seconds)}`);
+  // Before collect counted what each page adds, it reckons with a third of every page after the first: the limits then decide.
+  const before = laneTotal(sweepPlans({ ...site, pages: pages.map((page) => ({ ...page, newOperable: null, pressable: null })), source: "inventory" }, 1, false).states, "pointer") * six.states.slowdown;
+  assert.ok(before > 25 * 60 && before < 40 * 60, `aanwijzen en indrukken vóór collect ${durationNl(before)}`);
+});
+
+test("the method names the numbers of the sweep as the code has them", () => {
+  const method = readFileSync(fileURLToPath(new URL("../../docs/methode.md", import.meta.url)), "utf8");
+  const nl = (value: number): string => String(value).replace(".", ",");
+  const c = SWEEP_COEFFICIENTS;
+  const collect = `${c.collect.loads} × de laadtijd + ${nl(c.collect.perPage)} + ${nl(c.collect.perLink)} per link + ${nl(c.collect.perControl)} per ander bedieningselement; daarna per toestand uit het sitemodel ${nl(c.collect.capturedStateShare)} × een gemiddelde pagina`;
+  assert.ok(method.includes(collect), `docs/methode.md noemt collect niet als: ${collect}`);
+  assert.ok(method.includes(`1 + (n − 1) × ${nl(c.slowdown.collect)} voor \`collect\`, × ${nl(c.slowdown.contrast)} voor \`contrast\` en × ${nl(c.slowdown.states)} voor \`states\``), "docs/methode.md noemt de vertraging met meer tegelijk niet zoals de code");
+  assert.ok(method.includes(`Indrukken stopt bij ${MAX_DOWN_TARGETS} soorten en aanwijzen bij ${MAX_HOVER_TARGETS}`), "docs/methode.md noemt de grenzen van states niet zoals de code");
+  assert.ok(method.includes(`1,2 per aangewezen element en ${nl(c.states.pointer.perPress)} + ${nl(c.states.pointer.freshAfterPress)} × de laadtijd per ingedrukt element`) && c.states.pointer.perHover === 1.2, "docs/methode.md noemt aanwijzen en indrukken niet zoals de code");
 });

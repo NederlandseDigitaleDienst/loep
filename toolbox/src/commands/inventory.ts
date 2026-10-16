@@ -23,6 +23,10 @@ export interface InventoryPage {
   words?: number;
   /** The widths the stylesheets name in a media or container query, for the explorer. Absent in older runs. */
   breakpoints?: number[];
+  /** Milliseconds from asking for the page until it was loaded and quiet, as every step of the sweep waits for it. Absent in older runs. */
+  loadMs?: number;
+  /** What there is to operate: links, and the other controls. The sweep takes longer the more there is. Absent in older runs. */
+  operable?: { links: number; controls: number };
 }
 
 export interface Inventory {
@@ -298,7 +302,9 @@ type Inspected = Omit<InventoryPage, "foundVia" | "slug"> & { links: string[]; f
  * `offered`: a link offers the address as a download; then anything but HTML is a document.
  */
 async function inspect(page: Page, url: string, mayBeDocument: boolean, offered: boolean): Promise<Inspected | { document: DocumentKind }> {
+  const began = performance.now();
   const loaded = await loadPage(page, url);
+  const loadMs = Math.round(performance.now() - began);
   // A browser shows plain text as a page of its own, a bare `<pre>` without language or title. It is a document, not a page.
   const sent = mayBeDocument ? kindOfContentType(loaded.contentType) : null;
   if (sent) return { document: sent };
@@ -306,11 +312,12 @@ async function inspect(page: Page, url: string, mayBeDocument: boolean, offered:
   const html = await page.content();
   const result = await page.evaluate(() => {
     const loep = (window as unknown as { __loep: Record<string, () => unknown> }).__loep;
-    const facts = loep.collectFacts!() as { title: string; lang: string | null; counts: Record<string, unknown> };
+    const facts = loep.collectFacts!() as { title: string; lang: string | null; counts: Record<string, unknown>; links: unknown[]; controls: unknown[] };
     return {
       title: facts.title,
       lang: facts.lang,
       counts: facts.counts,
+      operable: { links: facts.links.length, controls: facts.controls.length },
       template: loep.templateSignature!() as string,
       snapshot: loep.contentSnapshot!() as string,
       links: loep.sameOriginLinks!() as string[],
@@ -332,6 +339,8 @@ async function inspect(page: Page, url: string, mayBeDocument: boolean, offered:
     counts: result.counts,
     words: result.words,
     breakpoints: result.breakpoints,
+    loadMs,
+    operable: result.operable,
     links: result.links,
     frames: result.frames,
     snapshot: result.snapshot,
