@@ -979,6 +979,8 @@
         runningAnimations: document.getAnimations().filter((animation) => animation.playState === "running").length,
         tables: tables.length,
         lists: select("ul,ol,dl,[role=list]").length,
+        images: images.length,
+        headings: headings.length,
       },
     };
   }

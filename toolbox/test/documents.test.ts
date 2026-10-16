@@ -410,6 +410,8 @@ test("inventory finds the documents, sample labels them, documents measures them
     if (/Executable doesn't exist|browserType.launch/.test((error as Error).message)) return context.skip("no browser available");
     throw error;
   }
+  // What the sample chooses on variation with: images, headings and the length of every page.
+  assert.ok(stock.pages.every((entry) => typeof entry.counts.images === "number" && typeof entry.counts.headings === "number" && typeof entry.words === "number" && entry.words > 0));
   const byPath = new Map(stock.documents!.map((document) => [new URL(document.url).pathname + new URL(document.url).search, document]));
   assert.deepEqual([...byPath.keys()].sort(), ["/download?id=7", "/files/jaarverslag.pdf", "/nota.docx", "/oud.doc", "/weg.pdf"]);
   const report = byPath.get("/files/jaarverslag.pdf")!;

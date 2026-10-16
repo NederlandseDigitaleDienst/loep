@@ -734,6 +734,30 @@
   )).flatten(),
 )
 
+#if evaluation.sample.at("pageTypes", default: none) != none [
+  == Paginatypen
+
+  #t.samplePageTypes
+
+  #v(6pt)
+  #table(
+    columns: (1fr, auto, auto, 40%),
+    table.header(th[Paginatype], th-right[Pagina's], th-right[Bekeken], th[Waarom deze]),
+    ..evaluation.sample.pageTypes.map(type => (
+      {
+        text(weight: 600, type.id)
+        if type.descriptionNl != "" {
+          linebreak()
+          text(size: 0.9em, fill: muted, type.descriptionNl)
+        }
+      },
+      align(right, str(type.pages)),
+      align(right, str(type.examined)),
+      type.reasonNl,
+    )).flatten(),
+  )
+]
+
 #if documents != none [
   == Documenten
 
