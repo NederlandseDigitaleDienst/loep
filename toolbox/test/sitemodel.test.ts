@@ -348,6 +348,17 @@ test("the gate flags pages that did not load and frames that are counted as page
   assert.deepEqual(names(gateRun(one, { siteModel: { ...validModel(), frames: [] }, siteStates: { siteSha256: "", seeded: { blockers: [], cookies: 0, storedValues: 0 }, dismissals: [], states: [] } })), ["frames-as-pages:P1"]);
 });
 
+test("a frame the model names as a component nobody can operate is a limitation when it does not load, not a gap", () => {
+  const pages = [gatePage("P1", "https://video.example/embed/abc?h=1", { kind: "embedded", links: 0, status: 403 }), ...["a", "b", "c", "d"].map((path, index) => gatePage(`P${index + 2}`, `https://site.nl/${path}`))];
+  const states = { siteSha256: "", seeded: { blockers: [], cookies: 0, storedValues: 0 }, dismissals: [], states: [] };
+  const player = { id: "speler", type: "other", descriptionNl: "Videospeler", pageTypes: ["start"], viewport: null, frame: "https://video.example/embed/abc", recipe: null, postcondition: null, notOpenedNl: "Een controle tegen robots wordt tegengehouden.", blockedRequests: ["POST video.example/challenge"] };
+  const withPlayer = gateChecks(gateRun(pages, { siteModel: { ...validModel(), components: [...validModel().components, player] } as unknown as SiteModel, siteStates: states }));
+  assert.deepEqual(withPlayer.gaps.filter((gap) => gap.check === "pages-loaded"), []);
+  assert.deepEqual(withPlayer.limitations.filter((gap) => gap.check === "frame-not-loaded").map((gap) => gap.page), ["P1"]);
+  // Without that entry the frame that did not load is still a gap: the explorer can describe it.
+  assert.deepEqual(names(gateRun(pages, { siteModel: validModel(), siteStates: states })).filter((name) => name.startsWith("pages-loaded")), ["pages-loaded:P1"]);
+});
+
 test("the gate flags components that did not open, a blocker that stayed and something that covers most pages", () => {
   const state = (id: string, reached: boolean): SiteStates["states"][number] => ({ id: `component-${id}`, kind: "component", modelId: id, pageTypes: ["start"], url: "https://site.nl/", viewport: { width: 1280, height: 800 }, reached, reasonNl: reached ? null : "stap 1 (click) vond het element niet terug", stillReachedAfterMeasuring: reached, dir: null, files: reached ? { screenshot: "s.png", engines: "e.json", facts: "f.json", contrast: "c.json", contrastDark: "d.json", targets: "g.json", textSpacing: "x.json", tabwalk: "t.json", order: "o.json", text: "t.txt", languages: "l.json", pictures: "p.json", focusCovered: "k.json" } : {}, engineSummary: null, contrast: null, largestOverlayShare: 0, ...(reached ? { perPageType: [] } : {}) });
   const withStates = (states: SiteStates["states"], dismissals: SiteStates["dismissals"] = []): RunData => gateRun([gatePage("P1", "https://site.nl/"), gatePage("P2", "https://site.nl/contact/")], { siteModel: validModel(), siteStates: { siteSha256: "", seeded: { blockers: ["cookies"], cookies: 1, storedValues: 0 }, dismissals, states } });
