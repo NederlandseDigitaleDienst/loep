@@ -1,11 +1,12 @@
 import { existsSync, readFileSync } from "node:fs";
 import { rm } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { basename, join, resolve } from "node:path";
 import { PNG } from "pngjs";
 import { readJson, sha256, sha256File, writeFileAtomic, writeJson } from "../lib/canonical.ts";
 import { expectedFocusable, pageCoverage, reachedByKeyboard, representativePages, stateCoverage } from "../lib/extractors.ts";
 import { type Manifest, stepStart, writeManifest } from "../lib/manifest.ts";
-import { TEMPLATES_DIR } from "../lib/procedures.ts";
+import { readTemplate } from "../lib/templates.ts";
+import { makeWorkDir } from "../lib/workdir.ts";
 import { uncoveredOperables, type CountedPage } from "../lib/operables.ts";
 import { loadRun, type PageData, type RunData } from "../lib/rundata.ts";
 import { frameAddress, frameEntry, frameStanding, type Component } from "../lib/sitemodel.ts";
@@ -760,7 +761,7 @@ export async function gate(runDir: string, outDir: string = runDir): Promise<Gat
   fixed.gaps.push(...withoutSheet);
   fixed.checks.push({ name: "sheets", ok: withoutSheet.length === 0, noteNl: withoutSheet.length === 0 ? `${sheets.length} ${sheets.length === 1 ? "paginatype heeft" : "paginatypen hebben elk"} een overzichtsblad` : `${withoutSheet.length} ${withoutSheet.length === 1 ? "gat" : "gaten"}` });
 
-  const template = readFileSync(join(TEMPLATES_DIR, "poort.md"), "utf8");
+  const template = readTemplate("poort");
   const sheetText = (sheet: Sheet): string =>
     [
       `### Paginatype \`${sheet.pageType}\` (${sheet.page}, ${sheet.url})`,
@@ -801,6 +802,8 @@ export async function gate(runDir: string, outDir: string = runDir): Promise<Gat
         example: JSON.stringify(example, null, 2),
         output: join(absoluteOut, part.answers),
         check: `node ${cli} check-gate --run ${absoluteOut}`,
+        workDir: await makeWorkDir(outDir, basename(part.task, ".md")),
+        workName: basename(part.task, ".md"),
       }),
     );
   }

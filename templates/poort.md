@@ -29,6 +29,10 @@ Beantwoord voor elk blad:
 
 Voor de vragen `covered` en `missing` wijst `ja` op een probleem. Voor `content`, `narrow`, `taborder` en de vakken vanaf 4 wijst `nee` op een probleem.
 
+## Je eigen bestanden
+
+{{workRules}}
+
 ## Je antwoord
 
 Schrijf je antwoord als JSON naar: `{{output}}`

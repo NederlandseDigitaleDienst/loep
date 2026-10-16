@@ -29,7 +29,9 @@ Vul bij `--model` de exacte naam en versie in van het model waarop je draait, zo
 
 Daarna is elk commando: `node {{cli}} session <commando> --run {{run}} --session {{session}}`
 
-Hulpbestanden en hulpscripts zet je alleen in je eigen werkmap: `{{workDir}}`. Een script met een sessienaam erin hoort nergens anders: een andere agent in dezelfde run kan het overschrijven met het zijne, en dan meet jij onder zijn sessie. Geef liever elk commando volledig, zoals hierboven.
+{{workRules}}
+
+Geef in elk commando je eigen sessienaam mee, `--session {{session}}`: voluit zoals hierboven, ook in een hulpscript. Een script met de sessienaam van een ander erin laat jou onder zijn sessie meten, en een `open` van jou gooit dan zijn toestand weg.
 
 | Commando | Wat het doet |
 |---|---|

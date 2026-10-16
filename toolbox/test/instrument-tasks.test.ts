@@ -58,7 +58,8 @@ write("sample.json", { items: [{ url: HOME }, { url: CONTACT }] });
 function namesItsWorkDir(prompt: string, session: string): void {
   const workDir = join(dir, "werk", session);
   assert.ok(prompt.includes(`werkmap: \`${workDir}\``), `the task names ${workDir} as its work folder`);
-  assert.ok(prompt.includes(`--session ${session}\` erin`), "the task says to give the session in full");
+  assert.ok(prompt.includes(`eigen sessienaam mee, \`--session ${session}\``), "the task says to give its own session in every command");
+  assert.ok(prompt.includes(`\`<scratchpad>/${session}/\``), "outside the run, the folder carries the session too");
   assert.ok(existsSync(workDir), `${workDir} is there before the agent starts`);
 }
 write(join("recipes", "process-contact.json"), { start: { url: HOME }, steps: [{ command: "goto", args: [CONTACT] }] });

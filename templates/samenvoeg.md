@@ -31,6 +31,8 @@ Meer mag je niet. Je schrijft geen bevinding, je verandert geen bevinding, je la
 - Controleer het daarna met: `{{check}}`
   Meldt die controle fouten, herstel ze en controleer opnieuw. Je bent pas klaar als de controle slaagt.
 
+{{workRules}}
+
 De controle weigert een voorstel waarin een bevinding ontbreekt of twee keer staat, waarin een gebrek van de vaste regels is gesplitst, waarin de bevindingen van een gebrek geen pagina delen, waarin bevindingen aantoonbaar een andere plek aanwijzen, of waarin het hoofdcriterium niet bij een van de bevindingen hoort.
 
 ## Vorm van het voorstel

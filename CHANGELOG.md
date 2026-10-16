@@ -4,6 +4,10 @@ Wat er per versie van loep is veranderd. De versie staat op het voorblad en onde
 
 ## Nog niet uitgebracht
 
+### Verder
+
+- Elke opdracht voor een agent (verkenner, poort, rondgang, beoordelaar, verifieerder, afmaakronde en samenvoegen) zegt waar hulpbestanden en hulpscripts horen: in de eigen werkmap, en mag de agent daar niet schrijven, in een eigen map met de naam van zijn sessie, zoals `<scratchpad>/<sessie>/`. Een bestand met een algemene naam (`loep.sh`, `final.json`) in een gedeelde map mag niet. Agents met een sessie geven in elk commando hun eigen sessienaam mee. In een sessie die aan een worktree vastzat, schreven agents hun wrapper met een algemene naam in de gedeelde scratchpad, overschreven ze elkaars wrapper, en mat een verifieerder in de loep-sessie van een ander. De regel staat één keer in `templates/werkmap.md` en komt in elke opdracht. De skill zegt erbij dat wie het onderzoek leidt, de agents van een werkstroom geen bericht stuurt: in Claude Code start zo'n bericht een tweede exemplaar van de agent, dat in dezelfde loep-sessie gaat meten (#79).
+
 ## 0.6.0 (2026-10-16)
 
 Deze versie is uitgebracht zonder nieuwe meting op de testsite, net als 0.5.0. De wijzigingen die een uitkomst kunnen veranderen, zijn dus nog niet vergeleken met 0.5.0. Met een echte Vimeo-speler is nagegaan dat de speler in een sessie tot de bediening laadt en dat zijn videostroom wordt opgehaald; dat de video in de browser van loep ook afspeelt, is niet vastgesteld.
