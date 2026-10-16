@@ -19,6 +19,8 @@ export interface InventoryPage {
   contentHash: string;
   foundVia: string[];
   counts: Record<string, unknown>;
+  /** Words of visible text in the main region (or the body without one): the length of the page, for choosing on variation. Absent in older runs. */
+  words?: number;
   /** The widths the stylesheets name in a media or container query, for the explorer. Absent in older runs. */
   breakpoints?: number[];
 }
@@ -314,6 +316,10 @@ async function inspect(page: Page, url: string, mayBeDocument: boolean, offered:
       links: loep.sameOriginLinks!() as string[],
       frames: loep.frameSources!() as string[],
       breakpoints: loep.layoutBreakpoints!() as number[],
+      words: (loep.flatText as unknown as (node: Node) => string[])((loep.deepQueryAll as unknown as (selector: string) => Element[])("main,[role=main]")[0] ?? document.body)
+        .join(" ")
+        .split(/\s+/)
+        .filter(Boolean).length,
     };
   });
   return {
@@ -324,6 +330,7 @@ async function inspect(page: Page, url: string, mayBeDocument: boolean, offered:
     templateHash: sha256(result.template).slice(0, 12),
     contentHash: sha256(result.snapshot),
     counts: result.counts,
+    words: result.words,
     breakpoints: result.breakpoints,
     links: result.links,
     frames: result.frames,

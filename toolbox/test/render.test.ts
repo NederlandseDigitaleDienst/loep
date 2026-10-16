@@ -336,6 +336,31 @@ test("the PDF shows the recommendations in their own part", async (context) => {
   assert.ok(flat.includes("aanbeveling A1 van de procedure"));
 });
 
+const PAGE_TYPES = [
+  { id: "artikel", descriptionNl: "Artikel in de kennisbank", pages: 197, examined: 6, reasonNl: "de voorbeeldpagina van de verkenner, 4 gekozen op variatie in inhoud en 1 willekeurig gekozen" },
+  { id: "contact", descriptionNl: "", pages: 1, examined: 1, reasonNl: "de voorbeeldpagina van de verkenner" },
+];
+
+test("the report says per page type how many pages it has, how many were examined and why those", async (context) => {
+  assert.ok(!renderMarkdown(exampleEvaluation()).includes("### Paginatypen"), "a sample without page types says nothing about them");
+  const evaluation = exampleEvaluation();
+  evaluation.sample.pageTypes = PAGE_TYPES;
+  const markdown = renderMarkdown(evaluation);
+  assert.ok(markdown.includes("### Paginatypen"));
+  assert.ok(markdown.includes("- **artikel** (Artikel in de kennisbank): 197 pagina's, 6 bekeken: de voorbeeldpagina van de verkenner, 4 gekozen op variatie in inhoud en 1 willekeurig gekozen."));
+  assert.ok(markdown.includes("- **contact**: 1 pagina, 1 bekeken: de voorbeeldpagina van de verkenner."));
+  const dir = mkdtempSync(join(tmpdir(), "render-pagetypes-"));
+  writeFileSync(join(dir, "evaluation.json"), canonicalJson(evaluation));
+  const result = await render(dir);
+  if (result.pdf === null) return context.skip("Typst is not installed");
+  const text = await tool("pdftotext", [result.pdf, "-"]);
+  if (!text.found) return context.skip("pdftotext is not installed");
+  const flat = text.stdout.replace(/\s+/g, " ");
+  assert.ok(flat.includes("Paginatypen"));
+  assert.ok(flat.includes("Artikel in de kennisbank"));
+  assert.ok(flat.includes("4 gekozen op variatie in inhoud"));
+});
+
 test("the PDF names the read requests that were let through among the facts of the evaluation", async (context) => {
   const dir = mkdtempSync(join(tmpdir(), "render-reads-"));
   const evaluation = exampleEvaluation();

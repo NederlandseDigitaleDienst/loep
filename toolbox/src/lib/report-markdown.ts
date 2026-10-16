@@ -100,6 +100,8 @@ export const REPORT_TEXT = {
     "Over de oplossingen: een stuk HTML in een oplossing toont de gewenste uitvoer in de browser, niet per se de wijziging in de bron (Markdown, een sjabloon of een component). Meet na een wijziging aan ruimte, breedte of afbreken opnieuw op 320 pixels breed en op een tussenbreedte, zoals 500 en 640 pixels: een oplossing voor één breedte kan op een andere iets breken.",
   defect: { label: "Gebrek", main: "Hoofdcriterium", also: "Raakt ook", check: "Controle" },
   measuredStates: "Gemeten toestanden",
+  samplePageTypes:
+    "Per paginatype uit het sitemodel: hoeveel unieke pagina's het heeft, hoeveel daarvan in de steekproef staan en waarom die. Een groot paginatype krijgt naast de voorbeeldpagina van de verkenner extra pagina's, gekozen op wat hun inhoud toevoegt aan de pagina's van dat type die er al in staan: afbeeldingen, tabellen, formulieren, video, geluid, ingesloten vensters, koppen, lijsten en lengte. Bij elke pagina hierboven staat wat ze toevoegt.",
   defectPageIntro: "Een gebrek staat hier bij elke pagina waar een van zijn bevindingen een plek aanwijst. Het kan op meer pagina's spelen; dat staat in de werklijst.",
   unfinished: "Het onderzoek is daarmee niet af: wat een instrument kan meten, hoort gemeten te zijn. De afmaakronde meet het alsnog; blijft er daarna iets over, dan kan alleen een persoon het nog vaststellen.",
   ownerOpen: "Daar kan geen instrument verder mee: een persoon legt het antwoord vast, en daarna telt het mee in de uitkomst.",
@@ -1304,6 +1306,11 @@ export function renderMarkdown(input: Evaluation): string {
     if (states.length > 0) lines.push(`  - ${REPORT_TEXT.measuredStates}: ${states.map(esc).join(", ")}`);
   });
   lines.push("");
+  if (evaluation.sample.pageTypes) {
+    lines.push("### Paginatypen", "", REPORT_TEXT.samplePageTypes, "");
+    for (const type of evaluation.sample.pageTypes) lines.push(`- **${esc(type.id)}**${type.descriptionNl ? ` (${esc(type.descriptionNl)})` : ""}: ${type.pages} ${type.pages === 1 ? "pagina" : "pagina's"}, ${type.examined} bekeken: ${esc(type.reasonNl)}.`);
+    lines.push("");
+  }
   if (derived.documents) {
     lines.push("### Documenten", "", ...bullets(derived.documents.factsNl.map(([name, value]) => `${name}: ${value}`)), "");
     for (const row of derived.documents.rows) lines.push(`- **${row.label}** ${esc(row.title)}, <${row.url}>. Soort: ${row.kindNl}. ${esc(row.statusNl)}. Reden: ${esc(row.reasonNl)}.`);

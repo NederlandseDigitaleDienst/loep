@@ -24,6 +24,18 @@ export interface SampleItem {
   embeddedOn?: string[];
 }
 
+/** One page type of the site model in the sample: how many pages it has, how many are examined and why those. */
+export interface SamplePageType {
+  id: string;
+  descriptionNl: string;
+  /** Unique pages of this type in the inventory. */
+  pages: number;
+  /** Pages of this type in the sample. */
+  examined: number;
+  /** Why these pages, in Dutch: it is printed in the report. */
+  reasonNl: string;
+}
+
 export interface Sample {
   method: "census" | "structured-plus-random" | "fixed-list";
   seed: string;
@@ -36,11 +48,115 @@ export interface Sample {
   documents?: SampleDocument[];
   /** How many documents the inventory found on the site, and how many on other origins (counted only). */
   documentPopulation?: { onSite: number; byKind: Partial<Record<DocumentKind, number>>; elsewhere: number; notChosen: number; notChosenByKind: Partial<Record<DocumentKind, number>> };
+  /** Only with a site model and a drawn sample: per page type how many pages there are and how many are examined. Absent in older runs. */
+  pageTypes?: SamplePageType[];
 }
 
 /** Below this size every page is evaluated and no sampling error is introduced. */
 export const CENSUS_LIMIT = 60;
 const RANDOM_SHARE = 0.1;
+
+/**
+ * A page type of the site model gets one extra page per this many of its pages, and at most
+ * MAX_EXTRA_PER_TYPE: the size of the sample grows with the size of the type (WCAG-EM 2.0 §6.3),
+ * and the extra pages are chosen on variation in content instead of at random (§6.3.1).
+ * docs/methode.md says why these numbers.
+ */
+export const PAGES_PER_EXTRA = 40;
+export const MAX_EXTRA_PER_TYPE = 5;
+
+/** How many pages a page type gets on top of the page that stands for it. */
+export const extraPagesFor = (pagesOfType: number): number => Math.min(MAX_EXTRA_PER_TYPE, Math.floor(pagesOfType / PAGES_PER_EXTRA));
+
+/** The kinds of content the inventory counts per page, in the order a reason names them. */
+const CONTENT_KINDS: { key: string; labelNl: string }[] = [
+  { key: "images", labelNl: "afbeeldingen" },
+  { key: "tables", labelNl: "tabel" },
+  { key: "forms", labelNl: "formulier" },
+  { key: "video", labelNl: "video" },
+  { key: "audio", labelNl: "geluid" },
+  { key: "iframe", labelNl: "ingesloten venster" },
+  { key: "headings", labelNl: "koppen" },
+  { key: "lists", labelNl: "lijsten" },
+  { key: "words", labelNl: "lange tekst" },
+];
+
+const countOf = (page: InventoryPage, key: string): number | undefined => {
+  const value = key === "words" ? page.words : page.counts[key];
+  return typeof value === "number" ? value : undefined;
+};
+
+/**
+ * The kinds of content each page of one type has more of than the usual page of that type:
+ * above the median and in the upper quarter. A table on one page in ten is a kind of its own;
+ * a search form in the header of every page is not. An older inventory without a count adds nothing for it.
+ */
+export function contentKindsOfType(pages: InventoryPage[]): Map<string, string[]> {
+  const thresholds = CONTENT_KINDS.flatMap(({ key, labelNl }) => {
+    const values = pages.map((page) => countOf(page, key)).filter((value): value is number => value !== undefined).sort((a, b) => a - b);
+    if (values.length === 0) return [];
+    return [{ key, labelNl, median: values[Math.floor((values.length - 1) / 2)]!, upperQuarter: values[Math.floor((values.length - 1) * 0.75)]! }];
+  });
+  return new Map(
+    pages.map((page) => [
+      page.url,
+      thresholds
+        .filter(({ key, median, upperQuarter }) => {
+          const value = countOf(page, key);
+          return value !== undefined && value > median && value >= upperQuarter;
+        })
+        .map(({ labelNl }) => labelNl),
+    ]),
+  );
+}
+
+/**
+ * Greedy choice on variation: each time the page that adds the most kinds of content not yet covered,
+ * and on a tie the first in the order of the seed. When no page adds anything new, the seed decides.
+ */
+export function chooseOnVariation<T extends { url: string; kinds: string[] }>(candidates: T[], covered: Iterable<string>, count: number, seed: string): { candidate: T; added: string[] }[] {
+  const seen = new Set(covered);
+  const left = seededOrder(candidates, seed);
+  const picks: { candidate: T; added: string[] }[] = [];
+  while (picks.length < count && left.length > 0) {
+    let best = 0;
+    let bestAdded: string[] = [];
+    for (const [index, candidate] of left.entries()) {
+      const added = candidate.kinds.filter((kind) => !seen.has(kind));
+      if (added.length > bestAdded.length) [best, bestAdded] = [index, added];
+    }
+    const [candidate] = left.splice(best, 1);
+    for (const kind of bestAdded) seen.add(kind);
+    picks.push({ candidate: candidate!, added: bestAdded });
+  }
+  return picks;
+}
+
+const VARIATION_REASON = "gekozen op variatie: ";
+const SEED_EXTRA_REASON = "extra pagina van dit paginatype";
+
+/** Per page type of the model: how many pages, how many in the sample, and why those. */
+function pageTypeSummary(model: SiteModel, pages: InventoryPage[], items: SampleItem[]): SamplePageType[] {
+  const unique = deduplicate(pages);
+  return model.pageTypes.map((type) => {
+    const members = new Set(type.pages);
+    const ofType = items.filter((item) => members.has(item.url));
+    const extra = (prefix: string): number => ofType.filter((item) => item.reason.startsWith(prefix)).length;
+    const variation = extra(VARIATION_REASON);
+    const bySeed = extra(SEED_EXTRA_REASON);
+    const random = ofType.filter((item) => item.kind === "random").length;
+    const other = ofType.filter((item) => item.url !== type.representative && item.kind !== "random" && !item.reason.startsWith(VARIATION_REASON) && !item.reason.startsWith(SEED_EXTRA_REASON));
+    const parts = [
+      ...(ofType.some((item) => item.url === type.representative) ? ["de voorbeeldpagina van de verkenner"] : []),
+      ...other.map((item) => item.reason),
+      ...(variation > 0 ? [`${variation} gekozen op variatie in inhoud`] : []),
+      ...(bySeed > 0 ? [`${bySeed} extra gekozen met de seed, omdat geen pagina nog een soort inhoud toevoegde`] : []),
+      ...(random > 0 ? [`${random} willekeurig gekozen`] : []),
+    ];
+    const reasonNl = parts.length === 0 ? "geen pagina in de steekproef" : parts.length === 1 ? parts[0]! : `${parts.slice(0, -1).join(", ")} en ${parts.at(-1)}`;
+    return { id: type.id, descriptionNl: type.descriptionNl, pages: unique.filter((entry) => members.has(entry.page.url)).length, examined: ofType.length, reasonNl };
+  });
+}
 
 /** Pages that WCAG-EM asks for by name, recognised by path or title. */
 const COMMON_PAGES: [RegExp, string][] = [
@@ -110,7 +226,9 @@ export function buildSample(inventory: Inventory, seed: string, model: SiteModel
     for (const item of sample.items) item.aliases = [...item.aliases, ...(framed.repeats.get(item.url) ?? [])].sort();
     const copies = framed.excluded.reduce((sum, frame) => sum + frame.copies, 0);
     const note = copies > 0 ? ` ${copies} ingesloten ${copies === 1 ? "venster telt" : "vensters tellen"} volgens het sitemodel niet mee als pagina (${framed.excluded.map((frame) => `${frame.descriptionNl}: ${frame.kindNl}`).join("; ")}).` : "";
-    return { ...sample, note: `${sample.note}${note}`, excludedFrames: framed.excluded };
+    // A census and a fixed list look at what they look at; only a drawn sample says per type what it took.
+    const perType = sample.method === "structured-plus-random" ? { pageTypes: pageTypeSummary(model, framed.pages, sample.items) } : {};
+    return { ...sample, note: `${sample.note}${note}`, excludedFrames: framed.excluded, ...perType };
   }
   const unique = deduplicate(inventory.pages);
   const toItem = (entry: { page: InventoryPage; aliases: string[] }, kind: SampleKind, reason: string): SampleItem => {
@@ -183,6 +301,27 @@ export function buildSample(inventory: Inventory, seed: string, model: SiteModel
     seenTemplates.add(entry.page.templateHash);
     if (type !== undefined && chosen.has(entry.page.url)) seenTypes.add(type);
   }
+  // A large page type gets extra pages, chosen on what their content adds to the pages of that type already in the sample.
+  let extras = 0;
+  const byType = new Map<string, typeof unique>();
+  for (const entry of unique) {
+    const type = typeOf.get(entry.page.url);
+    if (type !== undefined) byType.set(type, [...(byType.get(type) ?? []), entry]);
+  }
+  for (const members of byType.values()) {
+    const wanted = extraPagesFor(members.length);
+    if (wanted === 0) continue;
+    const kindsOf = contentKindsOfType(members.map((entry) => entry.page));
+    const covered = members.filter((entry) => chosen.has(entry.page.url)).flatMap((entry) => kindsOf.get(entry.page.url) ?? []);
+    const pool = members
+      .filter((entry) => !chosen.has(entry.page.url) && entry.page.url !== inventory.notFoundProbe && !entry.page.foundVia.every((via) => via.startsWith("iframe:")))
+      .map((entry) => ({ ...entry, url: entry.page.url, kinds: kindsOf.get(entry.page.url) ?? [] }));
+    for (const { candidate, added } of chooseOnVariation(pool, covered, wanted, seed)) {
+      const reason = added.length > 0 ? `${VARIATION_REASON}${added.join(", ")}` : `${SEED_EXTRA_REASON}, gekozen met seed ${seed}: geen pagina voegt nog een soort inhoud toe`;
+      chosen.set(candidate.url, toItem(candidate, "structured", reason));
+      extras++;
+    }
+  }
   const structuredCount = chosen.size;
   const randomCount = Math.max(1, Math.ceil(structuredCount * RANDOM_SHARE));
   const remaining = seededOrder(unique.filter((entry) => !chosen.has(entry.page.url)).map((entry) => ({ ...entry, url: entry.page.url })), seed);
@@ -192,7 +331,7 @@ export function buildSample(inventory: Inventory, seed: string, model: SiteModel
     method: "structured-plus-random",
     seed,
     populationSize: unique.length,
-    note: `Uit ${unique.length} unieke pagina's zijn ${structuredCount} pagina's gericht gekozen (elk paginatype en de vaste pagina's) en ${randomCount} willekeurig, volgens WCAG-EM stap 3.`,
+    note: `Uit ${unique.length} unieke pagina's zijn ${structuredCount} pagina's gericht gekozen (elk paginatype en de vaste pagina's${extras > 0 ? `, en ${extras} extra ${extras === 1 ? "pagina" : "pagina's"} van grote paginatypen, gekozen op variatie in inhoud: één per ${PAGES_PER_EXTRA} pagina's van het type, hooguit ${MAX_EXTRA_PER_TYPE}` : ""}) en ${randomCount} willekeurig, volgens WCAG-EM stap 3.`,
     items: [...chosen.values()].sort((a, b) => a.url.localeCompare(b.url)),
   };
 }

@@ -4,7 +4,7 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { buildSample, CENSUS_LIMIT, seededOrder } from "../src/commands/sample.ts";
+import { buildSample, CENSUS_LIMIT, chooseOnVariation, contentKindsOfType, extraPagesFor, MAX_EXTRA_PER_TYPE, seededOrder } from "../src/commands/sample.ts";
 import { formPagesNl, parseSitemap, passwordPagesNl, type Inventory, type InventoryPage } from "../src/commands/inventory.ts";
 import { progressLine, sayingItRuns } from "../src/instruments/limit.ts";
 import { canonicalJson, sha256, slugForUrl, stableId } from "../src/lib/canonical.ts";
@@ -106,8 +106,9 @@ test("every page type of the site model gets a page in the sample, also when it 
   const type = (id: string, members: string[]) => ({ id, descriptionNl: id, representative: members[0]!, pages: members });
   const model = { version: 1, baseUrl: "https://a.nl/", pageTypes: [type("overzicht", [urls[50]!]), type("artikel", urls.filter((_, index) => index !== 50))], blockers: [], components: [], processes: [], frames: [], notesNl: [] } as SiteModel;
   assert.equal(buildSample(inventory(pages), "seed").items.filter((item) => item.kind === "structured").length, 1, "one template, one structured page");
-  const structured = buildSample(inventory(pages), "seed", model).items.filter((item) => item.kind === "structured").map((item) => item.url);
-  assert.deepEqual(structured, [urls[0], urls[50]]);
+  const structured = buildSample(inventory(pages), "seed", model).items.filter((item) => item.kind === "structured");
+  assert.deepEqual(structured.filter((item) => !isExtra(item)).map((item) => item.url), [urls[0], urls[50]]);
+  assert.equal(structured.filter(isExtra).length, 2, "99 pages of one type: two extra pages, one per 40");
 });
 
 test("with a site model the page types decide the structured sample, not a template hash that differs per page", () => {
@@ -120,14 +121,108 @@ test("with a site model the page types decide the structured sample, not a templ
   const type = (id: string, members: string[], representative = members[0]!) => ({ id, descriptionNl: id, representative, pages: members });
   const model = { version: 1, baseUrl: "https://a.nl/", pageTypes: [type("overzicht", urls.slice(0, 10), urls[5]!), type("artikel", [...urls.slice(10), ...extra.slice(0, 3).map((entry) => entry.url)], urls[20]!)], blockers: [], components: [], processes: [], frames: [], notesNl: [] } as SiteModel;
   const sample = buildSample({ ...inventory(all), notFoundProbe: "https://a.nl/404-toegankelijkheidsonderzoek" }, "seed", model);
-  const structured = sample.items.filter((item) => item.kind === "structured");
+  const structured = sample.items.filter((item) => item.kind === "structured" && !isExtra(item));
   assert.deepEqual(structured.map((item) => [item.url, item.reason]).sort(), [
     ["https://a.nl/404-toegankelijkheidsonderzoek", "foutpagina (404)"],
     ["https://a.nl/toegankelijkheid", "toegankelijkheidsverklaring"],
     [urls[20]!, "eerste pagina van dit paginatype"],
     [urls[5]!, "eerste pagina van dit paginatype"],
   ].sort(), "one page per type (the representative), the statement once at the top of the site, no help page for a post that says 'helpt'");
+  assert.equal(sample.items.filter(isExtra).length, 2, "93 articles: two extra pages; ten overview pages: none");
   assert.equal(sample.items.filter((item) => item.kind === "random").length, 1);
+});
+
+// A page type of the size of a knowledge base: most pages alike, a few with content of their own.
+function knowledgeBase(size: number, offset = 0): InventoryPage[] {
+  return Array.from({ length: size }, (_, index) => {
+    const special: Record<number, Record<string, number>> = { 10: { tables: 1 }, 20: { tables: 2, video: 1 }, 30: { forms: 2 }, 50: { audio: 1 } };
+    return { ...page(offset + index, `t${offset + index}`), counts: { images: 2, tables: 0, forms: 1, video: 0, audio: 0, headings: 5, lists: 3, ...special[index] }, words: index === 40 ? 3000 : 300 };
+  });
+}
+const pageType = (id: string, members: string[]) => ({ id, descriptionNl: `type ${id}`, representative: members[0]!, pages: members });
+const modelOf = (types: ReturnType<typeof pageType>[]): SiteModel => ({ version: 1, baseUrl: "https://a.nl/", pageTypes: types, blockers: [], components: [], processes: [], frames: [], notesNl: [] }) as unknown as SiteModel;
+const isExtra = (item: { reason: string }): boolean => item.reason.startsWith("gekozen op variatie") || item.reason.startsWith("extra pagina van dit paginatype");
+
+test("a large page type gets extra pages chosen on what their content adds, the same every time", () => {
+  const pages = knowledgeBase(200);
+  const model = modelOf([pageType("artikel", pages.map((entry) => entry.url))]);
+  const first = buildSample(inventory(pages), "seed", model);
+  assert.deepEqual(first, buildSample(inventory([...pages].reverse()), "seed", model), "input order must not matter");
+  const extras = first.items.filter(isExtra);
+  assert.equal(extras.length, MAX_EXTRA_PER_TYPE, "200 pages: one per 40, at most five");
+  const at = (index: number): string => pages[index]!.url;
+  // The page with a table and a video adds two kinds at once and goes first; the page with only a table then adds nothing.
+  assert.deepEqual(
+    extras.filter((item) => item.reason.startsWith("gekozen op variatie")).map((item) => [item.url, item.reason]).sort(),
+    [
+      [at(20), "gekozen op variatie: tabel, video"],
+      [at(30), "gekozen op variatie: formulier"],
+      [at(40), "gekozen op variatie: lange tekst"],
+      [at(50), "gekozen op variatie: geluid"],
+    ].sort(),
+  );
+  assert.ok(!extras.some((item) => item.url === at(10)), "a table that is already covered adds nothing");
+  assert.match(extras.find((item) => item.reason.startsWith("extra pagina"))!.reason, /gekozen met seed seed: geen pagina voegt nog een soort inhoud toe/);
+  // Another seed keeps the pages chosen on variation and only changes the tie-break.
+  const other = buildSample(inventory(pages), "another seed", model);
+  assert.deepEqual(other.items.filter((item) => item.reason.startsWith("gekozen op variatie")).map((item) => item.url).sort(), [at(20), at(30), at(40), at(50)].sort());
+  // The random tenth stays a tenth of the structured part, the extra pages included.
+  const structured = first.items.filter((item) => item.kind === "structured").length;
+  assert.equal(first.items.filter((item) => item.kind === "random").length, Math.ceil(structured / 10));
+  assert.match(first.note, /5 extra pagina's van grote paginatypen, gekozen op variatie in inhoud: één per 40 pagina's van het type, hooguit 5/);
+  assert.deepEqual(first.pageTypes, [{ id: "artikel", descriptionNl: "type artikel", pages: 200, examined: first.items.length, reasonNl: `de voorbeeldpagina van de verkenner, 4 gekozen op variatie in inhoud, 1 extra gekozen met de seed, omdat geen pagina nog een soort inhoud toevoegde en ${first.items.filter((item) => item.kind === "random").length} willekeurig gekozen` }]);
+});
+
+test("the extra pages grow with the size of a page type", () => {
+  assert.deepEqual([1, 39, 40, 79, 80, 197, 199, 200, 5000].map(extraPagesFor), [0, 0, 1, 1, 2, 4, 4, 5, 5]);
+  // 562 pages in 11 types, the four largest 197, 145, 115 and 74, the other seven 31 together.
+  const sizes = [197, 145, 115, 74, 5, 5, 5, 4, 4, 4, 4];
+  let offset = 0;
+  const types = sizes.map((size, index) => {
+    const members = knowledgeBase(size, offset);
+    offset += size;
+    return { members, type: pageType(`type-${index + 1}`, members.map((entry) => entry.url)) };
+  });
+  const pages = types.flatMap((entry) => entry.members);
+  assert.equal(pages.length, 562);
+  const sample = buildSample(inventory(pages), "seed", modelOf(types.map((entry) => entry.type)));
+  assert.deepEqual(sample.pageTypes!.map((type) => type.pages), sizes);
+  assert.equal(sample.items.filter(isExtra).length, 4 + 3 + 2 + 1);
+  const structured = sample.items.filter((item) => item.kind === "structured").length;
+  assert.equal(structured, 11 + 10);
+  assert.equal(sample.items.filter((item) => item.kind === "random").length, 3);
+});
+
+test("a small site, a site without a model and a fixed list get no extra pages", () => {
+  const small = knowledgeBase(CENSUS_LIMIT);
+  const census = buildSample(inventory(small), "seed", modelOf([pageType("artikel", small.map((entry) => entry.url))]));
+  assert.equal(census.method, "census");
+  assert.equal(census.items.length, CENSUS_LIMIT);
+  assert.equal(census.pageTypes, undefined);
+  const large = knowledgeBase(200);
+  const without = buildSample(inventory(large), "seed");
+  assert.equal(without.items.filter(isExtra).length, 0);
+  assert.equal(without.pageTypes, undefined);
+  const fixed = large.map((entry) => ({ ...entry, foundVia: ["fixed-list"] }));
+  const listed = buildSample(inventory(fixed), "seed", modelOf([pageType("artikel", fixed.map((entry) => entry.url))]));
+  assert.equal(listed.method, "fixed-list");
+  assert.equal(listed.items.length, 200);
+  assert.equal(listed.items.filter(isExtra).length, 0);
+});
+
+test("a kind of content counts where a page has more of it than the usual page of its type", () => {
+  const kinds = contentKindsOfType(knowledgeBase(60));
+  assert.deepEqual(kinds.get(page(0).url), [], "the usual page adds nothing, also with a search form and images in its header");
+  assert.deepEqual(kinds.get(page(20).url), ["tabel", "video"]);
+  assert.deepEqual(kinds.get(page(40).url), ["lange tekst"]);
+  // An inventory from before the counts of images, headings and words adds nothing for them.
+  const older = knowledgeBase(60).map(({ words: _words, ...entry }) => ({ ...entry, counts: { tables: entry.counts.tables } }));
+  assert.deepEqual(contentKindsOfType(older).get(page(40).url), []);
+  // Two pages that add as much: the seed decides, and what is covered already does not count.
+  const tie = [{ url: "https://a.nl/a", kinds: ["tabel"] }, { url: "https://a.nl/b", kinds: ["tabel", "video"] }];
+  const [pick] = chooseOnVariation(tie, ["video"], 1, "seed");
+  assert.equal(pick!.candidate.url, seededOrder(tie, "seed")[0]!.url);
+  assert.deepEqual(pick!.added, ["tabel"]);
 });
 
 const observation = { checkedNl: "Alle afbeeldingen", howNl: "Tabel images", observedNl: "37 van 37 hebben een naam", evidence: ["images"] };
