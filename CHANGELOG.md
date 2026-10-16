@@ -4,6 +4,10 @@ Wat er per versie van loep is veranderd. De versie staat op het voorblad en onde
 
 ## Nog niet uitgebracht
 
+### Verder
+
+- `docs/plugin.md` beschrijft de marketplace zoals die werkt: `marketplace.json` in de root van `NederlandseDigitaleDienst/ai-plugins` is de bron, en de bestanden voor Claude Code, Cursor en Codex maakt een generator daaruit. Een nieuwe tag zet je in de bron, daarna draai je de generator en gaat alles in één voorstel. Eerder stond er dat je de tag met de hand in twee blokken zette.
+
 ## 0.4.0 (2026-10-16)
 
 Deze versie is uitgebracht zonder nieuwe meting op de testsite, net als 0.3.0. De wijzigingen die een uitkomst kunnen veranderen, zijn dus nog niet vergeleken met 0.3.0. Op de testsite van de repository slagen alle tests op één na; de vergelijking van een veegronde met één en met vier pagina's tegelijk slaagde los wel en faalde één keer onder zware belasting van dezelfde machine.
