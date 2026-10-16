@@ -1,3 +1,5 @@
+import { LANE_LABEL_NL, runningStep, slowestLane, SWEEP_COEFFICIENTS, sweepPlans, type RunningStep, type SweepWork } from "./estimate-sweep.ts";
+import type { StepProgress, SweepCommand } from "./progress.ts";
 import type { AgentPhaseId, AgentPhaseTiming, StageTiming, StepStage } from "./timing.ts";
 import { FINISH_FACTOR } from "./verdict.ts";
 
@@ -29,33 +31,14 @@ export const CALIBRATION = {
 export const COEFFICIENTS = {
   /** One explorer, from its task to the last `check-site`: 8.9, 8.1, 17.1, 6.0, 11.6, 8.2 (median 8.5, mean 10.0). Not tied to the size of the site in these runs. */
   exploreMinutes: 10,
-  /** `collect` per page of the sample: 0.71, 0.70, 0.83 local and 0.86, 1.13, 1.14 remote. The newest run of each kind counts, because the command got slower with every version. */
-  collectMinutesPerPage: { local: 0.83, remote: 1.14 },
-  /** `contrast` per page: 0.03, 0.03, 0.065 local and 0.04, 0.09, 0.10 remote; again the newest. */
-  contrastMinutesPerPage: { local: 0.065, remote: 0.1 },
   /**
-   * `states` per page: 0.46, 0.45, 0.60 local and 0.44, 0.82, 0.86 remote. In those runs on the remote
-   * site the press probe stopped at its then limit of 300 kinds of controls and hover and focus at 150;
-   * the limits are now 600 and 400, and what that does to the time per page has not been measured.
+   * The sweep, per page from what the run knows of each page and laid out as `--at-once` runs it; see
+   * `lib/estimate-sweep.ts`. The calibration runs above reckoned it with a fixed time per page:
+   * `collect` 0.83 minutes local and 1.14 remote, `contrast` 0.065 and 0.1, `states` 0.6 and 0.84.
+   * That held for the sites they were made on and not for a site with many more links per page, a
+   * slow one, or `states` with the groups and their pages at the same time.
    */
-  statesMinutesPerPage: { local: 0.6, remote: 0.84 },
-  /**
-   * The sweep with more than one at a time (`--at-once` of collect, contrast and states): how much faster
-   * each command is, as `1 + (at once − 1) × gain`, with at once no higher than `most`. `collect` measures
-   * pages at the same time, `contrast` its four passes and `states` its five groups of probes and the
-   * pages within a group. Measured three times on four pages of the local test site, four at once
-   * against one: `collect` 3.1, 3.8 and 3.5 times as fast (287 and 93 seconds, 215 and 57, 209 and 59),
-   * `contrast` 2.8, 2.8 and 3.3. `states` on three and four pages of the test site 2.5, 2.5 and 3.8 times
-   * (175 and 70, 100 and 40, 182 and 48), on ten pages 3.6 times with four (372 and 104) and 4.0 with
-   * eight (92): the forms and buttons go page after page and set the pace from there. Not measured on a
-   * site elsewhere, where a page waits more on the network and less on this machine, nor with more than
-   * eight at once.
-   */
-  sweepAtOnce: {
-    collect: { gain: 0.8, most: null },
-    contrast: { gain: 0.6, most: 4 },
-    states: { gain: 0.45, most: 8 },
-  },
+  sweep: SWEEP_COEFFICIENTS,
   /** The gate with the agent that looks at the sheets, from the first to the last verdict: 1.4, 0.9, 1.3, 2.4, 2.7, 1.2. The two highest sent the explorer back once. */
   gateMinutes: 1.5,
   /**
@@ -114,14 +97,19 @@ export const COEFFICIENTS = {
   tokensMargin: { low: 0.85, high: 1.2 },
 } as const;
 
-/** What a run with this code is not calibrated for, said with every estimate. */
+/** What a run with this code is not calibrated for, said with every estimate. A slow site is, once the inventory timed its pages. */
 export const NOT_COVERED_NL = [
-  "een trage site: de veegronde wacht op elke pagina, en is geijkt op één echte site die snel antwoordt",
   "documenten van de site (pdf, Office): het ophalen en inlezen is in geen van de gemeten runs meegeteld",
   "video en geluid: uitschrijven en beluisteren is niet gemeten",
   "veel bevindingen: een verifieerder krijgt tijd per bevinding, en de gemeten sites hadden er weinig per criterium",
   "een site achter een inlog, en een tweede ronde van de veegronde nadat de poort gaten vond",
 ] as const;
+
+/** Said when the inventory did not time the pages: the sweep is then reckoned with a load as on the calibration sites. */
+export const SLOW_SITE_NOT_COVERED_NL = "een trage site: deze inventaris heeft de laadtijd van de pagina's niet gemeten, dus de veegronde is gerekend met een laadtijd zoals op de gemeten sites. Draai inventory opnieuw met deze versie om de laadtijd mee te tellen";
+
+/** Said when it is: what was counted, and what the load of a page in the inventory does not say. */
+export const SLOW_SITE_NOTE = "een site die tijdens het onderzoek trager wordt dan bij de inventaris, of die meer pagina's tegelijk slecht verdraagt";
 
 export type Scheduling = "pool" | "groups";
 export type RowId = "inventory" | "explore" | "collect" | "contrast" | "states" | "gate" | AgentPhaseId | "report" | "between";
@@ -136,8 +124,10 @@ export interface EstimateBasis {
   criteriaSource: "tasks" | "catalogue";
   atOnce: number;
   atOnceSource: "option" | "session" | "default";
-  /** Pages (passes, groups of probes) the sweep measures at the same time, when more than one: the number given with `--at-once`. Absent is one. */
+  /** Pages (passes, groups of probes) the sweep measures at the same time, when more than one: the number given with `--at-once`, or the one the sweep of the run used. Absent is one. */
   sweepAtOnce?: number;
+  /** What the sweep has to do per page. Absent: so many typical pages. */
+  sweep?: SweepWork;
   local: boolean;
   scheduling: Scheduling;
   /** The criteria that get a finishing round, once the tasks say so. Absent while nobody knows: then the estimate reckons with a share of the criteria and shows a band. */
@@ -152,6 +142,10 @@ export interface Progress {
   done: RowId[];
   /** Seconds from the begin of the first step to the last thing the run recorded. */
   elapsedSeconds: number;
+  /** A step of the sweep that runs, with how far it says it is. */
+  running?: Partial<Record<SweepCommand, StepProgress>>;
+  /** When the estimate is made: a step that runs went on since it last wrote its progress. */
+  now?: string;
 }
 
 export interface EstimateRow {
@@ -182,6 +176,14 @@ export interface Estimate {
     finished: boolean;
   };
   tokens: { agents: number; estimated: number; range: [number, number] };
+  /** How the sweep was reckoned: from what per page, how many at once, and per step the seconds of each lane as it runs next to the others. */
+  sweep: {
+    source: SweepWork["source"];
+    atOnce: number;
+    /** The mean and the slowest load of a page in the inventory; null when it did not time them. */
+    loadSeconds: { mean: number; most: number } | null;
+    steps: Record<SweepCommand, { seconds: number; atOnce: number; lanes: Record<string, number> }>;
+  };
   calibration: typeof CALIBRATION;
   notCoveredNl: readonly string[];
 }
@@ -213,11 +215,18 @@ export function phaseMinutes(phase: AgentPhaseId, agents: number, basis: Pick<Es
   return agents <= atOnce ? each * slowest : each * (agents / atOnce + COEFFICIENTS.poolTail[phase]);
 }
 
-/** How many times faster a command of the sweep is with `atOnce` at the same time than with one. */
-export function sweepSpeedup(command: keyof typeof COEFFICIENTS.sweepAtOnce, atOnce: number): number {
-  const { gain, most } = COEFFICIENTS.sweepAtOnce[command];
-  const used = Math.min(Math.max(1, Math.floor(atOnce)), most ?? Number.POSITIVE_INFINITY);
-  return 1 + (used - 1) * gain;
+/** The work of the sweep when nothing was counted per page: so many typical pages, one per page type with a template of its own. */
+export function typicalSweep(basis: Pick<EstimateBasis, "pages" | "pageTypes">): SweepWork {
+  const typical = SWEEP_COEFFICIENTS.typicalPage;
+  return {
+    pages: Array.from({ length: basis.pages }, (_, index) => ({ loadSeconds: null, links: typical.links, controls: typical.controls, forms: typical.forms, newTemplate: index < basis.pageTypes, arrowWalks: null, newOperable: null, pressable: null })),
+    source: "typical",
+    narrowPages: basis.pageTypes,
+    modelStates: basis.pageTypes,
+    capturedStates: basis.pageTypes,
+    navigationDelaySeconds: 1,
+    limits: { press: 600, hover: 400 },
+  };
 }
 
 const AGENTS_OF = (basis: EstimateBasis): Record<AgentPhaseId, number> => ({ walks: basis.pageTypes, judges: basis.criteria, verifiers: basis.criteria, finishers: basis.finishers ?? Math.ceil(basis.criteria * COEFFICIENTS.finishShare.expected) });
@@ -229,7 +238,6 @@ const PHASE_IDS: readonly RowId[] = ["walks", "judges", "verifiers", "finishers"
  * basis and progress give the same estimate.
  */
 export function estimate(basis: EstimateBasis, progress: Progress = { stages: {}, phases: [], done: [], elapsedSeconds: 0 }): Estimate {
-  const site = basis.local ? "local" : "remote";
   const agents = AGENTS_OF(basis);
   const ranFinishers = progress.phases.some((phase) => phase.phase === "finishers");
   // A run that is over without a finishing round had none: nothing is estimated for it and it gets no row.
@@ -240,11 +248,16 @@ export function estimate(basis: EstimateBasis, progress: Progress = { stages: {}
   const finishBand = finishUnknown
     ? ([COEFFICIENTS.finishShare.low, COEFFICIENTS.finishShare.high].map((share) => Math.round(phaseMinutes("finishers", Math.ceil(basis.criteria * share), basis) * 60)) as [number, number])
     : null;
+  const work = basis.sweep ?? typicalSweep(basis);
+  const plans = sweepPlans(work, basis.sweepAtOnce ?? 1, basis.local);
+  const running: Partial<Record<SweepCommand, RunningStep>> = Object.fromEntries(
+    Object.entries(progress.running ?? {}).map(([command, step]) => [command, runningStep(plans[command as SweepCommand], step, progress.now)]),
+  );
   const minutes: Record<Exclude<RowId, "inventory">, number> = {
     explore: COEFFICIENTS.exploreMinutes,
-    collect: (COEFFICIENTS.collectMinutesPerPage[site] * basis.pages) / sweepSpeedup("collect", basis.sweepAtOnce ?? 1),
-    contrast: (COEFFICIENTS.contrastMinutesPerPage[site] * basis.pages) / sweepSpeedup("contrast", basis.sweepAtOnce ?? 1),
-    states: (COEFFICIENTS.statesMinutesPerPage[site] * basis.pages) / sweepSpeedup("states", basis.sweepAtOnce ?? 1),
+    collect: plans.collect.seconds / 60,
+    contrast: plans.contrast.seconds / 60,
+    states: plans.states.seconds / 60,
     gate: COEFFICIENTS.gateMinutes,
     walks: phaseMinutes("walks", agents.walks, basis),
     judges: phaseMinutes("judges", agents.judges, basis),
@@ -271,6 +284,18 @@ export function estimate(basis: EstimateBasis, progress: Progress = { stages: {}
       remainingSeconds = Math.round(phaseMinutes(phase.phase, open, basis) * 60);
       noteNl = `${phase.stopped} van ${agents[phase.phase]} klaar`;
     }
+    const sweepStep = id === "collect" || id === "contrast" || id === "states" ? id : null;
+    const ongoing = sweepStep && !done ? running[sweepStep] : undefined;
+    if (ongoing) {
+      status = "running";
+      remainingSeconds = ongoing.remainingSeconds;
+      noteNl = runningNoteNl(sweepStep!, ongoing);
+    } else if (sweepStep === "states" && !done && plans.states.atOnce > 1) {
+      // The slowest group sets the pace, unless the work of all groups fills the browsers they share for longer.
+      const slowest = slowestLane(plans.states);
+      if (slowest && slowest.seconds >= plans.states.floorSeconds) noteNl = `de traagste groep, ${LANE_LABEL_NL[slowest.id]}, bepaalt de duur`;
+      else if (slowest) noteNl = `alle groepen samen houden de ${plans.states.atOnce} browsers bezet`;
+    }
     if (id === "inventory" && measuredSeconds === null) continue;
     if (id === "finishers" && !phase) {
       const share = COEFFICIENTS.finishShare;
@@ -278,7 +303,7 @@ export function estimate(basis: EstimateBasis, progress: Progress = { stages: {}
       else if (agents.finishers === 0) noteNl = "niet nodig: geen criterium bleef open door het onderzoek zelf";
       else noteNl = `${agents.finishers} criteria bleven open door het onderzoek zelf; niet gemeten`;
     }
-    rows.push({ id, labelNl: LABEL_NL[id], estimatedSeconds, measuredSeconds: done || phase ? measuredSeconds : null, status, derived: done && (stage?.derived ?? false), remainingSeconds, ...(noteNl ? { noteNl } : {}), ...(id === "finishers" && finishBand && !done ? { bandSeconds: finishBand } : {}) });
+    rows.push({ id, labelNl: LABEL_NL[id], estimatedSeconds, measuredSeconds: ongoing ? ongoing.elapsedSeconds : done || phase ? measuredSeconds : null, status, derived: done && (stage?.derived ?? false), remainingSeconds, ...(noteNl ? { noteNl } : {}), ...(id === "finishers" && finishBand && !done ? { bandSeconds: finishBand } : {}) });
   }
   // What nobody's step is: the share of it that is still to come follows the share of the work that is.
   const workEstimated = rows.reduce((sum, row) => sum + (row.estimatedSeconds ?? 0), 0);
@@ -310,9 +335,47 @@ export function estimate(basis: EstimateBasis, progress: Progress = { stages: {}
     rows,
     totals: { estimatedSeconds, estimatedRange: range(estimatedSeconds), measuredSeconds: progress.elapsedSeconds, remainingSeconds, remainingRange: range(remainingSeconds), finished },
     tokens: { agents: agentCount, estimated: tokens, range: [Math.round(tokens * COEFFICIENTS.tokensMargin.low), Math.round(tokens * COEFFICIENTS.tokensMargin.high)] },
+    sweep: {
+      source: work.source,
+      atOnce: basis.sweepAtOnce ?? 1,
+      loadSeconds: loadSecondsOf(work),
+      steps: Object.fromEntries((["collect", "contrast", "states"] as const).map((command) => [command, { seconds: plans[command].seconds, atOnce: plans[command].atOnce, lanes: Object.fromEntries(plans[command].lanes.map((lane) => [lane.id, Math.round(lane.parts.reduce((total, part) => total + part.units.reduce((a, b) => a + b, 0), 0) * plans[command].slowdown)])) }])) as Estimate["sweep"]["steps"],
+    },
     calibration: CALIBRATION,
-    notCoveredNl: NOT_COVERED_NL,
+    notCoveredNl: loadSecondsOf(work) ? [...NOT_COVERED_NL, SLOW_SITE_NOTE] : [SLOW_SITE_NOT_COVERED_NL, ...NOT_COVERED_NL],
   };
+}
+
+/** The load of the pages as the inventory timed them; null when it timed none or not all. */
+function loadSecondsOf(work: SweepWork): { mean: number; most: number } | null {
+  const loads = work.pages.map((page) => page.loadSeconds);
+  if (loads.length === 0 || loads.some((load) => load === null)) return null;
+  const known = loads as number[];
+  return { mean: Math.round((known.reduce((a, b) => a + b, 0) / known.length) * 10) / 10, most: Math.round(Math.max(...known) * 10) / 10 };
+}
+
+const decimalNl = (value: number): string => String(value).replace(".", ",");
+
+/** Where a step of the sweep that runs is, as a reader wants to know it. */
+function runningNoteNl(command: SweepCommand, step: RunningStep): string {
+  const parts: string[] = [];
+  if (step.pages) parts.push(`${step.pages.done} van ${step.pages.total} pagina's`);
+  else parts.push(`${step.lanesDone} van ${step.lanes} ${command === "contrast" ? "rondes" : "groepen"} klaar`);
+  const slowest = step.slowest;
+  if (!step.pages && slowest) parts.push(`${LANE_LABEL_NL[slowest.id] ?? slowest.id} ${slowest.part ? `bij ${slowest.part === "pages" ? "pagina" : slowest.part} ${slowest.done} van ${slowest.total}` : "nog niet begonnen"}`);
+  if (step.pace !== null) parts.push(step.pace >= 1 ? `${decimalNl(step.pace)} keer zo lang als geschat` : `in ${Math.round(step.pace * 100)} procent van de geschatte tijd`);
+  else parts.push("nog geen tempo: gerekend met de schatting");
+  return parts.join("; ");
+}
+
+/** What the sweep was reckoned from, in one line. */
+function sweepBasisNl(result: Estimate): string {
+  const work = result.basis.sweep;
+  const from = { inventory: "de tellingen van de inventaris", collect: "de metingen van collect", typical: "een gewone pagina" }[result.sweep.source];
+  const operable = work && result.sweep.source !== "typical" ? work.pages.map((page) => (page.links ?? 0) + (page.controls ?? 0)) : [];
+  const counts = operable.length > 0 ? `, ${Math.min(...operable)} tot ${Math.max(...operable)} links en bedieningselementen per pagina` : "";
+  const load = result.sweep.loadSeconds ? `, laadtijd gemiddeld ${decimalNl(result.sweep.loadSeconds.mean)} s (traagste ${decimalNl(result.sweep.loadSeconds.most)} s)` : ", laadtijd niet gemeten";
+  return `Veegronde per pagina gerekend uit ${from}${counts}${load}.`;
 }
 
 /** "45 s", "33 min" or "3 u 05": a time as a reader says it. */
@@ -331,6 +394,7 @@ export function estimateTextNl(result: Estimate, runName: string, notesNl: strin
   const lines = [
     `Duur van ${runName}: ${basis.pages} pagina's (${source[basis.pagesSource]}), ${basis.pageTypes} paginatypen (${source[basis.pageTypesSource]}), ${basis.criteria} criteria (${source[basis.criteriaSource]}),`,
     `${basis.atOnce} agents tegelijk (${source[basis.atOnceSource]}), ${basis.scheduling === "pool" ? "in een pool" : "in groepen"}, ${(basis.sweepAtOnce ?? 1) > 1 ? `veegronde ${basis.sweepAtOnce} tegelijk, ` : ""}${basis.local ? "site op deze machine" : "site elders"}`,
+    sweepBasisNl(result),
     "",
   ];
   const table = [["onderdeel", "geschat", "gemeten", ""]];

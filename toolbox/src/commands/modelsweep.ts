@@ -181,7 +181,7 @@ export interface SiteStates {
 export const SITE_STATES_FILE = "site-states.json";
 const STATE_TIMEOUT_MS = 180_000;
 const STATE_TAB_STOPS = 60;
-const BLOCKER_VARIANTS = [
+export const BLOCKER_VARIANTS = [
   { suffix: "", width: 1280, height: 800, scheme: "light" },
   { suffix: "-dark", width: 1280, height: 800, scheme: "dark" },
   { suffix: "-narrow", width: 360, height: 740, scheme: "light" },

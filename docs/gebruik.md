@@ -57,7 +57,7 @@ Bij versturen of inloggen op een testomgeving vraagt hij ook je naam en functie,
 De assistent draait de stappen uit de [README](../README.md#hoe-het-werkt) en start de agents. Je ziet onderweg:
 
 1. **Hoeveel pagina's er zijn.** Hij noemt het aantal en wat is overgeslagen. Kijk of het klopt met wat je van de site verwacht.
-2. **Hoe lang het duurt.** Hij geeft de uitkomst van `estimate` door zoals die er staat. Een eigen schatting noemt hij niet. Vraag je halverwege hoe lang het nog duurt, dan rekent hij opnieuw, met wat al gemeten is.
+2. **Hoe lang het duurt.** Hij geeft de uitkomst van `estimate` door zoals die er staat. Een eigen schatting noemt hij niet. Vraag je halverwege hoe lang het nog duurt, dan rekent hij opnieuw, met wat al gemeten is en met het tempo van een stap die nog loopt.
 3. **Een verkenner.** Eén agent brengt in kaart welke paginatypen er zijn, wat over de pagina ligt (een cookiemelding, een chat) en wat pas na een klik iets toont.
 4. **Metingen zonder taalmodel.** Scripts meten elke pagina: regel-engines, contrast, toetsenbord, vergroten, formulieren en documenten.
 5. **De bewijspoort.** Is het bewijs bruikbaar? Zo niet, dan krijgt de verkenner een vervolgopdracht, hooguit twee keer.

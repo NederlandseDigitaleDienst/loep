@@ -7,6 +7,7 @@ import { confirmLogin, INPAGE_PATH, launchBrowser, loadSampled, newContext, REND
 import { readJson, sha256, writeFileAtomic, writeJson } from "../lib/canonical.ts";
 import { runEngines } from "../lib/engines.ts";
 import { stepStart, writeManifest } from "../lib/manifest.ts";
+import { ProgressFile } from "../lib/progress.ts";
 import { collectFacts, collectNamed } from "../instruments/facts.ts";
 import { arrowReach, skipLinkProbe, tabWalk } from "../instruments/keyboard.ts";
 import { mediaReport } from "../instruments/media.ts";
@@ -267,6 +268,8 @@ export async function collect(options: CollectOptions): Promise<void> {
     const watch = startSessionWatch(options.run);
     if (watch) process.stderr.write(watch.status === "running" ? `sessieproef loopt (proces ${watch.pid}); de stand staat in ${SESSION_WATCH_FILE}\n` : `sessieproef draait niet: ${watch.reasonNl ?? watch.status}\n`);
     const sweep = await ModelSweep.load(options.run, browser);
+    const progress = new ProgressFile(options.run, "collect", ["pages", "siteStates"], settings.atOnce);
+    progress.start("pages");
     if (settings.atOnce > 1) process.stderr.write(`collect: ${settings.atOnce} pagina's tegelijk, ${settings.navigationDelayMs} ms tussen twee navigaties naar dezelfde site\n`);
     let reused = 0;
     // The pictures read on the pages before: a picture counts as read on the first page that has it, as with one page after the other.
@@ -307,6 +310,7 @@ export async function collect(options: CollectOptions): Promise<void> {
           const entry = pages[index]!;
           sweep.absorb(measured.scope);
           summaries.push(measured.summary);
+          progress.tick("pages", "pages", index + 1, pages.length);
           if (measured.reused) {
             reused++;
             process.stderr.write(`collect ${index + 1}/${pages.length} ${entry.url} niet veranderd, niet opnieuw gemeten (${Date.now() - measured.started}ms)\n`);
@@ -327,7 +331,9 @@ export async function collect(options: CollectOptions): Promise<void> {
         },
       ),
     );
+    progress.end("pages");
     if (!options.only) await writeJson(join(options.run, "collect.json"), { rendering: RENDERING, pages: summaries });
+    if (!options.only) progress.start("siteStates");
     // Each blocker as it stands on a page, and each component and process as its recipe opens it.
     const captured = !options.only
       ? await sayingItRuns("collect toestanden uit het sitemodel", async () => {
@@ -337,8 +343,9 @@ export async function collect(options: CollectOptions): Promise<void> {
           return sweep.write(states);
         })
       : null;
+    if (captured) progress.end("siteStates");
     const kept = reused + sweep.reusedStates.length > 0 ? { reusedPages: reused, reusedStates: sweep.reusedStates.length } : {};
-    await writeManifest(options.run, { command: "collect", startedAt, pages: pages.length, only: options.only ?? null, ...(settings.atOnce > 1 ? { atOnce: settings.atOnce } : {}), ...(captured ? { siteStates: captured.states.length, siteStatesReached: captured.states.filter((state) => state.reached).length } : {}), ...kept }, browser.version());
+    await writeManifest(options.run, { command: "collect", startedAt, pages: pages.length, only: options.only ?? null, ...(settings.atOnce > 1 ? { atOnce: settings.atOnce } : {}), laneSeconds: progress.finish(), ...(captured ? { siteStates: captured.states.length, siteStatesReached: captured.states.filter((state) => state.reached).length } : {}), ...kept }, browser.version());
   } finally {
     await browser.close();
   }
