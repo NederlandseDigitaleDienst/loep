@@ -153,15 +153,16 @@ async function handleOrThrow(context: Context): Promise<NonNullable<Awaited<Retu
   return handle;
 }
 
-/** Turn a Playwright action error into a line that says what a user would run into. */
+/** Turn a Playwright action error into a line that says what a user would run into. The original stays as the cause: a replay tells a time-out by it. */
 function actionError(verb: string, error: Error): Error {
   const message = error.message;
+  const cause = { cause: error };
   const intercepts = /(<[^\n]{0,160}?)\s+(?:from <[^\n]*? subtree )?intercepts pointer events/.exec(message)?.[1];
-  if (intercepts) return new Error(`${verb} lukt niet: een ander element ligt eroverheen (${intercepts.slice(0, 120)})`);
-  if (/not visible|not attached|outside of the viewport/.test(message)) return new Error(`${verb} lukt niet: het element is niet zichtbaar`);
-  if (/not enabled/.test(message)) return new Error(`${verb} lukt niet: het element is uitgeschakeld`);
-  if (/not an <input>|not editable|cannot be filled|Element is not/.test(message)) return new Error(`${verb} lukt niet: dit is geen invoerveld`);
-  return new Error(`${verb} lukt niet: ${message.split("\n")[0]}`);
+  if (intercepts) return new Error(`${verb} lukt niet: een ander element ligt eroverheen (${intercepts.slice(0, 120)})`, cause);
+  if (/not visible|not attached|outside of the viewport/.test(message)) return new Error(`${verb} lukt niet: het element is niet zichtbaar`, cause);
+  if (/not enabled/.test(message)) return new Error(`${verb} lukt niet: het element is uitgeschakeld`, cause);
+  if (/not an <input>|not editable|cannot be filled|Element is not/.test(message)) return new Error(`${verb} lukt niet: dit is geen invoerveld`, cause);
+  return new Error(`${verb} lukt niet: ${message.split("\n")[0]}`, cause);
 }
 
 const click: Handler = async (context) => {

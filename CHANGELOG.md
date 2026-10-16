@@ -4,6 +4,10 @@ Wat er per versie van loep is veranderd. De versie staat op het voorblad en onde
 
 ## Nog niet uitgebracht
 
+### Wat een uitkomst kan veranderen
+
+- Stopt een stap van een recept op een time-out wanneer de veegronde een onderdeel opent (`collect` en `states`, op de eigen pagina en op elk paginatype), dan laadt loep de pagina opnieuw en speelt het recept nog één keer. Pas als ook die tweede poging mislukt, ging het onderdeel niet open en meldt de poort een gat. Een andere fout dan een time-out wordt niet opnieuw geprobeerd. Eerder werd een eenmalige time-out, zoals een klik die met zes browsers tegelijk vastliep, meteen een gat waarvoor een hele vervolgronde van de verkenner nodig was. Na een tweede poging staat onder `firstTimeoutNl` bij de toestand of bij het paginatype waarom de eerste stopte (#80).
+
 ### Verder
 
 - Elke opdracht voor een agent (verkenner, poort, rondgang, beoordelaar, verifieerder, afmaakronde en samenvoegen) zegt waar hulpbestanden en hulpscripts horen: in de eigen werkmap, en mag de agent daar niet schrijven, in een eigen map met de naam van zijn sessie, zoals `<scratchpad>/<sessie>/`. Een bestand met een algemene naam (`loep.sh`, `final.json`) in een gedeelde map mag niet. Agents met een sessie geven in elk commando hun eigen sessienaam mee. In een sessie die aan een worktree vastzat, schreven agents hun wrapper met een algemene naam in de gedeelde scratchpad, overschreven ze elkaars wrapper, en mat een verifieerder in de loep-sessie van een ander. De regel staat één keer in `templates/werkmap.md` en komt in elke opdracht. De skill zegt erbij dat wie het onderzoek leidt, de agents van een werkstroom geen bericht stuurt: in Claude Code start zo'n bericht een tweede exemplaar van de agent, dat in dezelfde loep-sessie gaat meten (#79).
