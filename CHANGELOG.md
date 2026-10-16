@@ -11,6 +11,9 @@ Wat er per versie van loep is veranderd. De versie staat op het voorblad en onde
 ### Wat een uitkomst kan veranderen
 
 - De steekproef van een grote site met een sitemodel heeft per paginatype één pagina, de pagina die de verkenner voor dat type koos, plus de vaste pagina's en een willekeurig tiende. Eerder kreeg elke pagina met een eigen opbouw (template-hash) er een plek in, ook als het sitemodel haar bij een bekend paginatype zette. Op een site waar die hash per pagina verschilt, kwamen zo 223 pagina's in de steekproef bij 11 paginatypen, en duurde de veegronde bijna tien uur. Ook kwam elke pagina met "privacy", "contact" of "toegankelijkheid" in het pad erin, tot tagpagina's en blogberichten aan toe; nu komt elke soort vaste pagina één keer, de pagina die het hoogst in de site staat. "Hulppagina" telt alleen het hele woord "help" (#48).
+### Wat een uitkomst kan veranderen
+
+- `inventory` verdeelt de grens van `--max-pages` over de gedeelten van de site (het eerste deel van het pad, en daarbinnen een niveau dieper), in plaats van de pagina's in alfabetische volgorde te bezoeken. Eerder vulde een gedeelte dat vooraan in het alfabet staat de grens, zoals een blog vol tagpagina's, en bleef de rest van de site buiten de steekproef. Wordt de grens bereikt, dan zegt `inventory` luid per gedeelte hoeveel pagina's zijn bezocht en hoeveel weggelaten, en de skill laat die melding in stap 2 controleren (#51).
 
 ## 0.3.0 (2026-10-15)
 
