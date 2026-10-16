@@ -1,6 +1,6 @@
 import { createWriteStream, existsSync } from "node:fs";
 import { join } from "node:path";
-import type { BrowserContext, CDPSession, Frame, Page } from "playwright";
+import type { BrowserContext, CDPSession, Frame, Page, Request } from "playwright";
 import { answeredByCloudflare, bodyOf, passOn, passWrite } from "../browser/session.ts";
 import { readJson } from "../lib/canonical.ts";
 import { isChallenge } from "../lib/challenge.ts";
@@ -90,11 +90,27 @@ export interface Blocked {
 
 /** Resource types a page needs to look the way it does. Fetched with GET only, also from hosts outside the scope unless the scope is strict. */
 const RENDERING_TYPES = new Set(["stylesheet", "script", "image", "font", "media"]);
+/**
+ * Requests a script makes to read data. From an embedded window in the scope, such as a video
+ * player, they may go to a host outside the scope with GET, unless the scope is strict: a player
+ * fetches its stream from its own servers, the way it does for any visitor.
+ */
+const READ_TYPES = new Set(["fetch", "xhr"]);
 const MAX_URL = 300;
+
+/** Whether a request comes from an embedded window whose address is in the scope. A request of a worker has no frame and does not count. */
+function fromEmbeddedInScope(scope: Scope, request: Request): boolean {
+  try {
+    const frame = request.frame();
+    return frame.parentFrame() !== null && inScope(scope, frame.url());
+  } catch {
+    return false;
+  }
+}
 
 export interface Guard {
   blocked: Blocked[];
-  /** Requests for rendering resources that went to a host outside the scope, per host. */
+  /** Requests for rendering resources, and reads of an embedded window in the scope, that went to a host outside the scope, per host. */
   outsideScopeLoaded: Record<string, number>;
   /** Writes that were let through to the test environment; absent until the first one. */
   passed?: PassedWrite[];
@@ -186,7 +202,7 @@ export async function guardContext(context: BrowserContext, scope: Scope, guard:
       return refuse();
     }
     if (inScope(scope, url)) return route.continue();
-    if (!scope.strict && !request.isNavigationRequest() && RENDERING_TYPES.has(type)) {
+    if (!scope.strict && !request.isNavigationRequest() && (RENDERING_TYPES.has(type) || (READ_TYPES.has(type) && fromEmbeddedInScope(scope, request)))) {
       const host = new URL(url).hostname;
       guard.outsideScopeLoaded[host] = (guard.outsideScopeLoaded[host] ?? 0) + 1;
       return route.continue();

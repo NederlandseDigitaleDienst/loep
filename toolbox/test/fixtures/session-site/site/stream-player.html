@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<title>Speler met stroom - Testsite sessie</title>
+</head>
+<body>
+<p id="state">Laden.</p>
+<script>
+  // A player fetches its stream from its own servers, on another host than the site.
+  fetch("__OTHER_ORIGIN__/stream-frame.txt").then(
+    () => (document.getElementById("state").textContent = "Stroom gehaald."),
+    () => (document.getElementById("state").textContent = "Stroom tegengehouden."),
+  );
+</script>
+</body>
+</html>
