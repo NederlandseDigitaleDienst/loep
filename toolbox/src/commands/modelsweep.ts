@@ -99,6 +99,17 @@ export interface StateInstance {
 
 /** The portrait window a component that was recorded in the default window is opened in on each page type. */
 export const PORTRAIT = { width: 800, height: 1280 };
+
+/**
+ * The portrait window for a component: as wide as the model says it needs to exist at least. A component
+ * that only stands from 997 pixels up can never open in a window of 800, so the window grows with it and
+ * stays taller than wide.
+ */
+export function portraitFor(viewport: { minWidth?: number; maxWidth?: number } | null): { width: number; height: number } {
+  const minWidth = viewport?.minWidth;
+  if (minWidth === undefined || minWidth <= PORTRAIT.width) return PORTRAIT;
+  return { width: minWidth, height: Math.max(PORTRAIT.height, Math.round(minWidth * 1.6)) };
+}
 /** A recipe recorded in a window narrower than this is one of the narrow layout: such a window is portrait already. */
 const NARROW_LAYOUT_BELOW = 768;
 const INSTANCE_TIMEOUT_MS = 60_000;
@@ -675,7 +686,7 @@ export class ModelSweep {
     const rows: StateInstance[] = [];
     const openOn = opener.openOn;
     if (!openOn || !opener.recordedIn) return rows;
-    const size = opener.recordedIn.width < NARROW_LAYOUT_BELOW ? { width: opener.recordedIn.width, height: Math.max(opener.recordedIn.height, Math.round(opener.recordedIn.width * 1.6)) } : PORTRAIT;
+    const size = opener.recordedIn.width < NARROW_LAYOUT_BELOW ? { width: opener.recordedIn.width, height: Math.max(opener.recordedIn.height, Math.round(opener.recordedIn.width * 1.6)) } : portraitFor(this.model.components.find((component) => component.id === opener.base.modelId)?.viewport ?? null);
     for (const typeId of state.pageTypes) {
       const type = this.model.pageTypes.find((entry) => entry.id === typeId);
       if (!type) continue;

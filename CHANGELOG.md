@@ -4,6 +4,10 @@ Wat er per versie van loep is veranderd. De versie staat op het voorblad en onde
 
 ## Nog niet uitgebracht
 
+### Verder
+
+- De staande veegronde opent een onderdeel in een venster dat minstens zo breed is als de `minWidth` uit het sitemodel. Eerder ging een onderdeel dat pas vanaf 997 pixels bestaat, zoals een zijbalk, in het staande venster van 800 pixels nooit open. De poort meldde dan een gat dat de verkenner alleen met een omweg kon sluiten (#46).
+
 ## 0.3.0 (2026-10-15)
 
 Deze versie is uitgebracht zonder nieuwe meting op de testsite, net als 0.2.0. De wijzigingen die een uitkomst kunnen veranderen, zijn dus nog niet vergeleken met 0.2.0.
