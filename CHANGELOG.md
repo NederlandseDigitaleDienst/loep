@@ -4,6 +4,10 @@ Wat er per versie van loep is veranderd. De versie staat op het voorblad en onde
 
 ## Nog niet uitgebracht
 
+### Wat een uitkomst kan veranderen
+
+- Stopt een stap van een recept op een time-out wanneer de veegronde een onderdeel opent (`collect` en `states`, op de eigen pagina en op elk paginatype), dan laadt loep de pagina opnieuw en speelt het recept nog één keer. Pas als ook die tweede poging mislukt, ging het onderdeel niet open en meldt de poort een gat. Een andere fout dan een time-out wordt niet opnieuw geprobeerd. Eerder werd een eenmalige time-out, zoals een klik die met zes browsers tegelijk vastliep, meteen een gat waarvoor een hele vervolgronde van de verkenner nodig was. Na een tweede poging staat onder `firstTimeoutNl` bij de toestand of bij het paginatype waarom de eerste stopte (#80).
+
 ## 0.6.0 (2026-10-16)
 
 Deze versie is uitgebracht zonder nieuwe meting op de testsite, net als 0.5.0. De wijzigingen die een uitkomst kunnen veranderen, zijn dus nog niet vergeleken met 0.5.0. Met een echte Vimeo-speler is nagegaan dat de speler in een sessie tot de bediening laadt en dat zijn videostroom wordt opgehaald; dat de video in de browser van loep ook afspeelt, is niet vastgesteld.

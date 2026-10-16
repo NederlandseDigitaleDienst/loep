@@ -22,7 +22,7 @@ import { blockersKey, readStamp, STATE_STAMP, stateKey } from "../lib/sweepstamp
 import { writesForRun } from "../lib/writes.ts";
 import { spokenByItself, type SpokenByItself } from "../instruments/methods/speech.ts";
 import type { LastStepSpeech, Recipe } from "../session/daemon.ts";
-import { adoptPage, frameAt, holds, installReplay, loadRecipes, overlays, replayEnv, replayFromClean, replaySteps, type Overlay } from "../session/recipe.ts";
+import { adoptPage, frameAt, holds, installReplay, loadRecipes, onceMoreAfterTimeout, overlays, replayEnv, replayFromClean, replaySteps, type Overlay } from "../session/recipe.ts";
 import { openSurface, type Env, type Surface } from "../session/surface.ts";
 
 /** One time a blocker was still on a page of the sweep and had to be closed there. */
@@ -82,6 +82,8 @@ export interface CapturedState {
    * other page types too and what it shows there. Absent for a blocker and a process, and in older runs.
    */
   perPageType?: StateInstance[];
+  /** Why the first opening stopped when a step of the recipe timed out and the sweep tried once more on a freshly loaded page. Absent when the first attempt decided it. */
+  firstTimeoutNl?: string;
 }
 
 /** One component opened on one page type, in a portrait window. */
@@ -96,6 +98,8 @@ export interface StateInstance {
   screenshot: string | null;
   /** Elements that carry content and are drawn a quarter turn in this window. */
   rotatedQuarterTurn: number;
+  /** Why the first attempt on this page stopped, when a step timed out and the recipe was played once more on a freshly loaded page. */
+  firstTimeoutNl?: string;
 }
 
 /** The portrait window a component that was recorded in the default window is opened in on each page type. */
@@ -142,6 +146,8 @@ export interface Opened {
   post: Postcondition | null;
   /** What was said by itself during the last step of the recipe, on the first opening of a state. */
   spoken?: SpokenByItself;
+  /** Why the first attempt stopped, when a step timed out and the recipe was played once more. */
+  firstTimeoutNl?: string;
 }
 
 /** One state of the model and the way to open it. The caller closes the context of the surface it gets. */
@@ -159,7 +165,7 @@ export interface StateOpener {
   /** Null when the explorer could not open it; `notOpenedNl` then says why. */
   open: ((how?: StateVariant) => Promise<Opened>) | null;
   /** For a component: play its recipe on another page, in a window of another size. `opened` names the controls that the recipe brought. */
-  openOn?: (url: string, size: { width: number; height: number }) => Promise<{ surface: Surface | null; reached: boolean; reasonNl: string | null; opened: string[] }>;
+  openOn?: (url: string, size: { width: number; height: number }) => Promise<{ surface: Surface | null; reached: boolean; reasonNl: string | null; opened: string[]; firstTimeoutNl?: string }>;
   /** The window the recipe was recorded in. */
   recordedIn?: { width: number; height: number };
   notOpenedNl?: string;
@@ -594,7 +600,7 @@ export class ModelSweep {
     let clippedBefore: { path: string[] }[] = [];
     const limited = await withinTime(STATE_TIMEOUT_MS, async (): Promise<CapturedState> => {
       const opened = await open();
-      const where = { url: opened.surface?.page.url() ?? null, viewport: opened.surface?.page.viewportSize() ?? null };
+      const where = { url: opened.surface?.page.url() ?? null, viewport: opened.surface?.page.viewportSize() ?? null, ...(opened.firstTimeoutNl !== undefined ? { firstTimeoutNl: opened.firstTimeoutNl } : {}) };
       if (!opened.reached || !opened.surface) return { ...base, ...empty, ...where, reached: false, reasonNl: opened.reasonNl };
       const { view, frame } = await this.viewOf(opened.surface.page, opener.frame);
       const { clippedBefore: clipped, ...measured } = await this.measure(opened.surface.page, view, base.id, opened.post, {});
@@ -620,7 +626,7 @@ export class ModelSweep {
       Object.assign(state, again.ok ? again.value : { contrastDark: null, variantsNotReached: ["textSpacing", "focusCovered", "contrastDark", ...(filledFields(opener.base.recipe ? this.recipes[opener.base.recipe] : undefined).length > 0 ? ["timeLimitsAfterSubmit"] : [])].filter((variant) => !state.files[variant] && !(variant === "contrastDark" && opener.ownScheme)).map((variant) => ({ variant, reasonNl: again.reason })) });
     }
     for (const surface of surfaces) await surface.context.close().catch(() => undefined);
-    process.stderr.write(`sitemodel: ${state.id} ${state.reached ? "vastgelegd" : `niet bereikt: ${state.reasonNl}`}\n`);
+    process.stderr.write(`sitemodel: ${state.id} ${state.reached ? "vastgelegd" : `niet bereikt: ${state.reasonNl}`}${state.firstTimeoutNl !== undefined ? ` (tweede poging; de eerste stopte op een time-out: ${state.firstTimeoutNl})` : ""}\n`);
     return state;
   }
 
@@ -672,16 +678,19 @@ export class ModelSweep {
             ? {
                 recordedIn: { width: recipe.start.width, height: recipe.start.height },
                 openOn: async (url: string, size: { width: number; height: number }) => {
-                  let surface: Surface;
-                  try {
-                    ({ surface } = await openSurface(this.env, { ...recipe.start!, url, ...size }));
-                  } catch (error) {
-                    return { surface: null, reached: false, reasonNl: `de pagina laadt niet: ${(error as Error).message.split("\n")[0]}`, opened: [] };
-                  }
-                  const before = new Set((await call<Control[]>(surface.page, "hoverTargets").catch(() => [])).map(controlKey));
-                  const replayed = await replaySteps(this.env, surface, recipe.steps, entry.postcondition);
-                  const after = replayed.ok ? await call<Control[]>(surface.page, "hoverTargets").catch(() => []) : [];
-                  return { surface, reached: replayed.ok, reasonNl: replayed.reasonNl, opened: after.filter((control) => !before.has(controlKey(control))).map((control) => (control.text || control.ariaLabel || control.tag).slice(0, 60)) };
+                  const result = await onceMoreAfterTimeout(async () => {
+                    let surface: Surface;
+                    try {
+                      ({ surface } = await openSurface(this.env, { ...recipe.start!, url, ...size }));
+                    } catch (error) {
+                      return { surface: null, ok: false, reasonNl: `de pagina laadt niet: ${(error as Error).message.split("\n")[0]}`, opened: [] as string[] };
+                    }
+                    const before = new Set((await call<Control[]>(surface.page, "hoverTargets").catch(() => [])).map(controlKey));
+                    const replayed = await replaySteps(this.env, surface, recipe.steps, entry.postcondition);
+                    const after = replayed.ok ? await call<Control[]>(surface.page, "hoverTargets").catch(() => []) : [];
+                    return { surface, ok: replayed.ok, reasonNl: replayed.reasonNl, ...(replayed.timedOut ? { timedOut: true } : {}), opened: after.filter((control) => !before.has(controlKey(control))).map((control) => (control.text || control.ariaLabel || control.tag).slice(0, 60)) };
+                  });
+                  return { surface: result.surface, reached: result.ok, reasonNl: result.reasonNl, opened: result.opened, ...(result.firstTimeoutNl !== undefined ? { firstTimeoutNl: result.firstTimeoutNl } : {}) };
                 },
               }
             : {}),
@@ -689,8 +698,12 @@ export class ModelSweep {
           open: async (how = {}) => {
             // The reader listens once, on the opening that is measured; the other openings repeat it for another scheme or spacing.
             const speech: LastStepSpeech | undefined = how.scheme || how.spaced || how.keys || how.submit ? undefined : { heard: [] };
-            const replay = await replayFromClean(this.env, recipe, entry.postcondition, how.scheme ? { scheme: how.scheme } : {}, how.spaced ? spaced : undefined, speech);
-            return { surface: replay.surface, reached: replay.ok, reasonNl: replay.reasonNl, post: entry.postcondition, ...(speech && speech.heard.length > 0 ? { spoken: spokenByItself(speech.heard) } : {}) };
+            const replay = await onceMoreAfterTimeout(() => {
+              // What the reader heard on an attempt that stopped does not belong to the opening that counts.
+              if (speech) speech.heard.length = 0;
+              return replayFromClean(this.env, recipe, entry.postcondition, how.scheme ? { scheme: how.scheme } : {}, how.spaced ? spaced : undefined, speech);
+            });
+            return { surface: replay.surface, reached: replay.ok, reasonNl: replay.reasonNl, post: entry.postcondition, ...(speech && speech.heard.length > 0 ? { spoken: spokenByItself(speech.heard) } : {}), ...(replay.firstTimeoutNl !== undefined ? { firstTimeoutNl: replay.firstTimeoutNl } : {}) };
           },
         });
       }
@@ -721,10 +734,12 @@ export class ModelSweep {
       const limited = await withinTime(INSTANCE_TIMEOUT_MS, async (): Promise<StateInstance> => {
         const opened = await openOn(type.representative, size);
         surface = opened.surface;
-        if (!opened.reached || !opened.surface) return { ...base, reached: false, reasonNl: opened.reasonNl, opened: [], screenshot: null, rotatedQuarterTurn: 0 };
+        const retried = opened.firstTimeoutNl !== undefined ? { firstTimeoutNl: opened.firstTimeoutNl } : {};
+        if (retried.firstTimeoutNl !== undefined) process.stderr.write(`sitemodel: ${state.id} op ${typeId}: tweede poging na een time-out (${retried.firstTimeoutNl})\n`);
+        if (!opened.reached || !opened.surface) return { ...base, reached: false, reasonNl: opened.reasonNl, opened: [], screenshot: null, rotatedQuarterTurn: 0, ...retried };
         await opened.surface.page.screenshot({ path: join(this.runDir, shot), animations: "disabled" });
         const content = await call<ContentInventory>(opened.surface.page, "contentInventory");
-        return { ...base, reached: true, reasonNl: null, opened: opened.opened, screenshot: shot, rotatedQuarterTurn: content.rotatedQuarterTurn.length };
+        return { ...base, reached: true, reasonNl: null, opened: opened.opened, screenshot: shot, rotatedQuarterTurn: content.rotatedQuarterTurn.length, ...retried };
       });
       await (surface as Surface | null)?.context.close().catch(() => undefined);
       rows.push(limited.ok ? limited.value : { ...base, reached: false, reasonNl: limited.reason, opened: [], screenshot: null, rotatedQuarterTurn: 0 });
