@@ -7,6 +7,7 @@ Wat er per versie van loep is veranderd. De versie staat op het voorblad en onde
 ### Verder
 
 - De poort telt een ingesloten venster dat niet laadt (status 401, 403 of een andere fout) niet meer als gat bij `pages-loaded`, als het sitemodel het noemt als onderdeel zonder recept. Dat is dezelfde beperking als `frame-not-operated`, nu onder `frame-not-loaded`. Eerder bleef een run met een videospeler achter een controle tegen robots, zoals Vimeo met Cloudflare, steken op "bewijs onvoldoende": de verkenner kon het gat niet sluiten, want `acceptedGaps` neemt alleen pagina's van de run aan.
+- De staande veegronde opent een onderdeel in een venster dat minstens zo breed is als de `minWidth` uit het sitemodel. Eerder ging een onderdeel dat pas vanaf 997 pixels bestaat, zoals een zijbalk, in het staande venster van 800 pixels nooit open. De poort meldde dan een gat dat de verkenner alleen met een omweg kon sluiten (#46).
 
 ## 0.3.0 (2026-10-15)
 
