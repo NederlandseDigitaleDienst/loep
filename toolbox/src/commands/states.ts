@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from "node:async_hooks";
 import { join } from "node:path";
 import type { Browser, BrowserContext, Page } from "playwright";
 import { call } from "../browser/call.ts";
@@ -5,6 +6,7 @@ import { confirmLogin, firstLineOf, INPAGE_PATH, launchBrowser, loadPage, loadSa
 import { isLogout, LoginExpired, runLoginMark, throwIfLoginExpired } from "../lib/login.ts";
 import { canonicalJson, sha256, slugForUrl, writeJson } from "../lib/canonical.ts";
 import { measuredPages, pageKey, readStamp, STATES_STAMP } from "../lib/sweepstamp.ts";
+import { inOrder, sweepAtOnce, withSpacing } from "../lib/atonce.ts";
 import { stepStart, writeManifest } from "../lib/manifest.ts";
 import { loadRun, type FormErrorState, type PageData, type States } from "../lib/rundata.ts";
 import type { Described } from "../instruments/activate.ts";
@@ -18,9 +20,28 @@ import { probeSettings } from "../instruments/settings.ts";
 import { holds } from "../session/recipe.ts";
 import { ModelSweep, type StateOpener } from "./modelsweep.ts";
 
-/** One guard for the whole command: nothing a probe submits may reach a server. */
-const guard: WriteGuard = { active: false, blocked: 0 };
-const socketMessagesBlocked = (): number => guard.blocked;
+/** Where the probes reached each embedded window of the sample: on the page it stands on, or on its own and why. */
+type Embedded = NonNullable<States["embedded"]>[number];
+
+/**
+ * One group of probes that runs on its own: its own guard, so that nothing a probe submits reaches a
+ * server while another group loads a page, its own copy of the sweep for the blockers it closes, and
+ * what it skipped and where it reached each embedded window. The groups are taken together in a fixed
+ * order, so what is written does not depend on whether they ran one after the other or at the same time.
+ */
+interface Lane {
+  guard: WriteGuard;
+  /** Set when the run has a site model: closes what covers a page before a probe acts on it. */
+  sweep: ModelSweep | null;
+  skipped: { page: string; step: string }[];
+  windows: Map<string, Embedded>;
+}
+
+/** The group of the whole command, and of every probe that runs outside a group. */
+const mainLane: Lane = { guard: { active: false, blocked: 0 }, sweep: null, skipped: [], windows: new Map() };
+const lanes = new AsyncLocalStorage<Lane>();
+const lane = (): Lane => lanes.getStore() ?? mainLane;
+const socketMessagesBlocked = (): number => lane().guard.blocked;
 /**
  * The most controls the hover probe points at in the pages of the sample. It counts kinds of control, not controls:
  * of each kind a few are pointed at, so the number that is reached follows the design of a site and not its size.
@@ -49,11 +70,8 @@ const MAX_KEY_REACTIONS_IN_STATE = 8;
 const EXAMPLES_NOT_EXAMINED = 25;
 
 const STEP_TIMEOUT_MS = 180_000;
-const skippedSteps: { page: string; step: string }[] = [];
 /** Each kind of setting is changed once in a run. */
 const seenSettings = new Set<string>();
-/** Set when the run has a site model: closes what covers a page before a probe acts on it. */
-let sweep: ModelSweep | null = null;
 
 /**
  * Run one probe step with a time limit. A page that never settles must not stall the
@@ -64,7 +82,7 @@ async function withinTime<T>(page: string, step: string, fallback: T, work: () =
   if (outcome.ok) return outcome.value;
   // A session that ran out is no step that was skipped: the command stops.
   throwIfLoginExpired();
-  skippedSteps.push({ page, step: `${step}: ${outcome.reason}` });
+  lane().skipped.push({ page, step: `${step}: ${outcome.reason}` });
   process.stderr.write(`states ${page} ${step} overgeslagen: ${outcome.reason}\n`);
   return fallback;
 }
@@ -77,9 +95,6 @@ const step = <T>(probe: string, index: number, total: number, what: string, work
   return sayingItRuns(`states ${probe} ${index + 1}/${total} ${what}`, work);
 };
 
-/** Where the probes reached each embedded window of the sample: on the page it stands on, or on its own and why. */
-const windows = new Map<string, NonNullable<States["embedded"]>[number]>();
-
 /** A page of the sample that did not load, also not the second time: the probe that wanted it is noted as not done and the command goes on. */
 class PageNotLoaded extends Error {}
 
@@ -90,6 +105,7 @@ class PageNotLoaded extends Error {}
  * A page that does not load is tried once more, as `collect` and `contrast` do.
  */
 async function freshPage(context: BrowserContext, data: PageData): Promise<Page> {
+  const { guard, sweep, windows } = lane();
   guard.active = false;
   const mark = sweep?.mark();
   const { page, placement } = await retryOnce(`states ${data.label} ${data.item.url}`, async () => {
@@ -119,6 +135,7 @@ async function freshPage(context: BrowserContext, data: PageData): Promise<Page>
 
 /** Bring a page that a probe navigated away from back to the page under test, as a fresh page is. */
 const restore = (context: BrowserContext, data: PageData) => async (page: Page): Promise<void> => {
+  const { guard, sweep } = lane();
   guard.active = false;
   const frame = page.mainFrame();
   if (frame.parentFrame()) {
@@ -143,6 +160,7 @@ async function inWindow<T>(data: PageData, probeNl: string, fallback: T, work: (
   } catch (error) {
     throwIfLoginExpired();
     const reason = firstLineOf(error);
+    const { skipped: skippedSteps, windows } = lane();
     if (!data.item.embeddedOn?.length) {
       if (!(error instanceof PageNotLoaded)) throw error;
       skippedSteps.push({ page: data.label, step: `${probeNl}: ${reason}` });
@@ -602,7 +620,7 @@ async function arrowFocus(context: BrowserContext, pages: PageData[]): Promise<N
 }
 
 async function listenersOnEmptyPage(context: BrowserContext): Promise<Record<string, Record<string, number>>> {
-  guard.active = false;
+  lane().guard.active = false;
   const page = await context.newPage();
   try {
     return await browserListeners(page);
@@ -624,12 +642,15 @@ interface StatesStamp {
  * the pages is kept and only the keys in the states whose recipe changed are pressed again;
  * with `fresh` everything is done again.
  */
-export async function states(runDir: string, options: { fresh?: boolean } = {}): Promise<States> {
+export async function states(runDir: string, options: { fresh?: boolean; atOnce?: number } = {}): Promise<States> {
   const startedAt = stepStart();
   const run = await loadRun(runDir);
+  const settings = sweepAtOnce(runDir, options.atOnce ?? 1);
+  if (settings.noteNl) process.stderr.write(`states: ${settings.noteNl}\n`);
   const browser: Browser = await launchBrowser();
-  sweep = await confirmLogin(browser)
-    .then(() => ModelSweep.load(runDir, browser, guard))
+  Object.assign(mainLane, { guard: { active: false, blocked: 0 }, skipped: [], windows: new Map() });
+  const sweep = await confirmLogin(browser)
+    .then(() => ModelSweep.load(runDir, browser, mainLane.guard))
     .catch(async (error: Error) => {
       await browser.close();
       throw error;
@@ -638,9 +659,10 @@ export async function states(runDir: string, options: { fresh?: boolean } = {}):
   const loggedIn = runLoginMark() !== null;
   const logsOut = (page: string, trigger: Described): boolean => {
     if (!loggedIn || !isLogout({ text: trigger.text || String(trigger.ariaLabel ?? "") })) return false;
-    skippedSteps.push({ page, step: `knop "${trigger.text.slice(0, 30)}": logt uit, niet bediend` });
+    lane().skipped.push({ page, step: `knop "${trigger.text.slice(0, 30)}": logt uit, niet bediend` });
     return true;
   };
+  mainLane.sweep = sweep;
   const measured = await measuredPages(runDir, run.sample.items);
   const blockers = sweep.blockersKey;
   const pagesNow = run.sample.items.every((item) => measured[item.slug]?.key === pageKey(blockers, item)) ? sha256(canonicalJson(run.sample.items.map((item) => [item.slug, measured[item.slug]]))) : null;
@@ -679,124 +701,204 @@ export async function states(runDir: string, options: { fresh?: boolean } = {}):
       await browser.close();
     }
   }
-  const context = await newContext(browser, {}, guard);
-  await context.addInitScript({ path: INPAGE_PATH });
-  await sweep?.install(context);
+  /** A browser context of the group that runs now: with its guard, and seeded and watched by its copy of the sweep. */
+  const contextOfLane = async (viewport?: { width: number; height: number }): Promise<BrowserContext> => {
+    const { guard, sweep: own } = lane();
+    const context = await newContext(browser, viewport ? { viewport } : {}, guard);
+    await context.addInitScript({ path: INPAGE_PATH });
+    await own?.install(context);
+    return context;
+  };
   const result: States = { dialogs: [], formErrors: [], singleKeys: { pagesExamined: 0, keysPressed: KEYS, reactions: [] }, hover: [], examined: { triggers: 0, forms: 0, hoverTargets: 0 } };
   try {
-    // Each distinct trigger is activated once, on the first page that has it.
-    const allSettings: NonNullable<States["settings"]> = [];
     seenSettings.clear();
-    const seenTriggers = new Set<string>();
-    const seenForms = new Set<string>();
-    skippedSteps.length = 0;
-    windows.clear();
-    for (const [index, data] of run.pages.entries()) {
-      say("formulieren en knoppen", index, run.pages.length, `${data.label} ${data.item.url}`);
-      const { triggers, inPageForms } = await withinTime(data.label, "formulieren", { triggers: [] as Described[], inPageForms: [] as FormErrorState[] }, async () => {
-        const page = await freshPage(context, data);
-        const found = await call<Described[]>(page, "triggers");
-        const forms = await probeForms(page, { label: data.label, url: data.item.url, outDir: runDir, openedVia: null, socketMessagesBlocked, restore: restore(context, data) });
-        await page.close();
-        return { triggers: found, inPageForms: forms };
-      });
-      allSettings.push(
-        ...(await withinTime(data.label, "instellingen", [] as NonNullable<States["settings"]>, async () => {
-          const settingsPage = await freshPage(context, data);
-          const changed = await probeSettings(settingsPage, { label: data.label, openedVia: null, seen: seenSettings });
-          await settingsPage.close();
-          return changed;
-        })),
-      );
-      for (const form of inPageForms) {
-        const key = `${form.fields.map((field) => field.name).join("|")}`;
-        if (seenForms.has(key)) continue;
-        seenForms.add(key);
-        result.formErrors.push(form);
-      }
-      for (const trigger of triggers) {
-        const key = `${trigger.tag}|${trigger.text.slice(0, 40)}|${trigger.ariaLabel}|${trigger.region}`;
-        if (seenTriggers.has(key)) continue;
-        seenTriggers.add(key);
-        if (logsOut(data.label, trigger)) continue;
-        const probed = await withinTime(data.label, `knop "${trigger.text.slice(0, 30)}"`, null, () => triggerOnFreshPage(context, data, trigger, runDir, DESKTOP));
-        if (!probed) continue;
-        result.dialogs.push(probed.dialog);
-        allSettings.push(...probed.settings);
-        for (const form of probed.forms) {
-          const formKey = `${form.fields.map((field) => field.name).join("|")}`;
-          if (seenForms.has(formKey)) continue;
-          seenForms.add(formKey);
-          result.formErrors.push(form);
+    // The forms, the buttons and the settings. Each distinct trigger is activated once, on the first page that has it.
+    const triggersAndForms = async (): Promise<{ dialogs: States["dialogs"]; formErrors: States["formErrors"]; settings: NonNullable<States["settings"]>; triggers: number }> => {
+      const allSettings: NonNullable<States["settings"]> = [];
+      const dialogs: States["dialogs"] = [];
+      const formErrors: States["formErrors"] = [];
+      const seenTriggers = new Set<string>();
+      const seenForms = new Set<string>();
+      const context = await contextOfLane();
+      try {
+        for (const [index, data] of run.pages.entries()) {
+          say("formulieren en knoppen", index, run.pages.length, `${data.label} ${data.item.url}`);
+          const { triggers, inPageForms } = await withinTime(data.label, "formulieren", { triggers: [] as Described[], inPageForms: [] as FormErrorState[] }, async () => {
+            const page = await freshPage(context, data);
+            const found = await call<Described[]>(page, "triggers");
+            const forms = await probeForms(page, { label: data.label, url: data.item.url, outDir: runDir, openedVia: null, socketMessagesBlocked, restore: restore(context, data) });
+            await page.close();
+            return { triggers: found, inPageForms: forms };
+          });
+          allSettings.push(
+            ...(await withinTime(data.label, "instellingen", [] as NonNullable<States["settings"]>, async () => {
+              const settingsPage = await freshPage(context, data);
+              const changed = await probeSettings(settingsPage, { label: data.label, openedVia: null, seen: seenSettings });
+              await settingsPage.close();
+              return changed;
+            })),
+          );
+          for (const form of inPageForms) {
+            const key = `${form.fields.map((field) => field.name).join("|")}`;
+            if (seenForms.has(key)) continue;
+            seenForms.add(key);
+            formErrors.push(form);
+          }
+          for (const trigger of triggers) {
+            const key = `${trigger.tag}|${trigger.text.slice(0, 40)}|${trigger.ariaLabel}|${trigger.region}`;
+            if (seenTriggers.has(key)) continue;
+            seenTriggers.add(key);
+            if (logsOut(data.label, trigger)) continue;
+            const probed = await withinTime(data.label, `knop "${trigger.text.slice(0, 30)}"`, null, () => triggerOnFreshPage(context, data, trigger, runDir, DESKTOP));
+            if (!probed) continue;
+            dialogs.push(probed.dialog);
+            allSettings.push(...probed.settings);
+            for (const form of probed.forms) {
+              const formKey = `${form.fields.map((field) => field.name).join("|")}`;
+              if (seenForms.has(formKey)) continue;
+              seenForms.add(formKey);
+              formErrors.push(form);
+            }
+            process.stderr.write(`states ${data.label} "${probed.dialog.trigger}" -> ${probed.dialog.kind ?? "geen reactie"}\n`);
+          }
         }
-        process.stderr.write(`states ${data.label} "${probed.dialog.trigger}" -> ${probed.dialog.kind ?? "geen reactie"}\n`);
+      } finally {
+        await context.close().catch(() => undefined);
       }
-    }
-    // Some controls only exist on a narrow screen, such as a menu button. Activate those there.
-    const mobile = await newContext(browser, { viewport: MOBILE }, guard);
-    await mobile.addInitScript({ path: INPAGE_PATH });
-    await sweep?.install(mobile);
-    for (const [index, data] of run.pages.entries()) {
-      say("knoppen smal", index, run.pages.length, data.label);
-      const triggers = await inWindow(data, "knoppen op een smal scherm", [] as Described[], async () => {
-        const page = await freshPage(mobile, data);
-        const found = await call<Described[]>(page, "triggers");
-        await page.close();
-        return found;
-      });
-      for (const trigger of triggers) {
-        const key = `${trigger.tag}|${trigger.text.slice(0, 40)}|${trigger.ariaLabel}|${trigger.region}`;
-        if (seenTriggers.has(key)) continue;
-        seenTriggers.add(key);
-        if (logsOut(data.label, trigger)) continue;
-        const probed = await withinTime(data.label, `knop "${trigger.text.slice(0, 30)}" (smal)`, null, () => triggerOnFreshPage(mobile, data, trigger, runDir, `${MOBILE.width}x${MOBILE.height}`));
-        if (!probed) continue;
-        result.dialogs.push(probed.dialog);
-        process.stderr.write(`states ${data.label} smal "${probed.dialog.trigger}" -> ${probed.dialog.kind ?? "geen reactie"}\n`);
+      // Some controls only exist on a narrow screen, such as a menu button. Activate those there.
+      const mobile = await contextOfLane(MOBILE);
+      try {
+        for (const [index, data] of run.pages.entries()) {
+          say("knoppen smal", index, run.pages.length, data.label);
+          const triggers = await inWindow(data, "knoppen op een smal scherm", [] as Described[], async () => {
+            const page = await freshPage(mobile, data);
+            const found = await call<Described[]>(page, "triggers");
+            await page.close();
+            return found;
+          });
+          for (const trigger of triggers) {
+            const key = `${trigger.tag}|${trigger.text.slice(0, 40)}|${trigger.ariaLabel}|${trigger.region}`;
+            if (seenTriggers.has(key)) continue;
+            seenTriggers.add(key);
+            if (logsOut(data.label, trigger)) continue;
+            const probed = await withinTime(data.label, `knop "${trigger.text.slice(0, 30)}" (smal)`, null, () => triggerOnFreshPage(mobile, data, trigger, runDir, `${MOBILE.width}x${MOBILE.height}`));
+            if (!probed) continue;
+            dialogs.push(probed.dialog);
+            process.stderr.write(`states ${data.label} smal "${probed.dialog.trigger}" -> ${probed.dialog.kind ?? "geen reactie"}\n`);
+          }
+        }
+      } finally {
+        await mobile.close().catch(() => undefined);
       }
-    }
-    await mobile.close();
-    result.examined.triggers = seenTriggers.size;
-    result.examined.forms = result.formErrors.length;
-    result.singleKeys = await probeSingleKeys(context, run.pages);
-    if (sweep) result.singleKeys.states = await probeSingleKeysInStates(sweep);
-    // What the test browser itself listens for on an empty page: to be subtracted from every page's count.
-    result.browserListeners = await listenersOnEmptyPage(context);
+      return { dialogs, formErrors, settings: allSettings, triggers: seenTriggers.size };
+    };
+    const keysOnPages = async (): Promise<States["singleKeys"]> => {
+      const context = await contextOfLane();
+      try {
+        return await probeSingleKeys(context, run.pages);
+      } finally {
+        await context.close().catch(() => undefined);
+      }
+    };
+    const keysInStates = (): Promise<StateKeys[]> => probeSingleKeysInStates(lane().sweep!);
     // The pointer probes: every page in the default window, one page of each page type in the narrow one, and every state of the model.
-    const narrowPages = sweep ? onePagePerType(sweep, run.pages) : [];
-    const narrow = await newContext(browser, { viewport: MOBILE }, guard);
-    await narrow.addInitScript({ path: INPAGE_PATH });
-    await sweep?.install(narrow);
-    const hovering = new HoverRun(runDir);
-    const pressing = new DownRun();
-    const hoveredNarrow = await probeHover(context, narrow, run.pages, narrowPages, hovering);
-    const pressedOn = await probeDownEvents(context, narrow, run.pages, narrowPages, result.browserListeners, pressing);
-    await narrow.close();
-    // The counts are those of the pages; what a state added is in its own row.
-    const pagesHover = hovering.coverage();
-    const pagesDown = { kindsFound: pressing.seen.size + pressing.left.size, examined: pressing.results.length };
-    const inStates = sweep ? await probePointerInStates(sweep, hovering, pressing, result.browserListeners) : null;
+    const pointer = async () => {
+      const context = await contextOfLane();
+      const narrow = await contextOfLane(MOBILE);
+      try {
+        // What the test browser itself listens for on an empty page: to be subtracted from every page's count.
+        const browserListeners = await listenersOnEmptyPage(context);
+        const narrowPages = onePagePerType(sweep, run.pages);
+        const hovering = new HoverRun(runDir);
+        const pressing = new DownRun();
+        const hoveredNarrow = await probeHover(context, narrow, run.pages, narrowPages, hovering);
+        const pressedOn = await probeDownEvents(context, narrow, run.pages, narrowPages, browserListeners, pressing);
+        // The counts are those of the pages; what a state added is in its own row.
+        const pagesHover = hovering.coverage();
+        const pagesDown = { kindsFound: pressing.seen.size + pressing.left.size, examined: pressing.results.length };
+        const inStates = await probePointerInStates(lane().sweep!, hovering, pressing, browserListeners);
+        return { browserListeners, hovering, pressing, hoveredNarrow, pressedOn, pagesHover, pagesDown, inStates };
+      } finally {
+        await narrow.close().catch(() => undefined);
+        await context.close().catch(() => undefined);
+      }
+    };
+    const arrows = async (): Promise<NonNullable<States["arrowFocus"]>> => {
+      const context = await contextOfLane();
+      try {
+        return await arrowFocus(context, run.pages);
+      } finally {
+        await context.close().catch(() => undefined);
+      }
+    };
+    // Five groups, each in browser contexts of its own. They run one after the other or, with atOnce, at the same time; what they found is taken in this order.
+    const groups: (() => Promise<unknown>)[] = [triggersAndForms, keysOnPages, keysInStates, pointer, arrows];
+    const own: Lane[] = groups.map(() => {
+      const fork = sweep.fork();
+      return { guard: fork.guard, sweep: fork, skipped: [], windows: new Map() };
+    });
+    const atOnce = Math.min(settings.atOnce, groups.length);
+    if (atOnce > 1) process.stderr.write(`states: ${atOnce} groepen proeven tegelijk, ${settings.navigationDelayMs} ms tussen twee navigaties naar dezelfde site\n`);
+    const found = await withSpacing({ ...settings, atOnce }, () =>
+      inOrder<unknown>(
+        groups.length,
+        atOnce,
+        (index) => lanes.run(own[index]!, () => groups[index]!()),
+        (index) => {
+          const done = own[index]!;
+          sweep.absorb(done.sweep!);
+          mainLane.skipped.push(...done.skipped);
+          takeWindows(mainLane.windows, done.windows);
+        },
+      ),
+    );
+    const [forms, keys, keysStates, pointed, arrowed] = found as [Awaited<ReturnType<typeof triggersAndForms>>, States["singleKeys"], StateKeys[], Awaited<ReturnType<typeof pointer>>, NonNullable<States["arrowFocus"]>];
+    result.dialogs = forms.dialogs;
+    result.formErrors = forms.formErrors;
+    result.examined.triggers = forms.triggers;
+    result.examined.forms = forms.formErrors.length;
+    result.singleKeys = keys;
+    result.singleKeys.states = keysStates;
+    result.browserListeners = pointed.browserListeners;
+    const { hovering, pressing, pagesHover, pagesDown, inStates } = pointed;
     result.hover = hovering.hover;
     result.examined.hoverTargets = hovering.examined;
     result.hoverContrast = hovering.contrast;
     // A kind that the limit left out is named wherever it was found, on a page or in a state.
     const leftOut = hovering.coverage();
-    result.hoverCoverage = { ...pagesHover, notExamined: leftOut.notExamined, notExaminedExamples: leftOut.notExaminedExamples, nonControlsExamined: leftOut.nonControlsExamined, iconOnly: hovering.iconOnly, narrowPages: hoveredNarrow, ...(inStates ? { states: inStates.hover } : {}) };
+    result.hoverCoverage = { ...pagesHover, notExamined: leftOut.notExamined, notExaminedExamples: leftOut.notExaminedExamples, nonControlsExamined: leftOut.nonControlsExamined, iconOnly: hovering.iconOnly, narrowPages: pointed.hoveredNarrow, states: inStates.hover };
     result.downEvents = pressing.results;
     result.examined.downEventTargets = pressing.results.length;
-    result.downEventCoverage = { limit: pressing.limit, ...pagesDown, goneBeforePress: pressing.gone, notExamined: pressing.left.size, notExaminedExamples: [...pressing.left.values()].slice(0, EXAMPLES_NOT_EXAMINED), ...pressedOn, ...(inStates ? { states: inStates.down } : {}) };
-    result.settings = allSettings;
-    result.arrowFocus = await arrowFocus(context, run.pages);
-    result.skipped = [...skippedSteps];
-    if (windows.size > 0) result.embedded = [...windows.values()];
+    result.downEventCoverage = { limit: pressing.limit, ...pagesDown, goneBeforePress: pressing.gone, notExamined: pressing.left.size, notExaminedExamples: [...pressing.left.values()].slice(0, EXAMPLES_NOT_EXAMINED), ...pointed.pressedOn, states: inStates.down };
+    result.settings = forms.settings;
+    result.arrowFocus = arrowed;
+    result.skipped = [...mainLane.skipped];
+    if (mainLane.windows.size > 0) result.embedded = [...mainLane.windows.values()];
     // What a probe did not reach because the session ran out is not written down as not there.
     await confirmLogin(browser);
-    if (sweep) result.blockers = { closedOnPage: sweep.dismissals.filter((entry) => entry.dismissed).length, notClosed: sweep.dismissals.filter((entry) => !entry.dismissed).map((entry) => ({ url: entry.url, blocker: entry.blocker, reasonNl: entry.reasonNl })) };
+    result.blockers = { closedOnPage: sweep.dismissals.filter((entry) => entry.dismissed).length, notClosed: sweep.dismissals.filter((entry) => !entry.dismissed).map((entry) => ({ url: entry.url, blocker: entry.blocker, reasonNl: entry.reasonNl })) };
     await writeJson(join(runDir, "states.json"), result);
     await writeJson(join(runDir, STATES_STAMP), { pages: pagesNow, states: stateKeys } satisfies StatesStamp);
-    await writeManifest(runDir, { command: "states", startedAt, ...result.examined }, browser.version());
+    await writeManifest(runDir, { command: "states", startedAt, ...result.examined, ...(atOnce > 1 ? { atOnce } : {}) }, browser.version());
   } finally {
     await browser.close();
   }
   return result;
+}
+
+/**
+ * Take over where one group of probes reached each embedded window, after the groups before it:
+ * a window opened on its own once stays so, and what failed in it is added. This is what one list
+ * kept by every group in turn would hold.
+ */
+function takeWindows(into: Map<string, Embedded>, from: Map<string, Embedded>): void {
+  for (const [label, entry] of from) {
+    const known = into.get(label);
+    if (!known) {
+      into.set(label, entry);
+      continue;
+    }
+    if (entry.apartNl) Object.assign(known, { inPlaceOn: null, apartNl: entry.apartNl });
+    known.failedNl.push(...entry.failedNl);
+  }
 }

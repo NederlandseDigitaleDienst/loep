@@ -1,6 +1,7 @@
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { readJson, sha256File } from "./canonical.ts";
+import { readJson, sha256, sha256File } from "./canonical.ts";
+import { readMatches, readRequestProblems, type ReadRequest } from "./reads.ts";
 
 /**
  * The site model: what an exploring agent found out about a site before anything is
@@ -191,6 +192,11 @@ export interface SiteModel {
   /** What the explorer saw but could not open or classify, in free text. */
   notesNl: string[];
   acceptedGaps?: AcceptedGap[];
+  /**
+   * Requests that only read although they are a POST, such as a question to a search service.
+   * Let through once `check-site` passed the model; every other write stays held back. Absent in models from before this was asked.
+   */
+  readRequests?: ReadRequest[];
 }
 
 /** What the validator needs to know about the run the model belongs to. */
@@ -205,6 +211,8 @@ export interface ModelContext {
   observations?: Set<string> | null;
   /** Per page address: how many audio and video elements the inventory counted there. Absent when not checked. */
   media?: Record<string, { audio: number; video: number }>;
+  /** Per observation that a read request names: the requests it held back or let through as a read. Absent when not checked. */
+  requestsSeen?: Record<string, { method: string; url: string; /** The search services whose form loep recognised in the body. */ search?: string[] }[]>;
 }
 
 const ID = /^[a-z0-9][a-z0-9-]{0,40}$/;
@@ -256,7 +264,7 @@ export function validateSiteModel(value: unknown, context: ModelContext): string
   for (const key of ["pageTypes", "blockers", "components", "processes", "frames", "notesNl"] as const) {
     if (!Array.isArray(model[key])) problems.push(`${key} ontbreekt of is geen lijst (een lege lijst mag)`);
   }
-  for (const key of Object.keys(model)) if (!["version", "baseUrl", "descriptionNl", "pageTypes", "blockers", "components", "processes", "content", "frames", "notesNl", "acceptedGaps"].includes(key)) problems.push(`onbekend veld "${key}"`);
+  for (const key of Object.keys(model)) if (!["version", "baseUrl", "descriptionNl", "pageTypes", "blockers", "components", "processes", "content", "frames", "notesNl", "acceptedGaps", "readRequests"].includes(key)) problems.push(`onbekend veld "${key}"`);
   problems.push(...descriptionProblems(model.descriptionNl));
   if (problems.length > 0) return problems;
 
@@ -440,7 +448,65 @@ export function validateSiteModel(value: unknown, context: ModelContext): string
       }
     }
   }
+
+  // Requests that only read: each one narrow, with its reason and the observation that shows it.
+  if (model.readRequests !== undefined) {
+    if (!Array.isArray(model.readRequests)) problems.push("readRequests is een lijst");
+    else {
+      const seenRules = new Set<string>();
+      for (const [index, rule] of (model.readRequests as unknown[]).entries()) {
+        const where = `readRequests[${index}]`;
+        const own = readRequestProblems(rule, where);
+        if (isRecord(rule)) checkId(rule.id, where);
+        problems.push(...own);
+        if (own.length > 0) continue;
+        const read = rule as ReadRequest;
+        const key = `${read.origin}${read.path}`;
+        if (seenRules.has(key)) problems.push(`${where}: ${read.method} ${key} staat twee keer in readRequests`);
+        seenRules.add(key);
+        if (context.observations && !context.observations.has(read.observation)) problems.push(`${where}: waarneming ${read.observation} bestaat niet in deze run`);
+        else if (context.requestsSeen) {
+          const seen = (context.requestsSeen[read.observation] ?? []).filter((request) => readMatches(read, request.method, request.url));
+          if (seen.length === 0) problems.push(`${where}: in waarneming ${read.observation} is geen ${read.method} naar ${read.origin}${read.path} tegengehouden; geef het id van het commando waarvan het antwoord dit verzoek onder blocked noemt`);
+          else if (!seen.some((request) => (request.search ?? []).includes(read.service))) {
+            const found = [...new Set(seen.flatMap((request) => request.search ?? []))];
+            problems.push(`${where}: loep herkende de body van dat verzoek in waarneming ${read.observation} niet als zoekvraag aan ${read.service}${found.length > 0 ? ` (wel als ${found.join(", ")})` : ""}; een verzoek waarvan loep de body niet herkent, blijft tegengehouden en kan geen leesverzoek worden`);
+          }
+        }
+        // A request that may pass is not also a request a component cannot do without.
+        for (const component of model.components as unknown[]) {
+          if (!isRecord(component) || !Array.isArray(component.blockedRequests)) continue;
+          for (const blocked of component.blockedRequests as unknown[]) {
+            if (isRecord(blocked) && typeof blocked.method === "string" && typeof blocked.address === "string" && readMatches(read, blocked.method, `${new URL(read.origin).protocol}//${blocked.address}`)) {
+              problems.push(`components: onderdeel "${String(component.id)}" noemt ${blocked.method} ${blocked.address} onder blockedRequests, maar ${where} laat dat verzoek door; haal het weg uit blockedRequests`);
+            }
+          }
+        }
+      }
+    }
+  }
   return problems;
+}
+
+/**
+ * The read requests of a model that passed `check-site` and has not changed since; empty
+ * otherwise. Read at the moment a browser context is made, so a session that started before
+ * the check gets them as soon as the check passed, and loses them as soon as the model changes.
+ * Every rule is tested again: what is let through never rests on a file alone.
+ */
+export function approvedReads(runDir: string): ReadRequest[] {
+  const path = join(runDir, SITE_MODEL_FILE);
+  const checkPath = join(runDir, SITE_CHECK_FILE);
+  if (!existsSync(path) || !existsSync(checkPath)) return [];
+  try {
+    const raw = readFileSync(path);
+    const check = JSON.parse(readFileSync(checkPath, "utf8")) as Partial<SiteCheck>;
+    if (check.ok !== true || check.siteSha256 !== sha256(raw)) return [];
+    const rules = (JSON.parse(raw.toString("utf8")) as { readRequests?: unknown }).readRequests;
+    return Array.isArray(rules) ? (rules as unknown[]).filter((rule): rule is ReadRequest => readRequestProblems(rule, "").length === 0) : [];
+  } catch {
+    return [];
+  }
 }
 
 export const DESCRIPTION_MIN_WORDS = 40;

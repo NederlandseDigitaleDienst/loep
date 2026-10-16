@@ -330,6 +330,8 @@ export interface EvaluationChain {
   gate: { sufficient: boolean; checks: number; checksPassed: number; exploreRounds: number; acceptedNl: string[]; limitationsNl: string[]; /** The pictures an agent looked at after the fixed checks: how many sheets, and how many page types had none. Absent when nobody looked, and in older evaluations. */ review?: { sheets: number; pageTypesWithoutSheet: number } } | null;
   /** Whether requests that can change something were let through, and on what ground. */
   writes: { allowed: boolean; noteNl: string };
+  /** POST requests that only read and were let through, such as a question to a search service. Absent when there were none, and in older evaluations. */
+  reads?: { method: string; origin: string; path: string; /** The search service whose form a body had to have; absent in evaluations from before it was asked. */ service?: string; reasonNl: string }[];
 }
 
 /** The verdict of the judge (`a`), that of the verifier (`final`) and that of the finishing round, for a criterion that had one. */

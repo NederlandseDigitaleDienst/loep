@@ -80,6 +80,15 @@ export async function startServer(port = 0): Promise<FixtureServer> {
     if (request.method !== "GET" && request.method !== "HEAD") {
       const chunks: Buffer[] = [];
       for await (const chunk of request) chunks.push(chunk as Buffer);
+      // A search service on another host: a question is a POST, and a browser asks first whether it may send one.
+      if (request.method === "OPTIONS") {
+        response.writeHead(204, { "access-control-allow-origin": "*", "access-control-allow-methods": "POST", "access-control-allow-headers": "content-type" }).end();
+        return;
+      }
+      if (path.endsWith("/queries")) {
+        response.writeHead(200, { "content-type": "application/json", "access-control-allow-origin": "*" }).end(JSON.stringify({ results: [{ hits: [{ title: "Afvalkalender" }, { title: "Afval scheiden" }, { title: "Grofvuil" }] }] }));
+        return;
+      }
       // A write that the server passes on to another host, keeping the method.
       if (path === "/submit-redirect") {
         response.writeHead(307, { location: `${otherOrigin}/submit` }).end();

@@ -336,6 +336,20 @@ test("the PDF shows the recommendations in their own part", async (context) => {
   assert.ok(flat.includes("aanbeveling A1 van de procedure"));
 });
 
+test("the PDF names the read requests that were let through among the facts of the evaluation", async (context) => {
+  const dir = mkdtempSync(join(tmpdir(), "render-reads-"));
+  const evaluation = exampleEvaluation();
+  evaluation.chain!.reads = [{ method: "POST", origin: "https://zoek.example.nl", path: "/multi_search", service: "typesense", reasonNl: "Het zoekveld stuurt de zoekvraag naar de zoekdienst." }];
+  writeFileSync(join(dir, "evaluation.json"), canonicalJson(evaluation));
+  const result = await render(dir);
+  if (result.pdf === null) return context.skip("Typst is not installed");
+  const text = await tool("pdftotext", [result.pdf, "-"]);
+  if (!text.found) return context.skip("pdftotext is not installed");
+  const flat = text.stdout.replace(/\s+/g, " ");
+  assert.ok(flat.includes("Leesverzoeken"));
+  assert.ok(flat.includes("zoekvraag aan Typesense"), flat.slice(flat.indexOf("Leesverzoeken"), flat.indexOf("Leesverzoeken") + 400));
+});
+
 test("the PDF shows the part for what waits for sending, with the flags of inventory", async (context) => {
   const dir = mkdtempSync(join(tmpdir(), "render-not-sent-"));
   writeFileSync(join(dir, "evaluation.json"), canonicalJson(withNotSent().evaluation));
@@ -775,6 +789,11 @@ test("an evaluation is described as it was made: a judge and a verifier, both wi
   assert.ok(markdown.includes("9 van de 9 controles waren in orde en het bewijs is voldoende bevonden; 1 gat is aanvaard als eigenschap van de site."));
   assert.ok(markdown.includes("Wat de bewijspoort heeft vastgesteld:\n\n- P03: het menu opent niet met het toetsenbord."));
   assert.ok(markdown.includes("- Versturen van formulieren: Niet toegestaan: verzoeken die iets kunnen wijzigen zijn tegengehouden."));
+  // Read requests are named only when there were any, with the address and the reason.
+  assert.ok(!markdown.includes("Leesverzoeken:"));
+  const searched = withInstruments();
+  searched.chain!.reads = [{ method: "POST", origin: "https://zoek.example.nl", path: "/multi_search", service: "typesense", reasonNl: "Het zoekveld stuurt de zoekvraag naar de zoekdienst." }];
+  assert.ok(renderMarkdown(searched).includes("- Leesverzoeken: één adres is toegelaten voor leesverzoeken: POST https://zoek.example.nl/multi\\_search, zoekvraag aan Typesense (Het zoekveld stuurt de zoekvraag naar de zoekdienst). Een verzoek daarheen ging alleen door als loep de body herkende als zoekvraag aan die dienst; elk ander verzoek dat iets kan wijzigen is tegengehouden."), renderMarkdown(searched).split("\n").find((line) => line.includes("Leesverzoeken")));
   // The rule engines are the tools, by name and version; the rest gathers evidence.
   assert.ok(markdown.includes("Hulpmiddelen in de zin van de methode zijn de regel-engines axe-core 4.13.0 en Alfa 0.119.0: zij draaien op elke pagina van de steekproef."));
   assert.ok(markdown.includes("Bij 1 criterium kwam de verificatie op een andere uitkomst dan de beoordelaar"));

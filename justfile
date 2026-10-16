@@ -81,7 +81,7 @@ test:
 
 # Draai alleen de tests die geen browser starten: een paar seconden, voor tussendoor en voor de snelle controle bij een push
 test-quick:
-    cd {{toolbox}} && node --test test/compare-findings.test.ts test/contrast.test.ts test/core.test.ts test/defects.test.ts test/docs.test.ts test/estimate.test.ts test/release.test.ts test/extractors.test.ts test/feedback.test.ts test/instrument-tasks.test.ts test/render.test.ts test/sequence.test.ts test/statement.test.ts test/sweepstamp.test.ts test/timing.test.ts test/verdict.test.ts test/voiceover.test.ts
+    cd {{toolbox}} && node --test test/compare-findings.test.ts test/contrast.test.ts test/core.test.ts test/defects.test.ts test/docs.test.ts test/estimate.test.ts test/release.test.ts test/searchbody.test.ts test/extractors.test.ts test/feedback.test.ts test/instrument-tasks.test.ts test/portrait.test.ts test/render.test.ts test/sequence.test.ts test/statement.test.ts test/sweepstamp.test.ts test/timing.test.ts test/atonce.test.ts test/verdict.test.ts test/voiceover.test.ts
 
 # Controleer de types
 check:
@@ -97,7 +97,7 @@ explore url run:
     {{cli}} sample --run {{run}}
     {{cli}} explore --run {{run}}
 
-# Na de verkenner: controleer het sitemodel, trek de steekproef opnieuw (vensters van derden vallen eruit), meet alles, ook de documenten, en vraag de poort. Een tweede keer meet alleen wat veranderd is; met --fresh alles opnieuw
+# Na de verkenner: controleer het sitemodel, trek de steekproef opnieuw (vensters van derden vallen eruit), meet alles, ook de documenten, en vraag de poort. Een tweede keer meet alleen wat veranderd is; met --fresh alles opnieuw. Met --at-once <n> meet de veegronde n pagina's tegelijk, als de eigenaar van de site meer agents toestaat: nooit meer dan het sessieproces van de run toelaat, met dezelfde tijd tussen twee navigaties
 sweep run *flags:
     {{cli}} check-site --run {{run}}
     {{cli}} sample --run {{run}}
@@ -116,7 +116,7 @@ tasks run:
 status run:
     {{cli}} pending --run {{run}}
 
-# Reken de verwachte duur per onderdeel en in totaal uit, naast wat de run al heeft gemeten. Kan vanaf de inventaris en zegt halverwege wat er nog komt; schrijft niets. Met --at-once <n> voor het aantal agents tegelijk, --json voor wie verder rekent
+# Reken de verwachte duur per onderdeel en in totaal uit, naast wat de run al heeft gemeten. Kan vanaf de inventaris en zegt halverwege wat er nog komt; schrijft niets. Met --at-once <n> voor het aantal agents tegelijk en de pagina's tegelijk in de veegronde, --json voor wie verder rekent
 estimate run *flags:
     {{cli}} estimate --run {{run}} {{flags}}
 

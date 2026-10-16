@@ -8,7 +8,7 @@ import { type Manifest, stepStart, writeManifest } from "../lib/manifest.ts";
 import { TEMPLATES_DIR } from "../lib/procedures.ts";
 import { uncoveredOperables, type CountedPage } from "../lib/operables.ts";
 import { loadRun, type PageData, type RunData } from "../lib/rundata.ts";
-import { frameEntry, frameStanding, type Component } from "../lib/sitemodel.ts";
+import { frameAddress, frameEntry, frameStanding, type Component } from "../lib/sitemodel.ts";
 import { drawMarks } from "../session/marks.ts";
 import { coversContent, type Overlay } from "../session/recipe.ts";
 
@@ -162,7 +162,23 @@ export function gateChecks(run: RunData): { checks: Check[]; gaps: Gap[]; warnin
 
   // 1. Pages that did not load: what was recorded for them is an error page.
   const notFound = (page: PageData): boolean => page.item.url === run.inventory.notFoundProbe || /404/.test(page.item.reason);
-  const failed = run.pages.filter((page) => !notFound(page) && (page.item.status === null || page.item.status >= 400));
+  const loadFailed = run.pages.filter((page) => !notFound(page) && (page.item.status === null || page.item.status >= 400));
+  // An embedded window that the model names as a component nobody can operate (no recipe, with the reason) does not load for
+  // the tools either: that is the same limitation as frame-not-operated below, not a gap the explorer can close.
+  const unoperable = (page: PageData): Component | null => {
+    if (!model || page.item.kind !== "embedded") return null;
+    let address: string;
+    try {
+      address = frameAddress(page.item.url);
+    } catch {
+      return null;
+    }
+    return model.components.find((component) => component.recipe === null && component.frame !== undefined && frameAddress(component.frame) === address) ?? null;
+  };
+  const failed = loadFailed.filter((page) => !unoperable(page));
+  for (const page of loadFailed.filter((entry) => unoperable(entry))) {
+    limitations.push({ check: "frame-not-loaded", ...on(page), state: "default", missingNl: `Dit ingesloten venster gaf bij het laden ${page.item.status === null ? "geen antwoord" : `status ${page.item.status}`}. Het sitemodel noemt het als onderdeel "${unoperable(page)!.id}" dat niet te bedienen is; wat in het venster staat, is niet gemeten.`, measured: { status: page.item.status } });
+  }
   add(
     "pages-loaded",
     [

@@ -114,6 +114,99 @@ export function formPagesNl(pages: Pick<InventoryPage, "url" | "counts" | "found
   );
 }
 
+/**
+ * Where an address sits in the site: each segment of its path, then its query as one level
+ * deeper. A page with a query (`?page=2`) is thus one level below the page without.
+ */
+export function addressLevels(url: string): string[] {
+  const parsed = new URL(url);
+  const segments = parsed.pathname.split("/").filter(Boolean);
+  return parsed.search ? [...segments, parsed.search] : segments;
+}
+
+const levelKey = (levels: string[], depth: number): string => levels.slice(0, depth).join("\n");
+
+/** Record that an address was visited: every part of the site it sits in has one more page. */
+export function noteVisited(visited: Map<string, number>, url: string): void {
+  const levels = addressLevels(url);
+  for (let depth = 1; depth <= levels.length; depth++) {
+    const key = levelKey(levels, depth);
+    visited.set(key, (visited.get(key) ?? 0) + 1);
+  }
+}
+
+/**
+ * The next address to visit, so that a limit on the number of pages covers the site in its
+ * breadth. Of the candidates, the one in the part of the site (first path segment) with the
+ * fewest visited pages goes first; within that part, the one in the sub-part with the fewest,
+ * and so on down the path. A shallower address goes before a deeper one with the same counts,
+ * and the address itself decides a tie, so the order never depends on timing. A part full of
+ * tag pages or pages of a list (`/blog/tag/x/page/2`) thus gets its turn like any other part,
+ * instead of filling the limit because its addresses come first in the alphabet.
+ */
+export function nextAddress(candidates: Iterable<string>, visited: Map<string, number>): string | undefined {
+  let best: { url: string; counts: number[] } | undefined;
+  for (const url of candidates) {
+    const levels = addressLevels(url);
+    const counts = levels.map((_, index) => visited.get(levelKey(levels, index + 1)) ?? 0);
+    const order = best === undefined ? -1 : compareCounts(counts, best.counts) || (url < best.url ? -1 : 1);
+    if (order < 0) best = { url, counts };
+  }
+  return best?.url;
+}
+
+function compareCounts(a: number[], b: number[]): number {
+  for (let index = 0; index < Math.min(a.length, b.length); index++) if (a[index] !== b[index]) return a[index]! - b[index]!;
+  return a.length - b.length;
+}
+
+/** The reason recorded for an address left out because the limit on pages was reached. */
+export const pageLimitReason = (maxPages: number): string => `page limit of ${maxPages} reached`;
+
+/** The part of the site an address belongs to, as `pageLimitNl` names it: the first path segment, or the origin of another site. */
+function sectionOf(url: string, origin: string): string {
+  const parsed = new URL(url);
+  if (parsed.origin !== origin) return parsed.origin;
+  const first = parsed.pathname.split("/").filter(Boolean)[0];
+  return first === undefined ? "/" : `/${first}`;
+}
+
+/** At most this many parts of the site are named one by one in the warning about the limit. */
+const SECTIONS_NAMED = 12;
+
+/**
+ * Said right after the inventory when the limit on pages was reached: per part of the site how
+ * many pages were visited and how many were left out. What is left out never reaches the sample,
+ * and the line with the totals does not say which part is missing. Null when the limit was not reached.
+ */
+export function pageLimitNl(found: Pick<Inventory, "origin" | "notFoundProbe" | "pages" | "skipped">, maxPages: number): string | null {
+  const omitted = found.skipped.filter((entry) => entry.reason === pageLimitReason(maxPages));
+  if (omitted.length === 0) return null;
+  const sections = new Map<string, { visited: number; omitted: number }>();
+  const count = (url: string, field: "visited" | "omitted"): void => {
+    const section = sectionOf(url, found.origin);
+    const entry = sections.get(section) ?? { visited: 0, omitted: 0 };
+    entry[field]++;
+    sections.set(section, entry);
+  };
+  for (const entry of found.pages) if (entry.url !== found.notFoundProbe) count(entry.url, "visited");
+  for (const entry of omitted) count(entry.url, "omitted");
+  const ranked = [...sections.entries()].sort(([a, x], [b, y]) => y.visited + y.omitted - (x.visited + x.omitted) || a.localeCompare(b));
+  const named = ranked.slice(0, SECTIONS_NAMED);
+  const width = Math.max(...named.map(([section]) => section.length));
+  const lines = named.map(([section, entry]) => `  ${section.padEnd(width)}  ${String(entry.visited).padStart(4)} bezocht, ${String(entry.omitted).padStart(4)} weggelaten`);
+  const rest = ranked.slice(SECTIONS_NAMED);
+  if (rest.length > 0) {
+    const sum = (field: "visited" | "omitted"): number => rest.reduce((total, [, entry]) => total + entry[field], 0);
+    lines.push(`  en ${rest.length} ${rest.length === 1 ? "ander gedeelte" : "andere gedeelten"}: samen ${sum("visited")} bezocht, ${sum("omitted")} weggelaten`);
+  }
+  return [
+    `LET OP: de grens van ${maxPages} pagina's (--max-pages) is bereikt. ${omitted.length === 1 ? "Eén gevonden pagina is" : `${omitted.length} gevonden pagina's zijn`} niet bezocht, en wat alleen via die pagina's te vinden is, ontbreekt ook in deze telling. De bezochte pagina's zijn over de gedeelten van de site verdeeld. Per gedeelte (het eerste deel van het pad):`,
+    ...lines,
+    "Wat niet is bezocht, komt niet in de steekproef. Ontbreekt een gedeelte dat erbij hoort, of is het aandeel van een gedeelte veel kleiner dan op de site, begin dan opnieuw met inventory in een nieuwe map, met een hogere --max-pages of met --urls.",
+  ].join("\n");
+}
+
 export function parseSitemap(xml: string): string[] {
   return [...xml.matchAll(/<loc>\s*([^<\s]+)\s*<\/loc>/g)].map((match) => match[1]!.replaceAll("&amp;", "&"));
 }
@@ -294,9 +387,13 @@ export async function inventory(options: InventoryOptions): Promise<Inventory> {
   const logoutLinks = new Set<string>();
   try {
     await confirmLogin(browser);
-    // Sorted breadth-first: the visiting order never depends on timing.
+    // Pages visited per part of the site: the next address comes from the part with the fewest (see nextAddress).
+    const visited = new Map<string, number>();
+    let limitReached = false;
     for (;;) {
-      const next = [...foundVia.keys()].filter((url) => !done.has(url)).sort()[0];
+      const open = [...foundVia.keys()].filter((url) => !done.has(url));
+      // Once the limit is reached, what is left is only sorted out (documents, skipped), and the order no longer matters.
+      const next = pages.length >= options.maxPages ? open.sort()[0] : nextAddress(open, visited);
       if (next === undefined) break;
       done.add(next);
       // A link that logs out is never followed: it would end the session for every page after it.
@@ -324,9 +421,12 @@ export async function inventory(options: InventoryOptions): Promise<Inventory> {
         continue;
       }
       if (pages.length >= options.maxPages) {
-        skipped.push({ url: next, reason: `page limit of ${options.maxPages} reached` });
+        if (!limitReached) process.stderr.write(`inventory: grens van ${options.maxPages} pagina's bereikt; de andere gevonden pagina's worden niet bezocht\n`);
+        limitReached = true;
+        skipped.push({ url: next, reason: pageLimitReason(options.maxPages) });
         continue;
       }
+      noteVisited(visited, next);
       try {
         const result = await inspect(page, next, next !== notFoundProbe, downloads.has(next));
         if ("document" in result) {

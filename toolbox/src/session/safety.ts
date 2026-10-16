@@ -1,9 +1,11 @@
 import { createWriteStream, existsSync } from "node:fs";
 import { join } from "node:path";
 import type { BrowserContext, CDPSession, Frame, Page } from "playwright";
-import { passWrite } from "../browser/session.ts";
+import { bodyOf, passOn, passWrite } from "../browser/session.ts";
 import { readJson } from "../lib/canonical.ts";
 import { loginCookieHeader, logsOut } from "../lib/login.ts";
+import { readDecision, readRuleFor, type ReadRequest } from "../lib/reads.ts";
+import { searchServicesOf, type SearchServiceId } from "../lib/searchbody.ts";
 import { isWriteOrigin, runWrites, writeAccess, writesForRun, type PassedWrite, type WriteAccess } from "../lib/writes.ts";
 
 /** Limits of the process that holds the browser; set once, when it starts. */
@@ -79,6 +81,10 @@ export interface Blocked {
   method: string;
   url: string;
   resourceType: string;
+  /** For a request with a body: the search services whose question the body has the form of. Absent when none. */
+  search?: SearchServiceId[];
+  /** Why a request that a read request covered was held back. */
+  reasonNl?: string;
 }
 
 /** Resource types a page needs to look the way it does. Fetched with GET only, also from hosts outside the scope unless the scope is strict. */
@@ -91,6 +97,18 @@ export interface Guard {
   outsideScopeLoaded: Record<string, number>;
   /** Writes that were let through to the test environment; absent until the first one. */
   passed?: PassedWrite[];
+  /** Read requests of the site model that were let through, without their body; absent until the first one. */
+  reads?: PassedRead[];
+}
+
+export interface PassedRead {
+  at: string;
+  method: string;
+  url: string;
+  /** Id of the rule in the site model that let it through. */
+  rule: string;
+  /** The search service the body was recognised as. */
+  service: SearchServiceId;
 }
 
 const inScope = (scope: Scope, url: string): boolean => {
@@ -107,11 +125,13 @@ export const urlInScope = inScope;
 /**
  * Everything a session page may not do, enforced where requests leave the browser: no
  * method other than GET or HEAD, nothing to a host outside the scope, and no message over
- * a WebSocket. Each refusal is recorded. The one exception is the origin of a test environment
+ * a WebSocket. Each refusal is recorded. One exception is the origin of a test environment
  * that the run was given at inventory: writes and socket messages to it pass, and each is
- * recorded too. Registered after the context's own routes, so it decides first.
+ * recorded too. The other is a read request of a checked site model: exactly that method,
+ * origin and path, also on a host outside the scope, recorded as a read. Registered after the
+ * context's own routes, so it decides first.
  */
-export async function guardContext(context: BrowserContext, scope: Scope, guard: Guard): Promise<void> {
+export async function guardContext(context: BrowserContext, scope: Scope, guard: Guard, reads: readonly ReadRequest[] = []): Promise<void> {
   const note = (kind: Blocked["kind"], method: string, url: string, resourceType: string): void => {
     guard.blocked.push({ at: new Date().toISOString(), kind, method, url: url.slice(0, MAX_URL), resourceType });
   };
@@ -128,12 +148,25 @@ export async function guardContext(context: BrowserContext, scope: Scope, guard:
       return refuse();
     }
     if (method !== "GET" && method !== "HEAD") {
+      const body = bodyOf(request);
+      const read = readDecision(reads, method, url, request.headers(), body);
+      if (read?.pass) {
+        (guard.reads ??= []).push({ at: new Date().toISOString(), method, url: url.slice(0, MAX_URL), rule: read.rule.id, service: read.rule.service });
+        // Repeated only to an address a rule of the same service covers; otherwise followed only inside the scope or on the origin of the rule.
+        return passOn(route, (target) => readRuleFor(reads, method, target)?.service === read.rule.service, (target) => inScope(scope, target) || target.startsWith(`${read.rule.origin}/`)).then(() => undefined);
+      }
+      if (read) {
+        guard.blocked.push({ at: new Date().toISOString(), kind: "method", method, url: url.slice(0, MAX_URL), resourceType: type, reasonNl: read.reasonNl });
+        return refuse();
+      }
       if (isWriteOrigin(scope.writes, url)) {
         (guard.passed ??= []).push(scope.writes!.record(method, url));
         // Where the server sends the browser next is not asked here again: it has to be inside the scope.
         return passWrite(route, scope.writes!, (target) => inScope(scope, target)).then((repeated) => void (repeated && (guard.passed ??= []).push(scope.writes!.record(method, repeated))));
       }
-      note("method", method, url, type);
+      // Whether the body has the form of a search: what the explorer needs to record a read request, never the body itself.
+      const search = method === "POST" ? searchServicesOf(body) : [];
+      guard.blocked.push({ at: new Date().toISOString(), kind: "method", method, url: url.slice(0, MAX_URL), resourceType: type, ...(search.length > 0 ? { search } : {}) });
       return refuse();
     }
     if (inScope(scope, url)) return route.continue();

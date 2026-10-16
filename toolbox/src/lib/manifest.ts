@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { RENDERING } from "../browser/session.ts";
 import { readJson, sha256, writeJson } from "./canonical.ts";
 import type { LoginMark } from "./login.ts";
+import type { ReadRequest } from "./reads.ts";
 import type { WritePermission } from "./writes.ts";
 
 const TOOLBOX_ROOT = fileURLToPath(new URL("../..", import.meta.url));
@@ -35,6 +36,8 @@ export interface Manifest {
   writes?: WritePermission;
   /** Set by `login` when a person logged in for this run: the role and what tells a logged-in page from the login screen. Never the session itself. */
   login?: LoginMark;
+  /** Set by `check-site` when the site model names read requests: the POST requests, such as a question to a search service, that were let through. */
+  reads?: ReadRequest[];
 }
 
 function git(root: string, ...args: string[]): string | null {
@@ -104,6 +107,7 @@ export async function writeManifest(runDir: string, step: Omit<ManifestStep, "at
     ...(previous?.tools ? { tools: previous.tools } : {}),
     ...(previous?.writes ? { writes: previous.writes } : {}),
     ...(previous?.login ? { login: previous.login } : {}),
+    ...(previous?.reads ? { reads: previous.reads } : {}),
   };
   await writeJson(path, manifest);
 }

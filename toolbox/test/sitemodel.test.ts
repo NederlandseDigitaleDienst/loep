@@ -152,6 +152,25 @@ test("the validator refuses a model that does not fit the run", () => {
   assert.ok(validateSiteModel({ ...validModel(), extra: 1 }, CONTEXT).includes('onbekend veld "extra"'));
 });
 
+test("the validator tests a read request: narrow, seen held back in its observation, and not also a request a component misses", () => {
+  const read = { id: "zoekdienst", method: "POST" as const, origin: "https://zoek.example.nl", path: "/multi_search", service: "typesense" as const, reasonNl: "De zoekvraag van het zoekveld gaat naar de zoekdienst en wijzigt niets.", observation: "verken-0003" };
+  const context: ModelContext = { ...CONTEXT, requestsSeen: { "verken-0003": [{ method: "POST", url: "https://zoek.example.nl/multi_search?x-typesense-api-key=abc", search: ["typesense"] }] } };
+  assert.deepEqual(validateSiteModel({ ...validModel(), readRequests: [read] }, context), []);
+  const problems = (model: SiteModel, given = context): string[] => validateSiteModel(model, given);
+  assert.match(problems({ ...validModel(), readRequests: [{ ...read, path: "/*" }] }).join(" | "), /eindigt op een jokerteken/);
+  assert.match(problems({ ...validModel(), readRequests: [{ ...read, observation: "verken-0099" }] }).join(" | "), /waarneming verken-0099 bestaat niet/);
+  assert.match(problems({ ...validModel(), readRequests: [read] }, { ...context, requestsSeen: { "verken-0003": [{ method: "POST", url: "https://zoek.example.nl/elders" }] } }).join(" | "), /in waarneming verken-0003 is geen POST naar https:\/\/zoek\.example\.nl\/multi_search tegengehouden/);
+  // The body of the request in that observation has to have the form of the service the rule names.
+  assert.match(problems({ ...validModel(), readRequests: [read] }, { ...context, requestsSeen: { "verken-0003": [{ method: "POST", url: "https://zoek.example.nl/multi_search", search: [] }] } }).join(" | "), /loep herkende de body van dat verzoek in waarneming verken-0003 niet als zoekvraag aan typesense; een verzoek waarvan loep de body niet herkent, blijft tegengehouden/);
+  assert.match(problems({ ...validModel(), readRequests: [{ ...read, service: "graphql" }] }).join(" | "), /niet als zoekvraag aan graphql \(wel als typesense\)/);
+  assert.match(problems({ ...validModel(), readRequests: [read, { ...read, id: "nog-een" }] }).join(" | "), /staat twee keer in readRequests/);
+  assert.match(problems({ ...validModel(), readRequests: [{ ...read, id: "menu" }] }).join(" | "), /id "menu" komt twee keer voor/);
+  const missing = validModel();
+  missing.components[1] = { ...missing.components[1]!, blockedRequests: [{ method: "POST", address: "zoek.example.nl/multi_search" }] };
+  assert.match(problems({ ...missing, readRequests: [read] }).join(" | "), /onderdeel "kaart" noemt POST zoek\.example\.nl\/multi_search onder blockedRequests, maar readRequests\[0\] laat dat verzoek door/);
+  assert.match(problems({ ...validModel(), readRequests: {} as never }).join(" | "), /readRequests is een lijst/);
+});
+
 const inventoryPage = (url: string, foundVia: string[], contentHash = url): InventoryPage => ({ url, slug: url.replace(/\W+/g, "-"), status: 200, title: url, lang: "nl", templateHash: "t", contentHash, foundVia, counts: {} });
 
 test("a site model from before the description was asked still loads, and gives no description", async () => {
@@ -346,6 +365,17 @@ test("the gate flags pages that did not load and frames that are counted as page
   assert.deepEqual(names(gateRun(one)), [], "one embedded player among five pages is content");
   // With a site model the question is whether each frame was classified.
   assert.deepEqual(names(gateRun(one, { siteModel: { ...validModel(), frames: [] }, siteStates: { siteSha256: "", seeded: { blockers: [], cookies: 0, storedValues: 0 }, dismissals: [], states: [] } })), ["frames-as-pages:P1"]);
+});
+
+test("a frame the model names as a component nobody can operate is a limitation when it does not load, not a gap", () => {
+  const pages = [gatePage("P1", "https://video.example/embed/abc?h=1", { kind: "embedded", links: 0, status: 403 }), ...["a", "b", "c", "d"].map((path, index) => gatePage(`P${index + 2}`, `https://site.nl/${path}`))];
+  const states = { siteSha256: "", seeded: { blockers: [], cookies: 0, storedValues: 0 }, dismissals: [], states: [] };
+  const player = { id: "speler", type: "other", descriptionNl: "Videospeler", pageTypes: ["start"], viewport: null, frame: "https://video.example/embed/abc", recipe: null, postcondition: null, notOpenedNl: "Een controle tegen robots wordt tegengehouden.", blockedRequests: ["POST video.example/challenge"] };
+  const withPlayer = gateChecks(gateRun(pages, { siteModel: { ...validModel(), components: [...validModel().components, player] } as unknown as SiteModel, siteStates: states }));
+  assert.deepEqual(withPlayer.gaps.filter((gap) => gap.check === "pages-loaded"), []);
+  assert.deepEqual(withPlayer.limitations.filter((gap) => gap.check === "frame-not-loaded").map((gap) => gap.page), ["P1"]);
+  // Without that entry the frame that did not load is still a gap: the explorer can describe it.
+  assert.deepEqual(names(gateRun(pages, { siteModel: validModel(), siteStates: states })).filter((name) => name.startsWith("pages-loaded")), ["pages-loaded:P1"]);
 });
 
 test("the gate flags components that did not open, a blocker that stayed and something that covers most pages", () => {

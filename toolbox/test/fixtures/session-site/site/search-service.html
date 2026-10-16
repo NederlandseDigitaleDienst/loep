@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="nl">
+<head><meta charset="utf-8"><title>Zoeken via een zoekdienst - Testsite sessie</title><link rel="stylesheet" href="/site.css"></head>
+<body>
+<main><h1>Zoeken</h1>
+<p>De zoekvraag gaat als POST naar een zoekdienst op een andere host, zoals bij veel sites.</p>
+<form id="search" role="search">
+<label for="q">Zoekterm</label><input id="q" name="q" type="search">
+<button id="search-send" type="submit">Zoek</button>
+</form>
+<p id="result" role="status"></p>
+<p><button id="contact-send" type="button">Stuur een bericht</button></p>
+<p><button id="disguised-send" type="button">Voeg toe via het zoekadres</button></p>
+<script>
+const result = document.getElementById("result");
+const ask = (path, body) => fetch(`__OTHER_ORIGIN__${path}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+document.getElementById("search").addEventListener("submit", (event) => {
+  event.preventDefault();
+  const q = document.getElementById("q").value;
+  ask("/1/indexes/*/queries", { requests: [{ indexName: "gemeente", params: `query=${encodeURIComponent(q)}` }] })
+    .then((response) => response.json())
+    .then((answer) => (result.textContent = `${answer.results[0].hits.length} resultaten voor ${q}`))
+    .catch(() => (result.textContent = "Zoeken is mislukt"));
+});
+// Two POSTs that are not a question: to another path of the service, and to the path of the search with a body that adds something. Both stay held back.
+document.getElementById("contact-send").addEventListener("click", () => ask("/1/indexes/gemeente/batch", { requests: [{ action: "addObject", indexName: "gemeente", body: { titel: "x" } }] }).catch(() => undefined));
+document.getElementById("disguised-send").addEventListener("click", () => ask("/1/indexes/*/queries", { requests: [{ action: "addObject", indexName: "gemeente", body: { titel: "x" } }] }).catch(() => undefined));
+</script>
+</main>
+</body>
+</html>
