@@ -25,6 +25,7 @@ import {
 } from "../lib/verdict.ts";
 import { CRITERIA, criterionById } from "../lib/wcag.ts";
 import { agentLoginNl } from "../lib/login.ts";
+import { readsAllowedNl } from "../lib/reads.ts";
 import { WRITES_BLOCKED_NL, writesAllowedNl, writesForRun } from "../lib/writes.ts";
 import { sweepCandidates } from "../lib/statusmessages.ts";
 import { makeWorkDir } from "../lib/workdir.ts";
@@ -365,7 +366,8 @@ export async function instrumentTasks(runDir: string, options: TaskOptions = {})
   const insert = (template: string): string => Object.entries(includes).reduce((text, [key, file]) => text.replace(`{{${key}}}`, () => readFileSync(join(TEMPLATES_DIR, file), "utf8").trim()), template);
   const templates = Object.fromEntries(["rondgang", "beoordeel", "verifieer", "afmaak"].map((name) => [name, insert(readFileSync(join(TEMPLATES_DIR, `${name}.md`), "utf8"))])) as Record<"rondgang" | "beoordeel" | "verifieer" | "afmaak", string>;
   const base = { run: absoluteRun, cli, siteModel: join(absoluteRun, "site.json"), login: agentLoginNl(run.login) };
-  const writesNl = run.writes ? `ja, ${writesAllowedNl(run.writes)}` : `nee, ${WRITES_BLOCKED_NL}`;
+  const readsNl = readsAllowedNl(run.reads ?? []);
+  const writesNl = `${run.writes ? `ja, ${writesAllowedNl(run.writes)}` : `nee, ${WRITES_BLOCKED_NL}`}${readsNl ? `. Wel gaat door: ${readsNl} (in het dossier onder \`reads\`)` : ""}`;
   const criteriaList = CRITERIA.filter((criterion) => procedures.some((procedure) => procedure.id === criterion.id)).map((criterion) => `${criterion.id} ${criterion.titleNl}`).join("\n");
   const recipes = await readRecipes(runDir);
   const observations = loadObservations(runDir);

@@ -403,6 +403,8 @@ export class Daemon {
     session.blockedTotal += blocked.length;
     // What went through to a test environment where the run may write; nothing on any other site.
     const written = surface?.guard.passed?.splice(0) ?? [];
+    // Read requests of the site model that went through, such as a question to a search service.
+    const read = surface?.guard.reads?.splice(0) ?? [];
     const after = stateOf(surface);
     const observation: Observation = {
       id,
@@ -421,6 +423,7 @@ export class Daemon {
       images: await images.hashed(),
       blocked,
       ...(written.length > 0 ? { writes: written } : {}),
+      ...(read.length > 0 ? { reads: read } : {}),
       popups: surface ? surface.popups.splice(0) : [],
       alerts: surface ? surface.alerts.splice(0) : [],
       error,
@@ -431,7 +434,8 @@ export class Daemon {
     // The words a finding needs to say where the element is, ready to copy.
     if (!error && turn.target && (turn.target.heading || turn.target.around || turn.target.frame)) print.place = { ...(turn.target.frame ? { frame: sayFrame(turn.target.frame) } : {}), ...(turn.target.heading ? { heading: turn.target.heading } : {}), ...(turn.target.around ? { text: turn.target.around } : {}) };
     if (written.length > 0) print.written = [...written.slice(0, MAX_BLOCKED_PRINTED).map((entry) => `${entry.method} ${entry.path.slice(0, 100)}`), ...(written.length > MAX_BLOCKED_PRINTED ? [`(+${written.length - MAX_BLOCKED_PRINTED})`] : [])];
-    if (blocked.length > 0) print.blocked = [...blocked.slice(0, MAX_BLOCKED_PRINTED).map((entry) => `${entry.kind}: ${entry.method} ${entry.url.slice(0, 100)}`), ...(blocked.length > MAX_BLOCKED_PRINTED ? [`(+${blocked.length - MAX_BLOCKED_PRINTED})`] : [])];
+    if (read.length > 0) print.read = [...read.slice(0, MAX_BLOCKED_PRINTED).map((entry) => `${entry.method} ${entry.url.slice(0, 100)} (leesverzoek ${entry.rule})`), ...(read.length > MAX_BLOCKED_PRINTED ? [`(+${read.length - MAX_BLOCKED_PRINTED})`] : [])];
+    if (blocked.length > 0) print.blocked = [...blocked.slice(0, MAX_BLOCKED_PRINTED).map((entry) => `${entry.kind}: ${entry.method} ${entry.url.slice(0, 100)}${entry.search ? ` (zoekvraag: ${entry.search.join(", ")})` : ""}${entry.reasonNl ? ` (${entry.reasonNl})` : ""}`), ...(blocked.length > MAX_BLOCKED_PRINTED ? [`(+${blocked.length - MAX_BLOCKED_PRINTED})`] : [])];
     if (observation.popups.length > 0) print.popups = observation.popups;
     if (observation.alerts.length > 0) print.alerts = observation.alerts.map((alert) => `${alert.type}: ${alert.message.slice(0, 80)}`);
     // From 80 percent on every answer says so, in one line: the agent reads answers, not its status.

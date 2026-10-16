@@ -4,6 +4,8 @@ import type { Browser, BrowserContext, ElementHandle, Frame, Page, Response } fr
 import { frameAsPage, frameRecord } from "../browser/frame.ts";
 import { INPAGE_PATH, loadPage, newContext, settlePage, type LoadResult } from "../browser/session.ts";
 import { LOGOUT_REFUSED_NL, logsOut } from "../lib/login.ts";
+import { setRunReads, type ReadRequest } from "../lib/reads.ts";
+import { approvedReads } from "../lib/sitemodel.ts";
 import { canonicalJson, sha256 } from "../lib/canonical.ts";
 import type { FrameTarget, Locators, PageRecord, StartState, StateRecord, Step, TargetRecord } from "./observations.ts";
 import { guardContext, guardRedirects, guardRedirectsByRoute, urlInScope, type Blocked, type DaemonLimits, type Guard, type Politeness, type Scope } from "./safety.ts";
@@ -22,6 +24,8 @@ export interface Env {
   scope: Scope;
   politeness: Politeness;
   limits: DaemonLimits;
+  /** The read requests a page may send; left out, those of a site model that passed `check-site` (see `approvedReads`). */
+  reads?: ReadRequest[];
 }
 
 export interface TargetInfo extends TargetRecord {
@@ -117,10 +121,13 @@ export async function openSurface(env: Env, start: StartState, onContext?: (cont
   }
   // In a run with a login an address that logs out is not opened: say so in words, before a browser is asked.
   if (logsOut(start.url)) throw new Refused(`${start.url}: ${LOGOUT_REFUSED_NL}`, [{ at: new Date().toISOString(), kind: "logout", method: "GET", url: start.url.slice(0, 300), resourceType: "document" }]);
-  const context = await newContext(env.browser, { viewport: { width: start.width, height: start.height }, colorScheme: start.scheme });
+  const reads = env.reads ?? approvedReads(env.runDir);
+  // The instruments in this process read the same rules: a search that went through is no submission that was held back.
+  setRunReads(reads);
+  const context = await newContext(env.browser, { viewport: { width: start.width, height: start.height }, colorScheme: start.scheme, reads });
   onContext?.(context);
   try {
-    await guardContext(context, env.scope, guard);
+    await guardContext(context, env.scope, guard, reads);
     await context.addInitScript({ content: INPAGE_SOURCE });
     await context.addInitScript({ content: SESSION_INPAGE_SOURCE });
     const page = await context.newPage();

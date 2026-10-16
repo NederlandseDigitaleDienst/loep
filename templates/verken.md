@@ -80,7 +80,7 @@ Doe de stappen in deze volgorde.
 
 Voor elk onderdeel: begin met een verse `open`, doe de handeling, lees in het antwoord of er iets veranderde, en bewaar: `state save component-<id>`. Staat hetzelfde onderdeel op meer paginatypen (het hoofdmenu), leg het dan één keer vast en noem alle typen in `pageTypes`. Vindt het gereedschap het element van een stap bij het afspelen niet terug via de selector (een id dat bij elke lading anders is), dan zoekt het zelf verder op rol, naam en plek; je hoeft daarvoor geen Tab-tellingen te gebruiken.
 
-Laadt een onderdeel zijn inhoud met een verzoek dat het gereedschap tegenhoudt (het antwoord van een commando noemt het onder `blocked`, bijvoorbeeld `method: POST ...admin-ajax.php`, of een adres buiten de site), leg dat dan vast bij het onderdeel in `blockedRequests`, met `method` en `address` (host en pad, zonder query). Zo'n onderdeel is niet te onderzoeken en dat moet in het rapport komen.
+Laadt een onderdeel zijn inhoud met een verzoek dat het gereedschap tegenhoudt (het antwoord van een commando noemt het onder `blocked`, bijvoorbeeld `method: POST ...admin-ajax.php`, of een adres buiten de site), leg dat dan vast bij het onderdeel in `blockedRequests`, met `method` en `address` (host en pad, zonder query). Zo'n onderdeel is niet te onderzoeken en dat moet in het rapport komen. Een zoekvraag aan een zoekdienst is de uitzondering: die leg je vast als leesverzoek (stap 4).
 
 **Stap 2b. Wat er zonder handeling al beweegt of speelt.** Leg per paginatype in `content` vast: elke video (`video`), elk geluidsfragment (`audio`), elk blok dat vanzelf wisselt, schuift of telt (`moving`, bijvoorbeeld een carrousel die doorloopt of een nieuwsblok dat rouleert) en elke kaart (`map`). Kijk daarvoor twee keer met een paar seconden ertussen (`look`, wachten, `look`): wat verschilt, beweegt vanzelf. Een speler in een ingesloten venster deel je daarnaast in bij de vensters (stap 5). Deze inhoud krijgt geen recept.
 
@@ -90,7 +90,9 @@ Laadt een onderdeel zijn inhoud met een verzoek dat het gereedschap tegenhoudt (
 
 Een onderdeel dat alleen tussen twee van die breedtes bestaat, open je op een breedte waar het in beeld staat, neem je daar op en leg je vast met `minWidth` en `maxWidth`.
 
-**Stap 4. Processen.** Heeft de site een zoekfunctie: typ de vaste zoekwaarde (`type <ref> search`), druk op Enter en bewaar de toestand op de resultaatpagina (`state save process-zoeken`). Een keuzelijst bedien je met `select <ref> <optietekst>`; zegt het antwoord dat het geen echte keuzelijst is, gebruik dan `click` en `key`. Heeft de site een formulier: vul één of twee velden in met vaste testwaarden, verstuur niet, en bewaar (`state save process-<id>`). Eén proces per soort.
+**Stap 4. Processen.** Heeft de site een zoekfunctie: typ de vaste zoekwaarde (`type <ref> search`), druk op Enter en bewaar de toestand op de resultaatpagina (`state save process-zoeken`).
+
+Verschijnen er geen resultaten, kijk dan onder `blocked` in het antwoord van Enter (of van de zoekknop). Staat daar een `method: POST` met `(zoekvraag: <dienst>)` erachter, dan herkende loep de body van dat verzoek als zoekvraag aan een bekende zoekdienst (`typesense`, `algolia`, `elasticsearch`, `meilisearch` of `graphql` met alleen query's) en houdt het gereedschap haar tegen omdat ze als POST gaat. Een zoekvraag wijzigt niets. Leg haar vast in `readRequests` (zie de vorm hieronder), met die dienst in `service` en het `id` uit het antwoord. Leg het zoekproces voorlopig vast met een postconditie `value` op het zoekveld en draai de controle van stap 7. Slaagt die, dan gaat de zoekvraag vanaf de volgende `open` door, telkens alleen als loep de body opnieuw als zoekvraag aan die dienst herkent. Neem het zoekproces dan opnieuw op met de resultaten in beeld, kies een postconditie die alleen met resultaten geldt, en controleer opnieuw. Staat er geen `(zoekvraag: ...)` achter het verzoek, dan herkent loep de body niet, en dan kun jij het niet toelaten, ook niet als het pad op zoeken lijkt: leg het vast in `blockedRequests` bij het onderdeel en schrijf in `notesNl` dat zoeken via een POST gaat die loep niet herkent. Versturen van een formulier blijft verboden. Een keuzelijst bedien je met `select <ref> <optietekst>`; zegt het antwoord dat het geen echte keuzelijst is, gebruik dan `click` en `key`. Heeft de site een formulier: vul één of twee velden in met vaste testwaarden, verstuur niet, en bewaar (`state save process-<id>`). Eén proces per soort.
 
 **Stap 5. Vensters indelen.** Een ingesloten venster is voor de bezoeker deel van de pagina. Of het meetelt in het onderzoek, hangt af van wie er zeggenschap over heeft. Deel elk adres uit `frames` in bij één soort (`class`) en schrijf in `reasonNl` in gewone woorden waarom: wie het rapport tekent, leest die reden en kan je keuze omkeren.
 
@@ -141,7 +143,10 @@ Meldt ze problemen, herstel ze en controleer opnieuw; laat de sessie daarbij ope
   "frames": [
     { "address": "https://www.google.com/recaptcha/api2/anchor", "class": "vendor-component", "descriptionNl": "reCAPTCHA bij het contactformulier", "reasonNl": "De gemeente heeft deze controle gekozen en een bezoeker moet haar doorlopen om het formulier te versturen." }
   ],
-  "notesNl": ["Het donkere kleurenschema is op twee van de vijf paginatypen bekeken."]
+  "notesNl": ["Het donkere kleurenschema is op twee van de vijf paginatypen bekeken."],
+  "readRequests": [
+    { "id": "zoekdienst", "method": "POST", "origin": "https://zoek.voorbeeld.nl", "path": "/multi_search", "service": "typesense", "reasonNl": "Het zoekveld stuurt de zoekvraag naar de zoekdienst, die alleen resultaten teruggeeft.", "observation": "verken-0042" }
+  ]
 }
 ```
 
@@ -151,6 +156,7 @@ Meldt ze problemen, herstel ze en controleer opnieuw; laat de sessie daarbij ope
 - `viewport`: `null` als het onderdeel op elke breedte bestaat; anders `maxWidth`, `minWidth` of beide, in pixels. Het recept is bewaard op een breedte die daarbij past.
 - `address` van een venster: het adres zonder alles vanaf het vraagteken, zoals in `frames` van het contextbestand.
 - `class` en `reasonNl` van een venster: de soort uit stap 5 en de reden in één of twee zinnen. `decidedBy` vul je niet in: dat veld is voor een persoon die de soort zelf bepaalt.
+- `readRequests`: alleen voor een zoekvraag die als POST gaat (stap 4); geen zoekvraag gezien, laat het veld dan weg. `method` is altijd `POST`. `origin` is schema, host en poort van het tegengehouden adres, zonder schuine streep aan het eind. `path` is het pad zonder query, letterlijk overgenomen. Heeft het pad een deel dat per zoekopdracht wisselt, zoals de naam van een index, dan mag dat ene deel `*` zijn, maar nooit het laatste deel. `service` is de dienst die het antwoord achter het verzoek noemde (`zoekvraag: <dienst>`). `observation` is het `id` uit dat antwoord. `reasonNl` zegt in een hele zin wat het verzoek vraagt en waarom het niets wijzigt. De controle weigert een pad dat op iets anders wijst dan lezen (zoals `batch`, `update`, `delete`, `contact` of `track`), en een waarneming waarin het verzoek niet is tegengehouden of waarin loep de body niet als zoekvraag aan die dienst herkende. Staat hetzelfde verzoek ook in `blockedRequests` van een onderdeel, haal het daar dan weg.
 - Lege lijsten mogen. Geen blokkade gevonden: `"blockers": []`.
 
 ### Postcondities

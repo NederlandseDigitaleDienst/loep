@@ -6,6 +6,7 @@ import { signatureIsCurrent } from "../commands/sign.ts";
 import { extensionsNl } from "./budget.ts";
 import { modelsNl } from "./models.ts";
 import { NOT_SENT, notSentOrigins, OPEN_POINT_KINDS, openPoint, waitsOnlyOnSending, type Outcome } from "./verdict.ts";
+import { readsAllowedNl } from "./reads.ts";
 import { compareCriterionIds, type WcagVersion } from "./wcag.ts";
 
 /**
@@ -172,6 +173,8 @@ export interface ChainText {
   stepsNl: { nameNl: string; textNl: string }[];
   /** Whether forms could be submitted; null when the evaluation does not say. */
   writesNl: string | null;
+  /** Which POST requests that only read were let through, such as a question to a search service; null when there were none. */
+  readsNl: string | null;
   challengeLabel: string;
   droppedLabel: string;
   verification: { reproduced: string; unverified: string; repeated: string };
@@ -609,6 +612,7 @@ function chainText(evaluation: Evaluation): ChainText {
       ...(evaluation.defects ? [{ nameNl: "Samenvoegen", textNl: "Bevindingen over dezelfde plek worden één gebrek. De bevindingen en de uitkomst per criterium blijven zoals ze zijn." }] : []),
     ],
     writesNl: evaluation.chain ? (evaluation.chain.writes.allowed ? `Toegestaan: ${evaluation.chain.writes.noteNl}.` : `Niet toegestaan: ${evaluation.chain.writes.noteNl}.`) : null,
+    readsNl: evaluation.chain?.reads && evaluation.chain.reads.length > 0 ? `${readsAllowedNl(evaluation.chain.reads)}.` : null,
     challengeLabel: "Poging om het oordeel onderuit te halen",
     droppedLabel: "Vervallen bij de verificatie",
     verification: { reproduced: "Bij de controle bevestigd", unverified: "Toegevoegd door de verificatie, één keer gezien", repeated: "Uit de afmaakronde, twee keer gezien door dezelfde agent" },
@@ -1261,6 +1265,7 @@ export function renderMarkdown(input: Evaluation): string {
       `Uitgevoerd door: ${REPORT_TEXT.performedBy.toLowerCase()}`,
       ...(derived.followsUpNl ? [`${REPORT_TEXT.followsUp}: ${derived.followsUpNl}`] : []),
       ...(derived.chain.writesNl ? [`Versturen van formulieren: ${esc(derived.chain.writesNl)}`] : []),
+      ...(derived.chain.readsNl ? [`Leesverzoeken: ${esc(derived.chain.readsNl)}`] : []),
       signature ? `Afgetekend door: ${esc(signature.name)}, ${esc(signature.role)}, ${esc(signature.organisation)}, op ${derived.signedDateNl}` : `Afgetekend door: ${REPORT_TEXT.notSigned.toLowerCase()}${staleNote ? `.${staleNote}` : ""}`,
     ]),
     "",
