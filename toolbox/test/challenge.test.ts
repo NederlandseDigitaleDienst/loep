@@ -23,7 +23,7 @@ before(async () => {
     { url: `${site.origin}/form.html`, foundVia: [`iframe:${site.origin}/choose.html`] },
   ];
   writeFileSync(join(run, "inventory.json"), JSON.stringify({ baseUrl: `${site.origin}/`, origin: site.origin, pages }));
-  daemon = await Daemon.create(run, { hosts: ["127.0.0.1"], baseUrl: `${site.origin}/`, strict: false }, { navigationDelayMs: 50, maxSessions: 4, secondBrowsers: false });
+  daemon = await Daemon.create(run, { hosts: ["127.0.0.1"], baseUrl: `${site.origin}/`, strict: false }, { navigationDelayMs: 50, maxSessions: 5, secondBrowsers: false });
   browser = await launchBrowser();
 });
 
@@ -77,6 +77,14 @@ test("the sweep lets Cloudflare's check through on the same terms", async () => 
   }
   assert.equal(posted(CHECK), 1);
   assert.equal(posted("/submit"), 0);
+});
+
+test("an embedded window in the scope may read from a host outside it, as a player fetches its stream; the page itself may not", async () => {
+  site.requests.length = 0;
+  const opened = await open("stream", "/player-host.html");
+  const reads = site.requests.filter((request) => request.host === "localhost").map((request) => `${request.method} ${request.path}`);
+  assert.deepEqual(reads, ["GET /stream-frame.txt"]);
+  assert.ok(opened.record.blocked.some((entry) => entry.kind === "scope" && entry.url === `${site.otherOrigin}/stream-page.txt`), JSON.stringify(opened.record.blocked));
 });
 
 test("a window that the inventory found only embedded is opened with the page around it as referer", async () => {

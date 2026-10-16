@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<title>Speler - Testsite sessie</title>
+</head>
+<body>
+<main>
+<h1>Speler</h1>
+<iframe title="Speler" src="/stream-player.html" width="400" height="200"></iframe>
+<script>
+  // The page itself reads from another host as well; only the player may.
+  fetch("__OTHER_ORIGIN__/stream-page.txt").catch(() => undefined);
+</script>
+</main>
+</body>
+</html>
