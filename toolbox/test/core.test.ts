@@ -110,6 +110,26 @@ test("every page type of the site model gets a page in the sample, also when it 
   assert.deepEqual(structured, [urls[0], urls[50]]);
 });
 
+test("with a site model the page types decide the structured sample, not a template hash that differs per page", () => {
+  // Every page its own template hash, as on a site that puts a build hash or a page id in the markup.
+  const pages = Array.from({ length: CENSUS_LIMIT + 40 }, (_, index) => page(index, `t${index}`));
+  const at = (path: string, index: number): InventoryPage => ({ ...page(index, `t${index}`), url: `https://a.nl${path}` });
+  const extra = [at("/toegankelijkheid", 900), at("/blog/tags/toegankelijkheid", 901), at("/blog/2025/hoe-dit-helpt", 902), at("/404-toegankelijkheidsonderzoek", 903)];
+  const all = [...pages, ...extra];
+  const urls = pages.map((entry) => entry.url);
+  const type = (id: string, members: string[], representative = members[0]!) => ({ id, descriptionNl: id, representative, pages: members });
+  const model = { version: 1, baseUrl: "https://a.nl/", pageTypes: [type("overzicht", urls.slice(0, 10), urls[5]!), type("artikel", [...urls.slice(10), ...extra.slice(0, 3).map((entry) => entry.url)], urls[20]!)], blockers: [], components: [], processes: [], frames: [], notesNl: [] } as SiteModel;
+  const sample = buildSample({ ...inventory(all), notFoundProbe: "https://a.nl/404-toegankelijkheidsonderzoek" }, "seed", model);
+  const structured = sample.items.filter((item) => item.kind === "structured");
+  assert.deepEqual(structured.map((item) => [item.url, item.reason]).sort(), [
+    ["https://a.nl/404-toegankelijkheidsonderzoek", "foutpagina (404)"],
+    ["https://a.nl/toegankelijkheid", "toegankelijkheidsverklaring"],
+    [urls[20]!, "eerste pagina van dit paginatype"],
+    [urls[5]!, "eerste pagina van dit paginatype"],
+  ].sort(), "one page per type (the representative), the statement once at the top of the site, no help page for a post that says 'helpt'");
+  assert.equal(sample.items.filter((item) => item.kind === "random").length, 1);
+});
+
 const observation = { checkedNl: "Alle afbeeldingen", howNl: "Tabel images", observedNl: "37 van 37 hebben een naam", evidence: ["images"] };
 const finding: Finding = { titleNl: "Logo zonder alt", observedNl: "Het logo heeft geen alt.", impactNl: "Schermlezer slaat het over.", fixNl: "Voeg alt toe.", severity: "hoog", owner: "techniek", component: null, locations: [{ page: "P01", where: "header img" }], pagesAffected: "P01", evidence: ["images"] };
 const passed: Verdict = { criterion: "1.1.1", outcome: "passed", rule: "R4", summaryNl: "Alle 37 afbeeldingen hebben een passend tekstalternatief.", observations: [observation], findings: [] };

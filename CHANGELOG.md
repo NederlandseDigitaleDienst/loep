@@ -8,6 +8,9 @@ Wat er per versie van loep is veranderd. De versie staat op het voorblad en onde
 
 - De poort telt een ingesloten venster dat niet laadt (status 401, 403 of een andere fout) niet meer als gat bij `pages-loaded`, als het sitemodel het noemt als onderdeel zonder recept. Dat is dezelfde beperking als `frame-not-operated`, nu onder `frame-not-loaded`. Eerder bleef een run met een videospeler achter een controle tegen robots, zoals Vimeo met Cloudflare, steken op "bewijs onvoldoende": de verkenner kon het gat niet sluiten, want `acceptedGaps` neemt alleen pagina's van de run aan.
 - De staande veegronde opent een onderdeel in een venster dat minstens zo breed is als de `minWidth` uit het sitemodel. Eerder ging een onderdeel dat pas vanaf 997 pixels bestaat, zoals een zijbalk, in het staande venster van 800 pixels nooit open. De poort meldde dan een gat dat de verkenner alleen met een omweg kon sluiten (#46).
+### Wat een uitkomst kan veranderen
+
+- De steekproef van een grote site met een sitemodel heeft per paginatype één pagina, de pagina die de verkenner voor dat type koos, plus de vaste pagina's en een willekeurig tiende. Eerder kreeg elke pagina met een eigen opbouw (template-hash) er een plek in, ook als het sitemodel haar bij een bekend paginatype zette. Op een site waar die hash per pagina verschilt, kwamen zo 223 pagina's in de steekproef bij 11 paginatypen, en duurde de veegronde bijna tien uur. Ook kwam elke pagina met "privacy", "contact" of "toegankelijkheid" in het pad erin, tot tagpagina's en blogberichten aan toe; nu komt elke soort vaste pagina één keer, de pagina die het hoogst in de site staat. "Hulppagina" telt alleen het hele woord "help" (#48).
 
 ## 0.3.0 (2026-10-15)
 
