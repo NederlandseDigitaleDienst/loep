@@ -150,6 +150,8 @@ export interface Replayed {
   /** Why not, in Dutch; null when the steps ran and the postcondition holds. */
   reasonNl: string | null;
   after: Held | null;
+  /** True when a step stopped on a time-out: the page did not respond in time, which can pass on its own. */
+  timedOut?: boolean;
 }
 
 /** Run recorded steps on a page that is already loaded, and check what they were meant to achieve. */
@@ -157,7 +159,7 @@ export async function replaySteps(env: Env, surface: Surface, steps: Step[], pos
   const scratch = await mkdtemp(join(tmpdir(), "loep-sweep-"));
   try {
     const failed = await runSteps(env, surface, steps, new Images(scratch, "step"), undefined, speech);
-    if (failed) return { ok: false, reasonNl: `stap ${failed.index + 1} (${failed.command}) ${failed.reason}`, after: null };
+    if (failed) return { ok: false, reasonNl: `stap ${failed.index + 1} (${failed.command}) ${failed.reason}`, after: null, ...(failed.timedOut ? { timedOut: true } : {}) };
     if (!post) return { ok: true, reasonNl: null, after: null };
     const after = await holds(surface.page, post, POSTCONDITION_WAIT_MS);
     return { ok: after.holds, reasonNl: after.holds ? null : `na de stappen geldt de postconditie niet: ${after.detail}`, after };
@@ -190,6 +192,19 @@ export async function replayFromClean(env: Env, recipe: Recipe, post: Postcondit
   if (before?.holds) return { ok: false, reasonNl: `de postconditie geldt al op de verse pagina, voor de eerste stap (${before.detail}); ze bewijst dus niets`, before, after: null, surface };
   const replayed = await replaySteps(env, surface, recipe.steps, post, speech);
   return { ...replayed, before, surface };
+}
+
+/**
+ * Play a recipe once more, on a freshly loaded page, when a step stopped on a time-out. Under load
+ * (several browsers at once) a click can stall once while the recipe itself is sound. Any other
+ * failure, and a second time-out, stands. `firstTimeoutNl` says why the first attempt stopped.
+ */
+export async function onceMoreAfterTimeout<T extends { ok: boolean; reasonNl: string | null; timedOut?: boolean; surface: Surface | null }>(attempt: () => Promise<T>): Promise<T & { firstTimeoutNl?: string }> {
+  const first = await attempt();
+  if (first.ok || !first.timedOut) return first;
+  await first.surface?.context.close().catch(() => undefined);
+  const second = await attempt();
+  return { ...second, firstTimeoutNl: first.reasonNl ?? "" };
 }
 
 /** What of the page lies under an element that stays in place: lines of text and controls, counted in the window. */

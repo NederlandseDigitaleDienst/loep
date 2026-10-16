@@ -767,7 +767,13 @@ export interface LastStepSpeech {
 }
 
 /** Execute recorded steps on a fresh page. Returns the first step that could not be done, or null. */
-export async function runSteps(env: Env, surface: Surface, steps: Step[], images: Images, matches?: string[], speech?: LastStepSpeech): Promise<{ index: number; command: string; reason: string } | null> {
+/** Whether an error is, or was caused by, a Playwright time-out: the step waited for the page and the page did not come. */
+export function isTimeout(error: unknown): boolean {
+  for (let current = error; current instanceof Error; current = current.cause) if (current.name === "TimeoutError") return true;
+  return false;
+}
+
+export async function runSteps(env: Env, surface: Surface, steps: Step[], images: Images, matches?: string[], speech?: LastStepSpeech): Promise<{ index: number; command: string; reason: string; timedOut?: boolean } | null> {
   for (const [index, step] of steps.entries()) {
     const info = step.target ? await resolveStep(surface, { target: step.target, locators: step.locators ?? null }) : null;
     if (step.target && !info) return { index, command: step.command, reason: "vond het element niet terug" };
@@ -783,7 +789,7 @@ export async function runSteps(env: Env, surface: Surface, steps: Step[], images
       await execute({ env, surface, images, target: info }, step.command, step.args, step.options, step.locators ?? null);
       await leftScope(env, surface);
     } catch (error) {
-      return { index, command: step.command, reason: firstLine(error) };
+      return { index, command: step.command, reason: firstLine(error), ...(isTimeout(error) ? { timedOut: true } : {}) };
     } finally {
       for (const page of listening) {
         const heard = await stopListening(page);
