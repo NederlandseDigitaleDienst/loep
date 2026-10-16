@@ -14,6 +14,7 @@ Wat er per versie van loep is veranderd. De versie staat op het voorblad en onde
 ### Wat een uitkomst kan veranderen
 
 - `inventory` verdeelt de grens van `--max-pages` over de gedeelten van de site (het eerste deel van het pad, en daarbinnen een niveau dieper), in plaats van de pagina's in alfabetische volgorde te bezoeken. Eerder vulde een gedeelte dat vooraan in het alfabet staat de grens, zoals een blog vol tagpagina's, en bleef de rest van de site buiten de steekproef. Wordt de grens bereikt, dan zegt `inventory` luid per gedeelte hoeveel pagina's zijn bezocht en hoeveel weggelaten, en de skill laat die melding in stap 2 controleren (#51).
+- `collect` hergebruikt een eerdere meting van een pagina weer als een bezoeker dezelfde pagina ziet. De hash van de inhoud telde de kop van het document, elke klassenaam, id en data-attribuut, toestanden van een carrousel, tokens in adressen en datums in de tekst mee, en werd genomen voordat een blok van een ander adres binnen was. Daardoor gold na een vervolgronde bijna elke pagina als veranderd. Nu telt alleen wat een bezoeker leest en bedient, gelezen als de pagina niet meer verandert. Per pagina die opnieuw wordt gemeten, zegt `collect` waarom: geen stempel, een andere versie van loep, andere blokkades, of andere inhoud met de eerste regel die verschilt (#47). Een run van een eerdere versie wordt de eerste keer nog helemaal opnieuw gemeten.
 
 ## 0.3.0 (2026-10-15)
 

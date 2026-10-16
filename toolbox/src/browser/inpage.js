@@ -1015,6 +1015,110 @@
     return lines.join("\n");
   }
 
+  // What a visitor reads, hears or operates, with its value: a change here is a change of the page.
+  const STEADY_ATTRIBUTES = new Set(["role", "alt", "title", "lang", "dir", "type", "name", "placeholder", "label", "abbr", "scope", "colspan", "rowspan", "autocomplete", "inputmode", "accesskey", "contenteditable", "disabled", "required", "readonly", "multiple", "min", "max", "step", "pattern", "maxlength", "controls", "autoplay", "loop", "muted", "download", "target", "method"]);
+  // Addresses: kept without the tokens a new build or a new session puts in them.
+  const ADDRESS_ATTRIBUTES = new Set(["href", "src", "poster", "action", "data", "cite"]);
+  // References to an id: an id can be made anew on every load, so only that there is a reference counts.
+  const REFERENCE_ATTRIBUTES = new Set(["for", "headers", "list", "form", "aria-labelledby", "aria-describedby", "aria-controls", "aria-owns", "aria-activedescendant", "aria-details", "aria-errormessage", "aria-flowto"]);
+  // States a script sets after loading, or a slider changes with time: the same page, in another moment.
+  const MOMENT_ATTRIBUTES = new Set(["aria-hidden", "aria-expanded", "aria-selected", "aria-pressed", "aria-checked", "aria-current", "aria-busy", "aria-valuenow", "aria-valuetext"]);
+  const MONTH = "(?:januari|january|jan|februari|february|feb|maart|march|mrt|mar|april|apr|mei|may|juni|june|jun|juli|july|jul|augustus|august|aug|september|sept|sep|oktober|october|okt|oct|november|nov|december|dec)(?![a-z])\\.?";
+  const WEEKDAY = "(?:(?:maan|dins|woens|donder|vrij|zater|zon)dag|(?:mon|tues|wednes|thurs|fri|satur|sun)day|ma|di|wo|do|vr|za|zo|mon|tue|wed|thu|fri|sat|sun)\\.?,?\\s+";
+  const MOMENTS = [
+    /\b\d{4}-\d{2}-\d{2}(?:[T ]\d{1,2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:?\d{2})?)?\b/g,
+    new RegExp(`\\b(?:${WEEKDAY})?\\d{1,2}[-/.]\\d{1,2}[-/.](?:\\d{4}|\\d{2})\\b`, "gi"),
+    new RegExp(`\\b(?:${WEEKDAY})?\\d{1,2}(?:st|nd|rd|th|e)?\\s+${MONTH}(?:\\s+\\d{4})?`, "gi"),
+    new RegExp(`\\b(?:${WEEKDAY})?${MONTH}\\s+\\d{1,2}(?:st|nd|rd|th)?(?:,?\\s+\\d{4})?\\b`, "gi"),
+    /\b\d{1,2}:\d{2}(?::\d{2})?(?:\s*(?:uur|u|am|pm)\b)?/gi,
+    /\b\d{1,2}\.\d{2}\s*(?:uur|u)\b/gi,
+    /\b\d+\s+(?:seconden?|sec|minuut|minuten|min|uur|uren|dagen|dag|weken|week|maanden|maand|jaren|jaar|seconds?|minutes?|hours?|days?|weeks?|months?|years?)\s+(?:geleden|ago)\b/gi,
+    /\b(?:vandaag|gisteren|morgen|today|yesterday|tomorrow)\b/gi,
+  ];
+
+  /** Text without the dates and times that differ from one day or load to the next. */
+  function withoutMoments(text) {
+    return MOMENTS.reduce((value, pattern) => value.replace(pattern, "{tijd}"), text);
+  }
+
+  /** An identifier or token in an address or name: a build hash, a version stamp, a session or a uuid. */
+  function withoutTokens(value) {
+    return value
+      .replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, "~")
+      .replace(/[A-Za-z0-9]{6,}/g, (run) => (/\d/.test(run) && (run.length >= 8 || /^[0-9a-f]+$/i.test(run)) ? "~" : run));
+  }
+
+  /** An address as it points: on the same site without the origin; for a file the page loads (an image, a frame) without the query. */
+  function steadyAddress(raw, name) {
+    const value = raw.trim();
+    if (/^(?:data|blob):/i.test(value)) return value.slice(0, value.indexOf(":") + 1);
+    try {
+      const url = new URL(value, document.baseURI);
+      if (!/^https?:$/.test(url.protocol)) return withoutTokens(value);
+      const loaded = name !== "href" && name !== "action" && name !== "cite";
+      const place = `${url.origin === location.origin ? "" : url.origin}${url.pathname}${loaded ? "" : url.search}${url.hash}`;
+      return withoutTokens(place);
+    } catch {
+      return withoutTokens(value);
+    }
+  }
+
+  /**
+   * Text, structure and controls of the page as a visitor meets them, without what differs from one
+   * load to the next while the page stays the same: the head with its build hashes, class names, ids
+   * and the references to them, styles, nonces, data attributes, states a script or a slider sets,
+   * tokens in addresses, and dates and times in the text. A later sweep compares this to decide
+   * whether a page is still the page that was measured.
+   */
+  function visitorSnapshot() {
+    const lines = [`title "${withoutMoments(document.title.replace(/\s+/g, " ").trim())}"`, `lang ${document.documentElement.getAttribute("lang") ?? ""}`];
+    const attributesOf = (element) => {
+      const kept = [];
+      for (const { name, value } of element.attributes) {
+        if (REFERENCE_ATTRIBUTES.has(name)) kept.push(name);
+        else if (ADDRESS_ATTRIBUTES.has(name)) kept.push(`${name}=${JSON.stringify(steadyAddress(value, name))}`);
+        else if (name === "tabindex") {
+          // Only a positive order is part of the page (2.4.3); 0 and -1 move with a slider.
+          if (Number(value) > 0) kept.push(`${name}=${JSON.stringify(value)}`);
+        } else if (name === "value") {
+          // The label of a button; the value of a field is filled in, or a token of the session.
+          if (element.localName === "input" && ["button", "submit", "reset"].includes(element.type)) kept.push(`${name}=${JSON.stringify(withoutMoments(value))}`);
+        } else if (name === "name") kept.push(`${name}=${JSON.stringify(withoutTokens(value))}`);
+        else if (STEADY_ATTRIBUTES.has(name) || (name.startsWith("aria-") && !MOMENT_ATTRIBUTES.has(name))) kept.push(`${name}=${JSON.stringify(withoutMoments(value.replace(/\s+/g, " ").trim()))}`);
+      }
+      return kept.sort().join(" ");
+    };
+    const visitChildren = (nodes, depth) => {
+      // Text split over several nodes is one text: a script may split it differently on another load.
+      let text = "";
+      const flush = () => {
+        const value = withoutMoments(text.replace(/\s+/g, " ").trim());
+        if (value) lines.push(`${"  ".repeat(depth)}"${value}"`);
+        text = "";
+      };
+      for (const child of nodes) {
+        if (child.nodeType === Node.TEXT_NODE) text += child.textContent;
+        else if (child.nodeType === Node.ELEMENT_NODE) {
+          if (["script", "style", "noscript", "template", "link", "meta", "base"].includes(child.localName)) continue;
+          flush();
+          visit(child, depth);
+        }
+      }
+      flush();
+    };
+    const visit = (element, depth) => {
+      const attributes = attributesOf(element);
+      lines.push(`${"  ".repeat(depth)}<${element.localName}${attributes ? ` ${attributes}` : ""}>`);
+      if (element.shadowRoot) {
+        lines.push(`${"  ".repeat(depth + 1)}#shadow-root`);
+        visitChildren(element.shadowRoot.childNodes, depth + 2);
+      }
+      visitChildren(element.childNodes, depth + 1);
+    };
+    if (document.body) visit(document.body, 0);
+    return lines.join("\n");
+  }
+
   function sameOriginLinks() {
     const urls = new Set();
     for (const element of deepElements()) {
@@ -2068,6 +2172,7 @@
     operables,
     templateSignature,
     contentSnapshot,
+    visitorSnapshot,
     sameOriginLinks,
     deepActiveElement,
     overflowReport,

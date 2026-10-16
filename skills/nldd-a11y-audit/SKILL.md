@@ -88,7 +88,7 @@ Een agent starten betekent steeds: een aparte agent die alleen dit krijgt: "Lees
    LOEP states --run RUN
    LOEP documents --run RUN
    ```
-   Draai je de eerste drie een tweede keer, na een vervolgronde van de verkenner, dan meten ze alleen wat veranderd is: een pagina waarvan de inhoud en de blokkades gelijk zijn gebleven en een toestand waarvan het recept gelijk is gebleven, houden hun metingen. Met `--fresh` achter elk commando wordt alles opnieuw gemeten; doe dat na een nieuwe versie van de toolbox.
+   Draai je de eerste drie een tweede keer, na een vervolgronde van de verkenner, dan meten ze alleen wat veranderd is: een pagina waarvan de inhoud en de blokkades gelijk zijn gebleven en een toestand waarvan het recept gelijk is gebleven, houden hun metingen. Een pagina die `collect` toch opnieuw meet, krijgt een regel met de reden. Met `--fresh` achter elk commando wordt alles opnieuw gemeten; doe dat na een nieuwe versie van de toolbox.
 
 5. **Bewijspoort.** Is het bewijs bruikbaar?
    ```

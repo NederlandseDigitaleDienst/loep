@@ -1,4 +1,5 @@
 import { sayingItRuns } from "../instruments/limit.ts";
+import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Browser, Page } from "playwright";
 import { call } from "../browser/call.ts";
@@ -11,7 +12,7 @@ import { arrowReach, skipLinkProbe, tabWalk } from "../instruments/keyboard.ts";
 import { mediaReport } from "../instruments/media.ts";
 import { pageOperables } from "../instruments/operables.ts";
 import { controlsOnlyWithSpacing, overflowProbe, textSpacing, visibleControlKeys, VIEWPORT_PROBES } from "../instruments/overflow.ts";
-import { pageKey, pageStampPath, readStamp, type PageStamp } from "../lib/sweepstamp.ts";
+import { CONTENT_VERSION, pageContentPath, pageKey, pageStampPath, readStamp, remeasureReason, SWEEP_STAMP_VERSION, type ContentNow, type PageStamp } from "../lib/sweepstamp.ts";
 import { languagesOf } from "../instruments/languages.ts";
 import { visualOrder } from "../instruments/order.ts";
 import { picturesWithText } from "../instruments/pictures.ts";
@@ -34,18 +35,34 @@ export interface CollectOptions {
   fresh?: boolean | undefined;
 }
 
-/** Hash of the text and structure of the page as it is now: what tells a later sweep whether the page changed. */
-const contentHash = async (page: Page): Promise<string> => sha256(await call<string>(page, "contentSnapshot"));
+/** How long the content of a page may keep changing after it loaded, and how often it is read meanwhile. */
+const STEADY = { intervalMs: 500, limitMs: 5000 };
+
+/**
+ * The text, structure and controls of the page as a visitor meets them, once two readings half a second
+ * apart agree: a block that loads from another address is then filled, or stays empty. What tells a later
+ * sweep whether the page changed.
+ */
+export async function contentOf(page: Page): Promise<ContentNow> {
+  let snapshot = await call<string>(page, "visitorSnapshot");
+  for (let waited = 0; waited < STEADY.limitMs; waited += STEADY.intervalMs) {
+    await page.waitForTimeout(STEADY.intervalMs);
+    const again = await call<string>(page, "visitorSnapshot");
+    if (again === snapshot) break;
+    snapshot = again;
+  }
+  return { sha256: sha256(snapshot), snapshot };
+}
 
 /** Load a page the way the sweep measures it first, with the blockers closed, only to see whether it is still the page that was measured. */
-async function contentNow(browser: Browser, entry: SampleItem, sweep: ModelSweep): Promise<string | null> {
+async function contentNow(browser: Browser, entry: SampleItem, sweep: ModelSweep): Promise<ContentNow | null> {
   const mark = sweep.mark();
   const context = await newContext(browser, { colorScheme: "light" }, sweep.guard);
   try {
     await context.addInitScript({ path: INPAGE_PATH });
     await sweep.install(context);
     const { page } = await loadSampled(await context.newPage(), entry, (tab) => sweep.dismiss(context, tab, "collect:check", "light"));
-    return await contentHash(page);
+    return await contentOf(page);
   } catch {
     return null;
   } finally {
@@ -56,7 +73,7 @@ async function contentNow(browser: Browser, entry: SampleItem, sweep: ModelSweep
 }
 
 /** `sweep` closes what covers the page before anything is measured. */
-async function collectPage(browser: Browser, entry: SampleItem, runDir: string, sweep: ModelSweep, noted: { contentSha256?: string } = {}): Promise<Record<string, unknown>> {
+async function collectPage(browser: Browser, entry: SampleItem, runDir: string, sweep: ModelSweep, noted: { content?: ContentNow } = {}): Promise<Record<string, unknown>> {
   const dir = join(runDir, "pages", entry.slug);
   const summary: Record<string, unknown> = { url: entry.url, slug: entry.slug };
 
@@ -66,7 +83,7 @@ async function collectPage(browser: Browser, entry: SampleItem, runDir: string, 
     await sweep.install(context);
     try {
       const { page, placement } = await loadSampled(await context.newPage(), entry, (tab) => sweep.dismiss(context, tab, `collect:${scheme}`, scheme));
-      if (scheme === "light") noted.contentSha256 = await contentHash(page);
+      if (scheme === "light") noted.content = await contentOf(page);
       // Where an embedded window was measured: on the page it stands on, or on its own and why.
       if (scheme === "light" && placement) {
         await writeJson(join(dir, "probes", "placement.json"), placement);
@@ -244,20 +261,33 @@ export async function collect(options: CollectOptions): Promise<void> {
       // A page an earlier sweep measured under the same blockers, and that still has the same content, is not measured again.
       const key = pageKey(sweep.blockersKey, entry);
       const stamp = options.fresh ? null : await readStamp<PageStamp>(pageStampPath(options.run, entry.slug));
-      if (stamp && stamp.key === key && (await contentNow(browser, entry, sweep)) === stamp.contentSha256) {
+      const reason = options.fresh
+        ? "met --fresh wordt alles opnieuw gemeten"
+        : await remeasureReason(
+            stamp,
+            key,
+            sweep.blockersKey,
+            () => contentNow(browser, entry, sweep),
+            () => readFile(pageContentPath(options.run, entry.slug), "utf8").then((text) => text.replace(/\n$/, ""), () => null),
+          );
+      if (stamp && reason === null) {
         sweep.restore(stamp as Parameters<ModelSweep["restore"]>[0]);
         summaries.push(stamp.summary);
         reused++;
         process.stderr.write(`collect ${index + 1}/${pages.length} ${entry.url} niet veranderd, niet opnieuw gemeten (${Date.now() - started}ms)\n`);
         continue;
       }
+      process.stderr.write(`collect ${index + 1}/${pages.length} ${entry.url} opnieuw gemeten: ${reason}\n`);
       const mark = sweep.mark();
-      const noted: { contentSha256?: string } = {};
+      const noted: { content?: ContentNow } = {};
       // A page gets one retry: a page that loaded too slowly once, or a crashed renderer, must not cost the whole run.
       // A page with many measurements takes more than a minute: say every half minute that it still runs.
       const summary = await sayingItRuns(`collect ${index + 1}/${pages.length} ${entry.url}`, () => retryOnce(entry.url, () => collectPage(browser, entry, options.run, sweep, noted)));
       summaries.push(summary);
-      if (noted.contentSha256) await writeJson(pageStampPath(options.run, entry.slug), { key, contentSha256: noted.contentSha256, summary, ...sweep.since(mark) } satisfies PageStamp);
+      if (noted.content) {
+        await writeFileAtomic(pageContentPath(options.run, entry.slug), `${noted.content.snapshot}\n`);
+        await writeJson(pageStampPath(options.run, entry.slug), { key, version: SWEEP_STAMP_VERSION, contentVersion: CONTENT_VERSION, blockers: sweep.blockersKey, contentSha256: noted.content.sha256, summary, ...sweep.since(mark) } satisfies PageStamp);
+      }
       process.stderr.write(`collect ${index + 1}/${pages.length} ${entry.url} ${Date.now() - started}ms\n`);
     }
     if (!options.only) await writeJson(join(options.run, "collect.json"), { rendering: RENDERING, pages: summaries });
