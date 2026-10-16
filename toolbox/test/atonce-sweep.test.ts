@@ -86,8 +86,10 @@ describe("the sweep with four at once writes what it writes with one at a time",
    * Limits for the hover and press probes that the pages of the sample reach. With four at once the
    * pages within a group of `states` run at the same time, and the kinds of control must be shared out
    * over them in the order of the pages, as with one after the other, also when a later page is ready first.
+   * Pressing finds two kinds on the sample since the kinds follow look and behaviour (#63): one in the default
+   * window and one in the narrow one; a limit of one runs out between them.
    */
-  const LIMITS = { hover: 30, down: 3 };
+  const LIMITS = { hover: 30, down: 1 };
 
   /**
    * What records a moment or a duration, which two runs with one at a time do not share either: when a
