@@ -346,6 +346,8 @@ export interface RoundVerdicts {
   a: Verdict | null;
   final: Verdict | null;
   finish?: Verdict | null;
+  /** The verdict of the finishing round before the one that counts, when the round ran again with `tasks --again`: kept, and shown as what stood before. */
+  finishBefore?: Verdict | null;
 }
 
 export interface CriterionInput {
@@ -426,7 +428,11 @@ export function resolveCriterion(input: CriterionInput, sitePrefix: string): Cri
               ? `Vastgesteld in een aanvullende meting: het oordeel bleef eerst open door een beperking van het onderzoek, en een aparte beoordelaar heeft daarna gemeten wat ontbrak. Daarna is het oordeel niet nog eens gecontroleerd${finish.outcome === "failed" ? "; elke bevinding is twee keer vastgelegd, de tweede keer vanaf een verse pagina" : ""}.`
               : "Vastgesteld in een aanvullende meting: de eerste beoordeling leverde geen geldig oordeel. Daarna is het oordeel niet nog eens gecontroleerd.",
             ...(finish.finish?.coverageNl ? { coverageNl: finish.finish.coverageNl } : {}),
-            ...(beforeFinish ? { before: { roundNl: verified ? "controle" : "eerste beoordeling", outcome: beforeFinish.outcome, summaryNl: beforeFinish.summaryNl, missingNl: beforeFinish.missingNl ?? [] } } : {}),
+            ...(verdicts.finishBefore
+              ? { before: { roundNl: "vorige aanvullende meting", outcome: verdicts.finishBefore.outcome, summaryNl: verdicts.finishBefore.summaryNl, missingNl: verdicts.finishBefore.missingNl ?? [] } }
+              : beforeFinish
+                ? { before: { roundNl: verified ? "controle" : "eerste beoordeling", outcome: beforeFinish.outcome, summaryNl: beforeFinish.summaryNl, missingNl: beforeFinish.missingNl ?? [] } }
+                : {}),
           }
         : { by: "verification", noteNl: "Vastgesteld bij de controle: een tweede beoordelaar heeft het oordeel van de eerste beoordeling nagegaan." };
   const [principleKey, guidelineKey] = [criterion.id.split(".")[0]!, criterion.id.split(".").slice(0, 2).join(".")];

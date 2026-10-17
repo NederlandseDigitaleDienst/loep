@@ -177,7 +177,7 @@ export interface Finish {
   /** Where was measured, with counts. */
   coverageNl: string;
   findings: { key: string; first: string[]; repeated: string[] }[];
-  /** One entry per point "proef werkte niet:" in missingNl; `missing` is its place there, counted from 1. */
+  /** One entry per point "proef werkte niet:" or "niet bereikbaar:" in missingNl; `missing` is its place there, counted from 1. */
   attempts?: { missing: number; triedNl: string; evidence: string[] }[];
 }
 
@@ -188,9 +188,12 @@ const isText = (value: unknown, minimum = 1): value is string => typeof value ==
  * and a colon ("veegronde mist: ..."), so the list stays a list of texts and a verdict from
  * before the kinds existed can still be read. `reader` says whose work the point is: the
  * owner of the site (something no instrument can establish, a choice, or what only shows after
- * sending in a run that may not send), or the toolbox (coverage that was missing, a budget that
- * ran out, a probe that did not work). Sending is the owner's choice: a run sends only after
- * somebody declared a test environment at inventory, and then an instrument measures the point.
+ * sending in a run that may not send), the toolbox (coverage that was missing, a budget that
+ * ran out, a probe that did not work), or the site itself (a part of it that did not load while
+ * the rest did). Sending is the owner's choice: a run sends only after somebody declared a test
+ * environment at inventory, and then an instrument measures the point. A part that was not
+ * reachable is no fault of loep and no work for the owner: the evaluation is not finished, and
+ * a new finishing round measures it once the part loads again.
  */
 export const OPEN_POINT_KINDS = [
   { prefix: "mens nodig", reader: "owner", labelNl: "geen instrument kan dit vaststellen" },
@@ -199,10 +202,30 @@ export const OPEN_POINT_KINDS = [
   { prefix: "veegronde mist", reader: "toolbox", labelNl: "dekking ontbrak" },
   { prefix: "budget op", reader: "toolbox", labelNl: "de tijd voor het meten was op" },
   { prefix: "proef werkte niet", reader: "toolbox", labelNl: "een proef werkte niet" },
+  { prefix: "niet bereikbaar", reader: "site", labelNl: "een deel van de site was niet bereikbaar" },
 ] as const;
 export type OpenPointKind = (typeof OPEN_POINT_KINDS)[number];
 /** The kind of a point that stays open only because the run may not send: no person is needed, a declared test environment is. */
 export const NOT_SENT = "versturen niet toegestaan";
+/** The kind of a point about a part of the site that did not load on repeated tries while the rest did: open until a new finishing round measures it. */
+export const UNREACHABLE = "niet bereikbaar";
+/** The kinds a new finishing round may be asked for with `tasks --again`: what an instrument can measure once it works or the part loads again. */
+export const KINDS_FOR_AGAIN = ["proef werkte niet", UNREACHABLE] as const;
+/** The kinds of open point that stay only after a real attempt, described in `finish.attempts`. */
+const KINDS_WITH_ATTEMPT: readonly string[] = ["proef werkte niet", UNREACHABLE];
+
+/**
+ * A point "niet bereikbaar" says what did not load (an address or the label of a page) and
+ * when (a time of day), so the report can say it and a later round knows what to try again.
+ */
+export function unreachablePointProblems(point: string, at: string): string[] {
+  const { kind, textNl } = openPoint(point);
+  if (kind?.prefix !== UNREACHABLE) return [];
+  const problems: string[] = [];
+  if (!(/\bhttps?:\/\/\S+/i.test(textNl) || /\bP\d+\b/.test(textNl))) problems.push(`${at}: a point "${UNREACHABLE}:" names what did not load: the address of the page or the embedded frame, or the label of the page (P03)`);
+  if (!/\b\d{1,2}[:.]\d{2}\b/.test(textNl)) problems.push(`${at}: a point "${UNREACHABLE}:" says when it did not load: the time of the first and the last try, such as "tussen 14:05 en 14:40"`);
+  return problems;
+}
 
 /** Whether every open point is of the kind "versturen niet toegestaan": then one declaration at inventory is all the criterion waits for. */
 export const waitsOnlyOnSending = (points: string[]): boolean => points.length > 0 && points.every((point) => openPoint(point).kind?.prefix === NOT_SENT);
@@ -722,6 +745,7 @@ function instrumentRules(verdict: Partial<Verdict>, context: InstrumentContext, 
     const { kind, textNl } = openPoint(point);
     if (!kind) problems.push(`${at}: an open point starts with its kind and a colon: ${OPEN_POINT_KINDS.map((entry) => `"${entry.prefix}:" (${entry.labelNl})`).join(", ")}`);
     else if (!isText(textNl, 10)) problems.push(`${at}: say after "${kind.prefix}:" what is open and where`);
+    else problems.push(...unreachablePointProblems(point, at));
     const said: string[] = [];
     if (textNl.split(/[\s,;()]+/).some((word) => index.has(word.replace(/[.:]+$/, "")))) said.push("the number of an observation (cite it in the evidence of an observation with ruling \"open\")");
     if (NAMES_A_COMMAND.test(textNl)) said.push("the name of a command");
@@ -789,7 +813,7 @@ function instrumentRules(verdict: Partial<Verdict>, context: InstrumentContext, 
     if (!isText(verdict.nothingFound?.coverageNl, 20)) problems.push('nothingFound.coverageNl: say what was measured, with counts, such as "gemeten op 9 van 29 pagina\'s en in 4 van 12 toestanden; geen verschil gevonden"');
     if (!cited.some(shows)) problems.push("nothingFound needs at least one observation of a look or measure command among the observations: nothing was found only where somebody looked");
     if (rulings.some((ruling) => ruling.ruling === "open")) problems.push("nothingFound cannot stand next to a candidate that is left open");
-    if (points.length === 0 || points.some((point) => point.kind?.reader !== "toolbox")) problems.push(`nothingFound is only for a verdict whose open points are all of the kinds ${OPEN_POINT_KINDS.filter((kind) => kind.reader === "toolbox").map((kind) => `"${kind.prefix}:"`).join(", ")}; with a point a person has to look into the outcome is a plain "cantTell", so leave nothingFound out`);
+    if (points.length === 0 || points.some((point) => !point.kind || point.kind.reader === "owner")) problems.push(`nothingFound is only for a verdict whose open points are all of the kinds ${OPEN_POINT_KINDS.filter((kind) => kind.reader !== "owner").map((kind) => `"${kind.prefix}:"`).join(", ")}; with a point a person has to look into the outcome is a plain "cantTell", so leave nothingFound out`);
   }
 
   (Array.isArray(verdict.crossCandidates) ? verdict.crossCandidates : []).forEach((cross, position) => {
@@ -914,8 +938,8 @@ export interface FinishContext extends InstrumentContext {
  */
 export const FINISH_FACTOR = 3.5;
 
-/** The kinds of open point a finishing round may still leave: what asks a person or a choice, what only shows after sending in a run that may not send, and an instrument that did not work after a real attempt. */
-export const KINDS_AFTER_FINISH = ["mens nodig", "keuze nodig", NOT_SENT, "proef werkte niet"] as const;
+/** The kinds of open point a finishing round may still leave: what asks a person or a choice, what only shows after sending in a run that may not send, an instrument that did not work after a real attempt, and a part of the site that did not load on repeated tries. */
+export const KINDS_AFTER_FINISH = ["mens nodig", "keuze nodig", NOT_SENT, "proef werkte niet", UNREACHABLE] as const;
 /** A real attempt is more than one try: at least this many observations of the finisher's own session. */
 export const MIN_ATTEMPT_OBSERVATIONS = 2;
 
@@ -956,8 +980,8 @@ export function validateFinish(input: unknown, context: FinishContext): string[]
     if (!kind) return; // the rules every verdict has already say so
     if (!(KINDS_AFTER_FINISH as readonly string[]).includes(kind.prefix)) {
       problems.push(`missingNl[${position}]: "${kind.prefix}:" cannot stay after the finishing round. This round exists to measure what was missing, with a budget of its own: measure it, and decide. Only ${KINDS_AFTER_FINISH.map((prefix) => `"${prefix}:"`).join(", ")} may stay`);
-    } else if (kind.prefix === "proef werkte niet" && attempts.filter((entry) => entry?.missing === position + 1).length !== 1) {
-      problems.push(`missingNl[${position}]: an instrument that did not work stays open only after a real attempt: give one entry in finish.attempts with "missing": ${position + 1}`);
+    } else if (KINDS_WITH_ATTEMPT.includes(kind.prefix) && attempts.filter((entry) => entry?.missing === position + 1).length !== 1) {
+      problems.push(`missingNl[${position}]: ${kind.prefix === UNREACHABLE ? "a part of the site that did not load" : "an instrument that did not work"} stays open only after a real attempt: give one entry in finish.attempts with "missing": ${position + 1}`);
     }
   });
 
@@ -966,7 +990,7 @@ export function validateFinish(input: unknown, context: FinishContext): string[]
   attempts.forEach((attempt, position) => {
     const at = `finish.attempts[${position}]`;
     const point = typeof attempt?.missing === "number" ? missing[attempt.missing - 1] : undefined;
-    if (point === undefined || openPoint(point).kind?.prefix !== "proef werkte niet") problems.push(`${at}: "missing" is the place in missingNl (counted from 1) of a point "proef werkte niet:"`);
+    if (point === undefined || !KINDS_WITH_ATTEMPT.includes(openPoint(point).kind?.prefix ?? "")) problems.push(`${at}: "missing" is the place in missingNl (counted from 1) of a point "proef werkte niet:" or "${UNREACHABLE}:"`);
     if (!isText(attempt?.triedNl, 40)) problems.push(`${at}: triedNl says what was tried, in which ways, and what the instrument answered`);
     if (new Set(refs(attempt?.evidence).filter(own)).size < MIN_ATTEMPT_OBSERVATIONS) problems.push(`${at}: a real attempt shows in the observation log: cite at least ${MIN_ATTEMPT_OBSERVATIONS} observations of session "${context.session}" (a command that failed counts), made in more than one way`);
     checkRefs(attempt?.evidence, at);

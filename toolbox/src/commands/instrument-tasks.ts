@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, renameSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { EXTENSION, extensionsOf, finishBudget, judgeBudget, verifyBudget, walkBudget, type Coverage } from "../lib/budget.ts";
 import { canonicalJson, pageLabels, readJson, sha256, sha256File, writeFileAtomic, writeJson } from "../lib/canonical.ts";
@@ -11,6 +11,7 @@ import {
   citedObservations,
   FINISH_FACTOR,
   indexObservations,
+  KINDS_FOR_AGAIN,
   notSentPointProblems,
   openPoint,
   searchableText,
@@ -89,7 +90,17 @@ export interface InstrumentTask {
    * `points` are the open points the task lists, in that order: the verdict accounts for each.
    * Absent in an index from before the finishing round existed.
    */
-  finish?: { prompt: string; output: string; candidates: string; session: string; maxCommands: number; maxMinutes: number; points: string[] } | null;
+  finish?: {
+    prompt: string;
+    output: string;
+    candidates: string;
+    session: string;
+    maxCommands: number;
+    maxMinutes: number;
+    points: string[];
+    /** The verdicts of earlier finishing rounds of this criterion, oldest first, kept when the round ran again with `--again`. Absent when it ran once. */
+    earlier?: string[];
+  } | null;
 }
 
 export interface InstrumentIndex {
@@ -109,6 +120,11 @@ export interface TaskOptions {
   only?: string[] | undefined;
   /** Walk only these page types. */
   pageTypes?: string[] | undefined;
+  /**
+   * A new finishing round for these criteria, also when the run is done: only for a criterion whose
+   * final verdict is open with a point "niet bereikbaar" or "proef werkte niet". The earlier verdict is kept.
+   */
+  again?: string[] | undefined;
   /** For tests: the run data and the dossier builder, instead of what is read from the run directory. */
   run?: RunData;
   buildDossier?: typeof buildDossier;
@@ -331,6 +347,56 @@ export function pointsToFinish(standing: Standing): string[] | null {
   return verdict.outcome === "cantTell" && points.some((point) => openPoint(point).kind?.reader !== "owner") ? points : null;
 }
 
+/** The verdict that counts for a criterion, as `evaluate` takes it: that of the finishing round when it is current, otherwise that of the verifier. */
+async function countingOf(runDir: string, task: InstrumentTask, observations: ReturnType<typeof loadObservations>): Promise<{ round: "finish" | "final"; verdict: Verdict } | null> {
+  for (const round of ["finish", "final"] as const) {
+    if (await instrumentVerdictIsCurrent(runDir, task, round, observations)) return { round, verdict: await readJson<Verdict>(join(runDir, partOf(task, round)!.output)) };
+  }
+  return null;
+}
+
+/**
+ * The open points a new finishing round for this criterion starts from, or why it cannot get one.
+ * It can when its final verdict is open with a point an instrument can measure once the part of
+ * the site loads again or the probe works: "niet bereikbaar" or "proef werkte niet".
+ */
+async function pointsForAgain(runDir: string, previous: InstrumentIndex | null, id: string, observations: ReturnType<typeof loadObservations>): Promise<string[] | string> {
+  if (!criterionById(id)) return `--again: "${id}" is geen succescriterium`;
+  const task = previous?.tasks.find((entry) => entry.criterion === id);
+  if (!previous || !task) return `--again: ${id} heeft geen opdracht in deze run`;
+  if (!previous.finishDecided) return `--again: ${id} kan nog geen nieuwe afmaakronde krijgen, want de afmaakronde is nog niet aan de beurt; draai eerst de fasen ervoor af (tasks en pending)`;
+  const counting = await countingOf(runDir, task, observations);
+  const kinds = KINDS_FOR_AGAIN.map((kind) => `"${kind}"`).join(" of ");
+  if (!counting || counting.verdict.outcome !== "cantTell" || !(counting.verdict.missingNl ?? []).some((point) => (KINDS_FOR_AGAIN as readonly string[]).includes(openPoint(point).kind?.prefix ?? ""))) {
+    return `--again: het eindoordeel van ${id} staat niet open met een punt ${kinds}; een nieuwe afmaakronde is alleen voor wat een instrument kan meten zodra het deel van de site weer laadt of de proef werkt`;
+  }
+  if (counting.round === "final" && task.finish && !skipped(runDir, task.finish.output)) return `--again: de afmaakronde van ${id} staat al klaar; pending noemt haar onder finishers`;
+  return counting.verdict.missingNl ?? [];
+}
+
+/**
+ * Set the files of the last finishing round of a criterion aside, so a new round can write its
+ * own: the verdict with its stamp, the prompt, and a record that it was skipped. They keep their
+ * name with a number ("afmaak-1.json"). Returns the verdict that was kept, if there was one.
+ */
+function setFinishAside(runDir: string, finish: NonNullable<InstrumentTask["finish"]>): string[] {
+  const numbered = (path: string, number: number): string => path.replace(/(\.[a-z]+)$/, `-${number}$1`);
+  let number = 1;
+  while (existsSync(join(runDir, numbered(finish.output, number))) || existsSync(join(runDir, numbered(finish.prompt, number)))) number++;
+  const kept: string[] = [];
+  for (const [from, to] of [
+    [finish.output, numbered(finish.output, number)],
+    [stampOf(finish.output), stampOf(numbered(finish.output, number))],
+    [skipOf(finish.output), skipOf(numbered(finish.output, number))],
+    [finish.prompt, numbered(finish.prompt, number)],
+  ] as const) {
+    if (!existsSync(join(runDir, from))) continue;
+    renameSync(join(runDir, from), join(runDir, to));
+    if (from === finish.output) kept.push(to);
+  }
+  return kept;
+}
+
 /** Whether a walk or a verdict was given up on with `skip`. */
 export const skipped = (runDir: string, output: string): boolean => existsSync(join(runDir, skipOf(output)));
 
@@ -356,6 +422,14 @@ export async function instrumentTasks(runDir: string, options: TaskOptions = {})
   const { procedures, missing, invalid } = loadAllProcedures();
   if (invalid.length > 0) throw new Error(`invalid procedures:\n${invalid.join("\n")}`);
   const previous = isInstrumentRun(runDir) ? await loadInstrumentIndex(runDir) : null;
+  // A new finishing round is asked for by name: every criterion is checked before anything is written.
+  const observations = loadObservations(runDir);
+  const again = new Map<string, string[]>();
+  for (const id of options.again ?? []) {
+    const points = await pointsForAgain(runDir, previous, id, observations);
+    if (typeof points === "string") throw new Error(points);
+    again.set(id, points);
+  }
   const only = options.only ?? previous?.only ?? [];
   for (const id of only) if (!criterionById(id)) throw new Error(`--only: "${id}" is not a success criterion`);
   const typeIds = options.pageTypes ?? previous?.walks.map((walk) => walk.pageType) ?? run.siteModel.pageTypes.map((type) => type.id);
@@ -369,7 +443,6 @@ export async function instrumentTasks(runDir: string, options: TaskOptions = {})
   const writesNl = `${run.writes ? `ja, ${writesAllowedNl(run.writes)}` : `nee, ${WRITES_BLOCKED_NL}`}${readsNl ? `. Wel gaat door: ${readsNl} (in het dossier onder \`reads\`)` : ""}`;
   const criteriaList = CRITERIA.filter((criterion) => procedures.some((procedure) => procedure.id === criterion.id)).map((criterion) => `${criterion.id} ${criterion.titleNl}`).join("\n");
   const recipes = await readRecipes(runDir);
-  const observations = loadObservations(runDir);
 
   // Phase 1: one walk per page type, on the page the explorer looked at.
   const walks: WalkTask[] = [];
@@ -521,29 +594,41 @@ export async function instrumentTasks(runDir: string, options: TaskOptions = {})
     for (const task of tasks) if (task.verify && !(await instrumentVerdictIsCurrent(runDir, task, "final", observations)) && !skipped(runDir, task.verify.output)) verifiersOpen++;
   }
   const finishDecided = judgesOpen === 0 && verifiersOpen === 0;
+  if (again.size > 0 && !finishDecided) throw new Error("--again: de afmaakronde is niet meer aan de beurt, want er staat weer een beoordeling of verificatie open; draai eerst tasks en pending zonder --again");
   let finishers = 0;
   if (finishDecided) {
     for (const task of tasks) {
       const standing = await standingVerdict(runDir, task, observations);
-      const points = pointsToFinish(standing);
+      const was = earlierVerify.get(task.criterion) ?? null;
+      // A round that ran again keeps the points it was given, and the verdicts before it stay where they were set aside.
+      let earlierRounds = was?.finish?.earlier ?? [];
+      let points = earlierRounds.length > 0 && was?.finish ? was.finish.points : pointsToFinish(standing);
+      if (again.has(task.criterion)) {
+        if (was?.finish) earlierRounds = [...earlierRounds, ...setFinishAside(runDir, was.finish)];
+        points = again.get(task.criterion)!;
+      }
       if (!points) continue;
       const procedure = procedures.find((entry) => entry.id === task.criterion)!;
       const criterion = criterionById(task.criterion)!;
       const dir = join("tasks", task.criterion);
       const digits = task.criterion.replaceAll(".", "");
-      const was = earlierVerify.get(task.criterion) ?? null;
       // What the verifier ruled on with an observation of its own is settled; what it left open, and everything nobody verified, is for this round.
       const all = await readJson<Candidate[]>(join(runDir, (task.verify ?? task.judge).candidates));
       const finishLimits = finishBudget(BUDGETS.finish, { commands: task.judge.maxCommands, minutes: task.judge.maxMinutes }, BUDGETS.judge);
       const ruled = new Set(standing.round === "final" ? (standing.verdict!.candidates ?? []).filter((ruling) => ruling.ruling !== "open").map((ruling) => ruling.id) : []);
-      const finish = { prompt: join(dir, "afmaak.md"), output: join("verdicts", task.criterion, "afmaak.json"), candidates: join(dir, "kandidaten-afmaak.json"), session: was?.finish?.session ?? `a-${digits}`, maxCommands: finishLimits.commands, maxMinutes: finishLimits.minutes, points };
+      const finish: NonNullable<InstrumentTask["finish"]> = { prompt: join(dir, "afmaak.md"), output: join("verdicts", task.criterion, "afmaak.json"), candidates: join(dir, "kandidaten-afmaak.json"), session: was?.finish?.session ?? `a-${digits}`, maxCommands: finishLimits.commands, maxMinutes: finishLimits.minutes, points, ...(earlierRounds.length > 0 ? { earlier: earlierRounds } : {}) };
       await writeJson(join(runDir, finish.candidates), all.filter((candidate) => !ruled.has(candidate.id)));
-      const earlierNl =
+      const standingNl =
         standing.round === "final"
           ? `Het eindoordeel van de verifieerder: \`${join(absoluteRun, task.verify!.output)}\`. Het oordeel van de beoordelaar daarvoor: \`${join(absoluteRun, task.judge.output)}\`.`
           : standing.round === "judge"
             ? `Het oordeel van de beoordelaar: \`${join(absoluteRun, task.judge.output)}\`. Een verifieerder heeft het niet gecontroleerd: neem er niets uit over zonder het zelf te meten.`
             : "Er is geen eerder oordeel: de beoordeling leverde geen geldig resultaat. Je begint bij de procedure en het dossier.";
+      // A round that runs again starts from the verdict of the round before it, which stays in the run.
+      const earlierNl =
+        earlierRounds.length > 0
+          ? `Een eerdere afmaakronde liet dit criterium open. Haar oordeel blijft bewaard: \`${join(absoluteRun, earlierRounds.at(-1)!)}\`. De punten hierboven komen daaruit. Ze bleven open omdat een deel van de site niet bereikbaar was of een instrument niet werkte. Open dat deel eerst opnieuw: laadt het nu, of werkt het instrument nu, meet dan wat ontbrak. Laadt het nog steeds niet, dan blijft het punt open, met jouw eigen poging in \`finish.attempts\`. ${standingNl}`
+          : standingNl;
       const writeFinish = async (): Promise<void> => writeFileAtomic(
         join(runDir, finish.prompt),
         fill(templates.afmaak, {
@@ -630,7 +715,8 @@ export async function instrumentPending(runDir: string): Promise<InstrumentPendi
   let finisherTasksMissing = false;
   if (walks.length + judges.length + verifiers.length === 0 && !verifierTasksMissing) {
     for (const task of index.tasks) {
-      if (!pointsToFinish(await standingVerdict(runDir, task, observations))) continue;
+      // A round that was asked for again is open until its verdict comes, whatever the verdicts before it say.
+      if (!task.finish?.earlier?.length && !pointsToFinish(await standingVerdict(runDir, task, observations))) continue;
       if (!task.finish) finisherTasksMissing = true;
       else if (!(await instrumentVerdictIsCurrent(runDir, task, "finish", observations))) {
         if (skipped(runDir, task.finish.output)) given.push(`afmaakronde ${task.criterion}`);

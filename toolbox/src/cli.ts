@@ -37,10 +37,14 @@ const USAGE = `loep <command> [options]
   gate --run <run> [--out <dir>]         Decide whether the evidence is fit to judge on; exit 1 when it is not, 2 when
                                          only the agent's look at the pictures is still missing. --out leaves the run untouched
   check-gate --run <run>                 Validate the agent's answers for the gate; non-zero exit on problems
-  tasks --run <run> [--only <ids>] [--page-types <ids>]
+  tasks --run <run> [--only <ids>] [--page-types <ids>] [--again <ids>]
                                          Write the task files of the phase the run is in (walks, judges, verifiers, and a
                                          finishing round for what the evaluation itself left open), with a dossier per
-                                         criterion; run it again after each phase. Needs the site model of explore
+                                         criterion; run it again after each phase. Needs the site model of explore.
+                                         --again 2.4.3,3.3.1 writes a new finishing round for those criteria, also when the
+                                         run is done, but only for one whose final verdict is open with a point "niet
+                                         bereikbaar" or "proef werkte niet". Each attempt gets its own session; the earlier
+                                         verdict is kept, the new one counts in evaluate
   check-walk --run <run> --page-type <id>
                                          Validate the candidates of a walk-through; non-zero exit on problems
   skip --run <run> (--page-type <id> | --criterion <id> [--round judge|final|finish]) --reason <text>
@@ -54,12 +58,14 @@ const USAGE = `loep <command> [options]
                                          sample, explore and the sweep), next to what the run measured so far. --at-once is the
                                          number of agents at the same time, and of pages in the sweep. Writes nothing
   gaps --run <run> [<run> ...] [--json]  Every open point of one or more runs, per kind (veegronde mist, budget op, proef
-                                         werkte niet, versturen niet toegestaan, mens nodig, keuze nodig) and per criterion,
-                                         equal points taken together and counted: the work list for whoever improves the
-                                         sweep. Writes nothing
+                                         werkte niet, niet bereikbaar, versturen niet toegestaan, mens nodig, keuze nodig) and
+                                         per criterion, equal points taken together and counted: the work list for whoever
+                                         improves the sweep. Writes nothing
   feedback --run <run> [--out <dir>] [--json]
                                          Draft issues for the makers of loep: one per criterion and kind that stayed open
-                                         because of loep itself, without the address or name of the site. Sends nothing
+                                         because of loep itself, without the address or name of the site. Criteria open
+                                         because the run could not send, or because a part of the site did not load, get no
+                                         draft and are named apart. Sends nothing
   procedures                             Validate the procedure catalogue
   evaluate --run <run> --name <site> [--organisation <name>] [--model <id>] [--previous <evaluation.json>]
                                          Combine the verdicts into evaluation.json; --model is the model the operator names,
@@ -154,6 +160,7 @@ async function main(): Promise<void> {
       round: { type: "string" },
       "page-type": { type: "string" },
       "page-types": { type: "string" },
+      again: { type: "string" },
       point: { type: "string" },
       did: { type: "string" },
       outcome: { type: "string" },
@@ -342,7 +349,7 @@ async function main(): Promise<void> {
       if (!values.run) throw new Error("tasks needs --run <run>");
       const { instrumentTasks } = await import("./commands/instrument-tasks.ts");
       const list = (text: string | undefined): string[] | undefined => text?.split(",").map((part) => part.trim()).filter(Boolean);
-      const written = await instrumentTasks(values.run, { only: list(values.only), pageTypes: list(values["page-types"]) });
+      const written = await instrumentTasks(values.run, { only: list(values.only), pageTypes: list(values["page-types"]), again: list(values.again) });
       process.stdout.write(`${written.walks} walks, ${written.judges} judge tasks, ${written.verifiers} verifier tasks, ${written.finishers} finishing tasks written\n`);
       return;
     }

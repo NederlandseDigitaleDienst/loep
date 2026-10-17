@@ -567,6 +567,8 @@
 #let open-groups = (
   (t.investigate.owner, (t.investigate.ownerIntro,), open-points.owner),
   ..if not-sent != none { ((t.investigate.notSent, (t.investigate.notSentIntro, [#not-sent.declarationNl #mono(not-sent.flags)], not-sent.originNl), not-sent.items),) },
+  // A part of the site that did not load: in full, because each point says what and when.
+  (t.investigate.unreachable, (t.investigate.unreachableIntro,), open-points.at("unreachable", default: ())),
   (t.investigate.unsorted, (t.investigate.unsortedIntro,), open-points.unsorted),
 )
 #if open-groups.map(group => group.at(2).len()).sum() + open-points.toolbox.len() == 0 [Er zijn geen open punten.] else {

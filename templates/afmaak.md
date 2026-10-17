@@ -34,12 +34,13 @@ Lees dat oordeel en de waarnemingen waar het naar wijst. Je hoeft niet over te d
 
 ## Wat "kan niet bepalen" nog mag zijn
 
-Je geeft `cantTell` alleen nog als er na jouw werk een punt overblijft van een van deze vier soorten:
+Je geeft `cantTell` alleen nog als er na jouw werk een punt overblijft van een van deze vijf soorten:
 
 - `mens nodig:` geen instrument kan dit vaststellen: wat een schermlezer voorleest als `voiceover` niet beschikbaar is of het niet beslist (wat VoiceOver met Safari zei, staat er dan bij), een melding van de browser zelf, iets wat alleen na inloggen te zien is in een run die dat niet mag;
 - `keuze nodig:` het oordeel hangt af van een besluit dat de norm of de procedure uitdrukkelijk bij de eigenaar van de site legt; hoe je een succescriterium leest, beslis je zelf en is nooit een keuze;
 - `versturen niet toegestaan:` het antwoord komt pas nadat er iets is verstuurd (een bericht in een chat, een formulier), en deze run mag daar niet versturen. Dat is nooit `mens nodig:`: met een verklaarde testomgeving meet een instrument het. Noem het adres van het ingesloten venster of van waar het bericht naartoe gaat. Een verzoek dat een pagina of venster bij het laden uit zichzelf doet (een controle tegen robots, een meetdienst) is geen versturen: laadt het venster daardoor niet, dan is het `proef werkte niet:`;
 - `proef werkte niet:` een instrument gaf na een echte poging geen bruikbaar antwoord. Dat vraagt minstens twee waarnemingen uit je eigen sessie, op meer dan één manier geprobeerd, en een beschrijving in `finish.attempts`.
+- `niet bereikbaar:` een deel van de site, een pagina of een ingesloten venster, laadde bij herhaalde pogingen niet, terwijl de rest van de site in jouw sessie wel laadde. Het instrument werkte, de site gaf geen antwoord. Open het deel minstens twee keer, met tijd ertussen en op meer dan één manier (in de pagina en los, een andere pagina met hetzelfde venster), en beschrijf dat in `finish.attempts`. Noem in het punt wat niet laadde (het adres of het label van de pagina) en de tijd van je eerste en laatste poging. Laadt het later weer, dan kan wie het onderzoek leidt een nieuwe afmaakronde klaarzetten die het meet.
 
 Een punt `veegronde mist:` of `budget op:` mag niet blijven staan: de controle weigert het. "Niet overal gemeten" is na deze ronde geen uitkomst meer: meet het, of zeg precies welk instrument op welke plek niet werkte. Raakt je eigen budget op voordat je klaar bent, verleng het dan: dat kan twee keer en staat bij het gereedschap. Is het daarna nog op, oordeel dan over wat je hebt gemeten en zeg in `finish.coverageNl` eerlijk waar dat was: een goedkeuring geef je alleen als wat je mat het criterium dekt.
 
@@ -105,7 +106,7 @@ Stop je sessie als je klaar bent: `node {{cli}} session stop --run {{run}} --ses
   "recommendations": [
     { "rule": "A1", "titleNl": "...", "observedNl": "...", "recommendationNl": "...", "component": null, "locations": [ { "page": "P03", "where": "...", "heading": "..." } ], "evidence": ["{{session}}-0018"] }
   ],
-  "missingNl": ["Alleen wat na jouw werk nog open is, met de soort ervoor: mens nodig, keuze nodig, versturen niet toegestaan of proef werkte niet."],
+  "missingNl": ["Alleen wat na jouw werk nog open is, met de soort ervoor: mens nodig, keuze nodig, versturen niet toegestaan, proef werkte niet of niet bereikbaar."],
   "finish": {
     "points": [
       { "point": 1, "settled": true, "howNl": "Wat je mat, waar, en wat eruit kwam.", "evidence": ["{{session}}-0004"] },
@@ -116,7 +117,7 @@ Stop je sessie als je klaar bent: `node {{cli}} session stop --run {{run}} --ses
       { "key": "F1", "first": ["{{session}}-0006"], "repeated": ["{{session}}-0021"] }
     ],
     "attempts": [
-      { "missing": 1, "triedNl": "Bij een punt proef werkte niet: wat je probeerde, op welke manieren, en wat het instrument antwoordde.", "evidence": ["{{session}}-0030", "{{session}}-0033"] }
+      { "missing": 1, "triedNl": "Bij een punt proef werkte niet of niet bereikbaar: wat je probeerde, op welke manieren en wanneer, en wat het instrument antwoordde.", "evidence": ["{{session}}-0030", "{{session}}-0033"] }
     ]
   }
 }
@@ -125,7 +126,7 @@ Stop je sessie als je klaar bent: `node {{cli}} session stop --run {{run}} --ses
 - `finish.points`: één regel per open punt uit deze opdracht, met zijn nummer. `settled: true` vraagt minstens één waarneming van een kijk- of meetcommando uit je eigen sessie. `settled: false` betekent dat het punt in `missingNl` staat. Bij `passed` en `inapplicable` is elk punt beslecht.
 - `finish.coverageNl`: waar je hebt gemeten, met aantallen. Het rapport neemt deze zin over.
 - `finish.findings`: één regel per bevinding, met de eerste waarneming en de herhaling na een nieuwe `open`.
-- `finish.attempts`: één regel per punt `proef werkte niet:` in `missingNl`; `missing` is de plaats van dat punt in `missingNl`, geteld vanaf 1. Laat het veld weg als er geen zo'n punt is.
+- `finish.attempts`: één regel per punt `proef werkte niet:` of `niet bereikbaar:` in `missingNl`; `missing` is de plaats van dat punt in `missingNl`, geteld vanaf 1. Laat het veld weg als er geen zo'n punt is.
 - `observations`: wat nu vaststaat. Elke waarneming zegt in `ruling` wat eruit volgt: `noIssue`, `finding` (met de `key` in `finding`), `open` (met het punt in `missingNl`) of `otherCriterion` (met een regel in `crossCandidates`). Bij `passed` gelden de eisen van de procedure onder "Bewijs bij goedkeuring", en `resolved` voor elke meting waarvan de methoden het oneens waren over de vraag van dit criterium: `{ "observations": [de metingen], "by": [de waarneming die het beslecht], "howNl": "wat het verschil was" }`.
 - `candidates`: één regel per kandidaat uit je kandidatenbestand. Bij `noIssue` staat in `evidence` een waarneming van een kijk- of meetcommando uit je eigen sessie.
 - `findings`: sleutels `F1`, `F2`. Laat `verification` en `nothingFound` weg.

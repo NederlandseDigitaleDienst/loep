@@ -3,7 +3,7 @@ import { basename, join, resolve } from "node:path";
 import { madeWith, openCriteria, type CriterionResult, type Evaluation } from "../lib/evaluation.ts";
 import { siteOrigins } from "../lib/origins.ts";
 import { SHOWN_LABEL, shownOutcome } from "../lib/report-markdown.ts";
-import { NOT_SENT, OPEN_POINT_KINDS, openPoint } from "../lib/verdict.ts";
+import { NOT_SENT, OPEN_POINT_KINDS, openPoint, UNREACHABLE } from "../lib/verdict.ts";
 import { compareCriterionIds } from "../lib/wcag.ts";
 
 /*
@@ -15,7 +15,9 @@ import { compareCriterionIds } from "../lib/wcag.ts";
  * person who ran the evaluation decides what leaves the machine. The address, the name and the
  * organisation of the site are left out; the points themselves are written by an agent and are
  * shown to be read. A point "versturen niet toegestaan" gets no draft: the run measured all it
- * was allowed to, and whether it may send is the owner's choice. Those criteria are named apart.
+ * was allowed to, and whether it may send is the owner's choice. Nor does a point "niet
+ * bereikbaar": a part of the site did not load, which is no fault of loep, and a new finishing
+ * round (`tasks --again`) measures it once it loads. Both kinds of criteria are named apart.
  */
 
 export const REPOSITORY = "NederlandseDigitaleDienst/loep";
@@ -47,6 +49,12 @@ export interface Feedback {
    * person who runs this knows one declaration at inventory would have closed them.
    */
   notSent: string[];
+  /**
+   * Open criteria with a point "niet bereikbaar": a part of the site did not load while the rest
+   * did. No fault of loep, so no draft; named so the person who runs this can ask for a new
+   * finishing round once the part loads again.
+   */
+  unreachable: string[];
 }
 
 const escape = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -68,17 +76,18 @@ export function redactor(site: Evaluation["site"]): (text: string) => string {
   return (text) => replacements.reduce((result, [pattern, by]) => result.replace(pattern, by), text);
 }
 
-/** The points of one criterion that are about loep and not about the site, per kind. */
+/** The points of one criterion that are about loep and not about the site, per kind. Empty when every point is the owner's or the site's. */
 function ownPointsByKind(criterion: CriterionResult): Map<string, string[]> {
   const byKind = new Map<string, string[]>();
   if (criterion.outcome === "untested") byKind.set(UNTESTED, []);
   for (const point of criterion.missingNl) {
     const parsed = openPoint(point);
-    if (parsed.kind?.reader === "owner") continue;
+    if (parsed.kind?.reader === "owner" || parsed.kind?.reader === "site") continue;
     const kind = criterion.outcome === "untested" ? UNTESTED : (parsed.kind?.prefix ?? NO_KIND);
     byKind.set(kind, [...(byKind.get(kind) ?? []), parsed.textNl]);
   }
-  if (byKind.size === 0) byKind.set(NO_KIND, []);
+  // Open with no point that has a kind of the owner or the site: then nobody said why, and that is loep's.
+  if (byKind.size === 0 && !criterion.missingNl.some((point) => openPoint(point).kind)) byKind.set(NO_KIND, []);
   return byKind;
 }
 
@@ -120,8 +129,8 @@ export function feedback(runDir: string, options: { out?: string | undefined } =
     }
   }
   const open = openCriteria(evaluation.criteria);
-  const notSent = [...open.owner, ...open.evaluation].filter((id) => evaluation.criteria.find((criterion) => criterion.id === id)!.missingNl.some((point) => openPoint(point).kind?.prefix === NOT_SENT)).sort(compareCriterionIds);
-  return { run: basename(resolve(runDir)), repository: REPOSITORY, madeWithNl: madeWith(evaluation, true), drafts, notSent };
+  const withKind = (prefix: string): string[] => [...open.owner, ...open.evaluation].filter((id) => evaluation.criteria.find((criterion) => criterion.id === id)!.missingNl.some((point) => openPoint(point).kind?.prefix === prefix)).sort(compareCriterionIds);
+  return { run: basename(resolve(runDir)), repository: REPOSITORY, madeWithNl: madeWith(evaluation, true), drafts, notSent: withKind(NOT_SENT), unreachable: withKind(UNREACHABLE) };
 }
 
 /** The drafts as a text to read: what to check first, then per draft the title and the body or where it is. */
@@ -131,14 +140,20 @@ export function feedbackTextNl(result: Feedback): string {
     result.notSent.length > 0
       ? `\nNiet terug te melden: ${result.notSent.length === 1 ? "criterium" : "criteria"} ${result.notSent.join(", ")} ${result.notSent.length === 1 ? "bleef" : "bleven"} ook open omdat het onderzoek niet mocht versturen. Dat is een keuze van de eigenaar van de site, geen fout in loep. Een testomgeving, verklaard bij inventory met --test-environment, laat een instrument het meten; LOEP gaps telt deze punten onder "${NOT_SENT}".\n`
       : "";
-  if (result.drafts.length === 0) return `Niets terug te melden uit ${result.run}: geen criterium is open door loep zelf.\n${notSent}`;
+  // A part of the site that did not load is no fault of loep either; a new finishing round measures it once it loads.
+  const unreachable =
+    result.unreachable.length > 0
+      ? `\nNiet terug te melden: ${result.unreachable.length === 1 ? "criterium" : "criteria"} ${result.unreachable.join(", ")} ${result.unreachable.length === 1 ? "bleef" : "bleven"} ook open omdat een deel van de site tijdens het onderzoek niet bereikbaar was. Dat is geen fout in loep. Laadt het deel weer, dan meet een nieuwe afmaakronde het: LOEP tasks --run <run> --again ${result.unreachable.join(",")}; LOEP gaps telt deze punten onder "${UNREACHABLE}".\n`
+      : "";
+  const apart = `${notSent}${unreachable}`;
+  if (result.drafts.length === 0) return `Niets terug te melden uit ${result.run}: geen criterium is open door loep zelf.\n${apart}`;
   const criteria = new Set(result.drafts.map((draft) => draft.criterion)).size;
   const lines = [
     `Terug te melden aan ${result.repository} uit ${result.run} (${result.madeWithNl}): ${result.drafts.length} ${result.drafts.length === 1 ? "melding" : "meldingen"} bij ${criteria} ${criteria === 1 ? "criterium" : "criteria"}.`,
     "Een issue is openbaar. Het adres, de naam en de organisatie van de site zijn weggelaten, maar de punten zijn door een agent geschreven: lees ze voordat er iets wordt verstuurd.",
   ];
   for (const draft of result.drafts) lines.push("", `### ${draft.title}`, draft.file ? `Tekst: ${draft.file}` : `\n${draft.bodyMd.trimEnd()}`);
-  return `${lines.join("\n")}\n${notSent}`;
+  return `${lines.join("\n")}\n${apart}`;
 }
 
 export function feedbackOutput(runDir: string, options: { out?: string | undefined; json?: boolean | undefined } = {}): string {

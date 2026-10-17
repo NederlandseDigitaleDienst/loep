@@ -111,3 +111,25 @@ test("a criterion open because the run may not send is the owner's choice: no dr
   assert.deepEqual(only.drafts, []);
   assert.match(feedbackTextNl(only), /^Niets terug te melden uit site-chat-only: geen criterium is open door loep zelf\.\n\nNiet terug te melden: criterium 3\.3\.1 bleef ook open omdat/);
 });
+
+test("a criterion open because a part of the site did not load is no fault of loep: no draft, but named apart with the way to measure it again", () => {
+  const UNREACHABLE = "niet bereikbaar: het chatvenster op P03 (https://chat.example.nl/widget) laadde niet, ook los geopend, tussen 14:05 en 14:40.";
+  const result = feedback(
+    run("site-unreachable", [
+      criterion("3.3.1", "cantTell", [UNREACHABLE]),
+      criterion("4.1.3", "cantTell", [UNREACHABLE, "mens nodig: wat NVDA voorleest bij een nieuw bericht."]),
+      // Open by loep as well: only the probe point becomes a draft.
+      criterion("2.4.3", "cantTell", [UNREACHABLE, "proef werkte niet: de Tab-proef op P02 gaf geen antwoord."]),
+      criterion("1.1.1", "passed", []),
+    ]),
+  );
+  assert.deepEqual(result.drafts.map((draft) => draft.title), [`${TITLE_PREFIX} 2.4.3 proef werkte niet`]);
+  assert.ok(!result.drafts[0]!.bodyMd.includes("chatvenster"), "the point about the part that did not load stays out of the draft");
+  assert.deepEqual(result.unreachable, ["2.4.3", "3.3.1", "4.1.3"]);
+  assert.deepEqual(result.notSent, []);
+  assert.match(feedbackTextNl(result), /^Niet terug te melden: criteria 2\.4\.3, 3\.3\.1, 4\.1\.3 bleven ook open omdat een deel van de site tijdens het onderzoek niet bereikbaar was\. Dat is geen fout in loep\. .*--again 2\.4\.3,3\.3\.1,4\.1\.3/m);
+  // Only that point: nothing to report, and still said why the criterion is open.
+  const only = feedback(run("site-unreachable-only", [criterion("3.3.1", "cantTell", [UNREACHABLE])]));
+  assert.deepEqual(only.drafts, []);
+  assert.match(feedbackTextNl(only), /^Niets terug te melden uit site-unreachable-only: geen criterium is open door loep zelf\.\n\nNiet terug te melden: criterium 3\.3\.1 bleef ook open omdat een deel van de site/);
+});
