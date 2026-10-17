@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { originsNl } from "./origins.ts";
+import { isOwnAddress, originsNl, siteOrigins, type OriginSource } from "./origins.ts";
 
 /**
  * Documents a site publishes next to its pages: PDF, word processor, presentation and
@@ -112,6 +112,30 @@ export interface DocumentTotals {
   /** Links to documents on another origin: counted, never fetched. */
   elsewhere: number;
   elsewhereByKind: Partial<Record<DocumentKind, number>>;
+}
+
+/**
+ * Why size and date are missing for a document whose address redirects to a host outside the
+ * site. An inventory from before such documents were counted as elsewhere still lists them
+ * among the documents of the site with this reason; it is how they are recognised there.
+ */
+export const REDIRECTS_ELSEWHERE_NL = "het adres verwijst door naar een ander domein";
+
+/** Whether a document of an inventory lies on the site: on one of its origins, and not redirecting to a host outside it. */
+export function isSiteDocument(document: InventoryDocument, origins: readonly string[]): boolean {
+  return isOwnAddress(document.url, origins) && document.notAsked !== REDIRECTS_ELSEWHERE_NL;
+}
+
+/**
+ * The documents of the site and the count of those elsewhere. A new inventory already counts a
+ * document that redirects to another host as elsewhere; an older one listed it on the site, and
+ * here it moves to the count elsewhere, so an old run gives the same sample a new one would.
+ */
+export function siteDocuments(inventory: OriginSource & { documents?: InventoryDocument[] | undefined; documentTotals?: DocumentTotals | undefined }): { onSite: InventoryDocument[]; elsewhere: number } {
+  const origins = siteOrigins(inventory);
+  const all = inventory.documents ?? [];
+  const onSite = all.filter((document) => isSiteDocument(document, origins));
+  return { onSite, elsewhere: (inventory.documentTotals?.elsewhere ?? 0) + all.length - onSite.length };
 }
 
 export type SampleDocumentReason = "all" | "structured" | "random";
