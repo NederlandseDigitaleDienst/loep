@@ -4,6 +4,7 @@ import { join } from "node:path";
 import type { Page } from "playwright";
 import { PNG } from "pngjs";
 import { call } from "../browser/call.ts";
+import { wholePageScreenshot } from "../browser/screenshot.ts";
 import { contrastRatio, floorRatio, ringColour, type Region, type Rgb } from "../lib/contrast.ts";
 import { FLAT_BACKGROUND_SHARE, measureGraphic, NON_TEXT_RATIO, type Graphic, type Positioned } from "./contrast.ts";
 import { focusIndicatorOf } from "./focus.ts";
@@ -137,7 +138,7 @@ async function see(page: Page, options: { only: string[] | null; maxFocus: numbe
   const same = (item: { path: string[] }): boolean => options.only === null || item.path.join(" >>> ") === options.only.join(" >>> ");
   const allControls = await call<Positioned[]>(page, "hoverTargets");
   const allGraphics = await call<Graphic[]>(page, "graphicBoxes");
-  const picture = await page.screenshot({ fullPage: true, animations: "disabled" });
+  const picture = (await wholePageScreenshot(page)).image;
   const image = PNG.sync.read(picture);
   const controls = allControls.filter(same);
   // With one element asked for, its drawings are the ones that lie within it, and the element itself when it is one.

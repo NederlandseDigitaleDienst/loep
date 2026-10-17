@@ -2,6 +2,7 @@ import { join } from "node:path";
 import type { Page } from "playwright";
 import { PNG } from "pngjs";
 import { call } from "../browser/call.ts";
+import { wholePageScreenshot } from "../browser/screenshot.ts";
 import { RENDERING } from "../browser/session.ts";
 import { writeFileAtomic } from "../lib/canonical.ts";
 import { focusIndicator } from "../lib/contrast.ts";
@@ -403,7 +404,7 @@ export async function tabOrderScreenshot(page: Page, stops: Record<string, unkno
     });
   }, stops.map((stop) => ({ box: stop.box, scroll: stop.scroll, ref: stop.ref }) as DrawnStop));
   try {
-    await page.screenshot({ path, fullPage: true, animations: "disabled" });
+    await wholePageScreenshot(page, { path });
   } finally {
     // The numbers are no part of the page: what is measured after the picture must not find them.
     await page.evaluate(() => document.querySelector("[data-loep-tab-order]")?.remove()).catch(() => undefined);

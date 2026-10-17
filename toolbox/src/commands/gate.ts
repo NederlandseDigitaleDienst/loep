@@ -186,6 +186,7 @@ export function gateChecks(run: RunData): { checks: Check[]; gaps: Gap[]; warnin
     "pages-loaded",
     [
       ...failed.map((page) => ({ check: "pages-loaded", ...on(page), state: "default", missingNl: `De pagina gaf bij het laden ${page.item.status === null ? "geen antwoord" : `status ${page.item.status}`}. Wat is vastgelegd, is een foutpagina.`, measured: { status: page.item.status } })),
+      ...(run.collectFailed ?? []).map((entry) => ({ check: "pages-loaded", page: entry.label, url: entry.item.url, state: "default", missingNl: `De veegronde kon deze pagina ook bij een tweede poging niet meten (${entry.error.slice(0, 160)}). Er is geen bewijs van deze pagina; draai collect opnieuw voor deze pagina.`, measured: { collectError: entry.error } })),
       ...run.inventory.skipped.filter((entry) => entry.reason.startsWith("failed to load")).map((entry) => ({ check: "pages-loaded", page: null, url: entry.url, state: "default", missingNl: `De pagina laadde niet tijdens de inventaris en is niet onderzocht (${entry.reason.slice(0, 120)}).` })),
     ],
     `${run.pages.length} pagina's geladen`,
@@ -304,6 +305,12 @@ export function gateChecks(run: RunData): { checks: Check[]; gaps: Gap[]; warnin
   for (const page of run.pages.filter((entry) => (entry.tabwalk.focusThrownAwayBy ?? []).length > 0)) {
     const thrower = page.tabwalk.focusThrownAwayBy![0]!;
     warnings.push({ check: "focus-thrown-away", ...on(page), state: "default", missingNl: `Het element ${thrower.tag} "${thrower.text.slice(0, 40)}" gooit de focus weg zodra het die krijgt. De Tab-proef is daarachter verder gegaan; een gebruiker met een toetsenbord komt daar niet. Dat is een bevinding voor de beoordeling, geen gat in het bewijs.` });
+  }
+
+  // A page taller than a picture may be: what stands below the limit is in no screenshot, and its contrast is not measured.
+  for (const page of run.pages.filter((entry) => entry.facts.screenshotClippedAt)) {
+    const { pageHeight, limit } = page.facts.screenshotClippedAt!;
+    limitations.push({ check: "screenshot-clipped", ...on(page), state: "default", missingNl: `De pagina is ${pageHeight} pixels hoog. De schermafbeeldingen stoppen bij ${limit} pixels; wat daaronder staat, is op geen schermafbeelding te zien en het contrast ervan is niet gemeten.`, measured: { pageHeight, limit } });
   }
 
   // 5. The sweep itself must be complete.

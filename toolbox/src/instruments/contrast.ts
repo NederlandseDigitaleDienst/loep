@@ -1,6 +1,7 @@
 import type { Page } from "playwright";
 import { PNG } from "pngjs";
 import { call } from "../browser/call.ts";
+import { wholePageScreenshot, type ScreenshotClip } from "../browser/screenshot.ts";
 import type { ColorScheme } from "../browser/session.ts";
 import type { ForcedProbe } from "./forced.ts";
 import { backgroundBehind, backgroundRange, blend, colourShares, containsColour, contrastRatio, floorRatio, requiredRatio, ringColour, type Rgb } from "../lib/contrast.ts";
@@ -94,6 +95,8 @@ export interface PageContrast {
   forced?: ForcedProbe | { error: string };
   /** The text of every link and button while pointed at and while it has focus, on the first page it stands on. Default window only, light and dark; absent in older runs. */
   hoverFocus?: HoverFocusReport;
+  /** Set when the page was taller than a picture may be: what stands below `limit` is "cantTell", not measured. Absent when the whole page was in the picture. */
+  screenshotClippedAt?: ScreenshotClip;
 }
 
 /** WCAG 1.4.11 asks 3:1 for the parts of a control or graphic that are needed to recognise it. */
@@ -181,22 +184,31 @@ export function measure(run: TextRun, image: PNG): ContrastMeasurement {
 export type Graphic = Positioned & { inControl: string | null; controlHasText: boolean | null };
 
 /** Measure the contrast of every piece of visible text, control and small graphic on the page as it is now. */
-export async function pageContrast(page: Page): Promise<Pick<PageContrast, "measurements" | "controls" | "graphics">> {
+export async function pageContrast(page: Page): Promise<Pick<PageContrast, "measurements" | "controls" | "graphics" | "screenshotClippedAt">> {
   // Text and screenshot are taken from the same page state, so positions match pixel for pixel.
   const runs = await call<TextRun[]>(page, "textRuns");
-  const image = PNG.sync.read(await page.screenshot({ fullPage: true, animations: "disabled" }));
+  const shot = await wholePageScreenshot(page);
+  const image = PNG.sync.read(shot.image);
+  const clip = shot.clippedAt;
+  // On a picture that stops at the limit, what does not stand wholly above it is not measured: a part of it would be read as all of it.
+  const below = (box: Positioned["box"]): boolean => clip !== null && box.y + box.height > clip.limit;
+  const belowNl = clip ? `staat onder de grens van de schermafbeelding: de pagina is ${clip.pageHeight} pixels hoog, de afbeelding stopt bij ${clip.limit} pixels` : "";
+  const measureHere = (run: TextRun, picture: PNG): ContrastMeasurement => {
+    const measured = measure(run, picture);
+    return below(run.box) && measured.outcome !== "exempt" ? { ...measured, background: null, ratio: null, outcome: "cantTell", reason: `de tekst ${belowNl}` } : measured;
+  };
   const controls = await call<Positioned[]>(page, "hoverTargets");
   const graphics = await call<Graphic[]>(page, "graphicBoxes");
-  const measurements = runs.map((run) => measure(run, image));
+  const measurements = runs.map((run) => measureHere(run, image));
   // Text that only shows when it has focus, such as a skip link, is measured in that state.
   await page.keyboard.press("Tab");
   // That covers text that was not there before, and text that could not be measured without focus (off screen).
   const undecided = (run: TextRun): boolean => measurements.find((entry) => entry.where === run.path.join(" >>> "))?.outcome !== "passed" && measurements.find((entry) => entry.where === run.path.join(" >>> "))?.outcome !== "failed";
   const revealed = (await call<TextRun[]>(page, "focusedTextRuns")).filter(undecided);
   if (revealed.length > 0) {
-    const focusedImage = PNG.sync.read(await page.screenshot({ fullPage: true, animations: "disabled" }));
+    const focusedImage = PNG.sync.read((await wholePageScreenshot(page)).image);
     for (const run of revealed) {
-      const measured = { ...measure(run, focusedImage), text: `(zichtbaar bij focus) ${run.text}`.slice(0, 70) };
+      const measured = { ...measureHere(run, focusedImage), text: `(zichtbaar bij focus) ${run.text}`.slice(0, 70) };
       const earlier = measurements.findIndex((entry) => entry.where === measured.where);
       if (earlier >= 0) measurements.splice(earlier, 1, measured);
       else measurements.push(measured);
@@ -204,8 +216,9 @@ export async function pageContrast(page: Page): Promise<Pick<PageContrast, "meas
   }
   return {
     measurements,
-    controls: controls.map((control) => measureControl(control, image)),
-    graphics: graphics.map((graphic) => measureGraphic(graphic, image)),
+    controls: controls.map((control) => (below(control.box) ? { ...measureControl(control, image), outside: null, edge: null, fill: null, edgeRatio: null, fillRatio: null, outcome: "cantTell" } : measureControl(control, image))),
+    graphics: graphics.map((graphic) => (below(graphic.box) ? { ...measureGraphic(graphic, image), background: null, foreground: null, ratio: null, outcome: "cantTell" } : measureGraphic(graphic, image))),
+    ...(clip ? { screenshotClippedAt: clip } : {}),
   };
 }
 

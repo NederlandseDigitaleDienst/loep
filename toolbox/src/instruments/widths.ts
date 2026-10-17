@@ -1,6 +1,7 @@
 import { join } from "node:path";
 import type { Page } from "playwright";
 import { call } from "../browser/call.ts";
+import { wholePageScreenshot } from "../browser/screenshot.ts";
 import { collectNamed, type Described } from "./facts.ts";
 
 /** The widths every page is measured at: the default window, the narrow window and the smallest width of WCAG. */
@@ -118,7 +119,7 @@ export async function betweenWidths(page: Page, dir: string, relative: string): 
     await page.waitForTimeout(SETTLE_MS);
     await page.evaluate(() => window.scrollTo(0, 0));
     const shot = `between-${width}.png`;
-    await page.screenshot({ path: join(dir, shot), fullPage: true, animations: "disabled" });
+    await wholePageScreenshot(page, { path: join(dir, shot) });
     const facts = await collectNamed(page).catch(() => ({ links: [], controls: [] }));
     for (const item of [...facts.links, ...facts.controls]) named.set((item.path as string[]).join(" >>> "), item);
     const here = between.filter((entry) => entry.widths.includes(width));
