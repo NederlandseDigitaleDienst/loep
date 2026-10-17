@@ -1,5 +1,6 @@
 import type { BrowserContext, Page } from "playwright";
 import { call } from "../browser/call.ts";
+import { wholePageScreenshot } from "../browser/screenshot.ts";
 import { collectClickables, type Described } from "./facts.ts";
 
 export interface ViewportProbe {
@@ -38,7 +39,8 @@ export interface OverflowResult {
 export async function overflowProbe(page: Page, screenshotPath: string): Promise<OverflowResult> {
   const report = await call<Record<string, unknown>>(page, "overflowReport");
   const visibleControls = (await call<{ text: string; tag: string }[]>(page, "targetSizes")).map((target) => `${target.tag}:${target.text}`).sort();
-  await page.screenshot({ path: screenshotPath, fullPage: true, animations: "disabled" });
+  const { clippedAt } = await wholePageScreenshot(page, { path: screenshotPath });
+  if (clippedAt) report.screenshotClippedAt = clippedAt;
   // Some clickable elements only exist at this size, such as a menu button on a narrow screen.
   const clickables = await collectClickables(page);
   return { report, visibleControls, clickables, content: await call<ContentInventory>(page, "contentInventory") };
@@ -72,7 +74,8 @@ export async function overflowGeometryAtSize(page: Page, viewport: { width: numb
   await page.waitForTimeout(SETTLE_AFTER_RESIZE_MS);
   try {
     const report = await call<Record<string, unknown>>(page, "overflowReport");
-    await page.screenshot({ path: screenshotPath, fullPage: true, animations: "disabled" });
+    const { clippedAt } = await wholePageScreenshot(page, { path: screenshotPath });
+    if (clippedAt) report.screenshotClippedAt = clippedAt;
     return report;
   } finally {
     if (original) {
@@ -119,7 +122,7 @@ export async function spacingEffect(page: Page, clippedBefore: { path: string[] 
   await page.waitForTimeout(250);
   const after = await call<{ clipped: { path: string[] }[]; horizontalScroll: boolean }>(page, "overflowReport");
   const already = new Set(clippedBefore.map((item) => item.path.join(" >>> ")));
-  await page.screenshot({ path: screenshotPath, fullPage: true, animations: "disabled" });
+  await wholePageScreenshot(page, { path: screenshotPath });
   return {
     note: TEXT_SPACING_NOTE,
     shadowRootsStyled: applied.shadowRootsStyled,

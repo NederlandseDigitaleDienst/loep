@@ -1264,7 +1264,8 @@ export const screenshots: Extractor = (run) => {
     note: perType
       ? "Volledige pagina op 1280 pixels breed, licht en donker, en op 360 pixels breed. Eén pagina per paginatype uit het sitemodel, elk paginatype zonder grens; `pageType` zegt welk. Van elke andere pagina staan dezelfde bestanden in haar map (`files` in de legenda)."
       : "Volledige pagina op 1280 pixels breed, licht en donker. Eén pagina per sjabloon, hooguit twaalf; van elke andere pagina staan dezelfde bestanden in haar map (`files` in de legenda).",
-    pages: (perType ?? representativePages(run).map((page) => ({ page, type: null }))).map(({ page, type }) => ({ page: page.label, ...(type ? { pageType: type } : {}), url: page.item.url, light: `${page.dir}/screenshot-light.png`, dark: `${page.dir}/screenshot-dark.png`, ...(type ? { narrow: `${page.dir}/screenshot-narrow.png` } : {}), accessibilityTree: `${page.dir}/aria.yaml` })),
+    ...(run.pages.some((page) => page.facts.screenshotClippedAt) ? { clippedNote: "Een pagina met `screenshotClippedAt` is hoger dan een schermafbeelding mag zijn: haar afbeeldingen stoppen bij `limit` pixels, de pagina is `pageHeight` pixels hoog. Wat daaronder staat, zie je op geen afbeelding." } : {}),
+    pages: (perType ?? representativePages(run).map((page) => ({ page, type: null }))).map(({ page, type }) => ({ page: page.label, ...(type ? { pageType: type } : {}), url: page.item.url, light: `${page.dir}/screenshot-light.png`, dark: `${page.dir}/screenshot-dark.png`, ...(type ? { narrow: `${page.dir}/screenshot-narrow.png` } : {}), accessibilityTree: `${page.dir}/aria.yaml`, ...(page.facts.screenshotClippedAt ? { screenshotClippedAt: page.facts.screenshotClippedAt } : {}) })),
   };
 };
 

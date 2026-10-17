@@ -3,6 +3,7 @@ import { readdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import type { Browser, BrowserContext, Page } from "playwright";
 import { call } from "../browser/call.ts";
+import { wholePageScreenshot } from "../browser/screenshot.ts";
 import { frameAsPage } from "../browser/frame.ts";
 import type { WriteGuard } from "../browser/session.ts";
 import { collectFacts } from "../instruments/facts.ts";
@@ -483,7 +484,7 @@ export class ModelSweep {
     const file = this.fileIn(id, files);
     await this.show(outer, post);
     await page.screenshot({ path: file("screenshot", "screenshot.png"), animations: "disabled" });
-    await page.screenshot({ path: file("screenshotFullPage", "screenshot-full.png"), fullPage: true, animations: "disabled" });
+    await wholePageScreenshot(page, { path: file("screenshotFullPage", "screenshot-full.png") });
     const covering = await overlays(page);
     await writeJson(file("overlays", "overlays.json"), covering);
     const engines = await runEngines(page);

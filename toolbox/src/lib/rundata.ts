@@ -1,4 +1,5 @@
 import type { FrameListeners, FrameNotInspected } from "../instruments/facts.ts";
+import type { ScreenshotClip } from "../browser/screenshot.ts";
 import type { MediaReport } from "../instruments/media.ts";
 import type { ContentInventory, SpacingControls } from "../instruments/overflow.ts";
 import type { CoverWalk } from "../instruments/keyboard.ts";
@@ -188,6 +189,10 @@ export interface Facts {
   /** Audio and video in this state of the page. Absent in older runs. */
   media?: MediaReport;
   timers: { intervals: number[]; longTimeouts: number[] };
+  /** Set when the page in the default window was taller than a picture may be: its screenshots stop at `limit` CSS pixels. Absent when the whole page is in them. */
+  screenshotClippedAt?: ScreenshotClip;
+  /** Set when collect failed on this page, also on its second try: the first line of the error. The other files of the page are then not from this sweep. */
+  collectError?: string;
 }
 
 export interface TabStop extends Element {
@@ -481,6 +486,8 @@ export interface RunData {
   sessionWatch?: WatchState | null;
   /** The saved states of the run by name, as far as the gate needs them: where each starts and which elements its steps operate. */
   recipes?: Record<string, RecipeSteps>;
+  /** Pages of the sample that collect failed on, twice, with the first line of the error. They are not in `pages`; the gate names them. Absent in data built by hand. */
+  collectFailed?: { label: string; item: SampleItem; error: string }[];
 }
 
 export async function loadRun(dir: string): Promise<RunData> {
@@ -488,8 +495,15 @@ export async function loadRun(dir: string): Promise<RunData> {
   const sample = await readJson<Sample>(join(dir, "sample.json"));
   const labels = pageLabels(sample.items.length);
   const pages: PageData[] = [];
+  const collectFailed: NonNullable<RunData["collectFailed"]> = [];
   for (const [index, item] of sample.items.entries()) {
     const pageDir = join(dir, "pages", item.slug);
+    // A page that collect could not measure is left out of the pages and named, so that what comes after the sweep goes on with the rest.
+    const failed = existsSync(join(pageDir, "facts.json")) ? (await readJson<Partial<Facts>>(join(pageDir, "facts.json"))).collectError : undefined;
+    if (failed) {
+      collectFailed.push({ label: labels[index]!, item, error: failed });
+      continue;
+    }
     if (!existsSync(join(pageDir, "probes", "textspacing.json"))) {
       throw new Error(`no collected evidence for ${item.url}; run "collect" first`);
     }
@@ -563,5 +577,5 @@ export async function loadRun(dir: string): Promise<RunData> {
   if (existsSync(join(dir, "recipes"))) for (const file of (await readdir(join(dir, "recipes"))).filter((name) => name.endsWith(".json")).sort()) recipes[file.slice(0, -5)] = await readJson<RecipeSteps>(join(dir, "recipes", file));
   const watchPath = join(dir, "session-watch.json");
   const sessionWatch = existsSync(watchPath) ? await readJson<WatchState>(watchPath).catch(() => null) : null;
-  return { states, contrast, dir, inventory, sample, pages, sessionWatch, writes: writesForRun(dir), reads: readsForRun(dir), login: loginForRun(dir), siteModel: await readSiteModel(dir), siteStates, stateEvidence, documents: loadDocuments(dir, sample.documents), recipes };
+  return { states, contrast, dir, inventory, sample, pages, sessionWatch, writes: writesForRun(dir), reads: readsForRun(dir), login: loginForRun(dir), siteModel: await readSiteModel(dir), siteStates, stateEvidence, documents: loadDocuments(dir, sample.documents), recipes, collectFailed };
 }

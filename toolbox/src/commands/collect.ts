@@ -1,9 +1,12 @@
 import { sayingItRuns } from "../instruments/limit.ts";
-import { readFile } from "node:fs/promises";
+import { readFile, rm } from "node:fs/promises";
+import { existsSync } from "node:fs";
 import { join } from "node:path";
 import type { Browser, Page } from "playwright";
 import { call } from "../browser/call.ts";
-import { confirmLogin, INPAGE_PATH, launchBrowser, loadSampled, newContext, RENDERING, retryOnce, type ColorScheme } from "../browser/session.ts";
+import { wholePageScreenshot, type ScreenshotClip } from "../browser/screenshot.ts";
+import { confirmLogin, firstLineOf, INPAGE_PATH, launchBrowser, loadSampled, newContext, RENDERING, retryOnce, type ColorScheme } from "../browser/session.ts";
+import { LoginExpired } from "../lib/login.ts";
 import { readJson, sha256, writeFileAtomic, writeJson } from "../lib/canonical.ts";
 import { runEngines } from "../lib/engines.ts";
 import { stepStart, writeManifest } from "../lib/manifest.ts";
@@ -82,10 +85,22 @@ async function contentNow(browser: Browser, entry: SampleItem, sweep: ModelSweep
   }
 }
 
+/**
+ * Write in the facts of a page that collect failed on it, also on the second try, and forget the
+ * stamp of an earlier sweep: the next collect measures the page again. The gate names the page as a gap.
+ */
+async function noteFailed(runDir: string, entry: SampleItem, error: string): Promise<void> {
+  const path = join(runDir, "pages", entry.slug, "facts.json");
+  const facts = existsSync(path) ? await readJson<Record<string, unknown>>(path).catch(() => ({})) : {};
+  await writeJson(path, { ...facts, url: entry.url, collectError: error });
+  await rm(pageStampPath(runDir, entry.slug), { force: true });
+}
+
 /** `sweep` closes what covers the page before anything is measured. */
 async function collectPage(browser: Browser, entry: SampleItem, runDir: string, sweep: ModelSweep, noted: Noted = {}): Promise<Record<string, unknown>> {
   const dir = join(runDir, "pages", entry.slug);
   const summary: Record<string, unknown> = { url: entry.url, slug: entry.slug };
+  let clippedAt: ScreenshotClip | null = null;
 
   for (const scheme of ["light", "dark"] as ColorScheme[]) {
     const context = await newContext(browser, { colorScheme: scheme }, sweep.guard);
@@ -100,12 +115,18 @@ async function collectPage(browser: Browser, entry: SampleItem, runDir: string, 
         summary.placement = placement;
       }
       if (scheme === "light") await writeJson(join(dir, "probes", "overlays.json"), await sweep.overlays(page));
-      await page.screenshot({ path: join(dir, `screenshot-${scheme}.png`), fullPage: true, animations: "disabled" });
+      // A very tall page is pictured down to a limit; the facts say where the picture stops.
+      const shot = await wholePageScreenshot(page, { path: join(dir, `screenshot-${scheme}.png`) });
+      if (scheme === "light") clippedAt = shot.clippedAt;
       const engines = await runEngines(page);
       await writeJson(join(dir, `engines-${scheme}.json`), engines);
       summary[`engines-${scheme}`] = engines.summary;
       if (scheme === "light") {
         const facts = await collectFacts(page);
+        if (clippedAt) {
+          facts.screenshotClippedAt = clippedAt;
+          summary.screenshotClippedAt = clippedAt;
+        }
         await writeJson(join(dir, "facts.json"), facts);
         await writeFileAtomic(join(dir, "aria.yaml"), `${await page.locator("body").ariaSnapshot()}\n`);
         await writeJson(join(dir, "probes", "targetsize.json"), await call(page, "targetSizes"));
@@ -188,11 +209,11 @@ async function collectPage(browser: Browser, entry: SampleItem, runDir: string, 
     await sweep.install(context);
     try {
       const { page } = await loadSampled(await context.newPage(), entry, (tab) => sweep.dismiss(context, tab, "collect:narrow"));
-      await page.screenshot({ path: join(dir, "screenshot-narrow.png"), fullPage: true, animations: "disabled" });
+      const narrowShot = await wholePageScreenshot(page, { path: join(dir, "screenshot-narrow.png") });
       await writeJson(join(dir, "probes", "overlays-narrow.json"), await sweep.overlays(page));
       await writeJson(join(dir, "probes", "operables-narrow.json"), await pageOperables(page));
       // What there is to reach with Tab in this window: the walk below is laid next to it.
-      await writeJson(join(dir, "probes", "named-narrow.json"), await collectNamed(page));
+      await writeJson(join(dir, "probes", "named-narrow.json"), { ...(await collectNamed(page)), ...(narrowShot.clippedAt ? { screenshotClippedAt: narrowShot.clippedAt } : {}) });
       const walk = await tabWalk(page, { continueAfterFocusLoss: true, focusDir: join(dir, "probes", "focus-narrow"), focusPath: "probes/focus-narrow", orderPicture: join(dir, "probes", "tabwalk-narrow.png") });
       await writeJson(join(dir, "probes", "tabwalk-narrow.json"), walk);
       summary["tabwalk-narrow"] = { outcome: walk.outcome, stops: walk.stopCount };
@@ -274,7 +295,7 @@ export async function collect(options: CollectOptions): Promise<void> {
     let reused = 0;
     // The pictures read on the pages before: a picture counts as read on the first page that has it, as with one page after the other.
     const seenPictures = new Set<string>();
-    type Measured = { summary: Record<string, unknown>; key: string; noted: Noted; reused: boolean; reason: string | null; started: number; scope: ModelSweep };
+    type Measured = { summary: Record<string, unknown>; key: string; noted: Noted; reused: boolean; reason: string | null; started: number; scope: ModelSweep; failed?: string };
     await withSpacing(settings, () =>
       inOrder(
         pages.length,
@@ -303,14 +324,27 @@ export async function collect(options: CollectOptions): Promise<void> {
           const noted: Noted = {};
           // A page gets one retry: a page that loaded too slowly once, or a crashed renderer, must not cost the whole run.
           // A page with many measurements takes more than a minute: say every half minute that it still runs.
-          const summary = await sayingItRuns(`collect ${index + 1}/${pages.length} ${entry.url}`, () => retryOnce(entry.url, () => collectPage(browser, entry, options.run, scope, noted)));
-          return { summary, key, noted, reused: false, reason, started, scope };
+          try {
+            const summary = await sayingItRuns(`collect ${index + 1}/${pages.length} ${entry.url}`, () => retryOnce(entry.url, () => collectPage(browser, entry, options.run, scope, noted)));
+            return { summary, key, noted, reused: false, reason, started, scope };
+          } catch (error) {
+            // A session that ran out, or a browser that is gone, stops the sweep: every page after it would fail the same way.
+            if (error instanceof LoginExpired || !browser.isConnected()) throw error;
+            // One page that fails twice does not stop the sweep: its facts say why, and the gate names it as a gap.
+            const failed = firstLineOf(error);
+            await noteFailed(options.run, entry, failed);
+            return { summary: { url: entry.url, slug: entry.slug, collectError: failed }, key, noted: {}, reused: false, reason, started, scope, failed };
+          }
         },
         async (index, measured) => {
           const entry = pages[index]!;
           sweep.absorb(measured.scope);
           summaries.push(measured.summary);
           progress.tick("pages", "pages", index + 1, pages.length);
+          if (measured.failed) {
+            process.stderr.write(`collect ${index + 1}/${pages.length} ${entry.url} niet gemeten: ${measured.failed}\n`);
+            return;
+          }
           if (measured.reused) {
             reused++;
             process.stderr.write(`collect ${index + 1}/${pages.length} ${entry.url} niet veranderd, niet opnieuw gemeten (${Date.now() - measured.started}ms)\n`);
