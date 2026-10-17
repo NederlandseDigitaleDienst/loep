@@ -21,7 +21,7 @@ loep is gemaakt om door een AI-assistent te worden bediend. Je vraagt in gewone 
 /plugin install nldd-a11y@nldd
 ```
 
-De plugin bevat de hele repository, ook de toolbox. Eén keer, in de map van de plugin of van je eigen kopie van de repository:
+De plugin bevat de hele repository, ook de toolbox. De agent die de skill gebruikt runt het volgende om benodigde tools/pakketten/browsers/... te installeren op je machine.
 
 ```
 just install        # pakketten en browsers
