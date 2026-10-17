@@ -4,6 +4,10 @@ Wat er per versie van loep is veranderd. De versie staat op het voorblad en onde
 
 ## Nog niet uitgebracht
 
+### Wat een uitkomst kan veranderen
+
+- Een schermafbeelding van een pagina die hoger is dan de grens van 16.384 pixels, wordt niet meer als hele pagina gerenderd en dan bijgesneden. Het venster wordt tijdelijk zo hoog als de grens gezet, de afbeelding wordt van het venster genomen, en daarna krijgt het venster zijn oude maat en scrollpositie terug. Hetzelfde geldt voor de afbeelding van één element op zo'n pagina (`crop`, `ocr`, contrast met `--at` en tekst in een afbeelding): het venster scrolt naar het element. Eerder liep `collect` op een pagina van ruim 170.000 pixels hoog nog steeds vast op een time-out, ook met de grens uit 0.9.0 (#94).
+
 ## 0.9.0 (2026-10-17)
 
 Ook deze versie is uitgebracht zonder nieuwe meting op de testsite. De wijzigingen zijn getest met eigen tests, niet in een volledige run.

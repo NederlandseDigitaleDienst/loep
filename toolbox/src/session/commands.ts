@@ -3,6 +3,7 @@ import { PNG } from "pngjs";
 import { axInfo, type AxInfo } from "../browser/call.ts";
 import { clipboardMark, clipboardReport, clipboardSince } from "../browser/clipboard.ts";
 import { clipboardNote, hasClipboardPermission, settlePage } from "../browser/session.ts";
+import { regionScreenshot } from "../browser/screenshot.ts";
 import { elementContrast, type ContrastMeasurement } from "../instruments/contrast.ts";
 import { focusIndicatorOf } from "../instruments/focus.ts";
 import { distinctByColour, type Side, type Vision, type VisionRatios } from "../instruments/distinct.ts";
@@ -447,7 +448,7 @@ const crop: Handler = async (context, _args, options) => {
   if (!fits) {
     // Larger than the window: cut it out of a picture of the whole page.
     const clip = { x: Math.max(0, target.box.x - margin), y: Math.max(0, target.box.y - margin), width: target.box.width + 2 * margin, height: target.box.height + 2 * margin };
-    await page.screenshot({ path, fullPage: true, clip, animations: "disabled" });
+    await regionScreenshot(page, clip, { path });
     return { result: { box: target.box, margin, fullPage: true }, print: { image: images.relative(path), size: `${target.box.width}x${target.box.height}` } };
   }
   const placed = await page.evaluate((ref) => {

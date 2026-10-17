@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, test } from "node:test";
 import { PNG } from "pngjs";
-import { MAX_SCREENSHOT_HEIGHT } from "../src/browser/screenshot.ts";
+import { MAX_SCREENSHOT_HEIGHT, regionScreenshot, wholePageScreenshot } from "../src/browser/screenshot.ts";
 import { INPAGE_PATH, launchBrowser, newContext } from "../src/browser/session.ts";
 import { collect } from "../src/commands/collect.ts";
 import { gateChecks } from "../src/commands/gate.ts";
@@ -21,6 +21,8 @@ let scratch: string;
 
 /** Far taller than a picture may be, with text at the top and text far below the limit. */
 const LONG = `<!doctype html><html lang="nl"><head><meta charset="utf-8"><title>Lang</title></head><body style="margin:0;background:#fff;color:#000"><main><h1>Lang</h1><p>Tekst bovenaan.</p><div style="height:40000px;position:relative"><p style="position:absolute;top:30000px;margin:0">Tekst onderaan.</p></div></main></body></html>`;
+/** Taller than Chromium paints with `fullPage` in time (#94), with a red block far below the limit. */
+const HUGE = `<!doctype html><html lang="nl"><head><meta charset="utf-8"><title>Zeer lang</title></head><body style="margin:0;background:#fff"><div style="height:200000px;position:relative"><div style="position:absolute;top:150000px;left:10px;width:100px;height:50px;background:#f00"></div></div></body></html>`;
 const SHORT = `<!doctype html><html lang="nl"><head><meta charset="utf-8"><title>a</title></head><body><main><h1>a</h1><p>Tekst op de pagina.</p></main></body></html>`;
 
 before(async () => {
@@ -30,6 +32,7 @@ before(async () => {
     // `/gone` never answers with HTTP: every measurement of it fails, also the second time.
     if (path === "/gone") return void request.socket.end("geen http\r\n\r\n");
     if (path === "/long") return void response.writeHead(200, { "content-type": "text/html; charset=utf-8" }).end(LONG);
+    if (path === "/huge") return void response.writeHead(200, { "content-type": "text/html; charset=utf-8" }).end(HUGE);
     if (path === "/a") return void response.writeHead(200, { "content-type": "text/html; charset=utf-8" }).end(SHORT);
     response.writeHead(404).end();
   });
@@ -97,6 +100,35 @@ test("contrast on a page taller than the limit measures the text above it and ma
     assert.equal(top.outcome, "passed");
     assert.equal(bottom.outcome, "cantTell");
     assert.match(bottom.reason ?? "", /onder de grens van de schermafbeelding/);
+  } finally {
+    await browser.close();
+  }
+});
+
+test("a page of 200,000 pixels is pictured down to the limit through the window, and the window is put back", { timeout: 120_000 }, async () => {
+  const browser = await launchBrowser();
+  try {
+    const context = await newContext(browser, { colorScheme: "light" });
+    const page = await context.newPage();
+    await page.setViewportSize({ width: 320, height: 640 });
+    await page.goto(`${origin}/huge`);
+    await page.evaluate(() => window.scrollTo(0, 500));
+    const started = Date.now();
+    const shot = await wholePageScreenshot(page);
+    assert.ok(Date.now() - started < 20_000, `took ${Date.now() - started} ms`);
+    assert.deepEqual(shot.clippedAt, { pageHeight: 200000, limit: MAX_SCREENSHOT_HEIGHT });
+    const picture = PNG.sync.read(shot.image);
+    assert.equal(picture.height, MAX_SCREENSHOT_HEIGHT);
+    assert.equal(picture.width, 320);
+    assert.deepEqual(page.viewportSize(), { width: 320, height: 640 });
+    assert.deepEqual(await page.evaluate(() => [window.innerHeight, window.scrollY]), [640, 500]);
+
+    // An element far below the limit is pictured through the window as well, not from a painting of the whole page.
+    const block = PNG.sync.read(await regionScreenshot(page, { x: 10, y: 150000, width: 100, height: 50 }));
+    assert.equal(block.width, 100);
+    assert.equal(block.height, 50);
+    assert.deepEqual([...block.data.subarray(0, 3)], [255, 0, 0]);
+    assert.deepEqual(await page.evaluate(() => [window.innerHeight, window.scrollY]), [640, 500]);
   } finally {
     await browser.close();
   }
