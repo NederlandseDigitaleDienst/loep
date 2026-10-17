@@ -14,7 +14,7 @@ import { extensionUse } from "../lib/budget.ts";
 import { loadAllProcedures } from "../lib/procedures.ts";
 import { reportedModels } from "../lib/models.ts";
 import { loadRun } from "../lib/rundata.ts";
-import { waitsOnlyOnSending, type Verdict } from "../lib/verdict.ts";
+import { openPoint, UNREACHABLE, waitsOnlyOnSending, type Verdict } from "../lib/verdict.ts";
 import { loginNl, NOT_LOGGED_IN_NL } from "../lib/login.ts";
 import { readsAllowedNl } from "../lib/reads.ts";
 import { WRITES_BLOCKED_NL, writesAllowedNl } from "../lib/writes.ts";
@@ -88,6 +88,9 @@ export async function gatherVerdicts(runDir: string, task: InstrumentTask, obser
     verdicts[slot] = await readJson<Verdict>(join(runDir, part.output));
     hashes[slot] = await sha256File(join(runDir, part.output));
   }
+  // A finishing round that ran again with `tasks --again`: the verdict of the round before it is kept, to show what stood before.
+  const earlierFinish = task.finish?.earlier?.at(-1);
+  if (verdicts.finish && earlierFinish && existsSync(join(runDir, earlierFinish))) verdicts.finishBefore = await readJson<Verdict>(join(runDir, earlierFinish));
   const { answers, stale } = await loadAnswers(runDir, task.criterion, await countingVerdict(runDir, task, observations));
   if (stale > 0) rejected.push(`${task.criterion}/answer: ${stale} given to an earlier verdict`);
   return { verdicts, hashes, answers, rejected };
@@ -338,7 +341,10 @@ export async function evaluate(options: EvaluateOptions): Promise<Evaluation> {
   const person = open.owner.filter((id) => !notSent.includes(id));
   if (person.length > 0) process.stderr.write(`open, vraagt een mens of een keuze: ${idsAcrossVersionsNl(person, criteria)}. Een persoon legt het antwoord vast met answer; daarna opnieuw evaluate.\n`);
   if (notSent.length > 0) process.stderr.write(`open, alleen omdat het onderzoek niet mocht versturen: ${idsAcrossVersionsNl(notSent, criteria)}. Geen persoon nodig: een nieuw onderzoek met een testomgeving, verklaard bij inventory (--test-environment <origin> --declared-by "<naam>, <functie>"), meet het met een instrument. Die origin mag die van alleen het ingesloten venster zijn.\n`);
-  if (open.evaluation.length > 0) process.stderr.write(`LET OP: het onderzoek is niet af. Door dit onderzoek niet vastgesteld: ${idsAcrossVersionsNl(open.evaluation, criteria)}. Draai tasks en pending: de afmaakronde meet wat ontbrak. Is die al geweest, dan kan alleen een persoon het punt nog sluiten, met answer.\n`);
+  if (open.evaluation.length > 0) process.stderr.write(`LET OP: het onderzoek is niet af. Door dit onderzoek niet vastgesteld: ${idsAcrossVersionsNl(open.evaluation, criteria)}. Draai tasks en pending: de afmaakronde meet wat ontbrak. Is die al geweest, dan kan alleen een persoon het punt nog sluiten, met answer, behalve een punt "${UNREACHABLE}" of "proef werkte niet": dat meet een nieuwe afmaakronde met tasks --again <criteria>.\n`);
+  // A part of the site that did not load is no fault of loep and no work for the owner: said apart, with the way to measure it once it loads.
+  const unreachable = open.evaluation.filter((id) => criteria.find((criterion) => criterion.id === id)!.missingNl.some((point) => openPoint(point).kind?.prefix === UNREACHABLE));
+  if (unreachable.length > 0) process.stderr.write(`open, een deel van de site was niet bereikbaar: ${idsAcrossVersionsNl(unreachable, criteria)}. Laadt het weer, zet dan een nieuwe afmaakronde klaar met tasks --again ${unreachable.join(",")}, en draai daarna opnieuw evaluate.\n`);
   // The phases with agents leave no step of their own: what their sessions say about begin, end and time per agent is kept here.
   await writeManifest(options.run, { command: "evaluate", startedAt, criteria: criteria.length, rejectedVerdicts: rejected.length, defects: merged.defects, mergeProposal: merged.proposal, establishedBy: { verification: by("verification").length, finishing: finished.length, person: byPerson.length }, open, extensions, agentPhases: agentPhaseTimings(options.run) });
   return evaluation;

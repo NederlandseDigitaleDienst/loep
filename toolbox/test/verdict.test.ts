@@ -8,6 +8,7 @@ import {
   notSentPointProblems,
   OPEN_POINT_KINDS,
   openPoint,
+  UNREACHABLE,
   waitsOnlyOnSending,
   indexObservations,
   validateCandidates,
@@ -361,7 +362,8 @@ test("every observation says what follows from it, so nothing that is wrong stay
 test("an open point names its kind and is written for a reader who does not know the toolbox", () => {
   const open = (missingNl: string[]): string => validateJudgeVerdict({ ...passed, outcome: "cantTell", missingNl }, context).join("\n");
   assert.match(open(["Het contrast op 320 pixels breed is niet gemeten."]), /missingNl\[0\]: an open point starts with its kind and a colon: "mens nodig:"/);
-  for (const kind of OPEN_POINT_KINDS) assert.equal(open([`${kind.prefix}: het contrast op 320 pixels breed is niet gemeten op P01.`]), "");
+  // A point "niet bereikbaar" also says when: a time of day.
+  for (const kind of OPEN_POINT_KINDS) assert.equal(open([`${kind.prefix}: het contrast op 320 pixels breed is niet gemeten op P01${kind.prefix === UNREACHABLE ? ", tussen 14:05 en 14:40" : ""}.`]), "");
   assert.match(open(["budget op: kort"]), /say after "budget op:" what is open and where/);
   // The words of the toolbox stay out of the text: the owner of the site reads it.
   const refs = [...context.observations.keys()];
@@ -401,6 +403,26 @@ test("a point that stays open only because the run may not send is the owner's c
   assert.deepEqual(notSentPointProblems([point], { origin: "https://www.voorbeeld.nl" }), []);
   assert.match(notSentPointProblems([point], { origin: "https://chat.voorbeeld.nl" }).join(), /missingNl\[0\]: this run may send to https:\/\/chat\.voorbeeld\.nl/);
   assert.match(notSentPointProblems(["versturen niet toegestaan: het antwoord van de chat op P02, zonder adres."], { origin: "https://www.voorbeeld.nl" }).join(), /name in the point the address it goes to/);
+});
+
+test("a part of the site that did not load is its own kind: not the owner's, not loep's, and it says what and when", () => {
+  const point = "niet bereikbaar: het chatvenster op P02 (https://chat.example.nl/widget) laadde niet, ook los geopend, tussen 14:05 en 14:40; de andere pagina's laadden wel.";
+  const kind = openPoint(point).kind!;
+  assert.equal(kind.prefix, UNREACHABLE);
+  assert.equal(kind.reader, "site", "no work for the owner and no fault of loep");
+  // check-verdict accepts it, for the judge and for the verifier.
+  assert.equal(validateJudgeVerdict({ ...passed, outcome: "cantTell", missingNl: [point] }, context).join("\n"), "");
+  const verification = { judgeOutcome: "cantTell" as const, findings: [], attackNl: "Het chatvenster op P02 twee keer opnieuw geopend; het laadde niet.", attackEvidence: ["v143-0002"] };
+  const afterOpen: VerificationContext = { ...context, session: "v143", judge: { ...passed, outcome: "cantTell", missingNl: [point] } };
+  assert.deepEqual(validateVerification({ ...passed, outcome: "cantTell", missingNl: [point], observations: [{ ...seen, evidence: ["v143-0002"] }], verification }, afterOpen), []);
+  // What did not load, and when: both are needed, so the report can say it and a later round knows what to try.
+  const open = (text: string): string => validateJudgeVerdict({ ...passed, outcome: "cantTell", missingNl: [text] }, context).join("\n");
+  assert.match(open("niet bereikbaar: het chatvenster laadde niet, tussen 14:05 en 14:40."), /names what did not load/);
+  assert.match(open("niet bereikbaar: het chatvenster op P02 laadde bij herhaalde pogingen niet."), /says when it did not load/);
+  assert.equal(open("niet bereikbaar: https://www.example.nl/contact/ gaf om 09.12 en om 09.50 een time-out."), "");
+  // A limit of the evaluation: it may stand next to "no deviation found", and the finishing round may leave it after a real attempt.
+  assert.deepEqual(validateJudgeVerdict({ ...passed, outcome: "cantTell", missingNl: [point], nothingFound: { coverageNl: "gemeten op 9 van 29 pagina's en in 4 van 12 toestanden; geen verschil gevonden" } }, context), []);
+  assert.ok((KINDS_AFTER_FINISH as readonly string[]).includes(UNREACHABLE));
 });
 
 test("no deviation found but not fully measured stays cantTell, and only when every open point is a limit of the evaluation", () => {

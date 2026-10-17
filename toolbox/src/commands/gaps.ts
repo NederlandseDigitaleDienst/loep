@@ -9,12 +9,14 @@ import { criterionById } from "../lib/wcag.ts";
  * should have delivered; "budget op" says where a budget did not fit; "proef werkte niet" names
  * an instrument that gave no answer. The kinds for the owner of the site are listed too, so the
  * list is complete; "versturen niet toegestaan" stands apart from them, because one declaration
- * of a test environment at inventory would have closed every such point. Reads the verdicts and
- * the evaluation of each run and writes nothing.
+ * of a test environment at inventory would have closed every such point. "niet bereikbaar" is a
+ * part of the site that did not load while the rest did: no fault of loep, and a new finishing
+ * round measures it once it loads. Reads the verdicts and the evaluation of each run and writes
+ * nothing.
  */
 
 /** The kinds in the order of the list: what the toolbox can do something about first. */
-const KIND_ORDER = ["veegronde mist", "budget op", "proef werkte niet", "versturen niet toegestaan", "mens nodig", "keuze nodig"] as const;
+const KIND_ORDER = ["veegronde mist", "budget op", "proef werkte niet", "niet bereikbaar", "versturen niet toegestaan", "mens nodig", "keuze nodig"] as const;
 /** A point from before the kinds existed that starts with none of them. */
 const NO_KIND = "zonder soort";
 
@@ -22,6 +24,7 @@ const WHAT_NL: Record<string, string> = {
   "veegronde mist": "Elk punt is een agent die zegt welke meting de veegronde had moeten leveren.",
   "budget op": "Elk punt is iets wat niet is bekeken omdat het budget van een agent op was.",
   "proef werkte niet": "Elk punt is een instrument dat geen bruikbaar antwoord gaf, of een onderdeel dat niet openging.",
+  "niet bereikbaar": "Elk punt is een deel van de site, een pagina of een ingesloten venster, dat bij herhaalde pogingen niet laadde terwijl de rest wel laadde. Geen fout in loep: laadt het weer, dan meet een nieuwe afmaakronde het (tasks --again).",
   "versturen niet toegestaan": "Elk punt is iets wat pas na versturen te zien is, in een run die niet mocht versturen. Geen persoon nodig: een testomgeving, verklaard bij inventory met --test-environment, laat een instrument het meten. Dat kan de origin van alleen het ingesloten venster zijn.",
   "mens nodig": "Elk punt vraagt iets wat geen instrument kan vaststellen.",
   "keuze nodig": "Elk punt vraagt een besluit van de eigenaar van de site.",
@@ -47,8 +50,8 @@ export interface GapPoint {
 export interface GapKind {
   kind: string;
   labelNl: string;
-  /** Whose work the point is: the toolbox, the owner of the site, or unknown for a point without a kind. */
-  reader: "toolbox" | "owner" | "unknown";
+  /** Whose work the point is: the toolbox, the owner of the site, the site itself (a part that did not load), or unknown for a point without a kind. */
+  reader: "toolbox" | "owner" | "site" | "unknown";
   whatNl: string;
   /** Points as written, and after equal points were taken together. */
   points: number;
