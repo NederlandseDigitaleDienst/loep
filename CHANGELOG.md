@@ -4,6 +4,8 @@ Wat er per versie van loep is veranderd. De versie staat op het voorblad en onde
 
 ## Nog niet uitgebracht
 
+## 0.9.0 (2026-10-17)
+
 ### Wat een uitkomst kan veranderen
 
 - Een nieuwe soort open punt: `niet bereikbaar`. Een agent gebruikt hem als een deel van de site, een pagina of een ingesloten venster, bij herhaalde pogingen niet laadt terwijl de rest van de site wel laadt. Het punt noemt wat er niet laadde (een adres of het label van de pagina) en wanneer (de tijd van de eerste en de laatste poging); de controle weigert een punt zonder die twee. Het criterium telt als door dit onderzoek niet vastgesteld en krijgt een afmaakronde. Die mag het punt laten staan na een beschreven poging met twee eigen waarnemingen, net als `proef werkte niet`. Het rapport zet de punten volledig en apart onder "Nog uitzoeken" en telt de criteria bovenaan apart. `feedback` maakt er geen tekst voor een issue van, want het is geen fout in loep, maar noemt de criteria apart; `gaps` telt de soort apart. De opdrachten van beoordelaar, verifieerder en afmaakronde zeggen wanneer de soort past. Eerder werd zo'n deel `proef werkte niet`, en kon het na de afmaakronde alleen nog door een persoon worden gesloten (#87).
