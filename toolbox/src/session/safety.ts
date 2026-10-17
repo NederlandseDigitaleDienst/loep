@@ -86,8 +86,10 @@ export interface Blocked {
   resourceType: string;
   /** For a request with a body: the search services whose question the body has the form of. Absent when none. */
   search?: SearchServiceId[];
-  /** Why a request that a read request covered was held back. */
+  /** Why a request that a read request covered, or a write to the test environment, was held back. */
   reasonNl?: string;
+  /** A write to the test environment that the budget for sending held back: because it was used up, or because the previous write was too recent. */
+  writeBudget?: "out" | "spacing";
 }
 
 /** Resource types a page needs to look the way it does. Fetched with GET only, also from hosts outside the scope unless the scope is strict. */
@@ -194,9 +196,15 @@ export async function guardContext(context: BrowserContext, scope: Scope, guard:
         return refuse();
       }
       if (isWriteOrigin(scope.writes, url)) {
-        (guard.passed ??= []).push(scope.writes!.record(method, url));
+        // Every write takes one from the budget of the whole run; when it is used up, or the previous one was too recent, the write is held back as without permission.
+        const claim = scope.writes!.claim(method, url);
+        if (!claim.ok) {
+          guard.blocked.push({ at: new Date().toISOString(), kind: "method", method, url: url.slice(0, MAX_URL), resourceType: type, reasonNl: claim.reasonNl, writeBudget: claim.budget });
+          return refuse();
+        }
+        (guard.passed ??= []).push(claim.entry);
         // Where the server sends the browser next is not asked here again: it has to be inside the scope.
-        return passWrite(route, scope.writes!, (target) => inScope(scope, target)).then((repeated) => void (repeated && (guard.passed ??= []).push(scope.writes!.record(method, repeated))));
+        return passWrite(route, scope.writes!, (target) => inScope(scope, target)).then((repeated) => void (repeated && (guard.passed ??= []).push(scope.writes!.record(method, repeated, { repeat: true }))));
       }
       // Whether the body has the form of a search: what the explorer needs to record a read request, never the body itself.
       const search = method === "POST" ? searchServicesOf(body) : [];

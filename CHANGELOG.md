@@ -4,6 +4,11 @@ Wat er per versie van loep is veranderd. De versie staat op het voorblad en onde
 
 ## Nog niet uitgebracht
 
+### Wat een uitkomst kan veranderen
+
+- Versturen heeft een grens. Een run die mag versturen, heeft een budget voor de hele run, alle sessies en de veegronde samen: standaard ten hoogste 5 verzoeken die iets kunnen wijzigen (POST, PUT, PATCH, DELETE en formulieren) naar de verklaarde origin, met minstens 120 seconden ertussen. Een ander aantal geef je bij `inventory` met `--max-writes <n>`; het manifest legt het vast naast de verklaring, en een run van vóór het budget krijgt de standaard. De telling staat in `writes.jsonl` van de run, zodat een nieuw sessieproces verder telt. Een verzoek dat te vroeg komt, wordt tegengehouden met de seconden die nog over zijn. Is het budget op, dan wordt elk volgend verzoek tegengehouden zoals zonder verklaring, en zegt het antwoord van het commando (`sending`) dat het budget op is en hoeveel er zijn verstuurd. Een agent schrijft dan een open punt `versturen niet toegestaan` met die reden; de controle staat dat alleen toe als het budget echt op is. Een bericht over een websocket telt niet mee. `session list` en `estimate` tonen wat er nog over is.
+- De opdrachten van beoordelaar, verifieerder en afmaakronde noemen het budget en zeggen: verstuur alleen als de procedure het echt vraagt, één keer per proef, en kijk eerst of een eerdere waarneming of de veegronde het al laat zien. De rondgang verstuurt ook in een run die mag versturen niets. De skill zegt bij de vraag vooraf over versturen hoeveel verzendingen er ten hoogste komen, en dat de ontvanger die echt krijgt.
+
 ## 0.10.0 (2026-10-17)
 
 Ook deze versie is uitgebracht zonder nieuwe meting op de testsite. De wijziging is getest met eigen tests, niet in een volledige run.

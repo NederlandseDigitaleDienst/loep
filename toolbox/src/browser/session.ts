@@ -210,8 +210,9 @@ export async function newContext(browser: Browser, options: ContextOptions = {},
     if (read) noteRefusedRead({ method, address: addressOf(route.request().url()), rule: read.rule.id, reasonNl: read.reasonNl });
     // An aborted navigation replaces the page with an error page. "No content" leaves the page as it was.
     if (!isWriteOrigin(writes, route.request().url())) return route.request().isNavigationRequest() ? route.fulfill({ status: 204, body: "" }) : route.abort("blockedbyclient");
-    writes!.record(method, route.request().url());
-    return passWrite(route, writes!).then((repeated) => void (repeated && writes!.record(method, repeated)));
+    // The sweep shares the budget for sending with the sessions: a write past it, or too soon after the previous one, is held back.
+    if (!writes!.claim(method, route.request().url()).ok) return route.request().isNavigationRequest() ? route.fulfill({ status: 204, body: "" }) : route.abort("blockedbyclient");
+    return passWrite(route, writes!).then((repeated) => void (repeated && writes!.record(method, repeated, { repeat: true })));
   });
   if (guard || writes) {
     await context.routeWebSocket(/.*/, (socket) => {
