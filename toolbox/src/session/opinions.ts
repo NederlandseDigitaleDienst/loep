@@ -1,5 +1,6 @@
 import { writeFile } from "node:fs/promises";
 import { PNG } from "pngjs";
+import { regionScreenshot } from "../browser/screenshot.ts";
 import { agreementLine, measuredBy, type Measured, type MethodFailure, type MethodResult } from "../instruments/methods.ts";
 import { chromiumBackgrounds, CONTRAST_RULES, computedContrast, contrastSummary, engineOpinions, focusStyles, ownMethod, styleChange, TARGET_RULES, verdictDifferences, withoutOpinion, type EngineOpinion, type Verdict } from "../instruments/methods/element.ts";
 import { detectLanguages, languageDifferences, languagePieces, languageVerdicts, markKnownLanguages, type LanguagePiece } from "../instruments/methods/lang.ts";
@@ -516,7 +517,7 @@ async function contrastAt(context: Context, options: Options): Promise<Outcome> 
   const element = context.target!.box;
   const box = pointedBox(options.at, element);
   const path = context.images.image();
-  await page.screenshot({ path, fullPage: true, clip: { x: Math.max(0, element.x), y: Math.max(0, element.y), width: element.width, height: element.height }, animations: "disabled" });
+  await regionScreenshot(page, { x: Math.max(0, element.x), y: Math.max(0, element.y), width: element.width, height: element.height }, { path });
   const ran = await runMethod<PointedAnswer>("image-box", browsersOf(context), () => pointedContrast(path, element.width, box));
   const measured = measuredBy(ran.ok ? [ran.value] : [], [], { failed: ran.ok ? [] : [ran.failure] });
   const { text: _text, confidence: _confidence, ...line } = ran.ok ? imageLine(ran.value.result.box) : { text: "", confidence: 0 };
@@ -570,7 +571,7 @@ export const contrastWith = (raw: Handler, single: Handler): Handler =>
       else {
         const path = context.images.image();
         const clip = { x: Math.max(0, box.x), y: Math.max(0, box.y), width: box.width, height: box.height };
-        await page.screenshot({ path, fullPage: true, clip, animations: "disabled" });
+        await regionScreenshot(page, clip, { path });
         imagePath = path;
         slows.push({ id: "image-text", detail: `${place}|${clip.width}x${clip.height}`, graceMs: BINARY_GRACE_MS, work: () => runMethod("image-text", browsers, () => imageTextContrast(path, clip.width), 40_000) });
       }
@@ -1298,7 +1299,7 @@ export const ocrCommand: Handler = async (context, _args, options) => {
   const path = images.image();
   const box = { x: Math.max(0, target.box.x), y: Math.max(0, target.box.y), width: Math.max(1, target.box.width), height: Math.max(1, target.box.height) };
   if (target.box.width < 4 || target.box.height < 4) throw new Error("het element is te klein of niet zichtbaar om te lezen");
-  await surface.page.screenshot({ path, fullPage: true, clip: box, animations: "disabled" });
+  await regionScreenshot(surface.page, box, { path });
   const browsers = browsersOf(context);
   await ensureHelpers(surface.page);
   const alternative = await runMethod("alt-text", browsers, async () => {
