@@ -8,7 +8,7 @@ import { after, before, test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { crc32 } from "node:zlib";
 import { documents as measureDocuments } from "../src/commands/documents.ts";
-import { inventory, type Inventory } from "../src/commands/inventory.ts";
+import { inventory, probeDocument, type Inventory } from "../src/commands/inventory.ts";
 import { buildSample, chooseDocuments, DOCUMENT_CENSUS_LIMIT, withDocuments } from "../src/commands/sample.ts";
 import { measureOffice } from "../src/instruments/documents/office.ts";
 import { compareOrder, measurePdf, parseStructText } from "../src/instruments/documents/pdf.ts";
@@ -19,7 +19,7 @@ import { documents as documentsExtractor } from "../src/lib/document-evidence.ts
 import { render } from "../src/commands/render.ts";
 import { canonicalJson } from "../src/lib/canonical.ts";
 import { mergeFindings } from "../src/lib/defects.ts";
-import { documentKind, documentScopeNl, kindOfContentType, loadDocuments, type DocumentFacts, type EvaluationDocuments, type InventoryDocument } from "../src/lib/documents.ts";
+import { documentKind, documentScopeNl, kindOfContentType, loadDocuments, REDIRECTS_ELSEWHERE_NL, type DocumentFacts, type EvaluationDocuments, type InventoryDocument } from "../src/lib/documents.ts";
 import { deriveReport, renderMarkdown } from "../src/lib/report-markdown.ts";
 import { exampleEvaluation } from "./fixtures/example-evaluation.ts";
 import { buildDossier } from "../src/lib/dossier.ts";
@@ -687,5 +687,81 @@ test("the report lists the documents with their kind and whether they were read,
     if (POPPLER) assert.match(execFileSync("pdftotext", [result.pdf, "-"], { encoding: "utf8" }), /Documenten[\s\S]*D02[\s\S]*Niet ingelezen/);
   } finally {
     rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// ------------------------------------------------------------- a document that redirects to another host
+
+test("an older inventory that listed a document redirecting to another host: the sample leaves it out and counts it elsewhere", () => {
+  const redirected = found(9, "text", { url: "https://a.test/.well-known/security.txt", bytes: null, status: null, notAsked: REDIRECTS_ELSEWHERE_NL });
+  const stock = inventoryWith([found(1, "pdf"), redirected], 2);
+  const sample = withDocuments(buildSample(stock, "seed"), stock, "seed");
+  assert.deepEqual(sample.documents!.map((document) => [document.label, new URL(document.url).pathname]), [["D01", "/d001.pdf"]]);
+  assert.equal(sample.documentPopulation!.onSite, 1);
+  assert.equal(sample.documentPopulation!.elsewhere, 3);
+  assert.match(sample.note, /Op de site staan 1 document \(1 pdf\)\. Het is in de steekproef opgenomen\. 3 documenten staan op een ander domein/);
+  const only = inventoryWith([redirected]);
+  const plain = buildSample(only, "seed");
+  assert.equal(withDocuments(plain, only, "seed"), plain, "with only such a document the site has none, as a new inventory would say");
+});
+
+test("a document whose address redirects to another host is counted elsewhere, not in the sample; a redirect to another origin of the run stays on the site", async (context) => {
+  const listen = async (handler: Parameters<typeof createServer>[1]): Promise<{ server: Server; origin: string }> => {
+    const created = createServer(handler);
+    await new Promise<void>((resolve) => created.listen(0, "127.0.0.1", resolve));
+    return { server: created, origin: `http://127.0.0.1:${(created.address() as { port: number }).port}` };
+  };
+  const pdf = readFileSync(join(FIXTURES, "tagged.pdf"));
+  const docs = await listen((request, response) => {
+    if (new URL(request.url!, "http://x").pathname === "/gids.pdf") {
+      response.writeHead(200, { "content-type": "application/pdf", "content-length": pdf.length });
+      response.end(request.method === "HEAD" ? undefined : pdf);
+    } else {
+      response.writeHead(404, { "content-type": "text/html; charset=utf-8" });
+      response.end("<!doctype html><html lang=nl><head><title>Niet gevonden</title></head><body><h1>Niet gevonden</h1></body></html>");
+    }
+  });
+  const asked: string[] = [];
+  const main = await listen((request, response) => {
+    const path = new URL(request.url!, "http://x").pathname;
+    asked.push(`${request.method} ${path}`);
+    if (path === "/") {
+      response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+      response.end(`<!doctype html><html lang="nl"><head><title>Start</title></head><body><h1>Start</h1><p><a href="/.well-known/security.txt">Beveiliging</a> <a href="/gids.pdf">Gids</a></p></body></html>`);
+    } else if (path === "/.well-known/security.txt") {
+      response.writeHead(301, { location: "https://security.example.nl/.well-known/security.txt" });
+      response.end();
+    } else if (path === "/gids.pdf") {
+      response.writeHead(302, { location: `${docs.origin}/gids.pdf` });
+      response.end();
+    } else {
+      response.writeHead(404, { "content-type": "text/html; charset=utf-8" });
+      response.end("<!doctype html><html lang=nl><head><title>Niet gevonden</title></head><body><h1>Niet gevonden</h1></body></html>");
+    }
+  });
+  try {
+    const away = await probeDocument(`${main.origin}/.well-known/security.txt`, [main.origin, docs.origin]);
+    assert.equal(away.redirectsTo, "https://security.example.nl/.well-known/security.txt");
+    const within = await probeDocument(`${main.origin}/gids.pdf`, [main.origin, docs.origin]);
+    assert.equal(within.redirectsTo, undefined, "an origin given with --also-origin is part of the site");
+    assert.equal(within.bytes, pdf.length);
+    assert.equal((await probeDocument(`${main.origin}/gids.pdf`, main.origin)).redirectsTo, `${docs.origin}/gids.pdf`, "without --also-origin the other origin is elsewhere");
+
+    const run = join(scratch, "run-redirect");
+    let stock: Inventory;
+    try {
+      stock = await inventory({ baseUrl: `${main.origin}/`, out: run, maxPages: 20, alsoOrigins: [docs.origin] });
+    } catch (error) {
+      if (/Executable doesn't exist|browserType.launch/.test((error as Error).message)) return context.skip("no browser available");
+      throw error;
+    }
+    assert.deepEqual(stock.documents!.map((document) => document.url), [`${main.origin}/gids.pdf`]);
+    assert.deepEqual(stock.documentTotals, { onSite: 1, byKind: { pdf: 1 }, elsewhere: 1, elsewhereByKind: { text: 1 } });
+    const sample = withDocuments(buildSample(stock, "seed"), stock, "seed");
+    assert.deepEqual(sample.documents!.map((document) => document.url), [`${main.origin}/gids.pdf`]);
+    assert.equal(sample.documentPopulation!.elsewhere, 1);
+    assert.ok(!asked.includes("GET /.well-known/security.txt"), "the redirecting address is asked about once, never fetched");
+  } finally {
+    await Promise.all([main.server, docs.server].map((each) => new Promise<void>((resolve) => void each.close(() => resolve()))));
   }
 });

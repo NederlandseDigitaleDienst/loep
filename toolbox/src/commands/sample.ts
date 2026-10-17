@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import { readJson, sha256, stableId, writeJson } from "../lib/canonical.ts";
-import { countByKind, DOCUMENT_KINDS, documentLabels, kindsNl, READ_KINDS, type DocumentKind, type InventoryDocument, type SampleDocument } from "../lib/documents.ts";
+import { countByKind, DOCUMENT_KINDS, documentLabels, kindsNl, READ_KINDS, siteDocuments, type DocumentKind, type InventoryDocument, type SampleDocument } from "../lib/documents.ts";
 import { stepStart, writeManifest } from "../lib/manifest.ts";
 import { notFoundProbes, siteOrigins } from "../lib/origins.ts";
 import { frameAddress, frameEntry, frameStanding, loadSiteModel, type SiteModel } from "../lib/sitemodel.ts";
@@ -378,13 +378,15 @@ export function chooseDocuments(found: InventoryDocument[], seed: string): Sampl
   return items.map(({ document, reason }, index) => ({ label: labels[index]!, url: document.url, kind: document.kind, slug: document.slug, reason, linkedFrom: document.linkedFrom, bytes: document.bytes, lastModified: document.lastModified }));
 }
 
-/** Add the documents to a sample of pages. A site without documents keeps the sample it had, to the letter. */
+/**
+ * Add the documents to a sample of pages. A site without documents keeps the sample it had, to the letter.
+ * Only documents on the site are chosen: one that an older inventory listed although its address redirects to another host counts as elsewhere.
+ */
 export function withDocuments(sample: Sample, inventory: Inventory, seed: string): Sample {
-  const found = inventory.documents ?? [];
+  const { onSite: found, elsewhere } = siteDocuments(inventory);
   if (found.length === 0) return sample;
   const documents = chooseDocuments(found, seed);
   const notChosen = found.filter((document) => !documents.some((entry) => entry.url === document.url));
-  const elsewhere = inventory.documentTotals?.elsewhere ?? 0;
   const all = documents.length === found.length;
   const note =
     ` Op de site staan ${found.length} ${found.length === 1 ? "document" : "documenten"} (${kindsNl(countByKind(found))}). ` +

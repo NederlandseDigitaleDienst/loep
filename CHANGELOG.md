@@ -4,6 +4,10 @@ Wat er per versie van loep is veranderd. De versie staat op het voorblad en onde
 
 ## Nog niet uitgebracht
 
+### Wat een uitkomst kan veranderen
+
+- Een document waarvan het adres doorverwijst naar een ander domein, zoals een `/.well-known/security.txt` die centraal wordt beheerd, telt als document op een ander domein: `inventory` telt het onder de documenten op andere origins (alleen geteld) en `sample` neemt het niet op in de steekproef. Eerder kwam zo'n document in de steekproef, kon `documents` het niet ophalen omdat het buiten de scope van de run lag, en schreven beoordelaars en verifieerders er een open punt `proef werkte niet` over. Een doorverwijzing naar een origin die met `--also-origin` is opgegeven, blijft een document van de site. Een oude run blijft leesbaar: `sample` op een oude `inventory.json` laat zo'n document ook weg en telt het bij de documenten op een ander domein. Een steekproef die al gemaakt is, verandert niet; maak hem opnieuw met `sample` (#88).
+
 ## 0.8.0 (2026-10-16)
 
 Ook deze versie is uitgebracht zonder nieuwe meting op de testsite. Een onderzoek over meer origins is getest met eigen tests, niet in een volledige run.

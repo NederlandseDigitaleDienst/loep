@@ -2,7 +2,7 @@ import { join } from "node:path";
 import type { BrowserContext, Page } from "playwright";
 import { confirmLogin, INPAGE_PATH, launchBrowser, loadPage, newContext } from "../browser/session.ts";
 import { sha256, slugForUrl, writeFileAtomic, writeJson } from "../lib/canonical.ts";
-import { countByKind, documentKind, kindOfContentType, type DocumentKind, type DocumentTotals, type InventoryDocument } from "../lib/documents.ts";
+import { countByKind, documentKind, kindOfContentType, REDIRECTS_ELSEWHERE_NL, type DocumentKind, type DocumentTotals, type InventoryDocument } from "../lib/documents.ts";
 import type { Vendor } from "../lib/evaluation.ts";
 import { isLogout, loginCookieHeader, LoginExpired, noteLogoutUrl, runLoginMark } from "../lib/login.ts";
 import { stepStart, writeManifest } from "../lib/manifest.ts";
@@ -292,14 +292,17 @@ function linksWithText(page: Page): Promise<Anchor[]> {
 export const MAX_DOCUMENT_PROBES = 300;
 const PROBE_TIMEOUT_MS = 8000;
 
+/** What one HEAD request says about a document. `redirectsTo` is the address outside the site its address redirects to: then it is no document of the site. */
+export type DocumentProbe = Pick<InventoryDocument, "bytes" | "lastModified" | "contentType" | "status" | "notAsked"> & { redirectsTo?: string };
+
 /** One HEAD request: size, date and type as the server gives them. Redirects are followed only inside the origins of the site. */
-export async function probeDocument(url: string, origins: string | readonly string[]): Promise<Pick<InventoryDocument, "bytes" | "lastModified" | "contentType" | "status" | "notAsked">> {
+export async function probeDocument(url: string, origins: string | readonly string[]): Promise<DocumentProbe> {
   const own = typeof origins === "string" ? [origins] : origins;
   const nothing = { bytes: null, lastModified: null, contentType: null, status: null };
   let address = url;
   try {
     for (let hop = 0; hop < 4; hop++) {
-      if (!own.includes(new URL(address).origin)) return { ...nothing, notAsked: "het adres verwijst door naar een ander domein" };
+      if (!own.includes(new URL(address).origin)) return { ...nothing, notAsked: REDIRECTS_ELSEWHERE_NL, redirectsTo: address };
       // A document behind a login is asked about with the session of the run.
       const cookie = loginCookieHeader(address);
       const response = await fetch(address, { method: "HEAD", redirect: "manual", signal: AbortSignal.timeout(PROBE_TIMEOUT_MS), ...(cookie ? { headers: { cookie } } : {}) });
@@ -436,7 +439,7 @@ export async function inventory(options: InventoryOptions): Promise<Inventory> {
   // What the server said each page was, to tell a page from a download once every link is known.
   const pageTypes = new Map<string, string | null>();
   /** Addresses without a telling extension that turned out to be a document when the browser could not show them. */
-  const probedAsDocument = new Map<string, Awaited<ReturnType<typeof probeDocument>>>();
+  const probedAsDocument = new Map<string, DocumentProbe>();
   // HEAD requests during the crawl: for an address the browser could not show, or one a link offers as a download.
   let failedLoadsProbed = 0;
   const logoutLinks = new Set<string>();
@@ -554,7 +557,12 @@ export async function inventory(options: InventoryOptions): Promise<Inventory> {
   const found: InventoryDocument[] = [];
   let probes = 0;
   for (const [url, kind] of [...documents.entries()].sort(([a], [b]) => a.localeCompare(b))) {
-    const probe = probedAsDocument.get(url) ?? (probes++ < MAX_DOCUMENT_PROBES ? await probeDocument(url, origins) : { bytes: null, lastModified: null, contentType: null, status: null, notAsked: `meer dan ${MAX_DOCUMENT_PROBES} documenten: grootte en datum zijn alleen van de eerste ${MAX_DOCUMENT_PROBES} gevraagd` });
+    const { redirectsTo, ...probe }: DocumentProbe = probedAsDocument.get(url) ?? (probes++ < MAX_DOCUMENT_PROBES ? await probeDocument(url, origins) : { bytes: null, lastModified: null, contentType: null, status: null, notAsked: `meer dan ${MAX_DOCUMENT_PROBES} documenten: grootte en datum zijn alleen van de eerste ${MAX_DOCUMENT_PROBES} gevraagd` });
+    // An address that redirects to a host outside the site, such as a security.txt kept elsewhere, is a document on another origin: counted, never fetched.
+    if (redirectsTo !== undefined) {
+      elsewhere.set(url, kind ?? documentKind(redirectsTo) ?? "other");
+      continue;
+    }
     const linkedFrom = [...(linksTo.get(url) ?? [])].sort((a, b) => a.page.localeCompare(b.page) || a.text.localeCompare(b.text));
     // A download whose address and answer name no kind the toolbox knows is counted all the same.
     found.push({ url, kind: kind ?? kindOfContentType(probe.contentType) ?? "other", slug: slugForUrl(url), linkedFrom, ...probe });

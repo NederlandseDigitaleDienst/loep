@@ -4,7 +4,7 @@ import { frameStanding } from "../lib/sitemodel.ts";
 import { readJson, sha256File } from "../lib/canonical.ts";
 import { allCriteriaSorted, carryFindingIds, ESTABLISHED_BY_NL, evaluationHash, idsAcrossVersionsNl, knownCommit, OUTCOME_LABEL, markVendor, openCriteria, quoteStart, resolveCriterion, summarise, type BrowserUse, type CriterionResult, type Evaluation, type PointAnswer, type RoundVerdicts } from "../lib/evaluation.ts";
 import { matchFindings, sideOf } from "../lib/difference.ts";
-import { documentScopeNl, evaluationDocuments } from "../lib/documents.ts";
+import { documentScopeNl, evaluationDocuments, siteDocuments } from "../lib/documents.ts";
 import { pagesInScopeNl, siteOrigins } from "../lib/origins.ts";
 import { type Manifest, stepStart, writeManifest } from "../lib/manifest.ts";
 import { agentPhaseTimings } from "../lib/timing.ts";
@@ -201,7 +201,7 @@ export async function evaluate(options: EvaluateOptions): Promise<Evaluation> {
   const origins = siteOrigins(run.inventory);
   const population = run.sample.documentPopulation;
   const documents = population ? evaluationDocuments(run.documents ?? [], population, procedures.filter((procedure) => procedure.evidence.includes("documents")).map((procedure) => procedure.id)) : null;
-  const documentScope = searchedForDocuments ? documentScopeNl(documents, origins, run.inventory.documentTotals?.elsewhere ?? 0) : null;
+  const documentScope = searchedForDocuments ? documentScopeNl(documents, origins, siteDocuments(run.inventory).elsewhere) : null;
 
   const limitations = [
     browsersNl,
