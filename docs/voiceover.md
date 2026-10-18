@@ -15,7 +15,26 @@ In het register van methoden (`toolbox/src/instruments/methods/registry.ts`) sta
 
 VoiceOver geeft via AppleScript terug wat het als laatste zei. Op een machine die vergrendeld is of waarvan het scherm slaapt, weigert het dat. Een virtuele Mac heeft een eigen scherm dat niet vergrendelt, en de instellingen die VoiceOver bedienbaar maken blijven daarbinnen. Op de machine zelf verandert niets.
 
-De virtuele Mac draait met lume (MIT, `trycua/cua` op GitHub), alleen op een Mac met Apple-chip. In de virtuele Mac stuurt een script van de toolbox VoiceOver aan zoals een gebruiker dat doet: met de eigen commando's en toetsen van VoiceOver, via AppleScript. loep start dat script over ssh. lume zit niet in de toolbox: dat installeer je zelf.
+De virtuele Mac draait met lume (MIT, `trycua/cua` op GitHub), alleen op een Mac met Apple-chip. In de virtuele Mac stuurt een script van de toolbox VoiceOver aan zoals een gebruiker dat doet: met de eigen commando's en toetsen van VoiceOver, via AppleScript. loep start dat script over ssh. lume zit niet in de toolbox: dat installeer je zelf, zie "lume installeren" hieronder.
+
+## lume installeren
+
+lume draait op een Mac met Apple-chip en macOS 13 of nieuwer. De toolbox is gebouwd en gemeten met lume 0.6.1. Het installatiescript van de maker van lume zet het programma in `~/.local/bin`:
+
+```
+curl -fsSL https://cua.ai/lume/install.sh -o lume-install.sh
+LUME_VERSION=0.6.1 LUME_TELEMETRY_ENABLED=false bash lume-install.sh --no-background-service
+LUME_TELEMETRY_ENABLED=false lume config telemetry disable
+lume --version
+```
+
+- Lees het script voordat je het draait. Het is van de maker van lume, niet van loep.
+- `LUME_VERSION=0.6.1` zet de versie vast waarmee de toolbox is gemeten. Zonder die regel komt de nieuwste stabiele versie.
+- `--no-background-service` laat de achtergronddienst weg die het script anders bij elke login start (`lume serve` op poort 7777, als LaunchAgent). loep roept alleen de commando's van lume aan (`pull`, `run`, `ssh`, `get`, `stop`) en heeft die dienst niet nodig.
+- Telemetrie staat bij een nieuwe installatie aan, en het script start lume één keer aan het eind. `LUME_TELEMETRY_ENABLED=false` zet het uit voor dat ene proces; `lume config telemetry disable` zet het daarna blijvend uit.
+- Staat `~/.local/bin` niet in je `PATH`, dan zegt het script hoe je het toevoegt.
+
+Daarna richt `just voiceover-setup` de virtuele Mac in, zie "Gebruik".
 
 ## Gebruik
 
@@ -115,7 +134,14 @@ Wat niet is uitgezocht: of het aan het virtuele geluidsapparaat ligt of aan de s
 | Welkomstvenster van VoiceOver uit, geen herstelde vensters na een herstart | VoiceOver en Safari beginnen elke keer hetzelfde |
 | node v24.21.0 in de thuismap van de gast | het script dat VoiceOver aanstuurt; een vaste versie, geen pakketten |
 
-System Integrity Protection zet je zelf uit, in de herstelmodus van de virtuele Mac. Het commando zegt hoe. Het geautomatiseerde `lume sip off` van lume 0.6.1 werkte hier niet.
+System Integrity Protection zet je zelf uit, in de herstelmodus van de virtuele Mac. Het geautomatiseerde `lume sip off` van lume 0.6.1 werkte hier niet. `just voiceover-setup` stopt bij deze stap met afsluitcode 1 en zegt wat je moet doen:
+
+1. `lume run loep-voiceover --recovery-mode true` opent een venster met de herstelmodus.
+2. Kies Options en Continue, en kies een taal. Bij Nederlands heten de menu's daarna anders: Utilities is Hulpprogramma's.
+3. Je komt in een venster met vier keuzes, zoals "Installeer macOS Tahoe opnieuw". Kies daar niets en klik niet op "Ga door" (Continue): dat start de herinstallatie van macOS, die daarna om een beheerderswachtwoord vraagt. Ben je daar toch in beland, sluit de app dan met ⌘Q.
+4. Open in de menubalk Utilities > Terminal (Hulpprogramma's > Terminal).
+5. Typ `csrutil disable` en antwoord `y`. Vraagt de Terminal om een gebruiker en wachtwoord, dan is dat `lume` en `lume`.
+6. Typ `shutdown -h now` en draai `just voiceover-setup` opnieuw. Die tweede keer zet het de rechten en node in de virtuele Mac; daarna meldt `just doctor` de virtuele Mac als aanwezig.
 
 Het openbare beeld `macos-tahoe-vanilla` heeft de gebruiker `lume` met het wachtwoord `lume`. Dat wachtwoord is openbaar. De virtuele Mac is alleen vanaf de eigen machine te bereiken, maar zet er niets in wat geheim moet blijven.
 
