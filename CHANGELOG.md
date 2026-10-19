@@ -4,6 +4,10 @@ Wat er per versie van loep is veranderd. De versie staat op het voorblad en onde
 
 ## Nog niet uitgebracht
 
+### Verder
+
+- De stappen die `just voiceover-setup` toont om System Integrity Protection (SIP) uit te zetten in de virtuele Mac, waarschuwen nu voor een valkuil. In de herstelmodus kom je in een venster met vier keuzes; klik je daar op Ga door (Continue), dan begint een herinstallatie van macOS. De stappen zeggen nu dat je daar niets aanklikt, hoe je zo'n installatie stopt (⌘Q) en hoe het menu heet in een Nederlandse virtuele Mac (Hulpprogramma's > Terminal), zoals `docs/voiceover.md` al zei. Je hoeft niets opnieuw te doen.
+
 ## 0.10.0 (2026-10-17)
 
 Ook deze versie is uitgebracht zonder nieuwe meting op de testsite. De wijziging is getest met eigen tests, niet in een volledige run.
