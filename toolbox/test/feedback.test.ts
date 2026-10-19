@@ -64,6 +64,28 @@ test("feedback drafts one issue per criterion and kind that stayed open by loep,
   assert.match(probe!.bodyMd, /De pdf van <site> gaf geen tags/);
 });
 
+test("a point \"proef werkte niet\" that stands in a criterion with an outcome gets the same draft, and no other kind does", () => {
+  const result = feedback(
+    run("site-outcome", [
+      criterion("1.3.2", "failed", ["proef werkte niet: de leesvolgorde op de startpagina van Gemeente Voorbeeldstad kon niet worden vergeleken."]),
+      criterion("4.1.2", "passed", ["proef werkte niet: de naam van het menu op https://www.voorbeeldstad.nl/ is niet uitgelezen.", "budget op: de tweede pagina is niet bekeken."]),
+      criterion("1.4.3", "passed", ["budget op: het donkere schema is niet bekeken."]),
+      criterion("2.4.6", "failed", ["versturen niet toegestaan: wat het formulier antwoordt.", "niet bereikbaar: pagina P03 laadde niet tussen 14:05 en 14:40."]),
+    ]),
+  );
+  assert.deepEqual(result.drafts.map((draft) => draft.title), [`${TITLE_PREFIX} 1.3.2 proef werkte niet`, `${TITLE_PREFIX} 4.1.2 proef werkte niet`]);
+  const [failed, passed] = result.drafts;
+  assert.match(failed!.bodyMd, /gaf dit criterium een uitkomst, maar een proef werkte niet/);
+  assert.match(failed!.bodyMd, /- Uitkomst: Voldoet niet/);
+  assert.match(passed!.bodyMd, /- Uitkomst: Voldoet\n/);
+  assert.ok(!passed!.bodyMd.includes("tweede pagina"), "only the point of this kind goes in");
+  for (const draft of result.drafts) assert.ok(!/voorbeeldstad/i.test(draft.bodyMd), draft.bodyMd);
+  assert.match(failed!.bodyMd, /De leesvolgorde op de startpagina van <site>/);
+  assert.match(passed!.bodyMd, /op <adres> is niet uitgelezen/);
+  assert.deepEqual(result.notSent, []);
+  assert.deepEqual(result.unreachable, []);
+});
+
 test("the redactor takes out addresses, the host with and without www, the organisation and the name", () => {
   const redact = redactor(SITE);
   assert.equal(redact("Zie http://voorbeeldstad.nl/a en WWW.VOORBEELDSTAD.NL."), "Zie <adres> en <site>.");
