@@ -62,7 +62,7 @@ const imagesOfText: Part = (facts) => ({
 
 const title: Part = (facts) => ({ title: facts.title, fileName: decodeURIComponent(new URL(facts.url).pathname.split("/").pop() ?? ""), ...(facts.pdf ? { titleShownInTitleBar: facts.pdf.displayDocTitle } : {}), firstHeading: facts.headings[0]?.text ?? facts.office?.slides?.[0]?.title ?? null, ...(facts.plain ? { titleProperty: false, notApplicableNl: PLAIN_TITLE_NOT_APPLICABLE_NL } : {}) });
 
-const links: Part = (facts) => ({ links: capped(facts.links), ...(facts.pdf ? { linkAnnotationsOnPages: facts.pdf.linkAnnotations, linksInTags: facts.pdf.counts.links, tagTextRead: facts.pdf.tagTextRead } : {}) });
+const links: Part = (facts) => ({ links: capped(facts.links), ...(facts.pdf ? { linkAnnotationsOnPages: facts.pdf.linkAnnotations, linksInTags: facts.pdf.counts.links + facts.pdf.nestedLinks, nestedLinks: facts.pdf.nestedLinks, tagTextRead: facts.pdf.tagTextRead } : {}) });
 
 const headings: Part = (facts) => ({
   headings: capped(facts.headings),
@@ -76,7 +76,7 @@ const language: Part = (facts) => ({ language: facts.language, partsWithOwnLangu
 
 const nameRoleValue: Part = (facts) => ({
   fields: { total: facts.fields.length, withoutName: capped(facts.fields.filter((field) => !field.name)), withName: capped(facts.fields.filter((field) => field.name)) },
-  ...(facts.pdf ? { tagged: facts.pdf.tagged, encryption: facts.pdf.encryption, linkAnnotationsOnPages: facts.pdf.linkAnnotations, linksInTags: facts.pdf.counts.links } : {}),
+  ...(facts.pdf ? { tagged: facts.pdf.tagged, encryption: facts.pdf.encryption, linkAnnotationsOnPages: facts.pdf.linkAnnotations, linksInTags: facts.pdf.counts.links + facts.pdf.nestedLinks, nestedLinks: facts.pdf.nestedLinks } : {}),
 });
 
 const PARTS: Record<string, Part> = { "1.1.1": images, "1.3.1": structure, "1.3.2": order, "1.4.5": imagesOfText, "2.4.2": title, "2.4.4": links, "2.4.6": headings, "3.1.1": language, "3.1.2": language, "4.1.2": nameRoleValue };

@@ -59,6 +59,24 @@ function* walk(node: TagNode): Generator<TagNode> {
   for (const child of node.children) if (typeof child !== "string") yield* walk(child);
 }
 
+/** The links of the tags. A Link without text of its own inside a Link with the same href is part of the outer link: it is counted in `nested` and not listed. */
+export function linksOf(roots: TagNode[]): { links: DocumentLink[]; nested: number } {
+  const links: DocumentLink[] = [];
+  let nested = 0;
+  const visit = (node: TagNode, outer: Set<string>): void => {
+    let inner = outer;
+    if (node.type === "Link") {
+      const linkText = clean(tagText(node)) || clean(node.alt ?? "");
+      if (node.href !== null && outer.has(node.href) && !linkText) nested++;
+      else links.push({ page: node.page, text: linkText, href: node.href });
+      if (node.href !== null) inner = new Set([...outer, node.href]);
+    }
+    for (const child of node.children) if (typeof child !== "string") visit(child, inner);
+  };
+  for (const root of roots) visit(root, new Set());
+  return { links, nested };
+}
+
 /**
  * The tree of `pdfinfo -struct-text`: a line per tag, indented two spaces per level, with
  * its text in quotes below it. Only the shape and the text are taken from it.
@@ -280,7 +298,7 @@ export async function measurePdf(pdf: string, scratch: string): Promise<PdfMeasu
     const headers = inside.filter((entry) => entry.type === "TH");
     return { page: node.page, rows: rows.length, headerCells: headers.length, hasHeader: headers.length > 0, firstRow: (rows[0]?.children ?? []).filter((cell): cell is TagNode => typeof cell !== "string").map((cell) => clean(tagText(cell)).slice(0, 60)) };
   });
-  const links: DocumentLink[] = all.filter((node) => node.type === "Link").map((node) => ({ page: node.page, text: clean(tagText(node)) || clean(node.alt ?? ""), href: node.href }));
+  const { links, nested: nestedLinks } = linksOf(structure.roots);
   let linkAnnotations = 0;
   for (const page of pagesJson) {
     const annotations = deref((deref(String(page.object)) as Dict | undefined)?.["/Annots"]);
@@ -373,6 +391,7 @@ export async function measurePdf(pdf: string, scratch: string): Promise<PdfMeasu
         lists: tags.L ?? 0,
         imageObjects,
         linkAnnotations,
+        nestedLinks,
         counts: { headings: headings.length, images: images.length, tables: tables.length, links: links.length, fields: fields.length },
       },
     },

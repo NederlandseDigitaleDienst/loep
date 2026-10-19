@@ -11,7 +11,7 @@ import { documents as measureDocuments } from "../src/commands/documents.ts";
 import { inventory, probeDocument, type Inventory } from "../src/commands/inventory.ts";
 import { buildSample, chooseDocuments, DOCUMENT_CENSUS_LIMIT, withDocuments } from "../src/commands/sample.ts";
 import { measureOffice } from "../src/instruments/documents/office.ts";
-import { buildStructure, compareOrder, measurePdf, parseStructText } from "../src/instruments/documents/pdf.ts";
+import { buildStructure, compareOrder, linksOf, measurePdf, parseStructText, type TagNode } from "../src/instruments/documents/pdf.ts";
 import { readMarkdown } from "../src/instruments/documents/text.ts";
 import { openZip, parseXml } from "../src/instruments/documents/zipxml.ts";
 import { readJson, writeJson } from "../src/lib/canonical.ts";
@@ -327,6 +327,23 @@ test("the text of poppler is only laid on the tags of qpdf when the types agree"
   assert.deepEqual(same.roots[0]!.children, ["Kop"]);
   const swapped = buildStructure(objects, catalog, new Map(), 'P\n  "Kop"\nH1\n  "Tekst"\n');
   assert.equal(swapped.textRead, false);
+});
+
+const tag = (type: string, href: string | null, children: (string | TagNode)[]): TagNode => ({ type, page: 1, alt: null, actualText: null, lang: null, scope: null, href, children });
+
+test("a Link without text inside a Link with the same href is part of the outer link", () => {
+  const inner = tag("Link", "https://a.test/x", []);
+  const { links, nested } = linksOf([tag("P", null, [tag("Link", "https://a.test/x", ["Lees meer ", inner])])]);
+  assert.deepEqual(links.map((link) => [link.text, link.href]), [["Lees meer", "https://a.test/x"]]);
+  assert.equal(nested, 1);
+});
+
+test("a nested Link with another href or with text of its own stays a link", () => {
+  const other = tag("Link", "https://a.test/y", []);
+  const own = tag("Link", "https://a.test/x", ["Eigen tekst"]);
+  const { links, nested } = linksOf([tag("Link", "https://a.test/x", ["Buiten ", other, own])]);
+  assert.deepEqual(links.map((link) => [link.text, link.href]), [["Buiten Eigen tekst", "https://a.test/x"], ["", "https://a.test/y"], ["Eigen tekst", "https://a.test/x"]]);
+  assert.equal(nested, 0);
 });
 
 test("a line of a hostile PDF does not make the tag pattern backtrack", () => {

@@ -251,6 +251,8 @@ export interface PdfFacts {
   imageObjects: number;
   /** Link annotations on the pages, tagged or not. */
   linkAnnotations: number;
+  /** Link tags without text inside a link tag with the same href; they are counted as part of the outer link and not listed in `links`. */
+  nestedLinks: number;
   /** How many there are of each, before the lists were cut off at their limit. */
   counts: { headings: number; images: number; tables: number; links: number; fields: number };
 }
