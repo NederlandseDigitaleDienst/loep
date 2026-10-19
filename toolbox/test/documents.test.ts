@@ -670,6 +670,20 @@ test("the facts of a document that was never measured are absent, not empty", ()
   assert.deepEqual(part.documents, []);
 });
 
+test("4.1.1 gets the documents with only the rules of veraPDF on how the structure tree is built", () => {
+  const failed = (clause: string, test: number, description: string) => ({ clause, test, description, failedChecks: 2 });
+  const facts = {
+    status: "read", kind: "pdf", title: "Brief", pages: 2, url: "https://a.test/brief.pdf", images: [], headings: [], tables: [], links: [], fields: [], notMeasuredNl: [], files: { text: null, tagTree: null, pageImages: [] },
+    pdf: { tagged: true, tags: {}, tagTextRead: true, lists: 0, counts: { links: 0, images: 0 }, linkAnnotations: 0, encryption: null, pdfUa: { available: true, compliant: false, reasonNl: null, failedRules: [failed("7.1", 11, "The logical structure of the conforming file shall be described by a structure hierarchy rooted in the StructTreeRoot entry"), failed("7.2", 17, "LI element should be contained in L element"), failed("7.9", 2, "Each Note tag shall have unique ID key"), failed("7.18.5", 2, "Links shall contain an alternate description via their Contents key"), failed("7.21.4.1", 1, "The font programs for all fonts used for rendering within a conforming file shall be embedded")] } },
+  } as unknown as DocumentFacts;
+  const data = { dir: scratch, inventory: inventoryWith([]), sample: { documents: [] }, pages: [], documents: [{ label: "D01", item: { label: "D01", url: facts.url, kind: "pdf", slug: "brief-00000000", reason: "", linkedFrom: [], bytes: null, lastModified: null }, dir: scratch, facts }] } as unknown as RunData;
+  const rules = (criterion: string) => ((documentsExtractor(data, criterion) as { documents: { pdfUa: { failedRulesForThisCriterion: { rule: string }[] } }[] }).documents[0]!.pdfUa.failedRulesForThisCriterion.map((rule) => rule.rule));
+  assert.deepEqual(rules("4.1.1"), ["7.1-11", "7.2-17", "7.9-2"]);
+  assert.deepEqual(rules("2.4.4"), ["7.18.5-2"]);
+  assert.equal(rules("1.3.1").length, 5);
+  assert.ok(loadProcedure("4.1.1").evidence.includes("documents"));
+});
+
 // ------------------------------------------------------------------------- the report
 
 const REPORTED: EvaluationDocuments = {

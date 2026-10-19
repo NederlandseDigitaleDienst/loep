@@ -10,8 +10,20 @@ import type { RunData } from "./rundata.ts";
 const LIMIT = 40;
 const capped = <T>(items: T[]): { total: number; shown: T[]; notShown?: number } => ({ total: items.length, shown: items.slice(0, LIMIT), ...(items.length > LIMIT ? { notShown: items.length - LIMIT } : {}) });
 
-/** Which failed rules of veraPDF bear on a criterion, by the words of the rule. Null: all of them. */
-const UA_RULES: Record<string, RegExp | null> = {
+/**
+ * The rules of the veraPDF PDF/UA-1 profile on how the structure tree is built: its root and
+ * parent links, the mapping of structure types, the nesting of standard structure types, and
+ * unique note IDs. Numbered as veraPDF numbers them: ISO 14289-1 clause, then test.
+ */
+const STRUCTURE_TREE_RULES: ReadonlySet<string> = new Set([
+  "7.1-5", "7.1-6", "7.1-7", "7.1-11", "7.1-12",
+  "7.2-3", "7.2-4", "7.2-5", "7.2-6", "7.2-7", "7.2-8", "7.2-9", "7.2-10", "7.2-11", "7.2-12", "7.2-13", "7.2-14", "7.2-16", "7.2-17", "7.2-18", "7.2-19", "7.2-20",
+  "7.2-26", "7.2-27", "7.2-28", "7.2-36", "7.2-37", "7.2-38", "7.2-39", "7.2-40",
+  "7.4.4-1", "7.4.4-2", "7.4.4-3", "7.9-2", "7.18.1-1", "7.18.4-1", "7.18.4-2", "7.18.5-1",
+]);
+
+/** Which failed rules of veraPDF bear on a criterion, by the words of the rule or by its number. Null: all of them. */
+const UA_RULES: Record<string, RegExp | ReadonlySet<string> | null> = {
   "1.1.1": /alternat|figure|formula|actualtext/i,
   "1.3.1": null,
   "1.3.2": /order|artifact|real content|tagged|structure/i,
@@ -20,6 +32,7 @@ const UA_RULES: Record<string, RegExp | null> = {
   "2.4.6": /heading|H1|H2|H3|H4|H5|H6/,
   "3.1.1": /language|lang/i,
   "3.1.2": /language|lang/i,
+  "4.1.1": STRUCTURE_TREE_RULES,
   "4.1.2": /annot|widget|form|field|TU|Contents|link/i,
 };
 
@@ -30,7 +43,7 @@ const pdfUa = (facts: DocumentFacts, criterion: string): Record<string, unknown>
   if (!ua) return {};
   if (!ua.available) return { pdfUa: { examined: false, reasonNl: ua.reasonNl } };
   const filter = criterion in UA_RULES ? UA_RULES[criterion]! : /$^/;
-  const rules = ua.failedRules.filter((rule) => filter === null || filter.test(rule.description));
+  const rules = ua.failedRules.filter((rule) => filter === null || (filter instanceof RegExp ? filter.test(rule.description) : filter.has(`${rule.clause}-${rule.test}`)));
   return { pdfUa: { examined: true, compliant: ua.compliant, failedRulesInTotal: ua.failedRules.length, failedRulesForThisCriterion: rules.map((rule) => ({ rule: `${rule.clause}-${rule.test}`, times: rule.failedChecks, description: rule.description })) } };
 };
 
