@@ -452,7 +452,9 @@ export async function inventory(options: InventoryOptions): Promise<Inventory> {
     const visited = new Map<string, number>();
     let limitReached = false;
     for (;;) {
-      const open = [...foundVia.keys()].filter((url) => !done.has(url));
+      let open = [...foundVia.keys()].filter((url) => !done.has(url));
+      // With a fixed list the listed addresses go first; a frame found on them must not take their place under the limit.
+      if (fixed && open.some((url) => fixed.includes(url))) open = open.filter((url) => fixed.includes(url));
       // Once the limit is reached, what is left is only sorted out (documents, skipped), and the order no longer matters.
       const next = pages.length >= options.maxPages ? open.sort()[0] : nextAddress(open, visited, origins);
       if (next === undefined) break;
