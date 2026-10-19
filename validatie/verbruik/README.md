@@ -103,6 +103,23 @@ Een stap gaat pas naar `main` als een meting laat zien dat het oordeel niet slec
 
 De uitkomst komt in `validatie/iteraties.md` en `validatie/lessen.md`, zoals bij elke meting.
 
+### Met welke commando's
+
+`LOEP` is `node toolbox/src/cli.ts` in de werkboom van de variant. Elk commando hieronder heeft uitleg bij `LOEP variant --help`.
+
+| Stap | Hoe |
+|---|---|
+| 1. Bevroren code | Een eigen werkboom per variant op een vaste commit. Draai alles hieronder met de toolbox uit die werkboom. |
+| 2. Bevroren bewijs | De veegronde één keer, van `inventory` tot en met `gate`. Daarna per run een kopie: `LOEP variant --run RUN --out KOPIE --name <variant>`. De kopie houdt de veegronde en laat weg wat de agents schreven: opdrachten, rondgangen, oordelen met hun stempels, hun sessies, werkmappen en recepten, en de evaluatie, het rapport en de vergelijkingen. In `variant.json` staat van welke run de kopie is, met welke code ze is gemaakt en wat is weggelaten. Op een Mac kost een kopie bijna geen schijfruimte. |
+| 3. Met gebreken en schoon | Een veegronde op elke variant van de testsite. De sleutel is `toolbox/fixtures/reference-lindewaard.json` of `reference-berkenveen.json`. |
+| 4. Negen criteria | `LOEP tasks --run KOPIE --only 1.1.1,4.1.2,1.4.11,3.1.2,1.3.1,1.4.3,2.1.1,2.4.3,3.3.1`, dan de fasen zoals `pending` ze noemt, en `evaluate`. |
+| 5. Drie keer | Drie kopieën per variant. Of een gebrek is gevonden, zeggen twee agents met `compare --findings` per run (zie [validatie/README.md](../README.md)). Ook dat kost tokens. |
+| 6. Gelijk of beter | `LOEP compare-variants --baseline N1 --baseline N2 --baseline N3 --variant V1 --variant V2 --variant V3 --reference <sleutel> --out <map>`. Bovenaan de vier toetsen; daaronder de uitkomst per criterium en per run, per gebrek in hoeveel runs het is gevonden, de open punten per soort, en per rol de sessies, commando's en tijd. Zonder `--variant` laat het zien hoe ver de runs van de nulmeting uit elkaar liggen. |
+
+Een gebrek telt als gevonden als beide agents van `compare --findings` "gevonden" zeggen. Zijn ze het oneens, dan telt het niet als gevonden. Een melding zonder gebrek is een criterium dat een run van de variant afkeurt, terwijl de sleutel er geen gebrek heeft en geen run van de nulmeting het afkeurde.
+
+Tokens en beurten staan niet in een run, alleen in de transcripts van de agents. Geef ze per run mee met `--usage <bestand>` (één rij per agent, met zijn sessie; zie het voorbeeld in `toolbox/test/fixtures/verbruik.json`). De kosten rekent het commando met de prijzen van Opus 5.5 hierboven; voor een ander model staan de prijzen in het bestand zelf. Een script dat dit bestand uit de transcripts maakt, is er nog niet. Wat stap 6 daarnaast noemt (eigen metingen van de agent, weigeringen van `check-verdict`, oordelen die de verifieerder omdraait, ernst en plek) telt het commando nog niet.
+
 De meting zelf kost ook. Een run van negen criteria op de bevroren testsite kost ongeveer 25 tot 35 dollar op Opus en minder op Sonnet. Drie runs per variant voor de nulmeting en vier varianten op de variant met gebreken, en drie runs van de nulmeting en de gekozen variant op de schone variant, zijn 21 runs: samen ongeveer 500 tot 700 dollar, plus één run op het grote dossier. Bij scenario C is dat terugverdiend na negen tot twaalf onderzoeken. De meting levert ook op wat [PLAN.md](../../PLAN.md) toch al vraagt: hoeveel twee runs van dezelfde code verschillen.
 
 ## Gevraagd besluit
