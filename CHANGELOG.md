@@ -4,6 +4,12 @@ Wat er per versie van loep is veranderd. De versie staat op het voorblad en onde
 
 ## Nog niet uitgebracht
 
+### Wat een uitkomst kan veranderen
+
+- Een pagina die onder meer dan één adres op de site staat, kon loep meten op een adres dat doorverwijst. Voorbeeld: `/vragen` verwijst door naar `/verklaring#vragen`, een plek halverwege de toegankelijkheidsverklaring. loep koos het eerste adres in het alfabet, hier `/vragen`. Dan begon elke meting halverwege de pagina, ook de proef met de Tab-toets, en noemde het rapport de Tab-volgorde als beperking. Nu meet loep op `/verklaring`. Daarvoor slaat loep op waar de browser uitkomt (`finalUrl` in `inventory.json`).
+- Ook een vaste pagina, zoals de contactpagina, en de voorbeeldpagina die de verkenner voor een paginatype koos, worden nu herkend als ze onder een ander adres staan.
+- Een bestaande steekproef blijft gelijk. Draai je opnieuw `inventory` en `sample`, dan kan een pagina een ander nummer (id) of label krijgen, en kan de willekeurige keuze van pagina's anders uitvallen. Draai je alleen `sample` opnieuw, dan kan de uitleg bij een paginatype of een vaste pagina veranderen.
+
 ## 0.10.0 (2026-10-17)
 
 Ook deze versie is uitgebracht zonder nieuwe meting op de testsite. De wijziging is getest met eigen tests, niet in een volledige run.

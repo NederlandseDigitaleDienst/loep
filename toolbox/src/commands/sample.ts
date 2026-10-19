@@ -136,30 +136,43 @@ export function chooseOnVariation<T extends { url: string; kinds: string[] }>(ca
 const VARIATION_REASON = "gekozen op variatie: ";
 const SEED_EXTRA_REASON = "extra pagina van dit paginatype";
 
+/**
+ * Whether a page with these addresses (its own first) counts for a type: by its own address, or,
+ * when that is in no type, by the first alias that is in one. `buildSample` decides the same way.
+ */
+function countsFor(addresses: string[], members: Set<string>, typed: Set<string>): boolean {
+  const [own, ...aliases] = addresses;
+  if (typed.has(own!)) return members.has(own!);
+  const alias = aliases.filter((address) => typed.has(address)).sort((a, b) => a.localeCompare(b))[0];
+  return alias !== undefined && members.has(alias);
+}
+
 /** Per page type of the model: how many pages, how many in the sample, and why those. */
 function pageTypeSummary(model: SiteModel, pages: InventoryPage[], items: SampleItem[]): SamplePageType[] {
   const unique = deduplicate(pages);
+  const typed = new Set(model.pageTypes.flatMap((type) => type.pages));
   return model.pageTypes.map((type) => {
     const members = new Set(type.pages);
-    const ofType = items.filter((item) => members.has(item.url));
+    const ofType = items.filter((item) => countsFor([item.url, ...item.aliases], members, typed));
+    const isRepresentative = (item: SampleItem): boolean => item.url === type.representative || item.aliases.includes(type.representative);
     const extra = (prefix: string): number => ofType.filter((item) => item.reason.startsWith(prefix)).length;
     const variation = extra(VARIATION_REASON);
     const bySeed = extra(SEED_EXTRA_REASON);
     const random = ofType.filter((item) => item.kind === "random").length;
-    const other = ofType.filter((item) => item.url !== type.representative && item.kind !== "random" && !item.reason.startsWith(VARIATION_REASON) && !item.reason.startsWith(SEED_EXTRA_REASON));
+    const other = ofType.filter((item) => !isRepresentative(item) && item.kind !== "random" && !item.reason.startsWith(VARIATION_REASON) && !item.reason.startsWith(SEED_EXTRA_REASON));
     const parts = [
-      ...(ofType.some((item) => item.url === type.representative) ? ["de voorbeeldpagina van de verkenner"] : []),
+      ...(ofType.some(isRepresentative) ? ["de voorbeeldpagina van de verkenner"] : []),
       ...other.map((item) => item.reason),
       ...(variation > 0 ? [`${variation} gekozen op variatie in inhoud`] : []),
       ...(bySeed > 0 ? [`${bySeed} extra gekozen met de seed, omdat geen pagina nog een soort inhoud toevoegde`] : []),
       ...(random > 0 ? [`${random} willekeurig gekozen`] : []),
     ];
     const reasonNl = parts.length === 0 ? "geen pagina in de steekproef" : parts.length === 1 ? parts[0]! : `${parts.slice(0, -1).join(", ")} en ${parts.at(-1)}`;
-    return { id: type.id, descriptionNl: type.descriptionNl, pages: unique.filter((entry) => members.has(entry.page.url)).length, examined: ofType.length, reasonNl };
+    return { id: type.id, descriptionNl: type.descriptionNl, pages: unique.filter((entry) => countsFor([entry.page.url, ...entry.aliases], members, typed)).length, examined: ofType.length, reasonNl };
   });
 }
 
-/** Pages that WCAG-EM asks for by name, recognised by path or title. */
+/** Pages that WCAG-EM asks for by name, recognised by the path of any of their addresses. */
 const COMMON_PAGES: [RegExp, string][] = [
   [/^\/?$/, "startpagina"],
   [/contact/i, "contactpagina"],
@@ -175,12 +188,46 @@ export function seededOrder<T extends { url: string }>(items: T[], seed: string)
   return [...items].sort((a, b) => sha256(`${seed}\u0000${a.url}`).localeCompare(sha256(`${seed}\u0000${b.url}`)));
 }
 
+/** Where the browser landed, or null when it stayed on the address or `finalUrl` is no address (a hand-edited inventory). */
+const landingOf = (page: InventoryPage): URL | null => {
+  if (page.finalUrl === undefined) return null;
+  try {
+    return new URL(page.finalUrl);
+  } catch {
+    return null;
+  }
+};
+
+/**
+ * Pages with the same content are one item. Its address is one the browser stays on, and of those
+ * first one that another address of the group leads to: every measurement loads it, and an address
+ * that redirects, to an anchor say, would start the sweep elsewhere or halfway down the page.
+ * A page of an older inventory has no `finalUrl` and counts as staying on its address, so such a
+ * group keeps its first address in the alphabet, as before.
+ */
 function deduplicate(pages: InventoryPage[]): { page: InventoryPage; aliases: string[] }[] {
   const byContent = new Map<string, InventoryPage[]>();
   for (const page of [...pages].sort((a, b) => a.url.localeCompare(b.url))) {
     byContent.set(page.contentHash, [...(byContent.get(page.contentHash) ?? []), page]);
   }
-  return [...byContent.values()].map(([first, ...rest]) => ({ page: first!, aliases: rest.map((page) => page.url) }));
+  return [...byContent.values()].map((group) => {
+    const landings = new Set(
+      group.flatMap((page) => {
+        const landed = landingOf(page);
+        if (landed === null) return [];
+        landed.hash = "";
+        return [landed.href];
+      }),
+    );
+    // Lower is better: stays and another address leads here, stays, redirects, redirects to an anchor.
+    const rank = (page: InventoryPage): number => {
+      const landed = landingOf(page);
+      if (landed === null) return landings.has(page.url) ? 0 : 1;
+      return landed.hash === "" ? 2 : 3;
+    };
+    const main = group.reduce((best, page) => (rank(page) < rank(best) ? page : best));
+    return { page: main, aliases: group.filter((page) => page !== main).map((page) => page.url) };
+  });
 }
 
 const isFrame = (page: InventoryPage): boolean => page.foundVia.length > 0 && page.foundVia.every((via) => via.startsWith("iframe:"));
@@ -232,8 +279,12 @@ export function buildSample(inventory: Inventory, seed: string, model: SiteModel
     return { ...sample, note: `${sample.note}${note}`, excludedFrames: framed.excluded, ...perType };
   }
   const unique = deduplicate(inventory.pages);
+  // The site model and the probes may name an address that is now an alias: they count for the item it belongs to.
+  const mainOf = new Map(unique.flatMap((entry) => [entry.page.url, ...entry.aliases].map((address) => [address, entry.page.url] as const)));
+  const toMain = (address: string): string => mainOf.get(address) ?? address;
+  const typeOfEntry = (entry: { page: InventoryPage; aliases: string[] }): string | undefined => typeOf.get(entry.page.url) ?? entry.aliases.map((address) => typeOf.get(address)).find((type) => type !== undefined);
   // The page for a missing address on every origin of the site, and the origins themselves.
-  const probes = new Set(notFoundProbes(inventory));
+  const probes = new Set(notFoundProbes(inventory).map(toMain));
   const origins = siteOrigins(inventory);
   const toItem =(entry: { page: InventoryPage; aliases: string[] }, kind: SampleKind, reason: string): SampleItem => {
     const frameOf = entry.page.foundVia.filter((via) => via.startsWith("iframe:")).map((via) => via.slice("iframe:".length));
@@ -279,26 +330,31 @@ export function buildSample(inventory: Inventory, seed: string, model: SiteModel
   const seenTemplates = new Set<string>();
   const seenTypes = new Set<string>();
   // The page the explorer chose to stand for its type comes first, so that type is represented by that page.
-  const first = new Set(representatives.values());
+  const first = new Set([...representatives.values()].map(toMain));
   const ordered = [...unique.filter((entry) => first.has(entry.page.url)), ...unique.filter((entry) => !first.has(entry.page.url))];
   // WCAG-EM asks for the start page, the contact page and the like once each, not for every page whose path holds the word:
   // per kind the page highest up in the site, so /toegankelijkheid and not a tag page or a blog post that names it.
   const depth = (url: string): number => new URL(url).pathname.split("/").filter(Boolean).length;
+  const higher = (a: string, b: string): number => depth(a) - depth(b) || a.length - b.length || a.localeCompare(b);
   // On a site with more than one origin each origin keeps its own: the documentation on a subdomain has a start page of its own.
   const commonOf = new Map<string, string>();
   for (const group of origins.length > 1 ? origins : [null]) {
     for (const [pattern, label] of COMMON_PAGES) {
-      const candidates = unique.filter((entry) => {
-        const url = new URL(entry.page.url);
-        const path = url.pathname;
-        return (group === null || url.origin === group) && !probes.has(entry.page.url) && !entry.page.foundVia.every((via) => via.startsWith("iframe:")) && !commonOf.has(entry.page.url) && pattern.test(path === "/" ? "" : path);
+      // An alias counts too: /contact that redirects to /klantenservice is still the contact page.
+      const candidates = unique.flatMap((entry) => {
+        if (probes.has(entry.page.url) || entry.page.foundVia.every((via) => via.startsWith("iframe:")) || commonOf.has(entry.page.url)) return [];
+        const matching = [entry.page.url, ...entry.aliases].filter((address) => {
+          const url = new URL(address);
+          return (group === null || url.origin === group) && pattern.test(url.pathname === "/" ? "" : url.pathname);
+        });
+        return matching.length > 0 ? [{ entry, address: matching.sort(higher)[0]! }] : [];
       });
-      const best = candidates.sort((a, b) => depth(a.page.url) - depth(b.page.url) || a.page.url.length - b.page.url.length || a.page.url.localeCompare(b.page.url))[0];
-      if (best) commonOf.set(best.page.url, group === null || group === origins[0] ? label : `${label} van ${new URL(group).hostname}`);
+      const best = candidates.sort((a, b) => higher(a.address, b.address))[0];
+      if (best) commonOf.set(best.entry.page.url, group === null || group === origins[0] ? label : `${label} van ${new URL(group).hostname}`);
     }
   }
   for (const entry of ordered) {
-    const type = typeOf.get(entry.page.url);
+    const type = typeOfEntry(entry);
     const common = commonOf.get(entry.page.url);
     const isFrame = entry.page.foundVia.every((via) => via.startsWith("iframe:"));
     if (isFrame) chosen.set(entry.page.url, toItem(entry, "embedded", "ingesloten venster"));
@@ -313,7 +369,7 @@ export function buildSample(inventory: Inventory, seed: string, model: SiteModel
   let extras = 0;
   const byType = new Map<string, typeof unique>();
   for (const entry of unique) {
-    const type = typeOf.get(entry.page.url);
+    const type = typeOfEntry(entry);
     if (type !== undefined) byType.set(type, [...(byType.get(type) ?? []), entry]);
   }
   for (const members of byType.values()) {
