@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, test } from "node:test";
@@ -92,7 +92,9 @@ test("a run with a site model starts with a walk per page type and a judge task 
   assert.equal(index.tasks.every((task) => task.verify === null), true);
   const pending = await instrumentPending(dir);
   assert.equal(pending.phase, "walks");
-  assert.deepEqual(pending.walks.map((walk) => walk.pageType), ["start", "contact"]);
+  assert.deepEqual(pending.walks.map((walk) => walk.pageType).sort(), ["contact", "start"]);
+  const taskSizes = pending.walks.map((walk) => statSync(walk.task).size);
+  assert.deepEqual(taskSizes, [...taskSizes].sort((a, b) => b - a), "the walks come longest first");
   assert.deepEqual(pending.judges, [], "judges wait for the walks");
 });
 

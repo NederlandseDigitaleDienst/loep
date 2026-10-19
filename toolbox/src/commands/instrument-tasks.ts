@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, readdirSync, renameSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, renameSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { EXTENSION, extensionsOf, finishBudget, judgeBudget, verifyBudget, walkBudget, type Coverage } from "../lib/budget.ts";
 import { canonicalJson, pageLabels, readJson, sha256, sha256File, writeFileAtomic, writeJson } from "../lib/canonical.ts";
@@ -671,7 +671,7 @@ export async function instrumentTasks(runDir: string, options: TaskOptions = {})
 
 export interface InstrumentPending {
   flow: typeof INSTRUMENT_FLOW;
-  /** The first phase with work left; run `tasks` again when a phase is finished. */
+  /** The first phase with work left; run `tasks` again when a phase is finished. Each list is longest expected first (walks by the size of the task file, the others by the size of their candidates file), equal sizes in the order of the index. */
   phase: "walks" | "judges" | "verifiers" | "finishers" | "done";
   walks: { pageType: string; task: string; session: string }[];
   judges: { criterion: string; task: string; session: string }[];
@@ -681,6 +681,22 @@ export interface InstrumentPending {
   /** Given up on with `skip`: no walk, or no verdict, will come. */
   skipped: string[];
   noteNl: string;
+}
+
+const sizeOf = (path: string): number => {
+  try {
+    return statSync(path).size;
+  } catch {
+    return 0;
+  }
+};
+
+/** Largest weight first, equal weights in their given order; the pool takes tasks in list order, so the long ones start first. */
+export function longestFirst<T>(items: T[], weight: (item: T) => number): T[] {
+  return items
+    .map((item, position) => ({ item, position, weight: weight(item) }))
+    .sort((a, b) => b.weight - a.weight || a.position - b.position)
+    .map((entry) => entry.item);
 }
 
 /** What is still to do, per phase. A verdict whose stamp no longer matches dossier, procedure, prompt, candidates or cited observations counts as not there. */
@@ -697,17 +713,24 @@ export async function instrumentPending(runDir: string): Promise<InstrumentPendi
   }
   const judges: InstrumentPending["judges"] = [];
   const verifiers: InstrumentPending["verifiers"] = [];
+  const candidatesOf = new Map<string, string>();
   let verifierTasksMissing = false;
   for (const task of index.tasks) {
     if (!(await instrumentVerdictIsCurrent(runDir, task, "judge", observations))) {
       if (skipped(runDir, task.judge.output)) given.push(`beoordeling ${task.criterion}`);
-      else judges.push({ criterion: task.criterion, task: absolute(task.judge.prompt), session: task.judge.session });
+      else {
+        judges.push({ criterion: task.criterion, task: absolute(task.judge.prompt), session: task.judge.session });
+        candidatesOf.set(`judge ${task.criterion}`, absolute(task.judge.candidates));
+      }
       continue;
     }
     if (!task.verify) verifierTasksMissing = true;
     else if (!(await instrumentVerdictIsCurrent(runDir, task, "final", observations))) {
       if (skipped(runDir, task.verify.output)) given.push(`verificatie ${task.criterion}`);
-      else verifiers.push({ criterion: task.criterion, task: absolute(task.verify.prompt), session: task.verify.session });
+      else {
+        verifiers.push({ criterion: task.criterion, task: absolute(task.verify.prompt), session: task.verify.session });
+        candidatesOf.set(`verify ${task.criterion}`, absolute(task.verify.candidates));
+      }
     }
   }
   // The finishing round is decided only when nothing before it is open: until then a verdict can still come that needs none.
@@ -720,7 +743,10 @@ export async function instrumentPending(runDir: string): Promise<InstrumentPendi
       if (!task.finish) finisherTasksMissing = true;
       else if (!(await instrumentVerdictIsCurrent(runDir, task, "finish", observations))) {
         if (skipped(runDir, task.finish.output)) given.push(`afmaakronde ${task.criterion}`);
-        else finishers.push({ criterion: task.criterion, task: absolute(task.finish.prompt), session: task.finish.session });
+        else {
+          finishers.push({ criterion: task.criterion, task: absolute(task.finish.prompt), session: task.finish.session });
+          candidatesOf.set(`finish ${task.criterion}`, absolute(task.finish.candidates));
+        }
       }
     }
   }
@@ -739,7 +765,17 @@ export async function instrumentPending(runDir: string): Promise<InstrumentPendi
               ? "Alle verificaties zijn binnen en er zijn criteria die door het onderzoek zelf open bleven. Draai `tasks` om de opdrachten voor de afmaakronde te schrijven."
               : "Start per criterium één agent met het opdrachtbestand voor de afmaakronde: die meet wat ontbrak en komt tot een oordeel."
             : "Alles is beoordeeld en geverifieerd, en niets bleef open door het onderzoek zelf. Ga door met `evaluate`.";
-  return { flow: INSTRUMENT_FLOW, phase, walks, judges: phase === "walks" ? [] : judges, verifiers: phase === "verifiers" ? verifiers : [], finishers, skipped: given, noteNl };
+  const bySize = <T extends { criterion: string }>(list: T[], round: string): T[] => longestFirst(list, (entry) => sizeOf(candidatesOf.get(`${round} ${entry.criterion}`) ?? ""));
+  return {
+    flow: INSTRUMENT_FLOW,
+    phase,
+    walks: longestFirst(walks, (walk) => sizeOf(walk.task)),
+    judges: phase === "walks" ? [] : bySize(judges, "judge"),
+    verifiers: phase === "verifiers" ? bySize(verifiers, "verify") : [],
+    finishers: bySize(finishers, "finish"),
+    skipped: given,
+    noteNl,
+  };
 }
 
 const stampNow = async (runDir: string, path: string, stamp: object): Promise<void> => void (await writeJson(join(runDir, stampOf(path)), { ...stamp, stampedAt: new Date().toISOString() }));
