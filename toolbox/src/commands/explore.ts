@@ -19,6 +19,7 @@ import { mergeWidths, uncoveredOperables, type CountedPage } from "../lib/operab
 import type { Recipe } from "../session/daemon.ts";
 import type { Gate } from "./gate.ts";
 import type { Inventory, InventoryPage } from "./inventory.ts";
+import { applyFrameClasses, mainAddresses } from "./sample.ts";
 
 /** Budget of the exploring agent's session. */
 export const EXPLORE_MAX_COMMANDS = 200;
@@ -48,7 +49,8 @@ export function exploreContext(inventory: Inventory): ExploreContext {
   const byTemplate = new Map<string, InventoryPage[]>();
   for (const page of own) byTemplate.set(page.templateHash, [...(byTemplate.get(page.templateHash) ?? []), page]);
   const groups = [...byTemplate.values()].sort((a, b) => a[0]!.url.localeCompare(b[0]!.url));
-  const proposedPageTypes = groups.map((pages, index) => ({ id: `type-${index + 1}`, descriptionNl: "", representative: pages[0]!.url, pages: pages.map((page) => page.url) }));
+  const mainOf = mainAddresses(inventory.pages);
+  const proposedPageTypes = groups.map((pages, index) => ({ id: `type-${index + 1}`, descriptionNl: "", representative: (pages.find((page) => mainOf.get(page.url) === page.url) ?? pages[0]!).url, pages: pages.map((page) => page.url) }));
   const frames = new Map<string, ExploreContext["frames"][number]>();
   for (const page of inventory.pages.filter(isFrame)) {
     const address = frameAddress(page.url);
@@ -276,6 +278,20 @@ export function widthHints(model: SiteModel, recipes: Record<string, Recipe>, sc
 }
 
 /**
+ * A representative that is another address of a page of the sample, by the rules `sample` applies
+ * with this model. The sample measures that page at its own address, but the sweep opens the
+ * representative as written: at an address that redirects to an anchor, halfway down the page.
+ */
+export function aliasRepresentatives(model: SiteModel, inventory: Inventory): string[] {
+  const mainOf = mainAddresses(applyFrameClasses(inventory.pages, model).pages);
+  return model.pageTypes.flatMap((type) => {
+    const main = mainOf.get(type.representative);
+    if (main === undefined || main === type.representative) return [];
+    return [`paginatype "${type.id}": representative ${type.representative} is een ander adres van dezelfde pagina als ${main}. De steekproef meet die pagina op ${main}; zet dat adres als representative${type.pages.includes(main) ? "" : " en in pages"}`];
+  });
+}
+
+/**
  * Validate the site model and replay every recipe from a clean page. An entry whose
  * recipe does not run, or whose postcondition does not hold afterwards, is refused. The
  * outcome is written next to the model; the sweep only accepts a model that passed.
@@ -295,6 +311,7 @@ export async function checkSite(runDir: string, options: { navigationDelayMs?: n
     void error;
   }
   const problems = parsed === null ? [`${SITE_MODEL_FILE} is geen geldige JSON`] : validateSiteModel(parsed, context);
+  if (problems.length === 0) problems.push(...aliasRepresentatives(parsed as SiteModel, inventory));
   const replays: SiteCheck["replays"] = [];
   const hintsNl: string[] = [];
   let operables: SiteCheck["operables"];

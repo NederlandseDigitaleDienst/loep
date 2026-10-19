@@ -4,6 +4,7 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
+import { aliasRepresentatives, checkSite, exploreContext } from "../src/commands/explore.ts";
 import { buildSample, CENSUS_LIMIT, chooseOnVariation, contentKindsOfType, extraPagesFor, MAX_EXTRA_PER_TYPE, seededOrder } from "../src/commands/sample.ts";
 import { formPagesNl, parseSitemap, passwordPagesNl, type Inventory, type InventoryPage } from "../src/commands/inventory.ts";
 import { progressLine, sayingItRuns } from "../src/instruments/limit.ts";
@@ -182,6 +183,25 @@ test("a page type, its representative and the probe that name an address that re
   assert.deepEqual(sample.pageTypes!.find((type) => type.id === "formulier"), { id: "formulier", descriptionNl: "type formulier", pages: 1, examined: 1, reasonNl: "de voorbeeldpagina van de verkenner" });
   assert.equal(sample.pageTypes!.find((type) => type.id === "artikel")!.pages, pages.length);
   assert.deepEqual([of("fout")?.url, of("fout")?.reason], ["https://a.nl/niet-gevonden", "foutpagina (404)"]);
+});
+
+test("check-site refuses a representative that is another address of a page, and names the page's own address", async () => {
+  const at = (path: string, content: string, finalUrl?: string): InventoryPage => ({ ...page(0, path === "/" ? "s" : "t", content), url: `https://a.nl${path}`, ...(finalUrl ? { finalUrl } : {}) });
+  const pages = [at("/", "start"), at("/vragen", "verklaring", "https://a.nl/verklaring#vragen"), at("/verklaring", "verklaring")];
+  const types = [pageType("start", ["https://a.nl/"]), pageType("verklaring", ["https://a.nl/vragen", "https://a.nl/verklaring"])];
+  assert.equal(exploreContext(inventory(pages)).proposedPageTypes.find((type) => type.pages.length === 2)?.representative, "https://a.nl/verklaring", "the proposal does not offer the redirect");
+  const problem = 'paginatype "verklaring": representative https://a.nl/vragen is een ander adres van dezelfde pagina als https://a.nl/verklaring. De steekproef meet die pagina op https://a.nl/verklaring; zet dat adres als representative';
+  assert.deepEqual(aliasRepresentatives(modelOf(types), inventory(pages)), [problem]);
+  assert.deepEqual(aliasRepresentatives(modelOf([types[0]!, { ...types[1]!, representative: "https://a.nl/verklaring" }]), inventory(pages)), [], "an alias among the pages is no problem");
+  assert.deepEqual(aliasRepresentatives(modelOf([types[0]!, { ...types[1]!, pages: ["https://a.nl/vragen"] }]), inventory(pages)), [`${problem} en in pages`]);
+
+  const run = mkdtempSync(join(tmpdir(), "loep-alias-"));
+  writeFileSync(join(run, "inventory.json"), JSON.stringify(inventory(pages)));
+  writeFileSync(join(run, "site.json"), JSON.stringify({ ...modelOf(types), descriptionNl: `${Array.from({ length: 45 }, (_, index) => `woord${index}`).join(" ")}.` }));
+  const checked = await checkSite(run);
+  assert.equal(checked.ok, false);
+  assert.deepEqual(checked.problems, [problem]);
+  assert.deepEqual(checked.replays, [], "refused before any recipe is replayed");
 });
 
 // A page type of the size of a knowledge base: most pages alike, a few with content of their own.
