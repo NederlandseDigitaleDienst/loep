@@ -234,3 +234,63 @@ export async function pointedContrast(imagePath: string, cssWidth: number, box: 
   const inPicture = { x: box.x * perCssPixel, y: box.y * perCssPixel, width: box.width * perCssPixel, height: box.height * perCssPixel };
   return { pointedBy: "agent", box: measureLine(image, { text: "", confidence: 100, box: inPicture }, perCssPixel, true) };
 }
+
+/** Proportions of the file and of the picture on the page further apart than this share: the page crops or stretches it. */
+const MAX_PROPORTION_DIFFERENCE = 0.02;
+/** A pixel of the picture on the page whose four neighbours lie this close to it (sum over the three channels) is in a flat area, where scaling down changes nothing. */
+const FLAT_NEIGHBOURS = 6;
+/** In a flat area the file scaled down and the picture on the page differ by more than this in a channel: not the same colour. */
+const SHOWN_DIFFERENCE = 4;
+/** More than this share of the flat area not the same colour: something lies over the picture, or the page changes its colours. */
+const MAX_DIFFERENT_SHARE = 0.01;
+/** Fewer flat pixels than this, as in a photo, and there is nothing to compare the file with. */
+const MIN_FLAT_PIXELS = 100;
+
+/**
+ * The image file of a picture, to measure in its place when the page shows it smaller than the file
+ * is: scaled down, a thin letter shares its pixels with the background around it and seems lighter or
+ * darker than it is. The file stands for the picture only when it has the same proportions and,
+ * scaled down to the size of `shown`, has the colours of `shown` in its flat areas: the edges of
+ * letters differ by how the browser scales, a filter, transparency or something on top differs there too.
+ * A transparent part of the file gets the colour the page shows there.
+ */
+export function fileAsShown(file: PNG, shown: PNG): { picture: PNG } | { reasonNl: string } {
+  if (Math.abs(file.width / file.height / (shown.width / shown.height) - 1) > MAX_PROPORTION_DIFFERENCE) return { reasonNl: "het beeldbestand heeft andere verhoudingen dan de afbeelding op de pagina: de pagina snijdt het bij of rekt het uit" };
+  const across = file.width / shown.width;
+  const down = file.height / shown.height;
+  const picture = new PNG({ width: file.width, height: file.height });
+  const sums = new Float64Array(shown.width * shown.height * 4);
+  for (let y = 0; y < file.height; y++) {
+    const row = Math.min(shown.height - 1, Math.floor(y / down));
+    for (let x = 0; x < file.width; x++) {
+      const at = (row * shown.width + Math.min(shown.width - 1, Math.floor(x / across))) * 4;
+      const offset = (y * file.width + x) * 4;
+      const alpha = file.data[offset + 3]! / 255;
+      for (let channel = 0; channel < 3; channel++) {
+        const value = Math.round(alpha * file.data[offset + channel]! + (1 - alpha) * shown.data[at + channel]!);
+        picture.data[offset + channel] = value;
+        sums[at + channel]! += value;
+      }
+      picture.data[offset + 3] = 255;
+      sums[at + 3]! += 1;
+    }
+  }
+  const colour = (x: number, y: number): Rgb => {
+    const at = (y * shown.width + x) * 4;
+    return [shown.data[at]!, shown.data[at + 1]!, shown.data[at + 2]!];
+  };
+  let flat = 0;
+  let different = 0;
+  for (let y = 1; y < shown.height - 1; y++) {
+    for (let x = 1; x < shown.width - 1; x++) {
+      const own = colour(x, y);
+      if ([colour(x - 1, y), colour(x + 1, y), colour(x, y - 1), colour(x, y + 1)].some((other) => distance(own, other) > FLAT_NEIGHBOURS)) continue;
+      flat++;
+      const at = (y * shown.width + x) * 4;
+      if (own.some((value, channel) => Math.abs(sums[at + channel]! / sums[at + 3]! - value) > SHOWN_DIFFERENCE)) different++;
+    }
+  }
+  if (flat < MIN_FLAT_PIXELS) return { reasonNl: "de afbeelding heeft geen egale vlakken om het beeldbestand mee te vergelijken" };
+  if (different > MAX_DIFFERENT_SHARE * flat) return { reasonNl: `op ${Math.round((100 * different) / flat)}% van de egale vlakken heeft het beeldbestand een andere kleur dan de afbeelding op de pagina: er ligt iets over, of de pagina verandert de kleuren` };
+  return { picture };
+}

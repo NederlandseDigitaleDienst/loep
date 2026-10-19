@@ -673,5 +673,38 @@
     };
   }
 
-  window.__loepm = { path, where, resolveWhere, deepXPath, byDeepXPath, byAxeTarget, relate, deepAll, removeAttributes, rgba, computedContrast, focusStyles, languageOf, languageBlocks, elementAt, elementAtDocument, focusedWhere, imageFacts, composedParent, contrastAgainst, controlStates, stopKinds, keepsFocus, liveState, elementState, intoView, shownStyles, blockedPlaces, coverOf };
+  /**
+   * The file an image element shows, drawn at its own size, as a PNG data URL, when it has more
+   * pixels across than the page shows. Null for an element that is no image or shows no file. A file
+   * from another host without permission to read its pixels gives a reason instead: the browser does not hand them out.
+   */
+  async function imageFile(target, maxPixels) {
+    const element = resolveWhere(target);
+    if (!element || element.localName !== "img" || !element.currentSrc) return null;
+    // A new image of the same address has the size of the file itself, also when srcset gives the element a density.
+    const shown = Math.round(element.getBoundingClientRect().width * window.devicePixelRatio) + 1;
+    const file = new Image();
+    if (element.crossOrigin !== null) file.crossOrigin = element.crossOrigin;
+    file.src = element.currentSrc;
+    try {
+      await file.decode();
+    } catch {
+      return element.naturalWidth > shown ? { reasonNl: "het beeldbestand is niet opnieuw te openen" } : null;
+    }
+    const { naturalWidth: width, naturalHeight: height } = file;
+    if (!width || !height) return null;
+    if (width <= shown) return { width, height };
+    if (width * height > maxPixels) return { width, height, reasonNl: `het beeldbestand is ${width} bij ${height} pixels, te groot om te meten` };
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    canvas.getContext("2d").drawImage(file, 0, 0);
+    try {
+      return { width, height, png: canvas.toDataURL("image/png") };
+    } catch {
+      return { width, height, reasonNl: "het beeldbestand komt van een andere host, die de pagina de pixels niet laat lezen" };
+    }
+  }
+
+  window.__loepm = { path, where, resolveWhere, deepXPath, byDeepXPath, byAxeTarget, relate, deepAll, removeAttributes, rgba, computedContrast, focusStyles, languageOf, languageBlocks, elementAt, elementAtDocument, focusedWhere, imageFacts, imageFile, composedParent, contrastAgainst, controlStates, stopKinds, keepsFocus, liveState, elementState, intoView, shownStyles, blockedPlaces, coverOf };
 })();
