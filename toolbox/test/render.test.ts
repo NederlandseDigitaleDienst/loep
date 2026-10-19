@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { browserUse, repeatedInBrowsersNl, secondBrowserUse } from "../src/commands/evaluate.ts";
+import { browserUse, gateLineNl, repeatedInBrowsersNl, secondBrowserUse } from "../src/commands/evaluate.ts";
 import { render } from "../src/commands/render.ts";
 import { canonicalJson } from "../src/lib/canonical.ts";
 import { mergeFindings } from "../src/lib/defects.ts";
@@ -831,6 +831,11 @@ test("an evaluation is described as it was made: a judge and a verifier, both wi
   assert.ok(renderMarkdown(reviewed).includes("Daarna heeft het model 12 overzichtsbladen met beelden van de paginatypen bekeken; van 4 paginatypen zijn de beelden niet bekeken. 9 van de 9 controles"));
   assert.ok(markdown.includes("9 van de 9 controles waren in orde en het bewijs is voldoende bevonden; 1 gat is aanvaard als eigenschap van de site."));
   assert.ok(markdown.includes("Wat de bewijspoort heeft vastgesteld:\n\n- P03: het menu opent niet met het toetsenbord."));
+  // An accepted gap says who accepted it; a limitation, and a gate from before that was asked, do not.
+  const gap = { page: "P03", missingNl: "Het menu ging op dit paginatype niet open.", reasonNl: "Het menu reageert hier op geen enkele klik" };
+  assert.equal(gateLineNl({ ...gap, decidedBy: "verkenner" }), "P03: Het menu ging op dit paginatype niet open. Het menu reageert hier op geen enkele klik. Aanvaard door de verkenner, niet door een persoon.");
+  assert.equal(gateLineNl({ ...gap, reasonNl: "Het menu reageert hier op geen enkele klik.", decidedBy: "persoon" }), "P03: Het menu ging op dit paginatype niet open. Het menu reageert hier op geen enkele klik. Aanvaard door een persoon, volgens het sitemodel; loep gaat dat niet na.");
+  assert.equal(gateLineNl(gap), "P03: Het menu ging op dit paginatype niet open. Het menu reageert hier op geen enkele klik");
   assert.ok(markdown.includes("- Versturen van formulieren: Niet toegestaan: verzoeken die iets kunnen wijzigen zijn tegengehouden."));
   // Read requests are named only when there were any, with the address and the reason.
   assert.ok(!markdown.includes("Leesverzoeken:"));
