@@ -10,8 +10,8 @@ export const meta = {
   ],
 }
 
-// args: { cli: absolute path of toolbox/src/cli.ts, run: absolute path of the run, atOnce?: agents at the same time, neverOpen?: hosts no agent may open }
-const { cli, run, atOnce, neverOpen } = args
+// args: { cli: absolute path of toolbox/src/cli.ts, run: absolute path of the run, atOnce?: agents at the same time, neverOpen?: hosts no agent may open, models?: model per role, for example { walks: 'sonnet' } }
+const { cli, run, atOnce, neverOpen, models } = args
 // Every agent holds a session, and the session process of a run allows 4 at the same time unless it was
 // started with --max-sessions. One of those is the session of whoever leads the audit, so 3 are left.
 // More agents need a process that was started with a higher limit: pass that limit minus one.
@@ -24,6 +24,23 @@ const NEVER_OPEN =
   Array.isArray(neverOpen) && neverOpen.length > 0
     ? `Open of bevraag nooit, op geen enkele manier, een van deze sites: ${neverOpen.join(', ')}. Je werkt alleen op de site uit je opdracht.`
     : 'Je werkt alleen op de site uit je opdracht.'
+
+// The model of each role. A role without a choice sets no model, so its agents run on the model of the session.
+const ROLES = ['stand', 'walks', 'judges', 'verifiers', 'finishers']
+const KNOWN_MODELS = ['opus', 'sonnet', 'haiku']
+function chooseModels(given) {
+  if (given === undefined || given === null) return {}
+  if (typeof given !== 'object' || Array.isArray(given)) throw new Error(`models moet een object zijn, bijvoorbeeld { "walks": "sonnet" }, niet ${JSON.stringify(given)}`)
+  const chosen = {}
+  for (const [role, model] of Object.entries(given)) {
+    if (!ROLES.includes(role)) throw new Error(`models: onbekende rol "${role}"; kies uit ${ROLES.join(', ')}`)
+    if (!KNOWN_MODELS.includes(model)) throw new Error(`models: onbekend model ${JSON.stringify(model)} voor "${role}"; kies uit ${KNOWN_MODELS.join(', ')}`)
+    chosen[role] = model
+  }
+  return chosen
+}
+const MODEL = chooseModels(models)
+const withModel = (role, options) => (MODEL[role] ? { ...options, model: MODEL[role] } : options)
 
 const ITEM = {
   type: 'object',
@@ -52,7 +69,7 @@ function shell(commands, round) {
   const numbered = commands.map((command, index) => `${index + 1}. ${command}`).join('\n')
   return agent(
     `Voer in een shell precies deze commando's uit, na elkaar, en doe verder niets. Lees geen bestanden en wijzig niets. ${NEVER_OPEN}\n${numbered}\nHet laatste commando drukt één JSON-object af met de sleutels phase, walks, judges, verifiers en finishers. Geef dat object ongewijzigd terug als je antwoord. Mislukt een commando, geef dan phase "error" terug met lege lijsten en in note de foutmelding.`,
-    { schema: PENDING, label: `stand ${round}`, phase: 'Stand', effort: 'low' },
+    withModel('stand', { schema: PENDING, label: `stand ${round}`, phase: 'Stand', effort: 'low' }),
   )
 }
 
@@ -126,7 +143,7 @@ for (let round = 1; round <= MAX_ROUNDS; round++) {
   }
   log(`ronde ${round}: ${state.phase}, ${todo.length} taken, ${pendingSkips.length} overgeslagen`)
   history.push({ round, phase: state.phase, tasks: todo.length, skippedNow: pendingSkips.length })
-  await pool(todo, AT_ONCE, (item) => agent(work(item.task), { label: `${state.phase} ${kind.id(item)}`, phase: kind.title }))
+  await pool(todo, AT_ONCE, (item) => agent(work(item.task), withModel(state.phase, { label: `${state.phase} ${kind.id(item)}`, phase: kind.title })))
 }
 
-return { history, skipped, last: last ? last.phase : null }
+return { history, skipped, last: last ? last.phase : null, models: Object.fromEntries(ROLES.map((role) => [role, MODEL[role] || null])) }

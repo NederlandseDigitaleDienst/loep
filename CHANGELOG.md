@@ -14,6 +14,7 @@ Wat er per versie van loep is veranderd. De versie staat op het voorblad en onde
 ### Verder
 
 - De stappen die `just voiceover-setup` toont om System Integrity Protection (SIP) uit te zetten in de virtuele Mac, waarschuwen nu voor een valkuil. In de herstelmodus kom je in een venster met vier keuzes; klik je daar op Ga door (Continue), dan begint een herinstallatie van macOS. De stappen zeggen nu dat je daar niets aanklikt, hoe je zo'n installatie stopt (⌘Q) en hoe het menu heet in een Nederlandse virtuele Mac (Hulpprogramma's > Terminal), zoals `docs/voiceover.md` al zei. Je hoeft niets opnieuw te doen.
+- De werkstroom `onderzoek.workflow.js` kan per rol een ander model gebruiken (`models`, bijvoorbeeld `models: { walks: "sonnet" }`), zodat een meting kan laten zien of een goedkoper model hetzelfde oordeel geeft. Zonder `models` verandert er niets, en het resultaat van de werkstroom noemt per rol het gekozen model. Een onbekende rol of een onbekend model stopt de werkstroom met een melding. Welke rol overgaat, volgt uit de meting (#137).
 
 ## 0.10.0 (2026-10-17)
 
