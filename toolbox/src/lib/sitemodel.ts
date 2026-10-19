@@ -173,7 +173,13 @@ export interface AcceptedGap {
   reasonNl: string;
   /** Id of the session observation that shows it. */
   observation: string;
+  /** Who decided it is how the site is. The explorer writes "verkenner"; only a person who decided it writes "persoon", by hand. */
+  decidedBy: AcceptedGapDecider;
 }
+
+/** Who can decide that a gap is a property of the site. */
+export const ACCEPTED_GAP_DECIDERS = ["verkenner", "persoon"] as const;
+export type AcceptedGapDecider = (typeof ACCEPTED_GAP_DECIDERS)[number];
 
 /** The check that refuses a component that did not open on one of its page types: the gate after the sweep, `check-site` before it. */
 export const NOT_OPENED_ON_PAGE_TYPE = "component-not-opened-on-page-type";
@@ -184,10 +190,11 @@ export const POSTCONDITION_NOT_HELD_NL = "na de stappen geldt de postconditie ni
 
 /**
  * The entry of the model that accepts a gap. For a component that did not open on a page type
- * only an entry that names that component: an entry without one matches nothing.
+ * only an entry that names that component: an entry without one matches nothing. Nor does an
+ * entry that does not say who decided it.
  */
 export function acceptedGapFor(model: Pick<SiteModel, "acceptedGaps"> | null | undefined, gap: { check: string; page: string | null; component?: string | undefined }): AcceptedGap | undefined {
-  return (model?.acceptedGaps ?? []).find((entry) => entry.check === gap.check && entry.page === gap.page && (gap.check !== NOT_OPENED_ON_PAGE_TYPE || (entry.component !== undefined && entry.component === gap.component)));
+  return (model?.acceptedGaps ?? []).find((entry) => entry.check === gap.check && entry.page === gap.page && ACCEPTED_GAP_DECIDERS.includes(entry.decidedBy) && (gap.check !== NOT_OPENED_ON_PAGE_TYPE || (entry.component !== undefined && entry.component === gap.component)));
 }
 
 /**
@@ -475,6 +482,7 @@ export function validateSiteModel(value: unknown, context: ModelContext): string
           if (gap.component === undefined) problems.push(`${where}: bij "${NOT_OPENED_ON_PAGE_TYPE}" hoort "component", het id van het onderdeel dat daar niet opengaat; zonder telt de regel voor geen enkel onderdeel`);
           else if (!(model.components as unknown[]).some((component) => isRecord(component) && component.id === gap.component)) problems.push(`${where}: onderdeel "${String(gap.component)}" staat niet in components`);
         } else if (gap.component !== undefined) problems.push(`${where}: "component" hoort alleen bij "${NOT_OPENED_ON_PAGE_TYPE}"`);
+        if (!(ACCEPTED_GAP_DECIDERS as readonly unknown[]).includes(gap.decidedBy)) problems.push(`${where}: "decidedBy" zegt wie de uitzondering heeft vastgesteld: "verkenner" als de verkenner dat deed, "persoon" als een persoon dat zelf deed; zonder telt de regel niet`);
         if (context.observations && !context.observations.has(gap.observation as string)) problems.push(`${where}: waarneming ${String(gap.observation)} bestaat niet in deze run`);
       }
     }

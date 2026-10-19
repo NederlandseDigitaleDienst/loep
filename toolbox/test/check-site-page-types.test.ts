@@ -107,7 +107,7 @@ test("a component that does not open on the representative page of one of its pa
 
 test("the same model passes when it accepts that gap, as the gate does", { timeout: 300_000 }, async () => {
   const observation = `verken-${readdirSync(join(run, "observations", "verken")).map((file) => /^(\d+)\.json$/.exec(file)?.[1]).filter((nr): nr is string => nr !== undefined).sort()[0]}`;
-  model.acceptedGaps = [{ check: NOT_OPENED_ON_PAGE_TYPE, page: representativeWithout, component: "vraag", reasonNl: "De vragen staan op dit paginatype niet; het onderdeel hoort er wel bij voor de bezoeker die er via de voet komt.", observation }];
+  model.acceptedGaps = [{ check: NOT_OPENED_ON_PAGE_TYPE, page: representativeWithout, component: "vraag", reasonNl: "De vragen staan op dit paginatype niet; het onderdeel hoort er wel bij voor de bezoeker die er via de voet komt.", observation, decidedBy: "verkenner" }];
   write();
   const check = await checkSite(run, { navigationDelayMs: 20 });
   assert.deepEqual(check.problems, []);

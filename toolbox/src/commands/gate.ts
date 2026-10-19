@@ -10,7 +10,7 @@ import { makeWorkDir } from "../lib/workdir.ts";
 import { notFoundProbes, siteHosts, siteLabel } from "../lib/origins.ts";
 import { uncoveredOperables, type CountedPage } from "../lib/operables.ts";
 import { loadRun, type PageData, type RunData } from "../lib/rundata.ts";
-import { acceptedGapFor, frameAddress, frameEntry, frameStanding, NOT_OPENED_ON_PAGE_TYPE, notOpenedAdviceNl, type Component } from "../lib/sitemodel.ts";
+import { acceptedGapFor, frameAddress, frameEntry, frameStanding, NOT_OPENED_ON_PAGE_TYPE, notOpenedAdviceNl, type AcceptedGapDecider, type Component } from "../lib/sitemodel.ts";
 import { drawMarks } from "../session/marks.ts";
 import { coversContent, type Overlay } from "../session/recipe.ts";
 
@@ -95,7 +95,7 @@ export interface Gate {
   checks: Check[];
   gaps: Gap[];
   /** Gaps the explorer confirmed as a property of the site; they do not make the evidence insufficient. */
-  accepted: (Gap & { reasonNl: string; observation: string })[];
+  accepted: (Gap & { reasonNl: string; observation: string; decidedBy: AcceptedGapDecider })[];
   warnings: Gap[];
   /** What cannot be examined at all with the limits an evaluation keeps to, such as content that only loads with a write request. It does not send the run back; it has to reach the report. */
   limitations: Gap[];
@@ -830,7 +830,7 @@ export async function gate(runDir: string, outDir: string = runDir): Promise<Gat
   const all = [...fixed.gaps, ...reviewed.gaps];
   // A gap the explorer confirmed as a property of the site does not hold the run back.
   const acceptedBy = (gap: Gap) => acceptedGapFor(run.siteModel, { check: gap.check, page: gap.url, component: gap.component });
-  const accepted = all.filter((gap) => acceptedBy(gap)).map((gap) => ({ ...gap, reasonNl: acceptedBy(gap)!.reasonNl, observation: acceptedBy(gap)!.observation }));
+  const accepted = all.filter((gap) => acceptedBy(gap)).map((gap) => ({ ...gap, reasonNl: acceptedBy(gap)!.reasonNl, observation: acceptedBy(gap)!.observation, decidedBy: acceptedBy(gap)!.decidedBy }));
   const gaps = all.filter((gap) => !acceptedBy(gap));
 
   const manifestPath = join(runDir, "manifest.json");
