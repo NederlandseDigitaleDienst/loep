@@ -4,6 +4,7 @@ import { createServer, type Server } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, test } from "node:test";
+import { startFixture } from "../fixtures/serve.ts";
 import { addressLevels, inventory, nextAddress, noteVisited, pageLimitNl, pageLimitReason, type Inventory } from "../src/commands/inventory.ts";
 import { buildSample } from "../src/commands/sample.ts";
 
@@ -258,4 +259,32 @@ test("an address that redirects to an anchor on a page of the site is recorded w
   assert.equal(item.url, `${at}/verklaring`, "not the address that redirects, though it comes first in the alphabet");
   assert.equal(item.slug, of("/verklaring").slug);
   assert.deepEqual(item.aliases, [`${at}/aan-de-slag/hulp`, `${at}/wetten/verklaring`]);
+});
+
+
+test("with a fixed list every listed page goes before a frame found on one, also when the frame's server has the lower port", async (context) => {
+  const free: number[] = [];
+  for (let count = 0; count < 3; count++) {
+    const probe = createServer();
+    await new Promise<void>((resolve) => probe.listen(0, "127.0.0.1", resolve));
+    free.push((probe.address() as { port: number }).port);
+    await new Promise<void>((resolve) => void probe.close(() => resolve()));
+  }
+  free.sort((a, b) => a - b);
+  const fixture = await startFixture({ ports: { thirdParty: free[0]!, clean: free[1]!, defect: free[2]! }, logFile: join(scratch, "fixture.log") });
+  try {
+    const clean = fixture.origins.clean;
+    const listed = [`${clean}/afval.html`, `${clean}/contact.html`];
+    let found: Inventory;
+    try {
+      found = await inventory({ baseUrl: `${clean}/`, out: join(scratch, "fixed"), maxPages: 2, fixedUrls: listed });
+    } catch (error) {
+      if (/Executable doesn't exist|browserType.launch/.test((error as Error).message)) return context.skip("no browser available");
+      throw error;
+    }
+    assert.deepEqual(found.pages.map((page) => page.url).sort(), listed);
+    assert.ok(found.skipped.some((entry) => entry.url === `${fixture.origins.thirdParty}/leeg.html` && entry.reason === pageLimitReason(2)), "the frame is left out by the limit");
+  } finally {
+    await fixture.close();
+  }
 });
