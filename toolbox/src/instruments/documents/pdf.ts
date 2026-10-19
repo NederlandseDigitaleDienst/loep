@@ -79,7 +79,9 @@ export function parseStructText(output: string): { type: string; children: (stri
     }
     // An attribute ("/Scope /Column") or the object of an annotation: not a tag.
     if (body.startsWith("/") || /^Object \d+ \d+$/.test(body)) continue;
-    const tag = /^([A-Za-z][\w-]*)(?: ".*")?(?: <[^>]*>)?(?: \((?:block|inline)\))?:?$/.exec(body);
+    // Only the name is read. After it poppler prints a title, <id>, (block) or ["alt"], without escaping
+    // quotes in the texts; the line comes from an untrusted PDF, so no pattern that could backtrack over it.
+    const tag = /^([A-Za-z][\w-]*)(?::?$| ["<(\[])/.exec(body);
     if (!tag) continue;
     const node: Node = { type: tag[1]!, children: [] };
     if (stack.length > 0) stack.at(-1)!.node.children.push(node);
@@ -158,7 +160,7 @@ export function buildStructure(objects: Dict, catalog: Dict, pageOf: Map<string,
   };
   roots.forEach(settle);
 
-  // The text: both trees list the same tags in the same order, or the text is left out.
+  // The text: both trees list the same tags (same types) in the same order, or the text is left out.
   const ours = roots.flatMap((node) => [...walk(node)]);
   type Parsed = { type: string; children: (string | Parsed)[] };
   const theirs: Parsed[] = [];
@@ -167,7 +169,7 @@ export function buildStructure(objects: Dict, catalog: Dict, pageOf: Map<string,
     for (const child of node.children) if (typeof child !== "string") flatten(child);
   };
   if (structText !== null) for (const node of parseStructText(structText) as Parsed[]) flatten(node);
-  if (ours.length === 0 || ours.length !== theirs.length) return { roots, textRead: false };
+  if (ours.length === 0 || ours.length !== theirs.length || theirs.some((node, index) => node.type !== ours[index]!.type)) return { roots, textRead: false };
   const byParsed = new Map<Parsed, TagNode>(theirs.map((node, index) => [node, ours[index]!]));
   for (const [parsed, node] of byParsed) node.children = parsed.children.map((child) => (typeof child === "string" ? child : byParsed.get(child)!));
   return { roots, textRead: true };

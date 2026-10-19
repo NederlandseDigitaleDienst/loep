@@ -11,7 +11,7 @@ import { documents as measureDocuments } from "../src/commands/documents.ts";
 import { inventory, probeDocument, type Inventory } from "../src/commands/inventory.ts";
 import { buildSample, chooseDocuments, DOCUMENT_CENSUS_LIMIT, withDocuments } from "../src/commands/sample.ts";
 import { measureOffice } from "../src/instruments/documents/office.ts";
-import { compareOrder, measurePdf, parseStructText } from "../src/instruments/documents/pdf.ts";
+import { buildStructure, compareOrder, measurePdf, parseStructText } from "../src/instruments/documents/pdf.ts";
 import { readMarkdown } from "../src/instruments/documents/text.ts";
 import { openZip, parseXml } from "../src/instruments/documents/zipxml.ts";
 import { readJson, writeJson } from "../src/lib/canonical.ts";
@@ -309,6 +309,32 @@ test("the tree of poppler is read by its indentation, and the order of tags is c
   assert.equal(compareOrder("", "een"), null);
 });
 
+test("the alt text of poppler in square brackets does not hide a tag", () => {
+  const tree = parseStructText('Document\n  Figure ["Alt tekst"]:\n     /Placement /Block\n    ""\n  Figure <logo> ["Alt met "aanhalingstekens" en ] "]:\n  Table (block) ["Alt"]\n  Figure <a1> (inline) ["Alt"]\n  Figure "titel "met" quote" ["gewoon "]\n  Figure "titel eindigt \\" ["eind met backslash \\ "]\n  Figure ["voor na"]\n  P (block)\n    "Tekst"\n');
+  const kinds = (tree[0]!.children as { type?: string }[]).map((child) => child.type);
+  assert.deepEqual(kinds, ["Figure", "Figure", "Table", "Figure", "Figure", "Figure", "Figure", "P"]);
+});
+
+test("the text of poppler is only laid on the tags of qpdf when the types agree", () => {
+  const objects = {
+    "obj:1 0 R": { value: { "/K": ["2 0 R", "3 0 R"] } },
+    "obj:2 0 R": { value: { "/S": "/H1" } },
+    "obj:3 0 R": { value: { "/S": "/P" } },
+  } as never;
+  const catalog = { "/StructTreeRoot": "1 0 R" } as never;
+  const same = buildStructure(objects, catalog, new Map(), 'H1\n  "Kop"\nP\n  "Tekst"\n');
+  assert.equal(same.textRead, true);
+  assert.deepEqual(same.roots[0]!.children, ["Kop"]);
+  const swapped = buildStructure(objects, catalog, new Map(), 'P\n  "Kop"\nH1\n  "Tekst"\n');
+  assert.equal(swapped.textRead, false);
+});
+
+test("a line of a hostile PDF does not make the tag pattern backtrack", () => {
+  const start = Date.now();
+  parseStructText(`Document\n  Figure${' "a"'.repeat(40)} x\n  Figure${' ["a"]'.repeat(40)} x\n  Figure "${'" ['.repeat(80_000)}x\n`);
+  assert.ok(Date.now() - start < 1000);
+});
+
 test("a tagged PDF: title, language, headings, figures, table headers, list, link, bookmarks and order", { skip: NEEDS_PDF_TOOLS }, async () => {
   const { facts, text, tagTree } = await measurePdf(join(FIXTURES, "tagged.pdf"), scratch);
   assert.equal(facts.pdf.tagged, true);
@@ -320,6 +346,7 @@ test("a tagged PDF: title, language, headings, figures, table headers, list, lin
   assert.deepEqual(facts.images.map((image) => image.alt), ["Staafdiagram van de inkomsten per jaar", null]);
   assert.deepEqual(facts.tables.map((table) => [table.page, table.rows, table.headerCells, table.firstRow]), [[1, 3, 2, ["Jaar", "Bedrag"]]]);
   assert.deepEqual(facts.links, [{ page: 1, text: "klik hier", href: "https://example.org/meer" }]);
+  assert.equal(facts.pdf.tagTextRead, true);
   assert.equal(facts.pdf.lists, 1);
   assert.equal(facts.pdf.bookmarks.count, 3);
   assert.deepEqual(facts.pdf.languageParts, [{ lang: "en", text: "This paragraph is in English.", page: 2 }]);
