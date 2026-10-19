@@ -259,3 +259,25 @@ test("an address that redirects to an anchor on a page of the site is recorded w
   assert.equal(item.slug, of("/verklaring").slug);
   assert.deepEqual(item.aliases, [`${at}/aan-de-slag/hulp`, `${at}/wetten/verklaring`]);
 });
+
+test("a redirect to an address with a secret in the query does not put the secret in the inventory", async (context) => {
+  const site = createServer((request, response) => {
+    const path = new URL(request.url!, "http://x").pathname;
+    if (path === "/terug") return void response.writeHead(302, { location: "/verklaring?code=geheim#x" }).end();
+    const known: Record<string, string> = { "/": html("Start", ["/terug", "/verklaring"]), "/verklaring": html("Verklaring", ["/"]) };
+    response.writeHead(known[path] ? 200 : 404, { "content-type": "text/html; charset=utf-8" });
+    response.end(known[path] ?? html("Niet gevonden", ["/"]));
+  });
+  await new Promise<void>((resolve) => site.listen(0, "127.0.0.1", resolve));
+  context.after(() => new Promise<void>((resolve) => void site.close(() => resolve())));
+  const at = `http://127.0.0.1:${(site.address() as { port: number }).port}`;
+  let found: Inventory;
+  try {
+    found = await inventory({ baseUrl: `${at}/`, out: join(scratch, "redirect-code"), maxPages: 10 });
+  } catch (error) {
+    if (/Executable doesn't exist|browserType.launch/.test((error as Error).message)) return context.skip("no browser available");
+    throw error;
+  }
+  assert.equal(found.pages.find((page) => page.url === `${at}/terug`)!.finalUrl, `${at}/verklaring#x`, "the landing address keeps its anchor and loses its query");
+  assert.ok(!JSON.stringify(found).includes("geheim"), "the secret is nowhere in the inventory");
+});

@@ -255,6 +255,13 @@ export function normaliseUrl(url: string): string {
   return parsed.href;
 }
 
+/** Where the browser landed, with a query only when the requested address has that same query: a redirect after a login can carry a secret in it (`?code=`). */
+function landingAddress(requested: string, landed: string): string {
+  const parsed = new URL(landed);
+  if (parsed.search !== new URL(requested).search) parsed.search = "";
+  return parsed.href;
+}
+
 const NON_PAGE = /\.(pdf|png|jpe?g|gif|svg|webp|ico|css|js|json|xml|txt|zip|woff2?|ttf|mp4|mp3|docx?|xlsx?|pptx?|odt|csv)$/i;
 
 /** A link on a page: where it leads, its text, and the file name of its `download` attribute (null without one, "" when it names none). */
@@ -367,7 +374,7 @@ async function inspect(page: Page, url: string, mayBeDocument: boolean, offered:
   }, [...origins]);
   return {
     url,
-    ...(loaded.finalUrl !== url ? { finalUrl: loaded.finalUrl } : {}),
+    ...(loaded.finalUrl !== url ? { finalUrl: landingAddress(url, loaded.finalUrl) } : {}),
     status: loaded.status,
     title: result.title,
     lang: result.lang,
