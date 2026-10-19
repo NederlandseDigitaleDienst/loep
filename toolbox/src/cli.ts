@@ -18,7 +18,8 @@ const USAGE = `loep <command> [options]
                                          Find every page and count what is on it. In a run with a login the pages are found
                                          by following links from the page the person pointed at; a link that logs out is never followed
   explore --run <run>                    Write the task for the agent that maps the site before it is measured
-  check-site --run <run>                 Validate site.json and replay every recipe in it; non-zero exit on problems
+  check-site --run <run>                 Validate site.json, replay every recipe in it and open every component on each of its
+                                         page types as the sweep does; non-zero exit on problems
   sample --run <run> [--seed <text>]     Choose the pages to evaluate (all of them on a small site)
   collect --run <run> [--fresh] [--at-once <n>]
                                          Gather facts, engine results and probe evidence per page. The sweep (collect, contrast,

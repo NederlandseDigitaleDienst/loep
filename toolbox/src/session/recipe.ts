@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Browser, BrowserContext, Frame, Page } from "playwright";
 import { readJson } from "../lib/canonical.ts";
-import { frameAddress, type Postcondition } from "../lib/sitemodel.ts";
+import { frameAddress, POSTCONDITION_NOT_HELD_NL, type Postcondition } from "../lib/sitemodel.ts";
 import { runSteps, type LastStepSpeech, type Recipe } from "./daemon.ts";
 import { Images, type StartState, type Step } from "./observations.ts";
 import { DEFAULT_DAEMON_LIMITS, Politeness, scopeForRun, type DaemonLimits } from "./safety.ts";
@@ -162,7 +162,7 @@ export async function replaySteps(env: Env, surface: Surface, steps: Step[], pos
     if (failed) return { ok: false, reasonNl: `stap ${failed.index + 1} (${failed.command}) ${failed.reason}`, after: null, ...(failed.timedOut ? { timedOut: true } : {}) };
     if (!post) return { ok: true, reasonNl: null, after: null };
     const after = await holds(surface.page, post, POSTCONDITION_WAIT_MS);
-    return { ok: after.holds, reasonNl: after.holds ? null : `na de stappen geldt de postconditie niet: ${after.detail}`, after };
+    return { ok: after.holds, reasonNl: after.holds ? null : `${POSTCONDITION_NOT_HELD_NL}: ${after.detail}`, after };
   } catch (error) {
     return { ok: false, reasonNl: (error as Error).message.split("\n")[0]!, after: null };
   } finally {

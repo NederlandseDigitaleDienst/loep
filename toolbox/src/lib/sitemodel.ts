@@ -168,9 +168,36 @@ export interface AcceptedGap {
   check: string;
   /** Address of the page the gap is on. */
   page: string;
+  /** Id of the component the gap is about. Required for `component-not-opened-on-page-type`, and only allowed there. */
+  component?: string;
   reasonNl: string;
   /** Id of the session observation that shows it. */
   observation: string;
+}
+
+/** The check that refuses a component that did not open on one of its page types: the gate after the sweep, `check-site` before it. */
+export const NOT_OPENED_ON_PAGE_TYPE = "component-not-opened-on-page-type";
+
+/** How `replaySteps` says that a step did not find its element, and that the steps ran but the postcondition does not hold. */
+export const STEP_NOT_FOUND_NL = "vond het element niet terug";
+export const POSTCONDITION_NOT_HELD_NL = "na de stappen geldt de postconditie niet";
+
+/**
+ * The entry of the model that accepts a gap. For a component that did not open on a page type
+ * only an entry that names that component: an entry without one matches nothing.
+ */
+export function acceptedGapFor(model: Pick<SiteModel, "acceptedGaps"> | null | undefined, gap: { check: string; page: string | null; component?: string | undefined }): AcceptedGap | undefined {
+  return (model?.acceptedGaps ?? []).find((entry) => entry.check === gap.check && entry.page === gap.page && (gap.check !== NOT_OPENED_ON_PAGE_TYPE || (entry.component !== undefined && entry.component === gap.component)));
+}
+
+/**
+ * What to do about a component that did not open on a page type, by why it did not. Only a step
+ * that did not find its element can mean that the component is not on that page type.
+ */
+export function notOpenedAdviceNl(reasonNl: string | null): string {
+  if (reasonNl?.startsWith(POSTCONDITION_NOT_HELD_NL)) return "De stappen vonden hun element op dit paginatype: maak het recept of de postconditie geldig op elk paginatype van het onderdeel.";
+  if (reasonNl !== null && /^stap \d+ \(/.test(reasonNl) && reasonNl.includes(STEP_NOT_FOUND_NL)) return "Ga eerst na of het onderdeel op dit paginatype staat. Staat het er, maak het recept dan geldig op elk paginatype van het onderdeel. Haal het paginatype alleen uit pageTypes van het onderdeel als het onderdeel er echt niet staat.";
+  return "Maak het recept en de postconditie geldig op elk paginatype van het onderdeel.";
 }
 
 export interface SiteModel {
@@ -444,6 +471,10 @@ export function validateSiteModel(value: unknown, context: ModelContext): string
           continue;
         }
         if (!context.pages.includes(gap.page as string)) problems.push(`${where}: "${String(gap.page)}" is geen pagina van deze run`);
+        if (gap.check === NOT_OPENED_ON_PAGE_TYPE) {
+          if (gap.component === undefined) problems.push(`${where}: bij "${NOT_OPENED_ON_PAGE_TYPE}" hoort "component", het id van het onderdeel dat daar niet opengaat; zonder telt de regel voor geen enkel onderdeel`);
+          else if (!(model.components as unknown[]).some((component) => isRecord(component) && component.id === gap.component)) problems.push(`${where}: onderdeel "${String(gap.component)}" staat niet in components`);
+        } else if (gap.component !== undefined) problems.push(`${where}: "component" hoort alleen bij "${NOT_OPENED_ON_PAGE_TYPE}"`);
         if (context.observations && !context.observations.has(gap.observation as string)) problems.push(`${where}: waarneming ${String(gap.observation)} bestaat niet in deze run`);
       }
     }
@@ -540,7 +571,17 @@ export interface SiteCheck {
   siteSha256: string;
   checkedAt: string;
   problems: string[];
-  replays: { kind: "blocker" | "component" | "process"; id: string; recipe: string; ok: boolean; reasonNl: string | null; before: string; after: string }[];
+  replays: {
+    kind: "blocker" | "component" | "process";
+    id: string;
+    recipe: string;
+    ok: boolean;
+    reasonNl: string | null;
+    before: string;
+    after: string;
+    /** For a component that replayed: its recipe on the representative page of every page type it stands on, in the window the sweep uses. `accepted` when the model accepts that it does not open there. */
+    onPageTypes?: { pageType: string; url: string; viewport: { width: number; height: number }; reached: boolean; reasonNl: string | null; accepted: boolean }[];
+  }[];
   /** Saved states of the explorer that the model does not use; moved to recipes/unused when the model passed. */
   unusedRecipes?: string[];
   /** How many forms and groups of controls were counted on the page types, and how many of them no recipe of the model touches. Absent when it was not counted. */
