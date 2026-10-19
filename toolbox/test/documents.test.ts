@@ -704,6 +704,13 @@ test("the scope and the limitations say which documents were read, which were no
   assert.match(none.limitationsNl[0]!, /op de site zijn geen documenten gevonden/);
 });
 
+test("the limitations name the pdf documents whose tag text was not read, with the criteria that are less certain", () => {
+  const items = REPORTED.items.map((item) => (item.label === "D01" ? { ...item, tagTextNotRead: true as const } : item));
+  const text = documentScopeNl({ ...REPORTED, items }, "https://voorbeeld.overheid.example", 4).limitationsNl.join("\n");
+  assert.match(text, /Van 1 pdf-document kon de toolbox de tekst bij de tags niet lezen \(D01\)\..*1\.3\.1, 1\.3\.2, 2\.4\.2, 2\.4\.4, 2\.4\.6 en 3\.1\.2\./);
+  assert.ok(!documentScopeNl(REPORTED, "https://voorbeeld.overheid.example", 4).limitationsNl.join("\n").includes("tekst bij de tags"));
+});
+
 test("the report lists the documents with their kind and whether they were read, and a finding can point at one", async (context) => {
   const evaluation = exampleEvaluation();
   const plain = renderMarkdown(evaluation);

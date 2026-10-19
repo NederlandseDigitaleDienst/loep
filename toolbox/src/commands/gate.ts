@@ -449,6 +449,10 @@ export function gateChecks(run: RunData): { checks: Check[]; gaps: Gap[]; warnin
     }
     add("overlay", overlayGaps, `op ${covered.length} van ${measured.length} pagina's ligt een vast element dat meer dan ${percent(MAX_OVERLAY_SHARE)} van het venster inneemt over de inhoud${beside > 0 ? `; op ${beside} ${beside === 1 ? "pagina staat" : "pagina's staat"} zo'n element naast de inhoud en bedekt het niets` : ""}`);
   }
+  // Documents: a tagged pdf whose tag text was not read has headings, links and tables without text. A warning: the file itself was measured.
+  for (const document of run.documents ?? []) {
+    if (document.facts?.pdf?.tagged && !document.facts.pdf.tagTextRead) warnings.push({ check: "document-tag-text-not-read", page: document.label, url: document.item.url, state: "default", missingNl: "De tekst per tag van dit document is niet gelezen, dus de koppen, links en tabellen zijn zonder hun tekst beoordeeld. De uitkomst van documents zegt welk programma niet paste. Herstel dat en draai documents opnieuw." });
+  }
   return { checks, gaps, warnings, limitations };
 }
 

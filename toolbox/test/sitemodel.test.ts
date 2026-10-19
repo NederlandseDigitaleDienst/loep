@@ -259,6 +259,13 @@ test("the gate passes a run in which every check holds", () => {
   assert.ok(checked.checks.every((check) => check.ok));
 });
 
+test("the gate warns, without a gap, for each tagged pdf whose tag text was not read", () => {
+  const document = (label: string, pdf: { tagged: boolean; tagTextRead: boolean } | undefined) => ({ label, item: { url: `https://site.nl/${label}.pdf` }, facts: { status: "read", ...(pdf ? { pdf } : {}) } });
+  const checked = gateChecks(gateRun([gatePage("P1", "https://site.nl/")], { documents: [document("D01", { tagged: true, tagTextRead: false }), document("D02", { tagged: true, tagTextRead: true }), document("D03", { tagged: false, tagTextRead: false }), document("D04", undefined)] as unknown as RunData["documents"] }));
+  assert.deepEqual(checked.gaps, []);
+  assert.deepEqual(checked.warnings.map((warning) => [warning.check, warning.page]), [["document-tag-text-not-read", "D01"]]);
+});
+
 test("the gate flags a Tab walk that reached less than the threshold, and not one just above it", () => {
   assert.equal(MIN_TAB_REACH, 0.5);
   assert.deepEqual(names(gateRun([gatePage("P1", "https://site.nl/", { links: 10, reached: 4 })])), ["tab-reach:P1"]);
