@@ -18,6 +18,8 @@ import { compareCriterionIds } from "../lib/wcag.ts";
  * was allowed to, and whether it may send is the owner's choice. Nor does a point "niet
  * bereikbaar": a part of the site did not load, which is no fault of loep, and a new finishing
  * round (`tasks --again`) measures it once it loads. Both kinds of criteria are named apart.
+ * A point "proef werkte niet" that still stands is a fault in loep also in a criterion that did
+ * get an outcome: it gets the same draft, with the outcome in the body.
  */
 
 export const REPOSITORY = "NederlandseDigitaleDienst/loep";
@@ -25,6 +27,8 @@ export const REPOSITORY = "NederlandseDigitaleDienst/loep";
 export const TITLE_PREFIX = "Open door loep:";
 /** A criterion without a verdict: the judge, the verifier or the finishing round was skipped. */
 const UNTESTED = "niet beoordeeld";
+/** The kind of a test that did not work: a fault in loep also where the criterion did get an outcome. */
+const PROBE_FAILED = "proef werkte niet";
 /** A criterion that is open with no point at all, or with a point from before the kinds existed. */
 const NO_KIND = "zonder soort";
 
@@ -91,6 +95,12 @@ function ownPointsByKind(criterion: CriterionResult): Map<string, string[]> {
   return byKind;
 }
 
+/** The points "proef werkte niet" that still stand in a criterion that did get an outcome. */
+function probePointsByKind(criterion: CriterionResult): Map<string, string[]> {
+  const points = criterion.missingNl.map(openPoint).filter((parsed) => parsed.kind?.prefix === PROBE_FAILED).map((parsed) => parsed.textNl);
+  return points.length > 0 ? new Map([[PROBE_FAILED, points]]) : new Map();
+}
+
 const KIND_LABEL_NL: Record<string, string> = {
   ...Object.fromEntries(OPEN_POINT_KINDS.map((kind) => [kind.prefix, kind.labelNl])),
   [UNTESTED]: "er kwam geen oordeel, ook niet na twee pogingen",
@@ -106,10 +116,15 @@ export function feedback(runDir: string, options: { out?: string | undefined } =
   const redact = redactor(evaluation.site);
   const own = new Set(openCriteria(evaluation.criteria).evaluation);
   const drafts: Draft[] = [];
-  for (const criterion of evaluation.criteria.filter((entry) => own.has(entry.id))) {
-    for (const [kind, points] of ownPointsByKind(criterion)) {
+  for (const criterion of evaluation.criteria) {
+    const isOwn = own.has(criterion.id);
+    // Standing in the evaluation is what gaps calls "nog open in het oordeel dat telt".
+    const byKind = isOwn ? ownPointsByKind(criterion) : probePointsByKind(criterion);
+    for (const [kind, points] of byKind) {
       const lines = [
-        `Een onderzoek met loep liet dit criterium open door loep zelf, niet door de site. Gemaakt met \`loep feedback\`; het adres, de naam en de organisatie van de site zijn weggelaten.`,
+        isOwn
+          ? `Een onderzoek met loep liet dit criterium open door loep zelf, niet door de site. Gemaakt met \`loep feedback\`; het adres, de naam en de organisatie van de site zijn weggelaten.`
+          : `Een onderzoek met loep gaf dit criterium een uitkomst, maar een proef werkte niet: dat is een fout in loep, ook al is de uitkomst bepaald. Gemaakt met \`loep feedback\`; het adres, de naam en de organisatie van de site zijn weggelaten.`,
         "",
         `- Criterium: ${criterion.id} ${criterion.titleNl}, niveau ${criterion.level}, WCAG ${criterion.versions.join(" en ")}`,
         `- Soort: ${kind} (${KIND_LABEL_NL[kind] ?? kind})`,

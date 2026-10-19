@@ -16,6 +16,7 @@ Wat er per versie van loep is veranderd. De versie staat op het voorblad en onde
 ### Verder
 
 - De stappen die `just voiceover-setup` toont om System Integrity Protection (SIP) uit te zetten in de virtuele Mac, waarschuwen nu voor een valkuil. In de herstelmodus kom je in een venster met vier keuzes; klik je daar op Ga door (Continue), dan begint een herinstallatie van macOS. De stappen zeggen nu dat je daar niets aanklikt, hoe je zo'n installatie stopt (⌘Q) en hoe het menu heet in een Nederlandse virtuele Mac (Hulpprogramma's > Terminal), zoals `docs/voiceover.md` al zei. Je hoeft niets opnieuw te doen.
+- `feedback` schreef alleen een issuetekst voor een criterium waar loep zelf geen oordeel over kon geven. Kreeg een criterium wel een oordeel, bijvoorbeeld "voldoet niet", maar werkte er een proef niet, dan bleef die fout in loep onzichtbaar. In een echte run gaf `feedback` één tekst (1.3.2), terwijl `gaps` bij zeven criteria een open punt `proef werkte niet` toonde (1.3.2, 1.4.3, 1.4.11, 2.4.4, 2.4.6, 3.1.2 en 4.1.2). Nu schrijft `feedback` ook voor die punten een tekst, met het oordeel erbij. De titel blijft `Open door loep: <criterium> proef werkte niet`, zodat een melding van een eerdere run vindbaar blijft. Adres, naam en organisatie van de site staan er niet in. Een bestaande run hoeft niets te doen: draai `feedback` opnieuw (#117).
 
 ## 0.10.0 (2026-10-17)
 
