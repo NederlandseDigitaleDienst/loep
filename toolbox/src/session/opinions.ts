@@ -1,4 +1,4 @@
-import { writeFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { PNG } from "pngjs";
 import { regionScreenshot } from "../browser/screenshot.ts";
 import { agreementLine, measuredBy, type Measured, type MethodFailure, type MethodResult } from "../instruments/methods.ts";
@@ -7,7 +7,7 @@ import { detectLanguages, languageDifferences, languagePieces, languageVerdicts,
 import { apiMotion, changedBetween, pixelMotion } from "../instruments/methods/motion.ts";
 import { overflowGeometryAtSize, textSpacing } from "../instruments/overflow.ts";
 import { groupAnswers, markKnownNames, nameDifferences, namesOf, sayName, type NameAnswer } from "../instruments/methods/names.ts";
-import { imageTextContrast, pointedContrast, type ImageTextAnswer, type ImageTextLine, type PointedAnswer } from "../instruments/methods/imagetext.ts";
+import { fileAsShown, imageTextContrast, pointedContrast, type ImageTextAnswer, type ImageTextLine, type PointedAnswer } from "../instruments/methods/imagetext.ts";
 import { ocr, overlap, type OcrAnswer } from "../instruments/methods/ocr.ts";
 import { idOf, knownError, methodById, runMethod, sortRan, toolStatus, versionOf, type BrowserVersions, type Ran } from "../instruments/methods/registry.ts";
 import { engineOf, flagOf, groupFindings, matchShare, runRuleEngines, type AlfaPage, type ElementGroup, type EngineId, type RulesRun } from "../instruments/methods/rules.ts";
@@ -498,6 +498,52 @@ async function elementState(context: Context): Promise<ElementState | null> {
   return context.surface.page.evaluate((place) => (window as unknown as { __loepm: { elementState: (place: string) => ElementState | null } }).__loepm.elementState(place), where(context.target!.path));
 }
 
+/** The largest image file that is drawn in the page to be measured in place of the picture on the page. */
+const MAX_FILE_PIXELS = 8_000_000;
+
+/** What an image file larger than its picture on the page was used for. */
+interface ImageFile {
+  /** Sizes in pixels; `file` is absent when the file could not be opened again. */
+  file?: { width: number; height: number };
+  shown: { width: number; height: number };
+  measuredOn: "file" | "page";
+  /** Why the picture on the page was measured instead of the file. */
+  reasonNl?: string;
+}
+
+/**
+ * The picture that text in an element is measured on: its picture on the page at `shownPath`, or,
+ * for an image the page shows smaller than its file is, the file itself when it stands for what is
+ * shown (`fileAsShown`). The file is the one the page loaded, drawn inside the page. Boxes stay in
+ * CSS pixels either way: the measurement scales by the width of the picture.
+ */
+async function pictureToMeasure(context: Context, shownPath: string): Promise<{ path: string; imageFile: ImageFile | null }> {
+  const { page } = context.surface;
+  await ensureHelpers(page);
+  type Found = { width?: number; height?: number; png?: string; reasonNl?: string } | null;
+  const found = await page
+    .evaluate(([place, max]) => (window as unknown as { __loepm: { imageFile: (place: string, max: number) => Promise<Found> } }).__loepm.imageFile(place, max), [where(context.target!.path), MAX_FILE_PIXELS] as const)
+    .catch((): Found => null);
+  if (!found || (!found.png && !found.reasonNl)) return { path: shownPath, imageFile: null };
+  const shownPicture = PNG.sync.read(await readFile(shownPath));
+  const shown = { width: shownPicture.width, height: shownPicture.height };
+  const file = found.width && found.height ? { width: found.width, height: found.height } : undefined;
+  const onPage = (reasonNl: string) => ({ path: shownPath, imageFile: { ...(file ? { file } : {}), shown, measuredOn: "page" as const, reasonNl } });
+  if (!found.png) return onPage(found.reasonNl!);
+  const asShown = fileAsShown(PNG.sync.read(Buffer.from(found.png.slice(found.png.indexOf(",") + 1), "base64")), shownPicture);
+  if ("reasonNl" in asShown) return onPage(asShown.reasonNl);
+  const path = context.images.image("-file");
+  await writeFile(path, PNG.sync.write(asShown.picture));
+  return { path, imageFile: { file, shown, measuredOn: "file" } };
+}
+
+/** How the print says which picture was measured, when the file is larger than the picture on the page. */
+function pictureLine(imageFile: ImageFile): string {
+  const size = (of: { width: number; height: number }): string => `${of.width}x${of.height}`;
+  if (imageFile.measuredOn === "file") return `gemeten op het beeldbestand zelf (${size(imageFile.file!)} pixels), dat de pagina kleiner toont (${size(imageFile.shown)}): verkleind delen dunne letters hun pixels met de achtergrond`;
+  return `gemeten op de afbeelding zoals de pagina haar toont (${size(imageFile.shown)} pixels)${imageFile.file ? `; het beeldbestand is ${size(imageFile.file)}` : ""}, maar ${imageFile.reasonNl}`;
+}
+
 /** `--at x,y,width,height`: a box in the picture of an element, in CSS pixels from its top left corner. */
 function pointedBox(value: string | boolean | undefined, element: { width: number; height: number }): { x: number; y: number; width: number; height: number } {
   const parts = typeof value === "string" ? value.split(/[,x ]+/).filter((part) => part !== "").map(Number) : [];
@@ -518,13 +564,15 @@ async function contrastAt(context: Context, options: Options): Promise<Outcome> 
   const box = pointedBox(options.at, element);
   const path = context.images.image();
   await regionScreenshot(page, { x: Math.max(0, element.x), y: Math.max(0, element.y), width: element.width, height: element.height }, { path });
-  const ran = await runMethod<PointedAnswer>("image-box", browsersOf(context), () => pointedContrast(path, element.width, box));
+  const picture = await pictureToMeasure(context, path);
+  const ran = await runMethod<PointedAnswer>("image-box", browsersOf(context), () => pointedContrast(picture.path, element.width, box));
   const measured = measuredBy(ran.ok ? [ran.value] : [], [], { failed: ran.ok ? [] : [ran.failure] });
   const { text: _text, confidence: _confidence, ...line } = ran.ok ? imageLine(ran.value.result.box) : { text: "", confidence: 0 };
   return {
-    result: { ...measured, at: box, pointedBy: "agent" },
+    result: { ...measured, at: box, pointedBy: "agent", ...(picture.imageFile ? { imageFile: picture.imageFile } : {}) },
     print: {
       image: context.images.relative(path),
+      ...(picture.imageFile ? { picture: pictureLine(picture.imageFile), ...(picture.path !== path ? { file: context.images.relative(picture.path) } : {}) } : {}),
       at: `${box.x},${box.y} ${box.width}x${box.height}`,
       ...(ran.ok ? { pointed: line } : {}),
       ...methodLines(measured),
@@ -563,6 +611,8 @@ export const contrastWith = (raw: Handler, single: Handler): Handler =>
     const picture = state !== null && (PICTURE_TAGS.has(state.tag) || (state.backgroundImage && !state.hasText));
     const slows: Slow[] = [];
     let imagePath: string | null = null;
+    let imageFile: ImageFile | null = null;
+    let measuredPath: string | null = null;
     // Why the text in a picture was not read, when it was not: a measurement that did not run says so.
     let notRead: string | null = picture && !context.services.jobs ? "geen achtergrondtaken in deze sessie" : null;
     if (picture && context.services.jobs) {
@@ -573,7 +623,10 @@ export const contrastWith = (raw: Handler, single: Handler): Handler =>
         const clip = { x: Math.max(0, box.x), y: Math.max(0, box.y), width: box.width, height: box.height };
         await regionScreenshot(page, clip, { path });
         imagePath = path;
-        slows.push({ id: "image-text", detail: `${place}|${clip.width}x${clip.height}`, graceMs: BINARY_GRACE_MS, work: () => runMethod("image-text", browsers, () => imageTextContrast(path, clip.width), 40_000) });
+        const picture = await pictureToMeasure(context, path);
+        ({ imageFile } = picture);
+        measuredPath = picture.path;
+        slows.push({ id: "image-text", detail: `${place}|${clip.width}x${clip.height}${picture.path === path ? "" : "|file"}`, graceMs: BINARY_GRACE_MS, work: () => runMethod("image-text", browsers, () => imageTextContrast(picture.path, clip.width), 40_000) });
       }
     }
     const overPicture = computed.ok && computed.value.result.pieces.some((piece) => piece.notes?.includes("background-image"));
@@ -618,9 +671,10 @@ export const contrastWith = (raw: Handler, single: Handler): Handler =>
                 ? "tekst op een afbeelding: alleen de pixelmeting geldt, met het ongunstigste en het gunstigste geval"
                 : null;
       return {
-        result: { ...measured, ...(live ? { liveState: live } : {}) },
+        result: { ...measured, ...(live ? { liveState: live } : {}), ...(imageFile ? { imageFile } : {}) },
         print: {
           ...pixels.print,
+          ...(imageFile ? { picture: pictureLine(imageFile), ...(measuredPath !== imagePath ? { file: context.images.relative(measuredPath!) } : {}) } : {}),
           ...(lines.length > 0 ? { image: context.images.relative(imagePath!), imageText: lines.slice(0, MAX_IMAGE_LINES).map(imageLine), ...(lines.length > MAX_IMAGE_LINES ? { moreImageText: lines.length - MAX_IMAGE_LINES } : {}) } : {}),
           ...(live ? { state: live } : {}),
           ...methodLines(measured, knownLines(methods)),

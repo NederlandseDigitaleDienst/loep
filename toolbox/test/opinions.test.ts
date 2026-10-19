@@ -11,7 +11,7 @@ import { parseSnapshotLine } from "../src/instruments/methods/names.ts";
 import { binary, INJECTED_FAULTS, KNOWN_ERRORS, METHODS } from "../src/instruments/methods/registry.ts";
 import { runRuleEngines } from "../src/instruments/methods/rules.ts";
 import { changedBetween, changedPlaces } from "../src/instruments/methods/motion.ts";
-import { estimatedFontSize, measureLine } from "../src/instruments/methods/imagetext.ts";
+import { estimatedFontSize, fileAsShown, measureLine, pointedContrast } from "../src/instruments/methods/imagetext.ts";
 import { isLead, otherFeatures, ratiosOf, sideColours } from "../src/instruments/distinct.ts";
 import { enlarge, levelled, lineOf, mergeReadings, overlap, sparsePieces } from "../src/instruments/methods/ocr.ts";
 import { contrastRatio, floorRatio, type Rgb } from "../src/lib/contrast.ts";
@@ -961,6 +961,38 @@ test("contrast measures a box the agent points at in a picture, and says the age
   // The observation plays again with the same box.
   const again = await loep("contrast", ["css:#labels"], { at: "10,56,230,38" });
   assert.equal((await loep("replay", [again.id])).verdict, "same");
+});
+
+test("an image shown smaller than its file is measured on the file, when the file is what the page shows", async () => {
+  await loep("open", ["/imagefile.html"]);
+  type Pointed = { fg?: string; bg?: string; ratio?: number; best?: number; outcome: string };
+  // label-large.png is 1176 by 590 pixels and shown at 371 by 186: the strokes of 2 pixels of the white E on the red bar are less than one pixel wide on the page.
+  const at = "12,150,32,34";
+  const label = await loep("contrast", ["css:#label"], { at });
+  const pointed = label.pointed as Pointed;
+  assert.deepEqual([pointed.fg, pointed.bg, pointed.ratio, pointed.best], ["#ffffff", "#e6011a", floorRatio(contrastRatio([255, 255, 255], [0xe6, 0x01, 0x1a])), undefined]);
+  assert.match(label.picture as string, /^gemeten op het beeldbestand zelf \(1176x590 pixels\), dat de pagina kleiner toont \(371x186\)/);
+  // On the picture of the page the letter mixes with the bar: a range, all of it lower than what the file has.
+  const onPage = (await pointedContrast(join(run, label.image as string), 371, { x: 12, y: 150, width: 32, height: 34 })).box;
+  assert.ok(onPage.ratio! < onPage.bestRatio! && onPage.bestRatio! < pointed.ratio!, JSON.stringify(onPage));
+  const file = PNG.sync.read(readFileSync(join(run, label.file as string)));
+  assert.deepEqual([file.width, file.height], [1176, 590]);
+  const record = observation(label.id);
+  assert.deepEqual(record.images.map((image) => image.path), [label.image, label.file]);
+  assert.equal((record.result as unknown as { imageFile: { measuredOn: string } }).imageFile.measuredOn, "file");
+  assert.equal((await loep("replay", [label.id])).verdict, "same");
+  // The same file made transparent by the page: the file is no longer what is shown, and the letter mixed with the bar gives a range.
+  const faded = await loep("contrast", ["css:#faded"], { at });
+  assert.match(faded.picture as string, /^gemeten op de afbeelding zoals de pagina haar toont \(371x186 pixels\); het beeldbestand is 1176x590, maar op \d+% van de egale vlakken heeft het beeldbestand een andere kleur/);
+  assert.equal(faded.file, undefined);
+  const shown = faded.pointed as Pointed;
+  assert.ok(shown.best !== undefined && shown.ratio! < shown.best, JSON.stringify(shown));
+  // Text recognition reads the file too.
+  const whole = await loep("contrast", ["css:#label"], { wait: true });
+  assert.match(whole.picture as string, /^gemeten op het beeldbestand zelf/);
+  // A page that crops or stretches the file does not show the file.
+  const cropped = fileAsShown(file, new PNG({ width: 186, height: 186 }));
+  assert.match("reasonNl" in cropped ? cropped.reasonNl : "", /^het beeldbestand heeft andere verhoudingen/);
 });
 
 test("a line of text in a picture gets no ratio when the recognition is unsure or the colours are not two groups", () => {
