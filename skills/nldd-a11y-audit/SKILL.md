@@ -74,7 +74,7 @@ Een agent starten betekent steeds: een aparte agent die alleen dit krijgt: "Lees
    ```
    LOEP check-site --run RUN
    ```
-   Meldt de controle fouten, laat dezelfde agent ze herstellen. Trek daarna de steekproef opnieuw, want het sitemodel zegt welke ingesloten vensters meetellen en welke geen pagina horen te zijn:
+   De controle speelt elk recept af en probeert elk onderdeel ook op de voorbeeldpagina van elk paginatype waarop het volgens het model staat, in hetzelfde venster als de veegronde. Meldt de controle fouten, laat dezelfde agent ze herstellen. Trek daarna de steekproef opnieuw, want het sitemodel zegt welke ingesloten vensters meetellen en welke geen pagina horen te zijn:
    ```
    LOEP sample --run RUN
    ```

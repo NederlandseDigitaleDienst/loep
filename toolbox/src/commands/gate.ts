@@ -10,7 +10,7 @@ import { makeWorkDir } from "../lib/workdir.ts";
 import { notFoundProbes, siteHosts, siteLabel } from "../lib/origins.ts";
 import { uncoveredOperables, type CountedPage } from "../lib/operables.ts";
 import { loadRun, type PageData, type RunData } from "../lib/rundata.ts";
-import { frameAddress, frameEntry, frameStanding, type Component } from "../lib/sitemodel.ts";
+import { acceptedGapFor, frameAddress, frameEntry, frameStanding, NOT_OPENED_ON_PAGE_TYPE, notOpenedAdviceNl, type Component } from "../lib/sitemodel.ts";
 import { drawMarks } from "../session/marks.ts";
 import { coversContent, type Overlay } from "../session/recipe.ts";
 
@@ -46,6 +46,8 @@ export interface Gap {
   url: string | null;
   /** "default" for the page as the sweep measured it, or the id of a state of the site model. */
   state: string;
+  /** Id of the component of the site model, for a gap about one component. */
+  component?: string;
   /** What is missing, in Dutch: this is what the explorer reads. */
   missingNl: string;
   measured?: Record<string, unknown>;
@@ -251,7 +253,7 @@ export function gateChecks(run: RunData): { checks: Check[]; gaps: Gap[]; warnin
     if (missing.length > 0) coverageGaps.push({ check: "coverage", page: null, url: state.url, state: state.id, missingNl: `In deze toestand ontbreken metingen: ${missing.join(", ")}. Draai collect opnieuw.`, measured: { missing } });
     // A component that did not open on one of its page types: the recipe or the postcondition does not hold there, or the component is not on
     // that page type. Either way the model is wrong for that page type, so it goes back to the explorer, who can also accept it as how the site is.
-    for (const row of (state.perPageType ?? []).filter((entry) => !entry.reached)) coverageGaps.push({ check: "component-not-opened-on-page-type", page: run.pages.find((page) => page.item.url === row.url)?.label ?? null, url: row.url, state: state.id, missingNl: `Het onderdeel ging op het paginatype "${row.pageType}" niet open in een staand venster: ${row.reasonNl ?? "geen reden vastgelegd"}. Voor dat paginatype is het geopende onderdeel niet vastgelegd. Maak het recept en de postconditie geldig op elk paginatype van het onderdeel, of haal het paginatype weg als het onderdeel daar niet staat.` });
+    for (const row of (state.perPageType ?? []).filter((entry) => !entry.reached)) coverageGaps.push({ check: NOT_OPENED_ON_PAGE_TYPE, page: run.pages.find((page) => page.item.url === row.url)?.label ?? null, url: row.url, state: state.id, component: state.modelId, missingNl: `Het onderdeel ging op het paginatype "${row.pageType}" niet open in een staand venster: ${row.reasonNl ?? "geen reden vastgelegd"}. Voor dat paginatype is het geopende onderdeel niet vastgelegd. ${notOpenedAdviceNl(row.reasonNl)}` });
     for (const entry of state.variantsNotReached ?? []) warnings.push({ check: "state-not-reopened", page: null, url: state.url, state: state.id, missingNl: `De toestand ging geen tweede keer open voor ${entry.variant}: ${entry.reasonNl ?? "geen reden vastgelegd"}. Die meting ontbreekt voor deze toestand.` });
   }
   // The Tab walk in the narrow window, next to what there is to reach there. A warning: the walk in the default window decides whether the evidence is enough.
@@ -823,7 +825,7 @@ export async function gate(runDir: string, outDir: string = runDir): Promise<Gat
   const remarks = (answers?.sheets ?? []).flatMap((entry) => (typeof entry.remarkNl === "string" && entry.remarkNl.trim() ? [{ pageType: entry.pageType, remarkNl: entry.remarkNl.trim() }] : []));
   const all = [...fixed.gaps, ...reviewed.gaps];
   // A gap the explorer confirmed as a property of the site does not hold the run back.
-  const acceptedBy = (gap: Gap) => (run.siteModel?.acceptedGaps ?? []).find((entry) => entry.check === gap.check && entry.page === gap.url);
+  const acceptedBy = (gap: Gap) => acceptedGapFor(run.siteModel, { check: gap.check, page: gap.url, component: gap.component });
   const accepted = all.filter((gap) => acceptedBy(gap)).map((gap) => ({ ...gap, reasonNl: acceptedBy(gap)!.reasonNl, observation: acceptedBy(gap)!.observation }));
   const gaps = all.filter((gap) => !acceptedBy(gap));
 

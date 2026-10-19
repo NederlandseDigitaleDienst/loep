@@ -20,7 +20,7 @@ import { buildSample, sample } from "../src/commands/sample.ts";
 import { tabWalk } from "../src/instruments/keyboard.ts";
 import { legend, siteStates, targetSize } from "../src/lib/extractors.ts";
 import { loadRun, type PageData, type RunData } from "../src/lib/rundata.ts";
-import { frameStanding, loadSiteModel, siteDescription, validateSiteModel, type ModelContext, type SiteModel } from "../src/lib/sitemodel.ts";
+import { acceptedGapFor, frameStanding, loadSiteModel, NOT_OPENED_ON_PAGE_TYPE, notOpenedAdviceNl, siteDescription, validateSiteModel, type ModelContext, type SiteModel } from "../src/lib/sitemodel.ts";
 import { Daemon } from "../src/session/daemon.ts";
 
 // A site with the traps a sweep walks into: a banner over the page, a menu behind a
@@ -148,6 +148,11 @@ test("the validator refuses a model that does not fit the run", () => {
   assert.deepEqual(validateSiteModel({ ...validModel(), frames: validModel().frames.map((frame) => ({ ...frame, decidedBy: "toegankelijkheidscoördinator" })) }, CONTEXT), []);
   broken((model) => void (model.components[0]!.postcondition = { kind: "expanded", selector: "#menuknop", frame: "https://elders.example/venster" }), /postcondition\.frame "https:\/\/elders\.example\/venster" staat niet in frames/);
   broken((model) => void (model.acceptedGaps = [{ check: "tab-trapped", page: "https://site.nl/", reasonNl: "val", observation: "verken-0099" }]), /waarneming verken-0099 bestaat niet/);
+  // A component that does not open on a page type is accepted for that component only.
+  broken((model) => void (model.acceptedGaps = [{ check: NOT_OPENED_ON_PAGE_TYPE, page: "https://site.nl/", reasonNl: "staat er niet", observation: "verken-0003" }]), /acceptedGaps\[0\]: bij "component-not-opened-on-page-type" hoort "component", het id van het onderdeel/);
+  broken((model) => void (model.acceptedGaps = [{ check: NOT_OPENED_ON_PAGE_TYPE, page: "https://site.nl/", component: "bestaat-niet", reasonNl: "staat er niet", observation: "verken-0003" }]), /onderdeel "bestaat-niet" staat niet in components/);
+  broken((model) => void (model.acceptedGaps = [{ check: "tab-trapped", page: "https://site.nl/", component: "menu", reasonNl: "val", observation: "verken-0003" }]), /"component" hoort alleen bij "component-not-opened-on-page-type"/);
+  assert.deepEqual(validateSiteModel({ ...validModel(), acceptedGaps: [{ check: NOT_OPENED_ON_PAGE_TYPE, page: "https://site.nl/", component: "menu", reasonNl: "staat er niet", observation: "verken-0003" }] }, CONTEXT), []);
   assert.deepEqual(validateSiteModel([], CONTEXT), ["site.json is geen JSON-object"]);
   assert.ok(validateSiteModel({ ...validModel(), extra: 1 }, CONTEXT).includes('onbekend veld "extra"'));
 });
@@ -356,7 +361,10 @@ test("the gate sends back a run in which the measurements that close a criterion
   const instances = [{ pageType: "start", url: "https://site.nl/", viewport: { width: 360, height: 740 }, reached: true, reasonNl: null, opened: ["Start"], screenshot: "a.png", rotatedQuarterTurn: 0 }, { pageType: "tekst", url: "https://site.nl/contact/", viewport: { width: 360, height: 740 }, reached: false, reasonNl: "stap 1 (click) vond het element niet terug", opened: [], screenshot: null, rotatedQuarterTurn: 0 }];
   const partly = gateChecks(withModel([complete], {}, [component(instances)]));
   assert.deepEqual(partly.gaps.filter((gap) => gap.check === "coverage"), [], "tried on every page type: nothing is owed");
-  assert.match(partly.gaps.find((gap) => gap.check === "component-not-opened-on-page-type")!.missingNl, /paginatype "tekst" niet open in een staand venster: stap 1/);
+  const notOpened = partly.gaps.find((gap) => gap.check === "component-not-opened-on-page-type")!;
+  assert.match(notOpened.missingNl, /paginatype "tekst" niet open in een staand venster: stap 1/);
+  assert.ok(notOpened.missingNl.endsWith(notOpenedAdviceNl("stap 1 (click) vond het element niet terug")));
+  assert.equal(notOpened.component, "menu", "the gap names the component, so that an accepted gap can be matched to it");
 });
 
 test("the gate flags pages that did not load and frames that are counted as pages", () => {
@@ -896,4 +904,32 @@ test("a sheet names the single-key shortcuts the sweep measured on its page, so 
   assert.deepEqual(keysOn({ label: "P10" }, { states: null }), [], "a run without states names no keys");
   const sheet = { pageType: "presentatie", page: "P10", url: "https://site.nl/deck/", file: "gate/sheet-presentatie.png", sha256: "abc", tiles: [], componentsNl: [], keysNl: [] } as Sheet;
   assert.notEqual(reviewedAs({ ...sheet, keysNl: keys }), reviewedAs(sheet), "the same picture with another list asks for a new review");
+});
+
+test("an accepted gap for a component that does not open matches that component only", () => {
+  const entry = { check: NOT_OPENED_ON_PAGE_TYPE, page: "https://site.nl/contact/", component: "menu", reasonNl: "staat er niet", observation: "verken-0003" };
+  const model = { acceptedGaps: [entry] };
+  assert.equal(acceptedGapFor(model, { check: NOT_OPENED_ON_PAGE_TYPE, page: "https://site.nl/contact/", component: "menu" }), entry);
+  assert.equal(acceptedGapFor(model, { check: NOT_OPENED_ON_PAGE_TYPE, page: "https://site.nl/contact/", component: "zoeken" }), undefined, "another component on the same page");
+  assert.equal(acceptedGapFor(model, { check: NOT_OPENED_ON_PAGE_TYPE, page: "https://site.nl/", component: "menu" }), undefined, "another page");
+  // An entry from before the component was asked matches no component.
+  const { component, ...old } = entry;
+  void component;
+  assert.equal(acceptedGapFor({ acceptedGaps: [old] }, { check: NOT_OPENED_ON_PAGE_TYPE, page: "https://site.nl/contact/", component: "menu" }), undefined);
+  // Other checks still match on check and page.
+  const trap = { check: "tab-trapped", page: "https://site.nl/", reasonNl: "val", observation: "verken-0003" };
+  assert.equal(acceptedGapFor({ acceptedGaps: [trap] }, { check: "tab-trapped", page: "https://site.nl/" }), trap);
+  assert.equal(acceptedGapFor(null, { check: "tab-trapped", page: "https://site.nl/" }), undefined);
+});
+
+test("the advice for a component that does not open on a page type depends on why", () => {
+  const notFound = notOpenedAdviceNl("stap 2 (click) vond het element niet terug");
+  assert.match(notFound, /^Ga eerst na of het onderdeel op dit paginatype staat\./);
+  assert.match(notFound, /Haal het paginatype alleen uit pageTypes van het onderdeel als het onderdeel er echt niet staat\.$/);
+  // The element was found: removing the page type is no way out.
+  for (const reason of ['na de stappen geldt de postconditie niet: 1 element voor ".vraag"; 0 met aria-expanded="true" of een open details', "stap 1 (click) klikken lukt niet: Timeout 3000ms exceeded", "geen antwoord binnen 60 seconden", "de pagina laadt niet: net::ERR_FAILED", null]) {
+    assert.doesNotMatch(notOpenedAdviceNl(reason), /haal|weg/i, String(reason));
+    assert.match(notOpenedAdviceNl(reason), /maak het recept (of|en) de postconditie geldig op elk paginatype van het onderdeel\.$/i);
+  }
+  assert.match(notOpenedAdviceNl("na de stappen geldt de postconditie niet: x"), /^De stappen vonden hun element op dit paginatype/);
 });

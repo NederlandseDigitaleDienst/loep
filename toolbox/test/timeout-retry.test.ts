@@ -8,9 +8,10 @@ import { after, before, test } from "node:test";
 import type { Browser } from "playwright";
 import { launchBrowser } from "../src/browser/session.ts";
 import { inventory } from "../src/commands/inventory.ts";
-import { ModelSweep, type StateOpener } from "../src/commands/modelsweep.ts";
+import { ModelSweep, openComponentOn, type StateOpener } from "../src/commands/modelsweep.ts";
 import { sha256File, writeJson } from "../src/lib/canonical.ts";
 import { Daemon } from "../src/session/daemon.ts";
+import { loadRecipes, replayEnv } from "../src/session/recipe.ts";
 
 // A page with a menu behind a button. While `stalling` is above zero, each load serves the button
 // shaking without end: Playwright never finds it stable, and the click stops on its time-out, as a
@@ -28,6 +29,9 @@ let opener: StateOpener;
 let stalling = 0;
 let gone = false;
 let loads = 0;
+// Loads after this many are answered only after SLOW_MS: a page that keeps a fresh attempt waiting past the limit.
+let slowAfter: number | null = null;
+const SLOW_MS = 6000;
 
 before(async () => {
   server = createServer((request, response) => {
@@ -36,7 +40,9 @@ before(async () => {
     const shaking = stalling > 0;
     if (shaking) stalling--;
     const button = gone ? "" : `<button type="button" id="menuknop" aria-expanded="false" aria-controls="paneel"${shaking ? ' class="shaking"' : ""}>Menu</button>`;
-    response.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" }).end(page(button));
+    const respond = (): void => void response.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" }).end(page(button));
+    if (slowAfter !== null && loads > slowAfter) setTimeout(respond, SLOW_MS);
+    else respond();
   });
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   origin = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
@@ -124,5 +130,41 @@ test("a step that fails without a time-out is not tried again", { timeout: 120_0
     }
   } finally {
     gone = false;
+  }
+});
+
+/** Open the menu on its page within `limitMs`, then wait until every slow page has answered: what it returned, and which contexts are still open. */
+async function openWithinLimit(limitMs: number): Promise<{ reached: boolean; reasonNl: string | null; openAfterwards: number }> {
+  const env = await replayEnv(browser, run, { navigationDelayMs: 0 });
+  const recipe = (await loadRecipes(run))["component-menu"]!;
+  assert.equal(browser.contexts().length, 0, "no context is open before");
+  const opened = await openComponentOn(env, { ...recipe, start: recipe.start! }, { kind: "expanded", selector: "#menuknop" }, `${origin}/`, { width: 800, height: 1280 }, limitMs);
+  await new Promise((resolve) => setTimeout(resolve, SLOW_MS + 3000));
+  return { reached: opened.reached, reasonNl: opened.reasonNl, openAfterwards: browser.contexts().length };
+}
+
+test("a page that loads after the limit leaves no context open", { timeout: 120_000 }, async () => {
+  slowAfter = 0;
+  loads = 0;
+  try {
+    const result = await openWithinLimit(1500);
+    assert.deepEqual(result, { reached: false, reasonNl: "geen antwoord binnen 1.5 seconden", openAfterwards: 0 });
+  } finally {
+    slowAfter = null;
+  }
+});
+
+test("a second attempt that is still loading at the limit leaves no context open", { timeout: 120_000 }, async () => {
+  // The first load shakes, so its click times out; the second load answers after the limit.
+  stalling = 1;
+  slowAfter = 1;
+  loads = 0;
+  try {
+    const result = await openWithinLimit(5000);
+    assert.deepEqual(result, { reached: false, reasonNl: "geen antwoord binnen 5 seconden", openAfterwards: 0 });
+    assert.equal(loads, 2, "the second attempt had started, and no third one followed");
+  } finally {
+    stalling = 0;
+    slowAfter = null;
   }
 });
