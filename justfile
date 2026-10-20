@@ -159,7 +159,7 @@ testsite *args:
 testsite-build:
     node {{toolbox}}/fixtures/build.ts
 
-# Zet een nieuwe versie klaar op een branch: alle versienummers en het deel in CHANGELOG.md, als één commit. Daarna een voorstel naar main
+# Zet een nieuwe versie klaar op een branch: alle versienummers en het deel in CHANGELOG.md (met de fragmenten uit changelog.d/, via towncrier), als één commit. Daarna een voorstel naar main
 release-prepare version:
     node {{toolbox}}/scripts/release.ts prepare {{version}}
 
