@@ -156,7 +156,7 @@ Een agent starten betekent steeds: een aparte agent die alleen dit krijgt: "Lees
 
    Deze stap mag worden overgeslagen: dan blijven die criteria open en blijft de status C.
 
-10. **Tekenen** doet de gebruiker zelf, na het lezen van het rapport in `RUN/report/`. Zeg vooraf waar naam en functie terechtkomen: in `RUN/signed/signature.json`, in het afgetekende rapport en in de verklaring.
+10. **Tekenen** doet de gebruiker zelf, na het lezen van het rapport in `RUN/report/`. Zeg vooraf waar naam en functie terechtkomen: de naam alleen in `RUN/signed/signature.json`, de functie ook in het afgetekende rapport en in de verklaring.
    ```
    LOEP sign --run RUN --name "<naam>" --role "<functie>" --organisation "<organisatie>"
    LOEP render --run RUN

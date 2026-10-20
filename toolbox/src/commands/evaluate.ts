@@ -2,7 +2,7 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { frameStanding, type AcceptedGapDecider } from "../lib/sitemodel.ts";
 import { readJson, sha256File } from "../lib/canonical.ts";
-import { allCriteriaSorted, carryFindingIds, ESTABLISHED_BY_NL, evaluationHash, idsAcrossVersionsNl, knownCommit, OUTCOME_LABEL, markVendor, openCriteria, resolveCriterion, summarise, type BrowserUse, type CriterionResult, type Evaluation, type PointAnswer, type RoundVerdicts } from "../lib/evaluation.ts";
+import { aiGeneratedMark, allCriteriaSorted, carryFindingIds, ESTABLISHED_BY_NL, evaluationHash, idsAcrossVersionsNl, knownCommit, OUTCOME_LABEL, markVendor, openCriteria, resolveCriterion, summarise, type BrowserUse, type CriterionResult, type Evaluation, type PointAnswer, type RoundVerdicts } from "../lib/evaluation.ts";
 import { matchFindings, sideOf } from "../lib/difference.ts";
 import { documentScopeNl, evaluationDocuments, siteDocuments } from "../lib/documents.ts";
 import { pagesInScopeNl, siteOrigins } from "../lib/origins.ts";
@@ -298,6 +298,7 @@ export async function evaluate(options: EvaluateOptions): Promise<Evaluation> {
     technologies: [...technologies].sort(),
     toolchain: { toolbox: manifest.toolbox, runtime: manifest.runtime, packages: manifest.packages, browser: manifest.browser, rendering: manifest.rendering },
     ...(instruments.length > 0 ? { instruments } : {}),
+    aiGenerated: aiGeneratedMark({ model: options.model, models: agentModels }, criteria),
     judgment: { model: options.model, ...(agentModels.length > 0 ? { models: agentModels } : {}), ...(extensions.length > 0 ? { extensions } : {}), rounds: ["rondgang per paginatype", "beoordeling met instrumenten", "verificatie en eindoordeel", ...(criteria.some((criterion) => criterion.rounds.finish !== undefined) ? ["afmaakronde voor wat het onderzoek zelf open liet"] : []), ...(answered ? ["antwoorden van een persoon op open punten"] : [])], promptTemplates: templates },
     criteria,
     summary: summarise(criteria),

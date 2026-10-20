@@ -275,14 +275,16 @@ Een regel die strenger is dan de letter van het criterium, hoort hier en niet on
 
 ## De handtekening
 
-Het onderzoek komt zonder menselijk werk tot stand. Eén mens met naam tekent voor de uitkomst. In het rapport staat letterlijk wat een handtekening betekent en wat de ondertekenaar zelf heeft gecontroleerd.
+Het onderzoek komt zonder menselijk werk tot stand. Eén mens met naam tekent voor de uitkomst. In het rapport staat letterlijk wat een handtekening betekent en wat de ondertekenaar zelf heeft gecontroleerd. Het afgetekende rapport en de verklaring noemen de functie en de organisatie van wie tekende; de naam staat alleen in `signed/signature.json`.
+
+Dat de oordelen door een taalmodel zijn opgesteld, staat ook in een vorm die een machine kan lezen (AI-verordening, artikel 50): in `evaluation.json` onder `aiGenerated`, met de modellen zoals ze zijn opgegeven en waar een mens meedoet (de handtekening, en de criteria waarvan een persoon de uitkomst vaststelde), en in de metadata van de pdf als trefwoorden `AI-generated` en `AI-model: <naam>`.
 
 Wat iemand tekent, is precies wat verzegeld is. De volgorde is vast:
 
 1. `evaluate` en `render` maken de evaluatie en het conceptrapport in `report/`. Heeft een persoon daarna met `answer` open punten beantwoord, dan draaien beide opnieuw.
 2. `seal` legt in `evidence-index.json` de hash vast van elk bestand in de run: het bewijs, de oordelen, de antwoorden van een persoon, de evaluatie en het conceptrapport.
 3. Een mens leest het rapport en tekent met `sign`. Dat commando weigert als een criterium geen oordeel heeft, als de run niet is verzegeld of als ze na het verzegelen is veranderd. De handtekening komt in `signed/signature.json` en noemt de hash van het zegel en van de evaluatie.
-4. `render` schrijft het rapport dat zegt wie tekende in `signed/`. `statement` schrijft de verklaring in `verklaring/`.
+4. `render` schrijft het afgetekende rapport in `signed/`. `statement` schrijft de verklaring in `verklaring/`.
 
 De handtekening, het afgetekende rapport en de verklaring staan buiten het zegel. Ze maken verandert dus niets aan wat verzegeld is, en `verify` klopt na het tekenen nog. Verandert er daarna één byte in een verzegeld bestand, dan meldt `verify` dat. Een handtekening die bij een ander zegel of een andere evaluatie hoort, meldt het ook, en het rapport behandelt het onderzoek dan weer als concept. Wie een afgetekende run na een wijziging opnieuw verzegelt, maakt de handtekening ongeldig: `seal` verwijdert haar en zegt dat.
 

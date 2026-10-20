@@ -7,7 +7,7 @@ import { answerSheetDocument, blocksFromMarkdown, buildStatement, statementDocum
 import { exampleEvaluation } from "./fixtures/example-evaluation.ts";
 
 function signed(evaluation: Evaluation): Evaluation {
-  return { ...evaluation, signature: { name: "N", role: "R", organisation: "O", signedAt: "2026-10-10T08:00:00.000Z", statementNl: "S", evaluationSha256: evaluationHash(evaluation), sealSha256: "5".repeat(64) } };
+  return { ...evaluation, signature: { name: "Een ondertekenaar", role: "R", organisation: "O", signedAt: "2026-10-10T08:00:00.000Z", statementNl: "S", evaluationSha256: evaluationHash(evaluation), sealSha256: "5".repeat(64) } };
 }
 
 function withOutcomes(evaluation: Evaluation, change: (outcome: string) => string): Evaluation {
@@ -33,6 +33,9 @@ test("open criteria give status C and are listed for further evaluation", () => 
   assert.equal(result.status, "C");
   assert.match(result.markdown, /Nalevingsstatus: C – eerste maatregelen genomen/);
   assert.match(result.markdown, /Succescriterium 1\.4\.11 – /);
+  // The function of who signed, not the name: that stays in signed/signature.json.
+  assert.match(result.markdown, /Voor het onderzoek is getekend door: R\./);
+  assert.ok(!result.markdown.includes("Een ondertekenaar"));
   assert.ok(!result.markdown.includes("Concept, niet publiceren"));
 });
 

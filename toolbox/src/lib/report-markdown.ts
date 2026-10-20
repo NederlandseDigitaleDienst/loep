@@ -1,6 +1,6 @@
 import { KIND_NAME_NL, kindsNl } from "./documents.ts";
 import { pageIndex, type Defect } from "./defects.ts";
-import { changedSinceCommit, closeCutQuote, complianceStatus, evaluationHash, idsAcrossVersionsNl, knownCommit, madeWith, openCriteria, OUTCOME_LABEL, type ComplianceStatus, type CriterionOutcome, type CriterionResult, type Evaluation, type ReportFinding, type Signature } from "./evaluation.ts";
+import { aiGeneratedMark, changedSinceCommit, closeCutQuote, complianceStatus, evaluationHash, idsAcrossVersionsNl, knownCommit, madeWith, openCriteria, OUTCOME_LABEL, type ComplianceStatus, type CriterionOutcome, type CriterionResult, type Evaluation, type ReportFinding, type Signature } from "./evaluation.ts";
 import { modelOf } from "../instruments/methods/registry.ts";
 import { signatureIsCurrent } from "../commands/sign.ts";
 import { extensionsNl } from "./budget.ts";
@@ -279,6 +279,8 @@ export interface ReportDerived {
   statusLine: StatusLine;
   /** One line when this evaluation follows up a signed one: its date and mark. Null otherwise; a concept is never named. */
   followsUpNl: string | null;
+  /** Keywords for the metadata of the PDF that say, readable by a machine, that the verdicts were drafted by a language model, and by which. */
+  aiKeywords: string[];
   /** What the agents said about their model, one line per role, and a line when the operator named another. Null when no agent session is known. */
   agentModels: { perRoleNl: string[]; differsNl: string | null } | null;
   /** Per role how many sessions added to their own budget and how often, in one line. Null when none did. */
@@ -864,6 +866,8 @@ export function deriveReport(input: Evaluation): ReportDerived {
     statusLine: statusLine(evaluation, stale),
     followsUpNl: evaluation.followsUp ? `Dit is een heronderzoek. Het vorige onderzoek is van ${dateNl(evaluation.followsUp.evaluatedAt)}, afgetekend op ${dateNl(evaluation.followsUp.signedAt)}, met kenmerk ${evaluation.followsUp.sha256.slice(0, 12)}.` : null,
     chain,
+    // An evaluation from before the mark was kept was made the same way: by a language model.
+    aiKeywords: ["AI-generated", ...(evaluation.aiGenerated ?? aiGeneratedMark(evaluation.judgment, evaluation.criteria)).models.map((model) => `AI-model: ${model}`)],
     agentModels: modelsNl(evaluation.judgment.model, evaluation.judgment.models),
     extensionsNl: extensionsNl(evaluation.judgment.extensions),
     scopeFramesNl: (evaluation.scope.frames ?? []).map(scopeFrameNl),
@@ -1151,7 +1155,7 @@ export function renderMarkdown(input: Evaluation): string {
   lines.push(`# ${REPORT_TEXT.title} ${esc(evaluation.site.name)}`, "");
   lines.push(
     signature
-      ? `> **Afgetekend** door ${esc(signature.name)} (${esc(signature.role)}, ${esc(signature.organisation)}) op ${derived.signedDateNl}.`
+      ? `> **Afgetekend** door ${esc(signature.role)} (${esc(signature.organisation)}) op ${derived.signedDateNl}.`
       : `> **${REPORT_TEXT.concept}**${staleNote}`,
     "",
     `> **${derived.statusLine.headingNl}**${derived.statusLine.noteNl ? `. ${derived.statusLine.noteNl}` : ""}`,
@@ -1285,7 +1289,8 @@ export function renderMarkdown(input: Evaluation): string {
       ...(derived.followsUpNl ? [`${REPORT_TEXT.followsUp}: ${derived.followsUpNl}`] : []),
       ...(derived.chain.writesNl ? [`Versturen van formulieren: ${esc(derived.chain.writesNl)}`] : []),
       ...(derived.chain.readsNl ? [`Leesverzoeken: ${esc(derived.chain.readsNl)}`] : []),
-      signature ? `Afgetekend door: ${esc(signature.name)}, ${esc(signature.role)}, ${esc(signature.organisation)}, op ${derived.signedDateNl}` : `Afgetekend door: ${REPORT_TEXT.notSigned.toLowerCase()}${staleNote ? `.${staleNote}` : ""}`,
+      // The function, not the name: the name of who signed stays in signed/signature.json.
+      signature ? `Afgetekend door: ${esc(signature.role)}, ${esc(signature.organisation)}, op ${derived.signedDateNl}` : `Afgetekend door: ${REPORT_TEXT.notSigned.toLowerCase()}${staleNote ? `.${staleNote}` : ""}`,
     ]),
     "",
   );

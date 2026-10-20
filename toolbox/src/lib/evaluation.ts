@@ -4,7 +4,7 @@ import { sha256, stableId } from "./canonical.ts";
 import type { Defect, MergeRecord } from "./defects.ts";
 import type { Manifest } from "./manifest.ts";
 import type { RoleExtensions } from "./budget.ts";
-import type { RoleModels } from "./models.ts";
+import { MODEL_UNKNOWN, type RoleModels } from "./models.ts";
 import { openPoint, shadowPartOf, vendorElementsIn, WITHIN_REACH, type Recommendation, type Finding, type Observation, type Outcome, type Verdict } from "./verdict.ts";
 import { compareCriterionIds, CRITERIA, en301549Clause, GUIDELINES, PRINCIPLES, understandingUrl, type Criterion, type WcagVersion } from "./wcag.ts";
 
@@ -298,6 +298,11 @@ export interface Evaluation {
    * `model` is what the operator named with `evaluate --model`. `models` is what each agent itself gave when it started
    * its session, counted per role; the toolbox cannot check either. `models` is absent in a run without sessions and in older evaluations.
    */
+  /**
+   * Machine-readable: the verdicts were drafted by a language model (EU AI Act, article 50), with
+   * the models as they were reported and where a person comes in. Absent in older evaluations.
+   */
+  aiGenerated?: AiGenerated;
   judgment: {
     model: string;
     models?: RoleModels[];
@@ -499,6 +504,26 @@ export function resolveCriterion(input: CriterionInput, sitePrefix: string): Cri
     ...(verified?.verification ? { dropped: droppedFindings(verdicts.a, verified) } : {}),
     procedure: input.procedure,
     provenance: input.provenance,
+  };
+}
+
+export interface AiGenerated {
+  /** The models that drafted the verdicts, as the agents and whoever ran the evaluation gave them; nothing in the run confirms them. */
+  models: string[];
+  humanReview: {
+    /** Where the signature of the person who stands for the report is kept, once there is one: outside the sealed evaluation. */
+    signature: string;
+    /** Criteria whose outcome a person established by answering an open point. */
+    criteriaByPerson: string[];
+  };
+}
+
+/** The mark that says the verdicts of this evaluation were drafted by a language model. */
+export function aiGeneratedMark(judgment: { model: string; models?: RoleModels[] | undefined }, criteria: Pick<CriterionResult, "id" | "established">[]): AiGenerated {
+  const models = [judgment.model, ...(judgment.models ?? []).flatMap((role) => role.models.map((entry) => entry.model))].filter((model) => model.trim() !== "" && model !== MODEL_UNKNOWN);
+  return {
+    models: [...new Set(models)].sort(),
+    humanReview: { signature: "signed/signature.json", criteriaByPerson: criteria.filter((criterion) => criterion.established?.by === "person").map((criterion) => criterion.id) },
   };
 }
 
