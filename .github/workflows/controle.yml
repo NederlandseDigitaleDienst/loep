@@ -1,9 +1,12 @@
-# Twee controles. De snelle draait bij elke push naar main en kost een paar minuten:
-# licenties, types, procedures en de tests die geen browser nodig hebben.
+# Twee controles. De snelle draait bij elke push naar main en op elk voorstel, en kost een paar
+# minuten: licenties, types, procedures en de tests die geen browser nodig hebben.
 #
 # De volledige doet wat een nieuwe gebruiker doet: installeren op een schone machine, zeggen
-# wat er staat, alle tests. Ze draait op een voorstel, in de merge queue, één keer per nacht
-# als er die dag iets is veranderd, en met de hand. Een nacht zonder wijziging draait niets.
+# wat er staat, alle tests. Ze draait in de merge queue, één keer per nacht als er die dag iets
+# is veranderd, en met de hand. Een nacht zonder wijziging draait niets. Op een voorstel draait
+# ze niet: de job `volledig` slaagt daar meteen, zodat een voorstel direct de queue in kan, en
+# de queue test het samen met main en de voorstellen ervoor. Zo draaien de zware tests één keer
+# per voorstel in plaats van twee keer. Wat in de queue faalt, gaat terug naar het voorstel.
 # Ze bestaat uit losse jobs die naast elkaar lopen:
 #
 # - wijziging: zegt of er iets te controleren is. Alleen 's nachts kan het antwoord nee zijn.
@@ -53,7 +56,7 @@ concurrency:
 
 jobs:
   snel:
-    if: github.event_name == 'push'
+    if: github.event_name == 'push' || github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -94,7 +97,9 @@ jobs:
         env:
           EVENT: ${{ github.event_name }}
         run: |
-          if [ "$EVENT" != "schedule" ] || [ -n "$(git log --since='25 hours ago' --format=%h -1)" ]; then echo "ja=true" >> "$GITHUB_OUTPUT"; else echo "ja=false" >> "$GITHUB_OUTPUT"; fi
+          # A pull request skips the full check: the merge queue runs it on the merge group.
+          if [ "$EVENT" = "pull_request" ]; then echo "ja=false" >> "$GITHUB_OUTPUT"
+          elif [ "$EVENT" != "schedule" ] || [ -n "$(git log --since='25 hours ago' --format=%h -1)" ]; then echo "ja=true" >> "$GITHUB_OUTPUT"; else echo "ja=false" >> "$GITHUB_OUTPUT"; fi
 
   installatie:
     needs: wijziging
@@ -340,8 +345,13 @@ jobs:
           TESTS: ${{ needs.tests.result }}
           NODE22: ${{ needs.node-22.result }}
           VEEGRONDE: ${{ needs.veegronde.result }}
+          EVENT: ${{ github.event_name }}
         run: |
           echo "wijziging: $WIJZIGING, installatie: $INSTALLATIE, tests: $TESTS, node 22: $NODE22, veegronde: $VEEGRONDE"
+          if [ "$WIJZIGING" = success ] && [ "$NIEUW" != true ] && [ "$EVENT" = pull_request ]; then
+            echo "Op een voorstel draait alleen de snelle controle; de volledige draait in de merge queue."
+            exit 0
+          fi
           if [ "$WIJZIGING" = success ] && [ "$NIEUW" != true ]; then
             echo "Vandaag is er niets veranderd; er is niets gecontroleerd."
             exit 0
