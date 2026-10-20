@@ -27,6 +27,8 @@ node {{cli}} session start --run {{run}} --session {{session}} --max-commands {{
 
 Vul bij `--model` de exacte naam en versie in van het model waarop je draait, zoals je eigen systeem je die meldt, tussen aanhalingstekens. Weet je het niet, geef dan `--model onbekend`. Raad niet: de naam komt in het rapport.{{login}}
 
+Het antwoord geeft een `key`: de sleutel van je sessie. Moet je de sessie later opnieuw starten, bijvoorbeeld na een herstart, zet dan `--key <key>` achter hetzelfde startcommando. Zonder die sleutel weigert `session start` een sessie die al loopt. Krijg je die weigering bij je eerste start, dan meet er al een andere agent onder jouw sessienaam: meet dan niet verder en meld dat in je antwoord.
+
 Daarna is elk commando: `node {{cli}} session <commando> --run {{run}} --session {{session}}`
 
 {{workRules}}

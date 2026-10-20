@@ -2,7 +2,7 @@ import { existsSync } from "node:fs";
 import { readdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import type { Browser, BrowserContext, Page } from "playwright";
-import { call } from "../browser/call.ts";
+import { call, readableFrame } from "../browser/call.ts";
 import { wholePageScreenshot } from "../browser/screenshot.ts";
 import { frameAsPage } from "../browser/frame.ts";
 import type { WriteGuard } from "../browser/session.ts";
@@ -566,7 +566,7 @@ export class ModelSweep {
   private async viewOf(page: Page, address: string | undefined): Promise<{ view: Page; frame?: NonNullable<CapturedState["frame"]> }> {
     if (!address) return { view: page };
     const frame = frameAt(page, address);
-    const readable = frame ? await frame.evaluate(() => typeof (window as unknown as { __loep?: unknown }).__loep === "object" && document.body !== null).catch(() => false) : false;
+    const readable = frame ? await frame.evaluate(readableFrame).catch(() => false) : false;
     if (frame && readable) {
       const view = await frameAsPage(page, frame).catch(() => null);
       if (view) return { view, frame: { address, measuredInFrame: true, reasonNl: null } };

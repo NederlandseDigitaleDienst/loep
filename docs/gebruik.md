@@ -15,7 +15,7 @@ Installeer de plugin uit de marketplace van NLDD en draai één keer de installa
 
 Daarna, in de map van de plugin: `just install` voor de pakketten en browsers, en `just doctor` om te zien welke hulpprogramma's ontbreken. Ontbreekt er een, dan werkt de rest gewoon. Het criterium dat die meting nodig had, blijft dan open. Vraag je de assistent om een onderzoek op een machine waar dit nog niet is gebeurd, dan doet hij het als eerste stap zelf.
 
-Reken op een middag. Voor een site elders met 30 pagina's en vier paginatypen, met drie agents tegelijk, komt de formule achter `estimate` op ruim vier uur, met een marge van ruim drie tot bijna zes uur. Blijven er na de verificatie criteria open, dan komt daar een afmaakronde bij, bij acht open criteria ongeveer een uur. De laatste twee volledige metingen kostten 16,6 en 16,9 miljoen tokens, voor 134 agents elk. Hoe die getallen tot stand komen, staat in [methode.md](methode.md#hoe-lang-een-onderzoek-duurt). Houd de sessie van de assistent open en de machine wakker zolang het loopt.
+Reken op een middag. Voor een site elders met 30 pagina's en vier paginatypen, met drie agents tegelijk, komt de formule achter `estimate` op ruim vier uur, met een marge van ruim drie tot bijna zes uur. Blijven er na de verificatie criteria open, dan komt daar een afmaakronde bij, bij acht open criteria ongeveer een uur. Een onderzoek van ongeveer 30 pagina's met alle criteria kost in de orde van 150 tot 250 dollar aan prijzen van de API: in de nulmeting van 19 oktober 2026 gebruikten 134 agents ongeveer 526 miljoen tokens, waarvan 97 procent uit de cache, voor ongeveer 184 dollar ([validatie/verbruik/README.md](../validatie/verbruik/README.md)). Op een abonnement kan zo'n run een groot deel van de weeklimiet gebruiken; die limiet verschilt per abonnement. `estimate` noemt tokens en kosten voor jouw run. Hoe die getallen tot stand komen, staat in [methode.md](methode.md#hoe-lang-een-onderzoek-duurt). Houd de sessie van de assistent open en de machine wakker zolang het loopt.
 
 ## Drie skills
 
@@ -64,7 +64,7 @@ De assistent draait de stappen uit de [README](../README.md#hoe-het-werkt) en st
 6. **Vier rondes agents.** Per paginatype een rondgang, per criterium een beoordelaar, dan per criterium een verifieerder die elke bevinding opnieuw maakt vanaf een verse pagina. Blijft een criterium open door het onderzoek zelf, dan meet een afmaakronde wat ontbrak. Dit is het grootste deel van de tijd.
 7. **Het rapport.** In de map van de run, onder `report/`: `rapport.md`, `rapport.pdf` en `rapport-kort.pdf` zonder bijlage A, als concept.
 
-Hij onderbreekt je alleen als iets van jou afhangt: een pagina met een wachtwoordveld terwijl er geen inlog was afgesproken, formulieren terwijl versturen niet ter sprake kwam, of een inlogsessie die is verlopen. Al het andere loopt door.
+Hij onderbreekt je alleen als iets van jou afhangt: een pagina met een wachtwoordveld terwijl er geen inlog was afgesproken, formulieren terwijl versturen niet ter sprake kwam, inhoud die een pagina ophaalt van een adres buiten het onderzoek, of een inlogsessie die is verlopen. Al het andere loopt door.
 
 ### Wat je terugkrijgt
 
