@@ -7,7 +7,7 @@ import { after, test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { checkWalk, instrumentPending, instrumentTasks, skip } from "../src/commands/instrument-tasks.ts";
-import { comparisonMarkdown, compareVariants, variant, VARIANT_FILE, type VariantRecord } from "../src/commands/variants.ts";
+import { comparisonMarkdown, compareVariants, MARGIN, pairedBootstrap, REPORT_MARGIN, SEED, variant, VARIANT_FILE, type VariantRecord } from "../src/commands/variants.ts";
 import type { RunData } from "../src/lib/rundata.ts";
 
 const CLI = fileURLToPath(new URL("../src/cli.ts", import.meta.url));
@@ -188,9 +188,18 @@ const CLASSES: Record<string, Record<string, string | null>> = {
   "nulmeting-2": { "1.1.1-logo": "gevonden", "1.4.3-kop": "gemist-bewijs-beoordeling" },
   "variant-1": { "1.1.1-logo": "gevonden", "1.4.3-kop": null },
 };
+/** Per run the findings of its own, by criterion, with what both classifications agreed on: "tegenhanger" belongs to a defect of the key. */
+const OWN: Record<string, [string, string | null][]> = {
+  "nulmeting-1": [["1.1.1", "tegenhanger"], ["1.4.3", "tegenhanger"], ["1.4.3", null]],
+  "nulmeting-2": [["1.1.1", "tegenhanger"]],
+  "variant-1": [["1.1.1", "tegenhanger"], ["2.1.1", "onterecht"]],
+};
 const classified = async (runDir: string) => {
   const name = runDir.split("/").at(-1)!;
-  return { findings: Object.entries(CLASSES[name]!).map(([id, agreed]) => ({ id, agreed })) } as unknown as Awaited<ReturnType<NonNullable<Parameters<typeof compareVariants>[0]["findings"]>>>;
+  return {
+    findings: Object.entries(CLASSES[name]!).map(([id, agreed]) => ({ id, agreed })),
+    ownFindings: (OWN[name] ?? []).map(([criterion, agreed]) => ({ criterion, agreed })),
+  } as unknown as Awaited<ReturnType<NonNullable<Parameters<typeof compareVariants>[0]["findings"]>>>;
 };
 
 test("the comparison lays the runs side by side per criterion, per defect and per kind of open point", async () => {
@@ -200,14 +209,24 @@ test("the comparison lays the runs side by side per criterion, per defect and pe
   assert.deepEqual(result.runs.map((run) => [run.run, run.side, run.variant, run.commit]), [["nulmeting-1", "baseline", null, "bbbbbbb2222222"], ["nulmeting-2", "baseline", null, "bbbbbbb2222222"], ["variant-1", "variant", "dossier-commando", "ccccccc3333333"]]);
 
   const row = (id: string) => result.rows.find((entry) => entry.criterion === id)!;
-  assert.deepEqual(row("1.4.3"), { criterion: "1.4.3", titleNl: row("1.4.3").titleNl, keyFails: true, baseline: ["failed", "cantTell"], variant: ["inapplicable"], deviates: true, newReport: false });
-  assert.equal(row("1.1.1").deviates, false);
-  assert.equal(row("2.1.1").newReport, true, "failed in the variant, not by the key and not in the baseline");
+  assert.deepEqual(row("1.4.3"), { criterion: "1.4.3", titleNl: row("1.4.3").titleNl, keyFails: true, baseline: ["failed", "cantTell"], variant: ["inapplicable"], spreadBaseline: 1, spreadVariant: null, spreadBetween: 1 });
+  assert.deepEqual([row("1.1.1").spreadBaseline, row("1.1.1").spreadBetween], [0, 0]);
+  assert.deepEqual([row("2.1.1").spreadBaseline, row("2.1.1").spreadBetween], [0, 1], "the same in the baseline, different in the variant");
 
-  assert.deepEqual(result.defects.map((defect) => [defect.id, defect.variant, defect.foundBaseline, defect.foundVariant, defect.fewer]), [["1.1.1-logo", ["gevonden"], [2, 2], [1, 1], false], ["1.4.3-kop", ["oneens"], [1, 2], [0, 1], true]], "a defect outside the criteria of the runs is left out, and one the two classifications disagree on is not found");
+  assert.deepEqual(result.defects.map((defect) => [defect.id, defect.variant, defect.foundBaseline, defect.foundVariant]), [["1.1.1-logo", ["gevonden"], [2, 2], [1, 1]], ["1.4.3-kop", ["oneens"], [1, 2], [0, 1]]], "a defect outside the criteria of the runs is left out, and one the two classifications disagree on is not found");
   assert.deepEqual(result.runs.map((run) => run.openPoints), [{ "mens nodig": 1 }, { "budget op": 1 }, { "budget op": 1, "mens nodig": 1 }]);
-  assert.deepEqual(result.checks, { outcomes: ["1.4.3", "2.1.1"], defects: ["1.4.3-kop"], newReports: ["2.1.1"], openPoints: { baseline: 1, variant: 2, more: true } });
+  assert.deepEqual(result.runs.map((run) => run.falseReports), [{ "1.1.1": 0, "1.4.3": 1, "2.1.1": 0 }, { "1.1.1": 0, "1.4.3": 0, "2.1.1": 0 }, { "1.1.1": 0, "1.4.3": 0, "2.1.1": 1 }], "a finding the classifications do not both put under a defect is unjustified");
   assert.deepEqual(result.runs[2]!.findings, { "1.1.1": 1, "1.4.3": 0, "2.1.1": 1 });
+
+  assert.deepEqual(result.agreement.baseline, { runs: 2, unanimous: [2, 3], kappa: result.agreement.baseline.kappa });
+  assert.ok(Math.abs(result.agreement.baseline.kappa! - 5 / 11) < 1e-12, "Fleiss' kappa over three criteria, two runs and three classes");
+  assert.deepEqual(result.agreement.variant, { runs: 1, unanimous: [3, 3], kappa: null });
+
+  const verdict = result.verdict!;
+  assert.deepEqual([verdict.found!.units, verdict.found!.baseline.value, verdict.found!.variant.value, verdict.found!.difference.value, verdict.found!.ok], [2, 0.75, 0.5, -0.25, false]);
+  assert.deepEqual([verdict.falseReports!.baseline.value, verdict.falseReports!.variant.value, verdict.falseReports!.difference.value, verdict.falseReports!.ok], [0.5, 1, 0.5, false]);
+  assert.deepEqual([verdict.openPoints.baseline.value, verdict.openPoints.variant.value], [1, 2]);
+  assert.equal(verdict.notWorse, false);
 });
 
 test("per role: sessions, commands and time from the run, and tokens, turns and cost from the usage file", async () => {
@@ -224,8 +243,11 @@ test("per role: sessions, commands and time from the run, and tokens, turns and 
   assert.deepEqual(result.runs[0]!.roles.map((use) => [use.role, use.tokens]), [["judge", null], ["verifier", null]], "a run without a usage file has no tokens");
 
   const markdown = comparisonMarkdown(result);
-  assert.match(markdown, /\| Geen uitkomst die de nulmeting niet had \| nee: 1\.4\.3, 2\.1\.1 \|/);
-  assert.match(markdown, /\| Geen melding zonder gebrek in de sleutel die de nulmeting niet had \| nee: 2\.1\.1 \|/);
+  assert.match(markdown, /\*\*Niet slechter: nee\.\*\*/);
+  assert.match(markdown, /\| Gevonden gebreken uit de sleutel, per run \(2 gebreken\) \| 75,0% \(.*\) \| 50,0% \(.*\) \| -25,0 \(.* tot .*\) procentpunt \| ondergrens boven -5,0 \| nee \|/);
+  assert.match(markdown, /\| Onterechte meldingen per run \(3 criteria\) \| 0,5 \(.*\) \| 1,0 \(.*\) \| \+0,5 \(.*\) \| bovengrens onder \+1,0 \| nee \|/);
+  assert.match(markdown, /\| nulmeting \| 2 \| 2 van 3 \| 0,45 \|/);
+  assert.match(markdown, /\| 1\.4\.3 .* \| voldoet niet \| voldoet niet \| kan niet bepalen \| n\.v\.t\. \| 100% \| - \| 100% \|/);
   assert.match(markdown, /\| V1 \| beoordelaar \| 1 \| 40 \| 30 min \| 100 \| 0,20 M \| 4,00 M \| 5\.000 \| 40 \| 1,90 dollar \|/);
   assert.match(markdown, /\| V1 \| rondgang \| 1 \| - \| - \| 10 \| .* \| geen prijs \|/);
   assert.doesNotMatch(markdown, /\u2013|\u2014/, "no dashes of the long kind");
@@ -233,9 +255,96 @@ test("per role: sessions, commands and time from the run, and tokens, turns and 
 
 test("only the baseline: the spread of its runs, without the checks", async () => {
   const result = await compareVariants({ baseline, reference, findings: classified });
-  assert.equal(result.checks, null);
+  assert.equal(result.verdict, null);
+  assert.equal(result.agreement.variant, null);
   assert.deepEqual(result.defects.map((defect) => [defect.id, defect.foundBaseline]), [["1.1.1-logo", [2, 2]], ["1.4.3-kop", [1, 2]]]);
-  assert.doesNotMatch(comparisonMarkdown(result), /## Gelijk of beter/);
+  const markdown = comparisonMarkdown(result);
+  assert.doesNotMatch(markdown, /## Niet slechter/);
+  assert.match(markdown, /## Overeenstemming tussen runs/);
+});
+
+/* The decision rule, on simulated runs of a key with ten defects under two criteria. */
+
+const bigReference = join(scratch, "sleutel-groot.json");
+const DEFECTS = Array.from({ length: 10 }, (_, i) => ({ id: `d${i}`, criterion: i < 5 ? "1.1.1" : "1.4.3", page: "/", descriptionNl: `Gebrek ${i}.` }));
+write(bigReference, { kind: "answer-key", wcagVersion: "2.2", sampleNote: "", outcomeNote: "", failed: ["1.1.1", "1.4.3"], findings: DEFECTS });
+
+/** Runs that each found the defects given, with unjustified reports under 1.4.3 as given. */
+function simulated(prefix: string, found: number[][], reports: number[]): { dirs: string[]; findings: NonNullable<Parameters<typeof compareVariants>[0]["findings"]> } {
+  const names = found.map((_, i) => `${prefix}-${i + 1}`);
+  const dirs = names.map((name, i) => measuredRun(name, { "1.1.1": "failed", "1.4.3": i === 1 ? "cantTell" : "failed", "2.1.1": "passed" }));
+  const byName = new Map(names.map((name, i) => [name, i]));
+  const findings = async (runDir: string) => {
+    const i = byName.get(runDir.split("/").at(-1)!)!;
+    return {
+      findings: DEFECTS.map((defect, d) => ({ id: defect.id, agreed: found[i]!.includes(d) ? "gevonden" : "gemist-bewijs-beoordeling" })),
+      ownFindings: Array.from({ length: reports[i]! }, () => ({ criterion: "1.4.3", agreed: "onterecht" })),
+    } as unknown as Awaited<ReturnType<NonNullable<Parameters<typeof compareVariants>[0]["findings"]>>>;
+  };
+  return { dirs, findings };
+}
+const both = (...sides: ReturnType<typeof simulated>["findings"][]) => async (runDir: string) => {
+  for (const side of sides) {
+    try {
+      return await side(runDir);
+    } catch {
+      // Not a run of this side.
+    }
+  }
+  throw new Error(`geen indeling voor ${runDir}`);
+};
+
+// Three runs that differ from each other: one misses two defects, one makes a report too many.
+const SAME = [[0, 1, 2, 3, 4, 5, 6, 7], [0, 1, 2, 3, 4, 5, 6, 7, 8, 9], [0, 1, 2, 3, 5, 6, 7, 9]];
+const SAME_REPORTS = [0, 1, 0];
+
+test("the same simulated runs twice are not worse: the difference is zero with an interval of zero", async () => {
+  const before = simulated("zelfde-n", SAME, SAME_REPORTS);
+  const after = simulated("zelfde-v", SAME, SAME_REPORTS);
+  const result = await compareVariants({ baseline: before.dirs, variant: after.dirs, reference: bigReference, findings: both(before.findings, after.findings) });
+  const verdict = result.verdict!;
+  assert.deepEqual(verdict.found!.difference, { value: 0, low: 0, high: 0 });
+  assert.deepEqual([verdict.found!.units, verdict.found!.baseline.value], [10, 26 / 30]);
+  assert.deepEqual(verdict.falseReports!.difference, { value: 0, low: 0, high: 0 });
+  assert.equal(verdict.notWorse, true, "the runs of each side differ, but the sides do not");
+  assert.deepEqual([verdict.margin, verdict.reportMargin], [MARGIN, REPORT_MARGIN]);
+  assert.deepEqual(result.agreement.baseline, result.agreement.variant!);
+  const contrast = result.rows.find((row) => row.criterion === "1.4.3")!;
+  assert.deepEqual([contrast.spreadBaseline, contrast.spreadVariant, contrast.spreadBetween], [2 / 3, 2 / 3, 4 / 9], "1.4.3 differs between the sides no more than within one side");
+  assert.match(comparisonMarkdown(result), /\*\*Niet slechter: ja\.\*\*/);
+});
+
+test("a variant that clearly finds less is worse: the interval lies below the margin", async () => {
+  const before = simulated("minder-n", SAME, SAME_REPORTS);
+  const after = simulated("minder-v", [[0, 1, 2, 5, 6], [0, 1, 5, 6, 7], [0, 2, 5, 6]], SAME_REPORTS);
+  const result = await compareVariants({ baseline: before.dirs, variant: after.dirs, reference: bigReference, findings: both(before.findings, after.findings) });
+  const found = result.verdict!.found!;
+  assert.ok(Math.abs(found.difference.value - (14 / 30 - 26 / 30)) < 1e-12);
+  assert.ok(found.difference.high < -MARGIN, "the whole interval lies below the margin");
+  assert.equal(found.ok, false);
+  assert.equal(result.verdict!.falseReports!.ok, true, "no more reports");
+  assert.equal(result.verdict!.notWorse, false);
+
+  // A wider margin, chosen beforehand, lets the same variant through.
+  const wide = await compareVariants({ baseline: before.dirs, variant: after.dirs, reference: bigReference, findings: both(before.findings, after.findings), margin: 0.9 });
+  assert.equal(wide.verdict!.notWorse, true);
+});
+
+test("the bootstrap gives the same interval for the same seed", async () => {
+  // Values that differ from each other, so another draw gives other bounds.
+  const units = Array.from({ length: 20 }, (_, i): [number, number] => [((i * 37) % 101) / 101, ((i * 53) % 97) / 97]);
+  const first = pairedBootstrap(units, "mean", { seed: 7, resamples: 2000 });
+  assert.deepEqual(pairedBootstrap(units, "mean", { seed: 7, resamples: 2000 }), first);
+  assert.notDeepEqual(pairedBootstrap(units, "mean", { seed: 8, resamples: 2000 }).difference, first.difference, "another seed draws otherwise");
+  assert.ok(first.difference.low <= first.difference.value && first.difference.value <= first.difference.high);
+
+  const before = simulated("seed-n", SAME, SAME_REPORTS);
+  const after = simulated("seed-v", [[0, 1, 2, 3, 4, 5], [1, 2, 3, 4, 5, 6, 7, 8], [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]], [1, 0, 2]);
+  const options = { baseline: before.dirs, variant: after.dirs, reference: bigReference, findings: both(before.findings, after.findings) };
+  const [one, two] = [await compareVariants(options), await compareVariants(options)];
+  assert.deepEqual(one.verdict, two.verdict);
+  assert.equal(one.verdict!.seed, SEED);
+  assert.equal((await compareVariants({ ...options, seed: 1 })).verdict!.seed, 1);
 });
 
 test("the comparison refuses what does not fit together", async () => {
@@ -251,7 +360,7 @@ test("the comparison refuses what does not fit together", async () => {
 test("on the command line, a run without a classification per finding says so and keeps its outcomes", async () => {
   const out = join(scratch, "vergelijking");
   const { stdout } = await promisify(execFile)(process.execPath, [CLI, "compare-variants", "--baseline", baseline[0]!, "--baseline", baseline[1]!, "--variant", variants[0]!, "--reference", reference, "--usage", USAGE_FIXTURE, "--out", out]);
-  assert.match(stdout, /^3 runs, 3 criteria, 2 gebreken uit de sleutel; .*varianten\.md\ngelijk of beter: nee \(andere uitkomst 2, minder vaak gevonden 0, nieuwe meldingen 1, open punten meer\)\n$/);
+  assert.match(stdout, /^3 runs, 3 criteria, 2 gebreken uit de sleutel; .*varianten\.md\nniet slechter: niet te bepalen \(gevonden niet te bepalen; onterechte meldingen niet te bepalen\)\n$/);
   const saved = readJsonFile<{ runs: { defects: Record<string, unknown>; defectsNl: string | null }[] }>(join(out, "varianten.json"));
   assert.deepEqual(saved.runs[0]!.defects, { "1.1.1-logo": null, "1.4.3-kop": null });
   assert.match(saved.runs[0]!.defectsNl!, /geen geldige indeling per bevinding/);

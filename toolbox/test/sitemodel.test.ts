@@ -346,6 +346,16 @@ test("the gate reports missing coverage, and what needs a write request as a lim
   assert.ok(!limited.limitations[0]!.missingNl.includes("meet.example"), "a refused beacon of a third party takes no content away and is not reported");
 });
 
+test("a rule engine without an answer is a limitation of the gate, not a clean result (#143)", () => {
+  const page = gatePage("P1", "https://site.nl/");
+  const stopped = { ...page, engines: { light: { status: { "axe-core": { ok: false, version: "unknown", error: "de pagina heeft window.axe zelf vastgezet" }, alfa: { ok: true, version: "1" } } }, dark: { status: { "axe-core": { ok: true, version: "4" }, alfa: { ok: true, version: "1" } } } } } as unknown as PageData;
+  const checked = gateChecks(gateRun([stopped]));
+  assert.deepEqual(checked.gaps, []);
+  assert.deepEqual(checked.limitations.map((gap) => [gap.check, gap.page]), [["engine-without-result", "P1"]]);
+  assert.match(checked.limitations[0]!.missingNl, /axe-core in licht: de pagina heeft window\.axe zelf vastgezet\)\. Wat die regelset hier zou vinden, kan niet worden vastgesteld/);
+  assert.deepEqual(gateChecks(gateRun([page])).limitations, [], "engines that ran are no limitation");
+});
+
 test("the gate sends back a run in which the measurements that close a criterion are missing", () => {
   const withModel = (pages: PageData[], extra: Partial<RunData> = {}, states: SiteStates["states"] = []): RunData => gateRun(pages, { siteModel: validModel(), siteStates: { siteSha256: "", seeded: { blockers: [], cookies: 0, storedValues: 0 }, dismissals: [], states }, ...extra });
   const complete = gatePage("P1", "https://site.nl/");
@@ -443,6 +453,13 @@ test("the gate flags components that did not open, a blocker that stayed and som
   const unexaminable = gateChecks({ ...withStates([...four.slice(0, 3), { ...state("kaart", false), id: "component-kaart" }]), siteModel: blocked });
   assert.deepEqual(unexaminable.gaps, []);
   assert.deepEqual(unexaminable.limitations.map((gap) => gap.check), ["needs-write-request"]);
+  // A GET is refused only to a host outside the run: that is the scope of the run, not a write.
+  const elsewhere = validModel();
+  elsewhere.components[1] = { ...elsewhere.components[1]!, blockedRequests: [{ method: "GET", address: "agenda.site.nl/api/items" }] };
+  const outside = gateChecks({ ...withStates([...four.slice(0, 3), { ...state("kaart", false), id: "component-kaart" }]), siteModel: elsewhere });
+  assert.deepEqual(outside.gaps, []);
+  assert.deepEqual(outside.limitations.map((gap) => gap.check), ["needs-host-outside-run"]);
+  assert.match(outside.limitations[0]!.missingNl, /^Niet onderzoekbaar zonder een adres buiten de run: .* GET agenda\.site\.nl\/api\/items nodig, en dat adres hoort niet bij de afbakening \(inventory --also-origin\)\.$/);
   assert.deepEqual(names(withStates(four, [{ url: "https://site.nl/contact/", where: "collect:light", blocker: "cookies", dismissed: false, reasonNl: "stap 1 (click) klikken lukt niet" }])), ["blocker-closed:P2"]);
 
   const covered = (shares: number[]): RunData => gateRun(shares.map((share, index) => gatePage(`P${index + 1}`, `https://site.nl/${index}`, { overlay: share })));
