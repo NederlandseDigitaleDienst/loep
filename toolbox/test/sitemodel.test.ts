@@ -155,6 +155,9 @@ test("the validator refuses a model that does not fit the run", () => {
   assert.deepEqual(validateSiteModel({ ...validModel(), acceptedGaps: [{ check: NOT_OPENED_ON_PAGE_TYPE, page: "https://site.nl/", component: "menu", reasonNl: "staat er niet", observation: "verken-0003", decidedBy: "verkenner" }] }, CONTEXT), []);
   // Every exception says who decided it: the explorer, or a person.
   assert.deepEqual(validateSiteModel({ ...validModel(), acceptedGaps: [{ check: "tab-trapped", page: "https://site.nl/", reasonNl: "val", observation: "verken-0003", decidedBy: "persoon" }] }, CONTEXT), []);
+  broken((model) => void (model.acceptedGaps = [{ check: "review-state", page: "https://site.nl/", reasonNl: "zwart vlak", observation: "verken-0003", decidedBy: "verkenner" }]), /acceptedGaps\[0\]: bij "review-state" hoort "state", het id van de toestand/);
+  broken((model) => void (model.acceptedGaps = [{ check: "tab-trapped", page: "https://site.nl/", state: "menu", reasonNl: "val", observation: "verken-0003", decidedBy: "verkenner" }]), /"state" hoort alleen bij "review-state"/);
+  assert.deepEqual(validateSiteModel({ ...validModel(), acceptedGaps: [{ check: "review-state", page: "https://site.nl/", state: "component-menu", reasonNl: "zwart vlak", observation: "verken-0003", decidedBy: "verkenner" }] }, CONTEXT), []);
   const decidedByNl = /acceptedGaps\[0\]: "decidedBy" zegt wie de uitzondering heeft vastgesteld: "verkenner" als de verkenner dat deed, "persoon" als een persoon dat zelf deed; zonder telt de regel niet/;
   broken((model) => void (model.acceptedGaps = [{ check: "tab-trapped", page: "https://site.nl/", reasonNl: "val", observation: "verken-0003" } as never]), decidedByNl);
   broken((model) => void (model.acceptedGaps = [{ check: "tab-trapped", page: "https://site.nl/", reasonNl: "val", observation: "verken-0003", decidedBy: "beheerder" } as never]), decidedByNl);
@@ -1002,6 +1005,15 @@ test("an accepted gap for a component that does not open matches that component 
   // Other checks still match on check and page.
   const trap = { check: "tab-trapped", page: "https://site.nl/", reasonNl: "val", observation: "verken-0003", decidedBy: "persoon" as const };
   assert.equal(acceptedGapFor({ acceptedGaps: [trap] }, { check: "tab-trapped", page: "https://site.nl/" }), trap);
+  // A rejected state picture matches its own state only.
+  const picture = { check: "review-state", page: "https://site.nl/videos/", state: "component-youtube-videos", reasonNl: "blokkade", observation: "verken-0003", decidedBy: "verkenner" as const };
+  const pictureGap = { check: "review-state", page: "https://site.nl/videos/" };
+  assert.equal(acceptedGapFor({ acceptedGaps: [picture] }, { ...pictureGap, state: "component-youtube-videos" }), picture);
+  assert.equal(acceptedGapFor({ acceptedGaps: [picture] }, { ...pictureGap, state: "component-menu" }), undefined, "another state on the same page");
+  assert.equal(acceptedGapFor({ acceptedGaps: [picture] }, { ...pictureGap, state: "default" }), undefined);
+  const { state, ...pageWide } = picture;
+  void state;
+  assert.equal(acceptedGapFor({ acceptedGaps: [pageWide] }, { ...pictureGap, state: "component-youtube-videos" }), undefined, "an entry without a state matches no state");
   assert.equal(acceptedGapFor(null, { check: "tab-trapped", page: "https://site.nl/" }), undefined);
 });
 
