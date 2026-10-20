@@ -18,13 +18,14 @@
 #   die het nodig hebben, falen met CI=true als het ontbreekt, in plaats van stil terug te vallen.
 # - tests zonder browser (Node 22.18): de types en `just test-quick` op de laagste versie van
 #   Node die toolbox/package.json belooft. De volledige tests draaien op Node 24.
-# - veegronde op de testsite: als een voorstel toolbox/src/ raakt (en elke nacht en met de hand)
+# - veegronde op de testsite: als een voorstel toolbox/src/ raakt, of de pakketten, de testsite
+#   (toolbox/fixtures/) of de toets zelf (en elke nacht en met de hand),
 #   de regressietoets `just sweep-check`: inventory, een vast sitemodel, collect, contrast en
 #   states op de testsite, en per gebrek uit de sleutel of het bewijs in het dossier staat. Twee
 #   jobs naast elkaar: Lindewaard (de gebreken) en Berkenveen (de tweeling). De tabel komt als
-#   artefact mee. Raakt het voorstel ook de contrastmeting of
-#   toolbox/src/lib/, dan draait daarna `just calibrate` en komt de uitkomst naast de vorige uit
-#   validatie/ijkset/. Raakt het voorstel toolbox/src/ niet, dan slaagt de job meteen.
+#   artefact mee. Raakt het voorstel ook de contrastmeting, toolbox/src/lib/ of de pakketten,
+#   dan draait daarna `just calibrate` en komt de uitkomst naast de vorige uit validatie/ijkset/.
+#   Raakt het voorstel niets daarvan, dan slaagt de job meteen.
 # - volledig: wacht op de andere en faalt als er een mislukte, werd afgebroken of werd
 #   overgeslagen. Dit is de verplichte check op main en in de merge queue; hernoem deze job
 #   niet, anders blokkeren de branch-protectie en de ruleset van de merge queue.
@@ -241,12 +242,13 @@ jobs:
           else
             changed="$(git diff --name-only "$base" HEAD)"
           fi
-          if echo "$changed" | grep -q '^toolbox/src/'; then echo "src=true" >> "$GITHUB_OUTPUT"; else echo "src=false" >> "$GITHUB_OUTPUT"; fi
-          if echo "$changed" | grep -Eq '^toolbox/src/(lib/|instruments/contrast\.ts|commands/contrast\.ts|commands/calibrate\.ts)'; then echo "ijk=true" >> "$GITHUB_OUTPUT"; else echo "ijk=false" >> "$GITHUB_OUTPUT"; fi
+          # The code of the sweep, the versions of the rule engines, the fixture site with its key, and the check itself.
+          if echo "$changed" | grep -Eq '^(toolbox/src/|toolbox/package-lock\.json|toolbox/fixtures/|toolbox/scripts/sweep-check\.ts|\.github/workflows/controle\.yml)'; then echo "src=true" >> "$GITHUB_OUTPUT"; else echo "src=false" >> "$GITHUB_OUTPUT"; fi
+          if echo "$changed" | grep -Eq '^(toolbox/src/(lib/|instruments/contrast\.ts|commands/contrast\.ts|commands/calibrate\.ts)|toolbox/package-lock\.json|toolbox/scripts/calibrate-compare\.ts)'; then echo "ijk=true" >> "$GITHUB_OUTPUT"; else echo "ijk=false" >> "$GITHUB_OUTPUT"; fi
 
       - name: Niets te meten
         if: steps.geraakt.outputs.src != 'true'
-        run: echo "Dit voorstel raakt toolbox/src/ niet; de veegronde is niet opnieuw gemeten."
+        run: echo "Dit voorstel raakt de code van de veegronde, de pakketten, de testsite en de toets niet; de veegronde is niet opnieuw gemeten."
 
       - uses: actions/setup-node@v7
         if: steps.geraakt.outputs.src == 'true'

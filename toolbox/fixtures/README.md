@@ -40,7 +40,7 @@ De uitkomst is een tabel per gebrek (gevonden, ontbreekt, niet door een script t
 | `sweep/recipes/` | De recepten van het sitemodel. Een stap noemt zijn element per variant als de twee sites daar anders zijn gebouwd |
 | `sweep/baseline.json` | Wat de toets vond toen de basislijn werd vastgelegd |
 
-Op GitHub draait de toets bij elk voorstel dat `toolbox/src/` raakt, Lindewaard en Berkenveen in twee jobs naast elkaar, met de tabel als artefact.
+Op GitHub draait de toets bij elk voorstel dat `toolbox/src/`, `toolbox/package-lock.json`, de testsite of de toets zelf raakt, Lindewaard en Berkenveen in twee jobs naast elkaar, met de tabel als artefact.
 
 ## Het deel achter een inlog
 
