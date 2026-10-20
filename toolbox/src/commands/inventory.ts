@@ -2,7 +2,7 @@ import { join } from "node:path";
 import type { BrowserContext, Page } from "playwright";
 import { confirmLogin, INPAGE_PATH, launchBrowser, loadPage, newContext } from "../browser/session.ts";
 import { sha256, slugForUrl, writeFileAtomic, writeJson } from "../lib/canonical.ts";
-import { countByKind, documentKind, kindOfContentType, REDIRECTS_ELSEWHERE_NL, type DocumentKind, type DocumentTotals, type InventoryDocument } from "../lib/documents.ts";
+import { countByKind, documentKind, kindOfContentType, REDIRECTS_ELSEWHERE_NL, startedDownload, type DocumentKind, type DocumentTotals, type InventoryDocument } from "../lib/documents.ts";
 import type { Vendor } from "../lib/evaluation.ts";
 import { isLogout, loginCookieHeader, LoginExpired, noteLogoutUrl, runLoginMark } from "../lib/login.ts";
 import { stepStart, writeManifest } from "../lib/manifest.ts";
@@ -535,6 +535,10 @@ export async function inventory(options: InventoryOptions): Promise<Inventory> {
         if (probe && (probedKind || (downloads.has(next) && !isHtml(probe.contentType)))) {
           noteDocument(next, probedKind);
           probedAsDocument.set(next, probe);
+        } else if (ownOrigin(next) && startedDownload((error as Error).message)) {
+          // The browser saved it as a file: a document whatever type the server names, also without a link that offers it for download.
+          noteDocument(next, probedKind);
+          if (probe) probedAsDocument.set(next, probe);
         } else skipped.push({ url: next, reason: `failed to load: ${(error as Error).message.split("\n")[0]}` });
       }
     }
