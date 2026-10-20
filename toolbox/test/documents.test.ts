@@ -557,6 +557,43 @@ test("inventory finds the documents, sample labels them, documents measures them
   }
 });
 
+test("an address the browser starts to download without a download link is a document, not a page that failed to load", async (context) => {
+  const calendar = "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nEND:VCALENDAR\r\n";
+  const site = createServer((request, response) => {
+    const path = new URL(request.url!, "http://x").pathname;
+    if (path === "/") {
+      response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+      response.end(`<!doctype html><html lang="nl"><head><title>Agenda</title></head><body><h1>Agenda</h1><p><a href="/assets/files/afspraak-1a2b3c.ics">Zet het in je agenda</a> <a href="/agenda?id=4">Agenda-export</a></p></body></html>`);
+    } else if (path === "/assets/files/afspraak-1a2b3c.ics") {
+      response.writeHead(200, { "content-type": "text/calendar", "content-length": Buffer.byteLength(calendar) });
+      response.end(request.method === "HEAD" ? undefined : calendar);
+    } else if (path === "/agenda") {
+      response.writeHead(200, { "content-type": "text/calendar", "content-disposition": "attachment; filename=agenda.ics", "content-length": Buffer.byteLength(calendar) });
+      response.end(request.method === "HEAD" ? undefined : calendar);
+    } else {
+      response.writeHead(404, { "content-type": "text/html; charset=utf-8" });
+      response.end("<!doctype html><html lang=nl><head><title>Niet gevonden</title></head><body><h1>Niet gevonden</h1></body></html>");
+    }
+  });
+  await new Promise<void>((resolve) => site.listen(0, "127.0.0.1", resolve));
+  const address = `http://127.0.0.1:${(site.address() as { port: number }).port}`;
+  try {
+    let stock: Inventory;
+    try {
+      stock = await inventory({ baseUrl: `${address}/`, out: join(scratch, "run-download"), maxPages: 20 });
+    } catch (error) {
+      if (/Executable doesn't exist|browserType.launch/.test((error as Error).message)) return context.skip("no browser available");
+      throw error;
+    }
+    assert.deepEqual(stock.skipped, [], "a download is not a page that failed to load");
+    const path = (url: string): string => new URL(url).pathname + new URL(url).search;
+    assert.deepEqual(stock.documents!.map((document) => [path(document.url), document.kind, document.contentType]), [["/agenda?id=4", "other", "text/calendar"], ["/assets/files/afspraak-1a2b3c.ics", "other", "text/calendar"]]);
+    assert.deepEqual(stock.documents!.find((document) => path(document.url) === "/assets/files/afspraak-1a2b3c.ics")!.linkedFrom, [{ page: `${address}/`, text: "Zet het in je agenda" }]);
+  } finally {
+    await new Promise<void>((resolve) => void site.close(() => resolve()));
+  }
+});
+
 // ------------------------------------------------- plain text offered for download
 
 const MARKDOWN = "# Één regeling\n\nDit is één pagina als Markdown, met [een link](https://a.test/meer).\n\n## Wie kan meedoen\n\nIedereen.\n";
