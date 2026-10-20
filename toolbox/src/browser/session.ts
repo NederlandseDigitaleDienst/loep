@@ -1,5 +1,6 @@
 import { fileURLToPath } from "node:url";
 import { chromium, type Browser, type BrowserContext, type Page, type Route } from "playwright";
+import type { Crowd } from "../lib/atonce.ts";
 import { CLOUDFLARE_HEADER, isChallenge } from "../lib/challenge.ts";
 import { confirmLoginOn, LoginExpired, logsOut, runLoginMark, runLoginState, throwIfLoginExpired, watchLogin } from "../lib/login.ts";
 import { addressOf, noteRefusedRead, readDecision, readRuleFor, runReads, type ReadRequest } from "../lib/reads.ts";
@@ -283,16 +284,17 @@ export async function loadPage(page: Page, url: string, referer?: string): Promi
 /**
  * Run the work on one page, and once more when it fails: a page that loads too slowly once, or a
  * renderer that crashed, must not cost the whole run. A session that ran out is not tried again.
+ * With a `crowd` the first try runs together with the other pages and the second try alone.
  * A second failure is thrown: the command decides whether it notes the page as not measured and goes on.
  */
-export async function retryOnce<T>(what: string, work: () => Promise<T>): Promise<T> {
+export async function retryOnce<T>(what: string, work: () => Promise<T>, crowd?: Crowd): Promise<T> {
   try {
-    return await work();
+    return await (crowd ? crowd.together(work) : work());
   } catch (error) {
     // Trying again does not help when the site refused the evaluation.
     if (error instanceof LoginExpired || error instanceof OriginBlocked) throw error;
     process.stderr.write(`retry ${what}: ${firstLineOf(error)}\n`);
-    return work();
+    return crowd ? crowd.alone(work) : work();
   }
 }
 
