@@ -91,7 +91,7 @@ Scenario D is de bovengrens. Of de beoordelaars op Sonnet even goed oordelen, is
 
 ## Hoe we meten
 
-Een stap gaat pas naar `main` als een meting laat zien dat het oordeel niet slechter is geworden. De grenzen daarvoor staan vast voordat er gemeten wordt.
+Het doel was dat een stap pas naar `main` gaat als een meting laat zien dat het oordeel niet slechter is geworden. Dat is niet gehaald: stap 1, het commando `dossier`, staat al op `main` zonder die meting. De meting hieronder zegt nu of een stap blijft. De grenzen daarvoor staan vast voordat er gemeten wordt.
 
 1. **Bevroren code.** Per variant een eigen werkboom op een vaste commit: de nulmeting op de commit van vóór de stap, de variant op de commit met de stap. Een ander model voor een rol is ook een variant, op dezelfde commit.
 2. **Bevroren bewijs.** De veegronde draait één keer. Elke variant werkt op een kopie van die run en draait alleen de rondgangen, beoordelaars, verifieerders en de afmaakronde opnieuw. Zo komt een verschil van de variant, en niet van een andere veegronde.

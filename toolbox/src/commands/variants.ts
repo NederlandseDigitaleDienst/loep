@@ -6,6 +6,7 @@ import { parseArgs } from "node:util";
 import { readJson, writeFileAtomic, writeJson } from "../lib/canonical.ts";
 import type { CriterionOutcome, Evaluation } from "../lib/evaluation.ts";
 import { stepStart, toolchain, writeManifest, type Manifest } from "../lib/manifest.ts";
+import { costOf, PRICES, type Price, type Tokens } from "../lib/prices.ts";
 import { ROLE_NL, roleOfSession, type AgentRole } from "../lib/models.ts";
 import { agentPhaseTimings, type AgentPhaseId } from "../lib/timing.ts";
 import { compareCriterionIds, criterionById } from "../lib/wcag.ts";
@@ -141,24 +142,6 @@ export async function variant(options: { run: string; out: string; name: string;
 
 /* ------------------------------------------------------------------------------------------ */
 
-/** Dollars per million tokens. */
-export interface Price {
-  input: number;
-  cacheWrite: number;
-  cacheRead: number;
-  output: number;
-}
-
-/** The API prices of 19 October 2026 that validatie/verbruik/README.md counts with; writing to the cache is the price for 5 minutes. */
-export const PRICES: Record<string, Price> = { "claude-opus-5-5": { input: 4, cacheWrite: 5, cacheRead: 0.2, output: 20 } };
-
-export interface Tokens {
-  input: number;
-  cacheWrite: number;
-  cacheRead: number;
-  output: number;
-}
-
 /**
  * What the agents of one run used, counted outside the run: a run records no tokens and no
  * turns, only the transcripts of the agents do. One row per agent. `session` is the session the
@@ -264,10 +247,6 @@ const PHASE_ROLE: Record<AgentPhaseId, AgentRole> = { walks: "walk", judges: "ju
 const ROLE_ORDER = ["walk", "judge", "verifier", "finisher"];
 const emptyTokens = (): Tokens => ({ input: 0, cacheWrite: 0, cacheRead: 0, output: 0 });
 const isCount = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value) && value >= 0;
-
-function costOf(tokens: Tokens, price: Price): number {
-  return (tokens.input * price.input + tokens.cacheWrite * price.cacheWrite + tokens.cacheRead * price.cacheRead + tokens.output * price.output) / 1_000_000;
-}
 
 function readUsage(path: string): UsageFile {
   const file = JSON.parse(readFileSync(path, "utf8")) as UsageFile;

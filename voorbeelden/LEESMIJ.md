@@ -1,6 +1,6 @@
 # Voorbeelden
 
-Eén rapport dat de toolbox heeft gemaakt, zoals het uit de keten van nu komt: het onderzoek van 11 oktober 2026 naar nerds.digitaledienst.overheid.nl, de eigen site van de makers van de toolbox. Het is de derde meting op die site; wat ze laat zien en wat niet, staat in [validatie/iteraties.md](../validatie/iteraties.md).
+Eén rapport dat de toolbox heeft gemaakt, zoals het op 11 oktober 2026 uit de keten kwam, van vóór de eerste versie van loep: het onderzoek van 11 oktober 2026 naar nerds.digitaledienst.overheid.nl, de eigen site van de makers van de toolbox. Het is de derde meting op die site; wat ze laat zien en wat niet, staat in [validatie/iteraties.md](../validatie/iteraties.md).
 
 Het rapport is een concept. Niemand heeft het afgetekend en het is niet gepubliceerd. Het team van de site heeft de bevindingen niet nagelopen, en ze zijn ook niet tegen de broncode van de site gelegd. Lees ze als aanwijzingen om na te gaan, niet als vaststaande feiten.
 
