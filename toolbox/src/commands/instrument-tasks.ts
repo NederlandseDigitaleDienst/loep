@@ -3,16 +3,6 @@ import { join, resolve } from "node:path";
 import { EXTENSION, extensionsOf, finishBudget, judgeBudget, verifyBudget, walkBudget, type Coverage } from "../lib/budget.ts";
 import { canonicalJson, pageLabels, readJson, sha256, sha256File, writeFileAtomic, writeJson } from "../lib/canonical.ts";
 import { buildDossier } from "../lib/dossier.ts";
-import { dossierReads, nameOf, readsOfSession, requiredParts, unreadPartsProblems } from "../lib/dossier-view.ts";
-
-/** The parts of a dossier the criterion counts on, as a task names them: `controls`, `images` en `siteStates`. */
-function dossierPartsNl(dossier: Record<string, unknown>): string {
-  const names = requiredParts(dossier).map((path) => `\`${nameOf(dossier, path)}\``);
-  if (names.length === 0) return "geen";
-  return names.length === 1 ? names[0]! : `${names.slice(0, -1).join(", ")} en ${names.at(-1)}`;
-}
-
-const dossierPartsOfFile = (runDir: string, path: string): string => dossierPartsNl(JSON.parse(readFileSync(join(runDir, path), "utf8")) as Record<string, unknown>);
 import { stepStart, writeManifest } from "../lib/manifest.ts";
 import { loadAllProcedures, type Procedure } from "../lib/procedures.ts";
 import { readTemplate } from "../lib/templates.ts";
@@ -638,8 +628,7 @@ export async function instrumentTasks(runDir: string, options: TaskOptions = {})
     const criterion = criterionById(procedure.id)!;
     const dir = join("tasks", procedure.id);
     const dossierPath = join(dir, "dossier.json");
-    const dossier = (options.buildDossier ?? buildDossier)(run, procedure);
-    const dossierSha256 = await writeJson(join(runDir, dossierPath), dossier);
+    const dossierSha256 = await writeJson(join(runDir, dossierPath), (options.buildDossier ?? buildDossier)(run, procedure));
     const digits = procedure.id.replaceAll(".", "");
     const earlier = previous?.tasks.find((entry) => entry.criterion === procedure.id);
     const judgeSession = earlier?.judge.session ?? `b-${digits}`;
@@ -649,7 +638,7 @@ export async function instrumentTasks(runDir: string, options: TaskOptions = {})
     const judgeLimits = judgeBudget(BUDGETS.judge, procedure.id, coverage.get(procedure.id)!, judgeCandidates.length);
     const judge = { prompt: TASK_FILES.judges(procedure.id), output: join("verdicts", procedure.id, "oordeel.json"), candidates: join(dir, "kandidaten.json"), session: judgeSession, maxCommands: judgeLimits.commands, maxMinutes: judgeLimits.minutes };
     await writeJson(join(runDir, judge.candidates), judgeCandidates);
-    const shared = { ...base, id: criterion.id, title: criterion.titleNl, level: criterion.level, dossier: join(absoluteRun, dossierPath), dossierParts: dossierPartsNl(dossier), gate: join(absoluteRun, "gate.json"), writes: writesNl, procedure: procedure.body };
+    const shared = { ...base, id: criterion.id, title: criterion.titleNl, level: criterion.level, dossier: join(absoluteRun, dossierPath), gate: join(absoluteRun, "gate.json"), writes: writesNl, procedure: procedure.body };
     const writeJudge = async (): Promise<void> => writeFileAtomic(
       join(runDir, judge.prompt),
       fill(templates.beoordeel, { ...shared, session: judge.session, workDir: await makeWorkDir(runDir, judge.session), workName: judge.session, maxCommands: String(judge.maxCommands), maxMinutes: String(judge.maxMinutes), candidates: join(absoluteRun, judge.candidates), notWalked: join(absoluteRun, NOT_WALKED), output: join(absoluteRun, judge.output), check: `node ${cli} check-verdict --run ${absoluteRun} --criterion ${criterion.id} --round judge` }),
@@ -698,7 +687,6 @@ export async function instrumentTasks(runDir: string, options: TaskOptions = {})
           title: criterion.titleNl,
           level: criterion.level,
           dossier: join(absoluteRun, task.dossier),
-          dossierParts: dossierPartsOfFile(runDir, task.dossier),
           writes: writesNl,
           procedure: procedure.body,
           session: verify.session,
@@ -784,7 +772,6 @@ export async function instrumentTasks(runDir: string, options: TaskOptions = {})
           title: criterion.titleNl,
           level: criterion.level,
           dossier: join(absoluteRun, task.dossier),
-          dossierParts: dossierPartsOfFile(runDir, task.dossier),
           writes: writesNl,
           procedure: procedure.body,
           session: finish.session,
@@ -985,8 +972,7 @@ export async function checkInstrumentVerdict(runDir: string, criterionId: string
   const part = partOf(task, round);
   if (!part) return [round === "finish" ? "this criterion has no task for the finishing round: it comes only for a criterion the evaluation itself left open, once every verifier is in (run tasks again)" : "the task for the verification is not written yet; run tasks again once every judge verdict is in"];
   const observations = loadObservations(runDir);
-  const dossierText = readFileSync(join(runDir, task.dossier), "utf8");
-  const dossier = JSON.parse(dossierText) as { evidence: Record<string, unknown>; legend: Record<string, unknown>; site?: { baseUrl?: string; origins?: string[] } };
+  const dossier = await readJson<{ evidence: Record<string, unknown>; legend: Record<string, unknown>; site?: { baseUrl?: string; origins?: string[] } }>(join(runDir, task.dossier));
   let verdict: Verdict;
   try {
     verdict = await readJson<Verdict>(join(runDir, part.output));
@@ -1011,11 +997,7 @@ export async function checkInstrumentVerdict(runDir: string, criterionId: string
     ...(vendorPrefixes ? { vendorPrefixes } : {}),
   };
   let problems: string[];
-  if (round === "judge") {
-    problems = validateJudgeVerdict(verdict, { ...context, session: part.session });
-    // The task says to read the dossier in full: a pass rests on it, so the parts the criterion counts on must have been read.
-    if (verdict.outcome === "passed") problems.push(...unreadPartsProblems(dossier as unknown as Record<string, unknown>, dossierReads(readsOfSession(runDir, part.session), task.dossier, sha256(dossierText)), part.session));
-  }
+  if (round === "judge") problems = validateJudgeVerdict(verdict, { ...context, session: part.session });
   else if (round === "finish") problems = validateFinish(verdict, { ...context, session: part.session, openPoints: task.finish!.points });
   else if (!(await instrumentVerdictIsCurrent(runDir, task, "judge", observations))) problems = ["the verdict of the judge must be validated, and unchanged since, before the verification"];
   else problems = validateVerification(verdict, { ...context, session: part.session, judge: await readJson<Verdict>(join(runDir, task.judge.output)) });

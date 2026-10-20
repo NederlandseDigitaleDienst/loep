@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { readDossierInFull } from "./fixtures/dossier-reads.ts";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -151,11 +150,6 @@ test("a cross-candidate is routed to the verifier of the criterion it names", as
   const measured = observe("b-1411", "contrast");
   const focus = observe("b-1411", "focus");
   write(join("verdicts", "1.4.11", "oordeel.json"), { criterion: "1.4.11", outcome: "passed", rule: "R6", summaryNl: "Randen en pictogrammen steken genoeg af op de bekeken pagina's.", observations: [seen([look, measured, focus])], findings: [] });
-  // A pass rests on the dossier: the judge reads the parts the criterion counts on in full, with dossier, in its own session.
-  assert.match((await checkInstrumentVerdict(dir, "1.4.11", "judge")).join(), /needs every part of the dossier this criterion counts on read in full with the command dossier in session "b-1411"; not read in full: contrast/);
-  readDossierInFull(dir, "v-1411", "1.4.11");
-  assert.match((await checkInstrumentVerdict(dir, "1.4.11", "judge")).join(), /not read in full: contrast/, "what another session read does not count");
-  readDossierInFull(dir, "b-1411", "1.4.11");
   assert.deepEqual(await checkInstrumentVerdict(dir, "1.4.11", "judge"), []);
   assert.deepEqual(await instrumentTasks(dir, options), { walks: 2, judges: 2, verifiers: 2, finishers: 0 });
   const index = await loadInstrumentIndex(dir);

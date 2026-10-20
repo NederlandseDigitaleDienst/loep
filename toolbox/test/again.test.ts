@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { readDossierInFull } from "./fixtures/dossier-reads.ts";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -44,7 +43,7 @@ const observe = (session: string, command: string, error: string | null = null):
 const digitsOf = (id: string): string => id.replaceAll(".", "");
 const task = async (id: string): Promise<InstrumentTask> => (await loadInstrumentIndex(dir)).tasks.find((entry) => entry.criterion === id)!;
 const seen = (evidence: string[], ruling: "noIssue" | "open" = "noIssue"): Verdict["observations"][number] => ({ checkedNl: "De pagina's van de steekproef", howNl: "Bekeken en gemeten in de sessie", observedNl: "Wat er op de pagina staat, zoals gemeten", evidence, ruling });
-const passEvidence = async (id: string, session: string): Promise<string[]> => (readDossierInFull(dir, session, id), [observe(session, "look"), ...(await task(id)).passCommands.map((command) => observe(session, command))]);
+const passEvidence = async (id: string, session: string): Promise<string[]> => [observe(session, "look"), ...(await task(id)).passCommands.map((command) => observe(session, command))];
 const again = (ids: string[]): ReturnType<typeof instrumentTasks> => instrumentTasks(dir, { ...options, again: ids });
 
 async function judgeAndVerify(id: string, outcome: "cantTell" | "passed", points: string[]): Promise<void> {

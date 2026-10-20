@@ -375,7 +375,7 @@ export const COMMAND_ALIASES: Record<string, string> = { engines: "rules", tabwa
 export const canonicalCommand = (command: string): string => COMMAND_ALIASES[command] ?? command;
 const SHOWING = new Set<string>([...LOOK_COMMANDS, ...MEASURE_COMMANDS]);
 /** Every word that can follow `session` on the command line as a command in a session (an agent types it as `loep <command>`): the commands that act, look, measure and record, with their older names. */
-export const SESSION_COMMANDS: string[] = [...LOOK_COMMANDS, ...MEASURE_COMMANDS, ...Object.keys(COMMAND_ALIASES), "open", "click", "key", "tab", "type", "select", "hover", "scroll", "back", "state", "replay", "status", "tools", "wait", "sheet", "dossier"];
+export const SESSION_COMMANDS: string[] = [...LOOK_COMMANDS, ...MEASURE_COMMANDS, ...Object.keys(COMMAND_ALIASES), "open", "click", "key", "tab", "type", "select", "hover", "scroll", "back", "state", "replay", "status", "tools", "wait", "sheet"];
 // "loep" is also an ordinary word, so only the word with a command behind it counts as naming one.
 const NAMES_A_COMMAND = new RegExp(`\\bloep (?:${SESSION_COMMANDS.join("|")})\\b`, "i");
 

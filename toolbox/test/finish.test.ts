@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { readDossierInFull } from "./fixtures/dossier-reads.ts";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -80,7 +79,7 @@ function makeRun(only: string[]) {
     assert.deepEqual(await checkInstrumentVerdict(dir, id, "final"), [], `final ${id}`);
   };
   /** The observations a pass has to cite for this criterion, made in the given session. */
-  const passEvidence = async (id: string, session: string): Promise<string[]> => (readDossierInFull(dir, session, id), [observe(session, "look"), ...(await task(id)).passCommands.map((command) => observe(session, command))]);
+  const passEvidence = async (id: string, session: string): Promise<string[]> => [observe(session, "look"), ...(await task(id)).passCommands.map((command) => observe(session, command))];
   return { dir, options, write, observe, digits, task, seen, leaveOpen, verifyOpen, passEvidence };
 }
 
