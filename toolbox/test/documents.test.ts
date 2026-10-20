@@ -11,7 +11,7 @@ import { documents as measureDocuments } from "../src/commands/documents.ts";
 import { inventory, probeDocument, type Inventory } from "../src/commands/inventory.ts";
 import { buildSample, chooseDocuments, DOCUMENT_CENSUS_LIMIT, withDocuments } from "../src/commands/sample.ts";
 import { measureOffice } from "../src/instruments/documents/office.ts";
-import { compareOrder, measurePdf, parseStructText } from "../src/instruments/documents/pdf.ts";
+import { buildStructure, compareOrder, linksOf, measurePdf, parseStructText, type TagNode } from "../src/instruments/documents/pdf.ts";
 import { readMarkdown } from "../src/instruments/documents/text.ts";
 import { openZip, parseXml } from "../src/instruments/documents/zipxml.ts";
 import { readJson, writeJson } from "../src/lib/canonical.ts";
@@ -309,6 +309,49 @@ test("the tree of poppler is read by its indentation, and the order of tags is c
   assert.equal(compareOrder("", "een"), null);
 });
 
+test("the alt text of poppler in square brackets does not hide a tag", () => {
+  const tree = parseStructText('Document\n  Figure ["Alt tekst"]:\n     /Placement /Block\n    ""\n  Figure <logo> ["Alt met "aanhalingstekens" en ] "]:\n  Table (block) ["Alt"]\n  Figure <a1> (inline) ["Alt"]\n  Figure "titel "met" quote" ["gewoon "]\n  Figure "titel eindigt \\" ["eind met backslash \\ "]\n  Figure ["voor na"]\n  P (block)\n    "Tekst"\n');
+  const kinds = (tree[0]!.children as { type?: string }[]).map((child) => child.type);
+  assert.deepEqual(kinds, ["Figure", "Figure", "Table", "Figure", "Figure", "Figure", "Figure", "P"]);
+});
+
+test("the text of poppler is only laid on the tags of qpdf when the types agree", () => {
+  const objects = {
+    "obj:1 0 R": { value: { "/K": ["2 0 R", "3 0 R"] } },
+    "obj:2 0 R": { value: { "/S": "/H1" } },
+    "obj:3 0 R": { value: { "/S": "/P" } },
+  } as never;
+  const catalog = { "/StructTreeRoot": "1 0 R" } as never;
+  const same = buildStructure(objects, catalog, new Map(), 'H1\n  "Kop"\nP\n  "Tekst"\n');
+  assert.equal(same.textRead, true);
+  assert.deepEqual(same.roots[0]!.children, ["Kop"]);
+  const swapped = buildStructure(objects, catalog, new Map(), 'P\n  "Kop"\nH1\n  "Tekst"\n');
+  assert.equal(swapped.textRead, false);
+});
+
+const tag = (type: string, href: string | null, children: (string | TagNode)[]): TagNode => ({ type, page: 1, alt: null, actualText: null, lang: null, scope: null, href, children });
+
+test("a Link without text inside a Link with the same href is part of the outer link", () => {
+  const inner = tag("Link", "https://a.test/x", []);
+  const { links, nested } = linksOf([tag("P", null, [tag("Link", "https://a.test/x", ["Lees meer ", inner])])]);
+  assert.deepEqual(links.map((link) => [link.text, link.href]), [["Lees meer", "https://a.test/x"]]);
+  assert.equal(nested, 1);
+});
+
+test("a nested Link with another href or with text of its own stays a link", () => {
+  const other = tag("Link", "https://a.test/y", []);
+  const own = tag("Link", "https://a.test/x", ["Eigen tekst"]);
+  const { links, nested } = linksOf([tag("Link", "https://a.test/x", ["Buiten ", other, own])]);
+  assert.deepEqual(links.map((link) => [link.text, link.href]), [["Buiten Eigen tekst", "https://a.test/x"], ["", "https://a.test/y"], ["Eigen tekst", "https://a.test/x"]]);
+  assert.equal(nested, 0);
+});
+
+test("a line of a hostile PDF does not make the tag pattern backtrack", () => {
+  const start = Date.now();
+  parseStructText(`Document\n  Figure${' "a"'.repeat(40)} x\n  Figure${' ["a"]'.repeat(40)} x\n  Figure "${'" ['.repeat(80_000)}x\n`);
+  assert.ok(Date.now() - start < 1000);
+});
+
 test("a tagged PDF: title, language, headings, figures, table headers, list, link, bookmarks and order", { skip: NEEDS_PDF_TOOLS }, async () => {
   const { facts, text, tagTree } = await measurePdf(join(FIXTURES, "tagged.pdf"), scratch);
   assert.equal(facts.pdf.tagged, true);
@@ -320,6 +363,7 @@ test("a tagged PDF: title, language, headings, figures, table headers, list, lin
   assert.deepEqual(facts.images.map((image) => image.alt), ["Staafdiagram van de inkomsten per jaar", null]);
   assert.deepEqual(facts.tables.map((table) => [table.page, table.rows, table.headerCells, table.firstRow]), [[1, 3, 2, ["Jaar", "Bedrag"]]]);
   assert.deepEqual(facts.links, [{ page: 1, text: "klik hier", href: "https://example.org/meer" }]);
+  assert.equal(facts.pdf.tagTextRead, true);
   assert.equal(facts.pdf.lists, 1);
   assert.equal(facts.pdf.bookmarks.count, 3);
   assert.deepEqual(facts.pdf.languageParts, [{ lang: "en", text: "This paragraph is in English.", page: 2 }]);
@@ -626,6 +670,20 @@ test("the facts of a document that was never measured are absent, not empty", ()
   assert.deepEqual(part.documents, []);
 });
 
+test("4.1.1 gets the documents with only the rules of veraPDF on how the structure tree is built", () => {
+  const failed = (clause: string, test: number, description: string) => ({ clause, test, description, failedChecks: 2 });
+  const facts = {
+    status: "read", kind: "pdf", title: "Brief", pages: 2, url: "https://a.test/brief.pdf", images: [], headings: [], tables: [], links: [], fields: [], notMeasuredNl: [], files: { text: null, tagTree: null, pageImages: [] },
+    pdf: { tagged: true, tags: {}, tagTextRead: true, lists: 0, counts: { links: 0, images: 0 }, linkAnnotations: 0, encryption: null, pdfUa: { available: true, compliant: false, reasonNl: null, failedRules: [failed("7.1", 11, "The logical structure of the conforming file shall be described by a structure hierarchy rooted in the StructTreeRoot entry"), failed("7.2", 17, "LI element should be contained in L element"), failed("7.9", 2, "Each Note tag shall have unique ID key"), failed("7.18.5", 2, "Links shall contain an alternate description via their Contents key"), failed("7.21.4.1", 1, "The font programs for all fonts used for rendering within a conforming file shall be embedded")] } },
+  } as unknown as DocumentFacts;
+  const data = { dir: scratch, inventory: inventoryWith([]), sample: { documents: [] }, pages: [], documents: [{ label: "D01", item: { label: "D01", url: facts.url, kind: "pdf", slug: "brief-00000000", reason: "", linkedFrom: [], bytes: null, lastModified: null }, dir: scratch, facts }] } as unknown as RunData;
+  const rules = (criterion: string) => ((documentsExtractor(data, criterion) as { documents: { pdfUa: { failedRulesForThisCriterion: { rule: string }[] } }[] }).documents[0]!.pdfUa.failedRulesForThisCriterion.map((rule) => rule.rule));
+  assert.deepEqual(rules("4.1.1"), ["7.1-11", "7.2-17", "7.9-2"]);
+  assert.deepEqual(rules("2.4.4"), ["7.18.5-2"]);
+  assert.equal(rules("1.3.1").length, 5);
+  assert.ok(loadProcedure("4.1.1").evidence.includes("documents"));
+});
+
 // ------------------------------------------------------------------------- the report
 
 const REPORTED: EvaluationDocuments = {
@@ -658,6 +716,13 @@ test("the scope and the limitations say which documents were read, which were no
   const none = documentScopeNl(null, "https://voorbeeld.overheid.example", 0);
   assert.deepEqual(none.includedNl, []);
   assert.match(none.limitationsNl[0]!, /op de site zijn geen documenten gevonden/);
+});
+
+test("the limitations name the pdf documents whose tag text was not read, with the criteria that are less certain", () => {
+  const items = REPORTED.items.map((item) => (item.label === "D01" ? { ...item, tagTextNotRead: true as const } : item));
+  const text = documentScopeNl({ ...REPORTED, items }, "https://voorbeeld.overheid.example", 4).limitationsNl.join("\n");
+  assert.match(text, /Van 1 pdf-document kon de toolbox de tekst bij de tags niet lezen \(D01\)\..*1\.3\.1, 1\.3\.2, 2\.4\.2, 2\.4\.4, 2\.4\.6 en 3\.1\.2\./);
+  assert.ok(!documentScopeNl(REPORTED, "https://voorbeeld.overheid.example", 4).limitationsNl.join("\n").includes("tekst bij de tags"));
 });
 
 test("the report lists the documents with their kind and whether they were read, and a finding can point at one", async (context) => {

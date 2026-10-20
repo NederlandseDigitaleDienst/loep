@@ -197,7 +197,7 @@ export async function pageContrast(page: Page): Promise<Pick<PageContrast, "meas
     const measured = measure(run, picture);
     return below(run.box) && measured.outcome !== "exempt" ? { ...measured, background: null, ratio: null, outcome: "cantTell", reason: `de tekst ${belowNl}` } : measured;
   };
-  const controls = await call<Positioned[]>(page, "hoverTargets");
+  const controls = await call<Positioned[]>(page, "boundaryTargets");
   const graphics = await call<Graphic[]>(page, "graphicBoxes");
   const measurements = runs.map((run) => measureHere(run, image));
   // Text that only shows when it has focus, such as a skip link, is measured in that state.
@@ -247,9 +247,11 @@ export async function elementContrast(page: Page, target: string[], options: { t
     // Only the text inside the element: reading every piece of text on the page for each element is what makes a page with many controls slow.
     const runs = (library.textRuns as (root: Element) => { path: string[] }[])(element);
     const same = (item: { path: string[] }): boolean => item.path.join(" >>> ") === chain.join(" >>> ");
+    // A label that draws a hidden checkbox or radio button stands for that control.
+    const drawsIt = (item: { drawnBy?: string[] }): boolean => item.drawnBy !== undefined && same({ path: item.drawnBy });
     return {
       runs,
-      control: textOnly ? null : ((library.hoverTargets as (options: { kinds: boolean }) => { path: string[] }[])({ kinds: false }).find(same) ?? null),
+      control: textOnly ? null : ((library.boundaryTargets as () => { path: string[]; drawnBy?: string[] }[])().find((item) => same(item) || drawsIt(item)) ?? null),
       graphic: textOnly ? null : ((library.graphicBoxes as () => { path: string[] }[])().find(same) ?? null),
       scroll: [window.scrollX, window.scrollY] as [number, number],
       original,

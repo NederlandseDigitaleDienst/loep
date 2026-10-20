@@ -251,6 +251,8 @@ export interface PdfFacts {
   imageObjects: number;
   /** Link annotations on the pages, tagged or not. */
   linkAnnotations: number;
+  /** Link tags without text inside a link tag with the same href; they are counted as part of the outer link and not listed in `links`. */
+  nestedLinks: number;
   /** How many there are of each, before the lists were cut off at their limit. */
   counts: { headings: number; images: number; tables: number; links: number; fields: number };
 }
@@ -382,7 +384,7 @@ export interface EvaluationDocuments {
   notChosenByKind: Partial<Record<DocumentKind, number>>;
   /** The criteria whose procedure takes the documents into account. */
   criteria: string[];
-  items: { label: string; url: string; kind: DocumentKind; title: string | null; pages: number | null; status: DocumentFacts["status"] | "notMeasured"; reasonNl: string | null; reason: string; lastModified: string | null }[];
+  items: { label: string; url: string; kind: DocumentKind; title: string | null; pages: number | null; status: DocumentFacts["status"] | "notMeasured"; reasonNl: string | null; reason: string; lastModified: string | null; /** A tagged pdf whose tag text could not be read; absent otherwise. */ tagTextNotRead?: true }[];
 }
 
 /** The date before which an office file can fall under the exemption of the law, when it is not needed for a running process. */
@@ -399,7 +401,7 @@ export function evaluationDocuments(documents: DocumentData[], population: { onS
     notChosen: population.notChosen,
     notChosenByKind: population.notChosenByKind,
     criteria,
-    items: documents.map((document) => ({ label: document.label, url: document.item.url, kind: document.item.kind, title: document.facts?.title ?? null, pages: document.facts?.pages ?? null, status: document.facts?.status ?? "notMeasured", reasonNl: document.facts ? document.facts.reasonNl : "het document is niet gemeten: het commando documents is niet gedraaid", reason: document.item.reason, lastModified: document.item.lastModified })),
+    items: documents.map((document) => ({ label: document.label, url: document.item.url, kind: document.item.kind, title: document.facts?.title ?? null, pages: document.facts?.pages ?? null, status: document.facts?.status ?? "notMeasured", reasonNl: document.facts ? document.facts.reasonNl : "het document is niet gemeten: het commando documents is niet gedraaid", reason: document.item.reason, lastModified: document.item.lastModified, ...(document.facts?.pdf?.tagged && !document.facts.pdf.tagTextRead ? { tagTextNotRead: true as const } : {}) })),
   };
 }
 
@@ -418,10 +420,12 @@ export function documentScopeNl(documents: EvaluationDocuments | null, origins: 
   const read = documents.items.filter((item) => item.status === "read");
   const notRead = documents.items.filter((item) => item.status === "notRead");
   const failed = documents.items.filter((item) => item.status === "failed" || item.status === "notMeasured");
+  const tagText = documents.items.filter((item) => item.tagTextNotRead);
   const old = documents.items.filter((item) => item.lastModified !== null && item.lastModified.slice(0, 10) < EXEMPTION_DATE);
   const limitations = [
     `Documenten: op de site staan ${plural(documents.onSite, "document", "documenten")} (${kindsNl(documents.byKind)}). De toolbox leest de soorten ${readKinds} in. ${plural(read.length, "document is", "documenten zijn")} ingelezen en beoordeeld${read.length > 0 ? ` (${read.map((item) => item.label).join(", ")})` : ""}. Gelezen is wat in het bestand staat: tags, titel, taal, koppen, tekstalternatieven, tabellen, lijsten, links en formuliervelden, en bij een pdf de uitkomst van veraPDF (PDF/UA-1). Er is geen kantoorpakket en geen schermlezer gebruikt, en van een kantoorbestand is er geen beeld.`,
     `Documenten zijn beoordeeld op de criteria ${listNl(documents.criteria)}. Op de andere criteria zijn ze niet beoordeeld, bijvoorbeeld contrast, bediening met het toetsenbord en foutmeldingen in formulieren.`,
+    ...(tagText.length > 0 ? [`Van ${plural(tagText.length, "pdf-document", "pdf-documenten")} kon de toolbox de tekst bij de tags niet lezen (${tagText.map((item) => item.label).join(", ")}). Van de tags is dan alleen bekend welke er zijn, niet welke tekst erbij hoort. De koppen, links en tabellen in ${tagText.length === 1 ? "dit document zijn" : "deze documenten zijn"} daardoor minder zeker beoordeeld. Dat geldt voor de criteria 1.3.1, 1.3.2, 2.4.2, 2.4.4, 2.4.6 en 3.1.2. Een document zonder bevinding is hier dus geen goedkeuring.`] : []),
     ...(notRead.length > 0 ? [`${plural(notRead.length, "document is", "documenten zijn")} van een soort die niet wordt ingelezen (${kindsNl(countByKind(notRead))}: ${notRead.map((item) => item.label).join(", ")}) en ${notRead.length === 1 ? "is" : "zijn"} niet onderzocht. Dat is een open punt, geen goedkeuring.`] : []),
     ...(failed.length > 0 ? [`${plural(failed.length, "document was", "documenten waren")} niet op te halen of niet te openen en ${failed.length === 1 ? "is" : "zijn"} niet onderzocht: ${failed.map((item) => `${item.label} (${item.reasonNl ?? "reden onbekend"})`).join("; ")}.`] : []),
     ...(documents.notChosen > 0 ? [`${plural(documents.notChosen, "document is", "documenten zijn")} niet voor de steekproef gekozen (${kindsNl(documents.notChosenByKind)}) en ${documents.notChosen === 1 ? "is" : "zijn"} niet onderzocht.`] : []),

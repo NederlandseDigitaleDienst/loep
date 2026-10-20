@@ -9,7 +9,7 @@ import { agentLoginNl, loginForRun } from "../lib/login.ts";
 import { recordReads } from "../lib/reads.ts";
 import { makeWorkDir } from "../lib/workdir.ts";
 import { siteLabel } from "../lib/origins.ts";
-import { frameAddress, readSiteModel, SITE_CHECK_FILE, SITE_MODEL_FILE, validateSiteModel, type ModelContext, type PageType, type Postcondition, type SiteCheck, type SiteModel } from "../lib/sitemodel.ts";
+import { acceptedGapFor, frameAddress, NOT_OPENED_ON_PAGE_TYPE, notOpenedAdviceNl, readSiteModel, SITE_CHECK_FILE, SITE_MODEL_FILE, validateSiteModel, type ModelContext, type PageType, type Postcondition, type SiteCheck, type SiteModel } from "../lib/sitemodel.ts";
 import { readObservation } from "../session/observations.ts";
 import { holds, loadRecipes, MAX_RECIPE_STEPS, replayEnv, replayFromClean, replaySteps } from "../session/recipe.ts";
 import { openSurface, type Env } from "../session/surface.ts";
@@ -19,6 +19,7 @@ import { mergeWidths, uncoveredOperables, type CountedPage } from "../lib/operab
 import type { Recipe } from "../session/daemon.ts";
 import type { Gate } from "./gate.ts";
 import type { Inventory, InventoryPage } from "./inventory.ts";
+import { openComponentOn, windowOnPageTypes } from "./modelsweep.ts";
 import { applyFrameClasses, mainAddresses } from "./sample.ts";
 
 /** Budget of the exploring agent's session. */
@@ -108,7 +109,7 @@ export async function explore(runDir: string): Promise<{ task: string; pages: nu
         ...(modelProblems.length > 0 ? ["De controle keurt het model nu af op:", "", ...modelProblems.map((problem) => `- ${problem}`), ""] : []),
         ...(forExplorer.length > 0 ? ["De bewijspoort vond na het meten deze gaten:", "", ...forExplorer.map((gap) => `- **${gap.check}**${gap.url ? `, ${gap.url}` : ""}${gap.state && gap.state !== "default" ? `, toestand ${gap.state}` : ""}: ${gap.missingNl}`), ""] : []),
         ...(modelProblems.length + forExplorer.length === 0 ? ["Er zijn geen open punten gemeld. Loop de werkwijze na op wat het model nog mist, met name stap 2b.", ""] : []),
-        "Is een gat een eigenschap van de site zelf en geen gemis in het model (de site heeft echt een toetsenbordval, een onderdeel gaat echt niet open), leg dat dan vast in `acceptedGaps`: `{ \"check\": \"<naam van de controle>\", \"page\": \"<adres>\", \"reasonNl\": \"wat je zag\", \"observation\": \"<id van de waarneming die het toont, bijvoorbeeld verken-0042>\" }`.",
+        "Is een gat een eigenschap van de site zelf en geen gemis in het model (de site heeft echt een toetsenbordval, een onderdeel gaat echt niet open), leg dat dan vast in `acceptedGaps`: `{ \"check\": \"<naam van de controle>\", \"page\": \"<adres>\", \"reasonNl\": \"wat je zag\", \"observation\": \"<id van de waarneming die het toont, bijvoorbeeld verken-0042>\", \"decidedBy\": \"verkenner\" }`. Schrijf in `decidedBy` altijd `verkenner`: `persoon` zet alleen een persoon die de uitzondering zelf heeft vastgesteld. Bij `component-not-opened-on-page-type` hoort er ook `\"component\": \"<id van het onderdeel>\"` bij: de regel geldt dan alleen voor dat onderdeel.",
       ].join("\n");
 
   const taskPath = join("explore", "verken.md");
@@ -292,8 +293,29 @@ export function aliasRepresentatives(model: SiteModel, inventory: Inventory): st
 }
 
 /**
+ * A component's recipe on the representative page of every page type it stands on, in the window
+ * the sweep opens it in there. What the gate would refuse after the sweep is told now, unless the
+ * model accepts it as how the site is, the way the gate does.
+ */
+async function componentOnPageTypes(env: Env, model: SiteModel, id: string, recipe: Recipe & { start: NonNullable<Recipe["start"]> }, post: Postcondition | null): Promise<NonNullable<SiteCheck["replays"][number]["onPageTypes"]>> {
+  const component = model.components.find((entry) => entry.id === id)!;
+  const size = windowOnPageTypes({ width: recipe.start.width, height: recipe.start.height }, component.viewport);
+  const rows: NonNullable<SiteCheck["replays"][number]["onPageTypes"]> = [];
+  for (const typeId of component.pageTypes) {
+    const type = model.pageTypes.find((entry) => entry.id === typeId);
+    if (!type) continue;
+    const opened = await openComponentOn(env, recipe, post, type.representative, size);
+    await opened.surface?.context.close().catch(() => undefined);
+    const accepted = acceptedGapFor(model, { check: NOT_OPENED_ON_PAGE_TYPE, page: type.representative, component: id }) !== undefined;
+    rows.push({ pageType: typeId, url: type.representative, viewport: size, reached: opened.reached, reasonNl: opened.reasonNl, accepted });
+  }
+  return rows;
+}
+
+/**
  * Validate the site model and replay every recipe from a clean page. An entry whose
- * recipe does not run, or whose postcondition does not hold afterwards, is refused. The
+ * recipe does not run, or whose postcondition does not hold afterwards, is refused; so is
+ * a component that does not open on one of its page types, as the sweep will open it. The
  * outcome is written next to the model; the sweep only accepts a model that passed.
  */
 export async function checkSite(runDir: string, options: { navigationDelayMs?: number } = {}): Promise<SiteCheck> {
@@ -343,8 +365,13 @@ export async function checkSite(runDir: string, options: { navigationDelayMs?: n
           before = replay.before?.detail ?? "";
           after = replay.after?.detail ?? "";
         }
-        replays.push({ kind: entry.kind, id: entry.id, recipe: entry.recipe, ok: reasonNl === null, reasonNl, before, after });
+        const onPageTypes = entry.kind === "component" && reasonNl === null && recipe.start ? await componentOnPageTypes(env, model, entry.id, { ...recipe, start: recipe.start }, entry.postcondition) : undefined;
+        replays.push({ kind: entry.kind, id: entry.id, recipe: entry.recipe, ok: reasonNl === null, reasonNl, before, after, ...(onPageTypes ? { onPageTypes } : {}) });
         if (reasonNl !== null) problems.push(`${entry.kind} "${entry.id}" (recept ${entry.recipe}): ${reasonNl}`);
+        for (const row of onPageTypes ?? []) {
+          if (row.reached || row.accepted) continue;
+          problems.push(`component "${entry.id}" (recept ${entry.recipe}): gaat op paginatype "${row.pageType}" (${row.url}) niet open in een staand venster van ${row.viewport.width} bij ${row.viewport.height}: ${row.reasonNl ?? "geen reden vastgelegd"}. ${notOpenedAdviceNl(row.reasonNl)}`);
+        }
       }
       // What there is to operate on each page type, next to what the model says. Only with the blockers closing: otherwise their buttons are counted as parts of the page.
       if (replays.every((replay) => replay.kind !== "blocker" || replay.ok)) {
