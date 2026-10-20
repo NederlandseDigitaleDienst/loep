@@ -23,7 +23,7 @@ import type { Gate } from "./gate.ts";
 import { readEvaluation, signatureIsCurrent, writeEvaluation } from "./sign.ts";
 import { mergeInto } from "./merge.ts";
 import { countingVerdict, loadAnswers } from "./answer.ts";
-import { instrumentVerdictIsCurrent, isInstrumentRun, loadInstrumentIndex, loadObservations, NO_TASKS_NL, type InstrumentTask } from "./instrument-tasks.ts";
+import { instrumentVerdictIsCurrent, isInstrumentRun, loadInstrumentIndex, loadObservations, NO_TASKS_NL, skippedForOutage, type InstrumentTask } from "./instrument-tasks.ts";
 
 export interface EvaluateOptions {
   run: string;
@@ -127,6 +127,7 @@ export async function evaluate(options: EvaluateOptions): Promise<Evaluation> {
           answers: criterion.id === "2.2.1" ? [...gathered.answers, ...sessionWatchAnswers(watch, (verdicts.finish ?? verdicts.final)?.missingNl ?? [])] : gathered.answers,
           procedure: procedure ? { version: procedure.version, sha256: procedure.sha256, class: procedure.class, limitsNl: procedure.limitsNl } : null,
           provenance: { dossierSha256: instrumentTask?.dossierSha256 ?? null, verdictSha256: hashes },
+          outage: instrumentTask !== undefined && !verdicts.finish && skippedForOutage(options.run, instrumentTask),
         },
         prefix,
     );

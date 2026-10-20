@@ -19,7 +19,9 @@ import { gaps } from "./gaps.ts";
  * `variant` copies a run whose sweep is done and leaves out everything the agent phases wrote, so
  * `tasks` and `pending` start the walks, judges, verifiers and finishing round again on the same
  * evidence. `compare-variants` lays runs of the baseline and of a variant side by side: per
- * criterion, per defect of the answer key, open points, and what each role used.
+ * criterion, per defect of the answer key, open points, and what each role used. Whether the
+ * variant is "not worse" is a paired comparison over the defects and criteria both sides share,
+ * with an interval from a bootstrap and a margin fixed before measuring.
  */
 
 export const VARIANT_FILE = "variant.json";
@@ -192,6 +194,14 @@ export interface RunResult {
   defectsNl: string | null;
   /** Open points that still stand in the verdict that counts, per kind, over the criteria of the scope. */
   openPoints: Record<string, number>;
+  /** The same open points per criterion of the scope. */
+  openPointsByCriterion: Record<string, number>;
+  /**
+   * Per criterion of the scope: findings of the run that belong to no defect of the answer key,
+   * because not both classifications of `compare --findings` name them under one. Null without a
+   * valid classification.
+   */
+  falseReports: Record<string, number> | null;
   roles: RoleUse[];
 }
 
@@ -202,10 +212,12 @@ export interface CriterionRow {
   keyFails: boolean;
   baseline: (CriterionOutcome | null)[];
   variant: (CriterionOutcome | null)[];
-  /** A variant run reached an outcome no baseline run reached. */
-  deviates: boolean;
-  /** A variant run failed it where the key does not and no baseline run did. */
-  newReport: boolean;
+  /** Share of the pairs of baseline runs that put the criterion in a different class (see `classOf`); null with fewer than two runs. */
+  spreadBaseline: number | null;
+  /** The same over the pairs of variant runs. */
+  spreadVariant: number | null;
+  /** The same over the pairs of one baseline and one variant run: a difference to read against the two spreads. */
+  spreadBetween: number | null;
 }
 
 export interface DefectRow {
@@ -217,12 +229,52 @@ export interface DefectRow {
   /** "gevonden" over the runs that were classified, as [found, classified]. */
   foundBaseline: [number, number];
   foundVariant: [number, number];
-  /** Found in a smaller share of the variant runs than of the baseline runs. */
-  fewer: boolean;
+}
+
+/** A value with its 95% interval from the bootstrap. */
+export interface Estimate {
+  value: number;
+  low: number;
+  high: number;
+}
+
+/** A paired comparison: both sides on the same units, the difference is variant minus baseline. */
+export interface PairedTest {
+  /** Units in the comparison: defects of the key, or criteria. */
+  units: number;
+  /** Why units were left out, or null. */
+  leftOutNl: string | null;
+  baseline: Estimate;
+  variant: Estimate;
+  difference: Estimate;
+}
+
+export interface Agreement {
+  runs: number;
+  /** Criteria in the same class in every run, as [same, criteria]. */
+  unanimous: [number, number];
+  /** Fleiss' kappa over criteria and runs; null with fewer than two runs, or when every run put every criterion in one and the same class. */
+  kappa: number | null;
+}
+
+export interface Verdict {
+  /** The margins, the seed and the number of resamples the verdict was made with. */
+  margin: number;
+  reportMargin: number;
+  seed: number;
+  resamples: number;
+  /** Share of the defects of the key found per run; null when no defect was classified on both sides. Passes when the lower bound of the difference lies above -margin. */
+  found: (PairedTest & { ok: boolean }) | null;
+  /** Unjustified reports per run; null when one of the sides has no run with a valid classification. Passes when the upper bound of the difference lies below reportMargin. */
+  falseReports: (PairedTest & { ok: boolean }) | null;
+  /** Open points per run, for information: not part of the verdict. */
+  openPoints: PairedTest;
+  /** Both tests that could be made pass; null when neither could be made. */
+  notWorse: boolean | null;
 }
 
 export interface VariantComparison {
-  schema: "loep/variant-comparison/1";
+  schema: "loep/variant-comparison/2";
   reference: string;
   criteria: string[];
   /** Runs whose criteria differ from those of the first run, as a warning. */
@@ -230,17 +282,49 @@ export interface VariantComparison {
   runs: RunResult[];
   rows: CriterionRow[];
   defects: DefectRow[];
-  /** The four checks of "gelijk of beter"; null without variant runs. */
-  checks: { outcomes: string[]; defects: string[]; newReports: string[]; openPoints: { baseline: number; variant: number; more: boolean } } | null;
+  /** How alike the runs of each side are, over the criteria; `variant` is null without variant runs. */
+  agreement: { baseline: Agreement; variant: Agreement | null };
+  /** Null without variant runs. */
+  verdict: Verdict | null;
 }
+
+/**
+ * The margins of "not worse", fixed before measuring (validatie/verbruik/README.md, "Hoe we meten").
+ *
+ * MARGIN: the variant may find at most 5 percentage points fewer of the defects of the key, with
+ * 95% confidence: the lower bound of the interval of the difference has to lie above -0.05. On
+ * the 79 defects of the testsite that is about four defects; a wider margin lets through a variant
+ * that misses defects an audit should report. It is strict: on the 29 defects under the nine
+ * criteria of the measurement, with three runs per side, a variant that is just as good passes it
+ * only about four times in ten when a fifth of the defects is found in some runs and not in others
+ * (a simulation; about eight in ten at 0.10). Set --margin from the spread of the baseline, before
+ * the variant is measured.
+ *
+ * REPORT_MARGIN: the variant may make less than one unjustified report per run more than the
+ * baseline, with 95% confidence: the upper bound of the interval of the difference has to lie
+ * below 1. A report too many is a finding a site owner fixes for nothing, so the margin stays at
+ * one per run of nine criteria.
+ *
+ * The interval comes from RESAMPLES draws with replacement over the defects (over the criteria
+ * for reports). Each draw takes the same units for both sides, because both work on the same
+ * frozen sweep. SEED makes the interval the same every time the command runs.
+ */
+export const MARGIN = 0.05;
+export const REPORT_MARGIN = 1;
+export const SEED = 20261020;
+export const RESAMPLES = 10_000;
 
 export interface CompareVariantsOptions {
   baseline: string[];
   variant?: string[] | undefined;
   reference: string;
   usage?: string[] | undefined;
-  /** For tests: the classes per defect, instead of the current classifications of `compare --findings`. */
-  findings?: (runDir: string) => Promise<Pick<FindingsSummary, "findings">>;
+  /** Defaults: MARGIN, REPORT_MARGIN and SEED. */
+  margin?: number | undefined;
+  reportMargin?: number | undefined;
+  seed?: number | undefined;
+  /** For tests: the classes per defect and per finding of the run, instead of the current classifications of `compare --findings`. */
+  findings?: (runDir: string) => Promise<Pick<FindingsSummary, "findings" | "ownFindings">>;
 }
 
 const PHASE_ROLE: Record<AgentPhaseId, AgentRole> = { walks: "walk", judges: "judge", verifiers: "verifier", finishers: "finisher" };
@@ -316,23 +400,33 @@ async function runResult(runDir: string, side: RunResult["side"], reference: Ref
 
   const defects: RunResult["defects"] = {};
   let defectsNl: string | null = null;
+  let falseReports: RunResult["falseReports"] = null;
   const keyFindings = (reference.findings ?? []).filter((finding) => inScope(finding.criterion));
   try {
-    const classified = new Map((await findings(runDir)).findings.map((finding) => [finding.id, finding]));
+    const summary = await findings(runDir);
+    const classified = new Map(summary.findings.map((finding) => [finding.id, finding]));
     for (const finding of keyFindings) {
       const entry = classified.get(finding.id);
       defects[finding.id] = entry ? (entry.agreed ?? "oneens") : null;
     }
     if (keyFindings.some((finding) => !classified.has(finding.id))) defectsNl = "de indeling noemt niet elk gebrek uit deze sleutel: is ze met een andere referentie gemaakt?";
+    // Like "gevonden": a finding belongs to a defect only when both classifications say so.
+    falseReports = Object.fromEntries(criteria.map((id) => [id, 0]));
+    for (const own of summary.ownFindings) if (inScope(own.criterion) && own.agreed !== "tegenhanger") falseReports[own.criterion]!++;
   } catch (error) {
     for (const finding of keyFindings) defects[finding.id] = null;
     defectsNl = `geen geldige indeling per bevinding (compare --findings): ${(error as Error).message}`;
   }
 
   const openPoints: Record<string, number> = {};
+  const openPointsByCriterion: Record<string, number> = Object.fromEntries(criteria.map((id) => [id, 0]));
   for (const kind of gaps([runDir]).kinds) {
-    const standing = kind.criteria.filter((entry) => inScope(entry.criterion)).flatMap((entry) => entry.points).filter((point) => point.standing).length;
-    if (standing > 0) openPoints[kind.kind] = standing;
+    for (const entry of kind.criteria.filter((item) => inScope(item.criterion))) {
+      const standing = entry.points.filter((point) => point.standing).length;
+      if (standing === 0) continue;
+      openPoints[kind.kind] = (openPoints[kind.kind] ?? 0) + standing;
+      openPointsByCriterion[entry.criterion]! += standing;
+    }
   }
 
   return {
@@ -346,6 +440,8 @@ async function runResult(runDir: string, side: RunResult["side"], reference: Ref
     defects,
     defectsNl,
     openPoints,
+    openPointsByCriterion,
+    falseReports,
     roles: rolesOf(runDir, usage),
   };
 }
@@ -353,7 +449,78 @@ async function runResult(runDir: string, side: RunResult["side"], reference: Ref
 const foundShare = ([found, classified]: [number, number]): number | null => (classified === 0 ? null : found / classified);
 const tally = (classes: (ReferenceClass | "oneens" | null)[]): [number, number] => [classes.filter((entry) => entry === "gevonden").length, classes.filter((entry) => entry !== null).length];
 const sumPoints = (run: RunResult): number => Object.values(run.openPoints).reduce((sum, count) => sum + count, 0);
-const mean = (values: number[]): number => (values.length === 0 ? 0 : values.reduce((sum, value) => sum + value, 0) / values.length);
+const sum = (values: number[]): number => values.reduce((total, value) => total + value, 0);
+const mean = (values: number[]): number | null => (values.length === 0 ? null : sum(values) / values.length);
+
+/** mulberry32: a small generator with a seed, so the same runs give the same interval. */
+function random(seed: number): () => number {
+  let state = seed >>> 0;
+  return () => {
+    state = (state + 0x6d2b79f5) >>> 0;
+    let t = state;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4_294_967_296;
+  };
+}
+
+/**
+ * Paired percentile bootstrap. Each unit has a value for the baseline and one for the variant;
+ * every draw takes units with replacement and the same draw for both sides. `statistic` is the
+ * mean over the units (a share per defect) or the sum (a count per criterion, so per run).
+ */
+export function pairedBootstrap(units: [number, number][], statistic: "mean" | "sum", options: { seed: number; resamples: number }): Pick<PairedTest, "baseline" | "variant" | "difference"> {
+  if (units.length === 0) {
+    const zero = { value: 0, low: 0, high: 0 };
+    return { baseline: zero, variant: zero, difference: zero };
+  }
+  const scale = statistic === "mean" ? 1 / units.length : 1;
+  const of = (side: 0 | 1, picks: number[]): number => sum(picks.map((index) => units[index]![side])) * scale;
+  const all = units.map((_, index) => index);
+  const draws: [number[], number[], number[]] = [[], [], []];
+  const next = random(options.seed);
+  for (let draw = 0; draw < options.resamples; draw++) {
+    const picks = all.map(() => Math.floor(next() * units.length));
+    const [before, after] = [of(0, picks), of(1, picks)];
+    draws[0].push(before);
+    draws[1].push(after);
+    draws[2].push(after - before);
+  }
+  const estimate = (value: number, values: number[]): Estimate => {
+    const sorted = [...values].sort((a, b) => a - b);
+    return { value, low: sorted[Math.floor(0.025 * sorted.length)]!, high: sorted[Math.ceil(0.975 * sorted.length) - 1]! };
+  };
+  const [before, after] = [of(0, all), of(1, all)];
+  return { baseline: estimate(before, draws[0]), variant: estimate(after, draws[1]), difference: estimate(after - before, draws[2]) };
+}
+
+/** The class a criterion is in for the spread and the agreement: "voldoet" counts not applicable too, as conformance does; "open" is every outcome without a verdict. */
+const classOf = (outcome: CriterionOutcome | null): "voldoet" | "voldoet niet" | "open" => (outcome === "passed" || outcome === "inapplicable" ? "voldoet" : outcome === "failed" ? "voldoet niet" : "open");
+const CLASSES = ["voldoet", "voldoet niet", "open"] as const;
+
+/** Share of the pairs (one from each list, or two from one list when `right` is left out) in a different class. */
+function spread(left: (CriterionOutcome | null)[], right?: (CriterionOutcome | null)[]): number | null {
+  let pairs = 0;
+  let differ = 0;
+  left.forEach((outcome, i) => {
+    for (const [j, other] of (right ?? left).entries()) {
+      if (!right && j <= i) continue;
+      pairs++;
+      if (classOf(outcome) !== classOf(other)) differ++;
+    }
+  });
+  return pairs === 0 ? null : differ / pairs;
+}
+
+/** Fleiss' kappa with the criteria as subjects and the runs as raters, and how many criteria every run put in the same class. */
+export function agreementOf(perCriterion: (CriterionOutcome | null)[][], runs: number): Agreement {
+  const counts = perCriterion.map((outcomes) => CLASSES.map((name) => outcomes.filter((outcome) => classOf(outcome) === name).length));
+  const unanimous: [number, number] = [counts.filter((row) => row.includes(runs)).length, counts.length];
+  if (runs < 2 || counts.length === 0) return { runs, unanimous, kappa: null };
+  const observed = mean(counts.map((row) => (sum(row.map((n) => n * n)) - runs) / (runs * (runs - 1))))!;
+  const expected = sum(CLASSES.map((_, k) => (sum(counts.map((row) => row[k]!)) / (counts.length * runs)) ** 2));
+  return { runs, unanimous, kappa: expected === 1 ? null : (observed - expected) / (1 - expected) };
+}
 
 export async function compareVariants(options: CompareVariantsOptions): Promise<VariantComparison> {
   if (options.baseline.length === 0) throw new Error("compare-variants needs at least one --baseline <run>");
@@ -385,15 +552,15 @@ export async function compareVariants(options: CompareVariantsOptions): Promise<
   const rows: CriterionRow[] = criteria.map((criterion) => {
     const before = baseline.map((run) => run.outcomes[criterion] ?? null);
     const after = variants.map((run) => run.outcomes[criterion] ?? null);
-    const keyFails = failedByKey.has(criterion);
     return {
       criterion,
       titleNl: criterionById(criterion)?.titleNl ?? "",
-      keyFails,
+      keyFails: failedByKey.has(criterion),
       baseline: before,
       variant: after,
-      deviates: after.some((outcome) => !before.includes(outcome)),
-      newReport: !keyFails && after.includes("failed") && !before.includes("failed"),
+      spreadBaseline: spread(before),
+      spreadVariant: spread(after),
+      spreadBetween: spread(before, after),
     };
   });
 
@@ -402,31 +569,44 @@ export async function compareVariants(options: CompareVariantsOptions): Promise<
     .map((finding) => {
       const before = baseline.map((run) => run.defects[finding.id] ?? null);
       const after = variants.map((run) => run.defects[finding.id] ?? null);
-      const [shareBefore, shareAfter] = [foundShare(tally(before)), foundShare(tally(after))];
-      return { id: finding.id, criterion: finding.criterion, descriptionNl: finding.descriptionNl, baseline: before, variant: after, foundBaseline: tally(before), foundVariant: tally(after), fewer: shareBefore !== null && shareAfter !== null && shareAfter < shareBefore };
+      return { id: finding.id, criterion: finding.criterion, descriptionNl: finding.descriptionNl, baseline: before, variant: after, foundBaseline: tally(before), foundVariant: tally(after) };
     })
     .sort((a, b) => compareCriterionIds(a.criterion, b.criterion) || a.id.localeCompare(b.id));
 
-  const pointsBefore = mean(baseline.map(sumPoints));
-  const pointsAfter = mean(variants.map(sumPoints));
-  return {
-    schema: "loep/variant-comparison/1",
-    reference: basename(options.reference),
-    criteria,
-    scopeNl,
-    runs,
-    rows,
-    defects,
-    checks:
-      variants.length === 0
-        ? null
-        : {
-            outcomes: rows.filter((row) => row.deviates).map((row) => row.criterion),
-            defects: defects.filter((row) => row.fewer).map((row) => row.id),
-            newReports: rows.filter((row) => row.newReport).map((row) => row.criterion),
-            openPoints: { baseline: pointsBefore, variant: pointsAfter, more: pointsAfter > pointsBefore },
-          },
+  const agreement = { baseline: agreementOf(rows.map((row) => row.baseline), baseline.length), variant: variants.length === 0 ? null : agreementOf(rows.map((row) => row.variant), variants.length) };
+  return { schema: "loep/variant-comparison/2", reference: basename(options.reference), criteria, scopeNl, runs, rows, defects, agreement, verdict: variants.length === 0 ? null : verdictOf(rows, defects, baseline, variants, options) };
+}
+
+function verdictOf(rows: CriterionRow[], defects: DefectRow[], baseline: RunResult[], variants: RunResult[], options: CompareVariantsOptions): Verdict {
+  const margin = options.margin ?? MARGIN;
+  const reportMargin = options.reportMargin ?? REPORT_MARGIN;
+  const draw = { seed: options.seed ?? SEED, resamples: RESAMPLES };
+
+  // Per defect the share of the classified runs that found it, on both sides; a defect no run of a side was classified on cannot be paired.
+  const shares = defects.map((row) => [foundShare(row.foundBaseline), foundShare(row.foundVariant)] as const);
+  const paired = shares.filter((pair): pair is [number, number] => pair[0] !== null && pair[1] !== null);
+  const unpaired = defects.length - paired.length;
+  const found = paired.length === 0 ? null : { units: paired.length, leftOutNl: unpaired === 0 ? null : `${unpaired} van ${defects.length} gebreken zonder geldige indeling aan een van de kanten`, ...pairedBootstrap(paired, "mean", draw) };
+
+  // Per criterion the mean count per run on each side; the sum over the criteria is the count per run.
+  const perCriterion = (pick: (run: RunResult) => Record<string, number> | null): { units: [number, number][]; without: number } => {
+    const side = (list: RunResult[]) => list.map(pick).filter((counts): counts is Record<string, number> => counts !== null);
+    const [before, after] = [side(baseline), side(variants)];
+    const units: [number, number][] = before.length === 0 || after.length === 0 ? [] : rows.map((row) => [mean(before.map((counts) => counts[row.criterion] ?? 0))!, mean(after.map((counts) => counts[row.criterion] ?? 0))!]);
+    return { units, without: baseline.length + variants.length - before.length - after.length };
   };
+  const reports = perCriterion((run) => run.falseReports);
+  const falseReports =
+    reports.units.length === 0
+      ? null
+      : { units: reports.units.length, leftOutNl: reports.without === 0 ? null : `${reports.without} ${reports.without === 1 ? "run" : "runs"} zonder geldige indeling niet meegeteld`, ...pairedBootstrap(reports.units, "sum", draw) };
+  const points = perCriterion((run) => run.openPointsByCriterion);
+  const openPoints = { units: points.units.length, leftOutNl: null, ...pairedBootstrap(points.units, "sum", draw) };
+
+  const withFound = found && { ...found, ok: found.difference.low > -margin };
+  const withReports = falseReports && { ...falseReports, ok: falseReports.difference.high < reportMargin };
+  const made = [withFound, withReports].filter((test) => test !== null);
+  return { margin, reportMargin, seed: draw.seed, resamples: draw.resamples, found: withFound, falseReports: withReports, openPoints, notWorse: made.length === 0 ? null : made.every((test) => test.ok) };
 }
 
 /* ------------------------------------------------------------------------------------------ */
@@ -456,26 +636,63 @@ export function comparisonMarkdown(result: VariantComparison): string {
     "",
   ];
 
-  if (result.checks) {
-    const { outcomes, defects, newReports, openPoints } = result.checks;
-    const ok = (list: string[]): string => (list.length === 0 ? "ja" : `nee: ${list.join(", ")}`);
+  const verdict = result.verdict;
+  if (verdict) {
+    const pct = (value: number): string => `${number(value * 100, 1)}%`;
+    const signed = (value: number): string => {
+      const text = number(Math.abs(value), 1);
+      return text === number(0, 1) ? text : `${value > 0 ? "+" : "-"}${text}`;
+    };
+    const points = (value: number): string => signed(value * 100);
+    const count = signed;
+    const interval = (estimate: Estimate, show: (value: number) => string): string => `${show(estimate.value)} (${show(estimate.low)} tot ${show(estimate.high)})`;
+    const yesNo = (ok: boolean): string => (ok ? "ja" : "nee");
+    const { found, falseReports, openPoints } = verdict;
     lines.push(
-      "## Gelijk of beter",
+      "## Niet slechter",
       "",
-      "| Toets | Uitkomst |",
-      "|---|---|",
-      `| Geen uitkomst die de nulmeting niet had | ${ok(outcomes)} |`,
-      `| Geen gebrek dat minder vaak is gevonden | ${ok(defects)} |`,
-      `| Geen melding zonder gebrek in de sleutel die de nulmeting niet had | ${ok(newReports)} |`,
-      `| Niet meer open punten (gemiddeld per run) | ${openPoints.more ? "nee" : "ja"}: ${number(openPoints.baseline, 1)} in de nulmeting, ${number(openPoints.variant, 1)} in de variant |`,
+      `**${verdict.notWorse === null ? "Niet te bepalen: geen gebrek en geen bevinding met een geldige indeling aan beide kanten." : `Niet slechter: ${yesNo(verdict.notWorse)}.`}**`,
+      "",
+      "| Toets | Nulmeting | Variant | Verschil (95%-interval) | Marge | Binnen de marge |",
+      "|---|---|---|---|---|---|",
+      found
+        ? `| Gevonden gebreken uit de sleutel, per run (${found.units} gebreken) | ${interval(found.baseline, pct)} | ${interval(found.variant, pct)} | ${interval(found.difference, points)} procentpunt | ondergrens boven ${points(-verdict.margin)} | ${yesNo(found.ok)} |`
+        : "| Gevonden gebreken uit de sleutel | - | - | - | - | geen gebrek met een geldige indeling aan beide kanten |",
+      falseReports
+        ? `| Onterechte meldingen per run (${falseReports.units} criteria) | ${interval(falseReports.baseline, (value) => number(value, 1))} | ${interval(falseReports.variant, (value) => number(value, 1))} | ${interval(falseReports.difference, count)} | bovengrens onder ${count(verdict.reportMargin)} | ${yesNo(falseReports.ok)} |`
+        : "| Onterechte meldingen per run | - | - | - | - | geen run met een geldige indeling aan een van de kanten |",
+      `| Open punten per run (ter informatie) | ${interval(openPoints.baseline, (value) => number(value, 1))} | ${interval(openPoints.variant, (value) => number(value, 1))} | ${interval(openPoints.difference, count)} | geen | - |`,
+      "",
+      `Het verschil is variant min nulmeting. Het interval komt uit ${number(verdict.resamples)} trekkingen met teruglegging over de gebreken (bij meldingen en open punten over de criteria), elke trekking met dezelfde gebreken of criteria voor beide kanten, met seed ${verdict.seed}. Een onterechte melding is een bevinding die niet beide indelingen van \`compare --findings\` bij een gebrek uit de sleutel zetten. De marges staan vast voordat de variant wordt gemeten; zie validatie/verbruik/README.md.`,
+      ...[found?.leftOutNl, falseReports?.leftOutNl].filter((note): note is string => Boolean(note)).map((note) => `\nLet op: ${note}.`),
       "",
     );
   }
 
-  lines.push("## Per criterium", "", `| Criterium | Sleutel | ${header.join(" | ")} |`, `|---|---|${header.map(() => "---|").join("")}`);
+  const agreementRow = (side: string, entry: Agreement): string => `| ${side} | ${entry.runs} | ${entry.unanimous[0]} van ${entry.unanimous[1]} | ${entry.kappa === null ? "-" : number(entry.kappa, 2)} |`;
+  lines.push(
+    "## Overeenstemming tussen runs",
+    "",
+    'Per criterium is een uitkomst "voldoet" (ook niet van toepassing), "voldoet niet" of "open" (kan niet bepalen, niet beoordeeld). Fleiss\' kappa is 1 als alle runs gelijk zijn en rond 0 als ze niet meer overeenstemmen dan toeval.',
+    "",
+    "| Kant | Runs | Zelfde uitkomst in alle runs | Fleiss' kappa |",
+    "|---|---|---|---|",
+    agreementRow("nulmeting", result.agreement.baseline),
+    ...(result.agreement.variant ? [agreementRow("variant", result.agreement.variant)] : []),
+    "",
+  );
+
+  const spreadCell = (value: number | null): string => (value === null ? "-" : `${number(value * 100)}%`);
+  lines.push(
+    "## Per criterium",
+    "",
+    "Spreiding: het aandeel paren runs waarin het criterium een andere uitkomst kreeg, binnen de nulmeting (N), binnen de variant (V) en tussen een run van elk (N tegen V). Ligt N tegen V niet boven N en V, dan verschilt de variant niet meer dan de runs onderling.",
+    "",
+    `| Criterium | Sleutel | ${header.join(" | ")} | N | V | N tegen V |`,
+    `|---|---|${header.map(() => "---|").join("")}---|---|---|`,
+  );
   for (const row of result.rows) {
-    const marks = [row.deviates ? "andere uitkomst" : "", row.newReport ? "nieuwe melding" : ""].filter(Boolean).join(", ");
-    lines.push(`| ${row.criterion} ${cell(row.titleNl)}${marks ? ` (${marks})` : ""} | ${row.keyFails ? "voldoet niet" : "geen gebrek"} | ${[...row.baseline, ...row.variant].map(outcomeCell).join(" | ")} |`);
+    lines.push(`| ${row.criterion} ${cell(row.titleNl)} | ${row.keyFails ? "voldoet niet" : "geen gebrek"} | ${[...row.baseline, ...row.variant].map(outcomeCell).join(" | ")} | ${spreadCell(row.spreadBaseline)} | ${spreadCell(row.spreadVariant)} | ${spreadCell(row.spreadBetween)} |`);
   }
   lines.push("", "Bevindingen per criterium in de evaluatie:", "", `| Criterium | ${header.join(" | ")} |`, `|---|${header.map(() => "---|").join("")}`);
   for (const criterion of result.criteria) lines.push(`| ${criterion} | ${ordered.map((run) => String(run.findings[criterion] ?? 0)).join(" | ")} |`);
@@ -486,7 +703,7 @@ export function comparisonMarkdown(result: VariantComparison): string {
     lines.push(`"gevonden" telt alleen waar beide indelingen van \`compare --findings\` het eens zijn; "-" is een run zonder geldige indeling.`, "", `| Gebrek | ${header.join(" | ")} | Nulmeting | Variant |`, `|---|${header.map(() => "---|").join("")}---|---|`);
     for (const row of result.defects) {
       const share = ([found, classified]: [number, number]): string => (classified === 0 ? "-" : `${found} van ${classified}`);
-      lines.push(`| ${row.id}${row.fewer ? " (minder vaak)" : ""} | ${[...row.baseline, ...row.variant].map(classCell).join(" | ")} | ${share(row.foundBaseline)} | ${variants.length === 0 ? "-" : share(row.foundVariant)} |`);
+      lines.push(`| ${row.id} |${[...row.baseline, ...row.variant].map(classCell).join(" | ")} | ${share(row.foundBaseline)} | ${variants.length === 0 ? "-" : share(row.foundVariant)} |`);
     }
   }
   for (const run of ordered.filter((entry) => entry.defectsNl)) lines.push("", `${label(run)}: ${run.defectsNl}`);
@@ -523,7 +740,8 @@ export async function writeComparison(result: VariantComparison, outDir: string)
 /* ------------------------------------------------------------------------------------------ */
 
 export const VARIANT_USAGE = `loep variant --run <run> --out <copy> --name <variant> [--note <text>]
-loep compare-variants --baseline <run>... [--variant <run>...] --reference <file> [--usage <file>...] [--out <dir>] [--json]
+loep compare-variants --baseline <run>... [--variant <run>...] --reference <file> [--usage <file>...]
+                      [--margin <share>] [--margin-reports <count>] [--seed <n>] [--out <dir>] [--json]
 
 Measuring a variant of the code on frozen evidence (validatie/verbruik/README.md, "Hoe we meten").
 Not a step of an evaluation.
@@ -535,15 +753,32 @@ Not a step of an evaluation.
                      the variant: variant.json in the copy records that commit, the run it came from and
                      what was left out. Files are cloned where the file system can (APFS, reflinks)
   compare-variants   Lay runs of the baseline and of a variant side by side, for the criteria of their
-                     tasks: the outcome per run, per defect of the answer key how often it was found
-                     (from the classifications of compare --findings), reports the key does not have,
-                     open points per kind, and per role the sessions, commands and time. Writes
-                     varianten.md and varianten.json with --out; without it prints the Markdown
+                     tasks. Says whether the variant is not worse: the share of the defects of the
+                     answer key found per run (from the classifications of compare --findings) and
+                     the unjustified reports per run, each a paired difference with a 95% interval
+                     from a bootstrap, against a margin fixed beforehand. Below that: how alike the
+                     runs of each side are (same outcome in all runs, Fleiss' kappa), per criterion
+                     the outcome per run and the spread within and between the sides, per defect how
+                     often it was found, open points per kind, and per role the sessions, commands
+                     and time. Writes varianten.md and varianten.json with --out; without it prints
+                     the Markdown
   --baseline, --variant  Repeatable: one run each. Without --variant: only the spread of the baseline
   --reference <file>     The answer key in the form compare reads (toolbox/fixtures/reference-*.json)
   --usage <file>         Repeatable: tokens and turns per agent of one run, counted from the transcripts
                          outside the run (schema loep/verbruik/1, see toolbox/test/fixtures/verbruik.json)
+  --margin <share>       Not worse when the lower bound of the difference in the share found lies above
+                         minus this (default ${MARGIN})
+  --margin-reports <count>  Not worse when the upper bound of the difference in unjustified reports per
+                         run lies below this (default ${REPORT_MARGIN})
+  --seed <n>             Seed of the bootstrap (default ${SEED})
 `;
+
+const numberOption = (name: string, value: string | undefined, check: (parsed: number) => boolean): number | undefined => {
+  if (value === undefined) return undefined;
+  const parsed = Number(value);
+  if (value.trim() === "" || !Number.isFinite(parsed) || !check(parsed)) throw new Error(`--${name} ${value}: geen geldige waarde`);
+  return parsed;
+};
 
 export async function cli(args: string[]): Promise<void> {
   const { positionals, values } = parseArgs({
@@ -558,6 +793,9 @@ export async function cli(args: string[]): Promise<void> {
       variant: { type: "string", multiple: true },
       reference: { type: "string" },
       usage: { type: "string", multiple: true },
+      margin: { type: "string" },
+      "margin-reports": { type: "string" },
+      seed: { type: "string" },
       json: { type: "boolean", default: false },
       help: { type: "boolean", short: "h" },
     },
@@ -577,12 +815,27 @@ export async function cli(args: string[]): Promise<void> {
   }
   if (command === "compare-variants") {
     if (!values.baseline?.length || !values.reference) throw new Error("compare-variants needs --baseline <run> (one or more) and --reference <file>");
-    const result = await compareVariants({ baseline: values.baseline, variant: values.variant, reference: values.reference, usage: values.usage });
+    const result = await compareVariants({
+      baseline: values.baseline,
+      variant: values.variant,
+      reference: values.reference,
+      usage: values.usage,
+      margin: numberOption("margin", values.margin, (value) => value >= 0 && value < 1),
+      reportMargin: numberOption("margin-reports", values["margin-reports"], (value) => value >= 0),
+      seed: numberOption("seed", values.seed, Number.isInteger),
+    });
     if (values.out) {
       await writeComparison(result, values.out);
-      const checks = result.checks;
       process.stdout.write(`${result.runs.length} runs, ${result.criteria.length} criteria, ${result.defects.length} gebreken uit de sleutel; ${join(values.out, "varianten.md")}\n`);
-      if (checks) process.stdout.write(`gelijk of beter: ${checks.outcomes.length + checks.defects.length + checks.newReports.length === 0 && !checks.openPoints.more ? "ja" : "nee"} (andere uitkomst ${checks.outcomes.length}, minder vaak gevonden ${checks.defects.length}, nieuwe meldingen ${checks.newReports.length}, open punten ${checks.openPoints.more ? "meer" : "niet meer"})\n`);
+      const verdict = result.verdict;
+      if (verdict) {
+        const fixed = (value: number): string => value.toFixed(3);
+        const parts = [
+          verdict.found ? `gevonden ${fixed(verdict.found.difference.value)} (interval ${fixed(verdict.found.difference.low)} tot ${fixed(verdict.found.difference.high)}, ondergrens boven -${verdict.margin})` : "gevonden niet te bepalen",
+          verdict.falseReports ? `onterechte meldingen per run ${fixed(verdict.falseReports.difference.value)} (interval ${fixed(verdict.falseReports.difference.low)} tot ${fixed(verdict.falseReports.difference.high)}, bovengrens onder ${verdict.reportMargin})` : "onterechte meldingen niet te bepalen",
+        ];
+        process.stdout.write(`niet slechter: ${verdict.notWorse === null ? "niet te bepalen" : verdict.notWorse ? "ja" : "nee"} (${parts.join("; ")})\n`);
+      }
     } else process.stdout.write(values.json ? `${JSON.stringify(result, null, 2)}\n` : comparisonMarkdown(result));
     return;
   }
