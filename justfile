@@ -75,9 +75,9 @@ doctor:
 voiceover-setup:
     {{cli}} voiceover setup
 
-# Draai de unittests
-test:
-    cd {{toolbox}} && node --test 'test/**/*.test.ts'
+# Draai de unittests. Met --test-shard=<i>/<n> alleen het i-de van n delen, zoals de volledige controle op GitHub doet
+test *flags:
+    cd {{toolbox}} && node --test {{flags}} 'test/**/*.test.ts'
 
 # Draai alleen de tests die geen browser starten: een paar seconden, voor tussendoor en voor de snelle controle bij een push
 test-quick:
