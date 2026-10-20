@@ -7,7 +7,7 @@ import { startFixture, type FixtureServer } from "../fixtures/serve.ts";
 import { checkSite, exploreContext } from "../src/commands/explore.ts";
 import { inventory } from "../src/commands/inventory.ts";
 import { readJson } from "../src/lib/canonical.ts";
-import { NOT_OPENED_ON_PAGE_TYPE, notOpenedAdviceNl, type SiteModel } from "../src/lib/sitemodel.ts";
+import { NOT_OPENED_ON_PAGE_TYPE, notOpenedAdviceNl, searchTermForRun, type SiteModel } from "../src/lib/sitemodel.ts";
 import { Daemon } from "../src/session/daemon.ts";
 
 /**
@@ -141,5 +141,26 @@ test("an accepted gap covers one component: another component that fails on the 
   } finally {
     model.components = model.components.filter((component) => component.id !== "vraag2");
     model.acceptedGaps = [{ ...accepted, page: representativeWithout }];
+  }
+});
+
+test("the inventory chooses the search term of the run, and another term of the explorer passes only when its page shows the word", { timeout: 300_000 }, async () => {
+  // The word on most titles; "berkenveen" and "gemeente" stand on all of them, and the alphabet decides.
+  assert.equal((await readJson<{ searchTerm?: string }>(join(run, "inventory.json"))).searchTerm, "berkenveen");
+  write();
+  assert.equal(searchTermForRun(run), "berkenveen");
+  try {
+    model.searchTerm = { term: "veelgestelde", page: `${origin}${VRAGEN}` };
+    write();
+    assert.equal(searchTermForRun(run), "veelgestelde");
+    const passed = await checkSite(run, { navigationDelayMs: 20 });
+    assert.deepEqual(passed.problems, []);
+    model.searchTerm = { term: "afvalkalender", page: `${origin}${OPENINGSTIJDEN}` };
+    write();
+    const refused = await checkSite(run, { navigationDelayMs: 20 });
+    assert.deepEqual(refused.problems, [`searchTerm: het woord "afvalkalender" staat niet in de tekst van ${origin}${OPENINGSTIJDEN}; kies een woord dat op die pagina staat, of een andere pagina`]);
+  } finally {
+    delete model.searchTerm;
+    write();
   }
 });

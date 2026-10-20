@@ -325,25 +325,25 @@ test("an advice inside the shadow tree of a vendor's element is for the vendor, 
 });
 
 test("a finding about input names the value that was typed, to the letter", () => {
-  const long = "Dit is een lange testwaarde om te zien wat er gebeurt als een veld meer tekst krijgt dan het breed is.";
+  const long = "Testbericht van loep (toegankelijkheidsonderzoek), niet beantwoorden. Dit is een lange testwaarde.";
   const typing = new Map([
     ...observations,
     ...indexObservations([
-      record("j143-0020", "type", { result: { kind: "name", entered: "Test Persoon" } }),
+      record("j143-0020", "type", { result: { kind: "name", entered: "Loep Testpersoon" } }),
       record("j143-0021", "type", { result: { kind: "empty", entered: "" } }),
       record("j143-0022", "type", { result: { kind: "long", entered: long } }),
-      record("j143-0023", "type", { error: "het element is van de pagina verdwenen", result: { kind: "email", entered: "test@example.com" } }),
+      record("j143-0023", "type", { error: "het element is van de pagina verdwenen", result: { kind: "email", entered: "loep-test@example.com" } }),
     ]),
   ]);
-  assert.deepEqual([typing.get("j143-0020")!.entered, typing.get("j143-0021")!.entered, typing.get("j143-0023")!.entered, typing.get("j143-0003")!.entered], ["Test Persoon", undefined, undefined, undefined]);
+  assert.deepEqual([typing.get("j143-0020")!.entered, typing.get("j143-0021")!.entered, typing.get("j143-0023")!.entered, typing.get("j143-0003")!.entered], ["Loep Testpersoon", undefined, undefined, undefined]);
   const about = (observedNl: string, evidence: string[], criterion = "3.3.3"): string[] =>
     validateJudgeVerdict({ ...failed, criterion, findings: [{ ...finding, observedNl, evidence: ["j143-0003", ...evidence] }] }, { ...context, criterion, observations: typing });
-  assert.match(about("Een tekst met spaties in het linkveld krijgt geen melding.", ["j143-0020"]).join(), /findings\[0\]\.observedNl: observation j143-0020 typed "Test Persoon" into a field, and the finding does not say so/);
-  assert.deepEqual(about("Met `Test Persoon` in het linkveld krijgt het formulier geen melding.", ["j143-0020"]), []);
+  assert.match(about("Een tekst met spaties in het linkveld krijgt geen melding.", ["j143-0020"]).join(), /findings\[0\]\.observedNl: observation j143-0020 typed "Loep Testpersoon" into a field, and the finding does not say so/);
+  assert.deepEqual(about("Met `Loep Testpersoon` in het linkveld krijgt het formulier geen melding.", ["j143-0020"]), []);
   // An emptied field and a failed command typed nothing that has to be named; of a long value the beginning is enough.
   assert.deepEqual(about("Met een leeg linkveld verstuurt het formulier niet.", ["j143-0021", "j143-0023"]), []);
-  assert.match(about("Een lange tekst loopt uit het veld.", ["j143-0022"]).join(), /typed "Dit is een lange testwaarde om te zien w"/);
-  assert.deepEqual(about("Met \u201cDit is een lange testwaarde om te zien w...\u201d loopt de tekst uit het veld.", ["j143-0022"]), []);
+  assert.match(about("Een lange tekst loopt uit het veld.", ["j143-0022"]).join(), /typed "Testbericht van loep \(toegankelijkheidso"/);
+  assert.deepEqual(about("Met \u201cTestbericht van loep (toegankelijkheidso...\u201d loopt de tekst uit het veld.", ["j143-0022"]), []);
   // Each value once, and only under the criteria about input.
   assert.equal(about("Geen melding.", ["j143-0020", "j143-0020"]).length, 1);
   assert.deepEqual(about("Grijs op wit, 3,9 op 1.", ["j143-0020"], "1.4.3"), []);

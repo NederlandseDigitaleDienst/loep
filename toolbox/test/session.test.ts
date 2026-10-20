@@ -301,7 +301,7 @@ test("type enters only fixed test values, and a POST never leaves the browser", 
   const invalid = await loep("click", [send]);
   assert.deepEqual(invalid.appeared, ["Vul een geldig e-mailadres in."]);
   const typed = await loep("type", [email, "email"]);
-  assert.equal(typed.entered, "test@example.com");
+  assert.equal(typed.entered, "loep-test@example.com");
   const sent = await loep("click", [send]);
   assert.deepEqual(sent.blocked, [`method: POST ${site.origin}/submit`]);
   const record = observation(sent.id);

@@ -20,7 +20,7 @@ import { buildSample, sample } from "../src/commands/sample.ts";
 import { tabWalk } from "../src/instruments/keyboard.ts";
 import { legend, siteStates, targetSize } from "../src/lib/extractors.ts";
 import { loadRun, type PageData, type RunData } from "../src/lib/rundata.ts";
-import { acceptedGapFor, frameStanding, loadSiteModel, NOT_OPENED_ON_PAGE_TYPE, notOpenedAdviceNl, siteDescription, validateSiteModel, type ModelContext, type SiteModel } from "../src/lib/sitemodel.ts";
+import { acceptedGapFor, frameStanding, loadSiteModel, NOT_OPENED_ON_PAGE_TYPE, notOpenedAdviceNl, searchTermForRun, siteDescription, validateSiteModel, type ModelContext, type SiteModel } from "../src/lib/sitemodel.ts";
 import { Daemon } from "../src/session/daemon.ts";
 
 // A site with the traps a sweep walks into: a banner over the page, a menu behind a
@@ -160,6 +160,16 @@ test("the validator refuses a model that does not fit the run", () => {
   broken((model) => void (model.acceptedGaps = [{ check: "tab-trapped", page: "https://site.nl/", reasonNl: "val", observation: "verken-0003", decidedBy: "beheerder" } as never]), decidedByNl);
   assert.deepEqual(validateSiteModel([], CONTEXT), ["site.json is geen JSON-object"]);
   assert.ok(validateSiteModel({ ...validModel(), extra: 1 }, CONTEXT).includes('onbekend veld "extra"'));
+});
+
+test("the validator tests another search term: one word, on a page of the inventory, not the term that finds nothing", () => {
+  const problems = (searchTerm: unknown): string[] => validateSiteModel({ ...validModel(), searchTerm }, CONTEXT);
+  assert.deepEqual(problems({ term: "paspoort", page: "https://site.nl/contact/" }), []);
+  assert.deepEqual(problems({ term: "paspoort aanvragen", page: "https://site.nl/" }), ['searchTerm.term "paspoort aanvragen" is geen enkel woord van 3 tot 40 letters of cijfers']);
+  assert.deepEqual(problems({ term: "loepqzx", page: "https://site.nl/" }), ["searchTerm.term mag niet loepqzx zijn: dat is de vaste term die niets vindt (search-none)"]);
+  assert.deepEqual(problems({ term: "paspoort", page: "https://elders.nl/" }), ["searchTerm.page https://elders.nl/ is geen pagina uit de inventaris"]);
+  assert.match(problems("paspoort").join(), /searchTerm is een object met "term"/);
+  assert.deepEqual(problems({ term: "paspoort", page: "https://site.nl/", why: "x" }), ['searchTerm kent geen veld "why"']);
 });
 
 test("the validator tests a read request: narrow, seen held back in its observation, and not also a request a component misses", () => {
@@ -647,7 +657,7 @@ test("explore, check-site, the sweep and the gate work together on a site with a
       { id: "dialoog", type: "dialog", descriptionNl: "Venster over de pagina", pageTypes: ["type-1"], viewport: null, recipe: "component-dialoog", postcondition: { kind: "dialog-open", selector: "#venster" } },
     ],
     processes: [
-      { id: "invullen", descriptionNl: "Zoekveld ingevuld, niet verstuurd", recipe: "process-invullen", postcondition: { kind: "value", selector: "#q", text: "test" } },
+      { id: "invullen", descriptionNl: "Zoekveld ingevuld, niet verstuurd", recipe: "process-invullen", postcondition: { kind: "value", selector: "#q", text: searchTermForRun(run) } },
       { id: "zoeken", descriptionNl: "Zoeken op de vaste zoekwaarde", recipe: "process-zoeken", postcondition: { kind: "text-visible", text: "Drie resultaten gevonden" } },
     ],
     frames: [
@@ -865,10 +875,10 @@ test("explore, check-site, the sweep and the gate work together on a site with a
     assert.match(String((changed.print.locators as string[])[0]), /gevonden via rol en naam/);
     // A process that went to another page ends there, and refuses a page label that would take it away again.
     const searched = await open("--state process-zoeken");
-    assert.equal(searched.print.url, `${origin}/resultaat.html?q=test`);
+    assert.equal(searched.print.url, `${origin}/resultaat.html?q=${searchTermForRun(run)}`);
     assert.equal(searched.print.reproduced, true);
     const own = await open(`${start.label} --state process-zoeken`);
-    assert.equal(own.print.url, `${origin}/resultaat.html?q=test`, "with the label of the page it started on, the state follows its own recipe");
+    assert.equal(own.print.url, `${origin}/resultaat.html?q=${searchTermForRun(run)}`, "with the label of the page it started on, the state follows its own recipe");
     const wrong = await open("/over.html --state process-zoeken");
     assert.equal(wrong.ok, false);
     assert.match(String(wrong.print.error), /gaat daar zelf naartoe; open hem zonder adres of paginalabel/);

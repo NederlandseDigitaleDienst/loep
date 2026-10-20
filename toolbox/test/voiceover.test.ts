@@ -404,8 +404,8 @@ test("the steps of a state become steps the test page plays; a step it cannot pl
   assert.deepEqual(unplayable, []);
   assert.deepEqual(planned.map((entry) => entry.how), ["click", "select", "fill", "fill", "key", "scroll", "skip", "spacing"]);
   assert.equal(planned[1]!.value, "Compliment");
-  assert.equal(planned[2]!.value, "Test");
-  assert.deepEqual([planned[3]!.value, planned[3]!.after], ["test@example.com", "Enter"]);
+  assert.equal(planned[2]!.value, "Testbericht van loep (toegankelijkheidsonderzoek), niet beantwoorden");
+  assert.deepEqual([planned[3]!.value, planned[3]!.after], ["loep-test@example.com", "Enter"]);
   assert.match(planned[6]!.note!, /in Safari niet herhaald/);
 
   const refused = planSteps([step("click"), step("tab", ["2"], {}, null), step("key", ["Shift+Tab"], {}, null), step("goto", ["https://example.test/b"], {}, null), step("press", [], { hold: true })]).unplayable;

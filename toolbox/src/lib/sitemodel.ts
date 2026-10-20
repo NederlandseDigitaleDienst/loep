@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { readJson, sha256, sha256File } from "./canonical.ts";
 import { readMatches, readRequestProblems, type ReadRequest } from "./reads.ts";
+import { SEARCH_FALLBACK, SEARCH_NONE, SEARCH_TERM_FORM } from "./searchterm.ts";
 
 /**
  * The site model: what an exploring agent found out about a site before anything is
@@ -231,6 +232,12 @@ export interface SiteModel {
    * Let through once `check-site` passed the model; every other write stays held back. Absent in models from before this was asked.
    */
   readRequests?: ReadRequest[];
+  /**
+   * Another search term than the one the inventory chose, when that one finds nothing on the
+   * site's own search: a word that stands in the text of `page`, a page of the inventory.
+   * `check-site` loads the page and checks it. Absent: the term of the inventory.
+   */
+  searchTerm?: { term: string; page: string };
 }
 
 /** What the validator needs to know about the run the model belongs to. */
@@ -298,7 +305,7 @@ export function validateSiteModel(value: unknown, context: ModelContext): string
   for (const key of ["pageTypes", "blockers", "components", "processes", "frames", "notesNl"] as const) {
     if (!Array.isArray(model[key])) problems.push(`${key} ontbreekt of is geen lijst (een lege lijst mag)`);
   }
-  for (const key of Object.keys(model)) if (!["version", "baseUrl", "descriptionNl", "pageTypes", "blockers", "components", "processes", "content", "frames", "notesNl", "acceptedGaps", "readRequests"].includes(key)) problems.push(`onbekend veld "${key}"`);
+  for (const key of Object.keys(model)) if (!["version", "baseUrl", "descriptionNl", "pageTypes", "blockers", "components", "processes", "content", "frames", "notesNl", "acceptedGaps", "readRequests", "searchTerm"].includes(key)) problems.push(`onbekend veld "${key}"`);
   problems.push(...descriptionProblems(model.descriptionNl));
   if (problems.length > 0) return problems;
 
@@ -524,7 +531,40 @@ export function validateSiteModel(value: unknown, context: ModelContext): string
       }
     }
   }
+
+  // Another search term: one word, on a page of the inventory. Whether the page has it, check-site sees when it loads the page.
+  if (model.searchTerm !== undefined) {
+    const chosen = model.searchTerm as unknown;
+    if (!isRecord(chosen) || typeof chosen.term !== "string" || typeof chosen.page !== "string") problems.push('searchTerm is een object met "term" (één woord) en "page" (het adres van een pagina uit de inventaris waarop het woord staat)');
+    else {
+      if (!SEARCH_TERM_FORM.test(chosen.term)) problems.push(`searchTerm.term "${chosen.term.slice(0, 60)}" is geen enkel woord van 3 tot 40 letters of cijfers`);
+      else if (chosen.term.toLowerCase() === SEARCH_NONE) problems.push(`searchTerm.term mag niet ${SEARCH_NONE} zijn: dat is de vaste term die niets vindt (search-none)`);
+      if (!context.pages.includes(chosen.page)) problems.push(`searchTerm.page ${chosen.page.slice(0, 120)} is geen pagina uit de inventaris`);
+      for (const key of Object.keys(chosen)) if (!["term", "page"].includes(key)) problems.push(`searchTerm kent geen veld "${key}"`);
+    }
+  }
   return problems;
+}
+
+/**
+ * The search term of a run: the explorer's from site.json when it has the form of one, else the
+ * one the inventory chose, else the old fixed term. A model that check-site turns down is never
+ * used by the sweep or a judge, so the explorer's term is read before the check passed: the
+ * explorer's own session and the replays of check-site search with the term the sweep will use.
+ */
+export function searchTermForRun(runDir: string): string {
+  const read = (file: string): Record<string, unknown> | null => {
+    try {
+      const path = join(runDir, file);
+      return existsSync(path) ? (JSON.parse(readFileSync(path, "utf8")) as Record<string, unknown>) : null;
+    } catch {
+      return null;
+    }
+  };
+  const chosen = read(SITE_MODEL_FILE)?.searchTerm;
+  if (isRecord(chosen) && typeof chosen.term === "string" && SEARCH_TERM_FORM.test(chosen.term) && chosen.term.toLowerCase() !== SEARCH_NONE) return chosen.term;
+  const inventory = read("inventory.json")?.searchTerm;
+  return typeof inventory === "string" && SEARCH_TERM_FORM.test(inventory) ? inventory : SEARCH_FALLBACK;
 }
 
 /**

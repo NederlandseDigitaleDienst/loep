@@ -335,7 +335,7 @@ test("an act command reports a state, a scroll position or a style that changed 
   assert.equal(up.changed, undefined);
   await loep("open", ["/form.html"]);
   const typed = await loep("type", ["css:#name", "name"]);
-  assert.deepEqual(typed.states, ['#name: value="" -> value="Test Persoon"']);
+  assert.deepEqual(typed.states, ['#name: value="" -> value="Loep Testpersoon"']);
   await loep("open", ["/changing.html"]);
   const opened = await loep("click", ["css:#toggle"]);
   assert.deepEqual(opened.states, ["#toggle: aria-expanded=false -> aria-expanded=true"]);
@@ -1362,10 +1362,10 @@ test("paste puts a fixed value in a field the way a user does and says when the 
   await loep("open", ["/inputs.html"]);
   const open = await loep("paste", ["css:#open-field", "email"]);
   assert.equal(open.arrived, true);
-  assert.equal(open.length, "0 -> 16");
+  assert.equal(open.length, "0 -> 21");
   assert.equal(open.prevented, undefined);
   // The same change report as the other acts; a password is given by its length.
-  assert.deepEqual(open.states, ["#open-field: value=(0 tekens) -> value=(16 tekens)"]);
+  assert.deepEqual(open.states, ["#open-field: value=(0 tekens) -> value=(21 tekens)"]);
   // A paste handler that returns false: nothing arrives, and the print says who stopped it.
   const refused = await loep("paste", ["css:#no-paste", "email"]);
   assert.equal(refused.arrived, false);
