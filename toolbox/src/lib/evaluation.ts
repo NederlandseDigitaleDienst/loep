@@ -357,6 +357,8 @@ export interface CriterionInput {
   answers?: PointAnswer[];
   procedure: CriterionResult["procedure"];
   provenance: CriterionResult["provenance"];
+  /** Open points about candidates other judges passed on to this criterion that no verdict of it ruled on (`unruledCrossPoints`). */
+  unruledNl?: string[];
 }
 
 const normalise = (text: string): string => text.toLowerCase().replace(/\s+/g, " ").trim();
@@ -404,7 +406,10 @@ export function resolveCriterion(input: CriterionInput, sitePrefix: string): Cri
   const final = finish ?? verified;
   const answered = final?.outcome === "cantTell" ? applyAnswers(final.missingNl ?? [], input.answers ?? []) : null;
   const byPerson = answered !== null && answered.outcome !== "cantTell";
-  const outcome: CriterionOutcome = byPerson ? answered.outcome : (final?.outcome ?? "untested");
+  const reached: CriterionOutcome = byPerson ? answered.outcome : (final?.outcome ?? "untested");
+  // A pass next to a candidate another judge passed on and nobody ruled on is no pass: that place was not looked at.
+  const unruled = reached === "passed" || reached === "inapplicable" ? (input.unruledNl ?? []) : [];
+  const outcome: CriterionOutcome = unruled.length > 0 ? "cantTell" : reached;
   const beforeFinish = verified ?? verdicts.a;
   const byWatch = byPerson && answered.counted.every((answer) => answer.instrument === true);
   const established: Established | null = !final
@@ -475,13 +480,15 @@ export function resolveCriterion(input: CriterionInput, sitePrefix: string): Cri
     outcome,
     rule: final?.rule ?? null,
     // What a person established is said first: the summary of the agent was written while the question was open.
-    summaryNl: byPerson
-      ? `Een persoon heeft vastgesteld: ${OUTCOME_LABEL[outcome].toLowerCase()}. Dit is vastgesteld door een persoon, niet door een instrument. Het onderzoek zelf kwam niet verder dan: ${final!.summaryNl}`
-      : (final?.summaryNl ?? "Voor dit criterium is geen eindoordeel vastgesteld."),
+    summaryNl: unruled.length > 0
+      ? `Niet vastgesteld: ${unruled.length === 1 ? "een waarneming die een andere beoordelaar doorgaf, is" : `${unruled.length} waarnemingen die een andere beoordelaar doorgaf, zijn`} door niemand beoordeeld. Het oordeel zonder die ${unruled.length === 1 ? "waarneming" : "waarnemingen"} was ${OUTCOME_LABEL[reached].toLowerCase()}: ${final!.summaryNl}`
+      : byPerson
+        ? `Een persoon heeft vastgesteld: ${OUTCOME_LABEL[outcome].toLowerCase()}. Dit is vastgesteld door een persoon, niet door een instrument. Het onderzoek zelf kwam niet verder dan: ${final!.summaryNl}`
+        : (final?.summaryNl ?? "Voor dit criterium is geen eindoordeel vastgesteld."),
     observations: final?.observations ?? [],
     findings,
     ...(recommendations.length > 0 ? { recommendations } : {}),
-    missingNl: answered ? answered.remainingNl : (final?.missingNl ?? []),
+    missingNl: [...(answered ? answered.remainingNl : (final?.missingNl ?? [])), ...unruled],
     ...(outcome === "cantTell" && final?.nothingFound ? { nothingFound: { coverageNl: final.nothingFound.coverageNl } } : {}),
     rounds: { a: verdicts.a?.outcome ?? null, b: null, final: verified?.outcome ?? null, ...(finish ? { finish: finish.outcome } : {}) },
     ...(established ? { established } : {}),

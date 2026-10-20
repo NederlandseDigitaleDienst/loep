@@ -2,7 +2,7 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { frameStanding, type AcceptedGapDecider } from "../lib/sitemodel.ts";
 import { readJson, sha256File } from "../lib/canonical.ts";
-import { allCriteriaSorted, carryFindingIds, ESTABLISHED_BY_NL, evaluationHash, idsAcrossVersionsNl, knownCommit, OUTCOME_LABEL, markVendor, openCriteria, quoteStart, resolveCriterion, summarise, type BrowserUse, type CriterionResult, type Evaluation, type PointAnswer, type RoundVerdicts } from "../lib/evaluation.ts";
+import { allCriteriaSorted, carryFindingIds, ESTABLISHED_BY_NL, evaluationHash, idsAcrossVersionsNl, knownCommit, OUTCOME_LABEL, markVendor, openCriteria, resolveCriterion, summarise, type BrowserUse, type CriterionResult, type Evaluation, type PointAnswer, type RoundVerdicts } from "../lib/evaluation.ts";
 import { matchFindings, sideOf } from "../lib/difference.ts";
 import { documentScopeNl, evaluationDocuments, siteDocuments } from "../lib/documents.ts";
 import { pagesInScopeNl, siteOrigins } from "../lib/origins.ts";
@@ -23,7 +23,7 @@ import type { Gate } from "./gate.ts";
 import { readEvaluation, signatureIsCurrent, writeEvaluation } from "./sign.ts";
 import { mergeInto } from "./merge.ts";
 import { countingVerdict, loadAnswers } from "./answer.ts";
-import { instrumentVerdictIsCurrent, isInstrumentRun, loadInstrumentIndex, loadObservations, NO_TASKS_NL, type InstrumentTask } from "./instrument-tasks.ts";
+import { instrumentVerdictIsCurrent, isInstrumentRun, loadInstrumentIndex, loadObservations, NO_TASKS_NL, unruledCrossPoints, type InstrumentTask } from "./instrument-tasks.ts";
 
 export interface EvaluateOptions {
   run: string;
@@ -112,11 +112,15 @@ export async function evaluate(options: EvaluateOptions): Promise<Evaluation> {
   const watch = stopSessionWatch(options.run);
   const criteria: CriterionResult[] = [];
   const rejected: string[] = [];
+  const gatheredAll = new Map<string, GatheredVerdicts>();
+  for (const task of instrumentTasks) gatheredAll.set(task.criterion, await gatherVerdicts(options.run, task, observations));
+  // What each judge saw that belongs to another criterion: the verdicts there have to have ruled on it.
+  const judged = new Map([...gatheredAll].flatMap(([id, gathered]): [string, Verdict][] => (gathered.verdicts.a ? [[id, gathered.verdicts.a]] : [])));
   for (const criterion of allCriteriaSorted()) {
     const procedure = procedures.find((entry) => entry.id === criterion.id);
     const instrumentTask = instrumentTasks.find((entry) => entry.criterion === criterion.id);
     // The judge's verdict is slot "a". Only the verifier's verdict gives an outcome, or after it that of the finishing round.
-    const gathered: GatheredVerdicts = instrumentTask ? await gatherVerdicts(options.run, instrumentTask, observations) : { verdicts: { a: null, final: null }, hashes: { a: null, b: null, final: null }, answers: [], rejected: [] };
+    const gathered: GatheredVerdicts = gatheredAll.get(criterion.id) ?? { verdicts: { a: null, final: null }, hashes: { a: null, b: null, final: null }, answers: [], rejected: [] };
     const { verdicts, hashes } = gathered;
     rejected.push(...gathered.rejected);
     const resolved = resolveCriterion(
@@ -127,6 +131,7 @@ export async function evaluate(options: EvaluateOptions): Promise<Evaluation> {
           answers: criterion.id === "2.2.1" ? [...gathered.answers, ...sessionWatchAnswers(watch, (verdicts.finish ?? verdicts.final)?.missingNl ?? [])] : gathered.answers,
           procedure: procedure ? { version: procedure.version, sha256: procedure.sha256, class: procedure.class, limitsNl: procedure.limitsNl } : null,
           provenance: { dossierSha256: instrumentTask?.dossierSha256 ?? null, verdictSha256: hashes },
+          unruledNl: instrumentTask ? unruledCrossPoints(judged, criterion.id, [verdicts.final, verdicts.finish]) : [],
         },
         prefix,
     );
@@ -225,20 +230,6 @@ export async function evaluate(options: EvaluateOptions): Promise<Evaluation> {
       : []),
     ...criteria.filter((criterion) => criterion.procedure?.limitsNl).map((criterion) => `${criterion.id} ${criterion.titleNl}: ${criterion.procedure!.limitsNl}`),
   ];
-
-  // A judge who sees something that belongs under another criterion says so in a fixed phrase.
-  // Follow each of those up: if the other criterion did not fail or stay open, the observation was lost.
-  const byId = new Map(criteria.map((criterion) => [criterion.id, criterion]));
-  for (const criterion of criteria) {
-    const texts = [criterion.summaryNl, ...criterion.observations.map((observation) => observation.observedNl), ...criterion.droppedNl, ...criterion.missingNl];
-    for (const text of texts) {
-      for (const match of text.matchAll(/hoort bij (?:succes)?criterium (\d\.\d\.\d{1,2})/g)) {
-        const target = byId.get(match[1]!);
-        if (!target || target.id === criterion.id || target.outcome === "failed" || target.outcome === "cantTell") continue;
-        limitations.push(`Bij ${criterion.id} is iets waargenomen dat volgens de beoordelaar bij ${target.id} hoort, maar ${target.id} heeft de uitkomst "${OUTCOME_LABEL[target.outcome]}". Dit moet worden nagekeken: "${quoteStart(text)}"`);
-      }
-    }
-  }
 
   // Only in a run with a site model: the states each page was measured in besides the way it loads.
   const { siteModel, siteStates } = run;
