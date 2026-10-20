@@ -12,6 +12,7 @@ import { COMMANDS, PUBLIC_COMMANDS, UsageError, type Context, type Options, type
 import { Jobs } from "./jobs.ts";
 import { cleanModel } from "../lib/models.ts";
 import { toolchain } from "../lib/manifest.ts";
+import { budgetOutPointNl, writeBudget, writeBudgetNl, writesForRun, type WriteBudget } from "../lib/writes.ts";
 import { loadSiteModel, STEP_NOT_FOUND_NL, type Postcondition, type SiteModel } from "../lib/sitemodel.ts";
 import { Images, ObservationLog, observationId, readObservation, type Locators, type Observation, type StartState, type StateRecord, type Step, type TargetRecord } from "./observations.ts";
 import { holds, POSTCONDITION_WAIT_MS } from "./recipe.ts";
@@ -186,7 +187,10 @@ export class Daemon {
   async handle(request: Request): Promise<Response> {
     this.lastCommandAt = Date.now();
     try {
-      if (request.op === "list") return { ok: true, print: { sessions: [...this.sessions.values()].map((session) => this.budget(session)), scope: this.env.scope.hosts } };
+      if (request.op === "list") {
+        const sending = this.writeBudget();
+        return { ok: true, print: { sessions: [...this.sessions.values()].map((session) => this.budget(session)), scope: this.env.scope.hosts, ...(sending ? { writes: writeBudgetNl(sending) } : {}) } };
+      }
       const name = request.session ?? "main";
       if (!SESSION_NAME.test(name)) throw new Error(`"${name}" is geen geldige sessienaam (kleine letters, cijfers, - en _)`);
       if (request.op === "start") {
@@ -208,6 +212,13 @@ export class Daemon {
     } catch (error) {
       return { ok: false, print: { error: firstLine(error) } };
     }
+  }
+
+  /** What is left of the budget for sending of the run, read from the run each time: the sweep sends from processes of its own. Null for a run that may not send. */
+  private writeBudget(): WriteBudget | null {
+    if (!this.env.scope.writes) return null;
+    const permission = writesForRun(this.runDir);
+    return permission ? writeBudget(this.runDir, permission) : null;
   }
 
   private budget(session: Session): Record<string, unknown> {
@@ -440,6 +451,15 @@ export class Daemon {
     if (read.length > 0) print.read = [...read.slice(0, MAX_BLOCKED_PRINTED).map((entry) => `${entry.method} ${entry.url.slice(0, 100)} (leesverzoek ${entry.rule})`), ...(read.length > MAX_BLOCKED_PRINTED ? [`(+${read.length - MAX_BLOCKED_PRINTED})`] : [])];
     if (challenges.length > 0) print.challenge = `${challenges.length} ${challenges.length === 1 ? "verzoek" : "verzoeken"} van de controle van Cloudflare tegen robots doorgelaten (${[...new Set(challenges.map((entry) => new URL(entry.url).hostname))].join(", ")}); de site krijgt die niet`;
     if (blocked.length > 0) print.blocked = [...blocked.slice(0, MAX_BLOCKED_PRINTED).map((entry) => `${entry.kind}: ${entry.method} ${entry.url.slice(0, 100)}${entry.search ? ` (zoekvraag: ${entry.search.join(", ")})` : ""}${entry.reasonNl ? ` (${entry.reasonNl})` : ""}`), ...(blocked.length > MAX_BLOCKED_PRINTED ? [`(+${blocked.length - MAX_BLOCKED_PRINTED})`] : [])];
+    // A write the budget for sending held back: the agent hears why, and what to write when nothing more can be sent.
+    const heldBack = blocked.find((entry) => entry.writeBudget === "out") ?? blocked.find((entry) => entry.writeBudget === "spacing");
+    if (heldBack) {
+      const sending = this.writeBudget();
+      print.sending =
+        heldBack.writeBudget === "out" && sending
+          ? `het budget voor versturen van deze run is op: ${sending.sent} van ${sending.max} verstuurd, door alle sessies en de veegronde samen. Er gaat niets meer weg. Wat daardoor niet te zien is, schrijf je als open punt: "${budgetOutPointNl(sending)}: <wat er pas na versturen te zien was>"`
+          : `${heldBack.reasonNl ?? "te kort na de vorige verzending"}. Er is niets verstuurd: kijk of een eerdere waarneming of de veegronde laat zien wat je zoekt, en doe de handeling anders na die tijd opnieuw`;
+    }
     if (observation.popups.length > 0) print.popups = observation.popups;
     if (observation.alerts.length > 0) print.alerts = observation.alerts.map((alert) => `${alert.type}: ${alert.message.slice(0, 80)}`);
     // From 80 percent on every answer says so, in one line: the agent reads answers, not its status.
