@@ -159,7 +159,7 @@ test("VoiceOver reads the state of the session: the page is fetched once, the st
   assert.equal(answer.state, "de toestand van je sessie: 3 van 3 stappen in Safari gespeeld");
   assert.equal(answer.notReached, undefined);
   // In the browser of the guest: the dialog open, the choices made, and the page's own script ran from the site.
-  assert.deepEqual(guest.seen.at(-1), { dialogOpen: true, kind: "Compliment", message: "Test", ownScript: "ran" });
+  assert.deepEqual(guest.seen.at(-1), { dialogOpen: true, kind: "Compliment", message: "Testbericht van loep (toegankelijkheidsonderzoek), niet beantwoorden", ownScript: "ran" });
   assert.deepEqual(answer.spoken, ["Uw e-mailprogramma is geopend."]);
   assert.deepEqual(answer.heldBack, ["e-mailprogramma niet geopend: GET mailto:test@example.com?subject=Feedback"]);
   assert.deepEqual(answer.changed, ["een mailto-adres opent het e-mailprogramma niet"]);

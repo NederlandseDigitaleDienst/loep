@@ -21,7 +21,7 @@ import { paste, press } from "./inputs.ts";
 import type { Images } from "./observations.ts";
 import { media } from "./media-command.ts";
 import { actWith, axWith, contrastWith, focusWith, lang, layoutWith, motion, name, ocrCommand, rules, source, targetWith, taborderWith, type Services } from "./opinions.ts";
-import { KEY_PATTERN, TEST_VALUES } from "./safety.ts";
+import { KEY_PATTERN, TEST_VALUES, testValuesForRun } from "./safety.ts";
 import { speakActs, speakWith } from "./speak.ts";
 import { changeState, enter, find as findOnPage, handleForRef, homeOf, locate, pageFacts, remember, resolveRef, sayFrame, settleAfter, syncRefs, tgs, type Env, type Surface, type TargetInfo } from "./surface.ts";
 
@@ -208,15 +208,16 @@ const tab: Handler = async (context, args, options) => {
 const type: Handler = async (context, args) => {
   const kind = args[0] ?? "";
   if (!(kind in TEST_VALUES)) throw new UsageError(`"${kind}" is geen vaste testwaarde; kies uit: ${Object.keys(TEST_VALUES).join(", ")}`);
+  const value = testValuesForRun(context.env.runDir)[kind]!;
   const handle = await handleOrThrow(context);
-  const acted = await act(context, SETTLE_MS, () => handle.fill(TEST_VALUES[kind]!, { timeout: ACTION_TIMEOUT_MS }).catch((error: Error) => Promise.reject(actionError("invullen", error))));
+  const acted = await act(context, SETTLE_MS, () => handle.fill(value, { timeout: ACTION_TIMEOUT_MS }).catch((error: Error) => Promise.reject(actionError("invullen", error))));
   const field = await handle
     .evaluate((element) => {
       const input = element as HTMLInputElement;
       return { value: input.value ?? null, ariaInvalid: input.getAttribute("aria-invalid"), nativeInvalid: typeof input.checkValidity === "function" ? !input.checkValidity() : false, validationMessage: input.validationMessage || null };
     })
     .catch(() => null);
-  return { result: { ...acted.result, kind, entered: TEST_VALUES[kind], field }, print: { entered: TEST_VALUES[kind]!.slice(0, 40), ...(field?.ariaInvalid === "true" || field?.nativeInvalid ? { invalid: field.validationMessage ?? "aria-invalid" } : {}), ...acted.print } };
+  return { result: { ...acted.result, kind, entered: value, field }, print: { entered: value.slice(0, 40), ...(field?.ariaInvalid === "true" || field?.nativeInvalid ? { invalid: field.validationMessage ?? "aria-invalid" } : {}), ...acted.print } };
 };
 
 /**

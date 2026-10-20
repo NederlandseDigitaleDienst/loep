@@ -38,13 +38,13 @@ export interface Unplayable {
 const SKIPPED_NOTE = "een meting zonder blijvend gevolg voor wat er wordt voorgelezen; in Safari niet herhaald";
 
 /** Which steps of a state the test page can play in Safari, and which it cannot. One step it cannot play makes the state unreachable there. */
-export function planSteps(steps: Step[]): { planned: PlannedStep[]; unplayable: Unplayable[] } {
+export function planSteps(steps: Step[], values: Record<string, string> = TEST_VALUES): { planned: PlannedStep[]; unplayable: Unplayable[] } {
   const planned: PlannedStep[] = [];
   const unplayable: Unplayable[] = [];
   for (const [index, step] of steps.entries()) {
     const base = { command: step.command, target: step.target, ...(step.locators ? { locators: step.locators } : {}) };
     const refuse = (reason: string): void => void unplayable.push({ step: index + 1, command: step.command, reason });
-    const value = (kind: string | undefined): string | null => (kind !== undefined && kind in TEST_VALUES ? TEST_VALUES[kind]! : null);
+    const value = (kind: string | undefined): string | null => (kind !== undefined && kind in values ? values[kind]! : null);
     switch (step.command) {
       case "click":
         planned.push({ ...base, how: "click" });

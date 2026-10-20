@@ -230,8 +230,10 @@ test("the form probe tries what a visitor does and says so when nothing at all f
     const forms = await probeForms(page, { label: "P1", url: `${site.origin}/feedback.html`, outDir: run, openedVia: null, socketMessagesBlocked: () => 0, writes });
     assert.deepEqual(forms.map((form) => form.form), ["#silent", "#sound"]);
     const [silent, sound] = forms.map((form) => form.attempts.find((attempt) => attempt.input === REGULAR_PATH)!);
+    // What a visitor types is the recognizable test text of a session: whoever receives it sees it comes from loep.
+    const text = TEST_VALUES.text!;
     // The required field is filled in and the optional one is empty, also after the attempt that filled in everything.
-    assert.deepEqual(await page.evaluate(() => ["silent-message", "silent-link", "sound-message", "sound-link"].map((id) => (document.getElementById(id) as HTMLInputElement).value)), writes ? ["Test", "Test", "Test", "Test"] : ["Test", "", "Test", ""]);
+    assert.deepEqual(await page.evaluate(() => ["silent-message", "silent-link", "sound-message", "sound-link"].map((id) => (document.getElementById(id) as HTMLInputElement).value)), writes ? [text, text, text, text] : [text, "", text, ""]);
     // The first form refuses an empty optional field and says nothing: no request, no message, the page as it was.
     assert.deepEqual(silent!.outcome, { request: "geen", requests: [], message: false, pageChanged: false, nothing: true, nl: "er gebeurde niets: geen verzoek, geen melding en geen verandering van de pagina" });
     assert.equal(silent!.submitted, true);
@@ -244,7 +246,7 @@ test("the form probe tries what a visitor does and says so when nothing at all f
     assert.deepEqual(silent!.spokenByItself!.spoken, []);
     assert.deepEqual(forms[0]!.attempts.find((attempt) => attempt.input === "leeg verstuurd")!.spokenByItself!.spoken, ["assertive: Vul een bericht in."]);
     assert.deepEqual(sound!.sent, writes ? [{ method: "POST", path: "/submit", status: 200 }] : undefined);
-    // Only the form that works reached the server, and only as a visitor fills it in: "Test" is no address for the link.
+    // Only the form that works reached the server, and only as a visitor fills it in: the test text is no address for the link.
     assert.deepEqual(writesReceived(), writes ? ["POST 127.0.0.1/submit"] : []);
     assert.ok(existsSync(join(run, silent!.screenshot!)) && silent!.screenshot!.endsWith("-form1-gewoon.png"));
     const dossier = formErrors({ states: { formErrors: forms, examined: { forms: forms.length } } } as unknown as RunData, "3.3.1") as { regularPath: { silentForms: number; forms: { form: string; attempt: string; nothing: boolean; request: string }[] } };

@@ -7,6 +7,7 @@ import type { Vendor } from "../lib/evaluation.ts";
 import { ignoreSecrets, isLogout, loginCookieHeader, LoginExpired, noteLogoutUrl, runLoginMark } from "../lib/login.ts";
 import { stepStart, writeManifest } from "../lib/manifest.ts";
 import { notFoundProbes, originsOfRun, privateFromPublicSite, siteOrigins } from "../lib/origins.ts";
+import { chooseSearchTerm } from "../lib/searchterm.ts";
 
 export interface InventoryPage {
   url: string;
@@ -74,6 +75,8 @@ export interface Inventory {
   documentTotals?: DocumentTotals;
   /** Only in a run with a login: the addresses of links that log out. None was followed, and no browser of the run asks for them. */
   logoutLinks?: string[];
+  /** The search term of the run (`type <ref> search`): the word on most page titles. Absent in older runs and when no title offers a word; then the term is `test`. */
+  searchTerm?: string;
   /**
    * Origins outside the run that a page of the site read content from with GET (fetch or XHR), with the
    * pages that did and how many such answers came. A session refuses those requests, so what they load
@@ -758,6 +761,8 @@ export async function inventory(options: InventoryOptions): Promise<Inventory> {
     ...(login ? { logoutLinks: [...logoutLinks].sort() } : {}),
     readsOutsideRun,
   };
+  const searchTerm = chooseSearchTerm(result.pages);
+  if (searchTerm !== null) result.searchTerm = searchTerm;
   await writeJson(join(options.out, "inventory.json"), result);
   await writeManifest(options.out, { command: "inventory", startedAt, baseUrl: start, maxPages: options.maxPages, fixedUrls: fixed?.length ?? null, ...(origins.length > 1 ? { alsoOrigins: origins.slice(1) } : {}), ...(login ? { loggedIn: true } : {}) }, browserVersion);
   return result;

@@ -8,6 +8,8 @@ import { privateFromPublicSite, scopeHost, scopeHostOf, siteOrigins, WEB_SCHEMES
 import { loginCookieHeader, logsOut } from "../lib/login.ts";
 import { readDecision, readRuleFor, type ReadRequest } from "../lib/reads.ts";
 import { searchServicesOf, type SearchServiceId } from "../lib/searchbody.ts";
+import { SEARCH_FALLBACK, SEARCH_NONE } from "../lib/searchterm.ts";
+import { searchTermForRun } from "../lib/sitemodel.ts";
 import { OriginBlocked, refusalNl, type Blockade } from "./blockade.ts";
 import { isWriteOrigin, runWrites, SocketFrames, writeAccess, writesForRun, type PassedWrite, type WriteAccess } from "../lib/writes.ts";
 
@@ -443,29 +445,43 @@ export async function guardRedirectsByRoute(context: BrowserContext, scope: Scop
   });
 }
 
-/** Test values a session may enter in a field. There is no free text: nothing an agent makes up reaches a page. */
+/** What a person who receives a message from a run reads first: that it is a test by loep and needs no answer. */
+const RECOGNIZABLE = "Testbericht van loep (toegankelijkheidsonderzoek), niet beantwoorden";
+
+/**
+ * Test values a session may enter in a field. There is no free text: nothing an agent makes up reaches a page.
+ * Whatever can reach a person says it comes from loep; example.com is reserved and receives no mail.
+ * A search term goes to a machine, not to a person, and stays a plain word: `search` is the term
+ * of the run (see `testValuesForRun`), `test` only where a run has none; `search-none` finds nothing.
+ */
 export const TEST_VALUES: Record<string, string> = {
-  text: "Test",
-  name: "Test Persoon",
-  email: "test@example.com",
+  text: RECOGNIZABLE,
+  name: "Loep Testpersoon",
+  email: "loep-test@example.com",
   "invalid-email": "geen-emailadres",
   number: "12",
   phone: "0612345678",
   postcode: "1234 AB",
   date: "2000-01-31",
   url: "https://example.com/",
-  search: "test",
-  long: "Dit is een lange testwaarde om te zien wat er gebeurt als een veld meer tekst krijgt dan het breed is, zonder dat de tekst iets betekent.",
+  search: SEARCH_FALLBACK,
+  "search-none": SEARCH_NONE,
+  long: `${RECOGNIZABLE}. Dit is een lange testwaarde om te zien wat er gebeurt als een veld meer tekst krijgt dan het breed is, zonder dat de tekst iets betekent.`,
   empty: "",
 };
 
+/** The test values of a run: `search` is the term the inventory chose, or the one the explorer showed on a page of the site. */
+export function testValuesForRun(runDir: string): Record<string, string> {
+  return { ...TEST_VALUES, search: searchTermForRun(runDir) };
+}
+
 /**
  * The test values that mark a frame over a socket as a message an agent sent (see `isOurMessage`), whatever else is in it.
- * Left out: the empty value, the search term and anything shorter than four characters, which
- * also occur in frames that nobody typed.
+ * Left out: the search terms (`search`, `search-none`), which make a search and no message, and the
+ * empty value and anything shorter than four characters, which also occur in frames that nobody typed.
  */
 export const MESSAGE_VALUES: readonly string[] = Object.entries(TEST_VALUES)
-  .filter(([kind, value]) => kind !== "search" && value.trim().length >= 4)
+  .filter(([kind, value]) => kind !== "search" && kind !== "search-none" && value.trim().length >= 4)
   .map(([, value]) => value);
 
 /** Keys a session may press: navigation and activation keys, and single characters to try key shortcuts. */

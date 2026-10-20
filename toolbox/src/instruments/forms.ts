@@ -7,6 +7,7 @@ import { readDecision, runReads } from "../lib/reads.ts";
 import { isWriteOrigin, runWrites } from "../lib/writes.ts";
 import { slugForUrl } from "../lib/canonical.ts";
 import { REGULAR_PATH, type FormErrorState } from "../lib/rundata.ts";
+import { TEST_VALUES } from "../session/safety.ts";
 import { contextState, SETTLE_MS, where, type Described } from "./activate.ts";
 import { spokenByItself, startListening, stopListening } from "./methods/speech.ts";
 
@@ -48,8 +49,8 @@ export interface FormProbeOptions {
   restore?: (page: Page) => Promise<void>;
 }
 
-/** A value a server will accept, by the type of the field. */
-const VALID_VALUES: Record<string, string> = { email: "test@example.com", tel: "0612345678", url: "https://example.com/", number: "12", date: "2000-01-31" };
+/** A value a server will accept, by the type of the field: the fixed test values of a session, so that what reaches a person says it comes from loep. */
+const VALID_VALUES: Record<string, string> = { email: TEST_VALUES.email!, tel: TEST_VALUES.phone!, url: TEST_VALUES.url!, number: TEST_VALUES.number!, date: TEST_VALUES.date! };
 
 type Attempt = FormErrorState["attempts"][number];
 type Input = "leeg verstuurd" | "ongeldige invoer" | typeof REGULAR_PATH | "geldige testwaarden";
@@ -62,7 +63,7 @@ function validValue(field: Field): string {
   if (byType) return byType;
   const hint = (field.autocomplete ?? "").toLowerCase();
   for (const type of ["email", "tel", "url"]) if (hint.includes(type)) return VALID_VALUES[type]!;
-  return hint.includes("postal-code") ? "1234 AB" : "Test";
+  return hint.includes("postal-code") ? TEST_VALUES.postcode! : TEST_VALUES.text!;
 }
 
 /**
@@ -128,7 +129,7 @@ async function attemptSubmit(page: Page, input: Input, formIndex: number, state:
       const handle = await handleFor(page, field.ref);
       if (field.type === "checkbox" && field.required) await handle?.check({ timeout: 2000 }).catch(() => undefined);
       if (!["input", "textarea"].includes(field.tag) || ["checkbox", "radio", "file"].includes(field.type ?? "")) continue;
-      await handle?.fill(VALID_VALUES[field.type ?? ""] ?? "Test").catch(() => undefined);
+      await handle?.fill(VALID_VALUES[field.type ?? ""] ?? TEST_VALUES.text!).catch(() => undefined);
     }
     await page.waitForTimeout(SETTLE_MS);
   }

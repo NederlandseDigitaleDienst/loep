@@ -1,7 +1,7 @@
 import { stateChanges as statesDiff } from "../instruments/change.ts";
 import { ensureHelpers } from "../instruments/methods/capsule.ts";
 import { act, UsageError, type Context, type Handler } from "./commands.ts";
-import { TEST_VALUES } from "./safety.ts";
+import { TEST_VALUES, testValuesForRun } from "./safety.ts";
 import { handleForRef } from "./surface.ts";
 
 const SETTLE_MS = 450;
@@ -36,7 +36,7 @@ interface FieldState {
 export const paste: Handler = async (context, args) => {
   const kind = args[0] ?? "";
   if (!(kind in TEST_VALUES) || TEST_VALUES[kind] === "") throw new UsageError(`"${kind}" is geen vaste testwaarde om te plakken; kies uit: ${Object.keys(TEST_VALUES).filter((name) => TEST_VALUES[name] !== "").join(", ")}`);
-  const value = TEST_VALUES[kind]!;
+  const value = testValuesForRun(context.env.runDir)[kind]!;
   const { page } = context.surface;
   const handle = await handleOf(context);
   // The clipboard of the browser, through the page: its own API where the page may use it, the old copy command where it may not (a page without https).

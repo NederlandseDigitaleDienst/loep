@@ -8,7 +8,7 @@ import { GuestQueue, LIMITS, lumeGuest, read, realClock, type Clock, type Guest,
 import { decodePage, guardLines, planSteps, playedOf, testPage, type Played } from "../lib/voiceover-page.ts";
 import { UsageError, type Options, type Outcome } from "./commands.ts";
 import type { Images, StateRecord } from "./observations.ts";
-import { guardedDownload, type Blocked, type Guard } from "./safety.ts";
+import { guardedDownload, testValuesForRun, type Blocked, type Guard } from "./safety.ts";
 import type { Env } from "./surface.ts";
 
 const DEFAULT_STEPS = 15;
@@ -79,7 +79,7 @@ export async function voiceoverOutcome(request: VoiceOverRequest): Promise<Outco
               throw new UsageError("er is geen pagina geopend: open eerst een pagina of toestand, of geef een paginalabel of --state <naam>");
             })();
   const start = state.start!;
-  const { planned, unplayable } = planSteps(state.steps);
+  const { planned, unplayable } = planSteps(state.steps, testValuesForRun(env.runDir));
   if (unplayable.length > 0) throw new UsageError(`deze toestand is in Safari niet na te spelen: ${unplayable.map((entry) => `stap ${entry.step} (${entry.command}) ${entry.reason}`).join("; ")}. Open een toestand zonder zo'n stap, of lees zonder handelingen vooraf. Dit commando kostte niets`);
 
   const own = request.guest ?? VOICEOVER_FOR_TESTS.guest;

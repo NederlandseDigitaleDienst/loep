@@ -9,7 +9,8 @@ import { agentLoginNl, loginForRun } from "../lib/login.ts";
 import { recordReads } from "../lib/reads.ts";
 import { makeWorkDir } from "../lib/workdir.ts";
 import { siteLabel } from "../lib/origins.ts";
-import { acceptedGapFor, frameAddress, NOT_OPENED_ON_PAGE_TYPE, notOpenedAdviceNl, readSiteModel, SITE_CHECK_FILE, SITE_MODEL_FILE, validateSiteModel, type ModelContext, type PageType, type Postcondition, type SiteCheck, type SiteModel } from "../lib/sitemodel.ts";
+import { textHasTerm } from "../lib/searchterm.ts";
+import { acceptedGapFor, frameAddress, NOT_OPENED_ON_PAGE_TYPE, notOpenedAdviceNl, readSiteModel, searchTermForRun, SITE_CHECK_FILE, SITE_MODEL_FILE, validateSiteModel, type ModelContext, type PageType, type Postcondition, type SiteCheck, type SiteModel } from "../lib/sitemodel.ts";
 import { readObservation } from "../session/observations.ts";
 import { holds, loadRecipes, MAX_RECIPE_STEPS, replayEnv, replayFromClean, replaySteps } from "../session/recipe.ts";
 import { openSurface, type Env } from "../session/surface.ts";
@@ -135,6 +136,7 @@ export async function explore(runDir: string): Promise<{ task: string; pages: nu
     breakpoints: breakpointsSummary,
     previous,
     login: agentLoginNl(loginForRun(runDir)),
+    searchTerm: searchTermForRun(runDir),
   });
   await writeFileAtomic(join(runDir, taskPath), prompt);
   await writeManifest(runDir, { command: "explore", startedAt, round, pages: pageCount, frames: context.frames.length, templateSha256: sha256(template) });
@@ -312,6 +314,20 @@ async function componentOnPageTypes(env: Env, model: SiteModel, id: string, reci
   return rows;
 }
 
+/** Whether the page the explorer named shows the search term in its text. Null when it does. */
+async function searchTermProblem(env: Env, chosen: { term: string; page: string }): Promise<string | null> {
+  let surface: Awaited<ReturnType<typeof openSurface>>["surface"] | null = null;
+  try {
+    ({ surface } = await openSurface(env, { url: chosen.page, ...WIDE, scheme: "light" }));
+    const text = await surface.page.evaluate(() => document.body?.innerText ?? "");
+    return textHasTerm(text, chosen.term) ? null : `searchTerm: het woord "${chosen.term}" staat niet in de tekst van ${chosen.page}; kies een woord dat op die pagina staat, of een andere pagina`;
+  } catch (error) {
+    return `searchTerm: ${chosen.page} laadt niet (${(error as Error).message.split("\n")[0]}); kies een pagina die laadt`;
+  } finally {
+    await surface?.context.close().catch(() => undefined);
+  }
+}
+
 /**
  * Validate the site model and replay every recipe from a clean page. An entry whose
  * recipe does not run, or whose postcondition does not hold afterwards, is refused; so is
@@ -372,6 +388,11 @@ export async function checkSite(runDir: string, options: { navigationDelayMs?: n
           if (row.reached || row.accepted) continue;
           problems.push(`component "${entry.id}" (recept ${entry.recipe}): gaat op paginatype "${row.pageType}" (${row.url}) niet open in een staand venster van ${row.viewport.width} bij ${row.viewport.height}: ${row.reasonNl ?? "geen reden vastgelegd"}. ${notOpenedAdviceNl(row.reasonNl)}`);
         }
+      }
+      // Another search term has to stand in the text of the page the explorer named.
+      if (model.searchTerm) {
+        const problem = await searchTermProblem(env, model.searchTerm);
+        if (problem !== null) problems.push(problem);
       }
       // What there is to operate on each page type, next to what the model says. Only with the blockers closing: otherwise their buttons are counted as parts of the page.
       if (replays.every((replay) => replay.kind !== "blocker" || replay.ok)) {
