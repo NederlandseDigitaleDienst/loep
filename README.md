@@ -90,7 +90,7 @@ De overige commando's:
 | `gaps` | Verzamelt de open punten van een of meer runs, per soort en per criterium, voegt gelijke punten samen en telt ze: de werklijst voor wie de veegronde verbetert. `just gaps <run> [<run> ...]`; met `--json` voor wie verder rekent |
 | `feedback` | Schrijft een tekst voor een issue op deze repository voor elk criterium dat open bleef door loep zelf, en ook voor een criterium met een oordeel waarbij een proef niet werkte. Zonder adres of naam van de site, met een titel die van run tot run gelijk blijft. Verstuurt niets. `just feedback <run> --out <map>` |
 | `check-walk`, `check-verdict` | Controleren de kandidaten van een rondgang en een oordeel; de agent die het schreef draait ze zelf |
-| `skip` | Legt vast dat een rondgang of oordeel niet komt, zodat de volgende fase kan beginnen |
+| `skip`, `unskip` | `skip` legt vast dat een rondgang of oordeel niet komt, zodat de volgende fase kan beginnen, met de soort "geen geldig resultaat" of "storing" (het model was er niet: een limiet of een storing van de dienst). `unskip` zet zo'n opdracht terug |
 | `answer` | Legt het antwoord van een persoon vast op een open punt dat geen instrument kan sluiten: wat is gedaan of besloten, wat dat betekent voor het criterium, en in welke functie. De naam blijft in een bestand van de run; het rapport noemt de functie. Zie [docs/methode.md](docs/methode.md#wat-een-mens-moet-vaststellen) |
 | `merge`, `check-merge` | De stap naar keuze die voorstelt welke bevindingen nog meer bij elkaar horen |
 | `diff` | Legt twee evaluaties van dezelfde site naast elkaar: opgelost, gebleven en nieuw, als werkdocument `verschil.md` |

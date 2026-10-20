@@ -155,3 +155,11 @@ test("a criterion open because a part of the site did not load is no fault of lo
   assert.deepEqual(only.drafts, []);
   assert.match(feedbackTextNl(only), /^Niets terug te melden uit site-unreachable-only: geen criterium is open door loep zelf\.\n\nNiet terug te melden: criterium 3\.3\.1 bleef ook open omdat een deel van de site/);
 });
+
+test("a criterion without a verdict because the model was not there is no fault of loep: no draft, but named apart with the way to do it again", () => {
+  const result = feedback(run("site-outage", [criterion("2.1.1", "untested", [], { outage: true }), criterion("2.1.2", "untested", [])]));
+  assert.deepEqual(result.drafts.map((draft) => draft.title), [`${TITLE_PREFIX} 2.1.2 niet beoordeeld`], "only the criterion whose agent gave no valid result");
+  assert.deepEqual(result.outage, ["2.1.1"]);
+  assert.match(feedbackTextNl(result), /Niet terug te melden: criterium 2\.1\.1 is niet beoordeeld door een storing van het model .*LOEP unskip --run <run> --criterion <id>/);
+  assert.ok(!feedbackTextNl(result).includes("budget op"));
+});
