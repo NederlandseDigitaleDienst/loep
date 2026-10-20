@@ -16,6 +16,36 @@ loep() { node {{cli}} session "$@" --run {{run}} --session {{session}}; }
 
 Geef in elk commando je eigen sessienaam mee, `--session {{session}}`: met de regel hierboven of voluit, ook in een hulpscript. Een script met de sessienaam van een ander erin laat jou onder zijn sessie meten, en een `open` van jou gooit dan zijn toestand weg.
 
+De commando's, één regel per commando. Wat elk commando precies doet, met de opties en wat er in het antwoord staat, staat in de naslag bij deze opdracht: `{{naslag}}`, onder "Je gereedschap in detail". Lees daar het stuk van een commando als je het voor het eerst gebruikt of als een antwoord je niet duidelijk is; zoek op de naam van het commando.
+
+- `open <label of adres> [--width 320] [--scheme dark] [--state <naam>] [--with-blockers]`: verse pagina, meldingen gesloten; met `--state` een bewaarde toestand, met `--with-blockers` blijft de cookiemelding staan
+- `look [--full] [--vision achromatopsia]`: schermafbeelding met genummerde elementen (de `ref`) en een lijst
+- `find <tekst>`, `find role:button`, `find tag:img`, `find css:<selector>`: zoek elementen en hun ref, ook verborgen
+- `crop <ref>`: afbeelding van één element, om dichterbij te kijken
+- `ax <ref>`, `html <ref> [--max n]`, `style <ref> [eigenschappen]`: rol, naam en toestand volgens de browser; de code; de berekende opmaak
+- `click <ref>`, `hover <ref>`, `key <toets>`, `tab [n] [--shift]`, `type <ref> <testwaarde>`, `select <ref> <optietekst|#n>`, `scroll <ref|top|bottom|down|up>`, `back`: handelen; het antwoord zegt wat er veranderde
+- `name <ref>`: toegankelijke naam en rol volgens meer methoden
+- `contrast <ref> [--at x,y,breedte,hoogte]`: contrast van tekst, rand, vlak, pictogram en tekst in een afbeelding; of tekst in beeld een logo of merknaam is, stel je zelf vast met `crop`
+- `focus <ref>`: focus, zichtbare verandering, contrast van de aanduiding, wat eroverheen ligt
+- `target <ref>`: afmeting van het aanwijsgebied en de afstand tot de buur
+- `taborder [--from <ref>] [--max 80]`: de pagina aflopen met Tab
+- `order`: volgorde in de code tegenover het scherm
+- `reflow`, `zoom`, `spacing [--keep]`: 320 pixels breed, 200% vergroot, ruimere tekstafstand; ook in WebKit gemeten, en een verschil tussen de browsers is een open punt, geen bevinding
+- `forced [<ref>] [--more-contrast] [--max 10]`: geforceerde kleuren of meer contrast: wat verdwijnt (een aanwijzing, geen eis)
+- `distinct <ref> [--against <ref>]`: kleur als enig onderscheid; `lead` is een aanwijzing (techniek G183), geen normtekst
+- `rules [<ref>] [--criterion <nummer>]`: de regel-engines op de pagina zoals ze nu is
+- `lang [<ref>]`, `source`, `ocr <ref>`, `motion [--seconds 6]`: taal; fouten in de HTML; tekst in een afbeelding; beweging
+- `timers`: elke timer van een seconde of langer, en wat hij deed; laat wachtende timers afgaan, dus open daarna opnieuw voor iets anders
+- `media [<ref>]`, `media <ref> --listen [--wait]`: audio en video; met `--listen` wat er te horen en te zien is (een verschil onder de marge van de herkenning is geen bevinding)
+- `speak <ref>`, `speak [<ref>] --steps n`, `speak <ref> --click`, `speak <ref> --type <testwaarde> [--submit]`: wat een nagebootste schermlezer voorleest, geen echte
+- `voiceover [--state <naam>] [--steps n] [--press "<naam> <rol>"] [--no-popup] [--no-mailto]`: wat VoiceOver met Safari voorleest, in een virtuele Mac
+- `document <label> [--page n] [--tags]`: een document van de steekproef, gelezen uit het bestand
+- `paste <ref> <testwaarde>`, `press <ref> --hold`, `press <ref> --abort`: plakken; indrukken zonder loslaten
+- `state save <naam>`, `state list`: een toestand bewaren; de bewaarde toestanden
+- `status`, `tools`, `wait`: je verbruik; de methoden; antwoorden van methoden die nog liepen
+
+<!-- naslag: Je gereedschap in detail -->
+
 | Commando | Wat het doet |
 |---|---|
 | `open <label of adres> [--width 320] [--scheme dark] [--state <naam>] [--with-blockers]` | Verse pagina, met de meldingen al gesloten. Een label van een pagina werkt (`P03`). Met `--state` wordt eerst een bewaarde toestand afgespeeld: een onderdeel open. Met `--with-blockers` blijft de cookiemelding staan. Een nieuwe `open` gooit de toestand weg waarin je was |
@@ -45,6 +75,10 @@ Geef in elk commando je eigen sessienaam mee, `--session {{session}}`: met de re
 | `state list` | Toon de bewaarde toestanden |
 | `status`, `tools`, `wait` | Je verbruik; welke methoden er zijn; haal antwoorden op van methoden die nog liepen |
 
+- `reflow`, `zoom` en `spacing` meten dezelfde pagina ook in WebKit, de motor van Safari. `browsers` zegt per browser wat is gemeten, `webkitImage` is het beeld uit WebKit, en `disagree` noemt waar de browsers verschillen. Een verschil is een open punt en op zichzelf geen bevinding: bekijk beide beelden.
+
+<!-- /naslag -->
+
 Zo lees je een antwoord:
 
 - Elk antwoord is één regel JSON met `id`: het nummer van de waarneming.
@@ -53,7 +87,6 @@ Zo lees je een antwoord:
 - De naam achter `--state` is de naam van het recept, zoals `state list` die toont en zoals ze in het sitemodel onder `recipe` staat (bijvoorbeeld `blocker-cookies`). Een toestand opent op de pagina waar ze is vastgelegd; staat het onderdeel ook op andere pagina's, open het daar dan zelf. `state list` kan ook toestanden tonen die een ander eerder bewaarde; die mag je gebruiken.
 - Nummers gelden ook voor wat in een ingesloten venster staat, ook als het venster van een andere partij komt of in een ander venster zit: elk commando met `<ref>` werkt er op dezelfde manier. In `look` staat achter zo'n element `in venster <nummer>`; dat nummer is het venster zelf, een regel hoger, met zijn adres. `find` en `tab` zeggen `in venster: "<titel>" <herkomst>`, en het antwoord op een commando herhaalt dat onder `place.frame`. Binnen een venster nummert `look` wat het venster toont; de rest vind je met `find` en breng je in beeld met `scroll <ref>`. Staat er bij een venster `inhoud van het venster niet te lezen`, dan laadde het niet of is het leeg.
 - Een label van een ingesloten venster (in de legenda staat `embedded`) is geen pagina om los te openen. Bekijk en bedien het venster op de pagina waar het in staat.
-- `reflow`, `zoom` en `spacing` meten dezelfde pagina ook in WebKit, de motor van Safari. `browsers` zegt per browser wat is gemeten, `webkitImage` is het beeld uit WebKit, en `disagree` noemt waar de browsers verschillen. Een verschil is een open punt en op zichzelf geen bevinding: bekijk beide beelden.
 - Zegt `speak` dat je het met een echte schermlezer moet proberen (`revealedNote`: een gebied dat verborgen was en nu zichtbaar is), of hangt je oordeel af van wat een schermlezer werkelijk voorleest of uit zichzelf uitspreekt: gebruik dan `voiceover` op dezelfde toestand voordat je `mens nodig` schrijft. Wat VoiceOver zegt, geldt voor VoiceOver met Safari. Schrijf dat in je waarneming ("VoiceOver met Safari las ..."), en dat NVDA en JAWS het anders kunnen doen. Is VoiceOver stil waar de standaard het uitspreken niet vastlegt, dan is dat wat een gebruiker van VoiceOver met Safari hoort. Blijft daarna alleen open wat NVDA of JAWS zou doen, dan is dat `mens nodig`, met wat VoiceOver zei. Draait de virtuele Mac niet, dan blijft het `mens nodig` zoals voorheen.
 - `methods` zegt hoeveel methoden antwoordden en of ze het eens zijn. Staat er "loopt nog", zet dan `--wait` achter het commando of geef daarna `wait`.
 - Staat er `error`, lees die en pas je aanpak aan. "Een ander element ligt eroverheen" betekent meestal dat er nog iets over de pagina ligt: kijk met `look` wat het is.

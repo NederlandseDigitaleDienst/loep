@@ -113,7 +113,9 @@ Stop je sessie als je klaar bent: `node {{cli}} session stop --run {{run}} --ses
 
 ## Vorm van het eindoordeel
 
-Dezelfde vorm als het oordeel van de beoordelaar, door jou opnieuw geschreven, met één blok erbij:
+Dezelfde vorm als het oordeel van de beoordelaar, door jou opnieuw geschreven, met één blok erbij: `verification`. Het skelet van het eindoordeel in JSON, met elk veld op zijn plaats, staat in de naslag bij deze opdracht: `{{naslag}}`, onder "Het skelet van het oordeel". Lees het als je het eindoordeel gaat schrijven. Wat elk veld moet bevatten, staat hieronder; de controle zegt wat er aan de vorm ontbreekt.
+
+<!-- naslag: Het skelet van het oordeel -->
 
 ```json
 {
@@ -149,6 +151,8 @@ Dezelfde vorm als het oordeel van de beoordelaar, door jou opnieuw geschreven, m
   }
 }
 ```
+
+<!-- /naslag -->
 
 - `verification.findings`: één regel per bevinding van de beoordelaar, met zijn `key`. `reproduced: true` vraagt minstens één waarneming van een kijk- of meetcommando uit je eigen sessie. `reproduced: false` vraagt `dropped` en `reasonNl`; bij `wrongCriterion` ook `belongsTo`.
 - `findings`: de bevindingen die blijven staan, met hun oude `key` en met jouw waarneming in `evidence`, plus wat je zelf vond (`V1`). Een vervallen bevinding staat er niet meer in.

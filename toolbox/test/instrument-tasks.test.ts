@@ -83,6 +83,17 @@ test("a run with a site model starts with a walk per page type and a judge task 
   namesItsWorkDir(contact, "r-contact");
   const judge = readFileSync(join(dir, "tasks", "1.4.3", "beoordeel.md"), "utf8");
   assert.doesNotMatch(judge, /\{\{\w+\}\}/);
+  // The core of a task holds the rules and one line per command; the explanation of each command and the skeleton of the verdict are in the reference next to it.
+  const reference = readFileSync(join(dir, "tasks", "1.4.3", "beoordeel-naslag.md"), "utf8");
+  assert.doesNotMatch(reference, /\{\{\w+\}\}/);
+  assert.ok(judge.includes(`\`${join(dir, "tasks", "1.4.3", "beoordeel-naslag.md")}\``), "the core names its reference");
+  assert.doesNotMatch(judge, /```json|<!-- naslag|\| Commando \| Wat het doet \|/, "no skeleton and no table of commands in the core");
+  assert.match(judge, /^- `contrast <ref> \[--at x,y,breedte,hoogte\]`: /m, "one line per command");
+  assert.match(judge, /\*\*Citeer letterlijk\.\*\*/, "the rules for measuring and writing stay in the core");
+  assert.match(reference, /^## Je gereedschap in detail\n\n\| Commando \| Wat het doet \|/m);
+  assert.match(reference, /^## Het skelet van het oordeel\n\n```json\n\{\n {2}"criterion": "1\.4\.3"/m);
+  assert.match(reference, /"evidence": \["contrast", "b-143-0007"\]/, "the skeleton is filled in for this task");
+  assert.ok(existsSync(join(dir, "rondgang", "start-naslag.md")), "a walk gets the explanation of the commands too");
   namesItsWorkDir(judge, "b-143");
   // 1.4.3 is a criterion whose judges ended on their budget in every measured run: it gets twice the floor.
   assert.equal(useFactor("judge", "1.4.3"), 2);

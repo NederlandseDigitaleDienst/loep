@@ -85,6 +85,10 @@ Stop je sessie als je klaar bent: `node {{cli}} session stop --run {{run}} --ses
 
 ## Vorm van het oordeel
 
+Het skelet van het oordeel in JSON, met elk veld op zijn plaats, staat in de naslag bij deze opdracht: `{{naslag}}`, onder "Het skelet van het oordeel". Lees het als je je oordeel gaat schrijven. Wat elk veld moet bevatten, staat hieronder; de controle zegt wat er aan de vorm ontbreekt.
+
+<!-- naslag: Het skelet van het oordeel -->
+
 ```json
 {
   "criterion": "{{id}}",
@@ -122,6 +126,8 @@ Stop je sessie als je klaar bent: `node {{cli}} session stop --run {{run}} --ses
   }
 }
 ```
+
+<!-- /naslag -->
 
 - `finish.points`: één regel per open punt uit deze opdracht, met zijn nummer. `settled: true` vraagt minstens één waarneming van een kijk- of meetcommando uit je eigen sessie. `settled: false` betekent dat het punt in `missingNl` staat. Bij `passed` en `inapplicable` is elk punt beslecht.
 - `finish.coverageNl`: waar je hebt gemeten, met aantallen. Het rapport neemt deze zin over.
