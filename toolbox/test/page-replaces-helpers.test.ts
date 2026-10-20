@@ -34,6 +34,15 @@ const SCRIPTS: Record<string, string> = {
   define: `window.define = (name, deps, factory) => { factory().run = async () => (${EMPTY}); }; window.define.amd = true;`,
   // Helpers of its own under the name loep uses for the second-opinion methods.
   loepm: `window.__loepm = { byAxeTarget: () => ({ where: null }) };`,
+  // Built-in functions of the browser changed so that whoever reads with them finds less (#155): every text black, and a walk through the document that finds nothing.
+  builtins: `
+    const style = window.getComputedStyle;
+    window.getComputedStyle = function (element, pseudo) {
+      const real = style.call(window, element, pseudo);
+      return new Proxy(real, { get: (target, key) => (key === "color" ? "rgb(0, 0, 0)" : typeof target[key] === "function" ? target[key].bind(target) : target[key]) });
+    };
+    const walker = Document.prototype.createTreeWalker;
+    Document.prototype.createTreeWalker = function (root, ...rest) { return walker.call(this, document.createComment(""), ...rest); };`,
 };
 const page = (script: string): string =>
   `<!doctype html><html lang="nl"><head><meta charset="utf-8"><title>Proef</title><script>${script}</script></head><body style="margin:0;background:#fff"><main><h1 style="color:#000">Proef</h1><p style="color:#aaa;font-size:16px">Lichtgrijze tekst op wit</p><img src="data:image/gif;base64,R0lGODlhAQABAAAAACw=" width="20" height="20"></main></body></html>`;
@@ -110,6 +119,28 @@ test("a library that is not the one loep fixed to the window is refused, not cal
   }
 });
 
+test("a script of the page cannot replace an element in the registry that loep's own world fills (#155)", { timeout: 60_000 }, async () => {
+  const tab = await open("plain");
+  try {
+    const facts = await call<{ headings: { ref: number; tag: string }[] }>(tab, "collectFacts");
+    const heading = facts.headings[0]!;
+    assert.equal(heading.tag, "h1");
+    const swapped = await tab.evaluate((ref) => {
+      const registry = (window as unknown as { __loep: { registry: Element[] } }).__loep.registry;
+      try {
+        registry[ref] = document.body;
+      } catch {
+        // Refused in strict code as well.
+      }
+      return registry[ref]!.localName;
+    }, heading.ref);
+    assert.equal(swapped, "h1");
+    assert.equal((await call<{ visible: boolean } | null>(tab, "paintedBox", heading.ref))?.visible, true);
+  } finally {
+    await tab.context().close();
+  }
+});
+
 test("axe-core finds the same failures on a page with an axe of its own that loep can replace, or with a loader of modules", { timeout: 120_000 }, async () => {
   const plain = await axeFailures("plain");
   assert.equal(plain.status.ok, true);
@@ -118,28 +149,46 @@ test("axe-core finds the same failures on a page with an axe of its own that loe
   assert.deepEqual(await axeFailures("define"), plain);
 });
 
-test("a page that fixed window.axe gets no clean result from axe-core but a result that cannot be established", { timeout: 120_000 }, async () => {
-  for (const name of ["axe-fixed", "axe-setter"]) {
-    const tampered = await axeFailures(name);
-    assert.equal(tampered.status.ok, false, name);
-    assert.match(tampered.status.error ?? "", /window\.axe zelf vastgezet/, name);
-    assert.deepEqual(tampered.failed, [], name);
-  }
-  // The extractor of the engines says it with every criterion.
-  const status = { "axe-core": { ok: false, version: "unknown", error: "de pagina heeft window.axe zelf vastgezet" }, alfa: { ok: true, version: "1" } };
-  assert.deepEqual(enginesWithoutResult({ status }), [{ engine: "axe-core", error: "de pagina heeft window.axe zelf vastgezet" }]);
+test("a page that fixed window.axe does not reach the axe-core of loep's own world: the same failures as without", { timeout: 120_000 }, async () => {
+  const plain = await axeFailures("plain");
+  for (const name of ["axe-fixed", "axe-setter"]) assert.deepEqual(await axeFailures(name), plain, name);
+  // An engine without a result is said with every criterion.
+  const status = { "axe-core": { ok: false, version: "unknown", error: "axe brak af" }, alfa: { ok: true, version: "1" } };
+  assert.deepEqual(enginesWithoutResult({ status }), [{ engine: "axe-core", error: "axe brak af" }]);
   const run = { pages: [{ label: "P1", engines: { light: { status, results: [] }, dark: { status: { ...status, "axe-core": { ok: true, version: "4" } }, results: [] } } }] } as unknown as RunData;
   const told = engine(run, "1.1.1") as { enginesWithoutResult?: { page: string; engine: string }[] };
   assert.deepEqual(told.enginesWithoutResult?.map((entry) => [entry.page, entry.engine]), [["P1/light", "axe-core"]]);
 });
 
-test("the second-opinion engines refuse a fixed window.axe and helpers the page put there itself", { timeout: 180_000 }, async () => {
+test("a page that changes built-in functions of the browser gets the same contrast measurement and the same failures of the rule engines (#155)", { timeout: 120_000 }, async () => {
+  // In the page itself the changed functions do make a reader find less.
+  const tab = await open("builtins");
+  try {
+    assert.equal(await tab.evaluate(() => getComputedStyle(document.querySelector("p")!).color), "rgb(0, 0, 0)");
+    assert.equal(await tab.evaluate(() => document.createTreeWalker(document.body, NodeFilter.SHOW_ELEMENT).nextNode()), null);
+  } finally {
+    await tab.context().close();
+  }
+  assert.deepEqual(await lowContrast("builtins"), await lowContrast("plain"));
+  const alfaFailures = async (name: string): Promise<string[]> => {
+    const opened = await open(name);
+    try {
+      return (await runEngines(opened)).results.filter((result) => result.engine === "alfa" && result.outcome === "failed").map((result) => result.rule);
+    } finally {
+      await opened.context().close();
+    }
+  };
+  assert.deepEqual(await axeFailures("builtins"), await axeFailures("plain"));
+  assert.deepEqual(await alfaFailures("builtins"), await alfaFailures("plain"));
+});
+
+test("the second-opinion engines run their own axe, whatever the page fixed; helpers the page put there itself are refused", { timeout: 180_000 }, async () => {
   const fixed = await open("axe-fixed");
   try {
     const run = await runRuleEngines(fixed, {});
-    const axe = run.failed.find((failure) => failure.implementation === "axe-core");
-    assert.match(axe?.reason ?? "", /window\.axe zelf vastgezet/);
-    assert.equal(run.methods.some((method) => method.implementation === "axe-core"), false);
+    assert.equal(run.failed.some((failure) => failure.implementation === "axe-core"), false, JSON.stringify(run.failed));
+    const axe = run.methods.find((method) => method.implementation === "axe-core");
+    assert.ok(axe?.result.findings.some((finding) => finding.rule === "image-alt" && finding.outcome === "failed"), "axe finds the image without a text alternative");
   } finally {
     await fixed.context().close();
   }
