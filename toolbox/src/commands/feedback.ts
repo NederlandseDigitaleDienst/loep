@@ -59,6 +59,12 @@ export interface Feedback {
    * finishing round once the part loads again.
    */
   unreachable: string[];
+  /**
+   * Criteria without the verdict that counts because the model was not there: a round was skipped
+   * with the kind "storing". No fault of loep, so no draft; named so the person who runs this can
+   * take the skip back with `unskip` and run the workflow again.
+   */
+  outage: string[];
 }
 
 const escape = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -117,6 +123,7 @@ export function feedback(runDir: string, options: { out?: string | undefined } =
   const own = new Set(openCriteria(evaluation.criteria).evaluation);
   const drafts: Draft[] = [];
   for (const criterion of evaluation.criteria) {
+    if (criterion.outage) continue;
     const isOwn = own.has(criterion.id);
     // Standing in the evaluation is what gaps calls "nog open in het oordeel dat telt".
     const byKind = isOwn ? ownPointsByKind(criterion) : probePointsByKind(criterion);
@@ -145,7 +152,7 @@ export function feedback(runDir: string, options: { out?: string | undefined } =
   }
   const open = openCriteria(evaluation.criteria);
   const withKind = (prefix: string): string[] => [...open.owner, ...open.evaluation].filter((id) => evaluation.criteria.find((criterion) => criterion.id === id)!.missingNl.some((point) => openPoint(point).kind?.prefix === prefix)).sort(compareCriterionIds);
-  return { run: basename(resolve(runDir)), repository: REPOSITORY, madeWithNl: madeWith(evaluation, true), drafts, notSent: withKind(NOT_SENT), unreachable: withKind(UNREACHABLE) };
+  return { run: basename(resolve(runDir)), repository: REPOSITORY, madeWithNl: madeWith(evaluation, true), drafts, notSent: withKind(NOT_SENT), unreachable: withKind(UNREACHABLE), outage: evaluation.criteria.filter((criterion) => criterion.outage).map((criterion) => criterion.id).sort(compareCriterionIds) };
 }
 
 /** The drafts as a text to read: what to check first, then per draft the title and the body or where it is. */
@@ -160,7 +167,12 @@ export function feedbackTextNl(result: Feedback): string {
     result.unreachable.length > 0
       ? `\nNiet terug te melden: ${result.unreachable.length === 1 ? "criterium" : "criteria"} ${result.unreachable.join(", ")} ${result.unreachable.length === 1 ? "bleef" : "bleven"} ook open omdat een deel van de site tijdens het onderzoek niet bereikbaar was. Dat is geen fout in loep. Laadt het deel weer, dan meet een nieuwe afmaakronde het: LOEP tasks --run <run> --again ${result.unreachable.join(",")}; LOEP gaps telt deze punten onder "${UNREACHABLE}".\n`
       : "";
-  const apart = `${notSent}${unreachable}`;
+  // Nor is a model that was not there: the skip can be taken back and the round done again.
+  const outage =
+    result.outage.length > 0
+      ? `\nNiet terug te melden: ${result.outage.length === 1 ? "criterium" : "criteria"} ${result.outage.join(", ")} ${result.outage.length === 1 ? "is" : "zijn"} niet beoordeeld door een storing van het model (een limiet of een storing van de dienst). Dat is geen fout in loep. Zet de opdracht terug met LOEP unskip --run <run> --criterion <id> [--round final|finish] en start de werkstroom opnieuw.\n`
+      : "";
+  const apart = `${notSent}${unreachable}${outage}`;
   if (result.drafts.length === 0) return `Niets terug te melden uit ${result.run}: geen criterium is open door loep zelf.\n${apart}`;
   const criteria = new Set(result.drafts.map((draft) => draft.criterion)).size;
   const lines = [

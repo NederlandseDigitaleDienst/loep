@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, join, normalize } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { EXPLORE_MAX_COMMANDS, EXPLORE_MAX_MINUTES } from "../src/commands/explore.ts";
 import { MAX_RETURNS_TO_EXPLORER, SHEETS_PER_TASK } from "../src/commands/gate.ts";
-import { BUDGETS } from "../src/commands/instrument-tasks.ts";
+import { briefPending, BUDGETS, INSTRUMENT_FLOW, loadInstrumentIndex, PHASES, pointsToFinish, recordAttempts, skip, skipKindOf, skipped, skippedForOutage, TASK_FILES, unskip } from "../src/commands/instrument-tasks.ts";
 import { CEILINGS, EXTENSION, MEASURED_USE, REFERENCE_SITE_SIZE, WALK_STATES } from "../src/lib/budget.ts";
 import { FINISH_FACTOR, LOOK_COMMANDS, MEASURE_COMMANDS, SESSION_COMMANDS } from "../src/lib/verdict.ts";
 import { SESSION_MANAGEMENT } from "../src/session/client.ts";
@@ -242,34 +243,69 @@ test("the workflow starts no more agents at a time than the session process has 
   assert.ok(skill.includes(`\`atOnce: ${max - 1}\` bij \`--max-sessions ${max}\``), `de skill geeft de werkstroom niet atOnce ${max - 1} bij --max-sessions ${max}`);
 });
 
+type WorkflowPhase = (typeof PHASES)[number];
+/** What the toolbox answers in one round: the phase and the ids that are open in it. A task that was skipped drops out by itself. */
 interface WorkflowState {
   phase: string;
-  walks?: { pageType: string; task: string }[];
-  judges?: { criterion: string; task: string }[];
-  verifiers?: { criterion: string; task: string }[];
-  finishers?: { criterion: string; task: string }[];
+  walks?: string[];
+  judges?: string[];
+  verifiers?: string[];
+  finishers?: string[];
+}
+
+/** The part of a run the workflow writes through the toolbox: the attempts it records with `tasks --attempted`, and what it skips. It outlives one run of the workflow. */
+interface FakeToolbox {
+  attempts: Record<string, number>;
+  skips: string[];
+}
+
+/** The path the toolbox writes the task file of a phase to, in the run "RUN" the tests give the workflow. */
+const taskOf = (phase: WorkflowPhase, id: string): string => `RUN/${TASK_FILES[phase](id)}`;
+const QUOTA = "Rate limit reached: you have used your weekly limit";
+
+interface WorkflowResult {
+  history: { round: number; phase: string; tasks?: number; note?: string }[];
+  skipped: string[];
+  last: string | null;
+  paused: string | null;
+  models: Record<string, string | null>;
 }
 
 /**
  * Run the workflow script as its host does: as the body of an async function that is given `args`,
  * `agent`, `parallel` and `log`. `states` is what the toolbox answers round after round; `seconds`
- * says how long the agent of a task works and `fails` which tasks end in an error.
+ * says how long the agent of a task works and `fails` which tasks come back without a valid result
+ * (still open next round). `trouble` says which calls end in an error of the model: "throw" for an
+ * exception, "null" for what the host gives when an agent died on such an error; the stand is "stand".
  */
-async function runWorkflow(atOnce: number | undefined, states: WorkflowState[], seconds: (task: string) => number = () => 0.002, fails: string[] = [], models?: unknown) {
-  const AsyncFunction = Object.getPrototypeOf(async () => undefined).constructor as new (...names: string[]) => (...values: unknown[]) => Promise<{ history: { round: number; phase: string; tasks?: number }[]; skipped: string[]; last: string | null; models: Record<string, string | null> }>;
+async function runWorkflow(atOnce: number | undefined, states: WorkflowState[], seconds: (task: string) => number = () => 0.002, models?: unknown, extra: { toolbox?: FakeToolbox; trouble?: (what: string, call: number) => "throw" | "null" | undefined } = {}) {
+  const AsyncFunction = Object.getPrototypeOf(async () => undefined).constructor as new (...names: string[]) => (...values: unknown[]) => Promise<WorkflowResult>;
   const script = new AsyncFunction("args", "agent", "parallel", "log", read("skills/nldd-a11y-audit/onderzoek.workflow.js").replace(/^export const meta/m, "const meta"));
+  const toolbox = extra.toolbox ?? { attempts: {}, skips: [] };
   const events: { task: string; what: "start" | "end" }[] = [];
   const stands: string[] = [];
+  const logs: string[] = [];
   let running = 0;
   let most = 0;
   let round = 0;
+  let calls = 0;
   const asked: { phase: string; model?: string }[] = [];
   const agent = async (prompt: string, options: { phase: string; model?: string }): Promise<unknown> => {
     asked.push(options);
+    calls++;
     if (options.phase === "Stand") {
       stands.push(prompt);
+      const trouble = extra.trouble?.("stand", calls);
+      if (trouble === "throw") throw new Error(QUOTA);
+      if (trouble === "null") return null;
+      // The toolbox as the commands of the stand change it: a skip, and the attempts of the agents that came back.
+      for (const match of prompt.matchAll(/ skip --run RUN (--page-type (\S+)|--criterion (\S+)(?: --round (final|finish))?) --kind "geen geldig resultaat"/g)) {
+        toolbox.skips.push(match[2] ? `walks:${match[2]}` : `${match[4] === "final" ? "verifiers" : match[4] === "finish" ? "finishers" : "judges"}:${match[3]}`);
+      }
+      for (const key of /tasks --run RUN --attempted (\S+)/.exec(prompt)?.[1]?.split(",") ?? []) toolbox.attempts[key] = (toolbox.attempts[key] ?? 0) + 1;
       const state = states[round++] ?? { phase: "done" };
-      return { walks: [], judges: [], verifiers: [], finishers: [], ...state };
+      const open = (phase: WorkflowPhase) => (state[phase] ?? []).filter((id) => !toolbox.skips.includes(`${phase}:${id}`)).map((id) => ({ id, attempts: toolbox.attempts[`${phase}:${id}`] ?? 0 }));
+      return { phase: state.phase, walks: open("walks"), judges: open("judges"), verifiers: open("verifiers"), finishers: open("finishers") };
     }
     const task = /Lees het bestand (\S+)/.exec(prompt)![1]!;
     events.push({ task, what: "start" });
@@ -277,34 +313,41 @@ async function runWorkflow(atOnce: number | undefined, states: WorkflowState[], 
     await new Promise((done) => setTimeout(done, seconds(task) * 1000));
     running--;
     events.push({ task, what: "end" });
-    if (fails.includes(task)) throw new Error(`geen resultaat voor ${task}`);
+    const trouble = extra.trouble?.(task, calls);
+    if (trouble === "throw") throw new Error(QUOTA);
+    if (trouble === "null") return null;
     return "klaar";
   };
   const parallel = (thunks: (() => Promise<unknown>)[]): Promise<unknown[]> => Promise.all(thunks.map((thunk) => thunk()));
-  const result = await script({ cli: "CLI", run: "RUN", atOnce, models }, agent, parallel, () => undefined);
+  const result = await script({ cli: "CLI", run: "RUN", atOnce, models }, agent, parallel, (message: string) => logs.push(message));
   const position = (task: string, what: "start" | "end"): number => events.findIndex((event) => event.task === task && event.what === what);
-  return { result, events, stands, asked, most, started: (task: string): number => events.filter((event) => event.task === task && event.what === "start").length, position };
+  return { result, events, stands, logs, asked, most, toolbox, started: (task: string): number => events.filter((event) => event.task === task && event.what === "start").length, position };
 }
 
 test("the workflow keeps atOnce agents running: a new one starts as soon as one is done, never more at a time, and every task gets its turn", async () => {
-  const walks = Array.from({ length: 7 }, (_, index) => ({ pageType: `t${index}`, task: `walk-${index}` }));
-  const judges = Array.from({ length: 10 }, (_, index) => ({ criterion: `1.1.${index}`, task: `judge-${index}` }));
-  const verifiers = Array.from({ length: 5 }, (_, index) => ({ criterion: `1.1.${index}`, task: `verify-${index}` }));
-  // The first agent of each phase is slow, and one judge ends in an error.
-  const slow = (task: string): number => (task.endsWith("-0") ? 0.15 : 0.002);
-  const flow = await runWorkflow(3, [{ phase: "walks", walks }, { phase: "judges", judges }, { phase: "verifiers", verifiers }, { phase: "done" }], slow, ["judge-4"]);
+  const walks = Array.from({ length: 7 }, (_, index) => `t${index}`);
+  const judges = Array.from({ length: 10 }, (_, index) => `1.1.${index}`);
+  const verifiers = judges.slice(0, 5);
+  // The first agent of each phase is slow.
+  const slow = (task: string): number => ([taskOf("walks", "t0"), taskOf("judges", "1.1.0"), taskOf("verifiers", "1.1.0")].includes(task) ? 0.15 : 0.002);
+  const flow = await runWorkflow(3, [{ phase: "walks", walks }, { phase: "judges", judges }, { phase: "verifiers", verifiers }, { phase: "done" }], slow);
   assert.equal(flow.most, 3, "there are three agents at a time, and never more");
-  for (const item of [...walks, ...judges, ...verifiers]) assert.equal(flow.started(item.task), 1, `${item.task} is done once`);
+  for (const id of walks) assert.equal(flow.started(taskOf("walks", id)), 1, `walk ${id} is done once, from the task file the toolbox wrote`);
+  for (const id of judges) assert.equal(flow.started(taskOf("judges", id)), 1, `judge ${id} is done once`);
+  for (const id of verifiers) assert.equal(flow.started(taskOf("verifiers", id)), 1, `verifier ${id} is done once`);
   assert.deepEqual(flow.result.history.map((entry) => [entry.phase, entry.tasks ?? null]), [["walks", 7], ["judges", 10], ["verifiers", 5], ["done", null]]);
   // In groups the last task would wait for the slow agent of the first group. In a pool it starts while that one still runs.
-  for (const [first, last] of [["walk-0", "walk-6"], ["judge-0", "judge-9"], ["verify-0", "verify-4"]] as const) {
-    assert.ok(flow.position(last, "end") < flow.position(first, "end"), `${last} is klaar terwijl de trage ${first} nog loopt`);
+  for (const [phase, first, last] of [["walks", "t0", "t6"], ["judges", "1.1.0", "1.1.9"], ["verifiers", "1.1.0", "1.1.4"]] as const) {
+    assert.ok(flow.position(taskOf(phase, last), "end") < flow.position(taskOf(phase, first), "end"), `${phase} ${last} is klaar terwijl de trage ${first} nog loopt`);
   }
   // The phases stay apart: no judge starts before the last walk is done.
-  assert.ok(flow.position("walk-0", "end") < flow.position("judge-0", "start"));
-  // An agent that failed did not stop the others, and nothing was skipped after one attempt.
-  assert.equal(flow.started("judge-9"), 1);
+  assert.ok(flow.position(taskOf("walks", "t0"), "end") < flow.position(taskOf("judges", "1.1.0"), "start"));
+  // The stand reads out ids only, and records the attempts of the agents that came back: the toolbox counts them.
+  assert.match(flow.stands[0]!, /pending --run RUN --brief/);
+  assert.match(flow.stands[1]!, /tasks --run RUN --attempted walks:t\d/);
+  for (const id of walks) assert.equal(flow.toolbox.attempts[`walks:${id}`], 1);
   assert.deepEqual(flow.result.skipped, []);
+  assert.equal(flow.result.paused, null);
 
   // Fewer tasks than places: no more agents than tasks. Without atOnce the default of the script holds.
   const small = await runWorkflow(8, [{ phase: "walks", walks: walks.slice(0, 2) }], () => 0.01);
@@ -313,54 +356,160 @@ test("the workflow keeps atOnce agents running: a new one starts as soon as one 
   assert.equal(standard.most, DEFAULT_DAEMON_LIMITS.maxSessions - 1);
 });
 
+test("the workflow derives the path of every task file as the toolbox writes it", () => {
+  const workflow = read("skills/nldd-a11y-audit/onderzoek.workflow.js");
+  for (const phase of PHASES) {
+    const line = new RegExp(`^  ${phase}: \\{ title: '[^']+', task: \\(id\\) => \`\\$\\{run\\}/([^\`]+)\``, "m").exec(workflow);
+    assert.ok(line, `de werkstroom leidt het pad van de fase ${phase} niet af op de regel waar deze test het leest`);
+    assert.equal(line[1]!.replace("${id}", "1.4.3"), TASK_FILES[phase]("1.4.3"), `de werkstroom en de toolbox noemen een ander pad voor de opdracht van ${phase}`);
+  }
+});
+
 test("the workflow runs the finishing round as a fourth phase, and goes straight to done when the toolbox names none", async () => {
-  const verifiers = [{ criterion: "1.3.4", task: "verify-134" }, { criterion: "1.4.4", task: "verify-144" }];
-  const finishers = [{ criterion: "1.3.4", task: "finish-134" }, { criterion: "1.4.13", task: "finish-1413" }, { criterion: "2.5.2", task: "finish-252" }];
-  const flow = await runWorkflow(2, [{ phase: "verifiers", verifiers }, { phase: "finishers", finishers }, { phase: "done" }]);
+  const finishers = ["1.3.4", "1.4.13", "2.5.2"];
+  const flow = await runWorkflow(2, [{ phase: "verifiers", verifiers: ["1.3.4", "1.4.4"] }, { phase: "finishers", finishers }, { phase: "done" }]);
   assert.deepEqual(flow.result.history.map((entry) => [entry.phase, entry.tasks ?? null]), [["verifiers", 2], ["finishers", 3], ["done", null]]);
-  for (const item of finishers) assert.equal(flow.started(item.task), 1, `${item.task} is done once`);
+  for (const id of finishers) assert.equal(flow.started(taskOf("finishers", id)), 1, `finisher ${id} is done once`);
   assert.equal(flow.most, 2, "the finishing round runs in the same pool");
-  assert.ok(flow.position("verify-144", "end") < flow.position("finish-134", "start"), "no finisher starts before the last verifier is done");
+  assert.ok(flow.position(taskOf("verifiers", "1.4.4"), "end") < flow.position(taskOf("finishers", "1.3.4"), "start"), "no finisher starts before the last verifier is done");
   assert.equal(flow.result.last, "done");
   // A finisher that gives no valid verdict twice is skipped like any other task, with its own round.
-  const stuck = await runWorkflow(2, [{ phase: "finishers", finishers: finishers.slice(0, 1) }, { phase: "finishers", finishers: finishers.slice(0, 1) }, { phase: "finishers", finishers: finishers.slice(0, 1) }, { phase: "done" }]);
-  assert.equal(stuck.started("finish-134"), 2);
+  const stuck = await runWorkflow(2, [{ phase: "finishers", finishers: ["1.3.4"] }, { phase: "finishers", finishers: ["1.3.4"] }, { phase: "finishers", finishers: ["1.3.4"] }, { phase: "done" }]);
+  assert.equal(stuck.started(taskOf("finishers", "1.3.4")), 2);
   assert.deepEqual(stuck.result.skipped, ["finishers:1.3.4"]);
-  assert.match(stuck.stands[3]!, /1\. node CLI skip --run RUN --criterion 1\.3\.4 --round finish --reason /);
+  assert.match(stuck.stands[3]!, /1\. node CLI skip --run RUN --criterion 1\.3\.4 --round finish --kind "geen geldig resultaat" --reason /);
   // No criterion was left open by the evaluation itself: the toolbox says done after the verifiers, and no agent of the round starts.
-  const without = await runWorkflow(2, [{ phase: "verifiers", verifiers }, { phase: "done" }]);
+  const without = await runWorkflow(2, [{ phase: "verifiers", verifiers: ["1.3.4", "1.4.4"] }, { phase: "done" }]);
   assert.deepEqual(without.result.history.map((entry) => entry.phase), ["verifiers", "done"]);
-  assert.equal(without.events.filter((event) => event.task.startsWith("finish-")).length, 0);
+  assert.equal(without.events.filter((event) => event.task.endsWith("/afmaak.md")).length, 0);
   // Every phase the toolbox can name is one the workflow knows.
   const workflow = read("skills/nldd-a11y-audit/onderzoek.workflow.js");
-  for (const phase of ["walks", "judges", "verifiers", "finishers"]) assert.match(workflow, new RegExp(`^  ${phase}: \\{ title: `, "m"), `de werkstroom kent de fase ${phase} niet`);
+  for (const phase of PHASES) assert.match(workflow, new RegExp(`^  ${phase}: \\{ title: `, "m"), `de werkstroom kent de fase ${phase} niet`);
 });
 
 test("the workflow tries a task twice and then has it skipped, as before the pool", async () => {
-  const stuck = { pageType: "zoek", task: "walk-zoek" };
-  const other = { pageType: "start", task: "walk-start" };
-  const flow = await runWorkflow(3, [{ phase: "walks", walks: [stuck, other] }, { phase: "walks", walks: [stuck] }, { phase: "walks", walks: [stuck] }, { phase: "done" }]);
-  assert.equal(flow.started("walk-zoek"), 2, "two attempts, not a third");
-  assert.equal(flow.started("walk-start"), 1);
+  const flow = await runWorkflow(3, [{ phase: "walks", walks: ["zoek", "start"] }, { phase: "walks", walks: ["zoek"] }, { phase: "walks", walks: ["zoek"] }, { phase: "done" }]);
+  assert.equal(flow.started(taskOf("walks", "zoek")), 2, "two attempts, not a third");
+  assert.equal(flow.started(taskOf("walks", "start")), 1);
   assert.deepEqual(flow.result.skipped, ["walks:zoek"]);
+  assert.deepEqual(flow.toolbox.attempts, { "walks:zoek": 2, "walks:start": 1 }, "the run holds the attempts");
   assert.ok(!flow.stands[2]!.includes(" skip "), "the round that finds it open for the third time does not skip yet");
-  assert.match(flow.stands[3]!, /1\. node CLI skip --run RUN --page-type zoek --reason /, "the next round begins with the skip");
+  assert.match(flow.stands[3]!, /1\. node CLI skip --run RUN --page-type zoek --kind "geen geldig resultaat" --reason /, "the next round begins with the skip");
   assert.equal(flow.result.last, "done");
 });
 
+test("a limit or a failure of the model pauses the workflow: it skips nothing and counts no attempt", async () => {
+  // Every call fails with a quota error, the stand included: the workflow stops at once, and nothing is skipped.
+  const quota = await runWorkflow(3, [{ phase: "walks", walks: ["zoek"] }], undefined, undefined, { trouble: () => "throw" });
+  assert.equal(quota.asked.length, 1, "after the stand fails, no agent starts");
+  assert.match(quota.result.paused!, /^storing van het model, run gepauzeerd; start de werkstroom opnieuw om verder te gaan/);
+  assert.ok(quota.logs.some((line) => line.startsWith("storing van het model, run gepauzeerd")), "the workflow says so");
+  assert.equal(quota.result.last, "storing");
+  assert.deepEqual(quota.result.skipped, []);
+  assert.deepEqual(quota.toolbox.skips, []);
+
+  // The stand answers, and every agent of a phase fails with a quota error: three in a row stop the round, round after round nothing is skipped.
+  const walks = Array.from({ length: 7 }, (_, index) => `t${index}`);
+  const states = Array.from({ length: 6 }, (): WorkflowState => ({ phase: "walks", walks }));
+  const agents = await runWorkflow(1, states, undefined, undefined, { trouble: (what) => (what === "stand" ? undefined : "throw") });
+  assert.equal(agents.events.filter((event) => event.what === "start").length, 3, "after three errors in a row no new agent starts");
+  assert.match(agents.result.paused!, /run gepauzeerd/);
+  assert.equal(agents.stands.length, 1, "no new round after the pause");
+  assert.deepEqual(agents.toolbox.attempts, {}, "an agent that stopped with an error is no attempt");
+  assert.deepEqual(agents.toolbox.skips, []);
+
+  // The host gives null for an agent that died on an error of the model after its retries: the same as an exception.
+  const dead = await runWorkflow(1, states, undefined, undefined, { trouble: (what) => (what === "stand" ? undefined : "null") });
+  assert.match(dead.result.paused!, /run gepauzeerd/);
+  assert.deepEqual(dead.toolbox.attempts, {});
+
+  // One agent that fails among others that come back is no storing: it gets its task again next round, without an attempt for the error.
+  let failedOnce = false;
+  const once = await runWorkflow(2, [{ phase: "judges", judges: ["1.1.1", "1.1.2", "1.1.3"] }, { phase: "judges", judges: ["1.1.2"] }, { phase: "done" }], undefined, undefined, {
+    trouble: (what) => (what === taskOf("judges", "1.1.2") && !failedOnce ? ((failedOnce = true), "throw") : undefined),
+  });
+  assert.equal(once.result.paused, null);
+  assert.equal(once.started(taskOf("judges", "1.1.2")), 2);
+  assert.deepEqual(once.toolbox.attempts, { "judges:1.1.1": 1, "judges:1.1.3": 1, "judges:1.1.2": 1 });
+  assert.equal(once.result.last, "done");
+});
+
+test("a workflow started again after a pause goes on with the attempts the run holds", async () => {
+  const toolbox: FakeToolbox = { attempts: {}, skips: [] };
+  // First start: the walk comes back without a valid result, then the model stops answering.
+  const first = await runWorkflow(1, [{ phase: "walks", walks: ["zoek"] }, { phase: "walks", walks: ["zoek"] }], undefined, undefined, { toolbox, trouble: (what, call) => (what !== "stand" && call > 2 ? "throw" : undefined) });
+  assert.match(first.result.paused!, /run gepauzeerd/);
+  assert.deepEqual(toolbox.attempts, { "walks:zoek": 1 }, "one attempt: the one that came back, not the one that stopped with an error");
+  assert.deepEqual(toolbox.skips, []);
+  // Second start: one attempt is left, and then the walk is skipped.
+  const second = await runWorkflow(1, [{ phase: "walks", walks: ["zoek"] }, { phase: "walks", walks: ["zoek"] }, { phase: "walks", walks: ["zoek"] }, { phase: "done" }], undefined, undefined, { toolbox });
+  assert.equal(second.started(taskOf("walks", "zoek")), 1, "the second start gives it its second attempt, not two more");
+  assert.deepEqual(second.result.skipped, ["walks:zoek"]);
+  assert.deepEqual(toolbox.skips, ["walks:zoek"]);
+  assert.equal(second.result.last, "done");
+});
+
+test("skip records its kind, a storing is no budget that ran out, and unskip puts the task back with its attempts from zero", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "loep-unskip-"));
+  try {
+    const part = (name: string) => ({ prompt: `${name}.md`, output: `${name}.json`, candidates: `${name}-kandidaten.json`, session: name, maxCommands: 1, maxMinutes: 1 });
+    const index = { flow: INSTRUMENT_FLOW, templates: {}, withoutProcedure: [], only: [], walks: [{ pageType: "zoek", page: "P1", prompt: "rondgang/zoek.md", output: "rondgang/zoek.json", session: "r-zoek", maxCommands: 1, maxMinutes: 1 }], tasks: [{ criterion: "1.4.3", judge: part("verdicts/1.4.3/oordeel"), verify: part("verdicts/1.4.3/final"), finish: null }] };
+    mkdirSync(join(dir, "tasks"), { recursive: true });
+    writeFileSync(join(dir, "tasks", "index.json"), JSON.stringify(index));
+    const loaded = await loadInstrumentIndex(dir);
+    const task = loaded.tasks[0]!;
+
+    assert.deepEqual(await recordAttempts(dir, ["walks:zoek", "judges:1.4.3", "judges:1.4.3"]), { "walks:zoek": 1, "judges:1.4.3": 2 });
+    await assert.rejects(recordAttempts(dir, ["finishers:1.4.3"]), /--attempted: "finishers:1\.4\.3" is no task of this run/);
+    await assert.rejects(recordAttempts(dir, ["rondgang:zoek"]), /is no task of this run/);
+
+    // Without a kind it is what it always was; a storing is said as one.
+    await skip(dir, { pageType: "zoek" }, "De agent leverde twee keer geen geldige lijst.");
+    assert.equal(skipKindOf(dir, "rondgang/zoek.json"), "geen geldig resultaat");
+    await skip(dir, { criterion: "1.4.3" }, "De weeklimiet van het abonnement was bereikt.", "storing");
+    assert.equal(skipKindOf(dir, task.judge.output), "storing");
+    assert.equal(skippedForOutage(dir, task), true);
+    await assert.rejects(skip(dir, { criterion: "1.4.3" }, "De weeklimiet van het abonnement was bereikt.", "quota"), /skip --kind is "geen geldig resultaat" or "storing", not "quota"/);
+    await assert.rejects(skip(dir, { criterion: "1.4.3", round: "finish" }, "Er is geen afmaakronde in deze run."), /skip needs --page-type <id> or --criterion <id>/);
+
+    // The finishing round of a criterion whose judge was skipped for a storing is not told that a budget ran out.
+    const outage = pointsToFinish({ round: null, verdict: null }, "storing")!;
+    assert.deepEqual(outage, ["De beoordeling is door een storing van het model niet gedaan. Het criterium is daardoor niet beoordeeld."]);
+    assert.ok(!outage.join().includes("budget op"));
+    assert.match(pointsToFinish({ round: "judge", verdict: null }, "storing")!.join(), /^De verificatie is door een storing van het model niet gedaan/);
+    assert.match(pointsToFinish({ round: null, verdict: null })!.join(), /^budget op: /, "a task without a valid result stays what it was");
+
+    // unskip: the task is open again, and the workflow gives it its two attempts anew.
+    assert.equal(await unskip(dir, { criterion: "1.4.3" }), "verdicts/1.4.3/oordeel.overgeslagen.json");
+    assert.equal(skipped(dir, task.judge.output), false);
+    assert.equal(skippedForOutage(dir, task), false);
+    assert.deepEqual((await loadInstrumentIndex(dir)).attempts, { "walks:zoek": 1 });
+    await assert.rejects(unskip(dir, { criterion: "1.4.3" }), /unskip: judges:1\.4\.3 is niet overgeslagen/);
+    await assert.rejects(unskip(dir, { criterion: "9.9.9" }), /unskip needs --page-type <id> or --criterion <id>/);
+    await unskip(dir, { pageType: "zoek" });
+    assert.equal((await loadInstrumentIndex(dir)).attempts, undefined, "no attempts left, no field");
+
+    // What the workflow reads: ids and attempts, no paths.
+    const brief = briefPending({ flow: INSTRUMENT_FLOW, phase: "judges", walks: [], judges: [{ criterion: "1.4.3", task: "/x/tasks/1.4.3/beoordeel.md", session: "b-143", attempts: 1 }], verifiers: [], finishers: [], skipped: [], noteNl: "" });
+    assert.deepEqual(brief, { phase: "judges", walks: [], judges: [{ id: "1.4.3", attempts: 1 }], verifiers: [], finishers: [] });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test("the workflow sets a model only for the roles that are given one, and refuses a role or model it does not know", async () => {
-  const states = (): WorkflowState[] => [{ phase: "walks", walks: [{ pageType: "start", task: "walk-start" }] }, { phase: "judges", judges: [{ criterion: "1.1.1", task: "judge-111" }] }, { phase: "done" }];
+  const states = (): WorkflowState[] => [{ phase: "walks", walks: ["start"] }, { phase: "judges", judges: ["1.1.1"] }, { phase: "done" }];
   const plain = await runWorkflow(2, states());
   assert.ok(plain.asked.every((options) => !("model" in options)), "without models no agent gets a model");
   assert.deepEqual(plain.result.models, { stand: null, walks: null, judges: null, verifiers: null, finishers: null });
-  const none = await runWorkflow(2, states(), undefined, [], {});
+  const none = await runWorkflow(2, states(), undefined, {});
   assert.ok(none.asked.every((options) => !("model" in options)));
 
-  const some = await runWorkflow(2, states(), undefined, [], { stand: "haiku", walks: "sonnet" });
+  const some = await runWorkflow(2, states(), undefined, { stand: "haiku", walks: "sonnet" });
   assert.deepEqual(some.asked.map((options) => [options.phase, options.model ?? null]), [["Stand", "haiku"], ["Rondgangen", "sonnet"], ["Stand", "haiku"], ["Beoordelen", null], ["Stand", "haiku"]]);
   assert.deepEqual(some.result.models, { stand: "haiku", walks: "sonnet", judges: null, verifiers: null, finishers: null });
 
-  await assert.rejects(runWorkflow(2, states(), undefined, [], { rondgangen: "sonnet" }), /onbekende rol "rondgangen"; kies uit stand, walks, judges, verifiers, finishers/);
-  await assert.rejects(runWorkflow(2, states(), undefined, [], { walks: "gpt" }), /onbekend model "gpt" voor "walks"; kies uit opus, sonnet, haiku/);
-  await assert.rejects(runWorkflow(2, states(), undefined, [], ["sonnet"]), /models moet een object zijn/);
+  await assert.rejects(runWorkflow(2, states(), undefined, { rondgangen: "sonnet" }), /onbekende rol "rondgangen"; kies uit stand, walks, judges, verifiers, finishers/);
+  await assert.rejects(runWorkflow(2, states(), undefined, { walks: "gpt" }), /onbekend model "gpt" voor "walks"; kies uit opus, sonnet, haiku/);
+  await assert.rejects(runWorkflow(2, states(), undefined, ["sonnet"]), /models moet een object zijn/);
 });
