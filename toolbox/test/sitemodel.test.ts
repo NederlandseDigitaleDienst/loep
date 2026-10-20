@@ -346,6 +346,16 @@ test("the gate reports missing coverage, and what needs a write request as a lim
   assert.ok(!limited.limitations[0]!.missingNl.includes("meet.example"), "a refused beacon of a third party takes no content away and is not reported");
 });
 
+test("a rule engine without an answer is a limitation of the gate, not a clean result (#143)", () => {
+  const page = gatePage("P1", "https://site.nl/");
+  const stopped = { ...page, engines: { light: { status: { "axe-core": { ok: false, version: "unknown", error: "de pagina heeft window.axe zelf vastgezet" }, alfa: { ok: true, version: "1" } } }, dark: { status: { "axe-core": { ok: true, version: "4" }, alfa: { ok: true, version: "1" } } } } } as unknown as PageData;
+  const checked = gateChecks(gateRun([stopped]));
+  assert.deepEqual(checked.gaps, []);
+  assert.deepEqual(checked.limitations.map((gap) => [gap.check, gap.page]), [["engine-without-result", "P1"]]);
+  assert.match(checked.limitations[0]!.missingNl, /axe-core in licht: de pagina heeft window\.axe zelf vastgezet\)\. Wat die regelset hier zou vinden, kan niet worden vastgesteld/);
+  assert.deepEqual(gateChecks(gateRun([page])).limitations, [], "engines that ran are no limitation");
+});
+
 test("the gate sends back a run in which the measurements that close a criterion are missing", () => {
   const withModel = (pages: PageData[], extra: Partial<RunData> = {}, states: SiteStates["states"] = []): RunData => gateRun(pages, { siteModel: validModel(), siteStates: { siteSha256: "", seeded: { blockers: [], cookies: 0, storedValues: 0 }, dismissals: [], states }, ...extra });
   const complete = gatePage("P1", "https://site.nl/");
