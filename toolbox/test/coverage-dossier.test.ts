@@ -276,3 +276,24 @@ test("1.4.5 and 1.3.2: with a site model there is a full screenshot of one page 
   assert.deepEqual([shots.pages[13]!.page, shots.pages[13]!.pageType, shots.pages[13]!.narrow], ["P14", "type-14", "pages/P14/screenshot-narrow.png"]);
   assert.equal((screenshots(runOf(pages), "1.4.5") as { pages: unknown[] }).pages.length, 12, "without a model: one per template, up to twelve");
 });
+
+test("2.4.11: an other address of a page that leads to an anchor, with what the inventory found there; the other criteria do not get it", () => {
+  const statement = page("P1", { item: { url: "https://site.nl/verklaring", kind: "structured", status: 200, slug: "P1", templateHash: "P1", reason: "", aliases: ["https://site.nl/formulier", "https://site.nl/oud", "https://site.nl/vragen"] } });
+  const inventory = {
+    totals: {},
+    pages: [
+      { url: "https://site.nl/verklaring" },
+      { url: "https://site.nl/vragen", finalUrl: "https://site.nl/verklaring#vragen", anchor: { id: "vragen", found: true, focused: false, inViewport: null, coveredBy: null } },
+      { url: "https://site.nl/formulier", finalUrl: "https://site.nl/verklaring#formulier", anchor: { id: "formulier", found: true, focused: true, inViewport: true, coveredBy: "html > body > header" } },
+      { url: "https://site.nl/oud", finalUrl: "https://site.nl/verklaring" },
+    ],
+  };
+  type Anchors = { anchorRedirects?: { examined: boolean; rows: { page: string; address: string; landsOn: string; anchorFound: boolean; focused: boolean; coveredBy: string | null }[] } };
+  const found = (keyboard(runOf([statement], { inventory }), "2.4.11") as Anchors).anchorRedirects!;
+  assert.equal(found.examined, true);
+  assert.deepEqual(found.rows.map((row) => [row.page, row.address, row.focused, row.coveredBy]), [["P1", "https://site.nl/formulier", true, "html > body > header"], ["P1", "https://site.nl/vragen", false, null]], "a redirect without an anchor is no row");
+  assert.equal((keyboard(runOf([statement], { inventory }), "2.4.7") as Anchors).anchorRedirects, undefined);
+  // An inventory that recorded where the browser landed, but not yet what it found there.
+  const older = { totals: {}, pages: [{ url: "https://site.nl/vragen", finalUrl: "https://site.nl/verklaring#vragen" }] };
+  assert.equal((keyboard(runOf([statement], { inventory: older }), "2.4.11") as Anchors).anchorRedirects!.examined, false);
+});

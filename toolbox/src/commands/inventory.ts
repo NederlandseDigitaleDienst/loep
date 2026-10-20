@@ -12,6 +12,8 @@ export interface InventoryPage {
   url: string;
   /** Where the browser was once the page had loaded, when that is not `url`: the server redirected, or a script changed the address. Absent when it stayed on `url`, and in older runs. */
   finalUrl?: string;
+  /** Only when `finalUrl` has an anchor: what a visitor finds there. Absent otherwise, and in older runs. */
+  anchor?: AnchorLanding;
   slug: string;
   status: number | null;
   title: string;
@@ -30,6 +32,23 @@ export interface InventoryPage {
   loadMs?: number;
   /** What there is to operate: links, and the other controls. The sweep takes longer the more there is. Absent in older runs. */
   operable?: { links: number; controls: number };
+}
+
+/**
+ * Where an address that leads to an anchor lands. Chromium gives focus to the target of the anchor
+ * when it can take focus (a link, a field, an element with tabindex); only then does WCAG 2.4.11
+ * apply. `coveredBy`: the element painted over the middle of the focused target, as in the Tab walk.
+ */
+export interface AnchorLanding {
+  /** The anchor as the address names it, without `#`. */
+  id: string;
+  /** Whether the page has an element with that id, or a link with that name. */
+  found: boolean;
+  /** Whether the target, or an element in it, has focus after the jump. */
+  focused: boolean;
+  /** Only when focused: whether the target is in the window. */
+  inViewport: boolean | null;
+  coveredBy: string | null;
 }
 
 export interface Inventory {
@@ -332,6 +351,27 @@ export async function probeDocument(url: string, origins: string | readonly stri
 /** Whether a `Content-Type` says HTML: only such an answer is a page. */
 export const isHtml = (contentType: string | null): boolean => /^\s*(text\/html|application\/xhtml\+xml)\s*(;|$)/i.test(contentType ?? "");
 
+/** What a visitor finds at the anchor the browser landed on; undefined when the address has no anchor. */
+async function anchorLanding(page: Page, finalUrl: string): Promise<AnchorLanding | undefined> {
+  const hash = new URL(finalUrl).hash.slice(1);
+  if (!hash) return undefined;
+  let id = hash;
+  try {
+    id = decodeURIComponent(hash);
+  } catch {
+    // An anchor that is no valid percent-encoding is looked up as it stands, as the browser does.
+  }
+  return page.evaluate((id) => {
+    const loep = (window as unknown as { __loep: Record<string, (...args: unknown[]) => unknown> }).__loep;
+    // As the browser looks for the target of an anchor: an element with that id, else a link with that name.
+    const target = document.getElementById(id) ?? document.querySelector(`a[name="${CSS.escape(id)}"]`);
+    const active = loep.deepActiveElement!() as Element | null;
+    const focused = target !== null && active !== null && active !== document.body && (active === target || target.contains(active));
+    const state = focused ? (loep.focusState!() as { inViewport: boolean; coveredBy: string[] | null } | null) : null;
+    return { id, found: target !== null, focused, inViewport: state ? state.inViewport : null, coveredBy: state?.coveredBy ? state.coveredBy.join(" >>> ") : null };
+  }, id);
+}
+
 type Inspected = Omit<InventoryPage, "foundVia" | "slug"> & { links: string[]; frames: string[]; snapshot: string; html: string; linksWithText: Anchor[]; contentType: string | null };
 
 /**
@@ -346,6 +386,7 @@ async function inspect(page: Page, url: string, mayBeDocument: boolean, offered:
   const sent = mayBeDocument ? kindOfContentType(loaded.contentType) : null;
   if (sent) return { document: sent };
   if (mayBeDocument && offered && loaded.contentType !== null && !isHtml(loaded.contentType)) return { document: "other" };
+  const anchor = loaded.finalUrl !== url ? await anchorLanding(page, loaded.finalUrl) : undefined;
   const html = await page.content();
   const result = await page.evaluate((own) => {
     const loep = (window as unknown as { __loep: Record<string, (...args: unknown[]) => unknown> }).__loep;
@@ -369,6 +410,7 @@ async function inspect(page: Page, url: string, mayBeDocument: boolean, offered:
   return {
     url,
     ...(loaded.finalUrl !== url ? { finalUrl: loaded.finalUrl } : {}),
+    ...(anchor ? { anchor } : {}),
     status: loaded.status,
     title: result.title,
     lang: result.lang,
