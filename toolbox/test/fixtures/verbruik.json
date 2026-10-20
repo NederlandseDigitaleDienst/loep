@@ -1,0 +1,15 @@
+{
+  "schema": "loep/verbruik/1",
+  "run": "variant-1",
+  "sourceNl": "Geteld uit de transcripts van de agents van deze run, elk bericht één keer.",
+  "model": "claude-opus-5-5",
+  "prices": {
+    "proefmodel": { "input": 1, "cacheWrite": 1.25, "cacheRead": 0.1, "output": 5 }
+  },
+  "agents": [
+    { "session": "b-143", "input": 100, "cacheWrite": 200000, "cacheRead": 4000000, "output": 5000, "turns": 40 },
+    { "session": "v-143", "model": "proefmodel", "input": 50, "cacheWrite": 100000, "cacheRead": 2000000, "output": 3000, "turns": 30 },
+    { "session": "r-start", "model": "zonder-prijs", "input": 10, "cacheWrite": 1000, "cacheRead": 10000, "output": 100, "turns": 5 },
+    { "role": "stand", "input": 4, "cacheWrite": 40000, "cacheRead": 40000, "output": 2000, "turns": 2 }
+  ]
+}
