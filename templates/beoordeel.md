@@ -46,7 +46,7 @@ Je beoordeelt succescriterium **{{id}} {{title}}** (niveau {{level}}) voor één
 
 ## Je bestanden
 
-- Dossier: `{{dossier}}` (JSON). Lees dit eerst helemaal. Paden erin zijn relatief aan `{{run}}`. De procedure schrijft onderdelen kort, zoals `keyboard.walk`; in het bestand staan ze onder `evidence`, dus `evidence.keyboard.walk`.
+- Dossier: `{{dossier}}`. Lees het met `loep dossier`, niet met eigen scripts, `jq`, `cat` of door het bestand te openen. Zonder onderdeel geeft het een overzicht: de onderdelen met hun omvang, wat je ervan al hebt gelezen, en de kleine onderdelen voluit. `loep dossier <onderdeel>` geeft één onderdeel in een compacte vorm, waarin niets is weggelaten: een lijst van rijen met dezelfde velden is een tabel met de kolommen één keer bovenaan en per rij een JSON-lijst met de waarden in die volgorde. Een lang onderdeel komt in delen; het antwoord zegt "deel 1 van 3" en noemt het volgende deel (`loep dossier <onderdeel> 2`). Dieper kan met een punt: een pagina (`loep dossier legend.P03`), een rij (`loep dossier controls.rows.4`) of een veld. Het antwoord is één regel JSON met de inhoud als tekst eronder. Het kost niets van je budget en werkt ook voordat je sessie loopt. Paden in het dossier zijn relatief aan `{{run}}`. De procedure schrijft onderdelen kort, zoals `keyboard.walk`; zo geef je ze ook aan `loep dossier`. Voor dit criterium tellen {{dossierParts}}: lees die eerst helemaal, elk deel. Een oordeel `passed` kan pas als dat in je eigen sessie is gebeurd; de controle gaat het na. De andere onderdelen, zoals `legend`, zoek je op waar je ze nodig hebt.
 - Uitkomst van de bewijspoort: `{{gate}}`.
 - Sitemodel: `{{siteModel}}`. Wat over de pagina ligt, welke onderdelen pas na een handeling iets tonen, en onder welke naam (`recipe`) de toestand is bewaard waarin ze open staan.
 - Kandidaten voor dit criterium: `{{candidates}}` (JSON, kan leeg zijn). Dat zijn de kandidaten uit de rondgang, plus wat de veegronde mat en waar alleen beluisteren of kijken uitsluitsel geeft (hun nummer begint met `S`; `evidence` wijst naar het bestand van de meting, de procedure zegt wat je ermee doet).
@@ -74,7 +74,7 @@ Stop je sessie als je klaar bent: `node {{cli}} session stop --run {{run}} --ses
 
 ## Werkwijze
 
-1. Lees de uitkomst van de bewijspoort, het dossier, het sitemodel, de kandidaten, wat de rondgang niet doorliep, en de procedure onderaan.
+1. Lees de uitkomst van de bewijspoort, het dossier (met `loep dossier`, zie hierboven), het sitemodel, de kandidaten, wat de rondgang niet doorliep, en de procedure onderaan.
 2. Volg de stappen van de procedure op het dossier. Noteer per stap wat het dossier laat zien, welke bevindingen eruit volgen en wat ontbreekt.
 3. **Maak een plan voordat je meet.** Schrijf voor jezelf op: de bevindingen die je zichtbaar moet maken, de gaten, de kandidaten en je steekproef, elk met de pagina en de toestand. Zet bij elkaar wat in dezelfde toestand kan, zodat je niet twee keer dezelfde pagina opent. Wat voor de hele site geldt (kop, menu, voet) meet je één keer. Tel de commando's; past het niet, schrap dan van onderaf.
 4. Start je sessie en voer het plan uit. Dicht elk gat volgens "Zelf nagaan" in de procedure.
