@@ -1,7 +1,7 @@
 import type { MediaElement, MediaReport } from "../instruments/media.ts";
 import type { ContentInventory } from "../instruments/overflow.ts";
 import { contrastRatio, floorRatio, type Rgb } from "./contrast.ts";
-import { frameStanding } from "./sitemodel.ts";
+import { acceptedGapFor, frameStanding, NOT_OPENED_ON_PAGE_TYPE } from "./sitemodel.ts";
 import type { EngineOutcome } from "./engines.ts";
 import { REGULAR_PATH, type Clickable, type Element, type Facts, type FormErrorState, type PageData, type RunData, type SkipLinkAim } from "./rundata.ts";
 import { documents } from "./document-evidence.ts";
@@ -257,6 +257,17 @@ export const siteStates: Extractor = (run, criterion) => {
     ...evidence(state.id),
   });
   const statesFor = (kind: string, id: string) => captured.states.filter((state) => state.kind === kind && state.modelId === id).map(stateRow);
+  // What the gate let through as how the site is, by the same rule: a component the sweep could not open on one of its page types.
+  const notOpenedAccepted = reachedStates(run)
+    .filter((state) => state.kind === "component")
+    .flatMap((state) =>
+      (state.perPageType ?? [])
+        .filter((row) => !row.reached)
+        .flatMap((row) => {
+          const accepted = acceptedGapFor(model, { check: NOT_OPENED_ON_PAGE_TYPE, page: row.url, component: state.modelId });
+          return accepted ? [{ component: state.modelId, pageType: row.pageType, triedOn: labelOf(row.url) ?? row.url, pagesOfThisType: labelsOf([row.pageType]), notOpenedNl: row.reasonNl, acceptedNl: accepted.reasonNl, decidedBy: accepted.decidedBy }] : [];
+        }),
+    );
   return {
     examined: true,
     method:
@@ -277,6 +288,14 @@ export const siteStates: Extractor = (run, criterion) => {
       ...model.components.filter((component) => (component.blockedRequests ?? []).length > 0).map((component) => ({ component: component.id, requests: component.blockedRequests })),
       ...run.pages.filter((page) => refusedWrites(page, run).length > 0).map((page) => ({ page: page.label, requests: refusedWrites(page, run) })),
     ],
+    ...(notOpenedAccepted.length > 0
+      ? {
+          componentsNotOpenedOnPageType: {
+            note: "Onderdelen die op een paginatype niet opengingen, terwijl ze er volgens het sitemodel wel staan. De verkenner of een persoon (`decidedBy`) heeft dat aanvaard als eigenschap van de site, en de bewijspoort telt het daarom niet als gat. Op dat paginatype is het onderdeel niet geopend en niet gemeten: wat het daar toont en hoe het daar werkt, staat niet in dit dossier. Of de metingen van het onderdeel onder `components` ook voor dat paginatype gelden, is niet vastgesteld. Hangt dit criterium af van dat onderdeel, dan rust een goedkeuring of \"niet van toepassing\" nooit op metingen van het onderdeel op een ander paginatype. Open het zelf op de pagina die erbij staat (`triedOn`) of op een andere pagina van dat paginatype, en meet het daar. Lukt openen na een echte poging niet, dan is dat een open punt `proef werkte niet:`, met het onderdeel, het paginatype en wat je probeerde. Zie je waarom het niet opengaat en valt dat onder dit criterium, dan is het een bevinding.",
+            rows: notOpenedAccepted,
+          },
+        }
+      : {}),
     processes: model.processes.map((process) => ({ id: process.id, descriptionNl: process.descriptionNl, ...statesFor("process", process.id)[0] })),
     frames: model.frames.map((frame) => ({ address: frame.address, class: frame.class, kindNl: frameStanding(frame).labelNl, counts: frameStanding(frame).counts, ...(frameStanding(frame).owner ? { ownerOfFindings: frameStanding(frame).owner } : {}), descriptionNl: frame.descriptionNl, ...(frame.reasonNl ? { reasonNl: frame.reasonNl } : {}), evaluatedAsPage: run.pages.filter((page) => page.item.kind === "embedded" && page.item.url.startsWith(frame.address)).map((page) => page.label) })),
     framesLeftOutOfTheSample: run.sample.excludedFrames ?? [],

@@ -110,7 +110,7 @@ function validModel(): SiteModel {
 
 test("a complete site model passes the validator", () => {
   assert.deepEqual(validateSiteModel(validModel(), CONTEXT), []);
-  assert.deepEqual(validateSiteModel({ ...validModel(), acceptedGaps: [{ check: "tab-trapped", page: "https://site.nl/", reasonNl: "Echte toetsenbordval in het menu", observation: "verken-0003" }] }, CONTEXT), []);
+  assert.deepEqual(validateSiteModel({ ...validModel(), acceptedGaps: [{ check: "tab-trapped", page: "https://site.nl/", reasonNl: "Echte toetsenbordval in het menu", observation: "verken-0003", decidedBy: "verkenner" }] }, CONTEXT), []);
 });
 
 test("the validator refuses a model that does not fit the run", () => {
@@ -147,12 +147,17 @@ test("the validator refuses a model that does not fit the run", () => {
   // A person may set the class and says who decided; a postcondition may be checked inside a frame that the model names.
   assert.deepEqual(validateSiteModel({ ...validModel(), frames: validModel().frames.map((frame) => ({ ...frame, decidedBy: "toegankelijkheidscoördinator" })) }, CONTEXT), []);
   broken((model) => void (model.components[0]!.postcondition = { kind: "expanded", selector: "#menuknop", frame: "https://elders.example/venster" }), /postcondition\.frame "https:\/\/elders\.example\/venster" staat niet in frames/);
-  broken((model) => void (model.acceptedGaps = [{ check: "tab-trapped", page: "https://site.nl/", reasonNl: "val", observation: "verken-0099" }]), /waarneming verken-0099 bestaat niet/);
+  broken((model) => void (model.acceptedGaps = [{ check: "tab-trapped", page: "https://site.nl/", reasonNl: "val", observation: "verken-0099", decidedBy: "verkenner" }]), /waarneming verken-0099 bestaat niet/);
   // A component that does not open on a page type is accepted for that component only.
-  broken((model) => void (model.acceptedGaps = [{ check: NOT_OPENED_ON_PAGE_TYPE, page: "https://site.nl/", reasonNl: "staat er niet", observation: "verken-0003" }]), /acceptedGaps\[0\]: bij "component-not-opened-on-page-type" hoort "component", het id van het onderdeel/);
-  broken((model) => void (model.acceptedGaps = [{ check: NOT_OPENED_ON_PAGE_TYPE, page: "https://site.nl/", component: "bestaat-niet", reasonNl: "staat er niet", observation: "verken-0003" }]), /onderdeel "bestaat-niet" staat niet in components/);
-  broken((model) => void (model.acceptedGaps = [{ check: "tab-trapped", page: "https://site.nl/", component: "menu", reasonNl: "val", observation: "verken-0003" }]), /"component" hoort alleen bij "component-not-opened-on-page-type"/);
-  assert.deepEqual(validateSiteModel({ ...validModel(), acceptedGaps: [{ check: NOT_OPENED_ON_PAGE_TYPE, page: "https://site.nl/", component: "menu", reasonNl: "staat er niet", observation: "verken-0003" }] }, CONTEXT), []);
+  broken((model) => void (model.acceptedGaps = [{ check: NOT_OPENED_ON_PAGE_TYPE, page: "https://site.nl/", reasonNl: "staat er niet", observation: "verken-0003", decidedBy: "verkenner" }]), /acceptedGaps\[0\]: bij "component-not-opened-on-page-type" hoort "component", het id van het onderdeel/);
+  broken((model) => void (model.acceptedGaps = [{ check: NOT_OPENED_ON_PAGE_TYPE, page: "https://site.nl/", component: "bestaat-niet", reasonNl: "staat er niet", observation: "verken-0003", decidedBy: "verkenner" }]), /onderdeel "bestaat-niet" staat niet in components/);
+  broken((model) => void (model.acceptedGaps = [{ check: "tab-trapped", page: "https://site.nl/", component: "menu", reasonNl: "val", observation: "verken-0003", decidedBy: "verkenner" }]), /"component" hoort alleen bij "component-not-opened-on-page-type"/);
+  assert.deepEqual(validateSiteModel({ ...validModel(), acceptedGaps: [{ check: NOT_OPENED_ON_PAGE_TYPE, page: "https://site.nl/", component: "menu", reasonNl: "staat er niet", observation: "verken-0003", decidedBy: "verkenner" }] }, CONTEXT), []);
+  // Every exception says who decided it: the explorer, or a person.
+  assert.deepEqual(validateSiteModel({ ...validModel(), acceptedGaps: [{ check: "tab-trapped", page: "https://site.nl/", reasonNl: "val", observation: "verken-0003", decidedBy: "persoon" }] }, CONTEXT), []);
+  const decidedByNl = /acceptedGaps\[0\]: "decidedBy" zegt wie de uitzondering heeft vastgesteld: "verkenner" als de verkenner dat deed, "persoon" als een persoon dat zelf deed; zonder telt de regel niet/;
+  broken((model) => void (model.acceptedGaps = [{ check: "tab-trapped", page: "https://site.nl/", reasonNl: "val", observation: "verken-0003" } as never]), decidedByNl);
+  broken((model) => void (model.acceptedGaps = [{ check: "tab-trapped", page: "https://site.nl/", reasonNl: "val", observation: "verken-0003", decidedBy: "beheerder" } as never]), decidedByNl);
   assert.deepEqual(validateSiteModel([], CONTEXT), ["site.json is geen JSON-object"]);
   assert.ok(validateSiteModel({ ...validModel(), extra: 1 }, CONTEXT).includes('onbekend veld "extra"'));
 });
@@ -372,6 +377,22 @@ test("the gate sends back a run in which the measurements that close a criterion
   assert.match(notOpened.missingNl, /paginatype "tekst" niet open in een staand venster: stap 1/);
   assert.ok(notOpened.missingNl.endsWith(notOpenedAdviceNl("stap 1 (click) vond het element niet terug")));
   assert.equal(notOpened.component, "menu", "the gap names the component, so that an accepted gap can be matched to it");
+  // Accepted as how the site is, the dossier of every criterion says the component was not measured on that page type, and who decided.
+  const notMeasured = (run: RunData, criterion: string) => (siteStates(run, criterion) as { componentsNotOpenedOnPageType?: { note: string; rows: Record<string, unknown>[] } }).componentsNotOpenedOnPageType;
+  assert.equal(notMeasured(withModel([complete], {}, [component(instances)]), "1.4.3"), undefined, "nothing accepted: the gate has the gap, the dossier adds nothing");
+  const accepted = withModel([complete], {}, [component(instances)]);
+  accepted.siteModel!.acceptedGaps = [{ check: NOT_OPENED_ON_PAGE_TYPE, page: "https://site.nl/contact/", component: "menu", reasonNl: "Het menu gaat op deze pagina echt niet open.", observation: "verken-0003", decidedBy: "verkenner" }];
+  for (const criterion of ["1.4.3", "2.1.1", "3.2.3"]) {
+    const entry = notMeasured(accepted, criterion)!;
+    assert.match(entry.note, /niet geopend en niet gemeten/);
+    assert.deepEqual(entry.rows.map((row) => [row.component, row.pageType, row.triedOn, row.notOpenedNl, row.acceptedNl, row.decidedBy]), [["menu", "tekst", "https://site.nl/contact/", "stap 1 (click) vond het element niet terug", "Het menu gaat op deze pagina echt niet open.", "verkenner"]]);
+  }
+  // An exception for another component, or one that does not say who decided it, does not count, as at the gate.
+  accepted.siteModel!.acceptedGaps = [{ ...accepted.siteModel!.acceptedGaps[0]!, component: "zoeken" }];
+  assert.equal(notMeasured(accepted, "1.4.3"), undefined);
+  const { decidedBy: _decidedBy, ...undecided } = { ...accepted.siteModel!.acceptedGaps[0]!, component: "menu" };
+  accepted.siteModel!.acceptedGaps = [undecided as never];
+  assert.equal(notMeasured(accepted, "1.4.3"), undefined);
 });
 
 test("the gate flags pages that did not load and frames that are counted as pages", () => {
@@ -914,7 +935,7 @@ test("a sheet names the single-key shortcuts the sweep measured on its page, so 
 });
 
 test("an accepted gap for a component that does not open matches that component only", () => {
-  const entry = { check: NOT_OPENED_ON_PAGE_TYPE, page: "https://site.nl/contact/", component: "menu", reasonNl: "staat er niet", observation: "verken-0003" };
+  const entry = { check: NOT_OPENED_ON_PAGE_TYPE, page: "https://site.nl/contact/", component: "menu", reasonNl: "staat er niet", observation: "verken-0003", decidedBy: "verkenner" as const };
   const model = { acceptedGaps: [entry] };
   assert.equal(acceptedGapFor(model, { check: NOT_OPENED_ON_PAGE_TYPE, page: "https://site.nl/contact/", component: "menu" }), entry);
   assert.equal(acceptedGapFor(model, { check: NOT_OPENED_ON_PAGE_TYPE, page: "https://site.nl/contact/", component: "zoeken" }), undefined, "another component on the same page");
@@ -923,8 +944,12 @@ test("an accepted gap for a component that does not open matches that component 
   const { component, ...old } = entry;
   void component;
   assert.equal(acceptedGapFor({ acceptedGaps: [old] }, { check: NOT_OPENED_ON_PAGE_TYPE, page: "https://site.nl/contact/", component: "menu" }), undefined);
+  // An entry that does not say who decided it matches nothing either.
+  const { decidedBy, ...undecided } = entry;
+  void decidedBy;
+  assert.equal(acceptedGapFor({ acceptedGaps: [undecided as never] }, { check: NOT_OPENED_ON_PAGE_TYPE, page: "https://site.nl/contact/", component: "menu" }), undefined);
   // Other checks still match on check and page.
-  const trap = { check: "tab-trapped", page: "https://site.nl/", reasonNl: "val", observation: "verken-0003" };
+  const trap = { check: "tab-trapped", page: "https://site.nl/", reasonNl: "val", observation: "verken-0003", decidedBy: "persoon" as const };
   assert.equal(acceptedGapFor({ acceptedGaps: [trap] }, { check: "tab-trapped", page: "https://site.nl/" }), trap);
   assert.equal(acceptedGapFor(null, { check: "tab-trapped", page: "https://site.nl/" }), undefined);
 });
