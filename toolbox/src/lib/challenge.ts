@@ -13,15 +13,16 @@ const CHALLENGE_PATH = "/cdn-cgi/challenge-platform/";
 export const CLOUDFLARE_HEADER = "cf-ray";
 
 /**
- * Whether a request is part of Cloudflare's check: anything to Cloudflare's own host for it, or
- * a path under `/cdn-cgi/challenge-platform/` on a host that answered through Cloudflare in this
- * browser context.
+ * Whether a request is part of Cloudflare's check: anything to Cloudflare's own host for it or one
+ * of its subdomains (Cloudflare loads the check from a host such as `<name>.challenges.cloudflare.com`
+ * as well), or a path under `/cdn-cgi/challenge-platform/` on a host that answered through
+ * Cloudflare in this browser context.
  */
 export function isChallenge(url: string, viaCloudflare: (host: string) => boolean): boolean {
   try {
     const parsed = new URL(url);
     if (parsed.protocol !== "https:" && parsed.protocol !== "http:") return false;
-    if (parsed.hostname === CHALLENGE_HOST) return true;
+    if (parsed.hostname === CHALLENGE_HOST || parsed.hostname.endsWith(`.${CHALLENGE_HOST}`)) return true;
     return parsed.pathname.startsWith(CHALLENGE_PATH) && viaCloudflare(parsed.hostname);
   } catch {
     return false;
