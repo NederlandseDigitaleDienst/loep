@@ -4,7 +4,7 @@ import { readJson, writeJson } from "../lib/canonical.ts";
 import { DECISION_KINDS, DECISION_LABEL_NL, DECISION_PRIVACY_NL, DECISION_WHAT_NL, DECISIONS_INDEX, decisionFile, readIndex, type Decision, type DecisionFile, type DecisionKind } from "../lib/decisions.ts";
 import type { Defect } from "../lib/defects.ts";
 import type { ReportFinding } from "../lib/evaluation.ts";
-import type { RecordedVia } from "../lib/recorded.ts";
+import { processTerminal, recordStatement, type RecordingFlags, type Terminal } from "../lib/recorded.ts";
 import { sortDefects } from "../lib/report-markdown.ts";
 import { readEvaluation, signatureIsCurrent } from "./sign.ts";
 import { sealHash } from "./verify.ts";
@@ -12,12 +12,14 @@ import { sealHash } from "./verify.ts";
 /*
  * What the organisation decides about each defect, recorded per defect. Without a decision the
  * command shows the defects, heaviest first, or one defect with what the report proposes. Who
- * decided and in what role is asked; nothing here is ever made up by an agent.
+ * decided and in what role is asked; nothing here is ever made up by an agent. A decision is
+ * confirmed by the person at an interactive terminal, or recorded by the agent in the
+ * conversation with the person's literal confirmation and the summary that was confirmed.
  */
 
 const MIN_WHAT = 10;
 
-export interface DecideOptions {
+export interface DecideOptions extends RecordingFlags {
   run: string;
   defect?: string | undefined;
   decision?: string | undefined;
@@ -26,7 +28,8 @@ export interface DecideOptions {
   alternative?: string | undefined;
   name?: string | undefined;
   role?: string | undefined;
-  recordedVia?: RecordedVia | undefined;
+  /** Where a person confirms the decision; a test plays the person here. */
+  terminal?: Terminal | undefined;
 }
 
 export interface DefectView {
@@ -94,6 +97,14 @@ export async function decide(options: DecideOptions): Promise<DecideResult> {
   if (alternative && kind !== "onevenredig") throw new Error("--alternative hoort bij onevenredig");
   if (!options.name?.trim() || !options.role?.trim()) throw new Error(`--name en --role zeggen wie besloot en in welke functie: ${DECISION_PRIVACY_NL}`);
 
+  const shownNl = [
+    `Besluit over gebrek ${defect.id}: ${defect.titleNl}`,
+    `${DECISION_LABEL_NL[kind]}${options.date ? ` (${options.date})` : ""}`,
+    ...(what ? [what] : []),
+    ...(alternative ? [`Alternatief: ${alternative}`] : []),
+    `Door: ${options.name.trim()}, ${options.role.trim()}`,
+  ].join("\n");
+  const recording = await recordStatement("decide", options, shownNl, options.terminal ?? processTerminal());
   const decision: Decision = {
     defect: { id: defect.id, titleNl: defect.titleNl, mainCriterion: defect.mainCriterion },
     decision: kind,
@@ -102,8 +113,9 @@ export async function decide(options: DecideOptions): Promise<DecideResult> {
     alternativeNl: alternative || null,
     name: options.name.trim(),
     role: options.role.trim(),
+    // The moment of the confirmation: the decision is recorded right after it.
     decidedAt: new Date().toISOString(),
-    ...(options.recordedVia ? { recordedVia: options.recordedVia } : {}),
+    ...recording,
     sealSha256: evaluation.signature!.sealSha256,
   };
   // A changed decision keeps the one before it.

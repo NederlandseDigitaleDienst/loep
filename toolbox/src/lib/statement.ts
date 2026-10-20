@@ -1,6 +1,7 @@
 import { measureDate, type Decision } from "./decisions.ts";
 import { complianceStatus, evaluationHash, madeWith, type ComplianceStatus, type CriterionResult, type Evaluation } from "./evaluation.ts";
 import { siteOrigins } from "./origins.ts";
+import { recordedNl } from "./recorded.ts";
 import type { WcagVersion } from "./wcag.ts";
 
 /**
@@ -123,14 +124,16 @@ export function otherDomains(evaluation: Pick<Evaluation, "site">, input: Pick<S
   return [...new Set([...siteOrigins(evaluation.site).slice(1), ...(input.subdomains ?? [])])];
 }
 
-/** A decision as one phrase of the statement. */
+/** A decision as one phrase of the statement, with how it was recorded. */
 function decisionNl(decision: Decision): string {
   const what = decision.whatNl ? `: ${decision.whatNl.replace(/\.$/, "")}` : "";
-  if (decision.decision === "gepland") return `herstel gepland, klaar uiterlijk ${nlDate(`${decision.date}T12:00:00Z`, "datum")}${what}`;
-  if (decision.decision === "opgelost") return `hersteld op ${nlDate(`${measureDate(decision)}T12:00:00Z`, "datum")}${what} (nog niet nagemeten)`;
-  if (decision.decision === "zienswijze") return `de organisatie ziet dit anders${what}`;
-  if (decision.decision === "onevenredig") return `onevenredige last${what}. Alternatief: ${decision.alternativeNl ?? ask("alternatief")}`;
-  return "nog niet besloten";
+  const notes = [...(decision.decision === "opgelost" ? ["nog niet nagemeten"] : []), ...[recordedNl(decision, decision.decidedAt)].filter((note): note is string => note !== null)];
+  const noted = notes.length > 0 ? ` (${notes.join("; ")})` : "";
+  if (decision.decision === "gepland") return `herstel gepland, klaar uiterlijk ${nlDate(`${decision.date}T12:00:00Z`, "datum")}${what}${noted}`;
+  if (decision.decision === "opgelost") return `hersteld op ${nlDate(`${measureDate(decision)}T12:00:00Z`, "datum")}${what}${noted}`;
+  if (decision.decision === "zienswijze") return `de organisatie ziet dit anders${what}${noted}`;
+  if (decision.decision === "onevenredig") return `onevenredige last${what}. Alternatief: ${decision.alternativeNl ?? ask("alternatief")}${noted}`;
+  return `nog niet besloten${noted}`;
 }
 
 /**
@@ -236,10 +239,13 @@ export function buildStatement(evaluation: Evaluation, input: StatementInput, op
   );
 
   heading(2, `Aanvullende informatie van ${organisation}`);
+  const signedHow = evaluation.signature ? recordedNl(evaluation.signature, evaluation.signature.signedAt) : null;
   if (input.additionalInformationNl) paragraph(input.additionalInformationNl);
   paragraph(
     `Het onderzoek is automatisch uitgevoerd met ${madeWith(evaluation)}, een open-source instrument dat meet en bewijs vastlegt: scripts hebben het bewijs verzameld en een taalmodel heeft elk criterium beoordeeld volgens een vaste procedure, met meetinstrumenten, waarna een tweede beoordeling elke bevinding opnieuw heeft gemaakt vanaf een verse pagina. ${
-      evaluation.signature ? `${evaluation.signature.name} (${evaluation.signature.role}) heeft voor het onderzoek getekend.` : "Er heeft nog niemand voor het onderzoek getekend."
+      evaluation.signature
+        ? `${evaluation.signature.name} (${evaluation.signature.role}) heeft voor het onderzoek getekend${signedHow ? `, ${signedHow}` : ""}.`
+        : "Er heeft nog niemand voor het onderzoek getekend."
     } Het rapport beschrijft de werkwijze en de beperkingen.`,
   );
   if (open.length > 0) {

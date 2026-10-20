@@ -1,7 +1,7 @@
 import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { readJson, writeJson } from "./canonical.ts";
-import type { RecordedVia } from "./recorded.ts";
+import { confirmByTyping, processTerminal, recordedNl, type RecordedVia, type Terminal } from "./recorded.ts";
 
 /**
  * Permission to send requests that can change something (anything but GET and HEAD, and
@@ -17,7 +17,7 @@ export interface WritePermission {
   /** Who stated that this is a test environment where submitting has no consequences; null for a local address. */
   declaredBy: { name: string; role: string } | null;
   declaredAt: string;
-  /** Set when the agent recorded the declaration in the conversation; `declaredAt` is then the moment the person confirmed it. */
+  /** How the declaration came about: confirmed by a person at a terminal (`confirmDeclaration`), never by an agent. `declaredAt` is the moment of that confirmation. */
   recordedVia?: RecordedVia;
   /** Most writes the whole run may send to the origin, over every session and the sweep together. Absent in a manifest from before the budget: `DEFAULT_MAX_WRITES`. */
   maxWrites?: number;
@@ -38,7 +38,6 @@ export interface WriteFlags {
   allowWrites?: boolean | undefined;
   testEnvironment?: string | undefined;
   declaredBy?: string | undefined;
-  recordedVia?: RecordedVia | undefined;
   /** `--max-writes`: the budget for sending of the whole run. */
   maxWrites?: string | undefined;
 }
@@ -52,7 +51,7 @@ export const WRITES_BLOCKED_NL = "verzoeken die iets kunnen wijzigen zijn tegeng
  * of the person stays in the manifest of the run, where the declaration can be traced.
  */
 export const writesAllowedNl = (permission: WritePermission): string =>
-  `onderzocht op een testomgeving waar versturen is toegestaan: ${permission.origin}${permission.declaredBy ? `, verklaard door iemand met de functie ${permission.declaredBy.role}${permission.recordedVia ? ", vastgelegd in een gesprek" : ""} (de naam staat in het dossier van het onderzoek, niet in dit rapport)` : " (lokaal adres)"}`;
+  `onderzocht op een testomgeving waar versturen is toegestaan: ${permission.origin}${permission.declaredBy ? `, verklaard door iemand met de functie ${permission.declaredBy.role}${permission.recordedVia ? `, ${recordedNl(permission, permission.declaredAt)}` : ""} (de naam staat in het dossier van het onderzoek, niet in dit rapport)` : " (lokaal adres)"}`;
 
 /** Hosts that cannot be a live site: the machine itself and the names reserved for testing. */
 export function isLocalHost(hostname: string): boolean {
@@ -97,7 +96,25 @@ export function decideWrites(baseUrl: string, flags: WriteFlags, now = new Date(
   const [name, ...rest] = flags.declaredBy.split(",");
   const role = rest.join(",").trim();
   if (!name?.trim() || !role) throw new Error('--declared-by verwacht een naam en een functie, gescheiden door een komma: --declared-by "<naam>, <functie>"');
-  return { origin, local: false, declaredBy: { name: name.trim(), role }, declaredAt: now.toISOString(), ...budget, ...(flags.recordedVia ? { recordedVia: flags.recordedVia } : {}) };
+  return { origin, local: false, declaredBy: { name: name.trim(), role }, declaredAt: now.toISOString(), ...budget };
+}
+
+/**
+ * A declared test environment lets the run send on a site that is not local: only a person
+ * declares that, never an agent. At an interactive terminal the person sees the origin, name and
+ * role and types the origin back; without one the declaration is refused before anything starts.
+ */
+export async function confirmDeclaration(permission: WritePermission, terminal: Terminal = processTerminal()): Promise<WritePermission> {
+  if (!permission.declaredBy) return permission;
+  const shownNl = [
+    `Verklaring dat ${permission.origin} een testomgeving is waar versturen geen gevolgen heeft.`,
+    `Origin: ${permission.origin}`,
+    `Naam: ${permission.declaredBy.name}`,
+    `Functie: ${permission.declaredBy.role}`,
+    `De run mag daarheen ten hoogste ${permission.maxWrites ?? DEFAULT_MAX_WRITES} keer iets versturen. De naam komt in manifest.json van de run; het rapport en de verklaring noemen alleen de functie.`,
+  ].join("\n");
+  const recording = await confirmByTyping("inventory --declared-by", shownNl, permission.origin, "de origin, met http:// of https://", terminal);
+  return { ...permission, declaredAt: new Date().toISOString(), ...recording };
 }
 
 function maxWritesOf(text: string | undefined): number {

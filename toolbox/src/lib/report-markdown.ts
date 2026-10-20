@@ -852,7 +852,7 @@ function deriveMeasures(evaluation: Evaluation, layer: DecisionLayer): MeasuresD
         criteriaNl: [defect.mainCriterion, ...defect.alsoCriteria].join(", "),
         decisionNl: decision ? decisionLabel(decision.decision, decision.date) : DECISION_LABEL_NL.onbesloten,
         linesNl: decision
-          ? [...decisionLines(decision), ...decision.previous.map((earlier) => `${REPORT_TEXT.measures.earlier}: ${decisionLabel(earlier.decision, earlier.date).toLowerCase()}, functie ${earlier.role}, op ${dateNl(earlier.decidedAt)}`)]
+          ? [...decisionLines(decision), ...decision.previous.map((earlier) => `${REPORT_TEXT.measures.earlier}: ${decisionLabel(earlier.decision, earlier.date).toLowerCase()}, functie ${earlier.role}, ${recordedNl(earlier, earlier.decidedAt) ?? `op ${dateNl(earlier.decidedAt)}`}`)]
           : [],
       };
     }),

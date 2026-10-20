@@ -118,19 +118,23 @@ export async function checkSeal(runDir: string): Promise<SealCheck | null> {
   return { files: Object.keys(sealed.files).length, outside: current.outside, problems, signature };
 }
 
-/** How many answers of a person the run keeps, and how many of them the agent recorded in the conversation. */
-async function answersRecorded(runDir: string): Promise<{ answers: number; viaConversation: number }> {
+/** How many answers of a person the run keeps, and how each came about. */
+async function answersRecorded(runDir: string): Promise<{ answers: number; viaConversation: number; viaTerminal: number }> {
   const dir = join(runDir, "antwoorden");
-  if (!existsSync(dir)) return { answers: 0, viaConversation: 0 };
-  let answers = 0;
-  let viaConversation = 0;
+  const counts = { answers: 0, viaConversation: 0, viaTerminal: 0 };
+  if (!existsSync(dir)) return counts;
   for (const name of (await readdir(dir)).filter((entry) => entry.endsWith(".json"))) {
     const stored = (await readJson<{ answers?: { recordedVia?: string }[] }>(join(dir, name)).catch(() => ({ answers: [] }))).answers ?? [];
-    answers += stored.length;
-    viaConversation += stored.filter((answer) => answer.recordedVia).length;
+    counts.answers += stored.length;
+    counts.viaConversation += stored.filter((answer) => answer.recordedVia === "gesprek").length;
+    counts.viaTerminal += stored.filter((answer) => answer.recordedVia === "terminal").length;
   }
-  return { answers, viaConversation };
+  return counts;
 }
+
+/** "3 in een terminal bevestigd, 1 in een gesprek vastgelegd, 1 zonder vastgelegde wijze". */
+const waysNl = (total: number, terminal: number, conversation: number): string =>
+  [`${terminal} in een terminal bevestigd`, `${conversation} in een gesprek vastgelegd`, ...(total - terminal - conversation > 0 ? [`${total - terminal - conversation} zonder vastgelegde wijze`] : [])].join(", ");
 
 /**
  * Recompute every hash and report anything that was changed, added or removed since the run was
@@ -151,8 +155,8 @@ export async function verify(runDir: string): Promise<boolean> {
   const via = check.signature ? recordedNl(check.signature, check.signature.signedAt) : null;
   process.stdout.write(check.signature ? `afgetekend op ${check.signature.signedAt.slice(0, 10)} voor zegel ${check.signature.sealSha256.slice(0, 12)}${via ? `, ${via}` : ""}\n` : "niet afgetekend\n");
   const answers = await answersRecorded(runDir);
-  if (answers.answers > 0) process.stdout.write(`antwoorden van een persoon: ${answers.answers}, waarvan ${answers.viaConversation} vastgelegd in een gesprek\n`);
-  if (decisions) process.stdout.write(`besluiten over gebreken: ${decisions.decisions}, waarvan ${decisions.viaConversation} vastgelegd in een gesprek; buiten het zegel, als eigen laag ${decisions.sha256 ? decisions.sha256.slice(0, 12) : "zonder index"}\n`);
+  if (answers.answers > 0) process.stdout.write(`antwoorden van een persoon: ${answers.answers} (${waysNl(answers.answers, answers.viaTerminal, answers.viaConversation)})\n`);
+  if (decisions) process.stdout.write(`besluiten over gebreken: ${decisions.decisions} (${waysNl(decisions.decisions, decisions.viaTerminal, decisions.viaConversation)}); buiten het zegel, als eigen laag ${decisions.sha256 ? decisions.sha256.slice(0, 12) : "zonder index"}\n`);
   if (check.outside.length > 0) process.stdout.write(`buiten het zegel, gemaakt na het verzegelen (handtekening, afgetekend rapport, besluiten, verklaring): ${check.outside.length}\n`);
   return problems.length === 0;
 }

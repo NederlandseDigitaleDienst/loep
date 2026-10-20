@@ -52,8 +52,11 @@ export interface Decision {
   name: string;
   role: string;
   decidedAt: string;
-  /** Set when the agent recorded it in the conversation; `decidedAt` is then the moment the person confirmed it. */
+  /** How it came about: confirmed at a terminal, or recorded by the agent in the conversation. `decidedAt` is the moment of the confirmation. Absent in no decision `decide` writes. */
   recordedVia?: RecordedVia;
+  /** With "gesprek": what the person said, word for word, and the summary they confirmed. */
+  confirmationNl?: string;
+  summaryNl?: string;
   /** The seal of the signed run the decision was recorded for. */
   sealSha256: string;
 }
@@ -98,6 +101,7 @@ export async function loadDecisions(runDir: string, defects: Defect[] | undefine
 export interface DecisionCheck {
   decisions: number;
   viaConversation: number;
+  viaTerminal: number;
   sha256: string | null;
   problems: string[];
 }
@@ -111,6 +115,7 @@ export async function checkDecisions(runDir: string, defects: Defect[] | undefin
   if (indexed === null) problems.push(`onleesbaar: ${DECISIONS_INDEX}`);
   const ids = new Set((defects ?? []).map((defect) => defect.id));
   let viaConversation = 0;
+  let viaTerminal = 0;
   for (const name of names) {
     const path = `${DECISIONS_DIR}/${name}`;
     const hash = await sha256File(join(runDir, path));
@@ -119,11 +124,13 @@ export async function checkDecisions(runDir: string, defects: Defect[] | undefin
     const decision = await readJson<DecisionFile>(join(runDir, path)).catch(() => null);
     if (!decision) problems.push(`onleesbaar: ${path}`);
     else if (!ids.has(decision.defect?.id)) problems.push(`${path}: het gebrek ${decision.defect?.id ?? "zonder nummer"} staat niet in deze evaluatie`);
-    else if (decision.recordedVia) viaConversation++;
+    else if (decision.recordedVia === "terminal") viaTerminal++;
+    else if (decision.recordedVia === "gesprek" && decision.confirmationNl && decision.summaryNl) viaConversation++;
+    else problems.push(`${path}: zegt niet hoe het besluit is vastgelegd (in een terminal, of in een gesprek met de letterlijke bevestiging en de samenvatting)`);
   }
   for (const name of Object.keys(indexed ?? {})) if (!names.includes(name)) problems.push(`ontbreekt: ${DECISIONS_DIR}/${name}`);
   const index = join(runDir, DECISIONS_INDEX);
-  return { decisions: names.length, viaConversation, sha256: existsSync(index) ? await sha256File(index) : null, problems };
+  return { decisions: names.length, viaConversation, viaTerminal, sha256: existsSync(index) ? await sha256File(index) : null, problems };
 }
 
 /** The date of a measure: by when it will be done, or since when it is done. Null for a decision that is no measure. */

@@ -128,7 +128,7 @@ export interface PointAnswer {
   answeredAt: string;
   /** Set when no person but an instrument of loep gave the answer: the watch on the session closes the point about its duration. */
   instrument?: true;
-  /** Set when the agent recorded the answer in the conversation; `answeredAt` is then the moment the person confirmed it. */
+  /** How a person's answer came about: confirmed at a terminal, or recorded by the agent in the conversation. `answeredAt` is the moment of the confirmation. Absent in an answer from before this was kept, and in one of an instrument. */
   recordedVia?: RecordedVia;
 }
 
@@ -243,7 +243,7 @@ export interface Signature {
   evaluationSha256: string;
   /** Hash of the seal the signer signed: evidence-index.json, which names every file of the run with its hash. */
   sealSha256: string;
-  /** Set when the agent recorded the signature in the conversation; `signedAt` is then the moment the person confirmed it. */
+  /** How the signature came about: "terminal", the signer typed the start of the seal back. An agent never signs. Absent in a signature from before this was kept. */
   recordedVia?: RecordedVia;
 }
 
