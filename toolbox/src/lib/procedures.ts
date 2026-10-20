@@ -26,7 +26,7 @@ export interface Procedure {
   evidence: string[];
   /** Inventory totals that must all be zero before "not applicable" can be considered. */
   inapplicableIfZero: string[];
-  /** What stays unknown after the judge has used the instruments; printed in the report under limitations. */
+  /** What stays unknown after the judge has used the instruments; printed in the report under limitations, through `runLimitsNl`. */
   limitsNl: string | null;
   /** Session commands of which a passed verdict must cite at least one observation each. */
   passCommands: string[];
@@ -62,6 +62,7 @@ export function parseProcedure(text: string, expectedId?: string): Procedure {
   else for (const name of decisive ?? []) if (!SHOWING_COMMANDS.includes(name)) problems.push(`decisive: "${name}" is not a look or measure command`);
   for (const section of REQUIRED_SECTIONS) if (!body.includes(`## ${section}`)) problems.push(`missing section "## ${section}"`);
   if (!/kan niet bepalen|cantTell/i.test(body.split("## Beslisregels")[1] ?? "")) problems.push('the decision rules must end in "kan niet bepalen"');
+  if (typeof front.limits === "string" && /[{}|]/.test(front.limits.replace(LIMIT_MARK, ""))) problems.push(`limits: a part that depends on the run is written as {${LIMIT_CONDITIONS.join(": ...} or {")}: ...}, with "|" before the text that takes its place otherwise`);
   const recommendations = recommendationSection(body);
   const recommendationRules = recommendations === null ? [] : [...recommendations.matchAll(/^- (A\d+)\. /gm)].map((match) => match[1]!);
   if (recommendations !== null) {
@@ -85,6 +86,26 @@ export function parseProcedure(text: string, expectedId?: string): Procedure {
     body,
     sha256: sha256(text),
   };
+}
+
+/**
+ * The parts of `limits` that hold only for a run without a real screen reader, or without a
+ * login: "{zonder-schermlezer: Er is geen echte schermlezer gebruikt.}". After a "|" comes the
+ * text that takes its place in a run that did use one, or did log in; without it the part goes.
+ */
+export const LIMIT_CONDITIONS = ["zonder-schermlezer", "zonder-inlog"] as const;
+const LIMIT_MARK = new RegExp(`\\{(${LIMIT_CONDITIONS.join("|")}): ([^{}|]*)(?:\\|([^{}|]*))?\\}`, "g");
+
+/**
+ * The limits of a procedure as they hold for one criterion in one run: a sentence that says no
+ * real screen reader was used is left out when one read aloud for this criterion, and one about
+ * pages behind a login when the run logged in. Without either, the text is as it always was.
+ */
+export function runLimitsNl(limits: string, run: { screenReader: boolean; loggedIn: boolean }): string {
+  return limits
+    .replace(LIMIT_MARK, (_, condition: string, without: string, otherwise: string | undefined) => ((condition === "zonder-schermlezer" ? run.screenReader : run.loggedIn) ? (otherwise ?? "") : without))
+    .replace(/ {2,}/g, " ")
+    .trim();
 }
 
 /** The text of the section "## Aanbevelingen", up to the next section; null when the procedure has none. */

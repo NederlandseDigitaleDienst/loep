@@ -261,6 +261,39 @@ test("an address that redirects to an anchor on a page of the site is recorded w
   assert.deepEqual(item.aliases, [`${at}/aan-de-slag/hulp`, `${at}/wetten/verklaring`]);
 });
 
+test("an address that redirects to an anchor records whether the anchor exists, whether its target took focus, and what lies over it", async (context) => {
+  // A fixed header over the top of the window: Chromium scrolls the target of the anchor to the top, under it.
+  const statement = html("Verklaring", ["/"]).replace(
+    "</main>",
+    '<header style="position:fixed;top:0;left:0;right:0;height:120px;background:#fff">Kop</header><div style="height:2000px"></div><h2 id="vragen">Vragen</h2><div style="height:2000px"></div><h2 id="formulier" tabindex="-1">Formulier</h2><div style="height:2000px"></div></main>',
+  );
+  const redirects: Record<string, string> = { "/vragen": "/verklaring#vragen", "/formulier": "/verklaring#formulier", "/weg": "/verklaring#bestaat-niet" };
+  const site = createServer((request, response) => {
+    const path = new URL(request.url!, "http://x").pathname;
+    if (redirects[path]) return void response.writeHead(302, { location: redirects[path] }).end();
+    const known: Record<string, string> = { "/": html("Start", ["/verklaring", ...Object.keys(redirects)]), "/verklaring": statement };
+    response.writeHead(known[path] ? 200 : 404, { "content-type": "text/html; charset=utf-8" });
+    response.end(known[path] ?? html("Niet gevonden", ["/"]));
+  });
+  await new Promise<void>((resolve) => site.listen(0, "127.0.0.1", resolve));
+  context.after(() => new Promise<void>((resolve) => void site.close(() => resolve())));
+  const at = `http://127.0.0.1:${(site.address() as { port: number }).port}`;
+  let found: Inventory;
+  try {
+    found = await inventory({ baseUrl: `${at}/`, out: join(scratch, "anchor-landing"), maxPages: 10 });
+  } catch (error) {
+    if (/Executable doesn't exist|browserType.launch/.test((error as Error).message)) return context.skip("no browser available");
+    throw error;
+  }
+  const of = (path: string) => found.pages.find((page) => page.url === `${at}${path}`)!;
+  assert.deepEqual(of("/vragen").anchor, { id: "vragen", found: true, focused: false, inViewport: null, coveredBy: null }, "a heading takes no focus: no question for 2.4.11");
+  const focused = of("/formulier").anchor!;
+  assert.deepEqual([focused.found, focused.focused, focused.inViewport], [true, true, true], "a target with tabindex takes focus after the jump");
+  assert.match(focused.coveredBy ?? "", /header/, "and lies under the fixed header");
+  assert.deepEqual(of("/weg").anchor, { id: "bestaat-niet", found: false, focused: false, inViewport: null, coveredBy: null });
+  assert.equal(of("/verklaring").anchor, undefined, "a page the browser stays on records nothing");
+});
+
 test("a page with a link whose address Chromium accepts and Node does not is still a page, and its other links are followed", async (context) => {
   const statement = html("Verklaring", ["/"]).replace("</main>", '<a href="http://www.example.nl&nbsp; via">site</a><a href="/contact">Contact</a></main>');
   const site = createServer((request, response) => {
