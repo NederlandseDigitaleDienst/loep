@@ -427,8 +427,9 @@ export function resolveCriterion(input: CriterionInput, sitePrefix: string): Cri
   const answered = final?.outcome === "cantTell" ? applyAnswers(final.missingNl ?? [], input.answers ?? []) : null;
   const byPerson = answered !== null && answered.outcome !== "cantTell";
   const reached: CriterionOutcome = byPerson ? answered.outcome : (final?.outcome ?? "untested");
-  // A pass next to a candidate another judge passed on and nobody ruled on is no pass: that place was not looked at.
-  const unruled = reached === "passed" || reached === "inapplicable" ? (input.unruledNl ?? []) : [];
+  // A pass next to a candidate another criterion passed on and nobody ruled on is no pass: that place was not looked at.
+  // An open criterion keeps it among its points, so it does not read as one that only waits for a person.
+  const unruled = reached === "passed" || reached === "inapplicable" || reached === "cantTell" ? (input.unruledNl ?? []) : [];
   const outcome: CriterionOutcome = unruled.length > 0 ? "cantTell" : reached;
   const beforeFinish = verified ?? verdicts.a;
   const byWatch = byPerson && answered.counted.every((answer) => answer.instrument === true);
@@ -500,7 +501,7 @@ export function resolveCriterion(input: CriterionInput, sitePrefix: string): Cri
     outcome,
     rule: final?.rule ?? null,
     // What a person established is said first: the summary of the agent was written while the question was open.
-    summaryNl: unruled.length > 0
+    summaryNl: unruled.length > 0 && reached !== "cantTell"
       ? `Niet vastgesteld: ${unruled.length === 1 ? "een waarneming die een andere beoordelaar doorgaf, is" : `${unruled.length} waarnemingen die een andere beoordelaar doorgaf, zijn`} door niemand beoordeeld. Het oordeel zonder die ${unruled.length === 1 ? "waarneming" : "waarnemingen"} was ${OUTCOME_LABEL[reached].toLowerCase()}: ${final!.summaryNl}`
       : byPerson
         ? `Een persoon heeft vastgesteld: ${OUTCOME_LABEL[outcome].toLowerCase()}. Dit is vastgesteld door een persoon, niet door een instrument. Het onderzoek zelf kwam niet verder dan: ${final!.summaryNl}`

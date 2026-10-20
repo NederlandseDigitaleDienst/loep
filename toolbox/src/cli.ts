@@ -44,7 +44,8 @@ const USAGE = `loep <command> [options]
                                          criterion; run it again after each phase. Needs the site model of explore.
                                          --again 2.4.3,3.3.1 writes a new finishing round for those criteria, also when the
                                          run is done, but only for one whose final verdict is open with a point "niet
-                                         bereikbaar" or "proef werkte niet". Each attempt gets its own session; the earlier
+                                         bereikbaar" or "proef werkte niet", or that another finishing round passed
+                                         something on to that no round of it ruled on. Each attempt gets its own session; the earlier
                                          verdict is kept, the new one counts in evaluate. --attempted walks:start,judges:1.4.3
                                          counts one attempt for each task whose agent came back (the workflow names them;
                                          an agent that stopped with an error is no attempt)
