@@ -287,7 +287,8 @@ function linksWithText(page: Page): Promise<Anchor[]> {
     };
     visit(document);
     return found;
-  });
+    // Chromium accepts some hosts that Node's URL rejects, such as one with a space in it.
+  }).then((found) => found.filter((anchor) => URL.canParse(anchor.href)));
 }
 
 /** Documents asked for their size and date; beyond this they are recorded without. */
