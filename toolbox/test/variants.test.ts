@@ -107,7 +107,8 @@ test("on the copy, tasks and pending start the agent phases again, with the firs
   assert.deepEqual(await instrumentTasks(copy, taskOptions(copy)), { walks: 2, judges: 1, verifiers: 0, finishers: 0 });
   const pending = await instrumentPending(copy);
   assert.equal(pending.phase, "walks");
-  assert.deepEqual(pending.walks.map((walk) => walk.session), ["r-start", "r-contact"]);
+  // pending puts the largest task first, so the order says nothing here; the names do.
+  assert.deepEqual(pending.walks.map((walk) => walk.session).sort(), ["r-contact", "r-start"]);
   assert.deepEqual(pending.skipped, []);
   const prompt = readFileSync(join(copy, "rondgang", "start.md"), "utf8");
   assert.ok(prompt.includes(copy) && !prompt.includes(source), "the walk is told to work in the copy");
