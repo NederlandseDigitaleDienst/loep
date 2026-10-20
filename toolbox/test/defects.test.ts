@@ -10,6 +10,7 @@ import { canonicalJson, readJson } from "../src/lib/canonical.ts";
 import { applyProposal, carryDefectIds, mainCriterion, mergeFindings, pageIndex, pagesOf, parseTargets, validateProposal, type MergeProposal } from "../src/lib/defects.ts";
 import { evaluationHash, summarise, type Evaluation, type ReportFinding } from "../src/lib/evaluation.ts";
 import { exampleEvaluation } from "./fixtures/example-evaluation.ts";
+import { typesSeal } from "./fixtures/terminal.ts";
 
 type Draft = Partial<ReportFinding> & { where: string | string[]; page?: string };
 
@@ -351,7 +352,7 @@ test("the merge step runs without the proposal, applies a validated one, and dro
   // Defects are part of what is signed.
   assert.notEqual(evaluationHash(applied), evaluationHash(written));
   await seal(dir);
-  await sign({ run: dir, name: "Een ondertekenaar", role: "Directeur", organisation: "Gemeente Voorbeeld", checkedNl: null });
+  await sign({ run: dir, name: "Een ondertekenaar", role: "Directeur", organisation: "Gemeente Voorbeeld", checkedNl: null, terminal: typesSeal() });
   assert.ok(signatureIsCurrent(await readEvaluation(path)));
   await assert.rejects(merge(dir), /the evaluation is signed/);
 

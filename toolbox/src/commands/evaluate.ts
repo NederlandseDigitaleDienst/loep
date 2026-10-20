@@ -18,6 +18,7 @@ import { openPoint, UNREACHABLE, waitsOnlyOnSending, type Verdict } from "../lib
 import { loginNl, NOT_LOGGED_IN_NL } from "../lib/login.ts";
 import { readsAllowedNl } from "../lib/reads.ts";
 import { WRITES_BLOCKED_NL, writesAllowedNl } from "../lib/writes.ts";
+import { blockadesNl } from "../session/blockade.ts";
 import { METHODS } from "../instruments/methods/registry.ts";
 import type { Gate } from "./gate.ts";
 import { readEvaluation, signatureIsCurrent, writeEvaluation } from "./sign.ts";
@@ -212,6 +213,8 @@ export async function evaluate(options: EvaluateOptions): Promise<Evaluation> {
     screenReader.limitationNl,
     `Versturen van formulieren: ${run.writes ? writesAllowedNl(run.writes) : WRITES_BLOCKED_NL}.`,
     ...(readsAllowedNl(run.reads ?? []) ? [`Leesverzoeken: ${readsAllowedNl(run.reads ?? [])}.`] : []),
+    // A site that blocked the run: what the sessions could not ask any more is missing.
+    ...blockadesNl(options.run),
     "De beoordeling per criterium is gedaan door een taalmodel, op basis van bewijs dat scripts hebben verzameld en van eigen waarnemingen met meetinstrumenten. Elke handeling en meting van het model is vastgelegd als waarneming en kan worden nagespeeld.",
     "Metingen zijn gedaan op de pagina's van de steekproef, met meldingen open en gesloten, en met de onderdelen geopend die een verkenner vooraf heeft vastgelegd. Een onderdeel dat de verkenner niet vond of niet open kreeg, is door de scripts niet gemeten. Het model heeft zelf in een steekproef van pagina's en toestanden gekeken en gemeten, niet op elke pagina in elke toestand.",
     run.login ? `${loginNl(run.login)}.` : NOT_LOGGED_IN_NL,
