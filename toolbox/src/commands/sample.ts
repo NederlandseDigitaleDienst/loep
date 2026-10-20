@@ -230,6 +230,11 @@ function deduplicate(pages: InventoryPage[]): { page: InventoryPage; aliases: st
   });
 }
 
+/** For every address of these pages the address the sample measures that page at: its own, or the one of its group. */
+export function mainAddresses(pages: InventoryPage[]): Map<string, string> {
+  return new Map(deduplicate(pages).flatMap((entry) => [entry.page.url, ...entry.aliases].map((address) => [address, entry.page.url] as const)));
+}
+
 const isFrame = (page: InventoryPage): boolean => page.foundVia.length > 0 && page.foundVia.every((via) => via.startsWith("iframe:"));
 
 /**
