@@ -22,6 +22,17 @@ const STRUCTURE_TREE_RULES: ReadonlySet<string> = new Set([
   "7.4.4-1", "7.4.4-2", "7.4.4-3", "7.9-2", "7.18.1-1", "7.18.4-1", "7.18.4-2", "7.18.5-1",
 ]);
 
+/**
+ * The rules of the veraPDF PDF/UA-1 profile on the name, role and value of annotations, form
+ * fields and links: each annotation in an Annot tag with a description, a form field with a TU
+ * key or an alternative, the tab order on a page with annotations, widgets in a Form tag, links
+ * in a Link tag with Contents, and no dynamic XFA forms. By number, because a pattern on the
+ * words also caught rules on the tag tree and on the file as a whole ("strucTUre", "conFORMing").
+ */
+const NAME_ROLE_VALUE_RULES: ReadonlySet<string> = new Set([
+  "7.15-1", "7.18.1-1", "7.18.1-2", "7.18.1-3", "7.18.3-1", "7.18.4-1", "7.18.4-2", "7.18.5-1", "7.18.5-2",
+]);
+
 /** Which failed rules of veraPDF bear on a criterion, by the words of the rule or by its number. Null: all of them. */
 const UA_RULES: Record<string, RegExp | ReadonlySet<string> | null> = {
   "1.1.1": /alternat|figure|formula|actualtext/i,
@@ -33,7 +44,7 @@ const UA_RULES: Record<string, RegExp | ReadonlySet<string> | null> = {
   "3.1.1": /language|lang/i,
   "3.1.2": /language|lang/i,
   "4.1.1": STRUCTURE_TREE_RULES,
-  "4.1.2": /annot|widget|form|field|TU|Contents|link/i,
+  "4.1.2": NAME_ROLE_VALUE_RULES,
 };
 
 type Part = (facts: DocumentFacts) => Record<string, unknown>;

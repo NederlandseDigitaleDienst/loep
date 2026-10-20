@@ -34,6 +34,10 @@ export const SESSION_USAGE = `  session start --run <run> [--session <name>] [--
       look:    look [--full] [--max n] [--plain] [--vision deuteranopia|protanopia|tritanopia|achromatopsia|blurredVision|reducedContrast],
                crop <ref> [--margin n], ax <ref>, style <ref> [a,b,c], html <ref> [--max n],
                find <text | role:x | tag:x | css:selector>
+      dossier [<part> [<chunk>]] [--criterion x.y.z]   the dossier of the task of this session, in a compact form: without a
+               part an overview with sizes and what is read; a part (controls, keyboard.walk, legend.P03, rows.4) in
+               chunks of at most 20.000 characters, printed as text under the line of JSON. Read from the run: needs no
+               started session and costs nothing of the budget; what was shown is kept for check-verdict
       document <label> [--page n] [--tags]   a document of the sample (D01): its facts; one page with a picture (pdf), the
                text in reading order and the tags on it; or the tag tree. Needs no open page
       measure: distinct <ref> [--against <ref>] (how far a link is from the text around it in colour, or one element from another:
@@ -295,6 +299,16 @@ export async function sessionCli(argv: string[]): Promise<number> {
       });
       const socket = await ensureDaemon(run, forwarded);
       return print(await send(socket, { op: "start", session, ...(values.model !== undefined ? { model: values.model } : {}), ...(number("max-sessions") !== undefined ? { maxSessions: number("max-sessions")! } : {}), limits: { ...(number("max-commands") !== undefined ? { maxCommands: number("max-commands")! } : {}), ...(number("max-minutes") !== undefined ? { maxMinutes: number("max-minutes")! } : {}) } }));
+    }
+    if (group === "session" && command === "dossier") {
+      // The dossier is a file of the run: reading it needs no browser and is no measurement.
+      if (!/^[a-z0-9][a-z0-9_-]{0,30}$/.test(session)) return fail(`"${session}" is geen geldige sessienaam (kleine letters, cijfers, - en _)`);
+      if (values.criterion !== undefined && !/^\d\.\d\.\d{1,2}$/.test(values.criterion)) return fail(`--criterion verwacht het nummer van een succescriterium, zoals 1.1.1, niet "${values.criterion}"`);
+      const { dossierAnswer, recordDossierRead } = await import("./dossier-command.ts");
+      const answer = await dossierAnswer(run, session, rest, values.criterion);
+      recordDossierRead(run, session, answer.result);
+      process.stdout.write(`${JSON.stringify(answer.print)}\n${answer.text}\n`);
+      return 0;
     }
     const socket = runningSocket(run);
     if (!socket || !(await alive(socket))) return fail(`er loopt geen sessie voor deze run; start er een met: session start --run ${run}`);

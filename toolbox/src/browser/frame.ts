@@ -1,23 +1,45 @@
+import { mkdir, writeFile } from "node:fs/promises";
+import { dirname } from "node:path";
 import type { BrowserContext, CDPSession, Frame, Keyboard, Mouse, Page } from "playwright";
+import { PNG } from "pngjs";
 
 type Box = { x: number; y: number; width: number; height: number };
 type ScreenshotOptions = NonNullable<Parameters<Page["screenshot"]>[0]>;
 
-/** Where an embedded frame shows its document: the inside of the frame element, in pixels of the window of the tab. */
-async function contentBox(frame: Frame): Promise<Box | null> {
+/**
+ * Where an embedded frame shows its document: the inside of the frame element, in pixels of the
+ * window of the tab, and how many of those one pixel of the frame takes across and down.
+ */
+async function contentBox(frame: Frame): Promise<(Box & { scale: { x: number; y: number } }) | null> {
   const element = await frame.frameElement();
   try {
     const box = await element.boundingBox();
     if (!box) return null;
-    const inset = await element.evaluate((node) => {
+    const own = await element.evaluate((node) => {
       const style = getComputedStyle(node as Element);
       const edge = (side: "Left" | "Top" | "Right" | "Bottom"): number => (parseFloat(style[`border${side}Width`]) || 0) + (parseFloat(style[`padding${side}`]) || 0);
-      return { left: edge("Left"), top: edge("Top"), right: edge("Right"), bottom: edge("Bottom") };
+      return { left: edge("Left"), top: edge("Top"), right: edge("Right"), bottom: edge("Bottom"), width: (node as HTMLElement).offsetWidth, height: (node as HTMLElement).offsetHeight };
     });
-    return { x: box.x + inset.left, y: box.y + inset.top, width: Math.max(0, box.width - inset.left - inset.right), height: Math.max(0, box.height - inset.top - inset.bottom) };
+    // A CSS zoom or scale around the frame element shows it, and its document with it, at another size than its own pixels; its border and padding are in those pixels too.
+    const scale = { x: own.width > 0 ? box.width / own.width : 1, y: own.height > 0 ? box.height / own.height : 1 };
+    const inset = { left: own.left * scale.x, top: own.top * scale.y, right: own.right * scale.x, bottom: own.bottom * scale.y };
+    return { x: box.x + inset.left, y: box.y + inset.top, width: Math.max(0, box.width - inset.left - inset.right), height: Math.max(0, box.height - inset.top - inset.bottom), scale };
   } finally {
     await element.dispose().catch(() => undefined);
   }
+}
+
+/** A picture of a frame shown at another size, brought to the pixels of the frame: each pixel takes the pixel the tab shows there. */
+function toFramePixels(shown: PNG, scale: { x: number; y: number }): Buffer {
+  const picture = new PNG({ width: Math.max(1, Math.round(shown.width / scale.x)), height: Math.max(1, Math.round(shown.height / scale.y)) });
+  for (let y = 0; y < picture.height; y++) {
+    const from = Math.min(shown.height - 1, Math.floor((y * shown.height) / picture.height));
+    for (let x = 0; x < picture.width; x++) {
+      const source = (from * shown.width + Math.min(shown.width - 1, Math.floor((x * shown.width) / picture.width))) << 2;
+      shown.data.copy(picture.data, (y * picture.width + x) << 2, source, source + 4);
+    }
+  }
+  return PNG.sync.write(picture);
 }
 
 /**
@@ -97,16 +119,26 @@ export async function frameAsPage(page: Page, frame: Frame): Promise<Page> {
       let origin = await contentBox(frame);
       if (!origin) throw new Error("het ingesloten venster is niet zichtbaar op de pagina");
       const viewport = page.viewportSize() ?? { width: 1280, height: 800 };
+      const shown = { width: inFrame.width * origin.scale.x, height: inFrame.height * origin.scale.y };
       // The frame itself may stand outside the window of the tab, or only partly in it.
-      const x = origin.x + inFrame.x;
-      const y = origin.y + inFrame.y;
-      const byX = x < 0 || x + inFrame.width > viewport.width ? x : 0;
-      const byY = y < 0 || y + inFrame.height > viewport.height ? y : 0;
+      const x = origin.x + inFrame.x * origin.scale.x;
+      const y = origin.y + inFrame.y * origin.scale.y;
+      const byX = x < 0 || x + shown.width > viewport.width ? x : 0;
+      const byY = y < 0 || y + shown.height > viewport.height ? y : 0;
       if (byX !== 0 || byY !== 0) {
         await top.evaluate(([left, topEdge]) => window.scrollBy({ left: left!, top: topEdge!, behavior: "instant" }), [byX, byY] as const);
         origin = (await contentBox(frame)) ?? origin;
       }
-      return await page.screenshot({ ...rest, clip: { x: origin.x + inFrame.x, y: origin.y + inFrame.y, width: inFrame.width, height: inFrame.height } });
+      const area = { x: origin.x + inFrame.x * origin.scale.x, y: origin.y + inFrame.y * origin.scale.y, ...shown };
+      if (Math.abs(origin.scale.x - 1) < 0.001 && Math.abs(origin.scale.y - 1) < 0.001) return await page.screenshot({ ...rest, clip: area });
+      // Whoever reads the picture finds an element in it by its position in the frame: the picture is brought to the pixels of the frame.
+      const { path, ...unsaved } = rest;
+      const image = toFramePixels(PNG.sync.read(await page.screenshot({ ...unsaved, clip: area })), origin.scale);
+      if (path) {
+        await mkdir(dirname(path), { recursive: true });
+        await writeFile(path, image);
+      }
+      return image;
     } finally {
       await scrollTo(top, topWas).catch(() => undefined);
       await scrollTo(frame, frameWas).catch(() => undefined);
@@ -116,7 +148,7 @@ export async function frameAsPage(page: Page, frame: Frame): Promise<Page> {
   const moved = async (x: number, y: number): Promise<[number, number]> => {
     const origin = await contentBox(frame);
     if (!origin) throw new Error("het ingesloten venster is niet zichtbaar op de pagina");
-    return [origin.x + x, origin.y + y];
+    return [origin.x + x * origin.scale.x, origin.y + y * origin.scale.y];
   };
   const mouse = new Proxy(page.mouse, {
     get(target, key) {
