@@ -3,6 +3,7 @@ import { rm } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
 import { PNG } from "pngjs";
 import { readJson, sha256, sha256File, writeFileAtomic, writeJson } from "../lib/canonical.ts";
+import { startedDownload } from "../lib/documents.ts";
 import { enginesWithoutResult, type EngineRun } from "../lib/engines.ts";
 import { expectedFocusable, pageCoverage, reachedByKeyboard, representativePages, stateCoverage } from "../lib/extractors.ts";
 import { type Manifest, stepStart, writeManifest } from "../lib/manifest.ts";
@@ -190,10 +191,14 @@ export function gateChecks(run: RunData): { checks: Check[]; gaps: Gap[]; warnin
     [
       ...failed.map((page) => ({ check: "pages-loaded", ...on(page), state: "default", missingNl: `De pagina gaf bij het laden ${page.item.status === null ? "geen antwoord" : `status ${page.item.status}`}. Wat is vastgelegd, is een foutpagina.`, measured: { status: page.item.status } })),
       ...(run.collectFailed ?? []).map((entry) => ({ check: "pages-loaded", page: entry.label, url: entry.item.url, state: "default", missingNl: `De veegronde kon deze pagina ook bij een tweede poging niet meten (${entry.error.slice(0, 160)}). Er is geen bewijs van deze pagina; draai collect opnieuw voor deze pagina.`, measured: { collectError: entry.error } })),
-      ...run.inventory.skipped.filter((entry) => entry.reason.startsWith("failed to load")).map((entry) => ({ check: "pages-loaded", page: null, url: entry.url, state: "default", missingNl: `De pagina laadde niet tijdens de inventaris en is niet onderzocht (${entry.reason.slice(0, 120)}).` })),
+      ...run.inventory.skipped.filter((entry) => entry.reason.startsWith("failed to load") && !startedDownload(entry.reason)).map((entry) => ({ check: "pages-loaded", page: null, url: entry.url, state: "default", missingNl: `De pagina laadde niet tijdens de inventaris en is niet onderzocht (${entry.reason.slice(0, 120)}).` })),
     ],
     `${run.pages.length} pagina's geladen`,
   );
+  // Left under skipped by an inventory from before such downloads were counted as documents, or on an origin outside the run.
+  for (const entry of run.inventory.skipped.filter((candidate) => candidate.reason.startsWith("failed to load") && startedDownload(candidate.reason))) {
+    warnings.push({ check: "download-not-a-page", page: null, url: entry.url, state: "default", missingNl: "Dit adres is geen pagina: de browser bood het aan als download. De inventaris telde het niet als document, dus het staat niet bij de documenten en is niet onderzocht." });
+  }
 
   // 2. Frames that are counted as pages.
   const embedded = run.pages.filter((page) => page.item.kind === "embedded");
