@@ -38,22 +38,30 @@ const USAGE = `loep <command> [options]
   gate --run <run> [--out <dir>]         Decide whether the evidence is fit to judge on; exit 1 when it is not, 2 when
                                          only the agent's look at the pictures is still missing. --out leaves the run untouched
   check-gate --run <run>                 Validate the agent's answers for the gate; non-zero exit on problems
-  tasks --run <run> [--only <ids>] [--page-types <ids>] [--again <ids>]
+  tasks --run <run> [--only <ids>] [--page-types <ids>] [--again <ids>] [--attempted <phase>:<id>,...]
                                          Write the task files of the phase the run is in (walks, judges, verifiers, and a
                                          finishing round for what the evaluation itself left open), with a dossier per
                                          criterion; run it again after each phase. Needs the site model of explore.
                                          --again 2.4.3,3.3.1 writes a new finishing round for those criteria, also when the
                                          run is done, but only for one whose final verdict is open with a point "niet
                                          bereikbaar" or "proef werkte niet". Each attempt gets its own session; the earlier
-                                         verdict is kept, the new one counts in evaluate
+                                         verdict is kept, the new one counts in evaluate. --attempted walks:start,judges:1.4.3
+                                         counts one attempt for each task whose agent came back (the workflow names them;
+                                         an agent that stopped with an error is no attempt)
   check-walk --run <run> --page-type <id>
                                          Validate the candidates of a walk-through; non-zero exit on problems
   skip --run <run> (--page-type <id> | --criterion <id> [--round judge|final|finish]) --reason <text>
-                                         Record that a walk or verdict will not come, so the next phase can start
+       [--kind "geen geldig resultaat"|storing]
+                                         Record that a walk or verdict will not come, so the next phase can start. --kind
+                                         storing: the model was not there (a limit, a failure of the service); the report
+                                         says so instead of "budget op", and feedback drafts no issue for it
+  unskip --run <run> (--page-type <id> | --criterion <id> [--round judge|final|finish])
+                                         Take back a skip: the task is open again, with its attempts counted from zero
   check-verdict --run <run> --criterion <id> --round judge|final|finish
                                          Validate the verdict of the judge, the final verdict of the verifier, or the verdict
                                          of the finishing round; non-zero exit on problems
-  pending --run <run>                    The phase the run is in and the tasks that are still open, as JSON
+  pending --run <run> [--brief]          The phase the run is in and the tasks that are still open, as JSON, each with
+                                         its attempts. --brief gives only the ids and attempts, for the workflow
   estimate --run <run> [--at-once <n>] [--groups] [--json]
                                          The expected time per part and in total, computed from the inventory (sharper after
                                          sample, explore and the sweep), next to what the run measured so far. --at-once is the
@@ -171,6 +179,9 @@ async function main(): Promise<void> {
       did: { type: "string" },
       outcome: { type: "string" },
       reason: { type: "string" },
+      kind: { type: "string" },
+      attempted: { type: "string" },
+      brief: { type: "boolean", default: false },
       concept: { type: "boolean", default: false },
       fresh: { type: "boolean", default: false },
       "allow-writes": { type: "boolean", default: false },
@@ -357,8 +368,9 @@ async function main(): Promise<void> {
     }
     case "tasks": {
       if (!values.run) throw new Error("tasks needs --run <run>");
-      const { instrumentTasks } = await import("./commands/instrument-tasks.ts");
+      const { instrumentTasks, recordAttempts } = await import("./commands/instrument-tasks.ts");
       const list = (text: string | undefined): string[] | undefined => text?.split(",").map((part) => part.trim()).filter(Boolean);
+      if (values.attempted !== undefined) await recordAttempts(values.run, list(values.attempted) ?? []);
       const written = await instrumentTasks(values.run, { only: list(values.only), pageTypes: list(values["page-types"]), again: list(values.again) });
       process.stdout.write(`${written.walks} walks, ${written.judges} judge tasks, ${written.verifiers} verifier tasks, ${written.finishers} finishing tasks written\n`);
       return;
@@ -375,7 +387,13 @@ async function main(): Promise<void> {
     case "skip": {
       if (!values.run) throw new Error("skip needs --run <run>");
       const { skip } = await import("./commands/instrument-tasks.ts");
-      process.stdout.write(`${await skip(values.run, { pageType: values["page-type"], criterion: values.criterion, round: values.round }, values.reason ?? "")}\n`);
+      process.stdout.write(`${await skip(values.run, { pageType: values["page-type"], criterion: values.criterion, round: values.round }, values.reason ?? "", values.kind)}\n`);
+      return;
+    }
+    case "unskip": {
+      if (!values.run) throw new Error("unskip needs --run <run>");
+      const { unskip } = await import("./commands/instrument-tasks.ts");
+      process.stdout.write(`${await unskip(values.run, { pageType: values["page-type"], criterion: values.criterion, round: values.round })} verwijderd: de opdracht staat weer open\n`);
       return;
     }
     case "check-verdict": {
@@ -391,9 +409,10 @@ async function main(): Promise<void> {
     }
     case "pending": {
       if (!values.run) throw new Error("pending needs --run <run>");
-      const { isInstrumentRun, instrumentPending, NO_TASKS_NL } = await import("./commands/instrument-tasks.ts");
+      const { isInstrumentRun, instrumentPending, briefPending, NO_TASKS_NL } = await import("./commands/instrument-tasks.ts");
       if (!isInstrumentRun(values.run)) throw new Error(NO_TASKS_NL);
-      process.stdout.write(`${JSON.stringify(await instrumentPending(values.run))}\n`);
+      const pending = await instrumentPending(values.run);
+      process.stdout.write(`${JSON.stringify(values.brief ? briefPending(pending) : pending)}\n`);
       return;
     }
     case "estimate": {
