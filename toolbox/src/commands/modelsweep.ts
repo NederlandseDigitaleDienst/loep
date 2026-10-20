@@ -279,6 +279,63 @@ async function textBehindSomething(page: Page, places: string[]): Promise<(strin
     }, places)
     .catch(() => places.map(() => null));
 }
+
+/**
+ * Show what the postcondition is about: a menu that opens further down the page is not in the window
+ * by itself. A control that opened something is shown with what it opened, and both are kept clear of
+ * what is fixed or sticky at the top of the window, such as the bar at the top of a site.
+ */
+export async function showPostcondition(page: Page, post: Postcondition | null): Promise<void> {
+  if (!post?.selector) return;
+  // What stands in an embedded frame is brought into view from inside that frame; the tab scrolls along.
+  const where = post.frame ? frameAt(page, post.frame) : page;
+  await where
+    ?.evaluate(
+      ([selector, kind]) => {
+        const loep = (window as unknown as { __loep: { deepQueryAll: (selector: string) => HTMLElement[]; isVisible: (element: Element) => boolean } }).__loep;
+        const visible = loep.deepQueryAll(selector).filter((element) => loep.isVisible(element));
+        const opened = kind === "expanded" ? visible.find((element) => element.getAttribute("aria-expanded") === "true" || (element.localName === "details" && (element as HTMLDetailsElement).open)) : undefined;
+        const shown = opened ?? visible[0];
+        if (!shown) return;
+        const own = shown.getBoundingClientRect();
+        let [top, bottom] = [own.top, own.bottom];
+        if (opened) {
+          // What it opened: the elements it controls, or else what follows it in the nearest element around it, such as the list under a category in a sidebar.
+          const root = opened.getRootNode() as Document | ShadowRoot;
+          const controlled = (opened.getAttribute("aria-controls") ?? "").split(/\s+/).flatMap((id) => {
+            const element = id ? root.getElementById(id) : null;
+            return element && loep.isVisible(element) ? [element.getBoundingClientRect()] : [];
+          });
+          for (const rect of controlled) [top, bottom] = [Math.min(top, rect.top), Math.max(bottom, rect.bottom)];
+          for (let around = controlled.length === 0 ? opened.parentElement : null; around && around !== document.body; around = around.parentElement) {
+            const next = [...around.children].find((child) => loep.isVisible(child) && child.getBoundingClientRect().top >= own.bottom - 1);
+            if (!next) continue;
+            bottom = Math.max(bottom, next.getBoundingClientRect().bottom);
+            break;
+          }
+        }
+        // What already stands in the window, also under a bar at the top, is shown as it is.
+        if (top >= 0 && bottom <= innerHeight) return;
+        let covered = 0;
+        for (const x of [own.left + 1, (own.left + own.right) / 2, own.right - 1].filter((at) => at >= 0 && at < innerWidth)) {
+          for (const hit of document.elementsFromPoint(x, 0)) {
+            const position = getComputedStyle(hit).position;
+            const rect = hit.getBoundingClientRect();
+            if ((position === "fixed" || position === "sticky") && !hit.contains(shown) && rect.bottom < innerHeight / 2) covered = Math.max(covered, rect.bottom);
+          }
+        }
+        // Scroll margins make the browser bring the whole part into view, also inside a sidebar that scrolls by itself, below the bar.
+        const was = [shown.style.scrollMarginTop, shown.style.scrollMarginBottom] as const;
+        shown.style.scrollMarginTop = `${own.top - top + covered}px`;
+        shown.style.scrollMarginBottom = `${bottom - own.bottom}px`;
+        shown.scrollIntoView({ block: bottom - top > innerHeight - covered ? "start" : "center", behavior: "instant" });
+        [shown.style.scrollMarginTop, shown.style.scrollMarginBottom] = was;
+      },
+      [post.selector, post.kind] as const,
+    )
+    .catch(() => undefined);
+}
+
 const DEFAULT_VIEWPORT = { width: 1280, height: 800 };
 
 interface Storage {
@@ -488,21 +545,6 @@ export class ModelSweep {
     };
   }
 
-  /** Show what the postcondition is about: a menu that opens further down the page is not in the window by itself. */
-  private async show(page: Page, post: Postcondition | null): Promise<void> {
-    if (!post?.selector) return;
-    // What stands in an embedded frame is brought into view from inside that frame; the tab scrolls along.
-    const where = post.frame ? frameAt(page, post.frame) : page;
-    await where
-      ?.evaluate((selector) => {
-        const loep = (window as unknown as { __loep: { deepQueryAll: (selector: string) => HTMLElement[]; isVisible: (element: Element) => boolean } }).__loep;
-        const shown = loep.deepQueryAll(selector).find((element) => loep.isVisible(element));
-        const rect = shown?.getBoundingClientRect();
-        if (rect && (rect.top < 0 || rect.bottom > innerHeight)) shown!.scrollIntoView({ block: rect.height > innerHeight ? "start" : "center", behavior: "instant" });
-      }, post.selector)
-      .catch(() => undefined);
-  }
-
   /** Contrast of the page as it is now, with the counts of text in front. */
   private async contrastOf(page: Page): Promise<{ contrast: Awaited<ReturnType<typeof pageContrast>>; counts: NonNullable<CapturedState["contrast"]> }> {
     const contrast = await pageContrast(page);
@@ -537,7 +579,7 @@ export class ModelSweep {
     const dir = join("site-states", id);
     const absolute = join(this.runDir, dir);
     const file = this.fileIn(id, files);
-    await this.show(outer, post);
+    await showPostcondition(outer, post);
     await page.screenshot({ path: file("screenshot", "screenshot.png"), animations: "disabled" });
     await wholePageScreenshot(page, { path: file("screenshotFullPage", "screenshot-full.png") });
     const covering = await overlays(page);
@@ -594,7 +636,7 @@ export class ModelSweep {
     const notReached: NonNullable<CapturedState["variantsNotReached"]> = [];
     const wide = await open({ spaced: true });
     if (wide.reached && wide.surface) {
-      await this.show(wide.surface.page, wide.post);
+      await showPostcondition(wide.surface.page, wide.post);
       const effect = await spacingEffect((await this.viewOf(wide.surface.page, opener.frame)).view, clippedBefore, file("textSpacingScreenshot", "textspacing.png"));
       await writeJson(file("textSpacing", "textspacing.json"), { ...effect, appliedBeforeOpening: true, reachedWithSpacing: true, stateStillReachedAfterwards: wide.post ? (await holds(wide.surface.page, wide.post)).holds : null });
     } else {
@@ -633,7 +675,7 @@ export class ModelSweep {
     let contrastDark: CapturedState["contrastDark"] = null;
     const dark = await open({ scheme: "dark" });
     if (dark.reached && dark.surface) {
-      await this.show(dark.surface.page, dark.post);
+      await showPostcondition(dark.surface.page, dark.post);
       const { view } = await this.viewOf(dark.surface.page, opener.frame);
       await view.screenshot({ path: file("screenshotDark", "screenshot-dark.png"), animations: "disabled" });
       const { contrast, counts } = await this.contrastOf(view);
