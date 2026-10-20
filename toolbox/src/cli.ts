@@ -20,7 +20,8 @@ const USAGE = `loep <command> [options]
   explore --run <run>                    Write the task for the agent that maps the site before it is measured
   check-site --run <run>                 Validate site.json, replay every recipe in it and open every component on each of its
                                          page types as the sweep does; non-zero exit on problems
-  sample --run <run> [--seed <text>]     Choose the pages to evaluate (all of them on a small site)
+  sample --run <run> [--seed <text>]     Choose the pages to evaluate (all of them on a small site). Without --seed the random
+                                         part follows the seed inventory made for the run
   collect --run <run> [--fresh] [--at-once <n>]
                                          Gather facts, engine results and probe evidence per page. The sweep (collect, contrast,
                                          states, gate) needs the site model of explore. A second run of collect, contrast or
@@ -178,7 +179,7 @@ async function main(): Promise<void> {
       only: { type: "string" },
       urls: { type: "string" },
       "also-origin": { type: "string", multiple: true },
-      seed: { type: "string", default: "toegankelijk" },
+      seed: { type: "string" },
       criterion: { type: "string" },
       name: { type: "string" },
       organisation: { type: "string" },

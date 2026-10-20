@@ -1,17 +1,17 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { aliasRepresentatives, checkSite, exploreContext } from "../src/commands/explore.ts";
-import { buildSample, CENSUS_LIMIT, chooseOnVariation, contentKindsOfType, extraPagesFor, MAX_EXTRA_PER_TYPE, seededOrder } from "../src/commands/sample.ts";
+import { buildSample, CENSUS_LIMIT, chooseOnVariation, contentKindsOfType, extraPagesFor, LEGACY_SEED, MAX_EXTRA_PER_TYPE, sample, seededOrder } from "../src/commands/sample.ts";
 import { contentReadOutside, formPagesNl, landingAddress, parseSitemap, passwordPagesNl, readsOutsideRunNl, type Inventory, type InventoryPage } from "../src/commands/inventory.ts";
 import { progressLine, sayingItRuns } from "../src/instruments/limit.ts";
 import { canonicalJson, sha256, slugForUrl, stableId } from "../src/lib/canonical.ts";
 import { isChallenge } from "../src/lib/challenge.ts";
 import { changedSinceCommit, complianceStatus, evaluationHash, knownCommit, resolveCriterion } from "../src/lib/evaluation.ts";
-import { toolboxSource } from "../src/lib/manifest.ts";
+import { type Manifest, toolboxSource, writeManifest } from "../src/lib/manifest.ts";
 import { loadAllProcedures, loadProcedure, parseProcedure, runLimitsNl } from "../src/lib/procedures.ts";
 import { Politeness } from "../src/session/safety.ts";
 import type { SiteModel } from "../src/lib/sitemodel.ts";
@@ -170,6 +170,34 @@ test("a large site gets a structured sample plus a seeded random tenth", () => {
   assert.equal(first.items.filter((item) => item.kind === "random").length, 1);
   assert.notDeepEqual(first.items.filter((item) => item.kind === "random"), other.items.filter((item) => item.kind === "random"));
   assert.deepEqual(seededOrder(pages, "x").map((entry) => entry.url), seededOrder([...pages].reverse(), "x").map((entry) => entry.url));
+});
+
+test("without --seed the random part follows a seed that inventory made for the run, and an older run keeps toegankelijk", async () => {
+  const pages = Array.from({ length: CENSUS_LIMIT + 40 }, (_, index) => page(index, `t${index % 7}`));
+  const runWith = async (step: string): Promise<string> => {
+    const dir = mkdtempSync(join(tmpdir(), "loep-seed-"));
+    writeFileSync(join(dir, "inventory.json"), JSON.stringify(inventory(pages)));
+    await writeManifest(dir, { command: step });
+    return dir;
+  };
+  const manifestOf = (dir: string): Manifest => JSON.parse(readFileSync(join(dir, "manifest.json"), "utf8")) as Manifest;
+
+  const run = await runWith("inventory");
+  const seed = manifestOf(run).seed!;
+  assert.match(seed, /^[0-9a-f]{32}$/, "inventory puts a random seed in the manifest");
+  assert.notEqual(manifestOf(await runWith("inventory")).seed, seed, "every run gets its own seed");
+  const first = await sample(run);
+  assert.equal(first.seed, seed, "sample.json names the seed it used");
+  assert.deepEqual(first, buildSample(inventory(pages), seed));
+  assert.deepEqual(await sample(run), first, "a second sample in the run chooses the same pages");
+  await writeManifest(run, { command: "inventory" });
+  assert.equal(manifestOf(run).seed, seed, "a later step, also a second inventory, keeps the seed");
+  assert.deepEqual(manifestOf(run).steps.filter((step) => step.command === "sample").map((step) => step.seed), [seed, seed], "the manifest names the seed of each sample");
+
+  assert.equal((await sample(run, "eigen")).seed, "eigen", "--seed wins");
+  const older = await runWith("login");
+  assert.equal(manifestOf(older).seed, undefined);
+  assert.equal((await sample(older)).seed, LEGACY_SEED, "a run without a seed in the manifest keeps the seed it always had");
 });
 
 test("every page type of the site model gets a page in the sample, also when it shares a template", () => {
