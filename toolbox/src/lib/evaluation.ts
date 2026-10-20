@@ -197,6 +197,12 @@ export interface CriterionResult {
   dropped?: DroppedFinding[];
   procedure: { version: number; sha256: string; class: string; limitsNl: string | null } | null;
   provenance: { dossierSha256: string | null; verdictSha256: Record<string, string | null> };
+  /**
+   * The verdict that counts did not come because the model was not there (a limit or a failure of
+   * the service): the last round that was given up on, was skipped with the kind "storing". The
+   * report says so, and `feedback` drafts no issue, since it is no fault of loep. Absent otherwise.
+   */
+  outage?: true;
 }
 
 export const DROP_REASON_NL: Record<string, string> = {
@@ -366,6 +372,8 @@ export interface CriterionInput {
   provenance: CriterionResult["provenance"];
   /** Open points about candidates other judges passed on to this criterion that no verdict of it ruled on (`unruledCrossPoints`). */
   unruledNl?: string[];
+  /** A round of this criterion was given up on for a storing of the model, and no round after it gave a verdict. */
+  outage?: boolean;
 }
 
 const normalise = (text: string): string => text.toLowerCase().replace(/\s+/g, " ").trim();
@@ -491,7 +499,7 @@ export function resolveCriterion(input: CriterionInput, sitePrefix: string): Cri
       ? `Niet vastgesteld: ${unruled.length === 1 ? "een waarneming die een andere beoordelaar doorgaf, is" : `${unruled.length} waarnemingen die een andere beoordelaar doorgaf, zijn`} door niemand beoordeeld. Het oordeel zonder die ${unruled.length === 1 ? "waarneming" : "waarnemingen"} was ${OUTCOME_LABEL[reached].toLowerCase()}: ${final!.summaryNl}`
       : byPerson
         ? `Een persoon heeft vastgesteld: ${OUTCOME_LABEL[outcome].toLowerCase()}. Dit is vastgesteld door een persoon, niet door een instrument. Het onderzoek zelf kwam niet verder dan: ${final!.summaryNl}`
-        : (final?.summaryNl ?? "Voor dit criterium is geen eindoordeel vastgesteld."),
+        : (final?.summaryNl ?? (input.outage ? `Voor dit criterium is geen eindoordeel vastgesteld: ${OUTAGE_NL.toLowerCase()}` : "Voor dit criterium is geen eindoordeel vastgesteld.")),
     observations: final?.observations ?? [],
     findings,
     ...(recommendations.length > 0 ? { recommendations } : {}),
@@ -506,6 +514,7 @@ export function resolveCriterion(input: CriterionInput, sitePrefix: string): Cri
     ...(verified?.verification ? { dropped: droppedFindings(verdicts.a, verified) } : {}),
     procedure: input.procedure,
     provenance: input.provenance,
+    ...(input.outage && !byPerson ? { outage: true as const } : {}),
   };
 }
 
@@ -557,6 +566,9 @@ export function aiGeneratedMark(judgment: { model: string; models?: RoleModels[]
     humanReview: { signature: "signed/signature.json", criteriaByPerson: criteria.filter((criterion) => criterion.established?.by === "person").map((criterion) => criterion.id) },
   };
 }
+
+/** What the report says of a criterion whose verdict did not come because the model was not there. */
+export const OUTAGE_NL = "De beoordeling is door een storing van het model niet gedaan.";
 
 /** How long a quote from a verdict may be in a limitation of the evaluation. */
 export const QUOTE_LIMIT = 220;

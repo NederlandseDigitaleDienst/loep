@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, readdirSync, renameSync, statSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, renameSync, rmSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { EXTENSION, extensionsOf, finishBudget, judgeBudget, verifyBudget, walkBudget, type Coverage } from "../lib/budget.ts";
 import { canonicalJson, pageLabels, readJson, sha256, sha256File, writeFileAtomic, writeJson } from "../lib/canonical.ts";
@@ -123,6 +123,13 @@ export interface InstrumentIndex {
   tasks: InstrumentTask[];
   /** True once every verifier is in: from then on it is known which criteria get a finishing round. Absent in an older index. */
   finishDecided?: boolean;
+  /**
+   * The attempts per task whose agent came back without a result that holds, under `<phase>:<id>`
+   * (`walks:start`, `judges:1.4.3`). The workflow counts them with `tasks --attempted`, so the count
+   * survives a restart. An agent that stopped with an error (a limit or a failure of the model) is no
+   * attempt. Absent when there is none.
+   */
+  attempts?: Record<string, number>;
 }
 
 export interface TaskOptions {
@@ -151,6 +158,23 @@ const INDEX = join("tasks", "index.json");
 const NOT_WALKED = join("rondgang", "niet-doorlopen.json");
 const stampOf = (path: string): string => path.replace(/\.json$/, ".stamp.json");
 const skipOf = (path: string): string => path.replace(/\.json$/, ".overgeslagen.json");
+/**
+ * Why a walk or a verdict was given up on: the agent came back twice without a result that holds,
+ * or the model was not there to do it (a limit of the subscription, a failure of the service).
+ * The second is no fault of an agent or of loep, and the report and the finishing round say so.
+ */
+export const SKIP_KINDS = ["geen geldig resultaat", "storing"] as const;
+export type SkipKind = (typeof SKIP_KINDS)[number];
+/** The phases of the flow as `pending` names them; the attempts of a task are counted under `<phase>:<id>`. */
+export const PHASES = ["walks", "judges", "verifiers", "finishers"] as const;
+export type Phase = (typeof PHASES)[number];
+/** Where the task file of each phase is, relative to the run. The workflow derives the same paths from the ids `pending --brief` gives. */
+export const TASK_FILES: Record<Phase, (id: string) => string> = {
+  walks: (id) => join("rondgang", `${id}.md`),
+  judges: (id) => join("tasks", id, "beoordeel.md"),
+  verifiers: (id) => join("tasks", id, "verifieer.md"),
+  finishers: (id) => join("tasks", id, "afmaak.md"),
+};
 /**
  * The session name for one attempt at a task. A session keeps its budget and its clock for the
  * life of the run, so a task that is done again needs a fresh one: the name it had while its
@@ -342,6 +366,9 @@ export async function standingVerdict(runDir: string, task: InstrumentTask, obse
 /** What the finishing round is told when the round before it gave nothing: an open point like any other, so the same rules hold for it. */
 export const NO_FINAL_NL = "budget op: de verificatie leverde na twee pogingen geen geldig eindoordeel. Het oordeel van de beoordelaar is daardoor niet gecontroleerd.";
 export const NO_VERDICT_NL = "budget op: de beoordeling leverde na twee pogingen geen geldig oordeel. Het criterium is daardoor niet beoordeeld.";
+/** The same for a round that was skipped because the model was not there: no budget ran out and no agent failed. */
+export const NO_FINAL_OUTAGE_NL = "De verificatie is door een storing van het model niet gedaan. Het oordeel van de beoordelaar is daardoor niet gecontroleerd.";
+export const NO_VERDICT_OUTAGE_NL = "De beoordeling is door een storing van het model niet gedaan. Het criterium is daardoor niet beoordeeld.";
 
 /**
  * The open points a finishing round has to settle, or null when the criterion needs none. It
@@ -349,8 +376,12 @@ export const NO_VERDICT_NL = "budget op: de beoordeling leverde na twee pogingen
  * with a point about coverage, budget or a probe, or no final verdict came at all. Every open
  * point is listed, also one for the owner of the site: the agent may settle it or leave it.
  */
-export function pointsToFinish(standing: Standing): string[] | null {
-  if (standing.round !== "final") return [...(standing.verdict?.outcome === "cantTell" ? (standing.verdict.missingNl ?? []) : []), standing.round === "judge" ? NO_FINAL_NL : NO_VERDICT_NL];
+export function pointsToFinish(standing: Standing, missedBy: SkipKind | null = null): string[] | null {
+  if (standing.round !== "final") {
+    const outage = missedBy === "storing";
+    const missed = standing.round === "judge" ? (outage ? NO_FINAL_OUTAGE_NL : NO_FINAL_NL) : outage ? NO_VERDICT_OUTAGE_NL : NO_VERDICT_NL;
+    return [...(standing.verdict?.outcome === "cantTell" ? (standing.verdict.missingNl ?? []) : []), missed];
+  }
   const verdict = standing.verdict!;
   const points = verdict.missingNl ?? [];
   // A point without a kind is from before the kinds existed: nobody can say it is the owner's, so it is the evaluation's.
@@ -409,6 +440,29 @@ function setFinishAside(runDir: string, finish: NonNullable<InstrumentTask["fini
 
 /** Whether a walk or a verdict was given up on with `skip`. */
 export const skipped = (runDir: string, output: string): boolean => existsSync(join(runDir, skipOf(output)));
+
+/** Why a walk or a verdict was given up on, or null when it was not. A record from before the kinds existed was always a task without a valid result. */
+export function skipKindOf(runDir: string, output: string): SkipKind | null {
+  if (!skipped(runDir, output)) return null;
+  const kind = (JSON.parse(readFileSync(join(runDir, skipOf(output)), "utf8")) as { kind?: string }).kind;
+  return kind === "storing" ? "storing" : "geen geldig resultaat";
+}
+
+/** Why the round a standing verdict lacks was given up on: the judge when there is no verdict, the verifier when there is only the judge's. */
+function missedBy(runDir: string, task: InstrumentTask, standing: Standing): SkipKind | null {
+  const part = standing.round === null ? task.judge : standing.round === "judge" ? task.verify : null;
+  return part ? skipKindOf(runDir, part.output) : null;
+}
+
+/**
+ * Whether a criterion lacks the verdict that counts because the model was not there: the last
+ * round of it that was given up on, was given up on for a storing. Then the report says so, and
+ * `feedback` drafts no issue: it is no fault of loep.
+ */
+export function skippedForOutage(runDir: string, task: InstrumentTask): boolean {
+  for (const part of [task.finish, task.verify, task.judge]) if (part && skipped(runDir, part.output)) return skipKindOf(runDir, part.output) === "storing";
+  return false;
+}
 
 /** What other criteria's judges saw that belongs to this one, as candidates for its verifier. */
 export function crossCandidates(verdicts: Map<string, Verdict>, criterion: string): Candidate[] {
@@ -483,7 +537,7 @@ export async function instrumentTasks(runDir: string, options: TaskOptions = {})
     const session = earlier?.session ?? `r-${sessionPart(type.id)}`;
     const stateLines = stateLinesFor(run, type.id, recipes);
     const walkLimits = walkBudget(BUDGETS.walk, stateLines.length);
-    const walk: WalkTask = { pageType: type.id, page: page.label, prompt: join("rondgang", `${type.id}.md`), output: join("rondgang", `${type.id}.json`), session, maxCommands: walkLimits.commands, maxMinutes: walkLimits.minutes };
+    const walk: WalkTask = { pageType: type.id, page: page.label, prompt: TASK_FILES.walks(type.id), output: join("rondgang", `${type.id}.json`), session, maxCommands: walkLimits.commands, maxMinutes: walkLimits.minutes };
     const writeWalk = async (): Promise<void> => writeFileAtomic(
       join(runDir, walk.prompt),
       fill(templates.rondgang, {
@@ -547,7 +601,7 @@ export async function instrumentTasks(runDir: string, options: TaskOptions = {})
     const judgeCandidates = [...(fromWalks.get(procedure.id) ?? []), ...sweepCandidates(run).filter((candidate) => candidate.criterion === procedure.id)];
     coverage.set(procedure.id, coverageOf(run, procedure));
     const judgeLimits = judgeBudget(BUDGETS.judge, procedure.id, coverage.get(procedure.id)!, judgeCandidates.length);
-    const judge = { prompt: join(dir, "beoordeel.md"), output: join("verdicts", procedure.id, "oordeel.json"), candidates: join(dir, "kandidaten.json"), session: judgeSession, maxCommands: judgeLimits.commands, maxMinutes: judgeLimits.minutes };
+    const judge = { prompt: TASK_FILES.judges(procedure.id), output: join("verdicts", procedure.id, "oordeel.json"), candidates: join(dir, "kandidaten.json"), session: judgeSession, maxCommands: judgeLimits.commands, maxMinutes: judgeLimits.minutes };
     await writeJson(join(runDir, judge.candidates), judgeCandidates);
     const shared = { ...base, id: criterion.id, title: criterion.titleNl, level: criterion.level, dossier: join(absoluteRun, dossierPath), dossierParts: dossierPartsNl(dossier), gate: join(absoluteRun, "gate.json"), writes: writesNl, procedure: procedure.body };
     const writeJudge = async (): Promise<void> => writeFileAtomic(
@@ -586,7 +640,7 @@ export async function instrumentTasks(runDir: string, options: TaskOptions = {})
       const maxCommands = budget.base + budget.perFinding * verdict.findings.length + budget.perDismissedCandidate * Math.max(0, dismissed) + (verdict.outcome === "failed" ? 0 : budget.afterPass);
       // What there is to reproduce is the floor; what the criterion used before and the size of the site come on top.
       const verifyLimits = verifyBudget({ commands: maxCommands, minutes: budget.minutes }, task.criterion, coverage.get(task.criterion)!);
-      const verify = { prompt: join(dir, "verifieer.md"), output: join("verdicts", task.criterion, "final.json"), candidates: join(dir, "kandidaten-verificatie.json"), session: was?.verify?.session ?? `v-${task.criterion.replaceAll(".", "")}`, maxCommands: verifyLimits.commands, maxMinutes: verifyLimits.minutes };
+      const verify = { prompt: TASK_FILES.verifiers(task.criterion), output: join("verdicts", task.criterion, "final.json"), candidates: join(dir, "kandidaten-verificatie.json"), session: was?.verify?.session ?? `v-${task.criterion.replaceAll(".", "")}`, maxCommands: verifyLimits.commands, maxMinutes: verifyLimits.minutes };
       await writeJson(join(runDir, verify.candidates), candidates);
       const writeVerify = async (): Promise<void> => writeFileAtomic(
         join(runDir, verify.prompt),
@@ -634,7 +688,8 @@ export async function instrumentTasks(runDir: string, options: TaskOptions = {})
       const was = earlierVerify.get(task.criterion) ?? null;
       // A round that ran again keeps the points it was given, and the verdicts before it stay where they were set aside.
       let earlierRounds = was?.finish?.earlier ?? [];
-      let points = earlierRounds.length > 0 && was?.finish ? was.finish.points : pointsToFinish(standing);
+      const missed = missedBy(runDir, task, standing);
+      let points = earlierRounds.length > 0 && was?.finish ? was.finish.points : pointsToFinish(standing, missed);
       if (again.has(task.criterion)) {
         if (was?.finish) earlierRounds = [...earlierRounds, ...setFinishAside(runDir, was.finish)];
         points = again.get(task.criterion)!;
@@ -650,14 +705,16 @@ export async function instrumentTasks(runDir: string, options: TaskOptions = {})
       const all = [...listed, ...crossCandidates(judged, task.criterion).filter((candidate) => !listed.some((entry) => entry.id === candidate.id))];
       const finishLimits = finishBudget(BUDGETS.finish, { commands: task.judge.maxCommands, minutes: task.judge.maxMinutes }, BUDGETS.judge);
       const ruled = new Set(standing.round === "final" ? (standing.verdict!.candidates ?? []).filter((ruling) => ruling.ruling !== "open").map((ruling) => ruling.id) : []);
-      const finish: NonNullable<InstrumentTask["finish"]> = { prompt: join(dir, "afmaak.md"), output: join("verdicts", task.criterion, "afmaak.json"), candidates: join(dir, "kandidaten-afmaak.json"), session: was?.finish?.session ?? `a-${digits}`, maxCommands: finishLimits.commands, maxMinutes: finishLimits.minutes, points, ...(earlierRounds.length > 0 ? { earlier: earlierRounds } : {}) };
+      const finish: NonNullable<InstrumentTask["finish"]> = { prompt: TASK_FILES.finishers(task.criterion), output: join("verdicts", task.criterion, "afmaak.json"), candidates: join(dir, "kandidaten-afmaak.json"), session: was?.finish?.session ?? `a-${digits}`, maxCommands: finishLimits.commands, maxMinutes: finishLimits.minutes, points, ...(earlierRounds.length > 0 ? { earlier: earlierRounds } : {}) };
       await writeJson(join(runDir, finish.candidates), all.filter((candidate) => !ruled.has(candidate.id)));
       const standingNl =
         standing.round === "final"
           ? `Het eindoordeel van de verifieerder: \`${join(absoluteRun, task.verify!.output)}\`. Het oordeel van de beoordelaar daarvoor: \`${join(absoluteRun, task.judge.output)}\`.`
           : standing.round === "judge"
             ? `Het oordeel van de beoordelaar: \`${join(absoluteRun, task.judge.output)}\`. Een verifieerder heeft het niet gecontroleerd: neem er niets uit over zonder het zelf te meten.`
-            : "Er is geen eerder oordeel: de beoordeling leverde geen geldig resultaat. Je begint bij de procedure en het dossier.";
+            : missed === "storing"
+              ? "Er is geen eerder oordeel: de beoordeling is door een storing van het model niet gedaan. Je begint bij de procedure en het dossier."
+              : "Er is geen eerder oordeel: de beoordeling leverde geen geldig resultaat. Je begint bij de procedure en het dossier.";
       // A round that runs again starts from the verdict of the round before it, which stays in the run.
       const earlierNl =
         earlierRounds.length > 0
@@ -698,7 +755,10 @@ export async function instrumentTasks(runDir: string, options: TaskOptions = {})
     }
   }
 
-  const index: InstrumentIndex = { flow: INSTRUMENT_FLOW, templates: Object.fromEntries(Object.entries(templates).map(([name, text]) => [name, sha256(text)])), withoutProcedure: missing, only, walks, tasks, finishDecided };
+  // The attempts stay with the run; a finishing round that runs again starts counting anew.
+  const attempts = { ...(previous?.attempts ?? {}) };
+  for (const id of again.keys()) delete attempts[`finishers:${id}`];
+  const index: InstrumentIndex = { flow: INSTRUMENT_FLOW, templates: Object.fromEntries(Object.entries(templates).map(([name, text]) => [name, sha256(text)])), withoutProcedure: missing, only, walks, tasks, finishDecided, ...(Object.keys(attempts).length > 0 ? { attempts } : {}) };
   await writeJson(join(runDir, INDEX), index);
   await writeManifest(runDir, { command: "tasks", startedAt, flow: INSTRUMENT_FLOW, walks: walks.length, criteria: tasks.length, verifiers, finishers, withoutProcedure: missing.length });
   return { walks: walks.length, judges: tasks.length, verifiers, finishers };
@@ -708,14 +768,25 @@ export interface InstrumentPending {
   flow: typeof INSTRUMENT_FLOW;
   /** The first phase with work left; run `tasks` again when a phase is finished. Each list is longest expected first (walks by the size of the task file, the others by the size of their candidates file), equal sizes in the order of the index. */
   phase: "walks" | "judges" | "verifiers" | "finishers" | "done";
-  walks: { pageType: string; task: string; session: string }[];
-  judges: { criterion: string; task: string; session: string }[];
-  verifiers: { criterion: string; task: string; session: string }[];
+  /** Each task with `attempts`: how often an agent came back from it without a result that holds (see `InstrumentIndex.attempts`). */
+  walks: { pageType: string; task: string; session: string; attempts: number }[];
+  judges: { criterion: string; task: string; session: string; attempts: number }[];
+  verifiers: { criterion: string; task: string; session: string; attempts: number }[];
   /** The finishing round: one task per criterion the evaluation itself left open. Empty when there is none. */
-  finishers: { criterion: string; task: string; session: string }[];
+  finishers: { criterion: string; task: string; session: string; attempts: number }[];
   /** Given up on with `skip`: no walk, or no verdict, will come. */
   skipped: string[];
   noteNl: string;
+}
+
+/**
+ * What the workflow asks of `pending`: per phase the ids of the open tasks and their attempts, and no
+ * paths, so the agent that reads it out has nothing long to copy. The workflow derives each path from
+ * its id, as `TASK_FILES` does.
+ */
+export function briefPending(pending: InstrumentPending): { phase: InstrumentPending["phase"] } & Record<Phase, { id: string; attempts: number }[]> {
+  const brief = (list: { pageType?: string; criterion?: string; attempts: number }[]): { id: string; attempts: number }[] => list.map((entry) => ({ id: entry.pageType ?? entry.criterion!, attempts: entry.attempts }));
+  return { phase: pending.phase, walks: brief(pending.walks), judges: brief(pending.judges), verifiers: brief(pending.verifiers), finishers: brief(pending.finishers) };
 }
 
 const sizeOf = (path: string): number => {
@@ -739,12 +810,13 @@ export async function instrumentPending(runDir: string): Promise<InstrumentPendi
   const index = await loadInstrumentIndex(runDir);
   const observations = loadObservations(runDir);
   const absolute = (path: string): string => join(resolve(runDir), path);
+  const attempts = (phase: Phase, id: string): number => index.attempts?.[`${phase}:${id}`] ?? 0;
   const given: string[] = [];
   const walks: InstrumentPending["walks"] = [];
   for (const walk of index.walks) {
     if (await walkIsCurrent(runDir, walk, observations)) continue;
     if (skipped(runDir, walk.output)) given.push(`rondgang ${walk.pageType}`);
-    else walks.push({ pageType: walk.pageType, task: absolute(walk.prompt), session: walk.session });
+    else walks.push({ pageType: walk.pageType, task: absolute(walk.prompt), session: walk.session, attempts: attempts("walks", walk.pageType) });
   }
   const judges: InstrumentPending["judges"] = [];
   const verifiers: InstrumentPending["verifiers"] = [];
@@ -754,7 +826,7 @@ export async function instrumentPending(runDir: string): Promise<InstrumentPendi
     if (!(await instrumentVerdictIsCurrent(runDir, task, "judge", observations))) {
       if (skipped(runDir, task.judge.output)) given.push(`beoordeling ${task.criterion}`);
       else {
-        judges.push({ criterion: task.criterion, task: absolute(task.judge.prompt), session: task.judge.session });
+        judges.push({ criterion: task.criterion, task: absolute(task.judge.prompt), session: task.judge.session, attempts: attempts("judges", task.criterion) });
         candidatesOf.set(`judge ${task.criterion}`, absolute(task.judge.candidates));
       }
       continue;
@@ -763,7 +835,7 @@ export async function instrumentPending(runDir: string): Promise<InstrumentPendi
     else if (!(await instrumentVerdictIsCurrent(runDir, task, "final", observations))) {
       if (skipped(runDir, task.verify.output)) given.push(`verificatie ${task.criterion}`);
       else {
-        verifiers.push({ criterion: task.criterion, task: absolute(task.verify.prompt), session: task.verify.session });
+        verifiers.push({ criterion: task.criterion, task: absolute(task.verify.prompt), session: task.verify.session, attempts: attempts("verifiers", task.criterion) });
         candidatesOf.set(`verify ${task.criterion}`, absolute(task.verify.candidates));
       }
     }
@@ -779,7 +851,7 @@ export async function instrumentPending(runDir: string): Promise<InstrumentPendi
       else if (!(await instrumentVerdictIsCurrent(runDir, task, "finish", observations))) {
         if (skipped(runDir, task.finish.output)) given.push(`afmaakronde ${task.criterion}`);
         else {
-          finishers.push({ criterion: task.criterion, task: absolute(task.finish.prompt), session: task.finish.session });
+          finishers.push({ criterion: task.criterion, task: absolute(task.finish.prompt), session: task.finish.session, attempts: attempts("finishers", task.criterion) });
           candidatesOf.set(`finish ${task.criterion}`, absolute(task.finish.candidates));
         }
       }
@@ -913,17 +985,70 @@ export function budgetPointProblems(runDir: string, verdict: Partial<Verdict> | 
   );
 }
 
-/** Record that a walk or a verdict will not come, so the next phase is not held up by it. */
-export async function skip(runDir: string, what: { pageType?: string | undefined; criterion?: string | undefined; round?: string | undefined }, reasonNl: string): Promise<string> {
-  const index = await loadInstrumentIndex(runDir);
-  let output: string | undefined;
-  if (what.pageType) output = index.walks.find((walk) => walk.pageType === what.pageType)?.output;
-  else if (what.criterion) {
-    const task = index.tasks.find((entry) => entry.criterion === what.criterion);
-    output = what.round === "final" ? task?.verify?.output : what.round === "finish" ? task?.finish?.output : task?.judge.output;
+/** What `skip`, `unskip` and `tasks --attempted` name: a walk by its page type, or a round of a criterion. */
+export interface TaskName {
+  pageType?: string | undefined;
+  criterion?: string | undefined;
+  round?: string | undefined;
+}
+
+/** The output of the walk or the round that is named, and the key its attempts are counted under; null when the run has no such task. */
+function partNamed(index: InstrumentIndex, what: TaskName): { output: string; key: string } | null {
+  if (what.pageType) {
+    const walk = index.walks.find((entry) => entry.pageType === what.pageType);
+    return walk ? { output: walk.output, key: `walks:${walk.pageType}` } : null;
   }
-  if (!output) throw new Error("skip needs --page-type <id> or --criterion <id> [--round judge|final|finish] that exists in this run");
+  const task = what.criterion ? index.tasks.find((entry) => entry.criterion === what.criterion) : undefined;
+  if (!task) return null;
+  const round = what.round ?? "judge";
+  const part = round === "judge" ? task.judge : round === "final" ? task.verify : round === "finish" ? task.finish : null;
+  const phase: Phase = round === "final" ? "verifiers" : round === "finish" ? "finishers" : "judges";
+  return part ? { output: part.output, key: `${phase}:${task.criterion}` } : null;
+}
+
+const NAMED_NL = "--page-type <id> or --criterion <id> [--round judge|final|finish] that exists in this run";
+
+/** Record that a walk or a verdict will not come, so the next phase is not held up by it. */
+export async function skip(runDir: string, what: TaskName, reasonNl: string, kind: string = "geen geldig resultaat"): Promise<string> {
+  const part = partNamed(await loadInstrumentIndex(runDir), what);
+  if (!part) throw new Error(`skip needs ${NAMED_NL}`);
   if (reasonNl.trim().length < 10) throw new Error("skip needs --reason: why no result will come");
-  await writeJson(join(runDir, skipOf(output)), { reasonNl, at: new Date().toISOString() });
-  return skipOf(output);
+  if (!(SKIP_KINDS as readonly string[]).includes(kind)) throw new Error(`skip --kind is ${SKIP_KINDS.map((entry) => `"${entry}"`).join(" or ")}, not "${kind}"`);
+  await writeJson(join(runDir, skipOf(part.output)), { reasonNl, kind, at: new Date().toISOString() });
+  return skipOf(part.output);
+}
+
+/** Take back a `skip`: the task is open again, with its attempts counted from zero. */
+export async function unskip(runDir: string, what: TaskName): Promise<string> {
+  const index = await loadInstrumentIndex(runDir);
+  const part = partNamed(index, what);
+  if (!part) throw new Error(`unskip needs ${NAMED_NL}`);
+  if (!skipped(runDir, part.output)) throw new Error(`unskip: ${part.key} is niet overgeslagen`);
+  rmSync(join(runDir, skipOf(part.output)));
+  if (index.attempts && part.key in index.attempts) {
+    delete index.attempts[part.key];
+    if (Object.keys(index.attempts).length === 0) delete index.attempts;
+    await writeJson(join(runDir, INDEX), index);
+  }
+  return skipOf(part.output);
+}
+
+/**
+ * Count one attempt for each task named as `<phase>:<id>` (`walks:start`, `judges:1.4.3`): its agent
+ * came back, and whether its result holds shows in `pending`. The workflow names only the agents that
+ * came back without an error, so a limit or a failure of the model counts no attempt.
+ */
+export async function recordAttempts(runDir: string, keys: string[]): Promise<Record<string, number>> {
+  const index = await loadInstrumentIndex(runDir);
+  const attempts = { ...(index.attempts ?? {}) };
+  const rounds: Record<Phase, string | undefined> = { walks: undefined, judges: "judge", verifiers: "final", finishers: "finish" };
+  for (const key of keys) {
+    const at = key.indexOf(":");
+    const phase = key.slice(0, at) as Phase;
+    const id = key.slice(at + 1);
+    if (at < 0 || !PHASES.includes(phase) || !partNamed(index, phase === "walks" ? { pageType: id } : { criterion: id, round: rounds[phase] })) throw new Error(`--attempted: "${key}" is no task of this run; write <phase>:<id>, with phase ${PHASES.join(", ")}`);
+    attempts[key] = (attempts[key] ?? 0) + 1;
+  }
+  await writeJson(join(runDir, INDEX), { ...index, attempts });
+  return attempts;
 }

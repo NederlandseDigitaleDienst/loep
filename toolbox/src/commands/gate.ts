@@ -385,7 +385,12 @@ export function gateChecks(run: RunData): { checks: Check[]; gaps: Gap[]; warnin
   // 6b. What cannot be examined without a request an evaluation does not send.
   if (model) {
     for (const component of model.components) {
-      for (const request of component.blockedRequests ?? []) limitations.push({ check: "needs-write-request", page: null, url: model.pageTypes.find((type) => component.pageTypes.includes(type.id))?.representative ?? null, state: component.recipe ?? `component-${component.id}`, missingNl: `Niet onderzoekbaar zonder schrijfverzoek: het onderdeel "${component.id}" heeft ${request.method} ${request.address} nodig, en dat verzoek wordt tegengehouden.` });
+      for (const request of component.blockedRequests ?? []) {
+        const where = { page: null, url: model.pageTypes.find((type) => component.pageTypes.includes(type.id))?.representative ?? null, state: component.recipe ?? `component-${component.id}` };
+        // A GET is refused only when it goes to a host outside the run: that is a read, and a choice of what the run covers, not a write.
+        if (["GET", "HEAD"].includes(String(request.method).toUpperCase())) limitations.push({ check: "needs-host-outside-run", ...where, missingNl: `Niet onderzoekbaar zonder een adres buiten de run: het onderdeel "${component.id}" heeft ${request.method} ${request.address} nodig, en dat adres hoort niet bij de afbakening (inventory --also-origin).` });
+        else limitations.push({ check: "needs-write-request", ...where, missingNl: `Niet onderzoekbaar zonder schrijfverzoek: het onderdeel "${component.id}" heeft ${request.method} ${request.address} nodig, en dat verzoek wordt tegengehouden.` });
+      }
     }
   }
   if (model) {

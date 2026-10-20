@@ -23,7 +23,7 @@ import type { Gate } from "./gate.ts";
 import { readEvaluation, signatureIsCurrent, writeEvaluation } from "./sign.ts";
 import { mergeInto } from "./merge.ts";
 import { countingVerdict, loadAnswers } from "./answer.ts";
-import { instrumentVerdictIsCurrent, isInstrumentRun, loadInstrumentIndex, loadObservations, NO_TASKS_NL, unruledCrossPoints, type InstrumentTask } from "./instrument-tasks.ts";
+import { instrumentVerdictIsCurrent, isInstrumentRun, loadInstrumentIndex, loadObservations, NO_TASKS_NL, skippedForOutage, unruledCrossPoints, type InstrumentTask } from "./instrument-tasks.ts";
 
 export interface EvaluateOptions {
   run: string;
@@ -152,6 +152,7 @@ export async function evaluate(options: EvaluateOptions): Promise<Evaluation> {
           procedure: procedure ? { version: procedure.version, sha256: procedure.sha256, class: procedure.class, limitsNl: procedure.limitsNl === null ? null : runLimitsNl(procedure.limitsNl, { screenReader: [instrumentTask?.judge.session, instrumentTask?.verify?.session, instrumentTask?.finish?.session].some((session) => session !== undefined && readAloud.has(session)), loggedIn: Boolean(run.login) }) } : null,
           provenance: { dossierSha256: instrumentTask?.dossierSha256 ?? null, verdictSha256: hashes },
           unruledNl: instrumentTask ? unruledCrossPoints(judged, criterion.id, [verdicts.final, verdicts.finish]) : [],
+          outage: instrumentTask !== undefined && !verdicts.finish && skippedForOutage(options.run, instrumentTask),
         },
         prefix,
     );
