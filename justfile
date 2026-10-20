@@ -81,7 +81,7 @@ test *flags:
 
 # Draai alleen de tests die geen browser starten: een paar seconden, voor tussendoor en voor de snelle controle bij een push
 test-quick:
-    cd {{toolbox}} && node --test test/compare-findings.test.ts test/contrast.test.ts test/core.test.ts test/defects.test.ts test/docs.test.ts test/estimate.test.ts test/release.test.ts test/searchbody.test.ts test/extractors.test.ts test/feedback.test.ts test/instrument-tasks.test.ts test/origins.test.ts test/portrait.test.ts test/render.test.ts test/sequence.test.ts test/statement.test.ts test/sweepstamp.test.ts test/timing.test.ts test/atonce.test.ts test/verdict.test.ts test/voiceover.test.ts test/again.test.ts
+    cd {{toolbox}} && node --test test/compare-findings.test.ts test/contrast.test.ts test/core.test.ts test/defects.test.ts test/docs.test.ts test/estimate.test.ts test/release.test.ts test/searchbody.test.ts test/extractors.test.ts test/feedback.test.ts test/instrument-tasks.test.ts test/origins.test.ts test/portrait.test.ts test/render.test.ts test/sequence.test.ts test/statement.test.ts test/sweepstamp.test.ts test/timing.test.ts test/atonce.test.ts test/verdict.test.ts test/voiceover.test.ts test/again.test.ts test/sweep-check.test.ts
 
 # Controleer de types
 check:
@@ -154,6 +154,10 @@ verify run:
 # Serveer de testsite met ingebouwde gebreken en de schone tweeling (poorten 4710, 4711 en 4712)
 testsite *args:
     node {{toolbox}}/fixtures/serve.ts {{args}}
+
+# Regressietoets van de veegronde op de testsite, zonder taalmodel: inventory, het vaste sitemodel uit toolbox/fixtures/sweep, collect, contrast en states op beide varianten, en per gebrek uit de sleutel of het bewijs in het dossier staat (toolbox/fixtures/evidence.ts). Faalt als iets uit de basislijn ontbreekt of de tweeling bewijs krijgt. Met --out <map>, --at-once <n>, --variant defect of clean, --runs <map> om bestaande runs opnieuw te lezen, --from-report <sweep-check.json> (twee keer, de artefacten van de CI) en --update-baseline om de basislijn bij te werken
+sweep-check *flags:
+    node {{toolbox}}/scripts/sweep-check.ts {{flags}}
 
 # Bouw de testsite opnieuw uit de bronnen in toolbox/fixtures/src
 testsite-build:

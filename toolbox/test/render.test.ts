@@ -616,7 +616,9 @@ test("the PDF is made for an evaluation with and without defects, passes its che
     const result = await render(dir);
     if (result.pdf === null) return context.skip("Typst is not installed");
     // Without poppler or veraPDF the check itself is what is missing; that is not a fault of the report.
-    assert.deepEqual(result.pdfChecks.filter((problem) => !problem.includes("is niet geïnstalleerd")), [], name);
+    // On GitHub veraPDF is installed, so there a missing veraPDF is a failure and not a reason to skip the check.
+    const missingAllowed = (problem: string): boolean => problem.includes("is niet geïnstalleerd") && !(process.env.CI === "true" && problem.includes("veraPDF"));
+    assert.deepEqual(result.pdfChecks.filter((problem) => !missingAllowed(problem)), [], name);
     made[name] = readFileSync(result.pdf);
     // Where the report came from stands on the cover with the commit, and at the foot of every other page.
     const text = await tool("pdftotext", ["-layout", result.pdf, "-"]);
