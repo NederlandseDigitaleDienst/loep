@@ -497,13 +497,15 @@ test("skip records its kind, a storing is no budget that ran out, and unskip put
   }
 });
 
-test("the workflow sets a model only for the roles that are given one, and refuses a role or model it does not know", async () => {
+test("the workflow sets a model only for the roles that are given one, the stand on Haiku unless told otherwise, and refuses a role or model it does not know", async () => {
   const states = (): WorkflowState[] => [{ phase: "walks", walks: ["start"] }, { phase: "judges", judges: ["1.1.1"] }, { phase: "done" }];
   const plain = await runWorkflow(2, states());
-  assert.ok(plain.asked.every((options) => !("model" in options)), "without models no agent gets a model");
-  assert.deepEqual(plain.result.models, { stand: null, walks: null, judges: null, verifiers: null, finishers: null });
+  assert.deepEqual(plain.asked.map((options) => [options.phase, options.model ?? null]), [["Stand", "haiku"], ["Rondgangen", null], ["Stand", "haiku"], ["Beoordelen", null], ["Stand", "haiku"]], "without models only the stand gets a model");
+  assert.deepEqual(plain.result.models, { stand: "haiku", walks: null, judges: null, verifiers: null, finishers: null });
   const none = await runWorkflow(2, states(), undefined, {});
-  assert.ok(none.asked.every((options) => !("model" in options)));
+  assert.deepEqual(none.result.models, plain.result.models);
+  const opus = await runWorkflow(2, states(), undefined, { stand: "opus" });
+  assert.ok(opus.asked.filter((options) => options.phase === "Stand").every((options) => options.model === "opus"), "models can set the stand back");
 
   const some = await runWorkflow(2, states(), undefined, { stand: "haiku", walks: "sonnet" });
   assert.deepEqual(some.asked.map((options) => [options.phase, options.model ?? null]), [["Stand", "haiku"], ["Rondgangen", "sonnet"], ["Stand", "haiku"], ["Beoordelen", null], ["Stand", "haiku"]]);

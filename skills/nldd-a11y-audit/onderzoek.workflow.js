@@ -31,12 +31,14 @@ const NEVER_OPEN =
     : 'Je werkt alleen op de site uit je opdracht.'
 
 // The model of each role. A role without a choice sets no model, so its agents run on the model of the session.
+// The stand only runs two commands and hands back their JSON, so it runs on Haiku unless `models` says otherwise.
 const ROLES = ['stand', 'walks', 'judges', 'verifiers', 'finishers']
 const KNOWN_MODELS = ['opus', 'sonnet', 'haiku']
+const DEFAULT_MODELS = { stand: 'haiku' }
 function chooseModels(given) {
-  if (given === undefined || given === null) return {}
+  if (given === undefined || given === null) return { ...DEFAULT_MODELS }
   if (typeof given !== 'object' || Array.isArray(given)) throw new Error(`models moet een object zijn, bijvoorbeeld { "walks": "sonnet" }, niet ${JSON.stringify(given)}`)
-  const chosen = {}
+  const chosen = { ...DEFAULT_MODELS }
   for (const [role, model] of Object.entries(given)) {
     if (!ROLES.includes(role)) throw new Error(`models: onbekende rol "${role}"; kies uit ${ROLES.join(', ')}`)
     if (!KNOWN_MODELS.includes(model)) throw new Error(`models: onbekend model ${JSON.stringify(model)} voor "${role}"; kies uit ${KNOWN_MODELS.join(', ')}`)
