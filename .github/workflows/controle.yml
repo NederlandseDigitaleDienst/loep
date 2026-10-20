@@ -1,7 +1,7 @@
 # Twee controles. De snelle draait bij elke push en kost een paar minuten: licenties, types,
 # procedures en de tests die geen browser nodig hebben. De volledige doet wat een nieuwe
 # gebruiker doet (installeren op een schone machine, zeggen wat er staat, alle tests) en
-# duurt ongeveer 25 minuten; die draait op een voorstel, één keer per nacht als er die dag
+# duurt ongeveer 25 minuten; die draait op een voorstel, in de merge queue, één keer per nacht als er die dag
 # iets is veranderd, en met de hand. Een nacht zonder wijziging draait niets.
 name: Controle
 
@@ -9,6 +9,8 @@ on:
   push:
     branches: [main]
   pull_request:
+  # The merge queue tests a pull request together with main and the ones queued before it.
+  merge_group:
   schedule:
     - cron: "17 2 * * *"
   workflow_dispatch:
