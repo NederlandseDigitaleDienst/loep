@@ -118,6 +118,7 @@ Options:
                     said in the conversation and confirmed after a repetition. Kept with the record and its time
 
 Comparing per finding has its own steps: loep compare --findings --help
+Measuring a variant of the code on a frozen sweep: loep variant --help (variant, compare-variants)
 A browser session for an agent has its own commands: loep session --help
 `;
 
@@ -137,6 +138,7 @@ async function main(): Promise<void> {
   // Comparing per finding has its own steps and options; it parses them itself.
   if (process.argv[2] === "compare" && process.argv.includes("--findings")) return (await import("./commands/compare-findings.ts")).cli(process.argv.slice(3));
   if (process.argv[2] === "calibrate") return (await import("./commands/calibrate.ts")).cli(process.argv.slice(3)); // outside an evaluation: measures the instruments against the ACT test cases
+  if (process.argv[2] === "variant" || process.argv[2] === "compare-variants") return (await import("./commands/variants.ts")).cli(process.argv.slice(2)); // outside an evaluation: measures a variant of the code on a frozen sweep
   // A session takes its commands and options as they come; it parses them itself.
   if (process.argv[2] === "session") {
     const { sessionCli, SESSION_USAGE } = await import("./session/client.ts");

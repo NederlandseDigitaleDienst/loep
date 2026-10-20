@@ -566,7 +566,8 @@ export function findingsMarkdown(summary: FindingsSummary): string {
   return lines.join("\n");
 }
 
-export async function mergeRun(runDir: string, outDir: string): Promise<FindingsSummary> {
+/** The two current classifications of a run side by side, without writing anything. Throws when one is missing or no longer current. */
+export async function findingsSummary(runDir: string): Promise<FindingsSummary> {
   for (const round of ["a", "b"] as const) {
     if (!(await classificationIsCurrent(runDir, round))) throw new Error(`classification ${round} has no current stamp; run "compare --findings check --round ${round}" (again) first`);
   }
@@ -574,12 +575,16 @@ export async function mergeRun(runDir: string, outDir: string): Promise<Findings
   const evaluationSha256 = await sha256File(join(runDir, "evaluation.json"));
   if (evaluationSha256 !== input.evaluationSha256) throw new Error("evaluation.json changed after the comparison tasks were written; run \"compare --findings tasks\" again");
   const [a, b] = [await readJson<Classification>(join(runDir, outputFile("a"))), await readJson<Classification>(join(runDir, outputFile("b")))];
-  const summary = mergeClassifications(input, a, b, await readJson<Evaluation>(join(runDir, "evaluation.json")), {
+  return mergeClassifications(input, a, b, await readJson<Evaluation>(join(runDir, "evaluation.json")), {
     inputSha256: await sha256File(join(runDir, INPUT)),
     evaluationSha256,
     classificationSha256: { a: await sha256File(join(runDir, outputFile("a"))), b: await sha256File(join(runDir, outputFile("b"))) },
     promptSha256: sha256(readFileSync(join(TEMPLATES_DIR, "vergelijk.md"), "utf8")),
   });
+}
+
+export async function mergeRun(runDir: string, outDir: string): Promise<FindingsSummary> {
+  const summary = await findingsSummary(runDir);
   await writeJson(join(outDir, "bevindingen.json"), summary);
   await writeFileAtomic(join(outDir, "bevindingen.md"), findingsMarkdown(summary));
   return summary;
