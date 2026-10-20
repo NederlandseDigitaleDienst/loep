@@ -4,12 +4,25 @@ import { Audit } from "@siteimprove/alfa-act";
 import { Playwright } from "@siteimprove/alfa-playwright";
 import alfaRules from "@siteimprove/alfa-rules";
 import type { Page } from "playwright";
+import { refuseFixedGlobals } from "../instruments/methods/capsule.ts";
 import { compareCriterionIds, criterionIdFromAxeTag } from "./wcag.ts";
 
 const require = createRequire(import.meta.url);
 const AXE_SOURCE = readFileSync(require.resolve("axe-core/axe.min.js"), "utf8");
 const AXE_TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"];
 const MAX_NODES_PER_RULE = 100;
+/**
+ * axe-core loaded and run in one go, so that no script of the page runs in between. A window.axe that the page fixed
+ * beforehand is refused instead of run, and the library is not announced to a loader of modules of the page (#143).
+ * The window keeps axe afterwards, as it did when it was loaded on its own.
+ */
+const AXE_RUN = `(async function () {
+  var define, module, exports;
+  ${refuseFixedGlobals(["axe"])}
+  ${AXE_SOURCE}
+  ;
+  return await axe.run(document, { runOnly: { type: "tag", values: ${JSON.stringify(AXE_TAGS)} }, resultTypes: ["violations", "incomplete", "passes", "inapplicable"] });
+}).call(window)`;
 
 export type EngineOutcome = "failed" | "cantTell" | "passed" | "inapplicable";
 
@@ -155,6 +168,16 @@ function fromAlfa(outcomes: AlfaOutcome[]): EngineResult[] {
   return [...grouped.values()];
 }
 
+/**
+ * The engines that gave no answer in a run, with their error. Their silence is no clean result: what they would
+ * have found cannot be established, for instance because the page fixed a library of its own in their place (#143).
+ */
+export function enginesWithoutResult(run: Pick<EngineRun, "status"> | undefined): { engine: string; error: string }[] {
+  return Object.entries(run?.status ?? {})
+    .filter(([, status]) => status?.ok === false)
+    .map(([engine, status]) => ({ engine, error: status.error ?? "geen foutmelding vastgelegd" }));
+}
+
 const OUTCOME_ORDER: EngineOutcome[] = ["failed", "cantTell", "passed", "inapplicable"];
 
 /** Run both rule engines on the page as it is now and keep every outcome, including passes. */
@@ -166,15 +189,7 @@ export async function runEngines(page: Page): Promise<EngineRun> {
   };
 
   try {
-    await page.evaluate(AXE_SOURCE);
-    const axe = (await page.evaluate(
-      (tags) =>
-        (window as unknown as { axe: { run: (context: Document, options: unknown) => Promise<unknown> } }).axe.run(document, {
-          runOnly: { type: "tag", values: tags },
-          resultTypes: ["violations", "incomplete", "passes", "inapplicable"],
-        }),
-      AXE_TAGS,
-    )) as AxeResults;
+    const axe = (await page.evaluate(AXE_RUN)) as AxeResults;
     results.push(...fromAxe(axe));
     status["axe-core"] = { ok: true, version: axe.testEngine.version };
   } catch (error) {
