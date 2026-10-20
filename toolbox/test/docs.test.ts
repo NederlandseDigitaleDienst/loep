@@ -255,15 +255,17 @@ interface WorkflowState {
  * `agent`, `parallel` and `log`. `states` is what the toolbox answers round after round; `seconds`
  * says how long the agent of a task works and `fails` which tasks end in an error.
  */
-async function runWorkflow(atOnce: number | undefined, states: WorkflowState[], seconds: (task: string) => number = () => 0.002, fails: string[] = []) {
-  const AsyncFunction = Object.getPrototypeOf(async () => undefined).constructor as new (...names: string[]) => (...values: unknown[]) => Promise<{ history: { round: number; phase: string; tasks?: number }[]; skipped: string[]; last: string | null }>;
+async function runWorkflow(atOnce: number | undefined, states: WorkflowState[], seconds: (task: string) => number = () => 0.002, fails: string[] = [], models?: unknown) {
+  const AsyncFunction = Object.getPrototypeOf(async () => undefined).constructor as new (...names: string[]) => (...values: unknown[]) => Promise<{ history: { round: number; phase: string; tasks?: number }[]; skipped: string[]; last: string | null; models: Record<string, string | null> }>;
   const script = new AsyncFunction("args", "agent", "parallel", "log", read("skills/nldd-a11y-audit/onderzoek.workflow.js").replace(/^export const meta/m, "const meta"));
   const events: { task: string; what: "start" | "end" }[] = [];
   const stands: string[] = [];
   let running = 0;
   let most = 0;
   let round = 0;
-  const agent = async (prompt: string, options: { phase: string }): Promise<unknown> => {
+  const asked: { phase: string; model?: string }[] = [];
+  const agent = async (prompt: string, options: { phase: string; model?: string }): Promise<unknown> => {
+    asked.push(options);
     if (options.phase === "Stand") {
       stands.push(prompt);
       const state = states[round++] ?? { phase: "done" };
@@ -279,9 +281,9 @@ async function runWorkflow(atOnce: number | undefined, states: WorkflowState[], 
     return "klaar";
   };
   const parallel = (thunks: (() => Promise<unknown>)[]): Promise<unknown[]> => Promise.all(thunks.map((thunk) => thunk()));
-  const result = await script({ cli: "CLI", run: "RUN", atOnce }, agent, parallel, () => undefined);
+  const result = await script({ cli: "CLI", run: "RUN", atOnce, models }, agent, parallel, () => undefined);
   const position = (task: string, what: "start" | "end"): number => events.findIndex((event) => event.task === task && event.what === what);
-  return { result, events, stands, most, started: (task: string): number => events.filter((event) => event.task === task && event.what === "start").length, position };
+  return { result, events, stands, asked, most, started: (task: string): number => events.filter((event) => event.task === task && event.what === "start").length, position };
 }
 
 test("the workflow keeps atOnce agents running: a new one starts as soon as one is done, never more at a time, and every task gets its turn", async () => {
@@ -344,4 +346,21 @@ test("the workflow tries a task twice and then has it skipped, as before the poo
   assert.ok(!flow.stands[2]!.includes(" skip "), "the round that finds it open for the third time does not skip yet");
   assert.match(flow.stands[3]!, /1\. node CLI skip --run RUN --page-type zoek --reason /, "the next round begins with the skip");
   assert.equal(flow.result.last, "done");
+});
+
+test("the workflow sets a model only for the roles that are given one, and refuses a role or model it does not know", async () => {
+  const states = (): WorkflowState[] => [{ phase: "walks", walks: [{ pageType: "start", task: "walk-start" }] }, { phase: "judges", judges: [{ criterion: "1.1.1", task: "judge-111" }] }, { phase: "done" }];
+  const plain = await runWorkflow(2, states());
+  assert.ok(plain.asked.every((options) => !("model" in options)), "without models no agent gets a model");
+  assert.deepEqual(plain.result.models, { stand: null, walks: null, judges: null, verifiers: null, finishers: null });
+  const none = await runWorkflow(2, states(), undefined, [], {});
+  assert.ok(none.asked.every((options) => !("model" in options)));
+
+  const some = await runWorkflow(2, states(), undefined, [], { stand: "haiku", walks: "sonnet" });
+  assert.deepEqual(some.asked.map((options) => [options.phase, options.model ?? null]), [["Stand", "haiku"], ["Rondgangen", "sonnet"], ["Stand", "haiku"], ["Beoordelen", null], ["Stand", "haiku"]]);
+  assert.deepEqual(some.result.models, { stand: "haiku", walks: "sonnet", judges: null, verifiers: null, finishers: null });
+
+  await assert.rejects(runWorkflow(2, states(), undefined, [], { rondgangen: "sonnet" }), /onbekende rol "rondgangen"; kies uit stand, walks, judges, verifiers, finishers/);
+  await assert.rejects(runWorkflow(2, states(), undefined, [], { walks: "gpt" }), /onbekend model "gpt" voor "walks"; kies uit opus, sonnet, haiku/);
+  await assert.rejects(runWorkflow(2, states(), undefined, [], ["sonnet"]), /models moet een object zijn/);
 });
