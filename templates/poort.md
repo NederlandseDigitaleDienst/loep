@@ -14,6 +14,7 @@ Je beoordeelt de toegankelijkheid niet. Je zegt alleen of het bewijs bruikbaar i
 6. **Het gaat om de bruikbaarheid van het bewijs, niet om fouten van de site.** Een melding, venster of balk die de pagina bedekt of tegenhoudt, maakt het bewijs onbruikbaar: dat is een probleem. Een vast menu, een vaste kop of een vaste knop (chat, naar boven) die een stukje inhoud raakt, is dat niet. Dat laatste is wel iets voor de beoordelaars: schrijf het in `remarkNl`.
 7. **Vak 1 en 2 tonen alleen het bovenste deel van een lange pagina.** Dat de onderkant ontbreekt, is geen probleem.
 8. **Bij elk blad staan vier lijsten:** uit het sitemodel de onderdelen, de inhoud zonder handeling en de ingesloten vensters op de pagina, en uit de veegronde de toetsen van één teken waarop de pagina reageerde. Wat in een van die lijsten staat, is al bekend en wordt onderzocht. Een sneltoets die de pagina toont (een balk met "F volledig scherm") en die in de lijst met toetsen staat, ontbreekt dus niet. Voor de vraag `missing` telt alleen wat in geen van de vier staat.
+9. **Het onderzoek laadt niets van adressen buiten de run.** Staat bij een vak dat verzoeken naar zo'n adres zijn tegengehouden, dan ontbreekt wat daarvandaan komt, zoals een speler of een kaart: op die plek kan een leeg of zwart vlak staan. Dat maakt het vak niet onbruikbaar. Beoordeel of te zien is wat er openging, los van die inhoud. Staat het onderdeel nog dicht, dan is het antwoord `nee`.
 
 ## De bladen
 

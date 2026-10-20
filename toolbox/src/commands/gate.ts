@@ -68,6 +68,8 @@ export interface Tile {
   state: string;
   file: string;
   descriptionNl: string;
+  /** Hosts outside the run that were refused in this state and not on a plain page load: what comes from there is not in the picture. */
+  refusedHosts?: string[];
 }
 
 export interface Sheet {
@@ -418,12 +420,10 @@ export function gateChecks(run: RunData): { checks: Check[]; gaps: Gap[]; warnin
     // An inventory without a usable address: only the hosts of the pages count.
   }
   const own = (address: string): boolean => ownHosts.has(address.split("/")[0]!);
-  // Hosts outside the run that are refused on a plain page load as well say nothing about a component: those are left out for its state.
-  const states = run.siteStates?.states ?? [];
-  const baseline = new Set(states.filter((state) => state.kind === "blocker").flatMap((state) => (state.refused ?? []).filter((entry) => entry.kind === "scope").map((entry) => entry.address.split("/")[0]!)));
-  for (const state of states.filter((entry) => entry.kind !== "blocker")) {
+  const outside = hostsRefusedInStates(run);
+  for (const state of (run.siteStates?.states ?? []).filter((entry) => entry.kind !== "blocker")) {
     const writes = (state.refused ?? []).filter((entry) => entry.kind === "method" && own(entry.address));
-    const hosts = [...new Set((state.refused ?? []).filter((entry) => entry.kind === "scope").map((entry) => entry.address.split("/")[0]!))].filter((host) => !baseline.has(host));
+    const hosts = outside.get(state.id) ?? [];
     if (writes.length > 0) limitations.push({ check: "needs-write-request", page: null, url: state.url, state: state.id, missingNl: `Niet onderzoekbaar zonder schrijfverzoek: in deze toestand zijn tegengehouden ${writes.map((entry) => `${entry.method} ${entry.address}`).slice(0, 3).join(", ")}. Wat daarmee laadt, staat niet in het bewijs.` });
     if (hosts.length > 0) limitations.push({ check: "needs-host-outside-run", page: null, url: state.url, state: state.id, missingNl: `In deze toestand zijn verzoeken naar adressen buiten de run tegengehouden die bij het gewone laden van de pagina niet voorkomen (${hosts.slice(0, 4).join(", ")}). Een onderdeel dat daarvan afhangt, werkte niet.` });
   }
@@ -483,6 +483,19 @@ export function gateChecks(run: RunData): { checks: Check[]; gaps: Gap[]; warnin
     if (document.facts?.pdf?.tagged && !document.facts.pdf.tagTextRead) warnings.push({ check: "document-tag-text-not-read", page: document.label, url: document.item.url, state: "default", missingNl: "De tekst per tag van dit document is niet gelezen, dus de koppen, links en tabellen zijn zonder hun tekst beoordeeld. De uitkomst van documents zegt welk programma niet paste. Herstel dat en draai documents opnieuw." });
   }
   return { checks, gaps, warnings, limitations };
+}
+
+/** Per state of the site model, the hosts outside the run that were refused while it was open and that a plain page load does not ask for. */
+export function hostsRefusedInStates(run: Pick<RunData, "siteStates">): Map<string, string[]> {
+  const states = run.siteStates?.states ?? [];
+  // Hosts outside the run that are refused on a plain page load as well say nothing about a component: those are left out for its state.
+  const baseline = new Set(states.filter((state) => state.kind === "blocker").flatMap((state) => (state.refused ?? []).filter((entry) => entry.kind === "scope").map((entry) => entry.address.split("/")[0]!)));
+  const found = new Map<string, string[]>();
+  for (const state of states.filter((entry) => entry.kind !== "blocker")) {
+    const hosts = [...new Set((state.refused ?? []).filter((entry) => entry.kind === "scope").map((entry) => entry.address.split("/")[0]!))].filter((host) => !baseline.has(host));
+    if (hosts.length > 0) found.set(state.id, hosts);
+  }
+  return found;
 }
 
 /**
@@ -561,8 +574,9 @@ export function contactSheet(tiles: PNG[]): PNG {
 }
 
 /** One sheet per page type: the page as measured, on a narrow screen, with its Tab stops, and every state of the site model that belongs to it. */
-async function buildSheets(run: RunData, runDir: string, outDir: string): Promise<Sheet[]> {
+export async function buildSheets(run: RunData, runDir: string, outDir: string): Promise<Sheet[]> {
   const model = run.siteModel ?? null;
+  const refusedHosts = hostsRefusedInStates(run);
   const types: { id: string; page: PageData }[] = [];
   if (model) {
     for (const type of model.pageTypes) {
@@ -591,7 +605,7 @@ async function buildSheets(run: RunData, runDir: string, outDir: string): Promis
       const entry = state.kind === "blocker" ? model?.blockers.find((blocker) => blocker.id === state.modelId) : state.kind === "component" ? model?.components.find((component) => component.id === state.modelId) : model?.processes.find((process) => process.id === state.modelId);
       const kind = state.kind === "blocker" ? "blokkade" : state.kind === "component" ? "onderdeel" : "proces";
       if (state.kind === "component") components.push(`${state.modelId}: ${entry?.descriptionNl ?? ""}${state.reached ? "" : " (niet geopend)"}`);
-      if (state.reached && state.files.screenshot) candidates.push({ state: state.id, file: state.files.screenshot, descriptionNl: `${kind} "${state.modelId}"${state.viewport ? ` op ${state.viewport.width} pixels breed` : ""}: ${entry?.descriptionNl ?? ""}` });
+      if (state.reached && state.files.screenshot) candidates.push({ state: state.id, file: state.files.screenshot, descriptionNl: `${kind} "${state.modelId}"${state.viewport ? ` op ${state.viewport.width} pixels breed` : ""}: ${entry?.descriptionNl ?? ""}`, ...(refusedHosts.has(state.id) ? { refusedHosts: refusedHosts.get(state.id) } : {}) });
     }
     const present = candidates.filter((candidate) => existsSync(join(runDir, candidate.file)));
     if (present.length === 0) continue;
@@ -635,7 +649,7 @@ export const QUESTIONS: { id: string; bad: Answer; tileState: string; questionNl
   { id: "taborder", bad: "nee", tileState: "taborder", questionNl: "Vak 3: staan de genummerde Tab-stops verspreid over de pagina (kop, inhoud en voet), en dus niet alleen in één hoek of één blok?" },
   { id: "missing", bad: "ja", tileState: "default", questionNl: "Vak 1 en 2: zie je een onderdeel dat pas na een handeling iets laat zien (menuknop, uitklapper, tabbladen, carrousel met knoppen, zoekknop, chatknop), of een speler of blok dat vanzelf beweegt, dat niet in de lijst met onderdelen, niet in de lijst met inhoud zonder handeling en ook niet in de lijst met ingesloten vensters van dit paginatype staat? Een ingesloten venster dat in die lijst staat (een vak 'Ik ben geen robot', een speler van een andere partij), telt hier niet: het sitemodel kent het." },
 ];
-const STATE_QUESTION_NL = "Elk vak vanaf 4: is te zien wat de omschrijving van het vak zegt? Bij een onderdeel of proces: het is open of uitgevoerd. Bij een blokkade: de blokkade staat in beeld.";
+const STATE_QUESTION_NL = "Elk vak vanaf 4: is te zien wat de omschrijving van het vak zegt? Bij een onderdeel of proces: het is open of uitgevoerd. Bij een blokkade: de blokkade staat in beeld. Staat bij het vak dat verzoeken naar adressen buiten de run zijn tegengehouden, dan telt wat er openging, niet de inhoud van die adressen.";
 
 interface GivenAnswer {
   answer?: unknown;
@@ -741,6 +755,28 @@ export function sheetGaps(run: RunData, sheets: Sheet[]): Gap[] {
   return gaps;
 }
 
+/** What the reviewing agent reads about one sheet: its tiles and the lists beside it. */
+export function sheetText(sheet: Sheet, outDir: string): string {
+  return [
+    `### Paginatype \`${sheet.pageType}\` (${sheet.page}, ${sheet.url})`,
+    "",
+    `Blad: \`${join(outDir, sheet.file)}\``,
+    "",
+    ...sheet.tiles.flatMap((entry) => [
+      `- Vak ${entry.nr}: ${entry.descriptionNl}`,
+      ...((entry.refusedHosts ?? []).length > 0 ? [`  - In deze toestand zijn verzoeken naar adressen buiten de run tegengehouden (${entry.refusedHosts!.join(", ")}). Wat daarvandaan komt, zoals een speler of een kaart, ontbreekt in dit vak; op die plek kan een leeg of zwart vlak staan. Beoordeel of te zien is wat er openging, los van die inhoud.`] : []),
+    ]),
+    "",
+    sheet.componentsNl.length > 0 ? `Onderdelen van dit paginatype volgens het sitemodel: ${sheet.componentsNl.join("; ")}.` : "Het sitemodel noemt voor dit paginatype geen onderdelen.",
+    "",
+    (sheet.contentNl ?? []).length > 0 ? `Inhoud zonder handeling (spelers, blokken die vanzelf bewegen) volgens het sitemodel: ${sheet.contentNl!.join("; ")}.` : "Het sitemodel noemt voor dit paginatype geen spelers of inhoud die vanzelf beweegt.",
+    "",
+    (sheet.framesNl ?? []).length > 0 ? `Ingesloten vensters op deze pagina volgens het sitemodel: ${sheet.framesNl!.join("; ")}.` : "Het sitemodel noemt op deze pagina geen ingesloten vensters.",
+    "",
+    (sheet.keysNl ?? []).length > 0 ? `Toetsen van één teken waarop deze pagina reageerde in de veegronde: ${sheet.keysNl!.join("; ")}.` : "De veegronde vond op deze pagina geen toets van één teken waarop de pagina reageert.",
+  ].join("\n");
+}
+
 function fill(template: string, values: Record<string, string>): string {
   return template.replace(/\{\{(\w+)\}\}/g, (_, key: string) => {
     if (!(key in values)) throw new Error(`template placeholder {{${key}}} has no value`);
@@ -767,9 +803,11 @@ export async function checkGate(runDir: string): Promise<string[]> {
   return problems;
 }
 
-/** What a reviewer was shown of a sheet: the picture and the lists beside it. A change in either asks for a new review. */
+/** What a reviewer was shown of a sheet: the picture, the lists beside it and the hosts refused in its states. A change in any of them asks for a new review. */
 export function reviewedAs(sheet: Sheet): string {
-  return sha256(JSON.stringify([sheet.sha256, sheet.componentsNl, sheet.contentNl ?? [], sheet.framesNl ?? [], sheet.keysNl ?? []]));
+  const refused = sheet.tiles.filter((entry) => (entry.refusedHosts ?? []).length > 0).map((entry) => [entry.state, entry.refusedHosts]);
+  // Only there when a tile has refused hosts, so a sheet without one keeps the hash its answers were stamped with.
+  return sha256(JSON.stringify([sheet.sha256, sheet.componentsNl, sheet.contentNl ?? [], sheet.framesNl ?? [], sheet.keysNl ?? [], ...(refused.length > 0 ? [refused] : [])]));
 }
 
 async function currentAnswers(runDir: string, sheets: Sheet[]): Promise<Answers | null> {
@@ -805,22 +843,6 @@ export async function gate(runDir: string, outDir: string = runDir): Promise<Gat
   fixed.checks.push({ name: "sheets", ok: withoutSheet.length === 0, noteNl: withoutSheet.length === 0 ? `${sheets.length} ${sheets.length === 1 ? "paginatype heeft" : "paginatypen hebben elk"} een overzichtsblad` : `${withoutSheet.length} ${withoutSheet.length === 1 ? "gat" : "gaten"}` });
 
   const template = readTemplate("poort");
-  const sheetText = (sheet: Sheet): string =>
-    [
-      `### Paginatype \`${sheet.pageType}\` (${sheet.page}, ${sheet.url})`,
-      "",
-      `Blad: \`${join(absoluteOut, sheet.file)}\``,
-      "",
-      ...sheet.tiles.map((entry) => `- Vak ${entry.nr}: ${entry.descriptionNl}`),
-      "",
-      sheet.componentsNl.length > 0 ? `Onderdelen van dit paginatype volgens het sitemodel: ${sheet.componentsNl.join("; ")}.` : "Het sitemodel noemt voor dit paginatype geen onderdelen.",
-      "",
-      (sheet.contentNl ?? []).length > 0 ? `Inhoud zonder handeling (spelers, blokken die vanzelf bewegen) volgens het sitemodel: ${sheet.contentNl!.join("; ")}.` : "Het sitemodel noemt voor dit paginatype geen spelers of inhoud die vanzelf beweegt.",
-      "",
-      (sheet.framesNl ?? []).length > 0 ? `Ingesloten vensters op deze pagina volgens het sitemodel: ${sheet.framesNl!.join("; ")}.` : "Het sitemodel noemt op deze pagina geen ingesloten vensters.",
-      "",
-      (sheet.keysNl ?? []).length > 0 ? `Toetsen van één teken waarop deze pagina reageerde in de veegronde: ${sheet.keysNl!.join("; ")}.` : "De veegronde vond op deze pagina geen toets van één teken waarop de pagina reageert.",
-    ].join("\n");
   // One task per SHEETS_PER_TASK sheets, so the task of one agent stays the same size however many page types a site has.
   const parts = reviewParts(sheets);
   for (const part of parts) {
@@ -840,7 +862,7 @@ export async function gate(runDir: string, outDir: string = runDir): Promise<Gat
       fill(template, {
         site: siteLabel(run.inventory),
         run: absoluteRun,
-        sheets: part.sheets.map(sheetText).join("\n\n") || "Er zijn geen bladen: de run heeft geen schermafbeeldingen.",
+        sheets: part.sheets.map((sheet) => sheetText(sheet, absoluteOut)).join("\n\n") || "Er zijn geen bladen: de run heeft geen schermafbeeldingen.",
         questions: [...QUESTIONS.map((question) => `- \`${question.id}\`: ${question.questionNl}`), `- \`stateTiles\`: ${STATE_QUESTION_NL}`].join("\n"),
         example: JSON.stringify(example, null, 2),
         output: join(absoluteOut, part.answers),
