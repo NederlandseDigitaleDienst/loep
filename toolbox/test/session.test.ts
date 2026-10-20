@@ -471,7 +471,7 @@ test("a session too many is refused with what to do, and a start that counted on
 });
 
 test("a running session has one owner: a second start is refused, and only its key starts it again", async () => {
-  const owned = await Daemon.create(run, { hosts: ["127.0.0.1"], baseUrl: `${site.origin}/`, strict: false }, { navigationDelayMs: 0, secondBrowsers: false });
+  const owned = await Daemon.create(run, { hosts: [new URL(site.origin).host], baseUrl: `${site.origin}/`, strict: false }, { navigationDelayMs: 0, secondBrowsers: false });
   try {
     const first = await owned.handle({ op: "start", session: "b-311", model: "model-een" });
     const key = first.print.key as string;
