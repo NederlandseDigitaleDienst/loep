@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { readJson, sha256File, writeJson } from "../lib/canonical.ts";
+import type { RecordedVia } from "../lib/recorded.ts";
 import { ANSWER_OUTCOMES, type AnswerOutcome, OUTCOME_LABEL, type PointAnswer } from "../lib/evaluation.ts";
 import { openPoint, type Verdict } from "../lib/verdict.ts";
 import { instrumentVerdictIsCurrent, isInstrumentRun, loadInstrumentIndex, loadObservations, NO_TASKS_NL, pointsToFinish, skipped, standingVerdict, type InstrumentTask } from "./instrument-tasks.ts";
@@ -11,7 +12,8 @@ import { instrumentVerdictIsCurrent, isInstrumentRun, loadInstrumentIndex, loadO
  * owner decides. This command keeps that answer in the run, next to the verdict it belongs to.
  * A point "versturen niet toegestaan" needs no person: a run with a declared test environment
  * measures it. A person may still answer it, by sending by hand and saying what was sent where.
- * Nothing here is ever filled in by an agent.
+ * Nothing here is ever made up by an agent: the answer is what the person said. The agent may
+ * record it in the conversation, after the person said yes to a repetition of it (`recordedVia`).
  */
 
 /** Where the answers of a run are kept: one file per criterion. Inside the seal, like every other piece of evidence. */
@@ -57,7 +59,7 @@ export async function loadAnswers(runDir: string, criterion: string, counting: C
   if (!existsSync(path)) return { answers: [], stale: 0 };
   const stored = (await readJson<AnswerFile>(path)).answers ?? [];
   const current = stored.filter((answer) => counting !== null && answer.verdict?.sha256 === counting.sha256);
-  return { answers: current.map(({ pointNl, didNl, outcome, role, answeredAt }) => ({ pointNl, didNl, outcome, role, answeredAt })), stale: stored.length - current.length };
+  return { answers: current.map(({ pointNl, didNl, outcome, role, answeredAt, recordedVia }) => ({ pointNl, didNl, outcome, role, answeredAt, ...(recordedVia ? { recordedVia } : {}) })), stale: stored.length - current.length };
 }
 
 export interface AnswerOptions {
@@ -70,6 +72,7 @@ export interface AnswerOptions {
   outcome?: string | undefined;
   name?: string | undefined;
   role?: string | undefined;
+  recordedVia?: RecordedVia | undefined;
 }
 
 export interface AnswerResult {
@@ -125,6 +128,7 @@ export async function answer(options: AnswerOptions): Promise<AnswerResult> {
     role: options.role.trim(),
     name: options.name.trim(),
     answeredAt: new Date().toISOString(),
+    ...(options.recordedVia ? { recordedVia: options.recordedVia } : {}),
     verdict: { round: counting.round, sha256: counting.sha256 },
   };
   // A second answer to the same point takes the place of the first.

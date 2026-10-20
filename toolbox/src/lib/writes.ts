@@ -1,6 +1,7 @@
 import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { readJson, writeJson } from "./canonical.ts";
+import type { RecordedVia } from "./recorded.ts";
 
 /**
  * Permission to send requests that can change something (anything but GET and HEAD, and
@@ -16,12 +17,15 @@ export interface WritePermission {
   /** Who stated that this is a test environment where submitting has no consequences; null for a local address. */
   declaredBy: { name: string; role: string } | null;
   declaredAt: string;
+  /** Set when the agent recorded the declaration in the conversation; `declaredAt` is then the moment the person confirmed it. */
+  recordedVia?: RecordedVia;
 }
 
 export interface WriteFlags {
   allowWrites?: boolean | undefined;
   testEnvironment?: string | undefined;
   declaredBy?: string | undefined;
+  recordedVia?: RecordedVia | undefined;
 }
 
 /** What is left out of an evaluation when nothing may be sent; for a report that has no permission to mention. */
@@ -33,7 +37,7 @@ export const WRITES_BLOCKED_NL = "verzoeken die iets kunnen wijzigen zijn tegeng
  * of the person stays in the manifest of the run, where the declaration can be traced.
  */
 export const writesAllowedNl = (permission: WritePermission): string =>
-  `onderzocht op een testomgeving waar versturen is toegestaan: ${permission.origin}${permission.declaredBy ? `, verklaard door iemand met de functie ${permission.declaredBy.role} (de naam staat in het dossier van het onderzoek, niet in dit rapport)` : " (lokaal adres)"}`;
+  `onderzocht op een testomgeving waar versturen is toegestaan: ${permission.origin}${permission.declaredBy ? `, verklaard door iemand met de functie ${permission.declaredBy.role}${permission.recordedVia ? ", vastgelegd in een gesprek" : ""} (de naam staat in het dossier van het onderzoek, niet in dit rapport)` : " (lokaal adres)"}`;
 
 /** Hosts that cannot be a live site: the machine itself and the names reserved for testing. */
 export function isLocalHost(hostname: string): boolean {
@@ -74,7 +78,7 @@ export function decideWrites(baseUrl: string, flags: WriteFlags, now = new Date(
   const [name, ...rest] = flags.declaredBy.split(",");
   const role = rest.join(",").trim();
   if (!name?.trim() || !role) throw new Error('--declared-by verwacht een naam en een functie, gescheiden door een komma: --declared-by "<naam>, <functie>"');
-  return { origin, local: false, declaredBy: { name: name.trim(), role }, declaredAt: now.toISOString() };
+  return { origin, local: false, declaredBy: { name: name.trim(), role }, declaredAt: now.toISOString(), ...(flags.recordedVia ? { recordedVia: flags.recordedVia } : {}) };
 }
 
 /** The permission a run was given at `inventory`, from its manifest. Null when it has none. */

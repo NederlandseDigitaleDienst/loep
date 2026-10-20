@@ -52,13 +52,14 @@ Wat je in je vraag al zei, vraagt hij niet opnieuw. Daarna zegt hij hoeveel pagi
 
 Je krijgt per criterium de uitkomst, wie of wat haar vaststelde, en wat nog open is en waarom. Apart staan aanbevelingen: wat de site beter maakt maar de norm niet vraagt; ze tellen niet mee voor de uitkomst. Het rapport staat als concept in de map van de run. Wat daarna van jou is:
 
-- Open punten die geen instrument kan sluiten (luisteren met een echte schermlezer, een besluit van de eigenaar), beantwoord je zelf met `answer`. De assistent toont de punten, maar typt het antwoord niet voor je.
-- Je leest het rapport en tekent met `sign`. Tekenen doet nooit de assistent.
+- Open punten die geen instrument kan sluiten (luisteren met een echte schermlezer, een besluit van de eigenaar), beantwoord je zelf. De assistent toont de punten. Het antwoord leg je zelf vast met `answer`, of de assistent doet het in het gesprek, nadat je het hebt gezegd en ja hebt gezegd op zijn herhaling ervan.
+- Je leest het rapport en tekent met `sign`, zelf of via de assistent op dezelfde manier: hij vraagt eerst of je het rapport hebt gelezen en noemt het zegel waarvoor je tekent.
+- Daarna loopt de assistent met je de gebreken langs, de zwaarste eerst: herken je het, wie gaat erover, en wat gaat er gebeuren? Wat je besluit, legt hij vast met `decide`, en het afgetekende rapport krijgt een hoofdstuk "Maatregelen en beslissingen". Inloggen doe je altijd zelf; een wachtwoord geef je nooit aan de assistent.
 - Bleef een criterium open door een gebrek in loep, dan schrijft de assistent een tekst voor een issue op deze repository, zonder adres of naam van de site. Er gaat niets weg zonder jouw ja.
 
 ### De verklaring laten maken
 
-Na het tekenen: "Maak de toegankelijkheidsverklaring bij het onderzoek in `toegankelijkheid/onderzoeken/2026-10-15`." De skill `nldd-a11y-statement` controleert of het onderzoek getekend en ongewijzigd is, vraagt de gegevens van de organisatie (contact, klachten, ombudsman, maatregelen en data), en schrijft de verklaring volgens het wettelijke model met een invulblad voor het register. Wat je niet weet, blijft staan als `[nog invullen: ...]`. De status rekent de toolbox uit; publiceren doe je zelf.
+Na het tekenen en de besluiten per gebrek: "Maak de toegankelijkheidsverklaring bij het onderzoek in `toegankelijkheid/onderzoeken/2026-10-15`." De skill `nldd-a11y-statement` controleert of het onderzoek getekend en ongewijzigd is, neemt de maatregelen uit de besluiten, vraagt de gegevens van de organisatie (contact, klachten, ombudsman en data), en schrijft de verklaring volgens het wettelijke model met een invulblad voor het register. Wat je niet weet, blijft staan als `[nog invullen: ...]`. De status rekent de toolbox uit; publiceren doe je zelf.
 
 De derde skill, `nldd-a11y`, wijst bij een algemene vraag ("hoe laat ik zien dat onze site toegankelijk is?") de weg naar deze twee. Het hele verloop, met de vragen en wat je terugkrijgt, staat in [docs/gebruik.md](docs/gebruik.md).
 
@@ -74,6 +75,7 @@ De derde skill, `nldd-a11y`, wijst bij een algemene vraag ("hoe laat ik zien dat
 8. `tasks` zet per fase de opdrachten klaar. Eerst loopt per paginatype een agent de pagina door en noteert wat opvalt (de rondgang). Dan beoordeelt per criterium een agent het bewijs, met eigen metingen via de instrumenten van de toolbox. Daarna controleert per criterium een tweede agent elke bevinding vanaf een verse pagina en schrijft het eindoordeel. Wat hij niet kan bevestigen, vervalt. Blijft een criterium daarna open door het onderzoek zelf (iets was niet gemeten, een proef stopte bij een grens, een budget was op), dan meet een afmaakronde met een ruimer budget wat ontbrak en komt tot een oordeel.
 9. `evaluate`, `render` en `statement` maken het rapport (Markdown, een volledige pdf en een korte pdf zonder bijlage A), de conceptverklaring en het invulblad voor het register.
 10. `seal` legt de hash van elk bestand van het onderzoek vast. Een mens leest het rapport en tekent met `sign` voor precies dat zegel. `verify` maakt elke wijziging achteraf zichtbaar.
+11. `decide` legt na het tekenen per gebrek vast wat de organisatie besluit: opgelost, gepland met een datum, een andere zienswijze, onevenredige last of nog niet besloten. De besluiten staan naast het zegel, als eigen laag met een eigen hash; `render` zet ze in het afgetekende rapport en `statement` neemt er de maatregelen uit.
 
 De stappen 1, 2, 4, 5 en 6 gebruiken geen taalmodel. Waar een agent werkt, handelt en meet die alleen via de instrumenten van de toolbox, met vaste opdrachten onder versiebeheer uit [templates/](templates/) en [procedures/](procedures/README.md). Elke uitspraak wijst naar een vastgelegde waarneming.
 

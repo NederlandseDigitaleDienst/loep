@@ -2,8 +2,10 @@ import { existsSync } from "node:fs";
 import { readdir, readFile, rm } from "node:fs/promises";
 import { join, relative, sep } from "node:path";
 import { readJson, sha256, sha256File, writeJson } from "../lib/canonical.ts";
+import { checkDecisions, DECISIONS_DIR } from "../lib/decisions.ts";
 import { evaluationHash, type Evaluation, type Signature } from "../lib/evaluation.ts";
 import { IDLE_SESSION_FILE, LOGIN_SESSION_FILE } from "../lib/login.ts";
+import { recordedNl } from "../lib/recorded.ts";
 
 export interface EvidenceIndex {
   files: Record<string, string>;
@@ -24,12 +26,12 @@ export const SIGNATURE_FILE = `${SIGNED_DIR}/signature.json`;
 
 /**
  * What the seal never covers, besides itself: the signature that refers to it, and the documents
- * that are made after signing (the signed report, the statement and what the organisation filled
- * in for it). Everything else in the run is evidence and is sealed. That includes the work folder
+ * that are made after signing (the signed report, the decisions about each defect, the statement
+ * and what the organisation filled in for it). The decisions have a hash of their own. Everything else in the run is evidence and is sealed. That includes the work folder
  * of each session (`werk/<session>/`): a helper script there shows how an agent called the
  * toolbox, and so how its observations came about. Nothing writes there after the agents are done.
  */
-const OUTSIDE_SEAL = { files: ["verklaring-invoer.json"], dirs: [SIGNED_DIR, "verklaring"] };
+const OUTSIDE_SEAL = { files: ["verklaring-invoer.json"], dirs: [SIGNED_DIR, DECISIONS_DIR, "verklaring"] };
 const outsideSeal = (name: string): boolean => OUTSIDE_SEAL.files.includes(name) || OUTSIDE_SEAL.dirs.some((dir) => name.startsWith(`${dir}/`));
 
 export async function hashRun(runDir: string): Promise<EvidenceIndex & { outside: string[] }> {
@@ -116,16 +118,41 @@ export async function checkSeal(runDir: string): Promise<SealCheck | null> {
   return { files: Object.keys(sealed.files).length, outside: current.outside, problems, signature };
 }
 
-/** Recompute every hash and report anything that was changed, added or removed since the run was sealed. */
+/** How many answers of a person the run keeps, and how many of them the agent recorded in the conversation. */
+async function answersRecorded(runDir: string): Promise<{ answers: number; viaConversation: number }> {
+  const dir = join(runDir, "antwoorden");
+  if (!existsSync(dir)) return { answers: 0, viaConversation: 0 };
+  let answers = 0;
+  let viaConversation = 0;
+  for (const name of (await readdir(dir)).filter((entry) => entry.endsWith(".json"))) {
+    const stored = (await readJson<{ answers?: { recordedVia?: string }[] }>(join(dir, name)).catch(() => ({ answers: [] }))).answers ?? [];
+    answers += stored.length;
+    viaConversation += stored.filter((answer) => answer.recordedVia).length;
+  }
+  return { answers, viaConversation };
+}
+
+/**
+ * Recompute every hash and report anything that was changed, added or removed since the run was
+ * sealed. The decisions after signing are checked as their own layer: against their index, and
+ * against the defects of the evaluation.
+ */
 export async function verify(runDir: string): Promise<boolean> {
   const check = await checkSeal(runDir);
   if (check === null) {
     process.stderr.write("deze run is niet verzegeld; verzegel met seal\n");
     return false;
   }
-  for (const problem of check.problems) process.stderr.write(`${problem}\n`);
-  process.stdout.write(`${check.files} bestanden nagerekend, ${check.problems.length === 1 ? "1 afwijking" : `${check.problems.length} afwijkingen`}\n`);
-  process.stdout.write(check.signature ? `afgetekend op ${check.signature.signedAt.slice(0, 10)} voor zegel ${check.signature.sealSha256.slice(0, 12)}\n` : "niet afgetekend\n");
-  if (check.outside.length > 0) process.stdout.write(`buiten het zegel, gemaakt na het verzegelen (handtekening, afgetekend rapport, verklaring): ${check.outside.length}\n`);
-  return check.problems.length === 0;
+  const evaluation = await readJson<Evaluation>(join(runDir, "evaluation.json")).catch(() => null);
+  const decisions = await checkDecisions(runDir, evaluation?.defects);
+  const problems = [...check.problems, ...(decisions?.problems ?? [])];
+  for (const problem of problems) process.stderr.write(`${problem}\n`);
+  process.stdout.write(`${check.files} bestanden nagerekend, ${problems.length === 1 ? "1 afwijking" : `${problems.length} afwijkingen`}\n`);
+  const via = check.signature ? recordedNl(check.signature, check.signature.signedAt) : null;
+  process.stdout.write(check.signature ? `afgetekend op ${check.signature.signedAt.slice(0, 10)} voor zegel ${check.signature.sealSha256.slice(0, 12)}${via ? `, ${via}` : ""}\n` : "niet afgetekend\n");
+  const answers = await answersRecorded(runDir);
+  if (answers.answers > 0) process.stdout.write(`antwoorden van een persoon: ${answers.answers}, waarvan ${answers.viaConversation} vastgelegd in een gesprek\n`);
+  if (decisions) process.stdout.write(`besluiten over gebreken: ${decisions.decisions}, waarvan ${decisions.viaConversation} vastgelegd in een gesprek; buiten het zegel, als eigen laag ${decisions.sha256 ? decisions.sha256.slice(0, 12) : "zonder index"}\n`);
+  if (check.outside.length > 0) process.stdout.write(`buiten het zegel, gemaakt na het verzegelen (handtekening, afgetekend rapport, besluiten, verklaring): ${check.outside.length}\n`);
+  return problems.length === 0;
 }

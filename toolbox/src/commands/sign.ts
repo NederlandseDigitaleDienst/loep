@@ -2,6 +2,7 @@ import { rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { readJson, writeJson } from "../lib/canonical.ts";
 import { evaluationHash, type Evaluation, type Signature } from "../lib/evaluation.ts";
+import type { RecordedVia } from "../lib/recorded.ts";
 import { checkSeal, readSignature, sealHash, SIGNATURE_FILE, SIGNED_DIR } from "./verify.ts";
 
 export interface SignOptions {
@@ -11,6 +12,8 @@ export interface SignOptions {
   organisation: string;
   /** What the signer checked personally, in their own words; printed in the report. */
   checkedNl: string | null;
+  /** Set when the agent records the signature in the conversation, after the person said yes to the report and the seal named. */
+  recordedVia?: RecordedVia | undefined;
 }
 
 /** What a signature means. Printed in the report so nobody reads more into it than it says. */
@@ -58,6 +61,7 @@ export async function sign(options: SignOptions): Promise<Signature> {
     statementNl: options.checkedNl ? `${SIGNING_STATEMENT} Zelf gecontroleerd: ${options.checkedNl}` : SIGNING_STATEMENT,
     evaluationSha256: evaluationHash(evaluation),
     sealSha256: (await sealHash(options.run))!,
+    ...(options.recordedVia ? { recordedVia: options.recordedVia } : {}),
   };
   // A report made for an earlier signature goes with that signature.
   await rm(join(options.run, SIGNED_DIR), { recursive: true, force: true });

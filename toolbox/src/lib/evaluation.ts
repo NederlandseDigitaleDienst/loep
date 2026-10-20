@@ -5,6 +5,7 @@ import type { Defect, MergeRecord } from "./defects.ts";
 import type { Manifest } from "./manifest.ts";
 import type { RoleExtensions } from "./budget.ts";
 import type { RoleModels } from "./models.ts";
+import type { RecordedVia } from "./recorded.ts";
 import { openPoint, shadowPartOf, vendorElementsIn, WITHIN_REACH, type Recommendation, type Finding, type Observation, type Outcome, type Verdict } from "./verdict.ts";
 import { compareCriterionIds, CRITERIA, en301549Clause, GUIDELINES, PRINCIPLES, understandingUrl, type Criterion, type WcagVersion } from "./wcag.ts";
 
@@ -127,6 +128,8 @@ export interface PointAnswer {
   answeredAt: string;
   /** Set when no person but an instrument of loep gave the answer: the watch on the session closes the point about its duration. */
   instrument?: true;
+  /** Set when the agent recorded the answer in the conversation; `answeredAt` is then the moment the person confirmed it. */
+  recordedVia?: RecordedVia;
 }
 
 /** Who or what established the outcome of a criterion: the verifier, the finishing round, or a person. */
@@ -240,6 +243,8 @@ export interface Signature {
   evaluationSha256: string;
   /** Hash of the seal the signer signed: evidence-index.json, which names every file of the run with its hash. */
   sealSha256: string;
+  /** Set when the agent recorded the signature in the conversation; `signedAt` is then the moment the person confirmed it. */
+  recordedVia?: RecordedVia;
 }
 
 /** An embedded frame as the report names it under the scope, so whoever signs sees what was left out and why. */
