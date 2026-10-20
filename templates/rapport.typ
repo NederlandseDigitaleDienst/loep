@@ -1145,6 +1145,10 @@
 
 #callout(chain.honestNl)
 
+== #t.versionAccuracy
+
+#derived.versionAccuracyNl
+
 #if chain.stepsNl.len() > 0 [
   == Werkwijze
   #enum(..chain.stepsNl.map(step => [#text(weight: 700, step.nameNl + ".") #step.textNl]))

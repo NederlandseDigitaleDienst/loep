@@ -3,11 +3,11 @@ import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { browserUse, gateLineNl, repeatedInBrowsersNl, secondBrowserUse } from "../src/commands/evaluate.ts";
+import { browserUse, gateLineNl, readVersionAccuracy, repeatedInBrowsersNl, secondBrowserUse } from "../src/commands/evaluate.ts";
 import { render } from "../src/commands/render.ts";
 import { canonicalJson } from "../src/lib/canonical.ts";
 import { mergeFindings } from "../src/lib/defects.ts";
-import { aiGeneratedMark, closeCutQuote, evaluationHash, idsAcrossVersionsNl, markVendor, quoteStart, summarise, vendorTagsOf, type Evaluation, type ReportFinding } from "../src/lib/evaluation.ts";
+import { aiGeneratedMark, closeCutQuote, evaluationHash, idsAcrossVersionsNl, markVendor, quoteStart, summarise, vendorTagsOf, VERSION_NOT_MEASURED_NL, type Evaluation, type ReportFinding } from "../src/lib/evaluation.ts";
 import { reportedModels } from "../src/lib/models.ts";
 import { deriveReport, renderMarkdown } from "../src/lib/report-markdown.ts";
 import { tool } from "../src/lib/typst.ts";
@@ -1059,4 +1059,34 @@ test("the evaluation and the metadata of the PDF say, readable by a machine, tha
     if (!info.found) return context.skip("pdfinfo is not installed");
     assert.match(info.stdout, /^Keywords:\s+.*AI-generated, AI-model: ander-model-2, AI-model: voorbeeld-model-4\.5\[1m\], AI-model: voorbeeldmodel$/m);
   }
+});
+
+test("the report always says how accurate this version of loep is: measured as a whole, or not", async (context) => {
+  // Without a measurement of this version, the fixed sentence; an evaluation from before the field was kept says the same.
+  for (const evaluation of [exampleEvaluation(), { ...exampleEvaluation(), versionAccuracy: null }]) {
+    const markdown = renderMarkdown(evaluation);
+    const block = markdown.split("## Betrouwbaarheid en beperkingen")[1]!.split("\n## ")[0]!;
+    assert.ok(block.includes(`### Nauwkeurigheid van deze versie\n\n${VERSION_NOT_MEASURED_NL}\n`), "the block stands under Betrouwbaarheid en beperkingen");
+  }
+  const measured = { ...exampleEvaluation(), versionAccuracy: { version: "0.0.1", measuredAt: "2026-10-18", againstNl: "het oordeel van een menselijke deskundige op drie sites", resultNl: "Bij 41 van de 50 criteria kwam loep op dezelfde uitkomst; 3 afkeuringen van de deskundige vond loep niet." } };
+  assert.ok(renderMarkdown(measured).includes("### Nauwkeurigheid van deze versie\n\nDeze versie van loep (0.0.1) is het laatst als geheel gemeten op 18 oktober 2026, tegen het oordeel van een menselijke deskundige op drie sites. Uitkomst: Bij 41 van de 50 criteria"));
+
+  // evaluate reads the file of its own version; without one there is no measurement, and a wrong file stops it.
+  const versions = mkdtempSync(join(tmpdir(), "versies-"));
+  assert.equal(readVersionAccuracy("0.0.1", versions), null);
+  writeFileSync(join(versions, "0.0.1.json"), JSON.stringify(measured.versionAccuracy));
+  assert.deepEqual(readVersionAccuracy("0.0.1", versions), measured.versionAccuracy);
+  writeFileSync(join(versions, "0.0.2.json"), JSON.stringify({ ...measured.versionAccuracy, measuredAt: "oktober" }));
+  assert.throws(() => readVersionAccuracy("0.0.2", versions), /version must be "0\.0\.2".*measuredAt must be a date/);
+
+  // The PDF has the block too.
+  const dir = mkdtempSync(join(tmpdir(), "render-accuracy-"));
+  writeFileSync(join(dir, "evaluation.json"), canonicalJson(exampleEvaluation()));
+  const result = await render(dir);
+  if (result.pdf === null) return context.skip("Typst is not installed");
+  const text = await tool("pdftotext", [result.pdf, "-"]);
+  if (!text.found) return context.skip("pdftotext is not installed");
+  const flat = text.stdout.replace(/\s+/g, " ");
+  assert.ok(flat.includes("Nauwkeurigheid van deze versie"));
+  assert.ok(flat.includes(VERSION_NOT_MEASURED_NL));
 });

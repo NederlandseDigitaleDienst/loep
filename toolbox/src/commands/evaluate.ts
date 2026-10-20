@@ -2,7 +2,7 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { frameStanding, type AcceptedGapDecider } from "../lib/sitemodel.ts";
 import { readJson, sha256File } from "../lib/canonical.ts";
-import { aiGeneratedMark, allCriteriaSorted, carryFindingIds, ESTABLISHED_BY_NL, evaluationHash, idsAcrossVersionsNl, knownCommit, OUTCOME_LABEL, markVendor, openCriteria, resolveCriterion, summarise, type BrowserUse, type CriterionResult, type Evaluation, type PointAnswer, type RoundVerdicts } from "../lib/evaluation.ts";
+import { aiGeneratedMark, allCriteriaSorted, carryFindingIds, ESTABLISHED_BY_NL, evaluationHash, idsAcrossVersionsNl, knownCommit, OUTCOME_LABEL, markVendor, openCriteria, resolveCriterion, summarise, versionAccuracyProblems, type BrowserUse, type CriterionResult, type Evaluation, type PointAnswer, type RoundVerdicts, type VersionAccuracy } from "../lib/evaluation.ts";
 import { matchFindings, sideOf } from "../lib/difference.ts";
 import { documentScopeNl, evaluationDocuments, siteDocuments } from "../lib/documents.ts";
 import { pagesInScopeNl, siteOrigins } from "../lib/origins.ts";
@@ -11,7 +11,7 @@ import { agentPhaseTimings } from "../lib/timing.ts";
 import { sessionWatchAnswers } from "../lib/timelimits.ts";
 import { stopSessionWatch } from "./watch-session.ts";
 import { extensionUse } from "../lib/budget.ts";
-import { loadAllProcedures } from "../lib/procedures.ts";
+import { loadAllProcedures, REPO_ROOT } from "../lib/procedures.ts";
 import { reportedModels } from "../lib/models.ts";
 import { loadRun } from "../lib/rundata.ts";
 import { openPoint, UNREACHABLE, waitsOnlyOnSending, type Verdict } from "../lib/verdict.ts";
@@ -32,6 +32,24 @@ export interface EvaluateOptions {
   model: string;
   /** Evaluation of an earlier round of the same site: findings that recur keep their identifier. */
   previous?: string | undefined;
+}
+
+/** Where the measurement of each version of loep as a whole is kept, one file per version. */
+export const VERSIONS_DIR = join(REPO_ROOT, "validatie", "versies");
+
+/**
+ * When this version of loep was last measured as a whole, from `validatie/versies/<version>.json`;
+ * null when there is no such file. A file that is there but wrong stops the evaluation: the report
+ * would otherwise say less, or more, than was measured.
+ */
+export function readVersionAccuracy(version: string, dir = VERSIONS_DIR): VersionAccuracy | null {
+  const path = join(dir, `${version}.json`);
+  if (!existsSync(path)) return null;
+  const value = JSON.parse(readFileSync(path, "utf8")) as unknown;
+  const problems = versionAccuracyProblems(value, version);
+  if (problems.length > 0) throw new Error(`${path}: ${problems.join("; ")}`);
+  const { measuredAt, againstNl, resultNl } = value as VersionAccuracy;
+  return { version, measuredAt, againstNl, resultNl };
 }
 
 /** Short uppercase prefix for finding identifiers, derived from the site name. */
@@ -299,6 +317,7 @@ export async function evaluate(options: EvaluateOptions): Promise<Evaluation> {
     toolchain: { toolbox: manifest.toolbox, runtime: manifest.runtime, packages: manifest.packages, browser: manifest.browser, rendering: manifest.rendering },
     ...(instruments.length > 0 ? { instruments } : {}),
     aiGenerated: aiGeneratedMark({ model: options.model, models: agentModels }, criteria),
+    versionAccuracy: readVersionAccuracy(manifest.toolbox.version),
     judgment: { model: options.model, ...(agentModels.length > 0 ? { models: agentModels } : {}), ...(extensions.length > 0 ? { extensions } : {}), rounds: ["rondgang per paginatype", "beoordeling met instrumenten", "verificatie en eindoordeel", ...(criteria.some((criterion) => criterion.rounds.finish !== undefined) ? ["afmaakronde voor wat het onderzoek zelf open liet"] : []), ...(answered ? ["antwoorden van een persoon op open punten"] : [])], promptTemplates: templates },
     criteria,
     summary: summarise(criteria),

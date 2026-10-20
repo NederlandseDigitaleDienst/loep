@@ -303,6 +303,8 @@ export interface Evaluation {
    * the models as they were reported and where a person comes in. Absent in older evaluations.
    */
   aiGenerated?: AiGenerated;
+  /** When this version of loep was last measured as a whole, against what, and what came out; null when it never was. Absent in older evaluations. */
+  versionAccuracy?: VersionAccuracy | null;
   judgment: {
     model: string;
     models?: RoleModels[];
@@ -505,6 +507,35 @@ export function resolveCriterion(input: CriterionInput, sitePrefix: string): Cri
     procedure: input.procedure,
     provenance: input.provenance,
   };
+}
+
+/** A measurement of one version of loep as a whole, as `validatie/versies/<version>.json` has it. */
+export interface VersionAccuracy {
+  version: string;
+  /** The date of the measurement, as YYYY-MM-DD. */
+  measuredAt: string;
+  /** What the outcomes were compared with: the judgment of a human expert, the key of the test site. */
+  againstNl: string;
+  /** What came out, in a sentence or two, with numbers. */
+  resultNl: string;
+}
+
+/** What the report says when this version was never measured as a whole. */
+export const VERSION_NOT_MEASURED_NL = "Deze versie van loep is niet vergeleken met het oordeel van een menselijke deskundige, en is niet als geheel gemeten op de testsite.";
+
+/** The sentence about how accurate this version of loep is, for the report. */
+export const versionAccuracyNl = (accuracy: VersionAccuracy | null | undefined, dateNl: (iso: string) => string): string =>
+  accuracy ? `Deze versie van loep (${accuracy.version}) is het laatst als geheel gemeten op ${dateNl(accuracy.measuredAt)}, tegen ${accuracy.againstNl.replace(/\.$/, "")}. Uitkomst: ${accuracy.resultNl}` : VERSION_NOT_MEASURED_NL;
+
+/** The problems of a file `validatie/versies/<version>.json`; empty when it can be shown. */
+export function versionAccuracyProblems(value: unknown, version: string): string[] {
+  if (value === null || typeof value !== "object") return ["not a JSON object"];
+  const entry = value as Record<string, unknown>;
+  const problems: string[] = [];
+  if (entry.version !== version) problems.push(`version must be "${version}", the name of the file`);
+  if (typeof entry.measuredAt !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(entry.measuredAt)) problems.push("measuredAt must be a date as YYYY-MM-DD");
+  for (const key of ["againstNl", "resultNl"]) if (typeof entry[key] !== "string" || (entry[key] as string).trim().length < 10) problems.push(`${key} must say it in a sentence`);
+  return problems;
 }
 
 export interface AiGenerated {
