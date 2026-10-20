@@ -8,7 +8,7 @@ import { siteOrigins } from "../lib/origins.ts";
 import { loginCookieHeader, logsOut } from "../lib/login.ts";
 import { readDecision, readRuleFor, type ReadRequest } from "../lib/reads.ts";
 import { searchServicesOf, type SearchServiceId } from "../lib/searchbody.ts";
-import { refusalNl, type Blockade } from "./blockade.ts";
+import { OriginBlocked, refusalNl, type Blockade } from "./blockade.ts";
 import { isWriteOrigin, runWrites, SocketFrames, writeAccess, writesForRun, type PassedWrite, type WriteAccess } from "../lib/writes.ts";
 
 /** Limits of the process that holds the browser; set once, when it starts. */
@@ -284,7 +284,7 @@ const MAX_REDIRECTS = 5;
  * is recorded with the refusals of the page, what comes from outside the scope is counted with
  * the rest. Stops at `maxBytes` or when the time is up and says so.
  */
-export async function guardedDownload(scope: Scope, guard: Guard, address: string, to: string, options: { resourceType: string; maxBytes: number; timeoutMs: number; headers?: (url: string) => Promise<Record<string, string>> }): Promise<Download> {
+export async function guardedDownload(scope: Scope, guard: Guard, address: string, to: string, options: { resourceType: string; maxBytes: number; timeoutMs: number; headers?: (url: string) => Promise<Record<string, string>>; blockade?: Blockade | undefined }): Promise<Download> {
   const abort = new AbortController();
   let timedOut = false;
   const timer = setTimeout(() => {
@@ -308,9 +308,17 @@ export async function guardedDownload(scope: Scope, guard: Guard, address: strin
         }
         guard.outsideScopeLoaded[parsed.hostname] = (guard.outsideScopeLoaded[parsed.hostname] ?? 0) + 1;
       }
+      // An origin that refused the evaluation for the rest of the run is not asked; a short pause the caller waits out before.
+      const refusedBy = options.blockade?.refuses(url);
+      if (refusedBy?.until === null) {
+        const reasonNl = new OriginBlocked(url, refusedBy).message;
+        guard.blocked.push({ at: new Date().toISOString(), kind: "blockade", method: "GET", url: url.slice(0, MAX_URL), resourceType: options.resourceType, reasonNl });
+        return { ok: false, reason: reasonNl };
+      }
       // A file behind a login is asked for with the session of the run, and only inside the scope.
       const cookie = inScope(scope, url) ? loginCookieHeader(url) : null;
       const response = await fetch(url, { method: "GET", redirect: "manual", signal: abort.signal, headers: { ...(cookie ? { cookie } : {}), ...((await options.headers?.(url)) ?? {}) } });
+      if (response.status === 429 && inScope(scope, url)) options.blockade?.tooMany(url, response.headers.get("retry-after") ?? undefined);
       const location = response.headers.get("location");
       if (response.status >= 300 && response.status < 400 && location) {
         await response.body?.cancel().catch(() => undefined);

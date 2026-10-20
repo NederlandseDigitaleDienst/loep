@@ -13,6 +13,7 @@ import { notFoundProbes, siteHosts, siteLabel } from "../lib/origins.ts";
 import { uncoveredOperables, type CountedPage } from "../lib/operables.ts";
 import { loadRun, type PageData, type RunData } from "../lib/rundata.ts";
 import { acceptedGapFor, frameAddress, frameEntry, frameStanding, NOT_OPENED_ON_PAGE_TYPE, notOpenedAdviceNl, type AcceptedGapDecider, type Component } from "../lib/sitemodel.ts";
+import { refusedRunNl } from "../session/blockade.ts";
 import { drawMarks } from "../session/marks.ts";
 import { coversContent, type Overlay } from "../session/recipe.ts";
 
@@ -194,6 +195,12 @@ export function gateChecks(run: RunData): { checks: Check[]; gaps: Gap[]; warnin
       ...run.inventory.skipped.filter((entry) => entry.reason.startsWith("failed to load") && !startedDownload(entry.reason)).map((entry) => ({ check: "pages-loaded", page: null, url: entry.url, state: "default", missingNl: `De pagina laadde niet tijdens de inventaris en is niet onderzocht (${entry.reason.slice(0, 120)}).` })),
     ],
     `${run.pages.length} pagina's geladen`,
+  );
+  // An origin that refused the evaluation for the rest of the run: what the sweep had to measure after that is missing.
+  add(
+    "site-answered",
+    (run.blockades ?? []).filter((entry) => entry.until === null).map((entry) => ({ check: "site-answered", page: null, url: entry.url, state: "default", missingNl: refusedRunNl(entry), measured: { origin: entry.origin, reason: entry.reason, at: entry.at } })),
+    "geen origin heeft verzoeken van het onderzoek geweigerd",
   );
   // Left under skipped by an inventory from before such downloads were counted as documents, or on an origin outside the run.
   for (const entry of run.inventory.skipped.filter((candidate) => candidate.reason.startsWith("failed to load") && startedDownload(candidate.reason))) {

@@ -193,12 +193,15 @@ const isText = (value: unknown, minimum = 1): value is string => typeof value ==
  * the rest did). Sending is the owner's choice: a run sends only after somebody declared a test
  * environment at inventory, and then an instrument measures the point. A part that was not
  * reachable is no fault of loep and no work for the owner: the evaluation is not finished, and
- * a new finishing round measures it once the part loads again.
+ * a new finishing round measures it once the part loads again. Content a page reads from an
+ * origin outside the run is outside the scope: whoever ordered the evaluation chose the origins,
+ * and a new run with that origin (inventory --also-origin) measures it.
  */
 export const OPEN_POINT_KINDS = [
   { prefix: "mens nodig", reader: "owner", labelNl: "geen instrument kan dit vaststellen" },
   { prefix: "keuze nodig", reader: "owner", labelNl: "vraagt een keuze" },
   { prefix: "versturen niet toegestaan", reader: "owner", labelNl: "pas te meten als het onderzoek mag versturen" },
+  { prefix: "buiten de afbakening", reader: "owner", labelNl: "inhoud van een adres buiten de afbakening" },
   { prefix: "veegronde mist", reader: "toolbox", labelNl: "dekking ontbrak" },
   { prefix: "budget op", reader: "toolbox", labelNl: "de tijd voor het meten was op" },
   { prefix: "proef werkte niet", reader: "toolbox", labelNl: "een proef werkte niet" },
@@ -209,6 +212,8 @@ export type OpenPointKind = (typeof OPEN_POINT_KINDS)[number];
 export const NOT_SENT = "versturen niet toegestaan";
 /** The kind of a point about a part of the site that did not load on repeated tries while the rest did: open until a new finishing round measures it. */
 export const UNREACHABLE = "niet bereikbaar";
+/** The kind of a point that stays open because the content comes from an origin the run does not cover: a choice of the scope, no fault of loep. */
+export const OUTSIDE_SCOPE = "buiten de afbakening";
 /** The kinds a new finishing round may be asked for with `tasks --again`: what an instrument can measure once it works or the part loads again. */
 export const KINDS_FOR_AGAIN = ["proef werkte niet", UNREACHABLE] as const;
 /** The kinds of open point that stay only after a real attempt, described in `finish.attempts`. */
@@ -217,9 +222,12 @@ const KINDS_WITH_ATTEMPT: readonly string[] = ["proef werkte niet", UNREACHABLE]
 /**
  * A point "niet bereikbaar" says what did not load (an address or the label of a page) and
  * when (a time of day), so the report can say it and a later round knows what to try again.
+ * A point "buiten de afbakening" names the address outside the run, so whoever chose the scope
+ * knows which origin a new run would need.
  */
 export function unreachablePointProblems(point: string, at: string): string[] {
   const { kind, textNl } = openPoint(point);
+  if (kind?.prefix === OUTSIDE_SCOPE && !/\bhttps?:\/\/\S+/i.test(textNl)) return [`${at}: a point "${OUTSIDE_SCOPE}:" names the address outside the run that the content comes from, such as https://data.example.nl`];
   if (kind?.prefix !== UNREACHABLE) return [];
   const problems: string[] = [];
   if (!(/\bhttps?:\/\/\S+/i.test(textNl) || /\bP\d+\b/.test(textNl))) problems.push(`${at}: a point "${UNREACHABLE}:" names what did not load: the address of the page or the embedded frame, or the label of the page (P03)`);
@@ -944,8 +952,8 @@ export interface FinishContext extends InstrumentContext {
  */
 export const FINISH_FACTOR = 3.5;
 
-/** The kinds of open point a finishing round may still leave: what asks a person or a choice, what only shows after sending in a run that may not send, an instrument that did not work after a real attempt, and a part of the site that did not load on repeated tries. */
-export const KINDS_AFTER_FINISH = ["mens nodig", "keuze nodig", NOT_SENT, "proef werkte niet", UNREACHABLE] as const;
+/** The kinds of open point a finishing round may still leave: what asks a person or a choice, what only shows after sending in a run that may not send, content of an address outside the scope, an instrument that did not work after a real attempt, and a part of the site that did not load on repeated tries. */
+export const KINDS_AFTER_FINISH = ["mens nodig", "keuze nodig", NOT_SENT, OUTSIDE_SCOPE, "proef werkte niet", UNREACHABLE] as const;
 /** A real attempt is more than one try: at least this many observations of the finisher's own session. */
 export const MIN_ATTEMPT_OBSERVATIONS = 2;
 

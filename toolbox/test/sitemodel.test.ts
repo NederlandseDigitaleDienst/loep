@@ -264,6 +264,14 @@ test("the gate passes a run in which every check holds", () => {
   assert.ok(checked.checks.every((check) => check.ok));
 });
 
+test("an origin that refused the evaluation for the rest of the run is coverage that was missing; a short pause is not", () => {
+  const entry = (origin: string, until: string | null) => ({ origin, reason: "429" as const, at: "2026-10-20T10:00:00.000Z", until, url: `${origin}/a` });
+  const checked = gateChecks(gateRun([gatePage("P1", "https://site.nl/")], { blockades: [entry("https://site.nl", null), entry("https://cdn.site.nl", "2026-10-20T10:00:30.000Z")] }));
+  assert.deepEqual(checked.gaps.map((gap) => [gap.check, gap.url]), [["site-answered", "https://site.nl/a"]]);
+  assert.match(checked.gaps[0]!.missingNl, /^https:\/\/site\.nl heeft verzoeken van het onderzoek geweigerd: de site antwoordde met 429 .* wat daarna nog gemeten moest worden, is niet gemeten\.$/);
+  assert.equal(checked.checks.find((check) => check.name === "site-answered")?.ok, false);
+});
+
 test("the gate warns, without a gap, for each tagged pdf whose tag text was not read", () => {
   const document = (label: string, pdf: { tagged: boolean; tagTextRead: boolean } | undefined) => ({ label, item: { url: `https://site.nl/${label}.pdf` }, facts: { status: "read", ...(pdf ? { pdf } : {}) } });
   const checked = gateChecks(gateRun([gatePage("P1", "https://site.nl/")], { documents: [document("D01", { tagged: true, tagTextRead: false }), document("D02", { tagged: true, tagTextRead: true }), document("D03", { tagged: false, tagTextRead: false }), document("D04", undefined)] as unknown as RunData["documents"] }));

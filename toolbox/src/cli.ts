@@ -69,9 +69,9 @@ const USAGE = `loep <command> [options]
                                          sample, explore and the sweep), next to what the run measured so far. --at-once is the
                                          number of agents at the same time, and of pages in the sweep. Writes nothing
   gaps --run <run> [<run> ...] [--json]  Every open point of one or more runs, per kind (veegronde mist, budget op, proef
-                                         werkte niet, niet bereikbaar, versturen niet toegestaan, mens nodig, keuze nodig) and
-                                         per criterion, equal points taken together and counted: the work list for whoever
-                                         improves the sweep. Writes nothing
+                                         werkte niet, niet bereikbaar, versturen niet toegestaan, buiten de afbakening, mens
+                                         nodig, keuze nodig) and per criterion, equal points taken together and counted: the
+                                         work list for whoever improves the sweep. Writes nothing
   feedback --run <run> [--out <dir>] [--json]
                                          Draft issues for the makers of loep: one per criterion and kind that stayed open
                                          because of loep itself, without the address or name of the site. Criteria open
@@ -259,6 +259,8 @@ async function main(): Promise<void> {
   // A run for which a person logged in starts every browser with that session; any other run is left as it was.
   const { runLoginMark, setRunLogin } = await import("./lib/login.ts");
   if (command !== "inventory" && command !== "login" && !readsOnly && values.run) setRunLogin(values.run);
+  // A site that refused the evaluation (blockades.json in the run) is asked nothing by the sweep either, and a 429 it gives the sweep ends the asking for the sessions too.
+  if (command !== "inventory" && !readsOnly && values.run) (await import("./session/blockade.ts")).setRunBlockade(values.run);
   if (NEEDS_SITE_MODEL.includes(command) && values.run && !existsSync(join(values.run, "site.json"))) throw new Error(NOT_EXPLORED_NL);
   switch (command) {
     case "login": {

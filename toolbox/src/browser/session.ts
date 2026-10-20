@@ -4,6 +4,7 @@ import { CLOUDFLARE_HEADER, isChallenge } from "../lib/challenge.ts";
 import { confirmLoginOn, LoginExpired, logsOut, runLoginMark, runLoginState, throwIfLoginExpired, watchLogin } from "../lib/login.ts";
 import { addressOf, noteRefusedRead, readDecision, readRuleFor, runReads, type ReadRequest } from "../lib/reads.ts";
 import { isWriteOrigin, runWrites, SocketFrames, type WriteAccess } from "../lib/writes.ts";
+import { OriginBlocked, runBlockade } from "../session/blockade.ts";
 import { MESSAGE_VALUES } from "../session/safety.ts";
 import { readableFrame } from "./call.ts";
 import { refusedByBrowser, type ClipboardWrite } from "./clipboard.ts";
@@ -179,7 +180,10 @@ export async function newContext(browser: Browser, options: ContextOptions = {},
   context.setDefaultNavigationTimeout(RENDERING.navigationTimeoutMs);
   const viaCloudflare = new Set<string>();
   cloudflareHosts.set(context, viaCloudflare);
+  // The blockade of the run, in a command of the sweep: a site that refused the evaluation is asked nothing, and a 429 it gives ends the asking.
+  const blockade = runBlockade();
   context.on("response", (response) => {
+    if (blockade && response.status() === 429 && blockade.ofSite(response.url())) blockade.blockade.tooMany(response.url(), response.headers()["retry-after"]);
     try {
       if (response.headers()[CLOUDFLARE_HEADER]) viaCloudflare.add(new URL(response.url()).hostname);
     } catch {
@@ -197,8 +201,8 @@ export async function newContext(browser: Browser, options: ContextOptions = {},
   // the read requests of a checked site model: a question to a search service, by method, origin and path.
   await context.route("**/*", (route) => {
     const method = route.request().method();
-    // Logging out ends the session for everything that comes after: such a request never leaves, whatever its method.
-    if (logsOut(route.request().url())) return route.request().isNavigationRequest() ? route.fulfill({ status: 204, body: "" }) : route.abort("blockedbyclient");
+    // Logging out ends the session for everything that comes after: such a request never leaves, whatever its method. Nor does one to an origin that refused the evaluation.
+    if (logsOut(route.request().url()) || blockade?.blockade.refuses(route.request().url())) return route.request().isNavigationRequest() ? route.fulfill({ status: 204, body: "" }) : route.abort("blockedbyclient");
     if (method === "GET" || method === "HEAD") {
       const spaced = spacing;
       if (spaced && loadsTab(route)) return spaced.before(route.request().url()).then(() => route.continue().catch(() => undefined));
@@ -253,7 +257,16 @@ export async function loadPage(page: Page, url: string, referer?: string): Promi
   // A session that ran out is not tried again page after page.
   throwIfLoginExpired();
   const options = { waitUntil: "load" as const, ...(referer ? { referer } : {}) };
+  // A site that asked for a short pause gets it; one that refused the evaluation is not asked, and the page is not measured.
+  const blockade = runBlockade()?.blockade;
+  const refused = await blockade?.pause(url);
+  if (refused) throw new OriginBlocked(url, refused);
   let response = await page.goto(url, options);
+  if (blockade && response?.status() === 429) {
+    const again = await blockade.pause(url);
+    if (again) throw new OriginBlocked(url, again);
+    response = await page.goto(url, options);
+  }
   await settlePage(page);
   // In a run with a login: a page that looks like the login screen is checked, and the page is loaded again when the session still holds.
   if (await watchLogin(page, url)) {
@@ -276,7 +289,8 @@ export async function retryOnce<T>(what: string, work: () => Promise<T>): Promis
   try {
     return await work();
   } catch (error) {
-    if (error instanceof LoginExpired) throw error;
+    // Trying again does not help when the site refused the evaluation.
+    if (error instanceof LoginExpired || error instanceof OriginBlocked) throw error;
     process.stderr.write(`retry ${what}: ${firstLineOf(error)}\n`);
     return work();
   }
