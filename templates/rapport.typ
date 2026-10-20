@@ -206,7 +206,8 @@
   title: document-title,
   author: or-none(site.organisation, "loep"),
   description: derived.statusSentenceNl,
-  keywords: ("toegankelijkheid", "WCAG", "EN 301 549"),
+  // The verdicts were drafted by a language model: said in the metadata too, so a machine can read it.
+  keywords: ("toegankelijkheid", "WCAG", "EN 301 549", ..derived.aiKeywords),
 )
 #set text(font: sans, size: 10.5pt, fill: ink, lang: "nl", region: "NL", hyphenate: false)
 #set par(leading: 0.68em, spacing: 0.95em, justify: false)
@@ -317,7 +318,7 @@
       ("Organisatie", or-none(site.organisation, "Niet opgegeven")),
       ("Datum", derived.dateNl),
       ("Versie", mono(derived.hashShort)),
-      ("Status", if unsigned { text(weight: 700, t.concept) + if stale-note != none [\ #text(size: 9pt, stale-note)] } else [Afgetekend door #signature.name (#signature.role, #signature.organisation) op #derived.signedDateNl]),
+      ("Status", if unsigned { text(weight: 700, t.concept) + if stale-note != none [\ #text(size: 9pt, stale-note)] } else [Afgetekend door #signature.role (#signature.organisation) op #derived.signedDateNl]),
     ).map(pair => stack(spacing: 6pt, eyebrow(pair.at(0)), pair.at(1))),
   )
   v(9pt)
@@ -669,7 +670,7 @@
   ..if chain.at("readsNl", default: none) != none { (("Leesverzoeken", chain.readsNl),) },
   (
     "Afgetekend door",
-    if unsigned { text(weight: 700, t.notSigned) + if stale-note != none [. #stale-note] } else [#signature.name, #signature.role, #signature.organisation, op #derived.signedDateNl#if derived.at("signatureRecordedNl", default: none) != none [, #derived.signatureRecordedNl]],
+    if unsigned { text(weight: 700, t.notSigned) + if stale-note != none [. #stale-note] } else [#signature.role, #signature.organisation, op #derived.signedDateNl#if derived.at("signatureRecordedNl", default: none) != none [, #derived.signatureRecordedNl]],
   ),
   ..if unsigned { () } else {
     (("Verklaring", [#signature.statementNl\ Getekend voor evaluatie #mono(signature.evaluationSha256.slice(0, calc.min(12, signature.evaluationSha256.len()))), verzegeld als #mono(signature.sealSha256.slice(0, calc.min(12, signature.sealSha256.len()))).]),)
@@ -1170,6 +1171,10 @@
 = Betrouwbaarheid en beperkingen
 
 #callout(chain.honestNl)
+
+== #t.versionAccuracy
+
+#derived.versionAccuracyNl
 
 #if chain.stepsNl.len() > 0 [
   == Werkwijze

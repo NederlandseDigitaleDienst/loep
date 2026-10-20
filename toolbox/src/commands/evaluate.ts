@@ -2,7 +2,7 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { frameStanding, type AcceptedGapDecider } from "../lib/sitemodel.ts";
 import { readJson, sha256File } from "../lib/canonical.ts";
-import { allCriteriaSorted, carryFindingIds, ESTABLISHED_BY_NL, evaluationHash, idsAcrossVersionsNl, knownCommit, OUTCOME_LABEL, markVendor, openCriteria, quoteStart, resolveCriterion, summarise, type BrowserUse, type CriterionResult, type Evaluation, type PointAnswer, type RoundVerdicts } from "../lib/evaluation.ts";
+import { aiGeneratedMark, allCriteriaSorted, carryFindingIds, ESTABLISHED_BY_NL, evaluationHash, idsAcrossVersionsNl, knownCommit, OUTCOME_LABEL, markVendor, openCriteria, resolveCriterion, summarise, versionAccuracyProblems, type BrowserUse, type CriterionResult, type Evaluation, type PointAnswer, type RoundVerdicts, type VersionAccuracy } from "../lib/evaluation.ts";
 import { matchFindings, sideOf } from "../lib/difference.ts";
 import { documentScopeNl, evaluationDocuments, siteDocuments } from "../lib/documents.ts";
 import { pagesInScopeNl, siteOrigins } from "../lib/origins.ts";
@@ -11,10 +11,10 @@ import { agentPhaseTimings } from "../lib/timing.ts";
 import { sessionWatchAnswers } from "../lib/timelimits.ts";
 import { stopSessionWatch } from "./watch-session.ts";
 import { extensionUse } from "../lib/budget.ts";
-import { loadAllProcedures } from "../lib/procedures.ts";
+import { loadAllProcedures, REPO_ROOT, runLimitsNl } from "../lib/procedures.ts";
 import { reportedModels } from "../lib/models.ts";
 import { loadRun } from "../lib/rundata.ts";
-import { openPoint, UNREACHABLE, waitsOnlyOnSending, type Verdict } from "../lib/verdict.ts";
+import { openPoint, sessionOfObservation, UNREACHABLE, waitsOnlyOnSending, type Verdict } from "../lib/verdict.ts";
 import { loginNl, NOT_LOGGED_IN_NL } from "../lib/login.ts";
 import { readsAllowedNl } from "../lib/reads.ts";
 import { WRITES_BLOCKED_NL, writesAllowedNl } from "../lib/writes.ts";
@@ -24,7 +24,7 @@ import type { Gate } from "./gate.ts";
 import { readEvaluation, signatureIsCurrent, writeEvaluation } from "./sign.ts";
 import { mergeInto } from "./merge.ts";
 import { countingVerdict, loadAnswers } from "./answer.ts";
-import { instrumentVerdictIsCurrent, isInstrumentRun, loadInstrumentIndex, loadObservations, NO_TASKS_NL, skippedForOutage, type InstrumentTask } from "./instrument-tasks.ts";
+import { instrumentVerdictIsCurrent, isInstrumentRun, loadInstrumentIndex, loadObservations, NO_TASKS_NL, skippedForOutage, unruledCrossPoints, type InstrumentTask } from "./instrument-tasks.ts";
 
 export interface EvaluateOptions {
   run: string;
@@ -33,6 +33,24 @@ export interface EvaluateOptions {
   model: string;
   /** Evaluation of an earlier round of the same site: findings that recur keep their identifier. */
   previous?: string | undefined;
+}
+
+/** Where the measurement of each version of loep as a whole is kept, one file per version. */
+export const VERSIONS_DIR = join(REPO_ROOT, "validatie", "versies");
+
+/**
+ * When this version of loep was last measured as a whole, from `validatie/versies/<version>.json`;
+ * null when there is no such file. A file that is there but wrong stops the evaluation: the report
+ * would otherwise say less, or more, than was measured.
+ */
+export function readVersionAccuracy(version: string, dir = VERSIONS_DIR): VersionAccuracy | null {
+  const path = join(dir, `${version}.json`);
+  if (!existsSync(path)) return null;
+  const value = JSON.parse(readFileSync(path, "utf8")) as unknown;
+  const problems = versionAccuracyProblems(value, version);
+  if (problems.length > 0) throw new Error(`${path}: ${problems.join("; ")}`);
+  const { measuredAt, againstNl, resultNl } = value as VersionAccuracy;
+  return { version, measuredAt, againstNl, resultNl };
 }
 
 /** Short uppercase prefix for finding identifiers, derived from the site name. */
@@ -113,11 +131,16 @@ export async function evaluate(options: EvaluateOptions): Promise<Evaluation> {
   const watch = stopSessionWatch(options.run);
   const criteria: CriterionResult[] = [];
   const rejected: string[] = [];
+  const readAloud = voiceOverSessions(observations.records);
+  const gatheredAll = new Map<string, GatheredVerdicts>();
+  for (const task of instrumentTasks) gatheredAll.set(task.criterion, await gatherVerdicts(options.run, task, observations));
+  // What each judge saw that belongs to another criterion: the verdicts there have to have ruled on it.
+  const judged = new Map([...gatheredAll].flatMap(([id, gathered]): [string, Verdict][] => (gathered.verdicts.a ? [[id, gathered.verdicts.a]] : [])));
   for (const criterion of allCriteriaSorted()) {
     const procedure = procedures.find((entry) => entry.id === criterion.id);
     const instrumentTask = instrumentTasks.find((entry) => entry.criterion === criterion.id);
     // The judge's verdict is slot "a". Only the verifier's verdict gives an outcome, or after it that of the finishing round.
-    const gathered: GatheredVerdicts = instrumentTask ? await gatherVerdicts(options.run, instrumentTask, observations) : { verdicts: { a: null, final: null }, hashes: { a: null, b: null, final: null }, answers: [], rejected: [] };
+    const gathered: GatheredVerdicts = gatheredAll.get(criterion.id) ?? { verdicts: { a: null, final: null }, hashes: { a: null, b: null, final: null }, answers: [], rejected: [] };
     const { verdicts, hashes } = gathered;
     rejected.push(...gathered.rejected);
     const resolved = resolveCriterion(
@@ -126,8 +149,10 @@ export async function evaluate(options: EvaluateOptions): Promise<Evaluation> {
           verdicts,
           // The open point about the duration of the session is closed by the watch, when it finished without the session running out.
           answers: criterion.id === "2.2.1" ? [...gathered.answers, ...sessionWatchAnswers(watch, (verdicts.finish ?? verdicts.final)?.missingNl ?? [])] : gathered.answers,
-          procedure: procedure ? { version: procedure.version, sha256: procedure.sha256, class: procedure.class, limitsNl: procedure.limitsNl } : null,
+          // A limit that says no screen reader was used, or nobody logged in, holds only when that is so for this criterion in this run.
+          procedure: procedure ? { version: procedure.version, sha256: procedure.sha256, class: procedure.class, limitsNl: procedure.limitsNl === null ? null : runLimitsNl(procedure.limitsNl, { screenReader: [instrumentTask?.judge.session, instrumentTask?.verify?.session, instrumentTask?.finish?.session].some((session) => session !== undefined && readAloud.has(session)), loggedIn: Boolean(run.login) }) } : null,
           provenance: { dossierSha256: instrumentTask?.dossierSha256 ?? null, verdictSha256: hashes },
+          unruledNl: instrumentTask ? unruledCrossPoints(judged, criterion.id, [verdicts.final, verdicts.finish]) : [],
           outage: instrumentTask !== undefined && !verdicts.finish && skippedForOutage(options.run, instrumentTask),
         },
         prefix,
@@ -165,7 +190,8 @@ export async function evaluate(options: EvaluateOptions): Promise<Evaluation> {
   const earlier = options.previous ? await readEvaluation(options.previous) : undefined;
 
   // Which criteria got their outcome from the finishing round, and which from a person.
-  const finished = criteria.filter((criterion) => criterion.established?.by === "finishing").map((criterion) => criterion.id);
+  // A criterion the finishing round left open was not established by it, so it is not counted here.
+  const finished = criteria.filter((criterion) => criterion.established?.by === "finishing" && criterion.outcome !== "cantTell").map((criterion) => criterion.id);
   const byPerson = criteria.filter((criterion) => criterion.established?.by === "person").map((criterion) => criterion.id);
   const answered = criteria.some((criterion) => (criterion.answers ?? []).length > 0);
 
@@ -228,20 +254,6 @@ export async function evaluate(options: EvaluateOptions): Promise<Evaluation> {
       : []),
     ...criteria.filter((criterion) => criterion.procedure?.limitsNl).map((criterion) => `${criterion.id} ${criterion.titleNl}: ${criterion.procedure!.limitsNl}`),
   ];
-
-  // A judge who sees something that belongs under another criterion says so in a fixed phrase.
-  // Follow each of those up: if the other criterion did not fail or stay open, the observation was lost.
-  const byId = new Map(criteria.map((criterion) => [criterion.id, criterion]));
-  for (const criterion of criteria) {
-    const texts = [criterion.summaryNl, ...criterion.observations.map((observation) => observation.observedNl), ...criterion.droppedNl, ...criterion.missingNl];
-    for (const text of texts) {
-      for (const match of text.matchAll(/hoort bij (?:succes)?criterium (\d\.\d\.\d{1,2})/g)) {
-        const target = byId.get(match[1]!);
-        if (!target || target.id === criterion.id || target.outcome === "failed" || target.outcome === "cantTell") continue;
-        limitations.push(`Bij ${criterion.id} is iets waargenomen dat volgens de beoordelaar bij ${target.id} hoort, maar ${target.id} heeft de uitkomst "${OUTCOME_LABEL[target.outcome]}". Dit moet worden nagekeken: "${quoteStart(text)}"`);
-      }
-    }
-  }
 
   // Only in a run with a site model: the states each page was measured in besides the way it loads.
   const { siteModel, siteStates } = run;
@@ -310,6 +322,8 @@ export async function evaluate(options: EvaluateOptions): Promise<Evaluation> {
     technologies: [...technologies].sort(),
     toolchain: { toolbox: manifest.toolbox, runtime: manifest.runtime, packages: manifest.packages, browser: manifest.browser, rendering: manifest.rendering },
     ...(instruments.length > 0 ? { instruments } : {}),
+    aiGenerated: aiGeneratedMark({ model: options.model, models: agentModels }, criteria),
+    versionAccuracy: readVersionAccuracy(manifest.toolbox.version),
     judgment: { model: options.model, ...(agentModels.length > 0 ? { models: agentModels } : {}), ...(extensions.length > 0 ? { extensions } : {}), rounds: ["rondgang per paginatype", "beoordeling met instrumenten", "verificatie en eindoordeel", ...(criteria.some((criterion) => criterion.rounds.finish !== undefined) ? ["afmaakronde voor wat het onderzoek zelf open liet"] : []), ...(answered ? ["antwoorden van een persoon op open punten"] : [])], promptTemplates: templates },
     criteria,
     summary: summarise(criteria),
@@ -442,6 +456,15 @@ export function* methodAnswers(records: ReadonlyMap<string, { command: string; r
       for (const method of methodsOf(entry.result)) if (!had.has(key(method))) yield { command: entry.command ?? record.command, method };
     }
   }
+}
+
+/** The sessions in which a real screen reader read aloud: VoiceOver answered a measurement without an error. */
+export function voiceOverSessions(records: ReadonlyMap<string, { id: string; command: string; result: unknown }>): Set<string> {
+  const sessions = new Set<string>();
+  for (const record of records.values()) {
+    for (const { method } of methodAnswers(new Map([[record.id, record]]))) if (method.implementation === "voiceover" && !method.error) sessions.add(sessionOfObservation(record.id));
+  }
+  return sessions;
 }
 
 /** The measurements a second browser answered, per browser and version, read from the recorded observations. A method that failed is not a measurement. */

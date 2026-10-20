@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="nl">
+<head><meta charset="utf-8"><title>Uitklappers onderaan het venster - Testsite sessie</title>
+<style>
+body { margin: 0; font: 16px/1.5 sans-serif; color: #1a1a1a; background: #ffffff; }
+header { position: sticky; top: 0; z-index: 1; height: 60px; background: rgb(128, 0, 128); }
+header a { color: #ffffff; }
+.layout { display: flex; }
+aside { position: sticky; top: 60px; flex: 0 0 300px; height: calc(100vh - 60px); overflow-y: auto; }
+aside ul { margin: 0; padding: 0; list-style: none; }
+aside li > a, aside li > div { display: block; height: 56px; }
+main { flex: 1; padding: 0 24px; }
+.code { height: 300px; background: #002040; color: #ffffff; }
+</style></head>
+<body>
+<header><a href="/">Testsite</a></header>
+<div class="layout">
+<aside><nav aria-label="Zijbalk"><ul>
+<li><a href="/">Een</a></li><li><a href="/">Twee</a></li><li><a href="/">Drie</a></li><li><a href="/">Vier</a></li>
+<li><a href="/">Vijf</a></li><li><a href="/">Zes</a></li><li><a href="/">Zeven</a></li><li><a href="/">Acht</a></li>
+<li><a href="/">Negen</a></li><li><a href="/">Tien</a></li><li><a href="/">Elf</a></li><li><a href="/">Twaalf</a></li>
+<li><div><a href="/">Tekstopmaak</a> <button id="categorie" type="button" aria-expanded="false" aria-label="Categorie uitklappen 'Tekstopmaak'">&gt;</button></div>
+<ul id="sub" hidden><li><a href="/">Koppen</a></li><li><a href="/">Lijsten</a></li><li><a href="/">Nadruk</a></li><li><a href="/">Tabellen</a></li></ul></li>
+</ul></nav></aside>
+<main id="inhoud"><h1 style="height:512px;margin:0">Uitklappers onderaan het venster</h1>
+<details id="hulp"><summary style="height:48px">Help Wanted - 11 van 11</summary><div style="height:300px">Wat al klaar is.</div></details>
+<details id="status"><summary style="height:48px">Candidate - 0 van 15</summary><div style="height:300px">Wat nog moet gebeuren.</div></details>
+<div><button id="toon-code" type="button" aria-expanded="false" aria-controls="code">Bekijk code</button></div>
+<div id="code" class="code" hidden>&lt;p&gt;Code van het voorbeeld&lt;/p&gt;</div>
+<p style="height:1500px">Tekst onder de uitklappers.</p>
+</main>
+</div>
+<script>
+document.getElementById("categorie").addEventListener("click", (event) => {
+  const open = event.currentTarget.getAttribute("aria-expanded") !== "true";
+  event.currentTarget.setAttribute("aria-expanded", String(open));
+  document.getElementById("sub").hidden = !open;
+});
+document.getElementById("toon-code").addEventListener("click", (event) => {
+  const open = event.currentTarget.getAttribute("aria-expanded") !== "true";
+  event.currentTarget.setAttribute("aria-expanded", String(open));
+  event.currentTarget.textContent = open ? "Verberg code" : "Bekijk code";
+  document.getElementById("code").hidden = !open;
+});
+</script>
+</body>
+</html>
