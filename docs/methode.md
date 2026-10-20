@@ -42,7 +42,7 @@ Waar het kan, meet een instrument met meer methoden naast elkaar en meldt het of
 6. **Beoordelen** (een agent per criterium). De beoordelaar krijgt het dossier van de veegronde, de kandidaten uit de rondgang en de procedure. Het dossier leest hij met `loep dossier`, in een compacte vorm en in delen, zonder eigen scripts. Zijn opdracht noemt de onderdelen die voor het criterium tellen; een goedkeuring kan pas als hij die in zijn eigen sessie helemaal heeft gelezen. Hij maakt elke bevinding uit het dossier op één plek zelf zichtbaar, zoekt uit wat het dossier niet kan laten zien, beslist over elke kandidaat en neemt een steekproef met eigen metingen.
 7. **Verifiëren** (een agent per criterium). De verifieerder doet wat hierboven onder de derde regel staat en schrijft het eindoordeel.
 8. **Afmaken** (een agent per criterium dat open bleef door het onderzoek zelf; geen als er geen is). Zie "De afmaakronde" hieronder.
-9. **Samenvoegen en rapport.** `evaluate` neemt per criterium het eindoordeel (dat van de afmaakronde als die er was), telt de antwoorden van een persoon op open punten mee (`answer`), bewaart vervallen bevindingen met hun reden en voegt bevindingen over dezelfde plek samen tot één gebrek. `render` maakt het rapport als Markdown en als pdf, en daarnaast een korte pdf zonder bijlage A. `statement` maakt de conceptverklaring.
+9. **Samenvoegen en rapport.** `evaluate` neemt per criterium het eindoordeel (dat van de afmaakronde als die er was), telt de antwoorden van een persoon op open punten mee (`answer`), bewaart vervallen bevindingen met hun reden en voegt bevindingen over dezelfde plek samen tot één gebrek. Wat een beoordelaar zag dat bij een ander criterium hoort, krijgt de verifieerder van dat criterium als kandidaat, of de afmaakronde als er geen verifieerder was. Heeft geen van beide erover beslist, dan is dat criterium niet goedgekeurd maar open, met een punt `veegronde mist:`. `render` maakt het rapport als Markdown en als pdf, en daarnaast een korte pdf zonder bijlage A. `statement` maakt de conceptverklaring.
 
 Elke agent krijgt alleen zijn eigen opdrachtbestand en begint met een schone context. De opdrachten zijn vaste bestanden onder versiebeheer; de hash van elke opdracht ligt vast in de run. Elke agent heeft een budget in commando's en minuten, uitgerekend voor zijn opdracht; hij kan het zelf twee keer verlengen (zie [Het budget van een agent](#het-budget-van-een-agent)). Is het daarna nog op, dan schrijft hij zijn oordeel met wat er ligt en noemt hij wat hij niet heeft bekeken; zo'n punt gaat naar de afmaakronde.
 
@@ -278,14 +278,16 @@ Een regel die strenger is dan de letter van het criterium, hoort hier en niet on
 
 ## De handtekening
 
-Het onderzoek komt zonder menselijk werk tot stand. Eén mens met naam tekent voor de uitkomst. In het rapport staat letterlijk wat een handtekening betekent en wat de ondertekenaar zelf heeft gecontroleerd.
+Het onderzoek komt zonder menselijk werk tot stand. Eén mens met naam tekent voor de uitkomst. In het rapport staat letterlijk wat een handtekening betekent en wat de ondertekenaar zelf heeft gecontroleerd. Het afgetekende rapport en de verklaring noemen de functie en de organisatie van wie tekende; de naam staat alleen in `signed/signature.json`.
+
+Dat de oordelen door een taalmodel zijn opgesteld, staat ook in een vorm die een machine kan lezen (AI-verordening, artikel 50): in `evaluation.json` onder `aiGenerated`, met de modellen zoals ze zijn opgegeven en waar een mens meedoet (de handtekening, en de criteria waarvan een persoon de uitkomst vaststelde), en in de metadata van de pdf als trefwoorden `AI-generated` en `AI-model: <naam>`.
 
 Wat iemand tekent, is precies wat verzegeld is. De volgorde is vast:
 
 1. `evaluate` en `render` maken de evaluatie en het conceptrapport in `report/`. Heeft een persoon daarna met `answer` open punten beantwoord, dan draaien beide opnieuw.
 2. `seal` legt in `evidence-index.json` de hash vast van elk bestand in de run: het bewijs, de oordelen, de antwoorden van een persoon, de evaluatie en het conceptrapport.
 3. Een mens leest het rapport en tekent met `sign`. Dat commando weigert als een criterium geen oordeel heeft, als de run niet is verzegeld of als ze na het verzegelen is veranderd. De handtekening komt in `signed/signature.json` en noemt de hash van het zegel en van de evaluatie.
-4. `render` schrijft het rapport dat zegt wie tekende in `signed/`. Daarna legt `decide` per gebrek vast wat de organisatie besluit (zie "Maatregelen en beslissingen"), en maakt `render` het afgetekende rapport opnieuw. `statement` schrijft de verklaring in `verklaring/`.
+4. `render` schrijft het afgetekende rapport in `signed/`. Daarna legt `decide` per gebrek vast wat de organisatie besluit (zie "Maatregelen en beslissingen"), en maakt `render` het afgetekende rapport opnieuw. `statement` schrijft de verklaring in `verklaring/`.
 
 De handtekening, het afgetekende rapport, de besluiten en de verklaring staan buiten het zegel. Ze maken verandert dus niets aan wat verzegeld is, en `verify` klopt na het tekenen nog. Verandert er daarna één byte in een verzegeld bestand, dan meldt `verify` dat. Een handtekening die bij een ander zegel of een andere evaluatie hoort, meldt het ook, en het rapport behandelt het onderzoek dan weer als concept. Wie een afgetekende run na een wijziging opnieuw verzegelt, maakt de handtekening ongeldig: `seal` verwijdert haar en zegt dat.
 

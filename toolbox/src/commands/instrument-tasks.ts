@@ -465,7 +465,7 @@ export function skippedForOutage(runDir: string, task: InstrumentTask): boolean 
 }
 
 /** What other criteria's judges saw that belongs to this one, as candidates for its verifier. */
-function crossCandidates(verdicts: Map<string, Verdict>, criterion: string): Candidate[] {
+export function crossCandidates(verdicts: Map<string, Verdict>, criterion: string): Candidate[] {
   const result: Candidate[] = [];
   for (const [from, verdict] of [...verdicts.entries()].sort(([a], [b]) => a.localeCompare(b))) {
     (verdict.crossCandidates ?? [])
@@ -473,6 +473,24 @@ function crossCandidates(verdicts: Map<string, Verdict>, criterion: string): Can
       .forEach((cross, position) => result.push({ id: `X${from.replaceAll(".", "")}-${String(position + 1).padStart(2, "0")}`, criterion, page: cross.page, where: cross.where, evidence: cross.evidence, noteNl: cross.noteNl, support: "bekeken" }));
   }
   return result;
+}
+
+/** The criterion whose judge passed a candidate on: "X1410-01" came from 1.4.10. */
+const crossSource = (id: string): string => {
+  const digits = /^X(\d+)-/.exec(id)?.[1] ?? "";
+  return `${digits.slice(0, 1)}.${digits.slice(1, 2)}.${digits.slice(2)}`;
+};
+
+/**
+ * What other judges passed on to this criterion that no verdict of it ruled on, as open points.
+ * The verifier rules on every candidate it is given and the finishing round on what the verifier
+ * left; a candidate that neither of them ruled on was not looked at, so the criterion cannot pass.
+ */
+export function unruledCrossPoints(judged: Map<string, Verdict>, criterion: string, rounds: (Verdict | null | undefined)[]): string[] {
+  const ruled = new Set(rounds.flatMap((verdict) => (verdict?.candidates ?? []).map((ruling) => ruling.id)));
+  return crossCandidates(judged, criterion)
+    .filter((candidate) => !ruled.has(candidate.id))
+    .map((candidate) => `veegronde mist: de beoordelaar van ${crossSource(candidate.id)} zag op ${candidate.page} (${candidate.where}) iets dat bij dit criterium hoort, en geen verifieerder of afmaakronde heeft dat beoordeeld (${candidate.id}): ${candidate.noteNl}`);
 }
 
 /**
@@ -682,7 +700,9 @@ export async function instrumentTasks(runDir: string, options: TaskOptions = {})
       const dir = join("tasks", task.criterion);
       const digits = task.criterion.replaceAll(".", "");
       // What the verifier ruled on with an observation of its own is settled; what it left open, and everything nobody verified, is for this round.
-      const all = await readJson<Candidate[]>(join(runDir, (task.verify ?? task.judge).candidates));
+      const listed = await readJson<Candidate[]>(join(runDir, (task.verify ?? task.judge).candidates));
+      // Without a verifier nobody was given what other judges passed on to this criterion: this round is.
+      const all = [...listed, ...crossCandidates(judged, task.criterion).filter((candidate) => !listed.some((entry) => entry.id === candidate.id))];
       const finishLimits = finishBudget(BUDGETS.finish, { commands: task.judge.maxCommands, minutes: task.judge.maxMinutes }, BUDGETS.judge);
       const ruled = new Set(standing.round === "final" ? (standing.verdict!.candidates ?? []).filter((ruling) => ruling.ruling !== "open").map((ruling) => ruling.id) : []);
       const finish: NonNullable<InstrumentTask["finish"]> = { prompt: TASK_FILES.finishers(task.criterion), output: join("verdicts", task.criterion, "afmaak.json"), candidates: join(dir, "kandidaten-afmaak.json"), session: was?.finish?.session ?? `a-${digits}`, maxCommands: finishLimits.commands, maxMinutes: finishLimits.minutes, points, ...(earlierRounds.length > 0 ? { earlier: earlierRounds } : {}) };

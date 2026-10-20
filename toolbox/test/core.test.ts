@@ -12,7 +12,7 @@ import { canonicalJson, sha256, slugForUrl, stableId } from "../src/lib/canonica
 import { isChallenge } from "../src/lib/challenge.ts";
 import { changedSinceCommit, complianceStatus, evaluationHash, knownCommit, resolveCriterion } from "../src/lib/evaluation.ts";
 import { toolboxSource } from "../src/lib/manifest.ts";
-import { loadProcedure, parseProcedure } from "../src/lib/procedures.ts";
+import { loadAllProcedures, loadProcedure, parseProcedure, runLimitsNl } from "../src/lib/procedures.ts";
 import { Politeness } from "../src/session/safety.ts";
 import type { SiteModel } from "../src/lib/sitemodel.ts";
 import type { Finding, Verdict } from "../src/lib/verdict.ts";
@@ -357,6 +357,21 @@ test("a criterion only gets an outcome from the verifier", () => {
   assert.equal(new Set(result.findings.map((entry) => entry.id)).size, 2, "finding identifiers are unique");
 });
 
+test("a criterion the finishing round left open is not called established", () => {
+  const criterion = criterionById("1.1.1")!;
+  const base = { criterion, procedure: null, provenance: { dossierSha256: null, verdictSha256: {} } };
+  const open = { ...passed, outcome: "cantTell" as const, missingNl: ["mens nodig: of het logo een naam nodig heeft, bepaalt de eigenaar."] };
+  const stillOpen = resolveCriterion({ ...base, verdicts: { a: open, final: open, finish: open } }, "X");
+  assert.equal(stillOpen.outcome, "cantTell");
+  assert.equal(stillOpen.established?.by, "finishing");
+  assert.doesNotMatch(stillOpen.established!.noteNl, /^Vastgesteld/);
+  assert.match(stillOpen.established!.noteNl, /^Ook na een aanvullende meting niet vastgesteld/);
+  // Without a verdict before it, the note says so too.
+  assert.match(resolveCriterion({ ...base, verdicts: { a: null, final: null, finish: open } }, "X").established!.noteNl, /^Ook na een aanvullende meting niet vastgesteld: de eerste beoordeling leverde geen geldig oordeel/);
+  // A finishing round that did settle it still says so.
+  assert.match(resolveCriterion({ ...base, verdicts: { a: open, final: open, finish: passed } }, "X").established!.noteNl, /^Vastgesteld in een aanvullende meting/);
+});
+
 test("two defects in one component get identifiers that do not read as one defect twice", () => {
   const criterion = criterionById("1.4.11")!;
   const base = { criterion, procedure: null, provenance: { dossierSha256: null, verdictSha256: {} } };
@@ -592,3 +607,26 @@ test("only Cloudflare's own check counts as its check, on its own host and subdo
   assert.equal(isChallenge("https://cloudflare.com/x", behind), false);
   assert.equal(isChallenge("ws://player.vimeo.com/cdn-cgi/challenge-platform/x", behind), false);
 });
+test("a limit of a procedure about a screen reader or a login follows the run", () => {
+  const limits = loadProcedure("1.3.1").limitsNl!;
+  const plain = runLimitsNl(limits, { screenReader: false, loggedIn: false });
+  // Without either the text is as it always was.
+  assert.ok(plain.includes("Er is geen echte schermlezer gebruikt.") && plain.includes("Pagina's achter een login zijn niet onderzocht."));
+  assert.doesNotMatch(plain, /[{}|]/);
+  const read = runLimitsNl(limits, { screenReader: true, loggedIn: false });
+  assert.ok(!read.includes("schermlezer") && read.includes("Pagina's achter een login zijn niet onderzocht."));
+  const loggedIn = runLimitsNl(limits, { screenReader: false, loggedIn: true });
+  assert.ok(loggedIn.includes("Er is geen echte schermlezer gebruikt.") && !loggedIn.includes("login"));
+  assert.doesNotMatch(loggedIn, / {2}|\s$/);
+  // A part can say what takes its place.
+  assert.equal(runLimitsNl("Er is geen echte {zonder-schermlezer: schermlezer of }spraakbesturing gebruikt. {zonder-inlog: Er wordt niet ingelogd.|Het inloggen is door een mens gedaan.}", { screenReader: true, loggedIn: true }), "Er is geen echte spraakbesturing gebruikt. Het inloggen is door een mens gedaan.");
+  // No procedure says in a run with a login that nothing behind a login was examined, nor with a screen reader that none was used.
+  for (const procedure of loadAllProcedures().procedures.filter((entry) => entry.limitsNl)) {
+    const both = runLimitsNl(procedure.limitsNl!, { screenReader: true, loggedIn: true });
+    assert.doesNotMatch(both, /achter een (?:login|inlog)[^.;]* (?:niet|nooit)|Er wordt niet ingelogd|geen echte schermlezer|zonder schermlezer|niet getest met een echte schermlezer/, procedure.id);
+  }
+  // A mark with another word is refused, so it cannot end up in the report as it is written.
+  const base = loadProcedure("1.1.1");
+  assert.throws(() => parseProcedure(`---\nid: "1.1.1"\nversion: 1\nclass: oordeel\nevidence: [images]\nlimits: "{zonder-browser: Er is geen browser gebruikt.}"\n---\n${base.body}\n`, "1.1.1"), /limits: a part that depends on the run/);
+});
+
