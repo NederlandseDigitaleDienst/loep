@@ -248,6 +248,21 @@ test("open points are split into work for the owner of the site and limits of th
   for (const id of [first!.id, second!.id, passed.id]) assert.equal(main!.split(`<a id="open-${id}"></a>`).length - 1, 1);
 });
 
+test("a criterion open by content of an address outside the scope is the owner's, counted apart in the summary, and not unfinished work of the evaluation", () => {
+  const evaluation = exampleEvaluation();
+  const open = evaluation.criteria.filter((entry) => entry.outcome === "cantTell" || entry.outcome === "untested");
+  for (const criterion of open.slice(1)) {
+    criterion.outcome = "passed";
+    criterion.missingNl = [];
+  }
+  open[0]!.outcome = "cantTell";
+  open[0]!.missingNl = ["buiten de afbakening: het blok met openingstijden op P02 haalt zijn inhoud van https://data.voorbeeld.nl en bleef leeg."];
+  const { todo, statusLine } = deriveReport(evaluation);
+  assert.equal(statusLine.unfinished, false);
+  assert.ok(statusLine.openNl.includes(`Van de criteria voor de eigenaar bleef er 1 open door inhoud van een adres buiten de afbakening (${open[0]!.id}); een nieuw onderzoek met dat adres erbij meet ze`), statusLine.openNl);
+  assert.deepEqual(todo.investigate.owner.map((item) => item.pointsNl), [["Buiten de afbakening: Het blok met openingstijden op P02 haalt zijn inhoud van https://data.voorbeeld.nl en bleef leeg."]]);
+});
+
 /** An evaluation with a chat in an embedded frame that answers only after a message: one criterion waits for sending alone, one also for a person. */
 function withNotSent(): { evaluation: Evaluation; only: string; mixed: string } {
   const evaluation = exampleEvaluation();

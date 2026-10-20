@@ -71,6 +71,7 @@ export interface StateEvidence {
 }
 import type { SiteStates } from "../commands/modelsweep.ts";
 import type { Overlay } from "../session/recipe.ts";
+import { readBlockades, type BlockadeEntry } from "../session/blockade.ts";
 import type { EngineRun } from "./engines.ts";
 import { readSiteModel, type SiteModel } from "./sitemodel.ts";
 
@@ -488,6 +489,8 @@ export interface RunData {
   recipes?: Record<string, RecipeSteps>;
   /** Pages of the sample that collect failed on, twice, with the first line of the error. They are not in `pages`; the gate names them. Absent in data built by hand. */
   collectFailed?: { label: string; item: SampleItem; error: string }[];
+  /** Origins that refused the evaluation (`blockades.json`): the sweep and the sessions asked them nothing after that. Absent in data built by hand. */
+  blockades?: BlockadeEntry[];
 }
 
 export async function loadRun(dir: string): Promise<RunData> {
@@ -577,5 +580,5 @@ export async function loadRun(dir: string): Promise<RunData> {
   if (existsSync(join(dir, "recipes"))) for (const file of (await readdir(join(dir, "recipes"))).filter((name) => name.endsWith(".json")).sort()) recipes[file.slice(0, -5)] = await readJson<RecipeSteps>(join(dir, "recipes", file));
   const watchPath = join(dir, "session-watch.json");
   const sessionWatch = existsSync(watchPath) ? await readJson<WatchState>(watchPath).catch(() => null) : null;
-  return { states, contrast, dir, inventory, sample, pages, sessionWatch, writes: writesForRun(dir), reads: readsForRun(dir), login: loginForRun(dir), siteModel: await readSiteModel(dir), siteStates, stateEvidence, documents: loadDocuments(dir, sample.documents), recipes, collectFailed };
+  return { states, contrast, dir, inventory, sample, pages, sessionWatch, writes: writesForRun(dir), reads: readsForRun(dir), login: loginForRun(dir), siteModel: await readSiteModel(dir), siteStates, stateEvidence, documents: loadDocuments(dir, sample.documents), recipes, collectFailed, blockades: readBlockades(dir) };
 }

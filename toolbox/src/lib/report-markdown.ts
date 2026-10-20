@@ -5,7 +5,7 @@ import { modelOf } from "../instruments/methods/registry.ts";
 import { signatureIsCurrent } from "../commands/sign.ts";
 import { extensionsNl } from "./budget.ts";
 import { modelsNl } from "./models.ts";
-import { NOT_SENT, notSentOrigins, OPEN_POINT_KINDS, openPoint, UNREACHABLE, waitsOnlyOnSending, type Outcome } from "./verdict.ts";
+import { NOT_SENT, notSentOrigins, OPEN_POINT_KINDS, openPoint, OUTSIDE_SCOPE, UNREACHABLE, waitsOnlyOnSending, type Outcome } from "./verdict.ts";
 import { siteOrigins } from "./origins.ts";
 import { readsAllowedNl } from "./reads.ts";
 import { compareCriterionIds, type WcagVersion } from "./wcag.ts";
@@ -583,13 +583,16 @@ function openCount(evaluation: Evaluation): { openNl: string; unfinished: boolea
   // A criterion that waits only for permission to send needs no person: it is counted apart, so the reader is not sent to one.
   const notSent = open.owner.filter((id) => waitsOnlyOnSending(evaluation.criteria.find((criterion) => criterion.id === id)?.missingNl ?? []));
   const notSentNl = notSent.length > 0 ? ` Van de criteria voor de eigenaar ${notSent.length === 1 ? "wacht" : "wachten"} er ${notSent.length} alleen op toestemming om te versturen${list(notSent)}.` : "";
+  // Content of an address outside the run is a choice of the scope, no fault of loep: counted apart, with what would measure it.
+  const outside = open.owner.filter((id) => (evaluation.criteria.find((criterion) => criterion.id === id)?.missingNl ?? []).some((point) => openPoint(point).kind?.prefix === OUTSIDE_SCOPE));
+  const outsideNl = outside.length > 0 ? ` Van de criteria voor de eigenaar ${outside.length === 1 ? "bleef" : "bleven"} er ${outside.length} open door inhoud van een adres buiten de afbakening${list(outside)}; een nieuw onderzoek met dat adres erbij meet ze, zie "Nog uitzoeken".` : "";
   const ownerNl = notSent.length === 0 ? REPORT_TEXT.ownerOpen : notSent.length === open.owner.length ? REPORT_TEXT.ownerOpenNotSent : REPORT_TEXT.ownerOpenMixed;
   // A part of the site that did not load is counted apart too: the evaluation is not finished, and no fault of the site is established.
   const unreachable = open.evaluation.filter((id) => (evaluation.criteria.find((criterion) => criterion.id === id)?.missingNl ?? []).some((point) => openPoint(point).kind?.prefix === UNREACHABLE));
   const unreachableNl = unreachable.length > 0 ? ` Van de criteria die dit onderzoek niet vaststelde, ${unreachable.length === 1 ? "bleef" : "bleven"} er ${unreachable.length} open doordat een deel van de site tijdens het onderzoek niet bereikbaar was${list(unreachable)}, zie "Nog uitzoeken".` : "";
   return {
     openNl:
-      `Open criteria: ${reasonsNl}${notSentNl}${unreachableNl}` +
+      `Open criteria: ${reasonsNl}${notSentNl}${outsideNl}${unreachableNl}` +
       (open.evaluation.length > 0 ? ` ${REPORT_TEXT.unfinished}` : ` ${ownerNl}`),
     unfinished: open.evaluation.length > 0,
   };
@@ -747,7 +750,7 @@ function investigate(evaluation: Evaluation): ReportDerived["todo"]["investigate
     criteria.flatMap((criterion) => {
       const points = openPoints(criterion).filter(wanted);
       if (points.length === 0) return [];
-      return [{ criterion: criterion.id, outcomeNl: SHOWN_LABEL[shownOutcome(criterion)].toLowerCase(), pointsNl: points.map((point) => (point.kind?.prefix === "keuze nodig" ? `Keuze: ${point.textNl}` : point.textNl)), anchor: anchor(criterion.id) }];
+      return [{ criterion: criterion.id, outcomeNl: SHOWN_LABEL[shownOutcome(criterion)].toLowerCase(), pointsNl: points.map((point) => (point.kind?.prefix === "keuze nodig" ? `Keuze: ${point.textNl}` : point.kind?.prefix === OUTSIDE_SCOPE ? `Buiten de afbakening: ${point.textNl}` : point.textNl)), anchor: anchor(criterion.id) }];
     });
   // What waits only for permission to send stands apart: no person is needed for it, one declaration is.
   result.owner = full((point) => point.kind?.reader === "owner" && point.kind.prefix !== NOT_SENT);

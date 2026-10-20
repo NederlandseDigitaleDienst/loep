@@ -8,6 +8,7 @@ import {
   notSentPointProblems,
   OPEN_POINT_KINDS,
   openPoint,
+  OUTSIDE_SCOPE,
   UNREACHABLE,
   waitsOnlyOnSending,
   indexObservations,
@@ -363,7 +364,11 @@ test("an open point names its kind and is written for a reader who does not know
   const open = (missingNl: string[]): string => validateJudgeVerdict({ ...passed, outcome: "cantTell", missingNl }, context).join("\n");
   assert.match(open(["Het contrast op 320 pixels breed is niet gemeten."]), /missingNl\[0\]: an open point starts with its kind and a colon: "mens nodig:"/);
   // A point "niet bereikbaar" also says when: a time of day.
-  for (const kind of OPEN_POINT_KINDS) assert.equal(open([`${kind.prefix}: het contrast op 320 pixels breed is niet gemeten op P01${kind.prefix === UNREACHABLE ? ", tussen 14:05 en 14:40" : ""}.`]), "");
+  for (const kind of OPEN_POINT_KINDS) assert.equal(open([`${kind.prefix}: het contrast op 320 pixels breed is niet gemeten op P01${kind.prefix === UNREACHABLE ? ", tussen 14:05 en 14:40" : kind.prefix === OUTSIDE_SCOPE ? ", met inhoud van https://data.example.nl" : ""}.`]), "");
+  // A point "buiten de afbakening" names the address outside the run, and is the owner's: a choice of the scope.
+  assert.match(open(["buiten de afbakening: het blok met openingstijden op P02 bleef leeg."]), /names the address outside the run/);
+  assert.equal(openPoint("buiten de afbakening: https://data.example.nl").kind?.reader, "owner");
+  assert.ok((KINDS_AFTER_FINISH as readonly string[]).includes(OUTSIDE_SCOPE));
   assert.match(open(["budget op: kort"]), /say after "budget op:" what is open and where/);
   // The words of the toolbox stay out of the text: the owner of the site reads it.
   const refs = [...context.observations.keys()];

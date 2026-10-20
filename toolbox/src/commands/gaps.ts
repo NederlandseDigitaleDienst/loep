@@ -11,12 +11,13 @@ import { criterionById } from "../lib/wcag.ts";
  * list is complete; "versturen niet toegestaan" stands apart from them, because one declaration
  * of a test environment at inventory would have closed every such point. "niet bereikbaar" is a
  * part of the site that did not load while the rest did: no fault of loep, and a new finishing
- * round measures it once it loads. Reads the verdicts and the evaluation of each run and writes
+ * round measures it once it loads. "buiten de afbakening" is content from an origin the run does
+ * not cover: a choice of the scope, no fault of loep. Reads the verdicts and the evaluation of each run and writes
  * nothing.
  */
 
 /** The kinds in the order of the list: what the toolbox can do something about first. */
-const KIND_ORDER = ["veegronde mist", "budget op", "proef werkte niet", "niet bereikbaar", "versturen niet toegestaan", "mens nodig", "keuze nodig"] as const;
+const KIND_ORDER = ["veegronde mist", "budget op", "proef werkte niet", "niet bereikbaar", "versturen niet toegestaan", "buiten de afbakening", "mens nodig", "keuze nodig"] as const;
 /** A point from before the kinds existed that starts with none of them. */
 const NO_KIND = "zonder soort";
 
@@ -26,6 +27,7 @@ const WHAT_NL: Record<string, string> = {
   "proef werkte niet": "Elk punt is een instrument dat geen bruikbaar antwoord gaf, of een onderdeel dat niet openging.",
   "niet bereikbaar": "Elk punt is een deel van de site, een pagina of een ingesloten venster, dat bij herhaalde pogingen niet laadde terwijl de rest wel laadde. Geen fout in loep: laadt het weer, dan meet een nieuwe afmaakronde het (tasks --again).",
   "versturen niet toegestaan": "Elk punt is iets wat pas na versturen te zien is, in een run die niet mocht versturen. Geen persoon nodig: een testomgeving, verklaard bij inventory met --test-environment, laat een instrument het meten. Dat kan de origin van alleen het ingesloten venster zijn.",
+  "buiten de afbakening": "Elk punt is inhoud die een pagina ophaalt van een adres buiten de run. Geen fout in loep: wie de afbakening koos, kan dat adres erbij nemen in een nieuwe run (inventory --also-origin).",
   "mens nodig": "Elk punt vraagt iets wat geen instrument kan vaststellen.",
   "keuze nodig": "Elk punt vraagt een besluit van de eigenaar van de site.",
   [NO_KIND]: "Punten uit een oordeel van voor de soorten bestonden.",
