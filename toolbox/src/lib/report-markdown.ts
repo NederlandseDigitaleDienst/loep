@@ -1,6 +1,6 @@
 import { KIND_NAME_NL, kindsNl } from "./documents.ts";
 import { pageIndex, type Defect } from "./defects.ts";
-import { changedSinceCommit, closeCutQuote, complianceStatus, evaluationHash, idsAcrossVersionsNl, knownCommit, madeWith, openCriteria, OUTAGE_NL, OUTCOME_LABEL, type ComplianceStatus, type CriterionOutcome, type CriterionResult, type Evaluation, type ReportFinding, type Signature } from "./evaluation.ts";
+import { aiGeneratedMark, changedSinceCommit, closeCutQuote, versionAccuracyNl, complianceStatus, evaluationHash, idsAcrossVersionsNl, knownCommit, madeWith, openCriteria, OUTAGE_NL, OUTCOME_LABEL, type ComplianceStatus, type CriterionOutcome, type CriterionResult, type Evaluation, type ReportFinding, type Signature } from "./evaluation.ts";
 import { modelOf } from "../instruments/methods/registry.ts";
 import { signatureIsCurrent } from "../commands/sign.ts";
 import { extensionsNl } from "./budget.ts";
@@ -115,6 +115,7 @@ export const REPORT_TEXT = {
   answers: "Vastgesteld door een persoon, niet door een instrument",
   before: "Het oordeel dat hiervoor stond",
   establishedBy: "Vastgesteld door",
+  versionAccuracy: "Nauwkeurigheid van deze versie",
   recommendations: "Aanbevelingen",
   recommendationsIntro: "Wat hier staat, is geen eis van WCAG en telt niet mee voor de uitkomst of de status. Het zijn patronen die de procedure van een criterium aanraadt, en alleen waar de procedure een regel voor een aanbeveling heeft. Een gebrek staat nooit hier: wat de norm fout noemt, staat onder Oplossen.",
   investigateIntro: "Wat het onderzoek open laat, staat hier in delen. Het eerste deel is werk voor de eigenaar van de site. Het laatste deel gaat over grenzen van dit onderzoek: daar hoeft de eigenaar niets mee te doen.",
@@ -291,6 +292,10 @@ export interface ReportDerived {
   statusLine: StatusLine;
   /** One line when this evaluation follows up a signed one: its date and mark. Null otherwise; a concept is never named. */
   followsUpNl: string | null;
+  /** When this version of loep was last measured as a whole and what came out, or that it never was: always said. */
+  versionAccuracyNl: string;
+  /** Keywords for the metadata of the PDF that say, readable by a machine, that the verdicts were drafted by a language model, and by which. */
+  aiKeywords: string[];
   /** What the agents said about their model, one line per role, and a line when the operator named another. Null when no agent session is known. */
   agentModels: { perRoleNl: string[]; differsNl: string | null } | null;
   /** Per role how many sessions added to their own budget and how often, in one line. Null when none did. */
@@ -934,6 +939,9 @@ export function deriveReport(input: Evaluation, decisions: DecisionLayer = { dec
     statusLine: statusLine(evaluation, stale),
     followsUpNl: evaluation.followsUp ? `Dit is een heronderzoek. Het vorige onderzoek is van ${dateNl(evaluation.followsUp.evaluatedAt)}, afgetekend op ${dateNl(evaluation.followsUp.signedAt)}, met kenmerk ${evaluation.followsUp.sha256.slice(0, 12)}.` : null,
     chain,
+    versionAccuracyNl: versionAccuracyNl(evaluation.versionAccuracy, dateNl),
+    // An evaluation from before the mark was kept was made the same way: by a language model.
+    aiKeywords: ["AI-generated", ...(evaluation.aiGenerated ?? aiGeneratedMark(evaluation.judgment, evaluation.criteria)).models.map((model) => `AI-model: ${model}`)],
     agentModels: modelsNl(evaluation.judgment.model, evaluation.judgment.models),
     extensionsNl: extensionsNl(evaluation.judgment.extensions),
     scopeFramesNl: (evaluation.scope.frames ?? []).map(scopeFrameNl),
@@ -1223,7 +1231,7 @@ export function renderMarkdown(input: Evaluation, decisions: DecisionLayer = { d
   lines.push(`# ${REPORT_TEXT.title} ${esc(evaluation.site.name)}`, "");
   lines.push(
     signature
-      ? `> **Afgetekend** door ${esc(signature.name)} (${esc(signature.role)}, ${esc(signature.organisation)}) op ${derived.signedDateNl}.`
+      ? `> **Afgetekend** door ${esc(signature.role)} (${esc(signature.organisation)}) op ${derived.signedDateNl}.`
       : `> **${REPORT_TEXT.concept}**${staleNote}`,
     "",
     `> **${derived.statusLine.headingNl}**${derived.statusLine.noteNl ? `. ${derived.statusLine.noteNl}` : ""}`,
@@ -1367,7 +1375,8 @@ export function renderMarkdown(input: Evaluation, decisions: DecisionLayer = { d
       ...(derived.followsUpNl ? [`${REPORT_TEXT.followsUp}: ${derived.followsUpNl}`] : []),
       ...(derived.chain.writesNl ? [`Versturen van formulieren: ${esc(derived.chain.writesNl)}`] : []),
       ...(derived.chain.readsNl ? [`Leesverzoeken: ${esc(derived.chain.readsNl)}`] : []),
-      signature ? `Afgetekend door: ${esc(signature.name)}, ${esc(signature.role)}, ${esc(signature.organisation)}, op ${derived.signedDateNl}${derived.signatureRecordedNl ? `, ${derived.signatureRecordedNl}` : ""}` : `Afgetekend door: ${REPORT_TEXT.notSigned.toLowerCase()}${staleNote ? `.${staleNote}` : ""}`,
+      // The function, not the name: the name of who signed stays in signed/signature.json.
+      signature ? `Afgetekend door: ${esc(signature.role)}, ${esc(signature.organisation)}, op ${derived.signedDateNl}${derived.signatureRecordedNl ? `, ${derived.signatureRecordedNl}` : ""}` : `Afgetekend door: ${REPORT_TEXT.notSigned.toLowerCase()}${staleNote ? `.${staleNote}` : ""}`,
     ]),
     "",
   );
@@ -1505,6 +1514,7 @@ export function renderMarkdown(input: Evaluation, decisions: DecisionLayer = { d
 
   section("Betrouwbaarheid en beperkingen");
   lines.push(derived.chain.honestNl, "");
+  lines.push(`### ${REPORT_TEXT.versionAccuracy}`, "", esc(derived.versionAccuracyNl), "");
   if (derived.chain.stepsNl.length > 0) lines.push("### Werkwijze", "", ...derived.chain.stepsNl.map((step, index) => `${index + 1}. **${step.nameNl}.** ${esc(step.textNl)}`), "");
   lines.push(derived.disagreementNl, "");
   const gate = evaluation.chain?.gate;

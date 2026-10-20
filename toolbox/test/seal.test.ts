@@ -60,7 +60,8 @@ test("evaluate, render, seal, verify, sign, verify: signing keeps the seal, and 
   const signedReport = await render(run);
   assert.equal(signedReport.markdown, join(run, "signed", "rapport.md"));
   const signedText = readFileSync(signedReport.markdown, "utf8");
-  assert.match(signedText, /^> \*\*Afgetekend\*\* door Een ondertekenaar \(Directeur, Gemeente Voorbeeld\)/m);
+  assert.match(signedText, /^> \*\*Afgetekend\*\* door Directeur \(Gemeente Voorbeeld\)/m);
+  assert.ok(!signedText.includes(SIGNER.name), "the name stays in signed/signature.json");
   assert.ok(signedText.includes(`verzegeld als \`${sealed.sha256.slice(0, 12)}\``), "the signed report names the seal");
   assert.ok(readFileSync(concept.markdown, "utf8").includes("Concept, niet afgetekend"), "the concept that was read stays as it was sealed");
   if (signedReport.pdf !== null) assert.deepEqual(signedReport.pdfChecks.filter((problem) => !problem.includes("is niet geïnstalleerd")), []);

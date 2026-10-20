@@ -176,7 +176,7 @@ Een agent starten betekent steeds: een aparte agent die alleen dit krijgt: "Lees
 
    Deze stap mag worden overgeslagen: dan blijven die criteria open en blijft de status C.
 
-10. **Tekenen** is een verklaring van de gebruiker, na het lezen van het rapport in `RUN/report/`. Zeg vooraf waar naam en functie terechtkomen: in `RUN/signed/signature.json`, in het afgetekende rapport en in de verklaring. Tekenen doet de gebruiker altijd zelf, nooit jij. Noem welk rapport er te lezen is (`RUN/report/rapport.pdf`) en geef het commando, met naam, functie en organisatie zoals de gebruiker ze noemde, om zelf te draaien in een interactieve terminal (een eigen terminalvenster, of `! <commando>` in Claude Code):
+10. **Tekenen** is een verklaring van de gebruiker, na het lezen van het rapport in `RUN/report/`. Zeg vooraf waar naam en functie terechtkomen: de naam alleen in `RUN/signed/signature.json`, de functie ook in het afgetekende rapport en in de verklaring. Tekenen doet de gebruiker altijd zelf, nooit jij. Noem welk rapport er te lezen is (`RUN/report/rapport.pdf`) en geef het commando, met naam, functie en organisatie zoals de gebruiker ze noemde, om zelf te draaien in een interactieve terminal (een eigen terminalvenster, of `! <commando>` in Claude Code):
    ```
    LOEP sign --run RUN --name "<naam>" --role "<functie>" --organisation "<organisatie>"
    ```

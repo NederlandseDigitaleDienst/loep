@@ -3,11 +3,11 @@ import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { browserUse, gateLineNl, repeatedInBrowsersNl, secondBrowserUse } from "../src/commands/evaluate.ts";
+import { browserUse, gateLineNl, readVersionAccuracy, repeatedInBrowsersNl, secondBrowserUse, voiceOverSessions } from "../src/commands/evaluate.ts";
 import { render } from "../src/commands/render.ts";
 import { canonicalJson } from "../src/lib/canonical.ts";
 import { mergeFindings } from "../src/lib/defects.ts";
-import { closeCutQuote, evaluationHash, idsAcrossVersionsNl, markVendor, quoteStart, summarise, vendorTagsOf, type Evaluation, type ReportFinding } from "../src/lib/evaluation.ts";
+import { aiGeneratedMark, closeCutQuote, evaluationHash, idsAcrossVersionsNl, markVendor, quoteStart, summarise, vendorTagsOf, VERSION_NOT_MEASURED_NL, type Evaluation, type ReportFinding } from "../src/lib/evaluation.ts";
 import { reportedModels } from "../src/lib/models.ts";
 import { deriveReport, renderMarkdown } from "../src/lib/report-markdown.ts";
 import { tool } from "../src/lib/typst.ts";
@@ -93,7 +93,7 @@ test("every finding id appears exactly once as an anchor", () => {
   assert.equal(new Set(anchors).size, anchors.length);
 });
 
-test("an unsigned evaluation is labelled as concept, a signed one names who signed", () => {
+test("an unsigned evaluation is labelled as concept, a signed one names the function of who signed and not the name", () => {
   const unsigned = renderMarkdown(exampleEvaluation());
   assert.match(unsigned, /^> \*\*Concept, niet afgetekend\*\*$/m);
   assert.ok(unsigned.includes("Afgetekend door: nog niet afgetekend"));
@@ -101,7 +101,10 @@ test("an unsigned evaluation is labelled as concept, a signed one names who sign
 
   const withSignature = renderMarkdown(signed(exampleEvaluation()));
   assert.ok(!withSignature.includes("Concept, niet afgetekend"));
-  assert.match(withSignature, /^> \*\*Afgetekend\*\* door Een ondertekenaar \(Directeur, Gemeente Voorbeeld\) op 12 oktober 2026\.$/m);
+  assert.match(withSignature, /^> \*\*Afgetekend\*\* door Directeur \(Gemeente Voorbeeld\) op 12 oktober 2026\.$/m);
+  assert.ok(withSignature.includes("Afgetekend door: Directeur, Gemeente Voorbeeld, op 12 oktober 2026"));
+  // The name stays in signed/signature.json: the report that gets published does not carry it.
+  assert.ok(!withSignature.includes("Een ondertekenaar"));
   // Four criteria could not be determined, so the strict status is C, never A or B.
   assert.ok(withSignature.includes("status C (eerste maatregelen genomen)"));
   assert.ok(!withSignature.includes("status A (voldoet volledig)"));
@@ -1036,4 +1039,64 @@ test("the open count across both WCAG versions names the criteria in one version
   assert.match(derived.statusLine.openNl, /^Open criteria: 3, door dit onderzoek niet vastgesteld \(2\.5\.2, 3\.3\.8 alleen in WCAG 2\.2, 4\.1\.1 alleen in WCAG 2\.1\)\. /);
   assert.match(derived.statusSentenceNl, /van WCAG 2\.2 niveau A en AA, maar van de \d+ criteria zijn er 2 nog open\./);
   assert.equal(idsAcrossVersionsNl(["1.1.1"], criteria), "1.1.1", "a criterion in both versions stays as it is");
+});
+
+test("the evaluation and the metadata of the PDF say, readable by a machine, that a language model drafted the verdicts", async (context) => {
+  const mark = aiGeneratedMark({ model: "voorbeeldmodel", models: AGENT_MODELS }, [{ id: "1.4.5", established: { by: "person", noteNl: "Vastgesteld door een persoon." } }, { id: "1.4.3", established: { by: "verification", noteNl: "Vastgesteld bij de controle." } }]);
+  // Each model once; "onbekend" names none.
+  assert.deepEqual(mark, { models: ["ander-model-2", "voorbeeld-model-4.5[1m]", "voorbeeldmodel"], humanReview: { signature: "signed/signature.json", criteriaByPerson: ["1.4.5"] } });
+  const evaluation = { ...exampleEvaluation(), aiGenerated: mark };
+  assert.deepEqual(deriveReport(evaluation).aiKeywords, ["AI-generated", "AI-model: ander-model-2", "AI-model: voorbeeld-model-4.5[1m]", "AI-model: voorbeeldmodel"]);
+  // An evaluation from before the mark was kept was made by a language model as well.
+  assert.deepEqual(deriveReport(exampleEvaluation()).aiKeywords, ["AI-generated", `AI-model: ${exampleEvaluation().judgment.model}`]);
+
+  const dir = mkdtempSync(join(tmpdir(), "render-ai-"));
+  writeFileSync(join(dir, "evaluation.json"), canonicalJson(evaluation));
+  const result = await render(dir);
+  if (result.pdf === null) return context.skip("Typst is not installed");
+  for (const pdf of [result.pdf, result.shortPdf!]) {
+    const info = await tool("pdfinfo", [pdf]);
+    if (!info.found) return context.skip("pdfinfo is not installed");
+    assert.match(info.stdout, /^Keywords:\s+.*AI-generated, AI-model: ander-model-2, AI-model: voorbeeld-model-4\.5\[1m\], AI-model: voorbeeldmodel$/m);
+  }
+});
+
+test("the report always says how accurate this version of loep is: measured as a whole, or not", async (context) => {
+  // Without a measurement of this version, the fixed sentence; an evaluation from before the field was kept says the same.
+  for (const evaluation of [exampleEvaluation(), { ...exampleEvaluation(), versionAccuracy: null }]) {
+    const markdown = renderMarkdown(evaluation);
+    const block = markdown.split("## Betrouwbaarheid en beperkingen")[1]!.split("\n## ")[0]!;
+    assert.ok(block.includes(`### Nauwkeurigheid van deze versie\n\n${VERSION_NOT_MEASURED_NL}\n`), "the block stands under Betrouwbaarheid en beperkingen");
+  }
+  const measured = { ...exampleEvaluation(), versionAccuracy: { version: "0.0.1", measuredAt: "2026-10-18", againstNl: "het oordeel van een menselijke deskundige op drie sites", resultNl: "Bij 41 van de 50 criteria kwam loep op dezelfde uitkomst; 3 afkeuringen van de deskundige vond loep niet." } };
+  assert.ok(renderMarkdown(measured).includes("### Nauwkeurigheid van deze versie\n\nDeze versie van loep (0.0.1) is het laatst als geheel gemeten op 18 oktober 2026, tegen het oordeel van een menselijke deskundige op drie sites. Uitkomst: Bij 41 van de 50 criteria"));
+
+  // evaluate reads the file of its own version; without one there is no measurement, and a wrong file stops it.
+  const versions = mkdtempSync(join(tmpdir(), "versies-"));
+  assert.equal(readVersionAccuracy("0.0.1", versions), null);
+  writeFileSync(join(versions, "0.0.1.json"), JSON.stringify(measured.versionAccuracy));
+  assert.deepEqual(readVersionAccuracy("0.0.1", versions), measured.versionAccuracy);
+  writeFileSync(join(versions, "0.0.2.json"), JSON.stringify({ ...measured.versionAccuracy, measuredAt: "oktober" }));
+  assert.throws(() => readVersionAccuracy("0.0.2", versions), /version must be "0\.0\.2".*measuredAt must be a date/);
+
+  // The PDF has the block too.
+  const dir = mkdtempSync(join(tmpdir(), "render-accuracy-"));
+  writeFileSync(join(dir, "evaluation.json"), canonicalJson(exampleEvaluation()));
+  const result = await render(dir);
+  if (result.pdf === null) return context.skip("Typst is not installed");
+  const text = await tool("pdftotext", [result.pdf, "-"]);
+  if (!text.found) return context.skip("pdftotext is not installed");
+  const flat = text.stdout.replace(/\s+/g, " ");
+  assert.ok(flat.includes("Nauwkeurigheid van deze versie"));
+  assert.ok(flat.includes(VERSION_NOT_MEASURED_NL));
+});
+
+test("a session counts as one in which a real screen reader read aloud only when VoiceOver answered without an error", () => {
+  const record = (id: string, methods: unknown[]) => [id, { id, command: "voiceover", result: { methods } }] as const;
+  const records = new Map([
+    record("b-131-0001", [{ method: "voiceover", implementation: "voiceover", version: "macOS 15" }]),
+    record("v-131-0001", [{ method: "voiceover", implementation: "voiceover", error: "geen virtuele Mac" }]),
+    record("b-143-0001", [{ method: "contrast", implementation: "loep" }]),
+  ]);
+  assert.deepEqual([...voiceOverSessions(records)], ["b-131"]);
 });

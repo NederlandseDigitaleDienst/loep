@@ -119,7 +119,8 @@ test("decisions come after signing, stand outside the seal as a layer of their o
   assert.ok(chapter.includes(`met een eigen kenmerk: ${(await loadDecisions(run, evaluation.defects)).sha256!.slice(0, 12)}`));
   assert.ok(!report.includes(WHO.name), "the name stays in the file of the decision");
   assert.ok(!report.includes(IN_CONVERSATION.summary), "the summary stays in the file of the decision");
-  assert.match(report, /^- Afgetekend door: Een ondertekenaar, Directeur, Gemeente Voorbeeld, op [^,]+, bevestigd in een terminal op /m);
+  assert.match(report, /^- Afgetekend door: Directeur, Gemeente Voorbeeld, op [^,]+, bevestigd in een terminal op /m);
+  assert.ok(!report.includes(SIGNER.name), "the name of who signed stays in signed/signature.json");
   assert.ok(!readFileSync(join(run, "report", "rapport.md"), "utf8").includes("Maatregelen en beslissingen"));
   assert.deepEqual((await checkSeal(run))!.problems, [], "rendering after a decision leaves the seal whole");
 });
@@ -190,7 +191,7 @@ test("the statement takes its measures from the decisions, says how each was rec
   const [one] = failed;
   const [defect] = defectsOf(one!.id);
   assert.ok(all.markdown.includes(`Succescriterium ${one!.id} – ${one!.titleNl}: ${defect!.titleNl.replace(/\.$/, "")}: herstel gepland, klaar uiterlijk 1 december 2026: Het team past het component aan (bevestigd in een terminal op 20 oktober 2026 om 12:00)`), all.markdown);
-  assert.ok(all.markdown.includes("N (R) heeft voor het onderzoek getekend, bevestigd in een terminal op 10 oktober 2026 om 10:00."), "the statement says how the signature came about");
+  assert.ok(all.markdown.includes("Voor het onderzoek is getekend door: R, bevestigd in een terminal op 10 oktober 2026 om 10:00."), "the statement says how the signature came about");
   assert.ok(renderAnswerSheet(evaluation, input, planned).includes(`- Maatregel bij ${one!.id}: ${defect!.titleNl.replace(/\.$/, "")}: herstel gepland`));
 
   // A decision from the conversation says so; one that is done also says it was not measured again.
