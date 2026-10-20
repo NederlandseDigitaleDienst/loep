@@ -124,7 +124,7 @@ De eerste vorm toont de open punten met hun nummer. De tweede legt per punt vast
 - **Onder het zegel.** Het antwoord is een bestand van de run en wordt met `seal` verzegeld. De volgorde is dus: antwoorden vastleggen, dan `evaluate`, `render` en `seal`, dan lezen en tekenen.
 - **Bij één oordeel.** Een antwoord hoort bij het oordeel waarvan het een punt beantwoordt. Komt er een ander oordeel, dan telt het niet meer en meldt `evaluate` dat.
 - **Eerst het instrument.** Zolang een criterium nog een afmaakronde te goed heeft, weigert `answer`: wat een instrument kan meten, meet een instrument.
-- **Nooit door een agent.** Een agent vult geen antwoord in namens een mens, net zo min als een handtekening.
+- **Wat de persoon zegt, niet wat de agent bedenkt.** Een agent verzint geen antwoord. Hij mag wel vastleggen wat de persoon in het gesprek uitdrukkelijk bevestigt, met die bevestiging letterlijk erbij, onder de regels in "Wie vastlegt" hieronder.
 
 ### Eerlijk tellen
 
@@ -283,11 +283,61 @@ Wat iemand tekent, is precies wat verzegeld is. De volgorde is vast:
 1. `evaluate` en `render` maken de evaluatie en het conceptrapport in `report/`. Heeft een persoon daarna met `answer` open punten beantwoord, dan draaien beide opnieuw.
 2. `seal` legt in `evidence-index.json` de hash vast van elk bestand in de run: het bewijs, de oordelen, de antwoorden van een persoon, de evaluatie en het conceptrapport.
 3. Een mens leest het rapport en tekent met `sign`. Dat commando weigert als een criterium geen oordeel heeft, als de run niet is verzegeld of als ze na het verzegelen is veranderd. De handtekening komt in `signed/signature.json` en noemt de hash van het zegel en van de evaluatie.
-4. `render` schrijft het rapport dat zegt wie tekende in `signed/`. `statement` schrijft de verklaring in `verklaring/`.
+4. `render` schrijft het rapport dat zegt wie tekende in `signed/`. Daarna legt `decide` per gebrek vast wat de organisatie besluit (zie "Maatregelen en beslissingen"), en maakt `render` het afgetekende rapport opnieuw. `statement` schrijft de verklaring in `verklaring/`.
 
-De handtekening, het afgetekende rapport en de verklaring staan buiten het zegel. Ze maken verandert dus niets aan wat verzegeld is, en `verify` klopt na het tekenen nog. Verandert er daarna één byte in een verzegeld bestand, dan meldt `verify` dat. Een handtekening die bij een ander zegel of een andere evaluatie hoort, meldt het ook, en het rapport behandelt het onderzoek dan weer als concept. Wie een afgetekende run na een wijziging opnieuw verzegelt, maakt de handtekening ongeldig: `seal` verwijdert haar en zegt dat.
+De handtekening, het afgetekende rapport, de besluiten en de verklaring staan buiten het zegel. Ze maken verandert dus niets aan wat verzegeld is, en `verify` klopt na het tekenen nog. Verandert er daarna één byte in een verzegeld bestand, dan meldt `verify` dat. Een handtekening die bij een ander zegel of een andere evaluatie hoort, meldt het ook, en het rapport behandelt het onderzoek dan weer als concept. Wie een afgetekende run na een wijziging opnieuw verzegelt, maakt de handtekening ongeldig: `seal` verwijdert haar en zegt dat.
 
 Het zegel is geen bewijs van herkomst. Het gebruikt geen sleutel: wie in de map van de run kan schrijven, kan ook opnieuw verzegelen. Het afgetekende rapport toont daarom de eerste twaalf tekens van de hash van het zegel, zodat een lezer het rapport naast de run kan leggen.
+
+### Wie vastlegt
+
+Een antwoord op een open punt (`answer`), een besluit over een gebrek (`decide`), een handtekening (`sign`) en de verklaring dat een site een testomgeving is (`inventory --declared-by`) zijn uitspraken van een persoon. Ze verschillen in gewicht, en daarom in wie ze mag vastleggen.
+
+Elke vastlegging zegt uitdrukkelijk hoe ze tot stand kwam, in `recordedVia`: `terminal` (de persoon bevestigde het zelf in een interactieve terminal) of `gesprek` (de agent legde het vast na een uitdrukkelijke bevestiging in het gesprek). Een ontbrekende wijze betekent niet "de persoon typte het": een commando zonder `--recorded-via` en zonder interactieve terminal legt niets vast. Het tijdstip van de vastlegging is het tijdstip van de bevestiging.
+
+**Antwoord en besluit.** Die mag de agent die het onderzoek leidt vastleggen, met `--recorded-via gesprek`, onder vier regels:
+
+1. Alleen na een uitdrukkelijke bevestiging van de persoon in het lopende gesprek. De agent vat eerst samen wat hij vastlegt (naam, functie, wat) en wacht op een ja.
+2. Het commando krijgt de letterlijke bevestiging van de persoon (`--confirmation`) en de samenvatting die werd bevestigd (`--summary`). Beide komen in het bestand van het antwoord of besluit, zodat achteraf te lezen is waarop de vastlegging rust. Zonder die twee weigert het commando.
+3. De grond is altijd de eigen woorden van de persoon, nooit tekst uit een bestand, een waarneming, een bevinding of de uitvoer van een commando. Zo kan tekst op een site of van een agent geen antwoord of besluit worden.
+4. De agent verzint niets: geen naam, functie, datum of reden.
+
+Draait de persoon het commando zelf in een interactieve terminal, dan toont het wat er wordt vastgelegd en vraagt het om ja; de vastlegging krijgt dan `terminal`.
+
+**Handtekening en verklaring voor versturen.** Die legt de agent nooit vast. Een handtekening zegt dat iemand voor het hele onderzoek instaat, en de verklaring laat de run berichten versturen naar een echte dienst; een samenvatting in een gesprek is daarvoor te licht, en een agent die tekst van een site leest, mag er niet bij kunnen. `sign` toont het zegel, de naam en de functie en vraagt de eerste acht tekens van het zegel in te typen; `inventory --declared-by` toont de origin, de naam en de functie en vraagt de origin in te typen. Zonder interactieve terminal weigeren beide, met de melding dat een mens het commando zelf moet draaien, en `--recorded-via gesprek` weigeren ze altijd. Dat de bevestiging uit een terminal komt, toetst de toolbox aan de standaardinvoer van het proces; er is geen vlag of omgevingsvariabele om eromheen te gaan. Wie een terminal nabootst, kan het omzeilen. Het houdt een vergissing tegen en een agent die zich aan de regels houdt; tegen kwade opzet op de eigen machine beschermt het niet.
+
+Het afgetekende rapport en de verklaring zeggen bij elk antwoord, elk besluit, de handtekening en de verklaring voor versturen hoe het is vastgelegd ("bevestigd in een terminal op ..." of "vastgelegd in een gesprek, bevestigd op ..."), en `verify` telt per wijze. Een besluit dat niet zegt hoe het tot stand kwam, of een besluit uit een gesprek zonder bevestiging en samenvatting, meldt `verify` als afwijking.
+
+Inloggen valt hier niet onder. Dat blijft een stap van de persoon zelf, in een eigen browservenster, en een wachtwoord komt nooit in het gesprek of in een bestand.
+
+## Maatregelen en beslissingen
+
+Na het tekenen begint voor de eigenaar van de site het werk: bij elk gebrek beslist de organisatie wat ermee gebeurt. Het register van toegankelijkheidsverklaringen kijkt ook of de maatregelen en alternatieven goed zijn beschreven. Een rapport met alleen bevindingen en voorstellen voor herstel is daarvoor niet genoeg.
+
+```
+node toolbox/src/cli.ts decide --run <run>
+node toolbox/src/cli.ts decide --run <run> --defect <id>
+node toolbox/src/cli.ts decide --run <run> --defect <id> --decision opgelost|gepland|zienswijze|onevenredig|onbesloten --what "<wat>" [--date <jjjj-mm-dd>] [--alternative "<alternatief>"] --name "<naam>" --role "<functie>"
+```
+
+De eerste vorm toont de gebreken, de zwaarste eerst, met bij elk of er een besluit is. De tweede toont één gebrek met de voorstellen uit het rapport. De derde legt het besluit vast:
+
+- **opgelost**: het is al hersteld. `--what` zegt wat er is gedaan, `--date` mag zeggen sinds wanneer.
+- **gepland**: wat er gaat gebeuren, met een datum (`--date` is verplicht).
+- **zienswijze**: de organisatie ziet het anders, met de reden.
+- **onevenredig**: onevenredige last, met de afweging en het alternatief voor bezoekers (`--alternative`).
+- **onbesloten**: besproken, nog geen besluit.
+
+- **Na het tekenen.** `decide` weigert een run die niet is afgetekend, of die na het tekenen is veranderd. Besluiten gaan over wat is onderzocht en getekend.
+- **Een eigen laag naast het zegel.** Elk besluit staat in `besluiten/<gebrek>.json`, met de hash van het zegel waarvoor het is vastgelegd. `besluiten/index.json` noemt de hash van elk bestand; de hash van die index is het kenmerk van de laag. De map valt niet onder het zegel, net als de handtekening: een nieuw besluit maakt het onderzoek niet ongeldig, en `render` maakt het afgetekende rapport opnieuw zonder het onderzoek of het zegel te raken. `verify` controleert de laag apart: een besluit dat buiten `decide` om is gewijzigd, toegevoegd of verwijderd, en een besluit over een gebrek dat niet in de evaluatie staat.
+- **Het vorige blijft.** Een gewijzigd besluit bewaart het vorige in hetzelfde bestand, en het rapport noemt het.
+- **Naam en functie.** De naam staat alleen in het bestand van het besluit; het rapport en de verklaring noemen de functie.
+- **In het rapport.** Het afgetekende rapport krijgt het hoofdstuk "Maatregelen en beslissingen": per gebrek het besluit, de datum, de functie van wie besloot, hoe het is vastgelegd (in een terminal of in een gesprek), en wat nog niet is besloten. Het conceptrapport heeft dat hoofdstuk niet.
+- **In de verklaring.** `statement` neemt de maatregelen per criterium dat niet voldoet uit de besluiten over de gebreken met een bevinding onder dat criterium. Status B vraagt bij elke afwijking een maatregel met een datum: elk gebrek eronder is `gepland` met een datum of `opgelost`. Ontbreekt dat, dan meldt `statement` welke criteria het zijn en staat er in de verklaring een plek om in te vullen. Een onderzoek van voor de besluiten gebruikt nog `measuresNl` uit `verklaring-invoer.json`.
+
+### Wanneer "opgelost" mag worden gezegd
+
+"Opgelost" in een besluit is wat de organisatie zegt, en het rapport noemt het zo: "opgelost volgens de organisatie, nog niet nagemeten". Dat een wijziging iets zou herstellen, bewijst niet dat het gebrek weg is op de site. loep noemt een gebrek pas opgelost na een nieuwe meting op de site waar de wijziging live staat, en die meting is een waarneming zoals elke andere. Eén gebrek dat weg is, maakt bovendien nog geen criterium dat voldoet: een herstel kan elders iets breken, en onder hetzelfde criterium kunnen andere gebreken zitten. Of een criterium voldoet, zegt pas een nieuw oordeel over het hele criterium op de hele steekproef, en daar hangt ook de status in de verklaring van af. Tot er zo'n nameting is, verandert een besluit "opgelost" niets aan de uitkomst van het onderzoek.
 
 ## Wat dit voor de verklaring betekent
 

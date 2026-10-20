@@ -620,6 +620,33 @@
   }
 ]
 
+// ---------------------------------------------------------------- measures
+
+// What the organisation decided per defect: only in a signed report, from the layer of decisions next to the seal.
+#let measures = derived.at("measures", default: none)
+#if measures != none [
+  #pagebreak(weak: true)
+  = #t.measures.title
+
+  #par(t.measures.intro)
+  #par(measures.countsNl)
+  #for row in measures.rows {
+    block(above: 11pt, below: 6pt, sticky: true, width: 100%, stroke: (top: 0.5pt + hairline), inset: (top: 5pt), {
+      [#link(label(row.defectId), text(weight: 700, prose(row.titleNl)))]
+      linebreak()
+      text(weight: 600, row.decisionNl)
+      linebreak()
+      set text(size: 8.5pt, fill: muted)
+      [#id-text(row.defectId) · #row.severity · #row.criteriaNl]
+    })
+    if row.linesNl.len() > 0 {
+      set text(size: 9.5pt)
+      plain-list(row.linesNl)
+    }
+  }
+  #par(text(size: 9pt, fill: muted, measures.layerNl))
+]
+
 // ---------------------------------------------------------------- facts
 
 #pagebreak(weak: true)
@@ -642,7 +669,7 @@
   ..if chain.at("readsNl", default: none) != none { (("Leesverzoeken", chain.readsNl),) },
   (
     "Afgetekend door",
-    if unsigned { text(weight: 700, t.notSigned) + if stale-note != none [. #stale-note] } else [#signature.name, #signature.role, #signature.organisation, op #derived.signedDateNl],
+    if unsigned { text(weight: 700, t.notSigned) + if stale-note != none [. #stale-note] } else [#signature.name, #signature.role, #signature.organisation, op #derived.signedDateNl#if derived.at("signatureRecordedNl", default: none) != none [, #derived.signatureRecordedNl]],
   ),
   ..if unsigned { () } else {
     (("Verklaring", [#signature.statementNl\ Getekend voor evaluatie #mono(signature.evaluationSha256.slice(0, calc.min(12, signature.evaluationSha256.len()))), verzegeld als #mono(signature.sealSha256.slice(0, calc.min(12, signature.sealSha256.len()))).]),)
