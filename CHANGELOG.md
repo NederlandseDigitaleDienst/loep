@@ -4,6 +4,8 @@ Wat er per versie van loep is veranderd. De versie staat op het voorblad en onde
 
 ## Nog niet uitgebracht
 
+<!-- towncrier: een nieuwe versie komt hieronder -->
+
 ### Wat een uitkomst kan veranderen
 
 - Een pagina met één kapotte link viel uit de inventaris als "failed to load: Invalid URL", terwijl ze gewoon laadde. Voorbeeld: een verklaring met `<a href="http://www.voorbeeld.nl&nbsp; via">`. Chromium neemt dat adres aan, Node niet, en daarop stopte `inventory` met die pagina. Ze kwam dan niet in de steekproef, en `gate` keurde het bewijs af met een gat dat de verkenner niet kan dichten. Nu slaat `inventory` alleen die link over. Staat er in `inventory.json` een pagina onder `skipped` met "Invalid URL", draai dan `inventory` opnieuw in een nieuwe map.

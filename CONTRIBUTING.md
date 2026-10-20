@@ -49,9 +49,15 @@ Een versie zegt iets over de methode. Twee rapporten met dezelfde versie zijn me
 | Het laatste getal (0.1.1) | Een reparatie of tekst die geen uitkomst raakt: documentatie, een melding, de opmaak van het rapport. |
 | Het eerste getal (1.0.0) | Pas als de methode door de eindmeting of een toezichthouder is gedragen. |
 
-Wat een wijziging doet, schrijf je in dezelfde commit onder "Nog niet uitgebracht" in [CHANGELOG.md](CHANGELOG.md), bij een uitkomst onder "Wat een uitkomst kan veranderen". Uitbrengen gaat in twee stappen, omdat `main` alleen voorstellen aanneemt:
+Wat een wijziging doet, schrijf je in dezelfde commit in een fragment in [changelog.d/](changelog.d/README.md), niet in [CHANGELOG.md](CHANGELOG.md). Voorstellen die tegelijk openstaan, botsen dan niet op dezelfde regels. Een fragment heet `<issue>.<soort>.md`: soort `uitkomst` komt onder "Wat een uitkomst kan veranderen", soort `verder` onder "Verder". Maak het met [towncrier](https://towncrier.readthedocs.io/):
 
-1. Op een branch: `just release-prepare 0.2.0`. Dat zet de versie overal, sluit het deel in de CHANGELOG af en legt het vast als één commit. Open daarmee een voorstel.
+```sh
+uvx towncrier@26.9.0 create 161.verder.md --content "Wat er verandert, voor wie loep gebruikt."
+```
+
+Uitbrengen gaat in twee stappen, omdat `main` alleen voorstellen aanneemt:
+
+1. Op een branch: `just release-prepare 0.2.0`. Dat zet de versie overal, zet de fragmenten en wat er nog onder "Nog niet uitgebracht" staat onder de juiste kop in een nieuw deel van de CHANGELOG, verwijdert de fragmenten en legt alles vast als één commit. Open daarmee een voorstel.
 2. Na de merge, op `main`: `just release-tag`. Dat zet de tag (`v0.2.0`) op GitHub en maakt de release met de tekst uit de CHANGELOG.
 
 Daarna zet een beheerder de nieuwe tag in de marketplace; zie [docs/plugin.md](docs/plugin.md). Wie de plugin heeft, krijgt de nieuwe versie bij de eerstvolgende update. Tussen twee versies verandert er niets aan de plugin, ook niet als `main` verder gaat.
