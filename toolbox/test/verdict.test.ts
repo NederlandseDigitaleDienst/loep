@@ -403,6 +403,11 @@ test("a point that stays open only because the run may not send is the owner's c
   assert.deepEqual(notSentPointProblems([point], { origin: "https://www.voorbeeld.nl" }), []);
   assert.match(notSentPointProblems([point], { origin: "https://chat.voorbeeld.nl" }).join(), /missingNl\[0\]: this run may send to https:\/\/chat\.voorbeeld\.nl/);
   assert.match(notSentPointProblems(["versturen niet toegestaan: het antwoord van de chat op P02, zonder adres."], { origin: "https://www.voorbeeld.nl" }).join(), /name in the point the address it goes to/);
+  // Once the budget for sending of the run is used up, the point may stand about that origin too, when it says so.
+  const budgetOut = "versturen niet toegestaan: het budget voor versturen van deze run is op (5 van 5 verstuurd): wat de chat op P02 antwoordt.";
+  assert.deepEqual(notSentPointProblems([budgetOut], { origin: "https://chat.voorbeeld.nl" }, { sent: 5, max: 5 }), []);
+  assert.match(notSentPointProblems([budgetOut], { origin: "https://chat.voorbeeld.nl" }, { sent: 2, max: 5 }).join(), /not used up \(2 of 5 sent\)/);
+  assert.match(notSentPointProblems([point], { origin: "https://chat.voorbeeld.nl" }, { sent: 5, max: 5 }).join(), /het budget voor versturen van deze run is op \(5 van 5 verstuurd\)/);
 });
 
 test("a part of the site that did not load is its own kind: not the owner's, not loep's, and it says what and when", () => {

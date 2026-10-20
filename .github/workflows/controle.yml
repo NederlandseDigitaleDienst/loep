@@ -1,14 +1,32 @@
-# Twee controles. De snelle draait bij elke push en kost een paar minuten: licenties, types,
-# procedures en de tests die geen browser nodig hebben. De volledige doet wat een nieuwe
-# gebruiker doet (installeren op een schone machine, zeggen wat er staat, alle tests) en
-# duurt ongeveer 25 minuten; die draait op een voorstel, één keer per nacht als er die dag
-# iets is veranderd, en met de hand. Een nacht zonder wijziging draait niets.
+# Twee controles. De snelle draait bij elke push naar main en kost een paar minuten:
+# licenties, types, procedures en de tests die geen browser nodig hebben.
+#
+# De volledige doet wat een nieuwe gebruiker doet: installeren op een schone machine, zeggen
+# wat er staat, alle tests. Ze draait op een voorstel, in de merge queue, één keer per nacht
+# als er die dag iets is veranderd, en met de hand. Een nacht zonder wijziging draait niets.
+# Ze bestaat uit losse jobs die naast elkaar lopen:
+#
+# - wijziging: zegt of er iets te controleren is. Alleen 's nachts kan het antwoord nee zijn.
+# - installatie: REUSE, `just install` en `just tools` op een schone machine (zonder cache
+#   voor de browsers), `just doctor`, de types en de procedures.
+# - tests (1/3) tot en met (3/3): elk een derde van de testbestanden, met de ingebouwde
+#   verdeling van de testrunner van Node (`just test --test-shard=<i>/<n>`). Die verdeelt per
+#   bestand, op volgorde van naam; het langste bestand bepaalt dus hoe kort een job kan zijn.
+#   De browsers van Playwright komen uit een cache met de versie van Playwright uit
+#   toolbox/package-lock.json als sleutel. Meer of minder delen: pas `shard` en `total` aan.
+# - volledig: wacht op de andere en faalt als er een mislukte, werd afgebroken of werd
+#   overgeslagen. Dit is de verplichte check op main en in de merge queue; hernoem deze job
+#   niet, anders blokkeren de branch-protectie en de ruleset van de merge queue.
+#
+# Alles samen duurt ongeveer 8 minuten, waar het eerst 15 tot 17 minuten na elkaar was.
 name: Controle
 
 on:
   push:
     branches: [main]
   pull_request:
+  # The merge queue tests a pull request together with main and the ones queued before it.
+  merge_group:
   schedule:
     - cron: "17 2 * * *"
   workflow_dispatch:
@@ -45,60 +63,127 @@ jobs:
       - name: Tests zonder browser
         run: just test-quick
 
-  volledig:
+  wijziging:
     if: github.event_name != 'push'
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 5
+    outputs:
+      ja: ${{ steps.nieuw.outputs.ja }}
     steps:
+      # Only the nightly run looks at the history; every other event always checks.
       - uses: actions/checkout@v7
+        if: github.event_name == 'schedule'
         with:
           fetch-depth: 50
 
       - name: Is er vandaag iets veranderd
         id: nieuw
+        env:
+          EVENT: ${{ github.event_name }}
         run: |
-          if [ "${{ github.event_name }}" != "schedule" ] || [ -n "$(git log --since='25 hours ago' --format=%h -1)" ]; then echo "ja=true" >> "$GITHUB_OUTPUT"; else echo "ja=false" >> "$GITHUB_OUTPUT"; fi
+          if [ "$EVENT" != "schedule" ] || [ -n "$(git log --since='25 hours ago' --format=%h -1)" ]; then echo "ja=true" >> "$GITHUB_OUTPUT"; else echo "ja=false" >> "$GITHUB_OUTPUT"; fi
 
+  installatie:
+    needs: wijziging
+    if: needs.wijziging.outputs.ja == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
-        if: steps.nieuw.outputs.ja == 'true'
         with:
           node-version: 24
           cache: npm
           cache-dependency-path: toolbox/package-lock.json
-
       - uses: extractions/setup-just@v4
-        if: steps.nieuw.outputs.ja == 'true'
-
       - uses: astral-sh/setup-uv@v7
-        if: steps.nieuw.outputs.ja == 'true'
-
       - uses: typst-community/setup-typst@v5
-        if: steps.nieuw.outputs.ja == 'true'
 
       - name: Elk bestand heeft een rechthebbende en een licentie
-        if: steps.nieuw.outputs.ja == 'true'
         run: just reuse
 
       - name: Pakketten en browsers
-        if: steps.nieuw.outputs.ja == 'true'
         run: just install
 
       - name: Hulpprogramma's
-        if: steps.nieuw.outputs.ja == 'true'
         run: just tools
 
       - name: Wat staat er op deze machine
-        if: steps.nieuw.outputs.ja == 'true'
         run: just doctor
 
       - name: Types
-        if: steps.nieuw.outputs.ja == 'true'
         run: just check
 
       - name: Procedures
-        if: steps.nieuw.outputs.ja == 'true'
         run: just procedures
 
+  tests:
+    needs: wijziging
+    if: needs.wijziging.outputs.ja == 'true'
+    name: tests (${{ matrix.shard }}/${{ matrix.total }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      # Let every shard finish, so a failure shows all tests that fail, not only the first shard's.
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
+        total: [3]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: toolbox/package-lock.json
+      - uses: extractions/setup-just@v4
+      # release.test.ts runs towncrier with uvx.
+      - uses: astral-sh/setup-uv@v7
+      - uses: typst-community/setup-typst@v5
+
+      - name: Pakketten
+        run: cd toolbox && npm ci
+
+      - name: Versie van Playwright
+        id: playwright
+        run: echo "versie=$(node -p "require('./toolbox/package-lock.json').packages['node_modules/playwright'].version")" >> "$GITHUB_OUTPUT"
+
+      - name: Browsers uit de cache
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.versie }}
+
+      # With the browsers from the cache this only installs what they need from the system.
+      - name: Browsers
+        run: cd toolbox && npx playwright install --with-deps chromium firefox webkit
+
+      - name: Hulpprogramma's
+        run: just tools
+
       - name: Tests
-        if: steps.nieuw.outputs.ja == 'true'
-        run: just test
+        run: just test --test-shard=${{ matrix.shard }}/${{ matrix.total }}
+
+  volledig:
+    needs: [wijziging, installatie, tests]
+    if: always() && github.event_name != 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Zijn alle delen geslaagd
+        env:
+          WIJZIGING: ${{ needs.wijziging.result }}
+          NIEUW: ${{ needs.wijziging.outputs.ja }}
+          INSTALLATIE: ${{ needs.installatie.result }}
+          TESTS: ${{ needs.tests.result }}
+        run: |
+          echo "wijziging: $WIJZIGING, installatie: $INSTALLATIE, tests: $TESTS"
+          if [ "$WIJZIGING" = success ] && [ "$NIEUW" != true ]; then
+            echo "Vandaag is er niets veranderd; er is niets gecontroleerd."
+            exit 0
+          fi
+          if [ "$WIJZIGING" = success ] && [ "$INSTALLATIE" = success ] && [ "$TESTS" = success ]; then
+            exit 0
+          fi
+          echo "::error::Een deel van de volledige controle is mislukt, afgebroken of overgeslagen."
+          exit 1

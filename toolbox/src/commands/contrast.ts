@@ -2,7 +2,7 @@ import { progressLine, sayingItRuns } from "../instruments/limit.ts";
 import { ProgressFile } from "../lib/progress.ts";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { confirmLogin, firstLineOf, INPAGE_PATH, launchBrowser, loadSampled, newContext, retryOnce, type ColorScheme } from "../browser/session.ts";
+import { confirmLogin, firstLineOf, INPAGE_PATH, launchBrowser, loadSampled, newContext, retryOnce, withinPageTime, type ColorScheme } from "../browser/session.ts";
 import { readJson, writeJson } from "../lib/canonical.ts";
 import { LoginExpired } from "../lib/login.ts";
 import { stepStart, writeManifest } from "../lib/manifest.ts";
@@ -27,6 +27,9 @@ export interface NotMeasured {
   width: number | null;
   reasonNl: string;
 }
+
+/** One try at one page in one pass, counted by Node: a page with many links takes minutes under the pointer and with focus. */
+const PAGE_LIMIT_MS = 15 * 60_000;
 
 /**
  * Measure the contrast of every piece of visible text against what is actually painted behind it.
@@ -104,13 +107,20 @@ export async function contrast(runDir: string, options: { fresh?: boolean; atOnc
             forget();
             const tab = await context.newPage();
             try {
-              const { page } = await loadSampled(tab, item, (loaded) => scope.dismiss(context, loaded, `contrast:${scheme}${viewport ? `:${viewport.width}` : ""}`, scheme));
-              const measured = await pageContrast(page);
-              // Forced colours take the colour scheme and the window as they are: once per page is enough to see what a page builds from shadows and backgrounds.
-              const forced = scheme === "light" && !viewport ? { forced: await forcedColoursProbe(page) } : {};
-              // The colours of links and buttons under the pointer and with focus, in both schemes, in the default window.
-              const hoverFocus = !viewport ? { hoverFocus: await hoverFocusContrast(page, seen) } : {};
-              return { url: item.url, slug: item.slug, scheme, ...(viewport ? { width: viewport.width } : {}), ...measured, ...forced, ...hoverFocus };
+              // A page that keeps the browser busy never answers: its tab is closed when the time is up.
+              return await withinPageTime(
+                PAGE_LIMIT_MS,
+                async () => {
+                  const { page } = await loadSampled(tab, item, (loaded) => scope.dismiss(context, loaded, `contrast:${scheme}${viewport ? `:${viewport.width}` : ""}`, scheme));
+                  const measured = await pageContrast(page);
+                  // Forced colours take the colour scheme and the window as they are: once per page is enough to see what a page builds from shadows and backgrounds.
+                  const forced = scheme === "light" && !viewport ? { forced: await forcedColoursProbe(page) } : {};
+                  // The colours of links and buttons under the pointer and with focus, in both schemes, in the default window.
+                  const hoverFocus = !viewport ? { hoverFocus: await hoverFocusContrast(page, seen) } : {};
+                  return { url: item.url, slug: item.slug, scheme, ...(viewport ? { width: viewport.width } : {}), ...measured, ...forced, ...hoverFocus };
+                },
+                () => tab.close(),
+              );
             } finally {
               await tab.close().catch(() => undefined);
             }

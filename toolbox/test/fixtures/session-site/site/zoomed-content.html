@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="nl">
+<head><meta charset="utf-8"><title>Voorbeeld</title>
+<style>
+body { margin: 0; background: #ffffff; font-family: Arial, sans-serif; }
+#blok { position: absolute; left: 600px; top: 300px; width: 200px; height: 100px; background: rgb(0, 102, 204); }
+#knop { position: absolute; left: 900px; top: 700px; width: 200px; height: 80px; }
+</style></head>
+<body>
+<div id="blok"></div>
+<button id="knop" type="button">Druk hier</button>
+<p id="status" role="status"></p>
+<script>
+document.getElementById("knop").addEventListener("click", () => void (document.getElementById("status").textContent = "Ingedrukt"));
+</script>
+</body>
+</html>

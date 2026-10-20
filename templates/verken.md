@@ -54,7 +54,7 @@ Bestaat er al een gecontroleerd `site.json` (een vervolgronde), dan sluit `open`
 
 De inventaris vond {{pageCount}} pagina's en {{frameCount}} ingesloten vensters. Alles staat in `{{context}}`. Lees dat bestand eerst.
 
-- `proposedPageTypes`: een voorstel voor de paginatypen, gemaakt door pagina's met dezelfde bouwstenen bij elkaar te zetten. De vorm is al die van `site.json`. Neem het over en verbeter het: geef elk type een `id` en een `descriptionNl`, en voeg typen samen of splits ze als je ziet dat het voorstel niet klopt. Elke pagina staat in precies één type. Neem adressen letterlijk over.
+- `proposedPageTypes`: een voorstel voor de paginatypen, gemaakt door pagina's met dezelfde bouwstenen bij elkaar te zetten. De vorm is al die van `site.json`. Neem het over en verbeter het: geef elk type een `id` en een `descriptionNl`, en voeg typen samen of splits ze als je ziet dat het voorstel niet klopt. Elke pagina staat in precies één type. Neem adressen letterlijk over. Staat dezelfde pagina onder meer dan één adres, kies dan als `representative` het adres van de pagina zelf, niet een adres dat doorverwijst. Het voorstel doet dat al; de controle keurt een ander adres af en noemt het adres dat je moet nemen.
 - `frames`: de ingesloten vensters, per adres, met hoe vaak en op welke pagina's ze voorkomen.
 
 {{pageTypesSummary}}

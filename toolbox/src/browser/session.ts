@@ -3,7 +3,8 @@ import { chromium, type Browser, type BrowserContext, type Page, type Route } fr
 import { CLOUDFLARE_HEADER, isChallenge } from "../lib/challenge.ts";
 import { confirmLoginOn, LoginExpired, logsOut, runLoginMark, runLoginState, throwIfLoginExpired, watchLogin } from "../lib/login.ts";
 import { addressOf, noteRefusedRead, readDecision, readRuleFor, runReads, type ReadRequest } from "../lib/reads.ts";
-import { isWriteOrigin, runWrites, type WriteAccess } from "../lib/writes.ts";
+import { isOurMessage, isWriteOrigin, runWrites, type WriteAccess } from "../lib/writes.ts";
+import { MESSAGE_VALUES } from "../session/safety.ts";
 import { refusedByBrowser, type ClipboardWrite } from "./clipboard.ts";
 import { frameAsPage } from "./frame.ts";
 
@@ -210,8 +211,9 @@ export async function newContext(browser: Browser, options: ContextOptions = {},
     if (read) noteRefusedRead({ method, address: addressOf(route.request().url()), rule: read.rule.id, reasonNl: read.reasonNl });
     // An aborted navigation replaces the page with an error page. "No content" leaves the page as it was.
     if (!isWriteOrigin(writes, route.request().url())) return route.request().isNavigationRequest() ? route.fulfill({ status: 204, body: "" }) : route.abort("blockedbyclient");
-    writes!.record(method, route.request().url());
-    return passWrite(route, writes!).then((repeated) => void (repeated && writes!.record(method, repeated)));
+    // The sweep shares the budget for sending with the sessions: a write past it, or too soon after the previous one, is held back.
+    if (!writes!.claim(method, route.request().url()).ok) return route.request().isNavigationRequest() ? route.fulfill({ status: 204, body: "" }) : route.abort("blockedbyclient");
+    return passWrite(route, writes!).then((repeated) => void (repeated && writes!.record(method, repeated, { repeat: true })));
   });
   if (guard || writes) {
     await context.routeWebSocket(/.*/, (socket) => {
@@ -219,7 +221,10 @@ export async function newContext(browser: Browser, options: ContextOptions = {},
       const free = isWriteOrigin(writes, socket.url());
       socket.onMessage((message) => {
         if (free) {
-          writes!.record("SEND", socket.url());
+          // A frame with a test value in it takes one from the budget of the run, and past it, or too soon, it is held back; a heartbeat is only noted.
+          if (isOurMessage(message, MESSAGE_VALUES)) {
+            if (!writes!.claim("SEND", socket.url(), { message: true }).ok) return void (guard?.active && guard.blocked++);
+          } else writes!.record("SEND", socket.url());
           server.send(message);
         } else if (guard?.active) guard.blocked++;
         else server.send(message);
@@ -335,10 +340,79 @@ export async function loadSampled(tab: Page, item: { url: string; embeddedOn?: s
   return { page: tab, placement: { inPlaceOn: null, apartNl: frame ? `het venster op ${on} was niet te lezen` : `op ${on} stond bij het meten geen venster met dit adres, of het laadde daar niet` } };
 }
 
-/** Wait until a page that has just loaded has stopped changing, then record the listeners it registered itself. */
+/**
+ * How long a page may take to answer after it loaded, counted by Node. The wait inside the page runs on
+ * the timers of the page, and a script that keeps the browser busy stops those timers and every answer.
+ */
+export const SETTLE_ANSWER_MS = RENDERING.settleTimeoutMs + 10_000;
+
+/** A page that gave no answer in time: a script of the page may keep the browser busy. The page cannot be used any more. */
+export class PageBusy extends Error {
+  override name = "PageBusy";
+}
+
+/** Begins as the time limit of a command of the session does, which then closes the page. */
+const busyNl = (limitMs: number, when: string): string => `geen antwoord binnen ${limitMs / 1000} seconden${when}: een script van de pagina houdt de browser misschien bezig`;
+
+/** Wait at most `limitMs` for a promise, counted by Node; a promise that is still open then throws a `PageBusy`. */
+async function answerWithin<T>(limitMs: number, answer: Promise<T>, reasonNl: string): Promise<T> {
+  let timer: NodeJS.Timeout | undefined;
+  const limit = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new PageBusy(reasonNl)), limitMs);
+  });
+  try {
+    return await Promise.race([answer, limit]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * Run the work on one page with a time limit counted by Node. When the time is up, `discard` closes
+ * what the work runs on (its tab or its browser contexts), the work gets a moment to end, and a
+ * `PageBusy` is thrown: the command notes the page as not measured and goes on.
+ */
+export async function withinPageTime<T>(limitMs: number, work: () => Promise<T>, discard: () => Promise<unknown>): Promise<T> {
+  const running = work();
+  try {
+    return await answerWithin(limitMs, running, busyNl(limitMs, ""));
+  } catch (error) {
+    if (error instanceof PageBusy) {
+      await discard().catch(() => undefined);
+      // Closed, every call to the page fails at once; the work ends before the next try begins.
+      await answerWithin(10_000, running, "").catch(() => undefined);
+    }
+    throw error;
+  }
+}
+
+/** The browser contexts of one try of work on a page: all closed when the time is up, and no new one after that. */
+export class PageContexts {
+  private readonly open = new Set<BrowserContext>();
+  private closed = false;
+
+  add(context: BrowserContext): BrowserContext {
+    if (this.closed) {
+      void context.close().catch(() => undefined);
+      throw new PageBusy("de tijd voor deze pagina is op");
+    }
+    this.open.add(context);
+    return context;
+  }
+
+  async closeAll(): Promise<void> {
+    this.closed = true;
+    await Promise.all([...this.open].map((context) => context.close().catch(() => undefined)));
+  }
+}
+
+/**
+ * Wait until a page that has just loaded has stopped changing, then record the listeners it registered itself.
+ * A page that does not answer within `SETTLE_ANSWER_MS` throws a `PageBusy`; the caller closes it.
+ */
 export async function settlePage(page: Page): Promise<void> {
   await page.waitForLoadState("networkidle", { timeout: RENDERING.settleTimeoutMs }).catch(() => undefined);
-  await page
+  const settled = page
     .evaluate(async (timeout) => {
       const names = new Set<string>();
       const visit = (root: Document | ShadowRoot): void => {
@@ -356,7 +430,14 @@ export async function settlePage(page: Page): Promise<void> {
       ]);
     }, RENDERING.settleTimeoutMs)
     .catch(() => undefined);
+  await answerWithin(SETTLE_ANSWER_MS, settled, busyNl(SETTLE_ANSWER_MS, " na het laden"));
   // From here on the test browser may register listeners of its own; the page's own are recorded now.
-  // Every frame keeps its own count; a frame that cannot run a script is reported as such when the counts are read.
-  for (const frame of page.frames()) await frame.evaluate(() => (window as unknown as { __loep?: { freezeListeners: () => void } }).__loep?.freezeListeners()).catch(() => undefined);
+  // Every frame keeps its own count; a frame that cannot run a script, or does not answer, is reported as such when the counts are read.
+  for (const frame of page.frames()) {
+    const frozen = frame.evaluate(() => (window as unknown as { __loep?: { freezeListeners: () => void } }).__loep?.freezeListeners()).catch(() => undefined);
+    await answerWithin(SETTLE_ANSWER_MS, frozen, busyNl(SETTLE_ANSWER_MS, " na het laden")).catch((error: unknown) => {
+      // A busy frame of another origin runs apart; a busy page itself cannot be measured.
+      if (frame === page.mainFrame()) throw error;
+    });
+  }
 }

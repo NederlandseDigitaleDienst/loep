@@ -88,6 +88,9 @@ export function kindOfContentType(contentType: string | null): DocumentKind | nu
   return BY_CONTENT_TYPE[(contentType ?? "").split(";")[0]!.trim().toLowerCase()] ?? null;
 }
 
+/** Whether a navigation error is Playwright's "Download is starting": the browser saves the address as a file, so it is no page that failed to load. */
+export const startedDownload = (message: string): boolean => /\bDownload is starting\b/.test(message);
+
 /** One document on the origin of the run, as the inventory found it. */
 export interface InventoryDocument {
   url: string;

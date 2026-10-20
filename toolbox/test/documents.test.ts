@@ -557,6 +557,43 @@ test("inventory finds the documents, sample labels them, documents measures them
   }
 });
 
+test("an address the browser starts to download without a download link is a document, not a page that failed to load", async (context) => {
+  const calendar = "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nEND:VCALENDAR\r\n";
+  const site = createServer((request, response) => {
+    const path = new URL(request.url!, "http://x").pathname;
+    if (path === "/") {
+      response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+      response.end(`<!doctype html><html lang="nl"><head><title>Agenda</title></head><body><h1>Agenda</h1><p><a href="/assets/files/afspraak-1a2b3c.ics">Zet het in je agenda</a> <a href="/agenda?id=4">Agenda-export</a></p></body></html>`);
+    } else if (path === "/assets/files/afspraak-1a2b3c.ics") {
+      response.writeHead(200, { "content-type": "text/calendar", "content-length": Buffer.byteLength(calendar) });
+      response.end(request.method === "HEAD" ? undefined : calendar);
+    } else if (path === "/agenda") {
+      response.writeHead(200, { "content-type": "text/calendar", "content-disposition": "attachment; filename=agenda.ics", "content-length": Buffer.byteLength(calendar) });
+      response.end(request.method === "HEAD" ? undefined : calendar);
+    } else {
+      response.writeHead(404, { "content-type": "text/html; charset=utf-8" });
+      response.end("<!doctype html><html lang=nl><head><title>Niet gevonden</title></head><body><h1>Niet gevonden</h1></body></html>");
+    }
+  });
+  await new Promise<void>((resolve) => site.listen(0, "127.0.0.1", resolve));
+  const address = `http://127.0.0.1:${(site.address() as { port: number }).port}`;
+  try {
+    let stock: Inventory;
+    try {
+      stock = await inventory({ baseUrl: `${address}/`, out: join(scratch, "run-download"), maxPages: 20 });
+    } catch (error) {
+      if (/Executable doesn't exist|browserType.launch/.test((error as Error).message)) return context.skip("no browser available");
+      throw error;
+    }
+    assert.deepEqual(stock.skipped, [], "a download is not a page that failed to load");
+    const path = (url: string): string => new URL(url).pathname + new URL(url).search;
+    assert.deepEqual(stock.documents!.map((document) => [path(document.url), document.kind, document.contentType]), [["/agenda?id=4", "other", "text/calendar"], ["/assets/files/afspraak-1a2b3c.ics", "other", "text/calendar"]]);
+    assert.deepEqual(stock.documents!.find((document) => path(document.url) === "/assets/files/afspraak-1a2b3c.ics")!.linkedFrom, [{ page: `${address}/`, text: "Zet het in je agenda" }]);
+  } finally {
+    await new Promise<void>((resolve) => void site.close(() => resolve()));
+  }
+});
+
 // ------------------------------------------------- plain text offered for download
 
 const MARKDOWN = "# Één regeling\n\nDit is één pagina als Markdown, met [een link](https://a.test/meer).\n\n## Wie kan meedoen\n\nIedereen.\n";
@@ -682,6 +719,35 @@ test("4.1.1 gets the documents with only the rules of veraPDF on how the structu
   assert.deepEqual(rules("2.4.4"), ["7.18.5-2"]);
   assert.equal(rules("1.3.1").length, 5);
   assert.ok(loadProcedure("4.1.1").evidence.includes("documents"));
+});
+
+test("4.1.2 gets the rules of veraPDF on annotations, form fields and links, not those on the tag tree or the file", () => {
+  const failed = (clause: string, test: number, description: string) => ({ clause, test, description, failedChecks: 1 });
+  const facts = {
+    status: "read", kind: "pdf", title: "Formulier", pages: 1, url: "https://a.test/formulier.pdf", images: [], headings: [], tables: [], links: [], fields: [], notMeasuredNl: [], files: { text: null, tagTree: null, pageImages: [] },
+    pdf: {
+      tagged: true, tags: {}, tagTextRead: true, lists: 0, counts: { links: 0, images: 0 }, linkAnnotations: 0, encryption: null,
+      pdfUa: {
+        available: true, compliant: false, reasonNl: null,
+        failedRules: [
+          failed("7.1", 11, "The logical structure of the conforming file shall be described by a structure hierarchy rooted in the StructTreeRoot entry of the document catalog dictionary"),
+          failed("7.1", 12, "A structure element dictionary shall contain the P (parent) entry according to ISO 32000-1:2008, 14.7.2, Table 355"),
+          failed("7.20", 2, "The content of Form XObjects shall be incorporated into structure elements according to ISO 32000-1:2008, 14.7.2"),
+          failed("7.21.4.1", 1, "The font programs for all fonts used for rendering within a conforming file shall be embedded within that file"),
+          failed("7.2", 25, "Natural language in the TU key for form fields shall be determined"),
+          failed("7.18.1", 2, "An annotation (except Widget annotations or hidden annotations) shall have either Contents key or an Alt entry in the enclosing structure element"),
+          failed("7.18.1", 3, "A form field shall have a TU key present or all its Widget annotations shall have alternative descriptions"),
+          failed("7.18.3", 1, "Every page on which there is an annotation shall contain in its page dictionary the key Tabs, and its value shall be S"),
+          failed("7.18.4", 1, "A Widget annotation shall be nested within a Form tag per ISO 32000-1:2008, 14.8.4.5, Table 340"),
+          failed("7.18.5", 1, "Links shall be tagged according to ISO 32000-1:2008, 14.8.4.4.2, Link Element"),
+          failed("7.18.5", 2, "Links shall contain an alternate description via their Contents key as described in ISO 32000-1:2008, 14.9.3"),
+        ],
+      },
+    },
+  } as unknown as DocumentFacts;
+  const data = { dir: scratch, inventory: inventoryWith([]), sample: { documents: [] }, pages: [], documents: [{ label: "D01", item: { label: "D01", url: facts.url, kind: "pdf", slug: "formulier-00000000", reason: "", linkedFrom: [], bytes: null, lastModified: null }, dir: scratch, facts }] } as unknown as RunData;
+  const rules = (documentsExtractor(data, "4.1.2") as { documents: { pdfUa: { failedRulesForThisCriterion: { rule: string }[] } }[] }).documents[0]!.pdfUa.failedRulesForThisCriterion.map((rule) => rule.rule);
+  assert.deepEqual(rules, ["7.18.1-2", "7.18.1-3", "7.18.3-1", "7.18.4-1", "7.18.5-1", "7.18.5-2"]);
 });
 
 // ------------------------------------------------------------------------- the report
