@@ -11,7 +11,7 @@ import { INPAGE_PATH, launchBrowser, loadPage, newContext } from "../src/browser
 import { probeForms } from "../src/instruments/forms.ts";
 import { formErrors } from "../src/lib/extractors.ts";
 import { REGULAR_PATH, type RunData } from "../src/lib/rundata.ts";
-import { budgetOutPointNl, decideWrites, isOurMessage, DEFAULT_MAX_WRITES, DEFAULT_WRITE_SPACING_SECONDS, recordWrites, WRITES_BLOCKED_NL, writeAccess, writeBudget, writeBudgetNl, writesAllowedNl, writesForRun, type PassedWrite, type WritePermission } from "../src/lib/writes.ts";
+import { budgetOutPointNl, decideWrites, isOurMessage, isProtocolFrame, SocketFrames, DEFAULT_MAX_WRITES, DEFAULT_WRITE_SPACING_SECONDS, recordWrites, WRITES_BLOCKED_NL, writeAccess, writeBudget, writeBudgetNl, writesAllowedNl, writesForRun, type PassedWrite, type WritePermission } from "../src/lib/writes.ts";
 import { Daemon } from "../src/session/daemon.ts";
 import type { Observation } from "../src/session/observations.ts";
 import { DEFAULT_DAEMON_LIMITS, MESSAGE_VALUES, Politeness, scopeForRun, TEST_VALUES } from "../src/session/safety.ts";
@@ -99,7 +99,8 @@ test("with the setting a POST and a socket message arrive and each is logged in 
   assert.deepEqual(site.socketMessages, ["hallo via socket"]);
   const lines = logged(run);
   assert.deepEqual(lines.map((line) => `${line.source} ${line.method} ${line.path}`).sort(), ["test POST /api/chat", "test SEND /chat"]);
-  assert.ok(lines.every((line) => !Number.isNaN(Date.parse(line.at)) && Object.keys(line).sort().join() === "at,method,path,source"));
+  // The frame carries no test value and is no heartbeat either: it counts, as a message.
+  assert.ok(lines.every((line) => !Number.isNaN(Date.parse(line.at)) && Object.keys(line).sort().join() === (line.method === "SEND" ? "at,message,method,path,source" : "at,method,path,source")));
   await page.context().close();
 });
 
@@ -383,6 +384,29 @@ test("a frame over a socket is a message of ours only when it carries a test val
   for (const heartbeat of ["2", "3", "40", '{"type":6}\u001e', '{"protocol":"json","version":1}\u001e', '[null,"3","phoenix","heartbeat",{}]', '{"type":"ping","page":"Testsite sessie"}']) assert.equal(isOurMessage(heartbeat, MESSAGE_VALUES), false, heartbeat);
 });
 
+test("every frame over a socket counts, except one shown to be a heartbeat or a message of the protocol", () => {
+  for (const frame of ["", "\n", "ping", "PONG", "2", "3", "2probe", "5", "6", "40", "41", "40/chat,", '{"type":6}\u001e', '{"protocol":"json","version":1}\u001e', '[null,"3","phoenix","heartbeat",{}]', '{"topic":"phoenix","event":"heartbeat","payload":{},"ref":"7"}', '{"type":"ping","page":"Testsite sessie"}', '{"type":"connection_init","payload":{}}', '{"op":"KeepAlive"}']) assert.equal(isProtocolFrame(frame), true, JSON.stringify(frame));
+  // A message without a test value in it, a frame that is not text, and anything long, cannot be shown to be nothing.
+  for (const frame of ["hallo via socket", '42["message",{"text":"x"}]', '{"type":"message","body":"eHl6"}', `{"type":"ping","data":"${"x".repeat(200)}"}`, "7", '["1","2","room:1","new_msg",{}]']) assert.equal(isProtocolFrame(frame), false, frame);
+  assert.equal(isProtocolFrame(Buffer.from("ping")), false, "a binary frame is not judged");
+
+  const frames = new SocketFrames(MESSAGE_VALUES);
+  assert.equal(frames.counts("2"), false);
+  assert.equal(frames.counts(Buffer.from([0x78, 0x9c, 0x01])), true, "a compressed frame counts");
+  assert.equal(frames.counts('{"seq":"a1"}'), true, "an unknown frame counts");
+  // What the page sends while nobody acts counts the first time, unless it is a known heartbeat, and after that the same frame passes.
+  assert.equal(frames.counts('{"hb":1}', true), true);
+  assert.equal(frames.counts('{"hb":1}', true), false);
+  assert.equal(frames.counts('{"hb":1}'), false, "also while an agent acts");
+  assert.equal(frames.counts(Buffer.from([1, 2, 3]), true), true);
+  assert.equal(frames.counts(Buffer.from([1, 2, 3])), false);
+  // What was sent while an agent may have acted is not remembered.
+  assert.equal(frames.counts('{"seq":"a1"}'), true);
+  // A frame with a test value in it always counts, also when the page sent the same frame by itself before.
+  assert.equal(frames.counts(`{"text":"${TEST_VALUES.email}"}`, true), true);
+  assert.equal(frames.counts(`{"text":"${TEST_VALUES.email}"}`), true);
+});
+
 /** Open a socket to the fixture site from the page and send these frames, one at a time. */
 async function sendFrames(page: Page, frames: string[]): Promise<void> {
   await page.evaluate(async ([url, list]) => {
@@ -395,6 +419,57 @@ async function sendFrames(page: Page, frames: string[]): Promise<void> {
   }, [`${site.origin.replace("http", "ws")}/chat`, frames] as const);
   await settle();
 }
+
+test("in a session a binary or unknown frame takes one from the budget; the same frame the page sent between two commands passes", async () => {
+  reset();
+  const dir = mkdtempSync(join(tmpdir(), "loep-writes-frames-"));
+  const limited: WritePermission = { ...permission, maxWrites: 2, spacingSeconds: 0 };
+  await recordWrites(dir, limited);
+  try {
+    const env = { browser, runDir: dir, scope: await scopeForRun(dir, { scopeUrl: `${site.origin}/` }), limits: DEFAULT_DAEMON_LIMITS, politeness: new Politeness(0) };
+    const { surface } = await openSurface(env, { url: `${site.origin}/callback.html`, width: 1280, height: 800, scheme: "light" });
+    // One socket, as a chat keeps open: what it remembers belongs to that socket.
+    await surface.page.evaluate(async (url) => {
+      const socket = new WebSocket(url);
+      await new Promise((resolve) => socket.addEventListener("open", resolve));
+      (window as unknown as { chat: WebSocket }).chat = socket;
+    }, `${site.origin.replace("http", "ws")}/chat`);
+    const send = async (frames: (string | number[])[]): Promise<void> => {
+      await surface.page.evaluate(async (list) => {
+        for (const frame of list) {
+          (window as unknown as { chat: WebSocket }).chat.send(typeof frame === "string" ? frame : new Uint8Array(frame));
+          await new Promise((resolve) => setTimeout(resolve, 100));
+        }
+      }, frames);
+      await settle();
+    };
+    // Between two commands: the page sends its own frame, which counts once and then passes.
+    surface.guard.idle = true;
+    await send(['{"hb":1}', '{"hb":1}']);
+    // During a command: a binary frame counts, and then the budget is used up; the frame the page sent by itself still passes.
+    surface.guard.idle = false;
+    await send([[0x78, 0x9c, 0x01], [0x78, 0x9c, 0x02], '{"hb":1}', "2"]);
+    assert.deepEqual(site.socketMessages, ['{"hb":1}', '{"hb":1}', "binary:789c01", '{"hb":1}', "2"], "the second binary frame stays in the browser");
+    assert.deepEqual(logged(dir).map((line) => `${line.method}${line.message ? " message" : ""}`), ["SEND message", "SEND", "SEND message", "SEND", "SEND"]);
+    assert.deepEqual(surface.guard.blocked.filter((entry) => entry.kind === "socket").map((entry) => entry.writeBudget), ["out"]);
+    await surface.context.close();
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+  // The session process says when nobody acts: after a command, until the next one.
+  const other = mkdtempSync(join(tmpdir(), "loep-writes-idle-"));
+  await recordWrites(other, permission);
+  const daemon = await Daemon.create(other, await scopeForRun(other, { scopeUrl: `${site.origin}/` }), { navigationDelayMs: 0, secondBrowsers: false });
+  try {
+    await daemon.handle({ op: "start", session: "main" });
+    await daemon.handle({ op: "command", session: "main", command: "open", args: ["/callback.html"], options: {} });
+    const guard = (daemon as unknown as { sessions: Map<string, { surface: { guard: { idle?: boolean } } }> }).sessions.get("main")!.surface.guard;
+    assert.equal(guard.idle, true);
+  } finally {
+    await daemon.close();
+    rmSync(other, { recursive: true, force: true });
+  }
+});
 
 test("a message over a socket counts against the budget for sending and is held back past it, in a session and in the sweep; a heartbeat passes", async () => {
   const limited: WritePermission = { ...permission, maxWrites: 1, spacingSeconds: 0 };
