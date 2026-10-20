@@ -182,14 +182,19 @@ const variants = [
   measuredRun("variant-1", { "1.1.1": "failed", "1.4.3": "inapplicable", "2.1.1": "failed" }, { findings: { "1.1.1": 1, "2.1.1": 1 }, points: { "1.4.3": [BUDGET], "2.1.1": [PERSON] }, variantName: "dossier-commando", commit: "ccccccc3333333" }),
 ];
 
+/** The first baseline run, measured on a criterion more: a fourth with a defect found, an unjustified report and an open point of its own. */
+const wider = measuredRun("nulmeting-breed", { "1.1.1": "failed", "1.4.3": "failed", "2.1.1": "passed", "2.4.3": "failed" }, { findings: { "1.1.1": 1, "1.4.3": 2, "2.4.3": 2 }, points: { "2.1.1": [PERSON], "2.4.3": [BUDGET] } });
+
 /** What the two classifications of compare --findings agreed on, per run. */
 const CLASSES: Record<string, Record<string, string | null>> = {
+  "nulmeting-breed": { "1.1.1-logo": "gevonden", "1.4.3-kop": "gevonden", "2.4.3-menu": "gevonden" },
   "nulmeting-1": { "1.1.1-logo": "gevonden", "1.4.3-kop": "gevonden" },
   "nulmeting-2": { "1.1.1-logo": "gevonden", "1.4.3-kop": "gemist-bewijs-beoordeling" },
   "variant-1": { "1.1.1-logo": "gevonden", "1.4.3-kop": null },
 };
 /** Per run the findings of its own, by criterion, with what both classifications agreed on: "tegenhanger" belongs to a defect of the key. */
 const OWN: Record<string, [string, string | null][]> = {
+  "nulmeting-breed": [["1.1.1", "tegenhanger"], ["1.4.3", "tegenhanger"], ["1.4.3", null], ["2.4.3", "tegenhanger"], ["2.4.3", "onterecht"]],
   "nulmeting-1": [["1.1.1", "tegenhanger"], ["1.4.3", "tegenhanger"], ["1.4.3", null]],
   "nulmeting-2": [["1.1.1", "tegenhanger"]],
   "variant-1": [["1.1.1", "tegenhanger"], ["2.1.1", "onterecht"]],
@@ -227,6 +232,31 @@ test("the comparison lays the runs side by side per criterion, per defect and pe
   assert.deepEqual([verdict.falseReports!.baseline.value, verdict.falseReports!.variant.value, verdict.falseReports!.difference.value, verdict.falseReports!.ok], [0.5, 1, 0.5, false]);
   assert.deepEqual([verdict.openPoints.baseline.value, verdict.openPoints.variant.value], [1, 2]);
   assert.equal(verdict.notWorse, false);
+});
+
+test("with --criteria, those criteria of a run with more are a fair baseline: everything else is left out", async () => {
+  const narrow = await compareVariants({ baseline, variant: variants, reference, findings: classified });
+  const chosen = await compareVariants({ baseline: [wider, baseline[1]!], variant: variants, reference, findings: classified, criteria: ["2.1.1", "1.1.1", "1.4.3"] });
+  assert.deepEqual(chosen.criteria, ["1.1.1", "1.4.3", "2.1.1"]);
+  assert.match(chosen.scopeNl!, /alleen de 3 criteria van --criteria tellen mee; nulmeting-breed heeft er 4/);
+  assert.deepEqual(chosen.runs[0]!.criteria, ["1.1.1", "1.4.3", "2.1.1", "2.4.3"], "the run keeps its own criteria");
+  // The run with 2.4.3 gives what the run without it gives: its defect, report, finding and open point under 2.4.3 do not count.
+  for (const key of ["rows", "defects", "agreement", "verdict"] as const) assert.deepEqual(chosen[key], narrow[key], key);
+  assert.deepEqual([chosen.runs[0]!.outcomes, chosen.runs[0]!.findings, chosen.runs[0]!.openPoints, chosen.runs[0]!.falseReports, chosen.runs[0]!.defects], [narrow.runs[0]!.outcomes, narrow.runs[0]!.findings, narrow.runs[0]!.openPoints, narrow.runs[0]!.falseReports, narrow.runs[0]!.defects]);
+  assert.match(comparisonMarkdown(chosen), /Let op: alleen de 3 criteria van --criteria tellen mee/);
+
+  const fewer = await compareVariants({ baseline: [wider, baseline[1]!], variant: variants, reference, findings: classified, criteria: ["1.1.1"] });
+  assert.deepEqual([fewer.criteria, fewer.defects.map((defect) => defect.id), fewer.runs.map((run) => run.falseReports)], [["1.1.1"], ["1.1.1-logo"], [{ "1.1.1": 0 }, { "1.1.1": 0 }, { "1.1.1": 0 }]]);
+  assert.match(fewer.scopeNl!, /nulmeting-breed heeft er 4, nulmeting-2 heeft er 3, variant-1 heeft er 3/);
+});
+
+test("runs with different criteria: without --criteria the comparison stops and names the shared ones", async () => {
+  await assert.rejects(compareVariants({ baseline: [wider, baseline[1]!], variant: variants, reference, findings: classified }), /de runs hebben niet dezelfde criteria \(nulmeting-breed 4, nulmeting-2 3, variant-1 3\): kies met --criteria welke meetellen, bijvoorbeeld .*: --criteria 1\.1\.1,1\.4\.3,2\.1\.1$/);
+  const apart = measuredRun("ander-criterium", { "3.3.1": "passed" });
+  await assert.rejects(compareVariants({ baseline: [baseline[0]!], variant: [apart], reference, findings: classified }), /geen criterium gemeen/);
+  await assert.rejects(compareVariants({ baseline, variant: variants, reference, findings: classified, criteria: ["1.1.1", "9.9.9", "logo"] }), /--criteria: "9\.9\.9", "logo" zijn geen succescriteria/);
+  await assert.rejects(compareVariants({ baseline: [wider], variant: variants, reference, findings: classified, criteria: ["1.1.1", "2.4.3"] }), /variant-1 mist 2\.4\.3/);
+  await assert.rejects(compareVariants({ baseline, reference, findings: classified, criteria: [] }), /noemt geen criterium/);
 });
 
 test("per role: sessions, commands and time from the run, and tokens, turns and cost from the usage file", async () => {
@@ -365,4 +395,7 @@ test("on the command line, a run without a classification per finding says so an
   assert.deepEqual(saved.runs[0]!.defects, { "1.1.1-logo": null, "1.4.3-kop": null });
   assert.match(saved.runs[0]!.defectsNl!, /geen geldige indeling per bevinding/);
   assert.match(readFileSync(join(out, "varianten.md"), "utf8"), /N1: geen geldige indeling per bevinding/);
+
+  const chosen = await promisify(execFile)(process.execPath, [CLI, "compare-variants", "--baseline", wider, "--variant", variants[0]!, "--reference", reference, "--criteria", "1.1.1, 2.1.1", "--json"]);
+  assert.deepEqual((JSON.parse(chosen.stdout) as { criteria: string[] }).criteria, ["1.1.1", "2.1.1"], "a list with commas, as tasks --only takes it");
 });
