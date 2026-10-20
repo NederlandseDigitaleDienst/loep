@@ -18,7 +18,8 @@ const USAGE = `loep <command> [options]
                                          Find every page and count what is on it. In a run with a login the pages are found
                                          by following links from the page the person pointed at; a link that logs out is never followed
   explore --run <run>                    Write the task for the agent that maps the site before it is measured
-  check-site --run <run>                 Validate site.json and replay every recipe in it; non-zero exit on problems
+  check-site --run <run>                 Validate site.json, replay every recipe in it and open every component on each of its
+                                         page types as the sweep does; non-zero exit on problems
   sample --run <run> [--seed <text>]     Choose the pages to evaluate (all of them on a small site)
   collect --run <run> [--fresh] [--at-once <n>]
                                          Gather facts, engine results and probe evidence per page. The sweep (collect, contrast,
@@ -296,7 +297,7 @@ async function main(): Promise<void> {
       for (const check of result.checks) process.stdout.write(`${check.ok ? "ok  " : "GAT "} ${check.name}: ${check.noteNl}\n`);
       for (const gap of result.gaps) process.stdout.write(`- ${gap.check}${gap.page ? ` ${gap.page}` : ""}${gap.state !== "default" ? ` [${gap.state}]` : ""}: ${gap.missingNl}\n`);
       for (const gap of result.limitations) process.stdout.write(`  (beperking) ${gap.check}${gap.page ? ` ${gap.page}` : ""}${gap.state !== "default" ? ` [${gap.state}]` : ""}: ${gap.missingNl}\n`);
-      for (const gap of result.accepted) process.stdout.write(`  (aanvaard) ${gap.check}${gap.page ? ` ${gap.page}` : ""}: ${gap.reasonNl}\n`);
+      for (const gap of result.accepted) process.stdout.write(`  (aanvaard door ${gap.decidedBy}) ${gap.check}${gap.page ? ` ${gap.page}` : ""}: ${gap.reasonNl}\n`);
       const verdict = result.sufficient ? "bewijs voldoende" : result.stage === "review-pending" ? `vaste controles voldoende; de beelden zijn nog niet bekeken: ${result.review.tasks.map((part) => part.task).join(", ")}${result.review.tasks.length > 1 ? " (één agent per opdracht)" : ""}` : `bewijs onvoldoende: ${result.gaps.length} ${result.gaps.length === 1 ? "gat" : "gaten"}${result.stage === "deterministic" ? " in de vaste controles" : ""}; nog ${result.returnsLeft} keer terug naar de verkenner`;
       process.stdout.write(`${verdict}\n${result.warnings.length} waarschuwingen\n`);
       process.exitCode = result.sufficient ? 0 : result.stage === "review-pending" ? 2 : 1;

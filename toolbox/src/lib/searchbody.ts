@@ -85,8 +85,21 @@ function typesense(body: string): Verdict {
 }
 
 // Algolia: POST /1/indexes/*/queries with { "requests": [ { "indexName", "params" } ] }, or POST /1/indexes/<index>/query with { "params" }.
+// Client v5 (DocSearch 4) puts the search parameters inline in each request instead of in "params".
 const ALGOLIA_TOP = new Set(["requests", "strategy"]);
-const ALGOLIA_REQUEST = new Set(["indexName", "params", "query", "type", "facet", "facetQuery", "maxFacetHits"]);
+// The search parameters of SearchParamsObject in Algolia's OpenAPI spec (specs/common/schemas/SearchParams.yml and IndexSettings.yml#/indexSettingsAsSearchParams).
+const ALGOLIA_SEARCH_PARAMS = [
+  "advancedSyntax", "advancedSyntaxFeatures", "allowTyposOnNumericTokens", "alternativesAsExact", "analytics", "analyticsTags", "aroundLatLng", "aroundLatLngViaIP",
+  "aroundPrecision", "aroundRadius", "attributeCriteriaComputedBy", "attributeCriteriaComputedByMinProximity", "attributesToHighlight", "attributesToRetrieve",
+  "attributesToSnippet", "clickAnalytics", "decompoundQuery", "disableExactOnAttributes", "disableTypoToleranceOnAttributes", "distinct", "enableABTest",
+  "enablePersonalization", "enableReRanking", "enableRules", "exactOnSingleWordQuery", "facetFilters", "facetingAfterDistinct", "facets", "filters", "getRankingInfo",
+  "highlightPostTag", "highlightPreTag", "hitsPerPage", "ignorePlurals", "insideBoundingBox", "insidePolygon", "length", "maxValuesPerFacet", "minimumAroundRadius",
+  "minProximity", "mode", "naturalLanguages", "numericFilters", "offset", "optionalFilters", "optionalWords", "page", "percentileComputation", "personalizationImpact",
+  "query", "queryLanguages", "queryType", "ranking", "relevancyStrictness", "removeStopWords", "removeWordsIfNoResults", "renderingContent",
+  "replaceSynonymsInHighlight", "reRankingApplyFilter", "responseFields", "restrictHighlightAndSnippetArrays", "restrictSearchableAttributes", "ruleContexts",
+  "semanticSearch", "similarQuery", "snippetEllipsisText", "sortFacetValuesBy", "sumOrFiltersScores", "synonyms", "tagFilters", "typoTolerance", "userToken",
+];
+const ALGOLIA_REQUEST = new Set(["indexName", "params", "type", "facet", "facetQuery", "maxFacetHits", ...ALGOLIA_SEARCH_PARAMS]);
 
 function algolia(body: string): Verdict {
   const json = jsonObject(body, "Algolia");
@@ -103,7 +116,7 @@ function algolia(body: string): Verdict {
   for (const request of value.requests) {
     if (!isObject(request)) return no('elke vraag in "requests" is een object');
     const other = outside(request, ALGOLIA_REQUEST);
-    if (other) return no(`een vraag in "requests" bevat "${other}"; een zoekvraag aan Algolia heeft alleen ${[...ALGOLIA_REQUEST].join(", ")}`);
+    if (other) return no(`een vraag in "requests" bevat "${other}"; een zoekvraag aan Algolia heeft alleen "indexName", "params", "type", "facet", "facetQuery", "maxFacetHits" en zoekparameters`);
     if (typeof request.indexName !== "string") return no('elke vraag in "requests" noemt de index in "indexName"');
     if (request.type !== undefined && request.type !== "default" && request.type !== "facet") return no(`"type" van een vraag aan Algolia is "default" of "facet", niet ${JSON.stringify(request.type)}`);
   }
@@ -336,7 +349,7 @@ function graphql(body: string): Verdict {
 
 export const SEARCH_SERVICES: Record<SearchServiceId, SearchService> = {
   typesense: { id: "typesense", nameNl: "Typesense", formNl: 'JSON met "searches", een lijst van zoekvragen (POST /multi_search)', recognise: typesense },
-  algolia: { id: "algolia", nameNl: "Algolia", formNl: 'JSON met "requests", elk met "indexName" en "params", of met alleen "params"', recognise: algolia },
+  algolia: { id: "algolia", nameNl: "Algolia", formNl: 'JSON met "requests", elk met "indexName" en "params" of met "indexName" en losse zoekparameters zoals "query" en "hitsPerPage", of met alleen "params"', recognise: algolia },
   elasticsearch: { id: "elasticsearch", nameNl: "Elasticsearch of OpenSearch", formNl: 'een zoekvraag met "query", "aggs" of "suggest" zonder script (_search), of regels met telkens een kop en een zoekvraag (_msearch)', recognise: elasticsearch },
   meilisearch: { id: "meilisearch", nameNl: "Meilisearch", formNl: 'JSON met zoekparameters als "q" en "filter", of met "queries"', recognise: meilisearch },
   graphql: { id: "graphql", nameNl: "GraphQL", formNl: 'JSON met een document in "query" dat alleen query-bewerkingen heeft, geen mutation of subscription', recognise: graphql },

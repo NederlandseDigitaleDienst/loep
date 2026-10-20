@@ -455,11 +455,23 @@
   function shownAs(element) {
     if (isVisible(element)) return element;
     if (!element.matches?.(STANDS_IN)) return null;
+    return standIn(element);
+  }
+
+  function standIn(element) {
     const root = element.getRootNode();
     const host = root instanceof ShadowRoot ? root.host : null;
     if (host && isVisible(host)) return host;
     const label = element.labels?.[0] ?? element.closest("label");
     return label && isVisible(label) ? label : null;
+  }
+
+  /**
+   * What draws a checkbox or radio button whose input is clipped to a pixel (a visually hidden
+   * class): its host or label. shownAs keeps the input itself, as it is still on the page.
+   */
+  function drawnBy(element) {
+    return element.matches?.(STANDS_IN) && isVisible(element) && visuallyHidden(element) ? standIn(element) : null;
   }
 
   /**
@@ -1959,6 +1971,16 @@
     return found.map((element) => ({ ...describe(element), ...hoverKind(element, styles) }));
   }
 
+  /** The controls whose boundary is measured for contrast (WCAG 1.4.11), each with the box of what draws it. */
+  function boundaryTargets() {
+    return deepQueryAll(INTERACTIVE)
+      .filter((element) => shownAs(element) !== null && !element.disabled)
+      .map((element) => {
+        const drawn = drawnBy(element) ?? shownAs(element);
+        return drawn !== element ? { ...describe(element), box: box(drawn), drawnBy: path(drawn) } : describe(element);
+      });
+  }
+
   const HINTED = "abbr,dfn,[title],[aria-describedby],[aria-details],[data-tooltip],[data-tip],[data-title]";
 
   /**
@@ -2352,6 +2374,7 @@
     contains,
     triggers,
     hoverTargets,
+    boundaryTargets,
     hoverHints,
     hearsDown,
     downSignature,

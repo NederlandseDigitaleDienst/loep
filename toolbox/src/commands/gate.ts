@@ -10,7 +10,7 @@ import { makeWorkDir } from "../lib/workdir.ts";
 import { notFoundProbes, siteHosts, siteLabel } from "../lib/origins.ts";
 import { uncoveredOperables, type CountedPage } from "../lib/operables.ts";
 import { loadRun, type PageData, type RunData } from "../lib/rundata.ts";
-import { frameAddress, frameEntry, frameStanding, type Component } from "../lib/sitemodel.ts";
+import { acceptedGapFor, frameAddress, frameEntry, frameStanding, NOT_OPENED_ON_PAGE_TYPE, notOpenedAdviceNl, type AcceptedGapDecider, type Component } from "../lib/sitemodel.ts";
 import { drawMarks } from "../session/marks.ts";
 import { coversContent, type Overlay } from "../session/recipe.ts";
 
@@ -46,6 +46,8 @@ export interface Gap {
   url: string | null;
   /** "default" for the page as the sweep measured it, or the id of a state of the site model. */
   state: string;
+  /** Id of the component of the site model, for a gap about one component. */
+  component?: string;
   /** What is missing, in Dutch: this is what the explorer reads. */
   missingNl: string;
   measured?: Record<string, unknown>;
@@ -93,7 +95,7 @@ export interface Gate {
   checks: Check[];
   gaps: Gap[];
   /** Gaps the explorer confirmed as a property of the site; they do not make the evidence insufficient. */
-  accepted: (Gap & { reasonNl: string; observation: string })[];
+  accepted: (Gap & { reasonNl: string; observation: string; decidedBy: AcceptedGapDecider })[];
   warnings: Gap[];
   /** What cannot be examined at all with the limits an evaluation keeps to, such as content that only loads with a write request. It does not send the run back; it has to reach the report. */
   limitations: Gap[];
@@ -251,7 +253,7 @@ export function gateChecks(run: RunData): { checks: Check[]; gaps: Gap[]; warnin
     if (missing.length > 0) coverageGaps.push({ check: "coverage", page: null, url: state.url, state: state.id, missingNl: `In deze toestand ontbreken metingen: ${missing.join(", ")}. Draai collect opnieuw.`, measured: { missing } });
     // A component that did not open on one of its page types: the recipe or the postcondition does not hold there, or the component is not on
     // that page type. Either way the model is wrong for that page type, so it goes back to the explorer, who can also accept it as how the site is.
-    for (const row of (state.perPageType ?? []).filter((entry) => !entry.reached)) coverageGaps.push({ check: "component-not-opened-on-page-type", page: run.pages.find((page) => page.item.url === row.url)?.label ?? null, url: row.url, state: state.id, missingNl: `Het onderdeel ging op het paginatype "${row.pageType}" niet open in een staand venster: ${row.reasonNl ?? "geen reden vastgelegd"}. Voor dat paginatype is het geopende onderdeel niet vastgelegd. Maak het recept en de postconditie geldig op elk paginatype van het onderdeel, of haal het paginatype weg als het onderdeel daar niet staat.` });
+    for (const row of (state.perPageType ?? []).filter((entry) => !entry.reached)) coverageGaps.push({ check: NOT_OPENED_ON_PAGE_TYPE, page: run.pages.find((page) => page.item.url === row.url)?.label ?? null, url: row.url, state: state.id, component: state.modelId, missingNl: `Het onderdeel ging op het paginatype "${row.pageType}" niet open in een staand venster: ${row.reasonNl ?? "geen reden vastgelegd"}. Voor dat paginatype is het geopende onderdeel niet vastgelegd. ${notOpenedAdviceNl(row.reasonNl)}` });
     for (const entry of state.variantsNotReached ?? []) warnings.push({ check: "state-not-reopened", page: null, url: state.url, state: state.id, missingNl: `De toestand ging geen tweede keer open voor ${entry.variant}: ${entry.reasonNl ?? "geen reden vastgelegd"}. Die meting ontbreekt voor deze toestand.` });
   }
   // The Tab walk in the narrow window, next to what there is to reach there. A warning: the walk in the default window decides whether the evidence is enough.
@@ -446,6 +448,10 @@ export function gateChecks(run: RunData): { checks: Check[]; gaps: Gap[]; warnin
       overlayGaps.push({ check: "overlay", ...on(covered[0]!), state: "default", missingNl: `Op ${covered.length} van de ${measured.length} pagina's ligt een vast element dat meer dan ${percent(MAX_OVERLAY_SHARE)} van het venster inneemt over de inhoud, bijvoorbeeld ${worst.tag} "${worst.text.slice(0, 40)}" (${percent(worst.share)}, ${where(worst).slice(0, 80)}).${underNl} Dat is een blokkade die niet in het sitemodel staat.`, measured: { pages: covered.length, of: measured.length, share: worst.share } });
     }
     add("overlay", overlayGaps, `op ${covered.length} van ${measured.length} pagina's ligt een vast element dat meer dan ${percent(MAX_OVERLAY_SHARE)} van het venster inneemt over de inhoud${beside > 0 ? `; op ${beside} ${beside === 1 ? "pagina staat" : "pagina's staat"} zo'n element naast de inhoud en bedekt het niets` : ""}`);
+  }
+  // Documents: a tagged pdf whose tag text was not read has headings, links and tables without text. A warning: the file itself was measured.
+  for (const document of run.documents ?? []) {
+    if (document.facts?.pdf?.tagged && !document.facts.pdf.tagTextRead) warnings.push({ check: "document-tag-text-not-read", page: document.label, url: document.item.url, state: "default", missingNl: "De tekst per tag van dit document is niet gelezen, dus de koppen, links en tabellen zijn zonder hun tekst beoordeeld. De uitkomst van documents zegt welk programma niet paste. Herstel dat en draai documents opnieuw." });
   }
   return { checks, gaps, warnings, limitations };
 }
@@ -823,8 +829,8 @@ export async function gate(runDir: string, outDir: string = runDir): Promise<Gat
   const remarks = (answers?.sheets ?? []).flatMap((entry) => (typeof entry.remarkNl === "string" && entry.remarkNl.trim() ? [{ pageType: entry.pageType, remarkNl: entry.remarkNl.trim() }] : []));
   const all = [...fixed.gaps, ...reviewed.gaps];
   // A gap the explorer confirmed as a property of the site does not hold the run back.
-  const acceptedBy = (gap: Gap) => (run.siteModel?.acceptedGaps ?? []).find((entry) => entry.check === gap.check && entry.page === gap.url);
-  const accepted = all.filter((gap) => acceptedBy(gap)).map((gap) => ({ ...gap, reasonNl: acceptedBy(gap)!.reasonNl, observation: acceptedBy(gap)!.observation }));
+  const acceptedBy = (gap: Gap) => acceptedGapFor(run.siteModel, { check: gap.check, page: gap.url, component: gap.component });
+  const accepted = all.filter((gap) => acceptedBy(gap)).map((gap) => ({ ...gap, reasonNl: acceptedBy(gap)!.reasonNl, observation: acceptedBy(gap)!.observation, decidedBy: acceptedBy(gap)!.decidedBy }));
   const gaps = all.filter((gap) => !acceptedBy(gap));
 
   const manifestPath = join(runDir, "manifest.json");
