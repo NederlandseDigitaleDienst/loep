@@ -29,7 +29,7 @@ before(async () => {
   site = await startServer();
   run = mkdtempSync(join(tmpdir(), "loep-opinions-"));
   // The methods of this file all run in Chromium or in this process; the second browsers have a file of their own.
-  daemon = await Daemon.create(run, { hosts: ["127.0.0.1"], baseUrl: `${site.origin}/`, strict: false }, { navigationDelayMs: 0, secondBrowsers: false });
+  daemon = await Daemon.create(run, { hosts: [new URL(site.origin).host], baseUrl: `${site.origin}/`, strict: false }, { navigationDelayMs: 0, secondBrowsers: false });
   assert.equal((await daemon.handle({ op: "start", session: "main" })).ok, true);
 });
 
@@ -378,7 +378,7 @@ test("sheet lays the pictures of a walk out on one image with the numbers of the
 
 test("a session keeps its clock and count when its process went away, and a loep command does not load the commands", async () => {
   const dir = mkdtempSync(join(tmpdir(), "loep-resume-"));
-  const scope = { hosts: ["127.0.0.1"], baseUrl: `${site.origin}/`, strict: false };
+  const scope = { hosts: [new URL(site.origin).host], baseUrl: `${site.origin}/`, strict: false };
   const first = await Daemon.create(dir, scope, { navigationDelayMs: 0, secondBrowsers: false });
   try {
     await first.handle({ op: "start", session: "main" });

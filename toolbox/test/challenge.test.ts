@@ -23,7 +23,7 @@ before(async () => {
     { url: `${site.origin}/form.html`, foundVia: [`iframe:${site.origin}/choose.html`] },
   ];
   writeFileSync(join(run, "inventory.json"), JSON.stringify({ baseUrl: `${site.origin}/`, origin: site.origin, pages }));
-  daemon = await Daemon.create(run, { hosts: ["127.0.0.1"], baseUrl: `${site.origin}/`, strict: false }, { navigationDelayMs: 50, maxSessions: 5, secondBrowsers: false });
+  daemon = await Daemon.create(run, { hosts: [new URL(site.origin).host], baseUrl: `${site.origin}/`, strict: false }, { navigationDelayMs: 50, maxSessions: 5, secondBrowsers: false });
   browser = await launchBrowser();
 });
 

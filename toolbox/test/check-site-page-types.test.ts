@@ -35,7 +35,7 @@ before(async () => {
   run = join(scratch, "run");
   await inventory({ baseUrl: `${origin}/`, out: run, maxPages: 3, fixedUrls: [`${origin}${VRAGEN}`, `${origin}${OPENINGSTIJDEN}`] });
   // The cookie notice as blocker and the first question of the list as component, both recorded through a real session.
-  const daemon = await Daemon.create(run, { hosts: ["127.0.0.1"], baseUrl: `${origin}/`, strict: false }, { navigationDelayMs: 20 });
+  const daemon = await Daemon.create(run, { hosts: [new URL(origin).host], baseUrl: `${origin}/`, strict: false }, { navigationDelayMs: 20 });
   const loep = async (command: string, args: string[] = [], options: Record<string, string | boolean> = {}): Promise<Record<string, unknown>> => {
     const response = await daemon.handle({ op: "command", session: "verken", command, args, options });
     assert.equal(response.ok, true, `${command}: ${JSON.stringify(response.print)}`);

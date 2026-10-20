@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { after, test } from "node:test";
 import { answer } from "../src/commands/answer.ts";
 import { gatherVerdicts } from "../src/commands/evaluate.ts";
-import { BUDGETS, checkInstrumentVerdict, instrumentPending, instrumentTasks, loadInstrumentIndex, NO_VERDICT_NL, skip, unruledCrossPoints, type InstrumentTask } from "../src/commands/instrument-tasks.ts";
+import { BUDGETS, checkInstrumentVerdict, crossCandidates, instrumentPending, instrumentTasks, loadInstrumentIndex, NO_VERDICT_NL, skip, unruledCrossPoints, type InstrumentTask } from "../src/commands/instrument-tasks.ts";
 import { render } from "../src/commands/render.ts";
 import { writeEvaluation } from "../src/commands/sign.ts";
 import { checkSeal, seal } from "../src/commands/verify.ts";
@@ -403,7 +403,7 @@ test("what a judge passes on to another criterion counts there: unruled it leave
   assert.deepEqual((JSON.parse(readFileSync(join(cross.dir, finish.candidates), "utf8")) as { id: string }[]).map((candidate) => candidate.id), ["X145-01"], "without a verifier, the finishing round rules on what was passed on");
 
   // A verdict that ruled on it says nothing more; one that did not leaves the criterion open, with a point for the finishing round.
-  const judged = new Map([[CRITERIA.person, JSON.parse(readFileSync(join(cross.dir, "verdicts", CRITERIA.person, "oordeel.json"), "utf8")) as Verdict]]);
+  const judged = new Map([[CRITERIA.person, { a: JSON.parse(readFileSync(join(cross.dir, "verdicts", CRITERIA.person, "oordeel.json"), "utf8")) as Verdict }]]);
   const passed: Verdict = { criterion: CRITERIA.passed, outcome: "passed", rule: "R6", summaryNl: "Randen steken genoeg af.", observations: [cross.seen([look])], findings: [] };
   const ruled: Verdict = { ...passed, candidates: [{ id: "X145-01", ruling: "noIssue", reasonNl: "Gemeten: de rand is 3,4 op 1.", evidence: [look] }] };
   assert.deepEqual(unruledCrossPoints(judged, CRITERIA.passed, [null, ruled]), []);
@@ -418,4 +418,72 @@ test("what a judge passes on to another criterion counts there: unruled it leave
   assert.deepEqual(openCriteria([open]).evaluation, [CRITERIA.passed]);
   // A failure stays a failure: what was passed on can only add to it.
   assert.equal(resolveCriterion({ ...base, verdicts: { a: null, final: null, finish: { ...passed, outcome: "failed", findings: [finding([look])] } }, unruledNl: points }, "SITE").outcome, "failed");
+});
+
+test("what a verifier passes on reaches the finishing round of that criterion, also when it passed; what a finishing round passes on gets a round of its own with --again", async () => {
+  const cross = makeRun([CRITERIA.person, CRITERIA.passed]);
+  const tasks = (again: string[] = []): ReturnType<typeof instrumentTasks> => instrumentTasks(cross.dir, { ...cross.options, again });
+  await tasks();
+  await skip(cross.dir, { pageType: "start" }, "Voor deze test is geen rondgang nodig.");
+  await tasks();
+  await cross.leaveOpen(CRITERIA.person, [PERSON]);
+  cross.write(join("verdicts", CRITERIA.passed, "oordeel.json"), { criterion: CRITERIA.passed, outcome: "passed", rule: "R6", summaryNl: "Randen steken genoeg af.", observations: [cross.seen(await cross.passEvidence(CRITERIA.passed, "b-1411"))], findings: [] } satisfies Verdict);
+  assert.deepEqual(await checkInstrumentVerdict(cross.dir, CRITERIA.passed, "judge"), []);
+  await tasks();
+  // The verifier of 1.4.5 sees something that belongs to 1.4.11, after the verifier of 1.4.11 was given its candidates.
+  const look = cross.observe("v-145", "look");
+  const crop = cross.observe("v-145", "crop");
+  cross.write(join("verdicts", CRITERIA.person, "final.json"), { criterion: CRITERIA.person, outcome: "cantTell", rule: "R9", summaryNl: "Ook bij de controle is niet alles vastgesteld.", observations: [cross.seen([look], "open"), { ...cross.seen([crop]), ruling: "otherCriterion" }], findings: [], missingNl: [PERSON], crossCandidates: [{ criterion: CRITERIA.passed, page: "P1", where: "rand van het zoekveld", evidence: [crop], noteNl: "De rand van het zoekveld is lichtgrijs op wit." }], verification: { judgeOutcome: "cantTell", findings: [], attackNl: "Geprobeerd het open punt te beslechten met een tweede blik op de startpagina.", attackEvidence: [look] } } satisfies Verdict);
+  assert.deepEqual(await checkInstrumentVerdict(cross.dir, CRITERIA.person, "final"), []);
+  const attack = await cross.passEvidence(CRITERIA.passed, "v-1411");
+  cross.write(join("verdicts", CRITERIA.passed, "final.json"), { criterion: CRITERIA.passed, outcome: "passed", rule: "R6", summaryNl: "Ook bij de controle steken randen genoeg af.", observations: [cross.seen(attack)], findings: [], verification: { judgeOutcome: "passed", findings: [], attackNl: "Gezocht naar een rand die te licht is op de contactpagina; geen gevonden.", attackEvidence: attack } } satisfies Verdict);
+  assert.deepEqual(await checkInstrumentVerdict(cross.dir, CRITERIA.passed, "final"), []);
+  const resolved = async (id: string): Promise<CriterionResult> => {
+    const index = await loadInstrumentIndex(cross.dir);
+    const gathered = new Map(await Promise.all(index.tasks.map(async (task) => [task.criterion, await gatherVerdicts(cross.dir, task)] as const)));
+    const { verdicts, answers, hashes } = gathered.get(id)!;
+    const passing = new Map([...gathered].map(([criterion, entry]) => [criterion, entry.verdicts]));
+    return resolveCriterion({ criterion: criterionById(id)!, verdicts, answers, procedure: null, provenance: { dossierSha256: null, verdictSha256: hashes }, unruledNl: unruledCrossPoints(passing, id, [verdicts.final, verdicts.finish]) }, "SITE");
+  };
+  assert.equal((await resolved(CRITERIA.passed)).outcome, "cantTell", "nobody ruled on it yet, so 1.4.11 does not pass");
+
+  // 1.4.11 passed, but gets a finishing round for what the verifier passed on; 1.4.5 only waits for a person.
+  assert.equal((await tasks()).finishers, 1);
+  const point = "veegronde mist: de verifieerder van 1.4.5 zag op P1 (rand van het zoekveld) iets dat bij dit criterium hoort, en geen verifieerder of afmaakronde heeft dat beoordeeld (XV145-01): De rand van het zoekveld is lichtgrijs op wit.";
+  const finish = (await cross.task(CRITERIA.passed)).finish!;
+  assert.deepEqual(finish.points, [point]);
+  assert.deepEqual((await instrumentPending(cross.dir)).finishers.map((entry) => entry.criterion), [CRITERIA.passed]);
+  assert.deepEqual((JSON.parse(readFileSync(join(cross.dir, finish.candidates), "utf8")) as { id: string }[]).map((candidate) => candidate.id), ["XV145-01"]);
+  assert.ok(!(await cross.task(CRITERIA.person)).finish);
+
+  // The finishing round of 1.4.11 rules on it, and passes something on to 1.4.5 in turn.
+  const evidence = await cross.passEvidence(CRITERIA.passed, "a-1411");
+  const button = cross.observe("a-1411", "crop");
+  cross.write(join("verdicts", CRITERIA.passed, "afmaak.json"), { criterion: CRITERIA.passed, outcome: "passed", rule: "R6", summaryNl: "Ook de rand van het zoekveld steekt genoeg af.", observations: [cross.seen(evidence), { ...cross.seen([button]), ruling: "otherCriterion" }], findings: [], candidates: [{ id: "XV145-01", ruling: "noIssue", reasonNl: "Gemeten: de rand van het zoekveld is 3,4 op 1.", evidence: [evidence[0]!] }], crossCandidates: [{ criterion: CRITERIA.person, page: "P2", where: "knop Verzenden", evidence: [button], noteNl: "De tekst op de knop Verzenden is een afbeelding van tekst." }], finish: { points: [{ point: 1, settled: true, howNl: "De rand van het zoekveld gemeten op de startpagina.", evidence }], coverageNl: "Gemeten op 2 van de 2 pagina's.", findings: [] } } satisfies Verdict);
+  assert.deepEqual(await checkInstrumentVerdict(cross.dir, CRITERIA.passed, "finish"), []);
+  assert.equal((await resolved(CRITERIA.passed)).outcome, "passed");
+
+  // The finishing round of 1.4.5 does not come by itself: the finishing rounds run side by side. 1.4.5 stays open with it until a round has ruled on it.
+  await tasks();
+  assert.ok(!(await cross.task(CRITERIA.person)).finish);
+  assert.equal((await instrumentPending(cross.dir)).phase, "done");
+  const passedOn = "veegronde mist: de afmaakronde van 1.4.11 zag op P2 (knop Verzenden) iets dat bij dit criterium hoort, en geen verifieerder of afmaakronde heeft dat beoordeeld (XA1411-01): De tekst op de knop Verzenden is een afbeelding van tekst.";
+  assert.deepEqual((await resolved(CRITERIA.person)).missingNl, [PERSON, passedOn]);
+  await assert.rejects(tasks([CRITERIA.passed]), /--again: het eindoordeel van 1\.4\.11 staat niet open met een punt "proef werkte niet" of "niet bereikbaar", en niets wat een ander criterium eraan doorgaf, is nog onbeoordeeld/);
+  assert.equal((await tasks([CRITERIA.person])).finishers, 2);
+  const again = (await cross.task(CRITERIA.person)).finish!;
+  assert.deepEqual(again.points, [PERSON, passedOn]);
+  assert.deepEqual((JSON.parse(readFileSync(join(cross.dir, again.candidates), "utf8")) as { id: string }[]).map((candidate) => candidate.id), ["XA1411-01"]);
+  assert.deepEqual((await instrumentPending(cross.dir)).finishers.map((entry) => entry.criterion), [CRITERIA.person], "the round of 1.4.11 still counts");
+  // A plain tasks keeps the round as it was asked for.
+  await tasks();
+  assert.deepEqual((await cross.task(CRITERIA.person)).finish, again);
+});
+
+test("what a verifier or finishing round passes on again, after a round before it of the same criterion did, is passed on once", () => {
+  const cross = (where: string): NonNullable<Verdict["crossCandidates"]>[number] => ({ criterion: "1.4.11", page: "P1", where, evidence: [], noteNl: "Een rand die te licht is." });
+  const verdict = (passed: string[]): Verdict => ({ criterion: "1.4.5", outcome: "passed", rule: "R6", summaryNl: "Voldoet.", observations: [], findings: [], crossCandidates: passed.map(cross) });
+  const passing = new Map([["1.4.5", { a: verdict(["zoekveld"]), final: verdict(["zoekveld", "knop"]), finish: verdict(["knop", "menu"]) }]]);
+  assert.deepEqual(crossCandidates(passing, "1.4.11", ["a", "final", "finish"]).map((candidate) => candidate.id), ["X145-01", "XV145-02", "XA145-02"]);
+  assert.deepEqual(crossCandidates(passing, "1.4.11").map((candidate) => candidate.id), ["X145-01"], "the judges' alone, by default");
 });

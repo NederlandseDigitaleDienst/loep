@@ -133,8 +133,9 @@ const attribute = (text: string): string => text.replace(/&/g, "&amp;").replace(
 
 /** The policy of the page: only the hosts of the run to send to and to frame, and no form goes anywhere. */
 export function policyOf(hosts: string[], strict: boolean): string {
-  const web = hosts.flatMap((host) => [`http://${host}:*`, `https://${host}:*`]);
-  const sockets = hosts.flatMap((host) => [`ws://${host}:*`, `wss://${host}:*`]);
+  // A host of the run carries its port when that is not 80 or 443 (see scopeHost); without one, only the usual port of each scheme.
+  const web = hosts.flatMap((host) => [`http://${host}`, `https://${host}`]);
+  const sockets = hosts.flatMap((host) => [`ws://${host}`, `wss://${host}`]);
   const parts = [`connect-src ${[...web, ...sockets].join(" ") || "'none'"}`, "form-action 'none'", `frame-src ${web.join(" ") || "'none'"}`];
   if (strict) {
     const own = web.join(" ");

@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<title>Tegels met een vaste hoogte</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; }
+  body { font: 16px/1.5 sans-serif; margin: 2rem; }
+  ul { list-style: none; margin: 0 0 1.5rem; padding: 0; display: flex; gap: 0.75rem; }
+  a { display: block; width: 11rem; padding: 6px 0.75rem; border: 1px solid #154273; text-decoration: none; line-height: 1.2; }
+  a span { display: block; white-space: nowrap; }
+  .titel { font-weight: 700; }
+  .sub { font-size: 0.9rem; }
+  .vast a { height: 50px; overflow: hidden; }
+  .knip a { height: 50px; overflow: clip; }
+  .groei a { min-height: 50px; }
+  .vlak { height: 50px; overflow: hidden; width: 11rem; }
+  .vlak i { display: block; height: 80px; background: #eef3f8; }
+</style>
+</head>
+<body>
+<main>
+<h1>Tegels met een vaste hoogte</h1>
+<ul class="vast">
+  <li><a href="#paspoort"><span class="titel">Paspoort</span><span class="sub">of rijbewijs</span></a></li>
+</ul>
+<ul class="knip">
+  <li><a href="#afval"><span class="titel">Afval</span><span class="sub">en grofvuil</span></a></li>
+</ul>
+<ul class="groei">
+  <li><a href="#parkeren"><span class="titel">Parkeren</span><span class="sub">bij uw huis</span></a></li>
+</ul>
+<div class="vlak"><span>Kort</span><i></i></div>
+</main>
+</body>
+</html>

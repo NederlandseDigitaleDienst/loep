@@ -274,6 +274,14 @@ test("the gate passes a run in which every check holds", () => {
   assert.ok(checked.checks.every((check) => check.ok));
 });
 
+test("an origin that refused the evaluation for the rest of the run is coverage that was missing; a short pause is not", () => {
+  const entry = (origin: string, until: string | null) => ({ origin, reason: "429" as const, at: "2026-10-20T10:00:00.000Z", until, url: `${origin}/a` });
+  const checked = gateChecks(gateRun([gatePage("P1", "https://site.nl/")], { blockades: [entry("https://site.nl", null), entry("https://cdn.site.nl", "2026-10-20T10:00:30.000Z")] }));
+  assert.deepEqual(checked.gaps.map((gap) => [gap.check, gap.url]), [["site-answered", "https://site.nl/a"]]);
+  assert.match(checked.gaps[0]!.missingNl, /^https:\/\/site\.nl heeft verzoeken van het onderzoek geweigerd: de site antwoordde met 429 .* wat daarna nog gemeten moest worden, is niet gemeten\.$/);
+  assert.equal(checked.checks.find((check) => check.name === "site-answered")?.ok, false);
+});
+
 test("the gate warns, without a gap, for each tagged pdf whose tag text was not read", () => {
   const document = (label: string, pdf: { tagged: boolean; tagTextRead: boolean } | undefined) => ({ label, item: { url: `https://site.nl/${label}.pdf` }, facts: { status: "read", ...(pdf ? { pdf } : {}) } });
   const checked = gateChecks(gateRun([gatePage("P1", "https://site.nl/")], { documents: [document("D01", { tagged: true, tagTextRead: false }), document("D02", { tagged: true, tagTextRead: true }), document("D03", { tagged: false, tagTextRead: false }), document("D04", undefined)] as unknown as RunData["documents"] }));
@@ -633,7 +641,7 @@ test("the Tab walk names an element that throws focus away and goes on behind it
 
 /** Record the recipes an explorer would save, through a real session. */
 async function recordRecipes(): Promise<void> {
-  const daemon = await Daemon.create(run, { hosts: ["127.0.0.1"], baseUrl: `${origin}/`, strict: false }, { navigationDelayMs: 20 });
+  const daemon = await Daemon.create(run, { hosts: [new URL(origin).host], baseUrl: `${origin}/`, strict: false }, { navigationDelayMs: 20 });
   const loep = async (command: string, args: string[] = [], options: Record<string, string | boolean> = {}): Promise<Record<string, unknown>> => {
     const response = await daemon.handle({ op: "command", session: "verken", command, args, options });
     assert.equal(response.ok, true, `${command}: ${JSON.stringify(response.print)}`);
@@ -856,7 +864,7 @@ test("explore, check-site, the sweep and the gate work together on a site with a
   assert.ok(dialog.textBehindALayerLeftOut >= 1);
 
   // One name per state: whatever the dossier calls a state opens in a session, on any page it belongs to.
-  const daemon = await Daemon.create(run, { hosts: ["127.0.0.1"], baseUrl: `${origin}/`, strict: false }, { navigationDelayMs: 20 });
+  const daemon = await Daemon.create(run, { hosts: [new URL(origin).host], baseUrl: `${origin}/`, strict: false }, { navigationDelayMs: 20 });
   try {
     await daemon.handle({ op: "start", session: "rechter" });
     const open = async (text: string): Promise<{ ok: boolean; print: Record<string, unknown> }> => {

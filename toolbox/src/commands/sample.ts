@@ -1,7 +1,8 @@
+import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { readJson, sha256, stableId, writeJson } from "../lib/canonical.ts";
 import { countByKind, DOCUMENT_KINDS, documentLabels, kindsNl, READ_KINDS, siteDocuments, type DocumentKind, type InventoryDocument, type SampleDocument } from "../lib/documents.ts";
-import { stepStart, writeManifest } from "../lib/manifest.ts";
+import { type Manifest, stepStart, writeManifest } from "../lib/manifest.ts";
 import { notFoundProbes, siteOrigins } from "../lib/origins.ts";
 import { frameAddress, frameEntry, frameStanding, loadSiteModel, type SiteModel } from "../lib/sitemodel.ts";
 import type { Inventory, InventoryPage } from "./inventory.ts";
@@ -456,8 +457,17 @@ export function withDocuments(sample: Sample, inventory: Inventory, seed: string
   return { ...sample, note: `${sample.note}${note}`, documents, documentPopulation: { onSite: found.length, byKind: countByKind(found), elsewhere, notChosen: notChosen.length, notChosenByKind: countByKind(notChosen) } };
 }
 
-export async function sample(runDir: string, seed: string): Promise<Sample> {
+/** The seed of a run from before `inventory` made one: every run then had this seed, unless `--seed` said otherwise. */
+export const LEGACY_SEED = "toegankelijk";
+
+/**
+ * Choose the sample of a run. Without `seed` it takes the seed `inventory` put in the manifest, so the random part
+ * cannot be known before the evaluation starts and a second `sample` in the run chooses the same pages.
+ */
+export async function sample(runDir: string, given?: string): Promise<Sample> {
   const startedAt = stepStart();
+  const manifestPath = join(runDir, "manifest.json");
+  const seed = given ?? (existsSync(manifestPath) ? (await readJson<Manifest>(manifestPath)).seed : undefined) ?? LEGACY_SEED;
   const inventory = await readJson<Inventory>(join(runDir, "inventory.json"));
   const model = await loadSiteModel(runDir);
   const result = withDocuments(buildSample(inventory, seed, model), inventory, seed);

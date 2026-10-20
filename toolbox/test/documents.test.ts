@@ -378,7 +378,11 @@ test("a tagged PDF: title, language, headings, figures, table headers, list, lin
   if (facts.pdf.pdfUa.available) {
     assert.equal(facts.pdf.pdfUa.compliant, false);
     assert.ok(facts.pdf.pdfUa.failedRules.some((rule) => rule.clause === "7.3" && rule.failedChecks === 1), "the figure without an alternative fails PDF/UA");
-  } else assert.ok(facts.notMeasuredNl.some((line) => /veraPDF/.test(line)));
+  } else {
+    // On GitHub veraPDF is installed: a check that falls back to "not installed" there tests nothing.
+    assert.notEqual(process.env.CI, "true", `veraPDF ontbreekt in de CI: ${facts.pdf.pdfUa.reasonNl}`);
+    assert.ok(facts.notMeasuredNl.some((line) => /veraPDF/.test(line)));
+  }
 });
 
 test("a PDF without tags: no structure, and every picture is without alternative", { skip: NEEDS_PDF_TOOLS }, async () => {
@@ -508,6 +512,7 @@ test("inventory finds the documents, sample labels them, documents measures them
   const ours = images.documents.find((document) => document.document === label)!;
   assert.deepEqual([ours.images.total, ours.images.withAlternative, ours.images.withoutAlternative.total], [2, 1, 1]);
   if (pdf.pdf!.pdfUa.available) assert.deepEqual(ours.pdfUa!.failedRulesForThisCriterion.map((rule) => rule.rule), ["7.3-1"]);
+  else assert.notEqual(process.env.CI, "true", `veraPDF ontbreekt in de CI: ${pdf.pdf!.pdfUa.reasonNl}`);
   const titles = documentsExtractor(data, "2.4.2") as { documents: { document: string; title: string | null; fileName: string; titleShownInTitleBar?: boolean }[] };
   assert.deepEqual(titles.documents.map((document) => [document.fileName, document.title, document.titleShownInTitleBar]).sort(), [["download", "Jaarverslag 2025", false], ["jaarverslag.pdf", "Jaarverslag 2025", false], ["nota.docx", null, undefined]]);
   const structure = documentsExtractor(data, "1.3.1") as { documents: { document: string; tagged?: boolean; paragraphsThatLookLikeAHeading?: { total: number } }[] };
@@ -539,7 +544,7 @@ test("inventory finds the documents, sample labels them, documents measures them
   assert.equal(notRead.print.status, "notRead");
 
   // In a session the command needs no open page, and its observation can carry a finding.
-  const daemon = await Daemon.create(run, { hosts: ["127.0.0.1"], baseUrl: `${origin}/`, strict: false }, { navigationDelayMs: 50, maxSessions: 1, secondBrowsers: false });
+  const daemon = await Daemon.create(run, { hosts: [new URL(origin).host], baseUrl: `${origin}/`, strict: false }, { navigationDelayMs: 50, maxSessions: 1, secondBrowsers: false });
   try {
     assert.equal((await daemon.handle({ op: "start", session: "judge" })).ok, true);
     const answer = await daemon.handle({ op: "command", session: "judge", command: "document", args: [label], options: { page: "1" } });

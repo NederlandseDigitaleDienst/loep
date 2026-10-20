@@ -20,7 +20,8 @@ const USAGE = `loep <command> [options]
   explore --run <run>                    Write the task for the agent that maps the site before it is measured
   check-site --run <run>                 Validate site.json, replay every recipe in it and open every component on each of its
                                          page types as the sweep does; non-zero exit on problems
-  sample --run <run> [--seed <text>]     Choose the pages to evaluate (all of them on a small site)
+  sample --run <run> [--seed <text>]     Choose the pages to evaluate (all of them on a small site). Without --seed the random
+                                         part follows the seed inventory made for the run
   collect --run <run> [--fresh] [--at-once <n>]
                                          Gather facts, engine results and probe evidence per page. The sweep (collect, contrast,
                                          states, gate) needs the site model of explore. A second run of collect, contrast or
@@ -44,7 +45,8 @@ const USAGE = `loep <command> [options]
                                          criterion; run it again after each phase. Needs the site model of explore.
                                          --again 2.4.3,3.3.1 writes a new finishing round for those criteria, also when the
                                          run is done, but only for one whose final verdict is open with a point "niet
-                                         bereikbaar" or "proef werkte niet". Each attempt gets its own session; the earlier
+                                         bereikbaar" or "proef werkte niet", or that another finishing round passed
+                                         something on to that no round of it ruled on. Each attempt gets its own session; the earlier
                                          verdict is kept, the new one counts in evaluate. --attempted walks:start,judges:1.4.3
                                          counts one attempt for each task whose agent came back (the workflow names them;
                                          an agent that stopped with an error is no attempt)
@@ -67,9 +69,9 @@ const USAGE = `loep <command> [options]
                                          sample, explore and the sweep), next to what the run measured so far. --at-once is the
                                          number of agents at the same time, and of pages in the sweep. Writes nothing
   gaps --run <run> [<run> ...] [--json]  Every open point of one or more runs, per kind (veegronde mist, budget op, proef
-                                         werkte niet, niet bereikbaar, versturen niet toegestaan, mens nodig, keuze nodig) and
-                                         per criterion, equal points taken together and counted: the work list for whoever
-                                         improves the sweep. Writes nothing
+                                         werkte niet, niet bereikbaar, versturen niet toegestaan, buiten de afbakening, mens
+                                         nodig, keuze nodig) and per criterion, equal points taken together and counted: the
+                                         work list for whoever improves the sweep. Writes nothing
   feedback --run <run> [--out <dir>] [--json]
                                          Draft issues for the makers of loep: one per criterion and kind that stayed open
                                          because of loep itself, without the address or name of the site. Criteria open
@@ -177,7 +179,7 @@ async function main(): Promise<void> {
       only: { type: "string" },
       urls: { type: "string" },
       "also-origin": { type: "string", multiple: true },
-      seed: { type: "string", default: "toegankelijk" },
+      seed: { type: "string" },
       criterion: { type: "string" },
       name: { type: "string" },
       organisation: { type: "string" },
@@ -257,6 +259,8 @@ async function main(): Promise<void> {
   // A run for which a person logged in starts every browser with that session; any other run is left as it was.
   const { runLoginMark, setRunLogin } = await import("./lib/login.ts");
   if (command !== "inventory" && command !== "login" && !readsOnly && values.run) setRunLogin(values.run);
+  // A site that refused the evaluation (blockades.json in the run) is asked nothing by the sweep either, and a 429 it gives the sweep ends the asking for the sessions too.
+  if (command !== "inventory" && !readsOnly && values.run) (await import("./session/blockade.ts")).setRunBlockade(values.run);
   if (NEEDS_SITE_MODEL.includes(command) && values.run && !existsSync(join(values.run, "site.json"))) throw new Error(NOT_EXPLORED_NL);
   switch (command) {
     case "login": {

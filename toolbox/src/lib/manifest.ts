@@ -1,4 +1,5 @@
 import { execFileSync } from "node:child_process";
+import { randomBytes } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { arch, platform, release } from "node:os";
 import { join } from "node:path";
@@ -38,6 +39,11 @@ export interface Manifest {
   login?: LoginMark;
   /** Set by `check-site` when the site model names read requests: the POST requests, such as a question to a search service, that were let through. */
   reads?: ReadRequest[];
+  /**
+   * The seed of the random part of the sample, made at the first `inventory` of the run, so that nobody can know
+   * before the evaluation starts which pages it picks. A run from before this was recorded has none.
+   */
+  seed?: string;
 }
 
 function git(root: string, ...args: string[]): string | null {
@@ -108,6 +114,7 @@ export async function writeManifest(runDir: string, step: Omit<ManifestStep, "at
     ...(previous?.writes ? { writes: previous.writes } : {}),
     ...(previous?.login ? { login: previous.login } : {}),
     ...(previous?.reads ? { reads: previous.reads } : {}),
+    ...(previous?.seed ? { seed: previous.seed } : step.command === "inventory" ? { seed: randomBytes(16).toString("hex") } : {}),
   };
   await writeJson(path, manifest);
 }

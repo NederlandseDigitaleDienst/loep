@@ -251,6 +251,21 @@ test("open points are split into work for the owner of the site and limits of th
   for (const id of [first!.id, second!.id, passed.id]) assert.equal(main!.split(`<a id="open-${id}"></a>`).length - 1, 1);
 });
 
+test("a criterion open by content of an address outside the scope is the owner's, counted apart in the summary, and not unfinished work of the evaluation", () => {
+  const evaluation = exampleEvaluation();
+  const open = evaluation.criteria.filter((entry) => entry.outcome === "cantTell" || entry.outcome === "untested");
+  for (const criterion of open.slice(1)) {
+    criterion.outcome = "passed";
+    criterion.missingNl = [];
+  }
+  open[0]!.outcome = "cantTell";
+  open[0]!.missingNl = ["buiten de afbakening: het blok met openingstijden op P02 haalt zijn inhoud van https://data.voorbeeld.nl en bleef leeg."];
+  const { todo, statusLine } = deriveReport(evaluation);
+  assert.equal(statusLine.unfinished, false);
+  assert.ok(statusLine.openNl.includes(`Van de criteria voor de eigenaar bleef er 1 open door inhoud van een adres buiten de afbakening (${open[0]!.id}); een nieuw onderzoek met dat adres erbij meet ze`), statusLine.openNl);
+  assert.deepEqual(todo.investigate.owner.map((item) => item.pointsNl), [["Buiten de afbakening: Het blok met openingstijden op P02 haalt zijn inhoud van https://data.voorbeeld.nl en bleef leeg."]]);
+});
+
 /** An evaluation with a chat in an embedded frame that answers only after a message: one criterion waits for sending alone, one also for a person. */
 function withNotSent(): { evaluation: Evaluation; only: string; mixed: string } {
   const evaluation = exampleEvaluation();
@@ -619,7 +634,9 @@ test("the PDF is made for an evaluation with and without defects, passes its che
     const result = await render(dir);
     if (result.pdf === null) return context.skip("Typst is not installed");
     // Without poppler or veraPDF the check itself is what is missing; that is not a fault of the report.
-    assert.deepEqual(result.pdfChecks.filter((problem) => !problem.includes("is niet geïnstalleerd")), [], name);
+    // On GitHub veraPDF is installed, so there a missing veraPDF is a failure and not a reason to skip the check.
+    const missingAllowed = (problem: string): boolean => problem.includes("is niet geïnstalleerd") && !(process.env.CI === "true" && problem.includes("veraPDF"));
+    assert.deepEqual(result.pdfChecks.filter((problem) => !missingAllowed(problem)), [], name);
     made[name] = readFileSync(result.pdf);
     // Where the report came from stands on the cover with the commit, and at the foot of every other page.
     const text = await tool("pdftotext", ["-layout", result.pdf, "-"]);

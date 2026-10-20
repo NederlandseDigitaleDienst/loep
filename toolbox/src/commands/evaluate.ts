@@ -134,8 +134,8 @@ export async function evaluate(options: EvaluateOptions): Promise<Evaluation> {
   const readAloud = voiceOverSessions(observations.records);
   const gatheredAll = new Map<string, GatheredVerdicts>();
   for (const task of instrumentTasks) gatheredAll.set(task.criterion, await gatherVerdicts(options.run, task, observations));
-  // What each judge saw that belongs to another criterion: the verdicts there have to have ruled on it.
-  const judged = new Map([...gatheredAll].flatMap(([id, gathered]): [string, Verdict][] => (gathered.verdicts.a ? [[id, gathered.verdicts.a]] : [])));
+  // What each round saw that belongs to another criterion: the verdicts there have to have ruled on it.
+  const passing = new Map([...gatheredAll].map(([id, gathered]) => [id, gathered.verdicts]));
   for (const criterion of allCriteriaSorted()) {
     const procedure = procedures.find((entry) => entry.id === criterion.id);
     const instrumentTask = instrumentTasks.find((entry) => entry.criterion === criterion.id);
@@ -152,7 +152,7 @@ export async function evaluate(options: EvaluateOptions): Promise<Evaluation> {
           // A limit that says no screen reader was used, or nobody logged in, holds only when that is so for this criterion in this run.
           procedure: procedure ? { version: procedure.version, sha256: procedure.sha256, class: procedure.class, limitsNl: procedure.limitsNl === null ? null : runLimitsNl(procedure.limitsNl, { screenReader: [instrumentTask?.judge.session, instrumentTask?.verify?.session, instrumentTask?.finish?.session].some((session) => session !== undefined && readAloud.has(session)), loggedIn: Boolean(run.login) }) } : null,
           provenance: { dossierSha256: instrumentTask?.dossierSha256 ?? null, verdictSha256: hashes },
-          unruledNl: instrumentTask ? unruledCrossPoints(judged, criterion.id, [verdicts.final, verdicts.finish]) : [],
+          unruledNl: instrumentTask ? unruledCrossPoints(passing, criterion.id, [verdicts.final, verdicts.finish]) : [],
           outage: instrumentTask !== undefined && !verdicts.finish && skippedForOutage(options.run, instrumentTask),
         },
         prefix,
@@ -358,7 +358,7 @@ export async function evaluate(options: EvaluateOptions): Promise<Evaluation> {
   const person = open.owner.filter((id) => !notSent.includes(id));
   if (person.length > 0) process.stderr.write(`open, vraagt een mens of een keuze: ${idsAcrossVersionsNl(person, criteria)}. Een persoon legt het antwoord vast met answer; daarna opnieuw evaluate.\n`);
   if (notSent.length > 0) process.stderr.write(`open, alleen omdat het onderzoek niet mocht versturen: ${idsAcrossVersionsNl(notSent, criteria)}. Geen persoon nodig: een nieuw onderzoek met een testomgeving, verklaard bij inventory (--test-environment <origin> --declared-by "<naam>, <functie>"), meet het met een instrument. Die origin mag die van alleen het ingesloten venster zijn.\n`);
-  if (open.evaluation.length > 0) process.stderr.write(`LET OP: het onderzoek is niet af. Door dit onderzoek niet vastgesteld: ${idsAcrossVersionsNl(open.evaluation, criteria)}. Draai tasks en pending: de afmaakronde meet wat ontbrak. Is die al geweest, dan kan alleen een persoon het punt nog sluiten, met answer, behalve een punt "${UNREACHABLE}" of "proef werkte niet": dat meet een nieuwe afmaakronde met tasks --again <criteria>.\n`);
+  if (open.evaluation.length > 0) process.stderr.write(`LET OP: het onderzoek is niet af. Door dit onderzoek niet vastgesteld: ${idsAcrossVersionsNl(open.evaluation, criteria)}. Draai tasks en pending: de afmaakronde meet wat ontbrak. Is die al geweest, dan kan alleen een persoon het punt nog sluiten, met answer, behalve een punt "${UNREACHABLE}" of "proef werkte niet", of iets wat een andere afmaakronde doorgaf en nog niemand beoordeelde: dat doet een nieuwe afmaakronde met tasks --again <criteria>.\n`);
   // A part of the site that did not load is no fault of loep and no work for the owner: said apart, with the way to measure it once it loads.
   const unreachable = open.evaluation.filter((id) => criteria.find((criterion) => criterion.id === id)!.missingNl.some((point) => openPoint(point).kind?.prefix === UNREACHABLE));
   if (unreachable.length > 0) process.stderr.write(`open, een deel van de site was niet bereikbaar: ${idsAcrossVersionsNl(unreachable, criteria)}. Laadt het weer, zet dan een nieuwe afmaakronde klaar met tasks --again ${unreachable.join(",")}, en draai daarna opnieuw evaluate.\n`);

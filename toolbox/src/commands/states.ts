@@ -18,6 +18,7 @@ import { progressLine, sayingItRuns, STILL_RUNNING_MS, withinTime as limited } f
 import { ProgressFile } from "../lib/progress.ts";
 import { DELEGATING, DOWN_EVENTS, downEventTargets, downKind, probeDownEvent, type DownTarget } from "../instruments/pointer.ts";
 import { probeSettings } from "../instruments/settings.ts";
+import { OriginBlocked } from "../session/blockade.ts";
 import { holds } from "../session/recipe.ts";
 import { ModelSweep, type StateOpener } from "./modelsweep.ts";
 
@@ -205,7 +206,7 @@ async function freshPage(context: BrowserContext, data: PageData): Promise<Page>
   }).catch((error: Error) => {
     throwIfLoginExpired();
     if (error instanceof LoginExpired) throw error;
-    throw new PageNotLoaded(`de pagina laadde ook bij de tweede poging niet (${firstLineOf(error)})`);
+    throw new PageNotLoaded(error instanceof OriginBlocked ? error.message : `de pagina laadde ook bij de tweede poging niet (${firstLineOf(error)})`);
   });
   if (placement) {
     const known = windows.get(data.label) ?? { page: data.label, url: data.item.url, inPlaceOn: placement.inPlaceOn, apartNl: placement.apartNl, failedNl: [] };
