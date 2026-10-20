@@ -20,7 +20,7 @@ let browser: Browser;
 before(async () => {
   site = await startServer();
   run = mkdtempSync(join(tmpdir(), "loep-speak-sweep-"));
-  daemon = await Daemon.create(run, { hosts: ["127.0.0.1"], baseUrl: `${site.origin}/`, strict: false }, { navigationDelayMs: 0, secondBrowsers: false });
+  daemon = await Daemon.create(run, { hosts: [new URL(site.origin).host], baseUrl: `${site.origin}/`, strict: false }, { navigationDelayMs: 0, secondBrowsers: false });
   assert.equal((await daemon.handle({ op: "start", session: "main" })).ok, true);
   browser = await chromium.launch();
 });
@@ -45,7 +45,7 @@ async function ref(query: string): Promise<number> {
 }
 
 test("the sweep hears what is said by itself during the step that opens a state, on the page and in an embedded frame", async () => {
-  const env: Env = { browser, runDir: run, scope: { hosts: ["127.0.0.1"], baseUrl: `${site.origin}/`, strict: false }, politeness: new Politeness(0), limits: { ...DEFAULT_DAEMON_LIMITS, navigationDelayMs: 0 } };
+  const env: Env = { browser, runDir: run, scope: { hosts: [new URL(site.origin).host], baseUrl: `${site.origin}/`, strict: false }, politeness: new Politeness(0), limits: { ...DEFAULT_DAEMON_LIMITS, navigationDelayMs: 0 } };
   const heardWhile = async (selector: string, name: string): Promise<ReturnType<typeof spokenByItself>> => {
     await loep("open", ["/speech.html"]);
     await loep("click", [await ref(selector)]);

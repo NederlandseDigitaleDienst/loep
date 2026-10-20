@@ -50,7 +50,7 @@ before(async () => {
   await inventory({ baseUrl: `${origin}/`, out: run, maxPages: 1, fixedUrls: [`${origin}/`] });
 
   // The recipe is recorded through a real session, on a page where the button stands still.
-  const daemon = await Daemon.create(run, { hosts: ["127.0.0.1"], baseUrl: `${origin}/`, strict: false }, { navigationDelayMs: 0, secondBrowsers: false });
+  const daemon = await Daemon.create(run, { hosts: [new URL(origin).host], baseUrl: `${origin}/`, strict: false }, { navigationDelayMs: 0, secondBrowsers: false });
   const loep = async (command: string, args: string[] = []): Promise<Record<string, unknown>> => {
     const response = await daemon.handle({ op: "command", session: "verken", command, args, options: {} });
     assert.equal(response.ok, true, `${command}: ${JSON.stringify(response.print)}`);

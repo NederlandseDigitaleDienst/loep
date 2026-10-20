@@ -130,9 +130,11 @@ export function embeddingPage(runDir: string, url: string): string | undefined {
 /** Open a fresh browser context on the start URL, with every safety limit of a session in place. */
 export async function openSurface(env: Env, start: StartState, onContext?: (context: BrowserContext) => void): Promise<{ surface: Surface; load: LoadResult }> {
   const guard: Guard = { blocked: [], outsideScopeLoaded: {} };
-  if (!urlInScope(env.scope, start.url)) {
+  // A page is opened over http or https only: never a file on this machine, a data: or blob: address, or a socket.
+  const web = /^https?:/i.test(start.url);
+  if (!web || !urlInScope(env.scope, start.url)) {
     const refusal: Blocked = { at: new Date().toISOString(), kind: "scope", method: "GET", url: start.url.slice(0, 300), resourceType: "document" };
-    throw new Refused(`${start.url} ligt buiten de scope van deze run (${env.scope.hosts.join(", ")}); er is niets opgevraagd`, [refusal]);
+    throw new Refused(web ? `${start.url} ligt buiten de scope van deze run (${env.scope.hosts.join(", ")}); er is niets opgevraagd` : `${start.url.slice(0, 120)} is geen adres met http:// of https://; een sessie opent alleen pagina's van de site. Er is niets opgevraagd`, [refusal]);
   }
   // In a run with a login an address that logs out is not opened: say so in words, before a browser is asked.
   if (logsOut(start.url)) throw new Refused(`${start.url}: ${LOGOUT_REFUSED_NL}`, [{ at: new Date().toISOString(), kind: "logout", method: "GET", url: start.url.slice(0, 300), resourceType: "document" }]);
@@ -195,10 +197,12 @@ export async function openSurface(env: Env, start: StartState, onContext?: (cont
 export async function leftScope(env: Env, surface: Surface): Promise<void> {
   const { page } = surface.top;
   const url = page.url();
-  if (urlInScope(env.scope, url)) return;
+  // A page that did not load stays empty or shows the browser's own error page: it went nowhere.
+  if (urlInScope(env.scope, url) || /^(about|chrome-error):/.test(url)) return;
   surface.guard.blocked.push({ at: new Date().toISOString(), kind: "left-scope", method: "GET", url: url.slice(0, 300), resourceType: "document" });
   await page.goto("about:blank").catch(() => undefined);
-  throw new Error(`de pagina kwam uit op ${new URL(url).hostname}, buiten de scope van deze run; de pagina is verlaten, begin opnieuw met open`);
+  const where = /^(https?|wss?):/.test(url) ? new URL(url).hostname : `een adres dat begint met ${url.split(":")[0]}:`;
+  throw new Error(`de pagina kwam uit op ${where}, buiten de scope van deze run; de pagina is verlaten, begin opnieuw met open`);
 }
 
 /** Wait for whatever an action set in motion: a short pause, and the full settling of a page when it navigated. */

@@ -5,8 +5,32 @@ import { redactor } from "../src/commands/feedback.ts";
 import { formPagesNl, pageLimitNl, pageLimitReason, type Inventory, type InventoryPage } from "../src/commands/inventory.ts";
 import { buildSample } from "../src/commands/sample.ts";
 import { documentScopeNl } from "../src/lib/documents.ts";
-import { notFoundProbes, originsNl, originsOfRun, pagesInScopeNl, parseOrigin, siteHosts, siteLabel, siteOrigins } from "../src/lib/origins.ts";
+import { isPrivateHost, notFoundProbes, originsNl, originsOfRun, pagesInScopeNl, parseOrigin, privateFromPublicSite, scopeHost, scopeHostOf, siteHosts, siteLabel, siteOrigins } from "../src/lib/origins.ts";
 import { otherDomains } from "../src/lib/statement.ts";
+import { urlInScope } from "../src/session/safety.ts";
+
+test("the scope takes http, https, ws and wss only, on the host with its port", () => {
+  const scope = { hosts: ["example.nl", "example.nl:8443", "127.0.0.1:4710"], baseUrl: null, strict: false };
+  for (const url of ["https://example.nl/a", "http://example.nl/", "http://example.nl:80/", "https://example.nl:443/", "wss://example.nl/chat", "https://example.nl:8443/", "http://127.0.0.1:4710/x"]) assert.ok(urlInScope(scope, url), url);
+  // Every other scheme is never in the scope, whatever the host.
+  for (const url of ["file:///etc/hosts", "file://example.nl/etc/hosts", "data:text/html,<p>x</p>", "blob:https://example.nl/0d3c", "javascript:alert(1)", "ftp://example.nl/", "about:blank", "chrome://settings"]) assert.ok(!urlInScope(scope, url), url);
+  // Another port is another server.
+  for (const url of ["http://example.nl:8080/", "https://example.nl:8444/", "http://127.0.0.1:4711/", "http://127.0.0.1/", "geen adres"]) assert.ok(!urlInScope(scope, url), url);
+  assert.equal(scopeHost(new URL("https://Example.nl:443/a")), "example.nl");
+  assert.equal(scopeHost(new URL("http://[::1]:4710/")), "[::1]:4710");
+  assert.deepEqual(["cdn.example.nl", "cdn.example.nl:8080", "https://cdn.example.nl/x", "http://cdn.example.nl:80"].map(scopeHostOf), ["cdn.example.nl", "cdn.example.nl:8080", "cdn.example.nl", "cdn.example.nl"]);
+});
+
+test("an address on this machine or a local network is private, and only a local site may embed one", () => {
+  const hostOf = (url: string): string => new URL(url).hostname;
+  for (const url of ["http://127.0.0.1/", "http://127.8.9.1/", "http://0.0.0.0/", "http://localhost:3000/", "http://app.localhost/", "http://10.0.0.1/", "http://172.16.0.1/", "http://172.31.255.255/", "http://192.168.1.1/", "http://169.254.169.254/", "http://printer.local/", "http://[::1]/", "http://[fc00::1]/", "http://[fd12:3456::1]/", "http://[fe80::1]/", "http://[febf::1]/", "http://[::ffff:127.0.0.1]/", "http://[::ffff:10.0.0.1]/", "http://2130706433/", "http://0x7f.1/"]) assert.ok(isPrivateHost(hostOf(url)), url);
+  for (const url of ["https://example.nl/", "http://172.15.0.1/", "http://172.32.0.1/", "http://192.169.1.1/", "http://11.0.0.1/", "http://169.255.0.1/", "http://[2001:db8::1]/", "http://[fec0::1]/", "http://[::ffff:8.8.8.8]/", "https://local.example.nl/", "https://example.localhost.nl/"]) assert.ok(!isPrivateHost(hostOf(url)), url);
+  assert.equal(privateFromPublicSite("http://10.0.0.1/beheer", ["https://example.nl"]), true);
+  assert.equal(privateFromPublicSite("https://video.example.org/embed", ["https://example.nl"]), false);
+  // The test site runs on this machine: its player on another port is part of it.
+  assert.equal(privateFromPublicSite("http://127.0.0.1:4712/speler.html", ["http://127.0.0.1:4710"]), false);
+  assert.equal(privateFromPublicSite("http://192.168.1.10/", ["https://example.nl", "http://intranet.local"]), false, "one origin of the site is local");
+});
 
 const main = "https://example.nl";
 const docs = "https://docs.example.nl";

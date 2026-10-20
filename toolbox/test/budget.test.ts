@@ -90,7 +90,7 @@ const REASON = "De foutmeldingen van het formulier zijn nog niet op 320 pixels g
 before(async () => {
   site = await startServer();
   run = mkdtempSync(join(tmpdir(), "loep-budget-"));
-  daemon = await Daemon.create(run, { hosts: ["127.0.0.1"], baseUrl: `${site.origin}/`, strict: false }, { navigationDelayMs: 20, maxSessions: 3, secondBrowsers: false });
+  daemon = await Daemon.create(run, { hosts: [new URL(site.origin).host], baseUrl: `${site.origin}/`, strict: false }, { navigationDelayMs: 20, maxSessions: 3, secondBrowsers: false });
 });
 after(async () => {
   await daemon.close();

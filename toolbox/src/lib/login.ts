@@ -1,5 +1,5 @@
 import { chmodSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import type { Page } from "playwright";
 import { readJson, writeJson } from "./canonical.ts";
 import { isLocalHost, writesForRun, type WritePermission } from "./writes.ts";
@@ -93,9 +93,30 @@ export function loginSessionProblems(value: unknown, origin?: string | null): st
 /** The part of a session that may be told. */
 export const markOf = (session: LoginMark): LoginMark => ({ origin: session.origin, loginUrl: session.loginUrl, landingUrl: session.landingUrl, role: session.role, loggedInAt: session.loggedInAt });
 
+/** The files of a run that hold a secret. Never in a commit, a task for an agent or a message. */
+export const SECRET_FILES: readonly string[] = [LOGIN_SESSION_FILE, IDLE_SESSION_FILE];
+
+/**
+ * Put a `.gitignore` in the run that keeps its secret files out of git, for whoever keeps the
+ * run in a repository. A line that is missing is added; what is there stays, so a run that is
+ * already sealed does not change when nothing is missing.
+ */
+export function ignoreSecrets(runDir: string): void {
+  const path = join(runDir, ".gitignore");
+  const existing = existsSync(path) ? readFileSync(path, "utf8") : "";
+  const lines = new Set(existing.split("\n").map((line) => line.trim().replace(/^\//, "")));
+  const missing = SECRET_FILES.filter((name) => !lines.has(name));
+  if (missing.length === 0) return;
+  mkdirSync(runDir, { recursive: true });
+  const lead = existing === "" ? "# Sessiebestanden van een inlog: wie ze heeft, is ingelogd. Nooit in een commit.\n" : existing.endsWith("\n") ? "" : "\n";
+  writeFileSync(path, `${existing}${lead}${missing.map((name) => `${name}\n`).join("")}`);
+}
+
 /** Write a session where only its owner can read it. */
 export function writeLoginFile(path: string, session: LoginSession): void {
   mkdirSync(dirname(path), { recursive: true });
+  // A session in a run: whoever keeps the run in a repository does not commit it by accident.
+  if (SECRET_FILES.includes(basename(path))) ignoreSecrets(dirname(path));
   writeFileSync(path, `${JSON.stringify(session, null, 2)}\n`, { mode: 0o600 });
   // The mode above only counts for a new file: a file that was there keeps the rights it had.
   chmodSync(path, 0o600);

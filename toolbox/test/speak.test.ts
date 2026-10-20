@@ -19,7 +19,7 @@ let browser: Browser;
 before(async () => {
   site = await startServer();
   run = mkdtempSync(join(tmpdir(), "loep-speak-"));
-  daemon = await Daemon.create(run, { hosts: ["127.0.0.1"], baseUrl: `${site.origin}/`, strict: false }, { navigationDelayMs: 0, secondBrowsers: false });
+  daemon = await Daemon.create(run, { hosts: [new URL(site.origin).host], baseUrl: `${site.origin}/`, strict: false }, { navigationDelayMs: 0, secondBrowsers: false });
   assert.equal((await daemon.handle({ op: "start", session: "main" })).ok, true);
   browser = await chromium.launch();
 });

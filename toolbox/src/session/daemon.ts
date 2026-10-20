@@ -539,11 +539,15 @@ export class Daemon {
       if (!item) throw new Error(`de steekproef heeft geen pagina ${address.toUpperCase()}`);
       return item.url;
     }
+    let url: URL;
     try {
-      return new URL(address, this.env.scope.baseUrl ?? undefined).href;
+      url = new URL(address, this.env.scope.baseUrl ?? undefined);
     } catch {
       throw new Error(`"${address}" is geen adres en geen paginalabel`);
     }
+    // Only a page of the web: never a file on this machine or an address that holds its own content (data:, blob:, javascript:).
+    if (url.protocol !== "http:" && url.protocol !== "https:") throw new Error(`"${address.slice(0, 120)}" is geen adres met http:// of https://; een sessie opent alleen pagina's van de site`);
+    return url.href;
   }
 
   /** The site model of the run, when there is one that passed `check-site`; a session works without it too. */

@@ -89,7 +89,7 @@ before(async () => {
   site = await startServer();
   run = mkdtempSync(join(tmpdir(), "loep-voiceover-session-"));
   pages = mkdtempSync(join(tmpdir(), "loep-voiceover-pages-"));
-  daemon = await Daemon.create(run, { hosts: ["127.0.0.1"], baseUrl: `${site.origin}/`, strict: false }, { navigationDelayMs: 0, secondBrowsers: false });
+  daemon = await Daemon.create(run, { hosts: [new URL(site.origin).host], baseUrl: `${site.origin}/`, strict: false }, { navigationDelayMs: 0, secondBrowsers: false });
   for (const session of ["main", "second"]) assert.equal((await daemon.handle({ op: "start", session })).ok, true);
   browser = await chromium.launch();
   VOICEOVER_FOR_TESTS.guest = fakeGuest();

@@ -4,9 +4,9 @@ import { confirmLogin, INPAGE_PATH, launchBrowser, loadPage, newContext, withinP
 import { sha256, slugForUrl, writeFileAtomic, writeJson } from "../lib/canonical.ts";
 import { countByKind, documentKind, kindOfContentType, REDIRECTS_ELSEWHERE_NL, startedDownload, type DocumentKind, type DocumentTotals, type InventoryDocument } from "../lib/documents.ts";
 import type { Vendor } from "../lib/evaluation.ts";
-import { isLogout, loginCookieHeader, LoginExpired, noteLogoutUrl, runLoginMark } from "../lib/login.ts";
+import { ignoreSecrets, isLogout, loginCookieHeader, LoginExpired, noteLogoutUrl, runLoginMark } from "../lib/login.ts";
 import { stepStart, writeManifest } from "../lib/manifest.ts";
-import { notFoundProbes, originsOfRun, siteOrigins } from "../lib/origins.ts";
+import { notFoundProbes, originsOfRun, privateFromPublicSite, siteOrigins } from "../lib/origins.ts";
 
 export interface InventoryPage {
   url: string;
@@ -193,6 +193,9 @@ function compareCounts(a: number[], b: number[]): number {
 
 /** The reason recorded for an address left out because the limit on pages was reached. */
 export const pageLimitReason = (maxPages: number): string => `page limit of ${maxPages} reached`;
+
+/** The reason recorded for an embedded window on this machine or a local network, on a site that is not there itself. */
+export const PRIVATE_FRAME_REASON = "embedded frame on a local or private address, on a site that is not local: not visited and not in the scope";
 
 /**
  * The part of the site an address belongs to, as `pageLimitNl` names it: the first path segment,
@@ -401,6 +404,8 @@ export async function inventory(options: InventoryOptions): Promise<Inventory> {
   // A run with a login: the session a person left behind, and the page that person pointed at.
   const login = runLoginMark();
   if (login && login.origin !== origin) throw new Error(`de inlogsessie van deze run is voor ${login.origin}, niet voor ${origin}`);
+  // The run is where a session of a login lives: whoever keeps the run in a repository does not commit it by accident.
+  ignoreSecrets(options.out);
   // Behind a login there is no sitemap to go by: the pages are found by following links with the session.
   const sitemap: string[] = [];
   if (!fixed && !login) for (const each of origins) sitemap.push(...(await fetchSitemapUrls(each)));
@@ -432,6 +437,15 @@ export async function inventory(options: InventoryOptions): Promise<Inventory> {
   const pages: InventoryPage[] = [];
   const skipped: Inventory["skipped"] = [];
   const done = new Set<string>();
+  // A site on the internet that embeds a window on this machine or a local network points into the network of whoever runs loep: that window is not visited and not in the scope.
+  const privateFrames = new Set<string>();
+  const noteFrame = (url: string, on: string): void => {
+    if (!privateFromPublicSite(url, origins)) return note(url, `iframe:${on}`);
+    if (privateFrames.has(url)) return;
+    privateFrames.add(url);
+    skipped.push({ url, reason: PRIVATE_FRAME_REASON });
+    process.stderr.write(`inventory: ingesloten venster op een lokaal of privé-adres niet opgenomen en buiten de scope: ${url} (op ${on})\n`);
+  };
   // Documents: found by a link or in the sitemap, never loaded here. A kind of null is decided by what the server says it sends.
   const documents = new Map<string, DocumentKind | null>();
   const elsewhere = new Map<string, DocumentKind>();
@@ -527,7 +541,7 @@ export async function inventory(options: InventoryOptions): Promise<Inventory> {
         pages.push({ ...record, slug, foundVia: via });
         // An embedded frame is evaluated as a page of its own, but its own links are not followed.
         const embedded = via.every((entry) => entry.startsWith("iframe:"));
-        if (!embedded) for (const frame of frames) note(normaliseUrl(frame), `iframe:${next}`);
+        if (!embedded) for (const frame of frames) noteFrame(normaliseUrl(frame), next);
         if (!fixed && !embedded && !missingPages.includes(next)) for (const link of links) note(normaliseUrl(link), "link");
         process.stderr.write(`inventory ${pages.length} ${next}\n`);
       } catch (error) {

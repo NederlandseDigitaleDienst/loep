@@ -39,7 +39,7 @@ let daemon: Daemon;
 before(async () => {
   site = await startServer();
   run = mkdtempSync(join(tmpdir(), "loep-frames-"));
-  daemon = await Daemon.create(run, { hosts: ["127.0.0.1", "localhost"], baseUrl: `${site.origin}/`, strict: false }, { navigationDelayMs: 50, secondBrowsers: false });
+  daemon = await Daemon.create(run, { hosts: [new URL(site.origin).host, new URL(site.otherOrigin).host], baseUrl: `${site.origin}/`, strict: false }, { navigationDelayMs: 50, secondBrowsers: false });
   assert.equal((await daemon.handle({ op: "start", session: "main" })).ok, true);
 });
 
@@ -215,7 +215,7 @@ test("a recipe that operates inside a frame is replayed from a clean page, and i
   const recipe = JSON.parse(readFileSync(join(run, "recipes", "speelt.json"), "utf8")) as Recipe;
   const browser = await chromium.launch();
   try {
-    const env: Env = { browser, runDir: run, scope: { hosts: ["127.0.0.1", "localhost"], baseUrl: `${site.origin}/`, strict: false }, politeness: new Politeness(50), limits: { ...DEFAULT_DAEMON_LIMITS, navigationDelayMs: 50 } };
+    const env: Env = { browser, runDir: run, scope: { hosts: [new URL(site.origin).host, new URL(site.otherOrigin).host], baseUrl: `${site.origin}/`, strict: false }, politeness: new Politeness(50), limits: { ...DEFAULT_DAEMON_LIMITS, navigationDelayMs: 50 } };
     const pressed = { kind: "visible", selector: "#play[aria-pressed=true]" } as const;
     const replay = await replayFromClean(env, recipe, { ...pressed, frame: `${site.otherOrigin}/player.html` });
     try {
@@ -257,7 +257,7 @@ test("a form and a button in a frame of another origin write nothing, and the re
 
 test("a frame from a host outside the scope does not load, and look says its content cannot be read", async () => {
   const strictRun = mkdtempSync(join(tmpdir(), "loep-frames-scope-"));
-  const narrow = await Daemon.create(strictRun, { hosts: ["127.0.0.1"], baseUrl: `${site.origin}/`, strict: false }, { navigationDelayMs: 50, secondBrowsers: false });
+  const narrow = await Daemon.create(strictRun, { hosts: [new URL(site.origin).host], baseUrl: `${site.origin}/`, strict: false }, { navigationDelayMs: 50, secondBrowsers: false });
   try {
     await narrow.handle({ op: "start", session: "main" });
     const opened = await narrow.handle({ op: "command", session: "main", command: "open", args: ["/embedded.html"] });
@@ -278,7 +278,7 @@ test("the same holds when the browser runs a frame of another site in a process 
   try {
     browser = await chromium.launch({ args: ["--site-per-process"] });
     const limits = { ...DEFAULT_DAEMON_LIMITS, navigationDelayMs: 50 };
-    const env: Env = { browser, runDir: isolatedRun, scope: { hosts: ["127.0.0.1", "localhost"], baseUrl: `${site.origin}/`, strict: false }, politeness: new Politeness(50), limits };
+    const env: Env = { browser, runDir: isolatedRun, scope: { hosts: [new URL(site.origin).host, new URL(site.otherOrigin).host], baseUrl: `${site.origin}/`, strict: false }, politeness: new Politeness(50), limits };
     site.requests.length = 0;
     const { surface } = await openSurface(env, { url: `${site.origin}/embedded.html`, width: 1280, height: 800, scheme: "light" });
     try {
@@ -426,7 +426,7 @@ test("the probes and the capture of a state work inside a window that counts, on
     const found = await inventory({ baseUrl: page, out: dir, maxPages: 6 });
     const context = exploreContext(found);
     // The explorer: the play button in the player of the site itself, pressed inside its frame.
-    const explorer = await Daemon.create(dir, { hosts: ["127.0.0.1", "localhost"], baseUrl: `${site.origin}/`, strict: false }, { navigationDelayMs: 20, secondBrowsers: false });
+    const explorer = await Daemon.create(dir, { hosts: [new URL(site.origin).host, new URL(site.otherOrigin).host], baseUrl: `${site.origin}/`, strict: false }, { navigationDelayMs: 20, secondBrowsers: false });
     try {
       const act = async (command: string, args: string[] = []): Promise<Record<string, unknown>> => {
         const response = await explorer.handle({ op: "command", session: "verken", command, args });

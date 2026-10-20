@@ -36,7 +36,9 @@
   var inScope = function (url) {
     try {
       var parsed = new URL(String(url), document.baseURI);
-      return !/^(https?|wss?):$/.test(parsed.protocol) || config.hosts.indexOf(parsed.hostname) !== -1;
+      // A host with its port, as the scope of the run names it (see scopeHost); what the page holds itself (data:, blob:) leaves nothing.
+      var host = parsed.port === "" || parsed.port === "80" || parsed.port === "443" ? parsed.hostname : parsed.hostname + ":" + parsed.port;
+      return !/^(https?|wss?):$/.test(parsed.protocol) || config.hosts.indexOf(host) !== -1;
     } catch (error) {
       return false;
     }
