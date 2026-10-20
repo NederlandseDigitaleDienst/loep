@@ -3,7 +3,8 @@ import { chromium, type Browser, type BrowserContext, type Page, type Route } fr
 import { CLOUDFLARE_HEADER, isChallenge } from "../lib/challenge.ts";
 import { confirmLoginOn, LoginExpired, logsOut, runLoginMark, runLoginState, throwIfLoginExpired, watchLogin } from "../lib/login.ts";
 import { addressOf, noteRefusedRead, readDecision, readRuleFor, runReads, type ReadRequest } from "../lib/reads.ts";
-import { isWriteOrigin, runWrites, type WriteAccess } from "../lib/writes.ts";
+import { isOurMessage, isWriteOrigin, runWrites, type WriteAccess } from "../lib/writes.ts";
+import { MESSAGE_VALUES } from "../session/safety.ts";
 import { refusedByBrowser, type ClipboardWrite } from "./clipboard.ts";
 import { frameAsPage } from "./frame.ts";
 
@@ -210,8 +211,9 @@ export async function newContext(browser: Browser, options: ContextOptions = {},
     if (read) noteRefusedRead({ method, address: addressOf(route.request().url()), rule: read.rule.id, reasonNl: read.reasonNl });
     // An aborted navigation replaces the page with an error page. "No content" leaves the page as it was.
     if (!isWriteOrigin(writes, route.request().url())) return route.request().isNavigationRequest() ? route.fulfill({ status: 204, body: "" }) : route.abort("blockedbyclient");
-    writes!.record(method, route.request().url());
-    return passWrite(route, writes!).then((repeated) => void (repeated && writes!.record(method, repeated)));
+    // The sweep shares the budget for sending with the sessions: a write past it, or too soon after the previous one, is held back.
+    if (!writes!.claim(method, route.request().url()).ok) return route.request().isNavigationRequest() ? route.fulfill({ status: 204, body: "" }) : route.abort("blockedbyclient");
+    return passWrite(route, writes!).then((repeated) => void (repeated && writes!.record(method, repeated, { repeat: true })));
   });
   if (guard || writes) {
     await context.routeWebSocket(/.*/, (socket) => {
@@ -219,7 +221,10 @@ export async function newContext(browser: Browser, options: ContextOptions = {},
       const free = isWriteOrigin(writes, socket.url());
       socket.onMessage((message) => {
         if (free) {
-          writes!.record("SEND", socket.url());
+          // A frame with a test value in it takes one from the budget of the run, and past it, or too soon, it is held back; a heartbeat is only noted.
+          if (isOurMessage(message, MESSAGE_VALUES)) {
+            if (!writes!.claim("SEND", socket.url(), { message: true }).ok) return void (guard?.active && guard.blocked++);
+          } else writes!.record("SEND", socket.url());
           server.send(message);
         } else if (guard?.active) guard.blocked++;
         else server.send(message);
