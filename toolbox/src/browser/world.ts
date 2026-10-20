@@ -200,9 +200,19 @@ export interface World {
   evaluate<R = unknown, A = unknown>(script: string | ((argument: A) => R | Promise<R>), argument?: A): Promise<R>;
 }
 
-/** loep's own world in the frame a page or frame stands for; for an embedded frame measured as a page, in that frame. */
+/** Whether the browser of a frame has the protocol for worlds of its own: Chromium. */
+export const hasOwnWorld = (target: Page | Frame): boolean => {
+  const name = ("mainFrame" in target ? target.mainFrame() : target).page().context().browser()?.browserType().name();
+  return name !== "webkit" && name !== "firefox";
+};
+
+/**
+ * loep's own world in the frame a page or frame stands for; for an embedded frame measured as a page, in that frame.
+ * A browser without that protocol (WebKit, Firefox: the second browsers of a few probes) runs the script in the page, as before.
+ */
 export function ownWorld(target: Page | Frame): World {
   const frame = "mainFrame" in target ? target.mainFrame() : target;
+  if (!hasOwnWorld(frame)) return { evaluate: <R, A>(script: string | ((argument: A) => R | Promise<R>), argument?: A) => frame.evaluate(script as never, argument) as Promise<R> };
   return {
     async evaluate<R, A>(script: string | ((argument: A) => R | Promise<R>), argument?: A): Promise<R> {
       const body = typeof script === "function" ? `(${script.toString()})(__loepWire.decode(argument))` : `(\n${script}\n)`;

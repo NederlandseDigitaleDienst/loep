@@ -1,5 +1,5 @@
 import type { CDPSession, ElementHandle, Page } from "playwright";
-import { ownWorld } from "./world.ts";
+import { hasOwnWorld, ownWorld } from "./world.ts";
 
 /**
  * Whether a library of the toolbox stands on the window as the toolbox leaves it: fixed and frozen (#143).
@@ -26,7 +26,7 @@ const IN_PAGE = new Set(["freezeListeners", "listenerCounts", "ownListeners", "t
  * toolbox fixed to the window, the call is refused (#143).
  */
 export function call<T>(page: Page, name: string, ...args: unknown[]): Promise<T> {
-  if (!IN_PAGE.has(name)) {
+  if (!IN_PAGE.has(name) && hasOwnWorld(page)) {
     return ownWorld(page).evaluate(
       ([fn, parameters]) => {
         const library = (window as unknown as { __loep: Record<string, (...values: unknown[]) => unknown> & { watched: () => boolean } }).__loep;
