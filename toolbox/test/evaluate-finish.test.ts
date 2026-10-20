@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readDossierInFull } from "./fixtures/dossier-reads.ts";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -65,7 +66,7 @@ const sessionFile = (session: string, extensions = 0): void =>
 const digits = (id: string): string => id.replaceAll(".", "");
 const task = async (id: string): Promise<InstrumentTask> => (await loadInstrumentIndex(run)).tasks.find((entry) => entry.criterion === id)!;
 const seen = (evidence: string[], ruling: "noIssue" | "open" | "finding" = "noIssue", finding?: string): Verdict["observations"][number] => ({ checkedNl: "De pagina's van de steekproef", howNl: "Bekeken en gemeten in de sessie", observedNl: "Wat er op de pagina staat, zoals gemeten", evidence, ruling, ...(finding ? { finding } : {}) });
-const passEvidence = async (id: string, session: string): Promise<string[]> => [observe(session, "look"), ...(await task(id)).passCommands.map((command) => observe(session, command))];
+const passEvidence = async (id: string, session: string): Promise<string[]> => (readDossierInFull(run, session, id), [observe(session, "look"), ...(await task(id)).passCommands.map((command) => observe(session, command))]);
 const valid = async (id: string, round: "judge" | "final" | "finish"): Promise<void> => assert.deepEqual(await checkInstrumentVerdict(run, id, round), [], `${id} ${round}`);
 
 test("evaluate on a run with a finishing round: its verdict is the outcome, what asks a person stays open, and the extensions are counted", { timeout: 600_000 }, async () => {

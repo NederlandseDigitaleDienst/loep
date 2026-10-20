@@ -384,6 +384,40 @@ test("an instrument that takes a page measures inside a frame when it is given t
   }
 });
 
+test("a frame that a zoom around it shows at half its size is pictured, operated and marked where it is shown", async () => {
+  const browser = await chromium.launch();
+  try {
+    const context = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+    const page = await context.newPage();
+    await page.goto(`${site.origin}/zoomed.html`);
+    const frame = page.frames().find((entry) => entry.url() === `${site.origin}/zoomed-content.html`)!;
+    const view = await frameAsPage(page, frame);
+    assert.deepEqual(view.viewportSize(), { width: 1236, height: 1020 });
+    // The button stands right in the frame: taken as if the frame were shown at full size, it would lie outside the tab.
+    const button = PNG.sync.read(await view.screenshot({ clip: { x: 900, y: 700, width: 200, height: 80 } }));
+    assert.deepEqual([button.width, button.height], [200, 80]);
+    // The picture is in pixels of the frame, as the positions inside it are.
+    const picture = PNG.sync.read(await view.screenshot());
+    assert.deepEqual([picture.width, picture.height], [1236, 1020]);
+    const colour = (x: number, y: number): number[] => [...picture.data.subarray((picture.width * y + x) << 2, ((picture.width * y + x) << 2) + 3)];
+    assert.deepEqual(colour(700, 350), [0, 102, 204], "the block stands where the frame has it");
+    assert.deepEqual(colour(560, 350), [255, 255, 255]);
+    assert.deepEqual(colour(840, 350), [255, 255, 255]);
+    await view.mouse.click(1000, 740);
+    assert.equal(await frame.locator("#status").textContent(), "Ingedrukt");
+  } finally {
+    await browser.close();
+  }
+
+  await loep("open", ["/zoomed.html"]);
+  const looked = await loep("look");
+  const line = (looked.outline as string[]).find((entry) => /button: Druk hier/.test(entry))!;
+  const items = (observation(looked.id).result as { items: { ref: number; box: { x: number; y: number; width: number; height: number } }[] }).items;
+  const mark = items.find((item) => item.ref === Number(line.split(" ")[0]))!;
+  // The frame shows its document from (401, 381) in the tab, at half size: the button at (900, 700) of the frame stands at (851, 731).
+  for (const [measured, expected] of [[mark.box.x, 851], [mark.box.y, 731], [mark.box.width, 100], [mark.box.height, 40]] as const) assert.ok(Math.abs(measured - expected) <= 1, `mark ${JSON.stringify(mark.box)}`);
+});
+
 test("the probes and the capture of a state work inside a window that counts, on the page it stands on", { timeout: 600_000 }, async () => {
   const dir = mkdtempSync(join(tmpdir(), "loep-frames-states-"));
   const page = `${site.origin}/embedded.html`;

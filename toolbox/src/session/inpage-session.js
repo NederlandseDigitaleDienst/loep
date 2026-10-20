@@ -277,6 +277,7 @@
         value: element.matches("input:not([type=password]),textarea,select") && element.value ? String(element.value).slice(0, 40) : undefined,
         coveredBy: cover ? `${cover.localName}${cover.id ? `#${cover.id}` : ""}` : undefined,
         inset: kind === "frame" ? ["Left", "Top"].map((side) => (parseFloat(getComputedStyle(element)[`border${side}Width`]) || 0) + (parseFloat(getComputedStyle(element)[`padding${side}`]) || 0)) : undefined,
+        scale: kind === "frame" ? [element.offsetWidth > 0 ? element.getBoundingClientRect().width / element.offsetWidth : 1, element.offsetHeight > 0 ? element.getBoundingClientRect().height / element.offsetHeight : 1] : undefined,
       });
     }
     const focused = library.deepActiveElement();

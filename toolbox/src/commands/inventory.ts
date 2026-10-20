@@ -1,8 +1,8 @@
 import { join } from "node:path";
 import type { BrowserContext, Page } from "playwright";
-import { confirmLogin, INPAGE_PATH, launchBrowser, loadPage, newContext } from "../browser/session.ts";
+import { confirmLogin, INPAGE_PATH, launchBrowser, loadPage, newContext, withinPageTime } from "../browser/session.ts";
 import { sha256, slugForUrl, writeFileAtomic, writeJson } from "../lib/canonical.ts";
-import { countByKind, documentKind, kindOfContentType, REDIRECTS_ELSEWHERE_NL, type DocumentKind, type DocumentTotals, type InventoryDocument } from "../lib/documents.ts";
+import { countByKind, documentKind, kindOfContentType, REDIRECTS_ELSEWHERE_NL, startedDownload, type DocumentKind, type DocumentTotals, type InventoryDocument } from "../lib/documents.ts";
 import type { Vendor } from "../lib/evaluation.ts";
 import { isLogout, loginCookieHeader, LoginExpired, noteLogoutUrl, runLoginMark } from "../lib/login.ts";
 import { stepStart, writeManifest } from "../lib/manifest.ts";
@@ -294,6 +294,8 @@ function linksWithText(page: Page): Promise<Anchor[]> {
 /** Documents asked for their size and date; beyond this they are recorded without. */
 export const MAX_DOCUMENT_PROBES = 300;
 const PROBE_TIMEOUT_MS = 8000;
+/** Loading and reading one page, counted by Node: twice the wait for a navigation and for settling, with a login, and room to read. */
+const PAGE_LIMIT_MS = 4 * 60_000;
 
 /** What one HEAD request says about a document. `redirectsTo` is the address outside the site its address redirects to: then it is no document of the site. */
 export type DocumentProbe = Pick<InventoryDocument, "bytes" | "lastModified" | "contentType" | "status" | "notAsked"> & { redirectsTo?: string };
@@ -425,7 +427,7 @@ export async function inventory(options: InventoryOptions): Promise<Inventory> {
   const browserVersion = browser.version();
   const context: BrowserContext = await newContext(browser);
   await context.addInitScript({ path: INPAGE_PATH });
-  const page = await context.newPage();
+  let page = await context.newPage();
 
   const pages: InventoryPage[] = [];
   const skipped: Inventory["skipped"] = [];
@@ -492,7 +494,8 @@ export async function inventory(options: InventoryOptions): Promise<Inventory> {
       }
       noteVisited(visited, next, origins);
       try {
-        const result = await inspect(page, next, !missingPages.includes(next), downloads.has(next), origins);
+        const tab = page;
+        const result = await withinPageTime(PAGE_LIMIT_MS, () => inspect(tab, next, !missingPages.includes(next), downloads.has(next), origins), () => tab.close());
         if ("document" in result) {
           noteDocument(next, result.document);
           continue;
@@ -529,12 +532,19 @@ export async function inventory(options: InventoryOptions): Promise<Inventory> {
         process.stderr.write(`inventory ${pages.length} ${next}\n`);
       } catch (error) {
         if (error instanceof LoginExpired) throw error;
+        // A page that failed may still keep its tab busy: the next page gets a fresh one.
+        await page.close().catch(() => undefined);
+        page = await context.newPage();
         // A download behind an address without an extension: the browser cannot show it, the server says what it is.
         const probe = ownOrigin(next) && failedLoadsProbed++ < MAX_DOCUMENT_PROBES ? await probeDocument(next, origins) : null;
         const probedKind = kindOfContentType(probe?.contentType ?? null);
         if (probe && (probedKind || (downloads.has(next) && !isHtml(probe.contentType)))) {
           noteDocument(next, probedKind);
           probedAsDocument.set(next, probe);
+        } else if (ownOrigin(next) && startedDownload((error as Error).message)) {
+          // The browser saved it as a file: a document whatever type the server names, also without a link that offers it for download.
+          noteDocument(next, probedKind);
+          if (probe) probedAsDocument.set(next, probe);
         } else skipped.push({ url: next, reason: `failed to load: ${(error as Error).message.split("\n")[0]}` });
       }
     }

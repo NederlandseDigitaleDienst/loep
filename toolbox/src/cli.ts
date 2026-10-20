@@ -14,7 +14,7 @@ const USAGE = `loep <command> [options]
   watch-session --run <run> [--gaps 5,10,20,40,80] [--max-hours 8]
                                          The watch on the session of a run with a login. collect starts it in the background
                                          and evaluate stops it; a second start on the same run leaves the running one alone
-  inventory <url> --out <run> [--also-origin <url>]... [--allow-writes | --test-environment <origin> --declared-by "<name>, <role>"]
+  inventory <url> --out <run> [--also-origin <url>]... [--allow-writes | --test-environment <origin> --declared-by "<name>, <role>"] [--max-writes <n>]
                                          Find every page and count what is on it. In a run with a login the pages are found
                                          by following links from the page the person pointed at; a link that logs out is never followed
   explore --run <run>                    Write the task for the agent that maps the site before it is measured
@@ -113,6 +113,9 @@ Options:
                     submit forms and send other requests that change something. On any other site, name the test
                     environment and who declares it to be one: --test-environment <origin> --declared-by "<name>, <role>"
                     The name is kept in the manifest of the run; the report shows only the role
+  --max-writes <n>  With --allow-writes or --test-environment: the most requests that change something the whole run
+                    may send to that origin, over every session and the sweep together (default 5), at least 120 s
+                    apart. Past it every write is held back as in a run without permission. Kept in the manifest
   --recorded-via gesprek
                     With answer, sign, decide and the declaration of inventory: the agent records what the person
                     said in the conversation and confirmed after a repetition. Kept with the record and its time
@@ -189,6 +192,7 @@ async function main(): Promise<void> {
       "allow-writes": { type: "boolean", default: false },
       "test-environment": { type: "string" },
       "declared-by": { type: "string" },
+      "max-writes": { type: "string" },
       url: { type: "string" },
       from: { type: "string" },
       steps: { type: "string" },
@@ -210,8 +214,8 @@ async function main(): Promise<void> {
   }
   // A run that was given a test environment at inventory may write there; every other run holds all writes back.
   const { decideWrites, recordWrites, setRunWrites, writeAccess, writesForRun } = await import("./lib/writes.ts");
-  if (command !== "inventory" && (values["allow-writes"] || values["test-environment"] !== undefined || values["declared-by"] !== undefined)) {
-    throw new Error("--allow-writes, --test-environment en --declared-by horen bij inventory: daar wordt voor de hele run vastgelegd of er verstuurd mag worden");
+  if (command !== "inventory" && (values["allow-writes"] || values["test-environment"] !== undefined || values["declared-by"] !== undefined || values["max-writes"] !== undefined)) {
+    throw new Error("--allow-writes, --test-environment, --declared-by en --max-writes horen bij inventory: daar wordt voor de hele run vastgelegd of er verstuurd mag worden, en hoe vaak");
   }
   // What a person states may be recorded by the agent in the conversation; the record says so.
   const { parseRecordedVia } = await import("./lib/recorded.ts");
@@ -250,7 +254,7 @@ async function main(): Promise<void> {
     }
     case "inventory": {
       if (!target || !values.out) throw new Error("inventory needs a URL and --out <run>");
-      const permission = decideWrites(target, { allowWrites: values["allow-writes"], testEnvironment: values["test-environment"], declaredBy: values["declared-by"], recordedVia });
+      const permission = decideWrites(target, { allowWrites: values["allow-writes"], testEnvironment: values["test-environment"], declaredBy: values["declared-by"], maxWrites: values["max-writes"], recordedVia });
       if (permission) setRunWrites(writeAccess(values.out, permission, "inventory"));
       // What this command was given decides whether a session may be used: the manifest only holds it afterwards.
       setRunLogin(values.out, { writes: permission });
@@ -268,6 +272,7 @@ async function main(): Promise<void> {
       await recordWrites(values.out, permission);
       if (permission) {
         process.stdout.write(`versturen toegestaan naar ${permission.origin}${permission.declaredBy ? `, verklaard door ${permission.declaredBy.name} (${permission.declaredBy.role})` : ""}\n`);
+        process.stdout.write(`budget voor versturen: ten hoogste ${permission.maxWrites} verzendingen naar die origin voor de hele run, alle agents en de veegronde samen, met minstens ${permission.spacingSeconds} s ertussen. Zoveel berichten of formulieren krijgt de ontvanger ten hoogste.\n`);
         // Say where the declaration ends up, so nobody finds their name somewhere they did not expect.
         if (permission.declaredBy) process.stdout.write(`let op: de naam staat in manifest.json van deze run; het rapport en de verklaring noemen alleen de functie (${permission.declaredBy.role}). Wie de map van de run deelt of publiceert, deelt ook de naam.\n`);
       }

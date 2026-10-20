@@ -2,10 +2,10 @@ import { sayingItRuns } from "../instruments/limit.ts";
 import { readFile, rm } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import type { Browser, Page } from "playwright";
+import type { Browser, BrowserContext, Page } from "playwright";
 import { call } from "../browser/call.ts";
 import { wholePageScreenshot, type ScreenshotClip } from "../browser/screenshot.ts";
-import { confirmLogin, firstLineOf, INPAGE_PATH, launchBrowser, loadSampled, newContext, RENDERING, retryOnce, type ColorScheme } from "../browser/session.ts";
+import { confirmLogin, firstLineOf, INPAGE_PATH, launchBrowser, loadSampled, newContext, PageContexts, RENDERING, retryOnce, withinPageTime, type ColorScheme, type ContextOptions } from "../browser/session.ts";
 import { LoginExpired } from "../lib/login.ts";
 import { readJson, sha256, writeFileAtomic, writeJson } from "../lib/canonical.ts";
 import { runEngines } from "../lib/engines.ts";
@@ -48,6 +48,11 @@ interface Noted {
   pictures?: PictureReport;
 }
 
+/** One try at measuring one page, counted by Node: nine loads of the page, pictures read with text recognition, and the walks with Tab. */
+const PAGE_LIMIT_MS = 30 * 60_000;
+/** Loading a page only to see whether it changed, counted by Node. */
+const CHECK_LIMIT_MS = 4 * 60_000;
+
 /** How long the content of a page may keep changing after it loaded, and how often it is read meanwhile. */
 const STEADY = { intervalMs: 500, limitMs: 5000 };
 
@@ -74,8 +79,14 @@ async function contentNow(browser: Browser, entry: SampleItem, sweep: ModelSweep
   try {
     await context.addInitScript({ path: INPAGE_PATH });
     await sweep.install(context);
-    const { page } = await loadSampled(await context.newPage(), entry, (tab) => sweep.dismiss(context, tab, "collect:check", "light"));
-    return await contentOf(page);
+    return await withinPageTime(
+      CHECK_LIMIT_MS,
+      async () => {
+        const { page } = await loadSampled(await context.newPage(), entry, (tab) => sweep.dismiss(context, tab, "collect:check", "light"));
+        return await contentOf(page);
+      },
+      () => context.close(),
+    );
   } catch {
     return null;
   } finally {
@@ -96,16 +107,20 @@ async function noteFailed(runDir: string, entry: SampleItem, error: string): Pro
   await rm(pageStampPath(runDir, entry.slug), { force: true });
 }
 
-/** `sweep` closes what covers the page before anything is measured. */
-async function collectPage(browser: Browser, entry: SampleItem, runDir: string, sweep: ModelSweep, noted: Noted = {}): Promise<Record<string, unknown>> {
+/** `sweep` closes what covers the page before anything is measured. Every browser context is opened through `contexts`, which closes them all when the time is up. */
+async function collectPage(browser: Browser, entry: SampleItem, runDir: string, sweep: ModelSweep, noted: Noted = {}, contexts = new PageContexts()): Promise<Record<string, unknown>> {
+  const open = async (options: ContextOptions): Promise<BrowserContext> => {
+    const context = contexts.add(await newContext(browser, options, sweep.guard));
+    await context.addInitScript({ path: INPAGE_PATH });
+    await sweep.install(context);
+    return context;
+  };
   const dir = join(runDir, "pages", entry.slug);
   const summary: Record<string, unknown> = { url: entry.url, slug: entry.slug };
   let clippedAt: ScreenshotClip | null = null;
 
   for (const scheme of ["light", "dark"] as ColorScheme[]) {
-    const context = await newContext(browser, { colorScheme: scheme }, sweep.guard);
-    await context.addInitScript({ path: INPAGE_PATH });
-    await sweep.install(context);
+    const context = await open({ colorScheme: scheme });
     try {
       const { page, placement } = await loadSampled(await context.newPage(), entry, (tab) => sweep.dismiss(context, tab, `collect:${scheme}`, scheme));
       if (scheme === "light") noted.content = await contentOf(page);
@@ -167,9 +182,7 @@ async function collectPage(browser: Browser, entry: SampleItem, runDir: string, 
   }
 
   for (const probe of VIEWPORT_PROBES) {
-    const context = await newContext(browser, { viewport: probe.viewport, deviceScaleFactor: probe.deviceScaleFactor }, sweep.guard);
-    await context.addInitScript({ path: INPAGE_PATH });
-    await sweep.install(context);
+    const context = await open({ viewport: probe.viewport, deviceScaleFactor: probe.deviceScaleFactor });
     try {
       const { page } = await loadSampled(await context.newPage(), entry, (tab) => sweep.dismiss(context, tab, `collect:${probe.name}`));
       const { report, visibleControls, clickables, content } = await overflowProbe(page, join(dir, "probes", `${probe.name}.png`));
@@ -182,9 +195,7 @@ async function collectPage(browser: Browser, entry: SampleItem, runDir: string, 
 
   // The page at 320 pixels wide: target sizes, names against visible text, and last the wider text spacing, which the page keeps.
   {
-    const context = await newContext(browser, { viewport: SMALLEST }, sweep.guard);
-    await context.addInitScript({ path: INPAGE_PATH });
-    await sweep.install(context);
+    const context = await open({ viewport: SMALLEST });
     try {
       const { page } = await loadSampled(await context.newPage(), entry, (tab) => sweep.dismiss(context, tab, "collect:smallest"));
       const targets = await call(page, "targetSizes");
@@ -204,9 +215,7 @@ async function collectPage(browser: Browser, entry: SampleItem, runDir: string, 
 
   // The page in a narrow window, where a menu sits behind a button and the order can differ.
   {
-    const context = await newContext(browser, { viewport: NARROW }, sweep.guard);
-    await context.addInitScript({ path: INPAGE_PATH });
-    await sweep.install(context);
+    const context = await open({ viewport: NARROW });
     try {
       const { page } = await loadSampled(await context.newPage(), entry, (tab) => sweep.dismiss(context, tab, "collect:narrow"));
       const narrowShot = await wholePageScreenshot(page, { path: join(dir, "screenshot-narrow.png") });
@@ -224,9 +233,7 @@ async function collectPage(browser: Browser, entry: SampleItem, runDir: string, 
 
   // Controls that show at none of the widths above, and the page at a width where they do (1.1.1, 1.3.1).
   {
-    const context = await newContext(browser, {}, sweep.guard);
-    await context.addInitScript({ path: INPAGE_PATH });
-    await sweep.install(context);
+    const context = await open({});
     try {
       const { page } = await loadSampled(await context.newPage(), entry, (tab) => sweep.dismiss(context, tab, "collect:widths"));
       // A page that cannot be laid out again, such as an embedded window measured in its place, says why.
@@ -240,9 +247,7 @@ async function collectPage(browser: Browser, entry: SampleItem, runDir: string, 
 
   // Skip link and moving content, each on a fresh page; motion is measured with animations allowed.
   for (const [name, reducedMotion] of [["skiplink", "reduce"], ["motion", "no-preference"]] as const) {
-    const context = await newContext(browser, { reducedMotion }, sweep.guard);
-    await context.addInitScript({ path: INPAGE_PATH });
-    await sweep.install(context);
+    const context = await open({ reducedMotion });
     try {
       const { page } = await loadSampled(await context.newPage(), entry, (tab) => sweep.dismiss(context, tab, `collect:${name}`));
       if (name === "skiplink") await writeJson(join(dir, "probes", "skiplink.json"), await skipLinkProbe(page));
@@ -258,9 +263,7 @@ async function collectPage(browser: Browser, entry: SampleItem, runDir: string, 
   }
 
   // Text spacing: measure clipping before and after, on a page that is then thrown away.
-  const context = await newContext(browser, {}, sweep.guard);
-  await context.addInitScript({ path: INPAGE_PATH });
-  await sweep.install(context);
+  const context = await open({});
   try {
     const { page } = await loadSampled(await context.newPage(), entry, (tab) => sweep.dismiss(context, tab, "collect:textspacing"));
     const before = await visibleControlKeys(page);
@@ -325,7 +328,12 @@ export async function collect(options: CollectOptions): Promise<void> {
           // A page gets one retry: a page that loaded too slowly once, or a crashed renderer, must not cost the whole run.
           // A page with many measurements takes more than a minute: say every half minute that it still runs.
           try {
-            const summary = await sayingItRuns(`collect ${index + 1}/${pages.length} ${entry.url}`, () => retryOnce(entry.url, () => collectPage(browser, entry, options.run, scope, noted)));
+            // A page that keeps the browser busy never answers: when the time is up, the contexts of the try are closed.
+            const measureOnce = (): Promise<Record<string, unknown>> => {
+              const contexts = new PageContexts();
+              return withinPageTime(PAGE_LIMIT_MS, () => collectPage(browser, entry, options.run, scope, noted, contexts), () => contexts.closeAll());
+            };
+            const summary = await sayingItRuns(`collect ${index + 1}/${pages.length} ${entry.url}`, () => retryOnce(entry.url, measureOnce));
             return { summary, key, noted, reused: false, reason, started, scope };
           } catch (error) {
             // A session that ran out, or a browser that is gone, stops the sweep: every page after it would fail the same way.

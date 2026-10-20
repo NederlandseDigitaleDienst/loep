@@ -295,6 +295,8 @@ interface OutlineItem {
   frame?: number;
   /** For a frame element: how far its document starts inside its box, and what could be read of it. */
   inset?: [number, number];
+  /** For a frame element: how many pixels of the tab one pixel of its document takes across and down, under a CSS zoom or scale around it. */
+  scale?: [number, number];
   address?: string;
   unread?: boolean;
   reg?: number;
@@ -361,7 +363,9 @@ async function outlineOf(surface: Surface, options: { full: boolean; max: number
   const items: OutlineItem[] = [];
   for (const item of outline.items) {
     const [left, top] = item.inset ?? [0, 0];
+    const [across, down] = item.scale ?? [1, 1];
     delete item.inset;
+    delete item.scale;
     items.push(item);
     if (item.kind !== "frame") continue;
     const inner = await enter(surface, item.path).catch(() => null);
@@ -371,7 +375,7 @@ async function outlineOf(surface: Surface, options: { full: boolean; max: number
     }
     item.address = inner.frame!.url;
     const nested = await outlineOf(inner, { ...options, full: false });
-    for (const child of nested.items) items.push({ ...child, frame: child.frame ?? item.ref, box: { ...child.box, x: item.box.x + left + child.box.x, y: item.box.y + top + child.box.y } });
+    for (const child of nested.items) items.push({ ...child, frame: child.frame ?? item.ref, box: { x: item.box.x + (left + child.box.x) * across, y: item.box.y + (top + child.box.y) * down, width: child.box.width * across, height: child.box.height * down } });
     outline.notShown += nested.notShown;
     outline.outsideWindow += nested.outsideWindow;
     outline.behindDialog += nested.behindDialog;
