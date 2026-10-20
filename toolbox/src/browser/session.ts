@@ -5,6 +5,7 @@ import { confirmLoginOn, LoginExpired, logsOut, runLoginMark, runLoginState, thr
 import { addressOf, noteRefusedRead, readDecision, readRuleFor, runReads, type ReadRequest } from "../lib/reads.ts";
 import { isWriteOrigin, runWrites, SocketFrames, type WriteAccess } from "../lib/writes.ts";
 import { MESSAGE_VALUES } from "../session/safety.ts";
+import { readableFrame } from "./call.ts";
 import { refusedByBrowser, type ClipboardWrite } from "./clipboard.ts";
 import { frameAsPage } from "./frame.ts";
 
@@ -335,7 +336,7 @@ export async function loadSampled(tab: Page, item: { url: string; embeddedOn?: s
   await loadPage(tab, on);
   await settle(tab);
   const frame = tab.frames().find((entry) => entry !== tab.mainFrame() && entry.url() === item.url) ?? tab.frames().find((entry) => entry !== tab.mainFrame() && sameDocument(entry.url(), item.url));
-  const readable = frame ? await frame.evaluate(() => typeof (window as unknown as { __loep?: unknown }).__loep === "object" && document.body !== null).catch(() => false) : false;
+  const readable = frame ? await frame.evaluate(readableFrame).catch(() => false) : false;
   if (frame && readable) return { page: await frameAsPage(tab, frame), placement: { inPlaceOn: on, apartNl: null } };
   await loadPage(tab, item.url, on);
   await settle(tab);
