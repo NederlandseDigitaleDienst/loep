@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { browserUse, gateLineNl, readVersionAccuracy, repeatedInBrowsersNl, secondBrowserUse } from "../src/commands/evaluate.ts";
+import { browserUse, gateLineNl, readVersionAccuracy, repeatedInBrowsersNl, secondBrowserUse, voiceOverSessions } from "../src/commands/evaluate.ts";
 import { render } from "../src/commands/render.ts";
 import { canonicalJson } from "../src/lib/canonical.ts";
 import { mergeFindings } from "../src/lib/defects.ts";
@@ -1089,4 +1089,14 @@ test("the report always says how accurate this version of loep is: measured as a
   const flat = text.stdout.replace(/\s+/g, " ");
   assert.ok(flat.includes("Nauwkeurigheid van deze versie"));
   assert.ok(flat.includes(VERSION_NOT_MEASURED_NL));
+});
+
+test("a session counts as one in which a real screen reader read aloud only when VoiceOver answered without an error", () => {
+  const record = (id: string, methods: unknown[]) => [id, { id, command: "voiceover", result: { methods } }] as const;
+  const records = new Map([
+    record("b-131-0001", [{ method: "voiceover", implementation: "voiceover", version: "macOS 15" }]),
+    record("v-131-0001", [{ method: "voiceover", implementation: "voiceover", error: "geen virtuele Mac" }]),
+    record("b-143-0001", [{ method: "contrast", implementation: "loep" }]),
+  ]);
+  assert.deepEqual([...voiceOverSessions(records)], ["b-131"]);
 });

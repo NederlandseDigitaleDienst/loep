@@ -11,10 +11,10 @@ import { agentPhaseTimings } from "../lib/timing.ts";
 import { sessionWatchAnswers } from "../lib/timelimits.ts";
 import { stopSessionWatch } from "./watch-session.ts";
 import { extensionUse } from "../lib/budget.ts";
-import { loadAllProcedures, REPO_ROOT } from "../lib/procedures.ts";
+import { loadAllProcedures, REPO_ROOT, runLimitsNl } from "../lib/procedures.ts";
 import { reportedModels } from "../lib/models.ts";
 import { loadRun } from "../lib/rundata.ts";
-import { openPoint, UNREACHABLE, waitsOnlyOnSending, type Verdict } from "../lib/verdict.ts";
+import { openPoint, sessionOfObservation, UNREACHABLE, waitsOnlyOnSending, type Verdict } from "../lib/verdict.ts";
 import { loginNl, NOT_LOGGED_IN_NL } from "../lib/login.ts";
 import { readsAllowedNl } from "../lib/reads.ts";
 import { WRITES_BLOCKED_NL, writesAllowedNl } from "../lib/writes.ts";
@@ -130,6 +130,7 @@ export async function evaluate(options: EvaluateOptions): Promise<Evaluation> {
   const watch = stopSessionWatch(options.run);
   const criteria: CriterionResult[] = [];
   const rejected: string[] = [];
+  const readAloud = voiceOverSessions(observations.records);
   const gatheredAll = new Map<string, GatheredVerdicts>();
   for (const task of instrumentTasks) gatheredAll.set(task.criterion, await gatherVerdicts(options.run, task, observations));
   // What each judge saw that belongs to another criterion: the verdicts there have to have ruled on it.
@@ -147,7 +148,8 @@ export async function evaluate(options: EvaluateOptions): Promise<Evaluation> {
           verdicts,
           // The open point about the duration of the session is closed by the watch, when it finished without the session running out.
           answers: criterion.id === "2.2.1" ? [...gathered.answers, ...sessionWatchAnswers(watch, (verdicts.finish ?? verdicts.final)?.missingNl ?? [])] : gathered.answers,
-          procedure: procedure ? { version: procedure.version, sha256: procedure.sha256, class: procedure.class, limitsNl: procedure.limitsNl } : null,
+          // A limit that says no screen reader was used, or nobody logged in, holds only when that is so for this criterion in this run.
+          procedure: procedure ? { version: procedure.version, sha256: procedure.sha256, class: procedure.class, limitsNl: procedure.limitsNl === null ? null : runLimitsNl(procedure.limitsNl, { screenReader: [instrumentTask?.judge.session, instrumentTask?.verify?.session, instrumentTask?.finish?.session].some((session) => session !== undefined && readAloud.has(session)), loggedIn: Boolean(run.login) }) } : null,
           provenance: { dossierSha256: instrumentTask?.dossierSha256 ?? null, verdictSha256: hashes },
           unruledNl: instrumentTask ? unruledCrossPoints(judged, criterion.id, [verdicts.final, verdicts.finish]) : [],
         },
@@ -450,6 +452,15 @@ export function* methodAnswers(records: ReadonlyMap<string, { command: string; r
       for (const method of methodsOf(entry.result)) if (!had.has(key(method))) yield { command: entry.command ?? record.command, method };
     }
   }
+}
+
+/** The sessions in which a real screen reader read aloud: VoiceOver answered a measurement without an error. */
+export function voiceOverSessions(records: ReadonlyMap<string, { id: string; command: string; result: unknown }>): Set<string> {
+  const sessions = new Set<string>();
+  for (const record of records.values()) {
+    for (const { method } of methodAnswers(new Map([[record.id, record]]))) if (method.implementation === "voiceover" && !method.error) sessions.add(sessionOfObservation(record.id));
+  }
+  return sessions;
 }
 
 /** The measurements a second browser answered, per browser and version, read from the recorded observations. A method that failed is not a measurement. */
