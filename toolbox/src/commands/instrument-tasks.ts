@@ -110,6 +110,8 @@ export interface InstrumentTask {
     points: string[];
     /** The verdicts of earlier finishing rounds of this criterion, oldest first, kept when the round ran again with `--again`. Absent when it ran once. */
     earlier?: string[];
+    /** Asked for with `--again`: its points stay as they were asked for, and it also gets what other finishing rounds passed on. */
+    again?: true;
   } | null;
 }
 
@@ -396,10 +398,20 @@ async function countingOf(runDir: string, task: InstrumentTask, observations: Re
   return null;
 }
 
+/** The current verdict of each round of each of these criteria, for what they passed on to other criteria. */
+async function passingOf(runDir: string, tasks: InstrumentTask[], observations: ReturnType<typeof loadObservations>): Promise<Map<string, PassingVerdicts>> {
+  const read = async (task: InstrumentTask, round: Round): Promise<Verdict | null> => ((await instrumentVerdictIsCurrent(runDir, task, round, observations)) ? readJson<Verdict>(join(runDir, partOf(task, round)!.output)) : null);
+  const result = new Map<string, PassingVerdicts>();
+  for (const task of tasks) result.set(task.criterion, { a: await read(task, "judge"), final: await read(task, "final"), finish: await read(task, "finish") });
+  return result;
+}
+
 /**
  * The open points a new finishing round for this criterion starts from, or why it cannot get one.
  * It can when its final verdict is open with a point an instrument can measure once the part of
- * the site loads again or the probe works: "niet bereikbaar" or "proef werkte niet".
+ * the site loads again or the probe works: "niet bereikbaar" or "proef werkte niet". It can also
+ * when another criterion passed something on to it that none of its verdicts ruled on and it did
+ * not fail: what a finishing round passes on reaches no other round by itself, since those run side by side.
  */
 async function pointsForAgain(runDir: string, previous: InstrumentIndex | null, id: string, observations: ReturnType<typeof loadObservations>): Promise<string[] | string> {
   if (!criterionById(id)) return `--again: "${id}" is geen succescriterium`;
@@ -408,11 +420,14 @@ async function pointsForAgain(runDir: string, previous: InstrumentIndex | null, 
   if (!previous.finishDecided) return `--again: ${id} kan nog geen nieuwe afmaakronde krijgen, want de afmaakronde is nog niet aan de beurt; draai eerst de fasen ervoor af (tasks en pending)`;
   const counting = await countingOf(runDir, task, observations);
   const kinds = KINDS_FOR_AGAIN.map((kind) => `"${kind}"`).join(" of ");
-  if (!counting || counting.verdict.outcome !== "cantTell" || !(counting.verdict.missingNl ?? []).some((point) => (KINDS_FOR_AGAIN as readonly string[]).includes(openPoint(point).kind?.prefix ?? ""))) {
-    return `--again: het eindoordeel van ${id} staat niet open met een punt ${kinds}; een nieuwe afmaakronde is alleen voor wat een instrument kan meten zodra het deel van de site weer laadt of de proef werkt`;
+  const passing = await passingOf(runDir, previous.tasks, observations);
+  const unruled = !counting || counting.verdict.outcome === "failed" ? [] : unruledCrossPoints(passing, id, [passing.get(id)?.final, passing.get(id)?.finish]);
+  const open = counting?.verdict.outcome === "cantTell" ? (counting.verdict.missingNl ?? []) : [];
+  if (!counting || (unruled.length === 0 && !open.some((point) => (KINDS_FOR_AGAIN as readonly string[]).includes(openPoint(point).kind?.prefix ?? "")))) {
+    return `--again: het eindoordeel van ${id} staat niet open met een punt ${kinds}, en niets wat een ander criterium eraan doorgaf, is nog onbeoordeeld; een nieuwe afmaakronde is alleen voor wat een instrument kan meten zodra het deel van de site weer laadt of de proef werkt, of voor wat een ander criterium doorgaf`;
   }
   if (counting.round === "final" && task.finish && !skipped(runDir, task.finish.output)) return `--again: de afmaakronde van ${id} staat al klaar; pending noemt haar onder finishers`;
-  return counting.verdict.missingNl ?? [];
+  return [...open, ...unruled];
 }
 
 /**
@@ -464,15 +479,64 @@ export function skippedForOutage(runDir: string, task: InstrumentTask): boolean 
   return false;
 }
 
-/** What other criteria's judges saw that belongs to this one, as candidates for its verifier. */
-function crossCandidates(verdicts: Map<string, Verdict>, criterion: string): Candidate[] {
+/** The verdicts of one criterion that can pass something on to another: the judge's (slot "a"), the verifier's and the finishing round's. */
+export interface PassingVerdicts {
+  a?: Verdict | null;
+  final?: Verdict | null;
+  finish?: Verdict | null;
+}
+type PassingRound = keyof PassingVerdicts;
+
+/** How a candidate's identifier says who passed it on: "X145-01" the judge of 1.4.5, "XV145-01" its verifier, "XA145-01" its finishing round. */
+const PASSED_BY: readonly [PassingRound, string, string][] = [["a", "X", "beoordelaar"], ["final", "XV", "verifieerder"], ["finish", "XA", "afmaakronde"]];
+
+/**
+ * What the rounds in `from` of other criteria passed on to this one, as candidates. What a verifier
+ * or finishing round passes on that a round before it of the same criterion already did (the same
+ * page and place) is not passed on twice.
+ */
+export function crossCandidates(verdicts: Map<string, PassingVerdicts>, criterion: string, from: readonly PassingRound[] = ["a"]): Candidate[] {
   const result: Candidate[] = [];
-  for (const [from, verdict] of [...verdicts.entries()].sort(([a], [b]) => a.localeCompare(b))) {
-    (verdict.crossCandidates ?? [])
-      .filter((cross) => cross.criterion === criterion)
-      .forEach((cross, position) => result.push({ id: `X${from.replaceAll(".", "")}-${String(position + 1).padStart(2, "0")}`, criterion, page: cross.page, where: cross.where, evidence: cross.evidence, noteNl: cross.noteNl, support: "bekeken" }));
+  for (const [source, rounds] of [...verdicts.entries()].sort(([a], [b]) => a.localeCompare(b))) {
+    const earlier: { page: string; where: string }[] = [];
+    for (const [round, prefix] of PASSED_BY) {
+      const passed = (rounds[round]?.crossCandidates ?? []).filter((cross) => cross.criterion === criterion);
+      passed.forEach((cross, position) => {
+        if (!from.includes(round) || earlier.some((entry) => entry.page === cross.page && entry.where === cross.where)) return;
+        result.push({ id: `${prefix}${source.replaceAll(".", "")}-${String(position + 1).padStart(2, "0")}`, criterion, page: cross.page, where: cross.where, evidence: cross.evidence, noteNl: cross.noteNl, support: "bekeken" });
+      });
+      earlier.push(...passed);
+    }
   }
   return result;
+}
+
+/** Who passed a candidate on: "XV1410-01" came from the verifier of 1.4.10. */
+const crossSource = (id: string): string => {
+  const [, prefix = "X", digits = ""] = /^(X[VA]?)(\d+)-/.exec(id) ?? [];
+  return `de ${PASSED_BY.find((entry) => entry[1] === prefix)![2]} van ${digits.slice(0, 1)}.${digits.slice(1, 2)}.${digits.slice(2)}`;
+};
+
+/**
+ * What the rounds of other criteria passed on to this criterion that no verdict of it ruled on, as
+ * open points. The verifier rules on every candidate it is given and the finishing round on what
+ * the verifier left; a candidate that neither of them ruled on was not looked at, so the criterion
+ * cannot pass.
+ */
+export function unruledCrossPoints(verdicts: Map<string, PassingVerdicts>, criterion: string, rounds: (Verdict | null | undefined)[], from: readonly PassingRound[] = ["a", "final", "finish"]): string[] {
+  const ruled = new Set(rounds.flatMap((verdict) => (verdict?.candidates ?? []).map((ruling) => ruling.id)));
+  return crossCandidates(verdicts, criterion, from)
+    .filter((candidate) => !ruled.has(candidate.id))
+    .map((candidate) => `veegronde mist: ${crossSource(candidate.id)} zag op ${candidate.page} (${candidate.where}) iets dat bij dit criterium hoort, en geen verifieerder of afmaakronde heeft dat beoordeeld (${candidate.id}): ${candidate.noteNl}`);
+}
+
+/**
+ * What a judge or verifier passed on to this criterion that the verdict it stands on did not rule
+ * on, as points for its finishing round, also when the criterion was settled. None when it failed:
+ * a failure it can only add to.
+ */
+function passedOnPoints(passing: Map<string, PassingVerdicts>, criterion: string, standing: Standing): string[] {
+  return standing.verdict?.outcome === "failed" ? [] : unruledCrossPoints(passing, criterion, [standing.round === "final" ? standing.verdict : null], ["a", "final"]);
 }
 
 /**
@@ -601,16 +665,16 @@ export async function instrumentTasks(runDir: string, options: TaskOptions = {})
   }
 
   // Phase 3: a verifier per criterion, once every judge is in (or given up on).
-  const judged = new Map<string, Verdict>();
+  const judged = new Map<string, PassingVerdicts>();
   let judgesOpen = 0;
   for (const task of tasks) {
-    if (await instrumentVerdictIsCurrent(runDir, task, "judge", observations)) judged.set(task.criterion, await readJson<Verdict>(join(runDir, task.judge.output)));
+    if (await instrumentVerdictIsCurrent(runDir, task, "judge", observations)) judged.set(task.criterion, { a: await readJson<Verdict>(join(runDir, task.judge.output)) });
     else if (!skipped(runDir, task.judge.output)) judgesOpen++;
   }
   let verifiers = 0;
   if (judgesOpen === 0) {
     for (const task of tasks) {
-      const verdict = judged.get(task.criterion);
+      const verdict = judged.get(task.criterion)?.a;
       if (!verdict) continue;
       const procedure = procedures.find((entry) => entry.id === task.criterion)!;
       const criterion = criterionById(task.criterion)!;
@@ -665,16 +729,23 @@ export async function instrumentTasks(runDir: string, options: TaskOptions = {})
   if (again.size > 0 && !finishDecided) throw new Error("--again: de afmaakronde is niet meer aan de beurt, want er staat weer een beoordeling of verificatie open; draai eerst tasks en pending zonder --again");
   let finishers = 0;
   if (finishDecided) {
+    // What every round passed on to another criterion. The finishing round comes after every verifier, so it gets what they passed on;
+    // what another finishing round passed on reaches only a round that runs again (`--again`), since they run side by side.
+    const passing = await passingOf(runDir, tasks.map((task) => ({ ...task, ...(again.has(task.criterion) ? {} : { finish: earlierVerify.get(task.criterion)?.finish }) })), observations);
     for (const task of tasks) {
       const standing = await standingVerdict(runDir, task, observations);
       const was = earlierVerify.get(task.criterion) ?? null;
       // A round that ran again keeps the points it was given, and the verdicts before it stay where they were set aside.
       let earlierRounds = was?.finish?.earlier ?? [];
+      let ranAgain = Boolean(was?.finish && (was.finish.again || earlierRounds.length > 0));
       const missed = missedBy(runDir, task, standing);
-      let points = earlierRounds.length > 0 && was?.finish ? was.finish.points : pointsToFinish(standing, missed);
+      let points = ranAgain ? was!.finish!.points : pointsToFinish(standing, missed);
+      const unruled = passedOnPoints(passing, task.criterion, standing);
+      if (!ranAgain && unruled.length > 0) points = [...(points ?? standing.verdict?.missingNl ?? []), ...unruled];
       if (again.has(task.criterion)) {
         if (was?.finish) earlierRounds = [...earlierRounds, ...setFinishAside(runDir, was.finish)];
         points = again.get(task.criterion)!;
+        ranAgain = true;
       }
       if (!points) continue;
       const procedure = procedures.find((entry) => entry.id === task.criterion)!;
@@ -682,10 +753,13 @@ export async function instrumentTasks(runDir: string, options: TaskOptions = {})
       const dir = join("tasks", task.criterion);
       const digits = task.criterion.replaceAll(".", "");
       // What the verifier ruled on with an observation of its own is settled; what it left open, and everything nobody verified, is for this round.
-      const all = await readJson<Candidate[]>(join(runDir, (task.verify ?? task.judge).candidates));
+      const listed = await readJson<Candidate[]>(join(runDir, (task.verify ?? task.judge).candidates));
+      // Nobody else was given what verifiers passed on, nor without a verifier what judges did: this round is, and when it runs again also what other finishing rounds passed on.
+      const passedOn = crossCandidates(passing, task.criterion, ranAgain ? ["a", "final", "finish"] : ["a", "final"]);
+      const all = [...listed, ...passedOn.filter((candidate) => !listed.some((entry) => entry.id === candidate.id))];
       const finishLimits = finishBudget(BUDGETS.finish, { commands: task.judge.maxCommands, minutes: task.judge.maxMinutes }, BUDGETS.judge);
       const ruled = new Set(standing.round === "final" ? (standing.verdict!.candidates ?? []).filter((ruling) => ruling.ruling !== "open").map((ruling) => ruling.id) : []);
-      const finish: NonNullable<InstrumentTask["finish"]> = { prompt: TASK_FILES.finishers(task.criterion), output: join("verdicts", task.criterion, "afmaak.json"), candidates: join(dir, "kandidaten-afmaak.json"), session: was?.finish?.session ?? `a-${digits}`, maxCommands: finishLimits.commands, maxMinutes: finishLimits.minutes, points, ...(earlierRounds.length > 0 ? { earlier: earlierRounds } : {}) };
+      const finish: NonNullable<InstrumentTask["finish"]> = { prompt: TASK_FILES.finishers(task.criterion), output: join("verdicts", task.criterion, "afmaak.json"), candidates: join(dir, "kandidaten-afmaak.json"), session: was?.finish?.session ?? `a-${digits}`, maxCommands: finishLimits.commands, maxMinutes: finishLimits.minutes, points, ...(earlierRounds.length > 0 ? { earlier: earlierRounds } : {}), ...(ranAgain ? { again: true as const } : {}) };
       await writeJson(join(runDir, finish.candidates), all.filter((candidate) => !ruled.has(candidate.id)));
       const standingNl =
         standing.round === "final"
@@ -824,9 +898,11 @@ export async function instrumentPending(runDir: string): Promise<InstrumentPendi
   const finishers: InstrumentPending["finishers"] = [];
   let finisherTasksMissing = false;
   if (walks.length + judges.length + verifiers.length === 0 && !verifierTasksMissing) {
+    const passing = await passingOf(runDir, index.tasks.map((task) => ({ ...task, finish: null })), observations);
     for (const task of index.tasks) {
       // A round that was asked for again is open until its verdict comes, whatever the verdicts before it say.
-      if (!task.finish?.earlier?.length && !pointsToFinish(await standingVerdict(runDir, task, observations))) continue;
+      const standing = await standingVerdict(runDir, task, observations);
+      if (!task.finish?.earlier?.length && !task.finish?.again && !pointsToFinish(standing) && passedOnPoints(passing, task.criterion, standing).length === 0) continue;
       if (!task.finish) finisherTasksMissing = true;
       else if (!(await instrumentVerdictIsCurrent(runDir, task, "finish", observations))) {
         if (skipped(runDir, task.finish.output)) given.push(`afmaakronde ${task.criterion}`);

@@ -34,11 +34,12 @@ Lees dat oordeel en de waarnemingen waar het naar wijst. Je hoeft niet over te d
 
 ## Wat "kan niet bepalen" nog mag zijn
 
-Je geeft `cantTell` alleen nog als er na jouw werk een punt overblijft van een van deze vijf soorten:
+Je geeft `cantTell` alleen nog als er na jouw werk een punt overblijft van een van deze zes soorten:
 
 - `mens nodig:` geen instrument kan dit vaststellen: wat een schermlezer voorleest als `voiceover` niet beschikbaar is of het niet beslist (wat VoiceOver met Safari zei, staat er dan bij), een melding van de browser zelf, iets wat alleen na inloggen te zien is in een run die dat niet mag;
 - `keuze nodig:` het oordeel hangt af van een besluit dat de norm of de procedure uitdrukkelijk bij de eigenaar van de site legt; hoe je een succescriterium leest, beslis je zelf en is nooit een keuze;
 - `versturen niet toegestaan:` het antwoord komt pas nadat er iets is verstuurd (een bericht in een chat, een formulier), en deze run mag daar niet versturen, of het budget voor versturen van de run is op (zeg dat dan in het punt). Dat is nooit `mens nodig:`: met een verklaarde testomgeving meet een instrument het. Noem het adres van het ingesloten venster of van waar het bericht naartoe gaat. Een verzoek dat een pagina of venster bij het laden uit zichzelf doet (een controle tegen robots, een meetdienst) is geen versturen: laadt het venster daardoor niet, dan is het `proef werkte niet:`;
+- `buiten de afbakening:` de inhoud komt van een adres buiten de run, en loep hield de GET daarnaar tegen (onder `blocked` met `kind` `scope`). Dat is een keuze van de afbakening, geen fout van loep: een nieuw onderzoek met dat adres erbij meet het. Noem het adres;
 - `proef werkte niet:` een instrument gaf na een echte poging geen bruikbaar antwoord. Dat vraagt minstens twee waarnemingen uit je eigen sessie, op meer dan één manier geprobeerd, en een beschrijving in `finish.attempts`.
 - `niet bereikbaar:` een deel van de site, een pagina of een ingesloten venster, laadde bij herhaalde pogingen niet, terwijl de rest van de site in jouw sessie wel laadde. Het instrument werkte, de site gaf geen antwoord. Open het deel minstens twee keer, met tijd ertussen en op meer dan één manier (in de pagina en los, een andere pagina met hetzelfde venster), en beschrijf dat in `finish.attempts`. Noem in het punt wat niet laadde (het adres of het label van de pagina) en de tijd van je eerste en laatste poging. Laadt het later weer, dan kan wie het onderzoek leidt een nieuwe afmaakronde klaarzetten die het meet.
 
@@ -106,7 +107,7 @@ Stop je sessie als je klaar bent: `node {{cli}} session stop --run {{run}} --ses
   "recommendations": [
     { "rule": "A1", "titleNl": "...", "observedNl": "...", "recommendationNl": "...", "component": null, "locations": [ { "page": "P03", "where": "...", "heading": "..." } ], "evidence": ["{{session}}-0018"] }
   ],
-  "missingNl": ["Alleen wat na jouw werk nog open is, met de soort ervoor: mens nodig, keuze nodig, versturen niet toegestaan, proef werkte niet of niet bereikbaar."],
+  "missingNl": ["Alleen wat na jouw werk nog open is, met de soort ervoor: mens nodig, keuze nodig, versturen niet toegestaan, buiten de afbakening, proef werkte niet of niet bereikbaar."],
   "finish": {
     "points": [
       { "point": 1, "settled": true, "howNl": "Wat je mat, waar, en wat eruit kwam.", "evidence": ["{{session}}-0004"] },

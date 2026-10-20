@@ -1344,6 +1344,28 @@
     return null;
   }
 
+  /**
+   * Whether an element that hides its overflow and overflows holds the text that is cut off:
+   * text of its own, or a descendant with text whose box sticks out past its padding box. A
+   * tile with a fixed height and overflow:hidden holds its lines in spans, and the line that
+   * falls away belongs to a span; an image or a decoration that sticks out does not count.
+   */
+  function cutsOffText(element) {
+    const outer = element.getBoundingClientRect();
+    const left = outer.left + element.clientLeft;
+    const top = outer.top + element.clientTop;
+    const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      if (!node.textContent.trim()) continue;
+      const holder = node.parentElement;
+      if (holder === element) return true;
+      if (!isVisible(holder)) continue;
+      const rect = holder.getBoundingClientRect();
+      if (rect.left < left - 1 || rect.top < top - 1 || rect.right > left + element.clientWidth + 1 || rect.bottom > top + element.clientHeight + 1) return true;
+    }
+    return false;
+  }
+
   function overflowReport() {
     const viewportWidth = document.documentElement.clientWidth;
     const scrollWidth = Math.max(document.documentElement.scrollWidth, document.body.scrollWidth);
@@ -1359,8 +1381,7 @@
         if (!parentOverflows) offenders.push({ ...describe(element), right: Math.round(rect.right), overflowContainer: overflowContainer(element) });
       }
       const hidesOverflow = ["hidden", "clip"].includes(style.overflowX) || ["hidden", "clip"].includes(style.overflowY);
-      const ownText = [...element.childNodes].some((node) => node.nodeType === Node.TEXT_NODE && node.textContent.trim());
-      if (hidesOverflow && ownText && (element.scrollWidth > element.clientWidth + 1 || element.scrollHeight > element.clientHeight + 1)) {
+      if (hidesOverflow && (element.scrollWidth > element.clientWidth + 1 || element.scrollHeight > element.clientHeight + 1) && cutsOffText(element)) {
         clipped.push({
           ...describe(element),
           scroll: [element.scrollWidth, element.scrollHeight],

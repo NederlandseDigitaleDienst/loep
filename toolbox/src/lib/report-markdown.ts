@@ -1,11 +1,11 @@
 import { KIND_NAME_NL, kindsNl } from "./documents.ts";
 import { pageIndex, type Defect } from "./defects.ts";
-import { changedSinceCommit, closeCutQuote, complianceStatus, evaluationHash, idsAcrossVersionsNl, knownCommit, madeWith, openCriteria, OUTAGE_NL, OUTCOME_LABEL, type ComplianceStatus, type CriterionOutcome, type CriterionResult, type Evaluation, type ReportFinding, type Signature } from "./evaluation.ts";
+import { aiGeneratedMark, changedSinceCommit, closeCutQuote, versionAccuracyNl, complianceStatus, evaluationHash, idsAcrossVersionsNl, knownCommit, madeWith, openCriteria, OUTAGE_NL, OUTCOME_LABEL, type ComplianceStatus, type CriterionOutcome, type CriterionResult, type Evaluation, type ReportFinding, type Signature } from "./evaluation.ts";
 import { modelOf } from "../instruments/methods/registry.ts";
 import { signatureIsCurrent } from "../commands/sign.ts";
 import { extensionsNl } from "./budget.ts";
 import { modelsNl } from "./models.ts";
-import { NOT_SENT, notSentOrigins, OPEN_POINT_KINDS, openPoint, UNREACHABLE, waitsOnlyOnSending, type Outcome } from "./verdict.ts";
+import { NOT_SENT, notSentOrigins, OPEN_POINT_KINDS, openPoint, OUTSIDE_SCOPE, UNREACHABLE, waitsOnlyOnSending, type Outcome } from "./verdict.ts";
 import { siteOrigins } from "./origins.ts";
 import { readsAllowedNl } from "./reads.ts";
 import { compareCriterionIds, type WcagVersion } from "./wcag.ts";
@@ -115,6 +115,7 @@ export const REPORT_TEXT = {
   answers: "Vastgesteld door een persoon, niet door een instrument",
   before: "Het oordeel dat hiervoor stond",
   establishedBy: "Vastgesteld door",
+  versionAccuracy: "Nauwkeurigheid van deze versie",
   recommendations: "Aanbevelingen",
   recommendationsIntro: "Wat hier staat, is geen eis van WCAG en telt niet mee voor de uitkomst of de status. Het zijn patronen die de procedure van een criterium aanraadt, en alleen waar de procedure een regel voor een aanbeveling heeft. Een gebrek staat nooit hier: wat de norm fout noemt, staat onder Oplossen.",
   investigateIntro: "Wat het onderzoek open laat, staat hier in delen. Het eerste deel is werk voor de eigenaar van de site. Het laatste deel gaat over grenzen van dit onderzoek: daar hoeft de eigenaar niets mee te doen.",
@@ -291,6 +292,10 @@ export interface ReportDerived {
   statusLine: StatusLine;
   /** One line when this evaluation follows up a signed one: its date and mark. Null otherwise; a concept is never named. */
   followsUpNl: string | null;
+  /** When this version of loep was last measured as a whole and what came out, or that it never was: always said. */
+  versionAccuracyNl: string;
+  /** Keywords for the metadata of the PDF that say, readable by a machine, that the verdicts were drafted by a language model, and by which. */
+  aiKeywords: string[];
   /** What the agents said about their model, one line per role, and a line when the operator named another. Null when no agent session is known. */
   agentModels: { perRoleNl: string[]; differsNl: string | null } | null;
   /** Per role how many sessions added to their own budget and how often, in one line. Null when none did. */
@@ -583,13 +588,16 @@ function openCount(evaluation: Evaluation): { openNl: string; unfinished: boolea
   // A criterion that waits only for permission to send needs no person: it is counted apart, so the reader is not sent to one.
   const notSent = open.owner.filter((id) => waitsOnlyOnSending(evaluation.criteria.find((criterion) => criterion.id === id)?.missingNl ?? []));
   const notSentNl = notSent.length > 0 ? ` Van de criteria voor de eigenaar ${notSent.length === 1 ? "wacht" : "wachten"} er ${notSent.length} alleen op toestemming om te versturen${list(notSent)}.` : "";
+  // Content of an address outside the run is a choice of the scope, no fault of loep: counted apart, with what would measure it.
+  const outside = open.owner.filter((id) => (evaluation.criteria.find((criterion) => criterion.id === id)?.missingNl ?? []).some((point) => openPoint(point).kind?.prefix === OUTSIDE_SCOPE));
+  const outsideNl = outside.length > 0 ? ` Van de criteria voor de eigenaar ${outside.length === 1 ? "bleef" : "bleven"} er ${outside.length} open door inhoud van een adres buiten de afbakening${list(outside)}; een nieuw onderzoek met dat adres erbij meet ze, zie "Nog uitzoeken".` : "";
   const ownerNl = notSent.length === 0 ? REPORT_TEXT.ownerOpen : notSent.length === open.owner.length ? REPORT_TEXT.ownerOpenNotSent : REPORT_TEXT.ownerOpenMixed;
   // A part of the site that did not load is counted apart too: the evaluation is not finished, and no fault of the site is established.
   const unreachable = open.evaluation.filter((id) => (evaluation.criteria.find((criterion) => criterion.id === id)?.missingNl ?? []).some((point) => openPoint(point).kind?.prefix === UNREACHABLE));
   const unreachableNl = unreachable.length > 0 ? ` Van de criteria die dit onderzoek niet vaststelde, ${unreachable.length === 1 ? "bleef" : "bleven"} er ${unreachable.length} open doordat een deel van de site tijdens het onderzoek niet bereikbaar was${list(unreachable)}, zie "Nog uitzoeken".` : "";
   return {
     openNl:
-      `Open criteria: ${reasonsNl}${notSentNl}${unreachableNl}` +
+      `Open criteria: ${reasonsNl}${notSentNl}${outsideNl}${unreachableNl}` +
       (open.evaluation.length > 0 ? ` ${REPORT_TEXT.unfinished}` : ` ${ownerNl}`),
     unfinished: open.evaluation.length > 0,
   };
@@ -747,7 +755,7 @@ function investigate(evaluation: Evaluation): ReportDerived["todo"]["investigate
     criteria.flatMap((criterion) => {
       const points = openPoints(criterion).filter(wanted);
       if (points.length === 0) return [];
-      return [{ criterion: criterion.id, outcomeNl: SHOWN_LABEL[shownOutcome(criterion)].toLowerCase(), pointsNl: points.map((point) => (point.kind?.prefix === "keuze nodig" ? `Keuze: ${point.textNl}` : point.textNl)), anchor: anchor(criterion.id) }];
+      return [{ criterion: criterion.id, outcomeNl: SHOWN_LABEL[shownOutcome(criterion)].toLowerCase(), pointsNl: points.map((point) => (point.kind?.prefix === "keuze nodig" ? `Keuze: ${point.textNl}` : point.kind?.prefix === OUTSIDE_SCOPE ? `Buiten de afbakening: ${point.textNl}` : point.textNl)), anchor: anchor(criterion.id) }];
     });
   // What waits only for permission to send stands apart: no person is needed for it, one declaration is.
   result.owner = full((point) => point.kind?.reader === "owner" && point.kind.prefix !== NOT_SENT);
@@ -934,6 +942,9 @@ export function deriveReport(input: Evaluation, decisions: DecisionLayer = { dec
     statusLine: statusLine(evaluation, stale),
     followsUpNl: evaluation.followsUp ? `Dit is een heronderzoek. Het vorige onderzoek is van ${dateNl(evaluation.followsUp.evaluatedAt)}, afgetekend op ${dateNl(evaluation.followsUp.signedAt)}, met kenmerk ${evaluation.followsUp.sha256.slice(0, 12)}.` : null,
     chain,
+    versionAccuracyNl: versionAccuracyNl(evaluation.versionAccuracy, dateNl),
+    // An evaluation from before the mark was kept was made the same way: by a language model.
+    aiKeywords: ["AI-generated", ...(evaluation.aiGenerated ?? aiGeneratedMark(evaluation.judgment, evaluation.criteria)).models.map((model) => `AI-model: ${model}`)],
     agentModels: modelsNl(evaluation.judgment.model, evaluation.judgment.models),
     extensionsNl: extensionsNl(evaluation.judgment.extensions),
     scopeFramesNl: (evaluation.scope.frames ?? []).map(scopeFrameNl),
@@ -1223,7 +1234,7 @@ export function renderMarkdown(input: Evaluation, decisions: DecisionLayer = { d
   lines.push(`# ${REPORT_TEXT.title} ${esc(evaluation.site.name)}`, "");
   lines.push(
     signature
-      ? `> **Afgetekend** door ${esc(signature.name)} (${esc(signature.role)}, ${esc(signature.organisation)}) op ${derived.signedDateNl}.`
+      ? `> **Afgetekend** door ${esc(signature.role)} (${esc(signature.organisation)}) op ${derived.signedDateNl}.`
       : `> **${REPORT_TEXT.concept}**${staleNote}`,
     "",
     `> **${derived.statusLine.headingNl}**${derived.statusLine.noteNl ? `. ${derived.statusLine.noteNl}` : ""}`,
@@ -1367,7 +1378,8 @@ export function renderMarkdown(input: Evaluation, decisions: DecisionLayer = { d
       ...(derived.followsUpNl ? [`${REPORT_TEXT.followsUp}: ${derived.followsUpNl}`] : []),
       ...(derived.chain.writesNl ? [`Versturen van formulieren: ${esc(derived.chain.writesNl)}`] : []),
       ...(derived.chain.readsNl ? [`Leesverzoeken: ${esc(derived.chain.readsNl)}`] : []),
-      signature ? `Afgetekend door: ${esc(signature.name)}, ${esc(signature.role)}, ${esc(signature.organisation)}, op ${derived.signedDateNl}${derived.signatureRecordedNl ? `, ${derived.signatureRecordedNl}` : ""}` : `Afgetekend door: ${REPORT_TEXT.notSigned.toLowerCase()}${staleNote ? `.${staleNote}` : ""}`,
+      // The function, not the name: the name of who signed stays in signed/signature.json.
+      signature ? `Afgetekend door: ${esc(signature.role)}, ${esc(signature.organisation)}, op ${derived.signedDateNl}${derived.signatureRecordedNl ? `, ${derived.signatureRecordedNl}` : ""}` : `Afgetekend door: ${REPORT_TEXT.notSigned.toLowerCase()}${staleNote ? `.${staleNote}` : ""}`,
     ]),
     "",
   );
@@ -1505,6 +1517,7 @@ export function renderMarkdown(input: Evaluation, decisions: DecisionLayer = { d
 
   section("Betrouwbaarheid en beperkingen");
   lines.push(derived.chain.honestNl, "");
+  lines.push(`### ${REPORT_TEXT.versionAccuracy}`, "", esc(derived.versionAccuracyNl), "");
   if (derived.chain.stepsNl.length > 0) lines.push("### Werkwijze", "", ...derived.chain.stepsNl.map((step, index) => `${index + 1}. **${step.nameNl}.** ${esc(step.textNl)}`), "");
   lines.push(derived.disagreementNl, "");
   const gate = evaluation.chain?.gate;

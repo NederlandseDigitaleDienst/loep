@@ -3,7 +3,8 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "no
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, test } from "node:test";
-import { Blockade, BLOCKADES_FILE, blockadesNl, MAX_FAILED_NAVIGATIONS, readBlockades, retryAfterSeconds, type BlockadeEntry } from "../src/session/blockade.ts";
+import { launchBrowser, loadPage, newContext } from "../src/browser/session.ts";
+import { Blockade, BLOCKADES_FILE, blockadesNl, MAX_FAILED_NAVIGATIONS, OriginBlocked, readBlockades, retryAfterSeconds, setRunBlockade, type BlockadeEntry } from "../src/session/blockade.ts";
 import { Daemon } from "../src/session/daemon.ts";
 import type { Observation } from "../src/session/observations.ts";
 import { startServer, type FixtureServer } from "./fixtures/session-site/server.ts";
@@ -69,7 +70,7 @@ test("after a 429 the session process asks that origin nothing more for the rest
     await again.daemon.close();
   }
   // Evaluate names it among the limitations, and with it the report.
-  assert.match(blockadesNl(run)[0]!, new RegExp(`^${site.origin.replace(/[.]/g, "\\.")} heeft verzoeken van het onderzoek geweigerd: de site antwoordde met 429 \\(te veel verzoeken\\), op \\d{4}-\\d\\d-\\d\\d om \\d\\d:\\d\\d\\. Daarna is daar in de sessies niets meer gevraagd`));
+  assert.match(blockadesNl(run)[0]!, new RegExp(`^${site.origin.replace(/[.]/g, "\\.")} heeft verzoeken van het onderzoek geweigerd: de site antwoordde met 429 \\(te veel verzoeken\\), op \\d{4}-\\d\\d-\\d\\d om \\d\\d:\\d\\d\\. Daarna is daar niets meer gevraagd`));
 });
 
 test("a short Retry-After is waited out: the origin is refused until then and asked again after", async () => {
@@ -81,7 +82,7 @@ test("a short Retry-After is waited out: the origin is refused until then and as
     assert.equal((await loep("open", "/")).ok, false);
     await new Promise((resolve) => setTimeout(resolve, 1200));
     assert.equal((await loep("open", "/")).ok, true);
-    assert.deepEqual(blockadesNl(run), [`${site.origin} vroeg één keer om even te wachten (429 met Retry-After); de sessies hebben dat aangehouden.`]);
+    assert.deepEqual(blockadesNl(run), [`${site.origin} vroeg één keer om even te wachten (429 met Retry-After); het onderzoek heeft dat aangehouden.`]);
   } finally {
     await daemon.close();
   }
@@ -140,4 +141,28 @@ test("a navigation that loads resets the count, and Retry-After is read as secon
   writeFileSync(join(run, BLOCKADES_FILE), "{");
   assert.deepEqual(readBlockades(run), []);
   assert.equal(existsSync(join(newRun(), BLOCKADES_FILE)), false);
+});
+
+test("the sweep asks a blocked origin nothing, notes a 429 it gets itself, and sees what another process noted", async () => {
+  const run = newRun();
+  writeFileSync(join(run, "inventory.json"), JSON.stringify({ baseUrl: `${site.origin}/`, origin: site.origin, pages: [] }));
+  setRunBlockade(run);
+  const browser = await launchBrowser();
+  try {
+    const page = await (await newContext(browser, { writes: null })).newPage();
+    // The session process, another process, blocks an origin while the sweep runs: that holds for the sweep at once.
+    new Blockade(run).tooMany(`${site.otherOrigin}/x`, undefined);
+    await assert.rejects(loadPage(page, `${site.otherOrigin}/`), OriginBlocked);
+    // A 429 without Retry-After for a page of the site: noted for the rest of the run next to what the other process noted, and the page is not measured.
+    await assert.rejects(loadPage(page, `${site.origin}/too-many`), (error: Error) => error instanceof OriginBlocked && /\/too-many is niet opgevraagd: .*met 429 \(te veel verzoeken\); loep vraagt daar de rest van de run niets meer/.test(error.message));
+    assert.deepEqual(readBlockades(run).map((entry) => [entry.origin, entry.reason, entry.until]), [[site.otherOrigin, "429", null], [site.origin, "429", null]]);
+    // The next page of that origin is not asked for, nor what a page asks of it.
+    const count = site.requests.length;
+    await assert.rejects(loadPage(page, `${site.origin}/`), OriginBlocked);
+    await page.evaluate((url) => fetch(url).catch(() => null), `${site.origin}/form.html`);
+    assert.equal(site.requests.length, count, "nothing more reached the site");
+  } finally {
+    setRunBlockade(null);
+    await browser.close();
+  }
 });

@@ -4,7 +4,7 @@ import { sha256, stableId } from "./canonical.ts";
 import type { Defect, MergeRecord } from "./defects.ts";
 import type { Manifest } from "./manifest.ts";
 import type { RoleExtensions } from "./budget.ts";
-import type { RoleModels } from "./models.ts";
+import { MODEL_UNKNOWN, type RoleModels } from "./models.ts";
 import type { RecordedVia } from "./recorded.ts";
 import { openPoint, shadowPartOf, vendorElementsIn, WITHIN_REACH, type Recommendation, type Finding, type Observation, type Outcome, type Verdict } from "./verdict.ts";
 import { compareCriterionIds, CRITERIA, en301549Clause, GUIDELINES, PRINCIPLES, understandingUrl, type Criterion, type WcagVersion } from "./wcag.ts";
@@ -309,6 +309,13 @@ export interface Evaluation {
    * `model` is what the operator named with `evaluate --model`. `models` is what each agent itself gave when it started
    * its session, counted per role; the toolbox cannot check either. `models` is absent in a run without sessions and in older evaluations.
    */
+  /**
+   * Machine-readable: the verdicts were drafted by a language model (EU AI Act, article 50), with
+   * the models as they were reported and where a person comes in. Absent in older evaluations.
+   */
+  aiGenerated?: AiGenerated;
+  /** When this version of loep was last measured as a whole, against what, and what came out; null when it never was. Absent in older evaluations. */
+  versionAccuracy?: VersionAccuracy | null;
   judgment: {
     model: string;
     models?: RoleModels[];
@@ -368,6 +375,8 @@ export interface CriterionInput {
   answers?: PointAnswer[];
   procedure: CriterionResult["procedure"];
   provenance: CriterionResult["provenance"];
+  /** Open points about candidates other judges passed on to this criterion that no verdict of it ruled on (`unruledCrossPoints`). */
+  unruledNl?: string[];
   /** A round of this criterion was given up on for a storing of the model, and no round after it gave a verdict. */
   outage?: boolean;
 }
@@ -417,7 +426,11 @@ export function resolveCriterion(input: CriterionInput, sitePrefix: string): Cri
   const final = finish ?? verified;
   const answered = final?.outcome === "cantTell" ? applyAnswers(final.missingNl ?? [], input.answers ?? []) : null;
   const byPerson = answered !== null && answered.outcome !== "cantTell";
-  const outcome: CriterionOutcome = byPerson ? answered.outcome : (final?.outcome ?? "untested");
+  const reached: CriterionOutcome = byPerson ? answered.outcome : (final?.outcome ?? "untested");
+  // A pass next to a candidate another criterion passed on and nobody ruled on is no pass: that place was not looked at.
+  // An open criterion keeps it among its points, so it does not read as one that only waits for a person.
+  const unruled = reached === "passed" || reached === "inapplicable" || reached === "cantTell" ? (input.unruledNl ?? []) : [];
+  const outcome: CriterionOutcome = unruled.length > 0 ? "cantTell" : reached;
   const beforeFinish = verified ?? verdicts.a;
   const byWatch = byPerson && answered.counted.every((answer) => answer.instrument === true);
   const established: Established | null = !final
@@ -437,9 +450,13 @@ export function resolveCriterion(input: CriterionInput, sitePrefix: string): Cri
       : finish
         ? {
             by: "finishing",
-            noteNl: beforeFinish
-              ? `Vastgesteld in een aanvullende meting: het oordeel bleef eerst open door een beperking van het onderzoek, en een aparte beoordelaar heeft daarna gemeten wat ontbrak. Daarna is het oordeel niet nog eens gecontroleerd${finish.outcome === "failed" ? "; elke bevinding is twee keer vastgelegd, de tweede keer vanaf een verse pagina" : ""}.`
-              : "Vastgesteld in een aanvullende meting: de eerste beoordeling leverde geen geldig oordeel. Daarna is het oordeel niet nog eens gecontroleerd.",
+            // A criterion that is still open after the finishing round was not established by it: the note says it stayed open.
+            noteNl:
+              finish.outcome === "cantTell"
+                ? `Ook na een aanvullende meting niet vastgesteld: ${beforeFinish ? "het oordeel bleef eerst open door een beperking van het onderzoek, en een aparte beoordelaar heeft daarna gemeten wat ontbrak" : "de eerste beoordeling leverde geen geldig oordeel, en een aparte beoordelaar heeft daarna zelf gemeten"}, maar kon het criterium niet beoordelen. Wat open bleef, staat bij het criterium.`
+                : beforeFinish
+                  ? `Vastgesteld in een aanvullende meting: het oordeel bleef eerst open door een beperking van het onderzoek, en een aparte beoordelaar heeft daarna gemeten wat ontbrak. Daarna is het oordeel niet nog eens gecontroleerd${finish.outcome === "failed" ? "; elke bevinding is twee keer vastgelegd, de tweede keer vanaf een verse pagina" : ""}.`
+                  : "Vastgesteld in een aanvullende meting: de eerste beoordeling leverde geen geldig oordeel. Daarna is het oordeel niet nog eens gecontroleerd.",
             ...(finish.finish?.coverageNl ? { coverageNl: finish.finish.coverageNl } : {}),
             ...(verdicts.finishBefore
               ? { before: { roundNl: "vorige aanvullende meting", outcome: verdicts.finishBefore.outcome, summaryNl: verdicts.finishBefore.summaryNl, missingNl: verdicts.finishBefore.missingNl ?? [] } }
@@ -484,13 +501,15 @@ export function resolveCriterion(input: CriterionInput, sitePrefix: string): Cri
     outcome,
     rule: final?.rule ?? null,
     // What a person established is said first: the summary of the agent was written while the question was open.
-    summaryNl: byPerson
-      ? `Een persoon heeft vastgesteld: ${OUTCOME_LABEL[outcome].toLowerCase()}. Dit is vastgesteld door een persoon, niet door een instrument. Het onderzoek zelf kwam niet verder dan: ${final!.summaryNl}`
-      : (final?.summaryNl ?? (input.outage ? `Voor dit criterium is geen eindoordeel vastgesteld: ${OUTAGE_NL.toLowerCase()}` : "Voor dit criterium is geen eindoordeel vastgesteld.")),
+    summaryNl: unruled.length > 0 && reached !== "cantTell"
+      ? `Niet vastgesteld: ${unruled.length === 1 ? "een waarneming die een andere beoordelaar doorgaf, is" : `${unruled.length} waarnemingen die een andere beoordelaar doorgaf, zijn`} door niemand beoordeeld. Het oordeel zonder die ${unruled.length === 1 ? "waarneming" : "waarnemingen"} was ${OUTCOME_LABEL[reached].toLowerCase()}: ${final!.summaryNl}`
+      : byPerson
+        ? `Een persoon heeft vastgesteld: ${OUTCOME_LABEL[outcome].toLowerCase()}. Dit is vastgesteld door een persoon, niet door een instrument. Het onderzoek zelf kwam niet verder dan: ${final!.summaryNl}`
+        : (final?.summaryNl ?? (input.outage ? `Voor dit criterium is geen eindoordeel vastgesteld: ${OUTAGE_NL.toLowerCase()}` : "Voor dit criterium is geen eindoordeel vastgesteld.")),
     observations: final?.observations ?? [],
     findings,
     ...(recommendations.length > 0 ? { recommendations } : {}),
-    missingNl: answered ? answered.remainingNl : (final?.missingNl ?? []),
+    missingNl: [...(answered ? answered.remainingNl : (final?.missingNl ?? [])), ...unruled],
     ...(outcome === "cantTell" && final?.nothingFound ? { nothingFound: { coverageNl: final.nothingFound.coverageNl } } : {}),
     rounds: { a: verdicts.a?.outcome ?? null, b: null, final: verified?.outcome ?? null, ...(finish ? { finish: finish.outcome } : {}) },
     ...(established ? { established } : {}),
@@ -502,6 +521,55 @@ export function resolveCriterion(input: CriterionInput, sitePrefix: string): Cri
     procedure: input.procedure,
     provenance: input.provenance,
     ...(input.outage && !byPerson ? { outage: true as const } : {}),
+  };
+}
+
+/** A measurement of one version of loep as a whole, as `validatie/versies/<version>.json` has it. */
+export interface VersionAccuracy {
+  version: string;
+  /** The date of the measurement, as YYYY-MM-DD. */
+  measuredAt: string;
+  /** What the outcomes were compared with: the judgment of a human expert, the key of the test site. */
+  againstNl: string;
+  /** What came out, in a sentence or two, with numbers. */
+  resultNl: string;
+}
+
+/** What the report says when this version was never measured as a whole. */
+export const VERSION_NOT_MEASURED_NL = "Deze versie van loep is niet vergeleken met het oordeel van een menselijke deskundige, en is niet als geheel gemeten op de testsite.";
+
+/** The sentence about how accurate this version of loep is, for the report. */
+export const versionAccuracyNl = (accuracy: VersionAccuracy | null | undefined, dateNl: (iso: string) => string): string =>
+  accuracy ? `Deze versie van loep (${accuracy.version}) is het laatst als geheel gemeten op ${dateNl(accuracy.measuredAt)}, tegen ${accuracy.againstNl.replace(/\.$/, "")}. Uitkomst: ${accuracy.resultNl}` : VERSION_NOT_MEASURED_NL;
+
+/** The problems of a file `validatie/versies/<version>.json`; empty when it can be shown. */
+export function versionAccuracyProblems(value: unknown, version: string): string[] {
+  if (value === null || typeof value !== "object") return ["not a JSON object"];
+  const entry = value as Record<string, unknown>;
+  const problems: string[] = [];
+  if (entry.version !== version) problems.push(`version must be "${version}", the name of the file`);
+  if (typeof entry.measuredAt !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(entry.measuredAt)) problems.push("measuredAt must be a date as YYYY-MM-DD");
+  for (const key of ["againstNl", "resultNl"]) if (typeof entry[key] !== "string" || (entry[key] as string).trim().length < 10) problems.push(`${key} must say it in a sentence`);
+  return problems;
+}
+
+export interface AiGenerated {
+  /** The models that drafted the verdicts, as the agents and whoever ran the evaluation gave them; nothing in the run confirms them. */
+  models: string[];
+  humanReview: {
+    /** Where the signature of the person who stands for the report is kept, once there is one: outside the sealed evaluation. */
+    signature: string;
+    /** Criteria whose outcome a person established by answering an open point. */
+    criteriaByPerson: string[];
+  };
+}
+
+/** The mark that says the verdicts of this evaluation were drafted by a language model. */
+export function aiGeneratedMark(judgment: { model: string; models?: RoleModels[] | undefined }, criteria: Pick<CriterionResult, "id" | "established">[]): AiGenerated {
+  const models = [judgment.model, ...(judgment.models ?? []).flatMap((role) => role.models.map((entry) => entry.model))].filter((model) => model.trim() !== "" && model !== MODEL_UNKNOWN);
+  return {
+    models: [...new Set(models)].sort(),
+    humanReview: { signature: "signed/signature.json", criteriaByPerson: criteria.filter((criterion) => criterion.established?.by === "person").map((criterion) => criterion.id) },
   };
 }
 

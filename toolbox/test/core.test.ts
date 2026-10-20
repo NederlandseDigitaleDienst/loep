@@ -1,18 +1,18 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { aliasRepresentatives, checkSite, exploreContext } from "../src/commands/explore.ts";
-import { buildSample, CENSUS_LIMIT, chooseOnVariation, contentKindsOfType, extraPagesFor, MAX_EXTRA_PER_TYPE, seededOrder } from "../src/commands/sample.ts";
+import { buildSample, CENSUS_LIMIT, chooseOnVariation, contentKindsOfType, extraPagesFor, LEGACY_SEED, MAX_EXTRA_PER_TYPE, sample, seededOrder } from "../src/commands/sample.ts";
 import { contentReadOutside, formPagesNl, landingAddress, parseSitemap, passwordPagesNl, readsOutsideRunNl, type Inventory, type InventoryPage } from "../src/commands/inventory.ts";
 import { progressLine, sayingItRuns } from "../src/instruments/limit.ts";
 import { canonicalJson, sha256, slugForUrl, stableId } from "../src/lib/canonical.ts";
 import { isChallenge } from "../src/lib/challenge.ts";
 import { changedSinceCommit, complianceStatus, evaluationHash, knownCommit, resolveCriterion } from "../src/lib/evaluation.ts";
-import { toolboxSource } from "../src/lib/manifest.ts";
-import { loadProcedure, parseProcedure } from "../src/lib/procedures.ts";
+import { type Manifest, toolboxSource, writeManifest } from "../src/lib/manifest.ts";
+import { loadAllProcedures, loadProcedure, parseProcedure, runLimitsNl } from "../src/lib/procedures.ts";
 import { Politeness } from "../src/session/safety.ts";
 import type { SiteModel } from "../src/lib/sitemodel.ts";
 import type { Finding, Verdict } from "../src/lib/verdict.ts";
@@ -170,6 +170,34 @@ test("a large site gets a structured sample plus a seeded random tenth", () => {
   assert.equal(first.items.filter((item) => item.kind === "random").length, 1);
   assert.notDeepEqual(first.items.filter((item) => item.kind === "random"), other.items.filter((item) => item.kind === "random"));
   assert.deepEqual(seededOrder(pages, "x").map((entry) => entry.url), seededOrder([...pages].reverse(), "x").map((entry) => entry.url));
+});
+
+test("without --seed the random part follows a seed that inventory made for the run, and an older run keeps toegankelijk", async () => {
+  const pages = Array.from({ length: CENSUS_LIMIT + 40 }, (_, index) => page(index, `t${index % 7}`));
+  const runWith = async (step: string): Promise<string> => {
+    const dir = mkdtempSync(join(tmpdir(), "loep-seed-"));
+    writeFileSync(join(dir, "inventory.json"), JSON.stringify(inventory(pages)));
+    await writeManifest(dir, { command: step });
+    return dir;
+  };
+  const manifestOf = (dir: string): Manifest => JSON.parse(readFileSync(join(dir, "manifest.json"), "utf8")) as Manifest;
+
+  const run = await runWith("inventory");
+  const seed = manifestOf(run).seed!;
+  assert.match(seed, /^[0-9a-f]{32}$/, "inventory puts a random seed in the manifest");
+  assert.notEqual(manifestOf(await runWith("inventory")).seed, seed, "every run gets its own seed");
+  const first = await sample(run);
+  assert.equal(first.seed, seed, "sample.json names the seed it used");
+  assert.deepEqual(first, buildSample(inventory(pages), seed));
+  assert.deepEqual(await sample(run), first, "a second sample in the run chooses the same pages");
+  await writeManifest(run, { command: "inventory" });
+  assert.equal(manifestOf(run).seed, seed, "a later step, also a second inventory, keeps the seed");
+  assert.deepEqual(manifestOf(run).steps.filter((step) => step.command === "sample").map((step) => step.seed), [seed, seed], "the manifest names the seed of each sample");
+
+  assert.equal((await sample(run, "eigen")).seed, "eigen", "--seed wins");
+  const older = await runWith("login");
+  assert.equal(manifestOf(older).seed, undefined);
+  assert.equal((await sample(older)).seed, LEGACY_SEED, "a run without a seed in the manifest keeps the seed it always had");
 });
 
 test("every page type of the site model gets a page in the sample, also when it shares a template", () => {
@@ -355,6 +383,21 @@ test("a criterion only gets an outcome from the verifier", () => {
   assert.equal(result.outcome, "failed");
   assert.deepEqual(result.rounds, { a: "passed", b: null, final: "failed" });
   assert.equal(new Set(result.findings.map((entry) => entry.id)).size, 2, "finding identifiers are unique");
+});
+
+test("a criterion the finishing round left open is not called established", () => {
+  const criterion = criterionById("1.1.1")!;
+  const base = { criterion, procedure: null, provenance: { dossierSha256: null, verdictSha256: {} } };
+  const open = { ...passed, outcome: "cantTell" as const, missingNl: ["mens nodig: of het logo een naam nodig heeft, bepaalt de eigenaar."] };
+  const stillOpen = resolveCriterion({ ...base, verdicts: { a: open, final: open, finish: open } }, "X");
+  assert.equal(stillOpen.outcome, "cantTell");
+  assert.equal(stillOpen.established?.by, "finishing");
+  assert.doesNotMatch(stillOpen.established!.noteNl, /^Vastgesteld/);
+  assert.match(stillOpen.established!.noteNl, /^Ook na een aanvullende meting niet vastgesteld/);
+  // Without a verdict before it, the note says so too.
+  assert.match(resolveCriterion({ ...base, verdicts: { a: null, final: null, finish: open } }, "X").established!.noteNl, /^Ook na een aanvullende meting niet vastgesteld: de eerste beoordeling leverde geen geldig oordeel/);
+  // A finishing round that did settle it still says so.
+  assert.match(resolveCriterion({ ...base, verdicts: { a: open, final: open, finish: passed } }, "X").established!.noteNl, /^Vastgesteld in een aanvullende meting/);
 });
 
 test("two defects in one component get identifiers that do not read as one defect twice", () => {
@@ -592,3 +635,26 @@ test("only Cloudflare's own check counts as its check, on its own host and subdo
   assert.equal(isChallenge("https://cloudflare.com/x", behind), false);
   assert.equal(isChallenge("ws://player.vimeo.com/cdn-cgi/challenge-platform/x", behind), false);
 });
+test("a limit of a procedure about a screen reader or a login follows the run", () => {
+  const limits = loadProcedure("1.3.1").limitsNl!;
+  const plain = runLimitsNl(limits, { screenReader: false, loggedIn: false });
+  // Without either the text is as it always was.
+  assert.ok(plain.includes("Er is geen echte schermlezer gebruikt.") && plain.includes("Pagina's achter een login zijn niet onderzocht."));
+  assert.doesNotMatch(plain, /[{}|]/);
+  const read = runLimitsNl(limits, { screenReader: true, loggedIn: false });
+  assert.ok(!read.includes("schermlezer") && read.includes("Pagina's achter een login zijn niet onderzocht."));
+  const loggedIn = runLimitsNl(limits, { screenReader: false, loggedIn: true });
+  assert.ok(loggedIn.includes("Er is geen echte schermlezer gebruikt.") && !loggedIn.includes("login"));
+  assert.doesNotMatch(loggedIn, / {2}|\s$/);
+  // A part can say what takes its place.
+  assert.equal(runLimitsNl("Er is geen echte {zonder-schermlezer: schermlezer of }spraakbesturing gebruikt. {zonder-inlog: Er wordt niet ingelogd.|Het inloggen is door een mens gedaan.}", { screenReader: true, loggedIn: true }), "Er is geen echte spraakbesturing gebruikt. Het inloggen is door een mens gedaan.");
+  // No procedure says in a run with a login that nothing behind a login was examined, nor with a screen reader that none was used.
+  for (const procedure of loadAllProcedures().procedures.filter((entry) => entry.limitsNl)) {
+    const both = runLimitsNl(procedure.limitsNl!, { screenReader: true, loggedIn: true });
+    assert.doesNotMatch(both, /achter een (?:login|inlog)[^.;]* (?:niet|nooit)|Er wordt niet ingelogd|geen echte schermlezer|zonder schermlezer|niet getest met een echte schermlezer/, procedure.id);
+  }
+  // A mark with another word is refused, so it cannot end up in the report as it is written.
+  const base = loadProcedure("1.1.1");
+  assert.throws(() => parseProcedure(`---\nid: "1.1.1"\nversion: 1\nclass: oordeel\nevidence: [images]\nlimits: "{zonder-browser: Er is geen browser gebruikt.}"\n---\n${base.body}\n`, "1.1.1"), /limits: a part that depends on the run/);
+});
+

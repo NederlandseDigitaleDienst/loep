@@ -243,8 +243,9 @@ export function buildStatement(evaluation: Evaluation, input: StatementInput, op
   if (input.additionalInformationNl) paragraph(input.additionalInformationNl);
   paragraph(
     `Het onderzoek is automatisch uitgevoerd met ${madeWith(evaluation)}, een open-source instrument dat meet en bewijs vastlegt: scripts hebben het bewijs verzameld en een taalmodel heeft elk criterium beoordeeld volgens een vaste procedure, met meetinstrumenten, waarna een tweede beoordeling elke bevinding opnieuw heeft gemaakt vanaf een verse pagina. ${
+      // The function only: the name of who signed stays in signed/signature.json.
       evaluation.signature
-        ? `${evaluation.signature.name} (${evaluation.signature.role}) heeft voor het onderzoek getekend${signedHow ? `, ${signedHow}` : ""}.`
+        ? `Voor het onderzoek is getekend door: ${evaluation.signature.role}${signedHow ? `, ${signedHow}` : ""}.`
         : "Er heeft nog niemand voor het onderzoek getekend."
     } Het rapport beschrijft de werkwijze en de beperkingen.`,
   );

@@ -29,6 +29,32 @@ async function contentBox(frame: Frame): Promise<(Box & { scale: { x: number; y:
   }
 }
 
+/**
+ * How far down from the top of the tab something fixed or sticky lies over the frame element,
+ * such as the bar at the top of a site: a part of the frame scrolled up to there lies under it.
+ */
+async function coveredAtTop(frame: Frame): Promise<number> {
+  // Only the tab is scrolled to bring a frame into view; around a frame in a frame this is not measured.
+  if (frame.parentFrame() !== frame.page().mainFrame()) return 0;
+  const element = await frame.frameElement();
+  try {
+    return await element.evaluate((node) => {
+      const box = (node as Element).getBoundingClientRect();
+      let covered = 0;
+      for (const x of [box.left + 1, (box.left + box.right) / 2, box.right - 1].filter((at) => at >= 0 && at < innerWidth)) {
+        for (const hit of document.elementsFromPoint(x, 0)) {
+          const position = getComputedStyle(hit).position;
+          const rect = hit.getBoundingClientRect();
+          if ((position === "fixed" || position === "sticky") && !hit.contains(node) && rect.bottom < innerHeight / 2) covered = Math.max(covered, rect.bottom);
+        }
+      }
+      return covered;
+    });
+  } finally {
+    await element.dispose().catch(() => undefined);
+  }
+}
+
 /** A picture of a frame shown at another size, brought to the pixels of the frame: each pixel takes the pixel the tab shows there. */
 function toFramePixels(shown: PNG, scale: { x: number; y: number }): Buffer {
   const picture = new PNG({ width: Math.max(1, Math.round(shown.width / scale.x)), height: Math.max(1, Math.round(shown.height / scale.y)) });
@@ -120,11 +146,13 @@ export async function frameAsPage(page: Page, frame: Frame): Promise<Page> {
       if (!origin) throw new Error("het ingesloten venster is niet zichtbaar op de pagina");
       const viewport = page.viewportSize() ?? { width: 1280, height: 800 };
       const shown = { width: inFrame.width * origin.scale.x, height: inFrame.height * origin.scale.y };
-      // The frame itself may stand outside the window of the tab, or only partly in it.
+      // The frame itself may stand outside the window of the tab, or only partly in it. Then it is scrolled to the middle of what a bar at the top leaves free, as a visitor would scroll it into view; what already stands in the window under such a bar is pictured as it is.
       const x = origin.x + inFrame.x * origin.scale.x;
       const y = origin.y + inFrame.y * origin.scale.y;
       const byX = x < 0 || x + shown.width > viewport.width ? x : 0;
-      const byY = y < 0 || y + shown.height > viewport.height ? y : 0;
+      const outside = y < 0 || y + shown.height > viewport.height;
+      const covered = outside ? await coveredAtTop(frame) : 0;
+      const byY = outside ? y - covered - Math.max(0, (viewport.height - covered - shown.height) / 2) : 0;
       if (byX !== 0 || byY !== 0) {
         await top.evaluate(([left, topEdge]) => window.scrollBy({ left: left!, top: topEdge!, behavior: "instant" }), [byX, byY] as const);
         origin = (await contentBox(frame)) ?? origin;

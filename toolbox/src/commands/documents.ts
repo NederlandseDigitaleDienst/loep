@@ -5,6 +5,7 @@ import { measurePdf, PREVIEW_PAGES, renderPage } from "../instruments/documents/
 import { readJson, sha256File, writeFileAtomic, writeJson } from "../lib/canonical.ts";
 import { documentDir, emptyFacts, NOT_READ_REASON_NL, originalPath, READ_KINDS, type DocumentFacts, type SampleDocument } from "../lib/documents.ts";
 import { stepStart, writeManifest } from "../lib/manifest.ts";
+import { runBlockade } from "../session/blockade.ts";
 import { guardedDownload, scopeForRun, type Guard, type Scope } from "../session/safety.ts";
 import type { Sample } from "./sample.ts";
 
@@ -64,7 +65,10 @@ async function fetchAndMeasure(runDir: string, document: SampleDocument, scope: 
   if (document.bytes !== null && document.bytes > MAX_DOCUMENT_BYTES) return emptyFacts(document.label, document.url, document.kind, "failed", `het bestand is ${Math.round(document.bytes / 1024 / 1024)} MB; de grens is ${MAX_DOCUMENT_BYTES / 1024 / 1024} MB`);
   await mkdir(join(runDir, documentDir(document)), { recursive: true });
   const file = join(runDir, originalPath(document));
-  const fetched = await guardedDownload(scope, guard, document.url, file, { resourceType: "document", maxBytes: MAX_DOCUMENT_BYTES + 1, timeoutMs: DOWNLOAD_MS });
+  // A short pause the site asked for is waited out first; an origin that refused the evaluation is not asked.
+  const blockade = runBlockade()?.blockade;
+  await blockade?.pause(document.url);
+  const fetched = await guardedDownload(scope, guard, document.url, file, { resourceType: "document", maxBytes: MAX_DOCUMENT_BYTES + 1, timeoutMs: DOWNLOAD_MS, blockade });
   if (!fetched.ok) return emptyFacts(document.label, document.url, document.kind, "failed", `niet op te halen: ${fetched.reason}`);
   if (fetched.truncated) {
     await rm(file, { force: true });
