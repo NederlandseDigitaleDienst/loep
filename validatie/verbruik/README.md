@@ -26,6 +26,8 @@ Tokens zeggen weinig over de kosten, want een token uit de cache kost een fracti
 | Naar de cache geschreven | 71 dollar | 39% |
 | Uitvoer | 11 dollar | 6% |
 
+De uitvoer in deze tabellen is te laag geteld: de meeste berichten in de transcripts dragen alleen de telling van het begin van het antwoord. Een schatting uit de berichten die wel de eindtelling hebben, komt op ongeveer vier keer zoveel uitvoer, 43 in plaats van 11 dollar, en dus ongeveer 216 dollar voor de werkstroom in plaats van 184 ([modelkeuze.md](modelkeuze.md)).
+
 ## Waar het verbruik zit
 
 1. **Elke beurt leest de hele context opnieuw.** Het verbruik van een agent volgt het aantal beurten (correlatie 0,98 tot 0,99 in elke rol), niet de omvang van zijn opdracht (0,34 bij de beoordelaars). Een beoordelaar deed gemiddeld 43 beurten en las per beurt gemiddeld 122.000 tokens uit de cache. Alles wat vroeg in de context komt, wordt dus tientallen keren opnieuw gelezen, en alles wat er in een beurt bij komt, wordt één keer naar de cache geschreven.
