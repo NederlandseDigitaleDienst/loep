@@ -437,6 +437,23 @@ test("the tab walk measures every focus indicator on a page that scrolls smoothl
   await page.context().close();
 });
 
+test("the tab walk of a page that puts focus in its search field on load starts at the top, so the header before the field is numbered too", async () => {
+  const page = await open("/search-focus.html");
+  const dir = await mkdtemp(join(tmpdir(), "loep-search-focus-"));
+  const walk = (await tabWalk(page, { fromTop: true, focusDir: join(dir, "focus"), focusPath: "focus" })) as { outcome: string; initialFocus: { tag: string } | null; stops: { text: string; tag: string }[] };
+  assert.equal(walk.initialFocus?.tag, "input");
+  assert.equal(walk.outcome, "completed");
+  assert.deepEqual(
+    walk.stops.map((stop) => stop.text || stop.tag),
+    ["Ga naar hoofdinhoud", "Logo", "Handboek", "Zoeken", "input", "Aangedreven door een zoekdienst", "Contact", "Colofon"],
+  );
+  // Without it the walk goes on from where focus is, as it must inside an opened dialog.
+  await page.locator("input").focus();
+  const fromFocus = (await tabWalk(page, { focusDir: join(dir, "focus-on"), focusPath: "focus-on" })) as { stops: { text: string }[] };
+  assert.equal(fromFocus.stops[0]!.text, "Aangedreven door een zoekdienst");
+  await page.context().close();
+});
+
 test("the numbered tab-order picture shows the slide the stops were counted on, also when the arrow keys turn the slide after the walk", async () => {
   const page = await open("/deck.html");
   const dir = await mkdtemp(join(tmpdir(), "loep-deck-"));
