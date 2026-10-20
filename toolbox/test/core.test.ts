@@ -574,7 +574,7 @@ test("navigations to one host are spaced out, also when they are asked for at th
   assert.equal(politeness.remaining("https://b.nl/"), 400);
 });
 
-test("only Cloudflare's own check counts as its check, and on a site only when Cloudflare answers there", () => {
+test("only Cloudflare's own check counts as its check, on its own host and subdomains, and on a site only when Cloudflare answers there", () => {
   const behind = (host: string): boolean => host === "player.vimeo.com";
   assert.equal(isChallenge("https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/g/turnstile/if/ov2/av0/rcv/abc", () => false), true);
   assert.equal(isChallenge("https://player.vimeo.com/cdn-cgi/challenge-platform/h/b/jsd/r/0.1:123:abc", behind), true);
@@ -584,6 +584,11 @@ test("only Cloudflare's own check counts as its check, and on a site only when C
   assert.equal(isChallenge("https://player.vimeo.com/cdn-cgi/rum", behind), false);
   assert.equal(isChallenge("https://player.vimeo.com/video/1/config", behind), false);
   assert.equal(isChallenge("https://player.vimeo.com/challenge-platform/x", behind), false);
+  // Cloudflare also loads its check from a subdomain of its own host (#140).
+  assert.equal(isChallenge("https://brunhild.challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/x", () => false), true);
+  assert.equal(isChallenge("https://a.b.challenges.cloudflare.com/x", () => false), true);
   assert.equal(isChallenge("https://challenges.cloudflare.com.voorbeeld.nl/x", behind), false);
+  assert.equal(isChallenge("https://notchallenges.cloudflare.com/x", behind), false);
+  assert.equal(isChallenge("https://cloudflare.com/x", behind), false);
   assert.equal(isChallenge("ws://player.vimeo.com/cdn-cgi/challenge-platform/x", behind), false);
 });
