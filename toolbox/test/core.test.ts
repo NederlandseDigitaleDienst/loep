@@ -312,6 +312,21 @@ test("a criterion only gets an outcome from the verifier", () => {
   assert.equal(new Set(result.findings.map((entry) => entry.id)).size, 2, "finding identifiers are unique");
 });
 
+test("a criterion the finishing round left open is not called established", () => {
+  const criterion = criterionById("1.1.1")!;
+  const base = { criterion, procedure: null, provenance: { dossierSha256: null, verdictSha256: {} } };
+  const open = { ...passed, outcome: "cantTell" as const, missingNl: ["mens nodig: of het logo een naam nodig heeft, bepaalt de eigenaar."] };
+  const stillOpen = resolveCriterion({ ...base, verdicts: { a: open, final: open, finish: open } }, "X");
+  assert.equal(stillOpen.outcome, "cantTell");
+  assert.equal(stillOpen.established?.by, "finishing");
+  assert.doesNotMatch(stillOpen.established!.noteNl, /^Vastgesteld/);
+  assert.match(stillOpen.established!.noteNl, /^Ook na een aanvullende meting niet vastgesteld/);
+  // Without a verdict before it, the note says so too.
+  assert.match(resolveCriterion({ ...base, verdicts: { a: null, final: null, finish: open } }, "X").established!.noteNl, /^Ook na een aanvullende meting niet vastgesteld: de eerste beoordeling leverde geen geldig oordeel/);
+  // A finishing round that did settle it still says so.
+  assert.match(resolveCriterion({ ...base, verdicts: { a: open, final: open, finish: passed } }, "X").established!.noteNl, /^Vastgesteld in een aanvullende meting/);
+});
+
 test("two defects in one component get identifiers that do not read as one defect twice", () => {
   const criterion = criterionById("1.4.11")!;
   const base = { criterion, procedure: null, provenance: { dossierSha256: null, verdictSha256: {} } };

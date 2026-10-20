@@ -163,7 +163,8 @@ export async function evaluate(options: EvaluateOptions): Promise<Evaluation> {
   const earlier = options.previous ? await readEvaluation(options.previous) : undefined;
 
   // Which criteria got their outcome from the finishing round, and which from a person.
-  const finished = criteria.filter((criterion) => criterion.established?.by === "finishing").map((criterion) => criterion.id);
+  // A criterion the finishing round left open was not established by it, so it is not counted here.
+  const finished = criteria.filter((criterion) => criterion.established?.by === "finishing" && criterion.outcome !== "cantTell").map((criterion) => criterion.id);
   const byPerson = criteria.filter((criterion) => criterion.established?.by === "person").map((criterion) => criterion.id);
   const answered = criteria.some((criterion) => (criterion.answers ?? []).length > 0);
 

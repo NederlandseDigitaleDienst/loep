@@ -424,9 +424,13 @@ export function resolveCriterion(input: CriterionInput, sitePrefix: string): Cri
       : finish
         ? {
             by: "finishing",
-            noteNl: beforeFinish
-              ? `Vastgesteld in een aanvullende meting: het oordeel bleef eerst open door een beperking van het onderzoek, en een aparte beoordelaar heeft daarna gemeten wat ontbrak. Daarna is het oordeel niet nog eens gecontroleerd${finish.outcome === "failed" ? "; elke bevinding is twee keer vastgelegd, de tweede keer vanaf een verse pagina" : ""}.`
-              : "Vastgesteld in een aanvullende meting: de eerste beoordeling leverde geen geldig oordeel. Daarna is het oordeel niet nog eens gecontroleerd.",
+            // A criterion that is still open after the finishing round was not established by it: the note says it stayed open.
+            noteNl:
+              finish.outcome === "cantTell"
+                ? `Ook na een aanvullende meting niet vastgesteld: ${beforeFinish ? "het oordeel bleef eerst open door een beperking van het onderzoek, en een aparte beoordelaar heeft daarna gemeten wat ontbrak" : "de eerste beoordeling leverde geen geldig oordeel, en een aparte beoordelaar heeft daarna zelf gemeten"}, maar kon het criterium niet beoordelen. Wat open bleef, staat bij het criterium.`
+                : beforeFinish
+                  ? `Vastgesteld in een aanvullende meting: het oordeel bleef eerst open door een beperking van het onderzoek, en een aparte beoordelaar heeft daarna gemeten wat ontbrak. Daarna is het oordeel niet nog eens gecontroleerd${finish.outcome === "failed" ? "; elke bevinding is twee keer vastgelegd, de tweede keer vanaf een verse pagina" : ""}.`
+                  : "Vastgesteld in een aanvullende meting: de eerste beoordeling leverde geen geldig oordeel. Daarna is het oordeel niet nog eens gecontroleerd.",
             ...(finish.finish?.coverageNl ? { coverageNl: finish.finish.coverageNl } : {}),
             ...(verdicts.finishBefore
               ? { before: { roundNl: "vorige aanvullende meting", outcome: verdicts.finishBefore.outcome, summaryNl: verdicts.finishBefore.summaryNl, missingNl: verdicts.finishBefore.missingNl ?? [] } }
