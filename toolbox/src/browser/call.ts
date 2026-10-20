@@ -1,9 +1,31 @@
 import type { CDPSession, ElementHandle, Page } from "playwright";
 
-/** Call a function of the in-page library. Nothing from the toolbox itself exists inside the page. */
+/**
+ * Whether a library of the toolbox stands on the window as the toolbox leaves it: fixed and frozen (#143).
+ * Evaluated in the page, so it names nothing from outside itself.
+ */
+export const fixedOnWindow = (name: string): boolean => {
+  const own = Object.getOwnPropertyDescriptor(window, name);
+  return own !== undefined && "value" in own && !own.writable && !own.configurable && typeof own.value === "object" && own.value !== null && Object.isFrozen(own.value);
+};
+
+/** Whether a frame has the in-page library as the toolbox installed it, and a body to measure. */
+export const readableFrame = (): boolean => {
+  const own = Object.getOwnPropertyDescriptor(window, "__loep");
+  return own !== undefined && "value" in own && !own.writable && !own.configurable && Object.isFrozen(own.value) && document.body !== null;
+};
+
+/**
+ * Call a function of the in-page library. Nothing from the toolbox itself exists inside the page.
+ * A library that is not the one the toolbox fixed to the window is refused, not called (#143).
+ */
 export function call<T>(page: Page, name: string, ...args: unknown[]): Promise<T> {
   return page.evaluate(
-    ([fn, parameters]) => (window as unknown as { __loep: Record<string, (...values: unknown[]) => unknown> }).__loep[fn as string]!(...(parameters as unknown[])),
+    ([fn, parameters]) => {
+      const own = Object.getOwnPropertyDescriptor(window, "__loep");
+      if (own === undefined || !("value" in own) || own.writable || own.configurable || !Object.isFrozen(own.value)) throw new Error("window.__loep is niet de bibliotheek die loep in de pagina zette; wat ermee zou worden gemeten, kan niet worden vastgesteld");
+      return (own.value as Record<string, (...values: unknown[]) => unknown>)[fn as string]!(...(parameters as unknown[]));
+    },
     [name, args],
   ) as Promise<T>;
 }

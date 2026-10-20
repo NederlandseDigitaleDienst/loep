@@ -2,6 +2,7 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { Frame, Page } from "playwright";
+import { fixedOnWindow } from "../../browser/call.ts";
 import { TOOLBOX_ROOT, toolboxRequire } from "./registry.ts";
 
 /** The in-page helpers of the second-opinion methods, installed as window.__loepm on demand. */
@@ -62,10 +63,14 @@ export function commonJsBundle(packageName: string, entry: string): string {
   return bundle;
 }
 
-/** Install window.__loepm in a frame when it is not there yet. It only reads, like window.__loep. */
+/**
+ * Install window.__loepm in a frame when it is not there yet. It only reads, like window.__loep.
+ * One that the page put there itself is refused: a method would otherwise read with the page's functions (#143).
+ */
 export async function ensureHelpers(frame: Frame | Page): Promise<void> {
-  if (await frame.evaluate(() => typeof (window as unknown as { __loepm?: unknown }).__loepm === "object")) return;
+  if (await frame.evaluate(fixedOnWindow, "__loepm")) return;
   await frame.evaluate(INPAGE_METHODS);
+  if (!(await frame.evaluate(fixedOnWindow, "__loepm"))) throw new Error("de pagina heeft zelf een window.__loepm gezet, zodat loep zijn eigen hulpfuncties niet kan gebruiken; wat deze methode op deze pagina zou meten, kan niet worden vastgesteld");
 }
 
 /**
@@ -75,7 +80,11 @@ export async function ensureHelpers(frame: Frame | Page): Promise<void> {
  * never break the globals of another method or of the page itself.
  */
 export function capsule(libraries: string[], body: string, argument: unknown = null): string {
+  const read = SHARED_GLOBALS.filter((name) => new RegExp(`(?<![\\w$.])${name.replace(/\$/g, "\\$")}(?![\\w$])`).test(body));
   return `(async function () {
+  // A library announces itself to a loader of modules when it finds one; the page could take it from there and change it.
+  var define, module, exports;
+  ${refuseFixedGlobals(read)}
   const __names = new Set(Object.getOwnPropertyNames(window));
   const __kept = {};
   for (const name of ${JSON.stringify(SHARED_GLOBALS)}) if (name in window) __kept[name] = Object.getOwnPropertyDescriptor(window, name);
@@ -93,6 +102,20 @@ export function capsule(libraries: string[], body: string, argument: unknown = n
     }
   }
 }).call(window)`;
+}
+
+/**
+ * Source that throws when the page made one of these globals its own before a library could set it: not writable,
+ * or with a getter or setter, on the window or on its prototypes. The library would then not replace it, and the
+ * code after it would run the page's version, or the page would get hold of the library and could change it (#143).
+ */
+export function refuseFixedGlobals(names: readonly string[]): string {
+  if (names.length === 0) return "";
+  return `for (const __name of ${JSON.stringify(names)}) {
+    let __found;
+    for (let __at = window; __at && !__found; __at = Object.getPrototypeOf(__at)) __found = Object.getOwnPropertyDescriptor(__at, __name);
+    if (__found && (!("value" in __found) || !__found.writable)) throw new Error("de pagina heeft window." + __name + " zelf vastgezet, zodat loep zijn eigen bibliotheek niet kan laden; wat die op deze pagina zou vinden, kan niet worden vastgesteld");
+  }`;
 }
 
 /**

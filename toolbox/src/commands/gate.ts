@@ -4,6 +4,7 @@ import { basename, join, resolve } from "node:path";
 import { PNG } from "pngjs";
 import { readJson, sha256, sha256File, writeFileAtomic, writeJson } from "../lib/canonical.ts";
 import { startedDownload } from "../lib/documents.ts";
+import { enginesWithoutResult, type EngineRun } from "../lib/engines.ts";
 import { expectedFocusable, pageCoverage, reachedByKeyboard, representativePages, stateCoverage } from "../lib/extractors.ts";
 import { type Manifest, stepStart, writeManifest } from "../lib/manifest.ts";
 import { readTemplate } from "../lib/templates.ts";
@@ -320,6 +321,17 @@ export function gateChecks(run: RunData): { checks: Check[]; gaps: Gap[]; warnin
     limitations.push({ check: "screenshot-clipped", ...on(page), state: "default", missingNl: `De pagina is ${pageHeight} pixels hoog. De schermafbeeldingen stoppen bij ${limit} pixels; wat daaronder staat, is op geen schermafbeelding te zien en het contrast ervan is niet gemeten.`, measured: { pageHeight, limit } });
   }
 
+  // A rule engine that gave no answer on a page or in a state: what it would have found there cannot be established, and its silence must not read as clean (#143).
+  const withoutResult = (runs: [string, EngineRun | undefined][]): string => runs.flatMap(([where, engines]) => enginesWithoutResult(engines).map((entry) => `${entry.engine}${where ? ` ${where}` : ""}: ${entry.error.slice(0, 200)}`)).join("; ");
+  for (const page of run.pages) {
+    const told = withoutResult([["in licht", page.engines?.light], ["in donker", page.engines?.dark]]);
+    if (told) limitations.push({ check: "engine-without-result", ...on(page), state: "default", missingNl: `Een regelset gaf op deze pagina geen uitslag (${told}). Wat die regelset hier zou vinden, kan niet worden vastgesteld; dat er geen bevinding van in het bewijs staat, betekent niet dat de pagina zonder fouten is.` });
+  }
+  for (const state of run.siteStates?.states ?? []) {
+    const told = withoutResult([["", run.stateEvidence?.[state.id]?.engines]]);
+    if (told) limitations.push({ check: "engine-without-result", page: null, url: state.url, state: state.id, missingNl: `Een regelset gaf in deze toestand geen uitslag (${told}). Wat die regelset hier zou vinden, kan niet worden vastgesteld; dat er geen bevinding van in het bewijs staat, betekent niet dat de toestand zonder fouten is.` });
+  }
+
   // 5. The sweep itself must be complete.
   const incomplete: Gap[] = [];
   if (!run.states) incomplete.push({ check: "sweep-complete", page: null, url: null, state: "default", missingNl: "De interactieproef (states) heeft niet gedraaid." });
@@ -373,7 +385,12 @@ export function gateChecks(run: RunData): { checks: Check[]; gaps: Gap[]; warnin
   // 6b. What cannot be examined without a request an evaluation does not send.
   if (model) {
     for (const component of model.components) {
-      for (const request of component.blockedRequests ?? []) limitations.push({ check: "needs-write-request", page: null, url: model.pageTypes.find((type) => component.pageTypes.includes(type.id))?.representative ?? null, state: component.recipe ?? `component-${component.id}`, missingNl: `Niet onderzoekbaar zonder schrijfverzoek: het onderdeel "${component.id}" heeft ${request.method} ${request.address} nodig, en dat verzoek wordt tegengehouden.` });
+      for (const request of component.blockedRequests ?? []) {
+        const where = { page: null, url: model.pageTypes.find((type) => component.pageTypes.includes(type.id))?.representative ?? null, state: component.recipe ?? `component-${component.id}` };
+        // A GET is refused only when it goes to a host outside the run: that is a read, and a choice of what the run covers, not a write.
+        if (["GET", "HEAD"].includes(String(request.method).toUpperCase())) limitations.push({ check: "needs-host-outside-run", ...where, missingNl: `Niet onderzoekbaar zonder een adres buiten de run: het onderdeel "${component.id}" heeft ${request.method} ${request.address} nodig, en dat adres hoort niet bij de afbakening (inventory --also-origin).` });
+        else limitations.push({ check: "needs-write-request", ...where, missingNl: `Niet onderzoekbaar zonder schrijfverzoek: het onderdeel "${component.id}" heeft ${request.method} ${request.address} nodig, en dat verzoek wordt tegengehouden.` });
+      }
     }
   }
   if (model) {
