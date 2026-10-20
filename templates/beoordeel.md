@@ -83,6 +83,10 @@ Stop je sessie als je klaar bent: `node {{cli}} session stop --run {{run}} --ses
 
 ## Vorm van het oordeel
 
+Het skelet van het oordeel in JSON, met elk veld op zijn plaats, staat in de naslag bij deze opdracht: `{{naslag}}`, onder "Het skelet van het oordeel". Lees het als je je oordeel gaat schrijven. Wat elk veld moet bevatten, staat hieronder; de controle zegt wat er aan de vorm ontbreekt.
+
+<!-- naslag: Het skelet van het oordeel -->
+
 ```json
 {
   "criterion": "{{id}}",
@@ -123,6 +127,8 @@ Stop je sessie als je klaar bent: `node {{cli}} session stop --run {{run}} --ses
   "missingNl": ["veegronde mist: het contrast op 320 pixels breed is op geen van de 30 pagina's gemeten.", "versturen niet toegestaan: wat de chat in het ingesloten venster op P03 (https://chat.voorbeeld.nl) toont en laat voorlezen nadat er een bericht is verstuurd."]
 }
 ```
+
+<!-- /naslag -->
 
 - **Wees kort.** `summaryNl` is hooguit 40 woorden. Een oordeel heeft hooguit zes waarnemingen en elke `observedNl` is hooguit 70 woorden: aantallen en twee of drie voorbeelden. Een bevinding beschrijft één probleem; `observedNl`, `impactNl` en `fixNl` zijn elk hooguit 50 woorden.
 - `evidence`: nummers van waarnemingen, namen van dossieronderdelen (de sleutels onder `evidence` in het dossier), of bestandspaden uit het dossier. Een waarneming die het dossier samenvat, mag alleen naar het dossier wijzen. Een bevinding heeft altijd minstens één nummer van een kijk- of meetcommando. Een nummer dat niet in het logboek staat, wordt geweigerd.

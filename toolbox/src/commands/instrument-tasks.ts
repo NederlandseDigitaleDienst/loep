@@ -15,7 +15,7 @@ function dossierPartsNl(dossier: Record<string, unknown>): string {
 const dossierPartsOfFile = (runDir: string, path: string): string => dossierPartsNl(JSON.parse(readFileSync(join(runDir, path), "utf8")) as Record<string, unknown>);
 import { stepStart, writeManifest } from "../lib/manifest.ts";
 import { loadAllProcedures, type Procedure } from "../lib/procedures.ts";
-import { readTemplate } from "../lib/templates.ts";
+import { naslagOf, readTemplate, splitNaslag } from "../lib/templates.ts";
 import { loadRun, type RunData } from "../lib/rundata.ts";
 import {
   citedObservations,
@@ -154,6 +154,17 @@ function fill(template: string, values: Record<string, string>): string {
     if (!(key in values)) throw new Error(`template placeholder {{${key}}} has no value`);
     return values[key]!;
   });
+}
+
+/**
+ * Write a task in two files: the core, which the agent reads at the start and so again with every
+ * turn, and next to it the reference it reads when it needs it (the explanation of each command, the
+ * skeleton of the verdict).
+ */
+async function writeTask(runDir: string, prompt: string, text: string): Promise<void> {
+  const { core, naslag } = splitNaslag(text);
+  await writeFileAtomic(join(runDir, prompt), core);
+  if (naslag !== null) await writeFileAtomic(join(runDir, naslagOf(prompt)), `# Naslag bij je opdracht\n\nDe opdracht staat in \`${join(resolve(runDir), prompt)}\`. Hier staat wat ze naar de naslag verwijst. Lees het stuk dat je nodig hebt; wat de opdracht zegt, gaat voor.\n\n${naslag}`);
 }
 
 const INDEX = join("tasks", "index.json");
@@ -584,10 +595,12 @@ export async function instrumentTasks(runDir: string, options: TaskOptions = {})
     const stateLines = stateLinesFor(run, type.id, recipes);
     const walkLimits = walkBudget(BUDGETS.walk, stateLines.length);
     const walk: WalkTask = { pageType: type.id, page: page.label, prompt: TASK_FILES.walks(type.id), output: join("rondgang", `${type.id}.json`), session, maxCommands: walkLimits.commands, maxMinutes: walkLimits.minutes };
-    const writeWalk = async (): Promise<void> => writeFileAtomic(
-      join(runDir, walk.prompt),
+    const writeWalk = async (): Promise<void> => writeTask(
+      runDir,
+      walk.prompt,
       fill(templates.rondgang, {
         ...base,
+        naslag: join(absoluteRun, naslagOf(walk.prompt)),
         workDir: await makeWorkDir(runDir, walk.session),
         workName: walk.session,
         site: siteLabel(run.inventory),
@@ -650,9 +663,10 @@ export async function instrumentTasks(runDir: string, options: TaskOptions = {})
     const judge = { prompt: TASK_FILES.judges(procedure.id), output: join("verdicts", procedure.id, "oordeel.json"), candidates: join(dir, "kandidaten.json"), session: judgeSession, maxCommands: judgeLimits.commands, maxMinutes: judgeLimits.minutes };
     await writeJson(join(runDir, judge.candidates), judgeCandidates);
     const shared = { ...base, id: criterion.id, title: criterion.titleNl, level: criterion.level, dossier: join(absoluteRun, dossierPath), dossierParts: dossierPartsNl(dossier), gate: join(absoluteRun, "gate.json"), writes: writesNl, procedure: procedure.body };
-    const writeJudge = async (): Promise<void> => writeFileAtomic(
-      join(runDir, judge.prompt),
-      fill(templates.beoordeel, { ...shared, session: judge.session, workDir: await makeWorkDir(runDir, judge.session), workName: judge.session, maxCommands: String(judge.maxCommands), maxMinutes: String(judge.maxMinutes), candidates: join(absoluteRun, judge.candidates), notWalked: join(absoluteRun, NOT_WALKED), output: join(absoluteRun, judge.output), check: `node ${cli} check-verdict --run ${absoluteRun} --criterion ${criterion.id} --round judge` }),
+    const writeJudge = async (): Promise<void> => writeTask(
+      runDir,
+      judge.prompt,
+      fill(templates.beoordeel, { ...shared, naslag: join(absoluteRun, naslagOf(judge.prompt)), session: judge.session, workDir: await makeWorkDir(runDir, judge.session), workName: judge.session, maxCommands: String(judge.maxCommands), maxMinutes: String(judge.maxMinutes), candidates: join(absoluteRun, judge.candidates), notWalked: join(absoluteRun, NOT_WALKED), output: join(absoluteRun, judge.output), check: `node ${cli} check-verdict --run ${absoluteRun} --criterion ${criterion.id} --round judge` }),
     );
     const task: InstrumentTask = { criterion: criterion.id, titleNl: criterion.titleNl, procedureVersion: procedure.version, procedureSha256: procedure.sha256, dossier: dossierPath, dossierSha256, passCommands: procedure.passCommands, decisiveCommands: procedure.decisiveCommands, recommendationRules: procedure.recommendationRules, judge, verify: null };
     await writeJudge();
@@ -688,10 +702,12 @@ export async function instrumentTasks(runDir: string, options: TaskOptions = {})
       const verifyLimits = verifyBudget({ commands: maxCommands, minutes: budget.minutes }, task.criterion, coverage.get(task.criterion)!);
       const verify = { prompt: TASK_FILES.verifiers(task.criterion), output: join("verdicts", task.criterion, "final.json"), candidates: join(dir, "kandidaten-verificatie.json"), session: was?.verify?.session ?? `v-${task.criterion.replaceAll(".", "")}`, maxCommands: verifyLimits.commands, maxMinutes: verifyLimits.minutes };
       await writeJson(join(runDir, verify.candidates), candidates);
-      const writeVerify = async (): Promise<void> => writeFileAtomic(
-        join(runDir, verify.prompt),
+      const writeVerify = async (): Promise<void> => writeTask(
+        runDir,
+        verify.prompt,
         fill(templates.verifieer, {
           ...base,
+          naslag: join(absoluteRun, naslagOf(verify.prompt)),
           workDir: await makeWorkDir(runDir, verify.session),
           workName: verify.session,
           id: criterion.id,
@@ -774,10 +790,12 @@ export async function instrumentTasks(runDir: string, options: TaskOptions = {})
         earlierRounds.length > 0
           ? `Een eerdere afmaakronde liet dit criterium open. Haar oordeel blijft bewaard: \`${join(absoluteRun, earlierRounds.at(-1)!)}\`. De punten hierboven komen daaruit. Ze bleven open omdat een deel van de site niet bereikbaar was of een instrument niet werkte. Open dat deel eerst opnieuw: laadt het nu, of werkt het instrument nu, meet dan wat ontbrak. Laadt het nog steeds niet, dan blijft het punt open, met jouw eigen poging in \`finish.attempts\`. ${standingNl}`
           : standingNl;
-      const writeFinish = async (): Promise<void> => writeFileAtomic(
-        join(runDir, finish.prompt),
+      const writeFinish = async (): Promise<void> => writeTask(
+        runDir,
+        finish.prompt,
         fill(templates.afmaak, {
           ...base,
+          naslag: join(absoluteRun, naslagOf(finish.prompt)),
           workDir: await makeWorkDir(runDir, finish.session),
           workName: finish.session,
           id: criterion.id,
