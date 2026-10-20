@@ -157,7 +157,7 @@ async function collectPage(browser: Browser, entry: SampleItem, runDir: string, 
         // The language of text alternatives and names, which the text of the page does not hold (3.1.2).
         await writeJson(join(dir, "probes", "languages.json"), await languagesOf(page, { blocks: false }));
         // The walk draws its numbered picture itself, before any other key is pressed.
-        const walk = await tabWalk(page, { continueAfterFocusLoss: true, focusDir: join(dir, "probes", "focus"), focusPath: "probes/focus", orderPicture: join(dir, "probes", "tabwalk.png") });
+        const walk = await tabWalk(page, { continueAfterFocusLoss: true, fromTop: true, focusDir: join(dir, "probes", "focus"), focusPath: "probes/focus", orderPicture: join(dir, "probes", "tabwalk.png") });
         summary.tabwalk = { outcome: walk.outcome, stops: walk.stopCount };
         // Every picture cut out and read with text recognition (1.4.5); this scrolls, so it comes after what is measured in place.
         const pictures = await picturesWithText(page, join(dir, "probes", "pictures"), "probes/pictures", sweep.pictureCache);
@@ -174,7 +174,7 @@ async function collectPage(browser: Browser, entry: SampleItem, runDir: string, 
         summary.timeLimits = { timers: limits.timers.length, forced: limits.timers.filter((timer) => timer.forced).length };
       } else {
         // The focus indicator is measured again on the dark scheme: its colours differ.
-        await writeJson(join(dir, "probes", "tabwalk-dark.json"), await tabWalk(page, { continueAfterFocusLoss: true, focusDir: join(dir, "probes", "focus-dark"), focusPath: "probes/focus-dark" }));
+        await writeJson(join(dir, "probes", "tabwalk-dark.json"), await tabWalk(page, { continueAfterFocusLoss: true, fromTop: true, focusDir: join(dir, "probes", "focus-dark"), focusPath: "probes/focus-dark" }));
       }
     } finally {
       await context.close().catch(() => undefined);
@@ -223,7 +223,7 @@ async function collectPage(browser: Browser, entry: SampleItem, runDir: string, 
       await writeJson(join(dir, "probes", "operables-narrow.json"), await pageOperables(page));
       // What there is to reach with Tab in this window: the walk below is laid next to it.
       await writeJson(join(dir, "probes", "named-narrow.json"), { ...(await collectNamed(page)), ...(narrowShot.clippedAt ? { screenshotClippedAt: narrowShot.clippedAt } : {}) });
-      const walk = await tabWalk(page, { continueAfterFocusLoss: true, focusDir: join(dir, "probes", "focus-narrow"), focusPath: "probes/focus-narrow", orderPicture: join(dir, "probes", "tabwalk-narrow.png") });
+      const walk = await tabWalk(page, { continueAfterFocusLoss: true, fromTop: true, focusDir: join(dir, "probes", "focus-narrow"), focusPath: "probes/focus-narrow", orderPicture: join(dir, "probes", "tabwalk-narrow.png") });
       await writeJson(join(dir, "probes", "tabwalk-narrow.json"), walk);
       summary["tabwalk-narrow"] = { outcome: walk.outcome, stops: walk.stopCount };
     } finally {
