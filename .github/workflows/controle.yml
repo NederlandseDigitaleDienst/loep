@@ -137,6 +137,8 @@ jobs:
           cache: npm
           cache-dependency-path: toolbox/package-lock.json
       - uses: extractions/setup-just@v4
+      # release.test.ts runs towncrier with uvx.
+      - uses: astral-sh/setup-uv@v7
       - uses: typst-community/setup-typst@v5
 
       - name: Pakketten
