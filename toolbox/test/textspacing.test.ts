@@ -88,3 +88,15 @@ test("1.4.12: textSpacing with restore leaves the page as it was, also for parts
     await page.context().close();
   }
 });
+
+test("1.4.12: a tile with a fixed height that hides its overflow cuts off text held in spans; a tile that grows does not", async () => {
+  const page = await open("/spacing-tiles.html");
+  try {
+    const result = await textSpacing(page, `${process.env.TMPDIR ?? "/tmp"}/loep-spacing-tiles.png`, true);
+    assert.equal(result.clippedBefore, 0, "a block that only cuts off a decoration does not count");
+    // overflow:hidden and overflow:clip both cut off the second line; the tile with min-height grows along.
+    assert.deepEqual(result.newlyClipped.map((item) => (item as { text?: string }).text), ["Paspoort of rijbewijs", "Afval en grofvuil"]);
+  } finally {
+    await page.context().close();
+  }
+});
