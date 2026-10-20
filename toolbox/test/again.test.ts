@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, test } from "node:test";
 import { gatherVerdicts } from "../src/commands/evaluate.ts";
-import { checkInstrumentVerdict, instrumentPending, instrumentTasks, loadInstrumentIndex, skip, type InstrumentTask } from "../src/commands/instrument-tasks.ts";
+import { checkInstrumentVerdict, instrumentPending, instrumentTasks, loadInstrumentIndex, recordAttempts, skip, type InstrumentTask } from "../src/commands/instrument-tasks.ts";
 import { type CriterionResult, openCriteria, resolveCriterion, summarise } from "../src/lib/evaluation.ts";
 import { deriveReport, renderMarkdown } from "../src/lib/report-markdown.ts";
 import type { RunData } from "../src/lib/rundata.ts";
@@ -136,7 +136,12 @@ test("tasks --again refuses a criterion that is not open with a part that did no
 });
 
 test("tasks --again writes a new finishing round after done, with a session of its own, keeps the earlier verdict, and the new one counts", async () => {
+  // The attempts the workflow counted for the earlier round do not carry over to the new one; those of other tasks stay through every tasks.
+  await recordAttempts(dir, [`finishers:${CRITERIA.unreachable}`, `judges:${CRITERIA.unreachable}`]);
+  await instrumentTasks(dir, options);
+  assert.deepEqual((await loadInstrumentIndex(dir)).attempts, { [`finishers:${CRITERIA.unreachable}`]: 1, [`judges:${CRITERIA.unreachable}`]: 1 });
   assert.equal((await again([CRITERIA.unreachable])).finishers, 1);
+  assert.deepEqual((await loadInstrumentIndex(dir)).attempts, { [`judges:${CRITERIA.unreachable}`]: 1 });
   const finish = (await task(CRITERIA.unreachable)).finish!;
   assert.deepEqual([finish.session, finish.points, finish.earlier], ["a-243-2", [UNREACHABLE], [join("verdicts", CRITERIA.unreachable, "afmaak-1.json")]]);
   // The earlier verdict, its stamp and its task stay in the run under a number.

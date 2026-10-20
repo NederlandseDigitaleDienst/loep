@@ -2,7 +2,10 @@
 // Plain JavaScript on purpose: it is injected as-is. It only reads; the single
 // exception is applyTextSpacing(), which a probe calls on a page it then discards
 // or that it gives back with removeTextSpacing().
+// The library is fixed to the window, frozen and not writable: a script of the page cannot swap a function of it
+// for one that finds nothing (#143). Installed a second time in the same document, it leaves the first in place.
 (() => {
+  if (Object.getOwnPropertyDescriptor(window, "__loep")) return;
   const registry = [];
 
   // What the page writes to the clipboard, recorded where it asks for it and before any page
@@ -2346,7 +2349,7 @@
     });
   }
 
-  window.__loep = {
+  const library = {
     plainTextColours,
     layoutBreakpoints,
     shownControls,
@@ -2412,4 +2415,5 @@
     sentenceOf,
     skipLinkTarget,
   };
+  Object.defineProperty(window, "__loep", { value: Object.freeze(library), writable: false, configurable: false, enumerable: false });
 })();

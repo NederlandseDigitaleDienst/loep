@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { aliasRepresentatives, checkSite, exploreContext } from "../src/commands/explore.ts";
 import { buildSample, CENSUS_LIMIT, chooseOnVariation, contentKindsOfType, extraPagesFor, LEGACY_SEED, MAX_EXTRA_PER_TYPE, sample, seededOrder } from "../src/commands/sample.ts";
-import { formPagesNl, parseSitemap, passwordPagesNl, type Inventory, type InventoryPage } from "../src/commands/inventory.ts";
+import { contentReadOutside, formPagesNl, landingAddress, parseSitemap, passwordPagesNl, readsOutsideRunNl, type Inventory, type InventoryPage } from "../src/commands/inventory.ts";
 import { progressLine, sayingItRuns } from "../src/instruments/limit.ts";
 import { canonicalJson, sha256, slugForUrl, stableId } from "../src/lib/canonical.ts";
 import { isChallenge } from "../src/lib/challenge.ts";
@@ -80,6 +80,51 @@ test("inventory says when pages have a form or a frame on another origin has one
   // A frame on the site's own origin is a page like any other.
   assert.equal(formPagesNl([search(1), { ...chat, url: "https://a.nl/chat" }], "https://a.nl", false), null);
   assert.match(formPagesNl([page(1), contact, { ...page(5), counts: { forms: 3 } }], "https://a.nl", false)!, /2 pagina's hebben een formulier dat niet op elke pagina staat \(https:\/\/a\.nl\/p003 en 1 meer\)/);
+});
+
+test("inventory says which origins outside the run pages read content from, and how to take them in", () => {
+  assert.equal(readsOutsideRunNl(undefined), null, "an older inventory says nothing");
+  assert.equal(readsOutsideRunNl([]), null);
+  const two = readsOutsideRunNl([
+    { origin: "https://agenda.a.nl", pages: ["https://a.nl/", "https://a.nl/p002"], requests: 5 },
+    { origin: "https://api.b.nl", pages: ["https://a.nl/"], requests: 1 },
+  ])!;
+  assert.match(two, /^let op: 2 pagina's halen met GET inhoud op van een adres buiten de run: https:\/\/agenda\.a\.nl \(https:\/\/a\.nl\/ en 1 meer\), https:\/\/api\.b\.nl \(https:\/\/a\.nl\/\)\./, "pages are counted once, whatever they read from");
+  assert.match(two, /blijft in elke meting leeg/);
+  assert.match(two, /met --also-origin https:\/\/agenda\.a\.nl --also-origin https:\/\/api\.b\.nl\. Zo niet, dan valt ze buiten de afbakening$/);
+  const many = readsOutsideRunNl(["a", "b", "c", "d", "e", "f"].map((name) => ({ origin: `https://${name}.c.nl`, pages: ["https://a.nl/"], requests: 1 })))!;
+  assert.match(many, /https:\/\/e\.c\.nl \(https:\/\/a\.nl\/\), en 1 meer\./);
+  assert.match(many, /--also-origin <origin> voor elk adres dat erbij hoort/);
+});
+
+test("only a GET of the page itself for data or markup on another origin is a read of content elsewhere", () => {
+  const answer = (over: { method?: string; type?: string; status?: number; contentType?: string; url?: string; inFrame?: boolean } = {}) =>
+    ({
+      status: () => over.status ?? 200,
+      headers: () => ({ "content-type": over.contentType ?? "application/json; charset=utf-8" }),
+      url: () => over.url ?? "https://agenda.a.nl/api/items?page=1",
+      frame: () => ({ parentFrame: () => (over.inFrame ? {} : null) }),
+      request: () => ({ method: () => over.method ?? "GET", resourceType: () => over.type ?? "fetch" }),
+    }) as unknown as Parameters<typeof contentReadOutside>[0];
+  const site = ["https://a.nl"];
+  assert.equal(contentReadOutside(answer(), site), "https://agenda.a.nl");
+  assert.equal(contentReadOutside(answer({ type: "xhr", contentType: "text/html" }), site), "https://agenda.a.nl");
+  assert.equal(contentReadOutside(answer({ contentType: "application/vnd.api+json" }), site), "https://agenda.a.nl");
+  assert.equal(contentReadOutside(answer({ url: "https://a.nl/api/items" }), site), null, "the site itself");
+  assert.equal(contentReadOutside(answer({ method: "POST" }), site), null, "not a read");
+  assert.equal(contentReadOutside(answer({ type: "image", contentType: "image/png" }), site), null, "a session lets an image through");
+  assert.equal(contentReadOutside(answer({ type: "script", contentType: "text/javascript" }), site), null);
+  assert.equal(contentReadOutside(answer({ status: 204 }), site), null, "a beacon puts nothing in the page");
+  assert.equal(contentReadOutside(answer({ contentType: "image/gif" }), site), null, "nor does a pixel");
+  assert.equal(contentReadOutside(answer({ status: 404 }), site), null);
+  assert.equal(contentReadOutside(answer({ inFrame: true }), site), null, "a frame may read elsewhere in a session too");
+});
+
+test("where the browser landed keeps its anchor, and its query only when the address asked for had that same query", () => {
+  assert.equal(landingAddress("https://a.nl/terug", "https://a.nl/verklaring?code=geheim&state=x#vragen"), "https://a.nl/verklaring#vragen");
+  assert.equal(landingAddress("https://a.nl/zoeken?q=a", "https://a.nl/resultaten?q=a"), "https://a.nl/resultaten?q=a");
+  assert.equal(landingAddress("https://a.nl/zoeken?q=a", "https://a.nl/resultaten?q=a&session=geheim"), "https://a.nl/resultaten");
+  assert.equal(landingAddress("https://a.nl/oud", "https://a.nl/nieuw"), "https://a.nl/nieuw");
 });
 
 test("a small site is evaluated in full and identical pages once", () => {
