@@ -631,7 +631,7 @@ test("the Tab walk names an element that throws focus away and goes on behind it
 
 /** Record the recipes an explorer would save, through a real session. */
 async function recordRecipes(): Promise<void> {
-  const daemon = await Daemon.create(run, { hosts: ["127.0.0.1"], baseUrl: `${origin}/`, strict: false }, { navigationDelayMs: 20 });
+  const daemon = await Daemon.create(run, { hosts: [new URL(origin).host], baseUrl: `${origin}/`, strict: false }, { navigationDelayMs: 20 });
   const loep = async (command: string, args: string[] = [], options: Record<string, string | boolean> = {}): Promise<Record<string, unknown>> => {
     const response = await daemon.handle({ op: "command", session: "verken", command, args, options });
     assert.equal(response.ok, true, `${command}: ${JSON.stringify(response.print)}`);
@@ -854,7 +854,7 @@ test("explore, check-site, the sweep and the gate work together on a site with a
   assert.ok(dialog.textBehindALayerLeftOut >= 1);
 
   // One name per state: whatever the dossier calls a state opens in a session, on any page it belongs to.
-  const daemon = await Daemon.create(run, { hosts: ["127.0.0.1"], baseUrl: `${origin}/`, strict: false }, { navigationDelayMs: 20 });
+  const daemon = await Daemon.create(run, { hosts: [new URL(origin).host], baseUrl: `${origin}/`, strict: false }, { navigationDelayMs: 20 });
   try {
     await daemon.handle({ op: "start", session: "rechter" });
     const open = async (text: string): Promise<{ ok: boolean; print: Record<string, unknown> }> => {

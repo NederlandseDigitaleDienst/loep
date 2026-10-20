@@ -11,7 +11,7 @@ import { explore } from "../src/commands/explore.ts";
 import { inventory } from "../src/commands/inventory.ts";
 import { login, LOGIN_WARNING_NL } from "../src/commands/login.ts";
 import { readJson, writeJson } from "../src/lib/canonical.ts";
-import { agentLoginNl, isLogout, loggedOutReasonNl, LOGIN_SESSION_FILE, loginCookieHeader, loginForRun, loginRefusalNl, loginSessionProblems, runLoginState, setRunLogin, storeLoginSession, type LoginSession } from "../src/lib/login.ts";
+import { agentLoginNl, IDLE_SESSION_FILE, ignoreSecrets, isLogout, loggedOutReasonNl, LOGIN_SESSION_FILE, loginCookieHeader, loginForRun, loginRefusalNl, loginSessionProblems, runLoginState, setRunLogin, storeLoginSession, type LoginSession } from "../src/lib/login.ts";
 import type { Manifest } from "../src/lib/manifest.ts";
 import type { WritePermission } from "../src/lib/writes.ts";
 import { SecondBrowsers } from "../src/session/second.ts";
@@ -45,6 +45,22 @@ test("the rule for a control that logs out: by its address or by a short name", 
   for (const text of ["Inloggen", "Uitleg", "Overzicht", "", "Aanmelden", "Veelgestelde vragen: hoe kan ik uitloggen als ik de computer met iemand deel?"]) assert.ok(!isLogout({ text }), text);
   // An address that says nothing is still caught by the name of its link.
   assert.ok(isLogout({ href: "/mijn/sessie-sluiten", text: "Afmelden" }));
+});
+
+test("the .gitignore of a run names the session files, adds what is missing and leaves the rest alone", () => {
+  const dir = mkdtempSync(join(tmpdir(), "loep-ignore-"));
+  try {
+    const path = join(dir, ".gitignore");
+    writeFileSync(path, "notities.txt\n/login-session.json");
+    ignoreSecrets(dir);
+    assert.equal(readFileSync(path, "utf8"), `notities.txt\n/login-session.json\n${IDLE_SESSION_FILE}\n`);
+    // Nothing missing: the file is not touched, so a sealed run stays as it was.
+    const before = statSync(path).mtimeMs;
+    ignoreSecrets(dir);
+    assert.equal(statSync(path).mtimeMs, before);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test("the rule for a page that fell back to the login screen", () => {
@@ -116,6 +132,8 @@ test("a run without a login starts every browser as it did: no cookie, and a pag
   const plain = join(scratch, "plain");
   const found = await inventory({ baseUrl: `${origin}/`, out: plain, maxPages: 5, fixedUrls: [`${origin}/mijn/`, `${origin}/contact.html`] });
   assert.ok(!("logoutLinks" in found));
+  // Every run keeps the files of a login out of git, also one without a login: a session may come later.
+  assert.deepEqual(readFileSync(join(plain, ".gitignore"), "utf8").split("\n").filter((line) => line && !line.startsWith("#")), [LOGIN_SESSION_FILE, IDLE_SESSION_FILE]);
   assert.match(found.pages.find((entry) => entry.url.endsWith("/mijn/"))!.title, /^Inloggen/, "without a session the page behind the login is the login page");
   const manifest = await readJson<Manifest>(join(plain, "manifest.json"));
   assert.ok(!("login" in manifest) && !("loggedIn" in manifest.steps[0]!));
@@ -154,6 +172,7 @@ test("a person logs in, the session is kept where only its owner reads it, and i
   assert.equal(taken.mark.role, ROLE);
   assert.equal(statSync(join(other, LOGIN_SESSION_FILE)).mode & 0o777, 0o600);
   assert.equal(tokenOf(join(other, LOGIN_SESSION_FILE)), tokenOf(carried));
+  assert.match(readFileSync(join(other, ".gitignore"), "utf8"), /^login-session\.json$/m, "a session taken over into a run is kept out of git");
   // A file for another site than the run examines, an empty one and one that is no session are refused.
   const elsewhere = join(scratch, "elsewhere");
   mkdirSync(elsewhere);

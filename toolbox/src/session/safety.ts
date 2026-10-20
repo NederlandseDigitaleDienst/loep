@@ -4,7 +4,7 @@ import type { BrowserContext, CDPSession, Frame, Page, Request } from "playwrigh
 import { answeredByCloudflare, bodyOf, passOn, passWrite } from "../browser/session.ts";
 import { readJson } from "../lib/canonical.ts";
 import { isChallenge } from "../lib/challenge.ts";
-import { siteOrigins } from "../lib/origins.ts";
+import { privateFromPublicSite, scopeHost, scopeHostOf, siteOrigins, WEB_SCHEMES } from "../lib/origins.ts";
 import { loginCookieHeader, logsOut } from "../lib/login.ts";
 import { readDecision, readRuleFor, type ReadRequest } from "../lib/reads.ts";
 import { searchServicesOf, type SearchServiceId } from "../lib/searchbody.ts";
@@ -53,23 +53,31 @@ export interface Scope {
 }
 
 /**
- * The hosts in scope for a run: the site itself and every host that the inventory recorded
- * as a page, which includes the frames it found embedded.
+ * The hosts in scope for a run, each with its port when that is not 80 or 443 (`scopeHost`):
+ * the site itself and every host that the inventory recorded as a page, which includes the
+ * frames it found embedded. A frame on this machine or a local network counts only when the
+ * site runs there too; an older inventory may still list one.
  */
 export async function scopeForRun(runDir: string, extra: { scopeUrl?: string | undefined; allowHosts?: string[]; strict?: boolean }): Promise<Scope> {
-  const hosts = new Set<string>(extra.allowHosts ?? []);
+  const hosts = new Set<string>((extra.allowHosts ?? []).map(scopeHostOf));
   let baseUrl: string | null = null;
   const inventoryPath = join(runDir, "inventory.json");
   if (existsSync(inventoryPath)) {
     const inventory = await readJson<{ baseUrl: string; origin: string; origins?: string[]; pages: { url: string }[] }>(inventoryPath);
     baseUrl = inventory.baseUrl;
+    const origins = siteOrigins(inventory);
     // Every origin of the site, also one where no page was found.
-    for (const origin of siteOrigins(inventory)) hosts.add(new URL(origin).hostname);
-    for (const page of inventory.pages) hosts.add(new URL(page.url).hostname);
+    for (const origin of origins) hosts.add(scopeHost(new URL(origin)));
+    for (const page of inventory.pages) {
+      const url = new URL(page.url);
+      if (WEB_SCHEMES.includes(url.protocol) && !privateFromPublicSite(page.url, origins)) hosts.add(scopeHost(url));
+    }
   }
   if (extra.scopeUrl) {
+    const url = new URL(extra.scopeUrl);
+    if (url.protocol !== "http:" && url.protocol !== "https:") throw new Error(`--scope "${extra.scopeUrl}" is geen adres met http:// of https://`);
     baseUrl ??= extra.scopeUrl;
-    hosts.add(new URL(extra.scopeUrl).hostname);
+    hosts.add(scopeHost(url));
   }
   if (hosts.size === 0) throw new Error("geen inventory.json in de run en geen --scope <url> opgegeven: onbekend welke site in scope is");
   const permission = writesForRun(runDir);
@@ -108,8 +116,11 @@ const STOPPED = /ERR_ABORTED|ERR_BLOCKED_BY_CLIENT|NS_BINDING_ABORTED|NS_ERROR_A
 /** Whether a request comes from an embedded window whose address is in the scope. A request of a worker has no frame and does not count. */
 function fromEmbeddedInScope(scope: Scope, request: Request): boolean {
   try {
-    const frame = request.frame();
-    return frame.parentFrame() !== null && inScope(scope, frame.url());
+    let frame: Frame | null = request.frame();
+    if (frame.parentFrame() === null) return false;
+    // A frame without an address of its own (about:blank, about:srcdoc) belongs to the page that made it.
+    while (frame && frame.url().startsWith("about:")) frame = frame.parentFrame();
+    return frame !== null && inScope(scope, frame.url());
   } catch {
     return false;
   }
@@ -145,10 +156,11 @@ export interface PassedRead {
   service: SearchServiceId;
 }
 
+/** Whether an address is in the scope: http, https, ws or wss, on a host of the run with the same port. Any other scheme never is. */
 const inScope = (scope: Scope, url: string): boolean => {
   try {
     const parsed = new URL(url);
-    return !["http:", "https:", "ws:", "wss:"].includes(parsed.protocol) || scope.hosts.includes(parsed.hostname);
+    return WEB_SCHEMES.includes(parsed.protocol) && scope.hosts.includes(scopeHost(parsed));
   } catch {
     return false;
   }
@@ -237,6 +249,8 @@ export async function guardContext(context: BrowserContext, scope: Scope, guard:
       return refuse();
     }
     if (inScope(scope, url)) return route.continue();
+    // What the page already holds (data:, blob:) sends nothing anywhere; as the address of a page it is never in the scope.
+    if (!request.isNavigationRequest() && /^(data|blob):/.test(url)) return route.continue();
     if (!scope.strict && !request.isNavigationRequest() && (RENDERING_TYPES.has(type) || (READ_TYPES.has(type) && fromEmbeddedInScope(scope, request)))) {
       const host = new URL(url).hostname;
       guard.outsideScopeLoaded[host] = (guard.outsideScopeLoaded[host] ?? 0) + 1;

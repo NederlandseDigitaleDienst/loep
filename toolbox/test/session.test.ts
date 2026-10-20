@@ -27,7 +27,7 @@ let daemon: Daemon;
 before(async () => {
   site = await startServer();
   run = mkdtempSync(join(tmpdir(), "loep-test-"));
-  daemon = await Daemon.create(run, { hosts: ["127.0.0.1"], baseUrl: `${site.origin}/`, strict: false }, { navigationDelayMs: 50, maxSessions: 3, secondBrowsers: false });
+  daemon = await Daemon.create(run, { hosts: [new URL(site.origin).host], baseUrl: `${site.origin}/`, strict: false }, { navigationDelayMs: 50, maxSessions: 3, secondBrowsers: false });
   assert.equal((await daemon.handle({ op: "start", session: "main" })).ok, true);
 });
 
@@ -347,6 +347,21 @@ test("navigation outside the scope is refused and logged, also through a redirec
   assert.equal((await raw("look")).ok, false, "after a refused open there is no page");
 });
 
+test("a session opens only http and https on the host and port of the run", async () => {
+  site.requests.length = 0;
+  for (const address of ["file:///etc/hosts", "data:text/html,<h1>x</h1>", "javascript:alert(1)", "blob:http://127.0.0.1/abc"]) {
+    const refused = await raw("open", [address]);
+    assert.equal(refused.ok, false, address);
+    assert.match(refused.print.error as string, /geen adres met http:\/\/ of https:\/\//, address);
+  }
+  // The same host on another port is another server, and outside the scope.
+  const port = Number(new URL(site.origin).port);
+  const other = await raw("open", [`http://127.0.0.1:${port === 65535 ? port - 1 : port + 1}/`]);
+  assert.equal(other.ok, false);
+  assert.match(other.print.error as string, /buiten de scope/);
+  assert.deepEqual(site.requests, [], "nothing was asked for");
+});
+
 test("state save and open --state reproduce a state", async () => {
   await loep("open", ["/changing.html"]);
   const toggle = await ref("css:#toggle");
@@ -434,7 +449,7 @@ test("sessions have their own page, and navigations to one host are spaced", asy
 });
 
 test("a session too many is refused with what to do, and a start that counted on another limit is told the real one", async () => {
-  const small = await Daemon.create(run, { hosts: ["127.0.0.1"], baseUrl: `${site.origin}/`, strict: false }, { maxSessions: 2, navigationDelayMs: 0, secondBrowsers: false });
+  const small = await Daemon.create(run, { hosts: [new URL(site.origin).host], baseUrl: `${site.origin}/`, strict: false }, { maxSessions: 2, navigationDelayMs: 0, secondBrowsers: false });
   try {
     const first = await small.handle({ op: "start", session: "regie", maxSessions: 2 });
     assert.deepEqual([first.ok, first.print.warning, (first.print.limits as { maxSessions: number }).maxSessions], [true, undefined, 2]);
@@ -456,7 +471,7 @@ test("a session too many is refused with what to do, and a start that counted on
 });
 
 test("a running session has one owner: a second start is refused, and only its key starts it again", async () => {
-  const owned = await Daemon.create(run, { hosts: ["127.0.0.1"], baseUrl: `${site.origin}/`, strict: false }, { navigationDelayMs: 0, secondBrowsers: false });
+  const owned = await Daemon.create(run, { hosts: [new URL(site.origin).host], baseUrl: `${site.origin}/`, strict: false }, { navigationDelayMs: 0, secondBrowsers: false });
   try {
     const first = await owned.handle({ op: "start", session: "b-311", model: "model-een" });
     const key = first.print.key as string;
@@ -484,7 +499,7 @@ test("a running session has one owner: a second start is refused, and only its k
 });
 
 test("a command that takes too long is cut off and the page is closed", async () => {
-  const impatient = await Daemon.create(run, { hosts: ["127.0.0.1"], baseUrl: `${site.origin}/`, strict: false }, { commandTimeoutMs: 1500, navigationDelayMs: 0, secondBrowsers: false });
+  const impatient = await Daemon.create(run, { hosts: [new URL(site.origin).host], baseUrl: `${site.origin}/`, strict: false }, { commandTimeoutMs: 1500, navigationDelayMs: 0, secondBrowsers: false });
   try {
     await impatient.handle({ op: "start", session: "ongeduldig" });
     const hung = await impatient.handle({ op: "command", session: "ongeduldig", command: "open", args: ["/slow"], options: {} });
@@ -504,6 +519,13 @@ test("the scope of a run is its own host plus the hosts of embedded frames", asy
     await assert.rejects(scopeForRun(dir, {}), /onbekend welke site in scope is/);
     writeFileSync(join(dir, "inventory.json"), JSON.stringify({ baseUrl: "https://www.example.nl/", origin: "https://www.example.nl", pages: [{ url: "https://www.example.nl/contact" }, { url: "https://video.example.org/embed/1" }] }));
     assert.deepEqual(await scopeForRun(dir, { allowHosts: ["cdn.example.net"] }), { hosts: ["cdn.example.net", "video.example.org", "www.example.nl"], baseUrl: "https://www.example.nl/", strict: false });
+    // A host keeps its port unless it is 80 or 443; a frame on this machine or a local network is left out of a site on the internet, also from an older inventory that still lists it.
+    writeFileSync(join(dir, "inventory.json"), JSON.stringify({ baseUrl: "https://www.example.nl/", origin: "https://www.example.nl", origins: ["https://www.example.nl", "https://www.example.nl:8443"], pages: [{ url: "http://www.example.nl:80/a" }, { url: "https://video.example.org:8080/embed/1" }, { url: "http://127.0.0.1:4712/speler.html" }, { url: "http://10.1.2.3/beheer" }, { url: "http://printer.local/" }, { url: "http://[fe80::1]/" }] }));
+    assert.deepEqual((await scopeForRun(dir, { allowHosts: ["cdn.example.net:8080", "https://fonts.example.net/"] })).hosts, ["cdn.example.net:8080", "fonts.example.net", "video.example.org:8080", "www.example.nl", "www.example.nl:8443"]);
+    // On a site that runs locally, such as the test site, a frame on another local port is part of it.
+    writeFileSync(join(dir, "inventory.json"), JSON.stringify({ baseUrl: "http://127.0.0.1:4710/", origin: "http://127.0.0.1:4710", pages: [{ url: "http://127.0.0.1:4710/" }, { url: "http://127.0.0.1:4712/speler.html" }] }));
+    assert.deepEqual((await scopeForRun(dir, {})).hosts, ["127.0.0.1:4710", "127.0.0.1:4712"]);
+    await assert.rejects(scopeForRun(dir, { scopeUrl: "file:///etc/hosts" }), /geen adres met http/);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -538,7 +560,7 @@ test("the command line starts a session in the background, sends commands and st
     assert.match(silent.model as string, /^niet opgegeven/);
     assert.equal("models" in JSON.parse(readFileSync(join(dir, "observations", "zonder", "session.json"), "utf8")), false);
     await cli("session", "stop", "--session", "zonder");
-    assert.deepEqual(started.scope, ["127.0.0.1"]);
+    assert.deepEqual(started.scope, [new URL(site.origin).host]);
     const opened = await cli("session", "open", "/form.html", "--session", "cli", "--width", "360");
     assert.equal(opened.title, "Formulier - Testsite sessie");
     assert.equal(opened.viewport, "360x800");

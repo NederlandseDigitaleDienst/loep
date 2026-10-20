@@ -46,7 +46,7 @@ Een handtekening (`LOEP sign`) en de verklaring dat er verstuurd mag worden (`LO
 
 ## Stappen
 
-`LOEP` is `node <map van deze plugin>/toolbox/src/cli.ts`. `RUN` is de map voor dit onderzoek, bij voorkeur in de repository van de site: `toegankelijkheid/onderzoeken/<datum>`.
+`LOEP` is `node <map van deze plugin>/toolbox/src/cli.ts`. `RUN` is de map voor dit onderzoek, bij voorkeur in de repository van de site: `toegankelijkheid/onderzoeken/<datum>`. `inventory` en `login` zetten in `RUN` een `.gitignore` met de sessiebestanden van een inlog (`login-session.json`, `idle-session.json`). Die bestanden komen nooit in een commit: wie ze heeft, is ingelogd. Haal die regels niet uit de `.gitignore`, en kijk vóór elke commit van de run of er geen sessiebestand bij staat.
 
 Een agent starten betekent steeds: een aparte agent die alleen dit krijgt: "Lees het bestand `<pad>` en voer de opdracht daarin precies uit." In elk opdrachtbestand staat de naam van de sessie van die agent en zijn budget; dat budget is voor die opdracht uitgerekend, en de agent kan het zelf twee keer verlengen. Twee agents delen nooit een sessie.
 

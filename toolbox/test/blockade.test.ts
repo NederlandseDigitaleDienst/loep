@@ -29,7 +29,7 @@ function newRun(): string {
 
 /** A session process for a site on two origins: the fixture site, and the same server under another name. */
 async function daemonFor(run: string): Promise<{ daemon: Daemon; loep: (command: string, ...args: string[]) => Promise<{ ok: boolean; print: Record<string, unknown> }> }> {
-  const daemon = await Daemon.create(run, { hosts: ["127.0.0.1", "localhost"], baseUrl: `${site.origin}/`, strict: false }, { navigationDelayMs: 0, secondBrowsers: false });
+  const daemon = await Daemon.create(run, { hosts: [new URL(site.origin).host, new URL(site.otherOrigin).host], baseUrl: `${site.origin}/`, strict: false }, { navigationDelayMs: 0, secondBrowsers: false });
   await daemon.handle({ op: "start", session: "main" });
   return { daemon, loep: (command, ...args) => daemon.handle({ op: "command", session: "main", command, args, options: {} }) };
 }

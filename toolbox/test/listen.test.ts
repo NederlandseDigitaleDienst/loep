@@ -20,7 +20,7 @@ let daemon: Daemon;
 before(async () => {
   run = mkdtempSync(join(tmpdir(), "loep-listen-"));
   fixture = await startFixture({ ports: { defect: 0, clean: 0, thirdParty: 0 }, logFile: join(run, "server.log") });
-  daemon = await Daemon.create(run, { hosts: ["127.0.0.1"], baseUrl: `${fixture.origins.clean}/`, strict: false }, { navigationDelayMs: 0, secondBrowsers: false });
+  daemon = await Daemon.create(run, { hosts: [new URL(fixture.origins.clean).host, new URL(fixture.origins.defect).host], baseUrl: `${fixture.origins.clean}/`, strict: false }, { navigationDelayMs: 0, secondBrowsers: false });
   assert.equal((await daemon.handle({ op: "start", session: "main" })).ok, true);
 });
 
@@ -143,7 +143,7 @@ test("still pictures follow the changes of scene and fill what is left", () => {
 
 test("a file is fetched under the rules of the session, or not at all", async () => {
   const guard: Guard = { blocked: [], outsideScopeLoaded: {} };
-  const inside: Scope = { hosts: ["127.0.0.1"], baseUrl: null, strict: false };
+  const inside: Scope = { hosts: [new URL(fixture.origins.clean).host], baseUrl: null, strict: false };
   const to = join(run, "fetched");
   const whole = await guardedDownload(inside, guard, `${fixture.origins.clean}/media/raadsvergadering.vtt`, to, { resourceType: "texttrack", maxBytes: 1_000_000, timeoutMs: 5000 });
   assert.deepEqual(whole.ok && [whole.bytes, whole.truncated], [statSync(to).size, null]);

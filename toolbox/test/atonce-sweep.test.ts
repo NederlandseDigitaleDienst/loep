@@ -44,7 +44,7 @@ describe("the sweep with four at once writes what it writes with one at a time",
     const run = join(scratch, "explored");
     const paths = ["/afval.html", "/openingstijden.html", "/nieuws/zomerfeest.html", "/vergunning.html", "/veelgestelde-vragen.html"];
     await inventory({ baseUrl: `${origin}/`, out: run, maxPages: paths.length, fixedUrls: paths.map((path) => `${origin}${path}`) });
-    const daemon = await Daemon.create(run, { hosts: ["127.0.0.1"], baseUrl: `${origin}/`, strict: false }, { navigationDelayMs: 20 });
+    const daemon = await Daemon.create(run, { hosts: [new URL(origin).host], baseUrl: `${origin}/`, strict: false }, { navigationDelayMs: 20 });
     const loep = async (command: string, args: string[] = [], options: Record<string, string | boolean> = {}): Promise<Record<string, unknown>> => {
       const response = await daemon.handle({ op: "command", session: "verken", command, args, options });
       assert.equal(response.ok, true, `${command}: ${JSON.stringify(response.print)}`);

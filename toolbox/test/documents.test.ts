@@ -544,7 +544,7 @@ test("inventory finds the documents, sample labels them, documents measures them
   assert.equal(notRead.print.status, "notRead");
 
   // In a session the command needs no open page, and its observation can carry a finding.
-  const daemon = await Daemon.create(run, { hosts: ["127.0.0.1"], baseUrl: `${origin}/`, strict: false }, { navigationDelayMs: 50, maxSessions: 1, secondBrowsers: false });
+  const daemon = await Daemon.create(run, { hosts: [new URL(origin).host], baseUrl: `${origin}/`, strict: false }, { navigationDelayMs: 50, maxSessions: 1, secondBrowsers: false });
   try {
     assert.equal((await daemon.handle({ op: "start", session: "judge" })).ok, true);
     const answer = await daemon.handle({ op: "command", session: "judge", command: "document", args: [label], options: { page: "1" } });

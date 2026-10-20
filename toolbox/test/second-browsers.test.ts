@@ -24,7 +24,7 @@ let daemon: Daemon;
 before(async () => {
   site = await startServer();
   run = mkdtempSync(join(tmpdir(), "loep-second-"));
-  daemon = await Daemon.create(run, { hosts: ["127.0.0.1"], baseUrl: `${site.origin}/`, strict: false }, { navigationDelayMs: NAVIGATION_DELAY_MS });
+  daemon = await Daemon.create(run, { hosts: [new URL(site.origin).host], baseUrl: `${site.origin}/`, strict: false }, { navigationDelayMs: NAVIGATION_DELAY_MS });
   assert.equal((await daemon.handle({ op: "start", session: "main" })).ok, true);
 });
 
@@ -197,7 +197,7 @@ test("reflow, zoom and spacing are measured in WebKit too, on one page of WebKit
 
 test("without a second browser reflow answers as it did: one method, no word about WebKit", async () => {
   const dir = mkdtempSync(join(tmpdir(), "loep-single-"));
-  const single = await Daemon.create(dir, { hosts: ["127.0.0.1"], baseUrl: `${site.origin}/`, strict: false }, { navigationDelayMs: 0, secondBrowsers: false });
+  const single = await Daemon.create(dir, { hosts: [new URL(site.origin).host], baseUrl: `${site.origin}/`, strict: false }, { navigationDelayMs: 0, secondBrowsers: false });
   try {
     assert.equal((await single.handle({ op: "start", session: "main" })).ok, true);
     await single.handle({ op: "command", session: "main", command: "open", args: ["/"], options: {} });
@@ -247,7 +247,7 @@ test("a redirect out of the scope is refused in WebKit and Firefox before it is 
   site.requests.length = 0;
   const chromium = await launchBrowser();
   const politeness = new AskedPoliteness(0);
-  const env: Env = { browser: chromium, runDir: run, scope: { hosts: ["127.0.0.1"], baseUrl: `${site.origin}/`, strict: false }, limits: { ...DEFAULT_DAEMON_LIMITS, navigationDelayMs: 0 }, politeness };
+  const env: Env = { browser: chromium, runDir: run, scope: { hosts: [new URL(site.origin).host], baseUrl: `${site.origin}/`, strict: false }, limits: { ...DEFAULT_DAEMON_LIMITS, navigationDelayMs: 0 }, politeness };
   const second = new SecondBrowsers(env, runSteps);
   try {
     for (const name of ["webkit", "firefox"] as const) {

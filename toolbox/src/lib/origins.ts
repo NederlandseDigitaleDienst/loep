@@ -86,3 +86,67 @@ export function originsOfRun(baseUrl: string, also: readonly string[] = []): str
   const main = new URL(baseUrl).origin;
   return [...new Set([main, ...also.map(parseOrigin)])];
 }
+
+/** The schemes a run talks to a site over. Every other scheme (file:, data:, blob:, javascript: and the like) is never in the scope of a run. */
+export const WEB_SCHEMES: readonly string[] = ["http:", "https:", "ws:", "wss:"];
+
+/**
+ * The host of an address as the scope of a run compares it: the host name with the port. The
+ * usual ports (80 and 443) are left off, so http, https, ws and wss of one host are one host;
+ * any other port is a host of its own, as it is a server of its own.
+ */
+export function scopeHost(url: URL): string {
+  return url.port === "" || url.port === "80" || url.port === "443" ? url.hostname : `${url.hostname}:${url.port}`;
+}
+
+/** A host given on the command line (`--allow-host`), as the scope compares it: a host name, a host name with a port, or a whole address. */
+export function scopeHostOf(text: string): string {
+  const trimmed = text.trim();
+  try {
+    return scopeHost(new URL(trimmed.includes("://") ? trimmed : `http://${trimmed}`));
+  } catch {
+    throw new Error(`--allow-host "${text}" is geen host; geef een naam zoals cdn.example.nl, eventueel met een poort`);
+  }
+}
+
+function ipv4(host: string): number[] | null {
+  const parts = host.split(".");
+  if (parts.length !== 4 || !parts.every((part) => /^\d{1,3}$/.test(part))) return null;
+  const numbers = parts.map(Number);
+  return numbers.every((number) => number <= 255) ? numbers : null;
+}
+
+/**
+ * Whether a host name, as `URL.hostname` gives it, is an address on this machine or on a local
+ * network: loopback (and 0.0.0.0, which reaches this machine too), the private ranges (10/8,
+ * 172.16/12, 192.168/16, fc00::/7), link-local (169.254/16, fe80::/10), and names under
+ * .localhost and .local. A site on the internet that embeds such an address points into the
+ * network of whoever runs loep, never at itself.
+ */
+export function isPrivateHost(hostname: string): boolean {
+  const host = hostname.toLowerCase().replace(/^\[|\]$/g, "").replace(/\.$/, "");
+  if (host === "localhost" || host.endsWith(".localhost") || host === "local" || host.endsWith(".local")) return true;
+  // An IPv4 address written as IPv6 (::ffff:7f00:1) is that IPv4 address.
+  const mapped = /^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/.exec(host);
+  const high = mapped ? parseInt(mapped[1]!, 16) : 0;
+  const low = mapped ? parseInt(mapped[2]!, 16) : 0;
+  const four = mapped ? [high >> 8, high & 255, low >> 8, low & 255] : ipv4(host);
+  if (four) {
+    const [a, b] = four as [number, number];
+    return a === 0 || a === 127 || a === 10 || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || (a === 169 && b === 254);
+  }
+  if (!host.includes(":")) return false;
+  if (host === "::" || host === "::1") return true;
+  const first = parseInt(host.split(":")[0] || "0", 16);
+  // fc00::/7 (unique local) and fe80::/10 (link-local).
+  return (first & 0xfe00) === 0xfc00 || (first & 0xffc0) === 0xfe80;
+}
+
+/**
+ * Whether an address found on the site (an embedded window) lies on this machine or a local
+ * network while the site itself does not. Such an address is left out of the inventory and the
+ * scope. A site that runs locally, such as the test site, may embed one: there it is part of the site.
+ */
+export function privateFromPublicSite(url: string, origins: readonly string[]): boolean {
+  return isPrivateHost(new URL(url).hostname) && !origins.some((origin) => isPrivateHost(new URL(origin).hostname));
+}

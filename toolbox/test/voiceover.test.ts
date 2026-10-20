@@ -422,8 +422,10 @@ test("the test page keeps the page and puts a base, a policy and the script at t
   assert.match(page, /<title>T<\/title><\/head><body><a href="x">x<\/a>/);
   // A step with text that could end the script cannot.
   assert.doesNotMatch(testPage({ html: "<p>x</p>", url: "https://site.example/", steps: [{ command: "select", how: "select", target: null, value: "</script><b>" }], hosts: [], strict: false }), /<\/script><b>/);
-  assert.equal(policyOf(["site.example"], false), "connect-src http://site.example:* https://site.example:* ws://site.example:* wss://site.example:*; form-action 'none'; frame-src http://site.example:* https://site.example:*");
-  assert.match(policyOf(["site.example"], true), /script-src 'unsafe-inline' 'unsafe-eval' http:\/\/site\.example:\* https:\/\/site\.example:\*/);
+  assert.equal(policyOf(["site.example"], false), "connect-src http://site.example https://site.example ws://site.example wss://site.example; form-action 'none'; frame-src http://site.example https://site.example");
+  // Another port is another host: only that port, never every port of the name.
+  assert.equal(policyOf(["site.example:8443"], false), "connect-src http://site.example:8443 https://site.example:8443 ws://site.example:8443 wss://site.example:8443; form-action 'none'; frame-src http://site.example:8443 https://site.example:8443");
+  assert.match(policyOf(["site.example"], true), /script-src 'unsafe-inline' 'unsafe-eval' http:\/\/site\.example https:\/\/site\.example/);
 });
 
 test("what the page wrote into its address is read back, encoded or not", () => {

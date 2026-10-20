@@ -255,7 +255,7 @@ test("loep media gives the same for the current state of a session, without usin
   const { join } = await import("node:path");
   const { Daemon } = await import("../src/session/daemon.ts");
   const dir = mkdtempSync(join(tmpdir(), "loep-media-"));
-  const daemon = await Daemon.create(dir, { hosts: ["127.0.0.1"], baseUrl: `${site.origin}/`, strict: false }, { navigationDelayMs: 0, secondBrowsers: false });
+  const daemon = await Daemon.create(dir, { hosts: [new URL(site.origin).host], baseUrl: `${site.origin}/`, strict: false }, { navigationDelayMs: 0, secondBrowsers: false });
   const loep = async (command: string, ...args: string[]): Promise<Record<string, unknown>> => (await daemon.handle({ op: "command", session: "main", command, args, options: {} })).print;
   try {
     await daemon.handle({ op: "start", session: "main" });
