@@ -1,0 +1,24 @@
+# What a pull request changes goes in a fragment under changelog.d/, not in CHANGELOG.md.
+# `just release-prepare <version>` runs towncrier (via toolbox/scripts/release.ts) to put the
+# fragments in the new section of CHANGELOG.md. How to write a fragment: changelog.d/README.md.
+[tool.towncrier]
+directory = "changelog.d"
+filename = "CHANGELOG.md"
+start_string = "<!-- towncrier: een nieuwe versie komt hieronder -->\n"
+title_format = "## {version} ({project_date})"
+issue_format = "[#{issue}](https://github.com/NederlandseDigitaleDienst/loep/issues/{issue})"
+underlines = ["", "", ""]
+# Any other file in changelog.d/ makes towncrier fail, so a misspelled kind cannot slip through.
+ignore = ["README.md"]
+
+# The kinds are the headings CHANGELOG.md uses under a version, in that order.
+# toolbox/scripts/release.ts (KINDS) has the same list.
+[[tool.towncrier.type]]
+directory = "uitkomst"
+name = "Wat een uitkomst kan veranderen"
+showcontent = true
+
+[[tool.towncrier.type]]
+directory = "verder"
+name = "Verder"
+showcontent = true
