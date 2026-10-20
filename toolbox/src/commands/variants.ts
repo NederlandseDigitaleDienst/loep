@@ -184,6 +184,7 @@ export interface RunResult {
   /** The name in variant.json, or null for a run that is no copy. */
   variant: string | null;
   commit: string | null;
+  /** The criteria of its tasks; only those of the comparison count. */
   criteria: string[];
   outcomes: Record<string, CriterionOutcome | null>;
   /** Findings in the evaluation per criterion of the scope. */
@@ -276,8 +277,9 @@ export interface Verdict {
 export interface VariantComparison {
   schema: "loep/variant-comparison/2";
   reference: string;
+  /** The criteria that count: those of `--criteria`, or those every run has. */
   criteria: string[];
-  /** Runs whose criteria differ from those of the first run, as a warning. */
+  /** Runs with criteria of their own besides those that count, which are left out; null when there are none. */
   scopeNl: string | null;
   runs: RunResult[];
   rows: CriterionRow[];
@@ -319,6 +321,12 @@ export interface CompareVariantsOptions {
   variant?: string[] | undefined;
   reference: string;
   usage?: string[] | undefined;
+  /**
+   * Count only these criteria. Each has a judge and a verifier of its own, so these criteria of a
+   * run with more are a fair baseline for a variant with just these. Without it every run must have
+   * the same criteria.
+   */
+  criteria?: string[] | undefined;
   /** Defaults: MARGIN, REPORT_MARGIN and SEED. */
   margin?: number | undefined;
   reportMargin?: number | undefined;
@@ -388,10 +396,14 @@ function rolesOf(runDir: string, usage: UsageFile | null): RoleUse[] {
   return [...roles.values()].sort((a, b) => rank(a.role) - rank(b.role) || a.role.localeCompare(b.role));
 }
 
-async function runResult(runDir: string, side: RunResult["side"], reference: ReferenceAudit, usage: UsageFile | null, findings: NonNullable<CompareVariantsOptions["findings"]>): Promise<RunResult> {
+function taskCriteria(runDir: string): string[] {
   const index = readIfThere<{ tasks?: { criterion: string }[] }>(join(runDir, "tasks", "index.json"));
   if (!index?.tasks) throw new Error(`${runDir} heeft geen opdrachten (tasks/index.json): draai tasks en de fasen van de agents eerst`);
-  const criteria = index.tasks.map((task) => task.criterion).sort(compareCriterionIds);
+  return [...new Set(index.tasks.map((task) => task.criterion))].sort(compareCriterionIds);
+}
+
+/** The result of one run over the criteria of the comparison (`criteria`), which the run has all of. */
+async function runResult(runDir: string, side: RunResult["side"], criteria: string[], reference: ReferenceAudit, usage: UsageFile | null, findings: NonNullable<CompareVariantsOptions["findings"]>): Promise<RunResult> {
   const evaluationPath = join(runDir, "evaluation.json");
   if (!existsSync(evaluationPath)) throw new Error(`${runDir} heeft geen evaluation.json: draai evaluate eerst`);
   const evaluation = await readJson<Evaluation>(evaluationPath);
@@ -434,7 +446,7 @@ async function runResult(runDir: string, side: RunResult["side"], reference: Ref
     side,
     variant: readIfThere<VariantRecord>(join(runDir, VARIANT_FILE))?.name ?? null,
     commit: readIfThere<Manifest>(join(runDir, "manifest.json"))?.toolbox?.commit ?? null,
-    criteria,
+    criteria: taskCriteria(runDir),
     outcomes: Object.fromEntries(criteria.map((id) => [id, byId.get(id)?.outcome ?? null])),
     findings: Object.fromEntries(criteria.map((id) => [id, byId.get(id)?.findings.length ?? 0])),
     defects,
@@ -532,19 +544,17 @@ export async function compareVariants(options: CompareVariantsOptions): Promise<
     usage.set(file.run, file);
   }
   const findings = options.findings ?? findingsSummary;
+  const sides = [...options.baseline.map((dir) => ["baseline", dir] as const), ...(options.variant ?? []).map((dir) => ["variant", dir] as const)];
+  const own = sides.map(([, dir]) => ({ run: basename(resolve(dir)), criteria: taskCriteria(dir) }));
+  const { criteria, scopeNl } = scopeOf(own, options.criteria);
   const runs: RunResult[] = [];
-  for (const [side, dirs] of [["baseline", options.baseline], ["variant", options.variant ?? []]] as const) {
-    for (const dir of dirs) runs.push(await runResult(dir, side, reference, usage.get(basename(resolve(dir))) ?? null, findings));
-  }
+  for (const [side, dir] of sides) runs.push(await runResult(dir, side, criteria, reference, usage.get(basename(resolve(dir))) ?? null, findings));
   const names = runs.map((run) => run.run);
   const twice = names.find((name, position) => names.indexOf(name) !== position);
   if (twice) throw new Error(`run ${twice} staat er twee keer in: geef elke run een eigen mapnaam`);
   const unknown = [...usage.keys()].filter((name) => !names.includes(name));
   if (unknown.length > 0) throw new Error(`verbruik voor een run die niet wordt vergeleken: ${unknown.join(", ")}`);
 
-  const criteria = [...new Set(runs.flatMap((run) => run.criteria))].sort(compareCriterionIds);
-  const differing = runs.filter((run) => run.criteria.join() !== runs[0]!.criteria.join()).map((run) => run.run);
-  const scopeNl = differing.length > 0 ? `niet elke run heeft dezelfde criteria als ${runs[0]!.run}: ${differing.join(", ")}` : null;
   const baseline = runs.filter((run) => run.side === "baseline");
   const variants = runs.filter((run) => run.side === "variant");
   const failedByKey = new Set(reference.failed.filter((id) => !(reference.failedOnlyInDocuments ?? []).includes(id)));
@@ -575,6 +585,29 @@ export async function compareVariants(options: CompareVariantsOptions): Promise<
 
   const agreement = { baseline: agreementOf(rows.map((row) => row.baseline), baseline.length), variant: variants.length === 0 ? null : agreementOf(rows.map((row) => row.variant), variants.length) };
   return { schema: "loep/variant-comparison/2", reference: basename(options.reference), criteria, scopeNl, runs, rows, defects, agreement, verdict: variants.length === 0 ? null : verdictOf(rows, defects, baseline, variants, options) };
+}
+
+/**
+ * The criteria that count. With `chosen`: those, which every run must have. Without: the criteria
+ * of the runs, which must be the same, because a criterion only some runs have would count as not
+ * found in the others and make the comparison meaningless.
+ */
+function scopeOf(runs: { run: string; criteria: string[] }[], chosen: string[] | undefined): { criteria: string[]; scopeNl: string | null } {
+  if (chosen) {
+    const unknown = chosen.filter((id) => !criterionById(id));
+    if (unknown.length > 0) throw new Error(`--criteria: ${unknown.map((id) => `"${id}"`).join(", ")} ${unknown.length === 1 ? "is geen succescriterium" : "zijn geen succescriteria"}`);
+    const criteria = [...new Set(chosen)].sort(compareCriterionIds);
+    if (criteria.length === 0) throw new Error("--criteria noemt geen criterium");
+    const lacking = runs.map((run) => ({ run: run.run, missing: criteria.filter((id) => !run.criteria.includes(id)) })).filter((entry) => entry.missing.length > 0);
+    if (lacking.length > 0) throw new Error(`niet elke run heeft opdrachten voor de criteria van --criteria: ${lacking.map((entry) => `${entry.run} mist ${entry.missing.join(", ")}`).join("; ")}`);
+    const more = runs.filter((run) => run.criteria.length > criteria.length);
+    return { criteria, scopeNl: more.length === 0 ? null : `alleen de ${criteria.length} criteria van --criteria tellen mee; ${more.map((run) => `${run.run} heeft er ${run.criteria.length}`).join(", ")}, de rest telt niet mee` };
+  }
+  const criteria = runs[0]!.criteria;
+  if (runs.every((run) => run.criteria.join() === criteria.join())) return { criteria, scopeNl: null };
+  const shared = criteria.filter((id) => runs.every((run) => run.criteria.includes(id)));
+  const counts = runs.map((run) => `${run.run} ${run.criteria.length}`).join(", ");
+  throw new Error(`de runs hebben niet dezelfde criteria (${counts}): kies met --criteria welke meetellen${shared.length === 0 ? "; ze hebben geen criterium gemeen" : `, bijvoorbeeld de criteria die ze allemaal hebben: --criteria ${shared.join(",")}`}`);
 }
 
 function verdictOf(rows: CriterionRow[], defects: DefectRow[], baseline: RunResult[], variants: RunResult[], options: CompareVariantsOptions): Verdict {
@@ -741,7 +774,7 @@ export async function writeComparison(result: VariantComparison, outDir: string)
 
 export const VARIANT_USAGE = `loep variant --run <run> --out <copy> --name <variant> [--note <text>]
 loep compare-variants --baseline <run>... [--variant <run>...] --reference <file> [--usage <file>...]
-                      [--margin <share>] [--margin-reports <count>] [--seed <n>] [--out <dir>] [--json]
+                      [--criteria <ids>] [--margin <share>] [--margin-reports <count>] [--seed <n>] [--out <dir>] [--json]
 
 Measuring a variant of the code on frozen evidence (validatie/verbruik/README.md, "Hoe we meten").
 Not a step of an evaluation.
@@ -753,7 +786,7 @@ Not a step of an evaluation.
                      the variant: variant.json in the copy records that commit, the run it came from and
                      what was left out. Files are cloned where the file system can (APFS, reflinks)
   compare-variants   Lay runs of the baseline and of a variant side by side, for the criteria of their
-                     tasks. Says whether the variant is not worse: the share of the defects of the
+                     tasks (or those of --criteria). Says whether the variant is not worse: the share of the defects of the
                      answer key found per run (from the classifications of compare --findings) and
                      the unjustified reports per run, each a paired difference with a 95% interval
                      from a bootstrap, against a margin fixed beforehand. Below that: how alike the
@@ -766,6 +799,11 @@ Not a step of an evaluation.
   --reference <file>     The answer key in the form compare reads (toolbox/fixtures/reference-*.json)
   --usage <file>         Repeatable: tokens and turns per agent of one run, counted from the transcripts
                          outside the run (schema loep/verbruik/1, see toolbox/test/fixtures/verbruik.json)
+  --criteria <ids>       Count only these criteria, comma-separated as with tasks --only: in the outcomes,
+                         the defects of the key, the unjustified reports, the open points and the agreement.
+                         Every run needs tasks for each of them; a run may have more, so these criteria of a
+                         baseline of 56 compare with variants measured on just these. Without it every run
+                         must have the same criteria, and the command stops and names the shared ones
   --margin <share>       Not worse when the lower bound of the difference in the share found lies above
                          minus this (default ${MARGIN})
   --margin-reports <count>  Not worse when the upper bound of the difference in unjustified reports per
@@ -793,6 +831,7 @@ export async function cli(args: string[]): Promise<void> {
       variant: { type: "string", multiple: true },
       reference: { type: "string" },
       usage: { type: "string", multiple: true },
+      criteria: { type: "string" },
       margin: { type: "string" },
       "margin-reports": { type: "string" },
       seed: { type: "string" },
@@ -820,6 +859,7 @@ export async function cli(args: string[]): Promise<void> {
       variant: values.variant,
       reference: values.reference,
       usage: values.usage,
+      criteria: values.criteria?.split(",").map((part) => part.trim()).filter(Boolean),
       margin: numberOption("margin", values.margin, (value) => value >= 0 && value < 1),
       reportMargin: numberOption("margin-reports", values["margin-reports"], (value) => value >= 0),
       seed: numberOption("seed", values.seed, Number.isInteger),
