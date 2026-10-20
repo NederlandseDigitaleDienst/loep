@@ -900,7 +900,30 @@ function focusInStates(run: RunData): Record<string, unknown> {
   };
 }
 
-export const keyboard: Extractor = (run) => {
+/**
+ * The other addresses of the pages of the sample that lead to an anchor, such as `/vragen` to
+ * `/verklaring#vragen`, with what the inventory found where they land (WCAG 2.4.11). Only a target
+ * that took focus can fail 2.4.11; a missing anchor or a target under a fixed header without focus
+ * is no requirement of WCAG.
+ */
+function anchorRedirects(run: RunData): Record<string, unknown> {
+  const inventoried = new Map((run.inventory.pages ?? []).map((page) => [page.url, page]));
+  const rows = run.pages.flatMap((page) =>
+    (page.item.aliases ?? []).flatMap((address) => {
+      const landed = inventoried.get(address);
+      return landed?.anchor ? [{ page: page.label, address, landsOn: landed.finalUrl, anchorFound: landed.anchor.found, focused: landed.anchor.focused, inViewport: landed.anchor.inViewport, coveredBy: landed.anchor.coveredBy }] : [];
+    }),
+  );
+  // An inventory from before this measurement has the landing address without what was found there.
+  const examined = (run.inventory.pages ?? []).every((page) => page.anchor !== undefined || page.finalUrl === undefined || !page.finalUrl.includes("#"));
+  return {
+    examined,
+    method: "Elk adres dat de inventaris bezocht en waar de browser uitkwam op een anker, is geladen op 1280 bij 800, zonder blokkades weg te klikken. Vastgelegd is of het anker bestaat, of het doel daarna de focus heeft (Chromium geeft een doel focus als het focus kan krijgen: een link, een veld, een element met tabindex), en zo ja of het in beeld staat en wat er over het midden ligt.",
+    rows,
+  };
+}
+
+export const keyboard: Extractor = (run, criterion) => {
   const perPage = run.pages.map((page) => {
     const reached = reachedByKeyboard(page);
     const expected = expectedFocusable(page);
@@ -944,6 +967,7 @@ export const keyboard: Extractor = (run) => {
       : {}),
     narrow: narrowWalk(run),
     states: focusInStates(run),
+    ...(criterion === "2.4.11" ? { anchorRedirects: anchorRedirects(run) } : {}),
     firstStops: run.pages.slice(0, 3).map((page) => ({ page: page.label, order: page.tabwalk.stops.slice(0, 40).map((stop) => `${stop.index + 1}. ${stop.ax?.role ?? stop.tag} "${(axName(stop) || stop.text).slice(0, 40)}" [${stop.region ?? "-"}]`) })),
   };
 };
