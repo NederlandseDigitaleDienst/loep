@@ -427,6 +427,13 @@ test("the gate flags components that did not open, a blocker that stayed and som
   const unexaminable = gateChecks({ ...withStates([...four.slice(0, 3), { ...state("kaart", false), id: "component-kaart" }]), siteModel: blocked });
   assert.deepEqual(unexaminable.gaps, []);
   assert.deepEqual(unexaminable.limitations.map((gap) => gap.check), ["needs-write-request"]);
+  // A GET is refused only to a host outside the run: that is the scope of the run, not a write.
+  const elsewhere = validModel();
+  elsewhere.components[1] = { ...elsewhere.components[1]!, blockedRequests: [{ method: "GET", address: "agenda.site.nl/api/items" }] };
+  const outside = gateChecks({ ...withStates([...four.slice(0, 3), { ...state("kaart", false), id: "component-kaart" }]), siteModel: elsewhere });
+  assert.deepEqual(outside.gaps, []);
+  assert.deepEqual(outside.limitations.map((gap) => gap.check), ["needs-host-outside-run"]);
+  assert.match(outside.limitations[0]!.missingNl, /^Niet onderzoekbaar zonder een adres buiten de run: .* GET agenda\.site\.nl\/api\/items nodig, en dat adres hoort niet bij de afbakening \(inventory --also-origin\)\.$/);
   assert.deepEqual(names(withStates(four, [{ url: "https://site.nl/contact/", where: "collect:light", blocker: "cookies", dismissed: false, reasonNl: "stap 1 (click) klikken lukt niet" }])), ["blocker-closed:P2"]);
 
   const covered = (shares: number[]): RunData => gateRun(shares.map((share, index) => gatePage(`P${index + 1}`, `https://site.nl/${index}`, { overlay: share })));

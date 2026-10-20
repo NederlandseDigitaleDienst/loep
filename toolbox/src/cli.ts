@@ -231,7 +231,7 @@ async function main(): Promise<void> {
       if (permission) setRunWrites(writeAccess(values.out, permission, "inventory"));
       // What this command was given decides whether a session may be used: the manifest only holds it afterwards.
       setRunLogin(values.out, { writes: permission });
-      const { formPagesNl, inventory, pageLimitNl, passwordPagesNl } = await import("./commands/inventory.ts");
+      const { formPagesNl, inventory, pageLimitNl, passwordPagesNl, readsOutsideRunNl } = await import("./commands/inventory.ts");
       const { originsNl, originsOfRun, siteOrigins } = await import("./lib/origins.ts");
       // Checked before the browser starts: a mistyped origin should not cost a whole inventory.
       const origins = originsOfRun(target, values["also-origin"]);
@@ -259,6 +259,8 @@ async function main(): Promise<void> {
       if (behindLogin) process.stdout.write(`${behindLogin}\n`);
       const notSent = formPagesNl(result.pages, siteOrigins(result), permission !== null);
       if (notSent) process.stdout.write(`${notSent}\n`);
+      const readsElsewhere = readsOutsideRunNl(result.readsOutsideRun);
+      if (readsElsewhere) process.stdout.write(`${readsElsewhere}\n`);
       return;
     }
     case "sample": {
