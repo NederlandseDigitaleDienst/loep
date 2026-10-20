@@ -6,7 +6,7 @@ import { readJson, sha256, sha256File, writeFileAtomic, writeJson } from "../lib
 import { startedDownload } from "../lib/documents.ts";
 import { enginesWithoutResult, type EngineRun } from "../lib/engines.ts";
 import { expectedFocusable, pageCoverage, reachedByKeyboard, representativePages, stateCoverage } from "../lib/extractors.ts";
-import { type Manifest, stepStart, writeManifest } from "../lib/manifest.ts";
+import { type Manifest, type ManifestStep, stepStart, writeManifest } from "../lib/manifest.ts";
 import { readTemplate } from "../lib/templates.ts";
 import { makeWorkDir } from "../lib/workdir.ts";
 import { notFoundProbes, siteHosts, siteLabel } from "../lib/origins.ts";
@@ -21,7 +21,8 @@ import { coversContent, type Overlay } from "../session/recipe.ts";
  * The evidence gate: is what the sweep collected good enough to judge a site on? First
  * fixed checks on the numbers, then an agent that looks at one sheet of pictures per page
  * type and answers a fixed list of questions. A run that does not pass goes back to the
- * explorer with the gaps; it does not go on to the judging.
+ * explorer with the gaps, or, when a new sweep can close them, to the sweep; it does not go
+ * on to the judging.
  */
 
 /** A page counts for the Tab check when it has at least this many links and controls. */
@@ -36,6 +37,8 @@ export const MAX_OVERLAY_SHARE = 0.15;
 export const OVERLAY_PAGE_SHARE = 0.5;
 /** How often an insufficient run may go back to the explorer. */
 export const MAX_RETURNS_TO_EXPLORER = 2;
+/** How often the sweep may run again after one round of the explorer before what it still could not measure goes to the explorer. */
+export const MAX_RESWEEPS = 2;
 /** How many sheets one reviewing agent gets. Every page type has a sheet; a site with more page types than this gets more than one task, each with answers of its own. */
 export const SHEETS_PER_TASK = 8;
 /** A walk whose stops all lie in one block, on a page with at least twice as many visible links and controls, never got out of that block. */
@@ -54,6 +57,8 @@ export interface Gap {
   /** What is missing, in Dutch: this is what the explorer reads. */
   missingNl: string;
   measured?: Record<string, unknown>;
+  /** Who can close it: "sweep" when running the sweep again can (a measurement failed, timed out or is missing), "explorer" otherwise. Absent in a gate.json from before this was asked. */
+  fixedBy?: "sweep" | "explorer";
 }
 
 export interface Check {
@@ -88,11 +93,20 @@ export interface Sheet {
 
 export interface Gate {
   sufficient: boolean;
-  /** deterministic: the fixed checks already found gaps. review-pending: they did not, and the pictures have not been judged yet. complete: both were done. */
+  /**
+   * deterministic: the fixed checks found gaps the review does not wait for, because a new sweep has to close them first or no
+   * return to the explorer is left. review-pending: the pictures have not been judged yet; gaps of the fixed checks that only the
+   * explorer can close may be open, so that a return hands him every gap at once. complete: both were done.
+   */
   stage: "deterministic" | "review-pending" | "complete";
+  /** What comes next: on to the tasks, the review of the pictures, the sweep again, back to the explorer, or no evaluation. Absent in a gate.json from before this was asked. */
+  next?: "proceed" | "review" | "sweep" | "explore" | "stop";
   /** How many times the explorer has been given a task for this run, and how often the run may still go back. */
   exploreRound: number;
   returnsLeft: number;
+  /** How many times collect ran again since the last task for the explorer, and how often a gap the sweep can close may still send the run back to the sweep. */
+  resweeps?: number;
+  resweepsLeft?: number;
   hasSiteModel: boolean;
   thresholds: Record<string, number>;
   checks: Check[];
@@ -119,9 +133,17 @@ export interface Gate {
   };
 }
 
-const THRESHOLDS = { MIN_FOCUSABLE_FOR_SHARE, MIN_TAB_REACH, MIN_COMPONENTS_OPENED, MAX_OVERLAY_SHARE, OVERLAY_PAGE_SHARE, MAX_RETURNS_TO_EXPLORER };
+const THRESHOLDS = { MIN_FOCUSABLE_FOR_SHARE, MIN_TAB_REACH, MIN_COMPONENTS_OPENED, MAX_OVERLAY_SHARE, OVERLAY_PAGE_SHARE, MAX_RETURNS_TO_EXPLORER, MAX_RESWEEPS };
 const percent = (share: number): string => `${Math.round(share * 100)}%`;
 const where = (element: { path: string[] }): string => element.path.join(" >>> ");
+
+/** What a reason says when the browser or the machine failed the measurement, not the site model: a crash, a time limit, a page that gave no answer. */
+const MEASUREMENT_FAILED = /geen antwoord binnen \d+ seconden|crash|Timeout \d+ ?ms exceeded|has been closed/i;
+
+/** "sweep" when a new sweep can close a gap with this reason. */
+export function fixedByReason(reasonNl: string | null | undefined): "sweep" | "explorer" {
+  return reasonNl && MEASUREMENT_FAILED.test(reasonNl) ? "sweep" : "explorer";
+}
 
 const plain = (text: string): string => ` ${text.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim()} `;
 
@@ -191,7 +213,7 @@ export function gateChecks(run: RunData): { checks: Check[]; gaps: Gap[]; warnin
     "pages-loaded",
     [
       ...failed.map((page) => ({ check: "pages-loaded", ...on(page), state: "default", missingNl: `De pagina gaf bij het laden ${page.item.status === null ? "geen antwoord" : `status ${page.item.status}`}. Wat is vastgelegd, is een foutpagina.`, measured: { status: page.item.status } })),
-      ...(run.collectFailed ?? []).map((entry) => ({ check: "pages-loaded", page: entry.label, url: entry.item.url, state: "default", missingNl: `De veegronde kon deze pagina ook bij een tweede poging niet meten (${entry.error.slice(0, 160)}). Er is geen bewijs van deze pagina; draai collect opnieuw voor deze pagina.`, measured: { collectError: entry.error } })),
+      ...(run.collectFailed ?? []).map((entry) => ({ check: "pages-loaded", page: entry.label, url: entry.item.url, state: "default", missingNl: `De veegronde kon deze pagina ook bij een tweede poging niet meten (${entry.error.slice(0, 160)}). Er is geen bewijs van deze pagina; draai collect opnieuw voor deze pagina.`, measured: { collectError: entry.error }, fixedBy: "sweep" as const })),
       ...run.inventory.skipped.filter((entry) => entry.reason.startsWith("failed to load") && !startedDownload(entry.reason)).map((entry) => ({ check: "pages-loaded", page: null, url: entry.url, state: "default", missingNl: `De pagina laadde niet tijdens de inventaris en is niet onderzocht (${entry.reason.slice(0, 120)}).` })),
     ],
     `${run.pages.length} pagina's geladen`,
@@ -253,9 +275,9 @@ export function gateChecks(run: RunData): { checks: Check[]; gaps: Gap[]; warnin
     const missing = Object.entries(pageCoverage(page, run))
       .filter(([name, there]) => !there && (model !== null || name !== "tabWalkWithFocusNarrow") && name !== "blockersClosed" && name !== "interactionProbe" && !name.startsWith("contrast"))
       .map(([name]) => name);
-    if (missing.length > 0) coverageGaps.push({ check: "coverage", ...on(page), state: "default", missingNl: `Voor deze pagina ontbreken metingen van de veegronde: ${missing.join(", ")}. Draai collect opnieuw.`, measured: { missing } });
+    if (missing.length > 0) coverageGaps.push({ check: "coverage", ...on(page), state: "default", missingNl: `Voor deze pagina ontbreken metingen van de veegronde: ${missing.join(", ")}. Draai collect opnieuw.`, measured: { missing }, fixedBy: "sweep" });
     const withoutContrast = Object.entries(pageCoverage(page, run)).filter(([name, there]) => !there && name.startsWith("contrast")).map(([name]) => name);
-    if (run.contrast && withoutContrast.length > 0) coverageGaps.push({ check: "coverage", ...on(page), state: "default", missingNl: `Voor deze pagina ontbreekt de contrastmeting in licht of donker, in het standaardvenster of op 320 pixels breed (${withoutContrast.join(", ")}). Draai contrast opnieuw.`, measured: { missing: withoutContrast } });
+    if (run.contrast && withoutContrast.length > 0) coverageGaps.push({ check: "coverage", ...on(page), state: "default", missingNl: `Voor deze pagina ontbreekt de contrastmeting in licht of donker, in het standaardvenster of op 320 pixels breed (${withoutContrast.join(", ")}). Draai contrast opnieuw.`, measured: { missing: withoutContrast }, fixedBy: "sweep" });
   }
   for (const state of run.siteStates?.states ?? []) {
     if (!state.reached) continue;
@@ -263,10 +285,10 @@ export function gateChecks(run: RunData): { checks: Check[]; gaps: Gap[]; warnin
     const triedInVain = (name: string): boolean => (state.variantsNotReached ?? []).some((entry) => name.startsWith(entry.variant));
     const owed = Object.entries(stateCoverage(state, run)).filter(([name, there]) => !there && name !== "singleKeys" && !triedInVain(name)).map(([name]) => name);
     const missing = [...["screenshot", "engines", "facts", "tabwalk"].filter((name) => !state.files[name]), ...owed.filter((name) => name !== "visibleTextAndNames")];
-    if (missing.length > 0) coverageGaps.push({ check: "coverage", page: null, url: state.url, state: state.id, missingNl: `In deze toestand ontbreken metingen: ${missing.join(", ")}. Draai collect opnieuw.`, measured: { missing } });
+    if (missing.length > 0) coverageGaps.push({ check: "coverage", page: null, url: state.url, state: state.id, missingNl: `In deze toestand ontbreken metingen: ${missing.join(", ")}. Draai collect opnieuw.`, measured: { missing }, fixedBy: "sweep" });
     // A component that did not open on one of its page types: the recipe or the postcondition does not hold there, or the component is not on
     // that page type. Either way the model is wrong for that page type, so it goes back to the explorer, who can also accept it as how the site is.
-    for (const row of (state.perPageType ?? []).filter((entry) => !entry.reached)) coverageGaps.push({ check: NOT_OPENED_ON_PAGE_TYPE, page: run.pages.find((page) => page.item.url === row.url)?.label ?? null, url: row.url, state: state.id, component: state.modelId, missingNl: `Het onderdeel ging op het paginatype "${row.pageType}" niet open in een staand venster: ${row.reasonNl ?? "geen reden vastgelegd"}. Voor dat paginatype is het geopende onderdeel niet vastgelegd. ${notOpenedAdviceNl(row.reasonNl)}` });
+    for (const row of (state.perPageType ?? []).filter((entry) => !entry.reached)) coverageGaps.push({ check: NOT_OPENED_ON_PAGE_TYPE, page: run.pages.find((page) => page.item.url === row.url)?.label ?? null, url: row.url, state: state.id, component: state.modelId, missingNl: `Het onderdeel ging op het paginatype "${row.pageType}" niet open in een staand venster: ${row.reasonNl ?? "geen reden vastgelegd"}. Voor dat paginatype is het geopende onderdeel niet vastgelegd. ${notOpenedAdviceNl(row.reasonNl)}`, fixedBy: fixedByReason(row.reasonNl) });
     for (const entry of state.variantsNotReached ?? []) warnings.push({ check: "state-not-reopened", page: null, url: state.url, state: state.id, missingNl: `De toestand ging geen tweede keer open voor ${entry.variant}: ${entry.reasonNl ?? "geen reden vastgelegd"}. Die meting ontbreekt voor deze toestand.` });
   }
   // The Tab walk in the narrow window, next to what there is to reach there. A warning: the walk in the default window decides whether the evidence is enough.
@@ -281,7 +303,7 @@ export function gateChecks(run: RunData): { checks: Check[]; gaps: Gap[]; warnin
   // The single keys in the states of the model belong to the interaction probe.
   if (model && run.siteStates && run.states) {
     const inStates = run.states.singleKeys?.states;
-    if (inStates === undefined) coverageGaps.push({ check: "coverage", page: null, url: null, state: "default", missingNl: "De toetsenproef is niet gedaan in de toestanden van het sitemodel. Draai states opnieuw." });
+    if (inStates === undefined) coverageGaps.push({ check: "coverage", page: null, url: null, state: "default", missingNl: "De toetsenproef is niet gedaan in de toestanden van het sitemodel. Draai states opnieuw.", fixedBy: "sweep" });
     for (const row of inStates ?? []) {
       const state = run.siteStates.states.find((entry) => entry.id === row.state);
       if (!row.examined && state?.reached) warnings.push({ check: "keys-not-pressed-in-state", page: null, url: state.url, state: row.state, missingNl: `In deze toestand zijn geen losse toetsen ingedrukt: ${row.reasonNl ?? "geen reden vastgelegd"}.` });
@@ -291,9 +313,9 @@ export function gateChecks(run: RunData): { checks: Check[]; gaps: Gap[]; warnin
   if (model && run.siteStates && run.states) {
     const hoverCoverage = run.states.hoverCoverage;
     const pressCoverage = run.states.downEventCoverage;
-    if (hoverCoverage?.kinds === undefined) coverageGaps.push({ check: "coverage", page: null, url: null, state: "default", missingNl: "De proef met aanwijzen en focus is niet per soort bedieningselement gedaan, zodat niet vaststaat dat elke soort is onderzocht. Draai states opnieuw." });
-    if (hoverCoverage?.narrowPages === undefined || pressCoverage?.narrowPages === undefined) coverageGaps.push({ check: "coverage", page: null, url: null, state: "default", missingNl: "De proeven met aanwijzen en met indrukken zijn niet gedaan in het smalle venster. Draai states opnieuw." });
-    if (hoverCoverage?.states === undefined || pressCoverage?.states === undefined) coverageGaps.push({ check: "coverage", page: null, url: null, state: "default", missingNl: "De proeven met aanwijzen en met indrukken zijn niet gedaan in de toestanden van het sitemodel. Draai states opnieuw." });
+    if (hoverCoverage?.kinds === undefined) coverageGaps.push({ check: "coverage", page: null, url: null, state: "default", missingNl: "De proef met aanwijzen en focus is niet per soort bedieningselement gedaan, zodat niet vaststaat dat elke soort is onderzocht. Draai states opnieuw.", fixedBy: "sweep" });
+    if (hoverCoverage?.narrowPages === undefined || pressCoverage?.narrowPages === undefined) coverageGaps.push({ check: "coverage", page: null, url: null, state: "default", missingNl: "De proeven met aanwijzen en met indrukken zijn niet gedaan in het smalle venster. Draai states opnieuw.", fixedBy: "sweep" });
+    if (hoverCoverage?.states === undefined || pressCoverage?.states === undefined) coverageGaps.push({ check: "coverage", page: null, url: null, state: "default", missingNl: "De proeven met aanwijzen en met indrukken zijn niet gedaan in de toestanden van het sitemodel. Draai states opnieuw.", fixedBy: "sweep" });
     for (const [probeNl, rows] of [["aangewezen", hoverCoverage?.states ?? []], ["ingedrukt", pressCoverage?.states ?? []]] as const) {
       for (const row of rows) {
         const state = run.siteStates.states.find((entry) => entry.id === row.state);
@@ -341,9 +363,9 @@ export function gateChecks(run: RunData): { checks: Check[]; gaps: Gap[]; warnin
 
   // 5. The sweep itself must be complete.
   const incomplete: Gap[] = [];
-  if (!run.states) incomplete.push({ check: "sweep-complete", page: null, url: null, state: "default", missingNl: "De interactieproef (states) heeft niet gedraaid." });
-  if (!run.contrast) incomplete.push({ check: "sweep-complete", page: null, url: null, state: "default", missingNl: "De contrastmeting (contrast) heeft niet gedraaid." });
-  if (model && !run.siteStates) incomplete.push({ check: "sweep-complete", page: null, url: null, state: "default", missingNl: "Er is een sitemodel, maar de toestanden daaruit zijn niet vastgelegd; draai collect opnieuw." });
+  if (!run.states) incomplete.push({ check: "sweep-complete", page: null, url: null, state: "default", missingNl: "De interactieproef (states) heeft niet gedraaid.", fixedBy: "sweep" });
+  if (!run.contrast) incomplete.push({ check: "sweep-complete", page: null, url: null, state: "default", missingNl: "De contrastmeting (contrast) heeft niet gedraaid.", fixedBy: "sweep" });
+  if (model && !run.siteStates) incomplete.push({ check: "sweep-complete", page: null, url: null, state: "default", missingNl: "Er is een sitemodel, maar de toestanden daaruit zijn niet vastgelegd; draai collect opnieuw.", fixedBy: "sweep" });
   add("sweep-complete", incomplete, "collect, contrast en states hebben gedraaid");
   for (const skipped of run.states?.skipped ?? []) {
     const page = run.pages.find((entry) => entry.label === skipped.page);
@@ -369,7 +391,7 @@ export function gateChecks(run: RunData): { checks: Check[]; gaps: Gap[]; warnin
     }
     const unreached = openable.filter((state) => !state.reached && !seenBetween.has(state.id));
     const share = openable.length === 0 ? 1 : 1 - unreached.length / openable.length;
-    const entries = unreached.map((state) => ({ check: "components-opened", page: label(state.url ?? urlOf(state.pageTypes)), url: state.url ?? urlOf(state.pageTypes), state: state.id, missingNl: `Het ${state.kind === "process" ? "proces" : "onderdeel"} "${state.modelId}" is niet geopend: ${(state.reasonNl ?? "onbekende reden").replace(/[.\s]+$/, "")}.` }));
+    const entries = unreached.map((state) => ({ check: "components-opened", page: label(state.url ?? urlOf(state.pageTypes)), url: state.url ?? urlOf(state.pageTypes), state: state.id, missingNl: `Het ${state.kind === "process" ? "proces" : "onderdeel"} "${state.modelId}" is niet geopend: ${(state.reasonNl ?? "onbekende reden").replace(/[.\s]+$/, "")}.`, fixedBy: fixedByReason(state.reasonNl) }));
     if (share < MIN_COMPONENTS_OPENED) componentGaps.push(...entries);
     else warnings.push(...entries);
     componentNote = `${openable.length - unreached.length} van ${openable.length} onderdelen en processen geopend`;
@@ -380,11 +402,11 @@ export function gateChecks(run: RunData): { checks: Check[]; gaps: Gap[]; warnin
     });
     if (betweenNl.length > 0) componentNote += `; alleen op een tussenbreedte bestaand en daar door de veegronde geopend: ${betweenNl.join("; ")}`;
     for (const dismissal of run.siteStates.dismissals.filter((entry) => !entry.dismissed)) {
-      componentGaps.push({ check: "blocker-closed", page: label(dismissal.url), url: dismissal.url, state: "default", missingNl: `De blokkade "${dismissal.blocker}" stond op de pagina en is niet gesloten (${dismissal.where}): ${dismissal.reasonNl ?? "onbekende reden"}.` });
+      componentGaps.push({ check: "blocker-closed", page: label(dismissal.url), url: dismissal.url, state: "default", missingNl: `De blokkade "${dismissal.blocker}" stond op de pagina en is niet gesloten (${dismissal.where}): ${dismissal.reasonNl ?? "onbekende reden"}.`, fixedBy: fixedByReason(dismissal.reasonNl) });
     }
     for (const blocker of model.blockers) {
       const captured = run.siteStates.states.filter((state) => state.kind === "blocker" && state.modelId === blocker.id);
-      if (captured.length > 0 && captured.every((state) => !state.reached)) componentGaps.push({ check: "blocker-captured", page: null, url: null, state: captured[0]!.id, missingNl: `De blokkade "${blocker.id}" is op geen enkel paginatype met de blokkade erop vastgelegd, dus ze is zelf niet te beoordelen: ${captured[0]!.reasonNl ?? ""}` });
+      if (captured.length > 0 && captured.every((state) => !state.reached)) componentGaps.push({ check: "blocker-captured", page: null, url: null, state: captured[0]!.id, missingNl: `De blokkade "${blocker.id}" is op geen enkel paginatype met de blokkade erop vastgelegd, dus ze is zelf niet te beoordelen: ${captured[0]!.reasonNl ?? ""}`, fixedBy: fixedByReason(captured[0]!.reasonNl) });
     }
   }
   add("components-opened", componentGaps, componentNote || "niets te openen");
@@ -739,6 +761,7 @@ export function sheetGaps(run: RunData, sheets: Sheet[]): Gap[] {
         : unmeasured
           ? `Voor paginatype "${type.id}" is geen overzichtsblad gemaakt: ${unmeasured.label} zit wel in de steekproef, maar de veegronde kon die pagina niet meten (zie het gat bij het laden van de pagina). Draai collect opnieuw.`
           : `Voor paginatype "${type.id}" is geen overzichtsblad gemaakt: geen enkele pagina van dit type zit in de steekproef, dus er is niets van gemeten. Draai sample opnieuw na check-site, en daarna de veegronde.`,
+      fixedBy: page || unmeasured ? "sweep" : "explorer",
     });
   }
   return gaps;
@@ -785,6 +808,34 @@ async function currentAnswers(runDir: string, sheets: Sheet[]): Promise<Answers 
   const all: Answers = { sheets: [] };
   for (const part of parts) all.sheets.push(...(await readJson<Answers>(join(runDir, part.answers))).sheets);
   return all;
+}
+
+/**
+ * Where the run goes from the gate. Pure: the gaps of the fixed checks and of the review, whether the review is answered for
+ * the current sheets, the steps of the manifest and which gaps the site model accepts. Every gap it returns says who can close it.
+ */
+export function route(fixedGaps: Gap[], reviewedGaps: Gap[], answered: boolean, steps: Pick<ManifestStep, "command">[], isAccepted: (gap: Gap) => boolean): Pick<Gate, "sufficient" | "stage" | "exploreRound" | "returnsLeft" | "gaps"> & Required<Pick<Gate, "next" | "resweeps" | "resweepsLeft">> & { all: Gap[] } {
+  const exploreRound = steps.filter((step) => step.command === "explore").length;
+  const returnsLeft = Math.max(0, MAX_RETURNS_TO_EXPLORER - Math.max(0, exploreRound - 1));
+  const resweeps = Math.max(0, steps.slice(steps.findLastIndex((step) => step.command === "explore") + 1).filter((step) => step.command === "collect").length - 1);
+  const resweepsLeft = Math.max(0, MAX_RESWEEPS - resweeps);
+  // A measurement that still fails after every new sweep is no longer the sweep's: the explorer chooses another page or accepts it.
+  const owner = (gap: Gap): Gap =>
+    gap.fixedBy !== "sweep"
+      ? { ...gap, fixedBy: "explorer" }
+      : resweepsLeft > 0
+        ? gap
+        : { ...gap, fixedBy: "explorer", missingNl: `${gap.missingNl} De veegronde is na de laatste verkenning ${resweeps} keer opnieuw gedraaid en mat dit nog steeds niet. Ligt dat aan de pagina, kies dan voor het paginatype een pagina die wel te meten is, of leg in acceptedGaps vast dat het aan de site ligt.` };
+  const fixed = fixedGaps.map(owner);
+  const all = [...fixed, ...reviewedGaps.map(owner)];
+  const gaps = all.filter((gap) => !isAccepted(gap));
+  const forSweep = gaps.some((gap) => gap.fixedBy === "sweep");
+  const fixedOpen = fixed.some((gap) => !isAccepted(gap));
+  // The review waits only for what a new sweep changes, so that a return hands the explorer the gaps of the fixed checks and of the pictures at once.
+  const stage: Gate["stage"] = answered ? "complete" : forSweep || (fixedOpen && returnsLeft === 0) ? "deterministic" : "review-pending";
+  const sufficient = stage === "complete" && gaps.length === 0;
+  const next = sufficient ? "proceed" : forSweep ? "sweep" : stage === "review-pending" ? "review" : returnsLeft > 0 ? "explore" : "stop";
+  return { sufficient, stage, next, exploreRound, returnsLeft, resweeps, resweepsLeft, gaps, all };
 }
 
 /**
@@ -859,20 +910,21 @@ export async function gate(runDir: string, outDir: string = runDir): Promise<Gat
   const answers = await currentAnswers(outDir, sheets);
   const reviewed = answers ? reviewGaps(answers, sheets) : { gaps: [], warnings: [] };
   const remarks = (answers?.sheets ?? []).flatMap((entry) => (typeof entry.remarkNl === "string" && entry.remarkNl.trim() ? [{ pageType: entry.pageType, remarkNl: entry.remarkNl.trim() }] : []));
-  const all = [...fixed.gaps, ...reviewed.gaps];
+
   // A gap the explorer confirmed as a property of the site does not hold the run back.
   const acceptedBy = (gap: Gap) => acceptedGapFor(run.siteModel, { check: gap.check, page: gap.url, component: gap.component });
-  const accepted = all.filter((gap) => acceptedBy(gap)).map((gap) => ({ ...gap, reasonNl: acceptedBy(gap)!.reasonNl, observation: acceptedBy(gap)!.observation, decidedBy: acceptedBy(gap)!.decidedBy }));
-  const gaps = all.filter((gap) => !acceptedBy(gap));
-
   const manifestPath = join(runDir, "manifest.json");
-  const exploreRound = existsSync(manifestPath) ? (await readJson<Manifest>(manifestPath)).steps.filter((step) => step.command === "explore").length : 0;
-  const stage: Gate["stage"] = answers ? "complete" : fixed.gaps.filter((gap) => !acceptedBy(gap)).length > 0 ? "deterministic" : "review-pending";
+  const routed = route(fixed.gaps, reviewed.gaps, answers !== null, existsSync(manifestPath) ? (await readJson<Manifest>(manifestPath)).steps : [], (gap) => acceptedBy(gap) !== undefined);
+  const accepted = routed.all.filter((gap) => acceptedBy(gap)).map((gap) => ({ ...gap, reasonNl: acceptedBy(gap)!.reasonNl, observation: acceptedBy(gap)!.observation, decidedBy: acceptedBy(gap)!.decidedBy }));
+  const { gaps, stage, next } = routed;
   const result: Gate = {
-    sufficient: stage === "complete" && gaps.length === 0,
+    sufficient: routed.sufficient,
     stage,
-    exploreRound,
-    returnsLeft: Math.max(0, MAX_RETURNS_TO_EXPLORER - Math.max(0, exploreRound - 1)),
+    next,
+    exploreRound: routed.exploreRound,
+    returnsLeft: routed.returnsLeft,
+    resweeps: routed.resweeps,
+    resweepsLeft: routed.resweepsLeft,
     hasSiteModel: Boolean(run.siteModel),
     thresholds: THRESHOLDS,
     checks: fixed.checks,
@@ -897,6 +949,6 @@ export async function gate(runDir: string, outDir: string = runDir): Promise<Gat
     return { pageType: remark.pageType, page: sheet?.page ?? null, url: sheet?.url ?? null, sheet: sheet?.file ?? null, seenNl: remark.remarkNl };
   }));
   await writeJson(join(outDir, "gate.json"), result);
-  if (absoluteOut === absoluteRun) await writeManifest(runDir, { command: "gate", startedAt, stage, sufficient: result.sufficient, gaps: gaps.length, warnings: result.warnings.length, templateSha256: sha256(template) });
+  if (absoluteOut === absoluteRun) await writeManifest(runDir, { command: "gate", startedAt, stage, next, sufficient: result.sufficient, gaps: gaps.length, warnings: result.warnings.length, templateSha256: sha256(template) });
   return result;
 }

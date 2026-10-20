@@ -37,7 +37,8 @@ const USAGE = `loep <command> [options]
   documents --run <run>                  Fetch and measure the documents of the sample (pdf, office and plain text files): tags, title,
                                          language, headings, text alternatives, tables, links, PDF/UA-1 with veraPDF
   gate --run <run> [--out <dir>]         Decide whether the evidence is fit to judge on; exit 1 when it is not, 2 when
-                                         only the agent's look at the pictures is still missing. --out leaves the run untouched
+                                         the agent's look at the pictures is due, 3 when a new sweep can close the gaps (a
+                                         measurement failed or is missing). --out leaves the run untouched
   check-gate --run <run>                 Validate the agent's answers for the gate; non-zero exit on problems
   tasks --run <run> [--only <ids>] [--page-types <ids>] [--again <ids>] [--attempted <phase>:<id>,...]
                                          Write the task files of the phase the run is in (walks, judges, verifiers, and a
@@ -347,15 +348,24 @@ async function main(): Promise<void> {
     }
     case "gate": {
       if (!values.run) throw new Error("gate needs --run <run>");
-      const { gate } = await import("./commands/gate.ts");
+      const { gate, MAX_RETURNS_TO_EXPLORER } = await import("./commands/gate.ts");
       const result = await gate(values.run, values.out ?? values.run);
       for (const check of result.checks) process.stdout.write(`${check.ok ? "ok  " : "GAT "} ${check.name}: ${check.noteNl}\n`);
-      for (const gap of result.gaps) process.stdout.write(`- ${gap.check}${gap.page ? ` ${gap.page}` : ""}${gap.state !== "default" ? ` [${gap.state}]` : ""}: ${gap.missingNl}\n`);
+      for (const gap of result.gaps) process.stdout.write(`- ${gap.fixedBy === "sweep" ? "(opnieuw meten) " : ""}${gap.check}${gap.page ? ` ${gap.page}` : ""}${gap.state !== "default" ? ` [${gap.state}]` : ""}: ${gap.missingNl}\n`);
       for (const gap of result.limitations) process.stdout.write(`  (beperking) ${gap.check}${gap.page ? ` ${gap.page}` : ""}${gap.state !== "default" ? ` [${gap.state}]` : ""}: ${gap.missingNl}\n`);
       for (const gap of result.accepted) process.stdout.write(`  (aanvaard door ${gap.decidedBy}) ${gap.check}${gap.page ? ` ${gap.page}` : ""}: ${gap.reasonNl}\n`);
-      const verdict = result.sufficient ? "bewijs voldoende" : result.stage === "review-pending" ? `vaste controles voldoende; de beelden zijn nog niet bekeken: ${result.review.tasks.map((part) => part.task).join(", ")}${result.review.tasks.length > 1 ? " (één agent per opdracht)" : ""}` : `bewijs onvoldoende: ${result.gaps.length} ${result.gaps.length === 1 ? "gat" : "gaten"}${result.stage === "deterministic" ? " in de vaste controles" : ""}; nog ${result.returnsLeft} keer terug naar de verkenner`;
+      const counted = (count: number): string => `${count} ${count === 1 ? "gat" : "gaten"}`;
+      const tasksNl = `${result.review.tasks.map((part) => part.task).join(", ")}${result.review.tasks.length > 1 ? " (één agent per opdracht)" : ""}`;
+      const forSweep = result.gaps.filter((gap) => gap.fixedBy === "sweep").length;
+      const verdict = {
+        proceed: "bewijs voldoende",
+        review: result.gaps.length === 0 ? `vaste controles voldoende; de beelden zijn nog niet bekeken: ${tasksNl}` : `${counted(result.gaps.length)} in de vaste controles voor de verkenner; eerst de beelden bekijken, zodat de verkenner alle gaten in één keer krijgt: ${tasksNl}`,
+        sweep: `bewijs onvoldoende: een nieuwe veegronde kan ${forSweep} van de ${counted(result.gaps.length)} sluiten, want daar mislukte of ontbreekt een meting. Draai collect, contrast, states en documents opnieuw en daarna gate; dat kost geen terugkeer naar de verkenner (nog ${result.resweepsLeft} keer opnieuw meten na deze verkenning)`,
+        explore: `bewijs onvoldoende: ${counted(result.gaps.length)}${result.stage === "deterministic" ? " in de vaste controles" : ""}; nog ${result.returnsLeft} keer terug naar de verkenner`,
+        stop: `bewijs onvoldoende: ${counted(result.gaps.length)}${result.stage === "deterministic" ? " in de vaste controles" : ""}; de run is ${MAX_RETURNS_TO_EXPLORER} keer terug geweest naar de verkenner, er komt geen beoordeling`,
+      }[result.next!];
       process.stdout.write(`${verdict}\n${result.warnings.length} waarschuwingen\n`);
-      process.exitCode = result.sufficient ? 0 : result.stage === "review-pending" ? 2 : 1;
+      process.exitCode = { proceed: 0, review: 2, sweep: 3, explore: 1, stop: 1 }[result.next!];
       return;
     }
     case "check-gate": {

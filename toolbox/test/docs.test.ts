@@ -5,7 +5,7 @@ import { dirname, join, normalize } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { EXPLORE_MAX_COMMANDS, EXPLORE_MAX_MINUTES } from "../src/commands/explore.ts";
-import { MAX_RETURNS_TO_EXPLORER, SHEETS_PER_TASK } from "../src/commands/gate.ts";
+import { MAX_RESWEEPS, MAX_RETURNS_TO_EXPLORER, SHEETS_PER_TASK } from "../src/commands/gate.ts";
 import { briefPending, BUDGETS, INSTRUMENT_FLOW, loadInstrumentIndex, PHASES, pointsToFinish, recordAttempts, skip, skipKindOf, skipped, skippedForOutage, TASK_FILES, unskip } from "../src/commands/instrument-tasks.ts";
 import { CEILINGS, EXTENSION, MEASURED_USE, REFERENCE_SITE_SIZE, WALK_STATES } from "../src/lib/budget.ts";
 import { FINISH_FACTOR, LOOK_COMMANDS, MEASURE_COMMANDS, SESSION_COMMANDS } from "../src/lib/verdict.ts";
@@ -222,6 +222,7 @@ test("the architecture names every directory of the code and every step of the c
   assert.ok(method.includes(`bij ${always.slice(0, -1).join(", ")} en ${always.at(-1)}.`), `docs/methode.md noemt niet deze criteria als altijd tegen de grens: ${always.join(", ")}`);
   assert.equal(SHEETS_PER_TASK, 8, "docs/architectuur.md zegt: hooguit acht bladen per opdracht");
   assert.equal(MAX_RETURNS_TO_EXPLORER, 2, "docs/architectuur.md zegt: dat mag twee keer");
+  assert.equal(MAX_RESWEEPS, 2, "docs/methode.md, docs/architectuur.md en de skill zeggen: na de verkenning hooguit twee keer opnieuw vegen");
 });
 
 test("the list of look and measure commands in procedures/README.md is the list of the code", () => {

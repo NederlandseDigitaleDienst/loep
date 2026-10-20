@@ -11,7 +11,7 @@ import { PNG } from "pngjs";
 import { INPAGE_PATH, launchBrowser, loadPage, newContext } from "../src/browser/session.ts";
 import { collect } from "../src/commands/collect.ts";
 import { checkSite, explore, exploreContext } from "../src/commands/explore.ts";
-import { checkGate, commonBlock, contactSheet, gate, gateChecks, keysOn, MIN_TAB_REACH, reviewedAs, openedBetweenWidths, reviewGaps, reviewParts, SHEETS_PER_TASK, sheetGaps, tile, validateAnswers, type Answers, type Sheet } from "../src/commands/gate.ts";
+import { checkGate, commonBlock, contactSheet, fixedByReason, gate, gateChecks, keysOn, MAX_RESWEEPS, MAX_RETURNS_TO_EXPLORER, MIN_TAB_REACH, reviewedAs, openedBetweenWidths, reviewGaps, reviewParts, route, SHEETS_PER_TASK, sheetGaps, tile, validateAnswers, type Answers, type Gap, type Sheet } from "../src/commands/gate.ts";
 import { inventory, type Inventory, type InventoryPage } from "../src/commands/inventory.ts";
 import { ModelSweep, type SiteStates } from "../src/commands/modelsweep.ts";
 import { DownRun, HoverRun, probePointerInStates } from "../src/commands/states.ts";
@@ -524,6 +524,79 @@ test("the gate counts a component that only stands between the measured widths a
   }
 });
 
+test("a gap whose measurement failed is for the sweep, a gap in the site model for the explorer", () => {
+  assert.equal(fixedByReason("de pagina laadt niet: geen antwoord binnen 20 seconden: een script van de pagina houdt de browser misschien bezig"), "sweep");
+  assert.equal(fixedByReason("page.evaluate: Target crashed"), "sweep");
+  assert.equal(fixedByReason("de pagina laadt niet: page.goto: Timeout 30000ms exceeded."), "sweep");
+  assert.equal(fixedByReason("geen antwoord binnen 180 seconden"), "sweep");
+  assert.equal(fixedByReason("stap 1 (click) vond het element niet terug"), "explorer");
+  assert.equal(fixedByReason("de pagina laadt niet: https://elders.nl/ ligt buiten de scope van deze run (site.nl); er is niets opgevraagd"), "explorer");
+  assert.equal(fixedByReason(null), "explorer");
+
+  const withModel = (pages: PageData[], extra: Partial<RunData> = {}, states: SiteStates["states"] = []): RunData => gateRun(pages, { siteModel: validModel(), siteStates: { siteSha256: "", seeded: { blockers: [], cookies: 0, storedValues: 0 }, dismissals: [], states }, ...extra });
+  const complete = gatePage("P1", "https://site.nl/");
+  const owners = (run: RunData): string[][] => gateChecks(run).gaps.map((gap) => [gap.check, gap.fixedBy ?? "explorer"]);
+  // A page collect could not measure twice, next to one that answered with an error.
+  const failed = withModel([complete, gatePage("P2", "https://site.nl/stuk", { status: 500 })], { collectFailed: [{ label: "P3", item: { url: "https://site.nl/zwaar" } as PageData["item"], error: "page.evaluate: Target crashed" }] });
+  assert.deepEqual(owners(failed), [["pages-loaded", "explorer"], ["pages-loaded", "sweep"]]);
+  // A component that did not open on a page type because the page did not answer, and one whose step found nothing.
+  const row = (url: string, reasonNl: string) => ({ pageType: url.endsWith("/") ? "start" : "tekst", url, viewport: { width: 360, height: 740 }, reached: false, reasonNl, opened: [], screenshot: null, rotatedQuarterTurn: 0 });
+  const menu = { id: "component-menu", kind: "component", modelId: "menu", pageTypes: ["start", "tekst"], url: "https://site.nl/", viewport: { width: 360, height: 740 }, reached: true, reasonNl: null, stillReachedAfterMeasuring: true, dir: "site-states/component-menu", files: { screenshot: "s", engines: "e", facts: "f", tabwalk: "t", contrast: "c", contrastDark: "d", targets: "g", textSpacing: "x", order: "o", text: "t", languages: "l", pictures: "p", focusCovered: "k" }, engineSummary: {}, contrast: null, largestOverlayShare: 0, perPageType: [row("https://site.nl/", "de pagina laadt niet: geen antwoord binnen 20 seconden"), row("https://site.nl/contact/", "stap 1 (click) vond het element niet terug")] } as unknown as SiteStates["states"][number];
+  assert.deepEqual(owners(withModel([complete], {}, [menu])), [[NOT_OPENED_ON_PAGE_TYPE, "sweep"], [NOT_OPENED_ON_PAGE_TYPE, "explorer"]]);
+  // A run without contrast is incomplete: running the sweep closes that.
+  assert.deepEqual(owners(withModel([complete], { contrast: null })), [["sweep-complete", "sweep"]]);
+  // A page type whose page lacks its pictures is for the sweep; one without a page in the sample is not.
+  const run = { siteModel: { pageTypes: [{ id: "type-1", representative: "https://site.nl/1", pages: ["https://site.nl/1"] }, { id: "type-2", representative: "https://site.nl/2", pages: ["https://site.nl/2"] }] }, pages: [{ label: "P1", item: { url: "https://site.nl/1" } }] } as unknown as RunData;
+  assert.deepEqual(sheetGaps(run, []).map((gap) => gap.fixedBy), ["sweep", "explorer"]);
+  // A page collect could not measure is in the sample: its page type waits for the sweep, not for a new sample.
+  const crashedRun = { ...run, collectFailed: [{ label: "P2", item: { url: "https://site.nl/2" }, error: "page.evaluate: Target crashed" }] } as unknown as RunData;
+  const crashedGap = sheetGaps(crashedRun, [])[1]!;
+  assert.deepEqual([crashedGap.page, crashedGap.url, crashedGap.fixedBy], ["P2", "https://site.nl/2", "sweep"]);
+  assert.match(crashedGap.missingNl, /P2 zit wel in de steekproef, maar de veegronde kon die pagina niet meten .* Draai collect opnieuw\./);
+});
+
+test("the gate sends a run to the sweep for what a new sweep closes, without spending a return, and hands the explorer every gap at once", () => {
+  const gap = (check: string, fixedBy?: "sweep" | "explorer", url = "https://site.nl/"): Gap => ({ check, page: "P1", url, state: "default", missingNl: `${check} ontbreekt.`, ...(fixedBy ? { fixedBy } : {}) });
+  const steps = (...commands: string[]) => commands.map((command) => ({ command }));
+  const none = () => false;
+  const firstSweep = steps("explore", "check-site", "sample", "collect", "contrast", "states", "gate");
+
+  // A crashed page after the first sweep: measure again, the explorer keeps both returns.
+  const crashed = route([gap("pages-loaded", "sweep"), gap("tab-reach")], [], false, firstSweep, none);
+  assert.deepEqual([crashed.next, crashed.stage, crashed.sufficient, crashed.returnsLeft, crashed.resweeps, crashed.resweepsLeft], ["sweep", "deterministic", false, MAX_RETURNS_TO_EXPLORER, 0, MAX_RESWEEPS]);
+  assert.deepEqual(crashed.gaps.map((entry) => entry.fixedBy), ["sweep", "explorer"], "every gap says who can close it");
+  // With answers for the current sheets the review does not decide either: the sweep goes first.
+  assert.equal(route([gap("coverage", "sweep")], [gap("review-state")], true, firstSweep, none).next, "sweep");
+
+  // Only gaps for the explorer: the pictures are looked at first, so the explorer gets the gaps of both in one round.
+  const forExplorer = route([gap("tab-reach")], [], false, firstSweep, none);
+  assert.deepEqual([forExplorer.next, forExplorer.stage], ["review", "review-pending"]);
+  const reviewed = route([gap("tab-reach")], [gap("review-missing")], true, firstSweep, none);
+  assert.deepEqual([reviewed.next, reviewed.stage, reviewed.gaps.map((entry) => entry.check)], ["explore", "complete", ["tab-reach", "review-missing"]]);
+  // Without gaps the review decides, as before.
+  assert.equal(route([], [], false, firstSweep, none).next, "review");
+  const enough = route([], [], true, firstSweep, none);
+  assert.deepEqual([enough.next, enough.sufficient], ["proceed", true]);
+  // A gap the site model accepts sends nowhere.
+  assert.equal(route([gap("pages-loaded", "sweep")], [], true, firstSweep, (entry) => entry.check === "pages-loaded").next, "proceed");
+
+  // A page that keeps crashing: after MAX_RESWEEPS new sweeps the gap goes to the explorer, who can choose another page or accept it.
+  const twice = route([gap("pages-loaded", "sweep")], [], false, [...firstSweep, ...steps("collect", "contrast", "states", "gate", "collect", "gate")], none);
+  assert.deepEqual([twice.resweeps, twice.resweepsLeft, twice.next, twice.gaps[0]!.fixedBy], [MAX_RESWEEPS, 0, "review", "explorer"]);
+  assert.match(twice.gaps[0]!.missingNl, /^pages-loaded ontbreekt\. De veegronde is na de laatste verkenning 2 keer opnieuw gedraaid en mat dit nog steeds niet\./);
+  // A new round of the explorer starts the count again.
+  const again = route([gap("pages-loaded", "sweep")], [], false, [...firstSweep, ...steps("collect", "collect", "explore", "collect")], none);
+  assert.deepEqual([again.resweeps, again.next, again.returnsLeft], [0, "sweep", MAX_RETURNS_TO_EXPLORER - 1]);
+
+  // No return left: a gap for the explorer stops the run, without asking for a review that cannot change that.
+  const spent = steps("explore", "collect", "gate", "explore", "collect", "gate", "explore", "collect");
+  const stopped = route([gap("tab-reach")], [], false, spent, none);
+  assert.deepEqual([stopped.next, stopped.stage, stopped.returnsLeft], ["stop", "deterministic", 0]);
+  // A measurement that failed still goes to the sweep then.
+  assert.equal(route([gap("coverage", "sweep")], [], false, spent, none).next, "sweep");
+  assert.equal(route([], [gap("review-state")], true, spent, none).next, "stop");
+});
+
 test("answers of the reviewing agent are validated against the sheets and turned into gaps", () => {
   const sheets: Sheet[] = [{ pageType: "start", page: "P1", url: "https://site.nl/", file: "gate/sheet-start.png", sha256: "x", componentsNl: [], tiles: [1, 2, 3, 4].map((nr) => ({ nr, state: ["default", "narrow", "taborder", "component-menu"][nr - 1]!, file: "f.png", descriptionNl: "" })) }];
   const good: Answers = { sheets: [{ pageType: "start", answers: { content: { answer: "ja", noteNl: "" }, covered: { answer: "nee", noteNl: "" }, narrow: { answer: "ja", noteNl: "" }, taborder: { answer: "ja", noteNl: "" }, missing: { answer: "nee", noteNl: "" } }, stateTiles: [{ tile: 4, answer: "ja", noteNl: "" }] }] };
@@ -950,6 +1023,7 @@ test("explore, check-site, the sweep and the gate work together on a site with a
   const first = await gate(run);
   assert.equal(first.sufficient, false);
   assert.deepEqual([...new Set(first.gaps.map((gap) => gap.check))], ["sweep-complete"]);
+  assert.deepEqual([first.next, first.resweeps, first.returnsLeft], ["sweep", 1, 2], "a sweep that is not complete goes back to the sweep, not to the explorer");
   const sheet = first.review.sheets.find((entry) => entry.pageType === "type-1")!;
   assert.deepEqual(sheet.tiles.map((entry) => entry.state).slice(0, 5), ["default", "narrow", "taborder", "blocker-cookies", "blocker-cookies-dark"]);
   assert.deepEqual(first.review.withoutSheet, []);
@@ -970,6 +1044,7 @@ test("explore, check-site, the sweep and the gate work together on a site with a
   assert.deepEqual(second.remarks, [{ pageType: "type-1", remarkNl: "Het blok bovenaan wisselt vanzelf." }], "a remark is passed on and changes nothing");
   assert.equal((JSON.parse(readFileSync(second.review.candidates, "utf8")) as { seenNl: string }[])[0]!.seenNl, "Het blok bovenaan wisselt vanzelf.", "and is kept as a lead for the judges");
   assert.equal(second.sufficient, false);
+  assert.equal(second.next, "sweep");
 
   // A later round: the explorer gets the gaps.
   const again = await explore(run);

@@ -97,7 +97,7 @@ export async function explore(runDir: string): Promise<{ task: string; pages: nu
   const manifestPath = join(runDir, "manifest.json");
   const round = (existsSync(manifestPath) ? (await readJson<Manifest>(manifestPath)).steps.filter((step) => step.command === "explore").length : 0) + 1;
   // What the gate found that an explorer can do something about; a measurement the sweep still owes is not his to fix.
-  const forExplorer = (gate && !gate.sufficient ? gate.gaps : []).filter((gap) => !SWEEP_ONLY_CHECKS.includes(gap.check));
+  const forExplorer = (gate && !gate.sufficient ? gate.gaps : []).filter((gap) => gap.fixedBy !== "sweep");
   // And what the model itself lacks by today's rules, without replaying anything.
   const modelProblems = existsSync(join(runDir, SITE_MODEL_FILE)) ? await staticProblems(runDir, inventory) : [];
   const previous = !existsSync(join(runDir, SITE_MODEL_FILE))
@@ -156,9 +156,6 @@ export function breakpointsNl(context: ExploreContext): string {
   const lines = [...byList].map(([widths, types]) => `- ${byList.size === 1 ? "Alle paginatypen" : types.join(", ")}: ${widths}`);
   return ["De stylesheets noemen deze breedtes tussen 320 en 1280 pixels; daar verandert de opmaak:", "", ...lines, "", "Een knop of menu dat je op 1280 en op 360 pixels niet ziet, kan net boven of net onder zo'n breedte wel bestaan. Open dan een pagina op zo'n breedte (`--width <breedte>`) en neem het recept daar op. `check-site` meldt na het tellen welke bedieningselementen alleen tussen de gemeten breedtes in beeld staan, met de breedte waarop je ze vindt."].join("\n");
 }
-
-/** Checks of the gate whose gaps are closed by running the sweep again, not by exploring. */
-const SWEEP_ONLY_CHECKS = ["coverage", "sweep-complete", "sheets"];
 
 async function modelContext(runDir: string, inventory: Inventory): Promise<ModelContext> {
   const recipes = await loadRecipes(runDir);
