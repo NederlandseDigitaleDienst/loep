@@ -51,6 +51,8 @@ Uitgangspunt: de agent krijgt dezelfde informatie, maar in minder ruimte of pas 
 
    Een rol gaat pas over als de meting hieronder dat toelaat. Een lichter model kan meer beurten nodig hebben; ook dat laat de meting zien.
 
+   De werkstroom heeft hiervoor de instelling `models`, bijvoorbeeld `models: { walks: "sonnet" }` (rollen `stand`, `walks`, `judges`, `verifiers`, `finishers`; modellen `opus`, `sonnet`, `haiku`). Zonder instelling draait elke agent op het model van de sessie, dus zoals nu. Het resultaat van de werkstroom noemt per rol het model, zodat een meting de varianten uit elkaar houdt.
+
 Niet in dit voorstel, omdat het het werk zelf verandert en een eigen besluit vraagt:
 
 - kleinere budgetten per agent;
