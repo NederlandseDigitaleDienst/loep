@@ -21,6 +21,27 @@ Voor Berkenveen is `reference-berkenveen.json` de referentie: geen enkel criteri
 
 De server schrijft elk verzoek dat geen GET of HEAD is en elk bericht over de WebSocket van de chat naar het logbestand (standaard `runs/fixture-server.log`), één JSON-object per regel. Het log wordt nooit geleegd. Tel de regels met `kind` gelijk aan `request` of `ws-message` voor en na een run: het verschil hoort nul te zijn.
 
+## Regressietoets van de veegronde
+
+```
+just sweep-check                       # beide varianten, een tabel in een tijdelijke map
+just sweep-check --out pad --at-once 3 # eigen map, drie pagina's tegelijk per variant
+just sweep-check --runs pad/runs       # bestaande runs opnieuw lezen, zonder te meten
+```
+
+Zonder taalmodel en zonder verkenner. Op beide varianten draaien `inventory` (de pagina's waarop een gebrek staat, als vaste lijst), het vaste sitemodel uit `sweep/` (met `check-site`), `sample`, `collect`, `contrast` en `states`. Daarna zoekt de toets per gebrek het bewijs op de plek in het dossier die `evidence.ts` noemt. Een gebrek dat alleen een agent kan zien (kijken, luisteren of een oordeel over tekst) staat daar met de reden en telt niet mee. Op Berkenveen draait dezelfde toets op dezelfde plek: daar hoort niets te staan.
+
+De uitkomst is een tabel per gebrek (gevonden, ontbreekt, niet door een script te zien) in `sweep-check.md` en `sweep-check.json`. De toets faalt als een gebrek dat in de basislijn (`sweep/baseline.json`) werd gevonden nu ontbreekt, of als er op Berkenveen bewijs bijkomt. Wordt iets beter, dan zegt de tabel dat; werk dan de basislijn bij. Doe dat met de uitkomst van de CI, niet van een eigen machine, want lettertypen en hulpprogramma's verschillen: haal de artefacten `veegronde-Lindewaard` en `veegronde-Berkenveen` op en draai `just sweep-check --from-report <lindewaard>/sweep-check.json --from-report <berkenveen>/sweep-check.json --update-baseline`.
+
+| Pad | Inhoud |
+|---|---|
+| `evidence.ts` | Per gebrek waar het bewijs in het dossier staat, of waarom alleen een agent het ziet |
+| `sweep/site.json` | Het vaste sitemodel voor beide varianten. `{origin}` en `{thirdParty}` worden bij het draaien ingevuld; een onderdeel met `variants` geldt alleen voor die variant |
+| `sweep/recipes/` | De recepten van het sitemodel. Een stap noemt zijn element per variant als de twee sites daar anders zijn gebouwd |
+| `sweep/baseline.json` | Wat de toets vond toen de basislijn werd vastgelegd |
+
+Op GitHub draait de toets bij elk voorstel dat `toolbox/src/`, `toolbox/package-lock.json`, de testsite of de toets zelf raakt, Lindewaard en Berkenveen in twee jobs naast elkaar, met de tabel als artefact.
+
 ## Het deel achter een inlog
 
 Beide sites hebben vier pagina's onder `/mijn/` die alleen bestaan voor wie is ingelogd. Zonder sessie stuurt de server door naar `/inloggen.html`. Geen sitemap noemt ze. Inloggen gaat met het formulier op die pagina; de gegevens van het ene account staan in `account.ts` en horen alleen bij deze testsite. Een sessie is een cookie en verloopt een half uur na het inloggen, of na het aantal seconden van `--session-seconds`.

@@ -1,0 +1,51 @@
+{
+  "version": 1,
+  "baseUrl": "{origin}/",
+  "descriptionNl": "Dit is de website van een kleine gemeente. Inwoners lezen er nieuws, zoeken op wanneer het afval wordt opgehaald en wanneer het gemeentehuis open is, bekijken producten en vragen een parkeervergunning aan. Er is een contactformulier, een chatvenster en een pagina met veelgestelde vragen. Voor het onderzoek valt op dat er bij het eerste bezoek een cookiemelding over de pagina ligt, die eerst gesloten moet worden voordat de pagina zelf te gebruiken is.",
+  "pageTypes": [
+    { "id": "start", "descriptionNl": "Startpagina met uitgelicht bericht, snelkoppelingen, laatste nieuws en aanmelding voor de nieuwsbrief", "representative": "{origin}/", "pages": ["{origin}/"] },
+    { "id": "afval", "descriptionNl": "Afvalpagina met keuzelijst voor de wijk en tabbladen per afvalsoort", "representative": "{origin}/afval.html", "pages": ["{origin}/afval.html"] },
+    { "id": "contact", "descriptionNl": "Contactformulier met controlevenster van een andere partij", "representative": "{origin}/contact.html", "pages": ["{origin}/contact.html"] },
+    { "id": "niet-gevonden", "descriptionNl": "Foutpagina voor een onbekend adres, met zoekveld", "representative": "{origin}/deze-pagina-bestaat-niet-toegankelijkheidsonderzoek", "pages": ["{origin}/deze-pagina-bestaat-niet-toegankelijkheidsonderzoek"] },
+    { "id": "inloggen", "descriptionNl": "Inlogformulier", "representative": "{origin}/inloggen.html", "pages": ["{origin}/inloggen.html"] },
+    { "id": "nieuwsoverzicht", "descriptionNl": "Overzicht van nieuwsberichten met paginering", "representative": "{origin}/nieuws/", "pages": ["{origin}/nieuws/"] },
+    { "id": "nieuwsbericht-media", "descriptionNl": "Nieuwsbericht met ingesloten videospeler, geluidsfragment en foto's", "representative": "{origin}/nieuws/nieuwe-fietsenstalling.html", "pages": ["{origin}/nieuws/nieuwe-fietsenstalling.html"] },
+    { "id": "openingstijden", "descriptionNl": "Openingstijden in een tabel, met uitleg bij de tijden", "representative": "{origin}/openingstijden.html", "pages": ["{origin}/openingstijden.html"] },
+    { "id": "producten", "descriptionNl": "Productenoverzicht met zoekveld, prijsschuif en kaarten die een venster met uitleg openen", "representative": "{origin}/producten.html", "pages": ["{origin}/producten.html"] },
+    { "id": "raadsvergadering", "descriptionNl": "Raadsvergadering terugkijken: video op de pagina en ingesloten videospeler", "representative": "{origin}/raadsvergadering.html", "pages": ["{origin}/raadsvergadering.html"] },
+    { "id": "veelgestelde-vragen", "descriptionNl": "Veelgestelde vragen als uitklappers, met de vraag of de pagina hielp", "representative": "{origin}/veelgestelde-vragen.html", "pages": ["{origin}/veelgestelde-vragen.html"] },
+    { "id": "vergunning", "descriptionNl": "Aanvraagformulier voor een parkeervergunning in stappen", "representative": "{origin}/vergunning.html", "pages": ["{origin}/vergunning.html"] },
+    { "id": "zoeken", "descriptionNl": "Zoekpagina zonder zoekopdracht", "representative": "{origin}/zoeken.html", "pages": ["{origin}/zoeken.html"] }
+  ],
+  "blockers": [
+    { "id": "cookies", "kind": "cookie-banner", "descriptionNl": "Cookiemelding onderaan de pagina met de knoppen Alles toestaan, Aanpassen en Weigeren; gesloten met Weigeren", "recipe": "blocker-cookies", "postcondition": { "kind": "gone", "selector": "#cookiemelding" } }
+  ],
+  "components": [
+    { "id": "menu-smal", "type": "menu", "descriptionNl": "Hoofdmenu achter de menuknop op een smal scherm. Staat op elke pagina; in dit model alleen op de startpagina geopend, zodat de toets kort blijft", "pageTypes": ["start"], "viewport": { "maxWidth": 720 }, "recipe": "component-menu-smal", "postcondition": { "kind": "visible", "selector": "#mobiel-menu" } },
+    { "id": "chat", "type": "chat", "descriptionNl": "Chatvenster achter de knop Chat met ons. Staat op elke pagina; in dit model alleen op de startpagina geopend, zodat de toets kort blijft", "pageTypes": ["start"], "viewport": null, "recipe": "component-chat", "postcondition": { "kind": "expanded", "selector": "button.chat-knop" } },
+    { "id": "afval-tabs", "type": "tabs", "descriptionNl": "Tabbladen onder Wat hoort waar?", "pageTypes": ["afval"], "viewport": null, "recipe": null, "postcondition": null, "notOpenedNl": "Niet geopend in het vaste model van de regressietoets: geen gebrek uit de sleutel vraagt deze toestand, en elke toestand maakt de toets langer." },
+    { "id": "productvenster", "type": "dialog", "descriptionNl": "Venster met uitleg over een product, na een klik op de kaart Paspoort", "pageTypes": ["producten"], "viewport": null, "recipe": "component-productvenster", "postcondition": { "kind": "text-visible", "text": "Neem een pasfoto en uw oude paspoort mee" } },
+    { "id": "producten-filter", "type": "search", "descriptionNl": "Zoekveld Zoek in de producten dat de lijst tijdens het typen filtert", "pageTypes": ["producten"], "viewport": null, "recipe": "component-producten-filter", "postcondition": { "kind": "text-visible", "text": "0 producten gevonden" } },
+    { "id": "uitleg-tijden", "type": "tooltip", "descriptionNl": "Uitleg bij de openingstijden", "pageTypes": ["openingstijden"], "viewport": null, "recipe": null, "postcondition": null, "notOpenedNl": "Niet geopend in het vaste model van de regressietoets: geen gebrek uit de sleutel vraagt deze toestand, en elke toestand maakt de toets langer." },
+    { "id": "faq", "type": "accordion", "descriptionNl": "Uitklapper per vraag; de tweede vraag is geopend", "pageTypes": ["veelgestelde-vragen"], "viewport": null, "recipe": "component-faq", "postcondition": { "kind": "visible", "selector": "#antwoord-2" } },
+    { "id": "faq-oordeel", "type": "other", "descriptionNl": "Knoppen Ja en Nee onder de vragen; na een klik op Ja staat er een bedankje", "pageTypes": ["veelgestelde-vragen"], "viewport": null, "recipe": "component-faq-oordeel", "postcondition": { "kind": "text-visible", "text": "Bedankt voor uw reactie" } },
+    { "id": "formulieren", "type": "form", "descriptionNl": "Formulieren zonder vervolgstap in dit model: de nieuwsbrief, de keuze van de wijk, het contactformulier, het inlogformulier en de zoekformulieren", "pageTypes": ["start", "afval", "contact", "niet-gevonden", "inloggen", "zoeken"], "viewport": null, "recipe": null, "postcondition": null, "notOpenedNl": "Niet geopend in het vaste model van de regressietoets: versturen is een schrijfverzoek of een navigatie, en de toets kijkt naar wat de veegronde zonder vervolgstap vastlegt." },
+    { "id": "knoppen-zonder-recept", "type": "other", "descriptionNl": "Knoppen en een schuif die de inhoud ter plekke wisselen: het uitgelichte bericht, de fotoserie en de prijsschuif", "pageTypes": ["start", "nieuwsbericht-media", "producten"], "viewport": null, "recipe": null, "postcondition": null, "notOpenedNl": "Niet geopend in het vaste model van de regressietoets: wat ze tonen staat al in de pagina, en de proeven van states drukken ze zelf in." },
+    { "id": "controlevenster", "type": "other", "descriptionNl": "Controle of de bezoeker een mens is, in een venster van een andere partij", "pageTypes": ["start", "contact"], "viewport": null, "frame": "{thirdParty}/controle.html", "recipe": null, "postcondition": null, "notOpenedNl": "Niet bediend: het vinkje hoort bij het versturen van een formulier, en de toets verstuurt niets." },
+    { "id": "videospeler", "type": "player", "descriptionNl": "Videospeler van een andere partij in een ingesloten venster", "pageTypes": ["nieuwsbericht-media", "raadsvergadering"], "viewport": null, "frame": "{thirdParty}/speler.html", "recipe": null, "postcondition": null, "notOpenedNl": "Niet bediend: de knoppen van de speler zijn geen gebrek van de sleutel, en de toets kijkt naar het venster zoals het laadt." },
+    { "id": "vergunning-stap-2", "type": "form", "descriptionNl": "De aanvraag van een parkeervergunning in stappen", "pageTypes": ["vergunning"], "viewport": null, "recipe": null, "postcondition": null, "notOpenedNl": "Niet geopend in het vaste model van de regressietoets: geen gebrek uit de sleutel vraagt deze toestand, en elke toestand maakt de toets langer." }
+  ],
+  "processes": [],
+  "content": [
+    { "id": "melodie", "kind": "audio", "descriptionNl": "Verborgen geluidsfragment op de startpagina dat bij het laden vanzelf begint", "pageTypes": ["start"], "variants": ["defect"] },
+    { "id": "raadsvideo", "kind": "video", "descriptionNl": "Video van de raadsvergadering op de pagina zelf, met de knoppen van de browser", "pageTypes": ["raadsvergadering"] },
+    { "id": "gesprek", "kind": "audio", "descriptionNl": "Geluidsfragment in het bericht over de fietsenstalling, met de knoppen van de browser", "pageTypes": ["nieuwsbericht-media"] },
+    { "id": "speler", "kind": "video", "descriptionNl": "Videospeler van een andere partij in een ingesloten venster", "pageTypes": ["nieuwsbericht-media", "raadsvergadering"] }
+  ],
+  "frames": [
+    { "address": "{thirdParty}/controle.html", "class": "vendor-component", "descriptionNl": "Controle of de bezoeker een mens is, bij de nieuwsbrief en het contactformulier", "reasonNl": "Een gekozen onderdeel van een leverancier waar de bezoeker iets moet doen." },
+    { "address": "{thirdParty}/leeg.html", "class": "no-content", "descriptionNl": "Leeg, verborgen hulpvenster op elke pagina", "reasonNl": "Toont de bezoeker niets." },
+    { "address": "{thirdParty}/speler.html", "class": "own-content", "descriptionNl": "Videospeler bij het bericht over de fietsenstalling en bij de raadsvergadering", "reasonNl": "Eigen video van de gemeente in een gekozen speler." }
+  ],
+  "notesNl": ["Vast sitemodel van de testsite voor de regressietoets van de veegronde (toolbox/scripts/sweep-check.ts). Geldt voor beide varianten; de adressen worden bij het draaien ingevuld."]
+}

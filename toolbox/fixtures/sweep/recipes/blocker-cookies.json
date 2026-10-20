@@ -1,0 +1,19 @@
+{
+  "name": "blocker-cookies",
+  "start": {
+    "url": "{origin}/",
+    "width": 1280,
+    "height": 800,
+    "scheme": "light"
+  },
+  "steps": [
+    {
+      "command": "click",
+      "args": [],
+      "options": {},
+      "target": [
+        "#cookiemelding > div:nth-of-type(2) > button:nth-of-type(3)"
+      ]
+    }
+  ]
+}

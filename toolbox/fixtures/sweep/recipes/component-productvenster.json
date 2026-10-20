@@ -1,0 +1,32 @@
+{
+  "name": "component-productvenster",
+  "start": {
+    "url": "{origin}/producten.html",
+    "width": 1280,
+    "height": 800,
+    "scheme": "light"
+  },
+  "steps": [
+    {
+      "command": "click",
+      "args": [],
+      "options": {},
+      "target": [
+        "#cookiemelding > div:nth-of-type(2) > button:nth-of-type(3)"
+      ]
+    },
+    {
+      "command": "click",
+      "args": [],
+      "options": {},
+      "target": {
+        "defect": [
+          "#hoofddeel > div:nth-of-type(2) > div:nth-of-type(1) > h2"
+        ],
+        "clean": [
+          "#inhoud > ul > li:nth-of-type(1) > h2 > button"
+        ]
+      }
+    }
+  ]
+}

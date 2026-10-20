@@ -1,0 +1,32 @@
+{
+  "name": "component-faq",
+  "start": {
+    "url": "{origin}/veelgestelde-vragen.html",
+    "width": 1280,
+    "height": 800,
+    "scheme": "light"
+  },
+  "steps": [
+    {
+      "command": "click",
+      "args": [],
+      "options": {},
+      "target": [
+        "#cookiemelding > div:nth-of-type(2) > button:nth-of-type(3)"
+      ]
+    },
+    {
+      "command": "click",
+      "args": [],
+      "options": {},
+      "target": {
+        "defect": [
+          "#hoofddeel > button:nth-of-type(2)"
+        ],
+        "clean": [
+          "#inhoud > h2:nth-of-type(2) > button"
+        ]
+      }
+    }
+  ]
+}
