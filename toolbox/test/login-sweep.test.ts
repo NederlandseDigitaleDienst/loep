@@ -160,7 +160,7 @@ test("the session is in no seal, no report, no dossier and no task; they name th
   await instrumentTasks(run, { only: ["2.4.2"] });
   const dossier = await readJson<{ login?: { role: string; noteNl: string } }>(join(run, "tasks", "2.4.2", "dossier.json"));
   assert.equal(dossier.login?.role, ROLE);
-  assert.match(readFileSync(walk(join(run, "rondgang")).find((path) => path.endsWith(".md"))!, "utf8"), /Deze site wordt onderzocht achter een inlog/);
+  assert.match(readFileSync(walk(join(run, "rondgang")).find((path) => path.endsWith(".md") && !path.endsWith("-naslag.md"))!, "utf8"), /Deze site wordt onderzocht achter een inlog/);
 
   // The evaluation and the report say what was done.
   const evaluation = await evaluate({ run, name: "Mijn Berkenveen", organisation: null, model: "geen" });
