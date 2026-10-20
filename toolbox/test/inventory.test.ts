@@ -261,6 +261,28 @@ test("an address that redirects to an anchor on a page of the site is recorded w
   assert.deepEqual(item.aliases, [`${at}/aan-de-slag/hulp`, `${at}/wetten/verklaring`]);
 });
 
+test("a page with a link whose address Chromium accepts and Node does not is still a page, and its other links are followed", async (context) => {
+  const statement = html("Verklaring", ["/"]).replace("</main>", '<a href="http://www.example.nl&nbsp; via">site</a><a href="/contact">Contact</a></main>');
+  const site = createServer((request, response) => {
+    const path = new URL(request.url!, "http://x").pathname;
+    const known: Record<string, string> = { "/": html("Start", ["/verklaring"]), "/verklaring": statement, "/contact": html("Contact", ["/"]) };
+    response.writeHead(known[path] ? 200 : 404, { "content-type": "text/html; charset=utf-8" });
+    response.end(known[path] ?? html("Niet gevonden", ["/"]));
+  });
+  await new Promise<void>((resolve) => site.listen(0, "127.0.0.1", resolve));
+  context.after(() => new Promise<void>((resolve) => void site.close(() => resolve())));
+  const at = `http://127.0.0.1:${(site.address() as { port: number }).port}`;
+  let found: Inventory;
+  try {
+    found = await inventory({ baseUrl: `${at}/`, out: join(scratch, "invalid-link"), maxPages: 10 });
+  } catch (error) {
+    if (/Executable doesn't exist|browserType.launch/.test((error as Error).message)) return context.skip("no browser available");
+    throw error;
+  }
+  assert.ok(found.pages.some((page) => page.url === `${at}/verklaring`), "the page with the broken link is in the inventory");
+  assert.ok(found.pages.some((page) => page.url === `${at}/contact`), "a link after the broken one is followed");
+});
+
 
 test("with a fixed list every listed page goes before a frame found on one, also when the frame's server has the lower port", async (context) => {
   const free: number[] = [];

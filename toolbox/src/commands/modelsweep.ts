@@ -18,7 +18,7 @@ import { withinTime } from "../instruments/limit.ts";
 import { readJson, sha256File, writeFileAtomic, writeJson } from "../lib/canonical.ts";
 import { inOrder } from "../lib/atonce.ts";
 import { runEngines } from "../lib/engines.ts";
-import { frameStanding, loadSiteModel, SITE_MODEL_FILE, type Postcondition, type SiteModel } from "../lib/sitemodel.ts";
+import { frameStanding, loadSiteModel, SITE_MODEL_FILE, type Component, type Postcondition, type SiteModel } from "../lib/sitemodel.ts";
 import { blockersKey, readStamp, STATE_STAMP, stateKey } from "../lib/sweepstamp.ts";
 import { writesForRun } from "../lib/writes.ts";
 import { spokenByItself, type SpokenByItself } from "../instruments/methods/speech.ts";
@@ -120,6 +120,61 @@ export function portraitFor(viewport: { minWidth?: number; maxWidth?: number } |
 const NARROW_LAYOUT_BELOW = 768;
 const INSTANCE_TIMEOUT_MS = 60_000;
 
+/**
+ * The window a component is opened in on each of its page types: the portrait window, as wide as
+ * the model says the component needs, or the window its recipe was recorded in when that is one
+ * of the narrow layout, stretched to a portrait.
+ */
+export function windowOnPageTypes(recordedIn: { width: number; height: number }, viewport: Component["viewport"]): { width: number; height: number } {
+  if (recordedIn.width < NARROW_LAYOUT_BELOW) return { width: recordedIn.width, height: Math.max(recordedIn.height, Math.round(recordedIn.width * 1.6)) };
+  return portraitFor(viewport);
+}
+
+export interface ComponentOnPage {
+  surface: Surface | null;
+  reached: boolean;
+  reasonNl: string | null;
+  /** The links and controls that were not there before the recipe ran, by their text, in the order of the code. */
+  opened: string[];
+  /** Why the first attempt stopped, when a step timed out and the recipe was played once more on a freshly loaded page. */
+  firstTimeoutNl?: string;
+}
+
+/**
+ * A component's recipe played on another page, in a window of another size, within a time limit.
+ * The sweep opens a component on a page of every page type this way, and `check-site` tries the
+ * same before the sweep; the two must not drift apart. The caller closes the context of the surface.
+ */
+export async function openComponentOn(env: Env, recipe: Recipe & { start: NonNullable<Recipe["start"]> }, post: Postcondition | null, url: string, size: { width: number; height: number }, limitMs = INSTANCE_TIMEOUT_MS): Promise<ComponentOnPage> {
+  // The work goes on past the limit: every context it opens, also one that only comes after the limit, is closed then.
+  const contexts = new Set<BrowserContext>();
+  let abandoned = false;
+  const keep = (context: BrowserContext): void => {
+    contexts.add(context);
+    if (abandoned) void context.close().catch(() => undefined);
+  };
+  const limited = await withinTime(limitMs, async (): Promise<ComponentOnPage> => {
+    const result = await onceMoreAfterTimeout(async () => {
+      if (abandoned) return { surface: null, ok: false, reasonNl: null, opened: [] as string[] };
+      let opened: Surface;
+      try {
+        ({ surface: opened } = await openSurface(env, { ...recipe.start, url, ...size }, keep));
+      } catch (error) {
+        return { surface: null, ok: false, reasonNl: `de pagina laadt niet: ${(error as Error).message.split("\n")[0]}`, opened: [] as string[] };
+      }
+      const before = new Set((await call<Control[]>(opened.page, "hoverTargets").catch(() => [])).map(controlKey));
+      const replayed = await replaySteps(env, opened, recipe.steps, post);
+      const after = replayed.ok ? await call<Control[]>(opened.page, "hoverTargets").catch(() => []) : [];
+      return { surface: opened, ok: replayed.ok, reasonNl: replayed.reasonNl, ...(replayed.timedOut ? { timedOut: true } : {}), opened: after.filter((control) => !before.has(controlKey(control))).map((control) => (control.text || control.ariaLabel || control.tag).slice(0, 60)) };
+    });
+    return { surface: result.surface, reached: result.ok, reasonNl: result.reasonNl, opened: result.opened, ...(result.firstTimeoutNl !== undefined ? { firstTimeoutNl: result.firstTimeoutNl } : {}) };
+  });
+  if (limited.ok) return limited.value;
+  abandoned = true;
+  await Promise.all([...contexts].map((context) => context.close().catch(() => undefined)));
+  return { surface: null, reached: false, reasonNl: limited.reason, opened: [] };
+}
+
 /** How a state is opened again: on the dark scheme, or with the wider text spacing in force from the first document on. */
 export interface StateVariant {
   scheme?: "light" | "dark";
@@ -166,7 +221,7 @@ export interface StateOpener {
   /** Null when the explorer could not open it; `notOpenedNl` then says why. */
   open: ((how?: StateVariant) => Promise<Opened>) | null;
   /** For a component: play its recipe on another page, in a window of another size. `opened` names the controls that the recipe brought. */
-  openOn?: (url: string, size: { width: number; height: number }) => Promise<{ surface: Surface | null; reached: boolean; reasonNl: string | null; opened: string[]; firstTimeoutNl?: string }>;
+  openOn?: (url: string, size: { width: number; height: number }) => Promise<ComponentOnPage>;
   /** The window the recipe was recorded in. */
   recordedIn?: { width: number; height: number };
   notOpenedNl?: string;
@@ -678,21 +733,7 @@ export class ModelSweep {
           ...(kind === "component" && recipe.start
             ? {
                 recordedIn: { width: recipe.start.width, height: recipe.start.height },
-                openOn: async (url: string, size: { width: number; height: number }) => {
-                  const result = await onceMoreAfterTimeout(async () => {
-                    let surface: Surface;
-                    try {
-                      ({ surface } = await openSurface(this.env, { ...recipe.start!, url, ...size }));
-                    } catch (error) {
-                      return { surface: null, ok: false, reasonNl: `de pagina laadt niet: ${(error as Error).message.split("\n")[0]}`, opened: [] as string[] };
-                    }
-                    const before = new Set((await call<Control[]>(surface.page, "hoverTargets").catch(() => [])).map(controlKey));
-                    const replayed = await replaySteps(this.env, surface, recipe.steps, entry.postcondition);
-                    const after = replayed.ok ? await call<Control[]>(surface.page, "hoverTargets").catch(() => []) : [];
-                    return { surface, ok: replayed.ok, reasonNl: replayed.reasonNl, ...(replayed.timedOut ? { timedOut: true } : {}), opened: after.filter((control) => !before.has(controlKey(control))).map((control) => (control.text || control.ariaLabel || control.tag).slice(0, 60)) };
-                  });
-                  return { surface: result.surface, reached: result.ok, reasonNl: result.reasonNl, opened: result.opened, ...(result.firstTimeoutNl !== undefined ? { firstTimeoutNl: result.firstTimeoutNl } : {}) };
-                },
+                openOn: (url: string, size: { width: number; height: number }) => openComponentOn(this.env, { ...recipe, start: recipe.start! }, entry.postcondition, url, size),
               }
             : {}),
           key: stateKey({ id: base.id, kind, startUrl: recipe.start?.url ?? null }, entry.postcondition, recipe),
@@ -720,7 +761,7 @@ export class ModelSweep {
     const rows: StateInstance[] = [];
     const openOn = opener.openOn;
     if (!openOn || !opener.recordedIn) return rows;
-    const size = opener.recordedIn.width < NARROW_LAYOUT_BELOW ? { width: opener.recordedIn.width, height: Math.max(opener.recordedIn.height, Math.round(opener.recordedIn.width * 1.6)) } : portraitFor(this.model.components.find((component) => component.id === opener.base.modelId)?.viewport ?? null);
+    const size = windowOnPageTypes(opener.recordedIn, this.model.components.find((component) => component.id === opener.base.modelId)?.viewport ?? null);
     for (const typeId of state.pageTypes) {
       const type = this.model.pageTypes.find((entry) => entry.id === typeId);
       if (!type) continue;

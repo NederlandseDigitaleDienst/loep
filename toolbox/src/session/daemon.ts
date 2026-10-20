@@ -12,7 +12,7 @@ import { COMMANDS, PUBLIC_COMMANDS, UsageError, type Context, type Options, type
 import { Jobs } from "./jobs.ts";
 import { cleanModel } from "../lib/models.ts";
 import { toolchain } from "../lib/manifest.ts";
-import { loadSiteModel, type Postcondition, type SiteModel } from "../lib/sitemodel.ts";
+import { loadSiteModel, STEP_NOT_FOUND_NL, type Postcondition, type SiteModel } from "../lib/sitemodel.ts";
 import { Images, ObservationLog, observationId, readObservation, type Locators, type Observation, type StartState, type StateRecord, type Step, type TargetRecord } from "./observations.ts";
 import { holds, POSTCONDITION_WAIT_MS } from "./recipe.ts";
 import { toolsOutcome, waitOutcome, type Services } from "./opinions.ts";
@@ -776,7 +776,7 @@ export function isTimeout(error: unknown): boolean {
 export async function runSteps(env: Env, surface: Surface, steps: Step[], images: Images, matches?: string[], speech?: LastStepSpeech): Promise<{ index: number; command: string; reason: string; timedOut?: boolean } | null> {
   for (const [index, step] of steps.entries()) {
     const info = step.target ? await resolveStep(surface, { target: step.target, locators: step.locators ?? null }) : null;
-    if (step.target && !info) return { index, command: step.command, reason: "vond het element niet terug" };
+    if (step.target && !info) return { index, command: step.command, reason: STEP_NOT_FOUND_NL };
     // The reader listens in the tab itself, and in the embedded frame the step acts in.
     const listening: Surface["page"][] = [];
     if (speech && index === steps.length - 1 && step.command !== "goto") {
