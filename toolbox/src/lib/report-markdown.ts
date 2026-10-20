@@ -1,6 +1,6 @@
 import { KIND_NAME_NL, kindsNl } from "./documents.ts";
 import { pageIndex, type Defect } from "./defects.ts";
-import { changedSinceCommit, closeCutQuote, complianceStatus, evaluationHash, idsAcrossVersionsNl, knownCommit, madeWith, openCriteria, OUTAGE_NL, OUTCOME_LABEL, type ComplianceStatus, type CriterionOutcome, type CriterionResult, type Evaluation, type ReportFinding, type Signature } from "./evaluation.ts";
+import { aiGeneratedMark, changedSinceCommit, closeCutQuote, versionAccuracyNl, complianceStatus, evaluationHash, idsAcrossVersionsNl, knownCommit, madeWith, openCriteria, OUTAGE_NL, OUTCOME_LABEL, type ComplianceStatus, type CriterionOutcome, type CriterionResult, type Evaluation, type ReportFinding, type Signature } from "./evaluation.ts";
 import { modelOf } from "../instruments/methods/registry.ts";
 import { signatureIsCurrent } from "../commands/sign.ts";
 import { extensionsNl } from "./budget.ts";
@@ -9,6 +9,8 @@ import { NOT_SENT, notSentOrigins, OPEN_POINT_KINDS, openPoint, UNREACHABLE, wai
 import { siteOrigins } from "./origins.ts";
 import { readsAllowedNl } from "./reads.ts";
 import { compareCriterionIds, type WcagVersion } from "./wcag.ts";
+import { DECISION_LABEL_NL, type Decision, type DecisionKind, type DecisionLayer } from "./decisions.ts";
+import { recordedNl } from "./recorded.ts";
 
 /**
  * The report as Markdown, and everything the PDF template needs that it cannot work
@@ -113,6 +115,7 @@ export const REPORT_TEXT = {
   answers: "Vastgesteld door een persoon, niet door een instrument",
   before: "Het oordeel dat hiervoor stond",
   establishedBy: "Vastgesteld door",
+  versionAccuracy: "Nauwkeurigheid van deze versie",
   recommendations: "Aanbevelingen",
   recommendationsIntro: "Wat hier staat, is geen eis van WCAG en telt niet mee voor de uitkomst of de status. Het zijn patronen die de procedure van een criterium aanraadt, en alleen waar de procedure een regel voor een aanbeveling heeft. Een gebrek staat nooit hier: wat de norm fout noemt, staat onder Oplossen.",
   investigateIntro: "Wat het onderzoek open laat, staat hier in delen. Het eerste deel is werk voor de eigenaar van de site. Het laatste deel gaat over grenzen van dit onderzoek: daar hoeft de eigenaar niets mee te doen.",
@@ -154,6 +157,16 @@ export const REPORT_TEXT = {
     "fixed-list": "Vaste lijst van pagina's, vooraf opgegeven",
   },
   sampleKind: { structured: "Gericht", random: "Willekeurig", embedded: "Ingesloten venster" },
+  measures: {
+    title: "Maatregelen en beslissingen",
+    intro:
+      "Wat de organisatie na het aftekenen per gebrek heeft besloten, met de zwaarste gebreken eerst. Een besluit is geen deel van het onderzoek en valt niet onder het zegel: het kan later veranderen, en het eerdere besluit blijft dan bewaard. \"Opgelost\" is wat de organisatie zegt. Of een gebrek echt weg is, laat pas een nieuwe meting op de site zien, en of een criterium dan voldoet, pas een nieuw oordeel over het hele criterium.",
+    what: { opgelost: "Hersteld", gepland: "Wat er gebeurt", zienswijze: "Reden", onevenredig: "Afweging", onbesloten: "Toelichting" },
+    date: { opgelost: "Hersteld op", gepland: "Klaar uiterlijk" },
+    alternative: "Alternatief voor bezoekers",
+    by: "Besloten door",
+    earlier: "Eerder besloten",
+  },
 } as const;
 
 /** The compliance status as the front of the report shows it: provisional until somebody signs. */
@@ -279,6 +292,10 @@ export interface ReportDerived {
   statusLine: StatusLine;
   /** One line when this evaluation follows up a signed one: its date and mark. Null otherwise; a concept is never named. */
   followsUpNl: string | null;
+  /** When this version of loep was last measured as a whole and what came out, or that it never was: always said. */
+  versionAccuracyNl: string;
+  /** Keywords for the metadata of the PDF that say, readable by a machine, that the verdicts were drafted by a language model, and by which. */
+  aiKeywords: string[];
   /** What the agents said about their model, one line per role, and a line when the operator named another. Null when no agent session is known. */
   agentModels: { perRoleNl: string[]; differsNl: string | null } | null;
   /** Per role how many sessions added to their own budget and how often, in one line. Null when none did. */
@@ -310,6 +327,10 @@ export interface ReportDerived {
   todo: { /** Criteria a person found failing: there is no finding of an instrument behind them, so they stand here by name. */ person: { criterion: string; textNl: string }[]; fix: { owner: string; findingIds: string[] }[]; /** Findings that touch an element of the vendor, per element; null when no vendor was given. */ vendor: { nameNl: string; elements: { tag: string; findingIds: string[] }[] } | null; /** Every open point of the evaluation by whose work it is. The owner's points and those without a kind stand here in full; those about the evaluation itself are counted here and stand in appendix A. */ investigate: { owner: OpenGroup[]; /** The points that stay open only because the run may not send, with the declaration that would have let it; null when there are none. */ notSent: NotSent | null; /** The points about a part of the site that did not load while the rest did, in full: they say what and when. */ unreachable: OpenGroup[]; unsorted: OpenGroup[]; toolbox: { criterion: string; outcomeNl: string; countNl: string; kindsNl: string; /** What was measured, for a criterion without a deviation that was not fully measured. */ coverageNl: string | null; anchor: boolean }[] } };
   /** The findings grouped into things to repair; null for an evaluation from before that step existed. */
   defects: DefectsDerived | null;
+  /** What the organisation decided per defect: only in a signed report of an evaluation with defects, null otherwise. */
+  measures: MeasuresDerived | null;
+  /** How the signature was recorded, when the agent recorded it in the conversation; null otherwise. */
+  signatureRecordedNl: string | null;
   /** Limitations of the evaluation as a whole; those of a single procedure are in the appendix. */
   generalLimitationsNl: string[];
   procedureLimitations: number;
@@ -344,6 +365,15 @@ export interface DefectsDerived {
   ofFinding: Record<string, { defectId: string; role: "only" | "main" | "other"; compact: boolean }>;
   /** How the grouping was done, for the section on reliability. */
   mergeNl: string;
+}
+
+export interface MeasuresDerived {
+  /** "2 van de 6 gebreken hebben een besluit; 4 nog niet." */
+  countsNl: string;
+  /** Where the decisions are kept and the mark of their layer. */
+  layerNl: string;
+  /** Per defect, heaviest first: its decision, or that there is none yet. */
+  rows: { defectId: string; titleNl: string; severity: string; criteriaNl: string; decisionNl: string; linesNl: string[] }[];
 }
 
 /** Dutch long date in the timezone the site is evaluated in, independent of the machine's locale. */
@@ -522,7 +552,7 @@ function roundsLine(criterion: CriterionResult): string {
 }
 
 const answerLine = (answer: NonNullable<CriterionResult["answers"]>[number]): string =>
-  `${openPoint(answer.pointNl).textNl.replace(/[.:]+$/, "")}. ${answer.instrument ? "Antwoord van de meting van de sessieduur" : "Antwoord van een persoon"} (${answer.instrument ? "" : "functie: "}${answer.role}, ${dateNl(answer.answeredAt)}): ${answer.didNl.replace(/\.$/, "")}. Uitkomst op dit punt: ${OUTCOME_LABEL[answer.outcome].toLowerCase()}.`;
+  `${openPoint(answer.pointNl).textNl.replace(/[.:]+$/, "")}. ${answer.instrument ? "Antwoord van de meting van de sessieduur" : "Antwoord van een persoon"} (${answer.instrument ? "" : "functie: "}${answer.role}, ${recordedNl(answer, answer.answeredAt) ?? dateNl(answer.answeredAt)}): ${answer.didNl.replace(/\.$/, "")}. Uitkomst op dit punt: ${OUTCOME_LABEL[answer.outcome].toLowerCase()}.`;
 
 /** The status the outcomes lead to, shown also when nobody has signed yet. */
 function statusLine(evaluation: Evaluation, stale: boolean): StatusLine {
@@ -754,7 +784,8 @@ function pagesShort(pages: string[], labels: string[]): string {
   return parts.join(", ");
 }
 
-const sortDefects = (defects: Defect[]): Defect[] =>
+/** Defects heaviest first: by severity, then by how many pages they touch. The work list, the chapter on decisions and `decide` use this order. */
+export const sortDefects = (defects: Defect[]): Defect[] =>
   [...defects].sort((a, b) => SEVERITY_RANK[a.severity] - SEVERITY_RANK[b.severity] || b.pages.length - a.pages.length || compareCriterionIds(a.mainCriterion, b.mainCriterion) || a.id.localeCompare(b.id));
 
 function deriveDefects(evaluation: Evaluation, labels: string[]): DefectsDerived | null {
@@ -786,6 +817,50 @@ function deriveDefects(evaluation: Evaluation, labels: string[]): DefectsDerived
       (proposal?.status === "applied"
         ? `Daarna heeft een taalmodel voorgesteld wat verder bij elkaar hoort. Die stap geeft niet elke keer dezelfde uitkomst. Dat is aanvaardbaar omdat ze alleen kan samenvoegen: ze kan geen bevinding schrappen of wijzigen en geen oordeel over een criterium veranderen, en een vaste controle weigert elk voorstel waarin de bevindingen niet op dezelfde plek staan. Het aantal gebreken kan daardoor per keer iets verschillen, het aantal bevindingen en de uitkomst per criterium niet. In dit onderzoek voegde de stap ${proposal.joined} keer gebreken samen en koos ze ${proposal.mainOverridden} keer een ander hoofdcriterium.`
         : "De tweede stap, waarin een taalmodel voorstelt wat verder bij elkaar hoort, is niet uitgevoerd."),
+  };
+}
+
+/** The lines under a decision: what, when, the alternative, who decided and how it was recorded. */
+function decisionLines(decision: Decision): string[] {
+  const text = REPORT_TEXT.measures;
+  const date = decision.decision === "gepland" || decision.decision === "opgelost" ? decision.date : null;
+  return [
+    ...(decision.whatNl ? [`${text.what[decision.decision]}: ${decision.whatNl}`] : []),
+    ...(date ? [`${text.date[decision.decision as "gepland" | "opgelost"]}: ${dateNl(`${date}T12:00:00Z`)}`] : []),
+    ...(decision.alternativeNl ? [`${text.alternative}: ${decision.alternativeNl}`] : []),
+    `${text.by}: functie ${decision.role}, ${recordedNl(decision, decision.decidedAt) ?? `op ${dateNl(decision.decidedAt)}`}`,
+  ];
+}
+
+const decisionLabel = (kind: DecisionKind, date: string | null): string => `${DECISION_LABEL_NL[kind]}${date && (kind === "gepland" || kind === "opgelost") ? ` (${dateNl(`${date}T12:00:00Z`)})` : ""}`;
+
+/**
+ * Per defect what the organisation decided, for a signed report: the decisions come after
+ * signing, as a layer of their own next to the seal. A concept has no such chapter.
+ */
+function deriveMeasures(evaluation: Evaluation, layer: DecisionLayer): MeasuresDerived | null {
+  if (!evaluation.signature || !evaluation.defects || evaluation.defects.length === 0) return null;
+  const byDefect = new Map(layer.decisions.map((decision) => [decision.defect.id, decision]));
+  const sorted = sortDefects(evaluation.defects);
+  const decided = sorted.filter((defect) => byDefect.has(defect.id) && byDefect.get(defect.id)!.decision !== "onbesloten").length;
+  return {
+    countsNl: `${decided} van de ${plural(sorted.length, "gebrek", "gebreken")} ${decided === 1 ? "heeft" : "hebben"} een besluit; ${sorted.length - decided} nog niet.`,
+    layerNl: layer.sha256
+      ? `De besluiten staan in de map besluiten van het onderzoek, buiten het zegel, met een eigen kenmerk: ${layer.sha256.slice(0, 12)}. Daar staat ook wie besloot; dit rapport noemt de functie.`
+      : "Er is nog niets besloten.",
+    rows: sorted.map((defect) => {
+      const decision = byDefect.get(defect.id);
+      return {
+        defectId: defect.id,
+        titleNl: defect.titleNl,
+        severity: defect.severity,
+        criteriaNl: [defect.mainCriterion, ...defect.alsoCriteria].join(", "),
+        decisionNl: decision ? decisionLabel(decision.decision, decision.date) : DECISION_LABEL_NL.onbesloten,
+        linesNl: decision
+          ? [...decisionLines(decision), ...decision.previous.map((earlier) => `${REPORT_TEXT.measures.earlier}: ${decisionLabel(earlier.decision, earlier.date).toLowerCase()}, functie ${earlier.role}, ${recordedNl(earlier, earlier.decidedAt) ?? `op ${dateNl(earlier.decidedAt)}`}`)]
+          : [],
+      };
+    }),
   };
 }
 
@@ -839,7 +914,7 @@ export function browserLinesNl(evaluation: Evaluation): string[] {
   return evaluation.browsers.map((browser) => (browser.used ? `${browser.name} ${version(browser.version)} (motor ${browser.engine}): ${browser.usedForNl}` : `${browser.name} (motor ${browser.engine}): ${REPORT_TEXT.browserNotUsed}`));
 }
 
-export function deriveReport(input: Evaluation): ReportDerived {
+export function deriveReport(input: Evaluation, decisions: DecisionLayer = { decisions: [], sha256: null }): ReportDerived {
   const { evaluation, stale } = withCurrentSignature(input);
   const hash = evaluationHash(evaluation);
   // The evaluation repeats each procedure's own limitation in its list; those belong with the criterion.
@@ -864,6 +939,9 @@ export function deriveReport(input: Evaluation): ReportDerived {
     statusLine: statusLine(evaluation, stale),
     followsUpNl: evaluation.followsUp ? `Dit is een heronderzoek. Het vorige onderzoek is van ${dateNl(evaluation.followsUp.evaluatedAt)}, afgetekend op ${dateNl(evaluation.followsUp.signedAt)}, met kenmerk ${evaluation.followsUp.sha256.slice(0, 12)}.` : null,
     chain,
+    versionAccuracyNl: versionAccuracyNl(evaluation.versionAccuracy, dateNl),
+    // An evaluation from before the mark was kept was made the same way: by a language model.
+    aiKeywords: ["AI-generated", ...(evaluation.aiGenerated ?? aiGeneratedMark(evaluation.judgment, evaluation.criteria)).models.map((model) => `AI-model: ${model}`)],
     agentModels: modelsNl(evaluation.judgment.model, evaluation.judgment.models),
     extensionsNl: extensionsNl(evaluation.judgment.extensions),
     scopeFramesNl: (evaluation.scope.frames ?? []).map(scopeFrameNl),
@@ -881,6 +959,8 @@ export function deriveReport(input: Evaluation): ReportDerived {
     recommendations: recommendationItems(evaluation),
     todo: work,
     defects: deriveDefects(evaluation, pageLabels(evaluation)),
+    measures: deriveMeasures(evaluation, decisions),
+    signatureRecordedNl: evaluation.signature ? recordedNl(evaluation.signature, evaluation.signature.signedAt) : null,
     generalLimitationsNl: evaluation.limitationsNl.filter((limitation) => !procedureLimits.has(limitation)).map(closeCutQuote),
     procedureLimitations: evaluation.limitationsNl.filter((limitation) => procedureLimits.has(limitation)).length,
     outcomeOrder: shownOrder(evaluation),
@@ -1131,8 +1211,8 @@ export function findingsByComponent(evaluation: Evaluation): { component: string
   return [...named, ...(loose.length > 0 ? [{ component: null, findings: loose }] : [])];
 }
 
-export function renderMarkdown(input: Evaluation): string {
-  const derived = deriveReport(input);
+export function renderMarkdown(input: Evaluation, decisions: DecisionLayer = { decisions: [], sha256: null }): string {
+  const derived = deriveReport(input, decisions);
   const { evaluation } = withCurrentSignature(input);
   const staleNote = derived.signatureStale ? ` ${REPORT_TEXT.staleSignature}` : "";
   const labels = derived.pageLabels;
@@ -1151,7 +1231,7 @@ export function renderMarkdown(input: Evaluation): string {
   lines.push(`# ${REPORT_TEXT.title} ${esc(evaluation.site.name)}`, "");
   lines.push(
     signature
-      ? `> **Afgetekend** door ${esc(signature.name)} (${esc(signature.role)}, ${esc(signature.organisation)}) op ${derived.signedDateNl}.`
+      ? `> **Afgetekend** door ${esc(signature.role)} (${esc(signature.organisation)}) op ${derived.signedDateNl}.`
       : `> **${REPORT_TEXT.concept}**${staleNote}`,
     "",
     `> **${derived.statusLine.headingNl}**${derived.statusLine.noteNl ? `. ${derived.statusLine.noteNl}` : ""}`,
@@ -1269,6 +1349,16 @@ export function renderMarkdown(input: Evaluation): string {
     lines.push("");
   }
 
+  if (derived.measures) {
+    section(REPORT_TEXT.measures.title);
+    lines.push(REPORT_TEXT.measures.intro, "", derived.measures.countsNl, "");
+    for (const row of derived.measures.rows) {
+      lines.push(`- **${esc(row.titleNl)}** ([${row.defectId}](#${row.defectId})), ${row.severity}, ${row.criteriaNl}: **${row.decisionNl}**`);
+      lines.push(...row.linesNl.map((line) => `  - ${esc(line)}`));
+    }
+    lines.push("", derived.measures.layerNl, "");
+  }
+
   section("Onderzoeksgegevens");
   lines.push(
     ...bullets([
@@ -1285,7 +1375,8 @@ export function renderMarkdown(input: Evaluation): string {
       ...(derived.followsUpNl ? [`${REPORT_TEXT.followsUp}: ${derived.followsUpNl}`] : []),
       ...(derived.chain.writesNl ? [`Versturen van formulieren: ${esc(derived.chain.writesNl)}`] : []),
       ...(derived.chain.readsNl ? [`Leesverzoeken: ${esc(derived.chain.readsNl)}`] : []),
-      signature ? `Afgetekend door: ${esc(signature.name)}, ${esc(signature.role)}, ${esc(signature.organisation)}, op ${derived.signedDateNl}` : `Afgetekend door: ${REPORT_TEXT.notSigned.toLowerCase()}${staleNote ? `.${staleNote}` : ""}`,
+      // The function, not the name: the name of who signed stays in signed/signature.json.
+      signature ? `Afgetekend door: ${esc(signature.role)}, ${esc(signature.organisation)}, op ${derived.signedDateNl}${derived.signatureRecordedNl ? `, ${derived.signatureRecordedNl}` : ""}` : `Afgetekend door: ${REPORT_TEXT.notSigned.toLowerCase()}${staleNote ? `.${staleNote}` : ""}`,
     ]),
     "",
   );
@@ -1423,6 +1514,7 @@ export function renderMarkdown(input: Evaluation): string {
 
   section("Betrouwbaarheid en beperkingen");
   lines.push(derived.chain.honestNl, "");
+  lines.push(`### ${REPORT_TEXT.versionAccuracy}`, "", esc(derived.versionAccuracyNl), "");
   if (derived.chain.stepsNl.length > 0) lines.push("### Werkwijze", "", ...derived.chain.stepsNl.map((step, index) => `${index + 1}. **${step.nameNl}.** ${esc(step.textNl)}`), "");
   lines.push(derived.disagreementNl, "");
   const gate = evaluation.chain?.gate;

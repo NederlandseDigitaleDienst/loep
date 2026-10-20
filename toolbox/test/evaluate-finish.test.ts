@@ -168,6 +168,8 @@ test("evaluate on a run with a finishing round: its verdict is the outcome, what
   assert.ok(evaluation.judgment.rounds.includes("afmaakronde voor wat het onderzoek zelf open liet"));
   assert.match(evaluation.limitationsNl.join("\n"), /Bij 2 criteria \(1\.3\.4, 1\.4\.4\) is het oordeel vastgesteld in een aanvullende meting, nadat het eerst open bleef door een beperking van het onderzoek\./);
   assert.equal(evaluation.judgment.model, "voorbeeld-model-1");
+  // Readable by a machine: a language model drafted the verdicts. The agents of this run gave no model.
+  assert.deepEqual(evaluation.aiGenerated, { models: ["voorbeeld-model-1"], humanReview: { signature: "signed/signature.json", criteriaByPerson: [] } });
 
   // The extensions, per role: one judge of four, one verifier of four, one finisher of two.
   assert.deepEqual(evaluation.judgment.extensions, [

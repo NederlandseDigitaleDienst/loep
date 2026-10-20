@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="nl">
+<head><meta charset="utf-8"><title>Zoeken - Testsite sessie</title>
+<style>
+  body { margin: 0; font: 16px sans-serif; }
+  header, footer { display: flex; gap: 16px; align-items: center; padding: 16px; }
+  main { padding: 16px; }
+</style>
+</head>
+<body>
+<header><a href="#main">Ga naar hoofdinhoud</a><a href="/">Logo</a><nav><a href="/handboek/">Handboek</a></nav><button type="button">Zoeken</button></header>
+<main id="main">
+  <h1>Zoeken</h1>
+  <form><input type="search" aria-label="Zoekterm"></form>
+  <a href="/zoekdienst/">Aangedreven door een zoekdienst</a>
+</main>
+<footer><a href="/contact/">Contact</a><a href="/colofon/">Colofon</a></footer>
+<script>
+// A search page as single-page frameworks make it: the field gets focus from a script once the page is drawn.
+document.querySelector("input").focus();
+</script>
+</body>
+</html>

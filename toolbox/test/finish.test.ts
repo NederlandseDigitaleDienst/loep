@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { after, test } from "node:test";
 import { answer } from "../src/commands/answer.ts";
 import { gatherVerdicts } from "../src/commands/evaluate.ts";
-import { BUDGETS, checkInstrumentVerdict, instrumentPending, instrumentTasks, loadInstrumentIndex, NO_VERDICT_NL, skip, type InstrumentTask } from "../src/commands/instrument-tasks.ts";
+import { BUDGETS, checkInstrumentVerdict, instrumentPending, instrumentTasks, loadInstrumentIndex, NO_VERDICT_NL, skip, unruledCrossPoints, type InstrumentTask } from "../src/commands/instrument-tasks.ts";
 import { render } from "../src/commands/render.ts";
 import { writeEvaluation } from "../src/commands/sign.ts";
 import { checkSeal, seal } from "../src/commands/verify.ts";
@@ -14,9 +14,10 @@ import { type CriterionResult, type Evaluation, openCriteria, resolveCriterion, 
 import { writeManifest } from "../src/lib/manifest.ts";
 import { deriveReport, renderMarkdown } from "../src/lib/report-markdown.ts";
 import type { RunData } from "../src/lib/rundata.ts";
-import { FINISH_FACTOR, type Verdict } from "../src/lib/verdict.ts";
+import { FINISH_FACTOR, openPoint, type Verdict } from "../src/lib/verdict.ts";
 import { criterionById } from "../src/lib/wcag.ts";
 import { exampleEvaluation } from "./fixtures/example-evaluation.ts";
+import { noTerminal, saysYes } from "./fixtures/terminal.ts";
 
 // The finishing round and the answers of a person, on a run as small as task generation allows.
 // Every criterion here ends "cantTell" after the verifier, each for another reason.
@@ -279,11 +280,15 @@ test("the answer of a person closes a criterion, stands in the report and under 
   assert.deepEqual(listed.points.map((point) => [point.number, point.kindNl, point.answered]), [[1, "mens nodig", null], [2, "keuze nodig", null]]);
   assert.equal(listed.written, null, "without a point nothing is written");
   assert.ok(!existsSync(join(dir, "antwoorden")));
-  const given = { run: dir, criterion: CRITERIA.person, name: PERSON_NAME, role: "Toetser" };
+  const given = { run: dir, criterion: CRITERIA.person, name: PERSON_NAME, role: "Toetser", terminal: saysYes() };
   await assert.rejects(answer({ ...given, point: 3, did: "Met een schermlezer de melding beluisterd.", outcome: "passed" }), /--point is het nummer van een open punt: 1 tot en met 2/);
   await assert.rejects(answer({ ...given, point: 1, did: "Gedaan.", outcome: "passed" }), /--did zegt wat de persoon heeft gedaan/);
   await assert.rejects(answer({ ...given, point: 1, did: "Met een schermlezer de melding beluisterd.", outcome: "cantTell" }), /--outcome is de uitkomst/);
   await assert.rejects(answer({ run: dir, criterion: CRITERIA.person, point: 1, did: "Met een schermlezer de melding beluisterd.", outcome: "passed", role: "Toetser" }), /de naam staat alleen in antwoorden/);
+  // How the answer comes about is said: without a terminal and without the conversation's confirmation and summary, nothing is recorded.
+  await assert.rejects(answer({ ...given, terminal: noTerminal, point: 1, did: "Met een schermlezer de melding beluisterd.", outcome: "passed" }), /geen interactieve terminal/);
+  await assert.rejects(answer({ ...given, terminal: noTerminal, point: 1, did: "Met een schermlezer de melding beluisterd.", outcome: "passed", recordedVia: "gesprek", confirmation: "Ja." }), /--summary "<samenvatting>"/);
+  assert.ok(!existsSync(join(dir, "antwoorden")), "a refused answer writes nothing");
 
   // One of two points answered: the criterion is still open, with the point that is left.
   const one = await answer({ ...given, point: 1, did: "Met VoiceOver in Safari het formulier op de contactpagina verstuurd; de melding wordt voorgelezen.", outcome: "passed" });
@@ -291,7 +296,9 @@ test("the answer of a person closes a criterion, stands in the report and under 
   const half = await resolved(CRITERIA.person);
   assert.deepEqual([half.outcome, half.missingNl, half.established?.by, half.answers?.length], ["cantTell", [CHOICE], "verification", 1]);
   // Both answered: the outcome is the person's, and it says so.
-  await answer({ ...given, point: 2, did: "De afbeelding in de kop is het logo van de organisatie; dat is zo besloten.", outcome: "passed", role: "Eigenaar van de site" });
+  await answer({ ...given, terminal: noTerminal, point: 2, did: "De afbeelding in de kop is het logo van de organisatie; dat is zo besloten.", outcome: "passed", role: "Eigenaar van de site", recordedVia: "gesprek", confirmation: "Ja, dat is ons logo.", summary: "De afbeelding in de kop is het logo; dat is besloten." });
+  const kept = JSON.parse(readFileSync(join(dir, "antwoorden", `${CRITERIA.person}.json`), "utf8")) as { answers: { recordedVia: string; confirmationNl?: string; summaryNl?: string }[] };
+  assert.deepEqual(kept.answers.map((entry) => [entry.recordedVia, entry.confirmationNl, entry.summaryNl]), [["terminal", undefined, undefined], ["gesprek", "Ja, dat is ons logo.", "De afbeelding in de kop is het logo; dat is besloten."]], "each answer says how it came about; one from the conversation keeps the confirmation and the summary");
   const closed = await resolved(CRITERIA.person);
   assert.equal(closed.outcome, "passed");
   assert.equal(closed.established?.by, "person");
@@ -305,7 +312,7 @@ test("the answer of a person closes a criterion, stands in the report and under 
   const look = flow.observe("a-221", "look");
   flow.write(join("verdicts", CRITERIA.mixed, "afmaak.json"), { criterion: CRITERIA.mixed, outcome: "cantTell", rule: "R9", summaryNl: "Het menu is nu gemeten; wat een schermlezer voorleest blijft open.", observations: [flow.seen([look], "open")], findings: [], missingNl: [PERSON], finish: { points: [{ point: 1, settled: false, howNl: "Geen instrument van de sessie kan dit vaststellen.", evidence: [] }, { point: 2, settled: true, howNl: "Het menu is op 320 pixels geopend en gemeten.", evidence: [look] }], coverageNl: "Gemeten op 2 van de 2 pagina's op 320 pixels.", findings: [] } } satisfies Verdict);
   assert.deepEqual(await checkInstrumentVerdict(dir, CRITERIA.mixed, "finish"), []);
-  await answer({ run: dir, criterion: CRITERIA.mixed, point: 1, did: "Met NVDA in Firefox het formulier verstuurd; de melding wordt niet voorgelezen.", outcome: "failed", name: PERSON_NAME, role: "Toetser" });
+  await answer({ run: dir, criterion: CRITERIA.mixed, point: 1, did: "Met NVDA in Firefox het formulier verstuurd; de melding wordt niet voorgelezen.", outcome: "failed", name: PERSON_NAME, role: "Toetser", terminal: saysYes() });
   const failed = await resolved(CRITERIA.mixed);
   assert.deepEqual([failed.outcome, failed.established?.by, failed.established?.before?.roundNl, failed.rounds.finish], ["failed", "person", "aanvullende meting", "cantTell"]);
 
@@ -316,7 +323,7 @@ test("the answer of a person closes a criterion, stands in the report and under 
   assert.match(markdown, /^\| \[1\.4\.5 [^|]+\| AA \| ● Voldoet \| een persoon \| 0 \|$/m);
   assert.ok(markdown.includes("Zekerheid: Vastgesteld door een persoon, niet door een instrument (functie: Toetser, Eigenaar van de site)."));
   assert.ok(markdown.includes("Een persoon, niet een instrument, tevens eindoordeel: Voldoet."));
-  assert.match(markdown, /Antwoord van een persoon \(functie: Toetser, \d+ \w+ \d{4}\): Met VoiceOver in Safari het formulier op de contactpagina verstuurd; de melding wordt voorgelezen\. Uitkomst op dit punt: voldoet\./);
+  assert.match(markdown, /Antwoord van een persoon \(functie: Toetser, bevestigd in een terminal op \d+ \w+ \d{4} om \d{2}:\d{2}\): Met VoiceOver in Safari het formulier op de contactpagina verstuurd; de melding wordt voorgelezen\. Uitkomst op dit punt: voldoet\./);
   assert.match(markdown, /\*\*Door een persoon vastgesteld\*\*\n\n[^\n]+\n\n- \[2\.2\.1 [^\]]+\]\(#sc-2\.2\.1\): Met NVDA in Firefox het formulier verstuurd; de melding wordt niet voorgelezen \(functie: Toetser\)/);
   assert.ok(!openCriteria(evaluation.criteria).owner.includes(CRITERIA.person), "an answered criterion is no longer open");
 
@@ -376,4 +383,39 @@ test("a run without a criterion that the evaluation left open skips the phase an
   assert.deepEqual(Object.keys(gathered.hashes), ["a", "b", "final"]);
   const result = resolveCriterion({ criterion: criterionById(CRITERIA.passed)!, verdicts: gathered.verdicts, answers: gathered.answers, procedure: null, provenance: { dossierSha256: null, verdictSha256: gathered.hashes } }, "SITE");
   assert.deepEqual([result.outcome, result.rounds, result.established?.by, result.answers], ["passed", { a: "passed", b: null, final: "passed" }, "verification", undefined]);
+});
+
+test("what a judge passes on to another criterion counts there: unruled it leaves the criterion open, and without a verifier the finishing round gets it", async () => {
+  const cross = makeRun([CRITERIA.person, CRITERIA.passed]);
+  await instrumentTasks(cross.dir, cross.options);
+  await skip(cross.dir, { pageType: "start" }, "Voor deze test is geen rondgang nodig.");
+  await instrumentTasks(cross.dir, cross.options);
+  // The judge of 1.4.5 sees something that belongs to 1.4.11 and passes it on; the judge of 1.4.11 never gives a verdict.
+  const look = cross.observe("b-145", "look");
+  const crop = cross.observe("b-145", "crop");
+  cross.write(join("verdicts", CRITERIA.person, "oordeel.json"), { criterion: CRITERIA.person, outcome: "cantTell", rule: "R9", summaryNl: "Er is geen afwijking gezien, maar niet alles is vastgesteld.", observations: [cross.seen([look], "open"), { ...cross.seen([crop]), ruling: "otherCriterion" }], findings: [], missingNl: [PERSON], crossCandidates: [{ criterion: CRITERIA.passed, page: "P1", where: "rand van het zoekveld", evidence: [crop], noteNl: "De rand van het zoekveld is lichtgrijs op wit." }] } satisfies Verdict);
+  assert.deepEqual(await checkInstrumentVerdict(cross.dir, CRITERIA.person, "judge"), []);
+  await skip(cross.dir, { criterion: CRITERIA.passed }, "De agent leverde twee keer geen geldig oordeel.");
+  await instrumentTasks(cross.dir, cross.options);
+  await cross.verifyOpen(CRITERIA.person, [PERSON]);
+  assert.equal((await instrumentTasks(cross.dir, cross.options)).finishers, 1);
+  const finish = (await cross.task(CRITERIA.passed)).finish!;
+  assert.deepEqual((JSON.parse(readFileSync(join(cross.dir, finish.candidates), "utf8")) as { id: string }[]).map((candidate) => candidate.id), ["X145-01"], "without a verifier, the finishing round rules on what was passed on");
+
+  // A verdict that ruled on it says nothing more; one that did not leaves the criterion open, with a point for the finishing round.
+  const judged = new Map([[CRITERIA.person, JSON.parse(readFileSync(join(cross.dir, "verdicts", CRITERIA.person, "oordeel.json"), "utf8")) as Verdict]]);
+  const passed: Verdict = { criterion: CRITERIA.passed, outcome: "passed", rule: "R6", summaryNl: "Randen steken genoeg af.", observations: [cross.seen([look])], findings: [] };
+  const ruled: Verdict = { ...passed, candidates: [{ id: "X145-01", ruling: "noIssue", reasonNl: "Gemeten: de rand is 3,4 op 1.", evidence: [look] }] };
+  assert.deepEqual(unruledCrossPoints(judged, CRITERIA.passed, [null, ruled]), []);
+  const points = unruledCrossPoints(judged, CRITERIA.passed, [null, passed]);
+  assert.deepEqual(points, ["veegronde mist: de beoordelaar van 1.4.5 zag op P1 (rand van het zoekveld) iets dat bij dit criterium hoort, en geen verifieerder of afmaakronde heeft dat beoordeeld (X145-01): De rand van het zoekveld is lichtgrijs op wit."]);
+  assert.equal(openPoint(points[0]!).kind?.reader, "toolbox", "the evaluation itself is not finished");
+  const base = { criterion: criterionById(CRITERIA.passed)!, procedure: null, provenance: { dossierSha256: null, verdictSha256: {} } };
+  const open = resolveCriterion({ ...base, verdicts: { a: null, final: null, finish: passed }, unruledNl: points }, "SITE");
+  assert.equal(open.outcome, "cantTell");
+  assert.deepEqual(open.missingNl, points);
+  assert.match(open.summaryNl, /^Niet vastgesteld: een waarneming die een andere beoordelaar doorgaf, is door niemand beoordeeld\. Het oordeel zonder die waarneming was voldoet: /);
+  assert.deepEqual(openCriteria([open]).evaluation, [CRITERIA.passed]);
+  // A failure stays a failure: what was passed on can only add to it.
+  assert.equal(resolveCriterion({ ...base, verdicts: { a: null, final: null, finish: { ...passed, outcome: "failed", findings: [finding([look])] } }, unruledNl: points }, "SITE").outcome, "failed");
 });

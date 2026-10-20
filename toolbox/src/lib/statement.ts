@@ -1,5 +1,7 @@
-import { complianceStatus, evaluationHash, madeWith, type ComplianceStatus, type Evaluation } from "./evaluation.ts";
+import { measureDate, type Decision } from "./decisions.ts";
+import { complianceStatus, evaluationHash, madeWith, type ComplianceStatus, type CriterionResult, type Evaluation } from "./evaluation.ts";
 import { siteOrigins } from "./origins.ts";
+import { recordedNl } from "./recorded.ts";
 import type { WcagVersion } from "./wcag.ts";
 
 /**
@@ -23,7 +25,10 @@ export interface StatementInput {
   /** ISO date of the planned further evaluation (status C). */
   plannedEvaluationDate?: string;
   alternativesNl?: string;
-  /** Measure per failed criterion, keyed by criterion id; a general text under "*". */
+  /**
+   * Measure per failed criterion, keyed by criterion id; a general text under "*". The fallback for a
+   * run without decisions: the measures come from what the organisation decided per defect (`decide`).
+   */
   measuresNl?: Record<string, string>;
   approval?: { date: string; functionTitle: string; lastReviewed: string };
 }
@@ -74,6 +79,14 @@ export type StatementBlock =
 export interface StatementModel {
   status: ComplianceStatus;
   blocks: StatementBlock[];
+  /** For status B: the deviations without a measure with a date, in one message. Null when every deviation has one, and for any other status. */
+  missingMeasuresNl: string | null;
+}
+
+export interface StatementOptions {
+  concept: boolean;
+  /** What the organisation decided per defect, after signing. */
+  decisions?: Decision[];
 }
 
 const SPAN = /<([a-z][a-z0-9+.-]*:[^>\s]+)>|\[nog invullen: ([^\]]+)\]/g;
@@ -111,13 +124,47 @@ export function otherDomains(evaluation: Pick<Evaluation, "site">, input: Pick<S
   return [...new Set([...siteOrigins(evaluation.site).slice(1), ...(input.subdomains ?? [])])];
 }
 
-export function buildStatement(evaluation: Evaluation, input: StatementInput, options: { concept: boolean }): StatementModel {
+/** A decision as one phrase of the statement, with how it was recorded. */
+function decisionNl(decision: Decision): string {
+  const what = decision.whatNl ? `: ${decision.whatNl.replace(/\.$/, "")}` : "";
+  const notes = [...(decision.decision === "opgelost" ? ["nog niet nagemeten"] : []), ...[recordedNl(decision, decision.decidedAt)].filter((note): note is string => note !== null)];
+  const noted = notes.length > 0 ? ` (${notes.join("; ")})` : "";
+  if (decision.decision === "gepland") return `herstel gepland, klaar uiterlijk ${nlDate(`${decision.date}T12:00:00Z`, "datum")}${what}${noted}`;
+  if (decision.decision === "opgelost") return `hersteld op ${nlDate(`${measureDate(decision)}T12:00:00Z`, "datum")}${what}${noted}`;
+  if (decision.decision === "zienswijze") return `de organisatie ziet dit anders${what}${noted}`;
+  if (decision.decision === "onevenredig") return `onevenredige last${what}. Alternatief: ${decision.alternativeNl ?? ask("alternatief")}${noted}`;
+  return `nog niet besloten${noted}`;
+}
+
+/**
+ * The measure for a failed criterion: from the decisions about the defects with a finding under
+ * it, or, for a run without decisions, from `measuresNl`. `dated` says whether every defect has a
+ * measure with a date (planned or done); for the free text the date is the target date of the statement.
+ */
+export function measureFor(criterion: CriterionResult, evaluation: Evaluation, input: StatementInput, decisions: Decision[]): { textNl: string | null; dated: boolean } {
+  const ids = new Set(criterion.findings.map((finding) => finding.id));
+  const defects = (evaluation.defects ?? []).filter((defect) => defect.findingIds.some((id) => ids.has(id)));
+  const byDefect = new Map(decisions.map((decision) => [decision.defect.id, decision]));
+  if (defects.some((defect) => byDefect.has(defect.id))) {
+    return {
+      textNl: `${defects.map((defect) => `${defect.titleNl.replace(/\.$/, "")}: ${byDefect.has(defect.id) ? decisionNl(byDefect.get(defect.id)!) : "nog niet besloten"}`).join("; ")}.`,
+      dated: defects.every((defect) => byDefect.has(defect.id) && measureDate(byDefect.get(defect.id)!) !== null),
+    };
+  }
+  const free = input.measuresNl?.[criterion.id] ?? input.measuresNl?.["*"];
+  return { textNl: free ?? null, dated: free !== undefined };
+}
+
+export function buildStatement(evaluation: Evaluation, input: StatementInput, options: StatementOptions): StatementModel {
   const { status, reasonNl } = complianceStatus(evaluation, LEGAL_VERSION);
   const site = evaluation.site.name;
   const organisation = input.organisation;
   const failed = evaluation.criteria.filter((criterion) => criterion.versions.includes(LEGAL_VERSION) && criterion.outcome === "failed");
   const open = evaluation.criteria.filter((criterion) => criterion.versions.includes(LEGAL_VERSION) && criterion.outcome === "cantTell");
   const failedOnly22 = evaluation.criteria.filter((criterion) => !criterion.versions.includes(LEGAL_VERSION) && criterion.outcome === "failed");
+  const measures = new Map(failed.map((criterion) => [criterion.id, measureFor(criterion, evaluation, input, options.decisions ?? [])]));
+  // Status B asks a measure with a date for every deviation.
+  const undated = status === "B" ? failed.filter((criterion) => !measures.get(criterion.id)!.dated).map((criterion) => criterion.id) : [];
   const blocks: StatementBlock[] = [];
   const heading = (level: 1 | 2 | 3, text: string): void => void blocks.push({ type: "heading", level, spans: statementSpans(text) });
   const paragraph = (...texts: string[]): void => void blocks.push(...texts.map((text): StatementBlock => ({ type: "paragraph", spans: statementSpans(text) })));
@@ -192,10 +239,14 @@ export function buildStatement(evaluation: Evaluation, input: StatementInput, op
   );
 
   heading(2, `Aanvullende informatie van ${organisation}`);
+  const signedHow = evaluation.signature ? recordedNl(evaluation.signature, evaluation.signature.signedAt) : null;
   if (input.additionalInformationNl) paragraph(input.additionalInformationNl);
   paragraph(
     `Het onderzoek is automatisch uitgevoerd met ${madeWith(evaluation)}, een open-source instrument dat meet en bewijs vastlegt: scripts hebben het bewijs verzameld en een taalmodel heeft elk criterium beoordeeld volgens een vaste procedure, met meetinstrumenten, waarna een tweede beoordeling elke bevinding opnieuw heeft gemaakt vanaf een verse pagina. ${
-      evaluation.signature ? `${evaluation.signature.name} (${evaluation.signature.role}) heeft voor het onderzoek getekend.` : "Er heeft nog niemand voor het onderzoek getekend."
+      // The function only: the name of who signed stays in signed/signature.json.
+      evaluation.signature
+        ? `Voor het onderzoek is getekend door: ${evaluation.signature.role}${signedHow ? `, ${signedHow}` : ""}.`
+        : "Er heeft nog niemand voor het onderzoek getekend."
     } Het rapport beschrijft de werkwijze en de beperkingen.`,
   );
   if (open.length > 0) {
@@ -256,9 +307,10 @@ export function buildStatement(evaluation: Evaluation, input: StatementInput, op
     paragraph(`${organisation} neemt de volgende maatregelen om de afwijkingen op te lossen:`);
     list(
       ...failed.map((criterion) => {
-        const measure = input.measuresNl?.[criterion.id] ?? input.measuresNl?.["*"];
+        const measure = measures.get(criterion.id)!;
         const proposals = [...new Set(criterion.findings.map((finding) => finding.fixNl))];
-        return `Succescriterium ${criterion.id} – ${criterion.titleNl}: ${measure ?? `${ask("maatregel")} Voorstel uit het rapport: ${proposals.join(" ")}`}`;
+        if (measure.textNl === null) return `Succescriterium ${criterion.id} – ${criterion.titleNl}: ${ask("maatregel")} Voorstel uit het rapport: ${proposals.join(" ")}`;
+        return `Succescriterium ${criterion.id} – ${criterion.titleNl}: ${measure.textNl}${undated.includes(criterion.id) ? ` ${ask("maatregel met een datum")}` : ""}`;
       }),
     );
     paragraph(`Op ${nlDate(input.targetDate, "datum waarop de afwijkingen zijn opgelost")} zal de website ${site} volledig voldoen aan standaard EN 301 549.`);
@@ -266,7 +318,11 @@ export function buildStatement(evaluation: Evaluation, input: StatementInput, op
     paragraph("Het is onbekend of er afwijkingen zijn bij de criteria die nog niet zijn vastgesteld.");
   }
 
-  return { status, blocks };
+  const missingMeasuresNl =
+    undated.length === 0
+      ? null
+      : `status B vraagt bij elke afwijking een maatregel met een datum. Die ontbreekt bij ${undated.join(", ")}. Leg per gebrek een besluit vast met decide: gepland met een datum, of opgelost. Een andere zienswijze, onevenredige last of nog niet besloten is geen maatregel met een datum.`;
+  return { status, blocks, missingMeasuresNl };
 }
 
 function blockMarkdown(block: StatementBlock): string {
@@ -291,11 +347,12 @@ export interface StatementResult {
   markdown: string;
   /** What the organisation still has to supply before the statement can be published. */
   openItems: string[];
+  missingMeasuresNl: string | null;
 }
 
-export function renderStatement(evaluation: Evaluation, input: StatementInput, options: { concept: boolean }): StatementResult {
-  const { status, blocks } = buildStatement(evaluation, input, options);
-  return { status, markdown: statementMarkdown(blocks), openItems: statementOpenItems(blocks) };
+export function renderStatement(evaluation: Evaluation, input: StatementInput, options: StatementOptions): StatementResult {
+  const { status, blocks, missingMeasuresNl } = buildStatement(evaluation, input, options);
+  return { status, markdown: statementMarkdown(blocks), openItems: statementOpenItems(blocks), missingMeasuresNl };
 }
 
 /** Everything the PDF template needs: the blocks, and what the title block shows. */
@@ -332,7 +389,7 @@ function documentFor(evaluation: Evaluation, input: StatementInput, kindLabel: s
   };
 }
 
-export function statementDocument(evaluation: Evaluation, input: StatementInput, options: { concept: boolean }): StatementDocument {
+export function statementDocument(evaluation: Evaluation, input: StatementInput, options: StatementOptions): StatementDocument {
   const { status, blocks } = buildStatement(evaluation, input, options);
   return { ...documentFor(evaluation, input, "Toegankelijkheidsverklaring", blocks), concept: options.concept, status: { code: status, name: STATUS_NAME[status] } };
 }
@@ -354,13 +411,13 @@ export function blocksFromMarkdown(markdown: string): StatementBlock[] {
   return blocks;
 }
 
-export function answerSheetDocument(evaluation: Evaluation, input: StatementInput): StatementDocument {
-  return { ...documentFor(evaluation, input, "Invulblad voor de invulassistent", blocksFromMarkdown(renderAnswerSheet(evaluation, input))), concept: false, status: null };
+export function answerSheetDocument(evaluation: Evaluation, input: StatementInput, decisions: Decision[] = []): StatementDocument {
+  return { ...documentFor(evaluation, input, "Invulblad voor de invulassistent", blocksFromMarkdown(renderAnswerSheet(evaluation, input, decisions))), concept: false, status: null };
 }
 
 /** Copy-and-paste values for the nine steps of the invulassistent on toegankelijkheidsverklaring.nl. */
-export function renderAnswerSheet(evaluation: Evaluation, input: StatementInput): string {
-  const statement = renderStatement(evaluation, input, { concept: true });
+export function renderAnswerSheet(evaluation: Evaluation, input: StatementInput, decisions: Decision[] = []): string {
+  const statement = renderStatement(evaluation, input, { concept: true, decisions });
   const failed = evaluation.criteria.filter((criterion) => criterion.versions.includes(LEGAL_VERSION) && criterion.outcome === "failed");
   const lines = [
     `# Invulblad voor de invulassistent: ${evaluation.site.name}`,
@@ -401,7 +458,7 @@ export function renderAnswerSheet(evaluation: Evaluation, input: StatementInput)
     "",
     `- Streefdatum volledig voldoen: ${nlDate(input.targetDate, "streefdatum")}`,
     `- Aanvullend onderzoek gepland op: ${nlDate(input.plannedEvaluationDate, "datum, alleen bij status C")}`,
-    ...failed.map((criterion) => `- Maatregel bij ${criterion.id}: ${input.measuresNl?.[criterion.id] ?? input.measuresNl?.["*"] ?? ask("maatregel")}`),
+    ...failed.map((criterion) => `- Maatregel bij ${criterion.id}: ${measureFor(criterion, evaluation, input, decisions).textNl ?? ask("maatregel")}`),
     "",
     "## 7. Extra teksten",
     "",

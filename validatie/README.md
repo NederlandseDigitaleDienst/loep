@@ -4,6 +4,19 @@ Voor de vergelijking met een bestaand onderzoek van een onafhankelijke onderzoek
 
 De map `ijkset/` is van een andere soort: daar staat hoe vaak de regelsets en de eigen metingen gelijk hebben op de testgevallen van de ACT-regels van W3C. Zie [ijkset/README.md](ijkset/README.md).
 
+De map `versies/` zegt per versie van loep wanneer die het laatst als geheel is gemeten, waartegen en wat daar uitkwam, in een bestand `<versie>.json`:
+
+```json
+{
+  "version": "0.11.0",
+  "measuredAt": "2026-10-25",
+  "againstNl": "het oordeel van een menselijke deskundige op drie sites",
+  "resultNl": "Eén of twee zinnen met de uitkomst, met getallen."
+}
+```
+
+`evaluate` leest het bestand van zijn eigen versie, en het rapport zet de zin onder "Betrouwbaarheid en beperkingen". Is er voor een versie geen bestand, dan staat er dat deze versie niet is vergeleken met het oordeel van een menselijke deskundige en niet als geheel is gemeten op de testsite. Schrijf het bestand alleen na een meting van de hele versie, niet na een meting van een paar criteria (`tasks --only`).
+
 De toolbox heet nu loep. De verslagen in deze map zijn geschreven toen ze nog opendeur heette en een commando in een sessie met `tg` begon; ze blijven staan zoals ze zijn.
 
 De verslagen noemen de commit waarmee is gemeten. Tot en met 11 oktober 2026 is dat een commit uit de ontwikkelgeschiedenis van vóór deze repository, die met één commit (`76495d6`) openbaar is gemaakt; zo'n commit is hier niet op te vragen. De code van toen is daarmee niet meer precies na te gaan, alleen wat het verslag erover zegt.

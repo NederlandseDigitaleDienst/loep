@@ -35,12 +35,11 @@ Je maakt de verklaring uit een onderzoek dat al bestaat. Heeft de gebruiker nog 
      "targetDate": "2027-03-01",
      "plannedEvaluationDate": "2027-01-15",
      "alternativesNl": "...",
-     "measuresNl": { "1.4.10": "...", "*": "..." },
      "approval": { "date": "2026-11-01", "functionTitle": "...", "lastReviewed": "2026-11-01" }
    }
    ```
-   Alle velden behalve `organisation` mogen ontbreken. De maatregelen in het rapport zijn voorstellen; de organisatie beslist wat ze toezegt en wanneer.
-3. Maak de verklaring: `LOEP statement --run RUN` (of met `--concept` zolang het onderzoek niet is afgetekend). De verklaring en `verklaring-invoer.json` staan buiten het zegel van het onderzoek: ze maken of aanpassen verandert niets aan wat is afgetekend, en `LOEP verify --run RUN` blijft kloppen.
+   Alle velden behalve `organisation` mogen ontbreken. De maatregelen in het rapport zijn voorstellen; de organisatie beslist wat ze toezegt en wanneer. Die besluiten staan per gebrek in `RUN/besluiten/`, vastgelegd met `LOEP decide` in de stap "Wat nu?" van `nldd-a11y-audit`. Zijn ze er nog niet, doe die stap dan eerst: `LOEP decide --run RUN` toont welke gebreken nog geen besluit hebben. Alleen voor een oud onderzoek zonder besluiten mag `"measuresNl": { "1.4.10": "...", "*": "..." }` in `verklaring-invoer.json` de maatregelen per criterium geven, als vrije tekst van de organisatie.
+3. Maak de verklaring: `LOEP statement --run RUN` (of met `--concept` zolang het onderzoek niet is afgetekend). De maatregelen komen uit de besluiten over de gebreken onder elk criterium dat niet voldoet. Bij status B vraagt elke afwijking een maatregel met een datum: elk gebrek eronder moet `gepland` met een datum of `opgelost` zijn. Ontbreekt dat, dan meldt de opdracht `LET OP` met de criteria, en staat er in de verklaring `[nog invullen: maatregel met een datum]`. Ga dan met de gebruiker terug naar die gebreken; vul zelf geen maatregel of datum in. De verklaring en `verklaring-invoer.json` staan buiten het zegel van het onderzoek: ze maken of aanpassen verandert niets aan wat is afgetekend, en `LOEP verify --run RUN` blijft kloppen.
 4. Laat de gebruiker zien wat er nog open staat. De opdracht meldt het aantal punten; ze staan in `RUN/verklaring/verklaring.json` onder `openItems`.
 5. Wijs de gebruiker op `RUN/verklaring/invulassistent.md`: de waarden per stap van de invulassistent, om over te nemen.
 
