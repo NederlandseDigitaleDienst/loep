@@ -1,6 +1,7 @@
 import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { readJson, writeJson } from "./canonical.ts";
+import { confirmByTyping, processTerminal, recordedNl, type RecordedVia, type Terminal } from "./recorded.ts";
 
 /**
  * Permission to send requests that can change something (anything but GET and HEAD, and
@@ -16,6 +17,8 @@ export interface WritePermission {
   /** Who stated that this is a test environment where submitting has no consequences; null for a local address. */
   declaredBy: { name: string; role: string } | null;
   declaredAt: string;
+  /** How the declaration came about: confirmed by a person at a terminal (`confirmDeclaration`), never by an agent. `declaredAt` is the moment of that confirmation. */
+  recordedVia?: RecordedVia;
   /** Most writes the whole run may send to the origin, over every session and the sweep together. Absent in a manifest from before the budget: `DEFAULT_MAX_WRITES`. */
   maxWrites?: number;
   /** Shortest time between two writes that pass, in seconds. Absent: `DEFAULT_WRITE_SPACING_SECONDS`. Not a flag: a test sets it in the manifest. */
@@ -48,7 +51,7 @@ export const WRITES_BLOCKED_NL = "verzoeken die iets kunnen wijzigen zijn tegeng
  * of the person stays in the manifest of the run, where the declaration can be traced.
  */
 export const writesAllowedNl = (permission: WritePermission): string =>
-  `onderzocht op een testomgeving waar versturen is toegestaan: ${permission.origin}${permission.declaredBy ? `, verklaard door iemand met de functie ${permission.declaredBy.role} (de naam staat in het dossier van het onderzoek, niet in dit rapport)` : " (lokaal adres)"}`;
+  `onderzocht op een testomgeving waar versturen is toegestaan: ${permission.origin}${permission.declaredBy ? `, verklaard door iemand met de functie ${permission.declaredBy.role}${permission.recordedVia ? `, ${recordedNl(permission, permission.declaredAt)}` : ""} (de naam staat in het dossier van het onderzoek, niet in dit rapport)` : " (lokaal adres)"}`;
 
 /** Hosts that cannot be a live site: the machine itself and the names reserved for testing. */
 export function isLocalHost(hostname: string): boolean {
@@ -96,6 +99,24 @@ export function decideWrites(baseUrl: string, flags: WriteFlags, now = new Date(
   return { origin, local: false, declaredBy: { name: name.trim(), role }, declaredAt: now.toISOString(), ...budget };
 }
 
+/**
+ * A declared test environment lets the run send on a site that is not local: only a person
+ * declares that, never an agent. At an interactive terminal the person sees the origin, name and
+ * role and types the origin back; without one the declaration is refused before anything starts.
+ */
+export async function confirmDeclaration(permission: WritePermission, terminal: Terminal = processTerminal()): Promise<WritePermission> {
+  if (!permission.declaredBy) return permission;
+  const shownNl = [
+    `Verklaring dat ${permission.origin} een testomgeving is waar versturen geen gevolgen heeft.`,
+    `Origin: ${permission.origin}`,
+    `Naam: ${permission.declaredBy.name}`,
+    `Functie: ${permission.declaredBy.role}`,
+    `De run mag daarheen ten hoogste ${permission.maxWrites ?? DEFAULT_MAX_WRITES} keer iets versturen. De naam komt in manifest.json van de run; het rapport en de verklaring noemen alleen de functie.`,
+  ].join("\n");
+  const recording = await confirmByTyping("inventory --declared-by", shownNl, permission.origin, "de origin, met http:// of https://", terminal);
+  return { ...permission, declaredAt: new Date().toISOString(), ...recording };
+}
+
 function maxWritesOf(text: string | undefined): number {
   if (text === undefined) return DEFAULT_MAX_WRITES;
   const value = Number(text.trim());
@@ -127,7 +148,7 @@ export interface PassedWrite {
   path: string;
   /** A write the browser repeated after a redirect that keeps the method (307, 308): logged, not counted again. */
   repeat?: true;
-  /** A frame over a socket that carried a fixed test value: a message an agent typed, counted like a request. */
+  /** A frame over a socket that counted against the budget: every frame, except one shown to be a heartbeat or a message of the protocol (see `SocketFrames`). */
   message?: true;
 }
 
@@ -149,7 +170,7 @@ export const runWrites = (): WriteAccess | null => current;
 export interface WriteBudget {
   origin: string;
   max: number;
-  /** Writes that counted: every request that passed to the origin and every socket frame with a test value in it, without the repeats after a redirect. */
+  /** Writes that counted: every request that passed to the origin and every socket frame that counted (see `SocketFrames`), without the repeats after a redirect. */
   sent: number;
   left: number;
   spacingSeconds: number;
@@ -158,21 +179,89 @@ export interface WriteBudget {
 }
 
 /**
- * Whether a write counts against the budget. A frame over a socket counts only when it carried a
- * fixed test value (see `isOurMessage`): a chat on a socket also sends a heartbeat every half
- * minute by itself, and counting those would use up the budget without anybody sending anything.
- * The repeat of a request after a redirect is the same request.
+ * Whether a write counts against the budget. A frame over a socket counts unless it was shown to be
+ * a heartbeat or a message of the protocol (see `SocketFrames`): a chat on a socket also sends a
+ * heartbeat every half minute by itself, and counting those would use up the budget without anybody
+ * sending anything. The repeat of a request after a redirect is the same request.
  */
 const counts = (entry: PassedWrite): boolean => !entry.repeat && (entry.method !== "SEND" || entry.message === true);
 
 /**
- * Whether a frame a page sends over a socket is a message of ours. An agent can only type the
- * fixed test values, so a frame that has one of them in it, as a whole word, is what an agent
- * typed and sent. Anything else (a heartbeat, a handshake, a receipt) is what the page sends by itself.
+ * Whether a frame a page sends over a socket has a test value in it, as a whole word. An agent
+ * can only type the fixed test values, so such a frame is what an agent typed and sent.
  */
 export function isOurMessage(message: string | Buffer, values: readonly string[]): boolean {
   const text = typeof message === "string" ? message : message.toString("utf8");
   return values.some((value) => new RegExp(`(?<![\\p{L}\\p{N}])${value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![\\p{L}\\p{N}])`, "u").test(text));
+}
+
+/** Text frames of known protocols that carry nothing: a ping, a pong, a handshake, a close. */
+const PROTOCOL_FRAMES: readonly RegExp[] = [
+  // Nothing, or the newline that is a heartbeat in STOMP.
+  /^\s*$/,
+  /^(?:ping|pong|heartbeat|keep-?alive)$/i,
+  // Engine.IO: open, close, ping, pong, an empty message, upgrade and noop, also during the probe of an upgrade.
+  /^[0-6](?:probe)?$/,
+  // Socket.IO: connecting to or leaving a namespace, without data.
+  /^4[01](?:\/[\w.-]*,?)?$/,
+  // SignalR: the handshake, and the ping and close messages.
+  /^\{"protocol":"\w+","version":\d+\}\x1e$/,
+  /^\{"type":[67]\}\x1e$/,
+];
+/** Values of the field that names the kind of a short JSON frame, for the kinds that carry nothing (also graphql-ws and its predecessor). */
+const PROTOCOL_KINDS = new Set(["ping", "pong", "heartbeat", "keepalive", "keep-alive", "ka", "connection_init", "connection_ack"]);
+const KIND_FIELDS = ["type", "event", "op", "action", "kind"];
+/** A JSON frame longer than this is not judged by its kind: it has room for more than a heartbeat. */
+const MAX_PROTOCOL_JSON = 200;
+
+/** Whether a frame is a short message of a known protocol that carries nothing. A frame that is not text cannot be judged and is no such message. */
+export function isProtocolFrame(message: string | Buffer): boolean {
+  if (typeof message !== "string") return false;
+  if (PROTOCOL_FRAMES.some((pattern) => pattern.test(message))) return true;
+  if (message.length > MAX_PROTOCOL_JSON || !/^[[{]/.test(message)) return false;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(message);
+  } catch {
+    return false;
+  }
+  // Phoenix: [join_ref, ref, "phoenix", "heartbeat", {}].
+  if (Array.isArray(parsed)) return parsed[2] === "phoenix" && parsed[3] === "heartbeat";
+  if (parsed === null || typeof parsed !== "object") return false;
+  return KIND_FIELDS.some((field) => {
+    const kind = (parsed as Record<string, unknown>)[field];
+    return typeof kind === "string" && PROTOCOL_KINDS.has(kind.toLowerCase());
+  });
+}
+
+/** How many frames a socket remembers as sent by the page by itself, and how long such a frame may be. */
+const MAX_REMEMBERED = 200;
+const MAX_REMEMBERED_LENGTH = 4096;
+
+/**
+ * Which frames a page sends over one socket count against the budget for sending. Every frame
+ * counts, except one that is shown to be a heartbeat or a message of the protocol: the same frame
+ * as one the page sent earlier while no agent acted, or a short frame of a known protocol (see
+ * `isProtocolFrame`). A frame with a test value in it always counts, and so does a frame that
+ * cannot be judged, such as a binary or compressed one: what cannot be shown to be nothing, may be a message.
+ */
+export class SocketFrames {
+  private readonly values: readonly string[];
+  /** Frames the page sent while no agent acted on it. */
+  private readonly byItself = new Set<string>();
+
+  constructor(values: readonly string[]) {
+    this.values = values;
+  }
+
+  /** Whether this frame counts. `idle`: no agent acts on the page now, so what it sends, it sends by itself; unknown is not idle. */
+  counts(message: string | Buffer, idle = false): boolean {
+    if (isOurMessage(message, this.values)) return true;
+    const key = typeof message === "string" ? `t${message}` : `b${message.toString("base64")}`;
+    if (this.byItself.has(key)) return false;
+    if (idle && key.length <= MAX_REMEMBERED_LENGTH && this.byItself.size < MAX_REMEMBERED) this.byItself.add(key);
+    return !isProtocolFrame(message);
+  }
 }
 
 function readLog(runDir: string): PassedWrite[] {

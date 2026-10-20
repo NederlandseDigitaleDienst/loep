@@ -31,14 +31,14 @@ export interface FixtureServer {
   otherOrigin: string;
   /** Everything that reached the server, in order. */
   requests: ReceivedRequest[];
-  /** Every WebSocket message a page managed to send. */
+  /** Every WebSocket message a page managed to send; a binary one as "binary:" and its bytes in hex. */
   socketMessages: string[];
   /** Which version of /changing.html is served. */
   setVariant(index: number): void;
   close(): Promise<void>;
 }
 
-/** Read the text frames a client sends; enough of RFC 6455 for a test server. */
+/** Read the text and binary frames a client sends; enough of RFC 6455 for a test server. */
 function readFrames(socket: Duplex, onText: (text: string) => void): void {
   let buffer = Buffer.alloc(0);
   socket.on("data", (chunk: Buffer) => {
@@ -61,6 +61,7 @@ function readFrames(socket: Duplex, onText: (text: string) => void): void {
       if (masked) for (let index = 0; index < payload.length; index++) payload[index] = payload[index]! ^ mask[index % 4]!;
       buffer = buffer.subarray(offset + maskLength + length);
       if (opcode === 1) onText(payload.toString("utf8"));
+      if (opcode === 2) onText(`binary:${payload.toString("hex")}`);
       if (opcode === 8) socket.end();
     }
   });
@@ -144,6 +145,17 @@ export async function startServer(port = 0): Promise<FixtureServer> {
     }
     // A page that never answers.
     if (path === "/slow") return;
+    // A site that says the visitor asked too much, with ?retry=<seconds> as the time to wait.
+    if (path === "/too-many") {
+      const retry = new URL(request.url ?? "/", "http://fixture").searchParams.get("retry");
+      response.writeHead(429, { "content-type": "text/html; charset=utf-8", ...(retry ? { "retry-after": retry } : {}) }).end('<!doctype html><html lang="nl"><head><meta charset="utf-8"><title>Te veel verzoeken - Testsite sessie</title></head><body><main><h1>Te veel verzoeken</h1></main></body></html>');
+      return;
+    }
+    // A site that drops the connection without an answer, as a firewall that blocks a visitor does.
+    if (path === "/drop") {
+      request.socket.destroy();
+      return;
+    }
     // A search that takes its time: the page that sent the form is still there when a short pause is over.
     if (path === "/slow-result") {
       await new Promise((resolve) => setTimeout(resolve, 1200));

@@ -10,6 +10,7 @@ import { approvedReads } from "../lib/sitemodel.ts";
 import { canonicalJson, sha256 } from "../lib/canonical.ts";
 import type { FrameTarget, Locators, PageRecord, StartState, StateRecord, Step, TargetRecord } from "./observations.ts";
 import { guardContext, guardRedirects, guardRedirectsByRoute, urlInScope, type Blocked, type DaemonLimits, type Guard, type Politeness, type Scope } from "./safety.ts";
+import { refusalNl, type Blockade } from "./blockade.ts";
 
 /** The part of the in-page library that only a session uses: reference numbers that last. */
 export const SESSION_INPAGE_PATH = fileURLToPath(new URL("./inpage-session.js", import.meta.url));
@@ -27,6 +28,8 @@ export interface Env {
   limits: DaemonLimits;
   /** The read requests a page may send; left out, those of a site model that passed `check-site` (see `approvedReads`). */
   reads?: ReadRequest[];
+  /** The origins of the site that blocked the run and are asked nothing more; left out, none are watched. */
+  blockade?: Blockade;
 }
 
 export interface TargetInfo extends TargetRecord {
@@ -136,6 +139,8 @@ export async function openSurface(env: Env, start: StartState, onContext?: (cont
     const refusal: Blocked = { at: new Date().toISOString(), kind: "scope", method: "GET", url: start.url.slice(0, 300), resourceType: "document" };
     throw new Refused(web ? `${start.url} ligt buiten de scope van deze run (${env.scope.hosts.join(", ")}); er is niets opgevraagd` : `${start.url.slice(0, 120)} is geen adres met http:// of https://; een sessie opent alleen pagina's van de site. Er is niets opgevraagd`, [refusal]);
   }
+  const blockedBy = env.blockade?.refuses(start.url);
+  if (blockedBy) throw new Refused(`${start.url} is niet opgevraagd: ${refusalNl(blockedBy)}`, [{ at: new Date().toISOString(), kind: "blockade", method: "GET", url: start.url.slice(0, 300), resourceType: "document", reasonNl: refusalNl(blockedBy) }]);
   // In a run with a login an address that logs out is not opened: say so in words, before a browser is asked.
   if (logsOut(start.url)) throw new Refused(`${start.url}: ${LOGOUT_REFUSED_NL}`, [{ at: new Date().toISOString(), kind: "logout", method: "GET", url: start.url.slice(0, 300), resourceType: "document" }]);
   const reads = env.reads ?? approvedReads(env.runDir);
@@ -144,7 +149,7 @@ export async function openSurface(env: Env, start: StartState, onContext?: (cont
   const context = await newContext(env.browser, { viewport: { width: start.width, height: start.height }, colorScheme: start.scheme, reads });
   onContext?.(context);
   try {
-    await guardContext(context, env.scope, guard, reads);
+    await guardContext(context, env.scope, guard, reads, env.blockade);
     await context.addInitScript({ content: INPAGE_SOURCE });
     await context.addInitScript({ content: SESSION_INPAGE_SOURCE });
     const page = await context.newPage();
@@ -186,6 +191,8 @@ export async function openSurface(env: Env, start: StartState, onContext?: (cont
     await leftScope(env, surface);
     return { surface, load };
   } catch (error) {
+    // A page that gives no answer in time did not load; a connection that failed was told to the blockade by the guard.
+    if ((error as Error).name === "TimeoutError") env.blockade?.failed(start.url);
     await context.close().catch(() => undefined);
     const refused = guard.blocked.at(-1);
     const message = (error as Error).message.split("\n")[0]!;

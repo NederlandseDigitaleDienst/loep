@@ -14,7 +14,7 @@ import { clipboardNote, hasClipboardPermission, INPAGE_PATH, launchBrowser, load
 import type { Described } from "../src/instruments/activate.ts";
 import { probeTrigger } from "../src/instruments/dialog.ts";
 import { canonicalJson, sha256 } from "../src/lib/canonical.ts";
-import { Daemon, tooManySessionsNl, type Response } from "../src/session/daemon.ts";
+import { Daemon, ownedSessionNl, tooManySessionsNl, type Response } from "../src/session/daemon.ts";
 import type { Observation } from "../src/session/observations.ts";
 import { scopeForRun } from "../src/session/safety.ts";
 import { startServer, type FixtureServer } from "./fixtures/session-site/server.ts";
@@ -459,7 +459,7 @@ test("a session too many is refused with what to do, and a start that counted on
     assert.equal(refused.print.error, tooManySessionsNl(2, 2));
     assert.match(refused.print.error as string, /^er lopen al 2 sessies en dit sessieproces laat er hooguit 2 tegelijk toe\. Wacht .*session list.*session stop --session <naam>.*hooguit 1 agent tegelijk.*--max-sessions <aantal>$/);
     // The limit belongs to the process: asking for another one later changes nothing, and says so.
-    const again = await small.handle({ op: "start", session: "regie", maxSessions: 11 });
+    const again = await small.handle({ op: "start", session: "regie", maxSessions: 11, key: first.print.key as string });
     assert.equal(again.ok, true);
     assert.match(again.print.warning as string, /^het sessieproces liep al en laat 2 sessies tegelijk toe, niet 11\./);
     assert.equal((again.print.limits as { maxSessions: number }).maxSessions, 2);
@@ -467,6 +467,34 @@ test("a session too many is refused with what to do, and a start that counted on
     assert.equal((await small.handle({ op: "start", session: "b-112" })).ok, true, "a place came free");
   } finally {
     await small.close();
+  }
+});
+
+test("a running session has one owner: a second start is refused, and only its key starts it again", async () => {
+  const owned = await Daemon.create(run, { hosts: ["127.0.0.1"], baseUrl: `${site.origin}/`, strict: false }, { navigationDelayMs: 0, secondBrowsers: false });
+  try {
+    const first = await owned.handle({ op: "start", session: "b-311", model: "model-een" });
+    const key = first.print.key as string;
+    await owned.handle({ op: "command", session: "b-311", command: "open", args: ["/"], options: {} });
+    // A second agent with the same session name, as when the same task was started twice.
+    const twin = await owned.handle({ op: "start", session: "b-311", model: "model-twee" });
+    assert.deepEqual([twin.ok, twin.print.error], [false, ownedSessionNl("b-311", false)]);
+    assert.match(twin.print.error as string, /^geweigerd: sessie "b-311" loopt al en heeft een eigenaar\. .*--key <sleutel>.*meet niet verder/);
+    const guessed = await owned.handle({ op: "start", session: "b-311", key: "00000000" });
+    assert.deepEqual([guessed.ok, guessed.print.error], [false, ownedSessionNl("b-311", true)]);
+    // The refused starts changed nothing: no model was added, and the page of the owner is still open.
+    assert.deepEqual((JSON.parse(readFileSync(join(run, "observations", "b-311", "session.json"), "utf8")) as { models: string[] }).models, ["model-een"]);
+    assert.equal((await owned.handle({ op: "command", session: "b-311", command: "status", args: [], options: {} })).print.url, `${site.origin}/`);
+    // The owner, after a restart of its own, goes on with its key.
+    const resumed = await owned.handle({ op: "start", session: "b-311", key });
+    assert.deepEqual([resumed.ok, resumed.print.key, resumed.print.commands], [true, key, "1 van 300"]);
+    // A session that was stopped has no owner any more: whoever starts it next gets a new key.
+    await owned.handle({ op: "stop", session: "b-311" });
+    const next = await owned.handle({ op: "start", session: "b-311" });
+    assert.equal(next.ok, true);
+    assert.notEqual(next.print.key, key);
+  } finally {
+    await owned.close();
   }
 });
 
@@ -517,10 +545,15 @@ test("the command line starts a session in the background, sends commands and st
     assert.equal(started.model, "voorbeeld-model-4.5[1m]");
     const sessionFile = (): { models?: string[] } => JSON.parse(readFileSync(join(dir, "observations", "cli", "session.json"), "utf8")) as { models?: string[] };
     assert.deepEqual(sessionFile().models, ["voorbeeld-model-4.5[1m]"]);
-    // A second start on another model adds it; the same name again and a placeholder that was copied from the task add nothing.
-    await cli("session", "start", "--session", "cli", "--model", "ander-model-2");
-    await cli("session", "start", "--session", "cli", "--model", "voorbeeld-model-4.5[1m]");
-    await cli("session", "start", "--session", "cli", "--model", "<naam en versie van je model>");
+    // A second start of the running session needs the key the first start gave; without it, it is refused.
+    assert.match(started.key as string, /^[0-9a-f]{8}$/);
+    const second = await cli("session", "start", "--session", "cli", "--model", "ander-model-2");
+    assert.deepEqual([second.exit, second.error], [1, ownedSessionNl("cli", false)]);
+    // With the key, a start on another model adds it; the same name again and a placeholder that was copied from the task add nothing.
+    const key = started.key as string;
+    assert.equal((await cli("session", "start", "--session", "cli", "--model", "ander-model-2", "--key", key)).key, key);
+    await cli("session", "start", "--session", "cli", "--model", "voorbeeld-model-4.5[1m]", "--key", key);
+    await cli("session", "start", "--session", "cli", "--model", "<naam en versie van je model>", "--key", key);
     assert.deepEqual(sessionFile().models, ["voorbeeld-model-4.5[1m]", "ander-model-2"]);
     // A session that names no model works as before and says how to give one.
     const silent = await cli("session", "start", "--session", "zonder");

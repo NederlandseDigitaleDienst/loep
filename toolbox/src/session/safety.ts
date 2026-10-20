@@ -8,7 +8,8 @@ import { privateFromPublicSite, scopeHost, scopeHostOf, siteOrigins, WEB_SCHEMES
 import { loginCookieHeader, logsOut } from "../lib/login.ts";
 import { readDecision, readRuleFor, type ReadRequest } from "../lib/reads.ts";
 import { searchServicesOf, type SearchServiceId } from "../lib/searchbody.ts";
-import { isOurMessage, isWriteOrigin, runWrites, writeAccess, writesForRun, type PassedWrite, type WriteAccess } from "../lib/writes.ts";
+import { refusalNl, type Blockade } from "./blockade.ts";
+import { isWriteOrigin, runWrites, SocketFrames, writeAccess, writesForRun, type PassedWrite, type WriteAccess } from "../lib/writes.ts";
 
 /** Limits of the process that holds the browser; set once, when it starts. */
 export interface DaemonLimits {
@@ -88,7 +89,7 @@ export async function scopeForRun(runDir: string, extra: { scopeUrl?: string | u
 
 export interface Blocked {
   at: string;
-  kind: "method" | "scope" | "socket" | "left-scope" | "logout";
+  kind: "method" | "scope" | "socket" | "left-scope" | "logout" | "blockade";
   method: string;
   url: string;
   resourceType: string;
@@ -109,6 +110,8 @@ const RENDERING_TYPES = new Set(["stylesheet", "script", "image", "font", "media
  */
 const READ_TYPES = new Set(["fetch", "xhr"]);
 const MAX_URL = 300;
+/** How a browser says that a navigation was stopped on purpose (by the page, by the guard, by a new navigation); that is no failure of the site. */
+const STOPPED = /ERR_ABORTED|ERR_BLOCKED_BY_CLIENT|NS_BINDING_ABORTED|NS_ERROR_ABORT|cancelled/i;
 
 /** Whether a request comes from an embedded window whose address is in the scope. A request of a worker has no frame and does not count. */
 function fromEmbeddedInScope(scope: Scope, request: Request): boolean {
@@ -133,6 +136,8 @@ export interface Guard {
   reads?: PassedRead[];
   /** Requests of Cloudflare's check whether the browser is a robot that were let through and would otherwise have been refused; absent until the first one. */
   challenges?: PassedChallenge[];
+  /** True between two commands of the agent: what the page sends over a socket then, it sends by itself. Absent: an agent may be acting. */
+  idle?: boolean;
 }
 
 export interface PassedChallenge {
@@ -171,13 +176,28 @@ export const urlInScope = inScope;
  * recorded too. The other is a read request of a checked site model: exactly that method,
  * origin and path, also on a host outside the scope, recorded as a read. Cloudflare's check
  * whether the browser is a robot passes as well, because Cloudflare answers it and the site never
- * gets it (see `isChallenge`); what would otherwise have been refused is recorded. Registered
- * after the context's own routes, so it decides first.
+ * gets it (see `isChallenge`); what would otherwise have been refused is recorded. An origin of
+ * the site that blocked the run (see `Blockade`) is asked nothing at all; what the site answers
+ * and which navigations fail is told to the blockade. Registered after the context's own routes,
+ * so it decides first.
  */
-export async function guardContext(context: BrowserContext, scope: Scope, guard: Guard, reads: readonly ReadRequest[] = []): Promise<void> {
+export async function guardContext(context: BrowserContext, scope: Scope, guard: Guard, reads: readonly ReadRequest[] = [], blockade?: Blockade): Promise<void> {
   const note = (kind: Blocked["kind"], method: string, url: string, resourceType: string): void => {
     guard.blocked.push({ at: new Date().toISOString(), kind, method, url: url.slice(0, MAX_URL), resourceType });
   };
+  if (blockade) {
+    context.on("response", (response) => {
+      const url = response.url();
+      if (!inScope(scope, url)) return;
+      const status = response.status();
+      if (status === 429) return blockade.tooMany(url, response.headers()["retry-after"]);
+      // A refused navigation is answered here with "no content": that is not the site.
+      if (response.request().isNavigationRequest() && response.request().method() === "GET" && status >= 200 && status < 400 && status !== 204) blockade.loaded(url);
+    });
+    context.on("requestfailed", (request) => {
+      if (request.isNavigationRequest() && inScope(scope, request.url()) && !STOPPED.test(request.failure()?.errorText ?? "")) blockade.failed(request.url());
+    });
+  }
   await context.route("**/*", (route) => {
     const request = route.request();
     const method = request.method();
@@ -185,6 +205,11 @@ export async function guardContext(context: BrowserContext, scope: Scope, guard:
     const type = request.resourceType();
     // An aborted navigation replaces the page with an error page. "No content" leaves the page as it was.
     const refuse = (): Promise<void> => (request.isNavigationRequest() ? route.fulfill({ status: 204, body: "" }) : route.abort("blockedbyclient"));
+    const refusedBy = blockade?.refuses(url);
+    if (refusedBy) {
+      guard.blocked.push({ at: new Date().toISOString(), kind: "blockade", method, url: url.slice(0, MAX_URL), resourceType: type, reasonNl: refusalNl(refusedBy) });
+      return refuse();
+    }
     // In a run with a login nothing logs out: the session has to last for everything that comes after.
     if (logsOut(url)) {
       note("logout", method, url, type);
@@ -236,15 +261,18 @@ export async function guardContext(context: BrowserContext, scope: Scope, guard:
   });
   await context.routeWebSocket(/.*/, (socket) => {
     const url = socket.url();
+    const refusedBy = blockade?.refuses(url);
     // The socket opens, so the page keeps working, and what the server says still arrives. Nothing the page says is passed on.
-    const server = inScope(scope, url) ? socket.connectToServer() : null;
-    if (!server) note("scope", "GET", url, "websocket");
+    const server = inScope(scope, url) && !refusedBy ? socket.connectToServer() : null;
+    if (refusedBy) guard.blocked.push({ at: new Date().toISOString(), kind: "blockade", method: "GET", url: url.slice(0, MAX_URL), resourceType: "websocket", reasonNl: refusalNl(refusedBy) });
+    else if (!server) note("scope", "GET", url, "websocket");
     // Only a socket of the test environment may carry what the page says.
     const free = server !== null && isWriteOrigin(scope.writes, url);
+    const frames = new SocketFrames(MESSAGE_VALUES);
     socket.onMessage((message) => {
       if (!free) return note("socket", "SEND", url, "websocket");
-      // A frame with a test value in it is a message an agent sent, and takes one from the budget; a heartbeat passes and is only noted.
-      const claim = isOurMessage(message, MESSAGE_VALUES) ? scope.writes!.claim("SEND", url, { message: true }) : { ok: true as const, entry: scope.writes!.record("SEND", url) };
+      // Every frame takes one from the budget, unless it is shown to be a heartbeat or a message of the protocol: that passes and is only noted.
+      const claim = frames.counts(message, guard.idle) ? scope.writes!.claim("SEND", url, { message: true }) : { ok: true as const, entry: scope.writes!.record("SEND", url) };
       if (!claim.ok) {
         guard.blocked.push({ at: new Date().toISOString(), kind: "socket", method: "SEND", url: url.slice(0, MAX_URL), resourceType: "websocket", reasonNl: claim.reasonNl, writeBudget: claim.budget });
         return;
@@ -424,7 +452,7 @@ export const TEST_VALUES: Record<string, string> = {
 };
 
 /**
- * The test values that mark a frame over a socket as a message an agent sent (see `isOurMessage`).
+ * The test values that mark a frame over a socket as a message an agent sent (see `isOurMessage`), whatever else is in it.
  * Left out: the empty value, the search term and anything shorter than four characters, which
  * also occur in frames that nobody typed.
  */

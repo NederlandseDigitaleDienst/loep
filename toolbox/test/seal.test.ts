@@ -11,8 +11,9 @@ import { canonicalJson } from "../src/lib/canonical.ts";
 import type { Signature } from "../src/lib/evaluation.ts";
 import { writeManifest } from "../src/lib/manifest.ts";
 import { exampleEvaluation } from "./fixtures/example-evaluation.ts";
+import { typesSeal } from "./fixtures/terminal.ts";
 
-const SIGNER = { name: "Een ondertekenaar", role: "Directeur", organisation: "Gemeente Voorbeeld", checkedNl: null };
+const SIGNER = { name: "Een ondertekenaar", role: "Directeur", organisation: "Gemeente Voorbeeld", checkedNl: null, terminal: typesSeal() };
 
 test("evaluate, render, seal, verify, sign, verify: signing keeps the seal, and one changed byte is seen", async () => {
   const run = mkdtempSync(join(tmpdir(), "seal-"));

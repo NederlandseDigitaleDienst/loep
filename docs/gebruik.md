@@ -15,7 +15,7 @@ Installeer de plugin uit de marketplace van NLDD en draai één keer de installa
 
 Daarna, in de map van de plugin: `just install` voor de pakketten en browsers, en `just doctor` om te zien welke hulpprogramma's ontbreken. Ontbreekt er een, dan werkt de rest gewoon. Het criterium dat die meting nodig had, blijft dan open. Vraag je de assistent om een onderzoek op een machine waar dit nog niet is gebeurd, dan doet hij het als eerste stap zelf.
 
-Reken op een middag. Voor een site elders met 30 pagina's en vier paginatypen, met drie agents tegelijk, komt de formule achter `estimate` op ruim vier uur, met een marge van ruim drie tot bijna zes uur. Blijven er na de verificatie criteria open, dan komt daar een afmaakronde bij, bij acht open criteria ongeveer een uur. De laatste twee volledige metingen kostten 16,6 en 16,9 miljoen tokens, voor 134 agents elk. Hoe die getallen tot stand komen, staat in [methode.md](methode.md#hoe-lang-een-onderzoek-duurt). Houd de sessie van de assistent open en de machine wakker zolang het loopt.
+Reken op een middag. Voor een site elders met 30 pagina's en vier paginatypen, met drie agents tegelijk, komt de formule achter `estimate` op ruim vier uur, met een marge van ruim drie tot bijna zes uur. Blijven er na de verificatie criteria open, dan komt daar een afmaakronde bij, bij acht open criteria ongeveer een uur. Een onderzoek van ongeveer 30 pagina's met alle criteria kost in de orde van 150 tot 250 dollar aan prijzen van de API: in de nulmeting van 19 oktober 2026 gebruikten 134 agents ongeveer 526 miljoen tokens, waarvan 97 procent uit de cache, voor ongeveer 184 dollar ([validatie/verbruik/README.md](../validatie/verbruik/README.md)). Op een abonnement kan zo'n run een groot deel van de weeklimiet gebruiken; die limiet verschilt per abonnement. `estimate` noemt tokens en kosten voor jouw run. Hoe die getallen tot stand komen, staat in [methode.md](methode.md#hoe-lang-een-onderzoek-duurt). Houd de sessie van de assistent open en de machine wakker zolang het loopt.
 
 ## Drie skills
 
@@ -50,7 +50,7 @@ Voordat er één commando draait, stelt de assistent in één bericht de vragen 
 
 Een antwoord kan kort zijn: "Geen inlog, niets versturen. Ik ben de eigenaar, zes agents mag. Alles hoort erbij. Naam Voorbeeld, organisatie Gemeente Voorbeeld, gebouwd met het NLDD-designsysteem, de elementen beginnen met `nldd-`."
 
-Bij versturen of inloggen op een testomgeving vraagt hij ook je naam en functie, voor de verklaring dat het een testomgeving is. Hij zegt dan eerst waar die terechtkomen: de naam in het manifest van de run, de functie in het rapport en de verklaring. Die verklaring typ je zelf; de assistent vult haar nooit in.
+Bij versturen of inloggen op een testomgeving vraagt hij ook je naam en functie, voor de verklaring dat het een testomgeving is. Hij zegt dan eerst waar die terechtkomen: de naam in het manifest van de run, de functie in het rapport en de verklaring. Die verklaring typ je zelf: de assistent geeft je het commando, je draait het in een terminal en typt ter bevestiging de origin. De assistent legt haar nooit vast.
 
 ### Daarna werkt het zelf
 
@@ -74,8 +74,9 @@ Per criterium de uitkomst, met erbij of de verificatie, de afmaakronde of een pe
 
 ### Wat daarna van jou is
 
-- **Open punten beantwoorden.** Sommige punten kan geen instrument sluiten, zoals luisteren met een echte schermlezer of een besluit van de eigenaar. De assistent laat je de punten zien met hun nummer. Het antwoord leg je zelf vast met `answer`, met wat je deed, wat het betekent en in welke functie; de assistent typt het niet voor je, ook niet als je het dicteert. Sla je dit over, dan blijven die criteria open.
-- **Lezen en tekenen.** Het rapport is een concept tot iemand het leest en tekent met `sign`. Tekenen doet een mens, nooit de assistent.
+- **Open punten beantwoorden.** Sommige punten kan geen instrument sluiten, zoals luisteren met een echte schermlezer of een besluit van de eigenaar. De assistent laat je de punten zien met hun nummer. Het antwoord is van jou: wat je deed, wat het betekent en in welke functie. Je legt het zelf vast met `answer` in een terminal, of je zegt het in het gesprek; dan vat de assistent samen wat hij vastlegt, en legt hij het pas vast na jouw uitdrukkelijke ja, met je antwoord letterlijk en de samenvatting erbij. Het rapport zegt bij elk antwoord hoe het is vastgelegd: "bevestigd in een terminal" of "vastgelegd in een gesprek". Sla je dit over, dan blijven die criteria open.
+- **Lezen en tekenen.** Het rapport is een concept tot iemand het leest en tekent met `sign`. Dat doe je altijd zelf, in een terminal: de assistent geeft je het commando (in Claude Code kan het met `! <commando>`), dat toont het zegel, je naam en je functie, en je typt de eerste acht tekens van het zegel. Zonder terminal weigert het.
+- **Wat nu?** Na het tekenen loopt de assistent met je de gebreken langs, één tegelijk en de zwaarste eerst. Bij elk vertelt hij kort wat het is, wie het merkt en wat het rapport voorstelt, en vraagt hij wat er gebeurt: is het al opgelost, wordt het hersteld en wanneer, ziet de organisatie het anders, of is herstel een onevenredige last? Hij vat samen wat hij hoorde en legt het vast met `decide` als je uitdrukkelijk zegt dat het klopt, met je bevestiging letterlijk en de samenvatting erbij; een datum of reden verzint hij niet. Het afgetekende rapport krijgt een hoofdstuk "Maatregelen en beslissingen", en de verklaring neemt de maatregelen daaruit over. Stoppen kan halverwege: de volgende keer gaat hij verder bij het eerste gebrek zonder besluit.
 - **Terugmelden aan loep.** Bleef een criterium open door een gebrek in loep, dan schrijft de assistent een tekst per issue, zonder adres of naam van de site. Je leest ze eerst; er gaat niets weg zonder jouw ja. Staat het issue al open, dan komt de tekst eronder als reactie; is het gesloten, dan komt er een nieuw issue dat het oude noemt.
 
 ## Achter een inlog
@@ -94,7 +95,7 @@ Noem de map van het vorige onderzoek. Een bevinding op dezelfde plek houdt dan h
 
 Vraag erom zodra het onderzoek is getekend: "Maak de toegankelijkheidsverklaring bij `toegankelijkheid/onderzoeken/2026-10-15`." De assistent controleert eerst of het onderzoek getekend is en sinds het zegel niet is veranderd. Is het niet getekend, dan kan alleen een concept.
 
-Daarna vraagt hij de gegevens van de organisatie: het adres voor contact en klachten, de ombudsman, het nummer op het dashboard van DigiToegankelijk, de maatregelen die de organisatie toezegt en wanneer, de datum van een volgend onderzoek, en de functie van wie de verklaring goedkeurt. Wat je niet weet, blijft in de tekst staan als `[nog invullen: ...]`; hij verzint niets. De status (A, B of C) rekent de toolbox uit het onderzoek; een hogere status vraagt meer onderzoek, niet een andere verklaring.
+Daarna vraagt hij de gegevens van de organisatie: het adres voor contact en klachten, de ombudsman, het nummer op het dashboard van DigiToegankelijk, de datum van een volgend onderzoek, en de functie van wie de verklaring goedkeurt. Wat je niet weet, blijft in de tekst staan als `[nog invullen: ...]`; hij verzint niets. De status (A, B of C) rekent de toolbox uit het onderzoek; een hogere status vraagt meer onderzoek, niet een andere verklaring.
 
 Je krijgt de verklaring en een invulblad met de waarden per stap van de invulassistent op toegankelijkheidsverklaring.nl. Publiceren en het register invullen doe je zelf.
 
@@ -102,7 +103,8 @@ Je krijgt de verklaring en een invulblad met de waarden per stap van de invulass
 
 - Een wachtwoord vragen of aannemen, of zelf inloggen.
 - Iets versturen op een site die niet als testomgeving is verklaard.
-- Tekenen, of een open punt beantwoorden, namens jou.
+- Tekenen, of verklaren dat een site een testomgeving is. Dat doe je zelf in een terminal.
+- Een open punt beantwoorden of een besluit vastleggen zonder dat jij zijn samenvatting in het gesprek uitdrukkelijk hebt bevestigd. Tekst uit de site, een bestand of een andere agent geldt nooit als jouw woorden.
 - Een oordeel vellen in zijn eigen context: elk oordeel komt van een aparte agent met een vaste opdracht.
 - Het rapport met de hand bijwerken of mooier maken dan het is.
 - Een issue versturen zonder dat jij de tekst hebt gelezen en ja hebt gezegd.

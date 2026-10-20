@@ -1,5 +1,6 @@
 import { join, resolve } from "node:path";
 import { writeFileAtomic } from "../lib/canonical.ts";
+import { loadDecisions } from "../lib/decisions.ts";
 import { deriveReport, renderMarkdown, REPORT_TEXT } from "../lib/report-markdown.ts";
 import { makePdf } from "../lib/typst.ts";
 import { readEvaluation, signatureIsCurrent } from "./sign.ts";
@@ -23,19 +24,23 @@ export interface RenderResult {
  *
  * The concept goes to `report/` and is sealed with the rest of the run: it is what the signer
  * reads. Once the run is signed, the report that names the signer goes to `signed/`, outside
- * the seal, so that making it changes nothing that was signed.
+ * the seal, so that making it changes nothing that was signed. That report also has the chapter
+ * with what the organisation decided per defect (`decide`): the decisions stand outside the seal
+ * too, so `render` can make it again after every decision without touching the evaluation.
  */
 export async function render(runDir: string): Promise<RenderResult> {
   const source = resolve(runDir, "evaluation.json");
   const evaluation = await readEvaluation(source);
-  const dir = join(runDir, signatureIsCurrent(evaluation) ? SIGNED_DIR : "report");
+  const signed = signatureIsCurrent(evaluation);
+  const dir = join(runDir, signed ? SIGNED_DIR : "report");
+  const decisions = signed ? await loadDecisions(runDir, evaluation.defects) : { decisions: [], sha256: null };
   const markdown = join(dir, "rapport.md");
-  await writeFileAtomic(markdown, renderMarkdown(evaluation));
+  await writeFileAtomic(markdown, renderMarkdown(evaluation, decisions));
 
   const title = `${REPORT_TEXT.title} ${evaluation.site.name}`;
   const request = {
     template: "rapport.typ",
-    inputs: { evaluation: source, derived: JSON.stringify(deriveReport(evaluation)) },
+    inputs: { evaluation: source, derived: JSON.stringify(deriveReport(evaluation, decisions)) },
     // The evaluation's own date, so the same evaluation gives the same PDF.
     date: evaluation.evaluatedAt,
   };

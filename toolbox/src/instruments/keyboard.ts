@@ -44,8 +44,14 @@ export interface TabWalkOptions {
   /** How that directory is named in the result. */
   focusPath: string;
   maxStops?: number;
-  /** Selector chain of the element to start after; without it the walk starts at the top of the page. */
+  /** Selector chain of the element to start after; without it the walk goes on from where focus is. */
   from?: string[];
+  /**
+   * Start at the top of the document, also when the page put focus somewhere itself on load,
+   * such as in a search field: otherwise everything before that element is never reached.
+   * A walk in an opened state leaves this off, so inside an opened dialog it stays there.
+   */
+  fromTop?: boolean;
   /**
    * What to do when the walk ends with focus on nothing while the DOM predicts more stops:
    * find the element that threw focus away, name it and walk on behind it. The sweep asks
@@ -184,7 +190,18 @@ async function walkWithTab(page: Page, options: TabWalkOptions): Promise<Record<
   const initialFocus = await call<Record<string, unknown> | null>(page, "focusState");
   if (options.from) {
     await page.evaluate((chain) => (window as unknown as { __loep: { resolve: (chain: string[]) => HTMLElement | null } }).__loep.resolve(chain)?.focus(), options.from);
-  } else await page.evaluate(() => window.scrollTo({ left: 0, top: 0, behavior: "instant" }));
+  } else {
+    await page.evaluate((fromTop) => {
+      window.scrollTo({ left: 0, top: 0, behavior: "instant" });
+      if (!fromTop) return;
+      // A browser continues from where focus last was, also after a blur, so focus is put on the body for a moment.
+      const previous = document.body.getAttribute("tabindex");
+      document.body.setAttribute("tabindex", "-1");
+      document.body.focus({ preventScroll: true });
+      if (previous === null) document.body.removeAttribute("tabindex");
+      else document.body.setAttribute("tabindex", previous);
+    }, options.fromTop === true);
+  }
   const startUrl = page.url();
   const stops: Record<string, unknown>[] = [];
   const focused: (Buffer | null)[] = [];

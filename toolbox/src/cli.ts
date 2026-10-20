@@ -87,10 +87,20 @@ const USAGE = `loep <command> [options]
                                          For an open point that asks a person or a choice of the owner: record what a person
                                          did or decided and what follows for the criterion. Without --point: list the open
                                          points. The name stays in antwoorden/<criterion>.json of the run; the evaluation and
-                                         the report name only the function. Counts at the next evaluate, and is sealed with the run
-  render --run <run>                     Write the report (Markdown and PDF) from evaluation.json
+                                         the report name only the function. Counts at the next evaluate, and is sealed with the run.
+                                         Confirmed at an interactive terminal, or --recorded-via gesprek (see below)
+  render --run <run>                     Write the report (Markdown and PDF) from evaluation.json; after signing with the
+                                         decisions about each defect
   sign --run <run> --name <who> --role <function> --organisation <name> [--checked <text>]
-                                         Record that a named person stands for the evaluation
+                                         Record that a named person stands for the evaluation. Only at an interactive terminal:
+                                         the signer types the first 8 characters of the seal. An agent never signs
+  decide --run <run> [--defect <id> [--decision opgelost|gepland|zienswijze|onevenredig|onbesloten --what <text>
+         [--date <yyyy-mm-dd>] [--alternative <text>] --name <who> --role <function>]]
+                                         After signing: what the organisation decides about a defect. Without --defect: every
+                                         defect, heaviest first, with its decision; with --defect only: that defect and what the
+                                         report proposes. Kept in besluiten/<defect>.json, outside the seal, as a layer with a
+                                         hash of its own; a changed decision keeps the earlier one. The report names the function.
+                                         Confirmed at an interactive terminal, or --recorded-via gesprek (see below)
   statement --run <run> [--concept]      Write the accessibility statement and the answer sheet for the register
   diff --previous <evaluation.json> --current <evaluation.json> --out <dir>
                                          Write verschil.md: solved, stayed and new between two evaluations of one site
@@ -113,10 +123,16 @@ Options:
   --allow-writes    With inventory, for a site on this machine or a .test or .localhost name only: let the run
                     submit forms and send other requests that change something. On any other site, name the test
                     environment and who declares it to be one: --test-environment <origin> --declared-by "<name>, <role>"
-                    The name is kept in the manifest of the run; the report shows only the role
+                    The name is kept in the manifest of the run; the report shows only the role. The declaration
+                    is confirmed at an interactive terminal by typing the origin; an agent never records it
   --max-writes <n>  With --allow-writes or --test-environment: the most requests that change something the whole run
                     may send to that origin, over every session and the sweep together (default 5), at least 120 s
                     apart. Past it every write is held back as in a run without permission. Kept in the manifest
+  --recorded-via gesprek --confirmation <text> --summary <text>
+                    With answer and decide only: the agent records what the person said in the conversation,
+                    after an express confirmation. --confirmation is what the person said, word for word;
+                    --summary the summary they confirmed. Both are kept with the record. Without the flag a person
+                    confirms at an interactive terminal (--recorded-via terminal); without one the command refuses
 
 Comparing per finding has its own steps: loep compare --findings --help
 Measuring a variant of the code on a frozen sweep: loep variant --help (variant, compare-variants)
@@ -179,6 +195,14 @@ async function main(): Promise<void> {
       did: { type: "string" },
       outcome: { type: "string" },
       reason: { type: "string" },
+      defect: { type: "string" },
+      decision: { type: "string" },
+      what: { type: "string" },
+      date: { type: "string" },
+      alternative: { type: "string" },
+      "recorded-via": { type: "string" },
+      confirmation: { type: "string" },
+      summary: { type: "string" },
       kind: { type: "string" },
       attempted: { type: "string" },
       brief: { type: "boolean", default: false },
@@ -208,10 +232,17 @@ async function main(): Promise<void> {
     return;
   }
   // A run that was given a test environment at inventory may write there; every other run holds all writes back.
-  const { decideWrites, recordWrites, setRunWrites, writeAccess, writesForRun } = await import("./lib/writes.ts");
+  const { confirmDeclaration, decideWrites, recordWrites, setRunWrites, writeAccess, writesForRun } = await import("./lib/writes.ts");
   if (command !== "inventory" && (values["allow-writes"] || values["test-environment"] !== undefined || values["declared-by"] !== undefined || values["max-writes"] !== undefined)) {
     throw new Error("--allow-writes, --test-environment, --declared-by en --max-writes horen bij inventory: daar wordt voor de hele run vastgelegd of er verstuurd mag worden, en hoe vaak");
   }
+  // How a statement of a person came about is recorded with it. An answer and a decision may be recorded by the agent in the
+  // conversation; a signature and the declaration for sending only by a person at an interactive terminal.
+  const { HUMAN_AT_TERMINAL_NL, parseRecordedVia } = await import("./lib/recorded.ts");
+  const recordedVia = parseRecordedVia(values["recorded-via"]);
+  const recording = { recordedVia: values["recorded-via"], confirmation: values.confirmation, summary: values.summary };
+  if (recordedVia === "gesprek" && (command === "sign" || command === "inventory")) throw new Error(`${command === "sign" ? "tekenen" : "de verklaring dat er verstuurd mag worden"} legt de assistent nooit vast, ook niet na een bevestiging in het gesprek. ${HUMAN_AT_TERMINAL_NL}`);
+  if ((recordedVia !== undefined || values.confirmation !== undefined || values.summary !== undefined) && command !== "answer" && command !== "decide") throw new Error("--recorded-via, --confirmation en --summary horen bij answer en decide");
   if (command !== "inventory" && values["also-origin"] !== undefined) throw new Error("--also-origin hoort bij inventory: daar wordt vastgelegd welke origins samen de site zijn");
   // `gaps` and `feedback` read the verdicts and the evaluation of finished runs and nothing else of them: they need no permission to write and no login.
   const readsOnly = command === "gaps" || command === "feedback";
@@ -245,6 +276,8 @@ async function main(): Promise<void> {
     case "inventory": {
       if (!target || !values.out) throw new Error("inventory needs a URL and --out <run>");
       const permission = decideWrites(target, { allowWrites: values["allow-writes"], testEnvironment: values["test-environment"], declaredBy: values["declared-by"], maxWrites: values["max-writes"] });
+      // A declared test environment is confirmed by a person at a terminal before anything starts.
+      if (permission?.declaredBy) Object.assign(permission, await confirmDeclaration(permission));
       if (permission) setRunWrites(writeAccess(values.out, permission, "inventory"));
       // What this command was given decides whether a session may be used: the manifest only holds it afterwards.
       setRunLogin(values.out, { writes: permission });
@@ -457,7 +490,7 @@ async function main(): Promise<void> {
     case "answer": {
       if (!values.run || !values.criterion) throw new Error("answer needs --run <run> and --criterion <id>");
       const { answer, ANSWER_PRIVACY_NL } = await import("./commands/answer.ts");
-      const result = await answer({ run: values.run, criterion: values.criterion, point: values.point === undefined ? undefined : Number(values.point), did: values.did, outcome: values.outcome, name: values.name, role: values.role });
+      const result = await answer({ run: values.run, criterion: values.criterion, point: values.point === undefined ? undefined : Number(values.point), did: values.did, outcome: values.outcome, name: values.name, role: values.role, ...recording });
       for (const point of result.points) process.stdout.write(`${point.number}. [${point.kindNl}] ${point.textNl}${point.answered ? ` (beantwoord: ${point.answered})` : ""}\n`);
       const { NOT_SENT } = await import("./lib/verdict.ts");
       if (result.written === null && result.points.some((point) => point.kindNl === NOT_SENT && point.answered === null)) process.stdout.write(`Een punt [${NOT_SENT}] heeft geen persoon nodig: een nieuw onderzoek met een testomgeving, verklaard bij inventory (--test-environment <origin> --declared-by "<naam>, <functie>"), meet het met een instrument. Die origin mag die van alleen het ingesloten venster zijn. Legt een persoon het toch vast, dan zegt --did wat er is verstuurd en waar.\n`);
@@ -498,11 +531,29 @@ async function main(): Promise<void> {
       process.stdout.write(`getekend voor evaluatie ${signature.evaluationSha256.slice(0, 12)}, verzegeld als ${signature.sealSha256.slice(0, 12)}; render maakt nu het afgetekende rapport in signed/\n`);
       return;
     }
+    case "decide": {
+      if (!values.run) throw new Error("decide needs --run <run>");
+      const { decide, defectLineNl } = await import("./commands/decide.ts");
+      const { DECISION_LABEL_NL, DECISION_PRIVACY_NL } = await import("./lib/decisions.ts");
+      const result = await decide({ run: values.run, defect: values.defect, decision: values.decision, what: values.what, date: values.date, alternative: values.alternative, name: values.name, role: values.role, ...recording });
+      if (values.defect === undefined) {
+        for (const view of result.defects) process.stdout.write(`${defectLineNl(view)}\n`);
+        process.stdout.write(`${result.left} van de ${result.defects.length} gebreken zonder besluit. Eén gebrek bekijken: --defect <nummer>.\n`);
+        return;
+      }
+      const view = result.defects[0]!;
+      process.stdout.write(`${defectLineNl(view)}\nPagina's: ${view.pages.join(", ") || "geen plek"}\n${view.proposalsNl.length === 1 ? "Voorstel uit het rapport" : "Voorstellen uit het rapport"}:\n${view.proposalsNl.map((text) => `- ${text}`).join("\n")}\n`);
+      for (const earlier of view.current?.previous ?? []) process.stdout.write(`eerder: ${DECISION_LABEL_NL[earlier.decision]}${earlier.date ? ` (${earlier.date})` : ""}, vastgelegd op ${earlier.decidedAt.slice(0, 10)}\n`);
+      if (result.written === null) process.stdout.write(`Een besluit vastleggen: --decision opgelost|gepland|zienswijze|onevenredig|onbesloten --what "<wat>" [--date jjjj-mm-dd] [--alternative "<alternatief>"] --name "<naam>" --role "<functie>". Let op: ${DECISION_PRIVACY_NL}.\n`);
+      else process.stdout.write(`besluit vastgelegd in ${result.written}; nog ${result.left} ${result.left === 1 ? "gebrek" : "gebreken"} zonder besluit. render zet het in het afgetekende rapport, statement in de verklaring. Let op: ${DECISION_PRIVACY_NL}.\n`);
+      return;
+    }
     case "statement": {
       if (!values.run) throw new Error("statement needs --run <run>");
       const { statement } = await import("./commands/statement.ts");
       const result = await statement(values.run, values.concept);
       process.stdout.write(`status ${result.status}; ${result.openItems.length} punten nog in te vullen\n${result.files.join("\n")}\n`);
+      if (result.missingMeasuresNl) process.stdout.write(`LET OP: ${result.missingMeasuresNl}\n`);
       for (const problem of result.pdfChecks) process.stdout.write(`- ${problem}\n`);
       if (result.pdfChecks.length > 0) process.exitCode = 1;
       return;
