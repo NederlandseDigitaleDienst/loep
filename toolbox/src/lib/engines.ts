@@ -1,25 +1,21 @@
-import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { Audit } from "@siteimprove/alfa-act";
-import { Playwright } from "@siteimprove/alfa-playwright";
 import alfaRules from "@siteimprove/alfa-rules";
 import type { Page } from "playwright";
-import { refuseFixedGlobals } from "../instruments/methods/capsule.ts";
+import { ownWorld } from "../browser/world.ts";
+import { axeSource } from "../instruments/methods/capsule.ts";
+import { alfaPageOf } from "../instruments/methods/rules.ts";
 import { compareCriterionIds, criterionIdFromAxeTag } from "./wcag.ts";
 
 const require = createRequire(import.meta.url);
-const AXE_SOURCE = readFileSync(require.resolve("axe-core/axe.min.js"), "utf8");
 const AXE_TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"];
 const MAX_NODES_PER_RULE = 100;
 /**
- * axe-core loaded and run in one go, so that no script of the page runs in between. A window.axe that the page fixed
- * beforehand is refused instead of run, and the library is not announced to a loader of modules of the page (#143).
- * The window keeps axe afterwards, as it did when it was loaded on its own.
+ * axe-core loaded and run in one go in loep's own world (#155): no script of the page sees it, takes hold of it
+ * or changes the built-in functions it uses. That world keeps axe afterwards.
  */
-const AXE_RUN = `(async function () {
-  var define, module, exports;
-  ${refuseFixedGlobals(["axe"])}
-  ${AXE_SOURCE}
+const axeRun = (): string => `(async function () {
+  ${axeSource()}
   ;
   return await axe.run(document, { runOnly: { type: "tag", values: ${JSON.stringify(AXE_TAGS)} }, resultTypes: ["violations", "incomplete", "passes", "inapplicable"] });
 }).call(window)`;
@@ -170,7 +166,7 @@ function fromAlfa(outcomes: AlfaOutcome[]): EngineResult[] {
 
 /**
  * The engines that gave no answer in a run, with their error. Their silence is no clean result: what they would
- * have found cannot be established, for instance because the page fixed a library of its own in their place (#143).
+ * have found cannot be established, for instance because the engine broke off on the page or the library in the page did not answer (#143).
  */
 export function enginesWithoutResult(run: Pick<EngineRun, "status"> | undefined): { engine: string; error: string }[] {
   return Object.entries(run?.status ?? {})
@@ -189,7 +185,7 @@ export async function runEngines(page: Page): Promise<EngineRun> {
   };
 
   try {
-    const axe = (await page.evaluate(AXE_RUN)) as AxeResults;
+    const axe = await ownWorld(page).evaluate<AxeResults>(axeRun());
     results.push(...fromAxe(axe));
     status["axe-core"] = { ok: true, version: axe.testEngine.version };
   } catch (error) {
@@ -197,9 +193,7 @@ export async function runEngines(page: Page): Promise<EngineRun> {
   }
 
   try {
-    const handle = await page.evaluateHandle(() => window.document);
-    const alfaPage = await Playwright.toPage(handle);
-    const outcomes: AlfaOutcome[] = [...(await Audit.of(alfaPage, alfaRules).evaluate())];
+    const outcomes: AlfaOutcome[] = [...(await Audit.of(await alfaPageOf(page), alfaRules).evaluate())];
     results.push(...fromAlfa(outcomes));
     status.alfa = { ok: true, version: require("@siteimprove/alfa-rules/package.json").version as string };
   } catch (error) {

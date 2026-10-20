@@ -4,8 +4,12 @@
 // or that it gives back with removeTextSpacing().
 // The library is fixed to the window, frozen and not writable: a script of the page cannot swap a function of it
 // for one that finds nothing (#143). Installed a second time in the same document, it leaves the first in place.
+// The same file runs twice in a document (#155). In the page it counts what the page registers and keeps the
+// registry of elements. In loep's own world (see world.ts) it reads, with built-in functions the page cannot
+// reach; there it asks the copy in the page for what only the page can know (see "bridge" below).
 (() => {
   if (Object.getOwnPropertyDescriptor(window, "__loep")) return;
+  const ownWorld = globalThis.__loepOwnWorld === true;
   const registry = [];
 
   // What the page writes to the clipboard, recorded where it asks for it and before any page
@@ -37,14 +41,15 @@
   };
   // A page without https has no clipboard object; there the old copy command below is all a page can use.
   const clipboardPrototype = navigator.clipboard ? Object.getPrototypeOf(navigator.clipboard) : null;
-  if (clipboardPrototype?.writeText) {
+  // Only the copy in the page watches: in loep's own world no script of the page runs.
+  if (!ownWorld && clipboardPrototype?.writeText) {
     const writeText = clipboardPrototype.writeText;
     clipboardPrototype.writeText = function (text) {
       const entry = noteClipboard("writeText", String(text));
       return answerClipboard(entry, () => writeText.call(this, text));
     };
   }
-  if (clipboardPrototype?.write) {
+  if (!ownWorld && clipboardPrototype?.write) {
     const write = clipboardPrototype.write;
     clipboardPrototype.write = function (items) {
       const entry = noteClipboard("write", null);
@@ -65,7 +70,7 @@
   }
   // The old way: select something and run the copy command, which fires a copy event. A user who
   // presses the copy shortcut fires the same event without the command.
-  EventTarget.prototype.addEventListener.call(window, "copy", (event) => {
+  if (!ownWorld) EventTarget.prototype.addEventListener.call(window, "copy", (event) => {
     let text = "";
     try {
       text = event.clipboardData?.getData("text/plain") ?? "";
@@ -82,7 +87,7 @@
     noteClipboard("copy-event", text);
   });
   const execCommand = Document.prototype.execCommand;
-  Document.prototype.execCommand = function (command, ...rest) {
+  if (!ownWorld) Document.prototype.execCommand = function (command, ...rest) {
     if (String(command).toLowerCase() !== "copy" && String(command).toLowerCase() !== "cut") return execCommand.call(this, command, ...rest);
     const before = clipboardLog.length;
     const done = execCommand.call(this, command, ...rest);
@@ -120,7 +125,7 @@
   };
   let frozenListeners = null;
   const addEventListener = EventTarget.prototype.addEventListener;
-  EventTarget.prototype.addEventListener = function (type, ...rest) {
+  if (!ownWorld) EventTarget.prototype.addEventListener = function (type, ...rest) {
     const target = this === window ? "window" : this === document ? "document" : (this.localName ?? "other");
     listeners[type] ??= {};
     listeners[type][target] = (listeners[type][target] ?? 0) + 1;
@@ -134,6 +139,141 @@
     }
     return addEventListener.call(this, type, ...rest);
   };
+
+  // The bridge between the two copies (#155). The copy in loep's own world asks with an event on the element it
+  // asks about; the copy in the page hears it first, before any script of the page, and stops it there. The answer
+  // comes back as an event on the window, and an element as an event on that element: an event is the one thing
+  // both worlds see. A script of the page could listen for the answers; it cannot see or change the questions.
+  const ASK = "loep:ask";
+  const ANSWER = "loep:answer";
+  const HANDED = "loep:element";
+  const UNWATCHED_NL = "window.__loep is niet de bibliotheek die loep in de pagina zette; wat ermee zou worden gemeten, kan niet worden vastgesteld";
+  const dispatch = EventTarget.prototype.dispatchEvent;
+  const pathOf = Event.prototype.composedPath;
+  const stop = Event.prototype.stopImmediatePropagation;
+  const detailOf = Object.getOwnPropertyDescriptor(CustomEvent.prototype, "detail").get;
+  const NativeCustomEvent = CustomEvent;
+  let replied = false;
+  let reply = null;
+  let arrived = [];
+  function onAsk(event) {
+    stop.call(event);
+    const handed = [];
+    let reply;
+    try {
+      const { kind, extra } = detailOf.call(event) ?? {};
+      reply = { ok: answer(kind, pathOf.call(event)[0], extra, handed) };
+    } catch (error) {
+      reply = { error: String(error?.message ?? error) };
+    }
+    for (let index = 0; index < handed.length; index++) dispatch.call(handed[index], new NativeCustomEvent(HANDED, { composed: true }));
+    dispatch.call(window, new NativeCustomEvent(ANSWER, { detail: reply }));
+  }
+  function onAnswer(event) {
+    if (replied) return;
+    replied = true;
+    reply = detailOf.call(event);
+  }
+  function onHanded(event) {
+    arrived.push(pathOf.call(event)[0]);
+  }
+  /** Listen; the same listener twice is one. Writing a new document into the window (document.open) takes every listener away, so that is listened for too. */
+  const arm = () => {
+    if (ownWorld) {
+      addEventListener.call(window, ANSWER, onAnswer, true);
+      addEventListener.call(window, HANDED, onHanded, true);
+    } else addEventListener.call(window, ASK, onAsk, true);
+  };
+  arm();
+  new MutationObserver(arm).observe(document, { childList: true });
+
+  /** Ask the copy in the page about an element (connected to the document) or the document. */
+  function ask(kind, target = document, extra = null) {
+    replied = false;
+    reply = null;
+    arrived = [];
+    target.dispatchEvent(new CustomEvent(ASK, { detail: { kind, extra }, composed: true }));
+    if (!replied) throw new Error(UNWATCHED_NL);
+    if (reply === null || typeof reply !== "object" || "error" in reply) throw new Error(reply?.error ?? UNWATCHED_NL);
+    return reply.ok;
+  }
+
+  /** The copy in the page answers what only the page can know. Elements to hand over go in `handed`. */
+  function answer(kind, target, extra, handed) {
+    if (kind === "ping") return true;
+    if (kind === "register") {
+      registry[registry.length] = target;
+      return registry.length - 1;
+    }
+    if (kind === "clear") return void (registry.length = 0);
+    if (kind === "element") {
+      const element = registry[extra.ref];
+      if (!element) return null;
+      if (!element.isConnected) return "detached";
+      handed[handed.length] = element;
+      return "handed";
+    }
+    if (kind === "click") return clickTargets.has(target);
+    if (kind === "hearsDown") return hearsDown(target);
+    if (kind === "signature") return listenerSignature(target, extra.types, extra.labels);
+    if (kind === "counts") return watchedCounts();
+    if (kind === "handler") return typeof target[extra.name] === "function";
+    if (kind === "member") {
+      let value = target[extra.name];
+      if (extra.call) value = typeof value === "function" ? Boolean(value.call(target)) : undefined;
+      if (value === null || typeof value === "string" || typeof value === "number" || typeof value === "boolean") return value;
+      // A list of elements, such as labels, is handed over element by element.
+      if (typeof value !== "object" || typeof value.length !== "number") return undefined;
+      for (let index = 0; index < value.length; index++) {
+        if (!(value[index] instanceof Element) || !value[index].isConnected) return undefined;
+        handed[handed.length] = value[index];
+      }
+      return { list: handed.length };
+    }
+    throw new Error(`onbekende vraag aan de meethulp in de pagina: ${kind}`);
+  }
+
+  /** Whether the copy in the page answers: not where the toolbox could not put it there, or where another library stands. */
+  const ping = () => {
+    try {
+      return ask("ping") === true;
+    } catch {
+      return false;
+    }
+  };
+  let watched = !ownWorld || ping();
+
+  /**
+   * A member of an element as the page defines it. A custom element gets its members (disabled, value, labels)
+   * from the code of the page, which only the page's world runs; any other element has the browser's own.
+   * With `call`, the member is a function and whether what it returns is true is the answer; undefined when it is no function.
+   */
+  function member(element, name, call = false) {
+    if (ownWorld && watched && element.isConnected && element.localName.includes("-")) {
+      const value = ask("member", element, { name, call });
+      return value !== null && typeof value === "object" && "list" in value ? [...arrived] : value;
+    }
+    const value = element[name];
+    return call ? (typeof value === "function" ? Boolean(value.call(element)) : undefined) : value;
+  }
+
+  /** Whether the page set a handler such as onfocus on an element, by an attribute or a property: those are the page's own. */
+  function handler(element, name) {
+    return ownWorld && watched && element.isConnected ? ask("handler", element, { name }) : typeof element[name] === "function";
+  }
+
+  /** The listener counts as the page left them and what its timers ask for. */
+  function watchedCounts() {
+    return ownWorld ? ask("counts") : { listeners: frozenListeners ?? listeners, timers };
+  }
+
+  /** The element under a reference number of the registry, which the page keeps. One that left the document stands in as an element that is nowhere. */
+  function registered(ref) {
+    if (!ownWorld) return registry[ref];
+    const found = ask("element", document, { ref });
+    return found === "handed" ? (arrived[0] ?? null) : found === "detached" ? document.createElement("i") : null;
+  }
+
   // Every timer of a second or more is kept with what it did when it went off (WCAG 2.2.1): whether
   // it navigated, opened a window, emptied a form, removed cookies or stored values, or took text
   // away. Shorter timeouts are only counted: they leave the user no time to act in.
@@ -224,7 +364,7 @@
     return record;
   };
   const nativeSetInterval = window.setInterval;
-  window.setInterval = function (handler, delay, ...rest) {
+  if (!ownWorld) window.setInterval = function (handler, delay, ...rest) {
     timers.intervals.push(Number(delay) || 0);
     const record = newTimerRecord("interval", delay);
     if (!record) return nativeSetInterval.call(window, handler, delay, ...rest);
@@ -237,7 +377,7 @@
     return record.handle;
   };
   const nativeSetTimeout = window.setTimeout;
-  window.setTimeout = function (handler, delay, ...rest) {
+  if (!ownWorld) window.setTimeout = function (handler, delay, ...rest) {
     if (Number(delay) >= 20000) timers.longTimeouts.push(Number(delay));
     if (!(Number(delay) >= TIMER_WATCH_FROM_MS)) {
       timerShortTimeouts++;
@@ -265,11 +405,13 @@
       }
       return native.call(window, handle);
     };
-  window.clearTimeout = clearTimer(nativeClearTimeout);
-  window.clearInterval = clearTimer(nativeClearInterval);
+  if (!ownWorld) {
+    window.clearTimeout = clearTimer(nativeClearTimeout);
+    window.clearInterval = clearTimer(nativeClearInterval);
+  }
   // What a timer can do that is gone before a comparison sees it: a navigation, a browser window, a reset form, removed cookies and stored values.
   try {
-    if (window.navigation)
+    if (window.navigation && !ownWorld)
       addEventListener.call(window.navigation, "navigate", (event) => {
         if (!timerOf()) return;
         noteTimerEffect("navigates", { to: event.destination?.url ?? null, how: event.navigationType });
@@ -279,7 +421,7 @@
   } catch {
     // No navigation API in this browser: the address comparison above still sees a change within the page.
   }
-  for (const name of ["alert", "confirm", "prompt"]) {
+  for (const name of ownWorld ? [] : ["alert", "confirm", "prompt"]) {
     const native = window[name];
     if (typeof native !== "function") continue;
     window[name] = function (...args) {
@@ -287,7 +429,7 @@
       return native.apply(window, args);
     };
   }
-  if (window.HTMLDialogElement) {
+  if (window.HTMLDialogElement && !ownWorld) {
     for (const name of ["showModal", "show"]) {
       const native = HTMLDialogElement.prototype[name];
       HTMLDialogElement.prototype[name] = function (...args) {
@@ -296,7 +438,7 @@
       };
     }
   }
-  {
+  if (!ownWorld) {
     const nativeReset = HTMLFormElement.prototype.reset;
     HTMLFormElement.prototype.reset = function (...args) {
       noteTimerEffect("clearsForm", { how: "reset" });
@@ -566,8 +708,13 @@
   }
 
   function register(element) {
-    registry.push(element);
-    return registry.length - 1;
+    if (!ownWorld) {
+      registry.push(element);
+      return registry.length - 1;
+    }
+    // The registry is the page's: loep's code in the page looks elements up there by number.
+    if (!watched) throw new Error(UNWATCHED_NL);
+    return element.isConnected ? ask("register", element) : -1;
   }
 
   function closestComposed(element, selector) {
@@ -675,7 +822,7 @@
   /** Why an element looks clickable; empty when nothing says so. */
   function clickSignals(element) {
     const signals = [];
-    if (clickTargets.has(element)) signals.push("click-listener");
+    if (ownWorld ? ask("click", element) : clickTargets.has(element)) signals.push("click-listener");
     if (element.hasAttribute("onclick")) signals.push("onclick");
     for (const name of CLICK_ATTRIBUTES) if (element.hasAttribute(name)) signals.push(name);
     // The cursor is inherited: only the element where the pointer starts is the clickable thing.
@@ -873,7 +1020,8 @@
   }
 
   function collectFacts() {
-    registry.length = 0;
+    if (ownWorld) ask("clear");
+    else registry.length = 0;
     const all = [...deepElements()];
     const select = (selector) => all.filter((element) => element.matches(selector));
 
@@ -895,7 +1043,7 @@
       .map((element) => ({
         ...describe(element),
         alt: element.getAttribute("alt"),
-        src: element.currentSrc || element.getAttribute("src") || null,
+        src: member(element, "currentSrc") || element.getAttribute("src") || null,
         svgTitle: element.localName === "svg" ? (element.querySelector(":scope > title")?.textContent ?? null) : null,
         inInteractive: closestComposed(composedParent(element) ?? element, INTERACTIVE)?.localName ?? null,
         interactiveText: text(closestComposed(composedParent(element) ?? element, INTERACTIVE) ?? document.createElement("i"), 80),
@@ -912,7 +1060,7 @@
       const sentence = closestComposed(composedParent(element), SENTENCE);
       return {
         ...describe(element),
-        href: element.href ?? element.getAttribute("href"),
+        href: member(element, "href") ?? element.getAttribute("href"),
         target: element.getAttribute("target"),
         context: context.text,
         contextFrom: context.from,
@@ -930,11 +1078,11 @@
         type: element.getAttribute("type"),
         name: element.getAttribute("name"),
         autocomplete: element.getAttribute("autocomplete"),
-        required: element.required === true || element.getAttribute("aria-required") === "true",
+        required: member(element, "required") === true || element.getAttribute("aria-required") === "true",
         placeholder: element.getAttribute("placeholder"),
         tabindex: element.getAttribute("tabindex"),
-        disabled: element.disabled === true || element.getAttribute("aria-disabled") === "true",
-        labelText: element.labels ? [...element.labels].map((label) => text(label, 120)).join(" | ") : null,
+        disabled: member(element, "disabled") === true || element.getAttribute("aria-disabled") === "true",
+        labelText: member(element, "labels") ? [...member(element, "labels")].map((label) => text(label, 120)).join(" | ") : null,
         inForm: closestComposed(element, "form,[role=form],nldd-form") !== null,
         ...notRendered(element),
       }));
@@ -985,8 +1133,7 @@
       iframes,
       tables,
       mainText,
-      listeners: frozenListeners ?? listeners,
-      timers,
+      ...watchedCounts(),
       counts: {
         elements: all.length,
         shadowRoots: all.filter((element) => element.shadowRoot).length,
@@ -1392,7 +1539,7 @@
 
   /** Where a registered element is painted now, and whether it is painted at all: to check that a screenshot clip shows it. */
   function paintedBox(ref) {
-    const element = registry[ref];
+    const element = registered(ref);
     if (!element) return null;
     const rect = element.getBoundingClientRect();
     return { visible: isVisible(element), viewportBox: { x: Math.round(rect.x), y: Math.round(rect.y), width: Math.round(rect.width), height: Math.round(rect.height) } };
@@ -1409,7 +1556,7 @@
 
   function targetSizes() {
     return deepQueryAll(INTERACTIVE)
-      .filter((element) => shownAs(element) !== null && !element.disabled)
+      .filter((element) => shownAs(element) !== null && !member(element, "disabled"))
       .map((element) => {
         const rect = shownAs(element).getBoundingClientRect();
         const inline = getComputedStyle(element).display === "inline" && closestComposed(composedParent(element) ?? element, "p,li,td,dd,span") !== null;
@@ -1440,6 +1587,7 @@
 
   /** Content that moves, blinks or plays by itself, measured with motion allowed. */
   function motionReport() {
+    const { timers: started } = watchedCounts();
     const animations = document.getAnimations().filter((animation) => animation.playState === "running");
     return {
       runningAnimations: animations.length,
@@ -1454,8 +1602,8 @@
       gifImages: deepQueryAll('img[src$=".gif" i]').length,
       autoplayMedia: deepQueryAll("audio[autoplay],video[autoplay]").length,
       marqueeBlink: deepQueryAll("marquee,blink").length,
-      intervals: timers.intervals,
-      longTimeouts: timers.longTimeouts,
+      intervals: started.intervals,
+      longTimeouts: started.longTimeouts,
     };
   }
 
@@ -1527,13 +1675,13 @@
     return {
       ...describe(element),
       type: element.getAttribute("type"),
-      required: element.required === true || element.getAttribute("aria-required") === "true",
+      required: member(element, "required") === true || element.getAttribute("aria-required") === "true",
       ariaInvalid: element.getAttribute("aria-invalid") === "true",
-      nativeInvalid: typeof element.checkValidity === "function" ? !element.checkValidity() : false,
-      validationMessage: element.validationMessage || null,
+      nativeInvalid: member(element, "checkValidity", true) === false,
+      validationMessage: member(element, "validationMessage") || null,
       describedBy: element.getAttribute("aria-describedby"),
       autocomplete: element.getAttribute("autocomplete"),
-      value: element.value ?? null,
+      value: member(element, "value") ?? null,
     };
   }
 
@@ -1648,19 +1796,19 @@
   }
 
   function fieldStates(formRef) {
-    const form = registry[formRef];
+    const form = registered(formRef);
     return form ? fieldsWithin(form).map(describeField) : [];
   }
 
   function contains(containerRef, element = deepActiveElement()) {
-    return element ? isComposedAncestor(registry[containerRef], element) : false;
+    return element ? isComposedAncestor(registered(containerRef), element) : false;
   }
 
   function triggers() {
     // A tab that is not selected reveals its panel when activated; the selected one has nothing to show.
     return deepQueryAll("button,[role=button],summary,[aria-haspopup],[aria-expanded],[role=tab]")
       .filter((element) => !(element.getAttribute("role") === "tab" && element.getAttribute("aria-selected") === "true"))
-      .filter((element) => isVisible(element) && !element.disabled && element.getAttribute("type") !== "submit" && !closestComposed(element, "form,[role=form]"))
+      .filter((element) => isVisible(element) && !member(element, "disabled") && element.getAttribute("type") !== "submit" && !closestComposed(element, "form,[role=form]"))
       .map((element) => ({ ...describe(element), title: element.getAttribute("title"), expanded: element.getAttribute("aria-expanded"), hasPopup: element.getAttribute("aria-haspopup") }));
   }
 
@@ -1712,10 +1860,10 @@
     const groups = new Map();
     const elements = deepQueryAll(OPERABLE).filter((element) => {
       if (element.matches("a[href],[role=link]") && !element.matches("[aria-expanded],[aria-haspopup]")) return false;
-      return shownAs(element) !== null && element.disabled !== true && element.getAttribute("aria-disabled") !== "true";
+      return shownAs(element) !== null && member(element, "disabled") !== true && element.getAttribute("aria-disabled") !== "true";
     });
     const nameOf = (element) => {
-      const labels = element.labels ? [...element.labels].map((label) => text(label, 60)).join(" ") : "";
+      const labels = member(element, "labels") ? [...member(element, "labels")].map((label) => text(label, 60)).join(" ") : "";
       return (element.getAttribute("aria-label") || labels || text(element, 60) || element.getAttribute("placeholder") || element.getAttribute("title") || element.getAttribute("value") || element.getAttribute("name") || "").replace(/\s+/g, " ").trim().slice(0, 60);
     };
     // The block a control shares with an audio or video element: its nearest ancestors, short of a region of the page.
@@ -1764,7 +1912,7 @@
   /** Checkboxes, radio buttons, switches and select lists: controls whose value a user changes in place. */
   function settingControls() {
     return deepQueryAll('input[type=checkbox],input[type=radio],select,[role=checkbox],[role=switch],[role=radio]')
-      .filter((element) => shownAs(element) !== null && !element.disabled)
+      .filter((element) => shownAs(element) !== null && !member(element, "disabled"))
       .map((element) => ({ ...describe(element), type: element.getAttribute("type"), options: element.localName === "select" ? element.options.length : null }));
   }
 
@@ -1895,6 +2043,7 @@
 
   /** The code of the listeners of a set of event types on an element and on what holds it, short of the page itself; with `labels` also on its labels. */
   function listenerSignature(element, types, labels = false) {
+    if (ownWorld) return ask("signature", element, { types, labels });
     const parts = [];
     const handlers = types.map((type) => `on${type}`);
     const of = (node, as) => {
@@ -1968,7 +2117,7 @@
 
   /** Every control a pointer or focus can reach, with its kind; with `kinds: false` without, for who only looks one up. */
   function hoverTargets({ kinds = true } = {}) {
-    const found = deepQueryAll(INTERACTIVE).filter((element) => shownAs(element) !== null && !element.disabled);
+    const found = deepQueryAll(INTERACTIVE).filter((element) => shownAs(element) !== null && !member(element, "disabled"));
     if (!kinds) return found.map(describe);
     const styles = interactionStyles();
     return found.map((element) => ({ ...describe(element), ...hoverKind(element, styles) }));
@@ -1977,7 +2126,7 @@
   /** The controls whose boundary is measured for contrast (WCAG 1.4.11), each with the box of what draws it. */
   function boundaryTargets() {
     return deepQueryAll(INTERACTIVE)
-      .filter((element) => shownAs(element) !== null && !element.disabled)
+      .filter((element) => shownAs(element) !== null && !member(element, "disabled"))
       .map((element) => {
         const drawn = drawnBy(element) ?? shownAs(element);
         return drawn !== element ? { ...describe(element), box: box(drawn), drawnBy: path(drawn) } : describe(element);
@@ -2004,6 +2153,7 @@
 
   /** Whether a press of the pointer on this element reaches a listener for it: on the element, on something around it, or on its label. */
   function hearsDown(element) {
+    if (ownWorld) return ask("hearsDown", element);
     const around = (start) => {
       for (let node = start; node; node = composedParent(node)) if (downTargets.has(node)) return true;
       return false;
@@ -2027,7 +2177,7 @@
     const images = deepQueryAll("img,svg,picture,canvas,video,[role=img]")
       .filter((element) => shown(element) && !closestComposed(composedParent(element) ?? element, "svg,picture,[role=img]"))
       .filter((element) => element.getBoundingClientRect().width >= 16 && element.getBoundingClientRect().height >= 16)
-      .map((element) => `${element.localName}:${squash(element.getAttribute("alt") ?? element.getAttribute("aria-label") ?? "") || (element.currentSrc ?? element.getAttribute("src") ?? "").split("/").pop().split("?")[0] || squash(text(element, 40)) || "-"}`);
+      .map((element) => `${element.localName}:${squash(element.getAttribute("alt") ?? element.getAttribute("aria-label") ?? "") || (member(element, "currentSrc") ?? element.getAttribute("src") ?? "").split("/").pop().split("?")[0] || squash(text(element, 40)) || "-"}`);
     const blocks = deepQueryAll(TEXT_BLOCK)
       .filter((element) => shown(element) && [...element.childNodes].some((node) => node.nodeType === Node.TEXT_NODE && node.textContent.trim()))
       .map((element) => squash(text(element, 80)))
@@ -2204,7 +2354,7 @@
   /** The controls that are on screen now, by where they are: for laying the window sizes next to each other. */
   function shownControls() {
     return deepQueryAll(INTERACTIVE)
-      .filter((element) => !element.disabled && shownAs(element) !== null)
+      .filter((element) => !member(element, "disabled") && shownAs(element) !== null)
       .map((element) => ({ tag: element.localName, text: text(element, 60), ariaLabel: element.getAttribute("aria-label"), region: region(element), path: path(element) }));
   }
 
@@ -2308,7 +2458,7 @@
       out.push({
         ...describe(element),
         kind: isPicture ? element.localName : "achtergrond",
-        src: isPicture ? (element.currentSrc || element.getAttribute("src") || element.getAttribute("data") || element.getAttribute("poster") || null) : background.slice(0, 200),
+        src: isPicture ? (member(element, "currentSrc") || element.getAttribute("src") || element.getAttribute("data") || element.getAttribute("poster") || null) : background.slice(0, 200),
         alt: element.getAttribute("alt") ?? element.getAttribute("aria-label") ?? (element.localName === "svg" ? (element.querySelector(":scope > title")?.textContent ?? null) : null),
         ownText: hasBackground && !isPicture ? text(element, 200) : "",
       });
@@ -2382,7 +2532,7 @@
     hearsDown,
     downSignature,
     contentInventory,
-    interactiveWithin: (ref) => composedWithin(registry[ref], INTERACTIVE).map(describe),
+    interactiveWithin: (ref) => composedWithin(registered(ref), INTERACTIVE).map(describe),
     freezeListeners,
     listenerCounts: () => JSON.parse(JSON.stringify(listeners)),
     // What the document registered itself: the counts as they were frozen, or as they are when nothing froze them.
@@ -2394,7 +2544,28 @@
     wait: (ms) => new Promise((resolve) => nativeSetTimeout.call(window, resolve, ms)),
     flatText,
     scrollRegions,
-    registry,
+    // In the page: the registry, which a script of the page can add to or empty but whose elements it cannot replace.
+    registry: ownWorld
+      ? undefined
+      : new Proxy(registry, {
+          get: (list, key) =>
+            key === "push"
+              ? (...elements) => {
+                  for (let index = 0; index < elements.length; index++) list[list.length] = elements[index];
+                  return list.length;
+                }
+              : list[key],
+          set: (list, key, value) => {
+            if (key !== "length" || !(value <= list.length)) return false;
+            list.length = value;
+            return true;
+          },
+          defineProperty: () => false,
+          deleteProperty: () => false,
+        }),
+    watched: () => watched || (watched = ping()),
+    member,
+    handler,
     deepElements,
     deepQueryAll,
     collectFacts,
@@ -2415,5 +2586,7 @@
     sentenceOf,
     skipLinkTarget,
   };
+  // What only the copy in the page knows or does is not there in loep's own world: a call there would find nothing.
+  if (ownWorld) for (const name of ["freezeListeners", "listenerCounts", "ownListeners", "timerReport", "clipboardWrites", "applyTextSpacing", "removeTextSpacing"]) delete library[name];
   Object.defineProperty(window, "__loep", { value: Object.freeze(library), writable: false, configurable: false, enumerable: false });
 })();

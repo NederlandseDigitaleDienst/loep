@@ -1,4 +1,5 @@
 import type { CDPSession, ElementHandle, Page } from "playwright";
+import { ownWorld } from "./world.ts";
 
 /**
  * Whether a library of the toolbox stands on the window as the toolbox leaves it: fixed and frozen (#143).
@@ -15,11 +16,26 @@ export const readableFrame = (): boolean => {
   return own !== undefined && "value" in own && !own.writable && !own.configurable && Object.isFrozen(own.value) && document.body !== null;
 };
 
+/** What only the library in the page itself knows or does: what the page registered, its timers and clipboard, and the wider text spacing it is given. */
+const IN_PAGE = new Set(["freezeListeners", "listenerCounts", "ownListeners", "timerReport", "clipboardWrites", "applyTextSpacing", "removeTextSpacing"]);
+
 /**
  * Call a function of the in-page library. Nothing from the toolbox itself exists inside the page.
- * A library that is not the one the toolbox fixed to the window is refused, not called (#143).
+ * It reads in loep's own world, with built-in functions a script of the page cannot replace (#155);
+ * what only the page knows, it asks the library in the page. Where that library is not the one the
+ * toolbox fixed to the window, the call is refused (#143).
  */
 export function call<T>(page: Page, name: string, ...args: unknown[]): Promise<T> {
+  if (!IN_PAGE.has(name)) {
+    return ownWorld(page).evaluate(
+      ([fn, parameters]) => {
+        const library = (window as unknown as { __loep: Record<string, (...values: unknown[]) => unknown> & { watched: () => boolean } }).__loep;
+        if (!library.watched()) throw new Error("window.__loep is niet de bibliotheek die loep in de pagina zette; wat ermee zou worden gemeten, kan niet worden vastgesteld");
+        return library[fn as string]!(...(parameters as unknown[]));
+      },
+      [name, args] as const,
+    ) as Promise<T>;
+  }
   return page.evaluate(
     ([fn, parameters]) => {
       const own = Object.getOwnPropertyDescriptor(window, "__loep");

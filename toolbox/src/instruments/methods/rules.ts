@@ -5,7 +5,8 @@ import alfaRules from "@siteimprove/alfa-rules";
 import type { Page } from "playwright";
 import { compareCriterionIds, criterionById, criterionIdFromAxeTag } from "../../lib/wcag.ts";
 import type { MethodFailure, MethodResult } from "../methods.ts";
-import { ensureHelpers, exportsOnThis, inCapsule, packageSource } from "./capsule.ts";
+import { ownWorld } from "../../browser/world.ts";
+import { axeSource, exportsOnThis, inOwnCapsule, packageSource } from "./capsule.ts";
 import { knownError, runMethod, sortRan, toolboxRequire, type BrowserVersions } from "./registry.ts";
 
 export type EngineId = "axe-core" | "alfa" | "ibm" | "qualweb";
@@ -122,21 +123,21 @@ const AXE_BODY = `async (tags) => {
 }`;
 
 /**
- * axe-core on the page and on every frame in it. axe only looks inside a frame when its own
- * script is there too, so the script is put into each frame for as long as the run lasts.
+ * axe-core on the page and on every frame in it, each in loep's own world (#155). axe only looks inside
+ * a frame when its own script is there too, so the script is put into each frame for as long as the run lasts.
  */
 async function runAxe(page: Page): Promise<EngineAnswer> {
-  const source = packageSource("axe-core/axe.min.js");
+  const source = axeSource();
   const frames = page.frames().filter((frame) => frame !== page.mainFrame());
   const prepared: typeof frames = [];
   for (const frame of frames) {
-    const ok = await frame
-      .evaluate(`(function () { window.__loepAxeKept = Object.getOwnPropertyDescriptor(window, "axe") ?? null; ${source}\n; return true; })()`)
+    const ok = await ownWorld(frame)
+      .evaluate(`(function () { ${source}\n; return true; })()`)
       .then(() => true, () => false);
     if (ok) prepared.push(frame);
   }
   try {
-    const raw = await inCapsule<RawAxe>(page, [source], AXE_BODY, AXE_TAGS);
+    const raw = await inOwnCapsule<RawAxe>(page, [source], AXE_BODY, AXE_TAGS);
     const rules: Record<string, RuleInfo> = {};
     for (const [id, rule] of Object.entries(raw.rules)) {
       rules[id] = { criteria: rule.tags.map(criterionIdFromAxeTag).filter((criterion): criterion is string => criterion !== undefined).sort(compareCriterionIds), act: rule.act, title: rule.title, url: rule.url };
@@ -145,13 +146,8 @@ async function runAxe(page: Page): Promise<EngineAnswer> {
     return summarise(rules, raw.findings, [`${prepared.length} van ${frames.length} frames geïnjecteerd`, ...(untested > 0 ? [`${untested} frames niet getest door axe`] : [])]);
   } finally {
     for (const frame of prepared) {
-      await frame
-        .evaluate(() => {
-          const scope = window as unknown as { axe?: unknown; __loepAxeKept?: PropertyDescriptor | null };
-          delete scope.axe;
-          if (scope.__loepAxeKept) Object.defineProperty(window, "axe", scope.__loepAxeKept);
-          delete scope.__loepAxeKept;
-        })
+      await ownWorld(frame)
+        .evaluate(() => void delete (window as unknown as { axe?: unknown }).axe)
         .catch(() => undefined);
     }
   }
@@ -160,8 +156,12 @@ async function runAxe(page: Page): Promise<EngineAnswer> {
 /** Alfa's copy of the page: a snapshot of the DOM, shadow roots and frames included, with the computed layout. */
 export type AlfaPage = Awaited<ReturnType<typeof Playwright.toPage>>;
 
+/** Alfa's copy, made in loep's own world (#155): Alfa reads the page through a handle, and each function it runs on that handle runs there. */
 export async function alfaPageOf(page: Page): Promise<AlfaPage> {
-  return Playwright.toPage(await page.evaluateHandle(() => window.document));
+  const world = ownWorld(page);
+  const on = (value: string) => ({ evaluate: (fn: unknown, options?: unknown) => world.evaluate(`(${String(fn)})(${value}${options === undefined ? "" : `, ${JSON.stringify(options)}`})`) });
+  const document = { ...on("window.document"), evaluateHandle: async () => on("window") };
+  return Playwright.toPage(document as unknown as Parameters<typeof Playwright.toPage>[0]);
 }
 
 /**
@@ -266,9 +266,8 @@ async function runAlfa(page: Page, alfaPage: AlfaPage): Promise<EngineAnswer> {
   }
   // One trip to the page for all the paths: there each becomes a place in the toolbox's notation.
   const paths = [...new Set(findings.map((finding) => finding.deep).filter((deep): deep is string => typeof deep === "string"))];
-  await ensureHelpers(page);
-  const places = await page.evaluate(
-    (list) => {
+  const places = await ownWorld(page).evaluate(
+    (list: string[]) => {
       const helpers = (window as unknown as { __loepm: { byDeepXPath: (path: string) => Element | null; where: (element: Element) => string | null } }).__loepm;
       return list.map((path) => {
         const element = helpers.byDeepXPath(path);
@@ -321,7 +320,7 @@ const IBM_BODY = `async () => {
 }`;
 
 async function runIbm(page: Page): Promise<EngineAnswer> {
-  const raw = await inCapsule<{ rules: Record<string, RuleInfo>; findings: Finding[] }>(page, [packageSource("accessibility-checker-engine/ace.js")], IBM_BODY);
+  const raw = await inOwnCapsule<{ rules: Record<string, RuleInfo>; findings: Finding[] }>(page, [packageSource("accessibility-checker-engine/ace.js")], IBM_BODY);
   for (const rule of Object.values(raw.rules)) rule.criteria.sort(compareCriterionIds);
   return summarise(raw.rules, raw.findings);
 }
@@ -413,13 +412,15 @@ let qualwebTranslation: unknown;
 async function runQualweb(page: Page): Promise<EngineAnswer> {
   qualwebTranslation ??= (toolboxRequire("@qualweb/locale") as { LocaleFetcher: { transform: (options: unknown) => unknown } }).LocaleFetcher.transform({ translate: "en", fallback: "en" });
   const libraries = ["@qualweb/qw-page", "@qualweb/util", "@qualweb/locale", "@qualweb/act-rules", "@qualweb/wcag-techniques"].map((name) => exportsOnThis(packageSource(name)));
-  const raw = await inCapsule<{ rules: Record<string, RuleInfo>; findings: Finding[] }>(page, libraries, QUALWEB_BODY, qualwebTranslation);
+  const raw = await inOwnCapsule<{ rules: Record<string, RuleInfo>; findings: Finding[] }>(page, libraries, QUALWEB_BODY, qualwebTranslation);
   for (const rule of Object.values(raw.rules)) rule.criteria.sort(compareCriterionIds);
   return summarise(raw.rules, raw.findings, ["schrijft tijdens het draaien attributen in de DOM; die zijn daarna weer weggehaald"]);
 }
 
 const snapshotOf = (page: Page): Promise<string | null> =>
-  page.evaluate(() => (window as unknown as { __loep?: { contentSnapshot: () => string } }).__loep?.contentSnapshot() ?? null).catch(() => null);
+  ownWorld(page)
+    .evaluate(() => (window as unknown as { __loep: { contentSnapshot: () => string } }).__loep.contentSnapshot())
+    .catch(() => null);
 
 const ENGINE_LIMIT_MS = 45_000;
 
@@ -429,9 +430,8 @@ const ENGINE_LIMIT_MS = 45_000;
  * because it writes into the DOM while it runs.
  */
 export async function runRuleEngines(page: Page, browsers: BrowserVersions, share: { alfaPage?: AlfaPage } = {}, between: () => Promise<void> = async () => undefined): Promise<RulesRun> {
-  await ensureHelpers(page);
   const before = await snapshotOf(page);
-  const usesLightDark = await page
+  const usesLightDark = await ownWorld(page)
     .evaluate(() => {
       const uses = (text: string | null): boolean => text !== null && text.includes("light-dark(");
       for (const sheet of document.styleSheets) {
@@ -444,7 +444,9 @@ export async function runRuleEngines(page: Page, browsers: BrowserVersions, shar
       return [...document.querySelectorAll("[style]")].some((element) => uses(element.getAttribute("style")));
     })
     .catch(() => false);
-  const live = await page.evaluate(() => (window as unknown as { __loepm: { liveState: () => { hover: string | null; focus: string | null } } }).__loepm.liveState()).catch(() => ({ hover: null, focus: null }));
+  const live = await ownWorld(page)
+    .evaluate(() => (window as unknown as { __loepm: { liveState: () => { hover: string | null; focus: string | null } } }).__loepm.liveState())
+    .catch(() => ({ hover: null, focus: null }));
   // An engine may scroll or move focus while it runs. `between` puts the page back in the state it was in, so each engine sees the same.
   const ran = [];
   ran.push(await runMethod("axe-core", browsers, () => runAxe(page), ENGINE_LIMIT_MS));

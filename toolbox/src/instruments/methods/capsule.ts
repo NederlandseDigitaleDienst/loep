@@ -3,6 +3,7 @@ import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { Frame, Page } from "playwright";
 import { fixedOnWindow } from "../../browser/call.ts";
+import { ownWorld } from "../../browser/world.ts";
 import { TOOLBOX_ROOT, toolboxRequire } from "./registry.ts";
 
 /** The in-page helpers of the second-opinion methods, installed as window.__loepm on demand. */
@@ -16,6 +17,24 @@ export function packageSource(specifier: string): string {
   if (source === undefined) {
     source = readFileSync(toolboxRequire.resolve(specifier), "utf8");
     sources.set(specifier, source);
+  }
+  return source;
+}
+
+/**
+ * axe-core as it runs in loep's own world (#155). axe reads a few members of an element that the page
+ * itself can define: a handler such as onfocus, and the value or state of a custom element. Those it
+ * gets from the library in the page, as it read them when it ran in the page.
+ */
+export function axeSource(): string {
+  let source = sources.get("axe:own");
+  if (source === undefined) {
+    const plain = packageSource("axe-core/axe.min.js");
+    const handlers = /(\w+)\.actualNode\.onfocus\b/g;
+    const states = /this\.actualNode\.(multiple|value|selected|checked|indeterminate)\b/g;
+    if ((plain.match(handlers) ?? []).length !== 2 || (plain.match(states) ?? []).length !== 5) throw new Error("axe-core is anders gebouwd dan de versie waarvoor de toolbox is gemaakt");
+    source = plain.replace(handlers, '__loep.handler($1.actualNode,"onfocus")').replace(states, '__loep.member(this.actualNode,"$1")');
+    sources.set("axe:own", source);
   }
   return source;
 }
@@ -134,4 +153,9 @@ const SHARED_GLOBALS = ["axe", "ace", "qwPage", "QWPage", "DomUtils", "Accessibi
 export async function inCapsule<T>(frame: Frame | Page, libraries: string[], body: string, argument: unknown = null): Promise<T> {
   await ensureHelpers(frame);
   return (await frame.evaluate(capsule(libraries, body, argument))) as T;
+}
+
+/** The same in loep's own world of the frame (#155), where the helpers always stand and no script of the page sees the libraries or can change what they use. */
+export function inOwnCapsule<T>(frame: Frame | Page, libraries: string[], body: string, argument: unknown = null): Promise<T> {
+  return ownWorld(frame).evaluate<T>(capsule(libraries, body, argument));
 }

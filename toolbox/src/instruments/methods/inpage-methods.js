@@ -4,6 +4,7 @@
 // pointed at it: one selector chain per shadow level joined with " >>> ", and one such
 // chain per frame joined with " | ", outermost first.
 // Fixed to the window and frozen, like window.__loep (#143); installed a second time, it leaves the first in place.
+// In loep's own world (world.ts) it is always there, next to the read-only library (#155).
 (() => {
   if (Object.getOwnPropertyDescriptor(window, "__loepm")) return;
   const isShadowRoot = (node) => node !== null && node.nodeType === 11 && Boolean(node.host);
