@@ -127,6 +127,8 @@ export interface PassedWrite {
   path: string;
   /** A write the browser repeated after a redirect that keeps the method (307, 308): logged, not counted again. */
   repeat?: true;
+  /** A frame over a socket that carried a fixed test value: a message an agent typed, counted like a request. */
+  message?: true;
 }
 
 export const WRITES_LOG = "writes.jsonl";
@@ -147,7 +149,7 @@ export const runWrites = (): WriteAccess | null => current;
 export interface WriteBudget {
   origin: string;
   max: number;
-  /** Writes that counted: every request that passed to the origin, without the repeats after a redirect and without socket messages. */
+  /** Writes that counted: every request that passed to the origin and every socket frame with a test value in it, without the repeats after a redirect. */
   sent: number;
   left: number;
   spacingSeconds: number;
@@ -156,11 +158,22 @@ export interface WriteBudget {
 }
 
 /**
- * Whether a write counts against the budget. A message over a socket does not: a chat on a
- * socket also sends a heartbeat every half minute by itself, and counting those would use up
- * the budget without anybody sending anything. The repeat of a request after a redirect is the same request.
+ * Whether a write counts against the budget. A frame over a socket counts only when it carried a
+ * fixed test value (see `isOurMessage`): a chat on a socket also sends a heartbeat every half
+ * minute by itself, and counting those would use up the budget without anybody sending anything.
+ * The repeat of a request after a redirect is the same request.
  */
-const counts = (entry: PassedWrite): boolean => entry.method !== "SEND" && !entry.repeat;
+const counts = (entry: PassedWrite): boolean => !entry.repeat && (entry.method !== "SEND" || entry.message === true);
+
+/**
+ * Whether a frame a page sends over a socket is a message of ours. An agent can only type the
+ * fixed test values, so a frame that has one of them in it, as a whole word, is what an agent
+ * typed and sent. Anything else (a heartbeat, a handshake, a receipt) is what the page sends by itself.
+ */
+export function isOurMessage(message: string | Buffer, values: readonly string[]): boolean {
+  const text = typeof message === "string" ? message : message.toString("utf8");
+  return values.some((value) => new RegExp(`(?<![\\p{L}\\p{N}])${value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![\\p{L}\\p{N}])`, "u").test(text));
+}
 
 function readLog(runDir: string): PassedWrite[] {
   const path = join(runDir, WRITES_LOG);
@@ -208,8 +221,8 @@ export interface WriteAccess {
    * up, or when the previous write is less than the spacing ago. A refused write is not sent, and
    * not waited for either: an agent that waits inside a command runs into its time limit.
    */
-  claim: (method: string, url: string) => WriteClaim;
-  /** Note a write that does not count against the budget: a message over a socket, or the repeat of a request after a redirect. */
+  claim: (method: string, url: string, options?: { message?: boolean }) => WriteClaim;
+  /** Note a write that does not count against the budget: a frame over a socket without a test value in it, or the repeat of a request after a redirect. */
   record: (method: string, url: string, options?: { repeat?: boolean }) => PassedWrite;
 }
 
@@ -249,8 +262,8 @@ function withLock<T>(runDir: string, work: () => T): T {
 }
 
 export function writeAccess(runDir: string, permission: WritePermission, source: string, now: () => number = Date.now): WriteAccess {
-  const append = (method: string, url: string, repeat: boolean): PassedWrite => {
-    const entry: PassedWrite = { at: new Date(now()).toISOString(), source, method, path: new URL(url).pathname, ...(repeat ? { repeat: true as const } : {}) };
+  const append = (method: string, url: string, repeat: boolean, message = false): PassedWrite => {
+    const entry: PassedWrite = { at: new Date(now()).toISOString(), source, method, path: new URL(url).pathname, ...(repeat ? { repeat: true as const } : {}), ...(message ? { message: true as const } : {}) };
     mkdirSync(runDir, { recursive: true });
     // Appended at once and synchronously: the line is there even when the run is cut off right after.
     appendFileSync(join(runDir, WRITES_LOG), `${JSON.stringify(entry)}\n`);
@@ -259,13 +272,13 @@ export function writeAccess(runDir: string, permission: WritePermission, source:
   return {
     origin: permission.origin,
     record: (method, url, options) => append(method, url, options?.repeat === true),
-    claim: (method, url) => {
+    claim: (method, url, options) => {
       mkdirSync(runDir, { recursive: true });
       return withLock(runDir, (): WriteClaim => {
         const budget = writeBudget(runDir, permission, now());
         if (budget.left === 0) return { ok: false, budget: "out", reasonNl: `het budget voor versturen van deze run is op: ${budget.sent} van ${budget.max} verzendingen naar ${budget.origin} zijn gedaan, door alle sessies en de veegronde samen` };
         if (budget.waitSeconds > 0) return { ok: false, budget: "spacing", reasonNl: `te kort na de vorige verzending: tussen twee verzendingen zit minstens ${budget.spacingSeconds} s; versturen kan weer over ${budget.waitSeconds} s (nog ${budget.left} van ${budget.max} over)` };
-        return { ok: true, entry: append(method, url, false) };
+        return { ok: true, entry: append(method, url, false, options?.message === true) };
       });
     },
   };

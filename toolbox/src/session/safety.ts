@@ -8,7 +8,7 @@ import { siteOrigins } from "../lib/origins.ts";
 import { loginCookieHeader, logsOut } from "../lib/login.ts";
 import { readDecision, readRuleFor, type ReadRequest } from "../lib/reads.ts";
 import { searchServicesOf, type SearchServiceId } from "../lib/searchbody.ts";
-import { isWriteOrigin, runWrites, writeAccess, writesForRun, type PassedWrite, type WriteAccess } from "../lib/writes.ts";
+import { isOurMessage, isWriteOrigin, runWrites, writeAccess, writesForRun, type PassedWrite, type WriteAccess } from "../lib/writes.ts";
 
 /** Limits of the process that holds the browser; set once, when it starts. */
 export interface DaemonLimits {
@@ -229,7 +229,13 @@ export async function guardContext(context: BrowserContext, scope: Scope, guard:
     const free = server !== null && isWriteOrigin(scope.writes, url);
     socket.onMessage((message) => {
       if (!free) return note("socket", "SEND", url, "websocket");
-      (guard.passed ??= []).push(scope.writes!.record("SEND", url));
+      // A frame with a test value in it is a message an agent sent, and takes one from the budget; a heartbeat passes and is only noted.
+      const claim = isOurMessage(message, MESSAGE_VALUES) ? scope.writes!.claim("SEND", url, { message: true }) : { ok: true as const, entry: scope.writes!.record("SEND", url) };
+      if (!claim.ok) {
+        guard.blocked.push({ at: new Date().toISOString(), kind: "socket", method: "SEND", url: url.slice(0, MAX_URL), resourceType: "websocket", reasonNl: claim.reasonNl, writeBudget: claim.budget });
+        return;
+      }
+      (guard.passed ??= []).push(claim.entry);
       server!.send(message);
     });
   });
@@ -402,6 +408,15 @@ export const TEST_VALUES: Record<string, string> = {
   long: "Dit is een lange testwaarde om te zien wat er gebeurt als een veld meer tekst krijgt dan het breed is, zonder dat de tekst iets betekent.",
   empty: "",
 };
+
+/**
+ * The test values that mark a frame over a socket as a message an agent sent (see `isOurMessage`).
+ * Left out: the empty value, the search term and anything shorter than four characters, which
+ * also occur in frames that nobody typed.
+ */
+export const MESSAGE_VALUES: readonly string[] = Object.entries(TEST_VALUES)
+  .filter(([kind, value]) => kind !== "search" && value.trim().length >= 4)
+  .map(([, value]) => value);
 
 /** Keys a session may press: navigation and activation keys, and single characters to try key shortcuts. */
 export const KEY_PATTERN = /^(?:(?:Shift|Control|Alt|Meta)\+)*(?:Enter|Space|Escape|Tab|ArrowUp|ArrowDown|ArrowLeft|ArrowRight|Home|End|PageUp|PageDown|Backspace|Delete|F[1-9]|F1[0-2]|[a-z0-9/?.,=-])$/;

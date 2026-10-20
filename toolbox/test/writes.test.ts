@@ -11,10 +11,10 @@ import { INPAGE_PATH, launchBrowser, loadPage, newContext } from "../src/browser
 import { probeForms } from "../src/instruments/forms.ts";
 import { formErrors } from "../src/lib/extractors.ts";
 import { REGULAR_PATH, type RunData } from "../src/lib/rundata.ts";
-import { budgetOutPointNl, decideWrites, DEFAULT_MAX_WRITES, DEFAULT_WRITE_SPACING_SECONDS, recordWrites, WRITES_BLOCKED_NL, writeAccess, writeBudget, writeBudgetNl, writesAllowedNl, writesForRun, type PassedWrite, type WritePermission } from "../src/lib/writes.ts";
+import { budgetOutPointNl, decideWrites, isOurMessage, DEFAULT_MAX_WRITES, DEFAULT_WRITE_SPACING_SECONDS, recordWrites, WRITES_BLOCKED_NL, writeAccess, writeBudget, writeBudgetNl, writesAllowedNl, writesForRun, type PassedWrite, type WritePermission } from "../src/lib/writes.ts";
 import { Daemon } from "../src/session/daemon.ts";
 import type { Observation } from "../src/session/observations.ts";
-import { DEFAULT_DAEMON_LIMITS, Politeness, scopeForRun } from "../src/session/safety.ts";
+import { DEFAULT_DAEMON_LIMITS, MESSAGE_VALUES, Politeness, scopeForRun, TEST_VALUES } from "../src/session/safety.ts";
 import { openSurface } from "../src/session/surface.ts";
 import { startServer, type FixtureServer } from "./fixtures/session-site/server.ts";
 
@@ -370,6 +370,61 @@ test("a session past the budget for sending is held back as without permission, 
     await daemon.close();
     rmSync(dir, { recursive: true, force: true });
   }
+});
+
+test("a frame over a socket is a message of ours only when it carries a test value; a heartbeat is not", () => {
+  assert.ok(!MESSAGE_VALUES.includes(TEST_VALUES.search!) && !MESSAGE_VALUES.includes(TEST_VALUES.number!) && !MESSAGE_VALUES.includes(""));
+  for (const value of MESSAGE_VALUES) {
+    assert.equal(isOurMessage(`42["message",{"text":${JSON.stringify(value)}}]`, MESSAGE_VALUES), true, value);
+    assert.equal(isOurMessage(Buffer.from(`bericht: ${value}`), MESSAGE_VALUES), true, value);
+  }
+  for (const heartbeat of ["2", "3", "40", '{"type":6}\u001e', '{"protocol":"json","version":1}\u001e', '[null,"3","phoenix","heartbeat",{}]', '{"type":"ping","page":"Testsite sessie"}']) assert.equal(isOurMessage(heartbeat, MESSAGE_VALUES), false, heartbeat);
+});
+
+/** Open a socket to the fixture site from the page and send these frames, one at a time. */
+async function sendFrames(page: Page, frames: string[]): Promise<void> {
+  await page.evaluate(async ([url, list]) => {
+    const socket = new WebSocket(url!);
+    await new Promise((resolve) => socket.addEventListener("open", resolve));
+    for (const frame of list as string[]) {
+      socket.send(frame);
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+  }, [`${site.origin.replace("http", "ws")}/chat`, frames] as const);
+  await settle();
+}
+
+test("a message over a socket counts against the budget for sending and is held back past it, in a session and in the sweep; a heartbeat passes", async () => {
+  const limited: WritePermission = { ...permission, maxWrites: 1, spacingSeconds: 0 };
+  const message = (n: number): string => JSON.stringify({ type: "message", n, text: TEST_VALUES.text });
+  // A session: the guard of the session process.
+  reset();
+  const dir = mkdtempSync(join(tmpdir(), "loep-writes-socket-"));
+  await recordWrites(dir, limited);
+  try {
+    const env = { browser, runDir: dir, scope: await scopeForRun(dir, { scopeUrl: `${site.origin}/` }), limits: DEFAULT_DAEMON_LIMITS, politeness: new Politeness(0) };
+    const { surface } = await openSurface(env, { url: `${site.origin}/callback.html`, width: 1280, height: 800, scheme: "light" });
+    await sendFrames(surface.page, ["40", message(1), "2", message(2), "3"]);
+    assert.deepEqual(site.socketMessages, ["40", message(1), "2", "3"], "the second message stays in the browser, the heartbeats go through");
+    assert.deepEqual(writeBudget(dir, limited).sent, 1);
+    assert.deepEqual(logged(dir).map((line) => `${line.method}${line.message ? " message" : ""}`), ["SEND", "SEND message", "SEND", "SEND"]);
+    const held = surface.guard.blocked.filter((entry) => entry.kind === "socket");
+    assert.deepEqual(held.map((entry) => entry.writeBudget), ["out"]);
+    assert.match(held[0]!.reasonNl!, /^het budget voor versturen van deze run is op: 1 van 1 verzendingen/);
+    await surface.context.close();
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+  // The sweep: a context of a command, with the same budget, here too soon after the previous message.
+  reset();
+  const spaced: WritePermission = { ...permission, maxWrites: 5, spacingSeconds: 60 };
+  const context = await newContext(browser, { writes: writeAccess(run, spaced, "states") }, { active: true, blocked: 0 });
+  const page = await context.newPage();
+  await loadPage(page, `${site.origin}/callback.html`);
+  await sendFrames(page, [message(1), "2", message(2)]);
+  assert.deepEqual(site.socketMessages, [message(1), "2"]);
+  assert.deepEqual(writeBudget(run, spaced).sent, 1);
+  await context.close();
 });
 
 for (const [name, type] of [["webkit", webkit], ["firefox", firefox]] as const) {
