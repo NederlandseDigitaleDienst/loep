@@ -60,7 +60,7 @@ Verder gelden voor een bevinding dezelfde eisen als voor elke andere: een plek i
 ## Je bestanden
 
 - De procedure staat onderaan. Lees die eerst.
-- Dossier: `{{dossier}}`. Paden erin zijn relatief aan `{{run}}`. De procedure schrijft onderdelen kort, zoals `keyboard.walk`; in het bestand staan ze onder `evidence`.
+- Dossier: `{{dossier}}`. Lees het met `loep dossier`, niet met eigen scripts, `jq`, `cat` of door het bestand te openen. Zonder onderdeel geeft het een overzicht: de onderdelen met hun omvang, wat je ervan al hebt gelezen, en de kleine onderdelen voluit. `loep dossier <onderdeel>` geeft één onderdeel in een compacte vorm, waarin niets is weggelaten: een lijst van rijen met dezelfde velden is een tabel met de kolommen één keer bovenaan en per rij een JSON-lijst met de waarden in die volgorde. Een lang onderdeel komt in delen; het antwoord zegt "deel 1 van 3" en noemt het volgende deel (`loep dossier <onderdeel> 2`). Dieper kan met een punt: een pagina (`loep dossier legend.P03`), een rij (`loep dossier controls.rows.4`) of een veld. Het antwoord is één regel JSON met de inhoud als tekst eronder. Het kost niets van je budget en werkt ook voordat je sessie loopt. Paden in het dossier zijn relatief aan `{{run}}`. De procedure schrijft onderdelen kort, zoals `keyboard.walk`; zo geef je ze ook aan `loep dossier`. Voor dit criterium tellen {{dossierParts}}.
 - Sitemodel: `{{siteModel}}`: de paginatypen, de bewaarde toestanden en hoe ze heten (`recipe`).
 - Waarnemingen van eerdere agents staan in `{{run}}/observations/<sessie>/<nummer>.json`, met de afbeeldingen ernaast.
 - Wat geen rondgang heeft bekeken: `{{notWalked}}`.
