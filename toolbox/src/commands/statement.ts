@@ -3,6 +3,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { readJson, writeFileAtomic, writeJson } from "../lib/canonical.ts";
+import { loadDecisions } from "../lib/decisions.ts";
 import { evaluationHash } from "../lib/evaluation.ts";
 import { answerSheetDocument, LEGAL_VERSION, renderAnswerSheet, renderStatement, statementDocument, type StatementDocument, type StatementInput } from "../lib/statement.ts";
 import { makePdf, type PdfResult } from "../lib/typst.ts";
@@ -18,6 +19,8 @@ export interface StatementFiles {
   pdf: string | null;
   /** Problems found while making or checking the PDFs; empty when every check passed. */
   pdfChecks: string[];
+  /** For status B: which deviations have no measure with a date; null when none is missing. */
+  missingMeasuresNl: string | null;
 }
 
 /** The PDF of a document model, in the identity of the report and under the same checks. */
@@ -36,7 +39,8 @@ async function documentPdf(document: StatementDocument, output: string, date: st
 /**
  * Write the accessibility statement, the answer sheet for the register and a
  * machine-readable version. A statement that is not a concept needs a signature
- * that belongs to exactly this evaluation.
+ * that belongs to exactly this evaluation. The measures come from what the organisation
+ * decided per defect (`decide`), and from `measuresNl` for a run without decisions.
  */
 export async function statement(runDir: string, concept: boolean): Promise<StatementFiles> {
   const evaluation = await readEvaluation(join(runDir, "evaluation.json"));
@@ -45,11 +49,12 @@ export async function statement(runDir: string, concept: boolean): Promise<State
   }
   const inputPath = join(runDir, STATEMENT_INPUT_FILE);
   const input: StatementInput = existsSync(inputPath) ? await readJson<StatementInput>(inputPath) : { organisation: evaluation.site.organisation ?? "[nog invullen: naam van de overheidsinstantie]" };
-  const result = renderStatement(evaluation, input, { concept });
+  const { decisions } = await loadDecisions(runDir, evaluation.defects);
+  const result = renderStatement(evaluation, input, { concept, decisions });
   const dir = join(runDir, "verklaring");
   const files = [join(dir, "verklaring.md"), join(dir, "invulassistent.md"), join(dir, "verklaring.json")];
   await writeFileAtomic(files[0]!, result.markdown);
-  await writeFileAtomic(files[1]!, renderAnswerSheet(evaluation, input));
+  await writeFileAtomic(files[1]!, renderAnswerSheet(evaluation, input, decisions));
   await writeJson(files[2]!, {
     schema: "loep/verklaring/1",
     concept,
@@ -65,11 +70,11 @@ export async function statement(runDir: string, concept: boolean): Promise<State
   });
 
   // Same content as the Markdown, from the same block model; the evaluation's date keeps the PDF reproducible.
-  const pdf = await documentPdf(statementDocument(evaluation, input, { concept }), join(dir, "verklaring.pdf"), evaluation.evaluatedAt);
-  const sheet = await documentPdf(answerSheetDocument(evaluation, input), join(dir, "invulassistent.pdf"), evaluation.evaluatedAt);
+  const pdf = await documentPdf(statementDocument(evaluation, input, { concept, decisions }), join(dir, "verklaring.pdf"), evaluation.evaluatedAt);
+  const sheet = await documentPdf(answerSheetDocument(evaluation, input, decisions), join(dir, "invulassistent.pdf"), evaluation.evaluatedAt);
   if (pdf.pdf) files.push(join(dir, "verklaring.pdf"));
   if (sheet.pdf) files.push(join(dir, "invulassistent.pdf"));
   // Without Typst both report the same thing; say it once.
   const sheetChecks = sheet.pdfChecks.filter((problem) => !pdf.pdfChecks.includes(problem)).map((problem) => `invulassistent.pdf: ${problem}`);
-  return { files, status: result.status, openItems: result.openItems, pdf: pdf.pdf ? join(dir, "verklaring.pdf") : null, pdfChecks: [...pdf.pdfChecks, ...sheetChecks] };
+  return { files, status: result.status, openItems: result.openItems, pdf: pdf.pdf ? join(dir, "verklaring.pdf") : null, pdfChecks: [...pdf.pdfChecks, ...sheetChecks], missingMeasuresNl: result.missingMeasuresNl };
 }

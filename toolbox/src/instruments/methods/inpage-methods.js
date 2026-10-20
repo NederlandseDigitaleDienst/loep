@@ -3,7 +3,9 @@
 // where an element is in the one notation the toolbox uses everywhere, whichever tool
 // pointed at it: one selector chain per shadow level joined with " >>> ", and one such
 // chain per frame joined with " | ", outermost first.
+// Fixed to the window and frozen, like window.__loep (#143); installed a second time, it leaves the first in place.
 (() => {
+  if (Object.getOwnPropertyDescriptor(window, "__loepm")) return;
   const isShadowRoot = (node) => node !== null && node.nodeType === 11 && Boolean(node.host);
 
   /** The same selector chain as path() in the read-only library; a test keeps the two equal. Works for an element of any frame. */
@@ -706,5 +708,6 @@
     }
   }
 
-  window.__loepm = { path, where, resolveWhere, deepXPath, byDeepXPath, byAxeTarget, relate, deepAll, removeAttributes, rgba, computedContrast, focusStyles, languageOf, languageBlocks, elementAt, elementAtDocument, focusedWhere, imageFacts, imageFile, composedParent, contrastAgainst, controlStates, stopKinds, keepsFocus, liveState, elementState, intoView, shownStyles, blockedPlaces, coverOf };
+  const helpers = { path, where, resolveWhere, deepXPath, byDeepXPath, byAxeTarget, relate, deepAll, removeAttributes, rgba, computedContrast, focusStyles, languageOf, languageBlocks, elementAt, elementAtDocument, focusedWhere, imageFacts, imageFile, composedParent, contrastAgainst, controlStates, stopKinds, keepsFocus, liveState, elementState, intoView, shownStyles, blockedPlaces, coverOf };
+  Object.defineProperty(window, "__loepm", { value: Object.freeze(helpers), writable: false, configurable: false, enumerable: false });
 })();

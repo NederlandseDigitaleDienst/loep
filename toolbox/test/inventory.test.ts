@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, test } from "node:test";
 import { startFixture } from "../fixtures/serve.ts";
-import { addressLevels, inventory, nextAddress, noteVisited, pageLimitNl, pageLimitReason, type Inventory } from "../src/commands/inventory.ts";
+import { addressLevels, inventory, nextAddress, noteVisited, pageLimitNl, pageLimitReason, readsOutsideRunNl, type Inventory } from "../src/commands/inventory.ts";
 import { buildSample } from "../src/commands/sample.ts";
 
 /** Visit every candidate in the order `inventory` would, when all are known from the start. */
@@ -261,6 +261,39 @@ test("an address that redirects to an anchor on a page of the site is recorded w
   assert.deepEqual(item.aliases, [`${at}/aan-de-slag/hulp`, `${at}/wetten/verklaring`]);
 });
 
+test("an address that redirects to an anchor records whether the anchor exists, whether its target took focus, and what lies over it", async (context) => {
+  // A fixed header over the top of the window: Chromium scrolls the target of the anchor to the top, under it.
+  const statement = html("Verklaring", ["/"]).replace(
+    "</main>",
+    '<header style="position:fixed;top:0;left:0;right:0;height:120px;background:#fff">Kop</header><div style="height:2000px"></div><h2 id="vragen">Vragen</h2><div style="height:2000px"></div><h2 id="formulier" tabindex="-1">Formulier</h2><div style="height:2000px"></div></main>',
+  );
+  const redirects: Record<string, string> = { "/vragen": "/verklaring#vragen", "/formulier": "/verklaring#formulier", "/weg": "/verklaring#bestaat-niet" };
+  const site = createServer((request, response) => {
+    const path = new URL(request.url!, "http://x").pathname;
+    if (redirects[path]) return void response.writeHead(302, { location: redirects[path] }).end();
+    const known: Record<string, string> = { "/": html("Start", ["/verklaring", ...Object.keys(redirects)]), "/verklaring": statement };
+    response.writeHead(known[path] ? 200 : 404, { "content-type": "text/html; charset=utf-8" });
+    response.end(known[path] ?? html("Niet gevonden", ["/"]));
+  });
+  await new Promise<void>((resolve) => site.listen(0, "127.0.0.1", resolve));
+  context.after(() => new Promise<void>((resolve) => void site.close(() => resolve())));
+  const at = `http://127.0.0.1:${(site.address() as { port: number }).port}`;
+  let found: Inventory;
+  try {
+    found = await inventory({ baseUrl: `${at}/`, out: join(scratch, "anchor-landing"), maxPages: 10 });
+  } catch (error) {
+    if (/Executable doesn't exist|browserType.launch/.test((error as Error).message)) return context.skip("no browser available");
+    throw error;
+  }
+  const of = (path: string) => found.pages.find((page) => page.url === `${at}${path}`)!;
+  assert.deepEqual(of("/vragen").anchor, { id: "vragen", found: true, focused: false, inViewport: null, coveredBy: null }, "a heading takes no focus: no question for 2.4.11");
+  const focused = of("/formulier").anchor!;
+  assert.deepEqual([focused.found, focused.focused, focused.inViewport], [true, true, true], "a target with tabindex takes focus after the jump");
+  assert.match(focused.coveredBy ?? "", /header/, "and lies under the fixed header");
+  assert.deepEqual(of("/weg").anchor, { id: "bestaat-niet", found: false, focused: false, inViewport: null, coveredBy: null });
+  assert.equal(of("/verklaring").anchor, undefined, "a page the browser stays on records nothing");
+});
+
 test("a page with a link whose address Chromium accepts and Node does not is still a page, and its other links are followed", async (context) => {
   const statement = html("Verklaring", ["/"]).replace("</main>", '<a href="http://www.example.nl&nbsp; via">site</a><a href="/contact">Contact</a></main>');
   const site = createServer((request, response) => {
@@ -309,4 +342,72 @@ test("with a fixed list every listed page goes before a frame found on one, also
   } finally {
     await fixture.close();
   }
+});
+
+test("a redirect to an address with a code in its query keeps the anchor and leaves the code out of the inventory", async (context) => {
+  const site = createServer((request, response) => {
+    const asked = new URL(request.url!, "http://x");
+    if (asked.pathname === "/terug") return void response.writeHead(302, { location: "/verklaring?code=geheim&state=ook-geheim#x" }).end();
+    if (asked.pathname === "/zoeken" && asked.search === "?q=a") return void response.writeHead(302, { location: "/resultaten?q=a" }).end();
+    const known: Record<string, string> = { "/": html("Start", ["/terug", "/verklaring", "/zoeken?q=a"]), "/verklaring": html("Verklaring", ["/"]), "/resultaten": html("Resultaten", ["/"]) };
+    response.writeHead(known[asked.pathname] ? 200 : 404, { "content-type": "text/html; charset=utf-8" });
+    response.end(known[asked.pathname] ?? html("Niet gevonden", ["/"]));
+  });
+  await new Promise<void>((resolve) => site.listen(0, "127.0.0.1", resolve));
+  context.after(() => new Promise<void>((resolve) => void site.close(() => resolve())));
+  const at = `http://127.0.0.1:${(site.address() as { port: number }).port}`;
+  let found: Inventory;
+  try {
+    found = await inventory({ baseUrl: `${at}/`, out: join(scratch, "redirect-code"), maxPages: 10 });
+  } catch (error) {
+    if (/Executable doesn't exist|browserType.launch/.test((error as Error).message)) return context.skip("no browser available");
+    throw error;
+  }
+  const of = (path: string) => found.pages.find((page) => page.url === `${at}${path}`)!;
+  assert.equal(of("/terug").finalUrl, `${at}/verklaring#x`, "the landing keeps its anchor and loses the query the address asked for did not have");
+  assert.equal(of("/zoeken?q=a").finalUrl, `${at}/resultaten?q=a`, "a query the address itself has, stays");
+  assert.ok(!readFileSync(join(scratch, "redirect-code", "inventory.json"), "utf8").includes("geheim"), "the code is nowhere in inventory.json");
+  assert.equal(buildSample(found, "seed").items.find((entry) => entry.contentHash === of("/verklaring").contentHash)!.url, `${at}/verklaring`, "the sample still measures the page itself");
+});
+
+test("a page that reads content from a host outside the run is reported with that origin; a beacon, an image and another port of the site's host are not", async (context) => {
+  // "localhost" is another host than 127.0.0.1 for the browser and for the scope of a session; another port of 127.0.0.1 is not.
+  const elsewhere = createServer((request, response) => {
+    const path = new URL(request.url!, "http://x").pathname;
+    const cors = { "access-control-allow-origin": "*" };
+    if (path === "/evenementen") return void response.writeHead(200, { ...cors, "content-type": "application/json" }).end('[{"titel":"Open dag"}]');
+    if (path === "/teller") return void response.writeHead(204, cors).end();
+    if (path === "/logo.png") return void response.writeHead(200, { ...cors, "content-type": "image/png" }).end("");
+    response.writeHead(404, cors).end();
+  });
+  await new Promise<void>((resolve) => elsewhere.listen(0, "127.0.0.1", resolve));
+  context.after(() => new Promise<void>((resolve) => void elsewhere.close(() => resolve())));
+  const port = (elsewhere.address() as { port: number }).port;
+  const outside = `http://localhost:${port}`;
+  const sameHost = `http://127.0.0.1:${port}`;
+  const reads = `<div id="agenda"></div><img src="${outside}/logo.png" alt=""><script>
+    fetch("${outside}/evenementen").then((answer) => answer.json()).then((items) => { document.getElementById("agenda").textContent = items[0].titel; });
+    fetch("${outside}/teller");
+    fetch("${sameHost}/evenementen");
+  </script>`;
+  const site = createServer((request, response) => {
+    const path = new URL(request.url!, "http://x").pathname;
+    const known: Record<string, string> = { "/": html("Start", ["/over"]).replace("</main>", `${reads}</main>`), "/over": html("Over", ["/"]) };
+    response.writeHead(known[path] ? 200 : 404, { "content-type": "text/html; charset=utf-8" });
+    response.end(known[path] ?? html("Niet gevonden", ["/"]));
+  });
+  await new Promise<void>((resolve) => site.listen(0, "127.0.0.1", resolve));
+  context.after(() => new Promise<void>((resolve) => void site.close(() => resolve())));
+  const at = `http://127.0.0.1:${(site.address() as { port: number }).port}`;
+  let found: Inventory;
+  try {
+    found = await inventory({ baseUrl: `${at}/`, out: join(scratch, "reads-outside"), maxPages: 10 });
+  } catch (error) {
+    if (/Executable doesn't exist|browserType.launch/.test((error as Error).message)) return context.skip("no browser available");
+    throw error;
+  }
+  assert.deepEqual(found.readsOutsideRun, [{ origin: outside, pages: [`${at}/`], requests: 1 }]);
+  const said = readsOutsideRunNl(found.readsOutsideRun)!;
+  assert.match(said, /^let op: één pagina haalt met GET inhoud op van een adres buiten de run: /);
+  assert.ok(said.includes(`--also-origin ${outside}`), "it names the option that takes the origin into the run");
 });

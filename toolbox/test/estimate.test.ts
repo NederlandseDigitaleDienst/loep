@@ -6,12 +6,13 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { estimateOutput, estimateRun, type RunEstimate } from "../src/commands/estimate.ts";
-import { CALIBRATION, COEFFICIENTS, durationNl, type EstimateBasis, estimate, estimateTextNl, phaseMinutes, type RowId, typicalSweep } from "../src/lib/estimate.ts";
+import { CALIBRATION, COEFFICIENTS, durationNl, type EstimateBasis, estimate, estimateTextNl, phaseMinutes, type RowId, typicalSweep, USAGE_BASELINE } from "../src/lib/estimate.ts";
 import { makespan, type PageWork, runningStep, slowestLane, SWEEP_COEFFICIENTS, sweepPlans, type SweepWork } from "../src/lib/estimate-sweep.ts";
 import { ProgressFile, readProgress, type StepProgress } from "../src/lib/progress.ts";
 import type { ManifestStep } from "../src/lib/manifest.ts";
 import { MAX_DOWN_TARGETS, MAX_HOVER_TARGETS, STATES_GROUPS } from "../src/commands/states.ts";
 import { FINISH_FACTOR } from "../src/lib/verdict.ts";
+import { PRICES } from "../src/lib/prices.ts";
 
 const REMOTE: EstimateBasis = { pages: 29, pagesSource: "sample", pageTypes: 18, pageTypesSource: "tasks", criteria: 56, criteriaSource: "tasks", atOnce: 8, atOnceSource: "option", local: false, scheduling: "pool" };
 const near = (actual: number | null, expected: number, what: string): void => assert.ok(actual !== null && Math.abs(actual - expected) <= 1, `${what}: ${actual}, verwacht ${expected}`);
@@ -73,14 +74,18 @@ test("the estimate on a fixed basis: every part, the total with its range, and t
   assert.match(row(result, "finishers").noteNl!, /^aantal vooraf onbekend: gerekend met 9 van 56 criteria, 0 s \(geen\) tot 51 min \(17\); niet gemeten$/);
   assert.match(estimateTextNl(result, "run"), /^afmaakronde +35 min +aantal vooraf onbekend/m);
   assert.match(estimateTextNl(result, "run"), /40 procent langer, en de afmaakronde van niets tot haar meeste\)/);
-  assert.deepEqual(result.tokens, { agents: 18 + 56 + 56 + 4 + 9 + 1, estimated: (18 + 56 + 56 + 4 + 1 + 9 * FINISH_FACTOR) * 125_000, range: [Math.round(20_812_500 * 0.85), 24_975_000] });
+  // Tokens per role as the average agent of that role in the baseline: 18 walks, 56 judges, 56 verifiers, 9 finishers and 5 rounds asking what is open.
+  assert.deepEqual(Object.fromEntries(Object.entries(result.tokens.byRole).map(([role, use]) => [role, use.agents])), { walks: 18, judges: 56, verifiers: 56, finishers: 9, status: 5 });
+  assert.equal(result.tokens.agents, 18 + 56 + 56 + 9 + 5);
+  assert.equal(result.tokens.byRole.finishers.tokens, Math.round(9 * (74 + 120_000 + 3_700_000 + 5_669)));
 
   // Once the tasks say how many criteria the evaluation left open, the round is a number: none here, and the estimate is the one from before the round existed.
   const none = estimate({ ...REMOTE, finishers: 0 });
   assert.deepEqual([row(none, "finishers").estimatedSeconds, row(none, "finishers").bandSeconds, row(none, "finishers").noteNl], [0, undefined, "niet nodig: geen criterium bleef open door het onderzoek zelf"]);
   assert.equal(none.totals.estimatedSeconds, counted);
   assert.deepEqual(none.totals.estimatedRange, [Math.round(counted * 0.75), Math.round(counted * 1.4)]);
-  assert.deepEqual(none.tokens, { agents: 18 + 56 + 56 + 4, estimated: 16_750_000, range: [14_237_500, 20_100_000] });
+  assert.deepEqual([none.tokens.agents, none.tokens.byRole.finishers.tokens, none.tokens.byRole.status.agents], [18 + 56 + 56 + 4, 0, 4], "no finishing round: no finishers and no round asking for them");
+  assert.ok(none.tokens.estimated < result.tokens.estimated && none.cost.dollars < result.cost.dollars);
   const eight = estimate({ ...REMOTE, finishers: 8 });
   near(row(eight, "finishers").estimatedSeconds, 4.7 * FINISH_FACTOR * 1.75 * 60, "acht agents op acht plaatsen: zo lang als de traagste");
   assert.match(row(eight, "finishers").noteNl!, /^8 criteria bleven open door het onderzoek zelf/);
@@ -94,6 +99,30 @@ test("the estimate on a fixed basis: every part, the total with its range, and t
   near(row(groups, "walks").estimatedSeconds, 7.2 * 1.12 * 3 * 60, "rondgangen in groepen");
   near(row(groups, "judges").estimatedSeconds, 4.7 * 1.75 * 7 * 60, "beoordelen in groepen");
   assert.ok(groups.totals.estimatedSeconds > result.totals.estimatedSeconds);
+});
+
+test("tokens and cost: the baseline of 19 October reckoned again, with the share from the cache, a range and the subscription", () => {
+  // The audit the baseline was counted on: 16 page types, 56 criteria, one criterion in the finishing round.
+  const baseline = estimate({ ...REMOTE, pages: 31, pageTypes: 16, atOnce: 10, finishers: 1 });
+  assert.equal(baseline.tokens.agents, 134);
+  assert.ok(Math.abs(baseline.tokens.estimated - 526_000_000) < 1_000_000, `ongeveer 526 miljoen: ${baseline.tokens.estimated}`);
+  assert.equal(Math.round((baseline.tokens.cacheRead / baseline.tokens.estimated) * 100), 97);
+  assert.deepEqual(baseline.cost, { model: "claude-opus-5-5", dollars: 184, range: [147, 248] });
+  assert.deepEqual(baseline.tokens.range, [Math.round(baseline.tokens.estimated * 0.8), Math.round(baseline.tokens.estimated * 1.35)]);
+  assert.equal(Math.round((baseline.tokens.byRole.judges.tokens / baseline.tokens.estimated) * 100), 57, "the judges, as in the table of the baseline");
+  // Twice the criteria is twice the judges and the verifiers, not twice the walks.
+  const fewer = estimate({ ...REMOTE, pages: 31, pageTypes: 16, criteria: 28, finishers: 1 });
+  assert.equal(fewer.tokens.byRole.judges.tokens * 2, baseline.tokens.byRole.judges.tokens);
+  assert.equal(fewer.tokens.byRole.walks.tokens, baseline.tokens.byRole.walks.tokens);
+
+  const text = estimateTextNl(baseline, "run");
+  assert.match(text, /^Tokens voor de 134 agents van de werkstroom: ongeveer 526,\d miljoen \(marge 420,\d tot 710,\d\), waarvan 97 procent uit de cache\. Per rol, in miljoenen: beoordelaars 301,7, verifieerders 159,0, rondgangen 61,2, afmaakronde 3,8, stand 0,4\.$/m);
+  assert.match(text, /^Kosten met de prijzen van de API voor Opus 5\.5 van 19 oktober 2026: ongeveer 184 dollar \(marge 147 tot 248\)\./m);
+  assert.match(text, /groot deel van de weeklimiet gebruiken\. Hoe groot die limiet is, verschilt per abonnement\.$/m);
+  assert.match(text, /nulmeting van 19 oktober 2026 \(validatie\/verbruik\/README\.md\): één onderzoek met loep 0\.10\.0/);
+  assert.doesNotMatch(text, /afmaakronde 0,0/);
+  assert.doesNotMatch(estimateTextNl(estimate({ ...REMOTE, finishers: 0 }), "run"), /afmaakronde \d/, "no finishing round, no tokens for it");
+  assert.ok(PRICES[USAGE_BASELINE.model], "the model of the baseline has a price");
 });
 
 test("a phase with agents: one agent, one group, a pool, and nothing", () => {

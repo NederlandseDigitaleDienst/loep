@@ -5,6 +5,7 @@ import type { Defect, MergeRecord } from "./defects.ts";
 import type { Manifest } from "./manifest.ts";
 import type { RoleExtensions } from "./budget.ts";
 import type { RoleModels } from "./models.ts";
+import type { RecordedVia } from "./recorded.ts";
 import { openPoint, shadowPartOf, vendorElementsIn, WITHIN_REACH, type Recommendation, type Finding, type Observation, type Outcome, type Verdict } from "./verdict.ts";
 import { compareCriterionIds, CRITERIA, en301549Clause, GUIDELINES, PRINCIPLES, understandingUrl, type Criterion, type WcagVersion } from "./wcag.ts";
 
@@ -127,6 +128,8 @@ export interface PointAnswer {
   answeredAt: string;
   /** Set when no person but an instrument of loep gave the answer: the watch on the session closes the point about its duration. */
   instrument?: true;
+  /** How a person's answer came about: confirmed at a terminal, or recorded by the agent in the conversation. `answeredAt` is the moment of the confirmation. Absent in an answer from before this was kept, and in one of an instrument. */
+  recordedVia?: RecordedVia;
 }
 
 /** Who or what established the outcome of a criterion: the verifier, the finishing round, or a person. */
@@ -197,6 +200,12 @@ export interface CriterionResult {
   dropped?: DroppedFinding[];
   procedure: { version: number; sha256: string; class: string; limitsNl: string | null } | null;
   provenance: { dossierSha256: string | null; verdictSha256: Record<string, string | null> };
+  /**
+   * The verdict that counts did not come because the model was not there (a limit or a failure of
+   * the service): the last round that was given up on, was skipped with the kind "storing". The
+   * report says so, and `feedback` drafts no issue, since it is no fault of loep. Absent otherwise.
+   */
+  outage?: true;
 }
 
 export const DROP_REASON_NL: Record<string, string> = {
@@ -240,6 +249,8 @@ export interface Signature {
   evaluationSha256: string;
   /** Hash of the seal the signer signed: evidence-index.json, which names every file of the run with its hash. */
   sealSha256: string;
+  /** How the signature came about: "terminal", the signer typed the start of the seal back. An agent never signs. Absent in a signature from before this was kept. */
+  recordedVia?: RecordedVia;
 }
 
 /** An embedded frame as the report names it under the scope, so whoever signs sees what was left out and why. */
@@ -357,6 +368,8 @@ export interface CriterionInput {
   answers?: PointAnswer[];
   procedure: CriterionResult["procedure"];
   provenance: CriterionResult["provenance"];
+  /** A round of this criterion was given up on for a storing of the model, and no round after it gave a verdict. */
+  outage?: boolean;
 }
 
 const normalise = (text: string): string => text.toLowerCase().replace(/\s+/g, " ").trim();
@@ -473,7 +486,7 @@ export function resolveCriterion(input: CriterionInput, sitePrefix: string): Cri
     // What a person established is said first: the summary of the agent was written while the question was open.
     summaryNl: byPerson
       ? `Een persoon heeft vastgesteld: ${OUTCOME_LABEL[outcome].toLowerCase()}. Dit is vastgesteld door een persoon, niet door een instrument. Het onderzoek zelf kwam niet verder dan: ${final!.summaryNl}`
-      : (final?.summaryNl ?? "Voor dit criterium is geen eindoordeel vastgesteld."),
+      : (final?.summaryNl ?? (input.outage ? `Voor dit criterium is geen eindoordeel vastgesteld: ${OUTAGE_NL.toLowerCase()}` : "Voor dit criterium is geen eindoordeel vastgesteld.")),
     observations: final?.observations ?? [],
     findings,
     ...(recommendations.length > 0 ? { recommendations } : {}),
@@ -488,8 +501,12 @@ export function resolveCriterion(input: CriterionInput, sitePrefix: string): Cri
     ...(verified?.verification ? { dropped: droppedFindings(verdicts.a, verified) } : {}),
     procedure: input.procedure,
     provenance: input.provenance,
+    ...(input.outage && !byPerson ? { outage: true as const } : {}),
   };
 }
+
+/** What the report says of a criterion whose verdict did not come because the model was not there. */
+export const OUTAGE_NL = "De beoordeling is door een storing van het model niet gedaan.";
 
 /** How long a quote from a verdict may be in a limitation of the evaluation. */
 export const QUOTE_LIMIT = 220;

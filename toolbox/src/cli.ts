@@ -38,22 +38,30 @@ const USAGE = `loep <command> [options]
   gate --run <run> [--out <dir>]         Decide whether the evidence is fit to judge on; exit 1 when it is not, 2 when
                                          only the agent's look at the pictures is still missing. --out leaves the run untouched
   check-gate --run <run>                 Validate the agent's answers for the gate; non-zero exit on problems
-  tasks --run <run> [--only <ids>] [--page-types <ids>] [--again <ids>]
+  tasks --run <run> [--only <ids>] [--page-types <ids>] [--again <ids>] [--attempted <phase>:<id>,...]
                                          Write the task files of the phase the run is in (walks, judges, verifiers, and a
                                          finishing round for what the evaluation itself left open), with a dossier per
                                          criterion; run it again after each phase. Needs the site model of explore.
                                          --again 2.4.3,3.3.1 writes a new finishing round for those criteria, also when the
                                          run is done, but only for one whose final verdict is open with a point "niet
                                          bereikbaar" or "proef werkte niet". Each attempt gets its own session; the earlier
-                                         verdict is kept, the new one counts in evaluate
+                                         verdict is kept, the new one counts in evaluate. --attempted walks:start,judges:1.4.3
+                                         counts one attempt for each task whose agent came back (the workflow names them;
+                                         an agent that stopped with an error is no attempt)
   check-walk --run <run> --page-type <id>
                                          Validate the candidates of a walk-through; non-zero exit on problems
   skip --run <run> (--page-type <id> | --criterion <id> [--round judge|final|finish]) --reason <text>
-                                         Record that a walk or verdict will not come, so the next phase can start
+       [--kind "geen geldig resultaat"|storing]
+                                         Record that a walk or verdict will not come, so the next phase can start. --kind
+                                         storing: the model was not there (a limit, a failure of the service); the report
+                                         says so instead of "budget op", and feedback drafts no issue for it
+  unskip --run <run> (--page-type <id> | --criterion <id> [--round judge|final|finish])
+                                         Take back a skip: the task is open again, with its attempts counted from zero
   check-verdict --run <run> --criterion <id> --round judge|final|finish
                                          Validate the verdict of the judge, the final verdict of the verifier, or the verdict
                                          of the finishing round; non-zero exit on problems
-  pending --run <run>                    The phase the run is in and the tasks that are still open, as JSON
+  pending --run <run> [--brief]          The phase the run is in and the tasks that are still open, as JSON, each with
+                                         its attempts. --brief gives only the ids and attempts, for the workflow
   estimate --run <run> [--at-once <n>] [--groups] [--json]
                                          The expected time per part and in total, computed from the inventory (sharper after
                                          sample, explore and the sweep), next to what the run measured so far. --at-once is the
@@ -79,10 +87,20 @@ const USAGE = `loep <command> [options]
                                          For an open point that asks a person or a choice of the owner: record what a person
                                          did or decided and what follows for the criterion. Without --point: list the open
                                          points. The name stays in antwoorden/<criterion>.json of the run; the evaluation and
-                                         the report name only the function. Counts at the next evaluate, and is sealed with the run
-  render --run <run>                     Write the report (Markdown and PDF) from evaluation.json
+                                         the report name only the function. Counts at the next evaluate, and is sealed with the run.
+                                         Confirmed at an interactive terminal, or --recorded-via gesprek (see below)
+  render --run <run>                     Write the report (Markdown and PDF) from evaluation.json; after signing with the
+                                         decisions about each defect
   sign --run <run> --name <who> --role <function> --organisation <name> [--checked <text>]
-                                         Record that a named person stands for the evaluation
+                                         Record that a named person stands for the evaluation. Only at an interactive terminal:
+                                         the signer types the first 8 characters of the seal. An agent never signs
+  decide --run <run> [--defect <id> [--decision opgelost|gepland|zienswijze|onevenredig|onbesloten --what <text>
+         [--date <yyyy-mm-dd>] [--alternative <text>] --name <who> --role <function>]]
+                                         After signing: what the organisation decides about a defect. Without --defect: every
+                                         defect, heaviest first, with its decision; with --defect only: that defect and what the
+                                         report proposes. Kept in besluiten/<defect>.json, outside the seal, as a layer with a
+                                         hash of its own; a changed decision keeps the earlier one. The report names the function.
+                                         Confirmed at an interactive terminal, or --recorded-via gesprek (see below)
   statement --run <run> [--concept]      Write the accessibility statement and the answer sheet for the register
   diff --previous <evaluation.json> --current <evaluation.json> --out <dir>
                                          Write verschil.md: solved, stayed and new between two evaluations of one site
@@ -105,10 +123,16 @@ Options:
   --allow-writes    With inventory, for a site on this machine or a .test or .localhost name only: let the run
                     submit forms and send other requests that change something. On any other site, name the test
                     environment and who declares it to be one: --test-environment <origin> --declared-by "<name>, <role>"
-                    The name is kept in the manifest of the run; the report shows only the role
+                    The name is kept in the manifest of the run; the report shows only the role. The declaration
+                    is confirmed at an interactive terminal by typing the origin; an agent never records it
   --max-writes <n>  With --allow-writes or --test-environment: the most requests that change something the whole run
                     may send to that origin, over every session and the sweep together (default 5), at least 120 s
                     apart. Past it every write is held back as in a run without permission. Kept in the manifest
+  --recorded-via gesprek --confirmation <text> --summary <text>
+                    With answer and decide only: the agent records what the person said in the conversation,
+                    after an express confirmation. --confirmation is what the person said, word for word;
+                    --summary the summary they confirmed. Both are kept with the record. Without the flag a person
+                    confirms at an interactive terminal (--recorded-via terminal); without one the command refuses
 
 Comparing per finding has its own steps: loep compare --findings --help
 Measuring a variant of the code on a frozen sweep: loep variant --help (variant, compare-variants)
@@ -171,6 +195,17 @@ async function main(): Promise<void> {
       did: { type: "string" },
       outcome: { type: "string" },
       reason: { type: "string" },
+      defect: { type: "string" },
+      decision: { type: "string" },
+      what: { type: "string" },
+      date: { type: "string" },
+      alternative: { type: "string" },
+      "recorded-via": { type: "string" },
+      confirmation: { type: "string" },
+      summary: { type: "string" },
+      kind: { type: "string" },
+      attempted: { type: "string" },
+      brief: { type: "boolean", default: false },
       concept: { type: "boolean", default: false },
       fresh: { type: "boolean", default: false },
       "allow-writes": { type: "boolean", default: false },
@@ -197,10 +232,17 @@ async function main(): Promise<void> {
     return;
   }
   // A run that was given a test environment at inventory may write there; every other run holds all writes back.
-  const { decideWrites, recordWrites, setRunWrites, writeAccess, writesForRun } = await import("./lib/writes.ts");
+  const { confirmDeclaration, decideWrites, recordWrites, setRunWrites, writeAccess, writesForRun } = await import("./lib/writes.ts");
   if (command !== "inventory" && (values["allow-writes"] || values["test-environment"] !== undefined || values["declared-by"] !== undefined || values["max-writes"] !== undefined)) {
     throw new Error("--allow-writes, --test-environment, --declared-by en --max-writes horen bij inventory: daar wordt voor de hele run vastgelegd of er verstuurd mag worden, en hoe vaak");
   }
+  // How a statement of a person came about is recorded with it. An answer and a decision may be recorded by the agent in the
+  // conversation; a signature and the declaration for sending only by a person at an interactive terminal.
+  const { HUMAN_AT_TERMINAL_NL, parseRecordedVia } = await import("./lib/recorded.ts");
+  const recordedVia = parseRecordedVia(values["recorded-via"]);
+  const recording = { recordedVia: values["recorded-via"], confirmation: values.confirmation, summary: values.summary };
+  if (recordedVia === "gesprek" && (command === "sign" || command === "inventory")) throw new Error(`${command === "sign" ? "tekenen" : "de verklaring dat er verstuurd mag worden"} legt de assistent nooit vast, ook niet na een bevestiging in het gesprek. ${HUMAN_AT_TERMINAL_NL}`);
+  if ((recordedVia !== undefined || values.confirmation !== undefined || values.summary !== undefined) && command !== "answer" && command !== "decide") throw new Error("--recorded-via, --confirmation en --summary horen bij answer en decide");
   if (command !== "inventory" && values["also-origin"] !== undefined) throw new Error("--also-origin hoort bij inventory: daar wordt vastgelegd welke origins samen de site zijn");
   // `gaps` and `feedback` read the verdicts and the evaluation of finished runs and nothing else of them: they need no permission to write and no login.
   const readsOnly = command === "gaps" || command === "feedback";
@@ -234,10 +276,12 @@ async function main(): Promise<void> {
     case "inventory": {
       if (!target || !values.out) throw new Error("inventory needs a URL and --out <run>");
       const permission = decideWrites(target, { allowWrites: values["allow-writes"], testEnvironment: values["test-environment"], declaredBy: values["declared-by"], maxWrites: values["max-writes"] });
+      // A declared test environment is confirmed by a person at a terminal before anything starts.
+      if (permission?.declaredBy) Object.assign(permission, await confirmDeclaration(permission));
       if (permission) setRunWrites(writeAccess(values.out, permission, "inventory"));
       // What this command was given decides whether a session may be used: the manifest only holds it afterwards.
       setRunLogin(values.out, { writes: permission });
-      const { formPagesNl, inventory, pageLimitNl, passwordPagesNl } = await import("./commands/inventory.ts");
+      const { formPagesNl, inventory, pageLimitNl, passwordPagesNl, readsOutsideRunNl } = await import("./commands/inventory.ts");
       const { originsNl, originsOfRun, siteOrigins } = await import("./lib/origins.ts");
       // Checked before the browser starts: a mistyped origin should not cost a whole inventory.
       const origins = originsOfRun(target, values["also-origin"]);
@@ -266,6 +310,8 @@ async function main(): Promise<void> {
       if (behindLogin) process.stdout.write(`${behindLogin}\n`);
       const notSent = formPagesNl(result.pages, siteOrigins(result), permission !== null);
       if (notSent) process.stdout.write(`${notSent}\n`);
+      const readsElsewhere = readsOutsideRunNl(result.readsOutsideRun);
+      if (readsElsewhere) process.stdout.write(`${readsElsewhere}\n`);
       return;
     }
     case "sample": {
@@ -355,8 +401,9 @@ async function main(): Promise<void> {
     }
     case "tasks": {
       if (!values.run) throw new Error("tasks needs --run <run>");
-      const { instrumentTasks } = await import("./commands/instrument-tasks.ts");
+      const { instrumentTasks, recordAttempts } = await import("./commands/instrument-tasks.ts");
       const list = (text: string | undefined): string[] | undefined => text?.split(",").map((part) => part.trim()).filter(Boolean);
+      if (values.attempted !== undefined) await recordAttempts(values.run, list(values.attempted) ?? []);
       const written = await instrumentTasks(values.run, { only: list(values.only), pageTypes: list(values["page-types"]), again: list(values.again) });
       process.stdout.write(`${written.walks} walks, ${written.judges} judge tasks, ${written.verifiers} verifier tasks, ${written.finishers} finishing tasks written\n`);
       return;
@@ -373,7 +420,13 @@ async function main(): Promise<void> {
     case "skip": {
       if (!values.run) throw new Error("skip needs --run <run>");
       const { skip } = await import("./commands/instrument-tasks.ts");
-      process.stdout.write(`${await skip(values.run, { pageType: values["page-type"], criterion: values.criterion, round: values.round }, values.reason ?? "")}\n`);
+      process.stdout.write(`${await skip(values.run, { pageType: values["page-type"], criterion: values.criterion, round: values.round }, values.reason ?? "", values.kind)}\n`);
+      return;
+    }
+    case "unskip": {
+      if (!values.run) throw new Error("unskip needs --run <run>");
+      const { unskip } = await import("./commands/instrument-tasks.ts");
+      process.stdout.write(`${await unskip(values.run, { pageType: values["page-type"], criterion: values.criterion, round: values.round })} verwijderd: de opdracht staat weer open\n`);
       return;
     }
     case "check-verdict": {
@@ -389,9 +442,10 @@ async function main(): Promise<void> {
     }
     case "pending": {
       if (!values.run) throw new Error("pending needs --run <run>");
-      const { isInstrumentRun, instrumentPending, NO_TASKS_NL } = await import("./commands/instrument-tasks.ts");
+      const { isInstrumentRun, instrumentPending, briefPending, NO_TASKS_NL } = await import("./commands/instrument-tasks.ts");
       if (!isInstrumentRun(values.run)) throw new Error(NO_TASKS_NL);
-      process.stdout.write(`${JSON.stringify(await instrumentPending(values.run))}\n`);
+      const pending = await instrumentPending(values.run);
+      process.stdout.write(`${JSON.stringify(values.brief ? briefPending(pending) : pending)}\n`);
       return;
     }
     case "estimate": {
@@ -436,7 +490,7 @@ async function main(): Promise<void> {
     case "answer": {
       if (!values.run || !values.criterion) throw new Error("answer needs --run <run> and --criterion <id>");
       const { answer, ANSWER_PRIVACY_NL } = await import("./commands/answer.ts");
-      const result = await answer({ run: values.run, criterion: values.criterion, point: values.point === undefined ? undefined : Number(values.point), did: values.did, outcome: values.outcome, name: values.name, role: values.role });
+      const result = await answer({ run: values.run, criterion: values.criterion, point: values.point === undefined ? undefined : Number(values.point), did: values.did, outcome: values.outcome, name: values.name, role: values.role, ...recording });
       for (const point of result.points) process.stdout.write(`${point.number}. [${point.kindNl}] ${point.textNl}${point.answered ? ` (beantwoord: ${point.answered})` : ""}\n`);
       const { NOT_SENT } = await import("./lib/verdict.ts");
       if (result.written === null && result.points.some((point) => point.kindNl === NOT_SENT && point.answered === null)) process.stdout.write(`Een punt [${NOT_SENT}] heeft geen persoon nodig: een nieuw onderzoek met een testomgeving, verklaard bij inventory (--test-environment <origin> --declared-by "<naam>, <functie>"), meet het met een instrument. Die origin mag die van alleen het ingesloten venster zijn. Legt een persoon het toch vast, dan zegt --did wat er is verstuurd en waar.\n`);
@@ -477,11 +531,29 @@ async function main(): Promise<void> {
       process.stdout.write(`getekend voor evaluatie ${signature.evaluationSha256.slice(0, 12)}, verzegeld als ${signature.sealSha256.slice(0, 12)}; render maakt nu het afgetekende rapport in signed/\n`);
       return;
     }
+    case "decide": {
+      if (!values.run) throw new Error("decide needs --run <run>");
+      const { decide, defectLineNl } = await import("./commands/decide.ts");
+      const { DECISION_LABEL_NL, DECISION_PRIVACY_NL } = await import("./lib/decisions.ts");
+      const result = await decide({ run: values.run, defect: values.defect, decision: values.decision, what: values.what, date: values.date, alternative: values.alternative, name: values.name, role: values.role, ...recording });
+      if (values.defect === undefined) {
+        for (const view of result.defects) process.stdout.write(`${defectLineNl(view)}\n`);
+        process.stdout.write(`${result.left} van de ${result.defects.length} gebreken zonder besluit. Eén gebrek bekijken: --defect <nummer>.\n`);
+        return;
+      }
+      const view = result.defects[0]!;
+      process.stdout.write(`${defectLineNl(view)}\nPagina's: ${view.pages.join(", ") || "geen plek"}\n${view.proposalsNl.length === 1 ? "Voorstel uit het rapport" : "Voorstellen uit het rapport"}:\n${view.proposalsNl.map((text) => `- ${text}`).join("\n")}\n`);
+      for (const earlier of view.current?.previous ?? []) process.stdout.write(`eerder: ${DECISION_LABEL_NL[earlier.decision]}${earlier.date ? ` (${earlier.date})` : ""}, vastgelegd op ${earlier.decidedAt.slice(0, 10)}\n`);
+      if (result.written === null) process.stdout.write(`Een besluit vastleggen: --decision opgelost|gepland|zienswijze|onevenredig|onbesloten --what "<wat>" [--date jjjj-mm-dd] [--alternative "<alternatief>"] --name "<naam>" --role "<functie>". Let op: ${DECISION_PRIVACY_NL}.\n`);
+      else process.stdout.write(`besluit vastgelegd in ${result.written}; nog ${result.left} ${result.left === 1 ? "gebrek" : "gebreken"} zonder besluit. render zet het in het afgetekende rapport, statement in de verklaring. Let op: ${DECISION_PRIVACY_NL}.\n`);
+      return;
+    }
     case "statement": {
       if (!values.run) throw new Error("statement needs --run <run>");
       const { statement } = await import("./commands/statement.ts");
       const result = await statement(values.run, values.concept);
       process.stdout.write(`status ${result.status}; ${result.openItems.length} punten nog in te vullen\n${result.files.join("\n")}\n`);
+      if (result.missingMeasuresNl) process.stdout.write(`LET OP: ${result.missingMeasuresNl}\n`);
       for (const problem of result.pdfChecks) process.stdout.write(`- ${problem}\n`);
       if (result.pdfChecks.length > 0) process.exitCode = 1;
       return;

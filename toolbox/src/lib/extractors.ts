@@ -2,7 +2,7 @@ import type { MediaElement, MediaReport } from "../instruments/media.ts";
 import type { ContentInventory } from "../instruments/overflow.ts";
 import { contrastRatio, floorRatio, type Rgb } from "./contrast.ts";
 import { acceptedGapFor, frameStanding, NOT_OPENED_ON_PAGE_TYPE } from "./sitemodel.ts";
-import type { EngineOutcome } from "./engines.ts";
+import { enginesWithoutResult, type EngineOutcome } from "./engines.ts";
 import { REGULAR_PATH, type Clickable, type Element, type Facts, type FormErrorState, type PageData, type RunData, type SkipLinkAim } from "./rundata.ts";
 import { documents } from "./document-evidence.ts";
 import { judgeTimer, TIMER_RULE_NL, timerNl, watchNl, type TimeLimitProbe } from "./timelimits.ts";
@@ -331,10 +331,13 @@ export const engine: Extractor = (run, criterion) => {
   const results = [...rows.values()]
     .sort((a, b) => order.indexOf(a.outcome) - order.indexOf(b.outcome) || a.engine.localeCompare(b.engine) || a.rule.localeCompare(b.rule))
     .map((row) => ({ ...row, pages: pagesText([...row.pages], run.pages.length), schemes: [...row.schemes].join("+") }));
+  // An engine that gave no answer on a page found nothing there because it did not run: that is not passing (#143).
+  const withoutResult = run.pages.flatMap((page) => (["light", "dark"] as const).flatMap((scheme) => enginesWithoutResult(page.engines?.[scheme]).map((entry) => ({ page: `${page.label}/${scheme}`, engine: entry.engine, error: entry.error.slice(0, 200) }))));
   return {
     note: "Geen bevinding van een engine is geen bewijs dat aan het criterium is voldaan. 'cantTell' betekent dat de engine het niet kon vaststellen.",
     rulesForThisCriterion: results.length,
     results,
+    ...(withoutResult.length > 0 ? { enginesWithoutResult: withoutResult, enginesWithoutResultNl: "Op deze pagina's gaf een regelset geen uitslag. Wat die regelset daar zou vinden, kan niet worden vastgesteld; zijn zwijgen is geen voldoende." } : {}),
   };
 };
 
@@ -897,7 +900,30 @@ function focusInStates(run: RunData): Record<string, unknown> {
   };
 }
 
-export const keyboard: Extractor = (run) => {
+/**
+ * The other addresses of the pages of the sample that lead to an anchor, such as `/vragen` to
+ * `/verklaring#vragen`, with what the inventory found where they land (WCAG 2.4.11). Only a target
+ * that took focus can fail 2.4.11; a missing anchor or a target under a fixed header without focus
+ * is no requirement of WCAG.
+ */
+function anchorRedirects(run: RunData): Record<string, unknown> {
+  const inventoried = new Map((run.inventory.pages ?? []).map((page) => [page.url, page]));
+  const rows = run.pages.flatMap((page) =>
+    (page.item.aliases ?? []).flatMap((address) => {
+      const landed = inventoried.get(address);
+      return landed?.anchor ? [{ page: page.label, address, landsOn: landed.finalUrl, anchorFound: landed.anchor.found, focused: landed.anchor.focused, inViewport: landed.anchor.inViewport, coveredBy: landed.anchor.coveredBy }] : [];
+    }),
+  );
+  // An inventory from before this measurement has the landing address without what was found there.
+  const examined = (run.inventory.pages ?? []).every((page) => page.anchor !== undefined || page.finalUrl === undefined || !page.finalUrl.includes("#"));
+  return {
+    examined,
+    method: "Elk adres dat de inventaris bezocht en waar de browser uitkwam op een anker, is geladen op 1280 bij 800, zonder blokkades weg te klikken. Vastgelegd is of het anker bestaat, of het doel daarna de focus heeft (Chromium geeft een doel focus als het focus kan krijgen: een link, een veld, een element met tabindex), en zo ja of het in beeld staat en wat er over het midden ligt.",
+    rows,
+  };
+}
+
+export const keyboard: Extractor = (run, criterion) => {
   const perPage = run.pages.map((page) => {
     const reached = reachedByKeyboard(page);
     const expected = expectedFocusable(page);
@@ -941,6 +967,7 @@ export const keyboard: Extractor = (run) => {
       : {}),
     narrow: narrowWalk(run),
     states: focusInStates(run),
+    ...(criterion === "2.4.11" ? { anchorRedirects: anchorRedirects(run) } : {}),
     firstStops: run.pages.slice(0, 3).map((page) => ({ page: page.label, order: page.tabwalk.stops.slice(0, 40).map((stop) => `${stop.index + 1}. ${stop.ax?.role ?? stop.tag} "${(axName(stop) || stop.text).slice(0, 40)}" [${stop.region ?? "-"}]`) })),
   };
 };
