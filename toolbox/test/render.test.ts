@@ -10,7 +10,7 @@ import { mergeFindings } from "../src/lib/defects.ts";
 import { aiGeneratedMark, closeCutQuote, evaluationHash, idsAcrossVersionsNl, markVendor, quoteStart, summarise, vendorTagsOf, VERSION_NOT_MEASURED_NL, type Evaluation, type ReportFinding } from "../src/lib/evaluation.ts";
 import { reportedModels } from "../src/lib/models.ts";
 import { deriveReport, renderMarkdown } from "../src/lib/report-markdown.ts";
-import { tool } from "../src/lib/typst.ts";
+import { tool, unshownPattern, unshownTexts } from "../src/lib/typst.ts";
 import { SEVERITIES } from "../src/lib/verdict.ts";
 import { exampleEvaluation } from "./fixtures/example-evaluation.ts";
 
@@ -409,6 +409,37 @@ test("a site on two origins names the second under the address, in the Markdown 
   const flat = text.stdout.replace(/\s+/g, " ");
   assert.ok(flat.includes("Ook onderdeel van de site"), "the facts of the evaluation name the second origin");
   assert.ok(flat.includes("https://docs.example.nl"));
+});
+
+test("Typst's report of text it cannot show becomes the texts and a pattern that matches them", () => {
+  const output = 'error: PDF/UA-1 error: the text `"中"` could not be displayed with font `"Atkinson Hyperlegible Next"`\n'
+    + 'error: PDF/UA-1 error: the text `"a\\u{301}\\"\\\\"` could not be displayed with font `"Atkinson Hyperlegible Next"`\n'
+    + 'error: PDF/UA-1 error: the text `"中"` could not be displayed with font `"Atkinson Hyperlegible Next"`\n';
+  assert.deepEqual(unshownTexts(output), ["中", 'a\u0301"\\']);
+  assert.deepEqual(unshownTexts("error: file not found"), []);
+  assert.equal(unshownPattern(["中", 'a\u0301"\\']), "(?:\\x{61}\\x{301}\\x{22}\\x{5c}|\\x{4e2d})+");
+});
+
+test("a quote from the site with emoji or a script no bundled font has still gives a PDF/UA-1 report", async (context) => {
+  const evaluation = exampleEvaluation();
+  const finding = evaluation.criteria.flatMap((criterion) => criterion.findings)[0]!;
+  finding.locations = [
+    { page: finding.locations[0]!.page, where: finding.locations[0]!.where, heading: "Tips 💡", text: "een vinkje ✅ en een raket 🚀" },
+    { page: finding.locations[0]!.page, where: finding.locations[0]!.where, text: "简体中文" },
+  ];
+  const dir = mkdtempSync(join(tmpdir(), "render-emoji-"));
+  writeFileSync(join(dir, "evaluation.json"), canonicalJson(evaluation));
+  const result = await render(dir);
+  if (result.pdf === null && result.pdfChecks.some((problem) => problem.includes("Typst is niet geïnstalleerd"))) return context.skip("Typst is not installed");
+  assert.ok(result.pdf !== null && result.shortPdf !== null, result.pdfChecks.join("\n"));
+  const missingAllowed = (problem: string): boolean => problem.includes("is niet geïnstalleerd") && !(process.env.CI === "true" && problem.includes("veraPDF"));
+  assert.deepEqual(result.pdfChecks.filter((problem) => !missingAllowed(problem)), []);
+  const text = await tool("pdftotext", [result.pdf, "-"]);
+  if (!text.found) return context.skip("pdftotext is not installed");
+  const flat = text.stdout.replace(/\s+/g, " ");
+  assert.ok(flat.includes("onder de kop “Tips 💡”, bij “een vinkje ✅ en een raket 🚀”"), "emoji are set in the bundled emoji font");
+  assert.ok(flat.includes("bij “[U+7B80 U+4F53 U+4E2D U+6587]”"), "a character no bundled font has is set as its code point");
+  assert.ok(renderMarkdown(evaluation).includes("简体中文"), "the Markdown keeps the text as it is");
 });
 
 test("the PDF shows the part for what waits for sending, with the flags of inventory", async (context) => {

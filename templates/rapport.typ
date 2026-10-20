@@ -47,8 +47,8 @@
 
 // ---------------------------------------------------------------- identity
 
-#let sans = ("Atkinson Hyperlegible Next", "DejaVu Sans Mono")
-#let mono-font = ("Atkinson Hyperlegible Mono", "DejaVu Sans Mono")
+#let sans = ("Atkinson Hyperlegible Next", "DejaVu Sans Mono", "Noto Emoji")
+#let mono-font = ("Atkinson Hyperlegible Mono", "DejaVu Sans Mono", "Noto Emoji")
 
 #let ink = rgb("#17171c")
 #let accent = rgb("#4630b8")
@@ -202,6 +202,17 @@
 #let document-title = t.title + " " + site.name + if short { ", " + t.shortVersion } else { "" }
 // A link to the entry of a criterion in appendix A; in the short report only the words.
 #let appendix-link(id, body) = if short { body } else { link(label("bijlage-" + id), body) }
+// Text no bundled font can show stops PDF/UA-1. The toolbox then compiles again with that
+// text in `unshown` (see typst.ts), and it is set as its code points.
+#show: body => {
+  let unshown = sys.inputs.at("unshown", default: none)
+  if unshown == none { return body }
+  show regex(unshown): it => "[" + it.text.codepoints().map(c => {
+    let hex = upper(str(c.to-unicode(), base: 16))
+    "U+" + "0" * calc.max(0, 4 - hex.len()) + hex
+  }).join(" ") + "]"
+  body
+}
 #set document(
   title: document-title,
   author: or-none(site.organisation, "loep"),
