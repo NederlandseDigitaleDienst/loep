@@ -5,6 +5,7 @@ import type { Defect, MergeRecord } from "./defects.ts";
 import type { Manifest } from "./manifest.ts";
 import type { RoleExtensions } from "./budget.ts";
 import { MODEL_UNKNOWN, type RoleModels } from "./models.ts";
+import type { RecordedVia } from "./recorded.ts";
 import { openPoint, shadowPartOf, vendorElementsIn, WITHIN_REACH, type Recommendation, type Finding, type Observation, type Outcome, type Verdict } from "./verdict.ts";
 import { compareCriterionIds, CRITERIA, en301549Clause, GUIDELINES, PRINCIPLES, understandingUrl, type Criterion, type WcagVersion } from "./wcag.ts";
 
@@ -127,6 +128,8 @@ export interface PointAnswer {
   answeredAt: string;
   /** Set when no person but an instrument of loep gave the answer: the watch on the session closes the point about its duration. */
   instrument?: true;
+  /** How a person's answer came about: confirmed at a terminal, or recorded by the agent in the conversation. `answeredAt` is the moment of the confirmation. Absent in an answer from before this was kept, and in one of an instrument. */
+  recordedVia?: RecordedVia;
 }
 
 /** Who or what established the outcome of a criterion: the verifier, the finishing round, or a person. */
@@ -246,6 +249,8 @@ export interface Signature {
   evaluationSha256: string;
   /** Hash of the seal the signer signed: evidence-index.json, which names every file of the run with its hash. */
   sealSha256: string;
+  /** How the signature came about: "terminal", the signer typed the start of the seal back. An agent never signs. Absent in a signature from before this was kept. */
+  recordedVia?: RecordedVia;
 }
 
 /** An embedded frame as the report names it under the scope, so whoever signs sees what was left out and why. */

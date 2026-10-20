@@ -17,6 +17,7 @@ import type { RunData } from "../src/lib/rundata.ts";
 import { FINISH_FACTOR, openPoint, type Verdict } from "../src/lib/verdict.ts";
 import { criterionById } from "../src/lib/wcag.ts";
 import { exampleEvaluation } from "./fixtures/example-evaluation.ts";
+import { noTerminal, saysYes } from "./fixtures/terminal.ts";
 
 // The finishing round and the answers of a person, on a run as small as task generation allows.
 // Every criterion here ends "cantTell" after the verifier, each for another reason.
@@ -279,11 +280,15 @@ test("the answer of a person closes a criterion, stands in the report and under 
   assert.deepEqual(listed.points.map((point) => [point.number, point.kindNl, point.answered]), [[1, "mens nodig", null], [2, "keuze nodig", null]]);
   assert.equal(listed.written, null, "without a point nothing is written");
   assert.ok(!existsSync(join(dir, "antwoorden")));
-  const given = { run: dir, criterion: CRITERIA.person, name: PERSON_NAME, role: "Toetser" };
+  const given = { run: dir, criterion: CRITERIA.person, name: PERSON_NAME, role: "Toetser", terminal: saysYes() };
   await assert.rejects(answer({ ...given, point: 3, did: "Met een schermlezer de melding beluisterd.", outcome: "passed" }), /--point is het nummer van een open punt: 1 tot en met 2/);
   await assert.rejects(answer({ ...given, point: 1, did: "Gedaan.", outcome: "passed" }), /--did zegt wat de persoon heeft gedaan/);
   await assert.rejects(answer({ ...given, point: 1, did: "Met een schermlezer de melding beluisterd.", outcome: "cantTell" }), /--outcome is de uitkomst/);
   await assert.rejects(answer({ run: dir, criterion: CRITERIA.person, point: 1, did: "Met een schermlezer de melding beluisterd.", outcome: "passed", role: "Toetser" }), /de naam staat alleen in antwoorden/);
+  // How the answer comes about is said: without a terminal and without the conversation's confirmation and summary, nothing is recorded.
+  await assert.rejects(answer({ ...given, terminal: noTerminal, point: 1, did: "Met een schermlezer de melding beluisterd.", outcome: "passed" }), /geen interactieve terminal/);
+  await assert.rejects(answer({ ...given, terminal: noTerminal, point: 1, did: "Met een schermlezer de melding beluisterd.", outcome: "passed", recordedVia: "gesprek", confirmation: "Ja." }), /--summary "<samenvatting>"/);
+  assert.ok(!existsSync(join(dir, "antwoorden")), "a refused answer writes nothing");
 
   // One of two points answered: the criterion is still open, with the point that is left.
   const one = await answer({ ...given, point: 1, did: "Met VoiceOver in Safari het formulier op de contactpagina verstuurd; de melding wordt voorgelezen.", outcome: "passed" });
@@ -291,7 +296,9 @@ test("the answer of a person closes a criterion, stands in the report and under 
   const half = await resolved(CRITERIA.person);
   assert.deepEqual([half.outcome, half.missingNl, half.established?.by, half.answers?.length], ["cantTell", [CHOICE], "verification", 1]);
   // Both answered: the outcome is the person's, and it says so.
-  await answer({ ...given, point: 2, did: "De afbeelding in de kop is het logo van de organisatie; dat is zo besloten.", outcome: "passed", role: "Eigenaar van de site" });
+  await answer({ ...given, terminal: noTerminal, point: 2, did: "De afbeelding in de kop is het logo van de organisatie; dat is zo besloten.", outcome: "passed", role: "Eigenaar van de site", recordedVia: "gesprek", confirmation: "Ja, dat is ons logo.", summary: "De afbeelding in de kop is het logo; dat is besloten." });
+  const kept = JSON.parse(readFileSync(join(dir, "antwoorden", `${CRITERIA.person}.json`), "utf8")) as { answers: { recordedVia: string; confirmationNl?: string; summaryNl?: string }[] };
+  assert.deepEqual(kept.answers.map((entry) => [entry.recordedVia, entry.confirmationNl, entry.summaryNl]), [["terminal", undefined, undefined], ["gesprek", "Ja, dat is ons logo.", "De afbeelding in de kop is het logo; dat is besloten."]], "each answer says how it came about; one from the conversation keeps the confirmation and the summary");
   const closed = await resolved(CRITERIA.person);
   assert.equal(closed.outcome, "passed");
   assert.equal(closed.established?.by, "person");
@@ -305,7 +312,7 @@ test("the answer of a person closes a criterion, stands in the report and under 
   const look = flow.observe("a-221", "look");
   flow.write(join("verdicts", CRITERIA.mixed, "afmaak.json"), { criterion: CRITERIA.mixed, outcome: "cantTell", rule: "R9", summaryNl: "Het menu is nu gemeten; wat een schermlezer voorleest blijft open.", observations: [flow.seen([look], "open")], findings: [], missingNl: [PERSON], finish: { points: [{ point: 1, settled: false, howNl: "Geen instrument van de sessie kan dit vaststellen.", evidence: [] }, { point: 2, settled: true, howNl: "Het menu is op 320 pixels geopend en gemeten.", evidence: [look] }], coverageNl: "Gemeten op 2 van de 2 pagina's op 320 pixels.", findings: [] } } satisfies Verdict);
   assert.deepEqual(await checkInstrumentVerdict(dir, CRITERIA.mixed, "finish"), []);
-  await answer({ run: dir, criterion: CRITERIA.mixed, point: 1, did: "Met NVDA in Firefox het formulier verstuurd; de melding wordt niet voorgelezen.", outcome: "failed", name: PERSON_NAME, role: "Toetser" });
+  await answer({ run: dir, criterion: CRITERIA.mixed, point: 1, did: "Met NVDA in Firefox het formulier verstuurd; de melding wordt niet voorgelezen.", outcome: "failed", name: PERSON_NAME, role: "Toetser", terminal: saysYes() });
   const failed = await resolved(CRITERIA.mixed);
   assert.deepEqual([failed.outcome, failed.established?.by, failed.established?.before?.roundNl, failed.rounds.finish], ["failed", "person", "aanvullende meting", "cantTell"]);
 
@@ -316,7 +323,7 @@ test("the answer of a person closes a criterion, stands in the report and under 
   assert.match(markdown, /^\| \[1\.4\.5 [^|]+\| AA \| ● Voldoet \| een persoon \| 0 \|$/m);
   assert.ok(markdown.includes("Zekerheid: Vastgesteld door een persoon, niet door een instrument (functie: Toetser, Eigenaar van de site)."));
   assert.ok(markdown.includes("Een persoon, niet een instrument, tevens eindoordeel: Voldoet."));
-  assert.match(markdown, /Antwoord van een persoon \(functie: Toetser, \d+ \w+ \d{4}\): Met VoiceOver in Safari het formulier op de contactpagina verstuurd; de melding wordt voorgelezen\. Uitkomst op dit punt: voldoet\./);
+  assert.match(markdown, /Antwoord van een persoon \(functie: Toetser, bevestigd in een terminal op \d+ \w+ \d{4} om \d{2}:\d{2}\): Met VoiceOver in Safari het formulier op de contactpagina verstuurd; de melding wordt voorgelezen\. Uitkomst op dit punt: voldoet\./);
   assert.match(markdown, /\*\*Door een persoon vastgesteld\*\*\n\n[^\n]+\n\n- \[2\.2\.1 [^\]]+\]\(#sc-2\.2\.1\): Met NVDA in Firefox het formulier verstuurd; de melding wordt niet voorgelezen \(functie: Toetser\)/);
   assert.ok(!openCriteria(evaluation.criteria).owner.includes(CRITERIA.person), "an answered criterion is no longer open");
 

@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { readJson, sha256File, writeJson } from "../lib/canonical.ts";
+import { processTerminal, recordStatement, type RecordingFlags, type Terminal } from "../lib/recorded.ts";
 import { ANSWER_OUTCOMES, type AnswerOutcome, OUTCOME_LABEL, type PointAnswer } from "../lib/evaluation.ts";
 import { openPoint, type Verdict } from "../lib/verdict.ts";
 import { instrumentVerdictIsCurrent, isInstrumentRun, loadInstrumentIndex, loadObservations, NO_TASKS_NL, pointsToFinish, skipped, standingVerdict, type InstrumentTask } from "./instrument-tasks.ts";
@@ -11,7 +12,9 @@ import { instrumentVerdictIsCurrent, isInstrumentRun, loadInstrumentIndex, loadO
  * owner decides. This command keeps that answer in the run, next to the verdict it belongs to.
  * A point "versturen niet toegestaan" needs no person: a run with a declared test environment
  * measures it. A person may still answer it, by sending by hand and saying what was sent where.
- * Nothing here is ever filled in by an agent.
+ * Nothing here is ever made up by an agent: the answer is what the person said. The person
+ * confirms it at an interactive terminal, or the agent records it in the conversation with the
+ * person's literal confirmation and the summary that was confirmed (`recordedVia`).
  */
 
 /** Where the answers of a run are kept: one file per criterion. Inside the seal, like every other piece of evidence. */
@@ -23,9 +26,12 @@ export const ANSWER_PRIVACY_NL = `de naam staat alleen in ${ANSWERS_DIR}/<criter
 
 const MIN_DID = 20;
 
-/** An answer as the run keeps it: with the name of who gave it, and the verdict it answers. */
+/** An answer as the run keeps it: with the name of who gave it, how it was recorded, and the verdict it answers. */
 export interface StoredAnswer extends PointAnswer {
   name: string;
+  /** With `recordedVia: "gesprek"`: what the person said, word for word, and the summary they confirmed. */
+  confirmationNl?: string;
+  summaryNl?: string;
   /** The verdict whose open point this answers: an answer to another verdict does not count. */
   verdict: { round: "final" | "finish"; sha256: string };
 }
@@ -57,10 +63,10 @@ export async function loadAnswers(runDir: string, criterion: string, counting: C
   if (!existsSync(path)) return { answers: [], stale: 0 };
   const stored = (await readJson<AnswerFile>(path)).answers ?? [];
   const current = stored.filter((answer) => counting !== null && answer.verdict?.sha256 === counting.sha256);
-  return { answers: current.map(({ pointNl, didNl, outcome, role, answeredAt }) => ({ pointNl, didNl, outcome, role, answeredAt })), stale: stored.length - current.length };
+  return { answers: current.map(({ pointNl, didNl, outcome, role, answeredAt, recordedVia }) => ({ pointNl, didNl, outcome, role, answeredAt, ...(recordedVia ? { recordedVia } : {}) })), stale: stored.length - current.length };
 }
 
-export interface AnswerOptions {
+export interface AnswerOptions extends RecordingFlags {
   run: string;
   criterion: string;
   /** The number of the open point, counted from 1. Without it the open points are only listed. */
@@ -70,6 +76,8 @@ export interface AnswerOptions {
   outcome?: string | undefined;
   name?: string | undefined;
   role?: string | undefined;
+  /** Where a person confirms the answer; a test plays the person here. */
+  terminal?: Terminal | undefined;
 }
 
 export interface AnswerResult {
@@ -118,13 +126,19 @@ export async function answer(options: AnswerOptions): Promise<AnswerResult> {
   if (!(ANSWER_OUTCOMES as readonly string[]).includes(options.outcome ?? "")) throw new Error(`--outcome is de uitkomst voor het criterium op dit punt: ${ANSWER_OUTCOMES.join(", ")}`);
   if (!options.name?.trim() || !options.role?.trim()) throw new Error(`--name en --role zeggen wie dit heeft vastgesteld en in welke functie: ${ANSWER_PRIVACY_NL}`);
 
+  const didNl = options.did!.replace(/\s+/g, " ").trim();
+  const outcome = options.outcome as AnswerOutcome;
+  const shownNl = `Antwoord op criterium ${options.criterion}, open punt ${options.point}: ${openPoint(point).textNl}\nGedaan of besloten: ${didNl}\nUitkomst op dit punt: ${OUTCOME_LABEL[outcome].toLowerCase()}\nDoor: ${options.name.trim()}, ${options.role.trim()}`;
+  const recording = await recordStatement("answer", options, shownNl, options.terminal ?? processTerminal());
   const entry: StoredAnswer = {
     pointNl: point,
-    didNl: options.did!.replace(/\s+/g, " ").trim(),
-    outcome: options.outcome as AnswerOutcome,
+    didNl,
+    outcome,
     role: options.role.trim(),
     name: options.name.trim(),
+    // The moment of the confirmation: the answer is recorded right after it.
     answeredAt: new Date().toISOString(),
+    ...recording,
     verdict: { round: counting.round, sha256: counting.sha256 },
   };
   // A second answer to the same point takes the place of the first.

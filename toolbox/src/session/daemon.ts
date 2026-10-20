@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import { existsSync } from "node:fs";
 import { mkdtemp, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -18,6 +19,7 @@ import { Images, ObservationLog, observationId, readObservation, type Locators, 
 import { holds, POSTCONDITION_WAIT_MS } from "./recipe.ts";
 import { toolsOutcome, waitOutcome, type Services } from "./opinions.ts";
 import { SecondBrowsers } from "./second.ts";
+import { Blockade, refusalNl } from "./blockade.ts";
 import { documentOutcome } from "./document-command.ts";
 import { sheetOutcome } from "./sheet.ts";
 import { VOICEOVER_COMMAND_MS, voiceoverOutcome } from "./voiceover-command.ts";
@@ -41,7 +43,16 @@ export interface Request {
   model?: string;
   /** `session start --max-sessions`: what the caller asked the process to allow. The limit is set when the process starts, so a process that runs already keeps its own. */
   maxSessions?: number;
+  /** `session start --key`: the key the first start of a running session gave, so its owner can start it again. */
+  key?: string;
 }
+
+/**
+ * Why a second start of a running session is refused, and what to do. Two agents in one session
+ * measure in each other's page and use one budget; the owner of the session has its key.
+ */
+export const ownedSessionNl = (name: string, wrongKey: boolean): string =>
+  `geweigerd: sessie "${name}" loopt al en heeft een eigenaar${wrongKey ? ", en deze sleutel hoort er niet bij" : ""}. Een tweede start laat twee agents in één sessie meten. Startte jij deze sessie zelf en wil je hem voortzetten, geef dan de sleutel mee die session start je gaf: session start --session ${name} --key <sleutel>. Heb je die sleutel niet, dan meet een andere agent al onder deze sessienaam: meet niet verder en meld dat sessie "${name}" al in gebruik is`;
 
 /**
  * What to do when the process has no room for another session. Fewer at the same time is what
@@ -65,6 +76,8 @@ interface Session {
   startedAt: number;
   /** The models the agents that started this session gave, in the order they were first given. */
   models: string[];
+  /** What `session start` gave whoever started the session: a later start of the running session needs it. Not written to the run. */
+  key: string;
   commands: number;
   surface: Surface | null;
   /** Commands of one session run one after another. */
@@ -161,7 +174,7 @@ export class Daemon {
   private constructor(runDir: string, browser: Browser, scope: Scope, limits: DaemonLimits) {
     this.runDir = runDir;
     this.limits = limits;
-    this.env = { browser, runDir, scope, limits, politeness: new Politeness(limits.navigationDelayMs) };
+    this.env = { browser, runDir, scope, limits, politeness: new Politeness(limits.navigationDelayMs), blockade: new Blockade(runDir) };
     this.second = new SecondBrowsers(this.env, runSteps);
   }
 
@@ -194,7 +207,7 @@ export class Daemon {
       const name = request.session ?? "main";
       if (!SESSION_NAME.test(name)) throw new Error(`"${name}" is geen geldige sessienaam (kleine letters, cijfers, - en _)`);
       if (request.op === "start") {
-        const response = await this.start(name, request.limits ?? {}, cleanModel(request.model));
+        const response = await this.start(name, request.limits ?? {}, cleanModel(request.model), request.key);
         // Whoever counted on another limit starts more agents than there is room for, or fewer than the owner of the site allows.
         if (request.maxSessions !== undefined && request.maxSessions !== this.limits.maxSessions) {
           response.print.warning = `het sessieproces liep al en laat ${this.limits.maxSessions} sessies tegelijk toe, niet ${request.maxSessions}. Reken met ${this.limits.maxSessions}, of stop alle sessies (session stop) en start opnieuw met --max-sessions ${request.maxSessions}`;
@@ -282,14 +295,16 @@ export class Daemon {
     return { ok: true, print: { ...this.budget(session), added: `${added.commands} commando's en ${added.minutes} minuten`, note: `verlengd om: ${reasonNl}. ${session.extensions.length < EXTENSION.max ? `Verlengen kan nog ${EXTENSION.max - session.extensions.length} keer.` : "Dit was de laatste verlenging: kom hierna tot een oordeel."}` } };
   }
 
-  private async start(name: string, limits: Partial<SessionLimits>, model: string | null = null): Promise<Response> {
+  private async start(name: string, limits: Partial<SessionLimits>, model: string | null = null, key?: string): Promise<Response> {
     const existing = this.sessions.get(name);
     if (existing) {
+      // A running session has one owner: whoever has its key. Anyone else would measure in its page and on its budget.
+      if (key !== existing.key) throw new Error(ownedSessionNl(name, key !== undefined));
       if (model && !existing.models.includes(model)) {
         existing.models.push(model);
         await this.writeSessionFile(existing);
       }
-      return { ok: true, print: { ...this.budget(existing), ...(existing.models.length > 0 ? { model: existing.models.join(", ") } : {}), note: "de sessie liep al", limits: { maxSessions: this.limits.maxSessions } } };
+      return { ok: true, print: { ...this.budget(existing), ...(existing.models.length > 0 ? { model: existing.models.join(", ") } : {}), key: existing.key, note: "de sessie liep al; je gaat verder met je eigen sessie", limits: { maxSessions: this.limits.maxSessions } } };
     }
     if (this.sessions.size >= this.limits.maxSessions) throw new Error(tooManySessionsNl(this.sessions.size, this.limits.maxSessions));
     const log = new ObservationLog(this.runDir, name);
@@ -313,7 +328,7 @@ export class Daemon {
     // Who starts the session says which model it runs on; a later start on another model is added, not put in its place.
     const models = (resumed && Array.isArray(resumed.models) ? resumed.models : []).map(cleanModel).filter((entry): entry is string => entry !== null);
     if (model && !models.includes(model)) models.push(model);
-    const session: Session = { name, log, limits: kept, extensions, startedAt: resumed ? Date.parse(resumed.startedAt!) : Date.now(), models, commands: resumed?.commands ?? 0, surface: null, queue: Promise.resolve(), blockedTotal: resumed?.blocked ?? 0, jobs: new Jobs() };
+    const session: Session = { name, log, limits: kept, extensions, startedAt: resumed ? Date.parse(resumed.startedAt!) : Date.now(), models, key: randomBytes(4).toString("hex"), commands: resumed?.commands ?? 0, surface: null, queue: Promise.resolve(), blockedTotal: resumed?.blocked ?? 0, jobs: new Jobs() };
     this.sessions.set(name, session);
     await this.writeSessionFile(session);
     if (!this.toolsRecorded) {
@@ -325,6 +340,7 @@ export class Daemon {
       ok: true,
       print: {
         ...this.budget(session),
+        key: session.key,
         model: models.length > 0 ? models.join(", ") : "niet opgegeven; geef het op met session start --model \"<naam en versie>\"",
         ...(resumed ? { note: `sessie bestond al: ${session.commands} van ${session.limits.maxCommands} gebruikt, ${Math.round(((Date.now() - session.startedAt) / 60_000) * 10) / 10} van ${session.limits.maxMinutes} minuten sinds de eerste start` } : {}),
         scope: this.env.scope.hosts,
@@ -379,6 +395,8 @@ export class Daemon {
       session.commands++;
     }
 
+    // While a command runs the agent may be acting on the page: what the page sends over a socket then is not known to be its own.
+    if (session.surface) session.surface.guard.idle = false;
     const nr = session.log.reserve();
     const id = observationId(session.name, nr);
     const images = new Images(this.runDir, session.log.file(nr, ""));
@@ -418,6 +436,8 @@ export class Daemon {
     const read = surface?.guard.reads?.splice(0) ?? [];
     // Cloudflare's check whether the browser is a robot, which Cloudflare answers and the site never gets.
     const challenges = surface?.guard.challenges?.splice(0) ?? [];
+    // An origin of the site that blocked the run while this command ran: from now on no session asks it anything.
+    const blockades = this.env.blockade?.since(started) ?? [];
     const after = stateOf(surface);
     const observation: Observation = {
       id,
@@ -438,6 +458,7 @@ export class Daemon {
       ...(written.length > 0 ? { writes: written } : {}),
       ...(read.length > 0 ? { reads: read } : {}),
       ...(challenges.length > 0 ? { challenges } : {}),
+      ...(blockades.length > 0 ? { blockades } : {}),
       popups: surface ? surface.popups.splice(0) : [],
       alerts: surface ? surface.alerts.splice(0) : [],
       error,
@@ -460,11 +481,15 @@ export class Daemon {
           ? `het budget voor versturen van deze run is op: ${sending.sent} van ${sending.max} verstuurd, door alle sessies en de veegronde samen. Er gaat niets meer weg. Wat daardoor niet te zien is, schrijf je als open punt: "${budgetOutPointNl(sending)}: <wat er pas na versturen te zien was>"`
           : `${heldBack.reasonNl ?? "te kort na de vorige verzending"}. Er is niets verstuurd: kijk of een eerdere waarneming of de veegronde laat zien wat je zoekt, en doe de handeling anders na die tijd opnieuw`;
     }
+    const refusedByBlockade = blocked.find((entry) => entry.kind === "blockade");
+    if (blockades.length > 0 || refusedByBlockade) print.blockade = blockades.length > 0 ? blockades.map(refusalNl).join(". ") : refusedByBlockade!.reasonNl;
     if (observation.popups.length > 0) print.popups = observation.popups;
     if (observation.alerts.length > 0) print.alerts = observation.alerts.map((alert) => `${alert.type}: ${alert.message.slice(0, 80)}`);
     // From 80 percent on every answer says so, in one line: the agent reads answers, not its status.
     const warning = this.warning(session);
     if (warning) print.budget = warning;
+    // Until the next command nobody acts on the page, unless a method of this command still does in the background.
+    if (session.surface && session.jobs.pending.running.length === 0) session.surface.guard.idle = true;
     return { ok: error === null, print };
   }
 

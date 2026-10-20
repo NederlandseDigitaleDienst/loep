@@ -14,10 +14,11 @@ import { setRunLogin } from "../lib/login.ts";
 import { scopeForRun, TEST_VALUES } from "./safety.ts";
 
 export const SESSION_USAGE = `  session start --run <run> [--session <name>] [--scope <url>] [--max-commands <n>] [--max-minutes <n>] [--single-browser]
-                [--model "<name and version>"]
+                [--model "<name and version>"] [--key <key>]
                                          Start a browser session for an agent (and the process that holds the browser);
                                          --model is the model the agent itself says it runs on, kept in the session file;
-                                         --single-browser keeps WebKit and Firefox out of it
+                                         --single-browser keeps WebKit and Firefox out of it. The answer gives a key: a
+                                         start of a session that runs already is refused without it (--key)
   session stop --run <run> [--session <name>]
                                          Stop one session, or all of them and the process
   session list --run <run>               Show the running sessions and what is left of their budget
@@ -199,7 +200,7 @@ async function ensureDaemon(runDir: string, forwarded: string[]): Promise<string
 }
 
 const DAEMON_OPTIONS = ["scope", "allow-host", "strict", "max-sessions", "nav-delay", "command-timeout", "idle-minutes", "single-browser"];
-const CLIENT_ONLY = new Set(["run", "session", "max-commands", "max-minutes", "model", "reason", ...DAEMON_OPTIONS]);
+const CLIENT_ONLY = new Set(["run", "session", "max-commands", "max-minutes", "model", "reason", "key", ...DAEMON_OPTIONS]);
 
 /**
  * The words after `session` that manage a session instead of being a command in one. No command
@@ -223,6 +224,7 @@ export async function sessionCli(argv: string[]): Promise<number> {
       "max-commands": { type: "string" },
       "max-minutes": { type: "string" },
       model: { type: "string" },
+      key: { type: "string" },
       reason: { type: "string" },
       "max-sessions": { type: "string" },
       "nav-delay": { type: "string" },
@@ -298,7 +300,7 @@ export async function sessionCli(argv: string[]): Promise<number> {
         return (Array.isArray(value) ? value : [value]).flatMap((entry) => [`--${name}`, entry]);
       });
       const socket = await ensureDaemon(run, forwarded);
-      return print(await send(socket, { op: "start", session, ...(values.model !== undefined ? { model: values.model } : {}), ...(number("max-sessions") !== undefined ? { maxSessions: number("max-sessions")! } : {}), limits: { ...(number("max-commands") !== undefined ? { maxCommands: number("max-commands")! } : {}), ...(number("max-minutes") !== undefined ? { maxMinutes: number("max-minutes")! } : {}) } }));
+      return print(await send(socket, { op: "start", session, ...(values.model !== undefined ? { model: values.model } : {}), ...(values.key !== undefined ? { key: values.key } : {}), ...(number("max-sessions") !== undefined ? { maxSessions: number("max-sessions")! } : {}), limits: { ...(number("max-commands") !== undefined ? { maxCommands: number("max-commands")! } : {}), ...(number("max-minutes") !== undefined ? { maxMinutes: number("max-minutes")! } : {}) } }));
     }
     if (group === "session" && command === "dossier") {
       // The dossier is a file of the run: reading it needs no browser and is no measurement.
