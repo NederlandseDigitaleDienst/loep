@@ -822,7 +822,7 @@ export async function checkWalk(runDir: string, pageType: string): Promise<strin
   try {
     list = await readJson(join(runDir, walk.output));
   } catch (error) {
-    return [`cannot read ${walk.output}: ${(error as Error).message}`];
+    return [`cannot read ${join(resolve(runDir), walk.output)}: ${(error as Error).message.split("\n")[0]}. Write the list there as JSON, as the task shows under "Vorm van het resultaat"`];
   }
   const problems = validateCandidates(list, { pageType, pageLabels: labels, criteria: loadAllProcedures().procedures.map((procedure) => procedure.id), idPrefix: walk.page, observations: observations.index });
   if (problems.length === 0) await stampNow(runDir, walk.output, (await walkStamp(runDir, walk, observations.sha))!);

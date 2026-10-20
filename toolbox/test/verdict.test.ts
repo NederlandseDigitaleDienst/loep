@@ -223,6 +223,20 @@ test("a candidate names a criterion, a place and an observation that shows it", 
   assert.match(validateCandidates({ ...walk, states: [] }, walkContext).join(), /states: name at least/);
 });
 
+test("check-walk says what is missing and how to put it right, so a walk fixes its list in one go", () => {
+  const one = walk.candidates[0]!;
+  const withCandidate = (candidate: Partial<typeof one>): string => validateCandidates({ ...walk, candidates: [{ ...one, ...candidate }] }, walkContext).join("\n");
+  assert.match(withCandidate({ evidence: ["j143-0006"] }), /"j143-0006" is a \w+, which acts and shows nothing; look or measure after it\. Commands that show: look, crop, cutout/);
+  assert.match(withCandidate({ evidence: [] }), /evidence is empty: give the number of the look or measure observation/);
+  assert.match(withCandidate({ id: "K1" }), /not "K1"; the first free one is "P02-K01"/);
+  assert.match(validateCandidates({ ...walk, candidates: [one, one] }, walkContext).join(), /id "P02-K01" is used twice; give this one "P02-K02"/);
+  assert.match(withCandidate({ noteNl: Array(60).fill("woord").join(" ") }), /at most 40 words; this one has 60/);
+  assert.match(withCandidate({ support: "zeker" as never }), /support must be one of "gemeten", "bekeken", "afgeleid", "alleen beeld", not "zeker"/);
+  assert.match(withCandidate({ page: "P9" }), /page "P9" is not in the legend; this walk is on "P02"/);
+  assert.match(withCandidate({ criterion: "1.4" }), /"1\.4" is not a criterion with a procedure; take one from the list under "De criteria"/);
+  assert.match(validateCandidates({ ...walk, pageType: "start" }, walkContext).join(), /pageType must be "nieuws", not "start"/);
+});
+
 test("the stamp of a verdict can bind it to the observations it cites", () => {
   assert.deepEqual(citedObservations(reproduced, observations), ["j143-0003", "v143-0002"]);
 });

@@ -18,6 +18,7 @@ import { holds, POSTCONDITION_WAIT_MS } from "./recipe.ts";
 import { toolsOutcome, waitOutcome, type Services } from "./opinions.ts";
 import { SecondBrowsers } from "./second.ts";
 import { documentOutcome } from "./document-command.ts";
+import { cutoutOutcome } from "./cutout-command.ts";
 import { sheetOutcome } from "./sheet.ts";
 import { VOICEOVER_COMMAND_MS, voiceoverOutcome } from "./voiceover-command.ts";
 import { DEFAULT_DAEMON_LIMITS, DEFAULT_SESSION_LIMITS, Politeness, type Blocked, type DaemonLimits, type Scope, type SessionLimits } from "./safety.ts";
@@ -358,7 +359,7 @@ export class Daemon {
 
   /** Run one command of an agent, within its budget and time limit, and write the record. */
   private async command(session: Session, command: string, rawArgs: string[], options: Options): Promise<Response> {
-    const known = ["open", "state", "replay", "status", "wait", "tools", "sheet", "document", "voiceover", ...PUBLIC_COMMANDS];
+    const known = ["open", "state", "replay", "status", "wait", "tools", "sheet", "document", "cutout", "voiceover", ...PUBLIC_COMMANDS];
     if (!known.includes(command)) throw new Error(`onbekend commando "${command}"; kies uit: ${known.join(", ")}`);
     const minutes = (Date.now() - session.startedAt) / 60_000;
     const free = isFree(command);
@@ -462,6 +463,8 @@ export class Daemon {
       if (command === "sheet") return sheetOutcome(this.runDir, rawArgs, images);
       // A document of the sample is read from the run, not from a page: no page has to be open.
       if (command === "document") return documentOutcome(this.runDir, rawArgs, options, images);
+      // A piece of a picture that is in the run already, such as a screenshot of the sweep: no page has to be open.
+      if (command === "cutout") return cutoutOutcome(this.runDir, rawArgs, options, images);
       // VoiceOver in Safari in the virtual Mac reads the state this session is in; the page of the session itself is not touched.
       if (command === "voiceover") return voiceoverOutcome({ env: this.env, current: session.surface ? before : null, args: rawArgs, options, images, blocked: turn.blocked, resolveUrl: (address) => this.resolveUrl(address), loadRecipe: (name) => this.loadRecipe(name) });
       const surface = session.surface;
