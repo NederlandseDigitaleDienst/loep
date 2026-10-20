@@ -262,16 +262,22 @@ export function openPoint(point: string): { kind: OpenPointKind | null; textNl: 
 /**
  * A run that may send to one origin has no point "versturen niet toegestaan" about that origin:
  * there the agent sends and measures. The point stays only for a message that goes elsewhere,
- * and then it names the address, so the report can say which declaration would have closed it.
+ * and then it names the address, so the report can say which declaration would have closed it,
+ * or once the budget for sending of the run is used up, and then the point says so.
  */
-export function notSentPointProblems(missingNl: unknown, permission: { origin: string } | null): string[] {
+export function notSentPointProblems(missingNl: unknown, permission: { origin: string } | null, budget: { sent: number; max: number } | null = null): string[] {
   if (!permission || !Array.isArray(missingNl)) return [];
-  return missingNl.flatMap((point, position) =>
-    typeof point === "string" && openPoint(point).kind?.prefix === NOT_SENT && !notSentOrigins([point]).some((origin) => origin !== permission.origin)
-      ? [`missingNl[${position}]: this run may send to ${permission.origin} (writes.allowed in the dossier), so "${NOT_SENT}:" is only for a message that goes to another origin. Send it there and measure; or, when the message goes elsewhere, name in the point the address it goes to`]
-      : [],
-  );
+  const usedUp = budget !== null && budget.sent >= budget.max;
+  return missingNl.flatMap((point, position) => {
+    if (typeof point !== "string" || openPoint(point).kind?.prefix !== NOT_SENT || notSentOrigins([point]).some((origin) => origin !== permission.origin)) return [];
+    if (usedUp && SENDING_BUDGET_OUT.test(point)) return [];
+    const budgetNl = budget ? ` The budget for sending of the run is ${usedUp ? "used up" : `not used up (${budget.sent} of ${budget.max} sent)`}${usedUp ? `: then the point says "het budget voor versturen van deze run is op (${budget.sent} van ${budget.max} verstuurd)"` : ""}` : "";
+    return [`missingNl[${position}]: this run may send to ${permission.origin} (writes.allowed in the dossier), so "${NOT_SENT}:" is only for a message that goes to another origin, or for one that could not go because the budget for sending of the run is used up. Send it there and measure; or, when the message goes elsewhere, name in the point the address it goes to.${budgetNl}`];
+  });
 }
+
+/** How a point "versturen niet toegestaan" says that the budget for sending of the run held the message back. */
+const SENDING_BUDGET_OUT = /budget voor versturen/i;
 
 interface ShapeContext {
   criterion: string;
@@ -361,7 +367,7 @@ export const COMMAND_ALIASES: Record<string, string> = { engines: "rules", tabwa
 export const canonicalCommand = (command: string): string => COMMAND_ALIASES[command] ?? command;
 const SHOWING = new Set<string>([...LOOK_COMMANDS, ...MEASURE_COMMANDS]);
 /** Every word that can follow `session` on the command line as a command in a session (an agent types it as `loep <command>`): the commands that act, look, measure and record, with their older names. */
-export const SESSION_COMMANDS: string[] = [...LOOK_COMMANDS, ...MEASURE_COMMANDS, ...Object.keys(COMMAND_ALIASES), "open", "click", "key", "tab", "type", "select", "hover", "scroll", "back", "state", "replay", "status", "tools", "wait", "sheet"];
+export const SESSION_COMMANDS: string[] = [...LOOK_COMMANDS, ...MEASURE_COMMANDS, ...Object.keys(COMMAND_ALIASES), "open", "click", "key", "tab", "type", "select", "hover", "scroll", "back", "state", "replay", "status", "tools", "wait", "sheet", "dossier"];
 // "loep" is also an ordinary word, so only the word with a command behind it counts as naming one.
 const NAMES_A_COMMAND = new RegExp(`\\bloep (?:${SESSION_COMMANDS.join("|")})\\b`, "i");
 
