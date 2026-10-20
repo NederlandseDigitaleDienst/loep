@@ -1,6 +1,6 @@
 import { KIND_NAME_NL, kindsNl } from "./documents.ts";
 import { pageIndex, type Defect } from "./defects.ts";
-import { changedSinceCommit, closeCutQuote, complianceStatus, evaluationHash, idsAcrossVersionsNl, knownCommit, madeWith, openCriteria, OUTCOME_LABEL, type ComplianceStatus, type CriterionOutcome, type CriterionResult, type Evaluation, type ReportFinding, type Signature } from "./evaluation.ts";
+import { changedSinceCommit, closeCutQuote, complianceStatus, evaluationHash, idsAcrossVersionsNl, knownCommit, madeWith, openCriteria, OUTAGE_NL, OUTCOME_LABEL, type ComplianceStatus, type CriterionOutcome, type CriterionResult, type Evaluation, type ReportFinding, type Signature } from "./evaluation.ts";
 import { modelOf } from "../instruments/methods/registry.ts";
 import { signatureIsCurrent } from "../commands/sign.ts";
 import { extensionsNl } from "./budget.ts";
@@ -644,7 +644,7 @@ const upperFirst = (text: string): string => `${text.charAt(0).toUpperCase()}${t
 /** The open points of a criterion, each with its kind. A criterion that is open without saying why still gets one point. */
 function openPoints(criterion: CriterionResult): ReturnType<typeof openPoint>[] {
   if (criterion.missingNl.length > 0) return criterion.missingNl.map(openPoint);
-  if (criterion.outcome === "untested") return [{ kind: null, textNl: "Dit criterium is nog niet beoordeeld." }];
+  if (criterion.outcome === "untested") return [{ kind: null, textNl: criterion.outage ? OUTAGE_NL : "Dit criterium is nog niet beoordeeld." }];
   return criterion.outcome === "cantTell" ? [{ kind: null, textNl: "Niet opgegeven." }] : [];
 }
 

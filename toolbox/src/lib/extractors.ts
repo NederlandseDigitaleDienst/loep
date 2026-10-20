@@ -2,7 +2,7 @@ import type { MediaElement, MediaReport } from "../instruments/media.ts";
 import type { ContentInventory } from "../instruments/overflow.ts";
 import { contrastRatio, floorRatio, type Rgb } from "./contrast.ts";
 import { acceptedGapFor, frameStanding, NOT_OPENED_ON_PAGE_TYPE } from "./sitemodel.ts";
-import type { EngineOutcome } from "./engines.ts";
+import { enginesWithoutResult, type EngineOutcome } from "./engines.ts";
 import { REGULAR_PATH, type Clickable, type Element, type Facts, type FormErrorState, type PageData, type RunData, type SkipLinkAim } from "./rundata.ts";
 import { documents } from "./document-evidence.ts";
 import { judgeTimer, TIMER_RULE_NL, timerNl, watchNl, type TimeLimitProbe } from "./timelimits.ts";
@@ -331,10 +331,13 @@ export const engine: Extractor = (run, criterion) => {
   const results = [...rows.values()]
     .sort((a, b) => order.indexOf(a.outcome) - order.indexOf(b.outcome) || a.engine.localeCompare(b.engine) || a.rule.localeCompare(b.rule))
     .map((row) => ({ ...row, pages: pagesText([...row.pages], run.pages.length), schemes: [...row.schemes].join("+") }));
+  // An engine that gave no answer on a page found nothing there because it did not run: that is not passing (#143).
+  const withoutResult = run.pages.flatMap((page) => (["light", "dark"] as const).flatMap((scheme) => enginesWithoutResult(page.engines?.[scheme]).map((entry) => ({ page: `${page.label}/${scheme}`, engine: entry.engine, error: entry.error.slice(0, 200) }))));
   return {
     note: "Geen bevinding van een engine is geen bewijs dat aan het criterium is voldaan. 'cantTell' betekent dat de engine het niet kon vaststellen.",
     rulesForThisCriterion: results.length,
     results,
+    ...(withoutResult.length > 0 ? { enginesWithoutResult: withoutResult, enginesWithoutResultNl: "Op deze pagina's gaf een regelset geen uitslag. Wat die regelset daar zou vinden, kan niet worden vastgesteld; zijn zwijgen is geen voldoende." } : {}),
   };
 };
 

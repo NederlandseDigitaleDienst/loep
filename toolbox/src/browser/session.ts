@@ -3,8 +3,9 @@ import { chromium, type Browser, type BrowserContext, type Page, type Route } fr
 import { CLOUDFLARE_HEADER, isChallenge } from "../lib/challenge.ts";
 import { confirmLoginOn, LoginExpired, logsOut, runLoginMark, runLoginState, throwIfLoginExpired, watchLogin } from "../lib/login.ts";
 import { addressOf, noteRefusedRead, readDecision, readRuleFor, runReads, type ReadRequest } from "../lib/reads.ts";
-import { isOurMessage, isWriteOrigin, runWrites, type WriteAccess } from "../lib/writes.ts";
+import { isWriteOrigin, runWrites, SocketFrames, type WriteAccess } from "../lib/writes.ts";
 import { MESSAGE_VALUES } from "../session/safety.ts";
+import { readableFrame } from "./call.ts";
 import { refusedByBrowser, type ClipboardWrite } from "./clipboard.ts";
 import { frameAsPage } from "./frame.ts";
 
@@ -219,10 +220,12 @@ export async function newContext(browser: Browser, options: ContextOptions = {},
     await context.routeWebSocket(/.*/, (socket) => {
       const server = socket.connectToServer();
       const free = isWriteOrigin(writes, socket.url());
+      const frames = new SocketFrames(MESSAGE_VALUES);
       socket.onMessage((message) => {
         if (free) {
-          // A frame with a test value in it takes one from the budget of the run, and past it, or too soon, it is held back; a heartbeat is only noted.
-          if (isOurMessage(message, MESSAGE_VALUES)) {
+          // A frame takes one from the budget of the run, and past it, or too soon, it is held back; only a heartbeat or a message of the protocol is just noted.
+          // The sweep acts on the page all the time, so no frame counts as sent by the page by itself.
+          if (frames.counts(message)) {
             if (!writes!.claim("SEND", socket.url(), { message: true }).ok) return void (guard?.active && guard.blocked++);
           } else writes!.record("SEND", socket.url());
           server.send(message);
@@ -333,7 +336,7 @@ export async function loadSampled(tab: Page, item: { url: string; embeddedOn?: s
   await loadPage(tab, on);
   await settle(tab);
   const frame = tab.frames().find((entry) => entry !== tab.mainFrame() && entry.url() === item.url) ?? tab.frames().find((entry) => entry !== tab.mainFrame() && sameDocument(entry.url(), item.url));
-  const readable = frame ? await frame.evaluate(() => typeof (window as unknown as { __loep?: unknown }).__loep === "object" && document.body !== null).catch(() => false) : false;
+  const readable = frame ? await frame.evaluate(readableFrame).catch(() => false) : false;
   if (frame && readable) return { page: await frameAsPage(tab, frame), placement: { inPlaceOn: on, apartNl: null } };
   await loadPage(tab, item.url, on);
   await settle(tab);

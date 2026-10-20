@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import type { BrowserContext, Page } from "playwright";
+import type { BrowserContext, Page, Response } from "playwright";
 import { confirmLogin, INPAGE_PATH, launchBrowser, loadPage, newContext, withinPageTime } from "../browser/session.ts";
 import { sha256, slugForUrl, writeFileAtomic, writeJson } from "../lib/canonical.ts";
 import { countByKind, documentKind, kindOfContentType, REDIRECTS_ELSEWHERE_NL, startedDownload, type DocumentKind, type DocumentTotals, type InventoryDocument } from "../lib/documents.ts";
@@ -74,6 +74,18 @@ export interface Inventory {
   documentTotals?: DocumentTotals;
   /** Only in a run with a login: the addresses of links that log out. None was followed, and no browser of the run asks for them. */
   logoutLinks?: string[];
+  /**
+   * Origins outside the run that a page of the site read content from with GET (fetch or XHR), with the
+   * pages that did and how many such answers came. A session refuses those requests, so what they load
+   * stays empty in every measurement unless the origin is given with `--also-origin`. Absent in older runs.
+   */
+  readsOutsideRun?: ReadOutsideRun[];
+}
+
+export interface ReadOutsideRun {
+  origin: string;
+  pages: string[];
+  requests: number;
 }
 
 export interface InventoryOptions {
@@ -149,6 +161,48 @@ export function formPagesNl(pages: Pick<InventoryPage, "url" | "counts" | "found
     `let op: dit onderzoek mag niet versturen, en ${parts.join(", en ")}. Wat pas na versturen verschijnt (een melding van de server, een bevestiging, het antwoord van een chat), blijft open als "versturen niet toegestaan". ` +
     `Is er een testomgeving, begin dan opnieuw met inventory, in een nieuwe map, met ${declare}${frames.length > 0 ? "; voor een venster op een ander adres kan dat de origin van alleen dat venster zijn" : ""}`
   );
+}
+
+/**
+ * The pages that read content from an origin outside the run, said right after the inventory. A
+ * session refuses such a request, so a block filled by it stays empty in every measurement; which
+ * origins belong to the run is decided here and cannot change later. Null when there is nothing to say.
+ */
+export function readsOutsideRunNl(reads: readonly ReadOutsideRun[] | undefined): string | null {
+  if (!reads || reads.length === 0) return null;
+  const pages = new Set(reads.flatMap((entry) => entry.pages)).size;
+  const shown = reads.slice(0, 5).map((entry) => `${entry.origin} (${entry.pages.length === 1 ? entry.pages[0] : `${entry.pages[0]} en ${entry.pages.length - 1} meer`})`);
+  const listed = reads.length > shown.length ? [...shown, `en ${reads.length - shown.length} meer`] : shown;
+  const flags = reads.length <= 3 ? reads.map((entry) => `--also-origin ${entry.origin}`).join(" ") : "--also-origin <origin> voor elk adres dat erbij hoort";
+  return (
+    `let op: ${pages === 1 ? "één pagina haalt" : `${pages} pagina's halen`} met GET inhoud op van een adres buiten de run: ${listed.join(", ")}. ` +
+    `Een sessie houdt die verzoeken tegen, dus wat zo in de pagina komt, blijft in elke meting leeg. ` +
+    `Hoort die inhoud bij het onderzoek, begin dan opnieuw met inventory, in een nieuwe map, met ${flags}. Zo niet, dan valt ze buiten de afbakening`
+  );
+}
+
+/** Answers that put content in a page: data or markup, not an image, a script or an empty answer such as a measuring beacon gets. */
+const CONTENT_TYPE = /^\s*(application\/([\w.-]+\+)?(json|xml)|application\/xhtml\+xml|text\/(html|plain|xml|csv))\s*(;|$)/i;
+
+/**
+ * The origin outside the site that a page itself read content from: a GET by fetch or XHR from the
+ * page, not from a frame in it, answered with data or markup. Null for any other answer. A frame
+ * may read elsewhere in a session, the way it does for every visitor; the page may not.
+ */
+export function contentReadOutside(response: Pick<Response, "status" | "headers" | "url" | "frame" | "request">, origins: readonly string[]): string | null {
+  try {
+    const request = response.request();
+    if (request.method() !== "GET" || !["fetch", "xhr"].includes(request.resourceType())) return null;
+    if (response.frame().parentFrame() !== null) return null;
+    if (response.status() < 200 || response.status() >= 300 || response.status() === 204) return null;
+    if (!CONTENT_TYPE.test(response.headers()["content-type"] ?? "")) return null;
+    const { origin, protocol } = new URL(response.url());
+    if (protocol !== "http:" && protocol !== "https:") return null;
+    return origins.includes(origin) ? null : origin;
+  } catch {
+    // An answer of a worker has no frame: no read of the page.
+    return null;
+  }
 }
 
 /**
@@ -271,6 +325,18 @@ export function parseSitemap(xml: string): string[] {
 export function normaliseUrl(url: string): string {
   const parsed = new URL(url);
   parsed.hash = "";
+  return parsed.href;
+}
+
+/**
+ * Where the browser landed, as the inventory records it: with its query only when the address asked
+ * for has that same query. After a login a redirect can put a secret there, such as the `code` and
+ * `state` of an OAuth or OpenID Connect redirect (RFC 6749, section 4.1.2), and the inventory goes
+ * into tasks for agents. The anchor stays: `sample` needs to know whether one was added.
+ */
+export function landingAddress(requested: string, landed: string): string {
+  const parsed = new URL(landed);
+  if (parsed.search !== new URL(requested).search) parsed.search = "";
   return parsed.href;
 }
 
@@ -409,9 +475,11 @@ async function inspect(page: Page, url: string, mayBeDocument: boolean, offered:
         .filter(Boolean).length,
     };
   }, [...origins]);
+  const landing = landingAddress(url, loaded.finalUrl);
   return {
     url,
-    ...(loaded.finalUrl !== url ? { finalUrl: loaded.finalUrl } : {}),
+    // A redirect that only added a query lands where the address itself does once the query is left out: nothing to record.
+    ...(landing !== url ? { finalUrl: landing } : {}),
     ...(anchor ? { anchor } : {}),
     status: loaded.status,
     title: result.title,
@@ -469,7 +537,20 @@ export async function inventory(options: InventoryOptions): Promise<Inventory> {
   const browserVersion = browser.version();
   const context: BrowserContext = await newContext(browser);
   await context.addInitScript({ path: INPAGE_PATH });
-  let page = await context.newPage();
+  // Reads of content from an origin outside the site by the page being inspected, per origin; null between pages.
+  let readsOfPage: Map<string, number> | null = null;
+  // A tab that counts those reads. A page that failed gets a fresh tab, which counts them too.
+  const newTab = async (): Promise<Page> => {
+    const tab = await context.newPage();
+    tab.on("response", (response) => {
+      if (readsOfPage === null) return;
+      const elsewhere = contentReadOutside(response, origins);
+      if (elsewhere !== null) readsOfPage.set(elsewhere, (readsOfPage.get(elsewhere) ?? 0) + 1);
+    });
+    return tab;
+  };
+  let page = await newTab();
+  const readsOutside = new Map<string, { pages: Set<string>; requests: number }>();
 
   const pages: InventoryPage[] = [];
   const skipped: Inventory["skipped"] = [];
@@ -535,9 +616,13 @@ export async function inventory(options: InventoryOptions): Promise<Inventory> {
         continue;
       }
       noteVisited(visited, next, origins);
+      const reads = new Map<string, number>();
       try {
         const tab = page;
-        const result = await withinPageTime(PAGE_LIMIT_MS, () => inspect(tab, next, !missingPages.includes(next), downloads.has(next), origins), () => tab.close());
+        readsOfPage = reads;
+        const result = await withinPageTime(PAGE_LIMIT_MS, () => inspect(tab, next, !missingPages.includes(next), downloads.has(next), origins), () => tab.close()).finally(() => {
+          readsOfPage = null;
+        });
         if ("document" in result) {
           noteDocument(next, result.document);
           continue;
@@ -569,6 +654,15 @@ export async function inventory(options: InventoryOptions): Promise<Inventory> {
         pages.push({ ...record, slug, foundVia: via });
         // An embedded frame is evaluated as a page of its own, but its own links are not followed.
         const embedded = via.every((entry) => entry.startsWith("iframe:"));
+        // A frame opened on its own is no page of the site: what it reads elsewhere it may read in a session too.
+        if (!embedded) {
+          for (const [elsewhere, count] of reads) {
+            const known = readsOutside.get(elsewhere) ?? { pages: new Set<string>(), requests: 0 };
+            known.pages.add(next);
+            known.requests += count;
+            readsOutside.set(elsewhere, known);
+          }
+        }
         if (!embedded) for (const frame of frames) note(normaliseUrl(frame), `iframe:${next}`);
         if (!fixed && !embedded && !missingPages.includes(next)) for (const link of links) note(normaliseUrl(link), "link");
         process.stderr.write(`inventory ${pages.length} ${next}\n`);
@@ -576,7 +670,7 @@ export async function inventory(options: InventoryOptions): Promise<Inventory> {
         if (error instanceof LoginExpired) throw error;
         // A page that failed may still keep its tab busy: the next page gets a fresh one.
         await page.close().catch(() => undefined);
-        page = await context.newPage();
+        page = await newTab();
         // A download behind an address without an extension: the browser cannot show it, the server says what it is.
         const probe = ownOrigin(next) && failedLoadsProbed++ < MAX_DOCUMENT_PROBES ? await probeDocument(next, origins) : null;
         const probedKind = kindOfContentType(probe?.contentType ?? null);
@@ -627,6 +721,13 @@ export async function inventory(options: InventoryOptions): Promise<Inventory> {
   }
   const documentTotals: DocumentTotals = { onSite: found.length, byKind: countByKind(found), elsewhere: elsewhere.size, elsewhereByKind: countByKind([...elsewhere.values()].map((kind) => ({ kind }))) };
 
+  // A session lets through every host of the site and of a page in the inventory, whatever the port: only what lies outside that is refused.
+  const runHosts = new Set([...origins, ...pages.map((entry) => entry.url)].map((url) => new URL(url).hostname));
+  const readsOutsideRun: ReadOutsideRun[] = [...readsOutside]
+    .filter(([elsewhere]) => !runHosts.has(new URL(elsewhere).hostname))
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([elsewhere, known]) => ({ origin: elsewhere, pages: [...known.pages].sort(), requests: known.requests }));
+
   const result: Inventory = {
     baseUrl: start,
     origin,
@@ -641,6 +742,7 @@ export async function inventory(options: InventoryOptions): Promise<Inventory> {
     documents: found,
     documentTotals,
     ...(login ? { logoutLinks: [...logoutLinks].sort() } : {}),
+    readsOutsideRun,
   };
   await writeJson(join(options.out, "inventory.json"), result);
   await writeManifest(options.out, { command: "inventory", startedAt, baseUrl: start, maxPages: options.maxPages, fixedUrls: fixed?.length ?? null, ...(origins.length > 1 ? { alsoOrigins: origins.slice(1) } : {}), ...(login ? { loggedIn: true } : {}) }, browserVersion);

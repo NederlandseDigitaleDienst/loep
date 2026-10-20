@@ -1,6 +1,7 @@
 import { LANE_LABEL_NL, runningStep, slowestLane, SWEEP_COEFFICIENTS, sweepPlans, type RunningStep, type SweepWork } from "./estimate-sweep.ts";
 import type { StepProgress, SweepCommand } from "./progress.ts";
 import type { AgentPhaseId, AgentPhaseTiming, StageTiming, StepStage } from "./timing.ts";
+import { costOf, PRICES, PRICES_SOURCE, type Tokens, totalTokens } from "./prices.ts";
 import { FINISH_FACTOR } from "./verdict.ts";
 
 /**
@@ -21,6 +22,35 @@ export const CALIBRATION = {
     { name: "nerds-v4", date: "2026-10-13", site: "nerds.digitaledienst.overheid.nl", pages: 29, pageTypes: 18, atOnce: 8 },
   ],
 } as const;
+
+/**
+ * What the agents of the workflow used, per role, in the one audit it was counted on: a real site in
+ * October 2026 with loep 0.10.0, every agent on Claude Opus 5.5, 31 pages in 16 page types and 19
+ * pdfs, all 56 criteria, 134 agents in 94 minutes. Counted from the transcripts of Claude Code, each
+ * message once; see validatie/verbruik/README.md. These are the totals of each role, the estimate
+ * divides them by its agents. An agent's use follows its number of turns (correlation 0.98 to 0.99
+ * in every role), and those follow the size of the dossier more than that of its task. The explorer
+ * and the agents of the gate used another 27 million, not split by kind and not in the estimate.
+ */
+export const USAGE_BASELINE = {
+  date: "2026-10-19",
+  toolboxVersion: "0.10.0",
+  model: "claude-opus-5-5",
+  modelNl: "Opus 5.5",
+  outsideWorkflowTokens: 27_000_000,
+  roles: {
+    walks: { agents: 16, input: 1_552, cacheWrite: 1_380_000, cacheRead: 59_700_000, output: 75_575 },
+    judges: { agents: 56, input: 4_808, cacheWrite: 7_290_000, cacheRead: 294_100_000, output: 261_342 },
+    verifiers: { agents: 56, input: 3_308, cacheWrite: 5_210_000, cacheRead: 153_600_000, output: 179_471 },
+    /** One agent, so one criterion: the finishing round has no more behind it than that. */
+    finishers: { agents: 1, input: 74, cacheWrite: 120_000, cacheRead: 3_700_000, output: 5_669 },
+    /** The small agents that ask the toolbox what is open: once per phase, once at the end, and once for the finishing round. */
+    status: { agents: 5, input: 20, cacheWrite: 210_000, cacheRead: 200_000, output: 11_774 },
+  },
+} as const;
+
+export type UsageRole = keyof typeof USAGE_BASELINE.roles;
+const USAGE_ROLES = Object.keys(USAGE_BASELINE.roles) as UsageRole[];
 
 /**
  * Every number the estimate uses, with where it comes from. All times are minutes. "Local" is a
@@ -79,13 +109,7 @@ export const COEFFICIENTS = {
   reportMinutes: 1,
   /** Whoever leads the audit between the steps, and the round of the workflow that asks what is open: total minus the parts, 3.5, 1.8, 4.3, 2.7 and 3.5 in the runs that were not interrupted. */
   betweenMinutes: 3.5,
-  /**
-   * Tokens per agent of the workflow: 16.6 million (nerds-v3) and 16.9 million (nerds-v4) for 134
-   * agents each, as the workflow reported them. The runs themselves hold no token counts, so
-   * this cannot be recomputed from their files. Without the explorer, the gate and whoever leads.
-   */
-  tokensPerAgent: 125_000,
-  /** The workflow asks the toolbox what is open once per phase and once at the end; each time is a small agent, and the 134 above count them: 18 + 56 + 56 + 4. A finishing round adds one. */
+  /** The workflow asks the toolbox what is open once per phase and once at the end; each time is a small agent (`USAGE_BASELINE.roles.status`). A finishing round adds one. */
   statusRounds: 4,
   /**
    * The range around what is still to come. Not a statistic: six runs on two sites carry none.
@@ -94,7 +118,11 @@ export const COEFFICIENTS = {
    * more likely than faster (a second attempt, the gate sending the explorer back, a slow site).
    */
   margin: { low: 0.75, high: 1.4 },
-  tokensMargin: { low: 0.85, high: 1.2 },
+  /**
+   * The range around the tokens and the cost. A choice, not a statistic: one audit carries none.
+   * Wider above than below: a larger dossier means more turns, and every turn reads the whole context again.
+   */
+  tokensMargin: { low: 0.8, high: 1.35 },
 } as const;
 
 /** What a run with this code is not calibrated for, said with every estimate. A slow site is, once the inventory timed its pages. */
@@ -175,7 +203,10 @@ export interface Estimate {
     remainingRange: [number, number];
     finished: boolean;
   };
-  tokens: { agents: number; estimated: number; range: [number, number] };
+  /** The tokens of the agents of the workflow, by role, reckoned from `USAGE_BASELINE`. */
+  tokens: { agents: number; estimated: number; range: [number, number]; cacheRead: number; byRole: Record<UsageRole, { agents: number; tokens: number }> };
+  /** What those tokens cost in dollars at the API prices of the model of `USAGE_BASELINE`. */
+  cost: { model: string; dollars: number; range: [number, number] };
   /** How the sweep was reckoned: from what per page, how many at once, and per step the seconds of each lane as it runs next to the others. */
   sweep: {
     source: SweepWork["source"];
@@ -326,15 +357,13 @@ export function estimate(basis: EstimateBasis, progress: Progress = { stages: {}
   const band = rows.find((row) => row.bandSeconds && row.remainingSeconds > 0);
   const [less, more] = band ? [band.remainingSeconds - band.bandSeconds![0], band.bandSeconds![1] - band.remainingSeconds] : [0, 0];
   const range = (seconds: number): [number, number] => [Math.round((seconds - less) * COEFFICIENTS.margin.low), Math.round((seconds + more) * COEFFICIENTS.margin.high)];
-  const usual = agents.walks + agents.judges + agents.verifiers + COEFFICIENTS.statusRounds;
-  const agentCount = usual + agents.finishers + (agents.finishers > 0 ? 1 : 0);
-  // An agent of the finishing round is reckoned at as many times the tokens as it gets room; not measured.
-  const tokens = Math.round((usual + (agents.finishers > 0 ? 1 : 0) + agents.finishers * FINISH_FACTOR) * COEFFICIENTS.tokensPerAgent);
+  const usage = usageOf({ ...agents, status: COEFFICIENTS.statusRounds + (agents.finishers > 0 ? 1 : 0) });
   return {
     basis,
     rows,
     totals: { estimatedSeconds, estimatedRange: range(estimatedSeconds), measuredSeconds: progress.elapsedSeconds, remainingSeconds, remainingRange: range(remainingSeconds), finished },
-    tokens: { agents: agentCount, estimated: tokens, range: [Math.round(tokens * COEFFICIENTS.tokensMargin.low), Math.round(tokens * COEFFICIENTS.tokensMargin.high)] },
+    tokens: usage.tokens,
+    cost: usage.cost,
     sweep: {
       source: work.source,
       atOnce: basis.sweepAtOnce ?? 1,
@@ -343,6 +372,25 @@ export function estimate(basis: EstimateBasis, progress: Progress = { stages: {}
     },
     calibration: CALIBRATION,
     notCoveredNl: loadSecondsOf(work) ? [...NOT_COVERED_NL, SLOW_SITE_NOTE] : [SLOW_SITE_NOT_COVERED_NL, ...NOT_COVERED_NL],
+  };
+}
+
+/** The tokens and their cost for so many agents per role: each agent as the average agent of its role in `USAGE_BASELINE`. */
+function usageOf(agents: Record<UsageRole, number>): Pick<Estimate, "tokens" | "cost"> {
+  const sum: Tokens = { input: 0, cacheWrite: 0, cacheRead: 0, output: 0 };
+  const byRole = {} as Estimate["tokens"]["byRole"];
+  for (const role of USAGE_ROLES) {
+    const { agents: measured, ...used } = USAGE_BASELINE.roles[role];
+    const share = agents[role] / measured;
+    for (const kind of Object.keys(sum) as (keyof Tokens)[]) sum[kind] += used[kind] * share;
+    byRole[role] = { agents: agents[role], tokens: Math.round(totalTokens(used) * share) };
+  }
+  const { low, high } = COEFFICIENTS.tokensMargin;
+  const tokens = Math.round(totalTokens(sum));
+  const dollars = costOf(sum, PRICES[USAGE_BASELINE.model]!);
+  return {
+    tokens: { agents: USAGE_ROLES.reduce((total, role) => total + agents[role], 0), estimated: tokens, range: [Math.round(tokens * low), Math.round(tokens * high)], cacheRead: Math.round(sum.cacheRead), byRole },
+    cost: { model: USAGE_BASELINE.model, dollars: Math.round(dollars), range: [Math.round(dollars * low), Math.round(dollars * high)] },
   };
 }
 
@@ -387,6 +435,13 @@ export function durationNl(seconds: number): string {
 
 const millionsNl = (tokens: number): string => (tokens / 1_000_000).toFixed(1).replace(".", ",");
 
+const MONTHS_NL = ["januari", "februari", "maart", "april", "mei", "juni", "juli", "augustus", "september", "oktober", "november", "december"];
+/** "19 oktober 2026" from "2026-10-19". */
+const dateNl = (iso: string): string => {
+  const [year, month, day] = iso.split("-").map(Number);
+  return `${day} ${MONTHS_NL[month! - 1]} ${year}`;
+};
+
 /** The estimate as a short table for a reader. `runName` is how the run is called, not its path. */
 export function estimateTextNl(result: Estimate, runName: string, notesNl: string[] = []): string {
   const { basis, totals } = result;
@@ -420,11 +475,18 @@ export function estimateTextNl(result: Estimate, runName: string, notesNl: strin
     if (totals.measuredSeconds > 0) lines.push(`Tot nu toe ${durationNl(totals.measuredSeconds)}; het geheel komt daarmee op ongeveer ${durationNl(totals.measuredSeconds + totals.remainingSeconds)}.`);
   }
   if (result.rows.some((row) => row.derived)) lines.push("~ gemeten vanaf de stap ervoor: deze run legde het begin van een stap nog niet vast.");
-  lines.push(`Tokens voor de ${result.tokens.agents} agents van de werkstroom: ongeveer ${millionsNl(result.tokens.estimated)} miljoen (marge ${millionsNl(result.tokens.range[0])} tot ${millionsNl(result.tokens.range[1])}), zonder de verkenner, de poort en wie het onderzoek leidt.`);
+  const { tokens, cost } = result;
+  const roleNl: Record<UsageRole, string> = { judges: "beoordelaars", verifiers: "verifieerders", walks: "rondgangen", finishers: "afmaakronde", status: "stand" };
+  const byRole = (["judges", "verifiers", "walks", "finishers", "status"] as const).filter((role) => tokens.byRole[role].agents > 0).map((role) => `${roleNl[role]} ${millionsNl(tokens.byRole[role].tokens)}`);
+  lines.push(`Tokens voor de ${tokens.agents} agents van de werkstroom: ongeveer ${millionsNl(tokens.estimated)} miljoen (marge ${millionsNl(tokens.range[0])} tot ${millionsNl(tokens.range[1])}), waarvan ${Math.round((tokens.cacheRead / tokens.estimated) * 100)} procent uit de cache. Per rol, in miljoenen: ${byRole.join(", ")}.`);
+  lines.push(`Kosten met de prijzen van de API voor ${USAGE_BASELINE.modelNl} van ${dateNl(PRICES_SOURCE.date)}: ongeveer ${cost.dollars} dollar (marge ${cost.range[0]} tot ${cost.range[1]}). Een token uit de cache kost een fractie van een gewoon token; het aantal tokens zegt dus weinig over de kosten.`);
+  lines.push("Op een abonnement betaal je niet per token, maar telt het verbruik mee voor de limiet van het abonnement: een run als deze kan een groot deel van de weeklimiet gebruiken. Hoe groot die limiet is, verschilt per abonnement.");
+  lines.push(`Niet meegeteld: de verkenner, de poort en wie het onderzoek leidt. In de nulmeting gebruikten de verkenner en de poort samen nog ${USAGE_BASELINE.outsideWorkflowTokens / 1_000_000} miljoen tokens.`);
   for (const note of notesNl) lines.push(`Let op: ${note}`);
   lines.push("");
   const calibration = result.calibration;
   lines.push(`Geijkt op ${calibration.runs.length} runs op twee sites (${calibration.runs.map((run) => run.name).join(", ")}), gemaakt met loep ${calibration.toolboxVersion} tot en met commit ${calibration.commit} van ${calibration.date}. De veegronde werd tussen die runs trager omdat de toolbox meer ging meten: de schatting hoort bij deze versie. Zes runs op twee sites is weinig; de marge is een keuze en geen statistiek.`);
+  lines.push(`De tokens zijn per rol gerekend uit de nulmeting van ${dateNl(USAGE_BASELINE.date)} (validatie/verbruik/README.md): één onderzoek met loep ${USAGE_BASELINE.toolboxVersion}, alle agents op ${USAGE_BASELINE.modelNl}. Het verbruik van een agent volgt zijn aantal beurten; een groter dossier, een ander model of een nieuwere versie van loep geeft andere getallen. Ook die marge is een keuze.`);
   if (basis.scheduling === "pool") lines.push("De fasen met agents zijn gerekend met een pool die steeds het volle aantal agents laat lopen. Zo is nog geen run gemeten: de zes runs liepen in groepen (reken die na met --groups).");
   lines.push(`Niet gedekt: ${result.notCoveredNl.join("; ")}.`);
   return `${lines.join("\n")}\n`;
