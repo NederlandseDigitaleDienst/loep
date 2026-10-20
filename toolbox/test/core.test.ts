@@ -88,6 +88,31 @@ test("a small site is evaluated in full and identical pages once", () => {
   assert.deepEqual(sample.items[1]!.aliases, ["https://a.nl/p003"]);
 });
 
+test("of identical pages the item takes an address the browser stays on, not one that redirects to an anchor", () => {
+  const same = (index: number, finalUrl?: string): InventoryPage => ({ ...page(index, "t", "verklaring"), ...(finalUrl ? { finalUrl } : {}) });
+  // p001 redirects to an anchor on p003, as an old address of a page can; p002 is the same page under a second address.
+  const pages = [same(1, "https://a.nl/p003#account"), same(2), same(3), page(4)];
+  const sample = buildSample(inventory(pages), "seed");
+  const item = sample.items.find((entry) => entry.contentHash === "verklaring")!;
+  assert.equal(item.url, "https://a.nl/p003", "the address the redirect lands on, though first in the alphabet is another");
+  assert.equal(item.slug, "p3");
+  assert.equal(item.id, buildSample(inventory([same(3)]), "seed").items[0]!.id, "the id follows the address");
+  assert.deepEqual(item.aliases, ["https://a.nl/p001", "https://a.nl/p002"]);
+  assert.deepEqual(buildSample(inventory([...pages].reverse()), "seed"), sample, "input order must not matter");
+
+  const elsewhere = buildSample(inventory([same(1, "https://a.nl/p009#account"), same(2), same(3)]), "seed").items[0]!;
+  assert.equal(elsewhere.url, "https://a.nl/p002", "without the landing address in the group: the first address that does not redirect");
+  const onlyRedirects = buildSample(inventory([same(1, "https://a.nl/p009#account"), same(2, "https://a.nl/p009")]), "seed").items[0]!;
+  assert.equal(onlyRedirects.url, "https://a.nl/p002", "a redirect to an anchor comes last");
+
+  const old = [same(1), same(2), same(3)];
+  assert.equal(buildSample(inventory(old), "seed").items[0]!.url, "https://a.nl/p001", "an older inventory without finalUrl keeps the first address");
+  for (const finalUrl of ["not an address", ""]) {
+    const edited = buildSample(inventory([{ ...same(1), finalUrl }, same(2)]), "seed").items[0]!;
+    assert.equal(edited.url, "https://a.nl/p001", `a finalUrl ${JSON.stringify(finalUrl)} counts as staying on the address`);
+  }
+});
+
 test("a large site gets a structured sample plus a seeded random tenth", () => {
   const pages = Array.from({ length: CENSUS_LIMIT + 40 }, (_, index) => page(index, `t${index % 7}`));
   const first = buildSample(inventory(pages), "seed");
@@ -131,6 +156,32 @@ test("with a site model the page types decide the structured sample, not a templ
   ].sort(), "one page per type (the representative), the statement once at the top of the site, no help page for a post that says 'helpt'");
   assert.equal(sample.items.filter(isExtra).length, 2, "93 articles: two extra pages; ten overview pages: none");
   assert.equal(sample.items.filter((item) => item.kind === "random").length, 1);
+});
+
+test("a common page whose address redirects stays in the sample under the address it lands on", () => {
+  const pages = Array.from({ length: CENSUS_LIMIT + 40 }, (_, index) => page(index));
+  const at = (path: string, content: string, finalUrl?: string): InventoryPage => ({ ...page(0, "t", content), url: `https://a.nl${path}`, ...(finalUrl ? { finalUrl } : {}) });
+  const extra = [at("/help", "hulp", "https://a.nl/over-ons#hulp"), at("/over-ons", "hulp"), at("/contact", "contact", "https://a.nl/klantenservice"), at("/klantenservice", "contact")];
+  const sample = buildSample(inventory([...pages, ...extra]), "seed");
+  const of = (content: string) => sample.items.find((item) => item.contentHash === content);
+  assert.deepEqual([of("hulp")?.url, of("hulp")?.reason, of("hulp")?.aliases], ["https://a.nl/over-ons", "hulppagina", ["https://a.nl/help"]], "the help page is not lost because /help redirects");
+  assert.deepEqual([of("contact")?.url, of("contact")?.reason], ["https://a.nl/klantenservice", "contactpagina"]);
+  const deeper = buildSample(inventory([...pages, ...extra, at("/a/b/contact", "elders")]), "seed");
+  assert.equal(deeper.items.find((item) => item.reason === "contactpagina")?.url, "https://a.nl/klantenservice", "the alias /contact is higher in the site than /a/b/contact");
+});
+
+test("a page type, its representative and the probe that name an address that redirects count for the page it lands on", () => {
+  const pages = Array.from({ length: CENSUS_LIMIT + 40 }, (_, index) => page(index));
+  const at = (path: string, content: string, finalUrl?: string): InventoryPage => ({ ...page(0, "t", content), url: `https://a.nl${path}`, ...(finalUrl ? { finalUrl } : {}) });
+  const extra = [at("/oud/formulier", "formulier", "https://a.nl/aanvragen#stap1"), at("/aanvragen", "formulier"), at("/bestaat-niet", "fout", "https://a.nl/niet-gevonden"), at("/niet-gevonden", "fout"), at("/z/kopie", "c5")];
+  // /z/kopie is p005 under another address: it stays an article, the type of its own address.
+  const model = modelOf([pageType("artikel", pages.map((entry) => entry.url)), pageType("formulier", ["https://a.nl/oud/formulier", "https://a.nl/z/kopie"])]);
+  const sample = buildSample({ ...inventory([...pages, ...extra]), notFoundProbe: "https://a.nl/bestaat-niet" }, "seed", model);
+  const of = (content: string) => sample.items.find((item) => item.contentHash === content);
+  assert.deepEqual([of("formulier")?.url, of("formulier")?.reason, of("formulier")?.aliases], ["https://a.nl/aanvragen", "eerste pagina van dit paginatype", ["https://a.nl/oud/formulier"]]);
+  assert.deepEqual(sample.pageTypes!.find((type) => type.id === "formulier"), { id: "formulier", descriptionNl: "type formulier", pages: 1, examined: 1, reasonNl: "de voorbeeldpagina van de verkenner" });
+  assert.equal(sample.pageTypes!.find((type) => type.id === "artikel")!.pages, pages.length);
+  assert.deepEqual([of("fout")?.url, of("fout")?.reason], ["https://a.nl/niet-gevonden", "foutpagina (404)"]);
 });
 
 // A page type of the size of a knowledge base: most pages alike, a few with content of their own.

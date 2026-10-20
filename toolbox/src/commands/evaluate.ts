@@ -1,6 +1,6 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { frameStanding } from "../lib/sitemodel.ts";
+import { frameStanding, type AcceptedGapDecider } from "../lib/sitemodel.ts";
 import { readJson, sha256File } from "../lib/canonical.ts";
 import { allCriteriaSorted, carryFindingIds, ESTABLISHED_BY_NL, evaluationHash, idsAcrossVersionsNl, knownCommit, OUTCOME_LABEL, markVendor, openCriteria, quoteStart, resolveCriterion, summarise, type BrowserUse, type CriterionResult, type Evaluation, type PointAnswer, type RoundVerdicts } from "../lib/evaluation.ts";
 import { matchFindings, sideOf } from "../lib/difference.ts";
@@ -260,9 +260,8 @@ export async function evaluate(options: EvaluateOptions): Promise<Evaluation> {
   const description = siteModel?.descriptionNl?.trim() || null;
   const gatePath = join(options.run, "gate.json");
   const gate = existsSync(gatePath) ? await readJson<Gate>(gatePath) : null;
-  const gapLine = (gap: { page?: string | null; missingNl: string; reasonNl?: string }): string => `${gap.page ? `${gap.page}: ` : ""}${gap.missingNl}${gap.reasonNl ? ` ${gap.reasonNl}` : ""}`;
   const gateSummary = gate
-    ? { sufficient: gate.sufficient, checks: gate.checks.length, checksPassed: gate.checks.filter((check) => check.ok).length, exploreRounds: gate.exploreRound, acceptedNl: gate.accepted.map(gapLine), limitationsNl: gate.limitations.map(gapLine), ...(gate.review?.answered ? { review: { sheets: gate.review.sheets.length, pageTypesWithoutSheet: gate.review.withoutSheet.length } } : {}) }
+    ? { sufficient: gate.sufficient, checks: gate.checks.length, checksPassed: gate.checks.filter((check) => check.ok).length, exploreRounds: gate.exploreRound, acceptedNl: gate.accepted.map(gateLineNl), limitationsNl: gate.limitations.map(gateLineNl), ...(gate.review?.answered ? { review: { sheets: gate.review.sheets.length, pageTypesWithoutSheet: gate.review.withoutSheet.length } } : {}) }
     : null;
 
   // Which model each agent said it ran on, per role. Nothing in the run can confirm it.
@@ -353,6 +352,14 @@ export async function evaluate(options: EvaluateOptions): Promise<Evaluation> {
 // What a second browser repeated, in the words of the report. `ax` and `name` ask the same of a second browser: what it hands to assistive technology.
 const WHAT_NL: Record<string, string> = { taborder: "de Tab-volgorde", tabwalk: "de Tab-volgorde", name: "de toegankelijke naam en rol", ax: "de toegankelijke naam en rol", reflow: "reflow op 320 pixels", zoom: "vergroten tot 200%", spacing: "de tekstafstand" };
 const SECOND = { webkit: { name: "WebKit", nameNl: "WebKit (de motor van Safari)", engine: "WebKit" }, firefox: { name: "Firefox", nameNl: "Firefox", engine: "Gecko" } } as const;
+
+const ACCEPTED_BY_NL: Record<AcceptedGapDecider, string> = { verkenner: "Aanvaard door de verkenner, niet door een persoon.", persoon: "Aanvaard door een persoon, volgens het sitemodel; loep gaat dat niet na." };
+
+/** A gap or limitation of the gate as the report lists it, with who accepted it for an accepted gap. A gate.json from before that was asked does not say. */
+export function gateLineNl(gap: { page?: string | null; missingNl: string; reasonNl?: string; decidedBy?: AcceptedGapDecider }): string {
+  const line = `${gap.page ? `${gap.page}: ` : ""}${gap.missingNl}${gap.reasonNl ? ` ${gap.reasonNl}` : ""}`;
+  return gap.decidedBy ? `${line.replace(/[^.!?]$/, "$&.")} ${ACCEPTED_BY_NL[gap.decidedBy]}` : line;
+}
 
 export interface SecondBrowserUse {
   browser: keyof typeof SECOND;

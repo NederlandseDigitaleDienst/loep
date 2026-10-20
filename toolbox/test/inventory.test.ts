@@ -4,7 +4,9 @@ import { createServer, type Server } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, test } from "node:test";
+import { startFixture } from "../fixtures/serve.ts";
 import { addressLevels, inventory, nextAddress, noteVisited, pageLimitNl, pageLimitReason, type Inventory } from "../src/commands/inventory.ts";
+import { buildSample } from "../src/commands/sample.ts";
 
 /** Visit every candidate in the order `inventory` would, when all are known from the start. */
 function visitOrder(urls: string[], limit: number): string[] {
@@ -226,4 +228,63 @@ test("a site on two origins is one inventory: both start pages, both sitemaps, l
   assert.deepEqual(found.documents!.map((document) => document.url).sort(), [`${docs.origin}/handleiding/naslag.pdf`, `${site.origin}/jaarverslag.pdf`].sort(), "documents on either origin are documents of the site");
   assert.ok(found.documents!.every((document) => document.bytes === 1234), "each was asked for its size");
   assert.equal(found.documentTotals!.elsewhere, 0);
+});
+
+test("an address that redirects to an anchor on a page of the site is recorded with where it lands, and the sample measures the page itself", async (context) => {
+  const statement = html("Verklaring", ["/"]).replace("</main>", '<h2 id="account">Account</h2></main>');
+  const site = createServer((request, response) => {
+    const path = new URL(request.url!, "http://x").pathname;
+    if (path === "/aan-de-slag/hulp") return void response.writeHead(302, { location: "/verklaring#account" }).end();
+    const known: Record<string, string> = { "/": html("Start", ["/aan-de-slag/hulp", "/verklaring", "/wetten/verklaring"]), "/verklaring": statement, "/wetten/verklaring": statement };
+    response.writeHead(known[path] ? 200 : 404, { "content-type": "text/html; charset=utf-8" });
+    response.end(known[path] ?? html("Niet gevonden", ["/"]));
+  });
+  await new Promise<void>((resolve) => site.listen(0, "127.0.0.1", resolve));
+  context.after(() => new Promise<void>((resolve) => void site.close(() => resolve())));
+  const at = `http://127.0.0.1:${(site.address() as { port: number }).port}`;
+  let found: Inventory;
+  try {
+    found = await inventory({ baseUrl: `${at}/`, out: join(scratch, "redirect"), maxPages: 10 });
+  } catch (error) {
+    if (/Executable doesn't exist|browserType.launch/.test((error as Error).message)) return context.skip("no browser available");
+    throw error;
+  }
+  const of = (path: string) => found.pages.find((page) => page.url === `${at}${path}`)!;
+  assert.equal(of("/aan-de-slag/hulp").finalUrl, `${at}/verklaring#account`, "where the browser landed, anchor and all");
+  assert.equal(of("/aan-de-slag/hulp").status, 200);
+  assert.equal(of("/verklaring").finalUrl, undefined, "a page the browser stays on records nothing more");
+  assert.equal(of("/aan-de-slag/hulp").contentHash, of("/verklaring").contentHash, "the same page under three addresses");
+  assert.equal(of("/wetten/verklaring").contentHash, of("/verklaring").contentHash);
+  const item = buildSample(found, "seed").items.find((entry) => entry.contentHash === of("/verklaring").contentHash)!;
+  assert.equal(item.url, `${at}/verklaring`, "not the address that redirects, though it comes first in the alphabet");
+  assert.equal(item.slug, of("/verklaring").slug);
+  assert.deepEqual(item.aliases, [`${at}/aan-de-slag/hulp`, `${at}/wetten/verklaring`]);
+});
+
+
+test("with a fixed list every listed page goes before a frame found on one, also when the frame's server has the lower port", async (context) => {
+  const free: number[] = [];
+  for (let count = 0; count < 3; count++) {
+    const probe = createServer();
+    await new Promise<void>((resolve) => probe.listen(0, "127.0.0.1", resolve));
+    free.push((probe.address() as { port: number }).port);
+    await new Promise<void>((resolve) => void probe.close(() => resolve()));
+  }
+  free.sort((a, b) => a - b);
+  const fixture = await startFixture({ ports: { thirdParty: free[0]!, clean: free[1]!, defect: free[2]! }, logFile: join(scratch, "fixture.log") });
+  try {
+    const clean = fixture.origins.clean;
+    const listed = [`${clean}/afval.html`, `${clean}/contact.html`];
+    let found: Inventory;
+    try {
+      found = await inventory({ baseUrl: `${clean}/`, out: join(scratch, "fixed"), maxPages: 2, fixedUrls: listed });
+    } catch (error) {
+      if (/Executable doesn't exist|browserType.launch/.test((error as Error).message)) return context.skip("no browser available");
+      throw error;
+    }
+    assert.deepEqual(found.pages.map((page) => page.url).sort(), listed);
+    assert.ok(found.skipped.some((entry) => entry.url === `${fixture.origins.thirdParty}/leeg.html` && entry.reason === pageLimitReason(2)), "the frame is left out by the limit");
+  } finally {
+    await fixture.close();
+  }
 });

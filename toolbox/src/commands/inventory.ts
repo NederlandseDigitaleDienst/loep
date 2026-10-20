@@ -10,6 +10,8 @@ import { notFoundProbes, originsOfRun, siteOrigins } from "../lib/origins.ts";
 
 export interface InventoryPage {
   url: string;
+  /** Where the browser was once the page had loaded, when that is not `url`: the server redirected, or a script changed the address. Absent when it stayed on `url`, and in older runs. */
+  finalUrl?: string;
   slug: string;
   status: number | null;
   title: string;
@@ -365,6 +367,7 @@ async function inspect(page: Page, url: string, mayBeDocument: boolean, offered:
   }, [...origins]);
   return {
     url,
+    ...(loaded.finalUrl !== url ? { finalUrl: loaded.finalUrl } : {}),
     status: loaded.status,
     title: result.title,
     lang: result.lang,
@@ -449,7 +452,9 @@ export async function inventory(options: InventoryOptions): Promise<Inventory> {
     const visited = new Map<string, number>();
     let limitReached = false;
     for (;;) {
-      const open = [...foundVia.keys()].filter((url) => !done.has(url));
+      let open = [...foundVia.keys()].filter((url) => !done.has(url));
+      // With a fixed list the listed addresses go first; a frame found on them must not take their place under the limit.
+      if (fixed && open.some((url) => fixed.includes(url))) open = open.filter((url) => fixed.includes(url));
       // Once the limit is reached, what is left is only sorted out (documents, skipped), and the order no longer matters.
       const next = pages.length >= options.maxPages ? open.sort()[0] : nextAddress(open, visited, origins);
       if (next === undefined) break;

@@ -9,7 +9,7 @@ import { INPAGE_PATH, launchBrowser, loadPage, newContext } from "../src/browser
 import type { Described } from "../src/instruments/activate.ts";
 import { probeTrigger } from "../src/instruments/dialog.ts";
 import { PNG } from "pngjs";
-import { pageContrast } from "../src/instruments/contrast.ts";
+import { elementContrast, pageContrast } from "../src/instruments/contrast.ts";
 import { boundaryOf, fateOf, forcedColoursProbe, type ForcedProbe } from "../src/instruments/forced.ts";
 import { uiContrast } from "../src/lib/extractors.ts";
 import type { RunData } from "../src/lib/rundata.ts";
@@ -452,5 +452,25 @@ test("the numbered tab-order picture shows the slide the stops were counted on, 
   assert.deepEqual(at(Math.floor(picture.width / 2), Math.floor(picture.height / 2)), [0xb0, 0, 0]);
   // The numbers were drawn for the picture only; they are gone from the page.
   assert.equal(await page.locator("[data-loep-tab-order]").count(), 0);
+  await page.context().close();
+});
+
+test("the boundary of a radio button clipped to a pixel is measured on the label that draws it, also in the chosen state", async () => {
+  const page = await open("/chosen-scale.html");
+  const atRest = (await pageContrast(page)).controls.find((control) => control.where === "#score-2")!;
+  assert.deepEqual([atRest.box.width > 100, atRest.edge, atRest.outside, atRest.outcome], [true, "#cccccc", "#e6e6e6", "kandidaat"], JSON.stringify(atRest));
+  await page.click("#label-2");
+  // On the input and on the label alike: the blue border of the chosen box against the grey form.
+  for (const target of ["#score-2", "#label-2"]) {
+    const chosen = (await elementContrast(page, [target]))!.control!;
+    assert.deepEqual([chosen.where, chosen.edge, chosen.outside, chosen.edgeRatio, chosen.fill, chosen.outcome], ["#score-2", "#0074bd", "#e6e6e6", 3.9, "#ffffff", "duidelijk"], `${target}: ${JSON.stringify(chosen)}`);
+  }
+  // A checkbox hidden with opacity is drawn by its label already; a radio button that shows itself keeps its own box.
+  await page.goto(`${site.origin}/radios.html`);
+  const controls = (await pageContrast(page)).controls;
+  const labelWidth = await page.evaluate(() => Math.round(document.querySelector("#box-label")!.getBoundingClientRect().width));
+  assert.equal(controls.find((control) => control.where === "#hidden-box")!.box.width, labelWidth);
+  assert.equal((await elementContrast(page, ["#box-label"]))!.control!.where, "#hidden-box");
+  assert.equal(controls.find((control) => control.where === "#by-mail")!.box.width, 13);
   await page.context().close();
 });

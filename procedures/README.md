@@ -2,7 +2,7 @@
 
 Eén bestand per succescriterium van WCAG 2.2 niveau A en AA, plus 4.1.1 uit WCAG 2.1. Samen zijn ze de methode: wat er per criterium wordt onderzocht, met welk bewijs, en volgens welke regels het oordeel tot stand komt. Ze worden met elk rapport meegepubliceerd.
 
-Een procedure is tegelijk de opdracht aan het taalmodel dat het criterium beoordeelt. Het model krijgt de procedure, een dossier met bewijs dat scripts hebben verzameld, en een sessie met instrumenten. De scripts leveren de dekking: elke pagina, beide kleurenschema's, het smalle scherm, elke melding in haar eigen toestand en elk onderdeel geopend. Het model doet die veegronde niet over. Het haalt op wat het dossier niet kan laten zien, kijkt de kandidaten uit de rondgang na en bevestigt het dossier met een steekproef. Het handelt en meet alleen via die instrumenten, en elke uitspraak wijst naar een vastgelegde waarneming. Tien procedures vragen ook het onderdeel `documents`: de pdf- en kantoorbestanden van de steekproef.
+Een procedure is tegelijk de opdracht aan het taalmodel dat het criterium beoordeelt. Het model krijgt de procedure, een dossier met bewijs dat scripts hebben verzameld, en een sessie met instrumenten. De scripts leveren de dekking: elke pagina, beide kleurenschema's, het smalle scherm, elke melding in haar eigen toestand en elk onderdeel geopend. Het model doet die veegronde niet over. Het haalt op wat het dossier niet kan laten zien, kijkt de kandidaten uit de rondgang na en bevestigt het dossier met een steekproef. Het handelt en meet alleen via die instrumenten, en elke uitspraak wijst naar een vastgelegde waarneming. Elf procedures vragen ook het onderdeel `documents`: de pdf- en kantoorbestanden van de steekproef.
 
 ## Opbouw van een bestand
 

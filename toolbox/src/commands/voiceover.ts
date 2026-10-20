@@ -82,7 +82,10 @@ export function setupLines(output: string): SetupLine[] {
 
 const SIP_STEPS = (name: string): string[] => [
   `lume run ${name} --recovery-mode true   (opent een venster met de herstelmodus)`,
-  "kies Options en Continue, kies een taal, en open in de menubalk Utilities > Terminal",
+  "kies Options en klik op Continue; kies daarna een taal",
+  "LET OP: in het venster met vier keuzes klik je niets aan. Klik niet op Ga door (Continue): dat start een herinstallatie van macOS",
+  "is dat toch gebeurd, sluit het installatieprogramma dan af met ⌘Q (Command-Q)",
+  "open in de menubalk bovenaan Utilities > Terminal (Nederlands: Hulpprogramma's > Terminal)",
   "typ: csrutil disable   en antwoord y; gebruiker lume, wachtwoord lume",
   "typ: shutdown -h now   en draai daarna just voiceover-setup opnieuw",
 ];
