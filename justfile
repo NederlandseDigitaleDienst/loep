@@ -75,9 +75,9 @@ doctor:
 voiceover-setup:
     {{cli}} voiceover setup
 
-# Draai de unittests
-test:
-    cd {{toolbox}} && node --test 'test/**/*.test.ts'
+# Draai de unittests. Met --test-shard=<i>/<n> alleen het i-de van n delen, zoals de volledige controle op GitHub doet
+test *flags:
+    cd {{toolbox}} && node --test {{flags}} 'test/**/*.test.ts'
 
 # Draai alleen de tests die geen browser starten: een paar seconden, voor tussendoor en voor de snelle controle bij een push
 test-quick:
@@ -159,7 +159,7 @@ testsite *args:
 testsite-build:
     node {{toolbox}}/fixtures/build.ts
 
-# Zet een nieuwe versie klaar op een branch: alle versienummers en het deel in CHANGELOG.md, als één commit. Daarna een voorstel naar main
+# Zet een nieuwe versie klaar op een branch: alle versienummers en het deel in CHANGELOG.md (met de fragmenten uit changelog.d/, via towncrier), als één commit. Daarna een voorstel naar main
 release-prepare version:
     node {{toolbox}}/scripts/release.ts prepare {{version}}
 
