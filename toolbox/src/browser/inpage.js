@@ -215,6 +215,7 @@
     }
     if (kind === "click") return clickTargets.has(target);
     if (kind === "hearsDown") return hearsDown(target);
+    if (kind === "down") return downTargets.has(target);
     if (kind === "signature") return listenerSignature(target, extra.types, extra.labels);
     if (kind === "counts") return watchedCounts();
     if (kind === "handler") return typeof target[extra.name] === "function";
@@ -819,10 +820,12 @@
 
   const CLICK_ATTRIBUTES = ["data-toggle", "data-bs-toggle", "data-dismiss", "data-bs-dismiss", "data-target", "data-bs-target", "data-fancybox", "data-href"];
 
-  /** Why an element looks clickable; empty when nothing says so. */
-  function clickSignals(element) {
+  /** Why an element looks clickable; empty when nothing says so. With `withPress`, a listener for a press of the pointer on the element itself counts too. */
+  function clickSignals(element, withPress = false) {
     const signals = [];
     if (ownWorld ? ask("click", element) : clickTargets.has(element)) signals.push("click-listener");
+    // The thumb of a slider that is dragged listens for the press, not for the click.
+    if (withPress && (ownWorld ? ask("down", element) : downTargets.has(element))) signals.push("press-listener");
     if (element.hasAttribute("onclick")) signals.push("onclick");
     for (const name of CLICK_ATTRIBUTES) if (element.hasAttribute(name)) signals.push(name);
     // The cursor is inherited: only the element where the pointer starts is the clickable thing.
@@ -840,11 +843,11 @@
    * does not announce them. Left out are real controls, what sits inside one, and wrappers
    * around one (a card with a handler around its own link).
    */
-  function clickables() {
+  function clickables(withPress = false) {
     const found = [];
     for (const element of deepElements(document.body)) {
       if (element.matches(INTERACTIVE) || element.matches(CONTROL) || !isVisible(element)) continue;
-      const signals = clickSignals(element);
+      const signals = clickSignals(element, withPress);
       if (signals.length === 0) continue;
       if (closestComposed(composedParent(element), CONTROL)) continue;
       let wrapsControl = false;
@@ -871,6 +874,16 @@
       tabindex: element.getAttribute("tabindex"),
       focusable: element.tabIndex >= 0,
     }));
+  }
+
+  /**
+   * What looks operable but presents itself as nothing: visible, without a role and without a
+   * Tab stop, with a listener for a click or a press, an onclick or a pointer cursor. A slider
+   * built from a track and a thumb is one. `operables` cannot name these, and they are often the
+   * defect itself, so the explorer gets them apart.
+   */
+  function looksOperable() {
+    return clickables(true).filter((entry) => !entry.focusable);
   }
 
   /** Walk the flattened tree in reading order, skipping what is not displayed (as flatText does). */
@@ -2591,6 +2604,7 @@
     deepQueryAll,
     collectFacts,
     operables,
+    looksOperable,
     templateSignature,
     contentSnapshot,
     visitorSnapshot,

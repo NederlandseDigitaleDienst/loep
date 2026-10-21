@@ -10,11 +10,12 @@ import { recordReads } from "../lib/reads.ts";
 import { makeWorkDir } from "../lib/workdir.ts";
 import { siteLabel } from "../lib/origins.ts";
 import { textHasTerm } from "../lib/searchterm.ts";
-import { acceptedGapFor, frameAddress, NOT_OPENED_ON_PAGE_TYPE, notOpenedAdviceNl, readSiteModel, searchTermForRun, SITE_CHECK_FILE, SITE_MODEL_FILE, validateSiteModel, type ModelContext, type PageType, type Postcondition, type SiteCheck, type SiteModel } from "../lib/sitemodel.ts";
+import { acceptedGapFor, frameAddress, NOT_OPENED_ON_PAGE_TYPE, notOpenedAdviceNl, readSiteModel, REVIEW_MISSING, searchTermForRun, SITE_CHECK_FILE, SITE_MODEL_FILE, validateSiteModel, type ModelContext, type PageType, type Postcondition, type SiteCheck, type SiteModel } from "../lib/sitemodel.ts";
+import { LOOK_COMMANDS } from "../lib/verdict.ts";
 import { readObservation } from "../session/observations.ts";
 import { holds, loadRecipes, MAX_RECIPE_STEPS, replayEnv, replayFromClean, replaySteps } from "../session/recipe.ts";
 import { openSurface, type Env } from "../session/surface.ts";
-import { pageOperables } from "../instruments/operables.ts";
+import { pageLooksOperable, pageOperables } from "../instruments/operables.ts";
 import { controlsBetweenWidths, MEASURED_WIDTHS, widthToTry, type WidthsForExplorer } from "../instruments/widths.ts";
 import { mergeWidths, uncoveredOperables, type CountedPage } from "../lib/operables.ts";
 import type { Recipe } from "../session/daemon.ts";
@@ -110,7 +111,7 @@ export async function explore(runDir: string): Promise<{ task: string; pages: nu
         ...(modelProblems.length > 0 ? ["De controle keurt het model nu af op:", "", ...modelProblems.map((problem) => `- ${problem}`), ""] : []),
         ...(forExplorer.length > 0 ? ["De bewijspoort vond na het meten deze gaten:", "", ...forExplorer.map((gap) => `- **${gap.check}**${gap.url ? `, ${gap.url}` : ""}${gap.state && gap.state !== "default" ? `, toestand ${gap.state}` : ""}: ${gap.missingNl}`), ""] : []),
         ...(modelProblems.length + forExplorer.length === 0 ? ["Er zijn geen open punten gemeld. Loop de werkwijze na op wat het model nog mist, met name stap 2b.", ""] : []),
-        "Is een gat een eigenschap van de site zelf en geen gemis in het model (de site heeft echt een toetsenbordval, een onderdeel gaat echt niet open), leg dat dan vast in `acceptedGaps`: `{ \"check\": \"<naam van de controle>\", \"page\": \"<adres>\", \"reasonNl\": \"wat je zag\", \"observation\": \"<id van de waarneming die het toont, bijvoorbeeld verken-0042>\", \"decidedBy\": \"verkenner\" }`. Schrijf in `decidedBy` altijd `verkenner`: `persoon` zet alleen een persoon die de uitzondering zelf heeft vastgesteld. Bij `component-not-opened-on-page-type` hoort er ook `\"component\": \"<id van het onderdeel>\"` bij: de regel geldt dan alleen voor dat onderdeel.",
+        "Is een gat een eigenschap van de site zelf en geen gemis in het model (de site heeft echt een toetsenbordval, een onderdeel gaat echt niet open), leg dat dan vast in `acceptedGaps`: `{ \"check\": \"<naam van de controle>\", \"page\": \"<adres>\", \"reasonNl\": \"wat je zag\", \"observation\": \"<id van de waarneming die het toont, bijvoorbeeld verken-0042>\", \"decidedBy\": \"verkenner\" }`. Schrijf in `decidedBy` altijd `verkenner`: `persoon` zet alleen een persoon die de uitzondering zelf heeft vastgesteld. Bij `component-not-opened-on-page-type` hoort er ook `\"component\": \"<id van het onderdeel>\"` bij: de regel geldt dan alleen voor dat onderdeel. Zeg je bij `review-missing` dat het onderdeel er niet is, dan is `observation` een `look`, `crop`, `html`, `find` of `ax` op die pagina die dat laat zien; een rij die in `operables.json` ontbreekt, is geen bewijs.",
       ].join("\n");
 
   const taskPath = join("explore", "verken.md");
@@ -168,6 +169,7 @@ async function modelContext(runDir: string, inventory: Inventory): Promise<Model
     recipes: Object.fromEntries(Object.entries(recipes).map(([name, recipe]) => [name, { width: recipe.start?.width ?? 0, steps: recipe.steps.length, url: recipe.start?.url ?? "" }])),
     observations: await observationIds(runDir),
     requestsSeen: await requestsSeen(runDir),
+    looksSeen: await looksSeen(runDir),
     media: Object.fromEntries(inventory.pages.filter((page) => !isFrame(page)).map((page) => [page.url, { audio: Number(page.counts.audio ?? 0), video: Number(page.counts.video ?? 0) }])),
   };
 }
@@ -199,6 +201,29 @@ export async function requestsSeen(runDir: string): Promise<Record<string, { met
       ...observation.blocked.filter((entry) => entry.kind === "method").map((entry) => ({ method: entry.method, url: entry.url, search: entry.search ?? [] })),
       ...(observation.reads ?? []).map((entry) => ({ method: entry.method, url: entry.url, search: entry.service ? [entry.service] : [] })),
     ];
+  }
+  return seen;
+}
+
+/**
+ * Per observation that an accepted gap of the review question `missing` names: the page it
+ * looked at, when it was a look command that succeeded, and null otherwise. Such a gap says a
+ * part the review saw is not there, and only a look at the page can show that.
+ */
+export async function looksSeen(runDir: string): Promise<Record<string, string | null>> {
+  let gaps: unknown = null;
+  try {
+    gaps = (JSON.parse(readFileSync(join(runDir, SITE_MODEL_FILE), "utf8")) as { acceptedGaps?: unknown }).acceptedGaps;
+  } catch {
+    gaps = null;
+  }
+  const seen: Record<string, string | null> = {};
+  for (const gap of Array.isArray(gaps) ? (gaps as unknown[]) : []) {
+    const { check, observation: id } = (gap ?? {}) as { check?: unknown; observation?: unknown };
+    if (check !== REVIEW_MISSING || typeof id !== "string" || id in seen) continue;
+    const observation = await readObservation(runDir, id).catch(() => null);
+    if (!observation) continue;
+    seen[id] = (LOOK_COMMANDS as readonly string[]).includes(observation.command) && observation.error === null ? (observation.page?.url ?? null) : null;
   }
   return seen;
 }
@@ -240,11 +265,12 @@ export async function countOperables(env: Env, model: SiteModel, recipes: Record
         await replaySteps(env, surface, leaves === -1 ? steps : steps.slice(0, leaves), blocker.postcondition);
       }
       const wide = await pageOperables(surface.page);
+      const looksOperable = await pageLooksOperable(surface.page);
       // The same scan of the widths in between as the sweep makes: a control that only shows there is tried at such a width.
       widths.push({ pageType: type.id, ...(await controlsBetweenWidths(surface.page).catch(() => ({ breakpoints: [], controls: [] }))) });
       await surface.page.setViewportSize(NARROW);
       await surface.page.waitForTimeout(300);
-      counted.push({ pageType: type.id, url: type.representative, groups: mergeWidths(wide, await pageOperables(surface.page)) });
+      counted.push({ pageType: type.id, url: type.representative, groups: mergeWidths(wide, await pageOperables(surface.page)), ...(looksOperable.length > 0 ? { looksOperable } : {}) });
     } catch (error) {
       problems.push(`paginatype "${type.id}": op ${type.representative} was niet te tellen wat er te bedienen is: ${(error as Error).message.split("\n")[0]}`);
     } finally {
@@ -399,7 +425,7 @@ export async function checkSite(runDir: string, options: { navigationDelayMs?: n
         const { counted, problems: notCounted, widths } = await countOperables(env, model, recipes);
         const compared = uncoveredOperables(model, recipes, counted);
         hintsNl.push(...widthHints(model, recipes, widths));
-        await writeJson(join(runDir, OPERABLES_FILE), { note: "Wat check-site telde op de representatieve pagina van elk paginatype, met de blokkades gesloten: formulieren, losse bedieningsonderdelen en ingesloten vensters met iets om te bedienen, zonder gewone links. uncovered is wat geen recept van het sitemodel aanraakt. betweenWidths zegt per paginatype welke breedtes de stylesheets noemen en welke bedieningselementen alleen tussen 1280, 360 en 320 pixels in beeld staan, met de breedtes waarop.", pageTypes: counted, uncovered: compared.uncovered, betweenWidths: widths });
+        await writeJson(join(runDir, OPERABLES_FILE), { note: "Wat check-site telde op de representatieve pagina van elk paginatype, met de blokkades gesloten: formulieren, losse bedieningsonderdelen en ingesloten vensters met iets om te bedienen, zonder gewone links. uncovered is wat geen recept van het sitemodel aanraakt. betweenWidths zegt per paginatype welke breedtes de stylesheets noemen en welke bedieningselementen alleen tussen 1280, 360 en 320 pixels in beeld staan, met de breedtes waarop. looksOperable zegt per paginatype wat er bedienbaar lijkt (een klik- of drukluisteraar, een onclick, een cursor als handje) zonder rol en zonder Tab-stop, zoals een schuif van div's: dat telt niet mee in uncovered, want niets zegt wat het is, maar het staat wel op de pagina.", pageTypes: counted, uncovered: compared.uncovered, betweenWidths: widths });
         operables = { counted: compared.counted, uncovered: compared.uncovered.length };
         problems.push(...notCounted, ...compared.uncovered.map((entry) => entry.problemNl));
       }
