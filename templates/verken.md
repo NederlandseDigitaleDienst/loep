@@ -84,7 +84,7 @@ Doe de stappen in deze volgorde.
 - chatvenster (alleen openen);
 - alles wat verder iets toont na een klik, een toets of aanwijzen.
 
-Voor elk onderdeel: begin met een verse `open`, doe de handeling, lees in het antwoord of er iets veranderde, en bewaar: `state save component-<id>`. Staat hetzelfde onderdeel op meer paginatypen (het hoofdmenu), leg het dan één keer vast en noem alle typen in `pageTypes`. Vindt het gereedschap het element van een stap bij het afspelen niet terug via de selector (een id dat bij elke lading anders is), dan zoekt het zelf verder op rol, naam en plek; je hoeft daarvoor geen Tab-tellingen te gebruiken.
+Voor elk onderdeel: begin met een verse `open`, doe de handeling, lees in het antwoord of er iets veranderde, en bewaar: `state save component-<id>`. Staat hetzelfde onderdeel op meer paginatypen (het hoofdmenu), leg het dan één keer vast en noem alle typen in `pageTypes`. Staat het op elke pagina (een menuknop op een smal scherm, een vaste chatknop), schrijf dan `"pageTypes": "all"` in plaats van een lijst. De controle opent het dan op een paar paginatypen, de veegronde op alle, en de bewijspoort weet dat het overal staat. Vindt het gereedschap het element van een stap bij het afspelen niet terug via de selector (een id dat bij elke lading anders is), dan zoekt het zelf verder op rol, naam en plek; je hoeft daarvoor geen Tab-tellingen te gebruiken.
 
 Laadt een onderdeel zijn inhoud met een verzoek dat het gereedschap tegenhoudt (het antwoord van een commando noemt het onder `blocked`, bijvoorbeeld `method: POST ...admin-ajax.php`, of een adres buiten de site), leg dat dan vast bij het onderdeel in `blockedRequests`, met `method` en `address` (host en pad, zonder query). Zo'n onderdeel is niet te onderzoeken en dat moet in het rapport komen. Een zoekvraag aan een zoekdienst is de uitzondering: die leg je vast als leesverzoek (stap 4).
 
@@ -136,7 +136,7 @@ Meldt ze problemen, herstel ze en controleer opnieuw; laat de sessie daarbij ope
     { "id": "cookies", "kind": "cookie-banner", "descriptionNl": "Cookiemelding onderaan, over de volle breedte", "recipe": "blocker-cookies", "postcondition": { "kind": "gone", "selector": "#cookiemelding" } }
   ],
   "components": [
-    { "id": "menu-smal", "type": "menu", "descriptionNl": "Hoofdmenu achter de knop Menu", "pageTypes": ["start"], "viewport": { "maxWidth": 767 }, "recipe": "component-menu-smal", "postcondition": { "kind": "expanded", "selector": "button.menuknop" } },
+    { "id": "menu-smal", "type": "menu", "descriptionNl": "Hoofdmenu achter de knop Menu, op elke pagina", "pageTypes": "all", "viewport": { "maxWidth": 767 }, "recipe": "component-menu-smal", "postcondition": { "kind": "expanded", "selector": "button.menuknop" } },
     { "id": "kaart", "type": "other", "descriptionNl": "Kaart die inzoomt bij dubbelklik", "pageTypes": ["start"], "viewport": null, "recipe": null, "postcondition": null, "notOpenedNl": "Dubbelklikken kan niet met de beschikbare commando's." },
     { "id": "controle-mens", "type": "other", "descriptionNl": "Vak 'Ik ben geen robot' in een ingesloten venster bij het contactformulier", "pageTypes": ["start"], "viewport": null, "frame": "https://www.google.com/recaptcha/api2/anchor", "recipe": "component-controle-mens", "postcondition": { "kind": "visible", "selector": ".recaptcha-checkbox-checked", "frame": "https://www.google.com/recaptcha/api2/anchor" } }
   ],
