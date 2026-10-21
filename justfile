@@ -155,7 +155,7 @@ verify run:
 testsite *args:
     node {{toolbox}}/fixtures/serve.ts {{args}}
 
-# Regressietoets van de veegronde op de testsite, zonder taalmodel: inventory, het vaste sitemodel uit toolbox/fixtures/sweep, collect, contrast en states op beide varianten, en per gebrek uit de sleutel of het bewijs in het dossier staat (toolbox/fixtures/evidence.ts). Faalt als iets uit de basislijn ontbreekt of de tweeling bewijs krijgt. Met --out <map>, --at-once <n>, --variant defect of clean, --runs <map> om bestaande runs opnieuw te lezen, --from-report <sweep-check.json> (twee keer, de artefacten van de CI) en --update-baseline om de basislijn bij te werken
+# Regressietoets van de veegronde op de testsite, zonder taalmodel: inventory, het vaste sitemodel uit toolbox/fixtures/sweep, collect, contrast en states op beide varianten, en per gebrek uit de sleutel of het bewijs in het dossier staat (toolbox/fixtures/evidence.ts). Faalt als iets uit de basislijn ontbreekt of de tweeling bewijs krijgt. Met --out <map>, --at-once <n>, --variant defect of clean, --fixed-ports om de testsite op 4710 tot en met 4712 te serveren zodat de runs in <out>/runs een bevroren veegronde voor een meting kunnen zijn, --runs <map> om bestaande runs opnieuw te lezen, --from-report <sweep-check.json> (twee keer, de artefacten van de CI) en --update-baseline om de basislijn bij te werken
 sweep-check *flags:
     node {{toolbox}}/scripts/sweep-check.ts {{flags}}
 
