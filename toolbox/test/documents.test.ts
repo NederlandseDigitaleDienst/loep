@@ -19,7 +19,7 @@ import { documents as documentsExtractor } from "../src/lib/document-evidence.ts
 import { render } from "../src/commands/render.ts";
 import { canonicalJson } from "../src/lib/canonical.ts";
 import { mergeFindings } from "../src/lib/defects.ts";
-import { documentKind, documentScopeNl, kindOfContentType, loadDocuments, REDIRECTS_ELSEWHERE_NL, type DocumentFacts, type EvaluationDocuments, type InventoryDocument } from "../src/lib/documents.ts";
+import { documentKind, documentScopeNl, kindOfContent, kindOfContentType, loadDocuments, REDIRECTS_ELSEWHERE_NL, type DocumentFacts, type EvaluationDocuments, type InventoryDocument } from "../src/lib/documents.ts";
 import { deriveReport, renderMarkdown } from "../src/lib/report-markdown.ts";
 import { exampleEvaluation } from "./fixtures/example-evaluation.ts";
 import { buildDossier } from "../src/lib/dossier.ts";
@@ -180,6 +180,21 @@ test("a link is recognised as a document by its extension or by what the server 
   assert.equal(documentKind("https://a.test/agenda/demo.ics"), "text");
   assert.equal(documentKind("https://a.test/kaart.VCF"), "text");
   assert.equal(kindOfContentType("text/calendar; charset=utf-8"), "text");
+});
+
+test("a file nobody could place is told by what is in it: the signature of a format, or else text, or else nothing", () => {
+  assert.equal(kindOfContent(Buffer.from("%PDF-1.7\n%âãÏÓ\n")), "pdf");
+  assert.equal(kindOfContent(Buffer.from("{\\rtf1\\ansi Hallo}")), "rtf");
+  assert.equal(kindOfContent(Buffer.concat([Buffer.from("PK\x03\x04"), Buffer.from("....mimetypeapplication/vnd.oasis.opendocument.text....")])), "odt");
+  assert.equal(kindOfContent(Buffer.concat([Buffer.from("PK\x03\x04"), Buffer.from("....[Content_Types].xml....word/document.xml")])), "docx");
+  assert.equal(kindOfContent(Buffer.concat([Buffer.from("PK\x03\x04"), Buffer.from("....[Content_Types].xml....xl/workbook.xml")])), "xlsx");
+  assert.equal(kindOfContent(Buffer.concat([Buffer.from("PK\x03\x04"), Buffer.from("....een gewone zip")])), null);
+  for (const text of ["BEGIN:VCALENDAR\r\nEND:VCALENDAR\r\n", '{"naam":"Één"}', "<?xml version=\"1.0\"?><gpx/>", "WEBVTT\n\n00:00.000 --> 00:01.000\nHallo"]) assert.equal(kindOfContent(Buffer.from(text)), "text", text);
+  // A picture has null bytes; Latin-1 that is no UTF-8 is no text either.
+  assert.equal(kindOfContent(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00])), null);
+  assert.equal(kindOfContent(Buffer.from([0x63, 0x61, 0x66, 0xe9])), null);
+  // A long text cut in the middle of a character at the end of the window is still text.
+  assert.equal(kindOfContent(Buffer.from(`${"a".repeat(65_535)}é`)), "text");
 });
 
 test("Markdown writes its structure out: headings, links, pictures and tables, not inside fenced code", () => {
@@ -601,7 +616,8 @@ test("an address the browser starts to download without a download link is a doc
     // An agenda item is plain text, and is read; also in a run whose inventory still called it "other".
     const run = join(scratch, "run-download");
     const sample = withDocuments(buildSample(stock, "seed"), stock, "seed");
-    await writeJson(join(run, "sample.json"), { ...sample, documents: (sample.documents ?? []).map((document) => (document.url.endsWith(".ics") ? { ...document, kind: "other" } : document)) });
+    // Also a document without an extension is read when nothing named its kind: what is in it says it is text.
+    await writeJson(join(run, "sample.json"), { ...sample, documents: (sample.documents ?? []).map((document) => ({ ...document, kind: "other" })) });
     assert.deepEqual(await measureDocuments(run), { documents: 2, read: 2, notRead: 0, failed: 0 });
     const ics = loadDocuments(run, sample.documents).find((document) => document.item.url.endsWith(".ics"))!;
     assert.match(readFileSync(join(run, ics.facts!.files.text!), "utf8"), /BEGIN:VCALENDAR/);
