@@ -6,6 +6,13 @@ Wat er per versie van loep is veranderd. De versie staat op het voorblad en onde
 
 <!-- towncrier: een nieuwe versie komt hieronder -->
 
+## 0.15.0 (2026-10-21)
+
+### Wat een uitkomst kan veranderen
+
+- Een opname van een verzonden bericht wordt niet meer gezocht met een regel die raadt welk deel van het adres een token is; die regel miste een token van 16 letters zonder cijfers, waarna hetzelfde testbericht opnieuw echt werd verstuurd. Zonder patroon hoort een opname bij de verklaarde origin van de testomgeving, de soort verbinding en de testwaarden in het bericht, en telt het pad niet mee. Een onderdeel of proces dat iets verstuurt kan in het sitemodel een patroon krijgen (`"sendsTo": "wss://chat.example.nl/ws/kanaal/*"`, ook voor een adres over HTTP); dan wordt op dat patroon gezocht. `check-site` speelt het recept van zo'n onderdeel twee keer af en weigert een patroon dat niet past of op elk adres past. Het antwoord van een commando noemt de sockets die de pagina opende, de verkenner legt het patroon vast, en de waarneming en de evaluatie zeggen op welk patroon of op de verklaarde origin is gezocht. De chat van de testsite zet nu per verbinding zo'n token in het adres. ([#300](https://github.com/NederlandseDigitaleDienst/loep/issues/300))
+- Een kandidaat die twee criteria aan elkaar doorgeven, gaat niet meer eindeloos heen en weer. Rust hij aan beide kanten op een meting van dezelfde eigenschap van hetzelfde element op dezelfde pagina, dan is de lus rond: beide criteria hebben hem bekeken en hij hoort bij geen van beide. Geen van beide gaat er weer door open, geen afmaakronde krijgt hem, en `tasks --again` zet er geen ronde voor klaar. De evaluatie legt hem bij beide criteria vast (`crossLoops`), met de zin van allebei, en het rapport noemt hem in bijlage A. Kan een van de twee rondes niet beslissen of hij toch bij haar criterium hoort (`undecidedNl`), dan wordt het een punt `mens nodig:` bij dat criterium. ([#302](https://github.com/NederlandseDigitaleDienst/loep/issues/302))
+
 ## 0.14.1 (2026-10-21)
 
 ### Wat een uitkomst kan veranderen

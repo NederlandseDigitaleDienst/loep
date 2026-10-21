@@ -1,0 +1,6 @@
+{
+  "version": "0.15.0",
+  "measuredAt": "2026-10-21",
+  "againstNl": "De sleutel van de eigen testsite, niet het oordeel van een menselijke deskundige. Deze versie verandert twee dingen die een uitkomst kunnen raken: een opname van een verzonden bericht wordt gezocht op de verklaarde origin en de testwaarden, of op een patroon in het sitemodel (#300), en een kandidaat die twee criteria aan elkaar teruggeven, maakt geen van beide meer open (#302). Beide zijn met tests nagegaan; de regressietoets van de veegronde speelt de chat van de testsite, die nu een token in het adres heeft, bij elke run twee keer af.",
+  "resultNl": "Niet opnieuw met agents gemeten. De regressietoets vond het bewijs voor alle 56 gebreken die een script kan zien, en op de tweeling niets. De lus bij het doorgeven is nagegaan op de oordelen van een echte run: twee van de drie lussen worden herkend, de derde niet omdat de criteria het onderdeel op verschillende pagina's maten. Voor de criteria geldt de meting van 0.14.0 en eerder."
+}
