@@ -1,0 +1,3452 @@
+{
+  "criteria": {
+    "bothFailed": [
+      "1.1.1",
+      "1.2.1",
+      "1.2.2",
+      "1.2.3",
+      "1.2.5",
+      "1.3.1",
+      "1.3.2",
+      "1.3.3",
+      "1.3.4",
+      "1.3.5",
+      "1.4.1",
+      "1.4.2",
+      "1.4.3",
+      "1.4.4",
+      "1.4.5",
+      "1.4.10",
+      "1.4.11",
+      "1.4.13",
+      "2.1.1",
+      "2.1.2",
+      "2.1.4",
+      "2.2.1",
+      "2.2.2",
+      "2.4.1",
+      "2.4.2",
+      "2.4.3",
+      "2.4.4",
+      "2.4.6",
+      "2.4.7",
+      "2.4.11",
+      "2.5.1",
+      "2.5.2",
+      "2.5.3",
+      "2.5.7",
+      "2.5.8",
+      "3.1.1",
+      "3.1.2",
+      "3.2.1",
+      "3.2.2",
+      "3.2.3",
+      "3.2.4",
+      "3.2.6",
+      "3.3.1",
+      "3.3.2",
+      "3.3.3",
+      "3.3.4",
+      "3.3.7",
+      "3.3.8",
+      "4.1.2",
+      "4.1.3"
+    ],
+    "criteria": 55,
+    "falsePassRate": 0.02,
+    "missed": [
+      {
+        "id": "1.4.12",
+        "ours": "passed"
+      }
+    ],
+    "neitherFailed": {
+      "inapplicable": 2,
+      "passed": 2
+    },
+    "onlyOurs": [],
+    "recall": 0.98,
+    "site": "Lindewaard (testsite)",
+    "undecidedRate": 0,
+    "wcagVersion": "2.2"
+  },
+  "findings": [
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "1.1.1",
+      "descriptionNl": "Het logo in de cookiemelding heeft als tekstalternatief het woord \"logo\".",
+      "id": "1.1.1-logo-melding",
+      "ours": {
+        "a": [
+          "LIND-1.1.1-7302"
+        ],
+        "b": [
+          "LIND-1.1.1-7302"
+        ]
+      },
+      "page": "alle",
+      "reasonNl": {
+        "a": "Onze bevinding noemt het schildje in de cookiemelding met alt-tekst \"logo\".",
+        "b": "Het schildje in de cookiemelding heeft alt-tekst logo. Onze bevinding noemt dezelfde afbeelding op P01 en P07."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "1.1.1",
+      "descriptionNl": "De foto van de fietsenstalling heeft geen alt-attribuut.",
+      "id": "1.1.1-artikelfoto",
+      "ours": {
+        "a": [
+          "LIND-1.1.1-5af9"
+        ],
+        "b": [
+          "LIND-1.1.1-5af9"
+        ]
+      },
+      "page": "/nieuws/nieuwe-fietsenstalling.html",
+      "reasonNl": {
+        "a": "Onze bevinding noemt de foto img.artikel-foto zonder alt-attribuut op P07.",
+        "b": "De foto img.artikel-foto op P07 heeft geen alt-attribuut. Onze bevinding beschrijft precies dit."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "1.1.1",
+      "descriptionNl": "Het logo van het waterschap heeft een bestandsnaam als tekstalternatief.",
+      "id": "1.1.1-bestandsnaam",
+      "ours": {
+        "a": [
+          "LIND-1.1.1-ccc2"
+        ],
+        "b": [
+          "LIND-1.1.1-ccc2"
+        ]
+      },
+      "page": "/",
+      "reasonNl": {
+        "a": "Onze bevinding noemt het eerste partnerlogo met alt-tekst IMG_2041.jpg op P01.",
+        "b": "Het eerste partnerlogo op P01 heeft alt-tekst IMG_2041.jpg. Onze bevinding noemt hetzelfde logo."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "1.1.1",
+      "descriptionNl": "De tarieven staan alleen in een afbeelding van een tabel, met een leeg alt.",
+      "id": "1.1.1-tarieven",
+      "ours": {
+        "a": [
+          "LIND-1.1.1-3274",
+          "LIND-1.4.5-4705"
+        ],
+        "b": [
+          "LIND-1.1.1-3274",
+          "LIND-1.4.5-4705"
+        ]
+      },
+      "page": "/veelgestelde-vragen.html",
+      "reasonNl": {
+        "a": "Twee bevindingen noemen de afbeelding met tarieven in het tweede antwoord op P11: lege alt-tekst en tekst als afbeelding.",
+        "b": "De tarieven staan alleen in een afbeelding met leeg alt in #antwoord-2 op P11. Onze bevindingen onder 1.1.1 en 1.4.5 noemen dezelfde afbeelding."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "1.2.1",
+      "descriptionNl": "Het gesprek met de wethouder is alleen te beluisteren; er is geen uitgeschreven tekst.",
+      "id": "1.2.1-gesprek",
+      "ours": {
+        "a": [
+          "LIND-1.2.1-4569"
+        ],
+        "b": [
+          "LIND-1.2.1-4569"
+        ]
+      },
+      "page": "/nieuws/nieuwe-fietsenstalling.html",
+      "reasonNl": {
+        "a": "Onze bevinding noemt het geluidsfragment onder de tweede kop Informatie op P07 zonder uitgeschreven tekst.",
+        "b": "Het geluidsfragment onder de tweede kop Informatie op P07 heeft geen tekstversie. Onze bevinding beschrijft dit."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "1.2.2",
+      "descriptionNl": "De video heeft gesproken tekst en geen ondertitels.",
+      "id": "1.2.2-ondertitels",
+      "ours": {
+        "a": [
+          "LIND-1.2.2-d601"
+        ],
+        "b": [
+          "LIND-1.2.2-d601"
+        ]
+      },
+      "page": "/raadsvergadering.html",
+      "reasonNl": {
+        "a": "Onze bevinding noemt de video op P10 met spraak en zonder ondertitels.",
+        "b": "De video op P10 heeft spraak en geen ondertitels. Onze bevinding noemt dezelfde video."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "1.2.3",
+      "descriptionNl": "De dia in beeld toont de agenda en de uitslag van de stemming (14 voor, 5 tegen). De spreker noemt die niet en er is geen uitgeschreven tekst.",
+      "id": "1.2.3-beschrijving",
+      "ours": {
+        "a": [
+          "LIND-1.2.3-8034"
+        ],
+        "b": [
+          "LIND-1.2.3-8034"
+        ]
+      },
+      "page": "/raadsvergadering.html",
+      "reasonNl": {
+        "a": "Onze bevinding noemt de agenda en de uitslag 14 voor, 5 tegen die alleen in beeld staan, zonder beschrijving of tekstversie.",
+        "b": "De agenda en de stemuitslag staan alleen in beeld in de video op P10. Onze bevinding beschrijft dit."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "1.2.5",
+      "descriptionNl": "Er is geen audiodescriptie voor de informatie die alleen in beeld staat.",
+      "id": "1.2.5-audiodescriptie",
+      "ours": {
+        "a": [
+          "LIND-1.2.5-f25e"
+        ],
+        "b": [
+          "LIND-1.2.5-f25e"
+        ]
+      },
+      "page": "/raadsvergadering.html",
+      "reasonNl": {
+        "a": "Onze bevinding noemt dat de informatie in beeld van de video op P10 geen audiodescriptie heeft.",
+        "b": "Geen audiodescriptie voor de agenda en uitslag in beeld in de video op P10. Onze bevinding beschrijft dit."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "1.3.1",
+      "descriptionNl": "Een tussenkop is opgemaakt als vette alinea in plaats van als kop.",
+      "id": "1.3.1-vette-tussenkop",
+      "ours": {
+        "a": [
+          "LIND-1.3.1-65b1"
+        ],
+        "b": [
+          "LIND-1.3.1-65b1"
+        ]
+      },
+      "page": "/nieuws/nieuwe-fietsenstalling.html",
+      "reasonNl": {
+        "a": "Onze bevinding noemt \"Wat verandert er voor u?\" als strong in een alinea op P07.",
+        "b": "Wat verandert er voor u? is een strong in een alinea op P07. Onze bevinding noemt dezelfde regel."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "1.3.1",
+      "descriptionNl": "Een opsomming is gemaakt met streepjes en regeleinden in één alinea.",
+      "id": "1.3.1-lijst-als-alinea",
+      "ours": {
+        "a": [
+          "LIND-1.3.1-579a"
+        ],
+        "b": [
+          "LIND-1.3.1-579a"
+        ]
+      },
+      "page": "/nieuws/nieuwe-fietsenstalling.html",
+      "reasonNl": {
+        "a": "Onze bevinding noemt de drie regels met streepjes in een alinea met br op P07.",
+        "b": "De drie regels met streepjes staan in een alinea met br op P07. Onze bevinding beschrijft dit."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "1.3.1",
+      "descriptionNl": "Twee tussenkoppen in een dichte uitklapper zijn vette alinea's.",
+      "id": "1.3.1-tussenkop-uitklapper",
+      "ours": {
+        "a": [
+          "LIND-1.3.1-31ab"
+        ],
+        "b": [
+          "LIND-1.3.1-31ab"
+        ]
+      },
+      "page": "/veelgestelde-vragen.html",
+      "reasonNl": {
+        "a": "Onze bevinding noemt \"Restafval en papier\" en \"Grofvuil\" als b-elementen in het derde antwoord op P11.",
+        "b": "Restafval en papier en Grofvuil zijn b-elementen in #antwoord-3 op P11. Onze bevinding noemt beide."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "1.3.1",
+      "descriptionNl": "De kopcellen van de rijen en kolommen zijn gewone cellen met een vette opmaak.",
+      "id": "1.3.1-tabelkoppen",
+      "ours": {
+        "a": [
+          "LIND-1.3.1-6081"
+        ],
+        "b": [
+          "LIND-1.3.1-6081"
+        ]
+      },
+      "page": "/openingstijden.html",
+      "reasonNl": {
+        "a": "Onze bevinding noemt de tabel met openingstijden op P08 waarin alle cellen td zijn.",
+        "b": "De tabel met openingstijden op P08 heeft alleen td-cellen. Onze bevinding beschrijft dit."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "1.3.1",
+      "descriptionNl": "De titels boven de kolommen in de voet zijn spans en geen koppen.",
+      "id": "1.3.1-voetkop",
+      "ours": {
+        "a": [
+          "LIND-1.3.1-220d"
+        ],
+        "b": [
+          "LIND-1.3.1-220d"
+        ]
+      },
+      "page": "alle",
+      "reasonNl": {
+        "a": "Onze bevinding noemt Bezoekadres, Over deze website en Volg ons als span zonder kop in de voet.",
+        "b": "De kolomtitels in de voet zijn span.voet-titel zonder kop. Onze bevinding noemt dezelfde drie titels."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "1.3.1",
+      "descriptionNl": "De groep keuzerondjes heeft geen fieldset en legend; de vraag is een losse alinea.",
+      "id": "1.3.1-keuzegroep",
+      "ours": {
+        "a": [
+          "LIND-1.3.1-cd47"
+        ],
+        "b": [
+          "LIND-1.3.1-cd47"
+        ]
+      },
+      "page": "/contact.html",
+      "reasonNl": {
+        "a": "Onze bevinding noemt de keuzerondjes onder p.groepslabel op P03 zonder fieldset of groep.",
+        "b": "De keuzerondjes op P03 staan niet in een fieldset; de vraag is p.groepslabel. Onze bevinding beschrijft dit."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "1.3.2",
+      "descriptionNl": "Het aantal resultaten en de links onder \"Veel gezocht\" staan in de code na de resultaten en zijn met CSS order naar boven gezet.",
+      "id": "1.3.2-zoekvolgorde",
+      "ours": {
+        "a": [
+          "LIND-1.3.2-af96"
+        ],
+        "b": [
+          "LIND-1.3.2-af96"
+        ]
+      },
+      "page": "/zoeken.html, /zoeken.html?q=afval",
+      "reasonNl": {
+        "a": "Onze bevinding noemt de telling en Veel gezocht die in de code na de resultaten staan en met CSS order naar boven gaan.",
+        "b": "Telling en Veel gezocht staan op P13 in de code na de resultaten en gaan met CSS order naar boven. Onze bevinding beschrijft dit."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "1.3.2",
+      "descriptionNl": "In de code staat eerst de samenvatting, dan de datum en als laatste de kop. Op het scherm is de volgorde omgedraaid.",
+      "id": "1.3.2-kaart-omgekeerd",
+      "ours": {
+        "a": [
+          "LIND-1.3.2-09f7"
+        ],
+        "b": [
+          "LIND-1.3.2-09f7"
+        ]
+      },
+      "page": "/nieuws/",
+      "reasonNl": {
+        "a": "Onze bevinding noemt de nieuwskaarten op P06 met in de code samenvatting, datum en dan pas de kop.",
+        "b": "De nieuwskaarten op P06 hebben de kop als laatste in de code, omgedraaid met column-reverse. Onze bevinding beschrijft dit."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "1.3.3",
+      "descriptionNl": "De instructie verwijst naar \"de ronde groene knop rechtsonder\" en noemt de naam van de knop niet.",
+      "id": "1.3.3-ronde-knop",
+      "ours": {
+        "a": [
+          "LIND-1.3.3-6f0e"
+        ],
+        "b": [
+          "LIND-1.3.3-6f0e"
+        ]
+      },
+      "page": "/contact.html",
+      "reasonNl": {
+        "a": "Onze bevinding noemt de zin over \"de ronde groene knop rechtsonder\" op P03 zonder naam van de knop.",
+        "b": "De zin over de ronde groene knop rechtsonder op P03 noemt de naam van de knop niet. Onze bevinding beschrijft dit."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "1.3.4",
+      "descriptionNl": "Op een scherm in staande stand tot 900 pixels breed is de tabel verborgen en staat er dat de bezoeker het toestel moet draaien.",
+      "id": "1.3.4-draai",
+      "ours": {
+        "a": [
+          "LIND-1.3.4-30e4"
+        ],
+        "b": [
+          "LIND-1.3.4-30e4"
+        ]
+      },
+      "page": "/openingstijden.html",
+      "reasonNl": {
+        "a": "Onze bevinding noemt de verborgen tabel en de vraag om het toestel te draaien in een staand venster op P08.",
+        "b": "In staande stand is de tabel op P08 verborgen met een melding om te draaien. Onze bevinding beschrijft dit."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "1.3.5",
+      "descriptionNl": "De velden voor persoonsgegevens hebben geen autocomplete-attribuut.",
+      "id": "1.3.5-autocomplete",
+      "ours": {
+        "a": [
+          "LIND-1.3.5-12d9",
+          "LIND-1.3.5-5e01",
+          "LIND-1.3.5-dd72"
+        ],
+        "b": [
+          "LIND-1.3.5-12d9",
+          "LIND-1.3.5-5e01",
+          "LIND-1.3.5-dd72"
+        ]
+      },
+      "page": "/contact.html",
+      "reasonNl": {
+        "a": "Drie bevindingen noemen samen de velden naam, e-mailadres en telefoonnummer op P03 zonder autocomplete.",
+        "b": "Naam, e-mailadres en telefoonnummer op P03 hebben geen autocomplete. Onze drie bevindingen noemen elk een van deze velden."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "1.4.1",
+      "descriptionNl": "Links in de tekst zijn niet onderstreept en verschillen alleen in kleur van de tekst eromheen (donkerblauw naast bijna zwart, contrast onder 3 op 1).",
+      "id": "1.4.1-tekstlink",
+      "ours": {
+        "a": [
+          "LIND-1.4.1-0375"
+        ],
+        "b": [
+          "LIND-1.4.1-0375"
+        ]
+      },
+      "page": "alle",
+      "reasonNl": {
+        "a": "Onze bevinding noemt links in lopende tekst die niet onderstreept zijn en 1,7 op 1 tegen de tekst hebben.",
+        "b": "Links in lopende tekst zijn alleen anders van kleur, 1,7 op 1, zonder onderstreping. Onze bevinding beschrijft dit op meerdere pagina's."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "1.4.1",
+      "descriptionNl": "Verplichte velden zijn alleen aan de rode kleur van het label te herkennen.",
+      "id": "1.4.1-verplicht",
+      "ours": {
+        "a": [
+          "LIND-1.4.1-1d5c",
+          "LIND-1.3.1-39d6",
+          "LIND-1.3.3-c789"
+        ],
+        "b": [
+          "LIND-1.4.1-1d5c",
+          "LIND-1.3.3-c789",
+          "LIND-1.3.1-39d6"
+        ]
+      },
+      "page": "/contact.html",
+      "reasonNl": {
+        "a": "Drie bevindingen noemen dezelfde rode labels Naam en Uw bericht op P03 als enige teken dat een veld verplicht is.",
+        "b": "Verplichte velden op P03 zijn alleen aan het rode label te herkennen. Drie bevindingen van ons, onder 1.4.1, 1.3.3 en 1.3.1, beschrijven dit gebrek."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "1.4.2",
+      "descriptionNl": "Bij het openen van de startpagina begint een melodie die blijft herhalen. Er is geen knop om het geluid te stoppen.",
+      "id": "1.4.2-melodie",
+      "ours": {
+        "a": [
+          "LIND-1.4.2-5453"
+        ],
+        "b": [
+          "LIND-1.4.2-5453"
+        ]
+      },
+      "page": "/",
+      "reasonNl": {
+        "a": "Onze bevinding noemt het verborgen audio-element met autoplay en loop op P01, zonder knop om te stoppen.",
+        "b": "Het verborgen audio-element op P01 speelt vanzelf en herhaalt, zonder knop om te stoppen. Onze bevinding beschrijft dit."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "1.4.3",
+      "descriptionNl": "De datum is lichtgrijs op wit (ongeveer 2,6 op 1).",
+      "id": "1.4.3-datum",
+      "ours": {
+        "a": [
+          "LIND-1.4.3-7322"
+        ],
+        "b": [
+          "LIND-1.4.3-7322"
+        ]
+      },
+      "page": "alle",
+      "reasonNl": {
+        "a": "Onze bevinding noemt de grijze datums #a0a0a0 op wit, 2,6 op 1, bij het nieuws.",
+        "b": "De datums bij het nieuws zijn #a0a0a0 op wit, 2,6 op 1. Onze bevinding beschrijft dit."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "1.4.3",
+      "descriptionNl": "Witte tekst staat direct op de foto. Het linkerdeel van de foto is licht, daar is het contrast te laag.",
+      "id": "1.4.3-tekst-op-foto",
+      "ours": {
+        "a": [
+          "LIND-1.4.3-2754",
+          "LIND-1.4.3-157b"
+        ],
+        "b": [
+          "LIND-1.4.3-2754",
+          "LIND-1.4.3-157b"
+        ]
+      },
+      "page": "/",
+      "reasonNl": {
+        "a": "Twee bevindingen noemen de witte kop en de witte inleiding op het lichte deel van de foto op P01.",
+        "b": "Witte kop en inleiding staan op het lichte deel van de foto op P01. Onze twee bevindingen noemen de kop en de inleiding."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "1.4.3",
+      "descriptionNl": "Bij aanwijzen met de muis wordt een menulink grijs op lichtgrijs (ongeveer 2 op 1).",
+      "id": "1.4.3-menu-aanwijzen",
+      "ours": {
+        "a": [
+          "LIND-1.4.3-3e50"
+        ],
+        "b": [
+          "LIND-1.4.3-3e50"
+        ]
+      },
+      "page": "alle",
+      "reasonNl": {
+        "a": "Onze bevinding noemt menulinks die bij aanwijzen grijs op lichtgrijs worden, 2 op 1.",
+        "b": "Bij aanwijzen worden menulinks grijs op lichtgrijs, 2 op 1. Onze bevinding beschrijft dit."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "1.4.4",
+      "descriptionNl": "De pagina verbiedt inzoomen op een aanraakscherm (user-scalable=no, maximum-scale=1).",
+      "id": "1.4.4-zoom-uit",
+      "ours": {
+        "a": [
+          "LIND-1.4.4-8591"
+        ],
+        "b": [
+          "LIND-1.4.4-8591"
+        ]
+      },
+      "page": "alle",
+      "reasonNl": {
+        "a": "Onze bevinding noemt maximum-scale=1 en user-scalable=no in het viewport-element.",
+        "b": "De viewport heeft user-scalable=no en maximum-scale=1. Onze bevinding beschrijft dit op 13 pagina's."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "1.4.4",
+      "descriptionNl": "De alinea heeft een vaste hoogte. Bij 200% vergroten valt het einde van de tekst weg.",
+      "id": "1.4.4-inleiding",
+      "ours": {
+        "a": [
+          "LIND-1.4.4-1b94"
+        ],
+        "b": [
+          "LIND-1.4.4-1b94"
+        ]
+      },
+      "page": "/producten.html",
+      "reasonNl": {
+        "a": "Onze bevinding noemt de inleiding op P09 met vaste hoogte, waarvan de tekst op 200% wegvalt.",
+        "b": "De inleiding op P09 heeft een vaste hoogte en valt bij 200% weg. Onze bevinding beschrijft dit."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "1.4.5",
+      "descriptionNl": "De aankondiging is een afbeelding van tekst. Het alt geeft de tekst wel weer.",
+      "id": "1.4.5-zomerfeest",
+      "ours": {
+        "a": [
+          "LIND-1.4.5-bca8"
+        ],
+        "b": [
+          "LIND-1.4.5-bca8"
+        ]
+      },
+      "page": "/",
+      "reasonNl": {
+        "a": "Onze bevinding noemt de afbeelding zomerfeest.svg op P01 als afbeelding van tekst.",
+        "b": "De aankondiging van het zomerfeest op P01 is een afbeelding van tekst. Onze bevinding noemt dezelfde afbeelding."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "1.4.10",
+      "descriptionNl": "Op 320 pixels breed staan de knoppen op één rij en valt \"Weigeren\" buiten beeld.",
+      "id": "1.4.10-weigerknop",
+      "ours": {
+        "a": [
+          "LIND-1.4.10-ebc7"
+        ],
+        "b": [
+          "LIND-1.4.10-ebc7"
+        ]
+      },
+      "page": "alle",
+      "reasonNl": {
+        "a": "Onze bevinding noemt de knoppenrij van de cookiemelding op 320 pixels, waarin Weigeren buiten beeld valt.",
+        "b": "Op 320 pixels valt Weigeren in de cookiemelding buiten beeld. Onze bevinding beschrijft dit."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "1.4.10",
+      "descriptionNl": "Het rooster heeft een vaste breedte van 720 pixels. Op 320 pixels breed moet de bezoeker opzij schuiven.",
+      "id": "1.4.10-rooster",
+      "ours": {
+        "a": [
+          "LIND-1.4.10-f899"
+        ],
+        "b": [
+          "LIND-1.4.10-f899"
+        ]
+      },
+      "page": "/producten.html",
+      "reasonNl": {
+        "a": "Onze bevinding noemt de productkaarten in vaste kolommen van samen 720 pixels op P09, met opzij schuiven op 320 pixels.",
+        "b": "Het rooster met productkaarten op P09 is 720 pixels breed en schuift op 320 pixels opzij. Onze bevinding beschrijft dit."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "1.4.11",
+      "descriptionNl": "De rand van de invoervelden is lichtgrijs op wit (ongeveer 1,4 op 1).",
+      "id": "1.4.11-veldrand",
+      "ours": {
+        "a": [
+          "LIND-1.4.11-bc48"
+        ],
+        "b": [
+          "LIND-1.4.11-bc48"
+        ]
+      },
+      "page": "alle",
+      "reasonNl": {
+        "a": "Onze bevinding noemt de rand #d9d9d9 van invoervelden op wit, 1,4 op 1.",
+        "b": "De rand van invoervelden is #d9d9d9 op wit, 1,4 op 1. Onze bevinding beschrijft dit."
+      }
+    },
+    {
+      "a": "gemist-bewijs-beoordeling",
+      "agreed": "gemist-bewijs-beoordeling",
+      "agreedCoarse": "gemist",
+      "b": "gemist-bewijs-beoordeling",
+      "criterion": "1.4.12",
+      "descriptionNl": "De tegels hebben een vaste hoogte. Met ruimere tekstafstand past de tekst niet meer en valt de laatste regel weg.",
+      "id": "1.4.12-tegel",
+      "ours": {
+        "a": [],
+        "b": []
+      },
+      "page": "/",
+      "reasonNl": {
+        "a": "Het dossier meldt bij ruimere tekstafstand afgekapte tekst in de vier tegels onder Snel regelen op P01. Het oordeel vond de tekst nog leesbaar en keurde niet af.",
+        "b": "Het dossier noemt afgekapte tekst in de vier tegels onder Snel regelen op P01. Het oordeel zag dat de tweede regel de onderrand raakt, maar keurde niet af."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "1.4.13",
+      "descriptionNl": "De uitleg verschijnt bij aanwijzen of focus. Hij is niet met Escape te sluiten en verdwijnt als de muis naar de uitleg zelf gaat.",
+      "id": "1.4.13-uitleg",
+      "ours": {
+        "a": [
+          "LIND-1.4.13-5759",
+          "LIND-1.4.13-6cf0"
+        ],
+        "b": [
+          "LIND-1.4.13-5759",
+          "LIND-1.4.13-6cf0"
+        ]
+      },
+      "page": "/openingstijden.html",
+      "reasonNl": {
+        "a": "Twee bevindingen noemen de uitleg bij het rondje i op P08: niet weg met Escape en weg als de muis erop komt.",
+        "b": "De uitleg bij het pictogram i op P08 gaat niet weg met Escape en verdwijnt als de muis erop komt. Onze twee bevindingen noemen elk een deel."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "2.1.1",
+      "descriptionNl": "Een kaart opent het bericht bij een klik, maar is geen link. De klik wordt afgehandeld op de lijst eromheen. Met het toetsenbord is het bericht niet te openen.",
+      "id": "2.1.1-nieuwskaart",
+      "ours": {
+        "a": [
+          "LIND-2.1.1-98e5",
+          "LIND-4.1.2-e33d"
+        ],
+        "b": [
+          "LIND-2.1.1-98e5",
+          "LIND-4.1.2-e33d"
+        ]
+      },
+      "page": "/nieuws/",
+      "reasonNl": {
+        "a": "Twee bevindingen noemen de nieuwskaarten op P06: div met data-doel, geen link, geen focus.",
+        "b": "De nieuwskaarten op P06 zijn div.kaart met data-doel, geen link en zonder focus. Onze bevindingen onder 2.1.1 en 4.1.2 beschrijven dit."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "2.1.1",
+      "descriptionNl": "Een kaart opent een venster met uitleg bij een klik, maar is geen knop en krijgt geen focus.",
+      "id": "2.1.1-productkaart",
+      "ours": {
+        "a": [
+          "LIND-2.1.1-98e5",
+          "LIND-4.1.2-bc00"
+        ],
+        "b": [
+          "LIND-2.1.1-98e5",
+          "LIND-4.1.2-bc00"
+        ]
+      },
+      "page": "/producten.html",
+      "reasonNl": {
+        "a": "Twee bevindingen noemen de productkaarten op P09 die een venster openen, maar geen knop zijn en geen focus krijgen.",
+        "b": "De productkaarten op P09 openen een venster bij klik maar krijgen geen focus. Onze bevindingen onder 2.1.1 en 4.1.2 beschrijven dit."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "2.1.1",
+      "descriptionNl": "Het echte selectievakje is verborgen met display:none en vervangen door een getekend vakje. Het is niet met Tab te bereiken.",
+      "id": "2.1.1-vinkje",
+      "ours": {
+        "a": [
+          "LIND-2.1.1-3bcc",
+          "LIND-4.1.2-d147"
+        ],
+        "b": [
+          "LIND-2.1.1-3bcc",
+          "LIND-4.1.2-d147"
+        ]
+      },
+      "page": "/contact.html",
+      "reasonNl": {
+        "a": "Twee bevindingen noemen het selectievakje voor een kopie op P03, verborgen met display none en niet met Tab te bereiken.",
+        "b": "Het selectievakje voor een kopie op P03 is verborgen met display:none en krijgt geen focus. Onze bevindingen onder 2.1.1 en 4.1.2 beschrijven dit."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "2.1.1",
+      "descriptionNl": "De link heeft geen href en werkt alleen met de muis.",
+      "id": "2.1.1-naar-boven",
+      "ours": {
+        "a": [
+          "LIND-2.1.1-08a2",
+          "LIND-4.1.2-6f22"
+        ],
+        "b": [
+          "LIND-2.1.1-08a2",
+          "LIND-4.1.2-6f22"
+        ]
+      },
+      "page": "alle",
+      "reasonNl": {
+        "a": "Twee bevindingen noemen Naar boven in de voet als a zonder href, alleen met de muis te gebruiken.",
+        "b": "Naar boven in de voet is een a zonder href en werkt alleen met de muis. Onze bevindingen onder 2.1.1 en 4.1.2 noemen dit element."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "2.1.1",
+      "descriptionNl": "Het kruisje om de chat te sluiten is een div die alleen op een klik reageert.",
+      "id": "2.1.1-chat-sluit",
+      "ours": {
+        "a": [
+          "LIND-4.1.2-3903"
+        ],
+        "b": [
+          "LIND-4.1.2-3903"
+        ]
+      },
+      "page": "alle",
+      "reasonNl": {
+        "a": "Onze bevinding noemt het kruisje in het chatvenster als div die alleen op een klik reageert.",
+        "b": "Het kruisje in het chatvenster is een div die alleen op een klik reageert. Onze bevinding onder 4.1.2 noemt dit kruisje."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "2.1.2",
+      "descriptionNl": "Staat de focus in het invoerveld van de chat, dan doet Tab niets meer. Escape sluit de chat niet.",
+      "id": "2.1.2-chat",
+      "ours": {
+        "a": [
+          "LIND-2.1.2-f5c5"
+        ],
+        "b": [
+          "LIND-2.1.2-f5c5"
+        ]
+      },
+      "page": "alle",
+      "reasonNl": {
+        "a": "Onze bevinding noemt dat Tab en Escape de focus in het invoerveld van de chat houden.",
+        "b": "In het chatveld houden Tab en Escape de focus vast. Onze bevinding beschrijft dit."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "2.1.4",
+      "descriptionNl": "De letter z zet de focus in het zoekveld en de letter c opent de chat. De sneltoetsen zijn niet uit te zetten of te wijzigen.",
+      "id": "2.1.4-sneltoets",
+      "ours": {
+        "a": [
+          "LIND-2.1.4-45db"
+        ],
+        "b": [
+          "LIND-2.1.4-45db"
+        ]
+      },
+      "page": "alle",
+      "reasonNl": {
+        "a": "Onze bevinding noemt dat c de chat opent en z de focus in het zoekveld zet, zonder instelling om dat uit te zetten.",
+        "b": "De letters z en c starten functies op elke pagina, zonder instelling. Onze bevinding beschrijft dit."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "2.2.1",
+      "descriptionNl": "Na tien minuten gaat de pagina vanzelf terug naar de startpagina. De tijd is niet te verlengen of uit te zetten.",
+      "id": "2.2.1-tijdslimiet",
+      "ours": {
+        "a": [
+          "LIND-2.2.1-f914"
+        ],
+        "b": [
+          "LIND-2.2.1-f914"
+        ]
+      },
+      "page": "/contact.html",
+      "reasonNl": {
+        "a": "Onze bevinding noemt de timer van 600 seconden op P03 die naar de startpagina stuurt, zonder verlengen.",
+        "b": "Na tien minuten gaat P03 vanzelf naar de startpagina, zonder verlengen. Onze bevinding beschrijft dit."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "2.2.2",
+      "descriptionNl": "Het blok wisselt elke vier seconden vanzelf van bericht. Er is geen knop om het te pauzeren.",
+      "id": "2.2.2-uitgelicht",
+      "ours": {
+        "a": [
+          "LIND-2.2.2-facb"
+        ],
+        "b": [
+          "LIND-2.2.2-facb"
+        ]
+      },
+      "page": "/",
+      "reasonNl": {
+        "a": "Onze bevinding noemt het blok Uitgelicht op P01 dat vanzelf wisselt, zonder pauzeknop.",
+        "b": "Het blok Uitgelicht op P01 wisselt elke vier seconden, zonder pauzeknop. Onze bevinding beschrijft dit."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "2.4.1",
+      "descriptionNl": "De skiplink wijst naar #inhoud, maar dat id bestaat niet. Er gebeurt niets bij activeren.",
+      "id": "2.4.1-skiplink",
+      "ours": {
+        "a": [
+          "LIND-2.4.1-1ce6"
+        ],
+        "b": [
+          "LIND-2.4.1-1ce6"
+        ]
+      },
+      "page": "alle",
+      "reasonNl": {
+        "a": "Onze bevinding noemt de skiplink naar #inhoud, terwijl geen element dat id heeft.",
+        "b": "De skiplink wijst naar #inhoud, dat niet bestaat. Onze bevinding beschrijft dit."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "2.4.2",
+      "descriptionNl": "De titel is \"Home - Gemeente Lindewaard - Gemeente Lindewaard % % %\": de naam staat er dubbel en er staan resten van een sjabloon in.",
+      "id": "2.4.2-sjabloonrest",
+      "ours": {
+        "a": [
+          "LIND-2.4.2-acbc"
+        ],
+        "b": [
+          "LIND-2.4.2-acbc"
+        ]
+      },
+      "page": "/",
+      "reasonNl": {
+        "a": "Onze bevinding noemt de titel met de naam dubbel en drie procenttekens op P01.",
+        "b": "De titel van P01 heeft de naam dubbel en drie procenttekens. Onze bevinding beschrijft dit."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "2.4.2",
+      "descriptionNl": "Beide pagina's hebben alleen \"Gemeente Lindewaard\" als titel.",
+      "id": "2.4.2-zelfde-titel",
+      "ours": {
+        "a": [
+          "LIND-2.4.2-bdfb"
+        ],
+        "b": [
+          "LIND-2.4.2-bdfb"
+        ]
+      },
+      "page": "/veelgestelde-vragen.html, /afval.html",
+      "reasonNl": {
+        "a": "Onze bevinding noemt P02 en P11 die allebei alleen \"Gemeente Lindewaard\" als titel hebben.",
+        "b": "P02 en P11 hebben alleen Gemeente Lindewaard als titel. Onze bevinding noemt beide pagina's."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "2.4.3",
+      "descriptionNl": "De velden hebben tabindex 1, 3 en 2. De focus begint midden op de pagina en gaat van naam naar telefoonnummer naar e-mailadres.",
+      "id": "2.4.3-tabindex",
+      "ours": {
+        "a": [
+          "LIND-2.4.3-9147"
+        ],
+        "b": [
+          "LIND-2.4.3-9147"
+        ]
+      },
+      "page": "/contact.html",
+      "reasonNl": {
+        "a": "Onze bevinding noemt de positieve tabindex op naam, telefoonnummer en e-mailadres op P03 en de verkeerde volgorde.",
+        "b": "De velden op P03 hebben een positieve tabindex; Tab gaat van naam naar telefoon naar e-mail. Onze bevinding beschrijft dit."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "2.4.3",
+      "descriptionNl": "Het menu staat in de code na de voet. Na het openen moet de bezoeker met Tab eerst door de hele pagina voordat de focus in het menu komt.",
+      "id": "2.4.3-mobiel-menu",
+      "ours": {
+        "a": [
+          "LIND-2.4.3-504f"
+        ],
+        "b": [
+          "LIND-2.4.3-504f"
+        ]
+      },
+      "page": "alle",
+      "reasonNl": {
+        "a": "Onze bevinding noemt dat het menu op een smal scherm pas na de voet in de Tab-volgorde komt.",
+        "b": "Het menu op een smal scherm staat na de voet; de focus komt er pas na de hele pagina. Onze bevinding beschrijft dit."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "2.4.4",
+      "descriptionNl": "De link naar de parkeervergunning heet \"Klik hier\" en staat alleen in een eigen alinea.",
+      "id": "2.4.4-klik-hier",
+      "ours": {
+        "a": [
+          "LIND-2.4.4-860a"
+        ],
+        "b": [
+          "LIND-2.4.4-860a"
+        ]
+      },
+      "page": "/nieuws/nieuwe-fietsenstalling.html",
+      "reasonNl": {
+        "a": "Onze bevinding noemt de link \"Klik hier\" naar /vergunning.html in een eigen alinea op P07.",
+        "b": "De link Klik hier naar /vergunning.html staat in een eigen alinea op P07. Onze bevinding beschrijft dit."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "2.4.4",
+      "descriptionNl": "De links bestaan alleen uit een pictogram en hebben geen naam.",
+      "id": "2.4.4-sociaal",
+      "ours": {
+        "a": [
+          "LIND-2.4.4-9d17",
+          "LIND-4.1.2-4b02",
+          "LIND-1.1.1-c54f"
+        ],
+        "b": [
+          "LIND-2.4.4-9d17",
+          "LIND-4.1.2-4b02",
+          "LIND-1.1.1-c54f"
+        ]
+      },
+      "page": "alle",
+      "reasonNl": {
+        "a": "Drie bevindingen noemen de twee pictogramlinks onder Volg ons in de voet zonder naam.",
+        "b": "De twee pictogramlinks onder Volg ons hebben geen naam. Onze bevindingen onder 2.4.4, 4.1.2 en 1.1.1 noemen deze links."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "2.4.6",
+      "descriptionNl": "Twee verschillende onderdelen hebben allebei de kop \"Informatie\".",
+      "id": "2.4.6-informatie",
+      "ours": {
+        "a": [
+          "LIND-2.4.6-8ef1"
+        ],
+        "b": [
+          "LIND-2.4.6-8ef1"
+        ]
+      },
+      "page": "/nieuws/nieuwe-fietsenstalling.html",
+      "reasonNl": {
+        "a": "Onze bevinding noemt de twee koppen \"Informatie\" boven video en geluidsfragment op P07.",
+        "b": "Twee koppen Informatie boven video en geluidsfragment op P07. Onze bevinding beschrijft dit."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "2.4.7",
+      "descriptionNl": "De focusrand is weggehaald (outline: none) en er is niets voor in de plaats gekomen.",
+      "id": "2.4.7-menu",
+      "ours": {
+        "a": [
+          "LIND-2.4.7-0111",
+          "LIND-2.4.7-9b42"
+        ],
+        "b": [
+          "LIND-2.4.7-0111",
+          "LIND-2.4.7-9b42"
+        ]
+      },
+      "page": "alle",
+      "reasonNl": {
+        "a": "Twee bevindingen noemen de links in het hoofdmenu en in het menu op een smal scherm zonder zichtbare focus.",
+        "b": "De menulinks tonen geen focus, breed en in het menu op een smal scherm. Onze twee bevindingen noemen beide menu's."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "2.4.11",
+      "descriptionNl": "De cookiemelding ligt als vaste laag over de onderkant van de pagina en houdt de focus niet vast. Een element dat focus krijgt onderaan het scherm ligt helemaal achter de melding. De melding zelf komt pas als laatste in de Tab-volgorde.",
+      "id": "2.4.11-melding",
+      "ours": {
+        "a": [
+          "LIND-2.4.11-f5a4",
+          "LIND-2.4.3-e622"
+        ],
+        "b": [
+          "LIND-2.4.11-f5a4",
+          "LIND-2.4.3-e622"
+        ]
+      },
+      "page": "alle",
+      "reasonNl": {
+        "a": "Twee bevindingen noemen de cookiemelding: ze bedekt elementen met focus helemaal en haar knoppen komen als laatste in de Tab-volgorde.",
+        "b": "De cookiemelding bedekt elementen met focus en komt als laatste in de Tab-volgorde. Onze bevindingen onder 2.4.11 en 2.4.3 beschrijven beide delen."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "2.5.1",
+      "descriptionNl": "De volgende foto is alleen te bereiken door te vegen. Er zijn geen knoppen.",
+      "id": "2.5.1-galerij",
+      "ours": {
+        "a": [
+          "LIND-2.5.1-7a69",
+          "LIND-2.1.1-9000"
+        ],
+        "b": [
+          "LIND-2.5.1-7a69",
+          "LIND-2.1.1-9000"
+        ]
+      },
+      "page": "/nieuws/nieuwe-fietsenstalling.html",
+      "reasonNl": {
+        "a": "Twee bevindingen noemen de fotoserie op P07 die alleen door vegen wisselt, zonder knoppen.",
+        "b": "De fotoserie op P07 werkt alleen met vegen, zonder knoppen. Onze bevindingen onder 2.5.1 en 2.1.1 beschrijven dit."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "2.5.2",
+      "descriptionNl": "De knoppen werken al bij het indrukken van de muisknop. Wegschuiven en loslaten maakt het niet ongedaan.",
+      "id": "2.5.2-feedback",
+      "ours": {
+        "a": [
+          "LIND-2.5.2-b13b"
+        ],
+        "b": [
+          "LIND-2.5.2-b13b"
+        ]
+      },
+      "page": "/veelgestelde-vragen.html",
+      "reasonNl": {
+        "a": "Onze bevinding noemt Ja en Nee op P11 die al bij indrukken werken, ook als je wegschuift.",
+        "b": "Ja en Nee op P11 werken al bij indrukken en zijn niet terug te nemen. Onze bevinding beschrijft dit."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "2.5.3",
+      "descriptionNl": "Op de knop staat \"Zoeken\", de toegankelijke naam is \"Opdracht versturen\".",
+      "id": "2.5.3-zoekknop",
+      "ours": {
+        "a": [
+          "LIND-2.5.3-9f4d"
+        ],
+        "b": [
+          "LIND-2.5.3-9f4d"
+        ]
+      },
+      "page": "alle",
+      "reasonNl": {
+        "a": "Onze bevinding noemt de zoekknop met tekst \"Zoeken\" en naam \"Opdracht versturen\".",
+        "b": "De zoekknop toont Zoeken maar heet Opdracht versturen. Onze bevinding beschrijft dit."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "2.5.7",
+      "descriptionNl": "De schuif werkt alleen door het bolletje te slepen. Klikken op de balk doet niets en het bolletje krijgt geen focus.",
+      "id": "2.5.7-schuif",
+      "ours": {
+        "a": [
+          "LIND-2.5.7-526c",
+          "LIND-2.1.1-4d08",
+          "LIND-4.1.2-4cf1"
+        ],
+        "b": [
+          "LIND-2.5.7-526c",
+          "LIND-2.1.1-4d08",
+          "LIND-4.1.2-4cf1"
+        ]
+      },
+      "page": "/producten.html",
+      "reasonNl": {
+        "a": "Drie bevindingen noemen de prijsschuif op P09: alleen slepen werkt, geen focus en geen rol of waarde.",
+        "b": "De prijsschuif op P09 werkt alleen met slepen en krijgt geen focus. Onze bevindingen onder 2.5.7, 2.1.1 en 4.1.2 noemen deze schuif."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "2.5.8",
+      "descriptionNl": "De links zijn 18 bij 18 pixels en staan 3 pixels uit elkaar.",
+      "id": "2.5.8-paginering",
+      "ours": {
+        "a": [
+          "LIND-2.5.8-ff88"
+        ],
+        "b": [
+          "LIND-2.5.8-ff88"
+        ]
+      },
+      "page": "/nieuws/",
+      "reasonNl": {
+        "a": "Onze bevinding noemt de paginanummers op P06, klein en 3 pixels uit elkaar.",
+        "b": "De paginanummers op P06 zijn klein en staan 3 pixels uit elkaar. Onze bevinding beschrijft dit."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "3.1.1",
+      "descriptionNl": "De pagina heeft geen taalcode.",
+      "id": "3.1.1-taal",
+      "ours": {
+        "a": [
+          "LIND-3.1.1-01fd",
+          "LIND-3.1.1-6f14"
+        ],
+        "b": [
+          "LIND-3.1.1-01fd",
+          "LIND-3.1.1-6f14"
+        ]
+      },
+      "page": "alle",
+      "reasonNl": {
+        "a": "Twee bevindingen noemen het html-element zonder lang op de foutpagina P04 en het nieuwsbericht P07.",
+        "b": "Het nieuwsbericht P07 en de foutpagina P04 hebben geen lang-attribuut. Onze twee bevindingen noemen deze pagina's."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "3.1.2",
+      "descriptionNl": "Een Engelse zin heeft geen taalcode.",
+      "id": "3.1.2-engels",
+      "ours": {
+        "a": [
+          "LIND-3.1.2-ad88"
+        ],
+        "b": [
+          "LIND-3.1.2-ad88"
+        ]
+      },
+      "page": "/nieuws/nieuwe-fietsenstalling.html",
+      "reasonNl": {
+        "a": "Onze bevinding noemt het Engelse citaat van de jury op P07 zonder lang-attribuut.",
+        "b": "Het Engelse citaat op P07 heeft geen taalcode. Onze bevinding beschrijft dit."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "3.2.1",
+      "descriptionNl": "Zodra de link focus krijgt, haalt een script de focus weer weg. De link is daardoor niet met het toetsenbord te gebruiken.",
+      "id": "3.2.1-voetlink",
+      "ours": {
+        "a": [
+          "LIND-3.2.1-075c",
+          "LIND-2.4.7-f2b0"
+        ],
+        "b": [
+          "LIND-3.2.1-075c",
+          "LIND-2.4.7-f2b0"
+        ]
+      },
+      "page": "alle",
+      "reasonNl": {
+        "a": "Twee bevindingen noemen de link Openingstijden in de voet met onfocus=\"this.blur()\".",
+        "b": "De link Openingstijden in de voet haalt de focus weg met onfocus blur. Onze bevindingen onder 3.2.1 en 2.4.7 beschrijven dit."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "3.2.2",
+      "descriptionNl": "Bij het kiezen van een wijk laadt de pagina direct opnieuw, zonder waarschuwing en zonder knop.",
+      "id": "3.2.2-wijk",
+      "ours": {
+        "a": [
+          "LIND-3.2.2-cfa6"
+        ],
+        "b": [
+          "LIND-3.2.2-cfa6"
+        ]
+      },
+      "page": "/afval.html",
+      "reasonNl": {
+        "a": "Onze bevinding noemt de keuzelijst Uw wijk op P02 die direct een nieuwe pagina laadt, zonder knop.",
+        "b": "Een keuze in Uw wijk op P02 laadt direct een andere pagina. Onze bevinding beschrijft dit."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "3.2.3",
+      "descriptionNl": "Op de contactpagina staat \"Contact\" vooraan in het menu. Op alle andere pagina's staat het achteraan.",
+      "id": "3.2.3-menuvolgorde",
+      "ours": {
+        "a": [
+          "LIND-3.2.3-04f9",
+          "LIND-3.2.6-2f1b"
+        ],
+        "b": [
+          "LIND-3.2.3-04f9",
+          "LIND-3.2.6-2f1b"
+        ]
+      },
+      "page": "/contact.html",
+      "reasonNl": {
+        "a": "Twee bevindingen noemen \"Contact\" vooraan in het hoofdmenu op P03 en achteraan op andere pagina's.",
+        "b": "Op P03 staat Contact vooraan in het menu, elders achteraan. Onze bevindingen onder 3.2.3 en 3.2.6 beschrijven dit."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "3.2.4",
+      "descriptionNl": "De knop heet hier \"Vind\". Dezelfde functie heet in de kop en op de pagina voor een onbekend adres \"Zoeken\".",
+      "id": "3.2.4-zoekknop",
+      "ours": {
+        "a": [
+          "LIND-3.2.4-ecdc"
+        ],
+        "b": [
+          "LIND-3.2.4-ecdc"
+        ]
+      },
+      "page": "/zoeken.html",
+      "reasonNl": {
+        "a": "Onze bevinding noemt de knop \"Vind\" op P13 tegenover \"Zoeken\" op P04.",
+        "b": "De knop van het zoekformulier heet op P13 Vind en op P04 Zoeken. Onze bevinding beschrijft dit."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "3.2.6",
+      "descriptionNl": "Op de nieuwspagina's staat het hulpblok in de kop, vóór het menu. Op alle andere pagina's staat het in de voet.",
+      "id": "3.2.6-hulp",
+      "ours": {
+        "a": [
+          "LIND-3.2.6-abb3",
+          "LIND-3.2.3-d291"
+        ],
+        "b": [
+          "LIND-3.2.6-abb3",
+          "LIND-3.2.3-d291"
+        ]
+      },
+      "page": "alle",
+      "reasonNl": {
+        "a": "Twee bevindingen noemen het hulpblok dat op P06 en P07 in de kop staat en op andere pagina's in de voet.",
+        "b": "Op de nieuwspagina's staat het hulpblok in de kop, elders in de voet. Onze bevindingen onder 3.2.6 en 3.2.3 beschrijven dit."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "3.3.1",
+      "descriptionNl": "Een verplicht veld dat leeg is, krijgt alleen een rode rand. Er staat geen tekst die zegt wat er mis is.",
+      "id": "3.3.1-rode-rand",
+      "ours": {
+        "a": [
+          "LIND-3.3.1-3956",
+          "LIND-3.3.3-85d4"
+        ],
+        "b": [
+          "LIND-3.3.1-3956",
+          "LIND-3.3.3-85d4"
+        ]
+      },
+      "page": "/contact.html",
+      "reasonNl": {
+        "a": "Twee bevindingen noemen de lege verplichte velden op P03 die na versturen alleen een rode rand krijgen, zonder tekst.",
+        "b": "Lege verplichte velden op P03 krijgen alleen een rode rand, zonder tekst. Onze bevindingen onder 3.3.1 en 3.3.3 beschrijven dit."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "3.3.2",
+      "descriptionNl": "De velden hebben geen label, alleen een voorbeeldtekst in het veld die verdwijnt bij typen.",
+      "id": "3.3.2-plaatshouder",
+      "ours": {
+        "a": [
+          "LIND-3.3.2-b94c",
+          "LIND-3.3.2-4e42"
+        ],
+        "b": [
+          "LIND-3.3.2-b94c",
+          "LIND-3.3.2-4e42"
+        ]
+      },
+      "page": "/contact.html",
+      "reasonNl": {
+        "a": "Twee bevindingen noemen e-mailadres en telefoonnummer op P03 met alleen een voorbeeldtekst en geen label.",
+        "b": "E-mailadres en Telefoonnummer op P03 hebben alleen een voorbeeldtekst. Onze twee bevindingen noemen elk een veld."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "3.3.3",
+      "descriptionNl": "Bij een datum in de verkeerde vorm staat er alleen \"Ongeldige invoer.\" De gewenste vorm wordt nergens genoemd.",
+      "id": "3.3.3-datum",
+      "ours": {
+        "a": [
+          "LIND-3.3.3-19b5",
+          "LIND-3.3.2-18f3"
+        ],
+        "b": [
+          "LIND-3.3.3-19b5",
+          "LIND-3.3.2-18f3"
+        ]
+      },
+      "page": "/contact.html",
+      "reasonNl": {
+        "a": "Twee bevindingen noemen het datumveld op P03: alleen \"Ongeldige invoer.\" en nergens de juiste vorm.",
+        "b": "Bij een foute datum staat alleen Ongeldige invoer, zonder de vorm. Onze bevindingen onder 3.3.3 en 3.3.2 beschrijven dit."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "3.3.4",
+      "descriptionNl": "De aanvraag met betaalverplichting wordt na stap 2 direct verstuurd. Er is geen stap om de gegevens te controleren of te wijzigen.",
+      "id": "3.3.4-controle",
+      "ours": {
+        "a": [
+          "LIND-3.3.4-9ddf"
+        ],
+        "b": [
+          "LIND-3.3.4-9ddf"
+        ]
+      },
+      "page": "/vergunning.html",
+      "reasonNl": {
+        "a": "Onze bevinding noemt dat de aanvraag op P12 na stap 2 direct verstuurt, zonder overzicht of controle.",
+        "b": "De aanvraag op P12 gaat na stap 2 direct door, zonder controle of overzicht. Onze bevinding beschrijft dit."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "3.3.7",
+      "descriptionNl": "Het adres uit stap 1 moet in stap 2 opnieuw worden getypt voor de rekening.",
+      "id": "3.3.7-adres",
+      "ours": {
+        "a": [
+          "LIND-3.3.7-914b"
+        ],
+        "b": [
+          "LIND-3.3.7-914b"
+        ]
+      },
+      "page": "/vergunning.html",
+      "reasonNl": {
+        "a": "Onze bevinding noemt dat stap 2 op P12 straat en postcode opnieuw vraagt, zonder het adres uit stap 1 over te nemen.",
+        "b": "Stap 2 op P12 vraagt het adres uit stap 1 opnieuw. Onze bevinding beschrijft dit."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "3.3.8",
+      "descriptionNl": "Plakken in het wachtwoordveld is geblokkeerd en automatisch invullen staat uit. Daarnaast moet de bezoeker twee letters van een geheim woord uit het hoofd typen.",
+      "id": "3.3.8-wachtwoord",
+      "ours": {
+        "a": [
+          "LIND-3.3.8-843c",
+          "LIND-3.3.8-d249",
+          "LIND-1.3.5-3af0"
+        ],
+        "b": [
+          "LIND-3.3.8-843c",
+          "LIND-3.3.8-d249",
+          "LIND-1.3.5-3af0"
+        ]
+      },
+      "page": "/inloggen.html",
+      "reasonNl": {
+        "a": "Drie bevindingen noemen het inlogformulier op P05: plakken geblokkeerd, autocomplete uit en twee letters van een geheim woord.",
+        "b": "Op P05 is plakken geblokkeerd, staat automatisch invullen uit en moet men twee letters onthouden. Onze drie bevindingen noemen deze delen."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "4.1.2",
+      "descriptionNl": "De tabbladen zijn divs met een klikhandler, zonder rol, zonder toestand en zonder focus.",
+      "id": "4.1.2-tabs",
+      "ours": {
+        "a": [
+          "LIND-4.1.2-de61",
+          "LIND-2.1.1-0ca8"
+        ],
+        "b": [
+          "LIND-4.1.2-de61",
+          "LIND-2.1.1-0ca8"
+        ]
+      },
+      "page": "/afval.html",
+      "reasonNl": {
+        "a": "Twee bevindingen noemen de tabbladen op P02 als div zonder rol, toestand en focus.",
+        "b": "De tabbladen op P02 zijn divs zonder rol, toestand en focus. Onze bevindingen onder 4.1.2 en 2.1.1 beschrijven dit."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "4.1.2",
+      "descriptionNl": "De knoppen melden niet of het antwoord open of dicht is.",
+      "id": "4.1.2-uitklapper",
+      "ours": {
+        "a": [
+          "LIND-4.1.2-6a9a"
+        ],
+        "b": [
+          "LIND-4.1.2-6a9a"
+        ]
+      },
+      "page": "/veelgestelde-vragen.html",
+      "reasonNl": {
+        "a": "Onze bevinding noemt de drie vraagknoppen op P11 die niet melden of het antwoord open is.",
+        "b": "De vraagknoppen op P11 melden niet of het antwoord open is. Onze bevinding beschrijft dit."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "4.1.2",
+      "descriptionNl": "De knop heeft geen naam en meldt niet of het menu open is.",
+      "id": "4.1.2-menuknop",
+      "ours": {
+        "a": [
+          "LIND-4.1.2-c8b1",
+          "LIND-4.1.2-25b3",
+          "LIND-1.1.1-c54f"
+        ],
+        "b": [
+          "LIND-4.1.2-c8b1",
+          "LIND-4.1.2-25b3",
+          "LIND-1.1.1-c54f"
+        ]
+      },
+      "page": "alle",
+      "reasonNl": {
+        "a": "Drie bevindingen noemen de menuknop op een smal scherm: geen naam en geen toestand open of dicht.",
+        "b": "De menuknop op een smal scherm heeft geen naam en geen toestand. Onze bevindingen noemen beide delen."
+      }
+    },
+    {
+      "a": "gemist-bewijs-beoordeling",
+      "agreed": "gemist-bewijs-beoordeling",
+      "agreedCoarse": "gemist",
+      "b": "gemist-bewijs-beoordeling",
+      "criterion": "4.1.2",
+      "descriptionNl": "De afbeelding heeft role=\"logo\". Die rol bestaat niet.",
+      "id": "4.1.2-rol-logo",
+      "ours": {
+        "a": [],
+        "b": []
+      },
+      "page": "alle",
+      "reasonNl": {
+        "a": "Het dossier bevat de engine-melding aria-roles voor het wapen met role=\"logo\" in de voet. Het oordeel liet het vallen als ander criterium, en 1.3.1 meldt het niet.",
+        "b": "Het dossier noemt de axe-regel aria-roles: het wapen in de voet heeft role logo, op 13 pagina's. Het oordeel liet dit vallen als ander criterium en niemand meldde het."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "4.1.2",
+      "descriptionNl": "Het venster van de videospeler heeft geen titel.",
+      "id": "4.1.2-kadertitel",
+      "ours": {
+        "a": [
+          "LIND-4.1.2-454c"
+        ],
+        "b": [
+          "LIND-4.1.2-454c"
+        ]
+      },
+      "page": "/nieuws/nieuwe-fietsenstalling.html, /raadsvergadering.html",
+      "reasonNl": {
+        "a": "Onze bevinding noemt iframe.spelerkader zonder title op P07 en P10.",
+        "b": "Het iframe.spelerkader op P07 en P10 heeft geen titel. Onze bevinding beschrijft dit."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "4.1.2",
+      "descriptionNl": "Het venster heeft geen rol dialog en geen naam. De focus gaat er niet heen en het kruisje is een div.",
+      "id": "4.1.2-venster",
+      "ours": {
+        "a": [
+          "LIND-4.1.2-c4be",
+          "LIND-2.4.3-2683",
+          "LIND-4.1.2-3903",
+          "LIND-2.1.1-52a3"
+        ],
+        "b": [
+          "LIND-4.1.2-c4be",
+          "LIND-2.4.3-2683",
+          "LIND-2.1.1-52a3",
+          "LIND-4.1.2-3903"
+        ]
+      },
+      "page": "/producten.html",
+      "reasonNl": {
+        "a": "Vier bevindingen noemen samen het productvenster op P09: geen rol dialog en naam, focus gaat er niet heen, kruisje is een div.",
+        "b": "Het productvenster op P09 heeft geen rol en naam, krijgt geen focus en het kruisje is een div. Onze vier bevindingen noemen deze delen."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "4.1.3",
+      "descriptionNl": "\"Bedankt voor uw reactie.\" verschijnt zonder dat hulpsoftware het meldt.",
+      "id": "4.1.3-bedankt",
+      "ours": {
+        "a": [
+          "LIND-4.1.3-f7ba"
+        ],
+        "b": [
+          "LIND-4.1.3-f7ba"
+        ]
+      },
+      "page": "/veelgestelde-vragen.html",
+      "reasonNl": {
+        "a": "Onze bevinding noemt \"Bedankt voor uw reactie.\" op P11 dat niet wordt voorgelezen.",
+        "b": "Bedankt voor uw reactie op P11 wordt niet gemeld. Onze bevinding beschrijft dit."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "4.1.3",
+      "descriptionNl": "Bij typen in het zoekveld verandert het aantal gevonden producten zonder dat hulpsoftware het meldt.",
+      "id": "4.1.3-aantal",
+      "ours": {
+        "a": [
+          "LIND-4.1.3-8c06"
+        ],
+        "b": [
+          "LIND-4.1.3-8c06"
+        ]
+      },
+      "page": "/producten.html",
+      "reasonNl": {
+        "a": "Onze bevinding noemt de regel met het aantal producten op P09 zonder live-regio of rol.",
+        "b": "Het aantal producten op P09 verandert zonder melding. Onze bevinding beschrijft dit."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "4.1.3",
+      "descriptionNl": "Nieuwe berichten in de chat worden niet gemeld aan hulpsoftware.",
+      "id": "4.1.3-chat",
+      "ours": {
+        "a": [
+          "LIND-4.1.3-9498"
+        ],
+        "b": [
+          "LIND-4.1.3-9498"
+        ]
+      },
+      "page": "alle",
+      "reasonNl": {
+        "a": "Onze bevinding noemt de berichtenlijst van de chat zonder rol log of status en zonder aria-live.",
+        "b": "Nieuwe chatberichten worden niet gemeld. Onze bevinding beschrijft dit."
+      }
+    }
+  ],
+  "ours": {
+    "agreement": 0.983,
+    "classes": {
+      "discutabel": {
+        "a": 7,
+        "agreed": 5,
+        "b": 5
+      },
+      "onterecht": {
+        "a": 0,
+        "agreed": 0,
+        "b": 1
+      },
+      "tegenhanger": {
+        "a": 107,
+        "agreed": 107,
+        "b": 107
+      },
+      "terecht": {
+        "a": 4,
+        "agreed": 4,
+        "b": 5
+      }
+    },
+    "disagreed": 2,
+    "duplicates": {
+      "a": {
+        "referenceFindings": 25,
+        "surplus": 33
+      },
+      "agreed": {
+        "referenceFindings": 25,
+        "surplus": 33
+      },
+      "b": {
+        "referenceFindings": 25,
+        "surplus": 33
+      }
+    },
+    "shareWithoutCounterpart": {
+      "discutabel": {
+        "a": 0.636,
+        "agreed": 0.455,
+        "b": 0.455
+      },
+      "onterecht": {
+        "a": 0,
+        "agreed": 0,
+        "b": 0.091
+      },
+      "terecht": {
+        "a": 0.364,
+        "agreed": 0.364,
+        "b": 0.455
+      }
+    },
+    "total": 118
+  },
+  "ownFindings": [
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "1.1.1",
+      "id": "LIND-1.1.1-5af9",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Foto van de fietsenstalling zonder alt-tekst"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "1.1.1",
+      "id": "LIND-1.1.1-ccc2",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Partnerlogo heeft een bestandsnaam als alt-tekst"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "1.1.1",
+      "id": "LIND-1.1.1-7302",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Wapen in de cookiemelding heet alleen logo"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "1.1.1",
+      "id": "LIND-1.1.1-c54f",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Knoppen en links met alleen een pictogram hebben geen naam"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "1.1.1",
+      "id": "LIND-1.1.1-3274",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Tarieven alleen in een afbeelding met lege alt-tekst"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "1.2.1",
+      "id": "LIND-1.2.1-4569",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Geluidsfragment van de wethouder zonder tekstversie"
+    },
+    {
+      "a": "discutabel",
+      "agreed": "discutabel",
+      "b": "discutabel",
+      "criterion": "1.2.1",
+      "id": "LIND-1.2.1-ad7d",
+      "reasonNl": {
+        "a": "Klopt: verborgen audio met 6 seconden muziek zonder spraak op P01. Achtergrondmuziek zonder informatie; een onderzoeker keurt dit eerder af onder 1.4.2, waar het al is gemeld.",
+        "b": "Het audio-element met de melodie staat op P01 en heeft geen tekst. Het is muziek zonder spraak of informatie; het gebrek staat al onder 1.4.2."
+      },
+      "titleNl": "Verborgen muziek op de startpagina zonder tekst"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "1.2.2",
+      "id": "LIND-1.2.2-d601",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Video van de raadsvergadering heeft geen ondertiteling"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "1.2.3",
+      "id": "LIND-1.2.3-8034",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Uitslag van de stemming staat alleen in beeld"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "1.2.5",
+      "id": "LIND-1.2.5-f25e",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Uitslag van de stemming staat alleen in beeld"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "1.3.1",
+      "id": "LIND-1.3.1-220d",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Kolomtitels in de voettekst zijn geen kop"
+    },
+    {
+      "a": "discutabel",
+      "agreed": "discutabel",
+      "b": "discutabel",
+      "criterion": "1.3.1",
+      "id": "LIND-1.3.1-5dfd",
+      "reasonNl": {
+        "a": "Klopt: \"Cookies op deze website\" is een vette p van 20 pixels in de cookiemelding. Een titel van een korte melding als kop eisen is een strenge lezing.",
+        "b": "De titel Cookies op deze website is p.melding-titel, vet en groot. Klopt, maar het is de titel van een korte melding; een onderzoeker keurt daar meestal niet op af."
+      },
+      "titleNl": "Titel van de cookiemelding is geen kop"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "1.3.1",
+      "id": "LIND-1.3.1-cd47",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Keuzerondjes niet gegroepeerd onder hun vraag"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "1.3.1",
+      "id": "LIND-1.3.1-39d6",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Verplichte velden alleen met rode letters gemarkeerd"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "1.3.1",
+      "id": "LIND-1.3.1-65b1",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Vette tussenkop in het nieuwsbericht is geen kop"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "1.3.1",
+      "id": "LIND-1.3.1-579a",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Opsomming met streepjes is geen lijst"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "1.3.1",
+      "id": "LIND-1.3.1-6081",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Tabel met openingstijden heeft geen kopcellen"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "1.3.1",
+      "id": "LIND-1.3.1-31ab",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Vette tussenkoppen in een antwoord zijn geen kop"
+    },
+    {
+      "a": "discutabel",
+      "agreed": "discutabel",
+      "b": "discutabel",
+      "criterion": "1.3.1",
+      "id": "LIND-1.3.1-7927",
+      "reasonNl": {
+        "a": "Klopt: de kaarten op P06 en P09 staan niet in een lijst. Elke kaart heeft een eigen kop, dus de structuur is te volgen. Waarschijnlijk geen afkeuring.",
+        "b": "De kaarten op P06 staan in divs, niet in een lijst. Elke kaart heeft een eigen kop. Dat is een strenge lezing van 1.3.1."
+      },
+      "titleNl": "Reeksen kaarten staan niet in een lijst"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "1.3.2",
+      "id": "LIND-1.3.2-af96",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Zoekpagina: telling en Veel gezocht staan in de code na de resultaten"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "1.3.2",
+      "id": "LIND-1.3.2-09f7",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Nieuwskaarten: kop staat in de code na samenvatting en datum"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "1.3.3",
+      "id": "LIND-1.3.3-6f0e",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Verzendknop alleen aangeduid met vorm, kleur en plek"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "1.3.3",
+      "id": "LIND-1.3.3-c789",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Verplichte velden alleen aangeduid met de kleur rood"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "1.3.4",
+      "id": "LIND-1.3.4-30e4",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Tabel met openingstijden alleen liggend te zien"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "1.3.5",
+      "id": "LIND-1.3.5-12d9",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Naamveld in het contactformulier zegt niet dat het om de naam vraagt"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "1.3.5",
+      "id": "LIND-1.3.5-5e01",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "E-mailveld in het contactformulier zegt niet dat het om het e-mailadres vraagt"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "1.3.5",
+      "id": "LIND-1.3.5-dd72",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Telefoonveld in het contactformulier zegt niet dat het om het telefoonnummer vraagt"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "1.3.5",
+      "id": "LIND-1.3.5-3af0",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Wachtwoordveld zet het invullen door de browser uit"
+    },
+    {
+      "a": "terecht",
+      "agreed": "terecht",
+      "b": "terecht",
+      "criterion": "1.3.5",
+      "id": "LIND-1.3.5-e602",
+      "reasonNl": {
+        "a": "In de code heeft #factuurstraat in stap 2 op P12 geen autocomplete, terwijl de velden in stap 1 dat wel hebben. Het veld vraagt het eigen adres van de aanvrager.",
+        "b": "In de code heeft #factuurstraat geen autocomplete, terwijl de velden in stap 1 dat wel hebben. Het vraagt het eigen factuuradres, dus 1.3.5 is van toepassing."
+      },
+      "titleNl": "Straat voor de rekening zegt niet dat het om het adres vraagt"
+    },
+    {
+      "a": "terecht",
+      "agreed": "terecht",
+      "b": "terecht",
+      "criterion": "1.3.5",
+      "id": "LIND-1.3.5-949f",
+      "reasonNl": {
+        "a": "In de code heeft #factuurpostcode in stap 2 op P12 geen autocomplete, terwijl postcode in stap 1 postal-code heeft. Het veld vraagt de eigen postcode.",
+        "b": "In de code heeft #factuurpostcode geen autocomplete, terwijl #postcode in stap 1 postal-code heeft. Het vraagt de eigen postcode, dus 1.3.5 is van toepassing."
+      },
+      "titleNl": "Postcode voor de rekening zegt niet dat het om de postcode vraagt"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "1.4.1",
+      "id": "LIND-1.4.1-0375",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Links in lopende tekst alleen herkenbaar aan kleur"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "1.4.1",
+      "id": "LIND-1.4.1-1d5c",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Verplichte velden alleen aangeduid met rode labels"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "1.4.2",
+      "id": "LIND-1.4.2-5453",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Muziek op de startpagina start vanzelf en is niet te stoppen"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "1.4.3",
+      "id": "LIND-1.4.3-2754",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Witte welkomstkop op lichte foto"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "1.4.3",
+      "id": "LIND-1.4.3-7322",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Lichtgrijze datums bij het nieuws"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "1.4.3",
+      "id": "LIND-1.4.3-157b",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Witte inleiding op lichte foto"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "1.4.3",
+      "id": "LIND-1.4.3-3e50",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Menulinks bijna onleesbaar bij aanwijzen"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "1.4.4",
+      "id": "LIND-1.4.4-8591",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Inzoomen op een telefoon is uitgezet"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "1.4.4",
+      "id": "LIND-1.4.4-1b94",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Inleiding op de productenpagina valt weg bij vergroten"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "1.4.5",
+      "id": "LIND-1.4.5-bca8",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Aankondiging van het zomerfeest is een afbeelding van tekst"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "1.4.5",
+      "id": "LIND-1.4.5-4705",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Tarieven voor paspoort en rijbewijs staan als afbeelding"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "1.4.10",
+      "id": "LIND-1.4.10-f899",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Rij productkaarten past niet op een smal scherm"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "1.4.10",
+      "id": "LIND-1.4.10-ebc7",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Knop Weigeren van de cookiemelding valt weg op een smal scherm"
+    },
+    {
+      "a": "discutabel",
+      "agreed": "discutabel",
+      "b": "discutabel",
+      "criterion": "1.4.10",
+      "id": "LIND-1.4.10-d889",
+      "reasonNl": {
+        "a": "Klopt: in WebKit steekt de knop Zoeken 17 pixels buiten 320 pixels; in Chromium past alles. Klein verschil in een motor, niet gebouwd; een onderzoeker keurt hier waarschijnlijk niet op af.",
+        "b": "Alleen in WebKit is de pagina op 320 pixels 337 breed; de knop Zoeken steekt 17 pixels uit maar blijft leesbaar. In Chromium past alles. Afkeuren is twijfelachtig."
+      },
+      "titleNl": "Zoekbalk in de kop te breed in Safari"
+    },
+    {
+      "a": "terecht",
+      "agreed": "terecht",
+      "b": "terecht",
+      "criterion": "1.4.10",
+      "id": "LIND-1.4.10-f003",
+      "reasonNl": {
+        "a": "Op 320 pixels valt de open uitleg bij het rondje i op P08 rechts buiten beeld; de schermafbeelding toont afgekapte tekst. De ballon heeft een vaste breedte van 256 pixels.",
+        "b": "Met de uitleg open op P08 is de ballon 256 pixels breed en begint naast het pictogram. De pagina wordt 418 pixels breed; de tekst valt rechts buiten beeld."
+      },
+      "titleNl": "Uitleg bij de openingstijden valt buiten een smal scherm"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "1.4.11",
+      "id": "LIND-1.4.11-bc48",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Invoervelden hebben een te vage rand"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "1.4.13",
+      "id": "LIND-1.4.13-5759",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Uitleg bij de openingstijden is niet weg te halen met Escape"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "1.4.13",
+      "id": "LIND-1.4.13-6cf0",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Uitleg bij de openingstijden verdwijnt als de muis erop komt"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "2.1.1",
+      "id": "LIND-2.1.1-0ca8",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Tabbladen per afvalsoort werken alleen met de muis"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "2.1.1",
+      "id": "LIND-2.1.1-98e5",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Nieuws- en productkaarten openen alleen met een klik"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "2.1.1",
+      "id": "LIND-2.1.1-52a3",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Productvenster is alleen met de muis te sluiten"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "2.1.1",
+      "id": "LIND-2.1.1-4d08",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Schuifregelaar voor de hoogste prijs werkt alleen met slepen"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "2.1.1",
+      "id": "LIND-2.1.1-9000",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Fotoserie wisselt alleen door te vegen"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "2.1.1",
+      "id": "LIND-2.1.1-3bcc",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Vakje voor een kopie van het bericht werkt alleen met de muis"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "2.1.1",
+      "id": "LIND-2.1.1-08a2",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Naar boven werkt alleen met de muis"
+    },
+    {
+      "a": "terecht",
+      "agreed": "terecht",
+      "b": "terecht",
+      "criterion": "2.1.1",
+      "id": "LIND-2.1.1-2bc7",
+      "reasonNl": {
+        "a": "site.js zet op Ja en Nee alleen een pointerdown-handler. Enter op Ja verandert niets. Met het toetsenbord is de keuze dus niet te maken.",
+        "b": "In site.js reageren Ja en Nee alleen op pointerdown. Enter en spatie op de knop Ja veranderden niets. Met het toetsenbord is de knop dus niet te gebruiken."
+      },
+      "titleNl": "Knoppen Ja en Nee reageren niet op het toetsenbord"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "2.1.2",
+      "id": "LIND-2.1.2-f5c5",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Toetsenbord zit vast in het chatvenster"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "2.1.4",
+      "id": "LIND-2.1.4-45db",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Letters c en z starten functies op elke pagina"
+    },
+    {
+      "a": "discutabel",
+      "agreed": null,
+      "b": "onterecht",
+      "criterion": "2.1.4",
+      "id": "LIND-2.1.4-5885",
+      "reasonNl": {
+        "a": "Klopt: m zet het geluid uit met de focus op Volledig scherm in de speler. De toets werkt alleen met de focus in de speler, dus de uitzondering voor focus geldt waarschijnlijk.",
+        "b": "De speler luistert naar k en m op het document in zijn eigen venster. De toetsen werken dus alleen als de focus in de speler staat; dat valt onder de uitzondering."
+      },
+      "titleNl": "Videospeler reageert op m en k waar de focus ook in de speler staat"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "2.2.1",
+      "id": "LIND-2.2.1-f914",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Contactformulier stuurt na tien minuten weg zonder verlengen"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "2.2.2",
+      "id": "LIND-2.2.2-facb",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Blok Uitgelicht wisselt vanzelf zonder pauzeknop"
+    },
+    {
+      "a": "discutabel",
+      "agreed": "discutabel",
+      "b": "discutabel",
+      "criterion": "2.2.2",
+      "id": "LIND-2.2.2-46ea",
+      "reasonNl": {
+        "a": "Klopt: de aftelklok op P03 ververst elke seconde. De klok hoort bij de tijdslimiet, die al onder 2.2.1 is gemeld. Een onderzoeker keurt dit waarschijnlijk niet apart af.",
+        "b": "De klok boven het formulier op P03 telt elke seconde af. Klopt, maar de klok hoort bij de tijdslimiet die al onder 2.2.1 is gemeld. Afkeuren onder 2.2.2 is twijfelachtig."
+      },
+      "titleNl": "Aftelklok ververst elke seconde zonder bediening"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "2.4.1",
+      "id": "LIND-2.4.1-1ce6",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Skiplink \"Direct naar de inhoud\" verwijst naar een doel dat niet bestaat"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "2.4.2",
+      "id": "LIND-2.4.2-acbc",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Titel van de startpagina bevat resten van een sjabloon"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "2.4.2",
+      "id": "LIND-2.4.2-bdfb",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Titel noemt alleen de naam van de site"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "2.4.3",
+      "id": "LIND-2.4.3-9147",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Velden van het contactformulier in een andere volgorde dan op het scherm"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "2.4.3",
+      "id": "LIND-2.4.3-e622",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Knoppen van de cookiemelding komen als laatste aan de beurt"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "2.4.3",
+      "id": "LIND-2.4.3-2683",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Focus gaat niet naar het productvenster"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "2.4.3",
+      "id": "LIND-2.4.3-504f",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Menu op een smal scherm komt pas na de hele pagina"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "2.4.4",
+      "id": "LIND-2.4.4-9d17",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Pictogramlinks naar sociale media zonder naam"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "2.4.4",
+      "id": "LIND-2.4.4-860a",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Link Klik hier zonder uitleg in dezelfde alinea"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "2.4.6",
+      "id": "LIND-2.4.6-8ef1",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Twee koppen \"Informatie\" boven verschillende onderdelen"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "2.4.7",
+      "id": "LIND-2.4.7-0111",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Links in het hoofdmenu tonen geen focus"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "2.4.7",
+      "id": "LIND-2.4.7-9b42",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Links in het menu op een smal scherm tonen geen focus"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "2.4.7",
+      "id": "LIND-2.4.7-f2b0",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "De link Openingstijden in de voettekst gooit de focus weg"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "2.4.11",
+      "id": "LIND-2.4.11-f5a4",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Cookiemelding bedekt elementen met focus helemaal"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "2.5.1",
+      "id": "LIND-2.5.1-7a69",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Fotoserie werkt alleen met vegen"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "2.5.2",
+      "id": "LIND-2.5.2-b13b",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Knoppen Ja en Nee reageren al bij indrukken"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "2.5.3",
+      "id": "LIND-2.5.3-9f4d",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Zoekknop heet niet zoals er op staat"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "2.5.7",
+      "id": "LIND-2.5.7-526c",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Prijsschuif werkt alleen met slepen"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "2.5.8",
+      "id": "LIND-2.5.8-ff88",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Paginanummers onder het nieuwsoverzicht te klein en te dicht op elkaar"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "3.1.1",
+      "id": "LIND-3.1.1-01fd",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Foutpagina geeft geen taal op in de code"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "3.1.1",
+      "id": "LIND-3.1.1-6f14",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Nieuwsbericht over de fietsenstalling geeft geen taal op in de code"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "3.1.2",
+      "id": "LIND-3.1.2-ad88",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Engels citaat zonder taalaanduiding"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "3.2.1",
+      "id": "LIND-3.2.1-075c",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Link Openingstijden in de voettekst haalt de focus weg"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "3.2.2",
+      "id": "LIND-3.2.2-cfa6",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Keuzelijst Uw wijk laadt meteen een nieuwe pagina"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "3.2.3",
+      "id": "LIND-3.2.3-04f9",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Hoofdmenu heeft op de contactpagina een andere volgorde"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "3.2.3",
+      "id": "LIND-3.2.3-d291",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Hulplinks staan op de nieuwspagina's boven het hoofdmenu"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "3.2.4",
+      "id": "LIND-3.2.4-ecdc",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Zoekknop heet op de foutpagina anders dan op de zoekpagina"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "3.2.6",
+      "id": "LIND-3.2.6-abb3",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Telefoonnummer en contactlink staan op nieuwspagina's in de kop"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "3.2.6",
+      "id": "LIND-3.2.6-2f1b",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Link Contact staat op de contactpagina vooraan in het hoofdmenu"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "3.3.1",
+      "id": "LIND-3.3.1-3956",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Fout in het contactformulier alleen met een rode rand aangegeven"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "3.3.2",
+      "id": "LIND-3.3.2-b94c",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "E-mailadres heeft alleen een voorbeeldtekst en is verplicht zonder dat dat er staat"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "3.3.2",
+      "id": "LIND-3.3.2-4e42",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Telefoonnummer heeft alleen een voorbeeldtekst"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "3.3.2",
+      "id": "LIND-3.3.2-18f3",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Datumveld eist een schrijfwijze die nergens staat"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "3.3.3",
+      "id": "LIND-3.3.3-85d4",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Fout in het contactformulier alleen met een rode rand aangeduid"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "3.3.3",
+      "id": "LIND-3.3.3-19b5",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Foutmelding bij de datum zegt niet welke vorm goed is"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "3.3.4",
+      "id": "LIND-3.3.4-9ddf",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Aanvraag parkeervergunning gaat zonder controle of overzicht direct door"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "3.3.7",
+      "id": "LIND-3.3.7-914b",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Adres voor de rekening moet opnieuw worden ingetypt"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "3.3.8",
+      "id": "LIND-3.3.8-843c",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Plakken in het wachtwoordveld is geblokkeerd"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "3.3.8",
+      "id": "LIND-3.3.8-d249",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Inloggen vraagt losse letters van een geheim woord"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "4.1.2",
+      "id": "LIND-4.1.2-4b02",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Pictogramlinks in de voettekst hebben geen naam"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "4.1.2",
+      "id": "LIND-4.1.2-c8b1",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Menuknop op een smal scherm heeft geen naam"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "4.1.2",
+      "id": "LIND-4.1.2-25b3",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Menuknop meldt niet of het menu open is"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "4.1.2",
+      "id": "LIND-4.1.2-d147",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Selectievakje voor een kopie is verborgen voor hulpsoftware"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "4.1.2",
+      "id": "LIND-4.1.2-de61",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Tabbladen hebben geen rol en geen gekozen toestand"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "4.1.2",
+      "id": "LIND-4.1.2-bc00",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Productkaarten openen een venster maar zijn geen bedieningselement"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "4.1.2",
+      "id": "LIND-4.1.2-c4be",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Productvenster heeft geen rol en geen naam"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "4.1.2",
+      "id": "LIND-4.1.2-3903",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Sluitkruisen zijn geen knop"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "4.1.2",
+      "id": "LIND-4.1.2-e33d",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Nieuwskaarten zijn klikbaar maar geen link"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "4.1.2",
+      "id": "LIND-4.1.2-454c",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Videovenster heeft geen naam"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "4.1.2",
+      "id": "LIND-4.1.2-4cf1",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Prijsschuif heeft geen rol, naam of waarde"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "4.1.2",
+      "id": "LIND-4.1.2-6a9a",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Vraagknoppen melden niet of het antwoord open is"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "4.1.2",
+      "id": "LIND-4.1.2-6f22",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Link Naar boven heeft geen betrouwbare rol"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "4.1.3",
+      "id": "LIND-4.1.3-8c06",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Aantal gevonden producten wordt niet voorgelezen"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "4.1.3",
+      "id": "LIND-4.1.3-f7ba",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Bedankje na Ja of Nee wordt niet voorgelezen"
+    },
+    {
+      "a": "discutabel",
+      "agreed": null,
+      "b": "terecht",
+      "criterion": "4.1.3",
+      "id": "LIND-4.1.3-8c59",
+      "reasonNl": {
+        "a": "Klopt: \"Ongeldige invoer.\" verschijnt na versturen zonder live-regio, focus blijft op de knop. Een foutmelding na versturen telt niet altijd als statusbericht; het gebrek bij de datum staat al onder 3.3.3.",
+        "b": "Volgens site.js komt Ongeldige invoer in een gewone p.veldmelding, zonder rol of live-regio, en de focus gaat er niet heen. Hulpsoftware hoort de melding dus niet."
+      },
+      "titleNl": "Foutmelding bij de datum wordt niet voorgelezen"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "4.1.3",
+      "id": "LIND-4.1.3-9498",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Nieuwe chatberichten worden niet voorgelezen"
+    }
+  ],
+  "provenance": {
+    "classificationSha256": {
+      "a": "b44623340cd501bfd6c92e4438b66b88d3543deed73216fbf9dc95d554cc5cb8",
+      "b": "f33e6e92af76bc368ffff43ee891c8f96ea2e919572d55e042ba8688c3a97a71"
+    },
+    "evaluationSha256": "8b601175fc4eeb2b86959a1b22aaa9ff45a7648be2e93398ce53365b6193cce1",
+    "inputSha256": "4b9fa487cb1be8197c0a3a7cb3fff565b99fd27ae24cef9c7214e839d42daecc",
+    "promptSha256": "17ca74c4b6010786a94d87f5d79b2c2d807d53f86e9ab5d8be6a4c1f340a53a0"
+  },
+  "reference": {
+    "agreement": 1,
+    "agreementCoarse": 1,
+    "classes": {
+      "buiten-bereik": {
+        "a": 0,
+        "agreed": 0,
+        "b": 0
+      },
+      "deels": {
+        "a": 0,
+        "agreed": 0,
+        "b": 0
+      },
+      "gemist-bewijs-beoordeling": {
+        "a": 2,
+        "agreed": 2,
+        "b": 2
+      },
+      "gemist-bewijs-dossier": {
+        "a": 0,
+        "agreed": 0,
+        "b": 0
+      },
+      "gemist-geen-bewijs": {
+        "a": 0,
+        "agreed": 0,
+        "b": 0
+      },
+      "gevonden": {
+        "a": 77,
+        "agreed": 77,
+        "b": 77
+      },
+      "niet-meer-aanwezig": {
+        "a": 0,
+        "agreed": 0,
+        "b": 0
+      }
+    },
+    "coarse": {
+      "buiten-bereik": {
+        "a": 0,
+        "agreed": 0,
+        "b": 0
+      },
+      "deels": {
+        "a": 0,
+        "agreed": 0,
+        "b": 0
+      },
+      "gemist": {
+        "a": 2,
+        "agreed": 2,
+        "b": 2
+      },
+      "gevonden": {
+        "a": 77,
+        "agreed": 77,
+        "b": 77
+      },
+      "niet-meer-aanwezig": {
+        "a": 0,
+        "agreed": 0,
+        "b": 0
+      }
+    },
+    "counted": 79,
+    "disagreed": 0,
+    "disagreedCoarse": 0,
+    "documents": 0,
+    "documentsOutOfReach": 0,
+    "foundShare": {
+      "a": {
+        "ofCounted": 0.975,
+        "ofStillPresent": 0.975
+      },
+      "agreed": {
+        "ofCounted": 0.975,
+        "ofStillPresent": 0.975
+      },
+      "b": {
+        "ofCounted": 0.975,
+        "ofStillPresent": 0.975
+      }
+    },
+    "stillPresent": {
+      "a": 79,
+      "agreed": 79,
+      "b": 79
+    },
+    "total": 79
+  },
+  "referenceKind": "answer-key",
+  "schema": "loep/compare-findings-summary/2",
+  "site": "Lindewaard (testsite)"
+}
