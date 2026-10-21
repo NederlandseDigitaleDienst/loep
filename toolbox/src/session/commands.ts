@@ -147,7 +147,8 @@ export async function act(context: Context, pauseMs: number, action: () => Promi
   if (clipboard !== null) print.clipboard = clipboard;
   if (note) print.note = note;
   if (Object.keys(print).length === 0) print.changed = false;
-  if (result.focus) print.focus = brief(result.focus);
+  // Whether focus sits in an embedded frame decides at 2.1.4 whether a key counts as a shortcut, so the line says it.
+  if (result.focus) print.focus = `${brief(result.focus)}${inFrame(result.focus)}`;
   return { result, print };
 }
 
@@ -648,7 +649,8 @@ const timers: Handler = async (context) => {
 const find: Handler = async (context, args, options) => {
   const query = args.join(" ").trim();
   if (!query) throw new UsageError("find verwacht een tekst, of role:<rol>, tag:<naam> of css:<selector>");
-  const prefixed = /^(role|tag|css):(.+)$/s.exec(query);
+  const prefixed = /^(role|tag|css):(.*)$/s.exec(query);
+  if (prefixed && prefixed[1] !== "css" && !prefixed[2]!.trim()) throw new UsageError(`find ${prefixed[1]}: verwacht een ${prefixed[1] === "role" ? "rol, zoals role:button" : "naam, zoals tag:img"}`);
   const found = await findOnPage(context.surface, prefixed ? prefixed[1]! : "text", prefixed ? prefixed[2]!.trim() : query, numberOption(options, "max", 20, 60)).catch((error: Error) => {
     throw new UsageError(prefixed?.[1] === "css" ? `ongeldige selector: ${error.message.split("\n")[0]}` : error.message.split("\n")[0]);
   });

@@ -68,8 +68,14 @@ export interface Component {
   id: string;
   type: (typeof COMPONENT_TYPES)[number];
   descriptionNl: string;
-  /** Ids of the page types it occurs on. */
+  /**
+   * Ids of the page types it occurs on. In site.json it may also be "all" (`ALL_PAGE_TYPES`): a
+   * part on every page, such as a menu button on a narrow screen. Reading the model turns that
+   * into the list of every page type and sets `siteWide`.
+   */
   pageTypes: string[];
+  /** Set when reading the model: site.json says the component is on every page type. */
+  siteWide?: boolean;
   viewport: ViewportCondition | null;
   /** Name of the saved state in which it is open; null when the explorer could not open it. */
   recipe: string | null;
@@ -267,6 +273,35 @@ export interface ModelContext {
 
 const ID = /^[a-z0-9][a-z0-9-]{0,40}$/;
 
+/** What `pageTypes` of a component says in site.json when the component is on every page. */
+export const ALL_PAGE_TYPES = "all";
+
+/** How many page types `check-site` opens a component on that stands on every page. The sweep opens it on all of them. */
+export const SITE_WIDE_CHECKED_PAGE_TYPES = 3;
+
+/**
+ * The model as the commands use it: a component with `"pageTypes": "all"` gets the list of every
+ * page type, and `siteWide` so that what has to know (the sheets of the gate) still knows.
+ */
+export function expandSiteWide(model: SiteModel): SiteModel {
+  if (!Array.isArray(model.components) || !model.components.some((component) => (component.pageTypes as unknown) === ALL_PAGE_TYPES)) return model;
+  const all = (Array.isArray(model.pageTypes) ? model.pageTypes : []).map((type) => type.id);
+  const components = model.components.map((component) => ((component.pageTypes as unknown) === ALL_PAGE_TYPES ? { ...component, pageTypes: [...all], siteWide: true } : component));
+  return { ...model, components };
+}
+
+/**
+ * The page types `check-site` opens a component on: all of them, or for a component on every page
+ * a few, spread over the list, so that one that is missing somewhere is likely to show.
+ */
+export function pageTypesToCheck(component: Pick<Component, "pageTypes" | "siteWide">): string[] {
+  const types = component.pageTypes;
+  if (!component.siteWide || types.length <= SITE_WIDE_CHECKED_PAGE_TYPES) return types;
+  const picked = new Set<string>();
+  for (let index = 0; index < SITE_WIDE_CHECKED_PAGE_TYPES; index++) picked.add(types[Math.round((index * (types.length - 1)) / (SITE_WIDE_CHECKED_PAGE_TYPES - 1))]!);
+  return types.filter((type) => picked.has(type));
+}
+
 /**
  * The page type a page belongs to: the one that lists its address, or else one that lists the
  * same page without query and anchor, such as `zoeken.html` for `zoeken.html?q=gemeente`.
@@ -394,8 +429,10 @@ export function validateSiteModel(value: unknown, context: ModelContext): string
     checkId(component.id, where);
     if (!COMPONENT_TYPES.includes(component.type as never)) problems.push(`${where}: type moet een van ${COMPONENT_TYPES.join(", ")} zijn`);
     if (!isText(component.descriptionNl)) problems.push(`${where}: descriptionNl ontbreekt`);
-    if (!Array.isArray(component.pageTypes) || component.pageTypes.length === 0) problems.push(`${where}: pageTypes ontbreekt of is leeg`);
-    else for (const type of component.pageTypes as unknown[]) if (!typeIds.has(String(type))) problems.push(`${where}: paginatype "${String(type)}" bestaat niet`);
+    if ((component.pageTypes as unknown) === ALL_PAGE_TYPES) {
+      // On every page: nothing to look up.
+    } else if (!Array.isArray(component.pageTypes) || component.pageTypes.length === 0) problems.push(`${where}: pageTypes ontbreekt of is leeg (of "${ALL_PAGE_TYPES}" voor een onderdeel dat op elke pagina staat)`);
+    else for (const type of component.pageTypes as unknown[]) if (!typeIds.has(String(type))) problems.push(`${where}: paginatype "${String(type)}" bestaat niet${type === "alle" || type === ALL_PAGE_TYPES ? `; staat het onderdeel op elke pagina, schrijf dan "pageTypes": "${ALL_PAGE_TYPES}" zonder lijst` : ""}`);
     const viewport = component.viewport;
     if (viewport !== null && !isRecord(viewport)) problems.push(`${where}: viewport is null of een object met maxWidth of minWidth`);
     if (isRecord(viewport)) {
@@ -676,11 +713,11 @@ export async function loadSiteModel(runDir: string): Promise<SiteModel | null> {
   const check = await readJson<SiteCheck>(checkPath);
   if (check.siteSha256 !== (await sha256File(path))) throw new Error(`${SITE_MODEL_FILE} is gewijzigd na de laatste controle; draai opnieuw: check-site --run ${runDir}`);
   if (!check.ok) throw new Error(`${SITE_MODEL_FILE} is afgekeurd door check-site (${check.problems.length} problemen); herstel het model eerst`);
-  return readJson<SiteModel>(path);
+  return expandSiteWide(await readJson<SiteModel>(path));
 }
 
 /** The model without the guarantee that it was checked: for commands that only read what it says. */
 export async function readSiteModel(runDir: string): Promise<SiteModel | null> {
   const path = join(runDir, SITE_MODEL_FILE);
-  return existsSync(path) ? readJson<SiteModel>(path) : null;
+  return existsSync(path) ? expandSiteWide(await readJson<SiteModel>(path)) : null;
 }

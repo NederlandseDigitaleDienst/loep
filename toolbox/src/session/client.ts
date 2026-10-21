@@ -34,7 +34,8 @@ export const SESSION_USAGE = `  session start --run <run> [--session <name>] [--
                drag <ref> <dx> <dy> | drag <ref> --to <ref> (press, move in steps, let go, with the mouse),
                swipe <ref> <left|right|up|down> (one finger on a touch screen: touch and pointer events of the kind touch);
                both keep a picture of the window before and after
-      a <ref> is a number from look or find, or css:<selector> when that matches exactly one element
+      a <ref> is a number from look or find, or css:<selector> when that matches exactly one element;
+      put a selector in single quotes ('css:main > div'), or the shell takes > for a redirection to a file
       look:    look [--full] [--max n] [--plain] [--vision deuteranopia|protanopia|tritanopia|achromatopsia|blurredVision|reducedContrast],
                crop <ref> [--margin n], ax <ref>, style <ref> [a,b,c], html <ref> [--max n],
                find <text | role:x | tag:x | css:selector>

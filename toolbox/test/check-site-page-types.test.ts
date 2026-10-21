@@ -7,7 +7,7 @@ import { startFixture, type FixtureServer } from "../fixtures/serve.ts";
 import { checkSite, exploreContext } from "../src/commands/explore.ts";
 import { inventory } from "../src/commands/inventory.ts";
 import { readJson } from "../src/lib/canonical.ts";
-import { NOT_OPENED_ON_PAGE_TYPE, notOpenedAdviceNl, searchTermForRun, type SiteModel } from "../src/lib/sitemodel.ts";
+import { ALL_PAGE_TYPES, NOT_OPENED_ON_PAGE_TYPE, notOpenedAdviceNl, searchTermForRun, type SiteModel } from "../src/lib/sitemodel.ts";
 import { Daemon } from "../src/session/daemon.ts";
 
 /**
@@ -161,6 +161,28 @@ test("the inventory chooses the search term of the run, and another term of the 
     assert.deepEqual(refused.problems, [`searchTerm: het woord "afvalkalender" staat niet in de tekst van ${origin}${OPENINGSTIJDEN}; kies een woord dat op die pagina staat, of een andere pagina`]);
   } finally {
     delete model.searchTerm;
+    write();
+  }
+});
+
+test("a component written as on every page is tried on the page types, and the advice says to give a list when it is not on every page", { timeout: 300_000 }, async () => {
+  const vraag = model.components.find((component) => component.id === "vraag")!;
+  const accepted = model.acceptedGaps;
+  const listed = vraag.pageTypes;
+  try {
+    (vraag as unknown as { pageTypes: string }).pageTypes = ALL_PAGE_TYPES;
+    write();
+    const passed = await checkSite(run, { navigationDelayMs: 20 });
+    assert.deepEqual(passed.problems, []);
+    assert.deepEqual(passed.replays.find((replay) => replay.id === "vraag")!.onPageTypes!.map((row) => [row.pageType, row.reached, row.accepted]), model.pageTypes.map((type) => [type.id, type.id !== typeWithoutQuestions, type.id === typeWithoutQuestions]), "every page type, since there are no more than check-site tries");
+    delete model.acceptedGaps;
+    write();
+    const refused = await checkSite(run, { navigationDelayMs: 20 });
+    assert.equal(refused.problems.length, 1, refused.problems.join("\n"));
+    assert.match(refused.problems[0]!, new RegExp(`^component "vraag" .*paginatype "${typeWithoutQuestions}".*Het onderdeel heeft "pageTypes": "all"; staat het niet op elke pagina, geef dan de lijst van paginatypen waar het wel staat\\.$`));
+  } finally {
+    vraag.pageTypes = listed;
+    if (accepted) model.acceptedGaps = accepted;
     write();
   }
 });
