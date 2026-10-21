@@ -879,9 +879,15 @@ test("a silence of the server is an answer when it lasted, and a conversation to
     assert.match(replayNl(found), /de server zei toen 12 s lang niets terug; de pagina krijgt nu ook niets/);
     assert.equal(recordings.find("wss://chat.example.nl/ws/ander/QpXz81LmNoTRwa2b", message), null, "another path is another chat");
     assert.equal(pathPattern("/ws/nldd/sTEEyUUqGuUpkriK?v=2&session=Ab3dEfGh1jKl"), "/ws/nldd/*?v=2&session=*");
-    assert.equal(pathPattern("/chat/123/socket"), "/chat/*/socket");
+    assert.equal(pathPattern("/chat/834723984/socket"), "/chat/*/socket");
     assert.equal(pathPattern("/rooms/0b9e4c1a-1f2b-4c3d-9e8f-001122334455"), "/rooms/*");
     assert.equal(pathPattern("/ws/notifications"), "/ws/notifications", "a word stays");
+    // A word with capitals, or a short number, may name another chat on the same origin: it stays, and a recording of one is not played on the other.
+    assert.equal(pathPattern("/ws/GemeenteZaken"), "/ws/GemeenteZaken");
+    assert.equal(pathPattern("/hubs/NotificationHub"), "/hubs/NotificationHub");
+    assert.equal(pathPattern("/ws/live-chat-Utrecht"), "/ws/live-chat-Utrecht");
+    assert.equal(pathPattern("/chat/2/socket?room=1"), "/chat/2/socket?room=1");
+    assert.equal(recordings.find("wss://chat.example.nl/ws/nldd/BelastingZaken", message), null, "a word in the place of the token is another chat");
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

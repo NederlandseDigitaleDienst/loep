@@ -87,19 +87,22 @@ function pathOf(url: string): string {
 }
 
 /**
- * The address of a socket without the segments that name one conversation: a segment of 12 or more
- * letters, digits, dashes or underscores with a digit or a capital in it, a number, or a UUID; in
- * the query only a value of 12 or more such characters.
+ * Whether a segment or query value names one conversation: a UUID, a number of 6 or more digits, or
+ * 12 or more letters, digits, dashes or underscores with two digits in it or a lowercase letter
+ * between two capitals (sTEEyUUqGuUpkriK). A word stays, also one with capitals (GemeenteZaken), and
+ * so does a short number: /chat/1 and /chat/2, like room=1 and room=2, may be two chats.
  */
+const isConversationToken = (value: string): boolean =>
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value) || /^\d{6,}$/.test(value) || (/^[\w-]{12,}$/.test(value) && (/\d.*\d/.test(value) || /[A-Z][a-z][A-Z]/.test(value)));
+
+/** The address of a socket without the segments and query values that name one conversation (see `isConversationToken`). */
 export function pathPattern(path: string): string {
   const [pathname, query] = path.split("?");
-  const token = (segment: string): boolean => /^\d+$/.test(segment) || /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(segment) || (/^[\w-]{12,}$/.test(segment) && /[\dA-Z]/.test(segment));
   const pattern = pathname!
     .split("/")
-    .map((segment) => (token(segment) ? "*" : segment))
+    .map((segment) => (isConversationToken(segment) ? "*" : segment))
     .join("/");
-  // The query counts as it is, apart from a value that is such a token: room=1 and room=2 are two chats.
-  return query === undefined ? pattern : `${pattern}?${query.split("&").map((pair) => pair.replace(/=(.*)$/, (whole, value: string) => (value.length >= 12 && token(value) ? "=*" : whole))).join("&")}`;
+  return query === undefined ? pattern : `${pattern}?${query.split("&").map((pair) => pair.replace(/=(.*)$/, (whole, value: string) => (isConversationToken(value) ? "=*" : whole))).join("&")}`;
 }
 
 /**
