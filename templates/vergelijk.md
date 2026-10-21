@@ -83,3 +83,4 @@ Ga na of de bevinding klopt met wat de run laat zien. Open het bewijs dat de bev
 - `ours` bij een bevinding van de referentie: alleen gevuld bij `gevonden` en `deels`.
 - `evidence`: verplicht bij `gemist-bewijs-beoordeling`, `gemist-bewijs-dossier` en `niet-meer-aanwezig`. Bij de andere klassen mag de lijst leeg zijn.
 - `ours` onderaan: alle bevindingen van ons die je bij geen enkele bevinding van de referentie hebt genoemd, en alleen die.
+- Is `reference` in de invoer leeg (een referentie zonder gebreken, zoals de schone tweeling van de testsite), dan is `reference` in je indeling ook een lege lijst en deel je elke bevinding van ons in als `terecht`, `discutabel` of `onterecht`.

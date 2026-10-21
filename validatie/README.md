@@ -63,7 +63,7 @@ De verslagen noemen de commit waarmee is gemeten. Tot en met 11 oktober 2026 is 
 | `failedOnlyInDocuments` | nee | Criteria die alleen op een pdf zijn afgekeurd. Die tellen niet mee |
 | `problemCount` | nee | Het aantal problemen dat het rapport zelf noemt |
 | `kind` | nee | `audit` (standaard) of `answer-key`. Bij een antwoordsleutel zijn de fouten met opzet ingebouwd, zoals op de testsite in `toolbox/fixtures/`. Een bevinding kan dan niet "niet meer aanwezig" of "buiten bereik" zijn |
-| `findings` | voor `compare --findings` | Eén rij per bevinding van het onderzoek |
+| `findings` | voor `compare --findings` | Eén rij per bevinding van het onderzoek. Een lege lijst mag alleen als `failed` en `failedOnlyInDocuments` ook leeg zijn: een referentie zonder gebreken, zoals de sleutel van de schone tweeling (`toolbox/fixtures/reference-berkenveen.json`). Dan deelt `compare --findings` elke bevinding van ons in als terecht, discutabel of onterecht. Ontbreekt `findings`, dan weigert `compare --findings` |
 
 Per bevinding:
 

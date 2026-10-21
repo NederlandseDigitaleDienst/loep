@@ -102,6 +102,37 @@ test("compare tasks refuse a reference without findings", async () => {
   await assert.rejects(makeRun(bare), /no "findings"/);
 });
 
+test("a reference without defects: an empty findings list is allowed only when nothing is failed", async () => {
+  await assert.rejects(makeRun({ ...REFERENCE, findings: [] }), /fails criteria but its "findings" is empty/);
+  await assert.rejects(makeRun({ ...REFERENCE, failed: [], failedOnlyInDocuments: ["1.3.1"], findings: [] }), /fails criteria but its "findings" is empty/);
+
+  const run = await makeRun({ ...REFERENCE, kind: "answer-key", failed: [], findings: [] });
+  assert.deepEqual(run.input.reference, []);
+  assert.ok(run.input.ours.length > 0);
+  // Every finding of ours is classified on its own; there is nothing to be a counterpart of.
+  const classes = ["terecht", "discutabel", "onterecht"] as const;
+  const own: Classification = {
+    schema: "loep/compare-findings/1",
+    reference: [],
+    ours: run.input.ours.map((finding, index) => ({ id: finding.id, class: classes[index % 3]!, evidence: [], reasonNl: "Nagegaan in de code van de pagina." })),
+  };
+  const left = { ...own, ours: own.ours.slice(1) };
+  assert.match(validateClassification(left, run.input, run.dir).join("\n"), /neither a counterpart nor classified/);
+  for (const round of ["a", "b"] as const) {
+    await write(run, round, own);
+    assert.deepEqual(await checkClassification(run.dir, round), []);
+  }
+  const summary = await mergeRun(run.dir, join(run.dir, "out"));
+  assert.deepEqual([summary.reference.total, summary.reference.counted, summary.reference.agreement], [0, 0, null]);
+  assert.equal(summary.ours.total, run.input.ours.length);
+  assert.deepEqual(summary.ours.classes.tegenhanger, { a: 0, b: 0, agreed: 0 });
+  assert.equal(summary.ours.classes.onterecht.agreed, own.ours.filter((entry) => entry.class === "onterecht").length);
+  assert.deepEqual(summary.criteria.missed, []);
+  const markdown = await readFile(join(run.dir, "out", "bevindingen.md"), "utf8");
+  assert.match(markdown, /De referentie heeft geen bevindingen/);
+  assert.doesNotMatch(markdown, /NaN|undefined/);
+});
+
 test("classification: a complete one passes, and each rule is enforced", async () => {
   const run = await makeRun();
   const problems = (value: Classification): string[] => validateClassification(value, run.input, run.dir);
