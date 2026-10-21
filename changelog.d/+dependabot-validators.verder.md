@@ -1,1 +1,0 @@
-Dependabot stelt een nieuwe versie van html-validate of vnu voortaan voor in de groep van de regel-engines, want beide leveren bevindingen met criteria. Zo krijgt zo'n voorstel dezelfde kleine meting op de testsite voordat het wordt overgenomen.
