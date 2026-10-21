@@ -1,0 +1,6 @@
+{
+  "version": "0.13.0",
+  "measuredAt": "2026-10-21",
+  "againstNl": "De sleutel van de eigen testsite (Lindewaard met ingebouwde gebreken, Berkenveen als tweeling zonder), niet het oordeel van een menselijke deskundige. Gerichte meting van de enige wijziging in het oordeel in deze versie: criterium 2.1.4, twee runs op Berkenveen en één op Lindewaard, op de bevroren veegronde van de meting voor 0.12.0.",
+  "resultNl": "Op Berkenveen kwam 2.1.4 in beide runs uit op niet van toepassing, zoals de sleutel zegt; met 0.12.0 was dat één keer een onterechte afkeuring en één keer niet van toepassing. Op Lindewaard bleef 2.1.4 afgekeurd op de twee ingebouwde sneltoetsen, zonder melding over de ingesloten speler. De andere wijzigingen (onderdelen op elke pagina in het sitemodel, selectors tussen aanhalingstekens, de testsite) zijn niet met agents gemeten. Voor de rest van de criteria geldt de meting van 0.12.0."
+}
