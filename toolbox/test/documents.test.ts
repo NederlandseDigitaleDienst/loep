@@ -176,6 +176,10 @@ test("a link is recognised as a document by its extension or by what the server 
   assert.equal(kindOfContentType("text/markdown"), "text");
   assert.equal(kindOfContentType("text/x-markdown; charset=utf-8"), "text");
   assert.equal(kindOfContentType("text/plain"), "text");
+  // An agenda item and a business card are plain text, also when the server sends them as application/octet-stream.
+  assert.equal(documentKind("https://a.test/agenda/demo.ics"), "text");
+  assert.equal(documentKind("https://a.test/kaart.VCF"), "text");
+  assert.equal(kindOfContentType("text/calendar; charset=utf-8"), "text");
 });
 
 test("Markdown writes its structure out: headings, links, pictures and tables, not inside fenced code", () => {
@@ -592,8 +596,15 @@ test("an address the browser starts to download without a download link is a doc
     }
     assert.deepEqual(stock.skipped, [], "a download is not a page that failed to load");
     const path = (url: string): string => new URL(url).pathname + new URL(url).search;
-    assert.deepEqual(stock.documents!.map((document) => [path(document.url), document.kind, document.contentType]), [["/agenda?id=4", "other", "text/calendar"], ["/assets/files/afspraak-1a2b3c.ics", "other", "text/calendar"]]);
+    assert.deepEqual(stock.documents!.map((document) => [path(document.url), document.kind, document.contentType]), [["/agenda?id=4", "text", "text/calendar"], ["/assets/files/afspraak-1a2b3c.ics", "text", "text/calendar"]]);
     assert.deepEqual(stock.documents!.find((document) => path(document.url) === "/assets/files/afspraak-1a2b3c.ics")!.linkedFrom, [{ page: `${address}/`, text: "Zet het in je agenda" }]);
+    // An agenda item is plain text, and is read; also in a run whose inventory still called it "other".
+    const run = join(scratch, "run-download");
+    const sample = withDocuments(buildSample(stock, "seed"), stock, "seed");
+    await writeJson(join(run, "sample.json"), { ...sample, documents: (sample.documents ?? []).map((document) => (document.url.endsWith(".ics") ? { ...document, kind: "other" } : document)) });
+    assert.deepEqual(await measureDocuments(run), { documents: 2, read: 2, notRead: 0, failed: 0 });
+    const ics = loadDocuments(run, sample.documents).find((document) => document.item.url.endsWith(".ics"))!;
+    assert.match(readFileSync(join(run, ics.facts!.files.text!), "utf8"), /BEGIN:VCALENDAR/);
   } finally {
     await new Promise<void>((resolve) => void site.close(() => resolve()));
   }
@@ -653,7 +664,7 @@ test("plain text offered for download is a document, not a page: inventory count
 
     const sample = withDocuments(buildSample(stock, "seed"), stock, "seed");
     await writeJson(join(run, "sample.json"), sample);
-    assert.match(sample.note, /4 platte tekst \(md, txt, csv\)/);
+    assert.match(sample.note, /4 platte tekst \(md, txt, csv, ics\)/);
     const result = await measureDocuments(run);
     assert.deepEqual(result, { documents: 4, read: 4, notRead: 0, failed: 0 });
     const loaded = loadDocuments(run, sample.documents);

@@ -11,7 +11,7 @@ import { isOwnAddress, originsNl, siteOrigins, type OriginSource } from "./origi
  */
 
 /**
- * "text" is plain text: Markdown, txt and csv. "other" is a file a link offers for download
+ * "text" is plain text: Markdown, txt, csv, and agenda items and business cards (ics, vcf). "other" is a file a link offers for download
  * (the `download` attribute) whose kind is none of these: counted as a document, not read.
  */
 export const DOCUMENT_KINDS = ["pdf", "docx", "odt", "rtf", "pptx", "odp", "xlsx", "ods", "text", "epub", "doc", "xls", "ppt", "other"] as const;
@@ -39,7 +39,7 @@ export const KIND_NAME_NL: Record<DocumentKind, string> = {
   odp: "OpenDocument-presentatie (odp)",
   xlsx: "Excel (xlsx)",
   ods: "OpenDocument-rekenblad (ods)",
-  text: "platte tekst (md, txt, csv)",
+  text: "platte tekst (md, txt, csv, ics)",
   epub: "epub",
   doc: "Word (doc)",
   xls: "Excel (xls)",
@@ -48,7 +48,8 @@ export const KIND_NAME_NL: Record<DocumentKind, string> = {
 };
 
 /** Extensions that name a kind other than themselves. */
-const BY_EXTENSION: Record<string, DocumentKind> = { md: "text", markdown: "text", txt: "text", csv: "text" };
+// An agenda item (ics) and a business card (vcf) are plain text too, and servers often send them as application/octet-stream.
+const BY_EXTENSION: Record<string, DocumentKind> = { md: "text", markdown: "text", txt: "text", csv: "text", ics: "text", ical: "text", ifb: "text", vcs: "text", vcf: "text" };
 
 const BY_CONTENT_TYPE: Record<string, DocumentKind> = {
   "application/pdf": "pdf",
@@ -68,6 +69,9 @@ const BY_CONTENT_TYPE: Record<string, DocumentKind> = {
   "text/markdown": "text",
   "text/x-markdown": "text",
   "text/csv": "text",
+  "text/calendar": "text",
+  "text/vcard": "text",
+  "text/x-vcard": "text",
 };
 
 /** The kind of document an address points at, by its extension; null when it is none. */

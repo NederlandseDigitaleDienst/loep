@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { measurePdf, PREVIEW_PAGES, renderPage } from "../instruments/documents/pdf.ts";
 import { readJson, sha256File, writeFileAtomic, writeJson } from "../lib/canonical.ts";
-import { documentDir, emptyFacts, NOT_READ_REASON_NL, originalPath, READ_KINDS, type DocumentFacts, type SampleDocument } from "../lib/documents.ts";
+import { documentDir, documentKind, emptyFacts, NOT_READ_REASON_NL, originalPath, READ_KINDS, type DocumentFacts, type SampleDocument } from "../lib/documents.ts";
 import { stepStart, writeManifest } from "../lib/manifest.ts";
 import { LONGEST_FAILURE_PAUSE_SECONDS, runBlockade } from "../session/blockade.ts";
 import { guardedDownload, scopeForRun, type Guard, type Scope } from "../session/safety.ts";
@@ -59,7 +59,9 @@ export async function measureDocument(runDir: string, document: SampleDocument, 
   return facts;
 }
 
-async function fetchAndMeasure(runDir: string, document: SampleDocument, scope: Scope, guard: Guard): Promise<DocumentFacts> {
+async function fetchAndMeasure(runDir: string, found: SampleDocument, scope: Scope, guard: Guard): Promise<DocumentFacts> {
+  // A run from before a kind was known, such as an agenda item (ics) that the inventory called "other", is read as what its extension says.
+  const document: SampleDocument = found.kind === "other" ? { ...found, kind: documentKind(found.url) ?? "other" } : found;
   const reason = NOT_READ_REASON_NL[document.kind];
   if (!READ_KINDS.includes(document.kind)) return emptyFacts(document.label, document.url, document.kind, "notRead", reason ?? "deze soort wordt niet ingelezen");
   if (document.bytes !== null && document.bytes > MAX_DOCUMENT_BYTES) return emptyFacts(document.label, document.url, document.kind, "failed", `het bestand is ${Math.round(document.bytes / 1024 / 1024)} MB; de grens is ${MAX_DOCUMENT_BYTES / 1024 / 1024} MB`);
