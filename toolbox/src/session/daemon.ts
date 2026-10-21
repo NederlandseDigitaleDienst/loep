@@ -432,6 +432,8 @@ export class Daemon {
     session.blockedTotal += blocked.length;
     // What went through to a test environment where the run may write; nothing on any other site.
     const written = surface?.guard.passed?.splice(0) ?? [];
+    // Messages played from a recording instead of sent.
+    const replayed = surface?.guard.replays?.splice(0) ?? [];
     // Read requests of the site model that went through, such as a question to a search service.
     const read = surface?.guard.reads?.splice(0) ?? [];
     // Cloudflare's check whether the browser is a robot, which Cloudflare answers and the site never gets.
@@ -456,6 +458,7 @@ export class Daemon {
       images: await images.hashed(),
       blocked,
       ...(written.length > 0 ? { writes: written } : {}),
+      ...(replayed.length > 0 ? { replays: replayed.map(({ noteNl: _noteNl, ...entry }) => entry) } : {}),
       ...(read.length > 0 ? { reads: read } : {}),
       ...(challenges.length > 0 ? { challenges } : {}),
       ...(blockades.length > 0 ? { blockades } : {}),
@@ -469,6 +472,7 @@ export class Daemon {
     // The words a finding needs to say where the element is, ready to copy.
     if (!error && turn.target && (turn.target.heading || turn.target.around || turn.target.frame)) print.place = { ...(turn.target.frame ? { frame: sayFrame(turn.target.frame) } : {}), ...(turn.target.heading ? { heading: turn.target.heading } : {}), ...(turn.target.around ? { text: turn.target.around } : {}) };
     if (written.length > 0) print.written = [...written.slice(0, MAX_BLOCKED_PRINTED).map((entry) => `${entry.method} ${entry.path.slice(0, 100)}`), ...(written.length > MAX_BLOCKED_PRINTED ? [`(+${written.length - MAX_BLOCKED_PRINTED})`] : [])];
+    if (replayed.length > 0) print.replayed = [...new Set(replayed.map((entry) => entry.noteNl))];
     if (read.length > 0) print.read = [...read.slice(0, MAX_BLOCKED_PRINTED).map((entry) => `${entry.method} ${entry.url.slice(0, 100)} (leesverzoek ${entry.rule})`), ...(read.length > MAX_BLOCKED_PRINTED ? [`(+${read.length - MAX_BLOCKED_PRINTED})`] : [])];
     if (challenges.length > 0) print.challenge = `${challenges.length} ${challenges.length === 1 ? "verzoek" : "verzoeken"} van de controle van Cloudflare tegen robots doorgelaten (${[...new Set(challenges.map((entry) => new URL(entry.url).hostname))].join(", ")}); de site krijgt die niet`;
     if (blocked.length > 0) print.blocked = [...blocked.slice(0, MAX_BLOCKED_PRINTED).map((entry) => `${entry.kind}: ${entry.method} ${entry.url.slice(0, 100)}${entry.search ? ` (zoekvraag: ${entry.search.join(", ")})` : ""}${entry.reasonNl ? ` (${entry.reasonNl})` : ""}`), ...(blocked.length > MAX_BLOCKED_PRINTED ? [`(+${blocked.length - MAX_BLOCKED_PRINTED})`] : [])];

@@ -11,6 +11,7 @@ import { searchServicesOf, type SearchServiceId } from "../lib/searchbody.ts";
 import { SEARCH_FALLBACK, SEARCH_NONE } from "../lib/searchterm.ts";
 import { searchTermForRun } from "../lib/sitemodel.ts";
 import { OriginBlocked, refusalNl, type Blockade } from "./blockade.ts";
+import { playRecording, replayNl, socketRecordings, type PassedReplay, type Recorder } from "../lib/recordings.ts";
 import { isWriteOrigin, runWrites, SocketFrames, writeAccess, writesForRun, type PassedWrite, type WriteAccess } from "../lib/writes.ts";
 
 /** Limits of the process that holds the browser; set once, when it starts. */
@@ -134,6 +135,8 @@ export interface Guard {
   outsideScopeLoaded: Record<string, number>;
   /** Writes that were let through to the test environment; absent until the first one. */
   passed?: PassedWrite[];
+  /** Messages that were not sent but played from a recording of an earlier real send (see `socketRecordings`); absent until the first one. */
+  replays?: (PassedReplay & { noteNl: string })[];
   /** Read requests of the site model that were let through, without their body; absent until the first one. */
   reads?: PassedRead[];
   /** Requests of Cloudflare's check whether the browser is a robot that were let through and would otherwise have been refused; absent until the first one. */
@@ -273,16 +276,44 @@ export async function guardContext(context: BrowserContext, scope: Scope, guard:
     // Only a socket of the test environment may carry what the page says.
     const free = server !== null && isWriteOrigin(scope.writes, url);
     const frames = new SocketFrames(MESSAGE_VALUES);
+    // On the socket of the test environment the answer to a real message is recorded, and a message that was sent before is played from its recording.
+    const recordings = free ? socketRecordings(scope.writes!.runDir, scope.writes!.source, MESSAGE_VALUES) : null;
+    let recorder: Recorder | null = null;
+    if (free) {
+      server!.onMessage((reply) => {
+        socket.send(reply);
+        recorder?.frame(reply);
+      });
+      // A handler for closing takes over passing it on: the server is closed as the page closed its side.
+      socket.onClose((code, reason) => {
+        recorder?.end();
+        void server!.close({ code, reason }).catch(() => undefined);
+      });
+    }
     socket.onMessage((message) => {
       if (!free) return note("socket", "SEND", url, "websocket");
+      const counted = frames.counts(message, guard.idle);
+      if (counted) {
+        const recording = recordings!.find(url, message);
+        if (recording) {
+          (guard.replays ??= []).push({ ...recordings!.replayed(url, recording, guard.sender), noteNl: replayNl(recording) });
+          return playRecording(recording, (reply) => socket.send(reply));
+        }
+      }
       // Every frame takes one from the budget, unless it is shown to be a heartbeat or a message of the protocol: that passes and is only noted.
-      const claim = frames.counts(message, guard.idle) ? scope.writes!.claim("SEND", url, { message: true, sender: guard.sender }) : { ok: true as const, entry: scope.writes!.record("SEND", url, { sender: guard.sender }) };
+      const claim = counted ? scope.writes!.claim("SEND", url, { message: true, sender: guard.sender }) : { ok: true as const, entry: scope.writes!.record("SEND", url, { sender: guard.sender }) };
       if (!claim.ok) {
         guard.blocked.push({ at: new Date().toISOString(), kind: "socket", method: "SEND", url: url.slice(0, MAX_URL), resourceType: "websocket", reasonNl: claim.reasonNl, writeBudget: claim.budget });
         return;
       }
       (guard.passed ??= []).push(claim.entry);
       server!.send(message);
+      // Only a message with a test value starts a recording, and ends the one before it.
+      const next = counted ? recordings!.start(url, message, guard.sender) : null;
+      if (next) {
+        recorder?.end();
+        recorder = next;
+      }
     });
   });
 }

@@ -1,4 +1,5 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { replaysNl } from "../lib/recordings.ts";
 import { join } from "node:path";
 import { frameStanding, type AcceptedGapDecider } from "../lib/sitemodel.ts";
 import { readJson, sha256File } from "../lib/canonical.ts";
@@ -331,7 +332,7 @@ export async function evaluate(options: EvaluateOptions): Promise<Evaluation> {
     limitationsNl: limitations,
     ...(measuredStates ? { measuredStates } : {}),
     ...(documents ? { documents } : {}),
-    chain: { kind: "instruments", gate: gateSummary, writes: { allowed: Boolean(run.writes), noteNl: run.writes ? writesAllowedNl(run.writes) : WRITES_BLOCKED_NL }, ...((run.reads ?? []).length > 0 ? { reads: run.reads!.map((rule) => ({ method: rule.method, origin: rule.origin, path: rule.path, service: rule.service, reasonNl: rule.reasonNl })) } : {}) },
+    chain: { kind: "instruments", gate: gateSummary, writes: { allowed: Boolean(run.writes), noteNl: run.writes ? [writesAllowedNl(run.writes), replaysNl(options.run)].filter(Boolean).join(". ") : WRITES_BLOCKED_NL }, ...((run.reads ?? []).length > 0 ? { reads: run.reads!.map((rule) => ({ method: rule.method, origin: rule.origin, path: rule.path, service: rule.service, reasonNl: rule.reasonNl })) } : {}) },
     signature: null,
   };
   if (earlier) {
