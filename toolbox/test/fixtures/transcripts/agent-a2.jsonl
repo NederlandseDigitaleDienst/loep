@@ -1,0 +1,2 @@
+{"type":"user","message":{"role":"user","content":"Lees de opdracht en voer haar uit."}}
+{"type":"assistant","message":{"id":"msg_a2_1","model":"claude-sonnet-5-5","role":"assistant","content":[{"type":"text","text":"Ik zoek tegenbewijs."}],"usage":{"input_tokens":4,"cache_creation_input_tokens":3000,"cache_read_input_tokens":10000,"output_tokens":100}}}

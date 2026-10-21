@@ -411,3 +411,25 @@ test("a page that reads content from a host outside the run is reported with tha
   assert.match(said, /^let op: één pagina haalt met GET inhoud op van een adres buiten de run: /);
   assert.ok(said.includes(`--also-origin ${outside}`), "it names the option that takes the origin into the run");
 });
+
+test("without a main region the search term comes from the body without header, navigation, footer and search box", async (context) => {
+  // Every page has the name of the site in the header and a search box in a plain div; the content differs.
+  const page = (title: string, content: string): string =>
+    `<!doctype html><html lang="nl"><head><title>${title} - Voorbeeldstad</title></head><body><header>Voorbeeldstad Bestuur</header><nav><a href="/">Wonen</a> <a href="/a">Parkeren</a> <a href="/b">Afval</a> <a href="/c">Overig</a></nav><div><form><input type="search" name="q"><button>Zoeken zoeken zoeken</button></form></div><div><h1>${title}</h1><p>${content}</p></div><footer>Contact Voorbeeldstad Bestuur</footer></body></html>`;
+  const site = await serveSite(() => ({
+    "/": page("Wonen", "Huurwoning zoeken in de stad."),
+    "/a": page("Parkeren", "Een parkeervergunning voor uw kenteken. Parkeervergunning aanvragen."),
+    "/b": page("Afval", "Restafval en papier. Een parkeervergunning hoort hier niet."),
+    "/c": page("Overig", "Overige zaken."),
+  }));
+  context.after(() => site.close());
+  let found: Inventory;
+  try {
+    found = await inventory({ baseUrl: `${site.origin}/`, out: join(scratch, "search-term-body"), maxPages: 10 });
+  } catch (error) {
+    if (/Executable doesn't exist|browserType.launch/.test((error as Error).message)) return context.skip("no browser available");
+    throw error;
+  }
+  assert.equal(found.searchTerm, "parkeervergunning", `${found.searchTerm} ${found.searchTermAlternatives}`);
+  for (const word of ["voorbeeldstad", "bestuur", "zoeken", "contact"]) assert.ok(!found.searchTermAlternatives?.includes(word), word);
+});

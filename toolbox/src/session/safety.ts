@@ -99,8 +99,8 @@ export interface Blocked {
   search?: SearchServiceId[];
   /** Why a request that a read request covered, or a write to the test environment, was held back. */
   reasonNl?: string;
-  /** A write to the test environment that the budget for sending held back: because it was used up, or because the previous write was too recent. */
-  writeBudget?: "out" | "spacing";
+  /** A write to the test environment that the budget for sending held back: because it was used up, because the sender had used its share, or because the previous write was too recent. */
+  writeBudget?: "out" | "share" | "spacing";
 }
 
 /** Resource types a page needs to look the way it does. Fetched with GET only, also from hosts outside the scope unless the scope is strict. */
@@ -140,6 +140,8 @@ export interface Guard {
   challenges?: PassedChallenge[];
   /** True between two commands of the agent: what the page sends over a socket then, it sends by itself. Absent: an agent may be acting. */
   idle?: boolean;
+  /** The session whose page this is, for its share of the budget for sending. Absent: the source the access to send was made for. */
+  sender?: string;
 }
 
 export interface PassedChallenge {
@@ -236,14 +238,14 @@ export async function guardContext(context: BrowserContext, scope: Scope, guard:
       }
       if (isWriteOrigin(scope.writes, url)) {
         // Every write takes one from the budget of the whole run; when it is used up, or the previous one was too recent, the write is held back as without permission.
-        const claim = scope.writes!.claim(method, url);
+        const claim = scope.writes!.claim(method, url, { sender: guard.sender });
         if (!claim.ok) {
           guard.blocked.push({ at: new Date().toISOString(), kind: "method", method, url: url.slice(0, MAX_URL), resourceType: type, reasonNl: claim.reasonNl, writeBudget: claim.budget });
           return refuse();
         }
         (guard.passed ??= []).push(claim.entry);
         // Where the server sends the browser next is not asked here again: it has to be inside the scope.
-        return passWrite(route, scope.writes!, (target) => inScope(scope, target)).then((repeated) => void (repeated && (guard.passed ??= []).push(scope.writes!.record(method, repeated, { repeat: true }))));
+        return passWrite(route, scope.writes!, (target) => inScope(scope, target)).then((repeated) => void (repeated && (guard.passed ??= []).push(scope.writes!.record(method, repeated, { repeat: true, sender: guard.sender }))));
       }
       // Whether the body has the form of a search: what the explorer needs to record a read request, never the body itself.
       const search = method === "POST" ? searchServicesOf(body) : [];
@@ -274,7 +276,7 @@ export async function guardContext(context: BrowserContext, scope: Scope, guard:
     socket.onMessage((message) => {
       if (!free) return note("socket", "SEND", url, "websocket");
       // Every frame takes one from the budget, unless it is shown to be a heartbeat or a message of the protocol: that passes and is only noted.
-      const claim = frames.counts(message, guard.idle) ? scope.writes!.claim("SEND", url, { message: true }) : { ok: true as const, entry: scope.writes!.record("SEND", url) };
+      const claim = frames.counts(message, guard.idle) ? scope.writes!.claim("SEND", url, { message: true, sender: guard.sender }) : { ok: true as const, entry: scope.writes!.record("SEND", url, { sender: guard.sender }) };
       if (!claim.ok) {
         guard.blocked.push({ at: new Date().toISOString(), kind: "socket", method: "SEND", url: url.slice(0, MAX_URL), resourceType: "websocket", reasonNl: claim.reasonNl, writeBudget: claim.budget });
         return;
@@ -298,9 +300,11 @@ const MAX_REDIRECTS = 5;
  * scope is strict, exactly as the browser was allowed to load it; `resourceType` says which
  * kind, in the words of the browser. Every hop of a redirect is asked again. What is refused
  * is recorded with the refusals of the page, what comes from outside the scope is counted with
- * the rest. Stops at `maxBytes` or when the time is up and says so.
+ * the rest. An origin the blockade of the run refuses is not asked, as the browser of a session
+ * does not ask it, and a 429 inside the scope is told to it; every caller says which blockade
+ * holds, or that none does. Stops at `maxBytes` or when the time is up and says so.
  */
-export async function guardedDownload(scope: Scope, guard: Guard, address: string, to: string, options: { resourceType: string; maxBytes: number; timeoutMs: number; headers?: (url: string) => Promise<Record<string, string>>; blockade?: Blockade | undefined }): Promise<Download> {
+export async function guardedDownload(scope: Scope, guard: Guard, address: string, to: string, options: { resourceType: string; maxBytes: number; timeoutMs: number; headers?: (url: string) => Promise<Record<string, string>>; blockade: Blockade | undefined }): Promise<Download> {
   const abort = new AbortController();
   let timedOut = false;
   const timer = setTimeout(() => {
@@ -324,10 +328,10 @@ export async function guardedDownload(scope: Scope, guard: Guard, address: strin
         }
         guard.outsideScopeLoaded[parsed.hostname] = (guard.outsideScopeLoaded[parsed.hostname] ?? 0) + 1;
       }
-      // An origin that refused the evaluation for the rest of the run is not asked; a short pause the caller waits out before.
+      // A blocked origin is not asked; a caller that can wait out a short pause does so before.
       const refusedBy = options.blockade?.refuses(url);
-      if (refusedBy?.until === null) {
-        const reasonNl = new OriginBlocked(url, refusedBy).message;
+      if (refusedBy) {
+        const reasonNl = refusedBy.until === null ? new OriginBlocked(url, refusedBy).message : `${url} is niet opgevraagd: ${refusalNl(refusedBy)}`;
         guard.blocked.push({ at: new Date().toISOString(), kind: "blockade", method: "GET", url: url.slice(0, MAX_URL), resourceType: options.resourceType, reasonNl });
         return { ok: false, reason: reasonNl };
       }

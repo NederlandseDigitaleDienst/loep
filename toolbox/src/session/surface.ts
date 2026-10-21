@@ -130,9 +130,9 @@ export function embeddingPage(runDir: string, url: string): string | undefined {
   return via[0]!.slice("iframe:".length);
 }
 
-/** Open a fresh browser context on the start URL, with every safety limit of a session in place. */
-export async function openSurface(env: Env, start: StartState, onContext?: (context: BrowserContext) => void): Promise<{ surface: Surface; load: LoadResult }> {
-  const guard: Guard = { blocked: [], outsideScopeLoaded: {} };
+/** Open a fresh browser context on the start URL, with every safety limit of a session in place. `sender`: the session it is for, which sends from its own share of the budget for sending. */
+export async function openSurface(env: Env, start: StartState, onContext?: (context: BrowserContext) => void, sender?: string): Promise<{ surface: Surface; load: LoadResult }> {
+  const guard: Guard = { blocked: [], outsideScopeLoaded: {}, ...(sender ? { sender } : {}) };
   // A page is opened over http or https only: never a file on this machine, a data: or blob: address, or a socket.
   const web = /^https?:/i.test(start.url);
   if (!web || !urlInScope(env.scope, start.url)) {

@@ -1,11 +1,12 @@
 /**
  * The regression check of the sweep on the fixture site, without a language model.
  *
- *   node scripts/sweep-check.ts [--out <dir>] [--at-once <n>] [--variant defect|clean] [--runs <dir>] [--update-baseline]
+ *   node scripts/sweep-check.ts [--out <dir>] [--at-once <n>] [--variant defect|clean] [--fixed-ports] [--runs <dir>] [--update-baseline]
  *
- * --variant measures one variant only (the CI runs the two on two machines), --runs reads runs that
- * were measured before instead of measuring, --from-report takes the rows of earlier reports (the
- * artefacts of the two CI jobs), --update-baseline writes what was found to the baseline.
+ * --variant measures one variant only (the CI runs the two on two machines), --fixed-ports serves the
+ * fixture on the ports of `just testsite` so the runs in <out>/runs stay usable as a frozen sweep,
+ * --runs reads runs that were measured before instead of measuring, --from-report takes the rows of
+ * earlier reports (the artefacts of the two CI jobs), --update-baseline writes what was found to the baseline.
  *
  * On both variants of the fixture site (Lindewaard with the planted defects, Berkenveen as the
  * clean twin) it runs inventory, installs the fixed site model of fixtures/sweep/, runs check-site,
@@ -25,7 +26,7 @@ import { parseArgs } from "node:util";
 import type { Browser } from "playwright";
 import { DEFECTS, type Defect } from "../fixtures/defects.ts";
 import { EVIDENCE, isAgentOnly, type Look, type ScriptEvidence } from "../fixtures/evidence.ts";
-import { startFixture } from "../fixtures/serve.ts";
+import { DEFAULT_PORTS, type SiteKey, startFixture } from "../fixtures/serve.ts";
 import { launchBrowser } from "../src/browser/session.ts";
 import { collect } from "../src/commands/collect.ts";
 import { contrast } from "../src/commands/contrast.ts";
@@ -78,6 +79,12 @@ export function installModel(run: string, variant: Variant, origins: { site: str
     writeFileSync(join(run, "recipes", file), `${JSON.stringify({ id, name, savedBy: "sweep-check", savedAt: "2026-10-20T00:00:00.000Z", start, steps, url: null, domSha256: null }, null, 2)}\n`);
   }
 }
+
+/**
+ * The ports the fixture listens on: free ones by default, so the check never collides with anything;
+ * with fixed ports those of `just testsite`, so the addresses in the runs open again afterwards.
+ */
+export const fixturePorts = (fixed: boolean): Record<SiteKey, number> => (fixed ? { ...DEFAULT_PORTS } : { defect: 0, clean: 0, thirdParty: 0 });
 
 export type SweepTimes = Record<string, number>;
 
@@ -298,7 +305,7 @@ export async function evaluate(runs: Partial<Record<Variant, string>>): Promise<
 }
 
 async function main(): Promise<void> {
-  const { values } = parseArgs({ options: { out: { type: "string" }, runs: { type: "string" }, variant: { type: "string" }, "from-report": { type: "string", multiple: true }, "at-once": { type: "string", default: "1" }, "update-baseline": { type: "boolean", default: false } } });
+  const { values } = parseArgs({ options: { out: { type: "string" }, runs: { type: "string" }, variant: { type: "string" }, "from-report": { type: "string", multiple: true }, "at-once": { type: "string", default: "1" }, "fixed-ports": { type: "boolean", default: false }, "update-baseline": { type: "boolean", default: false } } });
   const out = resolve(values.out ?? join(tmpdir(), `loep-sweep-check-${process.pid}`));
   const atOnce = Number(values["at-once"]);
   if (!Number.isInteger(atOnce) || atOnce < 1) throw new Error("--at-once is een geheel aantal pagina's, 1 of meer");
@@ -314,7 +321,10 @@ async function main(): Promise<void> {
   if (!values.runs && reports.length === 0) {
     rmSync(runsDir, { recursive: true, force: true });
     mkdirSync(runsDir, { recursive: true });
-    const fixture = await startFixture({ ports: { defect: 0, clean: 0, thirdParty: 0 }, logFile: join(out, "fixture-server.log") });
+    const fixture = await startFixture({ ports: fixturePorts(values["fixed-ports"]), logFile: join(out, "fixture-server.log") }).catch((error: NodeJS.ErrnoException) => {
+      if (error.code === "EADDRINUSE") throw new Error(`--fixed-ports: een van de poorten ${Object.values(DEFAULT_PORTS).join(", ")} is al in gebruik, bijvoorbeeld door just testsite; stop die eerst`);
+      throw error;
+    });
     try {
       // The two variants at the same time: each its own browser and run.
       await Promise.all(

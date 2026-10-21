@@ -1,0 +1,1467 @@
+{
+  "agreement": {
+    "baseline": {
+      "kappa": null,
+      "runs": 2,
+      "unanimous": [
+        9,
+        9
+      ]
+    },
+    "variant": {
+      "kappa": null,
+      "runs": 2,
+      "unanimous": [
+        9,
+        9
+      ]
+    }
+  },
+  "criteria": [
+    "1.1.1",
+    "1.3.1",
+    "1.4.3",
+    "1.4.11",
+    "2.1.1",
+    "2.4.3",
+    "3.1.2",
+    "3.3.1",
+    "4.1.2"
+  ],
+  "defects": [
+    {
+      "baseline": [
+        "gevonden",
+        "gevonden"
+      ],
+      "criterion": "1.1.1",
+      "descriptionNl": "De foto van de fietsenstalling heeft geen alt-attribuut.",
+      "foundBaseline": [
+        2,
+        2
+      ],
+      "foundVariant": [
+        2,
+        2
+      ],
+      "id": "1.1.1-artikelfoto",
+      "variant": [
+        "gevonden",
+        "gevonden"
+      ]
+    },
+    {
+      "baseline": [
+        "gevonden",
+        "gevonden"
+      ],
+      "criterion": "1.1.1",
+      "descriptionNl": "Het logo van het waterschap heeft een bestandsnaam als tekstalternatief.",
+      "foundBaseline": [
+        2,
+        2
+      ],
+      "foundVariant": [
+        2,
+        2
+      ],
+      "id": "1.1.1-bestandsnaam",
+      "variant": [
+        "gevonden",
+        "gevonden"
+      ]
+    },
+    {
+      "baseline": [
+        "gevonden",
+        "gevonden"
+      ],
+      "criterion": "1.1.1",
+      "descriptionNl": "Het logo in de cookiemelding heeft als tekstalternatief het woord \"logo\".",
+      "foundBaseline": [
+        2,
+        2
+      ],
+      "foundVariant": [
+        2,
+        2
+      ],
+      "id": "1.1.1-logo-melding",
+      "variant": [
+        "gevonden",
+        "gevonden"
+      ]
+    },
+    {
+      "baseline": [
+        "gevonden",
+        "gevonden"
+      ],
+      "criterion": "1.1.1",
+      "descriptionNl": "De tarieven staan alleen in een afbeelding van een tabel, met een leeg alt.",
+      "foundBaseline": [
+        2,
+        2
+      ],
+      "foundVariant": [
+        2,
+        2
+      ],
+      "id": "1.1.1-tarieven",
+      "variant": [
+        "gevonden",
+        "gevonden"
+      ]
+    },
+    {
+      "baseline": [
+        "gevonden",
+        "gevonden"
+      ],
+      "criterion": "1.3.1",
+      "descriptionNl": "De groep keuzerondjes heeft geen fieldset en legend; de vraag is een losse alinea.",
+      "foundBaseline": [
+        2,
+        2
+      ],
+      "foundVariant": [
+        2,
+        2
+      ],
+      "id": "1.3.1-keuzegroep",
+      "variant": [
+        "gevonden",
+        "gevonden"
+      ]
+    },
+    {
+      "baseline": [
+        "gevonden",
+        "gevonden"
+      ],
+      "criterion": "1.3.1",
+      "descriptionNl": "Een opsomming is gemaakt met streepjes en regeleinden in één alinea.",
+      "foundBaseline": [
+        2,
+        2
+      ],
+      "foundVariant": [
+        2,
+        2
+      ],
+      "id": "1.3.1-lijst-als-alinea",
+      "variant": [
+        "gevonden",
+        "gevonden"
+      ]
+    },
+    {
+      "baseline": [
+        "gevonden",
+        "gevonden"
+      ],
+      "criterion": "1.3.1",
+      "descriptionNl": "De kopcellen van de rijen en kolommen zijn gewone cellen met een vette opmaak.",
+      "foundBaseline": [
+        2,
+        2
+      ],
+      "foundVariant": [
+        2,
+        2
+      ],
+      "id": "1.3.1-tabelkoppen",
+      "variant": [
+        "gevonden",
+        "gevonden"
+      ]
+    },
+    {
+      "baseline": [
+        "gevonden",
+        "gevonden"
+      ],
+      "criterion": "1.3.1",
+      "descriptionNl": "Twee tussenkoppen in een dichte uitklapper zijn vette alinea's.",
+      "foundBaseline": [
+        2,
+        2
+      ],
+      "foundVariant": [
+        2,
+        2
+      ],
+      "id": "1.3.1-tussenkop-uitklapper",
+      "variant": [
+        "gevonden",
+        "gevonden"
+      ]
+    },
+    {
+      "baseline": [
+        "gevonden",
+        "gevonden"
+      ],
+      "criterion": "1.3.1",
+      "descriptionNl": "Een tussenkop is opgemaakt als vette alinea in plaats van als kop.",
+      "foundBaseline": [
+        2,
+        2
+      ],
+      "foundVariant": [
+        2,
+        2
+      ],
+      "id": "1.3.1-vette-tussenkop",
+      "variant": [
+        "gevonden",
+        "gevonden"
+      ]
+    },
+    {
+      "baseline": [
+        "gevonden",
+        "gevonden"
+      ],
+      "criterion": "1.3.1",
+      "descriptionNl": "De titels boven de kolommen in de voet zijn spans en geen koppen.",
+      "foundBaseline": [
+        2,
+        2
+      ],
+      "foundVariant": [
+        2,
+        2
+      ],
+      "id": "1.3.1-voetkop",
+      "variant": [
+        "gevonden",
+        "gevonden"
+      ]
+    },
+    {
+      "baseline": [
+        "gevonden",
+        "gevonden"
+      ],
+      "criterion": "1.4.3",
+      "descriptionNl": "De datum is lichtgrijs op wit (ongeveer 2,6 op 1).",
+      "foundBaseline": [
+        2,
+        2
+      ],
+      "foundVariant": [
+        2,
+        2
+      ],
+      "id": "1.4.3-datum",
+      "variant": [
+        "gevonden",
+        "gevonden"
+      ]
+    },
+    {
+      "baseline": [
+        "gevonden",
+        "gevonden"
+      ],
+      "criterion": "1.4.3",
+      "descriptionNl": "Bij aanwijzen met de muis wordt een menulink grijs op lichtgrijs (ongeveer 2 op 1).",
+      "foundBaseline": [
+        2,
+        2
+      ],
+      "foundVariant": [
+        2,
+        2
+      ],
+      "id": "1.4.3-menu-aanwijzen",
+      "variant": [
+        "gevonden",
+        "gevonden"
+      ]
+    },
+    {
+      "baseline": [
+        "gevonden",
+        "gevonden"
+      ],
+      "criterion": "1.4.3",
+      "descriptionNl": "Witte tekst staat direct op de foto. Het linkerdeel van de foto is licht, daar is het contrast te laag.",
+      "foundBaseline": [
+        2,
+        2
+      ],
+      "foundVariant": [
+        2,
+        2
+      ],
+      "id": "1.4.3-tekst-op-foto",
+      "variant": [
+        "gevonden",
+        "gevonden"
+      ]
+    },
+    {
+      "baseline": [
+        "gevonden",
+        "gevonden"
+      ],
+      "criterion": "1.4.11",
+      "descriptionNl": "De rand van de invoervelden is lichtgrijs op wit (ongeveer 1,4 op 1).",
+      "foundBaseline": [
+        2,
+        2
+      ],
+      "foundVariant": [
+        2,
+        2
+      ],
+      "id": "1.4.11-veldrand",
+      "variant": [
+        "gevonden",
+        "gevonden"
+      ]
+    },
+    {
+      "baseline": [
+        "gevonden",
+        "gevonden"
+      ],
+      "criterion": "2.1.1",
+      "descriptionNl": "Het kruisje om de chat te sluiten is een div die alleen op een klik reageert.",
+      "foundBaseline": [
+        2,
+        2
+      ],
+      "foundVariant": [
+        2,
+        2
+      ],
+      "id": "2.1.1-chat-sluit",
+      "variant": [
+        "gevonden",
+        "gevonden"
+      ]
+    },
+    {
+      "baseline": [
+        "gevonden",
+        "gevonden"
+      ],
+      "criterion": "2.1.1",
+      "descriptionNl": "De link heeft geen href en werkt alleen met de muis.",
+      "foundBaseline": [
+        2,
+        2
+      ],
+      "foundVariant": [
+        2,
+        2
+      ],
+      "id": "2.1.1-naar-boven",
+      "variant": [
+        "gevonden",
+        "gevonden"
+      ]
+    },
+    {
+      "baseline": [
+        "gevonden",
+        "gevonden"
+      ],
+      "criterion": "2.1.1",
+      "descriptionNl": "Een kaart opent het bericht bij een klik, maar is geen link. De klik wordt afgehandeld op de lijst eromheen. Met het toetsenbord is het bericht niet te openen.",
+      "foundBaseline": [
+        2,
+        2
+      ],
+      "foundVariant": [
+        2,
+        2
+      ],
+      "id": "2.1.1-nieuwskaart",
+      "variant": [
+        "gevonden",
+        "gevonden"
+      ]
+    },
+    {
+      "baseline": [
+        "gevonden",
+        "gevonden"
+      ],
+      "criterion": "2.1.1",
+      "descriptionNl": "Een kaart opent een venster met uitleg bij een klik, maar is geen knop en krijgt geen focus.",
+      "foundBaseline": [
+        2,
+        2
+      ],
+      "foundVariant": [
+        2,
+        2
+      ],
+      "id": "2.1.1-productkaart",
+      "variant": [
+        "gevonden",
+        "gevonden"
+      ]
+    },
+    {
+      "baseline": [
+        "gevonden",
+        "gevonden"
+      ],
+      "criterion": "2.1.1",
+      "descriptionNl": "Het echte selectievakje is verborgen met display:none en vervangen door een getekend vakje. Het is niet met Tab te bereiken.",
+      "foundBaseline": [
+        2,
+        2
+      ],
+      "foundVariant": [
+        2,
+        2
+      ],
+      "id": "2.1.1-vinkje",
+      "variant": [
+        "gevonden",
+        "gevonden"
+      ]
+    },
+    {
+      "baseline": [
+        "gevonden",
+        "gevonden"
+      ],
+      "criterion": "2.4.3",
+      "descriptionNl": "Het menu staat in de code na de voet. Na het openen moet de bezoeker met Tab eerst door de hele pagina voordat de focus in het menu komt.",
+      "foundBaseline": [
+        2,
+        2
+      ],
+      "foundVariant": [
+        2,
+        2
+      ],
+      "id": "2.4.3-mobiel-menu",
+      "variant": [
+        "gevonden",
+        "gevonden"
+      ]
+    },
+    {
+      "baseline": [
+        "gevonden",
+        "gevonden"
+      ],
+      "criterion": "2.4.3",
+      "descriptionNl": "De velden hebben tabindex 1, 3 en 2. De focus begint midden op de pagina en gaat van naam naar telefoonnummer naar e-mailadres.",
+      "foundBaseline": [
+        2,
+        2
+      ],
+      "foundVariant": [
+        2,
+        2
+      ],
+      "id": "2.4.3-tabindex",
+      "variant": [
+        "gevonden",
+        "gevonden"
+      ]
+    },
+    {
+      "baseline": [
+        "gevonden",
+        "gevonden"
+      ],
+      "criterion": "3.1.2",
+      "descriptionNl": "Een Engelse zin heeft geen taalcode.",
+      "foundBaseline": [
+        2,
+        2
+      ],
+      "foundVariant": [
+        2,
+        2
+      ],
+      "id": "3.1.2-engels",
+      "variant": [
+        "gevonden",
+        "gevonden"
+      ]
+    },
+    {
+      "baseline": [
+        "gevonden",
+        "gevonden"
+      ],
+      "criterion": "3.3.1",
+      "descriptionNl": "Een verplicht veld dat leeg is, krijgt alleen een rode rand. Er staat geen tekst die zegt wat er mis is.",
+      "foundBaseline": [
+        2,
+        2
+      ],
+      "foundVariant": [
+        2,
+        2
+      ],
+      "id": "3.3.1-rode-rand",
+      "variant": [
+        "gevonden",
+        "gevonden"
+      ]
+    },
+    {
+      "baseline": [
+        "gevonden",
+        "gevonden"
+      ],
+      "criterion": "4.1.2",
+      "descriptionNl": "Het venster van de videospeler heeft geen titel.",
+      "foundBaseline": [
+        2,
+        2
+      ],
+      "foundVariant": [
+        2,
+        2
+      ],
+      "id": "4.1.2-kadertitel",
+      "variant": [
+        "gevonden",
+        "gevonden"
+      ]
+    },
+    {
+      "baseline": [
+        "gevonden",
+        "gevonden"
+      ],
+      "criterion": "4.1.2",
+      "descriptionNl": "De knop heeft geen naam en meldt niet of het menu open is.",
+      "foundBaseline": [
+        2,
+        2
+      ],
+      "foundVariant": [
+        2,
+        2
+      ],
+      "id": "4.1.2-menuknop",
+      "variant": [
+        "gevonden",
+        "gevonden"
+      ]
+    },
+    {
+      "baseline": [
+        "gemist-bewijs-beoordeling",
+        "gevonden"
+      ],
+      "criterion": "4.1.2",
+      "descriptionNl": "De afbeelding heeft role=\"logo\". Die rol bestaat niet.",
+      "foundBaseline": [
+        1,
+        2
+      ],
+      "foundVariant": [
+        1,
+        2
+      ],
+      "id": "4.1.2-rol-logo",
+      "variant": [
+        "gemist-bewijs-beoordeling",
+        "gevonden"
+      ]
+    },
+    {
+      "baseline": [
+        "gevonden",
+        "gevonden"
+      ],
+      "criterion": "4.1.2",
+      "descriptionNl": "De tabbladen zijn divs met een klikhandler, zonder rol, zonder toestand en zonder focus.",
+      "foundBaseline": [
+        2,
+        2
+      ],
+      "foundVariant": [
+        2,
+        2
+      ],
+      "id": "4.1.2-tabs",
+      "variant": [
+        "gevonden",
+        "gevonden"
+      ]
+    },
+    {
+      "baseline": [
+        "gevonden",
+        "gevonden"
+      ],
+      "criterion": "4.1.2",
+      "descriptionNl": "De knoppen melden niet of het antwoord open of dicht is.",
+      "foundBaseline": [
+        2,
+        2
+      ],
+      "foundVariant": [
+        2,
+        2
+      ],
+      "id": "4.1.2-uitklapper",
+      "variant": [
+        "gevonden",
+        "gevonden"
+      ]
+    },
+    {
+      "baseline": [
+        "gevonden",
+        "gevonden"
+      ],
+      "criterion": "4.1.2",
+      "descriptionNl": "Het venster heeft geen rol dialog en geen naam. De focus gaat er niet heen en het kruisje is een div.",
+      "foundBaseline": [
+        2,
+        2
+      ],
+      "foundVariant": [
+        2,
+        2
+      ],
+      "id": "4.1.2-venster",
+      "variant": [
+        "gevonden",
+        "gevonden"
+      ]
+    }
+  ],
+  "reference": "reference-lindewaard.json",
+  "rows": [
+    {
+      "baseline": [
+        "failed",
+        "failed"
+      ],
+      "criterion": "1.1.1",
+      "keyFails": true,
+      "spreadBaseline": 0,
+      "spreadBetween": 0,
+      "spreadVariant": 0,
+      "titleNl": "Niet-tekstuele content",
+      "variant": [
+        "failed",
+        "failed"
+      ]
+    },
+    {
+      "baseline": [
+        "failed",
+        "failed"
+      ],
+      "criterion": "1.3.1",
+      "keyFails": true,
+      "spreadBaseline": 0,
+      "spreadBetween": 0,
+      "spreadVariant": 0,
+      "titleNl": "Info en relaties",
+      "variant": [
+        "failed",
+        "failed"
+      ]
+    },
+    {
+      "baseline": [
+        "failed",
+        "failed"
+      ],
+      "criterion": "1.4.3",
+      "keyFails": true,
+      "spreadBaseline": 0,
+      "spreadBetween": 0,
+      "spreadVariant": 0,
+      "titleNl": "Contrast (minimum)",
+      "variant": [
+        "failed",
+        "failed"
+      ]
+    },
+    {
+      "baseline": [
+        "failed",
+        "failed"
+      ],
+      "criterion": "1.4.11",
+      "keyFails": true,
+      "spreadBaseline": 0,
+      "spreadBetween": 0,
+      "spreadVariant": 0,
+      "titleNl": "Contrast van niet-tekstuele content",
+      "variant": [
+        "failed",
+        "failed"
+      ]
+    },
+    {
+      "baseline": [
+        "failed",
+        "failed"
+      ],
+      "criterion": "2.1.1",
+      "keyFails": true,
+      "spreadBaseline": 0,
+      "spreadBetween": 0,
+      "spreadVariant": 0,
+      "titleNl": "Toetsenbord",
+      "variant": [
+        "failed",
+        "failed"
+      ]
+    },
+    {
+      "baseline": [
+        "failed",
+        "failed"
+      ],
+      "criterion": "2.4.3",
+      "keyFails": true,
+      "spreadBaseline": 0,
+      "spreadBetween": 0,
+      "spreadVariant": 0,
+      "titleNl": "Focus volgorde",
+      "variant": [
+        "failed",
+        "failed"
+      ]
+    },
+    {
+      "baseline": [
+        "failed",
+        "failed"
+      ],
+      "criterion": "3.1.2",
+      "keyFails": true,
+      "spreadBaseline": 0,
+      "spreadBetween": 0,
+      "spreadVariant": 0,
+      "titleNl": "Taal van onderdelen",
+      "variant": [
+        "failed",
+        "failed"
+      ]
+    },
+    {
+      "baseline": [
+        "failed",
+        "failed"
+      ],
+      "criterion": "3.3.1",
+      "keyFails": true,
+      "spreadBaseline": 0,
+      "spreadBetween": 0,
+      "spreadVariant": 0,
+      "titleNl": "Foutidentificatie",
+      "variant": [
+        "failed",
+        "failed"
+      ]
+    },
+    {
+      "baseline": [
+        "failed",
+        "failed"
+      ],
+      "criterion": "4.1.2",
+      "keyFails": true,
+      "spreadBaseline": 0,
+      "spreadBetween": 0,
+      "spreadVariant": 0,
+      "titleNl": "Naam, rol, waarde",
+      "variant": [
+        "failed",
+        "failed"
+      ]
+    }
+  ],
+  "runs": [
+    {
+      "commit": "6ad7e5c3df6bc98968d979217d7ed8c275a9fbc5",
+      "criteria": [
+        "1.1.1",
+        "1.2.1",
+        "1.2.2",
+        "1.2.3",
+        "1.2.4",
+        "1.2.5",
+        "1.3.1",
+        "1.3.2",
+        "1.3.3",
+        "1.3.4",
+        "1.3.5",
+        "1.4.1",
+        "1.4.2",
+        "1.4.3",
+        "1.4.4",
+        "1.4.5",
+        "1.4.10",
+        "1.4.11",
+        "1.4.12",
+        "1.4.13",
+        "2.1.1",
+        "2.1.2",
+        "2.1.4",
+        "2.2.1",
+        "2.2.2",
+        "2.3.1",
+        "2.4.1",
+        "2.4.2",
+        "2.4.3",
+        "2.4.4",
+        "2.4.5",
+        "2.4.6",
+        "2.4.7",
+        "2.4.11",
+        "2.5.1",
+        "2.5.2",
+        "2.5.3",
+        "2.5.4",
+        "2.5.7",
+        "2.5.8",
+        "3.1.1",
+        "3.1.2",
+        "3.2.1",
+        "3.2.2",
+        "3.2.3",
+        "3.2.4",
+        "3.2.6",
+        "3.3.1",
+        "3.3.2",
+        "3.3.3",
+        "3.3.4",
+        "3.3.7",
+        "3.3.8",
+        "4.1.1",
+        "4.1.2",
+        "4.1.3"
+      ],
+      "defects": {
+        "1.1.1-artikelfoto": "gevonden",
+        "1.1.1-bestandsnaam": "gevonden",
+        "1.1.1-logo-melding": "gevonden",
+        "1.1.1-tarieven": "gevonden",
+        "1.3.1-keuzegroep": "gevonden",
+        "1.3.1-lijst-als-alinea": "gevonden",
+        "1.3.1-tabelkoppen": "gevonden",
+        "1.3.1-tussenkop-uitklapper": "gevonden",
+        "1.3.1-vette-tussenkop": "gevonden",
+        "1.3.1-voetkop": "gevonden",
+        "1.4.11-veldrand": "gevonden",
+        "1.4.3-datum": "gevonden",
+        "1.4.3-menu-aanwijzen": "gevonden",
+        "1.4.3-tekst-op-foto": "gevonden",
+        "2.1.1-chat-sluit": "gevonden",
+        "2.1.1-naar-boven": "gevonden",
+        "2.1.1-nieuwskaart": "gevonden",
+        "2.1.1-productkaart": "gevonden",
+        "2.1.1-vinkje": "gevonden",
+        "2.4.3-mobiel-menu": "gevonden",
+        "2.4.3-tabindex": "gevonden",
+        "3.1.2-engels": "gevonden",
+        "3.3.1-rode-rand": "gevonden",
+        "4.1.2-kadertitel": "gevonden",
+        "4.1.2-menuknop": "gevonden",
+        "4.1.2-rol-logo": "gemist-bewijs-beoordeling",
+        "4.1.2-tabs": "gevonden",
+        "4.1.2-uitklapper": "gevonden",
+        "4.1.2-venster": "gevonden"
+      },
+      "defectsNl": null,
+      "falseReports": {
+        "1.1.1": 0,
+        "1.3.1": 2,
+        "1.4.11": 0,
+        "1.4.3": 0,
+        "2.1.1": 1,
+        "2.4.3": 0,
+        "3.1.2": 0,
+        "3.3.1": 0,
+        "4.1.2": 0
+      },
+      "findings": {
+        "1.1.1": 5,
+        "1.3.1": 9,
+        "1.4.11": 1,
+        "1.4.3": 4,
+        "2.1.1": 8,
+        "2.4.3": 4,
+        "3.1.2": 1,
+        "3.3.1": 1,
+        "4.1.2": 13
+      },
+      "openPoints": {
+        "proef werkte niet": 1
+      },
+      "openPointsByCriterion": {
+        "1.1.1": 1,
+        "1.3.1": 0,
+        "1.4.11": 0,
+        "1.4.3": 0,
+        "2.1.1": 0,
+        "2.4.3": 0,
+        "3.1.2": 0,
+        "3.3.1": 0,
+        "4.1.2": 0
+      },
+      "outcomes": {
+        "1.1.1": "failed",
+        "1.3.1": "failed",
+        "1.4.11": "failed",
+        "1.4.3": "failed",
+        "2.1.1": "failed",
+        "2.4.3": "failed",
+        "3.1.2": "failed",
+        "3.3.1": "failed",
+        "4.1.2": "failed"
+      },
+      "roles": [
+        {
+          "agents": 13,
+          "commands": 691,
+          "costUsd": null,
+          "role": "walk",
+          "roleNl": "rondgang",
+          "sessionSeconds": 7303,
+          "tokens": null,
+          "turns": null
+        },
+        {
+          "agents": 56,
+          "commands": 2344,
+          "costUsd": null,
+          "role": "judge",
+          "roleNl": "beoordelaar",
+          "sessionSeconds": 20013,
+          "tokens": null,
+          "turns": null
+        },
+        {
+          "agents": 56,
+          "commands": 1305,
+          "costUsd": null,
+          "role": "verifier",
+          "roleNl": "verifieerder",
+          "sessionSeconds": 13388,
+          "tokens": null,
+          "turns": null
+        }
+      ],
+      "run": "n1",
+      "side": "baseline",
+      "variant": "n1"
+    },
+    {
+      "commit": "6ad7e5c3df6bc98968d979217d7ed8c275a9fbc5",
+      "criteria": [
+        "1.1.1",
+        "1.2.1",
+        "1.2.2",
+        "1.2.3",
+        "1.2.4",
+        "1.2.5",
+        "1.3.1",
+        "1.3.2",
+        "1.3.3",
+        "1.3.4",
+        "1.3.5",
+        "1.4.1",
+        "1.4.2",
+        "1.4.3",
+        "1.4.4",
+        "1.4.5",
+        "1.4.10",
+        "1.4.11",
+        "1.4.12",
+        "1.4.13",
+        "2.1.1",
+        "2.1.2",
+        "2.1.4",
+        "2.2.1",
+        "2.2.2",
+        "2.3.1",
+        "2.4.1",
+        "2.4.2",
+        "2.4.3",
+        "2.4.4",
+        "2.4.5",
+        "2.4.6",
+        "2.4.7",
+        "2.4.11",
+        "2.5.1",
+        "2.5.2",
+        "2.5.3",
+        "2.5.4",
+        "2.5.7",
+        "2.5.8",
+        "3.1.1",
+        "3.1.2",
+        "3.2.1",
+        "3.2.2",
+        "3.2.3",
+        "3.2.4",
+        "3.2.6",
+        "3.3.1",
+        "3.3.2",
+        "3.3.3",
+        "3.3.4",
+        "3.3.7",
+        "3.3.8",
+        "4.1.1",
+        "4.1.2",
+        "4.1.3"
+      ],
+      "defects": {
+        "1.1.1-artikelfoto": "gevonden",
+        "1.1.1-bestandsnaam": "gevonden",
+        "1.1.1-logo-melding": "gevonden",
+        "1.1.1-tarieven": "gevonden",
+        "1.3.1-keuzegroep": "gevonden",
+        "1.3.1-lijst-als-alinea": "gevonden",
+        "1.3.1-tabelkoppen": "gevonden",
+        "1.3.1-tussenkop-uitklapper": "gevonden",
+        "1.3.1-vette-tussenkop": "gevonden",
+        "1.3.1-voetkop": "gevonden",
+        "1.4.11-veldrand": "gevonden",
+        "1.4.3-datum": "gevonden",
+        "1.4.3-menu-aanwijzen": "gevonden",
+        "1.4.3-tekst-op-foto": "gevonden",
+        "2.1.1-chat-sluit": "gevonden",
+        "2.1.1-naar-boven": "gevonden",
+        "2.1.1-nieuwskaart": "gevonden",
+        "2.1.1-productkaart": "gevonden",
+        "2.1.1-vinkje": "gevonden",
+        "2.4.3-mobiel-menu": "gevonden",
+        "2.4.3-tabindex": "gevonden",
+        "3.1.2-engels": "gevonden",
+        "3.3.1-rode-rand": "gevonden",
+        "4.1.2-kadertitel": "gevonden",
+        "4.1.2-menuknop": "gevonden",
+        "4.1.2-rol-logo": "gevonden",
+        "4.1.2-tabs": "gevonden",
+        "4.1.2-uitklapper": "gevonden",
+        "4.1.2-venster": "gevonden"
+      },
+      "defectsNl": null,
+      "falseReports": {
+        "1.1.1": 0,
+        "1.3.1": 3,
+        "1.4.11": 1,
+        "1.4.3": 0,
+        "2.1.1": 1,
+        "2.4.3": 0,
+        "3.1.2": 0,
+        "3.3.1": 0,
+        "4.1.2": 0
+      },
+      "findings": {
+        "1.1.1": 6,
+        "1.3.1": 9,
+        "1.4.11": 2,
+        "1.4.3": 3,
+        "2.1.1": 6,
+        "2.4.3": 4,
+        "3.1.2": 1,
+        "3.3.1": 1,
+        "4.1.2": 13
+      },
+      "openPoints": {
+        "mens nodig": 2
+      },
+      "openPointsByCriterion": {
+        "1.1.1": 0,
+        "1.3.1": 0,
+        "1.4.11": 0,
+        "1.4.3": 0,
+        "2.1.1": 2,
+        "2.4.3": 0,
+        "3.1.2": 0,
+        "3.3.1": 0,
+        "4.1.2": 0
+      },
+      "outcomes": {
+        "1.1.1": "failed",
+        "1.3.1": "failed",
+        "1.4.11": "failed",
+        "1.4.3": "failed",
+        "2.1.1": "failed",
+        "2.4.3": "failed",
+        "3.1.2": "failed",
+        "3.3.1": "failed",
+        "4.1.2": "failed"
+      },
+      "roles": [
+        {
+          "agents": 13,
+          "commands": 732,
+          "costUsd": null,
+          "role": "walk",
+          "roleNl": "rondgang",
+          "sessionSeconds": 7524,
+          "tokens": null,
+          "turns": null
+        },
+        {
+          "agents": 56,
+          "commands": 2336,
+          "costUsd": null,
+          "role": "judge",
+          "roleNl": "beoordelaar",
+          "sessionSeconds": 20849,
+          "tokens": null,
+          "turns": null
+        },
+        {
+          "agents": 56,
+          "commands": 1327,
+          "costUsd": null,
+          "role": "verifier",
+          "roleNl": "verifieerder",
+          "sessionSeconds": 15157,
+          "tokens": null,
+          "turns": null
+        }
+      ],
+      "run": "n2",
+      "side": "baseline",
+      "variant": "n2"
+    },
+    {
+      "commit": "cb506905f5cb3865ad29a27a3bb51164392df809",
+      "criteria": [
+        "1.1.1",
+        "1.3.1",
+        "1.4.3",
+        "1.4.11",
+        "2.1.1",
+        "2.4.3",
+        "3.1.2",
+        "3.3.1",
+        "4.1.2"
+      ],
+      "defects": {
+        "1.1.1-artikelfoto": "gevonden",
+        "1.1.1-bestandsnaam": "gevonden",
+        "1.1.1-logo-melding": "gevonden",
+        "1.1.1-tarieven": "gevonden",
+        "1.3.1-keuzegroep": "gevonden",
+        "1.3.1-lijst-als-alinea": "gevonden",
+        "1.3.1-tabelkoppen": "gevonden",
+        "1.3.1-tussenkop-uitklapper": "gevonden",
+        "1.3.1-vette-tussenkop": "gevonden",
+        "1.3.1-voetkop": "gevonden",
+        "1.4.11-veldrand": "gevonden",
+        "1.4.3-datum": "gevonden",
+        "1.4.3-menu-aanwijzen": "gevonden",
+        "1.4.3-tekst-op-foto": "gevonden",
+        "2.1.1-chat-sluit": "gevonden",
+        "2.1.1-naar-boven": "gevonden",
+        "2.1.1-nieuwskaart": "gevonden",
+        "2.1.1-productkaart": "gevonden",
+        "2.1.1-vinkje": "gevonden",
+        "2.4.3-mobiel-menu": "gevonden",
+        "2.4.3-tabindex": "gevonden",
+        "3.1.2-engels": "gevonden",
+        "3.3.1-rode-rand": "gevonden",
+        "4.1.2-kadertitel": "gevonden",
+        "4.1.2-menuknop": "gevonden",
+        "4.1.2-rol-logo": "gemist-bewijs-beoordeling",
+        "4.1.2-tabs": "gevonden",
+        "4.1.2-uitklapper": "gevonden",
+        "4.1.2-venster": "gevonden"
+      },
+      "defectsNl": null,
+      "falseReports": {
+        "1.1.1": 0,
+        "1.3.1": 1,
+        "1.4.11": 0,
+        "1.4.3": 0,
+        "2.1.1": 1,
+        "2.4.3": 0,
+        "3.1.2": 0,
+        "3.3.1": 0,
+        "4.1.2": 0
+      },
+      "findings": {
+        "1.1.1": 6,
+        "1.3.1": 7,
+        "1.4.11": 1,
+        "1.4.3": 4,
+        "2.1.1": 7,
+        "2.4.3": 4,
+        "3.1.2": 1,
+        "3.3.1": 1,
+        "4.1.2": 13
+      },
+      "openPoints": {
+        "mens nodig": 2,
+        "proef werkte niet": 2
+      },
+      "openPointsByCriterion": {
+        "1.1.1": 1,
+        "1.3.1": 0,
+        "1.4.11": 0,
+        "1.4.3": 0,
+        "2.1.1": 2,
+        "2.4.3": 0,
+        "3.1.2": 0,
+        "3.3.1": 0,
+        "4.1.2": 1
+      },
+      "outcomes": {
+        "1.1.1": "failed",
+        "1.3.1": "failed",
+        "1.4.11": "failed",
+        "1.4.3": "failed",
+        "2.1.1": "failed",
+        "2.4.3": "failed",
+        "3.1.2": "failed",
+        "3.3.1": "failed",
+        "4.1.2": "failed"
+      },
+      "roles": [
+        {
+          "agents": 13,
+          "commands": 731,
+          "costUsd": null,
+          "role": "walk",
+          "roleNl": "rondgang",
+          "sessionSeconds": 6976,
+          "tokens": null,
+          "turns": null
+        },
+        {
+          "agents": 9,
+          "commands": 681,
+          "costUsd": null,
+          "role": "judge",
+          "roleNl": "beoordelaar",
+          "sessionSeconds": 4803,
+          "tokens": null,
+          "turns": null
+        },
+        {
+          "agents": 9,
+          "commands": 429,
+          "costUsd": null,
+          "role": "verifier",
+          "roleNl": "verifieerder",
+          "sessionSeconds": 3606,
+          "tokens": null,
+          "turns": null
+        }
+      ],
+      "run": "k1",
+      "side": "variant",
+      "variant": "k1"
+    },
+    {
+      "commit": "cb506905f5cb3865ad29a27a3bb51164392df809",
+      "criteria": [
+        "1.1.1",
+        "1.3.1",
+        "1.4.3",
+        "1.4.11",
+        "2.1.1",
+        "2.4.3",
+        "3.1.2",
+        "3.3.1",
+        "4.1.2"
+      ],
+      "defects": {
+        "1.1.1-artikelfoto": "gevonden",
+        "1.1.1-bestandsnaam": "gevonden",
+        "1.1.1-logo-melding": "gevonden",
+        "1.1.1-tarieven": "gevonden",
+        "1.3.1-keuzegroep": "gevonden",
+        "1.3.1-lijst-als-alinea": "gevonden",
+        "1.3.1-tabelkoppen": "gevonden",
+        "1.3.1-tussenkop-uitklapper": "gevonden",
+        "1.3.1-vette-tussenkop": "gevonden",
+        "1.3.1-voetkop": "gevonden",
+        "1.4.11-veldrand": "gevonden",
+        "1.4.3-datum": "gevonden",
+        "1.4.3-menu-aanwijzen": "gevonden",
+        "1.4.3-tekst-op-foto": "gevonden",
+        "2.1.1-chat-sluit": "gevonden",
+        "2.1.1-naar-boven": "gevonden",
+        "2.1.1-nieuwskaart": "gevonden",
+        "2.1.1-productkaart": "gevonden",
+        "2.1.1-vinkje": "gevonden",
+        "2.4.3-mobiel-menu": "gevonden",
+        "2.4.3-tabindex": "gevonden",
+        "3.1.2-engels": "gevonden",
+        "3.3.1-rode-rand": "gevonden",
+        "4.1.2-kadertitel": "gevonden",
+        "4.1.2-menuknop": "gevonden",
+        "4.1.2-rol-logo": "gevonden",
+        "4.1.2-tabs": "gevonden",
+        "4.1.2-uitklapper": "gevonden",
+        "4.1.2-venster": "gevonden"
+      },
+      "defectsNl": null,
+      "falseReports": {
+        "1.1.1": 0,
+        "1.3.1": 3,
+        "1.4.11": 0,
+        "1.4.3": 0,
+        "2.1.1": 1,
+        "2.4.3": 0,
+        "3.1.2": 0,
+        "3.3.1": 0,
+        "4.1.2": 0
+      },
+      "findings": {
+        "1.1.1": 4,
+        "1.3.1": 9,
+        "1.4.11": 1,
+        "1.4.3": 4,
+        "2.1.1": 7,
+        "2.4.3": 4,
+        "3.1.2": 1,
+        "3.3.1": 1,
+        "4.1.2": 14
+      },
+      "openPoints": {
+        "mens nodig": 2,
+        "proef werkte niet": 2
+      },
+      "openPointsByCriterion": {
+        "1.1.1": 1,
+        "1.3.1": 0,
+        "1.4.11": 0,
+        "1.4.3": 1,
+        "2.1.1": 2,
+        "2.4.3": 0,
+        "3.1.2": 0,
+        "3.3.1": 0,
+        "4.1.2": 0
+      },
+      "outcomes": {
+        "1.1.1": "failed",
+        "1.3.1": "failed",
+        "1.4.11": "failed",
+        "1.4.3": "failed",
+        "2.1.1": "failed",
+        "2.4.3": "failed",
+        "3.1.2": "failed",
+        "3.3.1": "failed",
+        "4.1.2": "failed"
+      },
+      "roles": [
+        {
+          "agents": 13,
+          "commands": 780,
+          "costUsd": null,
+          "role": "walk",
+          "roleNl": "rondgang",
+          "sessionSeconds": 6958,
+          "tokens": null,
+          "turns": null
+        },
+        {
+          "agents": 9,
+          "commands": 636,
+          "costUsd": null,
+          "role": "judge",
+          "roleNl": "beoordelaar",
+          "sessionSeconds": 4508,
+          "tokens": null,
+          "turns": null
+        },
+        {
+          "agents": 9,
+          "commands": 497,
+          "costUsd": null,
+          "role": "verifier",
+          "roleNl": "verifieerder",
+          "sessionSeconds": 3519,
+          "tokens": null,
+          "turns": null
+        }
+      ],
+      "run": "k2",
+      "side": "variant",
+      "variant": "k2"
+    }
+  ],
+  "schema": "loep/variant-comparison/2",
+  "scopeNl": "alleen de 9 criteria van --criteria tellen mee; n1 heeft er 56, n2 heeft er 56, de rest telt niet mee",
+  "verdict": {
+    "falseReports": {
+      "baseline": {
+        "high": 9,
+        "low": 0,
+        "value": 4
+      },
+      "difference": {
+        "high": 0,
+        "low": -2.5,
+        "value": -1
+      },
+      "leftOutNl": null,
+      "ok": true,
+      "units": 9,
+      "variant": {
+        "high": 7,
+        "low": 0,
+        "value": 3
+      }
+    },
+    "found": {
+      "baseline": {
+        "high": 1,
+        "low": 0.9482758620689655,
+        "value": 0.9827586206896551
+      },
+      "difference": {
+        "high": 0,
+        "low": 0,
+        "value": 0
+      },
+      "leftOutNl": null,
+      "ok": true,
+      "units": 29,
+      "variant": {
+        "high": 1,
+        "low": 0.9482758620689655,
+        "value": 0.9827586206896551
+      }
+    },
+    "margin": 0.05,
+    "notWorse": true,
+    "openPoints": {
+      "baseline": {
+        "high": 3.5,
+        "low": 0,
+        "value": 1.5
+      },
+      "difference": {
+        "high": 4.5,
+        "low": 0.5,
+        "value": 2.5
+      },
+      "leftOutNl": null,
+      "units": 9,
+      "variant": {
+        "high": 8,
+        "low": 1,
+        "value": 4
+      }
+    },
+    "reportMargin": 1,
+    "resamples": 10000,
+    "seed": 20261020
+  }
+}
