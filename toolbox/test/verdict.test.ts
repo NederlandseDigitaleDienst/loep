@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   citedObservations,
+  frameFocusProblems,
   KINDS_AFTER_FINISH,
   NOT_SENT,
   notSentOrigins,
@@ -535,4 +536,26 @@ test("a finding the verifier drops does not come back as a recommendation at its
   assert.deepEqual(validateVerification({ ...notSeenAgain, recommendations: [{ ...recommendation, evidence: ["v143-0003"] }] }, recommendingVerifier), []);
   // The verifier shows a recommendation with its own observation, like a finding.
   assert.match(validateVerification({ ...notSeenAgain, recommendations: [recommendation] }, recommendingVerifier).join(), /a recommendation needs at least one observation of session "v143"/);
+});
+
+test("2.1.4: a finding on an embedded window needs a key pressed with the focus on the page outside the window", () => {
+  const legend = { P01: { url: "http://127.0.0.1:4710/media.html" }, P15: { url: "http://127.0.0.1:4710/speler.html", embedded: "ingesloten venster op P01" } };
+  const inWindow = { ref: 4, tag: "button", text: "Geluid", frame: { url: "http://127.0.0.1:4710/speler.html", origin: "http://127.0.0.1:4710", title: "Speler", path: ["iframe"] } };
+  const records = new Map([
+    // The key pressed with the focus on another button in the player: still in the window.
+    ["j1-0001", { command: "key", error: null, result: { focus: inWindow }, page: { url: "http://127.0.0.1:4710/media.html" } }],
+    // The window opened on its own: no frame around the focus, but no page around the window either.
+    ["j1-0002", { command: "key", error: null, result: { focus: { ref: 2, tag: "button", text: "Geluid" } }, page: { url: "http://127.0.0.1:4710/speler.html" } }],
+    // The key pressed with the focus on a link of the page that embeds the window.
+    ["j1-0003", { command: "key", error: null, result: { focus: { ref: 9, tag: "a", text: "Terug naar nieuws" } }, page: { url: "http://127.0.0.1:4710/media.html#speler" } }],
+  ]);
+  const onWindow: Finding = { ...finding, titleNl: "Sneltoetsen k en m in de speler", locations: [{ page: "P15", where: "speler" }], pagesAffected: "P15" };
+  const failed = (evidence: string[], findings: Finding[] = [{ ...onWindow, evidence }]): Verdict => ({ criterion: "2.1.4", outcome: "failed", rule: "R1", summaryNl: "", observations: [], findings });
+  assert.equal(frameFocusProblems(failed(["j1-0001"]), legend, records).length, 1, "focus on another button in the same window is focus in the component");
+  assert.equal(frameFocusProblems(failed(["j1-0002"]), legend, records).length, 1, "the window opened on its own shows no page around it");
+  assert.deepEqual(frameFocusProblems(failed(["j1-0001", "j1-0003"]), legend, records), []);
+  // A finding on a page of the site itself, another criterion, or another outcome: not checked here.
+  assert.deepEqual(frameFocusProblems(failed([], [{ ...finding, evidence: ["j1-0001"] }]), legend, records), []);
+  assert.deepEqual(frameFocusProblems({ ...failed(["j1-0001"]), criterion: "2.1.1" }, legend, records), []);
+  assert.deepEqual(frameFocusProblems({ ...failed(["j1-0001"]), outcome: "cantTell" }, legend, records), []);
 });
