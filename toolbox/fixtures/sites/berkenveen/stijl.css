@@ -207,7 +207,6 @@ div.venster-sluit { position: absolute; top: 0.25rem; right: 0.75rem; font-size:
 .chat-knop { flex: none; }
 /* In a low viewport the panel shrinks and scrolls, so its top stays reachable. */
 .chat-venster { position: relative; width: min(20rem, 90vw); min-height: 0; overflow-y: auto; background: #ffffff; border: 2px solid #154273; border-radius: 6px; padding: 0.75rem; }
-/* Room for the absolutely placed close button, also with the text spacing of 1.4.12 on 320 px. */
 .chat-venster h2 { margin: 0 0 0.5rem; padding-right: 3rem; font-size: 1.1rem; }
 .chat-berichten { height: 9rem; overflow-y: auto; border: 1px solid #c4c4c4; padding: 0.5rem; font-size: 0.95rem; }
 .chat-berichten p { margin: 0 0 0.4rem; }
