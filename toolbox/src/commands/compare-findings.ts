@@ -165,8 +165,13 @@ function taskCriteria(runDir: string): string[] | null {
  * that the reference failed count in the comparison per criterion: the rest was not judged.
  */
 export function buildInput(runDir: string, evaluation: Evaluation, reference: ReferenceAudit, evaluationSha256: string, runCriteria: readonly string[] | null = null): CompareInput {
-  if (!reference.findings || reference.findings.length === 0) {
+  if (!Array.isArray(reference.findings)) {
     throw new Error("the reference has no \"findings\"; compare --findings needs one entry per finding (id, criterion, page, descriptionNl), see validatie/README.md");
+  }
+  // An empty list is a statement, not a gap: a reference that fails no criterion (a clean twin) has
+  // no findings, and every finding of ours is then classified as terecht, discutabel or onterecht.
+  if (reference.findings.length === 0 && (reference.failed.length > 0 || (reference.failedOnlyInDocuments?.length ?? 0) > 0)) {
+    throw new Error("the reference fails criteria but its \"findings\" is empty; compare --findings needs one entry per finding, see validatie/README.md");
   }
   const ids = reference.findings.map((finding) => finding.id);
   const repeated = ids.filter((id, index) => ids.indexOf(id) !== index);
@@ -516,6 +521,7 @@ export function findingsMarkdown(summary: FindingsSummary): string {
     summary.referenceKind === "answer-key"
       ? "De referentie is een antwoordsleutel: de fouten zijn met opzet ingebouwd en bestaan dus zeker."
       : "De referentie is een bestaand onderzoek. Zo'n onderzoek noemt voorbeelden en is niet uitputtend.",
+    ...(reference.total === 0 && reference.leftOut === 0 ? ["De referentie heeft geen bevindingen: geen enkel criterium hoort te worden afgekeurd. Elke bevinding van ons is dus zonder tegenhanger, en elke afkeuring door ons is terecht, discutabel of onterecht."] : []),
     `Twee beoordelaars (A en B) hebben elke bevinding onafhankelijk van elkaar ingedeeld met dezelfde vaste opdracht. De kolom "Eens" telt alleen bevindingen waar A en B dezelfde klasse gaven. Waar ze verschillen, is dat een eigen getal. Het verschil is niet opgelost.`,
     "",
     "## De getallen die ertoe doen",
@@ -630,7 +636,8 @@ const USAGE = `loep compare --findings <step> [options]
   check --run <run> --round <a|b>        Validate <run>/compare/<round>.json; non-zero exit on problems
   merge --run <run> --out <dir>          Put the two classifications side by side; write bevindingen.md and bevindingen.json
 
-The reference needs a list "findings"; see validatie/README.md. Two separate agents each get one prompt.
+The reference needs a list "findings"; an empty list is allowed only when it fails no criterion
+(a clean twin), and then every finding of ours is classified on its own. See validatie/README.md. Two separate agents each get one prompt.
 `;
 
 export async function cli(args: string[]): Promise<void> {
