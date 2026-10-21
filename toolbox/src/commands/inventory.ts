@@ -7,7 +7,7 @@ import type { Vendor } from "../lib/evaluation.ts";
 import { ignoreSecrets, isLogout, loginCookieHeader, LoginExpired, noteLogoutUrl, runLoginMark } from "../lib/login.ts";
 import { stepStart, writeManifest } from "../lib/manifest.ts";
 import { notFoundProbes, originsOfRun, privateFromPublicSite, siteOrigins } from "../lib/origins.ts";
-import { chooseSearchTerm } from "../lib/searchterm.ts";
+import { rankSearchTerms, type SearchTermPage } from "../lib/searchterm.ts";
 
 export interface InventoryPage {
   url: string;
@@ -75,8 +75,10 @@ export interface Inventory {
   documentTotals?: DocumentTotals;
   /** Only in a run with a login: the addresses of links that log out. None was followed, and no browser of the run asks for them. */
   logoutLinks?: string[];
-  /** The search term of the run (`type <ref> search`): the word on most page titles. Absent in older runs and when no title offers a word; then the term is `test`. */
+  /** The search term of the run (`type <ref> search`): the word with the highest tf-idf over the pages (see `rankSearchTerms`). Absent in older runs and when no page offers a word; then the term is `test`. */
   searchTerm?: string;
+  /** The next words of that ranking, best first, for the explorer to try when the term finds nothing. Absent in older runs and when there are none. */
+  searchTermAlternatives?: string[];
   /**
    * Origins outside the run that a page of the site read content from with GET (fetch or XHR), with the
    * pages that did and how many such answers came. A session refuses those requests, so what they load
@@ -446,7 +448,7 @@ async function anchorLanding(page: Page, finalUrl: string): Promise<AnchorLandin
   }, id);
 }
 
-type Inspected = Omit<InventoryPage, "foundVia" | "slug"> & { links: string[]; frames: string[]; snapshot: string; html: string; linksWithText: Anchor[]; contentType: string | null };
+type Inspected = Omit<InventoryPage, "foundVia" | "slug"> & { links: string[]; frames: string[]; snapshot: string; html: string; linksWithText: Anchor[]; contentType: string | null; searchText: string | null };
 
 /**
  * A page as the browser shows it, or the kind of document the server sent instead of HTML.
@@ -479,6 +481,26 @@ async function inspect(page: Page, url: string, mayBeDocument: boolean, offered:
         .join(" ")
         .split(/\s+/)
         .filter(Boolean).length,
+      // The text the search term is chosen from: the main region, or the body without its header, navigation and footer.
+      // A page with a search field there is the search page or its results: its text is about searching, not about the site.
+      searchText: (() => {
+        const flat = loep.flatText as unknown as (node: Node, parts?: string[]) => string[];
+        const main = (loep.deepQueryAll as unknown as (selector: string) => Element[])("main,[role=main]")[0];
+        const searchField = "input[type=search],[role=search],[role=searchbox]";
+        if (main) return main.querySelector(searchField) ? null : flat(main).join(" ");
+        const chrome = "header,nav,footer,[role=banner],[role=navigation],[role=contentinfo]";
+        if ([...document.querySelectorAll(searchField)].some((field) => !field.closest(chrome))) return null;
+        const parts: string[] = [];
+        const walk = (node: Node): void => {
+          for (const child of node.childNodes) {
+            if (child instanceof Element && child.matches(chrome)) continue;
+            if (child instanceof Element && child.querySelector(chrome)) walk(child);
+            else flat(child, parts);
+          }
+        };
+        walk(document.body);
+        return parts.join(" ");
+      })(),
     };
   }, [...origins]);
   const landing = landingAddress(url, loaded.finalUrl);
@@ -503,6 +525,7 @@ async function inspect(page: Page, url: string, mayBeDocument: boolean, offered:
     html,
     linksWithText: await linksWithText(page),
     contentType: loaded.contentType,
+    searchText: result.searchText === null ? null : `${result.title} ${result.searchText}`,
   };
 }
 
@@ -559,6 +582,8 @@ export async function inventory(options: InventoryOptions): Promise<Inventory> {
   };
   let page = await newTab();
   const readsOutside = new Map<string, { pages: Set<string>; requests: number }>();
+  /** Per page that is no embedded frame: the text the search term of the run is chosen from. */
+  const searchTexts: SearchTermPage[] = [];
 
   const pages: InventoryPage[] = [];
   const skipped: Inventory["skipped"] = [];
@@ -647,7 +672,7 @@ export async function inventory(options: InventoryOptions): Promise<Inventory> {
         const slug = slugForUrl(next);
         await writeFileAtomic(join(options.out, "pages", slug, "snapshot.txt"), result.snapshot);
         await writeFileAtomic(join(options.out, "pages", slug, "page.html"), result.html);
-        const { links, frames, snapshot: _snapshot, html: _html, linksWithText: anchors, contentType, ...record } = result;
+        const { links, frames, snapshot: _snapshot, html: _html, linksWithText: anchors, contentType, searchText, ...record } = result;
         pageTypes.set(next, contentType);
         for (const anchor of login ? anchors.filter(isLogout) : []) {
           logoutLinks.add(normaliseUrl(anchor.href));
@@ -673,6 +698,7 @@ export async function inventory(options: InventoryOptions): Promise<Inventory> {
         const embedded = via.every((entry) => entry.startsWith("iframe:"));
         // A frame opened on its own is no page of the site: what it reads elsewhere it may read in a session too.
         if (!embedded) {
+          if (searchText !== null) searchTexts.push({ text: searchText, status: record.status });
           for (const [elsewhere, count] of reads) {
             const known = readsOutside.get(elsewhere) ?? { pages: new Set<string>(), requests: 0 };
             known.pages.add(next);
@@ -761,8 +787,9 @@ export async function inventory(options: InventoryOptions): Promise<Inventory> {
     ...(login ? { logoutLinks: [...logoutLinks].sort() } : {}),
     readsOutsideRun,
   };
-  const searchTerm = chooseSearchTerm(result.pages);
-  if (searchTerm !== null) result.searchTerm = searchTerm;
+  const [searchTerm, ...alternatives] = rankSearchTerms(searchTexts, origins.map((each) => new URL(each).hostname));
+  if (searchTerm !== undefined) result.searchTerm = searchTerm;
+  if (alternatives.length > 0) result.searchTermAlternatives = alternatives;
   await writeJson(join(options.out, "inventory.json"), result);
   await writeManifest(options.out, { command: "inventory", startedAt, baseUrl: start, maxPages: options.maxPages, fixedUrls: fixed?.length ?? null, ...(origins.length > 1 ? { alsoOrigins: origins.slice(1) } : {}), ...(login ? { loggedIn: true } : {}) }, browserVersion);
   return result;

@@ -145,10 +145,10 @@ test("an accepted gap covers one component: another component that fails on the 
 });
 
 test("the inventory chooses the search term of the run, and another term of the explorer passes only when its page shows the word", { timeout: 300_000 }, async () => {
-  // The word on most titles; "berkenveen" and "gemeente" stand on all of them, and the alphabet decides.
-  assert.equal((await readJson<{ searchTerm?: string }>(join(run, "inventory.json"))).searchTerm, "berkenveen");
+  // Three pages that share no word but the name of the site and fixed text: no word scores, and the run searches with the fixed term.
+  assert.equal((await readJson<{ searchTerm?: string }>(join(run, "inventory.json"))).searchTerm, undefined);
   write();
-  assert.equal(searchTermForRun(run), "berkenveen");
+  assert.equal(searchTermForRun(run), "test");
   try {
     model.searchTerm = { term: "veelgestelde", page: `${origin}${VRAGEN}` };
     write();

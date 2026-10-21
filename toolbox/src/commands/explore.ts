@@ -138,6 +138,7 @@ export async function explore(runDir: string): Promise<{ task: string; pages: nu
     previous,
     login: agentLoginNl(loginForRun(runDir)),
     searchTerm: searchTermForRun(runDir),
+    searchTermAlternatives: inventory.searchTermAlternatives?.length ? inventory.searchTermAlternatives.map((word) => `\`${word}\``).join(", ") : "geen",
   });
   await writeFileAtomic(join(runDir, taskPath), prompt);
   await writeManifest(runDir, { command: "explore", startedAt, round, pages: pageCount, frames: context.frames.length, templateSha256: sha256(template) });
