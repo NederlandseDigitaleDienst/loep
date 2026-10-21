@@ -40,7 +40,7 @@ Geef in elk commando je eigen sessienaam mee, `--session {{session}}`: voluit zo
 |---|---|
 | `open <adres> [--width 360] [--state <naam>]` | Verse pagina. Met `--state` wordt eerst het bewaarde recept afgespeeld en daarna de pagina geopend |
 | `look [--full]` | Schermafbeelding met genummerde elementen en een lijst van die elementen. Het nummer is de `ref`. Open de afbeelding en bekijk haar |
-| `find <tekst>`, `find role:button`, `find css:<selector>` | Zoek elementen en hun ref |
+| `find <tekst>`, `find role:button`, `find 'css:<selector>'` | Zoek elementen en hun ref. Zet een selector altijd tussen enkele aanhalingstekens: `find 'css:main > div'`. Zonder aanhalingstekens leest de shell `>` als een omleiding: de uitvoer gaat naar een bestand in je werkmap, je ziet niets, en loep krijgt maar een deel van de selector |
 | `html <ref>` | De code van een element: daar haal je `id` en `class` vandaan voor een selector |
 | `ax <ref>` | Naam, rol en toestand (zoals `expanded`) |
 | `click <ref>`, `hover <ref>`, `key <toets>`, `tab [n]`, `type <ref> <search\|search-none\|text\|email\|name>`, `select <ref> <optietekst\|#n>` (een optie kiezen in een keuzelijst), `scroll <ref\|down\|up\|top\|bottom>` | Handelen. Het antwoord zegt wat er veranderde: `expanded 0 -> 1`, `dialogs 0 -> 1`, `appeared`, `disappeared`, `navigated` |

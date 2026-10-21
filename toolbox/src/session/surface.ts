@@ -368,8 +368,25 @@ export interface Found {
   items: TargetInfo[];
 }
 
+/**
+ * What is wrong with a selector the shell cut short: empty, or ending on a combinator. An agent
+ * that types `css:main > div` without quotes makes the shell write the output to a file `div`;
+ * what is left can end on the combinator, or be nothing at all. Null for a selector that is whole.
+ */
+export function selectorProblemNl(selector: string): string | null {
+  const trimmed = selector.trim();
+  const end = /([>+~,])$/.exec(trimmed)?.[1];
+  if (trimmed !== "" && end === undefined) return null;
+  const what = trimmed === "" ? "de selector is leeg" : `de selector "${trimmed}" eindigt op "${end}"`;
+  return `${what}. Zet een selector altijd tussen enkele aanhalingstekens, zoals 'css:main > div': zonder aanhalingstekens leest de shell > als een omleiding naar een bestand, en ziet loep maar een deel van de selector`;
+}
+
 /** Elements that match a query, on the page and in every embedded frame. */
 export async function find(surface: Surface, kind: string, wanted: string, max: number): Promise<Found> {
+  if (kind === "css") {
+    const problem = selectorProblemNl(wanted);
+    if (problem !== null) throw new Error(problem);
+  }
   const all: Found = { total: 0, hidden: 0, items: [] };
   for (const [index, document] of (await documents(surface.top)).entries()) {
     await syncRefs(document);
