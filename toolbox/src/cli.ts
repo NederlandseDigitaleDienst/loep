@@ -132,8 +132,9 @@ Options:
                     apart; on a local address default 50, without a pause. Past it every write is held back as in
                     a run without permission. Kept in the manifest
   --other-toolbox   Go on with a run that was made with another version of loep. Without it every command that
-                    changes a run refuses: another version writes other tasks and procedures, and the walks and
-                    verdicts of the run are then done again. Measure again with --fresh after changing
+                    measures or writes tasks refuses: another version writes other tasks and procedures, and the walks
+                    and verdicts of the run are then done again. Measure again with --fresh after changing. Commands
+                    that measure nothing (render, statement, compare, decide, sign, seal and the readers) go on
   --recorded-via gesprek --confirmation <text> --summary <text>
                     With answer and decide only: the agent records what the person said in the conversation,
                     after an express confirmation. --confirmation is what the person said, word for word;

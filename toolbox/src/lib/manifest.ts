@@ -81,8 +81,12 @@ function runtimePackages(): string[] {
 /** The version of this toolbox, from its package.json. */
 export const toolboxVersion = (): string => (JSON.parse(readFileSync(join(TOOLBOX_ROOT, "package.json"), "utf8")) as { version: string }).version;
 
-/** Commands that change nothing in a run: they may read a run of another version of loep. */
-export const READS_RUN_ONLY = ["pending", "estimate", "gaps", "feedback", "verify", "procedures"];
+/**
+ * Commands that measure nothing and write no tasks or procedures: they may work on a run of another version of loep.
+ * Some only read; `render`, `statement`, `compare`, `decide`, `sign` and `seal` write a report, a statement, a comparison,
+ * a decision, a signature or a seal from what the run holds, which is what a finished, sealed run needs after a release.
+ */
+export const MEASURES_NOTHING = ["pending", "estimate", "gaps", "feedback", "verify", "procedures", "render", "statement", "compare", "decide", "sign", "seal"];
 
 /**
  * Why this toolbox may not go on with the run, or null when it may. A run holds the version of loep of its last step.
@@ -91,7 +95,7 @@ export const READS_RUN_ONLY = ["pending", "estimate", "gaps", "feedback", "verif
  */
 export function otherToolboxNl(runDir: string, command: string, allowed: boolean): string | null {
   const path = join(runDir, "manifest.json");
-  if (allowed || READS_RUN_ONLY.includes(command) || !existsSync(path)) return null;
+  if (allowed || MEASURES_NOTHING.includes(command) || !existsSync(path)) return null;
   const run = (JSON.parse(readFileSync(path, "utf8")) as Partial<Manifest>).toolbox?.version;
   const own = toolboxVersion();
   if (!run || run === own) return null;
