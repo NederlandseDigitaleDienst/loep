@@ -8,6 +8,8 @@ Wat er per versie van loep is veranderd. De versie staat op het voorblad en onde
 
 ## 0.13.0 (2026-10-21)
 
+In 26 procedures staan de voorbeelden met `loep find 'css:...'` nu tussen aanhalingstekens. Het oordeel verandert daar niet door, maar de tekst van die procedures wel. Een run die met een eerdere versie loopt, krijgt de oordelen over die criteria daarom opnieuw te doen.
+
 ### Wat een uitkomst kan veranderen
 
 - Bij 2.1.4 valt een sneltoets in een ingesloten venster (een speler, een kaart) onder de uitzondering voor focus als hij alleen werkt met de focus in dat venster. Het onderdeel uit de uitzondering is daar het hele venster: een toets die werkt met de focus op een andere knop in hetzelfde venster, is geen bevinding. De procedure (versie 10) laat de beoordelaar meten of de toets ook werkt met de focus op een link of knop van de pagina buiten het venster (N6); alleen dan is het een bevinding, en `check-verdict` weigert een afkeuring op een ingesloten venster zonder zo'n `key`-waarneming. De regel van `loep key`, `click` en andere handelingen zegt nu bij `focus` of die in een venster staat (`[in venster: ...]`). Voor de bekende spelers die aan het adres worden herkend (YouTube, Vimeo) blijft de regel zoals hij was. ([#246](https://github.com/NederlandseDigitaleDienst/loep/issues/246))
