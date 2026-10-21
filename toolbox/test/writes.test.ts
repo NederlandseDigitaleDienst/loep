@@ -12,7 +12,7 @@ import { probeForms } from "../src/instruments/forms.ts";
 import { formErrors } from "../src/lib/extractors.ts";
 import { REGULAR_PATH, type RunData } from "../src/lib/rundata.ts";
 import { budgetOutPointNl, criterionSender, decideWrites, isOurMessage, isProtocolFrame, reservedWrites, senderOf, SocketFrames, DEFAULT_MAX_WRITES, DEFAULT_WRITE_SPACING_SECONDS, recordWrites, WRITES_BLOCKED_NL, writeAccess, writeBudget, writeBudgetNl, writesAllowedNl, writesForRun, type PassedWrite, type WritePermission } from "../src/lib/writes.ts";
-import { RECORD_QUIET_MS, readRecordings, readReplays, recordingKey, replaysNl, socketRecordings } from "../src/lib/recordings.ts";
+import { pathPattern, RECORD_QUIET_MS, readRecordings, readReplays, recordingKey, replayNl, replaysNl, socketRecordings } from "../src/lib/recordings.ts";
 import { Daemon } from "../src/session/daemon.ts";
 import type { Observation } from "../src/session/observations.ts";
 import { DEFAULT_DAEMON_LIMITS, MESSAGE_VALUES, Politeness, scopeForRun, TEST_VALUES } from "../src/session/safety.ts";
@@ -850,7 +850,38 @@ test("the evaluation says how many messages were recorded and how often a record
     assert.equal(replaysNl(dir), null);
     writeFileSync(join(dir, "opnames.jsonl"), `${JSON.stringify({ id: "a", at: "2026-10-21T09:00:00Z", source: "states", origin: "https://chat.example.nl", path: "/ws", key: "x", frames: [] })}\n`);
     writeFileSync(join(dir, "afgespeeld.jsonl"), `${JSON.stringify({ at: "2026-10-21T09:10:00Z", source: "b-331", recording: "a", path: "/ws", key: "x" })}\n`.repeat(3));
-    assert.equal(replaysNl(dir), "Van één bericht in een chat is het antwoord van de server opgenomen toen het echt werd verstuurd. Daarna is 3 keer hetzelfde bericht niet opnieuw verstuurd, maar is de opname afgespeeld: de pagina kreeg het antwoord van toen, met dezelfde tussentijden. Wat de pagina ermee deed, is gemeten; wat de server later uit zichzelf zou doen, niet");
+    assert.equal(replaysNl(dir), "Van één bericht in een chat is het antwoord van de server opgenomen toen het echt werd verstuurd, ook als dat antwoord was dat er een tijd niets kwam. Daarna is 3 keer hetzelfde bericht niet opnieuw verstuurd, maar is de opname afgespeeld: de pagina kreeg het antwoord van toen, met dezelfde tussentijden. Wat de pagina ermee deed, is gemeten; wat de server later uit zichzelf zou doen, niet");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("a silence of the server is an answer when it lasted, and a conversation token in the address of the socket does not make a message another one", () => {
+  const dir = mkdtempSync(join(tmpdir(), "loep-writes-silence-"));
+  try {
+    let clock = Date.parse("2026-10-21T17:00:00Z");
+    const recordings = socketRecordings(dir, "states", MESSAGE_VALUES, () => clock);
+    const message = JSON.stringify({ type: "chat", text: TEST_VALUES.text });
+    // Closed two seconds after the send: too soon to say the server keeps quiet.
+    recordings.start("wss://chat.example.nl/ws/nldd/sTEEyUUqGuUpkriK", message)!;
+    clock += 2_000;
+    recordings.start("wss://chat.example.nl/ws/nldd/sTEEyUUqGuUpkriK", message)!.end();
+    assert.deepEqual(readRecordings(dir), []);
+    // Twelve seconds without a word: that is the answer of a chat that people answer.
+    const recorder = recordings.start("wss://chat.example.nl/ws/nldd/sTEEyUUqGuUpkriK", message)!;
+    clock += 12_000;
+    recorder.end();
+    const [silence] = readRecordings(dir);
+    assert.deepEqual([silence!.frames, silence!.listenedMs, silence!.incomplete], [[], 12_000, undefined]);
+    // The next conversation has a token of its own, and still gets the same recording.
+    const found = recordings.find("wss://chat.example.nl/ws/nldd/QpXz81LmNoTRwa2b", message)!;
+    assert.equal(found.id, silence!.id);
+    assert.match(replayNl(found), /de server zei toen 12 s lang niets terug; de pagina krijgt nu ook niets/);
+    assert.equal(recordings.find("wss://chat.example.nl/ws/ander/QpXz81LmNoTRwa2b", message), null, "another path is another chat");
+    assert.equal(pathPattern("/ws/nldd/sTEEyUUqGuUpkriK?v=2&session=Ab3dEfGh1jKl"), "/ws/nldd/*?v=2&session=*");
+    assert.equal(pathPattern("/chat/123/socket"), "/chat/*/socket");
+    assert.equal(pathPattern("/rooms/0b9e4c1a-1f2b-4c3d-9e8f-001122334455"), "/rooms/*");
+    assert.equal(pathPattern("/ws/notifications"), "/ws/notifications", "a word stays");
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
