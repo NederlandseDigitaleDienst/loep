@@ -308,9 +308,11 @@ export async function guardContext(context: BrowserContext, scope: Scope, guard:
       }
       (guard.passed ??= []).push(claim.entry);
       server!.send(message);
-      if (counted) {
+      // Only a message with a test value starts a recording, and ends the one before it.
+      const next = counted ? recordings!.start(url, message, guard.sender) : null;
+      if (next) {
         recorder?.end();
-        recorder = recordings!.start(url, message, guard.sender);
+        recorder = next;
       }
     });
   });

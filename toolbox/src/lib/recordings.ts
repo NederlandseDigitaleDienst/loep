@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { isOurMessage, isProtocolFrame } from "./writes.ts";
@@ -12,14 +11,24 @@ import { isOurMessage, isProtocolFrame } from "./writes.ts";
  * real answer, so what it shows, says and does with focus can be measured, while the recipient gets
  * one message instead of one per agent. What a server does later on its own, such as ending a
  * conversation after a while, is not in a recording: that takes a real send.
+ *
+ * Only a message with a test value in it is recorded and played: any other frame, such as one that
+ * opens the chat, goes to the server as before. A recording is only played when it ran its whole
+ * window, or when the server had been quiet for a while when it ended. One cut off earlier, because
+ * the socket closed or the page sent the next message while the server was still answering, may miss
+ * part of the answer: it is kept as incomplete, never played, and the next send of that message is
+ * real. One without any frame, such as when the socket closed before the server answered, is not
+ * kept at all.
  */
 
-/** One recording per message per origin, in the run: the first one that ends wins. */
+/** One recording per message per socket address, in the run: the first complete one wins. */
 export const RECORDINGS_LOG = "opnames.jsonl";
 /** Every send that was played from a recording instead of sent: when, by whom, and which recording. */
 export const REPLAYS_LOG = "afgespeeld.jsonl";
 /** How long after a real send the answer of the server is recorded, unless the page sends another message or the socket closes first. */
 export const RECORD_WINDOW_MS = 30_000;
+/** How long the server must have been quiet when a recording ends before its window, for the answer to count as whole. */
+export const RECORD_QUIET_MS = 3_000;
 
 export interface RecordedFrame {
   /** Milliseconds after the send. */
@@ -37,10 +46,13 @@ export interface SocketRecording {
   source: string;
   /** The http(s) origin of the socket. */
   origin: string;
+  /** The path and query of the socket. */
   path: string;
-  /** Which message it was: the test values in it, sorted, or for a message without one, such as an empty one, the hash of the frame (see `recordingKey`). */
+  /** Which message it was: the test values in it, sorted (see `recordingKey`). */
   key: string;
   frames: RecordedFrame[];
+  /** Cut off before its window ended, so it may miss part of the answer: kept for the dossier, never played. */
+  incomplete?: true;
 }
 
 export interface PassedReplay {
@@ -59,15 +71,19 @@ function originOf(url: string): string {
   return parsed.origin;
 }
 
+/** The path and query of a socket. */
+function pathOf(url: string): string {
+  const parsed = new URL(url);
+  return `${parsed.pathname}${parsed.search}`;
+}
+
 /**
- * Which message a frame is: the test values in it, sorted. A frame without any, such as an empty
- * message, is only the same message when it is the same frame to the byte: it may also be something
- * else the page says, such as that the chat was opened, and that has another answer.
+ * Which message a frame is: the test values in it, sorted. A frame without any, such as one that
+ * says the chat was opened, is not a message of an agent and has no key: it is never played.
  */
-export function recordingKey(message: string | Buffer, values: readonly string[]): string {
+export function recordingKey(message: string | Buffer, values: readonly string[]): string | null {
   const ours = values.filter((value) => isOurMessage(message, [value])).sort();
-  if (ours.length > 0) return ours.join("|");
-  return `frame:${createHash("sha256").update(typeof message === "string" ? `t${message}` : Buffer.concat([Buffer.from("b"), message])).digest("hex").slice(0, 16)}`;
+  return ours.length > 0 ? ours.join("|") : null;
 }
 
 function readLines<T>(path: string): T[] {
@@ -91,59 +107,66 @@ export const readReplays = (runDir: string): PassedReplay[] => readLines<PassedR
 /** What the server says after one real send, until the window ends. */
 export interface Recorder {
   frame: (message: string | Buffer) => void;
-  /** End the recording now: the page sent another message, or the socket closed. */
+  /** End the recording now, before its window ended: the page sent another message, or the socket closed. Unless the server had been quiet for `RECORD_QUIET_MS`, it is then incomplete and never played. */
   end: () => void;
 }
 
 export interface SocketRecordings {
-  /** The recording of this message on the origin of this socket, or null when there is none yet. */
+  /** The complete recording of this message on this socket address, or null when there is none yet or the message has no test value. */
   find: (url: string, message: string | Buffer) => SocketRecording | null;
-  /** Start recording what the server answers to a message that was sent for real. */
-  start: (url: string, message: string | Buffer, sender?: string) => Recorder;
+  /** Start recording what the server answers to a message that was sent for real; null for a frame without a test value, which is not recorded. */
+  start: (url: string, message: string | Buffer, sender?: string) => Recorder | null;
   /** Note that a send was played from a recording. */
   replayed: (url: string, recording: SocketRecording, sender?: string) => PassedReplay;
 }
 
-export function socketRecordings(runDir: string, source: string, values: readonly string[], now: () => number = Date.now, windowMs = RECORD_WINDOW_MS): SocketRecordings {
+export function socketRecordings(runDir: string, source: string, values: readonly string[], now: () => number = Date.now, windowMs = RECORD_WINDOW_MS, quietMs = RECORD_QUIET_MS): SocketRecordings {
   const append = (file: string, entry: unknown): void => {
     mkdirSync(runDir, { recursive: true });
     // Appended at once and synchronously, as the log of writes is.
     appendFileSync(join(runDir, file), `${JSON.stringify(entry)}\n`);
   };
   const find = (url: string, message: string | Buffer): SocketRecording | null => {
-    const origin = originOf(url);
     const key = recordingKey(message, values);
-    return readRecordings(runDir).find((recording) => recording.origin === origin && recording.key === key) ?? null;
+    if (key === null) return null;
+    const origin = originOf(url);
+    const path = pathOf(url);
+    return readRecordings(runDir).find((recording) => !recording.incomplete && recording.origin === origin && recording.path === path && recording.key === key) ?? null;
   };
   return {
     find,
     start: (url, message, sender = source) => {
+      const key = recordingKey(message, values);
+      if (key === null) return null;
       const started = now();
       const frames: RecordedFrame[] = [];
       let ended = false;
-      const end = (): void => {
+      let lastFrameAt = started;
+      const finish = (complete: boolean): void => {
         if (ended) return;
         ended = true;
         clearTimeout(timer);
-        // The first recording of a message counts; one that ends later is not kept.
-        if (find(url, message)) return;
-        const parsed = new URL(url);
-        const key = recordingKey(message, values);
-        append(RECORDINGS_LOG, { id: `${originOf(url)}|${key}|${new Date(started).toISOString()}`, at: new Date(started).toISOString(), source: sender, origin: originOf(url), path: parsed.pathname, key, frames } satisfies SocketRecording);
+        // An answer that never came is no recording; the first complete recording of a message counts, and one that ends later is not kept.
+        if (frames.length === 0 || find(url, message)) return;
+        const path = pathOf(url);
+        append(RECORDINGS_LOG, { id: `${originOf(url)}${path}|${key}|${new Date(started).toISOString()}`, at: new Date(started).toISOString(), source: sender, origin: originOf(url), path, key, frames, ...(complete ? {} : { incomplete: true as const }) } satisfies SocketRecording);
       };
-      const timer = setTimeout(end, windowMs);
+      // Ended before the window: whole only when the server had stopped answering a while ago.
+      const end = (): void => finish(now() - lastFrameAt >= quietMs);
+      const timer = setTimeout(() => finish(true), windowMs);
       timer.unref?.();
       return {
         frame: (reply) => {
           // A heartbeat of the server is no answer, and the live connection keeps sending its own.
           if (ended || isProtocolFrame(reply)) return;
-          frames.push({ afterMs: now() - started, ...(typeof reply === "string" ? { text: reply } : { base64: reply.toString("base64") }) });
+          lastFrameAt = now();
+          frames.push({ afterMs: lastFrameAt - started, ...(typeof reply === "string" ? { text: reply } : { base64: reply.toString("base64") }) });
         },
         end,
       };
     },
     replayed: (url, recording, sender = source) => {
-      const entry: PassedReplay = { at: new Date(now()).toISOString(), source: sender, recording: recording.id, path: new URL(url).pathname, key: recording.key };
+      const entry: PassedReplay = { at: new Date(now()).toISOString(), source: sender, recording: recording.id, path: pathOf(url), key: recording.key };
       append(REPLAYS_LOG, entry);
       return entry;
     },
@@ -174,7 +197,7 @@ export const REPLAY_TASK_NL =
 
 /** For the evaluation, after what was allowed: how many messages were recorded and how often a recording was played instead of a send, without a closing full stop. Null when neither happened. */
 export function replaysNl(runDir: string): string | null {
-  const recordings = readRecordings(runDir).length;
+  const recordings = readRecordings(runDir).filter((recording) => !recording.incomplete).length;
   const replays = readReplays(runDir).length;
   if (recordings === 0 && replays === 0) return null;
   const times = (count: number): string => (count === 1 ? "één keer" : `${count} keer`);

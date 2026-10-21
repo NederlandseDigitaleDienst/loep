@@ -236,10 +236,10 @@ export async function newContext(browser: Browser, options: ContextOptions = {},
           recorder?.frame(reply);
         });
         // A handler for closing takes over passing it on: the server is closed as the page closed its side.
-      socket.onClose((code, reason) => {
-        recorder?.end();
-        void server!.close({ code, reason }).catch(() => undefined);
-      });
+        socket.onClose((code, reason) => {
+          recorder?.end();
+          void server.close({ code, reason }).catch(() => undefined);
+        });
       }
       socket.onMessage((message) => {
         if (free) {
@@ -253,8 +253,12 @@ export async function newContext(browser: Browser, options: ContextOptions = {},
             }
             if (!writes!.claim("SEND", socket.url(), { message: true }).ok) return void (guard?.active && guard.blocked++);
             server.send(message);
-            recorder?.end();
-            recorder = recordings!.start(socket.url(), message);
+            // Only a message with a test value starts a recording, and ends the one before it.
+            const next = recordings!.start(socket.url(), message);
+            if (next) {
+              recorder?.end();
+              recorder = next;
+            }
             return;
           }
           writes!.record("SEND", socket.url());
