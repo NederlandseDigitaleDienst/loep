@@ -11,7 +11,7 @@ import { INPAGE_PATH, launchBrowser, loadPage, newContext } from "../src/browser
 import { probeForms } from "../src/instruments/forms.ts";
 import { formErrors } from "../src/lib/extractors.ts";
 import { REGULAR_PATH, type RunData } from "../src/lib/rundata.ts";
-import { budgetOutPointNl, decideWrites, isOurMessage, isProtocolFrame, SocketFrames, DEFAULT_MAX_WRITES, DEFAULT_WRITE_SPACING_SECONDS, recordWrites, WRITES_BLOCKED_NL, writeAccess, writeBudget, writeBudgetNl, writesAllowedNl, writesForRun, type PassedWrite, type WritePermission } from "../src/lib/writes.ts";
+import { budgetOutPointNl, criterionSender, decideWrites, isOurMessage, isProtocolFrame, reservedWrites, senderOf, SocketFrames, DEFAULT_MAX_WRITES, DEFAULT_WRITE_SPACING_SECONDS, recordWrites, WRITES_BLOCKED_NL, writeAccess, writeBudget, writeBudgetNl, writesAllowedNl, writesForRun, type PassedWrite, type WritePermission } from "../src/lib/writes.ts";
 import { Daemon } from "../src/session/daemon.ts";
 import type { Observation } from "../src/session/observations.ts";
 import { DEFAULT_DAEMON_LIMITS, MESSAGE_VALUES, Politeness, scopeForRun, TEST_VALUES } from "../src/session/safety.ts";
@@ -284,7 +284,7 @@ test("a session writes to the test environment of its run only, and says so in t
     assert.deepEqual((clicked.written as string[]).sort(), ["POST /api/chat", "SEND /chat"]);
     assert.equal(clicked.blocked, undefined);
     const record = JSON.parse(readFileSync(join(dir, "observations", "main", `${(clicked.id as string).slice(-4)}.json`), "utf8")) as Observation;
-    assert.deepEqual(record.writes!.map((entry) => `${entry.source} ${entry.method} ${entry.path}`).sort(), ["session POST /api/chat", "session SEND /chat"]);
+    assert.deepEqual(record.writes!.map((entry) => `${entry.source} ${entry.method} ${entry.path}`).sort(), ["main POST /api/chat", "main SEND /chat"], "the log names the session that sent");
     await settle();
     assert.deepEqual(writesReceived(), ["POST 127.0.0.1/api/chat"]);
     assert.deepEqual(site.socketMessages, ["hallo via socket"]);
@@ -337,7 +337,7 @@ test("the budget for sending counts for the whole run, keeps the time between tw
     // A message over a socket and the repeat after a redirect are noted, and they do not count.
     session.record("SEND", `${site.origin.replace("http", "ws")}/chat`);
     session.record("POST", `${site.origin}/callback`, { repeat: true });
-    assert.deepEqual(writeBudget(dir, limited, clock), { origin: site.origin, max: 3, sent: 1, left: 2, spacingSeconds: 60, waitSeconds: 50 });
+    assert.deepEqual(writeBudget(dir, limited, clock), { origin: site.origin, max: 3, sent: 1, left: 2, reserved: 0, spacingSeconds: 60, waitSeconds: 50 });
     clock += 50_000;
     assert.equal(sweep.claim("POST", `${site.origin}/submit`).ok, true);
     clock += 60_000;
@@ -356,6 +356,72 @@ test("the budget for sending counts for the whole run, keeps the time between tw
     assert.deepEqual([DEFAULT_MAX_WRITES, DEFAULT_WRITE_SPACING_SECONDS], [5, 120]);
     assert.equal(budgetOutPointNl({ sent: 5, max: 5 }), "versturen niet toegestaan: het budget voor versturen van deze run is op (5 van 5 verstuurd)");
   } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// A declared test environment on a real site: the budget is small, and whoever sends first would use it up.
+const declared = (maxWrites: number): WritePermission => ({ ...permission, local: false, declaredBy: { name: "Iemand", role: "beheerder" }, maxWrites, spacingSeconds: 0 });
+
+test("on a declared test environment the last half of the budget is kept for senders that sent nothing yet; the sessions of one criterion are one sender", () => {
+  const dir = mkdtempSync(join(tmpdir(), "loep-writes-share-"));
+  try {
+    const five = declared(5);
+    assert.equal(reservedWrites(five), 2);
+    assert.equal(reservedWrites({ ...five, local: true }), 0, "nothing is kept on a local site");
+    assert.equal(senderOf("v-1410-2"), criterionSender("1.4.10"));
+    assert.equal(senderOf("a-331"), senderOf("b-331"));
+    assert.equal(senderOf("r-formulier"), "r-formulier");
+    // The sweep sends the three steps of one form: empty, invalid, valid. A fourth would take from what is kept.
+    const sweep = writeAccess(dir, five, "states");
+    for (let step = 0; step < 3; step++) assert.equal(sweep.claim("POST", `${site.origin}/submit`).ok, true);
+    const fourth = sweep.claim("POST", `${site.origin}/submit`);
+    assert.deepEqual(fourth.ok ? null : [fourth.budget, fourth.reasonNl], ["share", `states heeft al verstuurd, en er zijn nog 2 van 5 verzendingen naar ${site.origin} over: de laatste 2 verzendingen zijn voor een criterium of een opdracht van de veegronde die nog niets verstuurde`]);
+    // One access serves every session of the process; each sends as itself. The verifier and the finisher of 3.3.1 share with its judge.
+    const sessions = writeAccess(dir, five, "session");
+    assert.equal(sessions.claim("POST", `${site.origin}/callback`, { sender: "b-331" }).ok, true);
+    for (const later of ["v-331", "a-331-2"]) {
+      const refused = sessions.claim("POST", `${site.origin}/callback`, { sender: later });
+      assert.deepEqual(refused.ok ? null : [refused.budget, refused.reasonNl.split(",")[0]], ["share", "dit criterium heeft al verstuurd"], later);
+    }
+    assert.equal(writeBudget(dir, five, Date.now(), criterionSender("3.3.1")).left, 0);
+    assert.equal(writeBudgetNl(writeBudget(dir, five)), `nog 1 van 5 verzendingen naar ${site.origin} over voor de hele run (4 verstuurd), zonder wachttijd ertussen; de laatste 2 verzendingen zijn voor een criterium of een opdracht van de veegronde die nog niets verstuurde`);
+    // Another criterion takes the last one; after that the budget is out for everyone.
+    assert.equal(sessions.claim("POST", `${site.origin}/callback`, { sender: "b-412" }).ok, true);
+    const out = sessions.claim("POST", `${site.origin}/callback`, { sender: "b-131" });
+    assert.equal(out.ok ? null : out.budget, "out");
+    assert.deepEqual(logged(dir).map((line) => line.source), ["states", "states", "states", "b-331", "b-412"]);
+    assert.equal(budgetOutPointNl({ sent: 4, max: 5 }), "versturen niet toegestaan: het budget voor versturen van deze run is op voor dit criterium (4 van 5 verstuurd; de rest is voor criteria die nog niets verstuurden)");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("in the session process each session sends from the share of its criterion, and hears what to do when that is used", async () => {
+  reset();
+  const dir = mkdtempSync(join(tmpdir(), "loep-writes-share-session-"));
+  await recordWrites(dir, declared(2));
+  const daemon = await Daemon.create(dir, await scopeForRun(dir, { scopeUrl: `${site.origin}/` }), { navigationDelayMs: 0, secondBrowsers: false });
+  const loep = async (session: string, command: string, ...args: string[]): Promise<Record<string, unknown>> => (await daemon.handle({ op: "command", session, command, args, options: {} })).print;
+  const ref = async (session: string, query: string): Promise<string> => ((await loep(session, "find", query)).found as string[])[0]!.split(" ")[0]!;
+  try {
+    for (const session of ["b-331", "v-331", "b-412"]) {
+      await daemon.handle({ op: "start", session });
+      await loep(session, "open", "/callback.html");
+    }
+    assert.deepEqual((await loep("b-331", "click", await ref("b-331", "css:#call"))).written, ["POST /callback"]);
+    // The verifier of the same criterion cites what the judge saw; the last write is for another criterion.
+    const verifier = await loep("v-331", "click", await ref("v-331", "css:#call"));
+    assert.equal(verifier.written, undefined);
+    assert.match(verifier.sending as string, /^dit criterium heeft al verstuurd, .*Er is niets verstuurd: haal de waarneming aan .*"versturen niet toegestaan: het budget voor versturen van deze run is op voor dit criterium \(1 van 2 verstuurd; de rest is voor criteria die nog niets verstuurden\): <wat er pas na versturen te zien was>"$/);
+    const record = JSON.parse(readFileSync(join(dir, "observations", "v-331", `${(verifier.id as string).slice(-4)}.json`), "utf8")) as Observation;
+    assert.deepEqual(record.blocked.map((entry) => entry.writeBudget), ["share"]);
+    assert.deepEqual((await loep("b-412", "click", await ref("b-412", "css:#call"))).written, ["POST /callback"]);
+    await settle();
+    assert.equal(writesReceived().filter((line) => line.endsWith("/callback")).length, 2);
+    assert.deepEqual(logged(dir).map((line) => line.source), ["b-331", "b-412"]);
+  } finally {
+    await daemon.close();
     rmSync(dir, { recursive: true, force: true });
   }
 });

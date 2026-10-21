@@ -410,9 +410,13 @@ test("a point that stays open only because the run may not send is the owner's c
   assert.match(notSentPointProblems(["versturen niet toegestaan: het antwoord van de chat op P02, zonder adres."], { origin: "https://www.voorbeeld.nl" }).join(), /name in the point the address it goes to/);
   // Once the budget for sending of the run is used up, the point may stand about that origin too, when it says so.
   const budgetOut = "versturen niet toegestaan: het budget voor versturen van deze run is op (5 van 5 verstuurd): wat de chat op P02 antwoordt.";
-  assert.deepEqual(notSentPointProblems([budgetOut], { origin: "https://chat.voorbeeld.nl" }, { sent: 5, max: 5 }), []);
-  assert.match(notSentPointProblems([budgetOut], { origin: "https://chat.voorbeeld.nl" }, { sent: 2, max: 5 }).join(), /not used up \(2 of 5 sent\)/);
-  assert.match(notSentPointProblems([point], { origin: "https://chat.voorbeeld.nl" }, { sent: 5, max: 5 }).join(), /het budget voor versturen van deze run is op \(5 van 5 verstuurd\)/);
+  assert.deepEqual(notSentPointProblems([budgetOut], { origin: "https://chat.voorbeeld.nl" }, { sent: 5, max: 5, left: 0 }), []);
+  assert.match(notSentPointProblems([budgetOut], { origin: "https://chat.voorbeeld.nl" }, { sent: 2, max: 5, left: 3 }).join(), /not used up \(2 of 5 sent\)/);
+  assert.match(notSentPointProblems([point], { origin: "https://chat.voorbeeld.nl" }, { sent: 5, max: 5, left: 0 }).join(), /het budget voor versturen van deze run is op \(5 van 5 verstuurd\)/);
+  // A criterion that sent before and finds only the writes kept for others has used up its share: the point may stand too, and says so.
+  const shareOut = "versturen niet toegestaan: het budget voor versturen van deze run is op voor dit criterium (3 van 5 verstuurd; de rest is voor criteria die nog niets verstuurden): wat de chat op P02 antwoordt.";
+  assert.deepEqual(notSentPointProblems([shareOut], { origin: "https://chat.voorbeeld.nl" }, { sent: 3, max: 5, left: 0 }), []);
+  assert.match(notSentPointProblems([point], { origin: "https://chat.voorbeeld.nl" }, { sent: 3, max: 5, left: 0 }).join(), /used up for this criterion: then the point says "het budget voor versturen van deze run is op voor dit criterium \(3 van 5 verstuurd; de rest is voor criteria die nog niets verstuurden\)"/);
 });
 
 test("a part of the site that did not load is its own kind: not the owner's, not loep's, and it says what and when", () => {
