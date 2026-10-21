@@ -18,7 +18,8 @@ import { withinTime } from "../instruments/limit.ts";
 import { readJson, sha256File, writeFileAtomic, writeJson } from "../lib/canonical.ts";
 import { inOrder } from "../lib/atonce.ts";
 import { runEngines } from "../lib/engines.ts";
-import { frameStanding, loadSiteModel, SITE_MODEL_FILE, type Component, type Postcondition, type SiteModel } from "../lib/sitemodel.ts";
+import type { RecipeSteps } from "../lib/operables.ts";
+import { frameStanding, loadSiteModel, pageTypeOf, SITE_MODEL_FILE, type Component, type Postcondition, type SiteModel } from "../lib/sitemodel.ts";
 import { blockersKey, readStamp, STATE_STAMP, stateKey } from "../lib/sweepstamp.ts";
 import { writesForRun } from "../lib/writes.ts";
 import { spokenByItself, type SpokenByItself } from "../instruments/methods/speech.ts";
@@ -347,6 +348,26 @@ interface Storage {
  * The sweep as the site model steers it. It closes what covers a page before anything is
  * measured, and captures the states the model describes.
  */
+/**
+ * The page type of a process: the one it ends on, or else the one its recipe first goes to, or
+ * else the one it starts on. A recipe that starts by closing the cookie banner starts on the
+ * home page, and the process does not belong there. An address with a query, such as
+ * `zoeken.html?q=gemeente`, belongs to the page type of the same page without it.
+ */
+export function processPageType(model: Pick<SiteModel, "pageTypes">, recipe: RecipeSteps | undefined, endUrl: string | null): string | null {
+  const start = recipe?.start?.url;
+  const typeOf = (url: string | null | undefined): string | null => {
+    if (!url) return null;
+    try {
+      return pageTypeOf(model, new URL(url, start).href);
+    } catch {
+      return pageTypeOf(model, url);
+    }
+  };
+  const firstGoto = recipe?.steps.find((step) => step.command === "goto" && step.args[0])?.args[0];
+  return typeOf(endUrl) ?? typeOf(firstGoto) ?? typeOf(start);
+}
+
 export class ModelSweep {
   readonly model: SiteModel;
   /** Sockets are silenced from the moment a recipe step runs on a page: a click may not send anything. */
@@ -881,10 +902,8 @@ export class ModelSweep {
       state.perPageType = await this.instances(opener, state);
       if (JSON.stringify(state.perPageType) !== before) await writeJson(stampPath, { key: opener.key, state });
     }
-    // A process belongs to the page type it ends on, or else the one it started on.
     if (state.pageTypes.length === 0) {
-      const typeOf = (url: string | null | undefined): string | undefined => this.model.pageTypes.find((type) => url !== null && url !== undefined && type.pages.includes(url))?.id;
-      const type = typeOf(state.url) ?? typeOf(opener.startUrl);
+      const type = processPageType(this.model, opener.base.recipe ? this.recipes[opener.base.recipe] : undefined, state.url);
       if (type) state.pageTypes = [type];
     }
     return { state, reused };
