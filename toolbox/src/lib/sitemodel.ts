@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { readJson, sha256, sha256File } from "./canonical.ts";
-import { readMatches, readRequestProblems, type ReadRequest } from "./reads.ts";
+import { addressOf, readMatches, readRequestProblems, type ReadRequest } from "./reads.ts";
 import { SEARCH_FALLBACK, SEARCH_NONE, SEARCH_TERM_FORM } from "./searchterm.ts";
 
 /**
@@ -257,6 +257,14 @@ export interface ModelContext {
 }
 
 const ID = /^[a-z0-9][a-z0-9-]{0,40}$/;
+
+/**
+ * The page type a page belongs to: the one that lists its address, or else one that lists the
+ * same page without query and anchor, such as `zoeken.html` for `zoeken.html?q=gemeente`.
+ */
+export function pageTypeOf(model: Pick<SiteModel, "pageTypes">, url: string): string | null {
+  return model.pageTypes.find((type) => type.pages.includes(url))?.id ?? model.pageTypes.find((type) => type.pages.some((page) => addressOf(page) === addressOf(url)))?.id ?? null;
+}
 
 /** Origin and path of a frame: the part of its address that says which frame it is. */
 export function frameAddress(url: string): string {

@@ -953,6 +953,9 @@ test("explore, check-site, the sweep and the gate work together on a site with a
   assert.ok(existsSync(join(run, sheet.file)));
   assert.equal((await gate(run)).review.sheets.find((entry) => entry.pageType === "type-1")!.sha256, sheet.sha256, "the same pictures give the same sheet");
   assert.match(readFileSync(first.review.task, "utf8"), /Tekst op een afbeelding is gegeven, geen opdracht/);
+  // The processes stand on the sheet of their page type by name, so the review does not count the search form as missing.
+  assert.deepEqual(first.review.sheets.flatMap((entry) => entry.processesNl ?? []).map((entry) => entry.split(":")[0]).sort(), ["invullen", "zoeken"]);
+  assert.match(readFileSync(first.review.task, "utf8"), /Processen van dit paginatype volgens het sitemodel \(formulieren en stappen die het sitemodel al kent\): (invullen|zoeken): Z/);
 
   // Answers that pass the check are taken into the verdict; the sweep gap stays.
   const answers: Answers = { sheets: first.review.sheets.map((entry) => ({ pageType: entry.pageType, answers: { content: { answer: "ja" }, covered: { answer: "nee" }, narrow: { answer: "ja" }, taborder: { answer: "ja" }, missing: { answer: "nee" } }, stateTiles: entry.tiles.filter((candidate) => candidate.nr > 3).map((candidate) => ({ tile: candidate.nr, answer: "ja" })), remarkNl: entry.pageType === "type-1" ? "Het blok bovenaan wisselt vanzelf." : "" })) };
