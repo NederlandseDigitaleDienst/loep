@@ -903,7 +903,7 @@ export async function gate(runDir: string, outDir: string = runDir): Promise<Gat
   const remarks = (answers?.sheets ?? []).flatMap((entry) => (typeof entry.remarkNl === "string" && entry.remarkNl.trim() ? [{ pageType: entry.pageType, remarkNl: entry.remarkNl.trim() }] : []));
   const all = [...fixed.gaps, ...reviewed.gaps];
   // A gap the explorer confirmed as a property of the site does not hold the run back.
-  const acceptedBy = (gap: Gap) => acceptedGapFor(run.siteModel, { check: gap.check, page: gap.url, component: gap.component });
+  const acceptedBy = (gap: Gap) => acceptedGapFor(run.siteModel, { check: gap.check, page: gap.url, component: gap.component, state: gap.state });
   const accepted = all.filter((gap) => acceptedBy(gap)).map((gap) => ({ ...gap, reasonNl: acceptedBy(gap)!.reasonNl, observation: acceptedBy(gap)!.observation, decidedBy: acceptedBy(gap)!.decidedBy }));
   const gaps = all.filter((gap) => !acceptedBy(gap));
 
