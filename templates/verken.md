@@ -44,6 +44,7 @@ Geef in elk commando je eigen sessienaam mee, `--session {{session}}`: voluit zo
 | `html <ref>` | De code van een element: daar haal je `id` en `class` vandaan voor een selector |
 | `ax <ref>` | Naam, rol en toestand (zoals `expanded`) |
 | `click <ref>`, `hover <ref>`, `key <toets>`, `tab [n]`, `type <ref> <search\|search-none\|text\|email\|name>`, `select <ref> <optietekst\|#n>` (een optie kiezen in een keuzelijst), `scroll <ref\|down\|up\|top\|bottom>` | Handelen. Het antwoord zegt wat er veranderde: `expanded 0 -> 1`, `dialogs 0 -> 1`, `appeared`, `disappeared`, `navigated` |
+| `drag <ref> <dx> <dy>`, `swipe <ref> left\|right\|up\|down` | Slepen met de muis over `dx` en `dy` pixels (negatief is naar links of naar boven), en vegen met één vinger. Voor een onderdeel dat alleen zo werkt, zoals een schuifregelaar zonder invoerveld of een fotoserie zonder knoppen: het antwoord zegt wat er veranderde, en een veeg of sleep is een stap van het recept |
 | `state save <naam>` | Bewaar de stappen sinds de laatste `open` als recept |
 | `state list`, `status` | Bewaarde recepten; verbruikt budget |
 
