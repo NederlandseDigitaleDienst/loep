@@ -4,7 +4,7 @@ import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSyn
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { FRAGMENTS, fragmentsIn, isNewer, KINDS, releaseChangelog, ROOT, sectionOf, START, takeUnreleased, TOWNCRIER, UNRELEASED, versionsIn } from "../scripts/release.ts";
+import { FRAGMENTS, fragmentsIn, isNewer, KINDS, measurementGate, MEASUREMENTS, releaseChangelog, ROOT, sectionOf, START, takeUnreleased, TOWNCRIER, UNRELEASED, versionsIn } from "../scripts/release.ts";
 
 // The report says which version of loep made it, and the marketplace hands out the plugin by its version.
 // Both only mean something when every file says the same and the changelog says what that version is.
@@ -105,6 +105,40 @@ test("a release puts the fragments and the lines under the unreleased heading un
     assert.deepEqual(fragmentsIn(root), [], "the fragments are gone");
     const staged = execFileSync("git", ["status", "--porcelain"], { cwd: root, encoding: "utf8" });
     assert.match(staged, /^D {2}changelog\.d\/11\.uitkomst\.md$/m, "the removal of the fragments is staged for the release commit");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+// Every minor version can change an outcome, so none goes out unmeasured without saying so.
+test("a release needs a measurement of the version that evaluate accepts, or a reason why there is none", () => {
+  const root = mkdtempSync(join(tmpdir(), "loep-release-gate-"));
+  const file = join(root, MEASUREMENTS, "0.2.0.json");
+  try {
+    assert.throws(() => measurementGate(root, "0.2.0", undefined), /validatie\/versies\/0\.2\.0\.json ontbreekt\. Meet de versie eerst .* --unmeasured "<reden>"/);
+    assert.equal(measurementGate(root, "0.2.0", "alleen een herstel in de documentatie"), "Deze versie is uitgebracht zonder meting: alleen een herstel in de documentatie.");
+    assert.equal(measurementGate(root, "0.2.0", " geen testsite beschikbaar! "), "Deze versie is uitgebracht zonder meting: geen testsite beschikbaar!");
+    assert.throws(() => measurementGate(root, "0.2.0", "  "), /--unmeasured vraagt een reden/);
+    // A file that evaluate would refuse is no measurement either.
+    mkdirSync(join(root, MEASUREMENTS), { recursive: true });
+    writeFileSync(file, JSON.stringify({ version: "0.1.0", measuredAt: "2026-10-25", againstNl: "de sleutel van de testsite", resultNl: "Alle gebreken gevonden, geen onterechte meldingen." }));
+    assert.throws(() => measurementGate(root, "0.2.0", undefined), /0\.2\.0\.json: version must be "0\.2\.0"/);
+    writeFileSync(file, "{");
+    assert.throws(() => measurementGate(root, "0.2.0", undefined), /0\.2\.0\.json is geen JSON/);
+    // A measurement lets the release through, and a reason for none next to it is a contradiction.
+    writeFileSync(file, JSON.stringify({ version: "0.2.0", measuredAt: "2026-10-25", againstNl: "de sleutel van de testsite", resultNl: "Alle gebreken gevonden, geen onterechte meldingen." }));
+    assert.equal(measurementGate(root, "0.2.0", undefined), null);
+    assert.throws(() => measurementGate(root, "0.2.0", "toch niet"), /laat --unmeasured weg/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("a release without a measurement says so first in its section, before the text that stood above the headings", () => {
+  const root = repository(unreleased("Een regel boven de koppen.\n\n### Verder\n\n- iets"), {});
+  try {
+    releaseChangelog(root, "0.2.0", "2026-11-01", "Deze versie is uitgebracht zonder meting: alleen een herstel.");
+    assert.equal(sectionOf(readFileSync(join(root, "CHANGELOG.md"), "utf8"), "## 0.2.0"), `Deze versie is uitgebracht zonder meting: alleen een herstel.\n\nEen regel boven de koppen.\n\n### ${KINDS.verder}\n\n- iets`);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

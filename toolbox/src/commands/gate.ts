@@ -12,7 +12,7 @@ import { makeWorkDir } from "../lib/workdir.ts";
 import { notFoundProbes, siteHosts, siteLabel } from "../lib/origins.ts";
 import { uncoveredOperables, type CountedPage } from "../lib/operables.ts";
 import { loadRun, type PageData, type RunData } from "../lib/rundata.ts";
-import { acceptedGapFor, frameAddress, frameEntry, frameStanding, NOT_OPENED_ON_PAGE_TYPE, notOpenedAdviceNl, type AcceptedGapDecider, type Component } from "../lib/sitemodel.ts";
+import { acceptedGapFor, frameAddress, frameEntry, frameStanding, NOT_OPENED_ON_PAGE_TYPE, notOpenedAdviceNl, pageTypeOf, type AcceptedGapDecider, type Component } from "../lib/sitemodel.ts";
 import { refusedRunNl } from "../session/blockade.ts";
 import { drawMarks } from "../session/marks.ts";
 import { coversContent, type Overlay } from "../session/recipe.ts";
@@ -78,6 +78,8 @@ export interface Sheet {
   sha256: string;
   tiles: Tile[];
   componentsNl: string[];
+  /** The processes of the site model that belong to this page type. Absent in older runs. */
+  processesNl?: string[];
   /** Players and self-moving content the site model names for this page type. */
   contentNl?: string[];
   /** The embedded windows on this page that the site model classifies under `frames`, of whatever class. */
@@ -579,10 +581,11 @@ async function buildSheets(run: RunData, runDir: string, outDir: string): Promis
       { state: "taborder", file: `${type.page.dir}/probes/tabwalk.png`, descriptionNl: "de pagina met de Tab-stops genummerd in de volgorde van de Tab-toets" },
     ];
     const components: string[] = [];
+    const processes: string[] = [];
     for (const state of run.siteStates?.states ?? []) {
       if (!state.pageTypes.includes(type.id)) continue;
       // A state is one picture, taken on one page. It is shown on the sheet of that page's type; on the other sheets it is named.
-      const capturedType = model?.pageTypes.find((entry) => state.url !== null && entry.pages.includes(state.url))?.id ?? state.pageTypes[0];
+      const capturedType = (model && state.url !== null ? pageTypeOf(model, state.url) : null) ?? state.pageTypes[0];
       if (state.reached && capturedType !== type.id) {
         const label = run.pages.find((page) => page.item.url === state.url)?.label ?? state.url;
         if (state.kind === "component") components.push(`${state.modelId} (gemeten op ${label}, geldt ook voor dit paginatype; het vak staat op het blad van paginatype ${capturedType})`);
@@ -590,7 +593,7 @@ async function buildSheets(run: RunData, runDir: string, outDir: string): Promis
       }
       const entry = state.kind === "blocker" ? model?.blockers.find((blocker) => blocker.id === state.modelId) : state.kind === "component" ? model?.components.find((component) => component.id === state.modelId) : model?.processes.find((process) => process.id === state.modelId);
       const kind = state.kind === "blocker" ? "blokkade" : state.kind === "component" ? "onderdeel" : "proces";
-      if (state.kind === "component") components.push(`${state.modelId}: ${entry?.descriptionNl ?? ""}${state.reached ? "" : " (niet geopend)"}`);
+      if (state.kind !== "blocker") (state.kind === "component" ? components : processes).push(`${state.modelId}: ${entry?.descriptionNl ?? ""}${state.reached ? "" : " (niet geopend)"}`);
       if (state.reached && state.files.screenshot) candidates.push({ state: state.id, file: state.files.screenshot, descriptionNl: `${kind} "${state.modelId}"${state.viewport ? ` op ${state.viewport.width} pixels breed` : ""}: ${entry?.descriptionNl ?? ""}` });
     }
     const present = candidates.filter((candidate) => existsSync(join(runDir, candidate.file)));
@@ -599,7 +602,7 @@ async function buildSheets(run: RunData, runDir: string, outDir: string): Promis
     const file = join("gate", `sheet-${type.id}.png`);
     const bytes = PNG.sync.write(contactSheet(tiles.map((entry) => tile(PNG.sync.read(readFileSync(join(runDir, entry.file)))))));
     await writeFileAtomic(join(outDir, file), bytes);
-    sheets.push({ pageType: type.id, page: type.page.label, url: type.page.item.url, file, sha256: sha256(bytes), tiles, componentsNl: components, contentNl: (model?.content ?? []).filter((content) => content.pageTypes.includes(type.id)).map((content) => `${content.id} (${content.kind}): ${content.descriptionNl}`), framesNl: framesOn(type.page, model), keysNl: keysOn(type.page, run) });
+    sheets.push({ pageType: type.id, page: type.page.label, url: type.page.item.url, file, sha256: sha256(bytes), tiles, componentsNl: components, ...(processes.length > 0 ? { processesNl: processes } : {}), contentNl: (model?.content ?? []).filter((content) => content.pageTypes.includes(type.id)).map((content) => `${content.id} (${content.kind}): ${content.descriptionNl}`), framesNl: framesOn(type.page, model), keysNl: keysOn(type.page, run) });
   }
   return sheets;
 }
@@ -633,7 +636,7 @@ export const QUESTIONS: { id: string; bad: Answer; tileState: string; questionNl
   { id: "covered", bad: "ja", tileState: "default", questionNl: "Vak 1: ligt er een melding, venster of balk over de inhoud die de pagina bedekt of tegenhoudt, zoals een cookiemelding? Een vaste knop die een stukje inhoud raakt, telt hier niet: noem die in remarkNl." },
   { id: "narrow", bad: "nee", tileState: "narrow", questionNl: "Vak 2: zie je op het smalle scherm de inhoud van de pagina, zonder dat een melding of venster haar bedekt of tegenhoudt? Een vaste knop die een stukje inhoud raakt, telt hier niet: noem die in remarkNl." },
   { id: "taborder", bad: "nee", tileState: "taborder", questionNl: "Vak 3: staan de genummerde Tab-stops verspreid over de pagina (kop, inhoud en voet), en dus niet alleen in één hoek of één blok?" },
-  { id: "missing", bad: "ja", tileState: "default", questionNl: "Vak 1 en 2: zie je een onderdeel dat pas na een handeling iets laat zien (menuknop, uitklapper, tabbladen, carrousel met knoppen, zoekknop, chatknop), of een speler of blok dat vanzelf beweegt, dat niet in de lijst met onderdelen, niet in de lijst met inhoud zonder handeling en ook niet in de lijst met ingesloten vensters van dit paginatype staat? Een ingesloten venster dat in die lijst staat (een vak 'Ik ben geen robot', een speler van een andere partij), telt hier niet: het sitemodel kent het." },
+  { id: "missing", bad: "ja", tileState: "default", questionNl: "Vak 1 en 2: zie je een onderdeel dat pas na een handeling iets laat zien (menuknop, uitklapper, tabbladen, carrousel met knoppen, zoekknop, chatknop), of een speler of blok dat vanzelf beweegt, dat niet in de lijst met onderdelen, niet in de lijst met processen, niet in de lijst met inhoud zonder handeling en ook niet in de lijst met ingesloten vensters van dit paginatype staat? Een formulier dat in de lijst met processen staat (een zoekformulier, een contactformulier), of een ingesloten venster dat in die lijst staat (een vak 'Ik ben geen robot', een speler van een andere partij), telt hier niet: het sitemodel kent het." },
 ];
 const STATE_QUESTION_NL = "Elk vak vanaf 4: is te zien wat de omschrijving van het vak zegt? Bij een onderdeel of proces: het is open of uitgevoerd. Bij een blokkade: de blokkade staat in beeld.";
 
@@ -769,7 +772,8 @@ export async function checkGate(runDir: string): Promise<string[]> {
 
 /** What a reviewer was shown of a sheet: the picture and the lists beside it. A change in either asks for a new review. */
 export function reviewedAs(sheet: Sheet): string {
-  return sha256(JSON.stringify([sheet.sha256, sheet.componentsNl, sheet.contentNl ?? [], sheet.framesNl ?? [], sheet.keysNl ?? []]));
+  // The list of processes counts only where there is one, so a review of a sheet without processes stays valid.
+  return sha256(JSON.stringify([sheet.sha256, sheet.componentsNl, sheet.contentNl ?? [], sheet.framesNl ?? [], sheet.keysNl ?? [], ...(sheet.processesNl?.length ? [sheet.processesNl] : [])]));
 }
 
 async function currentAnswers(runDir: string, sheets: Sheet[]): Promise<Answers | null> {
@@ -814,6 +818,8 @@ export async function gate(runDir: string, outDir: string = runDir): Promise<Gat
       ...sheet.tiles.map((entry) => `- Vak ${entry.nr}: ${entry.descriptionNl}`),
       "",
       sheet.componentsNl.length > 0 ? `Onderdelen van dit paginatype volgens het sitemodel: ${sheet.componentsNl.join("; ")}.` : "Het sitemodel noemt voor dit paginatype geen onderdelen.",
+      "",
+      (sheet.processesNl ?? []).length > 0 ? `Processen van dit paginatype volgens het sitemodel (formulieren en stappen die het sitemodel al kent): ${sheet.processesNl!.join("; ")}.` : "Het sitemodel noemt voor dit paginatype geen processen.",
       "",
       (sheet.contentNl ?? []).length > 0 ? `Inhoud zonder handeling (spelers, blokken die vanzelf bewegen) volgens het sitemodel: ${sheet.contentNl!.join("; ")}.` : "Het sitemodel noemt voor dit paginatype geen spelers of inhoud die vanzelf beweegt.",
       "",

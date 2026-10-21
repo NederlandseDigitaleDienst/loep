@@ -298,9 +298,11 @@ const MAX_REDIRECTS = 5;
  * scope is strict, exactly as the browser was allowed to load it; `resourceType` says which
  * kind, in the words of the browser. Every hop of a redirect is asked again. What is refused
  * is recorded with the refusals of the page, what comes from outside the scope is counted with
- * the rest. Stops at `maxBytes` or when the time is up and says so.
+ * the rest. An origin the blockade of the run refuses is not asked, as the browser of a session
+ * does not ask it, and a 429 inside the scope is told to it; every caller says which blockade
+ * holds, or that none does. Stops at `maxBytes` or when the time is up and says so.
  */
-export async function guardedDownload(scope: Scope, guard: Guard, address: string, to: string, options: { resourceType: string; maxBytes: number; timeoutMs: number; headers?: (url: string) => Promise<Record<string, string>>; blockade?: Blockade | undefined }): Promise<Download> {
+export async function guardedDownload(scope: Scope, guard: Guard, address: string, to: string, options: { resourceType: string; maxBytes: number; timeoutMs: number; headers?: (url: string) => Promise<Record<string, string>>; blockade: Blockade | undefined }): Promise<Download> {
   const abort = new AbortController();
   let timedOut = false;
   const timer = setTimeout(() => {
@@ -324,10 +326,10 @@ export async function guardedDownload(scope: Scope, guard: Guard, address: strin
         }
         guard.outsideScopeLoaded[parsed.hostname] = (guard.outsideScopeLoaded[parsed.hostname] ?? 0) + 1;
       }
-      // An origin that refused the evaluation for the rest of the run is not asked; a short pause the caller waits out before.
+      // A blocked origin is not asked; a caller that can wait out a short pause does so before.
       const refusedBy = options.blockade?.refuses(url);
-      if (refusedBy?.until === null) {
-        const reasonNl = new OriginBlocked(url, refusedBy).message;
+      if (refusedBy) {
+        const reasonNl = refusedBy.until === null ? new OriginBlocked(url, refusedBy).message : `${url} is niet opgevraagd: ${refusalNl(refusedBy)}`;
         guard.blocked.push({ at: new Date().toISOString(), kind: "blockade", method: "GET", url: url.slice(0, MAX_URL), resourceType: options.resourceType, reasonNl });
         return { ok: false, reason: reasonNl };
       }

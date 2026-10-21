@@ -96,7 +96,7 @@ export async function voiceoverOutcome(request: VoiceOverRequest): Promise<Outco
   let sha256: string;
   try {
     await env.politeness.before(start.url);
-    const downloaded = await guardedDownload(env.scope, guard, start.url, join(scratch, "page.html"), { resourceType: "document", maxBytes: MAX_PAGE_BYTES, timeoutMs: FETCH_MS });
+    const downloaded = await guardedDownload(env.scope, guard, start.url, join(scratch, "page.html"), { resourceType: "document", maxBytes: MAX_PAGE_BYTES, timeoutMs: FETCH_MS, blockade: env.blockade });
     request.blocked.push(...guard.blocked);
     if (!downloaded.ok) throw new Error(`de pagina kon niet worden opgehaald: ${downloaded.reason}`);
     if (downloaded.truncated) throw new Error("de pagina is groter dan 5 MB of kwam niet op tijd binnen");

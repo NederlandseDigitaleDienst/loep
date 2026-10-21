@@ -32,7 +32,7 @@ interface Run {
 }
 
 /** A run directory with an evaluation and one page of evidence: enough for the comparison, no browser involved. */
-async function makeRun(reference: ReferenceAudit = REFERENCE): Promise<Run> {
+async function makeRun(reference: ReferenceAudit = REFERENCE, taskCriteria?: string[]): Promise<Run> {
   const dir = mkdtempSync(join(tmpdir(), "compare-findings-"));
   const evaluation = exampleEvaluation();
   await writeFile(join(dir, "evaluation.json"), JSON.stringify(evaluation));
@@ -43,6 +43,7 @@ async function makeRun(reference: ReferenceAudit = REFERENCE): Promise<Run> {
   writeFileSync(join(dir, "pages", slug, "probes", "reflow.json"), "{}");
   writeFileSync(join(dir, "tasks", "2.4.2", "dossier.json"), "{}");
   writeFileSync(join(dir, "reference.json"), JSON.stringify(reference));
+  if (taskCriteria) writeFileSync(join(dir, "tasks", "index.json"), JSON.stringify({ tasks: taskCriteria.map((criterion) => ({ criterion })) }));
   await compareTasks(dir, join(dir, "reference.json"));
   const input = await readJson<CompareInput>(join(dir, "compare", "invoer.json"));
   const ids: Record<string, string> = {};
@@ -271,4 +272,36 @@ test("merge: disagreement is its own number and is never resolved", async () => 
   assert.match(markdown, /oneens over een bevinding van de referentie: 3 van 5 \(60%\)/);
   assert.match(markdown, /\| R4 \| Gemist, bewijs aanwezig, beoordeling ging mis \| Gemist, bewijs aanwezig, niet in het dossier \|/);
   assert.match(markdown, /Oneens: Deels \/ Niet meer aanwezig/);
+});
+
+test("a run with tasks for part of the criteria classifies only the findings under those, and says how many it left out", async () => {
+  // 2.4.4 is no criterion of R5, but one it also touches; R6 is a document out of reach under 1.1.1.
+  const run = await makeRun(REFERENCE, ["1.1.1", "2.4.4", "4.1.2"]);
+  assert.deepEqual(run.input.reference.map((finding) => finding.id), ["R1", "R5", "R6"]);
+  assert.deepEqual(run.input.scope, { criteria: ["1.1.1", "2.4.4", "4.1.2"], leftOut: ["R2", "R3", "R4"] });
+  assert.deepEqual(run.input.audit.failed, ["1.1.1"], "a criterion the run did not judge is not counted as missed");
+  assert.match(run.input.noteNl, /de 3 bevindingen van de referentie onder andere criteria staan er niet in/);
+
+  const scoped = classification(run);
+  scoped.reference = scoped.reference.filter((entry) => ["R1", "R5", "R6"].includes(entry.id));
+  // Findings of the evaluation under criteria without a task do not occur in a real run; here they are classified like the others.
+  scoped.ours.push(
+    { id: run.ids["1.4.3:Grijze"]!, class: "terecht", evidence: [], reasonNl: "Zelfde hulptekst, zelfde kleur." },
+    { id: run.ids["2.4.7:Focus"]!, class: "terecht", evidence: [], reasonNl: "De kaarten hebben geen focusstijl." },
+  );
+  assert.match(validateClassification(classification(run), run.input, run.dir).join("\n"), /\(R2\): id is not a finding of the reference/);
+  for (const round of ["a", "b"] as const) {
+    await write(run, round, scoped);
+    assert.deepEqual(await checkClassification(run.dir, round), []);
+  }
+  const summary = await mergeRun(run.dir, join(run.dir, "out"));
+  assert.deepEqual([summary.reference.total, summary.reference.leftOut, summary.reference.counted], [3, 3, 2]);
+  assert.deepEqual(summary.criteria.missed, [], "2.4.2 was not judged, so it is not missed");
+  assert.match(await readFile(join(run.dir, "out", "bevindingen.md"), "utf8"), /3 bevindingen van de referentie vallen onder criteria die deze run niet beoordeelde/);
+
+  // A run with tasks for every criterion of the reference leaves nothing out and has no scope.
+  const full = await makeRun(REFERENCE, ["1.1.1", "1.3.1", "1.4.3", "2.4.2", "2.4.7"]);
+  assert.equal(full.input.reference.length, 6);
+  assert.equal(full.input.scope, undefined);
+  assert.deepEqual(full.input.audit.failed, REFERENCE.failed);
 });

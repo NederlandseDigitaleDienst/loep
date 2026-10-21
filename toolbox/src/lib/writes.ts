@@ -33,6 +33,15 @@ export interface WritePermission {
 export const DEFAULT_MAX_WRITES = 5;
 /** A service that counts messages per minute sees at most one from the run in two minutes. */
 export const DEFAULT_WRITE_SPACING_SECONDS = 120;
+/**
+ * On this machine nobody receives a stream of messages, so there is no pause and a larger budget.
+ * The limit stays, so an agent in a loop does not send without end.
+ */
+export const LOCAL_MAX_WRITES = 50;
+export const LOCAL_WRITE_SPACING_SECONDS = 0;
+
+/** The part of a sentence about the pause between two writes, starting with a comma. */
+export const spacingNl = (seconds: number): string => (seconds > 0 ? `, met minstens ${seconds} s ertussen` : ", zonder wachttijd ertussen");
 
 export interface WriteFlags {
   allowWrites?: boolean | undefined;
@@ -80,13 +89,13 @@ export function decideWrites(baseUrl: string, flags: WriteFlags, now = new Date(
     if (flags.maxWrites !== undefined) throw new Error("--max-writes hoort bij een run die mag versturen: geef het samen met --allow-writes, of met --test-environment en --declared-by");
     return null;
   }
-  const budget = { maxWrites: maxWritesOf(flags.maxWrites), spacingSeconds: DEFAULT_WRITE_SPACING_SECONDS };
   const origin = flags.testEnvironment !== undefined ? originOf(flags.testEnvironment, "--test-environment") : originOf(baseUrl, "het adres van de site");
   const local = isLocalHost(new URL(origin).hostname);
   if (local) {
     if (!flags.allowWrites) throw new Error(`versturen naar ${origin} is alleen toegestaan met --allow-writes erbij`);
-    return { origin, local: true, declaredBy: null, declaredAt: now.toISOString(), ...budget };
+    return { origin, local: true, declaredBy: null, declaredAt: now.toISOString(), maxWrites: maxWritesOf(flags.maxWrites, LOCAL_MAX_WRITES), spacingSeconds: LOCAL_WRITE_SPACING_SECONDS };
   }
+  const budget = { maxWrites: maxWritesOf(flags.maxWrites, DEFAULT_MAX_WRITES), spacingSeconds: DEFAULT_WRITE_SPACING_SECONDS };
   if (flags.testEnvironment === undefined || flags.declaredBy === undefined) {
     throw new Error(
       `versturen is niet toegestaan naar ${origin}: dat is geen lokaal adres. Op een live site blijft elk verzoek dat iets kan wijzigen tegengehouden. ` +
@@ -117,8 +126,8 @@ export async function confirmDeclaration(permission: WritePermission, terminal: 
   return { ...permission, declaredAt: new Date().toISOString(), ...recording };
 }
 
-function maxWritesOf(text: string | undefined): number {
-  if (text === undefined) return DEFAULT_MAX_WRITES;
+function maxWritesOf(text: string | undefined, fallback: number): number {
+  if (text === undefined) return fallback;
   const value = Number(text.trim());
   if (!/^\d+$/.test(text.trim()) || !Number.isSafeInteger(value) || value < 1) throw new Error(`--max-writes verwacht een geheel getal van 1 of meer, niet "${text}"`);
   return value;
@@ -292,7 +301,7 @@ export function writeBudget(runDir: string, permission: WritePermission, now = D
 
 /** One line for `session list` and `estimate`: what is left of the budget for sending. */
 export const writeBudgetNl = (budget: WriteBudget): string =>
-  `nog ${budget.left} van ${budget.max} verzendingen naar ${budget.origin} over voor de hele run (${budget.sent} verstuurd), met minstens ${budget.spacingSeconds} s ertussen${budget.left > 0 && budget.waitSeconds > 0 ? `; de volgende kan over ${budget.waitSeconds} s` : ""}`;
+  `nog ${budget.left} van ${budget.max} verzendingen naar ${budget.origin} over voor de hele run (${budget.sent} verstuurd)${spacingNl(budget.spacingSeconds)}${budget.left > 0 && budget.waitSeconds > 0 ? `; de volgende kan over ${budget.waitSeconds} s` : ""}`;
 
 /** The open point an agent writes when what it had to send could not go because the budget is used up. */
 export const budgetOutPointNl = (budget: Pick<WriteBudget, "sent" | "max">): string => `versturen niet toegestaan: het budget voor versturen van deze run is op (${budget.sent} van ${budget.max} verstuurd)`;

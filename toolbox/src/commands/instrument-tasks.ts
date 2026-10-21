@@ -38,7 +38,7 @@ import {
 import { CRITERIA, criterionById } from "../lib/wcag.ts";
 import { agentLoginNl } from "../lib/login.ts";
 import { readsAllowedNl } from "../lib/reads.ts";
-import { DEFAULT_MAX_WRITES, DEFAULT_WRITE_SPACING_SECONDS, WRITES_BLOCKED_NL, writeBudget, writesAllowedNl, writesForRun } from "../lib/writes.ts";
+import { DEFAULT_MAX_WRITES, DEFAULT_WRITE_SPACING_SECONDS, spacingNl, WRITES_BLOCKED_NL, writeBudget, writesAllowedNl, writesForRun } from "../lib/writes.ts";
 import { sweepCandidates } from "../lib/statusmessages.ts";
 import { makeWorkDir } from "../lib/workdir.ts";
 import { siteHosts, siteLabel } from "../lib/origins.ts";
@@ -569,7 +569,7 @@ export async function instrumentTasks(runDir: string, options: TaskOptions = {})
   const base = { run: absoluteRun, cli, siteModel: join(absoluteRun, "site.json"), login: agentLoginNl(run.login) };
   const readsNl = readsAllowedNl(run.reads ?? []);
   // The budget as it was set, not what is left of it: the task stays the same while agents send, and its hash with it.
-  const budgetNl = run.writes ? `. Het budget voor versturen is ${run.writes.maxWrites ?? DEFAULT_MAX_WRITES} verzendingen voor de hele run, met minstens ${run.writes.spacingSeconds ?? DEFAULT_WRITE_SPACING_SECONDS} s ertussen, gedeeld door alle agents en de veegronde; wat er nog over is, zegt \`session list\`` : "";
+  const budgetNl = run.writes ? `. Het budget voor versturen is ${run.writes.maxWrites ?? DEFAULT_MAX_WRITES} verzendingen voor de hele run${spacingNl(run.writes.spacingSeconds ?? DEFAULT_WRITE_SPACING_SECONDS)}, gedeeld door alle agents en de veegronde; wat er nog over is, zegt \`session list\`` : "";
   const writesNl = `${run.writes ? `ja, ${writesAllowedNl(run.writes)}${budgetNl}` : `nee, ${WRITES_BLOCKED_NL}`}${readsNl ? `. Wel gaat door: ${readsNl} (in het dossier onder \`reads\`)` : ""}`;
   const criteriaList = CRITERIA.filter((criterion) => procedures.some((procedure) => procedure.id === criterion.id)).map((criterion) => `${criterion.id} ${criterion.titleNl}`).join("\n");
   const recipes = await readRecipes(runDir);
