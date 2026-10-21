@@ -15,6 +15,7 @@ import {
   validateCandidates,
   validateJudgeVerdict,
   quotedFragments,
+  rowsToExplain,
   searchableText,
   validateVerification,
   type CandidateList,
@@ -232,6 +233,33 @@ test("a disagreement only needs settling for the command that decides the criter
   const leaning: Verdict = { ...passed, observations: [{ ...seen, evidence: ["j143-0003", "j143-0004"] }] };
   assert.deepEqual(validateJudgeVerdict(leaning, { ...context, decisiveCommands: ["focus"] }), []);
   assert.match(validateJudgeVerdict(leaning, context).join(), /methods that disagree/);
+});
+
+test("rows of the dossier that measure a loss are each explained by a look of one's own before a pass", () => {
+  const evidence = {
+    textSpacing: {
+      newlyClippedText: [{ text: "Paspoort of rijbewijs", textLost: true }, { text: "Zoeken", textLost: false }],
+      at320: { newlyClippedText: [{ text: "Paspoort  of rijbewijs", textLost: true }] },
+      states: [{ state: "menu", newlyClippedText: [{ text: "Afval en grofvuil" }] }, { state: "chat", examined: false }],
+    },
+  };
+  const paths = ["textSpacing.newlyClippedText:textLost", "textSpacing.at320.newlyClippedText:textLost", "textSpacing.states.newlyClippedText:textLost"];
+  // A row measured as no loss needs nothing, the same text counts once, and a row of an older run without the field counts.
+  assert.deepEqual(rowsToExplain(evidence, paths), [
+    { part: "textSpacing.newlyClippedText", text: "Paspoort of rijbewijs" },
+    { part: "textSpacing.states.newlyClippedText", text: "Afval en grofvuil" },
+  ]);
+  const rows = rowsToExplain(evidence, paths);
+  const tile = { ...seen, observedNl: "De tegel Paspoort of rijbewijs scrolt: de hele tekst is te bereiken.", evidence: ["j143-0005"] };
+  const menu = { ...seen, observedNl: "In het menu klapt Afval en grofvuil open bij focus.", evidence: ["j143-0002"] };
+  assert.deepEqual(validateJudgeVerdict({ ...passed, observations: [seen, tile, menu] }, { ...context, explainOnPass: rows }), []);
+  const problems = validateJudgeVerdict({ ...passed, observations: [seen, tile] }, { ...context, explainOnPass: rows }).join("\n");
+  assert.match(problems, /textSpacing\.states\.newlyClippedText measures a loss at "Afval en grofvuil"/);
+  assert.doesNotMatch(problems, /Paspoort/);
+  // Naming it in an observation that only points at the dossier is no look at the place.
+  assert.match(validateJudgeVerdict({ ...passed, observations: [seen, { ...tile, evidence: ["contrast"] }, menu] }, { ...context, explainOnPass: rows }).join(), /loss at "Paspoort of rijbewijs"/);
+  // A failure needs no explanation of what it found.
+  assert.deepEqual(validateJudgeVerdict(failed, { ...context, explainOnPass: rows }), []);
 });
 
 test("what belongs to another criterion is handed on with an observation", () => {
