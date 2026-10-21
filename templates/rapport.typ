@@ -1246,6 +1246,10 @@
     par(label-text[#chain.droppedLabel:])
     plain-list(criterion.droppedNl)
   }
+  if derived.briefs.at(criterion.id).loopsNl.len() > 0 {
+    par(label-text[#t.loops:])
+    plain-list(derived.briefs.at(criterion.id).loopsNl)
+  }
   par({
     label-text[Grondslag: ]
     if criterion.rule != none [beslisregel #criterion.rule, ]

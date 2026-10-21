@@ -96,6 +96,28 @@ export interface CrossCandidate {
   where: string;
   evidence: string[];
   noteNl: string;
+  /**
+   * Only when it may belong to this criterion after all and the round cannot decide that: why. The
+   * verdict then has a point "mens nodig:" and does not pass, so a person decides and no new
+   * finishing round comes for it.
+   */
+  undecidedNl?: string;
+}
+
+/**
+ * A candidate two criteria passed on to each other: each looked at it and said it belongs to the
+ * other. That closes the loop. It is an outcome, not an open point: neither criterion is opened
+ * for it again, and no finishing round gets it.
+ */
+export interface CrossLoop {
+  /** The other criterion. */
+  with: string;
+  page: string;
+  where: string;
+  /** The sentence each passed it on with: first the other criterion, then this one. */
+  reasons: { criterion: string; noteNl: string }[];
+  /** The criteria whose round said it may belong there after all but could not decide; that round left a point "mens nodig:". */
+  undecided?: string[];
 }
 
 /** Measurements whose methods contradicted each other in the same way, and the closer look that settled it. */
@@ -872,6 +894,11 @@ function instrumentRules(verdict: Partial<Verdict>, context: InstrumentContext, 
     if (!isText(cross.noteNl, 10)) problems.push(`${at}: noteNl is missing`);
     else if (cross.noteNl.trim().split(/\s+/).length > MAX_CANDIDATE_WORDS) problems.push(`${at}: noteNl is one sentence of at most ${MAX_CANDIDATE_WORDS} words`);
     if (!(Array.isArray(cross.evidence) && cross.evidence.some((ref) => shows(ref) && own(ref)))) problems.push(`${at}: needs at least one look or measure observation${whose} that shows it`);
+    if (cross.undecidedNl !== undefined) {
+      const asksPerson = (Array.isArray(verdict.missingNl) ? verdict.missingNl : []).some((point) => typeof point === "string" && openPoint(point).kind?.prefix === "mens nodig");
+      if (!isText(cross.undecidedNl, 10)) problems.push(`${at}: undecidedNl says in one sentence why it may belong to this criterion after all; leave it out when it does not`);
+      else if (!asksPerson || verdict.outcome === "passed" || verdict.outcome === "inapplicable") problems.push(`${at}: what may belong to this criterion after all but cannot be decided is for a person: a point "mens nodig:" in missingNl, and no "passed" or "inapplicable" outcome`);
+    }
   });
   return problems;
 }

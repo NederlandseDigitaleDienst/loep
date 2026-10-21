@@ -6,7 +6,7 @@ import type { Manifest } from "./manifest.ts";
 import type { RoleExtensions } from "./budget.ts";
 import { MODEL_UNKNOWN, type RoleModels } from "./models.ts";
 import type { RecordedVia } from "./recorded.ts";
-import { openPoint, shadowPartOf, vendorElementsIn, WITHIN_REACH, type Recommendation, type Finding, type Observation, type Outcome, type Verdict } from "./verdict.ts";
+import { openPoint, shadowPartOf, vendorElementsIn, WITHIN_REACH, type CrossLoop, type Recommendation, type Finding, type Observation, type Outcome, type Verdict } from "./verdict.ts";
 import { compareCriterionIds, CRITERIA, en301549Clause, GUIDELINES, PRINCIPLES, understandingUrl, type Criterion, type WcagVersion } from "./wcag.ts";
 
 /** "untested" means no verdict was reached at all; it is never rounded up to anything else. */
@@ -206,6 +206,12 @@ export interface CriterionResult {
    * report says so, and `feedback` drafts no issue, since it is no fault of loep. Absent otherwise.
    */
   outage?: true;
+  /**
+   * Candidates this criterion and another passed on to each other: looked at by both, and each
+   * said it belongs to the other. They leave neither criterion open; the report names them at both.
+   * Absent when there is none.
+   */
+  crossLoops?: CrossLoop[];
 }
 
 export const DROP_REASON_NL: Record<string, string> = {
@@ -377,6 +383,8 @@ export interface CriterionInput {
   provenance: CriterionResult["provenance"];
   /** Open points about candidates other rounds passed on to this criterion that no verdict of it ruled on (`unruledCrossPoints`), also when it failed or is not in the run. */
   unruledNl?: string[];
+  /** Candidates this criterion and another passed on to each other (`crossLoops`): no open point, but kept with the criterion. */
+  loops?: CrossLoop[];
   /** A round of this criterion was given up on for a storing of the model, and no round after it gave a verdict. */
   outage?: boolean;
 }
@@ -523,6 +531,7 @@ export function resolveCriterion(input: CriterionInput, sitePrefix: string): Cri
     procedure: input.procedure,
     provenance: input.provenance,
     ...(input.outage && !byPerson ? { outage: true as const } : {}),
+    ...(input.loops && input.loops.length > 0 ? { crossLoops: input.loops } : {}),
   };
 }
 

@@ -277,6 +277,11 @@ test("what belongs to another criterion is handed on with an observation", () =>
   assert.match(validateJudgeVerdict({ ...passed, crossCandidates: [{ ...cross, criterion: "1.4.3" }] }, context).join(), /another criterion than this one/);
   assert.match(validateJudgeVerdict({ ...passed, crossCandidates: [{ ...cross, evidence: ["contrast"] }] }, context).join(), /needs at least one look or measure observation/);
   assert.match(validateVerification({ ...reproduced, crossCandidates: [cross] }, verifierContext).join(), /observation of session "v143"/);
+  // What may belong here after all but cannot be decided goes to a person, and the criterion does not pass with it (#302).
+  const undecided = { ...cross, undecidedNl: "De rand kan ook als grens van het veld bedoeld zijn; dat beslist geen instrument." };
+  assert.match(validateJudgeVerdict({ ...passed, crossCandidates: [undecided] }, context).join(), /is for a person: a point "mens nodig:" in missingNl, and no "passed"/);
+  const person = "mens nodig: of de rand van het zoekveld bij dit criterium hoort, beslist een persoon op de startpagina.";
+  assert.deepEqual(validateJudgeVerdict({ ...passed, outcome: "cantTell", missingNl: [person], crossCandidates: [undecided] }, context).filter((problem) => problem.includes("undecided") || problem.includes("crossCandidates")), []);
 });
 
 test("the verifier dismisses a candidate only with a measurement of its own, and attacks only a pass", () => {
