@@ -1,1 +1,0 @@
-Een run van een andere versie van loep kun je toch renderen, tekenen, verzegelen, vergelijken, en er een besluit of verklaring van maken: die commando's meten niets. Zo maak je een afgeronde of verzegelde run na een nieuwe release nog af, zonder het onterechte advies om opnieuw te meten met `--fresh`.

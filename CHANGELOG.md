@@ -6,6 +6,22 @@ Wat er per versie van loep is veranderd. De versie staat op het voorblad en onde
 
 <!-- towncrier: een nieuwe versie komt hieronder -->
 
+## 0.14.0 (2026-10-21)
+
+### Wat een uitkomst kan veranderen
+
+- Na drie mislukte navigaties naar een origin vraagt het sessieproces die origin een tijd niets en probeert het daarna opnieuw, in plaats van de rest van de run niets meer. De pauze begint op 5 minuten en verdubbelt bij elke volgende keer, tot 40 minuten. De veegronde wacht zo'n pauze uit. Een blokkade uit een oudere run loopt na 5 minuten af. ([#279](https://github.com/NederlandseDigitaleDienst/loep/issues/279))
+- Een agendabestand (ics) of visitekaartje (vcf) wordt als platte tekst ingelezen, ook als de server het als `application/octet-stream` stuurt. Een run waarvan de inventaris zo'n bestand nog als onbekende soort telde, leest het bij `documents` ook in. ([#283](https://github.com/NederlandseDigitaleDienst/loep/issues/283))
+- Een bericht in een chat gaat per soort maar één keer echt weg. Het antwoord van de server wordt dan opgenomen, en een volgende sessie of de veegronde die hetzelfde bericht naar hetzelfde adres verstuurt, krijgt die opname afgespeeld, met dezelfde tussentijden en zonder dat het meetelt voor het budget. Zo kunnen ook de verifieerders en de afmaakronde zien wat de chat na een bericht doet. Alleen een bericht met een testwaarde wordt opgenomen; een opname zonder antwoord wordt niet bewaard, en een opname die werd afgebroken terwijl de server nog antwoordde, wordt niet afgespeeld. De evaluatie zegt hoeveel berichten zijn opgenomen en hoe vaak een opname is afgespeeld. ([#287](https://github.com/NederlandseDigitaleDienst/loep/issues/287))
+- Een document waarvan de soort niet uit de extensie of de content-type blijkt, wordt opgehaald en op de inhoud herkend: als pdf, rtf, OpenDocument of Office Open XML aan zijn handtekening, en anders als platte tekst als het geldige UTF-8 is. Alleen een bestand zonder tekst, zoals een afbeelding, blijft ongelezen. ([#289](https://github.com/NederlandseDigitaleDienst/loep/issues/289))
+
+### Verder
+
+- Een commando dat een run wijzigt, weigert als de run met een andere versie van loep is gemaakt, en zegt welke versie hoort. Zo schrijft een andere versie niet zonder melding andere opdrachten over een lopende run, waarna de rondgangen en oordelen opnieuw moesten. Bewust overstappen kan met `--other-toolbox`; commando's die alleen lezen, zoals `pending` en `estimate`, mogen gewoon. ([#281](https://github.com/NederlandseDigitaleDienst/loep/issues/281))
+- Mocht een onderzoek versturen en was het budget op, dan zegt het rapport dat de open criteria op meer verzendingen wachten, niet op toestemming. Onder "Nog uitzoeken" staat dan dezelfde verklaring met `--max-writes`. ([#284](https://github.com/NederlandseDigitaleDienst/loep/issues/284))
+- Dependabot stelt een nieuwe versie van html-validate of vnu voortaan voor in de groep van de regel-engines, want beide leveren bevindingen met criteria. Zo krijgt zo'n voorstel dezelfde kleine meting op de testsite voordat het wordt overgenomen.
+- Een run van een andere versie van loep kun je toch renderen, tekenen, verzegelen, vergelijken, en er een besluit of verklaring van maken: die commando's meten niets. Zo maak je een afgeronde of verzegelde run na een nieuwe release nog af, zonder het onterechte advies om opnieuw te meten met `--fresh`.
+
 ## 0.13.0 (2026-10-21)
 
 In 26 procedures staan de voorbeelden met `loep find 'css:...'` nu tussen aanhalingstekens. Het oordeel verandert daar niet door, maar de tekst van die procedures wel. Een run die met een eerdere versie loopt, krijgt de oordelen over die criteria daarom opnieuw te doen.
