@@ -146,9 +146,10 @@ export async function variant(options: { run: string; out: string; name: string;
 
 /**
  * What the agents of one run used, counted outside the run: a run records no tokens and no
- * turns, only the transcripts of the agents do. One row per agent. `session` is the session the
- * agent ran in (b-111, v-111, r-start, a-132); an agent without a session, such as the one that
- * asks for the state between phases, names its `role` instead.
+ * turns, only the transcripts of the agents do (`loep usage` counts them). One row per agent and
+ * model. A row names the session the agent ran in (b-111, v-111, r-start, a-132), or its `role`
+ * (walk, judge, verifier, finisher, stand) with the `criterion` of a judge, verifier or finishing
+ * round and the `pageType` of a walk.
  */
 export interface UsageFile {
   schema: "loep/verbruik/1";
@@ -160,7 +161,7 @@ export interface UsageFile {
   model?: string;
   /** Prices for models that `PRICES` does not have, or other ones. */
   prices?: Record<string, Price>;
-  agents: (Tokens & { session?: string; role?: string; model?: string; turns?: number })[];
+  agents: (Tokens & { session?: string; role?: string; criterion?: string; pageType?: string; agent?: string; model?: string; turns?: number })[];
 }
 
 export interface RoleUse {
@@ -359,14 +360,28 @@ function readUsage(path: string): UsageFile {
   return file;
 }
 
-/** What each role of a run used: sessions, commands and time from the run, tokens, turns and cost from the usage file when there is one. */
-function rolesOf(runDir: string, usage: UsageFile | null): RoleUse[] {
+/**
+ * Whether a session or a row of a usage file belongs to a criterion outside `criteria`: a judge,
+ * verifier or finishing round of another criterion. Their session names carry the criterion
+ * without dots (b-143, v-1411-2); WCAG numbers make that unambiguous. Walks and the stand agent
+ * work for the whole run and are never outside.
+ */
+function outside(criteria: string[], row: { session?: string | undefined; criterion?: string | undefined }): boolean {
+  const criterion = row.criterion ?? (row.session ? /^[bva]-(\d+)(?:-\d+)?$/.exec(row.session)?.[1] : undefined);
+  return criterion !== undefined && !criteria.some((id) => id === criterion || id.replaceAll(".", "") === criterion);
+}
+
+/**
+ * What each role of a run used over the criteria of the comparison: sessions, commands and time
+ * from the run, tokens, turns and cost from the usage file when there is one.
+ */
+function rolesOf(runDir: string, usage: UsageFile | null, criteria: string[]): RoleUse[] {
   const roles = new Map<string, RoleUse>();
   const roleOf = (key: string): RoleUse => {
     if (!roles.has(key)) roles.set(key, { role: key, roleNl: ROLE_NL[key as AgentRole] ?? key, agents: 0, commands: null, sessionSeconds: null, tokens: null, turns: null, costUsd: null });
     return roles.get(key)!;
   };
-  for (const phase of agentPhaseTimings(runDir)) {
+  for (const phase of agentPhaseTimings(runDir, (session) => !outside(criteria, { session }))) {
     const use = roleOf(PHASE_ROLE[phase.phase]);
     use.agents = phase.agents;
     use.sessionSeconds = phase.sumSeconds;
@@ -375,7 +390,7 @@ function rolesOf(runDir: string, usage: UsageFile | null): RoleUse[] {
   for (const name of existsSync(root) ? readdirSync(root).sort() : []) {
     const role = roleOfSession(name);
     const commands = readIfThere<{ commands?: unknown }>(join(root, name, "session.json"))?.commands;
-    if (!role || !AGENT_ROLES.has(role) || !isCount(commands)) continue;
+    if (!role || !AGENT_ROLES.has(role) || !isCount(commands) || outside(criteria, { session: name })) continue;
     const use = roleOf(role);
     use.commands = (use.commands ?? 0) + commands;
   }
@@ -383,6 +398,7 @@ function rolesOf(runDir: string, usage: UsageFile | null): RoleUse[] {
     const rows = new Map<string, number>();
     const unpriced = new Set<string>();
     for (const agent of usage.agents) {
+      if (outside(criteria, agent)) continue;
       const key = agent.role ?? roleOfSession(agent.session!) ?? agent.session!;
       const use = roleOf(key);
       rows.set(key, (rows.get(key) ?? 0) + 1);
@@ -474,7 +490,7 @@ async function runResult(runDir: string, side: RunResult["side"], criteria: stri
     openPointsByCriterion,
     falseReports,
     withoutCounterpart,
-    roles: rolesOf(runDir, usage),
+    roles: rolesOf(runDir, usage, criteria),
   };
 }
 
@@ -785,7 +801,7 @@ export function comparisonMarkdown(result: VariantComparison): string {
     lines.push(`| samen | ${ordered.map((run) => String(sumPoints(run))).join(" | ")} |`);
   }
 
-  lines.push("", "## Verbruik per rol", "", "Sessies, commando's en tijd uit de run. Tokens, beurten en kosten alleen uit een verbruiksbestand (--usage), want de run telt die niet.", "");
+  lines.push("", "## Verbruik per rol", "", "Sessies, commando's en tijd uit de run. Tokens, beurten en kosten alleen uit een verbruiksbestand (--usage, te maken met `loep usage`), want de run telt die niet. Beoordelaars, verifieerders en de afmaakronde tellen alleen over de criteria hierboven; rondgangen en de stand-agent werken voor de hele run.", "");
   lines.push("| Run | Rol | Agents | Commando's | Tijd in sessies | Invoer | Naar de cache | Uit de cache | Uitvoer | Beurten | Kosten |", "|---|---|---|---|---|---|---|---|---|---|---|");
   for (const run of ordered) {
     for (const use of run.roles) {
@@ -836,9 +852,12 @@ Not a step of an evaluation.
   --baseline, --variant  Repeatable: one run each. Without --variant: only the spread of the baseline
   --reference <file>     The answer key in the form compare reads (toolbox/fixtures/reference-*.json)
   --usage <file>         Repeatable: tokens and turns per agent of one run, counted from the transcripts
-                         outside the run (schema loep/verbruik/1, see toolbox/test/fixtures/verbruik.json)
+                         outside the run with loep usage (schema loep/verbruik/1, see
+                         toolbox/test/fixtures/verbruik.json). Opus and Sonnet have a price; another
+                         model needs one in the file
   --criteria <ids>       Count only these criteria, comma-separated as with tasks --only: in the outcomes,
-                         the defects of the key, the findings without a counterpart, the open points and the agreement.
+                         the defects of the key, the findings without a counterpart, the open points, the agreement
+                         and the use per role (walks and the stand agent work for the whole run).
                          Every run needs tasks for each of them; a run may have more, so these criteria of a
                          baseline of 56 compare with variants measured on just these. Without it every run
                          must have the same criteria, and the command stops and names the shared ones

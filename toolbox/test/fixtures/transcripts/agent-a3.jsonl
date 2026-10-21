@@ -1,0 +1,1 @@
+{"type":"assistant","message":{"id":"msg_a3_1","model":"claude-opus-5-5","role":"assistant","content":[{"type":"text","text":"Klaar."}],"usage":{"input_tokens":1,"cache_creation_input_tokens":500,"cache_read_input_tokens":5000,"output_tokens":10}}}
