@@ -192,18 +192,18 @@ const CLASSES: Record<string, Record<string, string | null>> = {
   "nulmeting-2": { "1.1.1-logo": "gevonden", "1.4.3-kop": "gemist-bewijs-beoordeling" },
   "variant-1": { "1.1.1-logo": "gevonden", "1.4.3-kop": null },
 };
-/** Per run the findings of its own, by criterion, with what both classifications agreed on: "tegenhanger" belongs to a defect of the key. */
-const OWN: Record<string, [string, string | null][]> = {
-  "nulmeting-breed": [["1.1.1", "tegenhanger"], ["1.4.3", "tegenhanger"], ["1.4.3", null], ["2.4.3", "tegenhanger"], ["2.4.3", "onterecht"]],
-  "nulmeting-1": [["1.1.1", "tegenhanger"], ["1.4.3", "tegenhanger"], ["1.4.3", null]],
-  "nulmeting-2": [["1.1.1", "tegenhanger"]],
-  "variant-1": [["1.1.1", "tegenhanger"], ["2.1.1", "onterecht"]],
+/** Per run the findings of its own, by criterion, with the class of each classification: "tegenhanger" belongs to a defect of the key. */
+const OWN: Record<string, [string, string, string][]> = {
+  "nulmeting-breed": [["1.1.1", "tegenhanger", "tegenhanger"], ["1.4.3", "tegenhanger", "tegenhanger"], ["1.4.3", "onterecht", "onterecht"], ["1.4.3", "onterecht", "discutabel"], ["2.4.3", "tegenhanger", "tegenhanger"], ["2.4.3", "onterecht", "onterecht"]],
+  "nulmeting-1": [["1.1.1", "tegenhanger", "tegenhanger"], ["1.4.3", "tegenhanger", "tegenhanger"], ["1.4.3", "onterecht", "onterecht"], ["1.4.3", "onterecht", "discutabel"]],
+  "nulmeting-2": [["1.1.1", "tegenhanger", "tegenhanger"], ["2.1.1", "terecht", "terecht"]],
+  "variant-1": [["1.1.1", "tegenhanger", "tegenhanger"], ["1.1.1", "terecht", "terecht"], ["2.1.1", "onterecht", "onterecht"]],
 };
 const classified = async (runDir: string) => {
   const name = runDir.split("/").at(-1)!;
   return {
     findings: Object.entries(CLASSES[name]!).map(([id, agreed]) => ({ id, agreed })),
-    ownFindings: (OWN[name] ?? []).map(([criterion, agreed]) => ({ criterion, agreed })),
+    ownFindings: (OWN[name] ?? []).map(([criterion, a, b]) => ({ criterion, a, b, agreed: a === b ? a : null })),
   } as unknown as Awaited<ReturnType<NonNullable<Parameters<typeof compareVariants>[0]["findings"]>>>;
 };
 
@@ -220,7 +220,16 @@ test("the comparison lays the runs side by side per criterion, per defect and pe
 
   assert.deepEqual(result.defects.map((defect) => [defect.id, defect.variant, defect.foundBaseline, defect.foundVariant]), [["1.1.1-logo", ["gevonden"], [2, 2], [1, 1]], ["1.4.3-kop", ["oneens"], [1, 2], [0, 1]]], "a defect outside the criteria of the runs is left out, and one the two classifications disagree on is not found");
   assert.deepEqual(result.runs.map((run) => run.openPoints), [{ "mens nodig": 1 }, { "budget op": 1 }, { "budget op": 1, "mens nodig": 1 }]);
-  assert.deepEqual(result.runs.map((run) => run.falseReports), [{ "1.1.1": 0, "1.4.3": 1, "2.1.1": 0 }, { "1.1.1": 0, "1.4.3": 0, "2.1.1": 0 }, { "1.1.1": 0, "1.4.3": 0, "2.1.1": 1 }], "a finding the classifications do not both put under a defect is unjustified");
+  assert.deepEqual(result.runs.map((run) => run.falseReports), [{ "1.1.1": 0, "1.4.3": 1, "2.1.1": 0 }, { "1.1.1": 0, "1.4.3": 0, "2.1.1": 0 }, { "1.1.1": 0, "1.4.3": 0, "2.1.1": 1 }], "only a finding both classifications call unjustified counts; one they call terecht, or disagree on, does not");
+  assert.deepEqual(
+    result.runs.map((run) => run.withoutCounterpart),
+    [
+      { total: 2, agreed: { terecht: 0, discutabel: 0, onterecht: 1 }, disagreed: { "discutabel / onterecht": 1 } },
+      { total: 1, agreed: { terecht: 1, discutabel: 0, onterecht: 0 }, disagreed: {} },
+      { total: 2, agreed: { terecht: 1, discutabel: 0, onterecht: 1 }, disagreed: {} },
+    ],
+    "every finding without a counterpart, by class, and where the classifications differ, both classes",
+  );
   assert.deepEqual(result.runs[2]!.findings, { "1.1.1": 1, "1.4.3": 0, "2.1.1": 1 });
 
   assert.deepEqual(result.agreement.baseline, { runs: 2, unanimous: [2, 3], kappa: result.agreement.baseline.kappa });
@@ -242,7 +251,7 @@ test("with --criteria, those criteria of a run with more are a fair baseline: ev
   assert.deepEqual(chosen.runs[0]!.criteria, ["1.1.1", "1.4.3", "2.1.1", "2.4.3"], "the run keeps its own criteria");
   // The run with 2.4.3 gives what the run without it gives: its defect, report, finding and open point under 2.4.3 do not count.
   for (const key of ["rows", "defects", "agreement", "verdict"] as const) assert.deepEqual(chosen[key], narrow[key], key);
-  assert.deepEqual([chosen.runs[0]!.outcomes, chosen.runs[0]!.findings, chosen.runs[0]!.openPoints, chosen.runs[0]!.falseReports, chosen.runs[0]!.defects], [narrow.runs[0]!.outcomes, narrow.runs[0]!.findings, narrow.runs[0]!.openPoints, narrow.runs[0]!.falseReports, narrow.runs[0]!.defects]);
+  for (const key of ["outcomes", "findings", "openPoints", "falseReports", "withoutCounterpart", "defects"] as const) assert.deepEqual(chosen.runs[0]![key], narrow.runs[0]![key], key);
   assert.match(comparisonMarkdown(chosen), /Let op: alleen de 3 criteria van --criteria tellen mee/);
 
   const fewer = await compareVariants({ baseline: [wider, baseline[1]!], variant: variants, reference, findings: classified, criteria: ["1.1.1"] });
@@ -275,7 +284,8 @@ test("per role: sessions, commands and time from the run, and tokens, turns and 
   const markdown = comparisonMarkdown(result);
   assert.match(markdown, /\*\*Niet slechter: nee\.\*\*/);
   assert.match(markdown, /\| Gevonden gebreken uit de sleutel, per run \(2 gebreken\) \| 75,0% \(.*\) \| 50,0% \(.*\) \| -25,0 \(.* tot .*\) procentpunt \| ondergrens boven -5,0 \| nee \|/);
-  assert.match(markdown, /\| Onterechte meldingen per run \(3 criteria\) \| 0,5 \(.*\) \| 1,0 \(.*\) \| \+0,5 \(.*\) \| bovengrens onder \+1,0 \| nee \|/);
+  assert.match(markdown, /\| Onterecht volgens beide, per run \(3 criteria\) \| 0,5 \(.*\) \| 1,0 \(.*\) \| \+0,5 \(.*\) \| bovengrens onder \+1,0 \| nee \|/);
+  assert.match(markdown, /## Meldingen zonder tegenhanger[\s\S]*\| terecht volgens beide \| 0 \| 1 \| 1 \|\n\| discutabel volgens beide \| 0 \| 0 \| 0 \|\n\| onterecht volgens beide \| 1 \| 0 \| 1 \|\n\| oneens: discutabel \/ onterecht \| 1 \| 0 \| 0 \|\n\| samen \| 2 \| 1 \| 2 \|/);
   assert.match(markdown, /\| nulmeting \| 2 \| 2 van 3 \| 0,45 \|/);
   assert.match(markdown, /\| 1\.4\.3 .* \| voldoet niet \| voldoet niet \| kan niet bepalen \| n\.v\.t\. \| 100% \| - \| 100% \|/);
   assert.match(markdown, /\| V1 \| beoordelaar \| 1 \| 40 \| 30 min \| 100 \| 0,20 M \| 4,00 M \| 5\.000 \| 40 \| 1,90 dollar \|/);
@@ -308,7 +318,7 @@ function simulated(prefix: string, found: number[][], reports: number[]): { dirs
     const i = byName.get(runDir.split("/").at(-1)!)!;
     return {
       findings: DEFECTS.map((defect, d) => ({ id: defect.id, agreed: found[i]!.includes(d) ? "gevonden" : "gemist-bewijs-beoordeling" })),
-      ownFindings: Array.from({ length: reports[i]! }, () => ({ criterion: "1.4.3", agreed: "onterecht" })),
+      ownFindings: Array.from({ length: reports[i]! }, () => ({ criterion: "1.4.3", a: "onterecht", b: "onterecht", agreed: "onterecht" })),
     } as unknown as Awaited<ReturnType<NonNullable<Parameters<typeof compareVariants>[0]["findings"]>>>;
   };
   return { dirs, findings };
@@ -390,7 +400,7 @@ test("the comparison refuses what does not fit together", async () => {
 test("on the command line, a run without a classification per finding says so and keeps its outcomes", async () => {
   const out = join(scratch, "vergelijking");
   const { stdout } = await promisify(execFile)(process.execPath, [CLI, "compare-variants", "--baseline", baseline[0]!, "--baseline", baseline[1]!, "--variant", variants[0]!, "--reference", reference, "--usage", USAGE_FIXTURE, "--out", out]);
-  assert.match(stdout, /^3 runs, 3 criteria, 2 gebreken uit de sleutel; .*varianten\.md\nniet slechter: niet te bepalen \(gevonden niet te bepalen; onterechte meldingen niet te bepalen\)\n$/);
+  assert.match(stdout, /^3 runs, 3 criteria, 2 gebreken uit de sleutel; .*varianten\.md\nniet slechter: niet te bepalen \(gevonden niet te bepalen; onterecht volgens beide niet te bepalen\)\n$/);
   const saved = readJsonFile<{ runs: { defects: Record<string, unknown>; defectsNl: string | null }[] }>(join(out, "varianten.json"));
   assert.deepEqual(saved.runs[0]!.defects, { "1.1.1-logo": null, "1.4.3-kop": null });
   assert.match(saved.runs[0]!.defectsNl!, /geen geldige indeling per bevinding/);
