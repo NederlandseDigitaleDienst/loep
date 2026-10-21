@@ -163,9 +163,10 @@ sweep-check *flags:
 testsite-build:
     node {{toolbox}}/fixtures/build.ts
 
-# Zet een nieuwe versie klaar op een branch: alle versienummers en het deel in CHANGELOG.md (met de fragmenten uit changelog.d/, via towncrier), als één commit. Daarna een voorstel naar main
-release-prepare version:
-    node {{toolbox}}/scripts/release.ts prepare {{version}}
+# Zet een nieuwe versie klaar op een branch: alle versienummers en het deel in CHANGELOG.md (met de fragmenten uit changelog.d/, via towncrier), als één commit. Daarna een voorstel naar main. Weigert zonder meting in validatie/versies/<versie>.json, tenzij met --unmeasured "<reden>"; die reden komt in CHANGELOG.md
+[positional-arguments]
+release-prepare version *flags:
+    node {{toolbox}}/scripts/release.ts prepare "$@"
 
 # Na de merge, op main: tag de versie, zet de tag op GitHub en maak de release met de tekst uit CHANGELOG.md
 release-tag:
