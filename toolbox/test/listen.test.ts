@@ -145,23 +145,23 @@ test("a file is fetched under the rules of the session, or not at all", async ()
   const guard: Guard = { blocked: [], outsideScopeLoaded: {} };
   const inside: Scope = { hosts: [new URL(fixture.origins.clean).host], baseUrl: null, strict: false };
   const to = join(run, "fetched");
-  const whole = await guardedDownload(inside, guard, `${fixture.origins.clean}/media/raadsvergadering.vtt`, to, { resourceType: "texttrack", maxBytes: 1_000_000, timeoutMs: 5000 });
+  const whole = await guardedDownload(inside, guard, `${fixture.origins.clean}/media/raadsvergadering.vtt`, to, { resourceType: "texttrack", maxBytes: 1_000_000, timeoutMs: 5000, blockade: undefined });
   assert.deepEqual(whole.ok && [whole.bytes, whole.truncated], [statSync(to).size, null]);
   assert.match(readFileSync(to, "utf8"), /^WEBVTT/);
-  const part = await guardedDownload(inside, guard, `${fixture.origins.clean}/media/raadsvergadering.webm`, to, { resourceType: "media", maxBytes: 1000, timeoutMs: 5000 });
+  const part = await guardedDownload(inside, guard, `${fixture.origins.clean}/media/raadsvergadering.webm`, to, { resourceType: "media", maxBytes: 1000, timeoutMs: 5000, blockade: undefined });
   assert.deepEqual(part.ok && [part.bytes, part.truncated, statSync(to).size], [1000, "size", 1000]);
-  assert.deepEqual(await guardedDownload(inside, guard, `${fixture.origins.clean}/media/bestaat-niet.webm`, to, { resourceType: "media", maxBytes: 1000, timeoutMs: 5000 }), { ok: false, reason: "de server antwoordt met 404" });
-  assert.match(((await guardedDownload(inside, guard, "blob:http://127.0.0.1/abc", to, { resourceType: "media", maxBytes: 1000, timeoutMs: 5000 })) as { reason: string }).reason, /^het adres begint met blob:/);
+  assert.deepEqual(await guardedDownload(inside, guard, `${fixture.origins.clean}/media/bestaat-niet.webm`, to, { resourceType: "media", maxBytes: 1000, timeoutMs: 5000, blockade: undefined }), { ok: false, reason: "de server antwoordt met 404" });
+  assert.match(((await guardedDownload(inside, guard, "blob:http://127.0.0.1/abc", to, { resourceType: "media", maxBytes: 1000, timeoutMs: 5000, blockade: undefined })) as { reason: string }).reason, /^het adres begint met blob:/);
   assert.deepEqual(guard.blocked, []);
   // A host outside the scope: a text track is refused as the browser refuses it, and so is everything under a strict scope. Nothing is sent.
   const elsewhere: Scope = { hosts: ["voorbeeld.invalid"], baseUrl: null, strict: false };
-  const track = await guardedDownload(elsewhere, guard, `${fixture.origins.thirdParty}/media/x.vtt`, to, { resourceType: "texttrack", maxBytes: 1000, timeoutMs: 5000 });
+  const track = await guardedDownload(elsewhere, guard, `${fixture.origins.thirdParty}/media/x.vtt`, to, { resourceType: "texttrack", maxBytes: 1000, timeoutMs: 5000, blockade: undefined });
   assert.deepEqual(track, { ok: false, reason: "127.0.0.1 ligt buiten de scope van de run" });
-  const strict = await guardedDownload({ ...elsewhere, strict: true }, guard, `${fixture.origins.clean}/media/raadsvergadering.webm`, to, { resourceType: "media", maxBytes: 1000, timeoutMs: 5000 });
+  const strict = await guardedDownload({ ...elsewhere, strict: true }, guard, `${fixture.origins.clean}/media/raadsvergadering.webm`, to, { resourceType: "media", maxBytes: 1000, timeoutMs: 5000, blockade: undefined });
   assert.equal(strict.ok, false);
   assert.deepEqual((guard.blocked as Blocked[]).map((entry) => [entry.kind, entry.method, entry.resourceType]), [["scope", "GET", "texttrack"], ["scope", "GET", "media"]]);
   // Media a page names may come from elsewhere when the scope is not strict, and is counted.
-  const named = await guardedDownload(elsewhere, guard, `${fixture.origins.clean}/media/raadsvergadering.webm`, to, { resourceType: "media", maxBytes: 1000, timeoutMs: 5000 });
+  const named = await guardedDownload(elsewhere, guard, `${fixture.origins.clean}/media/raadsvergadering.webm`, to, { resourceType: "media", maxBytes: 1000, timeoutMs: 5000, blockade: undefined });
   assert.equal(named.ok, true);
   assert.deepEqual(guard.outsideScopeLoaded, { "127.0.0.1": 1 });
 });
