@@ -805,7 +805,7 @@ export async function execute(context: Context, command: string, args: string[],
   const changes = typeof spec.changes === "function" ? spec.changes(options) : spec.changes;
   const locators = !changes || !home.target ? null : recorded !== undefined ? recorded : await tgs<Locators | null>(home.surface, "locatorsFor", home.target.ref).catch(() => null);
   const outcome = await spec.run(home, args, options);
-  if (changes) context.surface.steps.push({ command, args, options, target: context.target?.path ?? null, ...(locators ? { locators } : {}) });
+  if (changes) context.surface.steps.push({ command, ...(outcome.step ?? { args, options }), target: context.target?.path ?? null, ...(locators ? { locators } : {}) });
   return outcome;
 }
 
