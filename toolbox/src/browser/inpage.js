@@ -1379,6 +1379,42 @@
     return false;
   }
 
+  /** A line of text counts as cut off when more than this many pixels of its text box lie outside the box that clips it. */
+  const TEXT_CUT_MIN_PX = 2;
+
+  /**
+   * How much of the text of an element that hides its overflow lies outside its padding box,
+   * measured on the boxes of the lines of text themselves (Range.getClientRects), not on the
+   * boxes of the elements that hold them. Padding or line height that runs past the edge moves
+   * no letter out of sight; a line whose text box sticks out does. `lost` is whether any text
+   * disappears: a line cut off by more than TEXT_CUT_MIN_PX pixels, or a line out of sight.
+   * `pixels` is how far text sticks out at most, also when that is too little to count.
+   */
+  function textCut(element) {
+    const outer = element.getBoundingClientRect();
+    const box = { left: outer.left + element.clientLeft, top: outer.top + element.clientTop };
+    box.right = box.left + element.clientWidth;
+    box.bottom = box.top + element.clientHeight;
+    let linesCut = 0;
+    let linesHidden = 0;
+    let pixels = 0;
+    const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      if (!node.textContent.trim() || !isVisible(node.parentElement)) continue;
+      const range = document.createRange();
+      range.selectNodeContents(node);
+      for (const rect of range.getClientRects()) {
+        if (rect.width < 1 || rect.height < 1) continue;
+        const outside = Math.max(box.left - rect.left, box.top - rect.top, rect.right - box.right, rect.bottom - box.bottom, 0);
+        pixels = Math.max(pixels, Math.round(outside));
+        if (outside <= TEXT_CUT_MIN_PX) continue;
+        linesCut++;
+        if (rect.top >= box.bottom || rect.bottom <= box.top || rect.left >= box.right || rect.right <= box.left) linesHidden++;
+      }
+    }
+    return { lost: linesCut > 0, linesCut, linesHidden, pixels };
+  }
+
   function overflowReport() {
     const viewportWidth = document.documentElement.clientWidth;
     const scrollWidth = Math.max(document.documentElement.scrollWidth, document.body.scrollWidth);
@@ -1400,6 +1436,7 @@
           scroll: [element.scrollWidth, element.scrollHeight],
           client: [element.clientWidth, element.clientHeight],
           textOverflow: style.textOverflow,
+          textCut: textCut(element),
         });
       }
     }
