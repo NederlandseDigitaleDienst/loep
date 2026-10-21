@@ -642,12 +642,14 @@ const spacing: Handler = async (context, _args, options) => {
   const { surface, images } = context;
   const path = images.image();
   const measured = await textSpacing(surface.page, path, options.keep !== true);
-  const clipped = measured.newlyClipped as unknown as { tag: string; text: string }[];
+  const clipped = measured.newlyClipped as unknown as { tag: string; text: string; textCut?: { lost: boolean; linesCut: number; linesHidden: number; pixels: number } }[];
+  // Whether letters fall away, or only padding or line height runs past the edge.
+  const cutNl = (cut: (typeof clipped)[number]["textCut"]): string => (!cut ? "" : cut.lost ? ` (tekst verdwijnt: ${cut.linesCut} regel(s) tot ${cut.pixels}px buiten beeld, ${cut.linesHidden} helemaal)` : " (geen tekst buiten beeld, alleen ruimte rond de tekst)");
   return {
     result: measured,
     print: {
       newlyClipped: clipped.length,
-      ...(clipped.length > 0 ? { first: clipped.slice(0, MAX_LISTED).map(where) } : {}),
+      ...(clipped.length > 0 ? { textLost: clipped.filter((element) => element.textCut?.lost).length, first: clipped.slice(0, MAX_LISTED).map((element) => `${where(element)}${cutNl(element.textCut)}`) } : {}),
       textWithoutSpacing: measured.textWithoutSpacingCount,
       horizontalScrollAfter: measured.horizontalScrollAfter,
       ...(options.keep === true ? { kept: "de ruimere tekstafstand blijft aan tot de volgende open" } : {}),

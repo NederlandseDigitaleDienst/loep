@@ -95,7 +95,13 @@ test("1.4.12: a tile with a fixed height that hides its overflow cuts off text h
     const result = await textSpacing(page, `${process.env.TMPDIR ?? "/tmp"}/loep-spacing-tiles.png`, true);
     assert.equal(result.clippedBefore, 0, "a block that only cuts off a decoration does not count");
     // overflow:hidden and overflow:clip both cut off the second line; the tile with min-height grows along.
-    assert.deepEqual(result.newlyClipped.map((item) => (item as { text?: string }).text), ["Paspoort of rijbewijs", "Afval en grofvuil"]);
+    const clipped = result.newlyClipped as unknown as { text: string; textCut: { lost: boolean; linesCut: number; linesHidden: number; pixels: number } }[];
+    assert.deepEqual(clipped.map((item) => item.text), ["Paspoort of rijbewijs", "Afval en grofvuil", "Balie tijden bekijken"]);
+    // In the first two only line height and padding run past the edge: of the letters at most a pixel or two, no text lost.
+    assert.deepEqual(clipped.slice(0, 2).map((item) => item.textCut.lost), [false, false], JSON.stringify(clipped));
+    // The paragraph spacing pushes the second line of the last tile out of sight altogether.
+    assert.equal(clipped[2]!.textCut.lost, true);
+    assert.equal(clipped[2]!.textCut.linesHidden, 1, JSON.stringify(clipped[2]));
   } finally {
     await page.context().close();
   }

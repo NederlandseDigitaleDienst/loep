@@ -8,12 +8,13 @@
   body { font: 16px/1.5 sans-serif; margin: 2rem; }
   ul { list-style: none; margin: 0 0 1.5rem; padding: 0; display: flex; gap: 0.75rem; }
   a { display: block; width: 11rem; padding: 6px 0.75rem; border: 1px solid #154273; text-decoration: none; line-height: 1.2; }
-  a span { display: block; white-space: nowrap; }
+  a span, a p { display: block; white-space: nowrap; margin: 0; }
   .titel { font-weight: 700; }
   .sub { font-size: 0.9rem; }
   .vast a { height: 50px; overflow: hidden; }
   .knip a { height: 50px; overflow: clip; }
   .groei a { min-height: 50px; }
+  .weg a { height: 50px; overflow: hidden; }
   .vlak { height: 50px; overflow: hidden; width: 11rem; }
   .vlak i { display: block; height: 80px; background: #eef3f8; }
 </style>
@@ -29,6 +30,9 @@
 </ul>
 <ul class="groei">
   <li><a href="#parkeren"><span class="titel">Parkeren</span><span class="sub">bij uw huis</span></a></li>
+</ul>
+<ul class="weg">
+  <li><a href="#balie"><p class="titel">Balie</p><span class="sub">tijden bekijken</span></a></li>
 </ul>
 <div class="vlak"><span>Kort</span><i></i></div>
 </main>
