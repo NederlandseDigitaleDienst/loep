@@ -6,6 +6,12 @@ Wat er per versie van loep is veranderd. De versie staat op het voorblad en onde
 
 <!-- towncrier: een nieuwe versie komt hieronder -->
 
+## 0.14.1 (2026-10-21)
+
+### Wat een uitkomst kan veranderen
+
+- Een chat die na een bericht minstens 10 seconden niets terugzegt, zoals een chat die door mensen wordt beantwoord, krijgt die stilte als opname: een volgende verzending van hetzelfde bericht gaat dan ook niet meer naar de server. Een opname wordt gevonden over gesprekken heen, ook als de chat per gesprek een eigen token in het adres van de websocket zet. ([#297](https://github.com/NederlandseDigitaleDienst/loep/issues/297))
+
 ## 0.14.0 (2026-10-21)
 
 ### Wat een uitkomst kan veranderen
