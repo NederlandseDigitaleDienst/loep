@@ -15,6 +15,7 @@ import {
   validateCandidates,
   validateJudgeVerdict,
   quotedFragments,
+  rowsToExplain,
   searchableText,
   validateVerification,
   type CandidateList,
@@ -114,8 +115,12 @@ test("a pass may not lean on a measurement whose methods disagree, unless a clos
 test("every candidate of the walk-through gets a ruling", () => {
   const withCandidates = { ...context, candidateIds: ["P01-K01", "P01-K02"] };
   assert.match(validateJudgeVerdict(failed, withCandidates).join(), /candidate "P01-K01" has no ruling/);
-  const ruled: Verdict = { ...failed, candidates: [{ id: "P01-K01", ruling: "finding", finding: "F1", reasonNl: "Gemeten: 3,9 op 1." }, { id: "P01-K02", ruling: "otherCriterion", criterion: "1.4.11", reasonNl: "Het gaat om de rand van een veld." }] };
+  const border = { criterion: "1.4.11", page: "P01", where: "rand van het zoekveld", evidence: ["j143-0005"], noteNl: "De rand van het zoekveld is lichtgrijs op wit." };
+  const ruled: Verdict = { ...failed, candidates: [{ id: "P01-K01", ruling: "finding", finding: "F1", reasonNl: "Gemeten: 3,9 op 1." }, { id: "P01-K02", ruling: "otherCriterion", criterion: "1.4.11", reasonNl: "Het gaat om de rand van een veld." }], crossCandidates: [border] };
   assert.deepEqual(validateJudgeVerdict(ruled, withCandidates), []);
+  // A ruling alone reaches nobody: the criterion it names is given only what crossCandidates passes on.
+  assert.match(validateJudgeVerdict({ ...ruled, crossCandidates: undefined }, withCandidates).join(), /candidates\[1\]: a candidate for criterion 1\.4\.11 reaches that criterion only through an entry for it in crossCandidates/);
+  assert.match(validateJudgeVerdict({ ...ruled, crossCandidates: [{ ...border, criterion: "1.3.1" }] }, withCandidates).join(), /for criterion 1\.4\.11 reaches that criterion only/);
   assert.match(validateJudgeVerdict({ ...ruled, candidates: [{ ...ruled.candidates![0]!, finding: "F9" }, ruled.candidates![1]!] }, withCandidates).join(), /names the key of that finding/);
   assert.match(validateJudgeVerdict({ ...ruled, candidates: [ruled.candidates![0]!, { ...ruled.candidates![1]!, criterion: "1.4.3" }] }, withCandidates).join(), /names that criterion/);
   assert.match(validateJudgeVerdict({ ...ruled, candidates: [...ruled.candidates!, { id: "P09-K01", ruling: "noIssue", reasonNl: "Niets aan de hand hier." }] }, withCandidates).join(), /is not a candidate for this criterion/);
@@ -153,6 +158,10 @@ test("a finding that is not reproduced is dropped with a reason, and never becom
   assert.match(validateVerification({ ...dropped, outcome: "passed", missingNl: undefined }, verifierContext).join(), /the final outcome can only be failed, cantTell/);
   assert.match(validateVerification({ ...dropped, verification: { ...dropped.verification!, findings: [{ key: "F1", reproduced: false, evidence: [] }] } }, verifierContext).join(), /dropped must be one of/);
   assert.match(validateVerification({ ...dropped, verification: { ...dropped.verification!, findings: [{ key: "F1", reproduced: false, evidence: [], dropped: "wrongCriterion", reasonNl: "Dit gaat over de rand van het veld." }] } }, verifierContext).join(), /belongsTo/);
+  // Dropped because it belongs elsewhere: it is passed on there, with an observation of the verifier's own.
+  const elsewhere = { ...dropped.verification!, findings: [{ key: "F1", reproduced: false, evidence: [], dropped: "wrongCriterion" as const, belongsTo: "1.4.11", reasonNl: "Dit gaat over de rand van het veld, niet over tekst." }] };
+  assert.match(validateVerification({ ...dropped, verification: elsewhere }, verifierContext).join(), /belongs to criterion 1\.4\.11 reaches that criterion only through an entry for it in crossCandidates/);
+  assert.deepEqual(validateVerification({ ...dropped, verification: elsewhere, crossCandidates: [{ criterion: "1.4.11", page: "P01", where: "rand van het zoekveld", evidence: ["v143-0003"], noteNl: "De rand van het zoekveld is lichtgrijs op wit." }] }, verifierContext), []);
   assert.match(validateVerification({ ...reproduced, verification: { ...reproduced.verification!, findings: dropped.verification!.findings } }, verifierContext).join(), /a dropped finding cannot stay/);
   assert.match(validateVerification({ ...dropped, verification: { ...dropped.verification!, findings: [{ key: "F1", reproduced: true, evidence: ["v143-0002"] }] } }, verifierContext).join(), /a reproduced finding makes the outcome "failed"/);
 });
@@ -232,6 +241,33 @@ test("a disagreement only needs settling for the command that decides the criter
   const leaning: Verdict = { ...passed, observations: [{ ...seen, evidence: ["j143-0003", "j143-0004"] }] };
   assert.deepEqual(validateJudgeVerdict(leaning, { ...context, decisiveCommands: ["focus"] }), []);
   assert.match(validateJudgeVerdict(leaning, context).join(), /methods that disagree/);
+});
+
+test("rows of the dossier that measure a loss are each explained by a look of one's own before a pass", () => {
+  const evidence = {
+    textSpacing: {
+      newlyClippedText: [{ text: "Paspoort of rijbewijs", textLost: true }, { text: "Zoeken", textLost: false }],
+      at320: { newlyClippedText: [{ text: "Paspoort  of rijbewijs", textLost: true }] },
+      states: [{ state: "menu", newlyClippedText: [{ text: "Afval en grofvuil" }] }, { state: "chat", examined: false }],
+    },
+  };
+  const paths = ["textSpacing.newlyClippedText:textLost", "textSpacing.at320.newlyClippedText:textLost", "textSpacing.states.newlyClippedText:textLost"];
+  // A row measured as no loss needs nothing, the same text counts once, and a row of an older run without the field counts.
+  assert.deepEqual(rowsToExplain(evidence, paths), [
+    { part: "textSpacing.newlyClippedText", text: "Paspoort of rijbewijs" },
+    { part: "textSpacing.states.newlyClippedText", text: "Afval en grofvuil" },
+  ]);
+  const rows = rowsToExplain(evidence, paths);
+  const tile = { ...seen, observedNl: "De tegel Paspoort of rijbewijs scrolt: de hele tekst is te bereiken.", evidence: ["j143-0005"] };
+  const menu = { ...seen, observedNl: "In het menu klapt Afval en grofvuil open bij focus.", evidence: ["j143-0002"] };
+  assert.deepEqual(validateJudgeVerdict({ ...passed, observations: [seen, tile, menu] }, { ...context, explainOnPass: rows }), []);
+  const problems = validateJudgeVerdict({ ...passed, observations: [seen, tile] }, { ...context, explainOnPass: rows }).join("\n");
+  assert.match(problems, /textSpacing\.states\.newlyClippedText measures a loss at "Afval en grofvuil"/);
+  assert.doesNotMatch(problems, /Paspoort/);
+  // Naming it in an observation that only points at the dossier is no look at the place.
+  assert.match(validateJudgeVerdict({ ...passed, observations: [seen, { ...tile, evidence: ["contrast"] }, menu] }, { ...context, explainOnPass: rows }).join(), /loss at "Paspoort of rijbewijs"/);
+  // A failure needs no explanation of what it found.
+  assert.deepEqual(validateJudgeVerdict(failed, { ...context, explainOnPass: rows }), []);
 });
 
 test("what belongs to another criterion is handed on with an observation", () => {

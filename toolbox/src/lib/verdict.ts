@@ -455,6 +455,27 @@ interface InstrumentContext {
   siteHosts?: string[];
   /** Prefixes of the custom elements a vendor makes, as given at inventory. Without them nothing is known to be someone else's, and an advice is not checked for reaching into it. */
   vendorPrefixes?: string[];
+  /** Rows of the dossier that a pass has to explain one by one (`rowsToExplain`): a measurement that says something is lost. */
+  explainOnPass?: { part: string; text: string }[];
+}
+
+/**
+ * The rows of the dossier lists that `pass_explains` names that a pass has to explain, one per
+ * text. A path runs through lists; a row whose field after the colon is false needs nothing.
+ */
+export function rowsToExplain(evidence: Record<string, unknown>, paths: string[]): { part: string; text: string }[] {
+  const rows = new Map<string, { part: string; text: string }>();
+  const spread = (values: unknown[]): unknown[] => values.flatMap((value) => (Array.isArray(value) ? value : [value]));
+  for (const entry of paths) {
+    const [path, field] = entry.split(":") as [string, string | undefined];
+    let values: unknown[] = [evidence];
+    for (const key of path.split(".")) values = spread(values).flatMap((value) => (value && typeof value === "object" && key in value ? [(value as Record<string, unknown>)[key]] : []));
+    for (const row of spread(values) as Record<string, unknown>[]) {
+      const text = typeof row?.text === "string" ? row.text.replace(/\s+/g, " ").trim() : "";
+      if (text && !(field && row[field] === false) && !rows.has(text)) rows.set(text, { part: path, text });
+    }
+  }
+  return [...rows.values()];
 }
 
 export interface JudgeContext extends InstrumentContext {
@@ -788,6 +809,13 @@ function instrumentRules(verdict: Partial<Verdict>, context: InstrumentContext, 
     for (const command of context.passCommands) {
       if (!shown.some((ref) => index.get(ref)!.command === canonicalCommand(command))) problems.push(`a "passed" outcome for this criterion must cite an observation of "${command}" (the procedure asks for it under "Bewijs bij goedkeuring")`);
     }
+    // A measurement that says something is lost is passed only with a look of one's own at that place.
+    const explained = (Array.isArray(verdict.observations) ? verdict.observations : []).filter((observation) => observation.ruling === "noIssue" && (Array.isArray(observation.evidence) ? observation.evidence : []).some((ref) => typeof ref === "string" && shows(ref) && own(ref)));
+    const said = explained.map((observation) => `${observation.checkedNl ?? ""} ${observation.observedNl ?? ""}`.replace(/\s+/g, " ").toLowerCase());
+    for (const row of context.explainOnPass ?? []) {
+      const quoted = row.text.slice(0, 30).toLowerCase();
+      if (!said.some((text) => text.includes(quoted))) problems.push(`${row.part} measures a loss at "${row.text}"; a "passed" outcome needs an observation with ruling "noIssue" that names this text and cites a look or measure observation${whose} showing that nothing is lost there, as the procedure says when that holds. Otherwise it is a finding`);
+    }
   }
   if (verdict.outcome === "passed" || verdict.outcome === "inapplicable") {
     const resolved = Array.isArray(verdict.resolved) ? verdict.resolved : [];
@@ -802,6 +830,8 @@ function instrumentRules(verdict: Partial<Verdict>, context: InstrumentContext, 
   }
 
   const rulings = Array.isArray(verdict.candidates) ? verdict.candidates : [];
+  // What is said to belong elsewhere gets there only through crossCandidates: that is what other criteria are given.
+  const passesOn = (criterion: string): boolean => (Array.isArray(verdict.crossCandidates) ? verdict.crossCandidates : []).some((cross) => cross?.criterion === criterion);
   const ruled = new Set<string>();
   rulings.forEach((ruling, position) => {
     const at = `candidates[${position}]`;
@@ -812,6 +842,7 @@ function instrumentRules(verdict: Partial<Verdict>, context: InstrumentContext, 
     if (!isText(ruling.reasonNl, 10)) problems.push(`${at}: reasonNl is missing`);
     if (ruling.ruling === "finding" && !(typeof ruling.finding === "string" && keys.has(ruling.finding))) problems.push(`${at}: a candidate that became a finding names the key of that finding`);
     if (ruling.ruling === "otherCriterion" && !(typeof ruling.criterion === "string" && CRITERION_ID.test(ruling.criterion) && ruling.criterion !== context.criterion)) problems.push(`${at}: a candidate for another criterion names that criterion`);
+    else if (ruling.ruling === "otherCriterion" && !passesOn(ruling.criterion!)) problems.push(`${at}: a candidate for criterion ${ruling.criterion} reaches that criterion only through an entry for it in crossCandidates (page, place, an observation and one sentence); a ruling alone reaches nobody`);
     if (ruling.ruling === "open" && (verdict.outcome === "passed" || verdict.outcome === "inapplicable")) problems.push(`${at}: a "${verdict.outcome}" outcome cannot leave a candidate open`);
   });
   for (const id of context.candidateIds) if (!ruled.has(id)) problems.push(`candidates: candidate "${id}" has no ruling`);
@@ -906,6 +937,7 @@ export function validateVerification(input: unknown, context: VerificationContex
       if (!DROP_REASONS.includes(check.dropped as (typeof DROP_REASONS)[number])) problems.push(`${at}: dropped must be one of ${DROP_REASONS.join(", ")}`);
       if (!isText(check.reasonNl, 20)) problems.push(`${at}: reasonNl must say why the finding was dropped`);
       if (check.dropped === "wrongCriterion" && !(typeof check.belongsTo === "string" && CRITERION_ID.test(check.belongsTo) && check.belongsTo !== context.criterion)) problems.push(`${at}: belongsTo must name the criterion the finding does belong to`);
+      else if (check.dropped === "wrongCriterion" && !(Array.isArray(verdict.crossCandidates) && verdict.crossCandidates.some((cross) => cross?.criterion === check.belongsTo))) problems.push(`${at}: a finding that belongs to criterion ${check.belongsTo} reaches that criterion only through an entry for it in crossCandidates, with an observation of your own`);
       if (finalKeys.has(key)) problems.push(`${at}: a dropped finding cannot stay in findings`);
     } else problems.push(`${at}: reproduced must be true or false`);
   }
