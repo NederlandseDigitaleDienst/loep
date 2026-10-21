@@ -87,6 +87,45 @@ export function documentKind(url: string): DocumentKind | null {
   return extension !== "text" && extension !== "other" && (DOCUMENT_KINDS as readonly string[]).includes(extension) ? (extension as DocumentKind) : null;
 }
 
+/** How much of a file is looked at to tell its kind by what is in it. */
+const SNIFF_BYTES = 65_536;
+
+/**
+ * The kind of a file by what is in it, for a file the inventory could not place by its extension or
+ * by what the server said: the signature of a known format, or else plain text when its start is
+ * valid UTF-8 without a null byte. Null for a file that is neither, such as a picture or a program.
+ */
+export function kindOfContent(bytes: Buffer): DocumentKind | null {
+  const start = bytes.subarray(0, SNIFF_BYTES);
+  const latin = start.toString("latin1");
+  if (latin.startsWith("%PDF-")) return "pdf";
+  if (latin.startsWith("{\\rtf")) return "rtf";
+  if (latin.startsWith("PK\x03\x04")) {
+    // OpenDocument names its kind in the first entry; Office Open XML has a part list and a folder per kind.
+    const kind = /mimetypeapplication\/vnd\.oasis\.opendocument\.(text|presentation|spreadsheet)/.exec(latin)?.[1];
+    if (kind) return ({ text: "odt", presentation: "odp", spreadsheet: "ods" } as const)[kind as "text" | "presentation" | "spreadsheet"];
+    if (latin.includes("mimetypeapplication/epub+zip")) return "epub";
+    if (latin.includes("[Content_Types].xml") || /(?:word|ppt|xl)\//.test(latin)) {
+      if (latin.includes("word/")) return "docx";
+      if (latin.includes("ppt/")) return "pptx";
+      if (latin.includes("xl/")) return "xlsx";
+    }
+    return null;
+  }
+  if (start.includes(0)) return null;
+  // A cut at the end of the window may split a character: only what comes before it has to be valid.
+  const whole = bytes.length <= SNIFF_BYTES ? start : start.subarray(0, Math.max(0, start.length - 4));
+  try {
+    new TextDecoder("utf-8", { fatal: true }).decode(whole);
+    return "text";
+  } catch {
+    return null;
+  }
+}
+
+/** Why a file that is neither a known format nor text is not read. */
+export const BINARY_REASON_NL = "het bestand bevat geen tekst en is van een soort die de toolbox niet kent, zoals een afbeelding of een programma; het wordt niet ingelezen";
+
 /** The kind of document a server says it sends; null when it is none. */
 export function kindOfContentType(contentType: string | null): DocumentKind | null {
   return BY_CONTENT_TYPE[(contentType ?? "").split(";")[0]!.trim().toLowerCase()] ?? null;
