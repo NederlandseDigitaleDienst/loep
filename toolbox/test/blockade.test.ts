@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, test } from "node:test";
 import { launchBrowser, loadPage, newContext } from "../src/browser/session.ts";
-import { Blockade, BLOCKADES_FILE, blockadesNl, MAX_FAILED_NAVIGATIONS, OriginBlocked, readBlockades, retryAfterSeconds, setRunBlockade, type BlockadeEntry } from "../src/session/blockade.ts";
+import { Blockade, BLOCKADES_FILE, blockadesNl, endOf, FAILURE_PAUSE_SECONDS, isLasting, LONGEST_FAILURE_PAUSE_SECONDS, MAX_FAILED_NAVIGATIONS, OriginBlocked, readBlockades, retryAfterSeconds, setRunBlockade, type BlockadeEntry } from "../src/session/blockade.ts";
 import { Daemon } from "../src/session/daemon.ts";
 import type { Observation } from "../src/session/observations.ts";
 import { VOICEOVER_FOR_TESTS } from "../src/session/voiceover-command.ts";
@@ -168,6 +168,41 @@ test("a navigation that loads resets the count, and Retry-After is read as secon
   writeFileSync(join(run, BLOCKADES_FILE), "{");
   assert.deepEqual(readBlockades(run), []);
   assert.equal(existsSync(join(newRun(), BLOCKADES_FILE)), false);
+});
+
+test("failed navigations pause an origin and do not give it up: the pause ends, doubles when it fails again, and an entry of an older run ends too", () => {
+  const run = newRun();
+  let clock = Date.parse("2026-10-21T09:23:00Z");
+  const blockade = new Blockade(run, () => clock);
+  blockade.loaded("https://other.example.nl/");
+  const failThrice = (): void => {
+    for (let attempt = 0; attempt < MAX_FAILED_NAVIGATIONS; attempt++) blockade.failed(`https://www.example.nl/${attempt}`);
+  };
+  failThrice();
+  const first = blockade.refuses("https://www.example.nl/")!;
+  assert.equal(isLasting(first), false);
+  assert.equal(first.until, new Date(clock + FAILURE_PAUSE_SECONDS * 1000).toISOString());
+  assert.match(new OriginBlocked("https://www.example.nl/", first).message, /probeert het daarna opnieuw/);
+  clock += FAILURE_PAUSE_SECONDS * 1000 + 1;
+  assert.equal(blockade.refuses("https://www.example.nl/"), null);
+  failThrice();
+  assert.equal(blockade.refuses("https://www.example.nl/")!.until, new Date(clock + 2 * FAILURE_PAUSE_SECONDS * 1000).toISOString());
+  for (let round = 0; round < 6; round++) {
+    clock = endOf(blockade.refuses("https://www.example.nl/")!)! + 1;
+    failThrice();
+  }
+  assert.equal(blockade.refuses("https://www.example.nl/")!.until, new Date(clock + LONGEST_FAILURE_PAUSE_SECONDS * 1000).toISOString());
+  assert.match(blockadesNl(run)[0]!, /^https:\/\/www\.example\.nl antwoordde 8 keer niet op \d navigaties op rij; het onderzoek vroeg daar dan een tijd niets en ging daarna verder/);
+  // An older run noted failures for the rest of the run: that entry ends one pause after it was noted.
+  const old: BlockadeEntry = { origin: "https://www.example.nl", reason: "failures", at: "2026-10-21T09:23:28.286Z", until: null, url: "https://www.example.nl/contact" };
+  assert.equal(endOf(old), Date.parse(old.at) + FAILURE_PAUSE_SECONDS * 1000);
+  const older = newRun();
+  writeFileSync(join(older, BLOCKADES_FILE), JSON.stringify({ origins: [old] }));
+  const later = new Blockade(older, () => Date.parse(old.at) + FAILURE_PAUSE_SECONDS * 1000 + 1);
+  assert.equal(later.refuses("https://www.example.nl/"), null);
+  // A 429 without a short Retry-After still ends the asking for the rest of the run.
+  blockade.tooMany("https://api.example.nl/x", undefined);
+  assert.equal(isLasting(blockade.refuses("https://api.example.nl/")!), true);
 });
 
 test("the sweep asks a blocked origin nothing, notes a 429 it gets itself, and sees what another process noted", async () => {

@@ -316,6 +316,20 @@ test("what stays open only because the run may not send stands apart, with the d
   assert.equal(deriveReport(exampleEvaluation()).todo.investigate.notSent, null);
 });
 
+test("a run that might send and ran out of its budget waits for more sends, not for permission", () => {
+  const { evaluation, only, mixed } = withNotSent();
+  evaluation.chain = { ...evaluation.chain!, writes: { allowed: true, noteNl: "Versturen mocht naar https://chat.voorbeeld.nl." } };
+  const spent = "versturen niet toegestaan: het budget voor versturen van deze run is op (5 van 5 verstuurd). Wat de chat van https://chat.voorbeeld.nl antwoordt, is niet bekeken.";
+  evaluation.criteria.find((entry) => entry.id === only)!.missingNl = [spent];
+  evaluation.criteria.find((entry) => entry.id === mixed)!.missingNl = [spent];
+  const { todo, statusLine } = deriveReport(evaluation);
+  assert.ok(statusLine.openNl.includes("alleen op meer verzendingen, want het budget voor versturen van dit onderzoek was op"), statusLine.openNl);
+  assert.ok(!statusLine.openNl.includes("toestemming om te versturen"), statusLine.openNl);
+  assert.ok(statusLine.openNl.endsWith("Een instrument meet het in een nieuw onderzoek met een groter budget, zie \"Nog uitzoeken\"."), statusLine.openNl);
+  assert.equal(todo.investigate.notSent!.flags, '--test-environment https://chat.voorbeeld.nl --declared-by "<naam>, <functie>" --max-writes <aantal>');
+  assert.match(todo.investigate.notSent!.declarationNl, /^Dit onderzoek mocht versturen, maar het budget voor versturen was op/);
+});
+
 /** The example evaluation with one recommendation under a criterion that passed. */
 function withRecommendation() {
   const evaluation = exampleEvaluation();

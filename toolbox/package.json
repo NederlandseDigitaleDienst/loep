@@ -33,11 +33,11 @@
     "cld3-asm": "4.0.0",
     "dom-accessibility-api": "0.7.1",
     "eld": "2.1.0",
-    "html-validate": "11.16.2",
+    "html-validate": "11.16.4",
     "playwright": "1.63.0",
     "pngjs": "7.0.0",
     "tabbable": "6.5.0",
-    "vnu-jar": "26.10.11",
+    "vnu-jar": "26.10.12",
     "yaml": "2.9.1"
   },
   "devDependencies": {

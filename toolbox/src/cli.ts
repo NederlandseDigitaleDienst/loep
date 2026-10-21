@@ -131,6 +131,9 @@ Options:
                     may send to that origin, over every session and the sweep together: default 5, at least 120 s
                     apart; on a local address default 50, without a pause. Past it every write is held back as in
                     a run without permission. Kept in the manifest
+  --other-toolbox   Go on with a run that was made with another version of loep. Without it every command that
+                    changes a run refuses: another version writes other tasks and procedures, and the walks and
+                    verdicts of the run are then done again. Measure again with --fresh after changing
   --recorded-via gesprek --confirmation <text> --summary <text>
                     With answer and decide only: the agent records what the person said in the conversation,
                     after an express confirmation. --confirmation is what the person said, word for word;
@@ -213,6 +216,7 @@ async function main(): Promise<void> {
       brief: { type: "boolean", default: false },
       concept: { type: "boolean", default: false },
       fresh: { type: "boolean", default: false },
+      "other-toolbox": { type: "boolean", default: false },
       "allow-writes": { type: "boolean", default: false },
       "test-environment": { type: "string" },
       "declared-by": { type: "string" },
@@ -249,6 +253,12 @@ async function main(): Promise<void> {
   if (recordedVia === "gesprek" && (command === "sign" || command === "inventory")) throw new Error(`${command === "sign" ? "tekenen" : "de verklaring dat er verstuurd mag worden"} legt de assistent nooit vast, ook niet na een bevestiging in het gesprek. ${HUMAN_AT_TERMINAL_NL}`);
   if ((recordedVia !== undefined || values.confirmation !== undefined || values.summary !== undefined) && command !== "answer" && command !== "decide") throw new Error("--recorded-via, --confirmation en --summary horen bij answer en decide");
   if (command !== "inventory" && values["also-origin"] !== undefined) throw new Error("--also-origin hoort bij inventory: daar wordt vastgelegd welke origins samen de site zijn");
+  // A run goes on with the version of loep it was made with; another version would quietly write other tasks over it.
+  if (values.run) {
+    const { otherToolboxNl } = await import("./lib/manifest.ts");
+    const refusal = otherToolboxNl(values.run, command, values["other-toolbox"]);
+    if (refusal) throw new Error(refusal);
+  }
   // `gaps` and `feedback` read the verdicts and the evaluation of finished runs and nothing else of them: they need no permission to write and no login.
   const readsOnly = command === "gaps" || command === "feedback";
   if (command !== "inventory" && !readsOnly && values.run) {
