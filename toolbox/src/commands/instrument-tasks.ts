@@ -24,6 +24,7 @@ import {
   KINDS_FOR_AGAIN,
   notSentPointProblems,
   openPoint,
+  rowsToExplain,
   searchableText,
   validateCandidates,
   validateFinish,
@@ -38,7 +39,7 @@ import {
 import { CRITERIA, criterionById } from "../lib/wcag.ts";
 import { agentLoginNl } from "../lib/login.ts";
 import { readsAllowedNl } from "../lib/reads.ts";
-import { DEFAULT_MAX_WRITES, DEFAULT_WRITE_SPACING_SECONDS, WRITES_BLOCKED_NL, writeBudget, writesAllowedNl, writesForRun } from "../lib/writes.ts";
+import { criterionSender, DEFAULT_MAX_WRITES, DEFAULT_WRITE_SPACING_SECONDS, reservedNl, reservedWrites, spacingNl, WRITES_BLOCKED_NL, writeBudget, writesAllowedNl, writesForRun } from "../lib/writes.ts";
 import { sweepCandidates } from "../lib/statusmessages.ts";
 import { makeWorkDir } from "../lib/workdir.ts";
 import { siteHosts, siteLabel } from "../lib/origins.ts";
@@ -92,6 +93,8 @@ export interface InstrumentTask {
   decisiveCommands: string[];
   /** The recommendation rules of the procedure. Absent in an index from before recommendations existed: then none. */
   recommendationRules?: string[];
+  /** The lists in the dossier whose rows a pass explains one by one (`pass_explains`). Absent in an index from before: then none. */
+  passExplains?: string[];
   judge: { prompt: string; output: string; candidates: string; session: string; maxCommands: number; maxMinutes: number };
   /** Written once every judge verdict of the run is in: only then is it known what other criteria hand over. */
   verify: { prompt: string; output: string; candidates: string; session: string; maxCommands: number; maxMinutes: number } | null;
@@ -569,7 +572,7 @@ export async function instrumentTasks(runDir: string, options: TaskOptions = {})
   const base = { run: absoluteRun, cli, siteModel: join(absoluteRun, "site.json"), login: agentLoginNl(run.login) };
   const readsNl = readsAllowedNl(run.reads ?? []);
   // The budget as it was set, not what is left of it: the task stays the same while agents send, and its hash with it.
-  const budgetNl = run.writes ? `. Het budget voor versturen is ${run.writes.maxWrites ?? DEFAULT_MAX_WRITES} verzendingen voor de hele run, met minstens ${run.writes.spacingSeconds ?? DEFAULT_WRITE_SPACING_SECONDS} s ertussen, gedeeld door alle agents en de veegronde; wat er nog over is, zegt \`session list\`` : "";
+  const budgetNl = run.writes ? `. Het budget voor versturen is ${run.writes.maxWrites ?? DEFAULT_MAX_WRITES} verzendingen voor de hele run${spacingNl(run.writes.spacingSeconds ?? DEFAULT_WRITE_SPACING_SECONDS)}, gedeeld door alle agents en de veegronde${reservedWrites(run.writes) > 0 ? `; ${reservedNl(reservedWrites(run.writes))}. De sessies van één criterium (beoordelaar, verifieerder, afmaker) tellen samen als één` : ""}; wat er nog over is, zegt \`session list\`` : "";
   const writesNl = `${run.writes ? `ja, ${writesAllowedNl(run.writes)}${budgetNl}` : `nee, ${WRITES_BLOCKED_NL}`}${readsNl ? `. Wel gaat door: ${readsNl} (in het dossier onder \`reads\`)` : ""}`;
   const criteriaList = CRITERIA.filter((criterion) => procedures.some((procedure) => procedure.id === criterion.id)).map((criterion) => `${criterion.id} ${criterion.titleNl}`).join("\n");
   const recipes = await readRecipes(runDir);
@@ -654,7 +657,7 @@ export async function instrumentTasks(runDir: string, options: TaskOptions = {})
       join(runDir, judge.prompt),
       fill(templates.beoordeel, { ...shared, session: judge.session, workDir: await makeWorkDir(runDir, judge.session), workName: judge.session, maxCommands: String(judge.maxCommands), maxMinutes: String(judge.maxMinutes), candidates: join(absoluteRun, judge.candidates), notWalked: join(absoluteRun, NOT_WALKED), output: join(absoluteRun, judge.output), check: `node ${cli} check-verdict --run ${absoluteRun} --criterion ${criterion.id} --round judge` }),
     );
-    const task: InstrumentTask = { criterion: criterion.id, titleNl: criterion.titleNl, procedureVersion: procedure.version, procedureSha256: procedure.sha256, dossier: dossierPath, dossierSha256, passCommands: procedure.passCommands, decisiveCommands: procedure.decisiveCommands, recommendationRules: procedure.recommendationRules, judge, verify: null };
+    const task: InstrumentTask = { criterion: criterion.id, titleNl: criterion.titleNl, procedureVersion: procedure.version, procedureSha256: procedure.sha256, dossier: dossierPath, dossierSha256, passCommands: procedure.passCommands, decisiveCommands: procedure.decisiveCommands, recommendationRules: procedure.recommendationRules, ...(procedure.passExplains.length > 0 ? { passExplains: procedure.passExplains } : {}), judge, verify: null };
     await writeJudge();
     if (sessionStarted(runDir, judge.session) && !(await instrumentVerdictIsCurrent(runDir, task, "judge", observations))) {
       judge.session = nextSession(runDir, `b-${digits}`);
@@ -1005,6 +1008,7 @@ export async function checkInstrumentVerdict(runDir: string, criterionId: string
     passCommands: task.passCommands,
     decisiveCommands: task.decisiveCommands,
     recommendationRules: task.recommendationRules ?? [],
+    explainOnPass: rowsToExplain(dossier.evidence, task.passExplains ?? []),
     fileExists: (ref: string) => !ref.includes("..") && existsSync(join(runDir, ref)),
     sourceText: sourceTexts(runDir, observations.records, dossier),
     ...(dossier.site?.baseUrl ? { siteHosts: siteHosts(dossier.site) } : {}),
@@ -1021,7 +1025,7 @@ export async function checkInstrumentVerdict(runDir: string, criterionId: string
   else problems = validateVerification(verdict, { ...context, session: part.session, judge: await readJson<Verdict>(join(runDir, task.judge.output)) });
   problems.push(...budgetPointProblems(runDir, verdict, part.session));
   const permission = writesForRun(runDir);
-  problems.push(...notSentPointProblems(verdict.missingNl, permission, permission ? writeBudget(runDir, permission) : null));
+  problems.push(...notSentPointProblems(verdict.missingNl, permission, permission ? writeBudget(runDir, permission, Date.now(), criterionSender(task.criterion)) : null));
   if (problems.length === 0) await stampNow(runDir, part.output, (await verdictStamp(runDir, task, round, observations))!);
   return problems;
 }

@@ -3,6 +3,7 @@ import { PNG } from "pngjs";
 import { axInfo, type AxInfo } from "../browser/call.ts";
 import { clipboardMark, clipboardReport, clipboardSince } from "../browser/clipboard.ts";
 import { clipboardNote, hasClipboardPermission, settlePage } from "../browser/session.ts";
+import { tabPoint } from "../browser/frame.ts";
 import { regionScreenshot } from "../browser/screenshot.ts";
 import { elementContrast, type ContrastMeasurement } from "../instruments/contrast.ts";
 import { focusIndicatorOf } from "../instruments/focus.ts";
@@ -49,6 +50,8 @@ export interface Outcome {
   result: unknown;
   /** What the agent gets to read: a summary, as small as it can be. */
   print: Record<string, unknown>;
+  /** How the step of the recipe is written when the command as given holds only on this page, such as a second element by its number. */
+  step?: { args: string[]; options: Options };
 }
 
 export type Handler = (context: Context, args: string[], options: Options) => Promise<Outcome>;
@@ -245,6 +248,125 @@ const select: Handler = async (context, args) => {
 const hover: Handler = async (context) => {
   const handle = await handleOrThrow(context);
   return act(context, 700, () => handle.hover({ timeout: ACTION_TIMEOUT_MS }).catch((error: Error) => Promise.reject(actionError("aanwijzen", error))));
+};
+
+type Point = { x: number; y: number };
+type Box = Point & { width: number; height: number };
+
+const MAX_GESTURE_PX = 4000;
+const SWIPE_DIRECTIONS = ["left", "right", "up", "down"] as const;
+const SWIPE_STEPS = 12;
+const SWIPE_STEP_MS = 16;
+
+/**
+ * Perform a gesture on the element of the command as an act command does, with a picture of the
+ * window before and after: what a gesture changes is often only to be seen, a next photo in a series.
+ * `move` gets the box of the element in the window of its document, once it is brought into view, and
+ * returns what it did: for the record, and the line the agent reads. Positions are in that window.
+ */
+async function gesture(context: Context, verb: string, move: (box: Box) => Promise<{ result: Record<string, unknown>; print: Record<string, unknown> }>): Promise<Outcome> {
+  const { surface, images } = context;
+  const handle = await handleOrThrow(context);
+  const before = images.image("-before");
+  const after = images.image("-after");
+  let done: { result: Record<string, unknown>; print: Record<string, unknown> } | null = null;
+  const acted = await act(context, SETTLE_MS, async () => {
+    await handle.scrollIntoViewIfNeeded({ timeout: ACTION_TIMEOUT_MS }).catch(() => undefined);
+    const box = await handle.evaluate((element) => {
+      const rect = element.getBoundingClientRect();
+      return { x: rect.x, y: rect.y, width: rect.width, height: rect.height };
+    });
+    if (box.width < 1 || box.height < 1) throw new Error(`${verb} lukt niet: het element is niet zichtbaar`);
+    await surface.top.page.screenshot({ path: before });
+    done = await move(box);
+  });
+  await surface.top.page.screenshot({ path: after });
+  const { result, print } = done!;
+  return { result: { ...acted.result, ...result }, print: { ...print, imageBefore: images.relative(before), image: images.relative(after), ...acted.print } };
+}
+
+const round = (point: Point): Point => ({ x: Math.round(point.x), y: Math.round(point.y) });
+
+/**
+ * Drag an element with the mouse: press on its middle, move in steps and let go. The end is a
+ * shift in pixels (`drag <ref> 120 0`) or the middle of a second element (`drag <ref> --to <ref>`).
+ * A step of the recipe keeps the shift, so a fresh page drags just as far.
+ */
+const drag: Handler = async (context, args, options) => {
+  const to = options.to !== undefined ? await otherElement(context, "--to", options.to) : null;
+  const shift = args.map(Number);
+  if (to && args.length > 0) throw new UsageError("drag verwacht een verschuiving of --to, niet allebei");
+  if (!to && (args.length !== 2 || !args.every((value) => /^[+-]?\d+$/.test(value)))) throw new UsageError("drag verwacht een ref en een verschuiving in pixels, naar rechts en naar beneden (drag <ref> 120 0, drag <ref> -80 0), of een tweede element: drag <ref> --to <ref>");
+  if (shift.some((value) => Math.abs(value) > MAX_GESTURE_PX)) throw new UsageError(`een verschuiving is hooguit ${MAX_GESTURE_PX} pixels`);
+  const { page } = context.surface;
+  let step: string[] = [];
+  const outcome = await gesture(context, "slepen", async (box) => {
+    const start = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+    const end = to
+      ? await (async () => {
+          const handle = await handleForRef(page, to.ref);
+          if (!handle) throw new Error("--to: het element is van de pagina verdwenen");
+          const rect = await handle.evaluate((element) => element.getBoundingClientRect().toJSON() as Box);
+          return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 };
+        })()
+      : { x: start.x + shift[0]!, y: start.y + shift[1]! };
+    const distance = Math.hypot(end.x - start.x, end.y - start.y);
+    const steps = Math.max(5, Math.min(30, Math.round(distance / 10)));
+    await page.mouse.move(start.x, start.y);
+    await page.mouse.down();
+    await page.mouse.move(end.x, end.y, { steps });
+    await page.mouse.up();
+    const moved = round({ x: end.x - start.x, y: end.y - start.y });
+    step = [String(moved.x), String(moved.y)];
+    return { result: { from: round(start), to: round(end), dx: moved.x, dy: moved.y, steps }, print: { dragged: `${moved.x}, ${moved.y} pixels in ${steps} stappen` } };
+  });
+  return to ? { ...outcome, step: { args: step, options: Object.fromEntries(Object.entries(options).filter(([name]) => name !== "to")) } } : outcome;
+};
+
+/**
+ * Swipe over an element with one finger: a touch on the element that moves in a direction and is
+ * let go, as the browser gets it from a touch screen. A page gets touch events and pointer events
+ * of the kind touch, and whichever it listens to it hears; mouse events do not come.
+ */
+const swipe: Handler = async (context, args) => {
+  const direction = args[0] as (typeof SWIPE_DIRECTIONS)[number];
+  if (!SWIPE_DIRECTIONS.includes(direction)) throw new UsageError("swipe verwacht een ref en een richting: left, right, up of down");
+  const { page, top } = context.surface;
+  const tab = top.page;
+  const cdp = await tab.context().newCDPSession(tab);
+  try {
+    return await gesture(context, "vegen", async (box) => {
+      const viewport = page.viewportSize() ?? { width: 1280, height: 800 };
+      const across = direction === "left" || direction === "right";
+      const sign = direction === "left" || direction === "up" ? -1 : 1;
+      // The finger lands on the element and travels most of its length, at least 80 pixels, so that a page that wants a long swipe gets one; all within the window, where a finger can be.
+      const size = across ? box.width : box.height;
+      const span = Math.max(80, size * 0.6);
+      const centre = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+      const limit = across ? viewport.width : viewport.height;
+      const at = (value: number): Point => {
+        const along = Math.min(limit - 2, Math.max(2, value));
+        return across ? { x: along, y: centre.y } : { x: centre.x, y: along };
+      };
+      const landing = (across ? centre.x : centre.y) - sign * Math.min(span / 2, Math.max(0, size / 2 - 4));
+      const start = at(landing);
+      const end = at(landing + sign * span);
+      const touch = async (type: "touchStart" | "touchMove" | "touchEnd", point: Point | null): Promise<void> => {
+        const at = point ? await tabPoint(page, point.x, point.y) : null;
+        await cdp.send("Input.dispatchTouchEvent", { type, touchPoints: at ? [{ x: at[0], y: at[1], id: 1, radiusX: 4, radiusY: 4, force: 1 }] : [] });
+      };
+      await touch("touchStart", start);
+      for (let index = 1; index <= SWIPE_STEPS; index++) {
+        await tab.waitForTimeout(SWIPE_STEP_MS);
+        await touch("touchMove", { x: start.x + ((end.x - start.x) * index) / SWIPE_STEPS, y: start.y + ((end.y - start.y) * index) / SWIPE_STEPS });
+      }
+      await touch("touchEnd", null);
+      const length = Math.round(Math.hypot(end.x - start.x, end.y - start.y));
+      return { result: { direction, from: round(start), to: round(end), length, steps: SWIPE_STEPS }, print: { swiped: `${direction}, ${length} pixels` } };
+    });
+  } finally {
+    await cdp.detach().catch(() => undefined);
+  }
 };
 
 const scroll: Handler = async (context, args) => {
@@ -642,12 +764,14 @@ const spacing: Handler = async (context, _args, options) => {
   const { surface, images } = context;
   const path = images.image();
   const measured = await textSpacing(surface.page, path, options.keep !== true);
-  const clipped = measured.newlyClipped as unknown as { tag: string; text: string }[];
+  const clipped = measured.newlyClipped as unknown as { tag: string; text: string; textCut?: { lost: boolean; linesCut: number; linesHidden: number; pixels: number } }[];
+  // Whether letters fall away, or only padding or line height runs past the edge.
+  const cutNl = (cut: (typeof clipped)[number]["textCut"]): string => (!cut ? "" : cut.lost ? ` (tekst verdwijnt: ${cut.linesCut} regel(s) tot ${cut.pixels}px buiten beeld, ${cut.linesHidden} helemaal)` : " (geen tekst buiten beeld, alleen ruimte rond de tekst)");
   return {
     result: measured,
     print: {
       newlyClipped: clipped.length,
-      ...(clipped.length > 0 ? { first: clipped.slice(0, MAX_LISTED).map(where) } : {}),
+      ...(clipped.length > 0 ? { textLost: clipped.filter((element) => element.textCut?.lost).length, first: clipped.slice(0, MAX_LISTED).map((element) => `${where(element)}${cutNl(element.textCut)}`) } : {}),
       textWithoutSpacing: measured.textWithoutSpacingCount,
       horizontalScrollAfter: measured.horizontalScrollAfter,
       ...(options.keep === true ? { kept: "de ruimere tekstafstand blijft aan tot de volgende open" } : {}),
@@ -703,9 +827,9 @@ const VISION_NL: Record<Vision, string> = { normal: "gewoon", protanopia: "prota
 /** What the answer of `distinct` says about its own standing: where the limit of 3 to 1 comes from, and what it does not see. */
 export const DISTINCT_NOTE = "verhouding volgens de contrastformule van WCAG tussen de kleuren van de twee, afgelezen van de pixels: gewoon en zoals Chromium protanopie, deuteranopie, tritanopie en achromatopsie nabootst. Een verhouding onder 3 op 1 zonder ander kenmerk is een aanwijzing voor 1.4.1: dat is techniek G183 van W3C voor links, een techniek en geen normtekst. other noemt wat in de opmaak naast kleur verschilt; een pictogram, vorm of tekst die het verschil ook toont, stel je zelf vast (crop)";
 
-/** The second element of a comparison: a number or a selector, in the same document as the first. */
-async function againstElement(context: Context, value: string | boolean): Promise<TargetInfo> {
-  if (typeof value !== "string" || !(/^\d+$/.test(value) || value.startsWith("css:"))) throw new UsageError("--against verwacht het nummer van een element (uit look of find) of css:<selector>");
+/** A second element, given with an option (`--against`, `--to`): a number or a selector, in the same document as the first. */
+async function otherElement(context: Context, option: string, value: string | boolean): Promise<TargetInfo> {
+  if (typeof value !== "string" || !(/^\d+$/.test(value) || value.startsWith("css:"))) throw new UsageError(`${option} verwacht het nummer van een element (uit look of find) of css:<selector>`);
   let info: TargetInfo;
   try {
     if (value.startsWith("css:")) {
@@ -714,10 +838,10 @@ async function againstElement(context: Context, value: string | boolean): Promis
       info = found.items[0]!;
     } else info = await resolveRef(context.surface, Number(value));
   } catch (error) {
-    throw new UsageError(`--against: ${(error as Error).message.split("\n")[0]}`);
+    throw new UsageError(`${option}: ${(error as Error).message.split("\n")[0]}`);
   }
   const home = await homeOf(context.surface, info);
-  if (home.surface.page !== context.surface.page) throw new UsageError("--against: de twee elementen staan niet in hetzelfde venster");
+  if (home.surface.page !== context.surface.page) throw new UsageError(`${option}: de twee elementen staan niet in hetzelfde venster`);
   return home.target;
 }
 
@@ -726,7 +850,7 @@ const decides = (entry: VisionRatios): string | null => (entry.ratio === null ? 
 
 /** How far a link is from the text around it in colour, or one element from another, as everybody sees it and with each kind of colour vision deficiency. */
 const distinct: Handler = async (context, _args, options) => {
-  const against = options.against !== undefined ? await againstElement(context, options.against) : null;
+  const against = options.against !== undefined ? await otherElement(context, "--against", options.against) : null;
   const measured = await distinctByColour(context.surface.page, needTarget(context).path, against?.path ?? null);
   if ("error" in measured) throw new UsageError(measured.error);
   const side = (item: Side): string => `${item.tag}: ${item.text.slice(0, 40)}`;
@@ -832,6 +956,8 @@ export const COMMANDS: Record<string, Spec> = {
   paste: { target: "first-argument", changes: true, run: actWith(paste) },
   press: { target: "first-argument", changes: true, run: press },
   hover: { target: "first-argument", changes: true, run: actWith(hover) },
+  drag: { target: "first-argument", changes: true, run: actWith(drag) },
+  swipe: { target: "first-argument", changes: true, run: actWith(swipe) },
   scroll: { target: "optional-first-argument", changes: true, run: scroll },
   back: { target: "none", changes: true, run: actWith(back) },
   goto: { target: "none", changes: true, run: goto },

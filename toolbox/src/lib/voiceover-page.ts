@@ -99,6 +99,10 @@ export function planSteps(steps: Step[], values: Record<string, string> = TEST_V
       case "press":
         refuse("indrukken zonder loslaten is in de proefpagina niet na te doen");
         break;
+      case "drag":
+      case "swipe":
+        refuse("slepen en vegen zijn in de proefpagina niet na te doen");
+        break;
       case "back":
       case "goto":
         refuse("de toestand gaat naar een andere pagina; de proefpagina is één pagina");

@@ -34,6 +34,12 @@ export interface Procedure {
   decisiveCommands: string[];
   /** The rules of the section "Aanbevelingen" ("A1", "A2"): the only recommendations a verdict may give. Empty without that section. */
   recommendationRules: string[];
+  /**
+   * Lists in the dossier whose rows a pass has to explain one by one, as "part.path" or
+   * "part.path:field": a row whose `field` is false is measured as no loss and needs nothing.
+   * A path runs through lists, so "textSpacing.states.newlyClippedText" takes the rows of every state.
+   */
+  passExplains: string[];
   body: string;
   /** Hash of the whole file: recorded with every verdict that was reached with it. */
   sha256: string;
@@ -60,6 +66,9 @@ export function parseProcedure(text: string, expectedId?: string): Procedure {
   const decisive = front.decisive === undefined ? null : (front.decisive as string[]);
   if (decisive !== null && !Array.isArray(decisive)) problems.push("decisive must be a list of session commands");
   else for (const name of decisive ?? []) if (!SHOWING_COMMANDS.includes(name)) problems.push(`decisive: "${name}" is not a look or measure command`);
+  const passExplains = (front.pass_explains ?? []) as string[];
+  if (!Array.isArray(passExplains) || passExplains.some((entry) => typeof entry !== "string" || !/^[A-Za-z0-9]+(\.[A-Za-z0-9]+)+(:[A-Za-z0-9]+)?$/.test(entry))) problems.push('pass_explains must be a list of dossier paths, such as "textSpacing.newlyClippedText:textLost"');
+  else for (const entry of passExplains) if (!evidence.includes(entry.split(".")[0]!)) problems.push(`pass_explains: "${entry}" is not in a part this procedure has in evidence`);
   for (const section of REQUIRED_SECTIONS) if (!body.includes(`## ${section}`)) problems.push(`missing section "## ${section}"`);
   if (!/kan niet bepalen|cantTell/i.test(body.split("## Beslisregels")[1] ?? "")) problems.push('the decision rules must end in "kan niet bepalen"');
   if (typeof front.limits === "string" && /[{}|]/.test(front.limits.replace(LIMIT_MARK, ""))) problems.push(`limits: a part that depends on the run is written as {${LIMIT_CONDITIONS.join(": ...} or {")}: ...}, with "|" before the text that takes its place otherwise`);
@@ -83,6 +92,7 @@ export function parseProcedure(text: string, expectedId?: string): Procedure {
     passCommands: Array.isArray(passCommands) ? passCommands : [],
     decisiveCommands: Array.isArray(decisive) ? decisive : Array.isArray(passCommands) ? passCommands : [],
     recommendationRules,
+    passExplains: Array.isArray(passExplains) ? passExplains : [],
     body,
     sha256: sha256(text),
   };

@@ -1160,9 +1160,20 @@ function spacingControls(run: RunData): Record<string, unknown> {
   };
 }
 
+/**
+ * Whether text disappears in an element that cuts off its overflow, measured on the lines of text
+ * themselves: `textLost`, and how many lines stick out (`linesCut`), how many are out of sight
+ * altogether (`linesHidden`) and by how many pixels at most. Padding or line height that runs past
+ * the edge is no loss. Null in a run from before this was measured.
+ */
+const textCutOf = (element: { [key: string]: unknown }): { textLost: boolean | null; textOutside?: { linesCut: number; linesHidden: number; pixels: number } } => {
+  const cut = element.textCut as { lost: boolean; linesCut: number; linesHidden: number; pixels: number } | undefined;
+  return cut ? { textLost: cut.lost, textOutside: { linesCut: cut.linesCut, linesHidden: cut.linesHidden, pixels: cut.pixels } } : { textLost: null };
+};
+
 export const textSpacing: Extractor = (run) => {
   type Spacing = PageData["textspacing"];
-  const clipped = (select: (page: PageData) => Spacing | undefined) => group(run, (page) => select(page)?.newlyClipped ?? [], (element) => where(element)).map((entry) => ({ tag: entry.example.tag, text: entry.example.text.slice(0, 80), textOverflow: entry.example.textOverflow, region: entry.example.region, pages: pagesText(entry.pages, run.pages.length), where: where(entry.example) }));
+  const clipped = (select: (page: PageData) => Spacing | undefined) => group(run, (page) => select(page)?.newlyClipped ?? [], (element) => where(element)).map((entry) => ({ tag: entry.example.tag, text: entry.example.text.slice(0, 80), textOverflow: entry.example.textOverflow, ...textCutOf(entry.example), region: entry.example.region, pages: pagesText(entry.pages, run.pages.length), where: where(entry.example) }));
   const resistant = (select: (page: PageData) => Spacing | undefined) => group(run, (page) => select(page)?.textWithoutSpacing ?? [], (element) => where(element)).map((entry) => ({ tag: entry.example.tag, text: entry.example.text.slice(0, 60), region: entry.example.region, pages: pagesText(entry.pages, run.pages.length), where: where(entry.example) }));
   const atSmallest = (page: PageData): Spacing | undefined => page.smallest?.textspacing;
   const measuredSmallest = run.pages.filter((page) => atSmallest(page) !== undefined);
@@ -1198,7 +1209,7 @@ export const textSpacing: Extractor = (run) => {
         examined: true,
         appliedBeforeOpening: measured.appliedBeforeOpening === true,
         openedWithSpacing: measured.appliedBeforeOpening === true ? true : null,
-        newlyClippedText: (measured.newlyClipped ?? []).map((element) => ({ tag: element.tag, text: element.text.slice(0, 80), textOverflow: element.textOverflow, region: element.region, where: where(element) })),
+        newlyClippedText: (measured.newlyClipped ?? []).map((element) => ({ tag: element.tag, text: element.text.slice(0, 80), textOverflow: element.textOverflow, ...textCutOf(element), region: element.region, where: where(element) })),
         textThatDidNotTakeTheSpacingCount: measured.textWithoutSpacingCount ?? 0,
         horizontalScrollAfter: measured.horizontalScrollAfter ?? null,
         stillInThisStateAfterwards: measured.stateStillReachedAfterwards ?? null,

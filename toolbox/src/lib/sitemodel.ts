@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { readJson, sha256, sha256File } from "./canonical.ts";
-import { readMatches, readRequestProblems, type ReadRequest } from "./reads.ts";
+import { addressOf, readMatches, readRequestProblems, type ReadRequest } from "./reads.ts";
 import { SEARCH_FALLBACK, SEARCH_NONE, SEARCH_TERM_FORM } from "./searchterm.ts";
 
 /**
@@ -171,6 +171,8 @@ export interface AcceptedGap {
   page: string;
   /** Id of the component the gap is about. Required for `component-not-opened-on-page-type`, and only allowed there. */
   component?: string;
+  /** Id of the state the gap is about. Required for `review-state`, and only allowed there. */
+  state?: string;
   reasonNl: string;
   /** Id of the session observation that shows it. */
   observation: string;
@@ -184,6 +186,11 @@ export type AcceptedGapDecider = (typeof ACCEPTED_GAP_DECIDERS)[number];
 
 /** The check that refuses a component that did not open on one of its page types: the gate after the sweep, `check-site` before it. */
 export const NOT_OPENED_ON_PAGE_TYPE = "component-not-opened-on-page-type";
+/** The gap of the gate when the review sees a part on a sheet that the site model does not have. */
+export const REVIEW_MISSING = "review-missing";
+
+/** The check for a state picture that the review of the gate rejected. */
+export const REVIEW_STATE_CHECK = "review-state";
 
 /** How `replaySteps` says that a step did not find its element, and that the steps ran but the postcondition does not hold. */
 export const STEP_NOT_FOUND_NL = "vond het element niet terug";
@@ -191,11 +198,11 @@ export const POSTCONDITION_NOT_HELD_NL = "na de stappen geldt de postconditie ni
 
 /**
  * The entry of the model that accepts a gap. For a component that did not open on a page type
- * only an entry that names that component: an entry without one matches nothing. Nor does an
- * entry that does not say who decided it.
+ * only an entry that names that component: an entry without one matches nothing. The same for
+ * a rejected state picture and its state. Nor does an entry that does not say who decided it.
  */
-export function acceptedGapFor(model: Pick<SiteModel, "acceptedGaps"> | null | undefined, gap: { check: string; page: string | null; component?: string | undefined }): AcceptedGap | undefined {
-  return (model?.acceptedGaps ?? []).find((entry) => entry.check === gap.check && entry.page === gap.page && ACCEPTED_GAP_DECIDERS.includes(entry.decidedBy) && (gap.check !== NOT_OPENED_ON_PAGE_TYPE || (entry.component !== undefined && entry.component === gap.component)));
+export function acceptedGapFor(model: Pick<SiteModel, "acceptedGaps"> | null | undefined, gap: { check: string; page: string | null; component?: string | undefined; state?: string | undefined }): AcceptedGap | undefined {
+  return (model?.acceptedGaps ?? []).find((entry) => entry.check === gap.check && entry.page === gap.page && ACCEPTED_GAP_DECIDERS.includes(entry.decidedBy) && (gap.check !== NOT_OPENED_ON_PAGE_TYPE || (entry.component !== undefined && entry.component === gap.component)) && (gap.check !== REVIEW_STATE_CHECK || (entry.state !== undefined && entry.state === gap.state)));
 }
 
 /**
@@ -254,9 +261,19 @@ export interface ModelContext {
   media?: Record<string, { audio: number; video: number }>;
   /** Per observation that a read request names: the requests it held back or let through as a read. Absent when not checked. */
   requestsSeen?: Record<string, { method: string; url: string; /** The search services whose form loep recognised in the body. */ search?: string[] }[]>;
+  /** Per observation that an accepted gap of `review-missing` names: the page a look command that succeeded looked at, else null. Absent when not checked. */
+  looksSeen?: Record<string, string | null>;
 }
 
 const ID = /^[a-z0-9][a-z0-9-]{0,40}$/;
+
+/**
+ * The page type a page belongs to: the one that lists its address, or else one that lists the
+ * same page without query and anchor, such as `zoeken.html` for `zoeken.html?q=gemeente`.
+ */
+export function pageTypeOf(model: Pick<SiteModel, "pageTypes">, url: string): string | null {
+  return model.pageTypes.find((type) => type.pages.includes(url))?.id ?? model.pageTypes.find((type) => type.pages.some((page) => addressOf(page) === addressOf(url)))?.id ?? null;
+}
 
 /** Origin and path of a frame: the part of its address that says which frame it is. */
 export function frameAddress(url: string): string {
@@ -489,8 +506,16 @@ export function validateSiteModel(value: unknown, context: ModelContext): string
           if (gap.component === undefined) problems.push(`${where}: bij "${NOT_OPENED_ON_PAGE_TYPE}" hoort "component", het id van het onderdeel dat daar niet opengaat; zonder telt de regel voor geen enkel onderdeel`);
           else if (!(model.components as unknown[]).some((component) => isRecord(component) && component.id === gap.component)) problems.push(`${where}: onderdeel "${String(gap.component)}" staat niet in components`);
         } else if (gap.component !== undefined) problems.push(`${where}: "component" hoort alleen bij "${NOT_OPENED_ON_PAGE_TYPE}"`);
+        if (gap.check === REVIEW_STATE_CHECK) {
+          if (!isText(gap.state)) problems.push(`${where}: bij "${REVIEW_STATE_CHECK}" hoort "state", het id van de toestand waarvan het beeld is afgewezen; zonder telt de regel voor geen enkele toestand`);
+        } else if (gap.state !== undefined) problems.push(`${where}: "state" hoort alleen bij "${REVIEW_STATE_CHECK}"`);
         if (!(ACCEPTED_GAP_DECIDERS as readonly unknown[]).includes(gap.decidedBy)) problems.push(`${where}: "decidedBy" zegt wie de uitzondering heeft vastgesteld: "verkenner" als de verkenner dat deed, "persoon" als een persoon dat zelf deed; zonder telt de regel niet`);
         if (context.observations && !context.observations.has(gap.observation as string)) problems.push(`${where}: waarneming ${String(gap.observation)} bestaat niet in deze run`);
+        else if (gap.check === REVIEW_MISSING && context.looksSeen) {
+          // Saying a part the review saw is not there needs a look at the page that shows it; a row missing from operables.json shows nothing.
+          const looked = context.looksSeen[gap.observation as string];
+          if (!looked || addressOf(looked) !== addressOf(gap.page as string)) problems.push(`${where}: een onderdeel dat de bewijspoort mist, doe je alleen af als niet bestaand met een waarneming die dat laat zien: een look, crop, html, find of ax op ${String(gap.page)} die slaagde. Waarneming ${String(gap.observation)} is dat niet. Dat een rij in operables.json ontbreekt, laat niets zien; kijk naar de pagina zelf.`);
+        }
       }
     }
   }

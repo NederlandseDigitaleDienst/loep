@@ -149,7 +149,7 @@ export class SecondBrowsers {
     if (!SecondBrowsers.installed(name)) throw new Error(`niet beschikbaar: installeer de browser: npx playwright install ${name}`);
     const browser = await this.launch(name);
     const env: Env = { ...this.env, browser };
-    const { surface } = await openSurface(env, state.start).catch((error: Error) => {
+    const { surface } = await openSurface(env, state.start, undefined, session).catch((error: Error) => {
       this.note(session, (error as Refused).blocked ?? []);
       throw error;
     });

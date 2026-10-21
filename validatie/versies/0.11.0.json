@@ -1,0 +1,6 @@
+{
+  "version": "0.11.0",
+  "measuredAt": "2026-10-20",
+  "againstNl": "de antwoordsleutel van de eigen testsite van loep, met 79 ingebouwde gebreken, en niet tegen het oordeel van een menselijke deskundige",
+  "resultNl": "In twee volledige runs op hetzelfde vastgelegde bewijs kreeg elk van de 56 criteria in beide runs dezelfde uitkomst. Van de 79 gebreken vond de ene run er 77 en de andere 78, en geen eigen bevinding was volgens beide vergelijkers onterecht. Van de 51 criteria die de sleutel afkeurt, zijn er 50 afgekeurd; 1.4.12 is in beide runs goedgekeurd, maar dat gebrek is in de testsite te zwak gebouwd (van de letters valt maar 1 pixel weg), dus die misser ligt voor een deel aan de sleutel. De testsite is makkelijker dan een echte site, dus deze cijfers zeggen niet hoe loep op een echte site presteert."
+}

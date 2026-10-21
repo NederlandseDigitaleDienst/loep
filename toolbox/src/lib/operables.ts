@@ -1,5 +1,5 @@
 import type { Step } from "../session/observations.ts";
-import type { Component, SiteModel } from "./sitemodel.ts";
+import { pageTypeOf, type Component, type SiteModel } from "./sitemodel.ts";
 
 /**
  * What there is to operate on a page, laid next to what the site model says about it. The
@@ -33,11 +33,24 @@ export interface OperableGroup {
   controls?: number;
 }
 
+/** An element that looks operable but has no role and no Tab stop, as `looksOperable` of the in-page library finds it. */
+export interface LooksOperable {
+  path: string;
+  text: string;
+  region: string | null;
+  /** Why it looks operable: "click-listener", "press-listener", "onclick", "cursor: pointer", a data attribute. */
+  signals: string[];
+  /** The opening tag: for an empty div often the class name is the only thing that says what it is. */
+  html: string;
+}
+
 /** The groups of one page type, counted on its representative page. */
 export interface CountedPage {
   pageType: string;
   url: string;
   groups: OperableGroup[];
+  /** What looks operable there in the default window without presenting itself as a control. Not counted in `groups`: nothing says what it is. */
+  looksOperable?: LooksOperable[];
 }
 
 /** The groups of a page in the default window, with what only the narrow window adds. */
@@ -133,15 +146,6 @@ export interface Uncovered {
   problemNl: string;
 }
 
-const address = (url: string): string => {
-  try {
-    const parsed = new URL(url);
-    return `${parsed.origin}${parsed.pathname}`;
-  } catch {
-    return url;
-  }
-};
-
 /**
  * Lay what was counted next to the model. A group is accounted for when a recipe touches
  * one of its controls on a page of that type, or on a page type the component says it
@@ -155,9 +159,8 @@ const address = (url: string): string => {
  */
 export function uncoveredOperables(model: SiteModel, recipes: Record<string, RecipeSteps>, counted: CountedPage[]): { counted: number; uncovered: Uncovered[] } {
   const touches = modelTouches(model, recipes);
-  const typeOf = (url: string): string | null => model.pageTypes.find((type) => type.pages.includes(url))?.id ?? model.pageTypes.find((type) => type.pages.some((page) => address(page) === address(url)))?.id ?? null;
   const touched = (group: OperableGroup, pageType: string | null): boolean =>
-    touches.some((touch) => (pageType === null || touch.declaredTypes.includes(pageType) || typeOf(touch.url) === pageType) && group.members.some((member) => member.path === touch.path || (touch.structural !== null && member.structural === touch.structural)));
+    touches.some((touch) => (pageType === null || touch.declaredTypes.includes(pageType) || pageTypeOf(model, touch.url) === pageType) && group.members.some((member) => member.path === touch.path || (touch.structural !== null && member.structural === touch.structural)));
   const withoutRecipe = (group: OperableGroup, pageType: string | null): boolean => model.components.some((component) => component.recipe === null && (pageType === null || component.pageTypes.includes(pageType)) && KINDS_OF_TYPE[component.type]?.includes(group.kind));
   const named = (group: OperableGroup, pageType: string | null): boolean => group.kind === "player" && group.members.every((member) => member.kind === "player") && (model.content ?? []).some((content) => (content.kind === "video" || content.kind === "audio") && (pageType === null || content.pageTypes.includes(pageType)));
   // An embedded window is accounted for by the component that names its address, opened or not.
