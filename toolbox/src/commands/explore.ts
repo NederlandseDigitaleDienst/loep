@@ -10,7 +10,7 @@ import { recordReads } from "../lib/reads.ts";
 import { makeWorkDir } from "../lib/workdir.ts";
 import { siteLabel } from "../lib/origins.ts";
 import { textHasTerm } from "../lib/searchterm.ts";
-import { acceptedGapFor, frameAddress, NOT_OPENED_ON_PAGE_TYPE, notOpenedAdviceNl, readSiteModel, REVIEW_MISSING, searchTermForRun, SITE_CHECK_FILE, SITE_MODEL_FILE, validateSiteModel, type ModelContext, type PageType, type Postcondition, type SiteCheck, type SiteModel } from "../lib/sitemodel.ts";
+import { acceptedGapFor, frameAddress, NOT_OPENED_ON_PAGE_TYPE, notOpenedAdviceNl, pageTypesToCheck, readSiteModel, REVIEW_MISSING, searchTermForRun, SITE_CHECK_FILE, SITE_MODEL_FILE, validateSiteModel, type ModelContext, type PageType, type Postcondition, type SiteCheck, type SiteModel } from "../lib/sitemodel.ts";
 import { LOOK_COMMANDS } from "../lib/verdict.ts";
 import { readObservation } from "../session/observations.ts";
 import { holds, loadRecipes, MAX_RECIPE_STEPS, replayEnv, replayFromClean, replaySteps } from "../session/recipe.ts";
@@ -322,15 +322,15 @@ export function aliasRepresentatives(model: SiteModel, inventory: Inventory): st
 }
 
 /**
- * A component's recipe on the representative page of every page type it stands on, in the window
- * the sweep opens it in there. What the gate would refuse after the sweep is told now, unless the
+ * A component's recipe on the representative page of every page type it stands on (of a few, for
+ * one on every page: the sweep opens it on all of them), in the window the sweep opens it in there. What the gate would refuse after the sweep is told now, unless the
  * model accepts it as how the site is, the way the gate does.
  */
 async function componentOnPageTypes(env: Env, model: SiteModel, id: string, recipe: Recipe & { start: NonNullable<Recipe["start"]> }, post: Postcondition | null): Promise<NonNullable<SiteCheck["replays"][number]["onPageTypes"]>> {
   const component = model.components.find((entry) => entry.id === id)!;
   const size = windowOnPageTypes({ width: recipe.start.width, height: recipe.start.height }, component.viewport);
   const rows: NonNullable<SiteCheck["replays"][number]["onPageTypes"]> = [];
-  for (const typeId of component.pageTypes) {
+  for (const typeId of pageTypesToCheck(component)) {
     const type = model.pageTypes.find((entry) => entry.id === typeId);
     if (!type) continue;
     const opened = await openComponentOn(env, recipe, post, type.representative, size);
@@ -413,7 +413,7 @@ export async function checkSite(runDir: string, options: { navigationDelayMs?: n
         if (reasonNl !== null) problems.push(`${entry.kind} "${entry.id}" (recept ${entry.recipe}): ${reasonNl}`);
         for (const row of onPageTypes ?? []) {
           if (row.reached || row.accepted) continue;
-          problems.push(`component "${entry.id}" (recept ${entry.recipe}): gaat op paginatype "${row.pageType}" (${row.url}) niet open in een staand venster van ${row.viewport.width} bij ${row.viewport.height}: ${row.reasonNl ?? "geen reden vastgelegd"}. ${notOpenedAdviceNl(row.reasonNl)}`);
+          problems.push(`component "${entry.id}" (recept ${entry.recipe}): gaat op paginatype "${row.pageType}" (${row.url}) niet open in een staand venster van ${row.viewport.width} bij ${row.viewport.height}: ${row.reasonNl ?? "geen reden vastgelegd"}. ${notOpenedAdviceNl(row.reasonNl)}${model.components.find((component) => component.id === entry.id)?.siteWide ? ' Het onderdeel heeft "pageTypes": "all"; staat het niet op elke pagina, geef dan de lijst van paginatypen waar het wel staat.' : ""}`);
         }
       }
       // Another search term has to stand in the text of the page the explorer named.
