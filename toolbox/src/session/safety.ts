@@ -331,7 +331,7 @@ export async function guardedDownload(scope: Scope, guard: Guard, address: strin
       // A blocked origin is not asked; a caller that can wait out a short pause does so before.
       const refusedBy = options.blockade?.refuses(url);
       if (refusedBy) {
-        const reasonNl = refusedBy.until === null ? new OriginBlocked(url, refusedBy).message : `${url} is niet opgevraagd: ${refusalNl(refusedBy)}`;
+        const reasonNl = new OriginBlocked(url, refusedBy).message;
         guard.blocked.push({ at: new Date().toISOString(), kind: "blockade", method: "GET", url: url.slice(0, MAX_URL), resourceType: options.resourceType, reasonNl });
         return { ok: false, reason: reasonNl };
       }
