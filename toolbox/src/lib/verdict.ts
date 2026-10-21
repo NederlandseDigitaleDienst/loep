@@ -799,6 +799,8 @@ function instrumentRules(verdict: Partial<Verdict>, context: InstrumentContext, 
   }
 
   const rulings = Array.isArray(verdict.candidates) ? verdict.candidates : [];
+  // What is said to belong elsewhere gets there only through crossCandidates: that is what other criteria are given.
+  const passesOn = (criterion: string): boolean => (Array.isArray(verdict.crossCandidates) ? verdict.crossCandidates : []).some((cross) => cross?.criterion === criterion);
   const ruled = new Set<string>();
   rulings.forEach((ruling, position) => {
     const at = `candidates[${position}]`;
@@ -809,6 +811,7 @@ function instrumentRules(verdict: Partial<Verdict>, context: InstrumentContext, 
     if (!isText(ruling.reasonNl, 10)) problems.push(`${at}: reasonNl is missing`);
     if (ruling.ruling === "finding" && !(typeof ruling.finding === "string" && keys.has(ruling.finding))) problems.push(`${at}: a candidate that became a finding names the key of that finding`);
     if (ruling.ruling === "otherCriterion" && !(typeof ruling.criterion === "string" && CRITERION_ID.test(ruling.criterion) && ruling.criterion !== context.criterion)) problems.push(`${at}: a candidate for another criterion names that criterion`);
+    else if (ruling.ruling === "otherCriterion" && !passesOn(ruling.criterion!)) problems.push(`${at}: a candidate for criterion ${ruling.criterion} reaches that criterion only through an entry for it in crossCandidates (page, place, an observation and one sentence); a ruling alone reaches nobody`);
     if (ruling.ruling === "open" && (verdict.outcome === "passed" || verdict.outcome === "inapplicable")) problems.push(`${at}: a "${verdict.outcome}" outcome cannot leave a candidate open`);
   });
   for (const id of context.candidateIds) if (!ruled.has(id)) problems.push(`candidates: candidate "${id}" has no ruling`);
@@ -903,6 +906,7 @@ export function validateVerification(input: unknown, context: VerificationContex
       if (!DROP_REASONS.includes(check.dropped as (typeof DROP_REASONS)[number])) problems.push(`${at}: dropped must be one of ${DROP_REASONS.join(", ")}`);
       if (!isText(check.reasonNl, 20)) problems.push(`${at}: reasonNl must say why the finding was dropped`);
       if (check.dropped === "wrongCriterion" && !(typeof check.belongsTo === "string" && CRITERION_ID.test(check.belongsTo) && check.belongsTo !== context.criterion)) problems.push(`${at}: belongsTo must name the criterion the finding does belong to`);
+      else if (check.dropped === "wrongCriterion" && !(Array.isArray(verdict.crossCandidates) && verdict.crossCandidates.some((cross) => cross?.criterion === check.belongsTo))) problems.push(`${at}: a finding that belongs to criterion ${check.belongsTo} reaches that criterion only through an entry for it in crossCandidates, with an observation of your own`);
       if (finalKeys.has(key)) problems.push(`${at}: a dropped finding cannot stay in findings`);
     } else problems.push(`${at}: reproduced must be true or false`);
   }
