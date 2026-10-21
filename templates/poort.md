@@ -43,6 +43,7 @@ Schrijf je antwoord als JSON naar: `{{output}}`
 
 - `model`: de exacte naam en versie van het model waarop je draait, zoals je eigen systeem je die meldt. Weet je het niet, schrijf dan `onbekend`. Raad niet: de naam komt in het rapport.
 - Eén ingang in `sheets` per blad, met het paginatype als `pageType`.
+- `reviewedAs`: het kenmerk dat bij het blad staat. Neem het over nadat je dat blad hebt bekeken. Verandert het blad later, dan klopt het kenmerk niet meer en keurt de controle het antwoord af: bekijk het blad dan opnieuw.
 - `answers` heeft precies de vijf vragen `content`, `covered`, `narrow`, `taborder` en `missing`.
 - `stateTiles` heeft één ingang per vak vanaf 4, met het nummer van het vak in `tile`. Heeft een blad maar drie vakken, dan is `stateTiles` een lege lijst.
 - `remarkNl` is vrij: schrijf daar per blad op wat je verder opviel en wat een onderzoeker moet weten (een blok dat vanzelf wisselt, een half ingevuld formulier, een leeg vlak waar een video hoort). Het telt niet mee voor de uitkomst. Niets opgevallen: laat het leeg.

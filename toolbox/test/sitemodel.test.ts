@@ -1,7 +1,7 @@
 import type { Covered } from "../src/session/recipe.ts";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
@@ -539,7 +539,7 @@ test("the gate counts a component that only stands between the measured widths a
 
 test("answers of the reviewing agent are validated against the sheets and turned into gaps", () => {
   const sheets: Sheet[] = [{ pageType: "start", page: "P1", url: "https://site.nl/", file: "gate/sheet-start.png", sha256: "x", componentsNl: [], tiles: [1, 2, 3, 4].map((nr) => ({ nr, state: ["default", "narrow", "taborder", "component-menu"][nr - 1]!, file: "f.png", descriptionNl: "" })) }];
-  const good: Answers = { sheets: [{ pageType: "start", answers: { content: { answer: "ja", noteNl: "" }, covered: { answer: "nee", noteNl: "" }, narrow: { answer: "ja", noteNl: "" }, taborder: { answer: "ja", noteNl: "" }, missing: { answer: "nee", noteNl: "" } }, stateTiles: [{ tile: 4, answer: "ja", noteNl: "" }] }] };
+  const good: Answers = { sheets: [{ pageType: "start", reviewedAs: reviewedAs(sheets[0]!), answers: { content: { answer: "ja", noteNl: "" }, covered: { answer: "nee", noteNl: "" }, narrow: { answer: "ja", noteNl: "" }, taborder: { answer: "ja", noteNl: "" }, missing: { answer: "nee", noteNl: "" } }, stateTiles: [{ tile: 4, answer: "ja", noteNl: "" }] }] };
   assert.deepEqual(validateAnswers(good, sheets), []);
   assert.deepEqual(reviewGaps(good, sheets), { gaps: [], warnings: [] });
   const bad: Answers = structuredClone(good);
@@ -554,6 +554,9 @@ test("answers of the reviewing agent are validated against the sheets and turned
   assert.deepEqual(turned.warnings.map((gap) => gap.check), ["review-taborder"]);
   assert.ok(validateAnswers({ sheets: [] }, sheets).includes('er is geen antwoord voor paginatype "start"'));
   assert.ok(validateAnswers({ sheets: [{ ...good.sheets[0]!, stateTiles: [] }] }, sheets).some((problem) => /vak 4/.test(problem)));
+  // An answer for another version of the sheet, or without the mark of the sheet, is refused.
+  assert.deepEqual(validateAnswers(good, [{ ...sheets[0]!, sha256: "y" }]), [`start: het blad is veranderd sinds dit antwoord (reviewedAs ${reviewedAs(sheets[0]!)}, het blad heeft nu ${reviewedAs({ ...sheets[0]!, sha256: "y" })}); bekijk het blad opnieuw en beantwoord alle vragen opnieuw`]);
+  assert.match(validateAnswers({ sheets: [{ ...good.sheets[0]!, reviewedAs: undefined }] }, sheets)[0]!, /^start: reviewedAs ontbreekt/);
 });
 
 test("every page type gets a sheet: the sheets are divided over tasks, and a type without one is a gap", () => {
@@ -977,7 +980,8 @@ test("explore, check-site, the sweep and the gate work together on a site with a
   assert.match(readFileSync(first.review.task, "utf8"), /Processen van dit paginatype volgens het sitemodel \(formulieren en stappen die het sitemodel al kent\): (invullen|zoeken): Z/);
 
   // Answers that pass the check are taken into the verdict; the sweep gap stays.
-  const answers: Answers = { sheets: first.review.sheets.map((entry) => ({ pageType: entry.pageType, answers: { content: { answer: "ja" }, covered: { answer: "nee" }, narrow: { answer: "ja" }, taborder: { answer: "ja" }, missing: { answer: "nee" } }, stateTiles: entry.tiles.filter((candidate) => candidate.nr > 3).map((candidate) => ({ tile: candidate.nr, answer: "ja" })), remarkNl: entry.pageType === "type-1" ? "Het blok bovenaan wisselt vanzelf." : "" })) };
+  assert.match(readFileSync(first.review.task, "utf8"), new RegExp(`Kenmerk van dit blad \\(\`reviewedAs\`\\): \`${reviewedAs(sheet)}\``));
+  const answers: Answers = { sheets: first.review.sheets.map((entry) => ({ pageType: entry.pageType, reviewedAs: reviewedAs(entry), answers: { content: { answer: "ja" }, covered: { answer: "nee" }, narrow: { answer: "ja" }, taborder: { answer: "ja" }, missing: { answer: "nee" } }, stateTiles: entry.tiles.filter((candidate) => candidate.nr > 3).map((candidate) => ({ tile: candidate.nr, answer: "ja" })), remarkNl: entry.pageType === "type-1" ? "Het blok bovenaan wisselt vanzelf." : "" })) };
   writeFileSync(first.review.answers, JSON.stringify(answers));
   assert.deepEqual(await checkGate(run), []);
   const second = await gate(run);
@@ -986,6 +990,25 @@ test("explore, check-site, the sweep and the gate work together on a site with a
   assert.deepEqual(second.remarks, [{ pageType: "type-1", remarkNl: "Het blok bovenaan wisselt vanzelf." }], "a remark is passed on and changes nothing");
   assert.equal((JSON.parse(readFileSync(second.review.candidates, "utf8")) as { seenNl: string }[])[0]!.seenNl, "Het blok bovenaan wisselt vanzelf.", "and is kept as a lead for the judges");
   assert.equal(second.sufficient, false);
+  assert.ok(existsSync(second.review.answers), "answers that belong to the sheets stay where they are");
+  assert.deepEqual(await checkGate(run), [], "and stay valid");
+
+  // The model changes: the sheet of a page type gets another list, so the answers belong to an earlier round.
+  const modelPath = join(run, "site.json");
+  const modelBefore = readFileSync(modelPath, "utf8");
+  const changed = JSON.parse(modelBefore) as { components: { id: string; descriptionNl: string; pageTypes: string[] }[] };
+  for (const component of changed.components) component.descriptionNl += " (aangevuld)";
+  writeFileSync(modelPath, JSON.stringify(changed));
+  const third = await gate(run);
+  assert.ok(third.review.sheets.some((entry) => reviewedAs(entry) !== reviewedAs(second.review.sheets.find((before) => before.pageType === entry.pageType)!)), "a sheet changed");
+  assert.equal(third.review.answered, false, "answers for the sheets of before do not count");
+  assert.equal(existsSync(third.review.answers), false, "they are moved away");
+  assert.ok(readdirSync(join(run, "gate", "vorige")).some((name) => /^answers-.*\.json$/.test(name)), "to gate/vorige/, not deleted");
+  assert.match((await checkGate(run))[0]!, /answers\.json is niet te lezen/, "check-gate has no answer to approve");
+  // An agent that writes the old answers back gets told the sheet changed.
+  writeFileSync(third.review.answers, JSON.stringify(answers));
+  assert.ok((await checkGate(run)).some((problem) => /het blad is veranderd sinds dit antwoord/.test(problem)));
+  writeFileSync(modelPath, modelBefore);
 
   // A later round: the explorer gets the gaps.
   const again = await explore(run);
