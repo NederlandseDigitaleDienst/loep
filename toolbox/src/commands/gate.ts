@@ -78,6 +78,8 @@ export interface Sheet {
   sha256: string;
   tiles: Tile[];
   componentsNl: string[];
+  /** Components the site model has on every page (`"pageTypes": "all"`), named apart so a reviewer does not take them for missing. Absent when there are none. */
+  everywhereNl?: string[];
   /** The processes of the site model that belong to this page type. Absent in older runs. */
   processesNl?: string[];
   /** Players and self-moving content the site model names for this page type. */
@@ -563,7 +565,7 @@ export function contactSheet(tiles: PNG[]): PNG {
 }
 
 /** One sheet per page type: the page as measured, on a narrow screen, with its Tab stops, and every state of the site model that belongs to it. */
-async function buildSheets(run: RunData, runDir: string, outDir: string): Promise<Sheet[]> {
+export async function buildSheets(run: RunData, runDir: string, outDir: string): Promise<Sheet[]> {
   const model = run.siteModel ?? null;
   const types: { id: string; page: PageData }[] = [];
   if (model) {
@@ -581,19 +583,22 @@ async function buildSheets(run: RunData, runDir: string, outDir: string): Promis
       { state: "taborder", file: `${type.page.dir}/probes/tabwalk.png`, descriptionNl: "de pagina met de Tab-stops genummerd in de volgorde van de Tab-toets" },
     ];
     const components: string[] = [];
+    const everywhere: string[] = [];
     const processes: string[] = [];
     for (const state of run.siteStates?.states ?? []) {
       if (!state.pageTypes.includes(type.id)) continue;
+      const siteWide = state.kind === "component" && model?.components.find((component) => component.id === state.modelId)?.siteWide === true;
       // A state is one picture, taken on one page. It is shown on the sheet of that page's type; on the other sheets it is named.
       const capturedType = (model && state.url !== null ? pageTypeOf(model, state.url) : null) ?? state.pageTypes[0];
       if (state.reached && capturedType !== type.id) {
         const label = run.pages.find((page) => page.item.url === state.url)?.label ?? state.url;
-        if (state.kind === "component") components.push(`${state.modelId} (gemeten op ${label}, geldt ook voor dit paginatype; het vak staat op het blad van paginatype ${capturedType})`);
+        if (siteWide) everywhere.push(`${state.modelId} (het vak staat op het blad van paginatype ${capturedType})`);
+        else if (state.kind === "component") components.push(`${state.modelId} (gemeten op ${label}, geldt ook voor dit paginatype; het vak staat op het blad van paginatype ${capturedType})`);
         continue;
       }
       const entry = state.kind === "blocker" ? model?.blockers.find((blocker) => blocker.id === state.modelId) : state.kind === "component" ? model?.components.find((component) => component.id === state.modelId) : model?.processes.find((process) => process.id === state.modelId);
       const kind = state.kind === "blocker" ? "blokkade" : state.kind === "component" ? "onderdeel" : "proces";
-      if (state.kind !== "blocker") (state.kind === "component" ? components : processes).push(`${state.modelId}: ${entry?.descriptionNl ?? ""}${state.reached ? "" : " (niet geopend)"}`);
+      if (state.kind !== "blocker") (siteWide ? everywhere : state.kind === "component" ? components : processes).push(`${state.modelId}: ${entry?.descriptionNl ?? ""}${state.reached ? "" : " (niet geopend)"}`);
       if (state.reached && state.files.screenshot) candidates.push({ state: state.id, file: state.files.screenshot, descriptionNl: `${kind} "${state.modelId}"${state.viewport ? ` op ${state.viewport.width} pixels breed` : ""}: ${entry?.descriptionNl ?? ""}` });
     }
     const present = candidates.filter((candidate) => existsSync(join(runDir, candidate.file)));
@@ -602,9 +607,33 @@ async function buildSheets(run: RunData, runDir: string, outDir: string): Promis
     const file = join("gate", `sheet-${type.id}.png`);
     const bytes = PNG.sync.write(contactSheet(tiles.map((entry) => tile(PNG.sync.read(readFileSync(join(runDir, entry.file)))))));
     await writeFileAtomic(join(outDir, file), bytes);
-    sheets.push({ pageType: type.id, page: type.page.label, url: type.page.item.url, file, sha256: sha256(bytes), tiles, componentsNl: components, ...(processes.length > 0 ? { processesNl: processes } : {}), contentNl: (model?.content ?? []).filter((content) => content.pageTypes.includes(type.id)).map((content) => `${content.id} (${content.kind}): ${content.descriptionNl}`), framesNl: framesOn(type.page, model), keysNl: keysOn(type.page, run) });
+    sheets.push({ pageType: type.id, page: type.page.label, url: type.page.item.url, file, sha256: sha256(bytes), tiles, componentsNl: components, ...(everywhere.length > 0 ? { everywhereNl: everywhere } : {}), ...(processes.length > 0 ? { processesNl: processes } : {}), contentNl: (model?.content ?? []).filter((content) => content.pageTypes.includes(type.id)).map((content) => `${content.id} (${content.kind}): ${content.descriptionNl}`), framesNl: framesOn(type.page, model), keysNl: keysOn(type.page, run) });
   }
   return sheets;
+}
+
+/** What the reviewing agent reads beside one sheet: the picture, its tiles and the lists of what is known. */
+export function sheetText(sheet: Sheet, absoluteOut: string): string {
+  return [
+    `### Paginatype \`${sheet.pageType}\` (${sheet.page}, ${sheet.url})`,
+    "",
+    `Blad: \`${join(absoluteOut, sheet.file)}\``,
+    "",
+    `Kenmerk van dit blad (\`reviewedAs\`): \`${reviewedAs(sheet)}\``,
+    "",
+    ...sheet.tiles.map((entry) => `- Vak ${entry.nr}: ${entry.descriptionNl}`),
+    "",
+    sheet.componentsNl.length > 0 ? `Onderdelen van dit paginatype volgens het sitemodel: ${sheet.componentsNl.join("; ")}.` : (sheet.everywhereNl ?? []).length > 0 ? "Het sitemodel noemt voor dit paginatype geen eigen onderdelen." : "Het sitemodel noemt voor dit paginatype geen onderdelen.",
+    ...((sheet.everywhereNl ?? []).length > 0 ? ["", `Op elke pagina, ook deze, volgens het sitemodel: ${sheet.everywhereNl!.join("; ")}. Die horen bij de lijst met onderdelen.`] : []),
+    "",
+    (sheet.processesNl ?? []).length > 0 ? `Processen van dit paginatype volgens het sitemodel (formulieren en stappen die het sitemodel al kent): ${sheet.processesNl!.join("; ")}.` : "Het sitemodel noemt voor dit paginatype geen processen.",
+    "",
+    (sheet.contentNl ?? []).length > 0 ? `Inhoud zonder handeling (spelers, blokken die vanzelf bewegen) volgens het sitemodel: ${sheet.contentNl!.join("; ")}.` : "Het sitemodel noemt voor dit paginatype geen spelers of inhoud die vanzelf beweegt.",
+    "",
+    (sheet.framesNl ?? []).length > 0 ? `Ingesloten vensters op deze pagina volgens het sitemodel: ${sheet.framesNl!.join("; ")}.` : "Het sitemodel noemt op deze pagina geen ingesloten vensters.",
+    "",
+    (sheet.keysNl ?? []).length > 0 ? `Toetsen van één teken waarop deze pagina reageerde in de veegronde: ${sheet.keysNl!.join("; ")}.` : "De veegronde vond op deze pagina geen toets van één teken waarop de pagina reageert.",
+  ].join("\n");
 }
 
 /** What the single-key probe of the sweep recorded on a page: a shortcut it measured is known, not missing. */
@@ -781,7 +810,7 @@ export async function checkGate(runDir: string): Promise<string[]> {
 /** What a reviewer was shown of a sheet: the picture and the lists beside it. A change in either asks for a new review. */
 export function reviewedAs(sheet: Sheet): string {
   // The list of processes counts only where there is one, so a review of a sheet without processes stays valid.
-  return sha256(JSON.stringify([sheet.sha256, sheet.componentsNl, sheet.contentNl ?? [], sheet.framesNl ?? [], sheet.keysNl ?? [], ...(sheet.processesNl?.length ? [sheet.processesNl] : [])]));
+  return sha256(JSON.stringify([sheet.sha256, sheet.componentsNl, sheet.contentNl ?? [], sheet.framesNl ?? [], sheet.keysNl ?? [], ...(sheet.processesNl?.length ? [sheet.processesNl] : []), ...(sheet.everywhereNl?.length ? [{ everywhere: sheet.everywhereNl }] : [])]));
 }
 
 /**
@@ -844,26 +873,6 @@ export async function gate(runDir: string, outDir: string = runDir): Promise<Gat
   fixed.checks.push({ name: "sheets", ok: withoutSheet.length === 0, noteNl: withoutSheet.length === 0 ? `${sheets.length} ${sheets.length === 1 ? "paginatype heeft" : "paginatypen hebben elk"} een overzichtsblad` : `${withoutSheet.length} ${withoutSheet.length === 1 ? "gat" : "gaten"}` });
 
   const template = readTemplate("poort");
-  const sheetText = (sheet: Sheet): string =>
-    [
-      `### Paginatype \`${sheet.pageType}\` (${sheet.page}, ${sheet.url})`,
-      "",
-      `Blad: \`${join(absoluteOut, sheet.file)}\``,
-      "",
-      `Kenmerk van dit blad (\`reviewedAs\`): \`${reviewedAs(sheet)}\``,
-      "",
-      ...sheet.tiles.map((entry) => `- Vak ${entry.nr}: ${entry.descriptionNl}`),
-      "",
-      sheet.componentsNl.length > 0 ? `Onderdelen van dit paginatype volgens het sitemodel: ${sheet.componentsNl.join("; ")}.` : "Het sitemodel noemt voor dit paginatype geen onderdelen.",
-      "",
-      (sheet.processesNl ?? []).length > 0 ? `Processen van dit paginatype volgens het sitemodel (formulieren en stappen die het sitemodel al kent): ${sheet.processesNl!.join("; ")}.` : "Het sitemodel noemt voor dit paginatype geen processen.",
-      "",
-      (sheet.contentNl ?? []).length > 0 ? `Inhoud zonder handeling (spelers, blokken die vanzelf bewegen) volgens het sitemodel: ${sheet.contentNl!.join("; ")}.` : "Het sitemodel noemt voor dit paginatype geen spelers of inhoud die vanzelf beweegt.",
-      "",
-      (sheet.framesNl ?? []).length > 0 ? `Ingesloten vensters op deze pagina volgens het sitemodel: ${sheet.framesNl!.join("; ")}.` : "Het sitemodel noemt op deze pagina geen ingesloten vensters.",
-      "",
-      (sheet.keysNl ?? []).length > 0 ? `Toetsen van één teken waarop deze pagina reageerde in de veegronde: ${sheet.keysNl!.join("; ")}.` : "De veegronde vond op deze pagina geen toets van één teken waarop de pagina reageert.",
-    ].join("\n");
   // One task per SHEETS_PER_TASK sheets, so the task of one agent stays the same size however many page types a site has.
   const parts = reviewParts(sheets);
   for (const part of parts) {
@@ -884,7 +893,7 @@ export async function gate(runDir: string, outDir: string = runDir): Promise<Gat
       fill(template, {
         site: siteLabel(run.inventory),
         run: absoluteRun,
-        sheets: part.sheets.map(sheetText).join("\n\n") || "Er zijn geen bladen: de run heeft geen schermafbeeldingen.",
+        sheets: part.sheets.map((sheet) => sheetText(sheet, absoluteOut)).join("\n\n") || "Er zijn geen bladen: de run heeft geen schermafbeeldingen.",
         questions: [...QUESTIONS.map((question) => `- \`${question.id}\`: ${question.questionNl}`), `- \`stateTiles\`: ${STATE_QUESTION_NL}`].join("\n"),
         example: JSON.stringify(example, null, 2),
         output: join(absoluteOut, part.answers),
