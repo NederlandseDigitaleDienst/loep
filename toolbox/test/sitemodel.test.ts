@@ -571,6 +571,12 @@ test("every page type gets a sheet: the sheets are divided over tasks, and a typ
   assert.match(gaps[0]!.missingNl, /Draai collect opnieuw/);
   assert.match(gaps[1]!.missingNl, /geen enkele pagina van dit type zit in de steekproef/);
   assert.deepEqual(sheetGaps(run, [sheet(1), sheet(2), sheet(3)]), []);
+
+  const crashed = { ...run, collectFailed: [{ label: "P3", item: { url: "https://site.nl/3" }, error: "page.evaluate: Target crashed" }] } as unknown as RunData;
+  const unmeasured = sheetGaps(crashed, [sheet(1), sheet(2)]);
+  assert.deepEqual(unmeasured.map((gap) => [gap.page, gap.url]), [["P3", "https://site.nl/3"]]);
+  assert.match(unmeasured[0]!.missingNl, /P3 zit wel in de steekproef, maar de veegronde kon die pagina niet meten/);
+  assert.doesNotMatch(unmeasured[0]!.missingNl, /sample opnieuw/);
 });
 
 test("a contact sheet is built from tiles of a fixed width", () => {

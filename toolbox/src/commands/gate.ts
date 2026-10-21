@@ -731,14 +731,17 @@ export function sheetGaps(run: RunData, sheets: Sheet[]): Gap[] {
   for (const type of run.siteModel?.pageTypes ?? []) {
     if (sheets.some((sheet) => sheet.pageType === type.id)) continue;
     const page = run.pages.find((entry) => entry.item.url === type.representative) ?? run.pages.find((entry) => type.pages.includes(entry.item.url));
+    const unmeasured = page ? undefined : (run.collectFailed ?? []).find((entry) => entry.item.url === type.representative) ?? (run.collectFailed ?? []).find((entry) => type.pages.includes(entry.item.url));
     gaps.push({
       check: "sheets",
-      page: page?.label ?? null,
-      url: page?.item.url ?? type.representative,
+      page: page?.label ?? unmeasured?.label ?? null,
+      url: page?.item.url ?? unmeasured?.item.url ?? type.representative,
       state: "default",
       missingNl: page
         ? `Voor paginatype "${type.id}" is geen overzichtsblad gemaakt: van ${page.label} ontbreken de schermafbeeldingen van de veegronde. Draai collect opnieuw.`
-        : `Voor paginatype "${type.id}" is geen overzichtsblad gemaakt: geen enkele pagina van dit type zit in de steekproef, dus er is niets van gemeten. Draai sample opnieuw na check-site, en daarna de veegronde.`,
+        : unmeasured
+          ? `Voor paginatype "${type.id}" is geen overzichtsblad gemaakt: ${unmeasured.label} zit wel in de steekproef, maar de veegronde kon die pagina niet meten (zie het gat bij het laden van de pagina). Draai collect opnieuw.`
+          : `Voor paginatype "${type.id}" is geen overzichtsblad gemaakt: geen enkele pagina van dit type zit in de steekproef, dus er is niets van gemeten. Draai sample opnieuw na check-site, en daarna de veegronde.`,
     });
   }
   return gaps;
