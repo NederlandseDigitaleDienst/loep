@@ -7,6 +7,7 @@ import { addressOf, noteRefusedRead, readDecision, readRuleFor, runReads, type R
 import { isWriteOrigin, runWrites, SocketFrames, type WriteAccess } from "../lib/writes.ts";
 import { OriginBlocked, runBlockade } from "../session/blockade.ts";
 import { MESSAGE_VALUES } from "../session/safety.ts";
+import { playRecording, socketRecordings, type Recorder } from "../lib/recordings.ts";
 import { readableFrame } from "./call.ts";
 import { refusedByBrowser, type ClipboardWrite } from "./clipboard.ts";
 import { frameAsPage } from "./frame.ts";
@@ -226,13 +227,37 @@ export async function newContext(browser: Browser, options: ContextOptions = {},
       const server = socket.connectToServer();
       const free = isWriteOrigin(writes, socket.url());
       const frames = new SocketFrames(MESSAGE_VALUES);
+      // The answer to a real message is recorded, and a message that was sent before is played from its recording, as in a session.
+      const recordings = free ? socketRecordings(writes!.runDir, writes!.source, MESSAGE_VALUES) : null;
+      let recorder: Recorder | null = null;
+      if (free) {
+        server.onMessage((reply) => {
+          socket.send(reply);
+          recorder?.frame(reply);
+        });
+        // A handler for closing takes over passing it on: the server is closed as the page closed its side.
+      socket.onClose((code, reason) => {
+        recorder?.end();
+        void server!.close({ code, reason }).catch(() => undefined);
+      });
+      }
       socket.onMessage((message) => {
         if (free) {
           // A frame takes one from the budget of the run, and past it, or too soon, it is held back; only a heartbeat or a message of the protocol is just noted.
           // The sweep acts on the page all the time, so no frame counts as sent by the page by itself.
           if (frames.counts(message)) {
+            const recording = recordings!.find(socket.url(), message);
+            if (recording) {
+              recordings!.replayed(socket.url(), recording);
+              return playRecording(recording, (reply) => socket.send(reply));
+            }
             if (!writes!.claim("SEND", socket.url(), { message: true }).ok) return void (guard?.active && guard.blocked++);
-          } else writes!.record("SEND", socket.url());
+            server.send(message);
+            recorder?.end();
+            recorder = recordings!.start(socket.url(), message);
+            return;
+          }
+          writes!.record("SEND", socket.url());
           server.send(message);
         } else if (guard?.active) guard.blocked++;
         else server.send(message);

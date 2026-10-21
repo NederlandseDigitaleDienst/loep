@@ -351,6 +351,9 @@ export type WriteClaim = { ok: true; entry: PassedWrite } | { ok: false; budget:
  */
 export interface WriteAccess {
   origin: string;
+  /** The run and the command or session the access was made for: where the recordings of what a chat answered are kept (see `socketRecordings`). */
+  runDir: string;
+  source: string;
   /**
    * Take one write from the budget of the run and note it, or refuse it: when the budget is used
    * up, or when the previous write is less than the spacing ago. A refused write is not sent, and
@@ -408,6 +411,8 @@ export function writeAccess(runDir: string, permission: WritePermission, source:
   };
   return {
     origin: permission.origin,
+    runDir,
+    source,
     record: (method, url, options) => append(method, url, options?.repeat === true, false, options?.sender),
     claim: (method, url, options) => {
       mkdirSync(runDir, { recursive: true });

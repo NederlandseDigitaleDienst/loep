@@ -12,6 +12,7 @@ import { probeForms } from "../src/instruments/forms.ts";
 import { formErrors } from "../src/lib/extractors.ts";
 import { REGULAR_PATH, type RunData } from "../src/lib/rundata.ts";
 import { budgetOutPointNl, criterionSender, decideWrites, isOurMessage, isProtocolFrame, reservedWrites, senderOf, SocketFrames, DEFAULT_MAX_WRITES, DEFAULT_WRITE_SPACING_SECONDS, recordWrites, WRITES_BLOCKED_NL, writeAccess, writeBudget, writeBudgetNl, writesAllowedNl, writesForRun, type PassedWrite, type WritePermission } from "../src/lib/writes.ts";
+import { readRecordings, readReplays, recordingKey, replaysNl } from "../src/lib/recordings.ts";
 import { Daemon } from "../src/session/daemon.ts";
 import type { Observation } from "../src/session/observations.ts";
 import { DEFAULT_DAEMON_LIMITS, MESSAGE_VALUES, Politeness, scopeForRun, TEST_VALUES } from "../src/session/safety.ts";
@@ -489,6 +490,98 @@ test("every frame over a socket counts, except one shown to be a heartbeat or a 
   assert.equal(frames.counts(`{"text":"${TEST_VALUES.email}"}`), true);
 });
 
+test("the answer to a chat message is recorded once, and the same message is played from the recording after that: nothing more goes to the server", async () => {
+  reset();
+  const dir = mkdtempSync(join(tmpdir(), "loep-writes-replay-"));
+  const limited: WritePermission = { ...permission, maxWrites: 1, spacingSeconds: 0 };
+  await recordWrites(dir, limited);
+  try {
+    const env = { browser, runDir: dir, scope: await scopeForRun(dir, { scopeUrl: `${site.origin}/` }), limits: DEFAULT_DAEMON_LIMITS, politeness: new Politeness(0) };
+    const chat = async (frames: string[]): Promise<string[]> => {
+      const { surface } = await openSurface(env, { url: `${site.origin}/callback.html`, width: 1280, height: 800, scheme: "light" });
+      const replies = await surface.page.evaluate(
+        async ([url, list]) => {
+          const socket = new WebSocket(url!);
+          const got: string[] = [];
+          socket.addEventListener("message", (event) => got.push(String(event.data)));
+          await new Promise((resolve) => socket.addEventListener("open", resolve));
+          for (const frame of list as string[]) socket.send(frame);
+          await new Promise((resolve) => setTimeout(resolve, 600));
+          socket.close();
+          await new Promise((resolve) => setTimeout(resolve, 100));
+          return got;
+        },
+        [`${site.origin.replace("http", "ws")}/chat`, frames] as const,
+      );
+      const replays = surface.guard.replays ?? [];
+      await surface.context.close();
+      return [...replies, ...replays.map((entry) => `afgespeeld ${entry.key}`)];
+    };
+    const message = JSON.stringify({ type: "chat", text: TEST_VALUES.text });
+    // The first time it is sent for real, and the answer is recorded when the socket closes.
+    assert.deepEqual(await chat([message]), ['{"type":"reply","text":"Ontvangen"}', '{"type":"reply","text":"Waarmee kan ik helpen?"}']);
+    assert.deepEqual(site.socketMessages, [message]);
+    const [recording] = readRecordings(dir);
+    assert.deepEqual(recording!.frames.map((frame) => frame.text), ['{"type":"reply","text":"Ontvangen"}', '{"type":"reply","text":"Waarmee kan ik helpen?"}']);
+    assert.ok(recording!.frames[1]!.afterMs > recording!.frames[0]!.afterMs, "the time between the frames is kept");
+    // The second time, with the budget used up, it is played: the page gets the same answer and the server nothing.
+    assert.deepEqual(await chat([JSON.stringify({ type: "chat", text: TEST_VALUES.text, at: 2 })]), ['{"type":"reply","text":"Ontvangen"}', '{"type":"reply","text":"Waarmee kan ik helpen?"}', `afgespeeld ${TEST_VALUES.text}`]);
+    assert.deepEqual(site.socketMessages, [message]);
+    assert.equal(writeBudget(dir, limited).sent, 1);
+    assert.deepEqual(readReplays(dir).map((entry) => entry.recording), [recording!.id]);
+    // A frame without a test value is only the same message when it is the same frame: another one is not played, and is held back past the budget.
+    assert.deepEqual(await chat(['{"type":"chat","text":""}']), []);
+    assert.deepEqual(site.socketMessages, [message]);
+    assert.equal(recordingKey('{"type":"chat","text":""}', MESSAGE_VALUES), recordingKey('{"type":"chat","text":""}', MESSAGE_VALUES));
+    assert.notEqual(recordingKey('{"type":"chat","text":""}', MESSAGE_VALUES), recordingKey('{"type":"open"}', MESSAGE_VALUES));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("the sweep records and plays a chat message the same way, and a session plays what the sweep recorded", async () => {
+  reset();
+  const dir = mkdtempSync(join(tmpdir(), "loep-writes-replay-sweep-"));
+  const limited: WritePermission = { ...permission, maxWrites: 1, spacingSeconds: 0 };
+  await recordWrites(dir, limited);
+  const message = JSON.stringify({ type: "chat", text: TEST_VALUES.text });
+  const chatIn = async (page: Page): Promise<string[]> =>
+    page.evaluate(
+      async ([url, frame]) => {
+        const socket = new WebSocket(url!);
+        const got: string[] = [];
+        socket.addEventListener("message", (event) => got.push(String(event.data)));
+        await new Promise((resolve) => socket.addEventListener("open", resolve));
+        socket.send(frame!);
+        await new Promise((resolve) => setTimeout(resolve, 600));
+        socket.close();
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        return got;
+      },
+      [`${site.origin.replace("http", "ws")}/chat`, message] as const,
+    );
+  try {
+    const answer = ['{"type":"reply","text":"Ontvangen"}', '{"type":"reply","text":"Waarmee kan ik helpen?"}'];
+    for (let round = 0; round < 2; round++) {
+      const context = await newContext(browser, { writes: writeAccess(dir, limited, "states") });
+      const page = await context.newPage();
+      await loadPage(page, `${site.origin}/callback.html`);
+      assert.deepEqual(await chatIn(page), answer, `round ${round}`);
+      await context.close();
+    }
+    assert.deepEqual(site.socketMessages, [message], "only the first went to the server");
+    assert.deepEqual(readReplays(dir).map((entry) => entry.source), ["states"]);
+    const env = { browser, runDir: dir, scope: await scopeForRun(dir, { scopeUrl: `${site.origin}/` }), limits: DEFAULT_DAEMON_LIMITS, politeness: new Politeness(0) };
+    const { surface } = await openSurface(env, { url: `${site.origin}/callback.html`, width: 1280, height: 800, scheme: "light" });
+    assert.deepEqual(await chatIn(surface.page), answer);
+    assert.match(surface.guard.replays![0]!.noteNl, /^niet verstuurd maar afgespeeld: dit bericht is om \d\d:\d\d al eens echt verstuurd \(states\)/);
+    await surface.context.close();
+    assert.deepEqual(site.socketMessages, [message]);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 /** Open a socket to the fixture site from the page and send these frames, one at a time. */
 async function sendFrames(page: Page, frames: string[]): Promise<void> {
   await page.evaluate(async ([url, list]) => {
@@ -650,6 +743,18 @@ test("inventory refuses to start for a site that is not local without a declarat
     // An inventory without the flag is a run without the permission.
     assert.equal((await cli("inventory", `${site.origin}/`, "--out", dir, "--urls", join(dir, "urls.txt"))).code, 0);
     assert.equal(writesForRun(dir), null);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("the evaluation says how many messages were recorded and how often a recording was played", () => {
+  const dir = mkdtempSync(join(tmpdir(), "loep-writes-replays-nl-"));
+  try {
+    assert.equal(replaysNl(dir), null);
+    writeFileSync(join(dir, "opnames.jsonl"), `${JSON.stringify({ id: "a", at: "2026-10-21T09:00:00Z", source: "states", origin: "https://chat.example.nl", path: "/ws", key: "x", frames: [] })}\n`);
+    writeFileSync(join(dir, "afgespeeld.jsonl"), `${JSON.stringify({ at: "2026-10-21T09:10:00Z", source: "b-331", recording: "a", path: "/ws", key: "x" })}\n`.repeat(3));
+    assert.equal(replaysNl(dir), "Van één bericht in een chat is het antwoord van de server opgenomen toen het echt werd verstuurd. Daarna is 3 keer hetzelfde bericht niet opnieuw verstuurd, maar is de opname afgespeeld: de pagina kreeg het antwoord van toen, met dezelfde tussentijden. Wat de pagina ermee deed, is gemeten; wat de server later uit zichzelf zou doen, niet");
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
