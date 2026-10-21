@@ -1,5 +1,5 @@
 import { existsSync, readFileSync } from "node:fs";
-import { rm } from "node:fs/promises";
+import { mkdir, rename, rm } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
 import { PNG } from "pngjs";
 import { readJson, sha256, sha256File, writeFileAtomic, writeJson } from "../lib/canonical.ts";
@@ -646,7 +646,7 @@ interface GivenAnswer {
 }
 
 export interface Answers {
-  sheets: { pageType: string; answers: Record<string, GivenAnswer>; stateTiles: (GivenAnswer & { tile?: unknown })[]; remarkNl?: unknown }[];
+  sheets: { pageType: string; reviewedAs?: unknown; answers: Record<string, GivenAnswer>; stateTiles: (GivenAnswer & { tile?: unknown })[]; remarkNl?: unknown }[];
 }
 
 /** Check the form of the agent's answers against the sheets they are about. Problems are in Dutch: the agent reads them. */
@@ -663,6 +663,11 @@ export function validateAnswers(value: unknown, sheets: Sheet[]): string[] {
     const entry = given.find((candidate) => candidate?.pageType === sheet.pageType);
     if (!entry) {
       problems.push(`er is geen antwoord voor paginatype "${sheet.pageType}"`);
+      continue;
+    }
+    // An answer counts only for the sheet it was given for; one from an earlier round says nothing about this one.
+    if (entry.reviewedAs !== reviewedAs(sheet)) {
+      problems.push(typeof entry.reviewedAs === "string" ? `${sheet.pageType}: het blad is veranderd sinds dit antwoord (reviewedAs ${entry.reviewedAs}, het blad heeft nu ${reviewedAs(sheet)}); bekijk het blad opnieuw en beantwoord alle vragen opnieuw` : `${sheet.pageType}: reviewedAs ontbreekt; neem het kenmerk van het blad over uit de opdracht, nadat je het blad hebt bekeken`);
       continue;
     }
     for (const question of QUESTIONS) checkAnswer(entry.answers?.[question.id], `${sheet.pageType}.${question.id}`, question.bad);
@@ -779,6 +784,33 @@ export function reviewedAs(sheet: Sheet): string {
   return sha256(JSON.stringify([sheet.sha256, sheet.componentsNl, sheet.contentNl ?? [], sheet.framesNl ?? [], sheet.keysNl ?? [], ...(sheet.processesNl?.length ? [sheet.processesNl] : [])]));
 }
 
+/**
+ * Answers of an earlier round no longer belong to the sheets: move them to gate/vorige/, so
+ * neither an agent nor check-gate builds on them. A file that cannot be read is left alone:
+ * an agent may be writing it.
+ */
+async function setAsideStaleAnswers(outDir: string, parts: ReviewPart[]): Promise<void> {
+  const stale: string[] = [];
+  for (const part of parts) {
+    const path = join(outDir, part.answers);
+    if (!existsSync(path)) continue;
+    let given: unknown;
+    try {
+      given = (await readJson<Answers>(path)).sheets;
+    } catch {
+      continue;
+    }
+    if (!Array.isArray(given)) continue;
+    if (given.some((entry: Answers["sheets"][number] | null) => { const sheet = part.sheets.find((candidate) => candidate.pageType === entry?.pageType); return !sheet || entry?.reviewedAs !== reviewedAs(sheet); })) stale.push(part.answers);
+  }
+  // Answers of a task that no longer exists, when the site had more page types.
+  for (let nr = parts.length + 1; existsSync(join(outDir, "gate", `answers-${nr}.json`)); nr++) stale.push(join("gate", `answers-${nr}.json`));
+  if (stale.length === 0) return;
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+  await mkdir(join(outDir, "gate", "vorige"), { recursive: true });
+  for (const file of stale) await rename(join(outDir, file), join(outDir, "gate", "vorige", `${basename(file, ".json")}-${stamp}.json`));
+}
+
 async function currentAnswers(runDir: string, sheets: Sheet[]): Promise<Answers | null> {
   const parts = reviewParts(sheets);
   if (!existsSync(join(runDir, STAMP_FILE)) || parts.some((part) => !existsSync(join(runDir, part.answers)))) return null;
@@ -818,6 +850,8 @@ export async function gate(runDir: string, outDir: string = runDir): Promise<Gat
       "",
       `Blad: \`${join(absoluteOut, sheet.file)}\``,
       "",
+      `Kenmerk van dit blad (\`reviewedAs\`): \`${reviewedAs(sheet)}\``,
+      "",
       ...sheet.tiles.map((entry) => `- Vak ${entry.nr}: ${entry.descriptionNl}`),
       "",
       sheet.componentsNl.length > 0 ? `Onderdelen van dit paginatype volgens het sitemodel: ${sheet.componentsNl.join("; ")}.` : "Het sitemodel noemt voor dit paginatype geen onderdelen.",
@@ -838,6 +872,7 @@ export async function gate(runDir: string, outDir: string = runDir): Promise<Gat
       sheets: [
         {
           pageType: part.sheets[0]?.pageType ?? "start",
+          reviewedAs: part.sheets[0] ? reviewedAs(part.sheets[0]) : "<kenmerk van het blad>",
           answers: Object.fromEntries(QUESTIONS.map((question) => [question.id, { answer: question.bad === "ja" ? "nee" : "ja", noteNl: "" }])),
           stateTiles: [{ tile: 4, answer: "ja", noteNl: "" }],
           remarkNl: "",
@@ -862,6 +897,7 @@ export async function gate(runDir: string, outDir: string = runDir): Promise<Gat
   // Tasks of an earlier gate, when the site had more page types, must not be handed out again.
   for (let nr = parts.length + 1; existsSync(join(outDir, "gate", `poort-${nr}.md`)); nr++) await rm(join(outDir, "gate", `poort-${nr}.md`));
 
+  await setAsideStaleAnswers(outDir, parts);
   const answers = await currentAnswers(outDir, sheets);
   const reviewed = answers ? reviewGaps(answers, sheets) : { gaps: [], warnings: [] };
   const remarks = (answers?.sheets ?? []).flatMap((entry) => (typeof entry.remarkNl === "string" && entry.remarkNl.trim() ? [{ pageType: entry.pageType, remarkNl: entry.remarkNl.trim() }] : []));
