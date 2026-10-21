@@ -20,6 +20,7 @@ import { loadRun, type RunData } from "../lib/rundata.ts";
 import {
   citedObservations,
   FINISH_FACTOR,
+  frameFocusProblems,
   indexObservations,
   KINDS_FOR_AGAIN,
   notSentPointProblems,
@@ -1024,6 +1025,8 @@ export async function checkInstrumentVerdict(runDir: string, criterionId: string
   else if (!(await instrumentVerdictIsCurrent(runDir, task, "judge", observations))) problems = ["the verdict of the judge must be validated, and unchanged since, before the verification"];
   else problems = validateVerification(verdict, { ...context, session: part.session, judge: await readJson<Verdict>(join(runDir, task.judge.output)) });
   problems.push(...budgetPointProblems(runDir, verdict, part.session));
+  // Read only once the verdict has its form: it walks the findings and what they cite.
+  if (problems.length === 0) problems.push(...frameFocusProblems(verdict, dossier.legend, observations.records));
   const permission = writesForRun(runDir);
   problems.push(...notSentPointProblems(verdict.missingNl, permission, permission ? writeBudget(runDir, permission, Date.now(), criterionSender(task.criterion)) : null));
   if (problems.length === 0) await stampNow(runDir, part.output, (await verdictStamp(runDir, task, round, observations))!);

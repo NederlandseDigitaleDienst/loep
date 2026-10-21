@@ -1177,7 +1177,7 @@ export function validateCandidates(input: unknown, context: CandidateContext): s
 }
 
 /** Every observation id a verdict leans on, sorted: what a stamp binds the verdict to. */
-export function citedObservations(verdict: Verdict, observations: ObservationIndex): string[] {
+export function citedObservations(verdict: Verdict, observations: { has(ref: string): boolean }): string[] {
   const refs = [
     ...verdict.observations.flatMap((observation) => observation.evidence),
     ...verdict.findings.flatMap((finding) => finding.evidence),
@@ -1189,4 +1189,43 @@ export function citedObservations(verdict: Verdict, observations: ObservationInd
     ...(verdict.finish?.attempts ?? []).flatMap((attempt) => attempt.evidence ?? []),
   ];
   return [...new Set(refs.filter((ref) => observations.has(ref)))].sort();
+}
+
+/** What a check on where the focus stood needs of one observation record. */
+export interface FocusRecordLike {
+  command: string;
+  error: string | null;
+  result: unknown;
+  page?: { url?: string } | null;
+}
+
+const withoutHash = (url: string): string => url.replace(/#.*$/, "");
+
+/**
+ * At 2.1.4 the exception for focus covers a whole embedded window: a key that works with the focus
+ * on another button in the same window still works only with the focus in the component. A finding
+ * on an embedded window therefore stands only on a key pressed with the focus on the page around
+ * it: a cited `key` observation whose focus is not in a frame, made on a page other than the window
+ * opened on its own (procedure 2.1.4, N6).
+ */
+export function frameFocusProblems(verdict: Verdict, legend: Record<string, unknown>, records: ReadonlyMap<string, FocusRecordLike>): string[] {
+  if (verdict.criterion !== "2.1.4" || verdict.outcome !== "failed") return [];
+  const embedded = (label: string): string | null => {
+    const entry = legend[label] as { embedded?: unknown; url?: unknown } | undefined;
+    return entry && entry.embedded !== undefined && typeof entry.url === "string" ? entry.url : null;
+  };
+  const outside = citedObservations(verdict, records).filter((id) => {
+    const record = records.get(id)!;
+    const focus = (record.result as { focus?: { frame?: unknown } | null } | null)?.focus;
+    return canonicalCommand(record.command) === "key" && record.error === null && focus != null && focus.frame === undefined;
+  });
+  return verdict.findings.flatMap((finding, position) => {
+    const windows = [...new Set((finding.locations ?? []).map((location) => embedded(location?.page)).filter((url): url is string => url !== null))];
+    if (windows.length === 0) return [];
+    const shown = outside.some((id) => {
+      const url = records.get(id)!.page?.url;
+      return typeof url === "string" && windows.every((window) => withoutHash(window) !== withoutHash(url));
+    });
+    return shown ? [] : [`findings[${position}]: a single key that reacts in an embedded window (a page with "embedded" in the legend) is a shortcut under 2.1.4 only when it also works with the focus on an element of the page outside the window; focus on another button in the same window is focus in the component. Cite a "key" observation made on the page that embeds the window, whose focus is not in the window (no "[in venster: ...]"), and that shows the reaction (N6), or drop the finding`];
+  });
 }

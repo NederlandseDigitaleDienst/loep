@@ -147,7 +147,8 @@ export async function act(context: Context, pauseMs: number, action: () => Promi
   if (clipboard !== null) print.clipboard = clipboard;
   if (note) print.note = note;
   if (Object.keys(print).length === 0) print.changed = false;
-  if (result.focus) print.focus = brief(result.focus);
+  // Whether focus sits in an embedded frame decides at 2.1.4 whether a key counts as a shortcut, so the line says it.
+  if (result.focus) print.focus = `${brief(result.focus)}${inFrame(result.focus)}`;
   return { result, print };
 }
 
