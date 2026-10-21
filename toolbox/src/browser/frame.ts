@@ -173,14 +173,9 @@ export async function frameAsPage(page: Page, frame: Frame): Promise<Page> {
     }
   };
 
-  const moved = async (x: number, y: number): Promise<[number, number]> => {
-    const origin = await contentBox(frame);
-    if (!origin) throw new Error("het ingesloten venster is niet zichtbaar op de pagina");
-    return [origin.x + x * origin.scale.x, origin.y + y * origin.scale.y];
-  };
   const mouse = new Proxy(page.mouse, {
     get(target, key) {
-      if (key === "move" || key === "click" || key === "dblclick") return async (x: number, y: number, options?: unknown) => (target[key] as (x: number, y: number, options?: unknown) => Promise<void>)(...(await moved(x, y)), options);
+      if (key === "move" || key === "click" || key === "dblclick") return async (x: number, y: number, options?: unknown) => (target[key] as (x: number, y: number, options?: unknown) => Promise<void>)(...(await framePoint(frame, x, y)), options);
       const value = Reflect.get(target, key) as unknown;
       return typeof value === "function" ? value.bind(target) : value;
     },
@@ -255,6 +250,22 @@ export async function frameAsPage(page: Page, frame: Frame): Promise<Page> {
       return typeof value === "function" ? value.bind(target) : value;
     },
   });
+}
+
+/**
+ * Where a point in the window of a document lies in the window of the tab: the same point for the
+ * page in the tab, moved to where the frame stands for an embedded frame seen as a page. Input that
+ * the browser takes at a place in the tab, such as a touch, is given there.
+ */
+export async function tabPoint(page: Page, x: number, y: number): Promise<[number, number]> {
+  const frame = page.mainFrame();
+  return frame.parentFrame() ? framePoint(frame, x, y) : [x, y];
+}
+
+async function framePoint(frame: Frame, x: number, y: number): Promise<[number, number]> {
+  const origin = await contentBox(frame);
+  if (!origin) throw new Error("het ingesloten venster is niet zichtbaar op de pagina");
+  return [origin.x + x * origin.scale.x, origin.y + y * origin.scale.y];
 }
 
 /** What a record says about the frame an element sits in. */

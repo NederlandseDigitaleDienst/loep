@@ -809,6 +809,7 @@ export const actWith = (raw: Handler): Handler => async (context, args, options)
   const { changed: nothing, ...print } = outcome.print as { changed?: boolean };
   const changed = Object.keys(extra).length > 0;
   return {
+    ...(outcome.step ? { step: outcome.step } : {}),
     result: { ...(outcome.result as object), ...record },
     print: changed
       ? { ...print, ...extra }
