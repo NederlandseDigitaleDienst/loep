@@ -1,7 +1,7 @@
 # Voorstellen voor nieuwe versies, één keer per week. De controle draait op elk voorstel.
-# Een nieuwe versie van een regel-engine (axe-core, Alfa, QualWeb, de IBM-checker) kan
-# uitkomsten veranderen zonder dat een test faalt: neem zo'n voorstel pas over na een kleine
-# meting op de testsite.
+# Een nieuwe versie van een regel-engine (axe-core, Alfa, QualWeb, de IBM-checker) of van een
+# validator die bevindingen aan criteria koppelt (html-validate, vnu) kan uitkomsten veranderen
+# zonder dat een test faalt: neem zo'n voorstel pas over na een kleine meting op de testsite.
 version: 2
 updates:
   - package-ecosystem: npm
@@ -16,6 +16,8 @@ updates:
           - "@siteimprove/*"
           - "@qualweb/*"
           - "accessibility-checker*"
+          - "html-validate"
+          - "vnu-jar"
       overig:
         patterns:
           - "*"
@@ -24,6 +26,8 @@ updates:
           - "@siteimprove/*"
           - "@qualweb/*"
           - "accessibility-checker*"
+          - "html-validate"
+          - "vnu-jar"
     ignore:
       # De types volgen precies de laagste Node die de toolbox ondersteunt (22.18, zie de README).
       # Met types van een nieuwere Node, ook 22.20, compileert code die op 22.18 niet draait.
