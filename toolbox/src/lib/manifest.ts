@@ -78,13 +78,37 @@ function runtimePackages(): string[] {
   return Object.keys(dependencies).filter((name) => !name.startsWith("@types/")).sort();
 }
 
+/** The version of this toolbox, from its package.json. */
+export const toolboxVersion = (): string => (JSON.parse(readFileSync(join(TOOLBOX_ROOT, "package.json"), "utf8")) as { version: string }).version;
+
+/**
+ * Commands that measure nothing and write no tasks or procedures: they may work on a run of another version of loep.
+ * Some only read; `render`, `statement`, `compare`, `decide`, `sign` and `seal` write a report, a statement, a comparison,
+ * a decision, a signature or a seal from what the run holds, which is what a finished, sealed run needs after a release.
+ */
+export const MEASURES_NOTHING = ["pending", "estimate", "gaps", "feedback", "verify", "procedures", "render", "statement", "compare", "decide", "sign", "seal"];
+
+/**
+ * Why this toolbox may not go on with the run, or null when it may. A run holds the version of loep of its last step.
+ * Another version writes other tasks and procedures: the walks and verdicts of the run then stop counting and are
+ * done again, and a session process of the other version measures beside them. Changing on purpose takes `--other-toolbox`.
+ */
+export function otherToolboxNl(runDir: string, command: string, allowed: boolean): string | null {
+  const path = join(runDir, "manifest.json");
+  if (allowed || MEASURES_NOTHING.includes(command) || !existsSync(path)) return null;
+  const run = (JSON.parse(readFileSync(path, "utf8")) as Partial<Manifest>).toolbox?.version;
+  const own = toolboxVersion();
+  if (!run || run === own) return null;
+  return `deze run is gemaakt met loep ${run}, en dit is loep ${own} (${TOOLBOX_ROOT}). Een andere versie schrijft andere opdrachten en procedures: de rondgangen en oordelen van de run gelden dan niet meer en worden opnieuw gedaan. Gebruik de toolbox van loep ${run}. Stap je bewust over, geef dan --other-toolbox mee, en meet daarna opnieuw met --fresh`;
+}
+
 export function toolchain(browserVersion: string | null): Omit<Manifest, "steps"> {
   const lockfile = join(TOOLBOX_ROOT, "package-lock.json");
   return {
     toolbox: {
       ...toolboxSource(),
       lockfileSha256: existsSync(lockfile) ? sha256(readFileSync(lockfile)) : "no lockfile",
-      version: (JSON.parse(readFileSync(join(TOOLBOX_ROOT, "package.json"), "utf8")) as { version: string }).version,
+      version: toolboxVersion(),
     },
     runtime: { node: process.version, platform: platform(), osRelease: release(), arch: arch() },
     packages: Object.fromEntries(runtimePackages().map((name) => [name, installedVersion(name)])),

@@ -5,7 +5,7 @@ import { CLOUDFLARE_HEADER, isChallenge } from "../lib/challenge.ts";
 import { confirmLoginOn, LoginExpired, logsOut, runLoginMark, runLoginState, throwIfLoginExpired, watchLogin } from "../lib/login.ts";
 import { addressOf, noteRefusedRead, readDecision, readRuleFor, runReads, type ReadRequest } from "../lib/reads.ts";
 import { isWriteOrigin, runWrites, SocketFrames, type WriteAccess } from "../lib/writes.ts";
-import { OriginBlocked, runBlockade } from "../session/blockade.ts";
+import { LONGEST_FAILURE_PAUSE_SECONDS, OriginBlocked, runBlockade } from "../session/blockade.ts";
 import { MESSAGE_VALUES } from "../session/safety.ts";
 import { readableFrame } from "./call.ts";
 import { refusedByBrowser, type ClipboardWrite } from "./clipboard.ts";
@@ -258,9 +258,9 @@ export async function loadPage(page: Page, url: string, referer?: string): Promi
   // A session that ran out is not tried again page after page.
   throwIfLoginExpired();
   const options = { waitUntil: "load" as const, ...(referer ? { referer } : {}) };
-  // A site that asked for a short pause gets it; one that refused the evaluation is not asked, and the page is not measured.
+  // A site that asked for a pause gets it, also one after failures: the sweep has no agent waiting on it. One that refused the evaluation is not asked, and the page is not measured.
   const blockade = runBlockade()?.blockade;
-  const refused = await blockade?.pause(url);
+  const refused = await blockade?.pause(url, LONGEST_FAILURE_PAUSE_SECONDS);
   if (refused) throw new OriginBlocked(url, refused);
   let response = await page.goto(url, options);
   if (blockade && response?.status() === 429) {
