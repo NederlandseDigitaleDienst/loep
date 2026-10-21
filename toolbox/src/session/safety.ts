@@ -279,6 +279,8 @@ export async function guardContext(context: BrowserContext, scope: Scope, guard:
     // On the socket of the test environment the answer to a real message is recorded, and a message that was sent before is played from its recording.
     const recordings = free ? socketRecordings(scope.writes!.runDir, scope.writes!.source, MESSAGE_VALUES) : null;
     let recorder: Recorder | null = null;
+    // A page that is closed hears nothing more: what the server says after that is no part of the answer the page got.
+    context.once("close", () => recorder?.end());
     if (free) {
       server!.onMessage((reply) => {
         socket.send(reply);

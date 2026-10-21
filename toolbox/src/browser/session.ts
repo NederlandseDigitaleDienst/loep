@@ -230,6 +230,8 @@ export async function newContext(browser: Browser, options: ContextOptions = {},
       // The answer to a real message is recorded, and a message that was sent before is played from its recording, as in a session.
       const recordings = free ? socketRecordings(writes!.runDir, writes!.source, MESSAGE_VALUES) : null;
       let recorder: Recorder | null = null;
+      // A page that is closed hears nothing more: what the server says after that is no part of the answer the page got.
+      context.once("close", () => recorder?.end());
       if (free) {
         server.onMessage((reply) => {
           socket.send(reply);
