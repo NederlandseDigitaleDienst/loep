@@ -60,7 +60,8 @@ async function pageWith(writes: boolean, path: string): Promise<Page> {
 test("writing needs an explicit flag on a local address and a declaration by a person anywhere else", () => {
   const now = new Date("2026-01-02T03:04:05Z");
   assert.equal(decideWrites("https://www.example.nl/", {}), null);
-  assert.deepEqual(decideWrites("http://127.0.0.1:4710/", { allowWrites: true }, now), { origin: "http://127.0.0.1:4710", local: true, declaredBy: null, declaredAt: "2026-01-02T03:04:05.000Z", maxWrites: 5, spacingSeconds: 120 });
+  // On this machine nobody receives a stream of messages: no pause, and a larger budget that still has an end.
+  assert.deepEqual(decideWrites("http://127.0.0.1:4710/", { allowWrites: true }, now), { origin: "http://127.0.0.1:4710", local: true, declaredBy: null, declaredAt: "2026-01-02T03:04:05.000Z", maxWrites: 50, spacingSeconds: 0 });
   assert.equal(decideWrites("http://127.0.0.1:4710/", { allowWrites: true, maxWrites: "12" })?.maxWrites, 12);
   for (const wrong of ["0", "-1", "2.5", "veel", ""]) assert.throws(() => decideWrites("http://127.0.0.1:4710/", { allowWrites: true, maxWrites: wrong }), /--max-writes verwacht een geheel getal van 1 of meer/, wrong);
   assert.throws(() => decideWrites("https://www.example.nl/", { maxWrites: "3" }), /--max-writes hoort bij een run die mag versturen/);
@@ -305,6 +306,21 @@ test("a session writes to the test environment of its run only, and says so in t
   }
 });
 
+test("on a local address writes follow each other without a pause, until the budget is used up", () => {
+  const dir = mkdtempSync(join(tmpdir(), "loep-writes-local-"));
+  try {
+    const local = decideWrites(`${site.origin}/`, { allowWrites: true, maxWrites: "3" })!;
+    const clock = Date.parse("2026-01-02T10:00:00Z");
+    const access = writeAccess(dir, local, "session", () => clock);
+    for (let index = 0; index < 3; index++) assert.equal(access.claim("POST", `${site.origin}/callback`).ok, true, `write ${index + 1}`);
+    const out = access.claim("POST", `${site.origin}/callback`);
+    assert.deepEqual(out.ok ? null : out.budget, "out");
+    assert.equal(writeBudgetNl(writeBudget(dir, local, clock)), `nog 0 van 3 verzendingen naar ${site.origin} over voor de hele run (3 verstuurd), zonder wachttijd ertussen`);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test("the budget for sending counts for the whole run, keeps the time between two writes and refuses past the maximum", () => {
   const dir = mkdtempSync(join(tmpdir(), "loep-writes-budget-"));
   try {
@@ -352,7 +368,7 @@ test("a session past the budget for sending is held back as without permission, 
   const loep = async (session: string, command: string, ...args: string[]): Promise<Record<string, unknown>> => (await daemon.handle({ op: "command", session, command, args, options: {} })).print;
   const ref = async (session: string, query: string): Promise<string> => ((await loep(session, "find", query)).found as string[])[0]!.split(" ")[0]!;
   try {
-    assert.equal((await daemon.handle({ op: "list" })).print.writes, `nog 1 van 1 verzendingen naar ${site.origin} over voor de hele run (0 verstuurd), met minstens 0 s ertussen`);
+    assert.equal((await daemon.handle({ op: "list" })).print.writes, `nog 1 van 1 verzendingen naar ${site.origin} over voor de hele run (0 verstuurd), zonder wachttijd ertussen`);
     for (const session of ["a", "b"]) {
       await daemon.handle({ op: "start", session });
       await loep(session, "open", "/callback.html");
@@ -553,8 +569,8 @@ test("inventory refuses to start for a site that is not local without a declarat
     assert.equal(allowed.code, 0, allowed.stderr);
     assert.match(allowed.stdout, new RegExp(`versturen toegestaan naar ${site.origin.replaceAll(".", "\\.")}\n`));
     const stored = writesForRun(dir)!;
-    assert.deepEqual({ ...stored, declaredAt: "" }, { origin: site.origin, local: true, declaredBy: null, declaredAt: "", maxWrites: 5, spacingSeconds: 120 });
-    assert.match(allowed.stdout, /budget voor versturen: ten hoogste 5 verzendingen naar die origin voor de hele run/);
+    assert.deepEqual({ ...stored, declaredAt: "" }, { origin: site.origin, local: true, declaredBy: null, declaredAt: "", maxWrites: 50, spacingSeconds: 0 });
+    assert.match(allowed.stdout, /budget voor versturen: ten hoogste 50 verzendingen naar die origin voor de hele run, alle agents en de veegronde samen, zonder wachttijd ertussen\./);
     // The budget for sending is set next to the declaration, and only there.
     assert.equal((await cli("inventory", `${site.origin}/`, "--out", dir, "--urls", join(dir, "urls.txt"), "--allow-writes", "--max-writes", "3")).code, 0);
     assert.equal(writesForRun(dir)?.maxWrites, 3);
