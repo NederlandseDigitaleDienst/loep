@@ -57,6 +57,7 @@ Zoek een tegenvoorbeeld. Kijk waar de beoordelaar niet keek:
 
 - lees in zijn waarnemingen welke pagina's en toestanden hij zelf bekeek, en neem een ander paginatype, een toestand uit het sitemodel die hij oversloeg, het smalle scherm (`--width 320`), het donkere schema, of de pagina met de cookiemelding erop (`open <label> --with-blockers`);
 - loop "Bewijs bij goedkeuring" in de procedure na: dekt het dossier wat daar staat, en klopt het als jij op één plek hetzelfde meet;
+- zoek de metingen in het dossier die volgens de beslisregels een afkeuring zijn en die de beoordelaar toch wegzette (bij 1.4.12 een rij in `newlyClippedText` met `textLost: true`). Zo'n goedkeuring houdt alleen stand als jouw eigen waarneming laat zien wat de procedure als uitzondering noemt. "Het blijft leesbaar" of "het valt mee" is geen uitzondering: dan wordt het een bevinding (`V1`);
 - bij "niet van toepassing": zoek de content waar het criterium over gaat (`find tag:video`, `find role:...`, `look --full`), ook in elke toestand van het sitemodel. Rust "niet van toepassing" op kijken, zoek dan naar het soort onderdeel dat de procedure onder "Valkuilen" noemt.
 
 Vind je een aanwijsbaar gebrek dat de drie toetsen hierboven doorstaat, dan wordt de uitkomst `failed` met die bevinding (sleutel `V1`). Vind je een gat in het bewijs dat je niet zelf kunt dichten, dan wordt het `cantTell`. Vind je niets, dan blijft het oordeel staan en schrijf je in `attackNl` wat je probeerde.
