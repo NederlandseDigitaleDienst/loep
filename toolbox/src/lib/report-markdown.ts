@@ -5,7 +5,7 @@ import { modelOf } from "../instruments/methods/registry.ts";
 import { signatureIsCurrent } from "../commands/sign.ts";
 import { extensionsNl } from "./budget.ts";
 import { modelsNl } from "./models.ts";
-import { NOT_SENT, notSentOrigins, OPEN_POINT_KINDS, openPoint, OUTSIDE_SCOPE, UNREACHABLE, waitsOnlyOnSending, type Outcome } from "./verdict.ts";
+import { NOT_SENT, notSentOrigins, OPEN_POINT_KINDS, openPoint, OUTSIDE_SCOPE, UNREACHABLE, waitsOnlyOnSending, type CrossLoop, type Outcome } from "./verdict.ts";
 import { siteOrigins } from "./origins.ts";
 import { readsAllowedNl } from "./reads.ts";
 import { compareCriterionIds, type WcagVersion } from "./wcag.ts";
@@ -115,6 +115,7 @@ export const REPORT_TEXT = {
   personFailedIntro: "Bij deze criteria heeft een persoon vastgesteld dat de site niet voldoet. Er staat geen bevinding van een instrument achter: wat er mis is, staat in het antwoord van die persoon.",
   answers: "Vastgesteld door een persoon, niet door een instrument",
   before: "Het oordeel dat hiervoor stond",
+  loops: "Door twee criteria bekeken, hoort bij geen van beide",
   establishedBy: "Vastgesteld door",
   versionAccuracy: "Nauwkeurigheid van deze versie",
   recommendations: "Aanbevelingen",
@@ -219,6 +220,8 @@ export interface CriterionBrief {
   coverageNl: string | null;
   /** The open points about the evaluation itself, in full: they stand in the appendix, the work list only counts them. */
   toolboxPointsNl: string[];
+  /** What this criterion and another passed on to each other, one line each with what both said. Empty when there is none. */
+  loopsNl: string[];
 }
 
 /** The open points of one criterion that stand in the work list in full. */
@@ -684,6 +687,14 @@ function openPoints(criterion: CriterionResult): ReturnType<typeof openPoint>[] 
   return criterion.outcome === "cantTell" ? [{ kind: null, textNl: "Niet opgegeven." }] : [];
 }
 
+/** A candidate two criteria passed on to each other, in one line: where, and what each said. */
+function loopLine(criterion: string, loop: CrossLoop): string {
+  const sentence = (text: string): string => text.replace(/\s+/g, " ").trim().replace(/([^.!?])$/, "$1.");
+  const said = loop.reasons.map((reason) => `${reason.criterion}: ${sentence(reason.noteNl)}`).join(" ");
+  const undecided = loop.undecided?.length ? ` De ronde van ${loop.undecided.join(" en ")} kon niet beslissen of het er toch bij hoort; dat beslist een mens.` : "";
+  return `Op ${loop.page} (${loop.where.replace(/\s+/g, " ").trim()}): ${loop.with} en ${criterion} gaven het elk aan het andere door. ${said}${undecided}`;
+}
+
 function brief(criterion: CriterionResult): CriterionBrief {
   const points = openPoints(criterion);
   const before = criterion.established?.before;
@@ -698,6 +709,7 @@ function brief(criterion: CriterionResult): CriterionBrief {
     openNl: points.length > 0 ? plural(points.length, "punt", "punten") : null,
     coverageNl: shownOutcome(criterion) === "nothingFound" ? criterion.nothingFound!.coverageNl : criterion.established?.by === "finishing" ? (criterion.established.coverageNl ?? null) : null,
     toolboxPointsNl: points.filter((point) => point.kind?.reader === "toolbox").map((point) => `${upperFirst(point.kind!.labelNl)}: ${point.textNl}`),
+    loopsNl: (criterion.crossLoops ?? []).map((loop) => loopLine(criterion.id, loop)),
   };
 }
 
@@ -1206,6 +1218,7 @@ function appendixEntry(criterion: CriterionResult, short: CriterionBrief, chain:
   if (short.beforeNl.length > 0) lines.push(`${REPORT_TEXT.before}:`, "", ...bullets(short.beforeNl.map(esc)), "");
   if (criterion.challengeNl) lines.push(`${chain.challengeLabel}: ${esc(criterion.challengeNl)}`, "");
   if (criterion.droppedNl.length > 0) lines.push(`${chain.droppedLabel}:`, "", ...bullets(criterion.droppedNl.map(esc)), "");
+  if (short.loopsNl.length > 0) lines.push(`${REPORT_TEXT.loops}:`, "", ...bullets(short.loopsNl.map(esc)), "");
   const basis = [criterion.rule ? `Beslisregel ${criterion.rule}` : null, criterion.procedure ? `procedure versie ${criterion.procedure.version} (${esc(criterion.procedure.class)})` : "geen procedure vastgelegd"];
   lines.push(`Grondslag: ${basis.filter(Boolean).join(", ")}.`, "");
   if (criterion.procedure?.limitsNl) lines.push(`Beperking van de procedure: ${esc(criterion.procedure.limitsNl)}`, "");
