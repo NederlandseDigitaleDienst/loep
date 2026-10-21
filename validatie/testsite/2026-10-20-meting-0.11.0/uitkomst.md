@@ -112,10 +112,10 @@ Wat bij de veegronde en de vergelijking opviel:
 
 - Een proces dat eindigt op een adres met een query komt op het blad van de startpagina, en de poort mist het daar (#226).
 - De verkenner schreef dat de producten geen prijsschuif hebben. De schuif is met opzet een bouwsel zonder rol; de fout is dat de verkenner hem als niet bestaand afdeed (#227).
-- `compare-variants` noemt elke bevinding zonder tegenhanger een "onterechte melding", ook als A en B haar terecht of discutabel vinden. De meldingen in de tabellen hierboven zijn daarom "zonder tegenhanger"; volgens A en B was in geen enkele run op de negen criteria een bevinding onterecht (#241).
-- `compare --findings` loopt bij een run met `--only` alle 79 gebreken langs. Het percentage over 79 in de vergelijkingen van K en S zegt daardoor niets; tel alleen de 29 van de negen criteria (#242).
-- `sweep-check` kiest willekeurige poorten en ruimt de run op, dus een run daaruit is niet te bevriezen voor een meting (#244).
-- Het verzendbudget eist ook op een lokale site 120 seconden tussen twee verzoeken (#245).
+- `compare-variants` noemt elke bevinding zonder tegenhanger een "onterechte melding", ook als A en B haar terecht of discutabel vinden. De meldingen in de tabellen hierboven zijn daarom "zonder tegenhanger"; volgens A en B was in geen enkele run op de negen criteria een bevinding onterecht (#241, na de meting hersteld in #248; de bestanden in deze map zijn van daarvoor).
+- `compare --findings` loopt bij een run met `--only` alle 79 gebreken langs. Het percentage over 79 in de vergelijkingen van K en S zegt daardoor niets; tel alleen de 29 van de negen criteria (#242, na de meting hersteld in #249).
+- `sweep-check` kiest willekeurige poorten en ruimt de run op, dus een run daaruit is niet te bevriezen voor een meting (#244; sinds #247 kan dat met `--fixed-ports`).
+- Het verzendbudget eist ook op een lokale site 120 seconden tussen twee verzoeken (#245, na de meting hersteld in #250).
 
 ## Wat deze meting niet zegt
 
