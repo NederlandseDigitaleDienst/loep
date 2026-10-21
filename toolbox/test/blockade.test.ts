@@ -7,6 +7,7 @@ import { launchBrowser, loadPage, newContext } from "../src/browser/session.ts";
 import { Blockade, BLOCKADES_FILE, blockadesNl, MAX_FAILED_NAVIGATIONS, OriginBlocked, readBlockades, retryAfterSeconds, setRunBlockade, type BlockadeEntry } from "../src/session/blockade.ts";
 import { Daemon } from "../src/session/daemon.ts";
 import type { Observation } from "../src/session/observations.ts";
+import { VOICEOVER_FOR_TESTS } from "../src/session/voiceover-command.ts";
 import { startServer, type FixtureServer } from "./fixtures/session-site/server.ts";
 
 let site: FixtureServer;
@@ -84,6 +85,32 @@ test("a short Retry-After is waited out: the origin is refused until then and as
     assert.equal((await loep("open", "/")).ok, true);
     assert.deepEqual(blockadesNl(run), [`${site.origin} vroeg één keer om even te wachten (429 met Retry-After); het onderzoek heeft dat aangehouden.`]);
   } finally {
+    await daemon.close();
+  }
+});
+
+test("media and voiceover fetch nothing from a blocked origin outside the browser either, and say why", async () => {
+  const run = newRun();
+  const { daemon, loep } = await daemonFor(run);
+  VOICEOVER_FOR_TESTS.guest = { state: async () => "running", boot: async () => undefined, halt: async () => undefined, exec: async () => "" };
+  try {
+    assert.equal((await loep("open", "/media.html")).ok, true);
+    const film = String((((await loep("find", "css:#film")).print.found as string[]) ?? [])[0]).split(" ")[0]!;
+    // Another process notes a 429 of the site while the page is open: the file, the subtitles and the page are not asked for.
+    new Blockade(run).tooMany(`${site.origin}/x`, undefined);
+    const count = site.requests.length;
+    const listened = await daemon.handle({ op: "command", session: "main", command: "media", args: [film], options: { listen: true, wait: true } });
+    assert.match(listened.print.blockade as string, /met 429/);
+    assert.deepEqual(
+      observation(run, listened.print.id as string).blocked.map((entry) => [entry.kind, entry.resourceType]),
+      [["blockade", "texttrack"], ["blockade", "media"]],
+    );
+    const read = await loep("voiceover");
+    assert.equal(read.ok, false);
+    assert.match(read.print.error as string, /^de pagina kon niet worden opgehaald: .*\/media\.html is niet opgevraagd: .*met 429/);
+    assert.equal(site.requests.length, count, "nothing more reached the site");
+  } finally {
+    VOICEOVER_FOR_TESTS.guest = null;
     await daemon.close();
   }
 });
