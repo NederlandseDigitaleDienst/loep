@@ -473,13 +473,15 @@ export class Daemon {
     if (challenges.length > 0) print.challenge = `${challenges.length} ${challenges.length === 1 ? "verzoek" : "verzoeken"} van de controle van Cloudflare tegen robots doorgelaten (${[...new Set(challenges.map((entry) => new URL(entry.url).hostname))].join(", ")}); de site krijgt die niet`;
     if (blocked.length > 0) print.blocked = [...blocked.slice(0, MAX_BLOCKED_PRINTED).map((entry) => `${entry.kind}: ${entry.method} ${entry.url.slice(0, 100)}${entry.search ? ` (zoekvraag: ${entry.search.join(", ")})` : ""}${entry.reasonNl ? ` (${entry.reasonNl})` : ""}`), ...(blocked.length > MAX_BLOCKED_PRINTED ? [`(+${blocked.length - MAX_BLOCKED_PRINTED})`] : [])];
     // A write the budget for sending held back: the agent hears why, and what to write when nothing more can be sent.
-    const heldBack = blocked.find((entry) => entry.writeBudget === "out") ?? blocked.find((entry) => entry.writeBudget === "spacing");
+    const heldBack = blocked.find((entry) => entry.writeBudget === "out") ?? blocked.find((entry) => entry.writeBudget === "share") ?? blocked.find((entry) => entry.writeBudget === "spacing");
     if (heldBack) {
       const sending = this.writeBudget();
       print.sending =
         heldBack.writeBudget === "out" && sending
           ? `het budget voor versturen van deze run is op: ${sending.sent} van ${sending.max} verstuurd, door alle sessies en de veegronde samen. Er gaat niets meer weg. Wat daardoor niet te zien is, schrijf je als open punt: "${budgetOutPointNl(sending)}: <wat er pas na versturen te zien was>"`
-          : `${heldBack.reasonNl ?? "te kort na de vorige verzending"}. Er is niets verstuurd: kijk of een eerdere waarneming of de veegronde laat zien wat je zoekt, en doe de handeling anders na die tijd opnieuw`;
+          : heldBack.writeBudget === "share" && sending
+            ? `${heldBack.reasonNl}. Er is niets verstuurd: haal de waarneming aan van de verzending die er al was (de veegronde of een eerdere sessie van dit criterium). Is wat je zoekt daar niet te zien, schrijf het dan als open punt: "${budgetOutPointNl(sending)}: <wat er pas na versturen te zien was>"`
+            : `${heldBack.reasonNl ?? "te kort na de vorige verzending"}. Er is niets verstuurd: kijk of een eerdere waarneming of de veegronde laat zien wat je zoekt, en doe de handeling anders na die tijd opnieuw`;
     }
     const refusedByBlockade = blocked.find((entry) => entry.kind === "blockade");
     if (blockades.length > 0 || refusedByBlockade) print.blockade = blockades.length > 0 ? blockades.map(refusalNl).join(". ") : refusedByBlockade!.reasonNl;
@@ -501,7 +503,7 @@ export class Daemon {
         return { result: status, print: { ...status, note: "minuten: kloktijd sinds de sessie met deze naam voor het eerst is gestart in deze run, ook tussen de commando's en ook na stoppen en opnieuw starten; status, find, state, tools en wait tellen niet mee als commando" } };
       }
       if (command === "state") return this.state(session, rawArgs);
-      if (command === "replay") return this.replay(rawArgs, images, turn);
+      if (command === "replay") return this.replay(session, rawArgs, images, turn);
       if (command === "wait") return waitOutcome(session.jobs, options, this.limits.commandTimeoutMs - 5000);
       if (command === "tools") return toolsOutcome(this.runDir, this.second.versions);
       if (command === "sheet") return sheetOutcome(this.runDir, rawArgs, images);
@@ -630,7 +632,7 @@ export class Daemon {
     // A fresh browser context for every open: a state is a sequence of steps from a clean page.
     await session.surface?.context.close().catch(() => undefined);
     session.surface = null;
-    const { surface, load } = await openSurface(this.env, start, (context) => turn.contexts.push(context)).catch((error: Error) => {
+    const { surface, load } = await openSurface(this.env, start, (context) => turn.contexts.push(context), session.name).catch((error: Error) => {
       turn.blocked.push(...((error as Refused).blocked ?? []));
       throw error;
     });
@@ -735,12 +737,12 @@ export class Daemon {
    * Repeat an earlier observation on a fresh page: the steps that led to its state, then
    * the same command on the same element, and compare what comes out.
    */
-  private async replay(args: string[], images: Images, turn: Turn): Promise<Outcome> {
+  private async replay(session: Session, args: string[], images: Images, turn: Turn): Promise<Outcome> {
     if (!args[0]) throw new Error("replay verwacht het nummer van een waarneming, bijvoorbeeld main-0007");
     const original = await readObservation(this.runDir, args[0]);
     if (!original.state.start || !(original.command === "open" || original.command in COMMANDS)) throw new Error(`waarneming ${original.id} (${original.command}) is geen handeling of meting op een pagina en is niet af te spelen`);
     if (original.error) throw new Error(`waarneming ${original.id} eindigde zelf in een fout en is niet af te spelen`);
-    const { surface } = await openSurface(this.env, original.state.start, (context) => turn.contexts.push(context)).catch((error: Error) => {
+    const { surface } = await openSurface(this.env, original.state.start, (context) => turn.contexts.push(context), session.name).catch((error: Error) => {
       turn.blocked.push(...((error as Refused).blocked ?? []));
       throw error;
     });
