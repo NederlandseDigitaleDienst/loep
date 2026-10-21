@@ -416,8 +416,14 @@ test("what a judge passes on to another criterion counts there: unruled it leave
   assert.deepEqual(open.missingNl, points);
   assert.match(open.summaryNl, /^Niet vastgesteld: een waarneming die een andere beoordelaar doorgaf, is door niemand beoordeeld\. Het oordeel zonder die waarneming was voldoet: /);
   assert.deepEqual(openCriteria([open]).evaluation, [CRITERIA.passed]);
-  // A failure stays a failure: what was passed on can only add to it.
-  assert.equal(resolveCriterion({ ...base, verdicts: { a: null, final: null, finish: { ...passed, outcome: "failed", findings: [finding([look])] } }, unruledNl: points }, "SITE").outcome, "failed");
+  // A failure stays a failure: what was passed on can only add to it. It stays among the open points, so it does not vanish from the report.
+  const failing = resolveCriterion({ ...base, verdicts: { a: null, final: null, finish: { ...passed, outcome: "failed", findings: [finding([look])] } }, unruledNl: points }, "SITE");
+  assert.deepEqual([failing.outcome, failing.missingNl], ["failed", points]);
+  assert.equal(failing.summaryNl, "Randen steken genoeg af.");
+  // A criterion outside the run (tasks --only) keeps what was passed on to it as an open point too.
+  const outside = resolveCriterion({ ...base, verdicts: { a: null, final: null }, unruledNl: points }, "SITE");
+  assert.deepEqual([outside.outcome, outside.missingNl], ["untested", points]);
+  assert.deepEqual(unruledCrossPoints(judged, "2.4.7", [null, null]), [], "only what was passed on to that criterion");
 });
 
 test("what a verifier passes on reaches the finishing round of that criterion, also when it passed; what a finishing round passes on gets a round of its own with --again", async () => {

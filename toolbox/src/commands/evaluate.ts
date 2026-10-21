@@ -152,7 +152,8 @@ export async function evaluate(options: EvaluateOptions): Promise<Evaluation> {
           // A limit that says no screen reader was used, or nobody logged in, holds only when that is so for this criterion in this run.
           procedure: procedure ? { version: procedure.version, sha256: procedure.sha256, class: procedure.class, limitsNl: procedure.limitsNl === null ? null : runLimitsNl(procedure.limitsNl, { screenReader: [instrumentTask?.judge.session, instrumentTask?.verify?.session, instrumentTask?.finish?.session].some((session) => session !== undefined && readAloud.has(session)), loggedIn: Boolean(run.login) }) } : null,
           provenance: { dossierSha256: instrumentTask?.dossierSha256 ?? null, verdictSha256: hashes },
-          unruledNl: instrumentTask ? unruledCrossPoints(passing, criterion.id, [verdicts.final, verdicts.finish]) : [],
+          // Also for a criterion outside the run (`tasks --only`): what was passed on to it stays an open point.
+          unruledNl: unruledCrossPoints(passing, criterion.id, [verdicts.final, verdicts.finish]),
           outage: instrumentTask !== undefined && !verdicts.finish && skippedForOutage(options.run, instrumentTask),
         },
         prefix,

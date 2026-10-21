@@ -375,7 +375,7 @@ export interface CriterionInput {
   answers?: PointAnswer[];
   procedure: CriterionResult["procedure"];
   provenance: CriterionResult["provenance"];
-  /** Open points about candidates other judges passed on to this criterion that no verdict of it ruled on (`unruledCrossPoints`). */
+  /** Open points about candidates other rounds passed on to this criterion that no verdict of it ruled on (`unruledCrossPoints`), also when it failed or is not in the run. */
   unruledNl?: string[];
   /** A round of this criterion was given up on for a storing of the model, and no round after it gave a verdict. */
   outage?: boolean;
@@ -428,9 +428,11 @@ export function resolveCriterion(input: CriterionInput, sitePrefix: string): Cri
   const byPerson = answered !== null && answered.outcome !== "cantTell";
   const reached: CriterionOutcome = byPerson ? answered.outcome : (final?.outcome ?? "untested");
   // A pass next to a candidate another criterion passed on and nobody ruled on is no pass: that place was not looked at.
-  // An open criterion keeps it among its points, so it does not read as one that only waits for a person.
-  const unruled = reached === "passed" || reached === "inapplicable" || reached === "cantTell" ? (input.unruledNl ?? []) : [];
-  const outcome: CriterionOutcome = unruled.length > 0 ? "cantTell" : reached;
+  // Every other outcome keeps it among its points: an open criterion so it does not read as one that only waits for a person,
+  // a failed one or one outside the run so the defect another round saw does not vanish from the report.
+  const unruled = input.unruledNl ?? [];
+  const undone = unruled.length > 0 && (reached === "passed" || reached === "inapplicable");
+  const outcome: CriterionOutcome = undone ? "cantTell" : reached;
   const beforeFinish = verified ?? verdicts.a;
   const byWatch = byPerson && answered.counted.every((answer) => answer.instrument === true);
   const established: Established | null = !final
@@ -501,7 +503,7 @@ export function resolveCriterion(input: CriterionInput, sitePrefix: string): Cri
     outcome,
     rule: final?.rule ?? null,
     // What a person established is said first: the summary of the agent was written while the question was open.
-    summaryNl: unruled.length > 0 && reached !== "cantTell"
+    summaryNl: undone
       ? `Niet vastgesteld: ${unruled.length === 1 ? "een waarneming die een andere beoordelaar doorgaf, is" : `${unruled.length} waarnemingen die een andere beoordelaar doorgaf, zijn`} door niemand beoordeeld. Het oordeel zonder die ${unruled.length === 1 ? "waarneming" : "waarnemingen"} was ${OUTCOME_LABEL[reached].toLowerCase()}: ${final!.summaryNl}`
       : byPerson
         ? `Een persoon heeft vastgesteld: ${OUTCOME_LABEL[outcome].toLowerCase()}. Dit is vastgesteld door een persoon, niet door een instrument. Het onderzoek zelf kwam niet verder dan: ${final!.summaryNl}`
