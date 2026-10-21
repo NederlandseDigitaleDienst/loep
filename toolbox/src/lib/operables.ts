@@ -33,11 +33,24 @@ export interface OperableGroup {
   controls?: number;
 }
 
+/** An element that looks operable but has no role and no Tab stop, as `looksOperable` of the in-page library finds it. */
+export interface LooksOperable {
+  path: string;
+  text: string;
+  region: string | null;
+  /** Why it looks operable: "click-listener", "press-listener", "onclick", "cursor: pointer", a data attribute. */
+  signals: string[];
+  /** The opening tag: for an empty div often the class name is the only thing that says what it is. */
+  html: string;
+}
+
 /** The groups of one page type, counted on its representative page. */
 export interface CountedPage {
   pageType: string;
   url: string;
   groups: OperableGroup[];
+  /** What looks operable there in the default window without presenting itself as a control. Not counted in `groups`: nothing says what it is. */
+  looksOperable?: LooksOperable[];
 }
 
 /** The groups of a page in the default window, with what only the narrow window adds. */

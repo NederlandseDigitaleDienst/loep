@@ -20,7 +20,7 @@ import { buildSample, sample } from "../src/commands/sample.ts";
 import { tabWalk } from "../src/instruments/keyboard.ts";
 import { legend, siteStates, targetSize } from "../src/lib/extractors.ts";
 import { loadRun, type PageData, type RunData } from "../src/lib/rundata.ts";
-import { acceptedGapFor, frameStanding, loadSiteModel, NOT_OPENED_ON_PAGE_TYPE, notOpenedAdviceNl, searchTermForRun, siteDescription, validateSiteModel, type ModelContext, type SiteModel } from "../src/lib/sitemodel.ts";
+import { acceptedGapFor, frameStanding, loadSiteModel, NOT_OPENED_ON_PAGE_TYPE, notOpenedAdviceNl, REVIEW_MISSING, searchTermForRun, siteDescription, validateSiteModel, type ModelContext, type SiteModel } from "../src/lib/sitemodel.ts";
 import { Daemon } from "../src/session/daemon.ts";
 
 // A site with the traps a sweep walks into: a banner over the page, a menu behind a
@@ -111,6 +111,19 @@ function validModel(): SiteModel {
 test("a complete site model passes the validator", () => {
   assert.deepEqual(validateSiteModel(validModel(), CONTEXT), []);
   assert.deepEqual(validateSiteModel({ ...validModel(), acceptedGaps: [{ check: "tab-trapped", page: "https://site.nl/", reasonNl: "Echte toetsenbordval in het menu", observation: "verken-0003", decidedBy: "verkenner" }] }, CONTEXT), []);
+});
+
+test("a part the review saw is only dismissed as not there with a look at the page that shows it", () => {
+  const gap = { check: REVIEW_MISSING, page: "https://site.nl/contact/", reasonNl: "Er staat geen prijsschuif op deze pagina", observation: "verken-0003", decidedBy: "verkenner" };
+  const withGap = { ...validModel(), acceptedGaps: [gap] };
+  assert.deepEqual(validateSiteModel(withGap, { ...CONTEXT, looksSeen: { "verken-0003": "https://site.nl/contact/?tab=1" } }), [], "a look at the page, with a query, shows it");
+  for (const looked of [null, "https://site.nl/"]) {
+    const problems = validateSiteModel(withGap, { ...CONTEXT, looksSeen: { "verken-0003": looked } });
+    assert.equal(problems.length, 1, String(looked));
+    assert.match(problems[0]!, /alleen af als niet bestaand met een waarneming die dat laat zien: een look, crop, html, find of ax op https:\/\/site\.nl\/contact\/ die slaagde.*operables\.json/);
+  }
+  assert.equal(validateSiteModel(withGap, { ...CONTEXT, looksSeen: {} }).length, 1, "an observation that was not read is no look either");
+  assert.deepEqual(validateSiteModel({ ...withGap, acceptedGaps: [{ ...gap, check: "tab-trapped" }] }, { ...CONTEXT, looksSeen: {} }), [], "other gaps keep their own rules");
 });
 
 test("the validator refuses a model that does not fit the run", () => {
