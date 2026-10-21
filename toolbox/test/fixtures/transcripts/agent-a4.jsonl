@@ -1,0 +1,1 @@
+{"type":"assistant","message":{"id":"msg_a4_1","model":"claude-opus-5-5","role":"assistant","content":[{"type":"text","text":"Ik loop de startpagina langs."}],"usage":{"input_tokens":2,"cache_creation_input_tokens":100,"cache_read_input_tokens":1000,"output_tokens":5}}}

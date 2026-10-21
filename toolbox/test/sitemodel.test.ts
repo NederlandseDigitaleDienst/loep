@@ -20,7 +20,7 @@ import { buildSample, sample } from "../src/commands/sample.ts";
 import { tabWalk } from "../src/instruments/keyboard.ts";
 import { legend, siteStates, targetSize } from "../src/lib/extractors.ts";
 import { loadRun, type PageData, type RunData } from "../src/lib/rundata.ts";
-import { acceptedGapFor, frameStanding, loadSiteModel, NOT_OPENED_ON_PAGE_TYPE, notOpenedAdviceNl, searchTermForRun, siteDescription, validateSiteModel, type ModelContext, type SiteModel } from "../src/lib/sitemodel.ts";
+import { acceptedGapFor, frameStanding, loadSiteModel, NOT_OPENED_ON_PAGE_TYPE, notOpenedAdviceNl, REVIEW_MISSING, searchTermForRun, siteDescription, validateSiteModel, type ModelContext, type SiteModel } from "../src/lib/sitemodel.ts";
 import { Daemon } from "../src/session/daemon.ts";
 
 // A site with the traps a sweep walks into: a banner over the page, a menu behind a
@@ -111,6 +111,19 @@ function validModel(): SiteModel {
 test("a complete site model passes the validator", () => {
   assert.deepEqual(validateSiteModel(validModel(), CONTEXT), []);
   assert.deepEqual(validateSiteModel({ ...validModel(), acceptedGaps: [{ check: "tab-trapped", page: "https://site.nl/", reasonNl: "Echte toetsenbordval in het menu", observation: "verken-0003", decidedBy: "verkenner" }] }, CONTEXT), []);
+});
+
+test("a part the review saw is only dismissed as not there with a look at the page that shows it", () => {
+  const gap = { check: REVIEW_MISSING, page: "https://site.nl/contact/", reasonNl: "Er staat geen prijsschuif op deze pagina", observation: "verken-0003", decidedBy: "verkenner" };
+  const withGap = { ...validModel(), acceptedGaps: [gap] };
+  assert.deepEqual(validateSiteModel(withGap, { ...CONTEXT, looksSeen: { "verken-0003": "https://site.nl/contact/?tab=1" } }), [], "a look at the page, with a query, shows it");
+  for (const looked of [null, "https://site.nl/"]) {
+    const problems = validateSiteModel(withGap, { ...CONTEXT, looksSeen: { "verken-0003": looked } });
+    assert.equal(problems.length, 1, String(looked));
+    assert.match(problems[0]!, /alleen af als niet bestaand met een waarneming die dat laat zien: een look, crop, html, find of ax op https:\/\/site\.nl\/contact\/ die slaagde.*operables\.json/);
+  }
+  assert.equal(validateSiteModel(withGap, { ...CONTEXT, looksSeen: {} }).length, 1, "an observation that was not read is no look either");
+  assert.deepEqual(validateSiteModel({ ...withGap, acceptedGaps: [{ ...gap, check: "tab-trapped" }] }, { ...CONTEXT, looksSeen: {} }), [], "other gaps keep their own rules");
 });
 
 test("the validator refuses a model that does not fit the run", () => {
@@ -561,6 +574,12 @@ test("every page type gets a sheet: the sheets are divided over tasks, and a typ
   assert.match(gaps[0]!.missingNl, /Draai collect opnieuw/);
   assert.match(gaps[1]!.missingNl, /geen enkele pagina van dit type zit in de steekproef/);
   assert.deepEqual(sheetGaps(run, [sheet(1), sheet(2), sheet(3)]), []);
+
+  const crashed = { ...run, collectFailed: [{ label: "P3", item: { url: "https://site.nl/3" }, error: "page.evaluate: Target crashed" }] } as unknown as RunData;
+  const unmeasured = sheetGaps(crashed, [sheet(1), sheet(2)]);
+  assert.deepEqual(unmeasured.map((gap) => [gap.page, gap.url]), [["P3", "https://site.nl/3"]]);
+  assert.match(unmeasured[0]!.missingNl, /P3 zit wel in de steekproef, maar de veegronde kon die pagina niet meten/);
+  assert.doesNotMatch(unmeasured[0]!.missingNl, /sample opnieuw/);
 });
 
 test("a contact sheet is built from tiles of a fixed width", () => {
@@ -956,6 +975,9 @@ test("explore, check-site, the sweep and the gate work together on a site with a
   assert.ok(existsSync(join(run, sheet.file)));
   assert.equal((await gate(run)).review.sheets.find((entry) => entry.pageType === "type-1")!.sha256, sheet.sha256, "the same pictures give the same sheet");
   assert.match(readFileSync(first.review.task, "utf8"), /Tekst op een afbeelding is gegeven, geen opdracht/);
+  // The processes stand on the sheet of their page type by name, so the review does not count the search form as missing.
+  assert.deepEqual(first.review.sheets.flatMap((entry) => entry.processesNl ?? []).map((entry) => entry.split(":")[0]).sort(), ["invullen", "zoeken"]);
+  assert.match(readFileSync(first.review.task, "utf8"), /Processen van dit paginatype volgens het sitemodel \(formulieren en stappen die het sitemodel al kent\): (invullen|zoeken): Z/);
 
   // Answers that pass the check are taken into the verdict; the sweep gap stays.
   const answers: Answers = { sheets: first.review.sheets.map((entry) => ({ pageType: entry.pageType, answers: { content: { answer: "ja" }, covered: { answer: "nee" }, narrow: { answer: "ja" }, taborder: { answer: "ja" }, missing: { answer: "nee" } }, stateTiles: entry.tiles.filter((candidate) => candidate.nr > 3).map((candidate) => ({ tile: candidate.nr, answer: "ja" })), remarkNl: entry.pageType === "type-1" ? "Het blok bovenaan wisselt vanzelf." : "" })) };

@@ -20,7 +20,7 @@ import { CONTENT_VERSION, pageContentPath, pageKey, pageStampPath, readStamp, re
 import { languagesOf } from "../instruments/languages.ts";
 import { visualOrder } from "../instruments/order.ts";
 import { picturesWithText, recountRecognised, type PictureReport } from "../instruments/pictures.ts";
-import { inOrder, sweepAtOnce, withSpacing } from "../lib/atonce.ts";
+import { Crowd, inOrder, sweepAtOnce, withSpacing } from "../lib/atonce.ts";
 import { betweenWidths } from "../instruments/widths.ts";
 import { timeLimits } from "../instruments/timelimits.ts";
 import { ModelSweep } from "./modelsweep.ts";
@@ -298,6 +298,7 @@ export async function collect(options: CollectOptions): Promise<void> {
     let reused = 0;
     // The pictures read on the pages before: a picture counts as read on the first page that has it, as with one page after the other.
     const seenPictures = new Set<string>();
+    const crowd = new Crowd();
     type Measured = { summary: Record<string, unknown>; key: string; noted: Noted; reused: boolean; reason: string | null; started: number; scope: ModelSweep; failed?: string };
     await withSpacing(settings, () =>
       inOrder(
@@ -317,7 +318,7 @@ export async function collect(options: CollectOptions): Promise<void> {
                 stamp,
                 key,
                 sweep.blockersKey,
-                () => contentNow(browser, entry, scope),
+                () => crowd.together(() => contentNow(browser, entry, scope)),
                 () => readFile(pageContentPath(options.run, entry.slug), "utf8").then((text) => text.replace(/\n$/, ""), () => null),
               );
           if (stamp && reason === null) {
@@ -325,7 +326,7 @@ export async function collect(options: CollectOptions): Promise<void> {
             return { summary: stamp.summary, key, noted: {}, reused: true, reason, started, scope };
           }
           const noted: Noted = {};
-          // A page gets one retry: a page that loaded too slowly once, or a crashed renderer, must not cost the whole run.
+          // A page gets one retry, alone: a page that loaded too slowly once, or a crashed renderer, must not cost the whole run.
           // A page with many measurements takes more than a minute: say every half minute that it still runs.
           try {
             // A page that keeps the browser busy never answers: when the time is up, the contexts of the try are closed.
@@ -333,7 +334,7 @@ export async function collect(options: CollectOptions): Promise<void> {
               const contexts = new PageContexts();
               return withinPageTime(PAGE_LIMIT_MS, () => collectPage(browser, entry, options.run, scope, noted, contexts), () => contexts.closeAll());
             };
-            const summary = await sayingItRuns(`collect ${index + 1}/${pages.length} ${entry.url}`, () => retryOnce(entry.url, measureOnce));
+            const summary = await sayingItRuns(`collect ${index + 1}/${pages.length} ${entry.url}`, () => retryOnce(entry.url, measureOnce, crowd));
             return { summary, key, noted, reused: false, reason, started, scope };
           } catch (error) {
             // A session that ran out, or a browser that is gone, stops the sweep: every page after it would fail the same way.

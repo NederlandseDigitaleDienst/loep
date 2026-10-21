@@ -5,7 +5,8 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { DEFECTS } from "../fixtures/defects.ts";
 import { EVIDENCE, isAgentOnly } from "../fixtures/evidence.ts";
-import { baselineOf, compareWithBaseline, installModel, mergeRows, placeOf, reportMarkdown, SWEEP_PAGES, type Report, type Row } from "../scripts/sweep-check.ts";
+import { DEFAULT_PORTS } from "../fixtures/serve.ts";
+import { baselineOf, compareWithBaseline, fixturePorts, installModel, mergeRows, placeOf, reportMarkdown, SWEEP_PAGES, type Report, type Row } from "../scripts/sweep-check.ts";
 
 const row = (defect: string, found: boolean | null, twin: boolean | null): Row => ({ defect, criterion: defect.split("-")[0]!, kind: found === null ? "agent" : "script", whereNl: "probes/x.json", found, missingOn: found === false ? ["/"] : [], twin, twinOn: twin ? ["/"] : [] });
 
@@ -80,4 +81,10 @@ test("the reports of the two jobs make one table: Lindewaard from the one, Berke
   // A variant that was not measured keeps what the baseline said.
   const baseline = baselineOf([row("1.1.1-a", true, true)]);
   assert.deepEqual(baselineOf(berkenveen, baseline).defects["1.1.1-a"], { found: true, twin: false });
+});
+
+test("the check serves the fixture on free ports, and with --fixed-ports on those of just testsite, so a run opens again afterwards", () => {
+  assert.deepEqual(fixturePorts(false), { defect: 0, clean: 0, thirdParty: 0 });
+  assert.deepEqual(fixturePorts(true), { defect: 4710, clean: 4711, thirdParty: 4712 });
+  assert.deepEqual(fixturePorts(true), DEFAULT_PORTS);
 });

@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { readJson, sha256, sha256File } from "./canonical.ts";
-import { readMatches, readRequestProblems, type ReadRequest } from "./reads.ts";
+import { addressOf, readMatches, readRequestProblems, type ReadRequest } from "./reads.ts";
 import { SEARCH_FALLBACK, SEARCH_NONE, SEARCH_TERM_FORM } from "./searchterm.ts";
 
 /**
@@ -186,6 +186,8 @@ export type AcceptedGapDecider = (typeof ACCEPTED_GAP_DECIDERS)[number];
 
 /** The check that refuses a component that did not open on one of its page types: the gate after the sweep, `check-site` before it. */
 export const NOT_OPENED_ON_PAGE_TYPE = "component-not-opened-on-page-type";
+/** The gap of the gate when the review sees a part on a sheet that the site model does not have. */
+export const REVIEW_MISSING = "review-missing";
 
 /** The check for a state picture that the review of the gate rejected. */
 export const REVIEW_STATE_CHECK = "review-state";
@@ -259,9 +261,19 @@ export interface ModelContext {
   media?: Record<string, { audio: number; video: number }>;
   /** Per observation that a read request names: the requests it held back or let through as a read. Absent when not checked. */
   requestsSeen?: Record<string, { method: string; url: string; /** The search services whose form loep recognised in the body. */ search?: string[] }[]>;
+  /** Per observation that an accepted gap of `review-missing` names: the page a look command that succeeded looked at, else null. Absent when not checked. */
+  looksSeen?: Record<string, string | null>;
 }
 
 const ID = /^[a-z0-9][a-z0-9-]{0,40}$/;
+
+/**
+ * The page type a page belongs to: the one that lists its address, or else one that lists the
+ * same page without query and anchor, such as `zoeken.html` for `zoeken.html?q=gemeente`.
+ */
+export function pageTypeOf(model: Pick<SiteModel, "pageTypes">, url: string): string | null {
+  return model.pageTypes.find((type) => type.pages.includes(url))?.id ?? model.pageTypes.find((type) => type.pages.some((page) => addressOf(page) === addressOf(url)))?.id ?? null;
+}
 
 /** Origin and path of a frame: the part of its address that says which frame it is. */
 export function frameAddress(url: string): string {
@@ -499,6 +511,11 @@ export function validateSiteModel(value: unknown, context: ModelContext): string
         } else if (gap.state !== undefined) problems.push(`${where}: "state" hoort alleen bij "${REVIEW_STATE_CHECK}"`);
         if (!(ACCEPTED_GAP_DECIDERS as readonly unknown[]).includes(gap.decidedBy)) problems.push(`${where}: "decidedBy" zegt wie de uitzondering heeft vastgesteld: "verkenner" als de verkenner dat deed, "persoon" als een persoon dat zelf deed; zonder telt de regel niet`);
         if (context.observations && !context.observations.has(gap.observation as string)) problems.push(`${where}: waarneming ${String(gap.observation)} bestaat niet in deze run`);
+        else if (gap.check === REVIEW_MISSING && context.looksSeen) {
+          // Saying a part the review saw is not there needs a look at the page that shows it; a row missing from operables.json shows nothing.
+          const looked = context.looksSeen[gap.observation as string];
+          if (!looked || addressOf(looked) !== addressOf(gap.page as string)) problems.push(`${where}: een onderdeel dat de bewijspoort mist, doe je alleen af als niet bestaand met een waarneming die dat laat zien: een look, crop, html, find of ax op ${String(gap.page)} die slaagde. Waarneming ${String(gap.observation)} is dat niet. Dat een rij in operables.json ontbreekt, laat niets zien; kijk naar de pagina zelf.`);
+        }
       }
     }
   }

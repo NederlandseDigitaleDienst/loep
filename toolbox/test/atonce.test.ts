@@ -3,8 +3,9 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, test } from "node:test";
+import { retryOnce } from "../src/browser/session.ts";
 import { recountRecognised, type PictureReport } from "../src/instruments/pictures.ts";
-import { inOrder, Slots, sweepAtOnce, Turns } from "../src/lib/atonce.ts";
+import { Crowd, inOrder, Slots, sweepAtOnce, Turns } from "../src/lib/atonce.ts";
 import { DEFAULT_DAEMON_LIMITS } from "../src/session/safety.ts";
 
 const pause = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
@@ -141,6 +142,73 @@ describe("browsers shared by groups, and pages that choose in turn", () => {
       if (atOnce === 1) assert.deepEqual(order, ["tried 0", "tried 1", "tried 2", "tried 4"]);
     }
     assert.deepEqual(alone, [["a", "b", "c"], ["d"], ["e"], [], []], "the limit runs out on the third page");
+  });
+});
+
+describe("a second try alone", () => {
+  test("waits until the work that runs together has ended, and no new work starts together until it is done", async () => {
+    const crowd = new Crowd();
+    const events: string[] = [];
+    const together = (name: string, ms: number) =>
+      crowd.together(async () => {
+        events.push(`start ${name}`);
+        await pause(ms);
+        events.push(`end ${name}`);
+      });
+    const first = together("a", 30);
+    const second = together("b", 10);
+    await pause(1);
+    const alone = crowd.alone(async () => {
+      events.push("start alone");
+      await pause(10);
+      events.push("end alone");
+    });
+    // Asked for after the second try: it waits for it, also when the work it would join is still running.
+    await pause(1);
+    const later = together("c", 1);
+    await Promise.all([first, second, alone, later]);
+    assert.deepEqual(events, ["start a", "start b", "end b", "end a", "start alone", "end alone", "start c", "end c"]);
+  });
+
+  test("two second tries run one after the other, and a failure frees the crowd", async () => {
+    const crowd = new Crowd();
+    let running = 0;
+    let most = 0;
+    const alone = (fail: boolean) =>
+      crowd.alone(async () => {
+        running++;
+        most = Math.max(most, running);
+        await pause(5);
+        running--;
+        if (fail) throw new Error("tweede poging mislukt");
+      });
+    await Promise.all([assert.rejects(alone(true), /tweede poging mislukt/), alone(false)]);
+    assert.equal(most, 1);
+    assert.equal(await crowd.together(async () => 7), 7);
+  });
+
+  test("retryOnce tries again alone, and only after a failure", async () => {
+    const crowd = new Crowd();
+    const events: string[] = [];
+    let tries = 0;
+    const page = retryOnce(
+      "pagina",
+      async () => {
+        tries++;
+        events.push(`try ${tries}`);
+        if (tries === 1) throw new Error("page.evaluate: Target crashed");
+        return "gemeten";
+      },
+      crowd,
+    );
+    const other = crowd.together(async () => {
+      await pause(20);
+      events.push("other page done");
+    });
+    assert.equal(await page, "gemeten");
+    await other;
+    assert.deepEqual(events, ["try 1", "other page done", "try 2"]);
+    assert.equal(await retryOnce("pagina", async () => "meteen", crowd), "meteen");
   });
 });
 
