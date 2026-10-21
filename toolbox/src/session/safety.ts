@@ -139,6 +139,8 @@ export interface Guard {
   replays?: (PassedReplay & { noteNl: string })[];
   /** Read requests of the site model that were let through, without their body; absent until the first one. */
   reads?: PassedRead[];
+  /** Addresses of the sockets the page opened inside the scope: what the explorer compares to find the pattern of `sendsTo`. Absent until the first one. */
+  sockets?: string[];
   /** Requests of Cloudflare's check whether the browser is a robot that were let through and would otherwise have been refused; absent until the first one. */
   challenges?: PassedChallenge[];
   /** True between two commands of the agent: what the page sends over a socket then, it sends by itself. Absent: an agent may be acting. */
@@ -273,6 +275,7 @@ export async function guardContext(context: BrowserContext, scope: Scope, guard:
     const server = inScope(scope, url) && !refusedBy ? socket.connectToServer() : null;
     if (refusedBy) guard.blocked.push({ at: new Date().toISOString(), kind: "blockade", method: "GET", url: url.slice(0, MAX_URL), resourceType: "websocket", reasonNl: refusalNl(refusedBy) });
     else if (!server) note("scope", "GET", url, "websocket");
+    else (guard.sockets ??= []).push(url.slice(0, MAX_URL));
     // Only a socket of the test environment may carry what the page says.
     const free = server !== null && isWriteOrigin(scope.writes, url);
     const frames = new SocketFrames(MESSAGE_VALUES);
@@ -298,7 +301,8 @@ export async function guardContext(context: BrowserContext, scope: Scope, guard:
       if (counted) {
         const recording = recordings!.find(url, message);
         if (recording) {
-          (guard.replays ??= []).push({ ...recordings!.replayed(url, recording, guard.sender), noteNl: replayNl(recording) });
+          const replayed = recordings!.replayed(url, recording, guard.sender);
+          (guard.replays ??= []).push({ ...replayed, noteNl: replayNl(recording, replayed.matchedOn) });
           return playRecording(recording, (reply) => socket.send(reply));
         }
       }

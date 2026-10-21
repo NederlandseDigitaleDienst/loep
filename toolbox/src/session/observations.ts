@@ -101,6 +101,8 @@ export interface Observation {
   replays?: PassedReplay[];
   /** Read requests of the site model that were let through while the command ran; absent when there were none. */
   reads?: PassedRead[];
+  /** Addresses of the sockets the page opened while the command ran; absent when there were none. */
+  sockets?: string[];
   /** Requests of Cloudflare's check whether the browser is a robot that were let through while the command ran and would otherwise have been refused; absent when there were none. */
   challenges?: PassedChallenge[];
   /** Origins of the site that blocked the run while the command ran (see `Blockade`); absent when none did. */

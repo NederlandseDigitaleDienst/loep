@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
+import { createHash } from "node:crypto";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -12,7 +13,8 @@ import { probeForms } from "../src/instruments/forms.ts";
 import { formErrors } from "../src/lib/extractors.ts";
 import { REGULAR_PATH, type RunData } from "../src/lib/rundata.ts";
 import { budgetOutPointNl, criterionSender, decideWrites, isOurMessage, isProtocolFrame, reservedWrites, senderOf, SocketFrames, DEFAULT_MAX_WRITES, DEFAULT_WRITE_SPACING_SECONDS, recordWrites, WRITES_BLOCKED_NL, writeAccess, writeBudget, writeBudgetNl, writesAllowedNl, writesForRun, type PassedWrite, type WritePermission } from "../src/lib/writes.ts";
-import { pathPattern, RECORD_QUIET_MS, readRecordings, readReplays, recordingKey, replayNl, replaysNl, socketRecordings } from "../src/lib/recordings.ts";
+import { DECLARED_ORIGIN, RECORD_QUIET_MS, readRecordings, readReplays, recordingKey, replayNl, replaysNl, socketRecordings } from "../src/lib/recordings.ts";
+import { approvedSendsTo, sendsToMatches, sendsToProblems, sendsToReplayProblem } from "../src/lib/sitemodel.ts";
 import { Daemon } from "../src/session/daemon.ts";
 import type { Observation } from "../src/session/observations.ts";
 import { DEFAULT_DAEMON_LIMITS, MESSAGE_VALUES, Politeness, scopeForRun, TEST_VALUES } from "../src/session/safety.ts";
@@ -516,7 +518,7 @@ test("the answer to a chat message is recorded once, and the same message is pla
       );
       const replays = surface.guard.replays ?? [];
       await surface.context.close();
-      return [...replies, ...replays.map((entry) => `afgespeeld ${entry.key}`)];
+      return [...replies, ...replays.map((entry) => `afgespeeld ${entry.key} op ${entry.matchedOn}`)];
     };
     const message = JSON.stringify({ type: "chat", text: TEST_VALUES.text });
     // The first time it is sent for real, and the answer is recorded when the socket closes.
@@ -526,19 +528,21 @@ test("the answer to a chat message is recorded once, and the same message is pla
     assert.deepEqual(recording!.frames.map((frame) => frame.text), ['{"type":"reply","text":"Ontvangen"}', '{"type":"reply","text":"Waarmee kan ik helpen?"}']);
     assert.ok(recording!.frames[1]!.afterMs > recording!.frames[0]!.afterMs, "the time between the frames is kept");
     // The second time, with the budget used up, it is played: the page gets the same answer and the server nothing.
-    assert.deepEqual(await chat([JSON.stringify({ type: "chat", text: TEST_VALUES.text, at: 2 })]), ['{"type":"reply","text":"Ontvangen"}', '{"type":"reply","text":"Waarmee kan ik helpen?"}', `afgespeeld ${TEST_VALUES.text}`]);
+    assert.deepEqual(await chat([JSON.stringify({ type: "chat", text: TEST_VALUES.text, at: 2 })]), ['{"type":"reply","text":"Ontvangen"}', '{"type":"reply","text":"Waarmee kan ik helpen?"}', `afgespeeld ${TEST_VALUES.text} op ${DECLARED_ORIGIN}`]);
     assert.deepEqual(site.socketMessages, [message]);
     assert.equal(writeBudget(dir, limited).sent, 1);
     assert.deepEqual(readReplays(dir).map((entry) => entry.recording), [recording!.id]);
-    // The same message on another path of the origin is another chat: it is not played, and is held back past the budget.
-    assert.deepEqual(await chat([message], "/andere-dienst", 300), []);
+    // Without a pattern in the site model the path does not count: the next connection has a token of letters only, as in a real run, and still gets the recording, without a second claim.
+    assert.deepEqual(await chat([message], "/ws/chat/SFUjvfumdfeMLKtn", 600), ['{"type":"reply","text":"Ontvangen"}', '{"type":"reply","text":"Waarmee kan ik helpen?"}', `afgespeeld ${TEST_VALUES.text} op ${DECLARED_ORIGIN}`]);
+    assert.deepEqual(await chat([message], "/ws/chat/QpXzLmNoTRwabcde", 600), ['{"type":"reply","text":"Ontvangen"}', '{"type":"reply","text":"Waarmee kan ik helpen?"}', `afgespeeld ${TEST_VALUES.text} op ${DECLARED_ORIGIN}`]);
     assert.deepEqual(site.socketMessages, [message]);
-    assert.equal(readReplays(dir).length, 1);
+    assert.equal(writeBudget(dir, limited).sent, 1);
+    assert.equal(readReplays(dir).length, 3);
     // A frame without a test value has no recording: it is never played, and counts against the budget as before.
     assert.equal(recordingKey('{"type":"open","channel":"support"}', MESSAGE_VALUES), null);
     assert.deepEqual(await chat(['{"type":"open","channel":"support"}'], "/chat", 300), []);
     assert.deepEqual(site.socketMessages, [message]);
-    assert.equal(readReplays(dir).length, 1);
+    assert.equal(readReplays(dir).length, 3);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -601,11 +605,11 @@ test("a socket closed before the server answered leaves no recording, and the ne
   }
 });
 
-test("a recording cut off while the server was still answering is kept as incomplete and never played; the path and query count", () => {
+test("a recording cut off while the server was still answering is kept as incomplete and never played; without a pattern the path does not count", () => {
   const dir = mkdtempSync(join(tmpdir(), "loep-writes-recordings-"));
   try {
     let clock = 0;
-    const recordings = socketRecordings(dir, "states", MESSAGE_VALUES, () => clock);
+    const recordings = socketRecordings(dir, "states", MESSAGE_VALUES, { now: () => clock, sendsTo: [] });
     const message = JSON.stringify({ text: TEST_VALUES.text });
     const url = "wss://test.example.nl/chat?room=1";
     // Nothing came back: no recording at all.
@@ -626,8 +630,10 @@ test("a recording cut off while the server was still answering is kept as incomp
     clock += RECORD_QUIET_MS;
     whole.end();
     assert.equal(recordings.find(url, message)?.path, "/chat?room=1");
-    assert.equal(recordings.find("wss://test.example.nl/chat?room=2", message), null);
-    assert.equal(recordings.find("wss://test.example.nl/andere-dienst", message), null);
+    assert.equal(recordings.find("wss://test.example.nl/chat?room=2", message)?.path, "/chat?room=1");
+    assert.equal(recordings.find("wss://test.example.nl/andere-dienst", message)?.path, "/chat?room=1");
+    assert.equal(recordings.find("https://test.example.nl/chat?room=1", message), null, "a request over HTTP is another kind of connection");
+    assert.equal(recordings.find("wss://other.example.nl/chat?room=1", message), null, "another origin");
     assert.equal(recordings.start(url, '{"type":"open"}'), null);
     assert.match(replaysNl(dir)!, /^Van één bericht in een chat/);
   } finally {
@@ -850,17 +856,17 @@ test("the evaluation says how many messages were recorded and how often a record
     assert.equal(replaysNl(dir), null);
     writeFileSync(join(dir, "opnames.jsonl"), `${JSON.stringify({ id: "a", at: "2026-10-21T09:00:00Z", source: "states", origin: "https://chat.example.nl", path: "/ws", key: "x", frames: [] })}\n`);
     writeFileSync(join(dir, "afgespeeld.jsonl"), `${JSON.stringify({ at: "2026-10-21T09:10:00Z", source: "b-331", recording: "a", path: "/ws", key: "x" })}\n`.repeat(3));
-    assert.equal(replaysNl(dir), "Van één bericht in een chat is het antwoord van de server opgenomen toen het echt werd verstuurd, ook als dat antwoord was dat er een tijd niets kwam. Daarna is 3 keer hetzelfde bericht niet opnieuw verstuurd, maar is de opname afgespeeld: de pagina kreeg het antwoord van toen, met dezelfde tussentijden. Wat de pagina ermee deed, is gemeten; wat de server later uit zichzelf zou doen, niet");
+    assert.equal(replaysNl(dir), "Van één bericht in een chat is het antwoord van de server opgenomen toen het echt werd verstuurd, ook als dat antwoord was dat er een tijd niets kwam. Daarna is 3 keer hetzelfde bericht niet opnieuw verstuurd, maar is de opname afgespeeld: de pagina kreeg het antwoord van toen, met dezelfde tussentijden. Wat de pagina ermee deed, is gemeten; wat de server later uit zichzelf zou doen, niet. Gezocht is op de verklaarde origin van de testomgeving, met de testwaarden in het bericht");
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
 });
 
-test("a silence of the server is an answer when it lasted, and a conversation token in the address of the socket does not make a message another one", () => {
+test("a silence of the server is an answer when it lasted, and a token in the address of the socket does not make a message another one", () => {
   const dir = mkdtempSync(join(tmpdir(), "loep-writes-silence-"));
   try {
     let clock = Date.parse("2026-10-21T17:00:00Z");
-    const recordings = socketRecordings(dir, "states", MESSAGE_VALUES, () => clock);
+    const recordings = socketRecordings(dir, "states", MESSAGE_VALUES, { now: () => clock, sendsTo: [] });
     const message = JSON.stringify({ type: "chat", text: TEST_VALUES.text });
     // Closed two seconds after the send: too soon to say the server keeps quiet.
     recordings.start("wss://chat.example.nl/ws/nldd/sTEEyUUqGuUpkriK", message)!;
@@ -872,22 +878,70 @@ test("a silence of the server is an answer when it lasted, and a conversation to
     clock += 12_000;
     recorder.end();
     const [silence] = readRecordings(dir);
-    assert.deepEqual([silence!.frames, silence!.listenedMs, silence!.incomplete], [[], 12_000, undefined]);
-    // The next conversation has a token of its own, and still gets the same recording.
-    const found = recordings.find("wss://chat.example.nl/ws/nldd/QpXz81LmNoTRwa2b", message)!;
+    assert.deepEqual([silence!.frames, silence!.listenedMs, silence!.incomplete, silence!.kind, silence!.matchedOn], [[], 12_000, undefined, "websocket", DECLARED_ORIGIN]);
+    // The next conversation has a token of its own, of letters only as in a real run, and still gets the same recording.
+    const found = recordings.find("wss://chat.example.nl/ws/nldd/SFUjvfumdfeMLKtn", message)!;
     assert.equal(found.id, silence!.id);
-    assert.match(replayNl(found), /de server zei toen 12 s lang niets terug; de pagina krijgt nu ook niets/);
-    assert.equal(recordings.find("wss://chat.example.nl/ws/ander/QpXz81LmNoTRwa2b", message), null, "another path is another chat");
-    assert.equal(pathPattern("/ws/nldd/sTEEyUUqGuUpkriK?v=2&session=Ab3dEfGh1jKl"), "/ws/nldd/*?v=2&session=*");
-    assert.equal(pathPattern("/chat/834723984/socket"), "/chat/*/socket");
-    assert.equal(pathPattern("/rooms/0b9e4c1a-1f2b-4c3d-9e8f-001122334455"), "/rooms/*");
-    assert.equal(pathPattern("/ws/notifications"), "/ws/notifications", "a word stays");
-    // A word with capitals, or a short number, may name another chat on the same origin: it stays, and a recording of one is not played on the other.
-    assert.equal(pathPattern("/ws/GemeenteZaken"), "/ws/GemeenteZaken");
-    assert.equal(pathPattern("/hubs/NotificationHub"), "/hubs/NotificationHub");
-    assert.equal(pathPattern("/ws/live-chat-Utrecht"), "/ws/live-chat-Utrecht");
-    assert.equal(pathPattern("/chat/2/socket?room=1"), "/chat/2/socket?room=1");
-    assert.equal(recordings.find("wss://chat.example.nl/ws/nldd/BelastingZaken", message), null, "a word in the place of the token is another chat");
+    assert.match(replayNl(found), /de server zei toen 12 s lang niets terug; de pagina krijgt nu ook niets\. .*De opname is gezocht op de verklaarde origin van de testomgeving/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("with a sendsTo pattern a recording is played on an address under the same pattern only", () => {
+  const dir = mkdtempSync(join(tmpdir(), "loep-writes-sendsto-"));
+  try {
+    let clock = Date.parse("2026-10-21T17:00:00Z");
+    const sendsTo = ["wss://chat.example.nl/ws/kanaal/*", "wss://chat.example.nl/ws/meldingen/*"];
+    const recordings = socketRecordings(dir, "states", MESSAGE_VALUES, { now: () => clock, sendsTo });
+    const message = JSON.stringify({ type: "chat", text: TEST_VALUES.text });
+    const recorder = recordings.start("wss://chat.example.nl/ws/kanaal/SFUjvfumdfeMLKtn", message)!;
+    clock += 50;
+    recorder.frame('{"type":"reply","text":"Ontvangen"}');
+    clock += RECORD_QUIET_MS;
+    recorder.end();
+    assert.equal(readRecordings(dir)[0]!.matchedOn, "wss://chat.example.nl/ws/kanaal/*");
+    assert.ok(recordings.find("wss://chat.example.nl/ws/kanaal/QpXzLmNoTRwabcde", message), "another token under the same pattern");
+    assert.equal(recordings.find("wss://chat.example.nl/ws/meldingen/QpXzLmNoTRwabcde", message), null, "another pattern on the same origin");
+    assert.equal(recordings.find("wss://chat.example.nl/ws/anders", message), null, "an address under no pattern is looked up on the declared origin, apart from the patterns");
+    assert.equal(recordings.find("wss://chat.example.nl/ws/kanaal/a/b", message), null, "a * stands for one part");
+    assert.equal(recordings.replayed("wss://chat.example.nl/ws/kanaal/QpXzLmNoTRwabcde", readRecordings(dir)[0]!).matchedOn, "wss://chat.example.nl/ws/kanaal/*");
+    assert.match(replaysNl(dir)!, /Gezocht is op het patroon wss:\/\/chat\.example\.nl\/ws\/kanaal\/\* uit het sitemodel, met de testwaarden in het bericht$/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("a sendsTo pattern is narrow, falls under the same kind of connection, and counts once check-site passed the model", () => {
+  assert.deepEqual(sendsToProblems("wss://chat.example.nl/ws/kanaal/*", "x"), []);
+  assert.deepEqual(sendsToProblems("https://test.example.nl/api/aanvraag/*?sessie=*", "x"), []);
+  for (const wide of ["wss://chat.example.nl/*", "wss://chat.example.nl", "wss://chat.example.nl/", "https://test.example.nl/*/*"]) assert.match(sendsToProblems(wide, "components[0]").join(), /past op elk adres van/, wide);
+  assert.match(sendsToProblems("wss://*.example.nl/ws/a", "x").join(), /niet in de host/);
+  assert.match(sendsToProblems("ftp://example.nl/a/*", "x").join(), /alleen ws:\/\/, wss:\/\/, http:\/\/ en https:\/\//);
+  assert.match(sendsToProblems(3, "x").join(), /als tekst/);
+  assert.equal(sendsToMatches("wss://chat.example.nl/ws/kanaal/*", "wss://chat.example.nl/ws/kanaal/SFUjvfumdfeMLKtn"), true);
+  assert.equal(sendsToMatches("wss://chat.example.nl/ws/kanaal/*", "https://chat.example.nl/ws/kanaal/SFUjvfumdfeMLKtn"), false, "a request is not a socket");
+  assert.equal(sendsToMatches("https://test.example.nl/api/aanvraag/*", "https://test.example.nl/api/aanvraag/81723"), true);
+  assert.equal(sendsToMatches("https://test.example.nl/api/aanvraag/*", "https://test.example.nl/api/aanvraag/81723?x=1"), false, "the query counts");
+  assert.equal(sendsToMatches("https://test.example.nl/api/aanvraag?sessie=*", "https://test.example.nl/api/aanvraag?sessie=Ab3d"), true);
+  // check-site: both replays have to reach an address under the pattern, for a socket and for a request over HTTP alike.
+  const pattern = "wss://chat.example.nl/ws/kanaal/*";
+  assert.equal(sendsToReplayProblem('component "chat"', pattern, [["https://chat.example.nl/", "wss://chat.example.nl/ws/kanaal/SFUjvfumdfeMLKtn"], ["wss://chat.example.nl/ws/kanaal/QpXzLmNoTRwabcde"]]), null);
+  assert.match(sendsToReplayProblem('component "chat"', pattern, [["wss://chat.example.nl/ws/kanaal/SFUjvfumdfeMLKtn"], ["wss://chat.example.nl/ws/kamer/QpXzLmNoTRwabcde"]])!, /past niet: bij de tweede keer afspelen .*wel naar wss:\/\/chat\.example\.nl\/ws\/kamer\/QpXzLmNoTRwabcde/);
+  const http = "https://test.example.nl/api/aanvraag/*";
+  assert.equal(sendsToReplayProblem('process "aanvraag"', http, [["https://test.example.nl/api/aanvraag/81723"], ["https://test.example.nl/api/aanvraag/90211"]]), null);
+  assert.match(sendsToReplayProblem('process "aanvraag"', http, [["https://test.example.nl/api/aanvraag/81723"], ["https://test.example.nl/api/anders/1"]])!, /bij de tweede keer .*ging geen verzoek naar een adres onder dit patroon/);
+  assert.match(sendsToReplayProblem('process "aanvraag"', http, [[], []])!, /bij de eerste keer .*er ging geen verzoek naar https:\/\/test\.example\.nl/);
+  // Only a model that passed check-site and did not change since gives its patterns.
+  const dir = mkdtempSync(join(tmpdir(), "loep-writes-approved-"));
+  try {
+    const model = JSON.stringify({ components: [{ id: "chat", sendsTo: pattern }, { id: "breed", sendsTo: "wss://chat.example.nl/*" }], processes: [{ id: "aanvraag", sendsTo: http }] });
+    writeFileSync(join(dir, "site.json"), model);
+    assert.deepEqual(approvedSendsTo(dir), []);
+    writeFileSync(join(dir, "site-check.json"), JSON.stringify({ ok: true, siteSha256: createHash("sha256").update(model).digest("hex") }));
+    assert.deepEqual(approvedSendsTo(dir), [pattern, http]);
+    writeFileSync(join(dir, "site.json"), `${model} `);
+    assert.deepEqual(approvedSendsTo(dir), [], "changed after the check");
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

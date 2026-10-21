@@ -1,5 +1,6 @@
 import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { approvedSendsTo, connectionKind, sendsToMatches } from "./sitemodel.ts";
 import { isOurMessage, isProtocolFrame } from "./writes.ts";
 
 /**
@@ -22,11 +23,22 @@ import { isOurMessage, isProtocolFrame } from "./writes.ts";
  * socket closed right after the send, is not kept at all.
  *
  * A chat often opens its socket on an address with a token of its own per conversation
- * (/ws/chat/sTEEyUUqGuUpkriK). Such a segment is not part of what makes two sends the same message:
- * recordings are matched on the address with those segments left out (see `pathPattern`).
+ * (/ws/chat/sTEEyUUqGuUpkriK), so the exact address says little. Which recording belongs to a send
+ * is decided in one of two ways, and never by guessing which part of an address is a token:
+ *
+ * - With a `sendsTo` pattern in a site model that passed `check-site` (wss://host/ws/chat/*): a
+ *   recording is played on an address under the same pattern, and not on another address of the
+ *   origin. The explorer found the pattern by opening the part twice, and check-site checked it.
+ * - Without one: a recording belongs to the declared origin, the kind of connection (websocket or
+ *   HTTP) and the test values in the message, and the path does not count. That is safe because a
+ *   run may send to one origin only, the test environment it was given, and a message is made of
+ *   the fixed test values of loep, which no visitor types: the same test values to the same test
+ *   environment is the same message, whichever part of that origin it went to.
+ *
+ * The replay notes which of the two it was looked up on (`matchedOn`), and so does the evaluation.
  */
 
-/** One recording per message per socket address, in the run: the first complete one wins. */
+/** One recording per message per `sendsTo` pattern, or on the declared origin, in the run: the first complete one wins. */
 export const RECORDINGS_LOG = "opnames.jsonl";
 /** Every send that was played from a recording instead of sent: when, by whom, and which recording. */
 export const REPLAYS_LOG = "afgespeeld.jsonl";
@@ -57,6 +69,10 @@ export interface SocketRecording {
   path: string;
   /** Which message it was: the test values in it, sorted (see `recordingKey`). */
   key: string;
+  /** Over what it was sent; absent in recordings from before this was kept: a socket. */
+  kind?: "websocket" | "http";
+  /** The `sendsTo` pattern the address fell under, or `DECLARED_ORIGIN`. */
+  matchedOn?: string;
   frames: RecordedFrame[];
   /** Cut off before its window ended, so it may miss part of the answer: kept for the dossier, never played. */
   incomplete?: true;
@@ -70,7 +86,12 @@ export interface PassedReplay {
   recording: string;
   path: string;
   key: string;
+  /** What the recording was looked up on: the `sendsTo` pattern of the site model, or `DECLARED_ORIGIN`. */
+  matchedOn: string;
 }
+
+/** What a recording is looked up on when no `sendsTo` pattern of the site model covers the address. */
+export const DECLARED_ORIGIN = "verklaarde origin";
 
 /** The origin of a socket as its http(s) twin. */
 function originOf(url: string): string {
@@ -84,25 +105,6 @@ function originOf(url: string): string {
 function pathOf(url: string): string {
   const parsed = new URL(url);
   return `${parsed.pathname}${parsed.search}`;
-}
-
-/**
- * Whether a segment or query value names one conversation: a UUID, a number of 6 or more digits, or
- * 12 or more letters, digits, dashes or underscores with two digits in it or a lowercase letter
- * between two capitals (sTEEyUUqGuUpkriK). A word stays, also one with capitals (GemeenteZaken), and
- * so does a short number: /chat/1 and /chat/2, like room=1 and room=2, may be two chats.
- */
-const isConversationToken = (value: string): boolean =>
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value) || /^\d{6,}$/.test(value) || (/^[\w-]{12,}$/.test(value) && (/\d.*\d/.test(value) || /[A-Z][a-z][A-Z]/.test(value)));
-
-/** The address of a socket without the segments and query values that name one conversation (see `isConversationToken`). */
-export function pathPattern(path: string): string {
-  const [pathname, query] = path.split("?");
-  const pattern = pathname!
-    .split("/")
-    .map((segment) => (isConversationToken(segment) ? "*" : segment))
-    .join("/");
-  return query === undefined ? pattern : `${pattern}?${query.split("&").map((pair) => pair.replace(/=(.*)$/, (whole, value: string) => (isConversationToken(value) ? "=*" : whole))).join("&")}`;
 }
 
 /**
@@ -140,7 +142,7 @@ export interface Recorder {
 }
 
 export interface SocketRecordings {
-  /** The complete recording of this message on this socket address, or null when there is none yet or the message has no test value. */
+  /** The complete recording of this message under the same `sendsTo` pattern or on the declared origin, or null when there is none yet or the message has no test value. */
   find: (url: string, message: string | Buffer) => SocketRecording | null;
   /** Start recording what the server answers to a message that was sent for real; null for a frame without a test value, which is not recorded. */
   start: (url: string, message: string | Buffer, sender?: string) => Recorder | null;
@@ -148,7 +150,22 @@ export interface SocketRecordings {
   replayed: (url: string, recording: SocketRecording, sender?: string) => PassedReplay;
 }
 
-export function socketRecordings(runDir: string, source: string, values: readonly string[], now: () => number = Date.now, windowMs = RECORD_WINDOW_MS, quietMs = RECORD_QUIET_MS): SocketRecordings {
+/** The `sendsTo` pattern an address falls under, the longest when several do, or `DECLARED_ORIGIN` when none does. */
+export function matchedOnFor(sendsTo: readonly string[], address: string): string {
+  return sendsTo.filter((pattern) => sendsToMatches(pattern, address)).sort((a, b) => b.length - a.length)[0] ?? DECLARED_ORIGIN;
+}
+
+export interface RecordingOptions {
+  now?: () => number;
+  windowMs?: number;
+  quietMs?: number;
+  /** The `sendsTo` patterns to look recordings up on; left out, those of a site model that passed `check-site` (see `approvedSendsTo`). */
+  sendsTo?: readonly string[];
+}
+
+export function socketRecordings(runDir: string, source: string, values: readonly string[], options: RecordingOptions = {}): SocketRecordings {
+  const { now = Date.now, windowMs = RECORD_WINDOW_MS, quietMs = RECORD_QUIET_MS } = options;
+  const sendsTo = options.sendsTo ?? approvedSendsTo(runDir);
   const append = (file: string, entry: unknown): void => {
     mkdirSync(runDir, { recursive: true });
     // Appended at once and synchronously, as the log of writes is.
@@ -158,8 +175,11 @@ export function socketRecordings(runDir: string, source: string, values: readonl
     const key = recordingKey(message, values);
     if (key === null) return null;
     const origin = originOf(url);
-    const pattern = pathPattern(pathOf(url));
-    return readRecordings(runDir).find((recording) => !recording.incomplete && recording.origin === origin && pathPattern(recording.path) === pattern && recording.key === key) ?? null;
+    const kind = connectionKind(url);
+    const matchedOn = matchedOnFor(sendsTo, url);
+    // The address of a recording is kept as its http(s) twin; under a pattern for a socket it is asked as a socket again.
+    const addressOf = (recording: SocketRecording): string => (kind === "websocket" ? `${recording.origin.replace(/^http/, "ws")}${recording.path}` : `${recording.origin}${recording.path}`);
+    return readRecordings(runDir).find((recording) => !recording.incomplete && recording.origin === origin && (recording.kind ?? "websocket") === kind && recording.key === key && matchedOnFor(sendsTo, addressOf(recording)) === matchedOn) ?? null;
   };
   return {
     find,
@@ -178,7 +198,7 @@ export function socketRecordings(runDir: string, source: string, values: readonl
         // A silence is an answer only when it lasted; the first complete recording of a message counts, and one that ends later is not kept.
         if ((frames.length === 0 && listenedMs < RECORD_SILENCE_MS) || find(url, message)) return;
         const path = pathOf(url);
-        append(RECORDINGS_LOG, { id: `${originOf(url)}${path}|${key}|${new Date(started).toISOString()}`, at: new Date(started).toISOString(), source: sender, origin: originOf(url), path, key, frames, listenedMs, ...(complete ? {} : { incomplete: true as const }) } satisfies SocketRecording);
+        append(RECORDINGS_LOG, { id: `${originOf(url)}${path}|${key}|${new Date(started).toISOString()}`, at: new Date(started).toISOString(), source: sender, origin: originOf(url), path, key, kind: connectionKind(url), matchedOn: matchedOnFor(sendsTo, url), frames, listenedMs, ...(complete ? {} : { incomplete: true as const }) } satisfies SocketRecording);
       };
       // Ended before the window: whole only when the server had stopped answering a while ago.
       const end = (): void => finish(now() - lastFrameAt >= quietMs);
@@ -195,7 +215,7 @@ export function socketRecordings(runDir: string, source: string, values: readonl
       };
     },
     replayed: (url, recording, sender = source) => {
-      const entry: PassedReplay = { at: new Date(now()).toISOString(), source: sender, recording: recording.id, path: pathOf(url), key: recording.key };
+      const entry: PassedReplay = { at: new Date(now()).toISOString(), source: sender, recording: recording.id, path: pathOf(url), key: recording.key, matchedOn: matchedOnFor(sendsTo, url) };
       append(REPLAYS_LOG, entry);
       return entry;
     },
@@ -217,7 +237,14 @@ export function playRecording(recording: SocketRecording, send: (message: string
 }
 
 /** One line for an agent and for the dossier: that a send was played from a recording, and what that does not show. */
-export const replayNl = (recording: SocketRecording): string =>
+export const replayNl = (recording: SocketRecording, matchedOn: string = recording.matchedOn ?? DECLARED_ORIGIN): string =>
+  `${replayBodyNl(recording)}. ${matchedOnNl(matchedOn)}`;
+
+/** On what a recording was looked up, in a sentence without a closing full stop. */
+const matchedOnNl = (matchedOn: string): string =>
+  matchedOn === DECLARED_ORIGIN ? "De opname is gezocht op de verklaarde origin van de testomgeving en de testwaarden in het bericht, zonder patroon uit het sitemodel" : `De opname is gezocht op het patroon ${matchedOn} uit het sitemodel en de testwaarden in het bericht`;
+
+const replayBodyNl = (recording: SocketRecording): string =>
   recording.frames.length === 0
     ? `niet verstuurd maar afgespeeld: dit bericht is om ${new Date(recording.at).toTimeString().slice(0, 5)} al eens echt verstuurd (${recording.source}), en de server zei toen ${Math.round((recording.listenedMs ?? RECORD_WINDOW_MS) / 1000)} s lang niets terug; de pagina krijgt nu ook niets. Wat de pagina zelf doet na het versturen, is echt gemeten; een antwoord dat pas later komt, bijvoorbeeld van een mens, staat niet in een opname`
     : `niet verstuurd maar afgespeeld: dit bericht is om ${new Date(recording.at).toTimeString().slice(0, 5)} al eens echt verstuurd (${recording.source}), en wat de server toen antwoordde (${recording.frames.length} ${recording.frames.length === 1 ? "bericht" : "berichten"}) is nu met dezelfde tussentijden aan de pagina gegeven. Wat de pagina daarmee doet, is echt gemeten; wat de server pas later uit zichzelf doet, staat niet in een opname`;
@@ -229,8 +256,11 @@ export const REPLAY_TASK_NL =
 /** For the evaluation, after what was allowed: how many messages were recorded and how often a recording was played instead of a send, without a closing full stop. Null when neither happened. */
 export function replaysNl(runDir: string): string | null {
   const recordings = readRecordings(runDir).filter((recording) => !recording.incomplete).length;
-  const replays = readReplays(runDir).length;
+  const passed = readReplays(runDir);
+  const replays = passed.length;
   if (recordings === 0 && replays === 0) return null;
+  const matched = [...new Set(passed.map((entry) => entry.matchedOn ?? DECLARED_ORIGIN))].sort();
+  const lookedUp = matched.length === 0 ? "" : `. Gezocht is op ${matched.map((on) => (on === DECLARED_ORIGIN ? "de verklaarde origin van de testomgeving" : `het patroon ${on} uit het sitemodel`)).join(" en op ")}, met de testwaarden in het bericht`;
   const times = (count: number): string => (count === 1 ? "één keer" : `${count} keer`);
-  return `Van ${recordings === 1 ? "één bericht" : `${recordings} berichten`} in een chat is het antwoord van de server opgenomen toen het echt werd verstuurd, ook als dat antwoord was dat er een tijd niets kwam. ${replays > 0 ? `Daarna is ${times(replays)} hetzelfde bericht niet opnieuw verstuurd, maar is de opname afgespeeld: de pagina kreeg het antwoord van toen, met dezelfde tussentijden. Wat de pagina ermee deed, is gemeten; wat de server later uit zichzelf zou doen, niet` : "Geen opname is afgespeeld"}`;
+  return `Van ${recordings === 1 ? "één bericht" : `${recordings} berichten`} in een chat is het antwoord van de server opgenomen toen het echt werd verstuurd, ook als dat antwoord was dat er een tijd niets kwam. ${replays > 0 ? `Daarna is ${times(replays)} hetzelfde bericht niet opnieuw verstuurd, maar is de opname afgespeeld: de pagina kreeg het antwoord van toen, met dezelfde tussentijden. Wat de pagina ermee deed, is gemeten; wat de server later uit zichzelf zou doen, niet` : "Geen opname is afgespeeld"}${lookedUp}`;
 }

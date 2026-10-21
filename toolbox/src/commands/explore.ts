@@ -10,7 +10,7 @@ import { recordReads } from "../lib/reads.ts";
 import { makeWorkDir } from "../lib/workdir.ts";
 import { siteLabel } from "../lib/origins.ts";
 import { textHasTerm } from "../lib/searchterm.ts";
-import { acceptedGapFor, frameAddress, NOT_OPENED_ON_PAGE_TYPE, notOpenedAdviceNl, pageTypesToCheck, readSiteModel, REVIEW_MISSING, searchTermForRun, SITE_CHECK_FILE, SITE_MODEL_FILE, validateSiteModel, type ModelContext, type PageType, type Postcondition, type SiteCheck, type SiteModel } from "../lib/sitemodel.ts";
+import { acceptedGapFor, frameAddress, NOT_OPENED_ON_PAGE_TYPE, notOpenedAdviceNl, pageTypesToCheck, readSiteModel, REVIEW_MISSING, searchTermForRun, sendsToCandidates, sendsToReplayProblem, SITE_CHECK_FILE, SITE_MODEL_FILE, validateSiteModel, type ModelContext, type PageType, type Postcondition, type SiteCheck, type SiteModel } from "../lib/sitemodel.ts";
 import { LOOK_COMMANDS } from "../lib/verdict.ts";
 import { readObservation } from "../session/observations.ts";
 import { holds, loadRecipes, MAX_RECIPE_STEPS, replayEnv, replayFromClean, replaySteps } from "../session/recipe.ts";
@@ -19,6 +19,7 @@ import { pageLooksOperable, pageOperables } from "../instruments/operables.ts";
 import { controlsBetweenWidths, MEASURED_WIDTHS, widthToTry, type WidthsForExplorer } from "../instruments/widths.ts";
 import { mergeWidths, uncoveredOperables, type CountedPage } from "../lib/operables.ts";
 import type { Recipe } from "../session/daemon.ts";
+import type { BrowserContext } from "playwright";
 import type { Gate } from "./gate.ts";
 import type { Inventory, InventoryPage } from "./inventory.ts";
 import { openComponentOn, windowOnPageTypes } from "./modelsweep.ts";
@@ -341,6 +342,14 @@ async function componentOnPageTypes(env: Env, model: SiteModel, id: string, reci
   return rows;
 }
 
+/** Keep every address a page of the context opens a socket to or sends a request to. */
+const watchAddresses =
+  (into: string[]) =>
+  (context: BrowserContext): void => {
+    context.on("request", (request) => void into.push(request.url()));
+    context.on("page", (page) => page.on("websocket", (socket) => void into.push(socket.url())));
+  };
+
 /** Whether the page the explorer named shows the search term in its text. Null when it does. */
 async function searchTermProblem(env: Env, chosen: { term: string; page: string }): Promise<string | null> {
   let surface: Awaited<ReturnType<typeof openSurface>>["surface"] | null = null;
@@ -383,10 +392,10 @@ export async function checkSite(runDir: string, options: { navigationDelayMs?: n
 
   if (problems.length === 0) {
     const model = (await readSiteModel(runDir)) as SiteModel;
-    const entries: { kind: SiteCheck["replays"][number]["kind"]; id: string; recipe: string; postcondition: Postcondition }[] = [
+    const entries: { kind: SiteCheck["replays"][number]["kind"]; id: string; recipe: string; postcondition: Postcondition; sendsTo?: string | undefined }[] = [
       ...model.blockers.map((entry) => ({ kind: "blocker" as const, id: entry.id, recipe: entry.recipe, postcondition: entry.postcondition })),
-      ...model.components.filter((entry) => entry.recipe !== null).map((entry) => ({ kind: "component" as const, id: entry.id, recipe: entry.recipe!, postcondition: entry.postcondition! })),
-      ...model.processes.map((entry) => ({ kind: "process" as const, id: entry.id, recipe: entry.recipe, postcondition: entry.postcondition })),
+      ...model.components.filter((entry) => entry.recipe !== null).map((entry) => ({ kind: "component" as const, id: entry.id, recipe: entry.recipe!, postcondition: entry.postcondition!, sendsTo: entry.sendsTo })),
+      ...model.processes.map((entry) => ({ kind: "process" as const, id: entry.id, recipe: entry.recipe, postcondition: entry.postcondition, sendsTo: entry.sendsTo })),
     ];
     const browser = await launchBrowser();
     try {
@@ -399,17 +408,32 @@ export async function checkSite(runDir: string, options: { navigationDelayMs?: n
         let reasonNl: string | null = null;
         let before = "";
         let after = "";
+        let sendsTo: SiteCheck["replays"][number]["sendsTo"];
         if (recipe.steps.length > MAX_RECIPE_STEPS) reasonNl = `het recept heeft ${recipe.steps.length} stappen, meer dan ${MAX_RECIPE_STEPS}; begin met een verse open en doe alleen wat nodig is`;
         else if (entry.kind === "blocker" && recipe.steps.some((step) => step.command === "goto")) reasonNl = "het recept van een blokkade gaat door naar een andere pagina; bewaar het direct na het sluiten, op de pagina waar je begon";
         else {
-          const replay = await replayFromClean(env, recipe, entry.postcondition);
-          await replay.surface?.context.close().catch(() => undefined);
-          reasonNl = replay.reasonNl;
-          before = replay.before?.detail ?? "";
-          after = replay.after?.detail ?? "";
+          // A part with sendsTo is replayed twice, and the addresses it opened or sent to have to fall under the pattern both times.
+          const seen: string[][] = [];
+          for (let round = 0; round < (entry.sendsTo ? 2 : 1); round++) {
+            const addresses: string[] = [];
+            seen.push(addresses);
+            const replay = await replayFromClean(env, recipe, entry.postcondition, {}, entry.sendsTo ? watchAddresses(addresses) : undefined);
+            // A part may connect a moment after the last step.
+            if (entry.sendsTo) await replay.surface?.page.waitForTimeout(500).catch(() => undefined);
+            await replay.surface?.context.close().catch(() => undefined);
+            reasonNl = replay.reasonNl;
+            before = replay.before?.detail ?? "";
+            after = replay.after?.detail ?? "";
+            if (reasonNl !== null) break;
+          }
+          if (entry.sendsTo && reasonNl === null) {
+            sendsTo = { pattern: entry.sendsTo, seen: seen.map((addresses) => sendsToCandidates(entry.sendsTo!, addresses)) };
+            const problem = sendsToReplayProblem(`${entry.kind} "${entry.id}"`, entry.sendsTo, seen);
+            if (problem !== null) problems.push(problem);
+          }
         }
         const onPageTypes = entry.kind === "component" && reasonNl === null && recipe.start ? await componentOnPageTypes(env, model, entry.id, { ...recipe, start: recipe.start }, entry.postcondition) : undefined;
-        replays.push({ kind: entry.kind, id: entry.id, recipe: entry.recipe, ok: reasonNl === null, reasonNl, before, after, ...(onPageTypes ? { onPageTypes } : {}) });
+        replays.push({ kind: entry.kind, id: entry.id, recipe: entry.recipe, ok: reasonNl === null, reasonNl, before, after, ...(onPageTypes ? { onPageTypes } : {}), ...(sendsTo ? { sendsTo } : {}) });
         if (reasonNl !== null) problems.push(`${entry.kind} "${entry.id}" (recept ${entry.recipe}): ${reasonNl}`);
         for (const row of onPageTypes ?? []) {
           if (row.reached || row.accepted) continue;
