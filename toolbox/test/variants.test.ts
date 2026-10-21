@@ -293,6 +293,32 @@ test("per role: sessions, commands and time from the run, and tokens, turns and 
   assert.doesNotMatch(markdown, /\u2013|\u2014/, "no dashes of the long kind");
 });
 
+test("with --criteria, the use per role counts the judges, verifiers and finishing rounds of those criteria only", async () => {
+  write(join(wider, "observations", "b-243", "session.json"), { startedAt: "2026-10-18T12:00:00.000Z", stoppedAt: "2026-10-18T12:20:00.000Z", commands: 7 });
+  const usage = join(scratch, "verbruik-breed.json");
+  const tokens = (input: number) => ({ input, cacheWrite: 0, cacheRead: 0, output: 0 });
+  write(usage, {
+    schema: "loep/verbruik/1",
+    run: "nulmeting-breed",
+    model: "claude-opus-5-5",
+    agents: [
+      { role: "judge", criterion: "1.4.3", ...tokens(1), turns: 3 },
+      { role: "judge", criterion: "2.4.3", ...tokens(10), turns: 30 },
+      { session: "v-243", ...tokens(100), turns: 300 },
+      { role: "walk", pageType: "start", ...tokens(1000), turns: 4 },
+    ],
+  });
+  const chosen = await compareVariants({ baseline: [wider], reference, usage: [usage], findings: classified, criteria: ["1.1.1", "1.4.3", "2.1.1"] });
+  const roles = Object.fromEntries(chosen.runs[0]!.roles.map((use) => [use.role, use]));
+  assert.deepEqual([roles.judge!.agents, roles.judge!.commands, roles.judge!.sessionSeconds, roles.judge!.turns, roles.judge!.tokens!.input], [1, 40, 1800, 3, 1], "the session b-243 and the rows of 2.4.3 are left out");
+  assert.equal(roles.verifier!.tokens, null);
+  assert.deepEqual([roles.walk!.turns, roles.walk!.tokens!.input], [4, 1000], "a walk works for the whole run");
+
+  const all = await compareVariants({ baseline: [wider], reference, usage: [usage], findings: classified });
+  const every = Object.fromEntries(all.runs[0]!.roles.map((use) => [use.role, use]));
+  assert.deepEqual([every.judge!.agents, every.judge!.commands, every.judge!.turns, every.verifier!.tokens!.input], [2, 47, 33, 100]);
+});
+
 test("only the baseline: the spread of its runs, without the checks", async () => {
   const result = await compareVariants({ baseline, reference, findings: classified });
   assert.equal(result.verdict, null);
