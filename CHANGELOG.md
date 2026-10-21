@@ -6,6 +6,18 @@ Wat er per versie van loep is veranderd. De versie staat op het voorblad en onde
 
 <!-- towncrier: een nieuwe versie komt hieronder -->
 
+## 0.13.0 (2026-10-21)
+
+### Wat een uitkomst kan veranderen
+
+- Bij 2.1.4 valt een sneltoets in een ingesloten venster (een speler, een kaart) onder de uitzondering voor focus als hij alleen werkt met de focus in dat venster. Het onderdeel uit de uitzondering is daar het hele venster: een toets die werkt met de focus op een andere knop in hetzelfde venster, is geen bevinding. De procedure (versie 10) laat de beoordelaar meten of de toets ook werkt met de focus op een link of knop van de pagina buiten het venster (N6); alleen dan is het een bevinding, en `check-verdict` weigert een afkeuring op een ingesloten venster zonder zo'n `key`-waarneming. De regel van `loep key`, `click` en andere handelingen zegt nu bij `focus` of die in een venster staat (`[in venster: ...]`). Voor de bekende spelers die aan het adres worden herkend (YouTube, Vimeo) blijft de regel zoals hij was. ([#246](https://github.com/NederlandseDigitaleDienst/loep/issues/246))
+
+### Verder
+
+- Een onderdeel dat op elke pagina staat, zoals een menuknop op een smal scherm of een vaste chatknop, kan in het sitemodel `"pageTypes": "all"` hebben in plaats van een lijst met alle paginatypen. `check-site` opent het op drie paginatypen, de veegronde op alle, en het blad van de bewijspoort noemt het apart onder "Op elke pagina", zodat de poort het niet als ontbrekend meldt. ([#266](https://github.com/NederlandseDigitaleDienst/loep/issues/266))
+- De schone tweeling van de testsite (Berkenveen) heeft bij de artikelfoto en twee galerijfoto's een tekstalternatief dat beschrijft wat het beeld toont, en de kop van het chatvenster loopt op 320 pixels breed met de tekstafstand van 1.4.12 niet meer onder de sluitknop. `compare --findings` werkt nu ook met een referentie zonder gebreken (`findings: []` en geen afgekeurde criteria): elke bevinding van loep wordt dan ingedeeld als terecht, discutabel of onterecht. ([#270](https://github.com/NederlandseDigitaleDienst/loep/issues/270))
+- Een CSS-selector die leeg is of eindigt op `>`, `+`, `~` of een komma, geeft in `find`, in een commando op een element en bij `--against` en `--to` een melding dat de shell een deel heeft weggenomen en dat de selector tussen enkele aanhalingstekens moet. De gereedschapstabellen van de opdrachten en de procedures zetten selectors tussen enkele aanhalingstekens, met de reden. ([#273](https://github.com/NederlandseDigitaleDienst/loep/issues/273))
+
 ## 0.12.0 (2026-10-21)
 
 ### Wat een uitkomst kan veranderen
