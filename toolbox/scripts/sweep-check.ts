@@ -56,7 +56,7 @@ export const VARIANTS: Variant[] = ["defect", "clean"];
  * and `target.clean`), because the clean twin is built differently around the same controls.
  */
 export function installModel(run: string, variant: Variant, origins: { site: string; thirdParty: string }): void {
-  const fill = (text: string): string => text.replaceAll("{origin}", origins.site).replaceAll("{thirdParty}", origins.thirdParty);
+  const fill = (text: string): string => text.replaceAll("{wsOrigin}", origins.site.replace(/^http/, "ws")).replaceAll("{origin}", origins.site).replaceAll("{thirdParty}", origins.thirdParty);
   const model = JSON.parse(fill(readFileSync(join(MODEL_DIR, "site.json"), "utf8"))) as Record<string, unknown>;
   for (const [key, entries] of Object.entries(model)) {
     if (!Array.isArray(entries)) continue;

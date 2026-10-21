@@ -80,7 +80,10 @@
     chatPanel.hidden = false;
     chatButton.setAttribute('aria-expanded', 'true');
     if (!socket) {
-      socket = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/chat');
+      // Every connection gets an address of its own.
+      var token = '';
+      for (var i = 0; i < 16; i++) token += 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz'.charAt(Math.floor(Math.random() * 52));
+      socket = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws/chat/' + token);
       socket.addEventListener('message', function (event) { chatLine('Gemeente', String(event.data)); });
     }
     if (moveFocus) chatInput.focus();

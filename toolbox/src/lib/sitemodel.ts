@@ -86,6 +86,8 @@ export interface Component {
   blockedRequests?: BlockedRequest[];
   /** For a component that is an embedded window with something to operate: the address of that window, as `frames` has it. */
   frame?: string;
+  /** For a part that sends something: the address it sends to, with `*` for what changes per connection or session (see `sendsToProblems`). */
+  sendsTo?: string;
 }
 
 export interface BlockedRequest {
@@ -110,6 +112,61 @@ export interface Process {
   /** Name of the saved state at the end of the process: a search done, a form filled in but not sent. */
   recipe: string;
   postcondition: Postcondition;
+  /** For a process that sends something: the address it sends to, as a component has it. */
+  sendsTo?: string;
+}
+
+/**
+ * Where a part sends to, as a pattern: `wss://chat.example.nl/ws/kanaal/*` or
+ * `https://test.example.nl/api/aanvraag/*`. A `*` stands for one part of the path or one query
+ * value that changes per connection or session, such as a token; the rest of the path and query
+ * has to be the same. The explorer finds it by opening the part twice and comparing the
+ * addresses, and `check-site` checks it the same way. A recording of a send is then looked up by
+ * the pattern instead of by a rule that guesses which part of an address is a token (see
+ * `socketRecordings`).
+ */
+const SENDS_TO_PROTOCOLS = ["ws:", "wss:", "http:", "https:"];
+
+/** The http(s) twin of a socket address: the origin a socket and a page share. */
+export function httpTwin(url: URL): URL {
+  const twin = new URL(url.href);
+  if (twin.protocol === "ws:") twin.protocol = "http:";
+  if (twin.protocol === "wss:") twin.protocol = "https:";
+  return twin;
+}
+
+/** Whether an address or pattern is a socket or a request over HTTP. */
+export const connectionKind = (url: string): "websocket" | "http" => (/^wss?:/i.test(url) ? "websocket" : "http");
+
+/** What is wrong with a pattern for `sendsTo`, in Dutch, for the explorer: empty when it is a narrow address with a `*` only where it may be. */
+export function sendsToProblems(value: unknown, where: string): string[] {
+  if (typeof value !== "string" || !value.trim()) return [`${where}: sendsTo is het adres waar het onderdeel naartoe verstuurt, als tekst, met * voor wat per verbinding verandert (bijvoorbeeld wss://chat.example.nl/ws/kanaal/*)`];
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    return [`${where}: sendsTo "${value.slice(0, 120)}" is geen adres; een * mag alleen in het pad of de query staan, niet in de host`];
+  }
+  if (/\*|%2a/i.test(url.host)) return [`${where}: sendsTo "${value.slice(0, 120)}" heeft een * in de host; een * mag alleen in het pad of de query staan, niet in de host`];
+  if (!SENDS_TO_PROTOCOLS.includes(url.protocol)) return [`${where}: sendsTo begint met ${url.protocol}; alleen ws://, wss://, http:// en https:// kunnen iets versturen`];
+  if (url.hash || value.includes("#")) return [`${where}: sendsTo heeft geen anker (#)`];
+  // A pattern that every address of the origin falls under says nothing about which part sent: one fixed part of the path at least.
+  if (!url.pathname.split("/").some((segment) => segment !== "" && !segment.includes("*"))) return [`${where}: sendsTo "${value}" past op elk adres van ${httpTwin(url).origin}; geef het pad met ten minste één vast deel, en een * alleen voor wat per verbinding of sessie verandert (bijvoorbeeld ${url.protocol}//${url.host}/ws/kanaal/*)`];
+  return [];
+}
+
+/** Whether an address falls under a `sendsTo` pattern: the same kind of connection and origin, and the same path and query, a `*` standing for one part that is not empty. */
+export function sendsToMatches(pattern: string, address: string): boolean {
+  try {
+    if (connectionKind(pattern) !== connectionKind(address)) return false;
+    const wanted = httpTwin(new URL(pattern));
+    const actual = httpTwin(new URL(address));
+    if (wanted.origin !== actual.origin) return false;
+    const glob = `${wanted.pathname}${wanted.search}`.split("*").map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("[^/?#&=]+");
+    return new RegExp(`^${glob}$`).test(`${actual.pathname}${actual.search}`);
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -442,6 +499,7 @@ export function validateSiteModel(value: unknown, context: ModelContext): string
     }
     if (component.blockedRequests !== undefined && !(Array.isArray(component.blockedRequests) && component.blockedRequests.every((request) => isRecord(request) && isText(request.method) && isText(request.address)))) problems.push(`${where}: blockedRequests is een lijst van { method, address }`);
     if (component.frame !== undefined && !(model.frames as unknown[]).some((frame) => isRecord(frame) && frame.address === component.frame)) problems.push(`${where}: frame "${String(component.frame)}" staat niet in frames; neem het adres daar letterlijk over`);
+    if (component.sendsTo !== undefined) problems.push(...sendsToProblems(component.sendsTo, where), ...(component.recipe === null ? [`${where}: sendsTo vraagt een recept: check-site opent het onderdeel twee keer en kijkt of beide adressen onder het patroon vallen`] : []));
     if ((model.frames as unknown[]).some((frame) => isRecord(frame) && frame.address === component.frame && frame.class === "no-content")) problems.push(`${where}: het venster ${String(component.frame)} heeft iets om te bedienen en is dus geen no-content; deel het in als own-content of vendor-component`);
     if (component.recipe === null) {
       if (!isText(component.notOpenedNl)) problems.push(`${where}: zonder recipe is notOpenedNl verplicht: wat is geprobeerd en waarom het niet openging`);
@@ -468,6 +526,7 @@ export function validateSiteModel(value: unknown, context: ModelContext): string
     if (!isText(process.descriptionNl)) problems.push(`${where}: descriptionNl ontbreekt`);
     checkRecipe(process.recipe, where);
     checkPostcondition(process.postcondition, where, problems);
+    if (process.sendsTo !== undefined) problems.push(...sendsToProblems(process.sendsTo, where));
   }
 
   // Players and moving content that are there without an action.
@@ -650,6 +709,57 @@ export function approvedReads(runDir: string): ReadRequest[] {
   }
 }
 
+/** The addresses of `seen` on the origin of a pattern and of its kind of connection: what a replay of the recipe opened or sent there. */
+export function sendsToCandidates(pattern: string, seen: readonly string[]): string[] {
+  const kind = connectionKind(pattern);
+  const origin = httpTwin(new URL(pattern)).origin;
+  return [...new Set(seen.filter((address) => {
+    try {
+      return connectionKind(address) === kind && httpTwin(new URL(address)).origin === origin;
+    } catch {
+      return false;
+    }
+  }))];
+}
+
+/**
+ * Whether a `sendsTo` pattern holds for the two replays of a recipe in `check-site`: in each, the
+ * page opened a socket to, or sent a request to, an address under the pattern. Null when it holds,
+ * else what is wrong, in Dutch, for the explorer.
+ */
+export function sendsToReplayProblem(where: string, pattern: string, seen: readonly (readonly string[])[]): string | null {
+  const kind = connectionKind(pattern) === "websocket" ? "socket" : "verzoek";
+  for (const [index, addresses] of seen.entries()) {
+    const candidates = sendsToCandidates(pattern, addresses);
+    if (candidates.some((address) => sendsToMatches(pattern, address))) continue;
+    const round = index === 0 ? "de eerste" : "de tweede";
+    const found = candidates.length === 0 ? `er ging geen ${kind} naar ${httpTwin(new URL(pattern)).origin}` : `wel naar ${candidates.slice(0, 3).join(", ")}${candidates.length > 3 ? " en meer" : ""}`;
+    return `${where}: sendsTo "${pattern}" past niet: bij ${round} keer afspelen van het recept ging geen ${kind} naar een adres onder dit patroon (${found}). Open het onderdeel twee keer, vergelijk de adressen, en zet alleen een * waar ze verschillen; verstuurt het onderdeel pas na de laatste stap van het recept, laat sendsTo dan weg`;
+  }
+  return null;
+}
+
+/**
+ * The `sendsTo` patterns of a model that passed `check-site` and has not changed since; empty
+ * otherwise, and then a recording is looked up on the declared origin. Read the way
+ * `approvedReads` reads the read requests.
+ */
+export function approvedSendsTo(runDir: string): string[] {
+  const path = join(runDir, SITE_MODEL_FILE);
+  const checkPath = join(runDir, SITE_CHECK_FILE);
+  if (!existsSync(path) || !existsSync(checkPath)) return [];
+  try {
+    const raw = readFileSync(path);
+    const check = JSON.parse(readFileSync(checkPath, "utf8")) as Partial<SiteCheck>;
+    if (check.ok !== true || check.siteSha256 !== sha256(raw)) return [];
+    const model = JSON.parse(raw.toString("utf8")) as { components?: unknown; processes?: unknown };
+    const parts = [...(Array.isArray(model.components) ? model.components : []), ...(Array.isArray(model.processes) ? model.processes : [])] as unknown[];
+    return parts.flatMap((part) => (isRecord(part) && sendsToProblems(part.sendsTo, "").length === 0 ? [part.sendsTo as string] : []));
+  } catch {
+    return [];
+  }
+}
+
 export const DESCRIPTION_MIN_WORDS = 40;
 export const DESCRIPTION_MAX_WORDS = 140;
 /** Text that was left standing where a description should be. */
@@ -691,6 +801,8 @@ export interface SiteCheck {
     after: string;
     /** For a component that replayed: its recipe on the representative page of every page type it stands on, in the window the sweep uses. `accepted` when the model accepts that it does not open there. */
     onPageTypes?: { pageType: string; url: string; viewport: { width: number; height: number }; reached: boolean; reasonNl: string | null; accepted: boolean }[];
+    /** For a part with `sendsTo`: the pattern, and per replay of the recipe (two) the addresses on its origin that the page opened a socket to or sent a request to. */
+    sendsTo?: { pattern: string; seen: string[][] };
   }[];
   /** Saved states of the explorer that the model does not use; moved to recipes/unused when the model passed. */
   unusedRecipes?: string[];

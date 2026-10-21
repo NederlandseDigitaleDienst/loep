@@ -436,6 +436,8 @@ export class Daemon {
     const replayed = surface?.guard.replays?.splice(0) ?? [];
     // Read requests of the site model that went through, such as a question to a search service.
     const read = surface?.guard.reads?.splice(0) ?? [];
+    // Sockets the page opened, for the pattern of sendsTo in the site model.
+    const sockets = surface?.guard.sockets?.splice(0) ?? [];
     // Cloudflare's check whether the browser is a robot, which Cloudflare answers and the site never gets.
     const challenges = surface?.guard.challenges?.splice(0) ?? [];
     // An origin of the site that blocked the run while this command ran: from now on no session asks it anything.
@@ -460,6 +462,7 @@ export class Daemon {
       ...(written.length > 0 ? { writes: written } : {}),
       ...(replayed.length > 0 ? { replays: replayed.map(({ noteNl: _noteNl, ...entry }) => entry) } : {}),
       ...(read.length > 0 ? { reads: read } : {}),
+      ...(sockets.length > 0 ? { sockets } : {}),
       ...(challenges.length > 0 ? { challenges } : {}),
       ...(blockades.length > 0 ? { blockades } : {}),
       popups: surface ? surface.popups.splice(0) : [],
@@ -474,6 +477,7 @@ export class Daemon {
     if (written.length > 0) print.written = [...written.slice(0, MAX_BLOCKED_PRINTED).map((entry) => `${entry.method} ${entry.path.slice(0, 100)}`), ...(written.length > MAX_BLOCKED_PRINTED ? [`(+${written.length - MAX_BLOCKED_PRINTED})`] : [])];
     if (replayed.length > 0) print.replayed = [...new Set(replayed.map((entry) => entry.noteNl))];
     if (read.length > 0) print.read = [...read.slice(0, MAX_BLOCKED_PRINTED).map((entry) => `${entry.method} ${entry.url.slice(0, 100)} (leesverzoek ${entry.rule})`), ...(read.length > MAX_BLOCKED_PRINTED ? [`(+${read.length - MAX_BLOCKED_PRINTED})`] : [])];
+    if (sockets.length > 0) print.sockets = [...new Set(sockets)].slice(0, MAX_BLOCKED_PRINTED);
     if (challenges.length > 0) print.challenge = `${challenges.length} ${challenges.length === 1 ? "verzoek" : "verzoeken"} van de controle van Cloudflare tegen robots doorgelaten (${[...new Set(challenges.map((entry) => new URL(entry.url).hostname))].join(", ")}); de site krijgt die niet`;
     if (blocked.length > 0) print.blocked = [...blocked.slice(0, MAX_BLOCKED_PRINTED).map((entry) => `${entry.kind}: ${entry.method} ${entry.url.slice(0, 100)}${entry.search ? ` (zoekvraag: ${entry.search.join(", ")})` : ""}${entry.reasonNl ? ` (${entry.reasonNl})` : ""}`), ...(blocked.length > MAX_BLOCKED_PRINTED ? [`(+${blocked.length - MAX_BLOCKED_PRINTED})`] : [])];
     // A write the budget for sending held back: the agent hears why, and what to write when nothing more can be sent.
