@@ -482,14 +482,14 @@ async function inspect(page: Page, url: string, mayBeDocument: boolean, offered:
         .split(/\s+/)
         .filter(Boolean).length,
       // The text the search term is chosen from: the main region, or the body without its header, navigation and footer.
-      // A page with a search field there is the search page or its results: its text is about searching, not about the site.
+      // A page with a search field in its main region is the search page or its results: its text is about searching, not about the site.
       searchText: (() => {
         const flat = loep.flatText as unknown as (node: Node, parts?: string[]) => string[];
         const main = (loep.deepQueryAll as unknown as (selector: string) => Element[])("main,[role=main]")[0];
         const searchField = "input[type=search],[role=search],[role=searchbox]";
         if (main) return main.querySelector(searchField) ? null : flat(main).join(" ");
-        const chrome = "header,nav,footer,[role=banner],[role=navigation],[role=contentinfo]";
-        if ([...document.querySelectorAll(searchField)].some((field) => !field.closest(chrome))) return null;
+        // Without a main region a search box outside the header is common, on every page: it is left out like the header.
+        const chrome = "header,nav,footer,[role=banner],[role=navigation],[role=contentinfo],[role=search],form:has(input[type=search])";
         const parts: string[] = [];
         const walk = (node: Node): void => {
           for (const child of node.childNodes) {
