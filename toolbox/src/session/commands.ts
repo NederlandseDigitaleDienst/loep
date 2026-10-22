@@ -1000,6 +1000,8 @@ export const COMMANDS: Record<string, Spec> = {
   // The earlier name of `taborder`.
   tabwalk: { target: "option-from", changes: true, run: taborderWith(tabwalk, oneMethod("keyboard-walk", tabwalk), "tabwalk") },
   lang: { target: "optional-first-argument", changes: false, run: lang },
+  parse: { target: "none", changes: false, run: source },
+  // The earlier name of `parse`, which a shell guard reads as the builtin `source`.
   source: { target: "none", changes: false, run: source },
   ocr: { target: "first-argument", changes: false, run: ocrCommand },
   motion: { target: "none", changes: false, run: motion },

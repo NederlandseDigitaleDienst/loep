@@ -454,11 +454,11 @@ test("lang sets the declared language against two detectors", async () => {
   assert.ok(size(wrong) < 700);
 });
 
-test("source validates what the server sent with two parsers", async (context) => {
+test("parse validates what the server sent with two parsers", async (context) => {
   const java = await binary("java");
   if (!java.available) return context.skip("geen Java op deze machine");
   await loep("open", ["/opinions.html"]);
-  const source = await loep("source", [], { wait: true });
+  const source = await loep("parse", [], { wait: true });
   assert.equal(source.methods, "2 disagree");
   const lines = source.lines as string[];
   // The second id "dup" and the div in the ul are gone from the DOM after parsing; in the source both parsers see them.
