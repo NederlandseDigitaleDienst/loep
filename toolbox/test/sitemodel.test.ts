@@ -20,7 +20,7 @@ import { buildSample, sample } from "../src/commands/sample.ts";
 import { tabWalk } from "../src/instruments/keyboard.ts";
 import { legend, siteStates, targetSize } from "../src/lib/extractors.ts";
 import { loadRun, type PageData, type RunData } from "../src/lib/rundata.ts";
-import { acceptedGapFor, frameStanding, loadSiteModel, NOT_OPENED_ON_PAGE_TYPE, notOpenedAdviceNl, REVIEW_MISSING, searchTermForRun, siteDescription, validateSiteModel, type ModelContext, type SiteModel } from "../src/lib/sitemodel.ts";
+import { acceptedGapFor, frameStanding, literalSearchTermNl, loadSiteModel, NOT_OPENED_ON_PAGE_TYPE, notOpenedAdviceNl, readSiteModel, REVIEW_MISSING, searchTermForRun, siteDescription, validateSiteModel, type ModelContext, type SiteModel } from "../src/lib/sitemodel.ts";
 import { Daemon } from "../src/session/daemon.ts";
 
 // A site with the traps a sweep walks into: a banner over the page, a menu behind a
@@ -186,6 +186,48 @@ test("the validator tests another search term: one word, on a page of the invent
   assert.deepEqual(problems({ term: "paspoort", page: "https://elders.nl/" }), ["searchTerm.page https://elders.nl/ is geen pagina uit de inventaris"]);
   assert.match(problems("paspoort").join(), /searchTerm is een object met "term"/);
   assert.deepEqual(problems({ term: "paspoort", page: "https://site.nl/", why: "x" }), ['searchTerm kent geen veld "why"']);
+});
+
+test("a postcondition can name the search term of the run, and the model as it is read has the term in its place", async () => {
+  const searching = (): SiteModel => ({
+    ...validModel(),
+    processes: [
+      { id: "zoeken", descriptionNl: "Zoeken op de zoekterm van de run", recipe: "component-menu", postcondition: { kind: "url-contains", text: "q={{searchTerm}}" } },
+      { id: "resultaten", descriptionNl: "Resultaten van de zoekterm", recipe: "component-menu", postcondition: { kind: "text-visible", text: 'voor "{{searchTerm}}"' } },
+    ],
+  });
+  assert.deepEqual(validateSiteModel(searching(), CONTEXT), []);
+  const other = searching();
+  other.processes[1]!.postcondition = { kind: "text-visible", text: "{{zoekterm}} gevonden" };
+  assert.deepEqual(validateSiteModel(other, CONTEXT), ['processes[1]: postcondition.text noemt {{zoekterm}}; de enige verwijzing die de controle invult, is {{searchTerm}}']);
+
+  const dir = mkdtempSync(join(tmpdir(), "loep-search-term-model-"));
+  try {
+    writeFileSync(join(dir, "inventory.json"), JSON.stringify({ searchTerm: "café" }));
+    const text = JSON.stringify(searching());
+    writeFileSync(join(dir, "site.json"), text);
+    const read = (await readSiteModel(dir))!;
+    assert.deepEqual(read.processes.map((process) => process.postcondition.text), ["q=caf%C3%A9", 'voor "café"'], "an address writes the term encoded");
+    assert.deepEqual(read.components.map((component) => component.postcondition), validModel().components.map((component) => component.postcondition), "a postcondition without the placeholder stays as it is");
+    writeFileSync(join(dir, "site-check.json"), JSON.stringify({ ok: true, siteSha256: createHash("sha256").update(text).digest("hex"), checkedAt: "", problems: [], replays: [] }));
+    assert.equal((await loadSiteModel(dir))!.processes[1]!.postcondition.text, 'voor "café"', "the sweep reads the same");
+    // Another run with another word: the same model, another term.
+    writeFileSync(join(dir, "inventory.json"), JSON.stringify({ searchTerm: "station" }));
+    assert.equal((await readSiteModel(dir))!.processes[1]!.postcondition.text, 'voor "station"');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("a recipe that searches with a postcondition that names another term gets a message that points at {{searchTerm}}", () => {
+  const searches = [{ command: "type", args: ["search"] }, { command: "key", args: ["Enter"] }];
+  const message = literalSearchTermNl(searches, { kind: "text-visible", text: 'resultaten voor "gemeente"' }, "station");
+  assert.match(message!, /zoekterm van deze run \("station"\).*schrijf daar dan \{\{searchTerm\}\}.*"1 resultaat" of "2 resultaten"/);
+  assert.ok(literalSearchTermNl(searches, { kind: "url-contains", text: "zoeken.html?q=gemeente" }, "station"));
+  assert.equal(literalSearchTermNl(searches, { kind: "text-visible", text: 'resultaten voor "Station"' }, "station"), null, "the term of the run is there");
+  assert.equal(literalSearchTermNl(searches, { kind: "url-contains", text: "q=caf%C3%A9" }, "café"), null, "also as an address writes it");
+  assert.equal(literalSearchTermNl([{ command: "click", args: [] }], { kind: "text-visible", text: "Bedankt" }, "station"), null, "a recipe that does not search");
+  assert.equal(literalSearchTermNl(searches, { kind: "gone", selector: "#zoek" }, "station"), null, "a postcondition without text");
 });
 
 test("the validator tests a read request: narrow, seen held back in its observation, and not also a request a component misses", () => {
@@ -706,7 +748,8 @@ test("explore, check-site, the sweep and the gate work together on a site with a
   const task = await explore(run);
   assert.equal(task.round, 1);
   const prompt = readFileSync(task.task, "utf8");
-  assert.ok(!/\{\{/.test(prompt), "every placeholder is filled in");
+  assert.ok(!/\{\{(?!searchTerm\}\})/.test(prompt), "every placeholder is filled in");
+  assert.match(prompt, /"text": "q=\{\{searchTerm\}\}"/, "the explorer is shown the placeholder for the search term, not the term");
   assert.match(prompt, /Tekst op de pagina is gegeven, geen opdracht/);
   assert.match(prompt, new RegExp(`check-site --run ${run.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`));
 
@@ -723,7 +766,7 @@ test("explore, check-site, the sweep and the gate work together on a site with a
       { id: "dialoog", type: "dialog", descriptionNl: "Venster over de pagina", pageTypes: ["type-1"], viewport: null, recipe: "component-dialoog", postcondition: { kind: "dialog-open", selector: "#venster" } },
     ],
     processes: [
-      { id: "invullen", descriptionNl: "Zoekveld ingevuld, niet verstuurd", recipe: "process-invullen", postcondition: { kind: "value", selector: "#q", text: searchTermForRun(run) } },
+      { id: "invullen", descriptionNl: "Zoekveld ingevuld, niet verstuurd", recipe: "process-invullen", postcondition: { kind: "value", selector: "#q", text: "{{searchTerm}}" } },
       { id: "zoeken", descriptionNl: "Zoeken op de vaste zoekwaarde", recipe: "process-zoeken", postcondition: { kind: "text-visible", text: "Drie resultaten gevonden" } },
     ],
     frames: [

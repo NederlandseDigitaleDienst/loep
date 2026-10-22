@@ -10,7 +10,7 @@ import { recordReads } from "../lib/reads.ts";
 import { makeWorkDir } from "../lib/workdir.ts";
 import { siteLabel } from "../lib/origins.ts";
 import { textHasTerm } from "../lib/searchterm.ts";
-import { acceptedGapFor, frameAddress, NOT_OPENED_ON_PAGE_TYPE, notOpenedAdviceNl, pageTypesToCheck, readSiteModel, REVIEW_MISSING, searchTermForRun, sendsToCandidates, sendsToReplayProblem, SITE_CHECK_FILE, SITE_MODEL_FILE, validateSiteModel, type ModelContext, type PageType, type Postcondition, type SiteCheck, type SiteModel } from "../lib/sitemodel.ts";
+import { acceptedGapFor, frameAddress, literalSearchTermNl, NOT_OPENED_ON_PAGE_TYPE, POSTCONDITION_NOT_HELD_NL, SEARCH_TERM_PLACEHOLDER, notOpenedAdviceNl, pageTypesToCheck, readSiteModel, REVIEW_MISSING, searchTermForRun, sendsToCandidates, sendsToReplayProblem, SITE_CHECK_FILE, SITE_MODEL_FILE, validateSiteModel, type ModelContext, type PageType, type Postcondition, type SiteCheck, type SiteModel } from "../lib/sitemodel.ts";
 import { LOOK_COMMANDS } from "../lib/verdict.ts";
 import { readObservation } from "../session/observations.ts";
 import { holds, loadRecipes, MAX_RECIPE_STEPS, replayEnv, replayFromClean, replaySteps } from "../session/recipe.ts";
@@ -139,6 +139,8 @@ export async function explore(runDir: string): Promise<{ task: string; pages: nu
     previous,
     login: agentLoginNl(loginForRun(runDir)),
     searchTerm: searchTermForRun(runDir),
+    // The placeholder itself, for the postconditions of a recipe that searches: {{searchTerm}} in the template is the term of this run.
+    searchTermPlaceholder: SEARCH_TERM_PLACEHOLDER,
     searchTermAlternatives: inventory.searchTermAlternatives?.length ? inventory.searchTermAlternatives.map((word) => `\`${word}\``).join(", ") : "geen",
   });
   await writeFileAtomic(join(runDir, taskPath), prompt);
@@ -403,6 +405,7 @@ export async function checkSite(runDir: string, options: { navigationDelayMs?: n
       await confirmLogin(browser);
       // The read requests of the model passed the validator above; a recipe that searches is replayed with them, as the sweep will.
       const env: Env = { ...(await replayEnv(browser, runDir, options.navigationDelayMs === undefined ? {} : { navigationDelayMs: options.navigationDelayMs })), reads: model.readRequests ?? [] };
+      const term = searchTermForRun(runDir);
       for (const entry of entries) {
         const recipe = recipes[entry.recipe]!;
         let reasonNl: string | null = null;
@@ -431,6 +434,11 @@ export async function checkSite(runDir: string, options: { navigationDelayMs?: n
             const problem = sendsToReplayProblem(`${entry.kind} "${entry.id}"`, entry.sendsTo, seen);
             if (problem !== null) problems.push(problem);
           }
+        }
+        // Steps that ran but did not get there, in a recipe that searches: the postcondition may name the term of an earlier run.
+        if (reasonNl?.startsWith(POSTCONDITION_NOT_HELD_NL)) {
+          const literal = literalSearchTermNl(recipe.steps, entry.postcondition, term);
+          if (literal) reasonNl = `${reasonNl}. ${literal}`;
         }
         const onPageTypes = entry.kind === "component" && reasonNl === null && recipe.start ? await componentOnPageTypes(env, model, entry.id, { ...recipe, start: recipe.start }, entry.postcondition) : undefined;
         replays.push({ kind: entry.kind, id: entry.id, recipe: entry.recipe, ok: reasonNl === null, reasonNl, before, after, ...(onPageTypes ? { onPageTypes } : {}), ...(sendsTo ? { sendsTo } : {}) });
