@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   citedObservations,
+  failedEngineRules,
   frameFocusProblems,
   KINDS_AFTER_FINISH,
   NOT_SENT,
@@ -563,4 +564,43 @@ test("2.1.4: a finding on an embedded window needs a key pressed with the focus 
   assert.deepEqual(frameFocusProblems(failed([], [{ ...finding, evidence: ["j1-0001"] }]), legend, records), []);
   assert.deepEqual(frameFocusProblems({ ...failed(["j1-0001"]), criterion: "2.1.1" }, legend, records), []);
   assert.deepEqual(frameFocusProblems({ ...failed(["j1-0001"]), outcome: "cantTell" }, legend, records), []);
+});
+
+test("every rule an engine failed in the dossier is settled in an observation, per rule and kind of element (#239)", () => {
+  const evidence = { engine: { results: [
+    { engine: "axe-core", rule: "aria-roles", outcome: "failed" },
+    { engine: "axe-core", rule: "aria-roles", outcome: "passed" },
+    { engine: "axe-core", rule: "link-name", outcome: "failed" },
+    { engine: "alfa", rule: "sia-r11", outcome: "failed" },
+    { engine: "axe-core", rule: "label", outcome: "cantTell" },
+  ] } };
+  assert.deepEqual(failedEngineRules(evidence), ["aria-roles", "link-name", "sia-r11"]);
+  assert.deepEqual(failedEngineRules({}), []);
+
+  const engineContext: JudgeContext = { ...context, evidenceNames: ["contrast", "engine"], engineFailures: ["aria-roles", "link-name", "sia-r11"] };
+  const links = { checkedNl: "Pictogramlinks in de voettekst", howNl: "Naam gemeten op P01", observedNl: "Twee links hebben bij alle methoden geen naam.", evidence: ["engine", "j143-0003"], ruling: "finding" as const, finding: "F1", engineRules: ["link-name", "sia-r11"] };
+  const logo = { checkedNl: "Wapen met role logo in de voettekst", howNl: "Code en rol gelezen op P01", observedNl: "De afbeelding heeft role logo, een rol die niet bestaat.", evidence: ["engine", "j143-0002"], engineRules: ["aria-roles"] };
+
+  // Ignored: the verdict says nothing about a rule the engine failed.
+  const ignored = validateJudgeVerdict({ ...failed, observations: [seen, links] }, engineContext).join("\n");
+  assert.match(ignored, /engine rule "aria-roles" failed in the dossier part engine and no observation settles it/);
+  assert.doesNotMatch(ignored, /"link-name"|"sia-r11"/, "one observation settles two rules on the same elements");
+  // A finding, a candidate passed on, or an open point settles it.
+  assert.deepEqual(validateJudgeVerdict({ ...failed, observations: [seen, links, { ...logo, ruling: "finding", finding: "F1" }] }, engineContext), []);
+  const cross = { criterion: "1.3.1", page: "P01", where: "wapen in de voettekst", evidence: ["j143-0002"], noteNl: "De afbeelding heeft role logo, een rol die niet bestaat." };
+  assert.deepEqual(validateJudgeVerdict({ ...failed, observations: [seen, links, { ...logo, ruling: "otherCriterion" }], crossCandidates: [cross] }, engineContext), []);
+  const open = "veegronde mist: de rol van het wapen in de voettekst is niet in een tweede browser gelezen.";
+  assert.deepEqual(validateJudgeVerdict({ ...failed, missingNl: [open], observations: [seen, links, { ...logo, ruling: "open" }] }, engineContext), []);
+  // Set aside with a reason that points at a look of one's own; a reason without one is refused.
+  assert.deepEqual(validateJudgeVerdict({ ...failed, observations: [seen, links, { ...logo, ruling: "noIssue" }] }, engineContext), []);
+  assert.match(validateJudgeVerdict({ ...failed, observations: [seen, links, { ...logo, ruling: "noIssue", evidence: ["engine"] }] }, engineContext).join(), /"noIssue" next to engineRules needs a look or measure observation/);
+  assert.match(validateJudgeVerdict({ ...failed, observations: [seen, links, { ...logo, ruling: "finding", finding: "F1", engineRules: ["aria-role"] }] }, engineContext).join(), /"aria-role" is not a rule an engine failed/);
+
+  // The verifier sets a failed rule aside only with an observation of its own session.
+  const verifier: VerificationContext = { ...verifierContext, evidenceNames: engineContext.evidenceNames, engineFailures: ["aria-roles"] };
+  assert.match(validateVerification(reproduced, verifier).join(), /engine rule "aria-roles"/);
+  assert.match(validateVerification({ ...reproduced, observations: [...reproduced.observations, { ...logo, ruling: "noIssue" }] }, verifier).join(), /of session "v143" in evidence/);
+  assert.deepEqual(validateVerification({ ...reproduced, observations: [...reproduced.observations, { ...logo, ruling: "noIssue", evidence: ["v143-0003"] }] }, verifier), []);
+  // Without the dossier part nothing is asked.
+  assert.deepEqual(validateJudgeVerdict(failed, context), []);
 });

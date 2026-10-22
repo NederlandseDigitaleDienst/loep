@@ -21,6 +21,7 @@ import { loadRun, type RunData } from "../lib/rundata.ts";
 import {
   canonicalCommand,
   citedObservations,
+  failedEngineRules,
   FINISH_FACTOR,
   frameFocusProblems,
   indexObservations,
@@ -1090,6 +1091,7 @@ export async function checkInstrumentVerdict(runDir: string, criterionId: string
     decisiveCommands: task.decisiveCommands,
     recommendationRules: task.recommendationRules ?? [],
     explainOnPass: rowsToExplain(dossier.evidence, task.passExplains ?? []),
+    engineFailures: failedEngineRules(dossier.evidence),
     fileExists: (ref: string) => !ref.includes("..") && existsSync(join(runDir, ref)),
     sourceText: sourceTexts(runDir, observations.records, dossier),
     ...(dossier.site?.baseUrl ? { siteHosts: siteHosts(dossier.site) } : {}),
