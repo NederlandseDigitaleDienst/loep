@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { isAbsolute, join, relative } from "node:path";
 import { after, before, test } from "node:test";
 import { PNG } from "pngjs";
 import type { Browser } from "playwright";
@@ -113,6 +113,12 @@ test("a finding gets a piece of the screenshot of the sweep of the test site, wi
   const { files, problems } = await writeCutouts(run, evaluation, join(run, "report", "uitsneden"));
   assert.deepEqual(problems, []);
   const piece = PNG.sync.read(readFileSync(files[finding.id]!.absolute));
+
+  // A relative run folder, as `render --run runs/x` gives it, still yields a path typst can find from any working folder.
+  const relativeDir = relative(process.cwd(), join(run, "report", "relatief"));
+  const viaRelative = await writeCutouts(run, evaluation, relativeDir);
+  assert.ok(isAbsolute(viaRelative.files[finding.id]!.absolute));
+  assert.ok(existsSync(viaRelative.files[finding.id]!.absolute));
   const source = PNG.sync.read(screenshot);
   assert.deepEqual([piece.width, piece.height], [cutout.at.width, cutout.at.height]);
   const middle = { x: cutout.element.x + Math.floor(cutout.element.width / 2), y: cutout.element.y + Math.floor(cutout.element.height / 2) };
