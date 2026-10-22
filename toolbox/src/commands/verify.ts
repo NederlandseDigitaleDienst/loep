@@ -23,15 +23,18 @@ const INDEX = "evidence-index.json";
 /** Where the signature stands, and the report that names who signed. Both are made after the seal and refer to it. */
 export const SIGNED_DIR = "signed";
 export const SIGNATURE_FILE = `${SIGNED_DIR}/signature.json`;
+/** Where the rechecks of findings after the evaluation stand (`recheck`), each in a folder of its own. */
+export const RECHECKS_DIR = "rechecks";
 
 /**
  * What the seal never covers, besides itself: the signature that refers to it, and the documents
  * that are made after signing (the signed report, the decisions about each defect, the statement
- * and what the organisation filled in for it). The decisions have a hash of their own. Everything else in the run is evidence and is sealed. That includes the work folder
+ * and what the organisation filled in for it), and the rechecks of findings after the evaluation (`rechecks/`), which
+ * measure the site as it is later and change nothing of what was evaluated. The decisions have a hash of their own. Everything else in the run is evidence and is sealed. That includes the work folder
  * of each session (`werk/<session>/`): a helper script there shows how an agent called the
  * toolbox, and so how its observations came about. Nothing writes there after the agents are done.
  */
-const OUTSIDE_SEAL = { files: ["verklaring-invoer.json"], dirs: [SIGNED_DIR, DECISIONS_DIR, "verklaring"] };
+const OUTSIDE_SEAL = { files: ["verklaring-invoer.json"], dirs: [SIGNED_DIR, DECISIONS_DIR, "verklaring", RECHECKS_DIR] };
 const outsideSeal = (name: string): boolean => OUTSIDE_SEAL.files.includes(name) || OUTSIDE_SEAL.dirs.some((dir) => name.startsWith(`${dir}/`));
 
 export async function hashRun(runDir: string): Promise<EvidenceIndex & { outside: string[] }> {
@@ -157,6 +160,6 @@ export async function verify(runDir: string): Promise<boolean> {
   const answers = await answersRecorded(runDir);
   if (answers.answers > 0) process.stdout.write(`antwoorden van een persoon: ${answers.answers} (${waysNl(answers.answers, answers.viaTerminal, answers.viaConversation)})\n`);
   if (decisions) process.stdout.write(`besluiten over gebreken: ${decisions.decisions} (${waysNl(decisions.decisions, decisions.viaTerminal, decisions.viaConversation)}); buiten het zegel, als eigen laag ${decisions.sha256 ? decisions.sha256.slice(0, 12) : "zonder index"}\n`);
-  if (check.outside.length > 0) process.stdout.write(`buiten het zegel, gemaakt na het verzegelen (handtekening, afgetekend rapport, besluiten, verklaring): ${check.outside.length}\n`);
+  if (check.outside.length > 0) process.stdout.write(`buiten het zegel, gemaakt na het verzegelen (handtekening, afgetekend rapport, besluiten, verklaring, nametingen): ${check.outside.length}\n`);
   return problems.length === 0;
 }

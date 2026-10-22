@@ -158,7 +158,7 @@ export interface TaskOptions {
   buildDossier?: typeof buildDossier;
 }
 
-function fill(template: string, values: Record<string, string>): string {
+export function fill(template: string, values: Record<string, string>): string {
   return template.replace(/\{\{(\w+)\}\}/g, (_, key: string) => {
     if (!(key in values)) throw new Error(`template placeholder {{${key}}} has no value`);
     return values[key]!;
