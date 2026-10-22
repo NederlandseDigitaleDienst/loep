@@ -50,12 +50,14 @@ export async function overflowProbe(page: Page, screenshotPath: string): Promise
  * The same measurement on a page that is already open, by resizing its window and putting
  * it back. A page that only arranges itself while loading is measured better on a fresh page at that size.
  */
-export async function overflowAtSize(page: Page, viewport: { width: number; height: number }, screenshotPath: string): Promise<OverflowResult> {
+export async function overflowAtSize(page: Page, viewport: { width: number; height: number }, screenshotPath: string, alsoAtSize?: () => Promise<void>): Promise<OverflowResult> {
   const original = page.viewportSize();
   await page.setViewportSize(viewport);
   await page.waitForTimeout(SETTLE_AFTER_RESIZE_MS);
   try {
-    return await overflowProbe(page, screenshotPath);
+    const result = await overflowProbe(page, screenshotPath);
+    await alsoAtSize?.();
+    return result;
   } finally {
     if (original) {
       await page.setViewportSize(original);
