@@ -1,0 +1,1 @@
+Een paginatype zonder overzichtsblad meldt niet langer "draai sample opnieuw" als een pagina van dat type wel in de steekproef zit maar door de veegronde niet te meten was; het advies is dan collect opnieuw te draaien.

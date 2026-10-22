@@ -90,12 +90,55 @@ export function documentKind(url: string): DocumentKind | null {
 /** How much of a file is looked at to tell its kind by what is in it. */
 const SNIFF_BYTES = 65_536;
 
+/** The character set a `Content-Type` header names, lower case; null when it names none. */
+export function charsetOf(contentType: string | null): string | null {
+  const match = /;\s*charset\s*=\s*"?([^";\s]+)"?/i.exec(contentType ?? "");
+  return match ? match[1]!.toLowerCase() : null;
+}
+
+/**
+ * Plain text bytes as text: in the character set the server names, else UTF-16 when a byte order
+ * mark says so, else UTF-8 when the bytes are valid UTF-8, else windows-1252 (a superset of
+ * Latin-1). `partial` is for the start of a longer file, which may end in the middle of a character.
+ */
+export function decodeText(bytes: Buffer, charset: string | null, partial = false): { text: string; validUtf8: boolean; decodedAs: string } {
+  let validUtf8 = true;
+  let utf8 = "";
+  try {
+    utf8 = new TextDecoder("utf-8", { fatal: true }).decode(bytes, { stream: partial });
+  } catch {
+    validUtf8 = false;
+  }
+  const bom = bytes[0] === 0xff && bytes[1] === 0xfe ? "utf-16le" : bytes[0] === 0xfe && bytes[1] === 0xff ? "utf-16be" : null;
+  for (const label of [charset, bom]) {
+    if (!label) continue;
+    try {
+      return { text: new TextDecoder(label).decode(bytes, { stream: partial }), validUtf8, decodedAs: label };
+    } catch {
+      // A name the decoder does not know: decoded as below.
+    }
+  }
+  if (validUtf8) return { text: utf8, validUtf8, decodedAs: "utf-8" };
+  return { text: new TextDecoder("windows-1252").decode(bytes, { stream: partial }), validUtf8, decodedAs: "windows-1252" };
+}
+
+/** The names of the entries of a zip archive whose local headers lie in `start`. */
+function zipEntryNames(start: Buffer): string[] {
+  const names: string[] = [];
+  for (let at = start.indexOf("PK\x03\x04", 0, "latin1"); at >= 0 && at + 30 <= start.length; at = start.indexOf("PK\x03\x04", at + 4, "latin1")) {
+    names.push(start.toString("latin1", at + 30, Math.min(start.length, at + 30 + start.readUInt16LE(at + 26))));
+  }
+  return names;
+}
+
 /**
  * The kind of a file by what is in it, for a file the inventory could not place by its extension or
- * by what the server said: the signature of a known format, or else plain text when its start is
- * valid UTF-8 without a null byte. Null for a file that is neither, such as a picture or a program.
+ * by what the server said: the signature of a known format, or else plain text. Text is what decodes
+ * (see `decodeText`, with the character set the server named) to characters without a null and with
+ * hardly any control characters, so text in windows-1252, Latin-1 or UTF-16 counts too. Null for a
+ * file that is neither, such as a picture, a program or a zip archive that is no office file.
  */
-export function kindOfContent(bytes: Buffer): DocumentKind | null {
+export function kindOfContent(bytes: Buffer, charset: string | null = null): DocumentKind | null {
   const start = bytes.subarray(0, SNIFF_BYTES);
   const latin = start.toString("latin1");
   if (latin.startsWith("%PDF-")) return "pdf";
@@ -105,26 +148,20 @@ export function kindOfContent(bytes: Buffer): DocumentKind | null {
     const kind = /mimetypeapplication\/vnd\.oasis\.opendocument\.(text|presentation|spreadsheet)/.exec(latin)?.[1];
     if (kind) return ({ text: "odt", presentation: "odp", spreadsheet: "ods" } as const)[kind as "text" | "presentation" | "spreadsheet"];
     if (latin.includes("mimetypeapplication/epub+zip")) return "epub";
-    if (latin.includes("[Content_Types].xml") || /(?:word|ppt|xl)\//.test(latin)) {
-      if (latin.includes("word/")) return "docx";
-      if (latin.includes("ppt/")) return "pptx";
-      if (latin.includes("xl/")) return "xlsx";
-    }
+    const names = zipEntryNames(start);
+    if (!names.includes("[Content_Types].xml")) return null;
+    for (const [folder, office] of [["word/", "docx"], ["ppt/", "pptx"], ["xl/", "xlsx"]] as const) if (names.some((name) => name.startsWith(folder))) return office;
     return null;
   }
-  if (start.includes(0)) return null;
-  // A cut at the end of the window may split a character: only what comes before it has to be valid.
-  const whole = bytes.length <= SNIFF_BYTES ? start : start.subarray(0, Math.max(0, start.length - 4));
-  try {
-    new TextDecoder("utf-8", { fatal: true }).decode(whole);
-    return "text";
-  } catch {
-    return null;
-  }
+  const { text } = decodeText(start, charset, bytes.length > SNIFF_BYTES);
+  if (text.includes("\0")) return null;
+  // Tab, line feed, form feed and carriage return belong in text; other C0 and C1 controls are rare in it and common in binary data.
+  const controls = text.match(/[\x01-\x08\x0b\x0e-\x1f\x7f-\x9f]/g)?.length ?? 0;
+  return controls * 100 <= text.length ? "text" : null;
 }
 
 /** Why a file that is neither a known format nor text is not read. */
-export const BINARY_REASON_NL = "het bestand bevat geen tekst en is van een soort die de toolbox niet kent, zoals een afbeelding of een programma; het wordt niet ingelezen";
+export const BINARY_REASON_NL = "het bestand bevat geen tekst en is van een soort die de toolbox niet kent, zoals een afbeelding, een programma of een zip-archief; het wordt niet ingelezen";
 
 /** The kind of document a server says it sends; null when it is none. */
 export function kindOfContentType(contentType: string | null): DocumentKind | null {

@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
+import { fileURLToPath } from "node:url";
 import { browserUse, gateLineNl, readVersionAccuracy, repeatedInBrowsersNl, secondBrowserUse, voiceOverSessions } from "../src/commands/evaluate.ts";
 import { render } from "../src/commands/render.ts";
 import { canonicalJson } from "../src/lib/canonical.ts";
@@ -10,9 +11,11 @@ import { mergeFindings } from "../src/lib/defects.ts";
 import { aiGeneratedMark, closeCutQuote, evaluationHash, idsAcrossVersionsNl, markVendor, quoteStart, summarise, vendorTagsOf, VERSION_NOT_MEASURED_NL, type Evaluation, type ReportFinding } from "../src/lib/evaluation.ts";
 import { reportedModels } from "../src/lib/models.ts";
 import { deriveReport, renderMarkdown } from "../src/lib/report-markdown.ts";
-import { tool } from "../src/lib/typst.ts";
+import { makePdf, TEMPLATES, tool, unshownCheck, unshownPattern, unshownTexts, unshownWarning } from "../src/lib/typst.ts";
 import { SEVERITIES } from "../src/lib/verdict.ts";
 import { exampleEvaluation } from "./fixtures/example-evaluation.ts";
+
+const CLI = fileURLToPath(new URL("../src/cli.ts", import.meta.url));
 
 const signed = (evaluation: Evaluation): Evaluation => ({
   ...evaluation,
@@ -368,6 +371,60 @@ test("the PDF shows the recommendations in their own part", async (context) => {
   assert.ok(flat.includes("aanbeveling A1 van de procedure"));
 });
 
+/** A failed criterion whose places say what they came to: a defect, one in order, one open and one passed on. The rest stays as before rulings existed. */
+function withRulings() {
+  const evaluation = exampleEvaluation();
+  const host = evaluation.criteria.find((criterion) => criterion.outcome === "failed" && criterion.findings.length > 0)!;
+  const finding = host.findings[0]!;
+  finding.key = "F1";
+  const place = { checkedNl: "Het vinkje onder een eigen bericht", howNl: "Bekeken op de pagina", observedNl: "Het vinkje heeft geen tekstalternatief.", evidence: ["images"] };
+  host.observations = [
+    { ...place, ruling: "finding", finding: "F1" },
+    { ...place, checkedNl: "Een foto met een spandoek", ruling: "noIssue" },
+    { ...place, checkedNl: "Een vlak onder de voet", ruling: "open" },
+    { ...place, checkedNl: "De rand van een veld", ruling: "otherCriterion" },
+  ];
+  return { evaluation, host, finding };
+}
+
+test("appendix A says per examined place what it came to, with the finding of a defect; an old place says nothing", () => {
+  const { evaluation, host, finding } = withRulings();
+  const markdown = renderMarkdown(evaluation);
+  const entry = markdown.slice(markdown.indexOf(`<a id="bijlage-${host.id}"></a>`)).split("**Hoe zeker is dit oordeel**")[0]!;
+  assert.ok(entry.includes(`1. Uitkomst: gebrek, zie bevinding [${finding.id}](#${finding.id})\n   - Onderzocht: Het vinkje onder een eigen bericht`), entry);
+  assert.ok(entry.includes("2. Uitkomst: in orde\n   - Onderzocht: Een foto met een spandoek"));
+  assert.ok(entry.includes("3. Uitkomst: open, nog niet vastgesteld\n   - Onderzocht: Een vlak onder de voet"));
+  assert.ok(entry.includes("4. Uitkomst: doorgegeven aan een ander criterium\n   - Onderzocht: De rand van een veld"));
+  // A place from before observations had a ruling keeps the old form, without an outcome.
+  const old = renderMarkdown(exampleEvaluation());
+  const other = exampleEvaluation().criteria.find((criterion) => criterion.observations.length > 0)!;
+  const oldEntry = old.slice(old.indexOf(`<a id="bijlage-${other.id}"></a>`)).split("**Hoe zeker is dit oordeel**")[0]!;
+  assert.ok(oldEntry.includes("1. Onderzocht: "));
+  assert.ok(!old.includes("1. Uitkomst: "), "no outcome for a place without a ruling");
+});
+
+test("the PDF says per examined place what it came to, and still renders a verdict from before rulings", async (context) => {
+  const dir = mkdtempSync(join(tmpdir(), "render-rulings-"));
+  writeFileSync(join(dir, "evaluation.json"), canonicalJson(withRulings().evaluation));
+  const result = await render(dir);
+  if (result.pdf === null) return context.skip("Typst is not installed");
+  assert.deepEqual(result.pdfChecks.filter((problem) => !problem.includes("is niet geïnstalleerd")), []);
+  const text = await tool("pdftotext", [result.pdf, "-"]);
+  if (!text.found) return context.skip("pdftotext is not installed");
+  const flat = text.stdout.replace(/\s+/g, " ");
+  const { finding } = withRulings();
+  assert.ok(flat.includes(`1. Uitkomst: gebrek, zie bevinding ${finding.id}`), "the defect points at its finding");
+  assert.ok(flat.includes("2. Uitkomst: in orde"));
+  assert.ok(flat.includes("3. Uitkomst: open, nog niet vastgesteld"));
+  assert.ok(flat.includes("4. Uitkomst: doorgegeven aan een ander criterium"));
+  const oldDir = mkdtempSync(join(tmpdir(), "render-rulings-old-"));
+  writeFileSync(join(oldDir, "evaluation.json"), canonicalJson(exampleEvaluation()));
+  const old = await render(oldDir);
+  assert.ok(old.pdf !== null);
+  const oldText = (await tool("pdftotext", [old.pdf, "-"])).stdout;
+  assert.ok(!oldText.includes("Uitkomst: gebrek") && !oldText.includes("Uitkomst: in orde"));
+});
+
 const PAGE_TYPES = [
   { id: "artikel", descriptionNl: "Artikel in de kennisbank", pages: 197, examined: 6, reasonNl: "de voorbeeldpagina van de verkenner, 4 gekozen op variatie in inhoud en 1 willekeurig gekozen" },
   { id: "contact", descriptionNl: "", pages: 1, examined: 1, reasonNl: "de voorbeeldpagina van de verkenner" },
@@ -423,6 +480,67 @@ test("a site on two origins names the second under the address, in the Markdown 
   const flat = text.stdout.replace(/\s+/g, " ");
   assert.ok(flat.includes("Ook onderdeel van de site"), "the facts of the evaluation name the second origin");
   assert.ok(flat.includes("https://docs.example.nl"));
+});
+
+test("Typst's report of text it cannot show becomes the texts and a pattern that matches them", () => {
+  const output = 'error: PDF/UA-1 error: the text `"中"` could not be displayed with font `"Atkinson Hyperlegible Next"`\n'
+    + 'error: PDF/UA-1 error: the text `"a\\u{301}\\"\\\\"` could not be displayed with font `"Atkinson Hyperlegible Next"`\n'
+    + 'error: PDF/UA-1 error: the text `"中"` could not be displayed with font `"Atkinson Hyperlegible Next"`\n';
+  assert.deepEqual(unshownTexts(output), ["中", 'a\u0301"\\']);
+  assert.deepEqual(unshownTexts("error: file not found"), []);
+  assert.equal(unshownPattern(["中", 'a\u0301"\\']), "(?:\\x{61}\\x{301}\\x{22}\\x{5c}|\\x{4e2d})+");
+  assert.match(unshownCheck(["中", "𝒜b"]), /als codepunten.*"中" \[U\+4E2D\], "𝒜b" \[U\+1D49C U\+0062\]/);
+});
+
+test("a quote from the site with emoji or a script no bundled font has still gives a PDF/UA-1 report", async (context) => {
+  const evaluation = exampleEvaluation();
+  const finding = evaluation.criteria.flatMap((criterion) => criterion.findings)[0]!;
+  finding.locations = [
+    { page: finding.locations[0]!.page, where: finding.locations[0]!.where, heading: "Tips 💡", text: "een vinkje ✅ en een raket 🚀" },
+    { page: finding.locations[0]!.page, where: finding.locations[0]!.where, text: "简体中文" },
+  ];
+  const dir = mkdtempSync(join(tmpdir(), "render-emoji-"));
+  writeFileSync(join(dir, "evaluation.json"), canonicalJson(evaluation));
+  // Through the command, for its exit code: text of the site must not stop the report.
+  const run = await tool(process.execPath, [CLI, "render", "--run", dir]);
+  if (run.output.includes("Typst is niet geïnstalleerd")) return context.skip("Typst is not installed");
+  const pdf = join(dir, "report", "rapport.pdf");
+  assert.ok(existsSync(pdf) && existsSync(join(dir, "report", "rapport-kort.pdf")), run.output);
+  const missingAllowed = (problem: string): boolean => problem.includes("is niet geïnstalleerd") && !(process.env.CI === "true" && problem.includes("veraPDF"));
+  const checks = run.stdout.split("\n").filter((line) => line.startsWith("- ")).map((line) => line.slice(2));
+  assert.deepEqual(checks.filter((problem) => !missingAllowed(problem)), [], run.output);
+  // The code points are named once, as a warning, so they are seen before signing.
+  assert.equal(run.stdout.split("\n").filter((line) => line.startsWith("LET OP: ")).join("\n"), `LET OP: ${unshownWarning(["简", "体", "中", "文"])}`);
+  assert.match(unshownWarning(["简", "体", "中", "文"]), /^4 tekens zonder glyph zijn als codepunt weergegeven: "简" \[U\+7B80\]/);
+  if (checks.length === 0) assert.ok(run.ok, "render ends with exit code 0");
+  const text = await tool("pdftotext", [pdf, "-"]);
+  if (!text.found) return context.skip("pdftotext is not installed");
+  const flat = text.stdout.replace(/\s+/g, " ");
+  assert.ok(flat.includes("onder de kop “Tips 💡”, bij “een vinkje ✅ en een raket 🚀”"), "emoji are set in the bundled emoji font");
+  assert.ok(flat.includes("bij “[U+7B80 U+4F53 U+4E2D U+6587]”"), "a character no bundled font has is set as its code point");
+  assert.ok(renderMarkdown(evaluation).includes("简体中文"), "the Markdown keeps the text as it is");
+});
+
+test("a character without a glyph in a template stays a problem, the same character from the data a warning", async (context) => {
+  const dir = mkdtempSync(join(tmpdir(), "render-glyph-"));
+  const template = join(dir, "proef.typ");
+  // The rule that sets text as code points, as the report has it.
+  const report = readFileSync(join(TEMPLATES, "rapport.typ"), "utf8");
+  const rule = report.slice(report.indexOf("#show: body => {\n  let unshown"), report.indexOf("\n}\n", report.indexOf("let unshown")) + 3);
+  writeFileSync(template, `${rule}#set document(title: "Proef")\n#set text(lang: "nl", font: "Atkinson Hyperlegible Next")\n= Proef\n#sys.inputs.at("text", default: "")\n`);
+  const request = { template, inputs: { text: "Kop" }, title: "Proef", date: "2026-10-12T09:00:00.000Z" };
+  // The same character in the template's own text: a fault in loep, even when the data has it too.
+  writeFileSync(join(dir, "eigen.typ"), readFileSync(template, "utf8").replace("= Proef", "= Proef 中"));
+  const own = await makePdf({ ...request, template: join(dir, "eigen.typ"), inputs: { text: "中" }, output: join(dir, "eigen.pdf") });
+  if (own.pdfChecks.some((problem) => problem.includes("Typst is niet geïnstalleerd"))) return context.skip("Typst is not installed");
+  assert.ok(own.pdf !== null, own.pdfChecks.join("\n"));
+  assert.ok(own.pdfChecks.includes(unshownCheck(["中"])), own.pdfChecks.join("\n"));
+  assert.deepEqual(own.pdfWarnings, []);
+  const site = await makePdf({ ...request, inputs: { text: "中" }, output: join(dir, "site.pdf") });
+  assert.ok(site.pdf !== null, site.pdfChecks.join("\n"));
+  assert.ok(!site.pdfChecks.some((problem) => problem.includes("codepunt")), site.pdfChecks.join("\n"));
+  assert.deepEqual(site.pdfWarnings, [unshownWarning(["中"])]);
+  assert.match(unshownWarning(["中"]), /^1 teken zonder glyph is als codepunt weergegeven/);
 });
 
 test("the PDF shows the part for what waits for sending, with the flags of inventory", async (context) => {

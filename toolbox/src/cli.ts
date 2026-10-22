@@ -37,7 +37,8 @@ const USAGE = `loep <command> [options]
   documents --run <run>                  Fetch and measure the documents of the sample (pdf, office and plain text files): tags, title,
                                          language, headings, text alternatives, tables, links, PDF/UA-1 with veraPDF
   gate --run <run> [--out <dir>]         Decide whether the evidence is fit to judge on; exit 1 when it is not, 2 when
-                                         only the agent's look at the pictures is still missing. --out leaves the run untouched
+                                         the agent's look at the pictures is due, 3 when a new sweep can close the gaps (a
+                                         measurement failed or is missing). --out leaves the run untouched
   check-gate --run <run>                 Validate the agent's answers for the gate; non-zero exit on problems
   tasks --run <run> [--only <ids>] [--page-types <ids>] [--again <ids>] [--attempted <phase>:<id>,...]
                                          Write the task files of the phase the run is in (walks, judges, verifiers, and a
@@ -104,6 +105,10 @@ const USAGE = `loep <command> [options]
   check-recheck --run <run> (--finding <id> | --criterion <id>) [--at <moment>]
                                          Validate the outcome of a recheck (the latest, or the one at that moment); non-zero
                                          exit on problems
+  export --run <run> --format csv|issues [--out <file or dir>]
+                                         The work list as CSV (one row per defect, with its criteria), or as one Markdown block
+                                         per defect with a title and a body for an issue tracker. Without --out to standard
+                                         output; with issues --out is a directory with a file per defect. Creates no issues
   sign --run <run> --name <who> --role <function> --organisation <name> [--checked <text>]
                                          Record that a named person stands for the evaluation. Only at an interactive terminal:
                                          the signer types the first 8 characters of the seal. An agent never signs
@@ -146,7 +151,10 @@ Options:
                     measures or writes tasks refuses: another version writes other tasks and procedures, and the walks
                     and verdicts of the run are then done again. Measure again with --fresh after changing. Commands
                     that measure nothing (render, statement, compare, decide, sign, seal and the readers) go on, and so
-                    does recheck: it measures the site as it is now, in a folder of its own, and records its own version
+                    does recheck: it measures the site as it is now, in a folder of its own, and records its own version.
+                    In a copy made with variant (it holds variant.json) the agent phases (tasks, skip, unskip,
+                    check-walk, check-verdict, evaluate, answer, merge, check-merge) go on under another version
+                    and say which version the sweep is of; the sweep itself is held to the version it was made with
   --recorded-via gesprek --confirmation <text> --summary <text>
                     With answer and decide only: the agent records what the person said in the conversation,
                     after an express confirmation. --confirmation is what the person said, word for word;
@@ -244,6 +252,7 @@ async function main(): Promise<void> {
       finding: { type: "string" },
       at: { type: "string" },
       rechecks: { type: "boolean", default: false },
+      format: { type: "string" },
       help: { type: "boolean", short: "h" },
     },
   });
@@ -271,9 +280,11 @@ async function main(): Promise<void> {
   if (command !== "inventory" && values["also-origin"] !== undefined) throw new Error("--also-origin hoort bij inventory: daar wordt vastgelegd welke origins samen de site zijn");
   // A run goes on with the version of loep it was made with; another version would quietly write other tasks over it.
   if (values.run) {
-    const { otherToolboxNl } = await import("./lib/manifest.ts");
+    const { frozenSweepNl, otherToolboxNl } = await import("./lib/manifest.ts");
     const refusal = otherToolboxNl(values.run, command, values["other-toolbox"]);
     if (refusal) throw new Error(refusal);
+    const frozen = frozenSweepNl(values.run, command);
+    if (frozen) process.stderr.write(`loep: ${frozen}\n`);
   }
   // `gaps` and `feedback` read the verdicts and the evaluation of finished runs and nothing else of them: they need no permission to write and no login.
   // A recheck only reads the run and writes in a folder of its own; its session runs in that folder, not here.
@@ -377,15 +388,24 @@ async function main(): Promise<void> {
     }
     case "gate": {
       if (!values.run) throw new Error("gate needs --run <run>");
-      const { gate } = await import("./commands/gate.ts");
+      const { gate, MAX_RETURNS_TO_EXPLORER } = await import("./commands/gate.ts");
       const result = await gate(values.run, values.out ?? values.run);
       for (const check of result.checks) process.stdout.write(`${check.ok ? "ok  " : "GAT "} ${check.name}: ${check.noteNl}\n`);
-      for (const gap of result.gaps) process.stdout.write(`- ${gap.check}${gap.page ? ` ${gap.page}` : ""}${gap.state !== "default" ? ` [${gap.state}]` : ""}: ${gap.missingNl}\n`);
+      for (const gap of result.gaps) process.stdout.write(`- ${gap.fixedBy === "sweep" ? "(opnieuw meten) " : ""}${gap.check}${gap.page ? ` ${gap.page}` : ""}${gap.state !== "default" ? ` [${gap.state}]` : ""}: ${gap.missingNl}\n`);
       for (const gap of result.limitations) process.stdout.write(`  (beperking) ${gap.check}${gap.page ? ` ${gap.page}` : ""}${gap.state !== "default" ? ` [${gap.state}]` : ""}: ${gap.missingNl}\n`);
       for (const gap of result.accepted) process.stdout.write(`  (aanvaard door ${gap.decidedBy}) ${gap.check}${gap.page ? ` ${gap.page}` : ""}: ${gap.reasonNl}\n`);
-      const verdict = result.sufficient ? "bewijs voldoende" : result.stage === "review-pending" ? `vaste controles voldoende; de beelden zijn nog niet bekeken: ${result.review.tasks.map((part) => part.task).join(", ")}${result.review.tasks.length > 1 ? " (één agent per opdracht)" : ""}` : `bewijs onvoldoende: ${result.gaps.length} ${result.gaps.length === 1 ? "gat" : "gaten"}${result.stage === "deterministic" ? " in de vaste controles" : ""}; nog ${result.returnsLeft} keer terug naar de verkenner`;
+      const counted = (count: number): string => `${count} ${count === 1 ? "gat" : "gaten"}`;
+      const tasksNl = `${result.review.tasks.map((part) => part.task).join(", ")}${result.review.tasks.length > 1 ? " (één agent per opdracht)" : ""}`;
+      const forSweep = result.gaps.filter((gap) => gap.fixedBy === "sweep").length;
+      const verdict = {
+        proceed: "bewijs voldoende",
+        review: result.gaps.length === 0 ? `vaste controles voldoende; de beelden zijn nog niet bekeken: ${tasksNl}` : `${counted(result.gaps.length)} in de vaste controles voor de verkenner; eerst de beelden bekijken, zodat de verkenner alle gaten in één keer krijgt: ${tasksNl}`,
+        sweep: `bewijs onvoldoende: een nieuwe veegronde kan ${forSweep} van de ${counted(result.gaps.length)} sluiten, want daar mislukte of ontbreekt een meting. Draai collect, contrast, states en documents opnieuw en daarna gate; dat kost geen terugkeer naar de verkenner (nog ${result.resweepsLeft} keer opnieuw meten na deze verkenning)`,
+        explore: `bewijs onvoldoende: ${counted(result.gaps.length)}${result.stage === "deterministic" ? " in de vaste controles" : ""}; nog ${result.returnsLeft} keer terug naar de verkenner`,
+        stop: `bewijs onvoldoende: ${counted(result.gaps.length)}${result.stage === "deterministic" ? " in de vaste controles" : ""}; de run is ${MAX_RETURNS_TO_EXPLORER} keer terug geweest naar de verkenner, er komt geen beoordeling`,
+      }[result.next!];
       process.stdout.write(`${verdict}\n${result.warnings.length} waarschuwingen\n`);
-      process.exitCode = result.sufficient ? 0 : result.stage === "review-pending" ? 2 : 1;
+      process.exitCode = { proceed: 0, review: 2, sweep: 3, explore: 1, stop: 1 }[result.next!];
       return;
     }
     case "check-gate": {
@@ -560,6 +580,8 @@ async function main(): Promise<void> {
       const result = await render(values.run);
       process.stdout.write(`${result.markdown}\n${result.pdf ?? "(geen pdf)"}\n${result.shortPdf ? `${result.shortPdf}\n` : ""}`);
       for (const problem of result.pdfChecks) process.stdout.write(`- ${problem}\n`);
+      for (const note of result.cutoutNotes) process.stdout.write(`- ${note}\n`);
+      for (const warning of result.pdfWarnings) process.stdout.write(`LET OP: ${warning}\n`);
       // A report whose PDF fails its own accessibility check is not fit to hand over.
       if (result.pdfChecks.length > 0) process.exitCode = 1;
       return;
@@ -579,6 +601,18 @@ async function main(): Promise<void> {
       for (const problem of problems) process.stdout.write(`- ${problem}\n`);
       process.stdout.write(problems.length === 0 ? "OK: de nameting wijst naar eigen, nieuwe waarnemingen en is vastgelegd\n" : `${problems.length} problemen\n`);
       process.exitCode = problems.length === 0 ? 0 : 1;
+      return;
+    }
+    case "export": {
+      if (!values.run) throw new Error("export needs --run <run>");
+      const { exportWorkList } = await import("./commands/export.ts");
+      const result = await exportWorkList({ run: values.run, format: values.format, out: values.out });
+      if (result.text !== null) process.stdout.write(result.text);
+      else if (result.format === "csv") process.stdout.write(`${result.lines} regels van de werklijst in ${result.written[0]}\n`);
+      else {
+        process.stdout.write(`${result.lines} issues klaar in ${values.out}, een bestand per gebrek; de eerste regel is de titel. Er is niets aangemaakt.\n`);
+        process.stdout.write(`Aanmaken, na het lezen: for f in ${values.out}/*.md; do gh issue create --title "$(head -n 1 "$f" | sed 's/^# //')" --body "$(tail -n +3 "$f")"; done\n`);
+      }
       return;
     }
     case "sign": {
@@ -612,6 +646,7 @@ async function main(): Promise<void> {
       process.stdout.write(`status ${result.status}; ${result.openItems.length} punten nog in te vullen\n${result.files.join("\n")}\n`);
       if (result.missingMeasuresNl) process.stdout.write(`LET OP: ${result.missingMeasuresNl}\n`);
       for (const problem of result.pdfChecks) process.stdout.write(`- ${problem}\n`);
+      for (const warning of result.pdfWarnings) process.stdout.write(`LET OP: ${warning}\n`);
       if (result.pdfChecks.length > 0) process.exitCode = 1;
       return;
     }
