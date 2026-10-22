@@ -1,13 +1,13 @@
 import { fileURLToPath } from "node:url";
-import { chromium, type Browser, type BrowserContext, type Page, type Route } from "playwright";
+import { chromium, type APIResponse, type Browser, type BrowserContext, type Page, type Request, type Response, type Route } from "playwright";
 import type { Crowd } from "../lib/atonce.ts";
 import { CLOUDFLARE_HEADER, isChallenge } from "../lib/challenge.ts";
 import { confirmLoginOn, LoginExpired, logsOut, runLoginMark, runLoginState, throwIfLoginExpired, watchLogin } from "../lib/login.ts";
 import { addressOf, noteRefusedRead, readDecision, readRuleFor, runReads, type ReadRequest } from "../lib/reads.ts";
-import { isWriteOrigin, runWrites, SocketFrames, type WriteAccess } from "../lib/writes.ts";
+import { isWriteOrigin, runWrites, SocketFrames, type PassedWrite, type WriteAccess } from "../lib/writes.ts";
 import { LONGEST_FAILURE_PAUSE_SECONDS, OriginBlocked, runBlockade } from "../session/blockade.ts";
 import { MESSAGE_VALUES } from "../session/safety.ts";
-import { playRecording, socketRecordings, type Recorder } from "../lib/recordings.ts";
+import { answerRefusalNl, httpRecordings, httpReplayNl, httpSendOf, keptHeaders, playRecording, socketRecordings, type HttpRecordings, type PassedReplay, type Recorder } from "../lib/recordings.ts";
 import { readableFrame } from "./call.ts";
 import { refusedByBrowser, type ClipboardWrite } from "./clipboard.ts";
 import { frameAsPage } from "./frame.ts";
@@ -49,22 +49,17 @@ export interface ContextOptions {
 }
 
 /**
- * Let a write through to the test environment. What a browser asks for after a redirect does
- * not pass the route again, so the answer is looked at here first: a redirect that would
- * repeat the write somewhere else than the test environment (307, 308) is refused, and so is
- * one that `mayFollow` rejects. Returns the address of a write the browser will repeat, for the log.
- */
-export async function passWrite(route: Route, writes: WriteAccess, mayFollow: (url: string) => boolean = () => true): Promise<string | null> {
-  return passOn(route, (target) => isWriteOrigin(writes, target), mayFollow);
-}
-
-/**
  * Let a request through that may pass although it is not a GET: a write to the test environment,
  * or a read request of the site model. A redirect that would repeat it (307, 308) is only followed
  * to an address `mayRepeat` allows; any other redirect only where `mayFollow` allows. Returns the
  * address of a request the browser will repeat.
  */
 export async function passOn(route: Route, mayRepeat: (url: string) => boolean, mayFollow: (url: string) => boolean = () => true): Promise<string | null> {
+  return (await forward(route, mayRepeat, mayFollow)).repeated;
+}
+
+/** `passOn`, with the answer the browser was given: null when it was refused or nobody was left to answer. */
+async function forward(route: Route, mayRepeat: (url: string) => boolean, mayFollow: (url: string) => boolean = () => true): Promise<{ repeated: string | null; response: APIResponse | null }> {
   const request = route.request();
   const refuse = (): Promise<void> => (request.isNavigationRequest() ? route.fulfill({ status: 204, body: "" }) : route.abort("blockedbyclient"));
   try {
@@ -76,17 +71,147 @@ export async function passOn(route: Route, mayRepeat: (url: string) => boolean, 
       const keepsMethod = response.status() === 307 || response.status() === 308;
       if (keepsMethod ? !mayRepeat(target) : !mayFollow(target)) {
         await refuse();
-        return null;
+        return { repeated: null, response: null };
       }
       if (keepsMethod) repeated = target;
     }
     await route.fulfill({ response });
-    return repeated;
+    return { repeated, response };
   } catch {
     // The page went away while the answer was on its way; there is nobody left to answer.
     await route.abort("failed").catch(() => undefined);
+    return { repeated: null, response: null };
+  }
+}
+
+export type WriteOutcome =
+  | { kind: "sent"; entry: PassedWrite; repeated: PassedWrite | null }
+  | { kind: "replayed"; replay: PassedReplay; noteNl: string }
+  | { kind: "refused"; budget: "out" | "share" | "spacing"; reasonNl: string };
+
+/**
+ * A write to the test environment: answered from a recording when the same request was sent before
+ * (see `httpRecordings`), and otherwise taken from the budget and sent, or refused when the budget says
+ * no. The answer to a request with a test value in its body is recorded. Where the server sends the
+ * browser next has to be allowed by `mayFollow`; a redirect that repeats the request (307, 308) only goes
+ * to the test environment, and that repeat is noted, not counted again. `sender`: the session whose page it is.
+ */
+export async function sendOrReplay(context: BrowserContext, route: Route, writes: WriteAccess, options: { sender?: string | undefined; mayFollow?: (url: string) => boolean } = {}): Promise<WriteOutcome> {
+  const request = route.request();
+  const method = request.method();
+  const url = request.url();
+  const recordings = httpRecordings(writes.runDir, writes.source);
+  const send = httpSendOf(bodyBufferOf(request), request.headers()["content-type"], MESSAGE_VALUES);
+  const recording = send ? recordings.find(method, url, send) : null;
+  if (recording) {
+    // Answered here: nothing goes to the server, and no cookie of the recording is set.
+    await route.fulfill({ status: recording.answer.status, headers: recording.answer.headers, body: Buffer.from(recording.answer.base64, "base64") }).catch(() => undefined);
+    const replay = recordings.replayed(url, recording, options.sender);
+    return { kind: "replayed", replay, noteNl: httpReplayNl(recording, replay.matchedOn) };
+  }
+  const claim = writes.claim(method, url, { sender: options.sender });
+  if (!claim.ok) {
+    await (request.isNavigationRequest() ? route.fulfill({ status: 204, body: "" }) : route.abort("blockedbyclient")).catch(() => undefined);
+    return { kind: "refused", budget: claim.budget, reasonNl: claim.reasonNl };
+  }
+  // What the browser asks for after a redirect does not pass the route: where it lands is watched from before it gets the answer.
+  const landing = send ? watchLanding(context, request) : null;
+  const at = Date.now();
+  const { repeated, response } = await forward(route, (target) => isWriteOrigin(writes, target), options.mayFollow);
+  const repeatedEntry = repeated ? writes.record(method, repeated, { repeat: true, sender: options.sender }) : null;
+  if (send && response && landing) void recordAnswer(recordings, { method, url, send, response, landing, origin: writes.origin, sender: options.sender, at }).catch(() => landing.cancel());
+  else landing?.cancel();
+  return { kind: "sent", entry: claim.entry, repeated: repeatedEntry };
+}
+
+/** The body of a request as bytes, or null when it has none. */
+function bodyBufferOf(request: Request): Buffer | null {
+  try {
+    return request.postDataBuffer();
+  } catch {
     return null;
   }
+}
+
+/** How long the browser may take after a redirect to land on a page, for the answer to be recorded. */
+const LANDING_MS = 15_000;
+
+interface Landing {
+  /** The requests the browser made after the answer, the last one for the page it landed on. */
+  hops: Request[];
+  response: Response;
+  /** Its body, asked for as soon as it arrived: a page that is closed right after cannot be read any more. */
+  body: Promise<Buffer | null>;
+}
+
+type LandingWatch = { landed: Promise<Landing | null>; cancel: () => void };
+
+/** Wait for the page the browser lands on after the answer to `sent`: the first answer that is no redirect in the chain that began with it. Null when it does not land in time, or the context closes. */
+function watchLanding(context: BrowserContext, sent: Request): LandingWatch {
+  let resolve: (landing: Landing | null) => void = () => undefined;
+  const landed = new Promise<Landing | null>((done) => (resolve = done));
+  const onResponse = (response: Response): void => {
+    const hops: Request[] = [];
+    let at: Request | null = response.request();
+    while (at && at !== sent) {
+      hops.unshift(at);
+      at = at.redirectedFrom();
+    }
+    if (at !== sent || hops.length === 0 || (response.status() >= 300 && response.status() < 400)) return;
+    finish({ hops, response, body: response.body().catch(() => null) });
+  };
+  const onClose = (): void => finish(null);
+  const timer = setTimeout(() => finish(null), LANDING_MS);
+  timer.unref?.();
+  function finish(landing: Landing | null): void {
+    clearTimeout(timer);
+    context.off("response", onResponse);
+    context.off("close", onClose);
+    resolve(landing);
+  }
+  context.on("response", onResponse);
+  context.on("close", onClose);
+  return { landed, cancel: () => finish(null) };
+}
+
+/**
+ * Keep the answer to a request that was sent for real, with why it may not be played when that is so. After
+ * a redirect the page the browser landed on is asked for once more, without any cookie: a page that then
+ * looks different depends on the session (a message kept for the next page, a token per visit), and a replay,
+ * which sets no cookie, would show another page. Such a recording is never played. A browser that did not
+ * land in time leaves no recording: the next send is real.
+ */
+async function recordAnswer(recordings: HttpRecordings, sent: { method: string; url: string; send: { key: string; bodySha256: string }; response: APIResponse; landing: LandingWatch; origin: string; sender: string | undefined; at: number }): Promise<void> {
+  const { response, landing } = sent;
+  const headers = response.headers();
+  const body = await response.body();
+  let refusedNl = answerRefusalNl({ status: response.status(), headers, body }, sent.url, sent.origin);
+  let chain: { url: string; status: number }[] | undefined;
+  if (response.status() >= 300 && response.status() < 400 && !refusedNl) {
+    const landed = await landing.landed;
+    if (!landed) return;
+    chain = await Promise.all(landed.hops.map(async (hop) => ({ url: hop.url(), status: hop === landed.response.request() ? landed.response.status() : ((await hop.response().catch(() => null))?.status() ?? 0) })));
+    refusedNl = await landingRefusalNl(landed, chain, sent.origin);
+  } else landing.cancel();
+  recordings.record({ method: sent.method, url: sent.url, send: sent.send, answer: { status: response.status(), headers: keptHeaders(headers), base64: body.toString("base64") }, ...(chain ? { chain } : {}), refusedNl, sender: sent.sender, at: sent.at });
+}
+
+/** Why the page after a redirect makes the recording unplayable, in Dutch, or null when it does not. */
+async function landingRefusalNl(landed: Landing, chain: { url: string; status: number }[], origin: string): Promise<string | null> {
+  if (chain.some((hop) => new URL(hop.url).origin !== origin)) return "de doorverwijzing leidde buiten de testomgeving";
+  const final = chain.at(-1)!;
+  if (final.status < 200 || final.status >= 300) return `de pagina na de doorverwijzing antwoordde met ${final.status}`;
+  const seen = await landed.body;
+  if (!seen) return "de pagina na de doorverwijzing was niet te lezen";
+  try {
+    // Once more, without any cookie: the page a replay leads to has to be the same without the session.
+    const fresh = await fetch(final.url, { redirect: "manual", signal: AbortSignal.timeout(10_000) });
+    const freshBody = Buffer.from(await fresh.arrayBuffer());
+    if (fresh.status !== final.status || !freshBody.equals(seen)) return "de pagina na de doorverwijzing ziet er zonder de cookies van de browser anders uit: ze hangt af van de sessie, of van een kenmerk dat per keer verandert";
+  } catch {
+    return "niet na te gaan of de pagina na de doorverwijzing een sessie nodig heeft";
+  }
+  return null;
 }
 
 /** The body of a request as text, or null when it has none or it cannot be read as text. */
@@ -218,9 +343,8 @@ export async function newContext(browser: Browser, options: ContextOptions = {},
     if (read) noteRefusedRead({ method, address: addressOf(route.request().url()), rule: read.rule.id, reasonNl: read.reasonNl });
     // An aborted navigation replaces the page with an error page. "No content" leaves the page as it was.
     if (!isWriteOrigin(writes, route.request().url())) return route.request().isNavigationRequest() ? route.fulfill({ status: 204, body: "" }) : route.abort("blockedbyclient");
-    // The sweep shares the budget for sending with the sessions: a write past it, or too soon after the previous one, is held back.
-    if (!writes!.claim(method, route.request().url()).ok) return route.request().isNavigationRequest() ? route.fulfill({ status: 204, body: "" }) : route.abort("blockedbyclient");
-    return passWrite(route, writes!).then((repeated) => void (repeated && writes!.record(method, repeated, { repeat: true })));
+    // The sweep shares the budget for sending with the sessions: a write past it, or too soon after the previous one, is held back. The same request as one sent before is answered from its recording.
+    return sendOrReplay(context, route, writes!).then(() => undefined);
   });
   if (guard || writes) {
     await context.routeWebSocket(/.*/, (socket) => {

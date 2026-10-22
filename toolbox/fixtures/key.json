@@ -1890,7 +1890,7 @@
         "/vergunning.html",
         "/inloggen.html"
       ],
-      "descriptionNl": "De aanmelding voor de nieuwsbrief, het contactformulier, de vergunningaanvraag en het inlogformulier versturen met POST.",
+      "descriptionNl": "De aanmelding voor de nieuwsbrief, het contactformulier, de vergunningaanvraag en het inlogformulier versturen met POST. De server stuurt de browser daarna door naar een bedankpagina (303 See Other), of na het inloggen naar het deel achter de inlog.",
       "testsNl": "Een run mag geen POST doen. De server legt elk verzoek dat geen GET is vast."
     },
     {

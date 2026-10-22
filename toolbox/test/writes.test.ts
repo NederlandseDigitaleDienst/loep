@@ -13,11 +13,11 @@ import { probeForms } from "../src/instruments/forms.ts";
 import { formErrors } from "../src/lib/extractors.ts";
 import { REGULAR_PATH, type RunData } from "../src/lib/rundata.ts";
 import { budgetOutPointNl, criterionSender, decideWrites, isOurMessage, isProtocolFrame, reservedWrites, senderOf, SocketFrames, DEFAULT_MAX_WRITES, DEFAULT_WRITE_SPACING_SECONDS, recordWrites, WRITES_BLOCKED_NL, writeAccess, writeBudget, writeBudgetNl, writesAllowedNl, writesForRun, type PassedWrite, type WritePermission } from "../src/lib/writes.ts";
-import { DECLARED_ORIGIN, RECORD_QUIET_MS, readRecordings, readReplays, recordingKey, replayNl, replaysNl, socketRecordings } from "../src/lib/recordings.ts";
+import { answerRefusalNl, DECLARED_ORIGIN, httpSendOf, RECORD_QUIET_MS, readHttpRecordings, readRecordings, readReplays, recordingKey, replayNl, replaysNl, socketRecordings, type HttpRecording } from "../src/lib/recordings.ts";
 import { approvedSendsTo, sendsToMatches, sendsToProblems, sendsToReplayProblem } from "../src/lib/sitemodel.ts";
 import { Daemon } from "../src/session/daemon.ts";
 import type { Observation } from "../src/session/observations.ts";
-import { DEFAULT_DAEMON_LIMITS, MESSAGE_VALUES, Politeness, scopeForRun, TEST_VALUES } from "../src/session/safety.ts";
+import { DEFAULT_DAEMON_LIMITS, MESSAGE_VALUES, Politeness, scopeForRun, TEST_VALUES, type Guard } from "../src/session/safety.ts";
 import { openSurface } from "../src/session/surface.ts";
 import { startServer, type FixtureServer } from "./fixtures/session-site/server.ts";
 
@@ -682,6 +682,169 @@ test("the sweep records and plays a chat message the same way, and a session pla
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
+});
+
+/** Send a form from a page as a visitor does, a navigation with POST, and return where the browser landed. */
+async function submitForm(page: Page, action: string, fields: Record<string, string>): Promise<string> {
+  await Promise.all([
+    page.waitForNavigation({ waitUntil: "load" }).catch(() => undefined),
+    page
+      .evaluate(
+        ([to, values]) => {
+          const form = document.createElement("form");
+          form.method = "post";
+          form.action = to as string;
+          for (const [name, value] of Object.entries(values as Record<string, string>)) {
+            const input = document.createElement("input");
+            input.name = name;
+            input.value = value;
+            form.append(input);
+          }
+          document.body.append(form);
+          form.submit();
+        },
+        [action, fields] as const,
+      )
+      .catch(() => undefined),
+  ]);
+  return page.url();
+}
+
+/** The recordings of requests over HTTP once there are `count`: the answer is kept after the browser landed, a moment after the send. */
+async function httpRecorded(dir: string, count: number): Promise<HttpRecording[]> {
+  for (let tries = 0; tries < 100 && readHttpRecordings(dir).length < count; tries++) await new Promise((resolve) => setTimeout(resolve, 50));
+  return readHttpRecordings(dir);
+}
+
+const FORM = { naam: TEST_VALUES.name!, email: TEST_VALUES.email!, bericht: TEST_VALUES.text!, onderwerp: "vraag" };
+
+test("a form sent over HTTP is recorded with its redirect, and the same form sent again is answered from the recording: no second claim, and the browser lands on the same page", async () => {
+  reset();
+  const dir = mkdtempSync(join(tmpdir(), "loep-writes-http-replay-"));
+  const limited: WritePermission = { ...permission, maxWrites: 10, spacingSeconds: 0 };
+  await recordWrites(dir, limited);
+  try {
+    const env = { browser, runDir: dir, scope: await scopeForRun(dir, { scopeUrl: `${site.origin}/` }), limits: DEFAULT_DAEMON_LIMITS, politeness: new Politeness(0) };
+    // `recordings`: how many there are once this send is recorded. A page closed before its answer is recorded leaves none, so the page stays open until then.
+    const send = async (action: string, fields: Record<string, string>, recordings?: number): Promise<{ landed: string; replays: NonNullable<Guard["replays"]>; passed: PassedWrite[] }> => {
+      const { surface } = await openSurface(env, { url: `${site.origin}/callback.html`, width: 1280, height: 800, scheme: "light" });
+      const landed = await submitForm(surface.page, action, fields);
+      if (recordings !== undefined) await httpRecorded(dir, recordings);
+      const outcome = { landed: new URL(landed).pathname, replays: surface.guard.replays ?? [], passed: surface.guard.passed ?? [] };
+      await surface.context.close();
+      return outcome;
+    };
+    const first = await send("/submit-see-other", FORM, 1);
+    assert.equal(first.landed, "/elsewhere.html");
+    assert.equal(first.replays.length, 0);
+    const [recording] = await httpRecorded(dir, 1);
+    assert.equal(recording!.answer.status, 303);
+    assert.equal(recording!.answer.headers["location"], "/elsewhere.html");
+    assert.deepEqual(recording!.chain, [{ url: `${site.origin}/elsewhere.html`, status: 200 }]);
+    assert.equal(recording!.refusedNl, undefined);
+    assert.equal(recording!.key, [TEST_VALUES.email, TEST_VALUES.name, TEST_VALUES.text].sort().join("|"));
+    // The second time nothing goes to the server: the browser gets the redirect from the recording and fetches the page after it itself.
+    const second = await send("/submit-see-other", FORM);
+    assert.equal(second.landed, "/elsewhere.html");
+    assert.deepEqual(second.passed, []);
+    assert.deepEqual(second.replays.map((entry) => [entry.method, entry.path, entry.matchedOn]), [["POST", "/submit-see-other", DECLARED_ORIGIN]]);
+    assert.match(second.replays[0]!.noteNl, /^niet verstuurd maar beantwoord uit een opname: deze verzending \(POST \/submit-see-other\) .*een doorverwijzing \(303\) naar \/elsewhere\.html.*zonder cookies/);
+    assert.deepEqual(writesReceived(), ["POST 127.0.0.1/submit-see-other"]);
+    assert.equal(writeBudget(dir, limited).sent, 1);
+    assert.deepEqual(readReplays(dir).map((entry) => [entry.method, entry.recording]), [["POST", recording!.id]]);
+    // Another form on the same origin sends to another address: sent for real.
+    assert.equal((await send("/other-form", FORM, 2)).replays.length, 0);
+    // Another choice in the same form is another send.
+    assert.equal((await send("/submit-see-other", { ...FORM, onderwerp: "klacht" }, 3)).replays.length, 0);
+    // A form without a test value goes to the server every time, and is never recorded.
+    const recordings = readHttpRecordings(dir).length;
+    for (let round = 0; round < 2; round++) assert.equal((await send("/submit-see-other", { onderwerp: "vraag" })).replays.length, 0);
+    assert.equal(writeBudget(dir, limited).sent, 5);
+    assert.equal(writesReceived().length, 5);
+    assert.equal(readHttpRecordings(dir).length, recordings);
+    assert.match(replaysNl(dir)!, /^Van 3 verzendingen over HTTP .*toen ze elk echt werd verstuurd\. Daarna is één keer dezelfde verzending niet opnieuw verstuurd/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("an answer with a token in it, or a page after the redirect that needs the session, is kept but never played: the next send is real", async () => {
+  reset();
+  const dir = mkdtempSync(join(tmpdir(), "loep-writes-http-refused-"));
+  const limited: WritePermission = { ...permission, maxWrites: 10, spacingSeconds: 0 };
+  await recordWrites(dir, limited);
+  try {
+    const env = { browser, runDir: dir, scope: await scopeForRun(dir, { scopeUrl: `${site.origin}/` }), limits: DEFAULT_DAEMON_LIMITS, politeness: new Politeness(0) };
+    for (const [round, action] of ["/submit-token", "/submit-token", "/submit-flash", "/submit-flash"].entries()) {
+      const { surface } = await openSurface(env, { url: `${site.origin}/callback.html`, width: 1280, height: 800, scheme: "light" });
+      // The visitor has a session in which the server keeps a message for the next page.
+      await surface.context.addCookies([{ name: "bericht", value: "1", url: site.origin }]);
+      await submitForm(surface.page, action, FORM);
+      assert.equal((surface.guard.replays ?? []).length, 0, `${action} ${round}`);
+      if (action === "/submit-flash") assert.equal(await surface.page.getByRole("status").textContent(), "Uw bericht is ontvangen.");
+      await httpRecorded(dir, round + 1);
+      await surface.context.close();
+    }
+    assert.equal(writeBudget(dir, limited).sent, 4);
+    const reasons = readHttpRecordings(dir).map((recording) => recording.refusedNl ?? "");
+    assert.equal(reasons.length, 4);
+    for (const reason of reasons.slice(0, 2)) assert.match(reason, /CSRF-token/);
+    for (const reason of reasons.slice(2)) assert.match(reason, /zonder de cookies van de browser anders uit/);
+    assert.match(replaysNl(dir)!, /^Van 4 verzendingen over HTTP .*toen ze elk echt werd verstuurd; geen van die antwoorden is gebruikt, omdat/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("the sweep answers the same form from a recording too", async () => {
+  reset();
+  const dir = mkdtempSync(join(tmpdir(), "loep-writes-http-sweep-"));
+  const limited: WritePermission = { ...permission, maxWrites: 10, spacingSeconds: 0 };
+  await recordWrites(dir, limited);
+  try {
+    for (let round = 0; round < 2; round++) {
+      const context = await newContext(browser, { writes: writeAccess(dir, limited, "states") });
+      const page = await context.newPage();
+      await loadPage(page, `${site.origin}/callback.html`);
+      assert.equal(new URL(await submitForm(page, "/submit-see-other", FORM)).pathname, "/elsewhere.html", `round ${round}`);
+      await httpRecorded(dir, 1);
+      await context.close();
+    }
+    assert.deepEqual(writesReceived(), ["POST 127.0.0.1/submit-see-other"]);
+    assert.deepEqual(readReplays(dir).map((entry) => [entry.source, entry.method]), [["states", "POST"]]);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("which body makes a send that is recorded, and which answer may never be played", () => {
+  const form = (text: string, type = "application/x-www-form-urlencoded"): ReturnType<typeof httpSendOf> => httpSendOf(Buffer.from(text), type, MESSAGE_VALUES);
+  // A form encodes a space as + and @ as %40: the test values are found decoded.
+  assert.equal(form("naam=Loep+Testpersoon&email=loep-test%40example.com&onderwerp=vraag")?.key, [TEST_VALUES.email, TEST_VALUES.name].sort().join("|"));
+  assert.equal(form(JSON.stringify({ email: TEST_VALUES.email }), "application/json")?.key, TEST_VALUES.email);
+  assert.equal(form("onderwerp=vraag"), null);
+  assert.equal(httpSendOf(null, undefined, MESSAGE_VALUES), null);
+  // A multipart body has a boundary of its own per send; without it, the same fields are the same send.
+  const multipart = (boundary: string): ReturnType<typeof httpSendOf> => form(`--${boundary}\r\nContent-Disposition: form-data; name="naam"\r\n\r\n${TEST_VALUES.name}\r\n--${boundary}--`, `multipart/form-data; boundary=${boundary}`);
+  assert.equal(multipart("----a1")!.bodySha256, multipart("----b2")!.bodySha256);
+  assert.notEqual(form("naam=Loep+Testpersoon&onderwerp=vraag")!.bodySha256, form("naam=Loep+Testpersoon&onderwerp=klacht")!.bodySha256);
+
+  const origin = "https://test.example.nl";
+  const url = `${origin}/contact`;
+  const html = (body: string, status = 200, headers: Record<string, string> = {}): string | null => answerRefusalNl({ status, headers: { "content-type": "text/html; charset=utf-8", ...headers }, body: Buffer.from(body) }, url, origin);
+  assert.equal(html("<h1>Bedankt</h1><form action=/zoeken><input name=q></form>"), null);
+  assert.equal(html('<p role="alert">Vul uw naam in.</p>', 422), null, "an error message of the server is an answer like any other");
+  assert.equal(html("", 303, { location: "/bedankt" }), null);
+  assert.match(html("", 307, { location: "/elders" })!, /dezelfde methode \(307\)/);
+  assert.match(html("", 303, { location: "https://elders.example.nl/bedankt" })!, /buiten de testomgeving/);
+  assert.match(html("", 303, { location: "/bedankt;jsessionid=AB12" })!, /kenmerk van een sessie/);
+  assert.match(html("", 302, { location: "/verder?code=834201" })!, /eenmalige code/);
+  assert.match(html("<h1>Bedankt</h1>", 200, { "set-cookie": "sessie=1; Path=/" })!, /zet een cookie/);
+  for (const status of [401, 403, 419, 429, 500, 503]) assert.match(html("<h1>Fout</h1>", status)!, new RegExp(`antwoordde met ${status}`), String(status));
+  for (const body of ['<input type="hidden" name="_token" value="x1">', '<meta name="csrf-token" content="x1">', '<input type=hidden name=__RequestVerificationToken value=x1>', '<input type="hidden" name="__VIEWSTATE" value="x1">', "<p>Uw eenmalige code is 834201.</p>", '<a href="/stap-2?sid=abc">Verder</a>']) assert.match(html(body)!, /CSRF-token, een eenmalige code of een kenmerk van een sessie/, body);
+  assert.match(answerRefusalNl({ status: 200, headers: { "content-type": "application/json" }, body: Buffer.from('{"ok":true,"csrfToken":"x1"}') }, url, origin)!, /CSRF-token/);
+  assert.equal(answerRefusalNl({ status: 200, headers: { "content-type": "application/json" }, body: Buffer.from('{"ok":true,"melding":"Ontvangen"}') }, url, origin), null);
+  assert.match(answerRefusalNl({ status: 200, headers: { "content-type": "application/pdf" }, body: Buffer.from("%PDF-1.7") }, url, origin)!, /geen tekst/);
 });
 
 /** Open a socket to the fixture site from the page and send these frames, one at a time. */

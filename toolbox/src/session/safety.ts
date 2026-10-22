@@ -1,7 +1,7 @@
 import { createWriteStream, existsSync } from "node:fs";
 import { join } from "node:path";
 import type { BrowserContext, CDPSession, Frame, Page, Request } from "playwright";
-import { answeredByCloudflare, bodyOf, passOn, passWrite } from "../browser/session.ts";
+import { answeredByCloudflare, bodyOf, passOn, sendOrReplay } from "../browser/session.ts";
 import { readJson } from "../lib/canonical.ts";
 import { isChallenge } from "../lib/challenge.ts";
 import { privateFromPublicSite, scopeHost, scopeHostOf, siteOrigins, WEB_SCHEMES } from "../lib/origins.ts";
@@ -243,14 +243,12 @@ export async function guardContext(context: BrowserContext, scope: Scope, guard:
       }
       if (isWriteOrigin(scope.writes, url)) {
         // Every write takes one from the budget of the whole run; when it is used up, or the previous one was too recent, the write is held back as without permission.
-        const claim = scope.writes!.claim(method, url, { sender: guard.sender });
-        if (!claim.ok) {
-          guard.blocked.push({ at: new Date().toISOString(), kind: "method", method, url: url.slice(0, MAX_URL), resourceType: type, reasonNl: claim.reasonNl, writeBudget: claim.budget });
-          return refuse();
-        }
-        (guard.passed ??= []).push(claim.entry);
-        // Where the server sends the browser next is not asked here again: it has to be inside the scope.
-        return passWrite(route, scope.writes!, (target) => inScope(scope, target)).then((repeated) => void (repeated && (guard.passed ??= []).push(scope.writes!.record(method, repeated, { repeat: true, sender: guard.sender }))));
+        // The same request as one sent before is answered from its recording. Where the server sends the browser next is not asked here again: it has to be inside the scope.
+        return sendOrReplay(context, route, scope.writes!, { sender: guard.sender, mayFollow: (target) => inScope(scope, target) }).then((outcome) => {
+          if (outcome.kind === "refused") guard.blocked.push({ at: new Date().toISOString(), kind: "method", method, url: url.slice(0, MAX_URL), resourceType: type, reasonNl: outcome.reasonNl, writeBudget: outcome.budget });
+          else if (outcome.kind === "replayed") (guard.replays ??= []).push({ ...outcome.replay, noteNl: outcome.noteNl });
+          else (guard.passed ??= []).push(outcome.entry, ...(outcome.repeated ? [outcome.repeated] : []));
+        });
       }
       // Whether the body has the form of a search: what the explorer needs to record a read request, never the body itself.
       const search = method === "POST" ? searchServicesOf(body) : [];
