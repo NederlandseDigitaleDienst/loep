@@ -37,7 +37,8 @@ export const SESSION_USAGE = `  session start --run <run> [--session <name>] [--
       a <ref> is a number from look or find, or css:<selector> when that matches exactly one element;
       put a selector in single quotes ('css:main > div'), or the shell takes > for a redirection to a file
       look:    look [--full] [--max n] [--plain] [--vision deuteranopia|protanopia|tritanopia|achromatopsia|blurredVision|reducedContrast],
-               crop <ref> [--margin n], ax <ref>, style <ref> [a,b,c], html <ref> [--max n],
+               crop <ref> [--margin n], cutout <picture in the run> --at x,y,width,height (a piece of a screenshot that is
+               in the run already, such as one of the sweep; needs no open page), ax <ref>, style <ref> [a,b,c], html <ref> [--max n],
                find <text | role:x | tag:x | css:selector>
       dossier [<part> [<chunk>]] [--criterion x.y.z]   the dossier of the task of this session, in a compact form: without a
                part an overview with sizes and what is read; a part (controls, keyboard.walk, legend.P03, rows.4) in
