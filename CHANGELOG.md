@@ -6,6 +6,13 @@ Wat er per versie van loep is veranderd. De versie staat op het voorblad en onde
 
 <!-- towncrier: een nieuwe versie komt hieronder -->
 
+## 0.16.1 (2026-10-22)
+
+### Verder
+
+- De volledige controle op GitHub viel twee keer uit de merge queue zonder dat er een test faalde: de spiegel van Ubuntu was zo traag dat het inrichten van een job tot 23 minuten kostte, en een job breekt na 25 minuten af. De pakketten die apt binnenhaalt komen nu uit een cache, net als de browsers. De tests zijn op gemeten duur verdeeld over vier jobs in plaats van op naam over drie (`just test-shard <i> <n>`), en de ijkmeting loopt in een eigen job naast de veegronde in plaats van erna. Een run in de queue duurt daardoor ongeveer 14 in plaats van 20 minuten. Een onderzoek verandert er niet door. ([#320](https://github.com/NederlandseDigitaleDienst/loep/issues/320))
+- `render --run runs/<run>` met een relatief pad maakte geen pdf zodra het rapport uitsneden had: typst zocht de uitsneden vanuit de map van het sjabloon en meldde "file not found". De uitsneden krijgen nu een echt absoluut pad, dus een relatief `--run` werkt weer. ([#326](https://github.com/NederlandseDigitaleDienst/loep/issues/326))
+
 ## 0.16.0 (2026-10-22)
 
 ### Wat een uitkomst kan veranderen
