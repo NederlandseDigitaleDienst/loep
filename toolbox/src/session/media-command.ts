@@ -209,7 +209,7 @@ async function listen(context: Context, options: Options): Promise<Outcome> {
       facts.tracks.slice(0, MAX_TRACKS).map(async (track, index): Promise<TrackRead> => {
         if (track.src === null) return { ...track, source: "script" };
         const to = images.file(`-track-${index + 1}.vtt`);
-        const fetched = await guardedDownload(env.scope, surface.guard, track.src, to, { resourceType: "texttrack", maxBytes: MAX_TRACK_BYTES, timeoutMs: TRACK_DOWNLOAD_MS, headers });
+        const fetched = await guardedDownload(env.scope, surface.guard, track.src, to, { resourceType: "texttrack", maxBytes: MAX_TRACK_BYTES, timeoutMs: TRACK_DOWNLOAD_MS, headers, blockade: env.blockade });
         if (!fetched.ok) return { ...track, source: "track", cues: null, reason: fetched.reason };
         return { ...track, source: "track", cues: parseWebVtt(await readFile(to, "utf8")), file: images.relative(to) };
       }),
@@ -225,7 +225,7 @@ async function listen(context: Context, options: Options): Promise<Outcome> {
       ? ({ ok: false, reason: "het element noemt geen bron (src of source)" } as const)
       : blob
         ? ({ ok: false, reason: "het adres is een blob-adres: de speler voedt het element zelf (streaming), er is geen bestand om op te halen" } as const)
-        : await guardedDownload(env.scope, surface.guard, facts.src, file, { resourceType: "media", maxBytes: MAX_BYTES, timeoutMs: DOWNLOAD_MS, headers });
+        : await guardedDownload(env.scope, surface.guard, facts.src, file, { resourceType: "media", maxBytes: MAX_BYTES, timeoutMs: DOWNLOAD_MS, headers, blockade: env.blockade });
   let notRead: string | null = fetched.ok ? null : fetched.reason;
   let streams: MediaStreams | null = null;
   if (fetched.ok) {

@@ -122,7 +122,7 @@ export const EVIDENCE: Evidence[] = [
       return contrastOf(look).some((page) => list(page.controls).some((entry) => fields.has(entry.where) && look.at(entry.where) && typeof entry.edgeRatio === "number" && entry.edgeRatio < 3 && (entry.fillRatio ?? 1) < 3));
     },
   },
-  { defect: "1.4.12-tegel", whereNl: "probes/textspacing.json, newlyClipped: de tegel snijdt tekst af met ruimere tekstafstand", found: (look) => list(look.page("probes/textspacing.json")?.newlyClipped).some((entry) => look.at(entry.path)) },
+  { defect: "1.4.12-tegel", whereNl: "probes/textspacing.json, newlyClipped met textCut.lost: in de tegel verdwijnt tekst met ruimere tekstafstand", found: (look) => list(look.page("probes/textspacing.json")?.newlyClipped).some((entry) => look.at(entry.path) && (entry.textCut as { lost?: boolean } | undefined)?.lost === true) },
   {
     defect: "1.4.13-uitleg",
     whereNl: "states.json, hover: de uitleg sluit niet met Escape of verdwijnt als de muis erheen gaat",

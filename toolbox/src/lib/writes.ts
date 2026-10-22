@@ -33,6 +33,15 @@ export interface WritePermission {
 export const DEFAULT_MAX_WRITES = 5;
 /** A service that counts messages per minute sees at most one from the run in two minutes. */
 export const DEFAULT_WRITE_SPACING_SECONDS = 120;
+/**
+ * On this machine nobody receives a stream of messages, so there is no pause and a larger budget.
+ * The limit stays, so an agent in a loop does not send without end.
+ */
+export const LOCAL_MAX_WRITES = 50;
+export const LOCAL_WRITE_SPACING_SECONDS = 0;
+
+/** The part of a sentence about the pause between two writes, starting with a comma. */
+export const spacingNl = (seconds: number): string => (seconds > 0 ? `, met minstens ${seconds} s ertussen` : ", zonder wachttijd ertussen");
 
 export interface WriteFlags {
   allowWrites?: boolean | undefined;
@@ -80,13 +89,13 @@ export function decideWrites(baseUrl: string, flags: WriteFlags, now = new Date(
     if (flags.maxWrites !== undefined) throw new Error("--max-writes hoort bij een run die mag versturen: geef het samen met --allow-writes, of met --test-environment en --declared-by");
     return null;
   }
-  const budget = { maxWrites: maxWritesOf(flags.maxWrites), spacingSeconds: DEFAULT_WRITE_SPACING_SECONDS };
   const origin = flags.testEnvironment !== undefined ? originOf(flags.testEnvironment, "--test-environment") : originOf(baseUrl, "het adres van de site");
   const local = isLocalHost(new URL(origin).hostname);
   if (local) {
     if (!flags.allowWrites) throw new Error(`versturen naar ${origin} is alleen toegestaan met --allow-writes erbij`);
-    return { origin, local: true, declaredBy: null, declaredAt: now.toISOString(), ...budget };
+    return { origin, local: true, declaredBy: null, declaredAt: now.toISOString(), maxWrites: maxWritesOf(flags.maxWrites, LOCAL_MAX_WRITES), spacingSeconds: LOCAL_WRITE_SPACING_SECONDS };
   }
+  const budget = { maxWrites: maxWritesOf(flags.maxWrites, DEFAULT_MAX_WRITES), spacingSeconds: DEFAULT_WRITE_SPACING_SECONDS };
   if (flags.testEnvironment === undefined || flags.declaredBy === undefined) {
     throw new Error(
       `versturen is niet toegestaan naar ${origin}: dat is geen lokaal adres. Op een live site blijft elk verzoek dat iets kan wijzigen tegengehouden. ` +
@@ -117,8 +126,8 @@ export async function confirmDeclaration(permission: WritePermission, terminal: 
   return { ...permission, declaredAt: new Date().toISOString(), ...recording };
 }
 
-function maxWritesOf(text: string | undefined): number {
-  if (text === undefined) return DEFAULT_MAX_WRITES;
+function maxWritesOf(text: string | undefined, fallback: number): number {
+  if (text === undefined) return fallback;
   const value = Number(text.trim());
   if (!/^\d+$/.test(text.trim()) || !Number.isSafeInteger(value) || value < 1) throw new Error(`--max-writes verwacht een geheel getal van 1 of meer, niet "${text}"`);
   return value;
@@ -172,7 +181,10 @@ export interface WriteBudget {
   max: number;
   /** Writes that counted: every request that passed to the origin and every socket frame that counted (see `SocketFrames`), without the repeats after a redirect. */
   sent: number;
+  /** What may still be sent: by anyone, or by the sender the budget was asked for, which may have used its share (see `reservedWrites`). */
   left: number;
+  /** The last writes of the budget, kept for senders that have sent nothing yet. */
+  reserved: number;
   spacingSeconds: number;
   /** Seconds until the next write may pass; 0 when it may pass now. */
   waitSeconds: number;
@@ -264,6 +276,28 @@ export class SocketFrames {
   }
 }
 
+/**
+ * Who shares in the budget as one: the judge, the verifier and the finisher of one criterion
+ * (sessions b-331, v-331 and a-331, also with a number after them, as `tasks` names them) are one
+ * sender, because the later ones can cite what the first one saw. Any other session, and every
+ * command of the sweep, is a sender of its own.
+ */
+export function senderOf(source: string): string {
+  const criterion = /^[bva]-(\d+)(?:-\d+)?$/.exec(source);
+  return criterion ? criterionSender(criterion[1]!) : source;
+}
+
+/** The sender of the sessions of a criterion, such as 3.3.1. */
+export const criterionSender = (criterion: string): string => `criterium ${criterion.replaceAll(".", "")}`;
+
+/**
+ * The writes at the end of the budget that only a sender that has sent nothing yet may take: half
+ * of it, rounded down. Without it the sweep and the first agents used up everything, and the
+ * criteria whose turn came later could send nothing at all. Nothing is kept on a local site: there
+ * is no recipient, and the budget there is for an agent in a loop.
+ */
+export const reservedWrites = (permission: WritePermission): number => (permission.local ? 0 : Math.floor((permission.maxWrites ?? DEFAULT_MAX_WRITES) / 2));
+
 function readLog(runDir: string): PassedWrite[] {
   const path = join(runDir, WRITES_LOG);
   if (!existsSync(path)) return [];
@@ -280,24 +314,36 @@ function readLog(runDir: string): PassedWrite[] {
     });
 }
 
-/** The budget for sending of a run, from its permission and its log of writes. The log is in the run, so a new process goes on with what was sent. */
-export function writeBudget(runDir: string, permission: WritePermission, now = Date.now()): WriteBudget {
+/**
+ * The budget for sending of a run, from its permission and its log of writes. The log is in the run,
+ * so a new process goes on with what was sent. With a sender, `left` is what that sender may still
+ * send: a sender that has sent before does not get the reserved writes.
+ */
+export function writeBudget(runDir: string, permission: WritePermission, now = Date.now(), sender?: string): WriteBudget {
   const max = permission.maxWrites ?? DEFAULT_MAX_WRITES;
   const spacingSeconds = permission.spacingSeconds ?? DEFAULT_WRITE_SPACING_SECONDS;
   const counted = readLog(runDir).filter(counts);
   const last = counted.length > 0 ? Date.parse(counted.at(-1)!.at) : Number.NEGATIVE_INFINITY;
   const waitSeconds = Math.max(0, Math.ceil((last + spacingSeconds * 1000 - now) / 1000));
-  return { origin: permission.origin, max, sent: counted.length, left: Math.max(0, max - counted.length), spacingSeconds, waitSeconds };
+  const reserved = reservedWrites(permission);
+  const sentBefore = sender !== undefined && counted.some((entry) => senderOf(entry.source) === senderOf(sender));
+  return { origin: permission.origin, max, sent: counted.length, left: Math.max(0, max - counted.length - (sentBefore ? reserved : 0)), reserved, spacingSeconds, waitSeconds };
 }
 
 /** One line for `session list` and `estimate`: what is left of the budget for sending. */
 export const writeBudgetNl = (budget: WriteBudget): string =>
-  `nog ${budget.left} van ${budget.max} verzendingen naar ${budget.origin} over voor de hele run (${budget.sent} verstuurd), met minstens ${budget.spacingSeconds} s ertussen${budget.left > 0 && budget.waitSeconds > 0 ? `; de volgende kan over ${budget.waitSeconds} s` : ""}`;
+  `nog ${budget.left} van ${budget.max} verzendingen naar ${budget.origin} over voor de hele run (${budget.sent} verstuurd)${spacingNl(budget.spacingSeconds)}${budget.reserved > 0 ? `; ${reservedNl(budget.reserved)}` : ""}${budget.left > 0 && budget.waitSeconds > 0 ? `; de volgende kan over ${budget.waitSeconds} s` : ""}`;
 
-/** The open point an agent writes when what it had to send could not go because the budget is used up. */
-export const budgetOutPointNl = (budget: Pick<WriteBudget, "sent" | "max">): string => `versturen niet toegestaan: het budget voor versturen van deze run is op (${budget.sent} van ${budget.max} verstuurd)`;
+/** What the reserved writes are for, in the words of a task file and of an answer. */
+export const reservedNl = (reserved: number): string => `de laatste ${reserved === 1 ? "verzending is" : `${reserved} verzendingen zijn`} voor een criterium of een opdracht van de veegronde die nog niets verstuurde`;
 
-export type WriteClaim = { ok: true; entry: PassedWrite } | { ok: false; budget: "out" | "spacing"; reasonNl: string };
+/** The open point an agent writes when what it had to send could not go because the budget, or the share of its criterion, is used up. */
+export const budgetOutPointNl = (budget: Pick<WriteBudget, "sent" | "max">): string =>
+  budget.sent < budget.max
+    ? `versturen niet toegestaan: het budget voor versturen van deze run is op voor dit criterium (${budget.sent} van ${budget.max} verstuurd; de rest is voor criteria die nog niets verstuurden)`
+    : `versturen niet toegestaan: het budget voor versturen van deze run is op (${budget.sent} van ${budget.max} verstuurd)`;
+
+export type WriteClaim = { ok: true; entry: PassedWrite } | { ok: false; budget: "out" | "share" | "spacing"; reasonNl: string };
 
 /**
  * What a browser context needs to let writes through: the origin, and where to note each one.
@@ -305,14 +351,19 @@ export type WriteClaim = { ok: true; entry: PassedWrite } | { ok: false; budget:
  */
 export interface WriteAccess {
   origin: string;
+  /** The run and the command or session the access was made for: where the recordings of what a chat answered are kept (see `socketRecordings`). */
+  runDir: string;
+  source: string;
   /**
    * Take one write from the budget of the run and note it, or refuse it: when the budget is used
    * up, or when the previous write is less than the spacing ago. A refused write is not sent, and
-   * not waited for either: an agent that waits inside a command runs into its time limit.
+   * not waited for either: an agent that waits inside a command runs into its time limit. A sender
+   * that has sent before is refused the reserved writes. `sender`: the session that sends, when one
+   * access serves several; absent, the one the access was made for.
    */
-  claim: (method: string, url: string, options?: { message?: boolean }) => WriteClaim;
+  claim: (method: string, url: string, options?: { message?: boolean; sender?: string | undefined }) => WriteClaim;
   /** Note a write that does not count against the budget: a frame over a socket without a test value in it, or the repeat of a request after a redirect. */
-  record: (method: string, url: string, options?: { repeat?: boolean }) => PassedWrite;
+  record: (method: string, url: string, options?: { repeat?: boolean; sender?: string | undefined }) => PassedWrite;
 }
 
 const LOCK = "writes.lock";
@@ -351,8 +402,8 @@ function withLock<T>(runDir: string, work: () => T): T {
 }
 
 export function writeAccess(runDir: string, permission: WritePermission, source: string, now: () => number = Date.now): WriteAccess {
-  const append = (method: string, url: string, repeat: boolean, message = false): PassedWrite => {
-    const entry: PassedWrite = { at: new Date(now()).toISOString(), source, method, path: new URL(url).pathname, ...(repeat ? { repeat: true as const } : {}), ...(message ? { message: true as const } : {}) };
+  const append = (method: string, url: string, repeat: boolean, message = false, sender = source): PassedWrite => {
+    const entry: PassedWrite = { at: new Date(now()).toISOString(), source: sender, method, path: new URL(url).pathname, ...(repeat ? { repeat: true as const } : {}), ...(message ? { message: true as const } : {}) };
     mkdirSync(runDir, { recursive: true });
     // Appended at once and synchronously: the line is there even when the run is cut off right after.
     appendFileSync(join(runDir, WRITES_LOG), `${JSON.stringify(entry)}\n`);
@@ -360,14 +411,18 @@ export function writeAccess(runDir: string, permission: WritePermission, source:
   };
   return {
     origin: permission.origin,
-    record: (method, url, options) => append(method, url, options?.repeat === true),
+    runDir,
+    source,
+    record: (method, url, options) => append(method, url, options?.repeat === true, false, options?.sender),
     claim: (method, url, options) => {
       mkdirSync(runDir, { recursive: true });
+      const sender = options?.sender ?? source;
       return withLock(runDir, (): WriteClaim => {
-        const budget = writeBudget(runDir, permission, now());
+        const budget = writeBudget(runDir, permission, now(), sender);
+        if (budget.left === 0 && budget.sent < budget.max) return { ok: false, budget: "share", reasonNl: `${senderOf(sender) === sender ? sender : "dit criterium"} heeft al verstuurd, en er zijn nog ${budget.max - budget.sent} van ${budget.max} verzendingen naar ${budget.origin} over: ${reservedNl(budget.reserved)}` };
         if (budget.left === 0) return { ok: false, budget: "out", reasonNl: `het budget voor versturen van deze run is op: ${budget.sent} van ${budget.max} verzendingen naar ${budget.origin} zijn gedaan, door alle sessies en de veegronde samen` };
         if (budget.waitSeconds > 0) return { ok: false, budget: "spacing", reasonNl: `te kort na de vorige verzending: tussen twee verzendingen zit minstens ${budget.spacingSeconds} s; versturen kan weer over ${budget.waitSeconds} s (nog ${budget.left} van ${budget.max} over)` };
-        return { ok: true, entry: append(method, url, false, options?.message === true) };
+        return { ok: true, entry: append(method, url, false, options?.message === true, sender) };
       });
     },
   };

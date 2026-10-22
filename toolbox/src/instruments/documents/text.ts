@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import type { DocumentFacts, DocumentHeading, DocumentImage, DocumentLink, DocumentTable, PlainTextFacts } from "../../lib/documents.ts";
 
 /**
- * Plain text offered as a file: Markdown, txt and csv. The file has no properties: no title, no
+ * Plain text offered as a file: Markdown, txt, csv, and agenda items and business cards (ics, vcf). The file has no properties: no title, no
  * language, no tags. What it has is its text, the character set the server names for it, and
  * in Markdown the structure its syntax writes out (headings, links, pictures, tables).
  */

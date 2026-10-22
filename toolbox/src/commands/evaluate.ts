@@ -1,4 +1,5 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { replaysNl } from "../lib/recordings.ts";
 import { join } from "node:path";
 import { frameStanding, type AcceptedGapDecider } from "../lib/sitemodel.ts";
 import { readJson, sha256File } from "../lib/canonical.ts";
@@ -24,7 +25,7 @@ import type { Gate } from "./gate.ts";
 import { readEvaluation, signatureIsCurrent, writeEvaluation } from "./sign.ts";
 import { mergeInto } from "./merge.ts";
 import { countingVerdict, loadAnswers } from "./answer.ts";
-import { instrumentVerdictIsCurrent, isInstrumentRun, loadInstrumentIndex, loadObservations, NO_TASKS_NL, skippedForOutage, unruledCrossPoints, type InstrumentTask } from "./instrument-tasks.ts";
+import { instrumentVerdictIsCurrent, isInstrumentRun, loadInstrumentIndex, crossLoops, loadObservations, NO_TASKS_NL, skippedForOutage, unruledCrossPoints, type InstrumentTask } from "./instrument-tasks.ts";
 
 export interface EvaluateOptions {
   run: string;
@@ -152,7 +153,10 @@ export async function evaluate(options: EvaluateOptions): Promise<Evaluation> {
           // A limit that says no screen reader was used, or nobody logged in, holds only when that is so for this criterion in this run.
           procedure: procedure ? { version: procedure.version, sha256: procedure.sha256, class: procedure.class, limitsNl: procedure.limitsNl === null ? null : runLimitsNl(procedure.limitsNl, { screenReader: [instrumentTask?.judge.session, instrumentTask?.verify?.session, instrumentTask?.finish?.session].some((session) => session !== undefined && readAloud.has(session)), loggedIn: Boolean(run.login) }) } : null,
           provenance: { dossierSha256: instrumentTask?.dossierSha256 ?? null, verdictSha256: hashes },
-          unruledNl: instrumentTask ? unruledCrossPoints(passing, criterion.id, [verdicts.final, verdicts.finish]) : [],
+          // Also for a criterion outside the run (`tasks --only`): what was passed on to it stays an open point.
+          unruledNl: unruledCrossPoints(passing, criterion.id, [verdicts.final, verdicts.finish], observations.records),
+          // What this criterion and another passed on to each other: looked at by both, and open at neither.
+          loops: crossLoops(passing, criterion.id, observations.records).loops,
           outage: instrumentTask !== undefined && !verdicts.finish && skippedForOutage(options.run, instrumentTask),
         },
         prefix,
@@ -330,7 +334,7 @@ export async function evaluate(options: EvaluateOptions): Promise<Evaluation> {
     limitationsNl: limitations,
     ...(measuredStates ? { measuredStates } : {}),
     ...(documents ? { documents } : {}),
-    chain: { kind: "instruments", gate: gateSummary, writes: { allowed: Boolean(run.writes), noteNl: run.writes ? writesAllowedNl(run.writes) : WRITES_BLOCKED_NL }, ...((run.reads ?? []).length > 0 ? { reads: run.reads!.map((rule) => ({ method: rule.method, origin: rule.origin, path: rule.path, service: rule.service, reasonNl: rule.reasonNl })) } : {}) },
+    chain: { kind: "instruments", gate: gateSummary, writes: { allowed: Boolean(run.writes), noteNl: run.writes ? [writesAllowedNl(run.writes), replaysNl(options.run)].filter(Boolean).join(". ") : WRITES_BLOCKED_NL }, ...((run.reads ?? []).length > 0 ? { reads: run.reads!.map((rule) => ({ method: rule.method, origin: rule.origin, path: rule.path, service: rule.service, reasonNl: rule.reasonNl })) } : {}) },
     signature: null,
   };
   if (earlier) {

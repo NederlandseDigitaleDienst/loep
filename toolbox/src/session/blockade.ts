@@ -9,7 +9,7 @@ export interface BlockadeEntry {
   /** `429`: the site answered "too many requests". `failures`: navigations to it failed again and again while other origins loaded. */
   reason: "429" | "failures";
   at: string;
-  /** Until when requests are refused, for a 429 with a short Retry-After; null for the rest of the run. */
+  /** Until when requests are refused: a 429 with a short Retry-After, or a pause after failures. Null for the rest of the run (a 429 without a short Retry-After). */
   until: string | null;
   /** The address that gave the answer or failed last. */
   url: string;
@@ -21,6 +21,21 @@ export const BLOCKADES_FILE = "blockades.json";
 export const MAX_FAILED_NAVIGATIONS = 3;
 /** A Retry-After up to this many seconds is waited out; a longer one, or none, ends the asking for the rest of the run. */
 export const SHORT_RETRY_AFTER_SECONDS = 60;
+/**
+ * After failed navigations the origin is paused, not given up: a site that is slow for a while under
+ * the load of the sessions answers again later. The pause doubles each time the same origin fails again, up to the longest.
+ */
+export const FAILURE_PAUSE_SECONDS = 300;
+export const LONGEST_FAILURE_PAUSE_SECONDS = 2400;
+
+/** When an entry stops refusing, in milliseconds; null when it refuses for the rest of the run. A failures entry of an older run without an end ends one pause after it was noted. */
+export function endOf(entry: BlockadeEntry): number | null {
+  if (entry.until !== null) return Date.parse(entry.until);
+  return entry.reason === "failures" ? Date.parse(entry.at) + FAILURE_PAUSE_SECONDS * 1000 : null;
+}
+
+/** That an entry refuses for the rest of the run. */
+export const isLasting = (entry: BlockadeEntry): boolean => endOf(entry) === null;
 
 /** The origin of an address, with a socket counted as its http(s) twin; null for an address without one. */
 function originOf(url: string): string | null {
@@ -51,14 +66,16 @@ const whyNl = (entry: BlockadeEntry): string =>
 /** Why a request to a blocked origin is refused, and what the agent writes about what it could not measure. */
 export function refusalNl(entry: BlockadeEntry): string {
   const why = whyNl(entry);
-  if (entry.until) return `${why}; het sessieproces vraagt daar niets tot ${new Date(entry.until).toTimeString().slice(0, 8)}, zoals de site vroeg. Doe het daarna opnieuw`;
+  const end = endOf(entry);
+  if (end !== null && entry.reason === "failures") return `${why}; het sessieproces vraagt daar niets tot ${new Date(end).toTimeString().slice(0, 8)} en probeert het daarna opnieuw. Meet intussen wat zonder die site kan, en doe dit daarna opnieuw`;
+  if (end !== null) return `${why}; het sessieproces vraagt daar niets tot ${new Date(end).toTimeString().slice(0, 8)}, zoals de site vroeg. Doe het daarna opnieuw`;
   return `${why}; het sessieproces vraagt daar de rest van de run niets meer (${BLOCKADES_FILE} in de run). Schrijf wat daardoor niet te meten is als open punt: "niet bereikbaar: <adres>, ${entry.origin} weigerde vanaf ${timeOfDay(entry.at)}"`;
 }
 
-/** A page or document the sweep did not ask for, because the site refused the evaluation for the rest of the run. */
+/** A page or document that was not asked for, because the site refused the evaluation for the rest of the run or for a pause. */
 export class OriginBlocked extends Error {
   constructor(url: string, entry: BlockadeEntry) {
-    super(`${url} is niet opgevraagd: ${whyNl(entry)}; loep vraagt daar de rest van de run niets meer (${BLOCKADES_FILE} in de run)`);
+    super(isLasting(entry) ? `${url} is niet opgevraagd: ${whyNl(entry)}; loep vraagt daar de rest van de run niets meer (${BLOCKADES_FILE} in de run)` : `${url} is niet opgevraagd: ${refusalNl(entry)}`);
     this.name = "OriginBlocked";
   }
 }
@@ -82,20 +99,24 @@ export const refusedRunNl = (entry: BlockadeEntry): string =>
 export function blockadesNl(runDir: string): string[] {
   const lasting = new Map<string, BlockadeEntry>();
   const paused = new Map<string, number>();
+  const failing = new Map<string, number>();
   for (const entry of readBlockades(runDir)) {
-    if (entry.until === null) lasting.set(entry.origin, lasting.get(entry.origin) ?? entry);
+    if (isLasting(entry)) lasting.set(entry.origin, lasting.get(entry.origin) ?? entry);
+    else if (entry.reason === "failures") failing.set(entry.origin, (failing.get(entry.origin) ?? 0) + 1);
     else paused.set(entry.origin, (paused.get(entry.origin) ?? 0) + 1);
   }
+  const times = (count: number): string => (count === 1 ? "één keer" : `${count} keer`);
   return [
     ...[...lasting.values()].map(refusedRunNl),
-    ...[...paused.entries()].filter(([origin]) => !lasting.has(origin)).map(([origin, times]) => `${origin} vroeg ${times === 1 ? "één keer" : `${times} keer`} om even te wachten (429 met Retry-After); het onderzoek heeft dat aangehouden.`),
+    ...[...paused.entries()].filter(([origin]) => !lasting.has(origin)).map(([origin, count]) => `${origin} vroeg ${times(count)} om even te wachten (429 met Retry-After); het onderzoek heeft dat aangehouden.`),
+    ...[...failing.entries()].filter(([origin]) => !lasting.has(origin)).map(([origin, count]) => `${origin} antwoordde ${times(count)} niet op ${MAX_FAILED_NAVIGATIONS} navigaties op rij; het onderzoek vroeg daar dan een tijd niets en ging daarna verder. Wat in die tijd niet kon worden gemeten, staat bij het criterium als niet bereikbaar.`),
   ];
 }
 
 /**
  * The origins of the site that the session process stops asking anything: after a 429 (for the
- * rest of the run, or until a short Retry-After has passed), and after navigations to one origin
- * failed again and again while another origin loaded. Shared by every session of the process, and
+ * rest of the run, or until a short Retry-After has passed), and for a pause after navigations to
+ * one origin failed again and again while another origin loaded. Shared by every session of the process, and
  * kept in the run, so a new process goes on refusing.
  */
 export class Blockade {
@@ -126,14 +147,23 @@ export class Blockade {
     const origin = originOf(url);
     if (!origin) return null;
     this.sync();
-    return this.entries.find((entry) => entry.origin === origin && (entry.until === null || Date.parse(entry.until) > this.now())) ?? null;
+    return (
+      this.entries.find((entry) => {
+        const end = endOf(entry);
+        return entry.origin === origin && (end === null || end > this.now());
+      }) ?? null
+    );
   }
 
-  /** Wait out a short pause the site asked for. The entry that refuses this address for the rest of the run, or null when it may be asked. */
-  async pause(url: string): Promise<BlockadeEntry | null> {
+  /**
+   * Wait out a pause of at most `longestSeconds`: by default a short one the site asked for; the sweep, which has no
+   * agent waiting on it, also waits out a pause after failures. The entry that refuses this address for longer, or null when it may be asked.
+   */
+  async pause(url: string, longestSeconds = SHORT_RETRY_AFTER_SECONDS): Promise<BlockadeEntry | null> {
     for (let entry = this.refuses(url); entry; entry = this.refuses(url)) {
-      if (entry.until === null) return entry;
-      await new Promise((resolve) => setTimeout(resolve, Math.max(0, Date.parse(entry!.until!) - this.now())));
+      const end = endOf(entry);
+      if (end === null || end - this.now() > longestSeconds * 1000) return entry;
+      await new Promise((resolve) => setTimeout(resolve, Math.max(0, end - this.now())));
     }
     return null;
   }
@@ -169,7 +199,9 @@ export class Blockade {
     // Only when something else loads is it the site, and not the network of this machine.
     if (count < MAX_FAILED_NAVIGATIONS || ![...this.loadedOrigins].some((other) => other !== origin)) return;
     this.failures.delete(origin);
-    this.note({ origin, reason: "failures", at: new Date(this.now()).toISOString(), until: null, url: url.slice(0, 300) });
+    const before = this.entries.filter((entry) => entry.origin === origin && entry.reason === "failures").length;
+    const seconds = Math.min(FAILURE_PAUSE_SECONDS * 2 ** before, LONGEST_FAILURE_PAUSE_SECONDS);
+    this.note({ origin, reason: "failures", at: new Date(this.now()).toISOString(), until: new Date(this.now() + seconds * 1000).toISOString(), url: url.slice(0, 300) });
   }
 
   private note(entry: BlockadeEntry): void {

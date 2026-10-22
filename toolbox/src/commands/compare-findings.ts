@@ -77,6 +77,12 @@ export interface CompareInput {
     items: Record<string, { url: string; kind: DocumentKind; status: string; reasonNl: string | null; files: string; evidence: string[] }>;
   };
   criteria: { id: string; titleNl: string; outcome: CriterionOutcome; summaryNl: string; missingNl: string[]; findings: number; dossier: string | null }[];
+  /**
+   * The criteria the run had tasks for, and the findings of the reference left out because neither
+   * their criterion nor one of their `alsoCriteria` is among them. Absent when the run judged every
+   * criterion of the reference, and in inputs written before it existed.
+   */
+  scope?: { criteria: string[]; leftOut: string[] };
   reference: InputReferenceFinding[];
   ours: InputOwnFinding[];
 }
@@ -144,9 +150,28 @@ export function documentOutOfReach(finding: ReferenceFinding, baseUrl: string, c
   return null;
 }
 
-export function buildInput(runDir: string, evaluation: Evaluation, reference: ReferenceAudit, evaluationSha256: string): CompareInput {
-  if (!reference.findings || reference.findings.length === 0) {
+/** The criteria the run has tasks for, or null for a run without task files: then every criterion counts. */
+function taskCriteria(runDir: string): string[] | null {
+  const path = join(runDir, "tasks", "index.json");
+  if (!existsSync(path)) return null;
+  const tasks = (JSON.parse(readFileSync(path, "utf8")) as { tasks?: { criterion: string }[] }).tasks ?? [];
+  return tasks.length === 0 ? null : [...new Set(tasks.map((task) => task.criterion))].sort(compareCriterionIds);
+}
+
+/**
+ * The input for the two classifications. With `runCriteria` (a run with tasks for part of the
+ * criteria, such as `tasks --only`), only the findings of the reference under one of those
+ * criteria, by `criterion` or `alsoCriteria`, are classified, and only the criteria among them
+ * that the reference failed count in the comparison per criterion: the rest was not judged.
+ */
+export function buildInput(runDir: string, evaluation: Evaluation, reference: ReferenceAudit, evaluationSha256: string, runCriteria: readonly string[] | null = null): CompareInput {
+  if (!Array.isArray(reference.findings)) {
     throw new Error("the reference has no \"findings\"; compare --findings needs one entry per finding (id, criterion, page, descriptionNl), see validatie/README.md");
+  }
+  // An empty list is a statement, not a gap: a reference that fails no criterion (a clean twin) has
+  // no findings, and every finding of ours is then classified as terecht, discutabel or onterecht.
+  if (reference.findings.length === 0 && (reference.failed.length > 0 || (reference.failedOnlyInDocuments?.length ?? 0) > 0)) {
+    throw new Error("the reference fails criteria but its \"findings\" is empty; compare --findings needs one entry per finding, see validatie/README.md");
   }
   const ids = reference.findings.map((finding) => finding.id);
   const repeated = ids.filter((id, index) => ids.indexOf(id) !== index);
@@ -169,12 +194,19 @@ export function buildInput(runDir: string, evaluation: Evaluation, reference: Re
     documents.items[item.label] = { url: item.url, kind: item.kind, status: measured?.status ?? "notMeasured", reasonNl: measured?.reasonNl ?? null, files, evidence: filesUnder(runDir, files) };
   }
   const outcomes = new Map(evaluation.criteria.map((criterion) => [criterion.id, criterion.outcome]));
-  const { findings, ...audit } = reference;
+  const { findings: all, ...audit } = reference;
+  const judged = (criterion: string): boolean => runCriteria === null || runCriteria.includes(criterion);
+  const findings = all.filter((finding) => [finding.criterion, ...(finding.alsoCriteria ?? [])].some(judged));
+  const leftOut = all.filter((finding) => !findings.includes(finding)).map((finding) => finding.id);
+  if (leftOut.length > 0) {
+    audit.failed = audit.failed.filter(judged);
+    if (audit.failedOnlyInDocuments) audit.failedOnlyInDocuments = audit.failedOnlyInDocuments.filter(judged);
+  }
   return {
     schema: "loep/compare-findings-input/1",
     site: evaluation.site.name,
     baseUrl: evaluation.site.baseUrl,
-    noteNl: "De lijst 'candidates' bij een bevinding van de referentie noemt onze bevindingen onder hetzelfde criterium. Het is een plek om te beginnen met zoeken, geen uitspraak. Paden zijn relatief aan de run-map.",
+    noteNl: `De lijst 'candidates' bij een bevinding van de referentie noemt onze bevindingen onder hetzelfde criterium. Het is een plek om te beginnen met zoeken, geen uitspraak. Paden zijn relatief aan de run-map.${leftOut.length > 0 ? ` Deze run beoordeelde alleen de criteria in 'scope.criteria'; de ${leftOut.length} bevindingen van de referentie onder andere criteria staan er niet in.` : ""}`,
     evaluationSha256,
     audit,
     legend,
@@ -183,6 +215,7 @@ export function buildInput(runDir: string, evaluation: Evaluation, reference: Re
       const dossier = join("tasks", criterion.id, "dossier.json");
       return { id: criterion.id, titleNl: criterion.titleNl, outcome: criterion.outcome, summaryNl: criterion.summaryNl, missingNl: criterion.missingNl, findings: criterion.findings.length, dossier: existsSync(join(runDir, dossier)) ? dossier : null };
     }),
+    ...(leftOut.length > 0 ? { scope: { criteria: [...runCriteria!], leftOut } } : {}),
     reference: findings.map((finding) => {
       const criteria = new Set([finding.criterion, ...(finding.alsoCriteria ?? [])]);
       // A document on the site itself, of a kind that is read, on a criterion documents are judged on, is a finding like any other.
@@ -199,10 +232,10 @@ export function buildInput(runDir: string, evaluation: Evaluation, reference: Re
 }
 
 /** Write the input and the two fixed prompts for classifying each finding. Nothing here classifies anything. */
-export async function compareTasks(runDir: string, referencePath: string): Promise<{ reference: number; ours: number; prompts: string[] }> {
+export async function compareTasks(runDir: string, referencePath: string): Promise<{ reference: number; leftOut: number; ours: number; prompts: string[] }> {
   const evaluationPath = join(runDir, "evaluation.json");
   const evaluation = await readJson<Evaluation>(evaluationPath);
-  const input = buildInput(runDir, evaluation, await readJson<ReferenceAudit>(referencePath), await sha256File(evaluationPath));
+  const input = buildInput(runDir, evaluation, await readJson<ReferenceAudit>(referencePath), await sha256File(evaluationPath), taskCriteria(runDir));
   await writeJson(join(runDir, INPUT), input);
   const absoluteRun = resolve(runDir);
   const template = readFileSync(join(TEMPLATES_DIR, "vergelijk.md"), "utf8");
@@ -222,7 +255,7 @@ export async function compareTasks(runDir: string, referencePath: string): Promi
     );
     prompts.push(path);
   }
-  return { reference: input.reference.length, ours: input.ours.length, prompts };
+  return { reference: input.reference.length, leftOut: input.scope?.leftOut.length ?? 0, ours: input.ours.length, prompts };
 }
 
 const isText = (value: unknown, minimum = 1): value is string => typeof value === "string" && value.trim().length >= minimum;
@@ -340,6 +373,8 @@ export interface FindingsSummary {
   provenance: { inputSha256: string; evaluationSha256: string; classificationSha256: Record<CompareRound, string>; promptSha256: string };
   reference: {
     total: number;
+    /** Findings of the reference under criteria the run did not judge: not in the input, and in no count. */
+    leftOut: number;
     /** Findings about a document. Those within reach of the toolbox count like any other finding. */
     documents: number;
     /** Findings about a document the toolbox does not examine (other origin, a kind that is not read, a criterion documents are not judged on): fixed by script as out of reach, and in no denominator. */
@@ -440,6 +475,7 @@ export function mergeClassifications(input: CompareInput, a: Classification, b: 
     provenance,
     reference: {
       total: input.reference.length,
+      leftOut: input.scope?.leftOut.length ?? 0,
       documents,
       documentsOutOfReach,
       counted,
@@ -485,6 +521,7 @@ export function findingsMarkdown(summary: FindingsSummary): string {
     summary.referenceKind === "answer-key"
       ? "De referentie is een antwoordsleutel: de fouten zijn met opzet ingebouwd en bestaan dus zeker."
       : "De referentie is een bestaand onderzoek. Zo'n onderzoek noemt voorbeelden en is niet uitputtend.",
+    ...(reference.total === 0 && reference.leftOut === 0 ? ["De referentie heeft geen bevindingen: geen enkel criterium hoort te worden afgekeurd. Elke bevinding van ons is dus zonder tegenhanger, en elke afkeuring door ons is terecht, discutabel of onterecht."] : []),
     `Twee beoordelaars (A en B) hebben elke bevinding onafhankelijk van elkaar ingedeeld met dezelfde vaste opdracht. De kolom "Eens" telt alleen bevindingen waar A en B dezelfde klasse gaven. Waar ze verschillen, is dat een eigen getal. Het verschil is niet opgelost.`,
     "",
     "## De getallen die ertoe doen",
@@ -502,7 +539,7 @@ export function findingsMarkdown(summary: FindingsSummary): string {
     "",
     "## Bevindingen van de referentie",
     "",
-    `${reference.total} bevindingen, waarvan ${reference.documents} over een document. ${reference.documentsOutOfReach === 0 ? "Ze tellen allemaal mee." : `${reference.documentsOutOfReach} daarvan ${reference.documentsOutOfReach === 1 ? "gaat" : "gaan"} over een document dat de toolbox niet onderzoekt (een ander domein, een soort die niet wordt ingelezen of een criterium waarop documenten niet worden beoordeeld) en ${reference.documentsOutOfReach === 1 ? "telt" : "tellen"} nergens mee.`} Percentages zijn van de ${reference.counted} bevindingen die meetellen.`,
+    `${reference.leftOut > 0 ? `${reference.leftOut} bevindingen van de referentie vallen onder criteria die deze run niet beoordeelde; ze zijn niet ingedeeld en tellen nergens mee, ook niet per criterium. ` : ""}${reference.total} bevindingen, waarvan ${reference.documents} over een document. ${reference.documentsOutOfReach === 0 ? "Ze tellen allemaal mee." : `${reference.documentsOutOfReach} daarvan ${reference.documentsOutOfReach === 1 ? "gaat" : "gaan"} over een document dat de toolbox niet onderzoekt (een ander domein, een soort die niet wordt ingelezen of een criterium waarop documenten niet worden beoordeeld) en ${reference.documentsOutOfReach === 1 ? "telt" : "tellen"} nergens mee.`} Percentages zijn van de ${reference.counted} bevindingen die meetellen.`,
     "",
     "| Klasse | A | B | Eens |",
     "|---|---|---|---|",
@@ -592,11 +629,15 @@ export async function mergeRun(runDir: string, outDir: string): Promise<Findings
 
 const USAGE = `loep compare --findings <step> [options]
 
-  tasks --run <run> --reference <file>   Write <run>/compare/invoer.json and the two fixed prompts (opdracht-a.md, opdracht-b.md)
+  tasks --run <run> --reference <file>   Write <run>/compare/invoer.json and the two fixed prompts (opdracht-a.md, opdracht-b.md).
+                                         A run with tasks for part of the criteria (tasks --only) gets only the
+                                         findings under those criteria (or their alsoCriteria); it says how many
+                                         were left out
   check --run <run> --round <a|b>        Validate <run>/compare/<round>.json; non-zero exit on problems
   merge --run <run> --out <dir>          Put the two classifications side by side; write bevindingen.md and bevindingen.json
 
-The reference needs a list "findings"; see validatie/README.md. Two separate agents each get one prompt.
+The reference needs a list "findings"; an empty list is allowed only when it fails no criterion
+(a clean twin), and then every finding of ours is classified on its own. See validatie/README.md. Two separate agents each get one prompt.
 `;
 
 export async function cli(args: string[]): Promise<void> {
@@ -614,7 +655,8 @@ export async function cli(args: string[]): Promise<void> {
     case "tasks": {
       if (!values.run || !values.reference) throw new Error("compare --findings tasks needs --run and --reference");
       const result = await compareTasks(values.run, values.reference);
-      process.stdout.write(`${result.reference} bevindingen van de referentie, ${result.ours} van ons\n${result.prompts.join("\n")}\n`);
+      const leftOut = result.leftOut > 0 ? ` (${result.leftOut} weggelaten: hun criteria zitten niet in de opdrachten van deze run)` : "";
+      process.stdout.write(`${result.reference} bevindingen van de referentie${leftOut}, ${result.ours} van ons\n${result.prompts.join("\n")}\n`);
       return;
     }
     case "check": {

@@ -30,8 +30,12 @@ export const SESSION_USAGE = `  session start --run <run> [--session <name>] [--
       act:     open <url|label> [--width n] [--scheme light|dark] [--state <name>] [--with-blockers], click <ref>, key <key>,
                tab [n] [--shift], type <ref> <${Object.keys(TEST_VALUES).join("|")}>,
                select <ref> <option text | #n>, paste <ref> <same kinds as type>, press <ref> [--hold | --abort],
-               hover <ref>, scroll <ref|top|bottom|down|up|+n|-n>, back
-      a <ref> is a number from look or find, or css:<selector> when that matches exactly one element
+               hover <ref>, scroll <ref|top|bottom|down|up|+n|-n>, back,
+               drag <ref> <dx> <dy> | drag <ref> --to <ref> (press, move in steps, let go, with the mouse),
+               swipe <ref> <left|right|up|down> (one finger on a touch screen: touch and pointer events of the kind touch);
+               both keep a picture of the window before and after
+      a <ref> is a number from look or find, or css:<selector> when that matches exactly one element;
+      put a selector in single quotes ('css:main > div'), or the shell takes > for a redirection to a file
       look:    look [--full] [--max n] [--plain] [--vision deuteranopia|protanopia|tritanopia|achromatopsia|blurredVision|reducedContrast],
                crop <ref> [--margin n], ax <ref>, style <ref> [a,b,c], html <ref> [--max n],
                find <text | role:x | tag:x | css:selector>
@@ -254,6 +258,8 @@ export async function sessionCli(argv: string[]): Promise<number> {
       vision: { type: "string" },
       "more-contrast": { type: "boolean" },
       against: { type: "string" },
+      // drag: --to <ref>
+      to: { type: "string" },
       page: { type: "string" },
       tags: { type: "boolean" },
       // speak: --steps n, --click, --type <kind> [--submit]

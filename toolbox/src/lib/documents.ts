@@ -11,7 +11,7 @@ import { isOwnAddress, originsNl, siteOrigins, type OriginSource } from "./origi
  */
 
 /**
- * "text" is plain text: Markdown, txt and csv. "other" is a file a link offers for download
+ * "text" is plain text: Markdown, txt, csv, and agenda items and business cards (ics, vcf). "other" is a file a link offers for download
  * (the `download` attribute) whose kind is none of these: counted as a document, not read.
  */
 export const DOCUMENT_KINDS = ["pdf", "docx", "odt", "rtf", "pptx", "odp", "xlsx", "ods", "text", "epub", "doc", "xls", "ppt", "other"] as const;
@@ -39,7 +39,7 @@ export const KIND_NAME_NL: Record<DocumentKind, string> = {
   odp: "OpenDocument-presentatie (odp)",
   xlsx: "Excel (xlsx)",
   ods: "OpenDocument-rekenblad (ods)",
-  text: "platte tekst (md, txt, csv)",
+  text: "platte tekst (md, txt, csv, ics)",
   epub: "epub",
   doc: "Word (doc)",
   xls: "Excel (xls)",
@@ -48,7 +48,8 @@ export const KIND_NAME_NL: Record<DocumentKind, string> = {
 };
 
 /** Extensions that name a kind other than themselves. */
-const BY_EXTENSION: Record<string, DocumentKind> = { md: "text", markdown: "text", txt: "text", csv: "text" };
+// An agenda item (ics) and a business card (vcf) are plain text too, and servers often send them as application/octet-stream.
+const BY_EXTENSION: Record<string, DocumentKind> = { md: "text", markdown: "text", txt: "text", csv: "text", ics: "text", ical: "text", ifb: "text", vcs: "text", vcf: "text" };
 
 const BY_CONTENT_TYPE: Record<string, DocumentKind> = {
   "application/pdf": "pdf",
@@ -68,6 +69,9 @@ const BY_CONTENT_TYPE: Record<string, DocumentKind> = {
   "text/markdown": "text",
   "text/x-markdown": "text",
   "text/csv": "text",
+  "text/calendar": "text",
+  "text/vcard": "text",
+  "text/x-vcard": "text",
 };
 
 /** The kind of document an address points at, by its extension; null when it is none. */
@@ -82,6 +86,45 @@ export function documentKind(url: string): DocumentKind | null {
   if (extension in BY_EXTENSION) return BY_EXTENSION[extension]!;
   return extension !== "text" && extension !== "other" && (DOCUMENT_KINDS as readonly string[]).includes(extension) ? (extension as DocumentKind) : null;
 }
+
+/** How much of a file is looked at to tell its kind by what is in it. */
+const SNIFF_BYTES = 65_536;
+
+/**
+ * The kind of a file by what is in it, for a file the inventory could not place by its extension or
+ * by what the server said: the signature of a known format, or else plain text when its start is
+ * valid UTF-8 without a null byte. Null for a file that is neither, such as a picture or a program.
+ */
+export function kindOfContent(bytes: Buffer): DocumentKind | null {
+  const start = bytes.subarray(0, SNIFF_BYTES);
+  const latin = start.toString("latin1");
+  if (latin.startsWith("%PDF-")) return "pdf";
+  if (latin.startsWith("{\\rtf")) return "rtf";
+  if (latin.startsWith("PK\x03\x04")) {
+    // OpenDocument names its kind in the first entry; Office Open XML has a part list and a folder per kind.
+    const kind = /mimetypeapplication\/vnd\.oasis\.opendocument\.(text|presentation|spreadsheet)/.exec(latin)?.[1];
+    if (kind) return ({ text: "odt", presentation: "odp", spreadsheet: "ods" } as const)[kind as "text" | "presentation" | "spreadsheet"];
+    if (latin.includes("mimetypeapplication/epub+zip")) return "epub";
+    if (latin.includes("[Content_Types].xml") || /(?:word|ppt|xl)\//.test(latin)) {
+      if (latin.includes("word/")) return "docx";
+      if (latin.includes("ppt/")) return "pptx";
+      if (latin.includes("xl/")) return "xlsx";
+    }
+    return null;
+  }
+  if (start.includes(0)) return null;
+  // A cut at the end of the window may split a character: only what comes before it has to be valid.
+  const whole = bytes.length <= SNIFF_BYTES ? start : start.subarray(0, Math.max(0, start.length - 4));
+  try {
+    new TextDecoder("utf-8", { fatal: true }).decode(whole);
+    return "text";
+  } catch {
+    return null;
+  }
+}
+
+/** Why a file that is neither a known format nor text is not read. */
+export const BINARY_REASON_NL = "het bestand bevat geen tekst en is van een soort die de toolbox niet kent, zoals een afbeelding of een programma; het wordt niet ingelezen";
 
 /** The kind of document a server says it sends; null when it is none. */
 export function kindOfContentType(contentType: string | null): DocumentKind | null {

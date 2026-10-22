@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, test } from "node:test";
@@ -7,7 +7,7 @@ import { startFixture, type FixtureServer } from "../fixtures/serve.ts";
 import { checkSite, exploreContext } from "../src/commands/explore.ts";
 import { inventory } from "../src/commands/inventory.ts";
 import { readJson } from "../src/lib/canonical.ts";
-import { NOT_OPENED_ON_PAGE_TYPE, notOpenedAdviceNl, searchTermForRun, type SiteModel } from "../src/lib/sitemodel.ts";
+import { ALL_PAGE_TYPES, NOT_OPENED_ON_PAGE_TYPE, notOpenedAdviceNl, searchTermForRun, type SiteModel } from "../src/lib/sitemodel.ts";
 import { Daemon } from "../src/session/daemon.ts";
 
 /**
@@ -23,6 +23,7 @@ let model: SiteModel;
 let typeWithQuestions: string;
 let typeWithoutQuestions: string;
 let representativeWithout: string;
+let chatSocket: string;
 
 const VRAGEN = "/veelgestelde-vragen.html";
 const OPENINGSTIJDEN = "/openingstijden.html";
@@ -50,6 +51,10 @@ before(async () => {
     await loep("open", [VRAGEN], { state: "blocker-cookies" });
     await loep("click", [await ref("css:.vraag")]);
     await loep("state", ["save", "component-vraag"]);
+    // The chat opens a socket: the answer names its address, for the pattern of sendsTo.
+    await loep("open", [VRAGEN], { state: "blocker-cookies" });
+    chatSocket = ((await loep("click", [await ref("css:.chat-knop")])).sockets as string[])[0]!;
+    await loep("state", ["save", "component-chat"]);
   } finally {
     await daemon.close();
   }
@@ -145,10 +150,10 @@ test("an accepted gap covers one component: another component that fails on the 
 });
 
 test("the inventory chooses the search term of the run, and another term of the explorer passes only when its page shows the word", { timeout: 300_000 }, async () => {
-  // The word on most titles; "berkenveen" and "gemeente" stand on all of them, and the alphabet decides.
-  assert.equal((await readJson<{ searchTerm?: string }>(join(run, "inventory.json"))).searchTerm, "berkenveen");
+  // Three pages that share no word but the name of the site and fixed text: no word scores, and the run searches with the fixed term.
+  assert.equal((await readJson<{ searchTerm?: string }>(join(run, "inventory.json"))).searchTerm, undefined);
   write();
-  assert.equal(searchTermForRun(run), "berkenveen");
+  assert.equal(searchTermForRun(run), "test");
   try {
     model.searchTerm = { term: "veelgestelde", page: `${origin}${VRAGEN}` };
     write();
@@ -161,6 +166,63 @@ test("the inventory chooses the search term of the run, and another term of the 
     assert.deepEqual(refused.problems, [`searchTerm: het woord "afvalkalender" staat niet in de tekst van ${origin}${OPENINGSTIJDEN}; kies een woord dat op die pagina staat, of een andere pagina`]);
   } finally {
     delete model.searchTerm;
+    write();
+  }
+});
+
+test("a component written as on every page is tried on the page types, and the advice says to give a list when it is not on every page", { timeout: 300_000 }, async () => {
+  const vraag = model.components.find((component) => component.id === "vraag")!;
+  const accepted = model.acceptedGaps;
+  const listed = vraag.pageTypes;
+  try {
+    (vraag as unknown as { pageTypes: string }).pageTypes = ALL_PAGE_TYPES;
+    write();
+    const passed = await checkSite(run, { navigationDelayMs: 20 });
+    assert.deepEqual(passed.problems, []);
+    assert.deepEqual(passed.replays.find((replay) => replay.id === "vraag")!.onPageTypes!.map((row) => [row.pageType, row.reached, row.accepted]), model.pageTypes.map((type) => [type.id, type.id !== typeWithoutQuestions, type.id === typeWithoutQuestions]), "every page type, since there are no more than check-site tries");
+    delete model.acceptedGaps;
+    write();
+    const refused = await checkSite(run, { navigationDelayMs: 20 });
+    assert.equal(refused.problems.length, 1, refused.problems.join("\n"));
+    assert.match(refused.problems[0]!, new RegExp(`^component "vraag" .*paginatype "${typeWithoutQuestions}".*Het onderdeel heeft "pageTypes": "all"; staat het niet op elke pagina, geef dan de lijst van paginatypen waar het wel staat\\.$`));
+  } finally {
+    vraag.pageTypes = listed;
+    if (accepted) model.acceptedGaps = accepted;
+    write();
+  }
+});
+
+test("check-site replays a part with sendsTo twice, and refuses a pattern that one of the addresses does not fall under or that every address falls under", { timeout: 300_000 }, async () => {
+  assert.match(chatSocket, /^ws:\/\/127\.0\.0\.1:\d+\/ws\/chat\/[A-Za-z]{16}$/, "the answer of the click names the socket");
+  const chat = model.components.find((component) => component.id === "chat")!;
+  const before = { ...chat };
+  const ws = origin.replace(/^http/, "ws");
+  // A model that passed without the chat recipe set it aside as unused.
+  const unused = join(run, "recipes", "unused", "component-chat.json");
+  if (existsSync(unused)) renameSync(unused, join(run, "recipes", "component-chat.json"));
+  const withPattern = async (sendsTo: string) => {
+    Object.assign(chat, { pageTypes: [typeWithQuestions], recipe: "component-chat", postcondition: { kind: "expanded", selector: "button.chat-knop" }, notOpenedNl: undefined, sendsTo });
+    write();
+    return checkSite(run, { navigationDelayMs: 20 });
+  };
+  try {
+    const passed = await withPattern(`${ws}/ws/chat/*`);
+    assert.deepEqual(passed.problems, []);
+    const seen = passed.replays.find((replay) => replay.id === "chat")!.sendsTo!;
+    assert.equal(seen.pattern, `${ws}/ws/chat/*`);
+    assert.equal(seen.seen.length, 2);
+    for (const addresses of seen.seen) assert.equal(addresses.filter((address) => /\/ws\/chat\/[A-Za-z]{16}$/.test(address)).length, 1, addresses.join());
+    assert.notEqual(seen.seen[0]!.find((address) => address.startsWith("ws")), seen.seen[1]!.find((address) => address.startsWith("ws")), "a token of its own per replay");
+    const other = await withPattern(`${ws}/ws/kamer/*`);
+    assert.equal(other.ok, false);
+    assert.equal(other.problems.length, 1, other.problems.join("\n"));
+    assert.match(other.problems[0]!, /^component "chat": sendsTo "ws:.*\/ws\/kamer\/\*" past niet: bij de eerste keer afspelen van het recept ging geen socket naar een adres onder dit patroon \(wel naar ws:.*\/ws\/chat\/[A-Za-z]{16}\)/);
+    const everything = await withPattern(`${ws}/*`);
+    assert.equal(everything.ok, false);
+    assert.match(everything.problems.join("\n"), /components\[3\]: sendsTo "ws:.*\/\*" past op elk adres van http:\/\/127\.0\.0\.1:\d+/);
+  } finally {
+    for (const key of Object.keys(chat)) delete (chat as unknown as Record<string, unknown>)[key];
+    Object.assign(chat, before);
     write();
   }
 });

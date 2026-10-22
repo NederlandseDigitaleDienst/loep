@@ -27,7 +27,10 @@ De server schrijft elk verzoek dat geen GET of HEAD is en elk bericht over de We
 just sweep-check                       # beide varianten, een tabel in een tijdelijke map
 just sweep-check --out pad --at-once 3 # eigen map, drie pagina's tegelijk per variant
 just sweep-check --runs pad/runs       # bestaande runs opnieuw lezen, zonder te meten
+just sweep-check --out pad --fixed-ports # op de poorten van just testsite, voor een bevroren veegronde
 ```
+
+De runs blijven staan in `<out>/runs/defect` en `<out>/runs/clean`; een volgende keer met dezelfde `--out` maakt die map eerst leeg. Zonder `--fixed-ports` draait de testsite op willekeurige vrije poorten, zodat de toets nergens mee botst, maar zijn de adressen in de runs daarna niet meer te openen. Met `--fixed-ports` gebruikt hij 4710, 4711 en 4712, net als `just testsite`, zodat een meting de runs als bevroren veegronde kan gebruiken (zie [validatie/verbruik/README.md](../../validatie/verbruik/README.md)). Draait `just testsite` al, dan stopt de toets met die melding.
 
 Zonder taalmodel en zonder verkenner. Op beide varianten draaien `inventory` (de pagina's waarop een gebrek staat, als vaste lijst), het vaste sitemodel uit `sweep/` (met `check-site`), `sample`, `collect`, `contrast` en `states`. Daarna zoekt de toets per gebrek het bewijs op de plek in het dossier die `evidence.ts` noemt. Een gebrek dat alleen een agent kan zien (kijken, luisteren of een oordeel over tekst) staat daar met de reden en telt niet mee. Op Berkenveen draait dezelfde toets op dezelfde plek: daar hoort niets te staan.
 

@@ -1,11 +1,13 @@
 import { fileURLToPath } from "node:url";
 import { chromium, type Browser, type BrowserContext, type Page, type Route } from "playwright";
+import type { Crowd } from "../lib/atonce.ts";
 import { CLOUDFLARE_HEADER, isChallenge } from "../lib/challenge.ts";
 import { confirmLoginOn, LoginExpired, logsOut, runLoginMark, runLoginState, throwIfLoginExpired, watchLogin } from "../lib/login.ts";
 import { addressOf, noteRefusedRead, readDecision, readRuleFor, runReads, type ReadRequest } from "../lib/reads.ts";
 import { isWriteOrigin, runWrites, SocketFrames, type WriteAccess } from "../lib/writes.ts";
-import { OriginBlocked, runBlockade } from "../session/blockade.ts";
+import { LONGEST_FAILURE_PAUSE_SECONDS, OriginBlocked, runBlockade } from "../session/blockade.ts";
 import { MESSAGE_VALUES } from "../session/safety.ts";
+import { playRecording, socketRecordings, type Recorder } from "../lib/recordings.ts";
 import { readableFrame } from "./call.ts";
 import { refusedByBrowser, type ClipboardWrite } from "./clipboard.ts";
 import { frameAsPage } from "./frame.ts";
@@ -225,13 +227,43 @@ export async function newContext(browser: Browser, options: ContextOptions = {},
       const server = socket.connectToServer();
       const free = isWriteOrigin(writes, socket.url());
       const frames = new SocketFrames(MESSAGE_VALUES);
+      // The answer to a real message is recorded, and a message that was sent before is played from its recording, as in a session.
+      const recordings = free ? socketRecordings(writes!.runDir, writes!.source, MESSAGE_VALUES) : null;
+      let recorder: Recorder | null = null;
+      // A page that is closed hears nothing more: what the server says after that is no part of the answer the page got.
+      context.once("close", () => recorder?.end());
+      if (free) {
+        server.onMessage((reply) => {
+          socket.send(reply);
+          recorder?.frame(reply);
+        });
+        // A handler for closing takes over passing it on: the server is closed as the page closed its side.
+        socket.onClose((code, reason) => {
+          recorder?.end();
+          void server.close({ code, reason }).catch(() => undefined);
+        });
+      }
       socket.onMessage((message) => {
         if (free) {
           // A frame takes one from the budget of the run, and past it, or too soon, it is held back; only a heartbeat or a message of the protocol is just noted.
           // The sweep acts on the page all the time, so no frame counts as sent by the page by itself.
           if (frames.counts(message)) {
+            const recording = recordings!.find(socket.url(), message);
+            if (recording) {
+              recordings!.replayed(socket.url(), recording);
+              return playRecording(recording, (reply) => socket.send(reply));
+            }
             if (!writes!.claim("SEND", socket.url(), { message: true }).ok) return void (guard?.active && guard.blocked++);
-          } else writes!.record("SEND", socket.url());
+            server.send(message);
+            // Only a message with a test value starts a recording, and ends the one before it.
+            const next = recordings!.start(socket.url(), message);
+            if (next) {
+              recorder?.end();
+              recorder = next;
+            }
+            return;
+          }
+          writes!.record("SEND", socket.url());
           server.send(message);
         } else if (guard?.active) guard.blocked++;
         else server.send(message);
@@ -257,9 +289,9 @@ export async function loadPage(page: Page, url: string, referer?: string): Promi
   // A session that ran out is not tried again page after page.
   throwIfLoginExpired();
   const options = { waitUntil: "load" as const, ...(referer ? { referer } : {}) };
-  // A site that asked for a short pause gets it; one that refused the evaluation is not asked, and the page is not measured.
+  // A site that asked for a pause gets it, also one after failures: the sweep has no agent waiting on it. One that refused the evaluation is not asked, and the page is not measured.
   const blockade = runBlockade()?.blockade;
-  const refused = await blockade?.pause(url);
+  const refused = await blockade?.pause(url, LONGEST_FAILURE_PAUSE_SECONDS);
   if (refused) throw new OriginBlocked(url, refused);
   let response = await page.goto(url, options);
   if (blockade && response?.status() === 429) {
@@ -283,16 +315,17 @@ export async function loadPage(page: Page, url: string, referer?: string): Promi
 /**
  * Run the work on one page, and once more when it fails: a page that loads too slowly once, or a
  * renderer that crashed, must not cost the whole run. A session that ran out is not tried again.
+ * With a `crowd` the first try runs together with the other pages and the second try alone.
  * A second failure is thrown: the command decides whether it notes the page as not measured and goes on.
  */
-export async function retryOnce<T>(what: string, work: () => Promise<T>): Promise<T> {
+export async function retryOnce<T>(what: string, work: () => Promise<T>, crowd?: Crowd): Promise<T> {
   try {
-    return await work();
+    return await (crowd ? crowd.together(work) : work());
   } catch (error) {
     // Trying again does not help when the site refused the evaluation.
     if (error instanceof LoginExpired || error instanceof OriginBlocked) throw error;
     process.stderr.write(`retry ${what}: ${firstLineOf(error)}\n`);
-    return work();
+    return crowd ? crowd.alone(work) : work();
   }
 }
 

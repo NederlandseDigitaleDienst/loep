@@ -1,0 +1,6 @@
+{
+  "version": "0.12.0",
+  "measuredAt": "2026-10-21",
+  "againstNl": "De sleutel van de eigen testsite (Lindewaard met ingebouwde gebreken, Berkenveen als tweeling zonder), niet het oordeel van een menselijke deskundige. Gerichte meting: alleen de criteria die de wijzigingen in het oordeel raken (1.1.1, 1.3.1, 1.4.3, 1.4.12, 2.1.1, 2.1.4, 2.4.7, 2.5.1, 2.5.7, 3.3.2, 4.1.2), twee runs per variant, op een kandidaat van deze versie zonder de laatste wijzigingen aan budget, zoekterm en bewijspoort.",
+  "resultNl": "Op Lindewaard vond deze versie 98,3% van de 30 gebreken in die criteria, tegen 95,0% met 0.11.0, zonder onterechte meldingen en zonder open punten (0.11.0: 2 per run). 1.4.12 wordt nu afgekeurd waar tekst verdwijnt; dat komt deels door een duidelijker gebrek in de testsite. Op Berkenveen gaven de wijzigingen geen onterechte afkeuringen; beide runs keurden 1.1.1 en 1.4.12 af om fouten die in de tweeling zelf lijken te zitten (#270). Deze versie is niet als geheel op alle 56 criteria gemeten; de meting op 0.11.0 deed dat wel (77 en 78 van 79 gebreken, uitkomst per criterium in beide runs gelijk)."
+}
