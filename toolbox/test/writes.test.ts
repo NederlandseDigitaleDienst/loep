@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
+import { createHash } from "node:crypto";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -11,10 +12,12 @@ import { INPAGE_PATH, launchBrowser, loadPage, newContext } from "../src/browser
 import { probeForms } from "../src/instruments/forms.ts";
 import { formErrors } from "../src/lib/extractors.ts";
 import { REGULAR_PATH, type RunData } from "../src/lib/rundata.ts";
-import { budgetOutPointNl, decideWrites, isOurMessage, isProtocolFrame, SocketFrames, DEFAULT_MAX_WRITES, DEFAULT_WRITE_SPACING_SECONDS, recordWrites, WRITES_BLOCKED_NL, writeAccess, writeBudget, writeBudgetNl, writesAllowedNl, writesForRun, type PassedWrite, type WritePermission } from "../src/lib/writes.ts";
+import { budgetOutPointNl, criterionSender, decideWrites, isOurMessage, isProtocolFrame, reservedWrites, senderOf, SocketFrames, DEFAULT_MAX_WRITES, DEFAULT_WRITE_SPACING_SECONDS, recordWrites, WRITES_BLOCKED_NL, writeAccess, writeBudget, writeBudgetNl, writesAllowedNl, writesForRun, type PassedWrite, type WritePermission } from "../src/lib/writes.ts";
+import { answerRefusalNl, DECLARED_ORIGIN, httpSendOf, RECORD_QUIET_MS, readHttpRecordings, readRecordings, readReplays, recordingKey, replayNl, replaysNl, socketRecordings, type HttpRecording } from "../src/lib/recordings.ts";
+import { approvedSendsTo, sendsToMatches, sendsToProblems, sendsToReplayProblem } from "../src/lib/sitemodel.ts";
 import { Daemon } from "../src/session/daemon.ts";
 import type { Observation } from "../src/session/observations.ts";
-import { DEFAULT_DAEMON_LIMITS, MESSAGE_VALUES, Politeness, scopeForRun, TEST_VALUES } from "../src/session/safety.ts";
+import { DEFAULT_DAEMON_LIMITS, MESSAGE_VALUES, Politeness, scopeForRun, TEST_VALUES, type Guard } from "../src/session/safety.ts";
 import { openSurface } from "../src/session/surface.ts";
 import { startServer, type FixtureServer } from "./fixtures/session-site/server.ts";
 
@@ -60,7 +63,8 @@ async function pageWith(writes: boolean, path: string): Promise<Page> {
 test("writing needs an explicit flag on a local address and a declaration by a person anywhere else", () => {
   const now = new Date("2026-01-02T03:04:05Z");
   assert.equal(decideWrites("https://www.example.nl/", {}), null);
-  assert.deepEqual(decideWrites("http://127.0.0.1:4710/", { allowWrites: true }, now), { origin: "http://127.0.0.1:4710", local: true, declaredBy: null, declaredAt: "2026-01-02T03:04:05.000Z", maxWrites: 5, spacingSeconds: 120 });
+  // On this machine nobody receives a stream of messages: no pause, and a larger budget that still has an end.
+  assert.deepEqual(decideWrites("http://127.0.0.1:4710/", { allowWrites: true }, now), { origin: "http://127.0.0.1:4710", local: true, declaredBy: null, declaredAt: "2026-01-02T03:04:05.000Z", maxWrites: 50, spacingSeconds: 0 });
   assert.equal(decideWrites("http://127.0.0.1:4710/", { allowWrites: true, maxWrites: "12" })?.maxWrites, 12);
   for (const wrong of ["0", "-1", "2.5", "veel", ""]) assert.throws(() => decideWrites("http://127.0.0.1:4710/", { allowWrites: true, maxWrites: wrong }), /--max-writes verwacht een geheel getal van 1 of meer/, wrong);
   assert.throws(() => decideWrites("https://www.example.nl/", { maxWrites: "3" }), /--max-writes hoort bij een run die mag versturen/);
@@ -283,7 +287,7 @@ test("a session writes to the test environment of its run only, and says so in t
     assert.deepEqual((clicked.written as string[]).sort(), ["POST /api/chat", "SEND /chat"]);
     assert.equal(clicked.blocked, undefined);
     const record = JSON.parse(readFileSync(join(dir, "observations", "main", `${(clicked.id as string).slice(-4)}.json`), "utf8")) as Observation;
-    assert.deepEqual(record.writes!.map((entry) => `${entry.source} ${entry.method} ${entry.path}`).sort(), ["session POST /api/chat", "session SEND /chat"]);
+    assert.deepEqual(record.writes!.map((entry) => `${entry.source} ${entry.method} ${entry.path}`).sort(), ["main POST /api/chat", "main SEND /chat"], "the log names the session that sent");
     await settle();
     assert.deepEqual(writesReceived(), ["POST 127.0.0.1/api/chat"]);
     assert.deepEqual(site.socketMessages, ["hallo via socket"]);
@@ -305,6 +309,21 @@ test("a session writes to the test environment of its run only, and says so in t
   }
 });
 
+test("on a local address writes follow each other without a pause, until the budget is used up", () => {
+  const dir = mkdtempSync(join(tmpdir(), "loep-writes-local-"));
+  try {
+    const local = decideWrites(`${site.origin}/`, { allowWrites: true, maxWrites: "3" })!;
+    const clock = Date.parse("2026-01-02T10:00:00Z");
+    const access = writeAccess(dir, local, "session", () => clock);
+    for (let index = 0; index < 3; index++) assert.equal(access.claim("POST", `${site.origin}/callback`).ok, true, `write ${index + 1}`);
+    const out = access.claim("POST", `${site.origin}/callback`);
+    assert.deepEqual(out.ok ? null : out.budget, "out");
+    assert.equal(writeBudgetNl(writeBudget(dir, local, clock)), `nog 0 van 3 verzendingen naar ${site.origin} over voor de hele run (3 verstuurd), zonder wachttijd ertussen`);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test("the budget for sending counts for the whole run, keeps the time between two writes and refuses past the maximum", () => {
   const dir = mkdtempSync(join(tmpdir(), "loep-writes-budget-"));
   try {
@@ -321,7 +340,7 @@ test("the budget for sending counts for the whole run, keeps the time between tw
     // A message over a socket and the repeat after a redirect are noted, and they do not count.
     session.record("SEND", `${site.origin.replace("http", "ws")}/chat`);
     session.record("POST", `${site.origin}/callback`, { repeat: true });
-    assert.deepEqual(writeBudget(dir, limited, clock), { origin: site.origin, max: 3, sent: 1, left: 2, spacingSeconds: 60, waitSeconds: 50 });
+    assert.deepEqual(writeBudget(dir, limited, clock), { origin: site.origin, max: 3, sent: 1, left: 2, reserved: 0, spacingSeconds: 60, waitSeconds: 50 });
     clock += 50_000;
     assert.equal(sweep.claim("POST", `${site.origin}/submit`).ok, true);
     clock += 60_000;
@@ -344,6 +363,72 @@ test("the budget for sending counts for the whole run, keeps the time between tw
   }
 });
 
+// A declared test environment on a real site: the budget is small, and whoever sends first would use it up.
+const declared = (maxWrites: number): WritePermission => ({ ...permission, local: false, declaredBy: { name: "Iemand", role: "beheerder" }, maxWrites, spacingSeconds: 0 });
+
+test("on a declared test environment the last half of the budget is kept for senders that sent nothing yet; the sessions of one criterion are one sender", () => {
+  const dir = mkdtempSync(join(tmpdir(), "loep-writes-share-"));
+  try {
+    const five = declared(5);
+    assert.equal(reservedWrites(five), 2);
+    assert.equal(reservedWrites({ ...five, local: true }), 0, "nothing is kept on a local site");
+    assert.equal(senderOf("v-1410-2"), criterionSender("1.4.10"));
+    assert.equal(senderOf("a-331"), senderOf("b-331"));
+    assert.equal(senderOf("r-formulier"), "r-formulier");
+    // The sweep sends the three steps of one form: empty, invalid, valid. A fourth would take from what is kept.
+    const sweep = writeAccess(dir, five, "states");
+    for (let step = 0; step < 3; step++) assert.equal(sweep.claim("POST", `${site.origin}/submit`).ok, true);
+    const fourth = sweep.claim("POST", `${site.origin}/submit`);
+    assert.deepEqual(fourth.ok ? null : [fourth.budget, fourth.reasonNl], ["share", `states heeft al verstuurd, en er zijn nog 2 van 5 verzendingen naar ${site.origin} over: de laatste 2 verzendingen zijn voor een criterium of een opdracht van de veegronde die nog niets verstuurde`]);
+    // One access serves every session of the process; each sends as itself. The verifier and the finisher of 3.3.1 share with its judge.
+    const sessions = writeAccess(dir, five, "session");
+    assert.equal(sessions.claim("POST", `${site.origin}/callback`, { sender: "b-331" }).ok, true);
+    for (const later of ["v-331", "a-331-2"]) {
+      const refused = sessions.claim("POST", `${site.origin}/callback`, { sender: later });
+      assert.deepEqual(refused.ok ? null : [refused.budget, refused.reasonNl.split(",")[0]], ["share", "dit criterium heeft al verstuurd"], later);
+    }
+    assert.equal(writeBudget(dir, five, Date.now(), criterionSender("3.3.1")).left, 0);
+    assert.equal(writeBudgetNl(writeBudget(dir, five)), `nog 1 van 5 verzendingen naar ${site.origin} over voor de hele run (4 verstuurd), zonder wachttijd ertussen; de laatste 2 verzendingen zijn voor een criterium of een opdracht van de veegronde die nog niets verstuurde`);
+    // Another criterion takes the last one; after that the budget is out for everyone.
+    assert.equal(sessions.claim("POST", `${site.origin}/callback`, { sender: "b-412" }).ok, true);
+    const out = sessions.claim("POST", `${site.origin}/callback`, { sender: "b-131" });
+    assert.equal(out.ok ? null : out.budget, "out");
+    assert.deepEqual(logged(dir).map((line) => line.source), ["states", "states", "states", "b-331", "b-412"]);
+    assert.equal(budgetOutPointNl({ sent: 4, max: 5 }), "versturen niet toegestaan: het budget voor versturen van deze run is op voor dit criterium (4 van 5 verstuurd; de rest is voor criteria die nog niets verstuurden)");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("in the session process each session sends from the share of its criterion, and hears what to do when that is used", async () => {
+  reset();
+  const dir = mkdtempSync(join(tmpdir(), "loep-writes-share-session-"));
+  await recordWrites(dir, declared(2));
+  const daemon = await Daemon.create(dir, await scopeForRun(dir, { scopeUrl: `${site.origin}/` }), { navigationDelayMs: 0, secondBrowsers: false });
+  const loep = async (session: string, command: string, ...args: string[]): Promise<Record<string, unknown>> => (await daemon.handle({ op: "command", session, command, args, options: {} })).print;
+  const ref = async (session: string, query: string): Promise<string> => ((await loep(session, "find", query)).found as string[])[0]!.split(" ")[0]!;
+  try {
+    for (const session of ["b-331", "v-331", "b-412"]) {
+      await daemon.handle({ op: "start", session });
+      await loep(session, "open", "/callback.html");
+    }
+    assert.deepEqual((await loep("b-331", "click", await ref("b-331", "css:#call"))).written, ["POST /callback"]);
+    // The verifier of the same criterion cites what the judge saw; the last write is for another criterion.
+    const verifier = await loep("v-331", "click", await ref("v-331", "css:#call"));
+    assert.equal(verifier.written, undefined);
+    assert.match(verifier.sending as string, /^dit criterium heeft al verstuurd, .*Er is niets verstuurd: haal de waarneming aan .*"versturen niet toegestaan: het budget voor versturen van deze run is op voor dit criterium \(1 van 2 verstuurd; de rest is voor criteria die nog niets verstuurden\): <wat er pas na versturen te zien was>"$/);
+    const record = JSON.parse(readFileSync(join(dir, "observations", "v-331", `${(verifier.id as string).slice(-4)}.json`), "utf8")) as Observation;
+    assert.deepEqual(record.blocked.map((entry) => entry.writeBudget), ["share"]);
+    assert.deepEqual((await loep("b-412", "click", await ref("b-412", "css:#call"))).written, ["POST /callback"]);
+    await settle();
+    assert.equal(writesReceived().filter((line) => line.endsWith("/callback")).length, 2);
+    assert.deepEqual(logged(dir).map((line) => line.source), ["b-331", "b-412"]);
+  } finally {
+    await daemon.close();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test("a session past the budget for sending is held back as without permission, says so, and session list shows what is left", async () => {
   reset();
   const dir = mkdtempSync(join(tmpdir(), "loep-writes-budget-session-"));
@@ -352,7 +437,7 @@ test("a session past the budget for sending is held back as without permission, 
   const loep = async (session: string, command: string, ...args: string[]): Promise<Record<string, unknown>> => (await daemon.handle({ op: "command", session, command, args, options: {} })).print;
   const ref = async (session: string, query: string): Promise<string> => ((await loep(session, "find", query)).found as string[])[0]!.split(" ")[0]!;
   try {
-    assert.equal((await daemon.handle({ op: "list" })).print.writes, `nog 1 van 1 verzendingen naar ${site.origin} over voor de hele run (0 verstuurd), met minstens 0 s ertussen`);
+    assert.equal((await daemon.handle({ op: "list" })).print.writes, `nog 1 van 1 verzendingen naar ${site.origin} over voor de hele run (0 verstuurd), zonder wachttijd ertussen`);
     for (const session of ["a", "b"]) {
       await daemon.handle({ op: "start", session });
       await loep(session, "open", "/callback.html");
@@ -405,6 +490,361 @@ test("every frame over a socket counts, except one shown to be a heartbeat or a 
   // A frame with a test value in it always counts, also when the page sent the same frame by itself before.
   assert.equal(frames.counts(`{"text":"${TEST_VALUES.email}"}`, true), true);
   assert.equal(frames.counts(`{"text":"${TEST_VALUES.email}"}`), true);
+});
+
+test("the answer to a chat message is recorded once, and the same message is played from the recording after that: nothing more goes to the server", async () => {
+  reset();
+  const dir = mkdtempSync(join(tmpdir(), "loep-writes-replay-"));
+  const limited: WritePermission = { ...permission, maxWrites: 1, spacingSeconds: 0 };
+  await recordWrites(dir, limited);
+  try {
+    const env = { browser, runDir: dir, scope: await scopeForRun(dir, { scopeUrl: `${site.origin}/` }), limits: DEFAULT_DAEMON_LIMITS, politeness: new Politeness(0) };
+    // A socket that stays open until the server has been quiet for a while, unless `wait` says otherwise.
+    const chat = async (frames: string[], path = "/chat", wait = RECORD_QUIET_MS + 500): Promise<string[]> => {
+      const { surface } = await openSurface(env, { url: `${site.origin}/callback.html`, width: 1280, height: 800, scheme: "light" });
+      const replies = await surface.page.evaluate(
+        async ([url, list, ms]) => {
+          const socket = new WebSocket(url as string);
+          const got: string[] = [];
+          socket.addEventListener("message", (event) => got.push(String(event.data)));
+          await new Promise((resolve) => socket.addEventListener("open", resolve));
+          for (const frame of list as string[]) socket.send(frame);
+          await new Promise((resolve) => setTimeout(resolve, ms as number));
+          socket.close();
+          await new Promise((resolve) => setTimeout(resolve, 100));
+          return got;
+        },
+        [`${site.origin.replace("http", "ws")}${path}`, frames, wait] as const,
+      );
+      const replays = surface.guard.replays ?? [];
+      await surface.context.close();
+      return [...replies, ...replays.map((entry) => `afgespeeld ${entry.key} op ${entry.matchedOn}`)];
+    };
+    const message = JSON.stringify({ type: "chat", text: TEST_VALUES.text });
+    // The first time it is sent for real, and the answer is recorded when the socket closes.
+    assert.deepEqual(await chat([message]), ['{"type":"reply","text":"Ontvangen"}', '{"type":"reply","text":"Waarmee kan ik helpen?"}']);
+    assert.deepEqual(site.socketMessages, [message]);
+    const [recording] = readRecordings(dir);
+    assert.deepEqual(recording!.frames.map((frame) => frame.text), ['{"type":"reply","text":"Ontvangen"}', '{"type":"reply","text":"Waarmee kan ik helpen?"}']);
+    assert.ok(recording!.frames[1]!.afterMs > recording!.frames[0]!.afterMs, "the time between the frames is kept");
+    // The second time, with the budget used up, it is played: the page gets the same answer and the server nothing.
+    assert.deepEqual(await chat([JSON.stringify({ type: "chat", text: TEST_VALUES.text, at: 2 })]), ['{"type":"reply","text":"Ontvangen"}', '{"type":"reply","text":"Waarmee kan ik helpen?"}', `afgespeeld ${TEST_VALUES.text} op ${DECLARED_ORIGIN}`]);
+    assert.deepEqual(site.socketMessages, [message]);
+    assert.equal(writeBudget(dir, limited).sent, 1);
+    assert.deepEqual(readReplays(dir).map((entry) => entry.recording), [recording!.id]);
+    // Without a pattern in the site model the path does not count: the next connection has a token of letters only, as in a real run, and still gets the recording, without a second claim.
+    assert.deepEqual(await chat([message], "/ws/chat/SFUjvfumdfeMLKtn", 600), ['{"type":"reply","text":"Ontvangen"}', '{"type":"reply","text":"Waarmee kan ik helpen?"}', `afgespeeld ${TEST_VALUES.text} op ${DECLARED_ORIGIN}`]);
+    assert.deepEqual(await chat([message], "/ws/chat/QpXzLmNoTRwabcde", 600), ['{"type":"reply","text":"Ontvangen"}', '{"type":"reply","text":"Waarmee kan ik helpen?"}', `afgespeeld ${TEST_VALUES.text} op ${DECLARED_ORIGIN}`]);
+    assert.deepEqual(site.socketMessages, [message]);
+    assert.equal(writeBudget(dir, limited).sent, 1);
+    assert.equal(readReplays(dir).length, 3);
+    // A frame without a test value has no recording: it is never played, and counts against the budget as before.
+    assert.equal(recordingKey('{"type":"open","channel":"support"}', MESSAGE_VALUES), null);
+    assert.deepEqual(await chat(['{"type":"open","channel":"support"}'], "/chat", 300), []);
+    assert.deepEqual(site.socketMessages, [message]);
+    assert.equal(readReplays(dir).length, 3);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("a frame without a test value goes to the server every time and is never recorded", async () => {
+  reset();
+  const dir = mkdtempSync(join(tmpdir(), "loep-writes-replay-open-"));
+  const limited: WritePermission = { ...permission, maxWrites: 10, spacingSeconds: 0 };
+  await recordWrites(dir, limited);
+  try {
+    const env = { browser, runDir: dir, scope: await scopeForRun(dir, { scopeUrl: `${site.origin}/` }), limits: DEFAULT_DAEMON_LIMITS, politeness: new Politeness(0) };
+    const open = JSON.stringify({ type: "open", channel: "support" });
+    for (let round = 0; round < 2; round++) {
+      const { surface } = await openSurface(env, { url: `${site.origin}/callback.html`, width: 1280, height: 800, scheme: "light" });
+      await sendFrames(surface.page, [open]);
+      assert.equal((surface.guard.replays ?? []).length, 0, `round ${round}`);
+      await surface.context.close();
+    }
+    assert.deepEqual(site.socketMessages, [open, open], "the server hears of both connections");
+    assert.equal(writeBudget(dir, limited).sent, 2, "and each counts as before");
+    assert.deepEqual(readRecordings(dir), []);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("a socket closed before the server answered leaves no recording, and the next send of the message is real", async () => {
+  reset();
+  const dir = mkdtempSync(join(tmpdir(), "loep-writes-replay-early-"));
+  const limited: WritePermission = { ...permission, maxWrites: 10, spacingSeconds: 0 };
+  await recordWrites(dir, limited);
+  try {
+    const env = { browser, runDir: dir, scope: await scopeForRun(dir, { scopeUrl: `${site.origin}/` }), limits: DEFAULT_DAEMON_LIMITS, politeness: new Politeness(0) };
+    const message = JSON.stringify({ type: "chat", text: TEST_VALUES.text });
+    for (const wait of [10, RECORD_QUIET_MS + 500]) {
+      const { surface } = await openSurface(env, { url: `${site.origin}/callback.html`, width: 1280, height: 800, scheme: "light" });
+      await surface.page.evaluate(
+        async ([url, frame, ms]) => {
+          const socket = new WebSocket(url as string);
+          await new Promise((resolve) => socket.addEventListener("open", resolve));
+          socket.send(frame as string);
+          await new Promise((resolve) => setTimeout(resolve, ms as number));
+          socket.close();
+          await new Promise((resolve) => setTimeout(resolve, 100));
+        },
+        [`${site.origin.replace("http", "ws")}/chat`, message, wait] as const,
+      );
+      assert.equal((surface.guard.replays ?? []).length, 0, `wait ${wait}`);
+      await surface.context.close();
+    }
+    assert.deepEqual(site.socketMessages, [message, message], "the second send went to the server");
+    assert.equal(writeBudget(dir, limited).sent, 2);
+    // On a busy machine the close may come after the receipt: then the first is kept as incomplete, never as whole.
+    const whole = readRecordings(dir).filter((recording) => !recording.incomplete);
+    assert.equal(whole.length, 1, "only the second, whole answer is recorded");
+    assert.equal(whole[0]!.frames.length, 2);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("a recording cut off while the server was still answering is kept as incomplete and never played; without a pattern the path does not count", () => {
+  const dir = mkdtempSync(join(tmpdir(), "loep-writes-recordings-"));
+  try {
+    let clock = 0;
+    const recordings = socketRecordings(dir, "states", MESSAGE_VALUES, { now: () => clock, sendsTo: [] });
+    const message = JSON.stringify({ text: TEST_VALUES.text });
+    const url = "wss://test.example.nl/chat?room=1";
+    // Nothing came back: no recording at all.
+    recordings.start(url, message)!.end();
+    assert.deepEqual(readRecordings(dir), []);
+    // A receipt, and the socket closed a moment later: the answer may still have been coming.
+    const cut = recordings.start(url, message)!;
+    clock += 50;
+    cut.frame('{"type":"reply","text":"Ontvangen"}');
+    clock += 500;
+    cut.end();
+    assert.equal(readRecordings(dir)[0]!.incomplete, true);
+    assert.equal(recordings.find(url, message), null);
+    // Quiet long enough before the end: whole, and played on the same path and query only.
+    const whole = recordings.start(url, message)!;
+    clock += 50;
+    whole.frame('{"type":"reply","text":"Ontvangen"}');
+    clock += RECORD_QUIET_MS;
+    whole.end();
+    assert.equal(recordings.find(url, message)?.path, "/chat?room=1");
+    assert.equal(recordings.find("wss://test.example.nl/chat?room=2", message)?.path, "/chat?room=1");
+    assert.equal(recordings.find("wss://test.example.nl/andere-dienst", message)?.path, "/chat?room=1");
+    assert.equal(recordings.find("https://test.example.nl/chat?room=1", message), null, "a request over HTTP is another kind of connection");
+    assert.equal(recordings.find("wss://other.example.nl/chat?room=1", message), null, "another origin");
+    assert.equal(recordings.start(url, '{"type":"open"}'), null);
+    assert.match(replaysNl(dir)!, /^Van één bericht in een chat/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("the sweep records and plays a chat message the same way, and a session plays what the sweep recorded", async () => {
+  reset();
+  const dir = mkdtempSync(join(tmpdir(), "loep-writes-replay-sweep-"));
+  const limited: WritePermission = { ...permission, maxWrites: 1, spacingSeconds: 0 };
+  await recordWrites(dir, limited);
+  const message = JSON.stringify({ type: "chat", text: TEST_VALUES.text });
+  const chatIn = async (page: Page): Promise<string[]> =>
+    page.evaluate(
+      async ([url, frame, ms]) => {
+        const socket = new WebSocket(url as string);
+        const got: string[] = [];
+        socket.addEventListener("message", (event) => got.push(String(event.data)));
+        await new Promise((resolve) => socket.addEventListener("open", resolve));
+        socket.send(frame as string);
+        await new Promise((resolve) => setTimeout(resolve, ms as number));
+        socket.close();
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        return got;
+      },
+      [`${site.origin.replace("http", "ws")}/chat`, message, RECORD_QUIET_MS + 500] as const,
+    );
+  try {
+    const answer = ['{"type":"reply","text":"Ontvangen"}', '{"type":"reply","text":"Waarmee kan ik helpen?"}'];
+    for (let round = 0; round < 2; round++) {
+      const context = await newContext(browser, { writes: writeAccess(dir, limited, "states") });
+      const page = await context.newPage();
+      await loadPage(page, `${site.origin}/callback.html`);
+      assert.deepEqual(await chatIn(page), answer, `round ${round}`);
+      await context.close();
+    }
+    assert.deepEqual(site.socketMessages, [message], "only the first went to the server");
+    assert.deepEqual(readReplays(dir).map((entry) => entry.source), ["states"]);
+    const env = { browser, runDir: dir, scope: await scopeForRun(dir, { scopeUrl: `${site.origin}/` }), limits: DEFAULT_DAEMON_LIMITS, politeness: new Politeness(0) };
+    const { surface } = await openSurface(env, { url: `${site.origin}/callback.html`, width: 1280, height: 800, scheme: "light" });
+    assert.deepEqual(await chatIn(surface.page), answer);
+    assert.match(surface.guard.replays![0]!.noteNl, /^niet verstuurd maar afgespeeld: dit bericht is om \d\d:\d\d al eens echt verstuurd \(states\)/);
+    await surface.context.close();
+    assert.deepEqual(site.socketMessages, [message]);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+/** Send a form from a page as a visitor does, a navigation with POST, and return where the browser landed. */
+async function submitForm(page: Page, action: string, fields: Record<string, string>): Promise<string> {
+  await Promise.all([
+    page.waitForNavigation({ waitUntil: "load" }).catch(() => undefined),
+    page
+      .evaluate(
+        ([to, values]) => {
+          const form = document.createElement("form");
+          form.method = "post";
+          form.action = to as string;
+          for (const [name, value] of Object.entries(values as Record<string, string>)) {
+            const input = document.createElement("input");
+            input.name = name;
+            input.value = value;
+            form.append(input);
+          }
+          document.body.append(form);
+          form.submit();
+        },
+        [action, fields] as const,
+      )
+      .catch(() => undefined),
+  ]);
+  return page.url();
+}
+
+/** The recordings of requests over HTTP once there are `count`: the answer is kept after the browser landed, a moment after the send. */
+async function httpRecorded(dir: string, count: number): Promise<HttpRecording[]> {
+  for (let tries = 0; tries < 100 && readHttpRecordings(dir).length < count; tries++) await new Promise((resolve) => setTimeout(resolve, 50));
+  return readHttpRecordings(dir);
+}
+
+const FORM = { naam: TEST_VALUES.name!, email: TEST_VALUES.email!, bericht: TEST_VALUES.text!, onderwerp: "vraag" };
+
+test("a form sent over HTTP is recorded with its redirect, and the same form sent again is answered from the recording: no second claim, and the browser lands on the same page", async () => {
+  reset();
+  const dir = mkdtempSync(join(tmpdir(), "loep-writes-http-replay-"));
+  const limited: WritePermission = { ...permission, maxWrites: 10, spacingSeconds: 0 };
+  await recordWrites(dir, limited);
+  try {
+    const env = { browser, runDir: dir, scope: await scopeForRun(dir, { scopeUrl: `${site.origin}/` }), limits: DEFAULT_DAEMON_LIMITS, politeness: new Politeness(0) };
+    // `recordings`: how many there are once this send is recorded. A page closed before its answer is recorded leaves none, so the page stays open until then.
+    const send = async (action: string, fields: Record<string, string>, recordings?: number): Promise<{ landed: string; replays: NonNullable<Guard["replays"]>; passed: PassedWrite[] }> => {
+      const { surface } = await openSurface(env, { url: `${site.origin}/callback.html`, width: 1280, height: 800, scheme: "light" });
+      const landed = await submitForm(surface.page, action, fields);
+      if (recordings !== undefined) await httpRecorded(dir, recordings);
+      const outcome = { landed: new URL(landed).pathname, replays: surface.guard.replays ?? [], passed: surface.guard.passed ?? [] };
+      await surface.context.close();
+      return outcome;
+    };
+    const first = await send("/submit-see-other", FORM, 1);
+    assert.equal(first.landed, "/elsewhere.html");
+    assert.equal(first.replays.length, 0);
+    const [recording] = await httpRecorded(dir, 1);
+    assert.equal(recording!.answer.status, 303);
+    assert.equal(recording!.answer.headers["location"], "/elsewhere.html");
+    assert.deepEqual(recording!.chain, [{ url: `${site.origin}/elsewhere.html`, status: 200 }]);
+    assert.equal(recording!.refusedNl, undefined);
+    assert.equal(recording!.key, [TEST_VALUES.email, TEST_VALUES.name, TEST_VALUES.text].sort().join("|"));
+    // The second time nothing goes to the server: the browser gets the redirect from the recording and fetches the page after it itself.
+    const second = await send("/submit-see-other", FORM);
+    assert.equal(second.landed, "/elsewhere.html");
+    assert.deepEqual(second.passed, []);
+    assert.deepEqual(second.replays.map((entry) => [entry.method, entry.path, entry.matchedOn]), [["POST", "/submit-see-other", DECLARED_ORIGIN]]);
+    assert.match(second.replays[0]!.noteNl, /^niet verstuurd maar beantwoord uit een opname: deze verzending \(POST \/submit-see-other\) .*een doorverwijzing \(303\) naar \/elsewhere\.html.*zonder cookies/);
+    assert.deepEqual(writesReceived(), ["POST 127.0.0.1/submit-see-other"]);
+    assert.equal(writeBudget(dir, limited).sent, 1);
+    assert.deepEqual(readReplays(dir).map((entry) => [entry.method, entry.recording]), [["POST", recording!.id]]);
+    // Another form on the same origin sends to another address: sent for real.
+    assert.equal((await send("/other-form", FORM, 2)).replays.length, 0);
+    // Another choice in the same form is another send.
+    assert.equal((await send("/submit-see-other", { ...FORM, onderwerp: "klacht" }, 3)).replays.length, 0);
+    // A form without a test value goes to the server every time, and is never recorded.
+    const recordings = readHttpRecordings(dir).length;
+    for (let round = 0; round < 2; round++) assert.equal((await send("/submit-see-other", { onderwerp: "vraag" })).replays.length, 0);
+    assert.equal(writeBudget(dir, limited).sent, 5);
+    assert.equal(writesReceived().length, 5);
+    assert.equal(readHttpRecordings(dir).length, recordings);
+    assert.match(replaysNl(dir)!, /^Van 3 verzendingen over HTTP .*toen ze elk echt werd verstuurd\. Daarna is één keer dezelfde verzending niet opnieuw verstuurd/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("an answer with a token in it, or a page after the redirect that needs the session, is kept but never played: the next send is real", async () => {
+  reset();
+  const dir = mkdtempSync(join(tmpdir(), "loep-writes-http-refused-"));
+  const limited: WritePermission = { ...permission, maxWrites: 10, spacingSeconds: 0 };
+  await recordWrites(dir, limited);
+  try {
+    const env = { browser, runDir: dir, scope: await scopeForRun(dir, { scopeUrl: `${site.origin}/` }), limits: DEFAULT_DAEMON_LIMITS, politeness: new Politeness(0) };
+    for (const [round, action] of ["/submit-token", "/submit-token", "/submit-flash", "/submit-flash"].entries()) {
+      const { surface } = await openSurface(env, { url: `${site.origin}/callback.html`, width: 1280, height: 800, scheme: "light" });
+      // The visitor has a session in which the server keeps a message for the next page.
+      await surface.context.addCookies([{ name: "bericht", value: "1", url: site.origin }]);
+      await submitForm(surface.page, action, FORM);
+      assert.equal((surface.guard.replays ?? []).length, 0, `${action} ${round}`);
+      if (action === "/submit-flash") assert.equal(await surface.page.getByRole("status").textContent(), "Uw bericht is ontvangen.");
+      await httpRecorded(dir, round + 1);
+      await surface.context.close();
+    }
+    assert.equal(writeBudget(dir, limited).sent, 4);
+    const reasons = readHttpRecordings(dir).map((recording) => recording.refusedNl ?? "");
+    assert.equal(reasons.length, 4);
+    for (const reason of reasons.slice(0, 2)) assert.match(reason, /CSRF-token/);
+    for (const reason of reasons.slice(2)) assert.match(reason, /zonder de cookies van de browser anders uit/);
+    assert.match(replaysNl(dir)!, /^Van 4 verzendingen over HTTP .*toen ze elk echt werd verstuurd; geen van die antwoorden is gebruikt, omdat/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("the sweep answers the same form from a recording too", async () => {
+  reset();
+  const dir = mkdtempSync(join(tmpdir(), "loep-writes-http-sweep-"));
+  const limited: WritePermission = { ...permission, maxWrites: 10, spacingSeconds: 0 };
+  await recordWrites(dir, limited);
+  try {
+    for (let round = 0; round < 2; round++) {
+      const context = await newContext(browser, { writes: writeAccess(dir, limited, "states") });
+      const page = await context.newPage();
+      await loadPage(page, `${site.origin}/callback.html`);
+      assert.equal(new URL(await submitForm(page, "/submit-see-other", FORM)).pathname, "/elsewhere.html", `round ${round}`);
+      await httpRecorded(dir, 1);
+      await context.close();
+    }
+    assert.deepEqual(writesReceived(), ["POST 127.0.0.1/submit-see-other"]);
+    assert.deepEqual(readReplays(dir).map((entry) => [entry.source, entry.method]), [["states", "POST"]]);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("which body makes a send that is recorded, and which answer may never be played", () => {
+  const form = (text: string, type = "application/x-www-form-urlencoded"): ReturnType<typeof httpSendOf> => httpSendOf(Buffer.from(text), type, MESSAGE_VALUES);
+  // A form encodes a space as + and @ as %40: the test values are found decoded.
+  assert.equal(form("naam=Loep+Testpersoon&email=loep-test%40example.com&onderwerp=vraag")?.key, [TEST_VALUES.email, TEST_VALUES.name].sort().join("|"));
+  assert.equal(form(JSON.stringify({ email: TEST_VALUES.email }), "application/json")?.key, TEST_VALUES.email);
+  assert.equal(form("onderwerp=vraag"), null);
+  assert.equal(httpSendOf(null, undefined, MESSAGE_VALUES), null);
+  // A multipart body has a boundary of its own per send; without it, the same fields are the same send.
+  const multipart = (boundary: string): ReturnType<typeof httpSendOf> => form(`--${boundary}\r\nContent-Disposition: form-data; name="naam"\r\n\r\n${TEST_VALUES.name}\r\n--${boundary}--`, `multipart/form-data; boundary=${boundary}`);
+  assert.equal(multipart("----a1")!.bodySha256, multipart("----b2")!.bodySha256);
+  assert.notEqual(form("naam=Loep+Testpersoon&onderwerp=vraag")!.bodySha256, form("naam=Loep+Testpersoon&onderwerp=klacht")!.bodySha256);
+
+  const origin = "https://test.example.nl";
+  const url = `${origin}/contact`;
+  const html = (body: string, status = 200, headers: Record<string, string> = {}): string | null => answerRefusalNl({ status, headers: { "content-type": "text/html; charset=utf-8", ...headers }, body: Buffer.from(body) }, url, origin);
+  assert.equal(html("<h1>Bedankt</h1><form action=/zoeken><input name=q></form>"), null);
+  assert.equal(html('<p role="alert">Vul uw naam in.</p>', 422), null, "an error message of the server is an answer like any other");
+  assert.equal(html("", 303, { location: "/bedankt" }), null);
+  assert.match(html("", 307, { location: "/elders" })!, /dezelfde methode \(307\)/);
+  assert.match(html("", 303, { location: "https://elders.example.nl/bedankt" })!, /buiten de testomgeving/);
+  assert.match(html("", 303, { location: "/bedankt;jsessionid=AB12" })!, /kenmerk van een sessie/);
+  assert.match(html("", 302, { location: "/verder?code=834201" })!, /eenmalige code/);
+  assert.match(html("<h1>Bedankt</h1>", 200, { "set-cookie": "sessie=1; Path=/" })!, /zet een cookie/);
+  for (const status of [401, 403, 419, 429, 500, 503]) assert.match(html("<h1>Fout</h1>", status)!, new RegExp(`antwoordde met ${status}`), String(status));
+  for (const body of ['<input type="hidden" name="_token" value="x1">', '<meta name="csrf-token" content="x1">', '<input type=hidden name=__RequestVerificationToken value=x1>', '<input type="hidden" name="__VIEWSTATE" value="x1">', "<p>Uw eenmalige code is 834201.</p>", '<a href="/stap-2?sid=abc">Verder</a>']) assert.match(html(body)!, /CSRF-token, een eenmalige code of een kenmerk van een sessie/, body);
+  assert.match(answerRefusalNl({ status: 200, headers: { "content-type": "application/json" }, body: Buffer.from('{"ok":true,"csrfToken":"x1"}') }, url, origin)!, /CSRF-token/);
+  assert.equal(answerRefusalNl({ status: 200, headers: { "content-type": "application/json" }, body: Buffer.from('{"ok":true,"melding":"Ontvangen"}') }, url, origin), null);
+  assert.match(answerRefusalNl({ status: 200, headers: { "content-type": "application/pdf" }, body: Buffer.from("%PDF-1.7") }, url, origin)!, /geen tekst/);
 });
 
 /** Open a socket to the fixture site from the page and send these frames, one at a time. */
@@ -553,8 +993,8 @@ test("inventory refuses to start for a site that is not local without a declarat
     assert.equal(allowed.code, 0, allowed.stderr);
     assert.match(allowed.stdout, new RegExp(`versturen toegestaan naar ${site.origin.replaceAll(".", "\\.")}\n`));
     const stored = writesForRun(dir)!;
-    assert.deepEqual({ ...stored, declaredAt: "" }, { origin: site.origin, local: true, declaredBy: null, declaredAt: "", maxWrites: 5, spacingSeconds: 120 });
-    assert.match(allowed.stdout, /budget voor versturen: ten hoogste 5 verzendingen naar die origin voor de hele run/);
+    assert.deepEqual({ ...stored, declaredAt: "" }, { origin: site.origin, local: true, declaredBy: null, declaredAt: "", maxWrites: 50, spacingSeconds: 0 });
+    assert.match(allowed.stdout, /budget voor versturen: ten hoogste 50 verzendingen naar die origin voor de hele run, alle agents en de veegronde samen, zonder wachttijd ertussen\./);
     // The budget for sending is set next to the declaration, and only there.
     assert.equal((await cli("inventory", `${site.origin}/`, "--out", dir, "--urls", join(dir, "urls.txt"), "--allow-writes", "--max-writes", "3")).code, 0);
     assert.equal(writesForRun(dir)?.maxWrites, 3);
@@ -568,6 +1008,103 @@ test("inventory refuses to start for a site that is not local without a declarat
     // An inventory without the flag is a run without the permission.
     assert.equal((await cli("inventory", `${site.origin}/`, "--out", dir, "--urls", join(dir, "urls.txt"))).code, 0);
     assert.equal(writesForRun(dir), null);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("the evaluation says how many messages were recorded and how often a recording was played", () => {
+  const dir = mkdtempSync(join(tmpdir(), "loep-writes-replays-nl-"));
+  try {
+    assert.equal(replaysNl(dir), null);
+    writeFileSync(join(dir, "opnames.jsonl"), `${JSON.stringify({ id: "a", at: "2026-10-21T09:00:00Z", source: "states", origin: "https://chat.example.nl", path: "/ws", key: "x", frames: [] })}\n`);
+    writeFileSync(join(dir, "afgespeeld.jsonl"), `${JSON.stringify({ at: "2026-10-21T09:10:00Z", source: "b-331", recording: "a", path: "/ws", key: "x" })}\n`.repeat(3));
+    assert.equal(replaysNl(dir), "Van één bericht in een chat is het antwoord van de server opgenomen toen het echt werd verstuurd, ook als dat antwoord was dat er een tijd niets kwam. Daarna is 3 keer hetzelfde bericht niet opnieuw verstuurd, maar is de opname afgespeeld: de pagina kreeg het antwoord van toen, met dezelfde tussentijden. Wat de pagina ermee deed, is gemeten; wat de server later uit zichzelf zou doen, niet. Gezocht is op de verklaarde origin van de testomgeving, met de testwaarden in het bericht");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("a silence of the server is an answer when it lasted, and a token in the address of the socket does not make a message another one", () => {
+  const dir = mkdtempSync(join(tmpdir(), "loep-writes-silence-"));
+  try {
+    let clock = Date.parse("2026-10-21T17:00:00Z");
+    const recordings = socketRecordings(dir, "states", MESSAGE_VALUES, { now: () => clock, sendsTo: [] });
+    const message = JSON.stringify({ type: "chat", text: TEST_VALUES.text });
+    // Closed two seconds after the send: too soon to say the server keeps quiet.
+    recordings.start("wss://chat.example.nl/ws/nldd/sTEEyUUqGuUpkriK", message)!;
+    clock += 2_000;
+    recordings.start("wss://chat.example.nl/ws/nldd/sTEEyUUqGuUpkriK", message)!.end();
+    assert.deepEqual(readRecordings(dir), []);
+    // Twelve seconds without a word: that is the answer of a chat that people answer.
+    const recorder = recordings.start("wss://chat.example.nl/ws/nldd/sTEEyUUqGuUpkriK", message)!;
+    clock += 12_000;
+    recorder.end();
+    const [silence] = readRecordings(dir);
+    assert.deepEqual([silence!.frames, silence!.listenedMs, silence!.incomplete, silence!.kind, silence!.matchedOn], [[], 12_000, undefined, "websocket", DECLARED_ORIGIN]);
+    // The next conversation has a token of its own, of letters only as in a real run, and still gets the same recording.
+    const found = recordings.find("wss://chat.example.nl/ws/nldd/SFUjvfumdfeMLKtn", message)!;
+    assert.equal(found.id, silence!.id);
+    assert.match(replayNl(found), /de server zei toen 12 s lang niets terug; de pagina krijgt nu ook niets\. .*De opname is gezocht op de verklaarde origin van de testomgeving/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("with a sendsTo pattern a recording is played on an address under the same pattern only", () => {
+  const dir = mkdtempSync(join(tmpdir(), "loep-writes-sendsto-"));
+  try {
+    let clock = Date.parse("2026-10-21T17:00:00Z");
+    const sendsTo = ["wss://chat.example.nl/ws/kanaal/*", "wss://chat.example.nl/ws/meldingen/*"];
+    const recordings = socketRecordings(dir, "states", MESSAGE_VALUES, { now: () => clock, sendsTo });
+    const message = JSON.stringify({ type: "chat", text: TEST_VALUES.text });
+    const recorder = recordings.start("wss://chat.example.nl/ws/kanaal/SFUjvfumdfeMLKtn", message)!;
+    clock += 50;
+    recorder.frame('{"type":"reply","text":"Ontvangen"}');
+    clock += RECORD_QUIET_MS;
+    recorder.end();
+    assert.equal(readRecordings(dir)[0]!.matchedOn, "wss://chat.example.nl/ws/kanaal/*");
+    assert.ok(recordings.find("wss://chat.example.nl/ws/kanaal/QpXzLmNoTRwabcde", message), "another token under the same pattern");
+    assert.equal(recordings.find("wss://chat.example.nl/ws/meldingen/QpXzLmNoTRwabcde", message), null, "another pattern on the same origin");
+    assert.equal(recordings.find("wss://chat.example.nl/ws/anders", message), null, "an address under no pattern is looked up on the declared origin, apart from the patterns");
+    assert.equal(recordings.find("wss://chat.example.nl/ws/kanaal/a/b", message), null, "a * stands for one part");
+    assert.equal(recordings.replayed("wss://chat.example.nl/ws/kanaal/QpXzLmNoTRwabcde", readRecordings(dir)[0]!).matchedOn, "wss://chat.example.nl/ws/kanaal/*");
+    assert.match(replaysNl(dir)!, /Gezocht is op het patroon wss:\/\/chat\.example\.nl\/ws\/kanaal\/\* uit het sitemodel, met de testwaarden in het bericht$/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("a sendsTo pattern is narrow, falls under the same kind of connection, and counts once check-site passed the model", () => {
+  assert.deepEqual(sendsToProblems("wss://chat.example.nl/ws/kanaal/*", "x"), []);
+  assert.deepEqual(sendsToProblems("https://test.example.nl/api/aanvraag/*?sessie=*", "x"), []);
+  for (const wide of ["wss://chat.example.nl/*", "wss://chat.example.nl", "wss://chat.example.nl/", "https://test.example.nl/*/*"]) assert.match(sendsToProblems(wide, "components[0]").join(), /past op elk adres van/, wide);
+  assert.match(sendsToProblems("wss://*.example.nl/ws/a", "x").join(), /niet in de host/);
+  assert.match(sendsToProblems("ftp://example.nl/a/*", "x").join(), /alleen ws:\/\/, wss:\/\/, http:\/\/ en https:\/\//);
+  assert.match(sendsToProblems(3, "x").join(), /als tekst/);
+  assert.equal(sendsToMatches("wss://chat.example.nl/ws/kanaal/*", "wss://chat.example.nl/ws/kanaal/SFUjvfumdfeMLKtn"), true);
+  assert.equal(sendsToMatches("wss://chat.example.nl/ws/kanaal/*", "https://chat.example.nl/ws/kanaal/SFUjvfumdfeMLKtn"), false, "a request is not a socket");
+  assert.equal(sendsToMatches("https://test.example.nl/api/aanvraag/*", "https://test.example.nl/api/aanvraag/81723"), true);
+  assert.equal(sendsToMatches("https://test.example.nl/api/aanvraag/*", "https://test.example.nl/api/aanvraag/81723?x=1"), false, "the query counts");
+  assert.equal(sendsToMatches("https://test.example.nl/api/aanvraag?sessie=*", "https://test.example.nl/api/aanvraag?sessie=Ab3d"), true);
+  // check-site: both replays have to reach an address under the pattern, for a socket and for a request over HTTP alike.
+  const pattern = "wss://chat.example.nl/ws/kanaal/*";
+  assert.equal(sendsToReplayProblem('component "chat"', pattern, [["https://chat.example.nl/", "wss://chat.example.nl/ws/kanaal/SFUjvfumdfeMLKtn"], ["wss://chat.example.nl/ws/kanaal/QpXzLmNoTRwabcde"]]), null);
+  assert.match(sendsToReplayProblem('component "chat"', pattern, [["wss://chat.example.nl/ws/kanaal/SFUjvfumdfeMLKtn"], ["wss://chat.example.nl/ws/kamer/QpXzLmNoTRwabcde"]])!, /past niet: bij de tweede keer afspelen .*wel naar wss:\/\/chat\.example\.nl\/ws\/kamer\/QpXzLmNoTRwabcde/);
+  const http = "https://test.example.nl/api/aanvraag/*";
+  assert.equal(sendsToReplayProblem('process "aanvraag"', http, [["https://test.example.nl/api/aanvraag/81723"], ["https://test.example.nl/api/aanvraag/90211"]]), null);
+  assert.match(sendsToReplayProblem('process "aanvraag"', http, [["https://test.example.nl/api/aanvraag/81723"], ["https://test.example.nl/api/anders/1"]])!, /bij de tweede keer .*ging geen verzoek naar een adres onder dit patroon/);
+  assert.match(sendsToReplayProblem('process "aanvraag"', http, [[], []])!, /bij de eerste keer .*er ging geen verzoek naar https:\/\/test\.example\.nl/);
+  // Only a model that passed check-site and did not change since gives its patterns.
+  const dir = mkdtempSync(join(tmpdir(), "loep-writes-approved-"));
+  try {
+    const model = JSON.stringify({ components: [{ id: "chat", sendsTo: pattern }, { id: "breed", sendsTo: "wss://chat.example.nl/*" }], processes: [{ id: "aanvraag", sendsTo: http }] });
+    writeFileSync(join(dir, "site.json"), model);
+    assert.deepEqual(approvedSendsTo(dir), []);
+    writeFileSync(join(dir, "site-check.json"), JSON.stringify({ ok: true, siteSha256: createHash("sha256").update(model).digest("hex") }));
+    assert.deepEqual(approvedSendsTo(dir), [pattern, http]);
+    writeFileSync(join(dir, "site.json"), `${model} `);
+    assert.deepEqual(approvedSendsTo(dir), [], "changed after the check");
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

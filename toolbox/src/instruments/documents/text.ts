@@ -1,8 +1,8 @@
 import { readFile } from "node:fs/promises";
-import type { DocumentFacts, DocumentHeading, DocumentImage, DocumentLink, DocumentTable, PlainTextFacts } from "../../lib/documents.ts";
+import { charsetOf, decodeText, type DocumentFacts, type DocumentHeading, type DocumentImage, type DocumentLink, type DocumentTable, type PlainTextFacts } from "../../lib/documents.ts";
 
 /**
- * Plain text offered as a file: Markdown, txt and csv. The file has no properties: no title, no
+ * Plain text offered as a file: Markdown, txt, csv, and agenda items and business cards (ics, vcf). The file has no properties: no title, no
  * language, no tags. What it has is its text, the character set the server names for it, and
  * in Markdown the structure its syntax writes out (headings, links, pictures, tables).
  */
@@ -16,12 +16,6 @@ export interface TextMeasurement {
 const MAX_ITEMS = 400;
 const clean = (value: string): string => value.replace(/\s+/g, " ").trim();
 
-/** The character set a `Content-Type` header names, lower case; null when it names none. */
-export function charsetOf(contentType: string | null): string | null {
-  const match = /;\s*charset\s*=\s*"?([^";\s]+)"?/i.exec(contentType ?? "");
-  return match ? match[1]!.toLowerCase() : null;
-}
-
 function formatOf(url: string, contentType: string | null): PlainTextFacts["format"] {
   const type = (contentType ?? "").split(";")[0]!.trim().toLowerCase();
   if (type === "text/markdown" || type === "text/x-markdown") return "markdown";
@@ -30,25 +24,6 @@ function formatOf(url: string, contentType: string | null): PlainTextFacts["form
   if (extension === "md" || extension === "markdown") return "markdown";
   if (extension === "csv") return "csv";
   return "plain";
-}
-
-function decode(bytes: Buffer, charset: string | null): { text: string; validUtf8: boolean; decodedAs: string } {
-  let validUtf8 = true;
-  let utf8 = "";
-  try {
-    utf8 = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
-  } catch {
-    validUtf8 = false;
-  }
-  if (charset) {
-    try {
-      return { text: new TextDecoder(charset).decode(bytes), validUtf8, decodedAs: charset };
-    } catch {
-      // A name the decoder does not know: decoded as below.
-    }
-  }
-  if (validUtf8) return { text: utf8, validUtf8, decodedAs: "utf-8" };
-  return { text: new TextDecoder("windows-1252").decode(bytes), validUtf8, decodedAs: "windows-1252" };
 }
 
 /** Headings, pictures, links and tables as Markdown writes them out, outside fenced code. */
@@ -98,7 +73,7 @@ export function readMarkdown(text: string): { headings: DocumentHeading[]; image
 export async function measureText(file: string, url: string, contentType: string | null): Promise<TextMeasurement> {
   const bytes = await readFile(file);
   const charset = charsetOf(contentType);
-  const { text, validUtf8, decodedAs } = decode(bytes, charset);
+  const { text, validUtf8, decodedAs } = decodeText(bytes, charset);
   const format = formatOf(url, contentType);
   const nonAscii = bytes.some((byte) => byte > 0x7f);
   const markdown = format === "markdown" ? readMarkdown(text) : { headings: [], images: [], links: [], tables: [] };

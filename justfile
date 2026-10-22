@@ -75,13 +75,17 @@ doctor:
 voiceover-setup:
     {{cli}} voiceover setup
 
-# Draai de unittests. Met --test-shard=<i>/<n> alleen het i-de van n delen, zoals de volledige controle op GitHub doet
+# Draai de unittests
 test *flags:
     cd {{toolbox}} && node --test {{flags}} 'test/**/*.test.ts'
 
+# Draai het i-de van n delen van de unittests, verdeeld op gemeten duur (toolbox/test/durations.json), zoals de volledige controle op GitHub doet
+test-shard i n:
+    cd {{toolbox}} && node --test $(node scripts/test-shard.ts {{i}} {{n}})
+
 # Draai alleen de tests die geen browser starten: een paar seconden, voor tussendoor en voor de snelle controle bij een push
 test-quick:
-    cd {{toolbox}} && node --test test/compare-findings.test.ts test/contrast.test.ts test/core.test.ts test/defects.test.ts test/docs.test.ts test/estimate.test.ts test/release.test.ts test/searchbody.test.ts test/extractors.test.ts test/feedback.test.ts test/instrument-tasks.test.ts test/origins.test.ts test/portrait.test.ts test/render.test.ts test/sequence.test.ts test/statement.test.ts test/sweepstamp.test.ts test/timing.test.ts test/atonce.test.ts test/verdict.test.ts test/voiceover.test.ts test/again.test.ts test/sweep-check.test.ts
+    cd {{toolbox}} && node --test test/compare-findings.test.ts test/contrast.test.ts test/core.test.ts test/defects.test.ts test/docs.test.ts test/estimate.test.ts test/release.test.ts test/searchbody.test.ts test/extractors.test.ts test/feedback.test.ts test/instrument-tasks.test.ts test/origins.test.ts test/portrait.test.ts test/render.test.ts test/sequence.test.ts test/statement.test.ts test/sweepstamp.test.ts test/timing.test.ts test/atonce.test.ts test/verdict.test.ts test/voiceover.test.ts test/again.test.ts test/sweep-check.test.ts test/test-shard.test.ts
 
 # Controleer de types
 check:
@@ -155,7 +159,7 @@ verify run:
 testsite *args:
     node {{toolbox}}/fixtures/serve.ts {{args}}
 
-# Regressietoets van de veegronde op de testsite, zonder taalmodel: inventory, het vaste sitemodel uit toolbox/fixtures/sweep, collect, contrast en states op beide varianten, en per gebrek uit de sleutel of het bewijs in het dossier staat (toolbox/fixtures/evidence.ts). Faalt als iets uit de basislijn ontbreekt of de tweeling bewijs krijgt. Met --out <map>, --at-once <n>, --variant defect of clean, --runs <map> om bestaande runs opnieuw te lezen, --from-report <sweep-check.json> (twee keer, de artefacten van de CI) en --update-baseline om de basislijn bij te werken
+# Regressietoets van de veegronde op de testsite, zonder taalmodel: inventory, het vaste sitemodel uit toolbox/fixtures/sweep, collect, contrast en states op beide varianten, en per gebrek uit de sleutel of het bewijs in het dossier staat (toolbox/fixtures/evidence.ts). Faalt als iets uit de basislijn ontbreekt of de tweeling bewijs krijgt. Met --out <map>, --at-once <n>, --variant defect of clean, --fixed-ports om de testsite op 4710 tot en met 4712 te serveren zodat de runs in <out>/runs een bevroren veegronde voor een meting kunnen zijn, --runs <map> om bestaande runs opnieuw te lezen, --from-report <sweep-check.json> (twee keer, de artefacten van de CI) en --update-baseline om de basislijn bij te werken
 sweep-check *flags:
     node {{toolbox}}/scripts/sweep-check.ts {{flags}}
 
@@ -163,9 +167,10 @@ sweep-check *flags:
 testsite-build:
     node {{toolbox}}/fixtures/build.ts
 
-# Zet een nieuwe versie klaar op een branch: alle versienummers en het deel in CHANGELOG.md (met de fragmenten uit changelog.d/, via towncrier), als één commit. Daarna een voorstel naar main
-release-prepare version:
-    node {{toolbox}}/scripts/release.ts prepare {{version}}
+# Zet een nieuwe versie klaar op een branch: alle versienummers en het deel in CHANGELOG.md (met de fragmenten uit changelog.d/, via towncrier), als één commit. Daarna een voorstel naar main. Weigert zonder meting in validatie/versies/<versie>.json, tenzij met --unmeasured "<reden>"; die reden komt in CHANGELOG.md
+[positional-arguments]
+release-prepare version *flags:
+    node {{toolbox}}/scripts/release.ts prepare "$@"
 
 # Na de merge, op main: tag de versie, zet de tag op GitHub en maak de release met de tekst uit CHANGELOG.md
 release-tag:

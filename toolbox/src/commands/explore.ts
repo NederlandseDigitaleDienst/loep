@@ -10,14 +10,16 @@ import { recordReads } from "../lib/reads.ts";
 import { makeWorkDir } from "../lib/workdir.ts";
 import { siteLabel } from "../lib/origins.ts";
 import { textHasTerm } from "../lib/searchterm.ts";
-import { acceptedGapFor, frameAddress, NOT_OPENED_ON_PAGE_TYPE, notOpenedAdviceNl, readSiteModel, searchTermForRun, SITE_CHECK_FILE, SITE_MODEL_FILE, validateSiteModel, type ModelContext, type PageType, type Postcondition, type SiteCheck, type SiteModel } from "../lib/sitemodel.ts";
+import { acceptedGapFor, frameAddress, literalSearchTermNl, NOT_OPENED_ON_PAGE_TYPE, POSTCONDITION_NOT_HELD_NL, SEARCH_TERM_PLACEHOLDER, notOpenedAdviceNl, pageTypesToCheck, readSiteModel, REVIEW_MISSING, searchTermForRun, sendsToCandidates, sendsToReplayProblem, SITE_CHECK_FILE, SITE_MODEL_FILE, validateSiteModel, type ModelContext, type PageType, type Postcondition, type SiteCheck, type SiteModel } from "../lib/sitemodel.ts";
+import { LOOK_COMMANDS } from "../lib/verdict.ts";
 import { readObservation } from "../session/observations.ts";
 import { holds, loadRecipes, MAX_RECIPE_STEPS, replayEnv, replayFromClean, replaySteps } from "../session/recipe.ts";
 import { openSurface, type Env } from "../session/surface.ts";
-import { pageOperables } from "../instruments/operables.ts";
+import { pageLooksOperable, pageOperables } from "../instruments/operables.ts";
 import { controlsBetweenWidths, MEASURED_WIDTHS, widthToTry, type WidthsForExplorer } from "../instruments/widths.ts";
 import { mergeWidths, uncoveredOperables, type CountedPage } from "../lib/operables.ts";
 import type { Recipe } from "../session/daemon.ts";
+import type { BrowserContext } from "playwright";
 import type { Gate } from "./gate.ts";
 import type { Inventory, InventoryPage } from "./inventory.ts";
 import { openComponentOn, windowOnPageTypes } from "./modelsweep.ts";
@@ -97,7 +99,7 @@ export async function explore(runDir: string): Promise<{ task: string; pages: nu
   const manifestPath = join(runDir, "manifest.json");
   const round = (existsSync(manifestPath) ? (await readJson<Manifest>(manifestPath)).steps.filter((step) => step.command === "explore").length : 0) + 1;
   // What the gate found that an explorer can do something about; a measurement the sweep still owes is not his to fix.
-  const forExplorer = (gate && !gate.sufficient ? gate.gaps : []).filter((gap) => !SWEEP_ONLY_CHECKS.includes(gap.check));
+  const forExplorer = (gate && !gate.sufficient ? gate.gaps : []).filter((gap) => gap.fixedBy !== "sweep");
   // And what the model itself lacks by today's rules, without replaying anything.
   const modelProblems = existsSync(join(runDir, SITE_MODEL_FILE)) ? await staticProblems(runDir, inventory) : [];
   const previous = !existsSync(join(runDir, SITE_MODEL_FILE))
@@ -110,7 +112,7 @@ export async function explore(runDir: string): Promise<{ task: string; pages: nu
         ...(modelProblems.length > 0 ? ["De controle keurt het model nu af op:", "", ...modelProblems.map((problem) => `- ${problem}`), ""] : []),
         ...(forExplorer.length > 0 ? ["De bewijspoort vond na het meten deze gaten:", "", ...forExplorer.map((gap) => `- **${gap.check}**${gap.url ? `, ${gap.url}` : ""}${gap.state && gap.state !== "default" ? `, toestand ${gap.state}` : ""}: ${gap.missingNl}`), ""] : []),
         ...(modelProblems.length + forExplorer.length === 0 ? ["Er zijn geen open punten gemeld. Loop de werkwijze na op wat het model nog mist, met name stap 2b.", ""] : []),
-        "Is een gat een eigenschap van de site zelf en geen gemis in het model (de site heeft echt een toetsenbordval, een onderdeel gaat echt niet open), leg dat dan vast in `acceptedGaps`: `{ \"check\": \"<naam van de controle>\", \"page\": \"<adres>\", \"reasonNl\": \"wat je zag\", \"observation\": \"<id van de waarneming die het toont, bijvoorbeeld verken-0042>\", \"decidedBy\": \"verkenner\" }`. Schrijf in `decidedBy` altijd `verkenner`: `persoon` zet alleen een persoon die de uitzondering zelf heeft vastgesteld. Bij `component-not-opened-on-page-type` hoort er ook `\"component\": \"<id van het onderdeel>\"` bij: de regel geldt dan alleen voor dat onderdeel.",
+        "Is een gat een eigenschap van de site zelf en geen gemis in het model (de site heeft echt een toetsenbordval, een onderdeel gaat echt niet open), leg dat dan vast in `acceptedGaps`: `{ \"check\": \"<naam van de controle>\", \"page\": \"<adres>\", \"reasonNl\": \"wat je zag\", \"observation\": \"<id van de waarneming die het toont, bijvoorbeeld verken-0042>\", \"decidedBy\": \"verkenner\" }`. Schrijf in `decidedBy` altijd `verkenner`: `persoon` zet alleen een persoon die de uitzondering zelf heeft vastgesteld. Bij `component-not-opened-on-page-type` hoort er ook `\"component\": \"<id van het onderdeel>\"` bij: de regel geldt dan alleen voor dat onderdeel. Bij `review-state` (het beeld van een toestand dat de beoordeling van de poort afwees) hoort `\"state\": \"<id van de toestand>\"` erbij: de regel geldt dan alleen voor die toestand, niet voor andere toestanden op dezelfde pagina. Zeg je bij `review-missing` dat het onderdeel er niet is, dan is `observation` een `look`, `crop`, `html`, `find` of `ax` op die pagina die dat laat zien; een rij die in `operables.json` ontbreekt, is geen bewijs.",
       ].join("\n");
 
   const taskPath = join("explore", "verken.md");
@@ -137,6 +139,9 @@ export async function explore(runDir: string): Promise<{ task: string; pages: nu
     previous,
     login: agentLoginNl(loginForRun(runDir)),
     searchTerm: searchTermForRun(runDir),
+    // The placeholder itself, for the postconditions of a recipe that searches: {{searchTerm}} in the template is the term of this run.
+    searchTermPlaceholder: SEARCH_TERM_PLACEHOLDER,
+    searchTermAlternatives: inventory.searchTermAlternatives?.length ? inventory.searchTermAlternatives.map((word) => `\`${word}\``).join(", ") : "geen",
   });
   await writeFileAtomic(join(runDir, taskPath), prompt);
   await writeManifest(runDir, { command: "explore", startedAt, round, pages: pageCount, frames: context.frames.length, templateSha256: sha256(template) });
@@ -157,9 +162,6 @@ export function breakpointsNl(context: ExploreContext): string {
   return ["De stylesheets noemen deze breedtes tussen 320 en 1280 pixels; daar verandert de opmaak:", "", ...lines, "", "Een knop of menu dat je op 1280 en op 360 pixels niet ziet, kan net boven of net onder zo'n breedte wel bestaan. Open dan een pagina op zo'n breedte (`--width <breedte>`) en neem het recept daar op. `check-site` meldt na het tellen welke bedieningselementen alleen tussen de gemeten breedtes in beeld staan, met de breedte waarop je ze vindt."].join("\n");
 }
 
-/** Checks of the gate whose gaps are closed by running the sweep again, not by exploring. */
-const SWEEP_ONLY_CHECKS = ["coverage", "sweep-complete", "sheets"];
-
 async function modelContext(runDir: string, inventory: Inventory): Promise<ModelContext> {
   const recipes = await loadRecipes(runDir);
   return {
@@ -168,6 +170,7 @@ async function modelContext(runDir: string, inventory: Inventory): Promise<Model
     recipes: Object.fromEntries(Object.entries(recipes).map(([name, recipe]) => [name, { width: recipe.start?.width ?? 0, steps: recipe.steps.length, url: recipe.start?.url ?? "" }])),
     observations: await observationIds(runDir),
     requestsSeen: await requestsSeen(runDir),
+    looksSeen: await looksSeen(runDir),
     media: Object.fromEntries(inventory.pages.filter((page) => !isFrame(page)).map((page) => [page.url, { audio: Number(page.counts.audio ?? 0), video: Number(page.counts.video ?? 0) }])),
   };
 }
@@ -199,6 +202,29 @@ export async function requestsSeen(runDir: string): Promise<Record<string, { met
       ...observation.blocked.filter((entry) => entry.kind === "method").map((entry) => ({ method: entry.method, url: entry.url, search: entry.search ?? [] })),
       ...(observation.reads ?? []).map((entry) => ({ method: entry.method, url: entry.url, search: entry.service ? [entry.service] : [] })),
     ];
+  }
+  return seen;
+}
+
+/**
+ * Per observation that an accepted gap of the review question `missing` names: the page it
+ * looked at, when it was a look command that succeeded, and null otherwise. Such a gap says a
+ * part the review saw is not there, and only a look at the page can show that.
+ */
+export async function looksSeen(runDir: string): Promise<Record<string, string | null>> {
+  let gaps: unknown = null;
+  try {
+    gaps = (JSON.parse(readFileSync(join(runDir, SITE_MODEL_FILE), "utf8")) as { acceptedGaps?: unknown }).acceptedGaps;
+  } catch {
+    gaps = null;
+  }
+  const seen: Record<string, string | null> = {};
+  for (const gap of Array.isArray(gaps) ? (gaps as unknown[]) : []) {
+    const { check, observation: id } = (gap ?? {}) as { check?: unknown; observation?: unknown };
+    if (check !== REVIEW_MISSING || typeof id !== "string" || id in seen) continue;
+    const observation = await readObservation(runDir, id).catch(() => null);
+    if (!observation) continue;
+    seen[id] = (LOOK_COMMANDS as readonly string[]).includes(observation.command) && observation.error === null ? (observation.page?.url ?? null) : null;
   }
   return seen;
 }
@@ -240,11 +266,12 @@ export async function countOperables(env: Env, model: SiteModel, recipes: Record
         await replaySteps(env, surface, leaves === -1 ? steps : steps.slice(0, leaves), blocker.postcondition);
       }
       const wide = await pageOperables(surface.page);
+      const looksOperable = await pageLooksOperable(surface.page);
       // The same scan of the widths in between as the sweep makes: a control that only shows there is tried at such a width.
       widths.push({ pageType: type.id, ...(await controlsBetweenWidths(surface.page).catch(() => ({ breakpoints: [], controls: [] }))) });
       await surface.page.setViewportSize(NARROW);
       await surface.page.waitForTimeout(300);
-      counted.push({ pageType: type.id, url: type.representative, groups: mergeWidths(wide, await pageOperables(surface.page)) });
+      counted.push({ pageType: type.id, url: type.representative, groups: mergeWidths(wide, await pageOperables(surface.page)), ...(looksOperable.length > 0 ? { looksOperable } : {}) });
     } catch (error) {
       problems.push(`paginatype "${type.id}": op ${type.representative} was niet te tellen wat er te bedienen is: ${(error as Error).message.split("\n")[0]}`);
     } finally {
@@ -295,15 +322,15 @@ export function aliasRepresentatives(model: SiteModel, inventory: Inventory): st
 }
 
 /**
- * A component's recipe on the representative page of every page type it stands on, in the window
- * the sweep opens it in there. What the gate would refuse after the sweep is told now, unless the
+ * A component's recipe on the representative page of every page type it stands on (of a few, for
+ * one on every page: the sweep opens it on all of them), in the window the sweep opens it in there. What the gate would refuse after the sweep is told now, unless the
  * model accepts it as how the site is, the way the gate does.
  */
 async function componentOnPageTypes(env: Env, model: SiteModel, id: string, recipe: Recipe & { start: NonNullable<Recipe["start"]> }, post: Postcondition | null): Promise<NonNullable<SiteCheck["replays"][number]["onPageTypes"]>> {
   const component = model.components.find((entry) => entry.id === id)!;
   const size = windowOnPageTypes({ width: recipe.start.width, height: recipe.start.height }, component.viewport);
   const rows: NonNullable<SiteCheck["replays"][number]["onPageTypes"]> = [];
-  for (const typeId of component.pageTypes) {
+  for (const typeId of pageTypesToCheck(component)) {
     const type = model.pageTypes.find((entry) => entry.id === typeId);
     if (!type) continue;
     const opened = await openComponentOn(env, recipe, post, type.representative, size);
@@ -313,6 +340,14 @@ async function componentOnPageTypes(env: Env, model: SiteModel, id: string, reci
   }
   return rows;
 }
+
+/** Keep every address a page of the context opens a socket to or sends a request to. */
+const watchAddresses =
+  (into: string[]) =>
+  (context: BrowserContext): void => {
+    context.on("request", (request) => void into.push(request.url()));
+    context.on("page", (page) => page.on("websocket", (socket) => void into.push(socket.url())));
+  };
 
 /** Whether the page the explorer named shows the search term in its text. Null when it does. */
 async function searchTermProblem(env: Env, chosen: { term: string; page: string }): Promise<string | null> {
@@ -356,10 +391,10 @@ export async function checkSite(runDir: string, options: { navigationDelayMs?: n
 
   if (problems.length === 0) {
     const model = (await readSiteModel(runDir)) as SiteModel;
-    const entries: { kind: SiteCheck["replays"][number]["kind"]; id: string; recipe: string; postcondition: Postcondition }[] = [
+    const entries: { kind: SiteCheck["replays"][number]["kind"]; id: string; recipe: string; postcondition: Postcondition; sendsTo?: string | undefined }[] = [
       ...model.blockers.map((entry) => ({ kind: "blocker" as const, id: entry.id, recipe: entry.recipe, postcondition: entry.postcondition })),
-      ...model.components.filter((entry) => entry.recipe !== null).map((entry) => ({ kind: "component" as const, id: entry.id, recipe: entry.recipe!, postcondition: entry.postcondition! })),
-      ...model.processes.map((entry) => ({ kind: "process" as const, id: entry.id, recipe: entry.recipe, postcondition: entry.postcondition })),
+      ...model.components.filter((entry) => entry.recipe !== null).map((entry) => ({ kind: "component" as const, id: entry.id, recipe: entry.recipe!, postcondition: entry.postcondition!, sendsTo: entry.sendsTo })),
+      ...model.processes.map((entry) => ({ kind: "process" as const, id: entry.id, recipe: entry.recipe, postcondition: entry.postcondition, sendsTo: entry.sendsTo })),
     ];
     const browser = await launchBrowser();
     try {
@@ -367,26 +402,47 @@ export async function checkSite(runDir: string, options: { navigationDelayMs?: n
       await confirmLogin(browser);
       // The read requests of the model passed the validator above; a recipe that searches is replayed with them, as the sweep will.
       const env: Env = { ...(await replayEnv(browser, runDir, options.navigationDelayMs === undefined ? {} : { navigationDelayMs: options.navigationDelayMs })), reads: model.readRequests ?? [] };
+      const term = searchTermForRun(runDir);
       for (const entry of entries) {
         const recipe = recipes[entry.recipe]!;
         let reasonNl: string | null = null;
         let before = "";
         let after = "";
+        let sendsTo: SiteCheck["replays"][number]["sendsTo"];
         if (recipe.steps.length > MAX_RECIPE_STEPS) reasonNl = `het recept heeft ${recipe.steps.length} stappen, meer dan ${MAX_RECIPE_STEPS}; begin met een verse open en doe alleen wat nodig is`;
         else if (entry.kind === "blocker" && recipe.steps.some((step) => step.command === "goto")) reasonNl = "het recept van een blokkade gaat door naar een andere pagina; bewaar het direct na het sluiten, op de pagina waar je begon";
         else {
-          const replay = await replayFromClean(env, recipe, entry.postcondition);
-          await replay.surface?.context.close().catch(() => undefined);
-          reasonNl = replay.reasonNl;
-          before = replay.before?.detail ?? "";
-          after = replay.after?.detail ?? "";
+          // A part with sendsTo is replayed twice, and the addresses it opened or sent to have to fall under the pattern both times.
+          const seen: string[][] = [];
+          for (let round = 0; round < (entry.sendsTo ? 2 : 1); round++) {
+            const addresses: string[] = [];
+            seen.push(addresses);
+            const replay = await replayFromClean(env, recipe, entry.postcondition, {}, entry.sendsTo ? watchAddresses(addresses) : undefined);
+            // A part may connect a moment after the last step.
+            if (entry.sendsTo) await replay.surface?.page.waitForTimeout(500).catch(() => undefined);
+            await replay.surface?.context.close().catch(() => undefined);
+            reasonNl = replay.reasonNl;
+            before = replay.before?.detail ?? "";
+            after = replay.after?.detail ?? "";
+            if (reasonNl !== null) break;
+          }
+          if (entry.sendsTo && reasonNl === null) {
+            sendsTo = { pattern: entry.sendsTo, seen: seen.map((addresses) => sendsToCandidates(entry.sendsTo!, addresses)) };
+            const problem = sendsToReplayProblem(`${entry.kind} "${entry.id}"`, entry.sendsTo, seen);
+            if (problem !== null) problems.push(problem);
+          }
+        }
+        // Steps that ran but did not get there, in a recipe that searches: the postcondition may name the term of an earlier run.
+        if (reasonNl?.startsWith(POSTCONDITION_NOT_HELD_NL)) {
+          const literal = literalSearchTermNl(recipe.steps, entry.postcondition, term);
+          if (literal) reasonNl = `${reasonNl}. ${literal}`;
         }
         const onPageTypes = entry.kind === "component" && reasonNl === null && recipe.start ? await componentOnPageTypes(env, model, entry.id, { ...recipe, start: recipe.start }, entry.postcondition) : undefined;
-        replays.push({ kind: entry.kind, id: entry.id, recipe: entry.recipe, ok: reasonNl === null, reasonNl, before, after, ...(onPageTypes ? { onPageTypes } : {}) });
+        replays.push({ kind: entry.kind, id: entry.id, recipe: entry.recipe, ok: reasonNl === null, reasonNl, before, after, ...(onPageTypes ? { onPageTypes } : {}), ...(sendsTo ? { sendsTo } : {}) });
         if (reasonNl !== null) problems.push(`${entry.kind} "${entry.id}" (recept ${entry.recipe}): ${reasonNl}`);
         for (const row of onPageTypes ?? []) {
           if (row.reached || row.accepted) continue;
-          problems.push(`component "${entry.id}" (recept ${entry.recipe}): gaat op paginatype "${row.pageType}" (${row.url}) niet open in een staand venster van ${row.viewport.width} bij ${row.viewport.height}: ${row.reasonNl ?? "geen reden vastgelegd"}. ${notOpenedAdviceNl(row.reasonNl)}`);
+          problems.push(`component "${entry.id}" (recept ${entry.recipe}): gaat op paginatype "${row.pageType}" (${row.url}) niet open in een staand venster van ${row.viewport.width} bij ${row.viewport.height}: ${row.reasonNl ?? "geen reden vastgelegd"}. ${notOpenedAdviceNl(row.reasonNl)}${model.components.find((component) => component.id === entry.id)?.siteWide ? ' Het onderdeel heeft "pageTypes": "all"; staat het niet op elke pagina, geef dan de lijst van paginatypen waar het wel staat.' : ""}`);
         }
       }
       // Another search term has to stand in the text of the page the explorer named.
@@ -399,7 +455,7 @@ export async function checkSite(runDir: string, options: { navigationDelayMs?: n
         const { counted, problems: notCounted, widths } = await countOperables(env, model, recipes);
         const compared = uncoveredOperables(model, recipes, counted);
         hintsNl.push(...widthHints(model, recipes, widths));
-        await writeJson(join(runDir, OPERABLES_FILE), { note: "Wat check-site telde op de representatieve pagina van elk paginatype, met de blokkades gesloten: formulieren, losse bedieningsonderdelen en ingesloten vensters met iets om te bedienen, zonder gewone links. uncovered is wat geen recept van het sitemodel aanraakt. betweenWidths zegt per paginatype welke breedtes de stylesheets noemen en welke bedieningselementen alleen tussen 1280, 360 en 320 pixels in beeld staan, met de breedtes waarop.", pageTypes: counted, uncovered: compared.uncovered, betweenWidths: widths });
+        await writeJson(join(runDir, OPERABLES_FILE), { note: "Wat check-site telde op de representatieve pagina van elk paginatype, met de blokkades gesloten: formulieren, losse bedieningsonderdelen en ingesloten vensters met iets om te bedienen, zonder gewone links. uncovered is wat geen recept van het sitemodel aanraakt. betweenWidths zegt per paginatype welke breedtes de stylesheets noemen en welke bedieningselementen alleen tussen 1280, 360 en 320 pixels in beeld staan, met de breedtes waarop. looksOperable zegt per paginatype wat er bedienbaar lijkt (een klik- of drukluisteraar, een onclick, een cursor als handje) zonder rol en zonder Tab-stop, zoals een schuif van div's: dat telt niet mee in uncovered, want niets zegt wat het is, maar het staat wel op de pagina.", pageTypes: counted, uncovered: compared.uncovered, betweenWidths: widths });
         operables = { counted: compared.counted, uncovered: compared.uncovered.length };
         problems.push(...notCounted, ...compared.uncovered.map((entry) => entry.problemNl));
       }

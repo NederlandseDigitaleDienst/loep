@@ -15,7 +15,7 @@ De map `versies/` zegt per versie van loep wanneer die het laatst als geheel is 
 }
 ```
 
-`evaluate` leest het bestand van zijn eigen versie, en het rapport zet de zin onder "Betrouwbaarheid en beperkingen". Is er voor een versie geen bestand, dan staat er dat deze versie niet is vergeleken met het oordeel van een menselijke deskundige en niet als geheel is gemeten op de testsite. Schrijf het bestand alleen na een meting van de hele versie, niet na een meting van een paar criteria (`tasks --only`).
+`evaluate` leest het bestand van zijn eigen versie, en het rapport zet de zin onder "Betrouwbaarheid en beperkingen". Is er voor een versie geen bestand, dan staat er dat deze versie niet is vergeleken met het oordeel van een menselijke deskundige en niet als geheel is gemeten op de testsite. Schrijf het bestand alleen na een meting van de hele versie, niet na een meting van een paar criteria (`tasks --only`). `just release-prepare` weigert een versie zonder dit bestand, tenzij met `--unmeasured "<reden>"`; zie [CONTRIBUTING.md](../CONTRIBUTING.md#versies).
 
 De toolbox heet nu loep. De verslagen in deze map zijn geschreven toen ze nog opendeur heette en een commando in een sessie met `tg` begon; ze blijven staan zoals ze zijn.
 
@@ -63,7 +63,7 @@ De verslagen noemen de commit waarmee is gemeten. Tot en met 11 oktober 2026 is 
 | `failedOnlyInDocuments` | nee | Criteria die alleen op een pdf zijn afgekeurd. Die tellen niet mee |
 | `problemCount` | nee | Het aantal problemen dat het rapport zelf noemt |
 | `kind` | nee | `audit` (standaard) of `answer-key`. Bij een antwoordsleutel zijn de fouten met opzet ingebouwd, zoals op de testsite in `toolbox/fixtures/`. Een bevinding kan dan niet "niet meer aanwezig" of "buiten bereik" zijn |
-| `findings` | voor `compare --findings` | Eén rij per bevinding van het onderzoek |
+| `findings` | voor `compare --findings` | Eén rij per bevinding van het onderzoek. Een lege lijst mag alleen als `failed` en `failedOnlyInDocuments` ook leeg zijn: een referentie zonder gebreken, zoals de sleutel van de schone tweeling (`toolbox/fixtures/reference-berkenveen.json`). Dan deelt `compare --findings` elke bevinding van ons in als terecht, discutabel of onterecht. Ontbreekt `findings`, dan weigert `compare --findings` |
 
 Per bevinding:
 
@@ -99,7 +99,7 @@ LOEP compare --findings check --run RUN --round b
 LOEP compare --findings merge --run RUN --out validatie/<site>/<datum>-<ronde>
 ```
 
-1. `tasks` schrijft in `RUN/compare/` het invoerbestand `invoer.json` en twee opdrachten, `opdracht-a.md` en `opdracht-b.md`. De tekst komt uit `templates/vergelijk.md` en is voor beide gelijk.
+1. `tasks` schrijft in `RUN/compare/` het invoerbestand `invoer.json` en twee opdrachten, `opdracht-a.md` en `opdracht-b.md`. De tekst komt uit `templates/vergelijk.md` en is voor beide gelijk. Heeft de run opdrachten voor een deel van de criteria (`tasks --only`), dan komen alleen de bevindingen van de referentie onder die criteria in de invoer, of onder een van hun `alsoCriteria`, en telt de vergelijking per criterium alleen die criteria. `tasks` zegt hoeveel bevindingen zijn weggelaten, en `bevindingen.md` ook.
 2. Twee aparte agents krijgen elk één opdracht: "Lees het bestand `<pad>` en voer de opdracht daarin precies uit." Ze weten niet van elkaar. Elk schrijft een indeling (`a.json`, `b.json`) en draait zelf `check`. Een indeling telt pas als de controle slaagt; dan krijgt ze een stempel dat haar bindt aan de invoer en de opdracht.
 3. `merge` legt de twee indelingen naast elkaar en schrijft `bevindingen.md` en `bevindingen.json`. Waar A en B een andere klasse geven, telt de bevinding als "oneens". Dat is een eigen getal en wordt niet opgelost.
 

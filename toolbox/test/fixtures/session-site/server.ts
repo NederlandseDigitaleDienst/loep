@@ -67,6 +67,13 @@ function readFrames(socket: Duplex, onText: (text: string) => void): void {
   });
 }
 
+/** A text frame from the server to the page: never masked. */
+function textFrame(text: string): Buffer {
+  const payload = Buffer.from(text, "utf8");
+  const head = payload.length < 126 ? Buffer.from([0x81, payload.length]) : Buffer.from([0x81, 126, payload.length >> 8, payload.length & 0xff]);
+  return Buffer.concat([head, payload]);
+}
+
 /** Serve the fixture site. Port 0 picks a free port; a fixed port keeps URLs equal between two sweeps. */
 export async function startServer(port = 0): Promise<FixtureServer> {
   const requests: ReceivedRequest[] = [];
@@ -100,6 +107,16 @@ export async function startServer(port = 0): Promise<FixtureServer> {
       // The usual answer to a form: go and fetch the page that says how it went.
       if (path === "/submit-see-other") {
         response.writeHead(303, { location: "/elsewhere.html" }).end();
+        return;
+      }
+      // A form whose answer hands the page a token to send with the next form: a replay would hand over the token of another visit.
+      if (path === "/submit-token") {
+        response.writeHead(200, { "content-type": "text/html; charset=utf-8" }).end(`<!doctype html><html lang="nl"><head><meta charset="utf-8"><title>Stap 2 - Testsite sessie</title></head><body><main><h1>Stap 2</h1><form method="post" action="/submit-see-other"><input type="hidden" name="_token" value="${Date.now().toString(36)}"><button>Verder</button></form></main></body></html>`);
+        return;
+      }
+      // A form whose next page shows what the session holds, as a message kept for one page: without the cookie of the visitor that page is another.
+      if (path === "/submit-flash") {
+        response.writeHead(303, { location: "/flash.html" }).end();
         return;
       }
       // A form that only the server checks: the error message exists nowhere before submitting.
@@ -143,6 +160,12 @@ export async function startServer(port = 0): Promise<FixtureServer> {
       response.writeHead(200, { "content-type": "audio/wav", "content-length": wav.length, "accept-ranges": "none" }).end(wav);
       return;
     }
+    // The page after /submit-flash: what it says depends on the cookie of the visitor.
+    if (path === "/flash.html") {
+      const kept = /(?:^|;\s*)bericht=1/.test(request.headers.cookie ?? "");
+      response.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" }).end(`<!doctype html><html lang="nl"><head><meta charset="utf-8"><title>Melding - Testsite sessie</title></head><body><main><h1>Melding</h1>${kept ? '<p role="status">Uw bericht is ontvangen.</p>' : ""}</main></body></html>`);
+      return;
+    }
     // A page that never answers.
     if (path === "/slow") return;
     // A site that says the visitor asked too much, with ?retry=<seconds> as the time to wait.
@@ -181,7 +204,14 @@ export async function startServer(port = 0): Promise<FixtureServer> {
     note(request);
     const accept = createHash("sha1").update(`${request.headers["sec-websocket-key"]}258EAFA5-E914-47DA-95CA-C5AB0DC85B11`).digest("base64");
     socket.write(`HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: ${accept}\r\n\r\n`);
-    readFrames(socket, (text) => socketMessages.push(text));
+    readFrames(socket, (text) => {
+      socketMessages.push(text);
+      // A chat message gets an answer in two parts, as a chat answers: a receipt at once and the answer a moment later.
+      if (text.startsWith('{"type":"chat"')) {
+        setTimeout(() => socket.writable && socket.write(textFrame('{"type":"reply","text":"Ontvangen"}')), 50);
+        setTimeout(() => socket.writable && socket.write(textFrame('{"type":"reply","text":"Waarmee kan ik helpen?"}')), 200);
+      }
+    });
     socket.on("error", () => undefined);
   });
   // No host: the server answers on 127.0.0.1 and on localhost alike.

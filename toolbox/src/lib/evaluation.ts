@@ -1,12 +1,13 @@
 import type { Sample } from "../commands/sample.ts";
 import type { EvaluationDocuments } from "./documents.ts";
 import { sha256, stableId } from "./canonical.ts";
+import type { FindingCutout } from "./cutout.ts";
 import type { Defect, MergeRecord } from "./defects.ts";
 import type { Manifest } from "./manifest.ts";
 import type { RoleExtensions } from "./budget.ts";
 import { MODEL_UNKNOWN, type RoleModels } from "./models.ts";
 import type { RecordedVia } from "./recorded.ts";
-import { openPoint, shadowPartOf, vendorElementsIn, WITHIN_REACH, type Recommendation, type Finding, type Observation, type Outcome, type Verdict } from "./verdict.ts";
+import { openPoint, shadowPartOf, vendorElementsIn, WITHIN_REACH, type CrossLoop, type Recommendation, type Finding, type Observation, type Outcome, type Verdict } from "./verdict.ts";
 import { compareCriterionIds, CRITERIA, en301549Clause, GUIDELINES, PRINCIPLES, understandingUrl, type Criterion, type WcagVersion } from "./wcag.ts";
 
 /** "untested" means no verdict was reached at all; it is never rounded up to anything else. */
@@ -102,6 +103,12 @@ export interface ReportFinding extends Omit<Finding, "owner"> {
    * grouping findings by element needs no reading of prose.
    */
   targets?: { page: string; path: string[]; state: string | null }[];
+  /**
+   * Where the report cuts the picture of the finding from: a screenshot of the run, the rectangle
+   * and where the element lies in it (see `findingCutout`). Absent when the run has no picture
+   * with a bounding box of an element the finding cites.
+   */
+  cutout?: FindingCutout;
   /**
    * Whether the finding was seen a second time from a fresh page: by a verifier ("reproduced"),
    * or by the agent of the finishing round itself ("repeated"), after whom no verifier comes.
@@ -206,6 +213,12 @@ export interface CriterionResult {
    * report says so, and `feedback` drafts no issue, since it is no fault of loep. Absent otherwise.
    */
   outage?: true;
+  /**
+   * Candidates this criterion and another passed on to each other: looked at by both, and each
+   * said it belongs to the other. They leave neither criterion open; the report names them at both.
+   * Absent when there is none.
+   */
+  crossLoops?: CrossLoop[];
 }
 
 export const DROP_REASON_NL: Record<string, string> = {
@@ -375,8 +388,10 @@ export interface CriterionInput {
   answers?: PointAnswer[];
   procedure: CriterionResult["procedure"];
   provenance: CriterionResult["provenance"];
-  /** Open points about candidates other judges passed on to this criterion that no verdict of it ruled on (`unruledCrossPoints`). */
+  /** Open points about candidates other rounds passed on to this criterion that no verdict of it ruled on (`unruledCrossPoints`), also when it failed or is not in the run. */
   unruledNl?: string[];
+  /** Candidates this criterion and another passed on to each other (`crossLoops`): no open point, but kept with the criterion. */
+  loops?: CrossLoop[];
   /** A round of this criterion was given up on for a storing of the model, and no round after it gave a verdict. */
   outage?: boolean;
 }
@@ -428,9 +443,11 @@ export function resolveCriterion(input: CriterionInput, sitePrefix: string): Cri
   const byPerson = answered !== null && answered.outcome !== "cantTell";
   const reached: CriterionOutcome = byPerson ? answered.outcome : (final?.outcome ?? "untested");
   // A pass next to a candidate another criterion passed on and nobody ruled on is no pass: that place was not looked at.
-  // An open criterion keeps it among its points, so it does not read as one that only waits for a person.
-  const unruled = reached === "passed" || reached === "inapplicable" || reached === "cantTell" ? (input.unruledNl ?? []) : [];
-  const outcome: CriterionOutcome = unruled.length > 0 ? "cantTell" : reached;
+  // Every other outcome keeps it among its points: an open criterion so it does not read as one that only waits for a person,
+  // a failed one or one outside the run so the defect another round saw does not vanish from the report.
+  const unruled = input.unruledNl ?? [];
+  const undone = unruled.length > 0 && (reached === "passed" || reached === "inapplicable");
+  const outcome: CriterionOutcome = undone ? "cantTell" : reached;
   const beforeFinish = verified ?? verdicts.a;
   const byWatch = byPerson && answered.counted.every((answer) => answer.instrument === true);
   const established: Established | null = !final
@@ -501,7 +518,7 @@ export function resolveCriterion(input: CriterionInput, sitePrefix: string): Cri
     outcome,
     rule: final?.rule ?? null,
     // What a person established is said first: the summary of the agent was written while the question was open.
-    summaryNl: unruled.length > 0 && reached !== "cantTell"
+    summaryNl: undone
       ? `Niet vastgesteld: ${unruled.length === 1 ? "een waarneming die een andere beoordelaar doorgaf, is" : `${unruled.length} waarnemingen die een andere beoordelaar doorgaf, zijn`} door niemand beoordeeld. Het oordeel zonder die ${unruled.length === 1 ? "waarneming" : "waarnemingen"} was ${OUTCOME_LABEL[reached].toLowerCase()}: ${final!.summaryNl}`
       : byPerson
         ? `Een persoon heeft vastgesteld: ${OUTCOME_LABEL[outcome].toLowerCase()}. Dit is vastgesteld door een persoon, niet door een instrument. Het onderzoek zelf kwam niet verder dan: ${final!.summaryNl}`
@@ -521,6 +538,7 @@ export function resolveCriterion(input: CriterionInput, sitePrefix: string): Cri
     procedure: input.procedure,
     provenance: input.provenance,
     ...(input.outage && !byPerson ? { outage: true as const } : {}),
+    ...(input.loops && input.loops.length > 0 ? { crossLoops: input.loops } : {}),
   };
 }
 

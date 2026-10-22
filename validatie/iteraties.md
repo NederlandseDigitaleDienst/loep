@@ -287,3 +287,36 @@ Wat de meting laat zien:
 - Drie nieuwe afkeuringen op plekken die ook de vorige keer zijn onderzocht: 2.4.3 (een link in het zijmenu op een smal scherm verplaatst de focus niet), 2.4.11 (links in het zijmenu verdwijnen onderaan de pagina onder de voet) en 1.4.3. Dat een tweede meting op dezelfde inhoud andere dingen vindt, merkte het team ook bij de vorige meting op; hoe groot die spreiding is, is nog niet gemeten.
 
 Wat deze meting niet zegt. De 13 bevindingen zijn niet nagelopen tegen de broncode. De bevinding bij 1.4.3 gaat over witte letters in een plaatje dat van het register van toegankelijkheidsverklaringen komt; ze is gemeten met de versie van het instrument van vóór een herstel op dezelfde dag en is door de verificatie toegevoegd, dus één keer gezien. Of het plaatje een logo is en dan is uitgezonderd, is een keuze. De poort stuurde de run één keer terug voor de vaste zijkolom, die niets bedekt. Eén run.
+
+## Meting op 0.11.0, 20 en 21 oktober 2026
+
+Issue #184. De eerste meting van een uitgebrachte versie als geheel, en de eerste toets van twee stappen uit [het voorstel over verbruik](verbruik/README.md). Alle runs werkten op een kopie van één bevroren veegronde van de testsite Lindewaard (variant met 79 ingebouwde gebreken), gemaakt met tag `v0.11.0` (commit `6ad7e5c`), met versturen toegestaan. Opzet, stopregel en marge stonden in #184 voordat een variant draaide. De uitwerking, de vergelijkingen per run en de uitvoer van `compare-variants` staan in [testsite/2026-10-20-meting-0.11.0/](testsite/2026-10-20-meting-0.11.0/uitkomst.md).
+
+- Nulmeting: N1 en N2, `v0.11.0`, alle 56 criteria, zes agents tegelijk. 129 agents per run, geen uitval, geen afmaakronde, 2 uur 22 en 2 uur 50 minuten.
+- Variant K: #170, de opdracht in een kern en een naslag (commit `cb50690`). Variant S: rondgangen en verifieerders op Sonnet, beoordelaars op Opus. Beide op negen criteria (1.1.1, 1.3.1, 1.4.3, 1.4.11, 2.1.1, 2.4.3, 3.1.2, 3.3.1, 4.1.2), met 29 gebreken in de sleutel.
+- Marge, vastgelegd na de nulmeting: de standaard. Ondergrens van het verschil in gevonden gebreken boven -5 procentpunt, en minder dan één onterechte melding per run meer. De zorg was een spreiding waarbij een vijfde van de gebreken per run wisselt; gemeten is één wisselend gebrek op 79.
+
+| | N1 | N2 | K (2 runs) | S (3 runs) |
+|---|---|---|---|---|
+| Criteria met dezelfde uitkomst in alle runs | 56 van 56 | | 9 van 9 | 9 van 9 |
+| Criteria terecht afgekeurd (van 51) | 50 | 50 | | |
+| Criteria ten onrechte goedgekeurd | 1 (1.4.12, zie hieronder) | 1 (1.4.12) | 0 | 0 |
+| Criteria "kan niet bepalen" | 0 | 0 | 0 | 0 |
+| Gebreken gevonden, van 79 | 77 | 78 | | |
+| Gebreken gevonden per run, op 9 criteria (van 29) | 28 | 29 | 98,3% | 97,7% |
+| Meldingen zonder tegenhanger per run, op 9 criteria | 4,0 gemiddeld | | 3,0 | 2,3 |
+| Eigen bevindingen onterecht volgens beide vergelijkers | 0 | 0 | 0 | 0 |
+| Niet slechter dan de nulmeting | | | ja, gestopt na ronde 2 | niet aangetoond: verschil -0,6 procentpunt (-5,2 tot +4,0) |
+| Kosten per run, rondgangen en de 9 criteria | 88,52 dollar | 90,32 dollar | 89,20 dollar gemiddeld | 58,65 dollar gemiddeld |
+
+De kosten komen uit de transcripts, met de prijzen van de API van 19 oktober 2026: alleen rondgangen, stand-agent en de beoordelaars en verifieerders van de negen criteria, bij N1 en N2 dus 9 van de 56.
+
+Wat eruit kwam:
+
+- Op de testsite is loep 0.11.0 zeer herhaalbaar: dezelfde uitkomst bij alle 56 criteria, en bij 77 van de 79 gebreken dezelfde uitkomst in beide runs. Ook de afwijking van de sleutel herhaalt zich: 1.4.12 is in beide runs goedgekeurd terwijl de sleutel het afkeurt. Dat ligt voor een deel aan de sleutel. Met de tekstafstand loopt de tegel 10 pixels over, maar dat is vooral regelhoogte en padding; van de letters valt maar 1 pixel weg. Het oordeel "nog leesbaar" was dus verdedigbaar. De 77 en 78 van 79 en het ene ten onrechte goedgekeurde criterium zijn met die kanttekening te lezen. #238 gaat nu over een preciezere meting (verdwijnt er tekst of alleen ruimte), #218 over het herstel van de testsite.
+- Tegen versie 2 van 10 oktober: gevonden gebreken van 71 naar 77 en 78, terecht afgekeurde criteria van 46 naar 50, open criteria van 7 naar 0. Ten onrechte goedgekeurd van 0 naar 1.
+- K is niet slechter en bespaart niets: de beoordelaars nemen meer beurten en lezen meer uit de cache. #170 en #135 zijn gesloten.
+- S is 34% goedkoper, maar "niet slechter" is niet aangetoond: de ondergrens van het interval ligt net onder de marge. Twee keer kwam een gebrek dat de nulmeting steeds vond, niet of deels in het oordeel, beide keren passend bij een rondgang op Sonnet die een kandidaat niet doorgeeft. Rondgangen en verifieerders gaan niet samen naar Sonnet. Een vervolgmeting met alleen de verifieerders op Sonnet zou in deze samenstelling 15% schelen.
+- De open punten gaan in alle runs over dezelfde twee onderdelen, een fotoserie die alleen met vegen werkt en een schuif die alleen met slepen werkt (#240). Een gebrek dat een beoordelaar naar een ander criterium doorschuift, komt daar niet altijd aan (#239).
+
+Wat deze meting niet zegt. De uitkomst is gemeten tegen de sleutel van de eigen testsite, niet tegen het oordeel van een menselijke deskundige, en de testsite is makkelijker dan een echte site. Alle runs deelden één veegronde, dus de spreiding van de veegronde zelf is niet gemeten. De schone variant is niet gedraaid. Op de negen criteria is elke uitkomst "voldoet niet", dus de toets op criteriumniveau maakt daar geen onderscheid. Twee runs van de nulmeting.

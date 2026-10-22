@@ -30,6 +30,8 @@
   acc
 })
 #let measured-states = evaluation.at("measuredStates", default: (:))
+// Per finding a piece of a screenshot of the run, made by render; absent when the run had no picture with the element's box.
+#let cutouts = derived.at("cutouts", default: (:))
 #let sample-items = evaluation.sample.items
 #let page-labels = derived.pageLabels
 // The documents of the sample; none when the site has no documents.
@@ -47,8 +49,8 @@
 
 // ---------------------------------------------------------------- identity
 
-#let sans = ("Atkinson Hyperlegible Next", "DejaVu Sans Mono")
-#let mono-font = ("Atkinson Hyperlegible Mono", "DejaVu Sans Mono")
+#let sans = ("Atkinson Hyperlegible Next", "DejaVu Sans Mono", "Noto Emoji")
+#let mono-font = ("Atkinson Hyperlegible Mono", "DejaVu Sans Mono", "Noto Emoji")
 
 #let ink = rgb("#17171c")
 #let accent = rgb("#4630b8")
@@ -202,6 +204,17 @@
 #let document-title = t.title + " " + site.name + if short { ", " + t.shortVersion } else { "" }
 // A link to the entry of a criterion in appendix A; in the short report only the words.
 #let appendix-link(id, body) = if short { body } else { link(label("bijlage-" + id), body) }
+// Text no bundled font can show stops PDF/UA-1. The toolbox then compiles again with that
+// text in `unshown` (see typst.ts), and it is set as its code points.
+#show: body => {
+  let unshown = sys.inputs.at("unshown", default: none)
+  if unshown == none { return body }
+  show regex(unshown): it => "[" + it.text.codepoints().map(c => {
+    let hex = upper(str(c.to-unicode(), base: 16))
+    "U+" + "0" * calc.max(0, 4 - hex.len()) + hex
+  }).join(" ") + "]"
+  body
+}
 #set document(
   title: document-title,
   author: or-none(site.organisation, "loep"),
@@ -897,6 +910,14 @@
 #let version-note(criterion) = if "2.2" not in criterion.versions { "Alleen in WCAG 2.1" } else if "2.1" not in criterion.versions { "Nieuw in WCAG 2.2" } else { none }
 #let round-label(outcome) = if outcome == none { text(fill: muted, "Geen oordeel") } else { badge(outcome, weight: 400) }
 
+// The piece of a screenshot with the element of the finding outlined, at half a point per pixel; nothing when there is none.
+#let cutout-of(finding) = {
+  let cut = cutouts.at(finding.id, default: none)
+  if cut != none {
+    block(above: 9pt, below: 2pt, breakable: false, image(cut.path, alt: cut.altNl, width: calc.min(cut.width * 0.5, 400) * 1pt))
+  }
+}
+
 // A finding whose defect is filed under another criterion: the same facts as a full card, set closer together.
 #let compact-card(finding, place, lead: none) = {
   let defect = defect-by-id.at(place.defectId)
@@ -930,6 +951,7 @@
         ).filter(word => word != none)
         part("Waar", [#location.page #page-title.at(location.page, default: ""): #if words.len() > 0 [#words.join(", "), ]#where-text(location.where)])
       }
+      cutout-of(finding)
     })
   }, limit: 95mm, above: if lead != none { 14pt } else { 10pt })
 }
@@ -962,6 +984,7 @@
         if check != none [ #h(10pt) #eyebrow(t.defect.check) #chain.verification.at(check.status)]
       }
     })
+    cutout-of(finding)
     keep(limit: 110mm, grid(
       columns: (1fr, 1fr),
       column-gutter: 8mm,
@@ -1225,8 +1248,15 @@
   // A criterion without a block in the main part has its fixed facts here.
   if criterion.id in derived.quiet { block(sticky: true, par(text(fill: muted, criterion-facts(criterion)))) }
   for (index, observation) in criterion.observations.enumerate() {
+    // What the place came to stands first, in words; a place from before verdicts said so has none.
+    let place = derived.briefs.at(criterion.id).placesNl.at(index, default: none)
     block(above: 7pt, below: 7pt, stroke: (left: 1.2pt + hairline), inset: (left: 6pt), {
-      par[#label-text[#(index + 1). Onderzocht:] #prose(observation.checkedNl)]
+      if place != none {
+        par[#label-text[#(index + 1). #t.ruling.outcome:] #place.labelNl#if place.findingId != none [, #t.ruling.seeFinding #link(label(place.findingId), id-text(place.findingId, size: 0.95em))]]
+        par[#label-text[Onderzocht:] #prose(observation.checkedNl)]
+      } else {
+        par[#label-text[#(index + 1). Onderzocht:] #prose(observation.checkedNl)]
+      }
       par[#label-text[Hoe:] #prose(observation.howNl)]
       par[#label-text[Waargenomen:] #prose(observation.observedNl)]
       par[#label-text[Bewijs:] #observation.evidence.map(reference => mono(reference, size: 7.4pt)).join(", ")]
@@ -1245,6 +1275,10 @@
   if criterion.droppedNl.len() > 0 {
     par(label-text[#chain.droppedLabel:])
     plain-list(criterion.droppedNl)
+  }
+  if derived.briefs.at(criterion.id).loopsNl.len() > 0 {
+    par(label-text[#t.loops:])
+    plain-list(derived.briefs.at(criterion.id).loopsNl)
   }
   par({
     label-text[Grondslag: ]

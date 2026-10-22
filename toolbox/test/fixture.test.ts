@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { extname, join, relative } from "node:path";
 import { after, before, describe, test } from "node:test";
@@ -10,7 +10,11 @@ import { ACCOUNT_PAGES, PAGES, SITES, staleOutput } from "../fixtures/build.ts";
 import { CRITERIA_EXPECTED, DEFECTS, TRAPS } from "../fixtures/defects.ts";
 import { startFixture, type FixtureServer } from "../fixtures/serve.ts";
 import type { ReferenceAudit } from "../src/commands/compare.ts";
+import { DECLARED_ORIGIN, readHttpRecordings, RECORD_QUIET_MS } from "../src/lib/recordings.ts";
 import { CRITERIA } from "../src/lib/wcag.ts";
+import { decideWrites, recordWrites, writeBudget, type WritePermission } from "../src/lib/writes.ts";
+import { DEFAULT_DAEMON_LIMITS, Politeness, scopeForRun, TEST_VALUES } from "../src/session/safety.ts";
+import { openSurface } from "../src/session/surface.ts";
 
 const FIXTURES = fileURLToPath(new URL("../fixtures/", import.meta.url));
 const SERVED = join(FIXTURES, "sites");
@@ -185,7 +189,7 @@ describe("fixture server", () => {
       assert.ok(!(await (await get("/sitemap.xml")).text()).includes("/mijn/"));
       // A wrong password is answered as every form is; it opens nothing.
       const wrong = await logIn("iets-anders");
-      assert.deepEqual([wrong.status, wrong.headers.get("set-cookie")], [200, null]);
+      assert.deepEqual([wrong.status, wrong.headers.get("location"), wrong.headers.get("set-cookie")], [303, "/bedankt.html", null]);
       const entered = await logIn(ACCOUNT.password);
       assert.deepEqual([entered.status, entered.headers.get("location")], [303, "/mijn/"]);
       const cookie = entered.headers.get("set-cookie")!.split(";")[0]!;
@@ -235,5 +239,77 @@ describe("fixture server", () => {
     assert.equal(writes.length, expected);
     assert.deepEqual({ site: writes[0]!.site, kind: writes[0]!.kind, method: writes[0]!.method, path: writes[0]!.path, body: writes[0]!.body }, { site: "defect", kind: "request", method: "POST", path: "/contact/verzenden", body: "naam=x" });
     if (browser) assert.deepEqual({ site: writes[1]!.site, kind: writes[1]!.kind, body: writes[1]!.body }, { site: "clean", kind: "ws-message", body: '{"bericht":"Hallo"}' });
+  });
+
+  test("the chat opens its socket with a token of letters per connection, and a message sent before is played on the next connection", async (context) => {
+    if (!browser) return context.skip("no browser available");
+    const dir = mkdtempSync(join(tmpdir(), "fixture-chat-replay-"));
+    const origin = fixture.origins.clean;
+    const permission: WritePermission = { ...decideWrites(`${origin}/`, { allowWrites: true })!, maxWrites: 5, spacingSeconds: 0 };
+    await recordWrites(dir, permission);
+    const before = fixture.writes().length;
+    try {
+      const env = { browser, runDir: dir, scope: await scopeForRun(dir, { scopeUrl: `${origin}/` }), limits: DEFAULT_DAEMON_LIMITS, politeness: new Politeness(0) };
+      const sockets: string[] = [];
+      const replayed: string[] = [];
+      for (let round = 0; round < 2; round++) {
+        const { surface } = await openSurface(env, { url: `${origin}/afval.html`, width: 1280, height: 800, scheme: "light" });
+        await surface.page.getByRole("button", { name: "Weigeren" }).click();
+        await surface.page.getByRole("button", { name: "Chat met ons" }).click();
+        await surface.page.getByText("Welkom bij de chat").waitFor();
+        await surface.page.getByLabel("Uw bericht").fill(TEST_VALUES.text!);
+        await surface.page.getByRole("button", { name: "Verstuur" }).click();
+        await surface.page.getByText("Bedankt voor uw bericht").waitFor();
+        // Quiet long enough after the answer for the recording to count as whole when the page closes.
+        if (round === 0) await surface.page.waitForTimeout(RECORD_QUIET_MS + 500);
+        sockets.push(...(surface.guard.sockets ?? []));
+        replayed.push(...(surface.guard.replays ?? []).map((entry) => entry.matchedOn));
+        await surface.context.close();
+      }
+      assert.equal(sockets.length, 2);
+      for (const socket of sockets) assert.match(socket, /\/ws\/chat\/[A-Za-z]{16}$/);
+      assert.notEqual(sockets[0], sockets[1], "each connection has a token of its own");
+      // The second connection, with another token, got the recording: the server heard the message once, and the budget counts one.
+      assert.deepEqual(replayed, [DECLARED_ORIGIN]);
+      assert.equal(fixture.writes().slice(before).filter((entry) => entry.kind === "ws-message").length, 1);
+      assert.equal(writeBudget(dir, permission).sent, 1);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("the contact form is sent over HTTP and sends the browser on to the thank-you page; sent again the same way, it is answered from the recording", async (context) => {
+    if (!browser) return context.skip("no browser available");
+    const dir = mkdtempSync(join(tmpdir(), "fixture-form-replay-"));
+    const origin = fixture.origins.clean;
+    const permission: WritePermission = { ...decideWrites(`${origin}/`, { allowWrites: true })!, maxWrites: 5, spacingSeconds: 0 };
+    await recordWrites(dir, permission);
+    const before = fixture.writes().length;
+    try {
+      const env = { browser, runDir: dir, scope: await scopeForRun(dir, { scopeUrl: `${origin}/` }), limits: DEFAULT_DAEMON_LIMITS, politeness: new Politeness(0) };
+      const replayed: string[] = [];
+      for (let round = 0; round < 2; round++) {
+        const { surface } = await openSurface(env, { url: `${origin}/contact.html`, width: 1280, height: 800, scheme: "light" });
+        const page = surface.page;
+        await page.getByRole("button", { name: "Weigeren" }).click();
+        await page.locator("#contactformulier #naam").fill(TEST_VALUES.name!);
+        await page.locator("#contactformulier #email").fill(TEST_VALUES.email!);
+        await page.locator("#contactformulier #bericht").fill(TEST_VALUES.text!);
+        await Promise.all([page.waitForURL("**/bedankt.html"), page.getByRole("button", { name: "Bericht versturen" }).click()]);
+        assert.equal(await page.getByRole("heading", { level: 1 }).textContent(), "Bedankt", `round ${round}`);
+        // The answer is recorded once the browser landed; the page stays open until then.
+        for (let tries = 0; round === 0 && tries < 100 && readHttpRecordings(dir).length === 0; tries++) await page.waitForTimeout(50);
+        replayed.push(...(surface.guard.replays ?? []).map((entry) => `${entry.method} ${entry.path}`));
+        await surface.context.close();
+      }
+      const [recording] = readHttpRecordings(dir);
+      assert.equal(recording!.answer.status, 303);
+      assert.deepEqual(recording!.chain, [{ url: `${origin}/bedankt.html`, status: 200 }]);
+      assert.deepEqual(replayed, ["POST /contact/verzenden"]);
+      assert.equal(fixture.writes().slice(before).filter((entry) => entry.kind === "request").length, 1, "the server got the form once");
+      assert.equal(writeBudget(dir, permission).sent, 1);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

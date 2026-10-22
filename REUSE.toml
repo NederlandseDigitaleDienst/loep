@@ -47,6 +47,8 @@ path = [
   "toolbox/test/fixtures/**.odt",
   "toolbox/test/fixtures/**.pptx",
   "toolbox/test/fixtures/**.xlsx",
+  "toolbox/test/fixtures/**.jsonl",
+  "toolbox/test/fixtures/**.zip",
 ]
 SPDX-FileCopyrightText = "Staat der Nederlanden (Ministerie van Economische Zaken en Klimaat)"
 SPDX-License-Identifier = "EUPL-1.2"
@@ -68,6 +70,16 @@ SPDX-License-Identifier = "OFL-1.1"
 path = ["templates/fonts/AtkinsonHyperlegibleMono-*.otf", "templates/fonts/OFL-AtkinsonHyperlegibleMono.txt"]
 precedence = "override"
 SPDX-FileCopyrightText = "The Atkinson Hyperlegible Mono Project Authors (https://github.com/googlefonts/atkinson-hyperlegible-next-mono)"
+SPDX-License-Identifier = "OFL-1.1"
+
+# Noto Emoji, zwart-wit, voor emoji in tekst van de site. Gemaakt uit
+# ofl/notoemoji/NotoEmoji[wght].ttf van google/fonts, commit b979dba422e445492b0eb9951ac52ee0b4d648c3,
+# met `fonttools varLib.instancer NotoEmoji[wght].ttf wght=400` (fonttools 4.60.1):
+# typst 0.14 kent geen variabele lettertypes.
+[[annotations]]
+path = ["templates/fonts/NotoEmoji-Regular.ttf", "templates/fonts/OFL-NotoEmoji.txt"]
+precedence = "override"
+SPDX-FileCopyrightText = "2013 Google LLC"
 SPDX-License-Identifier = "OFL-1.1"
 
 # De titels van de succescriteria zijn letterlijk overgenomen uit de

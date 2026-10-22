@@ -1,19 +1,19 @@
 import { existsSync, readFileSync } from "node:fs";
-import { rm } from "node:fs/promises";
+import { mkdir, rename, rm } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
 import { PNG } from "pngjs";
 import { readJson, sha256, sha256File, writeFileAtomic, writeJson } from "../lib/canonical.ts";
 import { startedDownload } from "../lib/documents.ts";
 import { enginesWithoutResult, type EngineRun } from "../lib/engines.ts";
 import { expectedFocusable, pageCoverage, reachedByKeyboard, representativePages, stateCoverage } from "../lib/extractors.ts";
-import { type Manifest, stepStart, writeManifest } from "../lib/manifest.ts";
+import { type Manifest, type ManifestStep, stepStart, writeManifest } from "../lib/manifest.ts";
 import { readTemplate } from "../lib/templates.ts";
 import { makeWorkDir } from "../lib/workdir.ts";
 import { notFoundProbes, siteHosts, siteLabel } from "../lib/origins.ts";
 import { uncoveredOperables, type CountedPage } from "../lib/operables.ts";
 import { loadRun, type PageData, type RunData } from "../lib/rundata.ts";
-import { acceptedGapFor, frameAddress, frameEntry, frameStanding, NOT_OPENED_ON_PAGE_TYPE, notOpenedAdviceNl, type AcceptedGapDecider, type Component } from "../lib/sitemodel.ts";
-import { refusedRunNl } from "../session/blockade.ts";
+import { acceptedGapFor, frameAddress, frameEntry, frameStanding, NOT_OPENED_ON_PAGE_TYPE, notOpenedAdviceNl, pageTypeOf, type AcceptedGapDecider, type Component } from "../lib/sitemodel.ts";
+import { isLasting, refusedRunNl } from "../session/blockade.ts";
 import { drawMarks } from "../session/marks.ts";
 import { coversContent, type Overlay } from "../session/recipe.ts";
 
@@ -21,7 +21,8 @@ import { coversContent, type Overlay } from "../session/recipe.ts";
  * The evidence gate: is what the sweep collected good enough to judge a site on? First
  * fixed checks on the numbers, then an agent that looks at one sheet of pictures per page
  * type and answers a fixed list of questions. A run that does not pass goes back to the
- * explorer with the gaps; it does not go on to the judging.
+ * explorer with the gaps, or, when a new sweep can close them, to the sweep; it does not go
+ * on to the judging.
  */
 
 /** A page counts for the Tab check when it has at least this many links and controls. */
@@ -36,6 +37,8 @@ export const MAX_OVERLAY_SHARE = 0.15;
 export const OVERLAY_PAGE_SHARE = 0.5;
 /** How often an insufficient run may go back to the explorer. */
 export const MAX_RETURNS_TO_EXPLORER = 2;
+/** How often the sweep may run again after one round of the explorer before what it still could not measure goes to the explorer. */
+export const MAX_RESWEEPS = 2;
 /** How many sheets one reviewing agent gets. Every page type has a sheet; a site with more page types than this gets more than one task, each with answers of its own. */
 export const SHEETS_PER_TASK = 8;
 /** A walk whose stops all lie in one block, on a page with at least twice as many visible links and controls, never got out of that block. */
@@ -54,6 +57,8 @@ export interface Gap {
   /** What is missing, in Dutch: this is what the explorer reads. */
   missingNl: string;
   measured?: Record<string, unknown>;
+  /** Who can close it: "sweep" when running the sweep again can (a measurement failed, timed out or is missing), "explorer" otherwise. Absent in a gate.json from before this was asked. */
+  fixedBy?: "sweep" | "explorer";
 }
 
 export interface Check {
@@ -80,6 +85,10 @@ export interface Sheet {
   sha256: string;
   tiles: Tile[];
   componentsNl: string[];
+  /** Components the site model has on every page (`"pageTypes": "all"`), named apart so a reviewer does not take them for missing. Absent when there are none. */
+  everywhereNl?: string[];
+  /** The processes of the site model that belong to this page type. Absent in older runs. */
+  processesNl?: string[];
   /** Players and self-moving content the site model names for this page type. */
   contentNl?: string[];
   /** The embedded windows on this page that the site model classifies under `frames`, of whatever class. */
@@ -90,11 +99,20 @@ export interface Sheet {
 
 export interface Gate {
   sufficient: boolean;
-  /** deterministic: the fixed checks already found gaps. review-pending: they did not, and the pictures have not been judged yet. complete: both were done. */
+  /**
+   * deterministic: the fixed checks found gaps the review does not wait for, because a new sweep has to close them first or no
+   * return to the explorer is left. review-pending: the pictures have not been judged yet; gaps of the fixed checks that only the
+   * explorer can close may be open, so that a return hands him every gap at once. complete: both were done.
+   */
   stage: "deterministic" | "review-pending" | "complete";
+  /** What comes next: on to the tasks, the review of the pictures, the sweep again, back to the explorer, or no evaluation. Absent in a gate.json from before this was asked. */
+  next?: "proceed" | "review" | "sweep" | "explore" | "stop";
   /** How many times the explorer has been given a task for this run, and how often the run may still go back. */
   exploreRound: number;
   returnsLeft: number;
+  /** How many times collect ran again since the last task for the explorer, and how often a gap the sweep can close may still send the run back to the sweep. */
+  resweeps?: number;
+  resweepsLeft?: number;
   hasSiteModel: boolean;
   thresholds: Record<string, number>;
   checks: Check[];
@@ -121,9 +139,24 @@ export interface Gate {
   };
 }
 
-const THRESHOLDS = { MIN_FOCUSABLE_FOR_SHARE, MIN_TAB_REACH, MIN_COMPONENTS_OPENED, MAX_OVERLAY_SHARE, OVERLAY_PAGE_SHARE, MAX_RETURNS_TO_EXPLORER };
+const THRESHOLDS = { MIN_FOCUSABLE_FOR_SHARE, MIN_TAB_REACH, MIN_COMPONENTS_OPENED, MAX_OVERLAY_SHARE, OVERLAY_PAGE_SHARE, MAX_RETURNS_TO_EXPLORER, MAX_RESWEEPS };
 const percent = (share: number): string => `${Math.round(share * 100)}%`;
 const where = (element: { path: string[] }): string => element.path.join(" >>> ");
+
+/** What a reason says when the browser or the machine failed the measurement, not the site model: a crash, a time limit, a page that gave no answer. */
+const MEASUREMENT_FAILED = /geen antwoord binnen \d+ seconden|crash|Timeout \d+ ?ms exceeded|has been closed/i;
+
+/**
+ * What a reason says when the site model failed: a step of a recipe that did not work (runSteps and replayRecipe write
+ * "stap <n> (<command>) " before the error of the browser, so a click that times out under an overlay looks like a time limit),
+ * or a state the explorer could not open. These go to the explorer whatever error follows.
+ */
+const MODEL_FAILED = /^\s*(?:stap \d+ \(|de verkenner kon\b)/i;
+
+/** "sweep" when a new sweep can close a gap with this reason. */
+export function fixedByReason(reasonNl: string | null | undefined): "sweep" | "explorer" {
+  return reasonNl && !MODEL_FAILED.test(reasonNl) && MEASUREMENT_FAILED.test(reasonNl) ? "sweep" : "explorer";
+}
 
 const plain = (text: string): string => ` ${text.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim()} `;
 
@@ -193,7 +226,7 @@ export function gateChecks(run: RunData): { checks: Check[]; gaps: Gap[]; warnin
     "pages-loaded",
     [
       ...failed.map((page) => ({ check: "pages-loaded", ...on(page), state: "default", missingNl: `De pagina gaf bij het laden ${page.item.status === null ? "geen antwoord" : `status ${page.item.status}`}. Wat is vastgelegd, is een foutpagina.`, measured: { status: page.item.status } })),
-      ...(run.collectFailed ?? []).map((entry) => ({ check: "pages-loaded", page: entry.label, url: entry.item.url, state: "default", missingNl: `De veegronde kon deze pagina ook bij een tweede poging niet meten (${entry.error.slice(0, 160)}). Er is geen bewijs van deze pagina; draai collect opnieuw voor deze pagina.`, measured: { collectError: entry.error } })),
+      ...(run.collectFailed ?? []).map((entry) => ({ check: "pages-loaded", page: entry.label, url: entry.item.url, state: "default", missingNl: `De veegronde kon deze pagina ook bij een tweede poging niet meten (${entry.error.slice(0, 160)}). Er is geen bewijs van deze pagina; draai collect opnieuw voor deze pagina.`, measured: { collectError: entry.error }, fixedBy: "sweep" as const })),
       ...run.inventory.skipped.filter((entry) => entry.reason.startsWith("failed to load") && !startedDownload(entry.reason)).map((entry) => ({ check: "pages-loaded", page: null, url: entry.url, state: "default", missingNl: `De pagina laadde niet tijdens de inventaris en is niet onderzocht (${entry.reason.slice(0, 120)}).` })),
     ],
     `${run.pages.length} pagina's geladen`,
@@ -201,7 +234,7 @@ export function gateChecks(run: RunData): { checks: Check[]; gaps: Gap[]; warnin
   // An origin that refused the evaluation for the rest of the run: what the sweep had to measure after that is missing.
   add(
     "site-answered",
-    (run.blockades ?? []).filter((entry) => entry.until === null).map((entry) => ({ check: "site-answered", page: null, url: entry.url, state: "default", missingNl: refusedRunNl(entry), measured: { origin: entry.origin, reason: entry.reason, at: entry.at } })),
+    (run.blockades ?? []).filter(isLasting).map((entry) => ({ check: "site-answered", page: null, url: entry.url, state: "default", missingNl: refusedRunNl(entry), measured: { origin: entry.origin, reason: entry.reason, at: entry.at } })),
     "geen origin heeft verzoeken van het onderzoek geweigerd",
   );
   // Left under skipped by an inventory from before such downloads were counted as documents, or on an origin outside the run.
@@ -255,9 +288,9 @@ export function gateChecks(run: RunData): { checks: Check[]; gaps: Gap[]; warnin
     const missing = Object.entries(pageCoverage(page, run))
       .filter(([name, there]) => !there && (model !== null || name !== "tabWalkWithFocusNarrow") && name !== "blockersClosed" && name !== "interactionProbe" && !name.startsWith("contrast"))
       .map(([name]) => name);
-    if (missing.length > 0) coverageGaps.push({ check: "coverage", ...on(page), state: "default", missingNl: `Voor deze pagina ontbreken metingen van de veegronde: ${missing.join(", ")}. Draai collect opnieuw.`, measured: { missing } });
+    if (missing.length > 0) coverageGaps.push({ check: "coverage", ...on(page), state: "default", missingNl: `Voor deze pagina ontbreken metingen van de veegronde: ${missing.join(", ")}. Draai collect opnieuw.`, measured: { missing }, fixedBy: "sweep" });
     const withoutContrast = Object.entries(pageCoverage(page, run)).filter(([name, there]) => !there && name.startsWith("contrast")).map(([name]) => name);
-    if (run.contrast && withoutContrast.length > 0) coverageGaps.push({ check: "coverage", ...on(page), state: "default", missingNl: `Voor deze pagina ontbreekt de contrastmeting in licht of donker, in het standaardvenster of op 320 pixels breed (${withoutContrast.join(", ")}). Draai contrast opnieuw.`, measured: { missing: withoutContrast } });
+    if (run.contrast && withoutContrast.length > 0) coverageGaps.push({ check: "coverage", ...on(page), state: "default", missingNl: `Voor deze pagina ontbreekt de contrastmeting in licht of donker, in het standaardvenster of op 320 pixels breed (${withoutContrast.join(", ")}). Draai contrast opnieuw.`, measured: { missing: withoutContrast }, fixedBy: "sweep" });
   }
   for (const state of run.siteStates?.states ?? []) {
     if (!state.reached) continue;
@@ -265,10 +298,10 @@ export function gateChecks(run: RunData): { checks: Check[]; gaps: Gap[]; warnin
     const triedInVain = (name: string): boolean => (state.variantsNotReached ?? []).some((entry) => name.startsWith(entry.variant));
     const owed = Object.entries(stateCoverage(state, run)).filter(([name, there]) => !there && name !== "singleKeys" && !triedInVain(name)).map(([name]) => name);
     const missing = [...["screenshot", "engines", "facts", "tabwalk"].filter((name) => !state.files[name]), ...owed.filter((name) => name !== "visibleTextAndNames")];
-    if (missing.length > 0) coverageGaps.push({ check: "coverage", page: null, url: state.url, state: state.id, missingNl: `In deze toestand ontbreken metingen: ${missing.join(", ")}. Draai collect opnieuw.`, measured: { missing } });
+    if (missing.length > 0) coverageGaps.push({ check: "coverage", page: null, url: state.url, state: state.id, missingNl: `In deze toestand ontbreken metingen: ${missing.join(", ")}. Draai collect opnieuw.`, measured: { missing }, fixedBy: "sweep" });
     // A component that did not open on one of its page types: the recipe or the postcondition does not hold there, or the component is not on
     // that page type. Either way the model is wrong for that page type, so it goes back to the explorer, who can also accept it as how the site is.
-    for (const row of (state.perPageType ?? []).filter((entry) => !entry.reached)) coverageGaps.push({ check: NOT_OPENED_ON_PAGE_TYPE, page: run.pages.find((page) => page.item.url === row.url)?.label ?? null, url: row.url, state: state.id, component: state.modelId, missingNl: `Het onderdeel ging op het paginatype "${row.pageType}" niet open in een staand venster: ${row.reasonNl ?? "geen reden vastgelegd"}. Voor dat paginatype is het geopende onderdeel niet vastgelegd. ${notOpenedAdviceNl(row.reasonNl)}` });
+    for (const row of (state.perPageType ?? []).filter((entry) => !entry.reached)) coverageGaps.push({ check: NOT_OPENED_ON_PAGE_TYPE, page: run.pages.find((page) => page.item.url === row.url)?.label ?? null, url: row.url, state: state.id, component: state.modelId, missingNl: `Het onderdeel ging op het paginatype "${row.pageType}" niet open in een staand venster: ${row.reasonNl ?? "geen reden vastgelegd"}. Voor dat paginatype is het geopende onderdeel niet vastgelegd. ${notOpenedAdviceNl(row.reasonNl)}`, fixedBy: fixedByReason(row.reasonNl) });
     for (const entry of state.variantsNotReached ?? []) warnings.push({ check: "state-not-reopened", page: null, url: state.url, state: state.id, missingNl: `De toestand ging geen tweede keer open voor ${entry.variant}: ${entry.reasonNl ?? "geen reden vastgelegd"}. Die meting ontbreekt voor deze toestand.` });
   }
   // The Tab walk in the narrow window, next to what there is to reach there. A warning: the walk in the default window decides whether the evidence is enough.
@@ -283,7 +316,7 @@ export function gateChecks(run: RunData): { checks: Check[]; gaps: Gap[]; warnin
   // The single keys in the states of the model belong to the interaction probe.
   if (model && run.siteStates && run.states) {
     const inStates = run.states.singleKeys?.states;
-    if (inStates === undefined) coverageGaps.push({ check: "coverage", page: null, url: null, state: "default", missingNl: "De toetsenproef is niet gedaan in de toestanden van het sitemodel. Draai states opnieuw." });
+    if (inStates === undefined) coverageGaps.push({ check: "coverage", page: null, url: null, state: "default", missingNl: "De toetsenproef is niet gedaan in de toestanden van het sitemodel. Draai states opnieuw.", fixedBy: "sweep" });
     for (const row of inStates ?? []) {
       const state = run.siteStates.states.find((entry) => entry.id === row.state);
       if (!row.examined && state?.reached) warnings.push({ check: "keys-not-pressed-in-state", page: null, url: state.url, state: row.state, missingNl: `In deze toestand zijn geen losse toetsen ingedrukt: ${row.reasonNl ?? "geen reden vastgelegd"}.` });
@@ -293,9 +326,9 @@ export function gateChecks(run: RunData): { checks: Check[]; gaps: Gap[]; warnin
   if (model && run.siteStates && run.states) {
     const hoverCoverage = run.states.hoverCoverage;
     const pressCoverage = run.states.downEventCoverage;
-    if (hoverCoverage?.kinds === undefined) coverageGaps.push({ check: "coverage", page: null, url: null, state: "default", missingNl: "De proef met aanwijzen en focus is niet per soort bedieningselement gedaan, zodat niet vaststaat dat elke soort is onderzocht. Draai states opnieuw." });
-    if (hoverCoverage?.narrowPages === undefined || pressCoverage?.narrowPages === undefined) coverageGaps.push({ check: "coverage", page: null, url: null, state: "default", missingNl: "De proeven met aanwijzen en met indrukken zijn niet gedaan in het smalle venster. Draai states opnieuw." });
-    if (hoverCoverage?.states === undefined || pressCoverage?.states === undefined) coverageGaps.push({ check: "coverage", page: null, url: null, state: "default", missingNl: "De proeven met aanwijzen en met indrukken zijn niet gedaan in de toestanden van het sitemodel. Draai states opnieuw." });
+    if (hoverCoverage?.kinds === undefined) coverageGaps.push({ check: "coverage", page: null, url: null, state: "default", missingNl: "De proef met aanwijzen en focus is niet per soort bedieningselement gedaan, zodat niet vaststaat dat elke soort is onderzocht. Draai states opnieuw.", fixedBy: "sweep" });
+    if (hoverCoverage?.narrowPages === undefined || pressCoverage?.narrowPages === undefined) coverageGaps.push({ check: "coverage", page: null, url: null, state: "default", missingNl: "De proeven met aanwijzen en met indrukken zijn niet gedaan in het smalle venster. Draai states opnieuw.", fixedBy: "sweep" });
+    if (hoverCoverage?.states === undefined || pressCoverage?.states === undefined) coverageGaps.push({ check: "coverage", page: null, url: null, state: "default", missingNl: "De proeven met aanwijzen en met indrukken zijn niet gedaan in de toestanden van het sitemodel. Draai states opnieuw.", fixedBy: "sweep" });
     for (const [probeNl, rows] of [["aangewezen", hoverCoverage?.states ?? []], ["ingedrukt", pressCoverage?.states ?? []]] as const) {
       for (const row of rows) {
         const state = run.siteStates.states.find((entry) => entry.id === row.state);
@@ -343,9 +376,9 @@ export function gateChecks(run: RunData): { checks: Check[]; gaps: Gap[]; warnin
 
   // 5. The sweep itself must be complete.
   const incomplete: Gap[] = [];
-  if (!run.states) incomplete.push({ check: "sweep-complete", page: null, url: null, state: "default", missingNl: "De interactieproef (states) heeft niet gedraaid." });
-  if (!run.contrast) incomplete.push({ check: "sweep-complete", page: null, url: null, state: "default", missingNl: "De contrastmeting (contrast) heeft niet gedraaid." });
-  if (model && !run.siteStates) incomplete.push({ check: "sweep-complete", page: null, url: null, state: "default", missingNl: "Er is een sitemodel, maar de toestanden daaruit zijn niet vastgelegd; draai collect opnieuw." });
+  if (!run.states) incomplete.push({ check: "sweep-complete", page: null, url: null, state: "default", missingNl: "De interactieproef (states) heeft niet gedraaid.", fixedBy: "sweep" });
+  if (!run.contrast) incomplete.push({ check: "sweep-complete", page: null, url: null, state: "default", missingNl: "De contrastmeting (contrast) heeft niet gedraaid.", fixedBy: "sweep" });
+  if (model && !run.siteStates) incomplete.push({ check: "sweep-complete", page: null, url: null, state: "default", missingNl: "Er is een sitemodel, maar de toestanden daaruit zijn niet vastgelegd; draai collect opnieuw.", fixedBy: "sweep" });
   add("sweep-complete", incomplete, "collect, contrast en states hebben gedraaid");
   for (const skipped of run.states?.skipped ?? []) {
     const page = run.pages.find((entry) => entry.label === skipped.page);
@@ -371,7 +404,7 @@ export function gateChecks(run: RunData): { checks: Check[]; gaps: Gap[]; warnin
     }
     const unreached = openable.filter((state) => !state.reached && !seenBetween.has(state.id));
     const share = openable.length === 0 ? 1 : 1 - unreached.length / openable.length;
-    const entries = unreached.map((state) => ({ check: "components-opened", page: label(state.url ?? urlOf(state.pageTypes)), url: state.url ?? urlOf(state.pageTypes), state: state.id, missingNl: `Het ${state.kind === "process" ? "proces" : "onderdeel"} "${state.modelId}" is niet geopend: ${(state.reasonNl ?? "onbekende reden").replace(/[.\s]+$/, "")}.` }));
+    const entries = unreached.map((state) => ({ check: "components-opened", page: label(state.url ?? urlOf(state.pageTypes)), url: state.url ?? urlOf(state.pageTypes), state: state.id, missingNl: `Het ${state.kind === "process" ? "proces" : "onderdeel"} "${state.modelId}" is niet geopend: ${(state.reasonNl ?? "onbekende reden").replace(/[.\s]+$/, "")}.`, fixedBy: fixedByReason(state.reasonNl) }));
     if (share < MIN_COMPONENTS_OPENED) componentGaps.push(...entries);
     else warnings.push(...entries);
     componentNote = `${openable.length - unreached.length} van ${openable.length} onderdelen en processen geopend`;
@@ -382,11 +415,11 @@ export function gateChecks(run: RunData): { checks: Check[]; gaps: Gap[]; warnin
     });
     if (betweenNl.length > 0) componentNote += `; alleen op een tussenbreedte bestaand en daar door de veegronde geopend: ${betweenNl.join("; ")}`;
     for (const dismissal of run.siteStates.dismissals.filter((entry) => !entry.dismissed)) {
-      componentGaps.push({ check: "blocker-closed", page: label(dismissal.url), url: dismissal.url, state: "default", missingNl: `De blokkade "${dismissal.blocker}" stond op de pagina en is niet gesloten (${dismissal.where}): ${dismissal.reasonNl ?? "onbekende reden"}.` });
+      componentGaps.push({ check: "blocker-closed", page: label(dismissal.url), url: dismissal.url, state: "default", missingNl: `De blokkade "${dismissal.blocker}" stond op de pagina en is niet gesloten (${dismissal.where}): ${dismissal.reasonNl ?? "onbekende reden"}.`, fixedBy: fixedByReason(dismissal.reasonNl) });
     }
     for (const blocker of model.blockers) {
       const captured = run.siteStates.states.filter((state) => state.kind === "blocker" && state.modelId === blocker.id);
-      if (captured.length > 0 && captured.every((state) => !state.reached)) componentGaps.push({ check: "blocker-captured", page: null, url: null, state: captured[0]!.id, missingNl: `De blokkade "${blocker.id}" is op geen enkel paginatype met de blokkade erop vastgelegd, dus ze is zelf niet te beoordelen: ${captured[0]!.reasonNl ?? ""}` });
+      if (captured.length > 0 && captured.every((state) => !state.reached)) componentGaps.push({ check: "blocker-captured", page: null, url: null, state: captured[0]!.id, missingNl: `De blokkade "${blocker.id}" is op geen enkel paginatype met de blokkade erop vastgelegd, dus ze is zelf niet te beoordelen: ${captured[0]!.reasonNl ?? ""}`, fixedBy: fixedByReason(captured[0]!.reasonNl) });
     }
   }
   add("components-opened", componentGaps, componentNote || "niets te openen");
@@ -593,18 +626,22 @@ export async function buildSheets(run: RunData, runDir: string, outDir: string):
       { state: "taborder", file: `${type.page.dir}/probes/tabwalk.png`, descriptionNl: "de pagina met de Tab-stops genummerd in de volgorde van de Tab-toets" },
     ];
     const components: string[] = [];
+    const everywhere: string[] = [];
+    const processes: string[] = [];
     for (const state of run.siteStates?.states ?? []) {
       if (!state.pageTypes.includes(type.id)) continue;
+      const siteWide = state.kind === "component" && model?.components.find((component) => component.id === state.modelId)?.siteWide === true;
       // A state is one picture, taken on one page. It is shown on the sheet of that page's type; on the other sheets it is named.
-      const capturedType = model?.pageTypes.find((entry) => state.url !== null && entry.pages.includes(state.url))?.id ?? state.pageTypes[0];
+      const capturedType = (model && state.url !== null ? pageTypeOf(model, state.url) : null) ?? state.pageTypes[0];
       if (state.reached && capturedType !== type.id) {
         const label = run.pages.find((page) => page.item.url === state.url)?.label ?? state.url;
-        if (state.kind === "component") components.push(`${state.modelId} (gemeten op ${label}, geldt ook voor dit paginatype; het vak staat op het blad van paginatype ${capturedType})`);
+        if (siteWide) everywhere.push(`${state.modelId} (het vak staat op het blad van paginatype ${capturedType})`);
+        else if (state.kind === "component") components.push(`${state.modelId} (gemeten op ${label}, geldt ook voor dit paginatype; het vak staat op het blad van paginatype ${capturedType})`);
         continue;
       }
       const entry = state.kind === "blocker" ? model?.blockers.find((blocker) => blocker.id === state.modelId) : state.kind === "component" ? model?.components.find((component) => component.id === state.modelId) : model?.processes.find((process) => process.id === state.modelId);
       const kind = state.kind === "blocker" ? "blokkade" : state.kind === "component" ? "onderdeel" : "proces";
-      if (state.kind === "component") components.push(`${state.modelId}: ${entry?.descriptionNl ?? ""}${state.reached ? "" : " (niet geopend)"}`);
+      if (state.kind !== "blocker") (siteWide ? everywhere : state.kind === "component" ? components : processes).push(`${state.modelId}: ${entry?.descriptionNl ?? ""}${state.reached ? "" : " (niet geopend)"}`);
       if (state.reached && state.files.screenshot) candidates.push({ state: state.id, file: state.files.screenshot, descriptionNl: `${kind} "${state.modelId}"${state.viewport ? ` op ${state.viewport.width} pixels breed` : ""}: ${entry?.descriptionNl ?? ""}`, ...(refusedHosts.has(state.id) ? { refusedHosts: refusedHosts.get(state.id) } : {}) });
     }
     const present = candidates.filter((candidate) => existsSync(join(runDir, candidate.file)));
@@ -613,9 +650,36 @@ export async function buildSheets(run: RunData, runDir: string, outDir: string):
     const file = join("gate", `sheet-${type.id}.png`);
     const bytes = PNG.sync.write(contactSheet(tiles.map((entry) => tile(PNG.sync.read(readFileSync(join(runDir, entry.file)))))));
     await writeFileAtomic(join(outDir, file), bytes);
-    sheets.push({ pageType: type.id, page: type.page.label, url: type.page.item.url, file, sha256: sha256(bytes), tiles, componentsNl: components, contentNl: (model?.content ?? []).filter((content) => content.pageTypes.includes(type.id)).map((content) => `${content.id} (${content.kind}): ${content.descriptionNl}`), framesNl: framesOn(type.page, model), keysNl: keysOn(type.page, run) });
+    sheets.push({ pageType: type.id, page: type.page.label, url: type.page.item.url, file, sha256: sha256(bytes), tiles, componentsNl: components, ...(everywhere.length > 0 ? { everywhereNl: everywhere } : {}), ...(processes.length > 0 ? { processesNl: processes } : {}), contentNl: (model?.content ?? []).filter((content) => content.pageTypes.includes(type.id)).map((content) => `${content.id} (${content.kind}): ${content.descriptionNl}`), framesNl: framesOn(type.page, model), keysNl: keysOn(type.page, run) });
   }
   return sheets;
+}
+
+/** What the reviewing agent reads beside one sheet: the picture, its tiles and the lists of what is known. */
+export function sheetText(sheet: Sheet, absoluteOut: string): string {
+  return [
+    `### Paginatype \`${sheet.pageType}\` (${sheet.page}, ${sheet.url})`,
+    "",
+    `Blad: \`${join(absoluteOut, sheet.file)}\``,
+    "",
+    `Kenmerk van dit blad (\`reviewedAs\`): \`${reviewedAs(sheet)}\``,
+    "",
+    ...sheet.tiles.flatMap((entry) => [
+      `- Vak ${entry.nr}: ${entry.descriptionNl}`,
+      ...((entry.refusedHosts ?? []).length > 0 ? [`  - In deze toestand zijn verzoeken naar adressen buiten de run tegengehouden (${entry.refusedHosts!.join(", ")}). Wat daarvandaan komt, zoals een speler of een kaart, ontbreekt in dit vak; op die plek kan een leeg of zwart vlak staan. Beoordeel of te zien is wat er openging, los van die inhoud.`] : []),
+    ]),
+    "",
+    sheet.componentsNl.length > 0 ? `Onderdelen van dit paginatype volgens het sitemodel: ${sheet.componentsNl.join("; ")}.` : (sheet.everywhereNl ?? []).length > 0 ? "Het sitemodel noemt voor dit paginatype geen eigen onderdelen." : "Het sitemodel noemt voor dit paginatype geen onderdelen.",
+    ...((sheet.everywhereNl ?? []).length > 0 ? ["", `Op elke pagina, ook deze, volgens het sitemodel: ${sheet.everywhereNl!.join("; ")}. Die horen bij de lijst met onderdelen.`] : []),
+    "",
+    (sheet.processesNl ?? []).length > 0 ? `Processen van dit paginatype volgens het sitemodel (formulieren en stappen die het sitemodel al kent): ${sheet.processesNl!.join("; ")}.` : "Het sitemodel noemt voor dit paginatype geen processen.",
+    "",
+    (sheet.contentNl ?? []).length > 0 ? `Inhoud zonder handeling (spelers, blokken die vanzelf bewegen) volgens het sitemodel: ${sheet.contentNl!.join("; ")}.` : "Het sitemodel noemt voor dit paginatype geen spelers of inhoud die vanzelf beweegt.",
+    "",
+    (sheet.framesNl ?? []).length > 0 ? `Ingesloten vensters op deze pagina volgens het sitemodel: ${sheet.framesNl!.join("; ")}.` : "Het sitemodel noemt op deze pagina geen ingesloten vensters.",
+    "",
+    (sheet.keysNl ?? []).length > 0 ? `Toetsen van één teken waarop deze pagina reageerde in de veegronde: ${sheet.keysNl!.join("; ")}.` : "De veegronde vond op deze pagina geen toets van één teken waarop de pagina reageert.",
+  ].join("\n");
 }
 
 /** What the single-key probe of the sweep recorded on a page: a shortcut it measured is known, not missing. */
@@ -647,7 +711,7 @@ export const QUESTIONS: { id: string; bad: Answer; tileState: string; questionNl
   { id: "covered", bad: "ja", tileState: "default", questionNl: "Vak 1: ligt er een melding, venster of balk over de inhoud die de pagina bedekt of tegenhoudt, zoals een cookiemelding? Een vaste knop die een stukje inhoud raakt, telt hier niet: noem die in remarkNl." },
   { id: "narrow", bad: "nee", tileState: "narrow", questionNl: "Vak 2: zie je op het smalle scherm de inhoud van de pagina, zonder dat een melding of venster haar bedekt of tegenhoudt? Een vaste knop die een stukje inhoud raakt, telt hier niet: noem die in remarkNl." },
   { id: "taborder", bad: "nee", tileState: "taborder", questionNl: "Vak 3: staan de genummerde Tab-stops verspreid over de pagina (kop, inhoud en voet), en dus niet alleen in één hoek of één blok?" },
-  { id: "missing", bad: "ja", tileState: "default", questionNl: "Vak 1 en 2: zie je een onderdeel dat pas na een handeling iets laat zien (menuknop, uitklapper, tabbladen, carrousel met knoppen, zoekknop, chatknop), of een speler of blok dat vanzelf beweegt, dat niet in de lijst met onderdelen, niet in de lijst met inhoud zonder handeling en ook niet in de lijst met ingesloten vensters van dit paginatype staat? Een ingesloten venster dat in die lijst staat (een vak 'Ik ben geen robot', een speler van een andere partij), telt hier niet: het sitemodel kent het." },
+  { id: "missing", bad: "ja", tileState: "default", questionNl: "Vak 1 en 2: zie je een onderdeel dat pas na een handeling iets laat zien (menuknop, uitklapper, tabbladen, carrousel met knoppen, zoekknop, chatknop), of een speler of blok dat vanzelf beweegt, dat niet in de lijst met onderdelen, niet in de lijst met processen, niet in de lijst met inhoud zonder handeling en ook niet in de lijst met ingesloten vensters van dit paginatype staat? Een formulier dat in de lijst met processen staat (een zoekformulier, een contactformulier), of een ingesloten venster dat in die lijst staat (een vak 'Ik ben geen robot', een speler van een andere partij), telt hier niet: het sitemodel kent het." },
 ];
 const STATE_QUESTION_NL = "Elk vak vanaf 4: is te zien wat de omschrijving van het vak zegt? Bij een onderdeel of proces: het is open of uitgevoerd. Bij een blokkade: de blokkade staat in beeld. Staat bij het vak dat verzoeken naar adressen buiten de run zijn tegengehouden, dan telt wat er openging, niet de inhoud van die adressen.";
 
@@ -657,7 +721,7 @@ interface GivenAnswer {
 }
 
 export interface Answers {
-  sheets: { pageType: string; answers: Record<string, GivenAnswer>; stateTiles: (GivenAnswer & { tile?: unknown })[]; remarkNl?: unknown }[];
+  sheets: { pageType: string; reviewedAs?: unknown; answers: Record<string, GivenAnswer>; stateTiles: (GivenAnswer & { tile?: unknown })[]; remarkNl?: unknown }[];
 }
 
 /** Check the form of the agent's answers against the sheets they are about. Problems are in Dutch: the agent reads them. */
@@ -674,6 +738,11 @@ export function validateAnswers(value: unknown, sheets: Sheet[]): string[] {
     const entry = given.find((candidate) => candidate?.pageType === sheet.pageType);
     if (!entry) {
       problems.push(`er is geen antwoord voor paginatype "${sheet.pageType}"`);
+      continue;
+    }
+    // An answer counts only for the sheet it was given for; one from an earlier round says nothing about this one.
+    if (entry.reviewedAs !== reviewedAs(sheet)) {
+      problems.push(typeof entry.reviewedAs === "string" ? `${sheet.pageType}: het blad is veranderd sinds dit antwoord (reviewedAs ${entry.reviewedAs}, het blad heeft nu ${reviewedAs(sheet)}); bekijk het blad opnieuw en beantwoord alle vragen opnieuw` : `${sheet.pageType}: reviewedAs ontbreekt; neem het kenmerk van het blad over uit de opdracht, nadat je het blad hebt bekeken`);
       continue;
     }
     for (const question of QUESTIONS) checkAnswer(entry.answers?.[question.id], `${sheet.pageType}.${question.id}`, question.bad);
@@ -742,39 +811,21 @@ export function sheetGaps(run: RunData, sheets: Sheet[]): Gap[] {
   for (const type of run.siteModel?.pageTypes ?? []) {
     if (sheets.some((sheet) => sheet.pageType === type.id)) continue;
     const page = run.pages.find((entry) => entry.item.url === type.representative) ?? run.pages.find((entry) => type.pages.includes(entry.item.url));
+    const unmeasured = page ? undefined : (run.collectFailed ?? []).find((entry) => entry.item.url === type.representative) ?? (run.collectFailed ?? []).find((entry) => type.pages.includes(entry.item.url));
     gaps.push({
       check: "sheets",
-      page: page?.label ?? null,
-      url: page?.item.url ?? type.representative,
+      page: page?.label ?? unmeasured?.label ?? null,
+      url: page?.item.url ?? unmeasured?.item.url ?? type.representative,
       state: "default",
       missingNl: page
         ? `Voor paginatype "${type.id}" is geen overzichtsblad gemaakt: van ${page.label} ontbreken de schermafbeeldingen van de veegronde. Draai collect opnieuw.`
-        : `Voor paginatype "${type.id}" is geen overzichtsblad gemaakt: geen enkele pagina van dit type zit in de steekproef, dus er is niets van gemeten. Draai sample opnieuw na check-site, en daarna de veegronde.`,
+        : unmeasured
+          ? `Voor paginatype "${type.id}" is geen overzichtsblad gemaakt: ${unmeasured.label} zit wel in de steekproef, maar de veegronde kon die pagina niet meten (zie het gat bij het laden van de pagina). Draai collect opnieuw.`
+          : `Voor paginatype "${type.id}" is geen overzichtsblad gemaakt: geen enkele pagina van dit type zit in de steekproef, dus er is niets van gemeten. Draai sample opnieuw na check-site, en daarna de veegronde.`,
+      fixedBy: page || unmeasured ? "sweep" : "explorer",
     });
   }
   return gaps;
-}
-
-/** What the reviewing agent reads about one sheet: its tiles and the lists beside it. */
-export function sheetText(sheet: Sheet, outDir: string): string {
-  return [
-    `### Paginatype \`${sheet.pageType}\` (${sheet.page}, ${sheet.url})`,
-    "",
-    `Blad: \`${join(outDir, sheet.file)}\``,
-    "",
-    ...sheet.tiles.flatMap((entry) => [
-      `- Vak ${entry.nr}: ${entry.descriptionNl}`,
-      ...((entry.refusedHosts ?? []).length > 0 ? [`  - In deze toestand zijn verzoeken naar adressen buiten de run tegengehouden (${entry.refusedHosts!.join(", ")}). Wat daarvandaan komt, zoals een speler of een kaart, ontbreekt in dit vak; op die plek kan een leeg of zwart vlak staan. Beoordeel of te zien is wat er openging, los van die inhoud.`] : []),
-    ]),
-    "",
-    sheet.componentsNl.length > 0 ? `Onderdelen van dit paginatype volgens het sitemodel: ${sheet.componentsNl.join("; ")}.` : "Het sitemodel noemt voor dit paginatype geen onderdelen.",
-    "",
-    (sheet.contentNl ?? []).length > 0 ? `Inhoud zonder handeling (spelers, blokken die vanzelf bewegen) volgens het sitemodel: ${sheet.contentNl!.join("; ")}.` : "Het sitemodel noemt voor dit paginatype geen spelers of inhoud die vanzelf beweegt.",
-    "",
-    (sheet.framesNl ?? []).length > 0 ? `Ingesloten vensters op deze pagina volgens het sitemodel: ${sheet.framesNl!.join("; ")}.` : "Het sitemodel noemt op deze pagina geen ingesloten vensters.",
-    "",
-    (sheet.keysNl ?? []).length > 0 ? `Toetsen van één teken waarop deze pagina reageerde in de veegronde: ${sheet.keysNl!.join("; ")}.` : "De veegronde vond op deze pagina geen toets van één teken waarop de pagina reageert.",
-  ].join("\n");
 }
 
 function fill(template: string, values: Record<string, string>): string {
@@ -806,8 +857,35 @@ export async function checkGate(runDir: string): Promise<string[]> {
 /** What a reviewer was shown of a sheet: the picture, the lists beside it and the hosts refused in its states. A change in any of them asks for a new review. */
 export function reviewedAs(sheet: Sheet): string {
   const refused = sheet.tiles.filter((entry) => (entry.refusedHosts ?? []).length > 0).map((entry) => [entry.state, entry.refusedHosts]);
-  // Only there when a tile has refused hosts, so a sheet without one keeps the hash its answers were stamped with.
-  return sha256(JSON.stringify([sheet.sha256, sheet.componentsNl, sheet.contentNl ?? [], sheet.framesNl ?? [], sheet.keysNl ?? [], ...(refused.length > 0 ? [refused] : [])]));
+  // The list of processes and the refused hosts count only where there are any, so a review of a sheet without them stays valid.
+  return sha256(JSON.stringify([sheet.sha256, sheet.componentsNl, sheet.contentNl ?? [], sheet.framesNl ?? [], sheet.keysNl ?? [], ...(sheet.processesNl?.length ? [sheet.processesNl] : []), ...(sheet.everywhereNl?.length ? [{ everywhere: sheet.everywhereNl }] : []), ...(refused.length > 0 ? [{ refused }] : [])]));
+}
+
+/**
+ * Answers of an earlier round no longer belong to the sheets: move them to gate/vorige/, so
+ * neither an agent nor check-gate builds on them. A file that cannot be read is left alone:
+ * an agent may be writing it.
+ */
+async function setAsideStaleAnswers(outDir: string, parts: ReviewPart[]): Promise<void> {
+  const stale: string[] = [];
+  for (const part of parts) {
+    const path = join(outDir, part.answers);
+    if (!existsSync(path)) continue;
+    let given: unknown;
+    try {
+      given = (await readJson<Answers>(path)).sheets;
+    } catch {
+      continue;
+    }
+    if (!Array.isArray(given)) continue;
+    if (given.some((entry: Answers["sheets"][number] | null) => { const sheet = part.sheets.find((candidate) => candidate.pageType === entry?.pageType); return !sheet || entry?.reviewedAs !== reviewedAs(sheet); })) stale.push(part.answers);
+  }
+  // Answers of a task that no longer exists, when the site had more page types.
+  for (let nr = parts.length + 1; existsSync(join(outDir, "gate", `answers-${nr}.json`)); nr++) stale.push(join("gate", `answers-${nr}.json`));
+  if (stale.length === 0) return;
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+  await mkdir(join(outDir, "gate", "vorige"), { recursive: true });
+  for (const file of stale) await rename(join(outDir, file), join(outDir, "gate", "vorige", `${basename(file, ".json")}-${stamp}.json`));
 }
 
 async function currentAnswers(runDir: string, sheets: Sheet[]): Promise<Answers | null> {
@@ -820,6 +898,34 @@ async function currentAnswers(runDir: string, sheets: Sheet[]): Promise<Answers 
   const all: Answers = { sheets: [] };
   for (const part of parts) all.sheets.push(...(await readJson<Answers>(join(runDir, part.answers))).sheets);
   return all;
+}
+
+/**
+ * Where the run goes from the gate. Pure: the gaps of the fixed checks and of the review, whether the review is answered for
+ * the current sheets, the steps of the manifest and which gaps the site model accepts. Every gap it returns says who can close it.
+ */
+export function route(fixedGaps: Gap[], reviewedGaps: Gap[], answered: boolean, steps: Pick<ManifestStep, "command">[], isAccepted: (gap: Gap) => boolean): Pick<Gate, "sufficient" | "stage" | "exploreRound" | "returnsLeft" | "gaps"> & Required<Pick<Gate, "next" | "resweeps" | "resweepsLeft">> & { all: Gap[] } {
+  const exploreRound = steps.filter((step) => step.command === "explore").length;
+  const returnsLeft = Math.max(0, MAX_RETURNS_TO_EXPLORER - Math.max(0, exploreRound - 1));
+  const resweeps = Math.max(0, steps.slice(steps.findLastIndex((step) => step.command === "explore") + 1).filter((step) => step.command === "collect").length - 1);
+  const resweepsLeft = Math.max(0, MAX_RESWEEPS - resweeps);
+  // A measurement that still fails after every new sweep is no longer the sweep's: the explorer chooses another page or accepts it.
+  const owner = (gap: Gap): Gap =>
+    gap.fixedBy !== "sweep"
+      ? { ...gap, fixedBy: "explorer" }
+      : resweepsLeft > 0
+        ? gap
+        : { ...gap, fixedBy: "explorer", missingNl: `${gap.missingNl} De veegronde is na de laatste verkenning ${resweeps} keer opnieuw gedraaid en mat dit nog steeds niet. Ligt dat aan de pagina, kies dan voor het paginatype een pagina die wel te meten is, of leg in acceptedGaps vast dat het aan de site ligt.` };
+  const fixed = fixedGaps.map(owner);
+  const all = [...fixed, ...reviewedGaps.map(owner)];
+  const gaps = all.filter((gap) => !isAccepted(gap));
+  const forSweep = gaps.some((gap) => gap.fixedBy === "sweep");
+  const fixedOpen = fixed.some((gap) => !isAccepted(gap));
+  // The review waits only for what a new sweep changes, so that a return hands the explorer the gaps of the fixed checks and of the pictures at once.
+  const stage: Gate["stage"] = answered ? "complete" : forSweep || (fixedOpen && returnsLeft === 0) ? "deterministic" : "review-pending";
+  const sufficient = stage === "complete" && gaps.length === 0;
+  const next = sufficient ? "proceed" : forSweep ? "sweep" : stage === "review-pending" ? "review" : returnsLeft > 0 ? "explore" : "stop";
+  return { sufficient, stage, next, exploreRound, returnsLeft, resweeps, resweepsLeft, gaps, all };
 }
 
 /**
@@ -851,6 +957,7 @@ export async function gate(runDir: string, outDir: string = runDir): Promise<Gat
       sheets: [
         {
           pageType: part.sheets[0]?.pageType ?? "start",
+          reviewedAs: part.sheets[0] ? reviewedAs(part.sheets[0]) : "<kenmerk van het blad>",
           answers: Object.fromEntries(QUESTIONS.map((question) => [question.id, { answer: question.bad === "ja" ? "nee" : "ja", noteNl: "" }])),
           stateTiles: [{ tile: 4, answer: "ja", noteNl: "" }],
           remarkNl: "",
@@ -875,23 +982,25 @@ export async function gate(runDir: string, outDir: string = runDir): Promise<Gat
   // Tasks of an earlier gate, when the site had more page types, must not be handed out again.
   for (let nr = parts.length + 1; existsSync(join(outDir, "gate", `poort-${nr}.md`)); nr++) await rm(join(outDir, "gate", `poort-${nr}.md`));
 
+  await setAsideStaleAnswers(outDir, parts);
   const answers = await currentAnswers(outDir, sheets);
   const reviewed = answers ? reviewGaps(answers, sheets) : { gaps: [], warnings: [] };
   const remarks = (answers?.sheets ?? []).flatMap((entry) => (typeof entry.remarkNl === "string" && entry.remarkNl.trim() ? [{ pageType: entry.pageType, remarkNl: entry.remarkNl.trim() }] : []));
-  const all = [...fixed.gaps, ...reviewed.gaps];
-  // A gap the explorer confirmed as a property of the site does not hold the run back.
-  const acceptedBy = (gap: Gap) => acceptedGapFor(run.siteModel, { check: gap.check, page: gap.url, component: gap.component });
-  const accepted = all.filter((gap) => acceptedBy(gap)).map((gap) => ({ ...gap, reasonNl: acceptedBy(gap)!.reasonNl, observation: acceptedBy(gap)!.observation, decidedBy: acceptedBy(gap)!.decidedBy }));
-  const gaps = all.filter((gap) => !acceptedBy(gap));
 
+  // A gap the explorer confirmed as a property of the site does not hold the run back.
+  const acceptedBy = (gap: Gap) => acceptedGapFor(run.siteModel, { check: gap.check, page: gap.url, component: gap.component, state: gap.state });
   const manifestPath = join(runDir, "manifest.json");
-  const exploreRound = existsSync(manifestPath) ? (await readJson<Manifest>(manifestPath)).steps.filter((step) => step.command === "explore").length : 0;
-  const stage: Gate["stage"] = answers ? "complete" : fixed.gaps.filter((gap) => !acceptedBy(gap)).length > 0 ? "deterministic" : "review-pending";
+  const routed = route(fixed.gaps, reviewed.gaps, answers !== null, existsSync(manifestPath) ? (await readJson<Manifest>(manifestPath)).steps : [], (gap) => acceptedBy(gap) !== undefined);
+  const accepted = routed.all.filter((gap) => acceptedBy(gap)).map((gap) => ({ ...gap, reasonNl: acceptedBy(gap)!.reasonNl, observation: acceptedBy(gap)!.observation, decidedBy: acceptedBy(gap)!.decidedBy }));
+  const { gaps, stage, next } = routed;
   const result: Gate = {
-    sufficient: stage === "complete" && gaps.length === 0,
+    sufficient: routed.sufficient,
     stage,
-    exploreRound,
-    returnsLeft: Math.max(0, MAX_RETURNS_TO_EXPLORER - Math.max(0, exploreRound - 1)),
+    next,
+    exploreRound: routed.exploreRound,
+    returnsLeft: routed.returnsLeft,
+    resweeps: routed.resweeps,
+    resweepsLeft: routed.resweepsLeft,
     hasSiteModel: Boolean(run.siteModel),
     thresholds: THRESHOLDS,
     checks: fixed.checks,
@@ -916,6 +1025,6 @@ export async function gate(runDir: string, outDir: string = runDir): Promise<Gat
     return { pageType: remark.pageType, page: sheet?.page ?? null, url: sheet?.url ?? null, sheet: sheet?.file ?? null, seenNl: remark.remarkNl };
   }));
   await writeJson(join(outDir, "gate.json"), result);
-  if (absoluteOut === absoluteRun) await writeManifest(runDir, { command: "gate", startedAt, stage, sufficient: result.sufficient, gaps: gaps.length, warnings: result.warnings.length, templateSha256: sha256(template) });
+  if (absoluteOut === absoluteRun) await writeManifest(runDir, { command: "gate", startedAt, stage, next, sufficient: result.sufficient, gaps: gaps.length, warnings: result.warnings.length, templateSha256: sha256(template) });
   return result;
 }

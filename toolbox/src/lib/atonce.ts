@@ -133,6 +133,58 @@ export class Slots {
 }
 
 /**
+ * Work that runs together, and work that runs alone. `alone` waits until the work that runs together
+ * has ended, and while it waits or runs no new work starts together. A page that failed under the
+ * load of the others, by not answering in time or by a crashed renderer, gets its second try with
+ * the machine to itself. Work that runs alone must not ask for `together` or `alone` inside it.
+ */
+export class Crowd {
+  private running = 0;
+  private aloneRuns = false;
+  private readonly waitingAlone: (() => void)[] = [];
+  private readonly waitingTogether: (() => void)[] = [];
+
+  async together<T>(work: () => Promise<T>): Promise<T> {
+    // A place is counted when it is given, so that nothing can run alone between the grant and the start.
+    if (this.aloneRuns || this.waitingAlone.length > 0) await new Promise<void>((resolve) => this.waitingTogether.push(resolve));
+    else this.running++;
+    try {
+      return await work();
+    } finally {
+      this.running--;
+      this.wake();
+    }
+  }
+
+  async alone<T>(work: () => Promise<T>): Promise<T> {
+    await new Promise<void>((resolve) => {
+      this.waitingAlone.push(resolve);
+      this.wake();
+    });
+    try {
+      return await work();
+    } finally {
+      this.aloneRuns = false;
+      this.wake();
+    }
+  }
+
+  private wake(): void {
+    if (this.aloneRuns) return;
+    if (this.waitingAlone.length > 0) {
+      if (this.running > 0) return;
+      this.aloneRuns = true;
+      this.waitingAlone.shift()!();
+      return;
+    }
+    for (const start of this.waitingTogether.splice(0)) {
+      this.running++;
+      start();
+    }
+  }
+}
+
+/**
  * Turns in the order of the indexes, for work that runs at the same time but must decide something
  * in order. `turn(i)` resolves once every index before `i` said `done`; `done(i)` may come early,
  * for a piece of work that failed before its turn, and may come more than once.

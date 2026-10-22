@@ -1,0 +1,6 @@
+{
+  "version": "0.16.0",
+  "measuredAt": "2026-10-22",
+  "againstNl": "De sleutel van de eigen testsite (Lindewaard met ingebouwde gebreken), niet het oordeel van een menselijke deskundige. Gerichte metingen van de wijzigingen in het oordeel in deze versie, elk met twee runs op dezelfde bevroren veegronde: het afhandelen van regels van de engines en de verifieerder (4.1.2, 1.3.1, 1.1.1, 1.4.3), en samen het afspelen van formulieren over HTTP en de meldingen bij de rondgang (3.3.1, 3.3.3, 3.3.4, 3.3.7, 2.4.3, 4.1.3).",
+  "resultNl": "In alle runs keurden de gemeten criteria af zoals de sleutel zegt. De verifieerder hield het gebrek van een rol die niet bestaat (4.1.2) in beide runs vast; met 0.11.0 ging dat in 3 van 4 runs verloren. Formulieren werden opgenomen en afgespeeld zonder dat er een werd geweigerd, en de rondgangen vonden evenveel kandidaten als eerder (334 en 336, tegen 324 tot 336). Open bleven alleen punten voor een mens over het deel achter de inlog. Niet gemeten: de schone tweeling, en deze versie als geheel op alle 56 criteria. De werklijst, de nameting met recheck en de uitkomst per plek in bijlage A raken het oordeel niet."
+}

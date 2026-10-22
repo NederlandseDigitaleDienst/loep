@@ -1,7 +1,7 @@
 import { createWriteStream, existsSync } from "node:fs";
 import { join } from "node:path";
 import type { BrowserContext, CDPSession, Frame, Page, Request } from "playwright";
-import { answeredByCloudflare, bodyOf, passOn, passWrite } from "../browser/session.ts";
+import { answeredByCloudflare, bodyOf, passOn, sendOrReplay } from "../browser/session.ts";
 import { readJson } from "../lib/canonical.ts";
 import { isChallenge } from "../lib/challenge.ts";
 import { privateFromPublicSite, scopeHost, scopeHostOf, siteOrigins, WEB_SCHEMES } from "../lib/origins.ts";
@@ -11,6 +11,7 @@ import { searchServicesOf, type SearchServiceId } from "../lib/searchbody.ts";
 import { SEARCH_FALLBACK, SEARCH_NONE } from "../lib/searchterm.ts";
 import { searchTermForRun } from "../lib/sitemodel.ts";
 import { OriginBlocked, refusalNl, type Blockade } from "./blockade.ts";
+import { playRecording, replayNl, socketRecordings, type PassedReplay, type Recorder } from "../lib/recordings.ts";
 import { isWriteOrigin, runWrites, SocketFrames, writeAccess, writesForRun, type PassedWrite, type WriteAccess } from "../lib/writes.ts";
 
 /** Limits of the process that holds the browser; set once, when it starts. */
@@ -99,8 +100,8 @@ export interface Blocked {
   search?: SearchServiceId[];
   /** Why a request that a read request covered, or a write to the test environment, was held back. */
   reasonNl?: string;
-  /** A write to the test environment that the budget for sending held back: because it was used up, or because the previous write was too recent. */
-  writeBudget?: "out" | "spacing";
+  /** A write to the test environment that the budget for sending held back: because it was used up, because the sender had used its share, or because the previous write was too recent. */
+  writeBudget?: "out" | "share" | "spacing";
 }
 
 /** Resource types a page needs to look the way it does. Fetched with GET only, also from hosts outside the scope unless the scope is strict. */
@@ -134,12 +135,18 @@ export interface Guard {
   outsideScopeLoaded: Record<string, number>;
   /** Writes that were let through to the test environment; absent until the first one. */
   passed?: PassedWrite[];
+  /** Messages that were not sent but played from a recording of an earlier real send (see `socketRecordings`); absent until the first one. */
+  replays?: (PassedReplay & { noteNl: string })[];
   /** Read requests of the site model that were let through, without their body; absent until the first one. */
   reads?: PassedRead[];
+  /** Addresses of the sockets the page opened inside the scope: what the explorer compares to find the pattern of `sendsTo`. Absent until the first one. */
+  sockets?: string[];
   /** Requests of Cloudflare's check whether the browser is a robot that were let through and would otherwise have been refused; absent until the first one. */
   challenges?: PassedChallenge[];
   /** True between two commands of the agent: what the page sends over a socket then, it sends by itself. Absent: an agent may be acting. */
   idle?: boolean;
+  /** The session whose page this is, for its share of the budget for sending. Absent: the source the access to send was made for. */
+  sender?: string;
 }
 
 export interface PassedChallenge {
@@ -236,14 +243,12 @@ export async function guardContext(context: BrowserContext, scope: Scope, guard:
       }
       if (isWriteOrigin(scope.writes, url)) {
         // Every write takes one from the budget of the whole run; when it is used up, or the previous one was too recent, the write is held back as without permission.
-        const claim = scope.writes!.claim(method, url);
-        if (!claim.ok) {
-          guard.blocked.push({ at: new Date().toISOString(), kind: "method", method, url: url.slice(0, MAX_URL), resourceType: type, reasonNl: claim.reasonNl, writeBudget: claim.budget });
-          return refuse();
-        }
-        (guard.passed ??= []).push(claim.entry);
-        // Where the server sends the browser next is not asked here again: it has to be inside the scope.
-        return passWrite(route, scope.writes!, (target) => inScope(scope, target)).then((repeated) => void (repeated && (guard.passed ??= []).push(scope.writes!.record(method, repeated, { repeat: true }))));
+        // The same request as one sent before is answered from its recording. Where the server sends the browser next is not asked here again: it has to be inside the scope.
+        return sendOrReplay(context, route, scope.writes!, { sender: guard.sender, mayFollow: (target) => inScope(scope, target) }).then((outcome) => {
+          if (outcome.kind === "refused") guard.blocked.push({ at: new Date().toISOString(), kind: "method", method, url: url.slice(0, MAX_URL), resourceType: type, reasonNl: outcome.reasonNl, writeBudget: outcome.budget });
+          else if (outcome.kind === "replayed") (guard.replays ??= []).push({ ...outcome.replay, noteNl: outcome.noteNl });
+          else (guard.passed ??= []).push(outcome.entry, ...(outcome.repeated ? [outcome.repeated] : []));
+        });
       }
       // Whether the body has the form of a search: what the explorer needs to record a read request, never the body itself.
       const search = method === "POST" ? searchServicesOf(body) : [];
@@ -268,19 +273,51 @@ export async function guardContext(context: BrowserContext, scope: Scope, guard:
     const server = inScope(scope, url) && !refusedBy ? socket.connectToServer() : null;
     if (refusedBy) guard.blocked.push({ at: new Date().toISOString(), kind: "blockade", method: "GET", url: url.slice(0, MAX_URL), resourceType: "websocket", reasonNl: refusalNl(refusedBy) });
     else if (!server) note("scope", "GET", url, "websocket");
+    else (guard.sockets ??= []).push(url.slice(0, MAX_URL));
     // Only a socket of the test environment may carry what the page says.
     const free = server !== null && isWriteOrigin(scope.writes, url);
     const frames = new SocketFrames(MESSAGE_VALUES);
+    // On the socket of the test environment the answer to a real message is recorded, and a message that was sent before is played from its recording.
+    const recordings = free ? socketRecordings(scope.writes!.runDir, scope.writes!.source, MESSAGE_VALUES) : null;
+    let recorder: Recorder | null = null;
+    // A page that is closed hears nothing more: what the server says after that is no part of the answer the page got.
+    context.once("close", () => recorder?.end());
+    if (free) {
+      server!.onMessage((reply) => {
+        socket.send(reply);
+        recorder?.frame(reply);
+      });
+      // A handler for closing takes over passing it on: the server is closed as the page closed its side.
+      socket.onClose((code, reason) => {
+        recorder?.end();
+        void server!.close({ code, reason }).catch(() => undefined);
+      });
+    }
     socket.onMessage((message) => {
       if (!free) return note("socket", "SEND", url, "websocket");
+      const counted = frames.counts(message, guard.idle);
+      if (counted) {
+        const recording = recordings!.find(url, message);
+        if (recording) {
+          const replayed = recordings!.replayed(url, recording, guard.sender);
+          (guard.replays ??= []).push({ ...replayed, noteNl: replayNl(recording, replayed.matchedOn) });
+          return playRecording(recording, (reply) => socket.send(reply));
+        }
+      }
       // Every frame takes one from the budget, unless it is shown to be a heartbeat or a message of the protocol: that passes and is only noted.
-      const claim = frames.counts(message, guard.idle) ? scope.writes!.claim("SEND", url, { message: true }) : { ok: true as const, entry: scope.writes!.record("SEND", url) };
+      const claim = counted ? scope.writes!.claim("SEND", url, { message: true, sender: guard.sender }) : { ok: true as const, entry: scope.writes!.record("SEND", url, { sender: guard.sender }) };
       if (!claim.ok) {
         guard.blocked.push({ at: new Date().toISOString(), kind: "socket", method: "SEND", url: url.slice(0, MAX_URL), resourceType: "websocket", reasonNl: claim.reasonNl, writeBudget: claim.budget });
         return;
       }
       (guard.passed ??= []).push(claim.entry);
       server!.send(message);
+      // Only a message with a test value starts a recording, and ends the one before it.
+      const next = counted ? recordings!.start(url, message, guard.sender) : null;
+      if (next) {
+        recorder?.end();
+        recorder = next;
+      }
     });
   });
 }
@@ -298,9 +335,11 @@ const MAX_REDIRECTS = 5;
  * scope is strict, exactly as the browser was allowed to load it; `resourceType` says which
  * kind, in the words of the browser. Every hop of a redirect is asked again. What is refused
  * is recorded with the refusals of the page, what comes from outside the scope is counted with
- * the rest. Stops at `maxBytes` or when the time is up and says so.
+ * the rest. An origin the blockade of the run refuses is not asked, as the browser of a session
+ * does not ask it, and a 429 inside the scope is told to it; every caller says which blockade
+ * holds, or that none does. Stops at `maxBytes` or when the time is up and says so.
  */
-export async function guardedDownload(scope: Scope, guard: Guard, address: string, to: string, options: { resourceType: string; maxBytes: number; timeoutMs: number; headers?: (url: string) => Promise<Record<string, string>>; blockade?: Blockade | undefined }): Promise<Download> {
+export async function guardedDownload(scope: Scope, guard: Guard, address: string, to: string, options: { resourceType: string; maxBytes: number; timeoutMs: number; headers?: (url: string) => Promise<Record<string, string>>; blockade: Blockade | undefined }): Promise<Download> {
   const abort = new AbortController();
   let timedOut = false;
   const timer = setTimeout(() => {
@@ -324,9 +363,9 @@ export async function guardedDownload(scope: Scope, guard: Guard, address: strin
         }
         guard.outsideScopeLoaded[parsed.hostname] = (guard.outsideScopeLoaded[parsed.hostname] ?? 0) + 1;
       }
-      // An origin that refused the evaluation for the rest of the run is not asked; a short pause the caller waits out before.
+      // A blocked origin is not asked; a caller that can wait out a short pause does so before.
       const refusedBy = options.blockade?.refuses(url);
-      if (refusedBy?.until === null) {
+      if (refusedBy) {
         const reasonNl = new OriginBlocked(url, refusedBy).message;
         guard.blocked.push({ at: new Date().toISOString(), kind: "blockade", method: "GET", url: url.slice(0, MAX_URL), resourceType: options.resourceType, reasonNl });
         return { ok: false, reason: reasonNl };

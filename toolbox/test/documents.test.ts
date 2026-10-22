@@ -19,7 +19,7 @@ import { documents as documentsExtractor } from "../src/lib/document-evidence.ts
 import { render } from "../src/commands/render.ts";
 import { canonicalJson } from "../src/lib/canonical.ts";
 import { mergeFindings } from "../src/lib/defects.ts";
-import { documentKind, documentScopeNl, kindOfContentType, loadDocuments, REDIRECTS_ELSEWHERE_NL, type DocumentFacts, type EvaluationDocuments, type InventoryDocument } from "../src/lib/documents.ts";
+import { documentKind, documentScopeNl, kindOfContent, kindOfContentType, loadDocuments, REDIRECTS_ELSEWHERE_NL, type DocumentFacts, type EvaluationDocuments, type InventoryDocument } from "../src/lib/documents.ts";
 import { deriveReport, renderMarkdown } from "../src/lib/report-markdown.ts";
 import { exampleEvaluation } from "./fixtures/example-evaluation.ts";
 import { buildDossier } from "../src/lib/dossier.ts";
@@ -176,6 +176,37 @@ test("a link is recognised as a document by its extension or by what the server 
   assert.equal(kindOfContentType("text/markdown"), "text");
   assert.equal(kindOfContentType("text/x-markdown; charset=utf-8"), "text");
   assert.equal(kindOfContentType("text/plain"), "text");
+  // An agenda item and a business card are plain text, also when the server sends them as application/octet-stream.
+  assert.equal(documentKind("https://a.test/agenda/demo.ics"), "text");
+  assert.equal(documentKind("https://a.test/kaart.VCF"), "text");
+  assert.equal(kindOfContentType("text/calendar; charset=utf-8"), "text");
+});
+
+test("a file nobody could place is told by what is in it: the signature of a format, or else text, or else nothing", () => {
+  assert.equal(kindOfContent(Buffer.from("%PDF-1.7\n%âãÏÓ\n")), "pdf");
+  assert.equal(kindOfContent(Buffer.from("{\\rtf1\\ansi Hallo}")), "rtf");
+  assert.equal(kindOfContent(Buffer.concat([Buffer.from("PK\x03\x04"), Buffer.from("....mimetypeapplication/vnd.oasis.opendocument.text....")])), "odt");
+  assert.equal(kindOfContent(zip({ "[Content_Types].xml": "<Types/>", "word/document.xml": "<w:document/>" })), "docx");
+  assert.equal(kindOfContent(zip({ "[Content_Types].xml": "<Types/>", "ppt/presentation.xml": "<p:presentation/>" })), "pptx");
+  assert.equal(kindOfContent(zip({ "[Content_Types].xml": "<Types/>", "xl/workbook.xml": "<workbook/>" })), "xlsx");
+  assert.equal(kindOfContent(Buffer.concat([Buffer.from("PK\x03\x04"), Buffer.from("....een gewone zip")])), null);
+  // A zip is an office file only with a part list and a folder of that kind as entry, not a folder whose name merely ends in one.
+  assert.equal(kindOfContent(readFileSync(join(FIXTURES, "zip-met-map-keyword.zip"))), null);
+  assert.equal(kindOfContent(zip({ "word/document.xml": "<w:document/>" })), null);
+  assert.equal(kindOfContent(zip({ "[Content_Types].xml": "<Types/>", "keyword/readme.txt": "word/ in de tekst" })), null);
+  for (const text of ["BEGIN:VCALENDAR\r\nEND:VCALENDAR\r\n", '{"naam":"Één"}', "<?xml version=\"1.0\"?><gpx/>", "WEBVTT\n\n00:00.000 --> 00:01.000\nHallo"]) assert.equal(kindOfContent(Buffer.from(text)), "text", text);
+  // A picture has null bytes and control characters.
+  assert.equal(kindOfContent(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00])), null);
+  assert.equal(kindOfContent(readFileSync(join(FIXTURES, "figure.png"))), null);
+  assert.equal(kindOfContent(Buffer.from([0x01, 0x02, 0x03, 0xe9, 0x9f, 0x10, 0x11, 0x12])), null);
+  // Text in another character set is text: windows-1252 and Latin-1, UTF-16 with a byte order mark, UTF-16 the server names.
+  assert.equal(kindOfContent(Buffer.from([0x63, 0x61, 0x66, 0xe9])), "text");
+  assert.equal(kindOfContent(readFileSync(join(FIXTURES, "windows-1252.txt"))), "text");
+  assert.equal(kindOfContent(readFileSync(join(FIXTURES, "utf-16.txt"))), "text");
+  assert.equal(kindOfContent(readFileSync(join(FIXTURES, "utf-16-zonder-bom.txt"))), null, "UTF-16 without a byte order mark has null bytes");
+  assert.equal(kindOfContent(readFileSync(join(FIXTURES, "utf-16-zonder-bom.txt")), "utf-16le"), "text");
+  // A long text cut in the middle of a character at the end of the window is still text.
+  assert.equal(kindOfContent(Buffer.from(`${"a".repeat(65_535)}é`)), "text");
 });
 
 test("Markdown writes its structure out: headings, links, pictures and tables, not inside fenced code", () => {
@@ -592,8 +623,16 @@ test("an address the browser starts to download without a download link is a doc
     }
     assert.deepEqual(stock.skipped, [], "a download is not a page that failed to load");
     const path = (url: string): string => new URL(url).pathname + new URL(url).search;
-    assert.deepEqual(stock.documents!.map((document) => [path(document.url), document.kind, document.contentType]), [["/agenda?id=4", "other", "text/calendar"], ["/assets/files/afspraak-1a2b3c.ics", "other", "text/calendar"]]);
+    assert.deepEqual(stock.documents!.map((document) => [path(document.url), document.kind, document.contentType]), [["/agenda?id=4", "text", "text/calendar"], ["/assets/files/afspraak-1a2b3c.ics", "text", "text/calendar"]]);
     assert.deepEqual(stock.documents!.find((document) => path(document.url) === "/assets/files/afspraak-1a2b3c.ics")!.linkedFrom, [{ page: `${address}/`, text: "Zet het in je agenda" }]);
+    // An agenda item is plain text, and is read; also in a run whose inventory still called it "other".
+    const run = join(scratch, "run-download");
+    const sample = withDocuments(buildSample(stock, "seed"), stock, "seed");
+    // Also a document without an extension is read when nothing named its kind: what is in it says it is text.
+    await writeJson(join(run, "sample.json"), { ...sample, documents: (sample.documents ?? []).map((document) => ({ ...document, kind: "other" })) });
+    assert.deepEqual(await measureDocuments(run), { documents: 2, read: 2, notRead: 0, failed: 0 });
+    const ics = loadDocuments(run, sample.documents).find((document) => document.item.url.endsWith(".ics"))!;
+    assert.match(readFileSync(join(run, ics.facts!.files.text!), "utf8"), /BEGIN:VCALENDAR/);
   } finally {
     await new Promise<void>((resolve) => void site.close(() => resolve()));
   }
@@ -653,7 +692,7 @@ test("plain text offered for download is a document, not a page: inventory count
 
     const sample = withDocuments(buildSample(stock, "seed"), stock, "seed");
     await writeJson(join(run, "sample.json"), sample);
-    assert.match(sample.note, /4 platte tekst \(md, txt, csv\)/);
+    assert.match(sample.note, /4 platte tekst \(md, txt, csv, ics\)/);
     const result = await measureDocuments(run);
     assert.deepEqual(result, { documents: 4, read: 4, notRead: 0, failed: 0 });
     const loaded = loadDocuments(run, sample.documents);
@@ -689,6 +728,47 @@ test("plain text offered for download is a document, not a page: inventory count
     assert.match(String(look.print.text), /Wie kan meedoen/);
   } finally {
     await new Promise<void>((resolve) => void textServer.close(() => resolve()));
+  }
+});
+
+test("a file nobody could place is read as text in another character set, and a zip that is no office file is not read", async () => {
+  const files: Record<string, { type: string; body: Buffer }> = {
+    "/bijlage-1": { type: "application/octet-stream", body: readFileSync(join(FIXTURES, "windows-1252.txt")) },
+    "/bijlage-2": { type: "application/octet-stream", body: readFileSync(join(FIXTURES, "utf-16.txt")) },
+    "/bijlage-3": { type: "application/octet-stream; charset=utf-16le", body: readFileSync(join(FIXTURES, "utf-16-zonder-bom.txt")) },
+    "/bijlage-4": { type: "application/octet-stream", body: readFileSync(join(FIXTURES, "zip-met-map-keyword.zip")) },
+  };
+  const site = createServer((request, response) => {
+    const file = files[new URL(request.url!, "http://x").pathname];
+    response.writeHead(file ? 200 : 404, { "content-type": file?.type ?? "text/plain", "content-length": file?.body.length ?? 0 });
+    response.end(file?.body);
+  });
+  await new Promise<void>((resolve) => site.listen(0, "127.0.0.1", resolve));
+  const address = `http://127.0.0.1:${(site.address() as { port: number }).port}`;
+  try {
+    const run = join(scratch, "run-content");
+    mkdirSync(run, { recursive: true });
+    await writeJson(join(run, "inventory.json"), { baseUrl: `${address}/`, origin: address, pages: [] });
+    const chosen = Object.keys(files).map((path, index) => ({ label: `D0${index + 1}`, url: `${address}${path}`, kind: "other", slug: path.slice(1), reason: "test", linkedFrom: [], bytes: null, lastModified: null }));
+    await writeJson(join(run, "sample.json"), { documents: chosen });
+    assert.deepEqual(await measureDocuments(run), { documents: 4, read: 3, notRead: 1, failed: 0 });
+    const facts = new Map(loadDocuments(run, chosen as never).map((document) => [new URL(document.item.url).pathname, document.facts!]));
+    const latin = facts.get("/bijlage-1")!;
+    assert.equal(latin.status, "read");
+    assert.equal(latin.kind, "text");
+    assert.deepEqual([latin.plain!.validUtf8, latin.plain!.decodedAs], [false, "windows-1252"]);
+    assert.match(readFileSync(join(run, latin.files.text!), "utf8"), /Café “De Kroon”.*\r?\nPrijs: € 3,50/);
+    const bom = facts.get("/bijlage-2")!;
+    assert.deepEqual([bom.status, bom.plain!.decodedAs], ["read", "utf-16le"]);
+    assert.match(readFileSync(join(run, bom.files.text!), "utf8"), /^=== pagina 1 ===\nCafé De Kroon\n/);
+    const named = facts.get("/bijlage-3")!;
+    assert.deepEqual([named.status, named.plain!.charset, named.plain!.decodedAs], ["read", "utf-16le", "utf-16le"]);
+    assert.match(readFileSync(join(run, named.files.text!), "utf8"), /Open van 9 tot 17 uur/);
+    const archive = facts.get("/bijlage-4")!;
+    assert.equal(archive.status, "notRead");
+    assert.match(archive.reasonNl!, /geen tekst en is van een soort die de toolbox niet kent/);
+  } finally {
+    await new Promise<void>((resolve) => void site.close(() => resolve()));
   }
 });
 

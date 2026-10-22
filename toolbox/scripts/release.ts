@@ -11,11 +11,17 @@
  * so that open pull requests do not all edit the same lines. `prepare` has towncrier (configured in
  * towncrier.toml) put the fragments in the new section and delete them. Lines that still stand under
  * the unreleased heading of CHANGELOG.md come along: they become fragments just before towncrier runs.
+ *
+ * Every version is measured before it is released: `prepare` refuses without a measurement in
+ * validatie/versies/<version>.json that evaluate accepts, unless `--unmeasured "<reason>"` says why
+ * not. That reason then stands at the top of the section of the changelog.
  */
 import { execFileSync } from "node:child_process";
-import { readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { parseArgs } from "node:util";
+import { versionAccuracyProblems } from "../src/lib/evaluation.ts";
 
 export const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
@@ -32,6 +38,8 @@ export const TOWNCRIER = "towncrier@26.9.0";
 export const START = "<!-- towncrier: een nieuwe versie komt hieronder -->";
 /** The kinds of fragment and the heading each goes under, in the order of towncrier.toml. */
 export const KINDS: Record<string, string> = { uitkomst: "Wat een uitkomst kan veranderen", verder: "Verder" };
+/** Where the measurement of each version as a whole is kept, relative to the root of the repository; evaluate reads the same file. */
+export const MEASUREMENTS = "validatie/versies";
 
 const readJson = (root: string, file: string): Record<string, unknown> => JSON.parse(readFileSync(join(root, file), "utf8")) as Record<string, unknown>;
 
@@ -108,6 +116,32 @@ export function fragmentsIn(root: string): string[] {
   return readdirSync(join(root, FRAGMENTS)).filter((name) => name !== "README.md").sort();
 }
 
+/**
+ * Whether `version` may be released: with a measurement in validatie/versies/<version>.json that
+ * evaluate accepts, or without one for a reason that is given. The line the section of the changelog
+ * opens with for a release without a measurement; null for one with.
+ */
+export function measurementGate(root: string, version: string, unmeasured: string | undefined): string | null {
+  const file = `${MEASUREMENTS}/${version}.json`;
+  let problems: string[];
+  if (!existsSync(join(root, file))) problems = [`${file} ontbreekt`];
+  else {
+    try {
+      problems = versionAccuracyProblems(JSON.parse(readFileSync(join(root, file), "utf8")), version).map((problem) => `${file}: ${problem}`);
+    } catch (error) {
+      problems = [`${file} is geen JSON: ${(error as Error).message}`];
+    }
+  }
+  if (problems.length === 0) {
+    if (unmeasured !== undefined) throw new Error(`${file} legt een meting van deze versie vast; laat --unmeasured weg`);
+    return null;
+  }
+  if (unmeasured === undefined) throw new Error(`${problems.join("; ")}. Meet de versie eerst en leg de uitkomst vast in ${file} (zie validatie/README.md), of breng haar uit met --unmeasured "<reden>"; die reden komt in ${CHANGELOG}`);
+  const reason = unmeasured.trim();
+  if (reason === "") throw new Error('--unmeasured vraagt een reden, zoals --unmeasured "alleen een herstel in de documentatie"');
+  return `Deze versie is uitgebracht zonder meting: ${/[.!?]$/.test(reason) ? reason : `${reason}.`}`;
+}
+
 const ORDER_MARKER = (number: string): string => `<!-- nog niet uitgebracht ${number} -->`;
 
 /**
@@ -115,7 +149,7 @@ const ORDER_MARKER = (number: string): string => `<!-- nog niet uitgebracht ${nu
  * into a new section, the fragments are deleted and their removal staged. Nothing changes when towncrier refuses,
  * for example over a fragment of an unknown kind.
  */
-export function releaseChangelog(root: string, version: string, date: string): void {
+export function releaseChangelog(root: string, version: string, date: string, unmeasuredNl: string | null = null): void {
   const path = join(root, CHANGELOG);
   const original = readFileSync(path, "utf8");
   const { changelog, preamble, entries } = takeUnreleased(original);
@@ -140,18 +174,20 @@ export function releaseChangelog(root: string, version: string, date: string): v
   const title = `## ${version} (${date})\n`;
   // towncrier leaves two empty lines after a version; the rest of the changelog has one.
   let built = readFileSync(path, "utf8").replace(/\n{3,}(?=## )/g, "\n\n").replace(new RegExp(`^- ${ORDER_MARKER("\\d{4}")}`, "gm"), "- ");
-  if (preamble) built = built.replace(title, `${title}\n${preamble}\n`);
+  const opening = [unmeasuredNl, preamble].filter(Boolean).join("\n\n");
+  if (opening) built = built.replace(title, `${title}\n${opening}\n`);
   writeFileSync(path, built);
 }
 
 const git = (...args: string[]): string => execFileSync("git", args, { cwd: ROOT, encoding: "utf8" }).trim();
 
-function prepare(version: string): void {
+function prepare(version: string, unmeasured: string | undefined): void {
   const current = versionsIn(ROOT)["toolbox/package.json"]!;
   if (!isNewer(version, current)) throw new Error(`${version} is geen versie na ${current}; schrijf drie getallen, zoals 0.2.0`);
   if (git("status", "--porcelain") !== "") throw new Error("er staan wijzigingen die niet zijn vastgelegd; leg die eerst vast of zet ze opzij");
+  const unmeasuredNl = measurementGate(ROOT, version, unmeasured);
   const fragments = fragmentsIn(ROOT).length;
-  releaseChangelog(ROOT, version, new Date().toISOString().slice(0, 10));
+  releaseChangelog(ROOT, version, new Date().toISOString().slice(0, 10), unmeasuredNl);
   for (const file of VERSION_FILES) {
     const text = readFileSync(join(ROOT, file), "utf8");
     writeFileSync(join(ROOT, file), text.replace(/("version":\s*)"[^"]*"/, `$1"${version}"`));
@@ -187,11 +223,12 @@ function tag(): void {
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const [action, version] = process.argv.slice(2);
   try {
-    if (action === "prepare" && version) prepare(version);
-    else if (action === "tag") tag();
-    else throw new Error("gebruik: release.ts prepare <versie> | release.ts tag");
+    const { positionals, values } = parseArgs({ args: process.argv.slice(2), options: { unmeasured: { type: "string" } }, allowPositionals: true });
+    const [action, version] = positionals;
+    if (action === "prepare" && version && positionals.length === 2) prepare(version, values.unmeasured);
+    else if (action === "tag" && positionals.length === 1 && values.unmeasured === undefined) tag();
+    else throw new Error('gebruik: release.ts prepare <versie> [--unmeasured "<reden>"] | release.ts tag');
   } catch (error) {
     console.error((error as Error).message);
     process.exit(1);

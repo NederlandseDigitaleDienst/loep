@@ -103,7 +103,9 @@ test("candidates of a checked walk reach their criterion, by code", async () => 
   const look = observe("r-start", "look");
   write(join("rondgang", "start.json"), { pageType: "start", page: "P1", states: [{ nameNl: "Breed, melding gesloten", evidence: [look] }], candidates: [{ id: "P1-K01", criterion: "1.4.3", page: "P1", where: "kop op de foto", evidence: [look], noteNl: "Witte kop op een lichte foto, moeilijk te lezen.", support: "alleen beeld" }], notWalkedNl: [] });
   assert.deepEqual(await checkWalk(dir, "start"), []);
-  assert.match((await checkWalk(dir, "contact")).join(), /cannot read/);
+  // A list that is not there: most often its write was refused in the same batch as the check. The message says where, and to check that write.
+  assert.match((await checkWalk(dir, "contact")).join(), /there is no list at \/.*rondgang\/contact\.json: nothing was written there\. Look at what the command or tool that should have written it answered/);
+  assert.match((await checkWalk(dir, "nergens")).join(), /no walk for page type "nergens"; this run has walks for "start", "contact"/);
   await skip(dir, { pageType: "contact" }, "De agent leverde twee keer geen geldige lijst.");
   await instrumentTasks(dir, options);
   assert.deepEqual(JSON.parse(readFileSync(join(dir, "tasks", "1.4.3", "kandidaten.json"), "utf8")).map((candidate: { id: string }) => candidate.id), ["P1-K01"]);

@@ -30,10 +30,15 @@ export const SESSION_USAGE = `  session start --run <run> [--session <name>] [--
       act:     open <url|label> [--width n] [--scheme light|dark] [--state <name>] [--with-blockers], click <ref>, key <key>,
                tab [n] [--shift], type <ref> <${Object.keys(TEST_VALUES).join("|")}>,
                select <ref> <option text | #n>, paste <ref> <same kinds as type>, press <ref> [--hold | --abort],
-               hover <ref>, scroll <ref|top|bottom|down|up|+n|-n>, back
-      a <ref> is a number from look or find, or css:<selector> when that matches exactly one element
+               hover <ref>, scroll <ref|top|bottom|down|up|+n|-n>, back,
+               drag <ref> <dx> <dy> | drag <ref> --to <ref> (press, move in steps, let go, with the mouse),
+               swipe <ref> <left|right|up|down> (one finger on a touch screen: touch and pointer events of the kind touch);
+               both keep a picture of the window before and after
+      a <ref> is a number from look or find, or css:<selector> when that matches exactly one element;
+      put a selector in single quotes ('css:main > div'), or the shell takes > for a redirection to a file
       look:    look [--full] [--max n] [--plain] [--vision deuteranopia|protanopia|tritanopia|achromatopsia|blurredVision|reducedContrast],
-               crop <ref> [--margin n], ax <ref>, style <ref> [a,b,c], html <ref> [--max n],
+               crop <ref> [--margin n], cutout <picture in the run> --at x,y,width,height (a piece of a screenshot that is
+               in the run already, such as one of the sweep; needs no open page), ax <ref>, style <ref> [a,b,c], html <ref> [--max n],
                find <text | role:x | tag:x | css:selector>
       dossier [<part> [<chunk>]] [--criterion x.y.z]   the dossier of the task of this session, in a compact form: without a
                part an overview with sizes and what is read; a part (controls, keyboard.walk, legend.P03, rows.4) in
@@ -45,12 +50,12 @@ export const SESSION_USAGE = `  session start --run <run> [--session <name>] [--
                the contrast ratio as everybody sees it and with protanopia, deuteranopia, tritanopia and achromatopsia),
                forced [<ref>] [--more-contrast] [--max n] (the page again with forced colours or with more contrast: which boundary,
                focus indicator or drawing disappears; no requirement of WCAG, a lead),
-               reflow, spacing [--keep] (--keep leaves the wider spacing in force until the next open), zoom, order, media [<ref>] (every audio and video, or one: plays, muted, duration, tracks, controls),
+               reflow, spacing [--keep] (--keep leaves the wider spacing in force until the next open), zoom (also with the default font size doubled), order, media [<ref>] (every audio and video, or one: plays, muted, duration, tracks, controls),
                media <ref> --listen (fetches the file: what is said next to the subtitles and the text around it, sound that is
                not speech, still pictures of a video with the text in them, flashes per second; needs ffmpeg and whisper.cpp)
       measure with every method that answers the question, side by side:
                name <ref>, rules [<ref>] [--criterion x.y.z] (was: engines), contrast <ref> [--at x,y,width,height], focus <ref>, target <ref>,
-               taborder [--from <ref>|focus] [--max n] (was: tabwalk), lang [<ref>], source, ocr <ref>, motion [--seconds n],
+               taborder [--from <ref>|focus] [--max n] (was: tabwalk), lang [<ref>], parse (was: source), ocr <ref>, motion [--seconds n],
                timers (every timer of a second or more since the load, also one an action just started: the waiting ones
                are set off and what each did is judged by the rule of 2.2.1; this changes the page)
                reflow, zoom and spacing are measured in WebKit too; slow methods (a second browser, Java, text recognition) run in the background: --wait waits for them,
@@ -254,6 +259,8 @@ export async function sessionCli(argv: string[]): Promise<number> {
       vision: { type: "string" },
       "more-contrast": { type: "boolean" },
       against: { type: "string" },
+      // drag: --to <ref>
+      to: { type: "string" },
       page: { type: "string" },
       tags: { type: "boolean" },
       // speak: --steps n, --click, --type <kind> [--submit]

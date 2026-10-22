@@ -60,7 +60,7 @@ De assistent draait de stappen uit de [README](../README.md#hoe-het-werkt) en st
 2. **Hoe lang het duurt.** Hij geeft de uitkomst van `estimate` door zoals die er staat. Een eigen schatting noemt hij niet. Vraag je halverwege hoe lang het nog duurt, dan rekent hij opnieuw, met wat al gemeten is en met het tempo van een stap die nog loopt.
 3. **Een verkenner.** Eén agent brengt in kaart welke paginatypen er zijn, wat over de pagina ligt (een cookiemelding, een chat) en wat pas na een klik iets toont.
 4. **Metingen zonder taalmodel.** Scripts meten elke pagina: regel-engines, contrast, toetsenbord, vergroten, formulieren en documenten.
-5. **De bewijspoort.** Is het bewijs bruikbaar? Zo niet, dan krijgt de verkenner een vervolgopdracht, hooguit twee keer.
+5. **De bewijspoort.** Is het bewijs bruikbaar? Zo niet, dan krijgt de verkenner een vervolgopdracht, hooguit twee keer. Mislukte alleen een meting, dan meten de scripts eerst opnieuw.
 6. **Vier rondes agents.** Per paginatype een rondgang, per criterium een beoordelaar, dan per criterium een verifieerder die elke bevinding opnieuw maakt vanaf een verse pagina. Blijft een criterium open door het onderzoek zelf, dan meet een afmaakronde wat ontbrak. Dit is het grootste deel van de tijd.
 7. **Het rapport.** In de map van de run, onder `report/`: `rapport.md`, `rapport.pdf` en `rapport-kort.pdf` zonder bijlage A, als concept.
 

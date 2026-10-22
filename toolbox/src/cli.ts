@@ -37,7 +37,8 @@ const USAGE = `loep <command> [options]
   documents --run <run>                  Fetch and measure the documents of the sample (pdf, office and plain text files): tags, title,
                                          language, headings, text alternatives, tables, links, PDF/UA-1 with veraPDF
   gate --run <run> [--out <dir>]         Decide whether the evidence is fit to judge on; exit 1 when it is not, 2 when
-                                         only the agent's look at the pictures is still missing. --out leaves the run untouched
+                                         the agent's look at the pictures is due, 3 when a new sweep can close the gaps (a
+                                         measurement failed or is missing). --out leaves the run untouched
   check-gate --run <run>                 Validate the agent's answers for the gate; non-zero exit on problems
   tasks --run <run> [--only <ids>] [--page-types <ids>] [--again <ids>] [--attempted <phase>:<id>,...]
                                          Write the task files of the phase the run is in (walks, judges, verifiers, and a
@@ -93,6 +94,21 @@ const USAGE = `loep <command> [options]
                                          Confirmed at an interactive terminal, or --recorded-via gesprek (see below)
   render --run <run>                     Write the report (Markdown and PDF) from evaluation.json; after signing with the
                                          decisions about each defect
+  render --run <run> --rechecks          Write only the appendix with the rechecks (rechecks/nametingen.md), outside the
+                                         report and the seal; the report is not touched
+  recheck --run <run> (--finding <id> | --criterion <id>)
+                                         After the evaluation, also when it is sealed and signed: write the task for one agent
+                                         that measures a finding (or every finding of a criterion) again on the site as it is
+                                         now, as the verifier did. Everything goes in rechecks/<id>/<moment>/, outside the seal;
+                                         the evaluation does not change. The outcome per finding: nog aanwezig, opgelost or
+                                         niet na te gaan
+  check-recheck --run <run> (--finding <id> | --criterion <id>) [--at <moment>]
+                                         Validate the outcome of a recheck (the latest, or the one at that moment); non-zero
+                                         exit on problems
+  export --run <run> --format csv|issues [--out <file or dir>]
+                                         The work list as CSV (one row per defect, with its criteria), or as one Markdown block
+                                         per defect with a title and a body for an issue tracker. Without --out to standard
+                                         output; with issues --out is a directory with a file per defect. Creates no issues
   sign --run <run> --name <who> --role <function> --organisation <name> [--checked <text>]
                                          Record that a named person stands for the evaluation. Only at an interactive terminal:
                                          the signer types the first 8 characters of the seal. An agent never signs
@@ -128,8 +144,17 @@ Options:
                     The name is kept in the manifest of the run; the report shows only the role. The declaration
                     is confirmed at an interactive terminal by typing the origin; an agent never records it
   --max-writes <n>  With --allow-writes or --test-environment: the most requests that change something the whole run
-                    may send to that origin, over every session and the sweep together (default 5), at least 120 s
-                    apart. Past it every write is held back as in a run without permission. Kept in the manifest
+                    may send to that origin, over every session and the sweep together: default 5, at least 120 s
+                    apart; on a local address default 50, without a pause. Past it every write is held back as in
+                    a run without permission. Kept in the manifest
+  --other-toolbox   Go on with a run that was made with another version of loep. Without it every command that
+                    measures or writes tasks refuses: another version writes other tasks and procedures, and the walks
+                    and verdicts of the run are then done again. Measure again with --fresh after changing. Commands
+                    that measure nothing (render, statement, compare, decide, sign, seal and the readers) go on, and so
+                    does recheck: it measures the site as it is now, in a folder of its own, and records its own version.
+                    In a copy made with variant (it holds variant.json) the agent phases (tasks, skip, unskip,
+                    check-walk, check-verdict, evaluate, answer, merge, check-merge) go on under another version
+                    and say which version the sweep is of; the sweep itself is held to the version it was made with
   --recorded-via gesprek --confirmation <text> --summary <text>
                     With answer and decide only: the agent records what the person said in the conversation,
                     after an express confirmation. --confirmation is what the person said, word for word;
@@ -138,6 +163,7 @@ Options:
 
 Comparing per finding has its own steps: loep compare --findings --help
 Measuring a variant of the code on a frozen sweep: loep variant --help (variant, compare-variants)
+Tokens per agent from the transcripts of a workflow, for compare-variants --usage: loep usage --help
 A browser session for an agent has its own commands: loep session --help
 `;
 
@@ -158,6 +184,7 @@ async function main(): Promise<void> {
   if (process.argv[2] === "compare" && process.argv.includes("--findings")) return (await import("./commands/compare-findings.ts")).cli(process.argv.slice(3));
   if (process.argv[2] === "calibrate") return (await import("./commands/calibrate.ts")).cli(process.argv.slice(3)); // outside an evaluation: measures the instruments against the ACT test cases
   if (process.argv[2] === "variant" || process.argv[2] === "compare-variants") return (await import("./commands/variants.ts")).cli(process.argv.slice(2)); // outside an evaluation: measures a variant of the code on a frozen sweep
+  if (process.argv[2] === "usage") return (await import("./commands/usage.ts")).cli(process.argv.slice(3)); // outside an evaluation: tokens per agent from the transcripts, for compare-variants --usage
   // A session takes its commands and options as they come; it parses them itself.
   if (process.argv[2] === "session") {
     const { sessionCli, SESSION_USAGE } = await import("./session/client.ts");
@@ -210,6 +237,7 @@ async function main(): Promise<void> {
       brief: { type: "boolean", default: false },
       concept: { type: "boolean", default: false },
       fresh: { type: "boolean", default: false },
+      "other-toolbox": { type: "boolean", default: false },
       "allow-writes": { type: "boolean", default: false },
       "test-environment": { type: "string" },
       "declared-by": { type: "string" },
@@ -221,6 +249,10 @@ async function main(): Promise<void> {
       "at-once": { type: "string" },
       groups: { type: "boolean", default: false },
       json: { type: "boolean", default: false },
+      finding: { type: "string" },
+      at: { type: "string" },
+      rechecks: { type: "boolean", default: false },
+      format: { type: "string" },
       help: { type: "boolean", short: "h" },
     },
   });
@@ -234,7 +266,7 @@ async function main(): Promise<void> {
     return;
   }
   // A run that was given a test environment at inventory may write there; every other run holds all writes back.
-  const { confirmDeclaration, decideWrites, recordWrites, setRunWrites, writeAccess, writesForRun } = await import("./lib/writes.ts");
+  const { confirmDeclaration, decideWrites, DEFAULT_WRITE_SPACING_SECONDS, recordWrites, setRunWrites, spacingNl, writeAccess, writesForRun } = await import("./lib/writes.ts");
   if (command !== "inventory" && (values["allow-writes"] || values["test-environment"] !== undefined || values["declared-by"] !== undefined || values["max-writes"] !== undefined)) {
     throw new Error("--allow-writes, --test-environment, --declared-by en --max-writes horen bij inventory: daar wordt voor de hele run vastgelegd of er verstuurd mag worden, en hoe vaak");
   }
@@ -246,8 +278,17 @@ async function main(): Promise<void> {
   if (recordedVia === "gesprek" && (command === "sign" || command === "inventory")) throw new Error(`${command === "sign" ? "tekenen" : "de verklaring dat er verstuurd mag worden"} legt de assistent nooit vast, ook niet na een bevestiging in het gesprek. ${HUMAN_AT_TERMINAL_NL}`);
   if ((recordedVia !== undefined || values.confirmation !== undefined || values.summary !== undefined) && command !== "answer" && command !== "decide") throw new Error("--recorded-via, --confirmation en --summary horen bij answer en decide");
   if (command !== "inventory" && values["also-origin"] !== undefined) throw new Error("--also-origin hoort bij inventory: daar wordt vastgelegd welke origins samen de site zijn");
+  // A run goes on with the version of loep it was made with; another version would quietly write other tasks over it.
+  if (values.run) {
+    const { frozenSweepNl, otherToolboxNl } = await import("./lib/manifest.ts");
+    const refusal = otherToolboxNl(values.run, command, values["other-toolbox"]);
+    if (refusal) throw new Error(refusal);
+    const frozen = frozenSweepNl(values.run, command);
+    if (frozen) process.stderr.write(`loep: ${frozen}\n`);
+  }
   // `gaps` and `feedback` read the verdicts and the evaluation of finished runs and nothing else of them: they need no permission to write and no login.
-  const readsOnly = command === "gaps" || command === "feedback";
+  // A recheck only reads the run and writes in a folder of its own; its session runs in that folder, not here.
+  const readsOnly = command === "gaps" || command === "feedback" || command === "recheck" || command === "check-recheck";
   if (command !== "inventory" && !readsOnly && values.run) {
     const permission = writesForRun(values.run);
     if (permission) setRunWrites(writeAccess(values.run, permission, command));
@@ -299,7 +340,7 @@ async function main(): Promise<void> {
       await recordWrites(values.out, permission);
       if (permission) {
         process.stdout.write(`versturen toegestaan naar ${permission.origin}${permission.declaredBy ? `, verklaard door ${permission.declaredBy.name} (${permission.declaredBy.role})` : ""}\n`);
-        process.stdout.write(`budget voor versturen: ten hoogste ${permission.maxWrites} verzendingen naar die origin voor de hele run, alle agents en de veegronde samen, met minstens ${permission.spacingSeconds} s ertussen. Zoveel berichten of formulieren krijgt de ontvanger ten hoogste.\n`);
+        process.stdout.write(`budget voor versturen: ten hoogste ${permission.maxWrites} verzendingen naar die origin voor de hele run, alle agents en de veegronde samen${spacingNl(permission.spacingSeconds ?? DEFAULT_WRITE_SPACING_SECONDS)}. Zoveel berichten of formulieren krijgt de ontvanger ten hoogste.\n`);
         // Say where the declaration ends up, so nobody finds their name somewhere they did not expect.
         if (permission.declaredBy) process.stdout.write(`let op: de naam staat in manifest.json van deze run; het rapport en de verklaring noemen alleen de functie (${permission.declaredBy.role}). Wie de map van de run deelt of publiceert, deelt ook de naam.\n`);
       }
@@ -347,15 +388,24 @@ async function main(): Promise<void> {
     }
     case "gate": {
       if (!values.run) throw new Error("gate needs --run <run>");
-      const { gate } = await import("./commands/gate.ts");
+      const { gate, MAX_RETURNS_TO_EXPLORER } = await import("./commands/gate.ts");
       const result = await gate(values.run, values.out ?? values.run);
       for (const check of result.checks) process.stdout.write(`${check.ok ? "ok  " : "GAT "} ${check.name}: ${check.noteNl}\n`);
-      for (const gap of result.gaps) process.stdout.write(`- ${gap.check}${gap.page ? ` ${gap.page}` : ""}${gap.state !== "default" ? ` [${gap.state}]` : ""}: ${gap.missingNl}\n`);
+      for (const gap of result.gaps) process.stdout.write(`- ${gap.fixedBy === "sweep" ? "(opnieuw meten) " : ""}${gap.check}${gap.page ? ` ${gap.page}` : ""}${gap.state !== "default" ? ` [${gap.state}]` : ""}: ${gap.missingNl}\n`);
       for (const gap of result.limitations) process.stdout.write(`  (beperking) ${gap.check}${gap.page ? ` ${gap.page}` : ""}${gap.state !== "default" ? ` [${gap.state}]` : ""}: ${gap.missingNl}\n`);
       for (const gap of result.accepted) process.stdout.write(`  (aanvaard door ${gap.decidedBy}) ${gap.check}${gap.page ? ` ${gap.page}` : ""}: ${gap.reasonNl}\n`);
-      const verdict = result.sufficient ? "bewijs voldoende" : result.stage === "review-pending" ? `vaste controles voldoende; de beelden zijn nog niet bekeken: ${result.review.tasks.map((part) => part.task).join(", ")}${result.review.tasks.length > 1 ? " (één agent per opdracht)" : ""}` : `bewijs onvoldoende: ${result.gaps.length} ${result.gaps.length === 1 ? "gat" : "gaten"}${result.stage === "deterministic" ? " in de vaste controles" : ""}; nog ${result.returnsLeft} keer terug naar de verkenner`;
+      const counted = (count: number): string => `${count} ${count === 1 ? "gat" : "gaten"}`;
+      const tasksNl = `${result.review.tasks.map((part) => part.task).join(", ")}${result.review.tasks.length > 1 ? " (één agent per opdracht)" : ""}`;
+      const forSweep = result.gaps.filter((gap) => gap.fixedBy === "sweep").length;
+      const verdict = {
+        proceed: "bewijs voldoende",
+        review: result.gaps.length === 0 ? `vaste controles voldoende; de beelden zijn nog niet bekeken: ${tasksNl}` : `${counted(result.gaps.length)} in de vaste controles voor de verkenner; eerst de beelden bekijken, zodat de verkenner alle gaten in één keer krijgt: ${tasksNl}`,
+        sweep: `bewijs onvoldoende: een nieuwe veegronde kan ${forSweep} van de ${counted(result.gaps.length)} sluiten, want daar mislukte of ontbreekt een meting. Draai collect, contrast, states en documents opnieuw en daarna gate; dat kost geen terugkeer naar de verkenner (nog ${result.resweepsLeft} keer opnieuw meten na deze verkenning)`,
+        explore: `bewijs onvoldoende: ${counted(result.gaps.length)}${result.stage === "deterministic" ? " in de vaste controles" : ""}; nog ${result.returnsLeft} keer terug naar de verkenner`,
+        stop: `bewijs onvoldoende: ${counted(result.gaps.length)}${result.stage === "deterministic" ? " in de vaste controles" : ""}; de run is ${MAX_RETURNS_TO_EXPLORER} keer terug geweest naar de verkenner, er komt geen beoordeling`,
+      }[result.next!];
       process.stdout.write(`${verdict}\n${result.warnings.length} waarschuwingen\n`);
-      process.exitCode = result.sufficient ? 0 : result.stage === "review-pending" ? 2 : 1;
+      process.exitCode = { proceed: 0, review: 2, sweep: 3, explore: 1, stop: 1 }[result.next!];
       return;
     }
     case "check-gate": {
@@ -417,7 +467,7 @@ async function main(): Promise<void> {
       const { checkWalk } = await import("./commands/instrument-tasks.ts");
       const problems = await checkWalk(values.run, values["page-type"]);
       for (const problem of problems) process.stdout.write(`- ${problem}\n`);
-      process.stdout.write(problems.length === 0 ? "OK: de kandidatenlijst voldoet aan de vorm\n" : `${problems.length} problemen\n`);
+      process.stdout.write(problems.length === 0 ? "OK: de kandidatenlijst voldoet aan de vorm\n" : `${problems.length} ${problems.length === 1 ? "probleem" : "problemen"}; herstel ze allemaal in één keer en draai de controle daarna één keer opnieuw\n`);
       process.exitCode = problems.length === 0 ? 0 : 1;
       return;
     }
@@ -520,12 +570,49 @@ async function main(): Promise<void> {
     }
     case "render": {
       if (!values.run) throw new Error("render needs --run <run>");
+      if (values.rechecks) {
+        const { renderRechecks } = await import("./commands/recheck.ts");
+        const written = await renderRechecks(values.run);
+        process.stdout.write(`${written.path}\n${written.checked} ${written.checked === 1 ? "nameting" : "nametingen"} van een bevinding${written.unchecked > 0 ? `; ${written.unchecked} niet getoond, omdat de controle (check-recheck) niet slaagde of het resultaat daarna veranderde` : ""}. Het rapport en het zegel zijn niet aangeraakt.\n`);
+        return;
+      }
       const { render } = await import("./commands/render.ts");
       const result = await render(values.run);
       process.stdout.write(`${result.markdown}\n${result.pdf ?? "(geen pdf)"}\n${result.shortPdf ? `${result.shortPdf}\n` : ""}`);
       for (const problem of result.pdfChecks) process.stdout.write(`- ${problem}\n`);
+      for (const note of result.cutoutNotes) process.stdout.write(`- ${note}\n`);
+      for (const warning of result.pdfWarnings) process.stdout.write(`LET OP: ${warning}\n`);
       // A report whose PDF fails its own accessibility check is not fit to hand over.
       if (result.pdfChecks.length > 0) process.exitCode = 1;
+      return;
+    }
+    case "recheck": {
+      if (!values.run) throw new Error("recheck needs --run <run>");
+      const { recheck } = await import("./commands/recheck.ts");
+      const written = await recheck(values.run, { finding: values.finding, criterion: values.criterion });
+      process.stdout.write(`${join(values.run, written.task)}\nnameting van ${written.findings.join(", ")}: start één agent met deze opdracht, in sessie ${written.session}. Alles komt in ${join(values.run, written.dir)}; de evaluatie, het rapport en het zegel blijven zoals ze zijn.\n`);
+      return;
+    }
+    case "check-recheck": {
+      const target = values.finding ?? values.criterion;
+      if (!values.run || !target || (values.finding !== undefined && values.criterion !== undefined)) throw new Error("check-recheck needs --run <run> and --finding <id> or --criterion <id>");
+      const { checkRecheck } = await import("./commands/recheck.ts");
+      const { problems } = await checkRecheck(values.run, target, values.at);
+      for (const problem of problems) process.stdout.write(`- ${problem}\n`);
+      process.stdout.write(problems.length === 0 ? "OK: de nameting wijst naar eigen, nieuwe waarnemingen en is vastgelegd\n" : `${problems.length} problemen\n`);
+      process.exitCode = problems.length === 0 ? 0 : 1;
+      return;
+    }
+    case "export": {
+      if (!values.run) throw new Error("export needs --run <run>");
+      const { exportWorkList } = await import("./commands/export.ts");
+      const result = await exportWorkList({ run: values.run, format: values.format, out: values.out });
+      if (result.text !== null) process.stdout.write(result.text);
+      else if (result.format === "csv") process.stdout.write(`${result.lines} regels van de werklijst in ${result.written[0]}\n`);
+      else {
+        process.stdout.write(`${result.lines} issues klaar in ${values.out}, een bestand per gebrek; de eerste regel is de titel. Er is niets aangemaakt.\n`);
+        process.stdout.write(`Aanmaken, na het lezen: for f in ${values.out}/*.md; do gh issue create --title "$(head -n 1 "$f" | sed 's/^# //')" --body "$(tail -n +3 "$f")"; done\n`);
+      }
       return;
     }
     case "sign": {
@@ -559,6 +646,7 @@ async function main(): Promise<void> {
       process.stdout.write(`status ${result.status}; ${result.openItems.length} punten nog in te vullen\n${result.files.join("\n")}\n`);
       if (result.missingMeasuresNl) process.stdout.write(`LET OP: ${result.missingMeasuresNl}\n`);
       for (const problem of result.pdfChecks) process.stdout.write(`- ${problem}\n`);
+      for (const warning of result.pdfWarnings) process.stdout.write(`LET OP: ${warning}\n`);
       if (result.pdfChecks.length > 0) process.exitCode = 1;
       return;
     }
