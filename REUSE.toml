@@ -48,6 +48,7 @@ path = [
   "toolbox/test/fixtures/**.pptx",
   "toolbox/test/fixtures/**.xlsx",
   "toolbox/test/fixtures/**.jsonl",
+  "toolbox/test/fixtures/**.zip",
 ]
 SPDX-FileCopyrightText = "Staat der Nederlanden (Ministerie van Economische Zaken en Klimaat)"
 SPDX-License-Identifier = "EUPL-1.2"
