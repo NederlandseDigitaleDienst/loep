@@ -12,6 +12,12 @@ export interface Observation {
   ruling?: (typeof CANDIDATE_RULINGS)[number];
   /** With "finding": the key of the finding it supports. */
   finding?: string;
+  /**
+   * The rules a rule engine failed in the dossier that this observation settles, such as
+   * "aria-roles". One observation covers a rule for one kind of element, or several rules on the
+   * same elements; a rule that fails on different kinds of element may be split over observations.
+   */
+  engineRules?: string[];
 }
 
 /**
@@ -479,6 +485,15 @@ interface InstrumentContext {
   vendorPrefixes?: string[];
   /** Rows of the dossier that a pass has to explain one by one (`rowsToExplain`): a measurement that says something is lost. */
   explainOnPass?: { part: string; text: string }[];
+  /** The rules a rule engine failed in the dossier part `engine` (`failedEngineRules`). Each needs an observation that settles it. Without them, nothing is checked. */
+  engineFailures?: string[];
+}
+
+/** The rules that a rule engine failed in the dossier part `engine`, each once. */
+export function failedEngineRules(evidence: Record<string, unknown>): string[] {
+  const results = (evidence.engine as { results?: unknown } | undefined)?.results;
+  if (!Array.isArray(results)) return [];
+  return [...new Set(results.filter((row) => row?.outcome === "failed" && typeof row.rule === "string").map((row) => row.rule as string))].sort();
 }
 
 /**
@@ -824,6 +839,8 @@ function instrumentRules(verdict: Partial<Verdict>, context: InstrumentContext, 
     else if (observation.ruling === "otherCriterion" && !(Array.isArray(verdict.crossCandidates) && verdict.crossCandidates.length > 0)) problems.push(`${at}: ruling "otherCriterion" needs an entry in crossCandidates, so the judge of that criterion sees it`);
   });
 
+  problems.push(...engineRuleProblems(verdict, context, (ref) => shows(ref) && own(ref), whose));
+
   const cited = (Array.isArray(verdict.observations) ? verdict.observations : []).flatMap((observation) => (Array.isArray(observation.evidence) ? observation.evidence : [])).filter((ref): ref is string => typeof ref === "string");
   if (verdict.outcome === "passed") {
     const shown = cited.filter(shows);
@@ -900,6 +917,35 @@ function instrumentRules(verdict: Partial<Verdict>, context: InstrumentContext, 
       else if (!asksPerson || verdict.outcome === "passed" || verdict.outcome === "inapplicable") problems.push(`${at}: what may belong to this criterion after all but cannot be decided is for a person: a point "mens nodig:" in missingNl, and no "passed" or "inapplicable" outcome`);
     }
   });
+  return problems;
+}
+
+/**
+ * Every rule a rule engine failed in the dossier is settled in an observation that names it in
+ * `engineRules` (#239): a finding, a candidate passed on, an open point, or "noIssue" with a look
+ * or measure observation of one's own that shows why the report does not hold here. One entry per
+ * rule and kind of element, not per element.
+ */
+function engineRuleProblems(verdict: Partial<Verdict>, context: InstrumentContext, showsOwn: (ref: string) => boolean, whose: string): string[] {
+  const failed = context.engineFailures;
+  if (!failed) return [];
+  const problems: string[] = [];
+  const settled = new Set<string>();
+  (Array.isArray(verdict.observations) ? verdict.observations : []).forEach((observation, position) => {
+    if (observation.engineRules === undefined) return;
+    const at = `observations[${position}].engineRules`;
+    if (!Array.isArray(observation.engineRules) || observation.engineRules.some((rule) => typeof rule !== "string")) return void problems.push(`${at}: a list of rule names, such as ["aria-roles"]`);
+    for (const rule of observation.engineRules) {
+      if (!failed.includes(rule)) problems.push(`${at}: "${rule}" is not a rule an engine failed in the dossier part engine${failed.length > 0 ? ` (${failed.join(", ")})` : ""}`);
+      settled.add(rule);
+    }
+    if (observation.ruling === "noIssue" && !(Array.isArray(observation.evidence) && observation.evidence.some((ref) => typeof ref === "string" && showsOwn(ref)))) {
+      problems.push(`observations[${position}]: setting aside what an engine failed is a small pass; "noIssue" next to engineRules needs a look or measure observation${whose} in evidence that shows why the report does not hold here (a false report, or not applicable because of what you saw), otherwise the ruling is "finding", "otherCriterion" or "open"`);
+    }
+  });
+  for (const rule of failed) {
+    if (!settled.has(rule)) problems.push(`engine rule "${rule}" failed in the dossier part engine and no observation settles it. Name it in "engineRules" of the observation that handles it, one per rule and kind of element: ruling "finding" (with the finding), "otherCriterion" (with an entry in crossCandidates), "open" (with the point in missingNl), or "noIssue" with a look or measure observation${whose} that shows why the report does not hold here`);
+  }
   return problems;
 }
 
