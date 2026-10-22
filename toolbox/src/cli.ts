@@ -138,7 +138,10 @@ Options:
   --other-toolbox   Go on with a run that was made with another version of loep. Without it every command that
                     measures or writes tasks refuses: another version writes other tasks and procedures, and the walks
                     and verdicts of the run are then done again. Measure again with --fresh after changing. Commands
-                    that measure nothing (render, statement, compare, decide, sign, seal and the readers) go on
+                    that measure nothing (render, statement, compare, decide, sign, seal and the readers) go on.
+                    In a copy made with variant (it holds variant.json) the agent phases (tasks, skip, unskip,
+                    check-walk, check-verdict, evaluate, answer, merge, check-merge) go on under another version
+                    and say which version the sweep is of; the sweep itself is held to the version it was made with
   --recorded-via gesprek --confirmation <text> --summary <text>
                     With answer and decide only: the agent records what the person said in the conversation,
                     after an express confirmation. --confirmation is what the person said, word for word;
@@ -261,9 +264,11 @@ async function main(): Promise<void> {
   if (command !== "inventory" && values["also-origin"] !== undefined) throw new Error("--also-origin hoort bij inventory: daar wordt vastgelegd welke origins samen de site zijn");
   // A run goes on with the version of loep it was made with; another version would quietly write other tasks over it.
   if (values.run) {
-    const { otherToolboxNl } = await import("./lib/manifest.ts");
+    const { frozenSweepNl, otherToolboxNl } = await import("./lib/manifest.ts");
     const refusal = otherToolboxNl(values.run, command, values["other-toolbox"]);
     if (refusal) throw new Error(refusal);
+    const frozen = frozenSweepNl(values.run, command);
+    if (frozen) process.stderr.write(`loep: ${frozen}\n`);
   }
   // `gaps` and `feedback` read the verdicts and the evaluation of finished runs and nothing else of them: they need no permission to write and no login.
   const readsOnly = command === "gaps" || command === "feedback";
