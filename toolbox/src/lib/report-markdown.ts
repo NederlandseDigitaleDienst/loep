@@ -1097,8 +1097,14 @@ const placeNl = (location: { heading?: string; text?: string; where: string }): 
   [location.heading ? `onder de kop \u201c${esc(location.heading)}\u201d` : "", location.text ? `bij \u201c${esc(location.text)}\u201d` : "", code(location.where)].filter((part) => part !== "").join(", ");
 const whereLines = (finding: ReportFinding, titles: Map<string, string>): string[] => finding.locations.map((location) => `${esc(location.page)}${titles.has(location.page) ? ` ${esc(titles.get(location.page)!)}` : ""}: ${placeNl(location)}`);
 
+/** The cutouts `render` made, by finding: the file relative to the report and its alternative text. */
+export type CutoutPictures = Record<string, { file: string; altNl: string }>;
+
+/** The cutout of a finding as an image line, or nothing when it has none. */
+const pictureLines = (finding: ReportFinding, pictures: CutoutPictures): string[] => (pictures[finding.id] ? [`![${esc(pictures[finding.id]!.altNl)}](${pictures[finding.id]!.file})`, ""] : []);
+
 /** A finding whose defect is filed under another criterion: the same facts as a full card, set closer together. */
-function compactCard(finding: ReportFinding, defectText: string, titles: Map<string, string>, checkLabels: ChainText["verification"]): string[] {
+function compactCard(finding: ReportFinding, defectText: string, titles: Map<string, string>, checkLabels: ChainText["verification"], pictures: CutoutPictures): string[] {
   const vendor = finding.vendorTags?.length ? ` Raakt een element van de leverancier: ${finding.vendorTags.map(code).join(", ")}.` : "";
   return [
     `<a id="${finding.id}"></a>`,
@@ -1115,13 +1121,14 @@ function compactCard(finding: ReportFinding, defectText: string, titles: Map<str
       ...whereLines(finding, titles).map((line) => `Waar: ${line}`),
     ]),
     "",
+    ...pictureLines(finding, pictures),
   ];
 }
 
-function findingCard(finding: ReportFinding, titles: Map<string, string>, grouping: { defects: Map<string, Defect>; derived: DefectsDerived } | null, checkLabels: ChainText["verification"]): string[] {
+function findingCard(finding: ReportFinding, titles: Map<string, string>, grouping: { defects: Map<string, Defect>; derived: DefectsDerived } | null, checkLabels: ChainText["verification"], pictures: CutoutPictures): string[] {
   const defect = grouping ? defectLine(finding, grouping.defects, grouping.derived) : null;
   const place = grouping?.derived.ofFinding[finding.id];
-  if (defect && place?.compact) return compactCard(finding, defect, titles, checkLabels);
+  if (defect && place?.compact) return compactCard(finding, defect, titles, checkLabels, pictures);
   return [
     `<a id="${finding.id}"></a>`,
     "",
@@ -1137,6 +1144,7 @@ function findingCard(finding: ReportFinding, titles: Map<string, string>, groupi
       ...(finding.verification ? [`${REPORT_TEXT.defect.check}: ${checkLabels[finding.verification.status]}`] : []),
     ]),
     "",
+    ...pictureLines(finding, pictures),
     "**Wat is er mis**",
     "",
     esc(finding.observedNl),
@@ -1164,7 +1172,7 @@ const criterionFacts = (criterion: CriterionResult): string[] =>
 const openLine = (criterion: CriterionResult, short: CriterionBrief): string[] => (short.openNl ? [`Open: ${short.openNl}, zie [${REPORT_TEXT.openLink}](#${openAnchor(criterion.id)}).`, ""] : []);
 
 /** The criterion in the main part: outcome, summary, how firm the verdict is, where its open points are, and the findings. */
-function criterionSection(criterion: CriterionResult, short: CriterionBrief, titles: Map<string, string>, grouping: Parameters<typeof findingCard>[2], checkLabels: ChainText["verification"]): string[] {
+function criterionSection(criterion: CriterionResult, short: CriterionBrief, titles: Map<string, string>, grouping: Parameters<typeof findingCard>[2], checkLabels: ChainText["verification"], pictures: CutoutPictures): string[] {
   const appendix = `[Onderbouwing in bijlage A](#${appendixAnchor(criterion.id)})${short.observationsNl ? ` (${short.observationsNl})` : ""}`;
   const lines = [
     `<a id="${criterionAnchor(criterion.id)}"></a>`,
@@ -1182,7 +1190,7 @@ function criterionSection(criterion: CriterionResult, short: CriterionBrief, tit
   ];
   if (criterion.findings.length > 0) {
     lines.push(`**Bevindingen (${criterion.findings.length})**`, "");
-    for (const finding of criterion.findings) lines.push(...findingCard(finding, titles, grouping, checkLabels));
+    for (const finding of criterion.findings) lines.push(...findingCard(finding, titles, grouping, checkLabels, pictures));
   }
   return lines;
 }
@@ -1245,7 +1253,7 @@ export function findingsByComponent(evaluation: Evaluation): { component: string
   return [...named, ...(loose.length > 0 ? [{ component: null, findings: loose }] : [])];
 }
 
-export function renderMarkdown(input: Evaluation, decisions: DecisionLayer = { decisions: [], sha256: null }): string {
+export function renderMarkdown(input: Evaluation, decisions: DecisionLayer = { decisions: [], sha256: null }, pictures: CutoutPictures = {}): string {
   const derived = deriveReport(input, decisions);
   const { evaluation } = withCurrentSignature(input);
   const staleNote = derived.signatureStale ? ` ${REPORT_TEXT.staleSignature}` : "";
@@ -1518,7 +1526,7 @@ export function renderMarkdown(input: Evaluation, decisions: DecisionLayer = { d
     lines.push(`### ${principle.key} ${esc(principle.name)}`, "");
     for (const guideline of groupCriteria(principle.criteria, 2)) {
       lines.push(`#### Richtlijn ${guideline.key} ${esc(guideline.name)}`, "");
-      for (const criterion of guideline.criteria) lines.push(...criterionSection(criterion, derived.briefs[criterion.id]!, titles, grouping, derived.chain.verification));
+      for (const criterion of guideline.criteria) lines.push(...criterionSection(criterion, derived.briefs[criterion.id]!, titles, grouping, derived.chain.verification, pictures));
     }
   }
 

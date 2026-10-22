@@ -30,6 +30,8 @@
   acc
 })
 #let measured-states = evaluation.at("measuredStates", default: (:))
+// Per finding a piece of a screenshot of the run, made by render; absent when the run had no picture with the element's box.
+#let cutouts = derived.at("cutouts", default: (:))
 #let sample-items = evaluation.sample.items
 #let page-labels = derived.pageLabels
 // The documents of the sample; none when the site has no documents.
@@ -897,6 +899,14 @@
 #let version-note(criterion) = if "2.2" not in criterion.versions { "Alleen in WCAG 2.1" } else if "2.1" not in criterion.versions { "Nieuw in WCAG 2.2" } else { none }
 #let round-label(outcome) = if outcome == none { text(fill: muted, "Geen oordeel") } else { badge(outcome, weight: 400) }
 
+// The piece of a screenshot with the element of the finding outlined, at half a point per pixel; nothing when there is none.
+#let cutout-of(finding) = {
+  let cut = cutouts.at(finding.id, default: none)
+  if cut != none {
+    block(above: 9pt, below: 2pt, breakable: false, image(cut.path, alt: cut.altNl, width: calc.min(cut.width * 0.5, 400) * 1pt))
+  }
+}
+
 // A finding whose defect is filed under another criterion: the same facts as a full card, set closer together.
 #let compact-card(finding, place, lead: none) = {
   let defect = defect-by-id.at(place.defectId)
@@ -930,6 +940,7 @@
         ).filter(word => word != none)
         part("Waar", [#location.page #page-title.at(location.page, default: ""): #if words.len() > 0 [#words.join(", "), ]#where-text(location.where)])
       }
+      cutout-of(finding)
     })
   }, limit: 95mm, above: if lead != none { 14pt } else { 10pt })
 }
@@ -962,6 +973,7 @@
         if check != none [ #h(10pt) #eyebrow(t.defect.check) #chain.verification.at(check.status)]
       }
     })
+    cutout-of(finding)
     keep(limit: 110mm, grid(
       columns: (1fr, 1fr),
       column-gutter: 8mm,

@@ -538,6 +538,7 @@ async function main(): Promise<void> {
       const result = await render(values.run);
       process.stdout.write(`${result.markdown}\n${result.pdf ?? "(geen pdf)"}\n${result.shortPdf ? `${result.shortPdf}\n` : ""}`);
       for (const problem of result.pdfChecks) process.stdout.write(`- ${problem}\n`);
+      for (const note of result.cutoutNotes) process.stdout.write(`- ${note}\n`);
       // A report whose PDF fails its own accessibility check is not fit to hand over.
       if (result.pdfChecks.length > 0) process.exitCode = 1;
       return;
