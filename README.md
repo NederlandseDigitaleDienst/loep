@@ -148,4 +148,4 @@ De afspraken voor wie aan de toolbox werkt, en wat nooit mag, staan in [CONTRIBU
 
 ## Licentie
 
-Code en tekst vallen onder EUPL-1.2, zie [LICENSE.md](LICENSE.md). De lettertypes Atkinson Hyperlegible in `templates/fonts/` vallen onder OFL-1.1, en de titels van de succescriteria in `toolbox/data/wcag22-nl.json` zijn tekst van het W3C. Per bestand staat het in [REUSE.toml](REUSE.toml), de licentieteksten staan in `LICENSES/`, en `just reuse` controleert het.
+Code en tekst vallen onder EUPL-1.2, zie [LICENSE.md](LICENSE.md). De lettertypes Atkinson Hyperlegible en Noto Emoji in `templates/fonts/` vallen onder OFL-1.1, en de titels van de succescriteria in `toolbox/data/wcag22-nl.json` zijn tekst van het W3C. Per bestand staat het in [REUSE.toml](REUSE.toml), de licentieteksten staan in `LICENSES/`, en `just reuse` controleert het.
