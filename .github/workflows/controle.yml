@@ -73,7 +73,7 @@ jobs:
           node-version: 24
           cache: npm
           cache-dependency-path: toolbox/package-lock.json
-      - uses: extractions/setup-just@v4
+      - uses: ./.github/actions/just-and-typst
       - uses: astral-sh/setup-uv@v7
       - name: Elk bestand heeft een rechthebbende en een licentie
         run: just reuse
@@ -140,9 +140,10 @@ jobs:
           node-version: 24
           cache: npm
           cache-dependency-path: toolbox/package-lock.json
-      - uses: extractions/setup-just@v4
+      - uses: ./.github/actions/just-and-typst
+        with:
+          typst: true
       - uses: astral-sh/setup-uv@v7
-      - uses: typst-community/setup-typst@v5
       # Only the downloads of apt; what it installs, and the browsers, are as on a clean machine.
       - uses: ./.github/actions/ubuntu-packages
 
@@ -183,10 +184,11 @@ jobs:
           node-version: 24
           cache: npm
           cache-dependency-path: toolbox/package-lock.json
-      - uses: extractions/setup-just@v4
+      - uses: ./.github/actions/just-and-typst
+        with:
+          typst: true
       # release.test.ts runs towncrier with uvx.
       - uses: astral-sh/setup-uv@v7
-      - uses: typst-community/setup-typst@v5
 
       - name: Pakketten
         run: cd toolbox && npm ci
@@ -213,7 +215,7 @@ jobs:
           node-version: 22.18.0
           cache: npm
           cache-dependency-path: toolbox/package-lock.json
-      - uses: extractions/setup-just@v4
+      - uses: ./.github/actions/just-and-typst
       # release.test.ts runs towncrier with uvx.
       - uses: astral-sh/setup-uv@v7
       - name: Pakketten, zonder browsers
@@ -253,7 +255,7 @@ jobs:
           node-version: 24
           cache: npm
           cache-dependency-path: toolbox/package-lock.json
-      - uses: extractions/setup-just@v4
+      - uses: ./.github/actions/just-and-typst
         if: env.MEASURE == 'true'
 
       - name: Pakketten
@@ -302,7 +304,7 @@ jobs:
           node-version: 24
           cache: npm
           cache-dependency-path: toolbox/package-lock.json
-      - uses: extractions/setup-just@v4
+      - uses: ./.github/actions/just-and-typst
         if: env.MEASURE == 'true'
 
       - name: Pakketten
