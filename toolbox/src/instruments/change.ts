@@ -1,4 +1,5 @@
 import type { Page } from "playwright";
+import { fullscreenChange, fullscreenReading, type FullscreenReading } from "../browser/fullscreen.ts";
 import { ensureHelpers } from "./methods/capsule.ts";
 
 /** Everything on a page that an action can change, read at one moment. */
@@ -17,8 +18,8 @@ export interface ChangeState {
   states: Record<string, string>;
   /** The computed properties with which a state is usually shown, of the element the action is about. */
   style: Record<string, string> | null;
-  /** How often the page asked for full screen since the first reading, and whether it is in full screen now. A headless browser shows no change for it. Absent in older readings. */
-  fullscreen?: { requests: number; active: boolean };
+  /** What the documents of the tab asked of full screen since they loaded, and whether one is in full screen now. Absent in older readings. */
+  fullscreen?: FullscreenReading;
 }
 
 /**
@@ -28,25 +29,11 @@ export interface ChangeState {
  */
 export async function readChangeState(page: Page, place: string | null = null): Promise<ChangeState> {
   await ensureHelpers(page);
-  return page.evaluate((target) => {
+  const fullscreen = await fullscreenReading(page);
+  const state = await page.evaluate((target) => {
     const library = (window as unknown as { __loep: { visibleDialogs: () => unknown[]; textChunks: () => string[]; liveRegionTexts: () => string[]; deepActiveElement: () => Element | null } }).__loep;
     const helpers = (window as unknown as { __loepm: { controlStates: () => Record<string, string>; shownStyles: (place: string) => Record<string, string> | null; where: (element: Element) => string | null } }).__loepm;
     const active = library.deepActiveElement();
-    // Asking for full screen changes nothing a headless browser shows: count the requests instead.
-    const own = window as unknown as { __loepFullscreen?: { requests: number } };
-    if (!own.__loepFullscreen) {
-      const counter = { requests: 0 };
-      own.__loepFullscreen = counter;
-      const proto = Element.prototype as unknown as Record<string, unknown>;
-      for (const name of ["requestFullscreen", "webkitRequestFullscreen"]) {
-        const original = proto[name];
-        if (typeof original !== "function") continue;
-        proto[name] = function (this: Element, ...args: unknown[]) {
-          counter.requests++;
-          return (original as (...rest: unknown[]) => unknown).apply(this, args);
-        };
-      }
-    }
     return {
       url: location.href,
       doc: String(performance.timeOrigin),
@@ -57,9 +44,9 @@ export async function readChangeState(page: Page, place: string | null = null): 
       focus: active && active !== document.body && active !== document.documentElement ? helpers.where(active) : null,
       states: helpers.controlStates(),
       style: target ? helpers.shownStyles(target) : null,
-      fullscreen: { requests: own.__loepFullscreen.requests, active: document.fullscreenElement !== null },
     };
   }, place);
+  return { ...state, fullscreen };
 }
 
 /** The lines that say which states changed, e.g. `#box: checked=false -> checked=true`. */
@@ -126,13 +113,6 @@ export function compareChange(before: ChangeState, after: ChangeState, volatile:
   };
 }
 
-/** Whether the page asked for full screen or left it between two readings; null when neither. */
-function fullscreenChange(before: ChangeState["fullscreen"], after: ChangeState["fullscreen"]): string | null {
-  if (!before || !after) return null;
-  if (after.requests > before.requests) return "volledig scherm aangevraagd";
-  if (before.active !== after.active) return after.active ? "volledig scherm aan" : "volledig scherm uit";
-  return null;
-}
 
 /**
  * Whether the only thing that changed is a number inside text that is otherwise the same: a

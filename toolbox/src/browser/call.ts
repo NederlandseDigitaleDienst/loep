@@ -17,7 +17,7 @@ export const readableFrame = (): boolean => {
 };
 
 /** What only the library in the page itself knows or does: what the page registered, its timers and clipboard, and the wider text spacing it is given. */
-const IN_PAGE = new Set(["freezeListeners", "listenerCounts", "ownListeners", "timerReport", "clipboardWrites", "applyTextSpacing", "removeTextSpacing"]);
+const IN_PAGE = new Set(["freezeListeners", "listenerCounts", "ownListeners", "timerReport", "clipboardWrites", "fullscreenState", "applyTextSpacing", "removeTextSpacing"]);
 
 /**
  * Call a function of the in-page library. Nothing from the toolbox itself exists inside the page.

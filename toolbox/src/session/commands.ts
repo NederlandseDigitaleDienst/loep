@@ -2,6 +2,7 @@ import { writeFile } from "node:fs/promises";
 import { PNG } from "pngjs";
 import { axInfo, type AxInfo } from "../browser/call.ts";
 import { clipboardMark, clipboardReport, clipboardSince } from "../browser/clipboard.ts";
+import { fullscreenChange, fullscreenReading } from "../browser/fullscreen.ts";
 import { clipboardNote, hasClipboardPermission, settlePage } from "../browser/session.ts";
 import { tabPoint } from "../browser/frame.ts";
 import { regionScreenshot } from "../browser/screenshot.ts";
@@ -86,6 +87,7 @@ export async function act(context: Context, pauseMs: number, action: () => Promi
   const wait = Math.max(env.politeness.remaining(page.url()), env.politeness.remaining(surface.page.url()));
   if (wait > 0) await page.waitForTimeout(wait);
   const before = await changeState(surface);
+  const fullscreenBefore = await fullscreenReading(page);
   const navigations = surface.navigations;
   const clipboardBefore = await clipboardMark(page);
   await action();
@@ -118,6 +120,7 @@ export async function act(context: Context, pauseMs: number, action: () => Promi
   // What the action put on the clipboard, as the page asked for it. A page that says copying failed may be saying
   // something about the test browser, not about itself: whether the browser refused the write settles that.
   const clipboardWrites = await clipboardSince(page, clipboardBefore);
+  const fullscreen = navigated ? null : fullscreenChange(fullscreenBefore, await fullscreenReading(page));
   const clipboard = clipboardReport(clipboardWrites, [...appeared, ...live]);
   const note = clipboardNote([...appeared, ...live], hasClipboardPermission(env.browser), clipboardWrites);
   const result = {
@@ -135,6 +138,7 @@ export async function act(context: Context, pauseMs: number, action: () => Promi
     scrolled: after.scroll.join() !== before.scroll.join(),
     ...(clipboard !== null ? { clipboard: clipboardWrites, clipboardNl: clipboard } : {}),
     ...(note ? { note } : {}),
+    ...(fullscreen !== null ? { fullscreen } : {}),
     focus: facts?.focus ? { ref: facts.focus.ref, tag: facts.focus.tag, role: facts.focus.role, text: facts.focus.text, path: facts.focus.path, ...(facts.focus.frame ? { frame: facts.focus.frame } : {}) } : null,
   };
   const print: Record<string, unknown> = {};
@@ -146,6 +150,7 @@ export async function act(context: Context, pauseMs: number, action: () => Promi
   if (live.length > 0) print.live = live.slice(0, 3).map((text) => text.slice(0, 100));
   if (clipboard !== null) print.clipboard = clipboard;
   if (note) print.note = note;
+  if (fullscreen !== null) print.fullscreen = fullscreen;
   if (Object.keys(print).length === 0) print.changed = false;
   // Whether focus sits in an embedded frame decides at 2.1.4 whether a key counts as a shortcut, so the line says it.
   if (result.focus) print.focus = `${brief(result.focus)}${inFrame(result.focus)}`;

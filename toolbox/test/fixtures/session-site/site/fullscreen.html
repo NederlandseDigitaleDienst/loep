@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="nl">
+<head><meta charset="utf-8"><title>Volledig scherm - Testsite sessie</title><link rel="stylesheet" href="/site.css"></head>
+<body>
+<main><h1>Volledig scherm</h1>
+<div id="deck" style="width:400px;height:200px;background:#b00000;color:#fff">Dia een</div>
+<p><button id="own" type="button">Volledig scherm</button></p>
+<h2>Speler die geen volledig scherm mag</h2>
+<iframe id="player" src="/fullscreen-player.html" title="Speler zonder volledig scherm" allow="fullscreen 'none'" width="420" height="160"></iframe>
+</main>
+<script>
+document.getElementById("own").addEventListener("click", () => document.getElementById("deck").requestFullscreen().catch(() => undefined));
+</script>
+</body>
+</html>

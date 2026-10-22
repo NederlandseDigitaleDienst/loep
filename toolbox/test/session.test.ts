@@ -209,6 +209,19 @@ test("reflow, zoom and spacing measure and put the page back", async () => {
   assert.deepEqual(after.style, { "letter-spacing": "normal" }, "the forced spacing is gone again");
 });
 
+test("a click says whether full screen came on, was refused, or may not be asked for here (#322)", async () => {
+  await loep("open", ["/fullscreen.html"]);
+  const own = await loep("click", [await ref("css:#own")]);
+  assert.equal(own.fullscreen, "volledig scherm aangevraagd en aan");
+  // The frame of the player may not go to full screen: the site says so itself, and every browser refuses.
+  await loep("open", ["/fullscreen.html"]);
+  const asked = await loep("click", [await ref("Speler volledig scherm")]);
+  assert.match(asked.fullscreen as string, /^de pagina vroeg of volledig scherm mag en kreeg nee; dit document mag geen volledig scherm/);
+  assert.ok((asked.appeared as string[]).some((text) => text.includes("Volledig scherm lukt niet in dit venster")));
+  const requested = await loep("click", [await ref("Vraag volledig scherm")]);
+  assert.match(requested.fullscreen as string, /^volledig scherm aangevraagd en geweigerd door de browser \(TypeError: .+\); dit document mag geen volledig scherm/);
+});
+
 test("order sets the order of the code against the order on screen", async () => {
   await loep("open", ["/widgets.html"]);
   const order = await loep("order");
