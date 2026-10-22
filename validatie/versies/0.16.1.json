@@ -1,0 +1,6 @@
+{
+  "version": "0.16.1",
+  "measuredAt": "2026-10-22",
+  "againstNl": "De sleutel van de eigen testsite, niet het oordeel van een menselijke deskundige. Deze versie herstelt alleen dat render met een relatief pad naar de run geen pdf maakte zodra het rapport uitsneden had (#326), en maakt de controle op GitHub sneller (#320). Geen van beide raakt het oordeel, dus een run met agents meet deze wijzigingen niet; de herstelling is met tests nagegaan.",
+  "resultNl": "Niet opnieuw met agents gemeten. Voor de criteria geldt de meting van 0.16.0: in alle runs keurden de gemeten criteria af zoals de sleutel zegt. Niet gemeten: de schone tweeling, en deze versie als geheel op alle 56 criteria."
+}
