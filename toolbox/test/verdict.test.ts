@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   citedObservations,
+  failedEngineRules,
   frameFocusProblems,
   KINDS_AFTER_FINISH,
   NOT_SENT,
@@ -232,6 +233,32 @@ test("a candidate names a criterion, a place and an observation that shows it", 
   assert.match(validateCandidates(withCandidate({ noteNl: Array(60).fill("woord").join(" ") }), walkContext).join(), /one sentence of at most 40 words/);
   assert.match(validateCandidates({ ...walk, candidates: [one, one] }, walkContext).join(), /used twice/);
   assert.match(validateCandidates({ ...walk, states: [] }, walkContext).join(), /states: name at least/);
+});
+
+test("check-walk says per problem which candidate, what is wrong and what to give instead, all problems at once", () => {
+  const one = walk.candidates[0]!;
+  const withCandidate = (candidate: Partial<typeof one>): string[] => validateCandidates({ ...walk, candidates: [{ ...one, ...candidate }] }, walkContext);
+  // The most frequent rejection: evidence that only acts. Each observation given is named, with the first look or measure after it.
+  const acting = withCandidate({ evidence: ["j143-0006", "j143-0007"] });
+  assert.equal(acting.length, 1);
+  assert.match(acting[0]!, /^candidates\[0\] \(P02-K01\): /);
+  assert.match(acting[0]!, /"j143-0006" \(click\) acts and shows nothing \(the first look or measure after it is "j143-0008" \(look\); cite it only if it shows what you mean\)/);
+  assert.match(acting[0]!, /"j143-0007" \(contrast\) failed, so it shows nothing/);
+  assert.match(acting[0]!, /Commands that show: look, crop/);
+  assert.match(withCandidate({ evidence: [] }).join(), /evidence is empty: give the number of the look or measure observation/);
+  assert.match(withCandidate({ evidence: ["j143-0100"] }).join("\n"), /observation "j143-0100" is not in the observation log; give a number exactly as/);
+  assert.match(validateCandidates({ ...walk, states: [{ nameNl: "Smal", evidence: ["j143-0001"] }] }, walkContext).join(), /states\[0\] \("Smal"\): a walked state needs .*"j143-0001" \(open\) acts and shows nothing \(the first look or measure after it is "j143-0002"/);
+  assert.match(withCandidate({ noteNl: Array(60).fill("woord").join(" ") }).join(), /at most 40 words; this one has 60/);
+  assert.match(withCandidate({ id: "K1" }).join(), /not "K1"; the first free one is "P02-K01"/);
+  assert.match(validateCandidates({ ...walk, candidates: [one, one] }, walkContext).join(), /candidates\[1\] \(P02-K01\): id "P02-K01" is used twice; give this one "P02-K02"/);
+  assert.match(withCandidate({ support: "zeker" as never }).join(), /support must be one of "gemeten", "bekeken", "afgeleid", "alleen beeld", not "zeker"/);
+  assert.match(withCandidate({ page: "P9" }).join(), /page "P9" is not in the legend; this walk is on "P02"/);
+  assert.match(withCandidate({ criterion: "1.4" }).join(), /"1\.4" is not a criterion with a procedure; take one from the list under "De criteria"/);
+  assert.match(validateCandidates({ ...walk, pageType: "start" }, walkContext).join(), /pageType must be "nieuws", not "start"/);
+  // Several faults in several candidates come back together, so one round of fixes is enough.
+  const many = validateCandidates({ ...walk, candidates: [{ ...one, evidence: ["j143-0006"] }, { ...one, id: "P02-K02", support: "zeker" as never, where: "" }] }, walkContext);
+  assert.equal(many.length, 3);
+  assert.deepEqual(validateCandidates([], walkContext).length, 1, "an array is not the list");
 });
 
 test("the stamp of a verdict can bind it to the observations it cites", () => {
@@ -563,4 +590,43 @@ test("2.1.4: a finding on an embedded window needs a key pressed with the focus 
   assert.deepEqual(frameFocusProblems(failed([], [{ ...finding, evidence: ["j1-0001"] }]), legend, records), []);
   assert.deepEqual(frameFocusProblems({ ...failed(["j1-0001"]), criterion: "2.1.1" }, legend, records), []);
   assert.deepEqual(frameFocusProblems({ ...failed(["j1-0001"]), outcome: "cantTell" }, legend, records), []);
+});
+
+test("every rule an engine failed in the dossier is settled in an observation, per rule and kind of element (#239)", () => {
+  const evidence = { engine: { results: [
+    { engine: "axe-core", rule: "aria-roles", outcome: "failed" },
+    { engine: "axe-core", rule: "aria-roles", outcome: "passed" },
+    { engine: "axe-core", rule: "link-name", outcome: "failed" },
+    { engine: "alfa", rule: "sia-r11", outcome: "failed" },
+    { engine: "axe-core", rule: "label", outcome: "cantTell" },
+  ] } };
+  assert.deepEqual(failedEngineRules(evidence), ["aria-roles", "link-name", "sia-r11"]);
+  assert.deepEqual(failedEngineRules({}), []);
+
+  const engineContext: JudgeContext = { ...context, evidenceNames: ["contrast", "engine"], engineFailures: ["aria-roles", "link-name", "sia-r11"] };
+  const links = { checkedNl: "Pictogramlinks in de voettekst", howNl: "Naam gemeten op P01", observedNl: "Twee links hebben bij alle methoden geen naam.", evidence: ["engine", "j143-0003"], ruling: "finding" as const, finding: "F1", engineRules: ["link-name", "sia-r11"] };
+  const logo = { checkedNl: "Wapen met role logo in de voettekst", howNl: "Code en rol gelezen op P01", observedNl: "De afbeelding heeft role logo, een rol die niet bestaat.", evidence: ["engine", "j143-0002"], engineRules: ["aria-roles"] };
+
+  // Ignored: the verdict says nothing about a rule the engine failed.
+  const ignored = validateJudgeVerdict({ ...failed, observations: [seen, links] }, engineContext).join("\n");
+  assert.match(ignored, /engine rule "aria-roles" failed in the dossier part engine and no observation settles it/);
+  assert.doesNotMatch(ignored, /"link-name"|"sia-r11"/, "one observation settles two rules on the same elements");
+  // A finding, a candidate passed on, or an open point settles it.
+  assert.deepEqual(validateJudgeVerdict({ ...failed, observations: [seen, links, { ...logo, ruling: "finding", finding: "F1" }] }, engineContext), []);
+  const cross = { criterion: "1.3.1", page: "P01", where: "wapen in de voettekst", evidence: ["j143-0002"], noteNl: "De afbeelding heeft role logo, een rol die niet bestaat." };
+  assert.deepEqual(validateJudgeVerdict({ ...failed, observations: [seen, links, { ...logo, ruling: "otherCriterion" }], crossCandidates: [cross] }, engineContext), []);
+  const open = "veegronde mist: de rol van het wapen in de voettekst is niet in een tweede browser gelezen.";
+  assert.deepEqual(validateJudgeVerdict({ ...failed, missingNl: [open], observations: [seen, links, { ...logo, ruling: "open" }] }, engineContext), []);
+  // Set aside with a reason that points at a look of one's own; a reason without one is refused.
+  assert.deepEqual(validateJudgeVerdict({ ...failed, observations: [seen, links, { ...logo, ruling: "noIssue" }] }, engineContext), []);
+  assert.match(validateJudgeVerdict({ ...failed, observations: [seen, links, { ...logo, ruling: "noIssue", evidence: ["engine"] }] }, engineContext).join(), /"noIssue" next to engineRules needs a look or measure observation/);
+  assert.match(validateJudgeVerdict({ ...failed, observations: [seen, links, { ...logo, ruling: "finding", finding: "F1", engineRules: ["aria-role"] }] }, engineContext).join(), /"aria-role" is not a rule an engine failed/);
+
+  // The verifier sets a failed rule aside only with an observation of its own session.
+  const verifier: VerificationContext = { ...verifierContext, evidenceNames: engineContext.evidenceNames, engineFailures: ["aria-roles"] };
+  assert.match(validateVerification(reproduced, verifier).join(), /engine rule "aria-roles"/);
+  assert.match(validateVerification({ ...reproduced, observations: [...reproduced.observations, { ...logo, ruling: "noIssue" }] }, verifier).join(), /of session "v143" in evidence/);
+  assert.deepEqual(validateVerification({ ...reproduced, observations: [...reproduced.observations, { ...logo, ruling: "noIssue", evidence: ["v143-0003"] }] }, verifier), []);
+  // Without the dossier part nothing is asked.
+  assert.deepEqual(validateJudgeVerdict(failed, context), []);
 });

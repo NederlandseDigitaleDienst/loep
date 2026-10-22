@@ -158,8 +158,8 @@ export async function startFixture(options: { ports?: Partial<Record<SiteKey, nu
           sessions.set(token, { site, until: Date.now() + sessionMs });
           return redirect(response, 303, ACCOUNT_HOME, `${SESSION_COOKIE}=${token}; Path=/; HttpOnly; SameSite=Lax`);
         }
-        const thanks = join(root, "bedankt.html");
-        if (method === "POST" && existsSync(thanks)) sendFile(response, thanks, 200, false);
+        // A form is answered as most sites answer one: go and fetch the page that says it arrived (303 See Other), so that reloading it sends nothing again.
+        if (method === "POST" && existsSync(join(root, "bedankt.html"))) redirect(response, 303, "/bedankt.html");
         else response.writeHead(405, { "content-type": "text/plain; charset=utf-8" }).end("Niet toegestaan\n");
       });
       return;

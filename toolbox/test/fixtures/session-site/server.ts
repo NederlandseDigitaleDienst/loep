@@ -109,6 +109,16 @@ export async function startServer(port = 0): Promise<FixtureServer> {
         response.writeHead(303, { location: "/elsewhere.html" }).end();
         return;
       }
+      // A form whose answer hands the page a token to send with the next form: a replay would hand over the token of another visit.
+      if (path === "/submit-token") {
+        response.writeHead(200, { "content-type": "text/html; charset=utf-8" }).end(`<!doctype html><html lang="nl"><head><meta charset="utf-8"><title>Stap 2 - Testsite sessie</title></head><body><main><h1>Stap 2</h1><form method="post" action="/submit-see-other"><input type="hidden" name="_token" value="${Date.now().toString(36)}"><button>Verder</button></form></main></body></html>`);
+        return;
+      }
+      // A form whose next page shows what the session holds, as a message kept for one page: without the cookie of the visitor that page is another.
+      if (path === "/submit-flash") {
+        response.writeHead(303, { location: "/flash.html" }).end();
+        return;
+      }
       // A form that only the server checks: the error message exists nowhere before submitting.
       if (path === "/callback") {
         const phone = new URLSearchParams(Buffer.concat(chunks).toString("utf8")).get("phone") ?? "";
@@ -148,6 +158,12 @@ export async function startServer(port = 0): Promise<FixtureServer> {
       wav.writeUInt32LE(samples, 40);
       for (let index = 0; index < samples; index++) wav[44 + index] = 128 + Math.round(20 * Math.sin((index * 2 * Math.PI * 440) / 8000));
       response.writeHead(200, { "content-type": "audio/wav", "content-length": wav.length, "accept-ranges": "none" }).end(wav);
+      return;
+    }
+    // The page after /submit-flash: what it says depends on the cookie of the visitor.
+    if (path === "/flash.html") {
+      const kept = /(?:^|;\s*)bericht=1/.test(request.headers.cookie ?? "");
+      response.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" }).end(`<!doctype html><html lang="nl"><head><meta charset="utf-8"><title>Melding - Testsite sessie</title></head><body><main><h1>Melding</h1>${kept ? '<p role="status">Uw bericht is ontvangen.</p>' : ""}</main></body></html>`);
       return;
     }
     // A page that never answers.

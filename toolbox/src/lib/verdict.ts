@@ -12,6 +12,12 @@ export interface Observation {
   ruling?: (typeof CANDIDATE_RULINGS)[number];
   /** With "finding": the key of the finding it supports. */
   finding?: string;
+  /**
+   * The rules a rule engine failed in the dossier that this observation settles, such as
+   * "aria-roles". One observation covers a rule for one kind of element, or several rules on the
+   * same elements; a rule that fails on different kinds of element may be split over observations.
+   */
+  engineRules?: string[];
 }
 
 /**
@@ -479,6 +485,15 @@ interface InstrumentContext {
   vendorPrefixes?: string[];
   /** Rows of the dossier that a pass has to explain one by one (`rowsToExplain`): a measurement that says something is lost. */
   explainOnPass?: { part: string; text: string }[];
+  /** The rules a rule engine failed in the dossier part `engine` (`failedEngineRules`). Each needs an observation that settles it. Without them, nothing is checked. */
+  engineFailures?: string[];
+}
+
+/** The rules that a rule engine failed in the dossier part `engine`, each once. */
+export function failedEngineRules(evidence: Record<string, unknown>): string[] {
+  const results = (evidence.engine as { results?: unknown } | undefined)?.results;
+  if (!Array.isArray(results)) return [];
+  return [...new Set(results.filter((row) => row?.outcome === "failed" && typeof row.rule === "string").map((row) => row.rule as string))].sort();
 }
 
 /**
@@ -824,6 +839,8 @@ function instrumentRules(verdict: Partial<Verdict>, context: InstrumentContext, 
     else if (observation.ruling === "otherCriterion" && !(Array.isArray(verdict.crossCandidates) && verdict.crossCandidates.length > 0)) problems.push(`${at}: ruling "otherCriterion" needs an entry in crossCandidates, so the judge of that criterion sees it`);
   });
 
+  problems.push(...engineRuleProblems(verdict, context, (ref) => shows(ref) && own(ref), whose));
+
   const cited = (Array.isArray(verdict.observations) ? verdict.observations : []).flatMap((observation) => (Array.isArray(observation.evidence) ? observation.evidence : [])).filter((ref): ref is string => typeof ref === "string");
   if (verdict.outcome === "passed") {
     const shown = cited.filter(shows);
@@ -900,6 +917,35 @@ function instrumentRules(verdict: Partial<Verdict>, context: InstrumentContext, 
       else if (!asksPerson || verdict.outcome === "passed" || verdict.outcome === "inapplicable") problems.push(`${at}: what may belong to this criterion after all but cannot be decided is for a person: a point "mens nodig:" in missingNl, and no "passed" or "inapplicable" outcome`);
     }
   });
+  return problems;
+}
+
+/**
+ * Every rule a rule engine failed in the dossier is settled in an observation that names it in
+ * `engineRules` (#239): a finding, a candidate passed on, an open point, or "noIssue" with a look
+ * or measure observation of one's own that shows why the report does not hold here. One entry per
+ * rule and kind of element, not per element.
+ */
+function engineRuleProblems(verdict: Partial<Verdict>, context: InstrumentContext, showsOwn: (ref: string) => boolean, whose: string): string[] {
+  const failed = context.engineFailures;
+  if (!failed) return [];
+  const problems: string[] = [];
+  const settled = new Set<string>();
+  (Array.isArray(verdict.observations) ? verdict.observations : []).forEach((observation, position) => {
+    if (observation.engineRules === undefined) return;
+    const at = `observations[${position}].engineRules`;
+    if (!Array.isArray(observation.engineRules) || observation.engineRules.some((rule) => typeof rule !== "string")) return void problems.push(`${at}: a list of rule names, such as ["aria-roles"]`);
+    for (const rule of observation.engineRules) {
+      if (!failed.includes(rule)) problems.push(`${at}: "${rule}" is not a rule an engine failed in the dossier part engine${failed.length > 0 ? ` (${failed.join(", ")})` : ""}`);
+      settled.add(rule);
+    }
+    if (observation.ruling === "noIssue" && !(Array.isArray(observation.evidence) && observation.evidence.some((ref) => typeof ref === "string" && showsOwn(ref)))) {
+      problems.push(`observations[${position}]: setting aside what an engine failed is a small pass; "noIssue" next to engineRules needs a look or measure observation${whose} in evidence that shows why the report does not hold here (a false report, or not applicable because of what you saw), otherwise the ruling is "finding", "otherCriterion" or "open"`);
+    }
+  });
+  for (const rule of failed) {
+    if (!settled.has(rule)) problems.push(`engine rule "${rule}" failed in the dossier part engine and no observation settles it. Name it in "engineRules" of the observation that handles it, one per rule and kind of element: ruling "finding" (with the finding), "otherCriterion" (with an entry in crossCandidates), "open" (with the point in missingNl), or "noIssue" with a look or measure observation${whose} that shows why the report does not hold here`);
+  }
   return problems;
 }
 
@@ -1166,39 +1212,78 @@ export interface CandidateContext {
 const MAX_CANDIDATE_WORDS = 40;
 
 export function validateCandidates(input: unknown, context: CandidateContext): string[] {
-  if (input === null || typeof input !== "object") return ["the candidate list is not a JSON object"];
+  if (input === null || typeof input !== "object" || Array.isArray(input)) return ['the candidate list is not a JSON object: write { "pageType": ..., "page": ..., "states": [...], "candidates": [...], "notWalkedNl": [...] } as the task shows under "Vorm van het resultaat"'];
   const list = input as Partial<CandidateList>;
   const problems: string[] = [];
   const index = context.observations;
-  const showing = (refs: unknown): boolean => Array.isArray(refs) && refs.some((ref) => typeof ref === "string" && index.has(ref) && SHOWING.has(index.get(ref)!.command) && !index.get(ref)!.failed);
+  const shows = (ref: unknown): boolean => typeof ref === "string" && index.has(ref) && SHOWING.has(index.get(ref)!.command) && !index.get(ref)!.failed;
+  const showing = (refs: unknown): boolean => Array.isArray(refs) && refs.some(shows);
   const unknown = (refs: unknown): string[] => (Array.isArray(refs) ? refs.filter((ref) => typeof ref !== "string" || !index.has(ref)).map(String) : []);
+  const quoted = (value: unknown): string => (value === undefined ? "nothing" : JSON.stringify(value));
+  // The first observation in the same session after `ref` that shows something: where the look after an action usually is.
+  const nextShowing = (ref: string): string | null => {
+    const [session, from] = [sessionOfObservation(ref), observationNumber(ref)];
+    let first: string | null = null;
+    for (const id of index.keys()) if (sessionOfObservation(id) === session && observationNumber(id) > from && shows(id) && (first === null || observationNumber(id) < observationNumber(first))) first = id;
+    return first;
+  };
+  // What each observation given is, so the walk sees in one go why none of them counts.
+  const whyNotShowing = (refs: unknown): string => {
+    const given = Array.isArray(refs) ? refs : [];
+    if (given.length === 0) return 'evidence is empty: give the number of the look or measure observation that shows it, as its answer printed it under "id"';
+    const reasons = given.flatMap((ref) => {
+      if (typeof ref !== "string") return [`${quoted(ref)} is not an observation number`];
+      const observation = index.get(ref);
+      if (!observation) return [];
+      const after = nextShowing(ref);
+      const hint = after ? ` (the first look or measure after it is "${after}" (${index.get(after)!.command}); cite it only if it shows what you mean)` : "";
+      return [observation.failed ? `"${ref}" (${observation.command}) failed, so it shows nothing${hint}` : `"${ref}" (${observation.command}) acts and shows nothing${hint}`];
+    });
+    return `${reasons.length > 0 ? `${reasons.join("; ")}. ` : ""}Commands that show: ${[...SHOWING].join(", ")}`;
+  };
+  const notInLog = (at: string, ref: string): string => `${at}: observation "${ref}" is not in the observation log; give a number exactly as the answer of one of your own commands printed it under "id"`;
 
-  if (list.pageType !== context.pageType) problems.push(`pageType must be "${context.pageType}"`);
-  if (!context.pageLabels.includes(list.page as string)) problems.push(`page "${String(list.page)}" is not in the legend`);
+  if (list.pageType !== context.pageType) problems.push(`pageType must be "${context.pageType}", not ${quoted(list.pageType)}`);
+  if (!context.pageLabels.includes(list.page as string)) problems.push(`page ${quoted(list.page)} is not in the legend; this walk is on "${context.idPrefix}"`);
   const states = Array.isArray(list.states) ? list.states : [];
-  if (states.length === 0) problems.push("states: name at least the state the page was first looked at in");
+  if (states.length === 0) problems.push('states: name at least the state the page was first looked at in, as { "nameNl": "Breed, melding gesloten", "evidence": ["<the number of the look in that state>"] }');
   states.forEach((state, position) => {
-    if (!isText(state.nameNl, 3)) problems.push(`states[${position}]: nameNl is missing`);
-    if (!showing(state.evidence)) problems.push(`states[${position}]: a walked state needs an observation of a look or measure command`);
-    for (const ref of unknown(state.evidence)) problems.push(`states[${position}]: observation "${ref}" is not in the observation log`);
+    const at = `states[${position}]${isText(state?.nameNl) ? ` ("${state.nameNl}")` : ""}`;
+    if (!isText(state?.nameNl, 3)) problems.push(`${at}: nameNl is missing: name the state in a few words, such as "Breed, melding gesloten"`);
+    if (!showing(state?.evidence)) problems.push(`${at}: a walked state needs an observation of a look or measure command made in it; ${whyNotShowing(state?.evidence)}`);
+    for (const ref of unknown(state?.evidence)) problems.push(notInLog(at, ref));
   });
-  if (!Array.isArray(list.candidates)) problems.push("candidates must be a list; it may be empty");
-  if (!Array.isArray(list.notWalkedNl)) problems.push("notWalkedNl must be a list; it may be empty");
+  if (!Array.isArray(list.candidates)) problems.push("candidates must be a list; it may be empty ([])");
+  if (!Array.isArray(list.notWalkedNl)) problems.push("notWalkedNl must be a list of sentences; it may be empty ([])");
 
+  const candidates = (Array.isArray(list.candidates) ? list.candidates : []).map((candidate) => (candidate ?? {}) as Partial<Candidate>);
+  const taken = new Set(candidates.map((candidate) => candidate.id).filter((id): id is string => typeof id === "string"));
+  const nextFree = (): string => {
+    for (let number = 1; ; number++) {
+      const id = `${context.idPrefix}-K${String(number).padStart(2, "0")}`;
+      if (!taken.has(id)) {
+        taken.add(id);
+        return id;
+      }
+    }
+  };
   const ids = new Set<string>();
-  (Array.isArray(list.candidates) ? list.candidates : []).forEach((candidate, position) => {
-    const at = `candidates[${position}]`;
-    if (typeof candidate.id !== "string" || !candidate.id.startsWith(`${context.idPrefix}-K`) || !/-K\d{2,}$/.test(candidate.id)) problems.push(`${at}: id must look like "${context.idPrefix}-K01"`);
-    else if (ids.has(candidate.id)) problems.push(`${at}: id "${candidate.id}" is used twice`);
-    ids.add(candidate.id);
-    if (!context.criteria.includes(candidate.criterion)) problems.push(`${at}: "${candidate.criterion}" is not a criterion with a procedure`);
-    if (!context.pageLabels.includes(candidate.page)) problems.push(`${at}: page "${candidate.page}" is not in the legend`);
-    if (!isText(candidate.where, 3)) problems.push(`${at}: where is missing`);
-    if (!isText(candidate.noteNl, 10)) problems.push(`${at}: noteNl is missing`);
-    else if (candidate.noteNl.trim().split(/\s+/).length > MAX_CANDIDATE_WORDS) problems.push(`${at}: noteNl is one sentence of at most ${MAX_CANDIDATE_WORDS} words`);
-    if (!CANDIDATE_SUPPORT.includes(candidate.support)) problems.push(`${at}: support must be one of ${CANDIDATE_SUPPORT.join(", ")}`);
-    if (!showing(candidate.evidence)) problems.push(`${at}: a candidate needs at least one observation of a look or measure command that shows it`);
-    for (const ref of unknown(candidate.evidence)) problems.push(`${at}: observation "${ref}" is not in the observation log`);
+  candidates.forEach((candidate, position) => {
+    const at = `candidates[${position}]${typeof candidate.id === "string" ? ` (${candidate.id})` : ""}`;
+    if (typeof candidate.id !== "string" || !candidate.id.startsWith(`${context.idPrefix}-K`) || !/-K\d{2,}$/.test(candidate.id)) problems.push(`${at}: id must look like "${context.idPrefix}-K01" (the label of the page, -K and a number of at least two digits), not ${quoted(candidate.id)}; the first free one is "${nextFree()}"`);
+    else if (ids.has(candidate.id)) problems.push(`${at}: id "${candidate.id}" is used twice; give this one "${nextFree()}"`);
+    if (typeof candidate.id === "string") ids.add(candidate.id);
+    if (!context.criteria.includes(candidate.criterion as string)) problems.push(`${at}: ${quoted(candidate.criterion)} is not a criterion with a procedure; take one from the list under "De criteria" in the task, written as "1.4.3"`);
+    if (!context.pageLabels.includes(candidate.page as string)) problems.push(`${at}: page ${quoted(candidate.page)} is not in the legend; this walk is on "${context.idPrefix}"`);
+    if (!isText(candidate.where, 3)) problems.push(`${at}: where is missing: the element in words and, if you can, a selector, with the state if it is not the first one`);
+    if (!isText(candidate.noteNl, 10)) problems.push(`${at}: noteNl is missing: one sentence of what you saw, without a verdict`);
+    else {
+      const words = candidate.noteNl.trim().split(/\s+/).length;
+      if (words > MAX_CANDIDATE_WORDS) problems.push(`${at}: noteNl is one sentence of at most ${MAX_CANDIDATE_WORDS} words; this one has ${words}`);
+    }
+    if (!CANDIDATE_SUPPORT.includes(candidate.support as Candidate["support"])) problems.push(`${at}: support must be one of ${CANDIDATE_SUPPORT.map((value) => `"${value}"`).join(", ")}, not ${quoted(candidate.support)}`);
+    if (!showing(candidate.evidence)) problems.push(`${at}: a candidate needs at least one observation of a look or measure command that shows it; ${whyNotShowing(candidate.evidence)}`);
+    for (const ref of unknown(candidate.evidence)) problems.push(notInLog(at, ref));
   });
   return problems;
 }
