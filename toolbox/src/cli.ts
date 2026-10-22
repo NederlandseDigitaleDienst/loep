@@ -446,7 +446,7 @@ async function main(): Promise<void> {
       const { checkWalk } = await import("./commands/instrument-tasks.ts");
       const problems = await checkWalk(values.run, values["page-type"]);
       for (const problem of problems) process.stdout.write(`- ${problem}\n`);
-      process.stdout.write(problems.length === 0 ? "OK: de kandidatenlijst voldoet aan de vorm\n" : `${problems.length} problemen\n`);
+      process.stdout.write(problems.length === 0 ? "OK: de kandidatenlijst voldoet aan de vorm\n" : `${problems.length} ${problems.length === 1 ? "probleem" : "problemen"}; herstel ze allemaal in één keer en draai de controle daarna één keer opnieuw\n`);
       process.exitCode = problems.length === 0 ? 0 : 1;
       return;
     }
