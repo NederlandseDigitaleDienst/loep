@@ -1,17 +1,17 @@
 import type { Covered } from "../src/session/recipe.ts";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { after, before, test } from "node:test";
 import { PNG } from "pngjs";
 import { INPAGE_PATH, launchBrowser, loadPage, newContext } from "../src/browser/session.ts";
 import { collect } from "../src/commands/collect.ts";
 import { checkSite, explore, exploreContext } from "../src/commands/explore.ts";
-import { checkGate, commonBlock, contactSheet, fixedByReason, gate, gateChecks, keysOn, MAX_RESWEEPS, MAX_RETURNS_TO_EXPLORER, MIN_TAB_REACH, reviewedAs, openedBetweenWidths, reviewGaps, reviewParts, route, SHEETS_PER_TASK, sheetGaps, tile, validateAnswers, type Answers, type Gap, type Sheet } from "../src/commands/gate.ts";
+import { buildSheets, checkGate, commonBlock, contactSheet, fixedByReason, gate, gateChecks, hostsRefusedInStates, keysOn, MAX_RESWEEPS, MAX_RETURNS_TO_EXPLORER, MIN_TAB_REACH, reviewedAs, openedBetweenWidths, reviewGaps, reviewParts, route, SHEETS_PER_TASK, sheetGaps, sheetText, tile, validateAnswers, type Answers, type Gap, type Sheet } from "../src/commands/gate.ts";
 import { inventory, type Inventory, type InventoryPage } from "../src/commands/inventory.ts";
 import { ModelSweep, type SiteStates } from "../src/commands/modelsweep.ts";
 import { DownRun, HoverRun, probePointerInStates } from "../src/commands/states.ts";
@@ -703,6 +703,36 @@ test("every page type gets a sheet: the sheets are divided over tasks, and a typ
   assert.deepEqual(unmeasured.map((gap) => [gap.page, gap.url]), [["P3", "https://site.nl/3"]]);
   assert.match(unmeasured[0]!.missingNl, /P3 zit wel in de steekproef, maar de veegronde kon die pagina niet meten/);
   assert.doesNotMatch(unmeasured[0]!.missingNl, /sample opnieuw/);
+});
+
+test("the review is told which hosts outside the run were refused in a state, and a sheet with such a tile asks for a new review", async () => {
+  const state = (id: string, kind: "component" | "blocker", refused: string[]): SiteStates["states"][number] => ({ id, kind, modelId: id.replace(/^[a-z]+-/, ""), pageTypes: ["start"], url: "https://site.nl/", viewport: { width: 1280, height: 800 }, reached: true, reasonNl: null, stillReachedAfterMeasuring: true, dir: null, files: { screenshot: `site-states/${id}.png` }, engineSummary: null, contrast: null, largestOverlayShare: 0, refused: refused.map((address) => ({ kind: "scope", method: "GET", address, count: 1 })) });
+  const model = validModel();
+  model.components.push({ id: "video", type: "other", descriptionNl: "Video die na een klik laadt", pageTypes: ["start"], viewport: null, recipe: "component-video", postcondition: null });
+  const states = [state("blocker-cookies", "blocker", ["meet.example/collect"]), state("component-menu", "component", ["meet.example/collect"]), state("component-video", "component", ["www.youtube-nocookie.com/embed/abc", "meet.example/collect"])];
+  const run = gateRun([gatePage("P1", "https://site.nl/")], { siteModel: model, siteStates: { siteSha256: "", seeded: { blockers: ["cookies"], cookies: 1, storedValues: 0 }, dismissals: [], states } });
+
+  assert.deepEqual([...hostsRefusedInStates(run)], [["component-video", ["www.youtube-nocookie.com"]]], "a host also refused on a plain page load says nothing about a state");
+  assert.deepEqual(gateChecks(run).limitations.filter((gap) => gap.check === "needs-host-outside-run").map((gap) => gap.state), ["component-video"]);
+
+  const dir = mkdtempSync(join(tmpdir(), "loep-gate-sheets-"));
+  try {
+    for (const file of ["pages/P1/screenshot-light.png", "pages/P1/probes/reflow.png", "pages/P1/probes/tabwalk.png", ...states.map((entry) => entry.files.screenshot!)]) {
+      mkdirSync(join(dir, dirname(file)), { recursive: true });
+      writeFileSync(join(dir, file), PNG.sync.write(new PNG({ width: 64, height: 48 })));
+    }
+    const [sheet] = await buildSheets(run, dir, dir);
+    assert.deepEqual(sheet!.tiles.map((entry) => [entry.state, entry.refusedHosts]), [["default", undefined], ["narrow", undefined], ["taborder", undefined], ["blocker-cookies", undefined], ["component-menu", undefined], ["component-video", ["www.youtube-nocookie.com"]]]);
+    const text = sheetText(sheet!, dir);
+    assert.match(text, /- Vak 6: onderdeel "video" op 1280 pixels breed: Video die na een klik laadt\n {2}- In deze toestand zijn verzoeken naar adressen buiten de run tegengehouden \(www\.youtube-nocookie\.com\)\. Wat daarvandaan komt, zoals een speler of een kaart, ontbreekt in dit vak; op die plek kan een leeg of zwart vlak staan\. Beoordeel of te zien is wat er openging, los van die inhoud\.\n/);
+    assert.equal(text.match(/tegengehouden/g)!.length, 1, "only the tile of the state with a refused host gets the note");
+
+    const without: Sheet = { ...sheet!, tiles: sheet!.tiles.map(({ refusedHosts: _refusedHosts, ...entry }) => entry) };
+    assert.notEqual(reviewedAs(sheet!), reviewedAs(without), "the same picture with hosts named beside a tile asks for a new review");
+    assert.equal(reviewedAs(without), createHash("sha256").update(JSON.stringify([without.sha256, without.componentsNl, without.contentNl ?? [], without.framesNl ?? [], without.keysNl ?? []])).digest("hex"), "a sheet without refused hosts keeps the hash of answers given before");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test("a contact sheet is built from tiles of a fixed width", () => {

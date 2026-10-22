@@ -2,6 +2,7 @@ import { writeFile } from "node:fs/promises";
 import { PNG } from "pngjs";
 import { axInfo, type AxInfo } from "../browser/call.ts";
 import { clipboardMark, clipboardReport, clipboardSince } from "../browser/clipboard.ts";
+import { fullscreenChange, fullscreenReading } from "../browser/fullscreen.ts";
 import { clipboardNote, hasClipboardPermission, settlePage } from "../browser/session.ts";
 import { tabPoint } from "../browser/frame.ts";
 import { regionScreenshot } from "../browser/screenshot.ts";
@@ -13,6 +14,7 @@ import { tabWalk } from "../instruments/keyboard.ts";
 import { agreementLine, measuredBy, TOOLBOX_VERSION } from "../instruments/methods.ts";
 import { visualOrder } from "../instruments/order.ts";
 import { overflowAtSize, textSpacing } from "../instruments/overflow.ts";
+import { RAISED_FONT_PX, textScaling, textSizes, type TextGrowth } from "../instruments/textsize.ts";
 import { targetSize } from "../instruments/target.ts";
 import { timeLimits } from "../instruments/timelimits.ts";
 import { timerNl } from "../lib/timelimits.ts";
@@ -86,6 +88,7 @@ export async function act(context: Context, pauseMs: number, action: () => Promi
   const wait = Math.max(env.politeness.remaining(page.url()), env.politeness.remaining(surface.page.url()));
   if (wait > 0) await page.waitForTimeout(wait);
   const before = await changeState(surface);
+  const fullscreenBefore = await fullscreenReading(page);
   const navigations = surface.navigations;
   const clipboardBefore = await clipboardMark(page);
   await action();
@@ -118,6 +121,7 @@ export async function act(context: Context, pauseMs: number, action: () => Promi
   // What the action put on the clipboard, as the page asked for it. A page that says copying failed may be saying
   // something about the test browser, not about itself: whether the browser refused the write settles that.
   const clipboardWrites = await clipboardSince(page, clipboardBefore);
+  const fullscreen = navigated ? null : fullscreenChange(fullscreenBefore, await fullscreenReading(page));
   const clipboard = clipboardReport(clipboardWrites, [...appeared, ...live]);
   const note = clipboardNote([...appeared, ...live], hasClipboardPermission(env.browser), clipboardWrites);
   const result = {
@@ -135,6 +139,7 @@ export async function act(context: Context, pauseMs: number, action: () => Promi
     scrolled: after.scroll.join() !== before.scroll.join(),
     ...(clipboard !== null ? { clipboard: clipboardWrites, clipboardNl: clipboard } : {}),
     ...(note ? { note } : {}),
+    ...(fullscreen !== null ? { fullscreen } : {}),
     focus: facts?.focus ? { ref: facts.focus.ref, tag: facts.focus.tag, role: facts.focus.role, text: facts.focus.text, path: facts.focus.path, ...(facts.focus.frame ? { frame: facts.focus.frame } : {}) } : null,
   };
   const print: Record<string, unknown> = {};
@@ -146,6 +151,7 @@ export async function act(context: Context, pauseMs: number, action: () => Promi
   if (live.length > 0) print.live = live.slice(0, 3).map((text) => text.slice(0, 100));
   if (clipboard !== null) print.clipboard = clipboard;
   if (note) print.note = note;
+  if (fullscreen !== null) print.fullscreen = fullscreen;
   if (Object.keys(print).length === 0) print.changed = false;
   // Whether focus sits in an embedded frame decides at 2.1.4 whether a key counts as a shortcut, so the line says it.
   if (result.focus) print.focus = `${brief(result.focus)}${inFrame(result.focus)}`;
@@ -701,7 +707,19 @@ const contrast: Handler = async (context) => {
     .map(({ entry, count }) => ({ text: entry.text.slice(0, 30), fg: entry.foreground, bg: entry.background, ratio: entry.ratio, required: entry.required, outcome: entry.outcome, ...(entry.reason ? { reason: entry.reason } : {}), ...(count > 1 ? { pieces: count } : {}) }));
   const control = measured.control ? { outside: measured.control.outside, edge: measured.control.edge, fill: measured.control.fill, edgeRatio: measured.control.edgeRatio, fillRatio: measured.control.fillRatio, outcome: measured.control.outcome } : null;
   const graphic = measured.graphic ? { fg: measured.graphic.foreground, bg: measured.graphic.background, ratio: measured.graphic.ratio, outcome: measured.graphic.outcome } : null;
-  return { result: measured, print: { text, ...(groups.size > MAX_TEXT_PRINTED ? { moreText: groups.size - MAX_TEXT_PRINTED } : {}), ...(control ? { control } : {}), ...(graphic ? { graphic } : {}) } };
+  // Shapes with the same colours are one line: a diagram has many lines of one grey.
+  const shapeGroups = new Map<string, { entry: (typeof measured.shapes)[number]; count: number }>();
+  for (const entry of measured.shapes) {
+    const key = [entry.part, entry.foreground, entry.background, entry.ratio, entry.outcome, entry.reason].join("|");
+    const group = shapeGroups.get(key);
+    if (group) group.count++;
+    else shapeGroups.set(key, { entry, count: 1 });
+  }
+  const shapes = [...shapeGroups.values()]
+    .sort((a, b) => (a.entry.ratio ?? Infinity) - (b.entry.ratio ?? Infinity))
+    .slice(0, MAX_TEXT_PRINTED)
+    .map(({ entry, count }) => ({ part: entry.part, fg: entry.foreground, bg: entry.background, ratio: entry.ratio, outcome: entry.outcome, ...(entry.dashed ? { dashed: true } : {}), ...(entry.reason ? { reason: entry.reason } : {}), shapes: count, first: entry.where.split(" > ").slice(-2).join(" > ") }));
+  return { result: measured, print: { text, ...(groups.size > MAX_TEXT_PRINTED ? { moreText: groups.size - MAX_TEXT_PRINTED } : {}), ...(control ? { control } : {}), ...(graphic ? { graphic } : {}), ...(shapes.length > 0 ? { shapes } : {}), ...(shapeGroups.size > MAX_TEXT_PRINTED ? { moreShapes: shapeGroups.size - MAX_TEXT_PRINTED } : {}) } };
 };
 
 const focus: Handler = async (context) => {
@@ -744,10 +762,10 @@ const target: Handler = async (context) => {
 const MAX_LISTED = 5;
 const where = (element: { tag: string; text: string }): string => `${element.tag}: ${element.text.slice(0, 40)}`;
 
-async function overflow(context: Context, viewport: { width: number; height: number }, note: string): Promise<Outcome> {
+async function overflow(context: Context, viewport: { width: number; height: number }, note: string, alsoAtSize?: () => Promise<void>): Promise<Outcome> {
   const { surface, images } = context;
   const path = images.image();
-  const measured = await overflowAtSize(surface.page, viewport, path);
+  const measured = await overflowAtSize(surface.page, viewport, path, alsoAtSize);
   const report = measured.report as { horizontalScroll: boolean; scrollWidth: number; viewportWidth: number; offenders: { tag: string; text: string; right: number; overflowContainer: { tag: string; overflowX: string } | null }[]; clipped: { tag: string; text: string }[] };
   return {
     result: { note, viewport, ...measured.report, visibleControls: measured.visibleControls, clickables: measured.clickables },
@@ -766,9 +784,37 @@ async function overflow(context: Context, viewport: { width: number; height: num
 
 const reflow: Handler = (context) => overflow(context, { width: 320, height: 256 }, "WCAG 1.4.10: het venster teruggebracht tot 320 bij 256 CSS-pixels en daarna hersteld");
 
-const zoom: Handler = (context) => {
-  const viewport = context.surface.page.viewportSize()!;
-  return overflow(context, { width: Math.round(viewport.width / 2), height: Math.round(viewport.height / 2) }, "WCAG 1.4.4: het venster gehalveerd, wat de indeling geeft van 200% zoom, en daarna hersteld");
+/**
+ * 200% zoom as the halved window, and next to it the other way a browser offers to read text at
+ * 200%: the default font size doubled. WCAG asks for one way that works (#328).
+ */
+const zoom: Handler = async (context) => {
+  const page = context.surface.page;
+  const viewport = page.viewportSize()!;
+  const before = await textSizes(page);
+  let atZoom: Awaited<ReturnType<typeof textSizes>> = [];
+  const outcome = await overflow(context, { width: Math.round(viewport.width / 2), height: Math.round(viewport.height / 2) }, "WCAG 1.4.4: het venster gehalveerd, wat de indeling geeft van 200% zoom, en daarna hersteld", async () => {
+    atZoom = await textSizes(page);
+  });
+  const picture = context.images.image("-textonly");
+  const scaling = await textScaling(page, before, atZoom, picture);
+  const line = (entry: TextGrowth): string => `${entry.tag}: ${entry.text.slice(0, 40)} (${entry.drawn}px, zoom ${entry.byZoom ?? "-"}x, alleen tekst ${entry.byTextOnly ?? "-"}x)`;
+  return {
+    result: { ...(outcome.result as Record<string, unknown>), textScaling: scaling },
+    print: {
+      ...outcome.print,
+      textScaling: `${scaling.blocks} stukken tekst: ${scaling.doubledByZoom} tot 200% met zoom, ${scaling.doubledByTextOnly} met alleen de tekst groter (standaardlettergrootte ${RAISED_FONT_PX}px)`,
+      ...(scaling.onlyByTextOnly.length > 0 ? { onlyByTextOnly: scaling.onlyByTextOnly.length, firstOnlyByTextOnly: scaling.onlyByTextOnly.slice(0, MAX_LISTED).map(line) } : {}),
+      ...(scaling.byNeither.length > 0 ? { byNeither: scaling.byNeither.length, firstByNeither: scaling.byNeither.slice(0, MAX_LISTED).map(line) } : {}),
+      textOnly: {
+        newlyClipped: scaling.textOnly.newlyClipped.length,
+        ...(scaling.textOnly.newlyClipped.length > 0 ? { firstClipped: scaling.textOnly.newlyClipped.slice(0, MAX_LISTED).map(where) } : {}),
+        controlsGone: scaling.textOnly.controlsGone.length,
+        horizontalScroll: scaling.textOnly.horizontalScroll,
+        image: context.images.relative(picture),
+      },
+    },
+  };
 };
 
 /** With `--keep` the page keeps the wider spacing after the measurement: what only exists with it can then be opened and looked at. */
@@ -1000,6 +1046,8 @@ export const COMMANDS: Record<string, Spec> = {
   // The earlier name of `taborder`.
   tabwalk: { target: "option-from", changes: true, run: taborderWith(tabwalk, oneMethod("keyboard-walk", tabwalk), "tabwalk") },
   lang: { target: "optional-first-argument", changes: false, run: lang },
+  parse: { target: "none", changes: false, run: source },
+  // The earlier name of `parse`, which a shell guard reads as the builtin `source`.
   source: { target: "none", changes: false, run: source },
   ocr: { target: "first-argument", changes: false, run: ocrCommand },
   motion: { target: "none", changes: false, run: motion },

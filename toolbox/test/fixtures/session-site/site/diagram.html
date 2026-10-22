@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="nl">
+<head><meta charset="utf-8"><title>Diagram - Testsite sessie</title><link rel="stylesheet" href="/site.css"></head>
+<body>
+<main><h1>Diagram</h1>
+<figure>
+<svg id="diagram" width="400" height="220" viewBox="0 0 400 220" role="img" aria-label="Twee zones met een verbinding">
+  <defs><linearGradient id="verloop"><stop offset="0" stop-color="#000"/><stop offset="1" stop-color="#fff"/></linearGradient></defs>
+  <rect x="0" y="0" width="400" height="220" fill="#ffffff"/>
+  <rect id="zone" x="20" y="20" width="150" height="100" fill="none" stroke="#767676" stroke-width="2" stroke-dasharray="6 4"/>
+  <line id="verbinding" x1="170" y1="70" x2="260" y2="70" stroke="#aaaaaa" stroke-width="2"/>
+  <rect id="status" x="260" y="40" width="120" height="60" fill="#ffcc00"/>
+  <path id="pijl" d="M 20 180 L 380 180" stroke="url(#verloop)" stroke-width="4"/>
+</svg>
+<figcaption>Twee zones</figcaption>
+</figure>
+</main>
+</body>
+</html>

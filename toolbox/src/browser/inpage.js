@@ -99,6 +99,52 @@
   };
   const clipboardWrites = () => clipboardLog.map((entry) => ({ ...entry }));
 
+  // What the page asks of full screen, recorded before any page script runs: whether this document
+  // may go to full screen, each request, and what the browser answered. A player that may not
+  // often says so in its own words; this says why (#322).
+  const fullscreenLog = { requests: 0, refused: 0, lastRefusal: null, asked: 0, askedNotAllowed: 0 };
+  let fullscreenAllowed = () => document.fullscreenEnabled;
+  const noteRefusal = (error) => {
+    fullscreenLog.refused++;
+    fullscreenLog.lastRefusal = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
+  };
+  if (!ownWorld) {
+    for (const name of ["fullscreenEnabled", "webkitFullscreenEnabled"]) {
+      const descriptor = Object.getOwnPropertyDescriptor(Document.prototype, name);
+      if (!descriptor?.get || !descriptor.configurable) continue;
+      const read = descriptor.get;
+      // The reading of loep asks the browser itself, so it is not counted as a question of the page.
+      if (name === "fullscreenEnabled") fullscreenAllowed = () => read.call(document);
+      Object.defineProperty(Document.prototype, name, {
+        ...descriptor,
+        get() {
+          const allowed = read.call(this);
+          fullscreenLog.asked++;
+          if (!allowed) fullscreenLog.askedNotAllowed++;
+          return allowed;
+        },
+      });
+    }
+    for (const name of ["requestFullscreen", "webkitRequestFullscreen"]) {
+      const original = Element.prototype[name];
+      if (typeof original !== "function") continue;
+      Element.prototype[name] = function (...args) {
+        fullscreenLog.requests++;
+        if (!fullscreenAllowed()) fullscreenLog.askedNotAllowed++;
+        let answer;
+        try {
+          answer = original.apply(this, args);
+        } catch (error) {
+          noteRefusal(error);
+          throw error;
+        }
+        if (answer && typeof answer.then === "function") answer.then(undefined, noteRefusal);
+        return answer;
+      };
+    }
+  }
+  const fullscreenState = () => ({ ...fullscreenLog, active: document.fullscreenElement !== null });
+
   // Count what the page registers, before any page script runs. Whether a page uses
   // timers, gestures or key shortcuts cannot be read from the DOM afterwards.
   const listeners = {};
@@ -2280,6 +2326,23 @@
     return { viewport: { width: innerWidth, height: innerHeight }, headings, images, textBlocks: blocks, rotatedQuarterTurn: rotated.slice(0, 20), orientationRules };
   }
 
+  /**
+   * The size at which each visible block of text is drawn, in CSS pixels: its font size times the
+   * scale a transform of the block or an ancestor gives it. Text sized to the window or to its
+   * container shrinks when the window does, and a slide scaled to fit draws its text smaller.
+   */
+  function textSizes() {
+    const shown = (element) => isVisible(element) && !visuallyHidden(element);
+    return deepQueryAll(TEXT_BLOCK)
+      .filter((element) => shown(element) && [...element.childNodes].some((node) => node.nodeType === Node.TEXT_NODE && node.textContent.trim()))
+      .map((element) => {
+        const rect = element.getBoundingClientRect();
+        const scale = element.offsetWidth > 0 ? rect.width / element.offsetWidth : 1;
+        const drawn = Number.parseFloat(getComputedStyle(element).fontSize) * scale;
+        return { tag: element.localName, text: text(element, 80), path: path(element), drawn: Math.round(drawn * 10) / 10 };
+      });
+  }
+
   let colourCanvas = null;
 
   /** Any CSS colour as sRGB with alpha, resolved by the browser itself (handles oklch, light-dark and the rest). */
@@ -2389,6 +2452,53 @@
         const control = closestComposed(composedParent(element) ?? element, INTERACTIVE);
         return { ...describe(element), inControl: control ? `${control.localName}: "${text(control, 60)}"` : null, controlHasText: control ? text(control, 60).length > 0 : null };
       });
+  }
+
+  const SHAPES = "path,line,polyline,polygon,rect,circle,ellipse";
+  const MAX_SHAPES = 400;
+
+  /**
+   * The drawn shapes of the svg drawings in or around an element: per shape the colour of its
+   * line and of its area as the browser paints them, with the opacity of the shape and of
+   * everything around it. A colour from a gradient or pattern has no single value and is a
+   * reason instead.
+   */
+  function svgShapes(root) {
+    let own = root.closest?.("svg") ?? null;
+    while (own?.ownerSVGElement) own = own.ownerSVGElement;
+    const drawings = own ? [own] : [...deepElements(root)].filter((element) => element.localName === "svg" && !element.parentElement?.closest("svg"));
+    const shapes = [];
+    for (const drawing of drawings) {
+      for (const shape of drawing.querySelectorAll(SHAPES)) {
+        if (shapes.length >= MAX_SHAPES) break;
+        if (own && root !== own && !root.contains(shape)) continue;
+        if (shape.closest("defs,clipPath,mask,marker,pattern,symbol")) continue;
+        const style = getComputedStyle(shape);
+        if (style.display === "none" || style.visibility !== "visible") continue;
+        const rect = shape.getBoundingClientRect();
+        if (rect.width < 1 && rect.height < 1) continue;
+        let opacity = 1;
+        for (let node = shape; node && node !== drawing.parentElement; node = node.parentElement) opacity *= Number(getComputedStyle(node).opacity);
+        const paint = (value, partOpacity) => {
+          if (!value || value === "none") return null;
+          if (value.startsWith("url(")) return { colour: null, alpha: 0, reason: "een verloop of patroon" };
+          const rgba = toRgba(value);
+          return { colour: rgba.slice(0, 3), alpha: rgba[3] * partOpacity * opacity, reason: null };
+        };
+        const scale = shape.getScreenCTM?.()?.a ?? 1;
+        const strokeWidth = Number.parseFloat(style.strokeWidth) * Math.abs(scale);
+        const stroke = strokeWidth > 0 ? paint(style.stroke, Number(style.strokeOpacity)) : null;
+        // A line has no area, and neither has a path that is drawn as a single stroke; black is only their default fill.
+        const flat = shape.localName === "line" || (typeof shape.getBBox === "function" && (shape.getBBox().width < 1 || shape.getBBox().height < 1));
+        // An area that covers the drawing is its background, not a part of it.
+        const whole = drawing.getBoundingClientRect();
+        const backdrop = rect.width * rect.height >= 0.9 * whole.width * whole.height;
+        const fill = flat || backdrop ? null : paint(style.fill, Number(style.fillOpacity));
+        if (!stroke && !fill) continue;
+        shapes.push({ tag: shape.localName, path: path(shape), box: box(shape), stroke, fill, strokeWidth: Math.round(strokeWidth * 10) / 10, dashed: style.strokeDasharray !== "none" });
+      }
+    }
+    return shapes;
   }
 
   /**
@@ -2579,6 +2689,7 @@
     textBlocksWithLang,
     pictures,
     clipboardWrites,
+    fullscreenState,
     clickables,
     paintedBox,
     settingControls,
@@ -2603,6 +2714,11 @@
     hearsDown,
     downSignature,
     contentInventory,
+    textSizes,
+    svgShapes: (chain) => {
+      const element = resolve(chain);
+      return element ? svgShapes(element) : [];
+    },
     interactiveWithin: (ref) => composedWithin(registered(ref), INTERACTIVE).map(describe),
     freezeListeners,
     listenerCounts: () => JSON.parse(JSON.stringify(listeners)),
@@ -2659,6 +2775,6 @@
     skipLinkTarget,
   };
   // What only the copy in the page knows or does is not there in loep's own world: a call there would find nothing.
-  if (ownWorld) for (const name of ["freezeListeners", "listenerCounts", "ownListeners", "timerReport", "clipboardWrites", "applyTextSpacing", "removeTextSpacing"]) delete library[name];
+  if (ownWorld) for (const name of ["freezeListeners", "listenerCounts", "ownListeners", "timerReport", "clipboardWrites", "fullscreenState", "applyTextSpacing", "removeTextSpacing"]) delete library[name];
   Object.defineProperty(window, "__loep", { value: Object.freeze(library), writable: false, configurable: false, enumerable: false });
 })();

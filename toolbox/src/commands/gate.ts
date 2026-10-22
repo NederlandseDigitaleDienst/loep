@@ -73,6 +73,8 @@ export interface Tile {
   state: string;
   file: string;
   descriptionNl: string;
+  /** Hosts outside the run that were refused in this state and not on a plain page load: what comes from there is not in the picture. */
+  refusedHosts?: string[];
 }
 
 export interface Sheet {
@@ -451,12 +453,10 @@ export function gateChecks(run: RunData): { checks: Check[]; gaps: Gap[]; warnin
     // An inventory without a usable address: only the hosts of the pages count.
   }
   const own = (address: string): boolean => ownHosts.has(address.split("/")[0]!);
-  // Hosts outside the run that are refused on a plain page load as well say nothing about a component: those are left out for its state.
-  const states = run.siteStates?.states ?? [];
-  const baseline = new Set(states.filter((state) => state.kind === "blocker").flatMap((state) => (state.refused ?? []).filter((entry) => entry.kind === "scope").map((entry) => entry.address.split("/")[0]!)));
-  for (const state of states.filter((entry) => entry.kind !== "blocker")) {
+  const outside = hostsRefusedInStates(run);
+  for (const state of (run.siteStates?.states ?? []).filter((entry) => entry.kind !== "blocker")) {
     const writes = (state.refused ?? []).filter((entry) => entry.kind === "method" && own(entry.address));
-    const hosts = [...new Set((state.refused ?? []).filter((entry) => entry.kind === "scope").map((entry) => entry.address.split("/")[0]!))].filter((host) => !baseline.has(host));
+    const hosts = outside.get(state.id) ?? [];
     if (writes.length > 0) limitations.push({ check: "needs-write-request", page: null, url: state.url, state: state.id, missingNl: `Niet onderzoekbaar zonder schrijfverzoek: in deze toestand zijn tegengehouden ${writes.map((entry) => `${entry.method} ${entry.address}`).slice(0, 3).join(", ")}. Wat daarmee laadt, staat niet in het bewijs.` });
     if (hosts.length > 0) limitations.push({ check: "needs-host-outside-run", page: null, url: state.url, state: state.id, missingNl: `In deze toestand zijn verzoeken naar adressen buiten de run tegengehouden die bij het gewone laden van de pagina niet voorkomen (${hosts.slice(0, 4).join(", ")}). Een onderdeel dat daarvan afhangt, werkte niet.` });
   }
@@ -516,6 +516,19 @@ export function gateChecks(run: RunData): { checks: Check[]; gaps: Gap[]; warnin
     if (document.facts?.pdf?.tagged && !document.facts.pdf.tagTextRead) warnings.push({ check: "document-tag-text-not-read", page: document.label, url: document.item.url, state: "default", missingNl: "De tekst per tag van dit document is niet gelezen, dus de koppen, links en tabellen zijn zonder hun tekst beoordeeld. De uitkomst van documents zegt welk programma niet paste. Herstel dat en draai documents opnieuw." });
   }
   return { checks, gaps, warnings, limitations };
+}
+
+/** Per state of the site model, the hosts outside the run that were refused while it was open and that a plain page load does not ask for. */
+export function hostsRefusedInStates(run: Pick<RunData, "siteStates">): Map<string, string[]> {
+  const states = run.siteStates?.states ?? [];
+  // Hosts outside the run that are refused on a plain page load as well say nothing about a component: those are left out for its state.
+  const baseline = new Set(states.filter((state) => state.kind === "blocker").flatMap((state) => (state.refused ?? []).filter((entry) => entry.kind === "scope").map((entry) => entry.address.split("/")[0]!)));
+  const found = new Map<string, string[]>();
+  for (const state of states.filter((entry) => entry.kind !== "blocker")) {
+    const hosts = [...new Set((state.refused ?? []).filter((entry) => entry.kind === "scope").map((entry) => entry.address.split("/")[0]!))].filter((host) => !baseline.has(host));
+    if (hosts.length > 0) found.set(state.id, hosts);
+  }
+  return found;
 }
 
 /**
@@ -596,6 +609,7 @@ export function contactSheet(tiles: PNG[]): PNG {
 /** One sheet per page type: the page as measured, on a narrow screen, with its Tab stops, and every state of the site model that belongs to it. */
 export async function buildSheets(run: RunData, runDir: string, outDir: string): Promise<Sheet[]> {
   const model = run.siteModel ?? null;
+  const refusedHosts = hostsRefusedInStates(run);
   const types: { id: string; page: PageData }[] = [];
   if (model) {
     for (const type of model.pageTypes) {
@@ -628,7 +642,7 @@ export async function buildSheets(run: RunData, runDir: string, outDir: string):
       const entry = state.kind === "blocker" ? model?.blockers.find((blocker) => blocker.id === state.modelId) : state.kind === "component" ? model?.components.find((component) => component.id === state.modelId) : model?.processes.find((process) => process.id === state.modelId);
       const kind = state.kind === "blocker" ? "blokkade" : state.kind === "component" ? "onderdeel" : "proces";
       if (state.kind !== "blocker") (siteWide ? everywhere : state.kind === "component" ? components : processes).push(`${state.modelId}: ${entry?.descriptionNl ?? ""}${state.reached ? "" : " (niet geopend)"}`);
-      if (state.reached && state.files.screenshot) candidates.push({ state: state.id, file: state.files.screenshot, descriptionNl: `${kind} "${state.modelId}"${state.viewport ? ` op ${state.viewport.width} pixels breed` : ""}: ${entry?.descriptionNl ?? ""}` });
+      if (state.reached && state.files.screenshot) candidates.push({ state: state.id, file: state.files.screenshot, descriptionNl: `${kind} "${state.modelId}"${state.viewport ? ` op ${state.viewport.width} pixels breed` : ""}: ${entry?.descriptionNl ?? ""}`, ...(refusedHosts.has(state.id) ? { refusedHosts: refusedHosts.get(state.id) } : {}) });
     }
     const present = candidates.filter((candidate) => existsSync(join(runDir, candidate.file)));
     if (present.length === 0) continue;
@@ -650,7 +664,10 @@ export function sheetText(sheet: Sheet, absoluteOut: string): string {
     "",
     `Kenmerk van dit blad (\`reviewedAs\`): \`${reviewedAs(sheet)}\``,
     "",
-    ...sheet.tiles.map((entry) => `- Vak ${entry.nr}: ${entry.descriptionNl}`),
+    ...sheet.tiles.flatMap((entry) => [
+      `- Vak ${entry.nr}: ${entry.descriptionNl}`,
+      ...((entry.refusedHosts ?? []).length > 0 ? [`  - In deze toestand zijn verzoeken naar adressen buiten de run tegengehouden (${entry.refusedHosts!.join(", ")}). Wat daarvandaan komt, zoals een speler of een kaart, ontbreekt in dit vak; op die plek kan een leeg of zwart vlak staan. Beoordeel of te zien is wat er openging, los van die inhoud.`] : []),
+    ]),
     "",
     sheet.componentsNl.length > 0 ? `Onderdelen van dit paginatype volgens het sitemodel: ${sheet.componentsNl.join("; ")}.` : (sheet.everywhereNl ?? []).length > 0 ? "Het sitemodel noemt voor dit paginatype geen eigen onderdelen." : "Het sitemodel noemt voor dit paginatype geen onderdelen.",
     ...((sheet.everywhereNl ?? []).length > 0 ? ["", `Op elke pagina, ook deze, volgens het sitemodel: ${sheet.everywhereNl!.join("; ")}. Die horen bij de lijst met onderdelen.`] : []),
@@ -696,7 +713,7 @@ export const QUESTIONS: { id: string; bad: Answer; tileState: string; questionNl
   { id: "taborder", bad: "nee", tileState: "taborder", questionNl: "Vak 3: staan de genummerde Tab-stops verspreid over de pagina (kop, inhoud en voet), en dus niet alleen in één hoek of één blok?" },
   { id: "missing", bad: "ja", tileState: "default", questionNl: "Vak 1 en 2: zie je een onderdeel dat pas na een handeling iets laat zien (menuknop, uitklapper, tabbladen, carrousel met knoppen, zoekknop, chatknop), of een speler of blok dat vanzelf beweegt, dat niet in de lijst met onderdelen, niet in de lijst met processen, niet in de lijst met inhoud zonder handeling en ook niet in de lijst met ingesloten vensters van dit paginatype staat? Een formulier dat in de lijst met processen staat (een zoekformulier, een contactformulier), of een ingesloten venster dat in die lijst staat (een vak 'Ik ben geen robot', een speler van een andere partij), telt hier niet: het sitemodel kent het." },
 ];
-const STATE_QUESTION_NL = "Elk vak vanaf 4: is te zien wat de omschrijving van het vak zegt? Bij een onderdeel of proces: het is open of uitgevoerd. Bij een blokkade: de blokkade staat in beeld.";
+const STATE_QUESTION_NL = "Elk vak vanaf 4: is te zien wat de omschrijving van het vak zegt? Bij een onderdeel of proces: het is open of uitgevoerd. Bij een blokkade: de blokkade staat in beeld. Staat bij het vak dat verzoeken naar adressen buiten de run zijn tegengehouden, dan telt wat er openging, niet de inhoud van die adressen.";
 
 interface GivenAnswer {
   answer?: unknown;
@@ -837,10 +854,11 @@ export async function checkGate(runDir: string): Promise<string[]> {
   return problems;
 }
 
-/** What a reviewer was shown of a sheet: the picture and the lists beside it. A change in either asks for a new review. */
+/** What a reviewer was shown of a sheet: the picture, the lists beside it and the hosts refused in its states. A change in any of them asks for a new review. */
 export function reviewedAs(sheet: Sheet): string {
-  // The list of processes counts only where there is one, so a review of a sheet without processes stays valid.
-  return sha256(JSON.stringify([sheet.sha256, sheet.componentsNl, sheet.contentNl ?? [], sheet.framesNl ?? [], sheet.keysNl ?? [], ...(sheet.processesNl?.length ? [sheet.processesNl] : []), ...(sheet.everywhereNl?.length ? [{ everywhere: sheet.everywhereNl }] : [])]));
+  const refused = sheet.tiles.filter((entry) => (entry.refusedHosts ?? []).length > 0).map((entry) => [entry.state, entry.refusedHosts]);
+  // The list of processes and the refused hosts count only where there are any, so a review of a sheet without them stays valid.
+  return sha256(JSON.stringify([sheet.sha256, sheet.componentsNl, sheet.contentNl ?? [], sheet.framesNl ?? [], sheet.keysNl ?? [], ...(sheet.processesNl?.length ? [sheet.processesNl] : []), ...(sheet.everywhereNl?.length ? [{ everywhere: sheet.everywhereNl }] : []), ...(refused.length > 0 ? [{ refused }] : [])]));
 }
 
 /**

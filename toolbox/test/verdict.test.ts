@@ -61,6 +61,14 @@ test("the index reads what a verdict may lean on from the observation records", 
   assert.equal(observations.get("j143-0002")!.agreement, null);
 });
 
+test("an observation of source counts as one of parse, its new name (#327)", () => {
+  const parsed = indexObservations([record("j411-0001", "open"), record("j411-0002", "source", { result: { agreement: "agree", differences: [] } })]);
+  assert.equal(parsed.get("j411-0002")!.command, "parse");
+  const seenParse = { ...seen, evidence: ["j411-0002"] };
+  const parseContext: JudgeContext = { ...context, criterion: "4.1.1", evidenceNames: [], observations: parsed, passCommands: ["parse"], decisiveCommands: [] };
+  assert.deepEqual(validateJudgeVerdict({ ...passed, criterion: "4.1.1", observations: [seenParse] }, parseContext).filter((problem) => problem.includes("parse")), []);
+});
+
 test("a judge verdict that points at recorded observations is accepted", () => {
   assert.deepEqual(validateJudgeVerdict(passed, context), []);
   assert.deepEqual(validateJudgeVerdict(failed, context), []);

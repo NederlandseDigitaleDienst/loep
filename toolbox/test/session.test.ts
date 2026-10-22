@@ -13,6 +13,7 @@ import { clipboardLine, clipboardMark, clipboardSince, type ClipboardWrite } fro
 import { clipboardNote, hasClipboardPermission, INPAGE_PATH, launchBrowser, loadPage, newContext } from "../src/browser/session.ts";
 import type { Described } from "../src/instruments/activate.ts";
 import { probeTrigger } from "../src/instruments/dialog.ts";
+import type { TextScaling } from "../src/instruments/textsize.ts";
 import { canonicalJson, sha256 } from "../src/lib/canonical.ts";
 import { Daemon, ownedSessionNl, tooManySessionsNl, type Response } from "../src/session/daemon.ts";
 import type { Observation } from "../src/session/observations.ts";
@@ -207,6 +208,74 @@ test("reflow, zoom and spacing measure and put the page back", async () => {
   assert.equal(typeof spacing.newlyClipped, "number");
   const after = await loep("style", [await ref("css:h1"), "letter-spacing"]);
   assert.deepEqual(after.style, { "letter-spacing": "normal" }, "the forced spacing is gone again");
+});
+
+test("contrast measures the lines and areas of an svg drawing, grouped by colour (#324)", async () => {
+  await loep("open", ["/diagram.html"]);
+  const measured = await loep("contrast", [await ref("css:#diagram")]);
+  const shapes = measured.shapes as { part: string; fg: string | null; bg: string | null; ratio: number | null; outcome: string; dashed?: boolean; reason?: string; shapes: number }[];
+  const of = (part: string, fg: string) => shapes.find((shape) => shape.part === part && shape.fg === fg);
+  assert.deepEqual(of("lijn", "#aaaaaa") && { ratio: of("lijn", "#aaaaaa")!.ratio, bg: of("lijn", "#aaaaaa")!.bg, outcome: of("lijn", "#aaaaaa")!.outcome }, { ratio: 2.3, bg: "#ffffff", outcome: "kandidaat" });
+  assert.deepEqual(of("lijn", "#767676") && { ratio: of("lijn", "#767676")!.ratio, dashed: of("lijn", "#767676")!.dashed, outcome: of("lijn", "#767676")!.outcome }, { ratio: 4.5, dashed: true, outcome: "duidelijk" });
+  assert.equal(of("vlak", "#ffcc00")?.outcome, "kandidaat");
+  assert.ok(shapes.some((shape) => shape.part === "lijn" && shape.reason === "een verloop of patroon"));
+  assert.equal(shapes.length, 4, "the white area behind the drawing and the default black fill of a line are not parts of it");
+  // A shape inside the drawing measures that shape.
+  const inside = await loep("contrast", [await ref("css:#verbinding")]);
+  assert.ok((inside.shapes as { fg: string }[]).some((shape) => shape.fg === "#aaaaaa"));
+});
+
+test("a click says whether full screen came on, was refused, or may not be asked for here (#322)", async () => {
+  await loep("open", ["/fullscreen.html"]);
+  const own = await loep("click", [await ref("css:#own")]);
+  assert.equal(own.fullscreen, "volledig scherm aangevraagd en aan");
+  // The frame of the player may not go to full screen: the site says so itself, and every browser refuses.
+  await loep("open", ["/fullscreen.html"]);
+  const asked = await loep("click", [await ref("Speler volledig scherm")]);
+  assert.match(asked.fullscreen as string, /^de pagina vroeg of volledig scherm mag en kreeg nee; dit document mag geen volledig scherm/);
+  assert.ok((asked.appeared as string[]).some((text) => text.includes("Volledig scherm lukt niet in dit venster")));
+  const requested = await loep("click", [await ref("Vraag volledig scherm")]);
+  assert.match(requested.fullscreen as string, /^volledig scherm aangevraagd en geweigerd door de browser \(TypeError: .+\); dit document mag geen volledig scherm/);
+});
+
+test("zoom also measures text with the default font size doubled, the other way to read it at 200% (#328)", async () => {
+  await loep("open", ["/textsize.html"]);
+  const zoom = await loep("zoom");
+  const record = observation(zoom.id);
+  const scaling = (record.result as unknown as { methods: { result: { textScaling: TextScaling } }[] }).methods[0]!.result.textScaling;
+  const of = (start: string) => {
+    const entry = [...scaling.byNeither, ...scaling.onlyByTextOnly].find((growth) => growth.text.startsWith(start));
+    return entry ? { byZoom: entry.byZoom, byTextOnly: entry.byTextOnly } : null;
+  };
+  assert.equal(scaling.blocks, 5);
+  // Pixels and rem both reach 200% with zoom, so neither is listed.
+  assert.equal(of("Tekst in pixels"), null);
+  assert.equal(of("Tekst in rem"), null);
+  assert.deepEqual(of("Tekst naar het venster groeit"), { byZoom: 1, byTextOnly: 1 });
+  assert.deepEqual(of("Tekst naar het venster en de lettergrootte"), { byZoom: 1, byTextOnly: 2 });
+  assert.equal(scaling.doubledByZoom, 3);
+  assert.equal(scaling.doubledByTextOnly, 2, "rem and the size that adds the font size");
+  assert.ok(scaling.byNeither.every((entry) => entry.text !== ""));
+  assert.equal(zoom.byNeither, 1);
+  assert.equal(zoom.onlyByTextOnly, 1);
+  assert.ok(existsSync(join(run, (zoom.textOnly as { image: string }).image)));
+  // The default font size is back.
+  const after = await loep("style", [await ref("css:.rem"), "font-size"]);
+  assert.deepEqual(after.style, { "font-size": "20px" });
+});
+
+test("reflow and zoom say how to measure full screen instead of failing on it (#336)", async () => {
+  await loep("open", ["/fullscreen.html"]);
+  const own = await loep("click", [await ref("css:#own")]);
+  assert.equal(own.fullscreen, "volledig scherm aangevraagd en aan");
+  for (const command of ["reflow", "zoom"]) {
+    const response = await raw(command);
+    assert.equal(response.ok, false);
+    assert.match(JSON.stringify(response.print), /staat op volledig scherm, en dan kan Chromium het venster niet van grootte veranderen/);
+    assert.doesNotMatch(JSON.stringify(response.print), /Protocol error/);
+  }
+  // The page is still in full screen and can be looked at.
+  await loep("look");
 });
 
 test("order sets the order of the code against the order on screen", async () => {

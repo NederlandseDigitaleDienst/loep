@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="nl">
+<head><meta charset="utf-8"><title>Speler</title><link rel="stylesheet" href="/site.css"></head>
+<body>
+<p><button id="ask" type="button">Speler volledig scherm</button> <button id="request" type="button">Vraag volledig scherm</button></p>
+<p id="message" role="status"></p>
+<script>
+const message = document.getElementById("message");
+// Like many players: ask first, and say so when it may not.
+document.getElementById("ask").addEventListener("click", () => {
+  if (!document.fullscreenEnabled) message.textContent = "Volledig scherm lukt niet in dit venster";
+  else document.documentElement.requestFullscreen();
+});
+document.getElementById("request").addEventListener("click", () => document.documentElement.requestFullscreen().catch(() => { message.textContent = "Het lukte niet"; }));
+</script>
+</body>
+</html>

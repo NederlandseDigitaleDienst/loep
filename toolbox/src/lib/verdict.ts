@@ -400,9 +400,9 @@ export const LOOK_COMMANDS = ["look", "crop", "ax", "style", "html", "find", "do
 /** Commands that read what the run stored instead of a page: their observation can be made again without a state to open. */
 const STATELESS_COMMANDS = new Set<string>(["document", "cutout"]);
 /** Commands that measure. `paste`, `press`, `drag`, `swipe` and `timers` act on the page, and so can `speak`, but their answer is the measurement: whether a gesture does anything is what 2.5.1 and 2.5.7 ask first. */
-export const MEASURE_COMMANDS = ["contrast", "focus", "target", "reflow", "spacing", "zoom", "order", "name", "rules", "taborder", "lang", "source", "ocr", "motion", "timers", "paste", "press", "drag", "swipe", "media", "forced", "distinct", "speak", "voiceover"] as const;
+export const MEASURE_COMMANDS = ["contrast", "focus", "target", "reflow", "spacing", "zoom", "order", "name", "rules", "taborder", "lang", "parse", "ocr", "motion", "timers", "paste", "press", "drag", "swipe", "media", "forced", "distinct", "speak", "voiceover"] as const;
 /** Older names of a command that still work in a session. */
-export const COMMAND_ALIASES: Record<string, string> = { engines: "rules", tabwalk: "taborder" };
+export const COMMAND_ALIASES: Record<string, string> = { engines: "rules", tabwalk: "taborder", source: "parse" };
 export const canonicalCommand = (command: string): string => COMMAND_ALIASES[command] ?? command;
 const SHOWING = new Set<string>([...LOOK_COMMANDS, ...MEASURE_COMMANDS]);
 /** Every word that can follow `session` on the command line as a command in a session (an agent types it as `loep <command>`): the commands that act, look, measure and record, with their older names. */
