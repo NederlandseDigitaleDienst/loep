@@ -2391,6 +2391,53 @@
       });
   }
 
+  const SHAPES = "path,line,polyline,polygon,rect,circle,ellipse";
+  const MAX_SHAPES = 400;
+
+  /**
+   * The drawn shapes of the svg drawings in or around an element: per shape the colour of its
+   * line and of its area as the browser paints them, with the opacity of the shape and of
+   * everything around it. A colour from a gradient or pattern has no single value and is a
+   * reason instead.
+   */
+  function svgShapes(root) {
+    let own = root.closest?.("svg") ?? null;
+    while (own?.ownerSVGElement) own = own.ownerSVGElement;
+    const drawings = own ? [own] : [...deepElements(root)].filter((element) => element.localName === "svg" && !element.parentElement?.closest("svg"));
+    const shapes = [];
+    for (const drawing of drawings) {
+      for (const shape of drawing.querySelectorAll(SHAPES)) {
+        if (shapes.length >= MAX_SHAPES) break;
+        if (own && root !== own && !root.contains(shape)) continue;
+        if (shape.closest("defs,clipPath,mask,marker,pattern,symbol")) continue;
+        const style = getComputedStyle(shape);
+        if (style.display === "none" || style.visibility !== "visible") continue;
+        const rect = shape.getBoundingClientRect();
+        if (rect.width < 1 && rect.height < 1) continue;
+        let opacity = 1;
+        for (let node = shape; node && node !== drawing.parentElement; node = node.parentElement) opacity *= Number(getComputedStyle(node).opacity);
+        const paint = (value, partOpacity) => {
+          if (!value || value === "none") return null;
+          if (value.startsWith("url(")) return { colour: null, alpha: 0, reason: "een verloop of patroon" };
+          const rgba = toRgba(value);
+          return { colour: rgba.slice(0, 3), alpha: rgba[3] * partOpacity * opacity, reason: null };
+        };
+        const scale = shape.getScreenCTM?.()?.a ?? 1;
+        const strokeWidth = Number.parseFloat(style.strokeWidth) * Math.abs(scale);
+        const stroke = strokeWidth > 0 ? paint(style.stroke, Number(style.strokeOpacity)) : null;
+        // A line has no area, and neither has a path that is drawn as a single stroke; black is only their default fill.
+        const flat = shape.localName === "line" || (typeof shape.getBBox === "function" && (shape.getBBox().width < 1 || shape.getBBox().height < 1));
+        // An area that covers the drawing is its background, not a part of it.
+        const whole = drawing.getBoundingClientRect();
+        const backdrop = rect.width * rect.height >= 0.9 * whole.width * whole.height;
+        const fill = flat || backdrop ? null : paint(style.fill, Number(style.fillOpacity));
+        if (!stroke && !fill) continue;
+        shapes.push({ tag: shape.localName, path: path(shape), box: box(shape), stroke, fill, strokeWidth: Math.round(strokeWidth * 10) / 10, dashed: style.strokeDasharray !== "none" });
+      }
+    }
+    return shapes;
+  }
+
   /**
    * The widths at which the stylesheets change the layout: every length in a media or container
    * query about the width, in CSS pixels. Read from the document, from stylesheets that a link
@@ -2603,6 +2650,10 @@
     hearsDown,
     downSignature,
     contentInventory,
+    svgShapes: (chain) => {
+      const element = resolve(chain);
+      return element ? svgShapes(element) : [];
+    },
     interactiveWithin: (ref) => composedWithin(registered(ref), INTERACTIVE).map(describe),
     freezeListeners,
     listenerCounts: () => JSON.parse(JSON.stringify(listeners)),

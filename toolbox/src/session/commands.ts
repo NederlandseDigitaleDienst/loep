@@ -701,7 +701,19 @@ const contrast: Handler = async (context) => {
     .map(({ entry, count }) => ({ text: entry.text.slice(0, 30), fg: entry.foreground, bg: entry.background, ratio: entry.ratio, required: entry.required, outcome: entry.outcome, ...(entry.reason ? { reason: entry.reason } : {}), ...(count > 1 ? { pieces: count } : {}) }));
   const control = measured.control ? { outside: measured.control.outside, edge: measured.control.edge, fill: measured.control.fill, edgeRatio: measured.control.edgeRatio, fillRatio: measured.control.fillRatio, outcome: measured.control.outcome } : null;
   const graphic = measured.graphic ? { fg: measured.graphic.foreground, bg: measured.graphic.background, ratio: measured.graphic.ratio, outcome: measured.graphic.outcome } : null;
-  return { result: measured, print: { text, ...(groups.size > MAX_TEXT_PRINTED ? { moreText: groups.size - MAX_TEXT_PRINTED } : {}), ...(control ? { control } : {}), ...(graphic ? { graphic } : {}) } };
+  // Shapes with the same colours are one line: a diagram has many lines of one grey.
+  const shapeGroups = new Map<string, { entry: (typeof measured.shapes)[number]; count: number }>();
+  for (const entry of measured.shapes) {
+    const key = [entry.part, entry.foreground, entry.background, entry.ratio, entry.outcome, entry.reason].join("|");
+    const group = shapeGroups.get(key);
+    if (group) group.count++;
+    else shapeGroups.set(key, { entry, count: 1 });
+  }
+  const shapes = [...shapeGroups.values()]
+    .sort((a, b) => (a.entry.ratio ?? Infinity) - (b.entry.ratio ?? Infinity))
+    .slice(0, MAX_TEXT_PRINTED)
+    .map(({ entry, count }) => ({ part: entry.part, fg: entry.foreground, bg: entry.background, ratio: entry.ratio, outcome: entry.outcome, ...(entry.dashed ? { dashed: true } : {}), ...(entry.reason ? { reason: entry.reason } : {}), shapes: count, first: entry.where.split(" > ").slice(-2).join(" > ") }));
+  return { result: measured, print: { text, ...(groups.size > MAX_TEXT_PRINTED ? { moreText: groups.size - MAX_TEXT_PRINTED } : {}), ...(control ? { control } : {}), ...(graphic ? { graphic } : {}), ...(shapes.length > 0 ? { shapes } : {}), ...(shapeGroups.size > MAX_TEXT_PRINTED ? { moreShapes: shapeGroups.size - MAX_TEXT_PRINTED } : {}) } };
 };
 
 const focus: Handler = async (context) => {

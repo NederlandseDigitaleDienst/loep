@@ -82,6 +82,81 @@ export interface GraphicContrast {
   outcome: "duidelijk" | "kandidaat" | "cantTell";
 }
 
+/** One part of a drawn shape in an svg: its line or its area, against the colour around it. */
+export interface ShapeContrast {
+  tag: string;
+  where: string;
+  box: Positioned["box"];
+  part: "lijn" | "vlak";
+  strokeWidth: number;
+  dashed: boolean;
+  /** The colour as painted, with the opacity of the shape blended over the background. */
+  foreground: string | null;
+  background: string | null;
+  ratio: number | null;
+  outcome: "duidelijk" | "kandidaat" | "cantTell";
+  reason: string | null;
+}
+
+interface Shape {
+  tag: string;
+  path: string[];
+  box: Positioned["box"];
+  stroke: Paint | null;
+  fill: Paint | null;
+  strokeWidth: number;
+  dashed: boolean;
+}
+
+interface Paint {
+  colour: Rgb | null;
+  alpha: number;
+  reason: string | null;
+}
+
+/** Colours this close to the colour of the shape are the shape itself, or its smoothed edge. */
+const SHAPE_TOLERANCE = 40;
+const distance = (first: Rgb, second: Rgb): number => Math.abs(first[0] - second[0]) + Math.abs(first[1] - second[1]) + Math.abs(first[2] - second[2]);
+
+/**
+ * The line and the area of a shape against what is around it: the most common colour in and
+ * just around its box that is not the colour of the shape. A line in a diagram is often thin,
+ * so its colour is taken from the browser and looked for in the picture, not read from it.
+ */
+export function measureShape(shape: Shape, image: PNG): ShapeContrast[] {
+  const margin = Math.max(3, Math.ceil(shape.strokeWidth));
+  const region = { x: shape.box.x - margin, y: shape.box.y - margin, width: shape.box.width + 2 * margin, height: shape.box.height + 2 * margin };
+  const parts: ShapeContrast[] = [];
+  for (const [part, paint] of [["lijn", shape.stroke], ["vlak", shape.fill]] as const) {
+    if (!paint || (paint.colour !== null && paint.alpha <= 0)) continue;
+    const base = { tag: shape.tag, where: shape.path.join(" >>> "), box: shape.box, part, strokeWidth: shape.strokeWidth, dashed: shape.dashed };
+    if (shape.box.x + shape.box.width <= 0 || shape.box.y + shape.box.height <= 0 || shape.box.x >= image.width || shape.box.y >= image.height) {
+      parts.push({ ...base, foreground: null, background: null, ratio: null, outcome: "cantTell", reason: "de vorm valt buiten het venster: scroll ernaartoe en meet het deel van de tekening dat dan in beeld is" });
+      continue;
+    }
+    if (paint.colour === null) {
+      parts.push({ ...base, foreground: null, background: null, ratio: null, outcome: "cantTell", reason: paint.reason });
+      continue;
+    }
+    const solid = paint.colour;
+    // An area is set against what is outside it; a line also against what it runs over.
+    const around = part === "vlak" ? ringColour(image, shape.box, 2) : null;
+    const behind = around && distance(around.colour, solid) > SHAPE_TOLERANCE ? around : colourShares(image, region).find((entry) => distance(entry.colour, solid) > SHAPE_TOLERANCE);
+    if (!behind) {
+      parts.push({ ...base, foreground: hex(solid), background: null, ratio: null, outcome: "cantTell", reason: "om de vorm heen is geen andere kleur te zien" });
+      continue;
+    }
+    const painted = blend(solid, Math.min(1, paint.alpha), behind.colour);
+    const ratio = floorRatio(contrastRatio(painted, behind.colour));
+    if (!containsColour(image, region, painted, SHAPE_TOLERANCE)) {
+      parts.push({ ...base, foreground: hex(painted), background: hex(behind.colour), ratio, outcome: "cantTell", reason: "de kleur van de vorm is op deze plek niet teruggevonden in de schermafbeelding (bedekt, of te dun om zo te meten)" });
+      continue;
+    }
+    parts.push({ ...base, foreground: hex(painted), background: hex(behind.colour), ratio, outcome: ratio >= NON_TEXT_RATIO ? "duidelijk" : "kandidaat", reason: null });
+  }
+  return parts;
+}
+
 export interface PageContrast {
   url: string;
   slug: string;
@@ -229,6 +304,8 @@ export interface ElementContrast {
   control: ControlContrast | null;
   /** The element as a drawing, when it is a small image or icon. */
   graphic: GraphicContrast | null;
+  /** The lines and areas of the svg drawings in the element, or of the drawing it is part of (#324). */
+  shapes: ShapeContrast[];
 }
 
 /**
@@ -253,6 +330,7 @@ export async function elementContrast(page: Page, target: string[], options: { t
       runs,
       control: textOnly ? null : ((library.boundaryTargets as () => { path: string[]; drawnBy?: string[] }[])().find((item) => same(item) || drawsIt(item)) ?? null),
       graphic: textOnly ? null : ((library.graphicBoxes as () => { path: string[] }[])().find(same) ?? null),
+      shapes: textOnly ? [] : (library.svgShapes as (chain: string[]) => unknown[])(chain as string[]),
       scroll: [window.scrollX, window.scrollY] as [number, number],
       original,
     };
@@ -268,6 +346,7 @@ export async function elementContrast(page: Page, target: string[], options: { t
     text: (found.runs as unknown as TextRun[]).map((run) => onPage(measure(inWindow(run), image))),
     control: found.control ? onPage(measureControl(inWindow(found.control as unknown as Positioned), image)) : null,
     graphic: found.graphic ? onPage(measureGraphic(inWindow(found.graphic as unknown as Graphic), image)) : null,
+    shapes: (found.shapes as unknown as Shape[]).flatMap((shape) => measureShape(inWindow(shape), image).map(onPage)),
   };
 }
 

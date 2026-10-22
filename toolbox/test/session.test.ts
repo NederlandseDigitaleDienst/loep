@@ -209,6 +209,21 @@ test("reflow, zoom and spacing measure and put the page back", async () => {
   assert.deepEqual(after.style, { "letter-spacing": "normal" }, "the forced spacing is gone again");
 });
 
+test("contrast measures the lines and areas of an svg drawing, grouped by colour (#324)", async () => {
+  await loep("open", ["/diagram.html"]);
+  const measured = await loep("contrast", [await ref("css:#diagram")]);
+  const shapes = measured.shapes as { part: string; fg: string | null; bg: string | null; ratio: number | null; outcome: string; dashed?: boolean; reason?: string; shapes: number }[];
+  const of = (part: string, fg: string) => shapes.find((shape) => shape.part === part && shape.fg === fg);
+  assert.deepEqual(of("lijn", "#aaaaaa") && { ratio: of("lijn", "#aaaaaa")!.ratio, bg: of("lijn", "#aaaaaa")!.bg, outcome: of("lijn", "#aaaaaa")!.outcome }, { ratio: 2.3, bg: "#ffffff", outcome: "kandidaat" });
+  assert.deepEqual(of("lijn", "#767676") && { ratio: of("lijn", "#767676")!.ratio, dashed: of("lijn", "#767676")!.dashed, outcome: of("lijn", "#767676")!.outcome }, { ratio: 4.5, dashed: true, outcome: "duidelijk" });
+  assert.equal(of("vlak", "#ffcc00")?.outcome, "kandidaat");
+  assert.ok(shapes.some((shape) => shape.part === "lijn" && shape.reason === "een verloop of patroon"));
+  assert.equal(shapes.length, 4, "the white area behind the drawing and the default black fill of a line are not parts of it");
+  // A shape inside the drawing measures that shape.
+  const inside = await loep("contrast", [await ref("css:#verbinding")]);
+  assert.ok((inside.shapes as { fg: string }[]).some((shape) => shape.fg === "#aaaaaa"));
+});
+
 test("order sets the order of the code against the order on screen", async () => {
   await loep("open", ["/widgets.html"]);
   const order = await loep("order");
