@@ -129,7 +129,9 @@ export function flattenNestedMarkedContent(content: string, stack: MarkedStack =
 /**
  * A copy of the PDF in which the text of every tag can be read whole, or null when nothing in
  * it needs that or qpdf is not there. Made with qpdf in its form for editing (QDF), the content
- * streams of the pages rewritten, and the lengths put right with fix-qdf.
+ * streams of the pages rewritten, and written again by qpdf, which finds the new length of each
+ * stream and the place of each object itself. (fix-qdf would do that too, but before qpdf 12 it
+ * takes no file to write to.)
  */
 export async function readableTagCopy(pdf: string, scratch: string, timeoutMs: number): Promise<{ path: string; removed: number } | null> {
   const qdf = join(scratch, "marked.qdf");
@@ -159,8 +161,9 @@ export async function readableTagCopy(pdf: string, scratch: string, timeoutMs: n
     }
     if (removed === 0) return null;
     await writeFile(edited, out + text.slice(from), "latin1");
-    const fixed = await tool("fix-qdf", [edited, copy], timeoutMs);
-    if (!fixed.ok || !(await stat(copy).catch(() => null))) return null;
+    // qpdf ends with 3 when it had to find lengths and places itself, and still writes the file.
+    const fixed = await tool("qpdf", [edited, copy], timeoutMs);
+    if (!fixed.found || !(await stat(copy).catch(() => null))) return null;
     return { path: copy, removed };
   } finally {
     await rm(qdf, { force: true });
