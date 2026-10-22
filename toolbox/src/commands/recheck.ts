@@ -3,7 +3,7 @@ import { join, relative, resolve } from "node:path";
 import { pageLabels, readJson, sha256, sha256File, writeFileAtomic, writeJson } from "../lib/canonical.ts";
 import type { Evaluation, ReportFinding } from "../lib/evaluation.ts";
 import { agentLoginNl, LOGIN_SESSION_FILE, loginForRun } from "../lib/login.ts";
-import { toolboxVersion, writeManifest } from "../lib/manifest.ts";
+import { stepStart, toolboxVersion, writeManifest } from "../lib/manifest.ts";
 import { loadAllProcedures } from "../lib/procedures.ts";
 import { readsForRun } from "../lib/reads.ts";
 import { dateNl } from "../lib/report-markdown.ts";
@@ -140,6 +140,7 @@ export interface RecheckWritten {
  * not, is only read.
  */
 export async function recheck(runDir: string, what: { finding?: string | undefined; criterion?: string | undefined }, now = new Date()): Promise<RecheckWritten> {
+  const startedAt = stepStart();
   if ((what.finding === undefined) === (what.criterion === undefined)) throw new Error("recheck needs --finding <id> or --criterion <id>, one of the two");
   const evaluationPath = join(runDir, "evaluation.json");
   if (!existsSync(evaluationPath)) throw new Error("deze run heeft nog geen evaluatie: natoetsen kan pas na evaluate, op een bevinding uit het onderzoek");
@@ -173,7 +174,7 @@ export async function recheck(runDir: string, what: { finding?: string | undefin
   const reads = readsForRun(runDir);
   // Its own manifest: the toolbox of today, the login and the read requests of the run, and no permission to send.
   await writeJson(join(workspace, "manifest.json"), { steps: [], ...(login ? { login } : {}), ...(reads.length > 0 ? { reads } : {}) });
-  await writeManifest(workspace, { command: "recheck", target, findings: findings.map((finding) => finding.id) });
+  await writeManifest(workspace, { command: "recheck", startedAt, target, findings: findings.map((finding) => finding.id) });
 
   const records = loadObservations(runDir).records as unknown as Map<string, RecordLike>;
   const session = `n-${criterionId.replaceAll(".", "")}`;
