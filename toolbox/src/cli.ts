@@ -94,6 +94,17 @@ const USAGE = `loep <command> [options]
                                          Confirmed at an interactive terminal, or --recorded-via gesprek (see below)
   render --run <run>                     Write the report (Markdown and PDF) from evaluation.json; after signing with the
                                          decisions about each defect
+  render --run <run> --rechecks          Write only the appendix with the rechecks (rechecks/nametingen.md), outside the
+                                         report and the seal; the report is not touched
+  recheck --run <run> (--finding <id> | --criterion <id>)
+                                         After the evaluation, also when it is sealed and signed: write the task for one agent
+                                         that measures a finding (or every finding of a criterion) again on the site as it is
+                                         now, as the verifier did. Everything goes in rechecks/<id>/<moment>/, outside the seal;
+                                         the evaluation does not change. The outcome per finding: nog aanwezig, opgelost or
+                                         niet na te gaan
+  check-recheck --run <run> (--finding <id> | --criterion <id>) [--at <moment>]
+                                         Validate the outcome of a recheck (the latest, or the one at that moment); non-zero
+                                         exit on problems
   export --run <run> --format csv|issues [--out <file or dir>]
                                          The work list as CSV (one row per defect, with its criteria), or as one Markdown block
                                          per defect with a title and a body for an issue tracker. Without --out to standard
@@ -139,7 +150,8 @@ Options:
   --other-toolbox   Go on with a run that was made with another version of loep. Without it every command that
                     measures or writes tasks refuses: another version writes other tasks and procedures, and the walks
                     and verdicts of the run are then done again. Measure again with --fresh after changing. Commands
-                    that measure nothing (render, statement, compare, decide, sign, seal and the readers) go on.
+                    that measure nothing (render, statement, compare, decide, sign, seal and the readers) go on, and so
+                    does recheck: it measures the site as it is now, in a folder of its own, and records its own version.
                     In a copy made with variant (it holds variant.json) the agent phases (tasks, skip, unskip,
                     check-walk, check-verdict, evaluate, answer, merge, check-merge) go on under another version
                     and say which version the sweep is of; the sweep itself is held to the version it was made with
@@ -237,6 +249,9 @@ async function main(): Promise<void> {
       "at-once": { type: "string" },
       groups: { type: "boolean", default: false },
       json: { type: "boolean", default: false },
+      finding: { type: "string" },
+      at: { type: "string" },
+      rechecks: { type: "boolean", default: false },
       format: { type: "string" },
       help: { type: "boolean", short: "h" },
     },
@@ -272,7 +287,8 @@ async function main(): Promise<void> {
     if (frozen) process.stderr.write(`loep: ${frozen}\n`);
   }
   // `gaps` and `feedback` read the verdicts and the evaluation of finished runs and nothing else of them: they need no permission to write and no login.
-  const readsOnly = command === "gaps" || command === "feedback";
+  // A recheck only reads the run and writes in a folder of its own; its session runs in that folder, not here.
+  const readsOnly = command === "gaps" || command === "feedback" || command === "recheck" || command === "check-recheck";
   if (command !== "inventory" && !readsOnly && values.run) {
     const permission = writesForRun(values.run);
     if (permission) setRunWrites(writeAccess(values.run, permission, command));
@@ -554,6 +570,12 @@ async function main(): Promise<void> {
     }
     case "render": {
       if (!values.run) throw new Error("render needs --run <run>");
+      if (values.rechecks) {
+        const { renderRechecks } = await import("./commands/recheck.ts");
+        const written = await renderRechecks(values.run);
+        process.stdout.write(`${written.path}\n${written.checked} ${written.checked === 1 ? "nameting" : "nametingen"} van een bevinding${written.unchecked > 0 ? `; ${written.unchecked} niet getoond, omdat de controle (check-recheck) niet slaagde of het resultaat daarna veranderde` : ""}. Het rapport en het zegel zijn niet aangeraakt.\n`);
+        return;
+      }
       const { render } = await import("./commands/render.ts");
       const result = await render(values.run);
       process.stdout.write(`${result.markdown}\n${result.pdf ?? "(geen pdf)"}\n${result.shortPdf ? `${result.shortPdf}\n` : ""}`);
@@ -562,6 +584,23 @@ async function main(): Promise<void> {
       for (const warning of result.pdfWarnings) process.stdout.write(`LET OP: ${warning}\n`);
       // A report whose PDF fails its own accessibility check is not fit to hand over.
       if (result.pdfChecks.length > 0) process.exitCode = 1;
+      return;
+    }
+    case "recheck": {
+      if (!values.run) throw new Error("recheck needs --run <run>");
+      const { recheck } = await import("./commands/recheck.ts");
+      const written = await recheck(values.run, { finding: values.finding, criterion: values.criterion });
+      process.stdout.write(`${join(values.run, written.task)}\nnameting van ${written.findings.join(", ")}: start één agent met deze opdracht, in sessie ${written.session}. Alles komt in ${join(values.run, written.dir)}; de evaluatie, het rapport en het zegel blijven zoals ze zijn.\n`);
+      return;
+    }
+    case "check-recheck": {
+      const target = values.finding ?? values.criterion;
+      if (!values.run || !target || (values.finding !== undefined && values.criterion !== undefined)) throw new Error("check-recheck needs --run <run> and --finding <id> or --criterion <id>");
+      const { checkRecheck } = await import("./commands/recheck.ts");
+      const { problems } = await checkRecheck(values.run, target, values.at);
+      for (const problem of problems) process.stdout.write(`- ${problem}\n`);
+      process.stdout.write(problems.length === 0 ? "OK: de nameting wijst naar eigen, nieuwe waarnemingen en is vastgelegd\n" : `${problems.length} problemen\n`);
+      process.exitCode = problems.length === 0 ? 0 : 1;
       return;
     }
     case "export": {

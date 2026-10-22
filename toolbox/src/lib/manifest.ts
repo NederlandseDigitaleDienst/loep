@@ -86,7 +86,12 @@ export const toolboxVersion = (): string => (JSON.parse(readFileSync(join(TOOLBO
  * Some only read; `render`, `statement`, `compare`, `decide`, `sign` and `seal` write a report, a statement, a comparison,
  * a decision, a signature or a seal from what the run holds, which is what a finished, sealed run needs after a release.
  */
-export const MEASURES_NOTHING = ["pending", "estimate", "gaps", "feedback", "verify", "procedures", "render", "export", "statement", "compare", "decide", "sign", "seal"];
+/*
+ * `recheck` and `check-recheck` measure, but nothing of the evaluation: they measure the site as it is now, after it, in a
+ * folder of their own with a manifest of their own, and touch no walk, verdict or sweep of the run. A version check would
+ * only force whoever retests a finding to keep an old toolbox. The appendix names both versions when they differ.
+ */
+export const MEASURES_NOTHING = ["pending", "estimate", "gaps", "feedback", "verify", "procedures", "render", "export", "statement", "compare", "decide", "sign", "seal", "recheck", "check-recheck"];
 
 /**
  * The commands of the agent phases. They work on the evidence of the sweep and measure nothing of the site, so in a copy

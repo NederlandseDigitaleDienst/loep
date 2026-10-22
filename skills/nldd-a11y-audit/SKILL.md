@@ -210,7 +210,7 @@ Een agent starten betekent steeds: een aparte agent die alleen dit krijgt: "Lees
    LOEP decide --run RUN --defect <id> --decision <besluit> --what "<in de woorden van de gebruiker>" [--date jjjj-mm-dd] [--alternative "<alternatief>"] --name "<naam>" --role "<functie>" --recorded-via gesprek --confirmation "<letterlijke bevestiging>" --summary "<bevestigde samenvatting>"
    ```
    Is een antwoord geen uitdrukkelijke bevestiging ("ik denk het", "zoiets"), vraag dan door en leg nog niets vast. Wil de gebruiker het besluit liever zelf bevestigen, geef dan hetzelfde commando zonder de laatste drie opties: in een interactieve terminal toont het het besluit en vraagt om ja.
-   - `opgelost`: het is al hersteld. `--what` zegt wat er is gedaan; `--date` mag, en zegt sinds wanneer. Zeg erbij dat het rapport dit "opgelost volgens de organisatie, nog niet nagemeten" noemt: dat een gebrek weg is, laat pas een nieuwe meting zien (zie `docs/methode.md`).
+   - `opgelost`: het is al hersteld. `--what` zegt wat er is gedaan; `--date` mag, en zegt sinds wanneer. Zeg erbij dat het rapport dit "opgelost volgens de organisatie, nog niet nagemeten" noemt: dat een gebrek weg is, laat pas een nieuwe meting zien (stap 12, en `docs/methode.md`).
    - `gepland`: wat er gaat gebeuren, met de datum die de gebruiker noemt (`--date` is verplicht).
    - `zienswijze`: de organisatie ziet het anders; `--what` is de reden.
    - `onevenredig`: onevenredige last; `--what` is de afweging en `--alternative` het alternatief voor bezoekers.
@@ -221,6 +221,16 @@ Een agent starten betekent steeds: een aparte agent die alleen dit krijgt: "Lees
    Daarna komt de verklaring, met de skill `nldd-a11y-statement`. Die neemt de maatregelen uit de besluiten. Bij status B vraagt elke afwijking een maatregel met een datum: `gepland` met een datum, of `opgelost`.
 
    Deze stap mag worden overgeslagen; het rapport noemt dan elk gebrek "nog niet besloten".
+
+12. **Natoetsen na een herstel.** Zegt de gebruiker dat een gebrek is hersteld en live staat, meet de bevinding dan opnieuw. Doe dat pas als het onderzoek af en verzegeld is: dat is de beginstand, en die verandert niet.
+   ```
+   LOEP recheck --run RUN --finding <id>
+   ```
+   Met `--criterion <id>` in plaats van `--finding` meet het alle bevindingen van één criterium. Het commando schrijft een opdracht in `RUN/rechecks/<id>/<moment>/opdracht.md`. Start één agent met die opdracht en alleen die opdracht, zoals een verifieerder. Hij meet op de site zoals ze nu is en schrijft per bevinding `nog aanwezig`, `opgelost` of `niet na te gaan`, en controleert dat zelf met `check-recheck`. Een uitkomst die de controle niet haalt, laat dezelfde agent herstellen; jij past haar niet aan. Daarna:
+   ```
+   LOEP render --run RUN --rechecks
+   ```
+   Dat schrijft `RUN/rechecks/nametingen.md`, een bijlage naast het rapport. Zeg de gebruiker drie dingen. Het rapport, de evaluatie, het zegel en de handtekening blijven zoals ze zijn: de nametingen staan buiten het getekende rapport. Een bevinding die opgelost is, betekent niet dat het criterium nu voldoet: dat zegt pas een nieuw onderzoek van het hele criterium op de hele steekproef. En het besluit van de organisatie (`decide`) legt nog steeds een mens vast; een nameting is een meting, geen besluit.
 
 ## Terugmelden aan loep
 
