@@ -1030,15 +1030,18 @@ const stampNow = async (runDir: string, path: string, stamp: object): Promise<vo
 export async function checkWalk(runDir: string, pageType: string): Promise<string[]> {
   const index = await loadInstrumentIndex(runDir);
   const walk = index.walks.find((entry) => entry.pageType === pageType);
-  if (!walk) return [`no walk for page type ${pageType}`];
+  if (!walk) return [`no walk for page type "${pageType}"; this run has walks for ${index.walks.map((entry) => `"${entry.pageType}"`).join(", ")}`];
   const sample = await readJson<{ items: unknown[] }>(join(runDir, "sample.json"));
   const labels = pageLabels(sample.items.length);
   const observations = loadObservations(runDir);
+  const path = join(resolve(runDir), walk.output);
   let list: unknown;
   try {
-    list = await readJson(join(runDir, walk.output));
+    list = await readJson(path);
   } catch (error) {
-    return [`cannot read ${walk.output}: ${(error as Error).message}`];
+    // Most often the write itself was refused or failed, in the same batch of tool calls as this check: nothing is there yet.
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return [`there is no list at ${path}: nothing was written there. Look at what the command or tool that should have written it answered; a refused or failed write leaves no file. Write the list there again (if you may not write there directly, write it in your own work folder and copy it with cp), and run this check only once the write has succeeded`];
+    return [`cannot read ${path}: ${(error as Error).message.split("\n")[0]}. Write the list there as one JSON object, as the task shows under "Vorm van het resultaat"`];
   }
   const problems = validateCandidates(list, { pageType, pageLabels: labels, criteria: loadAllProcedures().procedures.map((procedure) => procedure.id), idPrefix: walk.page, observations: observations.index });
   if (problems.length === 0) await stampNow(runDir, walk.output, (await walkStamp(runDir, walk, observations.sha))!);

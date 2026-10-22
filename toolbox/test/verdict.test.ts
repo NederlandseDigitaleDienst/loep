@@ -234,6 +234,32 @@ test("a candidate names a criterion, a place and an observation that shows it", 
   assert.match(validateCandidates({ ...walk, states: [] }, walkContext).join(), /states: name at least/);
 });
 
+test("check-walk says per problem which candidate, what is wrong and what to give instead, all problems at once", () => {
+  const one = walk.candidates[0]!;
+  const withCandidate = (candidate: Partial<typeof one>): string[] => validateCandidates({ ...walk, candidates: [{ ...one, ...candidate }] }, walkContext);
+  // The most frequent rejection: evidence that only acts. Each observation given is named, with the first look or measure after it.
+  const acting = withCandidate({ evidence: ["j143-0006", "j143-0007"] });
+  assert.equal(acting.length, 1);
+  assert.match(acting[0]!, /^candidates\[0\] \(P02-K01\): /);
+  assert.match(acting[0]!, /"j143-0006" \(click\) acts and shows nothing \(the first look or measure after it is "j143-0008" \(look\); cite it only if it shows what you mean\)/);
+  assert.match(acting[0]!, /"j143-0007" \(contrast\) failed, so it shows nothing/);
+  assert.match(acting[0]!, /Commands that show: look, crop/);
+  assert.match(withCandidate({ evidence: [] }).join(), /evidence is empty: give the number of the look or measure observation/);
+  assert.match(withCandidate({ evidence: ["j143-0100"] }).join("\n"), /observation "j143-0100" is not in the observation log; give a number exactly as/);
+  assert.match(validateCandidates({ ...walk, states: [{ nameNl: "Smal", evidence: ["j143-0001"] }] }, walkContext).join(), /states\[0\] \("Smal"\): a walked state needs .*"j143-0001" \(open\) acts and shows nothing \(the first look or measure after it is "j143-0002"/);
+  assert.match(withCandidate({ noteNl: Array(60).fill("woord").join(" ") }).join(), /at most 40 words; this one has 60/);
+  assert.match(withCandidate({ id: "K1" }).join(), /not "K1"; the first free one is "P02-K01"/);
+  assert.match(validateCandidates({ ...walk, candidates: [one, one] }, walkContext).join(), /candidates\[1\] \(P02-K01\): id "P02-K01" is used twice; give this one "P02-K02"/);
+  assert.match(withCandidate({ support: "zeker" as never }).join(), /support must be one of "gemeten", "bekeken", "afgeleid", "alleen beeld", not "zeker"/);
+  assert.match(withCandidate({ page: "P9" }).join(), /page "P9" is not in the legend; this walk is on "P02"/);
+  assert.match(withCandidate({ criterion: "1.4" }).join(), /"1\.4" is not a criterion with a procedure; take one from the list under "De criteria"/);
+  assert.match(validateCandidates({ ...walk, pageType: "start" }, walkContext).join(), /pageType must be "nieuws", not "start"/);
+  // Several faults in several candidates come back together, so one round of fixes is enough.
+  const many = validateCandidates({ ...walk, candidates: [{ ...one, evidence: ["j143-0006"] }, { ...one, id: "P02-K02", support: "zeker" as never, where: "" }] }, walkContext);
+  assert.equal(many.length, 3);
+  assert.deepEqual(validateCandidates([], walkContext).length, 1, "an array is not the list");
+});
+
 test("the stamp of a verdict can bind it to the observations it cites", () => {
   assert.deepEqual(citedObservations(reproduced, observations), ["j143-0003", "v143-0002"]);
 });
