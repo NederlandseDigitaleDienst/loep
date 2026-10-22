@@ -1,6 +1,7 @@
 import type { Sample } from "../commands/sample.ts";
 import type { EvaluationDocuments } from "./documents.ts";
 import { sha256, stableId } from "./canonical.ts";
+import type { FindingCutout } from "./cutout.ts";
 import type { Defect, MergeRecord } from "./defects.ts";
 import type { Manifest } from "./manifest.ts";
 import type { RoleExtensions } from "./budget.ts";
@@ -102,6 +103,12 @@ export interface ReportFinding extends Omit<Finding, "owner"> {
    * grouping findings by element needs no reading of prose.
    */
   targets?: { page: string; path: string[]; state: string | null }[];
+  /**
+   * Where the report cuts the picture of the finding from: a screenshot of the run, the rectangle
+   * and where the element lies in it (see `findingCutout`). Absent when the run has no picture
+   * with a bounding box of an element the finding cites.
+   */
+  cutout?: FindingCutout;
   /**
    * Whether the finding was seen a second time from a fresh page: by a verifier ("reproduced"),
    * or by the agent of the finishing round itself ("repeated"), after whom no verifier comes.

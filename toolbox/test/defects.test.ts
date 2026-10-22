@@ -9,6 +9,7 @@ import { seal } from "../src/commands/verify.ts";
 import { canonicalJson, readJson } from "../src/lib/canonical.ts";
 import { applyProposal, carryDefectIds, mainCriterion, mergeFindings, pageIndex, pagesOf, parseTargets, validateProposal, type MergeProposal } from "../src/lib/defects.ts";
 import { evaluationHash, summarise, type Evaluation, type ReportFinding } from "../src/lib/evaluation.ts";
+import { renderMarkdown } from "../src/lib/report-markdown.ts";
 import { exampleEvaluation } from "./fixtures/example-evaluation.ts";
 import { typesSeal } from "./fixtures/terminal.ts";
 
@@ -219,6 +220,36 @@ test("the same colour measured on the same element is one defect, whatever each 
   assert.equal(mergeFindings(evaluationWith({ "1.4.1": [{ ...wideProse, where: "#menu app-list-item, item van de huidige pagina", page: "P02", pagesAffected: "P02" }], "1.4.11": [{ ...narrowProse, where: "#crumbs app-crumb, huidige pagina" }] })).length, 2);
 });
 
+test("three findings with the same measured pair of colours at one element are one line in the work list, with the criteria", () => {
+  const item = (nth: number): string[] => [`#menu > app-list > app-list-item:nth-of-type(${nth})`, "div > a"];
+  // Each judge cites the item that is current on the page it looked at: another item of the same menu on every page.
+  const draft = (page: string, nth: number, extra: Partial<Draft> = {}): Draft => ({ where: "item van de huidige pagina in het zijmenu", page, pagesAffected: `${page} en P02`, observedNl: "Het vlak is #D9DEE5 op #f5f7f9 (1,2:1).", targets: [{ page, path: item(nth), state: null }], ...extra });
+  const three = { "1.4.1": [draft("P02", 2, { component: "zijmenu" })], "1.4.3": [draft("P04", 4, { observedNl: "De tekst staat op een vlak van rgb(245, 247, 249) op #d9dee5." })], "1.4.11": [draft("P05", 5, { component: "menu-item, geselecteerd" })] };
+  const evaluation = evaluationWith(three);
+  const defects = mergeFindings(evaluation);
+  assert.equal(defects.length, 1);
+  assert.deepEqual([defects[0]!.findingIds, defects[0]!.mergedBy, defects[0]!.mainCriterion, defects[0]!.alsoCriteria], [["T-1.4.1-1", "T-1.4.3-1", "T-1.4.11-1"], ["cause"], "1.4.1", ["1.4.3", "1.4.11"]]);
+  // The outcome per criterion and the findings stay as they were; the work list has one line.
+  assert.deepEqual(evaluation.criteria.filter((criterion) => criterion.findings.length > 0).map((criterion) => [criterion.id, criterion.outcome, criterion.findings.length]), [["1.4.1", "failed", 1], ["1.4.3", "failed", 1], ["1.4.11", "failed", 1]]);
+  evaluation.defects = defects;
+  const worklist = renderMarkdown(evaluation).split("## Wat nu")[1]!.split("\n## ")[0]!;
+  assert.equal(worklist.split(`<a id="${defects[0]!.id}"></a>`).length - 1, 1);
+  assert.ok(worklist.includes("Hoofdcriterium 1.4.1, raakt ook 1.4.3, 1.4.11."));
+
+  // The same component in the same words, without observations, is the same element too.
+  const named = (page: string, criterion: string): Draft => ({ where: "het zoekveld", page, component: "Zoekveld", observedNl: `Rand ${criterion}: #949494 op #ffffff.` });
+  assert.equal(mergeFindings(evaluationWith({ "1.4.3": [named("P01", "a")], "1.4.11": [named("P01", "b")] })).length, 1);
+
+  // Strict: one colour in common, a ratio without colours, another element, or a criterion not about colour stays apart.
+  const apart = (extra: Record<string, Draft[]>): number => mergeFindings(evaluationWith({ ...three, ...extra })).length;
+  assert.equal(apart({ "1.4.3": [draft("P04", 4, { observedNl: "De tekst is #d9dee5 op #ffffff." })] }), 2, "one colour of the pair is not the pair");
+  assert.equal(apart({ "1.4.3": [draft("P04", 4, { observedNl: "Het vlak steekt 1,2 op 1 af." })] }), 2, "a ratio alone is not a measured pair");
+  assert.equal(apart({ "1.4.3": [draft("P04", 4, { targets: [{ page: "P04", path: ["#footer > app-crumb:nth-of-type(2)"], state: null }] })] }), 2, "the same pair elsewhere is another place to repair");
+  assert.equal(mergeFindings(evaluationWith({ "1.4.1": three["1.4.1"], "1.3.1": [draft("P02", 2)] })).length, 2, "what is wrong in the code is repaired somewhere else than the colour");
+  const { targets: _targets, ...prose } = draft("P02", 2);
+  assert.equal(mergeFindings(evaluationWith({ "1.4.1": [{ ...prose, where: "#menu app-list-item, huidige pagina" }], "1.4.11": [{ ...prose, where: "#crumbs app-crumb, huidige pagina" }] })).length, 2, "a selector read from prose is not enough");
+});
+
 test("the same input gives the same defects, and a defect keeps its identifier across evaluations", () => {
   const build = (extra: Draft[] = []): Evaluation => evaluationWith({ "1.3.1": [{ where: "#search" }], "3.3.2": [{ where: "#search" }, ...extra], "4.1.2": [{ where: "#search" }, { where: "#menu > button" }], "2.4.7": [{ where: "#footer > a" }] });
   const first = mergeFindings(build());
@@ -329,7 +360,7 @@ test("the merge step runs without the proposal, applies a validated one, and dro
   const first = await merge(dir);
   assert.deepEqual({ findings: first.findings, criteria: first.criteria, byRules: first.byRules, defects: first.defects, proposal: first.proposal }, { findings: 6, criteria: 5, byRules: 5, defects: 5, proposal: "not-run" });
   const written = await readJson<Evaluation>(path);
-  assert.deepEqual(written.merge, { rulesVersion: 2, proposal: { status: "not-run" } });
+  assert.deepEqual(written.merge, { rulesVersion: 3, proposal: { status: "not-run" } });
   assert.equal(canonicalJson(written.criteria), canonicalJson(JSON.parse(canonicalJson(evaluation)).criteria), "the findings are untouched");
   const task = await readJson<{ defects: unknown[] }>(join(dir, "tasks", "samenvoeg", "invoer.json"));
   assert.equal(task.defects.length, 5);

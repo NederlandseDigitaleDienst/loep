@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, statSync } from "node:fs";
 import { readdir, readFile, rename, rm } from "node:fs/promises";
 import { isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -166,7 +166,7 @@ export function unshownWarning(texts: string[]): string {
 async function splitByOrigin(texts: string[], inputs: Record<string, string>, template: string): Promise<{ site: string[]; own: string[] }> {
   if (texts.length === 0) return { site: [], own: [] };
   const data = await Promise.all(Object.values(inputs).map(async (value) => {
-    if (!isAbsolute(value) || !existsSync(value)) return value;
+    if (!isAbsolute(value) || !existsSync(value) || !statSync(value).isFile()) return value;
     const text = await readFile(value, "utf8");
     // A JSON file may write a character as an escape; parsed and written again, it is the character.
     try {

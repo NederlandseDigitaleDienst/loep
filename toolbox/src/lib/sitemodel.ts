@@ -27,6 +27,8 @@ export type PostconditionKind = (typeof POSTCONDITION_KINDS)[number];
  * - value: a field matching `selector` has a value; with `text`, that value
  *
  * With `frame` the condition is checked in the document of that embedded frame instead of the page around it.
+ * `{{searchTerm}}` in `text` stands for the search term of the run (see `fillSearchTerm`), so a
+ * recipe that searches keeps working when another run searches for another word.
  */
 export interface Postcondition {
   kind: PostconditionKind;
@@ -337,6 +339,36 @@ export const ALL_PAGE_TYPES = "all";
 export const SITE_WIDE_CHECKED_PAGE_TYPES = 3;
 
 /**
+ * The model with `{{searchTerm}}` in the text of each postcondition replaced by the search term of
+ * the run; in `url-contains` as the address writes it.
+ */
+export function fillSearchTerm(model: SiteModel, term: string): SiteModel {
+  const fill = <T extends { postcondition: Postcondition | null }>(entry: T): T => {
+    const post = entry.postcondition;
+    if (!post || typeof post.text !== "string" || !post.text.includes(SEARCH_TERM_PLACEHOLDER)) return entry;
+    return { ...entry, postcondition: { ...post, text: post.text.replaceAll(SEARCH_TERM_PLACEHOLDER, post.kind === "url-contains" ? encodeURIComponent(term) : term) } };
+  };
+  // A model that is no valid model yet (the validator says why) is left as it is.
+  if (!Array.isArray(model.blockers) || !Array.isArray(model.components) || !Array.isArray(model.processes)) return model;
+  return { ...model, blockers: model.blockers.map(fill), components: model.components.map(fill), processes: model.processes.map(fill) };
+}
+
+/**
+ * For a recipe that types the search term of the run and whose postcondition did not hold: when
+ * the text of the postcondition does not contain that term, it may name the term of an earlier run.
+ * Null when that cannot be the reason.
+ */
+export function literalSearchTermNl(steps: readonly { command: string; args: string[] }[], post: Postcondition, term: string): string | null {
+  if (!steps.some((step) => step.command === "type" && step.args[0] === "search") || typeof post.text !== "string") return null;
+  const text = post.text.toLowerCase();
+  if (text.includes(term.toLowerCase()) || text.includes(encodeURIComponent(term).toLowerCase())) return null;
+  return `Het recept typt de zoekterm van deze run ("${term}"), maar de postconditie noemt die niet. Staat er een zoekterm van een eerdere run letterlijk in, schrijf daar dan ${SEARCH_TERM_PLACEHOLDER}: de controle vult de term van de run in. Laat ook een telling als "1 resultaat" of "2 resultaten" weg; die hangt af van het aantal treffers.`;
+}
+
+/** A model as the commands read it: every component on its page types, and the search term of the run in the postconditions. */
+const asRead = (runDir: string, model: SiteModel): SiteModel => fillSearchTerm(expandSiteWide(model), searchTermForRun(runDir));
+
+/**
  * The model as the commands use it: a component with `"pageTypes": "all"` gets the list of every
  * page type, and `siteWide` so that what has to know (the sheets of the gate) still knows.
  */
@@ -386,6 +418,9 @@ export function frameEntry(model: SiteModel, url: string): FrameEntry | null {
 const isRecord = (value: unknown): value is Record<string, unknown> => value !== null && typeof value === "object" && !Array.isArray(value);
 const isText = (value: unknown): value is string => typeof value === "string" && value.trim().length > 0;
 
+/** In the `text` of a postcondition: the search term of the run, filled in when the model is read. */
+export const SEARCH_TERM_PLACEHOLDER = "{{searchTerm}}";
+
 function checkPostcondition(value: unknown, where: string, problems: string[]): void {
   if (!isRecord(value)) return void problems.push(`${where}: postcondition ontbreekt of is geen object`);
   if (!POSTCONDITION_KINDS.includes(value.kind as PostconditionKind)) return void problems.push(`${where}: postcondition.kind moet een van ${POSTCONDITION_KINDS.join(", ")} zijn`);
@@ -397,6 +432,8 @@ function checkPostcondition(value: unknown, where: string, problems: string[]): 
   if (value.selector !== undefined && !isText(value.selector)) problems.push(`${where}: postcondition.selector moet tekst zijn`);
   if (value.frame !== undefined && !isText(value.frame)) problems.push(`${where}: postcondition.frame is het adres van een venster uit frames`);
   for (const key of Object.keys(value)) if (!["kind", "selector", "text", "frame"].includes(key)) problems.push(`${where}: postcondition kent geen veld "${key}"`);
+  const other = typeof value.text === "string" ? /\{\{(?!searchTerm\}\})[^}]*\}\}/.exec(value.text)?.[0] : undefined;
+  if (other) problems.push(`${where}: postcondition.text noemt ${other}; de enige verwijzing die de controle invult, is ${SEARCH_TERM_PLACEHOLDER}`);
 }
 
 /**
@@ -825,11 +862,11 @@ export async function loadSiteModel(runDir: string): Promise<SiteModel | null> {
   const check = await readJson<SiteCheck>(checkPath);
   if (check.siteSha256 !== (await sha256File(path))) throw new Error(`${SITE_MODEL_FILE} is gewijzigd na de laatste controle; draai opnieuw: check-site --run ${runDir}`);
   if (!check.ok) throw new Error(`${SITE_MODEL_FILE} is afgekeurd door check-site (${check.problems.length} problemen); herstel het model eerst`);
-  return expandSiteWide(await readJson<SiteModel>(path));
+  return asRead(runDir, await readJson<SiteModel>(path));
 }
 
 /** The model without the guarantee that it was checked: for commands that only read what it says. */
 export async function readSiteModel(runDir: string): Promise<SiteModel | null> {
   const path = join(runDir, SITE_MODEL_FILE);
-  return existsSync(path) ? expandSiteWide(await readJson<SiteModel>(path)) : null;
+  return existsSync(path) ? asRead(runDir, await readJson<SiteModel>(path)) : null;
 }

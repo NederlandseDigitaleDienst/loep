@@ -94,6 +94,10 @@ const USAGE = `loep <command> [options]
                                          Confirmed at an interactive terminal, or --recorded-via gesprek (see below)
   render --run <run>                     Write the report (Markdown and PDF) from evaluation.json; after signing with the
                                          decisions about each defect
+  export --run <run> --format csv|issues [--out <file or dir>]
+                                         The work list as CSV (one row per defect, with its criteria), or as one Markdown block
+                                         per defect with a title and a body for an issue tracker. Without --out to standard
+                                         output; with issues --out is a directory with a file per defect. Creates no issues
   sign --run <run> --name <who> --role <function> --organisation <name> [--checked <text>]
                                          Record that a named person stands for the evaluation. Only at an interactive terminal:
                                          the signer types the first 8 characters of the seal. An agent never signs
@@ -233,6 +237,7 @@ async function main(): Promise<void> {
       "at-once": { type: "string" },
       groups: { type: "boolean", default: false },
       json: { type: "boolean", default: false },
+      format: { type: "string" },
       help: { type: "boolean", short: "h" },
     },
   });
@@ -553,9 +558,22 @@ async function main(): Promise<void> {
       const result = await render(values.run);
       process.stdout.write(`${result.markdown}\n${result.pdf ?? "(geen pdf)"}\n${result.shortPdf ? `${result.shortPdf}\n` : ""}`);
       for (const problem of result.pdfChecks) process.stdout.write(`- ${problem}\n`);
+      for (const note of result.cutoutNotes) process.stdout.write(`- ${note}\n`);
       for (const warning of result.pdfWarnings) process.stdout.write(`LET OP: ${warning}\n`);
       // A report whose PDF fails its own accessibility check is not fit to hand over.
       if (result.pdfChecks.length > 0) process.exitCode = 1;
+      return;
+    }
+    case "export": {
+      if (!values.run) throw new Error("export needs --run <run>");
+      const { exportWorkList } = await import("./commands/export.ts");
+      const result = await exportWorkList({ run: values.run, format: values.format, out: values.out });
+      if (result.text !== null) process.stdout.write(result.text);
+      else if (result.format === "csv") process.stdout.write(`${result.lines} regels van de werklijst in ${result.written[0]}\n`);
+      else {
+        process.stdout.write(`${result.lines} issues klaar in ${values.out}, een bestand per gebrek; de eerste regel is de titel. Er is niets aangemaakt.\n`);
+        process.stdout.write(`Aanmaken, na het lezen: for f in ${values.out}/*.md; do gh issue create --title "$(head -n 1 "$f" | sed 's/^# //')" --body "$(tail -n +3 "$f")"; done\n`);
+      }
       return;
     }
     case "sign": {

@@ -1,5 +1,6 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { replaysNl } from "../lib/recordings.ts";
+import { findingCutout, type CutoutContext } from "../lib/cutout.ts";
 import { join } from "node:path";
 import { frameStanding, type AcceptedGapDecider } from "../lib/sitemodel.ts";
 import { readJson, sha256File } from "../lib/canonical.ts";
@@ -125,6 +126,7 @@ export async function evaluate(options: EvaluateOptions): Promise<Evaluation> {
   const { tasks: instrumentTasks, templates } = await loadInstrumentIndex(options.run);
   const observations = loadObservations(options.run);
   const labelOfUrl = new Map(run.pages.map((page) => [page.item.url, page.label]));
+  const cutoutContext: CutoutContext = { runDir: options.run, records: observations.records, pages: run.pages.map((page) => ({ label: page.label, url: page.item.url, dir: page.dir })) };
   const { procedures } = loadAllProcedures();
   const prefix = sitePrefix(options.name);
 
@@ -177,6 +179,9 @@ export async function evaluate(options: EvaluateOptions): Promise<Evaluation> {
           targets.set(JSON.stringify(target), target);
         }
         if (targets.size > 0) finding.targets = [...targets.values()];
+        // A piece of a screenshot of the run that shows the element, for the report; none when no picture has its box.
+        const cutout = findingCutout(finding, cutoutContext);
+        if (cutout) finding.cutout = cutout;
         const check = checks.find((entry) => entry.key === key);
         const repeat = repeats.find((entry) => entry.key === key);
         // After the finishing round no verifier comes: its agent showed the finding twice itself, and the report says so.

@@ -1,5 +1,7 @@
+import { rm } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { writeFileAtomic } from "../lib/canonical.ts";
+import { writeCutouts } from "../lib/cutout.ts";
 import { loadDecisions } from "../lib/decisions.ts";
 import { deriveReport, renderMarkdown, REPORT_TEXT } from "../lib/report-markdown.ts";
 import { makePdf } from "../lib/typst.ts";
@@ -16,11 +18,18 @@ export interface RenderResult {
   pdfChecks: string[];
   /** What the reader should know but does not stop the report, such as text of the site set as code points. */
   pdfWarnings: string[];
+  /** Cutouts that were left out: their picture changed, or the pieces of the report reached their limit. The report is still whole. */
+  cutoutNotes: string[];
 }
+
+/** The directory, next to the report, with a piece of a screenshot for each finding that has one. */
+export const CUTOUT_DIR = "uitsneden";
 
 /**
  * Write the report for a run: Markdown always, and a PDF when Typst is available.
- * All come from evaluation.json and nothing else, so none is edited by hand.
+ * All come from evaluation.json and nothing else, so none is edited by hand; the pieces of
+ * screenshots at the findings are cut from the pictures of the run that the evaluation names,
+ * by path and sha256.
  * The PDF is made twice: in full, and without appendix A for a reader who wants the work
  * list and the results. Both carry the mark of the same evaluation.
  *
@@ -37,18 +46,22 @@ export async function render(runDir: string): Promise<RenderResult> {
   const dir = join(runDir, signed ? SIGNED_DIR : "report");
   const decisions = signed ? await loadDecisions(runDir, evaluation.defects) : { decisions: [], sha256: null };
   const markdown = join(dir, "rapport.md");
-  await writeFileAtomic(markdown, renderMarkdown(evaluation, decisions));
+  // The pieces are made anew every time, from the pictures the evaluation names.
+  await rm(join(dir, CUTOUT_DIR), { recursive: true, force: true });
+  const cutouts = await writeCutouts(runDir, evaluation, join(dir, CUTOUT_DIR));
+  const pictures = Object.fromEntries(Object.entries(cutouts.files).map(([id, file]) => [id, { file: `${CUTOUT_DIR}/${file.file}`, altNl: file.altNl }]));
+  await writeFileAtomic(markdown, renderMarkdown(evaluation, decisions, pictures));
 
   const title = `${REPORT_TEXT.title} ${evaluation.site.name}`;
   const request = {
     template: "rapport.typ",
-    inputs: { evaluation: source, derived: JSON.stringify(deriveReport(evaluation, decisions)) },
+    inputs: { evaluation: source, derived: JSON.stringify({ ...deriveReport(evaluation, decisions), cutouts: Object.fromEntries(Object.entries(cutouts.files).map(([id, file]) => [id, { path: file.absolute, width: file.width, altNl: file.altNl }])) }) },
     // The evaluation's own date, so the same evaluation gives the same PDF.
     date: evaluation.evaluatedAt,
   };
   const full = await makePdf({ ...request, output: join(dir, "rapport.pdf"), title });
   // Without Typst there is one message about that, not two.
-  if (full.pdf === null) return { markdown, pdf: null, shortPdf: null, pdfChecks: full.pdfChecks, pdfWarnings: [] };
+  if (full.pdf === null) return { markdown, pdf: null, shortPdf: null, pdfChecks: full.pdfChecks, pdfWarnings: [], cutoutNotes: cutouts.problems };
   const short = await makePdf({ ...request, inputs: { ...request.inputs, part: "short" }, output: join(dir, "rapport-kort.pdf"), title: `${title}, ${REPORT_TEXT.shortVersion}` });
   return {
     markdown,
@@ -57,5 +70,6 @@ export async function render(runDir: string): Promise<RenderResult> {
     pdfChecks: [...full.pdfChecks, ...short.pdfChecks.map((problem) => `Korte versie: ${problem}`)],
     // The short report quotes the same site; a text set as code points is named once.
     pdfWarnings: [...new Set([...full.pdfWarnings, ...short.pdfWarnings])],
+    cutoutNotes: cutouts.problems,
   };
 }
