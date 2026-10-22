@@ -249,6 +249,20 @@ test("zoom also measures text with the default font size doubled, the other way 
   assert.deepEqual(after.style, { "font-size": "20px" });
 });
 
+test("reflow and zoom say how to measure full screen instead of failing on it (#336)", async () => {
+  await loep("open", ["/fullscreen.html"]);
+  const own = await loep("click", [await ref("css:#own")]);
+  assert.equal(own.fullscreen, "volledig scherm aangevraagd en aan");
+  for (const command of ["reflow", "zoom"]) {
+    const response = await raw(command);
+    assert.equal(response.ok, false);
+    assert.match(JSON.stringify(response.print), /staat op volledig scherm, en dan kan Chromium het venster niet van grootte veranderen/);
+    assert.doesNotMatch(JSON.stringify(response.print), /Protocol error/);
+  }
+  // The page is still in full screen and can be looked at.
+  await loep("look");
+});
+
 test("order sets the order of the code against the order on screen", async () => {
   await loep("open", ["/widgets.html"]);
   const order = await loep("order");

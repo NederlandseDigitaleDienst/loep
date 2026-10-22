@@ -50,3 +50,11 @@ export function fullscreenChange(before: FullscreenReading | undefined, after: F
   if (notAllowed) return `de pagina vroeg of volledig scherm mag en kreeg nee${notAllowed}`;
   return null;
 }
+
+/** Said instead of the protocol error Chromium gives when a window in full screen is resized (#336). */
+export const RESIZE_IN_FULLSCREEN_NL = "de pagina staat op volledig scherm, en dan kan Chromium het venster niet van grootte veranderen. Om volledig scherm op een andere breedte te meten: open de pagina op die breedte (`open <label> --width 320` voor 320 pixels, `--width 640` voor 200% zoom), zet daarna volledig scherm aan en kijk met `look`. Zonder volledig scherm meet je na een nieuwe `open`";
+
+/** Refuse, with a reason a reader can act on, to resize a tab that has a document in full screen. */
+export async function refuseResizeInFullscreen(page: Page): Promise<void> {
+  if ((await fullscreenReading(page)).active) throw new Error(RESIZE_IN_FULLSCREEN_NL);
+}
