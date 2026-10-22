@@ -546,6 +546,11 @@ test("a gap whose measurement failed is for the sweep, a gap in the site model f
   assert.equal(fixedByReason("de pagina laadt niet: page.goto: Timeout 30000ms exceeded."), "sweep");
   assert.equal(fixedByReason("geen antwoord binnen 180 seconden"), "sweep");
   assert.equal(fixedByReason("stap 1 (click) vond het element niet terug"), "explorer");
+  // A step of a recipe that fails is the model's, also when the browser's error names a time limit or a closed page.
+  assert.equal(fixedByReason("stap 2 (click) locator.click: Timeout 5000ms exceeded."), "explorer");
+  assert.equal(fixedByReason("stap 1 (click) page.click: Target page, context or browser has been closed"), "explorer");
+  assert.equal(fixedByReason("de verkenner kon het niet openen: stap 1 (click) locator.click: Timeout 5000ms exceeded."), "explorer");
+  assert.equal(fixedByReason("de verkenner kon het niet openen: "), "explorer");
   assert.equal(fixedByReason("de pagina laadt niet: https://elders.nl/ ligt buiten de scope van deze run (site.nl); er is niets opgevraagd"), "explorer");
   assert.equal(fixedByReason(null), "explorer");
 

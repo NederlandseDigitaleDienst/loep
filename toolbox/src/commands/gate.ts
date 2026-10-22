@@ -144,9 +144,16 @@ const where = (element: { path: string[] }): string => element.path.join(" >>> "
 /** What a reason says when the browser or the machine failed the measurement, not the site model: a crash, a time limit, a page that gave no answer. */
 const MEASUREMENT_FAILED = /geen antwoord binnen \d+ seconden|crash|Timeout \d+ ?ms exceeded|has been closed/i;
 
+/**
+ * What a reason says when the site model failed: a step of a recipe that did not work (runSteps and replayRecipe write
+ * "stap <n> (<command>) " before the error of the browser, so a click that times out under an overlay looks like a time limit),
+ * or a state the explorer could not open. These go to the explorer whatever error follows.
+ */
+const MODEL_FAILED = /^\s*(?:stap \d+ \(|de verkenner kon\b)/i;
+
 /** "sweep" when a new sweep can close a gap with this reason. */
 export function fixedByReason(reasonNl: string | null | undefined): "sweep" | "explorer" {
-  return reasonNl && MEASUREMENT_FAILED.test(reasonNl) ? "sweep" : "explorer";
+  return reasonNl && !MODEL_FAILED.test(reasonNl) && MEASUREMENT_FAILED.test(reasonNl) ? "sweep" : "explorer";
 }
 
 const plain = (text: string): string => ` ${text.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim()} `;
