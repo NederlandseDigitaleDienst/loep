@@ -10,7 +10,7 @@ import { costOf, PRICES, type Price, type Tokens } from "../lib/prices.ts";
 import { ROLE_NL, roleOfSession, type AgentRole } from "../lib/models.ts";
 import { agentPhaseTimings, type AgentPhaseId } from "../lib/timing.ts";
 import { compareCriterionIds, criterionById } from "../lib/wcag.ts";
-import { findingsSummary, type FindingsSummary, type ReferenceClass } from "./compare-findings.ts";
+import { findingsSummary, OWN_CLASSES, type FindingsSummary, type OwnClass, type OwnResult, type ReferenceClass } from "./compare-findings.ts";
 import type { ReferenceAudit } from "./compare.ts";
 import { gaps } from "./gaps.ts";
 
@@ -146,9 +146,10 @@ export async function variant(options: { run: string; out: string; name: string;
 
 /**
  * What the agents of one run used, counted outside the run: a run records no tokens and no
- * turns, only the transcripts of the agents do. One row per agent. `session` is the session the
- * agent ran in (b-111, v-111, r-start, a-132); an agent without a session, such as the one that
- * asks for the state between phases, names its `role` instead.
+ * turns, only the transcripts of the agents do (`loep usage` counts them). One row per agent and
+ * model. A row names the session the agent ran in (b-111, v-111, r-start, a-132), or its `role`
+ * (walk, judge, verifier, finisher, stand) with the `criterion` of a judge, verifier or finishing
+ * round and the `pageType` of a walk.
  */
 export interface UsageFile {
   schema: "loep/verbruik/1";
@@ -160,7 +161,7 @@ export interface UsageFile {
   model?: string;
   /** Prices for models that `PRICES` does not have, or other ones. */
   prices?: Record<string, Price>;
-  agents: (Tokens & { session?: string; role?: string; model?: string; turns?: number })[];
+  agents: (Tokens & { session?: string; role?: string; criterion?: string; pageType?: string; agent?: string; model?: string; turns?: number })[];
 }
 
 export interface RoleUse {
@@ -184,6 +185,7 @@ export interface RunResult {
   /** The name in variant.json, or null for a run that is no copy. */
   variant: string | null;
   commit: string | null;
+  /** The criteria of its tasks; only those of the comparison count. */
   criteria: string[];
   outcomes: Record<string, CriterionOutcome | null>;
   /** Findings in the evaluation per criterion of the scope. */
@@ -197,11 +199,16 @@ export interface RunResult {
   /** The same open points per criterion of the scope. */
   openPointsByCriterion: Record<string, number>;
   /**
-   * Per criterion of the scope: findings of the run that belong to no defect of the answer key,
-   * because not both classifications of `compare --findings` name them under one. Null without a
-   * valid classification.
+   * Per criterion of the scope: findings of the run that both classifications of `compare --findings`
+   * call "onterecht". Null without a valid classification.
    */
   falseReports: Record<string, number> | null;
+  /**
+   * Over the criteria of the scope: findings without a counterpart, because not both classifications
+   * name them under a defect of the key. `agreed` counts those both gave the same class; `disagreed`
+   * the others, per pair of classes ("discutabel / onterecht"). Null without a valid classification.
+   */
+  withoutCounterpart: { total: number; agreed: Record<OwnClass, number>; disagreed: Record<string, number> } | null;
   roles: RoleUse[];
 }
 
@@ -265,7 +272,7 @@ export interface Verdict {
   resamples: number;
   /** Share of the defects of the key found per run; null when no defect was classified on both sides. Passes when the lower bound of the difference lies above -margin. */
   found: (PairedTest & { ok: boolean }) | null;
-  /** Unjustified reports per run; null when one of the sides has no run with a valid classification. Passes when the upper bound of the difference lies below reportMargin. */
+  /** Findings both classifications call unjustified, per run; null when one of the sides has no run with a valid classification. Passes when the upper bound of the difference lies below reportMargin. */
   falseReports: (PairedTest & { ok: boolean }) | null;
   /** Open points per run, for information: not part of the verdict. */
   openPoints: PairedTest;
@@ -274,10 +281,11 @@ export interface Verdict {
 }
 
 export interface VariantComparison {
-  schema: "loep/variant-comparison/2";
+  schema: "loep/variant-comparison/3";
   reference: string;
+  /** The criteria that count: those of `--criteria`, or those every run has. */
   criteria: string[];
-  /** Runs whose criteria differ from those of the first run, as a warning. */
+  /** Runs with criteria of their own besides those that count, which are left out; null when there are none. */
   scopeNl: string | null;
   runs: RunResult[];
   rows: CriterionRow[];
@@ -302,8 +310,10 @@ export interface VariantComparison {
  *
  * REPORT_MARGIN: the variant may make less than one unjustified report per run more than the
  * baseline, with 95% confidence: the upper bound of the interval of the difference has to lie
- * below 1. A report too many is a finding a site owner fixes for nothing, so the margin stays at
- * one per run of nine criteria.
+ * below 1. An unjustified report is a finding both classifications call "onterecht"; one without a
+ * counterpart in the key that they call "terecht" or "discutabel" may be a real defect the key
+ * lacks, and a variant that finds more of those is not worse for it. A report too many is a
+ * finding a site owner fixes for nothing, so the margin stays at one per run of nine criteria.
  *
  * The interval comes from RESAMPLES draws with replacement over the defects (over the criteria
  * for reports). Each draw takes the same units for both sides, because both work on the same
@@ -319,6 +329,12 @@ export interface CompareVariantsOptions {
   variant?: string[] | undefined;
   reference: string;
   usage?: string[] | undefined;
+  /**
+   * Count only these criteria. Each has a judge and a verifier of its own, so these criteria of a
+   * run with more are a fair baseline for a variant with just these. Without it every run must have
+   * the same criteria.
+   */
+  criteria?: string[] | undefined;
   /** Defaults: MARGIN, REPORT_MARGIN and SEED. */
   margin?: number | undefined;
   reportMargin?: number | undefined;
@@ -327,6 +343,7 @@ export interface CompareVariantsOptions {
   findings?: (runDir: string) => Promise<Pick<FindingsSummary, "findings" | "ownFindings">>;
 }
 
+const OWN_ORDER: OwnResult[] = ["tegenhanger", ...OWN_CLASSES];
 const PHASE_ROLE: Record<AgentPhaseId, AgentRole> = { walks: "walk", judges: "judge", verifiers: "verifier", finishers: "finisher" };
 const ROLE_ORDER = ["walk", "judge", "verifier", "finisher"];
 const emptyTokens = (): Tokens => ({ input: 0, cacheWrite: 0, cacheRead: 0, output: 0 });
@@ -343,14 +360,28 @@ function readUsage(path: string): UsageFile {
   return file;
 }
 
-/** What each role of a run used: sessions, commands and time from the run, tokens, turns and cost from the usage file when there is one. */
-function rolesOf(runDir: string, usage: UsageFile | null): RoleUse[] {
+/**
+ * Whether a session or a row of a usage file belongs to a criterion outside `criteria`: a judge,
+ * verifier or finishing round of another criterion. Their session names carry the criterion
+ * without dots (b-143, v-1411-2); WCAG numbers make that unambiguous. Walks and the stand agent
+ * work for the whole run and are never outside.
+ */
+function outside(criteria: string[], row: { session?: string | undefined; criterion?: string | undefined }): boolean {
+  const criterion = row.criterion ?? (row.session ? /^[bva]-(\d+)(?:-\d+)?$/.exec(row.session)?.[1] : undefined);
+  return criterion !== undefined && !criteria.some((id) => id === criterion || id.replaceAll(".", "") === criterion);
+}
+
+/**
+ * What each role of a run used over the criteria of the comparison: sessions, commands and time
+ * from the run, tokens, turns and cost from the usage file when there is one.
+ */
+function rolesOf(runDir: string, usage: UsageFile | null, criteria: string[]): RoleUse[] {
   const roles = new Map<string, RoleUse>();
   const roleOf = (key: string): RoleUse => {
     if (!roles.has(key)) roles.set(key, { role: key, roleNl: ROLE_NL[key as AgentRole] ?? key, agents: 0, commands: null, sessionSeconds: null, tokens: null, turns: null, costUsd: null });
     return roles.get(key)!;
   };
-  for (const phase of agentPhaseTimings(runDir)) {
+  for (const phase of agentPhaseTimings(runDir, (session) => !outside(criteria, { session }))) {
     const use = roleOf(PHASE_ROLE[phase.phase]);
     use.agents = phase.agents;
     use.sessionSeconds = phase.sumSeconds;
@@ -359,7 +390,7 @@ function rolesOf(runDir: string, usage: UsageFile | null): RoleUse[] {
   for (const name of existsSync(root) ? readdirSync(root).sort() : []) {
     const role = roleOfSession(name);
     const commands = readIfThere<{ commands?: unknown }>(join(root, name, "session.json"))?.commands;
-    if (!role || !AGENT_ROLES.has(role) || !isCount(commands)) continue;
+    if (!role || !AGENT_ROLES.has(role) || !isCount(commands) || outside(criteria, { session: name })) continue;
     const use = roleOf(role);
     use.commands = (use.commands ?? 0) + commands;
   }
@@ -367,6 +398,7 @@ function rolesOf(runDir: string, usage: UsageFile | null): RoleUse[] {
     const rows = new Map<string, number>();
     const unpriced = new Set<string>();
     for (const agent of usage.agents) {
+      if (outside(criteria, agent)) continue;
       const key = agent.role ?? roleOfSession(agent.session!) ?? agent.session!;
       const use = roleOf(key);
       rows.set(key, (rows.get(key) ?? 0) + 1);
@@ -388,10 +420,14 @@ function rolesOf(runDir: string, usage: UsageFile | null): RoleUse[] {
   return [...roles.values()].sort((a, b) => rank(a.role) - rank(b.role) || a.role.localeCompare(b.role));
 }
 
-async function runResult(runDir: string, side: RunResult["side"], reference: ReferenceAudit, usage: UsageFile | null, findings: NonNullable<CompareVariantsOptions["findings"]>): Promise<RunResult> {
+function taskCriteria(runDir: string): string[] {
   const index = readIfThere<{ tasks?: { criterion: string }[] }>(join(runDir, "tasks", "index.json"));
   if (!index?.tasks) throw new Error(`${runDir} heeft geen opdrachten (tasks/index.json): draai tasks en de fasen van de agents eerst`);
-  const criteria = index.tasks.map((task) => task.criterion).sort(compareCriterionIds);
+  return [...new Set(index.tasks.map((task) => task.criterion))].sort(compareCriterionIds);
+}
+
+/** The result of one run over the criteria of the comparison (`criteria`), which the run has all of. */
+async function runResult(runDir: string, side: RunResult["side"], criteria: string[], reference: ReferenceAudit, usage: UsageFile | null, findings: NonNullable<CompareVariantsOptions["findings"]>): Promise<RunResult> {
   const evaluationPath = join(runDir, "evaluation.json");
   if (!existsSync(evaluationPath)) throw new Error(`${runDir} heeft geen evaluation.json: draai evaluate eerst`);
   const evaluation = await readJson<Evaluation>(evaluationPath);
@@ -401,6 +437,7 @@ async function runResult(runDir: string, side: RunResult["side"], reference: Ref
   const defects: RunResult["defects"] = {};
   let defectsNl: string | null = null;
   let falseReports: RunResult["falseReports"] = null;
+  let withoutCounterpart: RunResult["withoutCounterpart"] = null;
   const keyFindings = (reference.findings ?? []).filter((finding) => inScope(finding.criterion));
   try {
     const summary = await findings(runDir);
@@ -410,9 +447,19 @@ async function runResult(runDir: string, side: RunResult["side"], reference: Ref
       defects[finding.id] = entry ? (entry.agreed ?? "oneens") : null;
     }
     if (keyFindings.some((finding) => !classified.has(finding.id))) defectsNl = "de indeling noemt niet elk gebrek uit deze sleutel: is ze met een andere referentie gemaakt?";
-    // Like "gevonden": a finding belongs to a defect only when both classifications say so.
+    // Like "gevonden": a finding belongs to a defect only when both classifications say so, and it is unjustified only when both say that.
     falseReports = Object.fromEntries(criteria.map((id) => [id, 0]));
-    for (const own of summary.ownFindings) if (inScope(own.criterion) && own.agreed !== "tegenhanger") falseReports[own.criterion]!++;
+    withoutCounterpart = { total: 0, agreed: Object.fromEntries(OWN_CLASSES.map((name) => [name, 0])) as Record<OwnClass, number>, disagreed: {} };
+    for (const own of summary.ownFindings) {
+      if (!inScope(own.criterion) || own.agreed === "tegenhanger") continue;
+      withoutCounterpart.total++;
+      if (own.agreed) withoutCounterpart.agreed[own.agreed]++;
+      else {
+        const pair = [own.a, own.b].sort((left, right) => OWN_ORDER.indexOf(left) - OWN_ORDER.indexOf(right)).join(" / ");
+        withoutCounterpart.disagreed[pair] = (withoutCounterpart.disagreed[pair] ?? 0) + 1;
+      }
+      if (own.agreed === "onterecht") falseReports[own.criterion]!++;
+    }
   } catch (error) {
     for (const finding of keyFindings) defects[finding.id] = null;
     defectsNl = `geen geldige indeling per bevinding (compare --findings): ${(error as Error).message}`;
@@ -434,7 +481,7 @@ async function runResult(runDir: string, side: RunResult["side"], reference: Ref
     side,
     variant: readIfThere<VariantRecord>(join(runDir, VARIANT_FILE))?.name ?? null,
     commit: readIfThere<Manifest>(join(runDir, "manifest.json"))?.toolbox?.commit ?? null,
-    criteria,
+    criteria: taskCriteria(runDir),
     outcomes: Object.fromEntries(criteria.map((id) => [id, byId.get(id)?.outcome ?? null])),
     findings: Object.fromEntries(criteria.map((id) => [id, byId.get(id)?.findings.length ?? 0])),
     defects,
@@ -442,7 +489,8 @@ async function runResult(runDir: string, side: RunResult["side"], reference: Ref
     openPoints,
     openPointsByCriterion,
     falseReports,
-    roles: rolesOf(runDir, usage),
+    withoutCounterpart,
+    roles: rolesOf(runDir, usage, criteria),
   };
 }
 
@@ -532,19 +580,17 @@ export async function compareVariants(options: CompareVariantsOptions): Promise<
     usage.set(file.run, file);
   }
   const findings = options.findings ?? findingsSummary;
+  const sides = [...options.baseline.map((dir) => ["baseline", dir] as const), ...(options.variant ?? []).map((dir) => ["variant", dir] as const)];
+  const own = sides.map(([, dir]) => ({ run: basename(resolve(dir)), criteria: taskCriteria(dir) }));
+  const { criteria, scopeNl } = scopeOf(own, options.criteria);
   const runs: RunResult[] = [];
-  for (const [side, dirs] of [["baseline", options.baseline], ["variant", options.variant ?? []]] as const) {
-    for (const dir of dirs) runs.push(await runResult(dir, side, reference, usage.get(basename(resolve(dir))) ?? null, findings));
-  }
+  for (const [side, dir] of sides) runs.push(await runResult(dir, side, criteria, reference, usage.get(basename(resolve(dir))) ?? null, findings));
   const names = runs.map((run) => run.run);
   const twice = names.find((name, position) => names.indexOf(name) !== position);
   if (twice) throw new Error(`run ${twice} staat er twee keer in: geef elke run een eigen mapnaam`);
   const unknown = [...usage.keys()].filter((name) => !names.includes(name));
   if (unknown.length > 0) throw new Error(`verbruik voor een run die niet wordt vergeleken: ${unknown.join(", ")}`);
 
-  const criteria = [...new Set(runs.flatMap((run) => run.criteria))].sort(compareCriterionIds);
-  const differing = runs.filter((run) => run.criteria.join() !== runs[0]!.criteria.join()).map((run) => run.run);
-  const scopeNl = differing.length > 0 ? `niet elke run heeft dezelfde criteria als ${runs[0]!.run}: ${differing.join(", ")}` : null;
   const baseline = runs.filter((run) => run.side === "baseline");
   const variants = runs.filter((run) => run.side === "variant");
   const failedByKey = new Set(reference.failed.filter((id) => !(reference.failedOnlyInDocuments ?? []).includes(id)));
@@ -574,7 +620,30 @@ export async function compareVariants(options: CompareVariantsOptions): Promise<
     .sort((a, b) => compareCriterionIds(a.criterion, b.criterion) || a.id.localeCompare(b.id));
 
   const agreement = { baseline: agreementOf(rows.map((row) => row.baseline), baseline.length), variant: variants.length === 0 ? null : agreementOf(rows.map((row) => row.variant), variants.length) };
-  return { schema: "loep/variant-comparison/2", reference: basename(options.reference), criteria, scopeNl, runs, rows, defects, agreement, verdict: variants.length === 0 ? null : verdictOf(rows, defects, baseline, variants, options) };
+  return { schema: "loep/variant-comparison/3", reference: basename(options.reference), criteria, scopeNl, runs, rows, defects, agreement, verdict: variants.length === 0 ? null : verdictOf(rows, defects, baseline, variants, options) };
+}
+
+/**
+ * The criteria that count. With `chosen`: those, which every run must have. Without: the criteria
+ * of the runs, which must be the same, because a criterion only some runs have would count as not
+ * found in the others and make the comparison meaningless.
+ */
+function scopeOf(runs: { run: string; criteria: string[] }[], chosen: string[] | undefined): { criteria: string[]; scopeNl: string | null } {
+  if (chosen) {
+    const unknown = chosen.filter((id) => !criterionById(id));
+    if (unknown.length > 0) throw new Error(`--criteria: ${unknown.map((id) => `"${id}"`).join(", ")} ${unknown.length === 1 ? "is geen succescriterium" : "zijn geen succescriteria"}`);
+    const criteria = [...new Set(chosen)].sort(compareCriterionIds);
+    if (criteria.length === 0) throw new Error("--criteria noemt geen criterium");
+    const lacking = runs.map((run) => ({ run: run.run, missing: criteria.filter((id) => !run.criteria.includes(id)) })).filter((entry) => entry.missing.length > 0);
+    if (lacking.length > 0) throw new Error(`niet elke run heeft opdrachten voor de criteria van --criteria: ${lacking.map((entry) => `${entry.run} mist ${entry.missing.join(", ")}`).join("; ")}`);
+    const more = runs.filter((run) => run.criteria.length > criteria.length);
+    return { criteria, scopeNl: more.length === 0 ? null : `alleen de ${criteria.length} criteria van --criteria tellen mee; ${more.map((run) => `${run.run} heeft er ${run.criteria.length}`).join(", ")}, de rest telt niet mee` };
+  }
+  const criteria = runs[0]!.criteria;
+  if (runs.every((run) => run.criteria.join() === criteria.join())) return { criteria, scopeNl: null };
+  const shared = criteria.filter((id) => runs.every((run) => run.criteria.includes(id)));
+  const counts = runs.map((run) => `${run.run} ${run.criteria.length}`).join(", ");
+  throw new Error(`de runs hebben niet dezelfde criteria (${counts}): kies met --criteria welke meetellen${shared.length === 0 ? "; ze hebben geen criterium gemeen" : `, bijvoorbeeld de criteria die ze allemaal hebben: --criteria ${shared.join(",")}`}`);
 }
 
 function verdictOf(rows: CriterionRow[], defects: DefectRow[], baseline: RunResult[], variants: RunResult[], options: CompareVariantsOptions): Verdict {
@@ -659,11 +728,11 @@ export function comparisonMarkdown(result: VariantComparison): string {
         ? `| Gevonden gebreken uit de sleutel, per run (${found.units} gebreken) | ${interval(found.baseline, pct)} | ${interval(found.variant, pct)} | ${interval(found.difference, points)} procentpunt | ondergrens boven ${points(-verdict.margin)} | ${yesNo(found.ok)} |`
         : "| Gevonden gebreken uit de sleutel | - | - | - | - | geen gebrek met een geldige indeling aan beide kanten |",
       falseReports
-        ? `| Onterechte meldingen per run (${falseReports.units} criteria) | ${interval(falseReports.baseline, (value) => number(value, 1))} | ${interval(falseReports.variant, (value) => number(value, 1))} | ${interval(falseReports.difference, count)} | bovengrens onder ${count(verdict.reportMargin)} | ${yesNo(falseReports.ok)} |`
-        : "| Onterechte meldingen per run | - | - | - | - | geen run met een geldige indeling aan een van de kanten |",
+        ? `| Onterecht volgens beide, per run (${falseReports.units} criteria) | ${interval(falseReports.baseline, (value) => number(value, 1))} | ${interval(falseReports.variant, (value) => number(value, 1))} | ${interval(falseReports.difference, count)} | bovengrens onder ${count(verdict.reportMargin)} | ${yesNo(falseReports.ok)} |`
+        : "| Onterecht volgens beide, per run | - | - | - | - | geen run met een geldige indeling aan een van de kanten |",
       `| Open punten per run (ter informatie) | ${interval(openPoints.baseline, (value) => number(value, 1))} | ${interval(openPoints.variant, (value) => number(value, 1))} | ${interval(openPoints.difference, count)} | geen | - |`,
       "",
-      `Het verschil is variant min nulmeting. Het interval komt uit ${number(verdict.resamples)} trekkingen met teruglegging over de gebreken (bij meldingen en open punten over de criteria), elke trekking met dezelfde gebreken of criteria voor beide kanten, met seed ${verdict.seed}. Een onterechte melding is een bevinding die niet beide indelingen van \`compare --findings\` bij een gebrek uit de sleutel zetten. De marges staan vast voordat de variant wordt gemeten; zie validatie/verbruik/README.md.`,
+      `Het verschil is variant min nulmeting. Het interval komt uit ${number(verdict.resamples)} trekkingen met teruglegging over de gebreken (bij meldingen en open punten over de criteria), elke trekking met dezelfde gebreken of criteria voor beide kanten, met seed ${verdict.seed}. "Onterecht volgens beide" is een bevinding die beide indelingen van \`compare --findings\` onterecht noemen. Meldingen zonder tegenhanger die ze terecht of discutabel noemen, of waarover ze het oneens zijn, tellen niet mee; ze staan onder "Meldingen zonder tegenhanger". De marges staan vast voordat de variant wordt gemeten; zie validatie/verbruik/README.md.`,
       ...[found?.leftOutNl, falseReports?.leftOutNl].filter((note): note is string => Boolean(note)).map((note) => `\nLet op: ${note}.`),
       "",
     );
@@ -708,6 +777,21 @@ export function comparisonMarkdown(result: VariantComparison): string {
   }
   for (const run of ordered.filter((entry) => entry.defectsNl)) lines.push("", `${label(run)}: ${run.defectsNl}`);
 
+  const counted = (pick: (entry: NonNullable<RunResult["withoutCounterpart"]>) => number): string => ordered.map((run) => (run.withoutCounterpart ? String(pick(run.withoutCounterpart)) : "-")).join(" | ");
+  const pairs = [...new Set(ordered.flatMap((run) => Object.keys(run.withoutCounterpart?.disagreed ?? {})))].sort();
+  lines.push(
+    "",
+    "## Meldingen zonder tegenhanger",
+    "",
+    `Bevindingen van een run die niet beide indelingen van \`compare --findings\` bij een gebrek uit de sleutel zetten. Alleen "onterecht volgens beide" telt mee in de toets; een melding die terecht is, kan een echt gebrek zijn dat niet in de sleutel staat. Waar de indelingen verschillen, staan beide klassen. "-" is een run zonder geldige indeling.`,
+    "",
+    `| Klasse | ${header.join(" | ")} |`,
+    `|---|${header.map(() => "---|").join("")}`,
+    ...OWN_CLASSES.map((name) => `| ${name} volgens beide | ${counted((entry) => entry.agreed[name])} |`),
+    ...pairs.map((pair) => `| oneens: ${pair} | ${counted((entry) => entry.disagreed[pair] ?? 0)} |`),
+    `| samen | ${counted((entry) => entry.total)} |`,
+  );
+
   const kinds = [...new Set(ordered.flatMap((run) => Object.keys(run.openPoints)))];
   lines.push("", "## Open punten per soort", "", "Wat nog open staat in het oordeel dat telt, over de criteria hierboven.", "");
   if (kinds.length === 0) lines.push("Geen.");
@@ -717,7 +801,7 @@ export function comparisonMarkdown(result: VariantComparison): string {
     lines.push(`| samen | ${ordered.map((run) => String(sumPoints(run))).join(" | ")} |`);
   }
 
-  lines.push("", "## Verbruik per rol", "", "Sessies, commando's en tijd uit de run. Tokens, beurten en kosten alleen uit een verbruiksbestand (--usage), want de run telt die niet.", "");
+  lines.push("", "## Verbruik per rol", "", "Sessies, commando's en tijd uit de run. Tokens, beurten en kosten alleen uit een verbruiksbestand (--usage, te maken met `loep usage`), want de run telt die niet. Beoordelaars, verifieerders en de afmaakronde tellen alleen over de criteria hierboven; rondgangen en de stand-agent werken voor de hele run.", "");
   lines.push("| Run | Rol | Agents | Commando's | Tijd in sessies | Invoer | Naar de cache | Uit de cache | Uitvoer | Beurten | Kosten |", "|---|---|---|---|---|---|---|---|---|---|---|");
   for (const run of ordered) {
     for (const use of run.roles) {
@@ -741,7 +825,7 @@ export async function writeComparison(result: VariantComparison, outDir: string)
 
 export const VARIANT_USAGE = `loep variant --run <run> --out <copy> --name <variant> [--note <text>]
 loep compare-variants --baseline <run>... [--variant <run>...] --reference <file> [--usage <file>...]
-                      [--margin <share>] [--margin-reports <count>] [--seed <n>] [--out <dir>] [--json]
+                      [--criteria <ids>] [--margin <share>] [--margin-reports <count>] [--seed <n>] [--out <dir>] [--json]
 
 Measuring a variant of the code on frozen evidence (validatie/verbruik/README.md, "Hoe we meten").
 Not a step of an evaluation.
@@ -753,23 +837,34 @@ Not a step of an evaluation.
                      the variant: variant.json in the copy records that commit, the run it came from and
                      what was left out. Files are cloned where the file system can (APFS, reflinks)
   compare-variants   Lay runs of the baseline and of a variant side by side, for the criteria of their
-                     tasks. Says whether the variant is not worse: the share of the defects of the
+                     tasks (or those of --criteria). Says whether the variant is not worse: the share of the defects of the
                      answer key found per run (from the classifications of compare --findings) and
-                     the unjustified reports per run, each a paired difference with a 95% interval
-                     from a bootstrap, against a margin fixed beforehand. Below that: how alike the
-                     runs of each side are (same outcome in all runs, Fleiss' kappa), per criterion
-                     the outcome per run and the spread within and between the sides, per defect how
-                     often it was found, open points per kind, and per role the sessions, commands
-                     and time. Writes varianten.md and varianten.json with --out; without it prints
-                     the Markdown
+                     the findings per run that both classifications call unjustified ("onterecht
+                     volgens beide"), each a paired difference with a 95% interval from a bootstrap,
+                     against a margin fixed beforehand. Below that: how alike the runs of each side
+                     are (same outcome in all runs, Fleiss' kappa), per criterion the outcome per run
+                     and the spread within and between the sides, per defect how often it was found,
+                     the findings without a counterpart in the key by class (terecht, discutabel or
+                     onterecht volgens beide, or the two classes where the classifications disagree;
+                     only "onterecht volgens beide" counts in the test), open points per kind, and
+                     per role the sessions, commands and time. Writes varianten.md and varianten.json
+                     with --out; without it prints the Markdown
   --baseline, --variant  Repeatable: one run each. Without --variant: only the spread of the baseline
   --reference <file>     The answer key in the form compare reads (toolbox/fixtures/reference-*.json)
   --usage <file>         Repeatable: tokens and turns per agent of one run, counted from the transcripts
-                         outside the run (schema loep/verbruik/1, see toolbox/test/fixtures/verbruik.json)
+                         outside the run with loep usage (schema loep/verbruik/1, see
+                         toolbox/test/fixtures/verbruik.json). Opus and Sonnet have a price; another
+                         model needs one in the file
+  --criteria <ids>       Count only these criteria, comma-separated as with tasks --only: in the outcomes,
+                         the defects of the key, the findings without a counterpart, the open points, the agreement
+                         and the use per role (walks and the stand agent work for the whole run).
+                         Every run needs tasks for each of them; a run may have more, so these criteria of a
+                         baseline of 56 compare with variants measured on just these. Without it every run
+                         must have the same criteria, and the command stops and names the shared ones
   --margin <share>       Not worse when the lower bound of the difference in the share found lies above
                          minus this (default ${MARGIN})
-  --margin-reports <count>  Not worse when the upper bound of the difference in unjustified reports per
-                         run lies below this (default ${REPORT_MARGIN})
+  --margin-reports <count>  Not worse when the upper bound of the difference in findings per run that both
+                         classifications call unjustified lies below this (default ${REPORT_MARGIN})
   --seed <n>             Seed of the bootstrap (default ${SEED})
 `;
 
@@ -793,6 +888,7 @@ export async function cli(args: string[]): Promise<void> {
       variant: { type: "string", multiple: true },
       reference: { type: "string" },
       usage: { type: "string", multiple: true },
+      criteria: { type: "string" },
       margin: { type: "string" },
       "margin-reports": { type: "string" },
       seed: { type: "string" },
@@ -820,6 +916,7 @@ export async function cli(args: string[]): Promise<void> {
       variant: values.variant,
       reference: values.reference,
       usage: values.usage,
+      criteria: values.criteria?.split(",").map((part) => part.trim()).filter(Boolean),
       margin: numberOption("margin", values.margin, (value) => value >= 0 && value < 1),
       reportMargin: numberOption("margin-reports", values["margin-reports"], (value) => value >= 0),
       seed: numberOption("seed", values.seed, Number.isInteger),
@@ -832,7 +929,7 @@ export async function cli(args: string[]): Promise<void> {
         const fixed = (value: number): string => value.toFixed(3);
         const parts = [
           verdict.found ? `gevonden ${fixed(verdict.found.difference.value)} (interval ${fixed(verdict.found.difference.low)} tot ${fixed(verdict.found.difference.high)}, ondergrens boven -${verdict.margin})` : "gevonden niet te bepalen",
-          verdict.falseReports ? `onterechte meldingen per run ${fixed(verdict.falseReports.difference.value)} (interval ${fixed(verdict.falseReports.difference.low)} tot ${fixed(verdict.falseReports.difference.high)}, bovengrens onder ${verdict.reportMargin})` : "onterechte meldingen niet te bepalen",
+          verdict.falseReports ? `onterecht volgens beide per run ${fixed(verdict.falseReports.difference.value)} (interval ${fixed(verdict.falseReports.difference.low)} tot ${fixed(verdict.falseReports.difference.high)}, bovengrens onder ${verdict.reportMargin})` : "onterecht volgens beide niet te bepalen",
         ];
         process.stdout.write(`niet slechter: ${verdict.notWorse === null ? "niet te bepalen" : verdict.notWorse ? "ja" : "nee"} (${parts.join("; ")})\n`);
       }

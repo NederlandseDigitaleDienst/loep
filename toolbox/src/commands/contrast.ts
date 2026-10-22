@@ -12,7 +12,7 @@ import { SMALLEST } from "./collect.ts";
 import { ModelSweep } from "./modelsweep.ts";
 import type { Sample } from "./sample.ts";
 import { CONTRAST_STAMP, measuredPages, pageKey, readStamp } from "../lib/sweepstamp.ts";
-import { inOrder, sweepAtOnce, withSpacing } from "../lib/atonce.ts";
+import { Crowd, inOrder, sweepAtOnce, withSpacing } from "../lib/atonce.ts";
 
 export { FLAT_BACKGROUND_SHARE, measure, measureControl, measureGraphic, NON_TEXT_RATIO } from "../instruments/contrast.ts";
 export type { ContrastMeasurement, ControlContrast, GraphicContrast, PageContrast } from "../instruments/contrast.ts";
@@ -68,6 +68,7 @@ export async function contrast(runDir: string, options: { fresh?: boolean; atOnc
     await confirmLogin(browser);
     // Each pass notes the blockers it closed apart; they are taken over in the order of the passes.
     const scopes = passes.map(() => sweep.fork());
+    const crowd = new Crowd();
     const laneOf = (index: number): string => `${passes[index]!.scheme}${passes[index]!.viewport ? `-${passes[index]!.viewport!.width}` : ""}`;
     const progress = new ProgressFile(runDir, "contrast", passes.map((_, index) => laneOf(index)), atOnce);
     const pass = async (index: number): Promise<void> => {
@@ -126,7 +127,7 @@ export async function contrast(runDir: string, options: { fresh?: boolean; atOnc
             }
           };
           try {
-            own.results.push(await sayingItRuns(`contrast ${nr + 1}/${total} ${what}`, () => retryOnce(what, measureOnce)));
+            own.results.push(await sayingItRuns(`contrast ${nr + 1}/${total} ${what}`, () => retryOnce(what, measureOnce, crowd)));
             process.stderr.write(progressLine("contrast", null, nr, total, `${what} ${Date.now() - started}ms`));
           } catch (error) {
             if (error instanceof LoginExpired) throw error;

@@ -1,4 +1,5 @@
 import { existsSync, readFileSync, readdirSync, renameSync, rmSync, statSync } from "node:fs";
+import { REPLAY_TASK_NL } from "../lib/recordings.ts";
 import { join, resolve } from "node:path";
 import { EXTENSION, extensionsOf, finishBudget, judgeBudget, verifyBudget, walkBudget, type Coverage } from "../lib/budget.ts";
 import { canonicalJson, pageLabels, readJson, sha256, sha256File, writeFileAtomic, writeJson } from "../lib/canonical.ts";
@@ -18,12 +19,16 @@ import { loadAllProcedures, type Procedure } from "../lib/procedures.ts";
 import { readTemplate } from "../lib/templates.ts";
 import { loadRun, type RunData } from "../lib/rundata.ts";
 import {
+  canonicalCommand,
   citedObservations,
   FINISH_FACTOR,
+  frameFocusProblems,
   indexObservations,
   KINDS_FOR_AGAIN,
+  MEASURE_COMMANDS,
   notSentPointProblems,
   openPoint,
+  rowsToExplain,
   searchableText,
   validateCandidates,
   validateFinish,
@@ -31,6 +36,8 @@ import {
   validateVerification,
   type Candidate,
   type CandidateList,
+  type CrossCandidate,
+  type CrossLoop,
   type ObservationIndex,
   type ObservationRecordLike,
   type Verdict,
@@ -38,7 +45,7 @@ import {
 import { CRITERIA, criterionById } from "../lib/wcag.ts";
 import { agentLoginNl } from "../lib/login.ts";
 import { readsAllowedNl } from "../lib/reads.ts";
-import { DEFAULT_MAX_WRITES, DEFAULT_WRITE_SPACING_SECONDS, WRITES_BLOCKED_NL, writeBudget, writesAllowedNl, writesForRun } from "../lib/writes.ts";
+import { criterionSender, DEFAULT_MAX_WRITES, DEFAULT_WRITE_SPACING_SECONDS, reservedNl, reservedWrites, spacingNl, WRITES_BLOCKED_NL, writeBudget, writesAllowedNl, writesForRun } from "../lib/writes.ts";
 import { sweepCandidates } from "../lib/statusmessages.ts";
 import { makeWorkDir } from "../lib/workdir.ts";
 import { siteHosts, siteLabel } from "../lib/origins.ts";
@@ -92,6 +99,8 @@ export interface InstrumentTask {
   decisiveCommands: string[];
   /** The recommendation rules of the procedure. Absent in an index from before recommendations existed: then none. */
   recommendationRules?: string[];
+  /** The lists in the dossier whose rows a pass explains one by one (`pass_explains`). Absent in an index from before: then none. */
+  passExplains?: string[];
   judge: { prompt: string; output: string; candidates: string; session: string; maxCommands: number; maxMinutes: number };
   /** Written once every judge verdict of the run is in: only then is it known what other criteria hand over. */
   verify: { prompt: string; output: string; candidates: string; session: string; maxCommands: number; maxMinutes: number } | null;
@@ -421,7 +430,7 @@ async function pointsForAgain(runDir: string, previous: InstrumentIndex | null, 
   const counting = await countingOf(runDir, task, observations);
   const kinds = KINDS_FOR_AGAIN.map((kind) => `"${kind}"`).join(" of ");
   const passing = await passingOf(runDir, previous.tasks, observations);
-  const unruled = !counting || counting.verdict.outcome === "failed" ? [] : unruledCrossPoints(passing, id, [passing.get(id)?.final, passing.get(id)?.finish]);
+  const unruled = !counting || counting.verdict.outcome === "failed" ? [] : unruledCrossPoints(passing, id, [passing.get(id)?.final, passing.get(id)?.finish], observations.records);
   const open = counting?.verdict.outcome === "cantTell" ? (counting.verdict.missingNl ?? []) : [];
   if (!counting || (unruled.length === 0 && !open.some((point) => (KINDS_FOR_AGAIN as readonly string[]).includes(openPoint(point).kind?.prefix ?? "")))) {
     return `--again: het eindoordeel van ${id} staat niet open met een punt ${kinds}, en niets wat een ander criterium eraan doorgaf, is nog onbeoordeeld; een nieuwe afmaakronde is alleen voor wat een instrument kan meten zodra het deel van de site weer laadt of de proef werkt, of voor wat een ander criterium doorgaf`;
@@ -490,25 +499,92 @@ type PassingRound = keyof PassingVerdicts;
 /** How a candidate's identifier says who passed it on: "X145-01" the judge of 1.4.5, "XV145-01" its verifier, "XA145-01" its finishing round. */
 const PASSED_BY: readonly [PassingRound, string, string][] = [["a", "X", "beoordelaar"], ["final", "XV", "verifieerder"], ["finish", "XA", "afmaakronde"]];
 
-/**
- * What the rounds in `from` of other criteria passed on to this one, as candidates. What a verifier
- * or finishing round passes on that a round before it of the same criterion already did (the same
- * page and place) is not passed on twice.
- */
-export function crossCandidates(verdicts: Map<string, PassingVerdicts>, criterion: string, from: readonly PassingRound[] = ["a"]): Candidate[] {
-  const result: Candidate[] = [];
+/** A candidate passed on from another criterion, with that criterion and the entry it came from. */
+interface PassedOn {
+  candidate: Candidate;
+  source: string;
+  cross: CrossCandidate;
+}
+
+function passedOn(verdicts: Map<string, PassingVerdicts>, criterion: string, from: readonly PassingRound[]): PassedOn[] {
+  const result: PassedOn[] = [];
   for (const [source, rounds] of [...verdicts.entries()].sort(([a], [b]) => a.localeCompare(b))) {
     const earlier: { page: string; where: string }[] = [];
     for (const [round, prefix] of PASSED_BY) {
       const passed = (rounds[round]?.crossCandidates ?? []).filter((cross) => cross.criterion === criterion);
       passed.forEach((cross, position) => {
         if (!from.includes(round) || earlier.some((entry) => entry.page === cross.page && entry.where === cross.where)) return;
-        result.push({ id: `${prefix}${source.replaceAll(".", "")}-${String(position + 1).padStart(2, "0")}`, criterion, page: cross.page, where: cross.where, evidence: cross.evidence, noteNl: cross.noteNl, support: "bekeken" });
+        result.push({ source, cross, candidate: { id: `${prefix}${source.replaceAll(".", "")}-${String(position + 1).padStart(2, "0")}`, criterion, page: cross.page, where: cross.where, evidence: cross.evidence, noteNl: cross.noteNl, support: "bekeken" } });
       });
       earlier.push(...passed);
     }
   }
   return result;
+}
+
+/**
+ * What the rounds in `from` of other criteria passed on to this one, as candidates. What a verifier
+ * or finishing round passes on that a round before it of the same criterion already did (the same
+ * page and place) is not passed on twice.
+ */
+export function crossCandidates(verdicts: Map<string, PassingVerdicts>, criterion: string, from: readonly PassingRound[] = ["a"]): Candidate[] {
+  return passedOn(verdicts, criterion, from).map((entry) => entry.candidate);
+}
+
+/** The part of an observation record that says what was measured where. */
+export type MeasuredRecords = ReadonlyMap<string, { command: string; target?: { path: string[] } | null; page?: { url: string } | null }>;
+
+/** What the observations a candidate cites measured: which property (the measuring command) of which element (its path) on which page (its address). */
+function measuredBy(cross: CrossCandidate, records: MeasuredRecords): Set<string> {
+  const measured = new Set<string>();
+  for (const ref of Array.isArray(cross.evidence) ? cross.evidence : []) {
+    const record = records.get(ref);
+    const command = record ? canonicalCommand(record.command) : "";
+    if (record?.page?.url && record.target?.path?.length && (MEASURE_COMMANDS as readonly string[]).includes(command)) measured.add(JSON.stringify([record.page.url, record.target.path, command]));
+  }
+  return measured;
+}
+
+/**
+ * Whether two candidates are the same: both rest on a measurement of the same property of the same
+ * element on the same page, such as the name (`name`) of one region on one address. Agents in
+ * different sessions find the same element under the same path, so this holds across sessions. A
+ * look shows a place but measures nothing there, so two defects of one element (its border and its
+ * text) stay apart as long as each rests on a measurement of its own. Without a measurement of an
+ * element on either side, only the same page and the same description of the place make it the same.
+ */
+function sameCandidate(a: CrossCandidate, b: CrossCandidate, records: MeasuredRecords): boolean {
+  const [first, second] = [measuredBy(a, records), measuredBy(b, records)];
+  if (first.size > 0 || second.size > 0) return [...first].some((key) => second.has(key));
+  const place = (text: string): string => text.toLowerCase().replace(/\s+/g, " ").trim();
+  return a.page === b.page && place(a.where) === place(b.where);
+}
+
+/**
+ * The candidates passed on to this criterion that close a loop: in one of its rounds, this criterion
+ * passed the same candidate back to the criterion it came from. Which of the two did so first does
+ * not matter, since finishing rounds run side by side. Returns the identifiers of those candidates,
+ * and one loop per candidate.
+ */
+export function crossLoops(verdicts: Map<string, PassingVerdicts>, criterion: string, records: MeasuredRecords, from: readonly PassingRound[] = ["a", "final", "finish"]): { closed: Set<string>; loops: CrossLoop[] } {
+  const closed = new Set<string>();
+  const loops: { loop: CrossLoop; cross: CrossCandidate }[] = [];
+  const own = verdicts.get(criterion);
+  const back = PASSED_BY.flatMap(([round]) => own?.[round]?.crossCandidates ?? []);
+  for (const { candidate, source, cross } of passedOn(verdicts, criterion, from)) {
+    const returned = back.filter((entry) => entry.criterion === source && sameCandidate(cross, entry, records));
+    if (returned.length === 0) continue;
+    closed.add(candidate.id);
+    const undecided = [...(cross.undecidedNl ? [source] : []), ...(returned.some((entry) => entry.undecidedNl) ? [criterion] : [])];
+    const known = loops.find((entry) => entry.loop.with === source && sameCandidate(entry.cross, cross, records));
+    if (known) {
+      const merged = [...new Set([...(known.loop.undecided ?? []), ...undecided])];
+      if (merged.length > 0) known.loop.undecided = merged;
+      continue;
+    }
+    loops.push({ cross, loop: { with: source, page: cross.page, where: cross.where, reasons: [{ criterion: source, noteNl: cross.noteNl }, { criterion, noteNl: returned[0]!.noteNl }], ...(undecided.length > 0 ? { undecided } : {}) } });
+  }
+  return { closed, loops: loops.map((entry) => entry.loop) };
 }
 
 /** Who passed a candidate on: "XV1410-01" came from the verifier of 1.4.10. */
@@ -521,12 +597,14 @@ const crossSource = (id: string): string => {
  * What the rounds of other criteria passed on to this criterion that no verdict of it ruled on, as
  * open points. The verifier rules on every candidate it is given and the finishing round on what
  * the verifier left; a candidate that neither of them ruled on was not looked at, so the criterion
- * cannot pass.
+ * cannot pass. A candidate this criterion passed back closes a loop (`crossLoops`): it was looked
+ * at here, and it is no open point.
  */
-export function unruledCrossPoints(verdicts: Map<string, PassingVerdicts>, criterion: string, rounds: (Verdict | null | undefined)[], from: readonly PassingRound[] = ["a", "final", "finish"]): string[] {
+export function unruledCrossPoints(verdicts: Map<string, PassingVerdicts>, criterion: string, rounds: (Verdict | null | undefined)[], records: MeasuredRecords, from: readonly PassingRound[] = ["a", "final", "finish"]): string[] {
   const ruled = new Set(rounds.flatMap((verdict) => (verdict?.candidates ?? []).map((ruling) => ruling.id)));
+  const { closed } = crossLoops(verdicts, criterion, records, from);
   return crossCandidates(verdicts, criterion, from)
-    .filter((candidate) => !ruled.has(candidate.id))
+    .filter((candidate) => !ruled.has(candidate.id) && !closed.has(candidate.id))
     .map((candidate) => `veegronde mist: ${crossSource(candidate.id)} zag op ${candidate.page} (${candidate.where}) iets dat bij dit criterium hoort, en geen verifieerder of afmaakronde heeft dat beoordeeld (${candidate.id}): ${candidate.noteNl}`);
 }
 
@@ -535,9 +613,12 @@ export function unruledCrossPoints(verdicts: Map<string, PassingVerdicts>, crite
  * on, as points for its finishing round, also when the criterion was settled. None when it failed:
  * a failure it can only add to.
  */
-function passedOnPoints(passing: Map<string, PassingVerdicts>, criterion: string, standing: Standing): string[] {
-  return standing.verdict?.outcome === "failed" ? [] : unruledCrossPoints(passing, criterion, [standing.round === "final" ? standing.verdict : null], ["a", "final"]);
+function passedOnPoints(passing: Map<string, PassingVerdicts>, criterion: string, standing: Standing, records: MeasuredRecords): string[] {
+  return standing.verdict?.outcome === "failed" ? [] : unruledCrossPoints(beforeOwnFinish(passing, criterion), criterion, [standing.round === "final" ? standing.verdict : null], records, ["a", "final"]);
 }
+
+/** The verdicts without the finishing round of this criterion: whether it gets that round, and what it is given, cannot follow from what that round wrote. */
+const beforeOwnFinish = (passing: Map<string, PassingVerdicts>, criterion: string): Map<string, PassingVerdicts> => new Map([...passing].map(([id, rounds]) => [id, id === criterion ? { ...rounds, finish: null } : rounds]));
 
 /**
  * Write the task files of the phase the run is in. Safe to run again at any time: what it
@@ -569,8 +650,8 @@ export async function instrumentTasks(runDir: string, options: TaskOptions = {})
   const base = { run: absoluteRun, cli, siteModel: join(absoluteRun, "site.json"), login: agentLoginNl(run.login) };
   const readsNl = readsAllowedNl(run.reads ?? []);
   // The budget as it was set, not what is left of it: the task stays the same while agents send, and its hash with it.
-  const budgetNl = run.writes ? `. Het budget voor versturen is ${run.writes.maxWrites ?? DEFAULT_MAX_WRITES} verzendingen voor de hele run, met minstens ${run.writes.spacingSeconds ?? DEFAULT_WRITE_SPACING_SECONDS} s ertussen, gedeeld door alle agents en de veegronde; wat er nog over is, zegt \`session list\`` : "";
-  const writesNl = `${run.writes ? `ja, ${writesAllowedNl(run.writes)}${budgetNl}` : `nee, ${WRITES_BLOCKED_NL}`}${readsNl ? `. Wel gaat door: ${readsNl} (in het dossier onder \`reads\`)` : ""}`;
+  const budgetNl = run.writes ? `. Het budget voor versturen is ${run.writes.maxWrites ?? DEFAULT_MAX_WRITES} verzendingen voor de hele run${spacingNl(run.writes.spacingSeconds ?? DEFAULT_WRITE_SPACING_SECONDS)}, gedeeld door alle agents en de veegronde${reservedWrites(run.writes) > 0 ? `; ${reservedNl(reservedWrites(run.writes))}. De sessies van één criterium (beoordelaar, verifieerder, afmaker) tellen samen als één` : ""}; wat er nog over is, zegt \`session list\`` : "";
+  const writesNl = `${run.writes ? `ja, ${writesAllowedNl(run.writes)}${budgetNl}. ${REPLAY_TASK_NL}` : `nee, ${WRITES_BLOCKED_NL}`}${readsNl ? `. Wel gaat door: ${readsNl} (in het dossier onder \`reads\`)` : ""}`;
   const criteriaList = CRITERIA.filter((criterion) => procedures.some((procedure) => procedure.id === criterion.id)).map((criterion) => `${criterion.id} ${criterion.titleNl}`).join("\n");
   const recipes = await readRecipes(runDir);
 
@@ -654,7 +735,7 @@ export async function instrumentTasks(runDir: string, options: TaskOptions = {})
       join(runDir, judge.prompt),
       fill(templates.beoordeel, { ...shared, session: judge.session, workDir: await makeWorkDir(runDir, judge.session), workName: judge.session, maxCommands: String(judge.maxCommands), maxMinutes: String(judge.maxMinutes), candidates: join(absoluteRun, judge.candidates), notWalked: join(absoluteRun, NOT_WALKED), output: join(absoluteRun, judge.output), check: `node ${cli} check-verdict --run ${absoluteRun} --criterion ${criterion.id} --round judge` }),
     );
-    const task: InstrumentTask = { criterion: criterion.id, titleNl: criterion.titleNl, procedureVersion: procedure.version, procedureSha256: procedure.sha256, dossier: dossierPath, dossierSha256, passCommands: procedure.passCommands, decisiveCommands: procedure.decisiveCommands, recommendationRules: procedure.recommendationRules, judge, verify: null };
+    const task: InstrumentTask = { criterion: criterion.id, titleNl: criterion.titleNl, procedureVersion: procedure.version, procedureSha256: procedure.sha256, dossier: dossierPath, dossierSha256, passCommands: procedure.passCommands, decisiveCommands: procedure.decisiveCommands, recommendationRules: procedure.recommendationRules, ...(procedure.passExplains.length > 0 ? { passExplains: procedure.passExplains } : {}), judge, verify: null };
     await writeJudge();
     if (sessionStarted(runDir, judge.session) && !(await instrumentVerdictIsCurrent(runDir, task, "judge", observations))) {
       judge.session = nextSession(runDir, `b-${digits}`);
@@ -740,7 +821,7 @@ export async function instrumentTasks(runDir: string, options: TaskOptions = {})
       let ranAgain = Boolean(was?.finish && (was.finish.again || earlierRounds.length > 0));
       const missed = missedBy(runDir, task, standing);
       let points = ranAgain ? was!.finish!.points : pointsToFinish(standing, missed);
-      const unruled = passedOnPoints(passing, task.criterion, standing);
+      const unruled = passedOnPoints(passing, task.criterion, standing, observations.records);
       if (!ranAgain && unruled.length > 0) points = [...(points ?? standing.verdict?.missingNl ?? []), ...unruled];
       if (again.has(task.criterion)) {
         if (was?.finish) earlierRounds = [...earlierRounds, ...setFinishAside(runDir, was.finish)];
@@ -755,8 +836,11 @@ export async function instrumentTasks(runDir: string, options: TaskOptions = {})
       // What the verifier ruled on with an observation of its own is settled; what it left open, and everything nobody verified, is for this round.
       const listed = await readJson<Candidate[]>(join(runDir, (task.verify ?? task.judge).candidates));
       // Nobody else was given what verifiers passed on, nor without a verifier what judges did: this round is, and when it runs again also what other finishing rounds passed on.
-      const passedOn = crossCandidates(passing, task.criterion, ranAgain ? ["a", "final", "finish"] : ["a", "final"]);
-      const all = [...listed, ...passedOn.filter((candidate) => !listed.some((entry) => entry.id === candidate.id))];
+      // Not what closes a loop: this criterion passed it back, so it was looked at here already.
+      const from: PassingRound[] = ranAgain ? ["a", "final", "finish"] : ["a", "final"];
+      const { closed } = crossLoops(beforeOwnFinish(passing, task.criterion), task.criterion, observations.records, from);
+      const given = crossCandidates(passing, task.criterion, from).filter((candidate) => !closed.has(candidate.id));
+      const all = [...listed, ...given.filter((candidate) => !listed.some((entry) => entry.id === candidate.id))];
       const finishLimits = finishBudget(BUDGETS.finish, { commands: task.judge.maxCommands, minutes: task.judge.maxMinutes }, BUDGETS.judge);
       const ruled = new Set(standing.round === "final" ? (standing.verdict!.candidates ?? []).filter((ruling) => ruling.ruling !== "open").map((ruling) => ruling.id) : []);
       const finish: NonNullable<InstrumentTask["finish"]> = { prompt: TASK_FILES.finishers(task.criterion), output: join("verdicts", task.criterion, "afmaak.json"), candidates: join(dir, "kandidaten-afmaak.json"), session: was?.finish?.session ?? `a-${digits}`, maxCommands: finishLimits.commands, maxMinutes: finishLimits.minutes, points, ...(earlierRounds.length > 0 ? { earlier: earlierRounds } : {}), ...(ranAgain ? { again: true as const } : {}) };
@@ -902,7 +986,7 @@ export async function instrumentPending(runDir: string): Promise<InstrumentPendi
     for (const task of index.tasks) {
       // A round that was asked for again is open until its verdict comes, whatever the verdicts before it say.
       const standing = await standingVerdict(runDir, task, observations);
-      if (!task.finish?.earlier?.length && !task.finish?.again && !pointsToFinish(standing) && passedOnPoints(passing, task.criterion, standing).length === 0) continue;
+      if (!task.finish?.earlier?.length && !task.finish?.again && !pointsToFinish(standing) && passedOnPoints(passing, task.criterion, standing, observations.records).length === 0) continue;
       if (!task.finish) finisherTasksMissing = true;
       else if (!(await instrumentVerdictIsCurrent(runDir, task, "finish", observations))) {
         if (skipped(runDir, task.finish.output)) given.push(`afmaakronde ${task.criterion}`);
@@ -1005,6 +1089,7 @@ export async function checkInstrumentVerdict(runDir: string, criterionId: string
     passCommands: task.passCommands,
     decisiveCommands: task.decisiveCommands,
     recommendationRules: task.recommendationRules ?? [],
+    explainOnPass: rowsToExplain(dossier.evidence, task.passExplains ?? []),
     fileExists: (ref: string) => !ref.includes("..") && existsSync(join(runDir, ref)),
     sourceText: sourceTexts(runDir, observations.records, dossier),
     ...(dossier.site?.baseUrl ? { siteHosts: siteHosts(dossier.site) } : {}),
@@ -1020,8 +1105,10 @@ export async function checkInstrumentVerdict(runDir: string, criterionId: string
   else if (!(await instrumentVerdictIsCurrent(runDir, task, "judge", observations))) problems = ["the verdict of the judge must be validated, and unchanged since, before the verification"];
   else problems = validateVerification(verdict, { ...context, session: part.session, judge: await readJson<Verdict>(join(runDir, task.judge.output)) });
   problems.push(...budgetPointProblems(runDir, verdict, part.session));
+  // Read only once the verdict has its form: it walks the findings and what they cite.
+  if (problems.length === 0) problems.push(...frameFocusProblems(verdict, dossier.legend, observations.records));
   const permission = writesForRun(runDir);
-  problems.push(...notSentPointProblems(verdict.missingNl, permission, permission ? writeBudget(runDir, permission) : null));
+  problems.push(...notSentPointProblems(verdict.missingNl, permission, permission ? writeBudget(runDir, permission, Date.now(), criterionSender(task.criterion)) : null));
   if (problems.length === 0) await stampNow(runDir, part.output, (await verdictStamp(runDir, task, round, observations))!);
   return problems;
 }

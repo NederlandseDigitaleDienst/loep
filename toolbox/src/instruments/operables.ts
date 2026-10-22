@@ -1,6 +1,6 @@
 import type { Frame, Page } from "playwright";
 import { call } from "../browser/call.ts";
-import type { OperableGroup } from "../lib/operables.ts";
+import type { LooksOperable, OperableGroup } from "../lib/operables.ts";
 
 interface FramePlace {
   path: string;
@@ -28,6 +28,12 @@ async function namesInFrame(frame: Frame): Promise<string[]> {
   for (const group of own) names.push(...(group.text ? group.text.split(", ") : group.members.map(() => "")));
   for (const child of frame.childFrames()) names.push(...(await namesInFrame(child)));
   return names;
+}
+
+/** What looks operable on the page as it is now without a role and without a Tab stop, such as a slider built from a track and a thumb. */
+export async function pageLooksOperable(page: Page): Promise<LooksOperable[]> {
+  const found = await call<{ path: string[]; text: string; region: string | null; signals: string[]; html: string }[]>(page, "looksOperable");
+  return found.map((entry) => ({ path: entry.path.join(" >>> "), text: entry.text, region: entry.region, signals: entry.signals, html: entry.html }));
 }
 
 /**

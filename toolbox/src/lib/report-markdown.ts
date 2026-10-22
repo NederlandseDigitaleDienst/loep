@@ -5,7 +5,7 @@ import { modelOf } from "../instruments/methods/registry.ts";
 import { signatureIsCurrent } from "../commands/sign.ts";
 import { extensionsNl } from "./budget.ts";
 import { modelsNl } from "./models.ts";
-import { NOT_SENT, notSentOrigins, OPEN_POINT_KINDS, openPoint, OUTSIDE_SCOPE, UNREACHABLE, waitsOnlyOnSending, type Outcome } from "./verdict.ts";
+import { NOT_SENT, notSentOrigins, OPEN_POINT_KINDS, openPoint, OUTSIDE_SCOPE, UNREACHABLE, waitsOnlyOnSending, type CrossLoop, type Outcome } from "./verdict.ts";
 import { siteOrigins } from "./origins.ts";
 import { readsAllowedNl } from "./reads.ts";
 import { compareCriterionIds, type WcagVersion } from "./wcag.ts";
@@ -109,11 +109,13 @@ export const REPORT_TEXT = {
   unfinished: "Zolang er een criterium open is, is status A of B niet mogelijk. Wat dit onderzoek niet heeft vastgesteld, sluit een nieuwe meting of een persoon die het vaststelt.",
   ownerOpen: "Daar kan geen instrument verder mee: een persoon legt het antwoord vast, en daarna telt het mee in de uitkomst.",
   ownerOpenNotSent: "Daar is geen persoon voor nodig: een instrument meet het in een nieuw onderzoek dat mag versturen, zie \"Nog uitzoeken\".",
+  ownerOpenBudget: "Daar is geen persoon voor nodig: dit onderzoek mocht versturen, maar het budget was op. Een instrument meet het in een nieuw onderzoek met een groter budget, zie \"Nog uitzoeken\".",
   ownerOpenMixed: "Die meet een instrument in een nieuw onderzoek dat mag versturen, zie \"Nog uitzoeken\". Bij de andere kan geen instrument verder: een persoon legt het antwoord vast, en daarna telt het mee in de uitkomst.",
   personFailed: "Door een persoon vastgesteld",
   personFailedIntro: "Bij deze criteria heeft een persoon vastgesteld dat de site niet voldoet. Er staat geen bevinding van een instrument achter: wat er mis is, staat in het antwoord van die persoon.",
   answers: "Vastgesteld door een persoon, niet door een instrument",
   before: "Het oordeel dat hiervoor stond",
+  loops: "Door twee criteria bekeken, hoort bij geen van beide",
   establishedBy: "Vastgesteld door",
   versionAccuracy: "Nauwkeurigheid van deze versie",
   recommendations: "Aanbevelingen",
@@ -218,6 +220,8 @@ export interface CriterionBrief {
   coverageNl: string | null;
   /** The open points about the evaluation itself, in full: they stand in the appendix, the work list only counts them. */
   toolboxPointsNl: string[];
+  /** What this criterion and another passed on to each other, one line each with what both said. Empty when there is none. */
+  loopsNl: string[];
 }
 
 /** The open points of one criterion that stand in the work list in full. */
@@ -587,11 +591,13 @@ function openCount(evaluation: Evaluation): { openNl: string; unfinished: boolea
         : `${total}. ${open.owner.length} ${open.owner.length === 1 ? "vraagt" : "vragen"} ${ownerReason}; ${open.evaluation.length} ${isAre(open.evaluation.length)} ${evaluationReason}.`;
   // A criterion that waits only for permission to send needs no person: it is counted apart, so the reader is not sent to one.
   const notSent = open.owner.filter((id) => waitsOnlyOnSending(evaluation.criteria.find((criterion) => criterion.id === id)?.missingNl ?? []));
-  const notSentNl = notSent.length > 0 ? ` Van de criteria voor de eigenaar ${notSent.length === 1 ? "wacht" : "wachten"} er ${notSent.length} alleen op toestemming om te versturen${list(notSent)}.` : "";
+  // A run that might send and ran out of its budget waits for more sends, not for permission.
+  const spent = notSent.length > 0 && notSent.every((id) => budgetSpent(evaluation, evaluation.criteria.find((criterion) => criterion.id === id)?.missingNl ?? []));
+  const notSentNl = notSent.length > 0 ? ` Van de criteria voor de eigenaar ${notSent.length === 1 ? "wacht" : "wachten"} er ${notSent.length} alleen op ${spent ? "meer verzendingen, want het budget voor versturen van dit onderzoek was op" : "toestemming om te versturen"}${list(notSent)}.` : "";
   // Content of an address outside the run is a choice of the scope, no fault of loep: counted apart, with what would measure it.
   const outside = open.owner.filter((id) => (evaluation.criteria.find((criterion) => criterion.id === id)?.missingNl ?? []).some((point) => openPoint(point).kind?.prefix === OUTSIDE_SCOPE));
   const outsideNl = outside.length > 0 ? ` Van de criteria voor de eigenaar ${outside.length === 1 ? "bleef" : "bleven"} er ${outside.length} open door inhoud van een adres buiten de afbakening${list(outside)}; een nieuw onderzoek met dat adres erbij meet ze, zie "Nog uitzoeken".` : "";
-  const ownerNl = notSent.length === 0 ? REPORT_TEXT.ownerOpen : notSent.length === open.owner.length ? REPORT_TEXT.ownerOpenNotSent : REPORT_TEXT.ownerOpenMixed;
+  const ownerNl = notSent.length === 0 ? REPORT_TEXT.ownerOpen : notSent.length === open.owner.length ? (spent ? REPORT_TEXT.ownerOpenBudget : REPORT_TEXT.ownerOpenNotSent) : REPORT_TEXT.ownerOpenMixed;
   // A part of the site that did not load is counted apart too: the evaluation is not finished, and no fault of the site is established.
   const unreachable = open.evaluation.filter((id) => (evaluation.criteria.find((criterion) => criterion.id === id)?.missingNl ?? []).some((point) => openPoint(point).kind?.prefix === UNREACHABLE));
   const unreachableNl = unreachable.length > 0 ? ` Van de criteria die dit onderzoek niet vaststelde, ${unreachable.length === 1 ? "bleef" : "bleven"} er ${unreachable.length} open doordat een deel van de site tijdens het onderzoek niet bereikbaar was${list(unreachable)}, zie "Nog uitzoeken".` : "";
@@ -681,6 +687,14 @@ function openPoints(criterion: CriterionResult): ReturnType<typeof openPoint>[] 
   return criterion.outcome === "cantTell" ? [{ kind: null, textNl: "Niet opgegeven." }] : [];
 }
 
+/** A candidate two criteria passed on to each other, in one line: where, and what each said. */
+function loopLine(criterion: string, loop: CrossLoop): string {
+  const sentence = (text: string): string => text.replace(/\s+/g, " ").trim().replace(/([^.!?])$/, "$1.");
+  const said = loop.reasons.map((reason) => `${reason.criterion}: ${sentence(reason.noteNl)}`).join(" ");
+  const undecided = loop.undecided?.length ? ` De ronde van ${loop.undecided.join(" en ")} kon niet beslissen of het er toch bij hoort; dat beslist een mens.` : "";
+  return `Op ${loop.page} (${loop.where.replace(/\s+/g, " ").trim()}): ${loop.with} en ${criterion} gaven het elk aan het andere door. ${said}${undecided}`;
+}
+
 function brief(criterion: CriterionResult): CriterionBrief {
   const points = openPoints(criterion);
   const before = criterion.established?.before;
@@ -695,6 +709,7 @@ function brief(criterion: CriterionResult): CriterionBrief {
     openNl: points.length > 0 ? plural(points.length, "punt", "punten") : null,
     coverageNl: shownOutcome(criterion) === "nothingFound" ? criterion.nothingFound!.coverageNl : criterion.established?.by === "finishing" ? (criterion.established.coverageNl ?? null) : null,
     toolboxPointsNl: points.filter((point) => point.kind?.reader === "toolbox").map((point) => `${upperFirst(point.kind!.labelNl)}: ${point.textNl}`),
+    loopsNl: (criterion.crossLoops ?? []).map((loop) => loopLine(criterion.id, loop)),
   };
 }
 
@@ -717,6 +732,12 @@ function todo(evaluation: Evaluation): ReportDerived["todo"] {
   };
 }
 
+/** Whether the points "versturen niet toegestaan" of a run that might send all say that its budget ran out. */
+function budgetSpent(evaluation: Evaluation, missingNl: string[]): boolean {
+  const points = missingNl.map(openPoint).filter((point) => point.kind?.prefix === NOT_SENT);
+  return Boolean(evaluation.chain?.writes.allowed) && points.length > 0 && points.every((point) => /budget voor versturen van deze run is op/.test(point.textNl));
+}
+
 /**
  * The declaration that would have closed the points "versturen niet toegestaan": a test
  * environment at inventory. `--test-environment` takes one origin, and that may be the origin of
@@ -731,6 +752,15 @@ function notSentDeclaration(evaluation: Evaluation, items: OpenGroup[]): NotSent
       : origins.length > 1
         ? `In de open punten staan ${origins.length} adressen: ${origins.join(", ")}. Per onderzoek kan er één worden verklaard. `
         : "";
+  const spent = items.every((item) => budgetSpent(evaluation, evaluation.criteria.find((criterion) => criterion.id === item.criterion)?.missingNl ?? []));
+  if (spent)
+    return {
+      items,
+      onlyCriteria: items.map((item) => item.criterion).filter((id) => waitsOnlyOnSending(evaluation.criteria.find((criterion) => criterion.id === id)?.missingNl ?? [])),
+      declarationNl: "Dit onderzoek mocht versturen, maar het budget voor versturen was op voordat deze punten aan de beurt kwamen. Een nieuw onderzoek met dezelfde verklaring en een groter budget meet ze:",
+      flags: `--test-environment ${origins.length === 1 ? origins[0] : "<origin>"} --declared-by "<naam>, <functie>" --max-writes <aantal>`,
+      originNl: `${named}Elk bericht komt echt aan bij wie de chat of het formulier ontvangt. Kies daarom een budget dat de ontvanger verwacht.`,
+    };
   const already = evaluation.chain?.writes.allowed ? "Dit onderzoek mocht alleen versturen naar de testomgeving die bij de onderzoeksgegevens staat; deze punten gaan over een ander adres. " : "";
   return {
     items,
@@ -1188,6 +1218,7 @@ function appendixEntry(criterion: CriterionResult, short: CriterionBrief, chain:
   if (short.beforeNl.length > 0) lines.push(`${REPORT_TEXT.before}:`, "", ...bullets(short.beforeNl.map(esc)), "");
   if (criterion.challengeNl) lines.push(`${chain.challengeLabel}: ${esc(criterion.challengeNl)}`, "");
   if (criterion.droppedNl.length > 0) lines.push(`${chain.droppedLabel}:`, "", ...bullets(criterion.droppedNl.map(esc)), "");
+  if (short.loopsNl.length > 0) lines.push(`${REPORT_TEXT.loops}:`, "", ...bullets(short.loopsNl.map(esc)), "");
   const basis = [criterion.rule ? `Beslisregel ${criterion.rule}` : null, criterion.procedure ? `procedure versie ${criterion.procedure.version} (${esc(criterion.procedure.class)})` : "geen procedure vastgelegd"];
   lines.push(`Grondslag: ${basis.filter(Boolean).join(", ")}.`, "");
   if (criterion.procedure?.limitsNl) lines.push(`Beperking van de procedure: ${esc(criterion.procedure.limitsNl)}`, "");

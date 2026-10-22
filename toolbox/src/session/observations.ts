@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { readJson, sha256File, writeJson } from "../lib/canonical.ts";
 import type { FrameRecord } from "../browser/frame.ts";
 import type { PassedWrite } from "../lib/writes.ts";
+import type { PassedReplay } from "../lib/recordings.ts";
 import type { Blocked, PassedChallenge, PassedRead } from "./safety.ts";
 import type { BlockadeEntry } from "./blockade.ts";
 
@@ -96,8 +97,12 @@ export interface Observation {
   blocked: Blocked[];
   /** Requests and socket messages that were let through to the test environment while the command ran; absent when there were none. */
   writes?: PassedWrite[];
+  /** Messages that were not sent while the command ran but played from a recording of an earlier real send (see `socketRecordings`); absent when there were none. */
+  replays?: PassedReplay[];
   /** Read requests of the site model that were let through while the command ran; absent when there were none. */
   reads?: PassedRead[];
+  /** Addresses of the sockets the page opened while the command ran; absent when there were none. */
+  sockets?: string[];
   /** Requests of Cloudflare's check whether the browser is a robot that were let through while the command ran and would otherwise have been refused; absent when there were none. */
   challenges?: PassedChallenge[];
   /** Origins of the site that blocked the run while the command ran (see `Blockade`); absent when none did. */

@@ -57,7 +57,7 @@ uvx towncrier@26.9.0 create 161.verder.md --content "Wat er verandert, voor wie 
 
 Uitbrengen gaat in twee stappen, omdat `main` alleen voorstellen aanneemt:
 
-1. Op een branch: `just release-prepare 0.2.0`. Dat zet de versie overal, zet de fragmenten en wat er nog onder "Nog niet uitgebracht" staat onder de juiste kop in een nieuw deel van de CHANGELOG, verwijdert de fragmenten en legt alles vast als één commit. Open daarmee een voorstel.
+1. Op een branch: `just release-prepare 0.2.0`. Dat zet de versie overal, zet de fragmenten en wat er nog onder "Nog niet uitgebracht" staat onder de juiste kop in een nieuw deel van de CHANGELOG, verwijdert de fragmenten en legt alles vast als één commit. Open daarmee een voorstel. Elke versie wordt eerst gemeten: zonder `validatie/versies/<versie>.json` (zie [validatie/README.md](validatie/README.md)), of met een bestand dat `evaluate` niet aanneemt, weigert het commando. Breng je een versie toch zonder meting uit, zeg dan waarom: `just release-prepare 0.2.0 --unmeasured "alleen een herstel in de documentatie"`. Het deel van die versie in de CHANGELOG begint dan met "Deze versie is uitgebracht zonder meting: alleen een herstel in de documentatie."
 2. Na de merge, op `main`: `just release-tag`. Dat zet de tag (`v0.2.0`) op GitHub en maakt de release met de tekst uit de CHANGELOG.
 
 Daarna zet een beheerder de nieuwe tag in de marketplace; zie [docs/plugin.md](docs/plugin.md). Wie de plugin heeft, krijgt de nieuwe versie bij de eerstvolgende update. Tussen twee versies verandert er niets aan de plugin, ook niet als `main` verder gaat.

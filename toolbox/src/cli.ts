@@ -129,8 +129,13 @@ Options:
                     The name is kept in the manifest of the run; the report shows only the role. The declaration
                     is confirmed at an interactive terminal by typing the origin; an agent never records it
   --max-writes <n>  With --allow-writes or --test-environment: the most requests that change something the whole run
-                    may send to that origin, over every session and the sweep together (default 5), at least 120 s
-                    apart. Past it every write is held back as in a run without permission. Kept in the manifest
+                    may send to that origin, over every session and the sweep together: default 5, at least 120 s
+                    apart; on a local address default 50, without a pause. Past it every write is held back as in
+                    a run without permission. Kept in the manifest
+  --other-toolbox   Go on with a run that was made with another version of loep. Without it every command that
+                    measures or writes tasks refuses: another version writes other tasks and procedures, and the walks
+                    and verdicts of the run are then done again. Measure again with --fresh after changing. Commands
+                    that measure nothing (render, statement, compare, decide, sign, seal and the readers) go on
   --recorded-via gesprek --confirmation <text> --summary <text>
                     With answer and decide only: the agent records what the person said in the conversation,
                     after an express confirmation. --confirmation is what the person said, word for word;
@@ -139,6 +144,7 @@ Options:
 
 Comparing per finding has its own steps: loep compare --findings --help
 Measuring a variant of the code on a frozen sweep: loep variant --help (variant, compare-variants)
+Tokens per agent from the transcripts of a workflow, for compare-variants --usage: loep usage --help
 A browser session for an agent has its own commands: loep session --help
 `;
 
@@ -159,6 +165,7 @@ async function main(): Promise<void> {
   if (process.argv[2] === "compare" && process.argv.includes("--findings")) return (await import("./commands/compare-findings.ts")).cli(process.argv.slice(3));
   if (process.argv[2] === "calibrate") return (await import("./commands/calibrate.ts")).cli(process.argv.slice(3)); // outside an evaluation: measures the instruments against the ACT test cases
   if (process.argv[2] === "variant" || process.argv[2] === "compare-variants") return (await import("./commands/variants.ts")).cli(process.argv.slice(2)); // outside an evaluation: measures a variant of the code on a frozen sweep
+  if (process.argv[2] === "usage") return (await import("./commands/usage.ts")).cli(process.argv.slice(3)); // outside an evaluation: tokens per agent from the transcripts, for compare-variants --usage
   // A session takes its commands and options as they come; it parses them itself.
   if (process.argv[2] === "session") {
     const { sessionCli, SESSION_USAGE } = await import("./session/client.ts");
@@ -211,6 +218,7 @@ async function main(): Promise<void> {
       brief: { type: "boolean", default: false },
       concept: { type: "boolean", default: false },
       fresh: { type: "boolean", default: false },
+      "other-toolbox": { type: "boolean", default: false },
       "allow-writes": { type: "boolean", default: false },
       "test-environment": { type: "string" },
       "declared-by": { type: "string" },
@@ -235,7 +243,7 @@ async function main(): Promise<void> {
     return;
   }
   // A run that was given a test environment at inventory may write there; every other run holds all writes back.
-  const { confirmDeclaration, decideWrites, recordWrites, setRunWrites, writeAccess, writesForRun } = await import("./lib/writes.ts");
+  const { confirmDeclaration, decideWrites, DEFAULT_WRITE_SPACING_SECONDS, recordWrites, setRunWrites, spacingNl, writeAccess, writesForRun } = await import("./lib/writes.ts");
   if (command !== "inventory" && (values["allow-writes"] || values["test-environment"] !== undefined || values["declared-by"] !== undefined || values["max-writes"] !== undefined)) {
     throw new Error("--allow-writes, --test-environment, --declared-by en --max-writes horen bij inventory: daar wordt voor de hele run vastgelegd of er verstuurd mag worden, en hoe vaak");
   }
@@ -247,6 +255,12 @@ async function main(): Promise<void> {
   if (recordedVia === "gesprek" && (command === "sign" || command === "inventory")) throw new Error(`${command === "sign" ? "tekenen" : "de verklaring dat er verstuurd mag worden"} legt de assistent nooit vast, ook niet na een bevestiging in het gesprek. ${HUMAN_AT_TERMINAL_NL}`);
   if ((recordedVia !== undefined || values.confirmation !== undefined || values.summary !== undefined) && command !== "answer" && command !== "decide") throw new Error("--recorded-via, --confirmation en --summary horen bij answer en decide");
   if (command !== "inventory" && values["also-origin"] !== undefined) throw new Error("--also-origin hoort bij inventory: daar wordt vastgelegd welke origins samen de site zijn");
+  // A run goes on with the version of loep it was made with; another version would quietly write other tasks over it.
+  if (values.run) {
+    const { otherToolboxNl } = await import("./lib/manifest.ts");
+    const refusal = otherToolboxNl(values.run, command, values["other-toolbox"]);
+    if (refusal) throw new Error(refusal);
+  }
   // `gaps` and `feedback` read the verdicts and the evaluation of finished runs and nothing else of them: they need no permission to write and no login.
   const readsOnly = command === "gaps" || command === "feedback";
   if (command !== "inventory" && !readsOnly && values.run) {
@@ -300,7 +314,7 @@ async function main(): Promise<void> {
       await recordWrites(values.out, permission);
       if (permission) {
         process.stdout.write(`versturen toegestaan naar ${permission.origin}${permission.declaredBy ? `, verklaard door ${permission.declaredBy.name} (${permission.declaredBy.role})` : ""}\n`);
-        process.stdout.write(`budget voor versturen: ten hoogste ${permission.maxWrites} verzendingen naar die origin voor de hele run, alle agents en de veegronde samen, met minstens ${permission.spacingSeconds} s ertussen. Zoveel berichten of formulieren krijgt de ontvanger ten hoogste.\n`);
+        process.stdout.write(`budget voor versturen: ten hoogste ${permission.maxWrites} verzendingen naar die origin voor de hele run, alle agents en de veegronde samen${spacingNl(permission.spacingSeconds ?? DEFAULT_WRITE_SPACING_SECONDS)}. Zoveel berichten of formulieren krijgt de ontvanger ten hoogste.\n`);
         // Say where the declaration ends up, so nobody finds their name somewhere they did not expect.
         if (permission.declaredBy) process.stdout.write(`let op: de naam staat in manifest.json van deze run; het rapport en de verklaring noemen alleen de functie (${permission.declaredBy.role}). Wie de map van de run deelt of publiceert, deelt ook de naam.\n`);
       }

@@ -1,0 +1,6 @@
+{
+  "version": "0.14.1",
+  "measuredAt": "2026-10-21",
+  "againstNl": "De sleutel van de eigen testsite, niet het oordeel van een menselijke deskundige. Deze versie herstelt alleen het afspelen van een chatbericht uit 0.14.0 (#297): een stilte telt als antwoord, en een token in het adres van de chat maakt van hetzelfde bericht geen ander bericht. De chat van de testsite heeft geen token in het adres en antwoordt altijd, dus een gerichte run met agents meet deze wijziging niet; ze is met tests nagegaan.",
+  "resultNl": "Niet opnieuw met agents gemeten. Voor de criteria geldt de meting van 0.14.0: in twee runs keurden 4.1.3, 2.4.3 en 2.2.1 met afspelen af zoals de sleutel zegt, zonder open punten. Een chat die mensen beantwoorden of die een token in het adres zet, is in geen enkele meting nagegaan."
+}

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   citedObservations,
+  frameFocusProblems,
   KINDS_AFTER_FINISH,
   NOT_SENT,
   notSentOrigins,
@@ -15,6 +16,7 @@ import {
   validateCandidates,
   validateJudgeVerdict,
   quotedFragments,
+  rowsToExplain,
   searchableText,
   validateVerification,
   type CandidateList,
@@ -114,8 +116,12 @@ test("a pass may not lean on a measurement whose methods disagree, unless a clos
 test("every candidate of the walk-through gets a ruling", () => {
   const withCandidates = { ...context, candidateIds: ["P01-K01", "P01-K02"] };
   assert.match(validateJudgeVerdict(failed, withCandidates).join(), /candidate "P01-K01" has no ruling/);
-  const ruled: Verdict = { ...failed, candidates: [{ id: "P01-K01", ruling: "finding", finding: "F1", reasonNl: "Gemeten: 3,9 op 1." }, { id: "P01-K02", ruling: "otherCriterion", criterion: "1.4.11", reasonNl: "Het gaat om de rand van een veld." }] };
+  const border = { criterion: "1.4.11", page: "P01", where: "rand van het zoekveld", evidence: ["j143-0005"], noteNl: "De rand van het zoekveld is lichtgrijs op wit." };
+  const ruled: Verdict = { ...failed, candidates: [{ id: "P01-K01", ruling: "finding", finding: "F1", reasonNl: "Gemeten: 3,9 op 1." }, { id: "P01-K02", ruling: "otherCriterion", criterion: "1.4.11", reasonNl: "Het gaat om de rand van een veld." }], crossCandidates: [border] };
   assert.deepEqual(validateJudgeVerdict(ruled, withCandidates), []);
+  // A ruling alone reaches nobody: the criterion it names is given only what crossCandidates passes on.
+  assert.match(validateJudgeVerdict({ ...ruled, crossCandidates: undefined }, withCandidates).join(), /candidates\[1\]: a candidate for criterion 1\.4\.11 reaches that criterion only through an entry for it in crossCandidates/);
+  assert.match(validateJudgeVerdict({ ...ruled, crossCandidates: [{ ...border, criterion: "1.3.1" }] }, withCandidates).join(), /for criterion 1\.4\.11 reaches that criterion only/);
   assert.match(validateJudgeVerdict({ ...ruled, candidates: [{ ...ruled.candidates![0]!, finding: "F9" }, ruled.candidates![1]!] }, withCandidates).join(), /names the key of that finding/);
   assert.match(validateJudgeVerdict({ ...ruled, candidates: [ruled.candidates![0]!, { ...ruled.candidates![1]!, criterion: "1.4.3" }] }, withCandidates).join(), /names that criterion/);
   assert.match(validateJudgeVerdict({ ...ruled, candidates: [...ruled.candidates!, { id: "P09-K01", ruling: "noIssue", reasonNl: "Niets aan de hand hier." }] }, withCandidates).join(), /is not a candidate for this criterion/);
@@ -153,6 +159,10 @@ test("a finding that is not reproduced is dropped with a reason, and never becom
   assert.match(validateVerification({ ...dropped, outcome: "passed", missingNl: undefined }, verifierContext).join(), /the final outcome can only be failed, cantTell/);
   assert.match(validateVerification({ ...dropped, verification: { ...dropped.verification!, findings: [{ key: "F1", reproduced: false, evidence: [] }] } }, verifierContext).join(), /dropped must be one of/);
   assert.match(validateVerification({ ...dropped, verification: { ...dropped.verification!, findings: [{ key: "F1", reproduced: false, evidence: [], dropped: "wrongCriterion", reasonNl: "Dit gaat over de rand van het veld." }] } }, verifierContext).join(), /belongsTo/);
+  // Dropped because it belongs elsewhere: it is passed on there, with an observation of the verifier's own.
+  const elsewhere = { ...dropped.verification!, findings: [{ key: "F1", reproduced: false, evidence: [], dropped: "wrongCriterion" as const, belongsTo: "1.4.11", reasonNl: "Dit gaat over de rand van het veld, niet over tekst." }] };
+  assert.match(validateVerification({ ...dropped, verification: elsewhere }, verifierContext).join(), /belongs to criterion 1\.4\.11 reaches that criterion only through an entry for it in crossCandidates/);
+  assert.deepEqual(validateVerification({ ...dropped, verification: elsewhere, crossCandidates: [{ criterion: "1.4.11", page: "P01", where: "rand van het zoekveld", evidence: ["v143-0003"], noteNl: "De rand van het zoekveld is lichtgrijs op wit." }] }, verifierContext), []);
   assert.match(validateVerification({ ...reproduced, verification: { ...reproduced.verification!, findings: dropped.verification!.findings } }, verifierContext).join(), /a dropped finding cannot stay/);
   assert.match(validateVerification({ ...dropped, verification: { ...dropped.verification!, findings: [{ key: "F1", reproduced: true, evidence: ["v143-0002"] }] } }, verifierContext).join(), /a reproduced finding makes the outcome "failed"/);
 });
@@ -234,12 +244,44 @@ test("a disagreement only needs settling for the command that decides the criter
   assert.match(validateJudgeVerdict(leaning, context).join(), /methods that disagree/);
 });
 
+test("rows of the dossier that measure a loss are each explained by a look of one's own before a pass", () => {
+  const evidence = {
+    textSpacing: {
+      newlyClippedText: [{ text: "Paspoort of rijbewijs", textLost: true }, { text: "Zoeken", textLost: false }],
+      at320: { newlyClippedText: [{ text: "Paspoort  of rijbewijs", textLost: true }] },
+      states: [{ state: "menu", newlyClippedText: [{ text: "Afval en grofvuil" }] }, { state: "chat", examined: false }],
+    },
+  };
+  const paths = ["textSpacing.newlyClippedText:textLost", "textSpacing.at320.newlyClippedText:textLost", "textSpacing.states.newlyClippedText:textLost"];
+  // A row measured as no loss needs nothing, the same text counts once, and a row of an older run without the field counts.
+  assert.deepEqual(rowsToExplain(evidence, paths), [
+    { part: "textSpacing.newlyClippedText", text: "Paspoort of rijbewijs" },
+    { part: "textSpacing.states.newlyClippedText", text: "Afval en grofvuil" },
+  ]);
+  const rows = rowsToExplain(evidence, paths);
+  const tile = { ...seen, observedNl: "De tegel Paspoort of rijbewijs scrolt: de hele tekst is te bereiken.", evidence: ["j143-0005"] };
+  const menu = { ...seen, observedNl: "In het menu klapt Afval en grofvuil open bij focus.", evidence: ["j143-0002"] };
+  assert.deepEqual(validateJudgeVerdict({ ...passed, observations: [seen, tile, menu] }, { ...context, explainOnPass: rows }), []);
+  const problems = validateJudgeVerdict({ ...passed, observations: [seen, tile] }, { ...context, explainOnPass: rows }).join("\n");
+  assert.match(problems, /textSpacing\.states\.newlyClippedText measures a loss at "Afval en grofvuil"/);
+  assert.doesNotMatch(problems, /Paspoort/);
+  // Naming it in an observation that only points at the dossier is no look at the place.
+  assert.match(validateJudgeVerdict({ ...passed, observations: [seen, { ...tile, evidence: ["contrast"] }, menu] }, { ...context, explainOnPass: rows }).join(), /loss at "Paspoort of rijbewijs"/);
+  // A failure needs no explanation of what it found.
+  assert.deepEqual(validateJudgeVerdict(failed, { ...context, explainOnPass: rows }), []);
+});
+
 test("what belongs to another criterion is handed on with an observation", () => {
   const cross = { criterion: "1.4.11", page: "P01", where: "rand van het zoekveld", evidence: ["j143-0005"], noteNl: "De rand van het zoekveld is lichtgrijs op wit." };
   assert.deepEqual(validateJudgeVerdict({ ...passed, crossCandidates: [cross] }, context), []);
   assert.match(validateJudgeVerdict({ ...passed, crossCandidates: [{ ...cross, criterion: "1.4.3" }] }, context).join(), /another criterion than this one/);
   assert.match(validateJudgeVerdict({ ...passed, crossCandidates: [{ ...cross, evidence: ["contrast"] }] }, context).join(), /needs at least one look or measure observation/);
   assert.match(validateVerification({ ...reproduced, crossCandidates: [cross] }, verifierContext).join(), /observation of session "v143"/);
+  // What may belong here after all but cannot be decided goes to a person, and the criterion does not pass with it (#302).
+  const undecided = { ...cross, undecidedNl: "De rand kan ook als grens van het veld bedoeld zijn; dat beslist geen instrument." };
+  assert.match(validateJudgeVerdict({ ...passed, crossCandidates: [undecided] }, context).join(), /is for a person: a point "mens nodig:" in missingNl, and no "passed"/);
+  const person = "mens nodig: of de rand van het zoekveld bij dit criterium hoort, beslist een persoon op de startpagina.";
+  assert.deepEqual(validateJudgeVerdict({ ...passed, outcome: "cantTell", missingNl: [person], crossCandidates: [undecided] }, context).filter((problem) => problem.includes("undecided") || problem.includes("crossCandidates")), []);
 });
 
 test("the verifier dismisses a candidate only with a measurement of its own, and attacks only a pass", () => {
@@ -410,9 +452,13 @@ test("a point that stays open only because the run may not send is the owner's c
   assert.match(notSentPointProblems(["versturen niet toegestaan: het antwoord van de chat op P02, zonder adres."], { origin: "https://www.voorbeeld.nl" }).join(), /name in the point the address it goes to/);
   // Once the budget for sending of the run is used up, the point may stand about that origin too, when it says so.
   const budgetOut = "versturen niet toegestaan: het budget voor versturen van deze run is op (5 van 5 verstuurd): wat de chat op P02 antwoordt.";
-  assert.deepEqual(notSentPointProblems([budgetOut], { origin: "https://chat.voorbeeld.nl" }, { sent: 5, max: 5 }), []);
-  assert.match(notSentPointProblems([budgetOut], { origin: "https://chat.voorbeeld.nl" }, { sent: 2, max: 5 }).join(), /not used up \(2 of 5 sent\)/);
-  assert.match(notSentPointProblems([point], { origin: "https://chat.voorbeeld.nl" }, { sent: 5, max: 5 }).join(), /het budget voor versturen van deze run is op \(5 van 5 verstuurd\)/);
+  assert.deepEqual(notSentPointProblems([budgetOut], { origin: "https://chat.voorbeeld.nl" }, { sent: 5, max: 5, left: 0 }), []);
+  assert.match(notSentPointProblems([budgetOut], { origin: "https://chat.voorbeeld.nl" }, { sent: 2, max: 5, left: 3 }).join(), /not used up \(2 of 5 sent\)/);
+  assert.match(notSentPointProblems([point], { origin: "https://chat.voorbeeld.nl" }, { sent: 5, max: 5, left: 0 }).join(), /het budget voor versturen van deze run is op \(5 van 5 verstuurd\)/);
+  // A criterion that sent before and finds only the writes kept for others has used up its share: the point may stand too, and says so.
+  const shareOut = "versturen niet toegestaan: het budget voor versturen van deze run is op voor dit criterium (3 van 5 verstuurd; de rest is voor criteria die nog niets verstuurden): wat de chat op P02 antwoordt.";
+  assert.deepEqual(notSentPointProblems([shareOut], { origin: "https://chat.voorbeeld.nl" }, { sent: 3, max: 5, left: 0 }), []);
+  assert.match(notSentPointProblems([point], { origin: "https://chat.voorbeeld.nl" }, { sent: 3, max: 5, left: 0 }).join(), /used up for this criterion: then the point says "het budget voor versturen van deze run is op voor dit criterium \(3 van 5 verstuurd; de rest is voor criteria die nog niets verstuurden\)"/);
 });
 
 test("a part of the site that did not load is its own kind: not the owner's, not loep's, and it says what and when", () => {
@@ -495,4 +541,26 @@ test("a finding the verifier drops does not come back as a recommendation at its
   assert.deepEqual(validateVerification({ ...notSeenAgain, recommendations: [{ ...recommendation, evidence: ["v143-0003"] }] }, recommendingVerifier), []);
   // The verifier shows a recommendation with its own observation, like a finding.
   assert.match(validateVerification({ ...notSeenAgain, recommendations: [recommendation] }, recommendingVerifier).join(), /a recommendation needs at least one observation of session "v143"/);
+});
+
+test("2.1.4: a finding on an embedded window needs a key pressed with the focus on the page outside the window", () => {
+  const legend = { P01: { url: "http://127.0.0.1:4710/media.html" }, P15: { url: "http://127.0.0.1:4710/speler.html", embedded: "ingesloten venster op P01" } };
+  const inWindow = { ref: 4, tag: "button", text: "Geluid", frame: { url: "http://127.0.0.1:4710/speler.html", origin: "http://127.0.0.1:4710", title: "Speler", path: ["iframe"] } };
+  const records = new Map([
+    // The key pressed with the focus on another button in the player: still in the window.
+    ["j1-0001", { command: "key", error: null, result: { focus: inWindow }, page: { url: "http://127.0.0.1:4710/media.html" } }],
+    // The window opened on its own: no frame around the focus, but no page around the window either.
+    ["j1-0002", { command: "key", error: null, result: { focus: { ref: 2, tag: "button", text: "Geluid" } }, page: { url: "http://127.0.0.1:4710/speler.html" } }],
+    // The key pressed with the focus on a link of the page that embeds the window.
+    ["j1-0003", { command: "key", error: null, result: { focus: { ref: 9, tag: "a", text: "Terug naar nieuws" } }, page: { url: "http://127.0.0.1:4710/media.html#speler" } }],
+  ]);
+  const onWindow: Finding = { ...finding, titleNl: "Sneltoetsen k en m in de speler", locations: [{ page: "P15", where: "speler" }], pagesAffected: "P15" };
+  const failed = (evidence: string[], findings: Finding[] = [{ ...onWindow, evidence }]): Verdict => ({ criterion: "2.1.4", outcome: "failed", rule: "R1", summaryNl: "", observations: [], findings });
+  assert.equal(frameFocusProblems(failed(["j1-0001"]), legend, records).length, 1, "focus on another button in the same window is focus in the component");
+  assert.equal(frameFocusProblems(failed(["j1-0002"]), legend, records).length, 1, "the window opened on its own shows no page around it");
+  assert.deepEqual(frameFocusProblems(failed(["j1-0001", "j1-0003"]), legend, records), []);
+  // A finding on a page of the site itself, another criterion, or another outcome: not checked here.
+  assert.deepEqual(frameFocusProblems(failed([], [{ ...finding, evidence: ["j1-0001"] }]), legend, records), []);
+  assert.deepEqual(frameFocusProblems({ ...failed(["j1-0001"]), criterion: "2.1.1" }, legend, records), []);
+  assert.deepEqual(frameFocusProblems({ ...failed(["j1-0001"]), outcome: "cantTell" }, legend, records), []);
 });

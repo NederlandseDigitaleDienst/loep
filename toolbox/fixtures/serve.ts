@@ -186,20 +186,22 @@ export async function startFixture(options: { ports?: Partial<Record<SiteKey, nu
 
   const upgrade = (site: SiteKey) => (request: IncomingMessage, socket: Duplex): void => {
     const key = request.headers["sec-websocket-key"];
-    if (request.url !== "/chat" || typeof key !== "string") {
+    // The chat opens its socket on an address with a token of its own per connection: /ws/chat/<sixteen letters>.
+    const path = request.url ?? "";
+    if (!/^\/ws\/chat\/[A-Za-z]{16}$/.test(path) || typeof key !== "string") {
       socket.end("HTTP/1.1 404 Not Found\r\n\r\n");
       return;
     }
     const accept = createHash("sha1").update(key + WEBSOCKET_GUID).digest("base64");
     socket.write(`HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: ${accept}\r\n\r\n`);
-    log({ site, kind: "ws-open", path: "/chat" });
+    log({ site, kind: "ws-open", path });
     socket.write(textFrame("Welkom bij de chat van de gemeente. Waarmee kunnen wij u helpen?"));
     let pending: Buffer = Buffer.alloc(0);
     socket.on("data", (chunk: Buffer) => {
       pending = readFrames(
         Buffer.concat([pending, chunk]),
         (text) => {
-          log({ site, kind: "ws-message", path: "/chat", body: text.slice(0, 2000) });
+          log({ site, kind: "ws-message", path, body: text.slice(0, 2000) });
           socket.write(textFrame("Bedankt voor uw bericht. Een medewerker reageert zo snel mogelijk."));
         },
         () => socket.end(),

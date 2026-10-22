@@ -1,3 +1,5 @@
+import { budgetOutPointNl } from "./writes.ts";
+
 export const OUTCOMES = ["passed", "failed", "inapplicable", "cantTell"] as const;
 export type Outcome = (typeof OUTCOMES)[number];
 
@@ -94,6 +96,28 @@ export interface CrossCandidate {
   where: string;
   evidence: string[];
   noteNl: string;
+  /**
+   * Only when it may belong to this criterion after all and the round cannot decide that: why. The
+   * verdict then has a point "mens nodig:" and does not pass, so a person decides and no new
+   * finishing round comes for it.
+   */
+  undecidedNl?: string;
+}
+
+/**
+ * A candidate two criteria passed on to each other: each looked at it and said it belongs to the
+ * other. That closes the loop. It is an outcome, not an open point: neither criterion is opened
+ * for it again, and no finishing round gets it.
+ */
+export interface CrossLoop {
+  /** The other criterion. */
+  with: string;
+  page: string;
+  where: string;
+  /** The sentence each passed it on with: first the other criterion, then this one. */
+  reasons: { criterion: string; noteNl: string }[];
+  /** The criteria whose round said it may belong there after all but could not decide; that round left a point "mens nodig:". */
+  undecided?: string[];
 }
 
 /** Measurements whose methods contradicted each other in the same way, and the closer look that settled it. */
@@ -273,13 +297,14 @@ export function openPoint(point: string): { kind: OpenPointKind | null; textNl: 
  * and then it names the address, so the report can say which declaration would have closed it,
  * or once the budget for sending of the run is used up, and then the point says so.
  */
-export function notSentPointProblems(missingNl: unknown, permission: { origin: string } | null, budget: { sent: number; max: number } | null = null): string[] {
+export function notSentPointProblems(missingNl: unknown, permission: { origin: string } | null, budget: { sent: number; max: number; left: number } | null = null): string[] {
   if (!permission || !Array.isArray(missingNl)) return [];
-  const usedUp = budget !== null && budget.sent >= budget.max;
+  // Used up for the criterion: the whole budget, or what is left is kept for criteria that sent nothing yet.
+  const usedUp = budget !== null && budget.left === 0;
   return missingNl.flatMap((point, position) => {
     if (typeof point !== "string" || openPoint(point).kind?.prefix !== NOT_SENT || notSentOrigins([point]).some((origin) => origin !== permission.origin)) return [];
     if (usedUp && SENDING_BUDGET_OUT.test(point)) return [];
-    const budgetNl = budget ? ` The budget for sending of the run is ${usedUp ? "used up" : `not used up (${budget.sent} of ${budget.max} sent)`}${usedUp ? `: then the point says "het budget voor versturen van deze run is op (${budget.sent} van ${budget.max} verstuurd)"` : ""}` : "";
+    const budgetNl = budget ? ` The budget for sending of the run is ${usedUp ? `used up${budget.sent < budget.max ? " for this criterion" : ""}` : `not used up (${budget.sent} of ${budget.max} sent)`}${usedUp ? `: then the point says "${budgetOutPointNl(budget).replace(/^versturen niet toegestaan: /, "")}"` : ""}` : "";
     return [`missingNl[${position}]: this run may send to ${permission.origin} (writes.allowed in the dossier), so "${NOT_SENT}:" is only for a message that goes to another origin, or for one that could not go because the budget for sending of the run is used up. Send it there and measure; or, when the message goes elsewhere, name in the point the address it goes to.${budgetNl}`];
   });
 }
@@ -368,8 +393,8 @@ function validateShape(input: unknown, context: ShapeContext): string[] {
 export const LOOK_COMMANDS = ["look", "crop", "ax", "style", "html", "find", "document"] as const;
 /** Commands that read what the run stored instead of a page: their observation can be made again without a state to open. */
 const STATELESS_COMMANDS = new Set<string>(["document"]);
-/** Commands that measure. `paste`, `press` and `timers` act on the page, and so can `speak`, but their answer is the measurement. */
-export const MEASURE_COMMANDS = ["contrast", "focus", "target", "reflow", "spacing", "zoom", "order", "name", "rules", "taborder", "lang", "source", "ocr", "motion", "timers", "paste", "press", "media", "forced", "distinct", "speak", "voiceover"] as const;
+/** Commands that measure. `paste`, `press`, `drag`, `swipe` and `timers` act on the page, and so can `speak`, but their answer is the measurement: whether a gesture does anything is what 2.5.1 and 2.5.7 ask first. */
+export const MEASURE_COMMANDS = ["contrast", "focus", "target", "reflow", "spacing", "zoom", "order", "name", "rules", "taborder", "lang", "source", "ocr", "motion", "timers", "paste", "press", "drag", "swipe", "media", "forced", "distinct", "speak", "voiceover"] as const;
 /** Older names of a command that still work in a session. */
 export const COMMAND_ALIASES: Record<string, string> = { engines: "rules", tabwalk: "taborder" };
 export const canonicalCommand = (command: string): string => COMMAND_ALIASES[command] ?? command;
@@ -452,6 +477,27 @@ interface InstrumentContext {
   siteHosts?: string[];
   /** Prefixes of the custom elements a vendor makes, as given at inventory. Without them nothing is known to be someone else's, and an advice is not checked for reaching into it. */
   vendorPrefixes?: string[];
+  /** Rows of the dossier that a pass has to explain one by one (`rowsToExplain`): a measurement that says something is lost. */
+  explainOnPass?: { part: string; text: string }[];
+}
+
+/**
+ * The rows of the dossier lists that `pass_explains` names that a pass has to explain, one per
+ * text. A path runs through lists; a row whose field after the colon is false needs nothing.
+ */
+export function rowsToExplain(evidence: Record<string, unknown>, paths: string[]): { part: string; text: string }[] {
+  const rows = new Map<string, { part: string; text: string }>();
+  const spread = (values: unknown[]): unknown[] => values.flatMap((value) => (Array.isArray(value) ? value : [value]));
+  for (const entry of paths) {
+    const [path, field] = entry.split(":") as [string, string | undefined];
+    let values: unknown[] = [evidence];
+    for (const key of path.split(".")) values = spread(values).flatMap((value) => (value && typeof value === "object" && key in value ? [(value as Record<string, unknown>)[key]] : []));
+    for (const row of spread(values) as Record<string, unknown>[]) {
+      const text = typeof row?.text === "string" ? row.text.replace(/\s+/g, " ").trim() : "";
+      if (text && !(field && row[field] === false) && !rows.has(text)) rows.set(text, { part: path, text });
+    }
+  }
+  return [...rows.values()];
 }
 
 export interface JudgeContext extends InstrumentContext {
@@ -785,6 +831,13 @@ function instrumentRules(verdict: Partial<Verdict>, context: InstrumentContext, 
     for (const command of context.passCommands) {
       if (!shown.some((ref) => index.get(ref)!.command === canonicalCommand(command))) problems.push(`a "passed" outcome for this criterion must cite an observation of "${command}" (the procedure asks for it under "Bewijs bij goedkeuring")`);
     }
+    // A measurement that says something is lost is passed only with a look of one's own at that place.
+    const explained = (Array.isArray(verdict.observations) ? verdict.observations : []).filter((observation) => observation.ruling === "noIssue" && (Array.isArray(observation.evidence) ? observation.evidence : []).some((ref) => typeof ref === "string" && shows(ref) && own(ref)));
+    const said = explained.map((observation) => `${observation.checkedNl ?? ""} ${observation.observedNl ?? ""}`.replace(/\s+/g, " ").toLowerCase());
+    for (const row of context.explainOnPass ?? []) {
+      const quoted = row.text.slice(0, 30).toLowerCase();
+      if (!said.some((text) => text.includes(quoted))) problems.push(`${row.part} measures a loss at "${row.text}"; a "passed" outcome needs an observation with ruling "noIssue" that names this text and cites a look or measure observation${whose} showing that nothing is lost there, as the procedure says when that holds. Otherwise it is a finding`);
+    }
   }
   if (verdict.outcome === "passed" || verdict.outcome === "inapplicable") {
     const resolved = Array.isArray(verdict.resolved) ? verdict.resolved : [];
@@ -799,6 +852,8 @@ function instrumentRules(verdict: Partial<Verdict>, context: InstrumentContext, 
   }
 
   const rulings = Array.isArray(verdict.candidates) ? verdict.candidates : [];
+  // What is said to belong elsewhere gets there only through crossCandidates: that is what other criteria are given.
+  const passesOn = (criterion: string): boolean => (Array.isArray(verdict.crossCandidates) ? verdict.crossCandidates : []).some((cross) => cross?.criterion === criterion);
   const ruled = new Set<string>();
   rulings.forEach((ruling, position) => {
     const at = `candidates[${position}]`;
@@ -809,6 +864,7 @@ function instrumentRules(verdict: Partial<Verdict>, context: InstrumentContext, 
     if (!isText(ruling.reasonNl, 10)) problems.push(`${at}: reasonNl is missing`);
     if (ruling.ruling === "finding" && !(typeof ruling.finding === "string" && keys.has(ruling.finding))) problems.push(`${at}: a candidate that became a finding names the key of that finding`);
     if (ruling.ruling === "otherCriterion" && !(typeof ruling.criterion === "string" && CRITERION_ID.test(ruling.criterion) && ruling.criterion !== context.criterion)) problems.push(`${at}: a candidate for another criterion names that criterion`);
+    else if (ruling.ruling === "otherCriterion" && !passesOn(ruling.criterion!)) problems.push(`${at}: a candidate for criterion ${ruling.criterion} reaches that criterion only through an entry for it in crossCandidates (page, place, an observation and one sentence); a ruling alone reaches nobody`);
     if (ruling.ruling === "open" && (verdict.outcome === "passed" || verdict.outcome === "inapplicable")) problems.push(`${at}: a "${verdict.outcome}" outcome cannot leave a candidate open`);
   });
   for (const id of context.candidateIds) if (!ruled.has(id)) problems.push(`candidates: candidate "${id}" has no ruling`);
@@ -838,6 +894,11 @@ function instrumentRules(verdict: Partial<Verdict>, context: InstrumentContext, 
     if (!isText(cross.noteNl, 10)) problems.push(`${at}: noteNl is missing`);
     else if (cross.noteNl.trim().split(/\s+/).length > MAX_CANDIDATE_WORDS) problems.push(`${at}: noteNl is one sentence of at most ${MAX_CANDIDATE_WORDS} words`);
     if (!(Array.isArray(cross.evidence) && cross.evidence.some((ref) => shows(ref) && own(ref)))) problems.push(`${at}: needs at least one look or measure observation${whose} that shows it`);
+    if (cross.undecidedNl !== undefined) {
+      const asksPerson = (Array.isArray(verdict.missingNl) ? verdict.missingNl : []).some((point) => typeof point === "string" && openPoint(point).kind?.prefix === "mens nodig");
+      if (!isText(cross.undecidedNl, 10)) problems.push(`${at}: undecidedNl says in one sentence why it may belong to this criterion after all; leave it out when it does not`);
+      else if (!asksPerson || verdict.outcome === "passed" || verdict.outcome === "inapplicable") problems.push(`${at}: what may belong to this criterion after all but cannot be decided is for a person: a point "mens nodig:" in missingNl, and no "passed" or "inapplicable" outcome`);
+    }
   });
   return problems;
 }
@@ -903,6 +964,7 @@ export function validateVerification(input: unknown, context: VerificationContex
       if (!DROP_REASONS.includes(check.dropped as (typeof DROP_REASONS)[number])) problems.push(`${at}: dropped must be one of ${DROP_REASONS.join(", ")}`);
       if (!isText(check.reasonNl, 20)) problems.push(`${at}: reasonNl must say why the finding was dropped`);
       if (check.dropped === "wrongCriterion" && !(typeof check.belongsTo === "string" && CRITERION_ID.test(check.belongsTo) && check.belongsTo !== context.criterion)) problems.push(`${at}: belongsTo must name the criterion the finding does belong to`);
+      else if (check.dropped === "wrongCriterion" && !(Array.isArray(verdict.crossCandidates) && verdict.crossCandidates.some((cross) => cross?.criterion === check.belongsTo))) problems.push(`${at}: a finding that belongs to criterion ${check.belongsTo} reaches that criterion only through an entry for it in crossCandidates, with an observation of your own`);
       if (finalKeys.has(key)) problems.push(`${at}: a dropped finding cannot stay in findings`);
     } else problems.push(`${at}: reproduced must be true or false`);
   }
@@ -1142,7 +1204,7 @@ export function validateCandidates(input: unknown, context: CandidateContext): s
 }
 
 /** Every observation id a verdict leans on, sorted: what a stamp binds the verdict to. */
-export function citedObservations(verdict: Verdict, observations: ObservationIndex): string[] {
+export function citedObservations(verdict: Verdict, observations: { has(ref: string): boolean }): string[] {
   const refs = [
     ...verdict.observations.flatMap((observation) => observation.evidence),
     ...verdict.findings.flatMap((finding) => finding.evidence),
@@ -1154,4 +1216,43 @@ export function citedObservations(verdict: Verdict, observations: ObservationInd
     ...(verdict.finish?.attempts ?? []).flatMap((attempt) => attempt.evidence ?? []),
   ];
   return [...new Set(refs.filter((ref) => observations.has(ref)))].sort();
+}
+
+/** What a check on where the focus stood needs of one observation record. */
+export interface FocusRecordLike {
+  command: string;
+  error: string | null;
+  result: unknown;
+  page?: { url?: string } | null;
+}
+
+const withoutHash = (url: string): string => url.replace(/#.*$/, "");
+
+/**
+ * At 2.1.4 the exception for focus covers a whole embedded window: a key that works with the focus
+ * on another button in the same window still works only with the focus in the component. A finding
+ * on an embedded window therefore stands only on a key pressed with the focus on the page around
+ * it: a cited `key` observation whose focus is not in a frame, made on a page other than the window
+ * opened on its own (procedure 2.1.4, N6).
+ */
+export function frameFocusProblems(verdict: Verdict, legend: Record<string, unknown>, records: ReadonlyMap<string, FocusRecordLike>): string[] {
+  if (verdict.criterion !== "2.1.4" || verdict.outcome !== "failed") return [];
+  const embedded = (label: string): string | null => {
+    const entry = legend[label] as { embedded?: unknown; url?: unknown } | undefined;
+    return entry && entry.embedded !== undefined && typeof entry.url === "string" ? entry.url : null;
+  };
+  const outside = citedObservations(verdict, records).filter((id) => {
+    const record = records.get(id)!;
+    const focus = (record.result as { focus?: { frame?: unknown } | null } | null)?.focus;
+    return canonicalCommand(record.command) === "key" && record.error === null && focus != null && focus.frame === undefined;
+  });
+  return verdict.findings.flatMap((finding, position) => {
+    const windows = [...new Set((finding.locations ?? []).map((location) => embedded(location?.page)).filter((url): url is string => url !== null))];
+    if (windows.length === 0) return [];
+    const shown = outside.some((id) => {
+      const url = records.get(id)!.page?.url;
+      return typeof url === "string" && windows.every((window) => withoutHash(window) !== withoutHash(url));
+    });
+    return shown ? [] : [`findings[${position}]: a single key that reacts in an embedded window (a page with "embedded" in the legend) is a shortcut under 2.1.4 only when it also works with the focus on an element of the page outside the window; focus on another button in the same window is focus in the component. Cite a "key" observation made on the page that embeds the window, whose focus is not in the window (no "[in venster: ...]"), and that shows the reaction (N6), or drop the finding`];
+  });
 }

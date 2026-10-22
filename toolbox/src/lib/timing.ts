@@ -76,14 +76,15 @@ function lastCommandAt(dir: string): number | null {
  * (`observations/<session>/session.json`). Every agent starts and stops one session, and the
  * session process writes both moments: that is the one source every run has, also a run that
  * was copied, where the times of the files are those of the copy. A phase without sessions is left out.
+ * With `keep`, only the sessions it keeps count.
  */
-export function agentPhaseTimings(runDir: string): AgentPhaseTiming[] {
+export function agentPhaseTimings(runDir: string, keep: (session: string) => boolean = () => true): AgentPhaseTiming[] {
   const sessions = readSessions(runDir);
   const timings: AgentPhaseTiming[] = [];
   for (const { id, prefix } of AGENT_PHASES) {
     const spans: { start: number; end: number; stopped: boolean }[] = [];
     for (const { name, file, dir } of sessions) {
-      if (!name.startsWith(prefix)) continue;
+      if (!name.startsWith(prefix) || !keep(name)) continue;
       const start = Date.parse(file.startedAt ?? "");
       if (!Number.isFinite(start)) continue;
       const stop = Date.parse(file.stoppedAt ?? "");

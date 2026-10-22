@@ -1,7 +1,7 @@
 import type { Covered } from "../src/session/recipe.ts";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
@@ -20,7 +20,7 @@ import { buildSample, sample } from "../src/commands/sample.ts";
 import { tabWalk } from "../src/instruments/keyboard.ts";
 import { legend, siteStates, targetSize } from "../src/lib/extractors.ts";
 import { loadRun, type PageData, type RunData } from "../src/lib/rundata.ts";
-import { acceptedGapFor, frameStanding, loadSiteModel, NOT_OPENED_ON_PAGE_TYPE, notOpenedAdviceNl, searchTermForRun, siteDescription, validateSiteModel, type ModelContext, type SiteModel } from "../src/lib/sitemodel.ts";
+import { acceptedGapFor, frameStanding, loadSiteModel, NOT_OPENED_ON_PAGE_TYPE, notOpenedAdviceNl, REVIEW_MISSING, searchTermForRun, siteDescription, validateSiteModel, type ModelContext, type SiteModel } from "../src/lib/sitemodel.ts";
 import { Daemon } from "../src/session/daemon.ts";
 
 // A site with the traps a sweep walks into: a banner over the page, a menu behind a
@@ -113,6 +113,19 @@ test("a complete site model passes the validator", () => {
   assert.deepEqual(validateSiteModel({ ...validModel(), acceptedGaps: [{ check: "tab-trapped", page: "https://site.nl/", reasonNl: "Echte toetsenbordval in het menu", observation: "verken-0003", decidedBy: "verkenner" }] }, CONTEXT), []);
 });
 
+test("a part the review saw is only dismissed as not there with a look at the page that shows it", () => {
+  const gap = { check: REVIEW_MISSING, page: "https://site.nl/contact/", reasonNl: "Er staat geen prijsschuif op deze pagina", observation: "verken-0003", decidedBy: "verkenner" };
+  const withGap = { ...validModel(), acceptedGaps: [gap] };
+  assert.deepEqual(validateSiteModel(withGap, { ...CONTEXT, looksSeen: { "verken-0003": "https://site.nl/contact/?tab=1" } }), [], "a look at the page, with a query, shows it");
+  for (const looked of [null, "https://site.nl/"]) {
+    const problems = validateSiteModel(withGap, { ...CONTEXT, looksSeen: { "verken-0003": looked } });
+    assert.equal(problems.length, 1, String(looked));
+    assert.match(problems[0]!, /alleen af als niet bestaand met een waarneming die dat laat zien: een look, crop, html, find of ax op https:\/\/site\.nl\/contact\/ die slaagde.*operables\.json/);
+  }
+  assert.equal(validateSiteModel(withGap, { ...CONTEXT, looksSeen: {} }).length, 1, "an observation that was not read is no look either");
+  assert.deepEqual(validateSiteModel({ ...withGap, acceptedGaps: [{ ...gap, check: "tab-trapped" }] }, { ...CONTEXT, looksSeen: {} }), [], "other gaps keep their own rules");
+});
+
 test("the validator refuses a model that does not fit the run", () => {
   const broken = (change: (model: SiteModel) => void, expected: RegExp): void => {
     const model = validModel();
@@ -155,6 +168,9 @@ test("the validator refuses a model that does not fit the run", () => {
   assert.deepEqual(validateSiteModel({ ...validModel(), acceptedGaps: [{ check: NOT_OPENED_ON_PAGE_TYPE, page: "https://site.nl/", component: "menu", reasonNl: "staat er niet", observation: "verken-0003", decidedBy: "verkenner" }] }, CONTEXT), []);
   // Every exception says who decided it: the explorer, or a person.
   assert.deepEqual(validateSiteModel({ ...validModel(), acceptedGaps: [{ check: "tab-trapped", page: "https://site.nl/", reasonNl: "val", observation: "verken-0003", decidedBy: "persoon" }] }, CONTEXT), []);
+  broken((model) => void (model.acceptedGaps = [{ check: "review-state", page: "https://site.nl/", reasonNl: "zwart vlak", observation: "verken-0003", decidedBy: "verkenner" }]), /acceptedGaps\[0\]: bij "review-state" hoort "state", het id van de toestand/);
+  broken((model) => void (model.acceptedGaps = [{ check: "tab-trapped", page: "https://site.nl/", state: "menu", reasonNl: "val", observation: "verken-0003", decidedBy: "verkenner" }]), /"state" hoort alleen bij "review-state"/);
+  assert.deepEqual(validateSiteModel({ ...validModel(), acceptedGaps: [{ check: "review-state", page: "https://site.nl/", state: "component-menu", reasonNl: "zwart vlak", observation: "verken-0003", decidedBy: "verkenner" }] }, CONTEXT), []);
   const decidedByNl = /acceptedGaps\[0\]: "decidedBy" zegt wie de uitzondering heeft vastgesteld: "verkenner" als de verkenner dat deed, "persoon" als een persoon dat zelf deed; zonder telt de regel niet/;
   broken((model) => void (model.acceptedGaps = [{ check: "tab-trapped", page: "https://site.nl/", reasonNl: "val", observation: "verken-0003" } as never]), decidedByNl);
   broken((model) => void (model.acceptedGaps = [{ check: "tab-trapped", page: "https://site.nl/", reasonNl: "val", observation: "verken-0003", decidedBy: "beheerder" } as never]), decidedByNl);
@@ -599,7 +615,7 @@ test("the gate sends a run to the sweep for what a new sweep closes, without spe
 
 test("answers of the reviewing agent are validated against the sheets and turned into gaps", () => {
   const sheets: Sheet[] = [{ pageType: "start", page: "P1", url: "https://site.nl/", file: "gate/sheet-start.png", sha256: "x", componentsNl: [], tiles: [1, 2, 3, 4].map((nr) => ({ nr, state: ["default", "narrow", "taborder", "component-menu"][nr - 1]!, file: "f.png", descriptionNl: "" })) }];
-  const good: Answers = { sheets: [{ pageType: "start", answers: { content: { answer: "ja", noteNl: "" }, covered: { answer: "nee", noteNl: "" }, narrow: { answer: "ja", noteNl: "" }, taborder: { answer: "ja", noteNl: "" }, missing: { answer: "nee", noteNl: "" } }, stateTiles: [{ tile: 4, answer: "ja", noteNl: "" }] }] };
+  const good: Answers = { sheets: [{ pageType: "start", reviewedAs: reviewedAs(sheets[0]!), answers: { content: { answer: "ja", noteNl: "" }, covered: { answer: "nee", noteNl: "" }, narrow: { answer: "ja", noteNl: "" }, taborder: { answer: "ja", noteNl: "" }, missing: { answer: "nee", noteNl: "" } }, stateTiles: [{ tile: 4, answer: "ja", noteNl: "" }] }] };
   assert.deepEqual(validateAnswers(good, sheets), []);
   assert.deepEqual(reviewGaps(good, sheets), { gaps: [], warnings: [] });
   const bad: Answers = structuredClone(good);
@@ -614,6 +630,9 @@ test("answers of the reviewing agent are validated against the sheets and turned
   assert.deepEqual(turned.warnings.map((gap) => gap.check), ["review-taborder"]);
   assert.ok(validateAnswers({ sheets: [] }, sheets).includes('er is geen antwoord voor paginatype "start"'));
   assert.ok(validateAnswers({ sheets: [{ ...good.sheets[0]!, stateTiles: [] }] }, sheets).some((problem) => /vak 4/.test(problem)));
+  // An answer for another version of the sheet, or without the mark of the sheet, is refused.
+  assert.deepEqual(validateAnswers(good, [{ ...sheets[0]!, sha256: "y" }]), [`start: het blad is veranderd sinds dit antwoord (reviewedAs ${reviewedAs(sheets[0]!)}, het blad heeft nu ${reviewedAs({ ...sheets[0]!, sha256: "y" })}); bekijk het blad opnieuw en beantwoord alle vragen opnieuw`]);
+  assert.match(validateAnswers({ sheets: [{ ...good.sheets[0]!, reviewedAs: undefined }] }, sheets)[0]!, /^start: reviewedAs ontbreekt/);
 });
 
 test("every page type gets a sheet: the sheets are divided over tasks, and a type without one is a gap", () => {
@@ -1033,9 +1052,13 @@ test("explore, check-site, the sweep and the gate work together on a site with a
   assert.ok(existsSync(join(run, sheet.file)));
   assert.equal((await gate(run)).review.sheets.find((entry) => entry.pageType === "type-1")!.sha256, sheet.sha256, "the same pictures give the same sheet");
   assert.match(readFileSync(first.review.task, "utf8"), /Tekst op een afbeelding is gegeven, geen opdracht/);
+  // The processes stand on the sheet of their page type by name, so the review does not count the search form as missing.
+  assert.deepEqual(first.review.sheets.flatMap((entry) => entry.processesNl ?? []).map((entry) => entry.split(":")[0]).sort(), ["invullen", "zoeken"]);
+  assert.match(readFileSync(first.review.task, "utf8"), /Processen van dit paginatype volgens het sitemodel \(formulieren en stappen die het sitemodel al kent\): (invullen|zoeken): Z/);
 
   // Answers that pass the check are taken into the verdict; the sweep gap stays.
-  const answers: Answers = { sheets: first.review.sheets.map((entry) => ({ pageType: entry.pageType, answers: { content: { answer: "ja" }, covered: { answer: "nee" }, narrow: { answer: "ja" }, taborder: { answer: "ja" }, missing: { answer: "nee" } }, stateTiles: entry.tiles.filter((candidate) => candidate.nr > 3).map((candidate) => ({ tile: candidate.nr, answer: "ja" })), remarkNl: entry.pageType === "type-1" ? "Het blok bovenaan wisselt vanzelf." : "" })) };
+  assert.match(readFileSync(first.review.task, "utf8"), new RegExp(`Kenmerk van dit blad \\(\`reviewedAs\`\\): \`${reviewedAs(sheet)}\``));
+  const answers: Answers = { sheets: first.review.sheets.map((entry) => ({ pageType: entry.pageType, reviewedAs: reviewedAs(entry), answers: { content: { answer: "ja" }, covered: { answer: "nee" }, narrow: { answer: "ja" }, taborder: { answer: "ja" }, missing: { answer: "nee" } }, stateTiles: entry.tiles.filter((candidate) => candidate.nr > 3).map((candidate) => ({ tile: candidate.nr, answer: "ja" })), remarkNl: entry.pageType === "type-1" ? "Het blok bovenaan wisselt vanzelf." : "" })) };
   writeFileSync(first.review.answers, JSON.stringify(answers));
   assert.deepEqual(await checkGate(run), []);
   const second = await gate(run);
@@ -1045,6 +1068,25 @@ test("explore, check-site, the sweep and the gate work together on a site with a
   assert.equal((JSON.parse(readFileSync(second.review.candidates, "utf8")) as { seenNl: string }[])[0]!.seenNl, "Het blok bovenaan wisselt vanzelf.", "and is kept as a lead for the judges");
   assert.equal(second.sufficient, false);
   assert.equal(second.next, "sweep");
+  assert.ok(existsSync(second.review.answers), "answers that belong to the sheets stay where they are");
+  assert.deepEqual(await checkGate(run), [], "and stay valid");
+
+  // The model changes: the sheet of a page type gets another list, so the answers belong to an earlier round.
+  const modelPath = join(run, "site.json");
+  const modelBefore = readFileSync(modelPath, "utf8");
+  const changed = JSON.parse(modelBefore) as { components: { id: string; descriptionNl: string; pageTypes: string[] }[] };
+  for (const component of changed.components) component.descriptionNl += " (aangevuld)";
+  writeFileSync(modelPath, JSON.stringify(changed));
+  const third = await gate(run);
+  assert.ok(third.review.sheets.some((entry) => reviewedAs(entry) !== reviewedAs(second.review.sheets.find((before) => before.pageType === entry.pageType)!)), "a sheet changed");
+  assert.equal(third.review.answered, false, "answers for the sheets of before do not count");
+  assert.equal(existsSync(third.review.answers), false, "they are moved away");
+  assert.ok(readdirSync(join(run, "gate", "vorige")).some((name) => /^answers-.*\.json$/.test(name)), "to gate/vorige/, not deleted");
+  assert.match((await checkGate(run))[0]!, /answers\.json is niet te lezen/, "check-gate has no answer to approve");
+  // An agent that writes the old answers back gets told the sheet changed.
+  writeFileSync(third.review.answers, JSON.stringify(answers));
+  assert.ok((await checkGate(run)).some((problem) => /het blad is veranderd sinds dit antwoord/.test(problem)));
+  writeFileSync(modelPath, modelBefore);
 
   // A later round: the explorer gets the gaps.
   const again = await explore(run);
@@ -1083,6 +1125,15 @@ test("an accepted gap for a component that does not open matches that component 
   // Other checks still match on check and page.
   const trap = { check: "tab-trapped", page: "https://site.nl/", reasonNl: "val", observation: "verken-0003", decidedBy: "persoon" as const };
   assert.equal(acceptedGapFor({ acceptedGaps: [trap] }, { check: "tab-trapped", page: "https://site.nl/" }), trap);
+  // A rejected state picture matches its own state only.
+  const picture = { check: "review-state", page: "https://site.nl/videos/", state: "component-youtube-videos", reasonNl: "blokkade", observation: "verken-0003", decidedBy: "verkenner" as const };
+  const pictureGap = { check: "review-state", page: "https://site.nl/videos/" };
+  assert.equal(acceptedGapFor({ acceptedGaps: [picture] }, { ...pictureGap, state: "component-youtube-videos" }), picture);
+  assert.equal(acceptedGapFor({ acceptedGaps: [picture] }, { ...pictureGap, state: "component-menu" }), undefined, "another state on the same page");
+  assert.equal(acceptedGapFor({ acceptedGaps: [picture] }, { ...pictureGap, state: "default" }), undefined);
+  const { state, ...pageWide } = picture;
+  void state;
+  assert.equal(acceptedGapFor({ acceptedGaps: [pageWide] }, { ...pictureGap, state: "component-youtube-videos" }), undefined, "an entry without a state matches no state");
   assert.equal(acceptedGapFor(null, { check: "tab-trapped", page: "https://site.nl/" }), undefined);
 });
 

@@ -67,6 +67,13 @@ function readFrames(socket: Duplex, onText: (text: string) => void): void {
   });
 }
 
+/** A text frame from the server to the page: never masked. */
+function textFrame(text: string): Buffer {
+  const payload = Buffer.from(text, "utf8");
+  const head = payload.length < 126 ? Buffer.from([0x81, payload.length]) : Buffer.from([0x81, 126, payload.length >> 8, payload.length & 0xff]);
+  return Buffer.concat([head, payload]);
+}
+
 /** Serve the fixture site. Port 0 picks a free port; a fixed port keeps URLs equal between two sweeps. */
 export async function startServer(port = 0): Promise<FixtureServer> {
   const requests: ReceivedRequest[] = [];
@@ -181,7 +188,14 @@ export async function startServer(port = 0): Promise<FixtureServer> {
     note(request);
     const accept = createHash("sha1").update(`${request.headers["sec-websocket-key"]}258EAFA5-E914-47DA-95CA-C5AB0DC85B11`).digest("base64");
     socket.write(`HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: ${accept}\r\n\r\n`);
-    readFrames(socket, (text) => socketMessages.push(text));
+    readFrames(socket, (text) => {
+      socketMessages.push(text);
+      // A chat message gets an answer in two parts, as a chat answers: a receipt at once and the answer a moment later.
+      if (text.startsWith('{"type":"chat"')) {
+        setTimeout(() => socket.writable && socket.write(textFrame('{"type":"reply","text":"Ontvangen"}')), 50);
+        setTimeout(() => socket.writable && socket.write(textFrame('{"type":"reply","text":"Waarmee kan ik helpen?"}')), 200);
+      }
+    });
     socket.on("error", () => undefined);
   });
   // No host: the server answers on 127.0.0.1 and on localhost alike.

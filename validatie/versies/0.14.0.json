@@ -1,0 +1,6 @@
+{
+  "version": "0.14.0",
+  "measuredAt": "2026-10-21",
+  "againstNl": "De sleutel van de eigen testsite (Lindewaard met ingebouwde gebreken), niet het oordeel van een menselijke deskundige. Gerichte meting van de enige wijziging in het oordeel in deze versie, het afspelen van een chatbericht dat al eens is verstuurd: een nieuwe veegronde met deze code, daarna twee runs op 4.1.3, 2.4.3 en 2.2.1. De update van html-validate en vnu is zonder taalmodel vergeleken op alle pagina's van beide varianten van de testsite.",
+  "resultNl": "In beide runs keurden 4.1.3, 2.4.3 en 2.2.1 af zoals de sleutel zegt, zonder open punten. In beide runs werd een chatbericht afgespeeld, en in beide werd het antwoord in de chat als niet voorgelezen gemeld, zoals de sleutel zegt. html-validate 11.16.4 en vnu gaven op 42 pagina's dezelfde 124 bevindingen als de vorige versies. Niet gemeten: een chat waarvan de berichten kenmerken van de verbinding dragen (zoals Socket.IO), en afspelen op een verklaarde testomgeving van een echte site. Voor de andere criteria geldt de meting van 0.12.0 en 0.13.0."
+}
