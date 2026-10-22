@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import { existsSync } from "node:fs";
-import { readFile, rename, rm } from "node:fs/promises";
-import { join } from "node:path";
+import { readdir, readFile, rename, rm } from "node:fs/promises";
+import { isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 
@@ -100,7 +100,7 @@ async function validatePdfUa(pdf: string): Promise<string[]> {
 }
 
 export interface PdfRequest {
-  /** File name of the template under templates/. */
+  /** File name of the template under templates/, or an absolute path. */
   template: string;
   output: string;
   /** Values the template reads from `sys.inputs`; file paths must be absolute. */
@@ -115,6 +115,8 @@ export interface PdfResult {
   pdf: string | null;
   /** Problems found while making or checking the PDF; empty when every check passed. */
   pdfChecks: string[];
+  /** What the reader should know but does not stop the PDF: text of the site set as code points. */
+  pdfWarnings: string[];
 }
 
 /**
@@ -139,25 +141,61 @@ export function unshownPattern(texts: string[]): string {
   return `(?:${alternatives.join("|")})+`;
 }
 
+const codePoints = (text: string): string => [...text].map((character) => `U+${character.codePointAt(0)!.toString(16).toUpperCase().padStart(4, "0")}`).join(" ");
+const listed = (texts: string[]): string => texts.map((text) => `"${text}" [${codePoints(text)}]`).join(", ");
+
 /**
- * The check line for texts set as code points. It is a problem on purpose: the report is what
- * gets signed, and a missing glyph in loep's own templates must fail the tests as it did before.
+ * The check line for texts set as code points that do not come from the data the template got:
+ * a missing glyph in loep's own templates is a fault in loep, and must fail the tests.
  */
 export function unshownCheck(texts: string[]): string {
-  const shown = texts.map((text) => `"${text}" [${[...text].map((character) => `U+${character.codePointAt(0)!.toString(16).toUpperCase().padStart(4, "0")}`).join(" ")}]`);
-  return `De PDF zet tekst als codepunten, omdat geen meegeleverd lettertype de tekens heeft: ${shown.join(", ")}. Controleer of dat tekst van de site is; rapport.md heeft de tekst zoals hij is.`;
+  return `De PDF zet tekst uit het sjabloon van loep als codepunten, omdat geen meegeleverd lettertype de tekens heeft: ${listed(texts)}. Dat is een fout in loep.`;
+}
+
+/** The warning for text of the site set as code points: it does not stop the report. */
+export function unshownWarning(texts: string[]): string {
+  const count = texts.reduce((sum, text) => sum + [...text].length, 0);
+  return `${count} ${count === 1 ? "teken zonder glyph is" : "tekens zonder glyph zijn"} als codepunt weergegeven: ${listed(texts)}. Het is tekst van de site; rapport.md heeft de tekst zoals hij is.`;
+}
+
+/**
+ * Where texts set as code points come from. A text is the site's when every character of it is
+ * in the data the template got (the input values and the files they name) and the text is not in
+ * the source of any template; everything else, including what cannot be traced, is loep's own.
+ */
+async function splitByOrigin(texts: string[], inputs: Record<string, string>, template: string): Promise<{ site: string[]; own: string[] }> {
+  if (texts.length === 0) return { site: [], own: [] };
+  const data = await Promise.all(Object.values(inputs).map(async (value) => {
+    if (!isAbsolute(value) || !existsSync(value)) return value;
+    const text = await readFile(value, "utf8");
+    // A JSON file may write a character as an escape; parsed and written again, it is the character.
+    try {
+      return JSON.stringify(JSON.parse(text));
+    } catch {
+      return text;
+    }
+  }));
+  const characters = new Set([...data.join("")]);
+  const sources = new Set([template, ...(await readdir(TEMPLATES)).filter((name) => name.endsWith(".typ")).map((name) => join(TEMPLATES, name))]);
+  const source = (await Promise.all([...sources].map((path) => readFile(path, "utf8"))))
+    .join("\n")
+    .replace(/\\u\{([0-9a-fA-F]+)\}/g, (_, hex: string) => String.fromCodePoint(parseInt(hex, 16)));
+  const isSite = (text: string): boolean => [...text].every((character) => characters.has(character)) && !source.includes(text);
+  return { site: texts.filter(isSite), own: texts.filter((text) => !isSite(text)) };
 }
 
 /**
  * Compile a template to a tagged PDF/UA-1 file and check the result. A text no bundled font
  * can show is set as its code points on a second attempt, so a quote from a site never stops
- * the PDF; the checks then name those texts. Without Typst there is no PDF, and the reason is returned as a problem instead of thrown.
+ * the PDF: text of the site becomes a warning, text of loep's own templates a problem.
+ * Without Typst there is no PDF, and the reason is returned as a problem instead of thrown.
  */
 export async function makePdf(request: PdfRequest): Promise<PdfResult> {
   const typst = await tool("typst", ["--version"]);
-  if (!typst.found) return { pdf: null, pdfChecks: ["Typst is niet geïnstalleerd: er is geen PDF gemaakt. Installeer Typst en draai dit commando opnieuw."] };
+  if (!typst.found) return { pdf: null, pdfChecks: ["Typst is niet geïnstalleerd: er is geen PDF gemaakt. Installeer Typst en draai dit commando opnieuw."], pdfWarnings: [] };
 
   const temporary = `${request.output}.tmp`;
+  const template = resolve(TEMPLATES, request.template);
   const compile = (inputs: Record<string, string>): Promise<CommandResult> => tool("typst", [
     "compile",
     // Templates read their data by absolute path, wherever the run lives.
@@ -173,7 +211,7 @@ export async function makePdf(request: PdfRequest): Promise<PdfResult> {
     "--creation-timestamp",
     String(Math.floor(new Date(request.date).getTime() / 1000)),
     ...Object.entries(inputs).flatMap(([name, value]) => ["--input", `${name}=${value}`]),
-    join(TEMPLATES, request.template),
+    template,
     temporary,
   ]);
   let compiled = await compile(request.inputs);
@@ -181,11 +219,13 @@ export async function makePdf(request: PdfRequest): Promise<PdfResult> {
   if (unshown.length > 0) compiled = await compile({ ...request.inputs, unshown: unshownPattern(unshown) });
   if (!compiled.ok || !existsSync(temporary)) {
     await rm(temporary, { force: true });
-    return { pdf: null, pdfChecks: [`Typst kon de PDF niet maken: ${compiled.output.trim()}`] };
+    return { pdf: null, pdfChecks: [`Typst kon de PDF niet maken: ${compiled.output.trim()}`], pdfWarnings: [] };
   }
   await rename(temporary, request.output);
+  const { site, own } = await splitByOrigin(unshown, request.inputs, template);
   return {
     pdf: request.output,
-    pdfChecks: [...(unshown.length > 0 ? [unshownCheck(unshown)] : []), ...(await basicChecks(request.output, request.title)), ...(await validatePdfUa(request.output))],
+    pdfChecks: [...(own.length > 0 ? [unshownCheck(own)] : []), ...(await basicChecks(request.output, request.title)), ...(await validatePdfUa(request.output))],
+    pdfWarnings: site.length > 0 ? [unshownWarning(site)] : [],
   };
 }

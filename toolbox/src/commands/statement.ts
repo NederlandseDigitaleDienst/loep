@@ -19,6 +19,8 @@ export interface StatementFiles {
   pdf: string | null;
   /** Problems found while making or checking the PDFs; empty when every check passed. */
   pdfChecks: string[];
+  /** What the reader should know but does not stop the statement, such as text of the site set as code points. */
+  pdfWarnings: string[];
   /** For status B: which deviations have no measure with a date; null when none is missing. */
   missingMeasuresNl: string | null;
 }
@@ -76,5 +78,5 @@ export async function statement(runDir: string, concept: boolean): Promise<State
   if (sheet.pdf) files.push(join(dir, "invulassistent.pdf"));
   // Without Typst both report the same thing; say it once.
   const sheetChecks = sheet.pdfChecks.filter((problem) => !pdf.pdfChecks.includes(problem)).map((problem) => `invulassistent.pdf: ${problem}`);
-  return { files, status: result.status, openItems: result.openItems, pdf: pdf.pdf ? join(dir, "verklaring.pdf") : null, pdfChecks: [...pdf.pdfChecks, ...sheetChecks], missingMeasuresNl: result.missingMeasuresNl };
+  return { files, status: result.status, openItems: result.openItems, pdf: pdf.pdf ? join(dir, "verklaring.pdf") : null, pdfChecks: [...pdf.pdfChecks, ...sheetChecks], pdfWarnings: [...new Set([...pdf.pdfWarnings, ...sheet.pdfWarnings])], missingMeasuresNl: result.missingMeasuresNl };
 }

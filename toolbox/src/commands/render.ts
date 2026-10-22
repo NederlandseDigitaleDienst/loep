@@ -14,6 +14,8 @@ export interface RenderResult {
   shortPdf: string | null;
   /** Problems found while making or checking the PDFs; empty when every check passed. */
   pdfChecks: string[];
+  /** What the reader should know but does not stop the report, such as text of the site set as code points. */
+  pdfWarnings: string[];
 }
 
 /**
@@ -46,7 +48,14 @@ export async function render(runDir: string): Promise<RenderResult> {
   };
   const full = await makePdf({ ...request, output: join(dir, "rapport.pdf"), title });
   // Without Typst there is one message about that, not two.
-  if (full.pdf === null) return { markdown, pdf: null, shortPdf: null, pdfChecks: full.pdfChecks };
+  if (full.pdf === null) return { markdown, pdf: null, shortPdf: null, pdfChecks: full.pdfChecks, pdfWarnings: [] };
   const short = await makePdf({ ...request, inputs: { ...request.inputs, part: "short" }, output: join(dir, "rapport-kort.pdf"), title: `${title}, ${REPORT_TEXT.shortVersion}` });
-  return { markdown, pdf: full.pdf, shortPdf: short.pdf, pdfChecks: [...full.pdfChecks, ...short.pdfChecks.map((problem) => `Korte versie: ${problem}`)] };
+  return {
+    markdown,
+    pdf: full.pdf,
+    shortPdf: short.pdf,
+    pdfChecks: [...full.pdfChecks, ...short.pdfChecks.map((problem) => `Korte versie: ${problem}`)],
+    // The short report quotes the same site; a text set as code points is named once.
+    pdfWarnings: [...new Set([...full.pdfWarnings, ...short.pdfWarnings])],
+  };
 }
