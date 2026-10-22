@@ -267,6 +267,14 @@ Een bevinding heeft een ernst in vier treden: `blokkerend` (een functie of een d
 
 De beoordelaar noemt wie een gebrek herstelt. Is bij de inventarisatie opgegeven welke elementen van een leverancier zijn (`--vendor-tags`), dan toont het rapport per zo'n element welke bevindingen het raken. Dat zegt waar een gebrek zit, niet wie het herstelt. `evaluate` zet de eigenaar alleen op de leverancier als het advies over de binnenkant van zo'n element gaat; wat de beoordelaar noemde, blijft in de gegevens staan.
 
+## De werklijst voor wie herstelt
+
+Het oordeel valt per criterium, dus één ding dat mis is kan onder drie criteria terugkomen. De werklijst geeft het één regel, met de criteria erbij: een gebrek. De bevindingen blijven onder hun eigen criterium staan, en de uitkomst per criterium verandert niet. Vaste regels voegen bevindingen samen, en alleen wat zeker is. Een van die regels gaat over de oorzaak. Twee bevindingen over kleur (1.4.1, 1.4.3 of 1.4.11) hebben dezelfde oorzaak als ze allebei hetzelfde kleurenpaar noemen, de ene kleur op de andere, zoals `#d9dee5 op #f5f7f9`, op hetzelfde element. Dat element is een pad uit de waarnemingen van de sessie, gelijk op de plek in een herhaald deel na (het huidige item van een menu is op elke pagina een ander item), of hetzelfde onderdeel in dezelfde woorden. Eén gedeelde kleur is niet genoeg, want een site gebruikt één grijs op veel plekken. Een verhouding zonder kleuren is ook niet genoeg, en een selector uit vrije tekst evenmin. Een bevinding over kleur en een over de code van hetzelfde element blijven twee regels: ze worden op twee plekken hersteld.
+
+Bij elke bevinding staat in het rapport een uitsnede: het element met wat marge, rood omlijnd. `evaluate` legt vast waar die vandaan komt: welke schermafbeelding van de run, met haar sha256, en welke rechthoek. Dat is een `look --plain` of een `crop` uit de waarnemingen die de bevinding draagt, of de schermafbeelding van de veegronde met het kader uit de feiten van die pagina, als de waarneming in dezelfde toestand, in licht en op dezelfde breedte is gedaan. `render` snijdt de stukken. Zonder schermafbeelding met kader staat er geen uitsnede. De stukken van één rapport blijven samen onder 12 MB.
+
+`export` zet de werklijst om voor wie ermee verder werkt: `export --run <run> --format csv` geeft een rij per gebrek, `--format issues` een Markdown-blok per gebrek met titel en body, klaar voor `gh issue create`. Het maakt zelf geen issues aan.
+
 ## Aanbevelingen
 
 Niet alles wat een site beter maakt, eist de norm. Een aanbeveling is een patroon dat helpt en dat WCAG niet vraagt: bijvoorbeeld de datum van een kaart in de code na haar titel, zodat wie met een schermlezer van kop naar kop springt haar hoort. Het rapport zet aanbevelingen apart, onder "Aanbevelingen" bij "Wat nu", na wat fout of open is. Ze tellen niet mee voor de uitkomst van een criterium, niet voor de status en niet in de verklaring.
