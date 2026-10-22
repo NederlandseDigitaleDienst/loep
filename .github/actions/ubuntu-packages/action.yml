@@ -4,7 +4,9 @@ description: >
   hulpprogramma's van `just tools`) uit de cache. De spiegel van Ubuntu leverde op 22 oktober 2026
   soms een paar kB per seconde; het inrichten kostte toen tot 23 minuten (#320). apt kiest nog steeds
   zelf welke versie het installeert en controleert elk pakket tegen zijn index: de cache scheelt
-  alleen het downloaden. Opslaan doet de stap `save` van browsers-and-tools, alleen op main.
+  alleen het downloaden. Opslaan doet browsers-and-tools, alleen op main. Zet daarnaast
+  `$APT_FALLBACK` klaar: een stap die ermee begint, krijgt vijf minuten en gaat daarna verder
+  via het hoofdarchief van Ubuntu in plaats van de spiegel in Azure.
 outputs:
   key:
     description: De sleutel waaronder de pakketten van deze versie van de runner horen.
@@ -20,7 +22,9 @@ runs:
       shell: bash
       run: |
         mkdir -p "$HOME/.cache/apt/partial"
-        printf 'Dir::Cache::Archives "%s";\nAPT::Keep-Downloaded-Packages "true";\nAPT::Sandbox::User "root";\n' "$HOME/.cache/apt" | sudo tee /etc/apt/apt.conf.d/90loep-cache > /dev/null
+        printf 'Dir::Cache::Archives "%s";\nAPT::Keep-Downloaded-Packages "true";\nAPT::Sandbox::User "root";\nDPkg::Lock::Timeout "120";\n' "$HOME/.cache/apt" | sudo tee /etc/apt/apt.conf.d/90loep-cache > /dev/null
+        # For the steps that install: a slow mirror gets five minutes, then the main archive takes over.
+        echo "APT_FALLBACK=$GITHUB_ACTION_PATH/mirror-fallback.sh" >> "$GITHUB_ENV"
         echo "os=apt-$ImageOS-" >> "$GITHUB_OUTPUT"
         echo "key=apt-$ImageOS-$ImageVersion" >> "$GITHUB_OUTPUT"
 

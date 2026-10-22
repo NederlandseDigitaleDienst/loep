@@ -150,10 +150,10 @@ jobs:
         run: just reuse
 
       - name: Pakketten en browsers
-        run: just install
+        run: '"$APT_FALLBACK" just install'
 
       - name: Hulpprogramma's
-        run: just tools
+        run: '"$APT_FALLBACK" just tools'
 
       - name: Wat staat er op deze machine
         run: just doctor

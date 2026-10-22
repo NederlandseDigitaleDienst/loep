@@ -24,11 +24,11 @@ runs:
     # With the browsers from the cache this only installs what they need from the system.
     - name: Browsers
       shell: bash
-      run: cd toolbox && npx playwright install --with-deps chromium firefox webkit
+      run: cd toolbox && "$APT_FALLBACK" npx playwright install --with-deps chromium firefox webkit
 
     - name: Hulpprogramma's
       shell: bash
-      run: just tools
+      run: '"$APT_FALLBACK" just tools'
 
     # A cache made in the merge queue is only visible to that one run; the nightly run and a run by
     # hand on main make the one that the queue reads. Packages that apt no longer offers go first.
