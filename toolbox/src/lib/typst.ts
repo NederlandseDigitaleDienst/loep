@@ -118,15 +118,47 @@ export interface PdfResult {
 }
 
 /**
- * Compile a template to a tagged PDF/UA-1 file and check the result. Without Typst
- * there is no PDF, and the reason is returned as a problem instead of thrown.
+ * The texts Typst could not set in any font it has, from its error output. PDF/UA-1 allows no
+ * text without a glyph, and the bundled fonts cannot cover every script a site may quote.
+ * Typst writes each text as a Rust string literal.
+ */
+export function unshownTexts(output: string): string[] {
+  const texts = [...output.matchAll(/the text `"((?:[^"\\]|\\.)*)"` could not be displayed/g)].map((match) =>
+    match[1]!.replace(/\\u\{([0-9a-fA-F]+)\}|\\(.)/g, (_, hex: string | undefined, escaped: string) =>
+      hex ? String.fromCodePoint(parseInt(hex, 16)) : ({ n: "\n", r: "\r", t: "\t", "0": "\0" } as Record<string, string>)[escaped] ?? escaped,
+    ),
+  );
+  return [...new Set(texts)];
+}
+
+/** A pattern for Typst's `regex` that matches a run of these texts, trying the longest first. */
+export function unshownPattern(texts: string[]): string {
+  const alternatives = [...texts]
+    .sort((a, b) => b.length - a.length)
+    .map((text) => [...text].map((character) => `\\x{${character.codePointAt(0)!.toString(16)}}`).join(""));
+  return `(?:${alternatives.join("|")})+`;
+}
+
+/**
+ * The check line for texts set as code points. It is a problem on purpose: the report is what
+ * gets signed, and a missing glyph in loep's own templates must fail the tests as it did before.
+ */
+export function unshownCheck(texts: string[]): string {
+  const shown = texts.map((text) => `"${text}" [${[...text].map((character) => `U+${character.codePointAt(0)!.toString(16).toUpperCase().padStart(4, "0")}`).join(" ")}]`);
+  return `De PDF zet tekst als codepunten, omdat geen meegeleverd lettertype de tekens heeft: ${shown.join(", ")}. Controleer of dat tekst van de site is; rapport.md heeft de tekst zoals hij is.`;
+}
+
+/**
+ * Compile a template to a tagged PDF/UA-1 file and check the result. A text no bundled font
+ * can show is set as its code points on a second attempt, so a quote from a site never stops
+ * the PDF; the checks then name those texts. Without Typst there is no PDF, and the reason is returned as a problem instead of thrown.
  */
 export async function makePdf(request: PdfRequest): Promise<PdfResult> {
   const typst = await tool("typst", ["--version"]);
   if (!typst.found) return { pdf: null, pdfChecks: ["Typst is niet geïnstalleerd: er is geen PDF gemaakt. Installeer Typst en draai dit commando opnieuw."] };
 
   const temporary = `${request.output}.tmp`;
-  const compiled = await tool("typst", [
+  const compile = (inputs: Record<string, string>): Promise<CommandResult> => tool("typst", [
     "compile",
     // Templates read their data by absolute path, wherever the run lives.
     "--root",
@@ -140,14 +172,20 @@ export async function makePdf(request: PdfRequest): Promise<PdfResult> {
     "ua-1",
     "--creation-timestamp",
     String(Math.floor(new Date(request.date).getTime() / 1000)),
-    ...Object.entries(request.inputs).flatMap(([name, value]) => ["--input", `${name}=${value}`]),
+    ...Object.entries(inputs).flatMap(([name, value]) => ["--input", `${name}=${value}`]),
     join(TEMPLATES, request.template),
     temporary,
   ]);
+  let compiled = await compile(request.inputs);
+  const unshown = compiled.ok ? [] : unshownTexts(compiled.output);
+  if (unshown.length > 0) compiled = await compile({ ...request.inputs, unshown: unshownPattern(unshown) });
   if (!compiled.ok || !existsSync(temporary)) {
     await rm(temporary, { force: true });
     return { pdf: null, pdfChecks: [`Typst kon de PDF niet maken: ${compiled.output.trim()}`] };
   }
   await rename(temporary, request.output);
-  return { pdf: request.output, pdfChecks: [...(await basicChecks(request.output, request.title)), ...(await validatePdfUa(request.output))] };
+  return {
+    pdf: request.output,
+    pdfChecks: [...(unshown.length > 0 ? [unshownCheck(unshown)] : []), ...(await basicChecks(request.output, request.title)), ...(await validatePdfUa(request.output))],
+  };
 }

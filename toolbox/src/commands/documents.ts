@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { measurePdf, PREVIEW_PAGES, renderPage } from "../instruments/documents/pdf.ts";
 import { readJson, sha256File, writeFileAtomic, writeJson } from "../lib/canonical.ts";
-import { BINARY_REASON_NL, documentDir, documentKind, emptyFacts, kindOfContent, NOT_READ_REASON_NL, originalPath, READ_KINDS, type DocumentFacts, type SampleDocument } from "../lib/documents.ts";
+import { BINARY_REASON_NL, charsetOf, documentDir, documentKind, emptyFacts, kindOfContent, NOT_READ_REASON_NL, originalPath, READ_KINDS, type DocumentFacts, type SampleDocument } from "../lib/documents.ts";
 import { stepStart, writeManifest } from "../lib/manifest.ts";
 import { LONGEST_FAILURE_PAUSE_SECONDS, runBlockade } from "../session/blockade.ts";
 import { guardedDownload, scopeForRun, type Guard, type Scope } from "../session/safety.ts";
@@ -78,7 +78,7 @@ async function fetchAndMeasure(runDir: string, found: SampleDocument, scope: Sco
     return emptyFacts(document.label, document.url, document.kind, "failed", fetched.truncated === "size" ? `het bestand is groter dan ${MAX_DOCUMENT_BYTES / 1024 / 1024} MB` : "het bestand kwam niet binnen de tijd binnen");
   }
   if (document.kind !== "other") return measureDocument(runDir, document, file, fetched.bytes, fetched.contentType);
-  const byContent = kindOfContent(await readFile(file));
+  const byContent = kindOfContent(await readFile(file), charsetOf(fetched.contentType));
   if (!byContent || !READ_KINDS.includes(byContent)) return { ...emptyFacts(document.label, document.url, document.kind, "notRead", byContent ? (NOT_READ_REASON_NL[byContent] ?? "deze soort wordt niet ingelezen") : BINARY_REASON_NL), bytes: fetched.bytes };
   return measureDocument(runDir, { ...document, kind: byContent }, file, fetched.bytes, fetched.contentType);
 }

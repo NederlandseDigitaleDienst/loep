@@ -184,7 +184,11 @@ export interface RunResult {
   side: "baseline" | "variant";
   /** The name in variant.json, or null for a run that is no copy. */
   variant: string | null;
+  /** The commit and version of the code that last wrote the run: for a copy, that of its agent phases. */
   commit: string | null;
+  version: string | null;
+  /** For a copy: the run its sweep came from and the version of loep that made that sweep. Null for a run that is no copy. */
+  sweep: { run: string; version: string | null } | null;
   /** The criteria of its tasks; only those of the comparison count. */
   criteria: string[];
   outcomes: Record<string, CriterionOutcome | null>;
@@ -433,6 +437,8 @@ async function runResult(runDir: string, side: RunResult["side"], criteria: stri
   const evaluation = await readJson<Evaluation>(evaluationPath);
   const byId = new Map(evaluation.criteria.map((criterion) => [criterion.id, criterion]));
   const inScope = (criterion: string): boolean => criteria.includes(criterion);
+  const record = readIfThere<VariantRecord>(join(runDir, VARIANT_FILE));
+  const manifest = readIfThere<Manifest>(join(runDir, "manifest.json"));
 
   const defects: RunResult["defects"] = {};
   let defectsNl: string | null = null;
@@ -479,8 +485,10 @@ async function runResult(runDir: string, side: RunResult["side"], criteria: stri
   return {
     run: basename(resolve(runDir)),
     side,
-    variant: readIfThere<VariantRecord>(join(runDir, VARIANT_FILE))?.name ?? null,
-    commit: readIfThere<Manifest>(join(runDir, "manifest.json"))?.toolbox?.commit ?? null,
+    variant: record?.name ?? null,
+    commit: manifest?.toolbox?.commit ?? null,
+    version: manifest?.toolbox?.version ?? null,
+    sweep: record?.from ? { run: record.from.run, version: record.from.toolbox?.version ?? null } : null,
     criteria: taskCriteria(runDir),
     outcomes: Object.fromEntries(criteria.map((id) => [id, byId.get(id)?.outcome ?? null])),
     findings: Object.fromEntries(criteria.map((id) => [id, byId.get(id)?.findings.length ?? 0])),
@@ -687,6 +695,10 @@ const millions = (value: number): string => `${number(value / 1_000_000, 2)} M`;
 const outcomeCell = (outcome: CriterionOutcome | null): string => (outcome === null ? "-" : SHORT_OUTCOME[outcome]);
 const classCell = (value: ReferenceClass | "oneens" | null): string => value ?? "-";
 
+/** The code of a run in the table of runs: its version of loep and short commit, as far as they are known. */
+const versionCell = (version: string | null, commit: string | null): string =>
+  [version ? `loep ${version}` : null, commit ? `\`${commit.slice(0, 7)}\`` : null].filter(Boolean).join(", ") || "onbekend";
+
 export function comparisonMarkdown(result: VariantComparison): string {
   const baseline = result.runs.filter((run) => run.side === "baseline");
   const variants = result.runs.filter((run) => run.side === "variant");
@@ -698,9 +710,9 @@ export function comparisonMarkdown(result: VariantComparison): string {
     "",
     `Sleutel: ${result.reference}. ${result.criteria.length} criteria: ${result.criteria.join(", ")}.`,
     "",
-    "| Run | Kant | Variant | Commit |",
-    "|---|---|---|---|",
-    ...ordered.map((run) => `| ${label(run)} ${cell(run.run)} | ${run.side === "baseline" ? "nulmeting" : "variant"} | ${cell(run.variant ?? "-")} | ${run.commit ? `\`${run.commit.slice(0, 7)}\`` : "onbekend"} |`),
+    "| Run | Kant | Variant | Code | Veegronde |",
+    "|---|---|---|---|---|",
+    ...ordered.map((run) => `| ${label(run)} ${cell(run.run)} | ${run.side === "baseline" ? "nulmeting" : "variant"} | ${cell(run.variant ?? "-")} | ${versionCell(run.version, run.commit)} | ${run.sweep ? `${cell(run.sweep.run)}, ${run.sweep.version ? `loep ${run.sweep.version}` : "versie onbekend"}` : "eigen"} |`),
     ...(result.scopeNl ? ["", `Let op: ${result.scopeNl}.`] : []),
     "",
   ];
@@ -835,7 +847,10 @@ Not a step of an evaluation.
                      evaluation, report, seal and comparisons made from them). Then tasks --only and
                      pending start the agent phases again on the same evidence. Run it with the code of
                      the variant: variant.json in the copy records that commit, the run it came from and
-                     what was left out. Files are cloned where the file system can (APFS, reflinks)
+                     the version of loep its sweep was made with, and what was left out. Under another
+                     version than the sweep's, only the agent phases go on in the copy (tasks, skip,
+                     check-walk, check-verdict, evaluate, merge and the like); they say which version the
+                     sweep is of. The sweep is not measured again without --other-toolbox. Files are cloned where the file system can (APFS, reflinks)
   compare-variants   Lay runs of the baseline and of a variant side by side, for the criteria of their
                      tasks (or those of --criteria). Says whether the variant is not worse: the share of the defects of the
                      answer key found per run (from the classifications of compare --findings) and

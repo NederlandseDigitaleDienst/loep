@@ -12,8 +12,8 @@
 
 // ---------------------------------------------------------------- identity
 
-#let sans = ("Atkinson Hyperlegible Next", "DejaVu Sans Mono")
-#let mono-font = ("Atkinson Hyperlegible Mono", "DejaVu Sans Mono")
+#let sans = ("Atkinson Hyperlegible Next", "DejaVu Sans Mono", "Noto Emoji")
+#let mono-font = ("Atkinson Hyperlegible Mono", "DejaVu Sans Mono", "Noto Emoji")
 
 #let ink = rgb("#17171c")
 #let accent = rgb("#4630b8")
@@ -81,6 +81,17 @@
 
 // ---------------------------------------------------------------- document
 
+// Text no bundled font can show stops PDF/UA-1. The toolbox then compiles again with that
+// text in `unshown` (see typst.ts), and it is set as its code points.
+#show: body => {
+  let unshown = sys.inputs.at("unshown", default: none)
+  if unshown == none { return body }
+  show regex(unshown): it => "[" + it.text.codepoints().map(c => {
+    let hex = upper(str(c.to-unicode(), base: 16))
+    "U+" + "0" * calc.max(0, 4 - hex.len()) + hex
+  }).join(" ") + "]"
+  body
+}
 #set document(
   title: doc.title,
   author: "loep",

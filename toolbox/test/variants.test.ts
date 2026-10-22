@@ -166,8 +166,8 @@ function measuredRun(name: string, outcomes: Record<string, string>, options: { 
   write(join(dir, "tasks", "index.json"), { tasks: Object.keys(outcomes).map((criterion) => ({ criterion })) });
   write(join(dir, "evaluation.json"), { criteria: Object.entries(outcomes).map(([id, outcome]) => ({ id, outcome, findings: Array.from({ length: options.findings?.[id] ?? 0 }, () => ({})), missingNl: options.points?.[id] ?? [] })) });
   for (const [criterion, points] of Object.entries(options.points ?? {})) write(join(dir, "verdicts", criterion, "final.json"), { outcome: "cantTell", missingNl: points });
-  write(join(dir, "manifest.json"), { toolbox: { commit: options.commit ?? "bbbbbbb2222222" }, steps: [] });
-  if (options.variantName) write(join(dir, VARIANT_FILE), { name: options.variantName });
+  write(join(dir, "manifest.json"), { toolbox: { commit: options.commit ?? "bbbbbbb2222222", version: "0.15.0" }, steps: [] });
+  if (options.variantName) write(join(dir, VARIANT_FILE), { name: options.variantName, from: { run: "bevroren", toolbox: { version: "0.11.0" }, variant: null } });
   write(join(dir, "observations", "b-143", "session.json"), { startedAt: "2026-10-18T12:00:00.000Z", stoppedAt: "2026-10-18T12:30:00.000Z", commands: 40 });
   write(join(dir, "observations", "v-143", "session.json"), { startedAt: "2026-10-18T13:00:00.000Z", stoppedAt: "2026-10-18T13:10:00.000Z", commands: 25 });
   write(join(dir, "observations", "verken", "session.json"), { startedAt: "2026-10-18T09:00:00.000Z", stoppedAt: "2026-10-18T09:10:00.000Z", commands: 99 });
@@ -283,6 +283,9 @@ test("per role: sessions, commands and time from the run, and tokens, turns and 
 
   const markdown = comparisonMarkdown(result);
   assert.match(markdown, /\*\*Niet slechter: nee\.\*\*/);
+  // A copy names the code of its agent phases and the version its sweep was made with; a run that is no copy has its own sweep.
+  assert.match(markdown, /\| V1 variant-1 \| variant \| dossier-commando \| loep 0\.15\.0, `ccccccc` \| bevroren, loep 0\.11\.0 \|/);
+  assert.match(markdown, /\| N1 nulmeting-1 \| nulmeting \| - \| loep 0\.15\.0, `bbbbbbb` \| eigen \|/);
   assert.match(markdown, /\| Gevonden gebreken uit de sleutel, per run \(2 gebreken\) \| 75,0% \(.*\) \| 50,0% \(.*\) \| -25,0 \(.* tot .*\) procentpunt \| ondergrens boven -5,0 \| nee \|/);
   assert.match(markdown, /\| Onterecht volgens beide, per run \(3 criteria\) \| 0,5 \(.*\) \| 1,0 \(.*\) \| \+0,5 \(.*\) \| bovengrens onder \+1,0 \| nee \|/);
   assert.match(markdown, /## Meldingen zonder tegenhanger[\s\S]*\| terecht volgens beide \| 0 \| 1 \| 1 \|\n\| discutabel volgens beide \| 0 \| 0 \| 0 \|\n\| onterecht volgens beide \| 1 \| 0 \| 1 \|\n\| oneens: discutabel \/ onterecht \| 1 \| 0 \| 0 \|\n\| samen \| 2 \| 1 \| 2 \|/);

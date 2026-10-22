@@ -89,17 +89,52 @@ export const toolboxVersion = (): string => (JSON.parse(readFileSync(join(TOOLBO
 export const MEASURES_NOTHING = ["pending", "estimate", "gaps", "feedback", "verify", "procedures", "render", "statement", "compare", "decide", "sign", "seal"];
 
 /**
+ * The commands of the agent phases. They work on the evidence of the sweep and measure nothing of the site, so in a copy
+ * made with `variant` (it holds variant.json) they may run under a newer version of loep: that is how a variant of the
+ * code is measured on a frozen sweep. The sweep itself (`inventory`, `collect`, `contrast`, `states`, `documents` and the
+ * rest) is never measured again by another version.
+ */
+export const AGENT_PHASES = ["tasks", "skip", "unskip", "check-walk", "check-verdict", "evaluate", "answer", "merge", "check-merge"];
+
+/** What variant.json of a copy holds of the version of the sweep; see VariantRecord in commands/variants.ts. */
+interface VariantVersions {
+  from?: { toolbox?: { version?: string } | null };
+}
+
+/**
+ * The version a command on this run is held to, or null when there is nothing to hold it to. In a copy made with `variant`
+ * the sweep is of the run it was copied from: its commands are held to that version, and the agent phases to none.
+ * Elsewhere the run holds the version of loep of its last step.
+ */
+function heldVersion(runDir: string, command: string): { version: string | null; sweep: string | null } {
+  const read = <T>(name: string): T | null => (existsSync(join(runDir, name)) ? (JSON.parse(readFileSync(join(runDir, name), "utf8")) as T) : null);
+  const last = read<Partial<Manifest>>("manifest.json")?.toolbox?.version ?? null;
+  const variant = read<VariantVersions>("variant.json");
+  if (!variant) return { version: last, sweep: null };
+  const sweep = variant.from?.toolbox?.version ?? last;
+  return { version: AGENT_PHASES.includes(command) ? null : sweep, sweep };
+}
+
+/**
  * Why this toolbox may not go on with the run, or null when it may. A run holds the version of loep of its last step.
  * Another version writes other tasks and procedures: the walks and verdicts of the run then stop counting and are
  * done again, and a session process of the other version measures beside them. Changing on purpose takes `--other-toolbox`.
  */
 export function otherToolboxNl(runDir: string, command: string, allowed: boolean): string | null {
-  const path = join(runDir, "manifest.json");
-  if (allowed || MEASURES_NOTHING.includes(command) || !existsSync(path)) return null;
-  const run = (JSON.parse(readFileSync(path, "utf8")) as Partial<Manifest>).toolbox?.version;
+  if (allowed || MEASURES_NOTHING.includes(command)) return null;
+  const { version: run, sweep } = heldVersion(runDir, command);
   const own = toolboxVersion();
   if (!run || run === own) return null;
+  if (sweep) return `de veegronde van deze kopie is gemaakt met loep ${run}, en dit is loep ${own} (${TOOLBOX_ROOT}). Een kopie van variant gaat met een andere versie alleen verder met de fasen van de agents (${AGENT_PHASES.join(", ")}); de veegronde zelf meet alleen loep ${run} opnieuw. Gebruik de toolbox van loep ${run}, of geef bewust --other-toolbox mee`;
   return `deze run is gemaakt met loep ${run}, en dit is loep ${own} (${TOOLBOX_ROOT}). Een andere versie schrijft andere opdrachten en procedures: de rondgangen en oordelen van de run gelden dan niet meer en worden opnieuw gedaan. Gebruik de toolbox van loep ${run}. Stap je bewust over, geef dan --other-toolbox mee, en meet daarna opnieuw met --fresh`;
+}
+
+/** For an agent phase in a copy made with `variant` whose sweep is of another version: the line that says so, else null. */
+export function frozenSweepNl(runDir: string, command: string): string | null {
+  if (!AGENT_PHASES.includes(command)) return null;
+  const { sweep } = heldVersion(runDir, command);
+  const own = toolboxVersion();
+  return sweep && sweep !== own ? `de veegronde van deze kopie is van loep ${sweep}; de fasen van de agents draaien met loep ${own} (variant.json)` : null;
 }
 
 export function toolchain(browserVersion: string | null): Omit<Manifest, "steps"> {
