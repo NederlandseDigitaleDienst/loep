@@ -50,12 +50,12 @@ export const SESSION_USAGE = `  session start --run <run> [--session <name>] [--
                the contrast ratio as everybody sees it and with protanopia, deuteranopia, tritanopia and achromatopsia),
                forced [<ref>] [--more-contrast] [--max n] (the page again with forced colours or with more contrast: which boundary,
                focus indicator or drawing disappears; no requirement of WCAG, a lead),
-               reflow, spacing [--keep] (--keep leaves the wider spacing in force until the next open), zoom, order, media [<ref>] (every audio and video, or one: plays, muted, duration, tracks, controls),
+               reflow, spacing [--keep] (--keep leaves the wider spacing in force until the next open), zoom (also with the default font size doubled), order, media [<ref>] (every audio and video, or one: plays, muted, duration, tracks, controls),
                media <ref> --listen (fetches the file: what is said next to the subtitles and the text around it, sound that is
                not speech, still pictures of a video with the text in them, flashes per second; needs ffmpeg and whisper.cpp)
       measure with every method that answers the question, side by side:
                name <ref>, rules [<ref>] [--criterion x.y.z] (was: engines), contrast <ref> [--at x,y,width,height], focus <ref>, target <ref>,
-               taborder [--from <ref>|focus] [--max n] (was: tabwalk), lang [<ref>], source, ocr <ref>, motion [--seconds n],
+               taborder [--from <ref>|focus] [--max n] (was: tabwalk), lang [<ref>], parse (was: source), ocr <ref>, motion [--seconds n],
                timers (every timer of a second or more since the load, also one an action just started: the waiting ones
                are set off and what each did is judged by the rule of 2.2.1; this changes the page)
                reflow, zoom and spacing are measured in WebKit too; slow methods (a second browser, Java, text recognition) run in the background: --wait waits for them,

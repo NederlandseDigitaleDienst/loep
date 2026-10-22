@@ -13,6 +13,7 @@ import { clipboardLine, clipboardMark, clipboardSince, type ClipboardWrite } fro
 import { clipboardNote, hasClipboardPermission, INPAGE_PATH, launchBrowser, loadPage, newContext } from "../src/browser/session.ts";
 import type { Described } from "../src/instruments/activate.ts";
 import { probeTrigger } from "../src/instruments/dialog.ts";
+import type { TextScaling } from "../src/instruments/textsize.ts";
 import { canonicalJson, sha256 } from "../src/lib/canonical.ts";
 import { Daemon, ownedSessionNl, tooManySessionsNl, type Response } from "../src/session/daemon.ts";
 import type { Observation } from "../src/session/observations.ts";
@@ -220,6 +221,32 @@ test("a click says whether full screen came on, was refused, or may not be asked
   assert.ok((asked.appeared as string[]).some((text) => text.includes("Volledig scherm lukt niet in dit venster")));
   const requested = await loep("click", [await ref("Vraag volledig scherm")]);
   assert.match(requested.fullscreen as string, /^volledig scherm aangevraagd en geweigerd door de browser \(TypeError: .+\); dit document mag geen volledig scherm/);
+});
+
+test("zoom also measures text with the default font size doubled, the other way to read it at 200% (#328)", async () => {
+  await loep("open", ["/textsize.html"]);
+  const zoom = await loep("zoom");
+  const record = observation(zoom.id);
+  const scaling = (record.result as unknown as { methods: { result: { textScaling: TextScaling } }[] }).methods[0]!.result.textScaling;
+  const of = (start: string) => {
+    const entry = [...scaling.byNeither, ...scaling.onlyByTextOnly].find((growth) => growth.text.startsWith(start));
+    return entry ? { byZoom: entry.byZoom, byTextOnly: entry.byTextOnly } : null;
+  };
+  assert.equal(scaling.blocks, 5);
+  // Pixels and rem both reach 200% with zoom, so neither is listed.
+  assert.equal(of("Tekst in pixels"), null);
+  assert.equal(of("Tekst in rem"), null);
+  assert.deepEqual(of("Tekst naar het venster groeit"), { byZoom: 1, byTextOnly: 1 });
+  assert.deepEqual(of("Tekst naar het venster en de lettergrootte"), { byZoom: 1, byTextOnly: 2 });
+  assert.equal(scaling.doubledByZoom, 3);
+  assert.equal(scaling.doubledByTextOnly, 2, "rem and the size that adds the font size");
+  assert.ok(scaling.byNeither.every((entry) => entry.text !== ""));
+  assert.equal(zoom.byNeither, 1);
+  assert.equal(zoom.onlyByTextOnly, 1);
+  assert.ok(existsSync(join(run, (zoom.textOnly as { image: string }).image)));
+  // The default font size is back.
+  const after = await loep("style", [await ref("css:.rem"), "font-size"]);
+  assert.deepEqual(after.style, { "font-size": "20px" });
 });
 
 test("order sets the order of the code against the order on screen", async () => {

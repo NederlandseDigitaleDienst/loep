@@ -2326,6 +2326,23 @@
     return { viewport: { width: innerWidth, height: innerHeight }, headings, images, textBlocks: blocks, rotatedQuarterTurn: rotated.slice(0, 20), orientationRules };
   }
 
+  /**
+   * The size at which each visible block of text is drawn, in CSS pixels: its font size times the
+   * scale a transform of the block or an ancestor gives it. Text sized to the window or to its
+   * container shrinks when the window does, and a slide scaled to fit draws its text smaller.
+   */
+  function textSizes() {
+    const shown = (element) => isVisible(element) && !visuallyHidden(element);
+    return deepQueryAll(TEXT_BLOCK)
+      .filter((element) => shown(element) && [...element.childNodes].some((node) => node.nodeType === Node.TEXT_NODE && node.textContent.trim()))
+      .map((element) => {
+        const rect = element.getBoundingClientRect();
+        const scale = element.offsetWidth > 0 ? rect.width / element.offsetWidth : 1;
+        const drawn = Number.parseFloat(getComputedStyle(element).fontSize) * scale;
+        return { tag: element.localName, text: text(element, 80), path: path(element), drawn: Math.round(drawn * 10) / 10 };
+      });
+  }
+
   let colourCanvas = null;
 
   /** Any CSS colour as sRGB with alpha, resolved by the browser itself (handles oklch, light-dark and the rest). */
@@ -2650,6 +2667,7 @@
     hearsDown,
     downSignature,
     contentInventory,
+    textSizes,
     interactiveWithin: (ref) => composedWithin(registered(ref), INTERACTIVE).map(describe),
     freezeListeners,
     listenerCounts: () => JSON.parse(JSON.stringify(listeners)),
