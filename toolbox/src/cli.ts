@@ -559,6 +559,7 @@ async function main(): Promise<void> {
       process.stdout.write(`${result.markdown}\n${result.pdf ?? "(geen pdf)"}\n${result.shortPdf ? `${result.shortPdf}\n` : ""}`);
       for (const problem of result.pdfChecks) process.stdout.write(`- ${problem}\n`);
       for (const note of result.cutoutNotes) process.stdout.write(`- ${note}\n`);
+      for (const warning of result.pdfWarnings) process.stdout.write(`LET OP: ${warning}\n`);
       // A report whose PDF fails its own accessibility check is not fit to hand over.
       if (result.pdfChecks.length > 0) process.exitCode = 1;
       return;
@@ -606,6 +607,7 @@ async function main(): Promise<void> {
       process.stdout.write(`status ${result.status}; ${result.openItems.length} punten nog in te vullen\n${result.files.join("\n")}\n`);
       if (result.missingMeasuresNl) process.stdout.write(`LET OP: ${result.missingMeasuresNl}\n`);
       for (const problem of result.pdfChecks) process.stdout.write(`- ${problem}\n`);
+      for (const warning of result.pdfWarnings) process.stdout.write(`LET OP: ${warning}\n`);
       if (result.pdfChecks.length > 0) process.exitCode = 1;
       return;
     }

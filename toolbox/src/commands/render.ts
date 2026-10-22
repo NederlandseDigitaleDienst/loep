@@ -16,6 +16,8 @@ export interface RenderResult {
   shortPdf: string | null;
   /** Problems found while making or checking the PDFs; empty when every check passed. */
   pdfChecks: string[];
+  /** What the reader should know but does not stop the report, such as text of the site set as code points. */
+  pdfWarnings: string[];
   /** Cutouts that were left out: their picture changed, or the pieces of the report reached their limit. The report is still whole. */
   cutoutNotes: string[];
 }
@@ -59,7 +61,15 @@ export async function render(runDir: string): Promise<RenderResult> {
   };
   const full = await makePdf({ ...request, output: join(dir, "rapport.pdf"), title });
   // Without Typst there is one message about that, not two.
-  if (full.pdf === null) return { markdown, pdf: null, shortPdf: null, pdfChecks: full.pdfChecks, cutoutNotes: cutouts.problems };
+  if (full.pdf === null) return { markdown, pdf: null, shortPdf: null, pdfChecks: full.pdfChecks, pdfWarnings: [], cutoutNotes: cutouts.problems };
   const short = await makePdf({ ...request, inputs: { ...request.inputs, part: "short" }, output: join(dir, "rapport-kort.pdf"), title: `${title}, ${REPORT_TEXT.shortVersion}` });
-  return { markdown, pdf: full.pdf, shortPdf: short.pdf, pdfChecks: [...full.pdfChecks, ...short.pdfChecks.map((problem) => `Korte versie: ${problem}`)], cutoutNotes: cutouts.problems };
+  return {
+    markdown,
+    pdf: full.pdf,
+    shortPdf: short.pdf,
+    pdfChecks: [...full.pdfChecks, ...short.pdfChecks.map((problem) => `Korte versie: ${problem}`)],
+    // The short report quotes the same site; a text set as code points is named once.
+    pdfWarnings: [...new Set([...full.pdfWarnings, ...short.pdfWarnings])],
+    cutoutNotes: cutouts.problems,
+  };
 }

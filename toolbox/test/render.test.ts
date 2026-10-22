@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
+import { fileURLToPath } from "node:url";
 import { browserUse, gateLineNl, readVersionAccuracy, repeatedInBrowsersNl, secondBrowserUse, voiceOverSessions } from "../src/commands/evaluate.ts";
 import { render } from "../src/commands/render.ts";
 import { canonicalJson } from "../src/lib/canonical.ts";
@@ -10,9 +11,11 @@ import { mergeFindings } from "../src/lib/defects.ts";
 import { aiGeneratedMark, closeCutQuote, evaluationHash, idsAcrossVersionsNl, markVendor, quoteStart, summarise, vendorTagsOf, VERSION_NOT_MEASURED_NL, type Evaluation, type ReportFinding } from "../src/lib/evaluation.ts";
 import { reportedModels } from "../src/lib/models.ts";
 import { deriveReport, renderMarkdown } from "../src/lib/report-markdown.ts";
-import { tool, unshownCheck, unshownPattern, unshownTexts } from "../src/lib/typst.ts";
+import { makePdf, TEMPLATES, tool, unshownCheck, unshownPattern, unshownTexts, unshownWarning } from "../src/lib/typst.ts";
 import { SEVERITIES } from "../src/lib/verdict.ts";
 import { exampleEvaluation } from "./fixtures/example-evaluation.ts";
+
+const CLI = fileURLToPath(new URL("../src/cli.ts", import.meta.url));
 
 const signed = (evaluation: Evaluation): Evaluation => ({
   ...evaluation,
@@ -444,18 +447,46 @@ test("a quote from the site with emoji or a script no bundled font has still giv
   ];
   const dir = mkdtempSync(join(tmpdir(), "render-emoji-"));
   writeFileSync(join(dir, "evaluation.json"), canonicalJson(evaluation));
-  const result = await render(dir);
-  if (result.pdf === null && result.pdfChecks.some((problem) => problem.includes("Typst is niet geïnstalleerd"))) return context.skip("Typst is not installed");
-  assert.ok(result.pdf !== null && result.shortPdf !== null, result.pdfChecks.join("\n"));
+  // Through the command, for its exit code: text of the site must not stop the report.
+  const run = await tool(process.execPath, [CLI, "render", "--run", dir]);
+  if (run.output.includes("Typst is niet geïnstalleerd")) return context.skip("Typst is not installed");
+  const pdf = join(dir, "report", "rapport.pdf");
+  assert.ok(existsSync(pdf) && existsSync(join(dir, "report", "rapport-kort.pdf")), run.output);
   const missingAllowed = (problem: string): boolean => problem.includes("is niet geïnstalleerd") && !(process.env.CI === "true" && problem.includes("veraPDF"));
-  // The code points are named in the checks of the full and the short report, so they are seen before signing.
-  assert.deepEqual(result.pdfChecks.filter((problem) => !missingAllowed(problem)), [unshownCheck(["简", "体", "中", "文"]), `Korte versie: ${unshownCheck(["简", "体", "中", "文"])}`]);
-  const text = await tool("pdftotext", [result.pdf, "-"]);
+  const checks = run.stdout.split("\n").filter((line) => line.startsWith("- ")).map((line) => line.slice(2));
+  assert.deepEqual(checks.filter((problem) => !missingAllowed(problem)), [], run.output);
+  // The code points are named once, as a warning, so they are seen before signing.
+  assert.equal(run.stdout.split("\n").filter((line) => line.startsWith("LET OP: ")).join("\n"), `LET OP: ${unshownWarning(["简", "体", "中", "文"])}`);
+  assert.match(unshownWarning(["简", "体", "中", "文"]), /^4 tekens zonder glyph zijn als codepunt weergegeven: "简" \[U\+7B80\]/);
+  if (checks.length === 0) assert.ok(run.ok, "render ends with exit code 0");
+  const text = await tool("pdftotext", [pdf, "-"]);
   if (!text.found) return context.skip("pdftotext is not installed");
   const flat = text.stdout.replace(/\s+/g, " ");
   assert.ok(flat.includes("onder de kop “Tips 💡”, bij “een vinkje ✅ en een raket 🚀”"), "emoji are set in the bundled emoji font");
   assert.ok(flat.includes("bij “[U+7B80 U+4F53 U+4E2D U+6587]”"), "a character no bundled font has is set as its code point");
   assert.ok(renderMarkdown(evaluation).includes("简体中文"), "the Markdown keeps the text as it is");
+});
+
+test("a character without a glyph in a template stays a problem, the same character from the data a warning", async (context) => {
+  const dir = mkdtempSync(join(tmpdir(), "render-glyph-"));
+  const template = join(dir, "proef.typ");
+  // The rule that sets text as code points, as the report has it.
+  const report = readFileSync(join(TEMPLATES, "rapport.typ"), "utf8");
+  const rule = report.slice(report.indexOf("#show: body => {\n  let unshown"), report.indexOf("\n}\n", report.indexOf("let unshown")) + 3);
+  writeFileSync(template, `${rule}#set document(title: "Proef")\n#set text(lang: "nl", font: "Atkinson Hyperlegible Next")\n= Proef\n#sys.inputs.at("text", default: "")\n`);
+  const request = { template, inputs: { text: "Kop" }, title: "Proef", date: "2026-10-12T09:00:00.000Z" };
+  // The same character in the template's own text: a fault in loep, even when the data has it too.
+  writeFileSync(join(dir, "eigen.typ"), readFileSync(template, "utf8").replace("= Proef", "= Proef 中"));
+  const own = await makePdf({ ...request, template: join(dir, "eigen.typ"), inputs: { text: "中" }, output: join(dir, "eigen.pdf") });
+  if (own.pdfChecks.some((problem) => problem.includes("Typst is niet geïnstalleerd"))) return context.skip("Typst is not installed");
+  assert.ok(own.pdf !== null, own.pdfChecks.join("\n"));
+  assert.ok(own.pdfChecks.includes(unshownCheck(["中"])), own.pdfChecks.join("\n"));
+  assert.deepEqual(own.pdfWarnings, []);
+  const site = await makePdf({ ...request, inputs: { text: "中" }, output: join(dir, "site.pdf") });
+  assert.ok(site.pdf !== null, site.pdfChecks.join("\n"));
+  assert.ok(!site.pdfChecks.some((problem) => problem.includes("codepunt")), site.pdfChecks.join("\n"));
+  assert.deepEqual(site.pdfWarnings, [unshownWarning(["中"])]);
+  assert.match(unshownWarning(["中"]), /^1 teken zonder glyph is als codepunt weergegeven/);
 });
 
 test("the PDF shows the part for what waits for sending, with the flags of inventory", async (context) => {
