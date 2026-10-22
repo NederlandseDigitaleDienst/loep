@@ -102,6 +102,8 @@ export const REPORT_TEXT = {
   adviceNote:
     "Over de oplossingen: een stuk HTML in een oplossing toont de gewenste uitvoer in de browser, niet per se de wijziging in de bron (Markdown, een sjabloon of een component). Meet na een wijziging aan ruimte, breedte of afbreken opnieuw op 320 pixels breed en op een tussenbreedte, zoals 500 en 640 pixels: een oplossing voor één breedte kan op een andere iets breken.",
   defect: { label: "Gebrek", main: "Hoofdcriterium", also: "Raakt ook", check: "Controle" },
+  // What one examined place in appendix A came to, as the verdict says in its ruling.
+  ruling: { finding: "gebrek", noIssue: "in orde", open: "open, nog niet vastgesteld", otherCriterion: "doorgegeven aan een ander criterium", outcome: "Uitkomst", seeFinding: "zie bevinding" },
   measuredStates: "Gemeten toestanden",
   samplePageTypes:
     "Per paginatype uit het sitemodel: hoeveel unieke pagina's het heeft, hoeveel daarvan in de steekproef staan en waarom die. Een groot paginatype krijgt naast de voorbeeldpagina van de verkenner extra pagina's, gekozen op wat hun inhoud toevoegt aan de pagina's van dat type die er al in staan: afbeeldingen, tabellen, formulieren, video, geluid, ingesloten vensters, koppen, lijsten en lengte. Bij elke pagina hierboven staat wat ze toevoegt.",
@@ -222,6 +224,12 @@ export interface CriterionBrief {
   toolboxPointsNl: string[];
   /** What this criterion and another passed on to each other, one line each with what both said. Empty when there is none. */
   loopsNl: string[];
+  /**
+   * What each examined place in appendix A came to, in the order of the observations: the ruling
+   * in words and, for a defect, the finding in the main part it points at. Null for a place in a
+   * verdict from before observations had a ruling.
+   */
+  placesNl: ({ labelNl: string; findingId: string | null } | null)[];
 }
 
 /** The open points of one criterion that stand in the work list in full. */
@@ -710,6 +718,12 @@ function brief(criterion: CriterionResult): CriterionBrief {
     coverageNl: shownOutcome(criterion) === "nothingFound" ? criterion.nothingFound!.coverageNl : criterion.established?.by === "finishing" ? (criterion.established.coverageNl ?? null) : null,
     toolboxPointsNl: points.filter((point) => point.kind?.reader === "toolbox").map((point) => `${upperFirst(point.kind!.labelNl)}: ${point.textNl}`),
     loopsNl: (criterion.crossLoops ?? []).map((loop) => loopLine(criterion.id, loop)),
+    placesNl: criterion.observations.map((observation) => {
+      const ruling = observation.ruling;
+      if (!ruling || !(ruling in REPORT_TEXT.ruling)) return null;
+      const finding = ruling === "finding" ? criterion.findings.find((entry) => entry.key !== undefined && entry.key === observation.finding) : undefined;
+      return { labelNl: REPORT_TEXT.ruling[ruling], findingId: finding?.id ?? null };
+    }),
   };
 }
 
@@ -1211,8 +1225,10 @@ function appendixEntry(criterion: CriterionResult, short: CriterionBrief, chain:
   if (criterion.observations.length > 0) {
     lines.push("**Hoe is dit vastgesteld**", "");
     criterion.observations.forEach((observation, index) => {
+      const place = short.placesNl[index];
+      const outcome = place ? `${REPORT_TEXT.ruling.outcome}: ${place.labelNl}${place.findingId ? `, ${REPORT_TEXT.ruling.seeFinding} [${place.findingId}](#${place.findingId})` : ""}` : null;
       lines.push(
-        `${index + 1}. Onderzocht: ${esc(observation.checkedNl)}`,
+        ...(outcome ? [`${index + 1}. ${outcome}`, `   - Onderzocht: ${esc(observation.checkedNl)}`] : [`${index + 1}. Onderzocht: ${esc(observation.checkedNl)}`]),
         `   - Hoe: ${esc(observation.howNl)}`,
         `   - Waargenomen: ${esc(observation.observedNl)}`,
         `   - Bewijs: ${observation.evidence.map(code).join(", ")}`,

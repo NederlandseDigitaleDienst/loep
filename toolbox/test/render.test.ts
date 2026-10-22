@@ -371,6 +371,60 @@ test("the PDF shows the recommendations in their own part", async (context) => {
   assert.ok(flat.includes("aanbeveling A1 van de procedure"));
 });
 
+/** A failed criterion whose places say what they came to: a defect, one in order, one open and one passed on. The rest stays as before rulings existed. */
+function withRulings() {
+  const evaluation = exampleEvaluation();
+  const host = evaluation.criteria.find((criterion) => criterion.outcome === "failed" && criterion.findings.length > 0)!;
+  const finding = host.findings[0]!;
+  finding.key = "F1";
+  const place = { checkedNl: "Het vinkje onder een eigen bericht", howNl: "Bekeken op de pagina", observedNl: "Het vinkje heeft geen tekstalternatief.", evidence: ["images"] };
+  host.observations = [
+    { ...place, ruling: "finding", finding: "F1" },
+    { ...place, checkedNl: "Een foto met een spandoek", ruling: "noIssue" },
+    { ...place, checkedNl: "Een vlak onder de voet", ruling: "open" },
+    { ...place, checkedNl: "De rand van een veld", ruling: "otherCriterion" },
+  ];
+  return { evaluation, host, finding };
+}
+
+test("appendix A says per examined place what it came to, with the finding of a defect; an old place says nothing", () => {
+  const { evaluation, host, finding } = withRulings();
+  const markdown = renderMarkdown(evaluation);
+  const entry = markdown.slice(markdown.indexOf(`<a id="bijlage-${host.id}"></a>`)).split("**Hoe zeker is dit oordeel**")[0]!;
+  assert.ok(entry.includes(`1. Uitkomst: gebrek, zie bevinding [${finding.id}](#${finding.id})\n   - Onderzocht: Het vinkje onder een eigen bericht`), entry);
+  assert.ok(entry.includes("2. Uitkomst: in orde\n   - Onderzocht: Een foto met een spandoek"));
+  assert.ok(entry.includes("3. Uitkomst: open, nog niet vastgesteld\n   - Onderzocht: Een vlak onder de voet"));
+  assert.ok(entry.includes("4. Uitkomst: doorgegeven aan een ander criterium\n   - Onderzocht: De rand van een veld"));
+  // A place from before observations had a ruling keeps the old form, without an outcome.
+  const old = renderMarkdown(exampleEvaluation());
+  const other = exampleEvaluation().criteria.find((criterion) => criterion.observations.length > 0)!;
+  const oldEntry = old.slice(old.indexOf(`<a id="bijlage-${other.id}"></a>`)).split("**Hoe zeker is dit oordeel**")[0]!;
+  assert.ok(oldEntry.includes("1. Onderzocht: "));
+  assert.ok(!old.includes("1. Uitkomst: "), "no outcome for a place without a ruling");
+});
+
+test("the PDF says per examined place what it came to, and still renders a verdict from before rulings", async (context) => {
+  const dir = mkdtempSync(join(tmpdir(), "render-rulings-"));
+  writeFileSync(join(dir, "evaluation.json"), canonicalJson(withRulings().evaluation));
+  const result = await render(dir);
+  if (result.pdf === null) return context.skip("Typst is not installed");
+  assert.deepEqual(result.pdfChecks.filter((problem) => !problem.includes("is niet geïnstalleerd")), []);
+  const text = await tool("pdftotext", [result.pdf, "-"]);
+  if (!text.found) return context.skip("pdftotext is not installed");
+  const flat = text.stdout.replace(/\s+/g, " ");
+  const { finding } = withRulings();
+  assert.ok(flat.includes(`1. Uitkomst: gebrek, zie bevinding ${finding.id}`), "the defect points at its finding");
+  assert.ok(flat.includes("2. Uitkomst: in orde"));
+  assert.ok(flat.includes("3. Uitkomst: open, nog niet vastgesteld"));
+  assert.ok(flat.includes("4. Uitkomst: doorgegeven aan een ander criterium"));
+  const oldDir = mkdtempSync(join(tmpdir(), "render-rulings-old-"));
+  writeFileSync(join(oldDir, "evaluation.json"), canonicalJson(exampleEvaluation()));
+  const old = await render(oldDir);
+  assert.ok(old.pdf !== null);
+  const oldText = (await tool("pdftotext", [old.pdf, "-"])).stdout;
+  assert.ok(!oldText.includes("Uitkomst: gebrek") && !oldText.includes("Uitkomst: in orde"));
+});
+
 const PAGE_TYPES = [
   { id: "artikel", descriptionNl: "Artikel in de kennisbank", pages: 197, examined: 6, reasonNl: "de voorbeeldpagina van de verkenner, 4 gekozen op variatie in inhoud en 1 willekeurig gekozen" },
   { id: "contact", descriptionNl: "", pages: 1, examined: 1, reasonNl: "de voorbeeldpagina van de verkenner" },

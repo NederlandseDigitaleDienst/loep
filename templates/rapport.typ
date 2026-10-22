@@ -1248,8 +1248,15 @@
   // A criterion without a block in the main part has its fixed facts here.
   if criterion.id in derived.quiet { block(sticky: true, par(text(fill: muted, criterion-facts(criterion)))) }
   for (index, observation) in criterion.observations.enumerate() {
+    // What the place came to stands first, in words; a place from before verdicts said so has none.
+    let place = derived.briefs.at(criterion.id).placesNl.at(index, default: none)
     block(above: 7pt, below: 7pt, stroke: (left: 1.2pt + hairline), inset: (left: 6pt), {
-      par[#label-text[#(index + 1). Onderzocht:] #prose(observation.checkedNl)]
+      if place != none {
+        par[#label-text[#(index + 1). #t.ruling.outcome:] #place.labelNl#if place.findingId != none [, #t.ruling.seeFinding #link(label(place.findingId), id-text(place.findingId, size: 0.95em))]]
+        par[#label-text[Onderzocht:] #prose(observation.checkedNl)]
+      } else {
+        par[#label-text[#(index + 1). Onderzocht:] #prose(observation.checkedNl)]
+      }
       par[#label-text[Hoe:] #prose(observation.howNl)]
       par[#label-text[Waargenomen:] #prose(observation.observedNl)]
       par[#label-text[Bewijs:] #observation.evidence.map(reference => mono(reference, size: 7.4pt)).join(", ")]
