@@ -140,9 +140,18 @@ export function unshownPattern(texts: string[]): string {
 }
 
 /**
+ * The check line for texts set as code points. It is a problem on purpose: the report is what
+ * gets signed, and a missing glyph in loep's own templates must fail the tests as it did before.
+ */
+export function unshownCheck(texts: string[]): string {
+  const shown = texts.map((text) => `"${text}" [${[...text].map((character) => `U+${character.codePointAt(0)!.toString(16).toUpperCase().padStart(4, "0")}`).join(" ")}]`);
+  return `De PDF zet tekst als codepunten, omdat geen meegeleverd lettertype de tekens heeft: ${shown.join(", ")}. Controleer of dat tekst van de site is; rapport.md heeft de tekst zoals hij is.`;
+}
+
+/**
  * Compile a template to a tagged PDF/UA-1 file and check the result. A text no bundled font
  * can show is set as its code points on a second attempt, so a quote from a site never stops
- * the PDF. Without Typst there is no PDF, and the reason is returned as a problem instead of thrown.
+ * the PDF; the checks then name those texts. Without Typst there is no PDF, and the reason is returned as a problem instead of thrown.
  */
 export async function makePdf(request: PdfRequest): Promise<PdfResult> {
   const typst = await tool("typst", ["--version"]);
@@ -168,12 +177,15 @@ export async function makePdf(request: PdfRequest): Promise<PdfResult> {
     temporary,
   ]);
   let compiled = await compile(request.inputs);
-  const unshown = unshownTexts(compiled.output);
-  if (!compiled.ok && unshown.length > 0) compiled = await compile({ ...request.inputs, unshown: unshownPattern(unshown) });
+  const unshown = compiled.ok ? [] : unshownTexts(compiled.output);
+  if (unshown.length > 0) compiled = await compile({ ...request.inputs, unshown: unshownPattern(unshown) });
   if (!compiled.ok || !existsSync(temporary)) {
     await rm(temporary, { force: true });
     return { pdf: null, pdfChecks: [`Typst kon de PDF niet maken: ${compiled.output.trim()}`] };
   }
   await rename(temporary, request.output);
-  return { pdf: request.output, pdfChecks: [...(await basicChecks(request.output, request.title)), ...(await validatePdfUa(request.output))] };
+  return {
+    pdf: request.output,
+    pdfChecks: [...(unshown.length > 0 ? [unshownCheck(unshown)] : []), ...(await basicChecks(request.output, request.title)), ...(await validatePdfUa(request.output))],
+  };
 }

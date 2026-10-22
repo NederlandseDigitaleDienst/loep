@@ -10,7 +10,7 @@ import { mergeFindings } from "../src/lib/defects.ts";
 import { aiGeneratedMark, closeCutQuote, evaluationHash, idsAcrossVersionsNl, markVendor, quoteStart, summarise, vendorTagsOf, VERSION_NOT_MEASURED_NL, type Evaluation, type ReportFinding } from "../src/lib/evaluation.ts";
 import { reportedModels } from "../src/lib/models.ts";
 import { deriveReport, renderMarkdown } from "../src/lib/report-markdown.ts";
-import { tool, unshownPattern, unshownTexts } from "../src/lib/typst.ts";
+import { tool, unshownCheck, unshownPattern, unshownTexts } from "../src/lib/typst.ts";
 import { SEVERITIES } from "../src/lib/verdict.ts";
 import { exampleEvaluation } from "./fixtures/example-evaluation.ts";
 
@@ -432,6 +432,7 @@ test("Typst's report of text it cannot show becomes the texts and a pattern that
   assert.deepEqual(unshownTexts(output), ["中", 'a\u0301"\\']);
   assert.deepEqual(unshownTexts("error: file not found"), []);
   assert.equal(unshownPattern(["中", 'a\u0301"\\']), "(?:\\x{61}\\x{301}\\x{22}\\x{5c}|\\x{4e2d})+");
+  assert.match(unshownCheck(["中", "𝒜b"]), /als codepunten.*"中" \[U\+4E2D\], "𝒜b" \[U\+1D49C U\+0062\]/);
 });
 
 test("a quote from the site with emoji or a script no bundled font has still gives a PDF/UA-1 report", async (context) => {
@@ -447,7 +448,8 @@ test("a quote from the site with emoji or a script no bundled font has still giv
   if (result.pdf === null && result.pdfChecks.some((problem) => problem.includes("Typst is niet geïnstalleerd"))) return context.skip("Typst is not installed");
   assert.ok(result.pdf !== null && result.shortPdf !== null, result.pdfChecks.join("\n"));
   const missingAllowed = (problem: string): boolean => problem.includes("is niet geïnstalleerd") && !(process.env.CI === "true" && problem.includes("veraPDF"));
-  assert.deepEqual(result.pdfChecks.filter((problem) => !missingAllowed(problem)), []);
+  // The code points are named in the checks of the full and the short report, so they are seen before signing.
+  assert.deepEqual(result.pdfChecks.filter((problem) => !missingAllowed(problem)), [unshownCheck(["简", "体", "中", "文"]), `Korte versie: ${unshownCheck(["简", "体", "中", "文"])}`]);
   const text = await tool("pdftotext", [result.pdf, "-"]);
   if (!text.found) return context.skip("pdftotext is not installed");
   const flat = text.stdout.replace(/\s+/g, " ");
