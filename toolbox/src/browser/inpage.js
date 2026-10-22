@@ -99,6 +99,52 @@
   };
   const clipboardWrites = () => clipboardLog.map((entry) => ({ ...entry }));
 
+  // What the page asks of full screen, recorded before any page script runs: whether this document
+  // may go to full screen, each request, and what the browser answered. A player that may not
+  // often says so in its own words; this says why (#322).
+  const fullscreenLog = { requests: 0, refused: 0, lastRefusal: null, asked: 0, askedNotAllowed: 0 };
+  let fullscreenAllowed = () => document.fullscreenEnabled;
+  const noteRefusal = (error) => {
+    fullscreenLog.refused++;
+    fullscreenLog.lastRefusal = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
+  };
+  if (!ownWorld) {
+    for (const name of ["fullscreenEnabled", "webkitFullscreenEnabled"]) {
+      const descriptor = Object.getOwnPropertyDescriptor(Document.prototype, name);
+      if (!descriptor?.get || !descriptor.configurable) continue;
+      const read = descriptor.get;
+      // The reading of loep asks the browser itself, so it is not counted as a question of the page.
+      if (name === "fullscreenEnabled") fullscreenAllowed = () => read.call(document);
+      Object.defineProperty(Document.prototype, name, {
+        ...descriptor,
+        get() {
+          const allowed = read.call(this);
+          fullscreenLog.asked++;
+          if (!allowed) fullscreenLog.askedNotAllowed++;
+          return allowed;
+        },
+      });
+    }
+    for (const name of ["requestFullscreen", "webkitRequestFullscreen"]) {
+      const original = Element.prototype[name];
+      if (typeof original !== "function") continue;
+      Element.prototype[name] = function (...args) {
+        fullscreenLog.requests++;
+        if (!fullscreenAllowed()) fullscreenLog.askedNotAllowed++;
+        let answer;
+        try {
+          answer = original.apply(this, args);
+        } catch (error) {
+          noteRefusal(error);
+          throw error;
+        }
+        if (answer && typeof answer.then === "function") answer.then(undefined, noteRefusal);
+        return answer;
+      };
+    }
+  }
+  const fullscreenState = () => ({ ...fullscreenLog, active: document.fullscreenElement !== null });
+
   // Count what the page registers, before any page script runs. Whether a page uses
   // timers, gestures or key shortcuts cannot be read from the DOM afterwards.
   const listeners = {};
@@ -2280,6 +2326,23 @@
     return { viewport: { width: innerWidth, height: innerHeight }, headings, images, textBlocks: blocks, rotatedQuarterTurn: rotated.slice(0, 20), orientationRules };
   }
 
+  /**
+   * The size at which each visible block of text is drawn, in CSS pixels: its font size times the
+   * scale a transform of the block or an ancestor gives it. Text sized to the window or to its
+   * container shrinks when the window does, and a slide scaled to fit draws its text smaller.
+   */
+  function textSizes() {
+    const shown = (element) => isVisible(element) && !visuallyHidden(element);
+    return deepQueryAll(TEXT_BLOCK)
+      .filter((element) => shown(element) && [...element.childNodes].some((node) => node.nodeType === Node.TEXT_NODE && node.textContent.trim()))
+      .map((element) => {
+        const rect = element.getBoundingClientRect();
+        const scale = element.offsetWidth > 0 ? rect.width / element.offsetWidth : 1;
+        const drawn = Number.parseFloat(getComputedStyle(element).fontSize) * scale;
+        return { tag: element.localName, text: text(element, 80), path: path(element), drawn: Math.round(drawn * 10) / 10 };
+      });
+  }
+
   let colourCanvas = null;
 
   /** Any CSS colour as sRGB with alpha, resolved by the browser itself (handles oklch, light-dark and the rest). */
@@ -2626,6 +2689,7 @@
     textBlocksWithLang,
     pictures,
     clipboardWrites,
+    fullscreenState,
     clickables,
     paintedBox,
     settingControls,
@@ -2650,6 +2714,7 @@
     hearsDown,
     downSignature,
     contentInventory,
+    textSizes,
     svgShapes: (chain) => {
       const element = resolve(chain);
       return element ? svgShapes(element) : [];
@@ -2710,6 +2775,6 @@
     skipLinkTarget,
   };
   // What only the copy in the page knows or does is not there in loep's own world: a call there would find nothing.
-  if (ownWorld) for (const name of ["freezeListeners", "listenerCounts", "ownListeners", "timerReport", "clipboardWrites", "applyTextSpacing", "removeTextSpacing"]) delete library[name];
+  if (ownWorld) for (const name of ["freezeListeners", "listenerCounts", "ownListeners", "timerReport", "clipboardWrites", "fullscreenState", "applyTextSpacing", "removeTextSpacing"]) delete library[name];
   Object.defineProperty(window, "__loep", { value: Object.freeze(library), writable: false, configurable: false, enumerable: false });
 })();

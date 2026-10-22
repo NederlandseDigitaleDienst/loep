@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="nl">
+<head><meta charset="utf-8"><title>Tekstgrootte - Testsite sessie</title>
+<style>
+  body { margin: 0; padding: 16px; font-family: sans-serif; }
+  .pixels { font-size: 20px; }
+  .rem { font-size: 1.25rem; }
+  .window { font-size: 2vw; }
+  /* The size follows the window, plus what the user adds to the default font size. */
+  .window-and-rem { font-size: calc(2vw + (1rem - 16px) * 1.6); }
+  .slide { width: 1280px; transform: scale(0.5); transform-origin: 0 0; }
+  .slide p { font-size: 40px; }
+</style>
+</head>
+<body>
+<p class="pixels">Tekst in pixels groeit met zoom en niet met de lettergrootte.</p>
+<p class="rem">Tekst in rem groeit met zoom en met de lettergrootte.</p>
+<p class="window">Tekst naar het venster groeit met geen van beide.</p>
+<p class="window-and-rem">Tekst naar het venster en de lettergrootte groeit alleen met de lettergrootte.</p>
+<div class="slide"><p>Tekst op een verkleinde dia.</p></div>
+</body>
+</html>
