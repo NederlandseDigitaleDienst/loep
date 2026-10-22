@@ -1323,7 +1323,7 @@ export const source: Handler = async (context, _args, options) => {
   // Where a selector leads in the page as it is now is looked up here, while the page is at hand; the validator in the background may answer later.
   const places = await sourcePlaces(surface.page, fast.ok ? fast.value.result.findings.map((finding) => finding.selector) : []);
   const slow: Slow = { id: "vnu", detail: String(body.length), graceMs: BINARY_GRACE_MS, work: () => runMethod("vnu", browsers, () => vnu(path), 70_000) };
-  return withBackground(context, "source", options, [slow], (answers, pending) => {
+  return withBackground(context, "parse", options, [slow], (answers, pending) => {
     const background = split<SourceAnswer>(answers);
     const methods = [...background.methods, ...(fast.ok ? [fast.value] : [])];
     const located = locateSourceFindings(methods, places);
