@@ -3,6 +3,7 @@ import { join } from "node:path";
 import type { DocumentFacts, DocumentHeading, DocumentImage, DocumentLink, DocumentTable, PdfFacts } from "../../lib/documents.ts";
 import { pdfUa, tool } from "../../lib/typst.ts";
 import { ocr } from "../methods/ocr.ts";
+import { readableTagCopy } from "./marked-content.ts";
 
 /**
  * What can be read from a PDF without opening it in a viewer. The structure comes from
@@ -274,7 +275,10 @@ export async function measurePdf(pdf: string, scratch: string): Promise<PdfMeasu
   const pageOf = new Map<string, number>(pagesJson.map((page) => [String(page.object), Number(page.pageposfrom1)]));
   const pageCount = pagesJson.length || Number(field(info.output, "Pages")) || null;
 
-  const structText = info.found ? await tool("pdfinfo", ["-struct-text", pdf], TOOL_MS) : null;
+  // The text of the tags is read from a copy in which poppler does not lose it at nested marked content (#325).
+  const readable = info.found && catalog["/StructTreeRoot"] !== undefined ? await readableTagCopy(pdf, scratch, TOOL_MS) : null;
+  const structText = info.found ? await tool("pdfinfo", ["-struct-text", readable?.path ?? pdf], TOOL_MS) : null;
+  if (readable) await rm(readable.path, { force: true });
   const structure = buildStructure(objects, catalog, pageOf, structText?.ok ? structText.stdout : null);
   const all = structure.roots.flatMap((node) => [...walk(node)]);
   const markInfo = deref(catalog["/MarkInfo"]);
