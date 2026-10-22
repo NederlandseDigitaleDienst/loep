@@ -9,9 +9,9 @@ import { compareCriterionIds } from "./wcag.ts";
  * are never removed or rewritten here: the outcome per criterion stays what it was.
  */
 
-export const MERGE_RULES_VERSION = 2;
+export const MERGE_RULES_VERSION = 3;
 
-export type MergeBasis = "duplicate" | "measurement" | "element" | "component" | "proposal";
+export type MergeBasis = "duplicate" | "measurement" | "cause" | "element" | "component" | "proposal";
 
 export interface Defect {
   /** Stable across re-evaluations as long as most of its findings stay together. */
@@ -332,20 +332,43 @@ interface Member {
   component: string | null;
   /** The colours the finding says it measured, each as six hexadecimal digits. */
   colours: Set<string>;
+  /** The pairs of colours it says it measured, one on the other: "d9dee5/f5f7f9", in sorted order. */
+  pairs: Set<string>;
+}
+
+const COLOUR = /#([0-9a-f]{6}|[0-9a-f]{3})(?![\w-])|\brgb\(\s*(\d{1,3})[\s,]+(\d{1,3})[\s,]+(\d{1,3})\s*\)/gi;
+
+/** The colours in a text in the order they stand, each as six hexadecimal digits, with where it ends. */
+function colourTokens(text: string): { colour: string; start: number; end: number }[] {
+  return [...text.matchAll(COLOUR)].map((match) => {
+    const [, hex, red, green, blue] = match;
+    const colour = hex ? (hex.length === 3 ? [...hex.toLowerCase()].map((digit) => digit + digit).join("") : hex.toLowerCase()) : [red, green, blue].map((part) => Math.min(255, Number(part)).toString(16).padStart(2, "0")).join("");
+    return { colour, start: match.index, end: match.index + match[0].length };
+  });
 }
 
 /** Colours written as a judge takes them from a measurement: "#d9dee5", "#ddd" or "rgb(217, 222, 229)". */
-function measuredColours(text: string): Set<string> {
-  const colours = new Set<string>();
-  for (const [, hex] of text.matchAll(/#([0-9a-f]{6}|[0-9a-f]{3})(?![\w-])/gi)) colours.add(hex!.length === 3 ? [...hex!.toLowerCase()].map((digit) => digit + digit).join("") : hex!.toLowerCase());
-  for (const [, red, green, blue] of text.matchAll(/\brgb\(\s*(\d{1,3})[\s,]+(\d{1,3})[\s,]+(\d{1,3})\s*\)/gi)) colours.add([red, green, blue].map((part) => Math.min(255, Number(part)).toString(16).padStart(2, "0")).join(""));
-  return colours;
+const measuredColours = (text: string): Set<string> => new Set(colourTokens(text).map((token) => token.colour));
+
+/**
+ * Pairs of colours written as a measurement gives them, one on the other: "#d9dee5 op #f5f7f9".
+ * Only two written colours with just "op", "tegen", "on", "against" or a slash between them are
+ * a pair; a colour named in words ("#767676 op wit") cannot be compared and gives none.
+ */
+function measuredPairs(text: string): Set<string> {
+  const tokens = colourTokens(text);
+  const pairs = new Set<string>();
+  for (const [index, token] of tokens.entries()) {
+    const next = tokens[index + 1];
+    if (next && /^\s*(?:op|tegen|on|against|\/)\s*$/i.test(text.slice(token.end, next.start)) && token.colour !== next.colour) pairs.add([token.colour, next.colour].sort().join("/"));
+  }
+  return pairs;
 }
 
 const normaliseComponent = (component: string | null): string | null => (component && squash(component) ? squash(component).replace(/^["'‘“]+|["'’”]+$/g, "") : null);
 
 function member(finding: ReportFinding, index: PageIndex): Member {
-  return { finding, targets: targetsOf(finding), pages: pagesOf(finding, index), component: normaliseComponent(finding.component), colours: measuredColours(finding.observedNl) };
+  return { finding, targets: targetsOf(finding), pages: pagesOf(finding, index), component: normaliseComponent(finding.component), colours: measuredColours(finding.observedNl), pairs: measuredPairs(finding.observedNl) };
 }
 
 /**
@@ -399,9 +422,39 @@ function sameElement(a: Member, b: Member): number | null {
 function sameMeasurement(a: Member, b: Member): boolean {
   if (!COLOUR_CRITERIA.has(a.finding.criterion) || !COLOUR_CRITERIA.has(b.finding.criterion)) return false;
   if (![...a.colours].some((colour) => b.colours.has(colour))) return false;
-  const observed = (entry: Member): string[] => entry.targets.filter((target) => !isFrame(target)).flatMap((target) => target.keys.filter((key) => key.startsWith("path:")));
-  const theirs = new Set(observed(b));
-  return observed(a).some((key) => theirs.has(key));
+  const theirs = new Set(observedKeys(b));
+  return observedKeys(a).some((key) => theirs.has(key));
+}
+
+/** The selector chains observations recorded for a finding, without the frames it only stands in. */
+const observedKeys = (entry: Member): string[] => entry.targets.filter((target) => !isFrame(target)).flatMap((target) => target.keys.filter((key) => key.startsWith("path:")));
+
+/** A chain with the place among its siblings left out: the same place in every item of a list, a menu or a row of cards. */
+const repeatedPlace = (key: string): string => key.replace(/:nth-(of-type|child)\(\d+\)/g, ":nth-$1(n)");
+
+/**
+ * The same cause: two findings about colour that name the same measured pair of colours, one on
+ * the other, at the same element. That is what "the same cause" means here, and nothing more: one
+ * colour in a style sheet that is too pale, which a designer changes in one place, whichever
+ * criteria it breaks. The rule is strict on purpose:
+ *
+ * - Only colour. A field without a label and the same field with a pale border are two repairs.
+ * - Both colours of a pair, written by both findings. One grey in common proves nothing: a site
+ *   uses one grey in many places. A ratio alone ("1,2 op 1") is not a pair.
+ * - The same element: a chain an observation recorded, the same apart from which item of a
+ *   repeated part it is (the current item of a menu is another item on every page), or, when the
+ *   judges named it so, the same component in the same words. A selector read from prose is not
+ *   enough.
+ *
+ * The outcome per criterion does not change: the findings stay as they are, under their own
+ * criterion. Only the work list for whoever repairs the site gets one line for them.
+ */
+function sameCause(a: Member, b: Member): boolean {
+  if (!COLOUR_CRITERIA.has(a.finding.criterion) || !COLOUR_CRITERIA.has(b.finding.criterion)) return false;
+  if (![...a.pairs].some((pair) => b.pairs.has(pair))) return false;
+  if (a.component !== null && a.component === b.component) return true;
+  const theirs = new Set(observedKeys(b).map(repeatedPlace));
+  return observedKeys(a).some((key) => theirs.has(repeatedPlace(key)));
 }
 
 /** The same problem measured twice: once per colour scheme or window size, under the same criterion. */
@@ -443,12 +496,13 @@ function placeWords(entry: Member, pages: string[]): Set<string> {
  *   That is a low bar, and it is all that prose allows; with observations of the session the
  *   first rule decides every case.
  *
- * One case needs none of this: the same colour measured on the same element is the same defect.
+ * Two cases need none of this: the same colour measured on the same element is the same defect,
+ * and so is the same pair of colours at the same element or component (see `sameCause`).
  */
 function holdsProblem(holder: Member, other: Member): string | null {
   const shared = holder.pages.filter((page) => other.pages.includes(page));
   if (shared.length === 0) return "share no page";
-  if (sameMeasurement(holder, other)) return null;
+  if (sameMeasurement(holder, other) || sameCause(holder, other)) return null;
   const selectors = (entry: Member): Target[] => entry.targets.filter((target) => !target.prose);
   const mine = selectors(holder).flatMap((target) => target.keys);
   const theirs = selectors(other);
@@ -590,6 +644,7 @@ export function mergeFindings(evaluation: Evaluation): Defect[] {
       if (isDuplicate(left, right)) pairs.push({ a, b, basis: "duplicate", score: 3 });
       // Decided by what was measured, before anything that depends on how a judge named or listed things.
       else if (sameMeasurement(left, right)) pairs.push({ a, b, basis: "measurement", score: 2.5 });
+      else if (sameCause(left, right)) pairs.push({ a, b, basis: "cause", score: 2.4 });
       else if (!sameKind(left, right)) continue;
       else if (element !== null) pairs.push({ a, b, basis: "element", score: 2 + element });
       // The same named component on the same pages, with at least one element in common. The name alone

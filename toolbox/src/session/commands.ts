@@ -576,8 +576,8 @@ const crop: Handler = async (context, _args, options) => {
   if (!fits) {
     // Larger than the window: cut it out of a picture of the whole page.
     const clip = { x: Math.max(0, target.box.x - margin), y: Math.max(0, target.box.y - margin), width: target.box.width + 2 * margin, height: target.box.height + 2 * margin };
-    await regionScreenshot(page, clip, { path });
-    return { result: { box: target.box, margin, fullPage: true }, print: { image: images.relative(path), size: `${target.box.width}x${target.box.height}` } };
+    const picture = await regionScreenshot(page, clip, { path });
+    return { result: { box: target.box, margin, fullPage: true, inImage: inPicture(target.box, clip, picture) }, print: { image: images.relative(path), size: `${target.box.width}x${target.box.height}` } };
   }
   const placed = await page.evaluate((ref) => {
     const element = (window as unknown as { __loeps: { get: (ref: number) => HTMLElement | null } }).__loeps.get(ref)!;
@@ -590,10 +590,20 @@ const crop: Handler = async (context, _args, options) => {
   const x = Math.max(0, Math.floor(placed.box.x - margin));
   const y = Math.max(0, Math.floor(placed.box.y - margin));
   const clip = { x, y, width: Math.max(1, Math.min(viewport.width, Math.ceil(placed.box.x + placed.box.width + margin)) - x), height: Math.max(1, Math.min(viewport.height, Math.ceil(placed.box.y + placed.box.height + margin)) - y) };
-  await page.screenshot({ path, clip, animations: "disabled" });
+  const picture = await page.screenshot({ path, clip, animations: "disabled" });
   await page.evaluate(([left, top]) => window.scrollTo({ left: left!, top: top!, behavior: "instant" }), placed.original);
-  return { result: { box: target.box, margin, fullPage: false }, print: { image: images.relative(path), size: `${target.box.width}x${target.box.height}` } };
+  return { result: { box: target.box, margin, fullPage: false, inImage: inPicture(placed.box, clip, picture) }, print: { image: images.relative(path), size: `${target.box.width}x${target.box.height}` } };
 };
+
+/**
+ * Where the element lies in the picture a crop made, in the pixels of that picture: the box and
+ * the clip are in CSS pixels, the picture may be made at a larger scale. A report cuts its piece
+ * for a finding from this, and outlines the element (see `findingCutout`).
+ */
+function inPicture(box: Box, clip: Box, picture: Buffer): Box {
+  const scale = picture.length >= 24 ? picture.readUInt32BE(16) / clip.width : 1;
+  return { x: Math.round((box.x - clip.x) * scale), y: Math.round((box.y - clip.y) * scale), width: Math.round(box.width * scale), height: Math.round(box.height * scale) };
+}
 
 const ax: Handler = async (context) => {
   const { page } = context.surface;

@@ -86,7 +86,7 @@ export const toolboxVersion = (): string => (JSON.parse(readFileSync(join(TOOLBO
  * Some only read; `render`, `statement`, `compare`, `decide`, `sign` and `seal` write a report, a statement, a comparison,
  * a decision, a signature or a seal from what the run holds, which is what a finished, sealed run needs after a release.
  */
-export const MEASURES_NOTHING = ["pending", "estimate", "gaps", "feedback", "verify", "procedures", "render", "statement", "compare", "decide", "sign", "seal"];
+export const MEASURES_NOTHING = ["pending", "estimate", "gaps", "feedback", "verify", "procedures", "render", "export", "statement", "compare", "decide", "sign", "seal"];
 
 /**
  * The commands of the agent phases. They work on the evidence of the sweep and measure nothing of the site, so in a copy
