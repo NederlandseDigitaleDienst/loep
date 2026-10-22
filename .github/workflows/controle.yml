@@ -9,16 +9,16 @@
 # per voorstel in plaats van twee keer. Wat in de queue faalt, gaat terug naar het voorstel.
 # Ze bestaat uit losse jobs die naast elkaar lopen:
 #
-# - wijziging: zegt of er iets te controleren is. Alleen 's nachts kan het antwoord nee zijn.
+# - wijziging: zegt of er iets te controleren is (alleen 's nachts kan het antwoord nee zijn),
+#   en wat het voorstel raakt: de veegronde en de ijkmeting draaien alleen als het ertoe doet.
 # - installatie: REUSE, `just install` en `just tools` op een schone machine (zonder cache
 #   voor de browsers), `just doctor`, de types en de procedures.
-# - tests (1/3) tot en met (3/3): elk een derde van de testbestanden, met de ingebouwde
-#   verdeling van de testrunner van Node (`just test --test-shard=<i>/<n>`). Die verdeelt per
-#   bestand, op volgorde van naam; het langste bestand bepaalt dus hoe kort een job kan zijn.
-#   De browsers van Playwright komen uit een cache met de versie van Playwright uit
-#   toolbox/package-lock.json als sleutel. Meer of minder delen: pas `shard` en `total` aan.
-#   In deze jobs staat veraPDF (een vaste versie, toolbox/scripts/install-verapdf.sh): de tests
-#   die het nodig hebben, falen met CI=true als het ontbreekt, in plaats van stil terug te vallen.
+# - tests (1/4) tot en met (4/4): elk een deel van de testbestanden, verdeeld op gemeten duur
+#   (`just test-shard <i> <n>`, met toolbox/test/durations.json). Het langste bestand,
+#   atonce-sweep.test.ts met ruim 9 minuten, bepaalt hoe kort een job kan zijn. Meer of minder
+#   delen: pas `shard` en `total` aan. In deze jobs staat veraPDF (een vaste versie,
+#   toolbox/scripts/install-verapdf.sh): de tests die het nodig hebben, falen met CI=true als
+#   het ontbreekt, in plaats van stil terug te vallen.
 # - tests zonder browser (Node 22.18): de types en `just test-quick` op de laagste versie van
 #   Node die toolbox/package.json belooft. De volledige tests draaien op Node 24.
 # - veegronde op de testsite: als een voorstel toolbox/src/ raakt, of de pakketten, de testsite
@@ -26,15 +26,22 @@
 #   de regressietoets `just sweep-check`: inventory, een vast sitemodel, collect, contrast en
 #   states op de testsite, en per gebrek uit de sleutel of het bewijs in het dossier staat. Twee
 #   jobs naast elkaar: Lindewaard (de gebreken) en Berkenveen (de tweeling). De tabel komt als
-#   artefact mee. Raakt het voorstel ook de contrastmeting, toolbox/src/lib/ of de pakketten,
-#   dan draait daarna `just calibrate` en komt de uitkomst naast de vorige uit validatie/ijkset/.
-#   Raakt het voorstel niets daarvan, dan slaagt de job meteen.
+#   artefact mee. Raakt het voorstel niets daarvan, dan slaagt de job meteen.
+# - ijkmeting: raakt het voorstel de contrastmeting, toolbox/src/lib/, de pakketten of deze
+#   workflow, dan draait `just calibrate` en komt de uitkomst naast de vorige uit
+#   validatie/ijkset/. Een eigen job naast de veegronde, niet erna: samen duurden ze 18 tot 23
+#   minuten.
 # - volledig: wacht op de andere en faalt als er een mislukte, werd afgebroken of werd
 #   overgeslagen. Dit is de verplichte check op main en in de merge queue; hernoem deze job
 #   niet, anders blokkeren de branch-protectie en de ruleset van de merge queue.
 #
-# Zonder de veegronde duurt alles samen ongeveer 8 minuten, waar het eerst 15 tot 17 minuten na
-# elkaar was. Loopt de veegronde mee, dan bepaalt die de duur.
+# Wat elke job inricht, komt zoveel mogelijk uit een cache: de pakketten van npm (setup-node),
+# de browsers van Playwright en de pakketten van Ubuntu die apt binnenhaalt (zie
+# .github/actions/). Een cache die de queue maakt, ziet alleen die ene run; de nachtelijke run op
+# main maakt de cache die de queue leest.
+#
+# De veegronde van Lindewaard bepaalt de duur: ongeveer 14 minuten. Zonder de veegronde duurt
+# alles samen ongeveer 11 minuten.
 name: Controle
 
 on:
@@ -85,12 +92,14 @@ jobs:
     timeout-minutes: 5
     outputs:
       ja: ${{ steps.nieuw.outputs.ja }}
+      src: ${{ steps.geraakt.outputs.src }}
+      ijk: ${{ steps.geraakt.outputs.ijk }}
     steps:
-      # Only the nightly run looks at the history; every other event always checks.
+      # A pull request needs no history: it skips the full check.
       - uses: actions/checkout@v7
-        if: github.event_name == 'schedule'
+        if: github.event_name != 'pull_request'
         with:
-          fetch-depth: 50
+          fetch-depth: 0
 
       - name: Is er vandaag iets veranderd
         id: nieuw
@@ -100,6 +109,24 @@ jobs:
           # A pull request skips the full check: the merge queue runs it on the merge group.
           if [ "$EVENT" = "pull_request" ]; then echo "ja=false" >> "$GITHUB_OUTPUT"
           elif [ "$EVENT" != "schedule" ] || [ -n "$(git log --since='25 hours ago' --format=%h -1)" ]; then echo "ja=true" >> "$GITHUB_OUTPUT"; else echo "ja=false" >> "$GITHUB_OUTPUT"; fi
+
+      # The merge queue is compared with its base; the nightly run and a run by hand always measure.
+      - name: Wat is er geraakt
+        id: geraakt
+        if: steps.nieuw.outputs.ja == 'true'
+        env:
+          EVENT: ${{ github.event_name }}
+          QUEUE_BASE: ${{ github.event.merge_group.base_sha }}
+        run: |
+          if [ "$EVENT" = merge_group ]; then
+            changed="$(git diff --name-only "$QUEUE_BASE" HEAD)"
+          else
+            changed="toolbox/src/lib/"
+          fi
+          # The code of the sweep, the versions of the rule engines, the fixture site with its key, and the check itself.
+          # A change to this workflow or its actions runs both, so that every part of it has run once before it lands.
+          if echo "$changed" | grep -Eq '^(toolbox/src/|toolbox/package-lock\.json|toolbox/fixtures/|toolbox/scripts/sweep-check\.ts|\.github/workflows/controle\.yml|\.github/actions/)'; then echo "src=true" >> "$GITHUB_OUTPUT"; else echo "src=false" >> "$GITHUB_OUTPUT"; fi
+          if echo "$changed" | grep -Eq '^(toolbox/src/(lib/|instruments/contrast\.ts|commands/contrast\.ts|commands/calibrate\.ts)|toolbox/package-lock\.json|toolbox/scripts/calibrate-compare\.ts|\.github/workflows/controle\.yml|\.github/actions/)'; then echo "ijk=true" >> "$GITHUB_OUTPUT"; else echo "ijk=false" >> "$GITHUB_OUTPUT"; fi
 
   installatie:
     needs: wijziging
@@ -116,6 +143,8 @@ jobs:
       - uses: extractions/setup-just@v4
       - uses: astral-sh/setup-uv@v7
       - uses: typst-community/setup-typst@v5
+      # Only the downloads of apt; what it installs, and the browsers, are as on a clean machine.
+      - uses: ./.github/actions/ubuntu-packages
 
       - name: Elk bestand heeft een rechthebbende en een licentie
         run: just reuse
@@ -145,8 +174,8 @@ jobs:
       # Let every shard finish, so a failure shows all tests that fail, not only the first shard's.
       fail-fast: false
       matrix:
-        shard: [1, 2, 3]
-        total: [3]
+        shard: [1, 2, 3, 4]
+        total: [4]
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -162,29 +191,14 @@ jobs:
       - name: Pakketten
         run: cd toolbox && npm ci
 
-      - name: Versie van Playwright
-        id: playwright
-        run: echo "versie=$(node -p "require('./toolbox/package-lock.json').packages['node_modules/playwright'].version")" >> "$GITHUB_OUTPUT"
-
-      - name: Browsers uit de cache
-        uses: actions/cache@v6
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.versie }}
-
-      # With the browsers from the cache this only installs what they need from the system.
-      - name: Browsers
-        run: cd toolbox && npx playwright install --with-deps chromium firefox webkit
-
-      - name: Hulpprogramma's
-        run: just tools
+      - uses: ./.github/actions/browsers-and-tools
 
       # No package source has veraPDF; the tests that need it fail with CI=true when it is missing.
       - name: veraPDF
         run: sudo sh toolbox/scripts/install-verapdf.sh
 
       - name: Tests
-        run: just test --test-shard=${{ matrix.shard }}/${{ matrix.total }}
+        run: just test-shard ${{ matrix.shard }} ${{ matrix.total }}
 
   node-22:
     needs: wijziging
@@ -224,81 +238,42 @@ jobs:
             site: Lindewaard
           - variant: clean
             site: Berkenveen
+    env:
+      MEASURE: ${{ needs.wijziging.outputs.src }}
     steps:
-      - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-
-      # A pull request and the merge queue are compared with their base; the nightly run and a run by hand always measure.
-      - name: Wat is er geraakt
-        id: geraakt
-        env:
-          EVENT: ${{ github.event_name }}
-          PR_BASE: ${{ github.event.pull_request.base.sha }}
-          QUEUE_BASE: ${{ github.event.merge_group.base_sha }}
-        run: |
-          case "$EVENT" in
-            pull_request) base="$PR_BASE" ;;
-            merge_group) base="$QUEUE_BASE" ;;
-            *) base="" ;;
-          esac
-          if [ -z "$base" ]; then
-            changed="toolbox/src/lib/"
-          else
-            changed="$(git diff --name-only "$base" HEAD)"
-          fi
-          # The code of the sweep, the versions of the rule engines, the fixture site with its key, and the check itself.
-          if echo "$changed" | grep -Eq '^(toolbox/src/|toolbox/package-lock\.json|toolbox/fixtures/|toolbox/scripts/sweep-check\.ts|\.github/workflows/controle\.yml)'; then echo "src=true" >> "$GITHUB_OUTPUT"; else echo "src=false" >> "$GITHUB_OUTPUT"; fi
-          if echo "$changed" | grep -Eq '^(toolbox/src/(lib/|instruments/contrast\.ts|commands/contrast\.ts|commands/calibrate\.ts)|toolbox/package-lock\.json|toolbox/scripts/calibrate-compare\.ts)'; then echo "ijk=true" >> "$GITHUB_OUTPUT"; else echo "ijk=false" >> "$GITHUB_OUTPUT"; fi
-
       - name: Niets te meten
-        if: steps.geraakt.outputs.src != 'true'
+        if: env.MEASURE != 'true'
         run: echo "Dit voorstel raakt de code van de veegronde, de pakketten, de testsite en de toets niet; de veegronde is niet opnieuw gemeten."
 
+      - uses: actions/checkout@v7
+        if: env.MEASURE == 'true'
       - uses: actions/setup-node@v7
-        if: steps.geraakt.outputs.src == 'true'
+        if: env.MEASURE == 'true'
         with:
           node-version: 24
           cache: npm
           cache-dependency-path: toolbox/package-lock.json
       - uses: extractions/setup-just@v4
-        if: steps.geraakt.outputs.src == 'true'
+        if: env.MEASURE == 'true'
 
       - name: Pakketten
-        if: steps.geraakt.outputs.src == 'true'
+        if: env.MEASURE == 'true'
         run: cd toolbox && npm ci
 
-      - name: Versie van Playwright
-        if: steps.geraakt.outputs.src == 'true'
-        id: playwright
-        run: echo "versie=$(node -p "require('./toolbox/package-lock.json').packages['node_modules/playwright'].version")" >> "$GITHUB_OUTPUT"
-
-      - name: Browsers uit de cache
-        if: steps.geraakt.outputs.src == 'true'
-        uses: actions/cache@v6
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.versie }}
-
-      - name: Browsers
-        if: steps.geraakt.outputs.src == 'true'
-        run: cd toolbox && npx playwright install --with-deps chromium firefox webkit
-
       # Text recognition and the other tools change what collect writes; the baseline was made with them.
-      - name: Hulpprogramma's
-        if: steps.geraakt.outputs.src == 'true'
-        run: just tools
+      - uses: ./.github/actions/browsers-and-tools
+        if: env.MEASURE == 'true'
 
       - name: Regressietoets van de veegronde
-        if: steps.geraakt.outputs.src == 'true'
+        if: env.MEASURE == 'true'
         run: just sweep-check --variant ${{ matrix.variant }} --out "$RUNNER_TEMP/veegronde" --at-once 3
 
       - name: Tabel in de samenvatting
-        if: always() && steps.geraakt.outputs.src == 'true'
+        if: always() && env.MEASURE == 'true'
         run: if [ -f "$RUNNER_TEMP/veegronde/sweep-check.md" ]; then cat "$RUNNER_TEMP/veegronde/sweep-check.md" >> "$GITHUB_STEP_SUMMARY"; fi
 
       - name: Tabel als artefact
-        if: always() && steps.geraakt.outputs.src == 'true'
+        if: always() && env.MEASURE == 'true'
         uses: actions/upload-artifact@v7
         with:
           name: veegronde-${{ matrix.site }}
@@ -307,16 +282,46 @@ jobs:
             ${{ runner.temp }}/veegronde/sweep-check.json
           if-no-files-found: warn
 
+  ijkmeting:
+    needs: wijziging
+    if: needs.wijziging.outputs.ja == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      MEASURE: ${{ needs.wijziging.outputs.ijk }}
+    steps:
+      - name: Niets te ijken
+        if: env.MEASURE != 'true'
+        run: echo "Dit voorstel raakt de contrastmeting, toolbox/src/lib/ en de pakketten niet; de ijkmeting is niet opnieuw gedaan."
+
+      - uses: actions/checkout@v7
+        if: env.MEASURE == 'true'
+      - uses: actions/setup-node@v7
+        if: env.MEASURE == 'true'
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: toolbox/package-lock.json
+      - uses: extractions/setup-just@v4
+        if: env.MEASURE == 'true'
+
+      - name: Pakketten
+        if: env.MEASURE == 'true'
+        run: cd toolbox && npm ci
+
+      - uses: ./.github/actions/browsers-and-tools
+        if: env.MEASURE == 'true'
+
       # The test cases of the ACT rules, about 90 MB, are fetched once per commit of their repository.
       - name: Testgevallen van de ACT-regels uit de cache
-        if: steps.geraakt.outputs.ijk == 'true' && matrix.variant == 'defect'
+        if: env.MEASURE == 'true'
         uses: actions/cache@v6
         with:
           path: ~/.cache/loep/act-rules
           key: act-rules-${{ hashFiles('toolbox/src/commands/calibrate.ts') }}
 
       - name: IJkmeting naast de vorige
-        if: steps.geraakt.outputs.ijk == 'true' && matrix.variant == 'defect'
+        if: env.MEASURE == 'true'
         run: |
           just calibrate --out "$RUNNER_TEMP/ijkset"
           previous="$(ls -d validatie/ijkset/20*/ | sort | tail -1)"
@@ -324,7 +329,7 @@ jobs:
           cat "$RUNNER_TEMP/ijkset/verschil.md" >> "$GITHUB_STEP_SUMMARY"
 
       - name: IJkmeting als artefact
-        if: always() && steps.geraakt.outputs.ijk == 'true' && matrix.variant == 'defect'
+        if: always() && env.MEASURE == 'true'
         uses: actions/upload-artifact@v7
         with:
           name: ijkset
@@ -332,7 +337,7 @@ jobs:
           if-no-files-found: warn
 
   volledig:
-    needs: [wijziging, installatie, tests, node-22, veegronde]
+    needs: [wijziging, installatie, tests, node-22, veegronde, ijkmeting]
     if: always() && github.event_name != 'push'
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -345,9 +350,10 @@ jobs:
           TESTS: ${{ needs.tests.result }}
           NODE22: ${{ needs.node-22.result }}
           VEEGRONDE: ${{ needs.veegronde.result }}
+          IJKMETING: ${{ needs.ijkmeting.result }}
           EVENT: ${{ github.event_name }}
         run: |
-          echo "wijziging: $WIJZIGING, installatie: $INSTALLATIE, tests: $TESTS, node 22: $NODE22, veegronde: $VEEGRONDE"
+          echo "wijziging: $WIJZIGING, installatie: $INSTALLATIE, tests: $TESTS, node 22: $NODE22, veegronde: $VEEGRONDE, ijkmeting: $IJKMETING"
           if [ "$WIJZIGING" = success ] && [ "$NIEUW" != true ] && [ "$EVENT" = pull_request ]; then
             echo "Op een voorstel draait alleen de snelle controle; de volledige draait in de merge queue."
             exit 0
@@ -356,7 +362,7 @@ jobs:
             echo "Vandaag is er niets veranderd; er is niets gecontroleerd."
             exit 0
           fi
-          if [ "$WIJZIGING" = success ] && [ "$INSTALLATIE" = success ] && [ "$TESTS" = success ] && [ "$NODE22" = success ] && [ "$VEEGRONDE" = success ]; then
+          if [ "$WIJZIGING" = success ] && [ "$INSTALLATIE" = success ] && [ "$TESTS" = success ] && [ "$NODE22" = success ] && [ "$VEEGRONDE" = success ] && [ "$IJKMETING" = success ]; then
             exit 0
           fi
           echo "::error::Een deel van de volledige controle is mislukt, afgebroken of overgeslagen."

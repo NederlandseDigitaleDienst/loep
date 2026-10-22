@@ -1,0 +1,34 @@
+name: Pakketten van Ubuntu uit de cache
+description: >
+  Haalt de pakketten die apt eerder binnenhaalde (de systeembibliotheken van de browsers en de
+  hulpprogramma's van `just tools`) uit de cache. De spiegel van Ubuntu leverde op 22 oktober 2026
+  soms een paar kB per seconde; het inrichten kostte toen tot 23 minuten (#320). apt kiest nog steeds
+  zelf welke versie het installeert en controleert elk pakket tegen zijn index: de cache scheelt
+  alleen het downloaden. Opslaan doet de stap `save` van browsers-and-tools, alleen op main.
+outputs:
+  key:
+    description: De sleutel waaronder de pakketten van deze versie van de runner horen.
+    value: ${{ steps.apt.outputs.key }}
+  hit:
+    description: true als de cache precies deze sleutel had.
+    value: ${{ steps.restore.outputs.cache-hit }}
+runs:
+  using: composite
+  steps:
+    - name: Pakketten van Ubuntu in een map die de cache kan bewaren
+      id: apt
+      shell: bash
+      run: |
+        mkdir -p "$HOME/.cache/apt/partial"
+        printf 'Dir::Cache::Archives "%s";\nAPT::Keep-Downloaded-Packages "true";\nAPT::Sandbox::User "root";\n' "$HOME/.cache/apt" | sudo tee /etc/apt/apt.conf.d/90loep-cache > /dev/null
+        echo "os=apt-$ImageOS-" >> "$GITHUB_OUTPUT"
+        echo "key=apt-$ImageOS-$ImageVersion" >> "$GITHUB_OUTPUT"
+
+    # A runner of last week still has most packages; apt fetches only what changed.
+    - name: Pakketten van Ubuntu uit de cache
+      id: restore
+      uses: actions/cache/restore@v6
+      with:
+        path: ~/.cache/apt/*.deb
+        key: ${{ steps.apt.outputs.key }}
+        restore-keys: ${{ steps.apt.outputs.os }}

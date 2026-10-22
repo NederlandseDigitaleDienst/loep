@@ -1,0 +1,45 @@
+name: Browsers en hulpprogramma's
+description: >
+  De drie browsers van Playwright, uit een cache met de versie van Playwright uit
+  toolbox/package-lock.json als sleutel, met wat ze van het systeem nodig hebben, en de
+  hulpprogramma's van `just tools`. Verwacht Node, just en de pakketten van de toolbox.
+runs:
+  using: composite
+  steps:
+    - name: Pakketten van Ubuntu
+      id: apt
+      uses: ./.github/actions/ubuntu-packages
+
+    - name: Versie van Playwright
+      id: playwright
+      shell: bash
+      run: echo "version=$(node -p "require('./toolbox/package-lock.json').packages['node_modules/playwright'].version")" >> "$GITHUB_OUTPUT"
+
+    - name: Browsers uit de cache
+      uses: actions/cache@v6
+      with:
+        path: ~/.cache/ms-playwright
+        key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
+
+    # With the browsers from the cache this only installs what they need from the system.
+    - name: Browsers
+      shell: bash
+      run: cd toolbox && npx playwright install --with-deps chromium firefox webkit
+
+    - name: Hulpprogramma's
+      shell: bash
+      run: just tools
+
+    # A cache made in the merge queue is only visible to that one run; the nightly run and a run by
+    # hand on main make the one that the queue reads. Packages that apt no longer offers go first.
+    - name: Oude pakketten van Ubuntu weg
+      if: github.ref == 'refs/heads/main' && steps.apt.outputs.hit != 'true'
+      shell: bash
+      run: sudo apt-get autoclean -qq
+
+    - name: Pakketten van Ubuntu in de cache
+      if: github.ref == 'refs/heads/main' && steps.apt.outputs.hit != 'true'
+      uses: actions/cache/save@v6
+      with:
+        path: ~/.cache/apt/*.deb
+        key: ${{ steps.apt.outputs.key }}
