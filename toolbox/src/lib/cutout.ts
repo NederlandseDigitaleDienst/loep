@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { PNG } from "pngjs";
 import { sha256 } from "./canonical.ts";
 import type { Evaluation, ReportFinding } from "./evaluation.ts";
@@ -266,7 +266,7 @@ export async function writeCutouts(runDir: string, evaluation: Evaluation, dir: 
     }
     spent += bytes.length;
     const file = `${key.slice(0, 16)}.png`;
-    const entry = { file, absolute: join(dir, file), width: piece.width, height: piece.height, altNl };
+    const entry = { file, absolute: resolve(dir, file), width: piece.width, height: piece.height, altNl };
     await writeFile(entry.absolute, bytes);
     made.set(key, entry);
     files[finding.id] = entry;
