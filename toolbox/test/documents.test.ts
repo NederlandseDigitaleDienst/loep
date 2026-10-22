@@ -11,6 +11,7 @@ import { documents as measureDocuments } from "../src/commands/documents.ts";
 import { inventory, probeDocument, type Inventory } from "../src/commands/inventory.ts";
 import { buildSample, chooseDocuments, DOCUMENT_CENSUS_LIMIT, withDocuments } from "../src/commands/sample.ts";
 import { measureOffice } from "../src/instruments/documents/office.ts";
+import { flattenNestedMarkedContent, type MarkedStack } from "../src/instruments/documents/marked-content.ts";
 import { buildStructure, compareOrder, linksOf, measurePdf, parseStructText, type TagNode } from "../src/instruments/documents/pdf.ts";
 import { readMarkdown } from "../src/instruments/documents/text.ts";
 import { openZip, parseXml } from "../src/instruments/documents/zipxml.ts";
@@ -414,6 +415,26 @@ test("a tagged PDF: title, language, headings, figures, table headers, list, lin
     assert.notEqual(process.env.CI, "true", `veraPDF ontbreekt in de CI: ${facts.pdf.pdfUa.reasonNl}`);
     assert.ok(facts.notMeasuredNl.some((line) => /veraPDF/.test(line)));
   }
+});
+
+test("nested marked content without an MCID is left out, and what it holds stays (#325)", () => {
+  const content = "/Link <</MCID 1>> BDC\nBT (pro) Tj\n/Span <</ActualText (f\\)i)>> BDC\n(fi) Tj\nEMC\n/Artifact BMC (x) Tj EMC\n(el) Tj ET\nEMC\n/P <</MCID 2>> BDC (Einde) Tj EMC\n/Span <</Lang (en)>> BDC (outside) Tj EMC";
+  const { content: flattened, removed } = flattenNestedMarkedContent(content);
+  assert.equal(removed, 2);
+  assert.equal(flattened.replace(/\s+/g, " "), "/Link <</MCID 1>> BDC BT (pro) Tj (fi) Tj (x) Tj (el) Tj ET EMC /P <</MCID 2>> BDC (Einde) Tj EMC /Span <</Lang (en)>> BDC (outside) Tj EMC");
+  // The nesting is carried from one content stream of a page to the next.
+  const stack: MarkedStack = [];
+  flattenNestedMarkedContent("/Link <</MCID 4>> BDC (a) Tj", stack);
+  assert.equal(flattenNestedMarkedContent("/Span <<>> BDC (b) Tj EMC EMC", stack).removed, 1);
+  assert.equal(stack.length, 0);
+  // An inline image is no operator, whatever its bytes say.
+  assert.equal(flattenNestedMarkedContent("/P <</MCID 0>> BDC BI /W 1 /H 1 ID EMC BDC\n EI EMC").removed, 0);
+});
+
+test("the text of a link in a PDF is not cut off at a span with ActualText inside it (#325)", { skip: NEEDS_PDF_TOOLS }, async () => {
+  const { facts } = await measurePdf(join(FIXTURES, "link-span.pdf"), scratch);
+  assert.deepEqual(facts.links, [{ page: 1, text: "profiel van de gemeente", href: "https://example.nl/profiel" }]);
+  assert.equal(facts.pdf.tagTextRead, true);
 });
 
 test("a PDF without tags: no structure, and every picture is without alternative", { skip: NEEDS_PDF_TOOLS }, async () => {
