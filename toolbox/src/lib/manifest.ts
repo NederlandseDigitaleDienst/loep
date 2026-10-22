@@ -86,7 +86,7 @@ export const toolboxVersion = (): string => (JSON.parse(readFileSync(join(TOOLBO
  * Some only read; `render`, `statement`, `compare`, `decide`, `sign` and `seal` write a report, a statement, a comparison,
  * a decision, a signature or a seal from what the run holds, which is what a finished, sealed run needs after a release.
  */
-export const MEASURES_NOTHING = ["pending", "estimate", "gaps", "feedback", "verify", "procedures", "render", "statement", "compare", "decide", "sign", "seal"];
+export const MEASURES_NOTHING = ["pending", "estimate", "gaps", "feedback", "verify", "procedures", "render", "export", "statement", "compare", "decide", "sign", "seal"];
 
 /**
  * Why this toolbox may not go on with the run, or null when it may. A run holds the version of loep of its last step.
