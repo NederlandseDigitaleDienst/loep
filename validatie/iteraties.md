@@ -320,3 +320,25 @@ Wat eruit kwam:
 - De open punten gaan in alle runs over dezelfde twee onderdelen, een fotoserie die alleen met vegen werkt en een schuif die alleen met slepen werkt (#240). Een gebrek dat een beoordelaar naar een ander criterium doorschuift, komt daar niet altijd aan (#239).
 
 Wat deze meting niet zegt. De uitkomst is gemeten tegen de sleutel van de eigen testsite, niet tegen het oordeel van een menselijke deskundige, en de testsite is makkelijker dan een echte site. Alle runs deelden één veegronde, dus de spreiding van de veegronde zelf is niet gemeten. De schone variant is niet gedraaid. Op de negen criteria is elke uitkomst "voldoet niet", dus de toets op criteriumniveau maakt daar geen onderscheid. Twee runs van de nulmeting.
+
+## Meting van "zo goed mogelijk" (#318), 23 oktober 2026
+
+Vooraf vastgelegd, voordat een run is beoordeeld.
+
+**Vraag.** Maakt voorstel #341 (doel van het onderzoek, beperking in plaats van open punt, een poging in elke ronde, `fail_observations`, zekerheid per plek, de poort die afschaalt, een bevinding op een eerdere waarneming) het oordeel niet slechter waar niets afschaalt, en klopt het oordeel waar de poort wel afschaalt?
+
+**Opzet.**
+
+- Eén bevroren veegronde van Lindewaard (de testsite met gebreken), gemaakt met de code van #341 (commit `4fa6e85`): het vaste sitemodel van de regressietoets, de 13 vaste pagina's, versturen toegestaan tot 30 keer, doel verbeteren, VoiceOver uit. Het vaste model opent vijf onderdelen bewust niet (`components-opened`), onder meer de formulieren, en opent het menu achter de menuknop alleen op de startpagina.
+- De bladen van de poort één keer beoordeeld door twee poort-agents, vóór het kopiëren; elke kopie neemt die antwoorden mee. De agent van de eerste acht bladen zag nergens iets ontbreken; die van de laatste vijf meldde op elk blad de menuknop (`review-missing`), terecht volgens de lijsten. Samen tien gaten.
+- Drie armen, elk een kopie met `variant`, op tien criteria (`tasks --only`): 1.1.1, 1.3.1, 1.4.3, 1.4.4, 1.4.11, 2.1.1, 2.4.3, 2.4.7, 3.3.1, 4.1.2. Werkstroom met 6 agents tegelijk, alle rollen op het model van de sessie, twee runs tegelijk.
+  - **A**: main (`a1b8e19`, 0.17.0 met #345), de tien gaten aanvaard in het sitemodel met `decidedBy: verkenner`, elk met een `look` op die pagina uit een eigen sessie (`verken-meting`).
+  - **B**: #341, dezelfde tien gaten aanvaard.
+  - **C**: #341, de tien gaten niet aanvaard. In het manifest staan drie verkenningen, alsof de run al twee keer terug was naar de verkenner (nagebootst: er is geen verkenner gedraaid). De poort schaalt dan af en de beoordelaars moeten die onderdelen zelf bekijken.
+- Per run `compare --findings` tegen `reference-lindewaard.json`, op de tien criteria.
+
+**Stopregel na ronde 1** (één run per arm).
+
+- B tegen A, "niet slechter": B vindt elk gebrek uit de sleutel dat A vindt, heeft hooguit één melding zonder tegenhanger meer, en niet meer criteria open door loep zelf. Dan stoppen. Mist B een gebrek dat A vond, of andersom, dan ronde 2: A2 en B2, en daarna de toets per gebrek over twee runs zoals bij 0.11.0.
+- C, "afschalen klopt": de poort gaat door met beperkingen (geen stop), geen criterium blijft open door loep zelf, geen afkeuring is onterecht volgens beide vergelijkers, en C vindt op de criteria die de tien gaten niet raken dezelfde gebreken als A. Wat C mist op de criteria die ze wel raken (zoals 3.3.1), staat in het verslag. Haalt C dit niet, dan geen tweede ronde maar een fout in #341 die eerst hersteld wordt.
+- Ter informatie, zonder drempel: het aandeel "vastgesteld door een agent", hoe vaak `check-verdict` een punt zonder poging weigerde, overgeslagen agents, de plekken in `instrument-gaps.json`, duur en tokens.
