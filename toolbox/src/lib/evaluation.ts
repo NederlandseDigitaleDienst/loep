@@ -1,4 +1,5 @@
 import type { Sample } from "../commands/sample.ts";
+import { splitPoints } from "./degrade.ts";
 import type { Purpose } from "./purpose.ts";
 import type { EvaluationDocuments } from "./documents.ts";
 import { sha256, stableId } from "./canonical.ts";
@@ -183,6 +184,8 @@ export interface CriterionResult {
   /** Recommendations under a rule of the procedure, with any outcome. Absent when there is none, and in an evaluation from before recommendations existed. */
   recommendations?: ReportRecommendation[];
   missingNl: string[];
+  /** Points about this investigation in a criterion whose outcome does not hang on them, such as a probe that did not work in a failed criterion (#318). Absent when there are none, and in older evaluations. */
+  limitsNl?: string[];
   /**
    * With "cantTell": no deviation was found, but not everything was measured; `coverageNl` says
    * what was. The outcome stays "cantTell" and counts as open. Absent when the question is
@@ -509,6 +512,8 @@ export function resolveCriterion(input: CriterionInput, sitePrefix: string): Cri
     used.add(id);
     return { ...entry, component: entry.component ?? null, id, criterion: criterion.id };
   });
+  // In a failed criterion a point about this investigation does not change the outcome: it is a limit (#318).
+  const points = splitPoints([...(answered ? answered.remainingNl : (final?.missingNl ?? [])), ...unruled], outcome);
   return {
     id: criterion.id,
     titleNl: criterion.titleNl,
@@ -529,7 +534,8 @@ export function resolveCriterion(input: CriterionInput, sitePrefix: string): Cri
     observations: final?.observations ?? [],
     findings,
     ...(recommendations.length > 0 ? { recommendations } : {}),
-    missingNl: [...(answered ? answered.remainingNl : (final?.missingNl ?? [])), ...unruled],
+    missingNl: points.openNl,
+    ...(points.limitsNl.length > 0 ? { limitsNl: points.limitsNl } : {}),
     ...(outcome === "cantTell" && final?.nothingFound ? { nothingFound: { coverageNl: final.nothingFound.coverageNl } } : {}),
     rounds: { a: verdicts.a?.outcome ?? null, b: null, final: verified?.outcome ?? null, ...(finish ? { finish: finish.outcome } : {}) },
     ...(established ? { established } : {}),

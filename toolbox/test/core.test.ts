@@ -385,6 +385,24 @@ test("a criterion only gets an outcome from the verifier", () => {
   assert.equal(new Set(result.findings.map((entry) => entry.id)).size, 2, "finding identifiers are unique");
 });
 
+test("in a failed criterion a point about this investigation is a limit, and the rest stays open (#318)", () => {
+  const criterion = criterionById("1.1.1")!;
+  const base = { criterion, procedure: null, provenance: { dossierSha256: null, verdictSha256: {} } };
+  const probe = "proef werkte niet: de diagrammen op een onderwerppagina gaven bij de meting geen verhouding.";
+  const outside = "buiten de afbakening: het blok haalt zijn inhoud van https://data.example.nl, en dat adres hoort niet bij de run.";
+  const person = "mens nodig: of het logo een naam nodig heeft, bepaalt de eigenaar.";
+  const failed = { ...passed, outcome: "failed" as const, findings: [finding], missingNl: [probe, outside, person] };
+  const result = resolveCriterion({ ...base, verdicts: { a: failed, final: failed } }, "X");
+  assert.equal(result.outcome, "failed");
+  assert.deepEqual(result.missingNl, [person], "what the owner can do stays open");
+  assert.deepEqual(result.limitsNl, [probe, outside]);
+  // Where the outcome hangs on the points, they stay open.
+  const open = { ...failed, outcome: "cantTell" as const, findings: [] };
+  const stillOpen = resolveCriterion({ ...base, verdicts: { a: open, final: open } }, "X");
+  assert.deepEqual(stillOpen.missingNl, [probe, outside, person]);
+  assert.equal(stillOpen.limitsNl, undefined);
+});
+
 test("a criterion the finishing round left open is not called established", () => {
   const criterion = criterionById("1.1.1")!;
   const base = { criterion, procedure: null, provenance: { dossierSha256: null, verdictSha256: {} } };

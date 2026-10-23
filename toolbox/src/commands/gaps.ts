@@ -106,12 +106,12 @@ const textsOf = (value: unknown): string[] => (Array.isArray(value) ? value.filt
  */
 function pointsOfRun(runDir: string): Written[] {
   const run = basename(resolve(runDir));
-  const evaluation = readJsonIfThere<{ criteria?: { id?: string; missingNl?: unknown }[] }>(join(runDir, "evaluation.json"));
-  const standingByCriterion = evaluation?.criteria ? new Map(evaluation.criteria.map((criterion) => [String(criterion.id), new Set(textsOf(criterion.missingNl).map(same))])) : null;
+  const evaluation = readJsonIfThere<{ criteria?: { id?: string; missingNl?: unknown; limitsNl?: unknown }[] }>(join(runDir, "evaluation.json"));
+  const standingByCriterion = evaluation?.criteria ? new Map(evaluation.criteria.map((criterion) => [String(criterion.id), new Set([...textsOf(criterion.missingNl), ...textsOf(criterion.limitsNl)].map(same))])) : null;
   const root = join(runDir, "verdicts");
   if (!existsSync(root)) {
     if (!evaluation?.criteria) throw new Error(`${runDir} heeft geen oordelen (verdicts/) en geen evaluatie (evaluation.json): er is niets om open punten uit te lezen`);
-    return evaluation.criteria.flatMap((criterion) => textsOf(criterion.missingNl).map((point) => ({ run, criterion: String(criterion.id), roundNl: "evaluatie", point, standing: true })));
+    return evaluation.criteria.flatMap((criterion) => [...textsOf(criterion.missingNl), ...textsOf(criterion.limitsNl)].map((point) => ({ run, criterion: String(criterion.id), roundNl: "evaluatie", point, standing: true })));
   }
   const written: Written[] = [];
   for (const criterion of readdirSync(root).sort()) {
