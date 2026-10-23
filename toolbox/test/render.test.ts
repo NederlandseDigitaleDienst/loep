@@ -252,6 +252,14 @@ test("open points are split into work for the owner of the site and limits of th
   assert.ok(appendix!.includes("- De tijd voor het meten was op: Het menu op P04 is niet geopend."));
   // Every anchor exists once, so no link to open points is dead.
   for (const id of [first!.id, second!.id, passed.id]) assert.equal(main!.split(`<a id="open-${id}"></a>`).length - 1, 1);
+
+  // A limit of a failed criterion is no open point: it stands with the criterion in the appendix, not in the work list (#318).
+  const failed = evaluation.criteria.find((entry) => entry.outcome === "failed")!;
+  failed.limitsNl = ["proef werkte niet: de lijnen in het diagram op P05 gaven geen verhouding."];
+  const withLimit = deriveReport(evaluation);
+  assert.equal(withLimit.briefs[failed.id]!.limitsCountNl, "1 beperking");
+  assert.ok(!withLimit.todo.investigate.toolbox.some((item) => item.criterion === failed.id));
+  assert.ok(renderMarkdown(evaluation).includes("Beperking van dit onderzoek, de uitkomst hangt er niet van af:\n\n- Een proef werkte niet: De lijnen in het diagram op P05 gaven geen verhouding."));
 });
 
 test("a criterion open by content of an address outside the scope is the owner's, counted apart in the summary, and not unfinished work of the evaluation", () => {
@@ -355,6 +363,37 @@ test("a recommendation stands apart, after what is wrong and open, and changes n
   assert.ok(work.includes(`aanbeveling A1 van de procedure`));
   assert.ok(work.includes("  - Aanbeveling: Zet de datum in de code na de titel, of neem haar op in de kop."));
   assert.ok(!renderMarkdown(exampleEvaluation()).includes("### Aanbevelingen"), "no part without a recommendation");
+});
+
+test("a report to account for says what is still missing for status B, per open criterion (#318)", async (context) => {
+  const evaluation = exampleEvaluation();
+  assert.equal(deriveReport(evaluation).forB, null, "a report to improve has no such part");
+  evaluation.purpose = "verantwoorden";
+  const open = evaluation.criteria.find((entry) => entry.outcome === "cantTell")!;
+  open.missingNl = ["proef werkte niet: de lijnen in het diagram op P05 gaven geen verhouding.", "mens nodig: wat een schermlezer voorleest bij de kaart op P02."];
+  for (const criterion of evaluation.criteria) criterion.basis = criterion.outcome === "cantTell" || criterion.outcome === "untested" ? "open" : "measured";
+  const forB = deriveReport(evaluation).forB!;
+  assert.match(forB.basisNl, / criteria gemeten met een instrument, 0 vastgesteld door een agent op eigen waarnemingen, 0 vastgesteld door een persoon, \d+ open\./);
+  assert.deepEqual(forB.openNl.find((row) => row.criterion === open.id), { criterion: open.id, closesNl: "een proef van loep die werkt: een nieuwe afmaakronde (tasks --again) na een herstel in loep; een persoon die het vaststelt en het vastlegt met answer" });
+  assert.ok(renderMarkdown(evaluation).includes("**Wat er nog ontbreekt voor status B**"));
+  const dir = mkdtempSync(join(tmpdir(), "render-for-b-"));
+  writeFileSync(join(dir, "evaluation.json"), canonicalJson(evaluation));
+  const result = await render(dir);
+  if (result.pdf === null) return context.skip("Typst is not installed");
+  assert.match((await tool("pdftotext", [result.pdf, "-"])).stdout.replace(/\s+/g, " "), /Wat er nog ontbreekt voor status B Waarop de uitkomsten rusten:/);
+});
+
+test("the PDF shows a limit with its criterion and in the appendix (#318)", async (context) => {
+  const dir = mkdtempSync(join(tmpdir(), "render-limit-"));
+  const evaluation = exampleEvaluation();
+  const failed = evaluation.criteria.find((entry) => entry.outcome === "failed")!;
+  failed.limitsNl = ["proef werkte niet: de lijnen in het diagram op P05 gaven geen verhouding."];
+  writeFileSync(join(dir, "evaluation.json"), canonicalJson(evaluation));
+  const result = await render(dir);
+  if (result.pdf === null) return context.skip("Typst is not installed");
+  const text = (await tool("pdftotext", [result.pdf, "-"])).stdout.replace(/\s+/g, " ");
+  assert.match(text, /1 beperking van dit onderzoek, de uitkomst hangt er niet van af; zie bijlage A/);
+  assert.match(text, /Beperking van dit onderzoek, de uitkomst hangt er niet van af: Een proef werkte niet: De lijnen in het diagram op P05 gaven geen verhouding\./);
 });
 
 test("the PDF shows the recommendations in their own part", async (context) => {

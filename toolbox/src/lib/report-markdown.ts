@@ -1,4 +1,5 @@
 import { KIND_NAME_NL, kindsNl } from "./documents.ts";
+import { BASIS_NL } from "./basis.ts";
 import { pageIndex, type Defect } from "./defects.ts";
 import { aiGeneratedMark, changedSinceCommit, closeCutQuote, versionAccuracyNl, complianceStatus, evaluationHash, idsAcrossVersionsNl, knownCommit, madeWith, openCriteria, OUTAGE_NL, OUTCOME_LABEL, type ComplianceStatus, type CriterionOutcome, type CriterionResult, type Evaluation, type ReportFinding, type Signature } from "./evaluation.ts";
 import { modelOf } from "../instruments/methods/registry.ts";
@@ -137,6 +138,7 @@ export const REPORT_TEXT = {
     toolbox: "Dit meet de toolbox een volgende keer",
     toolboxIntro: "Wat niet is gemeten, waar de tijd voor op was, of een proef die niet werkte. Per criterium staat hier hoeveel punten er zijn; de punten zelf staan volledig in bijlage A. Staat hier een criterium zonder oordeel, dan is het onderzoek onvolledig: een nieuwe meting of een persoon moet het nog vaststellen.",
     appendix: "Open, voor een volgende meting",
+    limits: "Beperking van dit onderzoek, de uitkomst hangt er niet van af",
   },
   vendorIntro: "Deze bevindingen raken een element van de leverancier. Dat zegt waar het gebrek zit, niet wie het moet herstellen: de oorzaak kan in het component liggen of in de manier waarop de site het gebruikt. Ga per bevinding na welke van de twee het is.",
   instrumentsIntro: "Elke meting van een agent is door een of meer van deze hulpmiddelen beantwoord. De lijst is geteld uit de vastgelegde waarnemingen: ze noemt wat in dit onderzoek is gebruikt, niet wat op de machine stond. Onder Pakketten hierboven staan alle pakketten waarmee de toolbox draait, ook die alleen de metingen vooraf op elke pagina deden. Alle hulpmiddelen zijn open source; de licentie van elk staat in evaluation.json en in de repository van de toolbox.",
@@ -200,7 +202,7 @@ export interface ChainText {
   readsNl: string | null;
   challengeLabel: string;
   droppedLabel: string;
-  verification: { reproduced: string; unverified: string; repeated: string };
+  verification: { reproduced: string; unverified: string; repeated: string; notRepeated: string };
 }
 
 export interface CriterionBrief {
@@ -222,6 +224,10 @@ export interface CriterionBrief {
   coverageNl: string | null;
   /** The open points about the evaluation itself, in full: they stand in the appendix, the work list only counts them. */
   toolboxPointsNl: string[];
+  /** What this investigation could not settle in a criterion whose outcome stands without it (#318), in full. Empty when there is none. */
+  limitsNl: string[];
+  /** How many such limits there are, as "2 beperkingen"; null when there are none. */
+  limitsCountNl: string | null;
   /** What this criterion and another passed on to each other, one line each with what both said. Empty when there is none. */
   loopsNl: string[];
   /**
@@ -302,6 +308,12 @@ export interface ReportDerived {
   status: Record<WcagVersion, { status: ComplianceStatus; reasonNl: string }>;
   statusSentenceNl: string;
   statusLine: StatusLine;
+  /**
+   * For an investigation to account for (#318): what the outcomes rest on, and per open criterion
+   * what would close it, so whoever signs sees what is still missing for status B. Null for an
+   * investigation to improve.
+   */
+  forB: { basisNl: string; openNl: { criterion: string; closesNl: string }[]; doneNl: string | null } | null;
   /** One line when this evaluation follows up a signed one: its date and mark. Null otherwise; a concept is never named. */
   followsUpNl: string | null;
   /** When this version of loep was last measured as a whole and what came out, or that it never was: always said. */
@@ -671,7 +683,7 @@ function chainText(evaluation: Evaluation): ChainText {
     readsNl: evaluation.chain?.reads && evaluation.chain.reads.length > 0 ? `${readsAllowedNl(evaluation.chain.reads)}.` : null,
     challengeLabel: "Poging om het oordeel onderuit te halen",
     droppedLabel: "Vervallen bij de controle",
-    verification: { reproduced: "Bij de controle bevestigd", unverified: "Toegevoegd bij de controle, één keer gezien", repeated: "Uit de aanvullende meting, twee keer gezien door één beoordelaar" },
+    verification: { reproduced: "Bij de controle bevestigd", unverified: "Toegevoegd bij de controle, één keer gezien", repeated: "Uit de aanvullende meting, twee keer gezien door één beoordelaar", notRepeated: "Uit de aanvullende meting, op een eerdere waarneming en niet opnieuw gemaakt: het deel laadde niet meer" },
   };
 }
 
@@ -703,6 +715,12 @@ function loopLine(criterion: string, loop: CrossLoop): string {
   return `Op ${loop.page} (${loop.where.replace(/\s+/g, " ").trim()}): ${loop.with} en ${criterion} gaven het elk aan het andere door. ${said}${undecided}`;
 }
 
+/** An open point as a line for a reader: its kind in words, then its text. */
+const pointLine = (point: string): string => {
+  const { kind, textNl } = openPoint(point);
+  return kind ? `${upperFirst(kind.labelNl)}: ${textNl}` : point.replace(/\s+/g, " ").trim();
+};
+
 function brief(criterion: CriterionResult): CriterionBrief {
   const points = openPoints(criterion);
   const before = criterion.established?.before;
@@ -711,20 +729,52 @@ function brief(criterion: CriterionResult): CriterionBrief {
     answersNl: (criterion.answers ?? []).map(answerLine),
     beforeNl: before ? [`De ${before.roundNl} kwam op ${roundLabel(before.outcome)}: ${before.summaryNl}`, ...before.missingNl.map((point) => `Stond open: ${point.replace(/\s+/g, " ").trim()}`)] : [],
     observationsNl: criterion.observations.length > 0 ? plural(criterion.observations.length, "waarneming", "waarnemingen") : null,
-    certaintyNl: certainty(criterion),
+    certaintyNl: criterion.basis && criterion.basis !== "open" ? `${upperFirst(BASIS_NL[criterion.basis])}. ${certainty(criterion)}` : certainty(criterion),
     roundsNl: roundsLine(criterion),
     // The open points themselves stand in the work list or in the appendix; here only how many there are.
     openNl: points.length > 0 ? plural(points.length, "punt", "punten") : null,
     coverageNl: shownOutcome(criterion) === "nothingFound" ? criterion.nothingFound!.coverageNl : criterion.established?.by === "finishing" ? (criterion.established.coverageNl ?? null) : null,
     toolboxPointsNl: points.filter((point) => point.kind?.reader === "toolbox").map((point) => `${upperFirst(point.kind!.labelNl)}: ${point.textNl}`),
+    limitsNl: (criterion.limitsNl ?? []).map(pointLine),
+    limitsCountNl: (criterion.limitsNl ?? []).length > 0 ? plural(criterion.limitsNl!.length, "beperking", "beperkingen") : null,
     loopsNl: (criterion.crossLoops ?? []).map((loop) => loopLine(criterion.id, loop)),
     placesNl: criterion.observations.map((observation) => {
       const ruling = observation.ruling;
       if (!ruling || !(ruling in REPORT_TEXT.ruling)) return null;
       const finding = ruling === "finding" ? criterion.findings.find((entry) => entry.key !== undefined && entry.key === observation.finding) : undefined;
-      return { labelNl: REPORT_TEXT.ruling[ruling], findingId: finding?.id ?? null };
+      const basis = criterion.placeBasis?.[criterion.observations.indexOf(observation)];
+      return { labelNl: `${REPORT_TEXT.ruling[ruling]}${basis ? ` (${basis === "measured" ? "gemeten" : "waarneming van een agent"})` : ""}`, findingId: finding?.id ?? null };
     }),
   };
+}
+
+/** What closes an open point of each kind, in the words of whoever signs. */
+const CLOSES_NL: Record<string, string> = {
+  "mens nodig": "een persoon die het vaststelt en het vastlegt met answer",
+  "keuze nodig": "een besluit van de eigenaar, vastgelegd met answer",
+  "versturen niet toegestaan": "toestemming om te versturen: een testomgeving, verklaard bij inventory",
+  "buiten de afbakening": "een nieuw onderzoek met dat adres erbij (inventory --also-origin)",
+  "veegronde mist": "een nieuwe afmaakronde (tasks --again), of een instrument dat loep nog mist",
+  "budget op": "een nieuwe afmaakronde (tasks --again)",
+  "geen geldig resultaat": "een nieuwe afmaakronde (tasks --again)",
+  "proef werkte niet": "een proef van loep die werkt: een nieuwe afmaakronde (tasks --again) na een herstel in loep",
+  "niet bereikbaar": "een nieuwe afmaakronde (tasks --again) zodra het deel weer laadt",
+};
+
+function forStatusB(evaluation: Evaluation): ReportDerived["forB"] {
+  if (evaluation.purpose !== "verantwoorden") return null;
+  const count = (basis: string): number => evaluation.criteria.filter((criterion) => criterion.basis === basis).length;
+  const basisNl = `${count("measured")} criteria ${BASIS_NL.measured}, ${count("observed")} ${BASIS_NL.observed}, ${count("person")} ${BASIS_NL.person}, ${count("open")} open.`;
+  const open = evaluation.criteria.filter((criterion) => criterion.outcome === "cantTell" || criterion.outcome === "untested");
+  const openNl = open.map((criterion) => {
+    if (criterion.outcome === "untested") return { criterion: criterion.id, closesNl: "een beoordeling: het criterium heeft nog geen oordeel" };
+    const kinds = [...new Set(criterion.missingNl.map((point) => openPoint(point).kind?.prefix ?? null))];
+    const closes = kinds.map((kind) => (kind ? CLOSES_NL[kind] : null) ?? "een nieuwe beoordeling: bij een punt staat niet wat het sluit");
+    return { criterion: criterion.id, closesNl: [...new Set(closes)].join("; ") };
+  });
+  const failed = evaluation.criteria.filter((criterion) => criterion.outcome === "failed").length;
+  const doneNl = open.length === 0 ? `Er staat geen criterium open. Een gebrek houdt status B niet tegen, als er per gebrek een maatregel bij staat${failed > 0 ? ` (${failed === 1 ? "1 criterium voldoet" : `${failed} criteria voldoen`} niet)` : ""}.` : null;
+  return { basisNl, openNl, doneNl };
 }
 
 /** The work that follows from the evaluation: what to fix, by owner, and what to find out. */
@@ -983,6 +1033,7 @@ export function deriveReport(input: Evaluation, decisions: DecisionLayer = { dec
     signatureStale: stale,
     status: { "2.1": complianceStatus(evaluation, "2.1"), "2.2": complianceStatus(evaluation, "2.2") },
     statusSentenceNl: statusSentence(evaluation),
+    forB: forStatusB(evaluation),
     statusLine: statusLine(evaluation, stale),
     followsUpNl: evaluation.followsUp ? `Dit is een heronderzoek. Het vorige onderzoek is van ${dateNl(evaluation.followsUp.evaluatedAt)}, afgetekend op ${dateNl(evaluation.followsUp.signedAt)}, met kenmerk ${evaluation.followsUp.sha256.slice(0, 12)}.` : null,
     chain,
@@ -1247,6 +1298,7 @@ function appendixEntry(criterion: CriterionResult, short: CriterionBrief, chain:
   lines.push(`Grondslag: ${basis.filter(Boolean).join(", ")}.`, "");
   if (criterion.procedure?.limitsNl) lines.push(`Beperking van de procedure: ${esc(criterion.procedure.limitsNl)}`, "");
   if (short.toolboxPointsNl.length > 0) lines.push(`${REPORT_TEXT.investigate.appendix}:`, "", ...bullets(short.toolboxPointsNl.map(esc)), "");
+  if (short.limitsNl.length > 0) lines.push(`${REPORT_TEXT.investigate.limits}:`, "", ...bullets(short.limitsNl.map(esc)), "");
   lines.push(...openLine(criterion, short));
   return lines;
 }
@@ -1315,6 +1367,11 @@ export function renderMarkdown(input: Evaluation, decisions: DecisionLayer = { d
   lines.push(`**${derived.statusLine.headingNl}**`, "");
   if (derived.statusLine.noteNl) lines.push(derived.statusLine.noteNl, "");
   lines.push(derived.statusLine.openNl, "");
+  if (derived.forB) {
+    lines.push("**Wat er nog ontbreekt voor status B**", "", `Waarop de uitkomsten rusten: ${derived.forB.basisNl}`, "");
+    if (derived.forB.doneNl) lines.push(derived.forB.doneNl, "");
+    else lines.push(...bullets(derived.forB.openNl.map((row) => `${row.criterion}: ${esc(row.closesNl)}`)), "");
+  }
   if (grouping) lines.push(`Het onderzoek vond ${grouping.derived.countsNl}.`, "");
   for (const version of VERSIONS) lines.push(`**WCAG ${version} niveau A en AA (${evaluation.summary[version].total} criteria)**`, "", ...scoreTable(evaluation, version), "");
   lines.push(derived.scoreNoteNl, "");

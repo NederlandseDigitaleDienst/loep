@@ -1,9 +1,11 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { BASIS_NL, criterionBasis, instrumentGaps, placeBasis, type Basis } from "../lib/basis.ts";
+import { purposeForRun } from "../lib/purpose.ts";
 import { replaysNl } from "../lib/recordings.ts";
 import { findingCutout, type CutoutContext } from "../lib/cutout.ts";
 import { join } from "node:path";
 import { frameStanding, type AcceptedGapDecider } from "../lib/sitemodel.ts";
-import { readJson, sha256File } from "../lib/canonical.ts";
+import { readJson, sha256File, writeJson } from "../lib/canonical.ts";
 import { aiGeneratedMark, allCriteriaSorted, carryFindingIds, ESTABLISHED_BY_NL, evaluationHash, idsAcrossVersionsNl, knownCommit, OUTCOME_LABEL, markVendor, openCriteria, resolveCriterion, summarise, versionAccuracyProblems, type BrowserUse, type CriterionResult, type Evaluation, type PointAnswer, type RoundVerdicts, type VersionAccuracy } from "../lib/evaluation.ts";
 import { matchFindings, sideOf } from "../lib/difference.ts";
 import { documentScopeNl, evaluationDocuments, siteDocuments } from "../lib/documents.ts";
@@ -186,13 +188,16 @@ export async function evaluate(options: EvaluateOptions): Promise<Evaluation> {
         const repeat = repeats.find((entry) => entry.key === key);
         // After the finishing round no verifier comes: its agent showed the finding twice itself, and the report says so.
         // A finding the verifier added itself has been seen once, by the verifier: nobody reproduced it.
-        finding.verification = counted.finish ? { status: "repeated", evidence: repeat?.repeated ?? [] } : check?.reproduced ? { status: "reproduced", evidence: check.evidence } : { status: "unverified", evidence: [] };
+        finding.verification = counted.finish ? (repeat?.notRepeatedNl !== undefined ? { status: "notRepeated", evidence: repeat.earlier ?? [], reasonNl: repeat.notRepeatedNl } : { status: "repeated", evidence: repeat?.repeated ?? [] }) : check?.reproduced ? { status: "reproduced", evidence: check.evidence } : { status: "unverified", evidence: [] };
       });
     }
     // Which elements of the vendor a finding touches. Where it is does not say whose fault it is, so the owner stays
     // what the judge said, unless the advice is about the inside of such an element: that only the vendor can change.
     const vendor = run.inventory.vendor;
     if (vendor) for (const finding of resolved.findings) markVendor(finding, vendor);
+    // What the outcome rests on, from what the verdict cites (#318).
+    resolved.basis = criterionBasis(resolved, observations.index);
+    resolved.placeBasis = resolved.observations.map((observation) => placeBasis(observation.evidence, observations.index));
     criteria.push(resolved);
   }
 
@@ -319,6 +324,7 @@ export async function evaluate(options: EvaluateOptions): Promise<Evaluation> {
       ...(scopeFrames.length > 0 ? { frames: scopeFrames } : {}),
     },
     sample: run.sample,
+    purpose: purposeForRun(options.run),
     baseline: {
       browsers: [
         { name: "Chromium (Chrome for Testing)", version: manifest.browser.version, engine: secondBrowsers.length > 0 ? "Blink; alle metingen" : "Blink" },
@@ -353,7 +359,19 @@ export async function evaluate(options: EvaluateOptions): Promise<Evaluation> {
   const merged = await mergeInto(options.run, evaluation, earlier);
   process.stderr.write(`${merged.defects} gebreken uit ${merged.findings} bevindingen\n`);
   await writeEvaluation(join(options.run, "evaluation.json"), evaluation);
+  // Where an instrument was missing: a work document next to the report, for whoever builds loep, not for its reader (#318).
+  const commandsFor = (id: string): string[] => {
+    const task = instrumentTasks.find((entry) => entry.criterion === id);
+    return task ? [...task.passCommands, ...Object.values(task.failCommands ?? {}).flat()] : [];
+  };
+  const gaps = instrumentGaps(criteria, commandsFor, observations.index);
+  await writeJson(join(options.run, "instrument-gaps.json"), { schema: "loep/instrument-gaps/1", gaps });
+  const based = (basis: Basis): number => criteria.filter((criterion) => criterion.basis === basis).length;
+  process.stdout.write(`zekerheid: ${based("measured")} criteria ${BASIS_NL.measured}, ${based("observed")} ${BASIS_NL.observed}, ${based("person")} ${BASIS_NL.person}, ${based("open")} open${gaps.length > 0 ? `; ${gaps.length} plekken waar een instrument ontbrak, in instrument-gaps.json` : ""}\n`);
   for (const problem of rejected) process.stderr.write(`rejected ${problem}\n`);
+  // A verdict that no longer belongs to its task does not count, and its criterion has no outcome: say so where it is read, with what to do (#318).
+  const stale = rejected.filter((problem) => problem.endsWith(": no current stamp")).map((problem) => problem.split(":")[0]!);
+  if (stale.length > 0) process.stdout.write(`LET OP: ${stale.length === 1 ? "een oordeel telt" : `${stale.length} oordelen tellen`} niet, want ${stale.length === 1 ? "het hoort" : "ze horen"} bij een eerdere opdracht of een eerder dossier (${stale.join(", ")}). Het criterium heeft daardoor geen uitkomst. Draai tasks opnieuw: dat zet de opdracht opnieuw klaar.\n`);
   // Per criterion who or what established the outcome: counted here, and said for every one that is not the verifier's.
   const by = (kind: keyof typeof ESTABLISHED_BY_NL): CriterionResult[] => criteria.filter((criterion) => criterion.established?.by === kind);
   const shown = (list: CriterionResult[]): string => list.map((criterion) => `${criterion.id} ${OUTCOME_LABEL[criterion.outcome].toLowerCase()}`).join("; ");
@@ -372,7 +390,7 @@ export async function evaluate(options: EvaluateOptions): Promise<Evaluation> {
   const unreachable = open.evaluation.filter((id) => criteria.find((criterion) => criterion.id === id)!.missingNl.some((point) => openPoint(point).kind?.prefix === UNREACHABLE));
   if (unreachable.length > 0) process.stderr.write(`open, een deel van de site was niet bereikbaar: ${idsAcrossVersionsNl(unreachable, criteria)}. Laadt het weer, zet dan een nieuwe afmaakronde klaar met tasks --again ${unreachable.join(",")}, en draai daarna opnieuw evaluate.\n`);
   // The phases with agents leave no step of their own: what their sessions say about begin, end and time per agent is kept here.
-  await writeManifest(options.run, { command: "evaluate", startedAt, criteria: criteria.length, rejectedVerdicts: rejected.length, defects: merged.defects, mergeProposal: merged.proposal, establishedBy: { verification: by("verification").length, finishing: finished.length, person: byPerson.length }, open, extensions, agentPhases: agentPhaseTimings(options.run) });
+  await writeManifest(options.run, { command: "evaluate", startedAt, criteria: criteria.length, rejectedVerdicts: rejected.length, ...(rejected.length > 0 ? { rejected } : {}), defects: merged.defects, mergeProposal: merged.proposal, establishedBy: { verification: by("verification").length, finishing: finished.length, person: byPerson.length }, open, extensions, agentPhases: agentPhaseTimings(options.run) });
   return evaluation;
 }
 

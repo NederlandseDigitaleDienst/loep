@@ -1,4 +1,5 @@
 import { execFileSync } from "node:child_process";
+import type { Purpose } from "./purpose.ts";
 import { randomBytes } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { arch, platform, release } from "node:os";
@@ -44,6 +45,8 @@ export interface Manifest {
    * before the evaluation starts which pages it picks. A run from before this was recorded has none.
    */
   seed?: string;
+  /** Set at `inventory` with `--purpose`: what the investigation is for (#318). A run without it is one to improve. */
+  purpose?: Purpose;
 }
 
 function git(root: string, ...args: string[]): string | null {
@@ -178,6 +181,7 @@ export async function writeManifest(runDir: string, step: Omit<ManifestStep, "at
     ...(previous?.writes ? { writes: previous.writes } : {}),
     ...(previous?.login ? { login: previous.login } : {}),
     ...(previous?.reads ? { reads: previous.reads } : {}),
+    ...(previous?.purpose ? { purpose: previous.purpose } : {}),
     ...(previous?.seed ? { seed: previous.seed } : step.command === "inventory" ? { seed: randomBytes(16).toString("hex") } : {}),
   };
   await writeJson(path, manifest);

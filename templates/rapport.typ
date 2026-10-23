@@ -427,6 +427,23 @@
   text(size: 9.5pt, weight: if status-line.unfinished { 700 } else { 400 }, status-line.openNl)
 })
 
+#if derived.forB != none {
+  callout(fill: panel, bar: ink, {
+    text(weight: 700)[Wat er nog ontbreekt voor status B]
+    linebreak()
+    text(size: 9.5pt)[Waarop de uitkomsten rusten: #derived.forB.basisNl]
+    if derived.forB.doneNl != none {
+      linebreak()
+      text(size: 9.5pt, derived.forB.doneNl)
+    } else {
+      set text(size: 9.5pt)
+      for row in derived.forB.openNl [
+        - #row.criterion: #row.closesNl
+      ]
+    }
+  })
+}
+
 #if grouping != none [Het onderzoek vond #grouping.countsNl.]
 
 #score-table("2.2")
@@ -1081,6 +1098,7 @@
         eyebrow[Zekerheid], brief.certaintyNl,
         ..if brief.coverageNl != none { (eyebrow(t.measured), brief.coverageNl) },
         ..if brief.openNl != none { (eyebrow[Open], open-ref(criterion)) },
+        ..if brief.limitsCountNl != none { (eyebrow[Beperking], [#brief.limitsCountNl van dit onderzoek, de uitkomst hangt er niet van af; zie bijlage A]) },
       )
     })
   }
@@ -1292,6 +1310,11 @@
   if later.len() > 0 {
     par(label-text[#t.investigate.appendix:])
     plain-list(later)
+  }
+  let limits = derived.briefs.at(criterion.id).limitsNl
+  if limits.len() > 0 {
+    par(label-text[#t.investigate.limits:])
+    plain-list(limits)
   }
   if derived.briefs.at(criterion.id).openNl != none { par[#label-text[Open:] #open-ref(criterion)] }
 }
