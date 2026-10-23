@@ -320,3 +320,15 @@ Wat eruit kwam:
 - De open punten gaan in alle runs over dezelfde twee onderdelen, een fotoserie die alleen met vegen werkt en een schuif die alleen met slepen werkt (#240). Een gebrek dat een beoordelaar naar een ander criterium doorschuift, komt daar niet altijd aan (#239).
 
 Wat deze meting niet zegt. De uitkomst is gemeten tegen de sleutel van de eigen testsite, niet tegen het oordeel van een menselijke deskundige, en de testsite is makkelijker dan een echte site. Alle runs deelden één veegronde, dus de spreiding van de veegronde zelf is niet gemeten. De schone variant is niet gedraaid. Op de negen criteria is elke uitkomst "voldoet niet", dus de toets op criteriumniveau maakt daar geen onderscheid. Twee runs van de nulmeting.
+
+## Sonnet tegen Opus op de testsite, 21 oktober 2026
+
+Eén bevroren veegronde op de variant met gebreken (commit `f63abea`), daarop zes kopieën met de negen criteria van stap 4 uit `validatie/verbruik/README.md`: drie met de rondgangen, beoordelaars en verifieerders op Opus 5.5, drie met die rollen op Sonnet 5.5. De opzet, de marge en de uitkomst staan in `validatie/testsite/2026-10-21-sonnet/uitkomst.md`.
+
+| | Opus | Sonnet |
+|---|---|---|
+| Gevonden gebreken uit de sleutel (29), gemiddeld per run | 98,9% | 97,7% |
+| Uitkomst per criterium gelijk aan de sleutel | 9 van 9 in elke run | 9 van 9 in elke run |
+| Kosten per run, met de prijzen van de API | 60 tot 64 dollar | 22 tot 23 dollar |
+
+"Niet slechter: nee", op de gevonden gebreken: het verschil komt uit één gebrek bij 4.1.2, dat Sonnet in twee van de drie runs maar deels beschreef. Onterecht volgens beide indelers: 0 aan beide kanten. Sonnet nam ongeveer 30% minder beurten. Naast variant S van de meting op 0.11.0 (beoordelaars op Opus) vond deze variant evenveel gebreken, 97,7% per run; S was 34% goedkoper dan zijn nulmeting, deze variant ongeveer 63%. De drie runs van de nulmeting vonden 28 van de 29 gebreken in elke run, en het 29e in twee van de drie.
