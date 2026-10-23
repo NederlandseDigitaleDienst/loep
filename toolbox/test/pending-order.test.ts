@@ -3,7 +3,8 @@ import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, test } from "node:test";
-import { checkInstrumentVerdict, instrumentPending, instrumentTasks, loadInstrumentIndex, longestFirst, skip } from "../src/commands/instrument-tasks.ts";
+import { briefPending, checkInstrumentVerdict, instrumentPending, instrumentTasks, loadInstrumentIndex, longestFirst, skip } from "../src/commands/instrument-tasks.ts";
+import { BLOCKADES_FILE } from "../src/session/blockade.ts";
 import type { RunData } from "../src/lib/rundata.ts";
 import type { Verdict } from "../src/lib/verdict.ts";
 
@@ -44,6 +45,17 @@ test("pending lists the judges by the size of their candidates file, a missing f
   const inIndex = index.tasks.map((task) => task.criterion);
   assert.deepEqual(order, longestFirst(inIndex, (id) => sizes[id]!));
   assert.equal(order.indexOf("1.4.11") < order.indexOf("1.4.5"), inIndex.indexOf("1.4.11") < inIndex.indexOf("1.4.5"));
+  assert.equal(pending.siteOutage, undefined);
+  assert.equal(briefPending(pending).siteOutage, undefined);
+
+  // The session process noted an outage of the site: pending says so, also to the workflow, and no agent should start.
+  const at = new Date(Date.now() - 60_000).toISOString();
+  writeFileSync(join(dir, BLOCKADES_FILE), JSON.stringify({ origins: [{ origin: "https://www.example.nl", reason: "outage", at, until: new Date(Date.now() + 240_000).toISOString(), url: home }] }));
+  const down = await instrumentPending(dir);
+  assert.match(down.siteOutage!, /^storing van de site: https:\/\/www\.example\.nl antwoordt sinds \d{4}-\d\d-\d\d \d\d:\d\d niet \(geen antwoord of geen verbinding\)\. loep vraagt de site niets tot \d\d:\d\d:\d\d en kijkt dan met één verzoek of ze terug is\. Start geen agents en draai pending na die tijd opnieuw$/);
+  assert.ok(down.noteNl.startsWith(`${down.siteOutage}. `));
+  assert.equal(briefPending(down).siteOutage, down.siteOutage);
+  assert.equal(down.phase, "judges", "the work that is open stays open");
 });
 
 test("pending lists the verifiers and the finishers by the size of their candidates file", async () => {

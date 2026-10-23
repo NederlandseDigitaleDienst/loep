@@ -87,7 +87,7 @@ De overige commando's:
 
 | Commando | Waarvoor |
 |---|---|
-| `pending` | Zegt in welke fase de run is en welke opdrachten nog open staan, met de grootste opdracht eerst |
+| `pending` | Zegt in welke fase de run is en welke opdrachten nog open staan, met de grootste opdracht eerst, en of de site een storing heeft (`siteOutage`) |
 | `estimate` | Rekent uit hoe lang de run naar verwachting duurt, per onderdeel en in totaal, met een marge, en de tokens per rol en de kosten met de prijzen van de API; toont wat al gemeten is ernaast. Zie [docs/methode.md](docs/methode.md#hoe-lang-een-onderzoek-duurt) |
 | `gaps` | Verzamelt de open punten van een of meer runs, per soort en per criterium, voegt gelijke punten samen en telt ze: de werklijst voor wie de veegronde verbetert. `just gaps <run> [<run> ...]`; met `--json` voor wie verder rekent |
 | `feedback` | Schrijft een tekst voor een issue op deze repository voor elk criterium dat open bleef door loep zelf, en ook voor een criterium met een oordeel waarbij een proef niet werkte. Zonder adres of naam van de site, met een titel die van run tot run gelijk blijft. Verstuurt niets. `just feedback <run> --out <map>` |
