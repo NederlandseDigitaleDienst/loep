@@ -38,6 +38,8 @@ export function placeBasis(evidence: unknown, index: ObservationIndex): "measure
 export function criterionBasis(criterion: Pick<CriterionResult, "outcome" | "observations" | "findings" | "established">, index: ObservationIndex): Basis {
   if (criterion.outcome === "cantTell" || criterion.outcome === "untested") return "open";
   if (criterion.established?.by === "person") return "person";
+  // What a finishing round decided on an earlier observation that was not made again is an agent's judgment, marked as such.
+  if (criterion.findings.some((finding) => finding.verification?.status === "notRepeated")) return "observed";
   if (criterion.outcome === "failed") {
     const grounds = [...criterion.findings.map((finding) => finding.evidence), ...criterion.observations.filter((observation) => observation.ruling === "finding").map((observation) => observation.evidence)];
     return grounds.some((evidence) => placeBasis(evidence, index) === "measured") ? "measured" : "observed";

@@ -117,7 +117,7 @@ export interface ReportFinding extends Omit<Finding, "owner"> {
    * or by the agent of the finishing round itself ("repeated"), after whom no verifier comes.
    * "unverified": seen once. Absent when no verification was done.
    */
-  verification?: { status: "reproduced" | "unverified" | "repeated"; evidence: string[] };
+  verification?: { status: "reproduced" | "unverified" | "repeated" | "notRepeated"; evidence: string[]; reasonNl?: string };
 }
 
 /** The outcomes a person can record for an open point: there is nothing left to leave open. */

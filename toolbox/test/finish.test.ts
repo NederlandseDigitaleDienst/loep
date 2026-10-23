@@ -61,9 +61,14 @@ function makeRun(only: string[]) {
   /** The session file of a session that used its budget and extended it as often as it may. */
   const extendedTwice = (session: string): void =>
     write(join("observations", session, "session.json"), { session, startedAt: "2026-01-01T10:00:00.000Z", commands: 160, limits: { maxCommands: 160, maxMinutes: 60 }, extensions: [1, 2].map(() => ({ at: "2026-01-01T10:20:00.000Z", reasonNl: "De contactpagina is nog niet vergroot bekeken.", commands: 40, minutes: 15, usedCommands: 80, usedMinutes: 12 })) });
+  /** Every round leaves a probe that did not work or a part that did not load only after a real attempt in its own session (#318). */
+  const attemptsFor = (session: string, points: string[]): Pick<Verdict, "attempts"> => {
+    const tried = points.flatMap((point, position) => (/^(proef werkte niet|niet bereikbaar):/.test(point) ? [{ missing: position + 1, triedNl: "Het deel twee keer opnieuw geopend, met tijd ertussen, en het venster bekeken.", evidence: [observe(session, "open"), observe(session, "look")] }] : []));
+    return tried.length > 0 ? { attempts: tried } : {};
+  };
   /** Judge and verifier both leave the criterion open with these points. */
   const leaveOpen = async (id: string, points: string[]): Promise<void> => {
-    const open = (session: string): Verdict => ({ criterion: id, outcome: "cantTell", rule: "R9", summaryNl: "Er is geen afwijking gezien, maar niet alles is vastgesteld.", observations: [seen([observe(session, "look")], "open")], findings: [], missingNl: points });
+    const open = (session: string): Verdict => ({ criterion: id, outcome: "cantTell", rule: "R9", summaryNl: "Er is geen afwijking gezien, maar niet alles is vastgesteld.", observations: [seen([observe(session, "look")], "open")], findings: [], missingNl: points, ...attemptsFor(session, points) });
     write(join("verdicts", id, "oordeel.json"), open(`b-${digits(id)}`));
     if (points.some((point) => point.startsWith("budget op:"))) {
       // A point about the budget is only accepted from a session that extended twice.
@@ -76,7 +81,7 @@ function makeRun(only: string[]) {
     const session = `v-${digits(id)}`;
     const look = observe(session, "look");
     if (points.some((point) => point.startsWith("budget op:"))) extendedTwice(session);
-    write(join("verdicts", id, "final.json"), { criterion: id, outcome: "cantTell", rule: "R9", summaryNl: "Ook bij de controle is niet alles vastgesteld.", observations: [seen([look], "open")], findings: [], missingNl: points, verification: { judgeOutcome: "cantTell", findings: [], attackNl: "Geprobeerd het open punt te beslechten met een tweede blik op de startpagina.", attackEvidence: [look] } } satisfies Verdict);
+    write(join("verdicts", id, "final.json"), { criterion: id, outcome: "cantTell", rule: "R9", summaryNl: "Ook bij de controle is niet alles vastgesteld.", observations: [seen([look], "open")], findings: [], missingNl: points, ...attemptsFor(session, points), verification: { judgeOutcome: "cantTell", findings: [], attackNl: "Geprobeerd het open punt te beslechten met een tweede blik op de startpagina.", attackEvidence: [look] } } satisfies Verdict);
     assert.deepEqual(await checkInstrumentVerdict(dir, id, "final"), [], `final ${id}`);
   };
   /** The observations a pass has to cite for this criterion, made in the given session. */
@@ -140,6 +145,35 @@ test("a run with open criteria of every kind gets a finishing task for what the 
   const none = (await flow.task(CRITERIA.none)).finish!;
   assert.deepEqual(none.points, [NO_VERDICT_NL]);
   assert.match(readFileSync(join(dir, none.prompt), "utf8"), /Er is geen eerder oordeel/);
+});
+
+test("a finishing round keeps a finding on an earlier observation when the part no longer loads, marked as not made again (#318)", async () => {
+  const session = "a-134";
+  const earlier = flow.observe("b-134", "look");
+  const tried = [flow.observe(session, "open"), flow.observe(session, "look")];
+  const unreachable = "niet bereikbaar: het menu op P2 (https://www.example.nl/menu) laadde niet, ook los geopend, tussen 14:05 en 14:40; de rest van de site laadde wel.";
+  const keptEarlier: Verdict = {
+    criterion: CRITERIA.sweep,
+    outcome: "failed",
+    rule: "R1",
+    summaryNl: "De inleiding valt weg bij vergroten; het menu laadde niet meer.",
+    observations: [flow.seen([earlier], "finding", "F1")],
+    findings: [finding([earlier])],
+    missingNl: [unreachable],
+    finish: {
+      points: [{ point: 1, settled: true, howNl: "Het gebrek uit de eerste beoordeling staat vast; het menu zelf laadde niet meer.", evidence: [tried[1]!] }],
+      coverageNl: "Het menu laadde niet meer; de bevinding rust op de waarneming van de eerste beoordeling.",
+      findings: [{ key: "F1", earlier: [earlier], notRepeatedNl: "Het menu laadde bij twee pogingen niet meer, dus de bevinding is niet opnieuw gemaakt." }],
+      attempts: [{ missing: 1, triedNl: "Het menu op P2 twee keer opnieuw geopend, met tijd ertussen, en het venster bekeken.", evidence: tried }],
+    },
+  };
+  const out = join("verdicts", CRITERIA.sweep, "afmaak.json");
+  flow.write(out, keptEarlier);
+  assert.deepEqual(await checkInstrumentVerdict(dir, CRITERIA.sweep, "finish"), []);
+  // Without a part that no longer loads, a finding is seen twice by the finisher itself.
+  flow.write(out, { ...keptEarlier, missingNl: [], finish: { ...keptEarlier.finish!, attempts: [] } });
+  assert.match((await checkInstrumentVerdict(dir, CRITERIA.sweep, "finish")).join("\n"), /rests on an earlier observation only when the part no longer loads/);
+  flow.write(out, keptEarlier);
 });
 
 test("a finishing verdict that still names missing coverage or a spent budget is refused, and an instrument that did not work needs a real attempt", async () => {

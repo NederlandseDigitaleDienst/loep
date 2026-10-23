@@ -202,7 +202,7 @@ export interface ChainText {
   readsNl: string | null;
   challengeLabel: string;
   droppedLabel: string;
-  verification: { reproduced: string; unverified: string; repeated: string };
+  verification: { reproduced: string; unverified: string; repeated: string; notRepeated: string };
 }
 
 export interface CriterionBrief {
@@ -683,7 +683,7 @@ function chainText(evaluation: Evaluation): ChainText {
     readsNl: evaluation.chain?.reads && evaluation.chain.reads.length > 0 ? `${readsAllowedNl(evaluation.chain.reads)}.` : null,
     challengeLabel: "Poging om het oordeel onderuit te halen",
     droppedLabel: "Vervallen bij de controle",
-    verification: { reproduced: "Bij de controle bevestigd", unverified: "Toegevoegd bij de controle, één keer gezien", repeated: "Uit de aanvullende meting, twee keer gezien door één beoordelaar" },
+    verification: { reproduced: "Bij de controle bevestigd", unverified: "Toegevoegd bij de controle, één keer gezien", repeated: "Uit de aanvullende meting, twee keer gezien door één beoordelaar", notRepeated: "Uit de aanvullende meting, op een eerdere waarneming en niet opnieuw gemaakt: het deel laadde niet meer" },
   };
 }
 

@@ -188,7 +188,7 @@ export async function evaluate(options: EvaluateOptions): Promise<Evaluation> {
         const repeat = repeats.find((entry) => entry.key === key);
         // After the finishing round no verifier comes: its agent showed the finding twice itself, and the report says so.
         // A finding the verifier added itself has been seen once, by the verifier: nobody reproduced it.
-        finding.verification = counted.finish ? { status: "repeated", evidence: repeat?.repeated ?? [] } : check?.reproduced ? { status: "reproduced", evidence: check.evidence } : { status: "unverified", evidence: [] };
+        finding.verification = counted.finish ? (repeat?.notRepeatedNl !== undefined ? { status: "notRepeated", evidence: repeat.earlier ?? [], reasonNl: repeat.notRepeatedNl } : { status: "repeated", evidence: repeat?.repeated ?? [] }) : check?.reproduced ? { status: "reproduced", evidence: check.evidence } : { status: "unverified", evidence: [] };
       });
     }
     // Which elements of the vendor a finding touches. Where it is does not say whose fault it is, so the owner stays
