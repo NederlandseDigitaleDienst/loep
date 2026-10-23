@@ -1160,6 +1160,8 @@ test("explore, check-site, the sweep and the gate work together on a site with a
   assert.equal(third.review.answered, false, "answers for the sheets of before do not count");
   assert.equal(existsSync(third.review.answers), false, "they are moved away");
   assert.ok(readdirSync(join(run, "gate", "vorige")).some((name) => /^answers-.*\.json$/.test(name)), "to gate/vorige/, not deleted");
+  // Every round of the gate is kept beside gate.json (#318).
+  assert.deepEqual(readdirSync(join(run, "gate")).filter((name) => name.startsWith("ronde-")).sort(), ["ronde-1.json", "ronde-2.json", "ronde-3.json", "ronde-4.json"]);
   assert.match((await checkGate(run))[0]!, /answers\.json is niet te lezen/, "check-gate has no answer to approve");
   // An agent that writes the old answers back gets told the sheet changed.
   writeFileSync(third.review.answers, JSON.stringify(answers));

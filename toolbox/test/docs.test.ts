@@ -478,7 +478,7 @@ test("skip records its kind, a storing is no budget that ran out, and unskip put
     assert.deepEqual(outage, ["De beoordeling is door een storing van het model niet gedaan. Het criterium is daardoor niet beoordeeld."]);
     assert.ok(!outage.join().includes("budget op"));
     assert.match(pointsToFinish({ round: "judge", verdict: null }, "storing")!.join(), /^De verificatie is door een storing van het model niet gedaan/);
-    assert.match(pointsToFinish({ round: null, verdict: null })!.join(), /^budget op: /, "a task without a valid result stays what it was");
+    assert.match(pointsToFinish({ round: null, verdict: null })!.join(), /^geen geldig resultaat: /, "a task without a valid result says so, and is no budget that ran out (#318)");
 
     // unskip: the task is open again, and the workflow gives it its two attempts anew.
     assert.equal(await unskip(dir, { criterion: "1.4.3" }), "verdicts/1.4.3/oordeel.overgeslagen.json");

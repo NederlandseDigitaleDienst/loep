@@ -235,6 +235,7 @@ export const OPEN_POINT_KINDS = [
   { prefix: "veegronde mist", reader: "toolbox", labelNl: "dekking ontbrak" },
   { prefix: "budget op", reader: "toolbox", labelNl: "de tijd voor het meten was op" },
   { prefix: "proef werkte niet", reader: "toolbox", labelNl: "een proef werkte niet" },
+  { prefix: "geen geldig resultaat", reader: "toolbox", labelNl: "er kwam geen geldig oordeel" },
   { prefix: "niet bereikbaar", reader: "site", labelNl: "een deel van de site was niet bereikbaar" },
 ] as const;
 export type OpenPointKind = (typeof OPEN_POINT_KINDS)[number];
@@ -317,6 +318,7 @@ export function notSentPointProblems(missingNl: unknown, permission: { origin: s
 
 /** How a point "versturen niet toegestaan" says that the budget for sending of the run held the message back. */
 const SENDING_BUDGET_OUT = /budget voor versturen/i;
+
 
 interface ShapeContext {
   criterion: string;

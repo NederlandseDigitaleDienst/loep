@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { mkdir, rename, rm } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
 import { PNG } from "pngjs";
@@ -1025,6 +1025,9 @@ export async function gate(runDir: string, outDir: string = runDir): Promise<Gat
     return { pageType: remark.pageType, page: sheet?.page ?? null, url: sheet?.url ?? null, sheet: sheet?.file ?? null, seenNl: remark.remarkNl };
   }));
   await writeJson(join(outDir, "gate.json"), result);
+  // gate.json is the latest round; every round is kept beside it, so why the gate fell earlier can still be read (#318).
+  const rounds = readdirSync(join(outDir, "gate")).filter((name) => /^ronde-\d+\.json$/.test(name)).length;
+  await writeJson(join(outDir, "gate", `ronde-${rounds + 1}.json`), result);
   if (absoluteOut === absoluteRun) await writeManifest(runDir, { command: "gate", startedAt, stage, next, sufficient: result.sufficient, gaps: gaps.length, warnings: result.warnings.length, templateSha256: sha256(template) });
   return result;
 }

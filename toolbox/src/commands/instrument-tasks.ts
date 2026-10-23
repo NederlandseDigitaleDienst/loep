@@ -376,8 +376,8 @@ export async function standingVerdict(runDir: string, task: InstrumentTask, obse
 }
 
 /** What the finishing round is told when the round before it gave nothing: an open point like any other, so the same rules hold for it. */
-export const NO_FINAL_NL = "budget op: de verificatie leverde na twee pogingen geen geldig eindoordeel. Het oordeel van de beoordelaar is daardoor niet gecontroleerd.";
-export const NO_VERDICT_NL = "budget op: de beoordeling leverde na twee pogingen geen geldig oordeel. Het criterium is daardoor niet beoordeeld.";
+export const NO_FINAL_NL = "geen geldig resultaat: de verificatie leverde na twee pogingen geen geldig eindoordeel. Het oordeel van de beoordelaar is daardoor niet gecontroleerd.";
+export const NO_VERDICT_NL = "geen geldig resultaat: de beoordeling leverde na twee pogingen geen geldig oordeel. Het criterium is daardoor niet beoordeeld.";
 /** The same for a round that was skipped because the model was not there: no budget ran out and no agent failed. */
 export const NO_FINAL_OUTAGE_NL = "De verificatie is door een storing van het model niet gedaan. Het oordeel van de beoordelaar is daardoor niet gecontroleerd.";
 export const NO_VERDICT_OUTAGE_NL = "De beoordeling is door een storing van het model niet gedaan. Het criterium is daardoor niet beoordeeld.";
