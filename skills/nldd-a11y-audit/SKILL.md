@@ -121,10 +121,11 @@ Een agent starten betekent steeds: een aparte agent die alleen dit krijgt: "Lees
    ```
    LOEP gate --run RUN
    ```
-   - Afsluitcode 0: voldoende, ga door.
+   - Afsluitcode 0: voldoende, ga door. Zegt de poort "bewijs niet volledig, verder met beperkingen", dan bleven er na twee keer terug naar de verkenner gaten over. Die zijn beperkingen geworden (`limitations` in `RUN/gate.json`): de beoordelaars bekijken die plekken zelf in de sessie, en het rapport noemt ze. Zeg de gebruiker welke het zijn, en ga door.
    - Afsluitcode 2: de beelden zijn nog niet bekeken. Start één agent met het opdrachtbestand dat het commando noemt; noemt het er meer dan één (elk paginatype heeft een blad, en een opdracht telt hooguit acht bladen), start dan per bestand een eigen agent. Draai als ze klaar zijn `LOEP check-gate --run RUN` en daarna opnieuw `LOEP gate --run RUN`. Noemt de poort ook gaten in de vaste controles, laat de beelden dan toch eerst bekijken: zo krijgt de verkenner daarna alle gaten in één keer.
    - Afsluitcode 3: een meting mislukte of ontbreekt (de gaten met `(opnieuw meten)`). Ga niet terug naar de verkenner, maar draai de vier commando's van stap 4 opnieuw en daarna stap 5. Ze meten alleen wat nog niet geldig is. Dit telt niet als terugkeer naar de verkenner. De poort geeft code 3 hooguit twee keer na elke verkenning; lukt een meting dan nog steeds niet, dan gaat het gat naar de verkenner. De poort telt daarvoor elke `collect` na de laatste verkenning, ook `collect --only` voor één pagina: één herhaalde pagina kost zo een hele herkansing. Een stap van een recept die mislukt, ook op een tijdgrens, krijgt geen code 3: dat is een fout in het sitemodel en gaat naar de verkenner. Draaide de machine zwaar (veel agents of ander werk tegelijk), meet dan met minder tegelijk (`--at-once`).
-   - Afsluitcode 1: onvoldoende. Ga terug naar stap 3: `LOEP explore --run RUN` schrijft dan een vervolgopdracht met de gaten erin. Daarna opnieuw stap 4 en 5. Dat mag **hooguit twee keer**. Is het bewijs dan nog onvoldoende, stop dan: meld de gebruiker "bewijs onvoldoende" met de gaten uit `RUN/gate.json`. Er komt geen beoordeling.
+   - Afsluitcode 1: onvoldoende. Ga terug naar stap 3: `LOEP explore --run RUN` schrijft dan een vervolgopdracht met de gaten erin. Daarna opnieuw stap 4 en 5. Dat gebeurt **hooguit twee keer**; daarna gaat de poort verder met beperkingen (afsluitcode 0).
+   - Afsluitcode 4: er valt niets te beoordelen: de site weigert de run blijvend, of meer dan de helft van de steekproef laadde niet. Stop dan: meld de gebruiker "bewijs onvoldoende" met de gaten uit `RUN/gate.json`. Er komt geen beoordeling.
 
 6. **Rondgang, beoordelen, verifiëren en afmaken.** Vier fasen, steeds met dezelfde twee commando's:
    ```
