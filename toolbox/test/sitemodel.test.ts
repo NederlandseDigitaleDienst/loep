@@ -249,6 +249,16 @@ test("the validator tests a read request: narrow, seen held back in its observat
   assert.match(problems({ ...validModel(), readRequests: {} as never }).join(" | "), /readRequests is een lijst/);
 });
 
+test("a read request for Algolia is shown by a search held back on any host of the same application", () => {
+  const read = { id: "algolia-dsn", method: "POST" as const, origin: "https://ab12cd34ef-dsn.algolia.net", path: "/1/indexes/*/queries", service: "algolia" as const, reasonNl: "Het zoekvenster stuurt de zoekvraag naar Algolia, die alleen resultaten teruggeeft.", observation: "verken-0003" };
+  const seen = (url: string): ModelContext => ({ ...CONTEXT, requestsSeen: { "verken-0003": [{ method: "POST", url, search: ["algolia"] }] } });
+  assert.deepEqual(validateSiteModel({ ...validModel(), readRequests: [read] }, seen("https://ab12cd34ef.algolia.net/1/indexes/site/query")), []);
+  assert.match(validateSiteModel({ ...validModel(), readRequests: [read] }, seen("https://anderapp01.algolia.net/1/indexes/site/query")).join(" | "), /in waarneming verken-0003 is geen POST naar https:\/\/ab12cd34ef-dsn\.algolia\.net\/1\/indexes\/\*\/queries tegengehouden/, "another application");
+  const missing = validModel();
+  missing.components[1] = { ...missing.components[1]!, blockedRequests: [{ method: "POST", address: "ab12cd34ef-2.algolianet.com/1/indexes/site/query" }] };
+  assert.match(validateSiteModel({ ...missing, readRequests: [read] }, seen("https://ab12cd34ef-dsn.algolia.net/1/indexes/*/queries")).join(" | "), /noemt POST ab12cd34ef-2\.algolianet\.com\/1\/indexes\/site\/query onder blockedRequests, maar readRequests\[0\] laat dat verzoek door/);
+});
+
 const inventoryPage = (url: string, foundVia: string[], contentHash = url): InventoryPage => ({ url, slug: url.replace(/\W+/g, "-"), status: 200, title: url, lang: "nl", templateHash: "t", contentHash, foundVia, counts: {} });
 
 test("a site model from before the description was asked still loads, and gives no description", async () => {
@@ -1166,11 +1176,16 @@ test("explore, check-site, the sweep and the gate work together on a site with a
   assert.ok((await checkGate(run)).some((problem) => /het blad is veranderd sinds dit antwoord/.test(problem)));
   writeFileSync(modelPath, modelBefore);
 
+  // A search question a judge met that no read request covers.
+  mkdirSync(join(run, "observations", "beoordeel-2.4.5"), { recursive: true });
+  writeFileSync(join(run, "observations", "beoordeel-2.4.5", "0003.json"), JSON.stringify({ id: "beoordeel-2.4.5-0003", blocked: [{ at: "", kind: "method", method: "POST", url: "https://ab12cd34ef.algolia.net/1/indexes/site/query?q=x", resourceType: "fetch", search: ["algolia"] }] }));
+
   // A later round: the explorer gets the gaps.
   const again = await explore(run);
   assert.equal(again.round, 2);
   const followUp = readFileSync(again.task, "utf8");
   assert.match(followUp, /Dit is een vervolgronde/);
+  assert.match(followUp, /Deze zoekvragen hield loep tegen omdat geen leesverzoek hun adres dekt;.*\n\n- POST https:\/\/ab12cd34ef\.algolia\.net\/1\/indexes\/site\/query, zoekvraag aan Algolia: 1 keer tegengehouden, het eerst in waarneming beoordeel-2\.4\.5-0003\n/);
   assert.ok(!followUp.includes("sweep-complete"), "a measurement the sweep still owes is not a task for the explorer");
 });
 
