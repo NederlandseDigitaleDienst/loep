@@ -1,4 +1,5 @@
 import type { Sample } from "../commands/sample.ts";
+import type { Basis } from "./basis.ts";
 import { splitPoints } from "./degrade.ts";
 import type { Purpose } from "./purpose.ts";
 import type { EvaluationDocuments } from "./documents.ts";
@@ -186,6 +187,10 @@ export interface CriterionResult {
   missingNl: string[];
   /** Points about this investigation in a criterion whose outcome does not hang on them, such as a probe that did not work in a failed criterion (#318). Absent when there are none, and in older evaluations. */
   limitsNl?: string[];
+  /** What the outcome rests on, derived from what the verdict cites (#318): an instrument, what an agent saw, a person, or nothing yet. Absent in older evaluations. */
+  basis?: Basis;
+  /** The same per examined place, in the order of `observations`. Absent in older evaluations. */
+  placeBasis?: ("measured" | "observed")[];
   /**
    * With "cantTell": no deviation was found, but not everything was measured; `coverageNl` says
    * what was. The outcome stays "cantTell" and counts as open. Absent when the question is

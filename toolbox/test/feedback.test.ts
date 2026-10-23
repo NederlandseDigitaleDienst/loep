@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { after, test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
-import { feedback, feedbackTextNl, redactor, TITLE_PREFIX, type Feedback } from "../src/commands/feedback.ts";
+import { feedback, GAP_TITLE_PREFIX, feedbackTextNl, redactor, TITLE_PREFIX, type Feedback } from "../src/commands/feedback.ts";
 
 const CLI = fileURLToPath(new URL("../src/cli.ts", import.meta.url));
 const scratch = mkdtempSync(join(tmpdir(), "loep-feedback-"));
@@ -162,4 +162,14 @@ test("a criterion without a verdict because the model was not there is no fault 
   assert.deepEqual(result.outage, ["2.1.1"]);
   assert.match(feedbackTextNl(result), /Niet terug te melden: criterium 2\.1\.1 is niet beoordeeld door een storing van het model .*LOEP unskip --run <run> --criterion <id>/);
   assert.ok(!feedbackTextNl(result).includes("budget op"));
+});
+
+test("a gap in an instrument becomes a draft with a key that a later run counts up (#318)", () => {
+  const withGaps = run("site-gaps", [criterion("1.4.11", "passed", [])]);
+  writeFileSync(join(withGaps, "instrument-gaps.json"), JSON.stringify({ schema: "loep/instrument-gaps/1", gaps: [{ key: "1.4.11:contrast", criterion: "1.4.11", kind: "instrument", what: ["contrast"], whatNl: "de uitkomst rust op wat een agent zelf zag, terwijl de procedure `contrast` noemt", count: 3 }] }));
+  const [draft] = feedback(withGaps).drafts;
+  assert.equal(draft!.title, `${GAP_TITLE_PREFIX} 1.4.11:contrast`);
+  assert.deepEqual(draft!.labels, ["enhancement"]);
+  assert.match(draft!.bodyMd, /- Sleutel: `1\.4\.11:contrast` \(bestaat er een issue met deze sleutel in de titel, tel deze run daar dan bij/);
+  assert.match(draft!.bodyMd, /- Plekken in deze run: 3/);
 });

@@ -1,4 +1,5 @@
 import { KIND_NAME_NL, kindsNl } from "./documents.ts";
+import { BASIS_NL } from "./basis.ts";
 import { pageIndex, type Defect } from "./defects.ts";
 import { aiGeneratedMark, changedSinceCommit, closeCutQuote, versionAccuracyNl, complianceStatus, evaluationHash, idsAcrossVersionsNl, knownCommit, madeWith, openCriteria, OUTAGE_NL, OUTCOME_LABEL, type ComplianceStatus, type CriterionOutcome, type CriterionResult, type Evaluation, type ReportFinding, type Signature } from "./evaluation.ts";
 import { modelOf } from "../instruments/methods/registry.ts";
@@ -722,7 +723,7 @@ function brief(criterion: CriterionResult): CriterionBrief {
     answersNl: (criterion.answers ?? []).map(answerLine),
     beforeNl: before ? [`De ${before.roundNl} kwam op ${roundLabel(before.outcome)}: ${before.summaryNl}`, ...before.missingNl.map((point) => `Stond open: ${point.replace(/\s+/g, " ").trim()}`)] : [],
     observationsNl: criterion.observations.length > 0 ? plural(criterion.observations.length, "waarneming", "waarnemingen") : null,
-    certaintyNl: certainty(criterion),
+    certaintyNl: criterion.basis && criterion.basis !== "open" ? `${upperFirst(BASIS_NL[criterion.basis])}. ${certainty(criterion)}` : certainty(criterion),
     roundsNl: roundsLine(criterion),
     // The open points themselves stand in the work list or in the appendix; here only how many there are.
     openNl: points.length > 0 ? plural(points.length, "punt", "punten") : null,
@@ -735,7 +736,8 @@ function brief(criterion: CriterionResult): CriterionBrief {
       const ruling = observation.ruling;
       if (!ruling || !(ruling in REPORT_TEXT.ruling)) return null;
       const finding = ruling === "finding" ? criterion.findings.find((entry) => entry.key !== undefined && entry.key === observation.finding) : undefined;
-      return { labelNl: REPORT_TEXT.ruling[ruling], findingId: finding?.id ?? null };
+      const basis = criterion.placeBasis?.[criterion.observations.indexOf(observation)];
+      return { labelNl: `${REPORT_TEXT.ruling[ruling]}${basis ? ` (${basis === "measured" ? "gemeten" : "waarneming van een agent"})` : ""}`, findingId: finding?.id ?? null };
     }),
   };
 }
