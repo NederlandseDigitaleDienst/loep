@@ -5,7 +5,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, test } from "node:test";
 import { gatherVerdicts } from "../src/commands/evaluate.ts";
-import { checkInstrumentVerdict, instrumentPending, instrumentTasks, loadInstrumentIndex, recordAttempts, skip, type InstrumentTask } from "../src/commands/instrument-tasks.ts";
+import { briefPending, checkInstrumentVerdict, instrumentPending, instrumentTasks, loadInstrumentIndex, recordAttempts, skip, type InstrumentTask } from "../src/commands/instrument-tasks.ts";
+import { BLOCKADES_FILE } from "../src/session/blockade.ts";
 import { type CriterionResult, openCriteria, resolveCriterion, summarise } from "../src/lib/evaluation.ts";
 import { deriveReport, renderMarkdown } from "../src/lib/report-markdown.ts";
 import type { RunData } from "../src/lib/rundata.ts";
@@ -107,6 +108,17 @@ test("a part of the site that did not load gets a finishing round, and stays ope
   write(join("verdicts", CRITERIA.unreachable, "afmaak.json"), { ...still, finish: { ...still.finish!, attempts: [{ missing: 1, triedNl: "Het chatvenster op de contactpagina geopend en daarna los; beide keren een time-out, om 14:05 en om 14:40.", evidence: [look, failed] }] } });
   assert.deepEqual(await checkInstrumentVerdict(dir, CRITERIA.unreachable, "finish"), []);
   assert.equal((await instrumentPending(dir)).phase, "done");
+
+  // After an outage of the site pending names it for a new finishing round, but only when the verdict was written before the site answered again.
+  assert.equal((await instrumentPending(dir)).again, undefined);
+  const outage = (back: number): void => write(BLOCKADES_FILE, { origins: [{ origin: "https://www.example.nl", reason: "outage", at: new Date(back - 600_000).toISOString(), until: new Date(back - 300_000).toISOString(), url: HOME, back: new Date(back).toISOString() }] });
+  outage(Date.now() - 3_600_000);
+  assert.equal((await instrumentPending(dir)).again, undefined);
+  outage(Date.now() + 60_000);
+  const back = await instrumentPending(dir);
+  assert.deepEqual([back.phase, back.again, briefPending(back).again], ["done", [CRITERIA.unreachable], [CRITERIA.unreachable]]);
+  assert.match(back.noteNl, /zet een nieuwe afmaakronde klaar met tasks --again 2\.4\.3 en draai daarna pending\.$/);
+  rmSync(join(dir, BLOCKADES_FILE));
 
   // evaluate counts it as not established by the evaluation, and the report says what did not load and when.
   const criterion = await resolved(CRITERIA.unreachable);
