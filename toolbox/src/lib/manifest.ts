@@ -103,7 +103,35 @@ export const AGENT_PHASES = ["tasks", "skip", "unskip", "check-walk", "check-ver
 
 /** What variant.json of a copy holds of the version of the sweep; see VariantRecord in commands/variants.ts. */
 interface VariantVersions {
-  from?: { toolbox?: { version?: string } | null };
+  from?: { run?: string; toolbox?: Partial<Manifest["toolbox"]> | null; browser?: Manifest["browser"] | null };
+}
+
+/** The code the sweep of a copy made with `variant` was measured with, when that differs from the code of the agent phases. */
+export interface SweepToolchain {
+  /** The run the sweep was copied from, by folder name. */
+  run: string;
+  toolbox: Manifest["toolbox"];
+  /** The browser of the sweep; null when variant.json does not hold it (copies made before it was recorded). */
+  browser: Manifest["browser"] | null;
+}
+
+/**
+ * For a copy made with `variant`: the code the sweep was measured with, taken from variant.json, or null when the run is
+ * no copy, when variant.json does not name that code, or when it is the code of `current`. The sweep files themselves
+ * hold no version of the code that wrote them.
+ */
+export function sweepToolchain(runDir: string, current: Manifest["toolbox"]): SweepToolchain | null {
+  const file = join(runDir, "variant.json");
+  if (!existsSync(file)) return null;
+  const from = (JSON.parse(readFileSync(file, "utf8")) as VariantVersions).from;
+  const toolbox = from?.toolbox;
+  if (!toolbox?.version) return null;
+  if (toolbox.version === current.version && (toolbox.commit ?? null) === current.commit && (toolbox.dirty ?? false) === current.dirty) return null;
+  return {
+    run: from?.run ?? "",
+    toolbox: { commit: toolbox.commit ?? null, dirty: toolbox.dirty ?? false, lockfileSha256: toolbox.lockfileSha256 ?? "no lockfile", version: toolbox.version },
+    browser: from?.browser ?? null,
+  };
 }
 
 /**
