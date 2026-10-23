@@ -1,7 +1,7 @@
 import type { Page } from "playwright";
 import { PNG } from "pngjs";
 import { call } from "../browser/call.ts";
-import { wholePageScreenshot, type ScreenshotClip } from "../browser/screenshot.ts";
+import { regionScreenshot, wholePageScreenshot, type ScreenshotClip } from "../browser/screenshot.ts";
 import type { ColorScheme } from "../browser/session.ts";
 import type { ForcedProbe } from "./forced.ts";
 import { backgroundBehind, backgroundRange, blend, colourShares, containsColour, contrastRatio, floorRatio, requiredRatio, ringColour, type Rgb } from "../lib/contrast.ts";
@@ -258,6 +258,36 @@ export function measure(run: TextRun, image: PNG): ContrastMeasurement {
 
 export type Graphic = Positioned & { inControl: string | null; controlHasText: boolean | null };
 
+/**
+ * Pieces of a page below the limit of one picture overlap by this much. What is measured in a
+ * piece stands at least half of it below the top, under a fixed header that each piece shows
+ * there too, so text and controls up to that height stand wholly in one piece.
+ */
+const PIECE_OVERLAP = 400;
+
+/**
+ * Measures what stands below the limit of the first picture in pictures of the page further
+ * down, one piece at a time (#340). `measureAt` measures an item on a picture whose top is at
+ * `top` on the page. Items that fit in no piece keep the answer they had.
+ */
+async function measureBelowTheLimit(page: Page, clip: ScreenshotClip, width: number, items: { box: Positioned["box"]; measureAt: (picture: PNG, top: number) => void }[]): Promise<number> {
+  const stride = clip.limit - PIECE_OVERLAP;
+  const pending = new Set(items.map((_item, index) => index));
+  let pieces = 0;
+  for (let top = stride; top < clip.pageHeight && pending.size > 0; top += stride) {
+    const height = Math.min(clip.limit, clip.pageHeight - top);
+    const here = [...pending].filter((index) => items[index]!.box.y >= top + PIECE_OVERLAP / 2 && items[index]!.box.y + items[index]!.box.height <= top + height);
+    if (here.length === 0) continue;
+    const picture = PNG.sync.read(await regionScreenshot(page, { x: 0, y: top, width, height }));
+    pieces++;
+    for (const index of here) {
+      items[index]!.measureAt(picture, top);
+      pending.delete(index);
+    }
+  }
+  return pieces;
+}
+
 /** Measure the contrast of every piece of visible text, control and small graphic on the page as it is now. */
 export async function pageContrast(page: Page): Promise<Pick<PageContrast, "measurements" | "controls" | "graphics" | "screenshotClippedAt">> {
   // Text and screenshot are taken from the same page state, so positions match pixel for pixel.
@@ -275,6 +305,18 @@ export async function pageContrast(page: Page): Promise<Pick<PageContrast, "meas
   const controls = await call<Positioned[]>(page, "boundaryTargets");
   const graphics = await call<Graphic[]>(page, "graphicBoxes");
   const measurements = runs.map((run) => measureHere(run, image));
+  const controlResults = controls.map((control) => (below(control.box) ? { ...measureControl(control, image), outside: null, edge: null, fill: null, edgeRatio: null, fillRatio: null, outcome: "cantTell" as const } : measureControl(control, image)));
+  const graphicResults = graphics.map((graphic) => (below(graphic.box) ? { ...measureGraphic(graphic, image), background: null, foreground: null, ratio: null, outcome: "cantTell" as const } : measureGraphic(graphic, image)));
+  if (clip) {
+    // What stands below the limit is measured in pictures further down the page, in the same state.
+    const up = <T extends { box: Positioned["box"] }>(item: T, top: number): T => ({ ...item, box: { ...item.box, y: item.box.y - top } });
+    const back = <T extends { box: Positioned["box"] }>(measured: T, box: Positioned["box"]): T => ({ ...measured, box });
+    await measureBelowTheLimit(page, clip, image.width, [
+      ...runs.flatMap((run, index) => (below(run.box) && measurements[index]!.outcome !== "exempt" ? [{ box: run.box, measureAt: (picture: PNG, top: number) => void (measurements[index] = back(measure(up(run, top), picture), run.box)) }] : [])),
+      ...controls.flatMap((control, index) => (below(control.box) ? [{ box: control.box, measureAt: (picture: PNG, top: number) => void (controlResults[index] = back(measureControl(up(control, top), picture), control.box)) }] : [])),
+      ...graphics.flatMap((graphic, index) => (below(graphic.box) ? [{ box: graphic.box, measureAt: (picture: PNG, top: number) => void (graphicResults[index] = back(measureGraphic(up(graphic, top), picture), graphic.box)) }] : [])),
+    ]);
+  }
   // Text that only shows when it has focus, such as a skip link, is measured in that state.
   await page.keyboard.press("Tab");
   // That covers text that was not there before, and text that could not be measured without focus (off screen).
@@ -291,8 +333,8 @@ export async function pageContrast(page: Page): Promise<Pick<PageContrast, "meas
   }
   return {
     measurements,
-    controls: controls.map((control) => (below(control.box) ? { ...measureControl(control, image), outside: null, edge: null, fill: null, edgeRatio: null, fillRatio: null, outcome: "cantTell" } : measureControl(control, image))),
-    graphics: graphics.map((graphic) => (below(graphic.box) ? { ...measureGraphic(graphic, image), background: null, foreground: null, ratio: null, outcome: "cantTell" } : measureGraphic(graphic, image))),
+    controls: controlResults,
+    graphics: graphicResults,
     ...(clip ? { screenshotClippedAt: clip } : {}),
   };
 }
