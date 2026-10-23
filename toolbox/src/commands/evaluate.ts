@@ -2,7 +2,7 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { replaysNl } from "../lib/recordings.ts";
 import { findingCutout, type CutoutContext } from "../lib/cutout.ts";
 import { join } from "node:path";
-import { frameStanding, type AcceptedGapDecider } from "../lib/sitemodel.ts";
+import { approvedReads, frameStanding, type AcceptedGapDecider } from "../lib/sitemodel.ts";
 import { readJson, sha256File } from "../lib/canonical.ts";
 import { aiGeneratedMark, allCriteriaSorted, carryFindingIds, ESTABLISHED_BY_NL, evaluationHash, idsAcrossVersionsNl, knownCommit, OUTCOME_LABEL, markVendor, openCriteria, resolveCriterion, summarise, versionAccuracyProblems, type BrowserUse, type CriterionResult, type Evaluation, type PointAnswer, type RoundVerdicts, type VersionAccuracy } from "../lib/evaluation.ts";
 import { matchFindings, sideOf } from "../lib/difference.ts";
@@ -18,7 +18,7 @@ import { reportedModels } from "../lib/models.ts";
 import { loadRun } from "../lib/rundata.ts";
 import { openPoint, sessionOfObservation, UNREACHABLE, waitsOnlyOnSending, type Verdict } from "../lib/verdict.ts";
 import { loginNl, NOT_LOGGED_IN_NL } from "../lib/login.ts";
-import { readsAllowedNl } from "../lib/reads.ts";
+import { heldBackSearches, heldBackSearchNl, readsAllowedNl, refusedCoveredReads } from "../lib/reads.ts";
 import { WRITES_BLOCKED_NL, writesAllowedNl } from "../lib/writes.ts";
 import { blockadesNl } from "../session/blockade.ts";
 import { METHODS } from "../instruments/methods/registry.ts";
@@ -371,6 +371,7 @@ export async function evaluate(options: EvaluateOptions): Promise<Evaluation> {
   // A part of the site that did not load is no fault of loep and no work for the owner: said apart, with the way to measure it once it loads.
   const unreachable = open.evaluation.filter((id) => criteria.find((criterion) => criterion.id === id)!.missingNl.some((point) => openPoint(point).kind?.prefix === UNREACHABLE));
   if (unreachable.length > 0) process.stderr.write(`open, een deel van de site was niet bereikbaar: ${idsAcrossVersionsNl(unreachable, criteria)}. Laadt het weer, zet dan een nieuwe afmaakronde klaar met tasks --again ${unreachable.join(",")}, en draai daarna opnieuw evaluate.\n`);
+  for (const line of heldBackSearchesNl(options.run, observations.records.values(), instrumentTasks, open.evaluation)) process.stderr.write(`${line}\n`);
   // The phases with agents leave no step of their own: what their sessions say about begin, end and time per agent is kept here.
   await writeManifest(options.run, { command: "evaluate", startedAt, criteria: criteria.length, rejectedVerdicts: rejected.length, defects: merged.defects, mergeProposal: merged.proposal, establishedBy: { verification: by("verification").length, finishing: finished.length, person: byPerson.length }, open, extensions, agentPhases: agentPhaseTimings(options.run) });
   return evaluation;
@@ -386,6 +387,31 @@ const ACCEPTED_BY_NL: Record<AcceptedGapDecider, string> = { verkenner: "Aanvaar
 export function gateLineNl(gap: { page?: string | null; missingNl: string; reasonNl?: string; decidedBy?: AcceptedGapDecider }): string {
   const line = `${gap.page ? `${gap.page}: ` : ""}${gap.missingNl}${gap.reasonNl ? ` ${gap.reasonNl}` : ""}`;
   return gap.decidedBy ? `${line.replace(/[^.!?]$/, "$&.")} ${ACCEPTED_BY_NL[gap.decidedBy]}` : line;
+}
+
+type BlockedRecord = { id: string; blocked?: readonly { kind: string; method: string; url: string; search?: readonly string[]; reasonNl?: string }[] };
+
+/**
+ * For whoever leads the audit: the POSTs to a search service the sessions held back, with what
+ * to do. A search question no read request covers needs a rule of the explorer; a request a rule
+ * covers but whose body loep did not recognise needs a new form in loep. Empty when there were
+ * none. `open` are the criteria the evaluation left open; those whose agents met such a request
+ * are named for `tasks --again`.
+ */
+export function heldBackSearchesNl(runDir: string, records: Iterable<BlockedRecord>, tasks: readonly Pick<InstrumentTask, "criterion" | "judge" | "verify" | "finish">[], open: readonly string[]): string[] {
+  const rules = approvedReads(runDir);
+  const all = [...records];
+  const held = heldBackSearches(all, rules);
+  const refused = refusedCoveredReads(all, rules);
+  const sessions = new Set(all.filter((record) => heldBackSearches([record], rules).length + refusedCoveredReads([record], rules).length > 0).map((record) => sessionOfObservation(record.id)));
+  const again = open.filter((id) => tasks.some((task) => task.criterion === id && [task.judge.session, task.verify?.session, task.finish?.session].some((session) => session !== undefined && sessions.has(session))));
+  const afterwards = `Zet daarna een nieuwe afmaakronde klaar met tasks --again ${again.length > 0 ? again.join(",") : "<criteria>"} en draai opnieuw evaluate.`;
+  return [
+    ...(held.length > 0 ? [`LET OP: loep hield zoekvragen tegen omdat geen leesverzoek van het sitemodel hun adres dekt; wat pas na zoeken te zien is, is daar niet gemeten. ${held.map(heldBackSearchNl).join("; ")}. Draai explore: de verkenner legt het adres vast in readRequests van site.json, met die waarneming, en draait check-site. ${afterwards}`] : []),
+    ...(refused.length > 0
+      ? [`LET OP: loep hield verzoeken tegen naar een adres dat een leesverzoek dekt, omdat het de body niet als zoekvraag herkende. ${refused.map((entry) => `POST ${entry.address} (leesverzoek ${entry.rule}): ${entry.count} keer, het eerst in waarneming ${entry.observation}${entry.reasonNl ? `; ${entry.reasonNl}` : ""}`).join("; ")}. Een regel van de verkenner verandert dat niet. Is het een zoekvraag in een vorm die loep nog niet kent, dan komt die vorm erbij in toolbox/src/lib/searchbody.ts, met tests. ${afterwards}`]
+      : []),
+  ];
 }
 
 export interface SecondBrowserUse {

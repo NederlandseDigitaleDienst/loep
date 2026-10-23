@@ -6,7 +6,7 @@ import { readJson } from "../lib/canonical.ts";
 import { isChallenge } from "../lib/challenge.ts";
 import { privateFromPublicSite, scopeHost, scopeHostOf, siteOrigins, WEB_SCHEMES } from "../lib/origins.ts";
 import { loginCookieHeader, logsOut } from "../lib/login.ts";
-import { readDecision, readRuleFor, type ReadRequest } from "../lib/reads.ts";
+import { onReadOrigin, readDecision, readRuleFor, type ReadRequest } from "../lib/reads.ts";
 import { searchServicesOf, type SearchServiceId } from "../lib/searchbody.ts";
 import { SEARCH_FALLBACK, SEARCH_NONE } from "../lib/searchterm.ts";
 import { searchTermForRun } from "../lib/sitemodel.ts";
@@ -182,8 +182,8 @@ export const urlInScope = inScope;
  * method other than GET or HEAD, nothing to a host outside the scope, and no message over
  * a WebSocket. Each refusal is recorded. One exception is the origin of a test environment
  * that the run was given at inventory: writes and socket messages to it pass, and each is
- * recorded too. The other is a read request of a checked site model: exactly that method,
- * origin and path, also on a host outside the scope, recorded as a read. Cloudflare's check
+ * recorded too. The other is a read request of a checked site model: the method, origin and
+ * path a rule covers (see `readMatches`), also on a host outside the scope, recorded as a read. Cloudflare's check
  * whether the browser is a robot passes as well, because Cloudflare answers it and the site never
  * gets it (see `isChallenge`); what would otherwise have been refused is recorded. An origin of
  * the site that blocked the run (see `Blockade`) is asked nothing at all; what the site answers
@@ -234,8 +234,8 @@ export async function guardContext(context: BrowserContext, scope: Scope, guard:
       const read = readDecision(reads, method, url, request.headers(), body);
       if (read?.pass) {
         (guard.reads ??= []).push({ at: new Date().toISOString(), method, url: url.slice(0, MAX_URL), rule: read.rule.id, service: read.rule.service });
-        // Repeated only to an address a rule of the same service covers; otherwise followed only inside the scope or on the origin of the rule.
-        return passOn(route, (target) => readRuleFor(reads, method, target)?.service === read.rule.service, (target) => inScope(scope, target) || target.startsWith(`${read.rule.origin}/`)).then(() => undefined);
+        // Repeated only to an address a rule of the same service covers; otherwise followed only inside the scope or on an origin the rule covers.
+        return passOn(route, (target) => readRuleFor(reads, method, target)?.service === read.rule.service, (target) => inScope(scope, target) || onReadOrigin(read.rule, target)).then(() => undefined);
       }
       if (read) {
         guard.blocked.push({ at: new Date().toISOString(), kind: "method", method, url: url.slice(0, MAX_URL), resourceType: type, reasonNl: read.reasonNl });
