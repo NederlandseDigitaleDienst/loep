@@ -8,7 +8,7 @@ import { browserUse, gateLineNl, readVersionAccuracy, repeatedInBrowsersNl, seco
 import { render } from "../src/commands/render.ts";
 import { canonicalJson } from "../src/lib/canonical.ts";
 import { mergeFindings } from "../src/lib/defects.ts";
-import { aiGeneratedMark, closeCutQuote, evaluationHash, idsAcrossVersionsNl, markVendor, quoteStart, summarise, vendorTagsOf, VERSION_NOT_MEASURED_NL, type Evaluation, type ReportFinding } from "../src/lib/evaluation.ts";
+import { aiGeneratedMark, closeCutQuote, evaluationHash, idsAcrossVersionsNl, madeWith, markVendor, quoteStart, summarise, vendorTagsOf, VERSION_NOT_MEASURED_NL, type Evaluation, type ReportFinding } from "../src/lib/evaluation.ts";
 import { reportedModels } from "../src/lib/models.ts";
 import { deriveReport, renderMarkdown } from "../src/lib/report-markdown.ts";
 import { makePdf, TEMPLATES, tool, unshownCheck, unshownPattern, unshownTexts, unshownWarning } from "../src/lib/typst.ts";
@@ -369,6 +369,46 @@ test("the PDF shows the recommendations in their own part", async (context) => {
   assert.ok(flat.includes("Aanbevelingen"));
   assert.ok(flat.includes("Datum na de titel van een kaart"));
   assert.ok(flat.includes("aanbeveling A1 van de procedure"));
+});
+
+/** A copy made with `variant`: the sweep was measured with older code than the agent phases. */
+function withSweepFromOlderCode(browser: Evaluation["toolchain"]["browser"] | null) {
+  const evaluation = exampleEvaluation();
+  const current = evaluation.toolchain.toolbox;
+  evaluation.sweepToolchain = { run: "bron-d", toolbox: { ...current, version: "0.10.0+unreleased", commit: "886b74a15776cc0652c6172d9329a1f80fe7dcb8", dirty: false }, browser };
+  return evaluation;
+}
+
+test("a variant copy names the code of the sweep next to that of the agent phases, in the Markdown", () => {
+  const plain = renderMarkdown(exampleEvaluation());
+  assert.ok(!plain.includes("veegronde is gemaakt met"), "a run that is no copy says nothing about a sweep");
+  assert.ok(!plain.includes("Toolbox van de veegronde"));
+
+  const evaluation = withSweepFromOlderCode({ name: "chromium", version: "152.0.1" });
+  const markdown = renderMarkdown(evaluation);
+  assert.ok(markdown.includes(`Gemaakt met ${madeWith(evaluation, true)} voor de fasen van de agents; de veegronde is gemaakt met loep 0.10.0+unreleased, commit 886b74a15776`));
+  assert.ok(markdown.includes("Toolbox van de veegronde: loep 0.10.0+unreleased, commit 886b74a15776, browser chromium 152.0.1; de pakketten hieronder zijn die van de fasen van de agents"));
+  assert.ok(markdown.includes(`Toolbox: loep, versie ${evaluation.toolchain.toolbox.version}`), "the line of the agent phases stays");
+  assert.ok(renderMarkdown(withSweepFromOlderCode(null)).includes("browser onbekend (niet vastgelegd in variant.json)"));
+});
+
+test("the PDF of a variant copy names the code of the sweep; one that is no copy does not", async (context) => {
+  const dir = mkdtempSync(join(tmpdir(), "render-sweep-"));
+  writeFileSync(join(dir, "evaluation.json"), canonicalJson(withSweepFromOlderCode({ name: "chromium", version: "152.0.1" })));
+  const result = await render(dir);
+  if (result.pdf === null) return context.skip("Typst is not installed");
+  const text = await tool("pdftotext", [result.pdf, "-"]);
+  if (!text.found) return context.skip("pdftotext is not installed");
+  const flat = text.stdout.replace(/\s+/g, " ");
+  assert.ok(flat.includes("de veegronde is gemaakt met loep 0.10.0+unreleased"));
+  assert.ok(flat.includes("Toolbox van de veegronde"));
+  assert.ok(flat.includes("browser chromium 152.0.1"));
+
+  const plainDir = mkdtempSync(join(tmpdir(), "render-nosweep-"));
+  writeFileSync(join(plainDir, "evaluation.json"), canonicalJson(exampleEvaluation()));
+  const plain = await render(plainDir);
+  const plainText = await tool("pdftotext", [plain.pdf!, "-"]);
+  assert.ok(!plainText.stdout.includes("Toolbox van de veegronde"));
 });
 
 /** A failed criterion whose places say what they came to: a defect, one in order, one open and one passed on. The rest stays as before rulings existed. */
