@@ -1,0 +1,1 @@
+Een onderzoek kost veel tokens, en de skill liet geen keuze in het model van de agents. De skill vraagt nu vooraf of het zuinig of grondig moet: bij zuinig draaien de rondgangen, beoordelaars en verifieerders op Sonnet, voor ongeveer een derde van de kosten, met een uitkomst die op de testsite bijna gelijk was maar niet aantoonbaar even goed.
