@@ -184,6 +184,12 @@ export interface Verdict {
   verification?: Verification;
   /** Finishing round only. */
   finish?: Finish;
+  /**
+   * For a judge and a verifier: one entry per point "proef werkte niet:" or "niet bereikbaar:" in
+   * missingNl, with `missing` its place there counted from 1 (#318). The finishing round writes them
+   * in `finish.attempts`.
+   */
+  attempts?: { missing: number; triedNl: string; evidence: string[] }[];
 }
 
 /** What the finishing round did with one point that the verdict before it left open. */
@@ -959,7 +965,41 @@ export function validateJudgeVerdict(input: unknown, context: JudgeContext): str
   if (input === null || typeof input !== "object") return problems;
   const verdict = input as Partial<Verdict>;
   if (verdict.verification !== undefined) problems.push("verification belongs in the verdict of the verifier, not of the judge");
-  return [...problems, ...instrumentRules(verdict, context, context.session ?? null, "judge")];
+  return [...problems, ...instrumentRules(verdict, context, context.session ?? null, "judge"), ...attemptRules(verdict, context, context.session ?? null)];
+}
+
+/**
+ * A probe that did not work, or a part of the site that did not load, stays open in any round only
+ * after a real attempt in the session of the agent that says so (#318): tried more than once and in
+ * more than one way, as the finishing round must. Without a session (a verdict checked on its own)
+ * there is no log to hold it to.
+ */
+function attemptRules(verdict: Partial<Verdict>, context: InstrumentContext, session: string | null): string[] {
+  if (session === null) return [];
+  const problems: string[] = [];
+  const missing = (Array.isArray(verdict.missingNl) ? verdict.missingNl : []).filter((point): point is string => typeof point === "string");
+  const attempts = Array.isArray(verdict.attempts) ? verdict.attempts : [];
+  missing.forEach((point, position) => {
+    const kind = openPoint(point).kind;
+    if (kind && KINDS_WITH_ATTEMPT.includes(kind.prefix) && attempts.filter((entry) => entry?.missing === position + 1).length !== 1) {
+      problems.push(`missingNl[${position}]: ${kind.prefix === UNREACHABLE ? "a part of the site that did not load" : "an instrument that did not work"} stays open only after a real attempt: give one entry in attempts with "missing": ${position + 1}, saying what you tried, in which ways, and citing at least ${MIN_ATTEMPT_OBSERVATIONS} observations of your own session`);
+    }
+  });
+  const index = context.observations;
+  const own = (ref: unknown): ref is string => typeof ref === "string" && sessionOfObservation(ref) === session && index.has(ref);
+  attempts.forEach((attempt, position) => {
+    const at = `attempts[${position}]`;
+    const point = typeof attempt?.missing === "number" ? missing[attempt.missing - 1] : undefined;
+    if (point === undefined || !KINDS_WITH_ATTEMPT.includes(openPoint(point).kind?.prefix ?? "")) problems.push(`${at}: "missing" is the place in missingNl (counted from 1) of a point "proef werkte niet:" or "${UNREACHABLE}:"`);
+    if (!isText(attempt?.triedNl, 40)) problems.push(`${at}: triedNl says what was tried, in which ways, and what the instrument answered`);
+    const evidence = Array.isArray(attempt?.evidence) ? attempt.evidence : [];
+    if (new Set(evidence.filter(own)).size < MIN_ATTEMPT_OBSERVATIONS) problems.push(`${at}: a real attempt shows in the observation log: cite at least ${MIN_ATTEMPT_OBSERVATIONS} observations of session "${session}" (a command that failed counts), made in more than one way`);
+    for (const ref of evidence) {
+      const problem = typeof ref === "string" ? refProblem(ref, context) : "evidence reference is not text";
+      if (problem) problems.push(`${at}: ${problem}`);
+    }
+  });
+  return problems;
 }
 
 /** Outcomes the verifier may reach from what the judge said. It never turns a failure into a pass; an open question it may settle either way. */
@@ -978,7 +1018,7 @@ export function validateVerification(input: unknown, context: VerificationContex
   const problems = validateShape(input, shapeContext(context));
   if (input === null || typeof input !== "object") return problems;
   const verdict = input as Partial<Verdict>;
-  problems.push(...instrumentRules(verdict, context, context.session));
+  problems.push(...instrumentRules(verdict, context, context.session), ...attemptRules(verdict, context, context.session));
 
   const index = context.observations;
   const ownShowing = (ref: unknown): boolean => {
