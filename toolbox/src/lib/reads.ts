@@ -137,8 +137,17 @@ export function readDecision(rules: readonly ReadRequest[], method: string, url:
   const rule = rules.length > 0 ? readRuleFor(rules, method, url, headers) : null;
   if (!rule) return null;
   if (method.toUpperCase() === "OPTIONS") return { rule, pass: true };
-  const verdict = recogniseSearch(rule.service, body);
+  const verdict = recogniseSearch(rule.service, body, pathOf(url));
   return verdict.search ? { rule, pass: true } : { rule, pass: false, reasonNl: `past bij leesverzoek "${rule.id}", maar de body is geen zoekvraag aan ${SEARCH_SERVICES[rule.service].nameNl}: ${verdict.reasonNl}` };
+}
+
+/** The pathname of an address, or undefined when it is none. */
+export function pathOf(url: string): string | undefined {
+  try {
+    return new URL(url).pathname;
+  } catch {
+    return undefined;
+  }
 }
 
 /** A request that a rule covered and whose body was no search: held back, and noted without its body. */

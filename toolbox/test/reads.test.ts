@@ -87,6 +87,11 @@ test("a request passes only when a rule covers its address and its body is a que
   assert.match(disguised!.pass ? "" : disguised!.reasonNl, /^past bij leesverzoek "zoekdienst", maar de body is geen zoekvraag aan Algolia: een vraag in "requests" bevat "action"/);
   assert.equal(readDecision(rules, "POST", at, {}, null)?.pass, false);
   assert.equal(readDecision(rules, "POST", at, {}, JSON.stringify({ searches: [{ collection: "a", q: "x" }] }))?.pass, false, "a question to another service is no question to this one");
+  const single = [rule({ path: "/1/indexes/*/query" })];
+  const inline = JSON.stringify({ query: "test", hitsPerPage: 20 });
+  assert.equal(readDecision(single, "POST", "https://zoek.example.nl/1/indexes/g/query?x=1", {}, inline)?.pass, true, "inline parameters on the query path of one index");
+  assert.equal(readDecision(single, "POST", "https://zoek.example.nl/1/indexes/g/query", {}, JSON.stringify({ query: "a", objectID: "1" }))?.pass, false);
+  assert.equal(readDecision(rules, "POST", at, {}, inline)?.pass, false, "inline parameters on the path of several indexes");
   for (const [method, url] of [["POST", "http://zoek.example.nl/1/indexes/g/queries"], ["POST", "https://zoek.example.nl:8443/1/indexes/g/queries"], ["POST", "https://elders.example.nl/1/indexes/g/queries"], ["PUT", at], ["DELETE", at], ["POST", "https://zoek.example.nl/1/indexes/g/batch"]] as const) {
     assert.equal(readDecision(rules, method, url, {}, QUESTION), null, `${method} ${url} is no read request at all`);
   }
