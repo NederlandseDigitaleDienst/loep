@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { existsSync, mkdirSync, openSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, fstatSync, mkdirSync, openSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { connect, createServer, type Server } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -213,6 +213,26 @@ const CLIENT_ONLY = new Set(["run", "session", "max-commands", "max-minutes", "m
  */
 export const SESSION_MANAGEMENT = ["start", "stop", "list", "extend", "serve"] as const;
 
+export const ANSWER_IN_FILE_NL = "let op: het antwoord op dit commando ging naar een bestand, niet naar jou. Stond er een > in een selector zonder aanhalingstekens? Zet de selector tussen enkele aanhalingstekens en geef het commando opnieuw.";
+
+/** Whether the answer on `out` goes to a file that `err` does not go to: the shell redirected only the answer away from the agent. */
+export function answerGoesToFile(out = 1, err = 2): boolean {
+  try {
+    const answer = fstatSync(out);
+    if (!answer.isFile()) return false;
+    // The Bash tool of Claude Code writes stdout and stderr to one regular file; that is the agent reading along, not a redirect.
+    const warning = fstatSync(err);
+    return answer.dev !== warning.dev || answer.ino !== warning.ino;
+  } catch {
+    return false;
+  }
+}
+
+function writeAnswer(text: string): void {
+  process.stdout.write(text);
+  if (answerGoesToFile()) process.stderr.write(`${ANSWER_IN_FILE_NL}\n`);
+}
+
 /** Entry point for `session ...`: managing a session, or one command in it. Returns the exit code. */
 export async function sessionCli(argv: string[]): Promise<number> {
   // A scroll distance such as -400 is an argument, not a set of flags.
@@ -278,7 +298,7 @@ export async function sessionCli(argv: string[]): Promise<number> {
   const run = values.run ?? process.env.LOEP_RUN;
   const session = values.session ?? process.env.LOEP_SESSION ?? "main";
   const print = (response: Response): number => {
-    process.stdout.write(`${JSON.stringify(response.print)}\n`);
+    writeAnswer(`${JSON.stringify(response.print)}\n`);
     return response.ok ? 0 : 1;
   };
   const fail = (message: string): number => print({ ok: false, print: { error: message } });
@@ -316,7 +336,7 @@ export async function sessionCli(argv: string[]): Promise<number> {
       const { dossierAnswer, recordDossierRead } = await import("./dossier-command.ts");
       const answer = await dossierAnswer(run, session, rest, values.criterion);
       recordDossierRead(run, session, answer.result);
-      process.stdout.write(`${JSON.stringify(answer.print)}\n${answer.text}\n`);
+      writeAnswer(`${JSON.stringify(answer.print)}\n${answer.text}\n`);
       return 0;
     }
     const socket = runningSocket(run);
