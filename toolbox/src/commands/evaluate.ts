@@ -1,4 +1,5 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { purposeForRun } from "../lib/purpose.ts";
 import { replaysNl } from "../lib/recordings.ts";
 import { findingCutout, type CutoutContext } from "../lib/cutout.ts";
 import { join } from "node:path";
@@ -319,6 +320,7 @@ export async function evaluate(options: EvaluateOptions): Promise<Evaluation> {
       ...(scopeFrames.length > 0 ? { frames: scopeFrames } : {}),
     },
     sample: run.sample,
+    purpose: purposeForRun(options.run),
     baseline: {
       browsers: [
         { name: "Chromium (Chrome for Testing)", version: manifest.browser.version, engine: secondBrowsers.length > 0 ? "Blink; alle metingen" : "Blink" },

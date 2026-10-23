@@ -1,4 +1,5 @@
 import type { Sample } from "../commands/sample.ts";
+import type { Purpose } from "./purpose.ts";
 import type { EvaluationDocuments } from "./documents.ts";
 import { sha256, stableId } from "./canonical.ts";
 import type { FindingCutout } from "./cutout.ts";
@@ -302,6 +303,8 @@ export interface Evaluation {
   /** Whose components the site is built with; absent when nobody said. */
   vendor?: Vendor;
   evaluatedAt: string;
+  /** What the investigation is for, as chosen at `inventory` (#318). Absent in older evaluations: those were to improve. */
+  purpose?: Purpose;
   method: { name: string; version: string; url: string; typeNl: string; deviationsNl: string[] };
   standards: { wcag: string[]; en301549: string };
   /** `frames`: what the site model says each embedded frame is, whether it counts and why. Absent without a site model, without frames, and in older evaluations. */

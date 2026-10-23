@@ -54,6 +54,7 @@ Een agent starten betekent steeds: een aparte agent die alleen dit krijgt: "Lees
 
 **Vooraf vragen.** Een paar keuzes liggen vast zodra het onderzoek begint, en alleen de gebruiker kan ze maken. Stel de vragen hieronder in één bericht, vóór het eerste commando van stap 1, en begin pas als ze zijn beantwoord. Daarna loopt het onderzoek uren door zonder de gebruiker; wat je nu niet vraagt, onderbreekt het later of kost een nieuwe run. Wat de gebruiker in de opdracht al zei, vraag je niet opnieuw. Vraag niets wat de toolbox zelf vaststelt, zoals welke pagina's er zijn, of de site lokaal is en of VoiceOver er is (`just doctor`).
 
+- **Doel.** Waarvoor is het onderzoek? *Verbeteren*: het team van de site wil weten wat er beter moet, en wat loep zelf niet kon vaststellen terwijl de uitkomst er niet van afhangt, staat apart als beperking. *Verantwoorden*: het rapport onderbouwt de status in een toegankelijkheidsverklaring; elke beperking blijft dan in beeld voor wie tekent, en het rapport zegt bovenaan wat er nog ontbreekt voor status B. Een gangbaar pad is eerst verbeteren en later één keer verantwoorden, met een nieuwe run. Geef het antwoord mee bij `inventory` als `--purpose verbeteren` of `--purpose verantwoorden`; zonder antwoord is het verbeteren.
 - **Inlog.** Staat de site, of een deel dat erbij hoort, achter een inlog? Op een site die niet lokaal is, kan inloggen alleen op een testomgeving, met een verklaring van de gebruiker dat het er een is (zie "Versturen" hieronder). Geef hier geen wachtwoord: je logt straks zelf in, in een browservenster. Voor een inlog is verder nodig: een testaccount en nooit een echt account, want schermafbeeldingen komen in het rapport; een rol en geen naam, want de rol komt in het manifest en in het rapport; en de gebruiker zelf aan een machine met een scherm, om vóór `inventory` twee keer in te loggen (stap 1). Een inlog kan verlopen; de gebruiker moet dan bereikbaar zijn om opnieuw in te loggen. Zonder inlog wordt wat erachter staat niet onderzocht.
 - **Versturen.** Mag dit onderzoek versturen? Het gaat om alles wat pas iets laat zien nadat het is verstuurd: een formulier (een aanvraag, een contactformulier), en een chat of formulier in een ingesloten venster op een ander adres dan de site, dat pas na een verstuurd bericht antwoordt. Een zoekvraag die als POST naar een zoekdienst gaat, hoort hier niet bij: de verkenner legt die vast als leesverzoek, en na `check-site` gaat ze door. Er zijn drie antwoorden:
   - *De hele site is een testomgeving.* Dan is het `--test-environment <origin van de site>`, en versturen de agents waar de procedure dat vraagt.
@@ -75,7 +76,7 @@ Een agent starten betekent steeds: een aparte agent die alleen dit krijgt: "Lees
 
 2. **Pagina's vinden** (geen taalmodel):
    ```
-   LOEP inventory <url> --out RUN
+   LOEP inventory <url> --out RUN --purpose <verbeteren|verantwoorden>
    LOEP sample --run RUN
    ```
    Met een verklaarde testomgeving (`--test-environment <origin> --declared-by "<naam>, <functie>"`) draai je `inventory` niet zelf: de gebruiker draait het in een interactieve terminal en bevestigt door de origin in te typen (zie "Wat je nooit doet"). `sample` en de rest draai je daarna weer zelf.
