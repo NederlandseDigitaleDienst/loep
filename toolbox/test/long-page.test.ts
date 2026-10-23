@@ -20,7 +20,7 @@ let origin: string;
 let scratch: string;
 
 /** Far taller than a picture may be, with text at the top and text far below the limit. */
-const LONG = `<!doctype html><html lang="nl"><head><meta charset="utf-8"><title>Lang</title></head><body style="margin:0;background:#fff;color:#000"><main><h1>Lang</h1><p>Tekst bovenaan.</p><div style="height:40000px;position:relative"><p style="position:absolute;top:30000px;margin:0">Tekst onderaan.</p></div></main></body></html>`;
+const LONG = `<!doctype html><html lang="nl"><head><meta charset="utf-8"><title>Lang</title></head><body style="margin:0;background:#fff;color:#000"><main><h1>Lang</h1><p>Tekst bovenaan.</p><div style="height:40000px;position:relative"><p style="position:absolute;top:30000px;margin:0">Tekst onderaan.</p><p style="position:absolute;top:35000px;margin:0;color:#bbbbbb">Lichte tekst onderaan.</p></div></main></body></html>`;
 /** Taller than Chromium paints with `fullPage` in time (#94), with a red block far below the limit. */
 const HUGE = `<!doctype html><html lang="nl"><head><meta charset="utf-8"><title>Zeer lang</title></head><body style="margin:0;background:#fff"><div style="height:200000px;position:relative"><div style="position:absolute;top:150000px;left:10px;width:100px;height:50px;background:#f00"></div></div></body></html>`;
 const SHORT = `<!doctype html><html lang="nl"><head><meta charset="utf-8"><title>a</title></head><body><main><h1>a</h1><p>Tekst op de pagina.</p></main></body></html>`;
@@ -86,7 +86,7 @@ test("a very tall page is pictured down to the limit, and a page that fails twic
   assert.deepEqual(limitations.filter((entry) => entry.check === "screenshot-clipped").map((entry) => entry.url), [`${origin}/long`]);
 });
 
-test("contrast on a page taller than the limit measures the text above it and marks the text below it as not measured", { timeout: 120_000 }, async () => {
+test("contrast on a page taller than the limit measures the text below it in pictures further down (#340)", { timeout: 120_000 }, async () => {
   const browser = await launchBrowser();
   try {
     const context = await newContext(browser, { colorScheme: "light" });
@@ -97,9 +97,12 @@ test("contrast on a page taller than the limit measures the text above it and ma
     assert.equal(measured.screenshotClippedAt?.limit, MAX_SCREENSHOT_HEIGHT);
     const top = measured.measurements.find((entry) => entry.text.includes("Tekst bovenaan"))!;
     const bottom = measured.measurements.find((entry) => entry.text.includes("Tekst onderaan"))!;
+    const light = measured.measurements.find((entry) => entry.text.includes("Lichte tekst onderaan"))!;
     assert.equal(top.outcome, "passed");
-    assert.equal(bottom.outcome, "cantTell");
-    assert.match(bottom.reason ?? "", /onder de grens van de schermafbeelding/);
+    assert.equal(bottom.outcome, "passed");
+    assert.ok(bottom.box.y > 30000 && bottom.box.y < 30200, `the place stays the place on the page: ${bottom.box.y}`);
+    assert.equal(light.outcome, "failed");
+    assert.equal(light.ratio, 1.9);
   } finally {
     await browser.close();
   }
