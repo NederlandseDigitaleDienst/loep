@@ -41,8 +41,15 @@ const WRITE_WORDS = new Set([
   "mutation", "batch", "bulk", "doc", "documents", "settings",
 ]);
 
-/** The lowercase words of a path segment: "_update_by_query" gives "update", "by" and "query". */
-const wordsOf = (segment: string): string[] => segment.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+/** The lowercase words of a path segment by two cuts, both kept: on every non-alphanumeric ("SignIn" gives "signin"), and on case and digit changes too ("_update_by_query" and "deleteByQuery" give "update", "by" and "query"; "HTMLExport" gives "html" and "export"). */
+const wordsOf = (segment: string): string[] =>
+  [
+    ...segment.toLowerCase().split(/[^a-z0-9]+/),
+    ...segment
+      .replace(/([a-z])(?=[A-Z0-9])|([A-Z])(?=[A-Z][a-z])|([0-9])(?=[A-Za-z])/g, "$1$2$3 ")
+      .toLowerCase()
+      .split(/[^a-z0-9]+/),
+  ].filter(Boolean);
 
 /** A segment of a path as a browser sends it: letters, digits and the characters a path may carry, nothing that reads as a pattern. */
 const SEGMENT = /^[A-Za-z0-9._~%!$&'()+,;=:@-]+$/;

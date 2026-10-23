@@ -40,7 +40,7 @@ test("a read request names one origin, a narrow path and the search service whos
   const problems = (change: Partial<Record<keyof ReadRequest, unknown>> & Record<string, unknown>): string[] => readRequestProblems({ ...rule(), ...change }, "readRequests[0]");
   assert.deepEqual(problems({}), []);
   // The path need not say it searches: the body says that, request by request.
-  for (const path of ["/multi_search", "/_search", "/*/_search", "/_msearch", "/1/indexes/gemeente/query", "/api/zoeken", "/graphql", "/api/v2/vinden", "/indexes/*/search"]) assert.deepEqual(problems({ path }), [], path);
+  for (const path of ["/multi_search", "/_search", "/*/_search", "/_msearch", "/1/indexes/gemeente/query", "/api/zoeken", "/graphql", "/api/v2/vinden", "/indexes/*/search", "/api/getItems", "/api/Search", "/api/searchV2", "/api/HTMLSearch", "/api/zoekenInDocumentatie", "/api/searchURLs", "/collections/products123/search"]) assert.deepEqual(problems({ path }), [], path);
   const refused = (change: Record<string, unknown>, expected: RegExp): void => {
     const found = problems(change);
     assert.ok(found.some((problem) => expected.test(problem)), `expected ${expected} for ${JSON.stringify(change)} in ${JSON.stringify(found)}`);
@@ -67,6 +67,18 @@ test("a read request names one origin, a narrow path and the search service whos
   refused({ path: "/idx/_delete_by_query" }, /bevat "delete"/);
   refused({ path: "/indexes/*/documents/delete" }, /bevat "documents"/);
   refused({ path: "/search/track" }, /bevat "track"/);
+  refused({ path: "/idx/deleteByQuery" }, /bevat "delete"/);
+  refused({ path: "/api/UpdateSettings" }, /bevat "update"/);
+  refused({ path: "/api/updateURL" }, /bevat "update"/);
+  refused({ path: "/api/saveHTML" }, /bevat "save"/);
+  refused({ path: "/api/URLDelete" }, /bevat "delete"/);
+  refused({ path: "/api/delete2" }, /bevat "delete"/);
+  refused({ path: "/api/v2/Batch" }, /bevat "batch"/);
+  refused({ path: "/api/SignIn" }, /bevat "signin"/);
+  refused({ path: "/CheckOut" }, /bevat "checkout"/);
+  refused({ path: "/api/NewsLetter" }, /bevat "newsletter"/);
+  refused({ path: "/LogOut" }, /bevat "logout"/);
+  refused({ path: "/api/SignUp" }, /bevat "signup"/);
   refused({ path: "/contact/verstuur" }, /bevat "contact"/);
   refused({ reasonNl: "zoeken" }, /reasonNl ontbreekt of is te kort/);
   refused({ observation: "" }, /observation ontbreekt/);
