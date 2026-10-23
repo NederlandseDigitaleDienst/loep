@@ -126,6 +126,10 @@ const USAGE = `loep <command> [options]
                                          Compare the evaluation with an existing audit of the same site
   seal --run <run>                       Record the hash of every file in the run; what is signed afterwards is this seal
   verify --run <run>                     Recompute every hash in the run
+  share --run <run> [--usage <file>] [--force] [--mattermost <server>/<team>/<channel> [--send]]
+                                         A fixed message about the run to share, from the run alone; with --mattermost
+                                         (or the setting of share --set-mattermost) posted in that channel with the
+                                         report, after a person confirms. Writes nothing in the run; loep share --help
   voiceover start|read|stop|setup        Optional, outside an evaluation: a real screen reader (VoiceOver in a virtual Mac) as a
                                          second source next to session speak; loep voiceover --help
 
@@ -185,6 +189,8 @@ async function main(): Promise<void> {
   if (process.argv[2] === "calibrate") return (await import("./commands/calibrate.ts")).cli(process.argv.slice(3)); // outside an evaluation: measures the instruments against the ACT test cases
   if (process.argv[2] === "variant" || process.argv[2] === "compare-variants") return (await import("./commands/variants.ts")).cli(process.argv.slice(2)); // outside an evaluation: measures a variant of the code on a frozen sweep
   if (process.argv[2] === "usage") return (await import("./commands/usage.ts")).cli(process.argv.slice(3)); // outside an evaluation: tokens per agent from the transcripts, for compare-variants --usage
+  // Reads a run of any version and writes nothing in it; it parses its own options, among them a confirmation that is not an answer or a decision.
+  if (process.argv[2] === "share") return (await import("./commands/share.ts")).cli(process.argv.slice(3));
   // A session takes its commands and options as they come; it parses them itself.
   if (process.argv[2] === "session") {
     const { sessionCli, SESSION_USAGE } = await import("./session/client.ts");

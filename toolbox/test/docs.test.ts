@@ -29,10 +29,10 @@ const LOGS = ["validatie/iteraties.md", "validatie/lessen.md"];
 /** The two texts that together have to name every command. */
 const COMMAND_REFERENCE = ["README.md", "docs/methode.md"];
 
-/** The commands of the toolbox: every case of the switch in cli.ts, and the one that is handled before it. */
+/** The commands of the toolbox: every case of the switch in cli.ts, and the two of an evaluation that are handled before it. */
 function cliCommands(source: string): string[] {
   const cases = [...source.matchAll(/^\s+case "([a-z-]+)":/gm)].map((match) => match[1]!);
-  return [...new Set([...cases, "session"])];
+  return [...new Set([...cases, "session", "share"])];
 }
 
 /** The words that can follow `session`: the three that manage a session, and every command in one. `serve` is how the process starts itself and is no command for a reader. */

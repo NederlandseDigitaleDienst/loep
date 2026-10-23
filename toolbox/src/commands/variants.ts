@@ -353,7 +353,7 @@ const ROLE_ORDER = ["walk", "judge", "verifier", "finisher"];
 const emptyTokens = (): Tokens => ({ input: 0, cacheWrite: 0, cacheRead: 0, output: 0 });
 const isCount = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value) && value >= 0;
 
-function readUsage(path: string): UsageFile {
+export function readUsage(path: string): UsageFile {
   const file = JSON.parse(readFileSync(path, "utf8")) as UsageFile;
   if (file.schema !== "loep/verbruik/1" || typeof file.run !== "string" || !Array.isArray(file.agents)) throw new Error(`${path}: geen verbruiksbestand (schema loep/verbruik/1 met run en agents)`);
   file.agents.forEach((agent, position) => {

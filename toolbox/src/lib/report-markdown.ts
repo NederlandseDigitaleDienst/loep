@@ -49,7 +49,7 @@ export const OUTCOME_SYMBOL: Record<ShownOutcome, string> = {
 };
 
 const SEVERITY_RANK: Record<ReportFinding["severity"], number> = { blokkerend: 0, hoog: 1, midden: 2, laag: 3 };
-const STATUS_LABEL: Record<ComplianceStatus, string> = {
+export const STATUS_LABEL: Record<ComplianceStatus, string> = {
   A: "status A (voldoet volledig)",
   B: "status B (voldoet gedeeltelijk)",
   C: "status C (eerste maatregelen genomen)",
