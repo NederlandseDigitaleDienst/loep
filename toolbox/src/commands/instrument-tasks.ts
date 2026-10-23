@@ -97,6 +97,8 @@ export interface InstrumentTask {
   dossier: string;
   dossierSha256: string;
   passCommands: string[];
+  /** What a failure must cite (`fail_observations`). Absent in an index from before: then nothing. */
+  failCommands?: Record<string, string[]>;
   decisiveCommands: string[];
   /** The recommendation rules of the procedure. Absent in an index from before recommendations existed: then none. */
   recommendationRules?: string[];
@@ -736,7 +738,7 @@ export async function instrumentTasks(runDir: string, options: TaskOptions = {})
       join(runDir, judge.prompt),
       fill(templates.beoordeel, { ...shared, session: judge.session, workDir: await makeWorkDir(runDir, judge.session), workName: judge.session, maxCommands: String(judge.maxCommands), maxMinutes: String(judge.maxMinutes), candidates: join(absoluteRun, judge.candidates), notWalked: join(absoluteRun, NOT_WALKED), output: join(absoluteRun, judge.output), check: `node ${cli} check-verdict --run ${absoluteRun} --criterion ${criterion.id} --round judge` }),
     );
-    const task: InstrumentTask = { criterion: criterion.id, titleNl: criterion.titleNl, procedureVersion: procedure.version, procedureSha256: procedure.sha256, dossier: dossierPath, dossierSha256, passCommands: procedure.passCommands, decisiveCommands: procedure.decisiveCommands, recommendationRules: procedure.recommendationRules, ...(procedure.passExplains.length > 0 ? { passExplains: procedure.passExplains } : {}), judge, verify: null };
+    const task: InstrumentTask = { criterion: criterion.id, titleNl: criterion.titleNl, procedureVersion: procedure.version, procedureSha256: procedure.sha256, dossier: dossierPath, dossierSha256, passCommands: procedure.passCommands, ...(Object.keys(procedure.failCommands).length > 0 ? { failCommands: procedure.failCommands } : {}), decisiveCommands: procedure.decisiveCommands, recommendationRules: procedure.recommendationRules, ...(procedure.passExplains.length > 0 ? { passExplains: procedure.passExplains } : {}), judge, verify: null };
     await writeJudge();
     if (sessionStarted(runDir, judge.session) && !(await instrumentVerdictIsCurrent(runDir, task, "judge", observations))) {
       judge.session = nextSession(runDir, `b-${digits}`);
@@ -1091,6 +1093,7 @@ export async function checkInstrumentVerdict(runDir: string, criterionId: string
     observations: observations.index,
     candidateIds: (await readJson<Candidate[]>(join(runDir, part.candidates))).map((candidate) => candidate.id),
     passCommands: task.passCommands,
+    failCommands: task.failCommands ?? {},
     decisiveCommands: task.decisiveCommands,
     recommendationRules: task.recommendationRules ?? [],
     explainOnPass: rowsToExplain(dossier.evidence, task.passExplains ?? []),

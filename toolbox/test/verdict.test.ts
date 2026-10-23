@@ -69,6 +69,16 @@ test("an observation of source counts as one of parse, its new name (#327)", () 
   assert.deepEqual(validateJudgeVerdict({ ...passed, criterion: "4.1.1", observations: [seenParse] }, parseContext).filter((problem) => problem.includes("parse")), []);
 });
 
+test("a failure on a rule with fail_observations cites that instrument (#318)", () => {
+  const zoomed = indexObservations([record("j144-0001", "open"), record("j144-0002", "look"), record("j144-0003", "zoom")]);
+  const zoomContext: JudgeContext = { ...context, criterion: "1.4.4", evidenceNames: [], observations: zoomed, passCommands: ["zoom", "look"], decisiveCommands: [], failCommands: { R2: ["zoom"], R4: ["zoom"] } };
+  const lost = { ...finding, evidence: ["j144-0002"] };
+  const onLook: Verdict = { ...failed, criterion: "1.4.4", rule: "R4", findings: [lost], observations: [{ ...seen, evidence: ["j144-0002"] }] };
+  assert.match(validateJudgeVerdict(onLook, zoomContext).join(), /must cite an observation of "zoom": the norm accepts more than one way/);
+  assert.equal(validateJudgeVerdict({ ...onLook, findings: [{ ...lost, evidence: ["j144-0002", "j144-0003"] }] }, zoomContext).filter((problem) => problem.includes("fail_observations")).length, 0, "a finding that cites zoom will do");
+  assert.equal(validateJudgeVerdict({ ...onLook, rule: "R1" }, zoomContext).filter((problem) => problem.includes("fail_observations")).length, 0, "a rule without it asks nothing");
+});
+
 test("a judge verdict that points at recorded observations is accepted", () => {
   assert.deepEqual(validateJudgeVerdict(passed, context), []);
   assert.deepEqual(validateJudgeVerdict(failed, context), []);

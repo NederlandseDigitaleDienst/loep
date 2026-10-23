@@ -479,6 +479,8 @@ interface InstrumentContext {
   candidateIds: string[];
   /** Commands the procedure wants to see cited in a pass (`pass_observations` in its front matter). */
   passCommands: string[];
+  /** Commands the procedure wants to see cited in a failure (`fail_observations`), such as the one instrument that measures every way the norm accepts (#318). Absent: none. */
+  failCommands?: Record<string, string[]>;
   /** Commands whose method agreement matters for this criterion (`decisive`, or else `pass_observations`). */
   decisiveCommands: string[];
   /** The recommendation rules of the procedure ("A1", "A2"). Without them a verdict gives no recommendations. */
@@ -850,6 +852,15 @@ function instrumentRules(verdict: Partial<Verdict>, context: InstrumentContext, 
   problems.push(...engineRuleProblems(verdict, context, (ref) => shows(ref) && own(ref), whose));
 
   const cited = (Array.isArray(verdict.observations) ? verdict.observations : []).flatMap((observation) => (Array.isArray(observation.evidence) ? observation.evidence : [])).filter((ref): ref is string => typeof ref === "string");
+  // A failure that rests on one way of measuring, where the norm accepts any way that works, is not one: it cites the instrument that measured them all (#318).
+  const failNeeds = verdict.outcome === "failed" && typeof verdict.rule === "string" ? (context.failCommands?.[verdict.rule] ?? []) : [];
+  if (failNeeds.length > 0) {
+    const findingRefs = (Array.isArray(verdict.findings) ? verdict.findings : []).flatMap((finding) => (Array.isArray(finding?.evidence) ? finding.evidence : [])).filter((ref): ref is string => typeof ref === "string");
+    const shownAll = [...cited, ...findingRefs].filter(shows);
+    for (const command of failNeeds) {
+      if (!shownAll.some((ref) => index.get(ref)!.command === canonicalCommand(command))) problems.push(`a "failed" outcome for this criterion must cite an observation of "${command}": the norm accepts more than one way, and "${command}" measures each of them (the procedure asks for it in fail_observations for ${verdict.rule})`);
+    }
+  }
   if (verdict.outcome === "passed") {
     const shown = cited.filter(shows);
     if (shown.length === 0) problems.push('a "passed" outcome needs at least one observation of a look or measure command among its observations; a pass that rests on the dossier alone is not checked against the site');
