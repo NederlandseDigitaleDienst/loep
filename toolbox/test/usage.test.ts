@@ -62,6 +62,48 @@ test("transcripts of another run, or a folder without them, are refused", () => 
   assert.throws(() => usageFromTranscripts({ transcripts: join(scratch, "bestaat-niet"), run: measured }), /geen map met transcripts/);
 });
 
+/** A workflow folder with one agent per entry: its label, its first prompt and its output tokens. */
+function workflow(name: string, agents: [string, string, number][]): string {
+  const dir = join(scratch, name);
+  agents.forEach(([description, prompt, output], i) => {
+    write(join(dir, `agent-w${i}.meta.json`), { description });
+    const lines = [{ type: "user", message: { role: "user", content: [{ type: "text", text: prompt }] } }, { type: "assistant", message: { id: `msg_w${i}`, model: "claude-opus-5-5", usage: { input_tokens: 1, cache_creation_input_tokens: 0, cache_read_input_tokens: 0, output_tokens: output } } }];
+    writeFileSync(join(dir, `agent-w${i}.jsonl`), lines.map((line) => JSON.stringify(line)).join("\n"));
+  });
+  return dir;
+}
+const outputs = (file: UsageFile): Record<string, number> => Object.fromEntries(file.agents.map((row) => [`${row.role} ${row.criterion ?? row.pageType ?? ""}`.trim(), row.output!]));
+
+test("a workflow over several runs counts for each run only the agents whose prompt names it", () => {
+  const one = run("opus-1", ["1.1.1"]);
+  const ten = run("opus-10", ["1.1.1"]);
+  const dir = workflow("twee-runs", [
+    ["walks start", `Lees ${one}/rondgang/start.md en voer de opdracht uit.`, 1],
+    ["judges 1.1.1", `Lees \`${one}/tasks/1.1.1/beoordeel.md\` en voer de opdracht uit.`, 2],
+    ["verifiers 1.1.1", `Lees ${one}/tasks/1.1.1/verifieer.md en voer de opdracht uit.`, 3],
+    ["stand 1", `1. node cli.ts tasks --run ${one} --attempted walks:start\n2. node cli.ts pending --run ${one} --brief`, 4],
+    ["walks start", `Lees ${ten}/rondgang/start.md en voer de opdracht uit.`, 10],
+    ["judges 1.1.1", `Lees ${ten}/tasks/1.1.1/beoordeel.md en voer de opdracht uit.`, 20],
+    ["stand 1", `node cli.ts pending --run ${ten}/ --brief`, 40],
+  ]);
+  const first = usageFromTranscripts({ transcripts: dir, run: one });
+  assert.deepEqual(outputs(first), { "walk start": 1, "judge 1.1.1": 2, "verifier 1.1.1": 3, stand: 4 }, "opus-10 is another run than opus-1");
+  assert.equal(first.sourceNl, "Geteld uit de transcripts van 4 agents in twee-runs, elk assistent-bericht één keer; 3 agents van een andere run niet geteld.");
+  assert.deepEqual(outputs(usageFromTranscripts({ transcripts: dir, run: ten })), { "walk start": 10, "judge 1.1.1": 20, stand: 40 });
+  assert.throws(() => usageFromTranscripts({ transcripts: dir, run: run("opus-2", ["1.1.1"]) }), /geen van de 7 agents in twee-runs werkte aan run opus-2/);
+});
+
+test("in a workflow over one run, an agent that names no run counts too", () => {
+  const only = run("enkel-1", ["1.1.1"]);
+  const dir = workflow("een-run", [
+    ["judges 1.1.1", `Lees ${only}/tasks/1.1.1/beoordeel.md en voer de opdracht uit.`, 2],
+    ["walks start", "Lees de opdracht en voer haar uit.", 1],
+  ]);
+  const file = usageFromTranscripts({ transcripts: dir, run: only });
+  assert.deepEqual(outputs(file), { "walk start": 1, "judge 1.1.1": 2 });
+  assert.equal(file.sourceNl, "Geteld uit de transcripts van 2 agents in een-run, elk assistent-bericht één keer.");
+});
+
 test("compare-variants counts the file per role, with the price of each model, over the criteria of --criteria", async () => {
   const path = join(scratch, "verbruik.json");
   write(path, usageFromTranscripts({ transcripts: TRANSCRIPTS, run: measured }));

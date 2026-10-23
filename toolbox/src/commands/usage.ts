@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { writeJson } from "../lib/canonical.ts";
@@ -56,6 +56,32 @@ export function transcriptUsage(text: string): Map<string, Tokens & { turns: num
   return byModel;
 }
 
+/** A run folder as runs are compared: with its links resolved where it exists. */
+const runPath = (path: string): string => (existsSync(path) ? realpathSync(path) : resolve(path));
+
+/** A task file of an agent (`rondgang/<id>.md`, `tasks/<id>/beoordeel.md`) or `pending --run <run>`: the run folder it names. */
+const RUN_NAMED = [/(\/[^\s"'`]+?)\/+(?:rondgang\/[^/\s"'`]+\.md|tasks\/[^/\s"'`]+\/(?:beoordeel|verifieer|afmaak)\.md)/g, /\bpending\s+--run\s+["']?(\/[^\s"'`]+)/g];
+
+/**
+ * The run folders the first prompt of a transcript names by an absolute path, to tell the runs of
+ * one workflow apart. Empty when it names none.
+ */
+export function runsNamed(text: string): Set<string> {
+  for (const line of text.split("\n")) {
+    let entry: { type?: unknown; message?: { content?: unknown } };
+    try {
+      entry = JSON.parse(line) as typeof entry;
+    } catch {
+      continue;
+    }
+    if (entry.type !== "user") continue;
+    const content = entry.message?.content;
+    const prompt = typeof content === "string" ? content : Array.isArray(content) ? content.map((part: { type?: unknown; text?: unknown }) => (part?.type === "text" && typeof part.text === "string" ? part.text : "")).join("\n") : "";
+    return new Set(RUN_NAMED.flatMap((pattern) => [...prompt.matchAll(pattern)].map((match) => runPath(match[1]!))));
+  }
+  return new Set();
+}
+
 /** The criteria the run has tasks for, or null without task files. */
 function taskCriteria(runDir: string): Set<string> | null {
   const path = join(runDir, "tasks", "index.json");
@@ -66,19 +92,22 @@ function taskCriteria(runDir: string): Set<string> | null {
 /**
  * One row per agent and model, from the transcripts in `transcripts`, for the run in `run`. The
  * role and the criterion or page type come from the label of the agent, the model from its
- * messages. Refuses transcripts that name a criterion the run has no task for: they belong to
- * another run.
+ * messages. A workflow can work on several runs: an agent whose first prompt names a run counts
+ * only for that run, and one that names none counts. Refuses transcripts that name a criterion the
+ * run has no task for: they belong to another run.
  */
 export function usageFromTranscripts(options: { transcripts: string; run: string }): UsageFile {
   const dir = resolve(options.transcripts);
   if (!existsSync(dir) || !statSync(dir).isDirectory()) throw new Error(`${options.transcripts} is geen map met transcripts`);
   const run = resolve(options.run);
   if (!existsSync(run)) throw new Error(`run ${options.run} bestaat niet`);
+  const thisRun = runPath(run);
   const metas = readdirSync(dir).filter((name) => /^agent-.+\.meta\.json$/.test(name)).sort();
   if (metas.length === 0) throw new Error(`${options.transcripts} heeft geen transcripts van agents (agent-<id>.jsonl met agent-<id>.meta.json): geef de map van één werkstroom`);
 
   const rows: Row[] = [];
   let notCounted = 0;
+  let otherRun = 0;
   for (const meta of metas) {
     const transcript = join(dir, meta.replace(/\.meta\.json$/, ".jsonl"));
     const description = (JSON.parse(readFileSync(join(dir, meta), "utf8")) as { description?: unknown }).description;
@@ -90,11 +119,18 @@ export function usageFromTranscripts(options: { transcripts: string; run: string
     const role = ROLE_OF_PHASE[phase] ?? phase;
     const item = rest.join(" ");
     const about = PER_CRITERION.has(role) && item ? { criterion: item } : role === "walk" && item ? { pageType: item } : {};
-    const byModel = transcriptUsage(readFileSync(transcript, "utf8"));
+    const text = readFileSync(transcript, "utf8");
+    const named = runsNamed(text);
+    if (named.size > 0 && !named.has(thisRun)) {
+      otherRun++;
+      continue;
+    }
+    const byModel = transcriptUsage(text);
     if (byModel.size === 0) notCounted++;
     for (const [model, { turns, ...tokens }] of byModel) rows.push({ role, ...about, agent: meta.replace(/^agent-/, "").replace(/\.meta\.json$/, ""), model, ...tokens, turns });
   }
 
+  if (rows.length === 0 && otherRun > 0) throw new Error(`geen van de ${otherRun} agents in ${basename(dir)} werkte aan run ${basename(run)}: hun opdrachten liggen in een andere run`);
   const criteria = taskCriteria(run);
   const foreign = criteria ? [...new Set(rows.flatMap((row) => (row.criterion && !criteria.has(row.criterion) ? [row.criterion] : [])))] : [];
   if (foreign.length > 0) throw new Error(`de transcripts noemen criteria waar run ${basename(run)} geen opdracht voor heeft (${foreign.join(", ")}): horen ze bij een andere run?`);
@@ -107,7 +143,7 @@ export function usageFromTranscripts(options: { transcripts: string; run: string
   return {
     schema: "loep/verbruik/1",
     run: basename(run),
-    sourceNl: `Geteld uit de transcripts van ${agents} agents in ${basename(dir)}, elk assistent-bericht één keer${notCounted > 0 ? `; ${notCounted} ${notCounted === 1 ? "agent" : "agents"} zonder transcript, beschrijving of bericht niet geteld` : ""}.`,
+    sourceNl: `Geteld uit de transcripts van ${agents} agents in ${basename(dir)}, elk assistent-bericht één keer${otherRun > 0 ? `; ${otherRun} ${otherRun === 1 ? "agent" : "agents"} van een andere run niet geteld` : ""}${notCounted > 0 ? `; ${notCounted} ${notCounted === 1 ? "agent" : "agents"} zonder transcript, beschrijving of bericht niet geteld` : ""}.`,
     prices,
     agents: rows,
   };
@@ -121,7 +157,8 @@ compare-variants --usage (schema loep/verbruik/1; validatie/verbruik/README.md).
   --transcripts <dir>  The folder of one workflow, with agent-<id>.jsonl and agent-<id>.meta.json per agent
                        (in Claude Code: subagents/workflows/<workflow> of the session)
   --run <run>          The run the workflow worked on; its folder name goes into the file, and a criterion
-                       the run has no task for is refused
+                       the run has no task for is refused. In a workflow over several runs, an agent whose
+                       first prompt names another run (a task file, pending --run) is left out
   --out <file>         Where to write the file; without it the file goes to standard output
 
 Per agent and model: tokens by kind and turns, each assistant message counted once. The role and the
