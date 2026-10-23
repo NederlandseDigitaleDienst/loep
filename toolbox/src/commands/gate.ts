@@ -360,7 +360,7 @@ export function gateChecks(run: RunData): { checks: Check[]; gaps: Gap[]; warnin
   // A page taller than a picture may be: what stands below the limit is in no screenshot, and its contrast is not measured.
   for (const page of run.pages.filter((entry) => entry.facts.screenshotClippedAt)) {
     const { pageHeight, limit } = page.facts.screenshotClippedAt!;
-    limitations.push({ check: "screenshot-clipped", ...on(page), state: "default", missingNl: `De pagina is ${pageHeight} pixels hoog. De schermafbeeldingen stoppen bij ${limit} pixels; wat daaronder staat, is op geen schermafbeelding te zien en het contrast ervan is niet gemeten.`, measured: { pageHeight, limit } });
+    limitations.push({ check: "screenshot-clipped", ...on(page), state: "default", missingNl: `De pagina is ${pageHeight} pixels hoog. De schermafbeeldingen stoppen bij ${limit} pixels; wat daaronder staat, is op geen schermafbeelding te zien. Het contrast daar is wel gemeten, in afbeeldingen verder op de pagina.`, measured: { pageHeight, limit } });
   }
 
   // A rule engine that gave no answer on a page or in a state: what it would have found there cannot be established, and its silence must not read as clean (#143).
