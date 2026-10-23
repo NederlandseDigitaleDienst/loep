@@ -427,6 +427,23 @@
   text(size: 9.5pt, weight: if status-line.unfinished { 700 } else { 400 }, status-line.openNl)
 })
 
+#if derived.forB != none {
+  callout(fill: panel, bar: ink, {
+    text(weight: 700)[Wat er nog ontbreekt voor status B]
+    linebreak()
+    text(size: 9.5pt)[Waarop de uitkomsten rusten: #derived.forB.basisNl]
+    if derived.forB.doneNl != none {
+      linebreak()
+      text(size: 9.5pt, derived.forB.doneNl)
+    } else {
+      set text(size: 9.5pt)
+      for row in derived.forB.openNl [
+        - #row.criterion: #row.closesNl
+      ]
+    }
+  })
+}
+
 #if grouping != none [Het onderzoek vond #grouping.countsNl.]
 
 #score-table("2.2")
