@@ -706,7 +706,8 @@ export async function inventory(options: InventoryOptions): Promise<Inventory> {
             readsOutside.set(elsewhere, known);
           }
         }
-        if (!embedded) for (const frame of frames) noteFrame(normaliseUrl(frame), next);
+        // As with links, Chromium accepts some frame addresses that Node's URL rejects: only that frame is left out (#342).
+        if (!embedded) for (const frame of frames) if (URL.canParse(frame)) noteFrame(normaliseUrl(frame), next);
         if (!fixed && !embedded && !missingPages.includes(next)) for (const link of links) note(normaliseUrl(link), "link");
         process.stderr.write(`inventory ${pages.length} ${next}\n`);
       } catch (error) {

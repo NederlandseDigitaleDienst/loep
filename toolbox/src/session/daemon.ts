@@ -14,6 +14,7 @@ import { Jobs } from "./jobs.ts";
 import { cleanModel } from "../lib/models.ts";
 import { toolchain } from "../lib/manifest.ts";
 import { budgetOutPointNl, writeBudget, writeBudgetNl, writesForRun, type WriteBudget } from "../lib/writes.ts";
+import { SEARCH_HELD_BACK_NL } from "../lib/reads.ts";
 import { loadSiteModel, STEP_NOT_FOUND_NL, type Postcondition, type SiteModel } from "../lib/sitemodel.ts";
 import { Images, ObservationLog, observationId, readObservation, type Locators, type Observation, type StartState, type StateRecord, type Step, type TargetRecord } from "./observations.ts";
 import { holds, POSTCONDITION_WAIT_MS } from "./recipe.ts";
@@ -481,6 +482,7 @@ export class Daemon {
     if (sockets.length > 0) print.sockets = [...new Set(sockets)].slice(0, MAX_BLOCKED_PRINTED);
     if (challenges.length > 0) print.challenge = `${challenges.length} ${challenges.length === 1 ? "verzoek" : "verzoeken"} van de controle van Cloudflare tegen robots doorgelaten (${[...new Set(challenges.map((entry) => new URL(entry.url).hostname))].join(", ")}); de site krijgt die niet`;
     if (blocked.length > 0) print.blocked = [...blocked.slice(0, MAX_BLOCKED_PRINTED).map((entry) => `${entry.kind}: ${entry.method} ${entry.url.slice(0, 100)}${entry.search ? ` (zoekvraag: ${entry.search.join(", ")})` : ""}${entry.reasonNl ? ` (${entry.reasonNl})` : ""}`), ...(blocked.length > MAX_BLOCKED_PRINTED ? [`(+${blocked.length - MAX_BLOCKED_PRINTED})`] : [])];
+    if (blocked.some((entry) => entry.search)) print.search = SEARCH_HELD_BACK_NL;
     // A write the budget for sending held back: the agent hears why, and what to write when nothing more can be sent.
     const heldBack = blocked.find((entry) => entry.writeBudget === "out") ?? blocked.find((entry) => entry.writeBudget === "share") ?? blocked.find((entry) => entry.writeBudget === "spacing");
     if (heldBack) {

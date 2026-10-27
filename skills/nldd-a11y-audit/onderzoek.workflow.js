@@ -24,6 +24,10 @@ const MAX_ATTEMPTS = 2
 // the agents: the workflow pauses instead of skipping. A start after the pause goes on from the run.
 const FAILS_IN_A_ROW = 3
 const PAUSED_NL = 'storing van het model, run gepauzeerd; start de werkstroom opnieuw om verder te gaan'
+// The site does not answer (`pending` says siteOutage, or an agent heard it from its session): the workflow pauses as well,
+// and an agent that stopped for it counts no attempt.
+const SITE_PAUSED_NL = 'storing van de site, run gepauzeerd; start de werkstroom opnieuw als de site weer antwoordt (pending zegt het)'
+const SITE_DOWN = /storing van de site/i
 // Sites that no agent of this run may open, for example a set that is held back for a final test. Empty when the caller gives none.
 const NEVER_OPEN =
   Array.isArray(neverOpen) && neverOpen.length > 0
@@ -63,6 +67,8 @@ const PENDING = {
     judges: { type: 'array', items: ITEM },
     verifiers: { type: 'array', items: ITEM },
     finishers: { type: 'array', items: ITEM },
+    siteOutage: { type: 'string', description: 'alleen als de site een storing heeft' },
+    again: { type: 'array', items: { type: 'string' }, description: 'alleen bij done: criteria die na een storing van de site een nieuwe afmaakronde kunnen krijgen' },
     note: { type: 'string' },
   },
   required: ['phase', 'walks', 'judges', 'verifiers', 'finishers'],
@@ -71,13 +77,13 @@ const PENDING = {
 function shell(commands, round) {
   const numbered = commands.map((command, index) => `${index + 1}. ${command}`).join('\n')
   return tryAgent(
-    `Voer in een shell precies deze commando's uit, elk één keer, na elkaar, en doe verder niets. Lees geen bestanden en wijzig niets. ${NEVER_OPEN}\n${numbered}\nHet laatste commando drukt één JSON-object af met de sleutels phase, walks, judges, verifiers en finishers. Geef dat object ongewijzigd terug als je antwoord. Mislukt een commando, geef dan phase "error" terug met lege lijsten en in note de foutmelding.`,
+    `Voer in een shell precies deze commando's uit, elk één keer, na elkaar, en doe verder niets. Lees geen bestanden en wijzig niets. ${NEVER_OPEN}\n${numbered}\nHet laatste commando drukt één JSON-object af met de sleutels phase, walks, judges, verifiers en finishers, en soms siteOutage of again. Geef dat object ongewijzigd terug als je antwoord. Mislukt een commando, geef dan phase "error" terug met lege lijsten en in note de foutmelding.`,
     withModel('stand', { schema: PENDING, label: `stand ${round}`, phase: 'Stand', effort: 'low' }),
   )
 }
 
 function work(task) {
-  return `Lees het bestand ${task} en voer de opdracht die daarin staat volledig en precies uit. Het bestand bevat alles wat je nodig hebt. Lees niets onder de map fixtures van de toolbox. Wijzig geen andere bestanden dan de bestanden die je opdracht noemt. Start of stop geen andere processen dan je eigen sessie. ${NEVER_OPEN} Meld na afloop in hooguit drie regels de uitkomst die je hebt opgeschreven en of de controle is geslaagd.`
+  return `Lees het bestand ${task} en voer de opdracht die daarin staat volledig en precies uit. Het bestand bevat alles wat je nodig hebt. Lees niets onder de map fixtures van de toolbox. Wijzig geen andere bestanden dan de bestanden die je opdracht noemt. Start of stop geen andere processen dan je eigen sessie. ${NEVER_OPEN} Zegt loep dat de site een storing heeft ("storing van de site"), stop dan meteen: schrijf geen oordeel en geen open punt, stop je sessie en antwoord alleen met: storing van de site. Meld anders na afloop in hooguit drie regels de uitkomst die je hebt opgeschreven en of de controle is geslaagd.`
 }
 
 // The task file of each phase follows from its id, as TASK_FILES in toolbox/src/commands/instrument-tasks.ts says; a test holds the two together.
@@ -105,20 +111,25 @@ async function tryAgent(prompt, options) {
 // A pool: `limit` workers each take the next item as soon as their own is done. So `limit` agents run for
 // as long as there is work, and never more: a slow agent holds up one place and not a whole group.
 // After FAILS_IN_A_ROW errors in a row no worker takes a new item: the model is not there, and more agents would only fail too.
+// An agent that answers that the site has an outage did not attempt its task either, and no worker takes a new item after it.
 async function pool(items, limit, start) {
   let next = 0
   let inARow = 0
   let stopped = false
+  let siteDown = 0
   const done = []
   const errors = []
   const worker = async () => {
-    while (next < items.length && !stopped) {
+    while (next < items.length && !stopped && siteDown === 0) {
       const item = items[next++]
       const outcome = await start(item)
       if (outcome.error) {
         errors.push(outcome.error)
         log(`agent gestopt met een fout: ${outcome.error}`)
         if (++inARow >= FAILS_IN_A_ROW) stopped = true
+      } else if (typeof outcome.result === 'string' && SITE_DOWN.test(outcome.result)) {
+        siteDown++
+        log(`agent gestopt door een storing van de site: ${item.id}`)
       } else {
         inARow = 0
         done.push(item)
@@ -126,7 +137,7 @@ async function pool(items, limit, start) {
     }
   }
   await parallel(Array.from({ length: Math.min(limit, items.length) }, () => worker))
-  return { done, errors, outage: stopped || (items.length > 0 && done.length === 0) }
+  return { done, errors, siteDown, outage: stopped || (items.length > 0 && done.length === 0 && siteDown === 0) }
 }
 
 const skipped = []
@@ -136,12 +147,15 @@ let attempted = []
 let last = null
 let paused = null
 let rounds = 0
+// Criteria that get a new finishing round once the site answers again after an outage: once per start of the workflow.
+let again = []
+let askedAgain = false
 
 for (let round = 1; round <= MAX_ROUNDS; round++) {
   rounds = round
   const commands = [
     ...pendingSkips.map((entry) => `node ${cli} skip --run ${run} ${entry} --kind "geen geldig resultaat" --reason "de agent leverde na ${MAX_ATTEMPTS} pogingen geen geldig resultaat"`),
-    `node ${cli} tasks --run ${run}${attempted.length > 0 ? ` --attempted ${attempted.join(',')}` : ''}`,
+    `node ${cli} tasks --run ${run}${attempted.length > 0 ? ` --attempted ${attempted.join(',')}` : ''}${again.length > 0 ? ` --again ${again.join(',')}` : ''}`,
     `node ${cli} pending --run ${run} --brief`,
   ]
   const asked = await shell(commands, round)
@@ -153,6 +167,7 @@ for (let round = 1; round <= MAX_ROUNDS; round++) {
   }
   pendingSkips = []
   attempted = []
+  again = []
   const state = asked.result
   last = state.phase
   if (state.phase === 'error') {
@@ -160,8 +175,20 @@ for (let round = 1; round <= MAX_ROUNDS; round++) {
     history.push({ round, phase: 'error', note: state.note || null })
     break
   }
+  if (state.phase === 'done' && Array.isArray(state.again) && state.again.length > 0 && !askedAgain) {
+    askedAgain = true
+    again = state.again
+    log(`ronde ${round}: de site antwoordt weer, nieuwe afmaakronde voor ${again.join(', ')}`)
+    history.push({ round, phase: 'done', again })
+    continue
+  }
   if (state.phase === 'done') {
     history.push({ round, phase: 'done' })
+    break
+  }
+  if (state.siteOutage) {
+    paused = `${SITE_PAUSED_NL} (stand ${round}: ${state.siteOutage})`
+    history.push({ round, phase: 'storing van de site', note: state.siteOutage })
     break
   }
   const kind = PHASES[state.phase]
@@ -181,6 +208,11 @@ for (let round = 1; round <= MAX_ROUNDS; round++) {
   history.push({ round, phase: state.phase, tasks: todo.length, skippedNow: pendingSkips.length })
   const ran = await pool(todo, AT_ONCE, (item) => tryAgent(work(kind.task(item.id)), withModel(state.phase, { label: `${state.phase} ${item.id}`, phase: kind.title })))
   attempted = ran.done.map((item) => `${state.phase}:${item.id}`)
+  if (ran.siteDown > 0) {
+    paused = `${SITE_PAUSED_NL} (${ran.siteDown} van ${todo.length} agents van ronde ${round} stopten door een storing van de site)`
+    history.push({ round, phase: 'storing van de site', note: `${ran.siteDown} agents` })
+    break
+  }
   if (ran.outage) {
     paused = `${PAUSED_NL} (${ran.errors.length} van ${todo.length} agents van ronde ${round} stopten met een fout, de laatste: ${ran.errors.at(-1)})`
     history.push({ round, phase: 'storing', note: ran.errors.at(-1) })
