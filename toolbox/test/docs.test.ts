@@ -252,6 +252,10 @@ interface WorkflowState {
   judges?: string[];
   verifiers?: string[];
   finishers?: string[];
+  /** What pending says while the site has an outage. */
+  siteOutage?: string;
+  /** At done: criteria that can get a new finishing round now that the site answers again. */
+  again?: string[];
 }
 
 /** The part of a run the workflow writes through the toolbox: the attempts it records with `tasks --attempted`, and what it skips. It outlives one run of the workflow. */
@@ -278,8 +282,9 @@ interface WorkflowResult {
  * says how long the agent of a task works and `fails` which tasks come back without a valid result
  * (still open next round). `trouble` says which calls end in an error of the model: "throw" for an
  * exception, "null" for what the host gives when an agent died on such an error; the stand is "stand".
+ * "site" is an agent that heard from its session that the site has an outage, and says so.
  */
-async function runWorkflow(atOnce: number | undefined, states: WorkflowState[], seconds: (task: string) => number = () => 0.002, models?: unknown, extra: { toolbox?: FakeToolbox; trouble?: (what: string, call: number) => "throw" | "null" | undefined } = {}) {
+async function runWorkflow(atOnce: number | undefined, states: WorkflowState[], seconds: (task: string) => number = () => 0.002, models?: unknown, extra: { toolbox?: FakeToolbox; trouble?: (what: string, call: number) => "throw" | "null" | "site" | undefined } = {}) {
   const AsyncFunction = Object.getPrototypeOf(async () => undefined).constructor as new (...names: string[]) => (...values: unknown[]) => Promise<WorkflowResult>;
   const script = new AsyncFunction("args", "agent", "parallel", "log", read("skills/nldd-a11y-audit/onderzoek.workflow.js").replace(/^export const meta/m, "const meta"));
   const toolbox = extra.toolbox ?? { attempts: {}, skips: [] };
@@ -306,7 +311,7 @@ async function runWorkflow(atOnce: number | undefined, states: WorkflowState[], 
       for (const key of /tasks --run RUN --attempted (\S+)/.exec(prompt)?.[1]?.split(",") ?? []) toolbox.attempts[key] = (toolbox.attempts[key] ?? 0) + 1;
       const state = states[round++] ?? { phase: "done" };
       const open = (phase: WorkflowPhase) => (state[phase] ?? []).filter((id) => !toolbox.skips.includes(`${phase}:${id}`)).map((id) => ({ id, attempts: toolbox.attempts[`${phase}:${id}`] ?? 0 }));
-      return { phase: state.phase, walks: open("walks"), judges: open("judges"), verifiers: open("verifiers"), finishers: open("finishers") };
+      return { phase: state.phase, walks: open("walks"), judges: open("judges"), verifiers: open("verifiers"), finishers: open("finishers"), ...(state.siteOutage ? { siteOutage: state.siteOutage } : {}), ...(state.again ? { again: state.again } : {}) };
     }
     const task = /Lees het bestand (\S+)/.exec(prompt)![1]!;
     events.push({ task, what: "start" });
@@ -317,6 +322,7 @@ async function runWorkflow(atOnce: number | undefined, states: WorkflowState[], 
     const trouble = extra.trouble?.(task, calls);
     if (trouble === "throw") throw new Error(QUOTA);
     if (trouble === "null") return null;
+    if (trouble === "site") return "Storing van de site.";
     return "klaar";
   };
   const parallel = (thunks: (() => Promise<unknown>)[]): Promise<unknown[]> => Promise.all(thunks.map((thunk) => thunk()));
@@ -433,6 +439,39 @@ test("a limit or a failure of the model pauses the workflow: it skips nothing an
   assert.equal(once.started(taskOf("judges", "1.1.2")), 2);
   assert.deepEqual(once.toolbox.attempts, { "judges:1.1.1": 1, "judges:1.1.3": 1, "judges:1.1.2": 1 });
   assert.equal(once.result.last, "done");
+});
+
+test("an outage of the site pauses the workflow like one of the model: no agent starts while pending says so, and an agent that stopped for it is no attempt", async () => {
+  // Pending says the site is down: no agent starts, nothing is skipped.
+  const said = "storing van de site: https://www.example.nl antwoordt sinds 2026-10-23 07:41 niet";
+  const down = await runWorkflow(3, [{ phase: "judges", judges: ["1.1.1", "1.4.3"], siteOutage: said }]);
+  assert.equal(down.events.length, 0, "no agent starts");
+  assert.equal(down.result.paused, `storing van de site, run gepauzeerd; start de werkstroom opnieuw als de site weer antwoordt (pending zegt het) (stand 1: ${said})`);
+  assert.equal(down.result.last, "storing");
+  assert.deepEqual(down.result.skipped, []);
+  assert.match(down.stands[0]!, /en soms siteOutage/);
+
+  // An agent hears it from its session halfway through a round: no new agent starts after it, and it counts no attempt.
+  const judges = Array.from({ length: 6 }, (_, index) => `1.1.${index}`);
+  const halfway = await runWorkflow(1, [{ phase: "judges", judges }, { phase: "judges", judges }], undefined, undefined, { trouble: (what) => (what === taskOf("judges", "1.1.1") ? "site" : undefined) });
+  assert.deepEqual(halfway.events.filter((event) => event.what === "start").map((event) => event.task), [taskOf("judges", "1.1.0"), taskOf("judges", "1.1.1")]);
+  assert.match(halfway.result.paused!, /^storing van de site, run gepauzeerd; .* \(1 van 6 agents van ronde 1 stopten door een storing van de site\)$/);
+  assert.equal(halfway.stands.length, 1, "no new round after the pause");
+  assert.deepEqual(halfway.toolbox.attempts, {});
+  // Every agent of a round heard it: that is the site, not the model.
+  const all = await runWorkflow(2, [{ phase: "walks", walks: ["zoek", "start"] }], undefined, undefined, { trouble: (what) => (what === "stand" ? undefined : "site") });
+  assert.match(all.result.paused!, /^storing van de site, run gepauzeerd/);
+  // The agent is told when to stop, and what to answer.
+  assert.match(read("skills/nldd-a11y-audit/onderzoek.workflow.js"), /stop je sessie en antwoord alleen met: storing van de site\./);
+
+  // Started again once the site answers: what got "niet bereikbaar" before gets a new finishing round, once per start.
+  const back = await runWorkflow(2, [{ phase: "done", again: ["2.4.3", "3.3.1"] }, { phase: "finishers", finishers: ["2.4.3", "3.3.1"] }, { phase: "done", again: ["2.4.3"] }]);
+  assert.match(back.stands[1]!, /tasks --run RUN --again 2\.4\.3,3\.3\.1\n/);
+  assert.ok(!back.stands[0]!.includes("--again") && !back.stands[2]!.includes("--again"));
+  for (const id of ["2.4.3", "3.3.1"]) assert.equal(back.started(taskOf("finishers", id)), 1);
+  assert.deepEqual(back.result.history.map((entry) => entry.phase), ["done", "finishers", "done"]);
+  assert.equal(back.result.last, "done");
+  assert.equal(back.result.paused, null);
 });
 
 test("a workflow started again after a pause goes on with the attempts the run holds", async () => {

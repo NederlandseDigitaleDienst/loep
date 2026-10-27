@@ -17,6 +17,7 @@ const dossierPartsOfFile = (runDir: string, path: string): string => dossierPart
 import { stepStart, writeManifest } from "../lib/manifest.ts";
 import { loadAllProcedures, type Procedure } from "../lib/procedures.ts";
 import { readTemplate } from "../lib/templates.ts";
+import { readBlockades, siteOutageNl } from "../session/blockade.ts";
 import { loadRun, type RunData } from "../lib/rundata.ts";
 import {
   canonicalCommand,
@@ -31,6 +32,7 @@ import {
   openPoint,
   rowsToExplain,
   searchableText,
+  UNREACHABLE,
   validateCandidates,
   validateFinish,
   validateJudgeVerdict,
@@ -917,6 +919,10 @@ export interface InstrumentPending {
   finishers: { criterion: string; task: string; session: string; attempts: number }[];
   /** Given up on with `skip`: no walk, or no verdict, will come. */
   skipped: string[];
+  /** The site has an outage now (`blockades.json`): no agent starts until it answers. Absent when it answers. */
+  siteOutage?: string;
+  /** Once the run is done and the site answers again after an outage: the criteria whose final verdict, written before that, is open with a point "niet bereikbaar". `tasks --again` gives each a new finishing round. Absent when there is none. */
+  again?: string[];
   noteNl: string;
 }
 
@@ -925,9 +931,28 @@ export interface InstrumentPending {
  * paths, so the agent that reads it out has nothing long to copy. The workflow derives each path from
  * its id, as `TASK_FILES` does.
  */
-export function briefPending(pending: InstrumentPending): { phase: InstrumentPending["phase"] } & Record<Phase, { id: string; attempts: number }[]> {
+export function briefPending(pending: InstrumentPending): { phase: InstrumentPending["phase"]; siteOutage?: string; again?: string[] } & Record<Phase, { id: string; attempts: number }[]> {
   const brief = (list: { pageType?: string; criterion?: string; attempts: number }[]): { id: string; attempts: number }[] => list.map((entry) => ({ id: entry.pageType ?? entry.criterion!, attempts: entry.attempts }));
-  return { phase: pending.phase, walks: brief(pending.walks), judges: brief(pending.judges), verifiers: brief(pending.verifiers), finishers: brief(pending.finishers) };
+  return { phase: pending.phase, walks: brief(pending.walks), judges: brief(pending.judges), verifiers: brief(pending.verifiers), finishers: brief(pending.finishers), ...(pending.siteOutage ? { siteOutage: pending.siteOutage } : {}), ...(pending.again ? { again: pending.again } : {}) };
+}
+
+/**
+ * The criteria a new finishing round can measure now that an outage of the site is over: the verdict
+ * that counts is open with a point "niet bereikbaar" and was written before the site answered again,
+ * and `tasks --again` would take it. A verdict written after that is not asked for again.
+ */
+async function againAfterOutage(runDir: string, index: InstrumentIndex, observations: ReturnType<typeof loadObservations>): Promise<string[]> {
+  const back = Math.max(...readBlockades(runDir).map((entry) => (entry.reason === "outage" && entry.back ? Date.parse(entry.back) : Number.NEGATIVE_INFINITY)));
+  if (!Number.isFinite(back)) return [];
+  const ids: string[] = [];
+  for (const task of index.tasks) {
+    const counting = await countingOf(runDir, task, observations);
+    if (counting?.verdict.outcome !== "cantTell" || !(counting.verdict.missingNl ?? []).some((point) => openPoint(point).kind?.prefix === UNREACHABLE)) continue;
+    const stamp = await readJson<{ stampedAt?: string }>(join(runDir, stampOf(partOf(task, counting.round)!.output))).catch(() => null);
+    if (!stamp?.stampedAt || Date.parse(stamp.stampedAt) >= back) continue;
+    if (Array.isArray(await pointsForAgain(runDir, index, task.criterion, observations))) ids.push(task.criterion);
+  }
+  return ids;
 }
 
 const sizeOf = (path: string): number => {
@@ -1016,6 +1041,9 @@ export async function instrumentPending(runDir: string): Promise<InstrumentPendi
               : "Start per criterium één agent met het opdrachtbestand voor de afmaakronde: die meet wat ontbrak en komt tot een oordeel."
             : "Alles is beoordeeld en geverifieerd, en niets bleef open door het onderzoek zelf. Ga door met `evaluate`.";
   const bySize = <T extends { criterion: string }>(list: T[], round: string): T[] => longestFirst(list, (entry) => sizeOf(candidatesOf.get(`${round} ${entry.criterion}`) ?? ""));
+  const siteOutage = phase === "done" ? null : await siteOutageNl(runDir);
+  const again = phase === "done" ? await againAfterOutage(runDir, index, observations) : [];
+  const againNl = again.length > 0 ? ` De site antwoordt weer na een storing, en ${again.join(", ")} ${again.length === 1 ? "staat" : "staan"} open met een punt "${UNREACHABLE}" van daarvoor: zet een nieuwe afmaakronde klaar met tasks --again ${again.join(",")} en draai daarna pending.` : "";
   return {
     flow: INSTRUMENT_FLOW,
     phase,
@@ -1024,7 +1052,8 @@ export async function instrumentPending(runDir: string): Promise<InstrumentPendi
     verifiers: phase === "verifiers" ? bySize(verifiers, "verify") : [],
     finishers: bySize(finishers, "finish"),
     skipped: given,
-    noteNl,
+    ...(siteOutage ? { siteOutage, noteNl: `${siteOutage}. ${noteNl}` } : { noteNl: `${noteNl}${againNl}` }),
+    ...(again.length > 0 ? { again } : {}),
   };
 }
 

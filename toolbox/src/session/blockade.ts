@@ -6,18 +6,23 @@ import { siteOrigins, type OriginSource } from "../lib/origins.ts";
 /** An origin the session process stopped asking anything, because the site said so or kept failing. */
 export interface BlockadeEntry {
   origin: string;
-  /** `429`: the site answered "too many requests". `failures`: navigations to it failed again and again while other origins loaded. */
-  reason: "429" | "failures";
+  /**
+   * `429`: the site answered "too many requests". `failures`: navigations to it failed again and again while other origins loaded.
+   * `outage`: navigations to it failed again and again and nothing else of the site loaded meanwhile: the site, or the connection of this machine, is down.
+   */
+  reason: "429" | "failures" | "outage";
   at: string;
-  /** Until when requests are refused: a 429 with a short Retry-After, or a pause after failures. Null for the rest of the run (a 429 without a short Retry-After). */
+  /** Until when requests are refused: a 429 with a short Retry-After, or a pause after failures or an outage. Null for the rest of the run (a 429 without a short Retry-After). */
   until: string | null;
   /** The address that gave the answer or failed last. */
   url: string;
+  /** An outage only: when the site answered again. Until then an outage refuses after its pause too, while one request asks whether the site is back. */
+  back?: string;
 }
 
 /** In the run, so that a new session process keeps refusing, and evaluate and the report can say it. */
 export const BLOCKADES_FILE = "blockades.json";
-/** Navigations to one origin that may fail in a row, while another origin loads, before the origin is left alone. */
+/** Navigations to one origin that may fail in a row before it is left alone: for a pause when another origin of the site loads meanwhile, and as an outage when nothing else does. */
 export const MAX_FAILED_NAVIGATIONS = 3;
 /** A Retry-After up to this many seconds is waited out; a longer one, or none, ends the asking for the rest of the run. */
 export const SHORT_RETRY_AFTER_SECONDS = 60;
@@ -27,6 +32,21 @@ export const SHORT_RETRY_AFTER_SECONDS = 60;
  */
 export const FAILURE_PAUSE_SECONDS = 300;
 export const LONGEST_FAILURE_PAUSE_SECONDS = 2400;
+/** How long the one request after the pause of an outage waits for an answer. */
+export const PROBE_SECONDS = 30;
+
+/** Whether the site answers at this address: any answer counts, also a 404 or a 503; only no connection or no answer in time does not. */
+export type Probe = (url: string) => Promise<boolean>;
+
+const probeSite: Probe = async (url) => {
+  try {
+    const response = await fetch(url, { redirect: "manual", signal: AbortSignal.timeout(PROBE_SECONDS * 1000) });
+    await response.body?.cancel();
+    return true;
+  } catch {
+    return false;
+  }
+};
 
 /** When an entry stops refusing, in milliseconds; null when it refuses for the rest of the run. A failures entry of an older run without an end ends one pause after it was noted. */
 export function endOf(entry: BlockadeEntry): number | null {
@@ -61,12 +81,21 @@ export function retryAfterSeconds(value: string | undefined, now: number): numbe
 const timeOfDay = (iso: string): string => new Date(iso).toTimeString().slice(0, 5);
 
 const whyNl = (entry: BlockadeEntry): string =>
-  entry.reason === "429" ? `${entry.origin} antwoordde om ${timeOfDay(entry.at)} met 429 (te veel verzoeken)` : `${MAX_FAILED_NAVIGATIONS} navigaties naar ${entry.origin} op rij mislukten (de laatste om ${timeOfDay(entry.at)}) terwijl andere adressen wel laadden`;
+  entry.reason === "429"
+    ? `${entry.origin} antwoordde om ${timeOfDay(entry.at)} met 429 (te veel verzoeken)`
+    : entry.reason === "outage"
+      ? `storing van de site: ${entry.origin} antwoordt niet, ${MAX_FAILED_NAVIGATIONS} navigaties op rij kregen geen antwoord of geen verbinding (de laatste om ${timeOfDay(entry.at)}) en in die tijd laadde niets anders van de site`
+      : `${MAX_FAILED_NAVIGATIONS} navigaties naar ${entry.origin} op rij mislukten (de laatste om ${timeOfDay(entry.at)}) terwijl andere adressen wel laadden`;
+
+/** What an agent does during an outage: it is no point "niet bereikbaar", and the task comes back. */
+export const OUTAGE_STOP_NL = 'Dit is geen "niet bereikbaar" en geen bevinding: meet niet verder, schrijf geen oordeel, stop je sessie en antwoord alleen met "storing van de site". De opdracht komt terug als de site weer antwoordt';
 
 /** Why a request to a blocked origin is refused, and what the agent writes about what it could not measure. */
 export function refusalNl(entry: BlockadeEntry): string {
   const why = whyNl(entry);
   const end = endOf(entry);
+  if (entry.reason === "outage" && end !== null && end <= Date.now()) return `${why}. De pauze is om: het sessieproces kijkt nu met één verzoek of de site terug is. Wacht een halve minuut en doe dit dan opnieuw`;
+  if (entry.reason === "outage") return `${why}. Het sessieproces vraagt de site niets tot ${new Date(end!).toTimeString().slice(0, 8)} en kijkt dan met één verzoek of ze terug is. ${OUTAGE_STOP_NL}`;
   if (end !== null && entry.reason === "failures") return `${why}; het sessieproces vraagt daar niets tot ${new Date(end).toTimeString().slice(0, 8)} en probeert het daarna opnieuw. Meet intussen wat zonder die site kan, en doe dit daarna opnieuw`;
   if (end !== null) return `${why}; het sessieproces vraagt daar niets tot ${new Date(end).toTimeString().slice(0, 8)}, zoals de site vroeg. Doe het daarna opnieuw`;
   return `${why}; het sessieproces vraagt daar de rest van de run niets meer (${BLOCKADES_FILE} in de run). Schrijf wat daardoor niet te meten is als open punt: "niet bereikbaar: <adres>, ${entry.origin} weigerde vanaf ${timeOfDay(entry.at)}"`;
@@ -100,9 +129,11 @@ export function blockadesNl(runDir: string): string[] {
   const lasting = new Map<string, BlockadeEntry>();
   const paused = new Map<string, number>();
   const failing = new Map<string, number>();
+  const down = new Map<string, BlockadeEntry[]>();
   for (const entry of readBlockades(runDir)) {
     if (isLasting(entry)) lasting.set(entry.origin, lasting.get(entry.origin) ?? entry);
     else if (entry.reason === "failures") failing.set(entry.origin, (failing.get(entry.origin) ?? 0) + 1);
+    else if (entry.reason === "outage") down.set(entry.origin, [...(down.get(entry.origin) ?? []), entry]);
     else paused.set(entry.origin, (paused.get(entry.origin) ?? 0) + 1);
   }
   const times = (count: number): string => (count === 1 ? "één keer" : `${count} keer`);
@@ -110,27 +141,52 @@ export function blockadesNl(runDir: string): string[] {
     ...[...lasting.values()].map(refusedRunNl),
     ...[...paused.entries()].filter(([origin]) => !lasting.has(origin)).map(([origin, count]) => `${origin} vroeg ${times(count)} om even te wachten (429 met Retry-After); het onderzoek heeft dat aangehouden.`),
     ...[...failing.entries()].filter(([origin]) => !lasting.has(origin)).map(([origin, count]) => `${origin} antwoordde ${times(count)} niet op ${MAX_FAILED_NAVIGATIONS} navigaties op rij; het onderzoek vroeg daar dan een tijd niets en ging daarna verder. Wat in die tijd niet kon worden gemeten, staat bij het criterium als niet bereikbaar.`),
+    ...[...down.entries()].filter(([origin]) => !lasting.has(origin)).map(([origin, entries]) => {
+      const back = entries.filter((entry) => entry.back).at(-1)?.back;
+      return `${origin} had een storing: de site antwoordde niet vanaf ${entries[0]!.at.slice(0, 10)} om ${timeOfDay(entries[0]!.at)}, en het onderzoek wachtte ${times(entries.length)} een pauze af${back ? `; de site antwoordde weer om ${timeOfDay(back)}` : ""}. In die tijd is daar niets gevraagd.`;
+    }),
   ];
 }
 
 /**
+ * What `pending` says while the site has an outage, after one request for an outage whose pause is
+ * over: no agent starts until the site answers. Null when it answers, as far as the run knows.
+ */
+export async function siteOutageNl(runDir: string, probe?: Probe): Promise<string | null> {
+  if (!existsSync(join(runDir, BLOCKADES_FILE))) return null;
+  const blockade = new Blockade(runDir, Date.now, probe);
+  const down = await blockade.outages();
+  if (down.length === 0) return null;
+  const since = down.map((entry) => blockade.outageSince(entry.origin)!).sort()[0]!;
+  const until = down.map((entry) => entry.until!).sort().at(-1)!;
+  return `storing van de site: ${down.map((entry) => entry.origin).join(", ")} antwoordt sinds ${since.slice(0, 10)} ${timeOfDay(since)} niet (geen antwoord of geen verbinding). loep vraagt de site niets tot ${new Date(until).toTimeString().slice(0, 8)} en kijkt dan met één verzoek of ze terug is. Start geen agents en draai pending na die tijd opnieuw`;
+}
+
+/**
  * The origins of the site that the session process stops asking anything: after a 429 (for the
- * rest of the run, or until a short Retry-After has passed), and for a pause after navigations to
- * one origin failed again and again while another origin loaded. Shared by every session of the process, and
- * kept in the run, so a new process goes on refusing.
+ * rest of the run, or until a short Retry-After has passed), for a pause after navigations to
+ * one origin failed again and again while another origin loaded, and during an outage: navigations
+ * failed again and again and nothing else loaded. An outage pauses longer each time, and after each
+ * pause one request asks whether the site is back; until it answers, everything stays refused.
+ * Shared by every session of the process, and kept in the run, so a new process goes on refusing.
  */
 export class Blockade {
   private readonly runDir: string;
   private readonly now: () => number;
+  private readonly probe: Probe;
   private readonly entries: BlockadeEntry[] = [];
-  private readonly failures = new Map<string, number>();
-  private readonly loadedOrigins = new Set<string>();
+  private readonly failures = new Map<string, { count: number; since: number }>();
+  /** When each origin last loaded a navigation. */
+  private readonly loadedOrigins = new Map<string, number>();
+  /** The one request per origin that asks whether the site is back after the pause of an outage. */
+  private readonly probing = new Map<string, Promise<void>>();
   /** When the file in the run last changed, as this process read it. */
   private seen = -1;
 
-  constructor(runDir: string, now: () => number = Date.now) {
+  constructor(runDir: string, now: () => number = Date.now, probe: Probe = probeSite) {
     this.runDir = runDir;
     this.now = now;
+    this.probe = probe;
     this.sync();
   }
 
@@ -139,20 +195,84 @@ export class Blockade {
     const changed = statSync(join(this.runDir, BLOCKADES_FILE), { throwIfNoEntry: false })?.mtimeMs ?? 0;
     if (changed === this.seen) return;
     this.seen = changed;
-    for (const entry of readBlockades(this.runDir)) if (!this.entries.some((own) => own.origin === entry.origin && own.at === entry.at)) this.entries.push(entry);
+    for (const entry of readBlockades(this.runDir)) {
+      const own = this.entries.find((known) => known.origin === entry.origin && known.at === entry.at);
+      if (!own) this.entries.push(entry);
+      else if (entry.back && !own.back) own.back = entry.back;
+    }
   }
 
-  /** The entry that refuses a request to this address now, or null. */
+  /** The outage entries of an origin since it last answered again, oldest first. */
+  private outageOf(origin: string): BlockadeEntry[] {
+    const outages = this.entries.filter((entry) => entry.origin === origin && entry.reason === "outage").sort((a, b) => a.at.localeCompare(b.at));
+    return outages.slice(outages.findLastIndex((entry) => entry.back) + 1);
+  }
+
+  /** The entry that refuses a request to this address now, or null. After the pause of an outage this starts the one request that asks whether the site is back. */
   refuses(url: string): BlockadeEntry | null {
     const origin = originOf(url);
     if (!origin) return null;
     this.sync();
-    return (
-      this.entries.find((entry) => {
-        const end = endOf(entry);
-        return entry.origin === origin && (end === null || end > this.now());
-      }) ?? null
-    );
+    const now = this.now();
+    const refusing = this.entries.find((entry) => {
+      const end = endOf(entry);
+      return entry.origin === origin && !entry.back && (end === null || end > now);
+    });
+    if (refusing) return refusing;
+    const outage = this.outageOf(origin).at(-1);
+    if (!outage) return null;
+    void this.probeOnce(outage);
+    return outage;
+  }
+
+  /** Ask once whether the site is back after the pause of this outage: an answer ends the outage, none pauses it again, longer. */
+  private probeOnce(outage: BlockadeEntry): Promise<void> {
+    const running = this.probing.get(outage.origin);
+    if (running) return running;
+    const asked = this.probe(outage.url)
+      .catch(() => false)
+      .then((answered) => {
+        this.sync();
+        // Another process asked meanwhile and noted what it got.
+        if (this.outageOf(outage.origin).at(-1) !== outage) return;
+        if (answered) this.answered(outage);
+        else this.noteOutage(outage.origin, outage.url);
+      })
+      // A run that is gone has nothing to note.
+      .catch(() => undefined)
+      .finally(() => this.probing.delete(outage.origin));
+    this.probing.set(outage.origin, asked);
+    return asked;
+  }
+
+  private answered(outage: BlockadeEntry): void {
+    outage.back = new Date(this.now()).toISOString();
+    this.write();
+  }
+
+  private noteOutage(origin: string, url: string): void {
+    const seconds = Math.min(FAILURE_PAUSE_SECONDS * 2 ** this.outageOf(origin).length, LONGEST_FAILURE_PAUSE_SECONDS);
+    this.note({ origin, reason: "outage", at: new Date(this.now()).toISOString(), until: new Date(this.now() + seconds * 1000).toISOString(), url: url.slice(0, 300) });
+  }
+
+  /** The outages of the site now, after one request for each whose pause is over: what `pending` says, so no agent starts while the site is down. */
+  async outages(): Promise<BlockadeEntry[]> {
+    this.sync();
+    const down: BlockadeEntry[] = [];
+    for (const origin of new Set(this.entries.filter((entry) => entry.reason === "outage").map((entry) => entry.origin))) {
+      let outage = this.outageOf(origin).at(-1);
+      if (outage && endOf(outage)! <= this.now()) {
+        await this.probeOnce(outage);
+        outage = this.outageOf(origin).at(-1);
+      }
+      if (outage) down.push(outage);
+    }
+    return down;
+  }
+
+  /** When the outage of this origin began: the first of its pauses since it last answered. */
+  outageSince(origin: string): string | null {
+    return this.outageOf(origin)[0]?.at ?? null;
   }
 
   /**
@@ -163,7 +283,7 @@ export class Blockade {
     for (let entry = this.refuses(url); entry; entry = this.refuses(url)) {
       const end = endOf(entry);
       if (end === null || end - this.now() > longestSeconds * 1000) return entry;
-      await new Promise((resolve) => setTimeout(resolve, Math.max(0, end - this.now())));
+      await (this.probing.get(entry.origin) ?? new Promise((resolve) => setTimeout(resolve, Math.max(0, end - this.now()))));
     }
     return null;
   }
@@ -186,19 +306,24 @@ export class Blockade {
   loaded(url: string): void {
     const origin = originOf(url);
     if (!origin) return;
-    this.loadedOrigins.add(origin);
+    this.loadedOrigins.set(origin, this.now());
     this.failures.delete(origin);
+    this.sync();
+    const outage = this.outageOf(origin).at(-1);
+    if (outage) this.answered(outage);
   }
 
   /** A navigation to this address did not load: the connection failed or no answer came. */
   failed(url: string): void {
     const origin = originOf(url);
     if (!origin || this.refuses(url)) return;
-    const count = (this.failures.get(origin) ?? 0) + 1;
-    this.failures.set(origin, count);
-    // Only when something else loads is it the site, and not the network of this machine.
-    if (count < MAX_FAILED_NAVIGATIONS || ![...this.loadedOrigins].some((other) => other !== origin)) return;
+    const streak = this.failures.get(origin) ?? { count: 0, since: this.now() };
+    streak.count++;
+    this.failures.set(origin, streak);
+    if (streak.count < MAX_FAILED_NAVIGATIONS) return;
     this.failures.delete(origin);
+    // Something else of the site loaded meanwhile: this origin fails, not the site. Nothing else did: the site, or the network of this machine, is down.
+    if (![...this.loadedOrigins].some(([other, at]) => other !== origin && at >= streak.since)) return this.noteOutage(origin, url);
     const before = this.entries.filter((entry) => entry.origin === origin && entry.reason === "failures").length;
     const seconds = Math.min(FAILURE_PAUSE_SECONDS * 2 ** before, LONGEST_FAILURE_PAUSE_SECONDS);
     this.note({ origin, reason: "failures", at: new Date(this.now()).toISOString(), until: new Date(this.now() + seconds * 1000).toISOString(), url: url.slice(0, 300) });
@@ -207,6 +332,10 @@ export class Blockade {
   private note(entry: BlockadeEntry): void {
     this.sync();
     this.entries.push(entry);
+    this.write();
+  }
+
+  private write(): void {
     writeFileSync(join(this.runDir, BLOCKADES_FILE), canonicalJson({ origins: this.entries }));
   }
 }
