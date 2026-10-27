@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, test } from "node:test";
-import { briefPending, checkInstrumentVerdict, instrumentPending, instrumentTasks, loadInstrumentIndex, longestFirst, skip } from "../src/commands/instrument-tasks.ts";
+import { briefPending, checkInstrumentVerdict, instrumentPending, instrumentTasks, loadInstrumentIndex, longestFirst, recordAttempts, skip } from "../src/commands/instrument-tasks.ts";
 import { BLOCKADES_FILE } from "../src/session/blockade.ts";
 import type { RunData } from "../src/lib/rundata.ts";
 import type { Verdict } from "../src/lib/verdict.ts";
@@ -128,4 +128,53 @@ test("pending lists the verifiers and the finishers by the size of their candida
   const finishers = await instrumentPending(dir);
   assert.equal(finishers.phase, "finishers");
   assert.deepEqual(finishers.finishers.map((entry) => entry.criterion), expected);
+});
+
+test("after a pause of the workflow a task whose session has no time left gets a fresh one, without an attempt, and pending says so (#359)", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "loep-pause-"));
+  after(() => rmSync(dir, { recursive: true, force: true }));
+  const home = "https://www.example.nl/";
+  const run = {
+    dir,
+    inventory: { baseUrl: home },
+    writes: null,
+    pages: [{ label: "P1", item: { url: home } }],
+    siteModel: { version: 1, baseUrl: home, pageTypes: [{ id: "start", descriptionNl: "De startpagina.", representative: home, pages: [home] }], blockers: [], components: [], processes: [], frames: [], notesNl: [] },
+  } as unknown as RunData;
+  const options = { run, only: ["1.4.11", "2.4.3", "1.4.5"], buildDossier: () => ({ legend: { P1: {} }, evidence: { contrast: {} } }) };
+  /** A session as the session process leaves it: its file, with the limit its extensions raised, and the one observation it made. */
+  const started = (session: string, minutesAgo: number, maxMinutes: number, extensions: unknown[] = []): void => {
+    mkdirSync(join(dir, "observations", session), { recursive: true });
+    writeFileSync(join(dir, "observations", session, "session.json"), JSON.stringify({ session, startedAt: new Date(Date.now() - minutesAgo * 60_000).toISOString(), commands: 9, limits: { maxCommands: 120, maxMinutes }, ...(extensions.length > 0 ? { extensions } : {}) }));
+    writeFileSync(join(dir, "observations", session, "0001.json"), JSON.stringify({ id: `${session}-0001`, command: "look", error: null, state: { id: "s1", start: { url: home }, steps: [] }, target: null, page: { url: home }, result: {} }));
+  };
+  await instrumentTasks(dir, options);
+  await skip(dir, { pageType: "start" }, "Voor deze test is geen rondgang nodig.");
+  await instrumentTasks(dir, options);
+
+  // Three judges began; the weekly limit stopped all three, and the workflow paused for four days.
+  // 1.4.11 ran out of time over the pause, extensions included; 2.4.3 still has time; 1.4.5 ran out during a real attempt.
+  started("b-1411", 4 * 24 * 60, 130, [{ commands: 30, minutes: 25 }, { commands: 30, minutes: 25 }]);
+  started("b-243", 10, 80);
+  started("b-145", 200, 80);
+  // The workflow counted the agent of 1.4.5, which came back, as an attempt; the others stopped with an error of the model.
+  await recordAttempts(dir, ["judges:1.4.5"]);
+  // The new start of the workflow runs tasks first.
+  await instrumentTasks(dir, options);
+
+  const pending = await instrumentPending(dir);
+  const judge = (id: string): (typeof pending.judges)[number] => pending.judges.find((entry) => entry.criterion === id)!;
+  // A session that gave no result is never handed out again: each task gets a fresh one with a clock of its own.
+  assert.deepEqual([judge("1.4.11").session, judge("1.4.11").attempts], ["b-1411-2", 0]);
+  assert.deepEqual([judge("2.4.3").session, judge("2.4.3").attempts], ["b-243-2", 0]);
+  assert.deepEqual([judge("1.4.5").session, judge("1.4.5").attempts], ["b-145-2", 1], "a real attempt still counts");
+  assert.match(readFileSync(join(dir, (await loadInstrumentIndex(dir)).tasks.find((task) => task.criterion === "1.4.11")!.judge.prompt), "utf8"), /--session b-1411-2 /);
+  // The old session stays where it was, readable.
+  assert.ok(existsSync(join(dir, "observations", "b-1411", "0001.json")));
+  // pending says it for the session that has no time left, with its own maximum and the extensions in it.
+  assert.match(judge("1.4.11").sessionNl ?? "", /^de sessie b-1411 gaf geen resultaat dat telt en heeft geen tijd meer: 5760 van 130 minuten .* verse sessie, b-1411-2, .* observations\/b-1411\. .* telt niet als poging$/);
+  assert.equal(judge("2.4.3").sessionNl, undefined, "a session with time left is not worth a word");
+  assert.match(judge("1.4.5").sessionNl ?? "", /^de sessie b-145 /);
+  // The workflow reads only id and attempts.
+  assert.ok(!JSON.stringify(briefPending(pending)).includes("sessionNl"));
 });
