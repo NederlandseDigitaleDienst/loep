@@ -129,12 +129,14 @@ export async function variant(options: { run: string; out: string; name: string;
   leftOut.sessions = [...sessions].sort();
 
   const sourceManifest = readIfThere<Manifest>(join(run, "manifest.json"));
+  const sourceVariant = readIfThere<VariantRecord>(join(run, VARIANT_FILE));
   const record: VariantRecord = {
     schema: "loep/variant/1",
     name: options.name,
     noteNl: options.noteNl?.trim() || null,
     madeAt: new Date().toISOString(),
-    from: { run: basename(run), toolbox: sourceManifest?.toolbox ?? null, variant: readIfThere<VariantRecord>(join(run, VARIANT_FILE))?.name ?? null, browser: sourceManifest?.browser ?? null },
+    // A copy of a copy: the sweep is that of the first source. The manifest of a copy names the code of its agent phases, not of its sweep.
+    from: { run: basename(run), toolbox: sourceVariant?.from.toolbox ?? sourceManifest?.toolbox ?? null, variant: sourceVariant?.name ?? null, browser: sourceVariant ? (sourceVariant.from.browser ?? null) : (sourceManifest?.browser ?? null) },
     toolbox: toolchain(null).toolbox,
     leftOut,
   };

@@ -133,9 +133,14 @@ test("on the copy, tasks and pending start the agent phases again, with the firs
 });
 
 test("a copy of a copy names the variant it came from; a copy is refused where it cannot be made", async () => {
+  // The agent phases of the copy wrote its manifest with their own code: the sweep is still that of the first source.
+  const sweepCode = (JSON.parse(readFileSync(join(copy, "variant.json"), "utf8")) as { from: { toolbox: unknown } }).from.toolbox;
+  const copyManifest = JSON.parse(readFileSync(join(copy, "manifest.json"), "utf8")) as { toolbox: { commit: string | null } };
+  writeFileSync(join(copy, "manifest.json"), JSON.stringify({ ...copyManifest, toolbox: { ...copyManifest.toolbox, commit: "code-van-de-agentfasen" } }));
   const again = join(scratch, "kopie-2");
   const { record } = await variant({ run: copy, out: again, name: "sonnet-verifieerders" });
   assert.equal(record.from.variant, "dossier-commando");
+  assert.deepEqual(record.from.toolbox, sweepCode, "a copy of a copy names the code of the sweep, not that of the agent phases of the copy in between");
   assert.equal(record.noteNl, null);
   await assert.rejects(variant({ run: source, out: copy, name: "x" }), /bestaat al/);
   await assert.rejects(variant({ run: source, out: join(scratch, "y"), name: "met spatie" }), /--name/);
