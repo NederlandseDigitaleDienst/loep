@@ -9,7 +9,7 @@ import { aiGeneratedMark, allCriteriaSorted, carryFindingIds, ESTABLISHED_BY_NL,
 import { matchFindings, sideOf } from "../lib/difference.ts";
 import { documentScopeNl, evaluationDocuments, siteDocuments } from "../lib/documents.ts";
 import { pagesInScopeNl, siteOrigins } from "../lib/origins.ts";
-import { type Manifest, stepStart, writeManifest } from "../lib/manifest.ts";
+import { type Manifest, stepStart, sweepToolchain, writeManifest } from "../lib/manifest.ts";
 import { agentPhaseTimings } from "../lib/timing.ts";
 import { sessionWatchAnswers } from "../lib/timelimits.ts";
 import { stopSessionWatch } from "./watch-session.ts";
@@ -298,6 +298,7 @@ export async function evaluate(options: EvaluateOptions): Promise<Evaluation> {
   // How often an agent added to its own budget, per role: a run where that happens often has budgets that do not fit.
   const extensions = extensionUse(options.run);
 
+  const sweep = sweepToolchain(options.run, manifest.toolbox);
   const evaluation: Evaluation = {
     schema: "loep/evaluation/1",
     site: { name: options.name, baseUrl: run.inventory.baseUrl, ...(origins.length > 1 ? { origins } : {}), organisation: options.organisation, ...(description ? { descriptionNl: description } : {}) },
@@ -334,6 +335,7 @@ export async function evaluate(options: EvaluateOptions): Promise<Evaluation> {
     browsers: browsersUsed,
     technologies: [...technologies].sort(),
     toolchain: { toolbox: manifest.toolbox, runtime: manifest.runtime, packages: manifest.packages, browser: manifest.browser, rendering: manifest.rendering },
+    ...(sweep ? { sweepToolchain: sweep } : {}),
     ...(instruments.length > 0 ? { instruments } : {}),
     aiGenerated: aiGeneratedMark({ model: options.model, models: agentModels }, criteria),
     versionAccuracy: readVersionAccuracy(manifest.toolbox.version),

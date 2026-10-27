@@ -1,7 +1,7 @@
 import { KIND_NAME_NL, kindsNl } from "./documents.ts";
 import { BASIS_NL } from "./basis.ts";
 import { pageIndex, type Defect } from "./defects.ts";
-import { aiGeneratedMark, changedSinceCommit, closeCutQuote, versionAccuracyNl, complianceStatus, evaluationHash, idsAcrossVersionsNl, knownCommit, madeWith, openCriteria, OUTAGE_NL, OUTCOME_LABEL, type ComplianceStatus, type CriterionOutcome, type CriterionResult, type Evaluation, type ReportFinding, type Signature } from "./evaluation.ts";
+import { aiGeneratedMark, changedSinceCommit, closeCutQuote, versionAccuracyNl, complianceStatus, evaluationHash, idsAcrossVersionsNl, knownCommit, madeWith, sweepMadeWith, openCriteria, OUTAGE_NL, OUTCOME_LABEL, type ComplianceStatus, type CriterionOutcome, type CriterionResult, type Evaluation, type ReportFinding, type Signature } from "./evaluation.ts";
 import { modelOf } from "../instruments/methods/registry.ts";
 import { signatureIsCurrent } from "../commands/sign.ts";
 import { extensionsNl } from "./budget.ts";
@@ -293,6 +293,8 @@ export interface ReportDerived {
   /** Where the report came from: with the commit for the cover, without for the foot of every page. */
   madeWithNl: string;
   madeWithShortNl: string;
+  /** Only in a copy made with `variant` whose sweep is of other code: what measured the sweep, for the facts under Gereedschap. Null elsewhere. */
+  sweepNl: string | null;
   /** The one sentence that says what the toolbox is and whose the judgment is. */
   instrumentNl: string;
   /** The commit of the toolbox; null when it did not run from a git repository, also for the placeholder an older run wrote. */
@@ -983,11 +985,13 @@ export function deriveReport(input: Evaluation, decisions: DecisionLayer = { dec
   const chain = chainText(evaluation);
   const work = todo(evaluation);
   const procedureLimits = new Set(evaluation.criteria.filter((criterion) => criterion.procedure?.limitsNl).map((criterion) => `${criterion.id} ${criterion.titleNl}: ${criterion.procedure!.limitsNl}`));
+  const sweep = sweepMadeWith(evaluation);
   return {
     hash,
     hashShort: hash.slice(0, 12),
     dateNl: dateNl(evaluation.evaluatedAt),
-    madeWithNl: `${REPORT_TEXT.madeWith} ${madeWith(evaluation, true)}`,
+    madeWithNl: sweep ? `${REPORT_TEXT.madeWith} ${madeWith(evaluation, true)} voor de fasen van de agents; de veegronde is gemaakt met ${sweep}` : `${REPORT_TEXT.madeWith} ${madeWith(evaluation, true)}`,
+    sweepNl: sweep ? `${sweep}, ${evaluation.sweepToolchain!.browser ? `browser ${evaluation.sweepToolchain!.browser.name} ${evaluation.sweepToolchain!.browser.version ?? "onbekend"}` : "browser onbekend (niet vastgelegd in variant.json)"}; de pakketten hieronder zijn die van de fasen van de agents` : null,
     madeWithShortNl: `${REPORT_TEXT.madeWith} ${madeWith(evaluation)}`,
     instrumentNl: `${madeWith(evaluation)}, ${REPORT_TEXT.instrument}.`,
     toolboxCommit: knownCommit(evaluation.toolchain.toolbox),
@@ -1503,6 +1507,7 @@ export function renderMarkdown(input: Evaluation, decisions: DecisionLayer = { d
   lines.push(
     ...bullets([
       `Toolbox: loep, versie ${esc(toolchain.toolbox.version)}, commit ${derived.toolboxCommit ? code(derived.toolboxCommit.slice(0, 12)) : REPORT_TEXT.commitUnknown}`,
+      ...(derived.sweepNl ? [`Toolbox van de veegronde: ${esc(derived.sweepNl)}`] : []),
       `Lockfile: ${shortHash(toolchain.toolbox.lockfileSha256)}`,
       `Runtime: Node ${esc(toolchain.runtime.node)} op ${esc(toolchain.runtime.platform)} ${esc(toolchain.runtime.osRelease)} (${esc(toolchain.runtime.arch)})`,
       `Pakketten: ${Object.keys(toolchain.packages).sort().map((name) => `${code(name)} ${esc(toolchain.packages[name]!)}`).join(", ")}`,

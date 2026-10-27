@@ -837,6 +837,7 @@
   let agent-models = derived.at("agentModels", default: none)
   facts(
     ("Toolbox", [loep, versie #toolchain.toolbox.version, commit #if derived.toolboxCommit == none { t.commitUnknown } else { short-hash(derived.toolboxCommit, length: 12) }]),
+    ..if derived.at("sweepNl", default: none) != none { (("Toolbox van de veegronde", derived.sweepNl),) } else { () },
     ("Lockfile", short-hash(toolchain.toolbox.lockfileSha256)),
     ("Runtime", [Node #toolchain.runtime.node op #toolchain.runtime.platform #toolchain.runtime.osRelease (#toolchain.runtime.arch)]),
     ("Pakketten", toolchain.packages.keys().sorted().map(name => [#mono(name) #toolchain.packages.at(name)]).join(linebreak())),

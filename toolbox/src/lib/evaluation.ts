@@ -4,7 +4,7 @@ import type { EvaluationDocuments } from "./documents.ts";
 import { sha256, stableId } from "./canonical.ts";
 import type { FindingCutout } from "./cutout.ts";
 import type { Defect, MergeRecord } from "./defects.ts";
-import type { Manifest } from "./manifest.ts";
+import type { Manifest, SweepToolchain } from "./manifest.ts";
 import type { RoleExtensions } from "./budget.ts";
 import { MODEL_UNKNOWN, type RoleModels } from "./models.ts";
 import type { RecordedVia } from "./recorded.ts";
@@ -323,6 +323,11 @@ export interface Evaluation {
   browsers?: BrowserUse[];
   technologies: string[];
   toolchain: Omit<Manifest, "steps">;
+  /**
+   * Only in a copy made with `variant` whose sweep was measured with other code than `toolchain`: the code of the sweep
+   * (from variant.json). `toolchain` is then the code of the agent phases. Absent in every other evaluation.
+   */
+  sweepToolchain?: SweepToolchain;
   /** Every implementation that answered a measurement of an agent, read from the observations. Absent in an evaluation without sessions or from before this was kept. */
   instruments?: { implementation: string; version: string | null; licence: string | null; usedForNl: string[]; measurements: number }[];
   /**
@@ -710,10 +715,18 @@ export function changedSinceCommit(toolbox: { commit?: string | null; dirty?: bo
  * A toolbox that did not run from a git repository has no commit to name, so the version stands alone.
  */
 export function madeWith(evaluation: Evaluation, withCommit = false): string {
-  const { version } = evaluation.toolchain.toolbox;
-  const commit = knownCommit(evaluation.toolchain.toolbox);
-  if (!withCommit || commit === null) return `${TOOL_NAME} ${version}`;
-  return `${TOOL_NAME} ${version}, commit ${commit.slice(0, 12)}${changedSinceCommit(evaluation.toolchain.toolbox) ? " met niet vastgelegde wijzigingen" : ""}`;
+  return toolboxLabel(evaluation.toolchain.toolbox, withCommit);
+}
+
+function toolboxLabel(toolbox: Manifest["toolbox"], withCommit: boolean): string {
+  const commit = knownCommit(toolbox);
+  if (!withCommit || commit === null) return `${TOOL_NAME} ${toolbox.version}`;
+  return `${TOOL_NAME} ${toolbox.version}, commit ${commit.slice(0, 12)}${changedSinceCommit(toolbox) ? " met niet vastgelegde wijzigingen" : ""}`;
+}
+
+/** "loep 0.10.0+unreleased, commit 886b74a15776" for the code that measured the sweep of a copy made with `variant`; null when the evaluation has no such copy. */
+export function sweepMadeWith(evaluation: Evaluation): string | null {
+  return evaluation.sweepToolchain ? toolboxLabel(evaluation.sweepToolchain.toolbox, true) : null;
 }
 
 export function evaluationHash(evaluation: Evaluation): string {
