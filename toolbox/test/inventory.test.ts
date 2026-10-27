@@ -317,6 +317,28 @@ test("a page with a link whose address Chromium accepts and Node does not is sti
 });
 
 
+test("a page with a frame whose address Chromium accepts and Node does not is still a page, and its links are followed (#342)", async (context) => {
+  const statement = html("Verklaring", ["/"]).replace("</main>", '<iframe src="https://www.example.nl&nbsp; via" title="kaart"></iframe><a href="/contact">Contact</a></main>');
+  const site = createServer((request, response) => {
+    const path = new URL(request.url!, "http://x").pathname;
+    const known: Record<string, string> = { "/": html("Start", ["/verklaring"]), "/verklaring": statement, "/contact": html("Contact", ["/"]) };
+    response.writeHead(known[path] ? 200 : 404, { "content-type": "text/html; charset=utf-8" });
+    response.end(known[path] ?? html("Niet gevonden", ["/"]));
+  });
+  await new Promise<void>((resolve) => site.listen(0, "127.0.0.1", resolve));
+  context.after(() => new Promise<void>((resolve) => void site.close(() => resolve())));
+  const at = `http://127.0.0.1:${(site.address() as { port: number }).port}`;
+  let found: Inventory;
+  try {
+    found = await inventory({ baseUrl: `${at}/`, out: join(scratch, "invalid-frame"), maxPages: 10 });
+  } catch (error) {
+    if (/Executable doesn't exist|browserType.launch/.test((error as Error).message)) return context.skip("no browser available");
+    throw error;
+  }
+  assert.ok(found.pages.some((page) => page.url === `${at}/verklaring`), "the page with the broken frame is in the inventory");
+  assert.ok(found.pages.some((page) => page.url === `${at}/contact`), "a link after the frame is followed");
+});
+
 test("with a fixed list every listed page goes before a frame found on one, also when the frame's server has the lower port", async (context) => {
   const free: number[] = [];
   for (let count = 0; count < 3; count++) {
