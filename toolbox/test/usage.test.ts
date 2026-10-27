@@ -104,6 +104,16 @@ test("in a workflow over one run, an agent that names no run counts too", () => 
   assert.equal(file.sourceNl, "Geteld uit de transcripts van 2 agents in een-run, elk assistent-bericht één keer.");
 });
 
+test("a relative path or one with a tilde names no run, so that agent counts and is not taken for another run", () => {
+  const only = run("relatief-1", ["1.1.1"]);
+  const dir = workflow("relatief", [
+    ["judges 1.1.1", `Lees ${only}/tasks/1.1.1/beoordeel.md en voer de opdracht uit.`, 2],
+    ["walks start", "Lees runs/relatief-1/rondgang/start.md en voer de opdracht uit.", 1],
+    ["verifiers 1.1.1", "Lees ~/loep-runs/relatief-1/tasks/1.1.1/verifieer.md en voer de opdracht uit.", 3],
+  ]);
+  assert.deepEqual(outputs(usageFromTranscripts({ transcripts: dir, run: only })), { "walk start": 1, "judge 1.1.1": 2, "verifier 1.1.1": 3 });
+});
+
 test("compare-variants counts the file per role, with the price of each model, over the criteria of --criteria", async () => {
   const path = join(scratch, "verbruik.json");
   write(path, usageFromTranscripts({ transcripts: TRANSCRIPTS, run: measured }));

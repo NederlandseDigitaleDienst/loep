@@ -60,7 +60,8 @@ export function transcriptUsage(text: string): Map<string, Tokens & { turns: num
 const runPath = (path: string): string => (existsSync(path) ? realpathSync(path) : resolve(path));
 
 /** A task file of an agent (`rondgang/<id>.md`, `tasks/<id>/beoordeel.md`) or `pending --run <run>`: the run folder it names. */
-const RUN_NAMED = [/(\/[^\s"'`]+?)\/+(?:rondgang\/[^/\s"'`]+\.md|tasks\/[^/\s"'`]+\/(?:beoordeel|verifieer|afmaak)\.md)/g, /\bpending\s+--run\s+["']?(\/[^\s"'`]+)/g];
+// Only an absolute path that starts a word names a run: in a relative path or one with a tilde the run cannot be told, and then the agent names none and counts (#347).
+const RUN_NAMED = [/(?<=^|[\s"'`(=:])(\/[^\s"'`]+?)\/+(?:rondgang\/[^/\s"'`]+\.md|tasks\/[^/\s"'`]+\/(?:beoordeel|verifieer|afmaak)\.md)/g, /\bpending\s+--run\s+["']?(\/[^\s"'`]+)/g];
 
 /**
  * The run folders the first prompt of a transcript names by an absolute path, to tell the runs of
