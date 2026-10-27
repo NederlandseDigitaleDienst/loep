@@ -6,11 +6,11 @@ import { readJson, sha256, sha256File, writeFileAtomic, writeJson } from "../lib
 import { type Manifest, stepStart, writeManifest } from "../lib/manifest.ts";
 import { readTemplate } from "../lib/templates.ts";
 import { agentLoginNl, loginForRun } from "../lib/login.ts";
-import { recordReads } from "../lib/reads.ts";
+import { heldBackSearches, heldBackSearchNl, recordReads, type HeldBackSearch } from "../lib/reads.ts";
 import { makeWorkDir } from "../lib/workdir.ts";
 import { siteLabel } from "../lib/origins.ts";
 import { textHasTerm } from "../lib/searchterm.ts";
-import { acceptedGapFor, frameAddress, literalSearchTermNl, NOT_OPENED_ON_PAGE_TYPE, POSTCONDITION_NOT_HELD_NL, SEARCH_TERM_PLACEHOLDER, notOpenedAdviceNl, pageTypesToCheck, readSiteModel, REVIEW_MISSING, searchTermForRun, sendsToCandidates, sendsToReplayProblem, SITE_CHECK_FILE, SITE_MODEL_FILE, validateSiteModel, type ModelContext, type PageType, type Postcondition, type SiteCheck, type SiteModel } from "../lib/sitemodel.ts";
+import { acceptedGapFor, approvedReads, frameAddress, literalSearchTermNl, NOT_OPENED_ON_PAGE_TYPE, POSTCONDITION_NOT_HELD_NL, SEARCH_TERM_PLACEHOLDER, notOpenedAdviceNl, pageTypesToCheck, readSiteModel, REVIEW_MISSING, searchTermForRun, sendsToCandidates, sendsToReplayProblem, SITE_CHECK_FILE, SITE_MODEL_FILE, validateSiteModel, type ModelContext, type PageType, type Postcondition, type SiteCheck, type SiteModel } from "../lib/sitemodel.ts";
 import { LOOK_COMMANDS } from "../lib/verdict.ts";
 import { readObservation } from "../session/observations.ts";
 import { holds, loadRecipes, MAX_RECIPE_STEPS, replayEnv, replayFromClean, replaySteps } from "../session/recipe.ts";
@@ -102,6 +102,8 @@ export async function explore(runDir: string): Promise<{ task: string; pages: nu
   const forExplorer = (gate && !gate.sufficient ? gate.gaps : []).filter((gap) => gap.fixedBy !== "sweep");
   // And what the model itself lacks by today's rules, without replaying anything.
   const modelProblems = existsSync(join(runDir, SITE_MODEL_FILE)) ? await staticProblems(runDir, inventory) : [];
+  // And the search questions any session held back because no rule of the checked model covers their address.
+  const searches = existsSync(join(runDir, SITE_MODEL_FILE)) ? await searchesHeldBack(runDir) : [];
   const previous = !existsSync(join(runDir, SITE_MODEL_FILE))
     ? ""
     : [
@@ -111,7 +113,8 @@ export async function explore(runDir: string): Promise<{ task: string; pages: nu
         "",
         ...(modelProblems.length > 0 ? ["De controle keurt het model nu af op:", "", ...modelProblems.map((problem) => `- ${problem}`), ""] : []),
         ...(forExplorer.length > 0 ? ["De bewijspoort vond na het meten deze gaten:", "", ...forExplorer.map((gap) => `- **${gap.check}**${gap.url ? `, ${gap.url}` : ""}${gap.state && gap.state !== "default" ? `, toestand ${gap.state}` : ""}: ${gap.missingNl}`), ""] : []),
-        ...(modelProblems.length + forExplorer.length === 0 ? ["Er zijn geen open punten gemeld. Loop de werkwijze na op wat het model nog mist, met name stap 2b.", ""] : []),
+        ...(searches.length > 0 ? ["Deze zoekvragen hield loep tegen omdat geen leesverzoek hun adres dekt; wat pas na zoeken te zien is, kon daardoor niet worden gemeten. Leg elk adres vast in `readRequests` (stap 4), met de genoemde dienst in `service` en de genoemde waarneming in `observation`, en draai de controle van stap 7:", "", ...searches.map((search) => `- ${heldBackSearchNl(search)}`), ""] : []),
+        ...(modelProblems.length + forExplorer.length + searches.length === 0 ? ["Er zijn geen open punten gemeld. Loop de werkwijze na op wat het model nog mist, met name stap 2b.", ""] : []),
         "Is een gat een eigenschap van de site zelf en geen gemis in het model (de site heeft echt een toetsenbordval, een onderdeel gaat echt niet open), leg dat dan vast in `acceptedGaps`: `{ \"check\": \"<naam van de controle>\", \"page\": \"<adres>\", \"reasonNl\": \"wat je zag\", \"observation\": \"<id van de waarneming die het toont, bijvoorbeeld verken-0042>\", \"decidedBy\": \"verkenner\" }`. Schrijf in `decidedBy` altijd `verkenner`: `persoon` zet alleen een persoon die de uitzondering zelf heeft vastgesteld. Bij `component-not-opened-on-page-type` hoort er ook `\"component\": \"<id van het onderdeel>\"` bij: de regel geldt dan alleen voor dat onderdeel. Bij `review-state` (het beeld van een toestand dat de beoordeling van de poort afwees) hoort `\"state\": \"<id van de toestand>\"` erbij: de regel geldt dan alleen voor die toestand, niet voor andere toestanden op dezelfde pagina. Zeg je bij `review-missing` dat het onderdeel er niet is, dan is `observation` een `look`, `crop`, `html`, `find` of `ax` op die pagina die dat laat zien; een rij die in `operables.json` ontbreekt, is geen bewijs.",
       ].join("\n");
 
@@ -227,6 +230,16 @@ export async function looksSeen(runDir: string): Promise<Record<string, string |
     seen[id] = (LOOK_COMMANDS as readonly string[]).includes(observation.command) && observation.error === null ? (observation.page?.url ?? null) : null;
   }
   return seen;
+}
+
+/** The search questions the sessions of this run held back that no read request of the checked model covers. */
+export async function searchesHeldBack(runDir: string): Promise<HeldBackSearch[]> {
+  const observations = [];
+  for (const id of [...(await observationIds(runDir))].sort()) {
+    const observation = await readObservation(runDir, id).catch(() => null);
+    if (observation) observations.push(observation);
+  }
+  return heldBackSearches(observations, approvedReads(runDir));
 }
 
 async function observationIds(runDir: string): Promise<Set<string>> {

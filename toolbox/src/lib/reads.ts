@@ -110,12 +110,52 @@ export function pathMatches(pattern: string, pathname: string): boolean {
   return want.length === have.length && want.every((segment, index) => (segment === "*" ? have[index] !== "" : segment === have[index]));
 }
 
-/** Whether a rule covers this method and address; the query does not count. */
-export function readMatches(rule: Pick<ReadRequest, "method" | "origin" | "path">, method: string, url: string): boolean {
+// The hosts of one Algolia application, as Algolia's REST API reference and its clients name them:
+// <APPID>.algolia.net, <APPID>-dsn.algolia.net and the fallbacks <APPID>-1, -2 and -3.algolianet.com.
+// A site can move its search from one to another without notice.
+const ALGOLIA_HOST = /^([a-z0-9]+)(?:\.algolia\.net|-dsn\.algolia\.net|-[1-3]\.algolianet\.com)$/;
+
+/** The id of the Algolia application whose host an origin is, in lower case; null for any other origin. */
+function algoliaApplication(origin: string): string | null {
+  try {
+    const parsed = new URL(origin);
+    return parsed.protocol === "https:" && parsed.port === "" ? (ALGOLIA_HOST.exec(parsed.hostname.toLowerCase())?.[1] ?? null) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** The two search endpoints of Algolia: all indices at once (with a literal `*`), or one index. */
+const isAlgoliaSearchPath = (path: unknown): boolean => typeof path === "string" && (path === "/1/indexes/*/queries" || pathMatches("/1/indexes/*/query", path));
+
+/** Whether a rule is for a search of an Algolia application and this origin is a host of the same application. */
+function sameAlgoliaApplication(rule: Pick<ReadRequest, "origin" | "path" | "service">, origin: string): boolean {
+  if (rule.service !== "algolia" || !isAlgoliaSearchPath(rule.path)) return false;
+  const application = algoliaApplication(rule.origin);
+  return application !== null && application === algoliaApplication(origin);
+}
+
+/**
+ * Whether a rule covers this method and address; the query does not count. Origin and path fit
+ * exactly, except for a rule on an Algolia search endpoint: that covers both search endpoints on
+ * every host of the same application. Whether the request passes is still up to its body.
+ */
+export function readMatches(rule: Pick<ReadRequest, "method" | "origin" | "path" | "service">, method: string, url: string): boolean {
   if (method.toUpperCase() !== rule.method) return false;
   try {
     const parsed = new URL(url);
-    return parsed.origin === rule.origin && pathMatches(rule.path, parsed.pathname);
+    if (parsed.origin === rule.origin && pathMatches(rule.path, parsed.pathname)) return true;
+    return isAlgoliaSearchPath(parsed.pathname) && sameAlgoliaApplication(rule, parsed.origin);
+  } catch {
+    return false;
+  }
+}
+
+/** Whether an address is on an origin the rule covers: where a redirect after a read may be followed. */
+export function onReadOrigin(rule: Pick<ReadRequest, "origin" | "path" | "service">, url: string): boolean {
+  try {
+    const { origin } = new URL(url);
+    return origin === rule.origin || sameAlgoliaApplication(rule, origin);
   } catch {
     return false;
   }
@@ -208,6 +248,80 @@ export const addressOf = (url: string): string => {
     return url.split("?")[0]!.slice(0, 300);
   }
 };
+
+/** A POST whose body loep took for a search question, held back because no rule covers its address: per address and service, how often, and the first observation. */
+export interface HeldBackSearch {
+  /** Origin and path, without query. */
+  address: string;
+  services: SearchServiceId[];
+  count: number;
+  observation: string;
+}
+
+type ObservedBlock = { kind: string; method: string; url: string; search?: readonly string[] };
+
+/**
+ * The search questions in these observations that were held back and that no rule of `rules`
+ * covers. A session only marks a held-back POST as a search when no rule covered it, so what a
+ * rule added later covers drops out here.
+ */
+export function heldBackSearches(observations: Iterable<{ id: string; blocked?: readonly ObservedBlock[] }>, rules: readonly ReadRequest[]): HeldBackSearch[] {
+  const found = new Map<string, HeldBackSearch>();
+  for (const observation of observations) {
+    for (const entry of observation.blocked ?? []) {
+      const services = (entry.search ?? []).filter((service): service is SearchServiceId => (SEARCH_SERVICE_IDS as readonly string[]).includes(service));
+      if (entry.kind !== "method" || entry.method !== "POST" || services.length === 0 || readRuleFor(rules, entry.method, entry.url)) continue;
+      const address = addressOf(entry.url);
+      const key = `${address} ${services.join(",")}`;
+      const seen = found.get(key);
+      if (seen) seen.count++;
+      else found.set(key, { address, services, count: 1, observation: observation.id });
+    }
+  }
+  return [...found.values()].sort((a, b) => b.count - a.count || a.address.localeCompare(b.address));
+}
+
+/** A POST to an address a rule covers whose body loep did not take for a search question: per address and rule, how often, the first observation and its reason. */
+export interface RefusedCoveredRead {
+  address: string;
+  rule: string;
+  count: number;
+  observation: string;
+  /** Absent when the request was held back before the rule existed. */
+  reasonNl?: string;
+}
+
+/**
+ * The POSTs in these observations that a rule of `rules` covers but that were held back
+ * because loep did not recognise the body. Only loep can let those through, with a new form in
+ * `searchbody.ts`; a rule of the explorer cannot.
+ */
+export function refusedCoveredReads(observations: Iterable<{ id: string; blocked?: readonly (ObservedBlock & { reasonNl?: string })[] }>, rules: readonly ReadRequest[]): RefusedCoveredRead[] {
+  const found = new Map<string, RefusedCoveredRead>();
+  for (const observation of observations) {
+    for (const entry of observation.blocked ?? []) {
+      if (entry.kind !== "method" || entry.method !== "POST" || (entry.search ?? []).length > 0) continue;
+      const rule = readRuleFor(rules, entry.method, entry.url);
+      if (!rule) continue;
+      const address = addressOf(entry.url);
+      const key = `${address} ${rule.id}`;
+      const seen = found.get(key);
+      if (seen) {
+        seen.count++;
+        if (!seen.reasonNl && entry.reasonNl) seen.reasonNl = entry.reasonNl;
+      } else found.set(key, { address, rule: rule.id, count: 1, observation: observation.id, ...(entry.reasonNl ? { reasonNl: entry.reasonNl } : {}) });
+    }
+  }
+  return [...found.values()].sort((a, b) => b.count - a.count || a.address.localeCompare(b.address));
+}
+
+/** One held-back search in the words of the operator and the explorer. */
+export const heldBackSearchNl = (entry: HeldBackSearch): string =>
+  `POST ${entry.address}, zoekvraag aan ${entry.services.map((service) => SEARCH_SERVICES[service].nameNl).join(" of ")}: ${entry.count} keer tegengehouden, het eerst in waarneming ${entry.observation}`;
+
+/** What a session says when it held back a search question that no rule covers. */
+export const SEARCH_HELD_BACK_NL =
+  "loep herkende de body als zoekvraag, maar geen leesverzoek van het sitemodel dekt dit adres: daarom is ze tegengehouden. De verkenner legt het adres vast in readRequests van site.json; na check-site gaat de zoekvraag door. Blijft daardoor iets open, noem dit adres dan in het punt `proef werkte niet:`";
 
 type ReadText = { method: string; origin: string; path: string; service?: string; reasonNl: string };
 
