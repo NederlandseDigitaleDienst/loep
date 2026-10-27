@@ -1,13 +1,14 @@
 import type { Sample } from "../commands/sample.ts";
+import type { Basis } from "./basis.ts";
 import type { EvaluationDocuments } from "./documents.ts";
 import { sha256, stableId } from "./canonical.ts";
 import type { FindingCutout } from "./cutout.ts";
 import type { Defect, MergeRecord } from "./defects.ts";
-import type { Manifest } from "./manifest.ts";
+import type { Manifest, SweepToolchain } from "./manifest.ts";
 import type { RoleExtensions } from "./budget.ts";
 import { MODEL_UNKNOWN, type RoleModels } from "./models.ts";
 import type { RecordedVia } from "./recorded.ts";
-import { openPoint, shadowPartOf, vendorElementsIn, WITHIN_REACH, type CrossLoop, type Recommendation, type Finding, type Observation, type Outcome, type Verdict } from "./verdict.ts";
+import { openPoint, OUTSIDE_SCOPE, shadowPartOf, vendorElementsIn, WITHIN_REACH, type CrossLoop, type Recommendation, type Finding, type Observation, type Outcome, type Verdict } from "./verdict.ts";
 import { compareCriterionIds, CRITERIA, en301549Clause, GUIDELINES, PRINCIPLES, understandingUrl, type Criterion, type WcagVersion } from "./wcag.ts";
 
 /** "untested" means no verdict was reached at all; it is never rounded up to anything else. */
@@ -182,6 +183,12 @@ export interface CriterionResult {
   /** Recommendations under a rule of the procedure, with any outcome. Absent when there is none, and in an evaluation from before recommendations existed. */
   recommendations?: ReportRecommendation[];
   missingNl: string[];
+  /** Points about this investigation in a criterion whose outcome does not hang on them, such as a probe that did not work in a failed criterion (#318). Absent when there are none, and in older evaluations. */
+  limitsNl?: string[];
+  /** What the outcome rests on, derived from what the verdict cites (#318): an instrument, what an agent saw, a person, or nothing yet. Absent in older evaluations. */
+  basis?: Basis;
+  /** The same per examined place, in the order of `observations`. Absent in older evaluations. */
+  placeBasis?: ("measured" | "observed")[];
   /**
    * With "cantTell": no deviation was found, but not everything was measured; `coverageNl` says
    * what was. The outcome stays "cantTell" and counts as open. Absent when the question is
@@ -316,6 +323,11 @@ export interface Evaluation {
   browsers?: BrowserUse[];
   technologies: string[];
   toolchain: Omit<Manifest, "steps">;
+  /**
+   * Only in a copy made with `variant` whose sweep was measured with other code than `toolchain`: the code of the sweep
+   * (from variant.json). `toolchain` is then the code of the agent phases. Absent in every other evaluation.
+   */
+  sweepToolchain?: SweepToolchain;
   /** Every implementation that answered a measurement of an agent, read from the observations. Absent in an evaluation without sessions or from before this was kept. */
   instruments?: { implementation: string; version: string | null; licence: string | null; usedForNl: string[]; measurements: number }[];
   /**
@@ -379,6 +391,21 @@ export interface RoundVerdicts {
   finish?: Verdict | null;
   /** The verdict of the finishing round before the one that counts, when the round ran again with `tasks --again`: kept, and shown as what stood before. */
   finishBefore?: Verdict | null;
+}
+
+/** Whether an open point is about this investigation and not something the owner of the site can do: a limit of loep, an unreachable part, or content outside the scope. */
+export function aboutThisInvestigation(point: string): boolean {
+  const kind = openPoint(point).kind;
+  return kind !== null && (kind.reader !== "owner" || kind.prefix === OUTSIDE_SCOPE);
+}
+
+/**
+ * The open points of a criterion, split into what stays open and what is a limit (#318): in a failed
+ * criterion every point about this investigation is a limit, because the outcome stands without it.
+ */
+export function splitPoints(points: string[], outcome: string): { openNl: string[]; limitsNl: string[] } {
+  if (outcome !== "failed") return { openNl: points, limitsNl: [] };
+  return { openNl: points.filter((point) => !aboutThisInvestigation(point)), limitsNl: points.filter(aboutThisInvestigation) };
 }
 
 export interface CriterionInput {
@@ -506,6 +533,8 @@ export function resolveCriterion(input: CriterionInput, sitePrefix: string): Cri
     used.add(id);
     return { ...entry, component: entry.component ?? null, id, criterion: criterion.id };
   });
+  // In a failed criterion a point about this investigation does not change the outcome: it is a limit (#318).
+  const points = splitPoints([...(answered ? answered.remainingNl : (final?.missingNl ?? [])), ...unruled], outcome);
   return {
     id: criterion.id,
     titleNl: criterion.titleNl,
@@ -526,7 +555,8 @@ export function resolveCriterion(input: CriterionInput, sitePrefix: string): Cri
     observations: final?.observations ?? [],
     findings,
     ...(recommendations.length > 0 ? { recommendations } : {}),
-    missingNl: [...(answered ? answered.remainingNl : (final?.missingNl ?? [])), ...unruled],
+    missingNl: points.openNl,
+    ...(points.limitsNl.length > 0 ? { limitsNl: points.limitsNl } : {}),
     ...(outcome === "cantTell" && final?.nothingFound ? { nothingFound: { coverageNl: final.nothingFound.coverageNl } } : {}),
     rounds: { a: verdicts.a?.outcome ?? null, b: null, final: verified?.outcome ?? null, ...(finish ? { finish: finish.outcome } : {}) },
     ...(established ? { established } : {}),
@@ -685,10 +715,18 @@ export function changedSinceCommit(toolbox: { commit?: string | null; dirty?: bo
  * A toolbox that did not run from a git repository has no commit to name, so the version stands alone.
  */
 export function madeWith(evaluation: Evaluation, withCommit = false): string {
-  const { version } = evaluation.toolchain.toolbox;
-  const commit = knownCommit(evaluation.toolchain.toolbox);
-  if (!withCommit || commit === null) return `${TOOL_NAME} ${version}`;
-  return `${TOOL_NAME} ${version}, commit ${commit.slice(0, 12)}${changedSinceCommit(evaluation.toolchain.toolbox) ? " met niet vastgelegde wijzigingen" : ""}`;
+  return toolboxLabel(evaluation.toolchain.toolbox, withCommit);
+}
+
+function toolboxLabel(toolbox: Manifest["toolbox"], withCommit: boolean): string {
+  const commit = knownCommit(toolbox);
+  if (!withCommit || commit === null) return `${TOOL_NAME} ${toolbox.version}`;
+  return `${TOOL_NAME} ${toolbox.version}, commit ${commit.slice(0, 12)}${changedSinceCommit(toolbox) ? " met niet vastgelegde wijzigingen" : ""}`;
+}
+
+/** "loep 0.10.0+unreleased, commit 886b74a15776" for the code that measured the sweep of a copy made with `variant`; null when the evaluation has no such copy. */
+export function sweepMadeWith(evaluation: Evaluation): string | null {
+  return evaluation.sweepToolchain ? toolboxLabel(evaluation.sweepToolchain.toolbox, true) : null;
 }
 
 export function evaluationHash(evaluation: Evaluation): string {

@@ -140,7 +140,10 @@ Dezelfde vorm als het oordeel van de beoordelaar, door jou opnieuw geschreven, m
     { "rule": "A1", "titleNl": "...", "observedNl": "...", "recommendationNl": "...", "component": null, "locations": [ { "page": "P03", "where": "...", "heading": "..." } ], "evidence": ["{{session}}-0018"] }
   ],
   "nothingFound": { "coverageNl": "Alleen bij cantTell zonder afwijking: wat wel is gemeten, met aantallen." },
-  "missingNl": ["Bij cantTell en bij open punten: de soort, een dubbele punt en wat er nodig is, zoals: mens nodig: wat NVDA en JAWS voorlezen bij het uitklapmenu op P03; VoiceOver met Safari las de naam en de toestand voor."],
+  "missingNl": ["Bij cantTell en bij open punten: de soort, een dubbele punt en wat er nodig is, zoals: mens nodig: wat NVDA en JAWS voorlezen bij het uitklapmenu op P03; VoiceOver met Safari las de naam en de toestand voor.", "proef werkte niet: de meting van het contrast gaf op P05 bij de lijnen in het diagram geen verhouding, ook niet na een nieuwe open."],
+  "attempts": [
+    { "missing": 2, "triedNl": "Alleen bij een punt proef werkte niet of niet bereikbaar: wat je probeerde, op welke manieren en wanneer, en wat het instrument antwoordde.", "evidence": ["{{session}}-0030", "{{session}}-0033"] }
+  ],
   "verification": {
     "judgeOutcome": "failed",
     "findings": [
@@ -152,6 +155,8 @@ Dezelfde vorm als het oordeel van de beoordelaar, door jou opnieuw geschreven, m
   }
 }
 ```
+
+- `attempts`: één regel per punt `proef werkte niet:` of `niet bereikbaar:` in `missingNl`; `missing` is de plaats van dat punt in `missingNl`, geteld vanaf 1. Zo'n punt laat je alleen staan na een echte poging in je eigen sessie: minstens twee keer en op meer dan één manier geprobeerd, met minstens twee eigen waarnemingen in `evidence` (een commando dat mislukte telt mee). De controle weigert het punt zonder. Laat het veld weg als er geen zo'n punt is.
 
 - `verification.findings`: één regel per bevinding van de beoordelaar, met zijn `key`. `reproduced: true` vraagt minstens één waarneming van een kijk- of meetcommando uit je eigen sessie. `reproduced: false` vraagt `dropped` en `reasonNl`; bij `wrongCriterion` ook `belongsTo`.
 - `findings`: de bevindingen die blijven staan, met hun oude `key` en met jouw waarneming in `evidence`, plus wat je zelf vond (`V1`). Een vervallen bevinding staat er niet meer in.

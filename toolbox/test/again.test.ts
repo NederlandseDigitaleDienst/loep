@@ -48,17 +48,23 @@ const seen = (evidence: string[], ruling: "noIssue" | "open" = "noIssue"): Verdi
 const passEvidence = async (id: string, session: string): Promise<string[]> => (readDossierInFull(dir, session, id), [observe(session, "look"), ...(await task(id)).passCommands.map((command) => observe(session, command))]);
 const again = (ids: string[]): ReturnType<typeof instrumentTasks> => instrumentTasks(dir, { ...options, again: ids });
 
+/** Every round leaves a probe that did not work or a part that did not load only after a real attempt in its own session (#318). */
+const attemptsFor = (points: string[], session: string): Verdict["attempts"] => {
+  const tried = points.flatMap((point, position) => (/^(proef werkte niet|niet bereikbaar):/.test(point) ? [{ missing: position + 1, triedNl: "Het deel twee keer opnieuw geopend, met tijd ertussen, en het venster bekeken.", evidence: [observe(session, "open"), observe(session, "look")] }] : []));
+  return tried.length > 0 ? tried : undefined;
+};
+
 async function judgeAndVerify(id: string, outcome: "cantTell" | "passed", points: string[]): Promise<void> {
   const judge = `b-${digitsOf(id)}`;
   const judgeEvidence = outcome === "passed" ? await passEvidence(id, judge) : [observe(judge, "look")];
-  write(join("verdicts", id, "oordeel.json"), { criterion: id, outcome, rule: "R9", summaryNl: "Wat de beoordeling vaststelde op de bekeken pagina's.", observations: [seen(judgeEvidence, outcome === "passed" ? "noIssue" : "open")], findings: [], ...(points.length > 0 ? { missingNl: points } : {}) } satisfies Verdict);
+  write(join("verdicts", id, "oordeel.json"), { criterion: id, outcome, rule: "R9", summaryNl: "Wat de beoordeling vaststelde op de bekeken pagina's.", observations: [seen(judgeEvidence, outcome === "passed" ? "noIssue" : "open")], findings: [], ...(points.length > 0 ? { missingNl: points, attempts: attemptsFor(points, judge) } : {}) } satisfies Verdict);
   assert.deepEqual(await checkInstrumentVerdict(dir, id, "judge"), [], `judge ${id}`);
 }
 
 async function verify(id: string, outcome: "cantTell" | "passed", points: string[]): Promise<void> {
   const session = `v-${digitsOf(id)}`;
   const evidence = outcome === "passed" ? await passEvidence(id, session) : [observe(session, "look")];
-  write(join("verdicts", id, "final.json"), { criterion: id, outcome, rule: "R9", summaryNl: "Ook bij de controle is dit wat vaststaat.", observations: [seen(evidence, outcome === "passed" ? "noIssue" : "open")], findings: [], ...(points.length > 0 ? { missingNl: points } : {}), verification: { judgeOutcome: outcome, findings: [], attackNl: "Geprobeerd het oordeel onderuit te halen met een tweede blik op de contactpagina.", attackEvidence: evidence } } satisfies Verdict);
+  write(join("verdicts", id, "final.json"), { criterion: id, outcome, rule: "R9", summaryNl: "Ook bij de controle is dit wat vaststaat.", observations: [seen(evidence, outcome === "passed" ? "noIssue" : "open")], findings: [], ...(points.length > 0 ? { missingNl: points, attempts: attemptsFor(points, session) } : {}), verification: { judgeOutcome: outcome, findings: [], attackNl: "Geprobeerd het oordeel onderuit te halen met een tweede blik op de contactpagina.", attackEvidence: evidence } } satisfies Verdict);
   assert.deepEqual(await checkInstrumentVerdict(dir, id, "final"), [], `final ${id}`);
 }
 

@@ -1,4 +1,5 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { BASIS_NL, criterionBasis, placeBasis, type Basis } from "../lib/basis.ts";
 import { replaysNl } from "../lib/recordings.ts";
 import { findingCutout, type CutoutContext } from "../lib/cutout.ts";
 import { join } from "node:path";
@@ -8,7 +9,7 @@ import { aiGeneratedMark, allCriteriaSorted, carryFindingIds, ESTABLISHED_BY_NL,
 import { matchFindings, sideOf } from "../lib/difference.ts";
 import { documentScopeNl, evaluationDocuments, siteDocuments } from "../lib/documents.ts";
 import { pagesInScopeNl, siteOrigins } from "../lib/origins.ts";
-import { type Manifest, stepStart, writeManifest } from "../lib/manifest.ts";
+import { type Manifest, stepStart, sweepToolchain, writeManifest } from "../lib/manifest.ts";
 import { agentPhaseTimings } from "../lib/timing.ts";
 import { sessionWatchAnswers } from "../lib/timelimits.ts";
 import { stopSessionWatch } from "./watch-session.ts";
@@ -193,6 +194,9 @@ export async function evaluate(options: EvaluateOptions): Promise<Evaluation> {
     // what the judge said, unless the advice is about the inside of such an element: that only the vendor can change.
     const vendor = run.inventory.vendor;
     if (vendor) for (const finding of resolved.findings) markVendor(finding, vendor);
+    // What the outcome rests on, from what the verdict cites (#318).
+    resolved.basis = criterionBasis(resolved, observations.index);
+    resolved.placeBasis = resolved.observations.map((observation) => placeBasis(observation.evidence, observations.index));
     criteria.push(resolved);
   }
 
@@ -294,6 +298,7 @@ export async function evaluate(options: EvaluateOptions): Promise<Evaluation> {
   // How often an agent added to its own budget, per role: a run where that happens often has budgets that do not fit.
   const extensions = extensionUse(options.run);
 
+  const sweep = sweepToolchain(options.run, manifest.toolbox);
   const evaluation: Evaluation = {
     schema: "loep/evaluation/1",
     site: { name: options.name, baseUrl: run.inventory.baseUrl, ...(origins.length > 1 ? { origins } : {}), organisation: options.organisation, ...(description ? { descriptionNl: description } : {}) },
@@ -330,6 +335,7 @@ export async function evaluate(options: EvaluateOptions): Promise<Evaluation> {
     browsers: browsersUsed,
     technologies: [...technologies].sort(),
     toolchain: { toolbox: manifest.toolbox, runtime: manifest.runtime, packages: manifest.packages, browser: manifest.browser, rendering: manifest.rendering },
+    ...(sweep ? { sweepToolchain: sweep } : {}),
     ...(instruments.length > 0 ? { instruments } : {}),
     aiGenerated: aiGeneratedMark({ model: options.model, models: agentModels }, criteria),
     versionAccuracy: readVersionAccuracy(manifest.toolbox.version),
@@ -353,7 +359,17 @@ export async function evaluate(options: EvaluateOptions): Promise<Evaluation> {
   const merged = await mergeInto(options.run, evaluation, earlier);
   process.stderr.write(`${merged.defects} gebreken uit ${merged.findings} bevindingen\n`);
   await writeEvaluation(join(options.run, "evaluation.json"), evaluation);
+  const based = (basis: Basis): number => criteria.filter((criterion) => criterion.basis === basis).length;
+  process.stdout.write(`zekerheid: ${based("measured")} criteria ${BASIS_NL.measured}, ${based("observed")} ${BASIS_NL.observed}, ${based("person")} ${BASIS_NL.person}, ${based("open")} open\n`);
   for (const problem of rejected) process.stderr.write(`rejected ${problem}\n`);
+  // A verdict that no longer belongs to its task does not count, and its criterion has no outcome: say so where it is read, with what to do (#318).
+  const stale = rejected.filter((problem) => problem.endsWith(": no current stamp")).map((problem) => problem.split(":")[0]!);
+  if (stale.length > 0) {
+    // stale holds "<criterion>/<round>": only a criterion that ended without an outcome lost it to this; at another a later round still counts (#361).
+    const lost = [...new Set(stale.map((entry) => entry.split("/")[0]!))].filter((id) => criteria.find((criterion) => criterion.id === id)?.outcome === "untested");
+    const lostNl = lost.length === 0 ? " Een latere ronde telt wel, dus elk criterium heeft nog een uitkomst." : ` ${lost.length === 1 ? `Criterium ${lost[0]} heeft` : `De criteria ${lost.join(", ")} hebben`} daardoor geen uitkomst.`;
+    process.stdout.write(`LET OP: ${stale.length === 1 ? "een oordeel telt" : `${stale.length} oordelen tellen`} niet, want ${stale.length === 1 ? "het hoort" : "ze horen"} bij een eerdere opdracht of een eerder dossier (${stale.join(", ")}).${lostNl} Draai tasks opnieuw: dat zet de opdracht opnieuw klaar.\n`);
+  }
   // Per criterion who or what established the outcome: counted here, and said for every one that is not the verifier's.
   const by = (kind: keyof typeof ESTABLISHED_BY_NL): CriterionResult[] => criteria.filter((criterion) => criterion.established?.by === kind);
   const shown = (list: CriterionResult[]): string => list.map((criterion) => `${criterion.id} ${OUTCOME_LABEL[criterion.outcome].toLowerCase()}`).join("; ");
@@ -372,7 +388,7 @@ export async function evaluate(options: EvaluateOptions): Promise<Evaluation> {
   const unreachable = open.evaluation.filter((id) => criteria.find((criterion) => criterion.id === id)!.missingNl.some((point) => openPoint(point).kind?.prefix === UNREACHABLE));
   if (unreachable.length > 0) process.stderr.write(`open, een deel van de site was niet bereikbaar: ${idsAcrossVersionsNl(unreachable, criteria)}. Laadt het weer, zet dan een nieuwe afmaakronde klaar met tasks --again ${unreachable.join(",")}, en draai daarna opnieuw evaluate.\n`);
   // The phases with agents leave no step of their own: what their sessions say about begin, end and time per agent is kept here.
-  await writeManifest(options.run, { command: "evaluate", startedAt, criteria: criteria.length, rejectedVerdicts: rejected.length, defects: merged.defects, mergeProposal: merged.proposal, establishedBy: { verification: by("verification").length, finishing: finished.length, person: byPerson.length }, open, extensions, agentPhases: agentPhaseTimings(options.run) });
+  await writeManifest(options.run, { command: "evaluate", startedAt, criteria: criteria.length, rejectedVerdicts: rejected.length, ...(rejected.length > 0 ? { rejected } : {}), defects: merged.defects, mergeProposal: merged.proposal, establishedBy: { verification: by("verification").length, finishing: finished.length, person: byPerson.length }, open, extensions, agentPhases: agentPhaseTimings(options.run) });
   return evaluation;
 }
 

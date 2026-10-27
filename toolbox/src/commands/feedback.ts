@@ -101,9 +101,10 @@ function ownPointsByKind(criterion: CriterionResult): Map<string, string[]> {
   return byKind;
 }
 
-/** The points "proef werkte niet" that still stand in a criterion that did get an outcome. */
+/** The points "proef werkte niet" that still stand in a criterion that did get an outcome, open or as a limit. */
 function probePointsByKind(criterion: CriterionResult): Map<string, string[]> {
-  const points = criterion.missingNl.map(openPoint).filter((parsed) => parsed.kind?.prefix === PROBE_FAILED).map((parsed) => parsed.textNl);
+  // A probe that did not work in a failed criterion is a limit there (#318), and still a fault of loep.
+  const points = [...criterion.missingNl, ...(criterion.limitsNl ?? [])].map(openPoint).filter((parsed) => parsed.kind?.prefix === PROBE_FAILED).map((parsed) => parsed.textNl);
   return points.length > 0 ? new Map([[PROBE_FAILED, points]]) : new Map();
 }
 

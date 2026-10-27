@@ -40,7 +40,7 @@ export interface VariantRecord {
   noteNl: string | null;
   madeAt: string;
   /** The run whose sweep the copy keeps, by folder name; the code that last wrote its manifest; and its own variant when it was a copy too. */
-  from: { run: string; toolbox: Manifest["toolbox"] | null; variant: string | null };
+  from: { run: string; toolbox: Manifest["toolbox"] | null; variant: string | null; browser?: Manifest["browser"] | null };
   /** The code that made the copy. The agent phases of the copy run with this same code. */
   toolbox: Manifest["toolbox"];
   leftOut: { paths: string[]; sessions: string[]; recipes: string[] };
@@ -128,12 +128,15 @@ export async function variant(options: { run: string; out: string; name: string;
   }
   leftOut.sessions = [...sessions].sort();
 
+  const sourceManifest = readIfThere<Manifest>(join(run, "manifest.json"));
+  const sourceVariant = readIfThere<VariantRecord>(join(run, VARIANT_FILE));
   const record: VariantRecord = {
     schema: "loep/variant/1",
     name: options.name,
     noteNl: options.noteNl?.trim() || null,
     madeAt: new Date().toISOString(),
-    from: { run: basename(run), toolbox: readIfThere<Manifest>(join(run, "manifest.json"))?.toolbox ?? null, variant: readIfThere<VariantRecord>(join(run, VARIANT_FILE))?.name ?? null },
+    // A copy of a copy: the sweep is that of the first source. The manifest of a copy names the code of its agent phases, not of its sweep.
+    from: { run: basename(run), toolbox: sourceVariant?.from.toolbox ?? sourceManifest?.toolbox ?? null, variant: sourceVariant?.name ?? null, browser: sourceVariant ? (sourceVariant.from.browser ?? null) : (sourceManifest?.browser ?? null) },
     toolbox: toolchain(null).toolbox,
     leftOut,
   };

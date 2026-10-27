@@ -90,6 +90,8 @@ test("pending lists the verifiers and the finishers by the size of their candida
     observations: [{ checkedNl: "De pagina's van de steekproef", howNl: "Bekeken en gemeten in de sessie", observedNl: "Wat er op de pagina staat, zoals gemeten", evidence: [observe(session)], ruling: "open" }],
     findings: [],
     missingNl: [point],
+    // A part that did not load stays open only after a real attempt, in every round (#318).
+    attempts: [{ missing: 1, triedNl: "Het deel twee keer opnieuw geopend, met tijd ertussen, en het venster bekeken.", evidence: [observe(session), observe(session)] }],
   });
   // Descending size is not the order of the index.
   const sizes: Record<string, number> = { "1.4.5": 10, "1.4.11": 900, "2.4.3": 500 };

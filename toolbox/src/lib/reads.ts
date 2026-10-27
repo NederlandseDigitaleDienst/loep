@@ -41,8 +41,15 @@ const WRITE_WORDS = new Set([
   "mutation", "batch", "bulk", "doc", "documents", "settings",
 ]);
 
-/** The lowercase words of a path segment: "_update_by_query" gives "update", "by" and "query". */
-const wordsOf = (segment: string): string[] => segment.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+/** The lowercase words of a path segment by two cuts, both kept: on every non-alphanumeric ("SignIn" gives "signin"), and on case and digit changes too ("_update_by_query" and "deleteByQuery" give "update", "by" and "query"; "HTMLExport" gives "html" and "export"). */
+const wordsOf = (segment: string): string[] =>
+  [
+    ...segment.toLowerCase().split(/[^a-z0-9]+/),
+    ...segment
+      .replace(/([a-z])(?=[A-Z0-9])|([A-Z])(?=[A-Z][a-z])|([0-9])(?=[A-Za-z])/g, "$1$2$3 ")
+      .toLowerCase()
+      .split(/[^a-z0-9]+/),
+  ].filter(Boolean);
 
 /** A segment of a path as a browser sends it: letters, digits and the characters a path may carry, nothing that reads as a pattern. */
 const SEGMENT = /^[A-Za-z0-9._~%!$&'()+,;=:@-]+$/;
@@ -137,8 +144,17 @@ export function readDecision(rules: readonly ReadRequest[], method: string, url:
   const rule = rules.length > 0 ? readRuleFor(rules, method, url, headers) : null;
   if (!rule) return null;
   if (method.toUpperCase() === "OPTIONS") return { rule, pass: true };
-  const verdict = recogniseSearch(rule.service, body);
+  const verdict = recogniseSearch(rule.service, body, pathOf(url));
   return verdict.search ? { rule, pass: true } : { rule, pass: false, reasonNl: `past bij leesverzoek "${rule.id}", maar de body is geen zoekvraag aan ${SEARCH_SERVICES[rule.service].nameNl}: ${verdict.reasonNl}` };
+}
+
+/** The pathname of an address, or undefined when it is none. */
+export function pathOf(url: string): string | undefined {
+  try {
+    return new URL(url).pathname;
+  } catch {
+    return undefined;
+  }
 }
 
 /** A request that a rule covered and whose body was no search: held back, and noted without its body. */

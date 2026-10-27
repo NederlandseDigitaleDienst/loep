@@ -146,11 +146,13 @@ let pendingSkips = []
 let attempted = []
 let last = null
 let paused = null
+let rounds = 0
 // Criteria that get a new finishing round once the site answers again after an outage: once per start of the workflow.
 let again = []
 let askedAgain = false
 
 for (let round = 1; round <= MAX_ROUNDS; round++) {
+  rounds = round
   const commands = [
     ...pendingSkips.map((entry) => `node ${cli} skip --run ${run} ${entry} --kind "geen geldig resultaat" --reason "de agent leverde na ${MAX_ATTEMPTS} pogingen geen geldig resultaat"`),
     `node ${cli} tasks --run ${run}${attempted.length > 0 ? ` --attempted ${attempted.join(',')}` : ''}${again.length > 0 ? ` --again ${again.join(',')}` : ''}`,
@@ -224,4 +226,7 @@ if (paused) {
   log(paused)
   last = 'storing'
 }
-return { history, skipped, last, paused, models: Object.fromEntries(ROLES.map((role) => [role, MODEL[role] || null])) }
+// Twenty rounds without the toolbox saying it is done: the run is not finished, and that is said, not left to be guessed (#318).
+const stopped = !paused && rounds === MAX_ROUNDS && last !== 'done' && last !== 'error' ? `na ${MAX_ROUNDS} rondes nog niet klaar (laatste fase: ${last}); draai pending om te zien wat er nog open staat, en start de werkstroom opnieuw` : null
+if (stopped) log(stopped)
+return { history, skipped, last, paused, stopped, models: Object.fromEntries(ROLES.map((role) => [role, MODEL[role] || null])) }
