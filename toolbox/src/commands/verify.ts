@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { readdir, readFile, rm } from "node:fs/promises";
+import { open, readdir, readFile, rm } from "node:fs/promises";
 import { join, relative, sep } from "node:path";
 import { readJson, sha256, sha256File, writeJson } from "../lib/canonical.ts";
 import { checkDecisions, DECISIONS_DIR } from "../lib/decisions.ts";
@@ -37,17 +37,41 @@ export const RECHECKS_DIR = "rechecks";
 const OUTSIDE_SEAL = { files: ["verklaring-invoer.json"], dirs: [SIGNED_DIR, DECISIONS_DIR, "verklaring", RECHECKS_DIR] };
 const outsideSeal = (name: string): boolean => OUTSIDE_SEAL.files.includes(name) || OUTSIDE_SEAL.dirs.some((dir) => name.startsWith(`${dir}/`));
 
-export async function hashRun(runDir: string): Promise<EvidenceIndex & { outside: string[] }> {
+/**
+ * The `.DS_Store` that Finder writes into a folder of a run when someone opens it. A file counts
+ * as such only when both its name and its first bytes say so; any other `.DS_Store` is sealed like
+ * any other file.
+ */
+const DS_STORE = { name: ".DS_Store", header: Buffer.from([0x00, 0x00, 0x00, 0x01, ...Buffer.from("Bud1")]) };
+
+async function isOsMetadata(name: string, path: string): Promise<boolean> {
+  if (name.slice(name.lastIndexOf("/") + 1) !== DS_STORE.name) return false;
+  const handle = await open(path, "r");
+  try {
+    const { buffer, bytesRead } = await handle.read(Buffer.alloc(DS_STORE.header.length), 0, DS_STORE.header.length, 0);
+    return bytesRead === DS_STORE.header.length && buffer.equals(DS_STORE.header);
+  } finally {
+    await handle.close();
+  }
+}
+
+/**
+ * Hash every file of the run that is evidence. Finder's `.DS_Store` is left out and
+ * listed under `osMetadata`, except a file that `sealed` names: that one is checked as before.
+ */
+export async function hashRun(runDir: string, sealed: Record<string, string> = {}): Promise<EvidenceIndex & { outside: string[]; osMetadata: string[] }> {
   const files: Record<string, string> = {};
   const outside: string[] = [];
+  const osMetadata: string[] = [];
   for (const path of (await walk(runDir)).sort()) {
     const name = relative(runDir, path).split(sep).join("/");
     // The session of a login is a secret and no evidence: it is in no seal and in no list.
     if (name === INDEX || name === LOGIN_SESSION_FILE || name === IDLE_SESSION_FILE || name.endsWith(".tmp")) continue;
-    if (outsideSeal(name)) outside.push(name);
+    if (!(name in sealed) && (await isOsMetadata(name, path))) osMetadata.push(name);
+    else if (outsideSeal(name)) outside.push(name);
     else files[name] = sha256(await readFile(path));
   }
-  return { files, outside };
+  return { files, outside, osMetadata };
 }
 
 /** The hash of the seal as it stands in the run: what a signature refers to. Null when the run is not sealed. */
@@ -87,6 +111,8 @@ export interface SealCheck {
   files: number;
   /** Files made after the seal that it does not cover. */
   outside: string[];
+  /** The `.DS_Store` files Finder wrote into the run: no evidence and outside the seal. */
+  osMetadata: string[];
   /** Everything that was changed, added or removed since the run was sealed, and a signature that does not belong to this seal. */
   problems: string[];
   signature: Signature | null;
@@ -96,7 +122,7 @@ export interface SealCheck {
 export async function checkSeal(runDir: string): Promise<SealCheck | null> {
   if (!existsSync(join(runDir, INDEX))) return null;
   const sealed = await readJson<EvidenceIndex>(join(runDir, INDEX));
-  const current = await hashRun(runDir);
+  const current = await hashRun(runDir, sealed.files);
   const problems: string[] = [];
   for (const [name, hash] of Object.entries(sealed.files)) {
     if (!(name in current.files)) problems.push(`ontbreekt: ${name}`);
@@ -118,7 +144,7 @@ export async function checkSeal(runDir: string): Promise<SealCheck | null> {
     const signedEvaluation = await readJson<Evaluation>(join(runDir, "evaluation.json")).then(evaluationHash, () => null);
     if (signature.evaluationSha256 !== signedEvaluation) problems.push(`${SIGNATURE_FILE}: de handtekening hoort bij een andere evaluatie`);
   }
-  return { files: Object.keys(sealed.files).length, outside: current.outside, problems, signature };
+  return { files: Object.keys(sealed.files).length, outside: current.outside, osMetadata: current.osMetadata, problems, signature };
 }
 
 /** How many answers of a person the run keeps, and how each came about. */
@@ -161,5 +187,6 @@ export async function verify(runDir: string): Promise<boolean> {
   if (answers.answers > 0) process.stdout.write(`antwoorden van een persoon: ${answers.answers} (${waysNl(answers.answers, answers.viaTerminal, answers.viaConversation)})\n`);
   if (decisions) process.stdout.write(`besluiten over gebreken: ${decisions.decisions} (${waysNl(decisions.decisions, decisions.viaTerminal, decisions.viaConversation)}); buiten het zegel, als eigen laag ${decisions.sha256 ? decisions.sha256.slice(0, 12) : "zonder index"}\n`);
   if (check.outside.length > 0) process.stdout.write(`buiten het zegel, gemaakt na het verzegelen (handtekening, afgetekend rapport, besluiten, verklaring, nametingen): ${check.outside.length}\n`);
+  if (check.osMetadata.length > 0) process.stdout.write(`buiten het zegel, metadata van het besturingssysteem: ${check.osMetadata.join(", ")}\n`);
   return problems.length === 0;
 }

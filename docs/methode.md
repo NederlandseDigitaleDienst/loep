@@ -317,7 +317,7 @@ Dat de oordelen door een taalmodel zijn opgesteld, staat ook in een vorm die een
 Wat iemand tekent, is precies wat verzegeld is. De volgorde is vast:
 
 1. `evaluate` en `render` maken de evaluatie en het conceptrapport in `report/`. Heeft een persoon daarna met `answer` open punten beantwoord, dan draaien beide opnieuw.
-2. `seal` legt in `evidence-index.json` de hash vast van elk bestand in de run: het bewijs, de oordelen, de antwoorden van een persoon, de evaluatie en het conceptrapport.
+2. `seal` legt in `evidence-index.json` de hash vast van elk bestand in de run: het bewijs, de oordelen, de antwoorden van een persoon, de evaluatie en het conceptrapport. Een `.DS_Store` van Finder laat het weg, als naam en inhoud dat allebei zeggen; `verify` noemt het apart.
 3. Een mens leest het rapport en tekent met `sign`. Dat commando weigert als een criterium geen oordeel heeft, als de run niet is verzegeld of als ze na het verzegelen is veranderd. De handtekening komt in `signed/signature.json` en noemt de hash van het zegel en van de evaluatie.
 4. `render` schrijft het afgetekende rapport in `signed/`. Daarna legt `decide` per gebrek vast wat de organisatie besluit (zie "Maatregelen en beslissingen"), en maakt `render` het afgetekende rapport opnieuw. `statement` schrijft de verklaring in `verklaring/`.
 
