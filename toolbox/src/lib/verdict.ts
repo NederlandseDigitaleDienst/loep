@@ -212,13 +212,7 @@ export interface Finish {
   points: FinishedPoint[];
   /** Where was measured, with counts. */
   coverageNl: string;
-  /**
-   * Per finding the observations that showed it first and again from a fresh page. When the part
-   * of the site no longer loads, a finding may instead rest on what an earlier round of this
-   * criterion recorded (`earlier`, with `notRepeatedNl` saying why it was not made again): the
-   * report marks it as not made again (#318).
-   */
-  findings: { key: string; first?: string[]; repeated?: string[]; earlier?: string[]; notRepeatedNl?: string }[];
+  findings: { key: string; first: string[]; repeated: string[] }[];
   /** One entry per point "proef werkte niet:" or "niet bereikbaar:" in missingNl; `missing` is its place there, counted from 1. */
   attempts?: { missing: number; triedNl: string; evidence: string[] }[];
 }
@@ -815,9 +809,7 @@ function instrumentRules(verdict: Partial<Verdict>, context: InstrumentContext, 
     else if (keys.has(finding.key)) problems.push(`${at}: key "${finding.key}" is used twice`);
     else keys.add(finding.key);
     const refs = Array.isArray(finding.evidence) ? finding.evidence.filter((ref): ref is string => typeof ref === "string") : [];
-    // A finding the finishing round keeps on an earlier observation, because the part no longer loads, cites that round's observation instead (#318); validateFinish holds it to that.
-    const keptEarlier = (verdict.finish?.findings ?? []).some((entry) => entry?.key === finding.key && entry?.notRepeatedNl !== undefined);
-    if (!keptEarlier && !refs.some((ref) => shows(ref) && own(ref) && index.get(ref)!.replayable)) {
+    if (!refs.some((ref) => shows(ref) && own(ref) && index.get(ref)!.replayable)) {
       problems.push(`${at}: a finding needs at least one observation${whose} of a look or measure command (${[...SHOWING].join(", ")}) that succeeded and was made in a state that starts with "open"`);
     }
     (Array.isArray(finding.locations) ? finding.locations : []).forEach((location, place) => {
@@ -1210,16 +1202,6 @@ export function validateFinish(input: unknown, context: FinishContext): string[]
       problems.push(`${at}: every finding needs exactly one entry, with the observations that showed it first and the ones that showed it again`);
       continue;
     }
-    // A part that no longer loads: the finding may rest on what an earlier round of this criterion saw, marked as not made again (#318).
-    if (entries[0]!.notRepeatedNl !== undefined) {
-      const earlierShowing = refs(entries[0]!.earlier).filter((ref): ref is string => typeof ref === "string" && sessionOfObservation(ref) !== context.session && index.has(ref) && SHOWING.has(index.get(ref)!.command) && !index.get(ref)!.failed);
-      const unreachable = missing.some((point, position) => openPoint(point).kind?.prefix === UNREACHABLE && attempts.some((entry) => entry?.missing === position + 1));
-      if (!unreachable) problems.push(`${at}: a finding rests on an earlier observation only when the part no longer loads: then missingNl has a point "${UNREACHABLE}:" with its attempt in finish.attempts`);
-      if (!isText(entries[0]!.notRepeatedNl, 30)) problems.push(`${at}: notRepeatedNl says why the finding was not made again, and what you tried`);
-      if (earlierShowing.length === 0) problems.push(`${at}: earlier cites at least one look or measure observation of an earlier round that showed the finding`);
-      checkRefs(entries[0]!.earlier, at);
-      continue;
-    }
     const first = refs(entries[0]!.first).filter(ownShowing);
     const repeated = refs(entries[0]!.repeated).filter(ownShowing);
     if (first.length === 0) problems.push(`${at}: first needs a look or measure observation of session "${context.session}"`);
@@ -1368,7 +1350,7 @@ export function citedObservations(verdict: Verdict, observations: { has(ref: str
     ...(verdict.verification?.findings ?? []).flatMap((check) => check.evidence ?? []),
     ...(verdict.verification?.attackEvidence ?? []),
     ...(verdict.finish?.points ?? []).flatMap((point) => point.evidence ?? []),
-    ...(verdict.finish?.findings ?? []).flatMap((entry) => [...(entry.first ?? []), ...(entry.repeated ?? []), ...(entry.earlier ?? [])]),
+    ...(verdict.finish?.findings ?? []).flatMap((entry) => [...(entry.first ?? []), ...(entry.repeated ?? [])]),
     ...(verdict.finish?.attempts ?? []).flatMap((attempt) => attempt.evidence ?? []),
   ];
   return [...new Set(refs.filter((ref) => observations.has(ref)))].sort();

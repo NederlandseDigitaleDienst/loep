@@ -1,5 +1,4 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import type { InstrumentGap } from "../lib/basis.ts";
 import { basename, join, resolve } from "node:path";
 import { madeWith, openCriteria, type CriterionResult, type Evaluation } from "../lib/evaluation.ts";
 import { siteOrigins } from "../lib/origins.ts";
@@ -26,8 +25,6 @@ import { compareCriterionIds } from "../lib/wcag.ts";
 export const REPOSITORY = "NederlandseDigitaleDienst/loep";
 /** The start of every title, so the issues of this command can be found together. */
 export const TITLE_PREFIX = "Open door loep:";
-/** The start of the title of a gap in an instrument: with its key the same gap from another run finds the same issue, to be counted up there (#318). */
-export const GAP_TITLE_PREFIX = "Instrument ontbrak:";
 /** A criterion without a verdict: the judge, the verifier or the finishing round was skipped. */
 const UNTESTED = "niet beoordeeld";
 /** The kind of a test that did not work: a fault in loep also where the criterion did get an outcome. */
@@ -153,27 +150,6 @@ export function feedback(runDir: string, options: { out?: string | undefined } =
       }
       drafts.push(draft);
     }
-  }
-  // Where the run shows an instrument was missing: one draft per key, which a later run with the same gap counts up (#318).
-  const gapsPath = join(runDir, "instrument-gaps.json");
-  const gaps = existsSync(gapsPath) ? ((JSON.parse(readFileSync(gapsPath, "utf8")) as { gaps?: InstrumentGap[] }).gaps ?? []) : [];
-  for (const gap of gaps) {
-    const lines = [
-      "Een onderzoek met loep liet zien dat hier een instrument ontbrak: " + gap.whatNl + ". Gemaakt met `loep feedback`; het adres, de naam en de organisatie van de site zijn weggelaten.",
-      "",
-      `- Sleutel: \`${gap.key}\` (bestaat er een issue met deze sleutel in de titel, tel deze run daar dan bij in plaats van een nieuw te openen)`,
-      `- Criterium: ${gap.criterion}`,
-      `- Soort: ${gap.kind === "instrument" ? "gat in een instrument" : "gat in de automatisering"}`,
-      `- Plekken in deze run: ${gap.count}`,
-      `- ${madeWith(evaluation, true)}`,
-    ];
-    const draft: Draft = { criterion: gap.criterion, kind: gap.kind === "instrument" ? "instrument" : "automatisering", title: `${GAP_TITLE_PREFIX} ${gap.key}`, labels: ["enhancement"], bodyMd: `${lines.join("\n")}\n`, file: null };
-    if (options.out) {
-      mkdirSync(options.out, { recursive: true });
-      draft.file = join(options.out, `gat-${slug(gap.key)}.md`);
-      writeFileSync(draft.file, draft.bodyMd);
-    }
-    drafts.push(draft);
   }
   const open = openCriteria(evaluation.criteria);
   const withKind = (prefix: string): string[] => [...open.owner, ...open.evaluation].filter((id) => evaluation.criteria.find((criterion) => criterion.id === id)!.missingNl.some((point) => openPoint(point).kind?.prefix === prefix)).sort(compareCriterionIds);

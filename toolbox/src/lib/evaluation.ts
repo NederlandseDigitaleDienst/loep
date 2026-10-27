@@ -1,7 +1,6 @@
 import type { Sample } from "../commands/sample.ts";
-import type { Basis } from "./basis.ts";
-import { splitPoints } from "./degrade.ts";
 import type { Purpose } from "./purpose.ts";
+import type { Basis } from "./basis.ts";
 import type { EvaluationDocuments } from "./documents.ts";
 import { sha256, stableId } from "./canonical.ts";
 import type { FindingCutout } from "./cutout.ts";
@@ -10,7 +9,7 @@ import type { Manifest } from "./manifest.ts";
 import type { RoleExtensions } from "./budget.ts";
 import { MODEL_UNKNOWN, type RoleModels } from "./models.ts";
 import type { RecordedVia } from "./recorded.ts";
-import { openPoint, shadowPartOf, vendorElementsIn, WITHIN_REACH, type CrossLoop, type Recommendation, type Finding, type Observation, type Outcome, type Verdict } from "./verdict.ts";
+import { openPoint, OUTSIDE_SCOPE, shadowPartOf, vendorElementsIn, WITHIN_REACH, type CrossLoop, type Recommendation, type Finding, type Observation, type Outcome, type Verdict } from "./verdict.ts";
 import { compareCriterionIds, CRITERIA, en301549Clause, GUIDELINES, PRINCIPLES, understandingUrl, type Criterion, type WcagVersion } from "./wcag.ts";
 
 /** "untested" means no verdict was reached at all; it is never rounded up to anything else. */
@@ -117,7 +116,7 @@ export interface ReportFinding extends Omit<Finding, "owner"> {
    * or by the agent of the finishing round itself ("repeated"), after whom no verifier comes.
    * "unverified": seen once. Absent when no verification was done.
    */
-  verification?: { status: "reproduced" | "unverified" | "repeated" | "notRepeated"; evidence: string[]; reasonNl?: string };
+  verification?: { status: "reproduced" | "unverified" | "repeated"; evidence: string[] };
 }
 
 /** The outcomes a person can record for an open point: there is nothing left to leave open. */
@@ -311,7 +310,7 @@ export interface Evaluation {
   /** Whose components the site is built with; absent when nobody said. */
   vendor?: Vendor;
   evaluatedAt: string;
-  /** What the investigation is for, as chosen at `inventory` (#318). Absent in older evaluations: those were to improve. */
+  /** What the investigation is for (#318), from `purpose`. Absent in older evaluations: those were to improve. */
   purpose?: Purpose;
   method: { name: string; version: string; url: string; typeNl: string; deviationsNl: string[] };
   standards: { wcag: string[]; en301549: string };
@@ -390,6 +389,21 @@ export interface RoundVerdicts {
   finish?: Verdict | null;
   /** The verdict of the finishing round before the one that counts, when the round ran again with `tasks --again`: kept, and shown as what stood before. */
   finishBefore?: Verdict | null;
+}
+
+/** Whether an open point is about this investigation and not something the owner of the site can do: a limit of loep, an unreachable part, or content outside the scope. */
+export function aboutThisInvestigation(point: string): boolean {
+  const kind = openPoint(point).kind;
+  return kind !== null && (kind.reader !== "owner" || kind.prefix === OUTSIDE_SCOPE);
+}
+
+/**
+ * The open points of a criterion, split into what stays open and what is a limit (#318): in a failed
+ * criterion every point about this investigation is a limit, because the outcome stands without it.
+ */
+export function splitPoints(points: string[], outcome: string): { openNl: string[]; limitsNl: string[] } {
+  if (outcome !== "failed") return { openNl: points, limitsNl: [] };
+  return { openNl: points.filter((point) => !aboutThisInvestigation(point)), limitsNl: points.filter(aboutThisInvestigation) };
 }
 
 export interface CriterionInput {

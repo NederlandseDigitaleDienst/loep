@@ -1,6 +1,4 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
-import { degrade } from "../lib/degrade.ts";
-import { purposeForRun, type Purpose } from "../lib/purpose.ts";
 import { mkdir, rename, rm } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
 import { PNG } from "pngjs";
@@ -945,8 +943,8 @@ function nothingToJudge(gaps: Gap[], pages: Pick<RunData["pages"][number], "item
  * each gap left becomes a limitation that the judges look at themselves (#318). It stops only where
  * nothing is left to judge.
  */
-export function afterEveryReturn(next: NonNullable<Gate["next"]>, gaps: Gap[], pages: Pick<RunData["pages"][number], "item">[], purpose: Purpose): { gaps: Gap[]; degradedLimitations: Gap[]; next: NonNullable<Gate["next"]>; afterRetries: boolean } {
-  const afterRetries = next === "stop" && !nothingToJudge(gaps, pages) && degrade("gate-after-retries", purpose) === "limit";
+export function afterEveryReturn(next: NonNullable<Gate["next"]>, gaps: Gap[], pages: Pick<RunData["pages"][number], "item">[]): { gaps: Gap[]; degradedLimitations: Gap[]; next: NonNullable<Gate["next"]>; afterRetries: boolean } {
+  const afterRetries = next === "stop" && !nothingToJudge(gaps, pages);
   if (!afterRetries) return { gaps, degradedLimitations: [], next, afterRetries };
   const degradedLimitations = gaps.map((gap) => ({ ...gap, missingNl: `Na ${MAX_RETURNS_TO_EXPLORER} keer terug naar de verkenner nog open: ${gap.missingNl} Wat hier niet in het bewijs staat, bekijkt de beoordelaar zelf in de sessie.` }));
   return { gaps: [], degradedLimitations, next: "proceed", afterRetries };
@@ -1018,7 +1016,7 @@ export async function gate(runDir: string, outDir: string = runDir): Promise<Gat
   const accepted = routed.all.filter((gap) => acceptedBy(gap)).map((gap) => ({ ...gap, reasonNl: acceptedBy(gap)!.reasonNl, observation: acceptedBy(gap)!.observation, decidedBy: acceptedBy(gap)!.decidedBy }));
   // After every return to the explorer the run goes on with what there is: each gap left becomes a limitation that the judges look at
   // themselves (#318). It stops only where nothing is left to judge.
-  const { gaps, degradedLimitations, next, afterRetries } = afterEveryReturn(routed.next, routed.gaps, run.pages, purposeForRun(runDir));
+  const { gaps, degradedLimitations, next, afterRetries } = afterEveryReturn(routed.next, routed.gaps, run.pages);
   const stage = routed.stage;
   const result: Gate = {
     sufficient: routed.sufficient,

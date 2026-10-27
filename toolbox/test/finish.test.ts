@@ -147,35 +147,6 @@ test("a run with open criteria of every kind gets a finishing task for what the 
   assert.match(readFileSync(join(dir, none.prompt), "utf8"), /Er is geen eerder oordeel/);
 });
 
-test("a finishing round keeps a finding on an earlier observation when the part no longer loads, marked as not made again (#318)", async () => {
-  const session = "a-134";
-  const earlier = flow.observe("b-134", "look");
-  const tried = [flow.observe(session, "open"), flow.observe(session, "look")];
-  const unreachable = "niet bereikbaar: het menu op P2 (https://www.example.nl/menu) laadde niet, ook los geopend, tussen 14:05 en 14:40; de rest van de site laadde wel.";
-  const keptEarlier: Verdict = {
-    criterion: CRITERIA.sweep,
-    outcome: "failed",
-    rule: "R1",
-    summaryNl: "De inleiding valt weg bij vergroten; het menu laadde niet meer.",
-    observations: [flow.seen([earlier], "finding", "F1")],
-    findings: [finding([earlier])],
-    missingNl: [unreachable],
-    finish: {
-      points: [{ point: 1, settled: true, howNl: "Het gebrek uit de eerste beoordeling staat vast; het menu zelf laadde niet meer.", evidence: [tried[1]!] }],
-      coverageNl: "Het menu laadde niet meer; de bevinding rust op de waarneming van de eerste beoordeling.",
-      findings: [{ key: "F1", earlier: [earlier], notRepeatedNl: "Het menu laadde bij twee pogingen niet meer, dus de bevinding is niet opnieuw gemaakt." }],
-      attempts: [{ missing: 1, triedNl: "Het menu op P2 twee keer opnieuw geopend, met tijd ertussen, en het venster bekeken.", evidence: tried }],
-    },
-  };
-  const out = join("verdicts", CRITERIA.sweep, "afmaak.json");
-  flow.write(out, keptEarlier);
-  assert.deepEqual(await checkInstrumentVerdict(dir, CRITERIA.sweep, "finish"), []);
-  // Without a part that no longer loads, a finding is seen twice by the finisher itself.
-  flow.write(out, { ...keptEarlier, missingNl: [], finish: { ...keptEarlier.finish!, attempts: [] } });
-  assert.match((await checkInstrumentVerdict(dir, CRITERIA.sweep, "finish")).join("\n"), /rests on an earlier observation only when the part no longer loads/);
-  flow.write(out, keptEarlier);
-});
-
 test("a finishing verdict that still names missing coverage or a spent budget is refused, and an instrument that did not work needs a real attempt", async () => {
   const session = "a-134";
   const look = flow.observe(session, "look");

@@ -124,6 +124,11 @@ const USAGE = `loep <command> [options]
                                          Write verschil.md: solved, stayed and new between two evaluations of one site
   compare --run <run> --reference <file> --out <dir>
                                          Compare the evaluation with an existing audit of the same site
+  purpose --run <run> [verbeteren|verantwoorden]
+                                         What the investigation is for. Verbeteren (the default): a team wants to know what
+                                         to fix, and the report is not signed. Verantwoorden: the report backs a statement,
+                                         says what is still missing for status B, and is signed. Choose or change it at the
+                                         end of a run, then run evaluate, render and seal again. Without a value: say it
   seal --run <run>                       Record the hash of every file in the run; what is signed afterwards is this seal
   verify --run <run>                     Recompute every hash in the run
   voiceover start|read|stop|setup        Optional, outside an evaluation: a real screen reader (VoiceOver in a virtual Mac) as a
@@ -131,9 +136,6 @@ const USAGE = `loep <command> [options]
 
 Options:
   --max-pages <n>   Upper bound on pages to visit (default 200)
-  --purpose <p>     With inventory: what the investigation is for, verbeteren (default) or verantwoorden. To improve,
-                    what loep cannot settle and the outcome does not hang on becomes a limit; to account for, the
-                    report keeps every such limit in sight and says what is still missing for status B
   --vendor-tags <p> With inventory: prefixes of element names that belong to a vendor, comma-separated ("nldd-").
                     The report lists per such element the findings that touch it; the owner of a finding stays as judged
   --vendor-name <n> With --vendor-tags: what the report calls the vendor, such as "designsysteem" (default "leverancier")
@@ -245,7 +247,6 @@ async function main(): Promise<void> {
       "test-environment": { type: "string" },
       "declared-by": { type: "string" },
       "max-writes": { type: "string" },
-      purpose: { type: "string" },
       url: { type: "string" },
       from: { type: "string" },
       steps: { type: "string" },
@@ -271,8 +272,6 @@ async function main(): Promise<void> {
   }
   // A run that was given a test environment at inventory may write there; every other run holds all writes back.
   const { confirmDeclaration, decideWrites, DEFAULT_WRITE_SPACING_SECONDS, recordWrites, setRunWrites, spacingNl, writeAccess, writesForRun } = await import("./lib/writes.ts");
-  const { parsePurpose, PURPOSE_NL, purposeForRun, recordPurpose } = await import("./lib/purpose.ts");
-  if (command !== "inventory" && values.purpose !== undefined) throw new Error("--purpose hoort bij inventory: het doel ligt vast voor de hele run");
   if (command !== "inventory" && (values["allow-writes"] || values["test-environment"] !== undefined || values["declared-by"] !== undefined || values["max-writes"] !== undefined)) {
     throw new Error("--allow-writes, --test-environment, --declared-by en --max-writes horen bij inventory: daar wordt voor de hele run vastgelegd of er verstuurd mag worden, en hoe vaak");
   }
@@ -326,7 +325,6 @@ async function main(): Promise<void> {
     }
     case "inventory": {
       if (!target || !values.out) throw new Error("inventory needs a URL and --out <run>");
-      const purpose = parsePurpose(values.purpose);
       const permission = decideWrites(target, { allowWrites: values["allow-writes"], testEnvironment: values["test-environment"], declaredBy: values["declared-by"], maxWrites: values["max-writes"] });
       // A declared test environment is confirmed by a person at a terminal before anything starts.
       if (permission?.declaredBy) Object.assign(permission, await confirmDeclaration(permission));
@@ -345,8 +343,6 @@ async function main(): Promise<void> {
       const vendor = tagPrefixes.length > 0 ? { tagPrefixes, nameNl: values["vendor-name"]?.trim() || "leverancier" } : undefined;
       const result = await inventory({ baseUrl: target, out: values.out, maxPages: Number(values["max-pages"]), fixedUrls, vendor, alsoOrigins: values["also-origin"] });
       await recordWrites(values.out, permission);
-      await recordPurpose(values.out, purpose);
-      process.stdout.write(`doel van het onderzoek: ${PURPOSE_NL[purposeForRun(values.out)]}${purpose ? "" : " (standaard; kies met --purpose verbeteren of verantwoorden)"}\n`);
       if (permission) {
         process.stdout.write(`versturen toegestaan naar ${permission.origin}${permission.declaredBy ? `, verklaard door ${permission.declaredBy.name} (${permission.declaredBy.role})` : ""}\n`);
         process.stdout.write(`budget voor versturen: ten hoogste ${permission.maxWrites} verzendingen naar die origin voor de hele run, alle agents en de veegronde samen${spacingNl(permission.spacingSeconds ?? DEFAULT_WRITE_SPACING_SECONDS)}. Zoveel berichten of formulieren krijgt de ontvanger ten hoogste.\n`);
@@ -673,6 +669,13 @@ async function main(): Promise<void> {
       const { diff } = await import("./commands/diff.ts");
       const { difference, markdown } = await diff(values.previous, values.current, values.out);
       process.stdout.write(`opgelost ${difference.resolved.length}, gebleven ${difference.remained.length}, nieuw ${difference.fresh.length}; ${difference.outcomes.length} criteria met een andere uitkomst\n${markdown}\n`);
+      return;
+    }
+    case "purpose": {
+      if (!values.run) throw new Error("purpose needs --run <run>");
+      const { parsePurpose, PURPOSE_NL, purposeForRun, recordPurpose } = await import("./lib/purpose.ts");
+      if (target !== undefined) await recordPurpose(values.run, parsePurpose(target));
+      process.stdout.write(`doel van het onderzoek: ${PURPOSE_NL[purposeForRun(values.run)]}${target !== undefined ? "\nhet rapport zegt het pas na evaluate, render en seal" : ""}\n`);
       return;
     }
     case "seal": {

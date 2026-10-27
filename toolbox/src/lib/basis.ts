@@ -1,5 +1,5 @@
 import type { CriterionResult } from "./evaluation.ts";
-import { canonicalCommand, MEASURE_COMMANDS, OBSERVATION_ID, openPoint, type ObservationIndex } from "./verdict.ts";
+import { canonicalCommand, MEASURE_COMMANDS, OBSERVATION_ID, type ObservationIndex } from "./verdict.ts";
 
 /**
  * What an outcome rests on, derived from what its verdict cites and never given by an agent (#318):
@@ -38,50 +38,10 @@ export function placeBasis(evidence: unknown, index: ObservationIndex): "measure
 export function criterionBasis(criterion: Pick<CriterionResult, "outcome" | "observations" | "findings" | "established">, index: ObservationIndex): Basis {
   if (criterion.outcome === "cantTell" || criterion.outcome === "untested") return "open";
   if (criterion.established?.by === "person") return "person";
-  // What a finishing round decided on an earlier observation that was not made again is an agent's judgment, marked as such.
-  if (criterion.findings.some((finding) => finding.verification?.status === "notRepeated")) return "observed";
   if (criterion.outcome === "failed") {
     const grounds = [...criterion.findings.map((finding) => finding.evidence), ...criterion.observations.filter((observation) => observation.ruling === "finding").map((observation) => observation.evidence)];
     return grounds.some((evidence) => placeBasis(evidence, index) === "measured") ? "measured" : "observed";
   }
   const inOrder = criterion.observations.filter((observation) => observation.ruling === undefined || observation.ruling === "noIssue");
   return inOrder.length > 0 && inOrder.every((observation) => placeBasis(observation.evidence, index) === "measured") ? "measured" : "observed";
-}
-
-/**
- * A place where the run shows that an instrument was missing (#318): an outcome that rests on what
- * an agent saw where the procedure names an instrument for it, or an open point a person settled
- * that an agent or an instrument could have. Its key (criterion and instrument, or criterion and
- * kind of point) stays the same from run to run, so the same gap on another site counts up.
- */
-export interface InstrumentGap {
-  key: string;
-  criterion: string;
-  kind: "instrument" | "automation";
-  /** The measure commands the procedure names, for a gap in an instrument; the kind of point, for one in automation. */
-  what: string[];
-  whatNl: string;
-  /** How many places or answers in this run show it. */
-  count: number;
-}
-
-/** What a person settles on purpose, and is no gap: a choice of the owner, a login, a screen reader other than VoiceOver. */
-const PERSON_BY_DESIGN = /\binlog|wachtwoord|NVDA|JAWS|TalkBack|Narrator|andere schermlezer/i;
-
-export function instrumentGaps(criteria: CriterionResult[], commandsFor: (criterion: string) => string[], index: ObservationIndex): InstrumentGap[] {
-  const gaps: InstrumentGap[] = [];
-  for (const criterion of criteria) {
-    const instruments = [...new Set(commandsFor(criterion.id).map(canonicalCommand).filter((command) => MEASURING.has(command)))].sort();
-    if (instruments.length > 0 && (criterion.basis === "observed" || criterionBasis(criterion, index) === "observed")) {
-      const places = criterion.observations.filter((observation) => placeBasis(observation.evidence, index) === "observed").length;
-      gaps.push({ key: `${criterion.id}:${instruments.join("+")}`, criterion: criterion.id, kind: "instrument", what: instruments, whatNl: `de uitkomst rust op wat een agent zelf zag, terwijl de procedure ${instruments.map((command) => `\`${command}\``).join(" en ")} noemt`, count: Math.max(1, places) });
-    }
-    const byPerson = (criterion.answers ?? []).filter((answer) => !answer.instrument && openPoint(answer.pointNl).kind?.prefix !== "keuze nodig" && !PERSON_BY_DESIGN.test(answer.pointNl));
-    const byKind = new Map<string, number>();
-    for (const answer of byPerson) byKind.set(openPoint(answer.pointNl).kind?.prefix ?? "zonder soort", (byKind.get(openPoint(answer.pointNl).kind?.prefix ?? "zonder soort") ?? 0) + 1);
-    for (const [kind, count] of byKind) {
-      gaps.push({ key: `${criterion.id}:${kind}`, criterion: criterion.id, kind: "automation", what: [kind], whatNl: `een persoon stelde vast wat een agent of instrument had kunnen vaststellen (${kind})`, count });
-    }
-  }
-  return gaps;
 }

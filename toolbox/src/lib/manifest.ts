@@ -45,7 +45,7 @@ export interface Manifest {
    * before the evaluation starts which pages it picks. A run from before this was recorded has none.
    */
   seed?: string;
-  /** Set at `inventory` with `--purpose`: what the investigation is for (#318). A run without it is one to improve. */
+  /** Set with `purpose`: what the investigation is for (#318). A run without it is one to improve. */
   purpose?: Purpose;
 }
 

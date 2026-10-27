@@ -16,7 +16,7 @@ import { loadAllProcedures, loadProcedure, parseProcedure, runLimitsNl } from ".
 import { Politeness } from "../src/session/safety.ts";
 import type { SiteModel } from "../src/lib/sitemodel.ts";
 import { indexObservations, type Finding, type Verdict } from "../src/lib/verdict.ts";
-import { criterionBasis, instrumentGaps, placeBasis } from "../src/lib/basis.ts";
+import { criterionBasis, placeBasis } from "../src/lib/basis.ts";
 import { compareCriterionIds, criteriaFor, criterionById, criterionIdFromAxeTag, en301549Clause } from "../src/lib/wcag.ts";
 import { exampleEvaluation } from "./fixtures/example-evaluation.ts";
 
@@ -404,7 +404,7 @@ test("in a failed criterion a point about this investigation is a limit, and the
   assert.equal(stillOpen.limitsNl, undefined);
 });
 
-test("what an outcome rests on is derived from what it cites, and an agent's own look where an instrument is named is a gap (#318)", () => {
+test("what an outcome rests on is derived from what it cites (#318)", () => {
   const record = (id: string, command: string, error: string | null = null) => ({ id, command, error, state: { start: { url: "http://127.0.0.1:4710/" } }, result: {} });
   const index = indexObservations([record("j1-0001", "open"), record("j1-0002", "look"), record("j1-0003", "contrast"), record("j1-0004", "contrast", "het element is weg")]);
   assert.equal(placeBasis(["j1-0003"], index), "measured");
@@ -421,13 +421,6 @@ test("what an outcome rests on is derived from what it cites, and an agent's own
   const failing = resolveCriterion({ ...base, verdicts: { a: onLook, final: { ...onLook, outcome: "failed", findings: [{ ...finding, evidence: ["j1-0003"] }] } } }, "X");
   assert.equal(criterionBasis(failing, index), "measured", "a failure is measured when a finding rests on an instrument");
   assert.equal(criterionBasis({ ...looked, outcome: "cantTell" }, index), "open");
-  // The procedure names contrast: an outcome on an agent's own look is a gap in an instrument, with a key that is the same on every site.
-  const gaps = instrumentGaps([looked, measured], () => ["contrast", "look"], index);
-  assert.deepEqual(gaps.map((gap) => [gap.key, gap.kind, gap.count]), [["1.4.3:contrast", "instrument", 1]]);
-  // A person who answered what an instrument could settle is a gap in automation; a choice of the owner and a login are not.
-  const answered = (pointNl: string) => ({ ...measured, answers: [{ pointNl, didNl: "Bekeken.", outcome: "passed" as const, role: "onderzoeker", answeredAt: "2026-10-23T10:00:00Z" }] });
-  assert.deepEqual(instrumentGaps([answered("proef werkte niet: het contrast op P02 gaf geen verhouding.")], () => [], index).map((gap) => gap.key), ["1.4.3:proef werkte niet"]);
-  assert.deepEqual(instrumentGaps([answered("keuze nodig: is de tekst op P02 een logo?"), answered("mens nodig: wat achter de inlog op P05 staat.")], () => [], index), []);
 });
 
 test("a criterion the finishing round left open is not called established", () => {

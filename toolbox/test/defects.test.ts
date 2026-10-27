@@ -17,7 +17,8 @@ type Draft = Partial<ReportFinding> & { where: string | string[]; page?: string 
 
 /** The example evaluation with exactly these findings, by criterion. A finding is "T-<criterion>-<n>". */
 function evaluationWith(byCriterion: Record<string, Draft[]>): Evaluation {
-  const evaluation = exampleEvaluation();
+  // Only a report to account for is signed (#318).
+  const evaluation = { ...exampleEvaluation(), purpose: "verantwoorden" as const };
   for (const criterion of evaluation.criteria) {
     const drafts = byCriterion[criterion.id] ?? [];
     criterion.outcome = drafts.length > 0 ? "failed" : criterion.outcome === "failed" ? "passed" : criterion.outcome;
