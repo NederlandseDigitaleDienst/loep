@@ -17,13 +17,14 @@ import { criterionById } from "../lib/wcag.ts";
  */
 
 /** The kinds in the order of the list: what the toolbox can do something about first. */
-const KIND_ORDER = ["veegronde mist", "budget op", "proef werkte niet", "niet bereikbaar", "versturen niet toegestaan", "buiten de afbakening", "mens nodig", "keuze nodig"] as const;
+const KIND_ORDER = ["veegronde mist", "budget op", "geen geldig resultaat", "proef werkte niet", "niet bereikbaar", "versturen niet toegestaan", "buiten de afbakening", "mens nodig", "keuze nodig"] as const;
 /** A point from before the kinds existed that starts with none of them. */
 const NO_KIND = "zonder soort";
 
 const WHAT_NL: Record<string, string> = {
   "veegronde mist": "Elk punt is een agent die zegt welke meting de veegronde had moeten leveren.",
   "budget op": "Elk punt is iets wat niet is bekeken omdat het budget van een agent op was.",
+  "geen geldig resultaat": "Elk punt is een agent die na twee pogingen geen geldig oordeel gaf, zodat de afmaakronde het criterium kreeg.",
   "proef werkte niet": "Elk punt is een instrument dat geen bruikbaar antwoord gaf, of een onderdeel dat niet openging.",
   "niet bereikbaar": "Elk punt is een deel van de site, een pagina of een ingesloten venster, dat bij herhaalde pogingen niet laadde terwijl de rest wel laadde. Geen fout in loep: laadt het weer, dan meet een nieuwe afmaakronde het (tasks --again).",
   "versturen niet toegestaan": "Elk punt is iets wat pas na versturen te zien is, in een run die niet mocht versturen. Geen persoon nodig: een testomgeving, verklaard bij inventory met --test-environment, laat een instrument het meten. Dat kan de origin van alleen het ingesloten venster zijn.",
@@ -106,12 +107,12 @@ const textsOf = (value: unknown): string[] => (Array.isArray(value) ? value.filt
  */
 function pointsOfRun(runDir: string): Written[] {
   const run = basename(resolve(runDir));
-  const evaluation = readJsonIfThere<{ criteria?: { id?: string; missingNl?: unknown }[] }>(join(runDir, "evaluation.json"));
-  const standingByCriterion = evaluation?.criteria ? new Map(evaluation.criteria.map((criterion) => [String(criterion.id), new Set(textsOf(criterion.missingNl).map(same))])) : null;
+  const evaluation = readJsonIfThere<{ criteria?: { id?: string; missingNl?: unknown; limitsNl?: unknown }[] }>(join(runDir, "evaluation.json"));
+  const standingByCriterion = evaluation?.criteria ? new Map(evaluation.criteria.map((criterion) => [String(criterion.id), new Set([...textsOf(criterion.missingNl), ...textsOf(criterion.limitsNl)].map(same))])) : null;
   const root = join(runDir, "verdicts");
   if (!existsSync(root)) {
     if (!evaluation?.criteria) throw new Error(`${runDir} heeft geen oordelen (verdicts/) en geen evaluatie (evaluation.json): er is niets om open punten uit te lezen`);
-    return evaluation.criteria.flatMap((criterion) => textsOf(criterion.missingNl).map((point) => ({ run, criterion: String(criterion.id), roundNl: "evaluatie", point, standing: true })));
+    return evaluation.criteria.flatMap((criterion) => [...textsOf(criterion.missingNl), ...textsOf(criterion.limitsNl)].map((point) => ({ run, criterion: String(criterion.id), roundNl: "evaluatie", point, standing: true })));
   }
   const written: Written[] = [];
   for (const criterion of readdirSync(root).sort()) {

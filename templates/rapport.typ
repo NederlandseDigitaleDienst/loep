@@ -1081,6 +1081,7 @@
         eyebrow[Zekerheid], brief.certaintyNl,
         ..if brief.coverageNl != none { (eyebrow(t.measured), brief.coverageNl) },
         ..if brief.openNl != none { (eyebrow[Open], open-ref(criterion)) },
+        ..if brief.limitsCountNl != none { (eyebrow[Beperking], [#brief.limitsCountNl van dit onderzoek, de uitkomst hangt er niet van af; zie bijlage A]) },
       )
     })
   }
@@ -1292,6 +1293,11 @@
   if later.len() > 0 {
     par(label-text[#t.investigate.appendix:])
     plain-list(later)
+  }
+  let limits = derived.briefs.at(criterion.id).limitsNl
+  if limits.len() > 0 {
+    par(label-text[#t.investigate.limits:])
+    plain-list(limits)
   }
   if derived.briefs.at(criterion.id).openNl != none { par[#label-text[Open:] #open-ref(criterion)] }
 }

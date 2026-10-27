@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { mkdir, rename, rm } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
 import { PNG } from "pngjs";
@@ -107,6 +107,8 @@ export interface Gate {
   stage: "deterministic" | "review-pending" | "complete";
   /** What comes next: on to the tasks, the review of the pictures, the sweep again, back to the explorer, or no evaluation. Absent in a gate.json from before this was asked. */
   next?: "proceed" | "review" | "sweep" | "explore" | "stop";
+  /** How many gaps were left after every return to the explorer and became limitations instead of stopping the run (#318). Absent when none. */
+  degraded?: number;
   /** How many times the explorer has been given a task for this run, and how often the run may still go back. */
   exploreRound: number;
   returnsLeft: number;
@@ -928,6 +930,26 @@ export function route(fixedGaps: Gap[], reviewedGaps: Gap[], answered: boolean, 
   return { sufficient, stage, next, exploreRound, returnsLeft, resweeps, resweepsLeft, gaps, all };
 }
 
+/** Nothing is left to judge when the site refuses the run for good, or more than half of the sample did not load. */
+function nothingToJudge(gaps: Gap[], pages: Pick<RunData["pages"][number], "item">[]): boolean {
+  const home = pages[0] ? new URL(pages[0].item.url).origin : null;
+  if (gaps.some((gap) => gap.check === "site-answered" && (gap.measured as { origin?: string } | undefined)?.origin === home)) return true;
+  const unloaded = new Set(gaps.filter((gap) => gap.check === "pages-loaded").map((gap) => gap.page ?? gap.url));
+  return pages.length > 0 && unloaded.size * 2 > pages.length;
+}
+
+/**
+ * Where the gate would stop after every return to the explorer, the run goes on with what there is:
+ * each gap left becomes a limitation that the judges look at themselves (#318). It stops only where
+ * nothing is left to judge.
+ */
+export function afterEveryReturn(next: NonNullable<Gate["next"]>, gaps: Gap[], pages: Pick<RunData["pages"][number], "item">[]): { gaps: Gap[]; degradedLimitations: Gap[]; next: NonNullable<Gate["next"]>; afterRetries: boolean } {
+  const afterRetries = next === "stop" && !nothingToJudge(gaps, pages);
+  if (!afterRetries) return { gaps, degradedLimitations: [], next, afterRetries };
+  const degradedLimitations = gaps.map((gap) => ({ ...gap, missingNl: `Na ${MAX_RETURNS_TO_EXPLORER} keer terug naar de verkenner nog open: ${gap.missingNl} Wat hier niet in het bewijs staat, bekijkt de beoordelaar zelf in de sessie.` }));
+  return { gaps: [], degradedLimitations, next: "proceed", afterRetries };
+}
+
 /**
  * Run the gate: the fixed checks, the sheets and the task for the agent, and, when the
  * agent's answers are there and checked, the verdict on the evidence as a whole. With
@@ -992,11 +1014,15 @@ export async function gate(runDir: string, outDir: string = runDir): Promise<Gat
   const manifestPath = join(runDir, "manifest.json");
   const routed = route(fixed.gaps, reviewed.gaps, answers !== null, existsSync(manifestPath) ? (await readJson<Manifest>(manifestPath)).steps : [], (gap) => acceptedBy(gap) !== undefined);
   const accepted = routed.all.filter((gap) => acceptedBy(gap)).map((gap) => ({ ...gap, reasonNl: acceptedBy(gap)!.reasonNl, observation: acceptedBy(gap)!.observation, decidedBy: acceptedBy(gap)!.decidedBy }));
-  const { gaps, stage, next } = routed;
+  // After every return to the explorer the run goes on with what there is: each gap left becomes a limitation that the judges look at
+  // themselves (#318). It stops only where nothing is left to judge.
+  const { gaps, degradedLimitations, next, afterRetries } = afterEveryReturn(routed.next, routed.gaps, run.pages);
+  const stage = routed.stage;
   const result: Gate = {
     sufficient: routed.sufficient,
     stage,
     next,
+    ...(afterRetries ? { degraded: degradedLimitations.length } : {}),
     exploreRound: routed.exploreRound,
     returnsLeft: routed.returnsLeft,
     resweeps: routed.resweeps,
@@ -1007,7 +1033,7 @@ export async function gate(runDir: string, outDir: string = runDir): Promise<Gat
     gaps,
     accepted,
     warnings: [...fixed.warnings, ...reviewed.warnings],
-    limitations: fixed.limitations,
+    limitations: [...fixed.limitations, ...degradedLimitations],
     remarks,
     review: {
       task: join(absoluteOut, parts[0]!.task),
@@ -1025,6 +1051,9 @@ export async function gate(runDir: string, outDir: string = runDir): Promise<Gat
     return { pageType: remark.pageType, page: sheet?.page ?? null, url: sheet?.url ?? null, sheet: sheet?.file ?? null, seenNl: remark.remarkNl };
   }));
   await writeJson(join(outDir, "gate.json"), result);
+  // gate.json is the latest round; every round is kept beside it, so why the gate fell earlier can still be read (#318).
+  const rounds = readdirSync(join(outDir, "gate")).filter((name) => /^ronde-\d+\.json$/.test(name)).length;
+  await writeJson(join(outDir, "gate", `ronde-${rounds + 1}.json`), result);
   if (absoluteOut === absoluteRun) await writeManifest(runDir, { command: "gate", startedAt, stage, next, sufficient: result.sufficient, gaps: gaps.length, warnings: result.warnings.length, templateSha256: sha256(template) });
   return result;
 }

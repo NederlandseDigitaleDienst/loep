@@ -16,7 +16,7 @@ Je beoordeelt succescriterium **{{id}} {{title}}** (niveau {{level}}) voor één
 ## Wie wat doet
 
 - **De veegronde (scripts) levert de dekking**: elke pagina, elk schema, het smalle scherm, elke toestand. Jij doet de veegronde niet over.
-- **De bewijspoort** heeft gecontroleerd of de veegronde bruikbaar is. De uitkomst staat in `{{gate}}`, met onder `gaps` de gaten: per gat de controle, de pagina, de toestand en wat er mist. Lees welke gaten het bewijs van dit criterium raken; "Wat de veegronde moet leveren" onderaan de procedure zegt welke dekking dit criterium nodig heeft.
+- **De bewijspoort** heeft gecontroleerd of de veegronde bruikbaar is. De uitkomst staat in `{{gate}}`, met onder `gaps` de gaten: per gat de controle, de pagina, de toestand en wat er mist. Lees welke gaten het bewijs van dit criterium raken; "Wat de veegronde moet leveren" onderaan de procedure zegt welke dekking dit criterium nodig heeft. Onder `limitations` staan plekken die het onderzoek niet kon meten. Begint er een met "Na 2 keer terug naar de verkenner nog open", dan ontbreekt daar bewijs dat de veegronde had moeten leveren: bekijk en meet die plek zelf in je sessie als ze dit criterium raakt, en schrijf op wat je zag.
 - **Een gat in de dekking houdt een goedkeuring tegen, nooit een afkeuring.** `passed` en `inapplicable` rusten op dekking: mist er dekking die dit criterium nodig heeft, of ontbreekt het bestand van de poort, dan kan de uitkomst geen `passed` of `inapplicable` zijn. Een bevinding rust op wat jij zelf laat zien. Ook bij een onvoldoende poort beoordeel je dus elke kandidaat en elke duidelijke rij uit het dossier met je eigen instrumenten, en meld je wat je vindt. Blijft er minstens één bevinding staan, dan is de uitkomst `failed`. Alleen als er geen blijft staan, is de uitkomst `cantTell`, met in `missingNl` per gat een regel die begint met `veegronde mist:`. Hetzelfde geldt voor één los gat: dat het smalle scherm niet is gemeten, houdt een bevinding op het brede scherm niet tegen. Je bouwt de ontbrekende dekking niet zelf opnieuw op.
 - **Jij** gebruikt je instrumenten voor vier dingen, in deze volgorde:
   1. elke bevinding uit het dossier op één plek zelf zichtbaar maken;
@@ -122,6 +122,9 @@ Stop je sessie als je klaar bent: `node {{cli}} session stop --run {{run}} --ses
   ],
   "nothingFound": { "coverageNl": "gemeten op 9 van 29 pagina's en in 4 van 12 toestanden; geen verschil gevonden" },
   "missingNl": ["veegronde mist: het contrast op 320 pixels breed is op geen van de 30 pagina's gemeten.", "versturen niet toegestaan: wat de chat in het ingesloten venster op P03 (https://chat.voorbeeld.nl) toont en laat voorlezen nadat er een bericht is verstuurd."]
+  "attempts": [
+    { "missing": 1, "triedNl": "Alleen bij een punt proef werkte niet of niet bereikbaar: wat je probeerde, op welke manieren en wanneer, en wat het instrument antwoordde.", "evidence": ["{{session}}-0030", "{{session}}-0033"] }
+  ],
 }
 ```
 
@@ -136,6 +139,7 @@ Stop je sessie als je klaar bent: `node {{cli}} session stop --run {{run}} --ses
 - `recommendations`: alleen onder een regel uit de sectie "Aanbevelingen" van de procedure, met die regel in `rule` (`A1`). Verder `titleNl`, `observedNl`, `recommendationNl` (wat de site kan doen), de plekken in `locations` zoals bij een bevinding, en in `evidence` minstens één waarneming van een kijk- of meetcommando. Laat het veld weg als er niets is, of als de procedure geen aanbevelingen kent.
 {{findingRules}}
 - `missingNl`: de open punten, elk met zijn soort ervoor (`mens nodig:`, `keuze nodig:`, `versturen niet toegestaan:`, `buiten de afbakening:`, `veegronde mist:`, `budget op:`, `proef werkte niet:` of `niet bereikbaar:`); wat elke soort betekent en hoe je een punt schrijft, staat hierboven bij de regels voor bevindingen en open punten.
+- `attempts`: één regel per punt `proef werkte niet:` of `niet bereikbaar:` in `missingNl`; `missing` is de plaats van dat punt in `missingNl`, geteld vanaf 1. Zo'n punt laat je alleen staan na een echte poging in je eigen sessie: minstens twee keer en op meer dan één manier geprobeerd, met minstens twee eigen waarnemingen in `evidence` (een commando dat mislukte telt mee). De controle weigert het punt zonder. Laat het veld weg als er geen zo'n punt is.
 - `nothingFound`: alleen bij `cantTell`, als er niets fout is gevonden en elk open punt over dit onderzoek gaat (`veegronde mist:`, `budget op:`, `proef werkte niet:` of `niet bereikbaar:`). Het rapport toont het criterium dan als "geen afwijking gevonden, niet volledig gemeten"; de uitkomst blijft `cantTell` en telt niet als voldoet. Zet in `coverageNl` wat wel is gemeten, met aantallen. Staat er ook maar één punt `mens nodig:`, `keuze nodig:` of `versturen niet toegestaan:`, staat er een kandidaat op `open`, of is er iets gezien dat op een fout kan wijzen, laat het veld dan weg: dan is de vraag echt open.
 - `severity`: een van de vier treden; hoe je kiest, staat hierboven bij de regels voor bevindingen.
 - `component`: als hetzelfde onderdeel op veel pagina's terugkomt (bijvoorbeeld de hoofdnavigatie), noem het dan, zodat één oplossing alle plekken dekt.
