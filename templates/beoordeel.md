@@ -121,10 +121,10 @@ Stop je sessie als je klaar bent: `node {{cli}} session stop --run {{run}} --ses
     { "observations": ["{{session}}-0009"], "by": ["{{session}}-0010"], "howNl": "Wat het verschil tussen de methoden was en waarmee je het hebt beslecht." }
   ],
   "nothingFound": { "coverageNl": "gemeten op 9 van 29 pagina's en in 4 van 12 toestanden; geen verschil gevonden" },
-  "missingNl": ["veegronde mist: het contrast op 320 pixels breed is op geen van de 30 pagina's gemeten.", "versturen niet toegestaan: wat de chat in het ingesloten venster op P03 (https://chat.voorbeeld.nl) toont en laat voorlezen nadat er een bericht is verstuurd."]
+  "missingNl": ["veegronde mist: het contrast op 320 pixels breed is op geen van de 30 pagina's gemeten.", "versturen niet toegestaan: wat de chat in het ingesloten venster op P03 (https://chat.voorbeeld.nl) toont en laat voorlezen nadat er een bericht is verstuurd.", "proef werkte niet: de meting van het contrast gaf op P05 bij de lijnen in het diagram geen verhouding, ook niet na een nieuwe open."],
   "attempts": [
-    { "missing": 1, "triedNl": "Alleen bij een punt proef werkte niet of niet bereikbaar: wat je probeerde, op welke manieren en wanneer, en wat het instrument antwoordde.", "evidence": ["{{session}}-0030", "{{session}}-0033"] }
-  ],
+    { "missing": 3, "triedNl": "Alleen bij een punt proef werkte niet of niet bereikbaar: wat je probeerde, op welke manieren en wanneer, en wat het instrument antwoordde.", "evidence": ["{{session}}-0030", "{{session}}-0033"] }
+  ]
 }
 ```
 

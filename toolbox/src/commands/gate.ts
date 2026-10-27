@@ -930,20 +930,25 @@ export function route(fixedGaps: Gap[], reviewedGaps: Gap[], answered: boolean, 
   return { sufficient, stage, next, exploreRound, returnsLeft, resweeps, resweepsLeft, gaps, all };
 }
 
-/** Nothing is left to judge when the site refuses the run for good, or more than half of the sample did not load. */
+/**
+ * Nothing is left to judge when the site refuses the run for good, or more than half of the sample
+ * did not load. Only pages of the sample count: a page the inventory skipped is not in it.
+ */
 function nothingToJudge(gaps: Gap[], pages: Pick<RunData["pages"][number], "item">[]): boolean {
   const home = pages[0] ? new URL(pages[0].item.url).origin : null;
   if (gaps.some((gap) => gap.check === "site-answered" && (gap.measured as { origin?: string } | undefined)?.origin === home)) return true;
-  const unloaded = new Set(gaps.filter((gap) => gap.check === "pages-loaded").map((gap) => gap.page ?? gap.url));
+  const unloaded = new Set(gaps.filter((gap) => gap.check === "pages-loaded" && gap.page !== null).map((gap) => gap.page));
   return pages.length > 0 && unloaded.size * 2 > pages.length;
 }
 
 /**
  * Where the gate would stop after every return to the explorer, the run goes on with what there is:
  * each gap left becomes a limitation that the judges look at themselves (#318). It stops only where
- * nothing is left to judge.
+ * nothing is left to judge. The pictures are always looked at first: a gap only the review finds,
+ * such as an empty screenshot or a notice over the page, has to be among the limitations too.
  */
-export function afterEveryReturn(next: NonNullable<Gate["next"]>, gaps: Gap[], pages: Pick<RunData["pages"][number], "item">[]): { gaps: Gap[]; degradedLimitations: Gap[]; next: NonNullable<Gate["next"]>; afterRetries: boolean } {
+export function afterEveryReturn(next: NonNullable<Gate["next"]>, stage: Gate["stage"], gaps: Gap[], pages: Pick<RunData["pages"][number], "item">[]): { gaps: Gap[]; degradedLimitations: Gap[]; next: NonNullable<Gate["next"]>; afterRetries: boolean } {
+  if (next === "stop" && stage !== "complete" && !nothingToJudge(gaps, pages)) return { gaps, degradedLimitations: [], next: "review", afterRetries: false };
   const afterRetries = next === "stop" && !nothingToJudge(gaps, pages);
   if (!afterRetries) return { gaps, degradedLimitations: [], next, afterRetries };
   const degradedLimitations = gaps.map((gap) => ({ ...gap, missingNl: `Na ${MAX_RETURNS_TO_EXPLORER} keer terug naar de verkenner nog open: ${gap.missingNl} Wat hier niet in het bewijs staat, bekijkt de beoordelaar zelf in de sessie.` }));
@@ -1016,7 +1021,7 @@ export async function gate(runDir: string, outDir: string = runDir): Promise<Gat
   const accepted = routed.all.filter((gap) => acceptedBy(gap)).map((gap) => ({ ...gap, reasonNl: acceptedBy(gap)!.reasonNl, observation: acceptedBy(gap)!.observation, decidedBy: acceptedBy(gap)!.decidedBy }));
   // After every return to the explorer the run goes on with what there is: each gap left becomes a limitation that the judges look at
   // themselves (#318). It stops only where nothing is left to judge.
-  const { gaps, degradedLimitations, next, afterRetries } = afterEveryReturn(routed.next, routed.gaps, run.pages);
+  const { gaps, degradedLimitations, next, afterRetries } = afterEveryReturn(routed.next, routed.stage, routed.gaps, run.pages);
   const stage = routed.stage;
   const result: Gate = {
     sufficient: routed.sufficient,

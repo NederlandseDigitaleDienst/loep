@@ -1,10 +1,12 @@
 import type { CriterionResult } from "./evaluation.ts";
-import { canonicalCommand, MEASURE_COMMANDS, OBSERVATION_ID, type ObservationIndex } from "./verdict.ts";
+import { canonicalCommand, OBSERVATION_ID, type ObservationIndex } from "./verdict.ts";
 
 /**
  * What an outcome rests on, derived from what its verdict cites and never given by an agent (#318):
- * an instrument (a measure command of the session, or the dossier of the sweep), what an agent saw
- * and did itself (look, crop, click and the like), a person, or nothing yet.
+ * an instrument, what an agent saw in a picture, a person, or nothing yet. An instrument is anything
+ * the browser answers itself: a measure command, but also the accessibility tree (ax), the code
+ * (html, find, style), and where focus and state go after a key or a click (#361). What an agent saw
+ * is a picture it looked at and judged: look, crop, or a screenshot file of the run.
  */
 export type Basis = "measured" | "observed" | "person" | "open";
 
@@ -15,13 +17,18 @@ export const BASIS_NL: Record<Basis, string> = {
   open: "open",
 };
 
-const MEASURING = new Set<string>(MEASURE_COMMANDS);
+/** Commands whose answer is a picture an agent judges by eye, or only opens the page: no instrument. */
+const SEEN = new Set<string>(["look", "crop", "open"]);
 
-/** A reference rests on an instrument when it is a measure command of the session, or a part of the dossier that the sweep measured. */
+/**
+ * A reference rests on an instrument when it is a session command whose answer comes from the
+ * browser, or a part of the dossier that the sweep measured. A file of the run (a path, such as a
+ * screenshot) is a picture, not a measurement.
+ */
 function measuredRef(ref: string, index: ObservationIndex): boolean {
-  if (!OBSERVATION_ID.test(ref)) return true;
+  if (!OBSERVATION_ID.test(ref)) return !ref.includes("/");
   const observation = index.get(ref);
-  return observation !== undefined && !observation.failed && MEASURING.has(canonicalCommand(observation.command));
+  return observation !== undefined && !observation.failed && !SEEN.has(canonicalCommand(observation.command));
 }
 
 /** What one examined place rests on: an instrument when one of its references does, else what the agent saw. */

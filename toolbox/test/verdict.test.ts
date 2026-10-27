@@ -74,8 +74,13 @@ test("a failure on a rule with fail_observations cites that instrument (#318)", 
   const zoomContext: JudgeContext = { ...context, criterion: "1.4.4", evidenceNames: [], observations: zoomed, passCommands: ["zoom", "look"], decisiveCommands: [], failCommands: { R2: ["zoom"], R4: ["zoom"] } };
   const lost = { ...finding, evidence: ["j144-0002"] };
   const onLook: Verdict = { ...failed, criterion: "1.4.4", rule: "R4", findings: [lost], observations: [{ ...seen, evidence: ["j144-0002"] }] };
-  assert.match(validateJudgeVerdict(onLook, zoomContext).join(), /must cite an observation of "zoom": the norm accepts more than one way/);
-  assert.equal(validateJudgeVerdict({ ...onLook, findings: [{ ...lost, evidence: ["j144-0002", "j144-0003"] }] }, zoomContext).filter((problem) => problem.includes("fail_observations")).length, 0, "a finding that cites zoom will do");
+  assert.match(validateJudgeVerdict(onLook, zoomContext).join(), /findings\[0\]: a "failed" outcome on R4 for this criterion needs, in the evidence of every finding, an observation of your own session of "zoom"/);
+  const judging: JudgeContext = { ...zoomContext, session: "j144" };
+  assert.equal(validateJudgeVerdict({ ...onLook, findings: [{ ...lost, evidence: ["j144-0002", "j144-0003"] }] }, judging).filter((problem) => problem.includes("fail_observations")).length, 0, "a finding that cites a zoom of one's own will do");
+  // A zoom elsewhere in the verdict, or of another session, does not carry the finding (#361).
+  assert.match(validateJudgeVerdict({ ...onLook, observations: [{ ...seen, evidence: ["j144-0003"] }] }, judging).join(), /fail_observations/);
+  const otherSession = indexObservations([record("j144-0001", "open"), record("j144-0002", "look"), record("v144-0001", "zoom")]);
+  assert.match(validateJudgeVerdict({ ...onLook, findings: [{ ...lost, evidence: ["j144-0002", "v144-0001"] }] }, { ...judging, observations: otherSession }).join(), /fail_observations/);
   assert.equal(validateJudgeVerdict({ ...onLook, rule: "R1" }, zoomContext).filter((problem) => problem.includes("fail_observations")).length, 0, "a rule without it asks nothing");
 });
 
@@ -282,6 +287,8 @@ test("check-walk says per problem which candidate, what is wrong and what to giv
 
 test("the stamp of a verdict can bind it to the observations it cites", () => {
   assert.deepEqual(citedObservations(reproduced, observations), ["j143-0003", "v143-0002"]);
+  // The observations of an attempt are bound too (#361).
+  assert.deepEqual(citedObservations({ ...reproduced, attempts: [{ missing: 1, triedNl: "Twee keer opnieuw geopend.", evidence: ["v143-0001", "v143-0003"] }] }, observations), ["j143-0003", "v143-0001", "v143-0002", "v143-0003"]);
 });
 
 test("a disagreement only needs settling for the command that decides the criterion", () => {
@@ -452,7 +459,9 @@ test("an open point names its kind and is written for a reader who does not know
   const open = (missingNl: string[]): string => validateJudgeVerdict({ ...passed, outcome: "cantTell", missingNl }, context).join("\n");
   assert.match(open(["Het contrast op 320 pixels breed is niet gemeten."]), /missingNl\[0\]: an open point starts with its kind and a colon: "mens nodig:"/);
   // A point "niet bereikbaar" also says when: a time of day.
-  for (const kind of OPEN_POINT_KINDS) assert.equal(open([`${kind.prefix}: het contrast op 320 pixels breed is niet gemeten op P01${kind.prefix === UNREACHABLE ? ", tussen 14:05 en 14:40" : kind.prefix === OUTSIDE_SCOPE ? ", met inhoud van https://data.example.nl" : ""}.`]), "");
+  for (const kind of OPEN_POINT_KINDS.filter((entry) => entry.prefix !== "geen geldig resultaat")) assert.equal(open([`${kind.prefix}: het contrast op 320 pixels breed is niet gemeten op P01${kind.prefix === UNREACHABLE ? ", tussen 14:05 en 14:40" : kind.prefix === OUTSIDE_SCOPE ? ", met inhoud van https://data.example.nl" : ""}.`]), "");
+  // Only loep writes that no valid verdict came (#361).
+  assert.match(open(["geen geldig resultaat: de beoordeling gaf geen oordeel."]), /is written by loep when an agent gave no valid verdict twice, not by an agent/);
   // A point "buiten de afbakening" names the address outside the run, and is the owner's: a choice of the scope.
   assert.match(open(["buiten de afbakening: het blok met openingstijden op P02 bleef leeg."]), /names the address outside the run/);
   assert.equal(openPoint("buiten de afbakening: https://data.example.nl").kind?.reader, "owner");

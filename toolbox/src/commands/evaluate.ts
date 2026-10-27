@@ -362,7 +362,12 @@ export async function evaluate(options: EvaluateOptions): Promise<Evaluation> {
   for (const problem of rejected) process.stderr.write(`rejected ${problem}\n`);
   // A verdict that no longer belongs to its task does not count, and its criterion has no outcome: say so where it is read, with what to do (#318).
   const stale = rejected.filter((problem) => problem.endsWith(": no current stamp")).map((problem) => problem.split(":")[0]!);
-  if (stale.length > 0) process.stdout.write(`LET OP: ${stale.length === 1 ? "een oordeel telt" : `${stale.length} oordelen tellen`} niet, want ${stale.length === 1 ? "het hoort" : "ze horen"} bij een eerdere opdracht of een eerder dossier (${stale.join(", ")}). Het criterium heeft daardoor geen uitkomst. Draai tasks opnieuw: dat zet de opdracht opnieuw klaar.\n`);
+  if (stale.length > 0) {
+    // stale holds "<criterion>/<round>": only a criterion that ended without an outcome lost it to this; at another a later round still counts (#361).
+    const lost = [...new Set(stale.map((entry) => entry.split("/")[0]!))].filter((id) => criteria.find((criterion) => criterion.id === id)?.outcome === "untested");
+    const lostNl = lost.length === 0 ? " Een latere ronde telt wel, dus elk criterium heeft nog een uitkomst." : ` ${lost.length === 1 ? `Criterium ${lost[0]} heeft` : `De criteria ${lost.join(", ")} hebben`} daardoor geen uitkomst.`;
+    process.stdout.write(`LET OP: ${stale.length === 1 ? "een oordeel telt" : `${stale.length} oordelen tellen`} niet, want ${stale.length === 1 ? "het hoort" : "ze horen"} bij een eerdere opdracht of een eerder dossier (${stale.join(", ")}).${lostNl} Draai tasks opnieuw: dat zet de opdracht opnieuw klaar.\n`);
+  }
   // Per criterion who or what established the outcome: counted here, and said for every one that is not the verifier's.
   const by = (kind: keyof typeof ESTABLISHED_BY_NL): CriterionResult[] => criteria.filter((criterion) => criterion.established?.by === kind);
   const shown = (list: CriterionResult[]): string => list.map((criterion) => `${criterion.id} ${OUTCOME_LABEL[criterion.outcome].toLowerCase()}`).join("; ");
