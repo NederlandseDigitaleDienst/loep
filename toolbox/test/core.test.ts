@@ -411,6 +411,10 @@ test("what an outcome rests on is derived from what it cites (#318)", () => {
   assert.equal(placeBasis(["j1-0002"], index), "observed");
   assert.equal(placeBasis(["j1-0004"], index), "observed", "a measurement that failed measured nothing");
   assert.equal(placeBasis(["contrast"], index), "measured", "a part of the dossier comes from the sweep");
+  // What the browser answers is measured, also the accessibility tree and focus after a key; a picture file of the run is not (#361).
+  const more = indexObservations([record("j2-0001", "ax"), record("j2-0002", "tab"), record("j2-0003", "click"), record("j2-0004", "crop")]);
+  assert.deepEqual(["j2-0001", "j2-0002", "j2-0003", "j2-0004"].map((ref) => placeBasis([ref], more)), ["measured", "measured", "measured", "observed"]);
+  assert.equal(placeBasis(["pages/P01/screenshot-light.png"], more), "observed");
   const criterion = criterionById("1.4.3")!;
   const base = { criterion, procedure: null, provenance: { dossierSha256: null, verdictSha256: {} } };
   const onLook: Verdict = { ...passed, criterion: "1.4.3", observations: [{ ...observation, evidence: ["j1-0002"], ruling: "noIssue" }] };

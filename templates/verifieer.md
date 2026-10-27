@@ -140,9 +140,9 @@ Dezelfde vorm als het oordeel van de beoordelaar, door jou opnieuw geschreven, m
     { "rule": "A1", "titleNl": "...", "observedNl": "...", "recommendationNl": "...", "component": null, "locations": [ { "page": "P03", "where": "...", "heading": "..." } ], "evidence": ["{{session}}-0018"] }
   ],
   "nothingFound": { "coverageNl": "Alleen bij cantTell zonder afwijking: wat wel is gemeten, met aantallen." },
-  "missingNl": ["Bij cantTell en bij open punten: de soort, een dubbele punt en wat er nodig is, zoals: mens nodig: wat NVDA en JAWS voorlezen bij het uitklapmenu op P03; VoiceOver met Safari las de naam en de toestand voor."],
+  "missingNl": ["Bij cantTell en bij open punten: de soort, een dubbele punt en wat er nodig is, zoals: mens nodig: wat NVDA en JAWS voorlezen bij het uitklapmenu op P03; VoiceOver met Safari las de naam en de toestand voor.", "proef werkte niet: de meting van het contrast gaf op P05 bij de lijnen in het diagram geen verhouding, ook niet na een nieuwe open."],
   "attempts": [
-    { "missing": 1, "triedNl": "Alleen bij een punt proef werkte niet of niet bereikbaar: wat je probeerde, op welke manieren en wanneer, en wat het instrument antwoordde.", "evidence": ["{{session}}-0030", "{{session}}-0033"] }
+    { "missing": 2, "triedNl": "Alleen bij een punt proef werkte niet of niet bereikbaar: wat je probeerde, op welke manieren en wanneer, en wat het instrument antwoordde.", "evidence": ["{{session}}-0030", "{{session}}-0033"] }
   ],
   "verification": {
     "judgeOutcome": "failed",

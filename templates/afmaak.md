@@ -108,7 +108,7 @@ Stop je sessie als je klaar bent: `node {{cli}} session stop --run {{run}} --ses
   "recommendations": [
     { "rule": "A1", "titleNl": "...", "observedNl": "...", "recommendationNl": "...", "component": null, "locations": [ { "page": "P03", "where": "...", "heading": "..." } ], "evidence": ["{{session}}-0018"] }
   ],
-  "missingNl": ["Alleen wat na jouw werk nog open is, met de soort ervoor: mens nodig, keuze nodig, versturen niet toegestaan, buiten de afbakening, proef werkte niet of niet bereikbaar."],
+  "missingNl": ["proef werkte niet: de meting van het contrast gaf op P05 bij de lijnen in het diagram geen verhouding, ook niet na een nieuwe open.", "mens nodig: wat NVDA en JAWS voorlezen bij het uitklapmenu op P03; VoiceOver met Safari las de naam en de toestand voor."],
   "finish": {
     "points": [
       { "point": 1, "settled": true, "howNl": "Wat je mat, waar, en wat eruit kwam.", "evidence": ["{{session}}-0004"] },
@@ -128,6 +128,7 @@ Stop je sessie als je klaar bent: `node {{cli}} session stop --run {{run}} --ses
 - `finish.points`: één regel per open punt uit deze opdracht, met zijn nummer. `settled: true` vraagt minstens één waarneming van een kijk- of meetcommando uit je eigen sessie. `settled: false` betekent dat het punt in `missingNl` staat. Bij `passed` en `inapplicable` is elk punt beslecht.
 - `finish.coverageNl`: waar je hebt gemeten, met aantallen. Het rapport neemt deze zin over.
 - `finish.findings`: één regel per bevinding, met de eerste waarneming en de herhaling na een nieuwe `open`.
+- `missingNl`: alleen wat na jouw werk nog open is, elk punt met de soort ervoor: mens nodig, keuze nodig, versturen niet toegestaan, buiten de afbakening, proef werkte niet of niet bereikbaar.
 - `finish.attempts`: één regel per punt `proef werkte niet:` of `niet bereikbaar:` in `missingNl`; `missing` is de plaats van dat punt in `missingNl`, geteld vanaf 1. Laat het veld weg als er geen zo'n punt is.
 - `observations`: wat nu vaststaat. Elke waarneming zegt in `ruling` wat eruit volgt: `noIssue`, `finding` (met de `key` in `finding`), `open` (met het punt in `missingNl`) of `otherCriterion` (met een regel in `crossCandidates`). Bij `passed` gelden de eisen van de procedure onder "Bewijs bij goedkeuring", en `resolved` voor elke meting waarvan de methoden het oneens waren over de vraag van dit criterium: `{ "observations": [de metingen], "by": [de waarneming die het beslecht], "howNl": "wat het verschil was" }`.
 - `engineRules`: staat er in het dossier onder `engine` een regel met `failed`, dan noemt een waarneming die regel in `engineRules` (de naam uit `rule`, zoals `aria-roles`). Haar `ruling` zegt wat eruit volgt: `finding`, `otherCriterion` (met een regel in `crossCandidates`), `open` (met het punt in `missingNl`), of `noIssue` met een kijk- of meetwaarneming uit je eigen sessie die laat zien waarom de melding hier niet opgaat: een valse melding, of niet van toepassing omdat je iets zag. Eén waarneming per regel en soort element is genoeg, niet één per element; meldt een regel verschillende soorten elementen, dan mag elke soort een eigen waarneming krijgen, en een waarneming mag meer regels noemen die over dezelfde elementen gaan (`link-name` en `sia-r11`). De controle weigert een oordeel dat een mislukte regel nergens noemt.

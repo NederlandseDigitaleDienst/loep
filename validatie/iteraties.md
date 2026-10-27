@@ -362,3 +362,15 @@ Per gebrek wijkt een run af bij zeven gebreken. Twee mist elke run (1.3.2-zoekvo
 - **C: afschalen klopt.** De poort ging door met tien beperkingen, geen criterium bleef open, geen afkeuring was onterecht. 3.3.1, waarvan het vaste model de formulieren niet opent, werd door de afmaakronde zelf gemeten en terecht afgekeurd. C vond 35 van 38, tussen A1 en A2.
 - **Beperkingen.** De open punten die A in afgekeurde criteria laat staan (6 en 8), zijn in B en C beperkingen; geen uitkomst verandert erdoor.
 - **Niet gemeten.** `instrument-gaps.json` bleef in alle runs van #341 leeg: niet aangetoond dat de afleiding van gaten werkt. Een bevinding op een eerdere waarneming (`notRepeated`) kwam niet voor. Het doel `verantwoorden` is niet gemeten.
+
+**Aanvulling, 28 oktober 2026** (na de review van #361).
+
+| | A1 | A2 | B1 | B2 | C1 |
+|---|---|---|---|---|---|
+| Duur van de werkstroom | 39 min | 44 min | 38 min | 42 min | 52 min |
+| Tokens volgens de werkstroom | 4,9 miljoen | 5,4 miljoen | 4,8 miljoen | 4,8 miljoen | 5,3 miljoen |
+| Criteria vastgesteld door een agent, van 10 | 0 | 0 | 0 | 0 | 0 |
+
+A2 en C1 liepen in twee delen door de weeklimiet; hun duur en tokens tellen de agents die bij de limiet stopten en opnieuw begonnen mee, en zijn daarom hoger en niet te vergelijken met A1 en B. B1 en B2 tegen A1: geen meerverbruik, binnen de grens van 20 procent uit #318.
+
+Het aandeel "vastgesteld door een agent" is gerekend met de definitie na #361: een uitkomst rust op een instrument als ze iets aanhaalt wat de browser zelf antwoordt (ook `ax`, `html`, `tab`, `key`, `click`), en op een eigen waarneming van een agent als ze alleen een beeld aanhaalt (`look`, `crop`, een schermafbeelding). Met de eerste definitie in #361, die alleen meetcommando's telde, kwam 3.3.1 in B1 en B2 op "vastgesteld door een agent"; dat was te laag geteld. Op deze testsite rust elke uitkomst op een instrument; wat het label op een echte site zegt, is nog niet gezien.
