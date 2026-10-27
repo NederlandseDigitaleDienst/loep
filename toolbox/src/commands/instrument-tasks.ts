@@ -201,6 +201,39 @@ const sessionStarted = (runDir: string, name: string): boolean => existsSync(joi
 
 const sessionPart = (text: string): string => text.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 24);
 
+/** The session name of the first attempt at a task; a later one adds `-2`, `-3` (see `nextSession`). */
+const SESSION_BASE: Record<Phase, (id: string) => string> = {
+  walks: (id) => `r-${sessionPart(id)}`,
+  judges: (id) => `b-${id.replaceAll(".", "")}`,
+  verifiers: (id) => `v-${id.replaceAll(".", "")}`,
+  finishers: (id) => `a-${id.replaceAll(".", "")}`,
+};
+
+/**
+ * What `pending` says when the session before the current one of an open task has no time left.
+ * Its clock runs from its first start, also through a pause of the workflow, so after a pause it
+ * can be far past its maximum (#359). `tasks` already gave the task a fresh session, as for any
+ * session that gave no result that holds; this says so, and where the old one is. Null when there
+ * is no earlier session, or it still had time.
+ */
+function spentSessionNl(runDir: string, phase: Phase, id: string, current: string): string | null {
+  const base = SESSION_BASE[phase](id);
+  const attempt = current === base ? 1 : Number(current.slice(base.length + 1));
+  if (!current.startsWith(`${base}-`) || !Number.isInteger(attempt) || attempt < 2) return null;
+  const earlier = attempt === 2 ? base : `${base}-${attempt - 1}`;
+  let file: { startedAt?: string; limits?: { maxMinutes?: number } };
+  try {
+    file = JSON.parse(readFileSync(join(runDir, "observations", earlier, "session.json"), "utf8"));
+  } catch {
+    return null;
+  }
+  // The limit in the session file includes what the session added itself with `session extend`.
+  const minutes = (Date.now() - Date.parse(file.startedAt ?? "")) / 60_000;
+  const max = file.limits?.maxMinutes;
+  if (!Number.isFinite(minutes) || typeof max !== "number" || minutes < max) return null;
+  return `de sessie ${earlier} gaf geen resultaat dat telt en heeft geen tijd meer: ${Math.round(minutes)} van ${max} minuten sinds haar eerste start, een pauze van de werkstroom meegeteld. Deze opdracht krijgt daarom een verse sessie, ${current}, met een eigen klok. De waarnemingen van ${earlier} blijven in observations/${earlier}. Een agent die stopte met een fout van het model telt niet als poging`;
+}
+
 /** What a command that needs the task files says when they are not there. */
 export const NO_TASKS_NL = "deze run heeft geen opdrachten om te beoordelen: draai eerst tasks, en daarvoor explore als de site nog niet is verkend";
 
@@ -664,7 +697,7 @@ export async function instrumentTasks(runDir: string, options: TaskOptions = {})
     const page = run.pages.find((entry) => entry.item.url === type.representative) ?? run.pages.find((entry) => type.pages.includes(entry.item.url));
     if (!page) continue;
     const earlier = previous?.walks.find((entry) => entry.pageType === type.id);
-    const session = earlier?.session ?? `r-${sessionPart(type.id)}`;
+    const session = earlier?.session ?? SESSION_BASE.walks(type.id);
     const stateLines = stateLinesFor(run, type.id, recipes);
     const walkLimits = walkBudget(BUDGETS.walk, stateLines.length);
     const walk: WalkTask = { pageType: type.id, page: page.label, prompt: TASK_FILES.walks(type.id), output: join("rondgang", `${type.id}.json`), session, maxCommands: walkLimits.commands, maxMinutes: walkLimits.minutes };
@@ -691,7 +724,7 @@ export async function instrumentTasks(runDir: string, options: TaskOptions = {})
     );
     await writeWalk();
     if (sessionStarted(runDir, walk.session) && !(await walkIsCurrent(runDir, walk, observations))) {
-      walk.session = nextSession(runDir, `r-${sessionPart(type.id)}`);
+      walk.session = nextSession(runDir, SESSION_BASE.walks(type.id));
       await writeWalk();
     }
     walks.push(walk);
@@ -724,9 +757,8 @@ export async function instrumentTasks(runDir: string, options: TaskOptions = {})
     const dossierPath = join(dir, "dossier.json");
     const dossier = (options.buildDossier ?? buildDossier)(run, procedure);
     const dossierSha256 = await writeJson(join(runDir, dossierPath), dossier);
-    const digits = procedure.id.replaceAll(".", "");
     const earlier = previous?.tasks.find((entry) => entry.criterion === procedure.id);
-    const judgeSession = earlier?.judge.session ?? `b-${digits}`;
+    const judgeSession = earlier?.judge.session ?? SESSION_BASE.judges(procedure.id);
     // Besides the walks, the sweep: what it measured that the role alone does not settle.
     const judgeCandidates = [...(fromWalks.get(procedure.id) ?? []), ...sweepCandidates(run).filter((candidate) => candidate.criterion === procedure.id)];
     coverage.set(procedure.id, coverageOf(run, procedure));
@@ -741,7 +773,7 @@ export async function instrumentTasks(runDir: string, options: TaskOptions = {})
     const task: InstrumentTask = { criterion: criterion.id, titleNl: criterion.titleNl, procedureVersion: procedure.version, procedureSha256: procedure.sha256, dossier: dossierPath, dossierSha256, passCommands: procedure.passCommands, ...(Object.keys(procedure.failCommands).length > 0 ? { failCommands: procedure.failCommands } : {}), decisiveCommands: procedure.decisiveCommands, recommendationRules: procedure.recommendationRules, ...(procedure.passExplains.length > 0 ? { passExplains: procedure.passExplains } : {}), judge, verify: null };
     await writeJudge();
     if (sessionStarted(runDir, judge.session) && !(await instrumentVerdictIsCurrent(runDir, task, "judge", observations))) {
-      judge.session = nextSession(runDir, `b-${digits}`);
+      judge.session = nextSession(runDir, SESSION_BASE.judges(procedure.id));
       await writeJudge();
     }
     tasks.push(task);
@@ -770,7 +802,7 @@ export async function instrumentTasks(runDir: string, options: TaskOptions = {})
       const maxCommands = budget.base + budget.perFinding * verdict.findings.length + budget.perDismissedCandidate * Math.max(0, dismissed) + (verdict.outcome === "failed" ? 0 : budget.afterPass);
       // What there is to reproduce is the floor; what the criterion used before and the size of the site come on top.
       const verifyLimits = verifyBudget({ commands: maxCommands, minutes: budget.minutes }, task.criterion, coverage.get(task.criterion)!);
-      const verify = { prompt: TASK_FILES.verifiers(task.criterion), output: join("verdicts", task.criterion, "final.json"), candidates: join(dir, "kandidaten-verificatie.json"), session: was?.verify?.session ?? `v-${task.criterion.replaceAll(".", "")}`, maxCommands: verifyLimits.commands, maxMinutes: verifyLimits.minutes };
+      const verify = { prompt: TASK_FILES.verifiers(task.criterion), output: join("verdicts", task.criterion, "final.json"), candidates: join(dir, "kandidaten-verificatie.json"), session: was?.verify?.session ?? SESSION_BASE.verifiers(task.criterion), maxCommands: verifyLimits.commands, maxMinutes: verifyLimits.minutes };
       await writeJson(join(runDir, verify.candidates), candidates);
       const writeVerify = async (): Promise<void> => writeFileAtomic(
         join(runDir, verify.prompt),
@@ -797,7 +829,7 @@ export async function instrumentTasks(runDir: string, options: TaskOptions = {})
       task.verify = verify;
       await writeVerify();
       if (sessionStarted(runDir, verify.session) && !(await instrumentVerdictIsCurrent(runDir, task, "final", observations))) {
-        verify.session = nextSession(runDir, `v-${task.criterion.replaceAll(".", "")}`);
+        verify.session = nextSession(runDir, SESSION_BASE.verifiers(task.criterion));
         await writeVerify();
       }
       verifiers++;
@@ -835,7 +867,6 @@ export async function instrumentTasks(runDir: string, options: TaskOptions = {})
       const procedure = procedures.find((entry) => entry.id === task.criterion)!;
       const criterion = criterionById(task.criterion)!;
       const dir = join("tasks", task.criterion);
-      const digits = task.criterion.replaceAll(".", "");
       // What the verifier ruled on with an observation of its own is settled; what it left open, and everything nobody verified, is for this round.
       const listed = await readJson<Candidate[]>(join(runDir, (task.verify ?? task.judge).candidates));
       // Nobody else was given what verifiers passed on, nor without a verifier what judges did: this round is, and when it runs again also what other finishing rounds passed on.
@@ -846,7 +877,7 @@ export async function instrumentTasks(runDir: string, options: TaskOptions = {})
       const all = [...listed, ...given.filter((candidate) => !listed.some((entry) => entry.id === candidate.id))];
       const finishLimits = finishBudget(BUDGETS.finish, { commands: task.judge.maxCommands, minutes: task.judge.maxMinutes }, BUDGETS.judge);
       const ruled = new Set(standing.round === "final" ? (standing.verdict!.candidates ?? []).filter((ruling) => ruling.ruling !== "open").map((ruling) => ruling.id) : []);
-      const finish: NonNullable<InstrumentTask["finish"]> = { prompt: TASK_FILES.finishers(task.criterion), output: join("verdicts", task.criterion, "afmaak.json"), candidates: join(dir, "kandidaten-afmaak.json"), session: was?.finish?.session ?? `a-${digits}`, maxCommands: finishLimits.commands, maxMinutes: finishLimits.minutes, points, ...(earlierRounds.length > 0 ? { earlier: earlierRounds } : {}), ...(ranAgain ? { again: true as const } : {}) };
+      const finish: NonNullable<InstrumentTask["finish"]> = { prompt: TASK_FILES.finishers(task.criterion), output: join("verdicts", task.criterion, "afmaak.json"), candidates: join(dir, "kandidaten-afmaak.json"), session: was?.finish?.session ?? SESSION_BASE.finishers(task.criterion), maxCommands: finishLimits.commands, maxMinutes: finishLimits.minutes, points, ...(earlierRounds.length > 0 ? { earlier: earlierRounds } : {}), ...(ranAgain ? { again: true as const } : {}) };
       await writeJson(join(runDir, finish.candidates), all.filter((candidate) => !ruled.has(candidate.id)));
       const standingNl =
         standing.round === "final"
@@ -889,7 +920,7 @@ export async function instrumentTasks(runDir: string, options: TaskOptions = {})
       task.finish = finish;
       await writeFinish();
       if (sessionStarted(runDir, finish.session) && !(await instrumentVerdictIsCurrent(runDir, task, "finish", observations))) {
-        finish.session = nextSession(runDir, `a-${digits}`);
+        finish.session = nextSession(runDir, SESSION_BASE.finishers(task.criterion));
         await writeFinish();
       }
       finishers++;
@@ -909,12 +940,15 @@ export interface InstrumentPending {
   flow: typeof INSTRUMENT_FLOW;
   /** The first phase with work left; run `tasks` again when a phase is finished. Each list is longest expected first (walks by the size of the task file, the others by the size of their candidates file), equal sizes in the order of the index. */
   phase: "walks" | "judges" | "verifiers" | "finishers" | "done";
-  /** Each task with `attempts`: how often an agent came back from it without a result that holds (see `InstrumentIndex.attempts`). */
-  walks: { pageType: string; task: string; session: string; attempts: number }[];
-  judges: { criterion: string; task: string; session: string; attempts: number }[];
-  verifiers: { criterion: string; task: string; session: string; attempts: number }[];
+  /**
+   * Each task with `attempts`: how often an agent came back from it without a result that holds (see `InstrumentIndex.attempts`).
+   * `sessionNl` is there when the session before `session` has no time left, as after a pause of the workflow (#359).
+   */
+  walks: { pageType: string; task: string; session: string; attempts: number; sessionNl?: string }[];
+  judges: { criterion: string; task: string; session: string; attempts: number; sessionNl?: string }[];
+  verifiers: { criterion: string; task: string; session: string; attempts: number; sessionNl?: string }[];
   /** The finishing round: one task per criterion the evaluation itself left open. Empty when there is none. */
-  finishers: { criterion: string; task: string; session: string; attempts: number }[];
+  finishers: { criterion: string; task: string; session: string; attempts: number; sessionNl?: string }[];
   /** Given up on with `skip`: no walk, or no verdict, will come. */
   skipped: string[];
   noteNl: string;
@@ -952,12 +986,17 @@ export async function instrumentPending(runDir: string): Promise<InstrumentPendi
   const observations = loadObservations(runDir);
   const absolute = (path: string): string => join(resolve(runDir), path);
   const attempts = (phase: Phase, id: string): number => index.attempts?.[`${phase}:${id}`] ?? 0;
+  // How often an agent came back, and what became of a session that has no time left.
+  const open = (phase: Phase, id: string, session: string): { session: string; attempts: number; sessionNl?: string } => {
+    const sessionNl = spentSessionNl(runDir, phase, id, session);
+    return { session, attempts: attempts(phase, id), ...(sessionNl ? { sessionNl } : {}) };
+  };
   const given: string[] = [];
   const walks: InstrumentPending["walks"] = [];
   for (const walk of index.walks) {
     if (await walkIsCurrent(runDir, walk, observations)) continue;
     if (skipped(runDir, walk.output)) given.push(`rondgang ${walk.pageType}`);
-    else walks.push({ pageType: walk.pageType, task: absolute(walk.prompt), session: walk.session, attempts: attempts("walks", walk.pageType) });
+    else walks.push({ pageType: walk.pageType, task: absolute(walk.prompt), ...open("walks", walk.pageType, walk.session) });
   }
   const judges: InstrumentPending["judges"] = [];
   const verifiers: InstrumentPending["verifiers"] = [];
@@ -967,7 +1006,7 @@ export async function instrumentPending(runDir: string): Promise<InstrumentPendi
     if (!(await instrumentVerdictIsCurrent(runDir, task, "judge", observations))) {
       if (skipped(runDir, task.judge.output)) given.push(`beoordeling ${task.criterion}`);
       else {
-        judges.push({ criterion: task.criterion, task: absolute(task.judge.prompt), session: task.judge.session, attempts: attempts("judges", task.criterion) });
+        judges.push({ criterion: task.criterion, task: absolute(task.judge.prompt), ...open("judges", task.criterion, task.judge.session) });
         candidatesOf.set(`judge ${task.criterion}`, absolute(task.judge.candidates));
       }
       continue;
@@ -976,7 +1015,7 @@ export async function instrumentPending(runDir: string): Promise<InstrumentPendi
     else if (!(await instrumentVerdictIsCurrent(runDir, task, "final", observations))) {
       if (skipped(runDir, task.verify.output)) given.push(`verificatie ${task.criterion}`);
       else {
-        verifiers.push({ criterion: task.criterion, task: absolute(task.verify.prompt), session: task.verify.session, attempts: attempts("verifiers", task.criterion) });
+        verifiers.push({ criterion: task.criterion, task: absolute(task.verify.prompt), ...open("verifiers", task.criterion, task.verify.session) });
         candidatesOf.set(`verify ${task.criterion}`, absolute(task.verify.candidates));
       }
     }
@@ -994,7 +1033,7 @@ export async function instrumentPending(runDir: string): Promise<InstrumentPendi
       else if (!(await instrumentVerdictIsCurrent(runDir, task, "finish", observations))) {
         if (skipped(runDir, task.finish.output)) given.push(`afmaakronde ${task.criterion}`);
         else {
-          finishers.push({ criterion: task.criterion, task: absolute(task.finish.prompt), session: task.finish.session, attempts: attempts("finishers", task.criterion) });
+          finishers.push({ criterion: task.criterion, task: absolute(task.finish.prompt), ...open("finishers", task.criterion, task.finish.session) });
           candidatesOf.set(`finish ${task.criterion}`, absolute(task.finish.candidates));
         }
       }
