@@ -402,10 +402,12 @@ async function main(): Promise<void> {
         review: result.gaps.length === 0 ? `vaste controles voldoende; de beelden zijn nog niet bekeken: ${tasksNl}` : `${counted(result.gaps.length)} in de vaste controles voor de verkenner; eerst de beelden bekijken, zodat de verkenner alle gaten in één keer krijgt: ${tasksNl}`,
         sweep: `bewijs onvoldoende: een nieuwe veegronde kan ${forSweep} van de ${counted(result.gaps.length)} sluiten, want daar mislukte of ontbreekt een meting. Draai collect, contrast, states en documents opnieuw en daarna gate; dat kost geen terugkeer naar de verkenner (nog ${result.resweepsLeft} keer opnieuw meten na deze verkenning)`,
         explore: `bewijs onvoldoende: ${counted(result.gaps.length)}${result.stage === "deterministic" ? " in de vaste controles" : ""}; nog ${result.returnsLeft} keer terug naar de verkenner`,
-        stop: `bewijs onvoldoende: ${counted(result.gaps.length)}${result.stage === "deterministic" ? " in de vaste controles" : ""}; de run is ${MAX_RETURNS_TO_EXPLORER} keer terug geweest naar de verkenner, er komt geen beoordeling`,
+        stop: `bewijs onvoldoende: ${counted(result.gaps.length)}${result.stage === "deterministic" ? " in de vaste controles" : ""}; de run is ${MAX_RETURNS_TO_EXPLORER} keer terug geweest naar de verkenner, en er valt niets te beoordelen: de site weigert de run, of meer dan de helft van de steekproef laadde niet. Er komt geen beoordeling`,
       }[result.next!];
-      process.stdout.write(`${verdict}\n${result.warnings.length} waarschuwingen\n`);
-      process.exitCode = { proceed: 0, review: 2, sweep: 3, explore: 1, stop: 1 }[result.next!];
+      // After every return the gaps left are limitations, and the run goes on (#318).
+      const degradedNl = result.degraded ? ` ${result.degraded === 1 ? "Eén gat bleef" : `${result.degraded} gaten bleven`} na ${MAX_RETURNS_TO_EXPLORER} keer terug naar de verkenner open en ${result.degraded === 1 ? "is een beperking" : "zijn beperkingen"} geworden: de beoordelaars bekijken die plekken zelf, en het rapport noemt ze.` : "";
+      process.stdout.write(`${result.degraded ? "bewijs niet volledig, verder met beperkingen." : verdict}${degradedNl}\n${result.warnings.length} waarschuwingen\n`);
+      process.exitCode = { proceed: 0, review: 2, sweep: 3, explore: 1, stop: 4 }[result.next!];
       return;
     }
     case "check-gate": {

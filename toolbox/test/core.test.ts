@@ -15,7 +15,8 @@ import { type Manifest, toolboxSource, writeManifest } from "../src/lib/manifest
 import { loadAllProcedures, loadProcedure, parseProcedure, runLimitsNl } from "../src/lib/procedures.ts";
 import { Politeness } from "../src/session/safety.ts";
 import type { SiteModel } from "../src/lib/sitemodel.ts";
-import type { Finding, Verdict } from "../src/lib/verdict.ts";
+import { indexObservations, type Finding, type Verdict } from "../src/lib/verdict.ts";
+import { criterionBasis, placeBasis } from "../src/lib/basis.ts";
 import { compareCriterionIds, criteriaFor, criterionById, criterionIdFromAxeTag, en301549Clause } from "../src/lib/wcag.ts";
 import { exampleEvaluation } from "./fixtures/example-evaluation.ts";
 
@@ -383,6 +384,43 @@ test("a criterion only gets an outcome from the verifier", () => {
   assert.equal(result.outcome, "failed");
   assert.deepEqual(result.rounds, { a: "passed", b: null, final: "failed" });
   assert.equal(new Set(result.findings.map((entry) => entry.id)).size, 2, "finding identifiers are unique");
+});
+
+test("in a failed criterion a point about this investigation is a limit, and the rest stays open (#318)", () => {
+  const criterion = criterionById("1.1.1")!;
+  const base = { criterion, procedure: null, provenance: { dossierSha256: null, verdictSha256: {} } };
+  const probe = "proef werkte niet: de diagrammen op een onderwerppagina gaven bij de meting geen verhouding.";
+  const outside = "buiten de afbakening: het blok haalt zijn inhoud van https://data.example.nl, en dat adres hoort niet bij de run.";
+  const person = "mens nodig: of het logo een naam nodig heeft, bepaalt de eigenaar.";
+  const failed = { ...passed, outcome: "failed" as const, findings: [finding], missingNl: [probe, outside, person] };
+  const result = resolveCriterion({ ...base, verdicts: { a: failed, final: failed } }, "X");
+  assert.equal(result.outcome, "failed");
+  assert.deepEqual(result.missingNl, [person], "what the owner can do stays open");
+  assert.deepEqual(result.limitsNl, [probe, outside]);
+  // Where the outcome hangs on the points, they stay open.
+  const open = { ...failed, outcome: "cantTell" as const, findings: [] };
+  const stillOpen = resolveCriterion({ ...base, verdicts: { a: open, final: open } }, "X");
+  assert.deepEqual(stillOpen.missingNl, [probe, outside, person]);
+  assert.equal(stillOpen.limitsNl, undefined);
+});
+
+test("what an outcome rests on is derived from what it cites (#318)", () => {
+  const record = (id: string, command: string, error: string | null = null) => ({ id, command, error, state: { start: { url: "http://127.0.0.1:4710/" } }, result: {} });
+  const index = indexObservations([record("j1-0001", "open"), record("j1-0002", "look"), record("j1-0003", "contrast"), record("j1-0004", "contrast", "het element is weg")]);
+  assert.equal(placeBasis(["j1-0003"], index), "measured");
+  assert.equal(placeBasis(["j1-0002"], index), "observed");
+  assert.equal(placeBasis(["j1-0004"], index), "observed", "a measurement that failed measured nothing");
+  assert.equal(placeBasis(["contrast"], index), "measured", "a part of the dossier comes from the sweep");
+  const criterion = criterionById("1.4.3")!;
+  const base = { criterion, procedure: null, provenance: { dossierSha256: null, verdictSha256: {} } };
+  const onLook: Verdict = { ...passed, criterion: "1.4.3", observations: [{ ...observation, evidence: ["j1-0002"], ruling: "noIssue" }] };
+  const looked = resolveCriterion({ ...base, verdicts: { a: onLook, final: onLook } }, "X");
+  assert.equal(criterionBasis(looked, index), "observed");
+  const measured = resolveCriterion({ ...base, verdicts: { a: onLook, final: { ...onLook, observations: [{ ...observation, evidence: ["j1-0003"], ruling: "noIssue" }] } } }, "X");
+  assert.equal(criterionBasis(measured, index), "measured");
+  const failing = resolveCriterion({ ...base, verdicts: { a: onLook, final: { ...onLook, outcome: "failed", findings: [{ ...finding, evidence: ["j1-0003"] }] } } }, "X");
+  assert.equal(criterionBasis(failing, index), "measured", "a failure is measured when a finding rests on an instrument");
+  assert.equal(criterionBasis({ ...looked, outcome: "cantTell" }, index), "open");
 });
 
 test("a criterion the finishing round left open is not called established", () => {

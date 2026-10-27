@@ -69,6 +69,16 @@ test("an observation of source counts as one of parse, its new name (#327)", () 
   assert.deepEqual(validateJudgeVerdict({ ...passed, criterion: "4.1.1", observations: [seenParse] }, parseContext).filter((problem) => problem.includes("parse")), []);
 });
 
+test("a failure on a rule with fail_observations cites that instrument (#318)", () => {
+  const zoomed = indexObservations([record("j144-0001", "open"), record("j144-0002", "look"), record("j144-0003", "zoom")]);
+  const zoomContext: JudgeContext = { ...context, criterion: "1.4.4", evidenceNames: [], observations: zoomed, passCommands: ["zoom", "look"], decisiveCommands: [], failCommands: { R2: ["zoom"], R4: ["zoom"] } };
+  const lost = { ...finding, evidence: ["j144-0002"] };
+  const onLook: Verdict = { ...failed, criterion: "1.4.4", rule: "R4", findings: [lost], observations: [{ ...seen, evidence: ["j144-0002"] }] };
+  assert.match(validateJudgeVerdict(onLook, zoomContext).join(), /must cite an observation of "zoom": the norm accepts more than one way/);
+  assert.equal(validateJudgeVerdict({ ...onLook, findings: [{ ...lost, evidence: ["j144-0002", "j144-0003"] }] }, zoomContext).filter((problem) => problem.includes("fail_observations")).length, 0, "a finding that cites zoom will do");
+  assert.equal(validateJudgeVerdict({ ...onLook, rule: "R1" }, zoomContext).filter((problem) => problem.includes("fail_observations")).length, 0, "a rule without it asks nothing");
+});
+
 test("a judge verdict that points at recorded observations is accepted", () => {
   assert.deepEqual(validateJudgeVerdict(passed, context), []);
   assert.deepEqual(validateJudgeVerdict(failed, context), []);
@@ -161,6 +171,7 @@ test("a finding that is not reproduced is dropped with a reason, and never becom
     outcome: "cantTell",
     rule: "R3",
     missingNl: ["proef werkte niet: de datum op P01 gaf bij een nieuwe meting 4,6 op 1; de bevinding is niet gereproduceerd."],
+    attempts: [{ missing: 1, triedNl: "De datum op P01 twee keer gemeten op een verse pagina, met contrast en met een uitsnede.", evidence: ["v143-0002", "v143-0003"] }],
     observations: [{ ...seen, evidence: ["v143-0002"] }],
     verification: { judgeOutcome: "failed", findings: [{ key: "F1", reproduced: false, evidence: [], dropped: "notReproduced", reasonNl: "Op een verse pagina meet de datum 4,6 op 1." }] },
   };
@@ -505,7 +516,9 @@ test("a part of the site that did not load is its own kind: not the owner's, not
   assert.equal(validateJudgeVerdict({ ...passed, outcome: "cantTell", missingNl: [point] }, context).join("\n"), "");
   const verification = { judgeOutcome: "cantTell" as const, findings: [], attackNl: "Het chatvenster op P02 twee keer opnieuw geopend; het laadde niet.", attackEvidence: ["v143-0002"] };
   const afterOpen: VerificationContext = { ...context, session: "v143", judge: { ...passed, outcome: "cantTell", missingNl: [point] } };
-  assert.deepEqual(validateVerification({ ...passed, outcome: "cantTell", missingNl: [point], observations: [{ ...seen, evidence: ["v143-0002"] }], verification }, afterOpen), []);
+  assert.deepEqual(validateVerification({ ...passed, outcome: "cantTell", missingNl: [point], observations: [{ ...seen, evidence: ["v143-0002"] }], verification, attempts: [{ missing: 1, triedNl: "Het chatvenster op P02 twee keer opnieuw geopend en bekeken; het bleef leeg.", evidence: ["v143-0001", "v143-0003"] }] }, afterOpen), []);
+  // Without the attempt the verifier may not leave it (#318).
+  assert.match(validateVerification({ ...passed, outcome: "cantTell", missingNl: [point], observations: [{ ...seen, evidence: ["v143-0002"] }], verification }, afterOpen).join(), /stays open only after a real attempt: give one entry in attempts with "missing": 1/);
   // What did not load, and when: both are needed, so the report can say it and a later round knows what to try.
   const open = (text: string): string => validateJudgeVerdict({ ...passed, outcome: "cantTell", missingNl: [text] }, context).join("\n");
   assert.match(open("niet bereikbaar: het chatvenster laadde niet, tussen 14:05 en 14:40."), /names what did not load/);
@@ -514,6 +527,18 @@ test("a part of the site that did not load is its own kind: not the owner's, not
   // A limit of the evaluation: it may stand next to "no deviation found", and the finishing round may leave it after a real attempt.
   assert.deepEqual(validateJudgeVerdict({ ...passed, outcome: "cantTell", missingNl: [point], nothingFound: { coverageNl: "gemeten op 9 van 29 pagina's en in 4 van 12 toestanden; geen verschil gevonden" } }, context), []);
   assert.ok((KINDS_AFTER_FINISH as readonly string[]).includes(UNREACHABLE));
+});
+
+test("a judge leaves a probe that did not work only after a real attempt in its own session (#318)", () => {
+  const judging: JudgeContext = { ...context, session: "j143" };
+  const probe: Verdict = { ...passed, outcome: "cantTell", missingNl: ["proef werkte niet: het contrast van de lijnen in het diagram op P01 gaf geen verhouding."] };
+  assert.match(validateJudgeVerdict(probe, judging).join(), /stays open only after a real attempt/);
+  const tried = { missing: 1, triedNl: "Het diagram op P01 gemeten met contrast op de lijn en met een uitsnede ervan.", evidence: ["j143-0003", "j143-0005"] };
+  assert.deepEqual(validateJudgeVerdict({ ...probe, attempts: [tried] }, judging), []);
+  assert.match(validateJudgeVerdict({ ...probe, attempts: [{ ...tried, evidence: ["j143-0003"] }] }, judging).join(), /cite at least 2 observations of session "j143"/);
+  assert.match(validateJudgeVerdict({ ...probe, attempts: [{ ...tried, evidence: ["v143-0002", "v143-0003"] }] }, judging).join(), /cite at least 2 observations of session "j143"/, "observations of another session are no attempt of this one");
+  // A point for a person needs no attempt.
+  assert.deepEqual(validateJudgeVerdict({ ...probe, missingNl: ["mens nodig: wat een schermlezer bij het diagram op P01 voorleest."] }, judging), []);
 });
 
 test("no deviation found but not fully measured stays cantTell, and only when every open point is a limit of the evaluation", () => {
@@ -566,6 +591,7 @@ test("a finding the verifier drops does not come back as a recommendation at its
     outcome: "cantTell",
     rule: "R3",
     missingNl: ["proef werkte niet: de datum op P01 gaf bij een nieuwe meting 4,6 op 1; de bevinding is niet gereproduceerd."],
+    attempts: [{ missing: 1, triedNl: "De datum op P01 twee keer gemeten op een verse pagina, met contrast en met een uitsnede.", evidence: ["v143-0002", "v143-0003"] }],
     observations: [{ ...seen, evidence: ["v143-0002"] }],
     recommendations: [{ ...recommendation, locations: finding.locations, evidence: ["v143-0003"] }],
     verification: { judgeOutcome: "failed", findings: [{ key: "F1", reproduced: false, evidence: [], dropped: "notReproduced", reasonNl: "Op een verse pagina meet de datum 4,6 op 1." }] },

@@ -320,3 +320,45 @@ Wat eruit kwam:
 - De open punten gaan in alle runs over dezelfde twee onderdelen, een fotoserie die alleen met vegen werkt en een schuif die alleen met slepen werkt (#240). Een gebrek dat een beoordelaar naar een ander criterium doorschuift, komt daar niet altijd aan (#239).
 
 Wat deze meting niet zegt. De uitkomst is gemeten tegen de sleutel van de eigen testsite, niet tegen het oordeel van een menselijke deskundige, en de testsite is makkelijker dan een echte site. Alle runs deelden één veegronde, dus de spreiding van de veegronde zelf is niet gemeten. De schone variant is niet gedraaid. Op de negen criteria is elke uitkomst "voldoet niet", dus de toets op criteriumniveau maakt daar geen onderscheid. Twee runs van de nulmeting.
+
+## Meting van "zo goed mogelijk" (#318), 23 oktober 2026
+
+Vooraf vastgelegd, voordat een run is beoordeeld.
+
+**Vraag.** Maakt voorstel #341 (doel van het onderzoek, beperking in plaats van open punt, een poging in elke ronde, `fail_observations`, zekerheid per plek, de poort die afschaalt, een bevinding op een eerdere waarneming) het oordeel niet slechter waar niets afschaalt, en klopt het oordeel waar de poort wel afschaalt?
+
+**Opzet.**
+
+- Eén bevroren veegronde van Lindewaard (de testsite met gebreken), gemaakt met de code van #341 (commit `4fa6e85`): het vaste sitemodel van de regressietoets, de 13 vaste pagina's, versturen toegestaan tot 30 keer, doel verbeteren, VoiceOver uit. Het vaste model opent vijf onderdelen bewust niet (`components-opened`), onder meer de formulieren, en opent het menu achter de menuknop alleen op de startpagina.
+- De bladen van de poort één keer beoordeeld door twee poort-agents, vóór het kopiëren; elke kopie neemt die antwoorden mee. De agent van de eerste acht bladen zag nergens iets ontbreken; die van de laatste vijf meldde op elk blad de menuknop (`review-missing`), terecht volgens de lijsten. Samen tien gaten.
+- Drie armen, elk een kopie met `variant`, op tien criteria (`tasks --only`): 1.1.1, 1.3.1, 1.4.3, 1.4.4, 1.4.11, 2.1.1, 2.4.3, 2.4.7, 3.3.1, 4.1.2. Werkstroom met 6 agents tegelijk, alle rollen op het model van de sessie, twee runs tegelijk.
+  - **A**: main (`a1b8e19`, 0.17.0 met #345), de tien gaten aanvaard in het sitemodel met `decidedBy: verkenner`, elk met een `look` op die pagina uit een eigen sessie (`verken-meting`).
+  - **B**: #341, dezelfde tien gaten aanvaard.
+  - **C**: #341, de tien gaten niet aanvaard. In het manifest staan drie verkenningen, alsof de run al twee keer terug was naar de verkenner (nagebootst: er is geen verkenner gedraaid). De poort schaalt dan af en de beoordelaars moeten die onderdelen zelf bekijken.
+- Per run `compare --findings` tegen `reference-lindewaard.json`, op de tien criteria.
+
+**Stopregel na ronde 1** (één run per arm).
+
+- B tegen A, "niet slechter": B vindt elk gebrek uit de sleutel dat A vindt, heeft hooguit één melding zonder tegenhanger meer, en niet meer criteria open door loep zelf. Dan stoppen. Mist B een gebrek dat A vond, of andersom, dan ronde 2: A2 en B2, en daarna de toets per gebrek over twee runs zoals bij 0.11.0.
+- C, "afschalen klopt": de poort gaat door met beperkingen (geen stop), geen criterium blijft open door loep zelf, geen afkeuring is onterecht volgens beide vergelijkers, en C vindt op de criteria die de tien gaten niet raken dezelfde gebreken als A. Wat C mist op de criteria die ze wel raken (zoals 3.3.1), staat in het verslag. Haalt C dit niet, dan geen tweede ronde maar een fout in #341 die eerst hersteld wordt.
+- Ter informatie, zonder drempel: het aandeel "vastgesteld door een agent", hoe vaak `check-verdict` een punt zonder poging weigerde, overgeslagen agents, de plekken in `instrument-gaps.json`, duur en tokens.
+
+**Uitkomst, 27 oktober 2026.** Ronde 1 haalde de stopregel niet (B1 had twee meldingen zonder tegenhanger meer dan A1, en bij 2.1.1-chat-sluit waren de vergelijkers het voor B1 oneens), dus ronde 2. De weeklimiet stopte C1 en A2 halverwege de beoordelaars; na de pauze zijn de sessies van vijf beoordelaars die al begonnen waren opzij gezet, omdat hun klok over de pauze heen was verlopen (#359). Telt niet als poging.
+
+| | A1 | A2 | B1 | B2 | C1 |
+|---|---|---|---|---|---|
+| Uitkomst zoals de sleutel, van 10 criteria | 10 | 10 | 10 | 10 | 10 |
+| Gebreken gevonden waar beide vergelijkers het eens zijn, van 38 | 34 | 36 | 34 | 33 | 35 |
+| Meldingen zonder tegenhanger | 3 | 4 | 5 | 4 | 5 |
+| Onterecht volgens beide vergelijkers | 0 | 0 | 0 | 0 | 0 |
+| Criteria open door loep | 0 | 0 | 0 | 0 | 0 |
+| Open punten in afgekeurde criteria | 6 | 8 | 0 | 0 | 0 |
+| Beperkingen in afgekeurde criteria | | | 11 | 8 | 5 |
+| Agents, overgeslagen | 37, 0 | 37, 0 | 37, 0 | 37, 0 | 42, 0 (één afmaakronde) |
+
+Per gebrek wijkt een run af bij zeven gebreken. Twee mist elke run (1.3.2-zoekvolgorde, 3.3.2-plaatshouder). 3.2.1-voetlink wisselt in beide armen (A: gemist en gevonden; B: gevonden en gemist). 2.4.11-melding is in elke arm een keer deels. Bij 1.3.1-tussenkop-uitklapper (B2), 2.1.1-chat-sluit (B1) en 2.4.7-menu (C1) noemde één vergelijker het deels en de ander gevonden.
+
+- **B tegen A: "niet slechter" niet strikt aangetoond, geen aanwijzing voor slechter.** B mist geen gebrek dat A in beide runs vond; de twee keer dat B afwijkt, is het een oneens tussen "deels" en "gevonden". Gemiddeld 33,5 tegen 35 van 38 gevonden (-3,9 procentpunt, binnen de marge van -5 van de meting op 0.11.0, maar met twee runs per arm is dat geen sterke uitspraak). Meldingen zonder tegenhanger 9 tegen 7 over twee runs, alle terecht of discutabel.
+- **C: afschalen klopt.** De poort ging door met tien beperkingen, geen criterium bleef open, geen afkeuring was onterecht. 3.3.1, waarvan het vaste model de formulieren niet opent, werd door de afmaakronde zelf gemeten en terecht afgekeurd. C vond 35 van 38, tussen A1 en A2.
+- **Beperkingen.** De open punten die A in afgekeurde criteria laat staan (6 en 8), zijn in B en C beperkingen; geen uitkomst verandert erdoor.
+- **Niet gemeten.** `instrument-gaps.json` bleef in alle runs van #341 leeg: niet aangetoond dat de afleiding van gaten werkt. Een bevinding op een eerdere waarneming (`notRepeated`) kwam niet voor. Het doel `verantwoorden` is niet gemeten.
