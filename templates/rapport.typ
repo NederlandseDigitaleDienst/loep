@@ -837,6 +837,7 @@
   let agent-models = derived.at("agentModels", default: none)
   facts(
     ("Toolbox", [loep, versie #toolchain.toolbox.version, commit #if derived.toolboxCommit == none { t.commitUnknown } else { short-hash(derived.toolboxCommit, length: 12) }]),
+    ..if derived.at("sweepNl", default: none) != none { (("Toolbox van de veegronde", derived.sweepNl),) } else { () },
     ("Lockfile", short-hash(toolchain.toolbox.lockfileSha256)),
     ("Runtime", [Node #toolchain.runtime.node op #toolchain.runtime.platform #toolchain.runtime.osRelease (#toolchain.runtime.arch)]),
     ("Pakketten", toolchain.packages.keys().sorted().map(name => [#mono(name) #toolchain.packages.at(name)]).join(linebreak())),
@@ -1081,6 +1082,7 @@
         eyebrow[Zekerheid], brief.certaintyNl,
         ..if brief.coverageNl != none { (eyebrow(t.measured), brief.coverageNl) },
         ..if brief.openNl != none { (eyebrow[Open], open-ref(criterion)) },
+        ..if brief.limitsCountNl != none { (eyebrow[Beperking], [#brief.limitsCountNl van dit onderzoek, de uitkomst hangt er niet van af; zie bijlage A]) },
       )
     })
   }
@@ -1292,6 +1294,11 @@
   if later.len() > 0 {
     par(label-text[#t.investigate.appendix:])
     plain-list(later)
+  }
+  let limits = derived.briefs.at(criterion.id).limitsNl
+  if limits.len() > 0 {
+    par(label-text[#t.investigate.limits:])
+    plain-list(limits)
   }
   if derived.briefs.at(criterion.id).openNl != none { par[#label-text[Open:] #open-ref(criterion)] }
 }

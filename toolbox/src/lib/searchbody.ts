@@ -16,7 +16,8 @@ export interface SearchService {
   nameNl: string;
   /** The form that is recognised, in the words of the explorer's task. */
   formNl: string;
-  recognise: (body: string) => Verdict;
+  /** `path` is the pathname of the address, for the services whose form depends on it. */
+  recognise: (body: string, path?: string) => Verdict;
 }
 
 /** Larger than any question to a search service; a body this large is not looked into. */
@@ -85,7 +86,7 @@ function typesense(body: string): Verdict {
 }
 
 // Algolia: POST /1/indexes/*/queries with { "requests": [ { "indexName", "params" } ] }, or POST /1/indexes/<index>/query with { "params" }.
-// Client v5 (DocSearch 4) puts the search parameters inline in each request instead of in "params".
+// Client v5 (DocSearch 4) puts the search parameters inline in each request instead of in "params". Its searchSingleIndex sends them inline at the top of the body of POST /1/indexes/<index>/query.
 const ALGOLIA_TOP = new Set(["requests", "strategy"]);
 // The search parameters of SearchParamsObject in Algolia's OpenAPI spec (specs/common/schemas/SearchParams.yml and IndexSettings.yml#/indexSettingsAsSearchParams).
 const ALGOLIA_SEARCH_PARAMS = [
@@ -101,7 +102,10 @@ const ALGOLIA_SEARCH_PARAMS = [
 ];
 const ALGOLIA_REQUEST = new Set(["indexName", "params", "type", "facet", "facetQuery", "maxFacetHits", ...ALGOLIA_SEARCH_PARAMS]);
 
-function algolia(body: string): Verdict {
+const ALGOLIA_SINGLE_INDEX = /^\/1\/indexes\/[^/]+\/query$/;
+const ALGOLIA_INLINE = new Set(ALGOLIA_SEARCH_PARAMS);
+
+function algolia(body: string, path?: string): Verdict {
   const json = jsonObject(body, "Algolia");
   if (!json.ok) return json.verdict;
   const value = json.value;
@@ -109,6 +113,12 @@ function algolia(body: string): Verdict {
     const extra = outside(value, new Set(["params"]));
     if (extra) return no(`een zoekvraag aan één index van Algolia heeft alleen "params", niet "${extra}"`);
     return typeof value.params === "string" || isObject(value.params) ? yes : no('"params" van Algolia is tekst of een object');
+  }
+  if (path !== undefined && ALGOLIA_SINGLE_INDEX.test(path) && !("requests" in value)) {
+    const other = outside(value, ALGOLIA_INLINE);
+    if (other) return no(`een zoekvraag aan één index van Algolia heeft alleen zoekparameters, niet "${other}"`);
+    if ("query" in value && typeof value.query !== "string") return no('"query" van Algolia is tekst');
+    return Object.keys(value).length > 0 ? yes : no("een zoekvraag aan één index van Algolia noemt minstens één zoekparameter");
   }
   const extra = outside(value, ALGOLIA_TOP);
   if (extra) return no(`Algolia kent "${extra}" niet in een zoekvraag; alleen "requests" of "params"`);
@@ -349,20 +359,20 @@ function graphql(body: string): Verdict {
 
 export const SEARCH_SERVICES: Record<SearchServiceId, SearchService> = {
   typesense: { id: "typesense", nameNl: "Typesense", formNl: 'JSON met "searches", een lijst van zoekvragen (POST /multi_search)', recognise: typesense },
-  algolia: { id: "algolia", nameNl: "Algolia", formNl: 'JSON met "requests", elk met "indexName" en "params" of met "indexName" en losse zoekparameters zoals "query" en "hitsPerPage", of met alleen "params"', recognise: algolia },
+  algolia: { id: "algolia", nameNl: "Algolia", formNl: 'JSON met "requests", elk met "indexName" en "params" of met "indexName" en losse zoekparameters zoals "query" en "hitsPerPage", of met alleen "params", of losse zoekparameters aan POST /1/indexes/<index>/query', recognise: algolia },
   elasticsearch: { id: "elasticsearch", nameNl: "Elasticsearch of OpenSearch", formNl: 'een zoekvraag met "query", "aggs" of "suggest" zonder script (_search), of regels met telkens een kop en een zoekvraag (_msearch)', recognise: elasticsearch },
   meilisearch: { id: "meilisearch", nameNl: "Meilisearch", formNl: 'JSON met zoekparameters als "q" en "filter", of met "queries"', recognise: meilisearch },
   graphql: { id: "graphql", nameNl: "GraphQL", formNl: 'JSON met een document in "query" dat alleen query-bewerkingen heeft, geen mutation of subscription', recognise: graphql },
 };
 
 /** Whether the body is a question to this service. An empty or very large body never is. */
-export function recogniseSearch(service: SearchServiceId, body: string | null): Verdict {
+export function recogniseSearch(service: SearchServiceId, body: string | null, path?: string): Verdict {
   if (body === null || body.trim() === "") return no("het verzoek heeft geen body");
   if (body.length > MAX_BODY) return no(`de body is groter dan ${MAX_BODY / 1024} kB`);
-  return SEARCH_SERVICES[service].recognise(body);
+  return SEARCH_SERVICES[service].recognise(body, path);
 }
 
 /** Every service that would take this body for a question to it; empty when none does. For the record of a request that was held back. */
-export function searchServicesOf(body: string | null): SearchServiceId[] {
-  return SEARCH_SERVICE_IDS.filter((id) => recogniseSearch(id, body).search);
+export function searchServicesOf(body: string | null, path?: string): SearchServiceId[] {
+  return SEARCH_SERVICE_IDS.filter((id) => recogniseSearch(id, body, path).search);
 }

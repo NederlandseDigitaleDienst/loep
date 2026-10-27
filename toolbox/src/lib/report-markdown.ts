@@ -1,6 +1,7 @@
 import { KIND_NAME_NL, kindsNl } from "./documents.ts";
+import { BASIS_NL } from "./basis.ts";
 import { pageIndex, type Defect } from "./defects.ts";
-import { aiGeneratedMark, changedSinceCommit, closeCutQuote, versionAccuracyNl, complianceStatus, evaluationHash, idsAcrossVersionsNl, knownCommit, madeWith, openCriteria, OUTAGE_NL, OUTCOME_LABEL, type ComplianceStatus, type CriterionOutcome, type CriterionResult, type Evaluation, type ReportFinding, type Signature } from "./evaluation.ts";
+import { aiGeneratedMark, changedSinceCommit, closeCutQuote, versionAccuracyNl, complianceStatus, evaluationHash, idsAcrossVersionsNl, knownCommit, madeWith, sweepMadeWith, openCriteria, OUTAGE_NL, OUTCOME_LABEL, type ComplianceStatus, type CriterionOutcome, type CriterionResult, type Evaluation, type ReportFinding, type Signature } from "./evaluation.ts";
 import { modelOf } from "../instruments/methods/registry.ts";
 import { signatureIsCurrent } from "../commands/sign.ts";
 import { extensionsNl } from "./budget.ts";
@@ -137,6 +138,7 @@ export const REPORT_TEXT = {
     toolbox: "Dit meet de toolbox een volgende keer",
     toolboxIntro: "Wat niet is gemeten, waar de tijd voor op was, of een proef die niet werkte. Per criterium staat hier hoeveel punten er zijn; de punten zelf staan volledig in bijlage A. Staat hier een criterium zonder oordeel, dan is het onderzoek onvolledig: een nieuwe meting of een persoon moet het nog vaststellen.",
     appendix: "Open, voor een volgende meting",
+    limits: "Beperking van dit onderzoek, de uitkomst hangt er niet van af",
   },
   vendorIntro: "Deze bevindingen raken een element van de leverancier. Dat zegt waar het gebrek zit, niet wie het moet herstellen: de oorzaak kan in het component liggen of in de manier waarop de site het gebruikt. Ga per bevinding na welke van de twee het is.",
   instrumentsIntro: "Elke meting van een agent is door een of meer van deze hulpmiddelen beantwoord. De lijst is geteld uit de vastgelegde waarnemingen: ze noemt wat in dit onderzoek is gebruikt, niet wat op de machine stond. Onder Pakketten hierboven staan alle pakketten waarmee de toolbox draait, ook die alleen de metingen vooraf op elke pagina deden. Alle hulpmiddelen zijn open source; de licentie van elk staat in evaluation.json en in de repository van de toolbox.",
@@ -222,6 +224,10 @@ export interface CriterionBrief {
   coverageNl: string | null;
   /** The open points about the evaluation itself, in full: they stand in the appendix, the work list only counts them. */
   toolboxPointsNl: string[];
+  /** What this investigation could not settle in a criterion whose outcome stands without it (#318), in full. Empty when there is none. */
+  limitsNl: string[];
+  /** How many such limits there are, as "2 beperkingen"; null when there are none. */
+  limitsCountNl: string | null;
   /** What this criterion and another passed on to each other, one line each with what both said. Empty when there is none. */
   loopsNl: string[];
   /**
@@ -287,6 +293,8 @@ export interface ReportDerived {
   /** Where the report came from: with the commit for the cover, without for the foot of every page. */
   madeWithNl: string;
   madeWithShortNl: string;
+  /** Only in a copy made with `variant` whose sweep is of other code: what measured the sweep, for the facts under Gereedschap. Null elsewhere. */
+  sweepNl: string | null;
   /** The one sentence that says what the toolbox is and whose the judgment is. */
   instrumentNl: string;
   /** The commit of the toolbox; null when it did not run from a git repository, also for the placeholder an older run wrote. */
@@ -703,6 +711,12 @@ function loopLine(criterion: string, loop: CrossLoop): string {
   return `Op ${loop.page} (${loop.where.replace(/\s+/g, " ").trim()}): ${loop.with} en ${criterion} gaven het elk aan het andere door. ${said}${undecided}`;
 }
 
+/** An open point as a line for a reader: its kind in words, then its text. */
+const pointLine = (point: string): string => {
+  const { kind, textNl } = openPoint(point);
+  return kind ? `${upperFirst(kind.labelNl)}: ${textNl}` : point.replace(/\s+/g, " ").trim();
+};
+
 function brief(criterion: CriterionResult): CriterionBrief {
   const points = openPoints(criterion);
   const before = criterion.established?.before;
@@ -711,18 +725,21 @@ function brief(criterion: CriterionResult): CriterionBrief {
     answersNl: (criterion.answers ?? []).map(answerLine),
     beforeNl: before ? [`De ${before.roundNl} kwam op ${roundLabel(before.outcome)}: ${before.summaryNl}`, ...before.missingNl.map((point) => `Stond open: ${point.replace(/\s+/g, " ").trim()}`)] : [],
     observationsNl: criterion.observations.length > 0 ? plural(criterion.observations.length, "waarneming", "waarnemingen") : null,
-    certaintyNl: certainty(criterion),
+    certaintyNl: criterion.basis && criterion.basis !== "open" ? `${upperFirst(BASIS_NL[criterion.basis])}. ${certainty(criterion)}` : certainty(criterion),
     roundsNl: roundsLine(criterion),
     // The open points themselves stand in the work list or in the appendix; here only how many there are.
     openNl: points.length > 0 ? plural(points.length, "punt", "punten") : null,
     coverageNl: shownOutcome(criterion) === "nothingFound" ? criterion.nothingFound!.coverageNl : criterion.established?.by === "finishing" ? (criterion.established.coverageNl ?? null) : null,
     toolboxPointsNl: points.filter((point) => point.kind?.reader === "toolbox").map((point) => `${upperFirst(point.kind!.labelNl)}: ${point.textNl}`),
+    limitsNl: (criterion.limitsNl ?? []).map(pointLine),
+    limitsCountNl: (criterion.limitsNl ?? []).length > 0 ? plural(criterion.limitsNl!.length, "beperking", "beperkingen") : null,
     loopsNl: (criterion.crossLoops ?? []).map((loop) => loopLine(criterion.id, loop)),
     placesNl: criterion.observations.map((observation) => {
       const ruling = observation.ruling;
       if (!ruling || !(ruling in REPORT_TEXT.ruling)) return null;
       const finding = ruling === "finding" ? criterion.findings.find((entry) => entry.key !== undefined && entry.key === observation.finding) : undefined;
-      return { labelNl: REPORT_TEXT.ruling[ruling], findingId: finding?.id ?? null };
+      const basis = criterion.placeBasis?.[criterion.observations.indexOf(observation)];
+      return { labelNl: `${REPORT_TEXT.ruling[ruling]}${basis ? ` (${basis === "measured" ? "gemeten" : "waarneming van een agent"})` : ""}`, findingId: finding?.id ?? null };
     }),
   };
 }
@@ -968,11 +985,13 @@ export function deriveReport(input: Evaluation, decisions: DecisionLayer = { dec
   const chain = chainText(evaluation);
   const work = todo(evaluation);
   const procedureLimits = new Set(evaluation.criteria.filter((criterion) => criterion.procedure?.limitsNl).map((criterion) => `${criterion.id} ${criterion.titleNl}: ${criterion.procedure!.limitsNl}`));
+  const sweep = sweepMadeWith(evaluation);
   return {
     hash,
     hashShort: hash.slice(0, 12),
     dateNl: dateNl(evaluation.evaluatedAt),
-    madeWithNl: `${REPORT_TEXT.madeWith} ${madeWith(evaluation, true)}`,
+    madeWithNl: sweep ? `${REPORT_TEXT.madeWith} ${madeWith(evaluation, true)} voor de fasen van de agents; de veegronde is gemaakt met ${sweep}` : `${REPORT_TEXT.madeWith} ${madeWith(evaluation, true)}`,
+    sweepNl: sweep ? `${sweep}, ${evaluation.sweepToolchain!.browser ? `browser ${evaluation.sweepToolchain!.browser.name} ${evaluation.sweepToolchain!.browser.version ?? "onbekend"}` : "browser onbekend (niet vastgelegd in variant.json)"}; de pakketten hieronder zijn die van de fasen van de agents` : null,
     madeWithShortNl: `${REPORT_TEXT.madeWith} ${madeWith(evaluation)}`,
     instrumentNl: `${madeWith(evaluation)}, ${REPORT_TEXT.instrument}.`,
     toolboxCommit: knownCommit(evaluation.toolchain.toolbox),
@@ -1247,6 +1266,7 @@ function appendixEntry(criterion: CriterionResult, short: CriterionBrief, chain:
   lines.push(`Grondslag: ${basis.filter(Boolean).join(", ")}.`, "");
   if (criterion.procedure?.limitsNl) lines.push(`Beperking van de procedure: ${esc(criterion.procedure.limitsNl)}`, "");
   if (short.toolboxPointsNl.length > 0) lines.push(`${REPORT_TEXT.investigate.appendix}:`, "", ...bullets(short.toolboxPointsNl.map(esc)), "");
+  if (short.limitsNl.length > 0) lines.push(`${REPORT_TEXT.investigate.limits}:`, "", ...bullets(short.limitsNl.map(esc)), "");
   lines.push(...openLine(criterion, short));
   return lines;
 }
@@ -1487,6 +1507,7 @@ export function renderMarkdown(input: Evaluation, decisions: DecisionLayer = { d
   lines.push(
     ...bullets([
       `Toolbox: loep, versie ${esc(toolchain.toolbox.version)}, commit ${derived.toolboxCommit ? code(derived.toolboxCommit.slice(0, 12)) : REPORT_TEXT.commitUnknown}`,
+      ...(derived.sweepNl ? [`Toolbox van de veegronde: ${esc(derived.sweepNl)}`] : []),
       `Lockfile: ${shortHash(toolchain.toolbox.lockfileSha256)}`,
       `Runtime: Node ${esc(toolchain.runtime.node)} op ${esc(toolchain.runtime.platform)} ${esc(toolchain.runtime.osRelease)} (${esc(toolchain.runtime.arch)})`,
       `Pakketten: ${Object.keys(toolchain.packages).sort().map((name) => `${code(name)} ${esc(toolchain.packages[name]!)}`).join(", ")}`,

@@ -11,7 +11,7 @@ import { PNG } from "pngjs";
 import { INPAGE_PATH, launchBrowser, loadPage, newContext } from "../src/browser/session.ts";
 import { collect } from "../src/commands/collect.ts";
 import { checkSite, explore, exploreContext } from "../src/commands/explore.ts";
-import { buildSheets, checkGate, commonBlock, contactSheet, fixedByReason, gate, gateChecks, hostsRefusedInStates, keysOn, MAX_RESWEEPS, MAX_RETURNS_TO_EXPLORER, MIN_TAB_REACH, reviewedAs, openedBetweenWidths, reviewGaps, reviewParts, route, SHEETS_PER_TASK, sheetGaps, sheetText, tile, validateAnswers, type Answers, type Gap, type Sheet } from "../src/commands/gate.ts";
+import { afterEveryReturn, buildSheets, checkGate, commonBlock, contactSheet, fixedByReason, gate, gateChecks, hostsRefusedInStates, keysOn, MAX_RESWEEPS, MAX_RETURNS_TO_EXPLORER, MIN_TAB_REACH, reviewedAs, openedBetweenWidths, reviewGaps, reviewParts, route, SHEETS_PER_TASK, sheetGaps, sheetText, tile, validateAnswers, type Answers, type Gap, type Sheet } from "../src/commands/gate.ts";
 import { inventory, type Inventory, type InventoryPage } from "../src/commands/inventory.ts";
 import { ModelSweep, type SiteStates } from "../src/commands/modelsweep.ts";
 import { DownRun, HoverRun, probePointerInStates } from "../src/commands/states.ts";
@@ -635,6 +635,21 @@ test("the gate sends a run to the sweep for what a new sweep closes, without spe
   const firstSweep = steps("explore", "check-site", "sample", "collect", "contrast", "states", "gate");
 
   // A crashed page after the first sweep: measure again, the explorer keeps both returns.
+  // After every return the gaps left become limitations and the run goes on; only with nothing to judge does it stop (#318).
+  const pages = ["https://site.nl/1", "https://site.nl/2", "https://site.nl/3"].map((url) => ({ item: { url } }));
+  const left = afterEveryReturn("stop", "complete", [gap("tab-reach")], pages as never);
+  assert.deepEqual([left.next, left.gaps.length, left.degradedLimitations.length], ["proceed", 0, 1]);
+  assert.match(left.degradedLimitations[0]!.missingNl, /^Na 2 keer terug naar de verkenner nog open: /);
+  const refused = { ...gap("site-answered"), measured: { origin: "https://site.nl" } };
+  assert.equal(afterEveryReturn("stop", "complete", [refused], pages as never).next, "stop", "a site that refuses the run leaves nothing to judge");
+  const unloaded = ["P1", "P2"].map((page) => ({ ...gap("pages-loaded"), page }));
+  assert.equal(afterEveryReturn("stop", "complete", unloaded, pages as never).next, "stop", "neither does a sample that mostly did not load");
+  assert.equal(afterEveryReturn("explore", "complete", [gap("tab-reach")], pages as never).next, "explore", "a return still left is taken");
+  // Without the review of the pictures the gate does not go on: what only the review finds would be missing from the limitations (#361).
+  assert.deepEqual(afterEveryReturn("stop", "deterministic", [gap("tab-reach")], pages as never).next, "review");
+  // A page the inventory skipped is no page of the sample.
+  const skipped = ["https://site.nl/a", "https://site.nl/b"].map((url) => ({ ...gap("pages-loaded"), page: null, url }));
+  assert.equal(afterEveryReturn("stop", "complete", skipped, pages as never).next, "proceed");
   const crashed = route([gap("pages-loaded", "sweep"), gap("tab-reach")], [], false, firstSweep, none);
   assert.deepEqual([crashed.next, crashed.stage, crashed.sufficient, crashed.returnsLeft, crashed.resweeps, crashed.resweepsLeft], ["sweep", "deterministic", false, MAX_RETURNS_TO_EXPLORER, 0, MAX_RESWEEPS]);
   assert.deepEqual(crashed.gaps.map((entry) => entry.fixedBy), ["sweep", "explorer"], "every gap says who can close it");
@@ -1170,6 +1185,8 @@ test("explore, check-site, the sweep and the gate work together on a site with a
   assert.equal(third.review.answered, false, "answers for the sheets of before do not count");
   assert.equal(existsSync(third.review.answers), false, "they are moved away");
   assert.ok(readdirSync(join(run, "gate", "vorige")).some((name) => /^answers-.*\.json$/.test(name)), "to gate/vorige/, not deleted");
+  // Every round of the gate is kept beside gate.json (#318).
+  assert.deepEqual(readdirSync(join(run, "gate")).filter((name) => name.startsWith("ronde-")).sort(), ["ronde-1.json", "ronde-2.json", "ronde-3.json", "ronde-4.json"]);
   assert.match((await checkGate(run))[0]!, /answers\.json is niet te lezen/, "check-gate has no answer to approve");
   // An agent that writes the old answers back gets told the sheet changed.
   writeFileSync(third.review.answers, JSON.stringify(answers));

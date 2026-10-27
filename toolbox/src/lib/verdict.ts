@@ -184,6 +184,12 @@ export interface Verdict {
   verification?: Verification;
   /** Finishing round only. */
   finish?: Finish;
+  /**
+   * For a judge and a verifier: one entry per point "proef werkte niet:" or "niet bereikbaar:" in
+   * missingNl, with `missing` its place there counted from 1 (#318). The finishing round writes them
+   * in `finish.attempts`.
+   */
+  attempts?: { missing: number; triedNl: string; evidence: string[] }[];
 }
 
 /** What the finishing round did with one point that the verdict before it left open. */
@@ -235,6 +241,7 @@ export const OPEN_POINT_KINDS = [
   { prefix: "veegronde mist", reader: "toolbox", labelNl: "dekking ontbrak" },
   { prefix: "budget op", reader: "toolbox", labelNl: "de tijd voor het meten was op" },
   { prefix: "proef werkte niet", reader: "toolbox", labelNl: "een proef werkte niet" },
+  { prefix: "geen geldig resultaat", reader: "toolbox", labelNl: "er kwam geen geldig oordeel" },
   { prefix: "niet bereikbaar", reader: "site", labelNl: "een deel van de site was niet bereikbaar" },
 ] as const;
 export type OpenPointKind = (typeof OPEN_POINT_KINDS)[number];
@@ -242,6 +249,8 @@ export type OpenPointKind = (typeof OPEN_POINT_KINDS)[number];
 export const NOT_SENT = "versturen niet toegestaan";
 /** The kind of a point about a part of the site that did not load on repeated tries while the rest did: open until a new finishing round measures it. */
 export const UNREACHABLE = "niet bereikbaar";
+/** The kind of the point loep itself writes for the finishing round when an agent gave no valid verdict twice (#318). No agent writes it. */
+export const NO_VALID_RESULT = "geen geldig resultaat";
 /** The kind of a point that stays open because the content comes from an origin the run does not cover: a choice of the scope, no fault of loep. */
 export const OUTSIDE_SCOPE = "buiten de afbakening";
 /** The kinds a new finishing round may be asked for with `tasks --again`: what an instrument can measure once it works or the part loads again. */
@@ -317,6 +326,7 @@ export function notSentPointProblems(missingNl: unknown, permission: { origin: s
 
 /** How a point "versturen niet toegestaan" says that the budget for sending of the run held the message back. */
 const SENDING_BUDGET_OUT = /budget voor versturen/i;
+
 
 interface ShapeContext {
   criterion: string;
@@ -471,6 +481,8 @@ interface InstrumentContext {
   candidateIds: string[];
   /** Commands the procedure wants to see cited in a pass (`pass_observations` in its front matter). */
   passCommands: string[];
+  /** Commands the procedure wants to see cited in a failure (`fail_observations`), such as the one instrument that measures every way the norm accepts (#318). Absent: none. */
+  failCommands?: Record<string, string[]>;
   /** Commands whose method agreement matters for this criterion (`decisive`, or else `pass_observations`). */
   decisiveCommands: string[];
   /** The recommendation rules of the procedure ("A1", "A2"). Without them a verdict gives no recommendations. */
@@ -819,6 +831,7 @@ function instrumentRules(verdict: Partial<Verdict>, context: InstrumentContext, 
     if (typeof point !== "string") return void problems.push(`${at}: an open point is text`);
     const { kind, textNl } = openPoint(point);
     if (!kind) problems.push(`${at}: an open point starts with its kind and a colon: ${OPEN_POINT_KINDS.map((entry) => `"${entry.prefix}:" (${entry.labelNl})`).join(", ")}`);
+    else if (kind.prefix === NO_VALID_RESULT) problems.push(`${at}: "${NO_VALID_RESULT}:" is written by loep when an agent gave no valid verdict twice, not by an agent: name the kind of what is open, such as "proef werkte niet:" with your attempt`);
     else if (!isText(textNl, 10)) problems.push(`${at}: say after "${kind.prefix}:" what is open and where`);
     else problems.push(...unreachablePointProblems(point, at));
     const said: string[] = [];
@@ -842,6 +855,17 @@ function instrumentRules(verdict: Partial<Verdict>, context: InstrumentContext, 
   problems.push(...engineRuleProblems(verdict, context, (ref) => shows(ref) && own(ref), whose));
 
   const cited = (Array.isArray(verdict.observations) ? verdict.observations : []).flatMap((observation) => (Array.isArray(observation.evidence) ? observation.evidence : [])).filter((ref): ref is string => typeof ref === "string");
+  // A failure that rests on one way of measuring, where the norm accepts any way that works, is not one: it cites the instrument that measured them all (#318).
+  const failNeeds = verdict.outcome === "failed" && typeof verdict.rule === "string" ? (context.failCommands?.[verdict.rule] ?? []) : [];
+  if (failNeeds.length > 0) {
+    // Per finding, and of one's own session: a zoom of another session, another place or a place found in order does not carry this finding (#361).
+    (Array.isArray(verdict.findings) ? verdict.findings : []).forEach((finding, position) => {
+      const refs = (Array.isArray(finding?.evidence) ? finding.evidence : []).filter((ref): ref is string => typeof ref === "string" && shows(ref) && own(ref));
+      for (const command of failNeeds) {
+        if (!refs.some((ref) => index.get(ref)!.command === canonicalCommand(command))) problems.push(`findings[${position}]: a "failed" outcome on ${verdict.rule} for this criterion needs, in the evidence of every finding, an observation of your own session of "${command}" at that place: the norm accepts more than one way, and "${command}" measures each of them (fail_observations of the procedure)`);
+      }
+    });
+  }
   if (verdict.outcome === "passed") {
     const shown = cited.filter(shows);
     if (shown.length === 0) problems.push('a "passed" outcome needs at least one observation of a look or measure command among its observations; a pass that rests on the dossier alone is not checked against the site');
@@ -957,7 +981,49 @@ export function validateJudgeVerdict(input: unknown, context: JudgeContext): str
   if (input === null || typeof input !== "object") return problems;
   const verdict = input as Partial<Verdict>;
   if (verdict.verification !== undefined) problems.push("verification belongs in the verdict of the verifier, not of the judge");
-  return [...problems, ...instrumentRules(verdict, context, context.session ?? null, "judge")];
+  return [...problems, ...instrumentRules(verdict, context, context.session ?? null, "judge"), ...attemptRules(verdict, context, context.session ?? null)];
+}
+
+/**
+ * A probe that did not work, or a part of the site that did not load, stays open in any round only
+ * after a real attempt in the session of the agent that says so (#318): tried more than once and in
+ * more than one way, as the finishing round must. Without a session (a verdict checked on its own)
+ * there is no log to hold it to.
+ */
+function attemptRules(verdict: Partial<Verdict>, context: InstrumentContext, session: string | null): string[] {
+  if (session === null) return [];
+  const missing = (Array.isArray(verdict.missingNl) ? verdict.missingNl : []).filter((point): point is string => typeof point === "string");
+  return attemptProblems(missing, Array.isArray(verdict.attempts) ? verdict.attempts : [], "attempts", context, session);
+}
+
+/**
+ * The rule for an attempt, the same in every round: each point "proef werkte niet:" or "niet
+ * bereikbaar:" has exactly one entry in `field`, and each entry says what was tried and cites at
+ * least two observations of the session. `skipPoint` leaves out points another rule already refuses.
+ */
+function attemptProblems(missing: string[], attempts: NonNullable<Verdict["attempts"]>, field: "attempts" | "finish.attempts", context: InstrumentContext, session: string, skipPoint: (prefix: string) => boolean = () => false): string[] {
+  const problems: string[] = [];
+  missing.forEach((point, position) => {
+    const kind = openPoint(point).kind;
+    if (kind && !skipPoint(kind.prefix) && KINDS_WITH_ATTEMPT.includes(kind.prefix) && attempts.filter((entry) => entry?.missing === position + 1).length !== 1) {
+      problems.push(`missingNl[${position}]: ${kind.prefix === UNREACHABLE ? "a part of the site that did not load" : "an instrument that did not work"} stays open only after a real attempt: give one entry in ${field} with "missing": ${position + 1}, saying what you tried, in which ways, and citing at least ${MIN_ATTEMPT_OBSERVATIONS} observations of your own session`);
+    }
+  });
+  const index = context.observations;
+  const own = (ref: unknown): ref is string => typeof ref === "string" && sessionOfObservation(ref) === session && index.has(ref);
+  attempts.forEach((attempt, position) => {
+    const at = `${field}[${position}]`;
+    const point = typeof attempt?.missing === "number" ? missing[attempt.missing - 1] : undefined;
+    if (point === undefined || !KINDS_WITH_ATTEMPT.includes(openPoint(point).kind?.prefix ?? "")) problems.push(`${at}: "missing" is the place in missingNl (counted from 1) of a point "proef werkte niet:" or "${UNREACHABLE}:"`);
+    if (!isText(attempt?.triedNl, 40)) problems.push(`${at}: triedNl says what was tried, in which ways, and what the instrument answered`);
+    const evidence = Array.isArray(attempt?.evidence) ? attempt.evidence : [];
+    if (new Set(evidence.filter(own)).size < MIN_ATTEMPT_OBSERVATIONS) problems.push(`${at}: a real attempt shows in the observation log: cite at least ${MIN_ATTEMPT_OBSERVATIONS} observations of session "${session}" (a command that failed counts), made in more than one way`);
+    for (const ref of evidence) {
+      const problem = typeof ref === "string" ? refProblem(ref, context) : "evidence reference is not text";
+      if (problem) problems.push(`${at}: ${problem}`);
+    }
+  });
+  return problems;
 }
 
 /** Outcomes the verifier may reach from what the judge said. It never turns a failure into a pass; an open question it may settle either way. */
@@ -976,7 +1042,7 @@ export function validateVerification(input: unknown, context: VerificationContex
   const problems = validateShape(input, shapeContext(context));
   if (input === null || typeof input !== "object") return problems;
   const verdict = input as Partial<Verdict>;
-  problems.push(...instrumentRules(verdict, context, context.session));
+  problems.push(...instrumentRules(verdict, context, context.session), ...attemptRules(verdict, context, context.session));
 
   const index = context.observations;
   const ownShowing = (ref: unknown): boolean => {
@@ -1102,21 +1168,12 @@ export function validateFinish(input: unknown, context: FinishContext): string[]
     if (!kind) return; // the rules every verdict has already say so
     if (!(KINDS_AFTER_FINISH as readonly string[]).includes(kind.prefix)) {
       problems.push(`missingNl[${position}]: "${kind.prefix}:" cannot stay after the finishing round. This round exists to measure what was missing, with a budget of its own: measure it, and decide. Only ${KINDS_AFTER_FINISH.map((prefix) => `"${prefix}:"`).join(", ")} may stay`);
-    } else if (KINDS_WITH_ATTEMPT.includes(kind.prefix) && attempts.filter((entry) => entry?.missing === position + 1).length !== 1) {
-      problems.push(`missingNl[${position}]: ${kind.prefix === UNREACHABLE ? "a part of the site that did not load" : "an instrument that did not work"} stays open only after a real attempt: give one entry in finish.attempts with "missing": ${position + 1}`);
     }
   });
+  problems.push(...attemptProblems(missing, attempts, "finish.attempts", context, context.session, (prefix) => !(KINDS_AFTER_FINISH as readonly string[]).includes(prefix)));
 
   if (!finish || typeof finish !== "object") return [...problems, "finish: the verdict of the finishing round says what happened to every point that stood open, what it covers and where every finding was seen twice"];
 
-  attempts.forEach((attempt, position) => {
-    const at = `finish.attempts[${position}]`;
-    const point = typeof attempt?.missing === "number" ? missing[attempt.missing - 1] : undefined;
-    if (point === undefined || !KINDS_WITH_ATTEMPT.includes(openPoint(point).kind?.prefix ?? "")) problems.push(`${at}: "missing" is the place in missingNl (counted from 1) of a point "proef werkte niet:" or "${UNREACHABLE}:"`);
-    if (!isText(attempt?.triedNl, 40)) problems.push(`${at}: triedNl says what was tried, in which ways, and what the instrument answered`);
-    if (new Set(refs(attempt?.evidence).filter(own)).size < MIN_ATTEMPT_OBSERVATIONS) problems.push(`${at}: a real attempt shows in the observation log: cite at least ${MIN_ATTEMPT_OBSERVATIONS} observations of session "${context.session}" (a command that failed counts), made in more than one way`);
-    checkRefs(attempt?.evidence, at);
-  });
 
   // Every point that stood open is accounted for.
   const points = Array.isArray(finish.points) ? finish.points : [];
@@ -1299,6 +1356,7 @@ export function citedObservations(verdict: Verdict, observations: { has(ref: str
     ...(verdict.finish?.points ?? []).flatMap((point) => point.evidence ?? []),
     ...(verdict.finish?.findings ?? []).flatMap((entry) => [...(entry.first ?? []), ...(entry.repeated ?? [])]),
     ...(verdict.finish?.attempts ?? []).flatMap((attempt) => attempt.evidence ?? []),
+    ...(verdict.attempts ?? []).flatMap((attempt) => attempt.evidence ?? []),
   ];
   return [...new Set(refs.filter((ref) => observations.has(ref)))].sort();
 }

@@ -6,7 +6,7 @@ import { readJson } from "../lib/canonical.ts";
 import { isChallenge } from "../lib/challenge.ts";
 import { privateFromPublicSite, scopeHost, scopeHostOf, siteOrigins, WEB_SCHEMES } from "../lib/origins.ts";
 import { loginCookieHeader, logsOut } from "../lib/login.ts";
-import { onReadOrigin, readDecision, readRuleFor, type ReadRequest } from "../lib/reads.ts";
+import { onReadOrigin, pathOf, readDecision, readRuleFor, type ReadRequest } from "../lib/reads.ts";
 import { searchServicesOf, type SearchServiceId } from "../lib/searchbody.ts";
 import { SEARCH_FALLBACK, SEARCH_NONE } from "../lib/searchterm.ts";
 import { searchTermForRun } from "../lib/sitemodel.ts";
@@ -251,7 +251,7 @@ export async function guardContext(context: BrowserContext, scope: Scope, guard:
         });
       }
       // Whether the body has the form of a search: what the explorer needs to record a read request, never the body itself.
-      const search = method === "POST" ? searchServicesOf(body) : [];
+      const search = method === "POST" ? searchServicesOf(body, pathOf(url)) : [];
       guard.blocked.push({ at: new Date().toISOString(), kind: "method", method, url: url.slice(0, MAX_URL), resourceType: type, ...(search.length > 0 ? { search } : {}) });
       return refuse();
     }

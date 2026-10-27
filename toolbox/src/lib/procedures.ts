@@ -30,6 +30,11 @@ export interface Procedure {
   limitsNl: string | null;
   /** Session commands of which a passed verdict must cite at least one observation each. */
   passCommands: string[];
+  /**
+   * Per decision rule, the commands a failure on that rule must cite (`fail_observations`): where
+   * the norm accepts more than one way, the instrument that measures them all (#318).
+   */
+  failCommands: Record<string, string[]>;
   /** Commands whose method agreement matters for this criterion: a pass must settle a disagreement in these. Defaults to `passCommands`. */
   decisiveCommands: string[];
   /** The rules of the section "Aanbevelingen" ("A1", "A2"): the only recommendations a verdict may give. Empty without that section. */
@@ -63,6 +68,14 @@ export function parseProcedure(text: string, expectedId?: string): Procedure {
   if (!Array.isArray(passCommands)) problems.push("pass_observations must be a list of session commands");
   else for (const name of passCommands) if (OLD_NAMES.includes(name)) problems.push(`pass_observations: "${name}" is now called "${COMMAND_ALIASES[name]}"`);
     else if (!SHOWING_COMMANDS.includes(name)) problems.push(`pass_observations: "${name}" is not a look or measure command (${SHOWING_COMMANDS.join(", ")})`);
+  const failCommands = (front.fail_observations ?? {}) as Record<string, string[]>;
+  if (typeof failCommands !== "object" || Array.isArray(failCommands)) problems.push('fail_observations maps a decision rule to session commands, such as { R2: [zoom] }');
+  else
+    for (const [rule, names] of Object.entries(failCommands)) {
+      if (!/^R\d+$/.test(rule)) problems.push(`fail_observations: "${rule}" is not a decision rule such as R2`);
+      if (!Array.isArray(names)) problems.push(`fail_observations.${rule} must be a list of session commands`);
+      else for (const name of names) if (!SHOWING_COMMANDS.includes(name)) problems.push(`fail_observations.${rule}: "${name}" is not a look or measure command (${SHOWING_COMMANDS.join(", ")})`);
+    }
   const decisive = front.decisive === undefined ? null : (front.decisive as string[]);
   if (decisive !== null && !Array.isArray(decisive)) problems.push("decisive must be a list of session commands");
   else for (const name of decisive ?? []) if (!SHOWING_COMMANDS.includes(name)) problems.push(`decisive: "${name}" is not a look or measure command`);
@@ -90,6 +103,7 @@ export function parseProcedure(text: string, expectedId?: string): Procedure {
     inapplicableIfZero: (front.inapplicable_if_zero ?? []) as string[],
     limitsNl: (front.limits as string | undefined) ?? null,
     passCommands: Array.isArray(passCommands) ? passCommands : [],
+    failCommands: typeof failCommands === "object" && !Array.isArray(failCommands) ? failCommands : {},
     decisiveCommands: Array.isArray(decisive) ? decisive : Array.isArray(passCommands) ? passCommands : [],
     recommendationRules,
     passExplains: Array.isArray(passExplains) ? passExplains : [],

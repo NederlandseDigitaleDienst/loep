@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { checkWalk, instrumentPending, instrumentTasks, skip } from "../src/commands/instrument-tasks.ts";
 import { comparisonMarkdown, compareVariants, MARGIN, pairedBootstrap, REPORT_MARGIN, SEED, variant, VARIANT_FILE, type VariantRecord } from "../src/commands/variants.ts";
+import { sweepToolchain } from "../src/lib/manifest.ts";
 import type { RunData } from "../src/lib/rundata.ts";
 
 const CLI = fileURLToPath(new URL("../src/cli.ts", import.meta.url));
@@ -93,7 +94,8 @@ test("a variant copy keeps the sweep and leaves out what the agent phases wrote"
   assert.deepEqual(saved, record);
   assert.equal(saved.name, "dossier-commando");
   assert.equal(saved.noteNl, "het dossier opvragen met een commando");
-  assert.deepEqual(saved.from, { run: "bron", toolbox: sweepCode, variant: null }, "the code that last wrote the manifest of the source");
+  const sweepBrowser = readJsonFile<{ browser?: unknown }>(join(source, "manifest.json")).browser ?? null;
+  assert.deepEqual(saved.from, { run: "bron", toolbox: sweepCode, variant: null, browser: sweepBrowser }, "the code and browser that last wrote the manifest of the source");
   assert.equal(typeof saved.toolbox.version, "string");
   assert.deepEqual(saved.leftOut.sessions, ["b-143", "r-contact", "r-start", "samenvoeg"], "also the work folders tasks made for sessions that never started");
   assert.deepEqual(saved.leftOut.recipes, ["eigen-toestand"]);
@@ -101,6 +103,21 @@ test("a variant copy keeps the sweep and leaves out what the agent phases wrote"
   const steps = readJsonFile<{ steps: { command: string; from?: string }[] }>(join(copy, "manifest.json")).steps;
   assert.deepEqual(steps.map((step) => step.command), ["gate", "tasks", "tasks", "variant"], "the steps of the source stay, as its history");
   assert.equal(steps.at(-1)!.from, "bron");
+});
+
+test("sweepToolchain names the code of the sweep of a copy, and nothing for a run that is no copy or a copy of the same code", () => {
+  const dir = mkdtempSync(join(tmpdir(), "sweep-toolchain-"));
+  const current = { commit: "d03c1c884f5f9bcb9c8a251e95f24fd0415c382f", dirty: false, lockfileSha256: "aa", version: "0.16.0" };
+  assert.equal(sweepToolchain(dir, current), null, "no variant.json");
+  const old = { commit: "886b74a15776cc0652c6172d9329a1f80fe7dcb8", dirty: false, lockfileSha256: "bb", version: "0.10.0+unreleased" };
+  writeFileSync(join(dir, VARIANT_FILE), JSON.stringify({ from: { run: "bron", toolbox: old, browser: { name: "chromium", version: "152.0.1" } } }));
+  assert.deepEqual(sweepToolchain(dir, current), { run: "bron", toolbox: old, browser: { name: "chromium", version: "152.0.1" } });
+  writeFileSync(join(dir, VARIANT_FILE), JSON.stringify({ from: { run: "bron", toolbox: old } }));
+  assert.equal(sweepToolchain(dir, current)!.browser, null, "a copy from before the browser was recorded");
+  writeFileSync(join(dir, VARIANT_FILE), JSON.stringify({ from: { run: "bron", toolbox: current } }));
+  assert.equal(sweepToolchain(dir, current), null, "the sweep was measured with this very code");
+  writeFileSync(join(dir, VARIANT_FILE), JSON.stringify({ from: { run: "bron", toolbox: null } }));
+  assert.equal(sweepToolchain(dir, current), null, "the source recorded no code");
 });
 
 test("on the copy, tasks and pending start the agent phases again, with the first session names and the copy's own paths", async () => {
@@ -116,9 +133,14 @@ test("on the copy, tasks and pending start the agent phases again, with the firs
 });
 
 test("a copy of a copy names the variant it came from; a copy is refused where it cannot be made", async () => {
+  // The agent phases of the copy wrote its manifest with their own code: the sweep is still that of the first source.
+  const sweepCode = (JSON.parse(readFileSync(join(copy, "variant.json"), "utf8")) as { from: { toolbox: unknown } }).from.toolbox;
+  const copyManifest = JSON.parse(readFileSync(join(copy, "manifest.json"), "utf8")) as { toolbox: { commit: string | null } };
+  writeFileSync(join(copy, "manifest.json"), JSON.stringify({ ...copyManifest, toolbox: { ...copyManifest.toolbox, commit: "code-van-de-agentfasen" } }));
   const again = join(scratch, "kopie-2");
   const { record } = await variant({ run: copy, out: again, name: "sonnet-verifieerders" });
   assert.equal(record.from.variant, "dossier-commando");
+  assert.deepEqual(record.from.toolbox, sweepCode, "a copy of a copy names the code of the sweep, not that of the agent phases of the copy in between");
   assert.equal(record.noteNl, null);
   await assert.rejects(variant({ run: source, out: copy, name: "x" }), /bestaat al/);
   await assert.rejects(variant({ run: source, out: join(scratch, "y"), name: "met spatie" }), /--name/);

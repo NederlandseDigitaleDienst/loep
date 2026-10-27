@@ -134,6 +134,39 @@ test("a body is a question to the one service whose form it has, and an empty or
   assert.equal(recogniseSearch("meilisearch", json({ q: "x".repeat(MAX_BODY) })).search, false);
 });
 
+test("Algolia: search parameters inline at the top of the body count only on the query path of one index", () => {
+  const path = "/1/indexes/nldesignsystem/query";
+  const inline = json({ query: "test", hitsPerPage: 20, attributesToRetrieve: ["url"], facetFilters: [["language:nl"]] });
+  assert.deepEqual(recogniseSearch("algolia", inline, path), { search: true });
+  assert.deepEqual(recogniseSearch("algolia", json({ query: "" }), path), { search: true });
+  assert.deepEqual(searchServicesOf(inline, path), ["algolia"]);
+  assert.deepEqual(recogniseSearch("algolia", json({ params: "query=a" }), path), { search: true });
+  assert.deepEqual(recogniseSearch("algolia", json({ requests: [{ indexName: "g", query: "a" }] }), "/1/indexes/*/queries"), { search: true });
+  // Not on another path, nor without one.
+  for (const other of [undefined, "/", "/1/indexes/x/queries", "/1/indexes/*/queries", "/1/indexes/x/facets/f/query", "/1/indexes/x/y/query", "/1/indexes/x/query/extra", "/api/graphql"]) {
+    assert.equal(recogniseSearch("algolia", inline, other).search, false, `path ${other}`);
+  }
+  assert.deepEqual(searchServicesOf(json({ query: "test", hitsPerPage: 20 }), "/search"), []);
+  assert.deepEqual(searchServicesOf(json({ query: "{ a }" }), path).sort(), ["algolia", "graphql"]);
+  // Refused on the query path: a key that is no search parameter, a write, and odd shapes.
+  const refused: [string, string, RegExp][] = [
+    ["an object to save", json({ objectID: "1", titel: "x" }), /niet "objectID"/],
+    ["a search parameter next to an object", json({ query: "a", objectID: "1" }), /niet "objectID"/],
+    ["an index setting", json({ query: "a", searchableAttributes: ["titel"] }), /niet "searchableAttributes"/],
+    ["an empty object", "{}", /minstens één zoekparameter/],
+    ["a query that is no text", json({ query: { match_all: {} } }), /"query" van Algolia is tekst/],
+    ["a number as query", json({ query: 5 }), /"query" van Algolia is tekst/],
+    ["a list", json([{ query: "a" }]), /geen JSON-object/],
+    ["not JSON", "query=a", /geen JSON/],
+    ["a write word inside", json({ action: "addObject", query: "a" }), /niet "action"/],
+  ];
+  for (const [name, body, reason] of refused) {
+    const verdict = recogniseSearch("algolia", body, path);
+    assert.equal(verdict.search, false, name);
+    if (!verdict.search) assert.match(verdict.reasonNl, reason, name);
+  }
+});
+
 test("a GraphQL document is read by its tokens, not by a word", () => {
   assert.deepEqual(graphqlOperations("query A { a } fragment F on T { b } { c }"), ["query", "query"]);
   // A description belongs to a schema, not to a request; the word inside it is never read as an operation.
