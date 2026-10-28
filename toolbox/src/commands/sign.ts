@@ -1,4 +1,5 @@
 import { rm } from "node:fs/promises";
+import { DEFAULT_PURPOSE } from "../lib/purpose.ts";
 import { dirname, join } from "node:path";
 import { readJson, writeJson } from "../lib/canonical.ts";
 import { evaluationHash, type Evaluation, type Signature } from "../lib/evaluation.ts";
@@ -49,6 +50,10 @@ export async function sign(options: SignOptions): Promise<Signature> {
   const untested = evaluation.criteria.filter((criterion) => criterion.outcome === "untested");
   if (untested.length > 0) {
     throw new Error(`${untested.length} criteria have no verdict (${untested.map((criterion) => criterion.id).join(", ")}); an incomplete evaluation cannot be signed`);
+  }
+  // A report to improve is not signed: it backs no statement (#318). The purpose can change at the end, without a new run.
+  if ((evaluation.purpose ?? DEFAULT_PURPOSE) !== "verantwoorden") {
+    throw new Error(`dit onderzoek is voor ${evaluation.purpose ?? DEFAULT_PURPOSE}; een getekend rapport onderbouwt een toegankelijkheidsverklaring. Wil de organisatie het daarvoor gebruiken, kies dan het doel verantwoorden (purpose --run ${options.run} verantwoorden), draai evaluate, render en seal opnieuw, lees het rapport, en teken dan`);
   }
   const check = await checkSeal(options.run);
   if (check === null) throw new Error("het onderzoek is niet verzegeld: draai eerst seal, zodat vastligt waarvoor wordt getekend");

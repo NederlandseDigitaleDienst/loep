@@ -10,10 +10,25 @@ import { checkSeal, seal, SIGNATURE_FILE, verify } from "../src/commands/verify.
 import { canonicalJson } from "../src/lib/canonical.ts";
 import type { Signature } from "../src/lib/evaluation.ts";
 import { writeManifest } from "../src/lib/manifest.ts";
+import { parsePurpose, purposeForRun, recordPurpose } from "../src/lib/purpose.ts";
 import { exampleEvaluation } from "./fixtures/example-evaluation.ts";
 import { typesSeal } from "./fixtures/terminal.ts";
 
 const SIGNER = { name: "Een ondertekenaar", role: "Directeur", organisation: "Gemeente Voorbeeld", checkedNl: null, terminal: typesSeal() };
+
+test("a report to improve is not signed, and the purpose can change at the end of a run (#318)", async () => {
+  const run = mkdtempSync(join(tmpdir(), "seal-doel-"));
+  await writeManifest(run, { command: "inventory" });
+  assert.equal(purposeForRun(run), "verbeteren", "without a choice a run is one to improve");
+  await writeEvaluation(join(run, "evaluation.json"), exampleEvaluation());
+  await seal(run);
+  await assert.rejects(sign({ run, ...SIGNER }), /dit onderzoek is voor verbeteren; .*purpose --run .* verantwoorden.*evaluate, render en seal opnieuw/);
+  await recordPurpose(run, "verantwoorden");
+  assert.equal(purposeForRun(run), "verantwoorden");
+  await writeManifest(run, { command: "evaluate" });
+  assert.equal(purposeForRun(run), "verantwoorden", "a later step keeps it");
+  assert.throws(() => parsePurpose("netjes"), /het doel is verbeteren of verantwoorden/);
+});
 
 test("evaluate, render, seal, verify, sign, verify: signing keeps the seal, and one changed byte is seen", async () => {
   const run = mkdtempSync(join(tmpdir(), "seal-"));
@@ -30,7 +45,8 @@ test("evaluate, render, seal, verify, sign, verify: signing keeps the seal, and 
   // The command itself needs a run that agents judged; the evidence here is one file.
   mkdirSync(join(run, "pages", "start"), { recursive: true });
   writeFileSync(join(run, "pages", "start", "facts.json"), canonicalJson({ title: "Start" }));
-  await writeEvaluation(join(run, "evaluation.json"), exampleEvaluation());
+  // Only a report to account for is signed (#318).
+  await writeEvaluation(join(run, "evaluation.json"), { ...exampleEvaluation(), purpose: "verantwoorden" });
   await writeManifest(run, { command: "evaluate" });
   assert.ok(!("signature" in JSON.parse(readFileSync(join(run, "evaluation.json"), "utf8"))), "the evaluation has no place for a signature");
 

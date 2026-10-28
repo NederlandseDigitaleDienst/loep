@@ -279,6 +279,15 @@ Bij elk criterium staat waarop de uitkomst rust (`basis` in evaluation.json, en 
 
 Bij elk criterium staat ook door wie of wat de uitkomst is vastgesteld: de verificatie, de afmaakronde of een persoon.
 
+### Waar loep afschaalt
+
+Loep stopt niet en laat niets open om iets wat het zelf niet kon. Op twee plekken schaalt het af naar een uitkomst met een beperking erbij:
+
+- **De bewijspoort na twee keer terug naar de verkenner.** Wat dan nog open is, wordt een beperking (`limitations` in gate.json). De beoordelaars bekijken die plekken zelf in hun sessie, en het rapport noemt ze. Alleen als er niets te beoordelen valt, stopt de poort: de site weigert de run, of meer dan de helft van de steekproef laadde niet (afsluitcode 4).
+- **Een punt over het onderzoek in een afgekeurd criterium.** Dat is een beperking en geen open punt (`limitsNl`, zie hierboven): de afkeuring hangt er niet van af.
+
+Elders schaalt loep niet af. Versturen, de afbakening, wachtwoorden, tekenen en de herleidbaarheid blijven streng, en een punt voor de eigenaar blijft open tot een persoon het vastlegt. (#318)
+
 ## Ernst en eigenaar van een bevinding
 
 Een bevinding heeft een ernst in vier treden: `blokkerend` (een functie of een deel van de inhoud werkt voor niemand, met of zonder beperking), `hoog`, `midden` en `laag`. De keuze volgt uit wat de bezoeker niet kan. De werklijst en de samenvatting sorteren erop. De samenvatting toont alle gebreken van de hoogste trede die voorkomt, die van de trede daaronder zolang de lijst kort blijft, en zegt hoeveel er niet staan.
@@ -309,6 +318,13 @@ Een regel die strenger is dan de letter van het criterium, hoort hier en niet on
 ## Een volgend onderzoek
 
 `evaluate --previous` laat een bevinding op dezelfde plek onder hetzelfde criterium haar nummer houden. `diff` legt twee evaluaties van dezelfde site naast elkaar en schrijft `verschil.md`: opgelost, gebleven, nieuw, en de criteria met een andere uitkomst, gekoppeld op criterium, pagina en plek. Dat is een werkdocument en geen deel van het rapport. Het rapport noemt een vorig onderzoek in één regel, en alleen als dat is afgetekend.
+
+## Het doel van het onderzoek
+
+Een onderzoek is om te verbeteren (de standaard) of om te verantwoorden. Het doel verandert niets aan wat loep meet of hoe het oordeelt; het bepaalt wat het rapport erbij zegt en of er getekend kan worden. Het doel kies je aan het eind, als het rapport er ligt: `purpose --run <run> verantwoorden` legt het vast in manifest.json, `purpose --run <run>` zegt welk doel er staat. Daarna draaien `evaluate`, `render` en `seal` opnieuw.
+
+- **Verbeteren.** Het rapport is een werklijst voor wie herstelt. `sign` weigert, en zegt hoe je van doel wisselt: een getekend rapport onderbouwt een toegankelijkheidsverklaring, en daar is dit onderzoek dan niet voor.
+- **Verantwoorden.** Het rapport zegt bovenaan wat er nog ontbreekt voor status B: waarop de uitkomsten rusten (gemeten, vastgesteld door een agent, door een persoon, open), en per open criterium wat het sluit, zoals een persoon die het vastlegt met `answer` of een nieuwe afmaakronde. Staat er niets open, dan zegt het dat een gebrek status B niet tegenhoudt als er per gebrek een maatregel bij staat. Daarna kan er getekend worden. (#318)
 
 ## De handtekening
 

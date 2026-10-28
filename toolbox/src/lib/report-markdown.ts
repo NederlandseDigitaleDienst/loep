@@ -310,6 +310,12 @@ export interface ReportDerived {
   status: Record<WcagVersion, { status: ComplianceStatus; reasonNl: string }>;
   statusSentenceNl: string;
   statusLine: StatusLine;
+  /**
+   * For an investigation to account for (#318): what the outcomes rest on, and per open criterion
+   * what would close it, so whoever signs sees what is still missing for status B. Null for an
+   * investigation to improve.
+   */
+  forB: { basisNl: string; openNl: { criterion: string; closesNl: string }[]; doneNl: string | null } | null;
   /** One line when this evaluation follows up a signed one: its date and mark. Null otherwise; a concept is never named. */
   followsUpNl: string | null;
   /** When this version of loep was last measured as a whole and what came out, or that it never was: always said. */
@@ -744,6 +750,35 @@ function brief(criterion: CriterionResult): CriterionBrief {
   };
 }
 
+/** What closes an open point of each kind, in the words of whoever signs. */
+const CLOSES_NL: Record<string, string> = {
+  "mens nodig": "een persoon die het vaststelt en het vastlegt met answer",
+  "keuze nodig": "een besluit van de eigenaar, vastgelegd met answer",
+  "versturen niet toegestaan": "toestemming om te versturen: een testomgeving, verklaard bij inventory",
+  "buiten de afbakening": "een nieuw onderzoek met dat adres erbij (inventory --also-origin)",
+  "veegronde mist": "een nieuwe afmaakronde (tasks --again), of een instrument dat loep nog mist",
+  "budget op": "een nieuwe afmaakronde (tasks --again)",
+  "geen geldig resultaat": "een nieuwe afmaakronde (tasks --again)",
+  "proef werkte niet": "een proef van loep die werkt: een nieuwe afmaakronde (tasks --again) na een herstel in loep",
+  "niet bereikbaar": "een nieuwe afmaakronde (tasks --again) zodra het deel weer laadt",
+};
+
+function forStatusB(evaluation: Evaluation): ReportDerived["forB"] {
+  if (evaluation.purpose !== "verantwoorden") return null;
+  const count = (basis: string): number => evaluation.criteria.filter((criterion) => criterion.basis === basis).length;
+  const basisNl = `${count("measured")} criteria ${BASIS_NL.measured}, ${count("observed")} ${BASIS_NL.observed}, ${count("person")} ${BASIS_NL.person}, ${count("open")} open.`;
+  const open = evaluation.criteria.filter((criterion) => criterion.outcome === "cantTell" || criterion.outcome === "untested");
+  const openNl = open.map((criterion) => {
+    if (criterion.outcome === "untested") return { criterion: criterion.id, closesNl: "een beoordeling: het criterium heeft nog geen oordeel" };
+    const kinds = [...new Set(criterion.missingNl.map((point) => openPoint(point).kind?.prefix ?? null))];
+    const closes = kinds.map((kind) => (kind ? CLOSES_NL[kind] : null) ?? "een nieuwe beoordeling: bij een punt staat niet wat het sluit");
+    return { criterion: criterion.id, closesNl: [...new Set(closes)].join("; ") };
+  });
+  const failed = evaluation.criteria.filter((criterion) => criterion.outcome === "failed").length;
+  const doneNl = open.length === 0 ? `Er staat geen criterium open. Een gebrek houdt status B niet tegen, als er per gebrek een maatregel bij staat${failed > 0 ? ` (${failed === 1 ? "1 criterium voldoet" : `${failed} criteria voldoen`} niet)` : ""}.` : null;
+  return { basisNl, openNl, doneNl };
+}
+
 /** The work that follows from the evaluation: what to fix, by owner, and what to find out. */
 function todo(evaluation: Evaluation): ReportDerived["todo"] {
   const pageCount = evaluation.sample.items.length;
@@ -1002,6 +1037,7 @@ export function deriveReport(input: Evaluation, decisions: DecisionLayer = { dec
     signatureStale: stale,
     status: { "2.1": complianceStatus(evaluation, "2.1"), "2.2": complianceStatus(evaluation, "2.2") },
     statusSentenceNl: statusSentence(evaluation),
+    forB: forStatusB(evaluation),
     statusLine: statusLine(evaluation, stale),
     followsUpNl: evaluation.followsUp ? `Dit is een heronderzoek. Het vorige onderzoek is van ${dateNl(evaluation.followsUp.evaluatedAt)}, afgetekend op ${dateNl(evaluation.followsUp.signedAt)}, met kenmerk ${evaluation.followsUp.sha256.slice(0, 12)}.` : null,
     chain,
@@ -1335,6 +1371,11 @@ export function renderMarkdown(input: Evaluation, decisions: DecisionLayer = { d
   lines.push(`**${derived.statusLine.headingNl}**`, "");
   if (derived.statusLine.noteNl) lines.push(derived.statusLine.noteNl, "");
   lines.push(derived.statusLine.openNl, "");
+  if (derived.forB) {
+    lines.push("**Wat er nog ontbreekt voor status B**", "", `Waarop de uitkomsten rusten: ${derived.forB.basisNl}`, "");
+    if (derived.forB.doneNl) lines.push(derived.forB.doneNl, "");
+    else lines.push(...bullets(derived.forB.openNl.map((row) => `${row.criterion}: ${esc(row.closesNl)}`)), "");
+  }
   if (grouping) lines.push(`Het onderzoek vond ${grouping.derived.countsNl}.`, "");
   for (const version of VERSIONS) lines.push(`**WCAG ${version} niveau A en AA (${evaluation.summary[version].total} criteria)**`, "", ...scoreTable(evaluation, version), "");
   lines.push(derived.scoreNoteNl, "");

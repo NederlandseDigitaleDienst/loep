@@ -36,6 +36,8 @@ function withDefects(): Evaluation {
   const evaluation = exampleEvaluation();
   evaluation.defects = mergeFindings(evaluation);
   evaluation.merge = { rulesVersion: 1, proposal: { status: "not-run" } };
+  // Only a report to account for is signed (#318).
+  evaluation.purpose = "verantwoorden";
   return evaluation;
 }
 

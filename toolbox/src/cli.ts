@@ -124,6 +124,11 @@ const USAGE = `loep <command> [options]
                                          Write verschil.md: solved, stayed and new between two evaluations of one site
   compare --run <run> --reference <file> --out <dir>
                                          Compare the evaluation with an existing audit of the same site
+  purpose --run <run> [verbeteren|verantwoorden]
+                                         What the investigation is for. Verbeteren (the default): a team wants to know what
+                                         to fix, and the report is not signed. Verantwoorden: the report backs a statement,
+                                         says what is still missing for status B, and is signed. Choose or change it at the
+                                         end of a run, then run evaluate, render and seal again. Without a value: say it
   seal --run <run>                       Record the hash of every file in the run; what is signed afterwards is this seal
   verify --run <run>                     Recompute every hash in the run
   voiceover start|read|stop|setup        Optional, outside an evaluation: a real screen reader (VoiceOver in a virtual Mac) as a
@@ -664,6 +669,13 @@ async function main(): Promise<void> {
       const { diff } = await import("./commands/diff.ts");
       const { difference, markdown } = await diff(values.previous, values.current, values.out);
       process.stdout.write(`opgelost ${difference.resolved.length}, gebleven ${difference.remained.length}, nieuw ${difference.fresh.length}; ${difference.outcomes.length} criteria met een andere uitkomst\n${markdown}\n`);
+      return;
+    }
+    case "purpose": {
+      if (!values.run) throw new Error("purpose needs --run <run>");
+      const { parsePurpose, PURPOSE_NL, purposeForRun, recordPurpose } = await import("./lib/purpose.ts");
+      if (target !== undefined) await recordPurpose(values.run, parsePurpose(target));
+      process.stdout.write(`doel van het onderzoek: ${PURPOSE_NL[purposeForRun(values.run)]}${target !== undefined ? "\nhet rapport zegt het pas na evaluate, render en seal" : ""}\n`);
       return;
     }
     case "seal": {

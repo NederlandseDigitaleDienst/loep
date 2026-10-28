@@ -365,6 +365,24 @@ test("a recommendation stands apart, after what is wrong and open, and changes n
   assert.ok(!renderMarkdown(exampleEvaluation()).includes("### Aanbevelingen"), "no part without a recommendation");
 });
 
+test("a report to account for says what is still missing for status B, per open criterion (#318)", async (context) => {
+  const evaluation = exampleEvaluation();
+  assert.equal(deriveReport(evaluation).forB, null, "a report to improve has no such part");
+  evaluation.purpose = "verantwoorden";
+  const open = evaluation.criteria.find((entry) => entry.outcome === "cantTell")!;
+  open.missingNl = ["proef werkte niet: de lijnen in het diagram op P05 gaven geen verhouding.", "mens nodig: wat een schermlezer voorleest bij de kaart op P02."];
+  for (const criterion of evaluation.criteria) criterion.basis = criterion.outcome === "cantTell" || criterion.outcome === "untested" ? "open" : "measured";
+  const forB = deriveReport(evaluation).forB!;
+  assert.match(forB.basisNl, / criteria gemeten met een instrument, 0 vastgesteld door een agent op eigen waarnemingen, 0 vastgesteld door een persoon, \d+ open\./);
+  assert.deepEqual(forB.openNl.find((row) => row.criterion === open.id), { criterion: open.id, closesNl: "een proef van loep die werkt: een nieuwe afmaakronde (tasks --again) na een herstel in loep; een persoon die het vaststelt en het vastlegt met answer" });
+  assert.ok(renderMarkdown(evaluation).includes("**Wat er nog ontbreekt voor status B**"));
+  const dir = mkdtempSync(join(tmpdir(), "render-for-b-"));
+  writeFileSync(join(dir, "evaluation.json"), canonicalJson(evaluation));
+  const result = await render(dir);
+  if (result.pdf === null) return context.skip("Typst is not installed");
+  assert.match((await tool("pdftotext", [result.pdf, "-"])).stdout.replace(/\s+/g, " "), /Wat er nog ontbreekt voor status B Waarop de uitkomsten rusten:/);
+});
+
 test("the PDF shows a limit with its criterion and in the appendix (#318)", async (context) => {
   const dir = mkdtempSync(join(tmpdir(), "render-limit-"));
   const evaluation = exampleEvaluation();
