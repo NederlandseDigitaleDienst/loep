@@ -61,10 +61,12 @@ concurrency:
   group: controle-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: true
 
+# Every job runs on ubuntu-24.04, not ubuntu-latest: on 26.04 the WebKit of this Playwright
+# does not start (it needs libicu 74), and the runner image may not change under a merge.
 jobs:
   snel:
     if: github.event_name == 'push' || github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
@@ -88,7 +90,7 @@ jobs:
 
   wijziging:
     if: github.event_name != 'push'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     outputs:
       ja: ${{ steps.nieuw.outputs.ja }}
@@ -131,7 +133,7 @@ jobs:
   installatie:
     needs: wijziging
     if: needs.wijziging.outputs.ja == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
@@ -169,7 +171,7 @@ jobs:
     needs: wijziging
     if: needs.wijziging.outputs.ja == 'true'
     name: tests (${{ matrix.shard }}/${{ matrix.total }})
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 25
     strategy:
       # Let every shard finish, so a failure shows all tests that fail, not only the first shard's.
@@ -206,7 +208,7 @@ jobs:
     needs: wijziging
     if: needs.wijziging.outputs.ja == 'true'
     name: tests zonder browser (Node 22.18)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
@@ -229,7 +231,7 @@ jobs:
     needs: wijziging
     if: needs.wijziging.outputs.ja == 'true'
     name: veegronde op de testsite (${{ matrix.site }})
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
     strategy:
       fail-fast: false
@@ -287,7 +289,7 @@ jobs:
   ijkmeting:
     needs: wijziging
     if: needs.wijziging.outputs.ja == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     env:
       MEASURE: ${{ needs.wijziging.outputs.ijk }}
@@ -341,7 +343,7 @@ jobs:
   volledig:
     needs: [wijziging, installatie, tests, node-22, veegronde, ijkmeting]
     if: always() && github.event_name != 'push'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
       - name: Zijn alle delen geslaagd
