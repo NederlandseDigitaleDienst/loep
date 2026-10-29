@@ -2,6 +2,7 @@ import { appendFileSync, existsSync, mkdirSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { readJson, sha256 } from "../lib/canonical.ts";
+import { underSeal } from "../lib/seal.ts";
 import { chunksOf, dossierReads, dossierReadsPath, nameOf, partsOf, readProgress, readsOfSession, requiredParts, resolvePart, SMALL_PART, valueAt, type DossierRead, type DossierReadResult } from "../lib/dossier-view.ts";
 
 /** What `dossier` hands back: a line of JSON, the text under it, and what was shown, for the log of the session. */
@@ -120,6 +121,8 @@ export async function dossierAnswer(runDir: string, session: string, args: strin
 /** Keep what was shown in the log of the session, so check-verdict can see which parts were read in full. */
 export function recordDossierRead(runDir: string, session: string, result: DossierReadResult): void {
   const path = join(runDir, dossierReadsPath(session));
+  // Reading the dossier of a sealed run is reading; the log of what was read is sealed as it was.
+  if (underSeal(path)) return;
   mkdirSync(dirname(path), { recursive: true });
   appendFileSync(path, `${JSON.stringify({ at: new Date().toISOString(), ...result })}\n`);
 }

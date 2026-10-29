@@ -99,9 +99,9 @@ const USAGE = `loep <command> [options]
   recheck --run <run> (--finding <id> | --criterion <id>)
                                          After the evaluation, also when it is sealed and signed: write the task for one agent
                                          that measures a finding (or every finding of a criterion) again on the site as it is
-                                         now, as the verifier did. Everything goes in rechecks/<id>/<moment>/, outside the seal;
-                                         the evaluation does not change. The outcome per finding: nog aanwezig, opgelost or
-                                         niet na te gaan
+                                         now, as the verifier did. Everything goes in rechecks/<id>/<moment>/, outside the seal,
+                                         and its session runs there with a session process of its own; the evaluation does not
+                                         change. The outcome per finding: nog aanwezig, opgelost or niet na te gaan
   check-recheck --run <run> (--finding <id> | --criterion <id>) [--at <moment>]
                                          Validate the outcome of a recheck (the latest, or the one at that moment); non-zero
                                          exit on problems
@@ -597,7 +597,7 @@ async function main(): Promise<void> {
       if (!values.run) throw new Error("recheck needs --run <run>");
       const { recheck } = await import("./commands/recheck.ts");
       const written = await recheck(values.run, { finding: values.finding, criterion: values.criterion });
-      process.stdout.write(`${join(values.run, written.task)}\nnameting van ${written.findings.join(", ")}: start één agent met deze opdracht, in sessie ${written.session}. Alles komt in ${join(values.run, written.dir)}; de evaluatie, het rapport en het zegel blijven zoals ze zijn.\n`);
+      process.stdout.write(`${join(values.run, written.task)}\nnameting van ${written.findings.join(", ")}: start één agent met deze opdracht, in sessie ${written.session}. Alles komt in ${join(values.run, written.dir)}; de evaluatie, het rapport en het zegel blijven zoals ze zijn. De agent start zijn sessie in die map, met een eigen sessieproces: een nameting telt niet mee bij het maximum van de run, en een sessie op de run zelf is niet nodig (op een verzegelde run weigert die).\n`);
       return;
     }
     case "check-recheck": {

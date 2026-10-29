@@ -1,14 +1,18 @@
 import assert from "node:assert/strict";
+import { execFile } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, test } from "node:test";
+import { fileURLToPath } from "node:url";
+import { promisify } from "node:util";
 import { startFixture, type FixtureServer } from "../fixtures/serve.ts";
 import { checkRecheck, loadRechecks, recheck, renderRechecks } from "../src/commands/recheck.ts";
 import { writeEvaluation } from "../src/commands/sign.ts";
 import { checkSeal, seal, verify } from "../src/commands/verify.ts";
 import { canonicalJson } from "../src/lib/canonical.ts";
-import { otherToolboxNl, writeManifest } from "../src/lib/manifest.ts";
+import { otherToolboxNl, writeManifest, writeManifestTools } from "../src/lib/manifest.ts";
+import { underSeal } from "../src/lib/seal.ts";
 import { Daemon } from "../src/session/daemon.ts";
 import { scopeForRun } from "../src/session/safety.ts";
 import { exampleEvaluation } from "./fixtures/example-evaluation.ts";
@@ -31,7 +35,7 @@ after(async () => {
 });
 
 /** A finished, sealed run on one origin, whose one finding under 1.1.1 rests on an observation of the verifier at the start page. */
-async function sealedRun(origin: string): Promise<string> {
+async function sealedRun(origin: string, sealIt = true): Promise<string> {
   const run = mkdtempSync(join(tmpdir(), "recheck-"));
   const start = `${origin}/`;
   writeFileSync(join(run, "inventory.json"), canonicalJson({ baseUrl: start, origin, pages: [{ url: start }, { url: `${origin}/contact.html` }] }));
@@ -44,6 +48,7 @@ async function sealedRun(origin: string): Promise<string> {
   criterion.findings = [{ ...criterion.findings[0]!, id: FINDING, titleNl: "Logo met een bestandsnaam als tekstalternatief", observedNl: 'Het eerste logo onder "Wij werken samen met" heeft als tekstalternatief "IMG_2041.jpg".', locations: [{ page: "P1", where: 'Het eerste logo onder "Wij werken samen met"' }], pagesAffected: "P1", evidence: ["v-111-0001"] }];
   await writeEvaluation(join(run, "evaluation.json"), evaluation);
   await writeManifest(run, { command: "evaluate" });
+  if (!sealIt) return run;
   await seal(run);
   assert.equal(await verify(run), true);
   return run;
@@ -176,5 +181,75 @@ test("recheck passes the version check: it measures the site as it is now, not t
   assert.equal(otherToolboxNl(run, "recheck", false), null);
   assert.equal(otherToolboxNl(run, "check-recheck", false), null);
   assert.notEqual(otherToolboxNl(run, "tasks", false), null, "a command that writes tasks for the evaluation still refuses");
+  rmSync(run, { recursive: true, force: true });
+});
+
+const CLI = fileURLToPath(new URL("../src/cli.ts", import.meta.url));
+
+test("a session on a sealed run is refused before it writes, and a recheck in its own folder may start one (#375)", async () => {
+  const run = await sealedRun(fixture.origins.defect);
+  const manifest = readFileSync(join(run, "manifest.json"), "utf8");
+  // What was given in the issue: the session of whoever leads the audit, again on the sealed run, with a higher maximum for the rechecks.
+  const output = await promisify(execFile)(process.execPath, [CLI, "session", "start", "--run", run, "--session", "regie", "--max-sessions", "7"]).then(
+    (done) => ({ stdout: done.stdout, code: 0 }),
+    (error: { stdout: string; code: number }) => ({ stdout: error.stdout, code: error.code }),
+  );
+  assert.equal(output.code, 1);
+  const refused = (JSON.parse(output.stdout) as { error: string }).error;
+  assert.match(refused, /^geweigerd: deze run is verzegeld, en observations\/regie\/session\.json valt onder het zegel/);
+  assert.match(refused, /rechecks\/<id>\/<moment>\//, "the refusal says where a recheck measures");
+  assert.ok(!existsSync(join(run, "session-daemon.json")), "no session process was started for the run");
+  assert.ok(!existsSync(join(run, "observations", "regie")));
+
+  // A process for the run started some other way refuses the session too, and writes no tools into the manifest.
+  const daemon = await Daemon.create(run, await scopeForRun(run, {}), { navigationDelayMs: 0, secondBrowsers: false });
+  try {
+    const started = await daemon.handle({ op: "start", session: "regie", maxSessions: 7 });
+    assert.equal(started.ok, false);
+    assert.match(started.print.error as string, /^geweigerd: deze run is verzegeld/);
+  } finally {
+    await daemon.close();
+  }
+  assert.equal(await writeManifestTools(run, [{ id: "voiceover", available: false }]), false);
+  assert.equal(readFileSync(join(run, "manifest.json"), "utf8"), manifest, "the manifest stays as it was sealed");
+  assert.deepEqual((await checkSeal(run))!.problems, []);
+
+  // The folder of a recheck lies in the sealed run, but outside the seal: its session is not refused.
+  const written = await recheck(run, { finding: FINDING });
+  const workspace = join(run, written.dir);
+  assert.equal(underSeal(join(workspace, "observations", written.session, "session.json")), null);
+  assert.equal(underSeal(join(workspace, "manifest.json")), null);
+  assert.deepEqual(underSeal(join(run, "manifest.json")), { run, name: "manifest.json" });
+  const { named, daemon: own } = await measure(workspace, written.session);
+  try {
+    assert.match(recorded(workspace, named), /IMG_2041\.jpg/);
+    assert.equal((await own.handle({ op: "stop", session: written.session })).ok, true);
+  } finally {
+    await own.close();
+  }
+  assert.ok(JSON.parse(readFileSync(join(workspace, "observations", written.session, "session.json"), "utf8")).stoppedAt, "the recheck keeps its own session file");
+  assert.ok(JSON.parse(readFileSync(join(workspace, "manifest.json"), "utf8")).tools, "and records its tools in its own manifest");
+  assert.equal(await verify(run), true);
+  rmSync(run, { recursive: true, force: true });
+});
+
+test("a session that still ran when the run was sealed measures no further, and its stop leaves the seal whole (#375)", async () => {
+  const run = await sealedRun(fixture.origins.defect, false);
+  const daemon = await Daemon.create(run, await scopeForRun(run, {}), { navigationDelayMs: 0, secondBrowsers: false });
+  try {
+    assert.equal((await daemon.handle({ op: "start", session: "regie" })).ok, true);
+    assert.equal((await daemon.handle({ op: "command", session: "regie", command: "open", args: ["/"], options: {} })).ok, true);
+    await seal(run);
+    const after = await daemon.handle({ op: "command", session: "regie", command: "look", args: [], options: {} });
+    assert.equal(after.ok, false);
+    assert.match(after.print.error as string, /^geweigerd: deze run is verzegeld, en observations\/regie valt onder het zegel/);
+    const extended = await daemon.handle({ op: "extend", session: "regie", reason: "Nog een meting op de startpagina, na het verzegelen." });
+    assert.match(extended.print.error as string, /^geweigerd: deze run is verzegeld/);
+    assert.equal((await daemon.handle({ op: "stop", session: "regie" })).ok, true, "the session still stops");
+  } finally {
+    await daemon.close();
+  }
+  assert.deepEqual((await checkSeal(run))!.problems, []);
+  assert.equal(await verify(run), true);
   rmSync(run, { recursive: true, force: true });
 });

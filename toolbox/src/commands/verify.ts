@@ -2,10 +2,10 @@ import { existsSync } from "node:fs";
 import { open, readdir, readFile, rm } from "node:fs/promises";
 import { join, relative, sep } from "node:path";
 import { readJson, sha256, sha256File, writeJson } from "../lib/canonical.ts";
-import { checkDecisions, DECISIONS_DIR } from "../lib/decisions.ts";
+import { checkDecisions } from "../lib/decisions.ts";
 import { evaluationHash, type Evaluation, type Signature } from "../lib/evaluation.ts";
-import { IDLE_SESSION_FILE, LOGIN_SESSION_FILE } from "../lib/login.ts";
 import { recordedNl } from "../lib/recorded.ts";
+import { DAEMON_POINTER, notHashed, outsideSeal, RECHECKS_DIR, SEAL_INDEX, SIGNED_DIR } from "../lib/seal.ts";
 
 export interface EvidenceIndex {
   files: Record<string, string>;
@@ -19,23 +19,9 @@ async function walk(dir: string): Promise<string[]> {
   return files.flat();
 }
 
-const INDEX = "evidence-index.json";
-/** Where the signature stands, and the report that names who signed. Both are made after the seal and refer to it. */
-export const SIGNED_DIR = "signed";
+const INDEX = SEAL_INDEX;
+export { RECHECKS_DIR, SIGNED_DIR };
 export const SIGNATURE_FILE = `${SIGNED_DIR}/signature.json`;
-/** Where the rechecks of findings after the evaluation stand (`recheck`), each in a folder of its own. */
-export const RECHECKS_DIR = "rechecks";
-
-/**
- * What the seal never covers, besides itself: the signature that refers to it, and the documents
- * that are made after signing (the signed report, the decisions about each defect, the statement
- * and what the organisation filled in for it), and the rechecks of findings after the evaluation (`rechecks/`), which
- * measure the site as it is later and change nothing of what was evaluated. The decisions have a hash of their own. Everything else in the run is evidence and is sealed. That includes the work folder
- * of each session (`werk/<session>/`): a helper script there shows how an agent called the
- * toolbox, and so how its observations came about. Nothing writes there after the agents are done.
- */
-const OUTSIDE_SEAL = { files: ["verklaring-invoer.json"], dirs: [SIGNED_DIR, DECISIONS_DIR, "verklaring", RECHECKS_DIR] };
-const outsideSeal = (name: string): boolean => OUTSIDE_SEAL.files.includes(name) || OUTSIDE_SEAL.dirs.some((dir) => name.startsWith(`${dir}/`));
 
 /**
  * The `.DS_Store` that Finder writes into a folder of a run when someone opens it. A file counts
@@ -66,7 +52,9 @@ export async function hashRun(runDir: string, sealed: Record<string, string> = {
   for (const path of (await walk(runDir)).sort()) {
     const name = relative(runDir, path).split(sep).join("/");
     // The session of a login is a secret and no evidence: it is in no seal and in no list.
-    if (name === INDEX || name === LOGIN_SESSION_FILE || name === IDLE_SESSION_FILE || name.endsWith(".tmp")) continue;
+    if (notHashed(name)) continue;
+    // The pointer to a session process that still ran when the run was sealed goes away when the process stops; a seal that named it keeps checking it.
+    if (name === DAEMON_POINTER && !(name in sealed)) continue;
     if (!(name in sealed) && (await isOsMetadata(name, path))) osMetadata.push(name);
     else if (outsideSeal(name)) outside.push(name);
     else files[name] = sha256(await readFile(path));

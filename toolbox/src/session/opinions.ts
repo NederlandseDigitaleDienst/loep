@@ -1430,7 +1430,7 @@ export const motion: Handler = async (context, _args, options) => {
 /** Every method with its version and whether it can run on this machine; also written into the manifest of the run. */
 export async function toolsOutcome(runDir: string, versions: BrowserVersions): Promise<Outcome> {
   const tools = await toolStatus(versions, (browser) => SecondBrowsers.installed(browser));
-  await writeManifestTools(runDir, tools);
+  const recorded = await writeManifestTools(runDir, tools);
   const questions = [...new Set(tools.flatMap((tool) => tool.questions))];
   // A method in a virtual machine is not something to install: that it is missing shows in its line, and the manifest keeps the reason.
   const unavailable = tools.filter((tool) => !tool.available && !(typeof methodById(tool.id).source === "object" && "guest" in (methodById(tool.id).source as object)));
@@ -1440,7 +1440,7 @@ export async function toolsOutcome(runDir: string, versions: BrowserVersions): P
       // The sha256 of a model is in the record and in the manifest; the printed line names the model only.
       tools: Object.fromEntries(questions.map((question) => [question, tools.filter((tool) => tool.questions.includes(question)).map((tool) => `${tool.id}${tool.available ? "" : " (ontbreekt)"} ${tool.version.replace(/ sha256:[0-9a-f]{64}/, "")}`).join(", ")])),
       ...(unavailable.length > 0 ? { unavailable: [...new Set(unavailable.map((tool) => `${tool.id}: ${tool.hint}`))] } : {}),
-      manifest: "manifest.json",
+      manifest: recorded ? "manifest.json" : "niet bijgewerkt: de run is verzegeld",
     },
   };
 }

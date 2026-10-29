@@ -7,6 +7,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { RENDERING } from "../browser/session.ts";
 import { readJson, sha256, writeJson } from "./canonical.ts";
+import { underSeal } from "./seal.ts";
 import type { LoginMark } from "./login.ts";
 import type { ReadRequest } from "./reads.ts";
 import type { WritePermission } from "./writes.ts";
@@ -218,9 +219,13 @@ export async function writeManifest(runDir: string, step: Omit<ManifestStep, "at
 /**
  * Record the measuring methods of a session with their versions and whether they can run
  * here. The list replaces the one that was there; the steps of the run are left as they are.
+ * The manifest of a sealed run is evidence and stays as it was sealed: then nothing is written,
+ * and the answer is false.
  */
-export async function writeManifestTools(runDir: string, tools: unknown[]): Promise<void> {
+export async function writeManifestTools(runDir: string, tools: unknown[]): Promise<boolean> {
   const path = join(runDir, "manifest.json");
+  if (underSeal(path)) return false;
   const previous = existsSync(path) ? await readJson<Manifest>(path) : null;
   await writeJson(path, { ...(previous ?? { ...toolchain(null), steps: [] }), tools });
+  return true;
 }
