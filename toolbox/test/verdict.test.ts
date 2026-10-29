@@ -550,6 +550,44 @@ test("a judge leaves a probe that did not work only after a real attempt in its 
   assert.deepEqual(validateJudgeVerdict({ ...probe, missingNl: ["mens nodig: wat een schermlezer bij het diagram op P01 voorleest."] }, judging), []);
 });
 
+test("a point that only shows after sending stands only when a press had a request held back (#371)", () => {
+  const blocked = (kind: string, method: string, url: string) => ({ at: "2026-10-29T10:00:00.000Z", kind, method, url, resourceType: kind === "socket" ? "websocket" : "document" });
+  const withBlocked = (id: string, command: string, entries: ReturnType<typeof blocked>[]): ObservationRecordLike => ({ ...record(id, command), blocked: entries }) as ObservationRecordLike;
+  const sending = indexObservations([
+    ...[...observations.keys()].map((id) => record(id, observations.get(id)!.command)),
+    // A form that sends with POST: the guard held it back.
+    withBlocked("j143-0011", "click", [blocked("method", "POST", "http://127.0.0.1:4710/submit")]),
+    // A form that checks itself in the browser, a mailto: button, a page of another site: nothing that could change something.
+    withBlocked("j143-0012", "click", []),
+    withBlocked("j143-0013", "click", [blocked("scope", "GET", "https://elders.voorbeeld.nl/melden")]),
+    // A page that posts by itself while it loads.
+    withBlocked("j143-0014", "open", [blocked("method", "POST", "http://127.0.0.1:4710/collect")]),
+    withBlocked("j143-0015", "key", [blocked("socket", "SEND", "ws://127.0.0.1:4710/chat")]),
+    withBlocked("v143-0004", "click", [blocked("method", "POST", "http://127.0.0.1:4710/submit")]),
+  ]);
+  assert.equal(sending.get("j143-0011")!.writesHeldBack, 1);
+  assert.equal(sending.get("j143-0012")!.writesHeldBack, undefined);
+  assert.equal(sending.get("j143-0013")!.writesHeldBack, undefined, "a navigation to another site is held back, but it sends nothing");
+  assert.equal(sending.get("j143-0015")!.writesHeldBack, 1);
+  const judging: JudgeContext = { ...context, observations: sending, session: "j143" };
+  const point = "versturen niet toegestaan: welke melding het contactformulier op P02 toont na het versturen met geldige testwaarden.";
+  const open: Verdict = { ...passed, outcome: "cantTell", missingNl: [point] };
+  assert.match(validateJudgeVerdict(open, judging).join(), /"versturen niet toegestaan:" stands only when a request that could change something was held back/);
+  const tried = { missing: 1, triedNl: "Op Verstuur gedrukt met geldige testwaarden; het verzoek POST /submit is tegengehouden.", evidence: ["j143-0011"] };
+  assert.deepEqual(validateJudgeVerdict({ ...open, attempts: [tried] }, judging), []);
+  assert.deepEqual(validateJudgeVerdict({ ...open, attempts: [{ ...tried, evidence: ["j143-0015"] }] }, judging), [], "a message in a chat that was held back counts too");
+  // Nothing held back: nothing was sent, so what the page shows is an ordinary observation.
+  for (const evidence of [["j143-0012"], ["j143-0013"], ["j143-0014"], ["v143-0004"]]) {
+    assert.match(validateJudgeVerdict({ ...open, attempts: [{ ...tried, evidence }] }, judging).join(), /cite the observation of session "j143" in which a request that could change something was held back/, evidence.join());
+  }
+  // The verifier presses in its own session.
+  const verification = { judgeOutcome: "cantTell" as const, findings: [], attackNl: "Het formulier op P02 opnieuw verstuurd met geldige testwaarden.", attackEvidence: ["v143-0002"] };
+  const verifying: VerificationContext = { ...context, observations: sending, session: "v143", judge: { ...open, attempts: [tried] } };
+  const verified: Verdict = { ...open, observations: [{ ...seen, evidence: ["v143-0002"] }], verification };
+  assert.match(validateVerification({ ...verified, attempts: [tried] }, verifying).join(), /cite the observation of session "v143"/);
+  assert.deepEqual(validateVerification({ ...verified, attempts: [{ ...tried, evidence: ["v143-0004"] }] }, verifying), []);
+});
+
 test("no deviation found but not fully measured stays cantTell, and only when every open point is a limit of the evaluation", () => {
   const partly: Verdict = { ...passed, outcome: "cantTell", missingNl: ["veegronde mist: het contrast op 320 pixels breed is op geen pagina gemeten."], nothingFound: { coverageNl: "gemeten op 9 van 29 pagina's en in 4 van 12 toestanden; geen verschil gevonden" } };
   assert.deepEqual(validateJudgeVerdict(partly, context), []);

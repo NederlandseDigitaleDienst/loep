@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="nl">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Reactie - Testsite sessie</title><link rel="stylesheet" href="/site.css"></head>
+<body>
+<main id="inhoud" tabindex="-1">
+<h1>Reactie op deze pagina</h1>
+<!-- A form without action and without method: what it shows after a press, the page shows by itself. Nothing goes to a server. -->
+<form id="reaction" novalidate>
+<label for="reaction-email">E-mailadres (verplicht)</label><input id="reaction-email" name="email" type="email" required aria-describedby="reaction-error">
+<p id="reaction-error" hidden>Vul een geldig e-mailadres in.</p>
+<label for="reaction-text">Uw reactie</label><textarea id="reaction-text" name="text"></textarea>
+<p><button id="by-mail" type="submit" value="mail">Verstuur per e-mail</button> <button id="elsewhere" type="submit" value="elsewhere">Meld het op de andere site</button></p>
+<p id="reaction-done" role="status" hidden>Bedankt voor uw reactie.</p>
+</form>
+</main>
+<script>
+document.getElementById("reaction").addEventListener("submit", (event) => {
+  event.preventDefault();
+  const email = document.getElementById("reaction-email");
+  const valid = /^[^@ ]+@[^@ ]+\.[a-z]+$/.test(email.value);
+  email.setAttribute("aria-invalid", String(!valid));
+  document.getElementById("reaction-error").hidden = valid;
+  if (!valid) return;
+  document.getElementById("reaction-done").hidden = false;
+  if (event.submitter && event.submitter.value === "elsewhere") window.open("__OTHER_ORIGIN__/elsewhere.html", "_blank");
+  else window.location.href = "mailto:reactie@example.nl?subject=Reactie";
+});
+</script>
+</body>
+</html>
