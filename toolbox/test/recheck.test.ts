@@ -107,9 +107,9 @@ test("a finding that is still there: the recheck measures in its own folder, the
   const appendix = await renderRechecks(run);
   assert.deepEqual([appendix.checked, appendix.unchecked], [1, 0]);
   const text = readFileSync(appendix.path, "utf8");
-  assert.match(text, /\| nog aanwezig \|/);
-  assert.match(text, /niet bij het rapport en niet bij wat is getekend/);
-  assert.match(text, /buiten het zegel/);
+  assert.match(text, new RegExp(`\\(${FINDING.replaceAll(".", "\\.")}\\), 1\\.1\\.1: \\*\\*nog aanwezig\\*\\*`));
+  assert.match(text, /Gemeten in: http[^\n]+, 1280 pixels breed/);
+  assert.match(text, /buiten het zegel en buiten de handtekening/);
   assert.match(text, /zegt niet dat het criterium nu voldoet/);
   assert.equal(await verify(run), true, "the appendix leaves the seal whole too");
   rmSync(run, { recursive: true, force: true });

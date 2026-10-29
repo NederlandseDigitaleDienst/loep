@@ -6,7 +6,7 @@ import { agentLoginNl, LOGIN_SESSION_FILE, loginForRun } from "../lib/login.ts";
 import { stepStart, toolboxVersion, writeManifest } from "../lib/manifest.ts";
 import { loadAllProcedures } from "../lib/procedures.ts";
 import { readsForRun } from "../lib/reads.ts";
-import { dateNl } from "../lib/report-markdown.ts";
+import { dateNl, deriveRechecks, rechecksMarkdownLines, REPORT_TEXT } from "../lib/report-markdown.ts";
 import { SITE_CHECK_FILE, SITE_MODEL_FILE } from "../lib/sitemodel.ts";
 import { readTemplate } from "../lib/templates.ts";
 import { canonicalCommand, LOOK_COMMANDS, MEASURE_COMMANDS, OBSERVATION_ID, sessionOfObservation } from "../lib/verdict.ts";
@@ -305,8 +305,13 @@ export interface CheckedRecheck {
   titleNl: string;
   criterion: string;
   outcome: RecheckOutcome;
+  /** Where the agent says it measured, in its own words. */
+  whereNl: string;
   observedNl: string;
   reasonNl: string | null;
+  /** The observations of the recheck it cites, and the windows they were made in. */
+  evidence: string[];
+  places: RecheckPlace[];
   /** When the agent measured: the latest of the observations it cites, as the instrument recorded it. */
   measuredAt: string;
   toolboxVersion: string;
@@ -335,14 +340,19 @@ export function loadRechecks(runDir: string): { checked: CheckedRecheck[]; unche
       }
       const result = JSON.parse(text!) as RecheckResult;
       for (const entry of result.findings) {
-        const times = entry.evidence.map((id) => (observations.records.get(id) as unknown as RecordLike | undefined)?.time).filter((time): time is string => typeof time === "string").sort();
+        const cited = entry.evidence.map((id) => observations.records.get(id) as unknown as RecordLike | undefined).filter((record): record is RecordLike => record !== undefined);
+        const times = cited.map((record) => record.time).filter((time): time is string => typeof time === "string").sort();
+        const places = cited.flatMap((record): RecheckPlace[] => (record.page?.url ? [{ url: withoutHash(record.page.url), width: record.page.viewport?.width ?? null, scheme: record.page.scheme ?? null, inState: (record.state?.steps?.length ?? 0) > 0, observation: record.id }] : []));
         checked.push({
           finding: entry.finding,
           titleNl: order.findings.find((finding) => finding.id === entry.finding)?.titleNl ?? "",
           criterion: order.criterion,
           outcome: entry.outcome,
+          whereNl: entry.whereNl,
           observedNl: entry.observedNl,
           reasonNl: entry.reasonNl ?? null,
+          evidence: entry.evidence,
+          places,
           measuredAt: times.at(-1) ?? order.createdAt,
           toolboxVersion: order.toolboxVersion,
           evaluationToolboxVersion: order.evaluation.toolboxVersion,
@@ -354,35 +364,30 @@ export function loadRechecks(runDir: string): { checked: CheckedRecheck[]; unche
   return { checked, unchecked };
 }
 
-const cell = (text: string): string => text.replace(/\s+/g, " ").replaceAll("|", "\\|").trim();
-
 /**
- * The appendix with the rechecks: a document of its own next to the report, never in it. It says
- * that these are measurements after the evaluation and outside what was signed, and that a finding
- * that is gone does not make its criterion pass.
+ * The working file with the rechecks, next to them in the run. A signed report has the same
+ * rechecks in its appendix C (`render`); both are made by `deriveRechecks`. It says that these are
+ * measurements after the evaluation, outside the seal and the signature, and that a finding that is
+ * gone does not make its criterion pass.
  */
 export function rechecksMarkdown(evaluation: Evaluation, loaded: { checked: CheckedRecheck[]; unchecked: number }): string {
+  const derived = deriveRechecks(evaluation, loaded);
   const lines = [
     `# Bijlage: nametingen na het onderzoek`,
     "",
     `Site: ${evaluation.site.name}. Onderzoek van ${dateNl(evaluation.evaluatedAt)}, gemaakt met loep ${evaluation.toolchain.toolbox.version}.`,
     "",
-    "Deze bijlage hoort niet bij het rapport en niet bij wat is getekend. Het zijn nametingen na het onderzoek: per bevinding is op de site van die dag opnieuw gemeten of het gebrek er nog is, op dezelfde plek, door een agent met instrumenten, zoals de verifieerder in het onderzoek deed. De nametingen staan buiten het zegel en veranderen geen oordeel in het rapport. Een bevinding die is opgelost, zegt niet dat het criterium nu voldoet: dat zegt pas een nieuw oordeel over het hele criterium op de hele steekproef.",
+    REPORT_TEXT.rechecks.intro,
     "",
+    "Dit is een werkbestand in de map van de run. Is het onderzoek afgetekend, dan zet render dezelfde nametingen in bijlage C van het afgetekende rapport.",
+    "",
+    ...(derived ? rechecksMarkdownLines(derived, false) : ["Er zijn nog geen nametingen die de controle haalden."]),
   ];
-  if (loaded.checked.length === 0) lines.push("Er zijn nog geen nametingen die de controle haalden.");
-  else {
-    lines.push("| Bevinding | Criterium | Nagemeten op | Uitkomst | Wat de meting liet zien |", "|---|---|---|---|---|");
-    for (const entry of loaded.checked) lines.push(`| ${cell(`${entry.finding} ${entry.titleNl}`)} | ${entry.criterion} | ${dateNl(entry.measuredAt)} | ${entry.outcome} | ${cell(entry.outcome === "niet na te gaan" && entry.reasonNl ? `${entry.reasonNl} ${entry.observedNl}` : entry.observedNl)} |`);
-    const versions = [...new Set(loaded.checked.map((entry) => entry.toolboxVersion))].sort();
-    const other = versions.filter((version) => version !== evaluation.toolchain.toolbox.version);
-    if (other.length > 0) lines.push("", `Nagemeten met loep ${versions.join(" en ")}; het onderzoek is gemaakt met loep ${evaluation.toolchain.toolbox.version}. Een ander resultaat kan dan ook uit de instrumenten komen en niet alleen uit een herstel.`);
-  }
-  if (loaded.unchecked > 0) lines.push("", `${loaded.unchecked === 1 ? "Eén nameting haalde" : `${loaded.unchecked} nametingen haalden`} de controle niet, of ${loaded.unchecked === 1 ? "is" : "zijn"} daarna veranderd, en ${loaded.unchecked === 1 ? "staat" : "staan"} hier niet.`);
+  if (!derived && loaded.unchecked > 0) lines.push("", `${loaded.unchecked === 1 ? "Eén nameting haalde" : `${loaded.unchecked} nametingen haalden`} de controle niet, of ${loaded.unchecked === 1 ? "is" : "zijn"} daarna veranderd, en ${loaded.unchecked === 1 ? "staat" : "staan"} hier niet.`);
   return `${lines.join("\n")}\n`;
 }
 
-/** Write the appendix with the rechecks next to them, in `rechecks/nametingen.md`. The report and the evaluation are not touched. */
+/** Write the working file with the rechecks next to them, in `rechecks/nametingen.md`. The report and the evaluation are not touched. */
 export async function renderRechecks(runDir: string): Promise<{ path: string; checked: number; unchecked: number }> {
   const evaluation = await readJson<Evaluation>(join(runDir, "evaluation.json"));
   const loaded = loadRechecks(runDir);

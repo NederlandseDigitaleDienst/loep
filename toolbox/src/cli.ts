@@ -94,8 +94,8 @@ const USAGE = `loep <command> [options]
                                          Confirmed at an interactive terminal, or --recorded-via gesprek (see below)
   render --run <run>                     Write the report (Markdown and PDF) from evaluation.json; after signing with the
                                          decisions about each defect
-  render --run <run> --rechecks          Write only the appendix with the rechecks (rechecks/nametingen.md), outside the
-                                         report and the seal; the report is not touched
+  render --run <run> --rechecks          Write only the working file with the rechecks (rechecks/nametingen.md), outside
+                                         the seal; the report is not touched. A signed report has them in appendix C
   recheck --run <run> (--finding <id> | --criterion <id>)
                                          After the evaluation, also when it is sealed and signed: write the task for one agent
                                          that measures a finding (or every finding of a criterion) again on the site as it is
@@ -632,7 +632,7 @@ async function main(): Promise<void> {
     case "decide": {
       if (!values.run) throw new Error("decide needs --run <run>");
       const { decide, defectLineNl } = await import("./commands/decide.ts");
-      const { DECISION_LABEL_NL, DECISION_PRIVACY_NL } = await import("./lib/decisions.ts");
+      const { decisionLabelNl, DECISION_PRIVACY_NL } = await import("./lib/decisions.ts");
       const result = await decide({ run: values.run, defect: values.defect, decision: values.decision, what: values.what, date: values.date, alternative: values.alternative, name: values.name, role: values.role, ...recording });
       if (values.defect === undefined) {
         for (const view of result.defects) process.stdout.write(`${defectLineNl(view)}\n`);
@@ -641,7 +641,7 @@ async function main(): Promise<void> {
       }
       const view = result.defects[0]!;
       process.stdout.write(`${defectLineNl(view)}\nPagina's: ${view.pages.join(", ") || "geen plek"}\n${view.proposalsNl.length === 1 ? "Voorstel uit het rapport" : "Voorstellen uit het rapport"}:\n${view.proposalsNl.map((text) => `- ${text}`).join("\n")}\n`);
-      for (const earlier of view.current?.previous ?? []) process.stdout.write(`eerder: ${DECISION_LABEL_NL[earlier.decision]}${earlier.date ? ` (${earlier.date})` : ""}, vastgelegd op ${earlier.decidedAt.slice(0, 10)}\n`);
+      for (const earlier of view.current?.previous ?? []) process.stdout.write(`eerder: ${decisionLabelNl(earlier.decision, earlier.date)}, vastgelegd op ${earlier.decidedAt.slice(0, 10)}\n`);
       if (result.written === null) process.stdout.write(`Een besluit vastleggen: --decision opgelost|gepland|zienswijze|onevenredig|onbesloten --what "<wat>" [--date jjjj-mm-dd] [--alternative "<alternatief>"] --name "<naam>" --role "<functie>". Let op: ${DECISION_PRIVACY_NL}.\n`);
       else process.stdout.write(`besluit vastgelegd in ${result.written}; nog ${result.left} ${result.left === 1 ? "gebrek" : "gebreken"} zonder besluit. render zet het in het afgetekende rapport, statement in de verklaring. Let op: ${DECISION_PRIVACY_NL}.\n`);
       return;

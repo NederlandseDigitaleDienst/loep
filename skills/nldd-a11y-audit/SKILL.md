@@ -211,7 +211,7 @@ Een agent starten betekent steeds: een aparte agent die alleen dit krijgt: "Lees
    LOEP decide --run RUN --defect <id> --decision <besluit> --what "<in de woorden van de gebruiker>" [--date jjjj-mm-dd] [--alternative "<alternatief>"] --name "<naam>" --role "<functie>" --recorded-via gesprek --confirmation "<letterlijke bevestiging>" --summary "<bevestigde samenvatting>"
    ```
    Is een antwoord geen uitdrukkelijke bevestiging ("ik denk het", "zoiets"), vraag dan door en leg nog niets vast. Wil de gebruiker het besluit liever zelf bevestigen, geef dan hetzelfde commando zonder de laatste drie opties: in een interactieve terminal toont het het besluit en vraagt om ja.
-   - `opgelost`: het is al hersteld. `--what` zegt wat er is gedaan; `--date` mag, en zegt sinds wanneer. Zeg erbij dat het rapport dit "opgelost volgens de organisatie, nog niet nagemeten" noemt: dat een gebrek weg is, laat pas een nieuwe meting zien (stap 12, en `docs/methode.md`).
+   - `opgelost`: het is al hersteld. `--what` zegt wat er is gedaan; `--date` mag, en zegt sinds wanneer. Zeg erbij dat het rapport dit "opgelost volgens de organisatie, nog niet nagemeten" noemt zolang er geen nameting is: dat een gebrek weg is, laat pas een nieuwe meting zien (stap 12, en `docs/methode.md`). Is elke bevinding van het gebrek nagemeten met de uitkomst `opgelost`, dan zegt het rapport "nagemeten op <datum>: opgelost", met een link naar de nameting in bijlage C.
    - `gepland`: wat er gaat gebeuren, met de datum die de gebruiker noemt (`--date` is verplicht).
    - `zienswijze`: de organisatie ziet het anders; `--what` is de reden.
    - `onevenredig`: onevenredige last; `--what` is de afweging en `--alternative` het alternatief voor bezoekers.
@@ -231,7 +231,7 @@ Een agent starten betekent steeds: een aparte agent die alleen dit krijgt: "Lees
    ```
    LOEP render --run RUN --rechecks
    ```
-   Dat schrijft `RUN/rechecks/nametingen.md`, een bijlage naast het rapport. Zeg de gebruiker drie dingen. Het rapport, de evaluatie, het zegel en de handtekening blijven zoals ze zijn: de nametingen staan buiten het getekende rapport. Een bevinding die opgelost is, betekent niet dat het criterium nu voldoet: dat zegt pas een nieuw onderzoek van het hele criterium op de hele steekproef. En het besluit van de organisatie (`decide`) legt nog steeds een mens vast; een nameting is een meting, geen besluit.
+   Dat schrijft `RUN/rechecks/nametingen.md`, een werkbestand in de run. Is het rapport al afgetekend, draai dan ook `LOEP render --run RUN`, en `LOEP statement --run RUN` als er een verklaring is. Het afgetekende rapport krijgt dan bijlage C met de nametingen, en bij een gebrek met het besluit `opgelost` zeggen het rapport en de verklaring wat de laatste nameting liet zien. Zeg de gebruiker drie dingen. De evaluatie, het zegel en de handtekening blijven zoals ze zijn: de nametingen staan wel in het afgetekende rapport, maar buiten het zegel en buiten de handtekening, want de handtekening geldt voor het verzegelde onderzoek en niet voor de nametingen. Een bevinding die opgelost is, betekent niet dat het criterium nu voldoet: dat zegt pas een nieuw onderzoek van het hele criterium op de hele steekproef. En het besluit van de organisatie (`decide`) legt nog steeds een mens vast; een nameting is een meting, geen besluit.
 
 ## Terugmelden aan loep
 
