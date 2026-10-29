@@ -282,9 +282,10 @@ interface WorkflowResult {
  * says how long the agent of a task works and `fails` which tasks come back without a valid result
  * (still open next round). `trouble` says which calls end in an error of the model: "throw" for an
  * exception, "null" for what the host gives when an agent died on such an error; the stand is "stand".
- * "site" is an agent that heard from its session that the site has an outage, and says so.
+ * "site" is an agent that heard from its session that the site has an outage, and says so; "fine" is an agent
+ * that did its task and says in its report that the site had no outage.
  */
-async function runWorkflow(atOnce: number | undefined, states: WorkflowState[], seconds: (task: string) => number = () => 0.002, models?: unknown, extra: { toolbox?: FakeToolbox; trouble?: (what: string, call: number) => "throw" | "null" | "site" | undefined } = {}) {
+async function runWorkflow(atOnce: number | undefined, states: WorkflowState[], seconds: (task: string) => number = () => 0.002, models?: unknown, extra: { toolbox?: FakeToolbox; trouble?: (what: string, call: number) => "throw" | "null" | "site" | "fine" | undefined } = {}) {
   const AsyncFunction = Object.getPrototypeOf(async () => undefined).constructor as new (...names: string[]) => (...values: unknown[]) => Promise<WorkflowResult>;
   const script = new AsyncFunction("args", "agent", "parallel", "log", read("skills/nldd-a11y-audit/onderzoek.workflow.js").replace(/^export const meta/m, "const meta"));
   const toolbox = extra.toolbox ?? { attempts: {}, skips: [] };
@@ -323,6 +324,7 @@ async function runWorkflow(atOnce: number | undefined, states: WorkflowState[], 
     if (trouble === "throw") throw new Error(QUOTA);
     if (trouble === "null") return null;
     if (trouble === "site") return "Storing van de site.";
+    if (trouble === "fine") return "Oordeel opgeschreven, de controle is geslaagd.\nEr werd geen commando geweigerd en er was geen storing van de site.";
     return "klaar";
   };
   const parallel = (thunks: (() => Promise<unknown>)[]): Promise<unknown[]> => Promise.all(thunks.map((thunk) => thunk()));
@@ -461,6 +463,17 @@ test("an outage of the site pauses the workflow like one of the model: no agent 
   // Every agent of a round heard it: that is the site, not the model.
   const all = await runWorkflow(2, [{ phase: "walks", walks: ["zoek", "start"] }], undefined, undefined, { trouble: (what) => (what === "stand" ? undefined : "site") });
   assert.match(all.result.paused!, /^storing van de site, run gepauzeerd/);
+  // Only the answer itself counts: a report that says there was no outage is a task done, and the run goes on.
+  const fine = await runWorkflow(2, [{ phase: "walks", walks: ["zoek", "start"] }, { phase: "done" }], undefined, undefined, { trouble: (what) => (what === "stand" ? undefined : "fine") });
+  assert.equal(fine.result.paused, null);
+  assert.equal(fine.result.last, "done");
+  assert.deepEqual(fine.toolbox.attempts, { "walks:zoek": 1, "walks:start": 1 });
+  assert.ok(!fine.logs.some((line) => line.startsWith("agent gestopt door een storing van de site")));
+  // The answer in any dress still pauses, and so does the message of loep that starts with it.
+  const workflow = read("skills/nldd-a11y-audit/onderzoek.workflow.js");
+  const siteDown = new RegExp(/^const SITE_DOWN = \/(.+)\/i$/m.exec(workflow)![1]!, "i");
+  for (const answer of ["storing van de site", "Storing van de site.", ' "storing van de site"\n', "**Storing van de site**", said]) assert.ok(siteDown.test(answer), `${JSON.stringify(answer)} telt als storing`);
+  for (const report of ["Er was geen storing van de site.", "Geen storing van de site, oordeel opgeschreven.", "Storing van de site was er niet; de controle is geslaagd."]) assert.ok(!siteDown.test(report), `${JSON.stringify(report)} telt niet als storing`);
   // The agent is told when to stop, and what to answer.
   assert.match(read("skills/nldd-a11y-audit/onderzoek.workflow.js"), /stop je sessie en antwoord alleen met: storing van de site\./);
 
