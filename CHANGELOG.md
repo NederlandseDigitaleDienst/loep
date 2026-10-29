@@ -14,6 +14,8 @@ Deze versie is uitgebracht zonder meting: de wijzigingen zijn met tests nagegaan
 
 - In een run die niet mag versturen drukken beoordelaar, verifieerder en afmaker nu wel op een verzendknop: het gereedschap houdt elk verzoek tegen dat iets kan wijzigen, en de waarneming zegt of er een werd tegengehouden. Een formulier dat niets naar een server stuurt (controle in de browser, een knop naar een `mailto:`-adres of naar een andere site) krijgt zo een gewone uitkomst. Een punt `versturen niet toegestaan` blijft alleen staan met een waarneming uit de eigen sessie waarin een verzoek werd tegengehouden; `check-verdict` weigert het zonder. ([#371](https://github.com/NederlandseDigitaleDienst/loep/issues/371))
 
+- tabbable 6.5.1, de bibliotheek achter de natuurlijke tabvolgorde: een element met `contenteditable="plaintext-only"`, of met de waarde in hoofdletters, telt nu mee als element dat de Tab bereikt (#368).
+
 ### Verder
 
 - Een agent die in zijn verslag schrijft dat er geen storing van de site was, pauzeert de werkstroom niet meer. Alleen een antwoord dat begint met "storing van de site" telt als storing. ([#369](https://github.com/NederlandseDigitaleDienst/loep/issues/369))
