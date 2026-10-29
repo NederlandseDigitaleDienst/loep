@@ -5,6 +5,7 @@ import { writeCutouts } from "../lib/cutout.ts";
 import { loadDecisions } from "../lib/decisions.ts";
 import { deriveReport, renderMarkdown, REPORT_TEXT } from "../lib/report-markdown.ts";
 import { makePdf } from "../lib/typst.ts";
+import { loadRechecks } from "./recheck.ts";
 import { readEvaluation, signatureIsCurrent } from "./sign.ts";
 import { SIGNED_DIR } from "./verify.ts";
 
@@ -44,7 +45,7 @@ export async function render(runDir: string): Promise<RenderResult> {
   const evaluation = await readEvaluation(source);
   const signed = signatureIsCurrent(evaluation);
   const dir = join(runDir, signed ? SIGNED_DIR : "report");
-  const decisions = signed ? await loadDecisions(runDir, evaluation.defects) : { decisions: [], sha256: null };
+  const decisions = signed ? { ...(await loadDecisions(runDir, evaluation.defects)), rechecks: loadRechecks(runDir) } : { decisions: [], sha256: null };
   const markdown = join(dir, "rapport.md");
   // The pieces are made anew every time, from the pictures the evaluation names.
   await rm(join(dir, CUTOUT_DIR), { recursive: true, force: true });

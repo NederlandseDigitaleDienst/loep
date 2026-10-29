@@ -10,8 +10,9 @@ import { NOT_SENT, notSentOrigins, OPEN_POINT_KINDS, openPoint, OUTSIDE_SCOPE, U
 import { siteOrigins } from "./origins.ts";
 import { readsAllowedNl } from "./reads.ts";
 import { compareCriterionIds, type WcagVersion } from "./wcag.ts";
-import { DECISION_LABEL_NL, type Decision, type DecisionKind, type DecisionLayer } from "./decisions.ts";
-import { recordedNl } from "./recorded.ts";
+import { DECISION_LABEL_NL, decisionLabelNl, NOT_REMEASURED_NL, remeasuredNl, type Decision, type DecisionKind, type DecisionLayer } from "./decisions.ts";
+import { dateTimeNl, recordedNl } from "./recorded.ts";
+import type { CheckedRecheck, RecheckPlace } from "../commands/recheck.ts";
 
 /**
  * The report as Markdown, and everything the PDF template needs that it cannot work
@@ -172,6 +173,18 @@ export const REPORT_TEXT = {
     alternative: "Alternatief voor bezoekers",
     by: "Besloten door",
     earlier: "Eerder besloten",
+    remeasured: { lead: "Nagemeten, zie bijlage C", clause: "Een nameting van de bevinding zegt niet dat het criterium nu voldoet." },
+  },
+  rechecks: {
+    title: "Bijlage C: nametingen na het onderzoek",
+    intro:
+      "Na het onderzoek is per bevinding op de site van die dag opnieuw gemeten of het gebrek er nog is, op dezelfde plek, door een agent met instrumenten, zoals de verifieerder in het onderzoek deed. Hier staan alleen de nametingen die de controle haalden. Ze vallen buiten het zegel en buiten de handtekening: wie tekent, tekent het verzegelde onderzoek, niet deze nametingen. Ze veranderen geen oordeel in het rapport. Een bevinding die is opgelost, zegt niet dat het criterium nu voldoet: dat zegt pas een nieuw oordeel over het hele criterium op de hele steekproef.",
+    measuredAt: "Nagemeten op",
+    where: "Waar",
+    places: "Gemeten in",
+    observed: "Wat de meting liet zien",
+    reason: "Waarom niet na te gaan",
+    evidence: "Waarnemingen",
   },
 } as const;
 
@@ -355,6 +368,8 @@ export interface ReportDerived {
   defects: DefectsDerived | null;
   /** What the organisation decided per defect: only in a signed report of an evaluation with defects, null otherwise. */
   measures: MeasuresDerived | null;
+  /** Appendix C, in a signed report with rechecks that passed their check; null otherwise. */
+  rechecks: RechecksDerived | null;
   /** How the signature was recorded, when the agent recorded it in the conversation; null otherwise. */
   signatureRecordedNl: string | null;
   /** Limitations of the evaluation as a whole; those of a single procedure are in the appendix. */
@@ -399,7 +414,13 @@ export interface MeasuresDerived {
   /** Where the decisions are kept and the mark of their layer. */
   layerNl: string;
   /** Per defect, heaviest first: its decision, or that there is none yet. */
-  rows: { defectId: string; titleNl: string; severity: string; criteriaNl: string; decisionNl: string; linesNl: string[] }[];
+  rows: { defectId: string; titleNl: string; severity: string; criteriaNl: string; decisionNl: string; linesNl: string[]; /** The anchors in appendix C of the rechecks of its findings, for an "opgelost" that was measured again. */ remeasured: { findingId: string; anchor: string }[] }[];
+}
+
+export interface RechecksDerived {
+  /** Per recheck of a finding, by finding and then by moment. The latest of each finding has the anchor `nameting-<finding>`. */
+  entries: { anchor: string; findingId: string; titleNl: string; criterion: string; outcome: string; linesNl: string[] }[];
+  notesNl: string[];
 }
 
 /** Dutch long date in the timezone the site is evaluated in, independent of the machine's locale. */
@@ -931,7 +952,7 @@ function decisionLines(decision: Decision): string[] {
   ];
 }
 
-const decisionLabel = (kind: DecisionKind, date: string | null): string => `${DECISION_LABEL_NL[kind]}${date && (kind === "gepland" || kind === "opgelost") ? ` (${dateNl(`${date}T12:00:00Z`)})` : ""}`;
+const decisionLabel = (kind: DecisionKind, date: string | null, remeasured?: string): string => decisionLabelNl(kind, date ? dateNl(`${date}T12:00:00Z`) : null, remeasured);
 
 /**
  * Per defect what the organisation decided, for a signed report: the decisions come after
@@ -949,18 +970,70 @@ function deriveMeasures(evaluation: Evaluation, layer: DecisionLayer): MeasuresD
       : "Er is nog niets besloten.",
     rows: sorted.map((defect) => {
       const decision = byDefect.get(defect.id);
+      const rechecks = layer.rechecks?.checked ?? [];
+      const remeasured = remeasuredNl(defect.findingIds, rechecks, dateNl);
+      const measured = decision?.decision === "opgelost" && remeasured !== NOT_REMEASURED_NL ? defect.findingIds.filter((id) => rechecks.some((entry) => entry.finding === id)) : [];
       return {
         defectId: defect.id,
         titleNl: defect.titleNl,
         severity: defect.severity,
         criteriaNl: [defect.mainCriterion, ...defect.alsoCriteria].join(", "),
-        decisionNl: decision ? decisionLabel(decision.decision, decision.date) : DECISION_LABEL_NL.onbesloten,
+        decisionNl: decision ? decisionLabel(decision.decision, decision.date, remeasured) : DECISION_LABEL_NL.onbesloten,
         linesNl: decision
           ? [...decisionLines(decision), ...decision.previous.map((earlier) => `${REPORT_TEXT.measures.earlier}: ${decisionLabel(earlier.decision, earlier.date).toLowerCase()}, functie ${earlier.role}, ${recordedNl(earlier, earlier.decidedAt) ?? `op ${dateNl(earlier.decidedAt)}`}`)]
           : [],
+        remeasured: measured.map((findingId) => ({ findingId, anchor: recheckAnchor(findingId) })),
       };
     }),
   };
+}
+
+const recheckAnchor = (findingId: string): string => `nameting-${findingId}`;
+
+const recheckPlaceNl = (place: RecheckPlace): string => [place.url, place.width !== null ? `${place.width} pixels breed` : null, place.scheme === "dark" ? "donker kleurschema" : null, place.inState ? "in een toestand" : null].filter(Boolean).join(", ");
+
+/**
+ * The rechecks of findings after the evaluation, for appendix C of a signed report and for the
+ * working file `rechecks/nametingen.md`. Null when no recheck passed its check.
+ */
+export function deriveRechecks(evaluation: Evaluation, loaded: { checked: CheckedRecheck[]; unchecked: number }): RechecksDerived | null {
+  if (loaded.checked.length === 0) return null;
+  const text = REPORT_TEXT.rechecks;
+  const versions = [...new Set(loaded.checked.map((entry) => entry.toolboxVersion))].sort();
+  const madeWith = evaluation.toolchain.toolbox.version;
+  return {
+    entries: loaded.checked.map((entry, at) => ({
+      // The latest recheck of a finding is the one the chapter with the decisions links to.
+      anchor: loaded.checked.slice(at + 1).some((later) => later.finding === entry.finding) ? `${recheckAnchor(entry.finding)}-${at + 1}` : recheckAnchor(entry.finding),
+      findingId: entry.finding,
+      titleNl: entry.titleNl,
+      criterion: entry.criterion,
+      outcome: entry.outcome,
+      linesNl: [
+        `${text.measuredAt}: ${dateTimeNl(entry.measuredAt)}`,
+        `${text.where}: ${entry.whereNl}`,
+        ...(entry.places.length > 0 ? [`${text.places}: ${[...new Set(entry.places.map(recheckPlaceNl))].join("; ")}`] : []),
+        `${text.observed}: ${entry.observedNl}`,
+        ...(entry.outcome === "niet na te gaan" && entry.reasonNl ? [`${text.reason}: ${entry.reasonNl}`] : []),
+        `${text.evidence}: ${entry.evidence.join(", ")}`,
+      ],
+    })),
+    notesNl: [
+      ...(versions.some((version) => version !== madeWith) ? [`Nagemeten met loep ${versions.join(" en ")}; het onderzoek is gemaakt met loep ${madeWith}. Een ander resultaat kan dan ook uit de instrumenten komen en niet alleen uit een herstel.`] : []),
+      ...(loaded.unchecked > 0 ? [`${loaded.unchecked === 1 ? "Eén nameting haalde" : `${loaded.unchecked} nametingen haalden`} de controle niet, of ${loaded.unchecked === 1 ? "is" : "zijn"} daarna veranderd, en ${loaded.unchecked === 1 ? "staat" : "staan"} hier niet.`] : []),
+    ],
+  };
+}
+
+/** The rechecks as Markdown lines: one item per recheck with its facts under it. `linked` links each finding to its place in the report. */
+export function rechecksMarkdownLines(derived: RechecksDerived, linked: boolean): string[] {
+  const lines: string[] = [];
+  for (const entry of derived.entries) {
+    lines.push(`- <a id="${entry.anchor}"></a>**${esc(entry.titleNl)}** (${linked ? `[${entry.findingId}](#${entry.findingId})` : entry.findingId}), ${entry.criterion}: **${entry.outcome}**`);
+    lines.push(...entry.linesNl.map((line) => `  - ${esc(line)}`));
+  }
+  if (derived.notesNl.length > 0) lines.push("", ...derived.notesNl.map(esc));
+  return lines;
 }
 
 /**
@@ -1062,6 +1135,7 @@ export function deriveReport(input: Evaluation, decisions: DecisionLayer = { dec
     todo: work,
     defects: deriveDefects(evaluation, pageLabels(evaluation)),
     measures: deriveMeasures(evaluation, decisions),
+    rechecks: evaluation.signature && decisions.rechecks ? deriveRechecks(evaluation, decisions.rechecks) : null,
     signatureRecordedNl: evaluation.signature ? recordedNl(evaluation.signature, evaluation.signature.signedAt) : null,
     generalLimitationsNl: evaluation.limitationsNl.filter((limitation) => !procedureLimits.has(limitation)).map(closeCutQuote),
     procedureLimitations: evaluation.limitationsNl.filter((limitation) => procedureLimits.has(limitation)).length,
@@ -1473,6 +1547,7 @@ export function renderMarkdown(input: Evaluation, decisions: DecisionLayer = { d
     lines.push(REPORT_TEXT.measures.intro, "", derived.measures.countsNl, "");
     for (const row of derived.measures.rows) {
       lines.push(`- **${esc(row.titleNl)}** ([${row.defectId}](#${row.defectId})), ${row.severity}, ${row.criteriaNl}: **${row.decisionNl}**`);
+      if (row.remeasured.length > 0) lines.push(`  - ${REPORT_TEXT.measures.remeasured.lead}: ${row.remeasured.map((entry) => `[${entry.findingId}](#${entry.anchor})`).join(", ")}. ${REPORT_TEXT.measures.remeasured.clause}`);
       lines.push(...row.linesNl.map((line) => `  - ${esc(line)}`));
     }
     lines.push("", derived.measures.layerNl, "");
@@ -1667,6 +1742,11 @@ export function renderMarkdown(input: Evaluation, decisions: DecisionLayer = { d
     ),
     "",
   );
+
+  if (derived.rechecks) {
+    section(REPORT_TEXT.rechecks.title);
+    lines.push(REPORT_TEXT.rechecks.intro, "", ...rechecksMarkdownLines(derived.rechecks, true), "");
+  }
 
   return `${lines.join("\n").replace(/\n{3,}/g, "\n\n").trimEnd()}\n`;
 }

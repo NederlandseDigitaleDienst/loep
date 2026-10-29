@@ -1,6 +1,7 @@
 import { existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { readJson, sha256File } from "./canonical.ts";
+import type { CheckedRecheck } from "../commands/recheck.ts";
 import type { Defect } from "./defects.ts";
 import type { RecordedVia } from "./recorded.ts";
 
@@ -21,9 +22,9 @@ export const decisionFile = (defectId: string): string => `${DECISIONS_DIR}/${de
 export const DECISION_KINDS = ["opgelost", "gepland", "zienswijze", "onevenredig", "onbesloten"] as const;
 export type DecisionKind = (typeof DECISION_KINDS)[number];
 
-/** "Opgelost" is what the organisation says; only a new measurement shows that the defect is gone (docs/methode.md). */
+/** "Opgelost" is what the organisation says; only a new measurement shows that the defect is gone (docs/methode.md). `decisionLabelNl` adds what the rechecks show. */
 export const DECISION_LABEL_NL: Record<DecisionKind, string> = {
-  opgelost: "Opgelost volgens de organisatie, nog niet nagemeten",
+  opgelost: "Opgelost volgens de organisatie",
   gepland: "Herstel gepland",
   zienswijze: "Andere zienswijze",
   onevenredig: "Onevenredige last",
@@ -71,6 +72,8 @@ export interface DecisionLayer {
   decisions: DecisionFile[];
   /** The hash of the index of the layer; null when nothing was decided. */
   sha256: string | null;
+  /** The rechecks of findings that passed their check, and how many did not; they say whether "opgelost" was measured again. */
+  rechecks?: { checked: CheckedRecheck[]; unchecked: number };
 }
 
 /** Said before a name is asked for and after it is stored. */
@@ -138,4 +141,35 @@ export function measureDate(decision: Decision): string | null {
   if (decision.decision === "gepland") return decision.date;
   if (decision.decision === "opgelost") return decision.date ?? decision.decidedAt.slice(0, 10);
   return null;
+}
+
+/** A recheck of a finding that passed its check (`check-recheck`), as `loadRechecks` gives it. */
+export interface FindingRecheck {
+  finding: string;
+  outcome: "nog aanwezig" | "opgelost" | "niet na te gaan";
+  measuredAt: string;
+}
+
+export const NOT_REMEASURED_NL = "nog niet nagemeten";
+
+/**
+ * What the rechecks say about the findings of a defect, as a phrase: the latest recheck of each
+ * finding counts. One finding still there says so; "opgelost" only when every finding was measured
+ * again as gone. `date` writes out the moment of a measurement.
+ */
+export function remeasuredNl(findingIds: string[], rechecks: FindingRecheck[], date: (iso: string) => string): string {
+  const latest = findingIds.map((id) => rechecks.filter((entry) => entry.finding === id).sort((a, b) => a.measuredAt.localeCompare(b.measuredAt)).at(-1));
+  const on = (entries: (FindingRecheck | undefined)[]): string => date(entries.map((entry) => entry!.measuredAt).sort().at(-1)!);
+  const of = (count: number): string => (findingIds.length === 1 ? "" : `${count} van de ${findingIds.length} bevindingen `);
+  const present = latest.filter((entry) => entry?.outcome === "nog aanwezig");
+  if (present.length > 0) return `nagemeten op ${on(present)}: ${of(present.length)}nog aanwezig`;
+  const solved = latest.filter((entry) => entry?.outcome === "opgelost");
+  if (solved.length === 0) return NOT_REMEASURED_NL;
+  return `nagemeten op ${on(solved)}: ${solved.length === findingIds.length ? "opgelost" : `${of(solved.length)}opgelost, de andere ${NOT_REMEASURED_NL}`}`;
+}
+
+/** The label of a decision with its date, already written out. "Opgelost" also says what the rechecks show (`remeasuredNl`). */
+export function decisionLabelNl(kind: DecisionKind, date: string | null, remeasured = NOT_REMEASURED_NL): string {
+  const dated = `${DECISION_LABEL_NL[kind]}${date && (kind === "gepland" || kind === "opgelost") ? ` (${date})` : ""}`;
+  return kind === "opgelost" ? `${dated}, ${remeasured}` : dated;
 }

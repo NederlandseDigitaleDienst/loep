@@ -1,4 +1,4 @@
-import { measureDate, type Decision } from "./decisions.ts";
+import { measureDate, remeasuredNl, type Decision, type FindingRecheck } from "./decisions.ts";
 import { complianceStatus, evaluationHash, madeWith, type ComplianceStatus, type CriterionResult, type Evaluation } from "./evaluation.ts";
 import { siteOrigins } from "./origins.ts";
 import { recordedNl } from "./recorded.ts";
@@ -87,6 +87,8 @@ export interface StatementOptions {
   concept: boolean;
   /** What the organisation decided per defect, after signing. */
   decisions?: Decision[];
+  /** The rechecks of findings that passed their check; they say whether "opgelost" was measured again. */
+  rechecks?: FindingRecheck[];
 }
 
 const SPAN = /<([a-z][a-z0-9+.-]*:[^>\s]+)>|\[nog invullen: ([^\]]+)\]/g;
@@ -124,10 +126,10 @@ export function otherDomains(evaluation: Pick<Evaluation, "site">, input: Pick<S
   return [...new Set([...siteOrigins(evaluation.site).slice(1), ...(input.subdomains ?? [])])];
 }
 
-/** A decision as one phrase of the statement, with how it was recorded. */
-function decisionNl(decision: Decision): string {
+/** A decision as one phrase of the statement, with how it was recorded; "opgelost" also says what the rechecks of the findings show. */
+function decisionNl(decision: Decision, findingIds: string[], rechecks: FindingRecheck[]): string {
   const what = decision.whatNl ? `: ${decision.whatNl.replace(/\.$/, "")}` : "";
-  const notes = [...(decision.decision === "opgelost" ? ["nog niet nagemeten"] : []), ...[recordedNl(decision, decision.decidedAt)].filter((note): note is string => note !== null)];
+  const notes = [...(decision.decision === "opgelost" ? [remeasuredNl(findingIds, rechecks, (iso) => nlDate(iso, "datum"))] : []), ...[recordedNl(decision, decision.decidedAt)].filter((note): note is string => note !== null)];
   const noted = notes.length > 0 ? ` (${notes.join("; ")})` : "";
   if (decision.decision === "gepland") return `herstel gepland, klaar uiterlijk ${nlDate(`${decision.date}T12:00:00Z`, "datum")}${what}${noted}`;
   if (decision.decision === "opgelost") return `hersteld op ${nlDate(`${measureDate(decision)}T12:00:00Z`, "datum")}${what}${noted}`;
@@ -141,13 +143,13 @@ function decisionNl(decision: Decision): string {
  * it, or, for a run without decisions, from `measuresNl`. `dated` says whether every defect has a
  * measure with a date (planned or done); for the free text the date is the target date of the statement.
  */
-export function measureFor(criterion: CriterionResult, evaluation: Evaluation, input: StatementInput, decisions: Decision[]): { textNl: string | null; dated: boolean } {
+export function measureFor(criterion: CriterionResult, evaluation: Evaluation, input: StatementInput, decisions: Decision[], rechecks: FindingRecheck[] = []): { textNl: string | null; dated: boolean } {
   const ids = new Set(criterion.findings.map((finding) => finding.id));
   const defects = (evaluation.defects ?? []).filter((defect) => defect.findingIds.some((id) => ids.has(id)));
   const byDefect = new Map(decisions.map((decision) => [decision.defect.id, decision]));
   if (defects.some((defect) => byDefect.has(defect.id))) {
     return {
-      textNl: `${defects.map((defect) => `${defect.titleNl.replace(/\.$/, "")}: ${byDefect.has(defect.id) ? decisionNl(byDefect.get(defect.id)!) : "nog niet besloten"}`).join("; ")}.`,
+      textNl: `${defects.map((defect) => `${defect.titleNl.replace(/\.$/, "")}: ${byDefect.has(defect.id) ? decisionNl(byDefect.get(defect.id)!, defect.findingIds, rechecks) : "nog niet besloten"}`).join("; ")}.`,
       dated: defects.every((defect) => byDefect.has(defect.id) && measureDate(byDefect.get(defect.id)!) !== null),
     };
   }
@@ -162,7 +164,7 @@ export function buildStatement(evaluation: Evaluation, input: StatementInput, op
   const failed = evaluation.criteria.filter((criterion) => criterion.versions.includes(LEGAL_VERSION) && criterion.outcome === "failed");
   const open = evaluation.criteria.filter((criterion) => criterion.versions.includes(LEGAL_VERSION) && criterion.outcome === "cantTell");
   const failedOnly22 = evaluation.criteria.filter((criterion) => !criterion.versions.includes(LEGAL_VERSION) && criterion.outcome === "failed");
-  const measures = new Map(failed.map((criterion) => [criterion.id, measureFor(criterion, evaluation, input, options.decisions ?? [])]));
+  const measures = new Map(failed.map((criterion) => [criterion.id, measureFor(criterion, evaluation, input, options.decisions ?? [], options.rechecks)]));
   // Status B asks a measure with a date for every deviation.
   const undated = status === "B" ? failed.filter((criterion) => !measures.get(criterion.id)!.dated).map((criterion) => criterion.id) : [];
   const blocks: StatementBlock[] = [];
@@ -411,13 +413,13 @@ export function blocksFromMarkdown(markdown: string): StatementBlock[] {
   return blocks;
 }
 
-export function answerSheetDocument(evaluation: Evaluation, input: StatementInput, decisions: Decision[] = []): StatementDocument {
-  return { ...documentFor(evaluation, input, "Invulblad voor de invulassistent", blocksFromMarkdown(renderAnswerSheet(evaluation, input, decisions))), concept: false, status: null };
+export function answerSheetDocument(evaluation: Evaluation, input: StatementInput, decisions: Decision[] = [], rechecks: FindingRecheck[] = []): StatementDocument {
+  return { ...documentFor(evaluation, input, "Invulblad voor de invulassistent", blocksFromMarkdown(renderAnswerSheet(evaluation, input, decisions, rechecks))), concept: false, status: null };
 }
 
 /** Copy-and-paste values for the nine steps of the invulassistent on toegankelijkheidsverklaring.nl. */
-export function renderAnswerSheet(evaluation: Evaluation, input: StatementInput, decisions: Decision[] = []): string {
-  const statement = renderStatement(evaluation, input, { concept: true, decisions });
+export function renderAnswerSheet(evaluation: Evaluation, input: StatementInput, decisions: Decision[] = [], rechecks: FindingRecheck[] = []): string {
+  const statement = renderStatement(evaluation, input, { concept: true, decisions, rechecks });
   const failed = evaluation.criteria.filter((criterion) => criterion.versions.includes(LEGAL_VERSION) && criterion.outcome === "failed");
   const lines = [
     `# Invulblad voor de invulassistent: ${evaluation.site.name}`,
@@ -458,7 +460,7 @@ export function renderAnswerSheet(evaluation: Evaluation, input: StatementInput,
     "",
     `- Streefdatum volledig voldoen: ${nlDate(input.targetDate, "streefdatum")}`,
     `- Aanvullend onderzoek gepland op: ${nlDate(input.plannedEvaluationDate, "datum, alleen bij status C")}`,
-    ...failed.map((criterion) => `- Maatregel bij ${criterion.id}: ${measureFor(criterion, evaluation, input, decisions).textNl ?? ask("maatregel")}`),
+    ...failed.map((criterion) => `- Maatregel bij ${criterion.id}: ${measureFor(criterion, evaluation, input, decisions, rechecks).textNl ?? ask("maatregel")}`),
     "",
     "## 7. Extra teksten",
     "",

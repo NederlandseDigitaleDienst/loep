@@ -7,17 +7,19 @@ import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { loadAnswers } from "../src/commands/answer.ts";
-import { decide } from "../src/commands/decide.ts";
+import { decide, defectLineNl } from "../src/commands/decide.ts";
+import { loadRechecks } from "../src/commands/recheck.ts";
 import { render } from "../src/commands/render.ts";
 import { sign, writeEvaluation } from "../src/commands/sign.ts";
+import { statement } from "../src/commands/statement.ts";
 import { checkSeal, seal, SIGNATURE_FILE, verify } from "../src/commands/verify.ts";
-import { canonicalJson } from "../src/lib/canonical.ts";
-import { checkDecisions, DECISIONS_INDEX, decisionFile, loadDecisions, type Decision, type DecisionFile } from "../src/lib/decisions.ts";
+import { canonicalJson, sha256 } from "../src/lib/canonical.ts";
+import { checkDecisions, decisionLabelNl, DECISIONS_INDEX, decisionFile, loadDecisions, remeasuredNl, type Decision, type DecisionFile } from "../src/lib/decisions.ts";
 import { mergeFindings } from "../src/lib/defects.ts";
 import { evaluationHash, summarise, type Evaluation } from "../src/lib/evaluation.ts";
 import { writeManifest } from "../src/lib/manifest.ts";
 import { parseRecordedVia, recordStatement } from "../src/lib/recorded.ts";
-import { renderMarkdown } from "../src/lib/report-markdown.ts";
+import { dateNl, renderMarkdown } from "../src/lib/report-markdown.ts";
 import { renderAnswerSheet, renderStatement } from "../src/lib/statement.ts";
 import { confirmDeclaration, decideWrites, writesAllowedNl } from "../src/lib/writes.ts";
 import { exampleEvaluation } from "./fixtures/example-evaluation.ts";
@@ -215,6 +217,80 @@ test("the statement takes its measures from the decisions, says how each was rec
   assert.match(none.missingMeasuresNl!, /Die ontbreekt bij /);
   // Any other status asks nothing of the kind.
   assert.equal(renderStatement(withDefects(), input, { concept: true }).missingMeasuresNl, null);
+});
+
+test("what the rechecks show about the findings of a defect: the latest recheck of each finding counts, and only every finding measured again as gone is opgelost", () => {
+  const at = (finding: string, outcome: "opgelost" | "nog aanwezig" | "niet na te gaan", day: string) => ({ finding, outcome, measuredAt: `2026-11-${day}T10:00:00.000Z` });
+  assert.equal(remeasuredNl(["A"], [], dateNl), "nog niet nagemeten");
+  assert.equal(remeasuredNl(["A"], [at("A", "opgelost", "03")], dateNl), "nagemeten op 3 november 2026: opgelost");
+  assert.equal(remeasuredNl(["A"], [at("A", "opgelost", "05"), at("A", "nog aanwezig", "03")], dateNl), "nagemeten op 5 november 2026: opgelost", "the latest recheck counts, not the order of the list");
+  assert.equal(remeasuredNl(["A"], [at("A", "opgelost", "03"), at("A", "nog aanwezig", "05")], dateNl), "nagemeten op 5 november 2026: nog aanwezig");
+  assert.equal(remeasuredNl(["A"], [at("A", "niet na te gaan", "03")], dateNl), "nog niet nagemeten", "a recheck that could not tell is no measurement that it is gone");
+  assert.equal(remeasuredNl(["A", "B"], [at("A", "opgelost", "03"), at("B", "opgelost", "04")], dateNl), "nagemeten op 4 november 2026: opgelost");
+  assert.equal(remeasuredNl(["A", "B", "C"], [at("A", "opgelost", "03"), at("B", "niet na te gaan", "04")], dateNl), "nagemeten op 3 november 2026: 1 van de 3 bevindingen opgelost, de andere nog niet nagemeten");
+  assert.equal(remeasuredNl(["A", "B"], [at("A", "opgelost", "03"), at("B", "nog aanwezig", "04")], dateNl), "nagemeten op 4 november 2026: 1 van de 2 bevindingen nog aanwezig");
+  assert.equal(remeasuredNl(["A"], [at("B", "opgelost", "03")], dateNl), "nog niet nagemeten", "a recheck of another finding says nothing about this defect");
+  // Only "opgelost" says it; the other kinds keep their label.
+  assert.equal(decisionLabelNl("opgelost", "2 november 2026", "nagemeten op 3 november 2026: opgelost"), "Opgelost volgens de organisatie (2 november 2026), nagemeten op 3 november 2026: opgelost");
+  assert.equal(decisionLabelNl("opgelost", null), "Opgelost volgens de organisatie, nog niet nagemeten");
+  assert.equal(decisionLabelNl("gepland", "1 december 2026", "nagemeten op 3 november 2026: nog aanwezig"), "Herstel gepland (1 december 2026)");
+});
+
+/** A recheck as `check-recheck` leaves it: the order, one observation of its own session, the outcome, and the stamp over the outcome and the observation. */
+function writeRecheck(run: string, finding: string, measuredAt: string, outcome: "opgelost" | "nog aanwezig"): void {
+  const dir = join(run, "rechecks", finding, measuredAt.replace(/\.\d+Z$/, "Z").replaceAll(":", "-"));
+  const session = "n-111";
+  const id = `${session}-0001`;
+  mkdirSync(join(dir, "observations", session), { recursive: true });
+  const observation = canonicalJson({ id, session, command: "name", args: ["4"], error: null, time: measuredAt, state: { steps: [{ command: "click", args: ["2"] }] }, page: { url: "https://voorbeeld.example/#logo", viewport: { width: 1280, height: 800 }, scheme: "dark" } });
+  writeFileSync(join(dir, "observations", session, "0001.json"), observation);
+  writeFileSync(join(dir, "opdracht.json"), canonicalJson({ schema: "loep/recheck/1", target: finding, criterion: "1.1.1", findings: [{ id: finding, titleNl: "Een bevinding", evidence: [], places: [] }], session, createdAt: measuredAt, toolboxVersion: "0.0.0", evaluation: { evaluatedAt: measuredAt, sha256: "0".repeat(64), toolboxVersion: "0.0.0" }, maxCommands: 25, maxMinutes: 20 }));
+  const text = JSON.stringify({ session, findings: [{ finding, outcome, whereNl: "Startpagina, het eerste logo.", observedNl: `Gemeten op dezelfde plek: ${outcome}.`, evidence: [id] }] });
+  writeFileSync(join(dir, "uitkomst.json"), text);
+  writeFileSync(join(dir, "uitkomst.stamp.json"), canonicalJson({ outputSha256: sha256(text), observations: { [id]: sha256(observation) }, checkedAt: measuredAt }));
+}
+
+test("a defect decided as opgelost whose finding was measured again: the report, decide and the statement say so, the signed report has the rechecks in appendix C, and a finding still there is said too", async () => {
+  const run = await sealedRun(false);
+  await sign({ run, ...SIGNER, terminal: typesSeal() });
+  const [first] = (await decide({ run })).defects;
+  const finding = withDefects().defects!.find((defect) => defect.id === first!.id)!.findingIds[0]!;
+  await decide({ run, defect: first!.id, decision: "opgelost", what: "Het component is aangepast en staat live.", date: "2026-11-02", ...WHO, ...IN_CONVERSATION });
+  assert.ok(defectLineNl((await decide({ run, defect: first!.id })).defects[0]!).endsWith(": Opgelost volgens de organisatie (2026-11-02), nog niet nagemeten"));
+
+  const report = (): string => readFileSync(join(run, "signed", "rapport.md"), "utf8");
+  const chapter = (): string => report().split("## Maatregelen en beslissingen")[1]!.split("\n## ")[0]!;
+  const appendix = (): string => report().split("## Bijlage C: nametingen na het onderzoek")[1] ?? "";
+  await render(run);
+  assert.equal(appendix(), "", "a signed report without a recheck that passed its check has no appendix C");
+
+  writeRecheck(run, finding, "2026-11-03T10:00:00.000Z", "opgelost");
+  assert.deepEqual(loadRechecks(run).checked.map((entry) => [entry.finding, entry.outcome]), [[finding, "opgelost"]], "the recheck passes as check-recheck left it");
+  assert.ok(defectLineNl((await decide({ run, defect: first!.id })).defects[0]!).endsWith(": Opgelost volgens de organisatie (2026-11-02), nagemeten op 3 november 2026: opgelost"));
+  const signedReport = await render(run);
+  if (signedReport.pdf !== null) assert.deepEqual(signedReport.pdfChecks.filter((problem) => !problem.includes("is niet geïnstalleerd")), [], "the PDF with appendix C and its links passes the checks");
+  assert.ok(chapter().includes(`([${first!.id}](#${first!.id})), `) && chapter().includes(": **Opgelost volgens de organisatie (2 november 2026), nagemeten op 3 november 2026: opgelost**"), chapter());
+  // The line under the defect links to the recheck in appendix C, never to a file in the run.
+  assert.ok(chapter().includes(`  - Nagemeten, zie bijlage C: [${finding}](#nameting-${finding}). Een nameting van de bevinding zegt niet dat het criterium nu voldoet.`), chapter());
+  assert.ok(!report().includes("nametingen.md"));
+  assert.ok(!chapter().includes("nog niet nagemeten"), "no defect of the chapter is opgelost without a recheck");
+  assert.ok(appendix().includes("buiten het zegel en buiten de handtekening"));
+  assert.ok(appendix().includes(`- <a id="nameting-${finding}"></a>**Een bevinding** ([${finding}](#${finding})), 1.1.1: **opgelost**`), appendix());
+  for (const line of ["Nagemeten op: 3 november 2026 om 11:00", "Waar: Startpagina, het eerste logo.", "Gemeten in: https://voorbeeld.example/, 1280 pixels breed, donker kleurschema, in een toestand", "Wat de meting liet zien: Gemeten op dezelfde plek: opgelost.", "Waarnemingen: n-111-0001"]) assert.ok(appendix().includes(`  - ${line}\n`), line);
+  await statement(run, false);
+  assert.ok(readFileSync(join(run, "verklaring", "verklaring.md"), "utf8").includes("hersteld op 2 november 2026: Het component is aangepast en staat live (nagemeten op 3 november 2026: opgelost; vastgelegd in een gesprek"));
+  assert.ok(readFileSync(join(run, "verklaring", "invulassistent.md"), "utf8").includes("(nagemeten op 3 november 2026: opgelost; vastgelegd in een gesprek"));
+
+  // A later recheck that finds it again: the label says so, though the organisation said opgelost.
+  writeRecheck(run, finding, "2026-11-05T10:00:00.000Z", "nog aanwezig");
+  assert.ok(defectLineNl((await decide({ run, defect: first!.id })).defects[0]!).endsWith(": Opgelost volgens de organisatie (2026-11-02), nagemeten op 5 november 2026: nog aanwezig"));
+  await render(run);
+  assert.ok(chapter().includes(": **Opgelost volgens de organisatie (2 november 2026), nagemeten op 5 november 2026: nog aanwezig**"), chapter());
+  // Both rechecks stand in appendix C; the line under the defect links to the latest.
+  assert.ok(chapter().includes(`zie bijlage C: [${finding}](#nameting-${finding}).`));
+  assert.ok(appendix().indexOf(`<a id="nameting-${finding}-1"></a>`) < appendix().indexOf(`<a id="nameting-${finding}"></a>**Een bevinding** ([${finding}](#${finding})), 1.1.1: **nog aanwezig**`), appendix());
+  assert.equal(await verify(run), true, "the rechecks stand outside the seal");
+  rmSync(run, { recursive: true, force: true });
 });
 
 test("an answer or a decision says how it came about: in the conversation with the literal confirmation and the summary, or at a terminal, and never neither", async () => {

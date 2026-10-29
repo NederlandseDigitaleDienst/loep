@@ -1,11 +1,12 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { readJson, writeJson } from "../lib/canonical.ts";
-import { DECISION_KINDS, DECISION_LABEL_NL, DECISION_PRIVACY_NL, DECISION_WHAT_NL, DECISIONS_INDEX, decisionFile, readIndex, type Decision, type DecisionFile, type DecisionKind } from "../lib/decisions.ts";
+import { DECISION_KINDS, decisionLabelNl, DECISION_PRIVACY_NL, DECISION_WHAT_NL, DECISIONS_INDEX, decisionFile, readIndex, remeasuredNl, type Decision, type DecisionFile, type DecisionKind } from "../lib/decisions.ts";
 import type { Defect } from "../lib/defects.ts";
 import type { ReportFinding } from "../lib/evaluation.ts";
 import { processTerminal, recordStatement, type RecordingFlags, type Terminal } from "../lib/recorded.ts";
-import { sortDefects } from "../lib/report-markdown.ts";
+import { dateNl, sortDefects } from "../lib/report-markdown.ts";
+import { loadRechecks } from "./recheck.ts";
 import { readEvaluation, signatureIsCurrent } from "./sign.ts";
 import { sealHash } from "./verify.ts";
 
@@ -42,6 +43,8 @@ export interface DefectView {
   /** What the report proposes, once per distinct text. */
   proposalsNl: string[];
   current: DecisionFile | null;
+  /** What the rechecks of its findings show (`remeasuredNl`); the label of "opgelost" says it. */
+  remeasuredNl: string;
 }
 
 export interface DecideResult {
@@ -63,6 +66,7 @@ export async function decide(options: DecideOptions): Promise<DecideResult> {
   const defects = evaluation.defects;
   if (!defects || defects.length === 0) throw new Error("dit onderzoek heeft geen gebreken om over te besluiten");
   const findings = new Map(evaluation.criteria.flatMap((criterion) => criterion.findings).map((finding) => [finding.id, finding]));
+  const rechecks = loadRechecks(options.run).checked;
   const read = async (id: string): Promise<DecisionFile | null> => (existsSync(join(options.run, decisionFile(id))) ? readJson<DecisionFile>(join(options.run, decisionFile(id))) : null);
   const view = async (defect: Defect): Promise<DefectView> => ({
     id: defect.id,
@@ -73,6 +77,7 @@ export async function decide(options: DecideOptions): Promise<DecideResult> {
     pages: defect.pages,
     proposalsNl: [...new Set(defect.findingIds.map((id) => findings.get(id)?.fixNl).filter((text): text is string => Boolean(text)))],
     current: await read(defect.id),
+    remeasuredNl: remeasuredNl(defect.findingIds, rechecks, dateNl),
   });
   const all = await Promise.all(sortDefects(defects).map(view));
   const left = (views: DefectView[]): number => views.filter((entry) => entry.current === null).length;
@@ -99,7 +104,7 @@ export async function decide(options: DecideOptions): Promise<DecideResult> {
 
   const shownNl = [
     `Besluit over gebrek ${defect.id}: ${defect.titleNl}`,
-    `${DECISION_LABEL_NL[kind]}${options.date ? ` (${options.date})` : ""}`,
+    decisionLabelNl(kind, options.date ?? null, shown.remeasuredNl),
     ...(what ? [what] : []),
     ...(alternative ? [`Alternatief: ${alternative}`] : []),
     `Door: ${options.name.trim()}, ${options.role.trim()}`,
@@ -130,6 +135,6 @@ export async function decide(options: DecideOptions): Promise<DecideResult> {
 
 /** One line per defect for the listing: what it is and whether there is a decision. */
 export function defectLineNl(view: DefectView): string {
-  const decided = view.current ? `${DECISION_LABEL_NL[view.current.decision]}${view.current.date ? ` (${view.current.date})` : ""}` : "geen besluit";
+  const decided = view.current ? decisionLabelNl(view.current.decision, view.current.date, view.remeasuredNl) : "geen besluit";
   return `${view.id} [${view.severity}, ${view.owner}] ${view.titleNl} (${view.criteriaNl}): ${decided}`;
 }

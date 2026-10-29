@@ -7,6 +7,7 @@ import { loadDecisions } from "../lib/decisions.ts";
 import { evaluationHash } from "../lib/evaluation.ts";
 import { answerSheetDocument, LEGAL_VERSION, renderAnswerSheet, renderStatement, statementDocument, type StatementDocument, type StatementInput } from "../lib/statement.ts";
 import { makePdf, type PdfResult } from "../lib/typst.ts";
+import { loadRechecks } from "./recheck.ts";
 import { readEvaluation, signatureIsCurrent } from "./sign.ts";
 
 export const STATEMENT_INPUT_FILE = "verklaring-invoer.json";
@@ -52,11 +53,12 @@ export async function statement(runDir: string, concept: boolean): Promise<State
   const inputPath = join(runDir, STATEMENT_INPUT_FILE);
   const input: StatementInput = existsSync(inputPath) ? await readJson<StatementInput>(inputPath) : { organisation: evaluation.site.organisation ?? "[nog invullen: naam van de overheidsinstantie]" };
   const { decisions } = await loadDecisions(runDir, evaluation.defects);
-  const result = renderStatement(evaluation, input, { concept, decisions });
+  const rechecks = loadRechecks(runDir).checked;
+  const result = renderStatement(evaluation, input, { concept, decisions, rechecks });
   const dir = join(runDir, "verklaring");
   const files = [join(dir, "verklaring.md"), join(dir, "invulassistent.md"), join(dir, "verklaring.json")];
   await writeFileAtomic(files[0]!, result.markdown);
-  await writeFileAtomic(files[1]!, renderAnswerSheet(evaluation, input, decisions));
+  await writeFileAtomic(files[1]!, renderAnswerSheet(evaluation, input, decisions, rechecks));
   await writeJson(files[2]!, {
     schema: "loep/verklaring/1",
     concept,
@@ -72,8 +74,8 @@ export async function statement(runDir: string, concept: boolean): Promise<State
   });
 
   // Same content as the Markdown, from the same block model; the evaluation's date keeps the PDF reproducible.
-  const pdf = await documentPdf(statementDocument(evaluation, input, { concept, decisions }), join(dir, "verklaring.pdf"), evaluation.evaluatedAt);
-  const sheet = await documentPdf(answerSheetDocument(evaluation, input, decisions), join(dir, "invulassistent.pdf"), evaluation.evaluatedAt);
+  const pdf = await documentPdf(statementDocument(evaluation, input, { concept, decisions, rechecks }), join(dir, "verklaring.pdf"), evaluation.evaluatedAt);
+  const sheet = await documentPdf(answerSheetDocument(evaluation, input, decisions, rechecks), join(dir, "invulassistent.pdf"), evaluation.evaluatedAt);
   if (pdf.pdf) files.push(join(dir, "verklaring.pdf"));
   if (sheet.pdf) files.push(join(dir, "invulassistent.pdf"));
   // Without Typst both report the same thing; say it once.

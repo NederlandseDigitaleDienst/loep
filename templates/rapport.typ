@@ -670,6 +670,10 @@
       set text(size: 8.5pt, fill: muted)
       [#id-text(row.defectId) · #row.severity · #row.criteriaNl]
     })
+    if row.remeasured.len() > 0 {
+      set text(size: 9.5pt)
+      par[#t.measures.remeasured.lead: #row.remeasured.map(entry => link(label(entry.anchor), id-text(entry.findingId, size: 0.95em))).join(", "). #t.measures.remeasured.clause]
+    }
     if row.linesNl.len() > 0 {
       set text(size: 9.5pt)
       plain-list(row.linesNl)
@@ -1358,3 +1362,27 @@
     short-hash(criterion.provenance.verdictSha256.at("final", default: none)),
   )).flatten(),
 )
+
+// ---------------------------------------------------------------- rechecks
+
+// Appendix C: the rechecks of findings after the evaluation, only in a signed report. Outside the seal and the signature.
+#let rechecks = derived.at("rechecks", default: none)
+#if rechecks != none [
+  #pagebreak(weak: true)
+  = #t.rechecks.title
+
+  #par(t.rechecks.intro)
+  #for entry in rechecks.entries {
+    block(above: 11pt, below: 6pt, sticky: true, width: 100%, stroke: (top: 0.5pt + hairline), inset: (top: 5pt), {
+      [#link(label(entry.findingId), text(weight: 700, prose(entry.titleNl))) #label(entry.anchor)]
+      linebreak()
+      text(weight: 600, entry.outcome)
+      linebreak()
+      set text(size: 8.5pt, fill: muted)
+      [#id-text(entry.findingId) · #entry.criterion]
+    })
+    set text(size: 9.5pt)
+    plain-list(entry.linesNl)
+  }
+  #for note in rechecks.notesNl { par(text(size: 9pt, fill: muted, note)) }
+]
