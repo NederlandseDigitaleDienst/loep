@@ -185,9 +185,9 @@ export interface Verdict {
   /** Finishing round only. */
   finish?: Finish;
   /**
-   * For a judge and a verifier: one entry per point "proef werkte niet:" or "niet bereikbaar:" in
-   * missingNl, with `missing` its place there counted from 1 (#318). The finishing round writes them
-   * in `finish.attempts`.
+   * For a judge and a verifier: one entry per point "proef werkte niet:", "niet bereikbaar:" or
+   * "versturen niet toegestaan:" in missingNl, with `missing` its place there counted from 1 (#318,
+   * #371). The finishing round writes them in `finish.attempts`.
    */
   attempts?: { missing: number; triedNl: string; evidence: string[] }[];
 }
@@ -213,7 +213,7 @@ export interface Finish {
   /** Where was measured, with counts. */
   coverageNl: string;
   findings: { key: string; first: string[]; repeated: string[] }[];
-  /** One entry per point "proef werkte niet:" or "niet bereikbaar:" in missingNl; `missing` is its place there, counted from 1. */
+  /** One entry per point "proef werkte niet:", "niet bereikbaar:" or "versturen niet toegestaan:" in missingNl; `missing` is its place there, counted from 1. */
   attempts?: { missing: number; triedNl: string; evidence: string[] }[];
 }
 
@@ -255,8 +255,12 @@ export const NO_VALID_RESULT = "geen geldig resultaat";
 export const OUTSIDE_SCOPE = "buiten de afbakening";
 /** The kinds a new finishing round may be asked for with `tasks --again`: what an instrument can measure once it works or the part loads again. */
 export const KINDS_FOR_AGAIN = ["proef werkte niet", UNREACHABLE] as const;
-/** The kinds of open point that stay only after a real attempt, described in `finish.attempts`. */
-const KINDS_WITH_ATTEMPT: readonly string[] = ["proef werkte niet", UNREACHABLE];
+/**
+ * The kinds of open point that stay only after a real attempt, described in `attempts` or
+ * `finish.attempts`. For "versturen niet toegestaan" the attempt is a press that the guard answered
+ * by holding back a request that could change something (#371): without one, nothing was sent.
+ */
+const KINDS_WITH_ATTEMPT: readonly string[] = ["proef werkte niet", UNREACHABLE, NOT_SENT];
 
 /**
  * A point "niet bereikbaar" says what did not load (an address or the label of a page) and
@@ -439,6 +443,8 @@ export interface ObservationRef {
   unreliable: boolean;
   /** For a command that typed into a field: the value it entered. Absent for every other command, and when the field was emptied. */
   entered?: string;
+  /** How many requests that could change something the guard held back while the command ran: a method other than GET and HEAD, or a message over a socket. Absent when none. */
+  writesHeldBack?: number;
 }
 
 export type ObservationIndex = ReadonlyMap<string, ObservationRef>;
@@ -452,12 +458,18 @@ export interface ObservationRecordLike {
   result: unknown;
 }
 
+/** The kinds of refusal that held back a request that could change something (see `Blocked`): a method other than GET and HEAD, and a message over a socket. */
+const WRITE_REFUSALS = new Set(["method", "socket"]);
+
 export function indexObservations(records: Iterable<ObservationRecordLike>): Map<string, ObservationRef> {
   const index = new Map<string, ObservationRef>();
   for (const record of records) {
     const result = (record.result ?? {}) as { agreement?: unknown; differences?: unknown; methods?: unknown; entered?: unknown };
     const methods = Array.isArray(result.methods) ? (result.methods as { knownUnreliable?: unknown }[]) : [];
     const agreement = result.agreement === "single" || result.agreement === "agree" || result.agreement === "disagree" ? result.agreement : null;
+    // What the guard refused while the command ran (see `Blocked`); a record from a test may leave it out.
+    const blocked = (record as { blocked?: unknown }).blocked;
+    const writesHeldBack = (Array.isArray(blocked) ? blocked : []).filter((entry) => WRITE_REFUSALS.has(String((entry as { kind?: unknown } | null)?.kind))).length;
     index.set(record.id, {
       command: canonicalCommand(record.command),
       failed: record.error !== null,
@@ -466,6 +478,7 @@ export function indexObservations(records: Iterable<ObservationRecordLike>): Map
       differences: Array.isArray(result.differences) ? result.differences.filter((line): line is string => typeof line === "string") : [],
       unreliable: methods.length > 0 && methods.every((method) => typeof method?.knownUnreliable === "string"),
       ...(canonicalCommand(record.command) === "type" && record.error === null && typeof result.entered === "string" && result.entered !== "" ? { entered: result.entered } : {}),
+      ...(writesHeldBack > 0 ? { writesHeldBack } : {}),
     });
   }
   return index;
@@ -987,8 +1000,9 @@ export function validateJudgeVerdict(input: unknown, context: JudgeContext): str
 /**
  * A probe that did not work, or a part of the site that did not load, stays open in any round only
  * after a real attempt in the session of the agent that says so (#318): tried more than once and in
- * more than one way, as the finishing round must. Without a session (a verdict checked on its own)
- * there is no log to hold it to.
+ * more than one way, as the finishing round must. What only shows after sending stays open only
+ * when a press in that session had a request held back (#371). Without a session (a verdict
+ * checked on its own) there is no log to hold it to.
  */
 function attemptRules(verdict: Partial<Verdict>, context: InstrumentContext, session: string | null): string[] {
   if (session === null) return [];
@@ -996,28 +1010,41 @@ function attemptRules(verdict: Partial<Verdict>, context: InstrumentContext, ses
   return attemptProblems(missing, Array.isArray(verdict.attempts) ? verdict.attempts : [], "attempts", context, session);
 }
 
+/** What a point of a kind with an attempt asks for when it has none, in the words of `check-verdict`. */
+function attemptNeededNl(prefix: string, field: string, place: number): string {
+  if (prefix === NOT_SENT) return `"${NOT_SENT}:" stands only when a request that could change something was held back. Press what sends (the button, Enter in a chat) in your own session, with the fixed test values, and give one entry in ${field} with "missing": ${place}, saying what you pressed and which request the answer lists under "blocked", citing that observation. When nothing was held back, nothing was sent: what the page then shows is an ordinary observation, and the point gets an ordinary outcome`;
+  return `${prefix === UNREACHABLE ? "a part of the site that did not load" : "an instrument that did not work"} stays open only after a real attempt: give one entry in ${field} with "missing": ${place}, saying what you tried, in which ways, and citing at least ${MIN_ATTEMPT_OBSERVATIONS} observations of your own session`;
+}
+
 /**
- * The rule for an attempt, the same in every round: each point "proef werkte niet:" or "niet
- * bereikbaar:" has exactly one entry in `field`, and each entry says what was tried and cites at
- * least two observations of the session. `skipPoint` leaves out points another rule already refuses.
+ * The rule for an attempt, the same in every round: each point "proef werkte niet:", "niet
+ * bereikbaar:" or "versturen niet toegestaan:" has exactly one entry in `field`, and each entry says
+ * what was tried. For the first two it cites at least two observations of the session; for the
+ * last, an observation of the session in which the guard held back a request that could change
+ * something, other than an `open` (a page sends by itself while it loads). `skipPoint` leaves out
+ * points another rule already refuses.
  */
 function attemptProblems(missing: string[], attempts: NonNullable<Verdict["attempts"]>, field: "attempts" | "finish.attempts", context: InstrumentContext, session: string, skipPoint: (prefix: string) => boolean = () => false): string[] {
   const problems: string[] = [];
   missing.forEach((point, position) => {
     const kind = openPoint(point).kind;
     if (kind && !skipPoint(kind.prefix) && KINDS_WITH_ATTEMPT.includes(kind.prefix) && attempts.filter((entry) => entry?.missing === position + 1).length !== 1) {
-      problems.push(`missingNl[${position}]: ${kind.prefix === UNREACHABLE ? "a part of the site that did not load" : "an instrument that did not work"} stays open only after a real attempt: give one entry in ${field} with "missing": ${position + 1}, saying what you tried, in which ways, and citing at least ${MIN_ATTEMPT_OBSERVATIONS} observations of your own session`);
+      problems.push(`missingNl[${position}]: ${attemptNeededNl(kind.prefix, field, position + 1)}`);
     }
   });
   const index = context.observations;
   const own = (ref: unknown): ref is string => typeof ref === "string" && sessionOfObservation(ref) === session && index.has(ref);
+  const heldBack = (ref: unknown): boolean => own(ref) && index.get(ref)!.command !== "open" && (index.get(ref)!.writesHeldBack ?? 0) > 0;
   attempts.forEach((attempt, position) => {
     const at = `${field}[${position}]`;
     const point = typeof attempt?.missing === "number" ? missing[attempt.missing - 1] : undefined;
-    if (point === undefined || !KINDS_WITH_ATTEMPT.includes(openPoint(point).kind?.prefix ?? "")) problems.push(`${at}: "missing" is the place in missingNl (counted from 1) of a point "proef werkte niet:" or "${UNREACHABLE}:"`);
+    const prefix = point === undefined ? undefined : openPoint(point).kind?.prefix;
+    if (prefix === undefined || !KINDS_WITH_ATTEMPT.includes(prefix)) problems.push(`${at}: "missing" is the place in missingNl (counted from 1) of a point "proef werkte niet:", "${UNREACHABLE}:" or "${NOT_SENT}:"`);
     if (!isText(attempt?.triedNl, 40)) problems.push(`${at}: triedNl says what was tried, in which ways, and what the instrument answered`);
     const evidence = Array.isArray(attempt?.evidence) ? attempt.evidence : [];
-    if (new Set(evidence.filter(own)).size < MIN_ATTEMPT_OBSERVATIONS) problems.push(`${at}: a real attempt shows in the observation log: cite at least ${MIN_ATTEMPT_OBSERVATIONS} observations of session "${session}" (a command that failed counts), made in more than one way`);
+    if (prefix === NOT_SENT) {
+      if (!evidence.some(heldBack)) problems.push(`${at}: cite the observation of session "${session}" in which a request that could change something was held back: its answer lists it under "blocked" as "method: POST ..." or "socket: SEND ...". An observation of open does not count, because a page sends by itself while it loads. When nothing was held back, nothing was sent: the point is not "${NOT_SENT}:"`);
+    } else if (new Set(evidence.filter(own)).size < MIN_ATTEMPT_OBSERVATIONS) problems.push(`${at}: a real attempt shows in the observation log: cite at least ${MIN_ATTEMPT_OBSERVATIONS} observations of session "${session}" (a command that failed counts), made in more than one way`);
     for (const ref of evidence) {
       const problem = typeof ref === "string" ? refProblem(ref, context) : "evidence reference is not text";
       if (problem) problems.push(`${at}: ${problem}`);

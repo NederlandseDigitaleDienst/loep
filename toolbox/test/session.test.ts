@@ -15,6 +15,7 @@ import type { Described } from "../src/instruments/activate.ts";
 import { probeTrigger } from "../src/instruments/dialog.ts";
 import type { TextScaling } from "../src/instruments/textsize.ts";
 import { canonicalJson, sha256 } from "../src/lib/canonical.ts";
+import { indexObservations } from "../src/lib/verdict.ts";
 import { Daemon, ownedSessionNl, tooManySessionsNl, type Response } from "../src/session/daemon.ts";
 import type { Observation } from "../src/session/observations.ts";
 import { scopeForRun } from "../src/session/safety.ts";
@@ -382,6 +383,31 @@ test("type enters only fixed test values, and a POST never leaves the browser", 
   await loep("type", [await ref("css:#q"), "search"]);
   const searched = await loep("key", ["Enter"]);
   assert.equal(searched.url, `${site.origin}/form.html?q=test`);
+});
+
+test("a press on a form that sends nothing to a server holds nothing back, so what the page shows is an ordinary observation (#371)", async () => {
+  site.requests.length = 0;
+  await loep("open", ["/form-local.html"]);
+  const email = await ref("css:#reaction-email");
+  const empty = await loep("click", [await ref("css:#by-mail")]);
+  assert.deepEqual(empty.appeared, ["Vul een geldig e-mailadres in."]);
+  await loep("type", [email, "email"]);
+  const byMail = await loep("click", [await ref("css:#by-mail")]);
+  assert.deepEqual(byMail.appeared, ["Bedankt voor uw reactie."]);
+  const elsewhere = await loep("click", [await ref("css:#elsewhere")]);
+  assert.ok(observation(elsewhere.id).blocked.some((entry) => entry.kind === "scope" && entry.url.startsWith(site.otherOrigin)), JSON.stringify(observation(elsewhere.id).blocked));
+  // A window of another site is a navigation with GET: held back for the scope, but nothing that could change something.
+  for (const press of [empty, byMail, elsewhere]) {
+    const record = observation(press.id);
+    assert.deepEqual(record.blocked.filter((entry) => entry.kind === "method" || entry.kind === "socket"), [], `${press.id}: ${JSON.stringify(record.blocked)}`);
+    assert.equal(indexObservations([record]).get(press.id)!.writesHeldBack, undefined);
+  }
+  // The form that does send with POST: the held-back request is what the index counts.
+  await loep("open", ["/form.html"]);
+  await loep("type", [await ref("css:#email"), "email"]);
+  const sent = await loep("click", [await ref("css:#send")]);
+  assert.equal(indexObservations([observation(sent.id)]).get(sent.id)!.writesHeldBack, 1);
+  assert.deepEqual(site.requests.filter((request) => request.method !== "GET"), [], "the server received nothing but GET");
 });
 
 test("a WebSocket message and a POST from a chat widget are refused and logged", async () => {

@@ -8,7 +8,7 @@ import { EXPLORE_MAX_COMMANDS, EXPLORE_MAX_MINUTES } from "../src/commands/explo
 import { MAX_RESWEEPS, MAX_RETURNS_TO_EXPLORER, SHEETS_PER_TASK } from "../src/commands/gate.ts";
 import { briefPending, BUDGETS, INSTRUMENT_FLOW, loadInstrumentIndex, PHASES, pointsToFinish, recordAttempts, skip, skipKindOf, skipped, skippedForOutage, TASK_FILES, unskip } from "../src/commands/instrument-tasks.ts";
 import { CEILINGS, EXTENSION, MEASURED_USE, REFERENCE_SITE_SIZE, WALK_STATES } from "../src/lib/budget.ts";
-import { FINISH_FACTOR, LOOK_COMMANDS, MEASURE_COMMANDS, openPoint, SESSION_COMMANDS } from "../src/lib/verdict.ts";
+import { FINISH_FACTOR, LOOK_COMMANDS, MEASURE_COMMANDS, NOT_SENT, openPoint, SESSION_COMMANDS } from "../src/lib/verdict.ts";
 import { SESSION_MANAGEMENT } from "../src/session/client.ts";
 import { DEFAULT_DAEMON_LIMITS } from "../src/session/safety.ts";
 
@@ -569,7 +569,7 @@ test("the workflow sets a model only for the roles that are given one, the stand
   await assert.rejects(runWorkflow(2, states(), undefined, ["sonnet"]), /models moet een object zijn/);
 });
 
-test("the example verdict in the tasks of judge, verifier and finisher is valid JSON, and each attempt points at a point that takes one (#361)", () => {
+test("the example verdict in the tasks of judge, verifier and finisher is valid JSON, and each attempt points at a point that takes one (#361, #371)", () => {
   for (const name of ["beoordeel", "verifieer", "afmaak"]) {
     const text = readFileSync(fileURLToPath(new URL(`../../templates/${name}.md`, import.meta.url)), "utf8");
     const example = [...text.matchAll(/```json\n([\s\S]*?)\n```/g)].map((match) => match[1]!).find((block) => block.includes('"missingNl"'));
@@ -577,7 +577,7 @@ test("the example verdict in the tasks of judge, verifier and finisher is valid 
     const verdict = JSON.parse(example) as { missingNl?: string[]; attempts?: { missing: number }[]; finish?: { attempts?: { missing: number }[] } };
     for (const attempt of verdict.attempts ?? verdict.finish?.attempts ?? []) {
       const kind = openPoint(verdict.missingNl?.[attempt.missing - 1] ?? "").kind?.prefix;
-      assert.ok(kind === "proef werkte niet" || kind === "niet bereikbaar", `${name}: attempt ${attempt.missing} points at "${kind}"`);
+      assert.ok(kind === "proef werkte niet" || kind === "niet bereikbaar" || kind === NOT_SENT, `${name}: attempt ${attempt.missing} points at "${kind}"`);
     }
   }
 });
