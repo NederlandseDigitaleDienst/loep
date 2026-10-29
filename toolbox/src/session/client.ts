@@ -310,7 +310,7 @@ export async function sessionCli(argv: string[]): Promise<number> {
     // The session process writes into the run it serves: on a sealed run that breaks the seal. A recheck starts it in its own folder, outside the seal.
     if (group === "session" && (command === "serve" || command === "start")) {
       const sealed = underSeal(join(run, "observations", session, "session.json"));
-      if (sealed) return fail(sealedRunNl(sealed.name));
+      if (sealed) return fail(sealedRunNl(sealed.run, sealed.name));
     }
     if (group === "session" && command === "serve") {
       await serve(run, {

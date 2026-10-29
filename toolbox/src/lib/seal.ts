@@ -56,12 +56,15 @@ export function underSeal(path: string): { run: string; name: string } | null {
   return { run, name };
 }
 
-/** Why a write under the seal is refused, and where a recheck measures instead. */
-export const sealedRunNl = (name: string): string =>
-  `geweigerd: deze run is verzegeld, en ${name} valt onder het zegel. Een sessie op de run schrijft in de run, en dan klopt het zegel niet meer (verify meldt een afwijking). Een nameting heeft de sessie van de run niet nodig: recheck maakt een eigen map (rechecks/<id>/<moment>/), en de agent start zijn sessie daar, met --run <die map>. Die map heeft een eigen sessieproces en valt buiten het zegel`;
+/**
+ * Why a write under the seal is refused, and the two ways on: a recheck measures in a folder of
+ * its own, and measuring in the run itself again starts with opening the seal on purpose.
+ */
+export const sealedRunNl = (run: string, name: string): string =>
+  `geweigerd: deze run is verzegeld, en ${name} valt onder het zegel. Wat hier schrijft, maakt het zegel ongeldig (verify meldt een afwijking). Een nameting heeft de run niet nodig: recheck maakt een eigen map (rechecks/<id>/<moment>/) met een eigen sessieproces, buiten het zegel, en de agent start zijn sessie daar, met --run <die map>. Wil je in de run zelf opnieuw meten, zoals een nieuwe afmaakronde met tasks --again, open het zegel dan eerst met: seal --run ${run} --open. Dan vervalt het zegel, en een handtekening ook. Verzegel daarna opnieuw met seal, en laat opnieuw lezen en tekenen`;
 
 /** Throw when a write to this path would land under the seal of a sealed run. */
 export function refuseUnderSeal(path: string): void {
   const sealed = underSeal(path);
-  if (sealed) throw new Error(sealedRunNl(sealed.name));
+  if (sealed) throw new Error(sealedRunNl(sealed.run, sealed.name));
 }

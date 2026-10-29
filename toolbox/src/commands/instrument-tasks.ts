@@ -51,6 +51,7 @@ import { readsAllowedNl } from "../lib/reads.ts";
 import { criterionSender, DEFAULT_MAX_WRITES, DEFAULT_WRITE_SPACING_SECONDS, reservedNl, reservedWrites, spacingNl, WRITES_BLOCKED_NL, writeBudget, writesAllowedNl, writesForRun } from "../lib/writes.ts";
 import { sweepCandidates } from "../lib/statusmessages.ts";
 import { makeWorkDir } from "../lib/workdir.ts";
+import { refuseUnderSeal } from "../lib/seal.ts";
 import { siteHosts, siteLabel } from "../lib/origins.ts";
 
 /*
@@ -663,6 +664,8 @@ const beforeOwnFinish = (passing: Map<string, PassingVerdicts>, criterion: strin
  * writes follows from the run, so a second call changes nothing unless walks or verdicts came in.
  */
 export async function instrumentTasks(runDir: string, options: TaskOptions = {}): Promise<{ walks: number; judges: number; verifiers: number; finishers: number }> {
+  // The tasks are written into the run, and their agents measure there: on a sealed run that breaks the seal.
+  refuseUnderSeal(join(runDir, "tasks"));
   const startedAt = stepStart();
   const run = options.run ?? (await loadRun(runDir));
   if (!run.siteModel) throw new Error("this run has no site model; the flow with instruments needs one");
@@ -1258,6 +1261,7 @@ export async function unskip(runDir: string, what: TaskName): Promise<string> {
  * came back without an error, so a limit or a failure of the model counts no attempt.
  */
 export async function recordAttempts(runDir: string, keys: string[]): Promise<Record<string, number>> {
+  refuseUnderSeal(join(runDir, "tasks"));
   const index = await loadInstrumentIndex(runDir);
   const attempts = { ...(index.attempts ?? {}) };
   const rounds: Record<Phase, string | undefined> = { walks: undefined, judges: "judge", verifiers: "final", finishers: "finish" };

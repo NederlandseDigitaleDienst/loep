@@ -88,10 +88,40 @@ export interface Sealed {
 export async function seal(runDir: string): Promise<Sealed> {
   const { files } = await hashRun(runDir);
   const hash = await writeJson(join(runDir, INDEX), { files });
-  const signature = await readSignature(runDir).catch(() => null);
-  const signatureVoided = existsSync(join(runDir, SIGNED_DIR)) && signature?.sealSha256 !== hash;
-  if (signatureVoided) await rm(join(runDir, SIGNED_DIR), { recursive: true, force: true });
+  const signatureVoided = await voidSignature(runDir, hash);
   return { sha256: hash, files: Object.keys(files).length, signatureVoided };
+}
+
+/**
+ * Remove the signature and the report made with it, unless they belong to the seal with this
+ * hash. True when they were removed: somebody has to read and sign again.
+ */
+async function voidSignature(runDir: string, keptSeal: string | null): Promise<boolean> {
+  const signature = await readSignature(runDir).catch(() => null);
+  const voided = existsSync(join(runDir, SIGNED_DIR)) && (keptSeal === null || signature?.sealSha256 !== keptSeal);
+  if (voided) await rm(join(runDir, SIGNED_DIR), { recursive: true, force: true });
+  return voided;
+}
+
+export interface Opened {
+  /** The hash of the seal that was removed. */
+  sha256: string;
+  /** There was a signature for it: it no longer says anything and was removed with the signed report. */
+  signatureVoided: boolean;
+}
+
+/**
+ * Open the seal of a run on purpose, to measure in the run itself again (a new finishing round
+ * with `tasks --again`): the file index goes, and a signature goes with it, as with a new seal
+ * that differs from the signed one. Only this command does that; nothing opens a seal by itself.
+ * Afterwards the run has to be sealed again, and read and signed again.
+ */
+export async function openSeal(runDir: string): Promise<Opened> {
+  const hash = await sealHash(runDir);
+  if (hash === null) throw new Error("deze run is niet verzegeld: er is geen zegel om te openen");
+  const signatureVoided = await voidSignature(runDir, null);
+  await rm(join(runDir, INDEX), { force: true });
+  return { sha256: hash, signatureVoided };
 }
 
 export interface SealCheck {

@@ -9,7 +9,8 @@ import { promisify } from "node:util";
 import { startFixture, type FixtureServer } from "../fixtures/serve.ts";
 import { checkRecheck, loadRechecks, recheck, renderRechecks } from "../src/commands/recheck.ts";
 import { writeEvaluation } from "../src/commands/sign.ts";
-import { checkSeal, seal, verify } from "../src/commands/verify.ts";
+import { instrumentTasks, recordAttempts } from "../src/commands/instrument-tasks.ts";
+import { checkSeal, openSeal, seal, sealHash, verify } from "../src/commands/verify.ts";
 import { canonicalJson } from "../src/lib/canonical.ts";
 import { otherToolboxNl, writeManifest, writeManifestTools } from "../src/lib/manifest.ts";
 import { underSeal } from "../src/lib/seal.ts";
@@ -198,6 +199,7 @@ test("a session on a sealed run is refused before it writes, and a recheck in it
   const refused = (JSON.parse(output.stdout) as { error: string }).error;
   assert.match(refused, /^geweigerd: deze run is verzegeld, en observations\/regie\/session\.json valt onder het zegel/);
   assert.match(refused, /rechecks\/<id>\/<moment>\//, "the refusal says where a recheck measures");
+  assert.ok(refused.includes(`seal --run ${run} --open`), "and how to measure in the run itself again");
   assert.ok(!existsSync(join(run, "session-daemon.json")), "no session process was started for the run");
   assert.ok(!existsSync(join(run, "observations", "regie")));
 
@@ -250,6 +252,62 @@ test("a session that still ran when the run was sealed measures no further, and 
     await daemon.close();
   }
   assert.deepEqual((await checkSeal(run))!.problems, []);
+  assert.equal(await verify(run), true);
+  rmSync(run, { recursive: true, force: true });
+});
+
+/** The CLI as a person or an agent runs it: what it printed, and its exit code. */
+const cli = (...args: string[]): Promise<{ stdout: string; stderr: string; code: number }> =>
+  promisify(execFile)(process.execPath, [CLI, ...args]).then(
+    (done) => ({ stdout: done.stdout, stderr: done.stderr, code: 0 }),
+    (error: { stdout: string; stderr: string; code: number }) => ({ stdout: error.stdout, stderr: error.stderr, code: error.code }),
+  );
+
+test("new tasks on a sealed run are refused up front, with the way to open the seal on purpose (#375)", async () => {
+  const run = await sealedRun(fixture.origins.defect, false);
+  // A run that was explored has a site model; tasks asks for one before anything else.
+  writeFileSync(join(run, "site.json"), canonicalJson({ schema: "loep/site/1" }));
+  await seal(run);
+  await assert.rejects(instrumentTasks(run, { again: ["1.1.1"] }), (error: Error) => error.message.startsWith("geweigerd: deze run is verzegeld, en tasks valt onder het zegel") && error.message.includes(`seal --run ${run} --open`));
+  await assert.rejects(recordAttempts(run, ["finishers:1.1.1"]), /^Error: geweigerd: deze run is verzegeld/);
+  const refused = await cli("tasks", "--run", run, "--again", "1.1.1");
+  assert.equal(refused.code, 1);
+  assert.match(refused.stderr, /geweigerd: deze run is verzegeld, en tasks valt onder het zegel/);
+  assert.ok(!existsSync(join(run, "tasks")), "no task was written");
+  assert.equal(await verify(run), true);
+  rmSync(run, { recursive: true, force: true });
+});
+
+test("seal --open voids the seal and a signature on purpose; then a session measures in the run, and seal closes it again (#375)", async () => {
+  const run = await sealedRun(fixture.origins.defect);
+  const hash = (await sealHash(run))!;
+  // What sign and render leave after signing: the signature for this seal and the signed report.
+  mkdirSync(join(run, "signed"), { recursive: true });
+  writeFileSync(join(run, "signed", "signature.json"), canonicalJson({ sealSha256: hash }));
+  writeFileSync(join(run, "signed", "rapport.md"), "# Afgetekend rapport\n");
+
+  const opened = await cli("seal", "--run", run, "--open");
+  assert.equal(opened.code, 0, opened.stderr);
+  assert.match(opened.stdout, new RegExp(`^zegel ${hash.slice(0, 12)} geopend`));
+  assert.match(opened.stdout, /de handtekening hoorde bij dit zegel en is vervallen/);
+  assert.match(opened.stdout, /verzegel opnieuw als het meten klaar is: evaluate, render en seal --run .*Laat daarna opnieuw lezen en tekenen/);
+  assert.ok(!existsSync(join(run, "evidence-index.json")), "the seal is gone");
+  assert.ok(!existsSync(join(run, "signed")), "and the signature and the signed report with it");
+  assert.equal(await checkSeal(run), null);
+  await assert.rejects(openSeal(run), /niet verzegeld/, "a run without a seal has nothing to open");
+
+  // Measuring in the run itself works again, as it did before the seal.
+  const daemon = await Daemon.create(run, await scopeForRun(run, {}), { navigationDelayMs: 0, secondBrowsers: false });
+  try {
+    assert.equal((await daemon.handle({ op: "start", session: "f-111" })).ok, true);
+    assert.equal((await daemon.handle({ op: "command", session: "f-111", command: "open", args: ["/"], options: {} })).ok, true);
+    assert.equal((await daemon.handle({ op: "stop", session: "f-111" })).ok, true);
+  } finally {
+    await daemon.close();
+  }
+  const resealed = await seal(run);
+  assert.notEqual(resealed.sha256, hash, "the new seal covers the new observations");
+  assert.equal(resealed.signatureVoided, false, "there was no signature left to void");
   assert.equal(await verify(run), true);
   rmSync(run, { recursive: true, force: true });
 });

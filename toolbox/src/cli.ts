@@ -130,6 +130,8 @@ const USAGE = `loep <command> [options]
                                          says what is still missing for status B, and is signed. Choose or change it at the
                                          end of a run, then run evaluate, render and seal again. Without a value: say it
   seal --run <run>                       Record the hash of every file in the run; what is signed afterwards is this seal
+  seal --run <run> --open                Open the seal on purpose, to measure in the run itself again (tasks --again): the seal
+                                         and a signature lapse; seal again afterwards, and read and sign again
   verify --run <run>                     Recompute every hash in the run
   voiceover start|read|stop|setup        Optional, outside an evaluation: a real screen reader (VoiceOver in a virtual Mac) as a
                                          second source next to session speak; loep voiceover --help
@@ -242,6 +244,7 @@ async function main(): Promise<void> {
       brief: { type: "boolean", default: false },
       concept: { type: "boolean", default: false },
       fresh: { type: "boolean", default: false },
+      open: { type: "boolean", default: false },
       "other-toolbox": { type: "boolean", default: false },
       "allow-writes": { type: "boolean", default: false },
       "test-environment": { type: "string" },
@@ -680,7 +683,14 @@ async function main(): Promise<void> {
     }
     case "seal": {
       if (!values.run) throw new Error("seal needs --run <run>");
-      const { seal } = await import("./commands/verify.ts");
+      const { openSeal, seal } = await import("./commands/verify.ts");
+      if (values.open) {
+        const opened = await openSeal(values.run);
+        process.stdout.write(`zegel ${opened.sha256.slice(0, 12)} geopend: de run is niet meer verzegeld, en sessies en opdrachten mogen weer in de run schrijven\n`);
+        if (opened.signatureVoided) process.stdout.write("de handtekening hoorde bij dit zegel en is vervallen; het afgetekende rapport in signed/ is verwijderd\n");
+        process.stdout.write(`verzegel opnieuw als het meten klaar is: evaluate, render en seal --run ${values.run}${opened.signatureVoided ? ". Laat daarna opnieuw lezen en tekenen" : ""}\n`);
+        return;
+      }
       const sealed = await seal(values.run);
       process.stdout.write(`verzegeld: ${sealed.sha256.slice(0, 12)} (${sealed.files} bestanden)\n`);
       if (sealed.signatureVoided) process.stdout.write("de handtekening hoorde bij het vorige zegel en is vervallen: lees het rapport en teken opnieuw\n");
