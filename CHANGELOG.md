@@ -6,6 +6,22 @@ Wat er per versie van loep is veranderd. De versie staat op het voorblad en onde
 
 <!-- towncrier: een nieuwe versie komt hieronder -->
 
+## 0.19.0 (2026-10-29)
+
+Deze versie is uitgebracht zonder meting: de wijzigingen zijn met tests nagegaan; een meting met agents op de testsite is niet gedaan.
+
+### Wat een uitkomst kan veranderen
+
+- In een run die niet mag versturen drukken beoordelaar, verifieerder en afmaker nu wel op een verzendknop: het gereedschap houdt elk verzoek tegen dat iets kan wijzigen, en de waarneming zegt of er een werd tegengehouden. Een formulier dat niets naar een server stuurt (controle in de browser, een knop naar een `mailto:`-adres of naar een andere site) krijgt zo een gewone uitkomst. Een punt `versturen niet toegestaan` blijft alleen staan met een waarneming uit de eigen sessie waarin een verzoek werd tegengehouden; `check-verdict` weigert het zonder. ([#371](https://github.com/NederlandseDigitaleDienst/loep/issues/371))
+
+- tabbable 6.5.1, de bibliotheek achter de natuurlijke tabvolgorde: een element met `contenteditable="plaintext-only"`, of met de waarde in hoofdletters, telt nu mee als element dat de Tab bereikt (#368).
+
+### Verder
+
+- Een agent die in zijn verslag schrijft dat er geen storing van de site was, pauzeert de werkstroom niet meer. Alleen een antwoord dat begint met "storing van de site" telt als storing. ([#369](https://github.com/NederlandseDigitaleDienst/loep/issues/369))
+- Het afgetekende rapport zei bij een gebrek met het besluit "opgelost" altijd "nog niet nagemeten", ook als `recheck` de bevinding al had nagemeten. Nu kijken het hoofdstuk "Maatregelen en beslissingen", de uitvoer van `decide` en de maatregel in de verklaring naar de laatste geldige nameting van elke bevinding. Is die bij elke bevinding `opgelost`, dan staat er "opgelost volgens de organisatie, nagemeten op <datum>: opgelost"; is een bevinding nog aanwezig, dan staat dat er; zonder nameting blijft het "nog niet nagemeten". De nametingen zelf staan nu in bijlage C van het afgetekende rapport, met per nameting waar en hoe is gemeten en de waarnemingen, en het label linkt ernaar. Die bijlage valt buiten het zegel en buiten de handtekening. `rechecks/nametingen.md` blijft als werkbestand. ([#372](https://github.com/NederlandseDigitaleDienst/loep/issues/372))
+- Een sessie op een verzegelde run schrijft niet meer onder het zegel. `session start` en `tasks` weigeren op een verzegelde run. De melding zegt dat een nameting haar sessie in haar eigen map start (`rechecks/<id>/<moment>/`), en dat wie in de run zelf opnieuw wil meten, zoals een nieuwe afmaakronde met `tasks --again`, het zegel eerst bewust opent met het nieuwe `seal --run <run> --open`. Dan vervalt het zegel, en een handtekening ook; daarna wordt opnieuw verzegeld en getekend. Een sessieproces dat nog liep toen de run werd verzegeld, neemt geen commando's meer aan en schrijft bij het stoppen het sessiebestand niet meer, en het manifest van een verzegelde run krijgt geen nieuwe lijst met methoden. Elke nameting heeft een eigen sessieproces: meerdere nametingen meten tegelijk zonder `--max-sessions` op de run, en de skill (stap 12) en de methode zeggen dat nu. ([#375](https://github.com/NederlandseDigitaleDienst/loep/issues/375))
+
 ## 0.18.0 (2026-10-28)
 
 Deze versie is uitgebracht zonder meting: de wijzigingen zijn met tests nagegaan; een meting met agents op de testsite is niet gedaan.
