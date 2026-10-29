@@ -27,7 +27,9 @@ const PAUSED_NL = 'storing van het model, run gepauzeerd; start de werkstroom op
 // The site does not answer (`pending` says siteOutage, or an agent heard it from its session): the workflow pauses as well,
 // and an agent that stopped for it counts no attempt.
 const SITE_PAUSED_NL = 'storing van de site, run gepauzeerd; start de werkstroom opnieuw als de site weer antwoordt (pending zegt het)'
-const SITE_DOWN = /storing van de site/i
+// Only the answer the prompt asks for counts, or the message of loep that starts with it: a report that says there was
+// "geen storing van de site" is a report, and no outage.
+const SITE_DOWN = /^\W*storing van de site(?::|\W*$)/i
 // Sites that no agent of this run may open, for example a set that is held back for a final test. Empty when the caller gives none.
 const NEVER_OPEN =
   Array.isArray(neverOpen) && neverOpen.length > 0
@@ -83,7 +85,7 @@ function shell(commands, round) {
 }
 
 function work(task) {
-  return `Lees het bestand ${task} en voer de opdracht die daarin staat volledig en precies uit. Het bestand bevat alles wat je nodig hebt. Lees niets onder de map fixtures van de toolbox. Wijzig geen andere bestanden dan de bestanden die je opdracht noemt. Start of stop geen andere processen dan je eigen sessie. ${NEVER_OPEN} Zegt loep dat de site een storing heeft ("storing van de site"), stop dan meteen: schrijf geen oordeel en geen open punt, stop je sessie en antwoord alleen met: storing van de site. Meld anders na afloop in hooguit drie regels de uitkomst die je hebt opgeschreven en of de controle is geslaagd.`
+  return `Lees het bestand ${task} en voer de opdracht die daarin staat volledig en precies uit. Het bestand bevat alles wat je nodig hebt. Lees niets onder de map fixtures van de toolbox. Wijzig geen andere bestanden dan de bestanden die je opdracht noemt. Start of stop geen andere processen dan je eigen sessie. ${NEVER_OPEN} Zegt loep dat de site een storing heeft ("storing van de site"), stop dan meteen: schrijf geen oordeel en geen open punt, stop je sessie en antwoord alleen met: storing van de site. Meld anders na afloop in hooguit drie regels de uitkomst die je hebt opgeschreven en of de controle is geslaagd, zonder de woorden storing van de site.`
 }
 
 // The task file of each phase follows from its id, as TASK_FILES in toolbox/src/commands/instrument-tasks.ts says; a test holds the two together.
