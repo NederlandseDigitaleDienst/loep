@@ -12,6 +12,7 @@ import { canonicalJson, readJson, writeJson } from "../lib/canonical.ts";
 import { COMMANDS, PUBLIC_COMMANDS, UsageError, type Context, type Options, type Outcome, type Spec } from "./commands.ts";
 import { Jobs } from "./jobs.ts";
 import { cleanModel } from "../lib/models.ts";
+import { refuseUnderSeal, underSeal } from "../lib/seal.ts";
 import { toolchain } from "../lib/manifest.ts";
 import { budgetOutPointNl, writeBudget, writeBudgetNl, writesForRun, type WriteBudget } from "../lib/writes.ts";
 import { SEARCH_HELD_BACK_NL } from "../lib/reads.ts";
@@ -283,6 +284,7 @@ export class Daemon {
    * at the same time, the pause between requests, the time per command) stay what they were.
    */
   private async extend(session: Session, reason: string | undefined): Promise<Response> {
+    refuseUnderSeal(this.sessionFilePath(session.name));
     // After whatever command of this session is still running: its count belongs to what was used.
     await session.queue;
     const reasonNl = (reason ?? "").replace(/\s+/g, " ").trim();
@@ -297,7 +299,14 @@ export class Daemon {
     return { ok: true, print: { ...this.budget(session), added: `${added.commands} commando's en ${added.minutes} minuten`, note: `verlengd om: ${reasonNl}. ${session.extensions.length < EXTENSION.max ? `Verlengen kan nog ${EXTENSION.max - session.extensions.length} keer.` : "Dit was de laatste verlenging: kom hierna tot een oordeel."}` } };
   }
 
+  /** The session file of a session in this run: its budget, its models and its limits. */
+  private sessionFilePath(name: string): string {
+    return join(this.runDir, "observations", name, "session.json");
+  }
+
   private async start(name: string, limits: Partial<SessionLimits>, model: string | null = null, key?: string): Promise<Response> {
+    // A session writes into the run: on a sealed run that breaks the seal. A recheck has a folder of its own outside the seal.
+    refuseUnderSeal(this.sessionFilePath(name));
     const existing = this.sessions.get(name);
     if (existing) {
       // A running session has one owner: whoever has its key. Anyone else would measure in its page and on its budget.
@@ -314,7 +323,7 @@ export class Daemon {
     // The budget belongs to the name of the session within the run, not to a process and not to one start:
     // whoever starts a session that existed before, after a stop or after the process went away, goes on with
     // what was used, the clock of the first start and the limits of the first start. A later start can lower a limit, never raise it.
-    const filePath = join(this.runDir, log.relativeDir, "session.json");
+    const filePath = this.sessionFilePath(name);
     const earlier = existsSync(filePath) ? await readJson<{ startedAt?: string; commands?: number; blocked?: number; limits?: Partial<SessionLimits>; models?: unknown; extensions?: unknown }>(filePath).catch(() => null) : null;
     const resumed = earlier && earlier.startedAt ? earlier : null;
     const asked = { ...DEFAULT_SESSION_LIMITS, ...limits };
@@ -370,7 +379,10 @@ export class Daemon {
   }
 
   private async writeSessionFile(session: Session, stopped = false): Promise<void> {
-    await writeJson(join(this.runDir, session.log.relativeDir, "session.json"), {
+    const path = this.sessionFilePath(session.name);
+    // The run was sealed while this process ran: the session file stays as it was sealed, and the session still stops.
+    if (underSeal(path)) return;
+    await writeJson(path, {
       session: session.name,
       startedAt: new Date(session.startedAt).toISOString(),
       ...(stopped ? { stoppedAt: new Date().toISOString() } : {}),
@@ -389,6 +401,8 @@ export class Daemon {
   private async command(session: Session, command: string, rawArgs: string[], options: Options): Promise<Response> {
     const known = ["open", "state", "replay", "status", "wait", "tools", "sheet", "document", "cutout", "voiceover", ...PUBLIC_COMMANDS];
     if (!known.includes(command)) throw new Error(`onbekend commando "${command}"; kies uit: ${known.join(", ")}`);
+    // Every command writes an observation. A run sealed while this session ran takes no more.
+    refuseUnderSeal(join(this.runDir, session.log.relativeDir));
     const minutes = (Date.now() - session.startedAt) / 60_000;
     const free = isFree(command);
     if (!free) {

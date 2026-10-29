@@ -11,6 +11,7 @@ import { sha256 } from "../lib/canonical.ts";
 // runs would break every command of that session.
 import type { Request, Response } from "./daemon.ts";
 import { setRunLogin } from "../lib/login.ts";
+import { sealedRunNl, underSeal } from "../lib/seal.ts";
 import { scopeForRun, TEST_VALUES } from "./safety.ts";
 
 export const SESSION_USAGE = `  session start --run <run> [--session <name>] [--scope <url>] [--max-commands <n>] [--max-minutes <n>] [--single-browser]
@@ -306,6 +307,11 @@ export async function sessionCli(argv: string[]): Promise<number> {
   const number = (name: string): number | undefined => (values[name as "max"] === undefined ? undefined : Number(values[name as "max"]));
 
   try {
+    // The session process writes into the run it serves: on a sealed run that breaks the seal. A recheck starts it in its own folder, outside the seal.
+    if (group === "session" && (command === "serve" || command === "start")) {
+      const sealed = underSeal(join(run, "observations", session, "session.json"));
+      if (sealed) return fail(sealedRunNl(sealed.run, sealed.name));
+    }
     if (group === "session" && command === "serve") {
       await serve(run, {
         scopeUrl: values.scope,
