@@ -4,22 +4,23 @@ import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSy
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { createServer as createHttpsServer } from "node:https";
 import type { AddressInfo, Socket } from "node:net";
-import { createServer as createTcpServer } from "node:net";
+import { createServer as createTcpServer, connect } from "node:net";
+import { createSocket } from "node:dgram";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, beforeEach, describe, test, type TestContext } from "node:test";
 import { gzipSync } from "node:zlib";
+import { generateCACertificate } from "mockttp";
 import * as playwright from "playwright";
 import type { Browser, BrowserContext, Page, Request } from "playwright";
 import { loadPage, newContext } from "../src/browser/session.ts";
-import * as shielded from "../src/browser/shielded.ts";
-import { cleanupLinesNl, mailCleanup, mailWait, startMailbox } from "../src/commands/mail.ts";
-import { MAILBOX_SECRETS_FILE } from "../src/lib/login.ts";
-import * as localcert from "../src/lib/localcert.ts";
+import * as shielded from "../src/browser/boundary.ts";
+import { absorbAll, cleanupLinesNl, mailCleanup, mailWait, startMailbox } from "../src/commands/mail.ts";
+import { RUN_SECRETS_FILE } from "../src/lib/login.ts";
 import { imapMailbox } from "../src/lib/mailbox-imap.ts";
-import { mailboxLimitationsNl, readMailboxState, recordMailbox, type Mailbox, type RawMail } from "../src/lib/mailbox.ts";
+import { MAIL_ADDRESS_SOURCE, MAIL_LINK_SOURCE, mailboxLimitationsNl, readMailboxState, recordMailbox, type Mailbox, type RawMail } from "../src/lib/mailbox.ts";
 import { parseMail } from "../src/lib/mailparse.ts";
-import { aliasFor, readShieldFile, scanRun, Shield } from "../src/lib/shield.ts";
+import { aliasFor, readSecretEvents, readSecretsFile, scanRun, Shield } from "../src/lib/secrets.ts";
 import { decideWrites, recordWrites, runWrites, type WritePermission } from "../src/lib/writes.ts";
 import { DEFAULT_DAEMON_LIMITS, guardContext, guardRedirects, guardRedirectsByRoute, Politeness, scopeForRun, TEST_VALUES, type Guard } from "../src/session/safety.ts";
 import { SecondBrowsers } from "../src/session/second.ts";
@@ -39,6 +40,8 @@ const BROWSERS = ["chromium", "firefox", "webkit"] as const;
 type Name = (typeof BROWSERS)[number];
 
 const hasBoundaryNetwork = "setBoundaryNetwork" in shielded;
+/** The aliases of the values a mail brought, in the order they came. */
+const linkAliases = (run: string): string[] => readSecretsFile(run)!.secrets.filter((secret) => secret.source === MAIL_LINK_SOURCE).map((secret) => secret.alias);
 const browsers = new Map<Name, Promise<Browser>>();
 const launched = (name: Name): Promise<Browser> => {
   if (!browsers.has(name)) browsers.set(name, playwright[name].launch());
@@ -231,7 +234,7 @@ const inFiles = (dir: string, needle: string): string[] =>
   readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
     const path = join(dir, entry.name);
     if (entry.isDirectory()) return inFiles(path, needle);
-    return entry.name !== MAILBOX_SECRETS_FILE && readFileSync(path).includes(needle) ? [path] : [];
+    return entry.name !== RUN_SECRETS_FILE && readFileSync(path).includes(needle) ? [path] : [];
   });
 
 /** Where this file looks for what may not be there, in every form a page can hold it. */
@@ -268,20 +271,47 @@ beforeEach(() => {
   otherHeard = [];
 });
 
+const HOST_NAME = "site.loep-test.example";
+
+/** A certificate for one host name, signed by itself: whoever trusts it, trusts only that. */
+async function certificateFor(host: string): Promise<{ key: string; cert: string }> {
+  return generateCACertificate({ subject: { commonName: host } });
+}
+
+/**
+ * A name server that says that every name is this machine: the boundary then finds a made-up host the
+ * way it finds a real one, and checks its certificate the way it checks a real one.
+ */
+async function nameServer(): Promise<{ address: string; close: () => void }> {
+  const server = createSocket("udp4");
+  server.on("message", (query, peer) => {
+    const end = query.indexOf(0, 12) + 5;
+    const isA = query.readUInt16BE(end - 4) === 1;
+    const head = Buffer.from(query.subarray(0, 12));
+    head.writeUInt16BE(0x8180, 2);
+    head.writeUInt16BE(isA ? 1 : 0, 6);
+    head.writeUInt32BE(0, 8);
+    const answer = Buffer.from([0xc0, 12, 0, 1, 0, 1, 0, 0, 0, 0, 0, 4, 127, 0, 0, 1]);
+    server.send(Buffer.concat([head, query.subarray(12, end), ...(isA ? [answer] : [])]), peer.port, peer.address);
+  });
+  await new Promise<void>((resolve) => server.bind(0, "127.0.0.1", resolve));
+  return { address: `127.0.0.1:${server.address().port}`, close: () => server.close() };
+}
+
 /** Run a test on a site as a browser sees it: on this machine, or on a host name, over http or https. */
 function eachPlace(name: Name, places: readonly ("local" | "http" | "https")[], work: (site: Fixture, browser: Browser, t: TestContext) => Promise<void>): void {
   for (const place of places) {
     test(`${name}, ${place === "local" ? "on this machine" : place}`, { skip: !SecondBrowsers.installed(name) || (place !== "local" && !hasBoundaryNetwork) }, async (t) => {
       const site = new Fixture(otherOrigin);
-      const tls = place === "https" ? (localcert as { localCertificate: () => { key: string; cert: string } }).localCertificate() : null;
-      await site.start(tls, place === "local" ? null : "site.loep-test.example");
-      if (place !== "local") {
-        (shielded as unknown as { setBoundaryNetwork: (network: unknown) => void }).setBoundaryNetwork({ place: () => ({ host: "127.0.0.1", port: site.port }), tls: tls ? { ca: tls.cert, checkServerIdentity: () => undefined } : {} });
-      }
+      const tls = place === "https" ? await certificateFor(HOST_NAME) : null;
+      await site.start(tls, place === "local" ? null : HOST_NAME);
+      const names = place === "local" ? null : await nameServer();
+      if (names) shielded.setBoundaryNetwork({ lookup: { servers: [names.address] }, ...(tls ? { trustedCa: [tls.cert] } : {}) });
       try {
         await work(site, await launched(name), t);
       } finally {
-        if (place !== "local") (shielded as unknown as { setBoundaryNetwork: (network: unknown) => void }).setBoundaryNetwork({});
+        shielded.setBoundaryNetwork({});
+        names?.close();
         await site.stop();
       }
     });
@@ -306,7 +336,7 @@ for (const name of BROWSERS) {
         const answer = await mailWait(run, { mailbox: memoryBox([mailOf(`Je link: ${site.origin}/link?token=${SPELLED}\nen ${site.origin}/voorkeuren?token=${SPELLED}\n`)]) });
         const [link, preferences] = answer.links;
         assert.ok(link && preferences);
-        const alias = readShieldFile(run)!.secrets[0]!.alias;
+        const alias = linkAliases(run)[0]!;
 
         await t.test("1: a redirect without a secret in its address, to a page that shows them", async () => {
           await loadPage(session.page, `${site.origin}/volgende`);
@@ -339,7 +369,7 @@ for (const name of BROWSERS) {
 
         await t.test("5: a script that is sent elsewhere takes aliases along, and no cookie", async () => {
           const elsewhere = await session.page.evaluate(() => fetch("/naar-elders").then((answer) => answer.status, () => 0));
-          assert.ok(elsewhere === 200 || elsewhere === 0);
+          assert.equal(elsewhere, shielded.REFUSED_STATUS, "a redirect that would take an alias elsewhere is held back");
           for (const request of otherHeard) assert.ok(!holdsSecret(JSON.stringify(request)), "the other server does not get the token");
           assert.equal(await session.page.evaluate(() => fetch("/stap-een").then((answer) => answer.text())), "einde juist");
           assert.ok(site.heard.some((request) => request.url === "/dieper/stap-drie"), "a next step resolves against the one before, not the first");
@@ -610,7 +640,7 @@ test("3: a token with a plus or a lower-case escape does not stay in what the ru
 
 test("3: a page may spell a token otherwise than the mail did, and it is an alias all the same", () => {
   const alias = aliasFor("abc+def123GHI");
-  const shield = new Shield({ address: ADDRESS, addressAlias: TEST_VALUES.email!, origins: ["http://localhost:1"], secrets: [{ real: "abc def123GHI", spelled: ["abc+def123GHI"], alias }], links: [] });
+  const shield = new Shield({ secrets: [{ real: "abc def123GHI", spelled: ["abc+def123GHI"], alias, source: MAIL_LINK_SOURCE, origins: ["http://localhost:1"], at: "" }] });
   for (const form of ["abc+def123GHI", "abc%2Bdef123GHI", "abc%2bdef123GHI", "abc%20def123GHI", "abc def123GHI", "abc&#43;def123GHI"]) assert.equal(shield.inward(`x${form}y`), `x${alias}y`, form);
   assert.equal(shield.outwardUrl(`http://localhost:1/?t=${alias}`), "http://localhost:1/?t=abc+def123GHI", "an address goes back as the mail spelled it");
   assert.equal(shield.outwardForm(Buffer.from(`t=${alias}`)).toString(), "t=abc+def123GHI", "a form with a space sends a plus");
@@ -645,7 +675,7 @@ test("10: a token in a fragment stays there as an alias, and two links do not be
     const answer = await mailWait(run, { mailbox: memoryBox([mailOf(`Link: http://127.0.0.1:1/app#token=${SPELLED}\nEn: http://127.0.0.1:1/app#token=${second}\n`)]) });
     assert.equal(answer.links.length, 2);
     const [first, other] = answer.links;
-    const aliases = readShieldFile(run)!.secrets.map((pair) => pair.alias);
+    const aliases = linkAliases(run);
     assert.ok(first!.url.endsWith(`#token=${aliases[0]}`));
     assert.ok(other!.url.endsWith(`#token=${aliases[1]}`));
     assert.notEqual(first!.url, other!.url);
@@ -661,7 +691,7 @@ test("11: a run without a mailbox is not read again for a seal", () => {
   try {
     writeFileSync(join(run, "groot.bin"), Buffer.alloc(1000));
     assert.deepEqual(scanRun(run), { files: 0, bytes: 0, hits: [], compressed: 0 });
-    assert.equal(existsSync(join(run, MAILBOX_SECRETS_FILE)), false);
+    assert.equal(existsSync(join(run, RUN_SECRETS_FILE)), false);
   } finally {
     rmSync(run, { recursive: true, force: true });
   }

@@ -28,6 +28,7 @@ De toolbox zelf valt onder EUPL-1.2. Dit overzicht noemt wat de toolbox van ande
 | `vnu-jar` | 26.10.11 | MIT | Nu Html Checker; vraagt Java op de machine |
 | `pngjs` | 7.0.0 | MIT | Schermafbeeldingen lezen en schrijven |
 | `yaml` | 2.9.1 | ISC | Procedures lezen |
+| `mockttp` | 4.6.5 | Apache-2.0 | Proxy op de eigen machine voor een run met geheimen (`src/browser/boundary.ts`); alleen geladen in zo'n run. Brengt 209 pakketten mee, geen daarvan onder GPL; toegevoegd en gelezen op 30 oktober 2026 |
 | `@types/pngjs` | 6.0.5 | MIT | Typen |
 | `typescript` (alleen ontwikkeling) | 7.0.2 | Apache-2.0 | Typecontrole |
 | `@types/node` (alleen ontwikkeling) | 22.18.0 | MIT | Typen |

@@ -7,7 +7,6 @@ import { isFor, parseMail, type ParsedMail } from "./mailparse.ts";
 import { imapMailbox } from "./mailbox-imap.ts";
 import { mailpitMailbox } from "./mailbox-mailpit.ts";
 import { confirmByTyping, processTerminal, type Terminal } from "./recorded.ts";
-import type { MailServer } from "./shield.ts";
 import { isLocalHost, writeOriginsNl, type WritePermission } from "./writes.ts";
 
 /**
@@ -19,7 +18,22 @@ import { isLocalHost, writeOriginsNl, type WritePermission } from "./writes.ts";
  * from a mail counts as sending.
  */
 
+/** Where the mailbox is. The user name and password are never here: they come from the environment or the keychain, for each command again. */
+export interface MailServer {
+  kind: "imap" | "mailpit";
+  host: string;
+  port: number;
+  tls: boolean;
+}
+
 export type MailboxKind = MailServer["kind"];
+
+/** The kinds of secret a mail brings. */
+export const MAIL_ADDRESS_SOURCE = "mail-adres";
+export const MAIL_LINK_SOURCE = "mail-link";
+export const MAIL_CODE_SOURCE = "mail-code";
+/** Under this name the mailbox keeps where it is, in the register: that is told nowhere. */
+export const MAIL_PRIVATE = "mailbox";
 
 /** One message as the server has it. */
 export interface RawMail {

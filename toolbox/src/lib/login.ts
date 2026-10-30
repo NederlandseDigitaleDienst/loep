@@ -2,6 +2,8 @@ import { chmodSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync
 import { basename, dirname, join } from "node:path";
 import type { Page } from "playwright";
 import { readJson, writeJson } from "./canonical.ts";
+import { looksSecret } from "./mailparse.ts";
+import { hostOf, registerSecrets, shieldForRun, type NewSecret } from "./secrets.ts";
 import { isLocalHost, writeOriginsOf, writesForRun, type WritePermission } from "./writes.ts";
 
 /**
@@ -20,8 +22,8 @@ export const LOGIN_SESSION_FILE = "login-session.json";
  * same rules hold: outside the seal, readable for its owner only, never read by an agent.
  */
 export const IDLE_SESSION_FILE = "idle-session.json";
-/** The real values behind the aliases of a mailbox (see `shield.ts`): the address of the run and the tokens of its mails. */
-export const MAILBOX_SECRETS_FILE = "mailbox-secrets.json";
+/** The register of the secrets of a run, with the real values behind their aliases (see `secrets.ts`). */
+export const RUN_SECRETS_FILE = "secrets.json";
 const SCHEMA = "loep/login-session/1";
 
 /** Cookies and stored values the way Playwright keeps them (`storageState`). */
@@ -149,6 +151,72 @@ export function siteOriginOfRun(runDir: string): string | null {
   const path = join(runDir, "inventory.json");
   return existsSync(path) ? ((JSON.parse(readFileSync(path, "utf8")) as { origin?: string }).origin ?? null) : null;
 }
+
+// ---- A session as a secret ----------------------------------------------------------------------------------------
+
+export const SESSION_COOKIE_SOURCE = "sessie-cookie";
+export const SESSION_STORAGE_SOURCE = "sessie-opslag";
+
+/** The strings in a stored value that may be a token. A JSON value keeps its shape, so a page can still read it. */
+function storedSecrets(value: string): string[] {
+  try {
+    const parsed: unknown = JSON.parse(value);
+    if (typeof parsed === "object" && parsed !== null) {
+      const leaves = (node: unknown): string[] => (typeof node === "string" ? [node] : typeof node === "object" && node !== null ? Object.values(node).flatMap(leaves) : []);
+      return leaves(parsed).filter(looksSecret);
+    }
+  } catch {
+    // No JSON: the value as a whole.
+  }
+  return looksSecret(value) ? [value] : [];
+}
+
+function sessionSecrets(state: StorageState, origin: string): NewSecret[] {
+  return [
+    ...state.cookies.filter((cookie) => looksSecret(cookie.value)).map((cookie): NewSecret => ({ value: cookie.value, source: SESSION_COOKIE_SOURCE, origins: [origin], domains: [cookie.domain] })),
+    ...state.origins.flatMap((entry) => entry.localStorage.flatMap((item) => storedSecrets(item.value).map((value): NewSecret => ({ value, source: SESSION_STORAGE_SOURCE, origins: [entry.origin] })))),
+  ];
+}
+
+/**
+ * Put the values of the sessions of a run in the register, so that a session is no more than any other
+ * secret: what was noted about it holds for every value, whatever the source. Done again for each
+ * context, also for a run that was made before this existed. A run without a session stays one without
+ * secrets.
+ */
+export function registerSessionSecrets(runDir: string): void {
+  for (const name of [LOGIN_SESSION_FILE, IDLE_SESSION_FILE]) {
+    const path = join(runDir, name);
+    if (!existsSync(path)) continue;
+    const session = JSON.parse(readFileSync(path, "utf8")) as Partial<LoginSession>;
+    // A file that cannot be used says so where it is read for use.
+    if (session.storageState?.cookies && session.storageState.origins && session.origin) registerSecrets(runDir, sessionSecrets(session.storageState, session.origin));
+  }
+}
+
+/** A session in which every value is its alias. A browser of a run starts with this; the boundary fills in the real values towards the site. */
+export function sessionWithAliases(runDir: string, state: StorageState): StorageState {
+  const shield = shieldForRun(runDir);
+  if (!shield) return state;
+  return {
+    cookies: state.cookies.map((cookie) => ({ ...cookie, value: shield.inward(cookie.value) })),
+    origins: state.origins.map((entry) => ({ ...entry, localStorage: entry.localStorage.map((item) => ({ ...item, value: shield.inward(item.value) })) })),
+  };
+}
+
+/** A site renews a session as it likes: in a run with a session what looks like a token in a `Set-Cookie` is a secret from now on, before the browser gets it. */
+export function renewSessionSecrets(runDir: string, headers: { "set-cookie"?: string | string[] | undefined }, url: URL): void {
+  if (!shieldForRun(runDir)?.hasSource(SESSION_COOKIE_SOURCE)) return;
+  const renewed = [headers["set-cookie"] ?? []].flat().flatMap((cookie): NewSecret[] => {
+    const value = /^[^=;]+=([^;]*)/.exec(cookie)?.[1] ?? "";
+    const domain = /;\s*domain=([^;]+)/i.exec(cookie)?.[1]?.trim();
+    return looksSecret(value) ? [{ value, source: SESSION_COOKIE_SOURCE, origins: [url.origin], ...(domain ? { domains: [domain] } : {}) }] : [];
+  });
+  registerSecrets(runDir, renewed);
+}
+
+/** The run the login of this process is for. */
+export const runOfLogin = (): string | null => current?.runDir ?? null;
 
 /** Put a session in a run: the secret in its own file, what may be told in the manifest. */
 export async function storeLoginSession(runDir: string, session: LoginSession): Promise<void> {

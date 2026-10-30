@@ -439,8 +439,8 @@ const STALE_LOCK_MS = 10_000;
  * process, but the sweep runs in processes of its own: two of them must not both take the last write.
  * The work is a read and an append of one line, so the wait is short and done in place.
  */
-function withLock<T>(runDir: string, work: () => T): T {
-  const path = join(runDir, LOCK);
+export function withLock<T>(runDir: string, work: () => T, name: string = LOCK): T {
+  const path = join(runDir, name);
   const pause = new Int32Array(new SharedArrayBuffer(4));
   for (let tries = 0; ; tries++) {
     try {

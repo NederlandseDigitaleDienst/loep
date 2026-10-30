@@ -21,6 +21,7 @@ import { loadRun } from "../lib/rundata.ts";
 import { openPoint, sessionOfObservation, UNREACHABLE, waitsOnlyOnSending, type Verdict } from "../lib/verdict.ts";
 import { loginNl, NOT_LOGGED_IN_NL } from "../lib/login.ts";
 import { mailboxLimitationsNl } from "../lib/mailbox.ts";
+import { secretLimitationsNl } from "../lib/secrets.ts";
 import { heldBackSearches, heldBackSearchNl, readsAllowedNl, refusedCoveredReads } from "../lib/reads.ts";
 import { WRITES_BLOCKED_NL, writesAllowedNl } from "../lib/writes.ts";
 import { blockadesNl } from "../session/blockade.ts";
@@ -260,6 +261,7 @@ export async function evaluate(options: EvaluateOptions): Promise<Evaluation> {
     "Metingen zijn gedaan op de pagina's van de steekproef, met meldingen open en gesloten, en met de onderdelen geopend die een verkenner vooraf heeft vastgelegd. Een onderdeel dat de verkenner niet vond of niet open kreeg, is door de scripts niet gemeten. Het model heeft zelf in een steekproef van pagina's en toestanden gekeken en gemeten, niet op elke pagina in elke toestand.",
     run.login ? `${loginNl(run.login)}.` : NOT_LOGGED_IN_NL,
     ...mailboxLimitationsNl(options.run),
+    ...secretLimitationsNl(options.run),
     ...(documentScope ? documentScope.limitationsNl : ["Pdf-bestanden en andere documenten die geen webpagina zijn, zijn niet beoordeeld; zie de scope."]),
     "Video en geluid zijn alleen beluisterd en bekeken als het bestand op te halen was en de hulpprogramma's daarvoor aanwezig waren, ook in een speler in een ingesloten venster. Media die als stream wordt afgespeeld, is niet beluisterd of bekeken. Spraak en tekst in beeld zijn herkend door software, die fouten maakt, en de flitsmeting is een benadering van de norm.",
     ...(finished.length > 0

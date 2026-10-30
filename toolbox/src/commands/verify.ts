@@ -6,7 +6,8 @@ import { checkDecisions } from "../lib/decisions.ts";
 import { evaluationHash, type Evaluation, type Signature } from "../lib/evaluation.ts";
 import { recordedNl } from "../lib/recorded.ts";
 import { DAEMON_POINTER, notHashed, outsideSeal, RECHECKS_DIR, SEAL_INDEX, SIGNED_DIR } from "../lib/seal.ts";
-import { leakRefusalNl, scanRun } from "../lib/shield.ts";
+import { registerSessionSecrets } from "../lib/login.ts";
+import { leakRefusalNl, scanRun } from "../lib/secrets.ts";
 
 export interface EvidenceIndex {
   files: Record<string, string>;
@@ -87,6 +88,7 @@ export interface Sealed {
  * made with it are removed: somebody has to read and sign again.
  */
 export async function seal(runDir: string): Promise<Sealed> {
+  registerSessionSecrets(runDir);
   const leak = leakRefusalNl(scanRun(runDir));
   if (leak) throw new Error(leak);
   const { files } = await hashRun(runDir);

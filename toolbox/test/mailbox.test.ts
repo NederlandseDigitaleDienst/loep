@@ -9,14 +9,14 @@ import type { Browser } from "playwright";
 import { launchBrowser, loadPage, newContext } from "../src/browser/session.ts";
 import { cleanupLinesNl, mailCleanup, mailWait, startMailbox } from "../src/commands/mail.ts";
 import { seal } from "../src/commands/verify.ts";
-import { MAILBOX_SECRETS_FILE } from "../src/lib/login.ts";
+import { RUN_SECRETS_FILE } from "../src/lib/login.ts";
 import { imapMailbox } from "../src/lib/mailbox-imap.ts";
 import { mailpitMailbox } from "../src/lib/mailbox-mailpit.ts";
 import { agentMailboxNl, confirmMailbox, decideMailbox, linkKind, mailboxForRun, mailboxLimitationsNl, mailCredentials, readMailboxState, recordMailbox, runAddress, waitForMail, type Mailbox, type RawMail } from "../src/lib/mailbox.ts";
 import { isFor, linksOf, looksSecret, parseMail, secretsInText, secretsInUrl } from "../src/lib/mailparse.ts";
 import { writeManifest } from "../src/lib/manifest.ts";
 import { notHashed } from "../src/lib/seal.ts";
-import { aliasFor, leakRefusalNl, readShieldFile, scanRun, searchedSpellings, Shield, shieldForRun, writeShieldFile } from "../src/lib/shield.ts";
+import { aliasFor, leakRefusalNl, registerSecret, scanRun, searchedSpellings, Shield, shieldForRun } from "../src/lib/secrets.ts";
 import { decideWrites, recordWrites, writeAccess, writesForRun, type WritePermission } from "../src/lib/writes.ts";
 import { guardContext, guardedDownload, guardRedirects, scopeForRun, TEST_VALUES, type Guard } from "../src/session/safety.ts";
 
@@ -314,7 +314,8 @@ test("an alias has the length of its value and swaps in every spelling, both way
   const real = "a/b+c&d1234567890";
   const alias = aliasFor(real);
   assert.equal(alias.length, real.length);
-  const shield = new Shield({ address: "n+r@example.nl", addressAlias: TEST_VALUES.email!, origins: ["http://localhost:1"], secrets: [{ real, alias }], links: [] });
+  const reach = { origins: ["http://localhost:1"], at: "" };
+  const shield = new Shield({ secrets: [{ real, alias, source: "test", ...reach }, { real: "n+r@example.nl", alias: TEST_VALUES.email!, source: "test", ...reach }] });
   assert.equal(shield.inward(`x ${real} y`), `x ${alias} y`);
   assert.equal(shield.inward(encodeURIComponent(real)), encodeURIComponent(alias));
   assert.equal(shield.inward(real.replaceAll("&", "&amp;")), alias.replaceAll("&", "&amp;"));
@@ -342,9 +343,9 @@ async function mailboxRun(origin: string, extra: Partial<WritePermission> = {}):
 test("the secrets stand in a file of their own: owner only, outside the seal, ignored by git", async () => {
   const run = await mailboxRun("http://localhost:8081");
   try {
-    assert.equal(notHashed(MAILBOX_SECRETS_FILE), true);
-    assert.equal(statSync(join(run, MAILBOX_SECRETS_FILE)).mode & 0o777, 0o600);
-    assert.match(readFileSync(join(run, ".gitignore"), "utf8"), /mailbox-secrets\.json/);
+    assert.equal(notHashed(RUN_SECRETS_FILE), true);
+    assert.equal(statSync(join(run, RUN_SECRETS_FILE)).mode & 0o777, 0o600);
+    assert.match(readFileSync(join(run, ".gitignore"), "utf8"), /secrets\.json/);
     assert.ok(!readFileSync(join(run, "manifest.json"), "utf8").includes(ADDRESS));
     assert.ok(!readFileSync(join(run, "mailbox.json"), "utf8").includes(ADDRESS));
     await writeManifest(run, { command: "collect" });
@@ -357,8 +358,7 @@ test("the secrets stand in a file of their own: owner only, outside the seal, ig
 test("the search finds a token in every spelling, also inside binary data and in a file name, and seal refuses such a run", async () => {
   const run = await mailboxRun("http://localhost:8081");
   try {
-    const file = readShieldFile(run)!;
-    writeShieldFile(run, { ...file, secrets: [{ real: TOKEN, alias: aliasFor(TOKEN) }] });
+    registerSecret(run, TOKEN, { source: "test" });
     const leaks: [string, string | Buffer][] = [
       ["gewoon.txt", `...${TOKEN}...`],
       ["adres.url", encodeURIComponent(`x${TOKEN}`)],
@@ -375,7 +375,7 @@ test("the search finds a token in every spelling, also inside binary data and in
       rmSync(join(run, name));
     }
     writeFileSync(join(run, `naam-${TOKEN}.txt`), "leeg");
-    assert.deepEqual(scanRun(run).hits.map((hit) => hit.secret), [0]);
+    assert.deepEqual(scanRun(run).hits.map((hit) => hit.source), ["test"]);
     rmSync(join(run, `naam-${TOKEN}.txt`));
     assert.deepEqual(scanRun(run).hits, []);
     assert.equal(leakRefusalNl(scanRun(run)), null);
@@ -479,7 +479,7 @@ const inFiles = (dir: string, needle: string): string[] =>
   readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
     const path = join(dir, entry.name);
     if (entry.isDirectory()) return inFiles(path, needle);
-    return entry.name !== MAILBOX_SECRETS_FILE && readFileSync(path).includes(needle) ? [path] : [];
+    return entry.name !== RUN_SECRETS_FILE && readFileSync(path).includes(needle) ? [path] : [];
   });
 
 test("a run sees aliases only, and the site gets the real values", async () => {
@@ -648,7 +648,7 @@ test("cleaning up removes the registration through the site, shows it is gone, w
   try {
     await mailWait(run, { mailbox: box });
     const cleanup = await mailCleanup(run, { mailbox: box, browser, settleMs: 0 });
-    assert.equal(cleanup.site.outcome, "verwijderd");
+    assert.equal(cleanup.site.outcome, "verwijderd", cleanup.site.noteNl);
     assert.equal(registered, false);
     assert.equal(cleanup.mail.left, 0);
     assert.equal(cleanup.complete, true);
@@ -705,7 +705,7 @@ test("a mailbox that does not answer does not stop the rest, and the report says
     await mailWait(run, { mailbox: good });
     const broken: Mailbox = { kind: "mailpit", fetch: async () => Promise.reject(new Error("geen verbinding")), remove: async () => 0 };
     const cleanup = await mailCleanup(run, { mailbox: broken, browser, settleMs: 0 });
-    assert.equal(cleanup.site.outcome, "verwijderd");
+    assert.equal(cleanup.site.outcome, "verwijderd", cleanup.site.noteNl);
     assert.equal(cleanup.mail.left, null);
     assert.equal(cleanup.complete, false);
     assert.match(mailboxLimitationsNl(run).join(" "), /in de mailbox: .*geen verbinding/);

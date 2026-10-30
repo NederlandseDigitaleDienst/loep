@@ -2,8 +2,9 @@ import { createWriteStream, existsSync } from "node:fs";
 import { join } from "node:path";
 import type { BrowserContext, CDPSession, Frame, Page, Request } from "playwright";
 import { answeredByCloudflare, bodyOf, canFulfilRedirect, passOn, sendOrReplay } from "../browser/session.ts";
-import { requireBoundary, shieldedFetch, shieldOf } from "../browser/shielded.ts";
+import { REFUSED_HEADER, REFUSED_STATUS, requireBoundary, shieldedFetch, shieldOf } from "../browser/boundary.ts";
 import { readJson } from "../lib/canonical.ts";
+import { maskFile } from "../lib/secrets.ts";
 import { isChallenge } from "../lib/challenge.ts";
 import { privateFromPublicSite, scopeHost, scopeHostOf, siteOrigins, WEB_SCHEMES } from "../lib/origins.ts";
 import { loginCookieHeader, logsOut } from "../lib/login.ts";
@@ -44,6 +45,8 @@ export interface Scope {
   hosts: string[];
   /** Start URL of the run; relative page addresses are resolved against it. */
   baseUrl: string | null;
+  /** The run, when there is one: a run with secrets has a boundary around every context. */
+  runDir?: string;
   /**
    * When false, stylesheets, scripts, images, fonts and media may still be fetched from other
    * hosts, as in the sweep: without them the page is not the page a visitor sees. When true, nothing leaves the scope.
@@ -88,12 +91,12 @@ export async function scopeForRun(runDir: string, extra: { scopeUrl?: string | u
   // Inside a command of the sweep the log names that command; a session names itself.
   const ambient = runWrites();
   const writes = permission ? (ambient?.origin === permission.origin ? ambient : writeAccess(runDir, permission, "session")) : null;
-  return { hosts: [...hosts].sort(), baseUrl, strict: extra.strict ?? false, ...(writes ? { writes } : {}) };
+  return { hosts: [...hosts].sort(), baseUrl, runDir, strict: extra.strict ?? false, ...(writes ? { writes } : {}) };
 }
 
 export interface Blocked {
   at: string;
-  kind: "method" | "scope" | "socket" | "left-scope" | "logout" | "blockade";
+  kind: "method" | "scope" | "socket" | "left-scope" | "logout" | "blockade" | "boundary";
   method: string;
   url: string;
   resourceType: string;
@@ -192,10 +195,21 @@ export const urlInScope = inScope;
  * so it decides first.
  */
 export async function guardContext(context: BrowserContext, scope: Scope, guard: Guard, reads: readonly ReadRequest[] = [], blockade?: Blockade): Promise<void> {
-  requireBoundary(context, scope.writes?.runDir);
+  const runDir = scope.runDir ?? scope.writes?.runDir;
+  requireBoundary(context, runDir);
   const note = (kind: Blocked["kind"], method: string, url: string, resourceType: string): void => {
     guard.blocked.push({ at: new Date().toISOString(), kind, method, url: url.slice(0, MAX_URL), resourceType });
   };
+  // What the boundary refused is no answer of the site: it stands in what the session reports, as anything the guard holds back.
+  if (runDir !== undefined) {
+    context.on("response", (response) => {
+      if (response.status() !== REFUSED_STATUS) return;
+      const reason = response.headers()[REFUSED_HEADER];
+      if (!reason) return;
+      const request = response.request();
+      guard.blocked.push({ at: new Date().toISOString(), kind: "boundary", method: request.method(), url: request.url().slice(0, MAX_URL), resourceType: request.resourceType(), reasonNl: decodeURIComponent(reason) });
+    });
+  }
   if (blockade) {
     context.on("response", (response) => {
       const url = response.url();
@@ -365,7 +379,7 @@ export async function guardedDownload(scope: Scope, guard: Guard, address: strin
       }
       if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return { ok: false, reason: `het adres begint met ${parsed.protocol} en is niet op te halen` };
       // The real value of an alias is only filled in on the way out of the browser: from here the site would show another page.
-      if (shieldOf(scope.writes, url)?.carriesAlias(url)) return { ok: false, reason: "dit adres hoort bij een persoonlijke link uit een e-mail en is alleen in de browser van de sessie te openen" };
+      if (shieldOf(runOf(scope), url)?.carriesAlias(url)) return { ok: false, reason: "dit adres heeft een vervanging voor een geheim erin en is alleen in de browser van de sessie te openen" };
       if (!inScope(scope, url)) {
         if (scope.strict || !RENDERING_TYPES.has(options.resourceType)) {
           guard.blocked.push({ at: new Date().toISOString(), kind: "scope", method: "GET", url: url.slice(0, MAX_URL), resourceType: options.resourceType });
@@ -382,8 +396,8 @@ export async function guardedDownload(scope: Scope, guard: Guard, address: strin
       }
       // A file behind a login is asked for with the session of the run, and only inside the scope.
       const cookie = inScope(scope, url) ? loginCookieHeader(url) : null;
-      // In a run with a mailbox the answer gets the aliases too: this file goes in the run.
-      const response = await shieldedFetch(shieldOf(scope.writes, url), url, { method: "GET", redirect: "manual", signal: abort.signal, headers: { ...(cookie ? { cookie } : {}), ...((await options.headers?.(url)) ?? {}) } });
+      // In a run with secrets the answer gets the aliases too: this file goes in the run.
+      const response = await shieldedFetch(shieldOf(runOf(scope), url), url, { method: "GET", redirect: "manual", signal: abort.signal, headers: { ...(cookie ? { cookie } : {}), ...((await options.headers?.(url)) ?? {}) } });
       if (response.status === 429 && inScope(scope, url)) options.blockade?.tooMany(url, response.headers.get("retry-after") ?? undefined);
       const location = response.headers.get("location");
       if (response.status >= 300 && response.status < 400 && location) {
@@ -418,6 +432,7 @@ export async function guardedDownload(scope: Scope, guard: Guard, address: strin
         await new Promise<void>((resolve) => file.end(resolve));
       }
       if (bytes === 0) return { ok: false, reason: timedOut ? "geen antwoord binnen de tijd" : "de server stuurt een leeg bestand" };
+      maskFile(to);
       return { ok: true, url, bytes, contentType: response.headers.get("content-type"), truncated };
     }
     return { ok: false, reason: "te veel doorverwijzingen" };
@@ -428,13 +443,15 @@ export async function guardedDownload(scope: Scope, guard: Guard, address: strin
   }
 }
 
+const runOf = (scope: Scope): string | undefined => scope.runDir ?? scope.writes?.runDir;
+
 /**
- * A navigation to a personal link from a mail takes from the budget like any write: whether it is
+ * A navigation to a guarded address takes from the budget like any write: whether it is
  * refused, and noted as refused. Asked once per navigation, by the guard that passes it on.
  */
 function linkRefused(scope: Scope, guard: Guard, request: Request): boolean {
   const url = request.url();
-  const link = request.isNavigationRequest() ? (shieldOf(scope.writes, url)?.linkId(url) ?? null) : null;
+  const link = request.isNavigationRequest() && scope.writes ? (shieldOf(runOf(scope), url)?.guardedId(url) ?? null) : null;
   const refused = link ? claimLink(scope.writes!, url, link, guard.sender) : null;
   if (refused) guard.blocked.push({ at: new Date().toISOString(), kind: "method", method: request.method(), url: url.slice(0, MAX_URL), resourceType: request.resourceType(), reasonNl: refused.reasonNl, writeBudget: refused.budget });
   return refused !== null;
@@ -490,7 +507,7 @@ export async function guardRedirectsByRoute(context: BrowserContext, scope: Scop
     const request = route.request();
     if (!request.isNavigationRequest() || request.method() !== "GET" || !/^https?:/.test(request.url()) || !inScope(scope, request.url()) || logsOut(request.url())) return route.fallback();
     // Left to `guardContext`, which passes it on: a redirect is then followed by the browser, and only has aliases to take along.
-    if (shieldOf(scope.writes, request.url()) && !canFulfilRedirect(context)) return route.fallback();
+    if (shieldOf(runOf(scope), request.url()) && !canFulfilRedirect(context)) return route.fallback();
     if (linkRefused(scope, guard, request)) return route.fulfill({ status: 204, body: "" });
     try {
       const response = await route.fetch({ maxRedirects: 0 });

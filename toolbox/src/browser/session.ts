@@ -2,17 +2,18 @@ import { fileURLToPath } from "node:url";
 import { chromium, type APIResponse, type Browser, type BrowserContext, type Page, type Request, type Response, type Route } from "playwright";
 import type { Crowd } from "../lib/atonce.ts";
 import { CLOUDFLARE_HEADER, isChallenge } from "../lib/challenge.ts";
-import { confirmLoginOn, LoginExpired, logsOut, runLoginMark, runLoginState, throwIfLoginExpired, watchLogin } from "../lib/login.ts";
+import { confirmLoginOn, LoginExpired, logsOut, registerSessionSecrets, runLoginMark, runLoginState, runOfLogin, sessionWithAliases, throwIfLoginExpired, watchLogin } from "../lib/login.ts";
+import { MAIL_ADDRESS_SOURCE } from "../lib/mailbox.ts";
 import { addressOf, noteRefusedRead, readDecision, readRuleFor, runReads, type ReadRequest } from "../lib/reads.ts";
 import { claimLink, isWriteOrigin, runWrites, SocketFrames, type PassedWrite, type WriteAccess } from "../lib/writes.ts";
 import { LONGEST_FAILURE_PAUSE_SECONDS, OriginBlocked, runBlockade } from "../session/blockade.ts";
 import { MESSAGE_VALUES } from "../session/safety.ts";
 import { answerRefusalNl, httpRecordings, httpReplayNl, httpSendOf, keptHeaders, playRecording, socketRecordings, type HttpRecordings, type PassedReplay, type Recorder } from "../lib/recordings.ts";
-import type { Shield } from "../lib/shield.ts";
+import type { Shield } from "../lib/secrets.ts";
 import { readableFrame } from "./call.ts";
 import { refusedByBrowser, type ClipboardWrite } from "./clipboard.ts";
 import { frameAsPage } from "./frame.ts";
-import { boundaryForContext, markInsideBoundary, shieldedFetch, shieldOf } from "./shielded.ts";
+import { boundaryForContext, markInsideBoundary, shieldedFetch, shieldOf } from "./boundary.ts";
 
 /** The read-only helper library that is injected into every page under test. */
 export const INPAGE_PATH = fileURLToPath(new URL("./inpage.js", import.meta.url));
@@ -48,7 +49,7 @@ export interface ContextOptions {
   reads?: readonly ReadRequest[];
   /** Start with these cookies and stored values instead of the session of the run: the watch on the session keeps the copy it began with. */
   storageState?: Awaited<ReturnType<BrowserContext["storageState"]>>;
-  /** The run this context belongs to, when the process does not know it from `setRunWrites`: a session process. A run with a mailbox has its boundary around every context. */
+  /** The run this context belongs to, when the process does not know it otherwise: a session process. A run with secrets has its boundary around every context. */
   runDir?: string;
 }
 
@@ -88,7 +89,7 @@ async function forward(route: Route, mayRepeat: (url: string) => boolean, mayFol
   }
 }
 
-/** WebKit refuses an answer with a redirect from a route. In a run with a mailbox the boundary does what the route is needed for there, so such a request is simply passed on. */
+/** WebKit refuses an answer with a redirect from a route. In a run with secrets the boundary does what the route is needed for there, so such a request is simply passed on. */
 export const canFulfilRedirect = (context: BrowserContext): boolean => context.browser()?.browserType().name() !== "webkit";
 
 export type WriteOutcome =
@@ -108,10 +109,10 @@ export async function sendOrReplay(context: BrowserContext, route: Route, writes
   const method = request.method();
   const url = request.url();
   const recordings = httpRecordings(writes.runDir, writes.source);
-  const shield = shieldOf(writes, url);
+  const shield = shieldOf(writes.runDir, url);
   const body = bodyBufferOf(request);
   // A form with the address of the run in it makes the site send a mail: that has to happen for real.
-  const send = shield?.mentionsAddress(body) ? null : httpSendOf(body, request.headers()["content-type"], MESSAGE_VALUES);
+  const send = shield?.mentions(body, MAIL_ADDRESS_SOURCE) ? null : httpSendOf(body, request.headers()["content-type"], MESSAGE_VALUES);
   const recording = send ? recordings.find(method, url, send) : null;
   if (recording) {
     // Answered here: nothing goes to the server, and no cookie of the recording is set.
@@ -138,9 +139,9 @@ export async function sendOrReplay(context: BrowserContext, route: Route, writes
   return { kind: "sent", entry: claim.entry, repeated: repeatedEntry };
 }
 
-/** A GET or HEAD of the sweep in a run with a mailbox: a personal link takes from the budget like any write. */
+/** A GET or HEAD of the sweep in a run with secrets: a guarded address takes from the budget like any write. */
 async function openShielded(route: Route, shield: Shield, writes: WriteAccess, spaced: NavigationSpacing | null): Promise<void> {
-  const link = route.request().isNavigationRequest() ? shield.linkId(route.request().url()) : null;
+  const link = route.request().isNavigationRequest() ? shield.guardedId(route.request().url()) : null;
   if (link && claimLink(writes, route.request().url(), link, undefined)) return void (await route.fulfill({ status: 204, body: "" }).catch(() => undefined));
   if (spaced && loadsTab(route)) await spaced.before(route.request().url());
   await route.continue().catch(() => undefined);
@@ -314,11 +315,13 @@ export const answeredByCloudflare = (context: BrowserContext, host: string): boo
 export async function newContext(browser: Browser, options: ContextOptions = {}, guard?: WriteGuard): Promise<BrowserContext> {
   // A run with a login starts every context with the session a person left behind; any other run starts clean, as it did.
   const login = options.storageState ?? runLoginState();
+  const runDir = options.runDir ?? (options.writes ?? runWrites())?.runDir ?? runOfLogin() ?? undefined;
+  if (runDir !== undefined) registerSessionSecrets(runDir);
   // Also a context that may not send has a boundary: what it gets from the site can hold the real values all the same.
-  const boundary = await boundaryForContext(browser, options.runDir ?? (options.writes ?? runWrites())?.runDir);
+  const boundary = await boundaryForContext(browser, runDir);
   const context = await browser.newContext({
     ...boundary,
-    ...(login ? { storageState: login } : {}),
+    ...(login ? { storageState: boundary.proxy ? sessionWithAliases(runDir!, login) : login } : {}),
     // The sites under test send a strict CSP; without this the engines cannot be injected.
     bypassCSP: true,
     viewport: options.viewport ?? RENDERING.viewport,
@@ -329,7 +332,7 @@ export async function newContext(browser: Browser, options: ContextOptions = {},
     colorScheme: options.colorScheme ?? "light",
     serviceWorkers: "block",
   });
-  if (boundary.proxy) markInsideBoundary(context);
+  if (boundary.proxy) await markInsideBoundary(context);
   context.setDefaultNavigationTimeout(RENDERING.navigationTimeoutMs);
   const viaCloudflare = new Set<string>();
   cloudflareHosts.set(context, viaCloudflare);
@@ -358,7 +361,7 @@ export async function newContext(browser: Browser, options: ContextOptions = {},
     if (logsOut(route.request().url()) || blockade?.blockade.refuses(route.request().url())) return route.request().isNavigationRequest() ? route.fulfill({ status: 204, body: "" }) : route.abort("blockedbyclient");
     if (method === "GET" || method === "HEAD") {
       const spaced = spacing;
-      const shield = shieldOf(writes, route.request().url());
+      const shield = shieldOf(writes?.runDir, route.request().url());
       if (shield) return openShielded(route, shield, writes!, spaced);
       if (spaced && loadsTab(route)) return spaced.before(route.request().url()).then(() => route.continue().catch(() => undefined));
       return route.continue();

@@ -131,6 +131,7 @@ const USAGE = `loep <command> [options]
                                          says what is still missing for status B, and is signed. Choose or change it at the
                                          end of a run, then run evaluate, render and seal again. Without a value: say it
   mail wait|cleanup|status --run <run>   The fixed flow around a mailbox; loep mail --help
+  secrets --run <run>                    What a run knows about its secrets, per source, and what happened around them: never a value
   seal --run <run>                       Record the hash of every file in the run; what is signed afterwards is this seal
   seal --run <run> --open                Open the seal on purpose, to measure in the run itself again (tasks --again): the seal
                                          and a signature lapse; seal again afterwards, and read and sign again
@@ -370,7 +371,7 @@ async function main(): Promise<void> {
         const { startMailbox } = await import("./commands/mail.ts");
         await startMailbox(values.out, mailbox.server, mailAddress!, mailbox.mark, permission!);
         await recordMailbox(values.out, mailbox.mark);
-        process.stdout.write(`mailbox aangesloten (${mailbox.mark.kind}): de testwaarde email in een formulier gaat naar het adres van deze run, en mail wait neemt de links uit de mail. Adres en codes staan alleen in mailbox-secrets.json, buiten het zegel en het rapport.\n`);
+        process.stdout.write(`mailbox aangesloten (${mailbox.mark.kind}): de testwaarde email in een formulier gaat naar het adres van deze run, en mail wait neemt de links uit de mail. Adres en codes staan alleen in secrets.json, buiten het zegel en het rapport.\n`);
       }
       if (permission) {
         process.stdout.write(`versturen toegestaan naar ${writeOriginsNl(permission)}${permission.declaredBy ? `, verklaard door ${permission.declaredBy.name} (${permission.declaredBy.role})` : ""}\n`);
@@ -553,6 +554,12 @@ async function main(): Promise<void> {
         const { readMailboxState } = await import("./lib/mailbox.ts");
         process.stdout.write(`${JSON.stringify(readMailboxState(values.run))}\n`);
       } else throw new Error(`mail kent wait, cleanup en status, niet "${target}"`);
+      return;
+    }
+    case "secrets": {
+      if (!values.run) throw new Error("secrets needs --run <run>");
+      const { secretsLinesNl } = await import("./lib/secrets.ts");
+      process.stdout.write(`${secretsLinesNl(values.run).join("\n")}\n`);
       return;
     }
     case "pending": {

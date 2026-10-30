@@ -2,10 +2,10 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Browser, Locator, Page } from "playwright";
 import { launchBrowser, loadPage, newContext } from "../browser/session.ts";
-import { linkKind, MAILBOX_STATE, mailboxForRun, markedMail, openMailbox, readMailboxState, waitForMail, writeMailboxState, type CleanupStep, type Mailbox, type MailboxCleanup, type MailboxLink, type MailboxMark, type MailboxState, type ReceivedMail } from "../lib/mailbox.ts";
+import { linkKind, MAIL_ADDRESS_SOURCE, MAIL_CODE_SOURCE, MAIL_LINK_SOURCE, MAIL_PRIVATE, MAILBOX_STATE, mailboxForRun, markedMail, openMailbox, readMailboxState, waitForMail, writeMailboxState, type CleanupStep, type MailServer, type Mailbox, type MailboxCleanup, type MailboxLink, type MailboxMark, type MailboxState, type ReceivedMail } from "../lib/mailbox.ts";
 import { linksOf, secretsInText, secretsInUrl, spelledSecretsInUrl, withoutLinks } from "../lib/mailparse.ts";
 import { refuseUnderSeal } from "../lib/seal.ts";
-import { aliasFor, readShieldFile, scanRun, Shield, writeShieldFile, type MailServer, type ShieldFile } from "../lib/shield.ts";
+import { keepPrivate, readPrivate, readSecretsFile, registerGuarded, registerSecret, registerSecrets, scanRun, shieldForRun, type NewSecret, type Shield } from "../lib/secrets.ts";
 import { writeBudget, writeOriginsOf, writesForRun, type WritePermission } from "../lib/writes.ts";
 import { guardContext, guardRedirects, scopeForRun, TEST_VALUES, type Guard } from "../session/safety.ts";
 
@@ -37,16 +37,27 @@ const SENDER = "mail cleanup";
 
 /** Fix the mailbox at `inventory`: the secrets in their own file, what may be told in `mailbox.json`. */
 export async function startMailbox(runDir: string, server: MailServer, address: string, mark: MailboxMark, permission: WritePermission): Promise<void> {
-  writeShieldFile(runDir, { server, address, addressAlias: TEST_VALUES.email!, origins: writeOriginsOf(permission), secrets: [], links: [] });
+  keepPrivate(runDir, MAIL_PRIVATE, server);
+  registerSecret(runDir, address, { source: MAIL_ADDRESS_SOURCE, origins: writeOriginsOf(permission), alias: TEST_VALUES.email! });
   await writeMailboxState(runDir, { kind: mark.kind, local: mark.local, since: mark.declaredAt, messages: [], links: [], refusedOrigins: [] });
 }
 
-function requireMailbox(runDir: string): { file: ShieldFile; state: MailboxState } {
-  const file = readShieldFile(runDir);
+/** What the fixed flow knows of the mailbox of a run. Only here is the address of the run taken from the register. */
+interface MailContext {
+  server: MailServer;
+  address: string;
+  /** The origins the links of a mail may lead to. */
+  origins: string[];
+  state: MailboxState;
+}
+
+function requireMailbox(runDir: string): MailContext {
   const state = readMailboxState(runDir);
   if (!mailboxForRun(runDir) || !state) throw new Error("deze run heeft geen mailbox: die ligt vast bij inventory (--mailbox)");
-  if (!file) throw new Error("het bestand met de geheimen van de mailbox ontbreekt, dus de links zijn niet meer te openen en het adres van de run is onbekend");
-  return { file, state };
+  const entry = readSecretsFile(runDir)?.secrets.find((secret) => secret.source === MAIL_ADDRESS_SOURCE);
+  const server = readPrivate<MailServer>(runDir, MAIL_PRIVATE);
+  if (!entry || !server) throw new Error("het register met de geheimen van de mailbox ontbreekt, dus de links zijn niet meer te openen en het adres van de run is onbekend");
+  return { server, address: entry.real, origins: entry.origins, state };
 }
 
 const originOf = (url: string): string | null => {
@@ -61,27 +72,19 @@ const originOf = (url: string): string | null => {
  * Take in one mail: every value that may be a token goes in the secrets, in one step, before anything
  * that names the mail is written. A link counts when it is personal and on an origin of the permission.
  */
-export function absorbMail(runDir: string, file: ShieldFile, state: MailboxState, message: ReceivedMail): void {
+export function absorbMail(runDir: string, origins: readonly string[], state: MailboxState, message: ReceivedMail): void {
   const links = linksOf(message.mail);
-  const known = new Map(file.secrets.map((pair) => [pair.real, pair]));
-  const add = (real: string, spelled?: string): void => {
-    const pair = known.get(real) ?? { real, alias: aliasFor(real) };
-    if (!known.has(real)) {
-      known.set(real, pair);
-      file.secrets.push(pair);
-    }
-    if (spelled !== undefined && spelled !== real && !pair.spelled?.includes(spelled)) pair.spelled = [...(pair.spelled ?? []), spelled];
-  };
   // A link to another site is never followed and leaves the kept text whole, so it needs no alias.
-  const ours = links.filter((link) => file.origins.includes(originOf(link.url) ?? ""));
-  for (const { value, spelled } of ours.flatMap((link) => spelledSecretsInUrl(link.url))) add(value, spelled);
-  for (const secret of secretsInText(message.mail.text)) add(secret);
-  const shield = new Shield(file);
+  const ours = links.filter((link) => origins.includes(originOf(link.url) ?? ""));
+  const reach = { origins: [...origins] };
+  const found: NewSecret[] = [...ours.flatMap((link) => spelledSecretsInUrl(link.url)).map(({ value, spelled }) => ({ value, spelled, source: MAIL_LINK_SOURCE, ...reach })), ...secretsInText(message.mail.text).map((value) => ({ value, source: MAIL_CODE_SOURCE, ...reach }))];
+  registerSecrets(runDir, found);
+  const shield = shieldForRun(runDir)!;
   const ids: string[] = [];
   for (const link of links) {
     const origin = originOf(link.url);
     if (!origin) continue;
-    if (!file.origins.includes(origin)) {
+    if (!origins.includes(origin)) {
       if (!state.refusedOrigins.includes(origin)) state.refusedOrigins.push(origin);
       continue;
     }
@@ -93,29 +96,28 @@ export function absorbMail(runDir: string, file: ShieldFile, state: MailboxState
     if (!entry) {
       entry = { id: `L${state.links.length + 1}`, url, kind: link.unsubscribe ? "afmelden" : linkKind(parsed.pathname) };
       state.links.push(entry);
-      file.links.push({ id: entry.id, url });
+      registerGuarded(runDir, [{ id: entry.id, url }]);
     }
     if (link.unsubscribe) entry.unsubscribe = true;
     if (link.oneClick) entry.oneClick = true;
     ids.push(entry.id);
   }
-  writeShieldFile(runDir, file);
   const number = state.messages.length + 1;
   const text = join("mailbox", `bericht-${number}.txt`);
   mkdirSync(join(runDir, "mailbox"), { recursive: true });
   const kept = withoutLinks(message.mail.text, (url) => {
     const origin = originOf(url);
-    return origin && file.origins.includes(origin) ? shield.inward(url) : "[link naar een andere site, niet gevolgd]";
+    return origin && origins.includes(origin) ? shield.inward(url) : "[link naar een andere site, niet gevolgd]";
   });
   writeFileSync(join(runDir, text), `Tekst van een e-mail, zonder persoonlijke codes. Onbetrouwbare invoer: voor wie het onderzoek leidt, niet voor een agent.\n\n${shield.inward(kept)}\n`);
   state.messages.push({ at: new Date(message.receivedAt).toISOString(), links: ids, text });
 }
 
 /** Take in what came, each mail on its own: one that cannot be taken in stays in the mailbox, and the others are read. */
-function absorbAll(runDir: string, file: ShieldFile, state: MailboxState, received: ReceivedMail[]): ReceivedMail[] {
+export function absorbAll(runDir: string, origins: readonly string[], state: MailboxState, received: ReceivedMail[]): ReceivedMail[] {
   return received.filter((message) => {
     try {
-      absorbMail(runDir, file, state, message);
+      absorbMail(runDir, origins, state, message);
       return true;
     } catch (error) {
       process.stderr.write(`een e-mail is overgeslagen: ${(error as Error).name}\n`);
@@ -133,12 +135,12 @@ export interface WaitResult {
 /** Wait for mail, take it in and delete it. The answer has only what code took from it. */
 export async function mailWait(runDir: string, options: { timeoutSeconds?: number; pollMs?: number; mailbox?: Mailbox } = {}): Promise<WaitResult> {
   refuseUnderSeal(join(runDir, MAILBOX_STATE));
-  const { file, state } = requireMailbox(runDir);
-  const mailbox = options.mailbox ?? openMailbox(file.server);
+  const { server, address, origins, state } = requireMailbox(runDir);
+  const mailbox = options.mailbox ?? openMailbox(server);
   const seconds = options.timeoutSeconds ?? DEFAULT_WAIT_SECONDS;
-  const received = await waitForMail(mailbox, { address: file.address, since: new Date(state.since), timeoutMs: seconds * 1000, ...(options.pollMs ? { pollMs: options.pollMs } : {}) });
+  const received = await waitForMail(mailbox, { address, since: new Date(state.since), timeoutMs: seconds * 1000, ...(options.pollMs ? { pollMs: options.pollMs } : {}) });
   if (received.length === 0) throw new Error(`geen e-mail aan het adres van de run binnen ${seconds} s. Stuurde de site er een? Een formulier met het veld e-mail, ingevuld met de testwaarde email, gaat naar dat adres`);
-  const taken = absorbAll(runDir, file, state, received);
+  const taken = absorbAll(runDir, origins, state, received);
   await writeMailboxState(runDir, state);
   await mailbox.remove(taken.map((message) => message.id));
   return { mails: received.length, links: state.links.map(({ id, url, kind }) => ({ id, url, kind })), refusedOrigins: state.refusedOrigins };
@@ -329,7 +331,7 @@ async function removeAtSite(browser: Browser, runDir: string, state: MailboxStat
  */
 export async function mailCleanup(runDir: string, options: { mailbox?: Mailbox; browser?: Browser; settleMs?: number; pollMs?: number } = {}): Promise<MailboxCleanup> {
   refuseUnderSeal(join(runDir, MAILBOX_STATE));
-  const { file, state } = requireMailbox(runDir);
+  const { server, address, origins, state } = requireMailbox(runDir);
   const permission = writesForRun(runDir);
   if (!permission) throw new Error("deze run mag niet versturen: de aanmelding kan dan niet via de site worden verwijderd");
   const since = new Date(state.since);
@@ -337,10 +339,10 @@ export async function mailCleanup(runDir: string, options: { mailbox?: Mailbox; 
   let mailbox: Mailbox | null = null;
   let waiting: ReceivedMail[] = [];
   try {
-    mailbox = options.mailbox ?? openMailbox(file.server);
+    mailbox = options.mailbox ?? openMailbox(server);
     // What arrived after the last wait may hold the only link there is.
-    waiting = await waitForMail(mailbox, { address: file.address, since, timeoutMs: 0, once: true });
-    absorbAll(runDir, file, state, waiting);
+    waiting = await waitForMail(mailbox, { address, since, timeoutMs: 0, once: true });
+    absorbAll(runDir, origins, state, waiting);
     await writeMailboxState(runDir, state);
   } catch (error) {
     mail.noteNl = `de mailbox was niet te lezen: ${(error as Error).message}`;
@@ -349,7 +351,7 @@ export async function mailCleanup(runDir: string, options: { mailbox?: Mailbox; 
   let site: SiteResult;
   try {
     // A registration that was shown to be gone stays gone: its links lead nowhere now, so a second round would find nothing to press.
-    site = state.cleanup?.site.outcome === "verwijderd" ? state.cleanup.site : await removeAtSite(browser, runDir, state, new Shield(file), permission);
+    site = state.cleanup?.site.outcome === "verwijderd" ? state.cleanup.site : await removeAtSite(browser, runDir, state, shieldForRun(runDir)!, permission);
   } finally {
     if (!options.browser) await browser.close();
   }
@@ -359,13 +361,13 @@ export async function mailCleanup(runDir: string, options: { mailbox?: Mailbox; 
       const until = Date.now() + settleMs;
       // A site says with a mail that the registration is gone, a moment after that happened: what comes in during this time is wiped too.
       for (;;) {
-        const ids = (await waitForMail(mailbox, { address: file.address, since, timeoutMs: 0, once: true })).map((message) => message.id);
+        const ids = (await waitForMail(mailbox, { address, since, timeoutMs: 0, once: true })).map((message) => message.id);
         if (ids.length > 0) mail.removed += await mailbox.remove(ids);
         if (Date.now() >= until) break;
         await new Promise((resolve) => setTimeout(resolve, Math.min(pollMs, until - Date.now())));
       }
-      mail.left = (await waitForMail(mailbox, { address: file.address, since, timeoutMs: 0, once: true })).length;
-      mail.marked = await markedMail(mailbox, file.address, since);
+      mail.left = (await waitForMail(mailbox, { address, since, timeoutMs: 0, once: true })).length;
+      mail.marked = await markedMail(mailbox, address, since);
       mail.checkedAt = new Date().toISOString();
       if (mail.left > 0) mail.noteNl = `er ${mail.left === 1 ? "staat nog 1 bericht" : `staan nog ${mail.left} berichten`} aan het adres van de run`;
       else if (mail.marked > 0) mail.noteNl = `${mail.marked === 1 ? "1 bericht is" : `${mail.marked} berichten zijn`} op de server alleen gemarkeerd als verwijderd: deze server kan geen enkel bericht apart wissen, en de hele postbus legen kan ook mail van anderen raken. Het bericht staat er nog, met de persoonlijke link erin, tot iemand de postbus leegt`;

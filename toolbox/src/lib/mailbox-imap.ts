@@ -1,7 +1,7 @@
 import { connect as plainConnect, isIP, type Socket } from "node:net";
 import { connect as tlsConnect } from "node:tls";
 import type { Mailbox, MailCredentials, RawMail } from "./mailbox.ts";
-import type { MailServer } from "./shield.ts";
+import type { MailServer } from "./mailbox.ts";
 
 /**
  * A mailbox over IMAP (RFC 9051), with the few commands this flow needs: find what came in for an

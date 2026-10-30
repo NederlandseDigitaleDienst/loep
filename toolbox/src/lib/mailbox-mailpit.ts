@@ -1,5 +1,5 @@
 import type { Mailbox, RawMail } from "./mailbox.ts";
-import type { MailServer } from "./shield.ts";
+import type { MailServer } from "./mailbox.ts";
 
 /**
  * Mailpit, the mail catcher of a site that runs on this machine, over its REST API. Mailpit has no
