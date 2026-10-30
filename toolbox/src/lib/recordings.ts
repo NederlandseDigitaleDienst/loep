@@ -32,7 +32,7 @@ import { isOurMessage, isProtocolFrame } from "./writes.ts";
  *   origin. The explorer found the pattern by opening the part twice, and check-site checked it.
  * - Without one: a recording belongs to the declared origin, the kind of connection (websocket or
  *   HTTP) and the test values in the message, and the path does not count. That is safe because a
- *   run may send to one origin only, the test environment it was given, and a message is made of
+ *   run may send only to the test environment it was given, a recording stays with its origin, and a message is made of
  *   the fixed test values of loep, which no visitor types: the same test values to the same test
  *   environment is the same message, whichever part of that origin it went to.
  *

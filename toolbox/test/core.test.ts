@@ -75,7 +75,7 @@ test("inventory says when pages have a form or a frame on another origin has one
   const both = formPagesNl([search(1), search(2), contact, chat], "https://a.nl", false)!;
   assert.match(both, /^let op: dit onderzoek mag niet versturen, en één pagina heeft een formulier dat niet op elke pagina staat \(https:\/\/a\.nl\/p003\), en één ingesloten venster op een ander adres heeft een formulier \(https:\/\/chat\.b\.nl\/widget\)\./);
   assert.match(both, /blijft open als "versturen niet toegestaan"/);
-  assert.match(both, /--test-environment <origin> --declared-by "<naam>, <functie>"; voor een venster op een ander adres kan dat de origin van alleen dat venster zijn$/);
+  assert.match(both, /--test-environment <origin> --declared-by "<naam>, <functie>"; voor een venster op een ander adres kan dat de origin van alleen dat venster zijn, en moeten er meer adressen bij, herhaal dan --test-environment$/);
   // With only the frame, its origin is the one to declare.
   assert.match(formPagesNl([search(1), search(2), chat], "https://a.nl", false)!, /--test-environment https:\/\/chat\.b\.nl --declared-by/);
   // A frame on the site's own origin is a page like any other.

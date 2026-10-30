@@ -119,7 +119,7 @@ export async function sendOrReplay(context: BrowserContext, route: Route, writes
   const at = Date.now();
   const { repeated, response } = await forward(route, (target) => isWriteOrigin(writes, target), options.mayFollow);
   const repeatedEntry = repeated ? writes.record(method, repeated, { repeat: true, sender: options.sender }) : null;
-  if (send && response && landing) void recordAnswer(recordings, { method, url, send, response, landing, origin: writes.origin, sender: options.sender, at }).catch(() => landing.cancel());
+  if (send && response && landing) void recordAnswer(recordings, { method, url, send, response, landing, origin: new URL(url).origin, sender: options.sender, at }).catch(() => landing.cancel());
   else landing?.cancel();
   return { kind: "sent", entry: claim.entry, repeated: repeatedEntry };
 }

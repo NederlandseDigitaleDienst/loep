@@ -302,7 +302,7 @@ test("what stays open only because the run may not send stands apart, with the d
   assert.deepEqual(notSent.onlyCriteria, [only]);
   // The one origin the points name goes into the flags; the frame alone may be declared.
   assert.equal(notSent.flags, '--test-environment https://chat.voorbeeld.nl --declared-by "<naam>, <functie>"');
-  assert.match(notSent.originNl, /^In de open punten staat als adres https:\/\/chat\.voorbeeld\.nl\. Er kan één origin worden verklaard, en dat mag de origin van alleen een ingesloten venster zijn/);
+  assert.match(notSent.originNl, /^In de open punten staat als adres https:\/\/chat\.voorbeeld\.nl\. Dat mag de origin van alleen een ingesloten venster zijn/);
   // The count at the top says which criteria wait for sending alone, and sends nobody to a person for them.
   assert.ok(statusLine.openNl.includes(`Van de criteria voor de eigenaar wacht er 1 alleen op toestemming om te versturen (${only}).`), statusLine.openNl);
   assert.ok(statusLine.openNl.endsWith("Bij de andere kan geen instrument verder: een persoon legt het antwoord vast, en daarna telt het mee in de uitkomst."), statusLine.openNl);
@@ -320,7 +320,7 @@ test("what stays open only because the run may not send stands apart, with the d
   evaluation.criteria.find((entry) => entry.id === mixed)!.missingNl = ["versturen niet toegestaan: het formulier naar https://formulier.voorbeeld.nl/aanvraag."];
   evaluation.criteria.find((entry) => entry.id === only)!.missingNl = ["versturen niet toegestaan: de chat van https://chat.voorbeeld.nl."];
   const two = deriveReport(evaluation);
-  assert.match(two.todo.investigate.notSent!.originNl, /^In de open punten staan 2 adressen: https:\/\/chat\.voorbeeld\.nl, https:\/\/formulier\.voorbeeld\.nl\. Per onderzoek kan er één worden verklaard\./);
+  assert.match(two.todo.investigate.notSent!.originNl, /^In de open punten staan 2 adressen: https:\/\/chat\.voorbeeld\.nl, https:\/\/formulier\.voorbeeld\.nl\. /);
   // When every open criterion of the owner waits for sending alone, no person is named at all.
   assert.ok(two.statusLine.openNl.endsWith("Daar is geen persoon voor nodig: een instrument meet het in een nieuw onderzoek dat mag versturen, zie \"Nog uitzoeken\"."), two.statusLine.openNl);
   // An evaluation without such points has no part for them.

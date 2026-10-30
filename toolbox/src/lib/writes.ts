@@ -5,13 +5,15 @@ import { confirmByTyping, processTerminal, recordedNl, type RecordedVia, type Te
 
 /**
  * Permission to send requests that can change something (anything but GET and HEAD, and
- * messages over a socket) to one origin. Without it every such request is held back, on every
+ * messages over a socket) to the origins named here. Without it every such request is held back, on every
  * site. It exists only for a test environment: a machine of one's own, or an environment
  * that a named person declared to be one.
  */
 export interface WritePermission {
-  /** The one origin that may be written to, e.g. "https://test.example.nl". */
+  /** The first origin that may be written to, e.g. "https://test.example.nl". */
   origin: string;
+  /** Further origins a person declared, such as the site next to the chat embedded in it. All origins share one budget (see `writeOriginsOf`). */
+  alsoOrigins?: string[];
   /** True for an address that cannot be a live site: this machine, or a name ending in .localhost or .test. */
   local: boolean;
   /** Who stated that this is a test environment where submitting has no consequences; null for a local address. */
@@ -40,12 +42,19 @@ export const DEFAULT_WRITE_SPACING_SECONDS = 120;
 export const LOCAL_MAX_WRITES = 50;
 export const LOCAL_WRITE_SPACING_SECONDS = 0;
 
+/** Every origin of a permission, the first one first. */
+export const writeOriginsOf = (permission: Pick<WritePermission, "origin" | "alsoOrigins">): string[] => [permission.origin, ...(permission.alsoOrigins ?? [])];
+
+/** The origins of a permission for in a sentence. */
+export const writeOriginsNl = (permission: Pick<WritePermission, "origin" | "alsoOrigins">): string => writeOriginsOf(permission).join(" en ");
+
 /** The part of a sentence about the pause between two writes, starting with a comma. */
 export const spacingNl = (seconds: number): string => (seconds > 0 ? `, met minstens ${seconds} s ertussen` : ", zonder wachttijd ertussen");
 
 export interface WriteFlags {
   allowWrites?: boolean | undefined;
-  testEnvironment?: string | undefined;
+  /** `--test-environment`, which may be given more than once. */
+  testEnvironment?: string | string[] | undefined;
   declaredBy?: string | undefined;
   /** `--max-writes`: the budget for sending of the whole run. */
   maxWrites?: string | undefined;
@@ -60,7 +69,7 @@ export const WRITES_BLOCKED_NL = "verzoeken die iets kunnen wijzigen zijn tegeng
  * of the person stays in the manifest of the run, where the declaration can be traced.
  */
 export const writesAllowedNl = (permission: WritePermission): string =>
-  `onderzocht op een testomgeving waar versturen is toegestaan: ${permission.origin}${permission.declaredBy ? `, verklaard door iemand met de functie ${permission.declaredBy.role}${permission.recordedVia ? `, ${recordedNl(permission, permission.declaredAt)}` : ""} (de naam staat in het dossier van het onderzoek, niet in dit rapport)` : " (lokaal adres)"}`;
+  `onderzocht op een testomgeving waar versturen is toegestaan: ${writeOriginsNl(permission)}${permission.declaredBy ? `, verklaard door iemand met de functie ${permission.declaredBy.role}${permission.recordedVia ? `, ${recordedNl(permission, permission.declaredAt)}` : ""} (de naam staat in het dossier van het onderzoek, niet in dit rapport)` : " (lokaal adres)"}`;
 
 /** Hosts that cannot be a live site: the machine itself and the names reserved for testing. */
 export function isLocalHost(hostname: string): boolean {
@@ -89,8 +98,10 @@ export function decideWrites(baseUrl: string, flags: WriteFlags, now = new Date(
     if (flags.maxWrites !== undefined) throw new Error("--max-writes hoort bij een run die mag versturen: geef het samen met --allow-writes, of met --test-environment en --declared-by");
     return null;
   }
-  const origin = flags.testEnvironment !== undefined ? originOf(flags.testEnvironment, "--test-environment") : originOf(baseUrl, "het adres van de site");
+  const declared = [...new Set([flags.testEnvironment ?? []].flat().map((address) => originOf(address, "--test-environment")))];
+  const origin = declared[0] ?? originOf(baseUrl, "het adres van de site");
   const local = isLocalHost(new URL(origin).hostname);
+  if (declared.length > 1 && declared.some((address) => isLocalHost(new URL(address).hostname))) throw new Error("een lokaal adres verklaar je niet naast een ander adres: een lokaal adres krijgt --allow-writes en een eigen run");
   if (local) {
     if (!flags.allowWrites) throw new Error(`versturen naar ${origin} is alleen toegestaan met --allow-writes erbij`);
     return { origin, local: true, declaredBy: null, declaredAt: now.toISOString(), maxWrites: maxWritesOf(flags.maxWrites, LOCAL_MAX_WRITES), spacingSeconds: LOCAL_WRITE_SPACING_SECONDS };
@@ -105,24 +116,29 @@ export function decideWrites(baseUrl: string, flags: WriteFlags, now = new Date(
   const [name, ...rest] = flags.declaredBy.split(",");
   const role = rest.join(",").trim();
   if (!name?.trim() || !role) throw new Error('--declared-by verwacht een naam en een functie, gescheiden door een komma: --declared-by "<naam>, <functie>"');
-  return { origin, local: false, declaredBy: { name: name.trim(), role }, declaredAt: now.toISOString(), ...budget };
+  return { origin, ...(declared.length > 1 ? { alsoOrigins: declared.slice(1) } : {}), local: false, declaredBy: { name: name.trim(), role }, declaredAt: now.toISOString(), ...budget };
 }
 
 /**
  * A declared test environment lets the run send on a site that is not local: only a person
- * declares that, never an agent. At an interactive terminal the person sees the origin, name and
- * role and types the origin back; without one the declaration is refused before anything starts.
+ * declares that, never an agent. At an interactive terminal the person sees the origins, name and
+ * role and types each origin back; without one the declaration is refused before anything starts.
  */
 export async function confirmDeclaration(permission: WritePermission, terminal: Terminal = processTerminal()): Promise<WritePermission> {
   if (!permission.declaredBy) return permission;
+  const origins = writeOriginsOf(permission);
   const shownNl = [
-    `Verklaring dat ${permission.origin} een testomgeving is waar versturen geen gevolgen heeft.`,
-    `Origin: ${permission.origin}`,
+    `Verklaring dat ${writeOriginsNl(permission)} ${origins.length > 1 ? "testomgevingen zijn" : "een testomgeving is"} waar versturen geen gevolgen heeft.`,
+    ...origins.map((origin) => `Origin: ${origin}`),
     `Naam: ${permission.declaredBy.name}`,
     `Functie: ${permission.declaredBy.role}`,
-    `De run mag daarheen ten hoogste ${permission.maxWrites ?? DEFAULT_MAX_WRITES} keer iets versturen. De naam komt in manifest.json van de run; het rapport en de verklaring noemen alleen de functie.`,
+    `De run mag daarheen ${origins.length > 1 ? "samen " : ""}ten hoogste ${permission.maxWrites ?? DEFAULT_MAX_WRITES} keer iets versturen. De naam komt in manifest.json van de run; het rapport en de verklaring noemen alleen de functie.`,
   ].join("\n");
-  const recording = await confirmByTyping("inventory --declared-by", shownNl, permission.origin, "de origin, met http:// of https://", terminal);
+  let recording: { recordedVia: "terminal" } | undefined;
+  for (const [position, origin] of origins.entries()) {
+    const whatNl = origins.length > 1 ? `origin ${position + 1} van ${origins.length}, met http:// of https://` : "de origin, met http:// of https://";
+    recording = await confirmByTyping("inventory --declared-by", position === 0 ? shownNl : "Nog een origin.", origin, whatNl, terminal);
+  }
   return { ...permission, declaredAt: new Date().toISOString(), ...recording };
 }
 
@@ -155,6 +171,8 @@ export interface PassedWrite {
   /** The request method, or "SEND" for a message over a socket. */
   method: string;
   path: string;
+  /** Where it went, in a run that may send to more than one origin. */
+  origin?: string;
   /** A write the browser repeated after a redirect that keeps the method (307, 308): logged, not counted again. */
   repeat?: true;
   /** A frame over a socket that counted against the budget: every frame, except one shown to be a heartbeat or a message of the protocol (see `SocketFrames`). */
@@ -177,6 +195,7 @@ export const runWrites = (): WriteAccess | null => current;
 
 /** What is left of the budget for sending of a run. */
 export interface WriteBudget {
+  /** The origins of the run, for in a sentence. */
   origin: string;
   max: number;
   /** Writes that counted: every request that passed to the origin and every socket frame that counted (see `SocketFrames`), without the repeats after a redirect. */
@@ -327,7 +346,7 @@ export function writeBudget(runDir: string, permission: WritePermission, now = D
   const waitSeconds = Math.max(0, Math.ceil((last + spacingSeconds * 1000 - now) / 1000));
   const reserved = reservedWrites(permission);
   const sentBefore = sender !== undefined && counted.some((entry) => senderOf(entry.source) === senderOf(sender));
-  return { origin: permission.origin, max, sent: counted.length, left: Math.max(0, max - counted.length - (sentBefore ? reserved : 0)), reserved, spacingSeconds, waitSeconds };
+  return { origin: writeOriginsNl(permission), max, sent: counted.length, left: Math.max(0, max - counted.length - (sentBefore ? reserved : 0)), reserved, spacingSeconds, waitSeconds };
 }
 
 /** One line for `session list` and `estimate`: what is left of the budget for sending. */
@@ -351,6 +370,8 @@ export type WriteClaim = { ok: true; entry: PassedWrite } | { ok: false; budget:
  */
 export interface WriteAccess {
   origin: string;
+  /** Every origin that may be written to, `origin` first. */
+  origins: string[];
   /** The run and the command or session the access was made for: where the recordings of what a chat answered are kept (see `socketRecordings`). */
   runDir: string;
   source: string;
@@ -403,7 +424,7 @@ function withLock<T>(runDir: string, work: () => T): T {
 
 export function writeAccess(runDir: string, permission: WritePermission, source: string, now: () => number = Date.now): WriteAccess {
   const append = (method: string, url: string, repeat: boolean, message = false, sender = source): PassedWrite => {
-    const entry: PassedWrite = { at: new Date(now()).toISOString(), source: sender, method, path: new URL(url).pathname, ...(repeat ? { repeat: true as const } : {}), ...(message ? { message: true as const } : {}) };
+    const entry: PassedWrite = { at: new Date(now()).toISOString(), source: sender, method, path: new URL(url).pathname, ...(permission.alsoOrigins ? { origin: new URL(url).origin } : {}), ...(repeat ? { repeat: true as const } : {}), ...(message ? { message: true as const } : {}) };
     mkdirSync(runDir, { recursive: true });
     // Appended at once and synchronously: the line is there even when the run is cut off right after.
     appendFileSync(join(runDir, WRITES_LOG), `${JSON.stringify(entry)}\n`);
@@ -411,6 +432,7 @@ export function writeAccess(runDir: string, permission: WritePermission, source:
   };
   return {
     origin: permission.origin,
+    origins: writeOriginsOf(permission),
     runDir,
     source,
     record: (method, url, options) => append(method, url, options?.repeat === true, false, options?.sender),
@@ -428,14 +450,14 @@ export function writeAccess(runDir: string, permission: WritePermission, source:
   };
 }
 
-/** Whether a request or socket goes to the origin that may be written to. A socket counts by the origin of its http(s) twin. */
+/** Whether a request or socket goes to an origin that may be written to. A socket counts by the origin of its http(s) twin. */
 export function isWriteOrigin(access: WriteAccess | null | undefined, url: string): boolean {
   if (!access) return false;
   try {
     const parsed = new URL(url);
     if (parsed.protocol === "ws:") parsed.protocol = "http:";
     if (parsed.protocol === "wss:") parsed.protocol = "https:";
-    return parsed.origin === access.origin;
+    return access.origins.includes(parsed.origin);
   } catch {
     return false;
   }

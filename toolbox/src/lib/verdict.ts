@@ -1,4 +1,4 @@
-import { budgetOutPointNl } from "./writes.ts";
+import { budgetOutPointNl, writeOriginsNl, writeOriginsOf } from "./writes.ts";
 
 export const OUTCOMES = ["passed", "failed", "inapplicable", "cantTell"] as const;
 export type Outcome = (typeof OUTCOMES)[number];
@@ -316,15 +316,15 @@ export function openPoint(point: string): { kind: OpenPointKind | null; textNl: 
  * and then it names the address, so the report can say which declaration would have closed it,
  * or once the budget for sending of the run is used up, and then the point says so.
  */
-export function notSentPointProblems(missingNl: unknown, permission: { origin: string } | null, budget: { sent: number; max: number; left: number } | null = null): string[] {
+export function notSentPointProblems(missingNl: unknown, permission: { origin: string; alsoOrigins?: string[] } | null, budget: { sent: number; max: number; left: number } | null = null): string[] {
   if (!permission || !Array.isArray(missingNl)) return [];
   // Used up for the criterion: the whole budget, or what is left is kept for criteria that sent nothing yet.
   const usedUp = budget !== null && budget.left === 0;
   return missingNl.flatMap((point, position) => {
-    if (typeof point !== "string" || openPoint(point).kind?.prefix !== NOT_SENT || notSentOrigins([point]).some((origin) => origin !== permission.origin)) return [];
+    if (typeof point !== "string" || openPoint(point).kind?.prefix !== NOT_SENT || notSentOrigins([point]).some((origin) => !writeOriginsOf(permission).includes(origin))) return [];
     if (usedUp && SENDING_BUDGET_OUT.test(point)) return [];
     const budgetNl = budget ? ` The budget for sending of the run is ${usedUp ? `used up${budget.sent < budget.max ? " for this criterion" : ""}` : `not used up (${budget.sent} of ${budget.max} sent)`}${usedUp ? `: then the point says "${budgetOutPointNl(budget).replace(/^versturen niet toegestaan: /, "")}"` : ""}` : "";
-    return [`missingNl[${position}]: this run may send to ${permission.origin} (writes.allowed in the dossier), so "${NOT_SENT}:" is only for a message that goes to another origin, or for one that could not go because the budget for sending of the run is used up. Send it there and measure; or, when the message goes elsewhere, name in the point the address it goes to.${budgetNl}`];
+    return [`missingNl[${position}]: this run may send to ${writeOriginsNl(permission)} (writes.allowed in the dossier), so "${NOT_SENT}:" is only for a message that goes to another origin, or for one that could not go because the budget for sending of the run is used up. Send it there and measure; or, when the message goes elsewhere, name in the point the address it goes to.${budgetNl}`];
   });
 }
 

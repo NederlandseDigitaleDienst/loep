@@ -14,7 +14,7 @@ const USAGE = `loep <command> [options]
   watch-session --run <run> [--gaps 5,10,20,40,80] [--max-hours 8]
                                          The watch on the session of a run with a login. collect starts it in the background
                                          and evaluate stops it; a second start on the same run leaves the running one alone
-  inventory <url> --out <run> [--also-origin <url>]... [--allow-writes | --test-environment <origin> --declared-by "<name>, <role>"] [--max-writes <n>]
+  inventory <url> --out <run> [--also-origin <url>]... [--allow-writes | --test-environment <origin>... --declared-by "<name>, <role>"] [--max-writes <n>]
                                          Find every page and count what is on it. In a run with a login the pages are found
                                          by following links from the page the person pointed at; a link that logs out is never followed
   explore --run <run>                    Write the task for the agent that maps the site before it is measured
@@ -247,7 +247,7 @@ async function main(): Promise<void> {
       open: { type: "boolean", default: false },
       "other-toolbox": { type: "boolean", default: false },
       "allow-writes": { type: "boolean", default: false },
-      "test-environment": { type: "string" },
+      "test-environment": { type: "string", multiple: true },
       "declared-by": { type: "string" },
       "max-writes": { type: "string" },
       url: { type: "string" },
@@ -274,7 +274,7 @@ async function main(): Promise<void> {
     return;
   }
   // A run that was given a test environment at inventory may write there; every other run holds all writes back.
-  const { confirmDeclaration, decideWrites, DEFAULT_WRITE_SPACING_SECONDS, recordWrites, setRunWrites, spacingNl, writeAccess, writesForRun } = await import("./lib/writes.ts");
+  const { confirmDeclaration, decideWrites, DEFAULT_WRITE_SPACING_SECONDS, recordWrites, setRunWrites, spacingNl, writeAccess, writeOriginsNl, writesForRun } = await import("./lib/writes.ts");
   if (command !== "inventory" && (values["allow-writes"] || values["test-environment"] !== undefined || values["declared-by"] !== undefined || values["max-writes"] !== undefined)) {
     throw new Error("--allow-writes, --test-environment, --declared-by en --max-writes horen bij inventory: daar wordt voor de hele run vastgelegd of er verstuurd mag worden, en hoe vaak");
   }
@@ -347,8 +347,8 @@ async function main(): Promise<void> {
       const result = await inventory({ baseUrl: target, out: values.out, maxPages: Number(values["max-pages"]), fixedUrls, vendor, alsoOrigins: values["also-origin"] });
       await recordWrites(values.out, permission);
       if (permission) {
-        process.stdout.write(`versturen toegestaan naar ${permission.origin}${permission.declaredBy ? `, verklaard door ${permission.declaredBy.name} (${permission.declaredBy.role})` : ""}\n`);
-        process.stdout.write(`budget voor versturen: ten hoogste ${permission.maxWrites} verzendingen naar die origin voor de hele run, alle agents en de veegronde samen${spacingNl(permission.spacingSeconds ?? DEFAULT_WRITE_SPACING_SECONDS)}. Zoveel berichten of formulieren krijgt de ontvanger ten hoogste.\n`);
+        process.stdout.write(`versturen toegestaan naar ${writeOriginsNl(permission)}${permission.declaredBy ? `, verklaard door ${permission.declaredBy.name} (${permission.declaredBy.role})` : ""}\n`);
+        process.stdout.write(`budget voor versturen: ten hoogste ${permission.maxWrites} verzendingen naar ${permission.alsoOrigins ? "die origins samen" : "die origin"} voor de hele run, alle agents en de veegronde samen${spacingNl(permission.spacingSeconds ?? DEFAULT_WRITE_SPACING_SECONDS)}. Zoveel berichten of formulieren krijgt de ontvanger ten hoogste.\n`);
         // Say where the declaration ends up, so nobody finds their name somewhere they did not expect.
         if (permission.declaredBy) process.stdout.write(`let op: de naam staat in manifest.json van deze run; het rapport en de verklaring noemen alleen de functie (${permission.declaredBy.role}). Wie de map van de run deelt of publiceert, deelt ook de naam.\n`);
       }

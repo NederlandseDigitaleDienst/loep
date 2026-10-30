@@ -2,7 +2,7 @@ import { chmodSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync
 import { basename, dirname, join } from "node:path";
 import type { Page } from "playwright";
 import { readJson, writeJson } from "./canonical.ts";
-import { isLocalHost, writesForRun, type WritePermission } from "./writes.ts";
+import { isLocalHost, writeOriginsOf, writesForRun, type WritePermission } from "./writes.ts";
 
 /**
  * A site behind a login. A person logs in, in a browser on a screen; the toolbox takes over
@@ -164,7 +164,7 @@ export async function storeLoginSession(runDir: string, session: LoginSession): 
  */
 export function loginRefusalNl(origin: string, writes: WritePermission | null): string | null {
   if (isLocalHost(new URL(origin).hostname)) return null;
-  if (writes && !writes.local && writes.declaredBy && writes.origin === origin) return null;
+  if (writes && !writes.local && writes.declaredBy && writeOriginsOf(writes).includes(origin)) return null;
   return (
     `deze run heeft een inlogsessie voor ${origin}, en dat is geen lokaal adres. Achter een inlog verandert bijna elke klik iets en tonen schermafbeeldingen gegevens van het account. ` +
     `Een ingelogde site wordt daarom alleen onderzocht op een verklaarde testomgeving: begin de run met inventory <adres> --out <run> --test-environment ${origin} --declared-by "<naam>, <functie>". ` +
