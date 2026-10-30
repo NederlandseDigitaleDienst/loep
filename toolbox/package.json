@@ -34,6 +34,7 @@
     "dom-accessibility-api": "0.7.1",
     "eld": "2.1.0",
     "html-validate": "11.16.4",
+    "mockttp": "4.6.5",
     "playwright": "1.63.0",
     "pngjs": "7.0.0",
     "tabbable": "6.5.1",
