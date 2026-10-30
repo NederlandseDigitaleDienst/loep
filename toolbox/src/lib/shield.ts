@@ -300,10 +300,12 @@ export interface ScanResult {
 
 /** Look for every secret of a run in every other file of the run, also in binary files and in file names. */
 export function scanRun(runDir: string): ScanResult {
-  const file = readShieldFile(runDir);
-  const secrets = file ? [...file.secrets.map((pair) => pair.real), file.address] : [];
-  const needles = secrets.map((secret) => searchedSpellings(secret).map((spelled) => Buffer.from(spelled)));
   const result: ScanResult = { files: 0, bytes: 0, hits: [], compressed: 0 };
+  const file = readShieldFile(runDir);
+  // A run without a mailbox has nothing to look for, and a seal reads every file already.
+  if (!file) return result;
+  const secrets = [...file.secrets.map((pair) => [pair.real, ...(pair.spelled ?? [])]), [file.address]];
+  const needles = secrets.map((forms) => [...new Set(forms.flatMap(searchedSpellings))].map((spelled) => Buffer.from(spelled)));
   for (const path of walk(runDir)) {
     const name = relative(runDir, path).split(sep).join("/");
     if (name === MAILBOX_SECRETS_FILE || name === `${MAILBOX_SECRETS_FILE}.tmp`) continue;

@@ -542,6 +542,17 @@ test("10: a token in a fragment stays there as an alias, and two links do not be
   }
 });
 
+test("11: a run without a mailbox is not read again for a seal", () => {
+  const run = mkdtempSync(join(tmpdir(), "loep-grens-"));
+  try {
+    writeFileSync(join(run, "groot.bin"), Buffer.alloc(1000));
+    assert.deepEqual(scanRun(run), { files: 0, bytes: 0, hits: [], compressed: 0 });
+    assert.equal(existsSync(join(run, MAILBOX_SECRETS_FILE)), false);
+  } finally {
+    rmSync(run, { recursive: true, force: true });
+  }
+});
+
 /** A server without UIDPLUS: what is marked stays, and a search for what is marked finds it. */
 async function imapWithoutUidplus(raw: Buffer): Promise<{ port: number; close: () => Promise<void> }> {
   const deleted = new Set<number>();
