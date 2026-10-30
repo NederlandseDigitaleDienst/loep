@@ -647,7 +647,7 @@ test("cleaning up removes the registration through the site, shows it is gone, w
   const box = memoryBox([mailFor(`${origin}/voorkeuren/?token=${TOKEN}`)]);
   try {
     await mailWait(run, { mailbox: box });
-    const cleanup = await mailCleanup(run, { mailbox: box, browser });
+    const cleanup = await mailCleanup(run, { mailbox: box, browser, settleMs: 0 });
     assert.equal(cleanup.site.outcome, "verwijderd");
     assert.equal(registered, false);
     assert.equal(cleanup.mail.left, 0);
@@ -663,7 +663,7 @@ test("cleaning up removes the registration through the site, shows it is gone, w
     assert.ok(!limits.includes(ADDRESS));
     assert.deepEqual(inFiles(run, TOKEN), []);
     // Run again, what was proved stays proved.
-    assert.equal((await mailCleanup(run, { mailbox: box, browser })).complete, true);
+    assert.equal((await mailCleanup(run, { mailbox: box, browser, settleMs: 0 })).complete, true);
   } finally {
     rmSync(run, { recursive: true, force: true });
   }
@@ -674,7 +674,7 @@ test("after a run that broke off a new process cleans up, from what is in the ru
   const box = memoryBox([mailFor(`${origin}/voorkeuren/?token=${TOKEN}`)]);
   try {
     // Nothing else happened: no wait, no session. The mail is still in the mailbox.
-    const cleanup = await mailCleanup(run, { mailbox: box, browser });
+    const cleanup = await mailCleanup(run, { mailbox: box, browser, settleMs: 0 });
     assert.equal(cleanup.complete, true);
     assert.equal(cleanup.mail.removed, 1);
     assert.equal(registered, false);
@@ -688,7 +688,7 @@ test("a registration that cannot be removed is said in the report, and the comma
   const box = memoryBox([mailFor(`${origin}/geen-knop/?token=${TOKEN}`)]);
   try {
     await mailWait(run, { mailbox: box });
-    const cleanup = await mailCleanup(run, { mailbox: box, browser });
+    const cleanup = await mailCleanup(run, { mailbox: box, browser, settleMs: 0 });
     assert.equal(cleanup.site.outcome, "mislukt");
     assert.equal(cleanup.complete, false);
     assert.match(cleanupLinesNl(cleanup).at(-1)!, /ER BLEEF IETS ACHTER/);
@@ -704,7 +704,7 @@ test("a mailbox that does not answer does not stop the rest, and the report says
   try {
     await mailWait(run, { mailbox: good });
     const broken: Mailbox = { kind: "mailpit", fetch: async () => Promise.reject(new Error("geen verbinding")), remove: async () => 0 };
-    const cleanup = await mailCleanup(run, { mailbox: broken, browser });
+    const cleanup = await mailCleanup(run, { mailbox: broken, browser, settleMs: 0 });
     assert.equal(cleanup.site.outcome, "verwijderd");
     assert.equal(cleanup.mail.left, null);
     assert.equal(cleanup.complete, false);
@@ -727,7 +727,7 @@ test("a sealed run is not cleaned up in place", async () => {
   const run = await mailboxRun(origin);
   try {
     await seal(run);
-    await assert.rejects(mailCleanup(run, { mailbox: memoryBox([]), browser }), /verzegeld/);
+    await assert.rejects(mailCleanup(run, { mailbox: memoryBox([]), browser, settleMs: 0 }), /verzegeld/);
   } finally {
     rmSync(run, { recursive: true, force: true });
   }

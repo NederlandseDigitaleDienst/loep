@@ -140,7 +140,9 @@ function fetchedMessages(reply: Reply): RawMail[] {
     const date = /\bINTERNALDATE "([^"]+)"/i.exec(line.text)?.[1];
     const raw = line.literals[0];
     if (!uid || !raw) return [];
-    return [{ id: uid, receivedAt: date ? Date.parse(date) : Date.now(), raw }];
+    const received = date ? Date.parse(date) : Number.NaN;
+    // A date that cannot be read may not make a message disappear: without one it counts as just arrived.
+    return [{ id: uid, receivedAt: Number.isNaN(received) ? Date.now() : received, raw }];
   });
 }
 
@@ -165,15 +167,18 @@ export function imapMailbox(server: MailServer, credentials: MailCredentials): M
       connection.close();
     }
   };
+  const find = (flag: "UNDELETED" | "DELETED", address: string, since: Date): Promise<RawMail[]> =>
+    session(async (connection) => {
+      const uids = searchResults(await connection.run(`UID SEARCH ${flag} SINCE ${searchDate(since)} TO ${quoted(address)}`, "het zoeken"));
+      if (uids.length === 0) return [];
+      // A peek leaves the message unread: reading is not what this flow is there to change.
+      return fetchedMessages(await connection.run(`UID FETCH ${uids.join(",")} (UID INTERNALDATE BODY.PEEK[]<0.${MAX_MESSAGE_BYTES}>)`, "het ophalen"));
+    });
   return {
     kind: "imap",
-    fetch: (address, since) =>
-      session(async (connection) => {
-        const uids = searchResults(await connection.run(`UID SEARCH UNDELETED SINCE ${searchDate(since)} TO ${quoted(address)}`, "het zoeken"));
-        if (uids.length === 0) return [];
-        // A peek leaves the message unread: reading is not what this flow is there to change.
-        return fetchedMessages(await connection.run(`UID FETCH ${uids.join(",")} (UID INTERNALDATE BODY.PEEK[]<0.${MAX_MESSAGE_BYTES}>)`, "het ophalen"));
-      }),
+    fetch: (address, since) => find("UNDELETED", address, since),
+    // A server without UIDPLUS keeps what was marked; `mailCleanup` says so instead of calling it gone.
+    marked: (address, since) => find("DELETED", address, since),
     remove: (ids) =>
       ids.length === 0
         ? Promise.resolve(0)

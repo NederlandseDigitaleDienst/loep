@@ -207,9 +207,10 @@ export type SiteCleanup = "verwijderd" | "niet aangetoond" | "mislukt" | "geen l
 export interface MailboxCleanup {
   at: string;
   site: { outcome: SiteCleanup; noteNl: string; steps: CleanupStep[] };
-  mail: { removed: number; left: number | null; noteNl: string | null };
+  /** `left`: what the last look found. `marked`: what the server only marked as deleted. `checkedAt`: the moment of that look; mail after it is not seen. */
+  mail: { removed: number; left: number | null; marked?: number; checkedAt?: string; noteNl: string | null };
   scan: { files: number; bytes: number; hits: { file: string; secret: number }[]; compressed: number };
-  /** The test registration is shown to be gone, the mail is gone and no secret stands in the run. */
+  /** The test registration is shown to be gone, the mail is gone, also from the server, and no secret stands in the run. */
   complete: boolean;
 }
 
@@ -269,9 +270,11 @@ export function mailboxLimitationsNl(runDir: string): string[] {
 function cleanupNl(state: MailboxState | null): string {
   const cleanup = state?.cleanup;
   if (!cleanup) return "Opruimen: niet gedaan. Er kan een testaanmelding op de site en e-mail in de mailbox zijn achtergebleven.";
-  if (cleanup.complete) return `Opruimen: de testaanmelding is via de site zelf verwijderd, en dat is nagegaan; de e-mail is gewist, en de mailbox bevat niets meer voor dit onderzoek. Het bewijs staat in ${MAILBOX_STATE}.`;
-  const behind = [cleanup.site.outcome === "verwijderd" ? null : `op de site: ${cleanup.site.noteNl}`, cleanup.mail.left === 0 ? null : `in de mailbox: ${cleanup.mail.noteNl ?? "er staat nog e-mail"}`, cleanup.scan.hits.length > 0 ? `in de run: een persoonlijke link staat in ${[...new Set(cleanup.scan.hits.map((hit) => hit.file))].join(", ")}` : null].filter(Boolean);
-  return `Er bleef iets achter na het opruimen, ${behind.join("; ")}. Wie over de site of de mailbox gaat, moet dat nog weghalen.`;
+  const checked = cleanup.mail.checkedAt ? ` Dat is voor het laatst nagegaan op ${cleanup.mail.checkedAt}: wat de site daarna nog stuurde, staat er misschien nog.` : "";
+  if (cleanup.complete) return `Opruimen: de testaanmelding is via de site zelf verwijderd, en dat is nagegaan; de e-mail is gewist, en de mailbox bevatte niets meer voor dit onderzoek.${checked} Het bewijs staat in ${MAILBOX_STATE}.`;
+  const mailGone = cleanup.mail.left === 0 && (cleanup.mail.marked ?? 0) === 0;
+  const behind = [cleanup.site.outcome === "verwijderd" ? null : `op de site: ${cleanup.site.noteNl}`, mailGone ? null : `in de mailbox: ${cleanup.mail.noteNl ?? "er staat nog e-mail"}`, cleanup.scan.hits.length > 0 ? `in de run: een persoonlijke link staat in ${[...new Set(cleanup.scan.hits.map((hit) => hit.file))].join(", ")}` : null].filter(Boolean);
+  return `Er bleef iets achter na het opruimen, ${behind.join("; ")}.${checked} Wie over de site of de mailbox gaat, moet dat nog weghalen.`;
 }
 
 /**

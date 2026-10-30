@@ -478,6 +478,120 @@ async function cleaned(handle: Parameters<typeof scriptedSite>[0], extra: Partia
   }
 }
 
+test("7: a link that works once is no proof that the registration is gone", async () => {
+  let opened = 0;
+  const { cleanup, run } = await cleaned((url, method, send) => {
+    if (method === "POST") return send(303, "", { location: "/klaar" });
+    if (url.pathname === "/klaar" || url.pathname === "/verlopen") return send(200, "<h1>Klaar</h1>");
+    // The first opening shows the button; from then on the link is used, and nothing is removed by that.
+    return opened++ === 0 ? send(200, BUTTON(SPELLED)) : send(303, "", { location: "/verlopen" });
+  });
+  assert.equal(cleanup.site.outcome, "niet aangetoond", cleanup.site.noteNl);
+  assert.match(cleanup.site.noteNl, /twee keer hetzelfde/);
+  rmSync(run, { recursive: true, force: true });
+});
+
+test("7: a registration that answers 404 on the same address afterwards is gone", async () => {
+  let gone = false;
+  for (const status of [404, 410]) {
+    gone = false;
+    const { cleanup, run } = await cleaned((url, method, send) => {
+      if (method === "POST") {
+        gone = true;
+        return send(303, "", { location: "/klaar" });
+      }
+      if (url.pathname === "/klaar") return send(200, "<h1>Klaar</h1>");
+      return gone ? send(status, "<h1>Weg</h1>") : send(200, BUTTON(SPELLED));
+    });
+    assert.equal(cleanup.site.outcome, "verwijderd", String(status));
+    assert.match(cleanup.site.noteNl, new RegExp(String(status)));
+    rmSync(run, { recursive: true, force: true });
+  }
+});
+
+test("7: a redirect that was held back says nothing about the site", async () => {
+  let gone = false;
+  const { cleanup, run } = await cleaned((url, method, send) => {
+    if (method === "POST") {
+      gone = true;
+      return send(303, "", { location: "/klaar" });
+    }
+    if (url.pathname === "/klaar") return send(200, "<h1>Klaar</h1>");
+    // The server wants the browser out of the scope: the guard holds that back, and the page stays where it was.
+    return gone ? send(302, "", { location: `${otherOrigin}/buiten` }) : send(200, BUTTON(SPELLED));
+  });
+  assert.equal(cleanup.site.outcome, "niet aangetoond", cleanup.site.noteNl);
+  assert.match(cleanup.site.noteNl, /tegengehouden/);
+  assert.equal(otherHeard.length, 0);
+  rmSync(run, { recursive: true, force: true });
+});
+
+test("7: a page that looks the same afterwards shows nothing, and that is what the report says", async () => {
+  const { cleanup, run } = await cleaned((url, method, send) => {
+    if (method === "POST") return send(303, "", { location: "/voorkeuren" });
+    send(200, BUTTON(SPELLED));
+  });
+  assert.equal(cleanup.site.outcome, "niet aangetoond");
+  assert.equal(cleanup.complete, false);
+  assert.match(mailboxLimitationsNl(run).join(" "), /Er bleef iets achter/);
+  rmSync(run, { recursive: true, force: true });
+});
+
+test("7: a redirect elsewhere after the removal, by the site itself, is proof", async () => {
+  let gone = false;
+  const { cleanup, run } = await cleaned((url, method, send) => {
+    if (method === "POST") {
+      gone = true;
+      return send(303, "", { location: "/klaar" });
+    }
+    if (url.pathname === "/klaar" || url.pathname === "/verlopen") return send(200, "<h1>Klaar</h1>");
+    return gone ? send(303, "", { location: "/verlopen" }) : send(200, BUTTON(SPELLED));
+  });
+  assert.equal(cleanup.site.outcome, "verwijderd");
+  rmSync(run, { recursive: true, force: true });
+});
+
+test("8: a link held back for the time between two writes is tried again after that time", async () => {
+  let gone = false;
+  const site = await scriptedSite((url, method, send) => {
+    if (method === "POST") {
+      gone = true;
+      return send(303, "", { location: "/klaar" });
+    }
+    if (url.pathname === "/klaar") return send(200, "<h1>Klaar</h1>");
+    if (url.pathname === "/een") return send(200, "<h1>Niets te doen</h1>");
+    return gone ? send(404, "<h1>Weg</h1>") : send(200, BUTTON("x"));
+  });
+  const run = await mailboxRun(site.origin, { spacingSeconds: 2 });
+  const box = memoryBox([mailOf(`Link: ${site.origin}/een?token=${TOKEN.slice(0, 20)}abc\nLink: ${site.origin}/twee?token=${TOKEN.slice(0, 20)}def\n`)]);
+  try {
+    await mailWait(run, { mailbox: box });
+    const cleanup = await mailCleanup(run, { mailbox: box, browser: await launched("chromium"), settleMs: 0 });
+    assert.notEqual(cleanup.site.outcome, "mislukt", cleanup.site.noteNl);
+    assert.equal(gone, true);
+    assert.equal(cleanup.site.outcome, "verwijderd");
+  } finally {
+    await site.close();
+    rmSync(run, { recursive: true, force: true });
+  }
+});
+
+test("8: a link the budget refuses says that, and is no failure of the browser", async () => {
+  const site = await scriptedSite((_url, _method, send) => send(200, "<h1>Pagina</h1>"));
+  const run = await mailboxRun(site.origin, { maxWrites: 1 });
+  const box = memoryBox([mailOf(`Link: ${site.origin}/een?token=${TOKEN.slice(0, 20)}abc\nLink: ${site.origin}/twee?token=${TOKEN.slice(0, 20)}def\n`)]);
+  try {
+    await mailWait(run, { mailbox: box });
+    const cleanup = await mailCleanup(run, { mailbox: box, browser: await launched("chromium"), settleMs: 0 });
+    assert.equal(cleanup.site.outcome, "mislukt");
+    assert.match(cleanup.site.noteNl, /kon niet worden geopend/);
+    assert.match(cleanup.site.noteNl, /budget/);
+  } finally {
+    await site.close();
+    rmSync(run, { recursive: true, force: true });
+  }
+});
+
 test("3: a token with a plus or a lower-case escape does not stay in what the run keeps", async () => {
   for (const spelled of ["abc+def123GHIjklMNO", "abc%2fdef123GHI%2bjklMNO", "abc%2Fdef123GHI%2BjklMNO", "ab%2fcd%2Bef123456"]) {
     const run = await mailboxRun("http://127.0.0.1:1");
@@ -593,3 +707,59 @@ async function imapWithoutUidplus(raw: Buffer): Promise<{ port: number; close: (
   };
 }
 
+test("12: a mail a server only marked as deleted is not called gone", async () => {
+  const site = await scriptedSite((url, method, send) => {
+    if (method === "POST") return send(303, "", { location: "/klaar" });
+    if (url.pathname === "/klaar") return send(200, "<h1>Klaar</h1>");
+    send(200, BUTTON(SPELLED));
+  });
+  const run = await mailboxRun(site.origin);
+  const fake = await imapWithoutUidplus(mailOf(`Link: ${site.origin}/voorkeuren?token=${SPELLED}\n`).raw);
+  try {
+    const box = imapMailbox({ kind: "imap", host: "127.0.0.1", port: fake.port, tls: false }, { user: "toets", password: "x" });
+    const cleanup = await mailCleanup(run, { mailbox: box, browser: await launched("chromium"), settleMs: 0 });
+    assert.equal(cleanup.mail.left, 0);
+    assert.equal(cleanup.complete, false);
+    assert.match(cleanupLinesNl(cleanup).join("\n"), /alleen gemarkeerd/);
+    assert.match(mailboxLimitationsNl(run).join(" "), /in de mailbox: .*alleen gemarkeerd als verwijderd/);
+    assert.doesNotMatch(mailboxLimitationsNl(run).join(" "), /bevatte niets meer/);
+  } finally {
+    await fake.close();
+    await site.close();
+    rmSync(run, { recursive: true, force: true });
+  }
+});
+
+test("13: the mail that confirms a removal is wiped too, and the report says until when it looked", async () => {
+  let gone = false;
+  const site = await scriptedSite((url, method, send) => {
+    if (method === "POST") {
+      gone = true;
+      return send(303, "", { location: "/klaar" });
+    }
+    if (url.pathname === "/klaar") return send(200, "<h1>Klaar</h1>");
+    return gone ? send(404, "<h1>Weg</h1>") : send(200, BUTTON(SPELLED));
+  });
+  const run = await mailboxRun(site.origin);
+  const box = memoryBox([mailOf(`Link: ${site.origin}/voorkeuren?token=${SPELLED}\n`)]);
+  try {
+    await mailWait(run, { mailbox: box });
+    // A fetch that finds a late mail once the registration is gone, a moment after that.
+    let lateIn: number | null = null;
+    const fetchFirst = box.fetch;
+    box.fetch = async (address, since) => {
+      if (gone && lateIn === null) lateIn = Date.now() + 300;
+      if (lateIn !== null && Date.now() >= lateIn && !box.mails.some((mail) => mail.id === "laat")) box.mails.push(mailOf("Je bent afgemeld.", "laat"));
+      return fetchFirst(address, since);
+    };
+    const cleanup = await mailCleanup(run, { mailbox: box, browser: await launched("chromium"), settleMs: 1000, pollMs: 100 });
+    assert.ok(box.removed.includes("laat"), "the late mail was wiped");
+    assert.equal(cleanup.mail.left, 0);
+    assert.equal(cleanup.complete, true);
+    assert.ok(cleanup.mail.checkedAt);
+    assert.match(mailboxLimitationsNl(run).join(" "), /voor het laatst nagegaan/);
+  } finally {
+    await site.close();
+    rmSync(run, { recursive: true, force: true });
+  }
+});
