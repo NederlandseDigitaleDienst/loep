@@ -759,6 +759,75 @@ test("a mailbox that does not answer does not stop the rest, and the report says
   }
 });
 
+test("3: a mail that only comes in while the cleanup waits is read first, its link is used, and only then is it wiped", async () => {
+  const run = await mailboxRun(origin);
+  const mail = mailFor(`${origin}/voorkeuren/?token=${TOKEN}`);
+  const box = memoryBox([]);
+  let looks = 0;
+  const late: Mailbox = { ...box, fetch: async (address, since) => (++looks > 1 && !box.removed.includes(mail.id) ? [mail] : box.fetch(address, since)), remove: async (ids) => {
+    assert.ok(readMailboxState(run)!.messages.length > 0, "read before it is wiped");
+    return box.remove(ids);
+  } };
+  try {
+    const cleanup = await mailCleanup(run, { mailbox: late, browser, settleMs: 200, pollMs: 20 });
+    assert.equal(cleanup.site.outcome, "verwijderd", cleanup.site.noteNl);
+    assert.equal(registered, false, "the registration is gone through the link that came in late");
+    assert.deepEqual(box.removed, [mail.id]);
+    assert.equal(readMailboxState(run)!.links.length, 1);
+    assert.equal(cleanup.complete, true);
+  } finally {
+    rmSync(run, { recursive: true, force: true });
+  }
+});
+
+test("3: a mailbox that fails for a moment never leads to wiping what was not read", async () => {
+  const run = await mailboxRun(origin);
+  const mail = mailFor(`${origin}/voorkeuren/?token=${TOKEN}`);
+  const box = memoryBox([mail]);
+  let looks = 0;
+  const flaky: Mailbox = { ...box, fetch: async (address, since) => (++looks === 1 ? Promise.reject(new Error("verbinding verbroken")) : box.fetch(address, since)), remove: async (ids) => {
+    assert.ok(readMailboxState(run)!.messages.length > 0, "read before it is wiped");
+    return box.remove(ids);
+  } };
+  try {
+    const cleanup = await mailCleanup(run, { mailbox: flaky, browser, settleMs: 0 });
+    assert.equal(readMailboxState(run)!.messages.length, 1);
+    assert.deepEqual(box.removed, [mail.id]);
+    assert.equal(cleanup.mail.left, 0);
+    assert.equal(cleanup.site.outcome, "verwijderd", cleanup.site.noteNl);
+    assert.equal(cleanup.complete, true);
+  } finally {
+    rmSync(run, { recursive: true, force: true });
+  }
+});
+
+test("3: a mail that cannot be read stays where it is, the report says so, and running it again finishes the job", async () => {
+  const run = await mailboxRun(origin);
+  const mail = mailFor(`${origin}/voorkeuren/?token=${TOKEN}`);
+  const box = memoryBox([mail]);
+  const errors = process.stderr.write.bind(process.stderr);
+  // The folder for the text of a mail cannot be made: nothing of this mail can be taken in.
+  writeFileSync(join(run, "mailbox"), "");
+  process.stderr.write = (() => true) as typeof process.stderr.write;
+  try {
+    const first = await mailCleanup(run, { mailbox: box, browser, settleMs: 0 });
+    assert.deepEqual(box.removed, [], "it stays in the mailbox");
+    assert.equal(first.mail.left, 1);
+    assert.match(first.mail.noteNl!, /niet te lezen was en daarom niet is gewist/);
+    assert.match(cleanupLinesNl(first).join("\n"), /1 over/);
+    assert.equal(first.complete, false);
+    assert.match(mailboxLimitationsNl(run).join(" "), /in de mailbox: .*niet te lezen/);
+    rmSync(join(run, "mailbox"));
+    const second = await mailCleanup(run, { mailbox: box, browser, settleMs: 0 });
+    assert.deepEqual(box.removed, [mail.id]);
+    assert.equal(second.site.outcome, "verwijderd", second.site.noteNl);
+    assert.equal(second.complete, true, "the promise that it can be run again");
+  } finally {
+    process.stderr.write = errors;
+    rmSync(run, { recursive: true, force: true });
+  }
+});
+
 test("a cleanup that never ran is said too", async () => {
   const run = await mailboxRun(origin);
   try {

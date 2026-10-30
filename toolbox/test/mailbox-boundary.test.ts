@@ -556,6 +556,86 @@ test("7: a redirect that was held back says nothing about the site", async () =>
   rmSync(run, { recursive: true, force: true });
 });
 
+test("9: a browser that does not start leaves an outcome, and the mail, the search and mailbox.json go on", async () => {
+  const site = await scriptedSite((_url, _method, send) => send(200, "<h1>Pagina</h1>"));
+  const run = await mailboxRun(site.origin);
+  const box = memoryBox([mailOf(`Je link: ${site.origin}/voorkeuren?token=${SPELLED}\n`)]);
+  try {
+    const cleanup = await mailCleanup(run, { mailbox: box, launch: () => Promise.reject(new Error("browser start niet\nmet meer regels")), settleMs: 0 });
+    assert.equal(cleanup.site.outcome, "mislukt");
+    assert.match(cleanup.site.noteNl, /browser start niet$/);
+    assert.equal(cleanup.mail.left, 0);
+    assert.equal(cleanup.mail.removed, 1);
+    assert.equal(typeof cleanup.scan.files, "number");
+    assert.equal(cleanup.complete, false);
+    assert.deepEqual(readMailboxState(run)!.cleanup, cleanup);
+    assert.equal((await mailCleanup(run, { mailbox: box, browser: await launched("chromium"), settleMs: 0 })).site.outcome, "mislukt", "and it can run again");
+  } finally {
+    await site.close();
+    rmSync(run, { recursive: true, force: true });
+  }
+});
+
+/** A browser whose contexts do what a test says, for what cannot be brought about on a real one. */
+function browserWith(real: Browser, change: (context: BrowserContext) => BrowserContext): Browser {
+  return new Proxy(real, {
+    get(target, name) {
+      if (name === "newContext") return async (...args: Parameters<Browser["newContext"]>) => change(await target.newContext(...args));
+      const value = Reflect.get(target, name) as unknown;
+      return typeof value === "function" ? value.bind(target) : value;
+    },
+  });
+}
+
+test("9: a boundary that refuses leaves an outcome, and the rest goes on", async () => {
+  const site = await scriptedSite((_url, _method, send) => send(200, "<h1>Pagina</h1>"));
+  const run = await mailboxRun(site.origin);
+  const box = memoryBox([mailOf(`Je link: ${site.origin}/voorkeuren?token=${SPELLED}\n`)]);
+  const refusing = new Proxy(await launched("chromium"), { get: (target, name) => (name === "newContext" ? () => Promise.reject(new Error("de grens weigert deze browser")) : (Reflect.get(target, name) as (...args: unknown[]) => unknown).bind(target)) });
+  try {
+    const cleanup = await mailCleanup(run, { mailbox: box, browser: refusing, settleMs: 0 });
+    assert.equal(cleanup.site.outcome, "mislukt");
+    assert.match(cleanup.site.noteNl, /grens weigert/);
+    assert.equal(cleanup.mail.left, 0);
+    assert.deepEqual(readMailboxState(run)!.cleanup, cleanup);
+  } finally {
+    await site.close();
+    rmSync(run, { recursive: true, force: true });
+  }
+});
+
+test("9: a guard that cannot be set closes its context, gives an outcome, and the rest goes on", async () => {
+  const site = await scriptedSite((_url, _method, send) => send(200, "<h1>Pagina</h1>"));
+  const run = await mailboxRun(site.origin);
+  const box = memoryBox([mailOf(`Je link: ${site.origin}/voorkeuren?token=${SPELLED}\n`)]);
+  const opened: BrowserContext[] = [];
+  const failing = browserWith(await launched("chromium"), (context) => {
+    let routes = 0;
+    // The first route is the one of `newContext`; the guard is the next one.
+    const changed = new Proxy(context, {
+      get(target, name) {
+        if (name === "route") return (...args: Parameters<BrowserContext["route"]>) => (++routes > 1 ? Promise.reject(new Error("de bewaking kon niet worden gezet")) : target.route(...args));
+        const value = Reflect.get(target, name) as unknown;
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+    opened.push(context);
+    return changed;
+  });
+  try {
+    const cleanup = await mailCleanup(run, { mailbox: box, browser: failing, settleMs: 0 });
+    assert.equal(cleanup.site.outcome, "mislukt");
+    assert.match(cleanup.site.noteNl, /bewaking kon niet worden gezet/);
+    assert.equal(cleanup.mail.left, 0);
+    assert.deepEqual(readMailboxState(run)!.cleanup, cleanup);
+    assert.equal(opened.at(-1)!.pages().length, 0);
+    await assert.rejects(opened.at(-1)!.newPage(), /closed/, "the context is closed");
+  } finally {
+    await site.close();
+    rmSync(run, { recursive: true, force: true });
+  }
+});
+
 test("7: a page that looks the same afterwards shows nothing, and that is what the report says", async () => {
   const { cleanup, run } = await cleaned((url, method, send) => {
     if (method === "POST") return send(303, "", { location: "/voorkeuren" });
