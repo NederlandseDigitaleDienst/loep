@@ -16,7 +16,7 @@ Kort:
 - Een poortwachter die een heel criterium overslaat, werkte in geen enkele vorm. Op het hele dossier scheidt hij niet (AUC 0,5). Per rij van het dossier ziet een Jev-kloon soms precies de foute rij, maar zet hij goede rijen bijna even hoog: bij 95% recall bespaart dat 3%.
 - Op één plek werkt het wel een beetje: beslissen of een oordeel "voldoet" of "niet van toepassing" nog een verifieerder nodig heeft. De verifieerder kost daar 53 dollar per onderzoek en veranderde in 245 van de 251 gevallen niets. Een Jev-kloon zet de 6 gevallen waarin hij wel iets veranderde hoger dan bij toeval (p = 0,006). Een drempel die achteraf is gekozen, bespaart 28 dollar per onderzoek (13%) zonder er een te missen; een drempel die van de ene site naar de andere gaat, mist er 1 tot 3 van de 6.
 - Lokaal kan het: een Jev-kloon van 4 miljard parameters doet op een M2 Pro met 16 GB een oordeel met vier vragen in 4 seconden, in ongeveer 4 GB. Jev zelf draait niet lokaal.
-- Er zijn te weinig gevallen om een drempel te kiezen die een miskans garandeert. Het voorstel is de poortwachter een tijd mee te laten lopen zonder dat hij iets overslaat, zodat elke run er gelabelde gevallen bij levert.
+- Er zijn te weinig gevallen om een drempel te kiezen die een miskans garandeert, en bij bijna één gevaarlijk geval per run duurt het lang voor dat er genoeg zijn. Besluit: niets bouwen. Elke run bewaart de labels al, dus deze meting kan later met dezelfde scripts opnieuw.
 
 ## Vraag 1: waar de tokens heen gaan
 
@@ -183,12 +183,23 @@ Niet gedraaid, en waarom:
 
 Voor de verifieerder-poort is een 4B-decoder genoeg, en die draait lokaal. Welke kloon het is, maakt in deze meting minder uit dan verwacht: Plumb scoort op JevBench hoger dan JevK5, maar hier slechter. De grotere stap is het model op deze taak afstemmen, zoals de nabouwsels het zelf doen: een temperatuur of een kleine LoRA op de paren `oordeel.json` en `final.json`. Daar zijn er nu 390 van, met 6 gevaarlijke. Een Nederlandse encoder als Vela-0.8B is de tweede kandidaat zodra eigen code van een model mag draaien.
 
-## Voorstel
+## Besluit
 
-1. **De verifieerder-poort laten meelopen zonder dat hij iets overslaat.** In elke run scoort hij elk oordeel "voldoet" en "n.v.t." en legt hij de score vast; de verifieerder draait gewoon. Dat kost een paar minuten per run en levert per run ongeveer 36 gelabelde gevallen, waarvan bij het huidige tempo bijna één gevaarlijk.
-2. **Pas overslaan als de drempel een miskans garandeert.** Met een Learn-then-Test-grens op de gevaarlijke gevallen van sites die het model niet zag. Daarvoor zijn er tientallen nodig, geen zes. Ook daarna gaat een willekeurige steekproef van wat de poort overslaat toch naar een verifieerder, om te zien of de recall blijft.
-3. **Afstemmen op eigen data** zodra er een paar dozijn gevaarlijke gevallen zijn.
-4. **Het criterium overslaan en de poort per rij niet verder volgen.** De meting geeft daar geen aanwijzing dat een beter model het oplost: het probleem is dat een criterium op honderd rijen steunt.
+Er komt nu geen poortwachter in loep.
+
+- **De winst is klein en nog niet veilig.** Hooguit 13% van een onderzoek, met een drempel die achteraf is gekozen; op een nieuwe site mist de poort 1 tot 3 van de 6 gevallen. Een gemiste verifieerder bij 2.4.3 of 2.4.7 is een onterecht "voldoet" over focus en toetsenbord in een getekend rapport.
+- **De data komt langzaam.** Voor een miskans van 5% met 95% zekerheid zijn ongeveer 60 gevaarlijke gevallen nodig zonder één misser. Bij bijna één per run zijn dat zo'n 70 runs.
+- **Meelopen is niet nodig.** Elke run bewaart `oordeel.json` en `final.json` al. De meting hierboven draait op nieuwe runs opnieuw in een kwartier, zonder iets in loep te veranderen.
+- **Het zou loep zwaarder maken**: een afhankelijkheid van MLX en Apple Silicon en een model van enkele gigabytes, voor een stap die ook op Linux moet draaien.
+
+De meting gaat opnieuw, met de scripts in [gate/](gate/), als een van deze dingen gebeurt:
+
+1. Er zijn ongeveer 30 runs bij gekomen sinds deze meting.
+2. Er is een Jev-achtig model dat Nederlands en toestanden van enkele duizenden tokens aantoonbaar aankan, en dat zonder eigen code uit zijn repository draait.
+
+Een heel criterium overslaan en de poort per rij volgen we niet verder. De meting geeft geen aanwijzing dat een beter model dat oplost: een criterium steunt op honderd rijen, en één vals alarm stuurt het hele criterium door.
+
+Voor dezelfde kosten ligt een andere route klaar: de verifieerders op Sonnet, zoals voorgesteld in [modelkeuze.md](modelkeuze.md), met een meetopzet op de sleutel van de testsite.
 
 ## Hoe de cijfers zijn gemaakt
 
