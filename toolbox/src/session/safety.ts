@@ -446,13 +446,21 @@ export async function guardedDownload(scope: Scope, guard: Guard, address: strin
 const runOf = (scope: Scope): string | undefined => scope.runDir ?? scope.writes?.runDir;
 
 /**
- * A navigation to a guarded address takes from the budget like any write: whether it is
- * refused, and noted as refused. Asked once per navigation, by the guard that passes it on.
+ * A navigation to a guarded address takes from the budget like any write, and a session that may
+ * not send may not open one at all: whether it is refused, and noted as refused. Asked once per
+ * navigation, by the guard that passes it on.
  */
 function linkRefused(scope: Scope, guard: Guard, request: Request): boolean {
   const url = request.url();
-  const link = request.isNavigationRequest() && scope.writes ? (shieldOf(runOf(scope), url)?.guardedId(url) ?? null) : null;
-  const refused = link ? claimLink(scope.writes!, url, link, guard.sender) : null;
+  const shield = request.isNavigationRequest() ? shieldOf(runOf(scope), url) : null;
+  if (!shield) return false;
+  if (!scope.writes) {
+    if (!shield.touchesGuarded(url)) return false;
+    guard.blocked.push({ at: new Date().toISOString(), kind: "method", method: request.method(), url: url.slice(0, MAX_URL), resourceType: request.resourceType(), reasonNl: "deze sessie mag niet versturen, en een persoonlijke link openen telt als versturen" });
+    return true;
+  }
+  const link = shield.guardedId(url);
+  const refused = link ? claimLink(scope.writes, url, link, guard.sender) : null;
   if (refused) guard.blocked.push({ at: new Date().toISOString(), kind: "method", method: request.method(), url: url.slice(0, MAX_URL), resourceType: request.resourceType(), reasonNl: refused.reasonNl, writeBudget: refused.budget });
   return refused !== null;
 }

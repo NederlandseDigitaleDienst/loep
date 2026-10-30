@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { createServer as createTcpServer, type AddressInfo, type Socket } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, beforeEach, test } from "node:test";
 import type { Browser } from "playwright";
+import { REFUSED_STATUS } from "../src/browser/boundary.ts";
 import { launchBrowser, loadPage, newContext } from "../src/browser/session.ts";
 import { cleanupLinesNl, mailCleanup, mailWait, startMailbox } from "../src/commands/mail.ts";
 import { seal } from "../src/commands/verify.ts";
@@ -16,7 +17,7 @@ import { agentMailboxNl, confirmMailbox, decideMailbox, linkKind, mailboxForRun,
 import { isFor, linksOf, looksSecret, parseMail, secretsInText, secretsInUrl } from "../src/lib/mailparse.ts";
 import { writeManifest } from "../src/lib/manifest.ts";
 import { notHashed } from "../src/lib/seal.ts";
-import { aliasFor, leakRefusalNl, registerSecret, scanRun, searchedSpellings, Shield, shieldForRun } from "../src/lib/secrets.ts";
+import { aliasFor, leakRefusalNl, readSecretEvents as eventsOf, registerSecret, scanRun, searchedSpellings, Shield, shieldForRun } from "../src/lib/secrets.ts";
 import { decideWrites, recordWrites, writeAccess, writesForRun, type WritePermission } from "../src/lib/writes.ts";
 import { guardContext, guardedDownload, guardRedirects, scopeForRun, TEST_VALUES, type Guard } from "../src/session/safety.ts";
 
@@ -618,6 +619,45 @@ test("a link to an origin outside the permission gets no alias and cannot be ope
     const kept = readFileSync(join(run, "mailbox", "bericht-1.txt"), "utf8");
     assert.ok(!kept.includes(TOKEN) && !kept.includes("aanvaller.example"));
     assert.match(kept, /niet gevolgd/);
+  } finally {
+    rmSync(run, { recursive: true, force: true });
+  }
+});
+
+test("2: a session that may not send opens no personal link, and the boundary fills in no real value", async () => {
+  const run = await mailboxRun(origin);
+  const recheck = join(run, "nalopen");
+  mkdirSync(recheck);
+  try {
+    await mailWait(run, { mailbox: memoryBox([mailFor(`${origin}/voorkeuren/?token=${TOKEN}`)]) });
+    const url = readMailboxState(run)!.links[0]!.url;
+    // What `recheck` makes: the register of the run by a link, its site, and a manifest without a permission.
+    symlinkSync(join(run, RUN_SECRETS_FILE), join(recheck, RUN_SECRETS_FILE));
+    copyFileSync(join(run, "inventory.json"), join(recheck, "inventory.json"));
+    writeFileSync(join(recheck, "manifest.json"), JSON.stringify({ steps: [] }));
+    const scope = await scopeForRun(recheck, {});
+    assert.equal(scope.writes, undefined);
+    const guard: Guard = { blocked: [], outsideScopeLoaded: {}, sender: "test" };
+    const context = await newContext(browser, { runDir: recheck });
+    await guardContext(context, scope, guard);
+    const page = await context.newPage();
+    await guardRedirects(page, scope, guard);
+    try {
+      await loadPage(page, `${origin}/`);
+      seen = [];
+      await loadPage(page, url).catch(() => undefined);
+      assert.equal(seen.length, 0, "the site heard nothing");
+      assert.match(guard.blocked.at(-1)?.reasonNl ?? "", /mag niet versturen/);
+      // A script does not navigate, so only the boundary sees this. The same goes for another address with the same code.
+      const alias = new URL(url).searchParams.get("token")!;
+      for (const address of [url, `${origin}/afmelden/?token=${alias}`]) assert.equal(await page.evaluate((target) => fetch(target).then((answer) => answer.status), address), REFUSED_STATUS, address);
+      assert.equal(seen.length, 0, "and neither of those reached it");
+      assert.ok(!seen.some((entry) => entry.url.includes(TOKEN)));
+      assert.ok(eventsOf(recheck).some((event) => event.kind === "refused"));
+      assert.equal(await page.evaluate(() => fetch("/verlopen/").then((answer) => answer.status)), 200, "the rest of the site stays open");
+    } finally {
+      await context.close();
+    }
   } finally {
     rmSync(run, { recursive: true, force: true });
   }

@@ -6,7 +6,7 @@ import type { CompletedRequest, Mockttp } from "mockttp";
 import type { Browser, BrowserContext, BrowserContextOptions } from "playwright";
 import { renewSessionSecrets } from "../lib/login.ts";
 import { noteSecretEvent, shieldForRun, type Shield } from "../lib/secrets.ts";
-import { isLocalHost } from "../lib/writes.ts";
+import { isLocalHost, writesForRun } from "../lib/writes.ts";
 
 /*
  * The boundary of `lib/secrets.ts`. A route of Playwright does not see what the browser asks by
@@ -93,6 +93,9 @@ const headersInward = (shield: Shield, headers: IncomingHttpHeaders): Record<str
       .filter((entry): entry is [string, string | string[]] => entry[1] !== undefined)
       .map(([name, value]) => [name, Array.isArray(value) ? value.map((part) => headerInward(shield, name, part)) : headerInward(shield, name, value)]),
   );
+
+/** Why a value of a guarded address is not filled in: without the permission to send, such an address may not be opened, and the guard of a page does not see every request. */
+const GUARDED_REFUSED_NL = "deze run mag niet versturen, en een persoonlijke link openen telt als versturen: de echte waarde is niet ingevuld";
 
 const refusalAnswer = (reasonNl: string) => ({ statusCode: REFUSED_STATUS, statusMessage: "Geweigerd door de grens van loep", headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store", [REFUSED_HEADER]: encodeURIComponent(reasonNl) }, body: `loep: ${reasonNl}\n` });
 
@@ -327,8 +330,15 @@ class Boundary {
     return { ...headers, cookie: headers.cookie.split("; ").map((pair) => this.cookies.get(`${origin}\n${pair}`) ?? pair).join("; ") };
   }
 
+  /** Whether this address may not get its real values, because this run may not send. */
+  private guardedRefused(shield: Shield, url: string): boolean {
+    return shield.touchesGuarded(url) && !writesForRun(this.runDir);
+  }
+
   private async swapRequest(request: CompletedRequest) {
-    const reaching = shieldForRun(this.runDir)!.reaching(request.url);
+    const shield = shieldForRun(this.runDir)!;
+    if (this.guardedRefused(shield, request.url)) return { response: this.refuse(request.url, GUARDED_REFUSED_NL) };
+    const reaching = shield.reaching(request.url);
     const sent = request.body.buffer;
     if (sent.length > MAX_REQUEST_BYTES) return { response: this.refuse(request.url, "dit verzoek is te groot om af te schermen, en is niet verstuurd") };
     const contentType = [request.headers["content-type"] ?? ""].flat()[0]!;
@@ -384,6 +394,10 @@ class Boundary {
     }
     const shield = shieldForRun(this.runDir);
     const covered = shield?.covers(request.url) ? shield : null;
+    if (covered && this.guardedRefused(covered, request.url)) {
+      noteSecretEvent(this.runDir, { kind: "refused", where: request.url, noteNl: GUARDED_REFUSED_NL });
+      return void socket.destroy();
+    }
     if (covered) {
       const reaching = covered.reaching(request.url);
       const httpOrigin = url.origin.replace(/^ws/, "http");

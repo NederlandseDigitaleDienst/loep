@@ -249,6 +249,7 @@ export class Shield {
   private readonly toRealInForm: [string, string][];
   /** The longest first: a value inside another value may not break it up. */
   private readonly toAlias: { pattern: RegExp; alias: string; short: boolean; asWord: boolean; source: string }[];
+  private readonly guardedAliases: string[];
   private readonly within = new Map<string, Shield>();
 
   constructor(file: Pick<SecretsFile, "secrets"> & Partial<Pick<SecretsFile, "guarded">>) {
@@ -271,6 +272,7 @@ export class Shield {
         return { pattern: valuePattern(value, asWord), alias: secret.alias, short: secret.real.length < MIN_BINARY_VALUE, asWord, source: secret.source };
       }),
     );
+    this.guardedAliases = this.tokens.filter((alias) => (file.guarded ?? []).some((address) => address.url.includes(alias)));
   }
 
   /** Whether the boundary has to swap for this address: some value may go there. */
@@ -349,6 +351,11 @@ export class Shield {
     } catch {
       return null;
     }
+  }
+
+  /** Whether an address is a guarded one, or leads the code of one to the site in another way: a site keeps that code in links of its own. */
+  touchesGuarded(url: string): boolean {
+    return this.guardedId(url) !== null || this.guardedAliases.some((alias) => url.includes(alias));
   }
 
   /** Whether an address has an alias in it. */
