@@ -79,11 +79,14 @@ function collect(raw: Buffer, into: { plain: string[]; html: string[]; parts: nu
 
 const ENTITIES: Record<string, string> = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " " };
 
+const MAX_CODE_POINT = 0x10ffff;
+
 export const decodeEntities = (text: string): string =>
   text.replace(/&(?:#(\d+)|#x([0-9a-f]+)|([a-z]+));/gi, (whole, decimal?: string, hex?: string, name?: string) => {
-    if (decimal) return String.fromCodePoint(Number(decimal));
-    if (hex) return String.fromCodePoint(parseInt(hex, 16));
-    return ENTITIES[name!.toLowerCase()] ?? whole;
+    if (name) return ENTITIES[name.toLowerCase()] ?? whole;
+    // A number the mail made up stays as it stands: one mail may not stop the reading of the others.
+    const code = decimal ? Number(decimal) : parseInt(hex!, 16);
+    return code <= MAX_CODE_POINT ? String.fromCodePoint(code) : whole;
   });
 
 const textOfHtml = (html: string): string =>
@@ -96,9 +99,15 @@ const textOfHtml = (html: string): string =>
     .replace(/[ \t]+/g, " ")
     .trim();
 
+/** Read a mail. A body that cannot be read leaves a mail with its headers and without text: who it is for is still known, and one mail never stops the others. */
 export function parseMail(raw: Buffer): ParsedMail {
   const into = { plain: [] as string[], html: [] as string[], parts: 0 };
-  const headers = collect(raw, into, 0);
+  let headers: Map<string, string[]>;
+  try {
+    headers = collect(raw, into, 0);
+  } catch {
+    return { headers: parseHeaders(splitHead(raw).head), text: "", html: "" };
+  }
   const html = into.html.join("\n");
   return { headers, text: into.plain.length > 0 ? into.plain.join("\n") : textOfHtml(html), html };
 }

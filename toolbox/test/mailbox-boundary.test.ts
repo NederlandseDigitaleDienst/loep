@@ -502,6 +502,28 @@ test("3: a page may spell a token otherwise than the mail did, and it is an alia
   assert.equal(shield.outwardForm(Buffer.from(`t=${alias}`)).toString(), "t=abc+def123GHI", "a form with a space sends a plus");
 });
 
+test("9: a number the mail made up breaks nothing", () => {
+  for (const entity of ["&#9999999;", "&#xFFFFFFF;", `&#${"9".repeat(400)};`]) {
+    const mail = parseMail(Buffer.from(`To: ${ADDRESS}\r\nContent-Type: text/html\r\n\r\n<p>${entity}</p><a href="https://site.example.nl/${entity}">x</a>`));
+    assert.match(mail.text, new RegExp(entity.slice(0, 4)));
+  }
+});
+
+test("9: one broken mail stops neither waiting nor cleaning up, and the others are read", async () => {
+  const site = await scriptedSite((_url, _method, send) => send(200, "<h1>Pagina</h1>"));
+  const run = await mailboxRun(site.origin);
+  const broken: RawMail = { id: "kapot", receivedAt: Date.parse("2026-10-30T10:00:00Z"), raw: Buffer.from(`To: ${ADDRESS}\r\nContent-Type: text/html\r\n\r\n<p>&#9999999;</p>`) };
+  const box = memoryBox([broken, mailOf(`Link: ${site.origin}/voorkeuren?token=${SPELLED}\n`, "goed")]);
+  try {
+    const answer = await mailWait(run, { mailbox: box });
+    assert.equal(answer.links.length, 1);
+    await mailCleanup(run, { mailbox: memoryBox([broken]), browser: await launched("chromium"), settleMs: 0 });
+  } finally {
+    await site.close();
+    rmSync(run, { recursive: true, force: true });
+  }
+});
+
 test("10: a token in a fragment stays there as an alias, and two links do not become one", async () => {
   const run = await mailboxRun("http://127.0.0.1:1");
   const second = "Yx8wV2mN5qR7tP3kL9sD4fG6hJ1bC0aE";

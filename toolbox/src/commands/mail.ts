@@ -108,6 +108,19 @@ export function absorbMail(runDir: string, file: ShieldFile, state: MailboxState
   state.messages.push({ at: new Date(message.receivedAt).toISOString(), links: ids, text });
 }
 
+/** Take in what came, each mail on its own: one that cannot be taken in stays in the mailbox, and the others are read. */
+function absorbAll(runDir: string, file: ShieldFile, state: MailboxState, received: ReceivedMail[]): ReceivedMail[] {
+  return received.filter((message) => {
+    try {
+      absorbMail(runDir, file, state, message);
+      return true;
+    } catch (error) {
+      process.stderr.write(`een e-mail is overgeslagen: ${(error as Error).name}\n`);
+      return false;
+    }
+  });
+}
+
 export interface WaitResult {
   mails: number;
   links: Pick<MailboxLink, "id" | "url" | "kind">[];
@@ -122,7 +135,7 @@ export async function mailWait(runDir: string, options: { timeoutSeconds?: numbe
   const seconds = options.timeoutSeconds ?? DEFAULT_WAIT_SECONDS;
   const received = await waitForMail(mailbox, { address: file.address, since: new Date(state.since), timeoutMs: seconds * 1000, ...(options.pollMs ? { pollMs: options.pollMs } : {}) });
   if (received.length === 0) throw new Error(`geen e-mail aan het adres van de run binnen ${seconds} s. Stuurde de site er een? Een formulier met het veld e-mail, ingevuld met de testwaarde email, gaat naar dat adres`);
-  for (const message of received) absorbMail(runDir, file, state, message);
+  const taken = absorbAll(runDir, file, state, received);
   await writeMailboxState(runDir, state);
   await mailbox.remove(received.map((message) => message.id));
   return { mails: received.length, links: state.links.map(({ id, url, kind }) => ({ id, url, kind })), refusedOrigins: state.refusedOrigins };
@@ -265,7 +278,7 @@ export async function mailCleanup(runDir: string, options: { mailbox?: Mailbox; 
     mailbox = options.mailbox ?? openMailbox(file.server);
     // What arrived after the last wait may hold the only link there is.
     waiting = await waitForMail(mailbox, { address: file.address, since, timeoutMs: 0, once: true });
-    for (const message of waiting) absorbMail(runDir, file, state, message);
+    absorbAll(runDir, file, state, waiting);
     await writeMailboxState(runDir, state);
   } catch (error) {
     mail.noteNl = `de mailbox was niet te lezen: ${(error as Error).message}`;
