@@ -647,6 +647,7 @@ test("2: a session that may not send opens no personal link, and the boundary fi
       seen = [];
       await loadPage(page, url).catch(() => undefined);
       assert.equal(seen.length, 0, "the site heard nothing");
+      assert.equal(guard.blocked.at(-1)?.kind, "method", "held back by the guard of the page, before the boundary");
       assert.match(guard.blocked.at(-1)?.reasonNl ?? "", /mag niet versturen/);
       // A script does not navigate, so only the boundary sees this. The same goes for another address with the same code.
       const alias = new URL(url).searchParams.get("token")!;

@@ -601,6 +601,22 @@ for (const [name, chrome] of [
   });
 }
 
+for (const [name, only] of [
+  ["a word that only means logging out", `<form method="post" action="/x"><button>Afmelden (uitloggen)</button></form>`],
+  ["an address that only means logging out", `<form method="post" action="/account/logout"><button>Verwijder sessie</button></form>`],
+] as const) {
+  test(`4: a button with ${name} is never pressed, also in the page itself`, async () => {
+    const posted: string[] = [];
+    const { cleanup, run } = await cleaned((url, method, send) => {
+      if (method === "POST") posted.push(url.pathname);
+      send(200, `<main><h1>Voorkeuren</h1>${only}</main>`);
+    });
+    rmSync(run, { recursive: true, force: true });
+    assert.deepEqual(posted, []);
+    assert.match(cleanup.site.noteNl, /geen knop gevonden/);
+  });
+}
+
 test("4: a page with only a logout is no place to press anything", async () => {
   const posted: string[] = [];
   const { cleanup, run } = await cleaned((url, method, send) => {

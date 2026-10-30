@@ -762,6 +762,8 @@ test("6: a site that renews a cookie with every answer does not stop the proxy, 
   writeLoginFile(join(run, LOGIN_SESSION_FILE), loginSession(site.origin));
   // A run of some size: looking through it for each new value is what stopped the proxy.
   writeFileSync(join(run, "groot.txt"), "x".repeat(64 * 1024 * 1024));
+  // That it does not look at all: a value the site has yet to hand out already stands here, and nobody notes it.
+  writeFileSync(join(run, "voorspeld.txt"), `verse-000030-Qw3Er5Ty7Ui9Op1As3Df5Gh7Jk9Lz`);
   setRunLogin(run);
   const session = await sessionOn(run, await launched("chromium"));
   let longestPause = 0;
@@ -779,7 +781,7 @@ test("6: a site that renews a cookie with every answer does not stop the proxy, 
     const statuses = await session.page.evaluate(() => Promise.all(Array.from({ length: 60 }, (_, index) => fetch(`/tik/${index}`).then((answer) => answer.status))));
     const took = performance.now() - started;
     assert.ok(statuses.every((status) => status === 200));
-    assert.ok(took < 15_000, `60 requests at once took ${Math.round(took)} ms`);
+    assert.ok(took < 5000, `60 requests at once took ${Math.round(took)} ms`);
     assert.ok(longestPause < 1000, `the proxy stood still for ${Math.round(longestPause)} ms`);
 
     const places = readSecretsFile(run)!.secrets.filter((secret) => secret.slot !== undefined);
@@ -802,6 +804,7 @@ test("6: a site that renews a cookie with every answer does not stop the proxy, 
     await writeJson(join(run, "observations", "o1.json"), { cookies: await session.page.context().cookies() });
     for (const value of values.slice(-3)) assert.deepEqual(filesHolding(run, value), [], value);
     assert.deepEqual(readSecretEvents(run).filter((event) => event.kind === "found-in-run"), []);
+    rmSync(join(run, "voorspeld.txt"));
     writeFileSync(join(run, "te-laat.txt"), values.at(-2)!);
     assert.deepEqual(scanRun(run).hits.map((hit) => hit.file), ["te-laat.txt"], "and the search still knows it");
   } finally {
@@ -846,8 +849,18 @@ test("7: a file named secrets.json above a run is not a register, whatever is in
         rmSync(join(place, RUN_SECRETS_FILE));
       }
     }
+    // Where nothing stops the climb, and in the root of a run itself: only the schema says it is no register.
+    for (const content of foreign) {
+      writeFileSync(join(outer, RUN_SECRETS_FILE), content);
+      assert.equal(maskText(join(outer, "los", "a.txt"), text), text, content);
+      rmSync(join(outer, RUN_SECRETS_FILE));
+      writeFileSync(join(run, RUN_SECRETS_FILE), content);
+      assert.equal(maskText(join(run, "pages", "a.json"), text), text, content);
+      rmSync(join(run, RUN_SECRETS_FILE));
+    }
     mkdirSync(join(outer, RUN_SECRETS_FILE));
     assert.equal(maskText(join(run, "pages", "a.json"), text), text, "a folder of that name");
+    assert.equal(maskText(join(outer, "los", "a.txt"), text), text, "a folder of that name, with nothing to stop the climb");
     rmSync(join(outer, RUN_SECRETS_FILE), { recursive: true });
     // Also a real register of another run stops at the root of this one.
     const other = mkdtempSync(join(tmpdir(), "loep-buiten-"));
@@ -931,7 +944,12 @@ test("5: a download stops at its limit while it comes in, and a value across tha
     await site.close();
     rmSync(run, { recursive: true, force: true });
   }
-  const edge = await siteWith((_request, response) => void response.writeHead(200, { "content-type": "text/plain" }).end(`${" ".repeat(1000 - 10)}${TOKEN} en verder`));
+  // The site stops halfway through the value, right at the limit.
+  const edge = await siteWith((_request, response) => {
+    response.writeHead(200, { "content-type": "text/plain" });
+    response.write(`${" ".repeat(1000 - 10)}${TOKEN.slice(0, 10)}`);
+    setTimeout(() => response.end(`${TOKEN.slice(10)} en verder`), 100);
+  });
   const second = runOn(edge.origin);
   registerSecret(second, TOKEN, { source: "lang" });
   try {
