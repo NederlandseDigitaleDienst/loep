@@ -2,8 +2,8 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Browser, Page } from "playwright";
 import { launchBrowser, loadPage, newContext } from "../browser/session.ts";
-import { linkKind, MAILBOX_STATE, mailboxForRun, openMailbox, readMailboxState, waitForMail, writeMailboxState, type CleanupStep, type Mailbox, type MailboxCleanup, type MailboxLink, type MailboxMark, type MailboxState, type ReceivedMail } from "../lib/mailbox.ts";
-import { linksOf, secretsInText, secretsInUrl, withoutLinks } from "../lib/mailparse.ts";
+import { linkKind, MAILBOX_STATE, mailboxForRun, markedMail, openMailbox, readMailboxState, waitForMail, writeMailboxState, type CleanupStep, type Mailbox, type MailboxCleanup, type MailboxLink, type MailboxMark, type MailboxState, type ReceivedMail } from "../lib/mailbox.ts";
+import { linksOf, secretsInText, secretsInUrl, spelledSecretsInUrl, withoutLinks } from "../lib/mailparse.ts";
 import { refuseUnderSeal } from "../lib/seal.ts";
 import { aliasFor, readShieldFile, scanRun, Shield, writeShieldFile, type MailServer, type ShieldFile } from "../lib/shield.ts";
 import { writeBudget, writeOriginsOf, writesForRun, type WritePermission } from "../lib/writes.ts";
@@ -60,14 +60,19 @@ const originOf = (url: string): string | null => {
  */
 export function absorbMail(runDir: string, file: ShieldFile, state: MailboxState, message: ReceivedMail): void {
   const links = linksOf(message.mail);
-  const known = new Set(file.secrets.map((pair) => pair.real));
+  const known = new Map(file.secrets.map((pair) => [pair.real, pair]));
+  const add = (real: string, spelled?: string): void => {
+    const pair = known.get(real) ?? { real, alias: aliasFor(real) };
+    if (!known.has(real)) {
+      known.set(real, pair);
+      file.secrets.push(pair);
+    }
+    if (spelled !== undefined && spelled !== real && !pair.spelled?.includes(spelled)) pair.spelled = [...(pair.spelled ?? []), spelled];
+  };
   // A link to another site is never followed and leaves the kept text whole, so it needs no alias.
   const ours = links.filter((link) => file.origins.includes(originOf(link.url) ?? ""));
-  for (const secret of [...ours.flatMap((link) => secretsInUrl(link.url)), ...secretsInText(message.mail.text)]) {
-    if (known.has(secret)) continue;
-    known.add(secret);
-    file.secrets.push({ real: secret, alias: aliasFor(secret) });
-  }
+  for (const { value, spelled } of ours.flatMap((link) => spelledSecretsInUrl(link.url))) add(value, spelled);
+  for (const secret of secretsInText(message.mail.text)) add(secret);
   const shield = new Shield(file);
   const ids: string[] = [];
   for (const link of links) {
@@ -78,8 +83,8 @@ export function absorbMail(runDir: string, file: ShieldFile, state: MailboxState
       continue;
     }
     if (secretsInUrl(link.url).length === 0) continue;
+    // With its fragment: a token can stand there, with an alias like any other, and two links can differ only there.
     const parsed = new URL(shield.inward(link.url));
-    parsed.hash = "";
     const url = parsed.href;
     let entry = state.links.find((known) => known.url === url);
     if (!entry) {

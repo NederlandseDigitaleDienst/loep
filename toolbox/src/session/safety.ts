@@ -1,8 +1,8 @@
 import { createWriteStream, existsSync } from "node:fs";
 import { join } from "node:path";
 import type { BrowserContext, CDPSession, Frame, Page, Request } from "playwright";
-import { answeredByCloudflare, bodyOf, inwardFrame, outwardFrame, passOn, sendOrReplay } from "../browser/session.ts";
-import { passShielded, shieldOf } from "../browser/shielded.ts";
+import { answeredByCloudflare, bodyOf, canFulfilRedirect, passOn, sendOrReplay } from "../browser/session.ts";
+import { requireBoundary, shieldedFetch, shieldOf } from "../browser/shielded.ts";
 import { readJson } from "../lib/canonical.ts";
 import { isChallenge } from "../lib/challenge.ts";
 import { privateFromPublicSite, scopeHost, scopeHostOf, siteOrigins, WEB_SCHEMES } from "../lib/origins.ts";
@@ -192,6 +192,7 @@ export const urlInScope = inScope;
  * so it decides first.
  */
 export async function guardContext(context: BrowserContext, scope: Scope, guard: Guard, reads: readonly ReadRequest[] = [], blockade?: Blockade): Promise<void> {
+  requireBoundary(context, scope.writes?.runDir);
   const note = (kind: Blocked["kind"], method: string, url: string, resourceType: string): void => {
     guard.blocked.push({ at: new Date().toISOString(), kind, method, url: url.slice(0, MAX_URL), resourceType });
   };
@@ -236,7 +237,7 @@ export async function guardContext(context: BrowserContext, scope: Scope, guard:
       if (read?.pass) {
         (guard.reads ??= []).push({ at: new Date().toISOString(), method, url: url.slice(0, MAX_URL), rule: read.rule.id, service: read.rule.service });
         // Repeated only to an address a rule of the same service covers; otherwise followed only inside the scope or on an origin the rule covers.
-        return passOn(route, (target) => readRuleFor(reads, method, target)?.service === read.rule.service, (target) => inScope(scope, target) || onReadOrigin(read.rule, target), shieldOf(scope.writes, url)).then(() => undefined);
+        return passOn(route, (target) => readRuleFor(reads, method, target)?.service === read.rule.service, (target) => inScope(scope, target) || onReadOrigin(read.rule, target)).then(() => undefined);
       }
       if (read) {
         guard.blocked.push({ at: new Date().toISOString(), kind: "method", method, url: url.slice(0, MAX_URL), resourceType: type, reasonNl: read.reasonNl });
@@ -257,16 +258,8 @@ export async function guardContext(context: BrowserContext, scope: Scope, guard:
       return refuse();
     }
     if (inScope(scope, url)) {
-      const shield = shieldOf(scope.writes, url);
-      if (!shield) return route.continue();
-      // A personal link from a mail takes from the budget like any write; what comes back goes through the shield.
-      const link = request.isNavigationRequest() ? shield.linkId(url) : null;
-      const refused = link ? claimLink(scope.writes!, url, link, guard.sender) : null;
-      if (refused) {
-        guard.blocked.push({ at: new Date().toISOString(), kind: "method", method, url: url.slice(0, MAX_URL), resourceType: type, reasonNl: refused.reasonNl, writeBudget: refused.budget });
-        return refuse();
-      }
-      return passShielded(route, shield, (target) => inScope(scope, target));
+      if (linkRefused(scope, guard, request)) return refuse();
+      return route.continue();
     }
     // What the page already holds (data:, blob:) sends nothing anywhere; as the address of a page it is never in the scope.
     if (!request.isNavigationRequest() && /^(data|blob):/.test(url)) return route.continue();
@@ -292,13 +285,11 @@ export async function guardContext(context: BrowserContext, scope: Scope, guard:
     const opened = Date.now();
     // On the socket of the test environment the answer to a real message is recorded, and a message that was sent before is played from its recording.
     const recordings = free ? socketRecordings(scope.writes!.runDir, scope.writes!.source, MESSAGE_VALUES) : null;
-    const shield = free ? shieldOf(scope.writes, url) : null;
     let recorder: Recorder | null = null;
     // A page that is closed hears nothing more: what the server says after that is no part of the answer the page got.
     context.once("close", () => recorder?.end());
     if (free) {
-      server!.onMessage((message) => {
-        const reply = inwardFrame(shield, message);
+      server!.onMessage((reply) => {
         socket.send(reply);
         recorder?.frame(reply);
       });
@@ -328,7 +319,7 @@ export async function guardContext(context: BrowserContext, scope: Scope, guard:
         return;
       }
       (guard.passed ??= []).push(claim.entry);
-      server!.send(outwardFrame(shield, message));
+      server!.send(message);
       // Only a message with a test value starts a recording, and ends the one before it.
       const next = counted ? recordings!.start(url, message, guard.sender, anyFrame) : null;
       if (next) {
@@ -391,7 +382,8 @@ export async function guardedDownload(scope: Scope, guard: Guard, address: strin
       }
       // A file behind a login is asked for with the session of the run, and only inside the scope.
       const cookie = inScope(scope, url) ? loginCookieHeader(url) : null;
-      const response = await fetch(url, { method: "GET", redirect: "manual", signal: abort.signal, headers: { ...(cookie ? { cookie } : {}), ...((await options.headers?.(url)) ?? {}) } });
+      // In a run with a mailbox the answer gets the aliases too: this file goes in the run.
+      const response = await shieldedFetch(shieldOf(scope.writes, url), url, { method: "GET", redirect: "manual", signal: abort.signal, headers: { ...(cookie ? { cookie } : {}), ...((await options.headers?.(url)) ?? {}) } });
       if (response.status === 429 && inScope(scope, url)) options.blockade?.tooMany(url, response.headers.get("retry-after") ?? undefined);
       const location = response.headers.get("location");
       if (response.status >= 300 && response.status < 400 && location) {
@@ -434,6 +426,18 @@ export async function guardedDownload(scope: Scope, guard: Guard, address: strin
   } finally {
     clearTimeout(timer);
   }
+}
+
+/**
+ * A navigation to a personal link from a mail takes from the budget like any write: whether it is
+ * refused, and noted as refused. Asked once per navigation, by the guard that passes it on.
+ */
+function linkRefused(scope: Scope, guard: Guard, request: Request): boolean {
+  const url = request.url();
+  const link = request.isNavigationRequest() ? (shieldOf(scope.writes, url)?.linkId(url) ?? null) : null;
+  const refused = link ? claimLink(scope.writes!, url, link, guard.sender) : null;
+  if (refused) guard.blocked.push({ at: new Date().toISOString(), kind: "method", method: request.method(), url: url.slice(0, MAX_URL), resourceType: request.resourceType(), reasonNl: refused.reasonNl, writeBudget: refused.budget });
+  return refused !== null;
 }
 
 /**
@@ -484,8 +488,10 @@ export async function guardRedirects(page: Page, scope: Scope, guard: Guard): Pr
 export async function guardRedirectsByRoute(context: BrowserContext, scope: Scope, guard: Guard): Promise<void> {
   await context.route("**/*", async (route) => {
     const request = route.request();
-    // What goes through the shield is left to `guardContext`, which also watches the redirects of it.
-    if (!request.isNavigationRequest() || request.method() !== "GET" || !/^https?:/.test(request.url()) || !inScope(scope, request.url()) || logsOut(request.url()) || shieldOf(scope.writes, request.url())) return route.fallback();
+    if (!request.isNavigationRequest() || request.method() !== "GET" || !/^https?:/.test(request.url()) || !inScope(scope, request.url()) || logsOut(request.url())) return route.fallback();
+    // Left to `guardContext`, which passes it on: a redirect is then followed by the browser, and only has aliases to take along.
+    if (shieldOf(scope.writes, request.url()) && !canFulfilRedirect(context)) return route.fallback();
+    if (linkRefused(scope, guard, request)) return route.fulfill({ status: 204, body: "" });
     try {
       const response = await route.fetch({ maxRedirects: 0 });
       const location = response.headers()["location"];

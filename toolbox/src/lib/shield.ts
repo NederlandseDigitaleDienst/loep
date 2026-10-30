@@ -8,7 +8,8 @@ import { ignoreSecrets, MAILBOX_SECRETS_FILE } from "./login.ts";
  * report, the manifest, the evidence index, an observation, a network log, a saved page or a
  * screenshot. Blanking each of those afterwards would be a list that is never complete, so the
  * browser never gets the token in the first place. Everything a run records, it records on the
- * browser side of one boundary: the requests that leave the browser. There the shield swaps.
+ * browser side of one boundary: a proxy on this machine that every request of the browser passes,
+ * also what the browser asks by itself after a redirect (`browser/shielded.ts`). There the shield swaps.
  *
  * - A secret gets an alias of the same length (a real token for `loepmail3f9a...`). An agent, a
  *   page, the DOM, a screenshot and every log only ever see the alias.
@@ -27,6 +28,8 @@ const SCHEMA = "loep/mailbox-secrets/1";
 export interface SecretPair {
   real: string;
   alias: string;
+  /** How the mail spelled it in an address, when that is not the value itself (`a%2fb`, `a+b`). An address goes back to the site spelled like this. */
+  spelled?: string[];
 }
 
 /** Where the mailbox is. The user name and password are never here: they come from the environment or the keychain, for each command again. */
@@ -65,18 +68,39 @@ export function aliasFor(real: string): string {
 }
 
 const escapeHtml = (text: string): string => text.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#39;");
+const escapeEach = (text: string, escaped: (code: number) => string): string => text.replace(/[^A-Za-z0-9_-]/g, (character) => escaped(character.charCodeAt(0)));
+const lowerHex = (text: string): string => text.replace(/%[0-9A-F]{2}/g, (byte) => byte.toLowerCase());
+/** As a form sends it: a space is a plus, and more characters are encoded than in an address. */
+const formEncoded = (text: string): string => new URLSearchParams({ a: text }).toString().slice(2);
+
+const SPELLINGS: ((text: string) => string)[] = [
+  encodeURIComponent,
+  (text) => lowerHex(encodeURIComponent(text)),
+  formEncoded,
+  (text) => lowerHex(formEncoded(text)),
+  escapeHtml,
+  // Some templates write one sign as a number (Go: `&#43;`), others every sign.
+  (text) => text.replaceAll("+", "&#43;"),
+  (text) => escapeEach(text, (code) => `&#${code};`),
+  (text) => escapeEach(text, (code) => `&#x${code.toString(16)};`),
+  (text) => escapeEach(text, (code) => `&#x${code.toString(16).toUpperCase()};`),
+  (text) => text.replaceAll("/", "\\/"),
+  (text) => escapeEach(text, (code) => `\\u${code.toString(16).padStart(4, "0")}`),
+  (text) => escapeEach(text, (code) => `\\u${code.toString(16).toUpperCase().padStart(4, "0")}`),
+];
 
 /**
- * The forms in which a value occurs in a page, an address or a body: as it is, percent-encoded,
- * HTML-escaped, and with an escaped slash as in JSON. Each with the same form of the other value.
+ * The forms in which a value occurs in a page, an address or a body: as it is, percent-encoded in
+ * either case, as a form sends it, HTML-escaped and as a number, and with an escaped slash or sign
+ * as in JSON. Each with the same form of the other value.
  */
 function spellings(from: string, to: string): [string, string][] {
   const found = new Map<string, string>([[from, to]]);
   // An alias has no character that gets another spelling: the first form of a value is the one that stands.
-  const add = (spelled: string, replacement: string): void => void (found.has(spelled) || found.set(spelled, replacement));
-  add(encodeURIComponent(from), encodeURIComponent(to));
-  add(escapeHtml(from), escapeHtml(to));
-  add(from.replaceAll("/", "\\/"), to.replaceAll("/", "\\/"));
+  for (const spell of SPELLINGS) {
+    const spelled = spell(from);
+    if (!found.has(spelled)) found.set(spelled, spell(to));
+  }
   return [...found];
 }
 
@@ -102,8 +126,10 @@ export class Shield {
   private readonly aliases: string[];
   private readonly toReal: [string, string][];
   private readonly toRealInUrl: [string, string][];
+  private readonly toRealInForm: [string, string][];
   private readonly toAlias: [string, string][];
   private readonly addressSpellings: Buffer[];
+  private readonly starts: Buffer[];
 
   constructor(file: Pick<ShieldFile, "address" | "addressAlias" | "origins" | "secrets" | "links">) {
     this.origins = file.origins;
@@ -112,8 +138,11 @@ export class Shield {
     // The longest first: a value inside another value may not break it up.
     const pairs = [...file.secrets, { real: file.address, alias: file.addressAlias }].sort((a, b) => b.real.length - a.real.length);
     this.toReal = pairs.flatMap((pair) => spellings(pair.alias, pair.real));
-    this.toRealInUrl = pairs.map((pair) => [pair.alias, encodeURIComponent(pair.real)]);
-    this.toAlias = pairs.flatMap((pair) => spellings(pair.real, pair.alias));
+    this.toRealInUrl = pairs.flatMap((pair: SecretPair) => [[pair.alias, pair.spelled?.[0] ?? encodeURIComponent(pair.real)], [encodeURIComponent(pair.alias), pair.spelled?.[0] ?? encodeURIComponent(pair.real)]]);
+    this.toRealInForm = pairs.flatMap((pair) => [[encodeURIComponent(pair.alias), formEncoded(pair.real)], [pair.alias, formEncoded(pair.real)]]);
+    // The longest first here too: a spelling of a mail can hold the value itself.
+    this.toAlias = pairs.flatMap((pair: SecretPair) => [...(pair.spelled ?? []).flatMap((spelled) => spellings(spelled, pair.alias)), ...spellings(pair.real, pair.alias)]).sort(([a], [b]) => b.length - a.length);
+    this.starts = this.toAlias.map(([spelled]) => Buffer.from(spelled));
     this.addressSpellings = spellings(file.addressAlias, file.address).map(([spelled]) => Buffer.from(spelled));
   }
 
@@ -134,14 +163,37 @@ export class Shield {
   outwardUrl = (url: string): string => this.toRealInUrl.reduce((value, [from, to]) => value.replaceAll(from, to), url);
   inward = (text: string): string => this.toAlias.reduce((value, [from, to]) => value.replaceAll(from, to), text);
   outwardBytes = (data: Buffer): Buffer => this.toReal.reduce((value, [from, to]) => replaceBytes(value, from, to), data);
+  /** The body of a form: a real value is encoded there, or a + becomes a space. */
+  outwardForm = (data: Buffer): Buffer => this.toRealInForm.reduce((value, [from, to]) => replaceBytes(value, from, to), data);
   inwardBytes = (data: Buffer): Buffer => this.toAlias.reduce((value, [from, to]) => replaceBytes(value, from, to), data);
 
-  /** The id of the personal link at this address, or null when it is none. */
+  /** How many bytes at the end of a piece of a stream can be the start of a value to swap: they have to wait for the next piece. */
+  unfinishedTail(data: Buffer): number {
+    let longest = 0;
+    for (const start of this.starts) {
+      for (let size = Math.min(start.length - 1, data.length); size > longest; size--) {
+        if (data.subarray(data.length - size).equals(start.subarray(0, size))) {
+          longest = size;
+          break;
+        }
+      }
+    }
+    return longest;
+  }
+
+  /** The id of the personal link at this address, or null when it is none. Two links can differ only in their fragment, and a browser does not always name it. */
   linkId(url: string): string | null {
-    try {
-      const parsed = new URL(url);
+    const withoutHash = (address: string): string => {
+      const parsed = new URL(address);
       parsed.hash = "";
-      return this.links.get(parsed.href) ?? null;
+      return parsed.href;
+    };
+    try {
+      const exact = this.links.get(new URL(url).href);
+      if (exact) return exact;
+      const bare = withoutHash(url);
+      for (const [link, id] of this.links) if (withoutHash(link) === bare) return id;
+      return null;
     } catch {
       return null;
     }

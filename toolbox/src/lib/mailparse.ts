@@ -162,20 +162,38 @@ export function looksSecret(value: string): boolean {
   return !/^[\d\-:./]+$/.test(value);
 }
 
-/** The parts of an address that may be a token: values in the query and the fragment, and parts of the path. */
-export function secretsInUrl(address: string): string[] {
-  const url = new URL(address);
-  const decoded = (text: string): string => {
-    try {
-      return decodeURIComponent(text);
-    } catch {
-      return text;
-    }
-  };
-  const fragment = new URLSearchParams(url.hash.slice(1));
-  const values = [...url.pathname.split("/").map(decoded), ...url.searchParams.values(), ...fragment.values(), ...fragment.keys()];
-  return [...new Set(values.filter(looksSecret))];
+export interface UrlSecret {
+  /** The value as the site means it. */
+  value: string;
+  /** How it stands in the address: with its own percent-encoding, or a plus for a space. */
+  spelled: string;
 }
+
+const decodedPart = (text: string): string => {
+  try {
+    return decodeURIComponent(text);
+  } catch {
+    return text;
+  }
+};
+
+/** The parts of an address that may be a token: values in the query and the fragment, and parts of the path, each with how the address spells it. */
+export function spelledSecretsInUrl(address: string): UrlSecret[] {
+  const url = new URL(address);
+  const path = url.pathname.split("/").map((spelled) => ({ value: decodedPart(spelled), spelled }));
+  const pairs = (text: string, withKeys: boolean): UrlSecret[] =>
+    text.split("&").flatMap((pair) => {
+      const at = pair.indexOf("=");
+      const key = at === -1 ? pair : pair.slice(0, at);
+      const value = at === -1 ? "" : pair.slice(at + 1);
+      return [{ value: decodedPart(value.replaceAll("+", " ")), spelled: value }, ...(withKeys ? [{ value: decodedPart(key.replaceAll("+", " ")), spelled: key }] : [])];
+    });
+  const found = [...path, ...pairs(url.search.slice(1), false), ...pairs(url.hash.slice(1), true)].filter((part) => looksSecret(part.value));
+  return [...new Map(found.map((part) => [`${part.value}\n${part.spelled}`, part])).values()];
+}
+
+/** The parts of an address that may be a token, as the site means them. */
+export const secretsInUrl = (address: string): string[] => [...new Set(spelledSecretsInUrl(address).map((part) => part.value))];
 
 /** A long token, or a one-time code after the word for it, that stands in the text of a mail outside a link. */
 export function secretsInText(text: string): string[] {

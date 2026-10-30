@@ -35,6 +35,8 @@ export interface Mailbox {
   fetch: (address: string, since: Date) => Promise<RawMail[]>;
   /** Delete messages. Says how many. */
   remove: (ids: string[]) => Promise<number>;
+  /** Messages for an address that are deleted in name only: a server may keep them until somebody empties the box. Absent where deleting is deleting. */
+  marked?: (address: string, since: Date) => Promise<RawMail[]>;
 }
 
 export interface MailCredentials {
@@ -154,17 +156,26 @@ export interface ReceivedMail {
   mail: ParsedMail;
 }
 
+/** The messages of a list that are for this address, since this moment. `parseMail` never throws, so one broken mail leaves the others alone. */
+const oursOf = (found: RawMail[], address: string, since: Date): ReceivedMail[] =>
+  found
+    .filter((raw) => raw.receivedAt >= since.getTime())
+    .map((raw) => ({ id: raw.id, receivedAt: raw.receivedAt, mail: parseMail(raw.raw) }))
+    .filter((message) => isFor(message.mail, address));
+
 /** Wait for messages to one address since one moment. What is for another address is not used, and stays where it is. */
 export async function waitForMail(mailbox: Mailbox, options: WaitOptions): Promise<ReceivedMail[]> {
   const { address, since, timeoutMs, pollMs = 3000, sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms)) } = options;
   const deadline = Date.now() + timeoutMs;
   for (;;) {
-    const found = (await mailbox.fetch(address, since)).filter((raw) => raw.receivedAt >= since.getTime()).map((raw) => ({ id: raw.id, receivedAt: raw.receivedAt, mail: parseMail(raw.raw) }));
-    const ours = found.filter((message) => isFor(message.mail, address));
+    const ours = oursOf(await mailbox.fetch(address, since), address, since);
     if (ours.length > 0 || options.once || Date.now() >= deadline) return ours;
     await sleep(pollMs);
   }
 }
+
+/** How many messages for this address are deleted in name only, and so still on the server. */
+export const markedMail = async (mailbox: Mailbox, address: string, since: Date): Promise<number> => (mailbox.marked ? oursOf(await mailbox.marked(address, since), address, since).length : 0);
 
 // ---- The run ---------------------------------------------------------------------------------------------------------
 

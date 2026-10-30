@@ -146,7 +146,7 @@ export async function openSurface(env: Env, start: StartState, onContext?: (cont
   const reads = env.reads ?? approvedReads(env.runDir);
   // The instruments in this process read the same rules: a search that went through is no submission that was held back.
   setRunReads(reads);
-  const context = await newContext(env.browser, { viewport: { width: start.width, height: start.height }, colorScheme: start.scheme, reads });
+  const context = await newContext(env.browser, { viewport: { width: start.width, height: start.height }, colorScheme: start.scheme, reads, runDir: env.runDir });
   onContext?.(context);
   try {
     await guardContext(context, env.scope, guard, reads, env.blockade);

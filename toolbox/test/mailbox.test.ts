@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, beforeEach, test } from "node:test";
 import type { Browser } from "playwright";
-import { inwardFrame, launchBrowser, loadPage, newContext, outwardFrame } from "../src/browser/session.ts";
+import { launchBrowser, loadPage, newContext } from "../src/browser/session.ts";
 import { cleanupLinesNl, mailCleanup, mailWait, startMailbox } from "../src/commands/mail.ts";
 import { seal } from "../src/commands/verify.ts";
 import { MAILBOX_SECRETS_FILE } from "../src/lib/login.ts";
@@ -325,15 +325,6 @@ test("an alias has the length of its value and swaps in every spelling, both way
   assert.equal(shield.covers("http://localhost:1/a"), true);
   assert.equal(shield.covers("ws://localhost:1/a"), true);
   assert.equal(shield.covers("http://localhost:2/a"), false);
-});
-
-test("a frame over a socket swaps like a request, as text and as bytes", () => {
-  const alias = aliasFor(TOKEN);
-  const shield = new Shield({ address: ADDRESS, addressAlias: TEST_VALUES.email!, origins: ["http://localhost:1"], secrets: [{ real: TOKEN, alias }], links: [] });
-  assert.equal(inwardFrame(shield, `{"token":"${TOKEN}"}`), `{"token":"${alias}"}`);
-  assert.equal(outwardFrame(shield, `{"token":"${alias}"}`), `{"token":"${TOKEN}"}`);
-  assert.deepEqual(inwardFrame(shield, Buffer.from(TOKEN)), Buffer.from(alias));
-  assert.equal(inwardFrame(null, TOKEN), TOKEN);
 });
 
 /** A run with a mailbox, as `inventory` leaves it. */
