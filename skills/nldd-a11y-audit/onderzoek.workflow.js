@@ -10,8 +10,8 @@ export const meta = {
   ],
 }
 
-// args: { cli: absolute path of toolbox/src/cli.ts, run: absolute path of the run, atOnce?: agents at the same time, neverOpen?: hosts no agent may open, models?: model per role, for example { walks: 'sonnet' } }
-const { cli, run, atOnce, neverOpen, models } = args
+// args: { cli: absolute path of toolbox/src/cli.ts, run: absolute path of the run, atOnce?: agents at the same time, neverOpen?: hosts no agent may open, models?: model per role, for example { walks: 'sonnet' }, sendingAccepted?: true when the person said to go on with what is left of the budget for sending }
+const { cli, run, atOnce, neverOpen, models, sendingAccepted } = args
 // Every agent holds a session, and the session process of a run allows 4 at the same time unless it was
 // started with --max-sessions. One of those is the session of whoever leads the audit, so 3 are left.
 // More agents need a process that was started with a higher limit: pass that limit minus one.
@@ -29,6 +29,8 @@ const PAUSED_NL = 'storing van het model, run gepauzeerd; start de werkstroom op
 const SITE_PAUSED_NL = 'storing van de site, run gepauzeerd; start de werkstroom opnieuw als de site weer antwoordt (pending zegt het)'
 // Only the answer the prompt asks for counts, or the message of loep that starts with it: a report that says there was
 // "geen storing van de site" is a report, and no outage.
+// The budget for sending is about to run out: only a person can raise it, and what is sent after it is gone stays open.
+const SENDING_PAUSED_NL = 'budget voor versturen bijna op, run gepauzeerd; vraag de gebruiker of het omhoog mag, leg dat vast met writes --max-writes en start de werkstroom opnieuw, of start opnieuw met sendingAccepted: true'
 const SITE_DOWN = /^\W*storing van de site(?::|\W*$)/i
 // Sites that no agent of this run may open, for example a set that is held back for a final test. Empty when the caller gives none.
 const NEVER_OPEN =
@@ -70,6 +72,7 @@ const PENDING = {
     verifiers: { type: 'array', items: ITEM },
     finishers: { type: 'array', items: ITEM },
     siteOutage: { type: 'string', description: 'alleen als de site een storing heeft' },
+    sendingLow: { type: 'string', description: 'alleen als het budget voor versturen bijna op is' },
     again: { type: 'array', items: { type: 'string' }, description: 'alleen bij done: criteria die na een storing van de site een nieuwe afmaakronde kunnen krijgen' },
     note: { type: 'string' },
   },
@@ -79,7 +82,7 @@ const PENDING = {
 function shell(commands, round) {
   const numbered = commands.map((command, index) => `${index + 1}. ${command}`).join('\n')
   return tryAgent(
-    `Voer in een shell precies deze commando's uit, elk één keer, na elkaar, en doe verder niets. Lees geen bestanden en wijzig niets. ${NEVER_OPEN}\n${numbered}\nHet laatste commando drukt één JSON-object af met de sleutels phase, walks, judges, verifiers en finishers, en soms siteOutage of again. Geef dat object ongewijzigd terug als je antwoord. Mislukt een commando, geef dan phase "error" terug met lege lijsten en in note de foutmelding.`,
+    `Voer in een shell precies deze commando's uit, elk één keer, na elkaar, en doe verder niets. Lees geen bestanden en wijzig niets. ${NEVER_OPEN}\n${numbered}\nHet laatste commando drukt één JSON-object af met de sleutels phase, walks, judges, verifiers en finishers, en soms siteOutage, sendingLow of again. Geef dat object ongewijzigd terug als je antwoord. Mislukt een commando, geef dan phase "error" terug met lege lijsten en in note de foutmelding.`,
     withModel('stand', { schema: PENDING, label: `stand ${round}`, phase: 'Stand', effort: 'low' }),
   )
 }
@@ -191,6 +194,11 @@ for (let round = 1; round <= MAX_ROUNDS; round++) {
   if (state.siteOutage) {
     paused = `${SITE_PAUSED_NL} (stand ${round}: ${state.siteOutage})`
     history.push({ round, phase: 'storing van de site', note: state.siteOutage })
+    break
+  }
+  if (state.sendingLow && !sendingAccepted) {
+    paused = `${SENDING_PAUSED_NL} (stand ${round}: ${state.sendingLow})`
+    history.push({ round, phase: 'budget voor versturen', note: state.sendingLow })
     break
   }
   const kind = PHASES[state.phase]

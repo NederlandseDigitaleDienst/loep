@@ -329,7 +329,7 @@ export function notSentPointProblems(missingNl: unknown, permission: { origin: s
 }
 
 /** How a point "versturen niet toegestaan" says that the budget for sending of the run held the message back. */
-const SENDING_BUDGET_OUT = /budget voor versturen/i;
+export const SENDING_BUDGET_OUT = /budget voor versturen/i;
 
 
 interface ShapeContext {

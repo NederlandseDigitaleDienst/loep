@@ -114,6 +114,13 @@ function pathOf(url: string): string {
  * Which message a frame is: the test values in it, sorted. A frame without any, such as one that
  * says the chat was opened, is not a message of an agent and has no key: it is never played.
  */
+/**
+ * The key of a frame without a test value: its exact content. Pressing send on an empty field gives the
+ * same frame every time, so the second press need not reach the service. A frame with a token in it
+ * differs every time and simply goes to the server.
+ */
+export const frameKey = (message: string | Buffer): string => `frame:${sha256(message)}`;
+
 export function recordingKey(message: string | Buffer, values: readonly string[]): string | null {
   const ours = values.filter((value) => isOurMessage(message, [value])).sort();
   return ours.length > 0 ? ours.join("|") : null;
@@ -149,10 +156,10 @@ export interface Recorder {
 }
 
 export interface SocketRecordings {
-  /** The complete recording of this message under the same `sendsTo` pattern or on the declared origin, or null when there is none yet or the message has no test value. */
-  find: (url: string, message: string | Buffer) => SocketRecording | null;
+  /** The complete recording of this message under the same `sendsTo` pattern or on the declared origin, or null when there is none yet or the message has no test value. `anyFrame`: a frame without a test value counts as well, by its exact content (see `frameKey`). */
+  find: (url: string, message: string | Buffer, anyFrame?: boolean) => SocketRecording | null;
   /** Start recording what the server answers to a message that was sent for real; null for a frame without a test value, which is not recorded. */
-  start: (url: string, message: string | Buffer, sender?: string) => Recorder | null;
+  start: (url: string, message: string | Buffer, sender?: string, anyFrame?: boolean) => Recorder | null;
   /** Note that a send was played from a recording. */
   replayed: (url: string, recording: SocketRecording, sender?: string) => PassedReplay;
 }
@@ -178,8 +185,9 @@ export function socketRecordings(runDir: string, source: string, values: readonl
     // Appended at once and synchronously, as the log of writes is.
     appendFileSync(join(runDir, file), `${JSON.stringify(entry)}\n`);
   };
-  const find = (url: string, message: string | Buffer): SocketRecording | null => {
-    const key = recordingKey(message, values);
+  const keyOf = (message: string | Buffer, anyFrame: boolean): string | null => recordingKey(message, values) ?? (anyFrame ? frameKey(message) : null);
+  const find = (url: string, message: string | Buffer, anyFrame = false): SocketRecording | null => {
+    const key = keyOf(message, anyFrame);
     if (key === null) return null;
     const origin = originOf(url);
     const kind = connectionKind(url);
@@ -190,8 +198,8 @@ export function socketRecordings(runDir: string, source: string, values: readonl
   };
   return {
     find,
-    start: (url, message, sender = source) => {
-      const key = recordingKey(message, values);
+    start: (url, message, sender = source, anyFrame = false) => {
+      const key = keyOf(message, anyFrame);
       if (key === null) return null;
       const started = now();
       const frames: RecordedFrame[] = [];
@@ -203,7 +211,7 @@ export function socketRecordings(runDir: string, source: string, values: readonl
         clearTimeout(timer);
         const listenedMs = now() - started;
         // A silence is an answer only when it lasted; the first complete recording of a message counts, and one that ends later is not kept.
-        if ((frames.length === 0 && listenedMs < RECORD_SILENCE_MS) || find(url, message)) return;
+        if ((frames.length === 0 && listenedMs < RECORD_SILENCE_MS) || find(url, message, anyFrame)) return;
         const path = pathOf(url);
         append(RECORDINGS_LOG, { id: `${originOf(url)}${path}|${key}|${new Date(started).toISOString()}`, at: new Date(started).toISOString(), source: sender, origin: originOf(url), path, key, kind: "websocket", matchedOn: matchedOnFor(sendsTo, url), frames, listenedMs, ...(complete ? {} : { incomplete: true as const }) } satisfies SocketRecording);
       };

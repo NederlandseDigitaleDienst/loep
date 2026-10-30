@@ -1,7 +1,7 @@
 import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { readJson, writeJson } from "./canonical.ts";
-import { confirmByTyping, processTerminal, recordedNl, type RecordedVia, type Terminal } from "./recorded.ts";
+import { confirmByTyping, processTerminal, recordedNl, recordStatement, type RecordedVia, type Recording, type RecordingFlags, type Terminal } from "./recorded.ts";
 
 /**
  * Permission to send requests that can change something (anything but GET and HEAD, and
@@ -25,6 +25,8 @@ export interface WritePermission {
   maxWrites?: number;
   /** Shortest time between two writes that pass, in seconds. Absent: `DEFAULT_WRITE_SPACING_SECONDS`. Not a flag: a test sets it in the manifest. */
   spacingSeconds?: number;
+  /** Each time a person raised `maxWrites` after inventory (see `raiseWrites`), oldest first. */
+  raised?: ({ from: number; to: number; at: string } & Recording)[];
 }
 
 /**
@@ -69,7 +71,9 @@ export const WRITES_BLOCKED_NL = "verzoeken die iets kunnen wijzigen zijn tegeng
  * of the person stays in the manifest of the run, where the declaration can be traced.
  */
 export const writesAllowedNl = (permission: WritePermission): string =>
-  `onderzocht op een testomgeving waar versturen is toegestaan: ${writeOriginsNl(permission)}${permission.declaredBy ? `, verklaard door iemand met de functie ${permission.declaredBy.role}${permission.recordedVia ? `, ${recordedNl(permission, permission.declaredAt)}` : ""} (de naam staat in het dossier van het onderzoek, niet in dit rapport)` : " (lokaal adres)"}`;
+  `onderzocht op een testomgeving waar versturen is toegestaan: ${writeOriginsNl(permission)}${permission.declaredBy ? `, verklaard door iemand met de functie ${permission.declaredBy.role}${permission.recordedVia ? `, ${recordedNl(permission, permission.declaredAt)}` : ""} (de naam staat in het dossier van het onderzoek, niet in dit rapport)` : " (lokaal adres)"}${raisedNl(permission)}`;
+
+const raisedNl = (permission: WritePermission): string => (permission.raised ?? []).map((raise) => `; budget voor versturen verhoogd van ${raise.from} naar ${raise.to}, ${recordedNl(raise, raise.at)}`).join("");
 
 /** Hosts that cannot be a live site: the machine itself and the names reserved for testing. */
 export function isLocalHost(hostname: string): boolean {
@@ -147,6 +151,24 @@ function maxWritesOf(text: string | undefined, fallback: number): number {
   const value = Number(text.trim());
   if (!/^\d+$/.test(text.trim()) || !Number.isSafeInteger(value) || value < 1) throw new Error(`--max-writes verwacht een geheel getal van 1 of meer, niet "${text}"`);
   return value;
+}
+
+/**
+ * Raise the budget of a run. The person who may decide that says so: at an interactive terminal, or
+ * in the conversation, like an answer or a decision (`recordStatement`). Where may be sent stays with
+ * the declaration at inventory. What runs picks up the new budget at the next write.
+ */
+export async function raiseWrites(runDir: string, text: string, flags: RecordingFlags = {}, terminal: Terminal = processTerminal()): Promise<WritePermission> {
+  const permission = writesForRun(runDir);
+  if (!permission) throw new Error("deze run mag niet versturen: dat ligt vast bij inventory, en een budget verhogen verandert dat niet");
+  const from = permission.maxWrites ?? DEFAULT_MAX_WRITES;
+  const to = maxWritesOf(text, from);
+  if (to <= from) throw new Error(`--max-writes moet hoger zijn dan het huidige budget (${from})`);
+  const shownNl = [`Verhoging van het budget voor versturen van ${from} naar ${to} verzendingen voor de hele run.`, `Origins: ${writeOriginsNl(permission)}`, "Elke verzending komt echt aan bij wie het bericht ontvangt."].join("\n");
+  const recording = await recordStatement("writes --max-writes", flags, shownNl, terminal);
+  const raised = { ...permission, maxWrites: to, raised: [...(permission.raised ?? []), { from, to, at: new Date().toISOString(), ...recording }] };
+  await recordWrites(runDir, raised);
+  return raised;
 }
 
 /** The permission a run was given at `inventory`, from its manifest. Null when it has none. */
@@ -339,7 +361,9 @@ function readLog(runDir: string): PassedWrite[] {
  * send: a sender that has sent before does not get the reserved writes.
  */
 export function writeBudget(runDir: string, permission: WritePermission, now = Date.now(), sender?: string): WriteBudget {
-  const max = permission.maxWrites ?? DEFAULT_MAX_WRITES;
+  // A person can raise the budget while sessions run: what the manifest says now counts.
+  const stored = writesForRun(runDir);
+  const max = (stored?.raised ? stored.maxWrites : undefined) ?? permission.maxWrites ?? DEFAULT_MAX_WRITES;
   const spacingSeconds = permission.spacingSeconds ?? DEFAULT_WRITE_SPACING_SECONDS;
   const counted = readLog(runDir).filter(counts);
   const last = counted.length > 0 ? Date.parse(counted.at(-1)!.at) : Number.NEGATIVE_INFINITY;
@@ -348,6 +372,9 @@ export function writeBudget(runDir: string, permission: WritePermission, now = D
   const sentBefore = sender !== undefined && counted.some((entry) => senderOf(entry.source) === senderOf(sender));
   return { origin: writeOriginsNl(permission), max, sent: counted.length, left: Math.max(0, max - counted.length - (sentBefore ? reserved : 0)), reserved, spacingSeconds, waitSeconds };
 }
+
+/** Whether the budget is about to run out: a person may want to raise it before the next agents start. */
+export const writesLow = (budget: WriteBudget): boolean => budget.left <= Math.max(1, Math.floor(budget.max / 4));
 
 /** One line for `session list` and `estimate`: what is left of the budget for sending. */
 export const writeBudgetNl = (budget: WriteBudget): string =>

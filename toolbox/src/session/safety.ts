@@ -277,6 +277,7 @@ export async function guardContext(context: BrowserContext, scope: Scope, guard:
     // Only a socket of the test environment may carry what the page says.
     const free = server !== null && isWriteOrigin(scope.writes, url);
     const frames = new SocketFrames(MESSAGE_VALUES);
+    const opened = Date.now();
     // On the socket of the test environment the answer to a real message is recorded, and a message that was sent before is played from its recording.
     const recordings = free ? socketRecordings(scope.writes!.runDir, scope.writes!.source, MESSAGE_VALUES) : null;
     let recorder: Recorder | null = null;
@@ -296,8 +297,10 @@ export async function guardContext(context: BrowserContext, scope: Scope, guard:
     socket.onMessage((message) => {
       if (!free) return note("socket", "SEND", url, "websocket");
       const counted = frames.counts(message, guard.idle);
+      // What a page sends right after it connects has to arrive; a later frame is something an agent did.
+      const anyFrame = Date.now() - opened >= GREETING_MS;
       if (counted) {
-        const recording = recordings!.find(url, message);
+        const recording = recordings!.find(url, message, anyFrame);
         if (recording) {
           const replayed = recordings!.replayed(url, recording, guard.sender);
           (guard.replays ??= []).push({ ...replayed, noteNl: replayNl(recording, replayed.matchedOn) });
@@ -313,7 +316,7 @@ export async function guardContext(context: BrowserContext, scope: Scope, guard:
       (guard.passed ??= []).push(claim.entry);
       server!.send(message);
       // Only a message with a test value starts a recording, and ends the one before it.
-      const next = counted ? recordings!.start(url, message, guard.sender) : null;
+      const next = counted ? recordings!.start(url, message, guard.sender, anyFrame) : null;
       if (next) {
         recorder?.end();
         recorder = next;
@@ -519,6 +522,9 @@ export function testValuesForRun(runDir: string): Record<string, string> {
  * Left out: the search terms (`search`, `search-none`), which make a search and no message, and the
  * empty value and anything shorter than four characters, which also occur in frames that nobody typed.
  */
+/** A frame this soon after a socket opened is the greeting of the page: it is never played from a recording. */
+export const GREETING_MS = 2000;
+
 export const MESSAGE_VALUES: readonly string[] = Object.entries(TEST_VALUES)
   .filter(([kind, value]) => kind !== "search" && kind !== "search-none" && value.trim().length >= 4)
   .map(([, value]) => value);

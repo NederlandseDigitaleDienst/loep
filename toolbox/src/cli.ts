@@ -125,6 +125,7 @@ const USAGE = `loep <command> [options]
   compare --run <run> --reference <file> --out <dir>
                                          Compare the evaluation with an existing audit of the same site
   purpose --run <run> [verbeteren|verantwoorden]
+  writes --run <run> --max-writes <n>    Raise the budget for sending. Confirmed at an interactive terminal, or --recorded-via gesprek (see below)
                                          What the investigation is for. Verbeteren (the default): a team wants to know what
                                          to fix, and the report is not signed. Verantwoorden: the report backs a statement,
                                          says what is still missing for status B, and is signed. Choose or change it at the
@@ -274,8 +275,8 @@ async function main(): Promise<void> {
     return;
   }
   // A run that was given a test environment at inventory may write there; every other run holds all writes back.
-  const { confirmDeclaration, decideWrites, DEFAULT_WRITE_SPACING_SECONDS, recordWrites, setRunWrites, spacingNl, writeAccess, writeOriginsNl, writesForRun } = await import("./lib/writes.ts");
-  if (command !== "inventory" && (values["allow-writes"] || values["test-environment"] !== undefined || values["declared-by"] !== undefined || values["max-writes"] !== undefined)) {
+  const { confirmDeclaration, decideWrites, DEFAULT_WRITE_SPACING_SECONDS, recordWrites, setRunWrites, raiseWrites, spacingNl, writeAccess, writeOriginsNl, writesForRun } = await import("./lib/writes.ts");
+  if (command !== "inventory" && (values["allow-writes"] || values["test-environment"] !== undefined || values["declared-by"] !== undefined || (values["max-writes"] !== undefined && command !== "writes"))) {
     throw new Error("--allow-writes, --test-environment, --declared-by en --max-writes horen bij inventory: daar wordt voor de hele run vastgelegd of er verstuurd mag worden, en hoe vaak");
   }
   // How a statement of a person came about is recorded with it. An answer and a decision may be recorded by the agent in the
@@ -284,7 +285,7 @@ async function main(): Promise<void> {
   const recordedVia = parseRecordedVia(values["recorded-via"]);
   const recording = { recordedVia: values["recorded-via"], confirmation: values.confirmation, summary: values.summary };
   if (recordedVia === "gesprek" && (command === "sign" || command === "inventory")) throw new Error(`${command === "sign" ? "tekenen" : "de verklaring dat er verstuurd mag worden"} legt de assistent nooit vast, ook niet na een bevestiging in het gesprek. ${HUMAN_AT_TERMINAL_NL}`);
-  if ((recordedVia !== undefined || values.confirmation !== undefined || values.summary !== undefined) && command !== "answer" && command !== "decide") throw new Error("--recorded-via, --confirmation en --summary horen bij answer en decide");
+  if ((recordedVia !== undefined || values.confirmation !== undefined || values.summary !== undefined) && command !== "answer" && command !== "decide" && command !== "writes") throw new Error("--recorded-via, --confirmation en --summary horen bij answer en decide");
   if (command !== "inventory" && values["also-origin"] !== undefined) throw new Error("--also-origin hoort bij inventory: daar wordt vastgelegd welke origins samen de site zijn");
   // A run goes on with the version of loep it was made with; another version would quietly write other tasks over it.
   if (values.run) {
@@ -502,6 +503,14 @@ async function main(): Promise<void> {
       for (const problem of problems) process.stdout.write(`- ${problem}\n`);
       process.stdout.write(problems.length === 0 ? "OK: het oordeel voldoet aan de vorm en wijst naar bestaande waarnemingen\n" : `${problems.length} problemen\n`);
       process.exitCode = problems.length === 0 ? 0 : 1;
+      return;
+    }
+    case "writes": {
+      if (!values.run || !values["max-writes"]) throw new Error("writes needs --run <run> and --max-writes <n>");
+      const { refuseUnderSeal } = await import("./lib/seal.ts");
+      refuseUnderSeal(`${values.run}/manifest.json`);
+      const raised = await raiseWrites(values.run, values["max-writes"], recording);
+      process.stdout.write(`budget voor versturen: ten hoogste ${raised.maxWrites} verzendingen voor de hele run. Open punten over een budget dat op was, meet een nieuwe afmaakronde: tasks --again <criteria>\n`);
       return;
     }
     case "pending": {
