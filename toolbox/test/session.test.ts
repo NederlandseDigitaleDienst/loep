@@ -613,7 +613,7 @@ test("the scope of a run is its own host plus the hosts of embedded frames", asy
   try {
     await assert.rejects(scopeForRun(dir, {}), /onbekend welke site in scope is/);
     writeFileSync(join(dir, "inventory.json"), JSON.stringify({ baseUrl: "https://www.example.nl/", origin: "https://www.example.nl", pages: [{ url: "https://www.example.nl/contact" }, { url: "https://video.example.org/embed/1" }] }));
-    assert.deepEqual(await scopeForRun(dir, { allowHosts: ["cdn.example.net"] }), { hosts: ["cdn.example.net", "video.example.org", "www.example.nl"], baseUrl: "https://www.example.nl/", strict: false });
+    assert.deepEqual(await scopeForRun(dir, { allowHosts: ["cdn.example.net"] }), { hosts: ["cdn.example.net", "video.example.org", "www.example.nl"], baseUrl: "https://www.example.nl/", runDir: dir, strict: false });
     // A host keeps its port unless it is 80 or 443; a frame on this machine or a local network is left out of a site on the internet, also from an older inventory that still lists it.
     writeFileSync(join(dir, "inventory.json"), JSON.stringify({ baseUrl: "https://www.example.nl/", origin: "https://www.example.nl", origins: ["https://www.example.nl", "https://www.example.nl:8443"], pages: [{ url: "http://www.example.nl:80/a" }, { url: "https://video.example.org:8080/embed/1" }, { url: "http://127.0.0.1:4712/speler.html" }, { url: "http://10.1.2.3/beheer" }, { url: "http://printer.local/" }, { url: "http://[fe80::1]/" }] }));
     assert.deepEqual((await scopeForRun(dir, { allowHosts: ["cdn.example.net:8080", "https://fonts.example.net/"] })).hosts, ["cdn.example.net:8080", "fonts.example.net", "video.example.org:8080", "www.example.nl", "www.example.nl:8443"]);
