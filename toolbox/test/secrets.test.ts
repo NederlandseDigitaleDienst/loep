@@ -644,6 +644,91 @@ test("a browser that goes around the proxy on this machine does not take part in
   }
 });
 
+// ---- A short value is no substring -------------------------------------------------------------------------------------
+
+const CODE = "483920";
+
+test("1: a short code only counts as a word of its own: never inside a number, a hash, a time or an address", () => {
+  const alias = "alias-van-de-code";
+  const shield = new Shield({ secrets: [{ ...secretFor(CODE), alias }] });
+  for (const kept of ["1483920", "4839201", "a483920", "483920b", "order-483920", "483920_x", "3.483920", "483920.5", "1,483920", "10:483920", "9f483920ab", "2026-10-30T10:48:39.483920Z", "http://localhost:483920/start"]) assert.equal(shield.inward(`<p>${kept}</p>`), `<p>${kept}</p>`, kept);
+  for (const [form, swapped] of [["Je code is 483920.", `Je code is ${alias}.`], ["<td>483920</td>", `<td>${alias}</td>`], ["?code=483920&x=1", `?code=${alias}&x=1`], ["%3D483920%26", `%3D${alias}%26`], ["/mail/483920/voorkeuren", `/mail/${alias}/voorkeuren`], ["code:483920", `code:${alias}`], ["&#52;83920", alias]] as const) assert.equal(shield.inward(form), swapped, form);
+});
+
+test("1: in data a short code only counts between quotes, so a number stays a number and the JSON stays JSON", () => {
+  const alias = "alias-van-de-code";
+  const shield = new Shield({ secrets: [{ ...secretFor(CODE), alias }] });
+  const json = JSON.stringify({ bytes: 483920, list: [483920, 1483920], at: "2026-10-30T10:48:39.483920Z", sha256: "ab483920cd", code: "483920", tekst: "je code is 483920" });
+  const expected = { bytes: 483920, list: [483920, 1483920], at: "2026-10-30T10:48:39.483920Z", sha256: "ab483920cd", code: alias, tekst: `je code is ${alias}` };
+  assert.deepEqual(JSON.parse(shield.inwardBody(Buffer.from(json), "application/json").data.toString()), expected);
+  assert.deepEqual(JSON.parse(shield.inwardBody(Buffer.from(json), "text/plain").data.toString()), expected, "by its shape, also under another type");
+  assert.deepEqual(JSON.parse(shield.inward(json)), expected);
+  assert.equal(shield.inwardBody(Buffer.from("var n = 483920; var c = '483920';"), "text/javascript").data.toString(), `var n = 483920; var c = '${alias}';`);
+  assert.equal(shield.inwardBody(Buffer.from("a { width: 483920px; margin: 483920 }"), "text/css").data.toString(), "a { width: 483920px; margin: 483920 }");
+  const large = Buffer.from(JSON.stringify({ base64: "a".repeat(64 * 1024 * 1024), n: 483920 }));
+  assert.equal(shield.inwardBody(large, "application/json").data, large, "a string of many megabytes is no problem for the pattern");
+});
+
+test("1: what a site sends goes through whole in a run with a short code: a number in JSON, the length of the body and a year", async () => {
+  const json = JSON.stringify({ bytes: 483920, jaar: 2026, duur: "12026", code: CODE });
+  const site = await siteWith((request, response) => {
+    if (request.url === "/data") return void response.writeHead(200, { "content-type": "application/json" }).end(json);
+    if (request.url === "/lang") return void response.writeHead(200, { "content-type": "text/plain", "x-rij": "1483920", age: "483920", "retry-after": "483920" }).end(`${" ".repeat(483919)}\n`);
+    html(response, `<h1>Site</h1><p id="jaar">2026</p><p id="code">Je code is ${CODE}</p><p id="getal">1483920</p>`);
+  });
+  const run = runOn(site.origin);
+  const mail: ReceivedMail = { id: "m", receivedAt: Date.now(), mail: { text: `Je code: ${CODE}. Deze code is geldig tot 2026.`, html: "", headers: new Map() } };
+  absorbAll(run, [site.origin], { kind: "mailpit", local: true, since: "2026-10-30T10:00:00Z", messages: [], links: [], refusedOrigins: [] }, [mail]);
+  const secrets = readSecretsFile(run)!.secrets;
+  assert.deepEqual(secrets.map((secret) => secret.real), [CODE], "the year is no code");
+  const session = await sessionOn(run, await launched("chromium"));
+  try {
+    await loadPage(session.page, `${site.origin}/`);
+    assert.equal(await session.page.locator("#jaar").textContent(), "2026");
+    assert.equal(await session.page.locator("#getal").textContent(), "1483920");
+    assert.equal(await session.page.locator("#code").textContent(), `Je code is ${secrets[0]!.alias}`);
+    const data = await session.page.evaluate(() => fetch("/data").then((answer) => answer.json()));
+    assert.deepEqual(data, { bytes: 483920, jaar: 2026, duur: "12026", code: secrets[0]!.alias });
+    const long = await session.page.evaluate(() => fetch("/lang").then(async (answer) => ({ length: (await answer.text()).length, age: answer.headers.get("age"), retry: answer.headers.get("retry-after"), row: answer.headers.get("x-rij") })));
+    assert.deepEqual(long, { length: 483920, age: "483920", retry: "483920", row: "1483920" });
+  } finally {
+    await session.close();
+    await site.close();
+    rmSync(run, { recursive: true, force: true });
+  }
+});
+
+test("1: the search follows the same rule, so a seal does not refuse a number, and the seal index is never touched", async () => {
+  const run = runOn("http://localhost:1");
+  try {
+    registerSecret(run, CODE, { source: "kort" });
+    writeFileSync(join(run, "data.json"), JSON.stringify({ bytes: 483920, at: "2026-10-30T10:48:39.483920Z", id: "x483920" }));
+    writeFileSync(join(run, "lijst.jsonl"), `${JSON.stringify({ n: 483920 })}\n${JSON.stringify({ n: 1 })}\n`);
+    writeFileSync(join(run, "tekst.html"), "<p>1483920 en a483920</p>");
+    writeFileSync(join(run, "beeld.bin"), Buffer.concat([Buffer.from([0, 1]), Buffer.from(` ${CODE} `), Buffer.from([2])]));
+    writeFileSync(join(run, "kopie.b64"), Buffer.from(CODE).toString("base64"));
+    writeFileSync(join(run, "hex.txt"), Buffer.from(CODE).toString("hex"));
+    writeFileSync(join(run, "pagina-483920.html"), "<p>leeg</p>");
+    assert.deepEqual(scanRun(run).hits, []);
+    await writeJson(join(run, "gemeten.json"), { bytes: 483920 });
+    assert.deepEqual(JSON.parse(readFileSync(join(run, "gemeten.json"), "utf8")), { bytes: 483920 });
+    assert.deepEqual(readSecretEvents(run), [], "a number is nothing to note");
+    const { sha256: first } = await seal(run);
+    assert.match(first, /^[0-9a-f]{64}$/);
+    for (const [name, content] of [["los.txt", `Je code is ${CODE}`], ["waarde.json", JSON.stringify({ code: CODE })]] as const) {
+      writeFileSync(join(run, name), content);
+      assert.deepEqual(scanRun(run).hits.map((hit) => hit.file), [name], "where it would be replaced, it is a leak");
+      rmSync(join(run, name));
+    }
+    const hash = "9f".repeat(32);
+    registerSecret(run, hash, { source: "lang" });
+    const index = JSON.stringify({ files: { "a.json": hash } });
+    assert.equal(maskText(join(run, "evidence-index.json"), index), index, "not even a long value changes the index: seal refused a leak before it got here");
+  } finally {
+    rmSync(run, { recursive: true, force: true });
+  }
+});
+
 test("8: a real value is put back as it is, with the signs a replacement would read as a pattern", () => {
   const real = "a$&b$$c$'d$`e$1f-0123456789";
   const alias = "x".repeat(real.length);

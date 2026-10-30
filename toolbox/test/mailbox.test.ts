@@ -140,6 +140,11 @@ test("what may be a token is told from what names a page", () => {
   assert.deepEqual(secretsInText(`Je code: 482913. Of gebruik ${TOKEN}. Bel 0612345678.`), [TOKEN, "482913"]);
 });
 
+test("1: a one-time code is told from a year, a date and any other number near the word for it", () => {
+  for (const text of ["Uw code is 482913", "code 4829", "De code is: 9931", "Verificatiecode: 5533", "Code voor bevestiging: 482913", "token = 8842", "Code **482913**", "Uw code 7788 is 15 minuten geldig."]) assert.equal(secretsInText(text).length, 1, text);
+  for (const text of ["Deze code is geldig tot 2026", "Deze code is geldig tot 31 december 2026", "code 2026", "code: 1999", "code: 20261030", "De code is 30102026.", "code 2026-10-30", "code 1030 uur", "code is 12.345", "code 1500 euro", "postcode 3511 AB", "postcode: 3511", "foutcode 5001"]) assert.deepEqual(secretsInText(text), [], text);
+});
+
 test("a link is named by the words in its path", () => {
   assert.equal(linkKind("/e-mailupdates/bevestigen/"), "bevestigen");
   assert.equal(linkKind("/account/confirm"), "bevestigen");

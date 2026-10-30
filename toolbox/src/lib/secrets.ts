@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 import { appendFileSync, chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, renameSync, statSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, relative, resolve, sep } from "node:path";
 import { ignoreSecrets, IDLE_SESSION_FILE, LOGIN_SESSION_FILE, RUN_SECRETS_FILE, siteOriginOfRun } from "./login.ts";
+import { SEAL_INDEX } from "./seal.ts";
 import { withLock } from "./writes.ts";
 
 /*
@@ -138,14 +139,30 @@ function characterPattern(character: string): string {
   return `(?:${forms.join("|")})`;
 }
 
+/** In a binary body a value shorter than this can stand there by chance: a code of six digits is in any picture of a megabyte. */
+export const MIN_BINARY_VALUE = 16;
+/** Anything shorter, and any short number, can also stand in a text by chance, as a piece of something else. */
+const MIN_RANDOM_VALUE = 8;
+const standsByChance = (value: string): boolean => value.length < MIN_RANDOM_VALUE || (value.length < MIN_BINARY_VALUE && /^\d+$/.test(value));
+
+/**
+ * Where a value that can stand somewhere by chance counts as that value. Not inside a longer word,
+ * number, hash or slug, not as a piece of a decimal, a time or a date, and not as the port of an
+ * address. A percent-escape before it counts as a separator: the letters of `%3D` belong to the sign.
+ */
+const WORD_BEFORE = String.raw`(?:(?<=%[0-9A-Fa-f]{2})|(?<![0-9A-Za-z_-]))(?<![0-9][.,:])(?<!\/\/[^\s/"'<>]*)`;
+const WORD_AFTER = String.raw`(?![0-9A-Za-z_-])(?![.,:][0-9])`;
+
 /**
  * A pattern for a value in every spelling this file knows, also when each character is spelled in
  * its own way. It runs over bytes. What it does not find, and `docs/methode.md` says so: a value
  * escaped twice (`%252B`), in base64 or hex in a page (`scanRun` does look for those), with other
- * capitals, cut in two by a tag, or anything a site derives from it.
+ * capitals, cut in two by a tag, or anything a site derives from it. With `asWord` a value only counts
+ * as a word of its own: replacing it anywhere else would change numbers, times and hashes that merely hold it.
  */
-function valuePattern(value: string): RegExp {
-  return new RegExp([...value].map(characterPattern).join(""), "g");
+function valuePattern(value: string, asWord: boolean): RegExp {
+  const pattern = [...value].map(characterPattern).join("");
+  return new RegExp(asWord ? `${WORD_BEFORE}${pattern}${WORD_AFTER}` : pattern, "g");
 }
 
 function replaceBytes(data: Buffer, from: string, to: string): Buffer {
@@ -164,14 +181,35 @@ function replaceBytes(data: Buffer, from: string, to: string): Buffer {
   return Buffer.concat(parts);
 }
 
-/** In a binary body a value shorter than this can stand there by chance: a code of six digits is in any picture of a megabyte. */
-export const MIN_BINARY_VALUE = 16;
 const TEXT_TYPE = /^(?:text\/|application\/(?:[\w.+-]*\+)?(?:json|xml|javascript|ecmascript|x-www-form-urlencoded|x-javascript)\b|image\/svg)/i;
 
 /** Whether a body is binary, by its type, or without one by what it starts with. */
 export function isBinaryBody(contentType: string | undefined, data: Buffer): boolean {
   if (contentType) return !TEXT_TYPE.test(contentType.trim());
   return data.subarray(0, 8192).includes(0);
+}
+
+/** Data and code: a number there is a number, and only what stands between quotes can be text. */
+const DATA_TYPE = /^(?:application\/(?:[\w.+-]*\+)?(?:json|javascript|ecmascript|x-javascript)\b|text\/(?:javascript|css)\b)/i;
+/** What stands between quotes. Unrolled, so a string of many megabytes (a recording keeps a body as base64) does not fill the stack of the pattern. */
+const QUOTED = /"[^"\\\n]*(?:\\.[^"\\\n]*)*"|'[^'\\\n]*(?:\\.[^'\\\n]*)*'/g;
+
+/**
+ * Whether a text is data, by its type or, without a type that says so, by its shape. There a value
+ * that can stand somewhere by chance only counts between quotes: an alias in the place of a number breaks the JSON around it.
+ */
+function isData(contentType: string | undefined, text: string): boolean {
+  if (contentType && DATA_TYPE.test(contentType.trim())) return true;
+  const [start, end] = [text.trimStart()[0], text.trimEnd().at(-1)];
+  return (start === "{" && end === "}") || (start === "[" && end === "]");
+}
+
+/** The kind of a file of a run, by its name: for the same rules as a body with that type. */
+function typeOfFile(path: string): string | undefined {
+  if (COMPRESSED.test(path)) return "application/octet-stream";
+  if (/\.(?:json|jsonl|map)$/i.test(path)) return "application/json";
+  if (/\.m?js$/i.test(path)) return "text/javascript";
+  return /\.css$/i.test(path) ? "text/css" : undefined;
 }
 
 export function hostOf(url: string): string {
@@ -199,6 +237,9 @@ const reachOf = (secret: Pick<RunSecret, "origins" | "domains">, url: string): b
   });
 };
 
+/** Everything that stands for one value in a page or a file: the value and how an address spells it. */
+const formsOf = (secret: RunSecret): string[] => [secret.real, ...(secret.spelled ?? [])];
+
 export class Shield {
   readonly secrets: readonly RunSecret[];
   private readonly guarded: Map<string, string>;
@@ -207,7 +248,7 @@ export class Shield {
   private readonly toRealInUrl: [string, string][];
   private readonly toRealInForm: [string, string][];
   /** The longest first: a value inside another value may not break it up. */
-  private readonly toAlias: { pattern: RegExp; alias: string; short: boolean; source: string; real: Buffer }[];
+  private readonly toAlias: { pattern: RegExp; alias: string; short: boolean; asWord: boolean; source: string }[];
   private readonly within = new Map<string, Shield>();
 
   constructor(file: Pick<SecretsFile, "secrets"> & Partial<Pick<SecretsFile, "guarded">>) {
@@ -225,13 +266,10 @@ export class Shield {
       [secret.alias, formEncoded(secret.real)],
     ]);
     this.toAlias = longestFirst.flatMap((secret) =>
-      [secret.real, ...(secret.spelled ?? [])].map((value) => ({
-        pattern: valuePattern(value),
-        alias: secret.alias,
-        short: secret.real.length < MIN_BINARY_VALUE,
-        source: secret.source,
-        real: Buffer.from(secret.real),
-      })),
+      formsOf(secret).map((value) => {
+        const asWord = standsByChance(secret.real);
+        return { pattern: valuePattern(value, asWord), alias: secret.alias, short: secret.real.length < MIN_BINARY_VALUE, asWord, source: secret.source };
+      }),
     );
   }
 
@@ -270,15 +308,18 @@ export class Shield {
   /** The body of a form: a real value is encoded there, or a + becomes a space. */
   outwardForm = (data: Buffer): Buffer => this.toRealInForm.reduce((value, [from, to]) => replaceBytes(value, from, to), data);
 
-  private swapped(data: Buffer, entries: Shield["toAlias"]): Buffer {
+  private swapped(data: Buffer, entries: Shield["toAlias"], contentType?: string): Buffer {
     if (entries.length === 0 || data.length === 0) return data;
     const before = data.toString("latin1");
-    const after = entries.reduce((text, entry) => text.replace(entry.pattern, entry.alias), before);
+    const swap = (text: string, some: Shield["toAlias"]): string => some.reduce((value, entry) => value.replace(entry.pattern, () => entry.alias), text);
+    const words = entries.filter((entry) => entry.asWord);
+    const rest = swap(before, entries.filter((entry) => !entry.asWord));
+    const after = words.length > 0 && isData(contentType, rest) ? rest.replace(QUOTED, (quoted) => swap(quoted, words)) : swap(rest, words);
     return after === before ? data : Buffer.from(after, "latin1");
   }
 
-  inward = (text: string): string => this.swapped(Buffer.from(text), this.toAlias).toString();
-  inwardBytes = (data: Buffer): Buffer => this.swapped(data, this.toAlias);
+  inward = (text: string, contentType?: string): string => this.swapped(Buffer.from(text), this.toAlias, contentType).toString();
+  inwardBytes = (data: Buffer, contentType?: string): Buffer => this.swapped(data, this.toAlias, contentType);
 
   /**
    * A body on its way back. In text every value is swapped. In a binary body only a value long enough
@@ -286,8 +327,9 @@ export class Shield {
    * swapping it could break a picture and saying nothing would hide a possible leak.
    */
   inwardBody(data: Buffer, contentType: string | undefined): { data: Buffer; shortFound: string[] } {
-    if (!isBinaryBody(contentType, data)) return { data: this.inwardBytes(data), shortFound: [] };
-    const shortFound = [...new Set(this.toAlias.filter((entry) => entry.short && data.includes(entry.real)).map((entry) => entry.source))];
+    if (!isBinaryBody(contentType, data)) return { data: this.inwardBytes(data, contentType), shortFound: [] };
+    const text = data.toString("latin1");
+    const shortFound = [...new Set(this.toAlias.filter((entry) => entry.short && text.search(entry.pattern) !== -1).map((entry) => entry.source))];
     return { data: this.swapped(data, this.toAlias.filter((entry) => !entry.short)), shortFound };
   }
 
@@ -539,13 +581,16 @@ const holdsSecretsOnPurpose = (name: string): boolean => {
 function searchFor(runDir: string, secrets: readonly { secret: RunSecret; index: number }[]): ScanResult {
   const result: ScanResult = { files: 0, bytes: 0, hits: [], compressed: 0 };
   const needles = secrets.map(({ secret, index }) => {
-    const forms = [secret.real, ...(secret.spelled ?? [])];
+    const forms = formsOf(secret);
+    const asWord = standsByChance(secret.real);
     return {
       index,
       source: secret.source,
       short: secret.real.length < MIN_BINARY_VALUE,
-      literal: [...new Set(forms.flatMap(searchedSpellings))].map((spelled) => Buffer.from(spelled)),
-      patterns: forms.map(valuePattern),
+      asWord,
+      // Only looked for where it would be replaced: as base64 or hex such a value would match pieces of anything.
+      literal: asWord ? [] : [...new Set(forms.flatMap(searchedSpellings))].map((spelled) => Buffer.from(spelled)),
+      patterns: forms.map((form) => valuePattern(form, asWord)),
     };
   });
   for (const path of walk(runDir)) {
@@ -557,10 +602,14 @@ function searchFor(runDir: string, secrets: readonly { secret: RunSecret; index:
     const compressed = COMPRESSED.test(name);
     if (compressed) result.compressed++;
     const text = data.length <= MAX_PATTERN_FILE ? data.toString("latin1") : "";
+    const binary = compressed || isBinaryBody(undefined, data);
+    // The same rule as where a run writes: what would not be replaced there is no leak here, or a seal would refuse a number.
+    const wordText = !binary && needles.some((needle) => needle.asWord) && isData(typeOfFile(name), text) ? (text.match(QUOTED) ?? []).join("\n") : text;
     for (const needle of needles) {
       // A short value in a picture is chance, not a leak: it stands in any file of some size.
-      if (needle.short && compressed) continue;
-      const found = needle.literal.some((form) => data.includes(form) || name.includes(form.toString())) || needle.patterns.some((pattern) => text.search(pattern) !== -1);
+      if (needle.short && binary) continue;
+      const body = needle.asWord ? wordText : text;
+      const found = needle.literal.some((form) => data.includes(form) || name.includes(form.toString())) || needle.patterns.some((pattern) => body.search(pattern) !== -1 || (needle.asWord && name.search(pattern) !== -1));
       if (found) result.hits.push({ file: name, secret: needle.index, source: needle.source });
     }
   }
@@ -627,7 +676,8 @@ function secretRunOf(path: string): string | null {
 }
 
 function maskFor(path: string): { runDir: string; shield: Shield; where: string } | null {
-  if (holdsSecretsOnPurpose(path) || basename(path) === SECRET_EVENTS_FILE) return null;
+  // The seal index is hashes and sizes of what was already written: swapping anything there breaks the seal. `seal` refuses a run with a leak before it writes the index.
+  if (holdsSecretsOnPurpose(path) || basename(path) === SECRET_EVENTS_FILE || basename(path) === SEAL_INDEX) return null;
   const runDir = secretRunOf(path);
   const shield = runDir ? shieldForRun(runDir) : null;
   return runDir && shield ? { runDir, shield, where: relative(runDir, resolve(path)).split(sep).join("/") } : null;
@@ -643,7 +693,7 @@ const noteMasked = (runDir: string, where: string): void => noteSecretEvent(runD
 export function maskText(path: string, text: string): string {
   const mask = maskFor(path);
   if (!mask) return text;
-  const safe = mask.shield.inward(text);
+  const safe = mask.shield.inward(text, typeOfFile(path));
   if (safe !== text) noteMasked(mask.runDir, mask.where);
   return safe;
 }

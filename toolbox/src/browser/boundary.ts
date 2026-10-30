@@ -82,11 +82,16 @@ function outwardHeaders(shield: Shield, headers: IncomingHttpHeaders): Record<st
   return Object.fromEntries(Object.entries(withoutHopByHop(headers)).map(([name, value]) => [name, Array.isArray(value) ? value.map((part) => swap(name, part)) : swap(name, value)]));
 }
 
+/** Headers that are a number or a date by definition: they hold no value of a run, and a short value that happens to match would break them. */
+const FIXED_HEADERS = new Set(["accept-ranges", "age", "content-length", "content-range", "date", "expires", "last-modified", "retry-after"]);
+
+const headerInward = (shield: Shield, name: string, value: string): string => (FIXED_HEADERS.has(name) ? value : shield.inward(value));
+
 const headersInward = (shield: Shield, headers: IncomingHttpHeaders): Record<string, string | string[]> =>
   Object.fromEntries(
     Object.entries(headers)
       .filter((entry): entry is [string, string | string[]] => entry[1] !== undefined)
-      .map(([name, value]) => [name, Array.isArray(value) ? value.map(shield.inward) : shield.inward(value)]),
+      .map(([name, value]) => [name, Array.isArray(value) ? value.map((part) => headerInward(shield, name, part)) : headerInward(shield, name, value)]),
   );
 
 const refusalAnswer = (reasonNl: string) => ({ statusCode: REFUSED_STATUS, statusMessage: "Geweigerd door de grens van loep", headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store", [REFUSED_HEADER]: encodeURIComponent(reasonNl) }, body: `loep: ${reasonNl}\n` });

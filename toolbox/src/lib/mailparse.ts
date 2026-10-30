@@ -204,11 +204,32 @@ export function spelledSecretsInUrl(address: string): UrlSecret[] {
 /** The parts of an address that may be a token, as the site means them. */
 export const secretsInUrl = (address: string): string[] => [...new Set(spelledSecretsInUrl(address).map((part) => part.value))];
 
-/** A long token, or a one-time code after the word for it, that stands in the text of a mail outside a link. */
+const PUNCTUATION = String.raw`[\s:=*_("'-]`;
+/**
+ * The word for a one-time code and the digits after it: right behind it, behind "is", or further on behind a
+ * colon. Any other words in between make it another sentence, such as "deze code is geldig tot 2026".
+ */
+const ONE_TIME_CODE = new RegExp(String.raw`\b(?:(?:pin|sms|inlog|toegangs|verificatie|bevestigings|beveiligings|activatie)?code|token)\b(?:${PUNCTUATION}{0,6}|\s+(?:is|luidt)\b${PUNCTUATION}{0,6}|\D{0,20}[:=]${PUNCTUATION}{0,4})(\d{4,8})\b`, "gi");
+/** A number goes on after this, or counts something: then it is no code. */
+const NUMBER_GOES_ON = /^(?:[-./,:]\d|\s*(?:uur|u\b|min(?:uten|uut)?\b|sec(?:onden)?\b|dag(?:en)?\b|jaar\b|maand(?:en)?\b|euro\b|eur\b|€|%|[kmg]b\b|bytes?\b|tekens\b|cijfers\b|letters\b))/i;
+
+const isDate = (year: number, month: number, day: number): boolean => year >= 1900 && year < 2100 && month >= 1 && month <= 12 && day >= 1 && day <= 31;
+
+/** A year, or a date without separators, as 20261030 or 30102026. Such a number stands on any page of a site, so taking it for a code would change those pages. */
+function isYearOrDate(digits: string): boolean {
+  if (digits.length === 4) return isDate(Number(digits), 1, 1);
+  if (digits.length !== 8) return false;
+  const parts = (at: number[]): number[] => at.map((start, index) => Number(digits.slice(start, at[index + 1])));
+  const [yearFirst, month, day] = parts([0, 4, 6, 8]);
+  const [dayFirst, monthAfter, year] = parts([0, 2, 4, 8]);
+  return isDate(yearFirst!, month!, day!) || isDate(year!, monthAfter!, dayFirst!);
+}
+
+/** A long token, or a one-time code after the word for it, that stands in the text of a mail outside a link. A year, a date or any other number that merely stands near that word is no code. */
 export function secretsInText(text: string): string[] {
   const withoutLinks = text.replace(URL_IN_TEXT, " ");
   const tokens = (withoutLinks.match(/[A-Za-z0-9_-]{20,}/g) ?? []).filter((word) => /[0-9]/.test(word) && /[A-Za-z]/.test(word));
-  const codes = [...withoutLinks.matchAll(/\b(?:code|token|pincode)\b\D{0,20}(\d{4,8})\b/gi)].map((match) => match[1]!);
+  const codes = [...withoutLinks.matchAll(ONE_TIME_CODE)].filter((match) => !isYearOrDate(match[1]!) && !NUMBER_GOES_ON.test(withoutLinks.slice(match.index + match[0].length, match.index + match[0].length + 16))).map((match) => match[1]!);
   return [...new Set([...tokens, ...codes])];
 }
 
