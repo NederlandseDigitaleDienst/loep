@@ -7,7 +7,7 @@ import { isLoginPath, loginForRun, onlyLogsOut, passwordFieldShows } from "../li
 import { linksOf, secretsInText, secretsInUrl, spelledSecretsInUrl, withoutLinks } from "../lib/mailparse.ts";
 import { refuseUnderSeal } from "../lib/seal.ts";
 import { keepPrivate, readPrivate, readSecretsFile, registerGuarded, registerSecret, registerSecrets, scanRun, shieldForRun, type NewSecret, type Shield } from "../lib/secrets.ts";
-import { writeBudget, writeOriginsOf, writesForRun, type WritePermission } from "../lib/writes.ts";
+import { usedLinks, writeBudget, writeOriginsOf, writesForRun, type WritePermission } from "../lib/writes.ts";
 import { guardContext, guardRedirects, scopeForRun, TEST_VALUES, type Guard } from "../session/safety.ts";
 
 /*
@@ -22,6 +22,8 @@ export const MAIL_USAGE = `  mail wait --run <run> [--timeout <s>]   Wait for ma
   mail cleanup --run <run>               After the measuring, also after a run that broke off: remove the test registration
                                          through the site's own flow, delete the mail and look for tokens in the whole
                                          run. The outcome goes in mailbox.json; non-zero exit when something stayed behind
+  mail links --run <run>                 The personal links as they are now, with aliases in them: those still to open, and those
+                                         the run used. Does not open the mailbox
   mail status --run <run>                What mailbox.json says, without opening the mailbox
 `;
 
@@ -131,10 +133,28 @@ export function absorbAll(runDir: string, origins: readonly string[], state: Mai
   });
 }
 
+type ShownLink = Pick<MailboxLink, "id" | "url" | "kind">;
+
 export interface WaitResult {
   mails: number;
-  links: Pick<MailboxLink, "id" | "url" | "kind">[];
+  /** Links the run did not open yet. */
+  links: ShownLink[];
+  /** Links the run opened: a link can expire with its first use, so these are no longer on offer. */
+  used: ShownLink[];
   refusedOrigins: string[];
+}
+
+function shownLinks(runDir: string, state: MailboxState): Pick<WaitResult, "links" | "used"> {
+  const used = usedLinks(runDir);
+  const shown = state.links.map(({ id, url, kind }) => ({ id, url, kind }));
+  return { links: shown.filter((link) => !used.has(link.id)), used: shown.filter((link) => used.has(link.id)) };
+}
+
+/** The personal links as they are now. An agent asks for them here: a list in its task would change that task with every mail. */
+export function mailLinks(runDir: string): Pick<WaitResult, "links" | "used"> {
+  const state = readMailboxState(runDir);
+  if (!mailboxForRun(runDir) || !state) throw new Error("deze run heeft geen mailbox: die ligt vast bij inventory (--mailbox)");
+  return shownLinks(runDir, state);
 }
 
 /** Wait for mail, take it in and delete it. The answer has only what code took from it. */
@@ -148,7 +168,7 @@ export async function mailWait(runDir: string, options: { timeoutSeconds?: numbe
   const taken = absorbAll(runDir, origins, state, received);
   await writeMailboxState(runDir, state);
   await mailbox.remove(taken.map((message) => message.id));
-  return { mails: received.length, links: state.links.map(({ id, url, kind }) => ({ id, url, kind })), refusedOrigins: state.refusedOrigins };
+  return { mails: received.length, ...shownLinks(runDir, state), refusedOrigins: state.refusedOrigins };
 }
 
 // ---- Cleaning up ------------------------------------------------------------------------------------------------------

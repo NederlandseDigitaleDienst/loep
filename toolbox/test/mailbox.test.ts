@@ -8,7 +8,7 @@ import { after, before, beforeEach, test } from "node:test";
 import type { Browser } from "playwright";
 import { REFUSED_STATUS } from "../src/browser/boundary.ts";
 import { launchBrowser, loadPage, newContext } from "../src/browser/session.ts";
-import { cleanupLinesNl, mailCleanup, mailWait, startMailbox } from "../src/commands/mail.ts";
+import { cleanupLinesNl, mailCleanup, mailLinks, mailWait, startMailbox } from "../src/commands/mail.ts";
 import { seal } from "../src/commands/verify.ts";
 import { RUN_SECRETS_FILE } from "../src/lib/login.ts";
 import { imapMailbox } from "../src/lib/mailbox-imap.ts";
@@ -667,10 +667,35 @@ test("what an agent gets holds the alias and nothing of the mail", async () => {
   const run = await mailboxRun(origin);
   try {
     await mailWait(run, { mailbox: memoryBox([mailFor(`${origin}/voorkeuren/?token=${TOKEN}`)]) });
-    const task = agentMailboxNl(run);
-    assert.ok(task.includes(readMailboxState(run)!.links[0]!.url));
+    const task = agentMailboxNl(run, "loep mail links --run RUN");
+    assert.ok(task.includes("loep mail links --run RUN"));
+    assert.ok(!task.includes(readMailboxState(run)!.links[0]!.url), "the address is not in the task: a task is hashed");
     assert.ok(!task.includes(TOKEN) && !task.includes("Hallo"));
+    const { links } = mailLinks(run);
+    assert.deepEqual(links.map((link) => link.url), [readMailboxState(run)!.links[0]!.url]);
+    assert.ok(!JSON.stringify(links).includes(TOKEN));
   } finally {
+    rmSync(run, { recursive: true, force: true });
+  }
+});
+
+test("10: a link the run used is not offered any more, by whichever command asks", async () => {
+  const run = await mailboxRun(origin);
+  const session = await sessionOn(run);
+  const first = `${origin}/voorkeuren/?token=${TOKEN}`;
+  try {
+    await mailWait(run, { mailbox: memoryBox([mailFor(first)]) });
+    const url = readMailboxState(run)!.links[0]!.url;
+    assert.deepEqual(mailLinks(run).links.map((link) => link.url), [url]);
+    assert.deepEqual(mailLinks(run).used, []);
+    await loadPage(session.page, url);
+    assert.deepEqual(mailLinks(run).links, [], "opened once");
+    assert.deepEqual(mailLinks(run).used.map((link) => link.url), [url]);
+    const later = await mailWait(run, { mailbox: memoryBox([mailFor(`${origin}/verder/?token=${TOKEN}A`)]) });
+    assert.deepEqual(later.links.map((link) => link.id), ["L2"]);
+    assert.deepEqual(later.used.map((link) => link.id), ["L1"]);
+  } finally {
+    await session.close();
     rmSync(run, { recursive: true, force: true });
   }
 });
@@ -857,7 +882,7 @@ test("a run without a mailbox has no shield and no sentence, and what opens a ma
     assert.ok(writesForRun(run));
     assert.equal(shieldForRun(run), null);
     assert.deepEqual(mailboxLimitationsNl(run), []);
-    assert.equal(agentMailboxNl(run), "");
+    assert.equal(agentMailboxNl(run, "loep mail links"), "");
     assert.deepEqual(scanRun(run).hits, []);
     await assert.rejects(mailWait(run), /geen mailbox/);
     await assert.rejects(mailCleanup(run), /geen mailbox/);

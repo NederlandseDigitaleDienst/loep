@@ -430,6 +430,9 @@ export function claimLink(access: WriteAccess, url: string, link: string, sender
   return claim.ok ? null : claim;
 }
 
+/** The guarded addresses this run opened, by their id. */
+export const usedLinks = (runDir: string): Set<string> => new Set(readLog(runDir).flatMap((entry) => (entry.link ? [entry.link] : [])));
+
 const LOCK = "writes.lock";
 /** A lock older than this was left behind by a process that stopped while it held it. */
 const STALE_LOCK_MS = 10_000;

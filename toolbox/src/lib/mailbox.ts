@@ -293,13 +293,12 @@ function cleanupNl(state: MailboxState | null): string {
 }
 
 /**
- * What an agent has to know in a run with personal links, for its task file. Empty for a run
- * without: a task of such a run is then byte for byte what it was. It holds the addresses with
- * aliases and nothing of the text of a mail.
+ * What an agent has to know in a run with a mailbox, for its task file. Empty for a run without: a
+ * task of such a run is then byte for byte what it was. It holds no address: a task is hashed, and a
+ * verdict stands on that hash, so a mail that comes in later may not change it. An agent asks for the
+ * links as they are with `askLinks`, the command for this run.
  */
-export function agentMailboxNl(runDir: string): string {
-  const state = readMailboxState(runDir);
-  if (!mailboxForRun(runDir) || !state || state.links.length === 0) return "";
-  const list = state.links.map((link) => `\n- ${link.kind}: \`${link.url}\``).join("");
-  return `\n\n**Deze run heeft pagina's achter een persoonlijke link uit een e-mail.** Open ze met \`open\` op deze adressen:${list}\nDe code in zo'n adres is een vervanging: de echte code krijg je niet te zien en heb je niet nodig. Een waarneming noemt dit adres, en dat is goed zo. De eerste keer dat de run een link opent, telt als verzending. Een link kan na gebruik vervallen, en de knop om af te melden of te verwijderen haalt de testaanmelding weg: druk daar niet op, tenzij de procedure dat vraagt. Lees de e-mail zelf niet: \`mailbox/\` in de run is voor wie het onderzoek leidt.`;
+export function agentMailboxNl(runDir: string, askLinks: string): string {
+  if (!mailboxForRun(runDir) || !readMailboxState(runDir)) return "";
+  return `\n\n**Deze run heeft pagina's achter een persoonlijke link uit een e-mail.** De adressen staan niet in deze opdracht, want er kan mail bijkomen. Vraag ze op met \`${askLinks}\`: onder \`links\` staan de adressen die de run nog niet opende. Open die met \`open\`. Onder \`used\` staan adressen die al zijn gebruikt: reken daar niet op, want zo'n link kan na gebruik vervallen. Is de lijst leeg, dan is er geen pagina achter een link om te bekijken. De code in zo'n adres is een vervanging: de echte code krijg je niet te zien en heb je niet nodig. Een waarneming noemt dit adres, en dat is goed zo. De eerste keer dat de run een link opent, telt als verzending. De knop om af te melden of te verwijderen haalt de testaanmelding weg: druk daar niet op, tenzij de procedure dat vraagt. Lees de e-mail zelf niet: \`mailbox/\` in de run is voor wie het onderzoek leidt.`;
 }

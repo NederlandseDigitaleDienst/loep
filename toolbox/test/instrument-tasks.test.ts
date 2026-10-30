@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { after, test } from "node:test";
 import { checkInstrumentVerdict, checkWalk, instrumentPending, instrumentTasks, loadInstrumentIndex, skip } from "../src/commands/instrument-tasks.ts";
 import { useFactor } from "../src/lib/budget.ts";
+import { sha256 } from "../src/lib/canonical.ts";
 import { resolveCriterion } from "../src/lib/evaluation.ts";
 import type { RunData } from "../src/lib/rundata.ts";
 import type { Verdict } from "../src/lib/verdict.ts";
@@ -97,6 +98,38 @@ test("a run with a site model starts with a walk per page type and a judge task 
   const taskSizes = pending.walks.map((walk) => statSync(walk.task).size);
   assert.deepEqual(taskSizes, [...taskSizes].sort((a, b) => b - a), "the walks come longest first");
   assert.deepEqual(pending.judges, [], "judges wait for the walks");
+});
+
+test("10: a mail that comes in changes no task, so a verdict on that task stays valid, and the links are not in it", async () => {
+  const mailRun = mkdtempSync(join(tmpdir(), "loep-tasks-mail-"));
+  const prompts = ["rondgang/start.md", "rondgang/contact.md", "tasks/1.4.3/beoordeel.md", "tasks/1.4.11/beoordeel.md"];
+  const link = (id: string): { id: string; url: string; kind: string } => ({ id, url: `https://site.test/voorkeuren/?token=loepsecret${id}`, kind: "voorkeuren" });
+  const state = (links: unknown[]): string => JSON.stringify({ kind: "mailpit", local: true, since: "2026-10-30T09:00:00.000Z", messages: [], links, refusedOrigins: [] });
+  try {
+    writeFileSync(join(mailRun, "sample.json"), JSON.stringify({ items: [{ url: HOME }, { url: CONTACT }] }));
+    writeFileSync(join(mailRun, "manifest.json"), JSON.stringify({ mailbox: { kind: "mailpit", local: true, declaredAt: "2026-10-30T09:00:00.000Z" } }));
+    mkdirSync(join(mailRun, "recipes"));
+    writeFileSync(join(mailRun, "recipes", "process-contact.json"), JSON.stringify({ start: { url: HOME }, steps: [{ command: "goto", args: [CONTACT] }] }));
+    const mailOptions = { ...options, run: { ...run, dir: mailRun } as unknown as RunData };
+    const hashes = (): string[] => prompts.map((path) => sha256(readFileSync(join(mailRun, path))));
+
+    writeFileSync(join(mailRun, "mailbox.json"), state([]));
+    await instrumentTasks(mailRun, mailOptions);
+    const before = hashes();
+    const text = readFileSync(join(mailRun, prompts[0]!), "utf8");
+    assert.match(text, /persoonlijke link uit een e-mail/);
+    assert.match(text, /mail links --run \S+/, "the task says where to ask");
+
+    writeFileSync(join(mailRun, "mailbox.json"), state([link("L1")]));
+    await instrumentTasks(mailRun, mailOptions);
+    assert.deepEqual(hashes(), before, "the first link changes nothing");
+    writeFileSync(join(mailRun, "mailbox.json"), state([link("L1"), link("L2")]));
+    await instrumentTasks(mailRun, mailOptions);
+    assert.deepEqual(hashes(), before, "nor does the next");
+    for (const path of prompts) assert.ok(!readFileSync(join(mailRun, path), "utf8").includes("loepsecret"), path);
+  } finally {
+    rmSync(mailRun, { recursive: true, force: true });
+  }
 });
 
 test("candidates of a checked walk reach their criterion, by code", async () => {

@@ -541,7 +541,7 @@ async function main(): Promise<void> {
     }
     case "mail": {
       if (!values.run) throw new Error("mail needs --run <run>");
-      const { cleanupLinesNl, mailCleanup, mailWait } = await import("./commands/mail.ts");
+      const { cleanupLinesNl, mailCleanup, mailLinks, mailWait } = await import("./commands/mail.ts");
       if (target === "wait") {
         const timeoutSeconds = values.timeout === undefined ? undefined : Number(values.timeout);
         if (timeoutSeconds !== undefined && !(timeoutSeconds >= 0)) throw new Error("--timeout is een aantal seconden");
@@ -550,10 +550,12 @@ async function main(): Promise<void> {
         const cleanup = await mailCleanup(values.run);
         process.stdout.write(`${cleanupLinesNl(cleanup).join("\n")}\n`);
         process.exitCode = cleanup.complete ? 0 : 1;
+      } else if (target === "links") {
+        process.stdout.write(`${JSON.stringify(mailLinks(values.run))}\n`);
       } else if (target === "status") {
         const { readMailboxState } = await import("./lib/mailbox.ts");
         process.stdout.write(`${JSON.stringify(readMailboxState(values.run))}\n`);
-      } else throw new Error(`mail kent wait, cleanup en status, niet "${target}"`);
+      } else throw new Error(`mail kent wait, cleanup, links en status, niet "${target}"`);
       return;
     }
     case "secrets": {
