@@ -3,7 +3,7 @@ import { basename, join, resolve } from "node:path";
 import { madeWith, openCriteria, type CriterionResult, type Evaluation } from "../lib/evaluation.ts";
 import { siteOrigins } from "../lib/origins.ts";
 import { SHOWN_LABEL, shownOutcome } from "../lib/report-markdown.ts";
-import { NOT_SENT, OPEN_POINT_KINDS, openPoint, UNREACHABLE } from "../lib/verdict.ts";
+import { NOT_SENT, OPEN_POINT_KINDS, openPoint, SENDING_BUDGET_OUT, UNREACHABLE } from "../lib/verdict.ts";
 import { compareCriterionIds } from "../lib/wcag.ts";
 
 /*
@@ -53,6 +53,8 @@ export interface Feedback {
    * person who runs this knows one declaration at inventory would have closed them.
    */
   notSent: string[];
+  /** Open because the budget for sending ran out, in a run that was allowed to send: a person can raise it. */
+  budgetOut: string[];
   /**
    * Open criteria with a point "niet bereikbaar": a part of the site did not load while the rest
    * did. No fault of loep, so no draft; named so the person who runs this can ask for a new
@@ -152,8 +154,8 @@ export function feedback(runDir: string, options: { out?: string | undefined } =
     }
   }
   const open = openCriteria(evaluation.criteria);
-  const withKind = (prefix: string): string[] => [...open.owner, ...open.evaluation].filter((id) => evaluation.criteria.find((criterion) => criterion.id === id)!.missingNl.some((point) => openPoint(point).kind?.prefix === prefix)).sort(compareCriterionIds);
-  return { run: basename(resolve(runDir)), repository: REPOSITORY, madeWithNl: madeWith(evaluation, true), drafts, notSent: withKind(NOT_SENT), unreachable: withKind(UNREACHABLE), outage: evaluation.criteria.filter((criterion) => criterion.outage).map((criterion) => criterion.id).sort(compareCriterionIds) };
+  const withKind = (prefix: string, also: (point: string) => boolean = () => true): string[] => [...open.owner, ...open.evaluation].filter((id) => evaluation.criteria.find((criterion) => criterion.id === id)!.missingNl.some((point) => openPoint(point).kind?.prefix === prefix && also(point))).sort(compareCriterionIds);
+  return { run: basename(resolve(runDir)), repository: REPOSITORY, madeWithNl: madeWith(evaluation, true), drafts, notSent: withKind(NOT_SENT, (point) => !SENDING_BUDGET_OUT.test(point)), budgetOut: withKind(NOT_SENT, (point) => SENDING_BUDGET_OUT.test(point)), unreachable: withKind(UNREACHABLE), outage: evaluation.criteria.filter((criterion) => criterion.outage).map((criterion) => criterion.id).sort(compareCriterionIds) };
 }
 
 /** The drafts as a text to read: what to check first, then per draft the title and the body or where it is. */
@@ -162,6 +164,11 @@ export function feedbackTextNl(result: Feedback): string {
   const notSent =
     result.notSent.length > 0
       ? `\nNiet terug te melden: ${result.notSent.length === 1 ? "criterium" : "criteria"} ${result.notSent.join(", ")} ${result.notSent.length === 1 ? "bleef" : "bleven"} ook open omdat het onderzoek niet mocht versturen. Dat is een keuze van de eigenaar van de site, geen fout in loep. Een testomgeving, verklaard bij inventory met --test-environment, laat een instrument het meten; LOEP gaps telt deze punten onder "${NOT_SENT}".\n`
+      : "";
+  // Allowed to send, and the budget ran out: no choice of the owner, and it can still be measured.
+  const budgetOut =
+    result.budgetOut.length > 0
+      ? `\nNiet terug te melden: ${result.budgetOut.length === 1 ? "criterium" : "criteria"} ${result.budgetOut.join(", ")} ${result.budgetOut.length === 1 ? "bleef" : "bleven"} ook open omdat het budget voor versturen op was. Wil de eigenaar dat, dan gaat het budget omhoog (LOEP writes --run <run> --max-writes <aantal>), en meet een nieuwe afmaakronde het: LOEP tasks --run <run> --again ${result.budgetOut.join(",")}.\n`
       : "";
   // A part of the site that did not load is no fault of loep either; a new finishing round measures it once it loads.
   const unreachable =
@@ -173,7 +180,7 @@ export function feedbackTextNl(result: Feedback): string {
     result.outage.length > 0
       ? `\nNiet terug te melden: ${result.outage.length === 1 ? "criterium" : "criteria"} ${result.outage.join(", ")} ${result.outage.length === 1 ? "is" : "zijn"} niet beoordeeld door een storing van het model (een limiet of een storing van de dienst). Dat is geen fout in loep. Zet de opdracht terug met LOEP unskip --run <run> --criterion <id> [--round final|finish] en start de werkstroom opnieuw.\n`
       : "";
-  const apart = `${notSent}${unreachable}${outage}`;
+  const apart = `${notSent}${budgetOut}${unreachable}${outage}`;
   if (result.drafts.length === 0) return `Niets terug te melden uit ${result.run}: geen criterium is open door loep zelf.\n${apart}`;
   const criteria = new Set(result.drafts.map((draft) => draft.criterion)).size;
   const lines = [

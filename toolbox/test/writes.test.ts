@@ -12,13 +12,13 @@ import { INPAGE_PATH, launchBrowser, loadPage, newContext } from "../src/browser
 import { probeForms } from "../src/instruments/forms.ts";
 import { formErrors } from "../src/lib/extractors.ts";
 import { REGULAR_PATH, type RunData } from "../src/lib/rundata.ts";
-import { budgetOutPointNl, confirmDeclaration, criterionSender, decideWrites, isOurMessage, isWriteOrigin, isProtocolFrame, reservedWrites, senderOf, SocketFrames, DEFAULT_MAX_WRITES, DEFAULT_WRITE_SPACING_SECONDS, recordWrites, WRITES_BLOCKED_NL, writeAccess, writeBudget, writeBudgetNl, writeOriginsOf, writesAllowedNl, writesForRun, type PassedWrite, type WritePermission } from "../src/lib/writes.ts";
+import { budgetOutPointNl, confirmDeclaration, raiseWrites, writesLow, criterionSender, decideWrites, isOurMessage, isWriteOrigin, isProtocolFrame, reservedWrites, senderOf, SocketFrames, DEFAULT_MAX_WRITES, DEFAULT_WRITE_SPACING_SECONDS, recordWrites, WRITES_BLOCKED_NL, writeAccess, writeBudget, writeBudgetNl, writeOriginsOf, writesAllowedNl, writesForRun, type PassedWrite, type WritePermission } from "../src/lib/writes.ts";
 import { answerRefusalNl, DECLARED_ORIGIN, httpSendOf, RECORD_QUIET_MS, readHttpRecordings, readRecordings, readReplays, recordingKey, replayNl, replaysNl, socketRecordings, type HttpRecording } from "../src/lib/recordings.ts";
 import { notSentPointProblems } from "../src/lib/verdict.ts";
 import { approvedSendsTo, sendsToMatches, sendsToProblems, sendsToReplayProblem } from "../src/lib/sitemodel.ts";
 import { Daemon } from "../src/session/daemon.ts";
 import type { Observation } from "../src/session/observations.ts";
-import { DEFAULT_DAEMON_LIMITS, MESSAGE_VALUES, Politeness, scopeForRun, TEST_VALUES, type Guard } from "../src/session/safety.ts";
+import { DEFAULT_DAEMON_LIMITS, GREETING_MS, MESSAGE_VALUES, Politeness, scopeForRun, TEST_VALUES, type Guard } from "../src/session/safety.ts";
 import { openSurface } from "../src/session/surface.ts";
 import { startServer, type FixtureServer } from "./fixtures/session-site/server.ts";
 
@@ -607,6 +607,56 @@ test("a frame without a test value goes to the server every time and is never re
   }
 });
 
+test("a frame without a test value is played from a recording after the greeting of the page, so pressing send on an empty field costs one send", async () => {
+  reset();
+  const dir = mkdtempSync(join(tmpdir(), "loep-writes-replay-empty-"));
+  const limited: WritePermission = { ...permission, maxWrites: 10, spacingSeconds: 0 };
+  await recordWrites(dir, limited);
+  try {
+    const env = { browser, runDir: dir, scope: await scopeForRun(dir, { scopeUrl: `${site.origin}/` }), limits: DEFAULT_DAEMON_LIMITS, politeness: new Politeness(0) };
+    const empty = JSON.stringify({ type: "chat", text: "" });
+    for (let round = 0; round < 2; round++) {
+      const { surface } = await openSurface(env, { url: `${site.origin}/callback.html`, width: 1280, height: 800, scheme: "light" });
+      await sendFrames(surface.page, [empty], GREETING_MS + 200);
+      await surface.page.waitForTimeout(RECORD_QUIET_MS + 300);
+      await surface.context.close();
+    }
+    assert.equal(site.socketMessages.length, 1, "the service hears it once");
+    assert.equal(writeBudget(dir, limited).sent, 1);
+    assert.equal(readReplays(dir).length, 1);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("a person raises the budget at a terminal or in the conversation, a running access sees it, and only upward", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "loep-writes-raise-"));
+  const declared: WritePermission = { ...decideWrites("https://site.example.nl/", { testEnvironment: "https://site.example.nl", declaredBy: "Een Beheerder, beheer", maxWrites: "2" })!, spacingSeconds: 0 };
+  await recordWrites(dir, declared);
+  const yes = (answer: string) => ({ interactive: true, ask: async () => answer });
+  try {
+    const access = writeAccess(dir, declared, "test");
+    assert.equal(access.claim("POST", "https://site.example.nl/a", { sender: "een" }).ok, true);
+    assert.equal(access.claim("POST", "https://site.example.nl/a", { sender: "twee" }).ok, true);
+    assert.equal(access.claim("POST", "https://site.example.nl/a", { sender: "drie" }).ok, false);
+    assert.equal(writesLow(writeBudget(dir, declared)), true);
+    await assert.rejects(raiseWrites(dir, "2", {}, yes("ja")), /hoger/);
+    await assert.rejects(raiseWrites(dir, "4", {}, yes("nee")), /niet bevestigd/);
+    await assert.rejects(raiseWrites(dir, "4", {}, { interactive: false, ask: async () => "ja" }), /interactieve terminal/);
+    await assert.rejects(raiseWrites(dir, "4", { recordedVia: "gesprek" }), /letterlijk/);
+    const raised = await raiseWrites(dir, "3", {}, yes("ja"));
+    assert.equal(raised.raised![0]!.recordedVia, "terminal");
+    assert.match(writesAllowedNl(raised), /verhoogd van 2 naar 3/);
+    assert.equal(access.claim("POST", "https://site.example.nl/a", { sender: "drie" }).ok, true, "the access made before the raise sees the new budget");
+    const inConversation = await raiseWrites(dir, "4", { recordedVia: "gesprek", confirmation: "ja, verhoog maar naar 4", summary: "Het budget gaat van 3 naar 4 verzendingen." });
+    const last = inConversation.raised!.at(-1)!;
+    assert.equal(inConversation.raised!.length, 2);
+    assert.equal(last.recordedVia === "gesprek" ? last.confirmationNl : null, "ja, verhoog maar naar 4");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test("a socket closed before the server answered leaves no recording, and the next send of the message is real", async () => {
   reset();
   const dir = mkdtempSync(join(tmpdir(), "loep-writes-replay-early-"));
@@ -885,15 +935,16 @@ test("which body makes a send that is recorded, and which answer may never be pl
 });
 
 /** Open a socket to the fixture site from the page and send these frames, one at a time. */
-async function sendFrames(page: Page, frames: string[]): Promise<void> {
-  await page.evaluate(async ([url, list]) => {
+async function sendFrames(page: Page, frames: string[], waitMs = 0): Promise<void> {
+  await page.evaluate(async ([url, list, wait]) => {
     const socket = new WebSocket(url!);
     await new Promise((resolve) => socket.addEventListener("open", resolve));
+    await new Promise((resolve) => setTimeout(resolve, wait as number));
     for (const frame of list as string[]) {
       socket.send(frame);
       await new Promise((resolve) => setTimeout(resolve, 100));
     }
-  }, [`${site.origin.replace("http", "ws")}/chat`, frames] as const);
+  }, [`${site.origin.replace("http", "ws")}/chat`, frames, waitMs] as const);
   await settle();
 }
 

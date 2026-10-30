@@ -44,11 +44,12 @@ import {
   type ObservationIndex,
   type ObservationRecordLike,
   type Verdict,
+  SENDING_BUDGET_OUT,
 } from "../lib/verdict.ts";
 import { CRITERIA, criterionById } from "../lib/wcag.ts";
 import { agentLoginNl } from "../lib/login.ts";
 import { readsAllowedNl } from "../lib/reads.ts";
-import { criterionSender, DEFAULT_MAX_WRITES, DEFAULT_WRITE_SPACING_SECONDS, reservedNl, reservedWrites, spacingNl, WRITES_BLOCKED_NL, writeBudget, writesAllowedNl, writesForRun } from "../lib/writes.ts";
+import { criterionSender, DEFAULT_MAX_WRITES, DEFAULT_WRITE_SPACING_SECONDS, reservedNl, reservedWrites, spacingNl, WRITES_BLOCKED_NL, writeBudget, writeBudgetNl, writesAllowedNl, writesForRun, writesLow } from "../lib/writes.ts";
 import { sweepCandidates } from "../lib/statusmessages.ts";
 import { makeWorkDir } from "../lib/workdir.ts";
 import { refuseUnderSeal } from "../lib/seal.ts";
@@ -460,6 +461,7 @@ async function passingOf(runDir: string, tasks: InstrumentTask[], observations: 
  * the site loads again or the probe works: "niet bereikbaar" or "proef werkte niet". It can also
  * when another criterion passed something on to it that none of its verdicts ruled on and it did
  * not fail: what a finishing round passes on reaches no other round by itself, since those run side by side.
+ * And it can when a person raised the budget for sending and a point says that budget was used up.
  */
 async function pointsForAgain(runDir: string, previous: InstrumentIndex | null, id: string, observations: ReturnType<typeof loadObservations>): Promise<string[] | string> {
   if (!criterionById(id)) return `--again: "${id}" is geen succescriterium`;
@@ -470,8 +472,10 @@ async function pointsForAgain(runDir: string, previous: InstrumentIndex | null, 
   const kinds = KINDS_FOR_AGAIN.map((kind) => `"${kind}"`).join(" of ");
   const passing = await passingOf(runDir, previous.tasks, observations);
   const unruled = !counting || counting.verdict.outcome === "failed" ? [] : unruledCrossPoints(passing, id, [passing.get(id)?.final, passing.get(id)?.finish], observations.records);
-  const open = counting?.verdict.outcome === "cantTell" ? (counting.verdict.missingNl ?? []) : [];
-  if (!counting || (unruled.length === 0 && !open.some((point) => (KINDS_FOR_AGAIN as readonly string[]).includes(openPoint(point).kind?.prefix ?? "")))) {
+  const raised = (writesForRun(runDir)?.raised ?? []).length > 0;
+  const spent = raised ? (counting?.verdict.missingNl ?? []).filter((point) => SENDING_BUDGET_OUT.test(point)) : [];
+  const open = counting?.verdict.outcome === "cantTell" ? (counting.verdict.missingNl ?? []) : spent;
+  if (!counting || (unruled.length === 0 && spent.length === 0 && !open.some((point) => (KINDS_FOR_AGAIN as readonly string[]).includes(openPoint(point).kind?.prefix ?? "")))) {
     return `--again: het eindoordeel van ${id} staat niet open met een punt ${kinds}, en niets wat een ander criterium eraan doorgaf, is nog onbeoordeeld; een nieuwe afmaakronde is alleen voor wat een instrument kan meten zodra het deel van de site weer laadt of de proef werkt, of voor wat een ander criterium doorgaf`;
   }
   if (counting.round === "final" && task.finish && !skipped(runDir, task.finish.output)) return `--again: de afmaakronde van ${id} staat al klaar; pending noemt haar onder finishers`;
@@ -958,6 +962,8 @@ export interface InstrumentPending {
   skipped: string[];
   /** The site has an outage now (`blockades.json`): no agent starts until it answers. Absent when it answers. */
   siteOutage?: string;
+  /** The budget for sending of a declared test environment is about to run out: whoever leads asks the person whether it may be raised (`writes`). */
+  sendingLow?: string;
   /** Once the run is done and the site answers again after an outage: the criteria whose final verdict, written before that, is open with a point "niet bereikbaar". `tasks --again` gives each a new finishing round. Absent when there is none. */
   again?: string[];
   noteNl: string;
@@ -968,9 +974,9 @@ export interface InstrumentPending {
  * paths, so the agent that reads it out has nothing long to copy. The workflow derives each path from
  * its id, as `TASK_FILES` does.
  */
-export function briefPending(pending: InstrumentPending): { phase: InstrumentPending["phase"]; siteOutage?: string; again?: string[] } & Record<Phase, { id: string; attempts: number }[]> {
+export function briefPending(pending: InstrumentPending): { phase: InstrumentPending["phase"]; siteOutage?: string; sendingLow?: string; again?: string[] } & Record<Phase, { id: string; attempts: number }[]> {
   const brief = (list: { pageType?: string; criterion?: string; attempts: number }[]): { id: string; attempts: number }[] => list.map((entry) => ({ id: entry.pageType ?? entry.criterion!, attempts: entry.attempts }));
-  return { phase: pending.phase, walks: brief(pending.walks), judges: brief(pending.judges), verifiers: brief(pending.verifiers), finishers: brief(pending.finishers), ...(pending.siteOutage ? { siteOutage: pending.siteOutage } : {}), ...(pending.again ? { again: pending.again } : {}) };
+  return { phase: pending.phase, walks: brief(pending.walks), judges: brief(pending.judges), verifiers: brief(pending.verifiers), finishers: brief(pending.finishers), ...(pending.siteOutage ? { siteOutage: pending.siteOutage } : {}), ...(pending.again ? { again: pending.again } : {}), ...(pending.sendingLow ? { sendingLow: pending.sendingLow } : {}) };
 }
 
 /**
@@ -1085,6 +1091,9 @@ export async function instrumentPending(runDir: string): Promise<InstrumentPendi
   const bySize = <T extends { criterion: string }>(list: T[], round: string): T[] => longestFirst(list, (entry) => sizeOf(candidatesOf.get(`${round} ${entry.criterion}`) ?? ""));
   const siteOutage = phase === "done" ? null : await siteOutageNl(runDir);
   const again = phase === "done" ? await againAfterOutage(runDir, index, observations) : [];
+  const permission = phase === "done" ? null : writesForRun(runDir);
+  const budget = permission?.declaredBy ? writeBudget(runDir, permission) : null;
+  const sendingLow = budget && writesLow(budget) ? writeBudgetNl(budget) : null;
   const againNl = again.length > 0 ? ` De site antwoordt weer na een storing, en ${again.join(", ")} ${again.length === 1 ? "staat" : "staan"} open met een punt "${UNREACHABLE}" van daarvoor: zet een nieuwe afmaakronde klaar met tasks --again ${again.join(",")} en draai daarna pending.` : "";
   return {
     flow: INSTRUMENT_FLOW,
@@ -1096,6 +1105,7 @@ export async function instrumentPending(runDir: string): Promise<InstrumentPendi
     skipped: given,
     ...(siteOutage ? { siteOutage, noteNl: `${siteOutage}. ${noteNl}` } : { noteNl: `${noteNl}${againNl}` }),
     ...(again.length > 0 ? { again } : {}),
+    ...(sendingLow ? { sendingLow } : {}),
   };
 }
 

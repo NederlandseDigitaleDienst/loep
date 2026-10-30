@@ -9,7 +9,7 @@ import { createInterface } from "node:readline/promises";
  * - `gesprek`: the agent recorded it in the conversation, after an express confirmation of the
  *   person. The record keeps that confirmation word for word and the summary that was confirmed.
  *
- * An answer and a decision may come about either way. A signature and the declaration for
+ * An answer, a decision and a higher budget for sending may come about either way. A signature and the declaration for
  * sending may not be recorded by an agent: they ask a person at a terminal to type back part
  * of what is recorded (the seal, the origin), and are refused without an interactive terminal.
  */
