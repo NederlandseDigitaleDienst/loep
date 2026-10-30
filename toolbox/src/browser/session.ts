@@ -58,6 +58,25 @@ export async function passOn(route: Route, mayRepeat: (url: string) => boolean, 
   return (await forward(route, mayRepeat, mayFollow)).repeated;
 }
 
+/** How a browser that takes no redirect from a route still goes on: a page that does nothing else. */
+const onwardPage = (target: string): string => `<!doctype html><html lang="nl"><title>Doorverwijzing</title><script>location.replace(${JSON.stringify(target).replaceAll("<", "\\u003c")})</script></html>`;
+
+/**
+ * Give the browser the answer that was fetched for a route. WebKit refuses a redirect there
+ * (`Cannot fulfill with redirect status`), so a navigation gets a page that sends it on, and goes
+ * through the route again, and anything else gets the end of the redirect, fetched here.
+ */
+export async function fulfillAnswer(route: Route, response: APIResponse): Promise<void> {
+  const location = response.headers()["location"];
+  const request = route.request();
+  const isRedirect = [301, 302, 303, 307, 308].includes(response.status()) && location !== undefined;
+  if (!isRedirect || request.frame().page().context().browser()?.browserType().name() !== "webkit") return route.fulfill({ response });
+  const target = new URL(location, request.url()).href;
+  const keepsMethod = response.status() === 307 || response.status() === 308;
+  if (request.isNavigationRequest() && !keepsMethod) return route.fulfill({ status: 200, contentType: "text/html; charset=utf-8", body: onwardPage(target) });
+  return route.fulfill({ response: await route.fetch({ url: target, ...(keepsMethod ? {} : { method: "GET", postData: "" }) }) });
+}
+
 /** `passOn`, with the answer the browser was given: null when it was refused or nobody was left to answer. */
 async function forward(route: Route, mayRepeat: (url: string) => boolean, mayFollow: (url: string) => boolean = () => true): Promise<{ repeated: string | null; response: APIResponse | null }> {
   const request = route.request();
@@ -75,7 +94,7 @@ async function forward(route: Route, mayRepeat: (url: string) => boolean, mayFol
       }
       if (keepsMethod) repeated = target;
     }
-    await route.fulfill({ response });
+    await fulfillAnswer(route, response);
     return { repeated, response };
   } catch {
     // The page went away while the answer was on its way; there is nobody left to answer.
