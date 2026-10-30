@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { DECISIONS_DIR } from "./decisions.ts";
-import { IDLE_SESSION_FILE, LOGIN_SESSION_FILE } from "./login.ts";
+import { IDLE_SESSION_FILE, LOGIN_SESSION_FILE, MAILBOX_SECRETS_FILE } from "./login.ts";
 
 /*
  * What the seal of a run covers, and the guard that keeps a write from landing under it. The
@@ -30,8 +30,8 @@ export const DAEMON_POINTER = "session-daemon.json";
 export const OUTSIDE_SEAL = { files: ["verklaring-invoer.json"], dirs: [SIGNED_DIR, DECISIONS_DIR, "verklaring", RECHECKS_DIR] };
 export const outsideSeal = (name: string): boolean => OUTSIDE_SEAL.files.includes(name) || OUTSIDE_SEAL.dirs.some((dir) => name.startsWith(`${dir}/`));
 
-/** Files of a run that are never hashed: the index itself, the sessions of a login (a secret, no evidence) and half-written files. */
-export const notHashed = (name: string): boolean => name === SEAL_INDEX || name === LOGIN_SESSION_FILE || name === IDLE_SESSION_FILE || name.endsWith(".tmp");
+/** Files of a run that are never hashed: the index itself, the sessions of a login and the secrets of a mailbox (a secret, no evidence) and half-written files. */
+export const notHashed = (name: string): boolean => name === SEAL_INDEX || name === LOGIN_SESSION_FILE || name === IDLE_SESSION_FILE || name === MAILBOX_SECRETS_FILE || name.endsWith(".tmp");
 
 /** The sealed run a path lies in: the nearest folder at or above it with a seal. Null when no folder above it is sealed. */
 export function sealedRunOf(path: string): string | null {

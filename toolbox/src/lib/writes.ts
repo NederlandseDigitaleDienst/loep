@@ -199,6 +199,8 @@ export interface PassedWrite {
   repeat?: true;
   /** A frame over a socket that counted against the budget: every frame, except one shown to be a heartbeat or a message of the protocol (see `SocketFrames`). */
   message?: true;
+  /** The id of a personal link from a mail that was opened: the first time counts as a write, like a form. */
+  link?: string;
 }
 
 export const WRITES_LOG = "writes.jsonl";
@@ -409,9 +411,23 @@ export interface WriteAccess {
    * that has sent before is refused the reserved writes. `sender`: the session that sends, when one
    * access serves several; absent, the one the access was made for.
    */
-  claim: (method: string, url: string, options?: { message?: boolean; sender?: string | undefined }) => WriteClaim;
+  claim: (method: string, url: string, options?: { message?: boolean; sender?: string | undefined; link?: string }) => WriteClaim;
   /** Note a write that does not count against the budget: a frame over a socket without a test value in it, or the repeat of a request after a redirect. */
   record: (method: string, url: string, options?: { repeat?: boolean; sender?: string | undefined }) => PassedWrite;
+}
+
+/**
+ * Open a personal link from a mail: the first time in the run it counts as a write, because a link can
+ * confirm something by being opened. Every later time is the same request, and is only noted. Null
+ * when the link may be opened; the reason when the budget says no.
+ */
+export function claimLink(access: WriteAccess, url: string, link: string, sender: string | undefined): Extract<WriteClaim, { ok: false }> | null {
+  if (readLog(access.runDir).some((entry) => entry.link === link)) {
+    access.record("GET", url, { repeat: true, sender });
+    return null;
+  }
+  const claim = access.claim("GET", url, { sender, link });
+  return claim.ok ? null : claim;
 }
 
 const LOCK = "writes.lock";
@@ -450,8 +466,8 @@ function withLock<T>(runDir: string, work: () => T): T {
 }
 
 export function writeAccess(runDir: string, permission: WritePermission, source: string, now: () => number = Date.now): WriteAccess {
-  const append = (method: string, url: string, repeat: boolean, message = false, sender = source): PassedWrite => {
-    const entry: PassedWrite = { at: new Date(now()).toISOString(), source: sender, method, path: new URL(url).pathname, ...(permission.alsoOrigins ? { origin: new URL(url).origin } : {}), ...(repeat ? { repeat: true as const } : {}), ...(message ? { message: true as const } : {}) };
+  const append = (method: string, url: string, repeat: boolean, message = false, sender = source, link?: string): PassedWrite => {
+    const entry: PassedWrite = { at: new Date(now()).toISOString(), source: sender, method, path: new URL(url).pathname, ...(permission.alsoOrigins ? { origin: new URL(url).origin } : {}), ...(repeat ? { repeat: true as const } : {}), ...(message ? { message: true as const } : {}), ...(link ? { link } : {}) };
     mkdirSync(runDir, { recursive: true });
     // Appended at once and synchronously: the line is there even when the run is cut off right after.
     appendFileSync(join(runDir, WRITES_LOG), `${JSON.stringify(entry)}\n`);
@@ -471,7 +487,7 @@ export function writeAccess(runDir: string, permission: WritePermission, source:
         if (budget.left === 0 && budget.sent < budget.max) return { ok: false, budget: "share", reasonNl: `${senderOf(sender) === sender ? sender : "dit criterium"} heeft al verstuurd, en er zijn nog ${budget.max - budget.sent} van ${budget.max} verzendingen naar ${budget.origin} over: ${reservedNl(budget.reserved)}` };
         if (budget.left === 0) return { ok: false, budget: "out", reasonNl: `het budget voor versturen van deze run is op: ${budget.sent} van ${budget.max} verzendingen naar ${budget.origin} zijn gedaan, door alle sessies en de veegronde samen` };
         if (budget.waitSeconds > 0) return { ok: false, budget: "spacing", reasonNl: `te kort na de vorige verzending: tussen twee verzendingen zit minstens ${budget.spacingSeconds} s; versturen kan weer over ${budget.waitSeconds} s (nog ${budget.left} van ${budget.max} over)` };
-        return { ok: true, entry: append(method, url, false, options?.message === true, sender) };
+        return { ok: true, entry: append(method, url, false, options?.message === true, sender, options?.link) };
       });
     },
   };

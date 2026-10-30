@@ -4,13 +4,15 @@ import type { Crowd } from "../lib/atonce.ts";
 import { CLOUDFLARE_HEADER, isChallenge } from "../lib/challenge.ts";
 import { confirmLoginOn, LoginExpired, logsOut, runLoginMark, runLoginState, throwIfLoginExpired, watchLogin } from "../lib/login.ts";
 import { addressOf, noteRefusedRead, readDecision, readRuleFor, runReads, type ReadRequest } from "../lib/reads.ts";
-import { isWriteOrigin, runWrites, SocketFrames, type PassedWrite, type WriteAccess } from "../lib/writes.ts";
+import { claimLink, isWriteOrigin, runWrites, SocketFrames, type PassedWrite, type WriteAccess } from "../lib/writes.ts";
 import { LONGEST_FAILURE_PAUSE_SECONDS, OriginBlocked, runBlockade } from "../session/blockade.ts";
 import { MESSAGE_VALUES } from "../session/safety.ts";
 import { answerRefusalNl, httpRecordings, httpReplayNl, httpSendOf, keptHeaders, playRecording, socketRecordings, type HttpRecordings, type PassedReplay, type Recorder } from "../lib/recordings.ts";
+import type { Shield } from "../lib/shield.ts";
 import { readableFrame } from "./call.ts";
 import { refusedByBrowser, type ClipboardWrite } from "./clipboard.ts";
 import { frameAsPage } from "./frame.ts";
+import { fetchShielded, fulfilShielded, passShielded, shieldOf, type ShieldedAnswer } from "./shielded.ts";
 
 /** The read-only helper library that is injected into every page under test. */
 export const INPAGE_PATH = fileURLToPath(new URL("./inpage.js", import.meta.url));
@@ -54,16 +56,17 @@ export interface ContextOptions {
  * to an address `mayRepeat` allows; any other redirect only where `mayFollow` allows. Returns the
  * address of a request the browser will repeat.
  */
-export async function passOn(route: Route, mayRepeat: (url: string) => boolean, mayFollow: (url: string) => boolean = () => true): Promise<string | null> {
-  return (await forward(route, mayRepeat, mayFollow)).repeated;
+export async function passOn(route: Route, mayRepeat: (url: string) => boolean, mayFollow: (url: string) => boolean = () => true, shield: Shield | null = null): Promise<string | null> {
+  return (await forward(route, mayRepeat, mayFollow, shield)).repeated;
 }
 
 /** `passOn`, with the answer the browser was given: null when it was refused or nobody was left to answer. */
-async function forward(route: Route, mayRepeat: (url: string) => boolean, mayFollow: (url: string) => boolean = () => true): Promise<{ repeated: string | null; response: APIResponse | null }> {
+async function forward(route: Route, mayRepeat: (url: string) => boolean, mayFollow: (url: string) => boolean = () => true, shield: Shield | null = null): Promise<{ repeated: string | null; response: APIResponse | ShieldedAnswer | null }> {
   const request = route.request();
   const refuse = (): Promise<void> => (request.isNavigationRequest() ? route.fulfill({ status: 204, body: "" }) : route.abort("blockedbyclient"));
   try {
-    const response = await route.fetch({ maxRedirects: 0 });
+    // In a run with a mailbox what goes out gets the real values, and what comes back the aliases, before anything keeps it.
+    const response = shield ? await fetchShielded(route, shield) : await route.fetch({ maxRedirects: 0 });
     const location = response.headers()["location"];
     let repeated: string | null = null;
     if (response.status() >= 300 && response.status() < 400 && location) {
@@ -75,7 +78,7 @@ async function forward(route: Route, mayRepeat: (url: string) => boolean, mayFol
       }
       if (keepsMethod) repeated = target;
     }
-    await route.fulfill({ response });
+    await (shield ? fulfilShielded(route, response as ShieldedAnswer) : route.fulfill({ response: response as APIResponse }));
     return { repeated, response };
   } catch {
     // The page went away while the answer was on its way; there is nobody left to answer.
@@ -101,7 +104,10 @@ export async function sendOrReplay(context: BrowserContext, route: Route, writes
   const method = request.method();
   const url = request.url();
   const recordings = httpRecordings(writes.runDir, writes.source);
-  const send = httpSendOf(bodyBufferOf(request), request.headers()["content-type"], MESSAGE_VALUES);
+  const shield = shieldOf(writes, url);
+  const body = bodyBufferOf(request);
+  // A form with the address of the run in it makes the site send a mail: that has to happen for real.
+  const send = shield?.mentionsAddress(body) ? null : httpSendOf(body, request.headers()["content-type"], MESSAGE_VALUES);
   const recording = send ? recordings.find(method, url, send) : null;
   if (recording) {
     // Answered here: nothing goes to the server, and no cookie of the recording is set.
@@ -117,12 +123,24 @@ export async function sendOrReplay(context: BrowserContext, route: Route, writes
   // What the browser asks for after a redirect does not pass the route: where it lands is watched from before it gets the answer.
   const landing = send ? watchLanding(context, request) : null;
   const at = Date.now();
-  const { repeated, response } = await forward(route, (target) => isWriteOrigin(writes, target), options.mayFollow);
+  const { repeated, response } = await forward(route, (target) => isWriteOrigin(writes, target), options.mayFollow, shield);
   const repeatedEntry = repeated ? writes.record(method, repeated, { repeat: true, sender: options.sender }) : null;
   if (send && response && landing) void recordAnswer(recordings, { method, url, send, response, landing, origin: new URL(url).origin, sender: options.sender, at }).catch(() => landing.cancel());
   else landing?.cancel();
   return { kind: "sent", entry: claim.entry, repeated: repeatedEntry };
 }
+
+/** A GET or HEAD of the sweep in a run with a mailbox: a personal link takes from the budget like any write. */
+async function openShielded(route: Route, shield: Shield, writes: WriteAccess, spaced: NavigationSpacing | null): Promise<void> {
+  const link = route.request().isNavigationRequest() ? shield.linkId(route.request().url()) : null;
+  if (link && claimLink(writes, route.request().url(), link, undefined)) return void (await route.fulfill({ status: 204, body: "" }).catch(() => undefined));
+  if (spaced && loadsTab(route)) await spaced.before(route.request().url());
+  await passShielded(route, shield);
+}
+
+/** A frame over a socket as the server gets it, and as the page gets it. */
+export const outwardFrame = (shield: Shield | null, frame: string | Buffer): string | Buffer => (!shield ? frame : typeof frame === "string" ? shield.outward(frame) : shield.outwardBytes(frame));
+export const inwardFrame = (shield: Shield | null, frame: string | Buffer): string | Buffer => (!shield ? frame : typeof frame === "string" ? shield.inward(frame) : shield.inwardBytes(frame));
 
 /** The body of a request as bytes, or null when it has none. */
 function bodyBufferOf(request: Request): Buffer | null {
@@ -181,7 +199,7 @@ function watchLanding(context: BrowserContext, sent: Request): LandingWatch {
  * which sets no cookie, would show another page. Such a recording is never played. A browser that did not
  * land in time leaves no recording: the next send is real.
  */
-async function recordAnswer(recordings: HttpRecordings, sent: { method: string; url: string; send: { key: string; bodySha256: string }; response: APIResponse; landing: LandingWatch; origin: string; sender: string | undefined; at: number }): Promise<void> {
+async function recordAnswer(recordings: HttpRecordings, sent: { method: string; url: string; send: { key: string; bodySha256: string }; response: APIResponse | ShieldedAnswer; landing: LandingWatch; origin: string; sender: string | undefined; at: number }): Promise<void> {
   const { response, landing } = sent;
   const headers = response.headers();
   const body = await response.body();
@@ -332,6 +350,8 @@ export async function newContext(browser: Browser, options: ContextOptions = {},
     if (logsOut(route.request().url()) || blockade?.blockade.refuses(route.request().url())) return route.request().isNavigationRequest() ? route.fulfill({ status: 204, body: "" }) : route.abort("blockedbyclient");
     if (method === "GET" || method === "HEAD") {
       const spaced = spacing;
+      const shield = shieldOf(writes, route.request().url());
+      if (shield) return openShielded(route, shield, writes!, spaced);
       if (spaced && loadsTab(route)) return spaced.before(route.request().url()).then(() => route.continue().catch(() => undefined));
       return route.continue();
     }
@@ -339,7 +359,7 @@ export async function newContext(browser: Browser, options: ContextOptions = {},
     if (isChallenge(route.request().url(), (host) => viaCloudflare.has(host))) return route.continue().catch(() => undefined);
     // A read request passes only when a rule covers it and its body is a question to the service of that rule; a covered request with another body is noted.
     const read = readDecision(reads, method, route.request().url(), route.request().headers(), bodyOf(route.request()));
-    if (read?.pass) return passOn(route, (target) => readRuleFor(reads, method, target)?.service === read.rule.service).then(() => undefined);
+    if (read?.pass) return passOn(route, (target) => readRuleFor(reads, method, target)?.service === read.rule.service, undefined, shieldOf(writes, route.request().url())).then(() => undefined);
     if (read) noteRefusedRead({ method, address: addressOf(route.request().url()), rule: read.rule.id, reasonNl: read.reasonNl });
     // An aborted navigation replaces the page with an error page. "No content" leaves the page as it was.
     if (!isWriteOrigin(writes, route.request().url())) return route.request().isNavigationRequest() ? route.fulfill({ status: 204, body: "" }) : route.abort("blockedbyclient");
@@ -356,8 +376,10 @@ export async function newContext(browser: Browser, options: ContextOptions = {},
       let recorder: Recorder | null = null;
       // A page that is closed hears nothing more: what the server says after that is no part of the answer the page got.
       context.once("close", () => recorder?.end());
+      const shield = free ? shieldOf(writes, socket.url()) : null;
       if (free) {
-        server.onMessage((reply) => {
+        server.onMessage((message) => {
+          const reply = inwardFrame(shield, message);
           socket.send(reply);
           recorder?.frame(reply);
         });
@@ -378,7 +400,7 @@ export async function newContext(browser: Browser, options: ContextOptions = {},
               return playRecording(recording, (reply) => socket.send(reply));
             }
             if (!writes!.claim("SEND", socket.url(), { message: true }).ok) return void (guard?.active && guard.blocked++);
-            server.send(message);
+            server.send(outwardFrame(shield, message));
             // Only a message with a test value starts a recording, and ends the one before it.
             const next = recordings!.start(socket.url(), message);
             if (next) {
@@ -388,7 +410,7 @@ export async function newContext(browser: Browser, options: ContextOptions = {},
             return;
           }
           writes!.record("SEND", socket.url());
-          server.send(message);
+          server.send(outwardFrame(shield, message));
         } else if (guard?.active) guard.blocked++;
         else server.send(message);
       });

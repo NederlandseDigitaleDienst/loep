@@ -1,7 +1,8 @@
 import { createWriteStream, existsSync } from "node:fs";
 import { join } from "node:path";
 import type { BrowserContext, CDPSession, Frame, Page, Request } from "playwright";
-import { answeredByCloudflare, bodyOf, passOn, sendOrReplay } from "../browser/session.ts";
+import { answeredByCloudflare, bodyOf, inwardFrame, outwardFrame, passOn, sendOrReplay } from "../browser/session.ts";
+import { passShielded, shieldOf } from "../browser/shielded.ts";
 import { readJson } from "../lib/canonical.ts";
 import { isChallenge } from "../lib/challenge.ts";
 import { privateFromPublicSite, scopeHost, scopeHostOf, siteOrigins, WEB_SCHEMES } from "../lib/origins.ts";
@@ -12,7 +13,7 @@ import { SEARCH_FALLBACK, SEARCH_NONE } from "../lib/searchterm.ts";
 import { searchTermForRun } from "../lib/sitemodel.ts";
 import { OriginBlocked, refusalNl, type Blockade } from "./blockade.ts";
 import { playRecording, replayNl, socketRecordings, type PassedReplay, type Recorder } from "../lib/recordings.ts";
-import { isWriteOrigin, runWrites, SocketFrames, writeAccess, writesForRun, type PassedWrite, type WriteAccess } from "../lib/writes.ts";
+import { claimLink, isWriteOrigin, runWrites, SocketFrames, writeAccess, writesForRun, type PassedWrite, type WriteAccess } from "../lib/writes.ts";
 
 /** Limits of the process that holds the browser; set once, when it starts. */
 export interface DaemonLimits {
@@ -235,7 +236,7 @@ export async function guardContext(context: BrowserContext, scope: Scope, guard:
       if (read?.pass) {
         (guard.reads ??= []).push({ at: new Date().toISOString(), method, url: url.slice(0, MAX_URL), rule: read.rule.id, service: read.rule.service });
         // Repeated only to an address a rule of the same service covers; otherwise followed only inside the scope or on an origin the rule covers.
-        return passOn(route, (target) => readRuleFor(reads, method, target)?.service === read.rule.service, (target) => inScope(scope, target) || onReadOrigin(read.rule, target)).then(() => undefined);
+        return passOn(route, (target) => readRuleFor(reads, method, target)?.service === read.rule.service, (target) => inScope(scope, target) || onReadOrigin(read.rule, target), shieldOf(scope.writes, url)).then(() => undefined);
       }
       if (read) {
         guard.blocked.push({ at: new Date().toISOString(), kind: "method", method, url: url.slice(0, MAX_URL), resourceType: type, reasonNl: read.reasonNl });
@@ -255,7 +256,18 @@ export async function guardContext(context: BrowserContext, scope: Scope, guard:
       guard.blocked.push({ at: new Date().toISOString(), kind: "method", method, url: url.slice(0, MAX_URL), resourceType: type, ...(search.length > 0 ? { search } : {}) });
       return refuse();
     }
-    if (inScope(scope, url)) return route.continue();
+    if (inScope(scope, url)) {
+      const shield = shieldOf(scope.writes, url);
+      if (!shield) return route.continue();
+      // A personal link from a mail takes from the budget like any write; what comes back goes through the shield.
+      const link = request.isNavigationRequest() ? shield.linkId(url) : null;
+      const refused = link ? claimLink(scope.writes!, url, link, guard.sender) : null;
+      if (refused) {
+        guard.blocked.push({ at: new Date().toISOString(), kind: "method", method, url: url.slice(0, MAX_URL), resourceType: type, reasonNl: refused.reasonNl, writeBudget: refused.budget });
+        return refuse();
+      }
+      return passShielded(route, shield, (target) => inScope(scope, target));
+    }
     // What the page already holds (data:, blob:) sends nothing anywhere; as the address of a page it is never in the scope.
     if (!request.isNavigationRequest() && /^(data|blob):/.test(url)) return route.continue();
     if (!scope.strict && !request.isNavigationRequest() && (RENDERING_TYPES.has(type) || (READ_TYPES.has(type) && fromEmbeddedInScope(scope, request)))) {
@@ -280,11 +292,13 @@ export async function guardContext(context: BrowserContext, scope: Scope, guard:
     const opened = Date.now();
     // On the socket of the test environment the answer to a real message is recorded, and a message that was sent before is played from its recording.
     const recordings = free ? socketRecordings(scope.writes!.runDir, scope.writes!.source, MESSAGE_VALUES) : null;
+    const shield = free ? shieldOf(scope.writes, url) : null;
     let recorder: Recorder | null = null;
     // A page that is closed hears nothing more: what the server says after that is no part of the answer the page got.
     context.once("close", () => recorder?.end());
     if (free) {
-      server!.onMessage((reply) => {
+      server!.onMessage((message) => {
+        const reply = inwardFrame(shield, message);
         socket.send(reply);
         recorder?.frame(reply);
       });
@@ -314,7 +328,7 @@ export async function guardContext(context: BrowserContext, scope: Scope, guard:
         return;
       }
       (guard.passed ??= []).push(claim.entry);
-      server!.send(message);
+      server!.send(outwardFrame(shield, message));
       // Only a message with a test value starts a recording, and ends the one before it.
       const next = counted ? recordings!.start(url, message, guard.sender, anyFrame) : null;
       if (next) {
@@ -359,6 +373,8 @@ export async function guardedDownload(scope: Scope, guard: Guard, address: strin
         return { ok: false, reason: "het adres is geen geldig adres" };
       }
       if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return { ok: false, reason: `het adres begint met ${parsed.protocol} en is niet op te halen` };
+      // The real value of an alias is only filled in on the way out of the browser: from here the site would show another page.
+      if (shieldOf(scope.writes, url)?.carriesAlias(url)) return { ok: false, reason: "dit adres hoort bij een persoonlijke link uit een e-mail en is alleen in de browser van de sessie te openen" };
       if (!inScope(scope, url)) {
         if (scope.strict || !RENDERING_TYPES.has(options.resourceType)) {
           guard.blocked.push({ at: new Date().toISOString(), kind: "scope", method: "GET", url: url.slice(0, MAX_URL), resourceType: options.resourceType });
@@ -468,7 +484,8 @@ export async function guardRedirects(page: Page, scope: Scope, guard: Guard): Pr
 export async function guardRedirectsByRoute(context: BrowserContext, scope: Scope, guard: Guard): Promise<void> {
   await context.route("**/*", async (route) => {
     const request = route.request();
-    if (!request.isNavigationRequest() || request.method() !== "GET" || !/^https?:/.test(request.url()) || !inScope(scope, request.url()) || logsOut(request.url())) return route.fallback();
+    // What goes through the shield is left to `guardContext`, which also watches the redirects of it.
+    if (!request.isNavigationRequest() || request.method() !== "GET" || !/^https?:/.test(request.url()) || !inScope(scope, request.url()) || logsOut(request.url()) || shieldOf(scope.writes, request.url())) return route.fallback();
     try {
       const response = await route.fetch({ maxRedirects: 0 });
       const location = response.headers()["location"];

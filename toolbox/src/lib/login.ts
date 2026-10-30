@@ -20,6 +20,8 @@ export const LOGIN_SESSION_FILE = "login-session.json";
  * same rules hold: outside the seal, readable for its owner only, never read by an agent.
  */
 export const IDLE_SESSION_FILE = "idle-session.json";
+/** The real values behind the aliases of a mailbox (see `shield.ts`): the address of the run and the tokens of its mails. */
+export const MAILBOX_SECRETS_FILE = "mailbox-secrets.json";
 const SCHEMA = "loep/login-session/1";
 
 /** Cookies and stored values the way Playwright keeps them (`storageState`). */
@@ -101,11 +103,11 @@ export const SECRET_FILES: readonly string[] = [LOGIN_SESSION_FILE, IDLE_SESSION
  * run in a repository. A line that is missing is added; what is there stays, so a run that is
  * already sealed does not change when nothing is missing.
  */
-export function ignoreSecrets(runDir: string): void {
+export function ignoreSecrets(runDir: string, names: readonly string[] = SECRET_FILES): void {
   const path = join(runDir, ".gitignore");
   const existing = existsSync(path) ? readFileSync(path, "utf8") : "";
   const lines = new Set(existing.split("\n").map((line) => line.trim().replace(/^\//, "")));
-  const missing = SECRET_FILES.filter((name) => !lines.has(name));
+  const missing = names.filter((name) => !lines.has(name));
   if (missing.length === 0) return;
   mkdirSync(runDir, { recursive: true });
   const lead = existing === "" ? "# Sessiebestanden van een inlog: wie ze heeft, is ingelogd. Nooit in een commit.\n" : existing.endsWith("\n") ? "" : "\n";
