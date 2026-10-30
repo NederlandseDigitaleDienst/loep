@@ -5,7 +5,7 @@ import { criterionById } from "./wcag.ts";
 import { loginNl } from "./login.ts";
 import { siteOrigins } from "./origins.ts";
 import { readsAllowedNl } from "./reads.ts";
-import { WRITES_BLOCKED_NL, writesAllowedNl } from "./writes.ts";
+import { WRITES_BLOCKED_NL, writeOriginsOf, writesAllowedNl } from "./writes.ts";
 
 /** Everything the scripts gathered that bears on one criterion. Nothing here judges anything. */
 export function buildDossier(run: RunData, procedure: Procedure): Record<string, unknown> {
@@ -24,7 +24,7 @@ export function buildDossier(run: RunData, procedure: Procedure): Record<string,
     site: { baseUrl: run.inventory.baseUrl, ...(siteOrigins(run.inventory).length > 1 ? { origins: siteOrigins(run.inventory) } : {}), pagesInSample: run.pages.length, sampleMethod: run.sample.method, sampleNote: run.sample.note },
     // Whether the run may submit: what only shows after sending is out of reach only when it may not.
     writes: run.writes
-      ? { allowed: true, origin: run.writes.origin, declaredBy: run.writes.declaredBy ? run.writes.declaredBy.role : null, noteNl: writesAllowedNl(run.writes) }
+      ? { allowed: true, origin: run.writes.origin, ...(run.writes.alsoOrigins ? { origins: writeOriginsOf(run.writes) } : {}), declaredBy: run.writes.declaredBy ? run.writes.declaredBy.role : null, noteNl: writesAllowedNl(run.writes) }
       : { allowed: false, origin: null, declaredBy: null, noteNl: WRITES_BLOCKED_NL },
     // Requests that only read and go through, such as a question to a search service: what they show was there to see, also when nothing may be sent.
     ...((run.reads ?? []).length > 0 ? { reads: { requests: run.reads!.map((rule) => `${rule.method} ${rule.origin}${rule.path}`), noteNl: readsAllowedNl(run.reads!) } } : {}),

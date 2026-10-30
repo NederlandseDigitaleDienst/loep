@@ -21,7 +21,7 @@ import { runEngines } from "../lib/engines.ts";
 import type { RecipeSteps } from "../lib/operables.ts";
 import { frameStanding, loadSiteModel, pageTypeOf, SITE_MODEL_FILE, type Component, type Postcondition, type SiteModel } from "../lib/sitemodel.ts";
 import { blockersKey, readStamp, STATE_STAMP, stateKey } from "../lib/sweepstamp.ts";
-import { writesForRun } from "../lib/writes.ts";
+import { writeOriginsOf, writesForRun } from "../lib/writes.ts";
 import { spokenByItself, type SpokenByItself } from "../instruments/methods/speech.ts";
 import type { LastStepSpeech, Recipe } from "../session/daemon.ts";
 import { adoptPage, frameAt, holds, installReplay, loadRecipes, onceMoreAfterTimeout, overlays, replayEnv, replayFromClean, replaySteps, type Overlay } from "../session/recipe.ts";
@@ -681,7 +681,7 @@ export class ModelSweep {
       if (sent.reached && sent.surface) {
         const { view } = await this.viewOf(sent.surface.page, opener.frame);
         const permission = writesForRun(this.runDir);
-        const mayWrite = (url: string): boolean => permission !== null && URL.canParse(url) && new URL(url).origin === permission.origin;
+        const mayWrite = (url: string): boolean => permission !== null && URL.canParse(url) && writeOriginsOf(permission).includes(new URL(url).origin);
         try {
           await writeJson(file("timeLimitsAfterSubmit", "timelimits-after-submit.json"), { ...(await timeLimitsAfterSubmit(view, fields, mayWrite, this.seededCookies)) });
         } catch (error) {

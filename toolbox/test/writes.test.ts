@@ -12,8 +12,9 @@ import { INPAGE_PATH, launchBrowser, loadPage, newContext } from "../src/browser
 import { probeForms } from "../src/instruments/forms.ts";
 import { formErrors } from "../src/lib/extractors.ts";
 import { REGULAR_PATH, type RunData } from "../src/lib/rundata.ts";
-import { budgetOutPointNl, criterionSender, decideWrites, isOurMessage, isProtocolFrame, reservedWrites, senderOf, SocketFrames, DEFAULT_MAX_WRITES, DEFAULT_WRITE_SPACING_SECONDS, recordWrites, WRITES_BLOCKED_NL, writeAccess, writeBudget, writeBudgetNl, writesAllowedNl, writesForRun, type PassedWrite, type WritePermission } from "../src/lib/writes.ts";
+import { budgetOutPointNl, confirmDeclaration, criterionSender, decideWrites, isOurMessage, isWriteOrigin, isProtocolFrame, reservedWrites, senderOf, SocketFrames, DEFAULT_MAX_WRITES, DEFAULT_WRITE_SPACING_SECONDS, recordWrites, WRITES_BLOCKED_NL, writeAccess, writeBudget, writeBudgetNl, writeOriginsOf, writesAllowedNl, writesForRun, type PassedWrite, type WritePermission } from "../src/lib/writes.ts";
 import { answerRefusalNl, DECLARED_ORIGIN, httpSendOf, RECORD_QUIET_MS, readHttpRecordings, readRecordings, readReplays, recordingKey, replayNl, replaysNl, socketRecordings, type HttpRecording } from "../src/lib/recordings.ts";
+import { notSentPointProblems } from "../src/lib/verdict.ts";
 import { approvedSendsTo, sendsToMatches, sendsToProblems, sendsToReplayProblem } from "../src/lib/sitemodel.ts";
 import { Daemon } from "../src/session/daemon.ts";
 import type { Observation } from "../src/session/observations.ts";
@@ -106,6 +107,42 @@ test("with the setting a POST and a socket message arrive and each is logged in 
   // The frame carries no test value and is no heartbeat either: it counts, as a message.
   assert.ok(lines.every((line) => !Number.isNaN(Date.parse(line.at)) && Object.keys(line).sort().join() === (line.method === "SEND" ? "at,message,method,path,source" : "at,method,path,source")));
   await page.context().close();
+});
+
+test("a person can declare more than one origin, confirms each of them, and they share one budget", async () => {
+  const declared = decideWrites("https://site.example.nl/", { testEnvironment: ["https://site.example.nl/", "https://chat.example.nl/venster", "https://site.example.nl"], declaredBy: "Een Beheerder, beheer" })!;
+  assert.equal(declared.origin, "https://site.example.nl");
+  assert.deepEqual(declared.alsoOrigins, ["https://chat.example.nl"], "a repeated origin counts once");
+  assert.deepEqual(writeOriginsOf(declared), ["https://site.example.nl", "https://chat.example.nl"]);
+  assert.match(writesAllowedNl(declared), /https:\/\/site\.example\.nl en https:\/\/chat\.example\.nl/);
+
+  assert.throws(() => decideWrites("https://site.example.nl/", { testEnvironment: ["https://site.example.nl", "http://127.0.0.1:4710"], declaredBy: "Een Beheerder, beheer" }), /lokaal adres verklaar je niet naast/);
+
+  const typed = ["https://site.example.nl", "https://chat.example.nl"];
+  const asked: string[] = [];
+  const terminal = { interactive: true, ask: async (question: string) => (asked.push(question), typed.shift()!) };
+  assert.equal((await confirmDeclaration(declared, terminal)).recordedVia, "terminal");
+  assert.equal(asked.length, 2, "each origin is typed over");
+  await assert.rejects(confirmDeclaration(declared, { interactive: true, ask: async () => "https://site.example.nl" }), /niet bevestigd/);
+
+  const dir = mkdtempSync(join(tmpdir(), "writes-two-"));
+  try {
+    const access = writeAccess(dir, { ...declared, maxWrites: 2, spacingSeconds: 0 }, "test");
+    assert.equal(isWriteOrigin(access, "https://site.example.nl/e-mailupdates/"), true);
+    assert.equal(isWriteOrigin(access, "wss://chat.example.nl/ws/kanaal"), true);
+    assert.equal(isWriteOrigin(access, "https://ander.example.nl/"), false);
+    assert.equal(access.claim("POST", "https://site.example.nl/e-mailupdates/", { sender: "een" }).ok, true);
+    assert.equal(access.claim("SEND", "wss://chat.example.nl/ws/kanaal", { message: true, sender: "twee" }).ok, true);
+    assert.equal(access.claim("POST", "https://chat.example.nl/ander", { sender: "drie" }).ok, false, "the budget is shared by the origins");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("a point about a second declared origin is not a reason to leave it open", () => {
+  const permission = { origin: "https://site.example.nl", alsoOrigins: ["https://chat.example.nl"] };
+  assert.equal(notSentPointProblems(["versturen niet toegestaan: het bericht gaat naar https://chat.example.nl"], permission).length, 1);
+  assert.equal(notSentPointProblems(["versturen niet toegestaan: het bericht gaat naar https://ander.example.nl"], permission).length, 0);
 });
 
 test("writes to a second origin stay blocked, also when the test environment passes one on", async () => {

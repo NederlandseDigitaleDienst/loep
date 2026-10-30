@@ -827,17 +827,19 @@ function budgetSpent(evaluation: Evaluation, missingNl: string[]): boolean {
 
 /**
  * The declaration that would have closed the points "versturen niet toegestaan": a test
- * environment at inventory. `--test-environment` takes one origin, and that may be the origin of
- * an embedded frame alone, so nothing is sent to the rest of the site. When the points name
- * exactly one origin, the flags carry it.
+ * environment at inventory. `--test-environment` may be the origin of an embedded frame alone, so
+ * nothing is sent to the rest of the site, and it may be repeated. The flags carry the origins the
+ * points name.
  */
+const testEnvironmentFlags = (origins: string[]): string => (origins.length > 0 ? origins : ["<origin>"]).map((origin) => `--test-environment ${origin}`).join(" ");
+
 function notSentDeclaration(evaluation: Evaluation, items: OpenGroup[]): NotSent {
   const origins = notSentOrigins(evaluation.criteria.flatMap((criterion) => criterion.missingNl));
   const named =
     origins.length === 1
       ? `In de open punten staat als adres ${origins[0]}. `
       : origins.length > 1
-        ? `In de open punten staan ${origins.length} adressen: ${origins.join(", ")}. Per onderzoek kan er één worden verklaard. `
+        ? `In de open punten staan ${origins.length} adressen: ${origins.join(", ")}. `
         : "";
   const spent = items.every((item) => budgetSpent(evaluation, evaluation.criteria.find((criterion) => criterion.id === item.criterion)?.missingNl ?? []));
   if (spent)
@@ -845,7 +847,7 @@ function notSentDeclaration(evaluation: Evaluation, items: OpenGroup[]): NotSent
       items,
       onlyCriteria: items.map((item) => item.criterion).filter((id) => waitsOnlyOnSending(evaluation.criteria.find((criterion) => criterion.id === id)?.missingNl ?? [])),
       declarationNl: "Dit onderzoek mocht versturen, maar het budget voor versturen was op voordat deze punten aan de beurt kwamen. Een nieuw onderzoek met dezelfde verklaring en een groter budget meet ze:",
-      flags: `--test-environment ${origins.length === 1 ? origins[0] : "<origin>"} --declared-by "<naam>, <functie>" --max-writes <aantal>`,
+      flags: `${testEnvironmentFlags(origins)} --declared-by "<naam>, <functie>" --max-writes <aantal>`,
       originNl: `${named}Elk bericht komt echt aan bij wie de chat of het formulier ontvangt. Kies daarom een budget dat de ontvanger verwacht.`,
     };
   const already = evaluation.chain?.writes.allowed ? "Dit onderzoek mocht alleen versturen naar de testomgeving die bij de onderzoeksgegevens staat; deze punten gaan over een ander adres. " : "";
@@ -853,9 +855,9 @@ function notSentDeclaration(evaluation: Evaluation, items: OpenGroup[]): NotSent
     items,
     onlyCriteria: items.map((item) => item.criterion).filter((id) => waitsOnlyOnSending(evaluation.criteria.find((criterion) => criterion.id === id)?.missingNl ?? [])),
     declarationNl: "Een nieuw onderzoek meet deze punten als bij inventory een testomgeving wordt verklaard, door iemand met naam en functie:",
-    flags: `--test-environment ${origins.length === 1 ? origins[0] : "<origin>"} --declared-by "<naam>, <functie>"`,
+    flags: `${testEnvironmentFlags(origins)} --declared-by "<naam>, <functie>"`,
     originNl:
-      `${already}${named}Er kan één origin worden verklaard, en dat mag de origin van alleen een ingesloten venster zijn, zoals een chat of een formulier van een andere partij: dan gaat alleen daarheen iets weg en wordt naar de rest van de site niets verstuurd. ` +
+      `${already}${named}Dat mag de origin van alleen een ingesloten venster zijn, zoals een chat of een formulier van een andere partij: dan gaat alleen daarheen iets weg en wordt naar de rest van de site niets verstuurd. Gaan berichten naar meer adressen, geef dan elke origin met een eigen --test-environment. ` +
       "Neem de origin waar het bericht naartoe gaat; meestal is dat die van het venster zelf. Verklaar het alleen als versturen daar geen gevolgen heeft. Het rapport noemt dan de functie van wie het verklaarde; de naam staat in het dossier van het onderzoek.",
   };
 }

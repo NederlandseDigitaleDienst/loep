@@ -49,7 +49,7 @@ export interface Scope {
    */
   strict: boolean;
   /**
-   * The one origin of a test environment that may be written to, when the run was given
+   * The origins of a test environment that may be written to, when the run was given
    * that at inventory. Absent or null: every write is refused, as on any live site.
    */
   writes?: WriteAccess | null;
