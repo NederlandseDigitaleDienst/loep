@@ -262,9 +262,10 @@ export class Shield {
     return this.secrets.some((secret) => url.includes(secret.alias) && !reachOf(secret, url));
   }
 
-  outward = (text: string): string => this.toReal.reduce((value, [from, to]) => value.replaceAll(from, to), text);
+  // As a function: a real value is no pattern, and `$&` or `$$` in one would change it.
+  outward = (text: string): string => this.toReal.reduce((value, [from, to]) => value.replaceAll(from, () => to), text);
   /** The real values in an address, percent-encoded: a token with a + or a / in it must stay one value. */
-  outwardUrl = (url: string): string => this.toRealInUrl.reduce((value, [from, to]) => value.replaceAll(from, to), url);
+  outwardUrl = (url: string): string => this.toRealInUrl.reduce((value, [from, to]) => value.replaceAll(from, () => to), url);
   outwardBytes = (data: Buffer): Buffer => this.toReal.reduce((value, [from, to]) => replaceBytes(value, from, to), data);
   /** The body of a form: a real value is encoded there, or a + becomes a space. */
   outwardForm = (data: Buffer): Buffer => this.toRealInForm.reduce((value, [from, to]) => replaceBytes(value, from, to), data);

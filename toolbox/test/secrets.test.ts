@@ -644,6 +644,20 @@ test("a browser that goes around the proxy on this machine does not take part in
   }
 });
 
+test("8: a real value is put back as it is, with the signs a replacement would read as a pattern", () => {
+  const real = "a$&b$$c$'d$`e$1f-0123456789";
+  const alias = "x".repeat(real.length);
+  const spelled = real.replace("$`", "%24%60");
+  const shield = new Shield({ secrets: [{ ...secretFor(real), alias, spelled: [spelled] }] });
+  assert.equal(shield.outward(`voor ${alias} na`), `voor ${real} na`);
+  assert.equal(shield.outward(`voor ${encodeURIComponent(alias)} na`), `voor ${real} na`);
+  assert.equal(shield.outwardUrl(`https://a.example/?t=${alias}&x=1`), `https://a.example/?t=${spelled}&x=1`);
+  assert.equal(shield.outwardBytes(Buffer.from(`voor ${alias} na`)).toString(), `voor ${real} na`);
+  assert.equal(shield.outwardForm(Buffer.from(`t=${alias}`)).toString(), `t=${new URLSearchParams({ a: real }).toString().slice(2)}`);
+  const plain = new Shield({ secrets: [{ ...secretFor(real), alias: "$&-alias-$$-alias" }] });
+  assert.equal(plain.inward(`voor ${real} na`), "voor $&-alias-$$-alias na", "and so is an alias");
+});
+
 // ---- I: one mail that cannot be read -----------------------------------------------------------------------------------
 
 test("I: a mail that cannot be taken in is skipped, named without its content, and stays in the mailbox; the others are read", async () => {
