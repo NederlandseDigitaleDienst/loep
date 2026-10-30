@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { createServer as createHttpsServer } from "node:https";
 import { connect, type AddressInfo, type Socket } from "node:net";
@@ -656,6 +656,56 @@ test("8: a real value is put back as it is, with the signs a replacement would r
   assert.equal(shield.outwardForm(Buffer.from(`t=${alias}`)).toString(), `t=${new URLSearchParams({ a: real }).toString().slice(2)}`);
   const plain = new Shield({ secrets: [{ ...secretFor(real), alias: "$&-alias-$$-alias" }] });
   assert.equal(plain.inward(`voor ${real} na`), "voor $&-alias-$$-alias na", "and so is an alias");
+});
+
+// ---- Where a run ends --------------------------------------------------------------------------------------------------
+
+test("7: a file named secrets.json above a run is not a register, whatever is in it", async () => {
+  const outer = mkdtempSync(join(tmpdir(), "loep-boven-"));
+  const run = join(outer, "onderzoek", "run");
+  mkdirSync(join(run, "pages"), { recursive: true });
+  writeFileSync(join(run, "manifest.json"), "{}");
+  const text = `titel ${TOKEN}`;
+  const foreign = ["{ kapot", "null", "[]", JSON.stringify({ schema: "iets-anders/1", secrets: [] }), JSON.stringify({ wachtwoord: TOKEN })];
+  try {
+    for (const content of foreign) {
+      for (const place of [outer, join(outer, "onderzoek")]) {
+        writeFileSync(join(place, RUN_SECRETS_FILE), content);
+        assert.equal(maskText(join(run, "pages", "a.json"), text), text, content);
+        await writeJson(join(run, "pages", "b.json"), { titel: text });
+        await writeFileAtomic(join(run, "pages", "c.txt"), text);
+        assert.deepEqual(readSecretEvents(run), []);
+        rmSync(join(place, RUN_SECRETS_FILE));
+      }
+    }
+    mkdirSync(join(outer, RUN_SECRETS_FILE));
+    assert.equal(maskText(join(run, "pages", "a.json"), text), text, "a folder of that name");
+    rmSync(join(outer, RUN_SECRETS_FILE), { recursive: true });
+    // Also a real register of another run stops at the root of this one.
+    const other = mkdtempSync(join(tmpdir(), "loep-buiten-"));
+    registerSecret(other, TOKEN, { source: "test", origins: ["http://localhost:1"] });
+    cpSync(join(other, RUN_SECRETS_FILE), join(outer, RUN_SECRETS_FILE));
+    rmSync(other, { recursive: true, force: true });
+    assert.equal(maskText(join(run, "pages", "a.json"), text), text);
+    assert.equal(maskText(join(outer, "los.txt"), text).includes(TOKEN), false, "outside a run the nearest register still counts");
+  } finally {
+    rmSync(outer, { recursive: true, force: true });
+  }
+});
+
+test("7: inside a run a nested folder of a recheck has its own root, and its register by a link still counts", async () => {
+  const run = runOn("http://localhost:1");
+  try {
+    registerSecret(run, TOKEN, { source: "test" });
+    const nested = join(run, "nalopen", "1.1.1");
+    mkdirSync(join(nested, "uit"), { recursive: true });
+    writeFileSync(join(nested, "manifest.json"), "{}");
+    symlinkSync(join(run, RUN_SECRETS_FILE), join(nested, RUN_SECRETS_FILE));
+    assert.ok(!maskText(join(nested, "uit", "a.json"), `x ${TOKEN}`).includes(TOKEN));
+    assert.ok(!maskText(join(run, "pages", "a.json"), `x ${TOKEN}`).includes(TOKEN), "and in the run itself");
+  } finally {
+    rmSync(run, { recursive: true, force: true });
+  }
 });
 
 // ---- I: one mail that cannot be read -----------------------------------------------------------------------------------

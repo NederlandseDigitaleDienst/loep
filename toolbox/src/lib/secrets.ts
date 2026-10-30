@@ -424,16 +424,24 @@ export const readPrivate = <T>(runDir: string, source: string): T | null => (rea
 
 const loaded = new Map<string, { stamp: string; shield: Shield }>();
 
+/** What tells one version of a file from the next. A new version is a new file, so also a value of the same length, written in the same tick, counts. */
+function stampOf(path: string): string | null {
+  try {
+    const { mtimeMs, size, ino } = statSync(path);
+    return `${mtimeMs}:${size}:${ino}`;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * The shield of a run, read again when a command added secrets: the session process keeps running
  * while another command adds what it found. Null for a run without secrets; such a run takes the paths
  * it always took.
  */
 export function shieldForRun(runDir: string): Shield | null {
-  const path = pathIn(runDir);
-  if (!existsSync(path)) return null;
-  const { mtimeMs, size } = statSync(path);
-  const stamp = `${mtimeMs}:${size}`;
+  const stamp = stampOf(pathIn(runDir));
+  if (stamp === null) return null;
   const known = loaded.get(runDir);
   if (known?.stamp === stamp) return known.shield;
   const file = readSecretsFile(runDir)!;
@@ -585,11 +593,33 @@ export function leakRefusalNl(scan: ScanResult): string | null {
 
 // ---- Where a run writes ----------------------------------------------------------------------------------------------
 
-/** The run a path lies in, when that run has secrets: the nearest folder at or above it with a register. */
+const registers = new Map<string, { stamp: string; valid: boolean }>();
+
+/** Whether a folder holds a register of loep. A file of that name can be anything: only the schema says that it is one. */
+function holdsRegister(dir: string): boolean {
+  const stamp = stampOf(pathIn(dir));
+  if (stamp === null) return false;
+  const known = registers.get(dir);
+  if (known?.stamp === stamp) return known.valid;
+  let valid = false;
+  try {
+    valid = readSecretsFile(dir) !== null;
+  } catch {
+    // Somebody else's file, or a broken one: no register, and no reason for a write to fail.
+  }
+  registers.set(dir, { stamp, valid });
+  return valid;
+}
+
+/** What only the root of a run has. */
+const isRunRoot = (dir: string): boolean => existsSync(join(dir, "manifest.json")) || existsSync(join(dir, "inventory.json"));
+
+/** The run a path lies in, when that run has secrets: the nearest folder at or above it with a register, up to the root of the run. */
 function secretRunOf(path: string): string | null {
   let dir = dirname(resolve(path));
   for (;;) {
-    if (existsSync(join(dir, RUN_SECRETS_FILE))) return dir;
+    if (holdsRegister(dir)) return dir;
+    if (isRunRoot(dir)) return null;
     const up = dirname(dir);
     if (up === dir) return null;
     dir = up;
