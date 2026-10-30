@@ -3,7 +3,7 @@ import { basename, dirname, join } from "node:path";
 import type { Page } from "playwright";
 import { readJson, writeJson } from "./canonical.ts";
 import { looksSecret } from "./mailparse.ts";
-import { hostOf, registerSecrets, shieldForRun, type NewSecret } from "./secrets.ts";
+import { registerSecrets, renewSecrets, shieldForRun, type NewSecret } from "./secrets.ts";
 import { isLocalHost, writeOriginsOf, writesForRun, type WritePermission } from "./writes.ts";
 
 /**
@@ -204,15 +204,22 @@ export function sessionWithAliases(runDir: string, state: StorageState): Storage
   };
 }
 
-/** A site renews a session as it likes: in a run with a session what looks like a token in a `Set-Cookie` is a secret from now on, before the browser gets it. */
+/**
+ * A site renews a session as it likes, some with every answer: in a run with a session what looks like
+ * a token in a `Set-Cookie` is a secret from now on, before the browser gets it. It takes the place of
+ * the value the cookie had, so the register does not grow with every answer.
+ */
 export function renewSessionSecrets(runDir: string, headers: { "set-cookie"?: string | string[] | undefined }, url: URL): void {
-  if (!shieldForRun(runDir)?.hasSource(SESSION_COOKIE_SOURCE)) return;
-  const renewed = [headers["set-cookie"] ?? []].flat().flatMap((cookie): NewSecret[] => {
-    const value = /^[^=;]+=([^;]*)/.exec(cookie)?.[1] ?? "";
-    const domain = /;\s*domain=([^;]+)/i.exec(cookie)?.[1]?.trim();
-    return looksSecret(value) ? [{ value, source: SESSION_COOKIE_SOURCE, origins: [url.origin], ...(domain ? { domains: [domain] } : {}) }] : [];
-  });
-  registerSecrets(runDir, renewed);
+  const cookies = [headers["set-cookie"] ?? []].flat();
+  if (cookies.length === 0 || !shieldForRun(runDir)?.hasSource(SESSION_COOKIE_SOURCE)) return;
+  renewSecrets(
+    runDir,
+    cookies.flatMap((cookie) => {
+      const [, name, value = ""] = /^([^=;]+)=([^;]*)/.exec(cookie) ?? [];
+      const domain = /;\s*domain=([^;]+)/i.exec(cookie)?.[1]?.trim();
+      return name && looksSecret(value) ? [{ value, source: SESSION_COOKIE_SOURCE, origins: [url.origin], ...(domain ? { domains: [domain] } : {}), slot: `cookie ${domain ?? url.origin} ${name.trim()}` }] : [];
+    }),
+  );
 }
 
 /** The run the login of this process is for. */

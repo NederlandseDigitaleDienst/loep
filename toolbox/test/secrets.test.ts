@@ -17,8 +17,8 @@ import { loadPage, newContext } from "../src/browser/session.ts";
 import { absorbAll } from "../src/commands/mail.ts";
 import { seal } from "../src/commands/verify.ts";
 import { appendRunLine, writeFileAtomic, writeJson } from "../src/lib/canonical.ts";
-import { IDLE_SESSION_FILE, LOGIN_SESSION_FILE, RUN_SECRETS_FILE, registerSessionSecrets, sessionWithAliases, setRunLogin, writeLoginFile, type LoginSession } from "../src/lib/login.ts";
-import { MIN_BINARY_VALUE, maskBytes, maskText, readPrivate, readSecretEvents, readSecretsFile, registerSecret, scanRun, secretLimitationsNl, secretsLinesNl, Shield, shieldForRun, type RunSecret } from "../src/lib/secrets.ts";
+import { IDLE_SESSION_FILE, LOGIN_SESSION_FILE, RUN_SECRETS_FILE, registerSessionSecrets, renewSessionSecrets, SESSION_COOKIE_SOURCE, sessionWithAliases, setRunLogin, writeLoginFile, type LoginSession } from "../src/lib/login.ts";
+import { MAX_PREVIOUS, MAX_SLOTS, MIN_BINARY_VALUE, maskBytes, maskText, readPrivate, readSecretEvents, readSecretsFile, registerSecret, scanRun, secretLimitationsNl, secretsLinesNl, Shield, shieldForRun, type RunSecret } from "../src/lib/secrets.ts";
 import type { ReceivedMail } from "../src/lib/mailbox.ts";
 import { notHashed } from "../src/lib/seal.ts";
 import { decideWrites, recordWrites } from "../src/lib/writes.ts";
@@ -741,6 +741,89 @@ test("8: a real value is put back as it is, with the signs a replacement would r
   assert.equal(shield.outwardForm(Buffer.from(`t=${alias}`)).toString(), `t=${new URLSearchParams({ a: real }).toString().slice(2)}`);
   const plain = new Shield({ secrets: [{ ...secretFor(real), alias: "$&-alias-$$-alias" }] });
   assert.equal(plain.inward(`voor ${real} na`), "voor $&-alias-$$-alias na", "and so is an alias");
+});
+
+// ---- A site that renews its cookies with every answer ----------------------------------------------------------------
+
+test("6: a site that renews a cookie with every answer does not stop the proxy, keeps the register small, and an old value stays out of the run", async () => {
+  let issued = 0;
+  const values: string[] = [];
+  const fresh = (): string => {
+    const value = `verse-${String(++issued).padStart(6, "0")}-Qw3Er5Ty7Ui9Op1As3Df5Gh7Jk9Lz`;
+    values.push(value);
+    return value;
+  };
+  const site = await siteWith((request, response) => {
+    if (request.url === "/oud") return html(response, `<p id="oud">${values.at(-2)}</p>`, { "set-cookie": `sessie=${fresh()}; Path=/` });
+    if (request.url === "/stil") return html(response, "<p>Stil</p>");
+    html(response, "<h1>Site</h1>", { "set-cookie": [`sessie=${fresh()}; Path=/`, "taal=nl; Path=/"] });
+  });
+  const run = runOn(site.origin);
+  writeLoginFile(join(run, LOGIN_SESSION_FILE), loginSession(site.origin));
+  // A run of some size: looking through it for each new value is what stopped the proxy.
+  writeFileSync(join(run, "groot.txt"), "x".repeat(64 * 1024 * 1024));
+  setRunLogin(run);
+  const session = await sessionOn(run, await launched("chromium"));
+  let longestPause = 0;
+  let last = performance.now();
+  const beat = setInterval(() => {
+    const now = performance.now();
+    longestPause = Math.max(longestPause, now - last);
+    last = now;
+  }, 5);
+  try {
+    await loadPage(session.page, `${site.origin}/`);
+    const started = performance.now();
+    longestPause = 0;
+    last = started;
+    const statuses = await session.page.evaluate(() => Promise.all(Array.from({ length: 60 }, (_, index) => fetch(`/tik/${index}`).then((answer) => answer.status))));
+    const took = performance.now() - started;
+    assert.ok(statuses.every((status) => status === 200));
+    assert.ok(took < 15_000, `60 requests at once took ${Math.round(took)} ms`);
+    assert.ok(longestPause < 1000, `the proxy stood still for ${Math.round(longestPause)} ms`);
+
+    const places = readSecretsFile(run)!.secrets.filter((secret) => secret.slot !== undefined);
+    assert.equal(places.length, 1, "one place for one cookie, whatever the number of answers");
+    assert.equal(places[0]!.real, values.at(-1));
+    assert.equal(places[0]!.previous!.length, MAX_PREVIOUS);
+    assert.ok(statSync(join(run, RUN_SECRETS_FILE)).size < 16 * 1024, "and the register has a limit");
+
+    // The browser keeps one alias, and the site gets the latest value for it.
+    const held = (await session.page.context().cookies()).find((cookie) => cookie.name === "sessie")!;
+    assert.equal(held.value, places[0]!.alias);
+    await session.page.evaluate(() => fetch("/stil").then((answer) => answer.text()));
+    assert.ok(site.heard.at(-1)!.headers.cookie?.includes(`sessie=${values.at(-1)}`), "the latest value goes out");
+
+    // An answer that was under way, with the value of a moment ago.
+    await loadPage(session.page, `${site.origin}/oud`);
+    const shown = await session.page.locator("#oud").textContent();
+    assert.ok(!values.includes(shown!), "the old value does not reach the browser");
+    await writeFileAtomic(join(run, "pages", "p1", "page.html"), await session.page.content());
+    await writeJson(join(run, "observations", "o1.json"), { cookies: await session.page.context().cookies() });
+    for (const value of values.slice(-3)) assert.deepEqual(filesHolding(run, value), [], value);
+    assert.deepEqual(readSecretEvents(run).filter((event) => event.kind === "found-in-run"), []);
+    writeFileSync(join(run, "te-laat.txt"), values.at(-2)!);
+    assert.deepEqual(scanRun(run).hits.map((hit) => hit.file), ["te-laat.txt"], "and the search still knows it");
+  } finally {
+    clearInterval(beat);
+    setRunLogin(null);
+    await session.close();
+    await site.close();
+    rmSync(run, { recursive: true, force: true });
+  }
+});
+
+test("6: a site with a new cookie name for each answer cannot make the register grow either", () => {
+  const run = runOn("http://localhost:1");
+  try {
+    registerSecret(run, COOKIE, { source: SESSION_COOKIE_SOURCE });
+    for (let index = 0; index < MAX_SLOTS * 3; index++) renewSessionSecrets(run, { "set-cookie": `naam${index}=waarde-${index}-Qw3Er5Ty7Ui9Op1As3Df5Gh7Jk9Lz; Path=/` }, new URL("http://localhost:1/"));
+    const places = readSecretsFile(run)!.secrets.filter((secret) => secret.slot !== undefined);
+    assert.equal(places.length, MAX_SLOTS);
+    assert.ok(places.at(-1)!.real.startsWith(`waarde-${MAX_SLOTS * 3 - 1}-`), "the oldest goes first");
+  } finally {
+    rmSync(run, { recursive: true, force: true });
+  }
 });
 
 // ---- Where a run ends --------------------------------------------------------------------------------------------------

@@ -43,6 +43,10 @@ export interface RunSecret {
   domains?: string[];
   /** How it stands in an address, when that is not the value itself (`a%2fb`, `a+b`). An address goes back to the site spelled like this. */
   spelled?: string[];
+  /** For a value a site keeps renewing: what it is the value of. A new value takes this place and keeps the alias. */
+  slot?: string;
+  /** The values this one replaced, the latest first. None goes to a site any more, but a page can still show one, so they are still swapped on the way in and looked for. */
+  previous?: string[];
   at: string;
 }
 
@@ -237,8 +241,8 @@ const reachOf = (secret: Pick<RunSecret, "origins" | "domains">, url: string): b
   });
 };
 
-/** Everything that stands for one value in a page or a file: the value and how an address spells it. */
-const formsOf = (secret: RunSecret): string[] => [secret.real, ...(secret.spelled ?? [])];
+/** Everything that stands for one value in a page or a file: the value, how an address spells it, and what it replaced. */
+const formsOf = (secret: RunSecret): string[] => [secret.real, ...(secret.spelled ?? []), ...(secret.previous ?? [])];
 
 export class Shield {
   readonly secrets: readonly RunSecret[];
@@ -448,6 +452,36 @@ export function registerSecrets(runDir: string, found: readonly NewSecret[]): vo
     return fresh;
   });
   lookBack(runDir, added);
+}
+
+/** What a site that keeps renewing a value is remembered by: its last values per place, for this many places. */
+export const MAX_PREVIOUS = 8;
+export const MAX_SLOTS = 32;
+
+/**
+ * Values a site hands out right now, each in the place of the one it had there (`slot`). This runs on
+ * the proxy for every answer of a site that renews its cookies, so it stays small: the place keeps its
+ * alias, which is what the browser holds, the register keeps a fixed number of old values, and nothing
+ * looks through the run, because a value that only now comes out of the site cannot stand there yet.
+ */
+export function renewSecrets(runDir: string, renewed: readonly (NewSecret & { slot: string })[]): void {
+  if (renewed.length === 0) return;
+  changing(runDir, (file) => {
+    for (const secret of renewed) {
+      if (file.secrets.some((entry) => entry.real === secret.value)) continue;
+      const place = file.secrets.find((entry) => entry.slot === secret.slot);
+      if (place) {
+        place.previous = [place.real, ...(place.previous ?? [])].filter((value) => value !== secret.value).slice(0, MAX_PREVIOUS);
+        place.real = secret.value;
+        place.origins = [...new Set([...place.origins, ...(secret.origins ?? [])])];
+        if (secret.domains) place.domains = [...new Set([...(place.domains ?? []), ...secret.domains])];
+        continue;
+      }
+      file.secrets.push({ real: secret.value, alias: aliasFor(secret.value), source: secret.source, origins: secret.origins ?? [], ...(secret.domains ? { domains: secret.domains } : {}), slot: secret.slot, at: new Date().toISOString() });
+      const places = file.secrets.filter((entry) => entry.slot !== undefined);
+      if (places.length > MAX_SLOTS) file.secrets.splice(file.secrets.indexOf(places[0]!), 1);
+    }
+  });
 }
 
 /** Add one value. All a new kind of secret needs. */
