@@ -6,6 +6,18 @@ Wat er per versie van loep is veranderd. De versie staat op het voorblad en onde
 
 <!-- towncrier: een nieuwe versie komt hieronder -->
 
+## 0.20.0 (2026-10-30)
+
+Deze versie is uitgebracht zonder meting: de wijzigingen zijn met tests nagegaan; een meting met agents op de testsite is niet gedaan.
+
+### Wat een uitkomst kan veranderen
+
+- Een chatframe zonder testwaarde, zoals drukken op verzenden met een leeg veld, gaat nog maar één keer echt: daarna speelt loep het antwoord af en kost het geen budget. Dreigt het budget voor versturen op te raken, dan pauzeert de werkstroom en beslist een persoon of het omhoog gaat (`writes --run <run> --max-writes <aantal>`). Punten die open bleven omdat het budget op was, meet daarna een nieuwe afmaakronde met `tasks --again`. ([#381](https://github.com/NederlandseDigitaleDienst/loep/issues/381))
+
+### Verder
+
+- `--test-environment` mag vaker worden gegeven: een site met een eigen formulier en een chat op een ander adres kan zo in één onderzoek op beide worden getoetst. Wie verklaart typt elke origin over, en het budget voor versturen geldt voor de origins samen. ([#379](https://github.com/NederlandseDigitaleDienst/loep/issues/379))
+
 ## 0.19.0 (2026-10-29)
 
 Deze versie is uitgebracht zonder meting: de wijzigingen zijn met tests nagegaan; een meting met agents op de testsite is niet gedaan.
