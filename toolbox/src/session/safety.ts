@@ -397,7 +397,7 @@ export async function guardedDownload(scope: Scope, guard: Guard, address: strin
       // A file behind a login is asked for with the session of the run, and only inside the scope.
       const cookie = inScope(scope, url) ? loginCookieHeader(url) : null;
       // In a run with secrets the answer gets the aliases too: this file goes in the run.
-      const response = await shieldedFetch(shieldOf(runOf(scope), url), url, { method: "GET", redirect: "manual", signal: abort.signal, headers: { ...(cookie ? { cookie } : {}), ...((await options.headers?.(url)) ?? {}) } });
+      const response = await shieldedFetch(shieldOf(runOf(scope), url), url, { method: "GET", redirect: "manual", signal: abort.signal, headers: { ...(cookie ? { cookie } : {}), ...((await options.headers?.(url)) ?? {}) } }, { maxBytes: options.maxBytes, runDir: runOf(scope) });
       if (response.status === 429 && inScope(scope, url)) options.blockade?.tooMany(url, response.headers.get("retry-after") ?? undefined);
       const location = response.headers.get("location");
       if (response.status >= 300 && response.status < 400 && location) {
@@ -431,8 +431,10 @@ export async function guardedDownload(scope: Scope, guard: Guard, address: strin
       } finally {
         await new Promise<void>((resolve) => file.end(resolve));
       }
+      // In a run with secrets the answer was read before this point: the time can have run out there, and this is what arrived.
+      if (timedOut) truncated ??= "time";
       if (bytes === 0) return { ok: false, reason: timedOut ? "geen antwoord binnen de tijd" : "de server stuurt een leeg bestand" };
-      maskFile(to);
+      maskFile(to, response.headers.get("content-type") ?? undefined);
       return { ok: true, url, bytes, contentType: response.headers.get("content-type"), truncated };
     }
     return { ok: false, reason: "te veel doorverwijzingen" };

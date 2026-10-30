@@ -372,7 +372,7 @@ class Boundary {
     this.keepCookies(url.origin, shield, answer.headers);
     const contentType = [answer.headers["content-type"] ?? ""].flat()[0] || undefined;
     const { data, shortFound } = shield.inwardBody(decoded, contentType);
-    for (const source of shortFound) noteSecretEvent(this.runDir, { kind: "short-in-binary", where, source, noteNl: "een korte code staat in een binair antwoord en is niet vervangen, omdat ze er ook toevallig kan staan" });
+    noteShortFound(this.runDir, where, shortFound);
     const headers = headersInward(shield, answer.headers);
     const changedBody = data !== decoded;
     if (!changedBody && JSON.stringify(headers) === JSON.stringify(answer.headers)) return undefined;
@@ -449,6 +449,10 @@ class Boundary {
 
 const boundaries = new Map<string, Promise<Boundary>>();
 
+function noteShortFound(runDir: string, where: string, sources: readonly string[]): void {
+  for (const source of sources) noteSecretEvent(runDir, { kind: "short-in-binary", where, source, noteNl: "een korte code staat in een binair antwoord en is niet vervangen, omdat ze er ook toevallig kan staan" });
+}
+
 function boundaryOf(runDir: string): Promise<Boundary> {
   let boundary = boundaries.get(runDir);
   if (!boundary) {
@@ -523,18 +527,49 @@ export async function boundaryForContext(browser: Browser, runDir: string | unde
   return { proxy: boundary.proxy, ignoreHTTPSErrors: true };
 }
 
+export interface FetchLimits {
+  /** Stop reading somewhat past this: the caller cuts it off, and a value across that point has been swapped by then. */
+  maxBytes?: number;
+  /** Where to note a short value in a binary answer. */
+  runDir?: string | undefined;
+}
+
+/** How much is read past `maxBytes`: more than the longest spelling of a value, each character escaped. */
+const READ_PAST_BYTES = 64 * 1024;
+
+/** The body of an answer, up to a limit. When the signal of the request ends it, what arrived is kept: the caller knows the time was up and says so. */
+async function boundedBody(body: ReadableStream<Uint8Array> | null, limit: number, signal: AbortSignal | null | undefined): Promise<Buffer> {
+  const parts: Uint8Array[] = [];
+  let size = 0;
+  try {
+    for await (const chunk of (body ?? []) as AsyncIterable<Uint8Array>) {
+      parts.push(chunk);
+      size += chunk.length;
+      if (size >= limit) break;
+    }
+  } catch (error) {
+    if (!signal?.aborted) throw error;
+  }
+  return Buffer.concat(parts);
+}
+
 /**
  * A request outside the browser, in a run with secrets: the same swap as at the boundary, so what
- * comes back has aliases in it. Any other run, and any other origin, gets a plain `fetch`.
+ * comes back has aliases in it, and a binary answer stays whole. It is read here, so the limits of the
+ * caller have to hold here. Any other run, and any other origin, gets a plain `fetch`.
  */
-export async function shieldedFetch(shield: Shield | null, url: string, init: RequestInit): Promise<Response> {
+export async function shieldedFetch(shield: Shield | null, url: string, init: RequestInit, limits: FetchLimits = {}): Promise<Response> {
   if (!shield) return fetch(url, init);
   const answer = await fetch(shield.reaching(url).outwardUrl(url), { ...init, headers: { ...(init.headers as Record<string, string> | undefined), "accept-encoding": "identity" } });
   const headers = new Headers();
   answer.headers.forEach((value, name) => {
-    if (!STALE_HEADERS.has(name)) headers.append(name, shield.inward(value));
+    if (!STALE_HEADERS.has(name)) headers.append(name, headerInward(shield, name, value));
   });
   // Set-Cookie is not read here: the callers ask without a session.
-  const empty = [101, 204, 205, 304].includes(answer.status);
-  return new Response(empty ? null : new Uint8Array(shield.inwardBytes(Buffer.from(await answer.arrayBuffer()))), { status: answer.status, statusText: answer.statusText, headers });
+  const answered = { status: answer.status, statusText: answer.statusText, headers };
+  if ([101, 204, 205, 304].includes(answer.status)) return new Response(null, answered);
+  const read = await boundedBody(answer.body, limits.maxBytes === undefined ? Number.POSITIVE_INFINITY : limits.maxBytes + READ_PAST_BYTES, init.signal);
+  const { data, shortFound } = shield.inwardBody(read, answer.headers.get("content-type") ?? undefined);
+  if (limits.runDir !== undefined) noteShortFound(limits.runDir, shield.inward(url), shortFound);
+  return new Response(new Uint8Array(data), answered);
 }

@@ -22,7 +22,7 @@ import { MIN_BINARY_VALUE, maskBytes, maskText, readPrivate, readSecretEvents, r
 import type { ReceivedMail } from "../src/lib/mailbox.ts";
 import { notHashed } from "../src/lib/seal.ts";
 import { decideWrites, recordWrites } from "../src/lib/writes.ts";
-import { guardContext, guardRedirects, scopeForRun, type Guard } from "../src/session/safety.ts";
+import { guardContext, guardedDownload, guardRedirects, scopeForRun, type Guard } from "../src/session/safety.ts";
 import { SecondBrowsers } from "../src/session/second.ts";
 
 /*
@@ -789,6 +789,92 @@ test("7: inside a run a nested folder of a recheck has its own root, and its reg
     assert.ok(!maskText(join(nested, "uit", "a.json"), `x ${TOKEN}`).includes(TOKEN));
     assert.ok(!maskText(join(run, "pages", "a.json"), `x ${TOKEN}`).includes(TOKEN), "and in the run itself");
   } finally {
+    rmSync(run, { recursive: true, force: true });
+  }
+});
+
+// ---- A download in a run with secrets ----------------------------------------------------------------------------------
+
+const PNG_HEAD = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0, 1]);
+
+async function downloadOn(run: string, url: string, name: string, limits: { maxBytes: number; timeoutMs: number }): Promise<Awaited<ReturnType<typeof guardedDownload>>> {
+  const guard: Guard = { blocked: [], outsideScopeLoaded: {}, sender: "test" };
+  return guardedDownload(await scopeForRun(run, {}), guard, url, join(run, name), { resourceType: "document", blockade: undefined, ...limits });
+}
+
+test("5: a binary file stays whole in a download: only a long value is swapped, and a short one is noted", async () => {
+  const binary = Buffer.concat([PNG_HEAD, Buffer.from(TOKEN), Buffer.from([0, 0xff, 0x20]), Buffer.from(CODE), Buffer.from([0x20, 0xfe, 0x80])]);
+  const noNull = Buffer.concat([Buffer.from([0x89, 0x50, 0x20]), Buffer.from(CODE), Buffer.from([0x20, 0xff])]);
+  const site = await siteWith((request, response) => void response.writeHead(200, { "content-type": request.url === "/geen-nul.bin" ? "application/octet-stream" : "image/png" }).end(request.url === "/geen-nul.bin" ? noNull : binary));
+  const run = runOn(site.origin);
+  registerSecret(run, TOKEN, { source: "lang" });
+  registerSecret(run, CODE, { source: "kort" });
+  const alias = readSecretsFile(run)!.secrets.find((secret) => secret.real === TOKEN)!.alias;
+  try {
+    const fetched = await downloadOn(run, `${site.origin}/plaatje.png`, "plaatje.png", { maxBytes: 1024 * 1024, timeoutMs: 5000 });
+    assert.deepEqual({ ...fetched, url: "" }, { ok: true, url: "", bytes: binary.length, contentType: "image/png", truncated: null });
+    assert.deepEqual(readFileSync(join(run, "plaatje.png")), Buffer.from(binary.toString("latin1").replace(TOKEN, () => alias), "latin1"));
+    const noted = readSecretEvents(run).filter((event) => event.kind === "short-in-binary");
+    assert.deepEqual(noted.map((event) => event.source), ["kort"]);
+    assert.ok(noted[0]!.where.endsWith("/plaatje.png"));
+    assert.equal((await downloadOn(run, `${site.origin}/geen-nul.bin`, "geen-nul.bin", { maxBytes: 1024, timeoutMs: 5000 })).ok, true);
+    assert.deepEqual(readFileSync(join(run, "geen-nul.bin")), noNull, "by its type, also without a zero byte, and also when the run writes it");
+  } finally {
+    await site.close();
+    rmSync(run, { recursive: true, force: true });
+  }
+});
+
+test("5: a download stops at its limit while it comes in, and a value across that limit is not cut in half", async () => {
+  const chunk = Buffer.alloc(64 * 1024, 0x20);
+  let sent = 0;
+  const site = await siteWith((_request, response) => {
+    response.writeHead(200, { "content-type": "text/plain" });
+    const more = (): void => {
+      if (response.destroyed || sent >= 1024 * 1024 * 1024) return void response.end();
+      sent += chunk.length;
+      response.write(chunk, () => setImmediate(more));
+    };
+    more();
+  });
+  const run = runOn(site.origin);
+  registerSecret(run, TOKEN, { source: "lang" });
+  try {
+    const fetched = await downloadOn(run, `${site.origin}/groot.txt`, "groot.txt", { maxBytes: 256 * 1024, timeoutMs: 20_000 });
+    assert.equal(fetched.ok && fetched.truncated, "size");
+    assert.equal(fetched.ok && fetched.bytes, 256 * 1024);
+    assert.ok(sent < 64 * 1024 * 1024, `the site sent ${sent} bytes for a limit of 256 kB`);
+  } finally {
+    await site.close();
+    rmSync(run, { recursive: true, force: true });
+  }
+  const edge = await siteWith((_request, response) => void response.writeHead(200, { "content-type": "text/plain" }).end(`${" ".repeat(1000 - 10)}${TOKEN} en verder`));
+  const second = runOn(edge.origin);
+  registerSecret(second, TOKEN, { source: "lang" });
+  try {
+    const fetched = await downloadOn(second, `${edge.origin}/rand.txt`, "rand.txt", { maxBytes: 1000, timeoutMs: 5000 });
+    assert.equal(fetched.ok && fetched.truncated, "size");
+    assert.ok(!readFileSync(join(second, "rand.txt"), "utf8").includes(TOKEN.slice(0, 10)), "not even its first half");
+  } finally {
+    await edge.close();
+    rmSync(second, { recursive: true, force: true });
+  }
+});
+
+test("5: when the time is up the part that arrived is kept and says so, with its values swapped", async () => {
+  const site = await siteWith((_request, response) => {
+    response.writeHead(200, { "content-type": "text/plain" });
+    response.write(`begin ${TOKEN} `);
+  });
+  const run = runOn(site.origin);
+  registerSecret(run, TOKEN, { source: "lang" });
+  const alias = readSecretsFile(run)!.secrets[0]!.alias;
+  try {
+    const fetched = await downloadOn(run, `${site.origin}/traag.txt`, "traag.txt", { maxBytes: 1024 * 1024, timeoutMs: 500 });
+    assert.equal(fetched.ok && fetched.truncated, "time");
+    assert.equal(readFileSync(join(run, "traag.txt"), "utf8"), `begin ${alias} `);
+  } finally {
+    await site.close();
     rmSync(run, { recursive: true, force: true });
   }
 });

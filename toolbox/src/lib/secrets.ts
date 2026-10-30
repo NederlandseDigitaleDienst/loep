@@ -706,19 +706,19 @@ export function maskText(path: string, text: string): string {
 }
 
 /** The same for bytes. A binary file only loses what cannot stand there by chance. */
-export function maskBytes(path: string, data: Uint8Array): Uint8Array {
+export function maskBytes(path: string, data: Uint8Array, contentType?: string): Uint8Array {
   const mask = maskFor(path);
   if (!mask) return data;
   const bytes = Buffer.from(data.buffer, data.byteOffset, data.byteLength);
-  const safe = mask.shield.inwardBody(bytes, COMPRESSED.test(path) ? "application/octet-stream" : undefined).data;
+  const safe = mask.shield.inwardBody(bytes, contentType ?? typeOfFile(path)).data;
   if (safe !== bytes) noteMasked(mask.runDir, mask.where);
   return safe;
 }
 
-/** The same for a file that is already on disk, such as a download. */
-export function maskFile(path: string): void {
+/** The same for a file that is already on disk, such as a download, with the type it came with when that is known. */
+export function maskFile(path: string, contentType?: string): void {
   const data = readFileSync(path);
-  const safe = maskBytes(path, data);
+  const safe = maskBytes(path, data, contentType);
   if (safe !== data && !Buffer.from(safe).equals(data)) writeFileSync(path, safe);
 }
 
