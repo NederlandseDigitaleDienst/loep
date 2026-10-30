@@ -556,6 +556,84 @@ test("7: a redirect that was held back says nothing about the site", async () =>
   rmSync(run, { recursive: true, force: true });
 });
 
+/** A page of a site with a login: a form to leave in the chrome of the site, and one for what the test says. */
+const withLogout = (own: string, logout = `<header><form method="post" action="/sessie/einde"><button>Afmelden</button></form></header>`): string => `${logout}<main><h1>Voorkeuren</h1>${own}</main>`;
+
+test("4: a button that logs out is left alone, also at an address that says nothing, and the real one behind it is pressed", async () => {
+  const posted: string[] = [];
+  let gone = false;
+  const { cleanup, run } = await cleaned((url, method, send) => {
+    if (method === "POST") {
+      posted.push(url.pathname);
+      gone = url.pathname === "/voorkeuren";
+      return send(303, "", { location: "/klaar" });
+    }
+    if (url.pathname === "/klaar" || url.pathname === "/verlopen") return send(200, "<h1>Klaar</h1>");
+    if (gone) return send(303, "", { location: "/verlopen" });
+    send(200, withLogout(`<form method="post" action="/voorkeuren?token=${url.searchParams.get("token")}"><button>Afmelden</button></form>`));
+  });
+  rmSync(run, { recursive: true, force: true });
+  assert.deepEqual(posted, ["/voorkeuren"]);
+  assert.equal(cleanup.site.outcome, "verwijderd", cleanup.site.noteNl);
+});
+
+for (const [name, chrome] of [
+  ["without a landmark, by the code it carries", `<div><form method="post" action="/sessie/einde"><button>Afmelden</button></form></div>`],
+  ["by a word that only means logging out", `<div><form method="post" action="/voorkeuren-x"><button>Afmelden (uitloggen)</button></form></div>`],
+  ["by its address", `<div><form method="post" action="/account/logout"><button>Verwijder sessie</button></form></div>`],
+] as const) {
+  test(`4: the real button comes first when a logout stands before it: ${name}`, async () => {
+    const posted: string[] = [];
+    let gone = false;
+    const { cleanup, run } = await cleaned((url, method, send) => {
+      if (method === "POST") {
+        posted.push(url.pathname);
+        gone = url.pathname === "/voorkeuren";
+        return send(303, "", { location: "/klaar" });
+      }
+      if (url.pathname === "/klaar" || url.pathname === "/verlopen") return send(200, "<h1>Klaar</h1>");
+      if (gone) return send(303, "", { location: "/verlopen" });
+      send(200, withLogout(`<form method="post" action="/voorkeuren"><input type="hidden" name="t" value="${url.searchParams.get("token")}"><button>Afmelden</button></form>`, chrome));
+    });
+    rmSync(run, { recursive: true, force: true });
+    assert.deepEqual(posted, ["/voorkeuren"]);
+    assert.equal(cleanup.site.outcome, "verwijderd", cleanup.site.noteNl);
+  });
+}
+
+test("4: a page with only a logout is no place to press anything", async () => {
+  const posted: string[] = [];
+  const { cleanup, run } = await cleaned((url, method, send) => {
+    if (method === "POST") posted.push(url.pathname);
+    send(200, withLogout("<p>Je voorkeuren</p>"));
+  });
+  rmSync(run, { recursive: true, force: true });
+  assert.deepEqual(posted, []);
+  assert.equal(cleanup.site.outcome, "mislukt");
+  assert.match(cleanup.site.noteNl, /geen knop gevonden/);
+});
+
+for (const [name, login, content] of [
+  ["a page with a login in its address", "/account/login", "<h1>Welkom terug</h1>"],
+  ["a page that shows a password field", "/start", `<h1>Welkom</h1><label>Wachtwoord <input type="password"></label>`],
+] as const) {
+  test(`4: being sent to ${name} is no proof that the registration is gone`, async () => {
+    let out = false;
+    const { cleanup, run } = await cleaned((url, method, send) => {
+      if (method === "POST") {
+        out = true;
+        return send(303, "", { location: login });
+      }
+      if (url.pathname === login) return send(200, content);
+      if (out) return send(302, "", { location: login });
+      send(200, `<main><h1>Voorkeuren</h1><form method="post" action="/sessie/einde"><button>Afmelden</button></form></main>`);
+    });
+    rmSync(run, { recursive: true, force: true });
+    assert.equal(cleanup.site.outcome, "niet aangetoond", cleanup.site.noteNl);
+    assert.equal(cleanup.complete, false);
+  });
+}
+
 test("9: a browser that does not start leaves an outcome, and the mail, the search and mailbox.json go on", async () => {
   const site = await scriptedSite((_url, _method, send) => send(200, "<h1>Pagina</h1>"));
   const run = await mailboxRun(site.origin);

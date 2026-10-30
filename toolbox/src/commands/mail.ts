@@ -3,6 +3,7 @@ import { join } from "node:path";
 import type { Browser, BrowserContext, Locator, Page } from "playwright";
 import { launchBrowser, loadPage, newContext } from "../browser/session.ts";
 import { linkKind, MAIL_ADDRESS_SOURCE, MAIL_CODE_SOURCE, MAIL_LINK_SOURCE, MAIL_PRIVATE, MAILBOX_STATE, mailboxForRun, markedMail, openMailbox, readMailboxState, waitForMail, writeMailboxState, type CleanupStep, type MailServer, type Mailbox, type MailboxCleanup, type MailboxLink, type MailboxMark, type MailboxState, type ReceivedMail } from "../lib/mailbox.ts";
+import { isLoginPath, loginForRun, onlyLogsOut, passwordFieldShows } from "../lib/login.ts";
 import { linksOf, secretsInText, secretsInUrl, spelledSecretsInUrl, withoutLinks } from "../lib/mailparse.ts";
 import { refuseUnderSeal } from "../lib/seal.ts";
 import { keepPrivate, readPrivate, readSecretsFile, registerGuarded, registerSecret, registerSecrets, scanRun, shieldForRun, type NewSecret, type Shield } from "../lib/secrets.ts";
@@ -31,6 +32,8 @@ const SETTLE_POLL_MS = 2000;
 /** How long a cleanup waits in total for the time between two writes on a test environment. */
 const MAX_BUDGET_WAIT_MS = 300_000;
 const REMOVE_NAME = /afmeld|uitschrij|verwijder|opzeg|unsubscribe|remove|delete/i;
+/** In Dutch this is how a person leaves a mailing list, and how a person logs out: by itself this name says neither. */
+const ONLY_AFMELDEN = /^\W*(?:afmelden|meld (?:je|u) af)\W*$/i;
 /** Pages a cleanup looks at, to find the button that removes the registration. */
 const MAX_CLEANUP_PAGES = 8;
 /** How often one cleanup goes to the site, when a link only came in later. */
@@ -160,6 +163,8 @@ interface Look {
   status: number | null;
   /** Whether the button that removes the registration stands there. */
   button: boolean;
+  /** Whether this is where a person logs in. */
+  login: boolean;
   /** Why this look says nothing about the site: it was held back on our side. */
   refusedNl: string | null;
 }
@@ -180,7 +185,8 @@ const sameLook = (first: Look, second: Look): boolean => !first.refusedNl && !se
 
 /** What says that a registration is gone: the same link answers that it no longer exists, leads elsewhere, or no longer has the button. */
 function goneBy(before: Look, after: Look): string | null {
-  if (after.refusedNl || after.status === null) return null;
+  // A site that sends a visitor to its login page says nothing about the registration: the visitor may just have been logged out.
+  if (after.refusedNl || after.status === null || after.login) return null;
   if (after.status === 404 || after.status === 410) return `de link geeft nu ${after.status}`;
   if (!isOk(after.status)) return null;
   if (after.path !== before.path) return "de link leidt nu ergens anders heen";
@@ -194,7 +200,41 @@ interface SiteResult {
   steps: CleanupStep[];
 }
 
-const removeButton = (page: Page): Locator => page.getByRole("button", { name: REMOVE_NAME }).first();
+/** What a button says about itself, through shadow roots: the design system of a site keeps the real button inside its own element. */
+const aboutButton = (element: Element): { text: string; target: string; carried: string; chrome: boolean } => {
+  let target = "";
+  let carried = "";
+  let chrome = false;
+  for (let at: Element | null = element; at; at = at.parentElement ?? ((at.getRootNode() as ShadowRoot).host ?? null)) {
+    if (at.matches("header, nav, footer, [role=banner], [role=navigation], [role=contentinfo]")) chrome = true;
+    if (at.matches("form")) {
+      target ||= at.getAttribute("action") ?? "";
+      carried ||= [...at.querySelectorAll("input")].map((input) => input.value).join(" ");
+    }
+    if (at.matches("a[href]")) target ||= at.getAttribute("href") ?? "";
+  }
+  return { text: element.getAttribute("aria-label") ?? element.textContent ?? "", target: element.getAttribute("formaction") ?? target, carried, chrome };
+};
+
+/**
+ * The button that removes the registration, or null. A button that can only log out never is one,
+ * also when its address says nothing. Of the rest the one that carries the personal code comes first,
+ * then one whose name says what it does, then what stands in the page itself: a bare `Afmelden` in the
+ * header or the navigation of a site is how a person logs out, so that one is left alone.
+ */
+async function removeButton(page: Page, shield: Shield): Promise<Locator | null> {
+  const buttons = await page.getByRole("button", { name: REMOVE_NAME }).all().catch(() => [] as Locator[]);
+  const ranked: { button: Locator; rank: number }[] = [];
+  for (const button of buttons) {
+    if (!(await button.isVisible().catch(() => false))) continue;
+    const about = await button.evaluate(aboutButton).catch(() => null);
+    if (!about || onlyLogsOut({ text: about.text, href: about.target })) continue;
+    const bare = ONLY_AFMELDEN.test(about.text.trim());
+    if (bare && about.chrome) continue;
+    ranked.push({ button, rank: (shield.carriesAlias(`${about.target} ${about.carried}`) ? 0 : 4) + (bare ? 2 : 0) + (about.chrome ? 1 : 0) });
+  }
+  return ranked.sort((first, second) => first.rank - second.rank)[0]?.button ?? null;
+}
 
 const pathOf = (url: string): string => {
   try {
@@ -244,6 +284,7 @@ async function removeAtSite(browser: Browser, runDir: string, state: MailboxStat
     };
     const page = await tab();
     const started = Date.now();
+    const loginPath = pathOf(loginForRun(runDir)?.loginUrl ?? "");
     /**
      * Run something that sends. A write that had to wait for the time between two writes is tried again
      * after that time. A navigation that was held back ends in an error of the browser: that is the refusal, no failure.
@@ -274,7 +315,8 @@ async function removeAtSite(browser: Browser, runDir: string, state: MailboxStat
     const look = async (on: Page, url: string): Promise<Look> => {
       // A page that does not open says nothing either: that is noted, and the other links are still looked at.
       const { value, refusedNl } = await sending(() => loadPage(on, url)).catch((error: Error) => ({ value: null, refusedNl: `de link ging niet open: ${error.message.split("\n")[0]}` }));
-      return { path: pathOf(on.url()), status: value?.status ?? null, button: await removeButton(on).isVisible().catch(() => false), refusedNl };
+      const path = pathOf(on.url());
+      return { path, status: value?.status ?? null, button: (await removeButton(on, shield)) !== null, login: isLoginPath(path) || path === loginPath || (await passwordFieldShows(on)), refusedNl };
     };
     const queue = CLEANUP_ORDER.flatMap((kind) => state.links.filter((link) => link.kind === kind).map((link) => link.url));
     const visits: Visit[] = [];
@@ -289,8 +331,8 @@ async function removeAtSite(browser: Browser, runDir: string, state: MailboxStat
       const stable = sameLook(before, await look(proof, url));
       visits.push({ url, before, stable });
       steps.push({ whatNl: `persoonlijke link geopend${stable ? ", en bij een tweede keer hetzelfde" : ", maar een tweede keer gaf iets anders, dus deze link bewijst achteraf niets"}`, path: before.path });
-      const button = removeButton(page);
-      if (await button.isVisible().catch(() => false)) {
+      const button = await removeButton(page, shield);
+      if (button) {
         const name = (await button.textContent().catch(() => null))?.trim() || "de knop om te verwijderen";
         const pressed = await sending(async () => {
           await button.click({ timeout: 5000 });

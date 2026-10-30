@@ -268,6 +268,9 @@ export const NOT_LOGGED_IN_NL = "Er is niet ingelogd. Wat achter een inlog staat
 
 const LOGOUT_WORDS = /(?:^|[^\p{L}])(uitloggen|uitlog|log[ -]?uit|afmelden|meld (?:je|u) af|log[ -]?out|log[ -]?off|sign[ -]?out|sign[ -]?off)(?:$|[^\p{L}])/iu;
 const LOGOUT_IN_ADDRESS = /(?:^|[^a-z])(log[-_]?out|sign[-_]?out|log[-_]?off|sign[-_]?off|uitloggen|uitlog|afmelden)(?:$|[^a-z])/i;
+/** The same without `afmelden`, which in Dutch is also how a person leaves a mailing list. */
+const ONLY_LOGOUT_WORDS = /(?:^|[^\p{L}])(uitloggen|uitlog|log[ -]?uit|log[ -]?out|log[ -]?off|sign[ -]?out|sign[ -]?off)(?:$|[^\p{L}])/iu;
+const ONLY_LOGOUT_IN_ADDRESS = /(?:^|[^a-z])(log[-_]?out|sign[-_]?out|log[-_]?off|sign[-_]?off|uitloggen|uitlog)(?:$|[^a-z])/i;
 /** A longer name is a sentence about logging out, such as a question in a list, not the control that does it. */
 export const MAX_LOGOUT_NAME = 40;
 
@@ -289,6 +292,13 @@ export function isLogout(control: { href?: string | null; text?: string | null }
     return false;
   }
 }
+
+/** Whether a control can only be for logging out: not when `afmelden` is all that says so. */
+export const onlyLogsOut = (control: { href?: string | null; text?: string | null }): boolean => ONLY_LOGOUT_WORDS.test((control.text ?? "").replace(/\s+/g, " ")) || ONLY_LOGOUT_IN_ADDRESS.test(control.href ?? "");
+
+/** Whether a page is where a person logs in: by its address, or by the password field it shows. */
+const LOGIN_IN_ADDRESS = /(?:^|[^a-z])(log[-_]?in|sign[-_]?in|inloggen|inlog|sso)(?:$|[^a-z])/i;
+export const isLoginPath = (path: string): boolean => LOGIN_IN_ADDRESS.test(path);
 
 export const LOGOUT_REFUSED_NL = "dit logt uit, en de run is ingelogd: het is niet gedaan. Uitloggen beëindigt de sessie voor alles wat hierna komt";
 
