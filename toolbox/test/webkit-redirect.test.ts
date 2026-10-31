@@ -64,7 +64,7 @@ test("a redirect out of the scope stays held back in WebKit", { skip }, async ()
 
 test("a form that redirects goes on in WebKit, and is sent once", { skip }, async () => {
   const context = await browser.newContext();
-  await context.route("**/*", (route: Route) => (route.request().method() === "POST" ? passOn(route, () => true).then(() => undefined) : route.continue()));
+  await context.route("**/*", (route: Route) => (route.request().method() === "POST" ? passOn(route, context, () => true).then(() => undefined) : route.continue()));
   const page = await context.newPage();
   await page.goto(`${origin}/doel`);
   heard.length = 0;
@@ -76,7 +76,7 @@ test("a form that redirects goes on in WebKit, and is sent once", { skip }, asyn
 
 test("a script gets the end of a redirect in WebKit, also one that keeps its method", { skip }, async () => {
   const context = await browser.newContext();
-  await context.route("**/*", (route: Route) => (route.request().resourceType() === "fetch" ? passOn(route, () => true).then(() => undefined) : route.continue()));
+  await context.route("**/*", (route: Route) => (route.request().resourceType() === "fetch" ? passOn(route, context, () => true).then(() => undefined) : route.continue()));
   const page = await context.newPage();
   await page.goto(`${origin}/doel`);
   assert.match(await page.evaluate(() => fetch("/start").then((answer) => answer.text())), /<h1>GET<\/h1>/);

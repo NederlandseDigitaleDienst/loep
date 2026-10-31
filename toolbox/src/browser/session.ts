@@ -5,7 +5,7 @@ import { CLOUDFLARE_HEADER, isChallenge } from "../lib/challenge.ts";
 import { confirmLoginOn, LoginExpired, logsOut, registerSessionSecrets, runLoginMark, runLoginState, runOfLogin, sessionWithAliases, throwIfLoginExpired, watchLogin } from "../lib/login.ts";
 import { MAIL_ADDRESS_SOURCE } from "../lib/mailbox.ts";
 import { addressOf, noteRefusedRead, readDecision, readRuleFor, runReads, type ReadRequest } from "../lib/reads.ts";
-import { claimLink, isWriteOrigin, runWrites, SocketFrames, type PassedWrite, type WriteAccess } from "../lib/writes.ts";
+import { claimLink, isThisMachine, isWriteOrigin, runWrites, SocketFrames, type PassedWrite, type WriteAccess } from "../lib/writes.ts";
 import { LONGEST_FAILURE_PAUSE_SECONDS, OriginBlocked, runBlockade } from "../session/blockade.ts";
 import { MESSAGE_VALUES } from "../session/safety.ts";
 import { answerRefusalNl, httpRecordings, httpReplayNl, httpSendOf, keptHeaders, playRecording, socketRecordings, type HttpRecordings, type PassedReplay, type Recorder } from "../lib/recordings.ts";
@@ -13,6 +13,7 @@ import { shieldForRun, type Shield } from "../lib/secrets.ts";
 import { readableFrame } from "./call.ts";
 import { refusedByBrowser, type ClipboardWrite } from "./clipboard.ts";
 import { frameAsPage } from "./frame.ts";
+import { gotoEnd, ONWARD_HEADER, onwardPage, passOnwardPage, REFUSED_ANSWER } from "./onward.ts";
 import { boundaryForContext, markInsideBoundary, shieldedFetch, shieldOf } from "./boundary.ts";
 
 /** The read-only helper library that is injected into every page under test. */
@@ -59,33 +60,122 @@ export interface ContextOptions {
  * to an address `mayRepeat` allows; any other redirect only where `mayFollow` allows. Returns the
  * address of a request the browser will repeat.
  */
-export async function passOn(route: Route, mayRepeat: (url: string) => boolean, mayFollow: (url: string) => boolean = () => true): Promise<string | null> {
-  return (await forward(route, mayRepeat, mayFollow)).repeated;
+export async function passOn(route: Route, context: BrowserContext, mayRepeat: (url: string) => boolean, mayFollow: (url: string) => boolean = () => true): Promise<string | null> {
+  return (await forward(route, context, mayRepeat, mayFollow)).repeated;
 }
 
-/** How a browser that takes no redirect from a route still goes on: a page that does nothing else. */
-const onwardPage = (target: string): string => `<!doctype html><html lang="nl"><title>Doorverwijzing</title><script>location.replace(${JSON.stringify(target).replaceAll("<", "\\u003c")})</script></html>`;
+/** How many steps of a redirect are followed here for what is no navigation, and how many pages that send a browser on come after each other. A browser gives up at about this many. */
+const MAX_FOLLOWED_REDIRECTS = 5;
+const MAX_ONWARD_PAGES = 20;
+const REDIRECTS = new Set([301, 302, 303, 307, 308]);
+/** How many requests go to one origin at the same time, from a context that opens no connection: a browser keeps about this many. */
+const MAX_AT_ONCE = 6;
+
+/**
+ * Contexts of WebKit in a run with secrets. WebKit on macOS skips a proxy for a new connection to
+ * `localhost` or `127.0.0.1`, and nothing sets that: only a browser that opens no connection at all
+ * stays inside the boundary. So everything such a context asks for is fetched here, through the proxy
+ * of the context, and the browser gets the answer (`proceed`). The page keeps its real address.
+ */
+const withoutConnections = new WeakSet<BrowserContext>();
+
+/** Whether this context opens no connection of its own. */
+export const opensNoConnection = (context: BrowserContext): boolean => withoutConnections.has(context);
+
+const places = new WeakMap<BrowserContext, Map<string, { busy: number; waiting: (() => void)[] }>>();
+
+/** Run work with at most `MAX_AT_ONCE` of its kind at one origin. */
+async function inTurn(context: BrowserContext, origin: string, work: () => Promise<void>): Promise<void> {
+  const origins = places.get(context) ?? new Map<string, { busy: number; waiting: (() => void)[] }>();
+  places.set(context, origins);
+  const place = origins.get(origin) ?? { busy: 0, waiting: [] };
+  origins.set(origin, place);
+  if (place.busy >= MAX_AT_ONCE) await new Promise<void>((resolve) => place.waiting.push(resolve));
+  else place.busy++;
+  try {
+    await work();
+  } finally {
+    const next = place.waiting.shift();
+    if (next) next();
+    else place.busy--;
+  }
+}
+
+/** Let a request go on: to the network, or in a context that opens no connection, through the proxy from here. The one way a request of a browser leaves, other than what a page holds already. */
+export async function proceed(route: Route, context: BrowserContext, mayFollow: (url: string) => boolean = () => true): Promise<void> {
+  const url = route.request().url();
+  if (!withoutConnections.has(context) || !/^https?:/i.test(url)) return route.continue();
+  await inTurn(context, new URL(url).origin, async () => {
+    try {
+      const response = await route.fetch({ maxRedirects: 0, timeout: RENDERING.navigationTimeoutMs });
+      await fulfillAnswer(route, response, context, mayFollow);
+      await response.dispose();
+    } catch {
+      // The page went away while the answer was on its way; there is nobody left to answer.
+      await route.abort("failed").catch(() => undefined);
+    }
+  });
+}
+
+/** How many pages that send the browser on came after each other, per context. */
+const onwardPages = new WeakMap<BrowserContext, number>();
+
+/** An answer WebKit cannot be given: it refuses every status from 300 to 399 from a route, and a request that gets no answer holds the page for good. */
+const noAnswer = (route: Route, whyNl: string): Promise<void> => route.fulfill({ status: 502, contentType: "text/plain; charset=utf-8", body: `loep: ${whyNl}\n` });
 
 /**
  * Give the browser the answer that was fetched for a route. WebKit refuses a redirect there
  * (`Cannot fulfill with redirect status`), so a navigation gets a page that sends it on, and goes
- * through the route again, and anything else gets the end of the redirect, fetched here.
+ * through the route again, and anything else gets the end of the redirect, fetched here. A write that
+ * keeps its method is repeated here too, once.
  */
-export async function fulfillAnswer(route: Route, response: APIResponse): Promise<void> {
-  const location = response.headers()["location"];
+export async function fulfillAnswer(route: Route, response: APIResponse, context: BrowserContext, mayFollow: (url: string) => boolean = () => true): Promise<void> {
+  if (context.browser()?.browserType().name() !== "webkit") return route.fulfill({ response });
   const request = route.request();
-  const isRedirect = [301, 302, 303, 307, 308].includes(response.status()) && location !== undefined;
-  if (!isRedirect || request.frame().page().context().browser()?.browserType().name() !== "webkit") return route.fulfill({ response });
-  const target = new URL(location, request.url()).href;
-  const keepsMethod = response.status() === 307 || response.status() === 308;
-  if (request.isNavigationRequest() && !keepsMethod) return route.fulfill({ status: 200, contentType: "text/html; charset=utf-8", body: onwardPage(target) });
-  return route.fulfill({ response: await route.fetch({ url: target, ...(keepsMethod ? {} : { method: "GET", postData: "" }) }) });
+  const status = response.status();
+  if (status < 300 || status >= 400) {
+    if (request.isNavigationRequest()) onwardPages.delete(context);
+    return route.fulfill({ response });
+  }
+  // The browser has no copy of what it asked for here: it asked because the route answers, so ask once more without the condition.
+  if (status === 304) {
+    const { "if-none-match": _match, "if-modified-since": _since, ...headers } = request.headers();
+    return route.fulfill({ response: await route.fetch({ headers, maxRedirects: 0, timeout: RENDERING.navigationTimeoutMs }) });
+  }
+  const location = response.headers()["location"];
+  if (location === undefined || !REDIRECTS.has(status)) return noAnswer(route, `de site antwoordde met ${status}, en dat kan WebKit via de route niet krijgen`);
+  const target = new URL(location, request.url());
+  if (!/^https?:$/.test(target.protocol)) return noAnswer(route, "de site stuurde door naar een adres dat geen webadres is");
+  target.hash ||= new URL(request.url()).hash;
+  const safe = request.method() === "GET" || request.method() === "HEAD";
+  const repeats = !safe && (status === 307 || status === 308);
+  if (request.isNavigationRequest() && !repeats) {
+    const pages = (onwardPages.get(context) ?? 0) + 1;
+    onwardPages.set(context, pages);
+    if (pages > MAX_ONWARD_PAGES) {
+      onwardPages.delete(context);
+      return noAnswer(route, "deze doorverwijzing houdt niet op");
+    }
+    return route.fulfill({ status: 200, headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store", [ONWARD_HEADER]: "1" }, body: onwardPage(target.href) });
+  }
+  let next = target.href;
+  for (let hop = 0; hop < MAX_FOLLOWED_REDIRECTS; hop++) {
+    if (!mayFollow(next)) return route.abort("blockedbyclient");
+    const answer = await route.fetch({ url: next, maxRedirects: 0, timeout: RENDERING.navigationTimeoutMs, ...(repeats && hop === 0 ? {} : { method: request.method() === "HEAD" ? "HEAD" : "GET", postData: "" }) });
+    const onward = answer.headers()["location"];
+    if (!REDIRECTS.has(answer.status()) || onward === undefined) return answer.status() >= 300 && answer.status() < 400 ? noAnswer(route, `de site antwoordde met ${answer.status()}, en dat kan WebKit via de route niet krijgen`) : route.fulfill({ response: answer });
+    // A second repeat of a write is one nobody counted.
+    if (repeats && (answer.status() === 307 || answer.status() === 308)) return noAnswer(route, "deze verzending zou een tweede keer worden herhaald");
+    next = new URL(onward, next).href;
+    await answer.dispose();
+  }
+  return noAnswer(route, "deze doorverwijzing houdt niet op");
 }
 
 /** `passOn`, with the answer the browser was given: null when it was refused or nobody was left to answer. */
-async function forward(route: Route, mayRepeat: (url: string) => boolean, mayFollow: (url: string) => boolean = () => true): Promise<{ repeated: string | null; response: APIResponse | null }> {
+async function forward(route: Route, context: BrowserContext, mayRepeat: (url: string) => boolean, mayFollow: (url: string) => boolean = () => true): Promise<{ repeated: string | null; response: APIResponse | null }> {
   const request = route.request();
-  const refuse = (): Promise<void> => (request.isNavigationRequest() ? route.fulfill({ status: 204, body: "" }) : route.abort("blockedbyclient"));
+  const refuse = (): Promise<void> => (request.isNavigationRequest() ? route.fulfill(REFUSED_ANSWER) : route.abort("blockedbyclient"));
   try {
     const response = await route.fetch({ maxRedirects: 0 });
     const location = response.headers()["location"];
@@ -99,7 +189,7 @@ async function forward(route: Route, mayRepeat: (url: string) => boolean, mayFol
       }
       if (keepsMethod) repeated = target;
     }
-    await fulfillAnswer(route, response);
+    await fulfillAnswer(route, response, context, mayFollow);
     return { repeated, response };
   } catch {
     // The page went away while the answer was on its way; there is nobody left to answer.
@@ -107,9 +197,6 @@ async function forward(route: Route, mayRepeat: (url: string) => boolean, mayFol
     return { repeated: null, response: null };
   }
 }
-
-/** WebKit refuses an answer with a redirect from a route. In a run with secrets the boundary does what the route is needed for there, so such a request is simply passed on. */
-export const canFulfilRedirect = (context: BrowserContext): boolean => context.browser()?.browserType().name() !== "webkit";
 
 export type WriteOutcome =
   | { kind: "sent"; entry: PassedWrite; repeated: PassedWrite | null }
@@ -144,14 +231,10 @@ export async function sendOrReplay(context: BrowserContext, route: Route, writes
     await (request.isNavigationRequest() ? route.fulfill({ status: 204, body: "" }) : route.abort("blockedbyclient")).catch(() => undefined);
     return { kind: "refused", budget: claim.budget, reasonNl: claim.reasonNl };
   }
-  if (shield && !canFulfilRedirect(context)) {
-    await route.continue().catch(() => undefined);
-    return { kind: "sent", entry: claim.entry, repeated: null };
-  }
   // What the browser asks for after a redirect does not pass the route: where it lands is watched from before it gets the answer.
   const landing = send ? watchLanding(context, request) : null;
   const at = Date.now();
-  const { repeated, response } = await forward(route, (target) => isWriteOrigin(writes, target), options.mayFollow);
+  const { repeated, response } = await forward(route, context, (target) => isWriteOrigin(writes, target), options.mayFollow);
   const repeatedEntry = repeated ? writes.record(method, repeated, { repeat: true, sender: options.sender }) : null;
   if (send && response && landing) void recordAnswer(recordings, { method, url, send, response, landing, origin: new URL(url).origin, sender: options.sender, at, shield }).catch(() => landing.cancel());
   else landing?.cancel();
@@ -159,11 +242,11 @@ export async function sendOrReplay(context: BrowserContext, route: Route, writes
 }
 
 /** A GET or HEAD of the sweep in a run with secrets: a guarded address takes from the budget like any write. */
-async function openShielded(route: Route, shield: Shield, writes: WriteAccess, spaced: NavigationSpacing | null): Promise<void> {
+async function openShielded(route: Route, context: BrowserContext, shield: Shield, writes: WriteAccess, spaced: NavigationSpacing | null): Promise<void> {
   const link = route.request().isNavigationRequest() ? shield.guardedId(route.request().url()) : null;
   if (link && claimLink(writes, route.request().url(), link, undefined)) return void (await route.fulfill({ status: 204, body: "" }).catch(() => undefined));
   if (spaced && loadsTab(route)) await spaced.before(route.request().url());
-  await route.continue().catch(() => undefined);
+  await proceed(route, context).catch(() => undefined);
 }
 
 /** The body of a request as bytes, or null when it has none. */
@@ -353,6 +436,7 @@ export async function newContext(browser: Browser, options: ContextOptions = {},
     colorScheme: options.colorScheme ?? "light",
     serviceWorkers: "block",
   });
+  if (boundary.proxy && browser.browserType().name() === "webkit") withoutConnections.add(context);
   if (boundary.proxy) await markInsideBoundary(context, runDir!, boundary.proxy);
   context.setDefaultNavigationTimeout(RENDERING.navigationTimeoutMs);
   const viaCloudflare = new Set<string>();
@@ -384,15 +468,15 @@ export async function newContext(browser: Browser, options: ContextOptions = {},
     if (method === "GET" || method === "HEAD") {
       const spaced = spacing;
       const shield = shieldOf(writes?.runDir, route.request().url());
-      if (shield) return openShielded(route, shield, writes!, spaced);
-      if (spaced && loadsTab(route)) return spaced.before(route.request().url()).then(() => route.continue().catch(() => undefined));
-      return route.continue();
+      if (shield) return openShielded(route, context, shield, writes!, spaced);
+      if (spaced && loadsTab(route)) return spaced.before(route.request().url()).then(() => proceed(route, context).catch(() => undefined));
+      return proceed(route, context);
     }
     // Cloudflare's check whether the browser is a robot is answered by Cloudflare and never reaches the site.
-    if (isChallenge(route.request().url(), (host) => viaCloudflare.has(host))) return route.continue().catch(() => undefined);
+    if (isChallenge(route.request().url(), (host) => viaCloudflare.has(host))) return proceed(route, context).catch(() => undefined);
     // A read request passes only when a rule covers it and its body is a question to the service of that rule; a covered request with another body is noted.
     const read = readDecision(reads, method, route.request().url(), route.request().headers(), bodyOf(route.request()));
-    if (read?.pass) return passOn(route, (target) => readRuleFor(reads, method, target)?.service === read.rule.service).then(() => undefined);
+    if (read?.pass) return passOn(route, context, (target) => readRuleFor(reads, method, target)?.service === read.rule.service).then(() => undefined);
     if (read) noteRefusedRead({ method, address: addressOf(route.request().url()), rule: read.rule.id, reasonNl: read.reasonNl });
     // An aborted navigation replaces the page with an error page. "No content" leaves the page as it was.
     if (!isWriteOrigin(writes, route.request().url())) return route.request().isNavigationRequest() ? route.fulfill({ status: 204, body: "" }) : route.abort("blockedbyclient");
@@ -401,6 +485,8 @@ export async function newContext(browser: Browser, options: ContextOptions = {},
   });
   if (guard || writes) {
     await context.routeWebSocket(/.*/, (socket) => {
+      // A socket opens a connection of its own, and on this machine WebKit does that past the proxy.
+      if (withoutConnections.has(context) && isThisMachine(new URL(socket.url()).hostname)) return void socket.close();
       const server = socket.connectToServer();
       const free = isWriteOrigin(writes, socket.url());
       const frames = new SocketFrames(MESSAGE_VALUES);
@@ -470,16 +556,16 @@ export async function loadPage(page: Page, url: string, referer?: string): Promi
   const blockade = runBlockade()?.blockade;
   const refused = await blockade?.pause(url, LONGEST_FAILURE_PAUSE_SECONDS);
   if (refused) throw new OriginBlocked(url, refused);
-  let response = await page.goto(url, options);
+  let response = await gotoEnd(page, url, options);
   if (blockade && response?.status() === 429) {
     const again = await blockade.pause(url);
     if (again) throw new OriginBlocked(url, again);
-    response = await page.goto(url, options);
+    response = await gotoEnd(page, url, options);
   }
   await settlePage(page);
   // In a run with a login: a page that looks like the login screen is checked, and the page is loaded again when the session still holds.
   if (await watchLogin(page, url)) {
-    response = await page.goto(url, options);
+    response = await gotoEnd(page, url, options);
     await settlePage(page);
   }
   return {
@@ -638,6 +724,7 @@ export class PageContexts {
  * A page that does not answer within `SETTLE_ANSWER_MS` throws a `PageBusy`; the caller closes it.
  */
 export async function settlePage(page: Page): Promise<void> {
+  if (page.context().browser()?.browserType().name() === "webkit") await passOnwardPage(page, SETTLE_ANSWER_MS);
   await page.waitForLoadState("networkidle", { timeout: RENDERING.settleTimeoutMs }).catch(() => undefined);
   const settled = page
     .evaluate(async (timeout) => {
