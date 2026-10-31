@@ -20,7 +20,7 @@ import { absorbAll } from "../src/commands/mail.ts";
 import { seal } from "../src/commands/verify.ts";
 import { appendRunLine, writeFileAtomic, writeJson } from "../src/lib/canonical.ts";
 import { IDLE_SESSION_FILE, LOGIN_SESSION_FILE, RUN_SECRETS_FILE, registerSessionSecrets, renewSessionSecrets, SESSION_COOKIE_SOURCE, sessionWithAliases, setRunLogin, writeLoginFile, type LoginSession } from "../src/lib/login.ts";
-import { MAX_PREVIOUS, MAX_SLOTS, MIN_BINARY_VALUE, maskBytes, maskText, readPrivate, readSecretEvents, readSecretsFile, registerSecret, scanRun, secretLimitationsNl, secretsLinesNl, Shield, shieldForRun, type RunSecret } from "../src/lib/secrets.ts";
+import { endContextSecrets, MAX_PREVIOUS, MAX_SLOTS, MIN_BINARY_VALUE, maskBytes, maskText, readPrivate, readSecretEvents, readSecretsFile, registerSecret, scanRun, secretLimitationsNl, secretsLinesNl, Shield, shieldForRun, type RunSecret } from "../src/lib/secrets.ts";
 import type { ReceivedMail } from "../src/lib/mailbox.ts";
 import { notHashed } from "../src/lib/seal.ts";
 import { decideWrites, recordWrites } from "../src/lib/writes.ts";
@@ -1242,6 +1242,121 @@ test("what a session says about a cookie is what its reach is: also for a cookie
     assert.ok(!covering("https://sub.app.example.nl/").includes(hostOnly));
   } finally {
     rmSync(run, { recursive: true, force: true });
+  }
+});
+
+test("fourth review: a short code in an address without a path counts, and the port of an address still does not", () => {
+  const shield = new Shield({ secrets: [secretFor("483920")] });
+  const alias = shield.secrets[0]!.alias;
+  assert.equal(shield.inward("https://site.nl?code=483920"), `https://site.nl?code=${alias}`);
+  assert.equal(shield.inward("https://site.nl#483920"), `https://site.nl#${alias}`);
+  assert.equal(shield.inward("http://localhost:483920/"), "http://localhost:483920/");
+});
+
+test("fourth review: a place of a context that is open stays, however many contexts there are; one of a closed context makes room", () => {
+  const run = runOn("http://localhost:1");
+  try {
+    registerSecret(run, COOKIE, { source: SESSION_COOKIE_SOURCE });
+    const renew = (context: string): void => renewSessionSecrets(run, { "set-cookie": `sessie=${randomValue(40)}; Path=/` }, new URL("http://localhost:1/"), context);
+    for (let index = 0; index < MAX_SLOTS + 8; index++) renew(`context${index}`);
+    const count = (): number => readSecretsFile(run)!.secrets.filter((secret) => secret.slot !== undefined).length;
+    assert.equal(count(), MAX_SLOTS + 8);
+    endContextSecrets(run, "context0");
+    renew("nieuw");
+    assert.equal(count(), MAX_SLOTS + 8);
+    assert.ok(!readSecretsFile(run)!.secrets.some((secret) => secret.context === "context0"));
+  } finally {
+    rmSync(run, { recursive: true, force: true });
+  }
+});
+
+test("fourth review: a short code in a template string of a script counts as text", () => {
+  const shield = new Shield({ secrets: [secretFor("483920")] });
+  assert.equal(shield.inward("const a=`code 483920`;", "text/javascript"), `const a=\`code ${shield.secrets[0]!.alias}\`;`);
+});
+
+test("fourth review: a readable value that also stands on the site does not stop a seal", async () => {
+  const run = runOn("http://localhost:1");
+  try {
+    writeFileSync(join(run, "inventaris.txt"), "https://site.nl/update-q4/");
+    registerSecret(run, "update-q4", { source: "test" });
+    assert.deepEqual(scanRun(run).hits, []);
+    writeFileSync(join(run, "later.txt"), "update-q4");
+    assert.deepEqual(scanRun(run).hits.map((hit) => hit.file), ["later.txt"]);
+  } finally {
+    rmSync(run, { recursive: true, force: true });
+  }
+});
+
+test("fourth review: an answer without a body is no answer that cannot be read, whatever it says about its encoding", async () => {
+  const site = await siteWith((request, response) => {
+    if (request.method === "HEAD") return void response.writeHead(200, { "content-encoding": "gzip", "content-type": "text/html" }).end();
+    html(response, "<h1>Site</h1>");
+  });
+  const run = runOn(site.origin);
+  registerSecret(run, TOKEN, { source: "test" });
+  const session = await sessionOn(run, await launched("chromium"));
+  try {
+    await loadPage(session.page, `${site.origin}/`);
+    assert.equal(await session.page.evaluate(() => fetch("/x", { method: "HEAD" }).then((answer) => answer.status)), 200);
+  } finally {
+    await session.close();
+    await site.close();
+    rmSync(run, { recursive: true, force: true });
+  }
+});
+
+test("fourth review: with the setting for a trial on this machine a request outside the browser stays here too", async () => {
+  process.env[LOCAL_ONLY_ENV] = "1";
+  try {
+    assert.equal((await shieldedFetch(null, "http://www.andere-site.example/x", {})).status, REFUSED_STATUS);
+  } finally {
+    delete process.env[LOCAL_ONLY_ENV];
+  }
+});
+
+test("fourth review: an answer of a site that looks like a refusal of the boundary means nothing, and cannot stop a session", async () => {
+  const site = await siteWith((request, response) => {
+    if (request.url === "/nep") return void response.writeHead(REFUSED_STATUS, { [REFUSED_HEADER]: "%E0%A4%A" }).end("nep");
+    html(response, "<h1>Site</h1>");
+  });
+  for (const withSecret of [false, true]) {
+    const run = runOn(site.origin);
+    if (withSecret) registerSecret(run, TOKEN, { source: "test" });
+    const session = await sessionOn(run, await launched("chromium"));
+    try {
+      await loadPage(session.page, `${site.origin}/`);
+      await session.page.evaluate(() => fetch("/nep").then((answer) => answer.text()));
+      assert.deepEqual(session.guard.blocked.filter((entry) => entry.kind === "boundary"), []);
+    } finally {
+      await session.close();
+      rmSync(run, { recursive: true, force: true });
+    }
+  }
+  await site.close();
+});
+
+test("fourth review: a real value goes into a JSON body in the way JSON writes it", () => {
+  const shield = new Shield({ secrets: [secretFor('{"keuze":true}')] });
+  const alias = shield.secrets[0]!.alias;
+  assert.equal(JSON.parse(shield.outwardJson(Buffer.from(JSON.stringify({ prefs: alias }))).toString()).prefs, '{"keuze":true}');
+});
+
+test("fourth review: a recheck and its run take the same lock on their one register", () => {
+  const run = runOn("http://localhost:1");
+  const workspace = mkdtempSync(join(tmpdir(), "loep-naloop-"));
+  registerSecret(run, TOKEN, { source: "test" });
+  symlinkSync(join(run, RUN_SECRETS_FILE), join(workspace, RUN_SECRETS_FILE));
+  try {
+    mkdirSync(join(run, "secrets.lock"));
+    setTimeout(() => undefined, 0);
+    const started = performance.now();
+    registerSecret(workspace, COOKIE, { source: "test" });
+    assert.ok(performance.now() - started > 500, "it waited for the lock of the run");
+    assert.ok(readSecretsFile(run)!.secrets.some((secret) => secret.real === COOKIE));
+  } finally {
+    rmSync(run, { recursive: true, force: true });
+    rmSync(workspace, { recursive: true, force: true });
   }
 });
 

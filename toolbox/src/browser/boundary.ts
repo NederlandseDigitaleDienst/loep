@@ -5,7 +5,7 @@ import { format } from "node:util";
 import type { CompletedRequest, Mockttp } from "mockttp";
 import type { Browser, BrowserContext, BrowserContextOptions } from "playwright";
 import { renewSessionSecrets } from "../lib/login.ts";
-import { noteSecretEvent, shieldForRun, type Shield } from "../lib/secrets.ts";
+import { endContextSecrets, noteSecretEvent, shieldForRun, type Shield } from "../lib/secrets.ts";
 import { isLocalHost, writesForRun } from "../lib/writes.ts";
 
 /*
@@ -82,6 +82,8 @@ function outwardHeaders(shield: Shield, headers: IncomingHttpHeaders): Record<st
   return Object.fromEntries(Object.entries(withoutHopByHop(headers)).map(([name, value]) => [name, Array.isArray(value) ? value.map((part) => swap(name, part)) : swap(name, value)]));
 }
 
+const JSON_BODY = /^application\/(?:[\w.+-]*\+)?json\b/i;
+
 /** Headers that are a number or a date by definition: they hold no value of a run, and a short value that happens to match would break them. */
 const FIXED_HEADERS = new Set(["accept-ranges", "age", "content-length", "content-range", "date", "expires", "last-modified", "retry-after"]);
 
@@ -97,19 +99,28 @@ const headersInward = (shield: Shield, headers: IncomingHttpHeaders): Record<str
 /** Why a value of a guarded address is not filled in: without the permission to send, such an address may not be opened, and the guard of a page does not see every request. */
 const GUARDED_REFUSED_NL = "deze run mag niet versturen, en een persoonlijke link openen telt als versturen: de echte waarde is niet ingevuld";
 
+/** Why an address is refused in a trial that stays on this machine. */
+const LOCAL_ONLY_NL = "dit adres ligt buiten deze machine, en deze run blijft hier";
+
 const refusalAnswer = (reasonNl: string) => ({ statusCode: REFUSED_STATUS, statusMessage: "Geweigerd door de grens van loep", headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store", [REFUSED_HEADER]: encodeURIComponent(reasonNl) }, body: `loep: ${reasonNl}\n` });
 
-/** Listen on this machine only: mockttp asks for every interface, and offers no way to say otherwise. */
-async function onLoopback(start: () => Promise<void>): Promise<void> {
-  const listen = NetServer.prototype.listen;
-  NetServer.prototype.listen = function (this: NetServer, ...args: unknown[]): NetServer {
-    return (listen as (...parts: unknown[]) => NetServer).apply(this, args.length === 1 && typeof args[0] === "number" ? [args[0], "127.0.0.1"] : args);
-  } as typeof listen;
-  try {
-    await start();
-  } finally {
-    NetServer.prototype.listen = listen;
-  }
+let loopbackTurn: Promise<unknown> = Promise.resolve();
+
+/** Listen on this machine only: mockttp asks for every interface, and offers no way to say otherwise. One at a time: the second would keep the replacement of the first for good. */
+function onLoopback(start: () => Promise<void>): Promise<void> {
+  const turn = loopbackTurn.then(async () => {
+    const listen = NetServer.prototype.listen;
+    NetServer.prototype.listen = function (this: NetServer, ...args: unknown[]): NetServer {
+      return (listen as (...parts: unknown[]) => NetServer).apply(this, args.length === 1 && typeof args[0] === "number" ? [args[0], "127.0.0.1"] : args);
+    } as typeof listen;
+    try {
+      await start();
+    } finally {
+      NetServer.prototype.listen = listen;
+    }
+  });
+  loopbackTurn = turn.catch(() => undefined);
+  return turn;
 }
 
 // ---- What mockttp says on the console -----------------------------------------------------------------------------------
@@ -169,6 +180,7 @@ class Boundary {
   /** A cookie with an alias in it, per origin, with the way the site spelled it: it goes back the same, as a site compares it to the letter. */
   private readonly cookies = new Map<string, string>();
   private decoyHost = "";
+  private readonly localOnly = process.env[LOCAL_ONLY_ENV] === "1";
   /** How many requests reached the decoy past the proxy. */
   bypassed = 0;
   port = 0;
@@ -205,12 +217,11 @@ class Boundary {
     // Every rule says `always`: without it mockttp serves a rule once and then moves on to the next one that matches.
     await this.mock.forAnyRequest().matching((request) => !this.throughGate(request)).always().thenCloseConnection();
     // For a trial on this machine: nothing goes further than this machine, whatever a page asks for.
-    const localOnly = process.env[LOCAL_ONLY_ENV] === "1";
     await this.mock
       .forAnyRequest()
-      .matching((request) => localOnly && !check(request) && !local(request))
+      .matching((request) => this.localOnly && !check(request) && !local(request))
       .always()
-      .thenCallback((request) => this.refuse(request.url, "dit adres ligt buiten deze machine, en deze run blijft hier"));
+      .thenCallback((request) => this.refuse(request.url, LOCAL_ONLY_NL));
     await this.mock
       .forAnyRequest()
       .matching(check)
@@ -292,6 +303,8 @@ class Boundary {
       const context = this.contextOf(head.subarray(0, end).toString("latin1"));
       if (context === null) {
         client.end(`HTTP/1.1 407 Proxy Authentication Required\r\nproxy-authenticate: Basic realm="loep"\r\ncontent-length: 0\r\nconnection: close\r\n\r\n`);
+        // It was paused above: without reading on, the end of the other side never comes, and the socket stays.
+        client.resume();
         return;
       }
       const inner = connect(this.mock.port, "127.0.0.1");
@@ -314,8 +327,12 @@ class Boundary {
     client.on("data", read);
   }
 
-  private refuse(where: string, reasonNl: string): ReturnType<typeof refusalAnswer> {
+  private noteRefused(where: string, reasonNl: string): void {
     noteSecretEvent(this.runDir, { kind: "refused", where, noteNl: reasonNl });
+  }
+
+  private refuse(where: string, reasonNl: string): ReturnType<typeof refusalAnswer> {
+    this.noteRefused(where, reasonNl);
     return refusalAnswer(reasonNl);
   }
 
@@ -345,7 +362,7 @@ class Boundary {
     const sent = request.body.buffer;
     if (sent.length > MAX_REQUEST_BYTES) return { response: this.refuse(request.url, "dit verzoek is te groot om af te schermen, en is niet verstuurd") };
     const contentType = [request.headers["content-type"] ?? ""].flat()[0]!;
-    const body = contentType.startsWith("application/x-www-form-urlencoded") ? reaching.outwardForm(sent) : reaching.outwardBytes(sent);
+    const body = contentType.startsWith("application/x-www-form-urlencoded") ? reaching.outwardForm(sent) : JSON_BODY.test(contentType) ? reaching.outwardJson(sent) : reaching.outwardBytes(sent);
     const target = new URL(reaching.outwardUrl(request.url));
     this.underWay.set(request.id, { url: request.url, context: this.admitted.get(request.remotePort!) ?? "" });
     const headers = {
@@ -358,7 +375,7 @@ class Boundary {
     return { url: target.href, headers, ...(body.length > 0 ? { rawBody: body } : {}) };
   }
 
-  private async swapResponse(answer: { id: string; statusCode: number; headers: IncomingHttpHeaders; body: { getDecodedBuffer(): Promise<Buffer | undefined> } }, request: { id: string; url: string }) {
+  private async swapResponse(answer: { id: string; statusCode: number; headers: IncomingHttpHeaders; body: { buffer: Buffer; getDecodedBuffer(): Promise<Buffer | undefined> } }, request: { id: string; url: string }) {
     const url = new URL(request.url);
     const context = this.underWay.get(request.id)?.context ?? "";
     this.underWay.delete(request.id);
@@ -371,7 +388,8 @@ class Boundary {
       const next = new URL(shown, where).href;
       if (shown !== location && shield.outOfReach(next)) return this.refuse(where, `de site stuurde door naar ${new URL(next).origin}, met een vervanging in het adres: die doorverwijzing is tegengehouden`);
     }
-    const decoded = await answer.body.getDecodedBuffer();
+    // An empty body has nothing to unpack, also when its header says it is packed: that fails, on a HEAD or a 304.
+    const decoded = answer.body.buffer.length === 0 ? answer.body.buffer : await answer.body.getDecodedBuffer();
     if (decoded === undefined) return this.refuse(where, `de site stuurde een antwoord met ${String(answer.headers["content-encoding"])}, en dat is niet af te schermen`);
     this.keepCookies(url.origin, shield, answer.headers);
     const contentType = [answer.headers["content-type"] ?? ""].flat()[0] || undefined;
@@ -392,14 +410,14 @@ class Boundary {
   private async swapSocket(real: SocketStep, step: SocketStep, request: SocketRequest, socket: Socket, head: Buffer, options: unknown): Promise<void> {
     if (!this.throughGate(request)) return void socket.destroy();
     const url = new URL(request.url);
-    if (process.env[LOCAL_ONLY_ENV] === "1" && !isLocalHost(url.hostname)) {
-      noteSecretEvent(this.runDir, { kind: "refused", where: request.url, noteNl: "dit adres ligt buiten deze machine, en deze run blijft hier" });
+    if (this.localOnly && !isLocalHost(url.hostname)) {
+      this.noteRefused(request.url, LOCAL_ONLY_NL);
       return void socket.destroy();
     }
     const shield = shieldForRun(this.runDir);
     const covered = shield?.covers(request.url) ? shield : null;
     if (covered && this.guardedRefused(covered, request.url)) {
-      noteSecretEvent(this.runDir, { kind: "refused", where: request.url, noteNl: GUARDED_REFUSED_NL });
+      this.noteRefused(request.url, GUARDED_REFUSED_NL);
       return void socket.destroy();
     }
     if (covered) {
@@ -424,7 +442,12 @@ class Boundary {
           };
         };
         swapping(browserSide.upstreamWebSocket, (now, data) => now.reaching(request.url).outwardBytes(data));
-        swapping(browserSide, (now, data, binary) => now.inwardBody(data, binary ? "application/octet-stream" : "text/plain").data);
+        // By its shape, as a body without a type: a number in a frame of JSON is a number there too.
+        swapping(browserSide, (now, data, binary) => {
+          const swapped = now.inwardBody(data, binary ? "application/octet-stream" : undefined);
+          noteShortFound(this.runDir, now.inward(request.url), swapped.shortFound);
+          return swapped.data;
+        });
       });
     } else request.rawHeaders = request.rawHeaders.filter(([name]) => !name.toLowerCase().startsWith("proxy-"));
     return real.handle.call(Object.create(step, { ignoreHostHttpsErrors: { value: isLocalHost(url.hostname) } }) as SocketStep, request, socket, head, options);
@@ -463,6 +486,8 @@ function boundaryOf(runDir: string): Promise<Boundary> {
     const fresh = new Boundary(runDir);
     boundary = fresh.start().then(() => fresh);
     boundaries.set(runDir, boundary);
+    // A start that failed is no reason for the next one to fail.
+    boundary.catch(() => boundaries.delete(runDir));
   }
   return boundary;
 }
@@ -480,14 +505,21 @@ const inside = new WeakSet<BrowserContext>();
  * once. From then on Chromium sends it by itself. Before that a protocol session that pauses answers,
  * as `guardRedirects` does, would get the 407 of the gate for an answer of the site.
  */
-export async function markInsideBoundary(context: BrowserContext): Promise<void> {
+export async function markInsideBoundary(context: BrowserContext, runDir: string, proxy: NonNullable<BrowserContextOptions["proxy"]>): Promise<void> {
   inside.add(context);
+  context.once("close", () => endContextSecrets(runDir, proxy.username!.slice(PROXY_USER_PREFIX.length)));
   if (context.browser()?.browserType().name() !== "chromium") return;
-  const page = await context.newPage();
   try {
-    await page.goto(`http://${CHECK_HOST}${CHECK_END}`, { timeout: CHECK_TIMEOUT_MS });
-  } finally {
-    await page.close();
+    const page = await context.newPage();
+    try {
+      await page.goto(`http://${CHECK_HOST}${CHECK_END}`, { timeout: CHECK_TIMEOUT_MS });
+    } finally {
+      await page.close();
+    }
+  } catch (error) {
+    // The caller never gets this context, so nobody else can close it.
+    await context.close().catch(() => undefined);
+    throw error;
   }
 }
 
@@ -525,7 +557,11 @@ export async function boundaryForContext(browser: Browser, runDir: string | unde
   const known = checked.get(browser) ?? new Map<string, Promise<string | null>>();
   checked.set(browser, known);
   const local = shield.secrets.some((secret) => secret.origins.some((origin) => isLocalHost(new URL(origin).hostname)) || (secret.domains ?? []).some(isLocalHost));
-  if (!known.has(runDir!)) known.set(runDir!, boundary.refusalNl(browser, local));
+  if (!known.has(runDir!)) {
+    const asked = boundary.refusalNl(browser, local);
+    known.set(runDir!, asked);
+    asked.catch(() => known.delete(runDir!));
+  }
   const refusalNl = await known.get(runDir!)!;
   if (refusalNl) throw new BoundaryRefused(`geweigerd in een run met geheimen: ${refusalNl}. Zonder grens kan een geheim in de browser en in de run terechtkomen, dus deze browser doet in deze run niet mee`);
   return { proxy: boundary.proxyFor(randomBytes(6).toString("hex")), ignoreHTTPSErrors: true };
@@ -563,6 +599,10 @@ async function boundedBody(body: ReadableStream<Uint8Array> | null, limit: numbe
  * caller have to hold here. Any other run, and any other origin, gets a plain `fetch`.
  */
 export async function shieldedFetch(shield: Shield | null, url: string, init: RequestInit, limits: FetchLimits = {}): Promise<Response> {
+  if (process.env[LOCAL_ONLY_ENV] === "1" && !isLocalHost(new URL(url).hostname)) {
+    if (limits.runDir !== undefined) noteSecretEvent(limits.runDir, { kind: "refused", where: url, noteNl: LOCAL_ONLY_NL });
+    return new Response(null, { status: REFUSED_STATUS, headers: { [REFUSED_HEADER]: encodeURIComponent(LOCAL_ONLY_NL) } });
+  }
   if (!shield) return fetch(url, init);
   const reaching = shield.reaching(url);
   // A caller may pass on what the browser has: its cookies are aliases, and the site only knows the real values.

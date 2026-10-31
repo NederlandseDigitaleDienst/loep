@@ -245,6 +245,8 @@ async function landingRefusalNl(landed: Landing, chain: { url: string; status: n
   if (final.status < 200 || final.status >= 300) return `de pagina na de doorverwijzing antwoordde met ${final.status}`;
   const seen = await landed.body;
   if (!seen) return "de pagina na de doorverwijzing was niet te lezen";
+  // Asking once more would use up a link that works once, and nobody would know.
+  if (shield?.touchesGuarded(final.url)) return "de doorverwijzing leidt naar een persoonlijke link, en die wordt niet nog een keer gevraagd";
   try {
     // Once more, without any cookie: the page a replay leads to has to be the same without the session.
     const fresh = await shieldedFetch(shield, final.url, { redirect: "manual", signal: AbortSignal.timeout(10_000) });
@@ -351,7 +353,7 @@ export async function newContext(browser: Browser, options: ContextOptions = {},
     colorScheme: options.colorScheme ?? "light",
     serviceWorkers: "block",
   });
-  if (boundary.proxy) await markInsideBoundary(context);
+  if (boundary.proxy) await markInsideBoundary(context, runDir!, boundary.proxy);
   context.setDefaultNavigationTimeout(RENDERING.navigationTimeoutMs);
   const viaCloudflare = new Set<string>();
   cloudflareHosts.set(context, viaCloudflare);

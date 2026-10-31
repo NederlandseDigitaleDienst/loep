@@ -4,7 +4,7 @@ import type { BrowserContext, CDPSession, Frame, Page, Request } from "playwrigh
 import { answeredByCloudflare, bodyOf, canFulfilRedirect, fulfillAnswer, passOn, sendOrReplay } from "../browser/session.ts";
 import { REFUSED_HEADER, REFUSED_STATUS, requireBoundary, shieldedFetch, shieldOf } from "../browser/boundary.ts";
 import { readJson } from "../lib/canonical.ts";
-import { maskFile } from "../lib/secrets.ts";
+import { maskFile, shieldForRun } from "../lib/secrets.ts";
 import { isChallenge } from "../lib/challenge.ts";
 import { privateFromPublicSite, scopeHost, scopeHostOf, siteOrigins, WEB_SCHEMES } from "../lib/origins.ts";
 import { loginCookieHeader, logsOut } from "../lib/login.ts";
@@ -106,6 +106,8 @@ export interface Blocked {
   reasonNl?: string;
   /** A write to the test environment that the budget for sending held back: because it was used up, because the sender had used its share, or because the previous write was too recent. */
   writeBudget?: "out" | "share" | "spacing";
+  /** A redirect that was held back: where the page ends then says nothing about the site. A window on a page that is held back is no such thing. */
+  redirect?: true;
 }
 
 /** Resource types a page needs to look the way it does. Fetched with GET only, also from hosts outside the scope unless the scope is strict. */
@@ -195,19 +197,26 @@ export const urlInScope = inScope;
  * so it decides first.
  */
 export async function guardContext(context: BrowserContext, scope: Scope, guard: Guard, reads: readonly ReadRequest[] = [], blockade?: Blockade): Promise<void> {
-  const runDir = scope.runDir ?? scope.writes?.runDir;
+  const runDir = runOf(scope);
   requireBoundary(context, runDir);
   const note = (kind: Blocked["kind"], method: string, url: string, resourceType: string): void => {
     guard.blocked.push({ at: new Date().toISOString(), kind, method, url: url.slice(0, MAX_URL), resourceType });
   };
   // What the boundary refused is no answer of the site: it stands in what the session reports, as anything the guard holds back.
-  if (runDir !== undefined) {
+  // Only with a boundary: elsewhere such a header comes from the site.
+  if (runDir !== undefined && shieldForRun(runDir)) {
     context.on("response", (response) => {
       if (response.status() !== REFUSED_STATUS) return;
       const reason = response.headers()[REFUSED_HEADER];
       if (!reason) return;
       const request = response.request();
-      guard.blocked.push({ at: new Date().toISOString(), kind: "boundary", method: request.method(), url: request.url().slice(0, MAX_URL), resourceType: request.resourceType(), reasonNl: decodeURIComponent(reason) });
+      let reasonNl: string;
+      try {
+        reasonNl = decodeURIComponent(reason);
+      } catch {
+        return;
+      }
+      guard.blocked.push({ at: new Date().toISOString(), kind: "boundary", method: request.method(), url: request.url().slice(0, MAX_URL), resourceType: request.resourceType(), reasonNl });
     });
   }
   if (blockade) {
@@ -481,7 +490,7 @@ export async function guardRedirects(page: Page, scope: Scope, guard: Guard): Pr
       if (status >= 300 && status < 400 && location) {
         const target = new URL(location, event.request.url).href;
         leaves = !inScope(scope, target);
-        if (leaves) guard.blocked.push({ at: new Date().toISOString(), kind: "scope", method: "GET", url: `${target.slice(0, MAX_URL)} (doorverwijzing vanaf ${event.request.url.slice(0, 120)})`, resourceType: "document" });
+        if (leaves) guard.blocked.push({ at: new Date().toISOString(), kind: "scope", method: "GET", url: `${target.slice(0, MAX_URL)} (doorverwijzing vanaf ${event.request.url.slice(0, 120)})`, resourceType: "document", redirect: true });
       }
       const done = leaves ? cdp.send("Fetch.failRequest", { requestId: event.requestId, errorReason: "BlockedByClient" }) : cdp.send("Fetch.continueRequest", { requestId: event.requestId });
       done.catch(() => undefined);
@@ -525,7 +534,7 @@ export async function guardRedirectsByRoute(context: BrowserContext, scope: Scop
       if (response.status() >= 300 && response.status() < 400 && location) {
         const target = new URL(location, request.url()).href;
         if (!inScope(scope, target)) {
-          guard.blocked.push({ at: new Date().toISOString(), kind: "scope", method: "GET", url: `${target.slice(0, MAX_URL)} (doorverwijzing vanaf ${request.url().slice(0, 120)})`, resourceType: "document" });
+          guard.blocked.push({ at: new Date().toISOString(), kind: "scope", method: "GET", url: `${target.slice(0, MAX_URL)} (doorverwijzing vanaf ${request.url().slice(0, 120)})`, resourceType: "document", redirect: true });
           return await route.fulfill({ status: 204, body: "" });
         }
       }

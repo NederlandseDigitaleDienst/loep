@@ -45,9 +45,13 @@ export async function sha256File(path: string): Promise<string> {
  * boundary stops, and is noted.
  */
 export async function writeFileAtomic(path: string, data: string | Uint8Array): Promise<void> {
+  await writeWhole(path, typeof data === "string" ? maskText(path, data) : maskBytes(path, data));
+}
+
+async function writeWhole(path: string, data: string | Uint8Array): Promise<void> {
   await mkdir(dirname(path), { recursive: true });
   const temporary = `${path}.tmp`;
-  await writeFile(temporary, typeof data === "string" ? maskText(path, data) : maskBytes(path, data));
+  await writeFile(temporary, data);
   await rename(temporary, path);
 }
 
@@ -58,7 +62,7 @@ export function appendRunLine(path: string, line: string): void {
 
 export async function writeJson(path: string, value: unknown): Promise<string> {
   const text = maskText(path, canonicalJson(value));
-  await writeFileAtomic(path, text);
+  await writeWhole(path, text);
   return sha256(text);
 }
 

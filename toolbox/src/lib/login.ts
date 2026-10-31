@@ -3,6 +3,7 @@ import { basename, dirname, join } from "node:path";
 import type { Page } from "playwright";
 import { readJson, writeJson } from "./canonical.ts";
 import { looksSecret } from "./mailparse.ts";
+import { siteOrigins } from "./origins.ts";
 import { registerSecrets, renewSecrets, shieldForRun, type NewSecret } from "./secrets.ts";
 import { isLocalHost, writeOriginsOf, writesForRun, type WritePermission } from "./writes.ts";
 
@@ -52,7 +53,7 @@ export interface LoginSession extends LoginMark {
 
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
 
-const originOf = (address: unknown): string | null => {
+export const originOf = (address: unknown): string | null => {
   try {
     const url = new URL(String(address));
     return url.protocol === "http:" || url.protocol === "https:" ? url.origin : null;
@@ -62,7 +63,7 @@ const originOf = (address: unknown): string | null => {
 };
 
 /** Whether a cookie is sent to a host. As Playwright keeps a cookie: with a dot it is for a domain and what lies under it, without one for that host alone. */
-const cookieFits = (domain: string, hostname: string): boolean => {
+export const cookieFits = (domain: string, hostname: string): boolean => {
   const [named, host] = [domain.toLowerCase(), hostname.toLowerCase()];
   return named.startsWith(".") ? host === named.slice(1) || host.endsWith(named) : host === named;
 };
@@ -155,9 +156,7 @@ export function siteOriginOfRun(runDir: string): string | null {
 /** Every origin a run is about, as `inventory` fixed them. */
 export function siteOriginsOfRun(runDir: string): string[] {
   const path = join(runDir, "inventory.json");
-  if (!existsSync(path)) return [];
-  const { origin, origins } = JSON.parse(readFileSync(path, "utf8")) as { origin?: string; origins?: string[] };
-  return origins ?? (origin ? [origin] : []);
+  return existsSync(path) ? siteOrigins(JSON.parse(readFileSync(path, "utf8")) as Parameters<typeof siteOrigins>[0]) : [];
 }
 
 // ---- A session as a secret ----------------------------------------------------------------------------------------
@@ -233,7 +232,7 @@ export function renewSessionSecrets(runDir: string, headers: { "set-cookie"?: st
       const [, name, value = ""] = /^([^=;]+)=([^;]*)/.exec(cookie) ?? [];
       const domain = /;\s*domain=([^;]+)/i.exec(cookie)?.[1]?.trim().replace(/^\./, "");
       const reach = domain ? `.${domain}` : url.hostname;
-      return name && looksSecret(value) ? [{ value, source: SESSION_COOKIE_SOURCE, origins: [], domains: [reach], ...(/;\s*secure\s*(?:;|$)/i.test(cookie) ? { secure: true } : {}), slot: `cookie ${context} ${reach} ${name.trim()}` }] : [];
+      return name && looksSecret(value) ? [{ value, source: SESSION_COOKIE_SOURCE, origins: [], domains: [reach], ...(/;\s*secure\s*(?:;|$)/i.test(cookie) ? { secure: true } : {}), slot: `cookie ${context} ${reach} ${name.trim()}`, context }] : [];
     }),
   );
 }
