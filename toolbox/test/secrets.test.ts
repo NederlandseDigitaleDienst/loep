@@ -15,7 +15,7 @@ import { generateCACertificate } from "mockttp";
 import * as playwright from "playwright";
 import type { Browser, Page } from "playwright";
 import { boundaryForContext, boundaryPortsForTest, LOCAL_ONLY_ENV, MAX_REQUEST_BYTES, REFUSED_HEADER, REFUSED_STATUS, setBoundaryNetwork, shieldedFetch } from "../src/browser/boundary.ts";
-import { loadPage, newContext } from "../src/browser/session.ts";
+import { loadPage, newContext, settlePage } from "../src/browser/session.ts";
 import { absorbAll } from "../src/commands/mail.ts";
 import { seal } from "../src/commands/verify.ts";
 import { appendRunLine, writeFileAtomic, writeJson } from "../src/lib/canonical.ts";
@@ -24,7 +24,7 @@ import { endContextSecrets, MAX_PREVIOUS, MAX_SLOTS, MIN_BINARY_VALUE, maskBytes
 import type { ReceivedMail } from "../src/lib/mailbox.ts";
 import { notHashed } from "../src/lib/seal.ts";
 import { decideWrites, recordWrites } from "../src/lib/writes.ts";
-import { guardContext, guardedDownload, guardRedirects, scopeForRun, type Guard } from "../src/session/safety.ts";
+import { guardContext, guardedDownload, guardRedirects, guardRedirectsByRoute, scopeForRun, type Guard } from "../src/session/safety.ts";
 import { SecondBrowsers } from "../src/session/second.ts";
 
 /*
@@ -99,7 +99,8 @@ async function sessionOn(run: string, browser: Browser): Promise<Session> {
   const context = await newContext(browser, { runDir: run });
   await guardContext(context, scope, guard);
   const opened = await context.newPage();
-  await guardRedirects(opened, scope, guard);
+  if (browser.browserType().name() === "chromium") await guardRedirects(opened, scope, guard);
+  else await guardRedirectsByRoute(context, scope, guard);
   return { page: opened, guard, close: () => context.close() };
 }
 
@@ -632,17 +633,93 @@ test("a session cookie is nowhere in the run after a run with a login, the site 
   }
 });
 
-test("a browser that goes around the proxy on this machine does not take part in a run with a login either", { skip: process.platform !== "darwin" || !SecondBrowsers.installed("webkit") }, async () => {
-  const site = await siteWith((_request, response) => html(response, "<h1>Site</h1>"));
+const WEBKIT_HERE = { skip: !SecondBrowsers.installed("webkit") };
+
+test("WebKit on a site on this machine: nothing leaves the browser by itself, whatever a page asks for, and it keeps its real address", WEBKIT_HERE, async () => {
+  const renewed = "vernieuwd-Qw3Er5Ty7Ui9Op1As3Df5Gh7Jk9Lz";
+  const css = "@import '/geimporteerd.css'; @font-face { font-family: Eigen; src: url('/letter.woff2'); } body { font-family: Eigen; background: url('/achtergrond.gif'); }";
+  const site = await siteWith((request, response) => {
+    const cookie = request.headers.cookie ?? "";
+    const loggedIn = cookie.includes(`sessie=${COOKIE}`) || cookie.includes(`sessie=${renewed}`);
+    const path = request.url!.replace(/^http:\/\/[^/]+/, "");
+    if (path === "/start") return void response.writeHead(302, { location: `http://${request.headers.host}/tussen` }).end();
+    if (path === "/tussen") return void response.writeHead(302, { location: "/mijn", "set-cookie": `sessie=${renewed}; Path=/` }).end();
+    if (path === "/verstuur") return void response.writeHead(303, { location: "/mijn" }).end();
+    if (path === "/json") return void response.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ ingelogd: loggedIn }));
+    if (path === "/stijl.css") return void response.writeHead(200, { "content-type": "text/css" }).end(css);
+    if (path === "/kader") return html(response, `<h1>Kader</h1><img alt="" src="/in-kader.gif">`);
+    if (path === "/mijn") {
+      if (!loggedIn) return void response.writeHead(303, { location: "/inloggen" }).end();
+      return html(response, `<h1>Mijn pagina</h1><p id="echo">${cookie}</p><link rel="stylesheet" href="/stijl.css"><link rel="prefetch" href="/vooruit"><link rel="preload" as="image" href="/vooraf.gif"><link rel="icon" href="/icoon.png">${[1, 2, 3, 4, 5, 6].map((index) => `<img alt="" src="/plaatje${index}.gif">`).join("")}<img alt="" srcset="/srcset.gif 1x"><video src="/film.mp4" preload="auto"></video><audio src="/geluid.mp3" preload="auto"></audio><iframe title="Kader" src="/kader"></iframe><script>navigator.sendBeacon("/baken", "x"); new EventSource("/stroom"); new Worker(URL.createObjectURL(new Blob(['fetch(self.location.origin + "/uit-worker")'])));</script><form method="post" action="/verstuur"><button>Stuur</button></form>`);
+    }
+    void response.writeHead(200, { "content-type": "text/plain" }).end("x");
+  });
   const run = runOn(site.origin);
   writeLoginFile(join(run, LOGIN_SESSION_FILE), loginSession(site.origin));
-  registerSessionSecrets(run);
+  await recordWrites(run, { ...decideWrites(`${site.origin}/`, { allowWrites: true })!, maxWrites: 100, spacingSeconds: 0 });
+  setRunLogin(run);
+  const session = await sessionOn(run, await launched("webkit"));
   try {
-    await assert.rejects(newContext(await launched("webkit"), { runDir: run }), /doet in deze run niet mee/);
-    assert.equal(site.heard.length, 0);
+    const answer = await loadPage(session.page, `${site.origin}/start`);
+    assert.equal(answer.finalUrl, `${site.origin}/mijn`, "loadPage ends where the redirect ends");
+    assert.equal(answer.status, 200);
+    assert.equal(await session.page.locator("h1").first().textContent(), "Mijn pagina");
+    assert.equal(await session.page.evaluate(() => location.href), `${site.origin}/mijn`, "the page keeps its real address");
+    assert.equal(await session.page.evaluate(() => isSecureContext), true, "and with it a secure context");
+    assert.ok(!(await session.page.locator("#echo").textContent())!.includes(renewed), "the page got the alias");
+    assert.ok(site.heard.some((request) => request.url === "/plaatje6.gif"));
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+
+    const data = await session.page.evaluate(() => fetch("/json").then((reply) => reply.json() as Promise<{ ingelogd: boolean }>));
+    assert.equal(data.ingelogd, true, "a script has the session");
+    await session.page.locator("button").click();
+    await session.page.waitForURL(/\/mijn$/);
+    await settlePage(session.page);
+    assert.equal(await session.page.locator("h1").first().textContent(), "Mijn pagina", "a form that redirects ends on its page");
+
+    const past = site.heard.filter((request) => request.url.startsWith("http") || (!request.headers.cookie?.includes("sessie=") && request.url !== "/start"));
+    assert.deepEqual(past.map((request) => request.url), [], "what reached the site without the real session went past the proxy");
+    await writeFileAtomic(join(run, "pages", "p1", "page.html"), await session.page.content());
+    for (const value of [COOKIE, renewed]) assert.deepEqual(filesHolding(run, value), [], value);
+    assert.deepEqual(scanRun(run).hits, []);
   } finally {
+    setRunLogin(null);
+    await session.close();
     await site.close();
     rmSync(run, { recursive: true, force: true });
+  }
+});
+
+test("WebKit on a site on this machine: a socket stays closed and says so, and the page measures as without a boundary", WEBKIT_HERE, async () => {
+  const content = `<h1>Pagina</h1><nav aria-label="Hoofd"><a href="/een">Een</a></nav><main><form><label>Naam <input></label><button>Zoek</button></form></main>`;
+  const site = await siteWith((_request, response) => html(response, content));
+  const measure = async (run: string): Promise<unknown> => {
+    const session = await sessionOn(run, await launched("webkit"));
+    try {
+      await loadPage(session.page, `${site.origin}/`);
+      return { tree: await session.page.locator("html").ariaSnapshot(), tabs: await session.page.evaluate(() => [...document.querySelectorAll("a, input, button")].map((element) => (element as HTMLElement).tabIndex)), box: await session.page.locator("button").boundingBox(), secure: await session.page.evaluate(() => isSecureContext) };
+    } finally {
+      await session.close();
+    }
+  };
+  const plain = runOn(site.origin);
+  const shielded = runOn(site.origin);
+  registerSecret(shielded, TOKEN, { source: "test" });
+  try {
+    assert.deepEqual(await measure(shielded), await measure(plain), "the same page gives the same measurements");
+    const session = await sessionOn(shielded, await launched("webkit"));
+    try {
+      await loadPage(session.page, `${site.origin}/`);
+      await session.page.evaluate((origin) => void new WebSocket(`${origin.replace("http", "ws")}/stroom`), site.origin);
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      assert.ok(session.guard.blocked.some((entry) => entry.kind === "boundary" && entry.resourceType === "websocket"));
+    } finally {
+      await session.close();
+    }
+  } finally {
+    await site.close();
+    rmSync(plain, { recursive: true, force: true });
+    rmSync(shielded, { recursive: true, force: true });
   }
 });
 

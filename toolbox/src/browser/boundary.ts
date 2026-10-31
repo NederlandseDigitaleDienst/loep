@@ -34,7 +34,9 @@ import { isLocalHost, writesForRun } from "../lib/writes.ts";
  *   in package.json: the tests in `test/mailbox-boundary.test.ts` and `test/secrets.test.ts` hold it.
  *
  * What the browser does not send through a proxy is what this has to guard against, so a browser
- * is first shown to use it (`boundaryForContext`), and is refused when it does not.
+ * is first shown to use it (`boundaryForContext`), and is refused when it does not. WebKit on macOS
+ * skips a proxy for a new connection to this machine, so a context of WebKit opens none: `proceed` in
+ * `browser/session.ts` fetches everything through this proxy, and the browser only gets the answer.
  */
 
 /** The shield for a request of a run, or null: no secrets, or an address no value may go to. */
@@ -466,7 +468,8 @@ class Boundary {
       };
       if (!(await reaches(`http://${CHECK_HOST}${CHECK_START}`))) return `${name} gebruikt de grens van deze run niet, ook niet op een adres dat alleen de grens kent`;
       if (!(await reaches(`https://${CHECK_HOST}${CHECK_START}`))) return `${name} krijgt over https geen verbinding via de grens van deze run`;
-      if (local && !(await reaches(`http://${this.decoyHost}${CHECK_START}`))) return `${name} gaat op deze machine buiten de grens van deze run om`;
+      // A page in WebKit opens no connection (`proceed`), so what WebKit would do here says nothing about it.
+      if (local && name !== "webkit" && !(await reaches(`http://${this.decoyHost}${CHECK_START}`))) return `${name} gaat op deze machine buiten de grens van deze run om`;
       return null;
     } finally {
       await context.close().catch(() => undefined);

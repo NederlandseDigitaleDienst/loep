@@ -1,7 +1,7 @@
 import { createWriteStream, existsSync } from "node:fs";
 import { join } from "node:path";
 import type { BrowserContext, CDPSession, Frame, Page, Request } from "playwright";
-import { answeredByCloudflare, bodyOf, canFulfilRedirect, fulfillAnswer, passOn, sendOrReplay } from "../browser/session.ts";
+import { answeredByCloudflare, bodyOf, fulfillAnswer, opensNoConnection, passOn, proceed, sendOrReplay } from "../browser/session.ts";
 import { REFUSED_HEADER, REFUSED_STATUS, requireBoundary, shieldedFetch, shieldOf } from "../browser/boundary.ts";
 import { readJson } from "../lib/canonical.ts";
 import { maskFile, shieldForRun } from "../lib/secrets.ts";
@@ -14,7 +14,7 @@ import { SEARCH_FALLBACK, SEARCH_NONE } from "../lib/searchterm.ts";
 import { searchTermForRun } from "../lib/sitemodel.ts";
 import { OriginBlocked, refusalNl, type Blockade } from "./blockade.ts";
 import { playRecording, replayNl, socketRecordings, type PassedReplay, type Recorder } from "../lib/recordings.ts";
-import { claimLink, isWriteOrigin, runWrites, SocketFrames, writeAccess, writesForRun, type PassedWrite, type WriteAccess } from "../lib/writes.ts";
+import { claimLink, isLocalHost, isWriteOrigin, runWrites, SocketFrames, writeAccess, writesForRun, type PassedWrite, type WriteAccess } from "../lib/writes.ts";
 
 /** Limits of the process that holds the browser; set once, when it starts. */
 export interface DaemonLimits {
@@ -109,6 +109,8 @@ export interface Blocked {
   /** A redirect that was held back: where the page ends then says nothing about the site. A window on a page that is held back is no such thing. */
   redirect?: true;
 }
+
+const SOCKET_REFUSED_NL = "WebKit opent een socket op deze machine buiten de grens om: de socket is niet verbonden, en wat erover zou komen, is in WebKit niet gemeten";
 
 /** Resource types a page needs to look the way it does. Fetched with GET only, also from hosts outside the scope unless the scope is strict. */
 const RENDERING_TYPES = new Set(["stylesheet", "script", "image", "font", "media"]);
@@ -252,7 +254,7 @@ export async function guardContext(context: BrowserContext, scope: Scope, guard:
     // Cloudflare's own host lies outside every scope: a strict scope keeps it out.
     if (isChallenge(url, (host) => answeredByCloudflare(context, host)) && (inScope(scope, url) || !scope.strict)) {
       if ((method !== "GET" && method !== "HEAD") || !inScope(scope, url)) (guard.challenges ??= []).push({ at: new Date().toISOString(), method, url: url.slice(0, MAX_URL) });
-      return route.continue();
+      return proceed(route);
     }
     if (method !== "GET" && method !== "HEAD") {
       const body = bodyOf(request);
@@ -282,14 +284,14 @@ export async function guardContext(context: BrowserContext, scope: Scope, guard:
     }
     if (inScope(scope, url)) {
       if (linkRefused(scope, guard, request)) return refuse();
-      return route.continue();
+      return proceed(route);
     }
     // What the page already holds (data:, blob:) sends nothing anywhere; as the address of a page it is never in the scope.
     if (!request.isNavigationRequest() && /^(data|blob):/.test(url)) return route.continue();
     if (!scope.strict && !request.isNavigationRequest() && (RENDERING_TYPES.has(type) || (READ_TYPES.has(type) && fromEmbeddedInScope(scope, request)))) {
       const host = new URL(url).hostname;
       guard.outsideScopeLoaded[host] = (guard.outsideScopeLoaded[host] ?? 0) + 1;
-      return route.continue();
+      return proceed(route);
     }
     note("scope", method, url, type);
     return refuse();
@@ -298,8 +300,11 @@ export async function guardContext(context: BrowserContext, scope: Scope, guard:
     const url = socket.url();
     const refusedBy = blockade?.refuses(url);
     // The socket opens, so the page keeps working, and what the server says still arrives. Nothing the page says is passed on.
-    const server = inScope(scope, url) && !refusedBy ? socket.connectToServer() : null;
-    if (refusedBy) guard.blocked.push({ at: new Date().toISOString(), kind: "blockade", method: "GET", url: url.slice(0, MAX_URL), resourceType: "websocket", reasonNl: refusalNl(refusedBy) });
+    // A socket opens a connection of its own, and on this machine WebKit does that past the proxy.
+    const pastTheProxy = opensNoConnection(context) && isLocalHost(new URL(url).hostname);
+    const server = inScope(scope, url) && !refusedBy && !pastTheProxy ? socket.connectToServer() : null;
+    if (pastTheProxy) guard.blocked.push({ at: new Date().toISOString(), kind: "boundary", method: "GET", url: url.slice(0, MAX_URL), resourceType: "websocket", reasonNl: SOCKET_REFUSED_NL });
+    else if (refusedBy) guard.blocked.push({ at: new Date().toISOString(), kind: "blockade", method: "GET", url: url.slice(0, MAX_URL), resourceType: "websocket", reasonNl: refusalNl(refusedBy) });
     else if (!server) note("scope", "GET", url, "websocket");
     else (guard.sockets ??= []).push(url.slice(0, MAX_URL));
     // Only a socket of the test environment may carry what the page says.
@@ -525,8 +530,6 @@ export async function guardRedirectsByRoute(context: BrowserContext, scope: Scop
   await context.route("**/*", async (route) => {
     const request = route.request();
     if (!request.isNavigationRequest() || request.method() !== "GET" || !/^https?:/.test(request.url()) || !inScope(scope, request.url()) || logsOut(request.url())) return route.fallback();
-    // Left to `guardContext`, which passes it on: a redirect is then followed by the browser, and only has aliases to take along.
-    if (shieldOf(runOf(scope), request.url()) && !canFulfilRedirect(context)) return route.fallback();
     if (linkRefused(scope, guard, request)) return route.fulfill({ status: 204, body: "" });
     try {
       const response = await route.fetch({ maxRedirects: 0 });
