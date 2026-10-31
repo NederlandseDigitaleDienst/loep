@@ -1,11 +1,11 @@
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { mediaReport, type MediaElement } from "../instruments/media.ts";
 import { measuredBy, type MethodFailure, type MethodResult } from "../instruments/methods.ts";
 import { compareSpeech, embeddedCues, MAX_MEDIA_SECONDS, notSpoken, parseWebVtt, pictureOf, probeMedia, saidAt, soundOf, soundWithoutSpeech, stills, stillTimes, transcribe, words, type Flashes, type MediaStreams, type Sound, type SpeechComparison, type Still, type Timed, type Transcript } from "../instruments/methods/listen.ts";
 import { idOf, knownError, runMethod, sortRan, Unavailable, type Ran } from "../instruments/methods/registry.ts";
-import { sha256File } from "../lib/canonical.ts";
+import { sha256File, writeFileAtomic } from "../lib/canonical.ts";
 import { UsageError, type Context, type Handler, type Options, type Outcome } from "./commands.ts";
 import { browsersOf, methodLines, short, withBackground, type Slow } from "./opinions.ts";
 import { guardedDownload } from "./safety.ts";
@@ -291,7 +291,7 @@ async function listen(context: Context, options: Options): Promise<Outcome> {
             browsers,
             async (): Promise<Transcript> => {
               const heard = await transcribe(file, work, language);
-              await writeFile(transcriptPath, `WEBVTT\n\n${heard.segments.map((segment) => `${stamp(segment.from)} --> ${stamp(segment.to)}\n${segment.text}\n`).join("\n")}`);
+              await writeFileAtomic(transcriptPath, `WEBVTT\n\n${heard.segments.map((segment) => `${stamp(segment.from)} --> ${stamp(segment.to)}\n${segment.text}\n`).join("\n")}`);
               return heard;
             },
             10 * 60_000,

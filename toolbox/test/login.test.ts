@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, wri
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, test } from "node:test";
-import { webkit, type Browser, type Page } from "playwright";
+import { firefox, type Browser, type Page } from "playwright";
 import { ACCOUNT } from "../fixtures/account.ts";
 import { startFixture, type FixtureServer } from "../fixtures/serve.ts";
 import { launchBrowser, loadPage, newContext } from "../src/browser/session.ts";
@@ -186,11 +186,12 @@ test("a person logs in, the session is kept where only its owner reads it, and i
 });
 
 test("a second browser starts with the same session", { timeout: 60_000 }, async (context) => {
-  if (!SecondBrowsers.installed("webkit")) return context.skip("WebKit is niet geïnstalleerd");
+  if (!SecondBrowsers.installed("firefox")) return context.skip("Firefox is niet geïnstalleerd");
   setRunLogin(run);
   let browser: Browser | null = null;
   try {
-    browser = await webkit.launch();
+    // Firefox: on this machine WebKit goes around the boundary after a redirect, and is refused in a run with secrets (`secrets.test.ts`).
+    browser = await firefox.launch();
     const page = await (await newContext(browser)).newPage();
     assert.equal(new URL((await loadPage(page, `${origin}/mijn/berichten.html`)).finalUrl).pathname, "/mijn/berichten.html");
     assert.equal(await page.locator("h1").textContent(), "Uw berichten");

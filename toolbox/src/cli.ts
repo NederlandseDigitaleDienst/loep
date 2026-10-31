@@ -14,7 +14,7 @@ const USAGE = `loep <command> [options]
   watch-session --run <run> [--gaps 5,10,20,40,80] [--max-hours 8]
                                          The watch on the session of a run with a login. collect starts it in the background
                                          and evaluate stops it; a second start on the same run leaves the running one alone
-  inventory <url> --out <run> [--also-origin <url>]... [--allow-writes | --test-environment <origin>... --declared-by "<name>, <role>"] [--max-writes <n>]
+  inventory <url> --out <run> [--also-origin <url>]... [--allow-writes | --test-environment <origin>... --declared-by "<name>, <role>"] [--max-writes <n>] [--mailbox <mailbox>]
                                          Find every page and count what is on it. In a run with a login the pages are found
                                          by following links from the page the person pointed at; a link that logs out is never followed
   explore --run <run>                    Write the task for the agent that maps the site before it is measured
@@ -130,6 +130,8 @@ const USAGE = `loep <command> [options]
                                          to fix, and the report is not signed. Verantwoorden: the report backs a statement,
                                          says what is still missing for status B, and is signed. Choose or change it at the
                                          end of a run, then run evaluate, render and seal again. Without a value: say it
+  mail wait|links|cleanup|status --run <run>   The fixed flow around a mailbox; loep mail --help
+  secrets --run <run>                    What a run knows about its secrets, per source, and what happened around them: never a value
   seal --run <run>                       Record the hash of every file in the run; what is signed afterwards is this seal
   seal --run <run> --open                Open the seal on purpose, to measure in the run itself again (tasks --again): the seal
                                          and a signature lapse; seal again afterwards, and read and sign again
@@ -155,6 +157,11 @@ Options:
                     may send to that origin, over every session and the sweep together: default 5, at least 120 s
                     apart; on a local address default 50, without a pause. Past it every write is held back as in
                     a run without permission. Kept in the manifest
+  --mailbox <m>     With inventory, for a run that may send: imap://<host>:993 (any real mailbox) or mailpit://localhost:8025 (a site
+                    on this machine). The user name and password never go here: they come from the environment
+                    (LOEP_IMAP_USER, LOEP_IMAP_PASSWORD) or the keychain. A mailbox on another machine is confirmed at an
+                    interactive terminal by typing its host; an agent never records it. Opening a link from a mail counts
+                    as sending. See loep mail --help
   --other-toolbox   Go on with a run that was made with another version of loep. Without it every command that
                     measures or writes tasks refuses: another version writes other tasks and procedures, and the walks
                     and verdicts of the run are then done again. Measure again with --fresh after changing. Commands
@@ -251,6 +258,8 @@ async function main(): Promise<void> {
       "test-environment": { type: "string", multiple: true },
       "declared-by": { type: "string" },
       "max-writes": { type: "string" },
+      mailbox: { type: "string" },
+      timeout: { type: "string" },
       url: { type: "string" },
       from: { type: "string" },
       steps: { type: "string" },
@@ -270,6 +279,10 @@ async function main(): Promise<void> {
     process.stdout.write((await import("./commands/voiceover.ts")).VOICEOVER_USAGE);
     return;
   }
+  if (command === "mail" && (values.help || !target)) {
+    process.stdout.write((await import("./commands/mail.ts")).MAIL_USAGE);
+    return;
+  }
   if (values.help || !command) {
     process.stdout.write(USAGE);
     return;
@@ -286,6 +299,7 @@ async function main(): Promise<void> {
   const recording = { recordedVia: values["recorded-via"], confirmation: values.confirmation, summary: values.summary };
   if (recordedVia === "gesprek" && (command === "sign" || command === "inventory")) throw new Error(`${command === "sign" ? "tekenen" : "de verklaring dat er verstuurd mag worden"} legt de assistent nooit vast, ook niet na een bevestiging in het gesprek. ${HUMAN_AT_TERMINAL_NL}`);
   if ((recordedVia !== undefined || values.confirmation !== undefined || values.summary !== undefined) && command !== "answer" && command !== "decide" && command !== "writes") throw new Error("--recorded-via, --confirmation en --summary horen bij answer en decide");
+  if (command !== "inventory" && values.mailbox !== undefined) throw new Error("--mailbox hoort bij inventory: daar wordt voor de hele run vastgelegd welke mailbox er is");
   if (command !== "inventory" && values["also-origin"] !== undefined) throw new Error("--also-origin hoort bij inventory: daar wordt vastgelegd welke origins samen de site zijn");
   // A run goes on with the version of loep it was made with; another version would quietly write other tasks over it.
   if (values.run) {
@@ -332,6 +346,12 @@ async function main(): Promise<void> {
       const permission = decideWrites(target, { allowWrites: values["allow-writes"], testEnvironment: values["test-environment"], declaredBy: values["declared-by"], maxWrites: values["max-writes"] });
       // A declared test environment is confirmed by a person at a terminal before anything starts.
       if (permission?.declaredBy) Object.assign(permission, await confirmDeclaration(permission));
+      const { confirmMailbox, decideMailbox, recordMailbox, runAddress } = await import("./lib/mailbox.ts");
+      const mailbox = values.mailbox === undefined ? null : decideMailbox(values.mailbox, permission);
+      // A mailbox on another machine holds real mail: a person confirms it before anything starts.
+      if (mailbox) mailbox.mark = await confirmMailbox(mailbox, permission!);
+      // Asked here, so a missing login does not cost a whole inventory.
+      const mailAddress = mailbox ? runAddress(mailbox.server) : null;
       if (permission) setRunWrites(writeAccess(values.out, permission, "inventory"));
       // What this command was given decides whether a session may be used: the manifest only holds it afterwards.
       setRunLogin(values.out, { writes: permission });
@@ -347,6 +367,12 @@ async function main(): Promise<void> {
       const vendor = tagPrefixes.length > 0 ? { tagPrefixes, nameNl: values["vendor-name"]?.trim() || "leverancier" } : undefined;
       const result = await inventory({ baseUrl: target, out: values.out, maxPages: Number(values["max-pages"]), fixedUrls, vendor, alsoOrigins: values["also-origin"] });
       await recordWrites(values.out, permission);
+      if (mailbox) {
+        const { startMailbox } = await import("./commands/mail.ts");
+        await startMailbox(values.out, mailbox.server, mailAddress!, mailbox.mark, permission!);
+        await recordMailbox(values.out, mailbox.mark);
+        process.stdout.write(`mailbox aangesloten (${mailbox.mark.kind}): de testwaarde email in een formulier gaat naar het adres van deze run, en mail wait neemt de links uit de mail. Adres en codes staan alleen in secrets.json, buiten het zegel en het rapport.\n`);
+      }
       if (permission) {
         process.stdout.write(`versturen toegestaan naar ${writeOriginsNl(permission)}${permission.declaredBy ? `, verklaard door ${permission.declaredBy.name} (${permission.declaredBy.role})` : ""}\n`);
         process.stdout.write(`budget voor versturen: ten hoogste ${permission.maxWrites} verzendingen naar ${permission.alsoOrigins ? "die origins samen" : "die origin"} voor de hele run, alle agents en de veegronde samen${spacingNl(permission.spacingSeconds ?? DEFAULT_WRITE_SPACING_SECONDS)}. Zoveel berichten of formulieren krijgt de ontvanger ten hoogste.\n`);
@@ -511,6 +537,31 @@ async function main(): Promise<void> {
       refuseUnderSeal(`${values.run}/manifest.json`);
       const raised = await raiseWrites(values.run, values["max-writes"], recording);
       process.stdout.write(`budget voor versturen: ten hoogste ${raised.maxWrites} verzendingen voor de hele run. Open punten over een budget dat op was, meet een nieuwe afmaakronde: tasks --again <criteria>\n`);
+      return;
+    }
+    case "mail": {
+      if (!values.run) throw new Error("mail vraagt --run <run>");
+      const { cleanupLinesNl, mailCleanup, mailLinks, mailWait } = await import("./commands/mail.ts");
+      if (target === "wait") {
+        const timeoutSeconds = values.timeout === undefined ? undefined : Number(values.timeout);
+        if (timeoutSeconds !== undefined && !(timeoutSeconds >= 0)) throw new Error("--timeout is een aantal seconden");
+        process.stdout.write(`${JSON.stringify(await mailWait(values.run, { ...(timeoutSeconds !== undefined ? { timeoutSeconds } : {}) }))}\n`);
+      } else if (target === "cleanup") {
+        const cleanup = await mailCleanup(values.run);
+        process.stdout.write(`${cleanupLinesNl(cleanup).join("\n")}\n`);
+        process.exitCode = cleanup.complete ? 0 : 1;
+      } else if (target === "links") {
+        process.stdout.write(`${JSON.stringify(mailLinks(values.run))}\n`);
+      } else if (target === "status") {
+        const { readMailboxState } = await import("./lib/mailbox.ts");
+        process.stdout.write(`${JSON.stringify(readMailboxState(values.run))}\n`);
+      } else throw new Error(`mail kent wait, cleanup, links en status, niet "${target}"`);
+      return;
+    }
+    case "secrets": {
+      if (!values.run) throw new Error("secrets vraagt --run <run>");
+      const { secretsLinesNl } = await import("./lib/secrets.ts");
+      process.stdout.write(`${secretsLinesNl(values.run).join("\n")}\n`);
       return;
     }
     case "pending": {

@@ -1,8 +1,10 @@
 import { createWriteStream, existsSync } from "node:fs";
 import { join } from "node:path";
 import type { BrowserContext, CDPSession, Frame, Page, Request } from "playwright";
-import { answeredByCloudflare, bodyOf, fulfillAnswer, passOn, sendOrReplay } from "../browser/session.ts";
+import { answeredByCloudflare, bodyOf, canFulfilRedirect, fulfillAnswer, passOn, sendOrReplay } from "../browser/session.ts";
+import { REFUSED_HEADER, REFUSED_STATUS, requireBoundary, shieldedFetch, shieldOf } from "../browser/boundary.ts";
 import { readJson } from "../lib/canonical.ts";
+import { maskFile, shieldForRun } from "../lib/secrets.ts";
 import { isChallenge } from "../lib/challenge.ts";
 import { privateFromPublicSite, scopeHost, scopeHostOf, siteOrigins, WEB_SCHEMES } from "../lib/origins.ts";
 import { loginCookieHeader, logsOut } from "../lib/login.ts";
@@ -12,7 +14,7 @@ import { SEARCH_FALLBACK, SEARCH_NONE } from "../lib/searchterm.ts";
 import { searchTermForRun } from "../lib/sitemodel.ts";
 import { OriginBlocked, refusalNl, type Blockade } from "./blockade.ts";
 import { playRecording, replayNl, socketRecordings, type PassedReplay, type Recorder } from "../lib/recordings.ts";
-import { isWriteOrigin, runWrites, SocketFrames, writeAccess, writesForRun, type PassedWrite, type WriteAccess } from "../lib/writes.ts";
+import { claimLink, isWriteOrigin, runWrites, SocketFrames, writeAccess, writesForRun, type PassedWrite, type WriteAccess } from "../lib/writes.ts";
 
 /** Limits of the process that holds the browser; set once, when it starts. */
 export interface DaemonLimits {
@@ -43,6 +45,8 @@ export interface Scope {
   hosts: string[];
   /** Start URL of the run; relative page addresses are resolved against it. */
   baseUrl: string | null;
+  /** The run, when there is one: a run with secrets has a boundary around every context. */
+  runDir?: string;
   /**
    * When false, stylesheets, scripts, images, fonts and media may still be fetched from other
    * hosts, as in the sweep: without them the page is not the page a visitor sees. When true, nothing leaves the scope.
@@ -87,12 +91,12 @@ export async function scopeForRun(runDir: string, extra: { scopeUrl?: string | u
   // Inside a command of the sweep the log names that command; a session names itself.
   const ambient = runWrites();
   const writes = permission ? (ambient?.origin === permission.origin ? ambient : writeAccess(runDir, permission, "session")) : null;
-  return { hosts: [...hosts].sort(), baseUrl, strict: extra.strict ?? false, ...(writes ? { writes } : {}) };
+  return { hosts: [...hosts].sort(), baseUrl, runDir, strict: extra.strict ?? false, ...(writes ? { writes } : {}) };
 }
 
 export interface Blocked {
   at: string;
-  kind: "method" | "scope" | "socket" | "left-scope" | "logout" | "blockade";
+  kind: "method" | "scope" | "socket" | "left-scope" | "logout" | "blockade" | "boundary";
   method: string;
   url: string;
   resourceType: string;
@@ -102,6 +106,8 @@ export interface Blocked {
   reasonNl?: string;
   /** A write to the test environment that the budget for sending held back: because it was used up, because the sender had used its share, or because the previous write was too recent. */
   writeBudget?: "out" | "share" | "spacing";
+  /** A redirect that was held back: where the page ends then says nothing about the site. A window on a page that is held back is no such thing. */
+  redirect?: true;
 }
 
 /** Resource types a page needs to look the way it does. Fetched with GET only, also from hosts outside the scope unless the scope is strict. */
@@ -191,9 +197,28 @@ export const urlInScope = inScope;
  * so it decides first.
  */
 export async function guardContext(context: BrowserContext, scope: Scope, guard: Guard, reads: readonly ReadRequest[] = [], blockade?: Blockade): Promise<void> {
+  const runDir = runOf(scope);
+  requireBoundary(context, runDir);
   const note = (kind: Blocked["kind"], method: string, url: string, resourceType: string): void => {
     guard.blocked.push({ at: new Date().toISOString(), kind, method, url: url.slice(0, MAX_URL), resourceType });
   };
+  // What the boundary refused is no answer of the site: it stands in what the session reports, as anything the guard holds back.
+  // Only with a boundary: elsewhere such a header comes from the site.
+  if (runDir !== undefined && shieldForRun(runDir)) {
+    context.on("response", (response) => {
+      if (response.status() !== REFUSED_STATUS) return;
+      const reason = response.headers()[REFUSED_HEADER];
+      if (!reason) return;
+      const request = response.request();
+      let reasonNl: string;
+      try {
+        reasonNl = decodeURIComponent(reason);
+      } catch {
+        return;
+      }
+      guard.blocked.push({ at: new Date().toISOString(), kind: "boundary", method: request.method(), url: request.url().slice(0, MAX_URL), resourceType: request.resourceType(), reasonNl });
+    });
+  }
   if (blockade) {
     context.on("response", (response) => {
       const url = response.url();
@@ -207,6 +232,8 @@ export async function guardContext(context: BrowserContext, scope: Scope, guard:
       if (request.isNavigationRequest() && inScope(scope, request.url()) && !STOPPED.test(request.failure()?.errorText ?? "")) blockade.failed(request.url());
     });
   }
+  // A personal link from a mail can say `afmelden`, and then it is about the mail and not about the session.
+  const loggingOut = (url: string): boolean => logsOut(url) && !(runDir !== undefined && shieldForRun(runDir)?.touchesGuarded(url));
   await context.route("**/*", (route) => {
     const request = route.request();
     const method = request.method();
@@ -220,7 +247,7 @@ export async function guardContext(context: BrowserContext, scope: Scope, guard:
       return refuse();
     }
     // In a run with a login nothing logs out: the session has to last for everything that comes after.
-    if (logsOut(url)) {
+    if (loggingOut(url)) {
       note("logout", method, url, type);
       return refuse();
     }
@@ -255,7 +282,10 @@ export async function guardContext(context: BrowserContext, scope: Scope, guard:
       guard.blocked.push({ at: new Date().toISOString(), kind: "method", method, url: url.slice(0, MAX_URL), resourceType: type, ...(search.length > 0 ? { search } : {}) });
       return refuse();
     }
-    if (inScope(scope, url)) return route.continue();
+    if (inScope(scope, url)) {
+      if (linkRefused(scope, guard, request)) return refuse();
+      return route.continue();
+    }
     // What the page already holds (data:, blob:) sends nothing anywhere; as the address of a page it is never in the scope.
     if (!request.isNavigationRequest() && /^(data|blob):/.test(url)) return route.continue();
     if (!scope.strict && !request.isNavigationRequest() && (RENDERING_TYPES.has(type) || (READ_TYPES.has(type) && fromEmbeddedInScope(scope, request)))) {
@@ -359,6 +389,8 @@ export async function guardedDownload(scope: Scope, guard: Guard, address: strin
         return { ok: false, reason: "het adres is geen geldig adres" };
       }
       if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return { ok: false, reason: `het adres begint met ${parsed.protocol} en is niet op te halen` };
+      // The real value of an alias is only filled in on the way out of the browser: from here the site would show another page.
+      if (shieldOf(runOf(scope), url)?.carriesAlias(url)) return { ok: false, reason: "dit adres heeft een vervanging voor een geheim erin en is alleen in de browser van de sessie te openen" };
       if (!inScope(scope, url)) {
         if (scope.strict || !RENDERING_TYPES.has(options.resourceType)) {
           guard.blocked.push({ at: new Date().toISOString(), kind: "scope", method: "GET", url: url.slice(0, MAX_URL), resourceType: options.resourceType });
@@ -375,7 +407,8 @@ export async function guardedDownload(scope: Scope, guard: Guard, address: strin
       }
       // A file behind a login is asked for with the session of the run, and only inside the scope.
       const cookie = inScope(scope, url) ? loginCookieHeader(url) : null;
-      const response = await fetch(url, { method: "GET", redirect: "manual", signal: abort.signal, headers: { ...(cookie ? { cookie } : {}), ...((await options.headers?.(url)) ?? {}) } });
+      // In a run with secrets the answer gets the aliases too: this file goes in the run.
+      const response = await shieldedFetch(shieldOf(runOf(scope), url), url, { method: "GET", redirect: "manual", signal: abort.signal, headers: { ...(cookie ? { cookie } : {}), ...((await options.headers?.(url)) ?? {}) } }, { maxBytes: options.maxBytes, runDir: runOf(scope) });
       if (response.status === 429 && inScope(scope, url)) options.blockade?.tooMany(url, response.headers.get("retry-after") ?? undefined);
       const location = response.headers.get("location");
       if (response.status >= 300 && response.status < 400 && location) {
@@ -409,7 +442,10 @@ export async function guardedDownload(scope: Scope, guard: Guard, address: strin
       } finally {
         await new Promise<void>((resolve) => file.end(resolve));
       }
+      // In a run with secrets the answer was read before this point: the time can have run out there, and this is what arrived.
+      if (timedOut) truncated ??= "time";
       if (bytes === 0) return { ok: false, reason: timedOut ? "geen antwoord binnen de tijd" : "de server stuurt een leeg bestand" };
+      maskFile(to, response.headers.get("content-type") ?? undefined);
       return { ok: true, url, bytes, contentType: response.headers.get("content-type"), truncated };
     }
     return { ok: false, reason: "te veel doorverwijzingen" };
@@ -418,6 +454,28 @@ export async function guardedDownload(scope: Scope, guard: Guard, address: strin
   } finally {
     clearTimeout(timer);
   }
+}
+
+const runOf = (scope: Scope): string | undefined => scope.runDir ?? scope.writes?.runDir;
+
+/**
+ * A navigation to a guarded address takes from the budget like any write, and a session that may
+ * not send may not open one at all: whether it is refused, and noted as refused. Asked once per
+ * navigation, by the guard that passes it on.
+ */
+function linkRefused(scope: Scope, guard: Guard, request: Request): boolean {
+  const url = request.url();
+  const shield = request.isNavigationRequest() ? shieldOf(runOf(scope), url) : null;
+  if (!shield) return false;
+  if (!scope.writes) {
+    if (!shield.touchesGuarded(url)) return false;
+    guard.blocked.push({ at: new Date().toISOString(), kind: "method", method: request.method(), url: url.slice(0, MAX_URL), resourceType: request.resourceType(), reasonNl: "deze sessie mag niet versturen, en een persoonlijke link openen telt als versturen" });
+    return true;
+  }
+  const link = shield.guardedId(url);
+  const refused = link ? claimLink(scope.writes, url, link, guard.sender) : null;
+  if (refused) guard.blocked.push({ at: new Date().toISOString(), kind: "method", method: request.method(), url: url.slice(0, MAX_URL), resourceType: request.resourceType(), reasonNl: refused.reasonNl, writeBudget: refused.budget });
+  return refused !== null;
 }
 
 /**
@@ -434,7 +492,7 @@ export async function guardRedirects(page: Page, scope: Scope, guard: Guard): Pr
       if (status >= 300 && status < 400 && location) {
         const target = new URL(location, event.request.url).href;
         leaves = !inScope(scope, target);
-        if (leaves) guard.blocked.push({ at: new Date().toISOString(), kind: "scope", method: "GET", url: `${target.slice(0, MAX_URL)} (doorverwijzing vanaf ${event.request.url.slice(0, 120)})`, resourceType: "document" });
+        if (leaves) guard.blocked.push({ at: new Date().toISOString(), kind: "scope", method: "GET", url: `${target.slice(0, MAX_URL)} (doorverwijzing vanaf ${event.request.url.slice(0, 120)})`, resourceType: "document", redirect: true });
       }
       const done = leaves ? cdp.send("Fetch.failRequest", { requestId: event.requestId, errorReason: "BlockedByClient" }) : cdp.send("Fetch.continueRequest", { requestId: event.requestId });
       done.catch(() => undefined);
@@ -469,13 +527,16 @@ export async function guardRedirectsByRoute(context: BrowserContext, scope: Scop
   await context.route("**/*", async (route) => {
     const request = route.request();
     if (!request.isNavigationRequest() || request.method() !== "GET" || !/^https?:/.test(request.url()) || !inScope(scope, request.url()) || logsOut(request.url())) return route.fallback();
+    // Left to `guardContext`, which passes it on: a redirect is then followed by the browser, and only has aliases to take along.
+    if (shieldOf(runOf(scope), request.url()) && !canFulfilRedirect(context)) return route.fallback();
+    if (linkRefused(scope, guard, request)) return route.fulfill({ status: 204, body: "" });
     try {
       const response = await route.fetch({ maxRedirects: 0 });
       const location = response.headers()["location"];
       if (response.status() >= 300 && response.status() < 400 && location) {
         const target = new URL(location, request.url()).href;
         if (!inScope(scope, target)) {
-          guard.blocked.push({ at: new Date().toISOString(), kind: "scope", method: "GET", url: `${target.slice(0, MAX_URL)} (doorverwijzing vanaf ${request.url().slice(0, 120)})`, resourceType: "document" });
+          guard.blocked.push({ at: new Date().toISOString(), kind: "scope", method: "GET", url: `${target.slice(0, MAX_URL)} (doorverwijzing vanaf ${request.url().slice(0, 120)})`, resourceType: "document", redirect: true });
           return await route.fulfill({ status: 204, body: "" });
         }
       }

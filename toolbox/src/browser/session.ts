@@ -2,15 +2,18 @@ import { fileURLToPath } from "node:url";
 import { chromium, type APIResponse, type Browser, type BrowserContext, type Page, type Request, type Response, type Route } from "playwright";
 import type { Crowd } from "../lib/atonce.ts";
 import { CLOUDFLARE_HEADER, isChallenge } from "../lib/challenge.ts";
-import { confirmLoginOn, LoginExpired, logsOut, runLoginMark, runLoginState, throwIfLoginExpired, watchLogin } from "../lib/login.ts";
+import { confirmLoginOn, LoginExpired, logsOut, registerSessionSecrets, runLoginMark, runLoginState, runOfLogin, sessionWithAliases, throwIfLoginExpired, watchLogin } from "../lib/login.ts";
+import { MAIL_ADDRESS_SOURCE } from "../lib/mailbox.ts";
 import { addressOf, noteRefusedRead, readDecision, readRuleFor, runReads, type ReadRequest } from "../lib/reads.ts";
-import { isWriteOrigin, runWrites, SocketFrames, type PassedWrite, type WriteAccess } from "../lib/writes.ts";
+import { claimLink, isWriteOrigin, runWrites, SocketFrames, type PassedWrite, type WriteAccess } from "../lib/writes.ts";
 import { LONGEST_FAILURE_PAUSE_SECONDS, OriginBlocked, runBlockade } from "../session/blockade.ts";
 import { MESSAGE_VALUES } from "../session/safety.ts";
 import { answerRefusalNl, httpRecordings, httpReplayNl, httpSendOf, keptHeaders, playRecording, socketRecordings, type HttpRecordings, type PassedReplay, type Recorder } from "../lib/recordings.ts";
+import { shieldForRun, type Shield } from "../lib/secrets.ts";
 import { readableFrame } from "./call.ts";
 import { refusedByBrowser, type ClipboardWrite } from "./clipboard.ts";
 import { frameAsPage } from "./frame.ts";
+import { boundaryForContext, markInsideBoundary, shieldedFetch, shieldOf } from "./boundary.ts";
 
 /** The read-only helper library that is injected into every page under test. */
 export const INPAGE_PATH = fileURLToPath(new URL("./inpage.js", import.meta.url));
@@ -46,6 +49,8 @@ export interface ContextOptions {
   reads?: readonly ReadRequest[];
   /** Start with these cookies and stored values instead of the session of the run: the watch on the session keeps the copy it began with. */
   storageState?: Awaited<ReturnType<BrowserContext["storageState"]>>;
+  /** The run this context belongs to, when the process does not know it otherwise: a session process. A run with secrets has its boundary around every context. */
+  runDir?: string;
 }
 
 /**
@@ -103,6 +108,9 @@ async function forward(route: Route, mayRepeat: (url: string) => boolean, mayFol
   }
 }
 
+/** WebKit refuses an answer with a redirect from a route. In a run with secrets the boundary does what the route is needed for there, so such a request is simply passed on. */
+export const canFulfilRedirect = (context: BrowserContext): boolean => context.browser()?.browserType().name() !== "webkit";
+
 export type WriteOutcome =
   | { kind: "sent"; entry: PassedWrite; repeated: PassedWrite | null }
   | { kind: "replayed"; replay: PassedReplay; noteNl: string }
@@ -120,7 +128,10 @@ export async function sendOrReplay(context: BrowserContext, route: Route, writes
   const method = request.method();
   const url = request.url();
   const recordings = httpRecordings(writes.runDir, writes.source);
-  const send = httpSendOf(bodyBufferOf(request), request.headers()["content-type"], MESSAGE_VALUES);
+  const shield = shieldOf(writes.runDir, url);
+  const body = bodyBufferOf(request);
+  // A form with the address of the run in it makes the site send a mail: that has to happen for real.
+  const send = shield?.mentions(body, MAIL_ADDRESS_SOURCE) ? null : httpSendOf(body, request.headers()["content-type"], MESSAGE_VALUES);
   const recording = send ? recordings.find(method, url, send) : null;
   if (recording) {
     // Answered here: nothing goes to the server, and no cookie of the recording is set.
@@ -133,14 +144,26 @@ export async function sendOrReplay(context: BrowserContext, route: Route, writes
     await (request.isNavigationRequest() ? route.fulfill({ status: 204, body: "" }) : route.abort("blockedbyclient")).catch(() => undefined);
     return { kind: "refused", budget: claim.budget, reasonNl: claim.reasonNl };
   }
+  if (shield && !canFulfilRedirect(context)) {
+    await route.continue().catch(() => undefined);
+    return { kind: "sent", entry: claim.entry, repeated: null };
+  }
   // What the browser asks for after a redirect does not pass the route: where it lands is watched from before it gets the answer.
   const landing = send ? watchLanding(context, request) : null;
   const at = Date.now();
   const { repeated, response } = await forward(route, (target) => isWriteOrigin(writes, target), options.mayFollow);
   const repeatedEntry = repeated ? writes.record(method, repeated, { repeat: true, sender: options.sender }) : null;
-  if (send && response && landing) void recordAnswer(recordings, { method, url, send, response, landing, origin: new URL(url).origin, sender: options.sender, at }).catch(() => landing.cancel());
+  if (send && response && landing) void recordAnswer(recordings, { method, url, send, response, landing, origin: new URL(url).origin, sender: options.sender, at, shield }).catch(() => landing.cancel());
   else landing?.cancel();
   return { kind: "sent", entry: claim.entry, repeated: repeatedEntry };
+}
+
+/** A GET or HEAD of the sweep in a run with secrets: a guarded address takes from the budget like any write. */
+async function openShielded(route: Route, shield: Shield, writes: WriteAccess, spaced: NavigationSpacing | null): Promise<void> {
+  const link = route.request().isNavigationRequest() ? shield.guardedId(route.request().url()) : null;
+  if (link && claimLink(writes, route.request().url(), link, undefined)) return void (await route.fulfill({ status: 204, body: "" }).catch(() => undefined));
+  if (spaced && loadsTab(route)) await spaced.before(route.request().url());
+  await route.continue().catch(() => undefined);
 }
 
 /** The body of a request as bytes, or null when it has none. */
@@ -200,7 +223,7 @@ function watchLanding(context: BrowserContext, sent: Request): LandingWatch {
  * which sets no cookie, would show another page. Such a recording is never played. A browser that did not
  * land in time leaves no recording: the next send is real.
  */
-async function recordAnswer(recordings: HttpRecordings, sent: { method: string; url: string; send: { key: string; bodySha256: string }; response: APIResponse; landing: LandingWatch; origin: string; sender: string | undefined; at: number }): Promise<void> {
+async function recordAnswer(recordings: HttpRecordings, sent: { method: string; url: string; send: { key: string; bodySha256: string }; response: APIResponse; landing: LandingWatch; origin: string; sender: string | undefined; at: number; shield: Shield | null }): Promise<void> {
   const { response, landing } = sent;
   const headers = response.headers();
   const body = await response.body();
@@ -210,21 +233,23 @@ async function recordAnswer(recordings: HttpRecordings, sent: { method: string; 
     const landed = await landing.landed;
     if (!landed) return;
     chain = await Promise.all(landed.hops.map(async (hop) => ({ url: hop.url(), status: hop === landed.response.request() ? landed.response.status() : ((await hop.response().catch(() => null))?.status() ?? 0) })));
-    refusedNl = await landingRefusalNl(landed, chain, sent.origin);
+    refusedNl = await landingRefusalNl(landed, chain, sent.origin, sent.shield);
   } else landing.cancel();
   recordings.record({ method: sent.method, url: sent.url, send: sent.send, answer: { status: response.status(), headers: keptHeaders(headers), base64: body.toString("base64") }, ...(chain ? { chain } : {}), refusedNl, sender: sent.sender, at: sent.at });
 }
 
 /** Why the page after a redirect makes the recording unplayable, in Dutch, or null when it does not. */
-async function landingRefusalNl(landed: Landing, chain: { url: string; status: number }[], origin: string): Promise<string | null> {
+async function landingRefusalNl(landed: Landing, chain: { url: string; status: number }[], origin: string, shield: Shield | null): Promise<string | null> {
   if (chain.some((hop) => new URL(hop.url).origin !== origin)) return "de doorverwijzing leidde buiten de testomgeving";
   const final = chain.at(-1)!;
   if (final.status < 200 || final.status >= 300) return `de pagina na de doorverwijzing antwoordde met ${final.status}`;
   const seen = await landed.body;
   if (!seen) return "de pagina na de doorverwijzing was niet te lezen";
+  // Asking once more would use up a link that works once, and nobody would know.
+  if (shield?.touchesGuarded(final.url)) return "de doorverwijzing leidt naar een persoonlijke link, en die wordt niet nog een keer gevraagd";
   try {
     // Once more, without any cookie: the page a replay leads to has to be the same without the session.
-    const fresh = await fetch(final.url, { redirect: "manual", signal: AbortSignal.timeout(10_000) });
+    const fresh = await shieldedFetch(shield, final.url, { redirect: "manual", signal: AbortSignal.timeout(10_000) });
     const freshBody = Buffer.from(await fresh.arrayBuffer());
     if (fresh.status !== final.status || !freshBody.equals(seen)) return "de pagina na de doorverwijzing ziet er zonder de cookies van de browser anders uit: ze hangt af van de sessie, of van een kenmerk dat per keer verandert";
   } catch {
@@ -311,8 +336,13 @@ export const answeredByCloudflare = (context: BrowserContext, host: string): boo
 export async function newContext(browser: Browser, options: ContextOptions = {}, guard?: WriteGuard): Promise<BrowserContext> {
   // A run with a login starts every context with the session a person left behind; any other run starts clean, as it did.
   const login = options.storageState ?? runLoginState();
+  const runDir = options.runDir ?? (options.writes ?? runWrites())?.runDir ?? runOfLogin() ?? undefined;
+  if (runDir !== undefined) registerSessionSecrets(runDir);
+  // Also a context that may not send has a boundary: what it gets from the site can hold the real values all the same.
+  const boundary = await boundaryForContext(browser, runDir);
   const context = await browser.newContext({
-    ...(login ? { storageState: login } : {}),
+    ...boundary,
+    ...(login ? { storageState: boundary.proxy ? sessionWithAliases(runDir!, login) : login } : {}),
     // The sites under test send a strict CSP; without this the engines cannot be injected.
     bypassCSP: true,
     viewport: options.viewport ?? RENDERING.viewport,
@@ -323,6 +353,7 @@ export async function newContext(browser: Browser, options: ContextOptions = {},
     colorScheme: options.colorScheme ?? "light",
     serviceWorkers: "block",
   });
+  if (boundary.proxy) await markInsideBoundary(context, runDir!, boundary.proxy);
   context.setDefaultNavigationTimeout(RENDERING.navigationTimeoutMs);
   const viaCloudflare = new Set<string>();
   cloudflareHosts.set(context, viaCloudflare);
@@ -348,9 +379,12 @@ export async function newContext(browser: Browser, options: ContextOptions = {},
   await context.route("**/*", (route) => {
     const method = route.request().method();
     // Logging out ends the session for everything that comes after: such a request never leaves, whatever its method. Nor does one to an origin that refused the evaluation.
-    if (logsOut(route.request().url()) || blockade?.blockade.refuses(route.request().url())) return route.request().isNavigationRequest() ? route.fulfill({ status: 204, body: "" }) : route.abort("blockedbyclient");
+    const personal = writes?.runDir !== undefined && shieldForRun(writes.runDir)?.touchesGuarded(route.request().url());
+    if ((logsOut(route.request().url()) && !personal) || blockade?.blockade.refuses(route.request().url())) return route.request().isNavigationRequest() ? route.fulfill({ status: 204, body: "" }) : route.abort("blockedbyclient");
     if (method === "GET" || method === "HEAD") {
       const spaced = spacing;
+      const shield = shieldOf(writes?.runDir, route.request().url());
+      if (shield) return openShielded(route, shield, writes!, spaced);
       if (spaced && loadsTab(route)) return spaced.before(route.request().url()).then(() => route.continue().catch(() => undefined));
       return route.continue();
     }

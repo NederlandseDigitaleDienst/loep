@@ -170,8 +170,8 @@ export function stopSessionWatch(runDir: string): SessionWatch | null {
 }
 
 /** Whether the session still holds, from a fresh context with the cookies the session file had: why not, or null. */
-async function sessionHolds(browser: Browser, state: LoginSession["storageState"], mark: LoginMark): Promise<string | null> {
-  const context = await newContext(browser, { storageState: state });
+async function sessionHolds(browser: Browser, runDir: string, state: LoginSession["storageState"], mark: LoginMark): Promise<string | null> {
+  const context = await newContext(browser, { storageState: state, runDir });
   try {
     return await landingFellBack(await context.newPage(), mark);
   } finally {
@@ -219,7 +219,7 @@ export async function watchSession(runDir: string, options: WatchOptions = {}): 
   let tab: BrowserContext | null = null;
   try {
     browser = await launchBrowser();
-    tab = await newContext(browser, { storageState: idle.storageState });
+    tab = await newContext(browser, { storageState: idle.storageState, runDir });
     await tab.addInitScript({ path: INPAGE_PATH });
     const page = await tab.newPage();
     const opened = await landingFellBack(page, mark);
@@ -258,7 +258,7 @@ export async function watchSession(runDir: string, options: WatchOptions = {}): 
       }
       let reason: string | null;
       try {
-        reason = await sessionHolds(browser, idle.storageState, mark);
+        reason = await sessionHolds(browser, runDir, idle.storageState, mark);
       } catch (error) {
         // The site did not answer: no word on the session. The next check comes after the next gap.
         process.stderr.write(`${new Date().toISOString()} nakijken lukte niet: ${(error as Error).message.split("\n")[0]}\n`);
@@ -270,7 +270,7 @@ export async function watchSession(runDir: string, options: WatchOptions = {}): 
       if (existsSync(join(runDir, LOGIN_SESSION_FILE))) {
         try {
           const main = readLoginFile(join(runDir, LOGIN_SESSION_FILE), siteOriginOfRun(runDir));
-          mainAlive = (await sessionHolds(browser, main.storageState, markOf(main))) === null;
+          mainAlive = (await sessionHolds(browser, runDir, main.storageState, markOf(main))) === null;
         } catch {
           mainAlive = null;
         }

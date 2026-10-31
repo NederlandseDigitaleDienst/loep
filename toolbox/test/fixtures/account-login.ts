@@ -3,7 +3,7 @@ import { join } from "node:path";
 import type { Page } from "playwright";
 import { ACCOUNT, SESSION_COOKIE } from "../../fixtures/account.ts";
 import { login, type LoggedIn } from "../../src/commands/login.ts";
-import { LOGIN_SESSION_FILE, type LoginSession } from "../../src/lib/login.ts";
+import { LOGIN_SESSION_FILE, RUN_SECRETS_FILE, type LoginSession } from "../../src/lib/login.ts";
 
 /**
  * Logging in on the fixture for a test. The code does here what a person does in the window
@@ -35,5 +35,5 @@ export function walk(dir: string): string[] {
   });
 }
 
-/** Every file of a run that holds the given text, apart from the session file itself. */
-export const filesHolding = (dir: string, text: string): string[] => walk(dir).filter((path) => !path.endsWith(LOGIN_SESSION_FILE) && readFileSync(path).includes(text));
+/** Every file of a run that holds the given text, apart from the two files that are there to hold it. */
+export const filesHolding = (dir: string, text: string): string[] => walk(dir).filter((path) => !path.endsWith(LOGIN_SESSION_FILE) && !path.endsWith(RUN_SECRETS_FILE) && readFileSync(path).includes(text));

@@ -9,6 +9,7 @@ import { RENDERING } from "../browser/session.ts";
 import { readJson, sha256, writeJson } from "./canonical.ts";
 import { underSeal } from "./seal.ts";
 import type { LoginMark } from "./login.ts";
+import type { MailboxMark } from "./mailbox.ts";
 import type { ReadRequest } from "./reads.ts";
 import type { WritePermission } from "./writes.ts";
 
@@ -39,6 +40,8 @@ export interface Manifest {
   writes?: WritePermission;
   /** Set by `login` when a person logged in for this run: the role and what tells a logged-in page from the login screen. Never the session itself. */
   login?: LoginMark;
+  /** Set with `--mailbox`: which kind, never its address or login. */
+  mailbox?: MailboxMark;
   /** Set by `check-site` when the site model names read requests: the POST requests, such as a question to a search service, that were let through. */
   reads?: ReadRequest[];
   /**
@@ -209,6 +212,7 @@ export async function writeManifest(runDir: string, step: Omit<ManifestStep, "at
     ...(previous?.tools ? { tools: previous.tools } : {}),
     ...(previous?.writes ? { writes: previous.writes } : {}),
     ...(previous?.login ? { login: previous.login } : {}),
+    ...(previous?.mailbox ? { mailbox: previous.mailbox } : {}),
     ...(previous?.reads ? { reads: previous.reads } : {}),
     ...(previous?.purpose ? { purpose: previous.purpose } : {}),
     ...(previous?.seed ? { seed: previous.seed } : step.command === "inventory" ? { seed: randomBytes(16).toString("hex") } : {}),

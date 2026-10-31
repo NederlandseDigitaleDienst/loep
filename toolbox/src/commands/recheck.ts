@@ -2,7 +2,7 @@ import { copyFileSync, cpSync, existsSync, mkdirSync, readdirSync, readFileSync,
 import { join, relative, resolve } from "node:path";
 import { pageLabels, readJson, sha256, sha256File, writeFileAtomic, writeJson } from "../lib/canonical.ts";
 import type { Evaluation, ReportFinding } from "../lib/evaluation.ts";
-import { agentLoginNl, LOGIN_SESSION_FILE, loginForRun } from "../lib/login.ts";
+import { agentLoginNl, LOGIN_SESSION_FILE, loginForRun, RUN_SECRETS_FILE } from "../lib/login.ts";
 import { stepStart, toolboxVersion, writeManifest } from "../lib/manifest.ts";
 import { loadAllProcedures } from "../lib/procedures.ts";
 import { readsForRun } from "../lib/reads.ts";
@@ -169,7 +169,8 @@ export async function recheck(runDir: string, what: { finding?: string | undefin
   for (const name of COPIED_FILES) if (existsSync(join(runDir, name))) copyFileSync(join(runDir, name), join(workspace, name));
   if (existsSync(join(runDir, "recipes"))) cpSync(join(runDir, "recipes"), join(workspace, "recipes"), { recursive: true });
   // The session of a person who logged in is used where it lies, never copied: it is a secret.
-  if (existsSync(join(runDir, LOGIN_SESSION_FILE))) symlinkSync(relative(workspace, resolve(runDir, LOGIN_SESSION_FILE)), join(workspace, LOGIN_SESSION_FILE));
+  // The secrets of the run hold here too: the same register, not a copy of it.
+  for (const name of [LOGIN_SESSION_FILE, RUN_SECRETS_FILE]) if (existsSync(join(runDir, name))) symlinkSync(relative(workspace, resolve(runDir, name)), join(workspace, name));
   const login = loginForRun(runDir);
   const reads = readsForRun(runDir);
   // Its own manifest: the toolbox of today, the login and the read requests of the run, and no permission to send.

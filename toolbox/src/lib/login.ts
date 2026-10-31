@@ -2,6 +2,9 @@ import { chmodSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync
 import { basename, dirname, join } from "node:path";
 import type { Page } from "playwright";
 import { readJson, writeJson } from "./canonical.ts";
+import { looksSecret } from "./mailparse.ts";
+import { siteOrigins } from "./origins.ts";
+import { registerSecrets, renewSecrets, shieldForRun, type NewSecret } from "./secrets.ts";
 import { isLocalHost, writeOriginsOf, writesForRun, type WritePermission } from "./writes.ts";
 
 /**
@@ -20,6 +23,8 @@ export const LOGIN_SESSION_FILE = "login-session.json";
  * same rules hold: outside the seal, readable for its owner only, never read by an agent.
  */
 export const IDLE_SESSION_FILE = "idle-session.json";
+/** The register of the secrets of a run, with the real values behind their aliases (see `secrets.ts`). */
+export const RUN_SECRETS_FILE = "secrets.json";
 const SCHEMA = "loep/login-session/1";
 
 /** Cookies and stored values the way Playwright keeps them (`storageState`). */
@@ -48,7 +53,7 @@ export interface LoginSession extends LoginMark {
 
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
 
-const originOf = (address: unknown): string | null => {
+export const originOf = (address: unknown): string | null => {
   try {
     const url = new URL(String(address));
     return url.protocol === "http:" || url.protocol === "https:" ? url.origin : null;
@@ -57,10 +62,10 @@ const originOf = (address: unknown): string | null => {
   }
 };
 
-/** Whether a cookie is sent to a host: the host itself or a domain above it. */
-const cookieFits = (domain: string, hostname: string): boolean => {
-  const bare = domain.replace(/^\./, "").toLowerCase();
-  return hostname.toLowerCase() === bare || hostname.toLowerCase().endsWith(`.${bare}`);
+/** Whether a cookie is sent to a host. As Playwright keeps a cookie: with a dot it is for a domain and what lies under it, without one for that host alone. */
+export const cookieFits = (domain: string, hostname: string): boolean => {
+  const [named, host] = [domain.toLowerCase(), hostname.toLowerCase()];
+  return named.startsWith(".") ? host === named.slice(1) || host.endsWith(named) : host === named;
 };
 
 /**
@@ -95,17 +100,19 @@ export const markOf = (session: LoginMark): LoginMark => ({ origin: session.orig
 
 /** The files of a run that hold a secret. Never in a commit, a task for an agent or a message. */
 export const SECRET_FILES: readonly string[] = [LOGIN_SESSION_FILE, IDLE_SESSION_FILE];
+/** And with the register: every file of a run that holds real values on purpose. */
+export const ALL_SECRET_FILES: readonly string[] = [...SECRET_FILES, RUN_SECRETS_FILE];
 
 /**
  * Put a `.gitignore` in the run that keeps its secret files out of git, for whoever keeps the
  * run in a repository. A line that is missing is added; what is there stays, so a run that is
  * already sealed does not change when nothing is missing.
  */
-export function ignoreSecrets(runDir: string): void {
+export function ignoreSecrets(runDir: string, names: readonly string[] = SECRET_FILES): void {
   const path = join(runDir, ".gitignore");
   const existing = existsSync(path) ? readFileSync(path, "utf8") : "";
   const lines = new Set(existing.split("\n").map((line) => line.trim().replace(/^\//, "")));
-  const missing = SECRET_FILES.filter((name) => !lines.has(name));
+  const missing = names.filter((name) => !lines.has(name));
   if (missing.length === 0) return;
   mkdirSync(runDir, { recursive: true });
   const lead = existing === "" ? "# Sessiebestanden van een inlog: wie ze heeft, is ingelogd. Nooit in een commit.\n" : existing.endsWith("\n") ? "" : "\n";
@@ -147,6 +154,94 @@ export function siteOriginOfRun(runDir: string): string | null {
   const path = join(runDir, "inventory.json");
   return existsSync(path) ? ((JSON.parse(readFileSync(path, "utf8")) as { origin?: string }).origin ?? null) : null;
 }
+
+/** Every origin a run is about, as `inventory` fixed them. */
+export function siteOriginsOfRun(runDir: string): string[] {
+  const path = join(runDir, "inventory.json");
+  return existsSync(path) ? siteOrigins(JSON.parse(readFileSync(path, "utf8")) as Parameters<typeof siteOrigins>[0]) : [];
+}
+
+// ---- A session as a secret ----------------------------------------------------------------------------------------
+
+export const SESSION_COOKIE_SOURCE = "sessie-cookie";
+export const SESSION_STORAGE_SOURCE = "sessie-opslag";
+
+/** The strings in a stored value that may be a token. A JSON value keeps its shape, so a page can still read it. */
+function storedSecrets(value: string): string[] {
+  try {
+    const parsed: unknown = JSON.parse(value);
+    if (typeof parsed === "object" && parsed !== null) {
+      const leaves = (node: unknown): string[] => (typeof node === "string" ? [node] : typeof node === "object" && node !== null ? Object.values(node).flatMap(leaves) : []);
+      return leaves(parsed).filter(looksSecret);
+    }
+  } catch {
+    // No JSON: the value as a whole.
+  }
+  return looksSecret(value) ? [value] : [];
+}
+
+/**
+ * What may go where. A cookie goes where a browser sends it, and no further. A stored value has no
+ * address of its own: a script sends it, also to a service on another origin, so it goes to the origins
+ * of the run as well. A request to any other origin is held back by the scope of the run already.
+ */
+function sessionSecrets(state: StorageState, siteOrigins: readonly string[]): NewSecret[] {
+  return [
+    ...state.cookies.filter((cookie) => looksSecret(cookie.value)).map((cookie): NewSecret => ({ value: cookie.value, source: SESSION_COOKIE_SOURCE, origins: [], domains: [cookie.domain], ...(cookie.secure ? { secure: true } : {}) })),
+    ...state.origins.flatMap((entry) => entry.localStorage.flatMap((item) => storedSecrets(item.value).map((value): NewSecret => ({ value, source: SESSION_STORAGE_SOURCE, origins: [...new Set([entry.origin, ...siteOrigins])] })))),
+  ];
+}
+
+/**
+ * Put the values of the sessions of a run in the register, so that a session is no more than any other
+ * secret: what was noted about it holds for every value, whatever the source. Done again for each
+ * context, also for a run that was made before this existed. A run without a session stays one without
+ * secrets.
+ */
+export function registerSessionSecrets(runDir: string): void {
+  for (const name of [LOGIN_SESSION_FILE, IDLE_SESSION_FILE]) {
+    const path = join(runDir, name);
+    if (!existsSync(path)) continue;
+    const session = JSON.parse(readFileSync(path, "utf8")) as Partial<LoginSession>;
+    // A file that cannot be used says so where it is read for use.
+    if (session.storageState?.cookies && session.storageState.origins && session.origin) registerSecrets(runDir, sessionSecrets(session.storageState, siteOriginsOfRun(runDir)));
+  }
+}
+
+/** A session in which every value is its alias. A browser of a run starts with this; the boundary fills in the real values towards the site. */
+export function sessionWithAliases(runDir: string, state: StorageState): StorageState {
+  const shield = shieldForRun(runDir);
+  if (!shield) return state;
+  return {
+    cookies: state.cookies.map((cookie) => ({ ...cookie, value: shield.inward(cookie.value) })),
+    origins: state.origins.map((entry) => ({ ...entry, localStorage: entry.localStorage.map((item) => ({ ...item, value: shield.inward(item.value) })) })),
+  };
+}
+
+/**
+ * A site renews a session as it likes, some with every answer: in a run with a session what looks like
+ * a token in a `Set-Cookie` is a secret from now on, before the browser gets it. It takes the place of
+ * the value the cookie had in this browser context, so the register does not grow with every answer. A
+ * place is per context: two contexts each have a session of their own, and sharing an alias would
+ * send the value of one from the other. The attributes of the cookie say how far the value may go.
+ */
+export function renewSessionSecrets(runDir: string, headers: { "set-cookie"?: string | string[] | undefined }, url: URL, context: string): void {
+  const cookies = [headers["set-cookie"] ?? []].flat();
+  if (cookies.length === 0 || !shieldForRun(runDir)?.hasSource(SESSION_COOKIE_SOURCE)) return;
+  renewSecrets(
+    runDir,
+    cookies.flatMap((cookie) => {
+      const [, name, value = ""] = /^([^=;]+)=([^;]*)/.exec(cookie) ?? [];
+      const domain = /;\s*domain=([^;]+)/i.exec(cookie)?.[1]?.trim().replace(/^\./, "");
+      const path = /;\s*path=([^;]*)/i.exec(cookie)?.[1]?.trim() ?? "/";
+      const reach = domain ? `.${domain}` : url.hostname.replace(/^\[|\]$/g, "");
+      return name && looksSecret(value) ? [{ value, source: SESSION_COOKIE_SOURCE, origins: [], domains: [reach], ...(/;\s*secure\s*(?:;|$)/i.test(cookie) ? { secure: true } : {}), slot: `cookie ${context} ${reach} ${path} ${name.trim()}`, context }] : [];
+    }),
+  );
+}
+
+/** The run the login of this process is for. */
+export const runOfLogin = (): string | null => current?.runDir ?? null;
 
 /** Put a session in a run: the secret in its own file, what may be told in the manifest. */
 export async function storeLoginSession(runDir: string, session: LoginSession): Promise<void> {
@@ -191,6 +286,9 @@ export const NOT_LOGGED_IN_NL = "Er is niet ingelogd. Wat achter een inlog staat
 
 const LOGOUT_WORDS = /(?:^|[^\p{L}])(uitloggen|uitlog|log[ -]?uit|afmelden|meld (?:je|u) af|log[ -]?out|log[ -]?off|sign[ -]?out|sign[ -]?off)(?:$|[^\p{L}])/iu;
 const LOGOUT_IN_ADDRESS = /(?:^|[^a-z])(log[-_]?out|sign[-_]?out|log[-_]?off|sign[-_]?off|uitloggen|uitlog|afmelden)(?:$|[^a-z])/i;
+/** The same without `afmelden`, which in Dutch is also how a person leaves a mailing list. */
+const ONLY_LOGOUT_WORDS = /(?:^|[^\p{L}])(uitloggen|uitlog|log[ -]?uit|log[ -]?out|log[ -]?off|sign[ -]?out|sign[ -]?off)(?:$|[^\p{L}])/iu;
+const ONLY_LOGOUT_IN_ADDRESS = /(?:^|[^a-z])(log[-_]?out|sign[-_]?out|log[-_]?off|sign[-_]?off|uitloggen|uitlog)(?:$|[^a-z])/i;
 /** A longer name is a sentence about logging out, such as a question in a list, not the control that does it. */
 export const MAX_LOGOUT_NAME = 40;
 
@@ -212,6 +310,13 @@ export function isLogout(control: { href?: string | null; text?: string | null }
     return false;
   }
 }
+
+/** Whether a control can only be for logging out: not when `afmelden` is all that says so. */
+export const onlyLogsOut = (control: { href?: string | null; text?: string | null }): boolean => ONLY_LOGOUT_WORDS.test((control.text ?? "").replace(/\s+/g, " ")) || ONLY_LOGOUT_IN_ADDRESS.test(control.href ?? "");
+
+/** Whether a page is where a person logs in: by its address, or by the password field it shows. */
+const LOGIN_IN_ADDRESS = /(?:^|[^a-z])(log[-_]?in|sign[-_]?in|inloggen|inlog|sso)(?:$|[^a-z])/i;
+export const isLoginPath = (path: string): boolean => LOGIN_IN_ADDRESS.test(path);
 
 export const LOGOUT_REFUSED_NL = "dit logt uit, en de run is ingelogd: het is niet gedaan. Uitloggen beëindigt de sessie voor alles wat hierna komt";
 
