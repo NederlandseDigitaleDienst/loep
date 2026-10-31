@@ -125,12 +125,14 @@ const noAnswer = (route: Route, whyNl: string): Promise<void> => route.fulfill({
 
 /**
  * Give the browser the answer that was fetched for a route. WebKit refuses a redirect there
- * (`Cannot fulfill with redirect status`), so a navigation gets a page that sends it on, and goes
- * through the route again, and anything else gets the end of the redirect, fetched here. A write that
+ * (`Cannot fulfill with redirect status`), and what Firefox follows from there passes no route, so
+ * a step past the first would go unseen. So in both a navigation gets a page that sends it on, and goes
+ * through the route again, and anything else gets the end of the redirect, fetched here. Chromium is
+ * watched at each step by its protocol session. A write that
  * keeps its method is repeated here too, once.
  */
 export async function fulfillAnswer(route: Route, response: APIResponse, context: BrowserContext, mayFollow: (url: string) => boolean = () => true): Promise<void> {
-  if (context.browser()?.browserType().name() !== "webkit") return route.fulfill({ response });
+  if (context.browser()?.browserType().name() === "chromium") return route.fulfill({ response });
   const request = route.request();
   const status = response.status();
   if (status < 300 || status >= 400) {
@@ -143,12 +145,14 @@ export async function fulfillAnswer(route: Route, response: APIResponse, context
     return route.fulfill({ response: await route.fetch({ headers, maxRedirects: 0, timeout: RENDERING.navigationTimeoutMs }) });
   }
   const location = response.headers()["location"];
-  if (location === undefined || !REDIRECTS.has(status)) return noAnswer(route, `de site antwoordde met ${status}, en dat kan WebKit via de route niet krijgen`);
+  if (location === undefined || !REDIRECTS.has(status)) return noAnswer(route, `de site antwoordde met ${status}, en dat kan de browser via de route niet krijgen`);
   const target = new URL(location, request.url());
   if (!/^https?:$/.test(target.protocol)) return noAnswer(route, "de site stuurde door naar een adres dat geen webadres is");
   target.hash ||= new URL(request.url()).hash;
   const safe = request.method() === "GET" || request.method() === "HEAD";
   const repeats = !safe && (status === 307 || status === 308);
+  // Firefox repeats a request itself, and a route can do that for no one: that one step it takes as it comes.
+  if (repeats && context.browser()?.browserType().name() === "firefox") return route.fulfill({ response });
   if (request.isNavigationRequest() && !repeats) {
     const pages = (onwardPages.get(context) ?? 0) + 1;
     onwardPages.set(context, pages);
@@ -724,7 +728,7 @@ export class PageContexts {
  * A page that does not answer within `SETTLE_ANSWER_MS` throws a `PageBusy`; the caller closes it.
  */
 export async function settlePage(page: Page): Promise<void> {
-  if (page.context().browser()?.browserType().name() === "webkit") await passOnwardPage(page, SETTLE_ANSWER_MS);
+  if (page.context().browser()?.browserType().name() !== "chromium") await passOnwardPage(page, SETTLE_ANSWER_MS);
   await page.waitForLoadState("networkidle", { timeout: RENDERING.settleTimeoutMs }).catch(() => undefined);
   const settled = page
     .evaluate(async (timeout) => {
