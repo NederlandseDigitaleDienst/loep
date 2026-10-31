@@ -436,6 +436,35 @@ export const usedLinks = (runDir: string): Set<string> => new Set(readLog(runDir
 const LOCK = "writes.lock";
 /** A lock older than this was left behind by a process that stopped while it held it. */
 const STALE_LOCK_MS = 10_000;
+/** The same for work that waits for a server: it holds the lock longer, and others wait without stopping their process. */
+const STALE_ASYNC_LOCK_MS = 120_000;
+const ASYNC_LOCK_POLL_MS = 25;
+
+/** A lock like `withLock` around work that awaits something. */
+export async function withAsyncLock<T>(runDir: string, name: string, work: () => Promise<T>): Promise<T> {
+  const path = join(runDir, name);
+  for (;;) {
+    try {
+      mkdirSync(path);
+      break;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+      let age = 0;
+      try {
+        age = Date.now() - statSync(path).mtimeMs;
+      } catch {
+        // Gone in between: try again at once.
+      }
+      if (age > STALE_ASYNC_LOCK_MS) rmSync(path, { recursive: true, force: true });
+      else await new Promise((resolve) => setTimeout(resolve, ASYNC_LOCK_POLL_MS));
+    }
+  }
+  try {
+    return await work();
+  } finally {
+    rmSync(path, { recursive: true, force: true });
+  }
+}
 
 /**
  * Hold the lock on the log of writes of a run while `work` runs. The sessions of a run share one

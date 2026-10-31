@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { createServer as createTcpServer, type AddressInfo, type Socket } from "node:net";
 import { tmpdir } from "node:os";
@@ -156,11 +156,12 @@ test("a link is named by the words in its path", () => {
 
 // ---- The interface -----------------------------------------------------------------------------------------------------
 
-const memoryBox = (mails: RawMail[]): Mailbox & { removed: string[] } => {
+const memoryBox = (mails: RawMail[]): Mailbox & { removed: string[]; mails: RawMail[] } => {
   const removed: string[] = [];
   return {
     kind: "mailpit",
     removed,
+    mails,
     fetch: async () => mails.filter((mail) => !removed.includes(mail.id)),
     remove: async (ids) => {
       removed.push(...ids);
@@ -439,6 +440,17 @@ const handler = (request: IncomingMessage, response: ServerResponse): void => {
       response.writeHead(303, { location: "/verlopen/" }).end();
       return;
     }
+    // A confirmation: only a page with a button once it was opened. Whoever opens it turns the registration on.
+    if (url.pathname === "/bevestigen/") return html(`<h1>Bevestigd</h1><form method="post" action="/voorkeuren/?token=${TOKEN}"><button>Verwijder alles</button></form>`);
+    // A press the site takes in without anything to show for it.
+    if (url.pathname === "/voorkeuren/blijft/" && request.method === "POST") return html(`<h1>Bedankt</h1><form method="post" action="/voorkeuren/blijft/?token=${TOKEN}"><button>Verwijder alles</button></form>`);
+    if (url.pathname === "/voorkeuren/blijft/") return html(`<h1>Blijft</h1><form method="post" action="/voorkeuren/blijft/?token=${TOKEN}"><button>Verwijder alles</button></form>`);
+    // A press that leads out of the scope.
+    if (url.pathname === "/voorkeuren/weg/" && request.method === "POST") {
+      response.writeHead(303, { location: "https://www.andere-site.example/klaar/" }).end();
+      return;
+    }
+    if (url.pathname === "/voorkeuren/weg/") return html(`<h1>Weg</h1><form method="post" action="/voorkeuren/weg/?token=${TOKEN}"><button>Verwijder alles</button></form>`);
     if (url.pathname === "/voorkeuren/" && request.method === "POST") {
       registered = false;
       response.writeHead(303, { location: "/klaar/" }).end();
@@ -850,6 +862,119 @@ test("3: a mail that cannot be read stays where it is, the report says so, and r
     assert.equal(second.complete, true, "the promise that it can be run again");
   } finally {
     process.stderr.write = errors;
+    rmSync(run, { recursive: true, force: true });
+  }
+});
+
+test("a confirmation link the run never used stays closed: opening it would turn on what the cleanup has to remove", async () => {
+  const run = await mailboxRun(origin);
+  const box = memoryBox([mailFor(`${origin}/bevestigen/?token=${TOKEN}`)]);
+  try {
+    await mailWait(run, { mailbox: box });
+    const cleanup = await mailCleanup(run, { mailbox: box, browser, settleMs: 0 });
+    assert.deepEqual(seen.filter((request) => request.url.startsWith("/bevestigen/")), [], "the site never got the link");
+    assert.equal(cleanup.site.outcome, "mislukt");
+    assert.match(cleanup.site.noteNl, /nooit bevestigd/);
+    assert.equal(cleanup.complete, false);
+  } finally {
+    rmSync(run, { recursive: true, force: true });
+  }
+});
+
+test("a confirmation link the run did use is opened again, and leads to the button", async () => {
+  const run = await mailboxRun(origin);
+  const box = memoryBox([mailFor(`${origin}/bevestigen/?token=${TOKEN}`)]);
+  const session = await sessionOn(run);
+  try {
+    const { links } = await mailWait(run, { mailbox: box });
+    await loadPage(session.page, links[0]!.url);
+    await session.close();
+    const cleanup = await mailCleanup(run, { mailbox: box, browser, settleMs: 0 });
+    assert.equal(cleanup.site.outcome, "verwijderd", cleanup.site.noteNl);
+    assert.equal(registered, false);
+  } finally {
+    rmSync(run, { recursive: true, force: true });
+  }
+});
+
+test("once the site was asked, no later cleanup opens a link that came after that, whatever the outcome said", async () => {
+  const run = await mailboxRun(origin);
+  const box = memoryBox([mailFor(`${origin}/voorkeuren/blijft/?token=${TOKEN}`)]);
+  try {
+    await mailWait(run, { mailbox: box });
+    const first = await mailCleanup(run, { mailbox: box, browser, settleMs: 0 });
+    assert.equal(first.site.outcome, "niet aangetoond", first.site.noteNl);
+    const asked = seen.filter((request) => request.method === "POST").length;
+    assert.equal(asked, 1);
+    // The goodbye mail, with a link that signs up again.
+    box.mails.push(mailFor(`${origin}/voorkeuren/opnieuw/?token=${TOKEN}`));
+    await mailCleanup(run, { mailbox: box, browser, settleMs: 0 });
+    assert.equal(readMailboxState(run)!.links.length, 2, "it is read, as any mail is");
+    assert.deepEqual(seen.filter((request) => request.url.includes("opnieuw")), [], "and never opened");
+  } finally {
+    rmSync(run, { recursive: true, force: true });
+  }
+});
+
+test("a press that reached the site is no failure to ask it, also when the page after it was held back", async () => {
+  const run = await mailboxRun(origin);
+  const box = memoryBox([mailFor(`${origin}/voorkeuren/weg/?token=${TOKEN}`)]);
+  try {
+    await mailWait(run, { mailbox: box });
+    const cleanup = await mailCleanup(run, { mailbox: box, browser, settleMs: 0 });
+    assert.equal(seen.filter((request) => request.method === "POST").length, 1, "the site got it");
+    assert.equal(cleanup.site.outcome, "niet aangetoond", cleanup.site.noteNl);
+    assert.doesNotMatch(cleanup.site.noteNl, /niet gevraagd/);
+    assert.equal(readMailboxState(run)!.askedLinks, 1);
+  } finally {
+    rmSync(run, { recursive: true, force: true });
+  }
+});
+
+test("a budget that holds the press back leaves the site unasked, so a later link may still try", async () => {
+  const run = await mailboxRun(origin, { maxWrites: 1 });
+  const box = memoryBox([mailFor(`${origin}/voorkeuren/?token=${TOKEN}`)]);
+  try {
+    await mailWait(run, { mailbox: box });
+    const cleanup = await mailCleanup(run, { mailbox: box, browser, settleMs: 0 });
+    assert.equal(cleanup.site.outcome, "mislukt", cleanup.site.noteNl);
+    assert.match(cleanup.site.noteNl, /niet gevraagd/);
+    assert.equal(readMailboxState(run)!.askedLinks, undefined);
+  } finally {
+    rmSync(run, { recursive: true, force: true });
+  }
+});
+
+test("two waits at once lose nothing: each link has its own number, and each is guarded", async () => {
+  const run = await mailboxRun(origin);
+  const [one, other] = [mailFor(`${origin}/voorkeuren/?token=${TOKEN}`), mailFor(`${origin}/voorkeuren/?token=${TOKEN}b`)];
+  const box = memoryBox([]);
+  let looks = 0;
+  // Each wait sees a mail of its own and then finds the other one gone from the list: as two processes do.
+  const shared: Mailbox = { ...box, fetch: async () => [++looks % 2 === 0 ? one : other] };
+  try {
+    await Promise.all([mailWait(run, { mailbox: shared }), mailWait(run, { mailbox: shared })]);
+    const state = readMailboxState(run)!;
+    assert.deepEqual(state.links.map((link) => link.id).sort(), ["L1", "L2"]);
+    const shield = shieldForRun(run)!;
+    for (const link of state.links) assert.equal(shield.guardedId(link.url), link.id);
+  } finally {
+    rmSync(run, { recursive: true, force: true });
+  }
+});
+
+test("a run with a file that could not be searched is not called clean", async () => {
+  const run = await mailboxRun(origin);
+  const box = memoryBox([mailFor(`${origin}/voorkeuren/?token=${TOKEN}`)]);
+  writeFileSync(join(run, "dicht.txt"), "x");
+  chmodSync(join(run, "dicht.txt"), 0o000);
+  try {
+    await mailWait(run, { mailbox: box });
+    const cleanup = await mailCleanup(run, { mailbox: box, browser, settleMs: 0 });
+    assert.equal(cleanup.complete, false);
+    assert.match(cleanup.scan.noteNl ?? "", /dicht\.txt/);
+  } finally {
+    chmodSync(join(run, "dicht.txt"), 0o600);
     rmSync(run, { recursive: true, force: true });
   }
 });

@@ -239,6 +239,12 @@ export interface MailboxState {
   links: MailboxLink[];
   /** Origins of links in a mail that are no part of the permission: never followed. */
   refusedOrigins: string[];
+  /**
+   * How many links there were when the site was asked to remove the registration. Noted before it is
+   * asked, so also a run that broke off right then keeps to it: what came in later is read, and never
+   * opened, because a site says goodbye with a mail that can hold a link that registers anew.
+   */
+  askedLinks?: number;
   cleanup?: MailboxCleanup;
 }
 

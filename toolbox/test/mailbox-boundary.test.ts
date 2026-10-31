@@ -763,11 +763,11 @@ test("8: a link held back for the time between two writes is tried again after t
       return send(303, "", { location: "/klaar" });
     }
     if (url.pathname === "/klaar") return send(200, "<h1>Klaar</h1>");
-    if (url.pathname === "/een") return send(200, "<h1>Niets te doen</h1>");
+    if (url.pathname === "/voorkeuren/een") return send(200, "<h1>Niets te doen</h1>");
     return gone ? send(404, "<h1>Weg</h1>") : send(200, BUTTON("x"));
   });
   const run = await mailboxRun(site.origin, { spacingSeconds: 2 });
-  const box = memoryBox([mailOf(`Link: ${site.origin}/een?token=${TOKEN.slice(0, 20)}abc\nLink: ${site.origin}/twee?token=${TOKEN.slice(0, 20)}def\n`)]);
+  const box = memoryBox([mailOf(`Link: ${site.origin}/voorkeuren/een?token=${TOKEN.slice(0, 20)}abc\nLink: ${site.origin}/voorkeuren/twee?token=${TOKEN.slice(0, 20)}def\n`)]);
   try {
     await mailWait(run, { mailbox: box });
     const cleanup = await mailCleanup(run, { mailbox: box, browser: await launched("chromium"), settleMs: 0 });
@@ -783,7 +783,7 @@ test("8: a link held back for the time between two writes is tried again after t
 test("8: a link the budget refuses says that, and is no failure of the browser", async () => {
   const site = await scriptedSite((_url, _method, send) => send(200, "<h1>Pagina</h1>"));
   const run = await mailboxRun(site.origin, { maxWrites: 1 });
-  const box = memoryBox([mailOf(`Link: ${site.origin}/een?token=${TOKEN.slice(0, 20)}abc\nLink: ${site.origin}/twee?token=${TOKEN.slice(0, 20)}def\n`)]);
+  const box = memoryBox([mailOf(`Link: ${site.origin}/voorkeuren/een?token=${TOKEN.slice(0, 20)}abc\nLink: ${site.origin}/voorkeuren/twee?token=${TOKEN.slice(0, 20)}def\n`)]);
   try {
     await mailWait(run, { mailbox: box });
     const cleanup = await mailCleanup(run, { mailbox: box, browser: await launched("chromium"), settleMs: 0 });
@@ -864,7 +864,7 @@ test("11: a run without a mailbox is not read again for a seal", () => {
   const run = mkdtempSync(join(tmpdir(), "loep-grens-"));
   try {
     writeFileSync(join(run, "groot.bin"), Buffer.alloc(1000));
-    assert.deepEqual(scanRun(run), { files: 0, bytes: 0, hits: [], compressed: 0 });
+    assert.deepEqual(scanRun(run), { files: 0, bytes: 0, hits: [], compressed: 0, unread: [] });
     assert.equal(existsSync(join(run, RUN_SECRETS_FILE)), false);
   } finally {
     rmSync(run, { recursive: true, force: true });
