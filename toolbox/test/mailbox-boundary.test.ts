@@ -21,7 +21,7 @@ import { imapMailbox } from "../src/lib/mailbox-imap.ts";
 import { MAIL_ADDRESS_SOURCE, MAIL_LINK_SOURCE, mailboxLimitationsNl, readMailboxState, recordMailbox, type Mailbox, type RawMail } from "../src/lib/mailbox.ts";
 import { parseMail } from "../src/lib/mailparse.ts";
 import { aliasFor, readSecretEvents, readSecretsFile, scanRun, Shield } from "../src/lib/secrets.ts";
-import { decideWrites, recordWrites, runWrites, type WritePermission } from "../src/lib/writes.ts";
+import { decideWrites, recordWrites, runWrites, type WritePermission, isThisMachine } from "../src/lib/writes.ts";
 import { DEFAULT_DAEMON_LIMITS, guardContext, guardRedirects, guardRedirectsByRoute, Politeness, scopeForRun, TEST_VALUES, type Guard } from "../src/session/safety.ts";
 import { SecondBrowsers } from "../src/session/second.ts";
 import { openSurface, type Env } from "../src/session/surface.ts";
@@ -392,15 +392,15 @@ for (const name of BROWSERS) {
             form.submit();
           }, TEST_VALUES.email!);
           // WebKit takes no redirect from a route: the page of the target stands on the old address.
-          if (name === "webkit") await session.page.waitForLoadState("networkidle");
-          else await session.page.waitForURL(/post-daarna/);
+          if (name !== "webkit") await session.page.waitForURL(/post-daarna/);
+          else await session.page.waitForFunction(() => document.querySelector("form") === null);
           const repeated = site.heard.filter((request) => request.url === "/post-daarna" && request.method === "POST");
           assert.equal(repeated.length, 1);
           assert.equal(new URLSearchParams(repeated[0]!.body).get("email"), ADDRESS, "the repeat carries the real address");
         });
 
         // On this machine WebKit keeps a socket closed; that has a test of its own.
-        await t.test("a socket: the real values go out, and a token cut in two over two frames comes back as an alias", { skip: name === "webkit" && site.origin.startsWith("http://127.") }, async () => {
+        await t.test("a socket: the real values go out, and a token cut in two over two frames comes back as an alias", { skip: name === "webkit" && isThisMachine(new URL(site.origin).hostname) }, async () => {
           const reply = await session.page.evaluate(
             ({ scheme, email, code }) =>
               new Promise<string>((resolve, reject) => {
@@ -494,7 +494,7 @@ test("7: a link that works once is no proof that the registration is gone", asyn
     // The first opening shows the button; from then on the link is used, and nothing is removed by that.
     return opened++ === 0 ? send(200, BUTTON(SPELLED)) : send(303, "", { location: "/verlopen" });
   });
-  assert.equal(cleanup.site.outcome, "niet aangetoond", cleanup.site.noteNl);
+  assert.equal(cleanup.site.outcome, "not shown", cleanup.site.noteNl);
   assert.match(cleanup.site.noteNl, /twee keer hetzelfde/);
   rmSync(run, { recursive: true, force: true });
 });
@@ -511,7 +511,7 @@ test("7: a registration that answers 404 on the same address afterwards is gone"
       if (url.pathname === "/klaar") return send(200, "<h1>Klaar</h1>");
       return gone ? send(status, "<h1>Weg</h1>") : send(200, BUTTON(SPELLED));
     });
-    assert.equal(cleanup.site.outcome, "verwijderd", String(status));
+    assert.equal(cleanup.site.outcome, "removed", String(status));
     assert.match(cleanup.site.noteNl, new RegExp(String(status)));
     rmSync(run, { recursive: true, force: true });
   }
@@ -528,7 +528,7 @@ test("7: a redirect that was held back says nothing about the site", async () =>
     // The server wants the browser out of the scope: the guard holds that back, and the page stays where it was.
     return gone ? send(302, "", { location: `${otherOrigin}/buiten` }) : send(200, BUTTON(SPELLED));
   });
-  assert.equal(cleanup.site.outcome, "niet aangetoond", cleanup.site.noteNl);
+  assert.equal(cleanup.site.outcome, "not shown", cleanup.site.noteNl);
   assert.match(cleanup.site.noteNl, /tegengehouden/);
   assert.equal(otherHeard.length, 0);
   rmSync(run, { recursive: true, force: true });
@@ -552,7 +552,7 @@ test("4: a button that logs out is left alone, also at an address that says noth
   });
   rmSync(run, { recursive: true, force: true });
   assert.deepEqual(posted, ["/voorkeuren"]);
-  assert.equal(cleanup.site.outcome, "verwijderd", cleanup.site.noteNl);
+  assert.equal(cleanup.site.outcome, "removed", cleanup.site.noteNl);
 });
 
 for (const [name, chrome] of [
@@ -575,7 +575,7 @@ for (const [name, chrome] of [
     });
     rmSync(run, { recursive: true, force: true });
     assert.deepEqual(posted, ["/voorkeuren"]);
-    assert.equal(cleanup.site.outcome, "verwijderd", cleanup.site.noteNl);
+    assert.equal(cleanup.site.outcome, "removed", cleanup.site.noteNl);
   });
 }
 
@@ -603,7 +603,7 @@ test("4: a page with only a logout is no place to press anything", async () => {
   });
   rmSync(run, { recursive: true, force: true });
   assert.deepEqual(posted, []);
-  assert.equal(cleanup.site.outcome, "mislukt");
+  assert.equal(cleanup.site.outcome, "failed");
   assert.match(cleanup.site.noteNl, /geen knop gevonden/);
 });
 
@@ -623,7 +623,7 @@ for (const [name, login, content] of [
       send(200, `<main><h1>Voorkeuren</h1><form method="post" action="/sessie/einde"><button>Afmelden</button></form></main>`);
     });
     rmSync(run, { recursive: true, force: true });
-    assert.equal(cleanup.site.outcome, "niet aangetoond", cleanup.site.noteNl);
+    assert.equal(cleanup.site.outcome, "not shown", cleanup.site.noteNl);
     assert.equal(cleanup.complete, false);
   });
 }
@@ -634,14 +634,14 @@ test("9: a browser that does not start leaves an outcome, and the mail, the sear
   const box = memoryBox([mailOf(`Je link: ${site.origin}/voorkeuren?token=${SPELLED}\n`)]);
   try {
     const cleanup = await mailCleanup(run, { mailbox: box, launch: () => Promise.reject(new Error("browser start niet\nmet meer regels")), settleMs: 0 });
-    assert.equal(cleanup.site.outcome, "mislukt");
+    assert.equal(cleanup.site.outcome, "failed");
     assert.match(cleanup.site.noteNl, /browser start niet$/);
     assert.equal(cleanup.mail.left, 0);
     assert.equal(cleanup.mail.removed, 1);
     assert.equal(typeof cleanup.scan.files, "number");
     assert.equal(cleanup.complete, false);
     assert.deepEqual(readMailboxState(run)!.cleanup, cleanup);
-    assert.equal((await mailCleanup(run, { mailbox: box, browser: await launched("chromium"), settleMs: 0 })).site.outcome, "mislukt", "and it can run again");
+    assert.equal((await mailCleanup(run, { mailbox: box, browser: await launched("chromium"), settleMs: 0 })).site.outcome, "failed", "and it can run again");
   } finally {
     await site.close();
     rmSync(run, { recursive: true, force: true });
@@ -666,7 +666,7 @@ test("9: a boundary that refuses leaves an outcome, and the rest goes on", async
   const refusing = new Proxy(await launched("chromium"), { get: (target, name) => (name === "newContext" ? () => Promise.reject(new Error("de grens weigert deze browser")) : (Reflect.get(target, name) as (...args: unknown[]) => unknown).bind(target)) });
   try {
     const cleanup = await mailCleanup(run, { mailbox: box, browser: refusing, settleMs: 0 });
-    assert.equal(cleanup.site.outcome, "mislukt");
+    assert.equal(cleanup.site.outcome, "failed");
     assert.match(cleanup.site.noteNl, /grens weigert/);
     assert.equal(cleanup.mail.left, 0);
     assert.deepEqual(readMailboxState(run)!.cleanup, cleanup);
@@ -696,7 +696,7 @@ test("9: a guard that cannot be set closes its context, gives an outcome, and th
   });
   try {
     const cleanup = await mailCleanup(run, { mailbox: box, browser: failing, settleMs: 0 });
-    assert.equal(cleanup.site.outcome, "mislukt");
+    assert.equal(cleanup.site.outcome, "failed");
     assert.match(cleanup.site.noteNl, /bewaking kon niet worden gezet/);
     assert.equal(cleanup.mail.left, 0);
     assert.deepEqual(readMailboxState(run)!.cleanup, cleanup);
@@ -713,7 +713,7 @@ test("7: a page that looks the same afterwards shows nothing, and that is what t
     if (method === "POST") return send(303, "", { location: "/voorkeuren" });
     send(200, BUTTON(SPELLED));
   });
-  assert.equal(cleanup.site.outcome, "niet aangetoond");
+  assert.equal(cleanup.site.outcome, "not shown");
   assert.equal(cleanup.complete, false);
   assert.match(mailboxLimitationsNl(run).join(" "), /Er bleef iets achter/);
   rmSync(run, { recursive: true, force: true });
@@ -729,7 +729,7 @@ test("7: a redirect elsewhere after the removal, by the site itself, is proof", 
     if (url.pathname === "/klaar" || url.pathname === "/verlopen") return send(200, "<h1>Klaar</h1>");
     return gone ? send(303, "", { location: "/verlopen" }) : send(200, BUTTON(SPELLED));
   });
-  assert.equal(cleanup.site.outcome, "verwijderd");
+  assert.equal(cleanup.site.outcome, "removed");
   rmSync(run, { recursive: true, force: true });
 });
 
@@ -749,9 +749,9 @@ test("8: a link held back for the time between two writes is tried again after t
   try {
     await mailWait(run, { mailbox: box });
     const cleanup = await mailCleanup(run, { mailbox: box, browser: await launched("chromium"), settleMs: 0 });
-    assert.notEqual(cleanup.site.outcome, "mislukt", cleanup.site.noteNl);
+    assert.notEqual(cleanup.site.outcome, "failed", cleanup.site.noteNl);
     assert.equal(gone, true);
-    assert.equal(cleanup.site.outcome, "verwijderd");
+    assert.equal(cleanup.site.outcome, "removed");
   } finally {
     await site.close();
     rmSync(run, { recursive: true, force: true });
@@ -765,7 +765,7 @@ test("8: a link the budget refuses says that, and is no failure of the browser",
   try {
     await mailWait(run, { mailbox: box });
     const cleanup = await mailCleanup(run, { mailbox: box, browser: await launched("chromium"), settleMs: 0 });
-    assert.equal(cleanup.site.outcome, "mislukt");
+    assert.equal(cleanup.site.outcome, "failed");
     assert.match(cleanup.site.noteNl, /kon niet worden geopend/);
     assert.match(cleanup.site.noteNl, /budget/);
   } finally {

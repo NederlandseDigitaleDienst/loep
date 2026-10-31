@@ -156,9 +156,15 @@ export function linksOf(mail: ParsedMail): MailLink[] {
 }
 
 /** Words and short numbers: what says which page a link is for, not who it is for (/vacatures/product-owner-2026/). */
+const MIN_PATH_TOKEN = 24;
 const PLAIN_PART = /^(?:[A-Za-z]?[a-z]{0,20}|\d{1,4})$/;
 const isPlain = (value: string): boolean => value.split(/[-_.]/).every((part) => PLAIN_PART.test(part));
 const MIN_SECRET = 6;
+/** An address or a path as a value, as in `?next=/mijn/profiel`: it says where to go, and replacing it would change every link to that place. */
+const isAddress = (value: string): boolean => /^https?:\/\//i.test(value) || (value.startsWith("/") && value.split("/").every((part) => part === "" || isPlain(part)));
+/** A part of a path that is a name: words and numbers with hyphens (`update-q4`), or only a number. A person can read it, and a site gives it to everyone. */
+const isSlug = (value: string): boolean => /^\d+$/.test(value) || (/^[a-z0-9-]+$/.test(value) && value.split("-").every((part) => /^(?:[a-z]*|\d*)$/.test(part) || part.length <= 3));
+const inPath = (value: string): boolean => value.length >= MIN_PATH_TOKEN || !isSlug(value);
 
 /**
  * Whether a part of an address may be a token. Taking too much costs little, because an alias is
@@ -166,7 +172,7 @@ const MIN_SECRET = 6;
  * word or a date, would then change what a page shows. So those stay as they are.
  */
 export function looksSecret(value: string): boolean {
-  if (value.length < MIN_SECRET || isPlain(value)) return false;
+  if (value.length < MIN_SECRET || isPlain(value) || isAddress(value)) return false;
   if (/^\d+$/.test(value)) return true;
   return !/^[\d\-:./]+$/.test(value);
 }
@@ -189,7 +195,7 @@ const decodedPart = (text: string): string => {
 /** The parts of an address that may be a token: values in the query and the fragment, and parts of the path, each with how the address spells it. */
 export function spelledSecretsInUrl(address: string): UrlSecret[] {
   const url = new URL(address);
-  const path = url.pathname.split("/").map((spelled) => ({ value: decodedPart(spelled), spelled }));
+  const path = url.pathname.split("/").map((spelled) => ({ value: decodedPart(spelled), spelled })).filter((part) => inPath(part.value));
   const pairs = (text: string, withKeys: boolean): UrlSecret[] =>
     text.split("&").flatMap((pair) => {
       const at = pair.indexOf("=");
@@ -232,11 +238,11 @@ function isYearOrDate(digits: string): boolean {
 
 /** A long token, or a one-time code after the word for it, that stands in the text of a mail outside a link. A year, a date or any other number that merely stands near that word is no code. */
 export function secretsInText(text: string): string[] {
-  const withoutLinks = text.replace(URL_IN_TEXT, " ");
-  const tokens = (withoutLinks.match(/[A-Za-z0-9_-]{20,}/g) ?? []).filter((word) => /[0-9]/.test(word) && /[A-Za-z]/.test(word));
-  const codes = [...withoutLinks.matchAll(ONE_TIME_CODE)].filter((match) => !isYearOrDate(match[1]!) && !NUMBER_GOES_ON.test(withoutLinks.slice(match.index + match[0].length, match.index + match[0].length + 16))).map((match) => match[1]!);
-  const letterCodes = [...withoutLinks.matchAll(LETTER_CODE)].map((match) => match[1]!).filter(isLetterCode);
-  const inBareAddresses = (withoutLinks.match(BARE_ADDRESS) ?? []).flatMap((address) => secretsInUrl(`https://${trimUrl(address)}`));
+  const words = text.replace(URL_IN_TEXT, " ");
+  const tokens = (words.match(/[A-Za-z0-9_-]{20,}/g) ?? []).filter((word) => /[0-9]/.test(word) && /[A-Za-z]/.test(word));
+  const codes = [...words.matchAll(ONE_TIME_CODE)].filter((match) => !isYearOrDate(match[1]!) && !NUMBER_GOES_ON.test(words.slice(match.index + match[0].length, match.index + match[0].length + 16))).map((match) => match[1]!);
+  const letterCodes = [...words.matchAll(LETTER_CODE)].map((match) => match[1]!).filter(isLetterCode);
+  const inBareAddresses = (words.match(BARE_ADDRESS) ?? []).flatMap((address) => secretsInUrl(`https://${trimUrl(address)}`));
   return [...new Set([...tokens, ...codes, ...letterCodes, ...inBareAddresses])];
 }
 

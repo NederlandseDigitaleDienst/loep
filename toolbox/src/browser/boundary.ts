@@ -6,7 +6,7 @@ import type { CompletedRequest, Mockttp } from "mockttp";
 import type { Browser, BrowserContext, BrowserContextOptions } from "playwright";
 import { renewSessionSecrets } from "../lib/login.ts";
 import { endContextSecrets, noteSecretEvent, shieldForRun, type Shield } from "../lib/secrets.ts";
-import { isLocalHost, writesForRun } from "../lib/writes.ts";
+import { claimLink, isLocalHost, isThisMachine, usedLinks, writeAccess, writesForRun } from "../lib/writes.ts";
 
 /*
  * The boundary of `lib/secrets.ts`. A route of Playwright does not see what the browser asks by
@@ -128,24 +128,26 @@ function onLoopback(start: () => Promise<void>): Promise<void> {
 // ---- What mockttp says on the console -----------------------------------------------------------------------------------
 
 let consoleMasked = false;
+/** The runs whose proxy can still print something. A run leaves when its proxy has stopped. */
+const maskedRuns = new Set<string>();
 
 /** mockttp prints an address now and then, and on this side of it that address holds the real value. */
 function maskConsole(): void {
   if (consoleMasked) return;
   consoleMasked = true;
-  for (const method of ["log", "warn", "error"] as const) {
+  for (const method of ["log", "info", "debug", "warn", "error"] as const) {
     const original = console[method].bind(console);
-    console[method] = (...args: unknown[]): void => original([...boundaries.keys()].reduce((text, runDir) => shieldForRun(runDir)?.inward(text) ?? text, format(...args)));
+    console[method] = (...args: unknown[]): void => original([...maskedRuns].reduce((text, runDir) => shieldForRun(runDir)?.inward(text) ?? text, format(...args)));
   }
 }
 
 // ---- The proxy ---------------------------------------------------------------------------------------------------------
 
 /** A name that exists nowhere: only the proxy can answer it. */
-const CHECK_HOST = "loep-grens.invalid";
+const CHECK_HOST = "loep-boundary.invalid";
 const CHECK_START = "/start";
-const CHECK_END = "/einde";
-const CHECK_MARK = "loep-grens";
+const CHECK_END = "/end";
+const CHECK_MARK = "loep-boundary";
 const CHECK_TIMEOUT_MS = 15_000;
 const PROXY_USER_PREFIX = "loep-";
 
@@ -179,7 +181,7 @@ class Boundary {
   private readonly admitted = new Map<number, string>();
   /** Requests under way to a site, by their id in mockttp, with the address as the browser knows it and the context that asked. */
   private readonly underWay = new Map<string, { url: string; context: string }>();
-  /** A cookie with an alias in it, per origin, with the way the site spelled it: it goes back the same, as a site compares it to the letter. */
+  /** A cookie with an alias in it, with the way the site spelled it: it goes back the same, as a site compares it to the letter. */
   private readonly cookies = new Map<string, string>();
   private decoyHost = "";
   private readonly localOnly = process.env[LOCAL_ONLY_ENV] === "1";
@@ -213,7 +215,9 @@ class Boundary {
       ...(network.lookup ? { lookupOptions: network.lookup } : {}),
       simulateConnectionErrors: true,
     };
-    const local = (request: CompletedRequest): boolean => isLocalHost(new URL(request.url).hostname);
+    // Only this machine may have a certificate of its own: a name that ends in `.test` can be any machine.
+    const local = (request: CompletedRequest): boolean => isThisMachine(new URL(request.url).hostname);
+    const offMachine = (request: CompletedRequest): boolean => !isLocalHost(new URL(request.url).hostname);
     const covered = (request: CompletedRequest): boolean => shieldForRun(this.runDir)?.covers(request.url) ?? false;
     const check = (request: CompletedRequest): boolean => new URL(request.url).hostname === CHECK_HOST || new URL(request.url).host === this.decoyHost;
     // Every rule says `always`: without it mockttp serves a rule once and then moves on to the next one that matches.
@@ -221,7 +225,7 @@ class Boundary {
     // For a trial on this machine: nothing goes further than this machine, whatever a page asks for.
     await this.mock
       .forAnyRequest()
-      .matching((request) => this.localOnly && !check(request) && !local(request))
+      .matching((request) => this.localOnly && !check(request) && offMachine(request))
       .always()
       .thenCallback((request) => this.refuse(request.url, LOCAL_ONLY_NL));
     await this.mock
@@ -338,18 +342,18 @@ class Boundary {
     return refusalAnswer(reasonNl);
   }
 
-  private keepCookies(origin: string, shield: Shield, headers: IncomingHttpHeaders): void {
+  private keepCookies(shield: Shield, headers: IncomingHttpHeaders): void {
     for (const cookie of [headers["set-cookie"] ?? []].flat()) {
       const pair = cookie.split(";")[0]!;
       const alias = shield.inward(pair);
-      if (alias !== pair) this.cookies.set(`${origin}\n${alias}`, pair);
+      if (alias !== pair) this.cookies.set(alias, pair);
     }
   }
 
   /** What the browser sends, with the cookies the site gave back as the site spelled them. */
-  private withSiteCookies(origin: string, headers: IncomingHttpHeaders): IncomingHttpHeaders {
+  private withSiteCookies(headers: IncomingHttpHeaders): IncomingHttpHeaders {
     if (!headers.cookie) return headers;
-    return { ...headers, cookie: headers.cookie.split("; ").map((pair) => this.cookies.get(`${origin}\n${pair}`) ?? pair).join("; ") };
+    return { ...headers, cookie: headers.cookie.split("; ").map((pair) => this.cookies.get(pair) ?? pair).join("; ") };
   }
 
   /** Whether this address may not get its real values, because this run may not send. */
@@ -357,9 +361,24 @@ class Boundary {
     return shield.touchesGuarded(url) && !writesForRun(this.runDir);
   }
 
+  /**
+   * What the guard of a page does not see also counts as opening a personal link: a script that asks
+   * for one, and a redirect that leads to one. Why that is refused, or null.
+   */
+  private claimRefusedNl(shield: Shield, url: string): string | null {
+    const id = shield.guardedId(url);
+    const permission = writesForRun(this.runDir);
+    if (!id || !permission || usedLinks(this.runDir).has(id)) return null;
+    const refused = claimLink(writeAccess(this.runDir, permission, "grens"), url, id, "grens");
+    return refused?.reasonNl ?? null;
+  }
+
   private async swapRequest(request: CompletedRequest) {
     const shield = shieldForRun(this.runDir)!;
-    if (this.guardedRefused(shield, request.url)) return { response: this.refuse(request.url, GUARDED_REFUSED_NL) };
+    const parts = [request.url, ...Object.values(request.headers).flat().filter((value) => value !== undefined), request.body.buffer.toString("latin1")];
+    if ((shield.touchesGuarded(request.url) || shield.holdsGuarded(parts)) && !writesForRun(this.runDir)) return { response: this.refuse(request.url, GUARDED_REFUSED_NL) };
+    const unclaimed = this.claimRefusedNl(shield, request.url);
+    if (unclaimed) return { response: this.refuse(request.url, unclaimed) };
     const reaching = shield.reaching(request.url);
     const sent = request.body.buffer;
     if (sent.length > MAX_REQUEST_BYTES) return { response: this.refuse(request.url, "dit verzoek is te groot om af te schermen, en is niet verstuurd") };
@@ -368,7 +387,7 @@ class Boundary {
     const target = new URL(reaching.outwardUrl(request.url));
     this.underWay.set(request.id, { url: request.url, context: this.admitted.get(request.remotePort!) ?? "" });
     const headers = {
-      ...outwardHeaders(reaching, this.withSiteCookies(new URL(request.url).origin, request.headers)),
+      ...outwardHeaders(reaching, this.withSiteCookies(request.headers)),
       host: target.host,
       // Asked plainly, so the answer can be read; a server that compresses all the same is unpacked below.
       "accept-encoding": "identity",
@@ -387,13 +406,13 @@ class Boundary {
     const location = typeof answer.headers.location === "string" ? answer.headers.location : null;
     if (location && answer.statusCode >= 300 && answer.statusCode < 400) {
       const shown = shield.inward(location);
-      const next = new URL(shown, where).href;
-      if (shown !== location && shield.outOfReach(next)) return this.refuse(where, `de site stuurde door naar ${new URL(next).origin}, met een vervanging in het adres: die doorverwijzing is tegengehouden`);
+      const next = absolute(shown, where);
+      if (next && shown !== location && shield.outOfReach(next)) return this.refuse(where, `de site stuurde door naar ${new URL(next).origin}, met een vervanging in het adres: die doorverwijzing is tegengehouden`);
     }
     // An empty body has nothing to unpack, also when its header says it is packed: that fails, on a HEAD or a 304.
     const decoded = answer.body.buffer.length === 0 ? answer.body.buffer : await answer.body.getDecodedBuffer();
     if (decoded === undefined) return this.refuse(where, `de site stuurde een antwoord met ${String(answer.headers["content-encoding"])}, en dat is niet af te schermen`);
-    this.keepCookies(url.origin, shield, answer.headers);
+    this.keepCookies(shield, answer.headers);
     const contentType = [answer.headers["content-type"] ?? ""].flat()[0] || undefined;
     const { data, shortFound } = shield.inwardBody(decoded, contentType);
     noteShortFound(this.runDir, where, shortFound);
@@ -424,8 +443,7 @@ class Boundary {
     }
     if (covered) {
       const reaching = covered.reaching(request.url);
-      const httpOrigin = url.origin.replace(/^ws/, "http");
-      const headers = outwardHeaders(reaching, this.withSiteCookies(httpOrigin, request.headers));
+      const headers = outwardHeaders(reaching, this.withSiteCookies(request.headers));
       request.url = reaching.outwardUrl(request.url);
       request.rawHeaders = request.rawHeaders.flatMap(([name, value]): [string, string][] => {
         const lower = name.toLowerCase();
@@ -434,25 +452,27 @@ class Boundary {
         const swapped = headers[lower]!;
         return [[name, Array.isArray(swapped) ? swapped[0]! : swapped]];
       });
-      socket.once("ws-upgrade", (browserSide: FrameSocket) => {
-        const swapping = (target: FrameSocket, swap: (shieldNow: Shield, data: Buffer, binary: boolean) => Buffer): void => {
-          const send = target.send.bind(target);
-          // Read per message, so a secret that came in between counts from the next frame on.
-          target.send = (data, sendOptions, done) => {
-            const shieldNow = shieldForRun(this.runDir);
-            send(shieldNow ? swap(shieldNow, data, sendOptions?.binary === true) : data, sendOptions, done);
-          };
-        };
-        swapping(browserSide.upstreamWebSocket, (now, data) => now.reaching(request.url).outwardBytes(data));
-        // By its shape, as a body without a type: a number in a frame of JSON is a number there too.
-        swapping(browserSide, (now, data, binary) => {
-          const swapped = now.inwardBody(data, binary ? "application/octet-stream" : undefined);
-          noteShortFound(this.runDir, now.inward(request.url), swapped.shortFound);
-          return swapped.data;
-        });
-      });
     } else request.rawHeaders = request.rawHeaders.filter(([name]) => !name.toLowerCase().startsWith("proxy-"));
-    return real.handle.call(Object.create(step, { ignoreHostHttpsErrors: { value: isLocalHost(url.hostname) } }) as SocketStep, request, socket, head, options);
+    // For every socket, also one that no value reaches now: a value can reach this address from the next frame on.
+    socket.once("ws-upgrade", (browserSide: FrameSocket) => {
+      const swapping = (target: FrameSocket, swap: (shieldNow: Shield, data: Buffer, binary: boolean) => Buffer): void => {
+        const send = target.send.bind(target);
+        // Read per message, so a secret that came in between counts from the next frame on.
+        target.send = (data, sendOptions, done) => {
+          const shieldNow = shieldForRun(this.runDir);
+          send(shieldNow?.covers(request.url) ? swap(shieldNow, data, sendOptions?.binary === true) : data, sendOptions, done);
+        };
+      };
+      // Without the permission to send, what is worth something by itself stays what the page has.
+      swapping(browserSide.upstreamWebSocket, (now, data) => (now.holdsGuarded([data.toString("latin1")]) && !writesForRun(this.runDir) ? data : now.reaching(request.url).outwardBytes(data)));
+      // By its shape, as a body without a type: a number in a frame of JSON is a number there too.
+      swapping(browserSide, (now, data, binary) => {
+        const swapped = now.inwardBody(data, binary ? "application/octet-stream" : undefined);
+        noteShortFound(this.runDir, now.inward(request.url), swapped.shortFound);
+        return swapped.data;
+      });
+    });
+    return real.handle.call(Object.create(step, { ignoreHostHttpsErrors: { value: isThisMachine(url.hostname) } }) as SocketStep, request, socket, head, options);
   }
 
   /** Why this browser does not stay inside the boundary, in Dutch, or null when it does. */
@@ -479,6 +499,15 @@ class Boundary {
 
 const boundaries = new Map<string, Promise<Boundary>>();
 
+/** An address that a site gave, which can be anything. */
+function absolute(address: string, base: string): string | null {
+  try {
+    return new URL(address, base).href;
+  } catch {
+    return null;
+  }
+}
+
 function noteShortFound(runDir: string, where: string, sources: readonly string[]): void {
   for (const source of sources) noteSecretEvent(runDir, { kind: "short-in-binary", where, source, noteNl: "een korte code staat in een binair antwoord en is niet vervangen, omdat ze er ook toevallig kan staan" });
 }
@@ -487,6 +516,7 @@ function boundaryOf(runDir: string): Promise<Boundary> {
   let boundary = boundaries.get(runDir);
   if (!boundary) {
     const fresh = new Boundary(runDir);
+    maskedRuns.add(runDir);
     boundary = fresh.start().then(() => fresh);
     boundaries.set(runDir, boundary);
     // A start that failed is no reason for the next one to fail.
@@ -554,7 +584,7 @@ export async function boundaryForContext(browser: Browser, runDir: string | unde
       boundary.users.delete(browser);
       if (boundary.users.size > 0) return;
       boundaries.delete(runDir!);
-      void boundary.stop();
+      void boundary.stop().finally(() => maskedRuns.delete(runDir!));
     });
   }
   const known = checked.get(browser) ?? new Map<string, Promise<string | null>>();

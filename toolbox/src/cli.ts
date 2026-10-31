@@ -540,7 +540,7 @@ async function main(): Promise<void> {
       return;
     }
     case "mail": {
-      if (!values.run) throw new Error("mail needs --run <run>");
+      if (!values.run) throw new Error("mail vraagt --run <run>");
       const { cleanupLinesNl, mailCleanup, mailLinks, mailWait } = await import("./commands/mail.ts");
       if (target === "wait") {
         const timeoutSeconds = values.timeout === undefined ? undefined : Number(values.timeout);
@@ -559,7 +559,7 @@ async function main(): Promise<void> {
       return;
     }
     case "secrets": {
-      if (!values.run) throw new Error("secrets needs --run <run>");
+      if (!values.run) throw new Error("secrets vraagt --run <run>");
       const { secretsLinesNl } = await import("./lib/secrets.ts");
       process.stdout.write(`${secretsLinesNl(values.run).join("\n")}\n`);
       return;

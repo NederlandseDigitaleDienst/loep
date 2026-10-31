@@ -155,10 +155,7 @@ export function timerNl(timer: TimerRecord): { kind: string; delayMs: number; we
 const SESSION_NAME =/sess|(^|[^a-z])sid([^a-z]|$)|auth|token|login|jsession|asp\.?net|connect\.sid|laravel|csrf|xsrf|jwt/i;
 export const looksLikeSession = (name: string, httpOnly: boolean): boolean => httpOnly || SESSION_NAME.test(name);
 
-export const cookieFitsHost = (domain: string, host: string): boolean => {
-  const bare = domain.replace(/^\./, "").toLowerCase();
-  return host.toLowerCase() === bare || host.toLowerCase().endsWith(`.${bare}`);
-};
+export { cookieFits as cookieFitsHost } from "./login.ts";
 
 // ---- The watch on the session --------------------------------------------------------------------------------
 

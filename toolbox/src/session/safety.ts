@@ -14,7 +14,7 @@ import { SEARCH_FALLBACK, SEARCH_NONE } from "../lib/searchterm.ts";
 import { searchTermForRun } from "../lib/sitemodel.ts";
 import { OriginBlocked, refusalNl, type Blockade } from "./blockade.ts";
 import { playRecording, replayNl, socketRecordings, type PassedReplay, type Recorder } from "../lib/recordings.ts";
-import { claimLink, isLocalHost, isWriteOrigin, runWrites, SocketFrames, writeAccess, writesForRun, type PassedWrite, type WriteAccess } from "../lib/writes.ts";
+import { claimLink, isThisMachine, isWriteOrigin, runWrites, SocketFrames, writeAccess, writesForRun, type PassedWrite, type WriteAccess } from "../lib/writes.ts";
 
 /** Limits of the process that holds the browser; set once, when it starts. */
 export interface DaemonLimits {
@@ -234,6 +234,8 @@ export async function guardContext(context: BrowserContext, scope: Scope, guard:
       if (request.isNavigationRequest() && inScope(scope, request.url()) && !STOPPED.test(request.failure()?.errorText ?? "")) blockade.failed(request.url());
     });
   }
+  // A personal link from a mail can say `afmelden`, and then it is about the mail and not about the session.
+  const loggingOut = (url: string): boolean => logsOut(url) && !(runDir !== undefined && shieldForRun(runDir)?.touchesGuarded(url));
   await context.route("**/*", (route) => {
     const request = route.request();
     const method = request.method();
@@ -247,7 +249,7 @@ export async function guardContext(context: BrowserContext, scope: Scope, guard:
       return refuse();
     }
     // In a run with a login nothing logs out: the session has to last for everything that comes after.
-    if (logsOut(url)) {
+    if (loggingOut(url)) {
       note("logout", method, url, type);
       return refuse();
     }
@@ -301,7 +303,7 @@ export async function guardContext(context: BrowserContext, scope: Scope, guard:
     const refusedBy = blockade?.refuses(url);
     // The socket opens, so the page keeps working, and what the server says still arrives. Nothing the page says is passed on.
     // A socket opens a connection of its own, and on this machine WebKit does that past the proxy.
-    const pastTheProxy = opensNoConnection(context) && isLocalHost(new URL(url).hostname);
+    const pastTheProxy = opensNoConnection(context) && isThisMachine(new URL(url).hostname);
     const server = inScope(scope, url) && !refusedBy && !pastTheProxy ? socket.connectToServer() : null;
     if (pastTheProxy) guard.blocked.push({ at: new Date().toISOString(), kind: "boundary", method: "GET", url: url.slice(0, MAX_URL), resourceType: "websocket", reasonNl: SOCKET_REFUSED_NL });
     else if (refusedBy) guard.blocked.push({ at: new Date().toISOString(), kind: "blockade", method: "GET", url: url.slice(0, MAX_URL), resourceType: "websocket", reasonNl: refusalNl(refusedBy) });

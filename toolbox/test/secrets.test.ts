@@ -23,7 +23,8 @@ import { IDLE_SESSION_FILE, LOGIN_SESSION_FILE, RUN_SECRETS_FILE, registerSessio
 import { endContextSecrets, MAX_PREVIOUS, MAX_SLOTS, MIN_BINARY_VALUE, maskBytes, maskText, readPrivate, readSecretEvents, readSecretsFile, registerSecret, scanRun, secretLimitationsNl, secretsLinesNl, Shield, shieldForRun, type RunSecret } from "../src/lib/secrets.ts";
 import type { ReceivedMail } from "../src/lib/mailbox.ts";
 import { notHashed } from "../src/lib/seal.ts";
-import { decideWrites, recordWrites } from "../src/lib/writes.ts";
+import { cookieFitsHost } from "../src/lib/timelimits.ts";
+import { decideWrites, isThisMachine, recordWrites, trialFetch } from "../src/lib/writes.ts";
 import { guardContext, guardedDownload, guardRedirects, guardRedirectsByRoute, scopeForRun, type Guard } from "../src/session/safety.ts";
 import { SecondBrowsers } from "../src/session/second.ts";
 
@@ -1434,6 +1435,79 @@ test("fourth review: a recheck and its run take the same lock on their one regis
   } finally {
     rmSync(run, { recursive: true, force: true });
     rmSync(workspace, { recursive: true, force: true });
+  }
+});
+
+test("fifth review: the shape of a text only counts when its type says nothing", () => {
+  const shield = new Shield({ secrets: [secretFor("483920")] });
+  const alias = shield.secrets[0]!.alias;
+  assert.equal(shield.inward("[Logo]\nUw code is 483920.\n[Voet]", "text/plain"), `[Logo]\nUw code is ${alias}.\n[Voet]`);
+  assert.equal(shield.inward("[483920]"), "[483920]", "without a type the shape still says data");
+});
+
+test("fifth review: a long token of only letters or digits is searched in every spelling", () => {
+  const run = runOn("http://localhost:1");
+  try {
+    registerSecret(run, "qwertyuiopasdfghjklzxcvbnm", { source: "test" });
+    writeFileSync(join(run, "opname.txt"), Buffer.from("xqwertyuiopasdfghjklzxcvbnmx").toString("base64"));
+    assert.deepEqual(scanRun(run).hits.map((hit) => hit.file), ["opname.txt"]);
+  } finally {
+    rmSync(run, { recursive: true, force: true });
+  }
+});
+
+test("fifth review: a redirect to an address that is none does not stop the proxy", async () => {
+  const site = await siteWith((request, response) => {
+    if (request.url === "/kapot") return void response.writeHead(302, { location: "http://[bad" }).end();
+    html(response, "<h1>Site</h1>");
+  });
+  const run = runOn(site.origin);
+  registerSecret(run, TOKEN, { source: "test" });
+  const session = await sessionOn(run, await launched("chromium"));
+  try {
+    await loadPage(session.page, `${site.origin}/`);
+    const answer = await session.page.evaluate(() => fetch("/kapot", { redirect: "manual" }).then((reply) => reply.type, (error: Error) => error.message));
+    assert.equal(readSecretEvents(run).filter((event) => event.kind === "unreachable").length, 0, answer);
+    assert.equal(await session.page.evaluate(() => fetch("/").then((reply) => reply.status)), 200, "and it goes on");
+  } finally {
+    await session.close();
+    await site.close();
+    rmSync(run, { recursive: true, force: true });
+  }
+});
+
+test("fifth review: two cookies with one name on two paths each keep their value, and a cookie on an IPv6 address stays in reach", () => {
+  const run = runOn("http://[::1]:3000");
+  try {
+    registerSecret(run, COOKIE, { source: SESSION_COOKIE_SOURCE });
+    renewSessionSecrets(run, { "set-cookie": [`s=${randomValue(40)}; Path=/a`, `s=${randomValue(40)}; Path=/b`] }, new URL("http://[::1]:3000/"), "context");
+    assert.equal(readSecretsFile(run)!.secrets.filter((secret) => secret.slot !== undefined).length, 2);
+    assert.ok(shieldForRun(run)!.covers("http://[::1]:3000/a"));
+  } finally {
+    rmSync(run, { recursive: true, force: true });
+  }
+});
+
+test("fifth review: a name that ends in .test is no reason to take any certificate, or to send a secure cookie over http", () => {
+  assert.equal(isThisMachine("staging.corp.test"), false);
+  assert.equal(isThisMachine("localhost"), true);
+  assert.equal(isThisMachine("127.0.0.1"), true);
+  assert.equal(isThisMachine("::1"), true);
+  const shield = new Shield({ secrets: [{ ...secretFor(randomValue(40)), origins: [], domains: ["staging.corp.test"], secure: true }] });
+  assert.equal(shield.covers("http://staging.corp.test/"), false);
+});
+
+test("fifth review: a cookie of one host is first-party there alone, as everywhere else", () => {
+  assert.equal(cookieFitsHost("site.nl", "www.site.nl"), false);
+  assert.equal(cookieFitsHost(".site.nl", "www.site.nl"), true);
+});
+
+test("fifth review: with the setting for a trial nothing outside this machine is asked, by any fetch of the toolbox", async () => {
+  process.env[LOCAL_ONLY_ENV] = "1";
+  try {
+    assert.equal((await trialFetch("http://www.andere-site.example/sitemap.xml")).status, REFUSED_STATUS);
+  } finally {
+    delete process.env[LOCAL_ONLY_ENV];
   }
 });
 
