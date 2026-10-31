@@ -7,7 +7,7 @@ import { isFor, parseMail, type ParsedMail } from "./mailparse.ts";
 import { imapMailbox } from "./mailbox-imap.ts";
 import { mailpitMailbox } from "./mailbox-mailpit.ts";
 import { confirmByTyping, processTerminal, type Terminal } from "./recorded.ts";
-import { isLocalHost, writeOriginsNl, type WritePermission } from "./writes.ts";
+import { usedLinks, writeOriginsNl, type WritePermission } from "./writes.ts";
 
 /**
  * A mailbox lets a run finish a flow that goes through an e-mail: wait for a message to the address
@@ -72,6 +72,12 @@ export const MAILBOX_ENV = { user: "LOEP_IMAP_USER", password: "LOEP_IMAP_PASSWO
 /** The name under which the keychain of macOS holds the login of a host. */
 export const keychainService = (host: string): string => `loep-imap-${host}`;
 
+/**
+ * This machine itself. `isLocalHost` also takes a name that ends in `.test`, which can be any machine:
+ * good enough for a site, not for where a password goes, or whether a person has to look at it.
+ */
+const isThisMachine = (host: string): boolean => /^(?:localhost|127(?:\.\d{1,3}){3}|::1)$/i.test(host);
+
 const FORM_NL = "--mailbox verwacht imap://<host>:993 of mailpit://localhost:8025";
 
 /**
@@ -90,14 +96,13 @@ export function decideMailbox(text: string, permission: WritePermission | null, 
   const host = url.hostname.replace(/^\[|\]$/g, "");
   const mark = { local: permission.local, declaredAt: now.toISOString() };
   if (url.protocol === "mailpit:") {
-    if (!isLocalHost(host)) throw new Error("mailpit:// is alleen voor deze machine: de REST-API van Mailpit heeft hier geen inlog. Gebruik imap:// voor een andere mailbox");
+    if (!isThisMachine(host)) throw new Error("mailpit:// is alleen voor deze machine: de REST-API van Mailpit heeft hier geen inlog. Gebruik imap:// voor een andere mailbox");
     if (!permission.local) throw new Error("Mailpit vangt alleen mail van een site op deze machine; deze run verstuurt naar een site die niet lokaal is. Gebruik imap://");
     return { server: { kind: "mailpit", host, port: Number(url.port || 8025), tls: false }, mark: { kind: "mailpit", ...mark } };
   }
   if (url.protocol !== "imap:") throw new Error(FORM_NL);
   const port = Number(url.port || 993);
-  const local = isLocalHost(host);
-  if (!local && port !== 993) throw new Error("imap:// naar een andere machine kan alleen op poort 993, met TLS: anders gaan de inloggegevens onversleuteld over het netwerk");
+  if (!isThisMachine(host) && port !== 993) throw new Error("imap:// naar een andere machine kan alleen op poort 993, met TLS: anders gaan de inloggegevens onversleuteld over het netwerk");
   return { server: { kind: "imap", host, port, tls: port === 993 }, mark: { kind: "imap", ...mark } };
 }
 
@@ -107,7 +112,7 @@ export function decideMailbox(text: string, permission: WritePermission | null, 
  * refused before anything starts.
  */
 export async function confirmMailbox(decided: { server: MailServer; mark: MailboxMark }, permission: WritePermission, terminal: Terminal = processTerminal()): Promise<MailboxMark> {
-  if (isLocalHost(decided.server.host)) return decided.mark;
+  if (isThisMachine(decided.server.host)) return decided.mark;
   const shownNl = [`Verklaring dat deze run de mailbox op ${decided.server.host} mag lezen, en daarin alleen mail aan het adres van de run.`, `Links uit die mail worden alleen gevolgd naar ${writeOriginsNl(permission)}. Elke link telt als verzending.`, "Het rapport noemt de soort mailbox, niet het adres of de inloggegevens."].join("\n");
   return { ...decided.mark, declaredAt: new Date().toISOString(), ...(await confirmByTyping("inventory --mailbox", shownNl, decided.server.host, "de host van de mailbox", terminal)) };
 }
@@ -248,13 +253,16 @@ export interface MailboxState {
   cleanup?: MailboxCleanup;
 }
 
-/** The kind of a link by the words in its path: the mail itself is not asked. */
+/** The kind of a link by the words in its path: the mail itself is not asked. A confirmation goes before preferences: it does something by being opened, also under a path for managing things. */
 export function linkKind(path: string): LinkKind {
   if (/afmeld|uitschrij|opzeg|unsubscribe|opt-?out/i.test(path)) return "afmelden";
-  if (/voorkeur|preference|instelling|beheer|manage|profiel|profile/i.test(path)) return "voorkeuren";
   if (/bevestig|confirm|verif|activ/i.test(path)) return "bevestigen";
+  if (/voorkeur|preference|instelling|beheer|manage|profiel|profile/i.test(path)) return "voorkeuren";
   return "overig";
 }
+
+/** Who opens a link when a run cleans up. */
+export const CLEANUP_SENDER = "mail cleanup";
 
 export function mailboxForRun(runDir: string): MailboxMark | null {
   const path = join(runDir, "manifest.json");
@@ -283,7 +291,8 @@ export function mailboxLimitationsNl(runDir: string): string[] {
   const mark = mailboxForRun(runDir);
   if (!mark) return [];
   const state = readMailboxState(runDir);
-  const used = (state?.links.length ?? 0) > 0;
+  // Opening a link to clean up is no looking at the page: that says what a run measured.
+  const used = usedLinks(runDir, CLEANUP_SENDER).size > 0;
   const kindNl = `Mailbox: ${used ? "pagina's achter een persoonlijke link uit een e-mail zijn bekeken met" : "er was aangesloten:"} ${LABEL_NL[mark.kind]}${used ? "" : ", maar er is geen persoonlijke link uit een e-mail gebruikt"}. Het adres en de inloggegevens staan niet in dit rapport.${mark.local ? " De meting is lokaal gedaan, op een site op deze machine, en niet op productie: wat de echte mailroute doet, is niet gemeten." : ""}`;
   return [kindNl, cleanupNl(state)];
 }

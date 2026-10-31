@@ -210,6 +210,11 @@ const PUNCTUATION = String.raw`[\s:=*_("'-]`;
  * colon. Any other words in between make it another sentence, such as "deze code is geldig tot 2026".
  */
 const ONE_TIME_CODE = new RegExp(String.raw`\b(?:(?:pin|sms|inlog|toegangs|verificatie|bevestigings|beveiligings|activatie)?code|token)\b(?:${PUNCTUATION}{0,6}|\s+(?:is|luidt)\b${PUNCTUATION}{0,6}|\D{0,20}[:=]${PUNCTUATION}{0,4})(\d{4,8})\b`, "gi");
+/** The same for a code with letters in it (`A1B2C3`, `XK29-LM84`), which also goes by the word `sleutel`. Without a digit and a letter it is a word in a sentence. */
+const LETTER_CODE = new RegExp(String.raw`\b(?:(?:pin|sms|inlog|toegangs|verificatie|bevestigings|beveiligings|activatie)?code|token|sleutel)\b(?:${PUNCTUATION}{0,6}|\s+(?:is|luidt)\b${PUNCTUATION}{0,6}|\D{0,20}[:=]${PUNCTUATION}{0,4})([A-Za-z0-9]+(?:-[A-Za-z0-9]+)*)\b`, "gi");
+const isLetterCode = (word: string): boolean => word.length >= 4 && word.length <= 32 && /\d/.test(word) && /[A-Za-z]/.test(word);
+/** An address without its scheme, as a mail client still makes a link of it. It is not followed, and what is personal in it may not stay in the text. */
+const BARE_ADDRESS = /(?<![\w@./-])(?:[a-z0-9-]+\.)+[a-z]{2,}\/[^\s<>"'`]+/gi;
 /** A number goes on after this, or counts something: then it is no code. */
 const NUMBER_GOES_ON = /^(?:[-./,:]\d|\s*(?:uur|u\b|min(?:uten|uut)?\b|sec(?:onden)?\b|dag(?:en)?\b|jaar\b|maand(?:en)?\b|euro\b|eur\b|€|%|[kmg]b\b|bytes?\b|tekens\b|cijfers\b|letters\b))/i;
 
@@ -230,7 +235,9 @@ export function secretsInText(text: string): string[] {
   const withoutLinks = text.replace(URL_IN_TEXT, " ");
   const tokens = (withoutLinks.match(/[A-Za-z0-9_-]{20,}/g) ?? []).filter((word) => /[0-9]/.test(word) && /[A-Za-z]/.test(word));
   const codes = [...withoutLinks.matchAll(ONE_TIME_CODE)].filter((match) => !isYearOrDate(match[1]!) && !NUMBER_GOES_ON.test(withoutLinks.slice(match.index + match[0].length, match.index + match[0].length + 16))).map((match) => match[1]!);
-  return [...new Set([...tokens, ...codes])];
+  const letterCodes = [...withoutLinks.matchAll(LETTER_CODE)].map((match) => match[1]!).filter(isLetterCode);
+  const inBareAddresses = (withoutLinks.match(BARE_ADDRESS) ?? []).flatMap((address) => secretsInUrl(`https://${trimUrl(address)}`));
+  return [...new Set([...tokens, ...codes, ...letterCodes, ...inBareAddresses])];
 }
 
 /** The text of a mail without the addresses in it, for what is kept of it in the run. */

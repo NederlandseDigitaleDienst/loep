@@ -1,4 +1,4 @@
-import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, statSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, utimesSync } from "node:fs";
 import { join } from "node:path";
 import { readJson, writeJson } from "./canonical.ts";
 import { confirmByTyping, processTerminal, recordedNl, recordStatement, type RecordedVia, type Recording, type RecordingFlags, type Terminal } from "./recorded.ts";
@@ -430,8 +430,8 @@ export function claimLink(access: WriteAccess, url: string, link: string, sender
   return claim.ok ? null : claim;
 }
 
-/** The guarded addresses this run opened, by their id. */
-export const usedLinks = (runDir: string): Set<string> => new Set(readLog(runDir).flatMap((entry) => (entry.link ? [entry.link] : [])));
+/** The guarded addresses this run opened, by their id. With `besides`, what that sender opened does not count. */
+export const usedLinks = (runDir: string, besides?: string): Set<string> => new Set(readLog(runDir).flatMap((entry) => (entry.link && entry.source !== besides ? [entry.link] : [])));
 
 const LOCK = "writes.lock";
 /** A lock older than this was left behind by a process that stopped while it held it. */
@@ -440,28 +440,41 @@ const STALE_LOCK_MS = 10_000;
 const STALE_ASYNC_LOCK_MS = 120_000;
 const ASYNC_LOCK_POLL_MS = 25;
 
-/** A lock like `withLock` around work that awaits something. */
+/** Try once to take a lock. One that is older than `staleMs`, or that `force` says to stop waiting for, is taken away first; the next try gets it. */
+function takeLock(path: string, staleMs: number, force = false): boolean {
+  try {
+    mkdirSync(path);
+    return true;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+  }
+  let age = 0;
+  try {
+    age = Date.now() - statSync(path).mtimeMs;
+  } catch {
+    // Gone in between: try again at once.
+  }
+  if (age > staleMs || force) rmSync(path, { recursive: true, force: true });
+  return false;
+}
+
+/** A lock like `withLock` around work that awaits something. While the work runs, the lock stays young. */
 export async function withAsyncLock<T>(runDir: string, name: string, work: () => Promise<T>): Promise<T> {
   const path = join(runDir, name);
-  for (;;) {
+  while (!takeLock(path, STALE_ASYNC_LOCK_MS)) await new Promise((resolve) => setTimeout(resolve, ASYNC_LOCK_POLL_MS));
+  const keepYoung = setInterval(() => {
     try {
-      mkdirSync(path);
-      break;
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
-      let age = 0;
-      try {
-        age = Date.now() - statSync(path).mtimeMs;
-      } catch {
-        // Gone in between: try again at once.
-      }
-      if (age > STALE_ASYNC_LOCK_MS) rmSync(path, { recursive: true, force: true });
-      else await new Promise((resolve) => setTimeout(resolve, ASYNC_LOCK_POLL_MS));
+      const now = new Date();
+      utimesSync(path, now, now);
+    } catch {
+      // Taken away after all: the work goes on, and the next write says what happened.
     }
-  }
+  }, STALE_ASYNC_LOCK_MS / 4);
+  keepYoung.unref();
   try {
     return await work();
   } finally {
+    clearInterval(keepYoung);
     rmSync(path, { recursive: true, force: true });
   }
 }
@@ -474,22 +487,7 @@ export async function withAsyncLock<T>(runDir: string, name: string, work: () =>
 export function withLock<T>(runDir: string, work: () => T, name: string = LOCK): T {
   const path = join(runDir, name);
   const pause = new Int32Array(new SharedArrayBuffer(4));
-  for (let tries = 0; ; tries++) {
-    try {
-      mkdirSync(path);
-      break;
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
-      let age = 0;
-      try {
-        age = Date.now() - statSync(path).mtimeMs;
-      } catch {
-        // Gone in between: try again at once.
-      }
-      if (age > STALE_LOCK_MS || tries > 400) rmSync(path, { recursive: true, force: true });
-      else Atomics.wait(pause, 0, 0, 5);
-    }
-  }
+  for (let tries = 0; !takeLock(path, STALE_LOCK_MS, tries > 400); tries++) Atomics.wait(pause, 0, 0, 5);
   try {
     return work();
   } finally {

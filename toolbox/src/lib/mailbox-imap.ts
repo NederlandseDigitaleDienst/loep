@@ -15,6 +15,7 @@ const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "
 /** A message larger than this is read up to here: a mail with a link does not need more. */
 const MAX_MESSAGE_BYTES = 1_048_576;
 const TIMEOUT_MS = 30_000;
+const NO_ANSWER_NL = "geen antwoord van de mailserver binnen de tijd";
 
 /** A string as IMAP quotes it. A line break would end the command, so it is refused and not escaped. */
 function quoted(text: string): string {
@@ -43,7 +44,7 @@ class Connection {
 
   constructor(socket: Socket) {
     this.socket = socket;
-    socket.setTimeout(TIMEOUT_MS, () => socket.destroy(new Error("geen antwoord van de mailserver binnen de tijd")));
+    socket.setTimeout(TIMEOUT_MS, () => socket.destroy(new Error(NO_ANSWER_NL)));
     socket.on("data", (data: Buffer) => {
       this.buffer = Buffer.concat([this.buffer, data]);
       this.wake();
@@ -146,13 +147,15 @@ function fetchedMessages(reply: Reply): RawMail[] {
   });
 }
 
-export function imapMailbox(server: MailServer, credentials: MailCredentials): Mailbox {
+export function imapMailbox(server: MailServer, credentials: MailCredentials, timeoutMs = TIMEOUT_MS): Mailbox {
   const session = async <T>(work: (connection: Connection, capabilities: string) => Promise<T>): Promise<T> => {
     const socket = await new Promise<Socket>((resolve, reject) => {
       const options = { host: server.host, port: server.port };
       const opened = server.tls ? tlsConnect({ ...options, ...(isIP(server.host) ? {} : { servername: server.host }) }) : plainConnect(options);
       opened.once(server.tls ? "secureConnect" : "connect", () => resolve(opened));
       opened.once("error", reject);
+      // Until the connection stands nothing else watches it: a server that accepts and then says nothing would hold the command for good.
+      opened.setTimeout(timeoutMs, () => opened.destroy(new Error(NO_ANSWER_NL)));
     });
     const connection = new Connection(socket);
     try {
@@ -169,7 +172,7 @@ export function imapMailbox(server: MailServer, credentials: MailCredentials): M
   };
   const find = (flag: "UNDELETED" | "DELETED", address: string, since: Date): Promise<RawMail[]> =>
     session(async (connection) => {
-      const uids = searchResults(await connection.run(`UID SEARCH ${flag} SINCE ${searchDate(since)} TO ${quoted(address)}`, "het zoeken"));
+      const uids = searchResults(await connection.run(`UID SEARCH ${flag} SINCE ${searchDate(since)} OR TO ${quoted(address)} OR CC ${quoted(address)} OR BCC ${quoted(address)} OR HEADER Delivered-To ${quoted(address)} HEADER X-Original-To ${quoted(address)}`, "het zoeken"));
       if (uids.length === 0) return [];
       // A peek leaves the message unread: reading is not what this flow is there to change.
       return fetchedMessages(await connection.run(`UID FETCH ${uids.join(",")} (UID INTERNALDATE BODY.PEEK[]<0.${MAX_MESSAGE_BYTES}>)`, "het ophalen"));

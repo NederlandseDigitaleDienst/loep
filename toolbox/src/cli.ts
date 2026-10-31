@@ -130,7 +130,7 @@ const USAGE = `loep <command> [options]
                                          to fix, and the report is not signed. Verantwoorden: the report backs a statement,
                                          says what is still missing for status B, and is signed. Choose or change it at the
                                          end of a run, then run evaluate, render and seal again. Without a value: say it
-  mail wait|cleanup|status --run <run>   The fixed flow around a mailbox; loep mail --help
+  mail wait|links|cleanup|status --run <run>   The fixed flow around a mailbox; loep mail --help
   secrets --run <run>                    What a run knows about its secrets, per source, and what happened around them: never a value
   seal --run <run>                       Record the hash of every file in the run; what is signed afterwards is this seal
   seal --run <run> --open                Open the seal on purpose, to measure in the run itself again (tasks --again): the seal

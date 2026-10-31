@@ -170,6 +170,12 @@ const memoryBox = (mails: RawMail[]): Mailbox & { removed: string[]; mails: RawM
   };
 };
 
+test("fourth review: a code with letters after the word for it is a code, and so is what stands in a link without a scheme", () => {
+  const found = secretsInText("Je code: A1B2C3 of sleutel XK29-LM84. Ga naar site.nl/x?t=abc123DEF456");
+  for (const value of ["A1B2C3", "XK29-LM84", "abc123DEF456"]) assert.ok(found.includes(value), value);
+  assert.deepEqual(secretsInText("Deze code is verlopen. De code: Nederland. Lees site.nl/vacatures/product-owner"), []);
+});
+
 test("waiting gives only what is for the address, since the moment", async () => {
   const since = new Date("2026-10-30T10:00:00Z");
   const box = memoryBox([
@@ -406,6 +412,7 @@ let origin: string;
 /** What the server saw, with the real values. */
 let seen: { method: string; url: string; body: string; cookie: string | undefined }[];
 let registered: boolean;
+let hideButton: boolean;
 
 /**
  * A site with a subscription behind a personal link. The token comes back in everything a page can
@@ -444,7 +451,20 @@ const handler = (request: IncomingMessage, response: ServerResponse): void => {
     if (url.pathname === "/bevestigen/") return html(`<h1>Bevestigd</h1><form method="post" action="/voorkeuren/?token=${TOKEN}"><button>Verwijder alles</button></form>`);
     // A press the site takes in without anything to show for it.
     if (url.pathname === "/voorkeuren/blijft/" && request.method === "POST") return html(`<h1>Bedankt</h1><form method="post" action="/voorkeuren/blijft/?token=${TOKEN}"><button>Verwijder alles</button></form>`);
-    if (url.pathname === "/voorkeuren/blijft/") return html(`<h1>Blijft</h1><form method="post" action="/voorkeuren/blijft/?token=${TOKEN}"><button>Verwijder alles</button></form>`);
+    if (url.pathname === "/voorkeuren/blijft/") return html(hideButton ? "<h1>Niets meer</h1>" : `<h1>Blijft</h1><form method="post" action="/voorkeuren/blijft/?token=${TOKEN}"><button>Verwijder alles</button></form>`);
+    if (url.pathname === "/voorkeuren/kader/") return html(`<h1>Met kader</h1><iframe title="Kaart" src="https://www.andere-site.example/kaart/"></iframe><form method="post" action="/voorkeuren/?token=${TOKEN}"><button>Verwijder alles</button></form>`);
+    if (url.pathname === "/voorkeuren/met-link/") return html(`<h1>Links</h1><a href="/bevestigen/?token=${TOKEN}">Bevestig</a> <a href="/aanmelden/opnieuw/?token=${TOKEN}">Opnieuw</a>`);
+    if (url.pathname === "/voorkeuren/kapot/") {
+      response.writeHead(303, { location: "https://www.andere-site.example/weg/" }).end();
+      return;
+    }
+    if (url.pathname === "/voorkeuren/filter/") return html(`<h1>Filters</h1><form method="post" action="/voorkeuren/filter/"><button>Verwijder filter</button></form>`);
+    if (url.pathname === "/voorkeuren/door/" && request.method === "POST") {
+      response.writeHead(303, { location: `/eenmalig/?token=${TOKEN}` }).end();
+      return;
+    }
+    if (url.pathname === "/voorkeuren/door/") return html(`<h1>Door</h1><form method="post" action="/voorkeuren/door/?token=${TOKEN}"><button>Verder</button></form>`);
+    if (url.pathname === "/eenmalig/") return html("<h1>Eenmalig</h1>");
     // A press that leads out of the scope.
     if (url.pathname === "/voorkeuren/weg/" && request.method === "POST") {
       response.writeHead(303, { location: "https://www.andere-site.example/klaar/" }).end();
@@ -479,6 +499,7 @@ after(async () => {
 beforeEach(() => {
   seen = [];
   registered = true;
+  hideButton = false;
 });
 
 const mailFor = (url: string, extra = ""): RawMail => ({ id: `m${Math.random()}`, receivedAt: Date.parse("2026-10-30T10:00:00Z"), raw: mailOf(ADDRESS, `Hallo,\n\nJe link: ${url}\n\nOok: https://www.andere-site.example/x/?code=Geheim123456\n`, extra) });
@@ -976,6 +997,189 @@ test("a run with a file that could not be searched is not called clean", async (
   } finally {
     chmodSync(join(run, "dicht.txt"), 0o600);
     rmSync(run, { recursive: true, force: true });
+  }
+});
+
+test("fourth review: a third-party window on a personal page is no held-back redirect, and the button is still pressed", async () => {
+  const run = await mailboxRun(origin);
+  const box = memoryBox([mailFor(`${origin}/voorkeuren/kader/?token=${TOKEN}`)]);
+  try {
+    await mailWait(run, { mailbox: box });
+    const cleanup = await mailCleanup(run, { mailbox: box, browser, settleMs: 0 });
+    assert.equal(cleanup.site.outcome, "verwijderd", cleanup.site.noteNl);
+    assert.equal(registered, false);
+  } finally {
+    rmSync(run, { recursive: true, force: true });
+  }
+});
+
+test("fourth review: a link on a page leads no further to a confirmation the run never used, or to signing up", async () => {
+  const run = await mailboxRun(origin);
+  const box = memoryBox([mailFor(`${origin}/voorkeuren/met-link/?token=${TOKEN}`)]);
+  try {
+    await mailWait(run, { mailbox: box });
+    await mailCleanup(run, { mailbox: box, browser, settleMs: 0 });
+    assert.deepEqual(seen.filter((request) => /bevestigen|aanmelden/.test(request.url)), []);
+  } finally {
+    rmSync(run, { recursive: true, force: true });
+  }
+});
+
+test("fourth review: the state with the links is on disk before a mail is deleted, also when deleting fails", async () => {
+  const run = await mailboxRun(origin);
+  const box = memoryBox([mailFor(`${origin}/voorkeuren/?token=${TOKEN}`)]);
+  const failing: Mailbox = { ...box, remove: async () => {
+    assert.equal(readMailboxState(run)!.links.length, 1, "written before the mail goes");
+    throw new Error("wissen mislukt");
+  } };
+  try {
+    await assert.rejects(mailWait(run, { mailbox: failing }), /wissen mislukt/);
+    assert.equal(readMailboxState(run)!.links.length, 1);
+  } finally {
+    rmSync(run, { recursive: true, force: true });
+  }
+});
+
+test("fourth review: the report says pages were viewed only when the run opened a link, not when one came in or when cleaning up did", async () => {
+  const run = await mailboxRun(origin);
+  const box = memoryBox([mailFor(`${origin}/voorkeuren/?token=${TOKEN}`)]);
+  try {
+    await mailWait(run, { mailbox: box });
+    assert.doesNotMatch(mailboxLimitationsNl(run).join(" "), /zijn bekeken/);
+    await mailCleanup(run, { mailbox: box, browser, settleMs: 0 });
+    assert.doesNotMatch(mailboxLimitationsNl(run).join(" "), /zijn bekeken/);
+  } finally {
+    rmSync(run, { recursive: true, force: true });
+  }
+  const opened = await mailboxRun(origin);
+  const session = await sessionOn(opened);
+  try {
+    const { links } = await mailWait(opened, { mailbox: memoryBox([mailFor(`${origin}/voorkeuren/?token=${TOKEN}`)]) });
+    await loadPage(session.page, links[0]!.url);
+    assert.match(mailboxLimitationsNl(opened).join(" "), /zijn bekeken/);
+  } finally {
+    await session.close();
+    rmSync(opened, { recursive: true, force: true });
+  }
+});
+
+test("fourth review: a cleanup that comes after a press does not say there was no button", async () => {
+  const run = await mailboxRun(origin);
+  const box = memoryBox([mailFor(`${origin}/voorkeuren/blijft/?token=${TOKEN}`)]);
+  try {
+    await mailWait(run, { mailbox: box });
+    assert.equal((await mailCleanup(run, { mailbox: box, browser, settleMs: 0 })).site.outcome, "niet aangetoond");
+    hideButton = true;
+    const again = await mailCleanup(run, { mailbox: box, browser, settleMs: 0 });
+    assert.equal(again.site.outcome, "niet aangetoond", again.site.noteNl);
+    assert.doesNotMatch(again.site.noteNl, /geen knop gevonden/);
+  } finally {
+    rmSync(run, { recursive: true, force: true });
+  }
+});
+
+test("fourth review: a link that does not open leaves the other links to try", async () => {
+  const run = await mailboxRun(origin);
+  const box = memoryBox([mailFor(`${origin}/voorkeuren/kapot/?token=${TOKEN}`), mailFor(`${origin}/voorkeuren/?token=${TOKEN}`)]);
+  try {
+    await mailWait(run, { mailbox: box });
+    const cleanup = await mailCleanup(run, { mailbox: box, browser, settleMs: 0 });
+    assert.equal(cleanup.site.outcome, "verwijderd", cleanup.site.noteNl);
+  } finally {
+    rmSync(run, { recursive: true, force: true });
+  }
+});
+
+test("fourth review: a kind of link says confirmation first, whatever path it stands under", () => {
+  for (const path of ["/manage/confirm/abc", "/beheer/activeer/abc", "/nieuwsbrief/voorkeuren-bevestigen/x"]) assert.equal(linkKind(path), "bevestigen", path);
+  assert.equal(linkKind("/afmelden/bevestigen/abc"), "afmelden");
+  assert.equal(linkKind("/voorkeuren/abc"), "voorkeuren");
+});
+
+test("fourth review: a button that only says it removes something, and is not about the registration, stays unpressed", async () => {
+  const run = await mailboxRun(origin);
+  const box = memoryBox([mailFor(`${origin}/voorkeuren/filter/?token=${TOKEN}`)]);
+  try {
+    await mailWait(run, { mailbox: box });
+    const cleanup = await mailCleanup(run, { mailbox: box, browser, settleMs: 0 });
+    assert.deepEqual(seen.filter((request) => request.method === "POST"), []);
+    assert.equal(cleanup.site.outcome, "mislukt", cleanup.site.noteNl);
+  } finally {
+    rmSync(run, { recursive: true, force: true });
+  }
+});
+
+test("fourth review: a one-time link at the end of a redirect is not used up by the check of a recording", async () => {
+  const run = await mailboxRun(origin);
+  const box = memoryBox([mailFor(`${origin}/voorkeuren/door/?token=${TOKEN}`), mailFor(`${origin}/eenmalig/?token=${TOKEN}`)]);
+  const session = await sessionOn(run);
+  try {
+    const { links } = await mailWait(run, { mailbox: box });
+    await loadPage(session.page, links.find((link) => link.url.includes("/voorkeuren/door/"))!.url);
+    await Promise.all([session.page.waitForURL(/eenmalig/), session.page.locator("button").click()]);
+    await session.page.waitForLoadState("networkidle");
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    assert.equal(seen.filter((request) => request.url.startsWith("/eenmalig/")).length, 1, "only the browser asked for it");
+  } finally {
+    await session.close();
+    rmSync(run, { recursive: true, force: true });
+  }
+});
+
+test("fourth review: a link named for unsubscribing later becomes that kind", async () => {
+  const run = await mailboxRun(origin);
+  const url = `${origin}/u/abc123xyz`;
+  const box = memoryBox([mailFor(url), mailFor(`${origin}/voorkeuren/?token=${TOKEN}`, `List-Unsubscribe: <${url}>\r\n`)]);
+  try {
+    await mailWait(run, { mailbox: box });
+    assert.equal(readMailboxState(run)!.links.find((link) => link.unsubscribe)!.kind, "afmelden");
+  } finally {
+    rmSync(run, { recursive: true, force: true });
+  }
+});
+
+test("fourth review: a second inventory on a run with a mailbox keeps its address and its links", async () => {
+  const run = await mailboxRun(origin);
+  const box = memoryBox([mailFor(`${origin}/voorkeuren/?token=${TOKEN}`)]);
+  try {
+    await mailWait(run, { mailbox: box });
+    const mark = { kind: "mailpit" as const, local: true, declaredAt: "2026-10-30T11:00:00.000Z" };
+    await startMailbox(run, { kind: "mailpit", host: "localhost", port: 1, tls: false }, "loep-99999999@example.com", mark, permission(origin));
+    assert.equal(readMailboxState(run)!.links.length, 1);
+    assert.equal(shieldForRun(run)!.secrets.filter((secret) => secret.source === "mail-adres").length, 1);
+  } finally {
+    rmSync(run, { recursive: true, force: true });
+  }
+});
+
+test("fourth review: only this machine counts as this machine for a mailbox, not a name that ends in .test", () => {
+  const local = permission("http://localhost:8081");
+  assert.throws(() => decideMailbox("imap://mail.corp.test:143", local), /poort 993/);
+  assert.throws(() => decideMailbox("mailpit://mail.test:8025", local), /alleen voor deze machine/);
+});
+
+test("fourth review: IMAP finds a mail that has the address of the run in any place the code accepts", async () => {
+  const fake = await fakeImap();
+  const box = imapMailbox({ kind: "imap", host: "127.0.0.1", port: fake.port, tls: false }, { user: "toets", password: 'ge"heim' });
+  try {
+    await box.fetch(ADDRESS, new Date("2026-10-30T10:00:00Z"));
+    const search = fake.commands.find((command) => command.includes("UID SEARCH"))!;
+    for (const part of ["TO", "CC", "BCC", "HEADER Delivered-To", "HEADER X-Original-To"]) assert.ok(search.includes(part), part);
+  } finally {
+    await fake.close();
+  }
+});
+
+test("fourth review: a mail server that stalls before TLS is done does not stop a command", async () => {
+  const open: Socket[] = [];
+  const silent = createTcpServer((socket) => void open.push(socket));
+  await new Promise<void>((resolve) => silent.listen(0, "127.0.0.1", resolve));
+  const box = imapMailbox({ kind: "imap", host: "127.0.0.1", port: (silent.address() as AddressInfo).port, tls: true }, { user: "toets", password: "x" }, 100);
+  try {
+    await assert.rejects(box.fetch(ADDRESS, new Date()), /geen antwoord/);
+  } finally {
+    for (const socket of open) socket.destroy();
+    silent.close();
   }
 });
 
