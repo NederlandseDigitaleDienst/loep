@@ -61,10 +61,10 @@ const originOf = (address: unknown): string | null => {
   }
 };
 
-/** Whether a cookie is sent to a host: the host itself or a domain above it. */
+/** Whether a cookie is sent to a host. As Playwright keeps a cookie: with a dot it is for a domain and what lies under it, without one for that host alone. */
 const cookieFits = (domain: string, hostname: string): boolean => {
-  const bare = domain.replace(/^\./, "").toLowerCase();
-  return hostname.toLowerCase() === bare || hostname.toLowerCase().endsWith(`.${bare}`);
+  const [named, host] = [domain.toLowerCase(), hostname.toLowerCase()];
+  return named.startsWith(".") ? host === named.slice(1) || host.endsWith(named) : host === named;
 };
 
 /**
@@ -152,6 +152,14 @@ export function siteOriginOfRun(runDir: string): string | null {
   return existsSync(path) ? ((JSON.parse(readFileSync(path, "utf8")) as { origin?: string }).origin ?? null) : null;
 }
 
+/** Every origin a run is about, as `inventory` fixed them. */
+export function siteOriginsOfRun(runDir: string): string[] {
+  const path = join(runDir, "inventory.json");
+  if (!existsSync(path)) return [];
+  const { origin, origins } = JSON.parse(readFileSync(path, "utf8")) as { origin?: string; origins?: string[] };
+  return origins ?? (origin ? [origin] : []);
+}
+
 // ---- A session as a secret ----------------------------------------------------------------------------------------
 
 export const SESSION_COOKIE_SOURCE = "sessie-cookie";
@@ -171,10 +179,15 @@ function storedSecrets(value: string): string[] {
   return looksSecret(value) ? [value] : [];
 }
 
-function sessionSecrets(state: StorageState, origin: string): NewSecret[] {
+/**
+ * What may go where. A cookie goes where a browser sends it, and no further. A stored value has no
+ * address of its own: a script sends it, also to a service on another origin, so it goes to the origins
+ * of the run as well. A request to any other origin is held back by the scope of the run already.
+ */
+function sessionSecrets(state: StorageState, siteOrigins: readonly string[]): NewSecret[] {
   return [
-    ...state.cookies.filter((cookie) => looksSecret(cookie.value)).map((cookie): NewSecret => ({ value: cookie.value, source: SESSION_COOKIE_SOURCE, origins: [origin], domains: [cookie.domain] })),
-    ...state.origins.flatMap((entry) => entry.localStorage.flatMap((item) => storedSecrets(item.value).map((value): NewSecret => ({ value, source: SESSION_STORAGE_SOURCE, origins: [entry.origin] })))),
+    ...state.cookies.filter((cookie) => looksSecret(cookie.value)).map((cookie): NewSecret => ({ value: cookie.value, source: SESSION_COOKIE_SOURCE, origins: [], domains: [cookie.domain], ...(cookie.secure ? { secure: true } : {}) })),
+    ...state.origins.flatMap((entry) => entry.localStorage.flatMap((item) => storedSecrets(item.value).map((value): NewSecret => ({ value, source: SESSION_STORAGE_SOURCE, origins: [...new Set([entry.origin, ...siteOrigins])] })))),
   ];
 }
 
@@ -190,7 +203,7 @@ export function registerSessionSecrets(runDir: string): void {
     if (!existsSync(path)) continue;
     const session = JSON.parse(readFileSync(path, "utf8")) as Partial<LoginSession>;
     // A file that cannot be used says so where it is read for use.
-    if (session.storageState?.cookies && session.storageState.origins && session.origin) registerSecrets(runDir, sessionSecrets(session.storageState, session.origin));
+    if (session.storageState?.cookies && session.storageState.origins && session.origin) registerSecrets(runDir, sessionSecrets(session.storageState, siteOriginsOfRun(runDir)));
   }
 }
 
@@ -207,17 +220,20 @@ export function sessionWithAliases(runDir: string, state: StorageState): Storage
 /**
  * A site renews a session as it likes, some with every answer: in a run with a session what looks like
  * a token in a `Set-Cookie` is a secret from now on, before the browser gets it. It takes the place of
- * the value the cookie had, so the register does not grow with every answer.
+ * the value the cookie had in this browser context, so the register does not grow with every answer. A
+ * place is per context: two contexts each have a session of their own, and sharing an alias would
+ * send the value of one from the other. The attributes of the cookie say how far the value may go.
  */
-export function renewSessionSecrets(runDir: string, headers: { "set-cookie"?: string | string[] | undefined }, url: URL): void {
+export function renewSessionSecrets(runDir: string, headers: { "set-cookie"?: string | string[] | undefined }, url: URL, context: string): void {
   const cookies = [headers["set-cookie"] ?? []].flat();
   if (cookies.length === 0 || !shieldForRun(runDir)?.hasSource(SESSION_COOKIE_SOURCE)) return;
   renewSecrets(
     runDir,
     cookies.flatMap((cookie) => {
       const [, name, value = ""] = /^([^=;]+)=([^;]*)/.exec(cookie) ?? [];
-      const domain = /;\s*domain=([^;]+)/i.exec(cookie)?.[1]?.trim();
-      return name && looksSecret(value) ? [{ value, source: SESSION_COOKIE_SOURCE, origins: [url.origin], ...(domain ? { domains: [domain] } : {}), slot: `cookie ${domain ?? url.origin} ${name.trim()}` }] : [];
+      const domain = /;\s*domain=([^;]+)/i.exec(cookie)?.[1]?.trim().replace(/^\./, "");
+      const reach = domain ? `.${domain}` : url.hostname;
+      return name && looksSecret(value) ? [{ value, source: SESSION_COOKIE_SOURCE, origins: [], domains: [reach], ...(/;\s*secure\s*(?:;|$)/i.test(cookie) ? { secure: true } : {}), slot: `cookie ${context} ${reach} ${name.trim()}` }] : [];
     }),
   );
 }

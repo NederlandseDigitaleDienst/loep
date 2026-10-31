@@ -1,9 +1,9 @@
 import { randomBytes } from "node:crypto";
-import { appendFileSync, chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, renameSync, statSync, writeFileSync } from "node:fs";
+import { appendFileSync, chmodSync, closeSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, readSync, realpathSync, renameSync, statSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, relative, resolve, sep } from "node:path";
 import { ignoreSecrets, IDLE_SESSION_FILE, LOGIN_SESSION_FILE, RUN_SECRETS_FILE, siteOriginOfRun } from "./login.ts";
 import { SEAL_INDEX } from "./seal.ts";
-import { withLock } from "./writes.ts";
+import { isLocalHost, withLock } from "./writes.ts";
 
 /*
  * Every value of a run that may not be recorded, whatever it is and wherever it came from, stands in
@@ -39,14 +39,18 @@ export interface RunSecret {
   source: string;
   /** Where the real value may go: exact origins. */
   origins: string[];
-  /** And hosts with what lies under them, as a cookie has its domain. */
+  /** And hosts as a cookie names them: `.example.nl` is that domain and what lies under it, `app.example.nl` is that host alone. */
   domains?: string[];
+  /** As a cookie with `Secure`: towards `domains` only over https, or on this machine. */
+  secure?: boolean;
   /** How it stands in an address, when that is not the value itself (`a%2fb`, `a+b`). An address goes back to the site spelled like this. */
   spelled?: string[];
   /** For a value a site keeps renewing: what it is the value of. A new value takes this place and keeps the alias. */
   slot?: string;
   /** The values this one replaced, the latest first. None goes to a site any more, but a page can still show one, so they are still swapped on the way in and looked for. */
   previous?: string[];
+  /** For a value that can stand somewhere by chance: how often it stood in a file when it became known. Only more than that counts. */
+  chance?: Record<string, number>;
   at: string;
 }
 
@@ -70,6 +74,7 @@ export interface NewSecret {
   /** Where the real value may go; without one, the site of the run. */
   origins?: string[];
   domains?: string[];
+  secure?: boolean;
   spelled?: string;
   /** What the browser sees, when that has to be something in particular. */
   alias?: string;
@@ -157,6 +162,58 @@ const standsByChance = (value: string): boolean => value.length < MIN_RANDOM_VAL
 const WORD_BEFORE = String.raw`(?:(?<=%[0-9A-Fa-f]{2})|(?<![0-9A-Za-z_-]))(?<![0-9][.,:])(?<!\/\/[^\s/"'<>]*)`;
 const WORD_AFTER = String.raw`(?![0-9A-Za-z_-])(?![.,:][0-9])`;
 
+/** The characters of a value in one pattern. A token of some kilobytes as one pattern is more than the compiler of a pattern can take: from about 1500 characters it throws. */
+const MAX_PIECE = 512;
+
+/** A value as patterns of one piece each: the first finds where it may start, and each next one has to follow at once. */
+class ValuePattern {
+  private readonly first: RegExp;
+  private readonly rest: RegExp[];
+
+  constructor(pieces: readonly string[]) {
+    this.first = new RegExp(pieces[0] ?? "(?!)", "g");
+    this.rest = pieces.slice(1).map((piece) => new RegExp(piece, "y"));
+  }
+
+  /** Where the whole value ends when it starts at this match of the first piece, or null when it is not the value. */
+  private endOf(text: string, match: RegExpMatchArray): number | null {
+    let end = match.index! + match[0].length;
+    for (const piece of this.rest) {
+      piece.lastIndex = end;
+      if (!piece.test(text)) return null;
+      end = piece.lastIndex;
+    }
+    return end;
+  }
+
+  replace(text: string, to: string): string {
+    if (this.rest.length === 0) return text.replace(this.first, () => to);
+    let kept = 0;
+    let result = "";
+    for (const match of text.matchAll(this.first)) {
+      const end = match.index >= kept ? this.endOf(text, match) : null;
+      if (end === null) continue;
+      result += text.slice(kept, match.index) + to;
+      kept = end;
+    }
+    return kept === 0 ? text : result + text.slice(kept);
+  }
+
+  count(text: string): number {
+    return [...text.matchAll(this.first)].filter((match) => this.endOf(text, match) !== null).length;
+  }
+
+  found(text: string): boolean {
+    if (this.rest.length === 0) return text.search(this.first) !== -1;
+    for (const match of text.matchAll(this.first)) if (this.endOf(text, match) !== null) return true;
+    return false;
+  }
+}
+
+/** A site that renews a cookie with every answer makes a new shield each time, with one new value: the patterns of the others are not made again. */
+const madePatterns = new Map<string, ValuePattern>();
+const MAX_MADE_PATTERNS = 1024;
+
 /**
  * A pattern for a value in every spelling this file knows, also when each character is spelled in
  * its own way. It runs over bytes. What it does not find, and `docs/methode.md` says so: a value
@@ -164,9 +221,16 @@ const WORD_AFTER = String.raw`(?![0-9A-Za-z_-])(?![.,:][0-9])`;
  * capitals, cut in two by a tag, or anything a site derives from it. With `asWord` a value only counts
  * as a word of its own: replacing it anywhere else would change numbers, times and hashes that merely hold it.
  */
-function valuePattern(value: string, asWord: boolean): RegExp {
-  const pattern = [...value].map(characterPattern).join("");
-  return new RegExp(asWord ? `${WORD_BEFORE}${pattern}${WORD_AFTER}` : pattern, "g");
+function valuePattern(value: string, asWord: boolean): ValuePattern {
+  const key = `${asWord ? "w" : "-"}${value}`;
+  const known = madePatterns.get(key);
+  if (known) return known;
+  const characters = [...value];
+  const pieces = Array.from({ length: Math.ceil(characters.length / MAX_PIECE) }, (_, index) => characters.slice(index * MAX_PIECE, (index + 1) * MAX_PIECE).map(characterPattern).join(""));
+  const made = new ValuePattern(pieces.map((piece, index) => `${asWord && index === 0 ? WORD_BEFORE : ""}${piece}${asWord && index === pieces.length - 1 ? WORD_AFTER : ""}`));
+  if (madePatterns.size >= MAX_MADE_PATTERNS) madePatterns.clear();
+  madePatterns.set(key, made);
+  return made;
 }
 
 function replaceBytes(data: Buffer, from: string, to: string): Buffer {
@@ -224,7 +288,7 @@ export function hostOf(url: string): string {
   }
 }
 
-const reachOf = (secret: Pick<RunSecret, "origins" | "domains">, url: string): boolean => {
+const reachOf = (secret: Pick<RunSecret, "origins" | "domains" | "secure">, url: string): boolean => {
   let parsed: URL;
   try {
     parsed = new URL(url);
@@ -235,9 +299,10 @@ const reachOf = (secret: Pick<RunSecret, "origins" | "domains">, url: string): b
   if (parsed.protocol === "wss:") parsed.protocol = "https:";
   if (secret.origins.includes(parsed.origin)) return true;
   const host = hostOf(parsed.href);
+  if (secret.secure && parsed.protocol !== "https:" && !isLocalHost(host)) return false;
   return (secret.domains ?? []).some((domain) => {
-    const bare = domain.replace(/^\./, "").toLowerCase();
-    return host === bare || host.endsWith(`.${bare}`);
+    const named = domain.toLowerCase();
+    return named.startsWith(".") ? host === named.slice(1) || host.endsWith(named) : host === named;
   });
 };
 
@@ -252,7 +317,7 @@ export class Shield {
   private readonly toRealInUrl: [string, string][];
   private readonly toRealInForm: [string, string][];
   /** The longest first: a value inside another value may not break it up. */
-  private readonly toAlias: { pattern: RegExp; alias: string; short: boolean; asWord: boolean; source: string }[];
+  private readonly toAlias: { pattern: ValuePattern; alias: string; short: boolean; asWord: boolean; source: string }[];
   private readonly guardedAliases: string[];
   private readonly within = new Map<string, Shield>();
 
@@ -317,7 +382,7 @@ export class Shield {
   private swapped(data: Buffer, entries: Shield["toAlias"], contentType?: string): Buffer {
     if (entries.length === 0 || data.length === 0) return data;
     const before = data.toString("latin1");
-    const swap = (text: string, some: Shield["toAlias"]): string => some.reduce((value, entry) => value.replace(entry.pattern, () => entry.alias), text);
+    const swap = (text: string, some: Shield["toAlias"]): string => some.reduce((value, entry) => entry.pattern.replace(value, entry.alias), text);
     const words = entries.filter((entry) => entry.asWord);
     const rest = swap(before, entries.filter((entry) => !entry.asWord));
     const after = words.length > 0 && isData(contentType, rest) ? rest.replace(QUOTED, (quoted) => swap(quoted, words)) : swap(rest, words);
@@ -335,7 +400,7 @@ export class Shield {
   inwardBody(data: Buffer, contentType: string | undefined): { data: Buffer; shortFound: string[] } {
     if (!isBinaryBody(contentType, data)) return { data: this.inwardBytes(data, contentType), shortFound: [] };
     const text = data.toString("latin1");
-    const shortFound = [...new Set(this.toAlias.filter((entry) => entry.short && text.search(entry.pattern) !== -1).map((entry) => entry.source))];
+    const shortFound = [...new Set(this.toAlias.filter((entry) => entry.short && entry.pattern.found(text)).map((entry) => entry.source))];
     return { data: this.swapped(data, this.toAlias.filter((entry) => !entry.short)), shortFound };
   }
 
@@ -435,6 +500,7 @@ export function registerSecrets(runDir: string, found: readonly NewSecret[]): vo
         if (secret.spelled !== undefined && secret.spelled !== secret.value && !known.spelled?.includes(secret.spelled)) known.spelled = [...(known.spelled ?? []), secret.spelled];
         known.origins = [...new Set([...known.origins, ...(secret.origins ?? [])])];
         if (secret.domains) known.domains = [...new Set([...(known.domains ?? []), ...secret.domains])];
+        if (known.secure) known.secure = secret.secure === true;
         continue;
       }
       const entry: RunSecret = {
@@ -443,6 +509,7 @@ export function registerSecrets(runDir: string, found: readonly NewSecret[]): vo
         source: secret.source,
         origins: secret.origins ?? (site ? [site] : []),
         ...(secret.domains ? { domains: secret.domains } : {}),
+        ...(secret.secure ? { secure: true } : {}),
         ...(secret.spelled !== undefined && secret.spelled !== secret.value ? { spelled: [secret.spelled] } : {}),
         at: new Date().toISOString(),
       };
@@ -475,9 +542,11 @@ export function renewSecrets(runDir: string, renewed: readonly (NewSecret & { sl
         place.real = secret.value;
         place.origins = [...new Set([...place.origins, ...(secret.origins ?? [])])];
         if (secret.domains) place.domains = [...new Set([...(place.domains ?? []), ...secret.domains])];
+        if (secret.secure) place.secure = true;
+        else delete place.secure;
         continue;
       }
-      file.secrets.push({ real: secret.value, alias: aliasFor(secret.value), source: secret.source, origins: secret.origins ?? [], ...(secret.domains ? { domains: secret.domains } : {}), slot: secret.slot, at: new Date().toISOString() });
+      file.secrets.push({ real: secret.value, alias: aliasFor(secret.value), source: secret.source, origins: secret.origins ?? [], ...(secret.domains ? { domains: secret.domains } : {}), ...(secret.secure ? { secure: true } : {}), slot: secret.slot, at: new Date().toISOString() });
       const places = file.secrets.filter((entry) => entry.slot !== undefined);
       if (places.length > MAX_SLOTS) file.secrets.splice(file.secrets.indexOf(places[0]!), 1);
     }
@@ -566,11 +635,22 @@ export function readSecretEvents(runDir: string): SecretEvent[] {
 
 // ---- Looking for what may not be there -----------------------------------------------------------------------------
 
-const walk = (dir: string): string[] =>
-  readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+const isGone = (error: unknown): boolean => (error as NodeJS.ErrnoException).code === "ENOENT";
+
+/** What stands in a folder now. A run is written to while this reads it, so what is gone by now was simply not there. */
+function walk(dir: string): string[] {
+  let entries;
+  try {
+    entries = readdirSync(dir, { withFileTypes: true });
+  } catch (error) {
+    if (isGone(error)) return [];
+    throw error;
+  }
+  return entries.flatMap((entry) => {
     const path = join(dir, entry.name);
     return entry.isDirectory() ? walk(path) : entry.isFile() ? [path] : [];
   });
+}
 
 /**
  * What a secret looks like in the bytes of a file: as it is, percent-encoded, HTML-escaped, as hex,
@@ -592,8 +672,29 @@ export function searchedSpellings(real: string): string[] {
 
 /** Pictures and PDF files keep what they show compressed: a search through their bytes does not show the text in them. */
 const COMPRESSED = /\.(?:png|jpe?g|webp|gif|pdf|gz|zip)$/i;
-/** Over a file this large the search for mixed spellings is left out: the fixed spellings still go through it. */
+/** Over a file this large the search for mixed spellings is left out: the fixed spellings still go through it, piece by piece, and a read of one file has a limit. */
 const MAX_PATTERN_FILE = 256 * 1024 * 1024;
+const LARGE_FILE_PIECE = 64 * 1024 * 1024;
+
+/** Whether any of these byte strings stands in a large file. Each piece overlaps the one before by the longest of them, so a value across two pieces counts. */
+function largeFileHolds(path: string, forms: readonly Buffer[]): boolean {
+  const overlap = Math.max(0, ...forms.map((form) => form.length));
+  const piece = Buffer.alloc(LARGE_FILE_PIECE + overlap);
+  const descriptor = openSync(path, "r");
+  try {
+    let kept = 0;
+    for (;;) {
+      const read = readSync(descriptor, piece, kept, LARGE_FILE_PIECE, null);
+      if (read === 0) return false;
+      const filled = piece.subarray(0, kept + read);
+      if (forms.some((form) => filled.includes(form))) return true;
+      kept = Math.min(overlap, filled.length);
+      filled.copy(piece, 0, filled.length - kept);
+    }
+  } finally {
+    closeSync(descriptor);
+  }
+}
 
 export interface ScanHit {
   /** The file, relative to the run. */
@@ -601,6 +702,8 @@ export interface ScanHit {
   /** Which secret, by its place in the list: never the secret. */
   secret: number;
   source: string;
+  /** For a value that can stand somewhere by chance: how often it stands here. */
+  count?: number;
 }
 
 export interface ScanResult {
@@ -611,6 +714,8 @@ export interface ScanResult {
   hits: ScanHit[];
   /** Files whose content is compressed, so the search through their bytes says little about text in them. */
   compressed: number;
+  /** Files that are there and could not be read, so nothing is known about what they hold. */
+  unread: string[];
 }
 
 /** Files that hold real values on purpose. */
@@ -620,7 +725,7 @@ const holdsSecretsOnPurpose = (name: string): boolean => {
 };
 
 function searchFor(runDir: string, secrets: readonly { secret: RunSecret; index: number }[]): ScanResult {
-  const result: ScanResult = { files: 0, bytes: 0, hits: [], compressed: 0 };
+  const result: ScanResult = { files: 0, bytes: 0, hits: [], compressed: 0, unread: [] };
   const needles = secrets.map(({ secret, index }) => {
     const forms = formsOf(secret);
     const asWord = standsByChance(secret.real);
@@ -629,29 +734,45 @@ function searchFor(runDir: string, secrets: readonly { secret: RunSecret; index:
       source: secret.source,
       short: secret.real.length < MIN_BINARY_VALUE,
       asWord,
+      chance: secret.chance ?? {},
       // Only looked for where it would be replaced: as base64 or hex such a value would match pieces of anything.
       literal: asWord ? [] : [...new Set(forms.flatMap(searchedSpellings))].map((spelled) => Buffer.from(spelled)),
       patterns: forms.map((form) => valuePattern(form, asWord)),
     };
   });
+  const searchFile = (path: string, name: string): void => {
+    const { size } = statSync(path);
+    const large = size > MAX_PATTERN_FILE;
+    const compressed = COMPRESSED.test(name);
+    if (large) {
+      // As in a picture: in this many bytes a short value stands by chance.
+      for (const needle of needles.filter((candidate) => !candidate.short && candidate.literal.length > 0)) if (largeFileHolds(path, needle.literal) || needle.literal.some((form) => name.includes(form.toString()))) result.hits.push({ file: name, secret: needle.index, source: needle.source });
+    } else {
+      const data = readFileSync(path);
+      const text = data.toString("latin1");
+      const binary = compressed || isBinaryBody(undefined, data);
+      // The same rule as where a run writes: what would not be replaced there is no leak here, or a seal would refuse a number.
+      const wordText = !binary && needles.some((needle) => needle.asWord) && isData(typeOfFile(name), text) ? (text.match(QUOTED) ?? []).join("\n") : text;
+      for (const needle of needles) {
+        // A short value in a picture is chance, not a leak: it stands in any file of some size.
+        if (needle.short && binary) continue;
+        if (needle.asWord) {
+          const count = needle.patterns.reduce((sum, pattern) => sum + pattern.count(wordText) + pattern.count(name), 0);
+          if (count > (needle.chance[name] ?? 0)) result.hits.push({ file: name, secret: needle.index, source: needle.source, count });
+        } else if (needle.literal.some((form) => data.includes(form) || name.includes(form.toString())) || needle.patterns.some((pattern) => pattern.found(text))) result.hits.push({ file: name, secret: needle.index, source: needle.source });
+      }
+    }
+    result.files++;
+    result.bytes += size;
+    if (compressed) result.compressed++;
+  };
   for (const path of walk(runDir)) {
     const name = relative(runDir, path).split(sep).join("/");
     if (holdsSecretsOnPurpose(name)) continue;
-    const data = readFileSync(path);
-    result.files++;
-    result.bytes += data.length;
-    const compressed = COMPRESSED.test(name);
-    if (compressed) result.compressed++;
-    const text = data.length <= MAX_PATTERN_FILE ? data.toString("latin1") : "";
-    const binary = compressed || isBinaryBody(undefined, data);
-    // The same rule as where a run writes: what would not be replaced there is no leak here, or a seal would refuse a number.
-    const wordText = !binary && needles.some((needle) => needle.asWord) && isData(typeOfFile(name), text) ? (text.match(QUOTED) ?? []).join("\n") : text;
-    for (const needle of needles) {
-      // A short value in a picture is chance, not a leak: it stands in any file of some size.
-      if (needle.short && binary) continue;
-      const body = needle.asWord ? wordText : text;
-      const found = needle.literal.some((form) => data.includes(form) || name.includes(form.toString())) || needle.patterns.some((pattern) => body.search(pattern) !== -1 || (needle.asWord && name.search(pattern) !== -1));
-      if (found) result.hits.push({ file: name, secret: needle.index, source: needle.source });
+    try {
+      searchFile(path, name);
+    } catch (error) {
+      if (!isGone(error)) result.unread.push(name);
     }
   }
   return result;
@@ -661,20 +782,35 @@ function searchFor(runDir: string, secrets: readonly { secret: RunSecret; index:
 export function scanRun(runDir: string): ScanResult {
   const file = readSecretsFile(runDir);
   // A run without secrets has nothing to look for, and a seal reads every file already.
-  if (!file) return { files: 0, bytes: 0, hits: [], compressed: 0 };
+  if (!file) return { files: 0, bytes: 0, hits: [], compressed: 0, unread: [] };
   return searchFor(runDir, file.secrets.map((secret, index) => ({ secret, index })));
 }
 
-/** Look for values that only just became known in what the run holds already. What is found is noted, and stays where it is. */
+/**
+ * Look for values that only just became known in what the run holds already. What is found is noted,
+ * and stays where it is. A value that can stand somewhere by chance, such as `2517` in a postcode, cannot
+ * be told from a leak here, so how often it stands where is remembered: only more than that counts from now on.
+ */
 function lookBack(runDir: string, added: readonly RunSecret[]): void {
   if (added.length === 0) return;
   const all = readSecretsFile(runDir)!.secrets;
-  const { hits } = searchFor(runDir, added.map((secret) => ({ secret, index: all.indexOf(all.find((entry) => entry.real === secret.real)!) })));
-  for (const hit of hits) noteSecretEvent(runDir, { kind: "found-in-run", where: hit.file, source: hit.source, noteNl: "deze waarde stond al in de run toen ze bekend werd" });
+  const { hits, unread } = searchFor(runDir, added.map((secret) => ({ secret, index: all.findIndex((entry) => entry.real === secret.real) })));
+  const counted = hits.filter((hit) => hit.count !== undefined);
+  if (counted.length > 0) {
+    changing(runDir, (file) => {
+      for (const hit of counted) {
+        const entry = file.secrets.find((known) => known.real === all[hit.secret]!.real);
+        if (entry) entry.chance = { ...entry.chance, [hit.file]: hit.count! };
+      }
+    });
+  }
+  for (const hit of hits) noteSecretEvent(runDir, { kind: "found-in-run", where: hit.file, source: hit.source, noteNl: hit.count === undefined ? "deze waarde stond al in de run toen ze bekend werd" : "deze korte waarde stond al in de run toen ze bekend werd; dat kan toeval zijn, zoals een postcode, en is niet te onderscheiden van een lek" });
+  for (const file of unread) noteSecretEvent(runDir, { kind: "found-in-run", where: file, noteNl: "dit bestand was niet te lezen toen deze waarde bekend werd, dus het is er niet op nagekeken" });
 }
 
 /** Why a run with secrets outside their file may not be sealed, in Dutch, or null when none was found. */
 export function leakRefusalNl(scan: ScanResult): string | null {
+  if (scan.unread.length > 0) return `niet verzegeld: ${scan.unread.join(", ")} is niet te lezen, dus er is niet nagegaan of er een geheim in staat. Maak het leesbaar of haal het weg`;
   if (scan.hits.length === 0) return null;
   const files = [...new Set(scan.hits.map((hit) => hit.file))];
   const sources = [...new Set(scan.hits.map((hit) => hit.source))];
@@ -786,7 +922,7 @@ export function secretsLinesNl(runDir: string): string[] {
   const scan = scanRun(runDir);
   return [
     ...[...bySource].sort().map(([source, count]) => `${source}: ${count}`),
-    `run: ${scan.files} bestanden doorzocht, ${scan.hits.length} keer een geheim gevonden${scan.hits.length > 0 ? `: ${[...new Set(scan.hits.map((hit) => `${hit.file} (${hit.source})`))].join(", ")}` : ""}`,
+    `run: ${scan.files} bestanden doorzocht, ${scan.hits.length} keer een geheim gevonden${scan.hits.length > 0 ? `: ${[...new Set(scan.hits.map((hit) => `${hit.file} (${hit.source})`))].join(", ")}` : ""}${scan.unread.length > 0 ? `; niet te lezen: ${scan.unread.join(", ")}` : ""}`,
     ...readSecretEvents(runDir).map((event) => `${event.at} ${event.kind} ${event.where}${event.source ? ` (${event.source})` : ""}: ${event.noteNl}`),
   ];
 }

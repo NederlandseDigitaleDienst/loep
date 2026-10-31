@@ -1,18 +1,20 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
+import { randomBytes } from "node:crypto";
+import fs, { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { createServer as createHttpsServer } from "node:https";
+import { syncBuiltinESMExports } from "node:module";
 import { connect, type AddressInfo, type Socket } from "node:net";
 import { networkInterfaces, tmpdir } from "node:os";
 import { join } from "node:path";
-import { after, test } from "node:test";
+import { after, mock, test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { gzipSync } from "node:zlib";
 import { generateCACertificate } from "mockttp";
 import * as playwright from "playwright";
 import type { Browser, Page } from "playwright";
-import { boundaryForContext, boundaryPortsForTest, LOCAL_ONLY_ENV, MAX_REQUEST_BYTES, REFUSED_HEADER, REFUSED_STATUS, setBoundaryNetwork } from "../src/browser/boundary.ts";
+import { boundaryForContext, boundaryPortsForTest, LOCAL_ONLY_ENV, MAX_REQUEST_BYTES, REFUSED_HEADER, REFUSED_STATUS, setBoundaryNetwork, shieldedFetch } from "../src/browser/boundary.ts";
 import { loadPage, newContext } from "../src/browser/session.ts";
 import { absorbAll } from "../src/commands/mail.ts";
 import { seal } from "../src/commands/verify.ts";
@@ -820,7 +822,7 @@ test("6: a site with a new cookie name for each answer cannot make the register 
   const run = runOn("http://localhost:1");
   try {
     registerSecret(run, COOKIE, { source: SESSION_COOKIE_SOURCE });
-    for (let index = 0; index < MAX_SLOTS * 3; index++) renewSessionSecrets(run, { "set-cookie": `naam${index}=waarde-${index}-Qw3Er5Ty7Ui9Op1As3Df5Gh7Jk9Lz; Path=/` }, new URL("http://localhost:1/"));
+    for (let index = 0; index < MAX_SLOTS * 3; index++) renewSessionSecrets(run, { "set-cookie": `naam${index}=waarde-${index}-Qw3Er5Ty7Ui9Op1As3Df5Gh7Jk9Lz; Path=/` }, new URL("http://localhost:1/"), "context");
     const places = readSecretsFile(run)!.secrets.filter((secret) => secret.slot !== undefined);
     assert.equal(places.length, MAX_SLOTS);
     assert.ok(places.at(-1)!.real.startsWith(`waarde-${MAX_SLOTS * 3 - 1}-`), "the oldest goes first");
@@ -1004,6 +1006,245 @@ test("I: a mail that cannot be taken in is skipped, named without its content, a
 
 // ---- Without secrets ---------------------------------------------------------------------------------------------------
 
+// ---- What a third review found -----------------------------------------------------------------------------------------
+
+const randomValue = (length: number): string => randomBytes(length).toString("base64url").slice(0, length);
+
+test("a value of some kilobytes is one value like any other, also spelled in a mix right across its length", () => {
+  const long = randomValue(6000);
+  const shield = new Shield({ secrets: [secretFor(long)] });
+  const alias = shield.secrets[0]!.alias;
+  assert.equal(shield.inward(`voor ${long} na`), `voor ${alias} na`);
+  for (const at of [0, 511, 512, 513, 2048, 5999]) {
+    const mixed = `${long.slice(0, at)}%${long.charCodeAt(at).toString(16)}${long.slice(at + 1)}`;
+    assert.equal(shield.inward(`voor ${mixed} na`), `voor ${alias} na`, `escaped at ${at}`);
+  }
+  const almost = `${long.slice(0, 5000)}!${long.slice(5001)}`;
+  assert.equal(shield.inward(almost), almost, "the same up to one character is another value");
+});
+
+test("a run with a session token of some kilobytes works: the browser starts, the site gets it, and it is nowhere in the run", async () => {
+  const long = randomValue(3000);
+  const site = await siteWith((request, response) => {
+    if (!request.headers.cookie?.includes(`sessie=${long}`)) return void response.writeHead(303, { location: "/inloggen" }).end();
+    html(response, "<h1>Mijn pagina</h1>");
+  });
+  const run = runOn(site.origin);
+  const login = loginSession(site.origin);
+  login.storageState.cookies[0]!.value = long;
+  writeLoginFile(join(run, LOGIN_SESSION_FILE), login);
+  setRunLogin(run);
+  const session = await sessionOn(run, await launched("chromium"));
+  try {
+    await loadPage(session.page, `${site.origin}/mijn`);
+    assert.equal(await session.page.locator("h1").textContent(), "Mijn pagina");
+    await writeJson(join(run, "observations", "o1.json"), { cookies: await session.page.context().cookies() });
+    assert.deepEqual(filesHolding(run, long), []);
+    assert.deepEqual(scanRun(run).hits, []);
+    writeFileSync(join(run, "gelekt.txt"), long);
+    assert.deepEqual(scanRun(run).hits.map((hit) => hit.file), ["gelekt.txt"]);
+  } finally {
+    setRunLogin(null);
+    await session.close();
+    await site.close();
+    rmSync(run, { recursive: true, force: true });
+  }
+});
+
+test("two contexts that each get their own renewed cookie keep it: one never sends the value of the other", async () => {
+  const [first, second] = [randomValue(40), randomValue(40)];
+  const site = await siteWith((request, response) => {
+    if (request.url === "/een") return html(response, "<h1>Een</h1>", { "set-cookie": `sessie=${first}; Path=/` });
+    if (request.url === "/twee") return html(response, "<h1>Twee</h1>", { "set-cookie": `sessie=${second}; Path=/` });
+    html(response, "<h1>Wie</h1>");
+  });
+  const run = runOn(site.origin);
+  writeLoginFile(join(run, LOGIN_SESSION_FILE), loginSession(site.origin));
+  setRunLogin(run);
+  const browser = await launched("chromium");
+  const [one, other] = [await sessionOn(run, browser), await sessionOn(run, browser)];
+  try {
+    await loadPage(one.page, `${site.origin}/een`);
+    await loadPage(other.page, `${site.origin}/twee`);
+    await loadPage(one.page, `${site.origin}/wie`);
+    assert.ok(site.heard.at(-1)!.headers.cookie?.includes(`sessie=${first}`), "the first context keeps its own value");
+    await loadPage(other.page, `${site.origin}/wie`);
+    assert.ok(site.heard.at(-1)!.headers.cookie?.includes(`sessie=${second}`), "and the second its own");
+    assert.equal(readSecretsFile(run)!.secrets.filter((secret) => secret.slot !== undefined).length, 2);
+  } finally {
+    setRunLogin(null);
+    await one.close();
+    await other.close();
+    await site.close();
+    rmSync(run, { recursive: true, force: true });
+  }
+});
+
+test("a stored token goes to every origin of the run, as a script sends it to its own service on another address", async () => {
+  const api = await siteWith((request, response) => {
+    response.writeHead(request.method === "OPTIONS" || request.headers.authorization === `Bearer ${STORED}` ? 200 : 401, { "access-control-allow-origin": "*", "access-control-allow-headers": "authorization", "content-type": "text/plain" }).end("api");
+  });
+  const site = await siteWith((_request, response) => html(response, "<h1>App</h1>"));
+  const run = runOn(site.origin);
+  writeFileSync(join(run, "inventory.json"), JSON.stringify({ baseUrl: `${site.origin}/`, origin: site.origin, origins: [site.origin, api.origin], pages: [] }));
+  writeLoginFile(join(run, LOGIN_SESSION_FILE), { ...loginSession(site.origin), storageState: { cookies: [], origins: [{ origin: site.origin, localStorage: [{ name: "token", value: STORED }] }] } });
+  setRunLogin(run);
+  const session = await sessionOn(run, await launched("chromium"));
+  try {
+    await loadPage(session.page, `${site.origin}/`);
+    assert.equal(await session.page.evaluate((url) => fetch(url, { headers: { authorization: `Bearer ${localStorage.getItem("token")}` } }).then((answer) => answer.status), `${api.origin}/ik`), 200);
+    assert.deepEqual(filesHolding(run, STORED), []);
+  } finally {
+    setRunLogin(null);
+    await session.close();
+    await api.close();
+    await site.close();
+    rmSync(run, { recursive: true, force: true });
+  }
+});
+
+test("a stored token stays off an address that is no part of the run: the scope holds the request back and says so, with or without secrets", async () => {
+  const api = await siteWith((_request, response) => void response.writeHead(200, { "access-control-allow-origin": "*", "access-control-allow-headers": "authorization" }).end("api"));
+  const site = await siteWith((_request, response) => html(response, "<h1>App</h1>"));
+  const run = runOn(site.origin);
+  writeLoginFile(join(run, LOGIN_SESSION_FILE), { ...loginSession(site.origin), storageState: { cookies: [], origins: [{ origin: site.origin, localStorage: [{ name: "token", value: STORED }] }] } });
+  setRunLogin(run);
+  const session = await sessionOn(run, await launched("chromium"));
+  try {
+    await loadPage(session.page, `${site.origin}/`);
+    await session.page.evaluate((url) => fetch(url, { headers: { authorization: `Bearer ${localStorage.getItem("token")}` } }).catch(() => undefined), `${api.origin}/ik`);
+    assert.deepEqual(api.heard, []);
+    assert.ok(session.guard.blocked.some((entry) => entry.kind === "scope" && entry.url.startsWith(api.origin)));
+  } finally {
+    setRunLogin(null);
+    await session.close();
+    await api.close();
+    await site.close();
+    rmSync(run, { recursive: true, force: true });
+  }
+});
+
+test("a cookie of the browser in a request outside the browser goes out real, so a file behind a login stays reachable", async () => {
+  const site = await siteWith((request, response) => void response.writeHead(request.headers.cookie === `sessie=${COOKIE}` ? 200 : 401, { "content-type": "text/plain" }).end("ondertitels"));
+  const run = runOn(site.origin);
+  registerSecret(run, COOKIE, { source: SESSION_COOKIE_SOURCE, origins: [site.origin] });
+  try {
+    const shield = shieldForRun(run)!;
+    const answer = await shieldedFetch(shield, `${site.origin}/track.vtt`, { headers: { cookie: `sessie=${shield.secrets[0]!.alias}` } });
+    assert.equal(answer.status, 200);
+  } finally {
+    await site.close();
+    rmSync(run, { recursive: true, force: true });
+  }
+});
+
+test("a short code that stood in the run by chance before it was known does not stop a seal, and one more of it does", async () => {
+  const run = runOn("http://localhost:1");
+  try {
+    writeFileSync(join(run, "notitie.txt"), "Postcode 2517 KJ, en nog eens 2517.");
+    registerSecret(run, "2517", { source: "test" });
+    assert.deepEqual(scanRun(run).hits, []);
+    assert.equal(readSecretEvents(run).filter((event) => event.kind === "found-in-run").length, 1, "it is noted");
+    await seal(run);
+    rmSync(join(run, "evidence-index.json"));
+    writeFileSync(join(run, "notitie.txt"), "Postcode 2517 KJ, en nog eens 2517, en de code: 2517.");
+    assert.deepEqual(scanRun(run).hits.map((hit) => hit.file), ["notitie.txt"], "what came after it was known is no chance");
+    writeFileSync(join(run, "ander.txt"), "2517");
+    assert.deepEqual(scanRun(run).hits.map((hit) => hit.file).sort(), ["ander.txt", "notitie.txt"]);
+  } finally {
+    rmSync(run, { recursive: true, force: true });
+  }
+});
+
+test("a file that disappears during the search is no failure, and the search still happens", () => {
+  const run = runOn("http://localhost:1");
+  writeFileSync(join(run, "weg.txt"), "tijdelijk");
+  writeFileSync(join(run, "gelekt.txt"), TOKEN);
+  const read = fs.readFileSync;
+  mock.method(fs, "readFileSync", (path: string, ...rest: unknown[]) => {
+    if (String(path).endsWith("weg.txt")) throw Object.assign(new Error("ENOENT"), { code: "ENOENT" });
+    return (read as (...parts: unknown[]) => unknown)(path, ...rest);
+  });
+  syncBuiltinESMExports();
+  try {
+    registerSecret(run, TOKEN, { source: "test" });
+    assert.deepEqual(readSecretEvents(run).map((event) => event.where), ["gelekt.txt"], "the value is looked for, in what is there");
+    assert.deepEqual(scanRun(run).unread, []);
+  } finally {
+    mock.restoreAll();
+    syncBuiltinESMExports();
+    rmSync(run, { recursive: true, force: true });
+  }
+});
+
+test("a file that cannot be read is named, and a seal does not pass over it", async () => {
+  const run = runOn("http://localhost:1");
+  registerSecret(run, TOKEN, { source: "test" });
+  writeFileSync(join(run, "dicht.txt"), TOKEN);
+  chmodSync(join(run, "dicht.txt"), 0o000);
+  try {
+    assert.deepEqual(scanRun(run).unread, ["dicht.txt"]);
+    await assert.rejects(seal(run), /dicht\.txt/);
+  } finally {
+    chmodSync(join(run, "dicht.txt"), 0o600);
+    rmSync(run, { recursive: true, force: true });
+  }
+});
+
+test("a file larger than a read can hold is searched too, also where a value lies across two pieces", () => {
+  const run = runOn("http://localhost:1");
+  registerSecret(run, TOKEN, { source: "test" });
+  const path = join(run, "groot.mp4");
+  const descriptor = fs.openSync(path, "w");
+  try {
+    fs.ftruncateSync(descriptor, 2 ** 31 + 1024);
+    fs.writeSync(descriptor, TOKEN, 2 ** 31 - TOKEN.length / 2, "latin1");
+    fs.closeSync(descriptor);
+    assert.deepEqual(scanRun(run).hits.map((hit) => hit.file), ["groot.mp4"]);
+  } finally {
+    rmSync(run, { recursive: true, force: true });
+  }
+});
+
+test("a cookie reaches what a browser sends it to: its own host, or under its domain, and over https when it is secure", () => {
+  const value = randomValue(40);
+  const covers = (details: Partial<RunSecret>, url: string): boolean => new Shield({ secrets: [{ ...secretFor(value), origins: [], ...details }] }).covers(url);
+  assert.equal(covers({ domains: ["app.example.nl"] }, "https://app.example.nl/"), true);
+  assert.equal(covers({ domains: ["app.example.nl"] }, "https://sub.app.example.nl/"), false, "a cookie of one host stays there");
+  assert.equal(covers({ domains: [".example.nl"] }, "https://sub.example.nl/"), true, "a cookie of a domain goes under it");
+  assert.equal(covers({ domains: [".example.nl"] }, "https://nietexample.nl/"), false);
+  assert.equal(covers({ domains: [".example.nl"], secure: true }, "http://sub.example.nl/"), false, "a secure cookie stays off http");
+  assert.equal(covers({ domains: [".example.nl"], secure: true }, "wss://sub.example.nl/"), true);
+  assert.equal(covers({ domains: ["localhost"], secure: true }, "http://localhost:8081/"), true, "as a browser does on this machine");
+});
+
+test("what a session says about a cookie is what its reach is: also for a cookie of another site and for one the site renews", () => {
+  const run = runOn("https://app.example.nl");
+  const login = loginSession("https://app.example.nl");
+  login.storageState.cookies = [
+    { ...login.storageState.cookies[0]!, secure: true },
+    { ...login.storageState.cookies[0]!, name: "idp", value: `idp-${COOKIE}`, domain: "login.example.org" },
+  ];
+  writeLoginFile(join(run, LOGIN_SESSION_FILE), login);
+  try {
+    registerSessionSecrets(run);
+    const covering = (url: string): string[] => shieldForRun(run)!.reaching(url).secrets.map((secret) => secret.real);
+    assert.deepEqual(covering("https://app.example.nl/").filter((real) => real.includes(COOKIE)), [COOKIE], "not the cookie of the other site");
+    assert.deepEqual(covering("http://app.example.nl/").filter((real) => real.includes(COOKIE)), [], "not over http");
+    assert.deepEqual(covering("https://sub.app.example.nl/").filter((real) => real.includes(COOKIE)), [], "not under the host");
+    const renewed = randomValue(40);
+    renewSessionSecrets(run, { "set-cookie": `sessie=${renewed}; Path=/; Secure; Domain=example.nl` }, new URL("https://app.example.nl/"), "context");
+    assert.ok(covering("https://sub.example.nl/").includes(renewed));
+    assert.ok(!covering("http://sub.example.nl/").includes(renewed));
+    const hostOnly = randomValue(40);
+    renewSessionSecrets(run, { "set-cookie": `ander=${hostOnly}; Path=/` }, new URL("https://app.example.nl/"), "context");
+    assert.ok(covering("http://app.example.nl/").includes(hostOnly), "without Secure also over http");
+    assert.ok(!covering("https://sub.app.example.nl/").includes(hostOnly));
+  } finally {
+    rmSync(run, { recursive: true, force: true });
+  }
+});
+
 test("a run without secrets has no boundary: no proxy, no register, no file more, and the library is not loaded", async () => {
   const site = await siteWith((_request, response) => html(response, "<h1>Site</h1>"));
   const run = runOn(site.origin);
@@ -1023,7 +1264,7 @@ test("a run without secrets has no boundary: no proxy, no register, no file more
     assert.equal(existsSync(join(run, RUN_SECRETS_FILE)), false);
     assert.equal(existsSync(join(run, ".gitignore")), false);
     assert.deepEqual(secretLimitationsNl(run), []);
-    assert.deepEqual(scanRun(run), { files: 0, bytes: 0, hits: [], compressed: 0 });
+    assert.deepEqual(scanRun(run), { files: 0, bytes: 0, hits: [], compressed: 0, unread: [] });
   } finally {
     await site.close();
     rmSync(run, { recursive: true, force: true });

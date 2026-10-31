@@ -134,7 +134,7 @@ const CHECK_START = "/start";
 const CHECK_END = "/einde";
 const CHECK_MARK = "loep-grens";
 const CHECK_TIMEOUT_MS = 15_000;
-const PROXY_USER = "loep";
+const PROXY_USER_PREFIX = "loep-";
 
 /** The step of mockttp for a socket from the inside: `swapSocket` calls the real one. */
 interface SocketStep {
@@ -162,10 +162,10 @@ class Boundary {
   /** Stands for a site on this machine. The proxy answers for it, so a browser that comes here went around the proxy. */
   private readonly decoy: Server;
   private readonly password = randomBytes(24).toString("hex");
-  /** The ports of the connections the gate opened: only those are served. */
-  private readonly admitted = new Set<number>();
-  /** Requests under way to a site, by their id in mockttp, with the address as the browser knows it. */
-  private readonly underWay = new Map<string, string>();
+  /** The ports of the connections the gate opened, with the browser context each belongs to: only those are served. */
+  private readonly admitted = new Map<number, string>();
+  /** Requests under way to a site, by their id in mockttp, with the address as the browser knows it and the context that asked. */
+  private readonly underWay = new Map<string, { url: string; context: string }>();
   /** A cookie with an alias in it, per origin, with the way the site spelled it: it goes back the same, as a site compares it to the letter. */
   private readonly cookies = new Map<string, string>();
   private decoyHost = "";
@@ -236,11 +236,11 @@ class Boundary {
     await this.mock.addWebSocketRule({ matchers: [new matchers.WildcardMatcher()], steps: [Object.assign(step, { handle })] });
     await this.mock.on("rule-event", (event) => {
       if (event.eventType !== "passthrough-abort") return;
-      const where = this.underWay.get(event.requestId);
-      if (!where) return;
+      const asked = this.underWay.get(event.requestId);
+      if (!asked) return;
       this.underWay.delete(event.requestId);
       const { error } = event.eventData as { error?: { code?: string } };
-      noteSecretEvent(this.runDir, { kind: "unreachable", where, noteNl: `de site is niet bereikt: ${error?.code ?? "onbekende fout"}` });
+      noteSecretEvent(this.runDir, { kind: "unreachable", where: asked.url, noteNl: `de site is niet bereikt: ${error?.code ?? "onbekende fout"}` });
     });
     const listen = (server: NetServer): Promise<number> => new Promise((resolve, reject) => server.once("error", reject).listen(0, "127.0.0.1", () => resolve((server.address() as AddressInfo).port)));
     this.port = await listen(this.gate);
@@ -253,8 +253,9 @@ class Boundary {
     this.decoy.close();
   }
 
-  get proxy(): NonNullable<BrowserContextOptions["proxy"]> {
-    return { server: `http://127.0.0.1:${this.port}`, username: PROXY_USER, password: this.password };
+  /** The proxy for one browser context. The user name tells the contexts apart: the password is one, and what a site renews belongs to the context it said it to. */
+  proxyFor(context: string): NonNullable<BrowserContextOptions["proxy"]> {
+    return { server: `http://127.0.0.1:${this.port}`, username: `${PROXY_USER_PREFIX}${context}`, password: this.password };
   }
 
   /** The port of mockttp itself, for a test that goes around the gate. */
@@ -266,12 +267,13 @@ class Boundary {
     return request.remotePort !== undefined && this.admitted.has(request.remotePort);
   }
 
-  private authorized(head: string): boolean {
+  /** The context a connection says it is for, when it knows the password. */
+  private contextOf(head: string): string | null {
     const given = /^proxy-authorization:\s*basic\s+(\S+)\s*$/im.exec(head)?.[1];
-    if (!given) return false;
-    const expected = Buffer.from(Buffer.from(`${PROXY_USER}:${this.password}`).toString("base64"));
-    const offered = Buffer.from(given);
-    return offered.length === expected.length && timingSafeEqual(offered, expected);
+    if (!given) return null;
+    const [user = "", ...rest] = Buffer.from(given, "base64").toString().split(":");
+    const [offered, expected] = [Buffer.from(rest.join(":")), Buffer.from(this.password)];
+    return user.startsWith(PROXY_USER_PREFIX) && offered.length === expected.length && timingSafeEqual(offered, expected) ? user.slice(PROXY_USER_PREFIX.length) : null;
   }
 
   /** Read the first request of a connection, and let it through to mockttp when it knows the password. After that only bytes pass here. */
@@ -287,7 +289,8 @@ class Boundary {
       }
       client.off("data", read);
       client.pause();
-      if (!this.authorized(head.subarray(0, end).toString("latin1"))) {
+      const context = this.contextOf(head.subarray(0, end).toString("latin1"));
+      if (context === null) {
         client.end(`HTTP/1.1 407 Proxy Authentication Required\r\nproxy-authenticate: Basic realm="loep"\r\ncontent-length: 0\r\nconnection: close\r\n\r\n`);
         return;
       }
@@ -297,7 +300,7 @@ class Boundary {
       inner.on("error", () => client.destroy());
       inner.once("connect", () => {
         port = inner.localPort!;
-        this.admitted.add(port);
+        this.admitted.set(port, context);
         // WebKit asks for an open socket as `GET ws://`, and mockttp only reads an address with http in that place.
         inner.write(head.subarray(0, 8).toString("latin1") === "GET ws:/" ? Buffer.concat([Buffer.from("GET http:/"), head.subarray(8)]) : head);
         client.pipe(inner).pipe(client);
@@ -344,7 +347,7 @@ class Boundary {
     const contentType = [request.headers["content-type"] ?? ""].flat()[0]!;
     const body = contentType.startsWith("application/x-www-form-urlencoded") ? reaching.outwardForm(sent) : reaching.outwardBytes(sent);
     const target = new URL(reaching.outwardUrl(request.url));
-    this.underWay.set(request.id, request.url);
+    this.underWay.set(request.id, { url: request.url, context: this.admitted.get(request.remotePort!) ?? "" });
     const headers = {
       ...outwardHeaders(reaching, this.withSiteCookies(new URL(request.url).origin, request.headers)),
       host: target.host,
@@ -357,8 +360,9 @@ class Boundary {
 
   private async swapResponse(answer: { id: string; statusCode: number; headers: IncomingHttpHeaders; body: { getDecodedBuffer(): Promise<Buffer | undefined> } }, request: { id: string; url: string }) {
     const url = new URL(request.url);
+    const context = this.underWay.get(request.id)?.context ?? "";
     this.underWay.delete(request.id);
-    renewSessionSecrets(this.runDir, answer.headers, url);
+    renewSessionSecrets(this.runDir, answer.headers, url, context);
     const shield = shieldForRun(this.runDir)!;
     const where = shield.inward(request.url);
     const location = typeof answer.headers.location === "string" ? answer.headers.location : null;
@@ -429,7 +433,7 @@ class Boundary {
   /** Why this browser does not stay inside the boundary, in Dutch, or null when it does. */
   async refusalNl(browser: Browser, local: boolean): Promise<string | null> {
     const name = browser.browserType().name();
-    const context = await browser.newContext({ proxy: this.proxy, ignoreHTTPSErrors: true, serviceWorkers: "block" });
+    const context = await browser.newContext({ proxy: this.proxyFor("check"), ignoreHTTPSErrors: true, serviceWorkers: "block" });
     try {
       const page = await context.newPage();
       const reaches = async (start: string): Promise<boolean> => {
@@ -466,7 +470,7 @@ function boundaryOf(runDir: string): Promise<Boundary> {
 /** For a test: the proxy of a run as a stranger on this machine finds it. */
 export async function boundaryPortsForTest(runDir: string): Promise<{ gate: number; inner: number; proxy: NonNullable<BrowserContextOptions["proxy"]> }> {
   const boundary = await boundaryOf(runDir);
-  return { gate: boundary.port, inner: boundary.innerPort, proxy: boundary.proxy };
+  return { gate: boundary.port, inner: boundary.innerPort, proxy: boundary.proxyFor("test") };
 }
 
 const inside = new WeakSet<BrowserContext>();
@@ -524,7 +528,7 @@ export async function boundaryForContext(browser: Browser, runDir: string | unde
   if (!known.has(runDir!)) known.set(runDir!, boundary.refusalNl(browser, local));
   const refusalNl = await known.get(runDir!)!;
   if (refusalNl) throw new BoundaryRefused(`geweigerd in een run met geheimen: ${refusalNl}. Zonder grens kan een geheim in de browser en in de run terechtkomen, dus deze browser doet in deze run niet mee`);
-  return { proxy: boundary.proxy, ignoreHTTPSErrors: true };
+  return { proxy: boundary.proxyFor(randomBytes(6).toString("hex")), ignoreHTTPSErrors: true };
 }
 
 export interface FetchLimits {
@@ -560,12 +564,14 @@ async function boundedBody(body: ReadableStream<Uint8Array> | null, limit: numbe
  */
 export async function shieldedFetch(shield: Shield | null, url: string, init: RequestInit, limits: FetchLimits = {}): Promise<Response> {
   if (!shield) return fetch(url, init);
-  const answer = await fetch(shield.reaching(url).outwardUrl(url), { ...init, headers: { ...(init.headers as Record<string, string> | undefined), "accept-encoding": "identity" } });
+  const reaching = shield.reaching(url);
+  // A caller may pass on what the browser has: its cookies are aliases, and the site only knows the real values.
+  const answer = await fetch(reaching.outwardUrl(url), { ...init, headers: { ...outwardHeaders(reaching, (init.headers ?? {}) as IncomingHttpHeaders), "accept-encoding": "identity" } });
   const headers = new Headers();
   answer.headers.forEach((value, name) => {
     if (!STALE_HEADERS.has(name)) headers.append(name, headerInward(shield, name, value));
   });
-  // Set-Cookie is not read here: the callers ask without a session.
+  // Set-Cookie is not kept here: a file is asked for with a session, not to change it.
   const answered = { status: answer.status, statusText: answer.statusText, headers };
   if ([101, 204, 205, 304].includes(answer.status)) return new Response(null, answered);
   const read = await boundedBody(answer.body, limits.maxBytes === undefined ? Number.POSITIVE_INFINITY : limits.maxBytes + READ_PAST_BYTES, init.signal);
