@@ -1,4 +1,4 @@
-import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, statSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, utimesSync } from "node:fs";
 import { join } from "node:path";
 import { readJson, writeJson } from "./canonical.ts";
 import { confirmByTyping, processTerminal, recordedNl, recordStatement, type RecordedVia, type Recording, type RecordingFlags, type Terminal } from "./recorded.ts";
@@ -76,6 +76,21 @@ export const writesAllowedNl = (permission: WritePermission): string =>
 const raisedNl = (permission: WritePermission): string => (permission.raised ?? []).map((raise) => `; budget voor versturen verhoogd van ${raise.from} naar ${raise.to}, ${recordedNl(raise, raise.at)}`).join("");
 
 /** Hosts that cannot be a live site: the machine itself and the names reserved for testing. */
+/**
+ * This machine itself. `isLocalHost` also takes a name that ends in `.test`, which can be any machine:
+ * good enough for a site, not for where a password or a session goes, or for taking any certificate.
+ */
+export const isThisMachine = (host: string): boolean => /^(?:localhost|.+\.localhost|0\.0\.0\.0|127(?:\.\d{1,3}){3}|\[?::1\]?)$/i.test(host);
+
+/**
+ * A request of the toolbox itself, outside a browser. With `LOEP_BOUNDARY_LOCAL_ONLY=1` nothing leaves
+ * this machine, also not this way.
+ */
+export function trialFetch(url: string, init?: RequestInit): Promise<Response> {
+  if (process.env.LOEP_BOUNDARY_LOCAL_ONLY === "1" && !isLocalHost(new URL(url).hostname)) return Promise.resolve(new Response(null, { status: 599 }));
+  return fetch(url, init);
+}
+
 export function isLocalHost(hostname: string): boolean {
   const host = hostname.toLowerCase().replace(/^\[|\]$/g, "");
   return host === "127.0.0.1" || host === "localhost" || host === "::1" || host.endsWith(".localhost") || host.endsWith(".test");
@@ -199,6 +214,8 @@ export interface PassedWrite {
   repeat?: true;
   /** A frame over a socket that counted against the budget: every frame, except one shown to be a heartbeat or a message of the protocol (see `SocketFrames`). */
   message?: true;
+  /** The id of a personal link from a mail that was opened: the first time counts as a write, like a form. */
+  link?: string;
 }
 
 export const WRITES_LOG = "writes.jsonl";
@@ -409,39 +426,83 @@ export interface WriteAccess {
    * that has sent before is refused the reserved writes. `sender`: the session that sends, when one
    * access serves several; absent, the one the access was made for.
    */
-  claim: (method: string, url: string, options?: { message?: boolean; sender?: string | undefined }) => WriteClaim;
+  claim: (method: string, url: string, options?: { message?: boolean; sender?: string | undefined; link?: string }) => WriteClaim;
   /** Note a write that does not count against the budget: a frame over a socket without a test value in it, or the repeat of a request after a redirect. */
   record: (method: string, url: string, options?: { repeat?: boolean; sender?: string | undefined }) => PassedWrite;
 }
 
+/**
+ * Open a personal link from a mail: the first time in the run it counts as a write, because a link can
+ * confirm something by being opened. Every later time is the same request, and is only noted. Null
+ * when the link may be opened; the reason when the budget says no.
+ */
+export function claimLink(access: WriteAccess, url: string, link: string, sender: string | undefined): Extract<WriteClaim, { ok: false }> | null {
+  if (readLog(access.runDir).some((entry) => entry.link === link)) {
+    access.record("GET", url, { repeat: true, sender });
+    return null;
+  }
+  const claim = access.claim("GET", url, { sender, link });
+  return claim.ok ? null : claim;
+}
+
+/** The guarded addresses this run opened, by their id. With `besides`, what that sender opened does not count. */
+export const usedLinks = (runDir: string, besides?: string): Set<string> => new Set(readLog(runDir).flatMap((entry) => (entry.link && entry.source !== besides ? [entry.link] : [])));
+
 const LOCK = "writes.lock";
 /** A lock older than this was left behind by a process that stopped while it held it. */
 const STALE_LOCK_MS = 10_000;
+/** The same for work that waits for a server: it holds the lock longer, and others wait without stopping their process. */
+const STALE_ASYNC_LOCK_MS = 120_000;
+const ASYNC_LOCK_POLL_MS = 25;
+
+/** Try once to take a lock. One that is older than `staleMs`, or that `force` says to stop waiting for, is taken away first; the next try gets it. */
+function takeLock(path: string, staleMs: number, force = false): boolean {
+  try {
+    mkdirSync(path);
+    return true;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+  }
+  let age = 0;
+  try {
+    age = Date.now() - statSync(path).mtimeMs;
+  } catch {
+    // Gone in between: try again at once.
+  }
+  if (age > staleMs || force) rmSync(path, { recursive: true, force: true });
+  return false;
+}
+
+/** A lock like `withLock` around work that awaits something. While the work runs, the lock stays young. */
+export async function withAsyncLock<T>(runDir: string, name: string, work: () => Promise<T>): Promise<T> {
+  const path = join(runDir, name);
+  while (!takeLock(path, STALE_ASYNC_LOCK_MS)) await new Promise((resolve) => setTimeout(resolve, ASYNC_LOCK_POLL_MS));
+  const keepYoung = setInterval(() => {
+    try {
+      const now = new Date();
+      utimesSync(path, now, now);
+    } catch {
+      // Taken away after all: the work goes on, and the next write says what happened.
+    }
+  }, STALE_ASYNC_LOCK_MS / 4);
+  keepYoung.unref();
+  try {
+    return await work();
+  } finally {
+    clearInterval(keepYoung);
+    rmSync(path, { recursive: true, force: true });
+  }
+}
 
 /**
  * Hold the lock on the log of writes of a run while `work` runs. The sessions of a run share one
  * process, but the sweep runs in processes of its own: two of them must not both take the last write.
  * The work is a read and an append of one line, so the wait is short and done in place.
  */
-function withLock<T>(runDir: string, work: () => T): T {
-  const path = join(runDir, LOCK);
+export function withLock<T>(runDir: string, work: () => T, name: string = LOCK): T {
+  const path = join(runDir, name);
   const pause = new Int32Array(new SharedArrayBuffer(4));
-  for (let tries = 0; ; tries++) {
-    try {
-      mkdirSync(path);
-      break;
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
-      let age = 0;
-      try {
-        age = Date.now() - statSync(path).mtimeMs;
-      } catch {
-        // Gone in between: try again at once.
-      }
-      if (age > STALE_LOCK_MS || tries > 400) rmSync(path, { recursive: true, force: true });
-      else Atomics.wait(pause, 0, 0, 5);
-    }
-  }
+  for (let tries = 0; !takeLock(path, STALE_LOCK_MS, tries > 400); tries++) Atomics.wait(pause, 0, 0, 5);
   try {
     return work();
   } finally {
@@ -450,8 +511,8 @@ function withLock<T>(runDir: string, work: () => T): T {
 }
 
 export function writeAccess(runDir: string, permission: WritePermission, source: string, now: () => number = Date.now): WriteAccess {
-  const append = (method: string, url: string, repeat: boolean, message = false, sender = source): PassedWrite => {
-    const entry: PassedWrite = { at: new Date(now()).toISOString(), source: sender, method, path: new URL(url).pathname, ...(permission.alsoOrigins ? { origin: new URL(url).origin } : {}), ...(repeat ? { repeat: true as const } : {}), ...(message ? { message: true as const } : {}) };
+  const append = (method: string, url: string, repeat: boolean, message = false, sender = source, link?: string): PassedWrite => {
+    const entry: PassedWrite = { at: new Date(now()).toISOString(), source: sender, method, path: new URL(url).pathname, ...(permission.alsoOrigins ? { origin: new URL(url).origin } : {}), ...(repeat ? { repeat: true as const } : {}), ...(message ? { message: true as const } : {}), ...(link ? { link } : {}) };
     mkdirSync(runDir, { recursive: true });
     // Appended at once and synchronously: the line is there even when the run is cut off right after.
     appendFileSync(join(runDir, WRITES_LOG), `${JSON.stringify(entry)}\n`);
@@ -471,7 +532,7 @@ export function writeAccess(runDir: string, permission: WritePermission, source:
         if (budget.left === 0 && budget.sent < budget.max) return { ok: false, budget: "share", reasonNl: `${senderOf(sender) === sender ? sender : "dit criterium"} heeft al verstuurd, en er zijn nog ${budget.max - budget.sent} van ${budget.max} verzendingen naar ${budget.origin} over: ${reservedNl(budget.reserved)}` };
         if (budget.left === 0) return { ok: false, budget: "out", reasonNl: `het budget voor versturen van deze run is op: ${budget.sent} van ${budget.max} verzendingen naar ${budget.origin} zijn gedaan, door alle sessies en de veegronde samen` };
         if (budget.waitSeconds > 0) return { ok: false, budget: "spacing", reasonNl: `te kort na de vorige verzending: tussen twee verzendingen zit minstens ${budget.spacingSeconds} s; versturen kan weer over ${budget.waitSeconds} s (nog ${budget.left} van ${budget.max} over)` };
-        return { ok: true, entry: append(method, url, false, options?.message === true, sender) };
+        return { ok: true, entry: append(method, url, false, options?.message === true, sender, options?.link) };
       });
     },
   };

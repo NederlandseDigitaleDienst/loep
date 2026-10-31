@@ -15,7 +15,7 @@ import { compareSource, htmlValidate, locateSourceFindings, sourcePlaces, vnu, t
 import { compareOrders, lightWalk, orderFromWalk, predictedOrder, type TabOrder, type TabStop } from "../instruments/methods/taborder.ts";
 import { readChangeState, scrollChange, stateChanges, styleChanges } from "../instruments/change.ts";
 import { ensureHelpers } from "../instruments/methods/capsule.ts";
-import { canonicalJson, sha256, sha256File } from "../lib/canonical.ts";
+import { canonicalJson, sha256, sha256File, writeFileAtomic } from "../lib/canonical.ts";
 import { writeManifestTools } from "../lib/manifest.ts";
 import { criterionById } from "../lib/wcag.ts";
 import { UsageError, type Context, type Handler, type Options, type Outcome } from "./commands.ts";
@@ -1317,7 +1317,7 @@ export const source: Handler = async (context, _args, options) => {
     text = body.toString("utf8");
   }
   const path = images.file("-source.html");
-  await writeFile(path, body);
+  await writeFileAtomic(path, body);
   const browsers = browsersOf(context);
   const fast = await runMethod("html-validate", browsers, () => htmlValidate(text));
   // Where a selector leads in the page as it is now is looked up here, while the page is at hand; the validator in the background may answer later.

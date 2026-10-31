@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { writeFileAtomic } from "../lib/canonical.ts";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { runLoginMark } from "../lib/login.ts";
@@ -114,7 +115,7 @@ export async function voiceoverOutcome(request: VoiceOverRequest): Promise<Outco
   const page = testPage({ html, url: fetched, steps: planned, hosts: env.scope.hosts, strict: env.scope.strict, noPopup, noMailto });
   // The test page is kept with the observation: what Safari got is part of the evidence.
   const file = request.images.file("-proefpagina.html");
-  await writeFile(file, page);
+  await writeFileAtomic(file, page);
 
   const press = typeof options.press === "string" ? options.press.trim() : undefined;
   const { value: reading, waited } = await (request.queue ?? VOICEOVER_FOR_TESTS.queue ?? queue()).turn(() => read(guest, { url: file, steps: Math.min(MAX_STEPS, steps), ...(press ? { press } : {}), played: true }, request.clock ?? VOICEOVER_FOR_TESTS.clock ?? realClock));

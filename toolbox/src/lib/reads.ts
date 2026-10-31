@@ -1,6 +1,6 @@
-import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { readJson, writeJson } from "./canonical.ts";
+import { appendRunLine, readJson, writeJson } from "./canonical.ts";
 import { recogniseSearch, SEARCH_SERVICE_IDS, SEARCH_SERVICES, type SearchServiceId } from "./searchbody.ts";
 
 /**
@@ -235,7 +235,7 @@ export function noteRefusedRead(entry: Omit<RefusedRead, "at" | "source">): void
 export function refusedReadsLog(runDir: string, source: string): (entry: Omit<RefusedRead, "at" | "source">) => void {
   return (entry) => {
     mkdirSync(runDir, { recursive: true });
-    appendFileSync(join(runDir, READS_REFUSED_LOG), `${JSON.stringify({ at: new Date().toISOString(), source, ...entry })}\n`);
+    appendRunLine(join(runDir, READS_REFUSED_LOG), `${JSON.stringify({ at: new Date().toISOString(), source, ...entry })}\n`);
   };
 }
 

@@ -48,6 +48,7 @@ import {
 } from "../lib/verdict.ts";
 import { CRITERIA, criterionById } from "../lib/wcag.ts";
 import { agentLoginNl } from "../lib/login.ts";
+import { agentMailboxNl } from "../lib/mailbox.ts";
 import { readsAllowedNl } from "../lib/reads.ts";
 import { criterionSender, DEFAULT_MAX_WRITES, DEFAULT_WRITE_SPACING_SECONDS, reservedNl, reservedWrites, spacingNl, WRITES_BLOCKED_NL, writeBudget, writeBudgetNl, writesAllowedNl, writesForRun, writesLow } from "../lib/writes.ts";
 import { sweepCandidates } from "../lib/statusmessages.ts";
@@ -692,7 +693,7 @@ export async function instrumentTasks(runDir: string, options: TaskOptions = {})
   const absoluteRun = resolve(runDir);
   const cli = resolve(new URL("../cli.ts", import.meta.url).pathname);
   const templates = Object.fromEntries(["rondgang", "beoordeel", "verifieer", "afmaak"].map((name) => [name, readTemplate(name)])) as Record<"rondgang" | "beoordeel" | "verifieer" | "afmaak", string>;
-  const base = { run: absoluteRun, cli, siteModel: join(absoluteRun, "site.json"), login: agentLoginNl(run.login) };
+  const base = { run: absoluteRun, cli, siteModel: join(absoluteRun, "site.json"), login: `${agentLoginNl(run.login)}${agentMailboxNl(runDir, `node ${cli} mail links --run ${absoluteRun}`)}` };
   const readsNl = readsAllowedNl(run.reads ?? []);
   // The budget as it was set, not what is left of it: the task stays the same while agents send, and its hash with it.
   const budgetNl = run.writes ? `. Het budget voor versturen is ${run.writes.maxWrites ?? DEFAULT_MAX_WRITES} verzendingen voor de hele run${spacingNl(run.writes.spacingSeconds ?? DEFAULT_WRITE_SPACING_SECONDS)}, gedeeld door alle agents en de veegronde${reservedWrites(run.writes) > 0 ? `; ${reservedNl(reservedWrites(run.writes))}. De sessies van één criterium (beoordelaar, verifieerder, afmaker) tellen samen als één` : ""}; wat er nog over is, zegt \`session list\`` : "";

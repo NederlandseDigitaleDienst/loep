@@ -1,6 +1,8 @@
 import { createHash } from "node:crypto";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { appendFileSync } from "node:fs";
 import { dirname } from "node:path";
+import { maskBytes, maskText } from "./secrets.ts";
 
 /**
  * Canonical JSON: object keys sorted, two-space indent, trailing newline. Every
@@ -37,17 +39,30 @@ export async function sha256File(path: string): Promise<string> {
   return sha256(await readFile(path));
 }
 
-/** Atomic write, so an interrupted run never leaves a truncated file behind. */
+/**
+ * Atomic write, so an interrupted run never leaves a truncated file behind. In a run with secrets what
+ * is written goes through the mask first (`secrets.ts`): this is where a value that got past the
+ * boundary stops, and is noted.
+ */
 export async function writeFileAtomic(path: string, data: string | Uint8Array): Promise<void> {
+  await writeWhole(path, typeof data === "string" ? maskText(path, data) : maskBytes(path, data));
+}
+
+async function writeWhole(path: string, data: string | Uint8Array): Promise<void> {
   await mkdir(dirname(path), { recursive: true });
   const temporary = `${path}.tmp`;
   await writeFile(temporary, data);
   await rename(temporary, path);
 }
 
+/** Add a line to a log of a run, with the same mask. */
+export function appendRunLine(path: string, line: string): void {
+  appendFileSync(path, maskText(path, line));
+}
+
 export async function writeJson(path: string, value: unknown): Promise<string> {
-  const text = canonicalJson(value);
-  await writeFileAtomic(path, text);
+  const text = maskText(path, canonicalJson(value));
+  await writeWhole(path, text);
   return sha256(text);
 }
 

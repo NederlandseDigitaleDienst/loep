@@ -1,6 +1,6 @@
-import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { sha256 } from "./canonical.ts";
+import { appendRunLine, sha256 } from "./canonical.ts";
 import { approvedSendsTo, connectionKind, sendsToMatches } from "./sitemodel.ts";
 import { isOurMessage, isProtocolFrame } from "./writes.ts";
 
@@ -183,7 +183,7 @@ export function socketRecordings(runDir: string, source: string, values: readonl
   const append = (file: string, entry: unknown): void => {
     mkdirSync(runDir, { recursive: true });
     // Appended at once and synchronously, as the log of writes is.
-    appendFileSync(join(runDir, file), `${JSON.stringify(entry)}\n`);
+    appendRunLine(join(runDir, file), `${JSON.stringify(entry)}\n`);
   };
   const keyOf = (message: string | Buffer, anyFrame: boolean): string | null => recordingKey(message, values) ?? (anyFrame ? frameKey(message) : null);
   const find = (url: string, message: string | Buffer, anyFrame = false): SocketRecording | null => {
@@ -400,7 +400,7 @@ export function httpRecordings(runDir: string, source: string, options: Pick<Rec
   const sendsTo = options.sendsTo ?? approvedSendsTo(runDir);
   const append = (file: string, entry: unknown): void => {
     mkdirSync(runDir, { recursive: true });
-    appendFileSync(join(runDir, file), `${JSON.stringify(entry)}\n`);
+    appendRunLine(join(runDir, file), `${JSON.stringify(entry)}\n`);
   };
   const find: HttpRecordings["find"] = (method, url, send) => {
     const origin = originOf(url);

@@ -135,6 +135,11 @@ export async function startServer(port = 0): Promise<FixtureServer> {
       response.writeHead(302, { location: `${otherOrigin}/elsewhere.html` }).end();
       return;
     }
+    // An address of the site itself that goes to the one above: the step out of the site comes second.
+    if (path === "/redirect-twice") {
+      response.writeHead(302, { location: "/redirect-out" }).end();
+      return;
+    }
     // An address that sends the visitor on to a host that is neither the site nor the other origin.
     if (path === "/redirect-third") {
       response.writeHead(302, { location: `${otherOrigin.replace("localhost", "[::1]")}/elsewhere.html` }).end();
