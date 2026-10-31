@@ -1,8 +1,8 @@
-import type { Page, Response } from "playwright";
+import type { Page, Request, Response } from "playwright";
 
 /*
- * WebKit takes no redirect from a route, so a navigation that was fetched for it gets a page that
- * does nothing but send it on. That page is no part of the site: whatever reads a page or its answer
+ * A browser without a protocol session to watch each step of a redirect gets a page that does nothing
+ * but send it on, for a navigation that was fetched for it. That page is no part of the site: whatever reads a page or its answer
  * comes here first.
  */
 
@@ -46,12 +46,28 @@ export async function gotoEnd(page: Page, url: string, options?: Parameters<Page
   const stopped = new Promise<void>((resolve) => {
     ended = resolve;
   });
+  let lost: string | null = null;
+  const inMainFrame = (request: Request): boolean => {
+    try {
+      return request.isNavigationRequest() && request.frame() === page.mainFrame();
+    } catch {
+      // A navigation that has no frame yet, in a window of its own.
+      return false;
+    }
+  };
   const watch = (response: Response): void => {
-    if (!response.request().isNavigationRequest() || response.frame() !== page.mainFrame()) return;
+    if (!inMainFrame(response.request())) return;
     last = response;
     if (staysOnPage(response) || response.headers()[NAVIGATION_REFUSED_HEADER]) ended();
   };
+  // Firefox gives no answer for an empty one: the step after a page that sends the browser on just fails, and the navigation it came from never ends.
+  const failed = (request: Request): void => {
+    if (!last?.headers()[ONWARD_HEADER] || !inMainFrame(request)) return;
+    lost = request.failure()?.errorText ?? "onbekend";
+    ended();
+  };
   page.on("response", watch);
+  page.on("requestfailed", failed);
   try {
     const opening = page.goto(url, options);
     // The answer that ends it can come before the navigation is done with the page that sent it on, and then that navigation never ends.
@@ -62,14 +78,17 @@ export async function gotoEnd(page: Page, url: string, options?: Parameters<Page
       await page.evaluate((mark) => document.documentElement.removeAttribute(mark), ONWARD_MARK).catch(() => undefined);
       return last;
     }
+    if (first === null && lost) throw new Error(`De navigatie kwam niet aan: ${lost}`);
     const answer = first ?? (await opening);
     if (!answer?.headers()[ONWARD_HEADER]) return answer;
     await Promise.race([leftOnwardPage(page, ONWARD_TIMEOUT_MS), stopped]);
     throwIfRefused(last);
+    if (lost) throw new Error(`De navigatie kwam niet aan: ${lost}`);
     await page.evaluate((mark) => document.documentElement.removeAttribute(mark), ONWARD_MARK).catch(() => undefined);
     await page.waitForLoadState("load").catch(() => undefined);
     return last ?? answer;
   } finally {
     page.off("response", watch);
+    page.off("requestfailed", failed);
   }
 }
