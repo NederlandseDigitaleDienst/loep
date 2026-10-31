@@ -2,6 +2,7 @@ import { existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { canonicalJson } from "../lib/canonical.ts";
 import { siteOrigins, type OriginSource } from "../lib/origins.ts";
+import { trialFetch } from "../lib/writes.ts";
 
 /** An origin the session process stopped asking anything, because the site said so or kept failing. */
 export interface BlockadeEntry {
@@ -40,7 +41,7 @@ export type Probe = (url: string) => Promise<boolean>;
 
 const probeSite: Probe = async (url) => {
   try {
-    const response = await fetch(url, { redirect: "manual", signal: AbortSignal.timeout(PROBE_SECONDS * 1000) });
+    const response = await trialFetch(url, { redirect: "manual", signal: AbortSignal.timeout(PROBE_SECONDS * 1000) });
     await response.body?.cancel();
     return true;
   } catch {

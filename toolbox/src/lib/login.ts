@@ -100,6 +100,8 @@ export const markOf = (session: LoginMark): LoginMark => ({ origin: session.orig
 
 /** The files of a run that hold a secret. Never in a commit, a task for an agent or a message. */
 export const SECRET_FILES: readonly string[] = [LOGIN_SESSION_FILE, IDLE_SESSION_FILE];
+/** And with the register: every file of a run that holds real values on purpose. */
+export const ALL_SECRET_FILES: readonly string[] = [...SECRET_FILES, RUN_SECRETS_FILE];
 
 /**
  * Put a `.gitignore` in the run that keeps its secret files out of git, for whoever keeps the
@@ -231,8 +233,9 @@ export function renewSessionSecrets(runDir: string, headers: { "set-cookie"?: st
     cookies.flatMap((cookie) => {
       const [, name, value = ""] = /^([^=;]+)=([^;]*)/.exec(cookie) ?? [];
       const domain = /;\s*domain=([^;]+)/i.exec(cookie)?.[1]?.trim().replace(/^\./, "");
-      const reach = domain ? `.${domain}` : url.hostname;
-      return name && looksSecret(value) ? [{ value, source: SESSION_COOKIE_SOURCE, origins: [], domains: [reach], ...(/;\s*secure\s*(?:;|$)/i.test(cookie) ? { secure: true } : {}), slot: `cookie ${context} ${reach} ${name.trim()}`, context }] : [];
+      const path = /;\s*path=([^;]*)/i.exec(cookie)?.[1]?.trim() ?? "/";
+      const reach = domain ? `.${domain}` : url.hostname.replace(/^\[|\]$/g, "");
+      return name && looksSecret(value) ? [{ value, source: SESSION_COOKIE_SOURCE, origins: [], domains: [reach], ...(/;\s*secure\s*(?:;|$)/i.test(cookie) ? { secure: true } : {}), slot: `cookie ${context} ${reach} ${path} ${name.trim()}`, context }] : [];
     }),
   );
 }

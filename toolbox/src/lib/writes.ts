@@ -76,6 +76,21 @@ export const writesAllowedNl = (permission: WritePermission): string =>
 const raisedNl = (permission: WritePermission): string => (permission.raised ?? []).map((raise) => `; budget voor versturen verhoogd van ${raise.from} naar ${raise.to}, ${recordedNl(raise, raise.at)}`).join("");
 
 /** Hosts that cannot be a live site: the machine itself and the names reserved for testing. */
+/**
+ * This machine itself. `isLocalHost` also takes a name that ends in `.test`, which can be any machine:
+ * good enough for a site, not for where a password or a session goes, or for taking any certificate.
+ */
+export const isThisMachine = (host: string): boolean => /^(?:localhost|127(?:\.\d{1,3}){3}|\[?::1\]?)$/i.test(host);
+
+/**
+ * A request of the toolbox itself, outside a browser. With `LOEP_BOUNDARY_LOCAL_ONLY=1` nothing leaves
+ * this machine, also not this way.
+ */
+export function trialFetch(url: string, init?: RequestInit): Promise<Response> {
+  if (process.env.LOEP_BOUNDARY_LOCAL_ONLY === "1" && !isLocalHost(new URL(url).hostname)) return Promise.resolve(new Response(null, { status: 599 }));
+  return fetch(url, init);
+}
+
 export function isLocalHost(hostname: string): boolean {
   const host = hostname.toLowerCase().replace(/^\[|\]$/g, "");
   return host === "127.0.0.1" || host === "localhost" || host === "::1" || host.endsWith(".localhost") || host.endsWith(".test");

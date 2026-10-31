@@ -232,6 +232,8 @@ export async function guardContext(context: BrowserContext, scope: Scope, guard:
       if (request.isNavigationRequest() && inScope(scope, request.url()) && !STOPPED.test(request.failure()?.errorText ?? "")) blockade.failed(request.url());
     });
   }
+  // A personal link from a mail can say `afmelden`, and then it is about the mail and not about the session.
+  const loggingOut = (url: string): boolean => logsOut(url) && !(runDir !== undefined && shieldForRun(runDir)?.touchesGuarded(url));
   await context.route("**/*", (route) => {
     const request = route.request();
     const method = request.method();
@@ -245,7 +247,7 @@ export async function guardContext(context: BrowserContext, scope: Scope, guard:
       return refuse();
     }
     // In a run with a login nothing logs out: the session has to last for everything that comes after.
-    if (logsOut(url)) {
+    if (loggingOut(url)) {
       note("logout", method, url, type);
       return refuse();
     }

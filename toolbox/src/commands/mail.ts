@@ -1,15 +1,15 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Browser, BrowserContext, Locator, Page } from "playwright";
-import { launchBrowser, loadPage, newContext } from "../browser/session.ts";
-import { CLEANUP_SENDER, linkKind, MAIL_ADDRESS_SOURCE, MAIL_CODE_SOURCE, MAIL_LINK_SOURCE, MAIL_PRIVATE, MAILBOX_STATE, mailboxForRun, markedMail, openMailbox, readMailboxState, waitForMail, writeMailboxState, type CleanupStep, type MailServer, type Mailbox, type MailboxCleanup, type MailboxLink, type MailboxMark, type MailboxState, type ReceivedMail } from "../lib/mailbox.ts";
+import { launchBrowser, loadPage, newContext, type LoadResult } from "../browser/session.ts";
+import { CLEANUP_SENDER, linkKind, MAIL_ADDRESS_SOURCE, MAIL_CODE_SOURCE, MAIL_LINK_SOURCE, MAIL_PRIVATE, MAILBOX_STATE, mailboxForRun, markedMail, openMailbox, readMailboxState, waitForMail, writeMailboxState, type CleanupStep, type MailServer, type Mailbox, type MailboxCleanup, type MailboxLink, type MailboxMark, type MailboxState, type ReceivedMail, type SiteCleanup } from "../lib/mailbox.ts";
 import { isLoginPath, loginForRun, onlyLogsOut, originOf, passwordFieldShows } from "../lib/login.ts";
 import { pathOf } from "../lib/reads.ts";
 import { linksOf, secretsInText, secretsInUrl, spelledSecretsInUrl, withoutLinks } from "../lib/mailparse.ts";
 import { refuseUnderSeal } from "../lib/seal.ts";
 import { keepPrivate, readPrivate, readSecretsFile, registerGuarded, registerSecret, registerSecrets, scanRun, shieldForRun, type NewSecret, type Shield } from "../lib/secrets.ts";
 import { usedLinks, withAsyncLock, writeBudget, writeOriginsOf, writesForRun, type WritePermission } from "../lib/writes.ts";
-import { guardContext, guardRedirects, scopeForRun, TEST_VALUES, type Guard } from "../session/safety.ts";
+import { guardContext, guardRedirects, scopeForRun, TEST_VALUES, type Blocked, type Guard } from "../session/safety.ts";
 
 /*
  * The fixed flow around a mailbox. A mail is untrusted input, so nothing here is a judgment of a
@@ -43,6 +43,7 @@ const ABOUT_REGISTRATION = /afmeld|uitschrij|opzeg|unsubscribe|aanmelding|abonne
 const NOT_THE_REGISTRATION = /\baccount\b/i;
 /** A link on a page of a site that leads to signing up: never what cleaning up is looking for. */
 const SIGNS_UP = /aanmeld|inschrijv|(?<!un)subscribe/i;
+const REMOVES_BY_PATH = /afmeld|uitschrij|verwijder|opzeg|unsubscribe|remove|delete/i;
 /** In Dutch this is how a person leaves a mailing list, and how a person logs out: by itself this name says neither. */
 const ONLY_AFMELDEN = /^\W*(?:afmelden|meld (?:je|u) af)\W*$/i;
 /** Pages a cleanup looks at, to find the button that removes the registration. */
@@ -69,9 +70,14 @@ interface MailContext {
   state: MailboxState;
 }
 
-function requireMailbox(runDir: string): MailContext {
+function stateOfMailbox(runDir: string): MailboxState {
   const state = readMailboxState(runDir);
   if (!mailboxForRun(runDir) || !state) throw new Error("deze run heeft geen mailbox: die ligt vast bij inventory (--mailbox)");
+  return state;
+}
+
+function requireMailbox(runDir: string): MailContext {
+  const state = stateOfMailbox(runDir);
   const entry = readSecretsFile(runDir)?.secrets.find((secret) => secret.source === MAIL_ADDRESS_SOURCE);
   const server = readPrivate<MailServer>(runDir, MAIL_PRIVATE);
   if (!entry || !server) throw new Error("het register met de geheimen van de mailbox ontbreekt, dus de links zijn niet meer te openen en het adres van de run is onbekend");
@@ -87,7 +93,9 @@ export function absorbMail(runDir: string, origins: readonly string[], state: Ma
   // A link to another site is never followed and leaves the kept text whole, so it needs no alias.
   const ours = links.filter((link) => origins.includes(originOf(link.url) ?? ""));
   const reach = { origins: [...origins] };
-  const found: NewSecret[] = [...ours.flatMap((link) => spelledSecretsInUrl(link.url)).map(({ value, spelled }) => ({ value, spelled, source: MAIL_LINK_SOURCE, ...reach })), ...secretsInText(message.mail.text).map((value) => ({ value, source: MAIL_CODE_SOURCE, ...reach }))];
+  // A mail can have a stub for text, with the code only in its HTML.
+  const texts = [message.mail.text, message.mail.html.replace(/<[^>]*>/g, " ")];
+  const found: NewSecret[] = [...ours.flatMap((link) => spelledSecretsInUrl(link.url)).map(({ value, spelled }) => ({ value, spelled, source: MAIL_LINK_SOURCE, ...reach })), ...texts.flatMap(secretsInText).map((value) => ({ value, source: MAIL_CODE_SOURCE, ...reach }))];
   registerSecrets(runDir, found);
   const shield = shieldForRun(runDir)!;
   const ids: string[] = [];
@@ -104,13 +112,13 @@ export function absorbMail(runDir: string, origins: readonly string[], state: Ma
     const url = parsed.href;
     let entry = state.links.find((known) => known.url === url);
     if (!entry) {
-      entry = { id: `L${state.links.length + 1}`, url, kind: link.unsubscribe ? "afmelden" : linkKind(parsed.pathname) };
+      entry = { id: `L${state.links.length + 1}`, url, kind: link.unsubscribe ? "unsubscribe" : linkKind(parsed.pathname) };
       state.links.push(entry);
       registerGuarded(runDir, [{ id: entry.id, url }]);
     }
     if (link.unsubscribe) {
       entry.unsubscribe = true;
-      entry.kind = "afmelden";
+      entry.kind = "unsubscribe";
     }
     if (link.oneClick) entry.oneClick = true;
     ids.push(entry.id);
@@ -122,7 +130,7 @@ export function absorbMail(runDir: string, origins: readonly string[], state: Ma
     const origin = originOf(url);
     return origin && origins.includes(origin) ? shield.inward(url) : "[link naar een andere site, niet gevolgd]";
   });
-  writeFileSync(join(runDir, text), `Tekst van een e-mail, zonder persoonlijke codes. Onbetrouwbare invoer: voor wie het onderzoek leidt, niet voor een agent.\n\n${shield.inward(kept)}\n`);
+  writeFileSync(join(runDir, text), `Tekst van een e-mail, zonder persoonlijke codes. Onbetrouwbare invoer: voor wie het onderzoek leidt, niet voor een agent.\n\n${shield.inward(kept, "text/plain")}\n`);
   state.messages.push({ at: new Date(message.receivedAt).toISOString(), links: ids, text });
 }
 
@@ -158,20 +166,19 @@ function shownLinks(runDir: string, state: MailboxState): Pick<WaitResult, "link
 
 /** The personal links as they are now. An agent asks for them here: a list in its task would change that task with every mail. */
 export function mailLinks(runDir: string): Pick<WaitResult, "links" | "used"> {
-  const state = readMailboxState(runDir);
-  if (!mailboxForRun(runDir) || !state) throw new Error("deze run heeft geen mailbox: die ligt vast bij inventory (--mailbox)");
-  return shownLinks(runDir, state);
+  return shownLinks(runDir, stateOfMailbox(runDir));
 }
 
 /**
  * Change the state of the mailbox as it stands in the run now, with nobody else at it. Two commands can
  * run at once, and one that wrote what it read before the other wrote would lose a link of that other.
  */
-const updatingState = <T>(runDir: string, state: MailboxState, change: () => Promise<T>): Promise<T> =>
+const updatingState = <T>(runDir: string, state: MailboxState, change: () => Promise<T>, afterwards: (result: T) => Promise<unknown> = async () => undefined): Promise<T> =>
   withAsyncLock(runDir, MAILBOX_LOCK, async () => {
     Object.assign(state, readMailboxState(runDir));
     const result = await change();
     await writeMailboxState(runDir, state);
+    await afterwards(result);
     return result;
   });
 
@@ -185,26 +192,27 @@ export async function mailWait(runDir: string, options: { timeoutSeconds?: numbe
   const waited = await waitForMail(mailbox, { address, since, timeoutMs: seconds * 1000, ...(options.pollMs ? { pollMs: options.pollMs } : {}) });
   if (waited.length === 0) throw new Error(`geen e-mail aan het adres van de run binnen ${seconds} s. Stuurde de site er een? Een formulier met het veld e-mail, ingevuld met de testwaarde email, gaat naar dat adres`);
   // Looked at again with the lock held: another command may have taken this mail in the meantime. What came from a mail is written before that mail goes.
-  const mails = await withAsyncLock(runDir, MAILBOX_LOCK, async () => {
-    Object.assign(state, readMailboxState(runDir));
-    const received = await waitForMail(mailbox, { address, since, timeoutMs: 0, once: true });
-    const taken = absorbAll(runDir, origins, state, received);
-    await writeMailboxState(runDir, state);
-    await mailbox.remove(taken.map((message) => message.id));
-    return received.length;
-  });
+  const { mails } = await updatingState(
+    runDir,
+    state,
+    async () => {
+      const received = await waitForMail(mailbox, { address, since, timeoutMs: 0, once: true });
+      return { mails: received.length, taken: absorbAll(runDir, origins, state, received) };
+    },
+    ({ taken }) => mailbox.remove(taken.map((message) => message.id)),
+  );
   return { mails, ...shownLinks(runDir, state), refusedOrigins: state.refusedOrigins };
 }
 
 // ---- Cleaning up ------------------------------------------------------------------------------------------------------
 
 /** The order to look for a way out: a page that shows the registration first, because it can show afterwards that it is gone. */
-const CLEANUP_ORDER = ["voorkeuren", "overig", "bevestigen", "afmelden"] as const;
+const CLEANUP_ORDER = ["preferences", "other", "confirm", "unsubscribe"] as const;
 /**
  * What a link can do by being opened, for a link the run never used: a confirmation turns on the
  * registration it has to remove, and a link that does not say what it is can be one.
  */
-const OPENS_ONLY_ONCE_USED: ReadonlySet<string> = new Set(["bevestigen", "overig"]);
+const OPENS_ONLY_ONCE_USED: ReadonlySet<string> = new Set(["confirm", "other"]);
 
 /** What a personal link gave when it was opened. */
 interface Look {
@@ -282,7 +290,7 @@ async function removeButton(page: Page, shield: Shield): Promise<Locator | null>
     const bare = ONLY_AFMELDEN.test(about.text.trim());
     if (bare && about.chrome) continue;
     const carries = shield.carriesAlias(`${about.target} ${about.carried}`);
-    if (!carries && !ABOUT_REGISTRATION.test(about.text)) continue;
+    if (!ABOUT_REGISTRATION.test(about.text)) continue;
     ranked.push({ button, rank: (carries ? 0 : 4) + (bare ? 2 : 0) + (about.chrome ? 1 : 0) });
   }
   return ranked.sort((first, second) => first.rank - second.rank)[0]?.button ?? null;
@@ -314,7 +322,7 @@ async function personalLinksOn(page: Page, shield: Shield, mayOpen: (url: string
  */
 async function removeAtSite(browser: Browser, runDir: string, state: MailboxState, permission: WritePermission): Promise<SiteResult> {
   const steps: CleanupStep[] = [];
-  if (state.links.length === 0) return { outcome: "geen link", noteNl: "er kwam geen e-mail met een persoonlijke link binnen, dus de aanmelding, als die er is, kon niet via de site worden verwijderd", steps };
+  if (state.links.length === 0) return { outcome: "no link", noteNl: "er kwam geen e-mail met een persoonlijke link binnen, dus de aanmelding, als die er is, kon niet via de site worden verwijderd", steps };
   const known = state.links.slice(0, state.askedLinks);
   const used = usedLinks(runDir);
   const openable = known.filter((link) => !OPENS_ONLY_ONCE_USED.has(link.kind) || used.has(link.id));
@@ -324,7 +332,7 @@ async function removeAtSite(browser: Browser, runDir: string, state: MailboxStat
     const id = shield.guardedId(url);
     const path = pathIn(url);
     if (onlyLogsOut({ href: url }) || SIGNS_UP.test(path)) return false;
-    return id !== null ? openable.some((link) => link.id === id) : linkKind(path) !== "bevestigen";
+    return id !== null ? openable.some((link) => link.id === id) : linkKind(path) !== "confirm";
   };
   const wasAsked = (): boolean => state.askedLinks !== undefined;
   let unopened: string | null = null;
@@ -347,7 +355,7 @@ async function removeAtSite(browser: Browser, runDir: string, state: MailboxStat
      * Run something that sends. A write that had to wait for the time between two writes is tried again
      * after that time. A navigation that was held back ends in an error of the browser: that is the refusal, no failure.
      */
-    const sending = async <T>(work: () => Promise<T>): Promise<{ value: T | null; refusedNl: string | null; budget: boolean }> => {
+    const sending = async <T>(work: () => Promise<T>, ours: (entry: Blocked) => boolean = (entry) => entry.resourceType === "document"): Promise<{ value: T | null; refusedNl: string | null; budget: boolean }> => {
       for (;;) {
         const seen = guard.blocked.length;
         let value: T | null = null;
@@ -358,7 +366,8 @@ async function removeAtSite(browser: Browser, runDir: string, state: MailboxStat
           failure = error;
         }
         const held = guard.blocked.slice(seen);
-        const refused = held.find((entry) => entry.writeBudget);
+        // What the page sends by itself, such as a beacon, says nothing about this work.
+        const refused = held.find((entry) => entry.writeBudget && ours(entry));
         if (!refused) {
           // A redirect out of the scope is held back too: the page that stays then says nothing about the site.
           const away = held.find((entry) => entry.redirect || (entry.resourceType === "document" && entry.kind !== "scope"));
@@ -371,16 +380,17 @@ async function removeAtSite(browser: Browser, runDir: string, state: MailboxStat
       }
     };
     /** Ask the site to remove the registration. Only a budget that held it back leaves the site unasked; from anything else, also an error, the site may have got it. */
-    const asking = async (work: () => Promise<void>): ReturnType<typeof sending<void>> => {
+    const asking = async (work: () => Promise<void>, ours?: (entry: Blocked) => boolean): ReturnType<typeof sending<void>> => {
       const first = state.askedLinks === undefined;
       if (first) await updatingState(runDir, state, async () => void (state.askedLinks = state.links.length));
-      const result = await sending(work);
+      const result = await sending(work, ours);
       if (result.budget && first) await updatingState(runDir, state, async () => void delete state.askedLinks);
       return result;
     };
-    const look = async (on: Page, url: string): Promise<Look> => {
+    const look = async (on: Page, url: string, asks = false): Promise<Look> => {
+      const open = (): Promise<{ value: LoadResult | null; refusedNl: string | null; budget: boolean }> => (asks ? asking(async () => void (await loadPage(on, url))).then((result) => ({ ...result, value: null as LoadResult | null })) : sending(() => loadPage(on, url)));
       // A page that does not open says nothing either: that is noted, and the other links are still looked at.
-      const { value, refusedNl } = await sending(() => loadPage(on, url)).catch((error: Error) => ({ value: null, refusedNl: `de link ging niet open: ${error.message.split("\n")[0]}`, budget: false }));
+      const { value, refusedNl } = await open().catch((error: Error) => ({ value: null, refusedNl: `de link ging niet open: ${error.message.split("\n")[0]}`, budget: false }));
       const path = pathIn(on.url());
       return { path, status: value?.status ?? null, button: (await removeButton(on, shield)) !== null, login: isLoginPath(path) || path === loginPath || (await passwordFieldShows(on)), refusedNl };
     };
@@ -391,7 +401,9 @@ async function removeAtSite(browser: Browser, runDir: string, state: MailboxStat
     while (queue.length > 0 && visits.length < MAX_CLEANUP_PAGES && !removedOn) {
       const url = queue.shift()!;
       if (visits.some((visit) => visit.url === url)) continue;
-      const before = await look(page, url);
+      // A link that says it removes can do so by being opened: from then on the site was asked.
+      const removes = REMOVES_BY_PATH.test(pathIn(url));
+      const before = removes ? await look(page, url, true) : await look(page, url);
       if (before.refusedNl) {
         unopened ??= before.refusedNl;
         steps.push({ whatNl: `persoonlijke link niet geopend: ${before.refusedNl}`, path: pathIn(url) });
@@ -408,7 +420,7 @@ async function removeAtSite(browser: Browser, runDir: string, state: MailboxStat
           await button.click({ timeout: 5000 });
           await page.waitForLoadState("networkidle", { timeout: 10_000 }).catch(() => undefined);
         });
-        if (pressed.budget) return { outcome: "mislukt", noteNl: `de site is niet gevraagd de aanmelding te verwijderen: ${pressed.refusedNl}`, steps };
+        if (pressed.budget) return { outcome: "failed", noteNl: `de site is niet gevraagd de aanmelding te verwijderen: ${pressed.refusedNl}`, steps };
         steps.push({ whatNl: `"${name}" ingedrukt${pressed.refusedNl ? ` (${pressed.refusedNl})` : ""}, de site ging naar`, path: pathIn(page.url()) });
         removedOn = url;
         break;
@@ -417,13 +429,13 @@ async function removeAtSite(browser: Browser, runDir: string, state: MailboxStat
     }
     if (!removedOn) {
       const oneClick = known.find((link) => link.oneClick);
-      if (!oneClick && wasAsked()) return { outcome: "niet aangetoond", noteNl: "de site kreeg het verzoek al bij een eerder opruimen, en nu staat er geen knop meer; dat alleen laat niet zien dat de aanmelding weg is", steps };
-      if (!oneClick && unopened) return { outcome: "mislukt", noteNl: `een persoonlijke link kon niet worden geopend: ${unopened}`, steps };
-      if (!oneClick) return { outcome: "mislukt", noteNl: openable.length < known.length ? "er kwam alleen een link binnen die de run nooit opende. De aanmelding is dus nooit bevestigd, en het opruimen opent zo'n link niet, omdat dat haar juist kan aanzetten. Ze blijft onbevestigd bij de site staan" : "geen knop gevonden om de aanmelding te verwijderen", steps };
+      if (!oneClick && wasAsked()) return { outcome: "not shown", noteNl: "de site kreeg het verzoek al bij een eerder opruimen, en nu staat er geen knop meer; dat alleen laat niet zien dat de aanmelding weg is", steps };
+      if (!oneClick && unopened) return { outcome: "failed", noteNl: `een persoonlijke link kon niet worden geopend: ${unopened}`, steps };
+      if (!oneClick) return { outcome: "failed", noteNl: openable.length < known.length ? "er kwam alleen een link binnen die de run nooit opende. De aanmelding is dus nooit bevestigd, en het opruimen opent zo'n link niet, omdat dat haar juist kan aanzetten. Ze blijft onbevestigd bij de site staan" : "geen knop gevonden om de aanmelding te verwijderen", steps };
       const posted = await asking(async () => {
         await page.evaluate((url) => fetch(url, { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body: "List-Unsubscribe=One-Click", redirect: "manual" }).then(() => undefined), oneClick.url);
-      });
-      if (posted.budget) return { outcome: "mislukt", noteNl: `de afmelding met één klik is niet verstuurd: ${posted.refusedNl}`, steps };
+      }, (entry) => oneClick.url.startsWith(entry.url));
+      if (posted.budget) return { outcome: "failed", noteNl: `de afmelding met één klik is niet verstuurd: ${posted.refusedNl}`, steps };
       steps.push({ whatNl: "afmelding met één klik verstuurd (RFC 8058)", path: pathIn(oneClick.url) });
     }
     // The proof: a link that showed the registration twice now shows something else, by the hand of the site.
@@ -433,13 +445,13 @@ async function removeAtSite(browser: Browser, runDir: string, state: MailboxStat
       steps.push({ whatNl: `link opnieuw geopend (eerst ${visit.before.path}), de site gaf ${after.status ?? "geen antwoord"} en ging naar`, path: after.path });
       if (after.refusedNl) held.push(after.refusedNl);
       const gone = goneBy(visit.before, after);
-      if (gone) return { outcome: "verwijderd", noteNl: `${gone}, terwijl ze dat eerst twee keer niet deed`, steps };
+      if (gone) return { outcome: "removed", noteNl: `${gone}, terwijl ze dat eerst twee keer niet deed`, steps };
     }
     const why = visits.some((visit) => visit.stable) ? "geen link laat zien dat de aanmelding weg is" : "geen enkele link gaf twee keer hetzelfde, dus een verschil achteraf bewijst niets";
-    return { outcome: "niet aangetoond", noteNl: `de site kreeg het verzoek, maar ${why}${held.length > 0 ? `; ${held[0]}` : ""}`, steps };
+    return { outcome: "not shown", noteNl: `de site kreeg het verzoek, maar ${why}${held.length > 0 ? `; ${held[0]}` : ""}`, steps };
   } catch (error) {
     const brokeOffNl = `het opruimen op de site brak af: ${(error as Error).message.split("\n")[0]}`;
-    return wasAsked() ? { outcome: "niet aangetoond", noteNl: `de site kan het verzoek hebben gekregen, maar ${brokeOffNl}`, steps } : { outcome: "mislukt", noteNl: brokeOffNl, steps };
+    return wasAsked() ? { outcome: "not shown", noteNl: `de site kan het verzoek hebben gekregen, maar ${brokeOffNl}`, steps } : { outcome: "failed", noteNl: brokeOffNl, steps };
   } finally {
     await context?.close().catch(() => undefined);
   }
@@ -461,14 +473,14 @@ export async function mailCleanup(runDir: string, options: { mailbox?: Mailbox; 
   const taken = new Set<string>();
   const skipped = new Set<string>();
   const takeIn = async (from: Mailbox): Promise<ReceivedMail[]> => {
-    const waiting = await waitForMail(from, { address, since, timeoutMs: 0, once: true });
-    const fresh = waiting.filter((message) => !taken.has(message.id) && !skipped.has(message.id));
-    if (fresh.length === 0) return waiting;
-    await updatingState(runDir, state, async () => {
+    // Looked at with the lock held, as in `mailWait`: what another command took in stands in the state by then.
+    return updatingState(runDir, state, async () => {
+      const waiting = await waitForMail(from, { address, since, timeoutMs: 0, once: true });
+      const fresh = waiting.filter((message) => !taken.has(message.id) && !skipped.has(message.id));
       const read = new Set(absorbAll(runDir, origins, state, fresh).map((message) => message.id));
       for (const { id } of fresh) (read.has(id) ? taken : skipped).add(id);
+      return waiting;
     });
-    return waiting;
   };
   try {
     mailbox = options.mailbox ?? openMailbox(server);
@@ -483,13 +495,13 @@ export async function mailCleanup(runDir: string, options: { mailbox?: Mailbox; 
       browser ??= await (options.launch ?? launchBrowser)();
       return await removeAtSite(browser, runDir, state, permission);
     } catch (error) {
-      return { outcome: "mislukt", noteNl: `het opruimen op de site brak af: ${(error as Error).message.split("\n")[0]}`, steps: [] };
+      return { outcome: "failed", noteNl: `het opruimen op de site brak af: ${(error as Error).message.split("\n")[0]}`, steps: [] };
     } finally {
       if (!options.browser) await browser?.close().catch(() => undefined);
     }
   };
   // A registration that was shown to be gone stays gone: its links lead nowhere now, so a second round would find nothing to press.
-  let site = state.cleanup?.site.outcome === "verwijderd" ? state.cleanup.site : await atSite();
+  let site = state.cleanup?.site.outcome === "removed" ? state.cleanup.site : await atSite();
   let linksTried = state.links.length;
   let rounds = 1;
   if (mailbox) {
@@ -531,15 +543,17 @@ export async function mailCleanup(runDir: string, options: { mailbox?: Mailbox; 
   } catch (error) {
     scan = { files: 0, bytes: 0, hits: [], compressed: 0, noteNl: `de run is niet doorzocht: ${(error as Error).message.split("\n")[0]}` };
   }
-  const cleanup: MailboxCleanup = { at: new Date().toISOString(), site, mail, scan, complete: site.outcome === "verwijderd" && mail.left === 0 && (mail.marked ?? 0) === 0 && scan.hits.length === 0 && !scan.noteNl };
+  const cleanup: MailboxCleanup = { at: new Date().toISOString(), site, mail, scan, complete: site.outcome === "removed" && mail.left === 0 && (mail.marked ?? 0) === 0 && scan.hits.length === 0 && !scan.noteNl };
   await updatingState(runDir, state, async () => void (state.cleanup = cleanup));
   return cleanup;
 }
 
+const SITE_OUTCOME_NL: Record<SiteCleanup, string> = { removed: "verwijderd", "not shown": "niet aangetoond", failed: "mislukt", "no link": "geen link" };
+
 /** The report of a cleanup for the terminal. */
 export function cleanupLinesNl(cleanup: MailboxCleanup): string[] {
   return [
-    `site: ${cleanup.site.outcome} (${cleanup.site.noteNl})`,
+    `site: ${SITE_OUTCOME_NL[cleanup.site.outcome]} (${cleanup.site.noteNl})`,
     ...cleanup.site.steps.map((step) => `  ${step.whatNl}${step.path ? ` ${step.path}` : ""}`),
     `mail: ${cleanup.mail.removed} gewist, ${cleanup.mail.left === null ? "niet na te gaan hoeveel er nog staat" : `${cleanup.mail.left} over${cleanup.mail.marked ? `, ${cleanup.mail.marked} alleen gemarkeerd` : ""}`}${cleanup.mail.noteNl ? ` (${cleanup.mail.noteNl})` : ""}${cleanup.mail.checkedAt ? `; nagegaan op ${cleanup.mail.checkedAt}, wat daarna binnenkwam is niet gezien` : ""}`,
     `run: ${cleanup.scan.noteNl ?? `${cleanup.scan.files} bestanden doorzocht`}, ${cleanup.scan.hits.length} keer een geheim gevonden${cleanup.scan.compressed > 0 ? `; ${cleanup.scan.compressed} afbeeldingen of PDF-bestanden zijn gecomprimeerd, daar zegt deze zoekactie weinig over` : ""}`,

@@ -4,6 +4,7 @@ import { confirmLogin, INPAGE_PATH, launchBrowser, loadPage, newContext, withinP
 import { sha256, slugForUrl, writeFileAtomic, writeJson } from "../lib/canonical.ts";
 import { countByKind, documentKind, kindOfContentType, REDIRECTS_ELSEWHERE_NL, startedDownload, type DocumentKind, type DocumentTotals, type InventoryDocument } from "../lib/documents.ts";
 import type { Vendor } from "../lib/evaluation.ts";
+import { trialFetch } from "../lib/writes.ts";
 import { ignoreSecrets, isLogout, loginCookieHeader, LoginExpired, noteLogoutUrl, runLoginMark } from "../lib/login.ts";
 import { stepStart, writeManifest } from "../lib/manifest.ts";
 import { notFoundProbes, originsOfRun, privateFromPublicSite, siteOrigins } from "../lib/origins.ts";
@@ -114,7 +115,7 @@ export async function fetchSitemapUrls(origin: string): Promise<string[]> {
     const sitemap = queue.shift()!;
     if (seen.has(sitemap)) continue;
     seen.add(sitemap);
-    const response = await fetch(sitemap).catch(() => null);
+    const response = await trialFetch(sitemap).catch(() => null);
     if (!response?.ok) continue;
     for (const location of parseSitemap(await response.text())) {
       if (location.endsWith(".xml") || location.endsWith(".xml.gz")) queue.push(location);
@@ -403,7 +404,7 @@ export async function probeDocument(url: string, origins: string | readonly stri
       if (!own.includes(new URL(address).origin)) return { ...nothing, notAsked: REDIRECTS_ELSEWHERE_NL, redirectsTo: address };
       // A document behind a login is asked about with the session of the run.
       const cookie = loginCookieHeader(address);
-      const response = await fetch(address, { method: "HEAD", redirect: "manual", signal: AbortSignal.timeout(PROBE_TIMEOUT_MS), ...(cookie ? { headers: { cookie } } : {}) });
+      const response = await trialFetch(address, { method: "HEAD", redirect: "manual", signal: AbortSignal.timeout(PROBE_TIMEOUT_MS), ...(cookie ? { headers: { cookie } } : {}) });
       const location = response.headers.get("location");
       if (response.status >= 300 && response.status < 400 && location) {
         address = new URL(location, address).href;

@@ -7,7 +7,7 @@ import { isFor, parseMail, type ParsedMail } from "./mailparse.ts";
 import { imapMailbox } from "./mailbox-imap.ts";
 import { mailpitMailbox } from "./mailbox-mailpit.ts";
 import { confirmByTyping, processTerminal, type Terminal } from "./recorded.ts";
-import { usedLinks, writeOriginsNl, type WritePermission } from "./writes.ts";
+import { isThisMachine, usedLinks, writeOriginsNl, type WritePermission } from "./writes.ts";
 
 /**
  * A mailbox lets a run finish a flow that goes through an e-mail: wait for a message to the address
@@ -71,12 +71,6 @@ export interface MailboxMark {
 export const MAILBOX_ENV = { user: "LOEP_IMAP_USER", password: "LOEP_IMAP_PASSWORD", address: "LOEP_IMAP_ADDRESS" } as const;
 /** The name under which the keychain of macOS holds the login of a host. */
 export const keychainService = (host: string): string => `loep-imap-${host}`;
-
-/**
- * This machine itself. `isLocalHost` also takes a name that ends in `.test`, which can be any machine:
- * good enough for a site, not for where a password goes, or whether a person has to look at it.
- */
-const isThisMachine = (host: string): boolean => /^(?:localhost|127(?:\.\d{1,3}){3}|::1)$/i.test(host);
 
 const FORM_NL = "--mailbox verwacht imap://<host>:993 of mailpit://localhost:8025";
 
@@ -156,7 +150,8 @@ export function runAddress(server: MailServer, env: NodeJS.ProcessEnv = process.
   const { user } = mailCredentials(server, env);
   const at = user.lastIndexOf("@");
   if (at <= 0) throw new Error(`de gebruikersnaam van de mailbox is geen e-mailadres: zet het adres van de run in ${MAILBOX_ENV.address}`);
-  return `${user.slice(0, at)}+${tag}${user.slice(at)}`;
+  // In small letters: a site writes an address like that, and the swap goes by the letter.
+  return `${user.slice(0, at)}+${tag}${user.slice(at)}`.toLowerCase();
 }
 
 export interface WaitOptions {
@@ -201,7 +196,7 @@ export const markedMail = async (mailbox: Mailbox, address: string, since: Date)
 /** What is known of a run's mail: no token, no address. In the run, under the seal. */
 export const MAILBOX_STATE = "mailbox.json";
 
-export type LinkKind = "bevestigen" | "voorkeuren" | "afmelden" | "overig";
+export type LinkKind = "confirm" | "preferences" | "unsubscribe" | "other";
 
 export interface MailboxLink {
   id: string;
@@ -221,7 +216,7 @@ export interface CleanupStep {
   path?: string;
 }
 
-export type SiteCleanup = "verwijderd" | "niet aangetoond" | "mislukt" | "geen link";
+export type SiteCleanup = "removed" | "not shown" | "failed" | "no link";
 
 export interface MailboxCleanup {
   at: string;
@@ -229,7 +224,7 @@ export interface MailboxCleanup {
   /** `left`: what the last look found. `marked`: what the server only marked as deleted. `checkedAt`: the moment of that look; mail after it is not seen. */
   mail: { removed: number; left: number | null; marked?: number; checkedAt?: string; noteNl: string | null };
   /** `noteNl`: why the run could not be searched. */
-  scan: { files: number; bytes: number; hits: { file: string; secret: number }[]; compressed: number; noteNl?: string };
+  scan: { files: number; bytes: number; hits: { file: string; secret: number; source?: string }[]; compressed: number; noteNl?: string };
   /** The test registration is shown to be gone, the mail is gone, also from the server, and no secret stands in the run. */
   complete: boolean;
 }
@@ -255,10 +250,10 @@ export interface MailboxState {
 
 /** The kind of a link by the words in its path: the mail itself is not asked. A confirmation goes before preferences: it does something by being opened, also under a path for managing things. */
 export function linkKind(path: string): LinkKind {
-  if (/afmeld|uitschrij|opzeg|unsubscribe|opt-?out/i.test(path)) return "afmelden";
-  if (/bevestig|confirm|verif|activ/i.test(path)) return "bevestigen";
-  if (/voorkeur|preference|instelling|beheer|manage|profiel|profile/i.test(path)) return "voorkeuren";
-  return "overig";
+  if (/afmeld|uitschrij|opzeg|unsubscribe|opt-?out/i.test(path)) return "unsubscribe";
+  if (/bevestig|confirm|verif|activ/i.test(path)) return "confirm";
+  if (/voorkeur|preference|instelling|beheer|manage|profiel|profile/i.test(path)) return "preferences";
+  return "other";
 }
 
 /** Who opens a link when a run cleans up. */
@@ -303,7 +298,7 @@ function cleanupNl(state: MailboxState | null): string {
   const checked = cleanup.mail.checkedAt ? ` Dat is voor het laatst nagegaan op ${cleanup.mail.checkedAt}: wat de site daarna nog stuurde, staat er misschien nog.` : "";
   if (cleanup.complete) return `Opruimen: de testaanmelding is via de site zelf verwijderd, en dat is nagegaan; de e-mail is gewist, en de mailbox bevatte niets meer voor dit onderzoek.${checked} Het bewijs staat in ${MAILBOX_STATE}.`;
   const mailGone = cleanup.mail.left === 0 && (cleanup.mail.marked ?? 0) === 0;
-  const behind = [cleanup.site.outcome === "verwijderd" ? null : `op de site: ${cleanup.site.noteNl}`, mailGone ? null : `in de mailbox: ${cleanup.mail.noteNl ?? "er staat nog e-mail"}`, cleanup.scan.hits.length > 0 ? `in de run: een persoonlijke link staat in ${[...new Set(cleanup.scan.hits.map((hit) => hit.file))].join(", ")}` : null, cleanup.scan.noteNl ? `in de run: ${cleanup.scan.noteNl}` : null].filter(Boolean);
+  const behind = [cleanup.site.outcome === "removed" ? null : `op de site: ${cleanup.site.noteNl}`, mailGone ? null : `in de mailbox: ${cleanup.mail.noteNl ?? "er staat nog e-mail"}`, cleanup.scan.hits.length > 0 ? `in de run: een geheim staat in ${[...new Set(cleanup.scan.hits.map((hit) => (hit.source ? `${hit.file} (${hit.source})` : hit.file)))].join(", ")}` : null, cleanup.scan.noteNl ? `in de run: ${cleanup.scan.noteNl}` : null].filter(Boolean);
   return `Er bleef iets achter na het opruimen, ${behind.join("; ")}.${checked} Wie over de site of de mailbox gaat, moet dat nog weghalen.`;
 }
 

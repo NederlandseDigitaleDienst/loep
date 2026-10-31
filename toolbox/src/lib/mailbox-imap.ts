@@ -42,9 +42,9 @@ class Connection {
   private tag = 0;
   private readonly socket: Socket;
 
-  constructor(socket: Socket) {
+  constructor(socket: Socket, timeoutMs: number) {
     this.socket = socket;
-    socket.setTimeout(TIMEOUT_MS, () => socket.destroy(new Error(NO_ANSWER_NL)));
+    socket.setTimeout(timeoutMs, () => socket.destroy(new Error(NO_ANSWER_NL)));
     socket.on("data", (data: Buffer) => {
       this.buffer = Buffer.concat([this.buffer, data]);
       this.wake();
@@ -157,7 +157,7 @@ export function imapMailbox(server: MailServer, credentials: MailCredentials, ti
       // Until the connection stands nothing else watches it: a server that accepts and then says nothing would hold the command for good.
       opened.setTimeout(timeoutMs, () => opened.destroy(new Error(NO_ANSWER_NL)));
     });
-    const connection = new Connection(socket);
+    const connection = new Connection(socket, timeoutMs);
     try {
       await connection.greeting();
       await connection.run(`LOGIN ${quoted(credentials.user)} ${quoted(credentials.password)}`, "de inlog");

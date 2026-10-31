@@ -1,9 +1,9 @@
 import { randomBytes } from "node:crypto";
 import { appendFileSync, chmodSync, closeSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, readSync, realpathSync, renameSync, statSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, relative, resolve, sep } from "node:path";
-import { cookieFits, ignoreSecrets, IDLE_SESSION_FILE, LOGIN_SESSION_FILE, RUN_SECRETS_FILE, siteOriginOfRun } from "./login.ts";
+import { ALL_SECRET_FILES, cookieFits, ignoreSecrets, RUN_SECRETS_FILE, siteOriginOfRun } from "./login.ts";
 import { SEAL_INDEX } from "./seal.ts";
-import { isLocalHost, withLock } from "./writes.ts";
+import { isThisMachine, withLock } from "./writes.ts";
 
 /*
  * Every value of a run that may not be recorded, whatever it is and wherever it came from, stands in
@@ -157,8 +157,9 @@ export const MIN_BINARY_VALUE = 16;
 /** Anything shorter, and any short number, can also stand in a text by chance, as a piece of something else. */
 const MIN_RANDOM_VALUE = 8;
 const standsByChance = (value: string): boolean => value.length < MIN_RANDOM_VALUE || (value.length < MIN_BINARY_VALUE && /^\d+$/.test(value));
+const MAX_READABLE = 48;
 /** Words and numbers, as a part of an address on a site can be (`update-q4`): a mail can have it as a token, and the site as the name of a page. */
-const isReadable = (value: string): boolean => /^[a-z0-9-]+$/.test(value) && value.split("-").every((part) => /^(?:[a-z]*|\d*)$/.test(part) || part.length <= 3);
+const isReadable = (value: string): boolean => value.includes("-") && value.length < MAX_READABLE && /^[a-z0-9-]+$/.test(value) && value.split("-").every((part) => /^(?:[a-z]*|\d*)$/.test(part) || part.length <= 3);
 
 /**
  * Where a value that can stand somewhere by chance counts as that value. Not inside a longer word,
@@ -263,19 +264,29 @@ export function isBinaryBody(contentType: string | undefined, data: Buffer): boo
   return data.subarray(0, 8192).includes(0);
 }
 
+/** Over this size a text with the shape of JSON is taken for JSON without reading it. */
+const MAX_PARSED_TEXT = 8 * 1024 * 1024;
 /** Data and code: a number there is a number, and only what stands between quotes can be text. */
 const DATA_TYPE = /^(?:application\/(?:[\w.+-]*\+)?(?:json|javascript|ecmascript|x-javascript)\b|text\/(?:javascript|css)\b)/i;
 /** What stands between quotes, or backticks in a script. Unrolled, so a string of many megabytes (a recording keeps a body as base64) does not fill the stack of the pattern. */
 const QUOTED = /"[^"\\\n]*(?:\\.[^"\\\n]*)*"|'[^'\\\n]*(?:\\.[^'\\\n]*)*'|`[^`\\]*(?:\\[\s\S][^`\\]*)*`/g;
 
 /**
- * Whether a text is data, by its type or, without a type that says so, by its shape. There a value
+ * Whether a text is data, by its type or, without a type that says so, by being JSON. There a value
  * that can stand somewhere by chance only counts between quotes: an alias in the place of a number breaks the JSON around it.
  */
 function isData(contentType: string | undefined, text: string): boolean {
   if (contentType && DATA_TYPE.test(contentType.trim())) return true;
   const [start, end] = [text.trimStart()[0], text.trimEnd().at(-1)];
-  return (start === "{" && end === "}") || (start === "[" && end === "]");
+  if (!((start === "{" && end === "}") || (start === "[" && end === "]"))) return false;
+  // A text with a logo in square brackets at the top and the bottom has that shape too.
+  if (text.length > MAX_PARSED_TEXT) return true;
+  try {
+    JSON.parse(text);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /** The kind of a file of a run, by its name: for the same rules as a body with that type. */
@@ -305,7 +316,7 @@ const reachOf = (secret: Pick<RunSecret, "origins" | "domains" | "secure">, url:
   if (parsed.protocol === "wss:") parsed.protocol = "https:";
   if (secret.origins.includes(parsed.origin)) return true;
   const host = hostOf(parsed.href);
-  if (secret.secure && parsed.protocol !== "https:" && !isLocalHost(host)) return false;
+  if (secret.secure && parsed.protocol !== "https:" && !isThisMachine(host)) return false;
   return (secret.domains ?? []).some((domain) => cookieFits(domain, host));
 };
 
@@ -356,17 +367,17 @@ export class Shield {
 
   /** This shield with only the values that may go to this address. What goes out is swapped with this one. */
   reaching(url: string): Shield {
-    const host = (() => {
+    const origin = (() => {
       try {
         return new URL(url).origin;
       } catch {
         return url;
       }
     })();
-    let shield = this.within.get(host);
+    let shield = this.within.get(origin);
     if (!shield) {
       shield = new Shield({ secrets: this.secrets.filter((secret) => reachOf(secret, url)) });
-      this.within.set(host, shield);
+      this.within.set(origin, shield);
     }
     return shield;
   }
@@ -432,6 +443,11 @@ export class Shield {
   /** Whether an address is a guarded one, or leads the code of one to the site in another way: a site keeps that code in links of its own. */
   touchesGuarded(url: string): boolean {
     return this.guardedId(url) !== null || this.guardedAliases.some((alias) => url.includes(alias));
+  }
+
+  /** Whether any of these parts of a request holds the code of a guarded address. */
+  holdsGuarded(parts: readonly string[]): boolean {
+    return parts.some((part) => this.guardedAliases.some((alias) => part.includes(alias)));
   }
 
   /** Whether an address has an alias in it. */
@@ -741,7 +757,7 @@ export interface ScanResult {
 /** Files that hold real values on purpose. */
 const holdsSecretsOnPurpose = (name: string): boolean => {
   const file = basename(name);
-  return file === RUN_SECRETS_FILE || file === `${RUN_SECRETS_FILE}.tmp` || file === LOGIN_SESSION_FILE || file === IDLE_SESSION_FILE;
+  return ALL_SECRET_FILES.includes(file) || file === `${RUN_SECRETS_FILE}.tmp`;
 };
 
 function searchFor(runDir: string, secrets: readonly { secret: RunSecret; index: number }[]): ScanResult {
