@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { appendFileSync, chmodSync, closeSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, readSync, realpathSync, renameSync, statSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, relative, resolve, sep } from "node:path";
+import { realHosts } from "./origins.ts";
 import { cookieFits, ignoreSecrets, IDLE_SESSION_FILE, LOGIN_SESSION_FILE, RUN_SECRETS_FILE, siteOriginOfRun } from "./login.ts";
 import { SEAL_INDEX } from "./seal.ts";
 import { isLocalHost, withLock } from "./writes.ts";
@@ -297,7 +298,7 @@ export function hostOf(url: string): string {
 const reachOf = (secret: Pick<RunSecret, "origins" | "domains" | "secure">, url: string): boolean => {
   let parsed: URL;
   try {
-    parsed = new URL(url);
+    parsed = new URL(realHosts(url));
   } catch {
     return false;
   }
@@ -419,9 +420,10 @@ export class Shield {
       return parsed.href;
     };
     try {
-      const exact = this.guarded.get(new URL(url).href);
+      const real = realHosts(url);
+      const exact = this.guarded.get(new URL(real).href);
       if (exact) return exact;
-      const bare = withoutHash(url);
+      const bare = withoutHash(real);
       for (const [address, id] of this.guarded) if (withoutHash(address) === bare) return id;
       return null;
     } catch {
@@ -643,7 +645,7 @@ export interface SecretEvent {
 /** Note what whoever leads the evaluation has to see. Nothing that could hold a value goes in here unswapped. */
 export function noteSecretEvent(runDir: string, event: Omit<SecretEvent, "at">): void {
   const shield = shieldForRun(runDir);
-  const safe: SecretEvent = { at: new Date().toISOString(), ...event, where: shield ? shield.inward(event.where) : event.where, noteNl: shield ? shield.inward(event.noteNl) : event.noteNl };
+  const safe: SecretEvent = { at: new Date().toISOString(), ...event, where: realHosts(shield ? shield.inward(event.where) : event.where), noteNl: shield ? shield.inward(event.noteNl) : event.noteNl };
   appendFileSync(join(runDir, SECRET_EVENTS_FILE), `${JSON.stringify(safe)}\n`);
 }
 
@@ -892,9 +894,10 @@ const noteMasked = (runDir: string, where: string): void => noteSecretEvent(runD
 export function maskText(path: string, text: string): string {
   const mask = maskFor(path);
   if (!mask) return text;
-  const safe = mask.shield.inward(text, typeOfFile(path));
-  if (safe !== text) noteMasked(mask.runDir, mask.where);
-  return safe;
+  const safe = realHosts(text);
+  const masked = mask.shield.inward(safe, typeOfFile(path));
+  if (masked !== safe) noteMasked(mask.runDir, mask.where);
+  return masked;
 }
 
 /** The same for bytes. A binary file only loses what cannot stand there by chance. */
@@ -902,8 +905,10 @@ export function maskBytes(path: string, data: Uint8Array, contentType?: string):
   const mask = maskFor(path);
   if (!mask) return data;
   const bytes = Buffer.from(data.buffer, data.byteOffset, data.byteLength);
-  const safe = mask.shield.inwardBody(bytes, contentType ?? typeOfFile(path)).data;
-  if (safe !== bytes) noteMasked(mask.runDir, mask.where);
+  const type = contentType ?? typeOfFile(path);
+  const named = isBinaryBody(type, bytes) ? bytes : Buffer.from(realHosts(bytes.toString("latin1")), "latin1");
+  const safe = mask.shield.inwardBody(named, type).data;
+  if (safe !== named) noteMasked(mask.runDir, mask.where);
   return safe;
 }
 

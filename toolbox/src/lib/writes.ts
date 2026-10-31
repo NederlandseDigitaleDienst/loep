@@ -1,3 +1,4 @@
+import { realHosts } from "./origins.ts";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, utimesSync } from "node:fs";
 import { join } from "node:path";
 import { readJson, writeJson } from "./canonical.ts";
@@ -527,7 +528,7 @@ export function writeAccess(runDir: string, permission: WritePermission, source:
 export function isWriteOrigin(access: WriteAccess | null | undefined, url: string): boolean {
   if (!access) return false;
   try {
-    const parsed = new URL(url);
+    const parsed = new URL(realHosts(url));
     if (parsed.protocol === "ws:") parsed.protocol = "http:";
     if (parsed.protocol === "wss:") parsed.protocol = "https:";
     return access.origins.includes(parsed.origin);

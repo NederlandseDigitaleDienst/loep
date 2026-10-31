@@ -318,8 +318,7 @@ function eachPlace(name: Name, places: readonly ("local" | "http" | "https")[], 
   }
 }
 
-/** WebKit on macOS goes around any proxy after a redirect to a host on this machine; it is shown with a host name instead, and its refusal has a test of its own. */
-const PLACES: Record<Name, readonly ("local" | "http" | "https")[]> = { chromium: ["local", "http", "https"], firefox: ["local", "http", "https"], webkit: ["http", "https"] };
+const PLACES: Record<Name, readonly ("local" | "http" | "https")[]> = { chromium: ["local", "http", "https"], firefox: ["local", "http", "https"], webkit: ["local", "http", "https"] };
 
 for (const name of BROWSERS) {
   describe(`the whole route in ${name}`, () => {
@@ -443,30 +442,6 @@ test("a session opens its pages inside the boundary, also in a process that does
     const bare = await browser.newContext();
     await assert.rejects(guardContext(bare, env.scope, { blocked: [], outsideScopeLoaded: {}, sender: "test" }), /loopt niet door de grens/);
     await bare.close();
-  } finally {
-    await site.stop();
-    rmSync(run, { recursive: true, force: true });
-  }
-});
-
-test("a browser that goes around the proxy after a redirect on this machine does not take part in the run", { skip: !SecondBrowsers.installed("webkit") }, async () => {
-  const site = new Fixture(otherOrigin);
-  await site.start(null, null);
-  const run = await mailboxRun(site.origin);
-  try {
-    const browser = await launched("webkit");
-    const refused = await sessionOn(run, browser).catch((error: Error) => error);
-    if (process.platform === "darwin") {
-      assert.ok(refused instanceof Error, "WebKit on macOS is refused");
-      assert.match(refused.message, /webkit/);
-      assert.match(refused.message, /doet in deze run niet mee/);
-      assert.equal(site.heard.length, 0, "the site was asked nothing");
-    } else if (!(refused instanceof Error)) {
-      // Elsewhere WebKit stays inside: then the site gets the real value and the browser the alias, as in the others.
-      await loadPage(refused.page, `${site.origin}/volgende`);
-      assert.ok(!holdsSecret(await visible(refused)));
-      await refused.context.close();
-    }
   } finally {
     await site.stop();
     rmSync(run, { recursive: true, force: true });
