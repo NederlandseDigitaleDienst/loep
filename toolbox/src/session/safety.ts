@@ -1,7 +1,7 @@
 import { createWriteStream, existsSync } from "node:fs";
 import { join } from "node:path";
 import type { BrowserContext, CDPSession, Frame, Page, Request } from "playwright";
-import { answeredByCloudflare, bodyOf, passOn, sendOrReplay } from "../browser/session.ts";
+import { answeredByCloudflare, bodyOf, fulfillAnswer, passOn, sendOrReplay } from "../browser/session.ts";
 import { readJson } from "../lib/canonical.ts";
 import { isChallenge } from "../lib/challenge.ts";
 import { privateFromPublicSite, scopeHost, scopeHostOf, siteOrigins, WEB_SCHEMES } from "../lib/origins.ts";
@@ -479,7 +479,7 @@ export async function guardRedirectsByRoute(context: BrowserContext, scope: Scop
           return await route.fulfill({ status: 204, body: "" });
         }
       }
-      return await route.fulfill({ response });
+      return await fulfillAnswer(route, response);
     } catch {
       // The page went away while the answer was on its way; there is nobody left to answer.
       return route.abort("failed").catch(() => undefined);
