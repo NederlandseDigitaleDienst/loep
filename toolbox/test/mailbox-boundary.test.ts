@@ -399,8 +399,8 @@ for (const name of BROWSERS) {
           assert.equal(new URLSearchParams(repeated[0]!.body).get("email"), ADDRESS, "the repeat carries the real address");
         });
 
-        // On this machine WebKit keeps a socket closed; that has a test of its own.
-        await t.test("a socket: the real values go out, and a token cut in two over two frames comes back as an alias", { skip: name === "webkit" && isThisMachine(new URL(site.origin).hostname) }, async () => {
+        // On this machine WebKit keeps a socket closed; that has a test of its own. On Linux WebKit does not take the certificate of the proxy for a socket.
+        await t.test("a socket: the real values go out, and a token cut in two over two frames comes back as an alias", { skip: name === "webkit" && (isThisMachine(new URL(site.origin).hostname) || (process.platform === "linux" && site.origin.startsWith("https"))) }, async () => {
           const reply = await session.page.evaluate(
             ({ scheme, email, code }) =>
               new Promise<string>((resolve, reject) => {

@@ -724,6 +724,75 @@ test("WebKit on a site on this machine: a socket stays closed and says so, and t
   }
 });
 
+test("a window that a page opens stays possible, whatever the browser, also without secrets", async () => {
+  const site = await siteWith((_request, response) => html(response, "<h1>Site</h1>"));
+  const run = runOn(site.origin);
+  const context = await newContext(await launched("chromium"), { runDir: run, writes: null });
+  try {
+    const page = await context.newPage();
+    await loadPage(page, `${site.origin}/`);
+    const [popup] = await Promise.all([context.waitForEvent("page"), page.evaluate((url) => void window.open(url), `${site.origin}/venster`)]);
+    await popup.waitForLoadState("load");
+    assert.equal(await popup.locator("h1").textContent(), "Site");
+  } finally {
+    await context.close();
+    await site.close();
+    rmSync(run, { recursive: true, force: true });
+  }
+});
+
+test("a browser that does not show it stays inside the boundary is refused, before it asks a site anything", async () => {
+  const run = runOn("http://localhost:1");
+  registerSecret(run, TOKEN, { source: "test" });
+  const outside = { browserType: () => ({ name: () => "buiten" }), once: () => undefined, newContext: async () => ({ newPage: async () => ({ goto: async () => null }), close: async () => undefined }) } as unknown as Browser;
+  try {
+    await assert.rejects(boundaryForContext(outside, run), /doet in deze run niet mee/);
+  } finally {
+    rmSync(run, { recursive: true, force: true });
+  }
+});
+
+test("a request leaves through one place: nothing else in the source sends one on by itself", () => {
+  const places = ["src/browser/session.ts", "src/session/safety.ts"].flatMap((file) => readFileSync(join(fileURLToPath(new URL("..", import.meta.url)), file), "utf8").split("\n").filter((line) => line.includes("route.continue(")));
+  assert.equal(places.length, 2, places.join("\n"));
+  assert.ok(places.some((line) => /return route\.continue\(\);$/.test(line) && line.includes("withoutConnections")));
+  assert.ok(places.some((line) => line.includes("data|blob")));
+});
+
+test("WebKit on a site on this machine: a redirect that does not stop, or asks for something a route cannot give, ends in an answer", WEBKIT_HERE, async () => {
+  let looped = 0;
+  const site = await siteWith((request, response) => {
+    if (request.url === "/lus1" || request.url === "/lus2") {
+      looped++;
+      return void response.writeHead(302, { location: request.url === "/lus1" ? "/lus2" : "/lus1" }).end();
+    }
+    if (request.url === "/deel") return void response.writeHead(308, { location: "/deel/" }).end();
+    if (request.url === "/kaal") return void response.writeHead(300).end();
+    if (request.url === "/naar-leeg") return void response.writeHead(302, { location: "/leeg" }).end();
+    if (request.url === "/leeg") return void response.writeHead(204).end();
+    if (request.url === "/naar-buiten") return void response.writeHead(302, { location: "http://elders.invalid/" }).end();
+    html(response, `<h1>${request.url}</h1>`);
+  });
+  const run = runOn(site.origin);
+  registerSecret(run, TOKEN, { source: "test" });
+  const session = await sessionOn(run, await launched("webkit"));
+  try {
+    assert.equal((await loadPage(session.page, `${site.origin}/deel`)).finalUrl, `${site.origin}/deel/`, "a plain page after a 308 stands on its own address");
+    assert.equal((await loadPage(session.page, `${site.origin}/lus1`)).status, 502);
+    assert.ok(looped <= 25, `${looped} requests for a redirect that does not stop`);
+    await loadPage(session.page, `${site.origin}/`);
+    assert.equal(await session.page.evaluate(() => fetch("/kaal").then((answer) => answer.status)), 502, "a status without an address gets an answer");
+    assert.equal(await session.page.evaluate(() => fetch("/naar-buiten").then((answer) => answer.status, () => 0)), 0, "a script stays inside the scope");
+    const started = performance.now();
+    await loadPage(session.page, `${site.origin}/naar-leeg`);
+    assert.ok(performance.now() - started < 30_000, "an empty answer after a redirect does not wait for a time limit");
+  } finally {
+    await session.close();
+    await site.close();
+    rmSync(run, { recursive: true, force: true });
+  }
+});
+
 // ---- A short value is no substring -------------------------------------------------------------------------------------
 
 const CODE = "483920";

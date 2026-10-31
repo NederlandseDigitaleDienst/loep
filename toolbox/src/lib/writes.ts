@@ -80,7 +80,7 @@ const raisedNl = (permission: WritePermission): string => (permission.raised ?? 
  * This machine itself. `isLocalHost` also takes a name that ends in `.test`, which can be any machine:
  * good enough for a site, not for where a password or a session goes, or for taking any certificate.
  */
-export const isThisMachine = (host: string): boolean => /^(?:localhost|127(?:\.\d{1,3}){3}|\[?::1\]?)$/i.test(host);
+export const isThisMachine = (host: string): boolean => /^(?:localhost|.+\.localhost|0\.0\.0\.0|127(?:\.\d{1,3}){3}|\[?::1\]?)$/i.test(host);
 
 /**
  * A request of the toolbox itself, outside a browser. With `LOEP_BOUNDARY_LOCAL_ONLY=1` nothing leaves

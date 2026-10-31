@@ -256,7 +256,7 @@ export async function guardContext(context: BrowserContext, scope: Scope, guard:
     // Cloudflare's own host lies outside every scope: a strict scope keeps it out.
     if (isChallenge(url, (host) => answeredByCloudflare(context, host)) && (inScope(scope, url) || !scope.strict)) {
       if ((method !== "GET" && method !== "HEAD") || !inScope(scope, url)) (guard.challenges ??= []).push({ at: new Date().toISOString(), method, url: url.slice(0, MAX_URL) });
-      return proceed(route);
+      return proceed(route, context, (target) => inScope(scope, target));
     }
     if (method !== "GET" && method !== "HEAD") {
       const body = bodyOf(request);
@@ -264,7 +264,7 @@ export async function guardContext(context: BrowserContext, scope: Scope, guard:
       if (read?.pass) {
         (guard.reads ??= []).push({ at: new Date().toISOString(), method, url: url.slice(0, MAX_URL), rule: read.rule.id, service: read.rule.service });
         // Repeated only to an address a rule of the same service covers; otherwise followed only inside the scope or on an origin the rule covers.
-        return passOn(route, (target) => readRuleFor(reads, method, target)?.service === read.rule.service, (target) => inScope(scope, target) || onReadOrigin(read.rule, target)).then(() => undefined);
+        return passOn(route, context, (target) => readRuleFor(reads, method, target)?.service === read.rule.service, (target) => inScope(scope, target) || onReadOrigin(read.rule, target)).then(() => undefined);
       }
       if (read) {
         guard.blocked.push({ at: new Date().toISOString(), kind: "method", method, url: url.slice(0, MAX_URL), resourceType: type, reasonNl: read.reasonNl });
@@ -286,14 +286,14 @@ export async function guardContext(context: BrowserContext, scope: Scope, guard:
     }
     if (inScope(scope, url)) {
       if (linkRefused(scope, guard, request)) return refuse();
-      return proceed(route);
+      return proceed(route, context, (target) => inScope(scope, target));
     }
     // What the page already holds (data:, blob:) sends nothing anywhere; as the address of a page it is never in the scope.
     if (!request.isNavigationRequest() && /^(data|blob):/.test(url)) return route.continue();
     if (!scope.strict && !request.isNavigationRequest() && (RENDERING_TYPES.has(type) || (READ_TYPES.has(type) && fromEmbeddedInScope(scope, request)))) {
       const host = new URL(url).hostname;
       guard.outsideScopeLoaded[host] = (guard.outsideScopeLoaded[host] ?? 0) + 1;
-      return proceed(route);
+      return proceed(route, context, (target) => inScope(scope, target));
     }
     note("scope", method, url, type);
     return refuse();
@@ -303,8 +303,9 @@ export async function guardContext(context: BrowserContext, scope: Scope, guard:
     const refusedBy = blockade?.refuses(url);
     // The socket opens, so the page keeps working, and what the server says still arrives. Nothing the page says is passed on.
     // A socket opens a connection of its own, and on this machine WebKit does that past the proxy.
-    const pastTheProxy = opensNoConnection(context) && isThisMachine(new URL(url).hostname);
-    const server = inScope(scope, url) && !refusedBy && !pastTheProxy ? socket.connectToServer() : null;
+    const allowed = inScope(scope, url) && !refusedBy;
+    const pastTheProxy = allowed && opensNoConnection(context) && isThisMachine(new URL(url).hostname);
+    const server = allowed && !pastTheProxy ? socket.connectToServer() : null;
     if (pastTheProxy) guard.blocked.push({ at: new Date().toISOString(), kind: "boundary", method: "GET", url: url.slice(0, MAX_URL), resourceType: "websocket", reasonNl: SOCKET_REFUSED_NL });
     else if (refusedBy) guard.blocked.push({ at: new Date().toISOString(), kind: "blockade", method: "GET", url: url.slice(0, MAX_URL), resourceType: "websocket", reasonNl: refusalNl(refusedBy) });
     else if (!server) note("scope", "GET", url, "websocket");
@@ -543,7 +544,7 @@ export async function guardRedirectsByRoute(context: BrowserContext, scope: Scop
           return await route.fulfill({ status: 204, body: "" });
         }
       }
-      return await fulfillAnswer(route, response);
+      return await fulfillAnswer(route, response, context, (target) => inScope(scope, target));
     } catch {
       // The page went away while the answer was on its way; there is nobody left to answer.
       return route.abort("failed").catch(() => undefined);

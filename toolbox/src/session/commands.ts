@@ -1,3 +1,4 @@
+import { gotoEnd } from "../browser/onward.ts";
 import { writeFile } from "node:fs/promises";
 import { PNG } from "pngjs";
 import { axInfo, type AxInfo } from "../browser/call.ts";
@@ -405,7 +406,7 @@ const back: Handler = async (context) => {
 const goto: Handler = async (context, args) => {
   const { surface, env } = context;
   await env.politeness.before(args[0]!);
-  const response = await surface.page.goto(args[0]!, { waitUntil: "load" });
+  const response = await gotoEnd(surface.page, args[0]!, { waitUntil: "load" });
   await settlePage(surface.page);
   const facts = await pageFacts(surface);
   const result = { status: response?.status() ?? null, url: facts?.url ?? null, title: facts?.title ?? null };

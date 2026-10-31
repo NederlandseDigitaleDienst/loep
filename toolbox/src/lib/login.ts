@@ -1,6 +1,7 @@
 import { chmodSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import type { Page } from "playwright";
+import { gotoEnd } from "../browser/onward.ts";
 import { readJson, writeJson } from "./canonical.ts";
 import { looksSecret } from "./mailparse.ts";
 import { siteOrigins } from "./origins.ts";
@@ -468,7 +469,7 @@ export function throwIfLoginExpired(): void {
 
 /** Open the page that only shows with a session, on a page that may be navigated: why it is the login screen, or null when the session holds. */
 export async function landingFellBack(page: Page, mark: LoginMark): Promise<string | null> {
-  await page.goto(mark.landingUrl, { waitUntil: "load" });
+  await gotoEnd(page, mark.landingUrl, { waitUntil: "load" });
   await page.waitForLoadState("networkidle", { timeout: 5000 }).catch(() => undefined);
   return loggedOutReasonNl(mark, { asked: mark.landingUrl, final: page.url(), passwordField: await passwordFieldShows(page) });
 }

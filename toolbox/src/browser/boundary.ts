@@ -14,7 +14,8 @@ import { claimLink, isLocalHost, isThisMachine, usedLinks, writeAccess, writesFo
  * the boundary is a proxy on this machine, mockttp: every browser context of a run with secrets has
  * it as its proxy, and every request leaves through it, in Chromium, Firefox and WebKit alike, also the
  * one after a redirect, after a form that is repeated (307, 308), and the upgrade of a socket. A
- * redirect is never followed here: it goes back to the browser, and the next request passes again.
+ * redirect is never followed here: it goes back to the browser, or for WebKit to `fulfillAnswer`, and
+ * the next request passes again.
  *
  * Towards an address a value may go to, the proxy fills in the real values, in the address, the
  * headers, the body and the frames of a socket. In the answer it puts the aliases back before the
