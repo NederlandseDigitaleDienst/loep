@@ -466,7 +466,7 @@ class Boundary {
       };
       if (!(await reaches(`http://${CHECK_HOST}${CHECK_START}`))) return `${name} gebruikt de grens van deze run niet, ook niet op een adres dat alleen de grens kent`;
       if (!(await reaches(`https://${CHECK_HOST}${CHECK_START}`))) return `${name} krijgt over https geen verbinding via de grens van deze run`;
-      if (local && !(await reaches(`http://${this.decoyHost}${CHECK_START}`))) return `${name} volgt een doorverwijzing op deze machine buiten de grens van deze run om`;
+      if (local && !(await reaches(`http://${this.decoyHost}${CHECK_START}`))) return `${name} gaat op deze machine buiten de grens van deze run om`;
       return null;
     } finally {
       await context.close().catch(() => undefined);
