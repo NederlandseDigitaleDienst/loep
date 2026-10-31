@@ -6,7 +6,7 @@ import { REFUSED_HEADER, REFUSED_STATUS, requireBoundary, shieldedFetch, shieldO
 import { readJson } from "../lib/canonical.ts";
 import { maskFile, shieldForRun } from "../lib/secrets.ts";
 import { isChallenge } from "../lib/challenge.ts";
-import { browserAddress, privateFromPublicSite, scopeHost, scopeHostOf, siteOrigins, WEB_SCHEMES } from "../lib/origins.ts";
+import { privateFromPublicSite, scopeHost, scopeHostOf, siteOrigins, WEB_SCHEMES } from "../lib/origins.ts";
 import { loginCookieHeader, logsOut } from "../lib/login.ts";
 import { onReadOrigin, pathOf, readDecision, readRuleFor, type ReadRequest } from "../lib/reads.ts";
 import { searchServicesOf, type SearchServiceId } from "../lib/searchbody.ts";
@@ -111,8 +111,6 @@ export interface Blocked {
 }
 
 /** Resource types a page needs to look the way it does. Fetched with GET only, also from hosts outside the scope unless the scope is strict. */
-const PAST_THE_PROXY_NL = "een script vroeg om een adres op deze machine onder zijn eigen naam, en dat gaat in WebKit buiten de grens om: het is tegengehouden";
-
 const RENDERING_TYPES = new Set(["stylesheet", "script", "image", "font", "media"]);
 /**
  * Requests a script makes to read data. From an embedded window in the scope, such as a video
@@ -234,8 +232,6 @@ export async function guardContext(context: BrowserContext, scope: Scope, guard:
       if (request.isNavigationRequest() && inScope(scope, request.url()) && !STOPPED.test(request.failure()?.errorText ?? "")) blockade.failed(request.url());
     });
   }
-  // A script can put the address of this machine together itself, and that is the one request WebKit would send past the proxy.
-  const pastTheProxy = (url: string): boolean => runDir !== undefined && shieldForRun(runDir) !== null && context.browser()?.browserType().name() === "webkit" && browserAddress(url) !== url;
   await context.route("**/*", (route) => {
     const request = route.request();
     const method = request.method();
@@ -246,10 +242,6 @@ export async function guardContext(context: BrowserContext, scope: Scope, guard:
     const refusedBy = blockade?.refuses(url);
     if (refusedBy) {
       guard.blocked.push({ at: new Date().toISOString(), kind: "blockade", method, url: url.slice(0, MAX_URL), resourceType: type, reasonNl: refusalNl(refusedBy) });
-      return refuse();
-    }
-    if (pastTheProxy(url)) {
-      guard.blocked.push({ at: new Date().toISOString(), kind: "boundary", method, url: url.slice(0, MAX_URL), resourceType: type, reasonNl: PAST_THE_PROXY_NL });
       return refuse();
     }
     // In a run with a login nothing logs out: the session has to last for everything that comes after.
@@ -306,7 +298,7 @@ export async function guardContext(context: BrowserContext, scope: Scope, guard:
     const url = socket.url();
     const refusedBy = blockade?.refuses(url);
     // The socket opens, so the page keeps working, and what the server says still arrives. Nothing the page says is passed on.
-    const server = inScope(scope, url) && !refusedBy && !pastTheProxy(url) ? socket.connectToServer() : null;
+    const server = inScope(scope, url) && !refusedBy ? socket.connectToServer() : null;
     if (refusedBy) guard.blocked.push({ at: new Date().toISOString(), kind: "blockade", method: "GET", url: url.slice(0, MAX_URL), resourceType: "websocket", reasonNl: refusalNl(refusedBy) });
     else if (!server) note("scope", "GET", url, "websocket");
     else (guard.sockets ??= []).push(url.slice(0, MAX_URL));

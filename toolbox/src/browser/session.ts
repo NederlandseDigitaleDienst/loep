@@ -2,7 +2,7 @@ import { fileURLToPath } from "node:url";
 import { chromium, type APIResponse, type Browser, type BrowserContext, type Page, type Request, type Response, type Route } from "playwright";
 import type { Crowd } from "../lib/atonce.ts";
 import { CLOUDFLARE_HEADER, isChallenge } from "../lib/challenge.ts";
-import { confirmLoginOn, LoginExpired, type StorageState as LoginStorage, logsOut, registerSessionSecrets, runLoginMark, runLoginState, runOfLogin, sessionWithAliases, throwIfLoginExpired, watchLogin } from "../lib/login.ts";
+import { confirmLoginOn, LoginExpired, logsOut, registerSessionSecrets, runLoginMark, runLoginState, runOfLogin, sessionWithAliases, throwIfLoginExpired, watchLogin } from "../lib/login.ts";
 import { MAIL_ADDRESS_SOURCE } from "../lib/mailbox.ts";
 import { addressOf, noteRefusedRead, readDecision, readRuleFor, runReads, type ReadRequest } from "../lib/reads.ts";
 import { claimLink, isWriteOrigin, runWrites, SocketFrames, type PassedWrite, type WriteAccess } from "../lib/writes.ts";
@@ -13,7 +13,6 @@ import type { Shield } from "../lib/secrets.ts";
 import { readableFrame } from "./call.ts";
 import { refusedByBrowser, type ClipboardWrite } from "./clipboard.ts";
 import { frameAsPage } from "./frame.ts";
-import { browserAddress, browserHost, realHosts } from "../lib/origins.ts";
 import { boundaryForContext, markInsideBoundary, shieldedFetch, shieldOf } from "./boundary.ts";
 
 /** The read-only helper library that is injected into every page under test. */
@@ -334,26 +333,6 @@ const cloudflareHosts = new WeakMap<BrowserContext, Set<string>>();
 /** Whether a host answered through Cloudflare in this context. */
 export const answeredByCloudflare = (context: BrowserContext, host: string): boolean => cloudflareHosts.get(context)?.has(host) ?? false;
 
-/** A session with the names WebKit has for a site on this machine. */
-const sessionForWebKit = (state: LoginStorage): LoginStorage => ({
-  cookies: state.cookies.map((cookie) => ({ ...cookie, domain: browserHost(cookie.domain) })),
-  origins: state.origins.map((entry) => ({ ...entry, origin: browserAddress(entry.origin).replace(/\/$/, "") })),
-});
-
-/**
- * Everything that opens or reads an address in this context works with the real one, and the page
- * with the name WebKit has for it. What is read in the page itself comes back real where it is written.
- */
-function keepRealAddresses(context: BrowserContext): void {
-  const cookies = context.cookies.bind(context);
-  context.cookies = (urls) => cookies(urls === undefined ? undefined : [urls].flat().map(browserAddress));
-  context.on("page", (page) => {
-    const [url, goto] = [page.url.bind(page), page.goto.bind(page)];
-    page.url = () => realHosts(url());
-    page.goto = (address, options) => goto(browserAddress(address), options);
-  });
-}
-
 export async function newContext(browser: Browser, options: ContextOptions = {}, guard?: WriteGuard): Promise<BrowserContext> {
   // A run with a login starts every context with the session a person left behind; any other run starts clean, as it did.
   const login = options.storageState ?? runLoginState();
@@ -361,10 +340,9 @@ export async function newContext(browser: Browser, options: ContextOptions = {},
   if (runDir !== undefined) registerSessionSecrets(runDir);
   // Also a context that may not send has a boundary: what it gets from the site can hold the real values all the same.
   const boundary = await boundaryForContext(browser, runDir);
-  const renamed = boundary.proxy !== undefined && browser.browserType().name() === "webkit";
   const context = await browser.newContext({
     ...boundary,
-    ...(login ? { storageState: renamed ? sessionForWebKit(sessionWithAliases(runDir!, login)) : boundary.proxy ? sessionWithAliases(runDir!, login) : login } : {}),
+    ...(login ? { storageState: boundary.proxy ? sessionWithAliases(runDir!, login) : login } : {}),
     // The sites under test send a strict CSP; without this the engines cannot be injected.
     bypassCSP: true,
     viewport: options.viewport ?? RENDERING.viewport,
@@ -375,7 +353,6 @@ export async function newContext(browser: Browser, options: ContextOptions = {},
     colorScheme: options.colorScheme ?? "light",
     serviceWorkers: "block",
   });
-  if (renamed) keepRealAddresses(context);
   if (boundary.proxy) await markInsideBoundary(context, runDir!, boundary.proxy);
   context.setDefaultNavigationTimeout(RENDERING.navigationTimeoutMs);
   const viaCloudflare = new Set<string>();

@@ -3,7 +3,7 @@ import { basename, dirname, join } from "node:path";
 import type { Page } from "playwright";
 import { readJson, writeJson } from "./canonical.ts";
 import { looksSecret } from "./mailparse.ts";
-import { realHosts, siteOrigins } from "./origins.ts";
+import { siteOrigins } from "./origins.ts";
 import { registerSecrets, renewSecrets, shieldForRun, type NewSecret } from "./secrets.ts";
 import { isLocalHost, writeOriginsOf, writesForRun, type WritePermission } from "./writes.ts";
 
@@ -390,9 +390,8 @@ export function noteLogoutUrl(address: string): void {
 }
 
 /** Whether a request would log the run out: by what its address says, or because the inventory found it under a link that says so. */
-export function logsOut(browserAddress: string): boolean {
+export function logsOut(address: string): boolean {
   if (!current || !existsSync(sessionPath(current.runDir))) return false;
-  const address = realHosts(browserAddress);
   const inventory = join(current.runDir, "inventory.json");
   const mtimeMs = existsSync(inventory) ? statSync(inventory).mtimeMs : -1;
   if (mtimeMs !== current.inventoryMtimeMs) {

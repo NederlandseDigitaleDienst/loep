@@ -96,8 +96,7 @@ export const WEB_SCHEMES: readonly string[] = ["http:", "https:", "ws:", "wss:"]
  * any other port is a host of its own, as it is a server of its own.
  */
 export function scopeHost(url: URL): string {
-  const host = realHosts(url.hostname);
-  return url.port === "" || url.port === "80" || url.port === "443" ? host : `${host}:${url.port}`;
+  return url.port === "" || url.port === "80" || url.port === "443" ? url.hostname : `${url.hostname}:${url.port}`;
 }
 
 /** A host given on the command line (`--allow-host`), as the scope compares it: a host name, a host name with a port, or a whole address. */
@@ -150,36 +149,4 @@ export function isPrivateHost(hostname: string): boolean {
  */
 export function privateFromPublicSite(url: string, origins: readonly string[]): boolean {
   return isPrivateHost(new URL(url).hostname) && !origins.some((origin) => isPrivateHost(new URL(origin).hostname));
-}
-
-/*
- * WebKit on macOS skips any proxy for a new connection to `localhost` or `127.0.0.1`, and nothing sets
- * that. So in a run with a boundary WebKit has a site on this machine under a name that only the proxy
- * knows. The name holds the real host, so these functions need no state, and every comparison of the
- * toolbox reads the real address. Other browsers, and hosts elsewhere, never have such a name.
- */
-const NAME_FOR_BROWSER = /\b(localhost|127-0-0-1)\.site\.loep\.test\b/g;
-/** A host of this machine as an address has it: after the slashes, also the escaped slashes of a script, and with what can come after a host. */
-const HOST_IN_ADDRESS = /((?:\/\/|\\\/\\\/))(localhost|127\.0\.0\.1)(?=[:/"'\\\s<>?#&]|$)/g;
-
-const nameForBrowser = (host: string): string => `${host.replaceAll(".", "-")}.site.loep.test`;
-
-/** The text with the real hosts in it, in place of the names WebKit has. */
-export const realHosts = (text: string): string => text.replace(NAME_FOR_BROWSER, (_name, host: string) => host.replaceAll("-", "."));
-
-/** The text as WebKit may get it: no address in it leads to this machine by its own name. */
-export const browserHosts = (text: string): string => text.replace(HOST_IN_ADDRESS, (_match, slashes: string, host: string) => `${slashes}${nameForBrowser(host)}`);
-
-/** The host of a cookie or a stored value as WebKit keeps it. */
-export const browserHost = (host: string): string => (host === "localhost" || host === "127.0.0.1" ? nameForBrowser(host) : host);
-
-/** An address as WebKit may ask for it. */
-export function browserAddress(address: string): string {
-  try {
-    const url = new URL(address);
-    url.hostname = browserHost(url.hostname);
-    return url.href;
-  } catch {
-    return address;
-  }
 }
