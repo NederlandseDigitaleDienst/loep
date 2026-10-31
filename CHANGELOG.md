@@ -6,6 +6,17 @@ Wat er per versie van loep is veranderd. De versie staat op het voorblad en onde
 
 <!-- towncrier: een nieuwe versie komt hieronder -->
 
+## 0.21.0 (2026-10-31)
+
+Deze versie is uitgebracht zonder meting: de wijzigingen zijn met tests en een proef op een lokale keten nagegaan; een meting met agents op de testsite is niet gedaan.
+
+### Wat een uitkomst kan veranderen
+
+- Een run die mag versturen, kan een mailbox krijgen (`inventory --mailbox`, IMAP of Mailpit). Zo maakt een onderzoek een route met e-mailbevestiging af: de pagina's achter een persoonlijke link worden gemeten in plaats van open te blijven. `mail cleanup` ruimt de testaanmelding en de mail op en toont met een controle vooraf dat de aanmelding echt weg is, en het rapport noemt de soort mailbox en wat er achterbleef. Geheimen staan nu in één register per run, ongeacht de bron: tokens en het adres uit een mail, en cookies en opgeslagen waarden van een inlogsessie. Ze komen niet in de browser en niet in de run: de proxy mockttp wisselt ze op de eigen machine, ook na een doorverwijzing en op een websocket, en wat toch tot het wegschrijven komt, wordt daar vervangen en gemeld. Een run zonder geheimen verandert niet. ([#384](https://github.com/NederlandseDigitaleDienst/loep/issues/384))
+- In WebKit komt een navigatie, een formulier of een script met een doorverwijzing weer aan. Een run liep daar vast, omdat WebKit van een route geen doorverwijzing aanneemt, en dat leek op een fout van de site. Een navigatie gaat nu via een pagina die alleen doorstuurt, en de rest krijgt het einde van de doorverwijzing. ([#386](https://github.com/NederlandseDigitaleDienst/loep/issues/386))
+- WebKit doet weer mee aan een run met geheimen op een site op de eigen machine, dus ook aan een lokale run met een inlog. Zo krijgt zo'n run ook de tweede meting in WebKit. Alleen een websocket blijft daar dicht, en dat staat bij de meting. ([#388](https://github.com/NederlandseDigitaleDienst/loep/issues/388))
+- Firefox blijft binnen de scope bij een doorverwijzing van meer dan één stap: elke stap wordt nu gecontroleerd, niet alleen de eerste. ([#390](https://github.com/NederlandseDigitaleDienst/loep/issues/390))
+
 ## 0.20.0 (2026-10-30)
 
 Deze versie is uitgebracht zonder meting: de wijzigingen zijn met tests nagegaan; een meting met agents op de testsite is niet gedaan.
