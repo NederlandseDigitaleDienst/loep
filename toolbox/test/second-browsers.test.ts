@@ -256,18 +256,16 @@ test("a redirect out of the scope is refused in WebKit and Firefox before it is 
       const refused = second.takeRefused("s");
       assert.ok(refused.some((entry) => entry.kind === "scope" && entry.url.startsWith(`${site.otherOrigin}/elsewhere.html`)), `${name}: ${JSON.stringify(refused)}`);
       // Refused one step further, after a redirect inside the scope: that also fails, and at once.
-      if (name === "webkit") {
-        const started = performance.now();
-        await assert.rejects(second.use("s", name, { id: `redirect-twice-${name}`, start: { ...start, url: `${site.origin}/redirect-twice` }, steps: [] }, async (surface) => surface.page.url()), name);
-        assert.ok(performance.now() - started < 20_000, `${name} waited for a time limit`);
-        second.takeRefused("s");
-      }
+      const started = performance.now();
+      await assert.rejects(second.use("s", name, { id: `redirect-twice-${name}`, start: { ...start, url: `${site.origin}/redirect-twice` }, steps: [] }, async (surface) => surface.page.url()), name);
+      assert.ok(performance.now() - started < 20_000, `${name} waited for a time limit`);
+      second.takeRefused("s");
       // A page inside the scope opens, and a direct address outside it is not even asked for.
       assert.equal(await second.use("s", name, { id: `ok-${name}`, start: { ...start, url: `${site.origin}/form.html` }, steps: [] }, async (surface) => surface.page.title()), "Formulier - Testsite sessie");
       await assert.rejects(second.use("s", name, { id: `out-${name}`, start: { ...start, url: `${site.otherOrigin}/elsewhere.html` }, steps: [] }, async (surface) => surface.page.url()), /buiten de scope/);
     }
     assert.deepEqual(site.requests.filter((request) => request.host === "localhost"), [], "nothing reached the other host");
-    assert.equal(site.requests.filter((request) => request.path === "/redirect-out").length, 3);
+    assert.equal(site.requests.filter((request) => request.path === "/redirect-out").length, 4);
     // WebKit and Firefox wait for the same pause between navigations as Chromium: they ask the politeness of the process.
     assert.equal(politeness.asked.filter((url) => url === `${site.origin}/form.html`).length, 2);
   } finally {
