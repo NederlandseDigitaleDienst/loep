@@ -3,6 +3,7 @@ import { join } from "node:path";
 import type { BrowserContext, CDPSession, Frame, Page, Request } from "playwright";
 import { answeredByCloudflare, bodyOf, fulfillAnswer, opensNoConnection, passOn, proceed, sendOrReplay } from "../browser/session.ts";
 import { REFUSED_HEADER, REFUSED_STATUS, requireBoundary, shieldedFetch, shieldOf } from "../browser/boundary.ts";
+import { REFUSED_ANSWER } from "../browser/onward.ts";
 import { readJson } from "../lib/canonical.ts";
 import { maskFile, shieldForRun } from "../lib/secrets.ts";
 import { isChallenge } from "../lib/challenge.ts";
@@ -533,7 +534,7 @@ export async function guardRedirectsByRoute(context: BrowserContext, scope: Scop
   await context.route("**/*", async (route) => {
     const request = route.request();
     if (!request.isNavigationRequest() || request.method() !== "GET" || !/^https?:/.test(request.url()) || !inScope(scope, request.url()) || logsOut(request.url())) return route.fallback();
-    if (linkRefused(scope, guard, request)) return route.fulfill({ status: 204, body: "" });
+    if (linkRefused(scope, guard, request)) return route.fulfill(REFUSED_ANSWER);
     try {
       const response = await route.fetch({ maxRedirects: 0 });
       const location = response.headers()["location"];
@@ -541,7 +542,7 @@ export async function guardRedirectsByRoute(context: BrowserContext, scope: Scop
         const target = new URL(location, request.url()).href;
         if (!inScope(scope, target)) {
           guard.blocked.push({ at: new Date().toISOString(), kind: "scope", method: "GET", url: `${target.slice(0, MAX_URL)} (doorverwijzing vanaf ${request.url().slice(0, 120)})`, resourceType: "document", redirect: true });
-          return await route.fulfill({ status: 204, body: "" });
+          return await route.fulfill(REFUSED_ANSWER);
         }
       }
       return await fulfillAnswer(route, response, context, (target) => inScope(scope, target));

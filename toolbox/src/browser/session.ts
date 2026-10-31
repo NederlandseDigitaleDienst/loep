@@ -13,7 +13,7 @@ import { shieldForRun, type Shield } from "../lib/secrets.ts";
 import { readableFrame } from "./call.ts";
 import { refusedByBrowser, type ClipboardWrite } from "./clipboard.ts";
 import { frameAsPage } from "./frame.ts";
-import { gotoEnd, ONWARD_HEADER, onwardPage, passOnwardPage } from "./onward.ts";
+import { gotoEnd, ONWARD_HEADER, onwardPage, passOnwardPage, REFUSED_ANSWER } from "./onward.ts";
 import { boundaryForContext, markInsideBoundary, shieldedFetch, shieldOf } from "./boundary.ts";
 
 /** The read-only helper library that is injected into every page under test. */
@@ -175,7 +175,7 @@ export async function fulfillAnswer(route: Route, response: APIResponse, context
 /** `passOn`, with the answer the browser was given: null when it was refused or nobody was left to answer. */
 async function forward(route: Route, context: BrowserContext, mayRepeat: (url: string) => boolean, mayFollow: (url: string) => boolean = () => true): Promise<{ repeated: string | null; response: APIResponse | null }> {
   const request = route.request();
-  const refuse = (): Promise<void> => (request.isNavigationRequest() ? route.fulfill({ status: 204, body: "" }) : route.abort("blockedbyclient"));
+  const refuse = (): Promise<void> => (request.isNavigationRequest() ? route.fulfill(REFUSED_ANSWER) : route.abort("blockedbyclient"));
   try {
     const response = await route.fetch({ maxRedirects: 0 });
     const location = response.headers()["location"];

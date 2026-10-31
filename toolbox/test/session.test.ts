@@ -438,6 +438,7 @@ test("navigation outside the scope is refused and logged, also through a redirec
   const redirected = await raw("open", ["/redirect-out"]);
   assert.equal(redirected.ok, false);
   assert.ok(observation(redirected.print.id as string).blocked.some((entry) => entry.kind === "scope" && entry.url.startsWith(`${site.otherOrigin}/elsewhere.html`)));
+  assert.equal((await raw("open", ["/redirect-twice"])).ok, false, "also when the step out comes second");
   assert.deepEqual(site.requests.filter((request) => request.host === "localhost"), [], "nothing reached the other host");
   assert.equal((await raw("look")).ok, false, "after a refused open there is no page");
 });

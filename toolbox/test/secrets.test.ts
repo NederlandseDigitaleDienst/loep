@@ -744,10 +744,12 @@ test("a window that a page opens stays possible, whatever the browser, also with
 test("a browser that does not show it stays inside the boundary is refused, before it asks a site anything", async () => {
   const run = runOn("http://localhost:1");
   registerSecret(run, TOKEN, { source: "test" });
-  const outside = { browserType: () => ({ name: () => "buiten" }), once: () => undefined, newContext: async () => ({ newPage: async () => ({ goto: async () => null }), close: async () => undefined }) } as unknown as Browser;
+  let closed = (): void => undefined;
+  const outside = { browserType: () => ({ name: () => "buiten" }), once: (_event: string, done: () => void) => void (closed = done), newContext: async () => ({ newPage: async () => ({ goto: async () => null }), close: async () => undefined }) } as unknown as Browser;
   try {
     await assert.rejects(boundaryForContext(outside, run), /doet in deze run niet mee/);
   } finally {
+    closed();
     rmSync(run, { recursive: true, force: true });
   }
 });
