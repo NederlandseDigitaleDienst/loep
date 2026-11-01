@@ -758,16 +758,17 @@ test("8: a link held back for the time between two writes is tried again after t
   }
 });
 
-test("8: a link the budget refuses says that, and is no failure of the browser", async () => {
+test("8: a link the time between two writes refuses says that, and is no failure of the browser", async () => {
   const site = await scriptedSite((_url, _method, send) => send(200, "<h1>Pagina</h1>"));
-  const run = await mailboxRun(site.origin, { maxWrites: 1 });
+  const run = await mailboxRun(site.origin, { spacingSeconds: 3600 });
+  writeFileSync(join(run, "writes.jsonl"), `${JSON.stringify({ at: new Date().toISOString(), source: "r-start", method: "POST", path: "/aanmelden/" })}\n`);
   const box = memoryBox([mailOf(`Link: ${site.origin}/voorkeuren/een?token=${TOKEN.slice(0, 20)}abc\nLink: ${site.origin}/voorkeuren/twee?token=${TOKEN.slice(0, 20)}def\n`)]);
   try {
     await mailWait(run, { mailbox: box });
     const cleanup = await mailCleanup(run, { mailbox: box, browser: await launched("chromium"), settleMs: 0 });
     assert.equal(cleanup.site.outcome, "failed");
     assert.match(cleanup.site.noteNl, /kon niet worden geopend/);
-    assert.match(cleanup.site.noteNl, /budget/);
+    assert.match(cleanup.site.noteNl, /te kort na de vorige verzending/);
   } finally {
     await site.close();
     rmSync(run, { recursive: true, force: true });
