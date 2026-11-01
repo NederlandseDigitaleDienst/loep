@@ -603,28 +603,25 @@ test("a personal link is not fetched outside the browser: the site would show an
   }
 });
 
-test("a form with the address of the run goes to the site with the real address, every time until a mail came, and the address stands nowhere in the run", async () => {
+test("a form with the address of the run goes to the site with the real address, and the address stands nowhere in the run", async () => {
   const run = await mailboxRun(origin);
   const session = await sessionOn(run);
   try {
     await loadPage(session.page, `${origin}/`);
-    for (let time = 0; time < 2; time++) {
-      await session.page.evaluate((email) => {
-        const form = document.createElement("form");
-        form.method = "post";
-        form.action = "/aanmelden/";
-        const field = form.appendChild(document.createElement("input"));
-        field.name = "email";
-        field.value = email;
-        document.body.append(form);
-        form.submit();
-      }, TEST_VALUES.email!);
-      await session.page.waitForURL(/controleren/);
-      await session.page.goto(`${origin}/`);
-    }
+    await session.page.evaluate((email) => {
+      const form = document.createElement("form");
+      form.method = "post";
+      form.action = "/aanmelden/";
+      const field = form.appendChild(document.createElement("input"));
+      field.name = "email";
+      field.value = email;
+      document.body.append(form);
+      form.submit();
+    }, TEST_VALUES.email!);
+    await session.page.waitForURL(/controleren/);
     const sent = seen.filter((request) => request.method === "POST");
-    assert.equal(sent.length, 2);
-    assert.ok(sent.every((request) => new URLSearchParams(request.body).get("email") === ADDRESS));
+    assert.equal(sent.length, 1);
+    assert.equal(new URLSearchParams(sent[0]!.body).get("email"), ADDRESS);
     assert.deepEqual(inFiles(run, ADDRESS), []);
   } finally {
     await session.close();
@@ -1032,7 +1029,7 @@ test("the time between two writes can still leave the site unasked, so a later l
   }
 });
 
-test("a form with the address of the run goes out for real until a mail came, and after that the answer is played", async () => {
+test("a form with the address of the run goes out once, and after that the answer is played, also when no mail came yet", async () => {
   const run = await mailboxRun(origin);
   const session = await sessionOn(run);
   const post = (): Promise<string> => session.page.evaluate(async (email) => (await fetch("/opgeslagen-aanmelding/", { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body: `email=${encodeURIComponent(email)}` })).text(), TEST_VALUES.email!);
@@ -1042,12 +1039,8 @@ test("a form with the address of the run goes out for real until a mail came, an
     const answer = await post();
     assert.ok(!answer.includes(ADDRESS), "the page shows the alias");
     assert.equal(await post(), answer);
-    assert.equal(heard(), 2, "no mail yet: a second try may be what makes it come");
-    await mailWait(run, { mailbox: memoryBox([mailFor(`${origin}/voorkeuren/?token=${TOKEN}`)]) });
-    const before = writeBudget(run, writesForRun(run)!).sent;
-    await post();
-    assert.equal(heard(), 2, "the mail came: the same form is not sent again");
-    assert.equal(writeBudget(run, writesForRun(run)!).sent, before);
+    assert.equal(heard(), 1, "the same request is not sent twice: who needs a new mail asks for a registration of its own");
+    assert.equal(writeBudget(run, writesForRun(run)!).sent, 1);
     assert.deepEqual(inFiles(run, ADDRESS), [], "what is kept to play holds the alias");
   } finally {
     await session.close();

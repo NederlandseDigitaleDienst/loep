@@ -455,12 +455,6 @@ export class Shield {
     return this.tokens.some((alias) => url.includes(alias));
   }
 
-  /** Whether a body has the alias of a value of this source in it. */
-  mentions(body: Buffer | null, source: string): boolean {
-    if (body === null) return false;
-    return this.secrets.filter((secret) => secret.source === source).some((secret) => spellings(secret.alias, secret.real).some(([spelled]) => body.includes(spelled)));
-  }
-
   hasSource(source: string): boolean {
     return this.secrets.some((secret) => secret.source === source);
   }

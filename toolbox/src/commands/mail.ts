@@ -211,29 +211,23 @@ export interface WaitResult {
   refusedOrigins: string[];
 }
 
-function shownLinks(runDir: string, state: MailboxState, shows: (link: MailboxLink) => boolean, owner: string | undefined): Pick<WaitResult, "links" | "used"> {
+function shownLinks(runDir: string, state: MailboxState, shows: (link: MailboxLink) => boolean, own: readonly string[] = []): Pick<WaitResult, "links" | "used"> {
   const used = usedLinks(runDir);
-  const ownedBy = (link: MailboxLink): boolean => state.registrations.some((registration) => registration.id === link.registration && registration.owner === owner);
-  const shown = state.links.filter(shows).map((link): ShownLink => ({ id: link.id, url: link.url, kind: link.kind, ...(ownedBy(link) ? { own: true as const } : {}) }));
+  const shown = state.links.filter(shows).map((link): ShownLink => ({ id: link.id, url: link.url, kind: link.kind, ...(own.includes(link.registration ?? "") ? { own: true as const } : {}) }));
   return { links: shown.filter((link) => !used.has(link.id)), used: shown.filter((link) => used.has(link.id)) };
 }
 
 /**
- * The links for an agent: those of the registration of its own, and of the shared one what says it
+ * The personal links as they are now, for an agent: a list in its task would change that task with
+ * every mail. Those of the registration of its own, and of the shared one what says it
  * does not end it. A link that unsubscribes can do so by being opened, and all agents share that
  * registration, so none of them is offered one, and neither one that does not say what it is: those
  * are for a session with a registration of its own, and for `mail cleanup`.
  */
-const offered = (state: MailboxState, owner: string | undefined): ((link: MailboxLink) => boolean) => {
-  const own = state.registrations.filter((registration) => registration.owner !== undefined && registration.owner === owner).map((registration) => registration.id);
-  return (link) => (link.registration === undefined ? keepsRegistration(link.kind) : own.includes(link.registration));
-};
-
-/** The personal links as they are now. An agent asks for them here: a list in its task would change that task with every mail. */
 export function mailLinks(runDir: string, session?: string): Pick<WaitResult, "links" | "used"> {
   const state = stateOfMailbox(runDir);
-  const owner = session === undefined ? undefined : senderOf(session);
-  return shownLinks(runDir, state, offered(state, owner), owner);
+  const own = session === undefined ? [] : state.registrations.filter((registration) => registration.owner === senderOf(session)).map((registration) => registration.id);
+  return shownLinks(runDir, state, (link) => (link.registration === undefined ? keepsRegistration(link.kind) : own.includes(link.registration)), own);
 }
 
 /**
@@ -272,7 +266,7 @@ export async function mailWait(runDir: string, options: { session?: string; time
     ({ taken }) => mailbox.remove(taken.map((message) => message.id)),
   );
   // Whoever leads the evaluation sees all that came for the shared registration: only that is what the route goes on with.
-  const shown = session === undefined ? shownLinks(runDir, state, (link) => link.registration === undefined, undefined) : mailLinks(runDir, session);
+  const shown = session === undefined ? shownLinks(runDir, state, (link) => link.registration === undefined) : mailLinks(runDir, session);
   return { mails, ...shown, refusedOrigins: state.refusedOrigins };
 }
 
