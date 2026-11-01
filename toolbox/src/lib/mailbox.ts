@@ -244,7 +244,7 @@ export interface CleanupStep {
 }
 
 /** `unused`: a registration of its own that never went to the site, so there is nothing to remove. */
-export type SiteCleanup = "removed" | "not shown" | "failed" | "no link" | "unused";
+export type SiteCleanup = "removed" | "by session" | "not shown" | "failed" | "no link" | "unused";
 
 export interface SiteOutcome {
   outcome: SiteCleanup;
@@ -369,14 +369,16 @@ export function mailboxLimitationsNl(runDir: string): string[] {
 }
 
 /** Nothing of this registration stands at the site, as far as can be shown. */
-export const siteDone = (site: Pick<SiteOutcome, "outcome">): boolean => site.outcome === "removed" || site.outcome === "unused";
+export const siteDone = (site: Pick<SiteOutcome, "outcome">): boolean => site.outcome === "removed" || site.outcome === "by session" || site.outcome === "unused";
 
 function cleanupNl(state: MailboxState | null): string {
   const cleanup = state?.cleanup;
   if (!cleanup) return "Opruimen: niet gedaan. Er kan een testaanmelding op de site en e-mail in de mailbox zijn achtergebleven.";
   const checked = cleanup.mail.checkedAt ? ` Dat is voor het laatst nagegaan op ${cleanup.mail.checkedAt}: wat de site daarna nog stuurde, staat er misschien nog.` : "";
   const removed = cleanup.sites.filter((site) => site.outcome === "removed").length;
-  if (cleanup.complete) return `Opruimen: ${removed === 1 ? "de testaanmelding is" : `de ${removed} testaanmeldingen zijn`} via de site zelf verwijderd, en dat is nagegaan; de e-mail is gewist, en de mailbox bevatte niets meer voor dit onderzoek.${checked} Het bewijs staat in ${MAILBOX_STATE}.`;
+  const bySession = cleanup.sites.filter((site) => site.outcome === "by session").length;
+  const ended = bySession > 0 ? ` ${bySession === 1 ? "Eén eigen aanmelding beëindigde" : `${bySession} eigen aanmeldingen beëindigden`} de agent zelf op de site; daarna stond er geen knop meer, en meer dan dat is niet nagegaan.` : "";
+  if (cleanup.complete) return `Opruimen: ${removed === 1 ? "de testaanmelding is" : `de ${removed} testaanmeldingen zijn`} via de site zelf verwijderd, en dat is nagegaan; de e-mail is gewist, en de mailbox bevatte niets meer voor dit onderzoek.${ended}${checked} Het bewijs staat in ${MAILBOX_STATE}.`;
   const mailGone = cleanup.mail.left === 0 && (cleanup.mail.marked ?? 0) === 0;
   const several = cleanup.sites.length > 1;
   const behind = [...cleanup.sites.filter((site) => !siteDone(site)).map((site) => `op de site${several ? ` (aanmelding ${site.registration})` : ""}: ${site.noteNl}`), mailGone ? null : `in de mailbox: ${cleanup.mail.noteNl ?? "er staat nog e-mail"}`, cleanup.scan.hits.length > 0 ? `in de run: een geheim staat in ${[...new Set(cleanup.scan.hits.map((hit) => (hit.source ? `${hit.file} (${hit.source})` : hit.file)))].join(", ")}` : null, cleanup.scan.noteNl ? `in de run: ${cleanup.scan.noteNl}` : null].filter(Boolean);

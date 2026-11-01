@@ -8,7 +8,7 @@ import { pathOf } from "../lib/reads.ts";
 import { linksOf, secretsInText, secretsInUrl, spelledSecretsInUrl, withoutLinks } from "../lib/mailparse.ts";
 import { refuseUnderSeal } from "../lib/seal.ts";
 import { keepPrivate, readPrivate, readSecretsFile, registerGuarded, registerSecret, registerSecrets, scanRun, shieldForRun, type NewSecret, type Shield } from "../lib/secrets.ts";
-import { claimRegistration, CLEANUP_SENDER, registrationUsed, senderOf, usedLinks, withAsyncLock, writeBudget, writeOriginsOf, writesForRun, type WritePermission } from "../lib/writes.ts";
+import { claimRegistration, CLEANUP_SENDER, registrationUsed, senderOf, sentOn, usedLinks, withAsyncLock, writeBudget, writeOriginsOf, writesForRun, type WritePermission } from "../lib/writes.ts";
 import { guardContext, guardRedirects, scopeForRun, TEST_VALUES, type Blocked, type Guard } from "../session/safety.ts";
 
 /*
@@ -494,6 +494,8 @@ async function removeAtSite(browser: Browser, runDir: string, state: MailboxStat
     }
     if (!removedOn) {
       const oneClick = known.find((link) => link.oneClick);
+      const sent = own ? sentOn(runDir, registration().owner!, openable.filter((link) => link.kind !== "confirm").map((link) => pathIn(link.url))) : null;
+      if (!oneClick && sent) return { outcome: "by session", noteNl: `de sessie die haar had, verstuurde zelf iets op ${sent}, en nu staat er geen knop meer`, steps };
       if (!oneClick && own && openable.length > 0) return { outcome: "not shown", noteNl: "er staat geen knop meer om deze aanmelding te verwijderen. De sessie die haar had, kan haar zelf hebben verwijderd, maar dat is hier niet aan te tonen: er is geen vergelijking met daarvoor", steps };
       if (!oneClick && wasAsked()) return { outcome: "not shown", noteNl: "de site kreeg het verzoek al bij een eerder opruimen, en nu staat er geen knop meer; dat alleen laat niet zien dat de aanmelding weg is", steps };
       if (!oneClick && unopened) return { outcome: "failed", noteNl: `een persoonlijke link kon niet worden geopend: ${unopened}`, steps };
@@ -631,7 +633,7 @@ export async function mailCleanup(runDir: string, options: { mailbox?: Mailbox; 
   return cleanup;
 }
 
-const SITE_OUTCOME_NL: Record<SiteCleanup, string> = { removed: "verwijderd", "not shown": "niet aangetoond", failed: "mislukt", "no link": "geen link", unused: "niet gebruikt" };
+const SITE_OUTCOME_NL: Record<SiteCleanup, string> = { removed: "verwijderd", "by session": "door de sessie zelf beëindigd", "not shown": "niet aangetoond", failed: "mislukt", "no link": "geen link", unused: "niet gebruikt" };
 
 /** The report of a cleanup for the terminal. */
 export function cleanupLinesNl(cleanup: MailboxCleanup): string[] {
