@@ -7,7 +7,7 @@ import { isFor, parseMail, type ParsedMail } from "./mailparse.ts";
 import { imapMailbox } from "./mailbox-imap.ts";
 import { mailpitMailbox } from "./mailbox-mailpit.ts";
 import { confirmByTyping, processTerminal, type Terminal } from "./recorded.ts";
-import { isThisMachine, usedLinks, writeOriginsNl, type WritePermission } from "./writes.ts";
+import { CLEANUP_SENDER, isThisMachine, usedLinks, writeOriginsNl, type WritePermission } from "./writes.ts";
 
 /**
  * A mailbox lets a run finish a flow that goes through an e-mail: wait for a message to the address
@@ -255,9 +255,6 @@ export function linkKind(path: string): LinkKind {
   if (/voorkeur|preference|instelling|beheer|manage|profiel|profile/i.test(path)) return "preferences";
   return "other";
 }
-
-/** Who opens a link when a run cleans up. */
-export const CLEANUP_SENDER = "mail cleanup";
 
 export function mailboxForRun(runDir: string): MailboxMark | null {
   const path = join(runDir, "manifest.json");

@@ -2,13 +2,13 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Browser, BrowserContext, Locator, Page } from "playwright";
 import { launchBrowser, loadPage, newContext, type LoadResult } from "../browser/session.ts";
-import { CLEANUP_SENDER, linkKind, MAIL_ADDRESS_SOURCE, MAIL_CODE_SOURCE, MAIL_LINK_SOURCE, MAIL_PRIVATE, MAILBOX_STATE, mailboxForRun, markedMail, openMailbox, readMailboxState, waitForMail, writeMailboxState, type CleanupStep, type MailServer, type Mailbox, type MailboxCleanup, type MailboxLink, type MailboxMark, type MailboxState, type ReceivedMail, type SiteCleanup } from "../lib/mailbox.ts";
+import { linkKind, MAIL_ADDRESS_SOURCE, MAIL_CODE_SOURCE, MAIL_LINK_SOURCE, MAIL_PRIVATE, MAILBOX_STATE, mailboxForRun, markedMail, openMailbox, readMailboxState, waitForMail, writeMailboxState, type CleanupStep, type MailServer, type Mailbox, type MailboxCleanup, type MailboxLink, type MailboxMark, type MailboxState, type ReceivedMail, type SiteCleanup } from "../lib/mailbox.ts";
 import { isLoginPath, loginForRun, onlyLogsOut, originOf, passwordFieldShows } from "../lib/login.ts";
 import { pathOf } from "../lib/reads.ts";
 import { linksOf, secretsInText, secretsInUrl, spelledSecretsInUrl, withoutLinks } from "../lib/mailparse.ts";
 import { refuseUnderSeal } from "../lib/seal.ts";
 import { keepPrivate, readPrivate, readSecretsFile, registerGuarded, registerSecret, registerSecrets, scanRun, shieldForRun, type NewSecret, type Shield } from "../lib/secrets.ts";
-import { usedLinks, withAsyncLock, writeBudget, writeOriginsOf, writesForRun, type WritePermission } from "../lib/writes.ts";
+import { CLEANUP_SENDER, usedLinks, withAsyncLock, writeBudget, writeOriginsOf, writesForRun, type WritePermission } from "../lib/writes.ts";
 import { guardContext, guardRedirects, scopeForRun, TEST_VALUES, type Blocked, type Guard } from "../session/safety.ts";
 
 /*

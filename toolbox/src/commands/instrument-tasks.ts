@@ -50,7 +50,7 @@ import { CRITERIA, criterionById } from "../lib/wcag.ts";
 import { agentLoginNl } from "../lib/login.ts";
 import { agentMailboxNl } from "../lib/mailbox.ts";
 import { readsAllowedNl } from "../lib/reads.ts";
-import { criterionSender, DEFAULT_MAX_WRITES, DEFAULT_WRITE_SPACING_SECONDS, reservedNl, reservedWrites, spacingNl, WRITES_BLOCKED_NL, writeBudget, writeBudgetNl, writesAllowedNl, writesForRun, writesLow } from "../lib/writes.ts";
+import { budgetEmptyNl, criterionSender, DEFAULT_MAX_WRITES, DEFAULT_WRITE_SPACING_SECONDS, reservedNl, reservedWrites, spacingNl, WRITES_BLOCKED_NL, writeBudget, writeBudgetNl, writesAllowedNl, writesForRun, writesLow } from "../lib/writes.ts";
 import { sweepCandidates } from "../lib/statusmessages.ts";
 import { makeWorkDir } from "../lib/workdir.ts";
 import { refuseUnderSeal } from "../lib/seal.ts";
@@ -1093,8 +1093,10 @@ export async function instrumentPending(runDir: string): Promise<InstrumentPendi
   const siteOutage = phase === "done" ? null : await siteOutageNl(runDir);
   const again = phase === "done" ? await againAfterOutage(runDir, index, observations) : [];
   const permission = phase === "done" ? null : writesForRun(runDir);
-  const budget = permission?.declaredBy ? writeBudget(runDir, permission) : null;
-  const sendingLow = budget && writesLow(budget) ? writeBudgetNl(budget) : null;
+  const budget = permission ? writeBudget(runDir, permission) : null;
+  // On a local run without a share kept, only an empty budget stops anything: there is no recipient to spare.
+  const sendingLow = budget && (budget.left === 0 || ((permission!.declaredBy || budget.reserved > 0) && writesLow(budget))) ? writeBudgetNl(budget) : null;
+  const emptyNl = budget?.left === 0 ? `${budgetEmptyNl(budget)}. ` : "";
   const againNl = again.length > 0 ? ` De site antwoordt weer na een storing, en ${again.join(", ")} ${again.length === 1 ? "staat" : "staan"} open met een punt "${UNREACHABLE}" van daarvoor: zet een nieuwe afmaakronde klaar met tasks --again ${again.join(",")} en draai daarna pending.` : "";
   return {
     flow: INSTRUMENT_FLOW,
@@ -1104,7 +1106,7 @@ export async function instrumentPending(runDir: string): Promise<InstrumentPendi
     verifiers: phase === "verifiers" ? bySize(verifiers, "verify") : [],
     finishers: bySize(finishers, "finish"),
     skipped: given,
-    ...(siteOutage ? { siteOutage, noteNl: `${siteOutage}. ${noteNl}` } : { noteNl: `${noteNl}${againNl}` }),
+    ...(siteOutage ? { siteOutage, noteNl: `${siteOutage}. ${emptyNl}${noteNl}` } : { noteNl: `${emptyNl}${noteNl}${againNl}` }),
     ...(again.length > 0 ? { again } : {}),
     ...(sendingLow ? { sendingLow } : {}),
   };

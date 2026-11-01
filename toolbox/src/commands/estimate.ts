@@ -12,7 +12,7 @@ import { DOWN_EVENTS } from "../instruments/pointer.ts";
 import { BLOCKER_VARIANTS } from "./modelsweep.ts";
 import { MAX_DOWN_TARGETS, MAX_HOVER_TARGETS } from "./states.ts";
 import { AGENT_PHASES, agentPhaseTimings, elapsedSeconds, sessionLimit, sessionLimits, stageTimings } from "../lib/timing.ts";
-import { isLocalHost, writeBudget, writeBudgetNl, writesForRun } from "../lib/writes.ts";
+import { budgetEmptyNl, isLocalHost, writeBudget, writeBudgetNl, writesForRun } from "../lib/writes.ts";
 import { DEFAULT_DAEMON_LIMITS } from "../session/safety.ts";
 
 /** Agents at the same time when nobody says and no session process runs: what the workflow starts by default. */
@@ -212,7 +212,11 @@ export function estimateRun(runDir: string, options: EstimateOptions = {}): RunE
   }
   // What is left of the budget for sending, for whoever decides whether a criterion still waits on a message.
   const permission = writesForRun(runDir);
-  if (permission) notesNl.push(`versturen: ${writeBudgetNl(writeBudget(runDir, permission, now))}`);
+  if (permission) {
+    const budget = writeBudget(runDir, permission, now);
+    if (budget.left === 0) notesNl.push(budgetEmptyNl(budget));
+    notesNl.push(`versturen: ${writeBudgetNl(budget)}`);
+  }
   const voiceover = voiceoverNoteNl(options.voiceover);
   if (voiceover) notesNl.push(voiceover);
   // Without a known commit, as from the plugin, there is nothing to hold against the calibration.

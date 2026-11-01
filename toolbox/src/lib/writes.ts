@@ -25,6 +25,8 @@ export interface WritePermission {
   maxWrites?: number;
   /** Shortest time between two writes that pass, in seconds. Absent: `DEFAULT_WRITE_SPACING_SECONDS`. Not a flag: a test sets it in the manifest. */
   spacingSeconds?: number;
+  /** Set at inventory for a run with a mailbox: on a local address too, the last part of the budget is kept (see `reservedWrites`). */
+  keepShare?: boolean;
   /** Each time a person raised `maxWrites` after inventory (see `raiseWrites`), oldest first. */
   raised?: ({ from: number; to: number; at: string } & Recording)[];
 }
@@ -216,9 +218,14 @@ export interface PassedWrite {
   message?: true;
   /** The id of a personal link from a mail that was opened: the first time counts as a write, like a form. */
   link?: string;
+  /** Sent by `mail cleanup`: it removes what the run left behind, and that does not depend on what is left of the budget. */
+  cleanup?: true;
 }
 
 export const WRITES_LOG = "writes.jsonl";
+
+/** The sender of `mail cleanup`. Only that command sets it. */
+export const CLEANUP_SENDER = "mail cleanup";
 
 let current: WriteAccess | null = null;
 
@@ -254,7 +261,7 @@ export interface WriteBudget {
  * heartbeat every half minute by itself, and counting those would use up the budget without anybody
  * sending anything. The repeat of a request after a redirect is the same request.
  */
-const counts = (entry: PassedWrite): boolean => !entry.repeat && (entry.method !== "SEND" || entry.message === true);
+const counts = (entry: PassedWrite): boolean => !entry.repeat && !entry.cleanup && (entry.method !== "SEND" || entry.message === true);
 
 /**
  * Whether a frame a page sends over a socket has a test value in it, as a whole word. An agent
@@ -352,9 +359,10 @@ export const criterionSender = (criterion: string): string => `criterium ${crite
  * The writes at the end of the budget that only a sender that has sent nothing yet may take: half
  * of it, rounded down. Without it the sweep and the first agents used up everything, and the
  * criteria whose turn came later could send nothing at all. Nothing is kept on a local site: there
- * is no recipient, and the budget there is for an agent in a loop.
+ * is no recipient, and the budget there is for an agent in a loop. Unless the run has a mailbox: then
+ * a form starts a route that agents go on with, and without it the walks used up all 50.
  */
-export const reservedWrites = (permission: WritePermission): number => (permission.local ? 0 : Math.floor((permission.maxWrites ?? DEFAULT_MAX_WRITES) / 2));
+export const reservedWrites = (permission: WritePermission): number => (permission.local && !permission.keepShare ? 0 : Math.floor((permission.maxWrites ?? DEFAULT_MAX_WRITES) / 2));
 
 function readLog(runDir: string): PassedWrite[] {
   const path = join(runDir, WRITES_LOG);
@@ -382,8 +390,11 @@ export function writeBudget(runDir: string, permission: WritePermission, now = D
   const stored = writesForRun(runDir);
   const max = (stored?.raised ? stored.maxWrites : undefined) ?? permission.maxWrites ?? DEFAULT_MAX_WRITES;
   const spacingSeconds = permission.spacingSeconds ?? DEFAULT_WRITE_SPACING_SECONDS;
-  const counted = readLog(runDir).filter(counts);
-  const last = counted.length > 0 ? Date.parse(counted.at(-1)!.at) : Number.NEGATIVE_INFINITY;
+  const log = readLog(runDir);
+  const counted = log.filter(counts);
+  // What cleanup sends costs nothing, but the service on the other side still sees it.
+  const spaced = log.filter((entry) => counts(entry) || entry.cleanup);
+  const last = spaced.length > 0 ? Date.parse(spaced.at(-1)!.at) : Number.NEGATIVE_INFINITY;
   const waitSeconds = Math.max(0, Math.ceil((last + spacingSeconds * 1000 - now) / 1000));
   const reserved = reservedWrites(permission);
   const sentBefore = sender !== undefined && counted.some((entry) => senderOf(entry.source) === senderOf(sender));
@@ -392,6 +403,9 @@ export function writeBudget(runDir: string, permission: WritePermission, now = D
 
 /** Whether the budget is about to run out: a person may want to raise it before the next agents start. */
 export const writesLow = (budget: WriteBudget): boolean => budget.left <= Math.max(1, Math.floor(budget.max / 4));
+
+/** What `pending` and `estimate` say when nothing is left: a person decides before the next phase starts, or its agents leave open what they could not send. */
+export const budgetEmptyNl = (budget: Pick<WriteBudget, "sent" | "max">): string => `LET OP: het budget voor versturen is op (${budget.sent} van ${budget.max} verstuurd), dus de volgende agents kunnen niets versturen. Laat iemand beslissen of het omhoog gaat (writes --run <run> --max-writes <aantal>) voordat de volgende fase start`;
 
 /** One line for `session list` and `estimate`: what is left of the budget for sending. */
 export const writeBudgetNl = (budget: WriteBudget): string =>
@@ -512,7 +526,7 @@ export function withLock<T>(runDir: string, work: () => T, name: string = LOCK):
 
 export function writeAccess(runDir: string, permission: WritePermission, source: string, now: () => number = Date.now): WriteAccess {
   const append = (method: string, url: string, repeat: boolean, message = false, sender = source, link?: string): PassedWrite => {
-    const entry: PassedWrite = { at: new Date(now()).toISOString(), source: sender, method, path: new URL(url).pathname, ...(permission.alsoOrigins ? { origin: new URL(url).origin } : {}), ...(repeat ? { repeat: true as const } : {}), ...(message ? { message: true as const } : {}), ...(link ? { link } : {}) };
+    const entry: PassedWrite = { at: new Date(now()).toISOString(), source: sender, method, path: new URL(url).pathname, ...(permission.alsoOrigins ? { origin: new URL(url).origin } : {}), ...(repeat ? { repeat: true as const } : {}), ...(message ? { message: true as const } : {}), ...(link ? { link } : {}), ...(sender === CLEANUP_SENDER && !repeat ? { cleanup: true as const } : {}) };
     mkdirSync(runDir, { recursive: true });
     // Appended at once and synchronously: the line is there even when the run is cut off right after.
     appendFileSync(join(runDir, WRITES_LOG), `${JSON.stringify(entry)}\n`);
@@ -529,8 +543,9 @@ export function writeAccess(runDir: string, permission: WritePermission, source:
       const sender = options?.sender ?? source;
       return withLock(runDir, (): WriteClaim => {
         const budget = writeBudget(runDir, permission, now(), sender);
-        if (budget.left === 0 && budget.sent < budget.max) return { ok: false, budget: "share", reasonNl: `${senderOf(sender) === sender ? sender : "dit criterium"} heeft al verstuurd, en er zijn nog ${budget.max - budget.sent} van ${budget.max} verzendingen naar ${budget.origin} over: ${reservedNl(budget.reserved)}` };
-        if (budget.left === 0) return { ok: false, budget: "out", reasonNl: `het budget voor versturen van deze run is op: ${budget.sent} van ${budget.max} verzendingen naar ${budget.origin} zijn gedaan, door alle sessies en de veegronde samen` };
+        const free = sender === CLEANUP_SENDER;
+        if (!free && budget.left === 0 && budget.sent < budget.max) return { ok: false, budget: "share", reasonNl: `${senderOf(sender) === sender ? sender : "dit criterium"} heeft al verstuurd, en er zijn nog ${budget.max - budget.sent} van ${budget.max} verzendingen naar ${budget.origin} over: ${reservedNl(budget.reserved)}` };
+        if (!free && budget.left === 0) return { ok: false, budget: "out", reasonNl: `het budget voor versturen van deze run is op: ${budget.sent} van ${budget.max} verzendingen naar ${budget.origin} zijn gedaan, door alle sessies en de veegronde samen` };
         if (budget.waitSeconds > 0) return { ok: false, budget: "spacing", reasonNl: `te kort na de vorige verzending: tussen twee verzendingen zit minstens ${budget.spacingSeconds} s; versturen kan weer over ${budget.waitSeconds} s (nog ${budget.left} van ${budget.max} over)` };
         return { ok: true, entry: append(method, url, false, options?.message === true, sender, options?.link) };
       });
