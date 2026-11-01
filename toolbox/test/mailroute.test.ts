@@ -241,13 +241,13 @@ test("a session with a registration of its own has its own address and its own l
     assert.equal(await openLink(lead.page, shared[1]!.url), 200, "the next agent still has the shared registration");
 
     const cleanup = await mailCleanup(run, { mailbox: box, browser, settleMs: 200, pollMs: 50 });
-    assert.deepEqual(cleanup.sites.map((site) => [site.registration, site.outcome]), [["A0", "removed"], [own.registration, "not shown"]]);
-    assert.match(cleanup.sites[1]!.noteNl, /kan haar zelf hebben verwijderd/);
+    assert.deepEqual(cleanup.sites.map((site) => [site.registration, site.outcome]), [["A0", "removed"], [own.registration, "by session"]]);
+    assert.match(cleanup.sites[1]!.noteNl, new RegExp(`verstuurde zelf iets op ${MAIL_ROUTE_PATHS.preferences}`));
     assert.equal(cleanup.mail.left, 0, "the mail of both addresses is gone");
-    assert.equal(cleanup.complete, false, "what cannot be shown is not called clean");
+    assert.equal(cleanup.complete, true, "an agent that ended its own registration leaves nothing to clean");
     assert.deepEqual(fixture.mailRoute.registrations, []);
     assert.deepEqual(scanRun(run).hits, []);
-    assert.ok(cleanupLinesNl(cleanup).some((line) => line.startsWith("site, aanmelding A1: niet aangetoond")));
+    assert.ok(cleanupLinesNl(cleanup).some((line) => line.startsWith("site, aanmelding A1: door de sessie zelf beëindigd")));
     assert.equal(readSecretsFile(run)!.secrets.filter((secret) => secret.source === MAIL_ADDRESS_SOURCE).length, 2, "each address stands in the register");
     for (const name of ["mailbox.json", "writes.jsonl", "manifest.json"]) for (const address of addresses) assert.ok(!readFileSync(join(run, name), "utf8").includes(address), name);
   } finally {

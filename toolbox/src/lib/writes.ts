@@ -441,6 +441,11 @@ export function registrationUsed(runDir: string, id: string): boolean {
   return taken !== -1 && log.slice(taken + 1).some((entry) => counts(entry) && senderOf(entry.source) === senderOf(log[taken]!.source));
 }
 
+/** The path on which a sender sent something itself, among these paths: what a run can say about a registration that its own session ended. */
+export function sentOn(runDir: string, sender: string, paths: readonly string[]): string | null {
+  return readLog(runDir).find((entry) => entry.method !== "GET" && senderOf(entry.source) === sender && paths.includes(entry.path))?.path ?? null;
+}
+
 /** Whether the budget is about to run out: a person may want to raise it before the next agents start. */
 export const writesLow = (budget: WriteBudget): boolean => budget.left <= Math.max(1, Math.floor(budget.max / 4));
 

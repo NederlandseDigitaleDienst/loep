@@ -8,7 +8,7 @@ import { pathOf } from "../lib/reads.ts";
 import { linksOf, secretsInText, secretsInUrl, spelledSecretsInUrl, withoutLinks } from "../lib/mailparse.ts";
 import { refuseUnderSeal } from "../lib/seal.ts";
 import { keepPrivate, readPrivate, readSecretsFile, registerGuarded, registerSecret, registerSecrets, scanRun, shieldForRun, type NewSecret, type Shield } from "../lib/secrets.ts";
-import { claimRegistration, CLEANUP_SENDER, registrationUsed, senderOf, usedLinks, withAsyncLock, writeBudget, writeOriginsOf, writesForRun, type WritePermission } from "../lib/writes.ts";
+import { claimRegistration, CLEANUP_SENDER, registrationUsed, senderOf, sentOn, usedLinks, withAsyncLock, writeBudget, writeOriginsOf, writesForRun, type WritePermission } from "../lib/writes.ts";
 import { guardContext, guardRedirects, scopeForRun, TEST_VALUES, type Blocked, type Guard } from "../session/safety.ts";
 
 /*
@@ -211,29 +211,23 @@ export interface WaitResult {
   refusedOrigins: string[];
 }
 
-function shownLinks(runDir: string, state: MailboxState, shows: (link: MailboxLink) => boolean, owner: string | undefined): Pick<WaitResult, "links" | "used"> {
+function shownLinks(runDir: string, state: MailboxState, shows: (link: MailboxLink) => boolean, own: readonly string[] = []): Pick<WaitResult, "links" | "used"> {
   const used = usedLinks(runDir);
-  const ownedBy = (link: MailboxLink): boolean => state.registrations.some((registration) => registration.id === link.registration && registration.owner === owner);
-  const shown = state.links.filter(shows).map((link): ShownLink => ({ id: link.id, url: link.url, kind: link.kind, ...(ownedBy(link) ? { own: true as const } : {}) }));
+  const shown = state.links.filter(shows).map((link): ShownLink => ({ id: link.id, url: link.url, kind: link.kind, ...(own.includes(link.registration ?? "") ? { own: true as const } : {}) }));
   return { links: shown.filter((link) => !used.has(link.id)), used: shown.filter((link) => used.has(link.id)) };
 }
 
 /**
- * The links for an agent: those of the registration of its own, and of the shared one what says it
+ * The personal links as they are now, for an agent: a list in its task would change that task with
+ * every mail. Those of the registration of its own, and of the shared one what says it
  * does not end it. A link that unsubscribes can do so by being opened, and all agents share that
  * registration, so none of them is offered one, and neither one that does not say what it is: those
  * are for a session with a registration of its own, and for `mail cleanup`.
  */
-const offered = (state: MailboxState, owner: string | undefined): ((link: MailboxLink) => boolean) => {
-  const own = state.registrations.filter((registration) => registration.owner !== undefined && registration.owner === owner).map((registration) => registration.id);
-  return (link) => (link.registration === undefined ? keepsRegistration(link.kind) : own.includes(link.registration));
-};
-
-/** The personal links as they are now. An agent asks for them here: a list in its task would change that task with every mail. */
 export function mailLinks(runDir: string, session?: string): Pick<WaitResult, "links" | "used"> {
   const state = stateOfMailbox(runDir);
-  const owner = session === undefined ? undefined : senderOf(session);
-  return shownLinks(runDir, state, offered(state, owner), owner);
+  const own = session === undefined ? [] : state.registrations.filter((registration) => registration.owner === senderOf(session)).map((registration) => registration.id);
+  return shownLinks(runDir, state, (link) => (link.registration === undefined ? keepsRegistration(link.kind) : own.includes(link.registration)), own);
 }
 
 /**
@@ -272,7 +266,7 @@ export async function mailWait(runDir: string, options: { session?: string; time
     ({ taken }) => mailbox.remove(taken.map((message) => message.id)),
   );
   // Whoever leads the evaluation sees all that came for the shared registration: only that is what the route goes on with.
-  const shown = session === undefined ? shownLinks(runDir, state, (link) => link.registration === undefined, undefined) : mailLinks(runDir, session);
+  const shown = session === undefined ? shownLinks(runDir, state, (link) => link.registration === undefined) : mailLinks(runDir, session);
   return { mails, ...shown, refusedOrigins: state.refusedOrigins };
 }
 
@@ -500,6 +494,8 @@ async function removeAtSite(browser: Browser, runDir: string, state: MailboxStat
     }
     if (!removedOn) {
       const oneClick = known.find((link) => link.oneClick);
+      const sent = own ? sentOn(runDir, registration().owner!, openable.filter((link) => link.kind !== "confirm").map((link) => pathIn(link.url))) : null;
+      if (!oneClick && sent) return { outcome: "by session", noteNl: `de sessie die haar had, verstuurde zelf iets op ${sent}, en nu staat er geen knop meer`, steps };
       if (!oneClick && own && openable.length > 0) return { outcome: "not shown", noteNl: "er staat geen knop meer om deze aanmelding te verwijderen. De sessie die haar had, kan haar zelf hebben verwijderd, maar dat is hier niet aan te tonen: er is geen vergelijking met daarvoor", steps };
       if (!oneClick && wasAsked()) return { outcome: "not shown", noteNl: "de site kreeg het verzoek al bij een eerder opruimen, en nu staat er geen knop meer; dat alleen laat niet zien dat de aanmelding weg is", steps };
       if (!oneClick && unopened) return { outcome: "failed", noteNl: `een persoonlijke link kon niet worden geopend: ${unopened}`, steps };
@@ -638,7 +634,7 @@ export async function mailCleanup(runDir: string, options: { mailbox?: Mailbox; 
   return cleanup;
 }
 
-const SITE_OUTCOME_NL: Record<SiteCleanup, string> = { removed: "verwijderd", "not shown": "niet aangetoond", failed: "mislukt", "no link": "geen link", unused: "niet gebruikt" };
+const SITE_OUTCOME_NL: Record<SiteCleanup, string> = { removed: "verwijderd", "by session": "door de sessie zelf beëindigd", "not shown": "niet aangetoond", failed: "mislukt", "no link": "geen link", unused: "niet gebruikt" };
 
 /** The report of a cleanup for the terminal. */
 export function cleanupLinesNl(cleanup: MailboxCleanup): string[] {
