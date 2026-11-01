@@ -14,7 +14,7 @@ const USAGE = `loep <command> [options]
   watch-session --run <run> [--gaps 5,10,20,40,80] [--max-hours 8]
                                          The watch on the session of a run with a login. collect starts it in the background
                                          and evaluate stops it; a second start on the same run leaves the running one alone
-  inventory <url> --out <run> [--also-origin <url>]... [--allow-writes | --test-environment <origin>... --declared-by "<name>, <role>"] [--max-writes <n>] [--mailbox <mailbox>]
+  inventory <url> --out <run> [--also-origin <url>]... [--allow-writes | --test-environment <origin>... --declared-by "<name>, <role>"] [--max-writes <n>] [--mailbox <mailbox> [--mail-link-origin <origin>]...]
                                          Find every page and count what is on it. In a run with a login the pages are found
                                          by following links from the page the person pointed at; a link that logs out is never followed
   explore --run <run>                    Write the task for the agent that maps the site before it is measured
@@ -164,6 +164,8 @@ Options:
                     (LOEP_IMAP_USER, LOEP_IMAP_PASSWORD) or the keychain. A mailbox on another machine is confirmed at an
                     interactive terminal by typing its host; an agent never records it. Opening a link from a mail counts
                     as sending. See loep mail --help
+  --mail-link-origin <origin>   With --mailbox, repeatable: another party that links in a mail may lead through, such as a
+                    mailing service. Only a GET goes there, and only a redirect that ends on an origin of the run is followed
   --other-toolbox   Go on with a run that was made with another version of loep. Without it every command that
                     measures or writes tasks refuses: another version writes other tasks and procedures, and the walks
                     and verdicts of the run are then done again. Measure again with --fresh after changing. Commands
@@ -262,6 +264,7 @@ async function main(): Promise<void> {
       "declared-by": { type: "string" },
       "max-writes": { type: "string" },
       mailbox: { type: "string" },
+      "mail-link-origin": { type: "string", multiple: true },
       session: { type: "string" },
       timeout: { type: "string" },
       url: { type: "string" },
@@ -304,6 +307,7 @@ async function main(): Promise<void> {
   if (recordedVia === "gesprek" && (command === "sign" || command === "inventory")) throw new Error(`${command === "sign" ? "tekenen" : "de verklaring dat er verstuurd mag worden"} legt de assistent nooit vast, ook niet na een bevestiging in het gesprek. ${HUMAN_AT_TERMINAL_NL}`);
   if ((recordedVia !== undefined || values.confirmation !== undefined || values.summary !== undefined) && command !== "answer" && command !== "decide" && command !== "writes") throw new Error("--recorded-via, --confirmation en --summary horen bij answer en decide");
   if (command !== "inventory" && values.mailbox !== undefined) throw new Error("--mailbox hoort bij inventory: daar wordt voor de hele run vastgelegd welke mailbox er is");
+  if (values["mail-link-origin"] !== undefined && (command !== "inventory" || values.mailbox === undefined)) throw new Error("--mail-link-origin hoort bij inventory, samen met --mailbox: daar wordt voor de hele run vastgelegd via welke partij links mogen lopen");
   if (command !== "inventory" && values["also-origin"] !== undefined) throw new Error("--also-origin hoort bij inventory: daar wordt vastgelegd welke origins samen de site zijn");
   // A run goes on with the version of loep it was made with; another version would quietly write other tasks over it.
   if (values.run) {
@@ -351,7 +355,7 @@ async function main(): Promise<void> {
       // A declared test environment is confirmed by a person at a terminal before anything starts.
       if (permission?.declaredBy) Object.assign(permission, await confirmDeclaration(permission));
       const { confirmMailbox, decideMailbox, recordMailbox, runAddress } = await import("./lib/mailbox.ts");
-      const mailbox = values.mailbox === undefined ? null : decideMailbox(values.mailbox, permission);
+      const mailbox = values.mailbox === undefined ? null : decideMailbox(values.mailbox, permission, undefined, values["mail-link-origin"]);
       // A mailbox on another machine holds real mail: a person confirms it before anything starts.
       if (mailbox) mailbox.mark = await confirmMailbox(mailbox, permission!);
       if (mailbox) permission!.keepShare = true;

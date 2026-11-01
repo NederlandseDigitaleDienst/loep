@@ -5,7 +5,7 @@ import { answeredByCloudflare, bodyOf, fulfillAnswer, opensNoConnection, passOn,
 import { LOCAL_ONLY_ENV, REFUSED_HEADER, REFUSED_STATUS, requireBoundary, shieldedFetch, shieldOf } from "../browser/boundary.ts";
 import { REFUSED_ANSWER } from "../browser/onward.ts";
 import { readJson } from "../lib/canonical.ts";
-import { ownRegistration, readMailboxState } from "../lib/mailbox.ts";
+import { mailboxForRun, ownRegistration, readMailboxState } from "../lib/mailbox.ts";
 import { maskFile, shieldForRun } from "../lib/secrets.ts";
 import { isChallenge } from "../lib/challenge.ts";
 import { privateFromPublicSite, scopeHost, scopeHostOf, siteOrigins, WEB_SCHEMES } from "../lib/origins.ts";
@@ -49,6 +49,8 @@ export interface Scope {
   baseUrl: string | null;
   /** The run, when there is one: a run with secrets has a boundary around every context. */
   runDir?: string;
+  /** Origins of another party that a personal link from a mail may lead through (see `throughParty`). */
+  linkOrigins?: string[];
   /**
    * When false, stylesheets, scripts, images, fonts and media may still be fetched from other
    * hosts, as in the sweep: without them the page is not the page a visitor sees. When true, nothing leaves the scope.
@@ -90,10 +92,11 @@ export async function scopeForRun(runDir: string, extra: { scopeUrl?: string | u
   }
   if (hosts.size === 0) throw new Error("geen inventory.json in de run en geen --scope <url> opgegeven: onbekend welke site in scope is");
   const permission = writesForRun(runDir);
+  const linkOrigins = mailboxForRun(runDir)?.linkOrigins;
   // Inside a command of the sweep the log names that command; a session names itself.
   const ambient = runWrites();
   const writes = permission ? (ambient?.origin === permission.origin ? ambient : writeAccess(runDir, permission, "session")) : null;
-  return { hosts: [...hosts].sort(), baseUrl, runDir, strict: extra.strict ?? false, ...(writes ? { writes } : {}) };
+  return { hosts: [...hosts].sort(), baseUrl, runDir, strict: extra.strict ?? false, ...(writes ? { writes } : {}), ...(linkOrigins ? { linkOrigins } : {}) };
 }
 
 /**
@@ -300,7 +303,7 @@ export async function guardContext(context: BrowserContext, scope: Scope, guard:
       guard.blocked.push({ at: new Date().toISOString(), kind: "method", method, url: url.slice(0, MAX_URL), resourceType: type, ...(search.length > 0 ? { search } : {}) });
       return refuse();
     }
-    if (inScope(scope, url)) {
+    if (inScope(scope, url) || throughParty(scope, request)) {
       if (linkRefused(scope, guard, request)) return refuse();
       return proceed(route, context, (target) => inScope(scope, target));
     }
@@ -479,6 +482,12 @@ export async function guardedDownload(scope: Scope, guard: Guard, address: strin
 }
 
 const runOf = (scope: Scope): string | undefined => scope.runDir ?? scope.writes?.runDir;
+
+/** A personal link on an origin of another party, opened as a page. Nothing else goes there, and what it leads to is decided at the boundary (`followThrough`). */
+function throughParty(scope: Scope, request: Request): boolean {
+  if (!request.isNavigationRequest() || !scope.linkOrigins?.includes(new URL(request.url()).origin)) return false;
+  return shieldOf(runOf(scope), request.url())?.guardedId(request.url()) != null;
+}
 
 /**
  * A navigation to a guarded address takes from the budget like any write, and a session that may

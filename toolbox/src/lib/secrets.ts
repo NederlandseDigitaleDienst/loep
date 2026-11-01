@@ -594,10 +594,10 @@ export function registerSecret(runDir: string, value: string, details: Omit<NewS
   registerSecrets(runDir, [{ value, ...details }]);
 }
 
-/** Add addresses that are worth something by themselves. */
+/** Add addresses that are worth something by themselves. One id can have more than one: a link through another party, and where it leads. */
 export function registerGuarded(runDir: string, addresses: readonly GuardedAddress[]): void {
   changing(runDir, (file) => {
-    for (const address of addresses) if (!file.guarded.some((known) => known.id === address.id)) file.guarded.push(address);
+    for (const address of addresses) if (!file.guarded.some((known) => known.id === address.id && known.url === address.url)) file.guarded.push(address);
   });
 }
 

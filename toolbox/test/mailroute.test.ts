@@ -3,16 +3,18 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, beforeEach, test } from "node:test";
+import * as playwright from "playwright";
 import type { Browser, Page } from "playwright";
 import { MAIL_ROUTE_PATHS } from "../fixtures/mailroute.ts";
 import { startFixture, type FixtureServer } from "../fixtures/serve.ts";
+import { REFUSED_STATUS } from "../src/browser/boundary.ts";
 import { launchBrowser, loadPage, newContext } from "../src/browser/session.ts";
 import { cleanupLinesNl, mailCleanup, mailLinks, mailRegister, mailWait, startMailbox } from "../src/commands/mail.ts";
-import { agentMailboxNl, MAIL_ADDRESS_SOURCE, mailboxLimitationsNl, readMailboxState, recordMailbox } from "../src/lib/mailbox.ts";
+import { agentMailboxNl, decideMailbox, MAIL_ADDRESS_SOURCE, mailboxForRun, mailboxLimitationsNl, readMailboxState, recordMailbox } from "../src/lib/mailbox.ts";
 import { readSecretsFile, scanRun } from "../src/lib/secrets.ts";
 import { decideWrites, DEFAULT_MAX_WRITES, recordWrites, reservedWrites, writeAccess, writeBudget, writesForRun } from "../src/lib/writes.ts";
 import { Daemon } from "../src/session/daemon.ts";
-import { guardContext, guardRedirects, scopeForRun, TEST_VALUES, testValuesForRun, type Guard } from "../src/session/safety.ts";
+import { guardContext, guardRedirects, guardRedirectsByRoute, scopeForRun, TEST_VALUES, testValuesForRun, type Guard } from "../src/session/safety.ts";
 
 /*
  * The hard mail route of the fixture (see `fixtures/mailroute.ts`): what the route does on a site
@@ -43,17 +45,18 @@ beforeEach(() => {
   const { mailRoute } = fixture;
   mailRoute.options.viaService = true;
   mailRoute.options.linkText = true;
+  mailRoute.options.serviceTarget = null;
   mailRoute.outbox.length = 0;
   mailRoute.registrations.length = 0;
 });
 
 /** A run with a mailbox on the fixture, as `inventory` leaves it. */
-async function mailRun(): Promise<string> {
+async function mailRun(linkOrigins: string[] = []): Promise<string> {
   const run = mkdtempSync(join(tmpdir(), "loep-mailroute-"));
   const granted = { ...decideWrites(`${origin}/`, { allowWrites: true })!, maxWrites: 50, spacingSeconds: 0 };
   writeFileSync(join(run, "inventory.json"), JSON.stringify({ baseUrl: `${origin}/`, origin, pages: [] }));
   await recordWrites(run, granted);
-  const mark = { kind: "mailpit" as const, local: true, declaredAt: new Date(Date.now() - 1000).toISOString() };
+  const mark = { kind: "mailpit" as const, local: true, declaredAt: new Date(Date.now() - 1000).toISOString(), ...(linkOrigins.length > 0 ? { linkOrigins } : {}) };
   await recordMailbox(run, mark);
   await startMailbox(run, { kind: "mailpit", host: "localhost", port: 1, tls: false }, ADDRESS, mark, granted);
   return run;
@@ -113,7 +116,7 @@ test("the same form with the address of the run goes out for real each time: a h
   }
 });
 
-test("what goes wrong now: a link through a mailing service is refused, so the route stops there", async () => {
+test("a link through a mailing service that nobody declared stays refused", async () => {
   const run = await mailRun();
   const session = await sessionOn(run, "r-start");
   try {
@@ -355,3 +358,142 @@ test("through the commands of a session: after a registration of its own the tes
     rmSync(run, { recursive: true, force: true });
   }
 });
+
+const click = (url: string): string => new URL(url).pathname.slice("/k/".length);
+
+test("a link through a declared party is opened: the party is asked for its redirect, and the browser goes on to the site with aliases", async () => {
+  const party = fixture.origins.thirdParty;
+  const run = await mailRun([party]);
+  const lead = await sessionOn(run, "r-start");
+  try {
+    await signUp(lead.page);
+    const realClicks = fixture.mailRoute.outbox[0]!.raw.toString().match(/\/k\/([0-9a-f]+)/g)!.map((path) => path.slice(3));
+    const { links, refusedOrigins } = await mailWait(run, { mailbox: fixture.mailRoute.mailbox(), timeoutSeconds: 1 });
+    assert.deepEqual(refusedOrigins, []);
+    assert.equal(links.length, 3);
+    assert.ok(links.every((link) => link.url.startsWith(`${party}/k/`) && !realClicks.includes(click(link.url))), "the agent gets an alias on the address of the party");
+    const clicks = fixture.mailRoute.clicks();
+    const sent = writeBudget(run, writesForRun(run)!).sent;
+    assert.equal(await openLink(lead.page, links[0]!.url), 200);
+    assert.equal(fixture.mailRoute.clicks(), clicks + 1);
+    assert.equal(fixture.mailRoute.registrations[0]!.confirmed, true, "the site got its real token");
+    assert.equal(writeBudget(run, writesForRun(run)!).sent, sent + 1, "the link and where it leads are one opening");
+    const landed = new URL(lead.page.url());
+    assert.equal(landed.origin, origin);
+    assert.equal(landed.pathname, MAIL_ROUTE_PATHS.confirm);
+    assert.notEqual(landed.searchParams.get("t"), fixture.mailRoute.registrations[0]!.token, "the browser has an alias");
+    assert.equal(await openLink(lead.page, links[0]!.url), 200);
+    assert.equal(writeBudget(run, writesForRun(run)!).sent, sent + 1, "a second opening costs nothing");
+    assert.equal(readSecretsFile(run)!.secrets.find((secret) => realClicks.includes(secret.real))!.origins.join(), party, "the token of the party goes to the party alone");
+    assert.deepEqual(scanRun(run).hits, []);
+    assert.ok(!(await lead.page.content()).includes(fixture.mailRoute.registrations[0]!.token));
+  } finally {
+    await lead.close();
+    rmSync(run, { recursive: true, force: true });
+  }
+});
+
+test("a declared party that leads elsewhere, or does not lead on, is refused, and nothing reaches the page", async () => {
+  const party = fixture.origins.thirdParty;
+  const run = await mailRun([party]);
+  const lead = await sessionOn(run, "r-start");
+  try {
+    await signUp(lead.page);
+    const { links } = await mailWait(run, { mailbox: fixture.mailRoute.mailbox(), timeoutSeconds: 1 });
+    fixture.mailRoute.options.serviceTarget = `${fixture.origins.defect}/`;
+    assert.equal(await openLink(lead.page, links[0]!.url), REFUSED_STATUS, "an origin that is no part of the run");
+    assert.match(lead.guard.blocked.at(-1)?.reasonNl ?? "", /hoort niet bij de run/);
+    fixture.mailRoute.options.serviceTarget = null;
+    assert.equal(fixture.mailRoute.registrations[0]!.confirmed, false);
+        const hits = fixture.mailRoute.clicks();
+    const other = await lead.page.evaluate((target) => fetch(target, { method: "POST", body: "x" }).then((answer) => answer.status, () => 0), `${party}/k/iets`);
+    assert.equal(other, 0, "nothing is sent to the party");
+    await lead.page.goto(`${party}/`).catch(() => undefined);
+    assert.equal(fixture.mailRoute.clicks(), hits, "and no other page of it is opened");
+    assert.ok(lead.guard.blocked.some((entry) => entry.kind === "scope" && entry.url === `${party}/`));
+  } finally {
+    await lead.close();
+    rmSync(run, { recursive: true, force: true });
+  }
+});
+
+test("a party that shows a page of its own is refused", async () => {
+  const party = fixture.origins.thirdParty;
+  const run = await mailRun([party]);
+  const lead = await sessionOn(run, "r-start");
+  try {
+    await signUp(lead.page);
+    const { links } = await mailWait(run, { mailbox: fixture.mailRoute.mailbox(), timeoutSeconds: 1 });
+    fixture.mailRoute.forgetClicks();
+    assert.equal(await openLink(lead.page, links[0]!.url), REFUSED_STATUS);
+    assert.match(lead.guard.blocked.at(-1)?.reasonNl ?? "", /stuurde niet door naar de site/);
+  } finally {
+    await lead.close();
+    rmSync(run, { recursive: true, force: true });
+  }
+});
+
+test("a party is declared at inventory, over https unless it is on this machine, and is no origin of the run", () => {
+  const local = decideWrites(`${origin}/`, { allowWrites: true })!;
+  assert.deepEqual(decideMailbox("mailpit://localhost:8025", local, undefined, ["https://klik.example.nl/pad", "https://klik.example.nl"]).mark.linkOrigins, ["https://klik.example.nl"]);
+  assert.throws(() => decideMailbox("mailpit://localhost:8025", local, undefined, ["http://klik.example.nl"]), /verwacht een adres met https/);
+  assert.throws(() => decideMailbox("mailpit://localhost:8025", local, undefined, ["geen adres"]), /verwacht een adres met https/);
+  assert.throws(() => decideMailbox("mailpit://localhost:8025", local, undefined, [origin]), /al een origin van de run/);
+  assert.equal(decideMailbox("mailpit://localhost:8025", local).mark.linkOrigins, undefined);
+});
+
+test("the report names a declared party, and the manifest keeps it", async () => {
+  const party = fixture.origins.thirdParty;
+  const run = await mailRun([party]);
+  try {
+    assert.deepEqual(mailboxForRun(run)!.linkOrigins, [party]);
+    assert.ok(mailboxLimitationsNl(run)[0]!.includes(`via ${party}: daar is alleen de doorverwijzing naar de site gelezen`));
+  } finally {
+    rmSync(run, { recursive: true, force: true });
+  }
+});
+
+test("mail cleanup goes through the party too", async () => {
+  const run = await mailRun([fixture.origins.thirdParty]);
+  const lead = await sessionOn(run, "r-start");
+  const box = fixture.mailRoute.mailbox();
+  try {
+    await signUp(lead.page);
+    const { links } = await mailWait(run, { mailbox: box, timeoutSeconds: 1 });
+    await openLink(lead.page, links[1]!.url);
+    const cleanup = await mailCleanup(run, { mailbox: box, browser, settleMs: 200, pollMs: 50 });
+    assert.equal(cleanup.sites[0]!.outcome, "removed", cleanup.sites[0]!.noteNl);
+    assert.deepEqual(fixture.mailRoute.registrations, []);
+    assert.deepEqual(scanRun(run).hits, []);
+  } finally {
+    await lead.close();
+    rmSync(run, { recursive: true, force: true });
+  }
+});
+
+for (const name of ["firefox", "webkit"] as const) {
+  test(`a link through a declared party also works in ${name}`, async () => {
+    const run = await mailRun([fixture.origins.thirdParty]);
+    const lead = await sessionOn(run, "r-start");
+    const other = await playwright[name].launch();
+    try {
+      await signUp(lead.page);
+      const { links } = await mailWait(run, { mailbox: fixture.mailRoute.mailbox(), timeoutSeconds: 1 });
+      const scope = await scopeForRun(run, {});
+      const guard: Guard = { blocked: [], outsideScopeLoaded: {}, sender: "b-331" };
+      const context = await newContext(other, { writes: scope.writes ?? null });
+      await guardContext(context, scope, guard);
+      await guardRedirectsByRoute(context, scope, guard);
+      const page = await context.newPage();
+      await page.goto(links[0]!.url);
+      await page.waitForURL(`**${MAIL_ROUTE_PATHS.confirm}**`);
+      assert.equal(await page.locator("h1").textContent(), "Bevestigd");
+      assert.equal(fixture.mailRoute.registrations[0]!.confirmed, true);
+      assert.deepEqual(scanRun(run).hits, []);
+    } finally {
+      await other.close();
+      await lead.close();
+      rmSync(run, { recursive: true, force: true });
+    }
+  });
+}
