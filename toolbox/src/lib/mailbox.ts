@@ -281,6 +281,9 @@ export const writeMailboxState = async (runDir: string, state: MailboxState): Pr
 
 const LABEL_NL: Record<MailboxKind, string> = { imap: "een echte mailbox (IMAP)", mailpit: "Mailpit, dat mail op deze machine opvangt" };
 
+/** A reader of the report could take the mail to be part of the evaluation: it is not. */
+export const MAIL_NOT_JUDGED_NL = "De e-mail zelf is niet beoordeeld. Code haalde de links uit de mail en wiste de mail daarna. Geen agent heeft de mail gezien, en geen van de criteria gaat over de mail. Dit rapport zegt dus niets over de toegankelijkheid van de e-mail die de site stuurt.";
+
 /** For the limitations of the report: which kind of mailbox, never its address, and what stayed behind. Empty for a run without a mailbox. */
 export function mailboxLimitationsNl(runDir: string): string[] {
   const mark = mailboxForRun(runDir);
@@ -289,7 +292,7 @@ export function mailboxLimitationsNl(runDir: string): string[] {
   // Opening a link to clean up is no looking at the page: that says what a run measured.
   const used = usedLinks(runDir, CLEANUP_SENDER).size > 0;
   const kindNl = `Mailbox: ${used ? "pagina's achter een persoonlijke link uit een e-mail zijn bekeken met" : "er was aangesloten:"} ${LABEL_NL[mark.kind]}${used ? "" : ", maar er is geen persoonlijke link uit een e-mail gebruikt"}. Het adres en de inloggegevens staan niet in dit rapport.${mark.local ? " De meting is lokaal gedaan, op een site op deze machine, en niet op productie: wat de echte mailroute doet, is niet gemeten." : ""}`;
-  return [kindNl, cleanupNl(state)];
+  return [kindNl, MAIL_NOT_JUDGED_NL, cleanupNl(state)];
 }
 
 function cleanupNl(state: MailboxState | null): string {
