@@ -2,7 +2,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Browser, BrowserContext, Locator, Page } from "playwright";
 import { launchBrowser, loadPage, newContext, type LoadResult } from "../browser/session.ts";
-import { linkKind, linksOfRegistration, MAIL_ADDRESS_SOURCE, MAIL_CODE_SOURCE, MAIL_LINK_SOURCE, MAIL_PRIVATE, MAILBOX_STATE, mailboxForRun, markedMail, openMailbox, ownAddress, ownRegistration, readMailboxState, SHARED_REGISTRATION, siteDone, waitForMail, writeMailboxState, type CleanupStep, type MailServer, type Mailbox, type MailboxCleanup, type MailboxLink, type MailboxMark, type MailboxState, type ReceivedMail, type Registration, type SiteCleanup, type SiteOutcome } from "../lib/mailbox.ts";
+import { keepsRegistration, linkKind, linksOfRegistration, MAIL_ADDRESS_SOURCE, MAIL_CODE_SOURCE, MAIL_LINK_SOURCE, MAIL_PRIVATE, MAILBOX_STATE, mailboxForRun, markedMail, openMailbox, ownAddress, ownRegistration, readMailboxState, SHARED_REGISTRATION, siteDone, waitForMail, writeMailboxState, type CleanupStep, type MailServer, type Mailbox, type MailboxCleanup, type MailboxLink, type MailboxMark, type MailboxState, type ReceivedMail, type Registration, type SiteCleanup, type SiteOutcome } from "../lib/mailbox.ts";
 import { isLoginPath, loginForRun, onlyLogsOut, originOf, passwordFieldShows } from "../lib/login.ts";
 import { pathOf } from "../lib/reads.ts";
 import { linksOf, secretsInText, secretsInUrl, spelledSecretsInUrl, withoutLinks } from "../lib/mailparse.ts";
@@ -163,7 +163,7 @@ export function absorbMail(runDir: string, origins: readonly string[], state: Ma
     const url = parsed.href;
     let entry = state.links.find((known) => known.url === url);
     if (!entry) {
-      entry = { id: `L${state.links.length + 1}`, url, kind: link.unsubscribe ? "unsubscribe" : linkKind(parsed.pathname), ...(registration === SHARED_REGISTRATION ? {} : { registration }) };
+      entry = { id: `L${state.links.length + 1}`, url, kind: link.unsubscribe ? "unsubscribe" : linkKind(parsed.pathname, link.text), ...(registration === SHARED_REGISTRATION ? {} : { registration }) };
       state.links.push(entry);
       registerGuarded(runDir, [{ id: entry.id, url }]);
     }
@@ -219,13 +219,14 @@ function shownLinks(runDir: string, state: MailboxState, shows: (link: MailboxLi
 }
 
 /**
- * The links for an agent: those of the registration of its own, and of the shared one what cannot end
- * it. A link that unsubscribes can do so by being opened, and all agents share that registration, so
- * none of them is offered one: that link is for `mail cleanup`. The links of another session are not its own.
+ * The links for an agent: those of the registration of its own, and of the shared one what says it
+ * does not end it. A link that unsubscribes can do so by being opened, and all agents share that
+ * registration, so none of them is offered one, and neither one that does not say what it is: those
+ * are for a session with a registration of its own, and for `mail cleanup`.
  */
 const offered = (state: MailboxState, owner: string | undefined): ((link: MailboxLink) => boolean) => {
   const own = state.registrations.filter((registration) => registration.owner !== undefined && registration.owner === owner).map((registration) => registration.id);
-  return (link) => (link.registration === undefined ? link.kind !== "unsubscribe" : own.includes(link.registration));
+  return (link) => (link.registration === undefined ? keepsRegistration(link.kind) : own.includes(link.registration));
 };
 
 /** The personal links as they are now. An agent asks for them here: a list in its task would change that task with every mail. */
@@ -472,7 +473,7 @@ async function removeAtSite(browser: Browser, runDir: string, state: MailboxStat
       const url = queue.shift()!;
       if (visits.some((visit) => visit.url === url)) continue;
       // A link that says it removes can do so by being opened: from then on the site was asked.
-      const removes = REMOVES_BY_PATH.test(pathIn(url));
+      const removes = REMOVES_BY_PATH.test(pathIn(url)) || links().some((link) => link.url === url && link.kind === "unsubscribe");
       const before = removes ? await look(page, url, true) : await look(page, url);
       if (before.refusedNl) {
         unopened ??= before.refusedNl;
@@ -499,9 +500,9 @@ async function removeAtSite(browser: Browser, runDir: string, state: MailboxStat
     }
     if (!removedOn) {
       const oneClick = known.find((link) => link.oneClick);
+      if (!oneClick && own && openable.length > 0) return { outcome: "not shown", noteNl: "er staat geen knop meer om deze aanmelding te verwijderen. De sessie die haar had, kan haar zelf hebben verwijderd, maar dat is hier niet aan te tonen: er is geen vergelijking met daarvoor", steps };
       if (!oneClick && wasAsked()) return { outcome: "not shown", noteNl: "de site kreeg het verzoek al bij een eerder opruimen, en nu staat er geen knop meer; dat alleen laat niet zien dat de aanmelding weg is", steps };
       if (!oneClick && unopened) return { outcome: "failed", noteNl: `een persoonlijke link kon niet worden geopend: ${unopened}`, steps };
-      if (!oneClick && own && openable.length > 0) return { outcome: "not shown", noteNl: "er staat geen knop meer om deze aanmelding te verwijderen. De sessie die haar had, kan haar zelf hebben verwijderd, maar dat is hier niet aan te tonen: er is geen vergelijking met daarvoor", steps };
       if (!oneClick) return { outcome: "failed", noteNl: openable.length < known.length ? "er kwam alleen een link binnen die de run nooit opende. De aanmelding is dus nooit bevestigd, en het opruimen opent zo'n link niet, omdat dat haar juist kan aanzetten. Ze blijft onbevestigd bij de site staan" : "geen knop gevonden om de aanmelding te verwijderen", steps };
       const posted = await asking(async () => {
         await page.evaluate((url) => fetch(url, { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body: "List-Unsubscribe=One-Click", redirect: "manual" }).then(() => undefined), oneClick.url);
