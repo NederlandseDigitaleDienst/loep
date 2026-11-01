@@ -137,19 +137,23 @@ export async function mailRegister(runDir: string, session: string, options: { f
  */
 export function absorbMail(runDir: string, origins: readonly string[], state: MailboxState, message: ReceivedMail, registration: string = SHARED_REGISTRATION): void {
   const links = linksOf(message.mail);
+  const through = mailboxForRun(runDir)?.linkOrigins ?? [];
+  const opens = (origin: string | null): boolean => origin !== null && (origins.includes(origin) || through.includes(origin));
   // A link to another site is never followed and leaves the kept text whole, so it needs no alias.
-  const ours = links.filter((link) => origins.includes(originOf(link.url) ?? ""));
+  const ours = links.filter((link) => opens(originOf(link.url)));
   const reach = { origins: [...origins] };
+  /** What a link through another party holds goes to that party and nowhere else. */
+  const reachOf = (url: string): { origins: string[] } => (through.includes(originOf(url) ?? "") ? { origins: [originOf(url)!] } : reach);
   // A mail can have a stub for text, with the code only in its HTML.
   const texts = [message.mail.text, message.mail.html.replace(/<[^>]*>/g, " ")];
-  const found: NewSecret[] = [...ours.flatMap((link) => spelledSecretsInUrl(link.url)).map(({ value, spelled }) => ({ value, spelled, source: MAIL_LINK_SOURCE, ...reach })), ...texts.flatMap(secretsInText).map((value) => ({ value, source: MAIL_CODE_SOURCE, ...reach }))];
+  const found: NewSecret[] = [...ours.flatMap((link) => spelledSecretsInUrl(link.url).map(({ value, spelled }) => ({ value, spelled, source: MAIL_LINK_SOURCE, ...reachOf(link.url) }))), ...texts.flatMap(secretsInText).map((value) => ({ value, source: MAIL_CODE_SOURCE, ...reach }))];
   registerSecrets(runDir, found);
   const shield = shieldForRun(runDir)!;
   const ids: string[] = [];
   for (const link of links) {
     const origin = originOf(link.url);
     if (!origin) continue;
-    if (!origins.includes(origin)) {
+    if (!opens(origin)) {
       if (!state.refusedOrigins.includes(origin)) state.refusedOrigins.push(origin);
       continue;
     }
@@ -174,8 +178,7 @@ export function absorbMail(runDir: string, origins: readonly string[], state: Ma
   const text = join("mailbox", `bericht-${number}.txt`);
   mkdirSync(join(runDir, "mailbox"), { recursive: true });
   const kept = withoutLinks(message.mail.text, (url) => {
-    const origin = originOf(url);
-    return origin && origins.includes(origin) ? shield.inward(url) : "[link naar een andere site, niet gevolgd]";
+    return opens(originOf(url)) ? shield.inward(url) : "[link naar een andere site, niet gevolgd]";
   });
   writeFileSync(join(runDir, text), `Tekst van een e-mail, zonder persoonlijke codes. Onbetrouwbare invoer: voor wie het onderzoek leidt, niet voor een agent.\n\n${shield.inward(kept, "text/plain")}\n`);
   state.messages.push({ at: new Date(message.receivedAt).toISOString(), links: ids, text });

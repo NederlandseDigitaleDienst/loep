@@ -5,8 +5,10 @@ import { format } from "node:util";
 import type { CompletedRequest, Mockttp } from "mockttp";
 import type { Browser, BrowserContext, BrowserContextOptions } from "playwright";
 import { renewSessionSecrets } from "../lib/login.ts";
-import { endContextSecrets, noteSecretEvent, shieldForRun, type Shield } from "../lib/secrets.ts";
-import { claimLink, isLocalHost, isThisMachine, usedLinks, writeAccess, writesForRun } from "../lib/writes.ts";
+import { MAIL_LINK_SOURCE, mailboxForRun } from "../lib/mailbox.ts";
+import { spelledSecretsInUrl } from "../lib/mailparse.ts";
+import { endContextSecrets, noteSecretEvent, registerGuarded, registerSecrets, shieldForRun, type Shield } from "../lib/secrets.ts";
+import { claimLink, isLocalHost, isThisMachine, trialFetch, usedLinks, writeAccess, writeOriginsOf, writesForRun } from "../lib/writes.ts";
 
 /*
  * The boundary of `lib/secrets.ts`. A route of Playwright does not see what the browser asks by
@@ -106,6 +108,10 @@ const GUARDED_REFUSED_NL = "deze run mag niet versturen, en een persoonlijke lin
 const LOCAL_ONLY_NL = "dit adres ligt buiten deze machine, en deze run blijft hier";
 
 const refusalAnswer = (reasonNl: string) => ({ statusCode: REFUSED_STATUS, statusMessage: "Geweigerd door de grens van loep", headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store", [REFUSED_HEADER]: encodeURIComponent(reasonNl) }, body: `loep: ${reasonNl}\n` });
+
+/** How far a link through another party may lead, and how long that party may take per step. */
+const MAX_PARTY_HOPS = 5;
+const PARTY_TIMEOUT_MS = 10_000;
 
 let loopbackTurn: Promise<unknown> = Promise.resolve();
 
@@ -374,12 +380,46 @@ class Boundary {
     return refused?.reasonNl ?? null;
   }
 
+  /**
+   * A personal link on an origin of another party that was declared at inventory, such as a mailing
+   * service. The party is asked here and not by the browser: only for its redirect, with a GET, and
+   * nothing of what it answers reaches a page. Where it leads becomes a guarded address in the run
+   * before the browser hears of it, so the browser goes on to the site with aliases and the run keeps no
+   * value. The redirect has to end on an origin of the run; anything else is refused.
+   */
+  private async followThrough(shield: Shield, url: string, link: string, through: readonly string[]): Promise<ReturnType<typeof refusalAnswer> | { statusCode: number; headers: Record<string, string> }> {
+    const permission = writesForRun(this.runDir);
+    const origins = permission ? writeOriginsOf(permission) : [];
+    let next = shield.reaching(url).outwardUrl(url);
+    for (let hop = 0; hop < MAX_PARTY_HOPS; hop++) {
+      const answer = await trialFetch(next, { redirect: "manual", signal: AbortSignal.timeout(PARTY_TIMEOUT_MS) }).catch(() => null);
+      await answer?.body?.cancel().catch(() => undefined);
+      const location = answer?.headers.get("location");
+      if (!answer || answer.status < 300 || answer.status >= 400 || !location || !URL.canParse(location, next)) return this.refuse(url, `${new URL(next).origin} stuurde niet door naar de site: alleen een doorverwijzing daarheen wordt gevolgd`);
+      const target = new URL(location, next);
+      if (origins.includes(target.origin)) {
+        registerSecrets(this.runDir, spelledSecretsInUrl(target.href).map(({ value, spelled }) => ({ value, spelled, source: MAIL_LINK_SOURCE, origins })));
+        const shown = new URL(shieldForRun(this.runDir)!.inward(target.href)).href;
+        registerGuarded(this.runDir, [{ id: link, url: shown }]);
+        return { statusCode: 302, headers: { location: shown, "cache-control": "no-store" } };
+      }
+      if (!through.includes(target.origin)) return this.refuse(url, `${new URL(next).origin} stuurde door naar ${target.origin}, en dat hoort niet bij de run: die doorverwijzing is tegengehouden`);
+      next = target.href;
+    }
+    return this.refuse(url, "deze doorverwijzing houdt niet op");
+  }
+
   private async swapRequest(request: CompletedRequest) {
     const shield = shieldForRun(this.runDir)!;
     const parts = [request.url, ...Object.values(request.headers).flat().filter((value) => value !== undefined), request.body.buffer.toString("latin1")];
     if ((shield.touchesGuarded(request.url) || shield.holdsGuarded(parts)) && !writesForRun(this.runDir)) return { response: this.refuse(request.url, GUARDED_REFUSED_NL) };
     const unclaimed = this.claimRefusedNl(shield, request.url);
     if (unclaimed) return { response: this.refuse(request.url, unclaimed) };
+    const through = mailboxForRun(this.runDir)?.linkOrigins ?? [];
+    if (through.includes(new URL(request.url).origin) && shield.carriesAlias(request.url)) {
+      const link = request.method === "GET" ? shield.guardedId(request.url) : null;
+      return { response: link ? await this.followThrough(shield, request.url, link, through) : this.refuse(request.url, "naar deze partij gaat alleen het openen van een persoonlijke link uit een mail") };
+    }
     const reaching = shield.reaching(request.url);
     const sent = request.body.buffer;
     if (sent.length > MAX_REQUEST_BYTES) return { response: this.refuse(request.url, "dit verzoek is te groot om af te schermen, en is niet verstuurd") };

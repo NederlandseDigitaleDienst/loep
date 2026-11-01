@@ -7,7 +7,7 @@ import { isFor, parseMail, type ParsedMail } from "./mailparse.ts";
 import { imapMailbox } from "./mailbox-imap.ts";
 import { mailpitMailbox } from "./mailbox-mailpit.ts";
 import { confirmByTyping, processTerminal, type Terminal } from "./recorded.ts";
-import { CLEANUP_SENDER, isThisMachine, senderOf, usedLinks, writeOriginsNl, type WritePermission } from "./writes.ts";
+import { CLEANUP_SENDER, isThisMachine, senderOf, usedLinks, writeOriginsNl, writeOriginsOf, type WritePermission } from "./writes.ts";
 
 /**
  * A mailbox lets a run finish a flow that goes through an e-mail: wait for a message to the address
@@ -68,6 +68,8 @@ export interface MailboxMark {
   declaredAt: string;
   /** A mailbox that is not on this machine was confirmed by a person, at a terminal. */
   recordedVia?: "terminal";
+  /** Origins of another party that a link in a mail may lead through, such as a mailing service. Declared at inventory: only a redirect to the site is read there. */
+  linkOrigins?: string[];
 }
 
 export const MAILBOX_ENV = { user: "LOEP_IMAP_USER", password: "LOEP_IMAP_PASSWORD", address: "LOEP_IMAP_ADDRESS" } as const;
@@ -80,7 +82,7 @@ const FORM_NL = "--mailbox verwacht imap://<host>:993 of mailpit://localhost:802
  * Decide from `--mailbox` where the mailbox of this run is. Throws, in Dutch. The value itself never
  * comes back in a message: somebody may have typed a password in it.
  */
-export function decideMailbox(text: string, permission: WritePermission | null, now = new Date()): { server: MailServer; mark: MailboxMark } {
+export function decideMailbox(text: string, permission: WritePermission | null, now = new Date(), linkOrigins: readonly string[] = []): { server: MailServer; mark: MailboxMark } {
   if (!permission) throw new Error("--mailbox hoort bij een run die mag versturen: een link uit een e-mail openen telt als versturen. Geef het samen met --allow-writes, of met --test-environment en --declared-by");
   let url: URL;
   try {
@@ -90,7 +92,8 @@ export function decideMailbox(text: string, permission: WritePermission | null, 
   }
   if (url.username || url.password) throw new Error(`zet geen gebruikersnaam of wachtwoord in --mailbox: een opdrachtregel blijft staan in de geschiedenis van de shell. Ze komen uit de omgeving (${MAILBOX_ENV.user}, ${MAILBOX_ENV.password}) of uit de sleutelhanger`);
   const host = url.hostname.replace(/^\[|\]$/g, "");
-  const mark = { local: permission.local, declaredAt: now.toISOString() };
+  const through = linkOrigins.map((origin) => linkOriginOf(origin, permission));
+  const mark = { local: permission.local, declaredAt: now.toISOString(), ...(through.length > 0 ? { linkOrigins: [...new Set(through)] } : {}) };
   if (url.protocol === "mailpit:") {
     if (!isThisMachine(host)) throw new Error("mailpit:// is alleen voor deze machine: de REST-API van Mailpit heeft hier geen inlog. Gebruik imap:// voor een andere mailbox");
     if (!permission.local) throw new Error("Mailpit vangt alleen mail van een site op deze machine; deze run verstuurt naar een site die niet lokaal is. Gebruik imap://");
@@ -102,6 +105,19 @@ export function decideMailbox(text: string, permission: WritePermission | null, 
   return { server: { kind: "imap", host, port, tls: port === 993 }, mark: { kind: "imap", ...mark } };
 }
 
+/** The origin of `--mail-link-origin`. A token goes there, so not over plain http, except on this machine. */
+function linkOriginOf(text: string, permission: WritePermission): string {
+  let url: URL;
+  try {
+    url = new URL(text);
+  } catch {
+    throw new Error(`--mail-link-origin verwacht een adres met https://, niet "${text}"`);
+  }
+  if (url.protocol !== "https:" && !(url.protocol === "http:" && isThisMachine(url.hostname))) throw new Error(`--mail-link-origin verwacht een adres met https://, niet "${text}"`);
+  if (writeOriginsOf(permission).includes(url.origin)) throw new Error(`${url.origin} is al een origin van de run: daarvoor is --mail-link-origin niet nodig`);
+  return url.origin;
+}
+
 /**
  * A mailbox that is not on this machine holds real mail, so only a person connects it: at an
  * interactive terminal, by typing the host, like the declaration for sending. Without one it is
@@ -109,7 +125,7 @@ export function decideMailbox(text: string, permission: WritePermission | null, 
  */
 export async function confirmMailbox(decided: { server: MailServer; mark: MailboxMark }, permission: WritePermission, terminal: Terminal = processTerminal()): Promise<MailboxMark> {
   if (isThisMachine(decided.server.host)) return decided.mark;
-  const shownNl = [`Verklaring dat deze run de mailbox op ${decided.server.host} mag lezen, en daarin alleen mail aan het adres van de run.`, `Links uit die mail worden alleen gevolgd naar ${writeOriginsNl(permission)}. Elke link telt als verzending.`, "Het rapport noemt de soort mailbox, niet het adres of de inloggegevens."].join("\n");
+  const shownNl = [`Verklaring dat deze run de mailbox op ${decided.server.host} mag lezen, en daarin alleen mail aan het adres van de run.`, `Links uit die mail worden alleen gevolgd naar ${writeOriginsNl(permission)}${decided.mark.linkOrigins ? `, ook via ${decided.mark.linkOrigins.join(" en ")} als de doorverwijzing daar eindigt` : ""}. Elke link telt als verzending.`, "Het rapport noemt de soort mailbox, niet het adres of de inloggegevens."].join("\n");
   return { ...decided.mark, declaredAt: new Date().toISOString(), ...(await confirmByTyping("inventory --mailbox", shownNl, decided.server.host, "de host van de mailbox", terminal)) };
 }
 
@@ -339,7 +355,7 @@ export function mailboxLimitationsNl(runDir: string): string[] {
   const state = readMailboxState(runDir);
   // Opening a link to clean up is no looking at the page: that says what a run measured.
   const used = usedLinks(runDir, CLEANUP_SENDER).size > 0;
-  const kindNl = `Mailbox: ${used ? "pagina's achter een persoonlijke link uit een e-mail zijn bekeken met" : "er was aangesloten:"} ${LABEL_NL[mark.kind]}${used ? "" : ", maar er is geen persoonlijke link uit een e-mail gebruikt"}. Het adres en de inloggegevens staan niet in dit rapport.${mark.local ? " De meting is lokaal gedaan, op een site op deze machine, en niet op productie: wat de echte mailroute doet, is niet gemeten." : ""}`;
+  const kindNl = `Mailbox: ${used ? "pagina's achter een persoonlijke link uit een e-mail zijn bekeken met" : "er was aangesloten:"} ${LABEL_NL[mark.kind]}${used ? "" : ", maar er is geen persoonlijke link uit een e-mail gebruikt"}. Het adres en de inloggegevens staan niet in dit rapport.${mark.linkOrigins ? ` Links in de mail liepen via ${mark.linkOrigins.join(" en ")}: daar is alleen de doorverwijzing naar de site gelezen.` : ""}${mark.local ? " De meting is lokaal gedaan, op een site op deze machine, en niet op productie: wat de echte mailroute doet, is niet gemeten." : ""}`;
   return [kindNl, MAIL_NOT_JUDGED_NL, cleanupNl(state)];
 }
 

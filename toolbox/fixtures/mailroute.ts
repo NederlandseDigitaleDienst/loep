@@ -22,6 +22,8 @@ export interface MailRouteOptions {
   viaService: boolean;
   /** The links in the HTML of a mail say what they do; without it they all say the same. */
   linkText: boolean;
+  /** Where the mailing service sends every click, in place of the site. */
+  serviceTarget: string | null;
 }
 
 export interface MailRegistration {
@@ -40,6 +42,8 @@ export interface MailRoute {
   posts: () => number;
   /** How many clicks reached the mailing service. */
   clicks: () => number;
+  /** The mailing service forgets its clicks: every click then gets a page of the service. */
+  forgetClicks: () => void;
   /** The mail as a mailbox of a run sees it: no server in between. */
   mailbox: () => Mailbox;
   /** Answer a request on the site. False when the path is no part of the route. */
@@ -53,7 +57,7 @@ const page = (title: string, content: string): string => `<!doctype html><html l
 const hex = (bytes: number): string => randomBytes(bytes).toString("hex");
 
 export function createMailRoute(onPost: (path: string, body: string) => void): MailRoute {
-  const options: MailRouteOptions = { viaService: true, linkText: true };
+  const options: MailRouteOptions = { viaService: true, linkText: true, serviceTarget: null };
   const outbox: RawMail[] = [];
   const registrations: MailRegistration[] = [];
   /** The hidden values handed out and not used yet: each works once, as with a real CSRF token. */
@@ -128,6 +132,7 @@ export function createMailRoute(onPost: (path: string, body: string) => void): M
     registrations,
     posts: () => posts,
     clicks: () => clicked,
+    forgetClicks: () => clicks.clear(),
     mailbox: () => ({
       kind: "mailpit",
       fetch: async (address) => outbox.filter((mail) => mail.raw.toString("latin1").toLowerCase().includes(`to: ${address.toLowerCase()}`)),
@@ -189,7 +194,7 @@ export function createMailRoute(onPost: (path: string, body: string) => void): M
       const path = request.url ?? "/";
       if (!path.startsWith(CLICK_PREFIX)) return false;
       clicked++;
-      const target = clicks.get(path.slice(CLICK_PREFIX.length));
+      const target = clicks.has(path.slice(CLICK_PREFIX.length)) ? (options.serviceTarget ?? clicks.get(path.slice(CLICK_PREFIX.length))) : undefined;
       if (target) response.writeHead(302, { location: target, "cache-control": "no-store" }).end();
       else response.writeHead(404, { "content-type": "text/plain; charset=utf-8" }).end("Onbekende klik\n");
       return true;
