@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="nl">
+<head><meta charset="utf-8"><title>Alleen zichtbaar bij focus - Testsite sessie</title>
+<style>
+  .off { position: absolute; left: -9999px; }
+  .off:focus { left: 8px; top: 8px; }
+  .clip { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  .clip:focus { position: static; width: auto; height: auto; clip: auto; }
+  .fade { opacity: 0; }
+  .fade:focus { opacity: 1; }
+</style></head>
+<body>
+<a class="off" href="#inhoud">Naar de inhoud</a>
+<a class="clip" href="#menu">Naar het menu</a>
+<a class="fade" href="#voet">Naar de voet</a>
+<nav aria-label="Hoofdmenu" id="menu"><a href="/">Start</a></nav>
+<main id="inhoud" tabindex="-1"><h1>Alleen zichtbaar bij focus</h1><p id="voet">Tekst.</p></main>
+</body>
+</html>
