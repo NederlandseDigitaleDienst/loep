@@ -353,6 +353,7 @@ async function main(): Promise<void> {
       const mailbox = values.mailbox === undefined ? null : decideMailbox(values.mailbox, permission);
       // A mailbox on another machine holds real mail: a person confirms it before anything starts.
       if (mailbox) mailbox.mark = await confirmMailbox(mailbox, permission!);
+      if (mailbox) permission!.keepShare = true;
       // Asked here, so a missing login does not cost a whole inventory.
       const mailAddress = mailbox ? runAddress(mailbox.server) : null;
       if (permission) setRunWrites(writeAccess(values.out, permission, "inventory"));

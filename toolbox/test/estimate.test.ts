@@ -1,6 +1,6 @@
-import { BUDGETS } from "../src/commands/instrument-tasks.ts";
+import { briefPending, BUDGETS, instrumentPending } from "../src/commands/instrument-tasks.ts";
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -13,6 +13,7 @@ import type { ManifestStep } from "../src/lib/manifest.ts";
 import { MAX_DOWN_TARGETS, MAX_HOVER_TARGETS, STATES_GROUPS } from "../src/commands/states.ts";
 import { FINISH_FACTOR } from "../src/lib/verdict.ts";
 import { PRICES } from "../src/lib/prices.ts";
+import { recordWrites, type WritePermission } from "../src/lib/writes.ts";
 
 const REMOTE: EstimateBasis = { pages: 29, pagesSource: "sample", pageTypes: 18, pageTypesSource: "tasks", criteria: 56, criteriaSource: "tasks", atOnce: 8, atOnceSource: "option", local: false, scheduling: "pool" };
 const near = (actual: number | null, expected: number, what: string): void => assert.ok(actual !== null && Math.abs(actual - expected) <= 1, `${what}: ${actual}, verwacht ${expected}`);
@@ -158,6 +159,30 @@ test("right after the inventory the estimate works from the inventory alone and 
   assert.deepEqual([sharper.basis.pages, sharper.basis.pagesSource, sharper.basis.pageTypes, sharper.basis.pageTypesSource, sharper.basis.atOnce, sharper.basis.atOnceSource, sharper.basis.scheduling], [4, "sample", 5, "site", 6, "option", "groups"]);
   assert.deepEqual(sharper.notesNl, ["de steekproef heeft 2 documenten; het inlezen daarvan is niet meegeteld"]);
   assert.throws(() => estimateRun(mkdtempSync(join(tmpdir(), "estimate-"))), /draai eerst inventory/);
+});
+
+test("a budget for sending that is used up stops the next phase: pending and estimate say so, also on this machine", async () => {
+  const run = makeRun({ baseUrl: "https://voorbeeld.example/", templates: ["a"], sample: 1, pageTypes: 1 });
+  const permission: WritePermission = { origin: "http://localhost:8081", local: true, declaredBy: null, declaredAt: "2026-10-30T09:00:00.000Z", maxWrites: 4, spacingSeconds: 0 };
+  await recordWrites(run, permission);
+  mkdirSync(join(run, "tasks"), { recursive: true });
+  writeFileSync(join(run, "tasks", "index.json"), JSON.stringify({ flow: "instrumenten", templates: {}, withoutProcedure: [], only: [], walks: [{ pageType: "start", page: "P1", prompt: "rondgang/start.md", output: "rondgang/start.json", session: "r-start", maxCommands: 1, maxMinutes: 1 }], tasks: [] }));
+  const send = (count: number): void => appendFileSync(join(run, "writes.jsonl"), `${JSON.stringify({ at: "2026-10-30T09:00:00.000Z", source: "states", method: "POST", path: "/aanmelden/" })}\n`.repeat(count));
+
+  // Nearly used up on this machine, without a mailbox: there is no recipient to spare.
+  send(3);
+  assert.equal((await instrumentPending(run)).sendingLow, undefined);
+  // With a mailbox the same budget has a share to keep, so it warns before the end.
+  await recordWrites(run, { ...permission, keepShare: true });
+  assert.match((await instrumentPending(run)).sendingLow ?? "", /nog 1 van 4 verzendingen/);
+
+  await recordWrites(run, permission);
+  send(1);
+  const pending = await instrumentPending(run);
+  assert.match(pending.sendingLow ?? "", /nog 0 van 4 verzendingen/);
+  assert.equal(briefPending(pending).sendingLow, pending.sendingLow);
+  assert.match(pending.noteNl, /^LET OP: het budget voor versturen is op \(4 van 4 verstuurd\).*writes --run <run> --max-writes <aantal>/);
+  assert.match(estimateRun(run, { voiceover: null }).notesNl.join("\n"), /LET OP: het budget voor versturen is op/);
 });
 
 test("with the virtual Mac for VoiceOver set up, the estimate says to start it with the sweep and stop it at the end; without one it says nothing", () => {

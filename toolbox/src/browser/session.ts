@@ -3,7 +3,7 @@ import { chromium, type APIResponse, type Browser, type BrowserContext, type Pag
 import type { Crowd } from "../lib/atonce.ts";
 import { CLOUDFLARE_HEADER, isChallenge } from "../lib/challenge.ts";
 import { confirmLoginOn, LoginExpired, logsOut, registerSessionSecrets, runLoginMark, runLoginState, runOfLogin, sessionWithAliases, throwIfLoginExpired, watchLogin } from "../lib/login.ts";
-import { MAIL_ADDRESS_SOURCE } from "../lib/mailbox.ts";
+import { MAIL_ADDRESS_SOURCE, readMailboxState } from "../lib/mailbox.ts";
 import { addressOf, noteRefusedRead, readDecision, readRuleFor, runReads, type ReadRequest } from "../lib/reads.ts";
 import { claimLink, isThisMachine, isWriteOrigin, runWrites, SocketFrames, type PassedWrite, type WriteAccess } from "../lib/writes.ts";
 import { LONGEST_FAILURE_PAUSE_SECONDS, OriginBlocked, runBlockade } from "../session/blockade.ts";
@@ -221,9 +221,10 @@ export async function sendOrReplay(context: BrowserContext, route: Route, writes
   const recordings = httpRecordings(writes.runDir, writes.source);
   const shield = shieldOf(writes.runDir, url);
   const body = bodyBufferOf(request);
-  // A form with the address of the run in it makes the site send a mail: that has to happen for real.
-  const send = shield?.mentions(body, MAIL_ADDRESS_SOURCE) ? null : httpSendOf(body, request.headers()["content-type"], MESSAGE_VALUES);
-  const recording = send ? recordings.find(method, url, send) : null;
+  const send = httpSendOf(body, request.headers()["content-type"], MESSAGE_VALUES);
+  // A form with the address of the run in it makes the site send a mail: that has to happen for real, until a mail came. After that the same form again only costs budget.
+  const replayable = !shield?.mentions(body, MAIL_ADDRESS_SOURCE) || (readMailboxState(writes.runDir)?.links.length ?? 0) > 0;
+  const recording = send && replayable ? recordings.find(method, url, send) : null;
   if (recording) {
     // Answered here: nothing goes to the server, and no cookie of the recording is set.
     await route.fulfill({ status: recording.answer.status, headers: recording.answer.headers, body: Buffer.from(recording.answer.base64, "base64") }).catch(() => undefined);

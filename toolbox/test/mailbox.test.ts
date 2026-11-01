@@ -18,7 +18,7 @@ import { isFor, linksOf, looksSecret, parseMail, secretsInText, secretsInUrl } f
 import { writeManifest } from "../src/lib/manifest.ts";
 import { notHashed } from "../src/lib/seal.ts";
 import { aliasFor, leakRefusalNl, readSecretEvents as eventsOf, registerSecret, scanRun, searchedSpellings, Shield, shieldForRun } from "../src/lib/secrets.ts";
-import { decideWrites, recordWrites, writeAccess, writesForRun, type WritePermission } from "../src/lib/writes.ts";
+import { decideWrites, recordWrites, reservedWrites, writeAccess, writeBudget, writesForRun, type PassedWrite, type WritePermission } from "../src/lib/writes.ts";
 import { guardContext, guardedDownload, guardRedirects, scopeForRun, TEST_VALUES, type Guard } from "../src/session/safety.ts";
 
 const TOKEN = "Zk3vQ9xT7bLp2nWd5sGh8JmR4cYf6AeU1oKi0tXa_-q";
@@ -433,6 +433,7 @@ const handler = (request: IncomingMessage, response: ServerResponse): void => {
     if (url.pathname === "/") return html("<h1>Start</h1>");
     if (url.pathname === "/verlopen/") return html("<h1>Link verlopen</h1>");
     if (url.pathname === "/klaar/") return html("<h1>Afgemeld</h1>");
+    if (url.pathname === "/opgeslagen-aanmelding/" && request.method === "POST") return html(`<h1>Bekijk je mail, ${new URLSearchParams(body).get("email")}</h1>`);
     if (url.pathname === "/aanmelden/" && request.method === "POST") {
       registered = new URLSearchParams(body).get("email") === ADDRESS;
       response.writeHead(303, { location: "/controleren/" }).end();
@@ -594,7 +595,7 @@ test("a personal link is not fetched outside the browser: the site would show an
   }
 });
 
-test("a form with the address of the run goes to the site with the real address, every time, and no answer is kept to play", async () => {
+test("a form with the address of the run goes to the site with the real address, every time until a mail came, and the address stands nowhere in the run", async () => {
   const run = await mailboxRun(origin);
   const session = await sessionOn(run);
   try {
@@ -616,7 +617,6 @@ test("a form with the address of the run goes to the site with the real address,
     const sent = seen.filter((request) => request.method === "POST");
     assert.equal(sent.length, 2);
     assert.ok(sent.every((request) => new URLSearchParams(request.body).get("email") === ADDRESS));
-    assert.equal(existsSync(join(run, "opnames.jsonl")), false);
     assert.deepEqual(inFiles(run, ADDRESS), []);
   } finally {
     await session.close();
@@ -984,15 +984,79 @@ test("a press that reached the site is no failure to ask it, also when the page 
   }
 });
 
-test("a budget that holds the press back leaves the site unasked, so a later link may still try", async () => {
+test("a budget that is used up does not stop the cleanup, and what it sends does not count", async () => {
   const run = await mailboxRun(origin, { maxWrites: 1 });
-  const box = memoryBox([mailFor(`${origin}/voorkeuren/?token=${TOKEN}`)]);
+  const box = memoryBox([mailFor(`${origin}/voorkeuren/?token=${TOKEN}`), mailFor(`${origin}/verder/?token=${TOKEN}A`)]);
+  const session = await sessionOn(run);
   try {
     await mailWait(run, { mailbox: box });
+    // The only write of the budget goes to one link; the cleanup still opens the other and presses the button.
+    await loadPage(session.page, readMailboxState(run)!.links[1]!.url);
+    await session.close();
+    const budget = (): { sent: number; left: number } => writeBudget(run, writesForRun(run)!);
+    assert.equal(budget().left, 0);
+    const cleanup = await mailCleanup(run, { mailbox: box, browser, settleMs: 0 });
+    assert.doesNotMatch(cleanup.site.noteNl, /budget|niet gevraagd/);
+    assert.notEqual(readMailboxState(run)!.askedLinks, undefined);
+    assert.equal(budget().sent, 1);
+    assert.ok(readFileSync(join(run, "writes.jsonl"), "utf8").split("\n").filter(Boolean).some((line) => (JSON.parse(line) as PassedWrite).cleanup));
+  } finally {
+    await session.close();
+    rmSync(run, { recursive: true, force: true });
+  }
+});
+
+test("the time between two writes can still leave the site unasked, so a later link may still try", async () => {
+  const run = await mailboxRun(origin, { spacingSeconds: 3600 });
+  const box = memoryBox([mailFor(`${origin}/voorkeuren/?token=${TOKEN}`)]);
+  const session = await sessionOn(run);
+  try {
+    await mailWait(run, { mailbox: box });
+    await loadPage(session.page, readMailboxState(run)!.links[0]!.url);
+    await session.close();
     const cleanup = await mailCleanup(run, { mailbox: box, browser, settleMs: 0 });
     assert.equal(cleanup.site.outcome, "failed", cleanup.site.noteNl);
     assert.match(cleanup.site.noteNl, /niet gevraagd/);
     assert.equal(readMailboxState(run)!.askedLinks, undefined);
+  } finally {
+    await session.close();
+    rmSync(run, { recursive: true, force: true });
+  }
+});
+
+test("a form with the address of the run goes out for real until a mail came, and after that the answer is played", async () => {
+  const run = await mailboxRun(origin);
+  const session = await sessionOn(run);
+  const post = (): Promise<string> => session.page.evaluate(async (email) => (await fetch("/opgeslagen-aanmelding/", { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body: `email=${encodeURIComponent(email)}` })).text(), TEST_VALUES.email!);
+  const heard = (): number => seen.filter((request) => request.url.startsWith("/opgeslagen-aanmelding/")).length;
+  try {
+    await loadPage(session.page, `${origin}/`);
+    const answer = await post();
+    assert.ok(!answer.includes(ADDRESS), "the page shows the alias");
+    assert.equal(await post(), answer);
+    assert.equal(heard(), 2, "no mail yet: a second try may be what makes it come");
+    await mailWait(run, { mailbox: memoryBox([mailFor(`${origin}/voorkeuren/?token=${TOKEN}`)]) });
+    const before = writeBudget(run, writesForRun(run)!).sent;
+    await post();
+    assert.equal(heard(), 2, "the mail came: the same form is not sent again");
+    assert.equal(writeBudget(run, writesForRun(run)!).sent, before);
+    assert.deepEqual(inFiles(run, ADDRESS), [], "what is kept to play holds the alias");
+  } finally {
+    await session.close();
+    rmSync(run, { recursive: true, force: true });
+  }
+});
+
+test("a run with a mailbox keeps the last half of the budget, also on this machine", async () => {
+  const run = await mailboxRun(origin, { maxWrites: 10, keepShare: true });
+  try {
+    const stored = writesForRun(run)!;
+    assert.equal(reservedWrites(stored), 5);
+    assert.equal(reservedWrites({ ...stored, keepShare: false }), 0);
+    const access = writeAccess(run, stored, "r-start");
+    for (let sent = 0; sent < 5; sent++) assert.ok(access.claim("POST", `${origin}/aanmelden/`).ok, `write ${sent + 1}`);
+    assert.deepEqual(access.claim("POST", `${origin}/aanmelden/`).ok, false, "the walk that sent before has had its share");
+    assert.equal(access.claim("POST", `${origin}/aanmelden/`, { sender: "b-331" }).ok, true, "a criterion that sent nothing still can");
   } finally {
     rmSync(run, { recursive: true, force: true });
   }
