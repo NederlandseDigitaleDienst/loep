@@ -125,6 +125,10 @@ export const isFor = (mail: ParsedMail, address: string): boolean => recipientsO
 
 const URL_IN_TEXT = /https?:\/\/[^\s<>"'`]+/gi;
 const HREF = /\bhref\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/gi;
+/** A link in HTML: the attributes of its tag, and what stands between the tags. */
+const ANCHOR = /<a\b([^>]*)>([\s\S]*?)<\/a\s*>/gi;
+/** Text past this is no name of a link any more. */
+const MAX_LINK_TEXT = 200;
 /** Punctuation after an address in a sentence is no part of it. */
 const trimUrl = (url: string): string => url.replace(/[.,;:!?)\]}>]+$/, "");
 
@@ -135,6 +139,8 @@ export interface MailLink {
   unsubscribe: boolean;
   /** The header says a mail client may POST there to unsubscribe in one click (RFC 8058). */
   oneClick: boolean;
+  /** What a reader sees on this link in the HTML of the mail, when it has any. */
+  text?: string;
 }
 
 /** Every http(s) address in a mail: in the text, in the HTML and in the header for unsubscribing. Other schemes are not links for this flow. */
@@ -150,6 +156,12 @@ export function linksOf(mail: ParsedMail): MailLink[] {
     if (/^https?:\/\//i.test(href)) add(href);
   }
   for (const match of decodeEntities(mail.html).match(URL_IN_TEXT) ?? []) add(trimUrl(match));
+  for (const [, attributes = "", content = ""] of mail.html.matchAll(ANCHOR)) {
+    const href = [...attributes.matchAll(HREF)][0];
+    const link = href && found.get(decodeEntities(href[1] ?? href[2] ?? href[3] ?? "").trim());
+    const text = textOfHtml(content).slice(0, MAX_LINK_TEXT);
+    if (link && text) link.text = link.text ? `${link.text} ${text}` : text;
+  }
   const oneClick = (mail.headers.get("list-unsubscribe-post") ?? []).some((value) => /List-Unsubscribe=One-Click/i.test(value));
   for (const header of mail.headers.get("list-unsubscribe") ?? []) for (const match of header.matchAll(/<(https?:\/\/[^>]+)>/gi)) add(match[1]!, true, oneClick);
   return [...found.values()];

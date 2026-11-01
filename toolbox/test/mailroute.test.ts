@@ -10,7 +10,8 @@ import { startFixture, type FixtureServer } from "../fixtures/serve.ts";
 import { REFUSED_STATUS } from "../src/browser/boundary.ts";
 import { launchBrowser, loadPage, newContext } from "../src/browser/session.ts";
 import { cleanupLinesNl, mailCleanup, mailLinks, mailRegister, mailWait, startMailbox } from "../src/commands/mail.ts";
-import { agentMailboxNl, decideMailbox, MAIL_ADDRESS_SOURCE, mailboxForRun, mailboxLimitationsNl, readMailboxState, recordMailbox } from "../src/lib/mailbox.ts";
+import { agentMailboxNl, decideMailbox, linkKind, MAIL_ADDRESS_SOURCE, mailboxForRun, mailboxLimitationsNl, readMailboxState, recordMailbox } from "../src/lib/mailbox.ts";
+import { linksOf, parseMail } from "../src/lib/mailparse.ts";
 import { readSecretEvents, readSecretsFile, scanRun } from "../src/lib/secrets.ts";
 import { decideWrites, DEFAULT_MAX_WRITES, recordWrites, reservedWrites, writeAccess, writeBudget, writesForRun } from "../src/lib/writes.ts";
 import { Daemon } from "../src/session/daemon.ts";
@@ -132,30 +133,75 @@ test("a link through a mailing service that nobody declared stays refused", asyn
   }
 });
 
-test("what goes wrong now: a link for unsubscribing with a path that says nothing goes to the agents, and one of them removes the shared registration", async () => {
+test("a link for unsubscribing with a path that says nothing is told by its text in the mail, and does not go to the agents on the shared registration", async () => {
   fixture.mailRoute.options.viaService = false;
   const run = await mailRun();
   const session = await sessionOn(run, "r-start");
-  const agent = await sessionOn(run, "b-334");
   try {
     await signUp(session.page);
-    await mailWait(run, { mailbox: fixture.mailRoute.mailbox(), timeoutSeconds: 1 });
-    const { links } = mailLinks(run);
-    assert.deepEqual(links.map((link) => link.kind), ["other", "other", "other"], "the paths say nothing");
-    assert.equal(links.length, 3, "the link for unsubscribing is among them");
-    const [confirm, preferences, unsubscribe] = links;
-    assert.equal(await openLink(agent.page, confirm!.url), 200);
-    assert.equal(fixture.mailRoute.registrations[0]!.confirmed, true);
-    assert.equal(await openLink(agent.page, unsubscribe!.url), 200);
-    assert.equal(fixture.mailRoute.registrations.length, 0, "one agent took the registration away from all of them");
-    assert.equal(await openLink(session.page, preferences!.url), 404, "the next agent finds nothing");
-    assert.equal(readMailboxState(run)!.links.length, 3);
+    const answer = await mailWait(run, { mailbox: fixture.mailRoute.mailbox(), timeoutSeconds: 1 });
+    assert.deepEqual(answer.links.map((link) => link.kind), ["confirm", "preferences", "unsubscribe"], "whoever leads the evaluation sees all of them");
+    assert.deepEqual(mailLinks(run).links.map((link) => link.kind), ["confirm", "preferences"]);
+    assert.ok(!mailLinks(run, "b-335").links.some((link) => link.kind === "unsubscribe"));
     assert.ok(!readFileSync(join(run, "mailbox.json"), "utf8").includes(ADDRESS));
   } finally {
     await session.close();
+    rmSync(run, { recursive: true, force: true });
+  }
+});
+
+test("a link whose kind stays unknown goes only to a session with a registration of its own", async () => {
+  fixture.mailRoute.options.viaService = false;
+  fixture.mailRoute.options.linkText = false;
+  const run = await mailRun();
+  const lead = await sessionOn(run, "r-start");
+  const agent = await sessionOn(run, "b-334");
+  const box = fixture.mailRoute.mailbox();
+  try {
+    await signUp(lead.page);
+    const answer = await mailWait(run, { mailbox: box, timeoutSeconds: 1 });
+    assert.deepEqual(answer.links.map((link) => link.kind), ["other", "other", "other"]);
+    assert.deepEqual(mailLinks(run), { links: [], used: [] }, "none of them goes to an agent on the shared registration");
+    const own = await mailRegister(run, "b-334");
+    await signUp(agent.page, own.email);
+    const { links } = await mailWait(run, { session: "b-334", mailbox: box, timeoutSeconds: 1 });
+    assert.deepEqual(links.map((link) => [link.kind, link.own]), [["other", true], ["other", true], ["other", true]]);
+    assert.equal(await openLink(agent.page, links[2]!.url), 200);
+    assert.deepEqual(fixture.mailRoute.registrations.map((registration) => registration.address), [ADDRESS], "the agent ended its own, and the shared one stays");
+    assert.deepEqual(mailLinks(run, "b-335"), { links: [], used: [] });
+  } finally {
+    await lead.close();
     await agent.close();
     rmSync(run, { recursive: true, force: true });
   }
+});
+
+test("through a party the text of a link is all there is, and it counts", async () => {
+  const run = await mailRun([fixture.origins.thirdParty]);
+  const lead = await sessionOn(run, "r-start");
+  try {
+    await signUp(lead.page);
+    await mailWait(run, { mailbox: fixture.mailRoute.mailbox(), timeoutSeconds: 1 });
+    assert.deepEqual(mailLinks(run).links.map((link) => link.kind), ["confirm", "preferences"]);
+  } finally {
+    await lead.close();
+    rmSync(run, { recursive: true, force: true });
+  }
+});
+
+test("the text of a link: a word for leaving in path or text wins, and a mail cannot hide it with a tag", () => {
+  const text = (html: string): string | undefined => linksOf(parseMail(Buffer.from(`To: x@example.com\r\nContent-Type: text/html; charset=utf-8\r\n\r\n${html}`)))[0]?.text;
+  assert.equal(text(`<a class="knop" href="https://site.example.nl/p/1?t=abc123def"><span>Bevestig</span> <b>nu</b></a>`), "Bevestig nu");
+  assert.equal(text(`<a href='https://site.example.nl/p/1?t=a&amp;u=2'>Af&shy;melden &amp; weg</a>`)?.includes("&"), true);
+  assert.equal(text(`<a href="https://site.example.nl/p/1"></a>`), undefined);
+  assert.equal(linkKind("/p/x7k2", "Bevestig je aanmelding"), "confirm");
+  assert.equal(linkKind("/p/x7k2", "Wijzig je voorkeuren"), "preferences");
+  assert.equal(linkKind("/p/x7k2", "Afmelden"), "unsubscribe");
+  assert.equal(linkKind("/p/x7k2", "Verwijder mijn gegevens"), "unsubscribe");
+  assert.equal(linkKind("/voorkeuren/", "Afmelden"), "unsubscribe", "the most careful reading counts");
+  assert.equal(linkKind("/afmelden/", "Bevestig"), "unsubscribe");
+  assert.equal(linkKind("/p/x7k2", "Klik hier"), "other");
+  assert.equal(linkKind("/p/x7k2"), "other");
 });
 
 test("a session with a registration of its own has its own address and its own links, and may end that registration", async () => {
@@ -168,7 +214,7 @@ test("a session with a registration of its own has its own address and its own l
     await signUp(lead.page);
     await mailWait(run, { mailbox: box, timeoutSeconds: 1 });
     const shared = mailLinks(run).links;
-    assert.equal(shared.length, 3);
+    assert.equal(shared.length, 2);
 
     const own = await mailRegister(run, "b-334");
     assert.equal(own.fresh, true);
