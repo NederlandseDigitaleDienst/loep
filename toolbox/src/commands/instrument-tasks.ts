@@ -963,7 +963,7 @@ export interface InstrumentPending {
   skipped: string[];
   /** The site has an outage now (`blockades.json`): no agent starts until it answers. Absent when it answers. */
   siteOutage?: string;
-  /** The budget for sending of a declared test environment is about to run out: whoever leads asks the person whether it may be raised (`writes`). */
+  /** The budget for sending is about to run out, or on this machine without a share kept: has run out. Whoever leads asks the person whether it may be raised (`writes`). */
   sendingLow?: string;
   /** Once the run is done and the site answers again after an outage: the criteria whose final verdict, written before that, is open with a point "niet bereikbaar". `tasks --again` gives each a new finishing round. Absent when there is none. */
   again?: string[];
