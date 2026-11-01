@@ -53,6 +53,16 @@ Uitloggen kan op twee plekken: de link "Uitloggen" naar `/uitloggen` op elke pag
 
 In tests logt de code zelf in met dat account. Op elke andere site logt een mens in, nooit de code.
 
+## De moeilijke mailroute
+
+Berkenveen heeft een aanmelding per mail die op geen enkele pagina staat: de veegronde en de sitemap zien haar niet, een test opent het formulier zelf (`/p/a3f9`). Ze heeft alles wat de eerste site waarop de route is gemeten niet had:
+
+- een verborgen veld dat per paginalading verandert en maar één keer werkt, dus elke verzending is anders en zo'n formulier gaat altijd echt;
+- links in de mail die via een mailingdienst op een ander domein lopen (Kijkpunt speelt die dienst, op `/k/<klik>`, met een doorverwijzing naar de site);
+- paden die niets zeggen (`/p/x7k2`), ook voor afmelden, en geen `List-Unsubscribe`. De afmeldlink meldt af door geopend te worden, zoals een echte.
+
+In de test staat de mail in `fixture.mailRoute.outbox`, en `fixture.mailRoute.mailbox()` is de nepmailbox: Mailpit is er in de CI niet. Met `options.viaService = false` staan de links rechtstreeks in de mail, en met `options.linkText = false` zegt de tekst van de links niets meer. De tests staan in `test/mailroute.test.ts`.
+
 ## Wat waar staat
 
 | Pad | Inhoud | Geserveerd |
@@ -65,6 +75,7 @@ In tests logt de code zelf in met dat account. Op elke andere site logt een mens
 | `reference-*.json` | De sleutel in de vorm die `compare` leest, zie `validatie/README.md` | nee |
 | `sites/` | De gegenereerde sites. Staan in git; de server bouwt niets | ja |
 | `serve.ts` | De server, alleen Node zelf. Houdt de sessies van het deel achter de inlog bij | nee |
+| `mailroute.ts` | De moeilijke mailroute: formulier, mail, mailingdienst en afmelden | nee |
 
 In wat wordt geserveerd staat niets dat het antwoord verraadt: geen aanwijzing in adressen, klassenamen, commentaar of tekst. Een test bewaakt dat.
 
