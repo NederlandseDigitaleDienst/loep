@@ -219,7 +219,7 @@ const tab: Handler = async (context, args, options) => {
 const type: Handler = async (context, args) => {
   const kind = args[0] ?? "";
   if (!(kind in TEST_VALUES)) throw new UsageError(`"${kind}" is geen vaste testwaarde; kies uit: ${Object.keys(TEST_VALUES).join(", ")}`);
-  const value = testValuesForRun(context.env.runDir)[kind]!;
+  const value = testValuesForRun(context.env.runDir, context.surface.guard.sender)[kind]!;
   const handle = await handleOrThrow(context);
   const acted = await act(context, SETTLE_MS, () => handle.fill(value, { timeout: ACTION_TIMEOUT_MS }).catch((error: Error) => Promise.reject(actionError("invullen", error))));
   const field = await handle

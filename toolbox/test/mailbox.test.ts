@@ -13,7 +13,7 @@ import { seal } from "../src/commands/verify.ts";
 import { RUN_SECRETS_FILE } from "../src/lib/login.ts";
 import { imapMailbox } from "../src/lib/mailbox-imap.ts";
 import { mailpitMailbox } from "../src/lib/mailbox-mailpit.ts";
-import { agentMailboxNl, MAIL_NOT_JUDGED_NL, confirmMailbox, decideMailbox, linkKind, mailboxForRun, mailboxLimitationsNl, mailCredentials, readMailboxState, recordMailbox, runAddress, waitForMail, type Mailbox, type RawMail } from "../src/lib/mailbox.ts";
+import { agentMailboxNl, MAIL_NOT_JUDGED_NL, confirmMailbox, decideMailbox, linkKind, mailboxForRun, mailboxLimitationsNl, mailCredentials, readMailboxState, ownAddress, recordMailbox, runAddress, waitForMail, type Mailbox, type RawMail } from "../src/lib/mailbox.ts";
 import { isFor, linksOf, looksSecret, parseMail, secretsInText, secretsInUrl } from "../src/lib/mailparse.ts";
 import { writeManifest } from "../src/lib/manifest.ts";
 import { notHashed } from "../src/lib/seal.ts";
@@ -84,6 +84,14 @@ test("a run gets an address of its own", () => {
   assert.match(runAddress(imap, { LOEP_IMAP_USER: "toets@example.nl", LOEP_IMAP_PASSWORD: "x" }), /^toets\+loep-[0-9a-f]{8}@example\.nl$/);
   assert.equal(runAddress(imap, { LOEP_IMAP_ADDRESS: "vast@example.nl" }), "vast@example.nl");
   assert.throws(() => runAddress(imap, { LOEP_IMAP_USER: "toets", LOEP_IMAP_PASSWORD: "x" }), /LOEP_IMAP_ADDRESS/);
+});
+
+test("a registration of its own has another address in the same box, without a login", () => {
+  const imap = { kind: "imap" as const, host: "mail.example.nl", port: 993, tls: true };
+  assert.match(ownAddress(imap, "toets+loep-1a2b3c4d@example.nl"), /^toets\+loep-[0-9a-f]{8}@example\.nl$/);
+  assert.notEqual(ownAddress(imap, "toets+loep-1a2b3c4d@example.nl"), "toets+loep-1a2b3c4d@example.nl");
+  assert.match(ownAddress(imap, "vast@example.nl"), /^vast\+loep-[0-9a-f]{8}@example\.nl$/, "also next to an address the environment fixed");
+  assert.match(ownAddress({ kind: "mailpit", host: "localhost", port: 8025, tls: false }, "loep-1a2b3c4d@example.com"), /^loep-[0-9a-f]{8}@example\.com$/);
 });
 
 // ---- Reading a mail ----------------------------------------------------------------------------------------------------
@@ -716,8 +724,8 @@ test("what an agent gets holds the alias and nothing of the mail", async () => {
   const run = await mailboxRun(origin);
   try {
     await mailWait(run, { mailbox: memoryBox([mailFor(`${origin}/voorkeuren/?token=${TOKEN}`)]) });
-    const task = agentMailboxNl(run, "loep mail links --run RUN");
-    assert.ok(task.includes("loep mail links --run RUN"));
+    const task = agentMailboxNl(run, "loep mail", "RUN");
+    assert.ok(task.includes("loep mail links --run RUN --session <je sessie>"));
     assert.ok(!task.includes(readMailboxState(run)!.links[0]!.url), "the address is not in the task: a task is hashed");
     assert.ok(!task.includes(TOKEN) && !task.includes("Hallo"));
     const { links } = mailLinks(run);
@@ -735,8 +743,8 @@ test("the agents share one registration: only the cleanup removes it, and what e
     const kinds = readMailboxState(run)!.links.map((link) => link.kind).sort();
     assert.deepEqual(kinds, ["preferences", "unsubscribe"]);
     assert.deepEqual(mailLinks(run).links.map((link) => link.kind), ["preferences"], "an unsubscribe link can do its work by being opened");
-    const task = agentMailboxNl(run, "loep mail links --run RUN");
-    assert.match(task, /Afmelden, opzeggen en verwijderen doet alleen de opruimstap aan het eind van de run \(`mail cleanup`\)/);
+    const task = agentMailboxNl(run, "loep mail", "RUN");
+    assert.match(task, /Afmelden, opzeggen en verwijderen van de gedeelde aanmelding doet alleen de opruimstap aan het eind van de run \(`mail cleanup`\)/);
     assert.match(task, /ook niet als de procedure dat vraagt/);
     assert.match(task, /laat een bevinding of kandidaat niet vervallen omdat een persoonlijke link niet meer werkt/);
     assert.match(task, /`proef werkte niet:`/);
@@ -784,12 +792,12 @@ test("cleaning up removes the registration through the site, shows it is gone, w
   try {
     await mailWait(run, { mailbox: box });
     const cleanup = await mailCleanup(run, { mailbox: box, browser, settleMs: 0 });
-    assert.equal(cleanup.site.outcome, "removed", cleanup.site.noteNl);
+    assert.equal(cleanup.sites[0]!.outcome, "removed", cleanup.sites[0]!.noteNl);
     assert.equal(registered, false);
     assert.equal(cleanup.mail.left, 0);
     assert.equal(cleanup.complete, true);
     assert.deepEqual(cleanup.scan.hits, []);
-    assert.ok(cleanup.site.steps.some((step) => step.path === "/verlopen/"));
+    assert.ok(cleanup.sites[0]!.steps.some((step) => step.path === "/verlopen/"));
     assert.ok(readMailboxState(run)!.cleanup?.complete);
     assert.ok(cleanupLinesNl(cleanup).at(-1) === "opgeruimd");
     const limits = mailboxLimitationsNl(run).join(" ");
@@ -825,7 +833,7 @@ test("a registration that cannot be removed is said in the report, and the comma
   try {
     await mailWait(run, { mailbox: box });
     const cleanup = await mailCleanup(run, { mailbox: box, browser, settleMs: 0 });
-    assert.equal(cleanup.site.outcome, "failed");
+    assert.equal(cleanup.sites[0]!.outcome, "failed");
     assert.equal(cleanup.complete, false);
     assert.match(cleanupLinesNl(cleanup).at(-1)!, /ER BLEEF IETS ACHTER/);
     assert.match(mailboxLimitationsNl(run).join(" "), /Er bleef iets achter/);
@@ -841,7 +849,7 @@ test("a mailbox that does not answer does not stop the rest, and the report says
     await mailWait(run, { mailbox: good });
     const broken: Mailbox = { kind: "mailpit", fetch: async () => Promise.reject(new Error("geen verbinding")), remove: async () => 0 };
     const cleanup = await mailCleanup(run, { mailbox: broken, browser, settleMs: 0 });
-    assert.equal(cleanup.site.outcome, "removed", cleanup.site.noteNl);
+    assert.equal(cleanup.sites[0]!.outcome, "removed", cleanup.sites[0]!.noteNl);
     assert.equal(cleanup.mail.left, null);
     assert.equal(cleanup.complete, false);
     assert.match(mailboxLimitationsNl(run).join(" "), /in de mailbox: .*geen verbinding/);
@@ -861,7 +869,7 @@ test("3: a mail that only comes in while the cleanup waits is read first, its li
   } };
   try {
     const cleanup = await mailCleanup(run, { mailbox: late, browser, settleMs: 200, pollMs: 20 });
-    assert.equal(cleanup.site.outcome, "removed", cleanup.site.noteNl);
+    assert.equal(cleanup.sites[0]!.outcome, "removed", cleanup.sites[0]!.noteNl);
     assert.equal(registered, false, "the registration is gone through the link that came in late");
     assert.deepEqual(box.removed, [mail.id]);
     assert.equal(readMailboxState(run)!.links.length, 1);
@@ -885,7 +893,7 @@ test("3: a mailbox that fails for a moment never leads to wiping what was not re
     assert.equal(readMailboxState(run)!.messages.length, 1);
     assert.deepEqual(box.removed, [mail.id]);
     assert.equal(cleanup.mail.left, 0);
-    assert.equal(cleanup.site.outcome, "removed", cleanup.site.noteNl);
+    assert.equal(cleanup.sites[0]!.outcome, "removed", cleanup.sites[0]!.noteNl);
     assert.equal(cleanup.complete, true);
   } finally {
     rmSync(run, { recursive: true, force: true });
@@ -911,7 +919,7 @@ test("3: a mail that cannot be read stays where it is, the report says so, and r
     rmSync(join(run, "mailbox"));
     const second = await mailCleanup(run, { mailbox: box, browser, settleMs: 0 });
     assert.deepEqual(box.removed, [mail.id]);
-    assert.equal(second.site.outcome, "removed", second.site.noteNl);
+    assert.equal(second.sites[0]!.outcome, "removed", second.sites[0]!.noteNl);
     assert.equal(second.complete, true, "the promise that it can be run again");
   } finally {
     process.stderr.write = errors;
@@ -926,8 +934,8 @@ test("a confirmation link the run never used stays closed: opening it would turn
     await mailWait(run, { mailbox: box });
     const cleanup = await mailCleanup(run, { mailbox: box, browser, settleMs: 0 });
     assert.deepEqual(seen.filter((request) => request.url.startsWith("/bevestigen/")), [], "the site never got the link");
-    assert.equal(cleanup.site.outcome, "failed");
-    assert.match(cleanup.site.noteNl, /nooit bevestigd/);
+    assert.equal(cleanup.sites[0]!.outcome, "failed");
+    assert.match(cleanup.sites[0]!.noteNl, /nooit bevestigd/);
     assert.equal(cleanup.complete, false);
   } finally {
     rmSync(run, { recursive: true, force: true });
@@ -943,7 +951,7 @@ test("a confirmation link the run did use is opened again, and leads to the butt
     await loadPage(session.page, links[0]!.url);
     await session.close();
     const cleanup = await mailCleanup(run, { mailbox: box, browser, settleMs: 0 });
-    assert.equal(cleanup.site.outcome, "removed", cleanup.site.noteNl);
+    assert.equal(cleanup.sites[0]!.outcome, "removed", cleanup.sites[0]!.noteNl);
     assert.equal(registered, false);
   } finally {
     rmSync(run, { recursive: true, force: true });
@@ -956,7 +964,7 @@ test("once the site was asked, no later cleanup opens a link that came after tha
   try {
     await mailWait(run, { mailbox: box });
     const first = await mailCleanup(run, { mailbox: box, browser, settleMs: 0 });
-    assert.equal(first.site.outcome, "not shown", first.site.noteNl);
+    assert.equal(first.sites[0]!.outcome, "not shown", first.sites[0]!.noteNl);
     const asked = seen.filter((request) => request.method === "POST").length;
     assert.equal(asked, 1);
     // The goodbye mail, with a link that signs up again.
@@ -976,9 +984,9 @@ test("a press that reached the site is no failure to ask it, also when the page 
     await mailWait(run, { mailbox: box });
     const cleanup = await mailCleanup(run, { mailbox: box, browser, settleMs: 0 });
     assert.equal(seen.filter((request) => request.method === "POST").length, 1, "the site got it");
-    assert.equal(cleanup.site.outcome, "not shown", cleanup.site.noteNl);
-    assert.doesNotMatch(cleanup.site.noteNl, /niet gevraagd/);
-    assert.equal(readMailboxState(run)!.askedLinks, 1);
+    assert.equal(cleanup.sites[0]!.outcome, "not shown", cleanup.sites[0]!.noteNl);
+    assert.doesNotMatch(cleanup.sites[0]!.noteNl, /niet gevraagd/);
+    assert.equal(readMailboxState(run)!.registrations[0]!.askedLinks, 1);
   } finally {
     rmSync(run, { recursive: true, force: true });
   }
@@ -996,8 +1004,8 @@ test("a budget that is used up does not stop the cleanup, and what it sends does
     const budget = (): { sent: number; left: number } => writeBudget(run, writesForRun(run)!);
     assert.equal(budget().left, 0);
     const cleanup = await mailCleanup(run, { mailbox: box, browser, settleMs: 0 });
-    assert.doesNotMatch(cleanup.site.noteNl, /budget|niet gevraagd/);
-    assert.notEqual(readMailboxState(run)!.askedLinks, undefined);
+    assert.doesNotMatch(cleanup.sites[0]!.noteNl, /budget|niet gevraagd/);
+    assert.notEqual(readMailboxState(run)!.registrations[0]!.askedLinks, undefined);
     assert.equal(budget().sent, 1);
     assert.ok(readFileSync(join(run, "writes.jsonl"), "utf8").split("\n").filter(Boolean).some((line) => (JSON.parse(line) as PassedWrite).cleanup));
   } finally {
@@ -1015,9 +1023,9 @@ test("the time between two writes can still leave the site unasked, so a later l
     await loadPage(session.page, readMailboxState(run)!.links[0]!.url);
     await session.close();
     const cleanup = await mailCleanup(run, { mailbox: box, browser, settleMs: 0 });
-    assert.equal(cleanup.site.outcome, "failed", cleanup.site.noteNl);
-    assert.match(cleanup.site.noteNl, /niet gevraagd/);
-    assert.equal(readMailboxState(run)!.askedLinks, undefined);
+    assert.equal(cleanup.sites[0]!.outcome, "failed", cleanup.sites[0]!.noteNl);
+    assert.match(cleanup.sites[0]!.noteNl, /niet gevraagd/);
+    assert.equal(readMailboxState(run)!.registrations[0]!.askedLinks, undefined);
   } finally {
     await session.close();
     rmSync(run, { recursive: true, force: true });
@@ -1102,7 +1110,7 @@ test("fourth review: a third-party window on a personal page is no held-back red
   try {
     await mailWait(run, { mailbox: box });
     const cleanup = await mailCleanup(run, { mailbox: box, browser, settleMs: 0 });
-    assert.equal(cleanup.site.outcome, "removed", cleanup.site.noteNl);
+    assert.equal(cleanup.sites[0]!.outcome, "removed", cleanup.sites[0]!.noteNl);
     assert.equal(registered, false);
   } finally {
     rmSync(run, { recursive: true, force: true });
@@ -1164,11 +1172,11 @@ test("fourth review: a cleanup that comes after a press does not say there was n
   const box = memoryBox([mailFor(`${origin}/voorkeuren/blijft/?token=${TOKEN}`)]);
   try {
     await mailWait(run, { mailbox: box });
-    assert.equal((await mailCleanup(run, { mailbox: box, browser, settleMs: 0 })).site.outcome, "not shown");
+    assert.equal((await mailCleanup(run, { mailbox: box, browser, settleMs: 0 })).sites[0]!.outcome, "not shown");
     hideButton = true;
     const again = await mailCleanup(run, { mailbox: box, browser, settleMs: 0 });
-    assert.equal(again.site.outcome, "not shown", again.site.noteNl);
-    assert.doesNotMatch(again.site.noteNl, /geen knop gevonden/);
+    assert.equal(again.sites[0]!.outcome, "not shown", again.sites[0]!.noteNl);
+    assert.doesNotMatch(again.sites[0]!.noteNl, /geen knop gevonden/);
   } finally {
     rmSync(run, { recursive: true, force: true });
   }
@@ -1180,7 +1188,7 @@ test("fourth review: a link that does not open leaves the other links to try", a
   try {
     await mailWait(run, { mailbox: box });
     const cleanup = await mailCleanup(run, { mailbox: box, browser, settleMs: 0 });
-    assert.equal(cleanup.site.outcome, "removed", cleanup.site.noteNl);
+    assert.equal(cleanup.sites[0]!.outcome, "removed", cleanup.sites[0]!.noteNl);
   } finally {
     rmSync(run, { recursive: true, force: true });
   }
@@ -1199,7 +1207,7 @@ test("fourth review: a button that only says it removes something, and is not ab
     await mailWait(run, { mailbox: box });
     const cleanup = await mailCleanup(run, { mailbox: box, browser, settleMs: 0 });
     assert.deepEqual(seen.filter((request) => request.method === "POST"), []);
-    assert.equal(cleanup.site.outcome, "failed", cleanup.site.noteNl);
+    assert.equal(cleanup.sites[0]!.outcome, "failed", cleanup.sites[0]!.noteNl);
   } finally {
     rmSync(run, { recursive: true, force: true });
   }
@@ -1325,8 +1333,8 @@ test("fifth review: a link that removes on being opened counts as asking the sit
   try {
     await mailWait(run, { mailbox: box });
     const cleanup = await mailCleanup(run, { mailbox: box, browser, settleMs: 0 });
-    assert.equal(readMailboxState(run)!.askedLinks, 1);
-    assert.equal(cleanup.site.outcome, "not shown", cleanup.site.noteNl);
+    assert.equal(readMailboxState(run)!.registrations[0]!.askedLinks, 1);
+    assert.equal(cleanup.sites[0]!.outcome, "not shown", cleanup.sites[0]!.noteNl);
   } finally {
     rmSync(run, { recursive: true, force: true });
   }
@@ -1338,7 +1346,7 @@ test("fifth review: a beacon of a page that the budget holds back is no refusal 
   try {
     await mailWait(run, { mailbox: box });
     const cleanup = await mailCleanup(run, { mailbox: box, browser, settleMs: 0 });
-    assert.ok(!cleanup.site.steps.some((step) => /niet geopend/.test(step.whatNl)), JSON.stringify(cleanup.site.steps));
+    assert.ok(!cleanup.sites[0]!.steps.some((step) => /niet geopend/.test(step.whatNl)), JSON.stringify(cleanup.sites[0]!.steps));
   } finally {
     rmSync(run, { recursive: true, force: true });
   }
@@ -1404,7 +1412,7 @@ test("a run without a mailbox has no shield and no sentence, and what opens a ma
     assert.ok(writesForRun(run));
     assert.equal(shieldForRun(run), null);
     assert.deepEqual(mailboxLimitationsNl(run), []);
-    assert.equal(agentMailboxNl(run, "loep mail links"), "");
+    assert.equal(agentMailboxNl(run, "loep mail", "RUN"), "");
     assert.deepEqual(scanRun(run).hits, []);
     await assert.rejects(mailWait(run), /geen mailbox/);
     await assert.rejects(mailCleanup(run), /geen mailbox/);

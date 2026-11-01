@@ -7,7 +7,7 @@ import { isFor, parseMail, type ParsedMail } from "./mailparse.ts";
 import { imapMailbox } from "./mailbox-imap.ts";
 import { mailpitMailbox } from "./mailbox-mailpit.ts";
 import { confirmByTyping, processTerminal, type Terminal } from "./recorded.ts";
-import { CLEANUP_SENDER, isThisMachine, usedLinks, writeOriginsNl, type WritePermission } from "./writes.ts";
+import { CLEANUP_SENDER, isThisMachine, senderOf, usedLinks, writeOriginsNl, type WritePermission } from "./writes.ts";
 
 /**
  * A mailbox lets a run finish a flow that goes through an e-mail: wait for a message to the address
@@ -32,6 +32,8 @@ export type MailboxKind = MailServer["kind"];
 export const MAIL_ADDRESS_SOURCE = "mail-adres";
 export const MAIL_LINK_SOURCE = "mail-link";
 export const MAIL_CODE_SOURCE = "mail-code";
+/** The registration all agents share, the first of a run. */
+export const SHARED_REGISTRATION = "A0";
 /** Under this name the mailbox keeps where it is, in the register: that is told nowhere. */
 export const MAIL_PRIVATE = "mailbox";
 
@@ -144,10 +146,17 @@ export function openMailbox(server: MailServer, env: NodeJS.ProcessEnv = process
  * login with a tag per run (`naam+loep-1a2b3c4d@example.nl`), which most providers deliver to the same box.
  */
 export function runAddress(server: MailServer, env: NodeJS.ProcessEnv = process.env): string {
+  return tagged(server, env[MAILBOX_ENV.address], () => mailCredentials(server, env).user);
+}
+
+/** An address for a registration of its own, next to the address of the run: at a real mailbox the same box, with a label of its own. No login is needed for it. */
+export const ownAddress = (server: MailServer, shared: string): string => tagged(server, undefined, () => shared.replace(/\+[^@]*@/, "@"));
+
+function tagged(server: MailServer, fixed: string | undefined, base: () => string): string {
   const tag = `loep-${randomBytes(4).toString("hex")}`;
   if (server.kind === "mailpit") return `${tag}@example.com`;
-  if (env[MAILBOX_ENV.address]) return env[MAILBOX_ENV.address]!;
-  const { user } = mailCredentials(server, env);
+  if (fixed) return fixed;
+  const user = base();
   const at = user.lastIndexOf("@");
   if (at <= 0) throw new Error(`de gebruikersnaam van de mailbox is geen e-mailadres: zet het adres van de run in ${MAILBOX_ENV.address}`);
   // In small letters: a site writes an address like that, and the swap goes by the letter.
@@ -203,6 +212,8 @@ export interface MailboxLink {
   /** With aliases in it: this is what a session opens. */
   url: string;
   kind: LinkKind;
+  /** The registration whose mail it came from. Absent: the shared one. */
+  registration?: string;
   /** It came from the header for unsubscribing. */
   unsubscribe?: true;
   /** That header allows a POST in one click (RFC 8058). */
@@ -216,17 +227,48 @@ export interface CleanupStep {
   path?: string;
 }
 
-export type SiteCleanup = "removed" | "not shown" | "failed" | "no link";
+/** `unused`: a registration of its own that never went to the site, so there is nothing to remove. */
+export type SiteCleanup = "removed" | "not shown" | "failed" | "no link" | "unused";
+
+export interface SiteOutcome {
+  outcome: SiteCleanup;
+  noteNl: string;
+  steps: CleanupStep[];
+}
+
+/** What a cleanup did at the site for one registration. */
+export interface RegistrationCleanup extends SiteOutcome {
+  registration: string;
+}
 
 export interface MailboxCleanup {
   at: string;
-  site: { outcome: SiteCleanup; noteNl: string; steps: CleanupStep[] };
+  /** Per registration, the shared one first. */
+  sites: RegistrationCleanup[];
   /** `left`: what the last look found. `marked`: what the server only marked as deleted. `checkedAt`: the moment of that look; mail after it is not seen. */
   mail: { removed: number; left: number | null; marked?: number; checkedAt?: string; noteNl: string | null };
   /** `noteNl`: why the run could not be searched. */
   scan: { files: number; bytes: number; hits: { file: string; secret: number; source?: string }[]; compressed: number; noteNl?: string };
-  /** The test registration is shown to be gone, the mail is gone, also from the server, and no secret stands in the run. */
+  /** Every test registration is shown to be gone, the mail is gone, also from the server, and no secret stands in the run. */
   complete: boolean;
+}
+
+/**
+ * One test registration at the site, with an address of its own. The first is shared by all agents, and
+ * stays for looking. A session that has to change or remove a registration asks for one of its own.
+ */
+export interface Registration {
+  id: string;
+  /** The sender it belongs to (see `senderOf`). Absent: shared by all. */
+  owner?: string;
+  /** What the browser has for its address; an own registration only: the shared one has the test value. */
+  alias?: string;
+  /**
+   * How many of its links there were when the site was asked to remove it. Noted before it is asked, so
+   * also a run that broke off right then keeps to it: what came in later is read, and never opened,
+   * because a site says goodbye with a mail that can hold a link that registers anew.
+   */
+  askedLinks?: number;
 }
 
 export interface MailboxState {
@@ -239,14 +281,16 @@ export interface MailboxState {
   links: MailboxLink[];
   /** Origins of links in a mail that are no part of the permission: never followed. */
   refusedOrigins: string[];
-  /**
-   * How many links there were when the site was asked to remove the registration. Noted before it is
-   * asked, so also a run that broke off right then keeps to it: what came in later is read, and never
-   * opened, because a site says goodbye with a mail that can hold a link that registers anew.
-   */
-  askedLinks?: number;
+  /** The shared registration first, then those of sessions. */
+  registrations: Registration[];
   cleanup?: MailboxCleanup;
 }
+
+/** The links of one registration. */
+export const linksOfRegistration = (state: Pick<MailboxState, "links">, id: string): MailboxLink[] => state.links.filter((link) => (link.registration ?? SHARED_REGISTRATION) === id);
+
+/** The registration of its own a sender has, the latest when it has more. */
+export const ownRegistration = (state: Pick<MailboxState, "registrations">, session: string | undefined): Registration | null => (session === undefined ? null : (state.registrations.filter((registration) => registration.owner === senderOf(session)).at(-1) ?? null));
 
 /** The kind of a link by the words in its path: the mail itself is not asked. A confirmation goes before preferences: it does something by being opened, also under a path for managing things. */
 export function linkKind(path: string): LinkKind {
@@ -267,9 +311,16 @@ export async function recordMailbox(runDir: string, mark: MailboxMark): Promise<
   await writeJson(path, { ...(existsSync(path) ? await readJson<Record<string, unknown>>(path) : {}), mailbox: mark });
 }
 
+/** The state of a run from before a run could have more than one registration. */
+type OldState = Omit<MailboxState, "registrations" | "cleanup"> & { registrations?: Registration[]; askedLinks?: number; cleanup?: Omit<MailboxCleanup, "sites"> & { sites?: RegistrationCleanup[]; site?: SiteOutcome } };
+
 export function readMailboxState(runDir: string): MailboxState | null {
   const path = join(runDir, MAILBOX_STATE);
-  return existsSync(path) ? (JSON.parse(readFileSync(path, "utf8")) as MailboxState) : null;
+  if (!existsSync(path)) return null;
+  const { askedLinks, cleanup, ...rest } = JSON.parse(readFileSync(path, "utf8")) as OldState;
+  const { site, ...kept } = cleanup ?? {};
+  const shared = { id: SHARED_REGISTRATION, ...(askedLinks === undefined ? {} : { askedLinks }) };
+  return { ...rest, registrations: rest.registrations ?? [shared], ...(cleanup ? { cleanup: { ...kept, sites: cleanup.sites ?? (site ? [{ registration: SHARED_REGISTRATION, ...site }] : []) } as MailboxCleanup } : {}) };
 }
 
 export const writeMailboxState = async (runDir: string, state: MailboxState): Promise<void> => {
@@ -292,13 +343,18 @@ export function mailboxLimitationsNl(runDir: string): string[] {
   return [kindNl, MAIL_NOT_JUDGED_NL, cleanupNl(state)];
 }
 
+/** Nothing of this registration stands at the site, as far as can be shown. */
+export const siteDone = (site: Pick<SiteOutcome, "outcome">): boolean => site.outcome === "removed" || site.outcome === "unused";
+
 function cleanupNl(state: MailboxState | null): string {
   const cleanup = state?.cleanup;
   if (!cleanup) return "Opruimen: niet gedaan. Er kan een testaanmelding op de site en e-mail in de mailbox zijn achtergebleven.";
   const checked = cleanup.mail.checkedAt ? ` Dat is voor het laatst nagegaan op ${cleanup.mail.checkedAt}: wat de site daarna nog stuurde, staat er misschien nog.` : "";
-  if (cleanup.complete) return `Opruimen: de testaanmelding is via de site zelf verwijderd, en dat is nagegaan; de e-mail is gewist, en de mailbox bevatte niets meer voor dit onderzoek.${checked} Het bewijs staat in ${MAILBOX_STATE}.`;
+  const removed = cleanup.sites.filter((site) => site.outcome === "removed").length;
+  if (cleanup.complete) return `Opruimen: ${removed === 1 ? "de testaanmelding is" : `de ${removed} testaanmeldingen zijn`} via de site zelf verwijderd, en dat is nagegaan; de e-mail is gewist, en de mailbox bevatte niets meer voor dit onderzoek.${checked} Het bewijs staat in ${MAILBOX_STATE}.`;
   const mailGone = cleanup.mail.left === 0 && (cleanup.mail.marked ?? 0) === 0;
-  const behind = [cleanup.site.outcome === "removed" ? null : `op de site: ${cleanup.site.noteNl}`, mailGone ? null : `in de mailbox: ${cleanup.mail.noteNl ?? "er staat nog e-mail"}`, cleanup.scan.hits.length > 0 ? `in de run: een geheim staat in ${[...new Set(cleanup.scan.hits.map((hit) => (hit.source ? `${hit.file} (${hit.source})` : hit.file)))].join(", ")}` : null, cleanup.scan.noteNl ? `in de run: ${cleanup.scan.noteNl}` : null].filter(Boolean);
+  const several = cleanup.sites.length > 1;
+  const behind = [...cleanup.sites.filter((site) => !siteDone(site)).map((site) => `op de site${several ? ` (aanmelding ${site.registration})` : ""}: ${site.noteNl}`), mailGone ? null : `in de mailbox: ${cleanup.mail.noteNl ?? "er staat nog e-mail"}`, cleanup.scan.hits.length > 0 ? `in de run: een geheim staat in ${[...new Set(cleanup.scan.hits.map((hit) => (hit.source ? `${hit.file} (${hit.source})` : hit.file)))].join(", ")}` : null, cleanup.scan.noteNl ? `in de run: ${cleanup.scan.noteNl}` : null].filter(Boolean);
   return `Er bleef iets achter na het opruimen, ${behind.join("; ")}.${checked} Wie over de site of de mailbox gaat, moet dat nog weghalen.`;
 }
 
@@ -308,7 +364,8 @@ function cleanupNl(state: MailboxState | null): string {
  * verdict stands on that hash, so a mail that comes in later may not change it. An agent asks for the
  * links as they are with `askLinks`, the command for this run.
  */
-export function agentMailboxNl(runDir: string, askLinks: string): string {
+export function agentMailboxNl(runDir: string, mail: string, run: string): string {
   if (!mailboxForRun(runDir) || !readMailboxState(runDir)) return "";
-  return `\n\n**Deze run heeft pagina's achter een persoonlijke link uit een e-mail.** De adressen staan niet in deze opdracht, want er kan mail bijkomen. Vraag ze op met \`${askLinks}\`: onder \`links\` staan de adressen die de run nog niet opende. Open die met \`open\`, ook een bevestiging als de procedure dat vraagt. Onder \`used\` staan adressen die de run al opende: open die ook, dat kost niets. Zo'n link kan na gebruik vervallen zijn, en dan is dat wat je vastlegt. Alle agents delen één testaanmelding, dus wat een eerdere agent zag, kan voor jou verlopen zijn. Dat weerlegt niets: laat een bevinding of kandidaat niet vervallen omdat een persoonlijke link niet meer werkt, maar zet wat je niet kon herhalen als \`proef werkte niet:\` onder \`missingNl\`. Zijn beide lijsten leeg, dan is er geen pagina achter een link om te bekijken. De code in zo'n adres is een vervanging: de echte code krijg je niet te zien en heb je niet nodig. Een waarneming noemt dit adres, en dat is goed zo. De eerste keer dat de run een link opent, telt als verzending. Afmelden, opzeggen en verwijderen doet alleen de opruimstap aan het eind van de run (\`mail cleanup\`), want daarna heeft geen agent de aanmelding nog. Druk zulke knoppen dus niet in en bevestig ze niet, ook niet als de procedure dat vraagt: bekijk en meet de knop zonder hem in te drukken, en zet wat pas daarna te zien is als \`proef werkte niet:\` onder \`missingNl\`. Lees de e-mail zelf niet: \`mailbox/\` in de run is voor wie het onderzoek leidt.`;
+  const asked = `\`${mail} links --run ${run} --session <je sessie>\``;
+  return `\n\n**Deze run heeft pagina's achter een persoonlijke link uit een e-mail.** De adressen staan niet in deze opdracht, want er kan mail bijkomen. Vraag ze op met ${asked}: onder \`links\` staan de adressen die de run nog niet opende. Open die met \`open\`, ook een bevestiging als de procedure dat vraagt. Onder \`used\` staan adressen die de run al opende: open die ook, dat kost niets. Zo'n link kan na gebruik vervallen zijn, en dan is dat wat je vastlegt. Standaard delen alle agents één testaanmelding, dus wat een eerdere agent zag, kan voor jou verlopen zijn. Dat weerlegt niets: laat een bevinding of kandidaat niet vervallen omdat een persoonlijke link niet meer werkt, maar zet wat je niet kon herhalen als \`proef werkte niet:\` onder \`missingNl\`. Zijn beide lijsten leeg, dan is er geen pagina achter een link om te bekijken. De code in zo'n adres is een vervanging: de echte code krijg je niet te zien en heb je niet nodig. Een waarneming noemt dit adres, en dat is goed zo. De eerste keer dat de run een link opent, telt als verzending. Afmelden, opzeggen en verwijderen van de gedeelde aanmelding doet alleen de opruimstap aan het eind van de run (\`mail cleanup\`), want daarna heeft geen agent haar nog. Druk zulke knoppen op een pagina van de gedeelde aanmelding dus niet in en bevestig ze niet, ook niet als de procedure dat vraagt. Vraagt de procedure dat wel, of moet je iets wijzigen of zien wat pas daarna komt, vraag dan een eigen aanmelding met \`${mail} register --run ${run} --session <je sessie>\`. Dat verstuurt nog niets, maar de route kost budget: het formulier, de bevestiging en het afmelden of verwijderen tellen elk als verzending, met de wachttijd ertussen die de sessie noemt. Doe het dus alleen als het niet anders kan. In je sessie gaat de testwaarde \`email\` daarna naar je eigen adres: vul het formulier van de site in en verstuur het, en haal je links met \`${mail} wait --run ${run} --session <je sessie>\`. Een link met \`own: true\` hoort bij jouw aanmelding: daar mag je alles, ook afmelden en verwijderen, en de opruimstap ruimt op wat overblijft. Weigert \`register\` omdat het budget te krap is, bekijk en meet de knop dan zonder hem in te drukken, en zet wat pas daarna te zien is als \`proef werkte niet:\` onder \`missingNl\`. Lees de e-mail zelf niet: \`mailbox/\` in de run is voor wie het onderzoek leidt.`;
 }

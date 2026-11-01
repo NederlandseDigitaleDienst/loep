@@ -2,13 +2,13 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Browser, BrowserContext, Locator, Page } from "playwright";
 import { launchBrowser, loadPage, newContext, type LoadResult } from "../browser/session.ts";
-import { linkKind, MAIL_ADDRESS_SOURCE, MAIL_CODE_SOURCE, MAIL_LINK_SOURCE, MAIL_PRIVATE, MAILBOX_STATE, mailboxForRun, markedMail, openMailbox, readMailboxState, waitForMail, writeMailboxState, type CleanupStep, type MailServer, type Mailbox, type MailboxCleanup, type MailboxLink, type MailboxMark, type MailboxState, type ReceivedMail, type SiteCleanup } from "../lib/mailbox.ts";
+import { linkKind, linksOfRegistration, MAIL_ADDRESS_SOURCE, MAIL_CODE_SOURCE, MAIL_LINK_SOURCE, MAIL_PRIVATE, MAILBOX_STATE, mailboxForRun, markedMail, openMailbox, ownAddress, ownRegistration, readMailboxState, SHARED_REGISTRATION, siteDone, waitForMail, writeMailboxState, type CleanupStep, type MailServer, type Mailbox, type MailboxCleanup, type MailboxLink, type MailboxMark, type MailboxState, type ReceivedMail, type Registration, type SiteCleanup, type SiteOutcome } from "../lib/mailbox.ts";
 import { isLoginPath, loginForRun, onlyLogsOut, originOf, passwordFieldShows } from "../lib/login.ts";
 import { pathOf } from "../lib/reads.ts";
 import { linksOf, secretsInText, secretsInUrl, spelledSecretsInUrl, withoutLinks } from "../lib/mailparse.ts";
 import { refuseUnderSeal } from "../lib/seal.ts";
 import { keepPrivate, readPrivate, readSecretsFile, registerGuarded, registerSecret, registerSecrets, scanRun, shieldForRun, type NewSecret, type Shield } from "../lib/secrets.ts";
-import { CLEANUP_SENDER, usedLinks, withAsyncLock, writeBudget, writeOriginsOf, writesForRun, type WritePermission } from "../lib/writes.ts";
+import { claimRegistration, CLEANUP_SENDER, registrationUsed, senderOf, usedLinks, withAsyncLock, writeBudget, writeOriginsOf, writesForRun, type WritePermission } from "../lib/writes.ts";
 import { guardContext, guardRedirects, scopeForRun, TEST_VALUES, type Blocked, type Guard } from "../session/safety.ts";
 
 /*
@@ -18,14 +18,22 @@ import { guardContext, guardRedirects, scopeForRun, TEST_VALUES, type Blocked, t
  * whoever leads the evaluation, without tokens and without addresses of other sites.
  */
 
-export const MAIL_USAGE = `  mail wait --run <run> [--timeout <s>]   Wait for mail to the address of the run, take the personal links from it and delete
-                                         it. Prints the links with aliases in them, and nothing of the mail itself
+export const MAIL_USAGE = `  mail wait --run <run> [--session <s>] [--timeout <s>]
+                                         Wait for mail to the address of the run, or with --session to the address of that session
+                                         when it has one of its own, take the personal links from it and delete it. Prints the
+                                         links with aliases in them, and nothing of the mail itself
   mail cleanup --run <run>               After the measuring, also after a run that broke off: remove the test registration
                                          through the site's own flow, delete the mail and look for tokens in the whole
                                          run. The outcome goes in mailbox.json; non-zero exit when something stayed behind
-  mail links --run <run>                 The personal links as they are now, with aliases in them: those still to open, and those
-                                         the run used. Does not open the mailbox
+  mail links --run <run> [--session <s>] The personal links as they are now, with aliases in them: those still to open, and those
+                                         the run used, of the shared registration and of the one of that session. Does not open
+                                         the mailbox
   mail status --run <run>                What mailbox.json says, without opening the mailbox
+  mail register --run <run> --session <s> [--fresh]
+                                         A test registration of its own for a session, with an address of its own: the test value
+                                         email goes there from now on, and with --session mail wait reads its mail and mail links
+                                         shows its links. Sends nothing yet, but refuses when the budget has no room for the
+                                         route. Without --fresh a session that has one keeps it
 `;
 
 const DEFAULT_WAIT_SECONDS = 120;
@@ -58,13 +66,13 @@ export async function startMailbox(runDir: string, server: MailServer, address: 
   if (readMailboxState(runDir) && readSecretsFile(runDir)?.secrets.some((secret) => secret.source === MAIL_ADDRESS_SOURCE)) return;
   keepPrivate(runDir, MAIL_PRIVATE, server);
   registerSecret(runDir, address, { source: MAIL_ADDRESS_SOURCE, origins: writeOriginsOf(permission), alias: TEST_VALUES.email! });
-  await writeMailboxState(runDir, { kind: mark.kind, local: mark.local, since: mark.declaredAt, messages: [], links: [], refusedOrigins: [] });
+  await writeMailboxState(runDir, { kind: mark.kind, local: mark.local, since: mark.declaredAt, messages: [], links: [], refusedOrigins: [], registrations: [{ id: SHARED_REGISTRATION }] });
 }
 
-/** What the fixed flow knows of the mailbox of a run. Only here is the address of the run taken from the register. */
+/** What the fixed flow knows of the mailbox of a run. Only here are the addresses taken from the register. */
 interface MailContext {
   server: MailServer;
-  address: string;
+  addressOf: (registration: Registration) => string;
   /** The origins the links of a mail may lead to. */
   origins: string[];
   state: MailboxState;
@@ -78,17 +86,56 @@ function stateOfMailbox(runDir: string): MailboxState {
 
 function requireMailbox(runDir: string): MailContext {
   const state = stateOfMailbox(runDir);
-  const entry = readSecretsFile(runDir)?.secrets.find((secret) => secret.source === MAIL_ADDRESS_SOURCE);
+  const entries = (readSecretsFile(runDir)?.secrets ?? []).filter((secret) => secret.source === MAIL_ADDRESS_SOURCE);
   const server = readPrivate<MailServer>(runDir, MAIL_PRIVATE);
-  if (!entry || !server) throw new Error("het register met de geheimen van de mailbox ontbreekt, dus de links zijn niet meer te openen en het adres van de run is onbekend");
-  return { server, address: entry.real, origins: entry.origins, state };
+  if (entries.length === 0 || !server) throw new Error("het register met de geheimen van de mailbox ontbreekt, dus de links zijn niet meer te openen en het adres van de run is onbekend");
+  const addressOf = (registration: Registration): string => {
+    // The register is read here, each time: a session takes a registration while another command runs.
+    const entry = registration.alias === undefined ? entries[0] : readSecretsFile(runDir)?.secrets.find((secret) => secret.alias === registration.alias);
+    if (!entry) throw new Error(`het adres van aanmelding ${registration.id} staat niet in het register met de geheimen`);
+    return entry.real;
+  };
+  return { server, addressOf, origins: entries[0]!.origins, state };
+}
+
+export interface RegisterResult {
+  registration: string;
+  /** The test value `email` of this session: the alias of its address. */
+  email: string;
+  /** False: the session had one, and this is it. */
+  fresh: boolean;
+  noteNl: string;
+}
+
+/**
+ * A test registration of its own for a session. Nothing goes to the site here: the session fills in the
+ * form, with the test value `email`, and that and what follows takes from the budget like any write.
+ * Whoever verifies or finishes a criterion is the same sender as its judge, so it finds the same registration.
+ */
+export async function mailRegister(runDir: string, session: string, options: { fresh?: boolean } = {}): Promise<RegisterResult> {
+  refuseUnderSeal(join(runDir, MAILBOX_STATE));
+  const { server, addressOf, origins, state } = requireMailbox(runDir);
+  const permission = writesForRun(runDir);
+  if (!permission) throw new Error("deze run mag niet versturen, en een eigen aanmelding bestaat alleen uit verzendingen");
+  const answer = (registration: Registration, fresh: boolean): RegisterResult => ({ registration: registration.id, email: registration.alias!, fresh, noteNl: "de testwaarde email gaat in deze sessie nu naar dit adres. Vul het formulier van de site in en verstuur het; mail wait met --session haalt daarna de links op. Elke verzending en de eerste keer dat een link opent tellen mee voor het budget" });
+  return updatingState(runDir, state, async () => {
+    const known = ownRegistration(state, session);
+    if (known && !options.fresh) return answer(known, false);
+    const number = state.registrations.length;
+    const registration: Registration = { id: `A${number}`, owner: senderOf(session), alias: TEST_VALUES.email!.replace("@", `-${number}@`) };
+    const refusedNl = claimRegistration(runDir, permission, registration.id, session);
+    if (refusedNl) throw new Error(refusedNl);
+    registerSecret(runDir, ownAddress(server, addressOf(state.registrations[0]!)), { source: MAIL_ADDRESS_SOURCE, origins, alias: registration.alias! });
+    state.registrations.push(registration);
+    return answer(registration, true);
+  });
 }
 
 /**
  * Take in one mail: every value that may be a token goes in the secrets, in one step, before anything
  * that names the mail is written. A link counts when it is personal and on an origin of the permission.
  */
-export function absorbMail(runDir: string, origins: readonly string[], state: MailboxState, message: ReceivedMail): void {
+export function absorbMail(runDir: string, origins: readonly string[], state: MailboxState, message: ReceivedMail, registration: string = SHARED_REGISTRATION): void {
   const links = linksOf(message.mail);
   // A link to another site is never followed and leaves the kept text whole, so it needs no alias.
   const ours = links.filter((link) => origins.includes(originOf(link.url) ?? ""));
@@ -112,7 +159,7 @@ export function absorbMail(runDir: string, origins: readonly string[], state: Ma
     const url = parsed.href;
     let entry = state.links.find((known) => known.url === url);
     if (!entry) {
-      entry = { id: `L${state.links.length + 1}`, url, kind: link.unsubscribe ? "unsubscribe" : linkKind(parsed.pathname) };
+      entry = { id: `L${state.links.length + 1}`, url, kind: link.unsubscribe ? "unsubscribe" : linkKind(parsed.pathname), ...(registration === SHARED_REGISTRATION ? {} : { registration }) };
       state.links.push(entry);
       registerGuarded(runDir, [{ id: entry.id, url }]);
     }
@@ -135,10 +182,10 @@ export function absorbMail(runDir: string, origins: readonly string[], state: Ma
 }
 
 /** Take in what came, each mail on its own: one that cannot be taken in stays in the mailbox, and the others are read. */
-export function absorbAll(runDir: string, origins: readonly string[], state: MailboxState, received: ReceivedMail[]): ReceivedMail[] {
+export function absorbAll(runDir: string, origins: readonly string[], state: MailboxState, received: ReceivedMail[], registration: string = SHARED_REGISTRATION): ReceivedMail[] {
   return received.filter((message) => {
     try {
-      absorbMail(runDir, origins, state, message);
+      absorbMail(runDir, origins, state, message, registration);
       return true;
     } catch (error) {
       process.stderr.write(`een e-mail is overgeslagen: ${(error as Error).name}\n`);
@@ -147,7 +194,10 @@ export function absorbAll(runDir: string, origins: readonly string[], state: Mai
   });
 }
 
-type ShownLink = Pick<MailboxLink, "id" | "url" | "kind">;
+type ShownLink = Pick<MailboxLink, "id" | "url" | "kind"> & {
+  /** It belongs to the registration of this session: there it may do anything. */
+  own?: true;
+};
 
 export interface WaitResult {
   mails: number;
@@ -158,21 +208,28 @@ export interface WaitResult {
   refusedOrigins: string[];
 }
 
-function shownLinks(runDir: string, state: MailboxState): Pick<WaitResult, "links" | "used"> {
+function shownLinks(runDir: string, state: MailboxState, shows: (link: MailboxLink) => boolean, owner: string | undefined): Pick<WaitResult, "links" | "used"> {
   const used = usedLinks(runDir);
-  const shown = state.links.map(({ id, url, kind }) => ({ id, url, kind }));
+  const ownedBy = (link: MailboxLink): boolean => state.registrations.some((registration) => registration.id === link.registration && registration.owner === owner);
+  const shown = state.links.filter(shows).map((link): ShownLink => ({ id: link.id, url: link.url, kind: link.kind, ...(ownedBy(link) ? { own: true as const } : {}) }));
   return { links: shown.filter((link) => !used.has(link.id)), used: shown.filter((link) => used.has(link.id)) };
 }
 
 /**
- * The personal links as they are now. An agent asks for them here: a list in its task would change
- * that task with every mail. A link that unsubscribes can do so by being opened, and all agents share
- * one registration, so none of them is offered one: that link is for `mail cleanup`.
+ * The links for an agent: those of the registration of its own, and of the shared one what cannot end
+ * it. A link that unsubscribes can do so by being opened, and all agents share that registration, so
+ * none of them is offered one: that link is for `mail cleanup`. The links of another session are not its own.
  */
-export function mailLinks(runDir: string): Pick<WaitResult, "links" | "used"> {
-  const { links, used } = shownLinks(runDir, stateOfMailbox(runDir));
-  const forAgents = (list: ShownLink[]): ShownLink[] => list.filter((link) => link.kind !== "unsubscribe");
-  return { links: forAgents(links), used: forAgents(used) };
+const offered = (state: MailboxState, owner: string | undefined): ((link: MailboxLink) => boolean) => {
+  const own = state.registrations.filter((registration) => registration.owner !== undefined && registration.owner === owner).map((registration) => registration.id);
+  return (link) => (link.registration === undefined ? link.kind !== "unsubscribe" : own.includes(link.registration));
+};
+
+/** The personal links as they are now. An agent asks for them here: a list in its task would change that task with every mail. */
+export function mailLinks(runDir: string, session?: string): Pick<WaitResult, "links" | "used"> {
+  const state = stateOfMailbox(runDir);
+  const owner = session === undefined ? undefined : senderOf(session);
+  return shownLinks(runDir, state, offered(state, owner), owner);
 }
 
 /**
@@ -189,9 +246,12 @@ const updatingState = <T>(runDir: string, state: MailboxState, change: () => Pro
   });
 
 /** Wait for mail, take it in and delete it. The answer has only what code took from it. */
-export async function mailWait(runDir: string, options: { timeoutSeconds?: number; pollMs?: number; mailbox?: Mailbox } = {}): Promise<WaitResult> {
+export async function mailWait(runDir: string, options: { session?: string; timeoutSeconds?: number; pollMs?: number; mailbox?: Mailbox } = {}): Promise<WaitResult> {
   refuseUnderSeal(join(runDir, MAILBOX_STATE));
-  const { server, address, origins, state } = requireMailbox(runDir);
+  const { server, addressOf, origins, state } = requireMailbox(runDir);
+  const { session } = options;
+  const registration = ownRegistration(state, session) ?? state.registrations[0]!;
+  const address = addressOf(registration);
   const mailbox = options.mailbox ?? openMailbox(server);
   const seconds = options.timeoutSeconds ?? DEFAULT_WAIT_SECONDS;
   const since = new Date(state.since);
@@ -203,11 +263,13 @@ export async function mailWait(runDir: string, options: { timeoutSeconds?: numbe
     state,
     async () => {
       const received = await waitForMail(mailbox, { address, since, timeoutMs: 0, once: true });
-      return { mails: received.length, taken: absorbAll(runDir, origins, state, received) };
+      return { mails: received.length, taken: absorbAll(runDir, origins, state, received, registration.id) };
     },
     ({ taken }) => mailbox.remove(taken.map((message) => message.id)),
   );
-  return { mails, ...shownLinks(runDir, state), refusedOrigins: state.refusedOrigins };
+  // Whoever leads the evaluation sees all that came for the shared registration: only that is what the route goes on with.
+  const shown = session === undefined ? shownLinks(runDir, state, (link) => link.registration === undefined, undefined) : mailLinks(runDir, session);
+  return { mails, ...shown, refusedOrigins: state.refusedOrigins };
 }
 
 // ---- Cleaning up ------------------------------------------------------------------------------------------------------
@@ -256,12 +318,6 @@ function goneBy(before: Look, after: Look): string | null {
   if (after.path !== before.path) return "de link leidt nu ergens anders heen";
   if (before.button && !after.button) return "de pagina toont de knop om te verwijderen niet meer";
   return null;
-}
-
-interface SiteResult {
-  outcome: MailboxCleanup["site"]["outcome"];
-  noteNl: string;
-  steps: CleanupStep[];
 }
 
 /** What a button says about itself, through shadow roots: the design system of a site keeps the real button inside its own element. */
@@ -326,10 +382,15 @@ async function personalLinksOn(page: Page, shield: Shield, mayOpen: (url: string
  * pressed: a link that does not show the same twice proves nothing afterwards. After the removal
  * those links are opened again, and only a difference the site itself made counts as proof.
  */
-async function removeAtSite(browser: Browser, runDir: string, state: MailboxState, permission: WritePermission): Promise<SiteResult> {
+async function removeAtSite(browser: Browser, runDir: string, state: MailboxState, id: string, permission: WritePermission): Promise<SiteOutcome> {
   const steps: CleanupStep[] = [];
-  if (state.links.length === 0) return { outcome: "no link", noteNl: "er kwam geen e-mail met een persoonlijke link binnen, dus de aanmelding, als die er is, kon niet via de site worden verwijderd", steps };
-  const known = state.links.slice(0, state.askedLinks);
+  // Looked up each time: `updatingState` reads the state again.
+  const registration = (): Registration => state.registrations.find((known) => known.id === id)!;
+  const own = registration().owner !== undefined;
+  const links = (): MailboxLink[] => linksOfRegistration(state, id);
+  if (links().length === 0 && own && !registrationUsed(runDir, id)) return { outcome: "unused", noteNl: "deze sessie heeft na het aanvragen niets verstuurd, dus er is geen aanmelding bij de site", steps };
+  if (links().length === 0) return { outcome: "no link", noteNl: "er kwam geen e-mail met een persoonlijke link binnen, dus de aanmelding, als die er is, kon niet via de site worden verwijderd", steps };
+  const known = links().slice(0, registration().askedLinks);
   const used = usedLinks(runDir);
   const openable = known.filter((link) => !OPENS_ONLY_ONCE_USED.has(link.kind) || used.has(link.id));
   const shield = shieldForRun(runDir)!;
@@ -340,7 +401,7 @@ async function removeAtSite(browser: Browser, runDir: string, state: MailboxStat
     if (onlyLogsOut({ href: url }) || SIGNS_UP.test(path)) return false;
     return id !== null ? openable.some((link) => link.id === id) : linkKind(path) !== "confirm";
   };
-  const wasAsked = (): boolean => state.askedLinks !== undefined;
+  const wasAsked = (): boolean => registration().askedLinks !== undefined;
   let unopened: string | null = null;
   let context: BrowserContext | null = null;
   try {
@@ -387,10 +448,10 @@ async function removeAtSite(browser: Browser, runDir: string, state: MailboxStat
     };
     /** Ask the site to remove the registration. Only a budget that held it back leaves the site unasked; from anything else, also an error, the site may have got it. */
     const asking = async (work: () => Promise<void>, ours?: (entry: Blocked) => boolean): ReturnType<typeof sending<void>> => {
-      const first = state.askedLinks === undefined;
-      if (first) await updatingState(runDir, state, async () => void (state.askedLinks = state.links.length));
+      const first = !wasAsked();
+      if (first) await updatingState(runDir, state, async () => void (registration().askedLinks = links().length));
       const result = await sending(work, ours);
-      if (result.budget && first) await updatingState(runDir, state, async () => void delete state.askedLinks);
+      if (result.budget && first) await updatingState(runDir, state, async () => void delete registration().askedLinks);
       return result;
     };
     const look = async (on: Page, url: string, asks = false): Promise<Look> => {
@@ -437,6 +498,7 @@ async function removeAtSite(browser: Browser, runDir: string, state: MailboxStat
       const oneClick = known.find((link) => link.oneClick);
       if (!oneClick && wasAsked()) return { outcome: "not shown", noteNl: "de site kreeg het verzoek al bij een eerder opruimen, en nu staat er geen knop meer; dat alleen laat niet zien dat de aanmelding weg is", steps };
       if (!oneClick && unopened) return { outcome: "failed", noteNl: `een persoonlijke link kon niet worden geopend: ${unopened}`, steps };
+      if (!oneClick && own && openable.length > 0) return { outcome: "not shown", noteNl: "er staat geen knop meer om deze aanmelding te verwijderen. De sessie die haar had, kan haar zelf hebben verwijderd, maar dat is hier niet aan te tonen: er is geen vergelijking met daarvoor", steps };
       if (!oneClick) return { outcome: "failed", noteNl: openable.length < known.length ? "er kwam alleen een link binnen die de run nooit opende. De aanmelding is dus nooit bevestigd, en het opruimen opent zo'n link niet, omdat dat haar juist kan aanzetten. Ze blijft onbevestigd bij de site staan" : "geen knop gevonden om de aanmelding te verwijderen", steps };
       const posted = await asking(async () => {
         await page.evaluate((url) => fetch(url, { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body: "List-Unsubscribe=One-Click", redirect: "manual" }).then(() => undefined), oneClick.url);
@@ -469,7 +531,7 @@ async function removeAtSite(browser: Browser, runDir: string, state: MailboxStat
  */
 export async function mailCleanup(runDir: string, options: { mailbox?: Mailbox; browser?: Browser; launch?: () => Promise<Browser>; settleMs?: number; pollMs?: number } = {}): Promise<MailboxCleanup> {
   refuseUnderSeal(join(runDir, MAILBOX_STATE));
-  const { server, address, origins, state } = requireMailbox(runDir);
+  const { server, addressOf, origins, state } = requireMailbox(runDir);
   const permission = writesForRun(runDir);
   if (!permission) throw new Error("deze run mag niet versturen: de aanmelding kan dan niet via de site worden verwijderd");
   const since = new Date(state.since);
@@ -481,10 +543,14 @@ export async function mailCleanup(runDir: string, options: { mailbox?: Mailbox; 
   const takeIn = async (from: Mailbox): Promise<ReceivedMail[]> => {
     // Looked at with the lock held, as in `mailWait`: what another command took in stands in the state by then.
     return updatingState(runDir, state, async () => {
-      const waiting = await waitForMail(from, { address, since, timeoutMs: 0, once: true });
-      const fresh = waiting.filter((message) => !taken.has(message.id) && !skipped.has(message.id));
-      const read = new Set(absorbAll(runDir, origins, state, fresh).map((message) => message.id));
-      for (const { id } of fresh) (read.has(id) ? taken : skipped).add(id);
+      const waiting: ReceivedMail[] = [];
+      for (const registration of state.registrations) {
+        const found = await waitForMail(from, { address: addressOf(registration), since, timeoutMs: 0, once: true });
+        const fresh = found.filter((message) => !taken.has(message.id) && !skipped.has(message.id));
+        const read = new Set(absorbAll(runDir, origins, state, fresh, registration.id).map((message) => message.id));
+        for (const { id } of fresh) (read.has(id) ? taken : skipped).add(id);
+        waiting.push(...found);
+      }
       return waiting;
     });
   };
@@ -495,24 +561,35 @@ export async function mailCleanup(runDir: string, options: { mailbox?: Mailbox; 
   } catch (error) {
     mail.noteNl = `de mailbox was niet te lezen: ${(error as Error).message}`;
   }
-  const atSite = async (): Promise<SiteResult> => {
+  const atSite = async (id: string): Promise<SiteOutcome> => {
     let browser = options.browser ?? null;
     try {
       browser ??= await (options.launch ?? launchBrowser)();
-      return await removeAtSite(browser, runDir, state, permission);
+      return await removeAtSite(browser, runDir, state, id, permission);
     } catch (error) {
       return { outcome: "failed", noteNl: `het opruimen op de site brak af: ${(error as Error).message.split("\n")[0]}`, steps: [] };
     } finally {
       if (!options.browser) await browser?.close().catch(() => undefined);
     }
   };
-  // A registration that was shown to be gone stays gone: its links lead nowhere now, so a second round would find nothing to press.
-  let site = state.cleanup?.site.outcome === "removed" ? state.cleanup.site : await atSite();
-  let linksTried = state.links.length;
-  let rounds = 1;
+  const sites = new Map<string, SiteOutcome>();
+  const linksTried = new Map<string, number>();
+  const rounds = new Map<string, number>();
+  const tryAtSite = async (id: string): Promise<void> => {
+    linksTried.set(id, linksOfRegistration(state, id).length);
+    rounds.set(id, (rounds.get(id) ?? 0) + 1);
+    sites.set(id, await atSite(id));
+  };
+  for (const { id } of state.registrations) {
+    // A registration that was shown to be gone stays gone: its links lead nowhere now, so a second round would find nothing to press.
+    const earlier = state.cleanup?.sites.find((site) => site.registration === id);
+    if (earlier?.outcome === "removed") sites.set(id, earlier);
+    else await tryAtSite(id);
+  }
   if (mailbox) {
     try {
-      const { settleMs = SETTLE_MS, pollMs = mailbox.kind === "imap" ? IMAP_SETTLE_POLL_MS : SETTLE_POLL_MS } = options;
+      // Every address is a login of its own at IMAP.
+      const { settleMs = SETTLE_MS, pollMs = mailbox.kind === "imap" ? IMAP_SETTLE_POLL_MS * state.registrations.length : SETTLE_POLL_MS } = options;
       let until = Date.now() + settleMs;
       mail.noteNl = null;
       // A site says with a mail that the registration is gone, a moment after that happened: what comes in during this time is read and wiped too.
@@ -520,21 +597,22 @@ export async function mailCleanup(runDir: string, options: { mailbox?: Mailbox; 
         const ids = (await takeIn(mailbox)).filter((message) => taken.has(message.id)).map((message) => message.id);
         if (ids.length > 0) mail.removed += await mailbox.remove(ids);
         // A link that only came now can do what the earlier ones could not. Never after the site was asked: a later mail can hold a link that registers anew.
-        if (state.links.length > linksTried && state.askedLinks === undefined && rounds < MAX_SITE_ROUNDS) {
-          linksTried = state.links.length;
-          rounds++;
-          site = await atSite();
+        const later = state.registrations.filter(({ id, askedLinks }) => linksOfRegistration(state, id).length > (linksTried.get(id) ?? 0) && askedLinks === undefined && (rounds.get(id) ?? 0) < MAX_SITE_ROUNDS);
+        if (later.length > 0) {
+          for (const { id } of later) await tryAtSite(id);
           until = Date.now() + settleMs;
           continue;
         }
         if (Date.now() >= until) break;
         await new Promise((resolve) => setTimeout(resolve, Math.min(pollMs, until - Date.now())));
       }
-      mail.left = (await waitForMail(mailbox, { address, since, timeoutMs: 0, once: true })).length;
-      mail.marked = await markedMail(mailbox, address, since);
+      const addresses = state.registrations.map(addressOf);
+      const open = mailbox;
+      mail.left = (await Promise.all(addresses.map((address) => waitForMail(open, { address, since, timeoutMs: 0, once: true })))).flat().length;
+      mail.marked = (await Promise.all(addresses.map((address) => markedMail(open, address, since)))).reduce((sum, count) => sum + count, 0);
       mail.checkedAt = new Date().toISOString();
       const unreadNl = skipped.size === 0 ? "" : `, waarvan ${skipped.size === 1 ? "1 bericht dat" : `${skipped.size} berichten die`} niet te lezen ${skipped.size === 1 ? "was" : "waren"} en daarom niet ${skipped.size === 1 ? "is" : "zijn"} gewist`;
-      if (mail.left > 0) mail.noteNl = `er ${mail.left === 1 ? "staat nog 1 bericht" : `staan nog ${mail.left} berichten`} aan het adres van de run${unreadNl}`;
+      if (mail.left > 0) mail.noteNl = `er ${mail.left === 1 ? "staat nog 1 bericht" : `staan nog ${mail.left} berichten`} aan ${addresses.length === 1 ? "het adres van de run" : "de adressen van de run"}${unreadNl}`;
       else if (mail.marked > 0) mail.noteNl = `${mail.marked === 1 ? "1 bericht is" : `${mail.marked} berichten zijn`} op de server alleen gemarkeerd als verwijderd: deze server kan geen enkel bericht apart wissen, en de hele postbus legen kan ook mail van anderen raken. Het bericht staat er nog, met de persoonlijke link erin, tot iemand de postbus leegt`;
     } catch (error) {
       mail.noteNl = `lezen of wissen lukte niet: ${(error as Error).message}`;
@@ -549,18 +627,18 @@ export async function mailCleanup(runDir: string, options: { mailbox?: Mailbox; 
   } catch (error) {
     scan = { files: 0, bytes: 0, hits: [], compressed: 0, noteNl: `de run is niet doorzocht: ${(error as Error).message.split("\n")[0]}` };
   }
-  const cleanup: MailboxCleanup = { at: new Date().toISOString(), site, mail, scan, complete: site.outcome === "removed" && mail.left === 0 && (mail.marked ?? 0) === 0 && scan.hits.length === 0 && !scan.noteNl };
+  const outcomes = state.registrations.map(({ id }) => ({ registration: id, ...sites.get(id)! }));
+  const cleanup: MailboxCleanup = { at: new Date().toISOString(), sites: outcomes, mail, scan, complete: outcomes.every(siteDone) && mail.left === 0 && (mail.marked ?? 0) === 0 && scan.hits.length === 0 && !scan.noteNl };
   await updatingState(runDir, state, async () => void (state.cleanup = cleanup));
   return cleanup;
 }
 
-const SITE_OUTCOME_NL: Record<SiteCleanup, string> = { removed: "verwijderd", "not shown": "niet aangetoond", failed: "mislukt", "no link": "geen link" };
+const SITE_OUTCOME_NL: Record<SiteCleanup, string> = { removed: "verwijderd", "not shown": "niet aangetoond", failed: "mislukt", "no link": "geen link", unused: "niet gebruikt" };
 
 /** The report of a cleanup for the terminal. */
 export function cleanupLinesNl(cleanup: MailboxCleanup): string[] {
   return [
-    `site: ${SITE_OUTCOME_NL[cleanup.site.outcome]} (${cleanup.site.noteNl})`,
-    ...cleanup.site.steps.map((step) => `  ${step.whatNl}${step.path ? ` ${step.path}` : ""}`),
+    ...cleanup.sites.flatMap((site) => [`site${cleanup.sites.length > 1 ? `, aanmelding ${site.registration}` : ""}: ${SITE_OUTCOME_NL[site.outcome]} (${site.noteNl})`, ...site.steps.map((step) => `  ${step.whatNl}${step.path ? ` ${step.path}` : ""}`)]),
     `mail: ${cleanup.mail.removed} gewist, ${cleanup.mail.left === null ? "niet na te gaan hoeveel er nog staat" : `${cleanup.mail.left} over${cleanup.mail.marked ? `, ${cleanup.mail.marked} alleen gemarkeerd` : ""}`}${cleanup.mail.noteNl ? ` (${cleanup.mail.noteNl})` : ""}${cleanup.mail.checkedAt ? `; nagegaan op ${cleanup.mail.checkedAt}, wat daarna binnenkwam is niet gezien` : ""}`,
     `run: ${cleanup.scan.noteNl ?? `${cleanup.scan.files} bestanden doorzocht`}, ${cleanup.scan.hits.length} keer een geheim gevonden${cleanup.scan.compressed > 0 ? `; ${cleanup.scan.compressed} afbeeldingen of PDF-bestanden zijn gecomprimeerd, daar zegt deze zoekactie weinig over` : ""}`,
     cleanup.complete ? "opgeruimd" : "ER BLEEF IETS ACHTER: het rapport zegt dat. Draai dit commando opnieuw of haal het met de hand weg",

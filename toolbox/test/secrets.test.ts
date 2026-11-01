@@ -829,7 +829,7 @@ test("1: what a site sends goes through whole in a run with a short code: a numb
   });
   const run = runOn(site.origin);
   const mail: ReceivedMail = { id: "m", receivedAt: Date.now(), mail: { text: `Je code: ${CODE}. Deze code is geldig tot 2026.`, html: "", headers: new Map() } };
-  absorbAll(run, [site.origin], { kind: "mailpit", local: true, since: "2026-10-30T10:00:00Z", messages: [], links: [], refusedOrigins: [] }, [mail]);
+  absorbAll(run, [site.origin], { kind: "mailpit", local: true, since: "2026-10-30T10:00:00Z", messages: [], links: [], refusedOrigins: [], registrations: [] }, [mail]);
   const secrets = readSecretsFile(run)!.secrets;
   assert.deepEqual(secrets.map((secret) => secret.real), [CODE], "the year is no code");
   const session = await sessionOn(run, await launched("chromium"));
@@ -1135,7 +1135,7 @@ test("5: when the time is up the part that arrived is kept and says so, with its
 
 test("I: a mail that cannot be taken in is skipped, named without its content, and stays in the mailbox; the others are read", async () => {
   const run = runOn("http://localhost:1");
-  const state = { kind: "mailpit" as const, local: true, since: "2026-10-30T10:00:00Z", messages: [], links: [], refusedOrigins: [] };
+  const state = { kind: "mailpit" as const, local: true, since: "2026-10-30T10:00:00Z", messages: [], links: [], refusedOrigins: [], registrations: [] };
   const good: ReceivedMail = { id: "goed", receivedAt: Date.parse("2026-10-30T10:00:00Z"), mail: { to: [], subject: "", text: `Link: http://localhost:1/x?token=${TOKEN.replace("+", "%2B").replace("/", "%2F")}`, html: "", headers: new Map() } } as unknown as ReceivedMail;
   const broken = { id: "kapot", receivedAt: Date.now(), mail: null } as unknown as ReceivedMail;
   const lines: string[] = [];
