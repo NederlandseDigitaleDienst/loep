@@ -22,6 +22,7 @@ import type { Duplex } from "node:stream";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import { ACCOUNT, ACCOUNT_HOME, DEFAULT_SESSION_SECONDS, LOGIN_PAGE, LOGOUT_PATHS, SESSION_COOKIE } from "./account.ts";
+import { createMailRoute, type MailRoute } from "./mailroute.ts";
 
 const ROOT = dirname(fileURLToPath(import.meta.url));
 
@@ -61,6 +62,8 @@ export interface FixtureServer {
   logouts(): number;
   /** End every session now, as if its time had passed. */
   expireSessions(): void;
+  /** The hard mail route on the sites, with the mailing service on the third party. */
+  mailRoute: MailRoute;
   close(): Promise<void>;
 }
 
@@ -135,7 +138,10 @@ export async function startFixture(options: { ports?: Partial<Record<SiteKey, nu
   };
   const redirect = (response: ServerResponse, status: number, location: string, cookie?: string): void => void response.writeHead(status, { location, "cache-control": "no-store", ...(cookie ? { "set-cookie": cookie } : {}) }).end();
 
+  const mailRoute = createMailRoute((path, body) => log({ site: "clean", kind: "request", method: "POST", path, body: body.slice(0, 2000) }));
+
   const handler = (site: SiteKey) => (request: IncomingMessage, response: ServerResponse): void => {
+    if (site === "thirdParty" ? mailRoute.service(request, response) : site === "clean" && mailRoute.site(request, response, origins.clean, origins.thirdParty)) return;
     const root = join(ROOT, "sites", DIRECTORIES[site]);
     const url = new URL(request.url ?? "/", "http://127.0.0.1");
     const method = request.method ?? "GET";
@@ -232,6 +238,7 @@ export async function startFixture(options: { ports?: Partial<Record<SiteKey, nu
         .filter((entry) => entry.kind !== "ws-open"),
     logouts: () => logouts,
     expireSessions: () => sessions.clear(),
+    mailRoute,
     close: async () => {
       for (const server of Object.values(servers)) {
         server.closeAllConnections();
