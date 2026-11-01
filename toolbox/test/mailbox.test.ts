@@ -13,7 +13,7 @@ import { seal } from "../src/commands/verify.ts";
 import { RUN_SECRETS_FILE } from "../src/lib/login.ts";
 import { imapMailbox } from "../src/lib/mailbox-imap.ts";
 import { mailpitMailbox } from "../src/lib/mailbox-mailpit.ts";
-import { agentMailboxNl, MAIL_NOT_JUDGED_NL, confirmMailbox, decideMailbox, linkKind, mailboxForRun, mailboxLimitationsNl, mailCredentials, readMailboxState, recordMailbox, runAddress, waitForMail, type Mailbox, type RawMail } from "../src/lib/mailbox.ts";
+import { agentMailboxNl, MAIL_NOT_JUDGED_NL, confirmMailbox, decideMailbox, linkKind, mailboxForRun, mailboxLimitationsNl, mailCredentials, readMailboxState, ownAddress, recordMailbox, runAddress, waitForMail, type Mailbox, type RawMail } from "../src/lib/mailbox.ts";
 import { isFor, linksOf, looksSecret, parseMail, secretsInText, secretsInUrl } from "../src/lib/mailparse.ts";
 import { writeManifest } from "../src/lib/manifest.ts";
 import { notHashed } from "../src/lib/seal.ts";
@@ -84,6 +84,14 @@ test("a run gets an address of its own", () => {
   assert.match(runAddress(imap, { LOEP_IMAP_USER: "toets@example.nl", LOEP_IMAP_PASSWORD: "x" }), /^toets\+loep-[0-9a-f]{8}@example\.nl$/);
   assert.equal(runAddress(imap, { LOEP_IMAP_ADDRESS: "vast@example.nl" }), "vast@example.nl");
   assert.throws(() => runAddress(imap, { LOEP_IMAP_USER: "toets", LOEP_IMAP_PASSWORD: "x" }), /LOEP_IMAP_ADDRESS/);
+});
+
+test("a registration of its own has another address in the same box, without a login", () => {
+  const imap = { kind: "imap" as const, host: "mail.example.nl", port: 993, tls: true };
+  assert.match(ownAddress(imap, "toets+loep-1a2b3c4d@example.nl"), /^toets\+loep-[0-9a-f]{8}@example\.nl$/);
+  assert.notEqual(ownAddress(imap, "toets+loep-1a2b3c4d@example.nl"), "toets+loep-1a2b3c4d@example.nl");
+  assert.match(ownAddress(imap, "vast@example.nl"), /^vast\+loep-[0-9a-f]{8}@example\.nl$/, "also next to an address the environment fixed");
+  assert.match(ownAddress({ kind: "mailpit", host: "localhost", port: 8025, tls: false }, "loep-1a2b3c4d@example.com"), /^loep-[0-9a-f]{8}@example\.com$/);
 });
 
 // ---- Reading a mail ----------------------------------------------------------------------------------------------------
