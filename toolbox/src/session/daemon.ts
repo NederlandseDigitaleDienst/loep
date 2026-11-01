@@ -26,7 +26,7 @@ import { cutoutOutcome } from "./cutout-command.ts";
 import { documentOutcome } from "./document-command.ts";
 import { sheetOutcome } from "./sheet.ts";
 import { VOICEOVER_COMMAND_MS, voiceoverOutcome } from "./voiceover-command.ts";
-import { DEFAULT_DAEMON_LIMITS, DEFAULT_SESSION_LIMITS, Politeness, type Blocked, type DaemonLimits, type Scope, type SessionLimits } from "./safety.ts";
+import { DEFAULT_DAEMON_LIMITS, DEFAULT_SESSION_LIMITS, Politeness, printedScope, type Blocked, type DaemonLimits, type Scope, type SessionLimits } from "./safety.ts";
 import { find, homeOf, leftScope, openSurface, pageFacts, resolvePath, resolveRef, resolveStep, sayFrame, stateOf, syncRefs, tgs, toRecord, type Env, type Refused, type Surface, type TargetInfo } from "./surface.ts";
 
 /** The code a session measured with: evaluate names a session that ran on other code than the rest of the run. */
@@ -205,7 +205,7 @@ export class Daemon {
     try {
       if (request.op === "list") {
         const sending = this.writeBudget();
-        return { ok: true, print: { sessions: [...this.sessions.values()].map((session) => this.budget(session)), scope: this.env.scope.hosts, ...(sending ? { writes: writeBudgetNl(sending) } : {}) } };
+        return { ok: true, print: { sessions: [...this.sessions.values()].map((session) => this.budget(session)), ...printedScope(this.env.scope.hosts), ...(sending ? { writes: writeBudgetNl(sending) } : {}) } };
       }
       const name = request.session ?? "main";
       if (!SESSION_NAME.test(name)) throw new Error(`"${name}" is geen geldige sessienaam (kleine letters, cijfers, - en _)`);
@@ -354,7 +354,7 @@ export class Daemon {
         key: session.key,
         model: models.length > 0 ? models.join(", ") : "niet opgegeven; geef het op met session start --model \"<naam en versie>\"",
         ...(resumed ? { note: `sessie bestond al: ${session.commands} van ${session.limits.maxCommands} gebruikt, ${Math.round(((Date.now() - session.startedAt) / 60_000) * 10) / 10} van ${session.limits.maxMinutes} minuten sinds de eerste start` } : {}),
-        scope: this.env.scope.hosts,
+        ...printedScope(this.env.scope.hosts),
         observations: `${log.relativeDir}/<nr>.json`,
         limits: { commandTimeoutSeconds: this.limits.commandTimeoutMs / 1000, navigationDelayMs: this.limits.navigationDelayMs, maxSessions: this.limits.maxSessions },
       },
