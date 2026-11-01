@@ -8,6 +8,7 @@ import {
   NOT_SENT,
   notSentOrigins,
   notSentPointProblems,
+  outsideScopePointProblems,
   OPEN_POINT_KINDS,
   openPoint,
   OUTSIDE_SCOPE,
@@ -710,4 +711,16 @@ test("every rule an engine failed in the dossier is settled in an observation, p
   assert.deepEqual(validateVerification({ ...reproduced, observations: [...reproduced.observations, { ...logo, ruling: "noIssue", evidence: ["v143-0003"] }] }, verifier), []);
   // Without the dossier part nothing is asked.
   assert.deepEqual(validateJudgeVerdict(failed, context), []);
+});
+
+test("an address in the scope of the run is never outside the scope, and an address outside it stays so", () => {
+  const inScope = (url: string): boolean => new URL(url).hostname === "chat.example.nl";
+  const point = (address: string): string => `buiten de afbakening: de chat op P03 haalt haar inhoud op van ${address}.`;
+  const problems = outsideScopePointProblems([point("https://chat.example.nl/nldd"), "mens nodig: iets anders."], inScope);
+  assert.equal(problems.length, 1);
+  assert.match(problems[0]!, /^missingNl\[0\]: https:\/\/chat\.example\.nl\/nldd is in the scope of this run.*"proef werkte niet:".*"niet bereikbaar:"/);
+  assert.deepEqual(outsideScopePointProblems([point("https://data.example.nl/x")], inScope), []);
+  // Two addresses, one of them outside: the point still stands for that one.
+  assert.deepEqual(outsideScopePointProblems([`${point("https://chat.example.nl/nldd")} En ook https://data.example.nl/x`], inScope), []);
+  assert.deepEqual(outsideScopePointProblems("geen lijst", inScope), []);
 });

@@ -1,5 +1,6 @@
 import { existsSync, readFileSync, readdirSync, renameSync, rmSync, statSync } from "node:fs";
 import { REPLAY_TASK_NL } from "../lib/recordings.ts";
+import { inScope, scopeForRun } from "../session/safety.ts";
 import { join, resolve } from "node:path";
 import { EXTENSION, extensionsOf, finishBudget, judgeBudget, verifyBudget, walkBudget, type Coverage } from "../lib/budget.ts";
 import { canonicalJson, pageLabels, readJson, sha256, sha256File, writeFileAtomic, writeJson } from "../lib/canonical.ts";
@@ -44,6 +45,7 @@ import {
   type ObservationIndex,
   type ObservationRecordLike,
   type Verdict,
+  outsideScopePointProblems,
   SENDING_BUDGET_OUT,
 } from "../lib/verdict.ts";
 import { CRITERIA, criterionById } from "../lib/wcag.ts";
@@ -477,7 +479,9 @@ async function pointsForAgain(runDir: string, previous: InstrumentIndex | null, 
   const spent = raised ? (counting?.verdict.missingNl ?? []).filter((point) => SENDING_BUDGET_OUT.test(point)) : [];
   const open = counting?.verdict.outcome === "cantTell" ? (counting.verdict.missingNl ?? []) : spent;
   if (!counting || (unruled.length === 0 && spent.length === 0 && !open.some((point) => (KINDS_FOR_AGAIN as readonly string[]).includes(openPoint(point).kind?.prefix ?? "")))) {
-    return `--again: het eindoordeel van ${id} staat niet open met een punt ${kinds}, en niets wat een ander criterium eraan doorgaf, is nog onbeoordeeld; een nieuwe afmaakronde is alleen voor wat een instrument kan meten zodra het deel van de site weer laadt of de proef werkt, of voor wat een ander criterium doorgaf`;
+    // The verdict that counts can differ from final.json: a finishing round may have settled what the verifier left open, and only what still stands decides.
+    const readNl = counting ? `. Gelezen is ${partOf(task, counting.round)!.output}, het oordeel dat telt; wat een eerdere ronde open liet en een latere afhandelde, telt niet meer` : "";
+    return `--again: het eindoordeel van ${id} staat niet open met een punt ${kinds}, en niets wat een ander criterium eraan doorgaf, is nog onbeoordeeld; een nieuwe afmaakronde is alleen voor wat een instrument kan meten zodra het deel van de site weer laadt of de proef werkt, of voor wat een ander criterium doorgaf${readNl}`;
   }
   if (counting.round === "final" && task.finish && !skipped(runDir, task.finish.output)) return `--again: de afmaakronde van ${id} staat al klaar; pending noemt haar onder finishers`;
   return [...open, ...unruled];
@@ -680,11 +684,14 @@ export async function instrumentTasks(runDir: string, options: TaskOptions = {})
   // A new finishing round is asked for by name: every criterion is checked before anything is written.
   const observations = loadObservations(runDir);
   const again = new Map<string, string[]>();
+  const refused: string[] = [];
   for (const id of options.again ?? []) {
     const points = await pointsForAgain(runDir, previous, id, observations);
-    if (typeof points === "string") throw new Error(points);
-    again.set(id, points);
+    if (typeof points === "string") refused.push(points);
+    else again.set(id, points);
   }
+  // All of them at once: whoever asked for six should not learn of the refusals one run at a time.
+  if (refused.length > 0) throw new Error(refused.join("\n"));
   const only = options.only ?? previous?.only ?? [];
   for (const id of only) if (!criterionById(id)) throw new Error(`--only: "${id}" is not a success criterion`);
   const typeIds = options.pageTypes ?? previous?.walks.map((walk) => walk.pageType) ?? run.siteModel.pageTypes.map((type) => type.id);
@@ -1199,6 +1206,9 @@ export async function checkInstrumentVerdict(runDir: string, criterionId: string
   if (problems.length === 0) problems.push(...frameFocusProblems(verdict, dossier.legend, observations.records));
   const permission = writesForRun(runDir);
   problems.push(...notSentPointProblems(verdict.missingNl, permission, permission ? writeBudget(runDir, permission, Date.now(), criterionSender(task.criterion)) : null));
+  // A run without an inventory has no scope to hold a point against.
+  const scope = await scopeForRun(runDir, {}).catch(() => null);
+  if (scope) problems.push(...outsideScopePointProblems(verdict.missingNl, (url) => inScope(scope, url)));
   if (problems.length === 0) await stampNow(runDir, part.output, (await verdictStamp(runDir, task, round, observations))!);
   return problems;
 }

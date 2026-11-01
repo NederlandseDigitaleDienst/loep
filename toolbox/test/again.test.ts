@@ -148,6 +148,14 @@ test("tasks --again refuses a criterion that is not open with a part that did no
   await assert.rejects(again([CRITERIA.person]), /--again: het eindoordeel van 1\.4\.5 staat niet open/);
   await assert.rejects(again(["9.9.9"]), /--again: "9\.9\.9" is geen succescriterium/);
   await assert.rejects(again(["1.1.1"]), /--again: 1\.1\.1 heeft geen opdracht in deze run/);
+  // Every refusal at once, each with its reason and the verdict it read, and nothing happens to the one that could go.
+  await assert.rejects(again([CRITERIA.passed, CRITERIA.unreachable, CRITERIA.person]), (error: Error) => {
+    const lines = error.message.split("\n");
+    assert.equal(lines.length, 2);
+    assert.match(lines[0]!, /^--again: het eindoordeel van 1\.4\.11 staat niet open.*Gelezen is verdicts\/1\.4\.11\/final\.json, het oordeel dat telt/);
+    assert.match(lines[1]!, /^--again: het eindoordeel van 1\.4\.5 staat niet open/);
+    return true;
+  });
   // Nothing was set aside by a refusal.
   assert.ok(existsSync(join(dir, "verdicts", CRITERIA.unreachable, "afmaak.json")) && !existsSync(join(dir, "verdicts", CRITERIA.unreachable, "afmaak-1.json")));
   assert.equal((await instrumentPending(dir)).phase, "done");
@@ -185,4 +193,14 @@ test("tasks --again writes a new finishing round after done, with a session of i
   assert.deepEqual(criterion.established?.before, { roundNl: "vorige aanvullende meting", outcome: "cantTell", summaryNl: "Het chatvenster laadde ook bij de aanvullende meting niet; de rest is gemeten.", missingNl: [UNREACHABLE] });
   // Once it is settled, there is nothing to ask again for.
   await assert.rejects(again([CRITERIA.unreachable]), /--again: het eindoordeel van 2\.4\.3 staat niet open/);
+});
+
+test("check-verdict refuses a point outside the scope about an address of the run, so one chat does not get two kinds of open point", async () => {
+  write("inventory.json", { baseUrl: HOME, origin: "https://www.example.nl", pages: [{ url: HOME }, { url: "https://chat.example.nl/widget" }] });
+  const session = "b-145";
+  const verdict = (address: string): Verdict => ({ criterion: CRITERIA.person, outcome: "cantTell", rule: "R9", summaryNl: "Wat de beoordeling vaststelde op de bekeken pagina's.", observations: [seen([observe(session, "look")], "open")], findings: [], missingNl: [`buiten de afbakening: de chat op de contactpagina (P2) haalt haar inhoud op van ${address}, en dat verzoek is tegengehouden.`] });
+  write(join("verdicts", CRITERIA.person, "oordeel.json"), verdict("https://chat.example.nl/widget"));
+  assert.match((await checkInstrumentVerdict(dir, CRITERIA.person, "judge")).join("\n"), /https:\/\/chat\.example\.nl\/widget is in the scope of this run/);
+  write(join("verdicts", CRITERIA.person, "oordeel.json"), verdict("https://data.example.nl/widget"));
+  assert.deepEqual(await checkInstrumentVerdict(dir, CRITERIA.person, "judge"), []);
 });

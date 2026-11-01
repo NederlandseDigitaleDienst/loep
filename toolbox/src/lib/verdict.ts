@@ -278,6 +278,21 @@ export function unreachablePointProblems(point: string, at: string): string[] {
   return problems;
 }
 
+/**
+ * A point "buiten de afbakening" is about an address the run does not cover. An address that is in the
+ * scope of the run and still gave nothing is a limit of the measuring or of that part of the site. Two
+ * agents wrote one chat down both ways, and only one of the two kinds gets a new finishing round (#401).
+ */
+export function outsideScopePointProblems(missingNl: unknown, inScope: (url: string) => boolean): string[] {
+  if (!Array.isArray(missingNl)) return [];
+  return missingNl.flatMap((point, position) => {
+    if (typeof point !== "string" || openPoint(point).kind?.prefix !== OUTSIDE_SCOPE) return [];
+    const addresses = [...point.matchAll(/\bhttps?:\/\/[^\s)>\]"',;]+/gi)].map(([address]) => address.replace(/[.:]+$/, ""));
+    if (addresses.length === 0 || !addresses.every(inScope)) return [];
+    return [`missingNl[${position}]: ${addresses[0]} is in the scope of this run (session start lists it under scope), so "${OUTSIDE_SCOPE}:" does not fit. Write "proef werkte niet:" when the toolbox held it back or could not reach it, and "${UNREACHABLE}:" when the part itself did not load, each with its attempts`];
+  });
+}
+
 /** Whether every open point is of the kind "versturen niet toegestaan": then one declaration at inventory is all the criterion waits for. */
 export const waitsOnlyOnSending = (points: string[]): boolean => points.length > 0 && points.every((point) => openPoint(point).kind?.prefix === NOT_SENT);
 

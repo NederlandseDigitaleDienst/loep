@@ -175,7 +175,7 @@ export interface PassedRead {
 }
 
 /** Whether an address is in the scope: http, https, ws or wss, on a host of the run with the same port. Any other scheme never is. */
-const inScope = (scope: Scope, url: string): boolean => {
+export const inScope = (scope: Scope, url: string): boolean => {
   try {
     const parsed = new URL(url);
     return WEB_SCHEMES.includes(parsed.protocol) && scope.hosts.includes(scopeHost(parsed));
