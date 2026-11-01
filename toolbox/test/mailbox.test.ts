@@ -13,7 +13,7 @@ import { seal } from "../src/commands/verify.ts";
 import { RUN_SECRETS_FILE } from "../src/lib/login.ts";
 import { imapMailbox } from "../src/lib/mailbox-imap.ts";
 import { mailpitMailbox } from "../src/lib/mailbox-mailpit.ts";
-import { agentMailboxNl, confirmMailbox, decideMailbox, linkKind, mailboxForRun, mailboxLimitationsNl, mailCredentials, readMailboxState, recordMailbox, runAddress, waitForMail, type Mailbox, type RawMail } from "../src/lib/mailbox.ts";
+import { agentMailboxNl, MAIL_NOT_JUDGED_NL, confirmMailbox, decideMailbox, linkKind, mailboxForRun, mailboxLimitationsNl, mailCredentials, readMailboxState, recordMailbox, runAddress, waitForMail, type Mailbox, type RawMail } from "../src/lib/mailbox.ts";
 import { isFor, linksOf, looksSecret, parseMail, secretsInText, secretsInUrl } from "../src/lib/mailparse.ts";
 import { writeManifest } from "../src/lib/manifest.ts";
 import { notHashed } from "../src/lib/seal.ts";
@@ -695,6 +695,18 @@ test("2: a session that may not send opens no personal link, and the boundary fi
     } finally {
       await context.close();
     }
+  } finally {
+    rmSync(run, { recursive: true, force: true });
+  }
+});
+
+test("the report says that the mail itself was not judged, also when no link was used (#398)", async () => {
+  const run = await mailboxRun(origin);
+  try {
+    assert.ok(mailboxLimitationsNl(run).includes(MAIL_NOT_JUDGED_NL));
+    assert.match(MAIL_NOT_JUDGED_NL, /^De e-mail zelf is niet beoordeeld\./);
+    await mailWait(run, { mailbox: memoryBox([mailFor(`${origin}/voorkeuren/?token=${TOKEN}`)]) });
+    assert.ok(mailboxLimitationsNl(run).includes(MAIL_NOT_JUDGED_NL));
   } finally {
     rmSync(run, { recursive: true, force: true });
   }
