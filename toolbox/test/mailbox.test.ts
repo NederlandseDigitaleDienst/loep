@@ -716,6 +716,23 @@ test("what an agent gets holds the alias and nothing of the mail", async () => {
   }
 });
 
+test("the agents share one registration: only the cleanup removes it, and what expired refutes nothing", async () => {
+  const run = await mailboxRun(origin);
+  try {
+    await mailWait(run, { mailbox: memoryBox([mailFor(`${origin}/voorkeuren/?token=${TOKEN} ${origin}/afmelden/?token=${TOKEN}A`)]) });
+    const kinds = readMailboxState(run)!.links.map((link) => link.kind).sort();
+    assert.deepEqual(kinds, ["preferences", "unsubscribe"]);
+    assert.deepEqual(mailLinks(run).links.map((link) => link.kind), ["preferences"], "an unsubscribe link can do its work by being opened");
+    const task = agentMailboxNl(run, "loep mail links --run RUN");
+    assert.match(task, /Afmelden, opzeggen en verwijderen doet alleen de opruimstap aan het eind van de run \(`mail cleanup`\)/);
+    assert.match(task, /ook niet als de procedure dat vraagt/);
+    assert.match(task, /laat een bevinding of kandidaat niet vervallen omdat een persoonlijke link niet meer werkt/);
+    assert.match(task, /`proef werkte niet:`/);
+  } finally {
+    rmSync(run, { recursive: true, force: true });
+  }
+});
+
 test("10: a link the run used is not offered any more, by whichever command asks", async () => {
   const run = await mailboxRun(origin);
   const session = await sessionOn(run);

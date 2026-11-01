@@ -164,9 +164,15 @@ function shownLinks(runDir: string, state: MailboxState): Pick<WaitResult, "link
   return { links: shown.filter((link) => !used.has(link.id)), used: shown.filter((link) => used.has(link.id)) };
 }
 
-/** The personal links as they are now. An agent asks for them here: a list in its task would change that task with every mail. */
+/**
+ * The personal links as they are now. An agent asks for them here: a list in its task would change
+ * that task with every mail. A link that unsubscribes can do so by being opened, and all agents share
+ * one registration, so none of them is offered one: that link is for `mail cleanup`.
+ */
 export function mailLinks(runDir: string): Pick<WaitResult, "links" | "used"> {
-  return shownLinks(runDir, stateOfMailbox(runDir));
+  const { links, used } = shownLinks(runDir, stateOfMailbox(runDir));
+  const forAgents = (list: ShownLink[]): ShownLink[] => list.filter((link) => link.kind !== "unsubscribe");
+  return { links: forAgents(links), used: forAgents(used) };
 }
 
 /**
