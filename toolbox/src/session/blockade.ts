@@ -253,7 +253,8 @@ export class Blockade {
 
   private noteOutage(origin: string, url: string): void {
     const seconds = Math.min(FAILURE_PAUSE_SECONDS * 2 ** this.outageOf(origin).length, LONGEST_FAILURE_PAUSE_SECONDS);
-    this.note({ origin, reason: "outage", at: new Date(this.now()).toISOString(), until: new Date(this.now() + seconds * 1000).toISOString(), url: url.slice(0, 300) });
+    const now = this.now();
+    this.note({ origin, reason: "outage", at: new Date(now).toISOString(), until: new Date(now + seconds * 1000).toISOString(), url: url.slice(0, 300) });
   }
 
   /** The outages of the site now, after one request for each whose pause is over: what `pending` says, so no agent starts while the site is down. */
@@ -298,9 +299,10 @@ export class Blockade {
   tooMany(url: string, retryAfter: string | undefined): void {
     const origin = originOf(url);
     if (!origin || this.refuses(url)) return;
-    const seconds = retryAfterSeconds(retryAfter, this.now());
-    const until = seconds !== null && seconds <= SHORT_RETRY_AFTER_SECONDS ? new Date(this.now() + seconds * 1000).toISOString() : null;
-    this.note({ origin, reason: "429", at: new Date(this.now()).toISOString(), until, url: url.slice(0, 300) });
+    const now = this.now();
+    const seconds = retryAfterSeconds(retryAfter, now);
+    const until = seconds !== null && seconds <= SHORT_RETRY_AFTER_SECONDS ? new Date(now + seconds * 1000).toISOString() : null;
+    this.note({ origin, reason: "429", at: new Date(now).toISOString(), until, url: url.slice(0, 300) });
   }
 
   /** A navigation to this address loaded. */
@@ -327,7 +329,8 @@ export class Blockade {
     if (![...this.loadedOrigins].some(([other, at]) => other !== origin && at >= streak.since)) return this.noteOutage(origin, url);
     const before = this.entries.filter((entry) => entry.origin === origin && entry.reason === "failures").length;
     const seconds = Math.min(FAILURE_PAUSE_SECONDS * 2 ** before, LONGEST_FAILURE_PAUSE_SECONDS);
-    this.note({ origin, reason: "failures", at: new Date(this.now()).toISOString(), until: new Date(this.now() + seconds * 1000).toISOString(), url: url.slice(0, 300) });
+    const now = this.now();
+    this.note({ origin, reason: "failures", at: new Date(now).toISOString(), until: new Date(now + seconds * 1000).toISOString(), url: url.slice(0, 300) });
   }
 
   private note(entry: BlockadeEntry): void {
