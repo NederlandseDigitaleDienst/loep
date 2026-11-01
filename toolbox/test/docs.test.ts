@@ -118,6 +118,12 @@ test("the tasks and the procedures an agent works from call the toolbox by comma
   assert.match(read("templates/verken.md"), /`node \{\{cli\}\} session <commando> /);
 });
 
+test("the task of the explorer ends a recipe while the part is there, and makes what removes it a part of its own (#395)", () => {
+  const task = read("templates/verken.md");
+  assert.match(task, /Een recept eindigt op het moment waarop het onderdeel zichtbaar is/);
+  assert.match(task, /leg haar dan vast als een eigen onderdeel met een eigen recept/);
+});
+
 test("where the README and the method list the steps, every name written as code is a command", () => {
   // In these two sections a lowercase word between backticks stands for a command. Anything else there
   // (a file name, a flag, a label) has a dot, a dash in front, a capital or a space, and is left alone.
