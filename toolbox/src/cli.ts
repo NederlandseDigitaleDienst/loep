@@ -40,7 +40,7 @@ const USAGE = `loep <command> [options]
                                          the agent's look at the pictures is due, 3 when a new sweep can close the gaps (a
                                          measurement failed or is missing). --out leaves the run untouched
   check-gate --run <run>                 Validate the agent's answers for the gate; non-zero exit on problems
-  tasks --run <run> [--only <ids>] [--page-types <ids>] [--again <ids>] [--attempted <phase>:<id>,...]
+  tasks --run <run> [--only <ids>] [--page-types <ids>] [--again <ids>] [--reopen] [--attempted <phase>:<id>,...]
                                          Write the task files of the phase the run is in (walks, judges, verifiers, and a
                                          finishing round for what the evaluation itself left open), with a dossier per
                                          criterion; run it again after each phase. Needs the site model of explore.
@@ -48,7 +48,9 @@ const USAGE = `loep <command> [options]
                                          run is done, but only for one whose final verdict is open with a point "niet
                                          bereikbaar" or "proef werkte niet", or that another finishing round passed
                                          something on to that no round of it ruled on. Each attempt gets its own session; the earlier
-                                         verdict is kept, the new one counts in evaluate. --attempted walks:start,judges:1.4.3
+                                         verdict is kept, the new one counts in evaluate. A finished run does not go back by
+                                         itself: when walks, judges or verifiers would be open again, tasks refuses, changes
+                                         nothing and says what would change; --reopen lets it. --attempted walks:start,judges:1.4.3
                                          counts one attempt for each task whose agent came back (the workflow names them;
                                          an agent that stopped with an error is no attempt)
   check-walk --run <run> --page-type <id>
@@ -235,6 +237,7 @@ async function main(): Promise<void> {
       "page-type": { type: "string" },
       "page-types": { type: "string" },
       again: { type: "string" },
+      reopen: { type: "boolean", default: false },
       point: { type: "string" },
       did: { type: "string" },
       outcome: { type: "string" },
@@ -495,7 +498,7 @@ async function main(): Promise<void> {
       const { instrumentTasks, recordAttempts } = await import("./commands/instrument-tasks.ts");
       const list = (text: string | undefined): string[] | undefined => text?.split(",").map((part) => part.trim()).filter(Boolean);
       if (values.attempted !== undefined) await recordAttempts(values.run, list(values.attempted) ?? []);
-      const written = await instrumentTasks(values.run, { only: list(values.only), pageTypes: list(values["page-types"]), again: list(values.again) });
+      const written = await instrumentTasks(values.run, { only: list(values.only), pageTypes: list(values["page-types"]), again: list(values.again), reopen: values.reopen });
       process.stdout.write(`${written.walks} walks, ${written.judges} judge tasks, ${written.verifiers} verifier tasks, ${written.finishers} finishing tasks written\n`);
       return;
     }

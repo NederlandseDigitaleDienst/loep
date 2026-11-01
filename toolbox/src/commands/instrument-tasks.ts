@@ -1,5 +1,6 @@
-import { existsSync, readFileSync, readdirSync, renameSync, rmSync, statSync } from "node:fs";
+import { cpSync, existsSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, statSync } from "node:fs";
 import { REPLAY_TASK_NL } from "../lib/recordings.ts";
+import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { EXTENSION, extensionsOf, finishBudget, judgeBudget, verifyBudget, walkBudget, type Coverage } from "../lib/budget.ts";
 import { canonicalJson, pageLabels, readJson, sha256, sha256File, writeFileAtomic, writeJson } from "../lib/canonical.ts";
@@ -50,7 +51,7 @@ import { CRITERIA, criterionById } from "../lib/wcag.ts";
 import { agentLoginNl } from "../lib/login.ts";
 import { agentMailboxNl } from "../lib/mailbox.ts";
 import { readsAllowedNl } from "../lib/reads.ts";
-import { criterionSender, DEFAULT_MAX_WRITES, DEFAULT_WRITE_SPACING_SECONDS, reservedNl, reservedWrites, spacingNl, WRITES_BLOCKED_NL, writeBudget, writeBudgetNl, writesAllowedNl, writesForRun, writesLow } from "../lib/writes.ts";
+import { criterionSender, DEFAULT_MAX_WRITES, DEFAULT_WRITE_SPACING_SECONDS, reservedNl, reservedWrites, spacingNl, WRITES_BLOCKED_NL, writeBudget, writeBudgetNl, writesAfterRaises, writesAllowedNl, writesForRun, writesLow, type WritePermission } from "../lib/writes.ts";
 import { sweepCandidates } from "../lib/statusmessages.ts";
 import { makeWorkDir } from "../lib/workdir.ts";
 import { refuseUnderSeal } from "../lib/seal.ts";
@@ -94,6 +95,18 @@ export interface WalkTask {
   maxMinutes: number;
 }
 
+/** One round of a criterion in the index. */
+export interface TaskPart {
+  prompt: string;
+  output: string;
+  candidates: string;
+  session: string;
+  maxCommands: number;
+  maxMinutes: number;
+  /** How many raises of the budget for sending its task names (`WritePermission.raised`). Absent: none. */
+  raises?: number;
+}
+
 export interface InstrumentTask {
   criterion: string;
   titleNl: string;
@@ -109,27 +122,21 @@ export interface InstrumentTask {
   recommendationRules?: string[];
   /** The lists in the dossier whose rows a pass explains one by one (`pass_explains`). Absent in an index from before: then none. */
   passExplains?: string[];
-  judge: { prompt: string; output: string; candidates: string; session: string; maxCommands: number; maxMinutes: number };
+  judge: TaskPart;
   /** Written once every judge verdict of the run is in: only then is it known what other criteria hand over. */
-  verify: { prompt: string; output: string; candidates: string; session: string; maxCommands: number; maxMinutes: number } | null;
+  verify: TaskPart | null;
   /**
    * Written once every verifier is in, and only for a criterion the evaluation itself left open.
    * `points` are the open points the task lists, in that order: the verdict accounts for each.
    * Absent in an index from before the finishing round existed.
    */
-  finish?: {
-    prompt: string;
-    output: string;
-    candidates: string;
-    session: string;
-    maxCommands: number;
-    maxMinutes: number;
+  finish?: (TaskPart & {
     points: string[];
     /** The verdicts of earlier finishing rounds of this criterion, oldest first, kept when the round ran again with `--again`. Absent when it ran once. */
     earlier?: string[];
     /** Asked for with `--again`: its points stay as they were asked for, and it also gets what other finishing rounds passed on. */
     again?: true;
-  } | null;
+  }) | null;
 }
 
 export interface InstrumentIndex {
@@ -161,6 +168,8 @@ export interface TaskOptions {
    * final verdict is open with a point "niet bereikbaar" or "proef werkte niet". The earlier verdict is kept.
    */
   again?: string[] | undefined;
+  /** Let a finished run go back to the rounds before the finishing round; without it `tasks` refuses that and changes nothing. */
+  reopen?: boolean | undefined;
   /** For tests: the run data and the dossier builder, instead of what is read from the run directory. */
   run?: RunData;
   buildDossier?: typeof buildDossier;
@@ -664,19 +673,71 @@ function passedOnPoints(passing: Map<string, PassingVerdicts>, criterion: string
 /** The verdicts without the finishing round of this criterion: whether it gets that round, and what it is given, cannot follow from what that round wrote. */
 const beforeOwnFinish = (passing: Map<string, PassingVerdicts>, criterion: string): Map<string, PassingVerdicts> => new Map([...passing].map(([id, rounds]) => [id, id === criterion ? { ...rounds, finish: null } : rounds]));
 
+/** The phases of a run that had all its judges and verifiers. */
+const FINISHED_PHASES: readonly InstrumentPending["phase"][] = ["finishers", "done"];
+
+/** The folders `tasks` writes in, kept aside so a refused call leaves the run as it was. Returns how to put them back. */
+function keepTaskFiles(runDir: string): { restore: () => void; drop: () => void } {
+  const kept = mkdtempSync(join(tmpdir(), "loep-tasks-"));
+  const folders = ["tasks", "rondgang"].filter((name) => existsSync(join(runDir, name)));
+  for (const name of folders) cpSync(join(runDir, name), join(kept, name), { recursive: true, preserveTimestamps: true });
+  return {
+    restore: () => {
+      for (const name of folders) {
+        rmSync(join(runDir, name), { recursive: true, force: true });
+        cpSync(join(kept, name), join(runDir, name), { recursive: true, preserveTimestamps: true });
+      }
+    },
+    drop: () => rmSync(kept, { recursive: true, force: true }),
+  };
+}
+
+/**
+ * What a call of `tasks` would undo in a finished run: the rounds that are open again, and why. A
+ * refusal costs a command; going on costs an agent for each criterion, and the workflow starts them
+ * by itself.
+ */
+function reopensNl(previous: InstrumentIndex, pending: InstrumentPending, tasks: InstrumentTask[]): string {
+  const rounds = [
+    [pending.walks.length, "rondgangen", pending.walks.map((walk) => walk.pageType)],
+    [pending.judges.length, "beoordelingen", pending.judges.map((judge) => judge.criterion)],
+    [pending.verifiers.length, "verificaties", pending.verifiers.map((verifier) => verifier.criterion)],
+  ] as const;
+  const changed = tasks.filter((task) => previous.tasks.find((entry) => entry.criterion === task.criterion)?.dossierSha256 !== task.dossierSha256).map((task) => task.criterion);
+  const listed = rounds.filter(([count]) => count > 0).map(([count, name, ids]) => `${count} ${name} (${ids.slice(0, 5).join(", ")}${ids.length > 5 ? ", ..." : ""})`).join(" en ");
+  const why = changed.length > 0 ? `het dossier van ${changed.length} ${changed.length === 1 ? "criterium" : "criteria"} veranderde (${changed.slice(0, 5).join(", ")}${changed.length > 5 ? ", ..." : ""})` : "hun opdracht of een oordeel waarop ze rusten veranderde, niet het dossier";
+  return `tasks: deze run is af, en dit zou ${listed} opnieuw openzetten: ${why}. Er is niets gewijzigd. Wil je alleen een nieuwe afmaakronde, gebruik dan tasks --again <criteria>. Moet de run echt terug, draai dan tasks --reopen`;
+}
+
 /**
  * Write the task files of the phase the run is in. Safe to run again at any time: what it
  * writes follows from the run, so a second call changes nothing unless walks or verdicts came in.
+ * A finished run does not go back by itself: a call that would open a round before the finishing
+ * round again, or an `--again` that cannot go on, leaves everything as it was and says why.
  */
 export async function instrumentTasks(runDir: string, options: TaskOptions = {}): Promise<{ walks: number; judges: number; verifiers: number; finishers: number }> {
   // The tasks are written into the run, and their agents measure there: on a sealed run that breaks the seal.
   refuseUnderSeal(join(runDir, "tasks"));
+  const previous = isInstrumentRun(runDir) ? await loadInstrumentIndex(runDir) : null;
+  const finished = Boolean(previous?.finishDecided) && FINISHED_PHASES.includes((await instrumentPending(runDir)).phase);
+  if (!finished && (options.again ?? []).length === 0) return writeTasks(runDir, options, previous, false);
+  const kept = keepTaskFiles(runDir);
+  try {
+    return await writeTasks(runDir, options, previous, finished && !options.reopen);
+  } catch (error) {
+    kept.restore();
+    throw error;
+  } finally {
+    kept.drop();
+  }
+}
+
+async function writeTasks(runDir: string, options: TaskOptions, previous: InstrumentIndex | null, keepFinished: boolean): Promise<{ walks: number; judges: number; verifiers: number; finishers: number }> {
   const startedAt = stepStart();
   const run = options.run ?? (await loadRun(runDir));
   if (!run.siteModel) throw new Error("this run has no site model; the flow with instruments needs one");
   const { procedures, missing, invalid } = loadAllProcedures();
   if (invalid.length > 0) throw new Error(`invalid procedures:\n${invalid.join("\n")}`);
-  const previous = isInstrumentRun(runDir) ? await loadInstrumentIndex(runDir) : null;
   // A new finishing round is asked for by name: every criterion is checked before anything is written.
   const observations = loadObservations(runDir);
   const again = new Map<string, string[]>();
@@ -696,8 +757,27 @@ export async function instrumentTasks(runDir: string, options: TaskOptions = {})
   const base = { run: absoluteRun, cli, siteModel: join(absoluteRun, "site.json"), login: `${agentLoginNl(run.login)}${agentMailboxNl(runDir, `node ${cli} mail links --run ${absoluteRun}`)}` };
   const readsNl = readsAllowedNl(run.reads ?? []);
   // The budget as it was set, not what is left of it: the task stays the same while agents send, and its hash with it.
-  const budgetNl = run.writes ? `. Het budget voor versturen is ${run.writes.maxWrites ?? DEFAULT_MAX_WRITES} verzendingen voor de hele run${spacingNl(run.writes.spacingSeconds ?? DEFAULT_WRITE_SPACING_SECONDS)}, gedeeld door alle agents en de veegronde${reservedWrites(run.writes) > 0 ? `; ${reservedNl(reservedWrites(run.writes))}. De sessies van één criterium (beoordelaar, verifieerder, afmaker) tellen samen als één` : ""}; wat er nog over is, zegt \`session list\`` : "";
-  const writesNl = `${run.writes ? `ja, ${writesAllowedNl(run.writes)}${budgetNl}. ${REPLAY_TASK_NL}` : `nee, ${WRITES_BLOCKED_NL}`}${readsNl ? `. Wel gaat door: ${readsNl} (in het dossier onder \`reads\`)` : ""}`;
+  const budgetNlOf = (writes: WritePermission): string => `. Het budget voor versturen is ${writes.maxWrites ?? DEFAULT_MAX_WRITES} verzendingen voor de hele run${spacingNl(writes.spacingSeconds ?? DEFAULT_WRITE_SPACING_SECONDS)}, gedeeld door alle agents en de veegronde${reservedWrites(writes) > 0 ? `; ${reservedNl(reservedWrites(writes))}. De sessies van één criterium (beoordelaar, verifieerder, afmaker) tellen samen als één` : ""}; wat er nog over is, zegt \`session list\``;
+  const writesNlOf = (writes: WritePermission | null | undefined): string => `${writes ? `ja, ${writesAllowedNl(writes)}${budgetNlOf(writes)}. ${REPLAY_TASK_NL}` : `nee, ${WRITES_BLOCKED_NL}`}${readsNl ? `. Wel gaat door: ${readsNl} (in het dossier onder \`reads\`)` : ""}`;
+  // A raise reaches a task when it is written, and leaves a task alone whose verdict holds (`renew`): a person raises the budget to finish what ran out, not to measure everything again.
+  const raises = run.writes?.raised?.length ?? 0;
+  const writesNlFor = (part: { raises?: number }): string => writesNlOf(run.writes ? writesAfterRaises(run.writes, part.raises ?? 0) : run.writes);
+  /** A part of a task as it stands so far: with the raises of the same part before, or all of them when it is new. */
+  const raisesOf = (earlierPart: { raises?: number } | null | undefined): { raises?: number } => {
+    const heard = earlierPart ? (earlierPart.raises ?? 0) : raises;
+    return heard > 0 ? { raises: heard } : {};
+  };
+  /**
+   * The task was just written as it stood. Without a verdict that holds it is done again: with the
+   * budget as it is now, and in a fresh session when the one it had has started.
+   */
+  const renew = async (part: { session: string; raises?: number }, base: string, holds: () => Promise<boolean>, write: () => Promise<void>): Promise<void> => {
+    const started = sessionStarted(runDir, part.session);
+    if ((!started && (part.raises ?? 0) === raises) || (await holds())) return;
+    if (raises > 0) part.raises = raises;
+    if (started) part.session = nextSession(runDir, base);
+    await write();
+  };
   const criteriaList = CRITERIA.filter((criterion) => procedures.some((procedure) => procedure.id === criterion.id)).map((criterion) => `${criterion.id} ${criterion.titleNl}`).join("\n");
   const recipes = await readRecipes(runDir);
 
@@ -773,19 +853,16 @@ export async function instrumentTasks(runDir: string, options: TaskOptions = {})
     const judgeCandidates = [...(fromWalks.get(procedure.id) ?? []), ...sweepCandidates(run).filter((candidate) => candidate.criterion === procedure.id)];
     coverage.set(procedure.id, coverageOf(run, procedure));
     const judgeLimits = judgeBudget(BUDGETS.judge, procedure.id, coverage.get(procedure.id)!, judgeCandidates.length);
-    const judge = { prompt: TASK_FILES.judges(procedure.id), output: join("verdicts", procedure.id, "oordeel.json"), candidates: join(dir, "kandidaten.json"), session: judgeSession, maxCommands: judgeLimits.commands, maxMinutes: judgeLimits.minutes };
+    const judge: InstrumentTask["judge"] = { prompt: TASK_FILES.judges(procedure.id), output: join("verdicts", procedure.id, "oordeel.json"), candidates: join(dir, "kandidaten.json"), session: judgeSession, maxCommands: judgeLimits.commands, maxMinutes: judgeLimits.minutes, ...raisesOf(earlier?.judge) };
     await writeJson(join(runDir, judge.candidates), judgeCandidates);
-    const shared = { ...base, id: criterion.id, title: criterion.titleNl, level: criterion.level, dossier: join(absoluteRun, dossierPath), dossierParts: dossierPartsNl(dossier), gate: join(absoluteRun, "gate.json"), writes: writesNl, procedure: procedure.body };
+    const shared = { ...base, id: criterion.id, title: criterion.titleNl, level: criterion.level, dossier: join(absoluteRun, dossierPath), dossierParts: dossierPartsNl(dossier), gate: join(absoluteRun, "gate.json"), procedure: procedure.body };
     const writeJudge = async (): Promise<void> => writeFileAtomic(
       join(runDir, judge.prompt),
-      fill(templates.beoordeel, { ...shared, session: judge.session, workDir: await makeWorkDir(runDir, judge.session), workName: judge.session, maxCommands: String(judge.maxCommands), maxMinutes: String(judge.maxMinutes), candidates: join(absoluteRun, judge.candidates), notWalked: join(absoluteRun, NOT_WALKED), output: join(absoluteRun, judge.output), check: `node ${cli} check-verdict --run ${absoluteRun} --criterion ${criterion.id} --round judge` }),
+      fill(templates.beoordeel, { ...shared, writes: writesNlFor(judge), session: judge.session, workDir: await makeWorkDir(runDir, judge.session), workName: judge.session, maxCommands: String(judge.maxCommands), maxMinutes: String(judge.maxMinutes), candidates: join(absoluteRun, judge.candidates), notWalked: join(absoluteRun, NOT_WALKED), output: join(absoluteRun, judge.output), check: `node ${cli} check-verdict --run ${absoluteRun} --criterion ${criterion.id} --round judge` }),
     );
     const task: InstrumentTask = { criterion: criterion.id, titleNl: criterion.titleNl, procedureVersion: procedure.version, procedureSha256: procedure.sha256, dossier: dossierPath, dossierSha256, passCommands: procedure.passCommands, ...(Object.keys(procedure.failCommands).length > 0 ? { failCommands: procedure.failCommands } : {}), decisiveCommands: procedure.decisiveCommands, recommendationRules: procedure.recommendationRules, ...(procedure.passExplains.length > 0 ? { passExplains: procedure.passExplains } : {}), judge, verify: null };
     await writeJudge();
-    if (sessionStarted(runDir, judge.session) && !(await instrumentVerdictIsCurrent(runDir, task, "judge", observations))) {
-      judge.session = nextSession(runDir, SESSION_BASE.judges(procedure.id));
-      await writeJudge();
-    }
+    await renew(judge, SESSION_BASE.judges(procedure.id), () => instrumentVerdictIsCurrent(runDir, task, "judge", observations), writeJudge);
     tasks.push(task);
     earlierVerify.set(criterion.id, earlier ?? null);
   }
@@ -812,7 +889,7 @@ export async function instrumentTasks(runDir: string, options: TaskOptions = {})
       const maxCommands = budget.base + budget.perFinding * verdict.findings.length + budget.perDismissedCandidate * Math.max(0, dismissed) + (verdict.outcome === "failed" ? 0 : budget.afterPass);
       // What there is to reproduce is the floor; what the criterion used before and the size of the site come on top.
       const verifyLimits = verifyBudget({ commands: maxCommands, minutes: budget.minutes }, task.criterion, coverage.get(task.criterion)!);
-      const verify = { prompt: TASK_FILES.verifiers(task.criterion), output: join("verdicts", task.criterion, "final.json"), candidates: join(dir, "kandidaten-verificatie.json"), session: was?.verify?.session ?? SESSION_BASE.verifiers(task.criterion), maxCommands: verifyLimits.commands, maxMinutes: verifyLimits.minutes };
+      const verify: NonNullable<InstrumentTask["verify"]> = { prompt: TASK_FILES.verifiers(task.criterion), output: join("verdicts", task.criterion, "final.json"), candidates: join(dir, "kandidaten-verificatie.json"), session: was?.verify?.session ?? SESSION_BASE.verifiers(task.criterion), maxCommands: verifyLimits.commands, maxMinutes: verifyLimits.minutes, ...raisesOf(was?.verify) };
       await writeJson(join(runDir, verify.candidates), candidates);
       const writeVerify = async (): Promise<void> => writeFileAtomic(
         join(runDir, verify.prompt),
@@ -825,7 +902,7 @@ export async function instrumentTasks(runDir: string, options: TaskOptions = {})
           level: criterion.level,
           dossier: join(absoluteRun, task.dossier),
           dossierParts: dossierPartsOfFile(runDir, task.dossier),
-          writes: writesNl,
+          writes: writesNlFor(verify),
           procedure: procedure.body,
           session: verify.session,
           maxCommands: String(verify.maxCommands),
@@ -838,10 +915,7 @@ export async function instrumentTasks(runDir: string, options: TaskOptions = {})
       );
       task.verify = verify;
       await writeVerify();
-      if (sessionStarted(runDir, verify.session) && !(await instrumentVerdictIsCurrent(runDir, task, "final", observations))) {
-        verify.session = nextSession(runDir, SESSION_BASE.verifiers(task.criterion));
-        await writeVerify();
-      }
+      await renew(verify, SESSION_BASE.verifiers(task.criterion), () => instrumentVerdictIsCurrent(runDir, task, "final", observations), writeVerify);
       verifiers++;
     }
   }
@@ -852,7 +926,7 @@ export async function instrumentTasks(runDir: string, options: TaskOptions = {})
     for (const task of tasks) if (task.verify && !(await instrumentVerdictIsCurrent(runDir, task, "final", observations)) && !skipped(runDir, task.verify.output)) verifiersOpen++;
   }
   const finishDecided = judgesOpen === 0 && verifiersOpen === 0;
-  if (again.size > 0 && !finishDecided) throw new Error("--again: de afmaakronde is niet meer aan de beurt, want er staat weer een beoordeling of verificatie open; draai eerst tasks en pending zonder --again");
+  if (again.size > 0 && !finishDecided) throw new Error("--again: de afmaakronde is niet meer aan de beurt, want er staat weer een beoordeling of verificatie open. Er is niets gewijzigd; wat er veranderde, zegt tasks zonder --again");
   let finishers = 0;
   if (finishDecided) {
     // What every round passed on to another criterion. The finishing round comes after every verifier, so it gets what they passed on;
@@ -887,7 +961,7 @@ export async function instrumentTasks(runDir: string, options: TaskOptions = {})
       const all = [...listed, ...given.filter((candidate) => !listed.some((entry) => entry.id === candidate.id))];
       const finishLimits = finishBudget(BUDGETS.finish, { commands: task.judge.maxCommands, minutes: task.judge.maxMinutes }, BUDGETS.judge);
       const ruled = new Set(standing.round === "final" ? (standing.verdict!.candidates ?? []).filter((ruling) => ruling.ruling !== "open").map((ruling) => ruling.id) : []);
-      const finish: NonNullable<InstrumentTask["finish"]> = { prompt: TASK_FILES.finishers(task.criterion), output: join("verdicts", task.criterion, "afmaak.json"), candidates: join(dir, "kandidaten-afmaak.json"), session: was?.finish?.session ?? SESSION_BASE.finishers(task.criterion), maxCommands: finishLimits.commands, maxMinutes: finishLimits.minutes, points, ...(earlierRounds.length > 0 ? { earlier: earlierRounds } : {}), ...(ranAgain ? { again: true as const } : {}) };
+      const finish: NonNullable<InstrumentTask["finish"]> = { prompt: TASK_FILES.finishers(task.criterion), output: join("verdicts", task.criterion, "afmaak.json"), candidates: join(dir, "kandidaten-afmaak.json"), session: was?.finish?.session ?? SESSION_BASE.finishers(task.criterion), maxCommands: finishLimits.commands, maxMinutes: finishLimits.minutes, points, ...(earlierRounds.length > 0 ? { earlier: earlierRounds } : {}), ...(ranAgain ? { again: true as const } : {}), ...raisesOf(was?.finish) };
       await writeJson(join(runDir, finish.candidates), all.filter((candidate) => !ruled.has(candidate.id)));
       const standingNl =
         standing.round === "final"
@@ -913,7 +987,7 @@ export async function instrumentTasks(runDir: string, options: TaskOptions = {})
           level: criterion.level,
           dossier: join(absoluteRun, task.dossier),
           dossierParts: dossierPartsOfFile(runDir, task.dossier),
-          writes: writesNl,
+          writes: writesNlFor(finish),
           procedure: procedure.body,
           session: finish.session,
           maxCommands: String(finish.maxCommands),
@@ -929,10 +1003,7 @@ export async function instrumentTasks(runDir: string, options: TaskOptions = {})
       );
       task.finish = finish;
       await writeFinish();
-      if (sessionStarted(runDir, finish.session) && !(await instrumentVerdictIsCurrent(runDir, task, "finish", observations))) {
-        finish.session = nextSession(runDir, SESSION_BASE.finishers(task.criterion));
-        await writeFinish();
-      }
+      await renew(finish, SESSION_BASE.finishers(task.criterion), () => instrumentVerdictIsCurrent(runDir, task, "finish", observations), writeFinish);
       finishers++;
     }
   }
@@ -942,6 +1013,10 @@ export async function instrumentTasks(runDir: string, options: TaskOptions = {})
   for (const id of again.keys()) delete attempts[`finishers:${id}`];
   const index: InstrumentIndex = { flow: INSTRUMENT_FLOW, templates: Object.fromEntries(Object.entries(templates).map(([name, text]) => [name, sha256(text)])), withoutProcedure: missing, only, walks, tasks, finishDecided, ...(Object.keys(attempts).length > 0 ? { attempts } : {}) };
   await writeJson(join(runDir, INDEX), index);
+  if (keepFinished) {
+    const now = await instrumentPending(runDir);
+    if (!FINISHED_PHASES.includes(now.phase)) throw new Error(reopensNl(previous!, now, tasks));
+  }
   await writeManifest(runDir, { command: "tasks", startedAt, flow: INSTRUMENT_FLOW, walks: walks.length, criteria: tasks.length, verifiers, finishers, withoutProcedure: missing.length });
   return { walks: walks.length, judges: tasks.length, verifiers, finishers };
 }
