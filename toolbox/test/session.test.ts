@@ -19,6 +19,7 @@ import { indexObservations } from "../src/lib/verdict.ts";
 import { Daemon, ownedSessionNl, tooManySessionsNl, type Response } from "../src/session/daemon.ts";
 import type { Observation } from "../src/session/observations.ts";
 import { scopeForRun } from "../src/session/safety.ts";
+import { printedScope } from "../src/session/safety.ts";
 import { startServer, type FixtureServer } from "./fixtures/session-site/server.ts";
 
 const CLI = fileURLToPath(new URL("../src/cli.ts", import.meta.url));
@@ -31,6 +32,29 @@ before(async () => {
   run = mkdtempSync(join(tmpdir(), "loep-test-"));
   daemon = await Daemon.create(run, { hosts: [new URL(site.origin).host], baseUrl: `${site.origin}/`, strict: false }, { navigationDelayMs: 50, maxSessions: 3, secondBrowsers: false });
   assert.equal((await daemon.handle({ op: "start", session: "main" })).ok, true);
+});
+
+test("with the boundary local only, a host elsewhere stands apart from the scope, with the reason", async () => {
+  const far = "chat.example.nl";
+  assert.deepEqual(printedScope(["localhost:8081", far]), { scope: ["localhost:8081", far] });
+  process.env.LOEP_BOUNDARY_LOCAL_ONLY = "1";
+  try {
+    const printed = printedScope(["localhost:8081", "[::1]:4000", far, "site.test"]);
+    assert.deepEqual(printed.scope, ["localhost:8081", "[::1]:4000", "site.test"]);
+    assert.deepEqual(printed.outsideThisMachine?.hosts, [far]);
+    assert.match(printed.outsideThisMachine!.noteNl, /elk verzoek daarheen wordt geweigerd/);
+    assert.deepEqual(printedScope(["localhost:8081"]), { scope: ["localhost:8081"] });
+    // What session start and session list print.
+    const hosts = (daemon as unknown as { env: { scope: { hosts: string[] } } }).env.scope.hosts;
+    hosts.push(far);
+    const started = (await daemon.handle({ op: "start", session: "scope" })).print as { scope: string[]; outsideThisMachine?: { hosts: string[] } };
+    const listed = (await daemon.handle({ op: "list" })).print as { scope: string[]; outsideThisMachine?: { hosts: string[] } };
+    hosts.pop();
+    await daemon.handle({ op: "stop", session: "scope" });
+    for (const print of [started, listed]) assert.deepEqual([print.scope.includes(far), print.outsideThisMachine?.hosts], [false, [far]]);
+  } finally {
+    delete process.env.LOEP_BOUNDARY_LOCAL_ONLY;
+  }
 });
 
 after(async () => {

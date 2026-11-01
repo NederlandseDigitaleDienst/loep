@@ -2,7 +2,7 @@ import { createWriteStream, existsSync } from "node:fs";
 import { join } from "node:path";
 import type { BrowserContext, CDPSession, Frame, Page, Request } from "playwright";
 import { answeredByCloudflare, bodyOf, fulfillAnswer, opensNoConnection, passOn, proceed, sendOrReplay } from "../browser/session.ts";
-import { REFUSED_HEADER, REFUSED_STATUS, requireBoundary, shieldedFetch, shieldOf } from "../browser/boundary.ts";
+import { LOCAL_ONLY_ENV, REFUSED_HEADER, REFUSED_STATUS, requireBoundary, shieldedFetch, shieldOf } from "../browser/boundary.ts";
 import { REFUSED_ANSWER } from "../browser/onward.ts";
 import { readJson } from "../lib/canonical.ts";
 import { maskFile, shieldForRun } from "../lib/secrets.ts";
@@ -15,7 +15,7 @@ import { SEARCH_FALLBACK, SEARCH_NONE } from "../lib/searchterm.ts";
 import { searchTermForRun } from "../lib/sitemodel.ts";
 import { OriginBlocked, refusalNl, type Blockade } from "./blockade.ts";
 import { playRecording, replayNl, socketRecordings, type PassedReplay, type Recorder } from "../lib/recordings.ts";
-import { claimLink, isThisMachine, isWriteOrigin, runWrites, SocketFrames, writeAccess, writesForRun, type PassedWrite, type WriteAccess } from "../lib/writes.ts";
+import { claimLink, isLocalHost, isThisMachine, isWriteOrigin, runWrites, SocketFrames, writeAccess, writesForRun, type PassedWrite, type WriteAccess } from "../lib/writes.ts";
 
 /** Limits of the process that holds the browser; set once, when it starts. */
 export interface DaemonLimits {
@@ -93,6 +93,20 @@ export async function scopeForRun(runDir: string, extra: { scopeUrl?: string | u
   const ambient = runWrites();
   const writes = permission ? (ambient?.origin === permission.origin ? ambient : writeAccess(runDir, permission, "session")) : null;
   return { hosts: [...hosts].sort(), baseUrl, runDir, strict: extra.strict ?? false, ...(writes ? { writes } : {}) };
+}
+
+/**
+ * The scope as an agent reads it. With `LOEP_BOUNDARY_LOCAL_ONLY=1` the boundary refuses every request
+ * that leaves this machine, so a host elsewhere is in the scope of the run but cannot be reached: it
+ * stands apart with the reason, or an agent keeps trying it.
+ */
+export function printedScope(hosts: readonly string[]): { scope: string[]; outsideThisMachine?: { hosts: string[]; noteNl: string } } {
+  const far = process.env[LOCAL_ONLY_ENV] === "1" ? hosts.filter((host) => !isLocalHost(new URL(`http://${host}`).hostname)) : [];
+  if (far.length === 0) return { scope: [...hosts] };
+  return {
+    scope: hosts.filter((host) => !far.includes(host)),
+    outsideThisMachine: { hosts: far, noteNl: "deze adressen horen bij de run, maar deze run blijft op deze machine en elk verzoek daarheen wordt geweigerd. Opnieuw proberen helpt niet: leg wat daar staat vast als `proef werkte niet:`" },
+  };
 }
 
 export interface Blocked {

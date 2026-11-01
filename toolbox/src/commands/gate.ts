@@ -625,7 +625,7 @@ export async function buildSheets(run: RunData, runDir: string, outDir: string):
     const candidates: Omit<Tile, "nr">[] = [
       { state: "default", file: `${type.page.dir}/screenshot-light.png`, descriptionNl: "de pagina zoals ze is gemeten, breed scherm (bovenste deel)" },
       { state: "narrow", file: `${type.page.dir}/probes/reflow.png`, descriptionNl: "dezelfde pagina op een smal scherm van 320 pixels (bovenste deel)" },
-      { state: "taborder", file: `${type.page.dir}/probes/tabwalk.png`, descriptionNl: "de pagina met de Tab-stops genummerd in de volgorde van de Tab-toets" },
+      { state: "taborder", file: `${type.page.dir}/probes/tabwalk.png`, descriptionNl: "de pagina met de Tab-stops genummerd in de volgorde van de Tab-toets; een stop met een gestippeld kader en \"alleen bij focus\" is er zonder focus niet, en dat is geen fout van dit beeld" },
     ];
     const components: string[] = [];
     const everywhere: string[] = [];

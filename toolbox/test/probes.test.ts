@@ -422,6 +422,29 @@ test("the numbered tab-order picture frames a sticky table of contents and a fix
   await page.context().close();
 });
 
+test("a tab stop that only shows with focus is marked on the numbered picture, and an ordinary one is not", async () => {
+  const page = await open("/skip-hidden.html");
+  const dir = await mkdtemp(join(tmpdir(), "loep-onlyfocus-"));
+  const path = join(dir, "tabwalk.png");
+  const walk = (await tabWalk(page, { continueAfterFocusLoss: true, fromTop: true, focusDir: join(dir, "focus"), focusPath: "focus", orderPicture: path })) as { stops: { text: string; onlyWithFocus?: boolean; focusScreenshot?: string; box: { x: number; y: number; width: number; height: number } }[] };
+  assert.deepEqual(walk.stops.map((stop) => [stop.text, stop.onlyWithFocus ?? false]), [["Naar de inhoud", true], ["Naar het menu", true], ["Naar de voet", true], ["Start", false]]);
+  // Its own picture with focus is there for whoever has to judge it.
+  assert.ok(walk.stops.filter((stop) => stop.onlyWithFocus).every((stop) => stop.focusScreenshot));
+  // The label says so on the picture: it is wider than the widest frame, which a number alone never is.
+  const png = PNG.sync.read(await readFile(path));
+  let widest = 0;
+  for (let y = 0; y < png.height; y++) {
+    let count = 0;
+    for (let x = 0; x < png.width; x++) {
+      const at = (png.width * y + x) * 4;
+      if (png.data[at]! > 180 && png.data[at + 1]! < 40 && png.data[at + 2]! > 120 && png.data[at + 2]! < 170) count++;
+    }
+    widest = Math.max(widest, count);
+  }
+  assert.ok(widest > Math.max(...walk.stops.map((stop) => stop.box.width)), `the label of a stop that is not on the picture: ${widest}`);
+  await page.context().close();
+});
+
 test("the tab walk measures every focus indicator on a page that scrolls smoothly, and gives the page its smooth scrolling back", async () => {
   const page = await open("/sticky-toc.html");
   const dir = await mkdtemp(join(tmpdir(), "loep-smooth-"));

@@ -75,6 +75,18 @@ export const WRITES_BLOCKED_NL = "verzoeken die iets kunnen wijzigen zijn tegeng
 export const writesAllowedNl = (permission: WritePermission): string =>
   `onderzocht op een testomgeving waar versturen is toegestaan: ${writeOriginsNl(permission)}${permission.declaredBy ? `, verklaard door iemand met de functie ${permission.declaredBy.role}${permission.recordedVia ? `, ${recordedNl(permission, permission.declaredAt)}` : ""} (de naam staat in het dossier van het onderzoek, niet in dit rapport)` : " (lokaal adres)"}${raisedNl(permission)}`;
 
+/**
+ * The permission as it stood after the first `count` raises. A person raises the budget to finish
+ * what ran out: a raise is no reason to measure again, so a task keeps the raises it was written with
+ * for as long as its verdict holds, and a dossier names none (see `instrumentTasks`).
+ */
+export const writesAfterRaises = (permission: WritePermission, count: number): WritePermission => {
+  const next = permission.raised?.[count];
+  if (!next) return permission;
+  const { raised, ...rest } = permission;
+  return { ...rest, ...(count > 0 ? { raised: raised!.slice(0, count) } : {}), maxWrites: next.from };
+};
+
 const raisedNl = (permission: WritePermission): string => (permission.raised ?? []).map((raise) => `; budget voor versturen verhoogd van ${raise.from} naar ${raise.to}, ${recordedNl(raise, raise.at)}`).join("");
 
 /** Hosts that cannot be a live site: the machine itself and the names reserved for testing. */
