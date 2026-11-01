@@ -46,7 +46,7 @@ Geef in elk commando je eigen sessienaam mee, `--session {{session}}`: met de re
 | `document <label> [--page n] [--tags]` | Een document van de steekproef (`D01` uit de legenda), gelezen uit het bestand: soort, titel, taal, tags, koppen, afbeeldingen met en zonder tekstalternatief, tabellen, links, formuliervelden en bij een pdf de regels van PDF/UA die falen. Met `--page n` één pagina, dia of blad: de tekst in leesvolgorde, de tags op die pagina en bij een pdf een afbeelding van de pagina. Met `--tags` de tagboom van een pdf. Er hoeft geen pagina open te staan. `status` anders dan `read`: het document is niet ingelezen en dat is een open punt |
 | `paste <ref> <testwaarde>`, `press <ref> --hold`, `press <ref> --abort` | Plakken in een veld: komt de waarde aan (`arrived`)? Indrukken zonder loslaten: gebeurt de functie al bij het indrukken (`completesOnDown`), en gaat ze door als je wegschuift voor het loslaten (`wentThrough`)? Begin voor elke proef met een verse `open` |
 | `state list` | Toon de bewaarde toestanden |
-| `status`, `tools`, `wait` | Je verbruik; welke methoden er zijn; haal antwoorden op van methoden die nog liepen |
+| `status`, `tools`, `wait` | Je verbruik; welke methoden er zijn; haal antwoorden op van methoden die nog liepen. `wait --seconds <n>` laat eerst n seconden voorbijgaan op de open pagina |
 
 Zo lees je een antwoord:
 

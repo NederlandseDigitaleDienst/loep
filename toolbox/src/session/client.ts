@@ -60,7 +60,7 @@ export const SESSION_USAGE = `  session start --run <run> [--session <name>] [--
                timers (every timer of a second or more since the load, also one an action just started: the waiting ones
                are set off and what each did is judged by the rule of 2.2.1; this changes the page)
                reflow, zoom and spacing are measured in WebKit too; slow methods (a second browser, Java, text recognition) run in the background: --wait waits for them,
-               wait [--timeout s] picks them up later, tools lists every method with its version
+               wait [--timeout s] picks them up later, wait --seconds n lets n seconds pass on the page first and says so in the observation, tools lists every method with its version
       speak:   what a screen reader says, by a reader simulated in the page that follows the standard (not a real one):
                speak <ref> (at the element), speak [<ref>] --steps n (the first n items from the top or from the element),
                speak <ref> --click | --type <kind> [--submit] [--seconds n] (act, then what is said by itself: status, error, focus)

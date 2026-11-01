@@ -1446,15 +1446,26 @@ export async function toolsOutcome(runDir: string, versions: BrowserVersions): P
 }
 
 /** Wait for the background methods of the session and finish the commands that were waiting for them. */
+/**
+ * Pick up what ran in the background. With `--seconds` it first lets that much time go by on the open
+ * page, for what only changes by itself: a look, a wait and a look show a carousel that turns slowly.
+ * The time waited stands in the observation, cut off at what a command may take.
+ */
 export async function waitOutcome(jobs: Jobs, options: Options, limitMs: number): Promise<Outcome> {
+  const asked = options.seconds === undefined ? null : Number(options.seconds);
+  if (asked !== null && !(asked > 0)) throw new UsageError("wait --seconds verwacht een aantal seconden groter dan 0");
+  const waitedMs = asked === null ? 0 : Math.min(limitMs, asked * 1000);
+  if (waitedMs > 0) await new Promise((resolve) => setTimeout(resolve, waitedMs));
+  const timed = asked === null ? {} : { waitedSeconds: waitedMs / 1000, ...(waitedMs < asked! * 1000 ? { cutOffNl: `er is ${waitedMs / 1000} s gewacht, niet ${asked} s: langer mag een commando niet duren; geef wait nog een keer` } : {}) };
   const seconds = Number(options.timeout ?? 0);
-  const drained = await jobs.drain(Number.isFinite(seconds) && seconds > 0 ? Math.min(limitMs, seconds * 1000) : limitMs);
+  const drained = await jobs.drain(asked !== null ? 0 : Number.isFinite(seconds) && seconds > 0 ? Math.min(limitMs, seconds * 1000) : limitMs);
   return {
-    result: { completed: drained.completed.map((entry) => ({ completes: entry.origin, command: entry.command, result: entry.outcome.result })), stillRunning: drained.stillRunning },
+    result: { ...timed, completed: drained.completed.map((entry) => ({ completes: entry.origin, command: entry.command, result: entry.outcome.result })), stillRunning: drained.stillRunning },
     print: {
+      ...timed,
       completed: Object.fromEntries(drained.completed.map((entry) => [entry.origin, { command: entry.command, ...entry.outcome.print }])),
       ...(drained.stillRunning.length > 0 ? { stillRunning: drained.stillRunning } : {}),
-      ...(drained.completed.length === 0 && drained.stillRunning.length === 0 ? { note: "er liep niets op de achtergrond" } : {}),
+      ...(asked === null && drained.completed.length === 0 && drained.stillRunning.length === 0 ? { note: "er liep niets op de achtergrond" } : {}),
     },
   };
 }

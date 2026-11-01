@@ -18,7 +18,8 @@ import { contrastRatio, floorRatio, type Rgb } from "../src/lib/contrast.ts";
 import { PNG } from "pngjs";
 import { Daemon, type Response } from "../src/session/daemon.ts";
 import type { Observation } from "../src/session/observations.ts";
-import { layoutDifferences, layoutLine, stateForSecondBrowser } from "../src/session/opinions.ts";
+import { Jobs } from "../src/session/jobs.ts";
+import { layoutDifferences, layoutLine, stateForSecondBrowser, waitOutcome } from "../src/session/opinions.ts";
 import { startServer, type FixtureServer } from "./fixtures/session-site/server.ts";
 
 let site: FixtureServer;
@@ -604,6 +605,22 @@ test("tools lists every method with its version and writes them into the manifes
   // The known systematic errors are data: every one names a method that exists.
   for (const known of KNOWN_ERRORS) assert.ok(METHODS.some((method) => method.id === known.method), known.method);
   assert.equal((await loep("wait")).note, "er liep niets op de achtergrond");
+  assert.equal((await loep("wait", [], { seconds: "0.1" })).waitedSeconds, 0.1);
+});
+
+test("wait --seconds lets time pass and says how much, also when a command may not take that long", async () => {
+  const jobs = new Jobs();
+  const started = Date.now();
+  const waited = await waitOutcome(jobs, { seconds: "0.1" }, 5000);
+  assert.ok(Date.now() - started >= 90, "it really waits");
+  assert.deepEqual(waited.print, { waitedSeconds: 0.1, completed: {} });
+  assert.equal((waited.result as { waitedSeconds: number }).waitedSeconds, 0.1);
+  const cut = await waitOutcome(jobs, { seconds: "600" }, 100);
+  assert.equal((cut.print as { waitedSeconds: number }).waitedSeconds, 0.1);
+  assert.match((cut.print as { cutOffNl: string }).cutOffNl, /er is 0\.1 s gewacht, niet 600 s/);
+  await assert.rejects(waitOutcome(jobs, { seconds: "0" }, 100), /groter dan 0/);
+  await assert.rejects(waitOutcome(jobs, { seconds: "lang" }, 100), /groter dan 0/);
+  assert.equal(((await waitOutcome(jobs, {}, 100)).print as { note: string }).note, "er liep niets op de achtergrond");
 });
 
 test("replay repeats a measurement with several methods and compares it method by method", async () => {
