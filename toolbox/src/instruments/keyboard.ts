@@ -384,10 +384,12 @@ interface DrawnStop {
  * down, its box lies halfway down, while the picture shows it at the top. So every box is moved
  * by as much as its element moves between the scroll position it was measured at and the top.
  * An element that moved for another reason, such as a skip link that only shows with focus,
- * keeps the box it had with focus.
+ * keeps the box it had with focus. Nothing has focus on this picture, so such an element is not on
+ * it: its frame is dashed and says so, and the stop gets `onlyWithFocus`. Its own picture with focus
+ * is in `focusScreenshot`.
  */
 export async function tabOrderScreenshot(page: Page, stops: Record<string, unknown>[], path: string): Promise<void> {
-  await page.evaluate((drawn) => {
+  const hidden = await page.evaluate((drawn) => {
     // Instant: a page with scroll-behavior:smooth would otherwise still be on its way up when the picture is taken.
     const scrollTo = (left: number, top: number): void => window.scrollTo({ left, top, behavior: "instant" });
     const registry = (window as unknown as { __loep?: { registry: Element[] } }).__loep?.registry ?? [];
@@ -404,6 +406,16 @@ export async function tabOrderScreenshot(page: Page, stops: Record<string, unkno
       return { ...box, x: box.x + Math.round(top.x - then.x), y: box.y + Math.round(top.y - then.y) };
     });
     scrollTo(0, 0);
+    /** Whether an element without focus is painted nowhere on the page: too small, outside the page, or see-through. */
+    const unpainted = (element: Element | undefined): boolean => {
+      if (!element?.isConnected) return false;
+      const rect = element.getBoundingClientRect();
+      if (rect.width <= 1 || rect.height <= 1 || rect.right + window.scrollX <= 0 || rect.bottom + window.scrollY <= 0) return true;
+      if (getComputedStyle(element).visibility === "hidden") return true;
+      for (let node: Element | null = element; node; node = node.parentElement) if (getComputedStyle(node).opacity === "0") return true;
+      return false;
+    };
+    const unseen = drawn.map(({ ref }) => unpainted(ref === undefined ? undefined : registry[ref]));
     const layer = document.createElement("div");
     layer.style.cssText = "position:absolute;left:0;top:0;width:0;height:0;z-index:2147483647;pointer-events:none";
     layer.setAttribute("data-loep-tab-order", "");
@@ -412,14 +424,16 @@ export async function tabOrderScreenshot(page: Page, stops: Record<string, unkno
     const origin = layer.getBoundingClientRect();
     boxes.forEach((box, index) => {
       const frame = document.createElement("div");
-      frame.style.cssText = `position:absolute;left:${box.x - origin.x}px;top:${box.y - origin.y}px;width:${box.width}px;height:${box.height}px;outline:2px solid #c4008f;`;
+      frame.style.cssText = `position:absolute;left:${box.x - origin.x}px;top:${box.y - origin.y}px;width:${box.width}px;height:${box.height}px;outline:2px ${unseen[index] ? "dashed" : "solid"} #c4008f;`;
       const label = document.createElement("span");
-      label.textContent = String(index + 1);
-      label.style.cssText = "position:absolute;left:-2px;top:-2px;background:#c4008f;color:#fff;font:bold 12px/1.3 sans-serif;padding:0 4px;";
+      label.textContent = unseen[index] ? `${index + 1} alleen bij focus` : String(index + 1);
+      label.style.cssText = "position:absolute;left:-2px;top:-2px;background:#c4008f;color:#fff;font:bold 12px/1.3 sans-serif;padding:0 4px;white-space:nowrap;";
       frame.append(label);
       layer.append(frame);
     });
+    return unseen;
   }, stops.map((stop) => ({ box: stop.box, scroll: stop.scroll, ref: stop.ref }) as DrawnStop));
+  for (const [index, stop] of stops.entries()) if (hidden[index]) stop.onlyWithFocus = true;
   try {
     await wholePageScreenshot(page, { path });
   } finally {
