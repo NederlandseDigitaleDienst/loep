@@ -10,6 +10,7 @@ import { startFixture, type FixtureServer } from "../fixtures/serve.ts";
 import { REFUSED_STATUS } from "../src/browser/boundary.ts";
 import { launchBrowser, loadPage, newContext } from "../src/browser/session.ts";
 import { cleanupLinesNl, mailCleanup, mailLinks, mailRegister, mailWait, startMailbox } from "../src/commands/mail.ts";
+import { agentMailboxNl, decideMailbox, linkKind, MAIL_ADDRESS_SOURCE, mailboxForRun, mailboxLimitationsNl, readMailboxState, recordMailbox } from "../src/lib/mailbox.ts";
 import { linksOf, parseMail } from "../src/lib/mailparse.ts";
 import { readSecretEvents, readSecretsFile, scanRun } from "../src/lib/secrets.ts";
 import { decideWrites, DEFAULT_MAX_WRITES, recordWrites, reservedWrites, writeAccess, writeBudget, writesForRun } from "../src/lib/writes.ts";
