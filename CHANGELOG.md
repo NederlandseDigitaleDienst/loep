@@ -6,6 +6,25 @@ Wat er per versie van loep is veranderd. De versie staat op het voorblad en onde
 
 <!-- towncrier: een nieuwe versie komt hieronder -->
 
+## 0.22.0 (2026-11-01)
+
+Deze versie is uitgebracht zonder meting: Vastgesteld op de lokale keten met mailbox, niet op de vaste testsite; de meting op de keten volgt op deze versie.
+
+### Wat een uitkomst kan veranderen
+
+- `session wait --seconds <n>` laat tijd voorbijgaan op de open pagina en zet die tijd in de waarneming. De verkenner kijkt nu met 15 seconden ertussen, zodat een carrousel of nieuwsblok dat langzaam wisselt in het sitemodel komt. ([#393](https://github.com/NederlandseDigitaleDienst/loep/issues/393))
+- Op het genummerde beeld van de Tab-stops krijgt een stop die alleen bij focus zichtbaar is, zoals een skiplink, een gestippeld kader met "alleen bij focus". De probe legt dat vast als `onlyWithFocus`. Zo beoordeelt de poort niet langer een leeg kader. ([#394](https://github.com/NederlandseDigitaleDienst/loep/issues/394))
+- De opdracht van de verkenner zegt dat een recept eindigt op het moment waarop het onderdeel zichtbaar is, met de handeling die het laat verdwijnen als een eigen onderdeel. Zo toont het vak op het blad van de poort het onderdeel, en kost een skiplink geen extra ronde verkennen en vegen. ([#395](https://github.com/NederlandseDigitaleDienst/loep/issues/395))
+- In een run met een mailbox delen alle agents één testaanmelding. De opdracht zegt nu dat alleen `mail cleanup` afmeldt of verwijdert, ook als de procedure daarom vraagt, en dat een verlopen link geen bevinding weerlegt. `mail links` biedt agents geen link meer die afmeldt. ([#396](https://github.com/NederlandseDigitaleDienst/loep/issues/396))
+- Een run op deze machine met een mailbox houdt de laatste helft van het budget voor versturen vrij voor wie nog niets verstuurde, en hetzelfde formulier met het adres van de run gaat na de eerste mail niet nog eens weg als het antwoord afgespeeld kan worden. Zo houden beoordelaars na de rondgangen budget over. `mail cleanup` telt niet meer mee voor het budget. `pending` en `estimate` waarschuwen als het budget op is, ook op deze machine, en de werkstroom stopt dan. ([#399](https://github.com/NederlandseDigitaleDienst/loep/issues/399))
+- `check-verdict` wijst een punt `buiten de afbakening` af als het adres bij de scope van de run hoort. Zo krijgt één onbereikbaar onderdeel niet per agent een andere soort open punt. `tasks --again` noemt in één keer alle geweigerde criteria, met de reden en het oordeel dat het las. ([#401](https://github.com/NederlandseDigitaleDienst/loep/issues/401))
+
+### Verder
+
+- Met `LOEP_BOUNDARY_LOCAL_ONLY=1` noemt `session start` een host buiten deze machine niet meer onder `scope`, maar apart onder `outsideThisMachine`, met de reden. Zo probeert een agent zo'n adres niet steeds opnieuw. ([#397](https://github.com/NederlandseDigitaleDienst/loep/issues/397))
+- Het rapport van een run met een mailbox zegt onder de beperkingen dat de e-mail zelf niet is beoordeeld. ([#398](https://github.com/NederlandseDigitaleDienst/loep/issues/398))
+- Een hoger budget voor versturen maakt geen oordeel meer ongeldig: `tasks --again` werkt direct na `writes`, en alleen de opdrachten die nog moeten beginnen noemen het nieuwe budget. Een gewone `tasks` zet een afgeronde run niet meer stilzwijgend terug naar de rondgangen, beoordelaars of verifieerders: het weigert, wijzigt niets en noemt wat er zou veranderen; `tasks --reopen` staat het toe. ([#400](https://github.com/NederlandseDigitaleDienst/loep/issues/400))
+
 ## 0.21.0 (2026-10-31)
 
 Deze versie is uitgebracht zonder meting: de wijzigingen zijn met tests en een proef op een lokale keten nagegaan; een meting met agents op de testsite is niet gedaan.
