@@ -36,7 +36,7 @@ interface FieldState {
 export const paste: Handler = async (context, args) => {
   const kind = args[0] ?? "";
   if (!(kind in TEST_VALUES) || TEST_VALUES[kind] === "") throw new UsageError(`"${kind}" is geen vaste testwaarde om te plakken; kies uit: ${Object.keys(TEST_VALUES).filter((name) => TEST_VALUES[name] !== "").join(", ")}`);
-  const value = testValuesForRun(context.env.runDir)[kind]!;
+  const value = testValuesForRun(context.env.runDir, context.surface.guard.sender)[kind]!;
   const { page } = context.surface;
   const handle = await handleOf(context);
   // The clipboard of the browser, through the page: its own API where the page may use it, the old copy command where it may not (a page without https).

@@ -45,6 +45,8 @@ export const DEFAULT_WRITE_SPACING_SECONDS = 120;
  */
 export const LOCAL_MAX_WRITES = 50;
 export const LOCAL_WRITE_SPACING_SECONDS = 0;
+/** What a registration of its own takes from the budget: the form, the link that confirms it, and the press that ends it. */
+export const REGISTRATION_WRITES = 3;
 
 /** Every origin of a permission, the first one first. */
 export const writeOriginsOf = (permission: Pick<WritePermission, "origin" | "alsoOrigins">): string[] => [permission.origin, ...(permission.alsoOrigins ?? [])];
@@ -232,6 +234,8 @@ export interface PassedWrite {
   link?: string;
   /** Sent by `mail cleanup`: it removes what the run left behind, and that does not depend on what is left of the budget. */
   cleanup?: true;
+  /** No write: the moment a sender took the registration of its own with this id (see `claimRegistration`). */
+  registration?: string;
 }
 
 export const WRITES_LOG = "writes.jsonl";
@@ -273,7 +277,7 @@ export interface WriteBudget {
  * heartbeat every half minute by itself, and counting those would use up the budget without anybody
  * sending anything. The repeat of a request after a redirect is the same request.
  */
-const counts = (entry: PassedWrite): boolean => !entry.repeat && !entry.cleanup && (entry.method !== "SEND" || entry.message === true);
+const counts = (entry: PassedWrite): boolean => !entry.repeat && !entry.cleanup && !entry.registration && (entry.method !== "SEND" || entry.message === true);
 
 /**
  * Whether a frame a page sends over a socket has a test value in it, as a whole word. An agent
@@ -409,8 +413,32 @@ export function writeBudget(runDir: string, permission: WritePermission, now = D
   const last = spaced.length > 0 ? Date.parse(spaced.at(-1)!.at) : Number.NEGATIVE_INFINITY;
   const waitSeconds = Math.max(0, Math.ceil((last + spacingSeconds * 1000 - now) / 1000));
   const reserved = reservedWrites(permission);
-  const sentBefore = sender !== undefined && counted.some((entry) => senderOf(entry.source) === senderOf(sender));
-  return { origin: writeOriginsNl(permission), max, sent: counted.length, left: Math.max(0, max - counted.length - (sentBefore ? reserved : 0)), reserved, spacingSeconds, waitSeconds };
+  const isSender = (entry: PassedWrite): boolean => sender !== undefined && senderOf(entry.source) === senderOf(sender);
+  const sentBefore = counted.some(isSender);
+  // A registration of its own has a route that takes several writes, so its sender may go on into what is kept, as far as that route goes.
+  const paidFor = log.filter((entry) => entry.registration && isSender(entry)).length * REGISTRATION_WRITES;
+  return { origin: writeOriginsNl(permission), max, sent: counted.length, left: Math.max(0, max - counted.length - (sentBefore ? Math.max(0, reserved - paidFor) : 0)), reserved, spacingSeconds, waitSeconds };
+}
+
+/**
+ * Take a registration of its own for a sender, or say why not, in Dutch. Nothing is sent yet: the route
+ * has to fit in what is left, or it stops halfway and leaves a registration nobody can finish.
+ */
+export function claimRegistration(runDir: string, permission: WritePermission, id: string, sender: string, now = Date.now()): string | null {
+  return withLock(runDir, () => {
+    const { max, sent } = writeBudget(runDir, permission, now);
+    if (max - sent < REGISTRATION_WRITES) return `een eigen aanmelding kost ${REGISTRATION_WRITES} verzendingen (het formulier, de bevestiging en het afmelden of verwijderen), en van het budget zijn er nog ${Math.max(0, max - sent)} van ${max} over. Laat iemand beslissen of het omhoog gaat (writes --run <run> --max-writes <aantal>)`;
+    const entry: PassedWrite = { at: new Date(now).toISOString(), source: sender, method: "REGISTER", path: "", registration: id };
+    appendFileSync(join(runDir, WRITES_LOG), `${JSON.stringify(entry)}\n`);
+    return null;
+  });
+}
+
+/** Whether the sender of a registration of its own sent anything after it took that registration. */
+export function registrationUsed(runDir: string, id: string): boolean {
+  const log = readLog(runDir);
+  const taken = log.findIndex((entry) => entry.registration === id);
+  return taken !== -1 && log.slice(taken + 1).some((entry) => counts(entry) && senderOf(entry.source) === senderOf(log[taken]!.source));
 }
 
 /** Whether the budget is about to run out: a person may want to raise it before the next agents start. */

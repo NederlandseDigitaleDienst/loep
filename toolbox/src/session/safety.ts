@@ -5,6 +5,7 @@ import { answeredByCloudflare, bodyOf, fulfillAnswer, opensNoConnection, passOn,
 import { LOCAL_ONLY_ENV, REFUSED_HEADER, REFUSED_STATUS, requireBoundary, shieldedFetch, shieldOf } from "../browser/boundary.ts";
 import { REFUSED_ANSWER } from "../browser/onward.ts";
 import { readJson } from "../lib/canonical.ts";
+import { ownRegistration, readMailboxState } from "../lib/mailbox.ts";
 import { maskFile, shieldForRun } from "../lib/secrets.ts";
 import { isChallenge } from "../lib/challenge.ts";
 import { privateFromPublicSite, scopeHost, scopeHostOf, siteOrigins, WEB_SCHEMES } from "../lib/origins.ts";
@@ -592,9 +593,13 @@ export const TEST_VALUES: Record<string, string> = {
   empty: "",
 };
 
-/** The test values of a run: `search` is the term the inventory chose, or the one the explorer showed on a page of the site. */
-export function testValuesForRun(runDir: string): Record<string, string> {
-  return { ...TEST_VALUES, search: searchTermForRun(runDir) };
+/**
+ * The test values of a run: `search` is the term the inventory chose, or the one the explorer showed on
+ * a page of the site. In a session with a registration of its own, `email` is the address of that registration.
+ */
+export function testValuesForRun(runDir: string, session?: string): Record<string, string> {
+  const own = ownRegistration(readMailboxState(runDir) ?? { registrations: [] }, session)?.alias;
+  return { ...TEST_VALUES, search: searchTermForRun(runDir), ...(own ? { email: own } : {}) };
 }
 
 /**

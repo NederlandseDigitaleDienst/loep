@@ -132,7 +132,7 @@ const USAGE = `loep <command> [options]
                                          to fix, and the report is not signed. Verantwoorden: the report backs a statement,
                                          says what is still missing for status B, and is signed. Choose or change it at the
                                          end of a run, then run evaluate, render and seal again. Without a value: say it
-  mail wait|links|cleanup|status --run <run>   The fixed flow around a mailbox; loep mail --help
+  mail wait|links|register|cleanup|status --run <run>   The fixed flow around a mailbox; loep mail --help
   secrets --run <run>                    What a run knows about its secrets, per source, and what happened around them: never a value
   seal --run <run>                       Record the hash of every file in the run; what is signed afterwards is this seal
   seal --run <run> --open                Open the seal on purpose, to measure in the run itself again (tasks --again): the seal
@@ -262,6 +262,7 @@ async function main(): Promise<void> {
       "declared-by": { type: "string" },
       "max-writes": { type: "string" },
       mailbox: { type: "string" },
+      session: { type: "string" },
       timeout: { type: "string" },
       url: { type: "string" },
       from: { type: "string" },
@@ -545,21 +546,25 @@ async function main(): Promise<void> {
     }
     case "mail": {
       if (!values.run) throw new Error("mail vraagt --run <run>");
-      const { cleanupLinesNl, mailCleanup, mailLinks, mailWait } = await import("./commands/mail.ts");
+      const { cleanupLinesNl, mailCleanup, mailLinks, mailRegister, mailWait } = await import("./commands/mail.ts");
+      const session = values.session === undefined ? {} : { session: values.session };
       if (target === "wait") {
         const timeoutSeconds = values.timeout === undefined ? undefined : Number(values.timeout);
         if (timeoutSeconds !== undefined && !(timeoutSeconds >= 0)) throw new Error("--timeout is een aantal seconden");
-        process.stdout.write(`${JSON.stringify(await mailWait(values.run, { ...(timeoutSeconds !== undefined ? { timeoutSeconds } : {}) }))}\n`);
+        process.stdout.write(`${JSON.stringify(await mailWait(values.run, { ...session, ...(timeoutSeconds !== undefined ? { timeoutSeconds } : {}) }))}\n`);
       } else if (target === "cleanup") {
         const cleanup = await mailCleanup(values.run);
         process.stdout.write(`${cleanupLinesNl(cleanup).join("\n")}\n`);
         process.exitCode = cleanup.complete ? 0 : 1;
       } else if (target === "links") {
-        process.stdout.write(`${JSON.stringify(mailLinks(values.run))}\n`);
+        process.stdout.write(`${JSON.stringify(mailLinks(values.run, values.session))}\n`);
+      } else if (target === "register") {
+        if (!values.session) throw new Error("mail register vraagt --session <sessie>: een eigen aanmelding hoort bij één sessie");
+        process.stdout.write(`${JSON.stringify(await mailRegister(values.run, values.session, { fresh: values.fresh }))}\n`);
       } else if (target === "status") {
         const { readMailboxState } = await import("./lib/mailbox.ts");
         process.stdout.write(`${JSON.stringify(readMailboxState(values.run))}\n`);
-      } else throw new Error(`mail kent wait, cleanup, links en status, niet "${target}"`);
+      } else throw new Error(`mail kent wait, cleanup, links, register en status, niet "${target}"`);
       return;
     }
     case "secrets": {

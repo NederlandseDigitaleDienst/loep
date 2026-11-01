@@ -7,10 +7,12 @@ import type { Browser, Page } from "playwright";
 import { MAIL_ROUTE_PATHS } from "../fixtures/mailroute.ts";
 import { startFixture, type FixtureServer } from "../fixtures/serve.ts";
 import { launchBrowser, loadPage, newContext } from "../src/browser/session.ts";
-import { mailLinks, mailWait, startMailbox } from "../src/commands/mail.ts";
-import { recordMailbox, readMailboxState } from "../src/lib/mailbox.ts";
-import { decideWrites, recordWrites, writeBudget, writesForRun } from "../src/lib/writes.ts";
-import { guardContext, guardRedirects, scopeForRun, TEST_VALUES, type Guard } from "../src/session/safety.ts";
+import { cleanupLinesNl, mailCleanup, mailLinks, mailRegister, mailWait, startMailbox } from "../src/commands/mail.ts";
+import { agentMailboxNl, MAIL_ADDRESS_SOURCE, mailboxLimitationsNl, readMailboxState, recordMailbox } from "../src/lib/mailbox.ts";
+import { readSecretsFile, scanRun } from "../src/lib/secrets.ts";
+import { decideWrites, DEFAULT_MAX_WRITES, recordWrites, reservedWrites, writeAccess, writeBudget, writesForRun } from "../src/lib/writes.ts";
+import { Daemon } from "../src/session/daemon.ts";
+import { guardContext, guardRedirects, scopeForRun, TEST_VALUES, testValuesForRun, type Guard } from "../src/session/safety.ts";
 
 /*
  * The hard mail route of the fixture (see `fixtures/mailroute.ts`): what the route does on a site
@@ -149,6 +151,207 @@ test("what goes wrong now: a link for unsubscribing with a path that says nothin
   } finally {
     await session.close();
     await agent.close();
+    rmSync(run, { recursive: true, force: true });
+  }
+});
+
+test("a session with a registration of its own has its own address and its own links, and may end that registration", async () => {
+  fixture.mailRoute.options.viaService = false;
+  const run = await mailRun();
+  const lead = await sessionOn(run, "r-start");
+  const agent = await sessionOn(run, "b-334");
+  const box = fixture.mailRoute.mailbox();
+  try {
+    await signUp(lead.page);
+    await mailWait(run, { mailbox: box, timeoutSeconds: 1 });
+    const shared = mailLinks(run).links;
+    assert.equal(shared.length, 3);
+
+    const own = await mailRegister(run, "b-334");
+    assert.equal(own.fresh, true);
+    assert.equal(testValuesForRun(run, "b-334").email, own.email);
+    assert.notEqual(own.email, TEST_VALUES.email);
+    assert.equal(testValuesForRun(run, "b-335").email, TEST_VALUES.email, "another session keeps the shared address");
+    assert.equal((await mailRegister(run, "v-334")).registration, own.registration, "the verifier of a criterion is the same sender");
+    await signUp(agent.page, testValuesForRun(run, "b-334").email);
+    const addresses = fixture.mailRoute.registrations.map((registration) => registration.address);
+    assert.equal(new Set(addresses).size, 2, "the site got two addresses");
+    assert.ok(!(await agent.page.content()).includes(addresses[1]!));
+
+    const answer = await mailWait(run, { session: "b-334", mailbox: box, timeoutSeconds: 1 });
+    const mine = answer.links.filter((link) => link.own);
+    assert.equal(mine.length, 3);
+    assert.deepEqual(mailLinks(run).links.map((link) => link.id), shared.map((link) => link.id), "the agents on the shared registration do not get them");
+    assert.deepEqual(mailLinks(run, "b-335").links.map((link) => link.id), shared.map((link) => link.id), "nor does another session");
+
+    assert.equal(await openLink(agent.page, mine[0]!.url), 200);
+    assert.equal(await openLink(agent.page, mine[1]!.url), 200);
+    await agent.page.getByRole("button", { name: "Verwijder alles" }).click();
+    await agent.page.waitForURL(`**${MAIL_ROUTE_PATHS.removed}`);
+    assert.deepEqual(fixture.mailRoute.registrations.map((registration) => registration.address), [addresses[0]], "the agent ended its own, and the shared one stays");
+    assert.equal(await openLink(lead.page, shared[1]!.url), 200, "the next agent still has the shared registration");
+
+    const cleanup = await mailCleanup(run, { mailbox: box, browser, settleMs: 200, pollMs: 50 });
+    assert.deepEqual(cleanup.sites.map((site) => [site.registration, site.outcome]), [["A0", "removed"], [own.registration, "not shown"]]);
+    assert.match(cleanup.sites[1]!.noteNl, /kan haar zelf hebben verwijderd/);
+    assert.equal(cleanup.mail.left, 0, "the mail of both addresses is gone");
+    assert.equal(cleanup.complete, false, "what cannot be shown is not called clean");
+    assert.deepEqual(fixture.mailRoute.registrations, []);
+    assert.deepEqual(scanRun(run).hits, []);
+    assert.ok(cleanupLinesNl(cleanup).some((line) => line.startsWith("site, aanmelding A1: niet aangetoond")));
+    assert.equal(readSecretsFile(run)!.secrets.filter((secret) => secret.source === MAIL_ADDRESS_SOURCE).length, 2, "each address stands in the register");
+    for (const name of ["mailbox.json", "writes.jsonl", "manifest.json"]) for (const address of addresses) assert.ok(!readFileSync(join(run, name), "utf8").includes(address), name);
+  } finally {
+    await lead.close();
+    await agent.close();
+    rmSync(run, { recursive: true, force: true });
+  }
+});
+
+test("mail cleanup removes a registration of its own that a session left behind, and says so per registration", async () => {
+  fixture.mailRoute.options.viaService = false;
+  const run = await mailRun();
+  const lead = await sessionOn(run, "r-start");
+  const agent = await sessionOn(run, "b-334");
+  const box = fixture.mailRoute.mailbox();
+  try {
+    await signUp(lead.page);
+    await mailWait(run, { mailbox: box, timeoutSeconds: 1 });
+    const own = await mailRegister(run, "b-334");
+    await signUp(agent.page, own.email);
+    const { links } = await mailWait(run, { session: "b-334", mailbox: box, timeoutSeconds: 1 });
+    const mine = links.filter((link) => link.own);
+    await openLink(agent.page, mine[0]!.url);
+    await openLink(agent.page, mine[1]!.url);
+    await openLink(lead.page, mailLinks(run).links[0]!.url);
+    await openLink(lead.page, mailLinks(run).links[0]!.url);
+    const cleanup = await mailCleanup(run, { mailbox: box, browser, settleMs: 200, pollMs: 50 });
+    assert.deepEqual(cleanup.sites.map((site) => site.outcome), ["removed", "removed"]);
+    assert.equal(cleanup.complete, true);
+    assert.deepEqual(fixture.mailRoute.registrations, []);
+    assert.match(mailboxLimitationsNl(run).at(-1)!, /de 2 testaanmeldingen zijn via de site zelf verwijderd/);
+  } finally {
+    await lead.close();
+    await agent.close();
+    rmSync(run, { recursive: true, force: true });
+  }
+});
+
+test("a registration that was taken and never used costs nothing and leaves nothing to clean", async () => {
+  fixture.mailRoute.options.viaService = false;
+  const run = await mailRun();
+  try {
+    await mailRegister(run, "b-334");
+    assert.equal(writeBudget(run, writesForRun(run)!).sent, 0, "taking one sends nothing");
+    const cleanup = await mailCleanup(run, { mailbox: fixture.mailRoute.mailbox(), browser, settleMs: 0, pollMs: 10 });
+    assert.deepEqual(cleanup.sites.map((site) => site.outcome), ["no link", "unused"]);
+  } finally {
+    rmSync(run, { recursive: true, force: true });
+  }
+});
+
+test("a fresh registration is a new address; the session goes on with the latest", async () => {
+  const run = await mailRun();
+  try {
+    const first = await mailRegister(run, "b-334");
+    const second = await mailRegister(run, "a-334", { fresh: true });
+    assert.notEqual(first.email, second.email);
+    assert.equal(testValuesForRun(run, "b-334").email, second.email);
+  } finally {
+    rmSync(run, { recursive: true, force: true });
+  }
+});
+
+test("on a real test environment one registration of its own takes what is left of the default budget, and a second is refused", async () => {
+  const run = await mailRun();
+  try {
+    await recordWrites(run, { ...writesForRun(run)!, local: false, declaredBy: { name: "Iemand", role: "beheerder" }, maxWrites: DEFAULT_MAX_WRITES, spacingSeconds: 0 });
+    const permission = writesForRun(run)!;
+    assert.equal(reservedWrites(permission), 2);
+    const lead = writeAccess(run, permission, "r-start");
+    for (const step of ["het formulier", "de bevestiging"]) assert.ok(lead.claim("POST", `${origin}/`).ok, step);
+    await mailRegister(run, "b-334");
+    const agent = writeAccess(run, permission, "b-334");
+    for (const step of ["het formulier", "de bevestiging", "het verwijderen"]) assert.ok(agent.claim("POST", `${origin}/`).ok, step);
+    assert.equal(writeBudget(run, permission).sent, 5);
+    assert.equal(agent.claim("POST", `${origin}/`).ok, false, "the total stays the limit");
+    await assert.rejects(mailRegister(run, "b-335"), /kost 3 verzendingen.*nog 0 van 5 over/);
+    assert.equal(testValuesForRun(run, "b-335").email, TEST_VALUES.email, "a refusal leaves nothing behind");
+  } finally {
+    rmSync(run, { recursive: true, force: true });
+  }
+});
+
+test("the share of a sender without a registration of its own stays what it was", async () => {
+  const run = await mailRun();
+  try {
+    await recordWrites(run, { ...writesForRun(run)!, local: false, declaredBy: { name: "Iemand", role: "beheerder" }, maxWrites: DEFAULT_MAX_WRITES, spacingSeconds: 0 });
+    const lead = writeAccess(run, writesForRun(run)!, "r-start");
+    for (let sent = 0; sent < 3; sent++) assert.ok(lead.claim("POST", `${origin}/`).ok);
+    assert.equal(lead.claim("POST", `${origin}/`).ok, false);
+  } finally {
+    rmSync(run, { recursive: true, force: true });
+  }
+});
+
+test("a state from before there could be more registrations reads as one registration, with its cleanup", async () => {
+  const run = await mailRun();
+  try {
+    const { registrations: _none, ...old } = readMailboxState(run)!;
+    writeFileSync(join(run, "mailbox.json"), JSON.stringify({ ...old, askedLinks: 2, cleanup: { at: "2026-10-30T10:00:00.000Z", site: { outcome: "removed", noteNl: "weg", steps: [] }, mail: { removed: 1, left: 0, noteNl: null }, scan: { files: 1, bytes: 1, hits: [], compressed: 0 }, complete: true } }));
+    const state = readMailboxState(run)!;
+    assert.deepEqual(state.registrations, [{ id: "A0", askedLinks: 2 }]);
+    assert.equal(state.cleanup!.sites[0]!.outcome, "removed");
+    assert.match(mailboxLimitationsNl(run).at(-1)!, /de testaanmelding is via de site zelf verwijderd/);
+  } finally {
+    rmSync(run, { recursive: true, force: true });
+  }
+});
+
+test("a task of a run with a mailbox does not change with a mail or a registration: a verdict stands on its hash", async () => {
+  fixture.mailRoute.options.viaService = false;
+  const run = await mailRun();
+  const session = await sessionOn(run, "r-start");
+  try {
+    const before = agentMailboxNl(run, "loep mail", "RUN");
+    await signUp(session.page);
+    await mailWait(run, { mailbox: fixture.mailRoute.mailbox(), timeoutSeconds: 1 });
+    await mailRegister(run, "b-334");
+    assert.equal(agentMailboxNl(run, "loep mail", "RUN"), before);
+    assert.match(before, /loep mail register --run RUN --session <je sessie>/);
+    assert.ok(!/loep-test/.test(before));
+  } finally {
+    await session.close();
+    rmSync(run, { recursive: true, force: true });
+  }
+});
+
+test("through the commands of a session: after a registration of its own the test value email is the address of that session", async () => {
+  fixture.mailRoute.options.viaService = false;
+  const run = await mailRun();
+  const daemon = await Daemon.create(run, await scopeForRun(run, {}), { navigationDelayMs: 0, secondBrowsers: false });
+  const loep = async (session: string, command: string, ...args: string[]): Promise<Record<string, unknown>> => (await daemon.handle({ op: "command", session, command, args, options: {} })).print;
+  const ref = async (session: string, query: string): Promise<string> => ((await loep(session, "find", query)).found as string[])[0]!.split(" ")[0]!;
+  const fill = async (session: string): Promise<void> => {
+    await loep(session, "open", MAIL_ROUTE_PATHS.form);
+    await loep(session, "type", await ref(session, "css:input[type=email]"), "email");
+    await loep(session, "type", await ref(session, "css:input[name=naam]"), "name");
+    await loep(session, "click", await ref(session, "css:form button"));
+  };
+  try {
+    await daemon.handle({ op: "start", session: "b-334" });
+    await daemon.handle({ op: "start", session: "b-335" });
+    await fill("b-335");
+    await mailRegister(run, "b-334");
+    await fill("b-334");
+    const addresses = fixture.mailRoute.registrations.map((registration) => registration.address);
+    assert.equal(addresses.length, 2);
+    assert.equal(addresses[0], ADDRESS, "the other session stays on the shared address");
+    assert.notEqual(addresses[1], ADDRESS);
+    await mailWait(run, { session: "b-334", mailbox: fixture.mailRoute.mailbox(), timeoutSeconds: 1 });
+    assert.equal(mailLinks(run, "b-334").links.filter((link) => link.own).length, 3);
+  } finally {
+    await daemon.close();
     rmSync(run, { recursive: true, force: true });
   }
 });
