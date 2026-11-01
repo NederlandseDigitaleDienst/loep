@@ -395,7 +395,7 @@ class Boundary {
       const answer = await trialFetch(next, { redirect: "manual", signal: AbortSignal.timeout(PARTY_TIMEOUT_MS) }).catch(() => null);
       await answer?.body?.cancel().catch(() => undefined);
       const location = answer?.headers.get("location");
-      if (!answer || answer.status < 300 || answer.status >= 400 || !location) return this.refuse(url, `${new URL(next).origin} stuurde niet door naar de site: alleen een doorverwijzing daarheen wordt gevolgd`);
+      if (!answer || answer.status < 300 || answer.status >= 400 || !location || !URL.canParse(location, next)) return this.refuse(url, `${new URL(next).origin} stuurde niet door naar de site: alleen een doorverwijzing daarheen wordt gevolgd`);
       const target = new URL(location, next);
       if (origins.includes(target.origin)) {
         registerSecrets(this.runDir, spelledSecretsInUrl(target.href).map(({ value, spelled }) => ({ value, spelled, source: MAIL_LINK_SOURCE, origins })));
@@ -416,7 +416,7 @@ class Boundary {
     const unclaimed = this.claimRefusedNl(shield, request.url);
     if (unclaimed) return { response: this.refuse(request.url, unclaimed) };
     const through = mailboxForRun(this.runDir)?.linkOrigins ?? [];
-    if (through.includes(new URL(request.url).origin)) {
+    if (through.includes(new URL(request.url).origin) && shield.carriesAlias(request.url)) {
       const link = request.method === "GET" ? shield.guardedId(request.url) : null;
       return { response: link ? await this.followThrough(shield, request.url, link, through) : this.refuse(request.url, "naar deze partij gaat alleen het openen van een persoonlijke link uit een mail") };
     }

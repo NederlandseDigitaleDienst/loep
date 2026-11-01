@@ -11,7 +11,7 @@ import { REFUSED_STATUS } from "../src/browser/boundary.ts";
 import { launchBrowser, loadPage, newContext } from "../src/browser/session.ts";
 import { cleanupLinesNl, mailCleanup, mailLinks, mailRegister, mailWait, startMailbox } from "../src/commands/mail.ts";
 import { agentMailboxNl, decideMailbox, MAIL_ADDRESS_SOURCE, mailboxForRun, mailboxLimitationsNl, readMailboxState, recordMailbox } from "../src/lib/mailbox.ts";
-import { readSecretsFile, scanRun } from "../src/lib/secrets.ts";
+import { readSecretEvents, readSecretsFile, scanRun } from "../src/lib/secrets.ts";
 import { decideWrites, DEFAULT_MAX_WRITES, recordWrites, reservedWrites, writeAccess, writeBudget, writesForRun } from "../src/lib/writes.ts";
 import { Daemon } from "../src/session/daemon.ts";
 import { guardContext, guardRedirects, guardRedirectsByRoute, scopeForRun, TEST_VALUES, testValuesForRun, type Guard } from "../src/session/safety.ts";
@@ -427,6 +427,27 @@ test("a party that shows a page of its own is refused", async () => {
     fixture.mailRoute.forgetClicks();
     assert.equal(await openLink(lead.page, links[0]!.url), REFUSED_STATUS);
     assert.match(lead.guard.blocked.at(-1)?.reasonNl ?? "", /stuurde niet door naar de site/);
+  } finally {
+    await lead.close();
+    rmSync(run, { recursive: true, force: true });
+  }
+});
+
+test("a picture that a page of the site gets from a declared party stays a picture", async () => {
+  const party = fixture.origins.thirdParty;
+  const run = await mailRun([party]);
+  const lead = await sessionOn(run, "r-start");
+  try {
+    await signUp(lead.page);
+    await mailWait(run, { mailbox: fixture.mailRoute.mailbox(), timeoutSeconds: 1 });
+    const status = await lead.page.evaluate((target) => new Promise<boolean>((resolve) => {
+      const image = new Image();
+      image.onload = image.onerror = () => resolve(true);
+      image.src = target;
+    }), `${party}/plaatje.png`);
+    assert.equal(status, true);
+    assert.ok(!lead.guard.blocked.some((entry) => entry.url.includes("plaatje.png")));
+    assert.ok(!readSecretEvents(run).some((event) => event.where.includes("plaatje.png")), "the boundary lets it pass");
   } finally {
     await lead.close();
     rmSync(run, { recursive: true, force: true });
