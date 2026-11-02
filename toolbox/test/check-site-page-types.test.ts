@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, test } from "node:test";
 import { startFixture, type FixtureServer } from "../fixtures/serve.ts";
-import { checkSite, exploreContext } from "../src/commands/explore.ts";
+import { checkSite, exploreContext, redirectLeftScope } from "../src/commands/explore.ts";
 import { inventory } from "../src/commands/inventory.ts";
 import { readJson } from "../src/lib/canonical.ts";
 import { ALL_PAGE_TYPES, NOT_OPENED_ON_PAGE_TYPE, notOpenedAdviceNl, searchTermForRun, type SiteModel } from "../src/lib/sitemodel.ts";
@@ -225,4 +225,9 @@ test("check-site replays a part with sendsTo twice, and refuses a pattern that o
     Object.assign(chat, before);
     write();
   }
+});
+
+test("redirectLeftScope: alleen een doorverwijzing naar buiten de run", () => {
+  assert.equal(redirectLeftScope("page.goto: net::ERR_BLOCKED_BY_CLIENT at https://site.example/a (geweigerd: GET https://other.example/a (doorverwijzing vanaf https://site.example/a))"), true);
+  assert.equal(redirectLeftScope("page.goto: net::ERR_CONNECTION_REFUSED at https://site.example/a"), false);
 });
