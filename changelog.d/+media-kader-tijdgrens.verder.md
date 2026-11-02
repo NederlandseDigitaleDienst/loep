@@ -1,0 +1,1 @@
+`collect` wacht niet meer eindeloos op een ingesloten venster dat niet antwoordt bij het lezen van audio en video. Zo'n venster komt onder "niet onderzocht" in de meting, en de pagina wordt verder gemeten.
