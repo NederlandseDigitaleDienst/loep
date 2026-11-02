@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, test } from "node:test";
 import { startFixture } from "../fixtures/serve.ts";
-import { addressLevels, inventory, nextAddress, noteVisited, pageLimitNl, pageLimitReason, readsOutsideRunNl, type Inventory } from "../src/commands/inventory.ts";
+import { addressLevels, inventory, linksToFollow, nextAddress, noteVisited, pageLimitNl, pageLimitReason, readsOutsideRunNl, type Inventory } from "../src/commands/inventory.ts";
 import { buildSample } from "../src/commands/sample.ts";
 
 /** Visit every candidate in the order `inventory` would, when all are known from the start. */
@@ -454,4 +454,14 @@ test("without a main region the search term comes from the body without header, 
   }
   assert.equal(found.searchTerm, "parkeervergunning", `${found.searchTerm} ${found.searchTermAlternatives}`);
   for (const word of ["voorbeeldstad", "bestuur", "zoeken", "contact"]) assert.ok(!found.searchTermAlternatives?.includes(word), word);
+});
+
+test("linksToFollow: a redirect to another site does not take the inventory along", () => {
+  const links = ["https://site.example/a", "https://other.example/b"];
+  assert.deepEqual(linksToFollow(links, ["https://site.example"], false), ["https://site.example/a"]);
+});
+
+test("linksToFollow: the start address may redirect", () => {
+  const links = ["https://www.site.example/a"];
+  assert.deepEqual(linksToFollow(links, ["https://site.example"], true), links);
 });
