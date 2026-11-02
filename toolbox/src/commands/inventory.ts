@@ -224,6 +224,15 @@ export function addressLevels(url: string): string[] {
 const levelKey = (levels: string[], depth: number): string => levels.slice(0, depth).join("\n");
 
 /**
+ * The links of a page that the inventory goes on with. A page that redirected to another site counts
+ * the links of that site as its own, so without this the rest of the inventory walks that site. The
+ * start address may redirect: the address a person gave is the site, wherever it landed.
+ */
+export function linksToFollow(links: readonly string[], origins: readonly string[], isStart: boolean): string[] {
+  return isStart ? [...links] : links.filter((link) => origins.includes(new URL(link).origin));
+}
+
+/**
  * The levels by which the order takes turns. On a site with more than one origin the origin is
  * the first level, so each origin of the site gets its share before the parts within it do. An
  * address on another origin (an embedded frame) counts as one of the first origin, as it always
@@ -709,7 +718,7 @@ export async function inventory(options: InventoryOptions): Promise<Inventory> {
         }
         // As with links, Chromium accepts some frame addresses that Node's URL rejects: only that frame is left out (#342).
         if (!embedded) for (const frame of frames) if (URL.canParse(frame)) noteFrame(normaliseUrl(frame), next);
-        if (!fixed && !embedded && !missingPages.includes(next)) for (const link of links) note(normaliseUrl(link), "link");
+        if (!fixed && !embedded && !missingPages.includes(next)) for (const link of linksToFollow(links, origins, next === start)) note(normaliseUrl(link), "link");
         process.stderr.write(`inventory ${pages.length} ${next}\n`);
       } catch (error) {
         if (error instanceof LoginExpired) throw error;
