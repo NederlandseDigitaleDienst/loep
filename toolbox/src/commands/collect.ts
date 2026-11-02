@@ -1,4 +1,4 @@
-import { sayingItRuns } from "../instruments/limit.ts";
+import { sayingItRuns, withinTime } from "../instruments/limit.ts";
 import { readFile, rm } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
@@ -28,6 +28,9 @@ import { SESSION_WATCH_FILE, startSessionWatch } from "./watch-session.ts";
 import type { Sample, SampleItem } from "./sample.ts";
 
 /** The narrow window of the sweep: the width of a small phone. */
+/** Trying the controls of a player can hang on a player whose requests are held back; the rest of the page must still be measured. */
+const MEDIA_LIMIT_MS = 60_000;
+
 export const NARROW = { width: 360, height: 740 };
 /** The smallest width WCAG speaks of (1.4.10). Sizes, names and text spacing are measured here too: a menu, a header and a button differ most at this width. */
 export const SMALLEST = { width: 320, height: 640 };
@@ -255,7 +258,8 @@ async function collectPage(browser: Browser, entry: SampleItem, runDir: string, 
         await page.waitForTimeout(1500);
         await writeJson(join(dir, "probes", "motion.json"), await call(page, "motionReport"));
         // This page is thrown away, so the controls that may stop a sound can be tried here.
-        await writeJson(join(dir, "probes", "media.json"), await mediaReport(page, { tryControls: true }));
+        const media = await withinTime(MEDIA_LIMIT_MS, () => mediaReport(page, { tryControls: true }));
+        await writeJson(join(dir, "probes", "media.json"), media.ok ? media.value : { note: "Niet gemeten: de meting van audio en video kwam niet terug.", elements: [], framesNotInspected: [{ address: page.url(), reason: media.reason }] });
       }
     } finally {
       await context.close().catch(() => undefined);
