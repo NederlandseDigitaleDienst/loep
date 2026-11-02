@@ -261,12 +261,21 @@ const WIDE = { width: 1280, height: 800 };
 const NARROW = { width: 360, height: 740 };
 
 /**
+ * Whether a page could not be opened because its address redirects outside the run. The explorer
+ * cannot close that: it is a property of the site and the scope, not a gap in the model.
+ */
+export function redirectLeftScope(message: string): boolean {
+  return message.includes("ERR_BLOCKED_BY_CLIENT") && /\(geweigerd: .*\(doorverwijzing vanaf /.test(message);
+}
+
+/**
  * Count the forms and loose controls on the representative page of every page type, with
  * the blockers closed, in the default window and in a narrow one.
  */
-export async function countOperables(env: Env, model: SiteModel, recipes: Record<string, Recipe>): Promise<{ counted: CountedPage[]; problems: string[]; widths: ({ pageType: string } & WidthsForExplorer)[] }> {
+export async function countOperables(env: Env, model: SiteModel, recipes: Record<string, Recipe>): Promise<{ counted: CountedPage[]; problems: string[]; widths: ({ pageType: string } & WidthsForExplorer)[]; leftScope: string[] }> {
   const counted: CountedPage[] = [];
   const problems: string[] = [];
+  const leftScope: string[] = [];
   const widths: ({ pageType: string } & WidthsForExplorer)[] = [];
   for (const type of model.pageTypes) {
     let surface: Awaited<ReturnType<typeof openSurface>>["surface"] | null = null;
@@ -286,12 +295,15 @@ export async function countOperables(env: Env, model: SiteModel, recipes: Record
       await surface.page.waitForTimeout(300);
       counted.push({ pageType: type.id, url: type.representative, groups: mergeWidths(wide, await pageOperables(surface.page)), ...(looksOperable.length > 0 ? { looksOperable } : {}) });
     } catch (error) {
-      problems.push(`paginatype "${type.id}": op ${type.representative} was niet te tellen wat er te bedienen is: ${(error as Error).message.split("\n")[0]}`);
+      const message = (error as Error).message.split("\n")[0]!;
+      const line = `paginatype "${type.id}": op ${type.representative} was niet te tellen wat er te bedienen is: ${message}`;
+      if (redirectLeftScope(message)) leftScope.push(`${line}. Dit adres verwijst door naar een adres buiten de run; het blijft een beperking van de meting.`);
+      else problems.push(line);
     } finally {
       await surface?.context.close().catch(() => undefined);
     }
   }
-  return { counted, problems, widths };
+  return { counted, problems, widths, leftScope };
 }
 
 /**
@@ -465,9 +477,10 @@ export async function checkSite(runDir: string, options: { navigationDelayMs?: n
       }
       // What there is to operate on each page type, next to what the model says. Only with the blockers closing: otherwise their buttons are counted as parts of the page.
       if (replays.every((replay) => replay.kind !== "blocker" || replay.ok)) {
-        const { counted, problems: notCounted, widths } = await countOperables(env, model, recipes);
+        const { counted, problems: notCounted, widths, leftScope } = await countOperables(env, model, recipes);
         const compared = uncoveredOperables(model, recipes, counted);
         hintsNl.push(...widthHints(model, recipes, widths));
+        hintsNl.push(...leftScope);
         await writeJson(join(runDir, OPERABLES_FILE), { note: "Wat check-site telde op de representatieve pagina van elk paginatype, met de blokkades gesloten: formulieren, losse bedieningsonderdelen en ingesloten vensters met iets om te bedienen, zonder gewone links. uncovered is wat geen recept van het sitemodel aanraakt. betweenWidths zegt per paginatype welke breedtes de stylesheets noemen en welke bedieningselementen alleen tussen 1280, 360 en 320 pixels in beeld staan, met de breedtes waarop. looksOperable zegt per paginatype wat er bedienbaar lijkt (een klik- of drukluisteraar, een onclick, een cursor als handje) zonder rol en zonder Tab-stop, zoals een schuif van div's: dat telt niet mee in uncovered, want niets zegt wat het is, maar het staat wel op de pagina.", pageTypes: counted, uncovered: compared.uncovered, betweenWidths: widths });
         operables = { counted: compared.counted, uncovered: compared.uncovered.length };
         problems.push(...notCounted, ...compared.uncovered.map((entry) => entry.problemNl));
