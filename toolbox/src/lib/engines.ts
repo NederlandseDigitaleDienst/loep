@@ -1,9 +1,8 @@
 import { createRequire } from "node:module";
-import { Audit } from "@siteimprove/alfa-act";
-import alfaRules from "@siteimprove/alfa-rules";
 import type { Page } from "playwright";
 import { ownWorld } from "../browser/world.ts";
 import { axeSource } from "../instruments/methods/capsule.ts";
+import { auditInWorker } from "../instruments/methods/alfa-audit.ts";
 import { alfaPageOf } from "../instruments/methods/rules.ts";
 import { compareCriterionIds, criterionIdFromAxeTag } from "./wcag.ts";
 
@@ -108,6 +107,9 @@ function fromAxe(results: AxeResults): EngineResult[] {
   ];
 }
 
+/** Longer than the audit of an ordinary page takes on a machine under load. */
+const ALFA_LIMIT_MS = 90_000;
+
 interface AlfaOutcome {
   toJSON(): unknown;
 }
@@ -193,7 +195,8 @@ export async function runEngines(page: Page): Promise<EngineRun> {
   }
 
   try {
-    const outcomes: AlfaOutcome[] = [...(await Audit.of(await alfaPageOf(page), alfaRules).evaluate())];
+    const audited = await auditInWorker(await alfaPageOf(page), ALFA_LIMIT_MS);
+    const outcomes: AlfaOutcome[] = audited.map((entry) => ({ toJSON: () => entry.json, target: entry.path === null ? undefined : { path: () => entry.path } }) as AlfaOutcome);
     results.push(...fromAlfa(outcomes));
     status.alfa = { ok: true, version: require("@siteimprove/alfa-rules/package.json").version as string };
   } catch (error) {

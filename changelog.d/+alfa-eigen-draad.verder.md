@@ -1,0 +1,1 @@
+De audit van Alfa draait in een eigen draad, met een tijdgrens. Op een pagina waar het vergelijken van selectors uren duurde, stond de hele veegronde stil zonder melding. Alfa geeft dan op die pagina geen antwoord, en de andere engines wel.
