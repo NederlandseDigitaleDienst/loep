@@ -140,7 +140,9 @@ export async function frameAsPage(page: Page, frame: Frame): Promise<Page> {
       }
       const left = Math.max(0, wanted.x);
       const topEdge = Math.max(0, wanted.y);
-      const inFrame = { x: left, y: topEdge, width: Math.min(size.width, wanted.x + wanted.width) - left, height: Math.min(size.height, wanted.y + wanted.height) - topEdge };
+      const asked = { x: left, y: topEdge, width: Math.min(size.width, wanted.x + wanted.width) - left, height: Math.min(size.height, wanted.y + wanted.height) - topEdge };
+      // Asked for a part with no size, for instance a document of height 0 in a player that stays empty: what the frame shows is then the best there is.
+      const inFrame = asked.width > 0 && asked.height > 0 ? asked : { x: 0, y: 0, width: size.width, height: size.height };
       if (inFrame.width <= 0 || inFrame.height <= 0) throw new Error("dit deel valt buiten wat het ingesloten venster toont");
       let origin = await contentBox(frame);
       if (!origin) throw new Error("het ingesloten venster is niet zichtbaar op de pagina");
