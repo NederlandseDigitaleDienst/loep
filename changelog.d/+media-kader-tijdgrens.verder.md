@@ -1,1 +1,1 @@
-`collect` wacht niet meer eindeloos op een ingesloten venster dat niet antwoordt bij het lezen van audio en video. Zo'n venster komt onder "niet onderzocht" in de meting, en de pagina wordt verder gemeten.
+`collect` wacht niet meer eindeloos bij het lezen van audio en video: elk ingesloten venster krijgt 15 seconden en de hele meting een minuut. Een venster dat niet antwoordt, komt onder "niet onderzocht" in de meting, en de pagina wordt verder gemeten.
