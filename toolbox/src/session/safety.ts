@@ -13,7 +13,7 @@ import { loginCookieHeader, logsOut } from "../lib/login.ts";
 import { onReadOrigin, pathOf, readDecision, readRuleFor, type ReadRequest } from "../lib/reads.ts";
 import { searchServicesOf, type SearchServiceId } from "../lib/searchbody.ts";
 import { SEARCH_FALLBACK, SEARCH_NONE } from "../lib/searchterm.ts";
-import { searchTermForRun } from "../lib/sitemodel.ts";
+import { searchTermForRun, searchTermsForRun } from "../lib/sitemodel.ts";
 import { OriginBlocked, refusalNl, type Blockade } from "./blockade.ts";
 import { playRecording, replayNl, socketRecordings, type PassedReplay, type Recorder } from "../lib/recordings.ts";
 import { claimLink, isLocalHost, isThisMachine, isWriteOrigin, runWrites, SocketFrames, writeAccess, writesForRun, type PassedWrite, type WriteAccess } from "../lib/writes.ts";
@@ -220,6 +220,8 @@ export const urlInScope = inScope;
 export async function guardContext(context: BrowserContext, scope: Scope, guard: Guard, reads: readonly ReadRequest[] = [], blockade?: Blockade): Promise<void> {
   const runDir = runOf(scope);
   requireBoundary(context, runDir);
+  // The terms loep types in a search: a body is only taken for a search by its term when it carries one of these.
+  const terms = runDir !== undefined ? searchTermsForRun(runDir) : [];
   const note = (kind: Blocked["kind"], method: string, url: string, resourceType: string): void => {
     guard.blocked.push({ at: new Date().toISOString(), kind, method, url: url.slice(0, MAX_URL), resourceType });
   };
@@ -299,7 +301,7 @@ export async function guardContext(context: BrowserContext, scope: Scope, guard:
         });
       }
       // Whether the body has the form of a search: what the explorer needs to record a read request, never the body itself.
-      const search = method === "POST" ? searchServicesOf(body, pathOf(url)) : [];
+      const search = method === "POST" ? searchServicesOf(body, pathOf(url), terms) : [];
       guard.blocked.push({ at: new Date().toISOString(), kind: "method", method, url: url.slice(0, MAX_URL), resourceType: type, ...(search.length > 0 ? { search } : {}) });
       return refuse();
     }
