@@ -1,11 +1,12 @@
 import { join } from "node:path";
-import type { Frame, Page, Request, Response } from "playwright";
+import type { ElementHandle, Frame, Page, Request, Response } from "playwright";
 import { axInfo, call, handleFor } from "../browser/call.ts";
 import { loadPage } from "../browser/session.ts";
 import { bodyOf } from "../browser/session.ts";
 import { readDecision, runReads } from "../lib/reads.ts";
 import { isWriteOrigin, runWrites } from "../lib/writes.ts";
 import { slugForUrl } from "../lib/canonical.ts";
+import { fittingTestValue, readConstraints } from "../lib/fitting-value.ts";
 import { REGULAR_PATH, type FormErrorState } from "../lib/rundata.ts";
 import { TEST_VALUES } from "../session/safety.ts";
 import { contextState, SETTLE_MS, where, type Described } from "./activate.ts";
@@ -49,21 +50,29 @@ export interface FormProbeOptions {
   restore?: (page: Page) => Promise<void>;
 }
 
-/** A value a server will accept, by the type of the field: the fixed test values of a session, so that what reaches a person says it comes from loep. */
-const VALID_VALUES: Record<string, string> = { email: TEST_VALUES.email!, tel: TEST_VALUES.phone!, url: TEST_VALUES.url!, number: TEST_VALUES.number!, date: TEST_VALUES.date! };
+/** The kind of fixed test value a server will accept, by the type of the field: the fixed test values of a session, so that what reaches a person says it comes from loep. */
+const VALID_KINDS: Record<string, string> = { email: "email", tel: "phone", url: "url", number: "number", date: "date" };
 
 type Attempt = FormErrorState["attempts"][number];
 type Input = "leeg verstuurd" | "ongeldige invoer" | typeof REGULAR_PATH | "geldige testwaarden";
 const NAVIGATION_WAIT_MS = 10_000;
 const SHOT_NAMES: Record<Input, string> = { "leeg verstuurd": "leeg", "ongeldige invoer": "ongeldig", [REGULAR_PATH]: "gewoon", "geldige testwaarden": "geldig" };
 
-/** The fixed test value for a field: by its type, and for a plain text field by what it says it expects. */
-function validValue(field: Field): string {
-  const byType = VALID_VALUES[field.type ?? ""];
+/** The kind of fixed test value for a field: by its type, and for a plain text field by what it says it expects. */
+function validKind(field: Field, byHint: boolean): string {
+  const byType = VALID_KINDS[field.type ?? ""];
   if (byType) return byType;
+  if (!byHint) return "text";
   const hint = (field.autocomplete ?? "").toLowerCase();
-  for (const type of ["email", "tel", "url"]) if (hint.includes(type)) return VALID_VALUES[type]!;
-  return hint.includes("postal-code") ? TEST_VALUES.postcode! : TEST_VALUES.text!;
+  for (const type of ["email", "tel", "url"]) if (hint.includes(type)) return VALID_KINDS[type]!;
+  return hint.includes("postal-code") ? "postcode" : "text";
+}
+
+/** The fixed test value of that kind, fitted to the min, max, step, length and pattern of the field on the page. */
+async function validValue(handle: ElementHandle<Element> | null, field: Field, byHint = true): Promise<string> {
+  const kind = validKind(field, byHint);
+  const constraints = handle ? await readConstraints(handle) : null;
+  return constraints ? fittingTestValue(kind, TEST_VALUES, constraints) : TEST_VALUES[kind]!;
 }
 
 /**
@@ -95,7 +104,7 @@ async function fillRegularPath(page: Page, fields: Field[]): Promise<string[]> {
         })
         .catch(() => undefined);
     } else if (type === "file") unfilled.push(where(field));
-    else if (typed) await handle?.fill(validValue(field), { timeout: 2000 }).catch(() => unfilled.push(where(field)));
+    else if (typed) await handle?.fill(await validValue(handle, field), { timeout: 2000 }).catch(() => unfilled.push(where(field)));
   }
   return unfilled;
 }
@@ -129,7 +138,7 @@ async function attemptSubmit(page: Page, input: Input, formIndex: number, state:
       const handle = await handleFor(page, field.ref);
       if (field.type === "checkbox" && field.required) await handle?.check({ timeout: 2000 }).catch(() => undefined);
       if (!["input", "textarea"].includes(field.tag) || ["checkbox", "radio", "file"].includes(field.type ?? "")) continue;
-      await handle?.fill(VALID_VALUES[field.type ?? ""] ?? TEST_VALUES.text!).catch(() => undefined);
+      await handle?.fill(await validValue(handle, field, false)).catch(() => undefined);
     }
     await page.waitForTimeout(SETTLE_MS);
   }
