@@ -1,5 +1,6 @@
 import { spaceNavigations } from "../browser/session.ts";
 import { DEFAULT_DAEMON_LIMITS, Politeness } from "../session/safety.ts";
+import { runNavigationDelayMs } from "./pace.ts";
 import { sessionLimits } from "./timing.ts";
 
 /**
@@ -17,6 +18,8 @@ export interface SweepAtOnce {
   limitSource: "session" | "default";
   /** Time between two navigations to the same host while more than one runs. */
   navigationDelayMs: number;
+  /** Whether the run was given its own delay at `inventory`: then even one page at a time is spaced. */
+  paced?: boolean;
   /** Said to whoever runs the command when the number asked for was lowered. */
   noteNl: string | null;
 }
@@ -35,15 +38,20 @@ export function sweepAtOnce(runDir: string, asked = 1): SweepAtOnce {
     asked > limit
       ? `--at-once ${asked} is meer dan de ${limit} sessies die ${limits ? "het sessieproces van deze run" : "het sessieproces zonder --max-sessions"} toelaat: de veegronde meet er ${limit} tegelijk. Meer kan alleen als de eigenaar van de site het toestaat; start het sessieproces dan met session start --max-sessions <aantal>`
       : null;
-  return { atOnce, limit, limitSource: limits ? "session" : "default", navigationDelayMs: limits?.navigationDelayMs ?? DEFAULT_DAEMON_LIMITS.navigationDelayMs, noteNl };
+  // A delay the run was given wins over a shorter one of a session process started before it was set.
+  const own = runNavigationDelayMs(runDir);
+  const sessionDelay = limits?.navigationDelayMs ?? DEFAULT_DAEMON_LIMITS.navigationDelayMs;
+  const navigationDelayMs = own === null ? sessionDelay : Math.max(own, limits?.navigationDelayMs ?? own);
+  return { atOnce, limit, limitSource: limits ? "session" : "default", navigationDelayMs, ...(own !== null ? { paced: true } : {}), noteNl };
 }
 
 /**
  * Run `work` with the navigations spaced as the sessions space them, when more than one runs at
- * once. With one at a time nothing changes: the pages follow each other as they always did.
+ * once or the run was given its own delay. Otherwise, with one at a time, nothing changes: the
+ * pages follow each other as they always did.
  */
-export async function withSpacing<T>(settings: Pick<SweepAtOnce, "atOnce" | "navigationDelayMs">, work: () => Promise<T>): Promise<T> {
-  if (settings.atOnce <= 1) return work();
+export async function withSpacing<T>(settings: Pick<SweepAtOnce, "atOnce" | "navigationDelayMs" | "paced">, work: () => Promise<T>): Promise<T> {
+  if (settings.atOnce <= 1 && !settings.paced) return work();
   spaceNavigations(new Politeness(settings.navigationDelayMs));
   try {
     return await work();

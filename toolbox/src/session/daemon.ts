@@ -28,6 +28,7 @@ import { sheetOutcome } from "./sheet.ts";
 import { VOICEOVER_COMMAND_MS, voiceoverOutcome } from "./voiceover-command.ts";
 import { DEFAULT_DAEMON_LIMITS, DEFAULT_SESSION_LIMITS, Politeness, printedScope, type Blocked, type DaemonLimits, type Scope, type SessionLimits } from "./safety.ts";
 import { find, homeOf, leftScope, openSurface, pageFacts, resolvePath, resolveRef, resolveStep, sayFrame, stateOf, syncRefs, tgs, toRecord, type Env, type Refused, type Surface, type TargetInfo } from "./surface.ts";
+import { runPace } from "../lib/pace.ts";
 
 /** The code a session measured with: evaluate names a session that ran on other code than the rest of the run. */
 const SESSION_TOOLBOX = (({ commit, dirty }) => ({ commit, dirty }))(toolchain(null).toolbox);
@@ -182,7 +183,7 @@ export class Daemon {
   }
 
   static async create(runDir: string, scope: Scope, limits: Partial<DaemonLimits> = {}): Promise<Daemon> {
-    return new Daemon(runDir, await launchBrowser(), scope, { ...DEFAULT_DAEMON_LIMITS, ...limits });
+    return new Daemon(runDir, await launchBrowser(), scope, { ...DEFAULT_DAEMON_LIMITS, ...runPace(runDir), ...limits });
   }
 
   get sessionCount(): number {

@@ -14,7 +14,7 @@ const USAGE = `loep <command> [options]
   watch-session --run <run> [--gaps 5,10,20,40,80] [--max-hours 8]
                                          The watch on the session of a run with a login. collect starts it in the background
                                          and evaluate stops it; a second start on the same run leaves the running one alone
-  inventory <url> --out <run> [--also-origin <url>]... [--allow-writes | --test-environment <origin>... --declared-by "<name>, <role>"] [--max-writes <n>] [--mailbox <mailbox> [--mail-link-origin <origin>]...]
+  inventory <url> --out <run> [--also-origin <url>]... [--navigation-delay <s>] [--allow-writes | --test-environment <origin>... --declared-by "<name>, <role>"] [--max-writes <n>] [--mailbox <mailbox> [--mail-link-origin <origin>]...]
                                          Find every page and count what is on it. In a run with a login the pages are found
                                          by following links from the page the person pointed at; a link that logs out is never followed
   explore --run <run>                    Write the task for the agent that maps the site before it is measured
@@ -147,6 +147,10 @@ Options:
                     The report lists per such element the findings that touch it; the owner of a finding stays as judged
   --vendor-name <n> With --vendor-tags: what the report calls the vendor, such as "designsysteem" (default "leverancier")
   --urls <file>     With inventory: evaluate exactly the URLs in this file, one per line
+  --navigation-delay <s>  With inventory: seconds between two navigations to the same host for the whole run, for a
+                    site that refuses connections after a number of page loads in a short time. Kept in
+                    manifest.json; holds for the inventory, check-site, collect, contrast, states and the
+                    sessions of the agents, also with one page at a time. Without it the default pace stays (1 s)
   --also-origin <u> With inventory, repeatable: a further origin of the same site, such as its documentation on
                     https://docs.example.nl. Its sitemap, start page, links, page for a missing address and documents
                     count as the site's own; one report covers all origins. An origin not given stays outside
@@ -225,6 +229,7 @@ async function main(): Promise<void> {
       only: { type: "string" },
       urls: { type: "string" },
       "also-origin": { type: "string", multiple: true },
+      "navigation-delay": { type: "string" },
       seed: { type: "string" },
       criterion: { type: "string" },
       name: { type: "string" },
@@ -308,6 +313,7 @@ async function main(): Promise<void> {
   if ((recordedVia !== undefined || values.confirmation !== undefined || values.summary !== undefined) && command !== "answer" && command !== "decide" && command !== "writes") throw new Error("--recorded-via, --confirmation en --summary horen bij answer en decide");
   if (command !== "inventory" && values.mailbox !== undefined) throw new Error("--mailbox hoort bij inventory: daar wordt voor de hele run vastgelegd welke mailbox er is");
   if (values["mail-link-origin"] !== undefined && (command !== "inventory" || values.mailbox === undefined)) throw new Error("--mail-link-origin hoort bij inventory, samen met --mailbox: daar wordt voor de hele run vastgelegd via welke partij links mogen lopen");
+  if (command !== "inventory" && values["navigation-delay"] !== undefined) throw new Error("--navigation-delay hoort bij inventory: daar wordt voor de hele run vastgelegd hoeveel tijd er tussen twee navigaties naar de site zit");
   if (command !== "inventory" && values["also-origin"] !== undefined) throw new Error("--also-origin hoort bij inventory: daar wordt vastgelegd welke origins samen de site zijn");
   // A run goes on with the version of loep it was made with; another version would quietly write other tasks over it.
   if (values.run) {
@@ -374,8 +380,16 @@ async function main(): Promise<void> {
       if (tagPrefixes.some((prefix) => !/^[a-z][a-z0-9]*-[a-z0-9-]*$/.test(prefix))) throw new Error('--vendor-tags: elke prefix is het begin van een elementnaam met een streepje, zoals "nldd-"');
       if (values["vendor-name"] !== undefined && tagPrefixes.length === 0) throw new Error("--vendor-name hoort bij --vendor-tags");
       const vendor = tagPrefixes.length > 0 ? { tagPrefixes, nameNl: values["vendor-name"]?.trim() || "leverancier" } : undefined;
-      const result = await inventory({ baseUrl: target, out: values.out, maxPages: Number(values["max-pages"]), fixedUrls, vendor, alsoOrigins: values["also-origin"] });
+      const { parseNavigationDelay, recordNavigationDelay } = await import("./lib/pace.ts");
+      const navigationDelayMs = values["navigation-delay"] === undefined ? null : parseNavigationDelay(values["navigation-delay"]);
+      const { spaceNavigations } = await import("./browser/session.ts");
+      const { Politeness } = await import("./session/safety.ts");
+      // The inventory itself keeps the pace the run was given, as everything after it does.
+      if (navigationDelayMs !== null) spaceNavigations(new Politeness(navigationDelayMs));
+      const result = await inventory({ baseUrl: target, out: values.out, maxPages: Number(values["max-pages"]), fixedUrls, vendor, alsoOrigins: values["also-origin"] }).finally(() => spaceNavigations(null));
       await recordWrites(values.out, permission);
+      await recordNavigationDelay(values.out, navigationDelayMs);
+      if (navigationDelayMs !== null) process.stdout.write(`tempo: ${navigationDelayMs / 1000} s tussen twee navigaties naar dezelfde site, voor de hele run: check-site, de veegronde en de sessies van de agents\n`);
       // inventory.json is already written, so the refusals can be read there; no mailbox and no agent follow.
       const refused = refusedPagesNl(result);
       if (refused) throw new Error(refused);

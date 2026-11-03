@@ -9,6 +9,7 @@ import { runSteps, type LastStepSpeech, type Recipe } from "./daemon.ts";
 import { Images, type StartState, type Step } from "./observations.ts";
 import { DEFAULT_DAEMON_LIMITS, Politeness, scopeForRun, type DaemonLimits } from "./safety.ts";
 import { openSurface, SESSION_INPAGE_PATH, topSurface, type Env, type Surface } from "./surface.ts";
+import { runPace } from "../lib/pace.ts";
 
 /**
  * Recipes outside a session: the same steps an agent saved, replayed by a script. The
@@ -31,7 +32,7 @@ export async function loadRecipes(runDir: string): Promise<Record<string, Recipe
 
 /** Everything a replay shares with a session: the scope of the run and the spacing between navigations. */
 export async function replayEnv(browser: Browser, runDir: string, limits: Partial<DaemonLimits> = {}): Promise<Env> {
-  const all = { ...DEFAULT_DAEMON_LIMITS, ...limits };
+  const all = { ...DEFAULT_DAEMON_LIMITS, ...runPace(runDir), ...limits };
   return { browser, runDir, scope: await scopeForRun(runDir, {}), limits: all, politeness: new Politeness(all.navigationDelayMs) };
 }
 
