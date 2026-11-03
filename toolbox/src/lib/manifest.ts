@@ -51,6 +51,8 @@ export interface Manifest {
   seed?: string;
   /** Set with `purpose`: what the investigation is for (#318). A run without it is one to improve. */
   purpose?: Purpose;
+  /** Set at `inventory` with `--navigation-delay`: the time between two navigations to the same host for the whole run (#424). */
+  navigationDelayMs?: number;
 }
 
 function git(root: string, ...args: string[]): string | null {
@@ -215,6 +217,7 @@ export async function writeManifest(runDir: string, step: Omit<ManifestStep, "at
     ...(previous?.mailbox ? { mailbox: previous.mailbox } : {}),
     ...(previous?.reads ? { reads: previous.reads } : {}),
     ...(previous?.purpose ? { purpose: previous.purpose } : {}),
+    ...(typeof previous?.navigationDelayMs === "number" ? { navigationDelayMs: previous.navigationDelayMs } : {}),
     ...(previous?.seed ? { seed: previous.seed } : step.command === "inventory" ? { seed: randomBytes(16).toString("hex") } : {}),
   };
   await writeJson(path, manifest);
