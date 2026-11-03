@@ -1,0 +1,1 @@
+Een pagina die met GET inhoud ophaalt van een adres buiten de run, wordt nu ook na `sample` en `explore` gemeld, zolang de run die origin niet heeft. De skill laat die melding niet meer passeren zonder keuze van de gebruiker, ook niet bij meer sites tegelijk.

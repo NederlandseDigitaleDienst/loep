@@ -187,6 +187,15 @@ export function readsOutsideRunNl(reads: readonly ReadOutsideRun[] | undefined):
   );
 }
 
+/**
+ * The same note for a later step (`sample`, `explore`), read from the inventory of the run: it stays
+ * as long as an origin it names is not one of the origins of the run. Null for a run without it.
+ */
+export function readsOutsideRunOfRunNl(found: Pick<Inventory, "origin" | "origins" | "readsOutsideRun">): string | null {
+  const site = new Set(siteOrigins(found));
+  return readsOutsideRunNl(found.readsOutsideRun?.filter((entry) => !site.has(entry.origin)));
+}
+
 /** Answers that put content in a page: data or markup, not an image, a script or an empty answer such as a measuring beacon gets. */
 const CONTENT_TYPE = /^\s*(application\/([\w.-]+\+)?(json|xml)|application\/xhtml\+xml|text\/(html|plain|xml|csv))\s*(;|$)/i;
 

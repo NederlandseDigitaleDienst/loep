@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, test } from "node:test";
 import { startFixture } from "../fixtures/serve.ts";
-import { addressLevels, inventory, linksToFollow, nextAddress, noteVisited, pageLimitNl, pageLimitReason, readsOutsideRunNl, type Inventory } from "../src/commands/inventory.ts";
+import { addressLevels, inventory, linksToFollow, nextAddress, noteVisited, pageLimitNl, pageLimitReason, readsOutsideRunNl, readsOutsideRunOfRunNl, type Inventory } from "../src/commands/inventory.ts";
 import { buildSample } from "../src/commands/sample.ts";
 
 /** Visit every candidate in the order `inventory` would, when all are known from the start. */
@@ -432,6 +432,15 @@ test("a page that reads content from a host outside the run is reported with tha
   const said = readsOutsideRunNl(found.readsOutsideRun)!;
   assert.match(said, /^let op: één pagina haalt met GET inhoud op van een adres buiten de run: /);
   assert.ok(said.includes(`--also-origin ${outside}`), "it names the option that takes the origin into the run");
+});
+
+test("sample and explore repeat the note as long as the run lacks the origin", () => {
+  const outside = "https://forms.example.test";
+  const reads = [{ origin: outside, pages: [`${site}/contact`], requests: 2 }];
+  const said = readsOutsideRunOfRunNl({ origin: site, readsOutsideRun: reads });
+  assert.ok(said?.includes(`--also-origin ${outside}`), "the note names the option and the origin");
+  assert.equal(readsOutsideRunOfRunNl({ origin: site, origins: [site, outside], readsOutsideRun: reads }), null, "once the run has the origin, nothing is said");
+  assert.equal(readsOutsideRunOfRunNl({ origin: site }), null, "an older run without the field says nothing");
 });
 
 test("without a main region the search term comes from the body without header, navigation, footer and search box", async (context) => {
