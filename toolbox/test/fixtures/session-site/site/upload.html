@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="nl">
+<head><meta charset="utf-8"><title>Bestand - Testsite sessie</title><link rel="stylesheet" href="/site.css"></head>
+<body>
+<main id="inhoud"><h1>Een bestand meesturen</h1>
+<form id="upload" method="post" action="/upload-received" enctype="multipart/form-data">
+<p><label for="bijlage" id="bijlage-label">Bijlage</label> <input id="bijlage" name="bijlage" type="file" accept=".txt,.pdf"></p>
+<p id="gekozen" role="status"></p>
+<p><label for="naam" id="naam-label">Naam</label> <input id="naam" name="naam"></p>
+<p><input id="uit" type="file" disabled aria-label="Uitgeschakeld"></p>
+<button type="submit">Versturen</button></form></main>
+<script>
+// A form that sends the file as soon as it is chosen, as some do: the guard must stop it.
+document.getElementById("bijlage").addEventListener("change", (event) => {
+  const file = event.target.files[0];
+  document.getElementById("gekozen").textContent = file ? "Gekozen: " + file.name : "";
+  if (file) fetch("/upload-direct", { method: "POST", body: file }).catch(() => undefined);
+});
+</script>
+</body>
+</html>
