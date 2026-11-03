@@ -1,1 +1,0 @@
-Een site die na een aantal paginaladingen kort na elkaar verbindingen weigert, is nu te onderzoeken: `inventory --navigation-delay <seconden>` legt de tijd tussen twee navigaties vast voor de hele run, en die geldt voor de inventaris, `check-site`, `collect`, `contrast`, `states` en de sessies van de agents. Zonder de vlag blijft het tempo zoals het was.

@@ -1,1 +1,0 @@
-Een ingesloten venster dat niet los te meten is, en een pagina die tijdens de inventaris niet laadde, houden de bewijspoort niet meer tegen. Geen van beide is door een nieuwe meting of door de verkenner te sluiten. Het rapport noemt ze als beperking.
