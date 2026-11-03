@@ -1,0 +1,1 @@
+Een melding van een hulpprogramma bij een pdf die niet te lezen is, noemt nu alleen de naam van het bestand. Eerder kwam het volledige pad op de eigen machine in het rapport, met de naam van wie het onderzoek draaide.
