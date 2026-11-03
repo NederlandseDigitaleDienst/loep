@@ -1,0 +1,2 @@
+Dit is een testbestand van loep, het gereedschap voor toegankelijkheidsonderzoek.
+Het bevat geen gegevens en is alleen gekozen om te zien wat een formulier met een gekozen bestand doet.

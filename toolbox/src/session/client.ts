@@ -31,6 +31,7 @@ export const SESSION_USAGE = `  session start --run <run> [--session <name>] [--
       act:     open <url|label> [--width n] [--scheme light|dark] [--state <name>] [--with-blockers], click <ref>, key <key>,
                tab [n] [--shift], type <ref> <${Object.keys(TEST_VALUES).join("|")}>,
                select <ref> <option text | #n>, paste <ref> <same kinds as type>, press <ref> [--hold | --abort],
+               upload <ref> (puts the test file of loep in a file field, or the field of a label; nothing is sent),
                hover <ref>, scroll <ref|top|bottom|down|up|+n|-n>, back,
                drag <ref> <dx> <dy> | drag <ref> --to <ref> (press, move in steps, let go, with the mouse),
                swipe <ref> <left|right|up|down> (one finger on a touch screen: touch and pointer events of the kind touch);
