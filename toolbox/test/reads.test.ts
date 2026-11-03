@@ -9,7 +9,7 @@ import { heldBackSearchesNl } from "../src/commands/evaluate.ts";
 import { requestsSeen, searchesHeldBack } from "../src/commands/explore.ts";
 import { sha256 } from "../src/lib/canonical.ts";
 import { heldBackSearches, heldBackSearchNl, onReadOrigin, pathMatches, readDecision, readRequestProblems, readRuleFor, READS_REFUSED_LOG, readsAllowedNl, readsForRun, recordReads, refusedCoveredReads, refusedReadsLog, SEARCH_HELD_BACK_NL, setRunReads, type ReadRequest, type RefusedRead } from "../src/lib/reads.ts";
-import { approvedReads } from "../src/lib/sitemodel.ts";
+import { approvedReads, withRunTerms } from "../src/lib/sitemodel.ts";
 import { Daemon } from "../src/session/daemon.ts";
 import type { Observation } from "../src/session/observations.ts";
 import { DEFAULT_DAEMON_LIMITS, Politeness, scopeForRun } from "../src/session/safety.ts";
@@ -48,7 +48,7 @@ test("a read request names one origin, a narrow path and the search service whos
   };
   refused({ method: "PUT" }, /method moet "POST" zijn/);
   refused({ method: "GET" }, /GET en HEAD gaan al door/);
-  refused({ service: "solr" }, /service moet een van typesense, algolia, elasticsearch, meilisearch, graphql zijn/);
+  refused({ service: "solr" }, /service moet een van typesense, algolia, elasticsearch, meilisearch, graphql, searchterm zijn/);
   refused({ service: undefined }, /service moet een van/);
   refused({ origin: "https://zoek.example.nl/" }, /alleen schema, host en poort/);
   refused({ origin: "https://*.example.nl" }, /origin/);
@@ -370,6 +370,24 @@ test("a session says which held-back request is a search, and lets it through on
     assert.ok(!existsSync(join(dir, READS_REFUSED_LOG)), "a session records its refusals in its observations");
   } finally {
     await daemon.close();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("a rule of searchterm lets a body through only with a search term of the run, which loep adds and the explorer cannot", () => {
+  const dir = mkdtempSync(join(tmpdir(), "loep-searchterm-"));
+  try {
+    writeFileSync(join(dir, "inventory.json"), JSON.stringify({ searchTerm: "afvalkalender" }));
+    const own = rule({ id: "zoekterm", origin: "https://zoek.example.nl", path: "/api/v2/search", service: "searchterm" });
+    assert.deepEqual(readRequestProblems({ ...own, terms: ["iets"] }, "r"), ['r: een leesverzoek kent geen veld "terms"']);
+    const [withTerms] = withRunTerms(dir, [own]);
+    assert.deepEqual(withTerms!.terms, ["afvalkalender", "loepqzx"]);
+    const at = "https://zoek.example.nl/api/v2/search";
+    assert.equal(readDecision([withTerms!], "POST", at, {}, JSON.stringify({ request: { query: { text: "afvalkalender" } } }))?.pass, true);
+    assert.equal(readDecision([withTerms!], "POST", at, {}, JSON.stringify({ request: { query: { text: "parkeren" } } }))?.pass, false);
+    assert.equal(readDecision([own], "POST", at, {}, JSON.stringify({ query: "afvalkalender" }))?.pass, false, "a rule without the terms of the run lets nothing through");
+    assert.deepEqual(withRunTerms(dir, [rule()]), [rule()], "other services get no terms");
+  } finally {
     rmSync(dir, { recursive: true, force: true });
   }
 });
