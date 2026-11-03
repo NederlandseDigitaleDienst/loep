@@ -169,7 +169,7 @@ async function collectPage(browser: Browser, entry: SampleItem, runDir: string, 
         summary.pictures = { found: pictures.pictures.length, recognised: pictures.recognised };
         // The arrow keys can change the page itself: a slide deck turns to the next slide on every
         // stop. So they come after everything that shows the page as it loaded.
-        walk.arrowReach = await arrowReach(page, walk.stops as { path: string[]; tag: string }[]);
+        walk.arrowReach = await arrowReach(page, walk.stops as { path: string[]; tag: string; inputType?: string | null }[]);
         await writeJson(join(dir, "probes", "tabwalk.json"), walk);
         // What can be a time limit (2.2.1): every timer with what it did, waiting timers set off now. This changes the page, so it is last.
         const limits = await timeLimits(page, sweep.seededCookies);

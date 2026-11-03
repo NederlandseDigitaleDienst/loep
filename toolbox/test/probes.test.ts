@@ -14,7 +14,7 @@ import { boundaryOf, fateOf, forcedColoursProbe, type ForcedProbe } from "../src
 import { uiContrast } from "../src/lib/extractors.ts";
 import type { RunData } from "../src/lib/rundata.ts";
 import { collectFacts, frameListeners } from "../src/instruments/facts.ts";
-import { arrowReach, MOVED, skipLinkProbe, tabWalk } from "../src/instruments/keyboard.ts";
+import { arrowReach, MOVED, skipLinkProbe, tabWalk, triesArrows } from "../src/instruments/keyboard.ts";
 import { probeHoverTarget } from "../src/instruments/hover.ts";
 import { firstKeyReaction, KEYS, leaveTextEntry } from "../src/instruments/keys.ts";
 import { spacingEffect, spacingFromLoad } from "../src/instruments/overflow.ts";
@@ -493,6 +493,21 @@ test("the numbered tab-order picture shows the slide the stops were counted on, 
   // The numbers were drawn for the picture only; they are gone from the page.
   assert.equal(await page.locator("[data-loep-tab-order]").count(), 0);
   await page.context().close();
+});
+
+test("the arrow keys reach the other buttons of a radio group that is one Tab stop, and leave a text field alone", async () => {
+  const page = await open("/radio-arrows.html");
+  const dir = await mkdtemp(join(tmpdir(), "loep-radio-arrows-"));
+  const walk = (await tabWalk(page, { focusDir: join(dir, "focus"), focusPath: "focus" })) as { stops: { path: string[]; tag: string; inputType?: string | null }[] };
+  const stops = walk.stops.map((stop) => stop.path.join(" >>> "));
+  assert.deepEqual(stops, ["#before", "#name", "#by-mail", "#after"], "the group is one Tab stop");
+  assert.deepEqual(walk.stops.map((stop) => stop.inputType ?? null), [null, "text", "radio", null]);
+  const reach = (await arrowReach(page, walk.stops)) as { from: string; reached: { where: string }[] }[];
+  assert.deepEqual(reach.map((entry) => entry.from), ["#by-mail"], "only the radio group is tried among the inputs");
+  assert.deepEqual(reach[0]!.reached.map((item) => item.where), ["#by-phone", "#by-post"]);
+  await page.context().close();
+  // A stop from an older walk, without an input type, is skipped as before; a text field and a select list always.
+  assert.deepEqual([triesArrows({ tag: "input" }), triesArrows({ tag: "input", inputType: "text" }), triesArrows({ tag: "select" }), triesArrows({ tag: "input", inputType: "radio" }), triesArrows({ tag: "a" })], [false, false, false, true, true]);
 });
 
 test("the boundary of a radio button clipped to a pixel is measured on the label that draws it, also in the chosen state", async () => {
