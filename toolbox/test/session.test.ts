@@ -409,6 +409,21 @@ test("type enters only fixed test values, and a POST never leaves the browser", 
   assert.equal(searched.url, `${site.origin}/form.html?q=test`);
 });
 
+test("type fits the fixed value to min, max, step, length and pattern, and the field is valid", async () => {
+  await loep("open", ["/bounded.html"]);
+  const cases: [string, string, string][] = [
+    ["css:#amount", "number", "100"],
+    ["css:#share", "number", "20"],
+    ["css:#code", "text", "1234 AB"],
+    ["css:#short", "text", "Loep Testpersoon"],
+  ];
+  for (const [query, kind, expected] of cases) {
+    const typed = await loep("type", [await ref(query), kind]);
+    assert.equal(typed.entered, expected, query);
+    assert.equal(typed.invalid, undefined, `${query} is valid after typing`);
+  }
+});
+
 test("a press on a form that sends nothing to a server holds nothing back, so what the page shows is an ordinary observation (#371)", async () => {
   site.requests.length = 0;
   await loep("open", ["/form-local.html"]);
