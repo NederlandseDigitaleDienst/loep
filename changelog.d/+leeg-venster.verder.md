@@ -1,1 +1,0 @@
-Een ingesloten venster met een document zonder hoogte, zoals een speler die leeg blijft, krijgt nu een schermafbeelding van wat het venster toont. Eerder mislukte daardoor de meting van de hele pagina.
