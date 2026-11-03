@@ -364,7 +364,7 @@ async function main(): Promise<void> {
       if (permission) setRunWrites(writeAccess(values.out, permission, "inventory"));
       // What this command was given decides whether a session may be used: the manifest only holds it afterwards.
       setRunLogin(values.out, { writes: permission });
-      const { formPagesNl, inventory, pageLimitNl, passwordPagesNl, readsOutsideRunNl } = await import("./commands/inventory.ts");
+      const { formPagesNl, inventory, pageLimitNl, passwordPagesNl, readsOutsideRunNl, refusedPagesNl } = await import("./commands/inventory.ts");
       const { originsNl, originsOfRun, siteOrigins } = await import("./lib/origins.ts");
       // Checked before the browser starts: a mistyped origin should not cost a whole inventory.
       const origins = originsOfRun(target, values["also-origin"]);
@@ -376,6 +376,9 @@ async function main(): Promise<void> {
       const vendor = tagPrefixes.length > 0 ? { tagPrefixes, nameNl: values["vendor-name"]?.trim() || "leverancier" } : undefined;
       const result = await inventory({ baseUrl: target, out: values.out, maxPages: Number(values["max-pages"]), fixedUrls, vendor, alsoOrigins: values["also-origin"] });
       await recordWrites(values.out, permission);
+      // inventory.json is already written, so the refusals can be read there; no mailbox and no agent follow.
+      const refused = refusedPagesNl(result);
+      if (refused) throw new Error(refused);
       if (mailbox) {
         const { startMailbox } = await import("./commands/mail.ts");
         await startMailbox(values.out, mailbox.server, mailAddress!, mailbox.mark, permission!);

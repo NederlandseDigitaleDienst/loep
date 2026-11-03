@@ -1,0 +1,1 @@
+`inventory` stopt met een melding als de site (bijna) alle bezoeken weigert met 401, 403 of 429, zoals een firewall of botfilter doet: 90% of meer van ten minste 5 bezochte pagina's. Er start dan geen verkenner op een site die alleen een foutpagina laat zien. `inventory.json` wordt wel geschreven, zodat te zien is welke pagina's werden geweigerd.
