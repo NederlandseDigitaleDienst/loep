@@ -198,7 +198,20 @@ function parseAtOnce(text: string | undefined, what: string): number | undefined
   return value;
 }
 
-const NOT_EXPLORED_NL = "deze run heeft geen sitemodel (site.json): verken de site eerst met explore en check-site, en draai daarna collect, contrast, states en gate";
+/**
+ * Say again, after `sample` and `explore`, that pages read content from an origin outside the run:
+ * the choice is made at the inventory, and a note said only there is easy to pass by.
+ */
+async function repeatReadsOutsideRun(runDir: string): Promise<void> {
+  const path = join(runDir, "inventory.json");
+  if (!existsSync(path)) return;
+  const { readJson } = await import("./lib/canonical.ts");
+  const { readsOutsideRunOfRunNl } = await import("./commands/inventory.ts");
+  const said = readsOutsideRunOfRunNl(await readJson<import("./commands/inventory.ts").Inventory>(path));
+  if (said) process.stdout.write(`${said}\n`);
+}
+
+const NOT_EXPLORED_NL ="deze run heeft geen sitemodel (site.json): verken de site eerst met explore en check-site, en draai daarna collect, contrast, states en gate";
 /** The commands that measure or judge a site that was mapped first. */
 const NEEDS_SITE_MODEL = ["collect", "contrast", "states", "gate", "tasks"];
 
@@ -426,6 +439,7 @@ async function main(): Promise<void> {
       const result = await sample(values.run, values.seed);
       process.stdout.write(`${result.items.length} of ${result.populationSize} unique pages (${result.method})\n`);
       if (result.documents) process.stdout.write(`${result.documents.length} of ${result.documentPopulation!.onSite} documents\n`);
+      await repeatReadsOutsideRun(values.run);
       return;
     }
     case "explore": {
@@ -433,6 +447,7 @@ async function main(): Promise<void> {
       const { explore } = await import("./commands/explore.ts");
       const result = await explore(values.run);
       process.stdout.write(`${result.task}\nronde ${result.round}: ${result.pages} pagina's, ${result.frames} ingesloten vensters\n`);
+      await repeatReadsOutsideRun(values.run);
       return;
     }
     case "check-site": {
