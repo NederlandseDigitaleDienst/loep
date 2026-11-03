@@ -1,0 +1,1 @@
+De pijltjesproef probeert nu ook een groep keuzerondjes. Zo'n groep is één Tab-stop; de andere rondjes bereik je met de pijltjes en tellen nu als bereikt, waardoor de poort geen vals laag bereik van de Tab-proef meer meldt. Tekstvelden en keuzelijsten blijven overgeslagen.

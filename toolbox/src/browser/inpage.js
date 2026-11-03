@@ -1631,6 +1631,8 @@
       focusVisible: element.matches(":focus-visible"),
       coveredBy: covered ? describe(top).path : null,
       href: element.getAttribute("href"),
+      // The arrow probe tries a radio button, whose group is one Tab stop, and leaves a text field alone.
+      inputType: element.localName === "input" ? element.type : null,
     };
   }
 
