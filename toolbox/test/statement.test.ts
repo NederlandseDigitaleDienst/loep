@@ -84,6 +84,9 @@ test("step 4 of the answer sheet asks the questions of the invulassistent, with 
   const count = (outcome: string) => legal.filter((criterion) => criterion.outcome === outcome).length;
   assert.match(step4, new RegExp(`onderzocht\\?: ${legal.length} `));
   assert.match(step4, new RegExp(`beoordeeld\\?: ${count("passed") + count("inapplicable")} \\(${count("passed")} voldoet en ${count("inapplicable")} niet van toepassing\\)`));
+  const step5 = sheet.slice(sheet.indexOf("## 5. "), sheet.indexOf("## 6. "));
+  const failed = legal.filter((criterion) => criterion.outcome === "failed");
+  assert.deepEqual([...step5.matchAll(/^- (.+)$/gm)].map((match) => match[1]), failed.map((criterion) => `${criterion.id} - ${criterion.titleNl} [niveau ${criterion.level}]`));
 });
 
 test("comparison with an existing audit separates misses from open questions", () => {

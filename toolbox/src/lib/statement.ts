@@ -467,7 +467,13 @@ export function renderAnswerSheet(evaluation: Evaluation, input: StatementInput,
     "",
     "## 5. Gevonden problemen",
     "",
-    ...(failed.length > 0 ? failed.map((criterion) => `- ${criterion.id} ${criterion.titleNl} (${criterion.findings.length} bevindingen)`) : ["- Geen afwijkingen vastgesteld."]),
+    ...(failed.length > 0
+      ? [
+          `Vink bij "Succescriteria" deze ${failed.length} aan. Ze staan zoals de lijst in de invulassistent ze noemt, in dezelfde volgorde.`,
+          "",
+          ...failed.map((criterion) => `- ${criterion.id} - ${criterion.titleNl} [niveau ${criterion.level}]`),
+        ]
+      : ["- Geen afwijkingen vastgesteld."]),
     "",
     "## 6. Planning en voortgang",
     "",
