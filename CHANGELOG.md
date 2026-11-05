@@ -6,6 +6,15 @@ Wat er per versie van loep is veranderd. De versie staat op het voorblad en onde
 
 <!-- towncrier: een nieuwe versie komt hieronder -->
 
+## 0.23.1 (2026-11-05)
+
+Deze versie is uitgebracht zonder meting: alleen het invulblad voor de invulassistent en een melding over een pdf veranderen; er zit geen wijziging aan de opdrachten of de oordeelregels in.
+
+### Verder
+
+- Een melding van een hulpprogramma bij een pdf die niet te lezen is, noemt nu alleen de naam van het bestand. Eerder kwam het volledige pad op de eigen machine in het rapport, met de naam van wie het onderzoek draaide.
+- Het invulblad voor de invulassistent volgt bij stap 4 tot en met 7 de vragen van toegankelijkheidsverklaring.nl, in dezelfde volgorde. Stap 4 (onderzoek) geeft de korte beschrijving, de datum als dd-mm-jjjj, de scope met puntkomma's, het aantal onderzochte en voldoende succescriteria, wie het uitvoerde, platformonderzoek, de eisen van DigiToegankelijk en de directe link. Stap 5 noemt de criteria zoals de lijst waarin je ze aanvinkt, bijvoorbeeld "1.3.1 - Info en relaties [niveau A]". Stap 6 zegt welke fouten je als opgelost markeert, met datum, maatregel en of het vinkje voor het hele kanaal mag, en geeft daarna de alternatieven, de maatregelen voor wat nog open is en de uiterste datum. Stap 7 geeft de links voor contact en klachten en een voorstel voor de extra informatie. Eerder stonden er velden die het formulier niet kent, zodat waarden in het verkeerde vak terechtkwamen.
+
 ## 0.23.0 (2026-11-03)
 
 Deze versie is uitgebracht zonder meting: robuustheid: stille hangs in de veegronde en de sessies, poortlussen, een tempo per run; geen wijziging aan de opdrachten of de oordeelregels; de veegronde op de testsite is groen.
