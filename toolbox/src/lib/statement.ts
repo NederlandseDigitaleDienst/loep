@@ -63,6 +63,13 @@ function nlDate(iso: string | undefined, what: string): string {
   return new Intl.DateTimeFormat("nl-NL", { day: "numeric", month: "long", year: "numeric", timeZone: "Europe/Amsterdam" }).format(new Date(iso));
 }
 
+/** A date as the invulassistent asks for it: dd-mm-jjjj. */
+function formDate(iso: string): string {
+  const parts = new Intl.DateTimeFormat("nl-NL", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "Europe/Amsterdam" }).formatToParts(new Date(iso));
+  const part = (type: string) => parts.find((p) => p.type === type)!.value;
+  return `${part("day")}-${part("month")}-${part("year")}`;
+}
+
 /**
  * The statement as a document: an ordered list of blocks. The Markdown and the PDF are
  * both rendered from this, so they always say the same thing.
@@ -420,11 +427,14 @@ export function answerSheetDocument(evaluation: Evaluation, input: StatementInpu
 /** Copy-and-paste values for the nine steps of the invulassistent on toegankelijkheidsverklaring.nl. */
 export function renderAnswerSheet(evaluation: Evaluation, input: StatementInput, decisions: Decision[] = [], rechecks: FindingRecheck[] = []): string {
   const statement = renderStatement(evaluation, input, { concept: true, decisions, rechecks });
-  const failed = evaluation.criteria.filter((criterion) => criterion.versions.includes(LEGAL_VERSION) && criterion.outcome === "failed");
+  const legal = evaluation.criteria.filter((criterion) => criterion.versions.includes(LEGAL_VERSION));
+  const failed = legal.filter((criterion) => criterion.outcome === "failed");
+  const passed = legal.filter((criterion) => criterion.outcome === "passed").length;
+  const inapplicable = legal.filter((criterion) => criterion.outcome === "inapplicable").length;
   const lines = [
     `# Invulblad voor de invulassistent: ${evaluation.site.name}`,
     "",
-    "Het register van toegankelijkheidsverklaringen heeft geen koppeling. Neem de waarden hieronder over in de invulassistent op <https://www.toegankelijkheidsverklaring.nl>. De veldnamen van de invulassistent kunnen afwijken; de volgorde volgt de negen stappen.",
+    "Het register van toegankelijkheidsverklaringen heeft geen koppeling. Neem de waarden hieronder over in de invulassistent op <https://www.toegankelijkheidsverklaring.nl>. Bij stap 4 staan de vragen zoals de invulassistent ze stelt, in dezelfde volgorde. Bij de andere stappen kunnen de veldnamen afwijken; de volgorde volgt de negen stappen.",
     "",
     "## 1. Kanaal",
     "",
@@ -443,14 +453,17 @@ export function renderAnswerSheet(evaluation: Evaluation, input: StatementInput,
     "",
     "## 4. Onderzoek",
     "",
-    `- Link naar het rapport: ${input.reportUrl ?? ask("rechtstreekse openbare link")}`,
-    `- Datum van het onderzoek: ${nlDate(evaluation.evaluatedAt, "datum")}`,
-    "- Type onderzoek: automatisch onderzoek",
-    "- Uitgevoerd door: in eigen beheer",
-    `- Standaard: ${evaluation.standards.en301549}; getoetst op ${evaluation.standards.wcag.join(" en ")}`,
-    `- Methode: ${evaluation.method.name} ${evaluation.method.version}`,
-    `- Scope: ${evaluation.scope.includedNl.join("; ")}`,
-    `- Steekproef: ${evaluation.sample.items.length} pagina's. ${evaluation.sample.note}`,
+    "Vul per rapport een blok in. Dit onderzoek is één rapport.",
+    "",
+    `- Korte beschrijving onderzoek: Automatisch WCAG-onderzoek van ${evaluation.sample.items.length} pagina's van ${evaluation.site.name} met ${madeWith(evaluation)}, volgens ${evaluation.method.name} ${evaluation.method.version}, getoetst op ${evaluation.standards.wcag.join(" en ")} (${evaluation.standards.en301549}).`,
+    `- Datum onderzoek: ${formDate(evaluation.evaluatedAt)}`,
+    `- Wat is onderzocht? (scope): ${[...evaluation.scope.includedNl, ...evaluation.scope.excludedNl.map((part) => `Niet: ${part.charAt(0).toLowerCase()}${part.slice(1)}`)].join("; ")}`,
+    `- Hoeveel succescriteria zijn onderzocht?: ${legal.length} (WCAG ${LEGAL_VERSION} niveau A en AA, de versie waar EN 301 549 naar verwijst)`,
+    `- Hoeveel van de onderzochte succescriteria zijn als voldoende beoordeeld?: ${passed + inapplicable} (${passed} voldoet en ${inapplicable} niet van toepassing). Zegt de uitleg bij deze vraag dat niet van toepassing niet meetelt, vul dan ${passed} in.`,
+    "- Uitgevoerd door: Interne medewerker",
+    "- Is dit een (deel)onderzoek van de techniek van het platform waarop deze website is gebaseerd?: Nee. Ja alleen als het rapport de techniek van een platform onderzoekt waarop meer sites draaien, en niet de inhoud van deze site.",
+    "- Voldoet dit rapport aan de eisen die DigiToegankelijk stelt?: niet bevestigd. DigiToegankelijk vraagt dat meer dan tachtig procent van de eisen door een mens is gecontroleerd. In dit onderzoek heeft een taalmodel elk criterium beoordeeld. Kies Ja alleen als wie het rapport aftekende die controle heeft gedaan, anders Nee.",
+    `- Directe link naar het onderzoeksrapport: ${input.reportUrl ?? ask("rechtstreekse openbare link, begint met https://")}`,
     "",
     "## 5. Gevonden problemen",
     "",
