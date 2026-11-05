@@ -63,6 +63,13 @@ function nlDate(iso: string | undefined, what: string): string {
   return new Intl.DateTimeFormat("nl-NL", { day: "numeric", month: "long", year: "numeric", timeZone: "Europe/Amsterdam" }).format(new Date(iso));
 }
 
+/** A date as the invulassistent asks for it: dd-mm-jjjj. */
+function formDate(iso: string): string {
+  const parts = new Intl.DateTimeFormat("nl-NL", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "Europe/Amsterdam" }).formatToParts(new Date(iso));
+  const part = (type: string) => parts.find((p) => p.type === type)!.value;
+  return `${part("day")}-${part("month")}-${part("year")}`;
+}
+
 /**
  * The statement as a document: an ordered list of blocks. The Markdown and the PDF are
  * both rendered from this, so they always say the same thing.
@@ -417,14 +424,69 @@ export function answerSheetDocument(evaluation: Evaluation, input: StatementInpu
   return { ...documentFor(evaluation, input, "Invulblad voor de invulassistent", blocksFromMarkdown(renderAnswerSheet(evaluation, input, decisions, rechecks))), concept: false, status: null };
 }
 
+/** A day (jjjj-mm-dd, or an ISO moment) as the invulassistent asks for it: dd-mm-jjjj. */
+function formDay(day: string): string {
+  return formDate(`${day.slice(0, 10)}T12:00:00Z`);
+}
+
+const capitalised = (text: string): string => `${text.charAt(0).toUpperCase()}${text.slice(1)}`;
+
+type EvaluationDefect = NonNullable<Evaluation["defects"]>[number];
+
+/** The defects with a finding under a criterion, each with the decision about it (undefined when there is none). */
+function criterionDecisions(criterion: CriterionResult, evaluation: Evaluation, decisions: Decision[]): { defects: EvaluationDefect[]; decided: (Decision | undefined)[] } {
+  const ids = new Set(criterion.findings.map((finding) => finding.id));
+  const defects = (evaluation.defects ?? []).filter((defect) => defect.findingIds.some((id) => ids.has(id)));
+  const byDefect = new Map(decisions.map((decision) => [decision.defect.id, decision]));
+  return { defects, decided: defects.map((defect) => byDefect.get(defect.id)) };
+}
+
+/** Whether the latest recheck of every finding under a criterion says it is gone. */
+function allRemeasuredGone(criterion: CriterionResult, rechecks: FindingRecheck[]): boolean {
+  return criterion.findings.length > 0 && remeasuredNl(criterion.findings.map((finding) => finding.id), rechecks, (iso) => iso).endsWith(": opgelost");
+}
+
+/** What was done for a solved criterion, with what the rechecks show unless the organisation's own text already says it. */
+function solvedMeasureNl(criterion: CriterionResult, defects: EvaluationDefect[], decided: Decision[], rechecks: FindingRecheck[]): string {
+  const done = defects.map((defect, index) => `${defect.titleNl.replace(/\.$/, "")}. ${decided[index]!.whatNl ? `${decided[index]!.whatNl!.replace(/\.$/, "")}.` : ""}`.trim()).join(" ");
+  if (/nagemeten/i.test(done)) return done;
+  return `${done} ${capitalised(remeasuredNl(criterion.findings.map((finding) => finding.id), rechecks, formDate))}.`;
+}
+
+/** The measure for a criterion that is not solved yet, as the single text field of the invulassistent takes it. */
+function openMeasureNl(criterion: CriterionResult, evaluation: Evaluation, input: StatementInput, decisions: Decision[], rechecks: FindingRecheck[]): string {
+  const { defects, decided } = criterionDecisions(criterion, evaluation, decisions);
+  if (decided.some((decision) => decision !== undefined)) {
+    return defects
+      .map((defect, index) => {
+        const decision = decided[index];
+        const title = defect.titleNl.replace(/\.$/, "");
+        if (decision?.decision === "gepland") return `${title}. ${decision.whatNl ? `${decision.whatNl.replace(/\.$/, "")}. ` : ""}Klaar uiterlijk ${formDay(decision.date!)}.`;
+        if (decision?.decision === "opgelost") return `${title}. Opgelost op ${formDay(measureDate(decision)!)}.`;
+        return `${title}: ${decision ? decisionNl(decision, defect.findingIds, rechecks) : "nog niet besloten"}.`;
+      })
+      .join(" ");
+  }
+  return measureFor(criterion, evaluation, input, decisions, rechecks).textNl ?? ask("maatregel");
+}
+
 /** Copy-and-paste values for the nine steps of the invulassistent on toegankelijkheidsverklaring.nl. */
 export function renderAnswerSheet(evaluation: Evaluation, input: StatementInput, decisions: Decision[] = [], rechecks: FindingRecheck[] = []): string {
   const statement = renderStatement(evaluation, input, { concept: true, decisions, rechecks });
-  const failed = evaluation.criteria.filter((criterion) => criterion.versions.includes(LEGAL_VERSION) && criterion.outcome === "failed");
+  const legal = evaluation.criteria.filter((criterion) => criterion.versions.includes(LEGAL_VERSION));
+  const failed = legal.filter((criterion) => criterion.outcome === "failed");
+  const passed = legal.filter((criterion) => criterion.outcome === "passed").length;
+  const inapplicable = legal.filter((criterion) => criterion.outcome === "inapplicable").length;
+  // A criterion is marked as solved in the register only when the organisation decided "opgelost" for every defect under it.
+  const decidedFor = failed.map((criterion) => ({ criterion, ...criterionDecisions(criterion, evaluation, decisions) }));
+  const fixed = decidedFor
+    .filter(({ defects, decided }) => defects.length > 0 && decided.every((decision) => decision?.decision === "opgelost"))
+    .map((entry) => ({ ...entry, decided: entry.decided as Decision[] }));
+  const unresolved = failed.filter((criterion) => !fixed.some((entry) => entry.criterion === criterion));
   const lines = [
     `# Invulblad voor de invulassistent: ${evaluation.site.name}`,
     "",
-    "Het register van toegankelijkheidsverklaringen heeft geen koppeling. Neem de waarden hieronder over in de invulassistent op <https://www.toegankelijkheidsverklaring.nl>. De veldnamen van de invulassistent kunnen afwijken; de volgorde volgt de negen stappen.",
+    "Het register van toegankelijkheidsverklaringen heeft geen koppeling. Neem de waarden hieronder over in de invulassistent op <https://www.toegankelijkheidsverklaring.nl>. Bij stap 4 tot en met 7 staan de vragen zoals de invulassistent ze stelt, in dezelfde volgorde. Bij de andere stappen kunnen de veldnamen afwijken; de volgorde volgt de negen stappen.",
     "",
     "## 1. Kanaal",
     "",
@@ -443,31 +505,61 @@ export function renderAnswerSheet(evaluation: Evaluation, input: StatementInput,
     "",
     "## 4. Onderzoek",
     "",
-    `- Link naar het rapport: ${input.reportUrl ?? ask("rechtstreekse openbare link")}`,
-    `- Datum van het onderzoek: ${nlDate(evaluation.evaluatedAt, "datum")}`,
-    "- Type onderzoek: automatisch onderzoek",
-    "- Uitgevoerd door: in eigen beheer",
-    `- Standaard: ${evaluation.standards.en301549}; getoetst op ${evaluation.standards.wcag.join(" en ")}`,
-    `- Methode: ${evaluation.method.name} ${evaluation.method.version}`,
-    `- Scope: ${evaluation.scope.includedNl.join("; ")}`,
-    `- Steekproef: ${evaluation.sample.items.length} pagina's. ${evaluation.sample.note}`,
+    "Vul per rapport een blok in. Dit onderzoek is één rapport.",
+    "",
+    `- Korte beschrijving onderzoek: Automatisch WCAG-onderzoek van ${evaluation.sample.items.length} pagina's van ${evaluation.site.name} met ${madeWith(evaluation)}, volgens ${evaluation.method.name} ${evaluation.method.version}, getoetst op ${evaluation.standards.wcag.join(" en ")} (${evaluation.standards.en301549}).`,
+    `- Datum onderzoek: ${formDate(evaluation.evaluatedAt)}`,
+    `- Wat is onderzocht? (scope): ${[...evaluation.scope.includedNl, ...evaluation.scope.excludedNl.map((part) => `Niet: ${part.charAt(0).toLowerCase()}${part.slice(1)}`)].join("; ")}`,
+    `- Hoeveel succescriteria zijn onderzocht?: ${legal.length} (WCAG ${LEGAL_VERSION} niveau A en AA, de versie waar EN 301 549 naar verwijst)`,
+    `- Hoeveel van de onderzochte succescriteria zijn als voldoende beoordeeld?: ${passed + inapplicable} (${passed} voldoet en ${inapplicable} niet van toepassing). Zegt de uitleg bij deze vraag dat niet van toepassing niet meetelt, vul dan ${passed} in.`,
+    "- Uitgevoerd door: Interne medewerker",
+    "- Is dit een (deel)onderzoek van de techniek van het platform waarop deze website is gebaseerd?: Nee. Ja alleen als het rapport de techniek van een platform onderzoekt waarop meer sites draaien, en niet de inhoud van deze site.",
+    "- Voldoet dit rapport aan de eisen die DigiToegankelijk stelt?: niet bevestigd. DigiToegankelijk vraagt dat meer dan tachtig procent van de eisen door een mens is gecontroleerd. In dit onderzoek heeft een taalmodel elk criterium beoordeeld. Kies Ja alleen als wie het rapport aftekende die controle heeft gedaan, anders Nee.",
+    `- Directe link naar het onderzoeksrapport: ${input.reportUrl ?? ask("rechtstreekse openbare link, begint met https://")}`,
     "",
     "## 5. Gevonden problemen",
     "",
-    ...(failed.length > 0 ? failed.map((criterion) => `- ${criterion.id} ${criterion.titleNl} (${criterion.findings.length} bevindingen)`) : ["- Geen afwijkingen vastgesteld."]),
+    ...(failed.length > 0
+      ? [
+          `Vink bij "Succescriteria" deze ${failed.length} aan. Ze staan zoals de lijst in de invulassistent ze noemt, in dezelfde volgorde.`,
+          "",
+          ...failed.map((criterion) => `- ${criterion.id} - ${criterion.titleNl} [niveau ${criterion.level}]`),
+        ]
+      : ["- Geen afwijkingen vastgesteld."]),
     "",
-    "## 6. Planning en voortgang",
+    "## 6. Fouten, alternatieven en maatregelen",
     "",
-    `- Streefdatum volledig voldoen: ${nlDate(input.targetDate, "streefdatum")}`,
-    `- Aanvullend onderzoek gepland op: ${nlDate(input.plannedEvaluationDate, "datum, alleen bij status C")}`,
-    ...failed.map((criterion) => `- Maatregel bij ${criterion.id}: ${measureFor(criterion, evaluation, input, decisions, rechecks).textNl ?? ask("maatregel")}`),
+    fixed.length > 0
+      ? `Kies in de tabel met fouten bij deze ${fixed.length} "Markeer als opgelost". Een fout die de organisatie nog niet heeft opgelost, laat je staan.`
+      : "In de tabel met fouten is nog niets als opgelost te markeren.",
     "",
-    "## 7. Extra teksten",
+    ...fixed.flatMap(({ criterion, defects, decided }) => [
+      `### ${criterion.id} ${criterion.titleNl}`,
+      "",
+      `- Op welke datum zijn de problemen bij dit succescriterium opgelost?: ${formDay(decided.map((decision) => measureDate(decision)!).sort().at(-1)!)}`,
+      `- Welke maatregelen zijn genomen om de problemen op te lossen?: ${solvedMeasureNl(criterion, defects, decided, rechecks)}`,
+      `- Alle problemen bij dit succescriterium zijn op het hele kanaal opgelost: ${
+        allRemeasuredGone(criterion, rechecks)
+          ? "aanvinken. Elke bevinding bij dit criterium is nagemeten en weg."
+          : "alleen aanvinken als de organisatie dat zeker weet. Niet elke bevinding bij dit criterium is nagemeten als weg."
+      }`,
+      "",
+    ]),
+    "### Alternatieven en maatregelen",
     "",
-    `- Alternatieven: ${input.alternativesNl ?? ask("alternatieven voor bezoekers")}`,
-    `- Contact: ${input.contactUrl ?? ask("link naar contactgegevens")}`,
-    `- Klachten: ${input.complaintsUrl ?? ask("link naar de klachtenprocedure")}`,
-    `- Tweede lijn: ${input.ombudsmanUrl ?? ask("link naar de ombudsman")}`,
+    `- Welke alternatieven biedt jouw organisatie aan bezoekers die last hebben van de problemen die nog niet zijn opgelost?: ${input.alternativesNl ?? ask("alternatieven voor bezoekers")}`,
+    `- Welke maatregelen neemt jouw organisatie om de problemen op te lossen?: ${
+      unresolved.length > 0 ? unresolved.map((criterion) => `${criterion.id} ${criterion.titleNl}: ${openMeasureNl(criterion, evaluation, input, decisions, rechecks)}`).join(" ") : "geen, alle problemen zijn opgelost"
+    }`,
+    `- Op welke datum zijn de problemen uiterlijk opgelost?: ${input.targetDate ? formDay(input.targetDate) : ask("streefdatum, in de toekomst")}`,
+    ...(statement.status === "C" ? [`- Aanvullend onderzoek gepland op: ${input.plannedEvaluationDate ? formDay(input.plannedEvaluationDate) : ask("datum van het aanvullende onderzoek")}`] : []),
+    "",
+    "## 7. Contact en klachten",
+    "",
+    "- Keuze: Gebruik de standaardtekst",
+    `- Link naar contactpagina: ${input.contactUrl ?? ask("link naar contactgegevens, begint met https://")}`,
+    `- Link naar informatie over klachtenprocedure: ${input.complaintsUrl ?? ask("link naar de klachtenprocedure, begint met https://")}`,
+    `- Extra informatie (niet verplicht): ${input.additionalInformationNl ?? `Het onderzoek is automatisch uitgevoerd met ${madeWith(evaluation)}, een open-source instrument. Scripts hebben het bewijs verzameld en een taalmodel heeft elk succescriterium beoordeeld.${evaluation.signature ? " Het rapport is gelezen en afgetekend." : ""}`}`,
     "",
     "## 8. Akkoordverklaring",
     "",
