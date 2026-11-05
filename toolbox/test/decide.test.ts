@@ -196,7 +196,20 @@ test("the statement takes its measures from the decisions, says how each was rec
   const [defect] = defectsOf(one!.id);
   assert.ok(all.markdown.includes(`Succescriterium ${one!.id} – ${one!.titleNl}: ${defect!.titleNl.replace(/\.$/, "")}: herstel gepland, klaar uiterlijk 1 december 2026: Het team past het component aan (bevestigd in een terminal op 20 oktober 2026 om 12:00)`), all.markdown);
   assert.ok(all.markdown.includes("Voor het onderzoek is getekend door: R, bevestigd in een terminal op 10 oktober 2026 om 10:00."), "the statement says how the signature came about");
-  assert.ok(renderAnswerSheet(evaluation, input, planned).includes(`- Maatregel bij ${one!.id}: ${defect!.titleNl.replace(/\.$/, "")}: herstel gepland`));
+  const plannedSheet = renderAnswerSheet(evaluation, input, planned);
+  assert.ok(plannedSheet.includes(`${one!.id} ${one!.titleNl}: ${defect!.titleNl.replace(/\.$/, "")}. Het team past het component aan. Klaar uiterlijk 01-12-2026.`), plannedSheet);
+  assert.ok(plannedSheet.includes("In de tabel met fouten is nog niets als opgelost te markeren."));
+
+  // One criterion solved and measured again: the sheet says to mark it, with the date as the form takes it.
+  const solvedIds = new Set(defectsOf(one!.id).map((entry) => entry.id));
+  const solved = evaluation.defects!.map((entry) => (solvedIds.has(entry.id) ? decision(entry, { decision: "opgelost", whatNl: "Aangepast in versie 2.", date: "2026-10-25" }) : decision(entry, {})));
+  const gone = one!.findings.map((finding) => ({ finding: finding.id, outcome: "opgelost" as const, measuredAt: "2026-10-26T09:00:00.000Z" }));
+  const solvedSheet = renderAnswerSheet(evaluation, input, solved, gone);
+  const marked = solvedSheet.slice(solvedSheet.indexOf(`### ${one!.id} `), solvedSheet.indexOf("### Alternatieven"));
+  assert.match(marked, /opgelost\?: 25-10-2026\n/);
+  assert.match(marked, /Aangepast in versie 2\. Nagemeten op 26-10-2026: opgelost\./);
+  assert.match(marked, /op het hele kanaal opgelost: aanvinken\./);
+  assert.ok(!solvedSheet.slice(solvedSheet.indexOf("### Alternatieven")).includes(`${one!.id} ${one!.titleNl}:`), "a solved criterion is not among the open measures");
 
   // A decision from the conversation says so; one that is done also says it was not measured again.
   const talked = planned.map((entry) => (entry.defect.id === defect!.id ? decision(defect!, { decision: "opgelost", recordedVia: "gesprek", confirmationNl: "Ja.", summaryNl: "Het component is aangepast." }) : entry));
@@ -279,7 +292,8 @@ test("a defect decided as opgelost whose finding was measured again: the report,
   for (const line of ["Nagemeten op: 3 november 2026 om 11:00", "Waar: Startpagina, het eerste logo.", "Gemeten in: https://voorbeeld.example/, 1280 pixels breed, donker kleurschema, in een toestand", "Wat de meting liet zien: Gemeten op dezelfde plek: opgelost.", "Waarnemingen: n-111-0001"]) assert.ok(appendix().includes(`  - ${line}\n`), line);
   await statement(run, false);
   assert.ok(readFileSync(join(run, "verklaring", "verklaring.md"), "utf8").includes("hersteld op 2 november 2026: Het component is aangepast en staat live (nagemeten op 3 november 2026: opgelost; vastgelegd in een gesprek"));
-  assert.ok(readFileSync(join(run, "verklaring", "invulassistent.md"), "utf8").includes("(nagemeten op 3 november 2026: opgelost; vastgelegd in een gesprek"));
+  const sheet = readFileSync(join(run, "verklaring", "invulassistent.md"), "utf8");
+  assert.match(sheet, /opgelost\?: 02-11-2026\n- Welke maatregelen zijn genomen om de problemen op te lossen\?: .*Het component is aangepast en staat live\. Nagemeten op 03-11-2026: opgelost\.\n- Alle problemen bij dit succescriterium zijn op het hele kanaal opgelost: aanvinken\./, sheet);
 
   // A later recheck that finds it again: the label says so, though the organisation said opgelost.
   writeRecheck(run, finding, "2026-11-05T10:00:00.000Z", "nog aanwezig");
