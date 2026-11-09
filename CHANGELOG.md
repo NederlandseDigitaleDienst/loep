@@ -6,6 +6,15 @@ Wat er per versie van loep is veranderd. De versie staat op het voorblad en onde
 
 <!-- towncrier: een nieuwe versie komt hieronder -->
 
+## 0.24.1 (2026-11-09)
+
+Deze versie is uitgebracht zonder meting: alleen de tekst van bevindingen over 2.5.3 en een waarschuwing bij een vaste lijst van pagina's (#482, #484).
+
+### Verder
+
+- Een bevinding over 2.5.3 zegt in de titel waar de naam vandaan komt (zoals `aria-label` of verborgen tekst) en citeert die code. Een lezer zocht de fout eerst in het logo, terwijl die in verborgen tekst ernaast zat. ([#482](https://github.com/NederlandseDigitaleDienst/loep/issues/482))
+- Bij een vaste lijst van pagina's zeggen `sample` en het rapport het als een paginatype er veel vaker in staat dan een getrokken steekproef zou nemen. Elk gebrek op dat type kwam anders tientallen keren terug zonder dat het onderzoek meer zag. ([#484](https://github.com/NederlandseDigitaleDienst/loep/issues/484))
+
 ## 0.24.0 (2026-11-09)
 
 Deze versie is uitgebracht zonder meting: alleen een nieuwe herkenner voor zoekvragen van Elastic Search UI (#478).
