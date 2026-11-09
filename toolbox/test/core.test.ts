@@ -354,6 +354,10 @@ test("a small site, a site without a model and a fixed list get no extra pages",
   assert.equal(listed.method, "fixed-list");
   assert.equal(listed.items.length, 200);
   assert.equal(listed.items.filter(isExtra).length, 0);
+  // Two hundred pages of one type: the note says so, where a drawn sample would take a handful.
+  assert.match(listed.note, /In de lijst staan 200 van het type artikel\b.*hooguit 6 pagina's/);
+  const few = buildSample(inventory(fixed.slice(0, 6)), "seed", modelOf([pageType("artikel", fixed.slice(0, 6).map((entry) => entry.url))]));
+  assert.doesNotMatch(few.note, /In de lijst staan/);
 });
 
 test("a kind of content counts where a page has more of it than the usual page of its type", () => {
