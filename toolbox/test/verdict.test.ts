@@ -446,6 +446,18 @@ test("a finding about input names the value that was typed, to the letter", () =
   assert.deepEqual(about("Grijs op wit, 3,9 op 1.", ["j143-0020"], "1.4.3"), []);
 });
 
+test("a finding under 2.5.3 says where the name comes from and quotes the code", () => {
+  const about = (titleNl: string, observedNl: string, criterion = "2.5.3"): string[] =>
+    validateJudgeVerdict({ ...failed, criterion, findings: [{ ...finding, titleNl, observedNl }] }, { ...context, criterion }).filter((problem) => /titleNl: say in the title|observedNl: quote the code/.test(problem));
+  const code = "De naam komt uit `<span class=\"visually-hidden\">Logo Ministerie</span>`.";
+  assert.match(about("Naam van de logolink mist een letter van de tekst in het logo", code).join(), /findings\[0\]\.titleNl: say in the title where the name comes from/);
+  assert.deepEqual(about("Verborgen tekst van de logolink mist een letter uit het logo", code), []);
+  assert.deepEqual(about("aria-label van de zoekknop zegt Zoeken op de site, de knop toont Vind", "Op de knop staat Vind, de naam komt uit `aria-label=\"Zoeken op de site\"`."), []);
+  assert.match(about("Verborgen tekst van de logolink mist een letter", "De naam mist een letter.").join(), /observedNl: quote the code/);
+  // Only under 2.5.3.
+  assert.deepEqual(about("Naam van de logolink mist een letter", "De naam mist een letter.", "4.1.2"), []);
+});
+
 test("every observation says what follows from it, so nothing that is wrong stays a remark", () => {
   const ruled = (observation: object, extra: Partial<Verdict> = {}): string[] => validateJudgeVerdict({ ...failed, ...extra, observations: [{ ...seen, ...observation }] }, context);
   assert.match(ruled({ ruling: undefined }).join(), /observations\[0\]: ruling says what follows/);
