@@ -439,6 +439,7 @@ async function main(): Promise<void> {
       const result = await sample(values.run, values.seed);
       process.stdout.write(`${result.items.length} of ${result.populationSize} unique pages (${result.method})\n`);
       if (result.documents) process.stdout.write(`${result.documents.length} of ${result.documentPopulation!.onSite} documents\n`);
+      if (result.method === "fixed-list" && result.note.includes(" In de lijst staan ")) process.stdout.write(`LET OP:${result.note.slice(result.note.indexOf(" In de lijst staan "))}\n`);
       await repeatReadsOutsideRun(values.run);
       return;
     }
