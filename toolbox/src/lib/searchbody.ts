@@ -6,7 +6,7 @@
  * search and change something.
  */
 
-export const SEARCH_SERVICE_IDS = ["typesense", "algolia", "elasticsearch", "meilisearch", "graphql"] as const;
+export const SEARCH_SERVICE_IDS = ["typesense", "algolia", "elasticsearch", "meilisearch", "graphql", "searchui"] as const;
 export type SearchServiceId = (typeof SEARCH_SERVICE_IDS)[number];
 
 export type Verdict = { search: true } | { search: false; reasonNl: string };
@@ -357,12 +357,70 @@ function graphql(body: string): Verdict {
   return yes;
 }
 
+// Elastic Search UI (@elastic/search-ui): the driver hands its request state and query configuration to a connector, which a site
+// often posts to a search endpoint of its own. ApiProxyConnector of @elastic/search-ui-elasticsearch-connector sends
+// { "state", "queryConfig" } to /api/search and /api/autocomplete; a custom connector may name the first "requestState".
+// The keys are those of RequestState, SearchQuery and AutocompleteQueryConfig in the types of @elastic/search-ui 1.24.
+const SEARCH_UI_STATE = new Set(["current", "filters", "resultsPerPage", "searchTerm", "sortDirection", "sortField", "sortList", "sort"]);
+const SEARCH_UI_QUERY = new Set([
+  ...SEARCH_UI_STATE, "facets", "fuzziness", "disjunctiveFacets", "disjunctiveFacetsAnalyticsTags", "result_fields", "search_fields",
+]);
+const SEARCH_UI_AUTOCOMPLETE = new Set(["results", "suggestions"]);
+const SEARCH_UI_FILTER = new Set(["field", "type", "values", "persistent"]);
+const SEARCH_UI_RECORDS = ["facets", "result_fields", "search_fields"];
+
+function searchUiState(value: unknown, allowed: ReadonlySet<string>, nameNl: string): string | null {
+  if (!isObject(value)) return `"${nameNl}" van Search UI is een object`;
+  const extra = outside(value, allowed);
+  if (extra) return `Search UI kent "${extra}" niet in "${nameNl}"`;
+  if ("searchTerm" in value && typeof value.searchTerm !== "string") return `"searchTerm" in "${nameNl}" is tekst`;
+  const notNumber = ["current", "resultsPerPage"].find((key) => key in value && typeof value[key] !== "number");
+  if (notNumber) return `"${notNumber}" in "${nameNl}" is een getal`;
+  if ("filters" in value) {
+    if (!Array.isArray(value.filters)) return `"filters" in "${nameNl}" is een lijst`;
+    for (const filter of value.filters) {
+      if (!isObject(filter) || typeof filter.field !== "string" || !Array.isArray(filter.values)) return `elk filter in "${nameNl}" is een object met "field" en "values"`;
+      const other = outside(filter, SEARCH_UI_FILTER);
+      if (other) return `een filter van Search UI kent "${other}" niet`;
+    }
+  }
+  const notRecord = SEARCH_UI_RECORDS.find((key) => key in value && !isObject(value[key]));
+  if (notRecord) return `"${notRecord}" in "${nameNl}" is een object`;
+  return null;
+}
+
+function searchUi(body: string): Verdict {
+  const json = jsonObject(body, "Search UI");
+  if (!json.ok) return json.verdict;
+  const value = json.value;
+  const stateKey = ["state", "requestState"].find((key) => key in value);
+  if (!stateKey || !("queryConfig" in value)) return no('een zoekvraag van Search UI heeft "state" of "requestState", en "queryConfig"');
+  const extra = outside(value, new Set([stateKey, "queryConfig"]));
+  if (extra) return no(`een zoekvraag van Search UI heeft alleen "${stateKey}" en "queryConfig", niet "${extra}"`);
+  const state = searchUiState(value[stateKey], SEARCH_UI_STATE, stateKey);
+  if (state) return no(state);
+  const config = value.queryConfig;
+  if (isObject(config) && Object.keys(config).some((key) => SEARCH_UI_AUTOCOMPLETE.has(key))) {
+    const other = outside(config, SEARCH_UI_AUTOCOMPLETE);
+    if (other) return no(`een vraag om aanvullingen van Search UI heeft alleen "results" en "suggestions" in "queryConfig", niet "${other}"`);
+    if (config.results !== undefined) {
+      const results = searchUiState(config.results, SEARCH_UI_QUERY, "queryConfig.results");
+      if (results) return no(results);
+    }
+    if (config.suggestions !== undefined && !isObject(config.suggestions)) return no('"suggestions" in "queryConfig" is een object');
+    return yes;
+  }
+  const query = searchUiState(config, SEARCH_UI_QUERY, "queryConfig");
+  return query ? no(query) : yes;
+}
+
 export const SEARCH_SERVICES: Record<SearchServiceId, SearchService> = {
   typesense: { id: "typesense", nameNl: "Typesense", formNl: 'JSON met "searches", een lijst van zoekvragen (POST /multi_search)', recognise: typesense },
   algolia: { id: "algolia", nameNl: "Algolia", formNl: 'JSON met "requests", elk met "indexName" en "params" of met "indexName" en losse zoekparameters zoals "query" en "hitsPerPage", of met alleen "params", of losse zoekparameters aan POST /1/indexes/<index>/query', recognise: algolia },
   elasticsearch: { id: "elasticsearch", nameNl: "Elasticsearch of OpenSearch", formNl: 'een zoekvraag met "query", "aggs" of "suggest" zonder script (_search), of regels met telkens een kop en een zoekvraag (_msearch)', recognise: elasticsearch },
   meilisearch: { id: "meilisearch", nameNl: "Meilisearch", formNl: 'JSON met zoekparameters als "q" en "filter", of met "queries"', recognise: meilisearch },
   graphql: { id: "graphql", nameNl: "GraphQL", formNl: 'JSON met een document in "query" dat alleen query-bewerkingen heeft, geen mutation of subscription', recognise: graphql },
+  searchui: { id: "searchui", nameNl: "Elastic Search UI", formNl: 'JSON met alleen "state" of "requestState" en "queryConfig", met de zoekterm, filters en paginering van Search UI (zoals POST /api/search)', recognise: searchUi },
 };
 
 /** Whether the body is a question to this service. An empty or very large body never is. */
