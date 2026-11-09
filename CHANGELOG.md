@@ -6,6 +6,14 @@ Wat er per versie van loep is veranderd. De versie staat op het voorblad en onde
 
 <!-- towncrier: een nieuwe versie komt hieronder -->
 
+## 0.24.0 (2026-11-09)
+
+Deze versie is uitgebracht zonder meting: alleen een nieuwe herkenner voor zoekvragen van Elastic Search UI (#478).
+
+### Wat een uitkomst kan veranderen
+
+- Een zoekvraag van Elastic Search UI, die een site als POST naar een eigen adres als `/api/search` stuurt, herkent loep nu als leesverzoek. De verkenner legt het adres vast in `readRequests`, en na `check-site` worden de zoekpagina en lijsten met filters gemeten in plaats van open gelaten met "proef werkte niet". ([#478](https://github.com/NederlandseDigitaleDienst/loep/issues/478))
+
 ## 0.23.1 (2026-11-05)
 
 Deze versie is uitgebracht zonder meting: alleen het invulblad voor de invulassistent en een melding over een pdf veranderen; er zit geen wijziging aan de opdrachten of de oordeelregels in.
