@@ -6,6 +6,20 @@ Wat er per versie van loep is veranderd. De versie staat op het voorblad en onde
 
 <!-- towncrier: een nieuwe versie komt hieronder -->
 
+## 0.25.0 (2026-11-10)
+
+### Wat een uitkomst kan veranderen
+
+- Binnen een gedeelte met een archief per jaar bezoekt `inventory` nu eerst het nieuwste jaar. Eerder ging het alfabet voor, en kwamen van een archief met 102.000 pagina's alleen de jaren 1988 tot en met 2006 in de inventaris, zonder één document. Is de grens van `--max-pages` bereikt en staat er op de bezochte pagina's geen document, dan zegt `inventory` dat er onder de weggelaten pagina's wel documenten kunnen staan. Het rapport zegt het dan ook in de beperkingen: de criteria die ook voor documenten gelden, zijn alleen op webpagina's beoordeeld, en een "voldoet" zegt niets over documenten op de site. ([#479](https://github.com/NederlandseDigitaleDienst/loep/issues/479))
+- De controle van Cloudflare tegen robots praat nu ook over een websocket, en die hield loep tegen. Een ingesloten speler van Vimeo bleef daardoor op de melding van Cloudflare staan en dertien criteria bleven open met "proef werkte niet". De websocket van de controle gaat nu door op dezelfde voorwaarden als haar andere verzoeken: alleen naar Cloudflare zelf of naar een host die via Cloudflare antwoordt, en niet bij een strikte afbakening. Wat een pagina op een andere websocket zegt, blijft tegengehouden. ([#489](https://github.com/NederlandseDigitaleDienst/loep/issues/489))
+- Een zoekvraag als POST met een JSON-body herkent loep nu ook aan de zoekterm van de run, als die letterlijk als waarde in de body staat, ook genest. Zo kan een zoekvraag aan bijvoorbeeld Google Discovery Engine (`:searchLite`) of aan `/api/v2/search` een leesverzoek worden, en zijn zoekresultaten daar te meten. Een body met velden die iets wijzigen of persoonsgegevens dragen, of met iets dat op een e-mailadres lijkt, blijft tegengehouden.
+
+### Verder
+
+- Deze versie is als geheel gemeten op de testsite: in twee runs alle 79 ingebouwde gebreken gevonden, met dezelfde uitkomst bij alle 56 criteria, en op de schone tweeling geen bevinding die beide vergelijkers onterecht noemen. De README en de pagina op Toon noemen deze meting. ([#498](https://github.com/NederlandseDigitaleDienst/loep/issues/498))
+- Een agent kan nu een bestand kiezen in een formulier: `session upload <ref>` zet een klein testbestand van loep in een bestandsveld (of het veld van een label), zonder te versturen. Zo is te beoordelen wat het formulier toont na een gekozen of geweigerd bestand. De stap telt als commando, hoort bij het recept en speelt opnieuw af.
+- Een pagina op Toon zegt in het kort wat loep is en hoe het werkt, gemaakt met het NLDD Designsysteem. De README noemt de metingen sinds 11 oktober.
+
 ## 0.24.1 (2026-11-09)
 
 Deze versie is uitgebracht zonder meting: alleen de tekst van bevindingen over 2.5.3 en een waarschuwing bij een vaste lijst van pagina's (#482, #484).
