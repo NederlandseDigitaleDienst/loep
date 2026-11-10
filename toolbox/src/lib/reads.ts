@@ -26,6 +26,12 @@ export interface ReadRequest {
   reasonNl: string;
   /** Id of the session observation in which the request was held back. */
   observation: string;
+  /**
+   * The search terms of the run, for a rule of `searchterm`: added by loep when the rule is
+   * approved (see `withRunTerms`), never written by the explorer, so a body passes only with
+   * the terms loep itself types.
+   */
+  terms?: string[];
 }
 
 export const READ_FIELDS = ["id", "method", "origin", "path", "service", "reasonNl", "observation"] as const;
@@ -184,7 +190,7 @@ export function readDecision(rules: readonly ReadRequest[], method: string, url:
   const rule = rules.length > 0 ? readRuleFor(rules, method, url, headers) : null;
   if (!rule) return null;
   if (method.toUpperCase() === "OPTIONS") return { rule, pass: true };
-  const verdict = recogniseSearch(rule.service, body, pathOf(url));
+  const verdict = recogniseSearch(rule.service, body, pathOf(url), rule.terms);
   return verdict.search ? { rule, pass: true } : { rule, pass: false, reasonNl: `past bij leesverzoek "${rule.id}", maar de body is geen zoekvraag aan ${SEARCH_SERVICES[rule.service].nameNl}: ${verdict.reasonNl}` };
 }
 

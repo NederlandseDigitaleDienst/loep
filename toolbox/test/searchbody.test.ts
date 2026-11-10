@@ -139,6 +139,11 @@ const CASES: Record<SearchServiceId, { search: [string, string][]; not: [string,
       ["other keys next to autocomplete", json({ state: {}, queryConfig: { results: {}, update: {} } }), /niet "update"/],
     ],
   },
+  // Recognised only with the terms of the run; see the tests below.
+  searchterm: {
+    search: [],
+    not: [["any body without the terms of the run", json({ query: "afval" }), /kent de zoekterm van deze run hier niet/]],
+  },
 };
 
 for (const service of SEARCH_SERVICE_IDS) {
@@ -205,4 +210,48 @@ test("a GraphQL document is read by its tokens, not by a word", () => {
   assert.deepEqual(graphqlOperations("mutation{a}"), ["mutation"]);
   assert.match(String(graphqlOperations("query { a } %")), /het teken "%"/);
   assert.equal(graphqlOperations(""), "het document heeft geen bewerking");
+});
+
+const TERMS = ["afvalkalender", "loepqzx"];
+
+test("a JSON body with the search term of the run as a value, also nested, is a search by its term", () => {
+  // The form of Google Discovery Engine (POST .../servingConfigs/default_search:searchLite).
+  const discovery = json({ servingConfig: "projects/1/locations/global/collections/default_collection/engines/e/servingConfigs/default_search", query: "afvalkalender", pageSize: 10, offset: 0, contentSearchSpec: { snippetSpec: { returnSnippet: true } } });
+  assert.deepEqual(recogniseSearch("searchterm", discovery, "/v1alpha/projects/1/locations/global/collections/default_collection/engines/e/servingConfigs/default_search:searchLite", TERMS), { search: true });
+  // Nested, in another case and with a trailing space, as for POST /api/v2/search and /api/v2/suggest.
+  assert.deepEqual(recogniseSearch("searchterm", json({ request: { filters: [{ field: "text", values: ["Afvalkalender "] }] }, size: 5 }), "/api/v2/search", TERMS), { search: true });
+  assert.deepEqual(recogniseSearch("searchterm", json([{ prefix: "afvalkalender" }]), "/api/v2/suggest", TERMS), { search: true });
+  assert.deepEqual(recogniseSearch("searchterm", json({ q: "loepqzx" }), "/api/v2/search", TERMS), { search: true }, "the term that finds nothing is a term of the run too");
+  assert.ok(searchServicesOf(discovery, "/x:searchLite", TERMS).includes("searchterm"));
+});
+
+test("a JSON body without the search term of the run, or one that may change something, is no search by its term", () => {
+  const refused = (body: string, reason: RegExp, terms: readonly string[] | undefined = TERMS): void => {
+    const verdict = recogniseSearch("searchterm", body, "/api/v2/search", terms);
+    assert.equal(verdict.search, false, body);
+    if (!verdict.search) assert.match(verdict.reasonNl, reason, body);
+  };
+  refused(json({ query: "parkeren" }), /staat niet letterlijk/);
+  refused(json({ query: "afvalkalender ophalen" }), /staat niet letterlijk/, TERMS);
+  refused(json({ query: "afvalkal" }), /staat niet letterlijk/);
+  refused(json({ query: "afvalkalender" }), /kent de zoekterm/, []);
+  assert.equal(recogniseSearch("searchterm", json({ query: "afvalkalender" }), "/api/v2/search").search, false, "without terms");
+  refused(json({ query: "afvalkalender", action: "delete" }), /bevat "action"/);
+  refused(json({ search: { q: "afvalkalender" }, documents: [{ id: 1 }] }), /bevat "documents"/);
+  refused(json({ subject: "afvalkalender", body: "vraag" }), /bevat "subject"/);
+  refused(json({ q: "afvalkalender", user: { E_mail: "x" } }), /bevat "E_mail"/);
+  refused(json({ q: "afvalkalender", from: "test@example.com" }), /e-mailadres/);
+  refused(json({ query: "mutation { wis(term: \"afvalkalender\") { id } }", variables: { term: "afvalkalender" } }), /mutation/);
+  refused("q=afvalkalender", /geen JSON/);
+  refused(json("afvalkalender"), /geen JSON-object of -lijst/);
+});
+
+test("form-encoded search parameters keep working as they did, and the terms change no other service", () => {
+  const algolia = json({ requests: [{ indexName: "gemeente", params: "query=afvalkalender&hitsPerPage=10" }] });
+  assert.deepEqual(recogniseSearch("algolia", algolia, "/1/indexes/*/queries", TERMS), { search: true });
+  assert.deepEqual(searchServicesOf(algolia, "/1/indexes/*/queries", TERMS), ["algolia"], "a form-encoded string holding the term is not the term as a value");
+  assert.deepEqual(searchServicesOf(json({ params: "query=afvalkalender" }), "/1/indexes/g/query", TERMS), ["algolia"]);
+  assert.deepEqual(searchServicesOf("q=afvalkalender&page=1", "/zoeken", TERMS), [], "a form-encoded body is held back as before");
+  assert.deepEqual(searchServicesOf(json({ q: "afvalkalender" }), "/indexes/a/search"), ["meilisearch"], "without terms nothing changes");
+  assert.deepEqual(searchServicesOf(json({ q: "afvalkalender" }), "/indexes/a/search", TERMS), ["meilisearch", "searchterm"]);
 });

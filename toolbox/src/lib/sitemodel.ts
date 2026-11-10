@@ -725,6 +725,13 @@ export function searchTermForRun(runDir: string): string {
   return typeof inventory === "string" && SEARCH_TERM_FORM.test(inventory) ? inventory : SEARCH_FALLBACK;
 }
 
+/** The terms loep types in a search of this run: the term of the run, and the term that finds nothing. */
+export const searchTermsForRun = (runDir: string): string[] => [searchTermForRun(runDir), SEARCH_NONE];
+
+/** The rules with the search terms of the run on each rule of `searchterm`, the only service that is recognised by them. */
+export const withRunTerms = (runDir: string, rules: readonly ReadRequest[]): ReadRequest[] =>
+  rules.map((rule) => (rule.service === "searchterm" ? { ...rule, terms: searchTermsForRun(runDir) } : rule));
+
 /**
  * The read requests of a model that passed `check-site` and has not changed since; empty
  * otherwise. Read at the moment a browser context is made, so a session that started before
@@ -740,7 +747,7 @@ export function approvedReads(runDir: string): ReadRequest[] {
     const check = JSON.parse(readFileSync(checkPath, "utf8")) as Partial<SiteCheck>;
     if (check.ok !== true || check.siteSha256 !== sha256(raw)) return [];
     const rules = (JSON.parse(raw.toString("utf8")) as { readRequests?: unknown }).readRequests;
-    return Array.isArray(rules) ? (rules as unknown[]).filter((rule): rule is ReadRequest => readRequestProblems(rule, "").length === 0) : [];
+    return Array.isArray(rules) ? withRunTerms(runDir, (rules as unknown[]).filter((rule): rule is ReadRequest => readRequestProblems(rule, "").length === 0)) : [];
   } catch {
     return [];
   }
