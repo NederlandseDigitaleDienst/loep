@@ -60,6 +60,14 @@ path = "voorbeelden/**.pdf"
 SPDX-FileCopyrightText = "Staat der Nederlanden (Ministerie van Economische Zaken en Klimaat)"
 SPDX-License-Identifier = "EUPL-1.2"
 
+# Beelden op de pagina in site/: schermafbeeldingen die loep maakte tijdens het
+# onderzoek van nerds.digitaledienst.overheid.nl op 29 oktober 2026, een site van
+# de Nederlandse Digitale Dienst.
+[[annotations]]
+path = "site/img/**.webp"
+SPDX-FileCopyrightText = "Staat der Nederlanden (Ministerie van Economische Zaken en Klimaat)"
+SPDX-License-Identifier = "EUPL-1.2"
+
 # De lettertypes Atkinson Hyperlegible Next en Mono voor de pdf van het rapport.
 [[annotations]]
 path = ["templates/fonts/AtkinsonHyperlegibleNext-*.otf", "templates/fonts/OFL-AtkinsonHyperlegibleNext.txt"]

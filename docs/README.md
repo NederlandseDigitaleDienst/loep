@@ -20,6 +20,7 @@ Buiten deze map:
 | Document | Wat het is |
 |---|---|
 | [../README.md](../README.md) | Wat de toolbox doet, hoe je hem gebruikt en wat hij niet doet |
+| [../site/index.html](../site/index.html) | De pagina op [nederlandsedigitaledienst.github.io/loep](https://nederlandsedigitaledienst.github.io/loep/): wat loep is en hoe het werkt, in het kort. Gemaakt met het NLDD Designsysteem; de workflow `site.yml` publiceert de map na een merge |
 | [../CONTRIBUTING.md](../CONTRIBUTING.md) | Afspraken voor wie aan de toolbox werkt, en wat nooit mag |
 | [../PLAN.md](../PLAN.md) | Wat er loopt, wat hierna komt en welke besluiten openstaan |
 | [../procedures/README.md](../procedures/README.md) | Hoe een procedure per succescriterium is opgebouwd |
