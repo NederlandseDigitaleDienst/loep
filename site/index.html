@@ -27,7 +27,7 @@
       </nldd-title>
       <nldd-spacer size="16"></nldd-spacer>
       <nldd-rich-text color="inherit">
-        <p>Een experiment van de Nederlandse Digitale Dienst. loep toetst een overheidssite op WCAG 2.2 en 2.1, niveau A en AA, volgens WCAG-EM, en schrijft het rapport en de toegankelijkheidsverklaring. Agents meten met de instrumenten van loep, en elke uitspraak in het rapport verwijst naar een vastgelegde waarneming. Het rapport teken je zelf.</p>
+        <p>Een experiment van de Nederlandse Digitale Dienst. loep toetst een overheidssite op WCAG 2.2 en 2.1, niveau A en AA, volgens WCAG-EM, en schrijft het rapport en de toegankelijkheidsverklaring. Elke uitspraak in het rapport verwijst naar een vastgelegde waarneming. Tekenen doe je zelf.</p>
       </nldd-rich-text>
       <nldd-spacer size="24"></nldd-spacer>
       <nldd-button-group>
@@ -44,8 +44,8 @@
     <nldd-one-half-one-half-section id="waarom" background="tinted">
       <nldd-title slot="header" size="2" text="Waarom zo vaak" heading-level="2"></nldd-title>
       <nldd-rich-text slot="left">
-        <p>Voor een toegankelijkheidsverklaring heb je een onderzoek nodig. Meestal laat een organisatie dat eens in de drie jaar doen, op een pagina of vijftien, en krijgt ze een rapport met wat er mis is. Intussen gaat er elke week iets nieuws live.</p>
-        <p>loep draai je wanneer je wilt. Een tweede run meet alleen wat er sinds de vorige veranderd is, en het rapport zegt per criterium op welke pagina's en met welke instrumenten er is gekeken.</p>
+        <p>Een toegankelijkheidsverklaring rust op een onderzoek, meestal eens in de drie jaar, op een pagina of vijftien, met een rapport dat alleen noemt wat er mis is. Intussen gaat er elke week iets nieuws live.</p>
+        <p>loep draai je wanneer je wilt, en een tweede run meet alleen wat veranderd is. Per criterium staat erbij op welke pagina's en met welke instrumenten er is gekeken.</p>
       </nldd-rich-text>
       <nldd-list slot="right" dividers="never" accessible-label="Wat loep onderzoekt">
         <nldd-list-item>
@@ -75,7 +75,7 @@
       <nldd-title slot="header" size="2" text="Eén onderzoek in cijfers" heading-level="2"></nldd-title>
       <nldd-spacer slot="header" size="16"></nldd-spacer>
       <nldd-rich-text slot="header">
-        <p>Het onderzoek van onze eigen site, nerds.digitaledienst.overheid.nl, op 29 oktober 2026. De site heeft 29 pagina's.</p>
+        <p>Onze eigen site, nerds.digitaledienst.overheid.nl, met 29 pagina's, op 29 oktober 2026.</p>
       </nldd-rich-text>
       <nldd-container layout="grid" sm-gap="16" md-gap="24" lg-gap="24" sm-column-count="2" md-column-count="3" lg-column-count="3">
         <nldd-card>
@@ -127,7 +127,7 @@
       <nldd-title slot="header" size="2" text="Een onderzoek, stap voor stap" heading-level="2"></nldd-title>
       <nldd-spacer slot="header" size="16"></nldd-spacer>
       <nldd-rich-text slot="header">
-        <p>Zo liep dat onderzoek van 29 oktober, in negen stappen. Bij elke stap staat wie het werk doet.</p>
+        <p>Hetzelfde onderzoek, in negen stappen. Bij elke stap staat wie het werk doet.</p>
       </nldd-rich-text>
       <nldd-container layout="grid" sm-gap="16" md-gap="24" lg-gap="24" sm-column-count="1" md-column-count="3" lg-column-count="3">
         <nldd-card>
@@ -148,7 +148,7 @@
           <nldd-container padding="16">
             <nldd-tag color="oranje" text="Mens"></nldd-tag>
             <nldd-spacer size="8"></nldd-spacer>
-            <nldd-rich-text><p>Wat alleen jij kunt doen, zoals inloggen, tekenen en per gebrek besluiten wat er gebeurt.</p></nldd-rich-text>
+            <nldd-rich-text><p>Inloggen, tekenen en per gebrek besluiten wat er gebeurt.</p></nldd-rich-text>
           </nldd-container>
         </nldd-card>
       </nldd-container>
@@ -163,15 +163,15 @@
       <nldd-title slot="left" size="3" text="Pagina's vinden" heading-level="3"></nldd-title>
       <nldd-spacer slot="left" size="12"></nldd-spacer>
       <nldd-rich-text slot="left">
-          <p><code>inventory</code> volgt elke link, ook in shadow DOM, en telt per pagina wat erop staat. Links naar pdf's en andere documenten legt het apart vast.</p>
-          <p>Tot zestig unieke pagina's onderzoekt loep de hele site. Bij een grotere site trekt <code>sample</code> een steekproef volgens WCAG-EM.</p>
+          <p><code>inventory</code> volgt elke link, ook in shadow DOM, telt per pagina wat erop staat en legt links naar documenten apart vast.</p>
+          <p>Tot zestig pagina's onderzoekt loep de hele site, daarboven trekt <code>sample</code> een steekproef volgens WCAG-EM.</p>
       </nldd-rich-text>
       <nldd-spacer slot="left" size="12"></nldd-spacer>
       <nldd-card slot="left">
         <nldd-container padding="16">
           <nldd-text size="sm" color="secondary">Op 29 oktober</nldd-text>
           <nldd-spacer size="4"></nldd-spacer>
-          <nldd-text>29 pagina's gevonden, dus de hele site onderzocht.</nldd-text>
+          <nldd-text>29 pagina's, dus de hele site.</nldd-text>
         </nldd-container>
       </nldd-card>
       <nldd-code-viewer slot="right" appearance="box-tinted" wrap no-copy>29 of 29 unique pages (census)</nldd-code-viewer>
@@ -187,8 +187,8 @@
       <nldd-title slot="left" size="3" text="De site verkennen" heading-level="3"></nldd-title>
       <nldd-spacer slot="left" size="12"></nldd-spacer>
       <nldd-rich-text slot="left">
-          <p>Een verkenner beschrijft de paginatypen, wat er over de pagina ligt en welke onderdelen pas na een handeling iets tonen, zoals een menu of een dialoog. Voor elk onderdeel schrijft hij een recept.</p>
-          <p>Daarna speelt <code>check-site</code> elk recept zelf na, en telt op elk paginatype wat er te bedienen is. Mist het model een formulier of knop, dan keurt het script het af.</p>
+          <p>Een verkenner beschrijft de paginatypen, wat over de pagina ligt en welke onderdelen pas na een handeling iets tonen. Voor elk onderdeel schrijft hij een recept.</p>
+          <p><code>check-site</code> speelt elk recept na en telt per paginatype wat er te bedienen is. Mist het model een formulier of knop, dan keurt het script het af.</p>
       </nldd-rich-text>
       <nldd-spacer slot="left" size="12"></nldd-spacer>
       <nldd-card slot="left">
@@ -210,15 +210,15 @@
       <nldd-title slot="left" size="3" text="Meten" heading-level="3"></nldd-title>
       <nldd-spacer slot="left" size="12"></nldd-spacer>
       <nldd-rich-text slot="left">
-          <p>De veegronde draait axe-core en Alfa op elke pagina, in licht en donker. Ze loopt elke pagina door met Tab, en meet reflow, zoom, tekstafstand en beweging, ook met elk menu en elke dialoog open.</p>
-          <p><code>contrast</code> meet elke tekst tegen de achtergrond die echt op het scherm staat, niet tegen wat de stijl belooft. <code>states</code> verstuurt formulieren leeg en met foute invoer, maar op een echte site houdt loep het verzoek tegen.</p>
+          <p>De veegronde draait axe-core en Alfa op elke pagina, in licht en donker, en meet toetsenbord, reflow, zoom, tekstafstand en beweging, ook met menu's en dialogen open.</p>
+          <p><code>contrast</code> meet tekst tegen de achtergrond die echt op het scherm staat. <code>states</code> verstuurt formulieren leeg en met foute invoer, en houdt dat verzoek op een echte site tegen.</p>
       </nldd-rich-text>
       <nldd-spacer slot="left" size="12"></nldd-spacer>
       <nldd-card slot="left">
         <nldd-container padding="16">
           <nldd-text size="sm" color="secondary">Op 29 oktober</nldd-text>
           <nldd-spacer size="4"></nldd-spacer>
-          <nldd-text>13.538 contrastmetingen, waarvan hiernaast de link Home in de hoofdnavigatie.</nldd-text>
+          <nldd-text>13.538 contrastmetingen. Hiernaast die van de link Home.</nldd-text>
         </nldd-container>
       </nldd-card>
       <nldd-code-viewer slot="right" appearance="box-tinted" language="json" wrap no-copy>{
@@ -243,7 +243,7 @@
       <nldd-title slot="left" size="3" text="De bewijspoort" heading-level="3"></nldd-title>
       <nldd-spacer slot="left" size="12"></nldd-spacer>
       <nldd-rich-text slot="left">
-          <p>Eerst toetsen twaalf vaste controles of het bewijs compleet is. Daarna bekijkt een agent per paginatype een overzichtsblad: de pagina breed, op 320 pixels, en met elk bedienbaar element genummerd.</p>
+          <p>Twaalf vaste controles toetsen of het bewijs compleet is. Daarna bekijkt een agent per paginatype een overzichtsblad met de pagina breed, op 320 pixels en met genummerde elementen.</p>
           <p><code>check-gate</code> controleert zijn antwoorden. Is het bewijs onvoldoende, dan gaat de run terug naar de verkenner. Blijft het onvoldoende, dan komt er geen oordeel.</p>
       </nldd-rich-text>
       <nldd-spacer slot="left" size="12"></nldd-spacer>
@@ -267,8 +267,8 @@
       <nldd-title slot="left" size="3" text="De rondgang" heading-level="3"></nldd-title>
       <nldd-spacer slot="left" size="12"></nldd-spacer>
       <nldd-rich-text slot="left">
-          <p>Per paginatype loopt een agent de pagina door zoals een deskundige dat doet, en noteert wat opvalt. Zo komen ook problemen boven waar geen regel-engine een regel voor heeft.</p>
-          <p>De agent ziet de pagina zoals hiernaast: elk element dat iets doet heeft een nummer, en elk nummer is een ingang voor de commando's van loep. <code>check-walk</code> toetst elke kandidaat.</p>
+          <p>Per paginatype loopt een agent de pagina door als een deskundige en noteert wat opvalt, ook waar geen regel-engine een regel voor heeft.</p>
+          <p>Elk element dat iets doet, krijgt een nummer waarmee de agent de commando's van loep gebruikt. <code>check-walk</code> toetst elke kandidaat.</p>
       </nldd-rich-text>
       <nldd-spacer slot="left" size="12"></nldd-spacer>
       <nldd-card slot="left">
@@ -291,15 +291,15 @@
       <nldd-title slot="left" size="3" text="Beoordelen" heading-level="3"></nldd-title>
       <nldd-spacer slot="left" size="12"></nldd-spacer>
       <nldd-rich-text slot="left">
-          <p>Per criterium leest een agent het dossier, meet zelf na waar de procedure dat vraagt en past de beslisregels toe. Zijn de instrumenten het oneens, dan kijkt hij dichterbij en kiest nooit het gunstigste antwoord.</p>
-          <p><code>check-verdict</code> weigert een oordeel dat niet naar een waarneming verwijst, of een citaat dat niet letterlijk op de pagina staat. Hiernaast een deel van het oordeel over contrast.</p>
+          <p>Per criterium leest een agent het dossier, meet zelf na waar de procedure dat vraagt en past de beslisregels toe.</p>
+          <p><code>check-verdict</code> weigert een oordeel zonder verwijzing naar een waarneming, of met een citaat dat niet letterlijk op de pagina staat.</p>
       </nldd-rich-text>
       <nldd-spacer slot="left" size="12"></nldd-spacer>
       <nldd-card slot="left">
         <nldd-container padding="16">
           <nldd-text size="sm" color="secondary">Op 29 oktober</nldd-text>
           <nldd-spacer size="4"></nldd-spacer>
-          <nldd-text>56 criteria beoordeeld. Bij contrast keurde axe-core één knop af. Drie andere metingen gaven 7,2 op 1, en de uitsnede bevestigde dat.</nldd-text>
+          <nldd-text>56 criteria. Bij contrast keurde axe-core één knop af, maar drie andere metingen gaven 7,2 op 1 en de uitsnede bevestigde dat.</nldd-text>
         </nldd-container>
       </nldd-card>
       <nldd-code-viewer slot="right" appearance="box-tinted" language="json" wrap no-copy>{
@@ -323,15 +323,15 @@
       <nldd-title slot="left" size="3" text="Controleren" heading-level="3"></nldd-title>
       <nldd-spacer slot="left" size="12"></nldd-spacer>
       <nldd-rich-text slot="left">
-          <p>Een tweede agent opent de pagina opnieuw en probeert elke bevinding zelf te maken. Lukt dat niet, dan haalt hij haar uit het rapport. Een bevinding noemt de plek zoals die op de pagina heet en de gemeten waarden, zodat jij hetzelfde kunt doen.</p>
-          <p>Bleef een criterium open door het onderzoek zelf, omdat een meting ontbrak of een budget op was, dan meet een afmaakronde wat ontbrak.</p>
+          <p>Een tweede agent opent de pagina opnieuw en maakt elke bevinding zelf na. Lukt dat niet, dan vervalt ze. Een bevinding noemt de plek en de gemeten waarden, zodat jij het ook kunt nagaan.</p>
+          <p>Bleef een criterium open door een ontbrekende meting of een budget dat op was, dan meet een afmaakronde wat ontbrak.</p>
       </nldd-rich-text>
       <nldd-spacer slot="left" size="12"></nldd-spacer>
       <nldd-card slot="left">
         <nldd-container padding="16">
           <nldd-text size="sm" color="secondary">Op 29 oktober</nldd-text>
           <nldd-spacer size="4"></nldd-spacer>
-          <nldd-text>Geen criterium bleef open. Hiernaast een van de 8 gebreken, zoals het in het rapport staat.</nldd-text>
+          <nldd-text>Geen criterium bleef open. Hiernaast een van de 8 gebreken.</nldd-text>
         </nldd-container>
       </nldd-card>
       <nldd-card slot="right">
@@ -362,7 +362,7 @@
       <nldd-spacer slot="left" size="12"></nldd-spacer>
       <nldd-rich-text slot="left">
           <p><code>evaluate</code> en <code>render</code> maken het rapport, een korte versie zonder bijlage en de werklijst. <code>seal</code> legt de hash van elk bestand van het onderzoek vast.</p>
-          <p>Een mens leest het rapport en tekent in een terminal voor precies dat zegel. <code>verify</code> laat elke latere wijziging zien.</p>
+          <p>Een mens leest het rapport en tekent in een terminal door de eerste acht tekens van het zegel over te typen. Dat doet nooit de assistent. <code>verify</code> toont elke latere wijziging.</p>
       </nldd-rich-text>
       <nldd-spacer slot="left" size="12"></nldd-spacer>
       <nldd-card slot="left">
@@ -433,8 +433,8 @@
       <nldd-title slot="header" size="2" text="Wat vastligt" heading-level="2"></nldd-title>
       <nldd-spacer slot="header" size="16"></nldd-spacer>
       <nldd-rich-text slot="header">
-        <p>Pagina's vinden, meten, het rapport en het zegel zijn scripts. Draai je ze twee keer op dezelfde pagina, dan krijg je hetzelfde. Waar een agent werkt, gaat zijn antwoord langs een script dat het kan weigeren: <code>check-site</code>, <code>check-gate</code>, <code>check-walk</code> en <code>check-verdict</code>.</p>
-        <p>Elk oordeel draagt een stempel van het bewijs, de procedure, de opdracht en de waarnemingen waarmee het is geveld. Verandert er een, dan komt het oordeel vanzelf terug op de lijst, en alleen dat wordt opnieuw gedaan.</p>
+        <p>Pagina's vinden, meten, het rapport en het zegel zijn scripts, die op dezelfde pagina steeds hetzelfde opleveren. Het antwoord van een agent gaat altijd langs een script dat het kan weigeren.</p>
+        <p>Elk oordeel draagt een stempel van bewijs, procedure, opdracht en waarnemingen. Verandert er een, dan komt alleen dat oordeel opnieuw aan de beurt.</p>
       </nldd-rich-text>
     </nldd-simple-section>
 
@@ -444,7 +444,7 @@
       <nldd-rich-text slot="header">
         <p>Op een echte site houdt de toolbox elk verzoek tegen dat iets kan wijzigen, wat een agent ook probeert.</p>
       </nldd-rich-text>
-      <nldd-container layout="grid" sm-gap="16" md-gap="24" lg-gap="24" sm-column-count="1" md-column-count="2" lg-column-count="4">
+      <nldd-container layout="grid" sm-gap="16" md-gap="24" lg-gap="24" sm-column-count="1" md-column-count="3" lg-column-count="3">
         <nldd-card>
           <nldd-container padding="16">
             <nldd-icon icon="paper-plane" size="32"></nldd-icon>
@@ -465,15 +465,6 @@
         </nldd-card>
         <nldd-card>
           <nldd-container padding="16">
-            <nldd-icon icon="seal-check-mark" size="32"></nldd-icon>
-            <nldd-spacer size="12"></nldd-spacer>
-            <nldd-title size="4" text="Tekenen" heading-level="3"></nldd-title>
-            <nldd-spacer size="8"></nldd-spacer>
-            <nldd-rich-text><p>Dat doe je zelf in een terminal, door het begin van het zegel over te typen. Wie daarna iets aan de run verandert, laat een spoor na.</p></nldd-rich-text>
-          </nldd-container>
-        </nldd-card>
-        <nldd-card>
-          <nldd-container padding="16">
             <nldd-icon icon="shield-lock" size="32"></nldd-icon>
             <nldd-spacer size="12"></nldd-spacer>
             <nldd-title size="4" text="De site noemen" heading-level="3"></nldd-title>
@@ -488,7 +479,7 @@
       <nldd-title slot="header" size="2" text="Wat erin zit" heading-level="2"></nldd-title>
       <nldd-spacer slot="header" size="16"></nldd-spacer>
       <nldd-rich-text slot="header">
-        <p>loep bouwt op open software die toegankelijkheidsonderzoekers al gebruiken, en legt de uitkomsten naast elkaar. Elk programma staat met versie en licentie in <a href="https://github.com/NederlandseDigitaleDienst/loep/blob/main/toolbox/THIRD-PARTY.md">THIRD-PARTY.md</a>.</p>
+        <p>loep bouwt op open software die onderzoekers al gebruiken. Versies en licenties staan in <a href="https://github.com/NederlandseDigitaleDienst/loep/blob/main/toolbox/THIRD-PARTY.md">THIRD-PARTY.md</a>.</p>
       </nldd-rich-text>
       <nldd-container layout="lanes" sm-gap="16" md-gap="24" lg-gap="24" sm-column-count="1" md-column-count="2" lg-column-count="3">
         <nldd-card>
@@ -694,7 +685,7 @@
           <nldd-spacer size="8"></nldd-spacer>
           <nldd-code-viewer appearance="box-tinted" wrap no-copy>Toets https://voorbeeld.nl op toegankelijkheid.</nldd-code-viewer>
           <nldd-spacer size="16"></nldd-spacer>
-          <nldd-text color="secondary">De assistent vraagt eerst wat alleen jij weet, zoals of er een inlog is en of er iets verstuurd mag worden. Daarna zegt hij hoe lang het duurt en wat het kost. Een site van zo'n dertig pagina's duurt 3 tot 7 uur, en daar hoef je niet bij te blijven.</nldd-text>
+          <nldd-text color="secondary">De assistent vraagt eerst wat alleen jij weet, zoals inlog en versturen, en zegt dan wat het duurt en kost. Zo'n dertig pagina's duurt 3 tot 7 uur, en je hoeft er niet bij te blijven.</nldd-text>
         </nldd-container>
       </nldd-card>
     </nldd-one-third-two-thirds-section>
@@ -703,8 +694,8 @@
       <nldd-title slot="header" size="2" text="Hoe ver het is" heading-level="2"></nldd-title>
       <nldd-spacer slot="header" size="16"></nldd-spacer>
       <nldd-rich-text slot="header">
-        <p>loep is een werkend concept. Op een testsite met 79 ingebouwde gebreken vond versie 0.11.0 er 77 en 78, in twee runs met dezelfde uitkomst bij alle 56 criteria. Dat is gemeten tegen de sleutel van die testsite, niet tegen het oordeel van een deskundige, en latere versies zijn niet als geheel opnieuw gemeten.</p>
-        <p>Het register van toegankelijkheidsverklaringen heeft een onderzoek met loep niet bevestigd als onderbouwing van status A of B, en geen toezichthouder heeft zich over de methode uitgesproken. Lees de methode voordat je een rapport ergens voor gebruikt.</p>
+        <p>loep is een werkend concept. Op een testsite met 79 ingebouwde gebreken vond versie 0.11.0 er 77 en 78, in twee runs met dezelfde uitkomst bij alle 56 criteria. Gemeten tegen de sleutel van die testsite, niet tegen een deskundige. Latere versies zijn niet als geheel opnieuw gemeten.</p>
+        <p>Lees de methode voordat je een rapport ergens voor gebruikt.</p>
         <p>De broncode staat op <a href="https://github.com/NederlandseDigitaleDienst/loep">GitHub</a>, onder de open licentie EUPL.</p>
       </nldd-rich-text>
       <nldd-button-group>
