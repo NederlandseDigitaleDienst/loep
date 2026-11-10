@@ -381,14 +381,14 @@ Issue #498. De eerste meting van een hele versie sinds 0.11.0, en de eerste voll
 
 | | L1 | L2 | B1 (tweeling) |
 |---|---|---|---|
-| Criteria zoals de sleutel, van 56 | 56 | 56 | 47 (3 afgekeurd, 6 open voor een mens) |
+| Criteria zoals de sleutel, van 56 | 56 | 56 | 47 (3 afgekeurd, 6 open) |
 | Gebreken gevonden waar beide vergelijkers het eens zijn, van 79 | 79 | 79 | n.v.t. |
 | Meldingen zonder tegenhanger | 6 | 11 | 3 |
 | Onterecht volgens beide vergelijkers | 0 | 0 | 0 |
 | Agents, uitval | 129, 0 | 129, 0 | 131, 0 (één afmaakronde) |
 | Duur, tokens | 81 min, 16,0 miljoen | 81 min, 16,0 miljoen | 91 min, 17,5 miljoen |
 
-- **Marge gehaald.** Gevonden gebreken 100% tegen 98% bij 0.11.0. Meldingen zonder tegenhanger 6 en 11 tegen 11 en 13. Geen criterium open door loep. Geen derde run nodig: L1 en L2 hadden bij alle 56 criteria dezelfde uitkomst.
+- **Marge op drie van de vier punten gehaald.** Gevonden gebreken 100% tegen 98% bij 0.11.0. Meldingen zonder tegenhanger 6 en 11 tegen 11 en 13. Niet gehaald: op de tweeling bleven 1.2.1, 1.2.3 en 1.2.5 open, omdat loep de video in een externe speler niet kan bekijken (#505). Geen derde run nodig: L1 en L2 hadden bij alle 56 criteria dezelfde uitkomst.
 - **1.4.12 nu afgekeurd.** 0.11.0 miste het in beide runs; sinds #271 meet 1.4.12 of er tekst verdwijnt.
-- **Tweeling.** De afkeuring van 1.4.10 is een fout in de testsite zelf (#499). Die zit ook op Lindewaard, buiten de sleutel. 2.4.3 (Tab blijft in de open chat) en 4.1.2 (`<audio>` en `<video>` zonder eigen naam) noemen beide vergelijkers discutabel. De zes open criteria vragen een video die niet te meten is, kennis van de eigenaar over de chat, of een testaccount.
+- **Tweeling.** De afkeuring van 1.4.10 is een fout in de testsite zelf (#499). Die zit ook op Lindewaard, buiten de sleutel. 2.4.3 (Tab blijft in de open chat) en 4.1.2 (`<audio>` en `<video>` zonder eigen naam) noemen beide vergelijkers discutabel. Van de zes open criteria komen er drie door loep (de video, #505); de andere drie vragen kennis van de eigenaar over de chat of een testaccount.
 - **Niet gemeten.** De spreiding op de tweeling (één run), VoiceOver, een site met login, het doel `verantwoorden`.
