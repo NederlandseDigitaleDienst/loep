@@ -7,6 +7,7 @@ import { after, before, test } from "node:test";
 import { startFixture } from "../fixtures/serve.ts";
 import { addressLevels, inventory, linksToFollow, nextAddress, noteVisited, pageLimitNl, pageLimitReason, readsOutsideRunNl, readsOutsideRunOfRunNl, type Inventory } from "../src/commands/inventory.ts";
 import { buildSample } from "../src/commands/sample.ts";
+import { omittedByPageLimit } from "../src/lib/documents.ts";
 
 /** Visit every candidate in the order `inventory` would, when all are known from the start. */
 function visitOrder(urls: string[], limit: number): string[] {
@@ -84,6 +85,7 @@ test("the warning about the limit names per part what was visited and what was l
   assert.ok(!pageLimitNl({ ...found, documentTotals: { ...none, onSite: 2 } }, 6)!.includes("geen enkel document"));
   assert.ok(!said.includes("geen enkel document"), "an inventory that did not count documents says nothing about them");
 
+  assert.equal(omittedByPageLimit(found.skipped), 4, "the report counts what the limit left out by the same reason");
   const many = { ...found, skipped: Array.from({ length: 15 }, (_, index) => ({ url: `${site}/deel-${String(index).padStart(2, "0")}/pagina`, reason: pageLimitReason(6) })) };
   assert.match(pageLimitNl(many, 6)!, /\n  en 6 andere gedeelten: samen 0 bezocht, 6 weggelaten\n/, "beyond twelve parts the rest is summed up");
 });

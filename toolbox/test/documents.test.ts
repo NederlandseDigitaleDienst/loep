@@ -888,6 +888,12 @@ test("the scope and the limitations say which documents were read, which were no
   const none = documentScopeNl(null, "https://voorbeeld.overheid.example", 0);
   assert.deepEqual(none.includedNl, []);
   assert.match(none.limitationsNl[0]!, /op de site zijn geen documenten gevonden/);
+  assert.ok(!none.limitationsNl[0]!.includes("grens"));
+  // An inventory that stopped at its limit did not look everywhere: "none found" is then no finding (#479).
+  const limited = documentScopeNl(null, "https://voorbeeld.overheid.example", 0, 114800).limitationsNl[0]!;
+  assert.match(limited, /heeft 114800 gevonden pagina's niet bezocht\. Daar kunnen documenten staan\./);
+  assert.match(limited, /een uitkomst "voldoet" zegt niets over documenten op de site/);
+  assert.ok(!documentScopeNl(REPORTED, "https://voorbeeld.overheid.example", 4, 10).limitationsNl.join("\n").includes("grens"), "with documents in the sample the limit is not about documents");
 });
 
 test("the limitations name the pdf documents whose tag text was not read, with the criteria that are less certain", () => {
