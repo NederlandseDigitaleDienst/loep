@@ -221,16 +221,35 @@
           <nldd-text>13.538 contrastmetingen. Hiernaast die van de link Home.</nldd-text>
         </nldd-container>
       </nldd-card>
-      <nldd-code-viewer slot="right" appearance="box-tinted" language="json" wrap no-copy>{
-  "text": "Home",
-  "region": "nav:Hoofdnavigatie",
-  "foreground": "#184576",
-  "background": "#ffffff",
-  "fontSizePx": 18,
-  "ratio": 9.7,
-  "required": 4.5,
-  "outcome": "passed"
-}</nldd-code-viewer>
+      <nldd-container slot="right" layout="stack" gap="8">
+        <nldd-text size="sm" color="secondary"><code>contrast</code> · meting 1 van 13.538</nldd-text>
+        <nldd-table accessible-label="Contrastmeting van de link Home" columns="8rem 1fr" sm-columns="6.5rem 1fr" background="tinted">
+          <nldd-table-row>
+            <nldd-text-cell row-header size="sm" color="secondary" text="Tekst"></nldd-text-cell>
+            <nldd-cell><nldd-text size="sm">Home</nldd-text></nldd-cell>
+          </nldd-table-row>
+          <nldd-table-row>
+            <nldd-text-cell row-header size="sm" color="secondary" text="Gebied"></nldd-text-cell>
+            <nldd-cell><nldd-text size="sm">Hoofdnavigatie</nldd-text></nldd-cell>
+          </nldd-table-row>
+          <nldd-table-row>
+            <nldd-text-cell row-header size="sm" color="secondary" text="Kleuren"></nldd-text-cell>
+            <nldd-cell><nldd-container layout="wrap" gap="8" vertical-alignment="center"><nldd-badge custom-color="#184576" text="#184576"></nldd-badge><nldd-text size="sm" color="secondary">op</nldd-text><nldd-badge custom-color="#ffffff" text="#ffffff"></nldd-badge></nldd-container></nldd-cell>
+          </nldd-table-row>
+          <nldd-table-row>
+            <nldd-text-cell row-header size="sm" color="secondary" text="Grootte"></nldd-text-cell>
+            <nldd-cell><nldd-text size="sm"><code>18px</code></nldd-text></nldd-cell>
+          </nldd-table-row>
+          <nldd-table-row>
+            <nldd-text-cell row-header size="sm" color="secondary" text="Verhouding"></nldd-text-cell>
+            <nldd-cell><nldd-container layout="wrap" gap="8" vertical-alignment="center"><nldd-text size="sm"><code>9,7:1</code></nldd-text><nldd-text size="sm" color="secondary">eis 4,5:1</nldd-text></nldd-container></nldd-cell>
+          </nldd-table-row>
+          <nldd-table-row>
+            <nldd-text-cell row-header size="sm" color="secondary" text="Uitkomst"></nldd-text-cell>
+            <nldd-cell><nldd-badge color="success" icon="check-mark-small" text="voldoet"></nldd-badge></nldd-cell>
+          </nldd-table-row>
+        </nldd-table>
+      </nldd-container>
     </nldd-one-half-one-half-section>
 
     <nldd-one-half-one-half-section id="stap-4" background="tinted" vertical-alignment="center">
@@ -302,15 +321,31 @@
           <nldd-text>56 criteria. Bij contrast keurde axe-core één knop af, maar drie andere metingen gaven 7,2 op 1 en de uitsnede bevestigde dat.</nldd-text>
         </nldd-container>
       </nldd-card>
-      <nldd-code-viewer slot="right" appearance="box-tinted" language="json" wrap no-copy>{
-  "criterion": "1.4.3",
-  "outcome": "passed",
-  "rule": "R2",
-  "summaryNl": "Alle tekst haalt de eis, in licht en donker, op breed en smal scherm, in elk geopend onderdeel en bij aanwijzen. Het laagste contrast is 4,5 op 1 bij kleine tekst, precies de eis.",
-  "resolved": [{
-    "howNl": "axe-core gaf 1,36 voor de knop Via e-mail in donker; pixels, berekende stijl en QualWeb gaven 7,2. De stijl toont zwarte tekst op een lichtblauwe oklch-achtergrond en de uitsnede toont zwarte letters op lichtblauw."
-  }]
-}</nldd-code-viewer>
+      <nldd-container slot="right" layout="stack" gap="8">
+        <nldd-text size="sm" color="secondary"><code>check-verdict</code> · oordeel 1.4.3, goedgekeurd</nldd-text>
+        <nldd-table accessible-label="Oordeel over criterium 1.4.3" columns="8rem 1fr" sm-columns="6.5rem 1fr" background="base">
+          <nldd-table-row>
+            <nldd-text-cell row-header size="sm" color="secondary" text="Criterium"></nldd-text-cell>
+            <nldd-cell><nldd-container layout="wrap" gap="8" vertical-alignment="center"><nldd-text size="sm"><code>1.4.3</code></nldd-text><nldd-text size="sm">Contrast (minimum)</nldd-text></nldd-container></nldd-cell>
+          </nldd-table-row>
+          <nldd-table-row>
+            <nldd-text-cell row-header size="sm" color="secondary" text="Uitkomst"></nldd-text-cell>
+            <nldd-cell><nldd-badge color="success" icon="check-mark-small" text="voldoet"></nldd-badge></nldd-cell>
+          </nldd-table-row>
+          <nldd-table-row>
+            <nldd-text-cell row-header size="sm" color="secondary" text="Beslisregel"></nldd-text-cell>
+            <nldd-cell><nldd-text size="sm"><code>R2</code></nldd-text></nldd-cell>
+          </nldd-table-row>
+          <nldd-table-row>
+            <nldd-text-cell row-header size="sm" color="secondary" text="Samenvatting"></nldd-text-cell>
+            <nldd-cell><nldd-text size="sm">Alle tekst haalt de eis, in licht en donker, op breed en smal scherm, in elk geopend onderdeel en bij aanwijzen. Het laagste contrast is 4,5 op 1 bij kleine tekst.</nldd-text></nldd-cell>
+          </nldd-table-row>
+          <nldd-table-row>
+            <nldd-text-cell row-header size="sm" color="secondary" text="Opgelost"></nldd-text-cell>
+            <nldd-cell><nldd-text size="sm">axe-core gaf 1,36 voor de knop Via e-mail in donker. Pixels, berekende stijl en QualWeb gaven 7,2, en de uitsnede toont zwarte letters op lichtblauw.</nldd-text></nldd-cell>
+          </nldd-table-row>
+        </nldd-table>
+      </nldd-container>
     </nldd-one-half-one-half-section>
 
     <nldd-one-half-one-half-section id="stap-7" vertical-alignment="center">
@@ -372,14 +407,39 @@
           <nldd-text>WCAG 2.2: 31 voldoet, 9 voldoet niet, 15 niet van toepassing, 0 kan niet bepalen. Dezelfde avond getekend.</nldd-text>
         </nldd-container>
       </nldd-card>
-      <nldd-code-viewer slot="right" appearance="box-tinted" language="json" wrap no-copy>{
-  "organisation": "Nederlandse Digitale Dienst",
-  "role": "Staff Engineer",
-  "recordedVia": "terminal",
-  "signedAt": "2026-10-29T18:41:26.551Z",
-  "sealSha256": "4638bc58e155ff32…",
-  "statementNl": "Ik heb dit rapport gelezen en sta in voor de inhoud. …"
-}</nldd-code-viewer>
+      <nldd-container slot="right" layout="stack" gap="8">
+        <nldd-text size="sm" color="secondary"><code>sign</code> · handtekening naast het zegel</nldd-text>
+        <nldd-table accessible-label="Handtekening onder het rapport" columns="8rem 1fr" sm-columns="6.5rem 1fr" background="tinted">
+          <nldd-table-row>
+            <nldd-text-cell row-header size="sm" color="secondary" text="Organisatie"></nldd-text-cell>
+            <nldd-cell><nldd-text size="sm">Nederlandse Digitale Dienst</nldd-text></nldd-cell>
+          </nldd-table-row>
+          <nldd-table-row>
+            <nldd-text-cell row-header size="sm" color="secondary" text="Functie"></nldd-text-cell>
+            <nldd-cell><nldd-text size="sm">Staff Engineer</nldd-text></nldd-cell>
+          </nldd-table-row>
+          <nldd-table-row>
+            <nldd-text-cell row-header size="sm" color="secondary" text="Getekend op"></nldd-text-cell>
+            <nldd-cell><nldd-text size="sm"><code>2026-10-29 19:41 CET</code></nldd-text></nldd-cell>
+          </nldd-table-row>
+          <nldd-table-row>
+            <nldd-text-cell row-header size="sm" color="secondary" text="Getekend via"></nldd-text-cell>
+            <nldd-cell><nldd-text size="sm"><code>terminal</code></nldd-text></nldd-cell>
+          </nldd-table-row>
+          <nldd-table-row>
+            <nldd-text-cell row-header size="sm" color="secondary" text="Zegel"></nldd-text-cell>
+            <nldd-cell><nldd-text size="sm"><code>sha256:4638bc58e155ff32…</code></nldd-text></nldd-cell>
+          </nldd-table-row>
+          <nldd-table-row>
+            <nldd-text-cell row-header size="sm" color="secondary" text="Overgetypt"></nldd-text-cell>
+            <nldd-cell><nldd-text size="sm"><code>4638bc58</code></nldd-text></nldd-cell>
+          </nldd-table-row>
+          <nldd-table-row>
+            <nldd-text-cell row-header size="sm" color="secondary" text="Verklaring"></nldd-text-cell>
+            <nldd-cell><nldd-text size="sm">Ik heb dit rapport gelezen en sta in voor de inhoud.</nldd-text></nldd-cell>
+          </nldd-table-row>
+        </nldd-table>
+      </nldd-container>
     </nldd-one-half-one-half-section>
 
     <nldd-one-half-one-half-section id="stap-9" vertical-alignment="center">
