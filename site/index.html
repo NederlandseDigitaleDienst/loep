@@ -174,7 +174,48 @@
           <nldd-text>29 pagina's, dus de hele site.</nldd-text>
         </nldd-container>
       </nldd-card>
-      <nldd-code-viewer slot="right" appearance="box-tinted" wrap no-copy>29 of 29 unique pages (census)</nldd-code-viewer>
+      <nldd-container slot="right" layout="stack" gap="8">
+        <nldd-text size="sm" color="secondary"><code>inventory</code> · 29 pagina's, opgeteld</nldd-text>
+        <nldd-container layout="grid" column-count="3" sm-column-count="2" gap="8">
+          <nldd-box>
+            <nldd-container padding="16" layout="stack" gap="4">
+              <nldd-text size="display-6">39.042</nldd-text>
+              <nldd-text size="sm" color="secondary">elementen</nldd-text>
+            </nldd-container>
+          </nldd-box>
+          <nldd-box>
+            <nldd-container padding="16" layout="stack" gap="4">
+              <nldd-text size="display-6">6.442</nldd-text>
+              <nldd-text size="sm" color="secondary">shadow roots</nldd-text>
+            </nldd-container>
+          </nldd-box>
+          <nldd-box>
+            <nldd-container padding="16" layout="stack" gap="4">
+              <nldd-text size="display-6">1.013</nldd-text>
+              <nldd-text size="sm" color="secondary">afbeeldingen</nldd-text>
+            </nldd-container>
+          </nldd-box>
+          <nldd-box>
+            <nldd-container padding="16" layout="stack" gap="4">
+              <nldd-text size="display-6">623</nldd-text>
+              <nldd-text size="sm" color="secondary">koppen</nldd-text>
+            </nldd-container>
+          </nldd-box>
+          <nldd-box>
+            <nldd-container padding="16" layout="stack" gap="4">
+              <nldd-text size="display-6">84</nldd-text>
+              <nldd-text size="sm" color="secondary">dialogen</nldd-text>
+            </nldd-container>
+          </nldd-box>
+          <nldd-box>
+            <nldd-container padding="16" layout="stack" gap="4">
+              <nldd-text size="display-6">58</nldd-text>
+              <nldd-text size="sm" color="secondary">formulieren</nldd-text>
+            </nldd-container>
+          </nldd-box>
+        </nldd-container>
+        <nldd-text size="sm" color="secondary">Herkend: NLDD Designsysteem (<code>nldd-</code>). Geen tabellen, video of audio. 36 links naar documenten elders.</nldd-text>
+      </nldd-container>
     </nldd-one-half-one-half-section>
 
     <nldd-one-half-one-half-section id="stap-2" background="tinted" vertical-alignment="center">
@@ -198,7 +239,44 @@
           <nldd-text>15 paginatypen, 11 onderdelen en 2 processen. Alle 13 recepten deden wat ze zeiden.</nldd-text>
         </nldd-container>
       </nldd-card>
-      <nldd-code-viewer slot="right" appearance="box-tinted" wrap no-copy>OK: het sitemodel klopt en elk recept doet wat het zegt</nldd-code-viewer>
+      <nldd-container slot="right" layout="stack" gap="8">
+        <nldd-text size="sm" color="secondary"><code>check-site</code> · 7 van de 13 recepten, nagespeeld</nldd-text>
+        <nldd-table accessible-label="Recepten die check-site naspeelde" columns="auto 1fr" background="base">
+          <nldd-table-row slot="header">
+            <nldd-text-cell size="sm" text="Recept"></nldd-text-cell>
+            <nldd-text-cell size="sm" text="Voor en na"></nldd-text-cell>
+          </nldd-table-row>
+          <nldd-table-row>
+            <nldd-cell row-header><nldd-text size="sm"><code>zoekvenster</code></nldd-text></nldd-cell>
+            <nldd-cell><nldd-container layout="stack" gap="4"><nldd-text size="sm"><code>0 → 1</code></nldd-text><nldd-text size="sm">dialoog Zoeken</nldd-text></nldd-container></nldd-cell>
+          </nldd-table-row>
+          <nldd-table-row>
+            <nldd-cell row-header><nldd-text size="sm"><code>feedbackvenster</code></nldd-text></nldd-cell>
+            <nldd-cell><nldd-container layout="stack" gap="4"><nldd-text size="sm"><code>0 → 1</code></nldd-text><nldd-text size="sm">dialoog Feedback geven</nldd-text></nldd-container></nldd-cell>
+          </nldd-table-row>
+          <nldd-table-row>
+            <nldd-cell row-header><nldd-text size="sm"><code>menu-smal</code></nldd-text></nldd-cell>
+            <nldd-cell><nldd-container layout="stack" gap="4"><nldd-text size="sm"><code>0 → 1</code></nldd-text><nldd-text size="sm">dialoog Menu</nldd-text></nldd-container></nldd-cell>
+          </nldd-table-row>
+          <nldd-table-row>
+            <nldd-cell row-header><nldd-text size="sm"><code>melding-verbergen</code></nldd-text></nldd-cell>
+            <nldd-cell><nldd-container layout="stack" gap="4"><nldd-text size="sm"><code>1 → 0</code></nldd-text><nldd-text size="sm">banners</nldd-text></nldd-container></nldd-cell>
+          </nldd-table-row>
+          <nldd-table-row>
+            <nldd-cell row-header><nldd-text size="sm"><code>praktische-tips</code></nldd-text></nldd-cell>
+            <nldd-cell><nldd-container layout="stack" gap="4"><nldd-text size="sm"><code>0 → 1</code></nldd-text><nldd-text size="sm">open van 4</nldd-text></nldd-container></nldd-cell>
+          </nldd-table-row>
+          <nldd-table-row>
+            <nldd-cell row-header><nldd-text size="sm"><code>checklist-uitkomsten</code></nldd-text></nldd-cell>
+            <nldd-cell><nldd-container layout="stack" gap="4"><nldd-text size="sm"><code>0 → 1</code></nldd-text><nldd-text size="sm">aangevinkt</nldd-text></nldd-container></nldd-cell>
+          </nldd-table-row>
+          <nldd-table-row>
+            <nldd-cell row-header><nldd-text size="sm"><code>code-kopieren</code></nldd-text></nldd-cell>
+            <nldd-cell><nldd-container layout="stack" gap="4"><nldd-text size="sm"><code>0 → 1</code></nldd-text><nldd-text size="sm">melding Gekopieerd</nldd-text></nldd-container></nldd-cell>
+          </nldd-table-row>
+        </nldd-table>
+        <nldd-text size="sm" color="secondary">Ook gevonden: de knop Meer opties staat alleen tussen 640 en 642 pixels breed in beeld.</nldd-text>
+      </nldd-container>
     </nldd-one-half-one-half-section>
 
     <nldd-one-half-one-half-section id="stap-3" vertical-alignment="center">
@@ -326,7 +404,8 @@
         <nldd-table accessible-label="Oordeel over criterium 1.4.3" columns="8rem 1fr" sm-columns="6.5rem 1fr" background="base">
           <nldd-table-row>
             <nldd-text-cell row-header size="sm" color="secondary" text="Criterium"></nldd-text-cell>
-            <nldd-cell><nldd-container layout="wrap" gap="8" vertical-alignment="center"><nldd-text size="sm"><code>1.4.3</code></nldd-text><nldd-text size="sm">Contrast (minimum)</nldd-text></nldd-container></nldd-cell>
+            <nldd-cell><nldd-text size="sm"><code>1.4.3</code></nldd-text></nldd-cell>
+            <nldd-text-cell size="sm" text="Contrast (minimum)"></nldd-text-cell>
           </nldd-table-row>
           <nldd-table-row>
             <nldd-text-cell row-header size="sm" color="secondary" text="Uitkomst"></nldd-text-cell>
