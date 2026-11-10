@@ -23,7 +23,7 @@ before(async () => {
     { url: `${site.origin}/form.html`, foundVia: [`iframe:${site.origin}/choose.html`] },
   ];
   writeFileSync(join(run, "inventory.json"), JSON.stringify({ baseUrl: `${site.origin}/`, origin: site.origin, pages }));
-  daemon = await Daemon.create(run, { hosts: [new URL(site.origin).host], baseUrl: `${site.origin}/`, strict: false }, { navigationDelayMs: 50, maxSessions: 5, secondBrowsers: false });
+  daemon = await Daemon.create(run, { hosts: [new URL(site.origin).host], baseUrl: `${site.origin}/`, strict: false }, { navigationDelayMs: 50, maxSessions: 7, secondBrowsers: false });
   browser = await launchBrowser();
 });
 
@@ -77,6 +77,45 @@ test("the sweep lets Cloudflare's check through on the same terms", async () => 
   }
   assert.equal(posted(CHECK), 1);
   assert.equal(posted("/submit"), 0);
+});
+
+const SOCKET_CHECK = "/cdn-cgi/challenge-platform/h/b/w";
+const until = async (met: () => boolean): Promise<boolean> => {
+  for (let tries = 0; tries < 40 && !met(); tries++) await new Promise((resolve) => setTimeout(resolve, 50));
+  return met();
+};
+
+test("the socket of Cloudflare's check carries what the page says only on a host that answers through Cloudflare (#489)", async () => {
+  site.socketMessages.length = 0;
+  await open("socket-plain", "/challenge-socket.html");
+  // A look afterwards reports what happened since the page opened.
+  const plain = await daemon.handle({ op: "command", session: "socket-plain", command: "look", args: [], options: {} });
+  assert.equal(plain.ok, true, JSON.stringify(plain.print));
+  assert.deepEqual(site.socketMessages, [], "a host that does not answer through Cloudflare gets nothing over the socket");
+
+  const behind = await open("socket-cloudflare", "/challenge-socket.html?cloudflare");
+  assert.equal(await until(() => site.socketMessages.length > 0), true, "the check arrives");
+  assert.deepEqual(site.socketMessages, ["controle"]);
+  assert.equal(behind.record.blocked.some((entry) => entry.url.includes(SOCKET_CHECK)), false, JSON.stringify(behind.record.blocked));
+});
+
+test("the sweep passes the socket of Cloudflare's check on the same terms, and counts what a page says on another socket", async () => {
+  site.socketMessages.length = 0;
+  for (const [address, check, blocked] of [["/challenge-socket.html", "Controle: nog geen antwoord.", 1], ["/challenge-socket.html?cloudflare", "Controle: ontvangen.", 0]] as const) {
+    const guard = { active: true, blocked: 0 };
+    const context = await newContext(browser, { writes: null, reads: [] }, guard);
+    try {
+      const page = await context.newPage();
+      await page.goto(`${site.origin}${address}`);
+      if (blocked === 0) await page.waitForFunction(() => document.body.textContent!.includes("ontvangen"));
+      else assert.equal(await until(() => guard.blocked > 0), true, "the message is held back");
+      assert.equal(await page.textContent("#check"), check, address);
+      assert.equal(guard.blocked, blocked, address);
+    } finally {
+      await context.close();
+    }
+  }
+  assert.deepEqual(site.socketMessages, ["controle"]);
 });
 
 test("an embedded window in the scope may read from a host outside it, as a player fetches its stream; the page itself may not", async () => {

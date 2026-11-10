@@ -211,6 +211,8 @@ export async function startServer(port = 0): Promise<FixtureServer> {
     socket.write(`HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: ${accept}\r\n\r\n`);
     readFrames(socket, (text) => {
       socketMessages.push(text);
+      // Cloudflare's check gets an answer over its socket, as Cloudflare gives one.
+      if (request.url?.startsWith("/cdn-cgi/challenge-platform/")) socket.write(textFrame("ontvangen"));
       // A chat message gets an answer in two parts, as a chat answers: a receipt at once and the answer a moment later.
       if (text.startsWith('{"type":"chat"')) {
         setTimeout(() => socket.writable && socket.write(textFrame('{"type":"reply","text":"Ontvangen"}')), 50);

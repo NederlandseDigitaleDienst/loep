@@ -322,12 +322,15 @@ export async function guardContext(context: BrowserContext, scope: Scope, guard:
     const refusedBy = blockade?.refuses(url);
     // The socket opens, so the page keeps working, and what the server says still arrives. Nothing the page says is passed on.
     // A socket opens a connection of its own, and on this machine WebKit does that past the proxy.
-    const allowed = inScope(scope, url) && !refusedBy;
+    // Cloudflare's check opens a socket of its own, on the terms of its other requests: Cloudflare answers it, and a strict scope keeps its host out.
+    const challenge = !refusedBy && isChallenge(url, (host) => answeredByCloudflare(context, host)) && (inScope(scope, url) || !scope.strict);
+    const allowed = (inScope(scope, url) || challenge) && !refusedBy;
     const pastTheProxy = allowed && opensNoConnection(context) && isThisMachine(new URL(url).hostname);
     const server = allowed && !pastTheProxy ? socket.connectToServer() : null;
     if (pastTheProxy) guard.blocked.push({ at: new Date().toISOString(), kind: "boundary", method: "GET", url: url.slice(0, MAX_URL), resourceType: "websocket", reasonNl: SOCKET_REFUSED_NL });
     else if (refusedBy) guard.blocked.push({ at: new Date().toISOString(), kind: "blockade", method: "GET", url: url.slice(0, MAX_URL), resourceType: "websocket", reasonNl: refusalNl(refusedBy) });
     else if (!server) note("scope", "GET", url, "websocket");
+    else if (challenge) (guard.challenges ??= []).push({ at: new Date().toISOString(), method: "GET", url: url.slice(0, MAX_URL) });
     else (guard.sockets ??= []).push(url.slice(0, MAX_URL));
     // Only a socket of the test environment may carry what the page says.
     const free = server !== null && isWriteOrigin(scope.writes, url);
@@ -350,6 +353,8 @@ export async function guardContext(context: BrowserContext, scope: Scope, guard:
       });
     }
     socket.onMessage((message) => {
+      // What the check says goes to Cloudflare and takes nothing from the budget: the site never gets it.
+      if (challenge && server) return void server.send(message);
       if (!free) return note("socket", "SEND", url, "websocket");
       const counted = frames.counts(message, guard.idle);
       // What a page sends right after it connects has to arrive; a later frame is something an agent did.

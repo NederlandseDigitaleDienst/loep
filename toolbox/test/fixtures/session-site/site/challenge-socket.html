@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<title>Controle over een socket - Testsite sessie</title>
+</head>
+<body>
+<main>
+<h1>Controle over een socket</h1>
+<p id="check">Controle: nog geen antwoord.</p>
+<script>
+  // What Cloudflare's script does on a page it serves: it opens a socket for its check and says something on it.
+  const socket = new WebSocket(`${location.origin.replace("http", "ws")}/cdn-cgi/challenge-platform/h/b/w`);
+  socket.onopen = () => socket.send("controle");
+  socket.onmessage = (event) => (document.getElementById("check").textContent = `Controle: ${event.data}.`);
+</script>
+</main>
+</body>
+</html>

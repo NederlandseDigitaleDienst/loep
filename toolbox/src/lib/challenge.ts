@@ -8,6 +8,7 @@
  */
 export const CHALLENGE_HOST = "challenges.cloudflare.com";
 const CHALLENGE_PATH = "/cdn-cgi/challenge-platform/";
+const CHALLENGE_SCHEMES = new Set(["https:", "http:", "wss:", "ws:"]);
 
 /** The header Cloudflare adds to every response it serves. A host without it is not behind Cloudflare, and its paths reach the site. */
 export const CLOUDFLARE_HEADER = "cf-ray";
@@ -16,12 +17,14 @@ export const CLOUDFLARE_HEADER = "cf-ray";
  * Whether a request is part of Cloudflare's check: anything to Cloudflare's own host for it or one
  * of its subdomains (Cloudflare loads the check from a host such as `<name>.challenges.cloudflare.com`
  * as well), or a path under `/cdn-cgi/challenge-platform/` on a host that answered through
- * Cloudflare in this browser context.
+ * Cloudflare in this browser context. The check also talks over a WebSocket to the same addresses
+ * (`wss://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/w`, #489), so `wss:` and `ws:`
+ * count as `https:` and `http:` do.
  */
 export function isChallenge(url: string, viaCloudflare: (host: string) => boolean): boolean {
   try {
     const parsed = new URL(url);
-    if (parsed.protocol !== "https:" && parsed.protocol !== "http:") return false;
+    if (!CHALLENGE_SCHEMES.has(parsed.protocol)) return false;
     if (parsed.hostname === CHALLENGE_HOST || parsed.hostname.endsWith(`.${CHALLENGE_HOST}`)) return true;
     return parsed.pathname.startsWith(CHALLENGE_PATH) && viaCloudflare(parsed.hostname);
   } catch {
