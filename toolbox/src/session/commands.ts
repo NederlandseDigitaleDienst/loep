@@ -25,6 +25,7 @@ import { paste, press } from "./inputs.ts";
 import type { Images } from "./observations.ts";
 import { media } from "./media-command.ts";
 import { actWith, axWith, contrastWith, focusWith, lang, layoutWith, motion, name, ocrCommand, rules, source, targetWith, taborderWith, type Services } from "./opinions.ts";
+import { fittingTestValue, readConstraints } from "../lib/fitting-value.ts";
 import { KEY_PATTERN, TEST_VALUES, testValuesForRun } from "./safety.ts";
 import { speakActs, speakWith } from "./speak.ts";
 import { changeState, enter, find as findOnPage, handleForRef, homeOf, locate, pageFacts, remember, resolveRef, sayFrame, settleAfter, syncRefs, tgs, type Env, type Surface, type TargetInfo } from "./surface.ts";
@@ -219,8 +220,11 @@ const tab: Handler = async (context, args, options) => {
 const type: Handler = async (context, args) => {
   const kind = args[0] ?? "";
   if (!(kind in TEST_VALUES)) throw new UsageError(`"${kind}" is geen vaste testwaarde; kies uit: ${Object.keys(TEST_VALUES).join(", ")}`);
-  const value = testValuesForRun(context.env.runDir, context.surface.guard.sender)[kind]!;
+  const values = testValuesForRun(context.env.runDir, context.surface.guard.sender);
   const handle = await handleOrThrow(context);
+  // A field with min, max, step, a length or a pattern gets a fixed value it accepts, so the form can get past it.
+  const constraints = await readConstraints(handle);
+  const value = constraints ? fittingTestValue(kind, values, constraints) : values[kind]!;
   const acted = await act(context, SETTLE_MS, () => handle.fill(value, { timeout: ACTION_TIMEOUT_MS }).catch((error: Error) => Promise.reject(actionError("invullen", error))));
   const field = await handle
     .evaluate((element) => {

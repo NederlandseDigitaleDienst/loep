@@ -48,7 +48,7 @@ test("a read request names one origin, a narrow path and the search service whos
   };
   refused({ method: "PUT" }, /method moet "POST" zijn/);
   refused({ method: "GET" }, /GET en HEAD gaan al door/);
-  refused({ service: "solr" }, /service moet een van typesense, algolia, elasticsearch, meilisearch, graphql, searchterm zijn/);
+  refused({ service: "solr" }, /service moet een van typesense, algolia, elasticsearch, meilisearch, graphql, searchui, searchterm zijn/);
   refused({ service: undefined }, /service moet een van/);
   refused({ origin: "https://zoek.example.nl/" }, /alleen schema, host en poort/);
   refused({ origin: "https://*.example.nl" }, /origin/);

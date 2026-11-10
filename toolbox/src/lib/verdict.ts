@@ -716,6 +716,24 @@ function inputProblems(finding: Partial<Finding>, at: string, context: Instrumen
   return problems;
 }
 
+/** Where an accessible name can come from, in the words a finding uses for it. */
+const NAME_SOURCE = /aria-label|aria-labelledby|verborgen tekst|tekst voor schermlezers|\balt\b|alt-tekst|\btitle\b|plaatshouder|placeholder|<label|label-element|eigen inhoud|inhoud van de (?:link|knop)/i;
+
+/**
+ * A finding under 2.5.3 says where the name comes from, in its title, and shows the code. A title
+ * like "the name of the logo link misses a letter of the text in the logo" sent an expert reader
+ * to the logo, which was right; the letter was missing from hidden text next to it.
+ */
+function nameSourceProblems(finding: Partial<Finding>, at: string, context: InstrumentContext): string[] {
+  if (context.criterion !== "2.5.3") return [];
+  const problems: string[] = [];
+  const title = typeof finding.titleNl === "string" ? finding.titleNl : "";
+  if (!NAME_SOURCE.test(title)) problems.push(`${at}.titleNl: say in the title where the name comes from (aria-label, aria-labelledby, verborgen tekst, alt, title, plaatshouder, the label element, or the own content of the link or button), so that a reader looks in the right place: "Verborgen tekst van de logolink mist een letter uit het logo", not "Naam van de logolink mist een letter van de tekst in het logo"`);
+  const observed = typeof finding.observedNl === "string" ? finding.observedNl : "";
+  if (!/`[^`]*[<=][^`]*`/.test(observed)) problems.push(`${at}.observedNl: quote the code the name comes from between backticks, as \`loep html\` printed it (such as \`<span class="visually-hidden">...</span>\` or \`aria-label="..."\`), so that a reader finds the line in the source`);
+  return problems;
+}
+
 /** Advice that would do harm when carried out to the letter. */
 function adviceProblems(finding: Partial<Finding>, at: string, context: InstrumentContext): string[] {
   const fix = typeof finding.fixNl === "string" ? finding.fixNl : "";
@@ -849,6 +867,7 @@ function instrumentRules(verdict: Partial<Verdict>, context: InstrumentContext, 
     if (context.sourceText) problems.push(...quoteProblems(finding, at, context.sourceText));
     problems.push(...adviceProblems(finding, at, context));
     problems.push(...inputProblems(finding, at, context));
+    problems.push(...nameSourceProblems(finding, at, context));
   });
 
   problems.push(...recommendationProblems(verdict, context, (ref) => shows(ref) && own(ref), whose));

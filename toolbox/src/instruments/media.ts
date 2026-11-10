@@ -1,3 +1,4 @@
+import { withinTime } from "./limit.ts";
 import type { Frame, Page } from "playwright";
 
 export interface MediaControl {
@@ -194,6 +195,15 @@ async function tryControls(frame: Frame, element: Reading): Promise<MediaControl
 
 const STOPS = new Set(["pauzeert", "dempt", "zet het volume lager"]);
 
+/** How long one frame may take to answer. A frame that never does, such as a player whose requests are held back, is left out of the report. */
+const FRAME_LIMIT_MS = 15_000;
+
+async function readFrameWithin(frame: Frame, target: string[] | null): Promise<Reading[]> {
+  const read = await withinTime(FRAME_LIMIT_MS, () => readFrame(frame, target));
+  if (!read.ok) throw new Error(read.reason);
+  return read.value;
+}
+
 /**
  * Every audio and video element on the page as it is now, in every frame that can be read:
  * what the code says, what the file is, whether it plays, and what a visitor can stop it
@@ -208,7 +218,7 @@ export async function mediaReport(page: Page, options: { target?: string[]; tryC
     // A target is a place in the page itself.
     if (options.target && frame !== page.mainFrame()) continue;
     try {
-      first.push({ frame, readings: await readFrame(frame, options.target ?? null) });
+      first.push({ frame, readings: await readFrameWithin(frame, options.target ?? null) });
     } catch (error) {
       if (frame !== page.mainFrame() && frame.url() !== "about:blank") framesNotInspected.push({ address: frame.url(), reason: ((error as Error).message ?? String(error)).split("\n")[0]!.slice(0, 160) });
     }
@@ -217,7 +227,7 @@ export async function mediaReport(page: Page, options: { target?: string[]; tryC
   await page.waitForTimeout(waitMs);
   const elements: MediaElement[] = [];
   for (const { frame, readings } of first) {
-    const again = await readFrame(frame, options.target ?? null).catch(() => [] as Reading[]);
+    const again = await readFrameWithin(frame, options.target ?? null).catch(() => [] as Reading[]);
     for (const reading of readings) {
       const later = again.find((entry) => entry.path.join(" >>> ") === reading.path.join(" >>> ")) ?? reading;
       const ownControls = reading.attributes.controls && reading.visible;

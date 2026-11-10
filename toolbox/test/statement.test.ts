@@ -62,6 +62,33 @@ test("the statement never contains an em-dash and the answer sheet has nine step
   assert.equal([...renderAnswerSheet(evaluation, { organisation: "O" }).matchAll(/^## \d\. /gm)].length, 9);
 });
 
+test("step 4 of the answer sheet asks the questions of the invulassistent, with a date and counts it accepts", () => {
+  const evaluation = signed(exampleEvaluation());
+  const sheet = renderAnswerSheet(evaluation, { organisation: "O" });
+  const step4 = sheet.slice(sheet.indexOf("## 4. "), sheet.indexOf("## 5. "));
+  const questions = [...step4.matchAll(/^- ([^:]+\??):/gm)].map((match) => match[1]);
+  assert.deepEqual(questions, [
+    "Korte beschrijving onderzoek",
+    "Datum onderzoek",
+    "Wat is onderzocht? (scope)",
+    "Hoeveel succescriteria zijn onderzocht?",
+    "Hoeveel van de onderzochte succescriteria zijn als voldoende beoordeeld?",
+    "Uitgevoerd door",
+    "Is dit een (deel)onderzoek van de techniek van het platform waarop deze website is gebaseerd?",
+    "Voldoet dit rapport aan de eisen die DigiToegankelijk stelt?",
+    "Directe link naar het onderzoeksrapport",
+  ]);
+  assert.match(step4, /- Datum onderzoek: 10-10-2026\n/);
+  assert.match(step4, /- Uitgevoerd door: Interne medewerker\n/);
+  const legal = evaluation.criteria.filter((criterion) => criterion.versions.includes("2.1"));
+  const count = (outcome: string) => legal.filter((criterion) => criterion.outcome === outcome).length;
+  assert.match(step4, new RegExp(`onderzocht\\?: ${legal.length} `));
+  assert.match(step4, new RegExp(`beoordeeld\\?: ${count("passed") + count("inapplicable")} \\(${count("passed")} voldoet en ${count("inapplicable")} niet van toepassing\\)`));
+  const step5 = sheet.slice(sheet.indexOf("## 5. "), sheet.indexOf("## 6. "));
+  const failed = legal.filter((criterion) => criterion.outcome === "failed");
+  assert.deepEqual([...step5.matchAll(/^- (.+)$/gm)].map((match) => match[1]), failed.map((criterion) => `${criterion.id} - ${criterion.titleNl} [niveau ${criterion.level}]`));
+});
+
 test("comparison with an existing audit separates misses from open questions", () => {
   const evaluation = exampleEvaluation();
   const result = compare(evaluation, { wcagVersion: "2.2", sampleNote: "", outcomeNote: "", failed: ["1.1.1", "1.4.3", "1.4.11", "2.4.2", "2.5.8"] });

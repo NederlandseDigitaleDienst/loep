@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="nl">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Begrensde velden - Testsite sessie</title><link rel="stylesheet" href="/site.css"></head>
+<body>
+<main id="inhoud">
+<h1>Begrensde velden</h1>
+<form id="bounded" action="/form.html" method="get">
+<label for="amount">Bedrag in euro</label><input id="amount" name="amount" type="number" min="100" max="1000000" step="50">
+<label for="share">Aandeel</label><input id="share" name="share" type="range" min="20" max="40" step="7">
+<label for="code">Code</label><input id="code" name="code" pattern="[0-9]{4} ?[A-Z]{2}">
+<label for="short">Korte naam</label><input id="short" name="short" maxlength="20">
+</form>
+</main>
+</body>
+</html>

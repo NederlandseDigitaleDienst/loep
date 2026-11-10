@@ -109,6 +109,36 @@ const CASES: Record<SearchServiceId, { search: [string, string][]; not: [string,
       ["the raw document", "query { a }", /geen JSON/],
     ],
   },
+  searchui: {
+    search: [
+      [
+        "a list with filters on the site's own /api/search",
+        json({
+          requestState: { current: 1, filters: [{ field: "content_type", values: ["pro:newsDocument"], type: "all" }], resultsPerPage: 20, searchTerm: "", sortList: [{ field: "date", direction: "desc" }] },
+          queryConfig: {
+            filters: [{ field: "content_type", values: ["pro:newsDocument"], type: "all" }],
+            result_fields: { url: { raw: {} }, meta_description: { raw: {}, snippet: { size: 140, fallback: true } } },
+            disjunctiveFacets: ["information_type"],
+            facets: { information_type: { type: "value", size: 100 }, date: { type: "range", ranges: [{ from: "2026-11-01T00:00:00.000Z", to: "2026-11-08T00:00:00.000Z", name: "past007Days" }] } },
+            current: 1,
+            resultsPerPage: 20,
+            searchTerm: "",
+          },
+        }),
+      ],
+      ["ApiProxyConnector", json({ state: { searchTerm: "afval", current: 1 }, queryConfig: { search_fields: { title: { weight: 3 } }, searchTerm: "afval" } })],
+      ["autocomplete", json({ state: { searchTerm: "afv" }, queryConfig: { results: { resultsPerPage: 5, result_fields: { title: { snippet: { size: 100 } } } }, suggestions: { types: { documents: { fields: ["title"] } }, size: 4 } } })],
+    ],
+    not: [
+      ["a document next to the state", json({ state: { searchTerm: "a" }, queryConfig: {}, document: { titel: "x" } }), /niet "document"/],
+      ["an unknown key in the query", json({ requestState: {}, queryConfig: { index: "nieuws", delete: true } }), /kent "index" niet/],
+      ["a form", json({ naam: "Test", email: "test@example.com" }), /heeft "state" of "requestState"/],
+      ["no query config", json({ state: { searchTerm: "a" } }), /"queryConfig"/],
+      ["a search term that is not text", json({ state: { searchTerm: { $set: 1 } }, queryConfig: {} }), /is tekst/],
+      ["a filter with another key", json({ state: { filters: [{ field: "a", values: [], action: "remove" }] }, queryConfig: {} }), /kent "action" niet/],
+      ["other keys next to autocomplete", json({ state: {}, queryConfig: { results: {}, update: {} } }), /niet "update"/],
+    ],
+  },
   // Recognised only with the terms of the run; see the tests below.
   searchterm: {
     search: [],
@@ -133,6 +163,7 @@ test("a body is a question to the one service whose form it has, and an empty or
   assert.deepEqual(searchServicesOf(json({ query: { match_all: {} } })), ["elasticsearch"]);
   assert.deepEqual(searchServicesOf(json({ q: "afval" })), ["meilisearch"]);
   assert.deepEqual(searchServicesOf(json({ query: "{ a }" })), ["graphql"]);
+  assert.deepEqual(searchServicesOf(json({ requestState: { searchTerm: "a" }, queryConfig: { searchTerm: "a" } })), ["searchui"]);
   assert.deepEqual(searchServicesOf("naam=Test&email=test%40example.com"), []);
   assert.deepEqual(searchServicesOf(null), []);
   assert.deepEqual(recogniseSearch("meilisearch", ""), { search: false, reasonNl: "het verzoek heeft geen body" });

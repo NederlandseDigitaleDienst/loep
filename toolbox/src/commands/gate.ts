@@ -224,12 +224,18 @@ export function gateChecks(run: RunData): { checks: Check[]; gaps: Gap[]; warnin
   for (const page of loadFailed.filter((entry) => unoperable(entry))) {
     limitations.push({ check: "frame-not-loaded", ...on(page), state: "default", missingNl: `Dit ingesloten venster gaf bij het laden ${page.item.status === null ? "geen antwoord" : `status ${page.item.status}`}. Het sitemodel noemt het als onderdeel "${unoperable(page)!.id}" dat niet te bedienen is; wat in het venster staat, is niet gemeten.`, measured: { status: page.item.status } });
   }
+  // Neither of these can be closed by a new sweep or by the explorer: they are said in the report as what was not measured.
+  for (const entry of run.collectFailed ?? []) {
+    if (entry.item.kind === "embedded") limitations.push({ check: "frame-not-loaded", page: entry.label, url: entry.item.url, state: "default", missingNl: `Dit ingesloten venster is niet los gemeten (${entry.error}). Het staat wel op de pagina waarop het voorkomt, en die is gemeten.` });
+  }
+  for (const entry of run.inventory.skipped.filter((skipped) => skipped.reason.startsWith("failed to load") && !startedDownload(skipped.reason))) {
+    limitations.push({ check: "page-not-loaded", page: null, url: entry.url, state: "default", missingNl: `Deze pagina laadde niet tijdens de inventaris en is niet onderzocht (${entry.reason}).` });
+  }
   add(
     "pages-loaded",
     [
       ...failed.map((page) => ({ check: "pages-loaded", ...on(page), state: "default", missingNl: `De pagina gaf bij het laden ${page.item.status === null ? "geen antwoord" : `status ${page.item.status}`}. Wat is vastgelegd, is een foutpagina.`, measured: { status: page.item.status } })),
-      ...(run.collectFailed ?? []).map((entry) => ({ check: "pages-loaded", page: entry.label, url: entry.item.url, state: "default", missingNl: `De veegronde kon deze pagina ook bij een tweede poging niet meten (${entry.error.slice(0, 160)}). Er is geen bewijs van deze pagina; draai collect opnieuw voor deze pagina.`, measured: { collectError: entry.error }, fixedBy: "sweep" as const })),
-      ...run.inventory.skipped.filter((entry) => entry.reason.startsWith("failed to load") && !startedDownload(entry.reason)).map((entry) => ({ check: "pages-loaded", page: null, url: entry.url, state: "default", missingNl: `De pagina laadde niet tijdens de inventaris en is niet onderzocht (${entry.reason.slice(0, 120)}).` })),
+      ...(run.collectFailed ?? []).filter((entry) => entry.item.kind !== "embedded").map((entry) => ({ check: "pages-loaded", page: entry.label, url: entry.item.url, state: "default", missingNl: `De veegronde kon deze pagina ook bij een tweede poging niet meten (${entry.error.slice(0, 160)}). Er is geen bewijs van deze pagina; draai collect opnieuw voor deze pagina.`, measured: { collectError: entry.error }, fixedBy: "sweep" as const })),
     ],
     `${run.pages.length} pagina's geladen`,
   );

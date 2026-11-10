@@ -187,6 +187,15 @@ export function readsOutsideRunNl(reads: readonly ReadOutsideRun[] | undefined):
   );
 }
 
+/**
+ * The same note for a later step (`sample`, `explore`), read from the inventory of the run: it stays
+ * as long as an origin it names is not one of the origins of the run. Null for a run without it.
+ */
+export function readsOutsideRunOfRunNl(found: Pick<Inventory, "origin" | "origins" | "readsOutsideRun">): string | null {
+  const site = new Set(siteOrigins(found));
+  return readsOutsideRunNl(found.readsOutsideRun?.filter((entry) => !site.has(entry.origin)));
+}
+
 /** Answers that put content in a page: data or markup, not an image, a script or an empty answer such as a measuring beacon gets. */
 const CONTENT_TYPE = /^\s*(application\/([\w.-]+\+)?(json|xml)|application\/xhtml\+xml|text\/(html|plain|xml|csv))\s*(;|$)/i;
 
@@ -334,6 +343,38 @@ export function pageLimitNl(found: Pick<Inventory, "origin" | "notFoundProbe" | 
     ...lines,
     "Wat niet is bezocht, komt niet in de steekproef. Ontbreekt een gedeelte dat erbij hoort, of is het aandeel van een gedeelte veel kleiner dan op de site, begin dan opnieuw met inventory in een nieuwe map, met een hogere --max-pages of met --urls.",
   ].join("\n");
+}
+
+/**
+ * Statuses that say the server refused the visit rather than served a page: 401 (login),
+ * 403 (a firewall or bot filter) and 429 (rate limit).
+ */
+const REFUSAL_STATUSES = new Set([401, 403, 429]);
+
+/**
+ * Thresholds for an inventory that was refused rather than run. 90% and not 100%: a firewall
+ * often lets the odd page through (9 of 10 refused was seen), and those few pages do not make
+ * a site that can be evaluated. A site with some pages behind a login or a rate limit that kicks
+ * in late stays far below 90%. At least 5 pages, so a short `--urls` list with one protected
+ * page among two or three does not stop the run on a single answer.
+ */
+export const REFUSED_SHARE = 0.9;
+export const REFUSED_MIN_PAGES = 5;
+
+/**
+ * Said, and the run stopped, when (nearly) every visited page was refused with 401, 403 or 429.
+ * The sitemap can still list every address, so a full inventory says nothing by itself; without
+ * this the run reaches the explorer with only the error page as its page type. The 404 probe
+ * does not count, nor does a page that did not load at all. Null when the site answered.
+ */
+export function refusedPagesNl(found: Pick<Inventory, "origin" | "notFoundProbe" | "pages"> & Partial<Pick<Inventory, "origins" | "notFoundProbes">>): string | null {
+  const probes = notFoundProbes(found);
+  const answered = found.pages.filter((entry) => !probes.includes(entry.url) && entry.status !== null);
+  if (answered.length < REFUSED_MIN_PAGES) return null;
+  const refused = answered.filter((entry) => REFUSAL_STATUSES.has(entry.status!));
+  if (refused.length < answered.length * REFUSED_SHARE) return null;
+  const perStatus = [...REFUSAL_STATUSES].map((status) => [status, refused.filter((entry) => entry.status === status).length] as const).filter(([, count]) => count > 0).map(([status, count]) => `${count} keer ${status}`).join(", ");
+  return `de site weigert de bezoeken: ${refused.length} van de ${answered.length} bezochte pagina's gaven een weigering (${perStatus}). Waarschijnlijk houdt een firewall of botfilter loep tegen, of is inloggen nodig. Zo is er niets te onderzoeken, dus de run stopt hier. Wat er gebeurde staat in inventory.json. Vraag de beheerder van de site om loep toe te laten, of meld je aan met login, en begin dan opnieuw met inventory in een nieuwe map.`;
 }
 
 export function parseSitemap(xml: string): string[] {

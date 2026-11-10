@@ -1,9 +1,9 @@
-import { Node as AriaNode } from "@siteimprove/alfa-aria";
 import type { Page } from "playwright";
 import type { MethodFailure, MethodResult } from "../methods.ts";
 import { commonJsBundle, ensureHelpers, inCapsule, packageSource } from "./capsule.ts";
 import { idOf, knownError, runMethod, sortRan, type BrowserVersions } from "./registry.ts";
-import { alfaNodeAt, alfaPageOf, type AlfaPage } from "./rules.ts";
+import { nameInWorker } from "./alfa-audit.ts";
+import { alfaPageOf, type AlfaPage } from "./rules.ts";
 
 /** What one method says an element is called and what it is. */
 export interface NameAnswer {
@@ -44,10 +44,9 @@ async function alfaName(page: Page, where: string, alfaPage: AlfaPage): Promise<
     const element = helpers.resolveWhere(place);
     return element ? helpers.deepXPath(element) : null;
   }, where);
-  const node = deep ? alfaNodeAt(alfaPage.document, deep) : null;
-  if (!node) throw new Error("het element is niet teruggevonden in de kopie die Alfa van de pagina maakt");
-  const aria = AriaNode.from(node, alfaPage.device);
-  return { role: aria.role.map((role) => String(role.name)).getOr(null), name: squash(aria.name.map((name) => name.value).getOr("")) };
+  if (!deep) throw new Error("het element is niet teruggevonden in de kopie die Alfa van de pagina maakt");
+  const { role, name } = await nameInWorker(alfaPage, deep, NAME_LIMIT_MS - 1000);
+  return { role, name: squash(name) };
 }
 
 const AXE_NAME_BODY = `(where) => {

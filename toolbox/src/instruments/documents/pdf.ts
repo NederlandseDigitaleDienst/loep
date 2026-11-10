@@ -15,6 +15,16 @@ import { readableTagCopy } from "./marked-content.ts";
 const TOOL_MS = 60_000;
 const VERAPDF_MS = 180_000;
 /** Pages without text that are rendered and given to text recognition. */
+/**
+ * The first line of what a program printed, for a message that reaches the report. Such a line
+ * often starts with the full path of the file, and that names the machine and the person that
+ * ran the evaluation: only the name of the file is kept.
+ */
+export function toolMessage(output: string): string {
+  const line = output.trim().split("\n")[0] ?? "";
+  return line.replace(/(?:\/[^\s/:]+)+\/([^\s/:]+)/g, "$1").slice(0, 160);
+}
+
 export const MAX_SCAN_PAGES = 8;
 /** A page with fewer characters than this has no text layer to speak of. */
 const NO_TEXT_BELOW = 20;
@@ -262,8 +272,8 @@ export async function measurePdf(pdf: string, scratch: string): Promise<PdfMeasu
   if (!dumped.found) notMeasured.push("qpdf is niet geïnstalleerd: tags, tekstalternatieven, formuliervelden, bladwijzers en versleuteling zijn niet gelezen.");
   else if (!parsed) {
     if (/password/i.test(dumped.output)) throw new Error("het bestand vraagt een wachtwoord om te openen");
-    if (!info.ok) throw new Error(`het bestand is niet als pdf te lezen: ${dumped.output.trim().split("\n")[0]!.slice(0, 160)}`);
-    notMeasured.push(`qpdf kon het bestand niet lezen: ${dumped.output.trim().split("\n")[0]!.slice(0, 160)}`);
+    if (!info.ok) throw new Error(`het bestand is niet als pdf te lezen: ${toolMessage(dumped.output)}`);
+    notMeasured.push(`qpdf kon het bestand niet lezen: ${toolMessage(dumped.output)}`);
   }
   if (!info.found) notMeasured.push("pdfinfo (poppler) is niet geïnstalleerd: de titel uit de metadata en de tekst per tag zijn niet gelezen.");
 

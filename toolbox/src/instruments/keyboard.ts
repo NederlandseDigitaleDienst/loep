@@ -329,18 +329,26 @@ async function walkWithTab(page: Page, options: TabWalkOptions): Promise<Record<
 }
 
 const MAX_ARROW_STEPS = 40;
-const ARROW_SKIP = new Set(["input", "textarea", "select"]);
+const ARROW_SKIP = new Set(["textarea", "select"]);
+/** Inputs on which the arrow keys move focus: a native radio group is one Tab stop, its other buttons are reached with the arrows. */
+const ARROW_INPUTS = new Set(["radio"]);
+
+/** A stop the arrow keys move away from. Text fields and select lists use the arrows themselves; a stop from an older walk has no input type and is skipped as before. */
+export function triesArrows(stop: { tag: string; inputType?: string | null }): boolean {
+  if (stop.tag === "input") return ARROW_INPUTS.has(stop.inputType ?? "");
+  return !ARROW_SKIP.has(stop.tag);
+}
 
 /**
  * Lists, menus and tab sets are one Tab stop; their items are reached with the arrow
  * keys. From every Tab stop, press the arrow keys and record where focus goes, so an
  * element that Tab skips is only reported as unreachable when the arrows skip it too.
  */
-export async function arrowReach(page: Page, stops: { path: string[]; tag: string }[]): Promise<Record<string, unknown>[]> {
+export async function arrowReach(page: Page, stops: { path: string[]; tag: string; inputType?: string | null }[]): Promise<Record<string, unknown>[]> {
   const reach: Record<string, unknown>[] = [];
   const seen = new Set(stops.map((stop) => stop.path.join(" >>> ")));
   for (const stop of stops) {
-    if (ARROW_SKIP.has(stop.tag)) continue;
+    if (!triesArrows(stop)) continue;
     for (const key of ["ArrowDown", "ArrowRight"] as const) {
       const focused = await page.evaluate((chain) => {
         const element = (window as unknown as { __loep: { resolve: (chain: string[]) => HTMLElement | null } }).__loep.resolve(chain);

@@ -499,7 +499,7 @@ test("the gate flags pages that did not load and frames that are counted as page
   assert.deepEqual(names(gateRun(one, { siteModel: { ...validModel(), frames: [] }, siteStates: { siteSha256: "", seeded: { blockers: [], cookies: 0, storedValues: 0 }, dismissals: [], states: [] } })), ["frames-as-pages:P1"]);
 });
 
-test("an address whose navigation started a download is no page that failed to load: a warning, not a gap", () => {
+test("an address that did not load during the inventory is a limitation, and one that started a download a warning", () => {
   const skipped = [
     { url: "https://site.nl/assets/files/agenda-abc123.ics", reason: "failed to load: page.goto: Download is starting" },
     { url: "https://site.nl/traag", reason: "failed to load: page.goto: Timeout 30000ms exceeded." },
@@ -509,7 +509,8 @@ test("an address whose navigation started a download is no page that failed to l
   const run = gateRun([gatePage("P1", "https://site.nl/")]);
   (run.inventory as { skipped: typeof skipped }).skipped = skipped;
   const checked = gateChecks(run);
-  assert.deepEqual(checked.gaps.map((gap) => [gap.check, gap.url]), [["pages-loaded", "https://site.nl/traag"], ["pages-loaded", "https://site.nl/weg"]]);
+  assert.deepEqual(checked.gaps, []);
+  assert.deepEqual(checked.limitations.map((gap) => [gap.check, gap.url]), [["page-not-loaded", "https://site.nl/traag"], ["page-not-loaded", "https://site.nl/weg"]]);
   const downloads = checked.warnings.filter((warning) => warning.check === "download-not-a-page");
   assert.deepEqual(downloads.map((warning) => warning.url), ["https://site.nl/assets/files/agenda-abc123.ics"]);
   assert.match(downloads[0]!.missingNl, /download/);

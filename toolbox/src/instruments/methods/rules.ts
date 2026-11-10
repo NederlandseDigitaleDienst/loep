@@ -1,7 +1,6 @@
-import { Audit } from "@siteimprove/alfa-act";
 import { Attribute, Document, Element, Shadow, type Node as AlfaNode } from "@siteimprove/alfa-dom";
 import { Playwright } from "@siteimprove/alfa-playwright";
-import alfaRules from "@siteimprove/alfa-rules";
+import { auditInWorker } from "./alfa-audit.ts";
 import type { Page } from "playwright";
 import { compareCriterionIds, criterionById, criterionIdFromAxeTag } from "../../lib/wcag.ts";
 import type { MethodFailure, MethodResult } from "../methods.ts";
@@ -231,30 +230,22 @@ interface AlfaJson {
 }
 
 async function runAlfa(page: Page, alfaPage: AlfaPage): Promise<EngineAnswer> {
-  const outcomes = [...(await Audit.of(alfaPage, alfaRules).evaluate())] as unknown as { toJSON(): unknown; target?: unknown }[];
+  const outcomes = await auditInWorker(alfaPage, ENGINE_LIMIT_MS - 1000);
   const rules: Record<string, RuleInfo> = {};
   const findings: (Finding & { deep?: string | null })[] = [];
   for (const outcome of outcomes) {
-    const json = outcome.toJSON() as AlfaJson;
+    const json = outcome.json as unknown as AlfaJson;
     const rule = json.rule.uri.split("/").pop()!;
     rules[rule] ??= {
       criteria: json.rule.requirements.filter((requirement) => requirement.type === "criterion" && requirement.chapter).map((requirement) => requirement.chapter!).sort(compareCriterionIds),
       act: [],
       url: json.rule.uri,
     };
-    if (json.outcome === "inapplicable" || outcome.target === undefined || outcome.target === null) {
+    if (json.outcome === "inapplicable" || !outcome.hasTarget) {
       findings.push({ rule, outcome: json.outcome, where: null, match: "rule" });
       continue;
     }
-    // Some rules judge a group of nodes together; the first of them stands for the group.
-    const target = outcome.target as AlfaNode | Iterable<AlfaNode>;
-    const node = typeof (target as AlfaNode).parent === "function" ? (target as AlfaNode) : ([...(target as Iterable<AlfaNode>)][0] ?? null);
-    let deep: string | null = null;
-    try {
-      deep = node ? alfaDeepPath(node) : null;
-    } catch {
-      deep = null;
-    }
+    const deep = outcome.deep;
     const finding: Finding & { deep?: string | null } = { rule, outcome: json.outcome, where: null, match: "none", deep };
     const expectations = (json.expectations ?? []).map(([, expectation]) => expectation);
     if (json.outcome === "failed" || json.outcome === "cantTell") {

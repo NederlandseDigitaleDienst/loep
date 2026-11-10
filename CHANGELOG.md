@@ -6,6 +6,54 @@ Wat er per versie van loep is veranderd. De versie staat op het voorblad en onde
 
 <!-- towncrier: een nieuwe versie komt hieronder -->
 
+## 0.24.1 (2026-11-09)
+
+Deze versie is uitgebracht zonder meting: alleen de tekst van bevindingen over 2.5.3 en een waarschuwing bij een vaste lijst van pagina's (#482, #484).
+
+### Verder
+
+- Een bevinding over 2.5.3 zegt in de titel waar de naam vandaan komt (zoals `aria-label` of verborgen tekst) en citeert die code. Een lezer zocht de fout eerst in het logo, terwijl die in verborgen tekst ernaast zat. ([#482](https://github.com/NederlandseDigitaleDienst/loep/issues/482))
+- Bij een vaste lijst van pagina's zeggen `sample` en het rapport het als een paginatype er veel vaker in staat dan een getrokken steekproef zou nemen. Elk gebrek op dat type kwam anders tientallen keren terug zonder dat het onderzoek meer zag. ([#484](https://github.com/NederlandseDigitaleDienst/loep/issues/484))
+
+## 0.24.0 (2026-11-09)
+
+Deze versie is uitgebracht zonder meting: alleen een nieuwe herkenner voor zoekvragen van Elastic Search UI (#478).
+
+### Wat een uitkomst kan veranderen
+
+- Een zoekvraag van Elastic Search UI, die een site als POST naar een eigen adres als `/api/search` stuurt, herkent loep nu als leesverzoek. De verkenner legt het adres vast in `readRequests`, en na `check-site` worden de zoekpagina en lijsten met filters gemeten in plaats van open gelaten met "proef werkte niet". ([#478](https://github.com/NederlandseDigitaleDienst/loep/issues/478))
+
+## 0.23.1 (2026-11-05)
+
+Deze versie is uitgebracht zonder meting: alleen het invulblad voor de invulassistent en een melding over een pdf veranderen; er zit geen wijziging aan de opdrachten of de oordeelregels in.
+
+### Verder
+
+- Een melding van een hulpprogramma bij een pdf die niet te lezen is, noemt nu alleen de naam van het bestand. Eerder kwam het volledige pad op de eigen machine in het rapport, met de naam van wie het onderzoek draaide.
+- Het invulblad voor de invulassistent volgt bij stap 4 tot en met 7 de vragen van toegankelijkheidsverklaring.nl, in dezelfde volgorde. Stap 4 (onderzoek) geeft de korte beschrijving, de datum als dd-mm-jjjj, de scope met puntkomma's, het aantal onderzochte en voldoende succescriteria, wie het uitvoerde, platformonderzoek, de eisen van DigiToegankelijk en de directe link. Stap 5 noemt de criteria zoals de lijst waarin je ze aanvinkt, bijvoorbeeld "1.3.1 - Info en relaties [niveau A]". Stap 6 zegt welke fouten je als opgelost markeert, met datum, maatregel en of het vinkje voor het hele kanaal mag, en geeft daarna de alternatieven, de maatregelen voor wat nog open is en de uiterste datum. Stap 7 geeft de links voor contact en klachten en een voorstel voor de extra informatie. Eerder stonden er velden die het formulier niet kent, zodat waarden in het verkeerde vak terechtkwamen.
+
+## 0.23.0 (2026-11-03)
+
+Deze versie is uitgebracht zonder meting: robuustheid: stille hangs in de veegronde en de sessies, poortlussen, een tempo per run; geen wijziging aan de opdrachten of de oordeelregels; de veegronde op de testsite is groen.
+
+### Wat een uitkomst kan veranderen
+
+- Een agent kan een eigen testaanmelding vragen met `mail register`, met een eigen adres, eigen links en eigen mail. Daarin mag hij afmelden en verwijderen, dus wat pas daarna komt (zoals bij 3.3.4) is te meten. Het kost 3 verzendingen, en `mail cleanup` ruimt alle aanmeldingen op en meldt de uitkomst per aanmelding. Links via een mailingdienst op een ander domein werken als die origin bij `inventory` is verklaard met `--mail-link-origin`: alleen een GET gaat daarheen, en alleen een doorverwijzing naar de site wordt gevolgd. Het soort link volgt nu ook uit de linktekst in de HTML van de mail, en een link waarvan het soort onbekend blijft, gaat alleen nog naar een sessie met een eigen aanmelding. Een formulier met het adres van de run wordt nu als elk ander formulier afgespeeld, ook voordat de mail er is. ([#413](https://github.com/NederlandseDigitaleDienst/loep/issues/413))
+
+### Verder
+
+- De audit van Alfa en de naam volgens Alfa draaien elk in een eigen draad, met een tijdgrens. Op een pagina waar het vergelijken van selectors uren duurde, stond de hele veegronde of het sessieproces van een run stil, zonder melding. Alfa geeft dan op die pagina geen antwoord, en de andere engines wel.
+- De pijltjesproef probeert nu ook een groep keuzerondjes. Zo'n groep is één Tab-stop; de andere rondjes bereik je met de pijltjes en tellen nu als bereikt, waardoor de poort geen vals laag bereik van de Tab-proef meer meldt. Tekstvelden en keuzelijsten blijven overgeslagen.
+- Een ingesloten venster dat niet los te meten is, en een pagina die tijdens de inventaris niet laadde, houden de bewijspoort niet meer tegen. Geen van beide is door een nieuwe meting of door de verkenner te sluiten. Het rapport noemt ze als beperking.
+- Een ingesloten venster met een document zonder hoogte, zoals een speler die leeg blijft, krijgt nu een schermafbeelding van wat het venster toont. Eerder mislukte daardoor de meting van de hele pagina.
+- Een pagina die met GET inhoud ophaalt van een adres buiten de run, wordt nu ook na `sample` en `explore` gemeld, zolang de run die origin niet heeft. De skill laat die melding niet meer passeren zonder keuze van de gebruiker, ook niet bij meer sites tegelijk.
+- Een site die na een aantal paginaladingen kort na elkaar verbindingen weigert, is nu te onderzoeken: `inventory --navigation-delay <seconden>` legt de tijd tussen twee navigaties vast voor de hele run, en die geldt voor de inventaris, `check-site`, `collect`, `contrast`, `states` en de sessies van de agents. Zonder de vlag blijft het tempo zoals het was.
+- Een veld met `min`, `max`, `step`, `minlength`, `maxlength` of `pattern` krijgt nu een vaste testwaarde die het accepteert, bij `type` in een sessie en bij het invullen van formulieren. Een bedrag van minstens 100 krijgt 100 in plaats van 12, zodat het formulier verder komt en wat daarna verschijnt gemeten wordt. Een tekst die niet past, wordt de eerste andere vaste testwaarde die wel past; past er geen, dan blijft de waarde zoals hij was. Bewust foute waarden (`invalid-email`, `long`, `empty`) blijven ongewijzigd.
+- `check-site` stopt niet meer op een paginatype waarvan het adres doorverwijst naar een adres buiten de run. Dat wordt een aanwijzing voor de verkenner en een beperking van de meting.
+- `collect` wacht niet meer eindeloos bij het lezen van audio en video: elk ingesloten venster krijgt 15 seconden en de hele meting een minuut. Een venster dat niet antwoordt, komt onder "niet onderzocht" in de meting, en de pagina wordt verder gemeten.
+- `inventory` blijft op de site: een pagina die naar een andere site doorverwijst, neemt de inventaris niet meer mee naar die site.
+- `inventory` stopt met een melding als de site (bijna) alle bezoeken weigert met 401, 403 of 429, zoals een firewall of botfilter doet: 90% of meer van ten minste 5 bezochte pagina's. Er start dan geen verkenner op een site die alleen een foutpagina laat zien. `inventory.json` wordt wel geschreven, zodat te zien is welke pagina's werden geweigerd.
+
 ## 0.22.0 (2026-11-01)
 
 Deze versie is uitgebracht zonder meting: Vastgesteld op de lokale keten met mailbox, niet op de vaste testsite; de meting op de keten volgt op deze versie.

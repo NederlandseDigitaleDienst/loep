@@ -1,0 +1,30 @@
+name: Site
+
+# Publishes site/ on Toon (nldd/loep), with the fonts and icons embedded,
+# because Toon refuses those from a CDN. The old GitHub Pages address
+# redirects there from NederlandseDigitaleDienst/nederlandsedigitaledienst.github.io.
+on:
+  push:
+    branches: [main]
+    paths: ["site/**", ".github/workflows/site.yml", ".github/scripts/site-toon.py"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: site
+  cancel-in-progress: false
+
+jobs:
+  toon:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - run: python3 .github/scripts/site-toon.py site toon-dist
+      - uses: DigiGilde/toon/actions/publish@3c0427f19f9ea7e367d9f6574e74d51fd789d0d7
+        with:
+          site: nldd/loep
+          site-id: ee7f5a1c-62d6-4fe5-a3db-58d0aea5c6de
+          dist-path: toon-dist

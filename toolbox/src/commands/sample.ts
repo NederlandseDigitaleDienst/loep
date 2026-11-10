@@ -271,6 +271,22 @@ export function applyFrameClasses(pages: InventoryPage[], model: SiteModel): { p
   return { pages: kept, repeats, excluded: [...excluded.values()] };
 }
 
+/** Most pages of one type a drawn sample takes: the representative and its extras. */
+export const MAX_PER_TYPE = 1 + MAX_EXTRA_PER_TYPE;
+
+/**
+ * A fixed list is taken as given, but a list with many pages of one type repeats every finding on
+ * that type many times, where WCAG-EM asks for one or two of each. Say so, with the types, so that
+ * whoever leads the evaluation can shorten the list. Empty when no type has more than a drawn sample takes.
+ */
+export function crowdedTypesNote(types: readonly SamplePageType[]): string {
+  const crowded = types.filter((type) => type.examined > MAX_PER_TYPE).sort((a, b) => b.examined - a.examined || a.id.localeCompare(b.id));
+  if (crowded.length === 0) return "";
+  const named = crowded.map((type) => `${type.examined} van het type ${type.id}${type.descriptionNl ? ` (${type.descriptionNl})` : ""}`);
+  const list = named.length === 1 ? named[0]! : `${named.slice(0, -1).join(", ")} en ${named.at(-1)}`;
+  return ` In de lijst staan ${list}. Een getrokken steekproef neemt van een type hooguit ${MAX_PER_TYPE} pagina's; WCAG-EM vraagt er een of twee per type. Een gebrek op zo'n type komt daardoor op veel pagina's terug, zonder dat het onderzoek meer ziet. Een kortere lijst geeft hetzelfde beeld.`;
+}
+
 export function buildSample(inventory: Inventory, seed: string, model: SiteModel | null = null, typeOf: Map<string, string> = new Map(), representatives: Map<string, string> = new Map()): Sample {
   if (model) {
     const framed = applyFrameClasses(inventory.pages, model);
@@ -282,7 +298,8 @@ export function buildSample(inventory: Inventory, seed: string, model: SiteModel
     const note = copies > 0 ? ` ${copies} ingesloten ${copies === 1 ? "venster telt" : "vensters tellen"} volgens het sitemodel niet mee als pagina (${framed.excluded.map((frame) => `${frame.descriptionNl}: ${frame.kindNl}`).join("; ")}).` : "";
     // A census and a fixed list look at what they look at; only a drawn sample says per type what it took.
     const perType = sample.method === "structured-plus-random" ? { pageTypes: pageTypeSummary(model, framed.pages, sample.items) } : {};
-    return { ...sample, note: `${sample.note}${note}`, excludedFrames: framed.excluded, ...perType };
+    const crowded = sample.method === "fixed-list" ? crowdedTypesNote(pageTypeSummary(model, framed.pages, sample.items)) : "";
+    return { ...sample, note: `${sample.note}${note}${crowded}`, excludedFrames: framed.excluded, ...perType };
   }
   const unique = deduplicate(inventory.pages);
   // The site model and the probes may name an address that is now an alias: they count for the item it belongs to.
