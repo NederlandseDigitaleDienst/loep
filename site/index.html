@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>loep: toegankelijkheidsonderzoek voor overheidssites</title>
-  <meta name="description" content="loep onderzoekt een overheidssite op WCAG 2.2 en 2.1, niveau A en AA, volgens WCAG-EM, en maakt de toegankelijkheidsverklaring die erop steunt. Een mens tekent.">
+  <title>loep: een experiment met toegankelijkheidsonderzoek</title>
+  <meta name="description" content="Een experiment van de Nederlandse Digitale Dienst. loep onderzoekt een overheidssite op WCAG 2.2 en 2.1, niveau A en AA, volgens WCAG-EM, en maakt de toegankelijkheidsverklaring die erop steunt. Een mens tekent.">
   <link rel="icon" type="image/svg+xml" href="https://cdn.jsdelivr.net/npm/@nldd/design-system@0.21.1/dist/favicon.svg">
   <link rel="apple-touch-icon" href="https://cdn.jsdelivr.net/npm/@nldd/design-system@0.21.1/dist/touch-icon.png">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@nldd/design-system@0.21.1/dist/css/global.css">
@@ -17,7 +17,7 @@
       <nldd-top-navigation-bar
         logo-title="Nederlandse Digitale Dienst"
         logo-subtitle="Ministerie van Economische Zaken en Klimaat"
-        website-title="loep"
+        website-title="loep (experiment)"
       ></nldd-top-navigation-bar>
     </nldd-skip-link>
 
@@ -27,7 +27,7 @@
       </nldd-title>
       <nldd-spacer size="16"></nldd-spacer>
       <nldd-rich-text color="inherit">
-        <p>loep onderzoekt een overheidssite op WCAG 2.2 en 2.1, niveau A en AA, volgens WCAG-EM. Agents meten met vaste instrumenten en leggen elk bewijs vast. Daarna maakt loep de toegankelijkheidsverklaring. Jij leest het rapport en tekent.</p>
+        <p>Een experiment van de Nederlandse Digitale Dienst. loep onderzoekt een overheidssite op WCAG 2.2 en 2.1, niveau A en AA, volgens WCAG-EM. Agents meten met vaste instrumenten en leggen elk bewijs vast. Daarna maakt loep de toegankelijkheidsverklaring. Jij leest het rapport en tekent.</p>
       </nldd-rich-text>
       <nldd-spacer size="24"></nldd-spacer>
       <nldd-button-group>
@@ -35,6 +35,12 @@
         <nldd-button appearance="inherit-tinted" text="Bekijk de code" href="https://github.com/NederlandseDigitaleDienst/loep"></nldd-button>
       </nldd-button-group>
     </nldd-hero>
+
+    <nldd-simple-section id="experiment" padding-bottom="0">
+      <nldd-banner variant="warning" text="Dit is een experiment" supporting-text="loep is niet af en niet bewezen. Het register van toegankelijkheidsverklaringen heeft een onderzoek met loep niet bevestigd als onderbouwing van status A of B, en geen toezichthouder heeft zich over de methode uitgesproken.">
+        <nldd-button slot="actions" appearance="secondary" text="Wat we weten" href="#status"></nldd-button>
+      </nldd-banner>
+    </nldd-simple-section>
 
     <nldd-simple-section id="cijfers">
       <nldd-title slot="header" size="2" text="Elk oordeel rust op een waarneming" heading-level="2"></nldd-title>
@@ -310,11 +316,11 @@
     </nldd-one-third-two-thirds-section>
 
     <nldd-simple-section id="status" background="tinted">
-      <nldd-title slot="header" size="2" text="Nog experimenteel" heading-level="2"></nldd-title>
+      <nldd-title slot="header" size="2" text="Wat we weten, en wat nog niet" heading-level="2"></nldd-title>
       <nldd-spacer slot="header" size="16"></nldd-spacer>
       <nldd-rich-text slot="header">
         <p>loep is een werkend concept. Op een testsite met 79 ingebouwde gebreken vond versie 0.11.0 er 77 en 78, in twee runs met dezelfde uitkomst bij alle 56 criteria. Dat is gemeten tegen de sleutel van die testsite, niet tegen het oordeel van een deskundige, en latere versies zijn niet als geheel opnieuw gemeten.</p>
-        <p>Geen toezichthouder heeft zich over de methode uitgesproken. Lees de methode voordat je een rapport ergens voor gebruikt.</p>
+        <p>Het register van toegankelijkheidsverklaringen heeft een onderzoek met loep niet bevestigd als onderbouwing van status A of B, en geen toezichthouder heeft zich over de methode uitgesproken. Lees de methode voordat je een rapport ergens voor gebruikt.</p>
         <p>De broncode staat op <a href="https://github.com/NederlandseDigitaleDienst/loep">GitHub</a>, onder de open licentie EUPL.</p>
       </nldd-rich-text>
       <nldd-button-group>
