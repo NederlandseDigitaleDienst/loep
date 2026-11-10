@@ -6,7 +6,7 @@
  * search and change something.
  */
 
-export const SEARCH_SERVICE_IDS = ["typesense", "algolia", "elasticsearch", "meilisearch", "graphql", "searchui"] as const;
+export const SEARCH_SERVICE_IDS = ["typesense", "algolia", "elasticsearch", "meilisearch", "graphql", "searchui", "searchterm"] as const;
 export type SearchServiceId = (typeof SEARCH_SERVICE_IDS)[number];
 
 export type Verdict = { search: true } | { search: false; reasonNl: string };
@@ -16,8 +16,11 @@ export interface SearchService {
   nameNl: string;
   /** The form that is recognised, in the words of the explorer's task. */
   formNl: string;
-  /** `path` is the pathname of the address, for the services whose form depends on it. */
-  recognise: (body: string, path?: string) => Verdict;
+  /**
+   * `path` is the pathname of the address, for the services whose form depends on it. `terms` are
+   * the search terms of the run, for the service that is recognised by the term alone.
+   */
+  recognise: (body: string, path?: string, terms?: readonly string[]) => Verdict;
 }
 
 /** Larger than any question to a search service; a body this large is not looked into. */
@@ -414,6 +417,60 @@ function searchUi(body: string): Verdict {
   return query ? no(query) : yes;
 }
 
+// Any search service with a JSON body, such as Google Discovery Engine (`POST .../servingConfigs/<config>:searchLite`) or a
+// `POST /api/v2/search` of its own: recognised only by the search term of the run standing in it, word for word, as a value.
+// Its form says nothing else, so whatever could change something or carry more than a search term is refused.
+const TERM_WRITE_KEYS = new Set([
+  ...WRITE_KEYS, "mutation", "remove", "save", "patch", "put", "set", "unset", "replace", "merge", "commit", "submit", "send", "subscribe", "order", "payment",
+  "email", "mail", "emailaddress", "e-mail", "password", "passwd", "wachtwoord", "token", "csrf", "phone", "telephone", "telefoon", "tel", "message", "bericht",
+  "comment", "comments", "opmerking", "reactie", "feedback", "subject", "onderwerp", "firstname", "lastname", "voornaam", "achternaam", "naam", "address", "adres",
+]);
+const EMAIL_LIKE = /[^\s@]+@[^\s@]+\.[^\s@]+/;
+const GRAPHQL_CHANGE = /\b(?:mutation|subscription)\b\s*[A-Za-z_({]/;
+
+/** The key at any depth whose lower-cased name, without separators, is in `keys`; null when none is. */
+function looseKeyAnywhere(value: unknown, keys: ReadonlySet<string>): string | null {
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const found = looseKeyAnywhere(item, keys);
+      if (found) return found;
+    }
+    return null;
+  }
+  if (!isObject(value)) return null;
+  for (const [key, inner] of Object.entries(value)) {
+    if (keys.has(key.toLowerCase()) || keys.has(key.toLowerCase().replace(/[-_\s.]/g, ""))) return key;
+    const found = looseKeyAnywhere(inner, keys);
+    if (found) return found;
+  }
+  return null;
+}
+
+/** Every string value at any depth. */
+function stringsOf(value: unknown): string[] {
+  if (typeof value === "string") return [value];
+  if (Array.isArray(value)) return value.flatMap(stringsOf);
+  if (isObject(value)) return Object.values(value).flatMap(stringsOf);
+  return [];
+}
+
+const sameTerm = (value: string, term: string): boolean => value.trim().normalize("NFC").toLowerCase() === term.trim().normalize("NFC").toLowerCase();
+
+function searchTerm(body: string, _path?: string, terms?: readonly string[]): Verdict {
+  const known = (terms ?? []).filter((term) => term.trim() !== "");
+  if (known.length === 0) return no("loep kent de zoekterm van deze run hier niet, en alleen daaraan is zo'n zoekvraag te herkennen");
+  const parsed = parseJson(body);
+  if (!parsed.ok) return no("de body is geen JSON, en een zoekvraag met de zoekterm in de body is dat wel");
+  if (!isObject(parsed.value) && !Array.isArray(parsed.value)) return no("de body is geen JSON-object of -lijst");
+  const write = looseKeyAnywhere(parsed.value, TERM_WRITE_KEYS);
+  if (write) return no(`de body bevat "${write}", en dat wijst op een verzoek dat iets wijzigt of meer meestuurt dan een zoekterm`);
+  const strings = stringsOf(parsed.value);
+  if (strings.some((value) => EMAIL_LIKE.test(value))) return no("de body bevat iets dat op een e-mailadres lijkt, en een zoekvraag heeft dat niet");
+  if (strings.some((value) => GRAPHQL_CHANGE.test(value))) return no("de body bevat een GraphQL-mutation of -subscription, en die wijzigt iets");
+  if (!strings.some((value) => known.some((term) => sameTerm(value, term)))) return no("de zoekterm van de run staat niet letterlijk als waarde in de body");
+  return yes;
+}
+
 export const SEARCH_SERVICES: Record<SearchServiceId, SearchService> = {
   typesense: { id: "typesense", nameNl: "Typesense", formNl: 'JSON met "searches", een lijst van zoekvragen (POST /multi_search)', recognise: typesense },
   algolia: { id: "algolia", nameNl: "Algolia", formNl: 'JSON met "requests", elk met "indexName" en "params" of met "indexName" en losse zoekparameters zoals "query" en "hitsPerPage", of met alleen "params", of losse zoekparameters aan POST /1/indexes/<index>/query', recognise: algolia },
@@ -421,16 +478,22 @@ export const SEARCH_SERVICES: Record<SearchServiceId, SearchService> = {
   meilisearch: { id: "meilisearch", nameNl: "Meilisearch", formNl: 'JSON met zoekparameters als "q" en "filter", of met "queries"', recognise: meilisearch },
   graphql: { id: "graphql", nameNl: "GraphQL", formNl: 'JSON met een document in "query" dat alleen query-bewerkingen heeft, geen mutation of subscription', recognise: graphql },
   searchui: { id: "searchui", nameNl: "Elastic Search UI", formNl: 'JSON met alleen "state" of "requestState" en "queryConfig", met de zoekterm, filters en paginering van Search UI (zoals POST /api/search)', recognise: searchUi },
+  searchterm: {
+    id: "searchterm",
+    nameNl: "een zoekdienst met de zoekterm van de run in de body",
+    formNl: "JSON waarin de zoekterm van de run (of de term die niets vindt) letterlijk als waarde staat, ook genest, zonder velden die iets wijzigen of persoonsgegevens dragen, zoals bij Google Discovery Engine (…:searchLite) of /api/v2/search",
+    recognise: searchTerm,
+  },
 };
 
-/** Whether the body is a question to this service. An empty or very large body never is. */
-export function recogniseSearch(service: SearchServiceId, body: string | null, path?: string): Verdict {
+/** Whether the body is a question to this service. An empty or very large body never is. `terms` are the search terms of the run (see `searchterm`). */
+export function recogniseSearch(service: SearchServiceId, body: string | null, path?: string, terms?: readonly string[]): Verdict {
   if (body === null || body.trim() === "") return no("het verzoek heeft geen body");
   if (body.length > MAX_BODY) return no(`de body is groter dan ${MAX_BODY / 1024} kB`);
-  return SEARCH_SERVICES[service].recognise(body, path);
+  return SEARCH_SERVICES[service].recognise(body, path, terms);
 }
 
 /** Every service that would take this body for a question to it; empty when none does. For the record of a request that was held back. */
-export function searchServicesOf(body: string | null, path?: string): SearchServiceId[] {
-  return SEARCH_SERVICE_IDS.filter((id) => recogniseSearch(id, body, path).search);
+export function searchServicesOf(body: string | null, path?: string, terms?: readonly string[]): SearchServiceId[] {
+  return SEARCH_SERVICE_IDS.filter((id) => recogniseSearch(id, body, path, terms).search);
 }

@@ -10,7 +10,7 @@ import { heldBackSearches, heldBackSearchNl, recordReads, type HeldBackSearch } 
 import { makeWorkDir } from "../lib/workdir.ts";
 import { siteLabel } from "../lib/origins.ts";
 import { textHasTerm } from "../lib/searchterm.ts";
-import { acceptedGapFor, approvedReads, frameAddress, literalSearchTermNl, NOT_OPENED_ON_PAGE_TYPE, POSTCONDITION_NOT_HELD_NL, SEARCH_TERM_PLACEHOLDER, notOpenedAdviceNl, pageTypesToCheck, readSiteModel, REVIEW_MISSING, searchTermForRun, sendsToCandidates, sendsToReplayProblem, SITE_CHECK_FILE, SITE_MODEL_FILE, validateSiteModel, type ModelContext, type PageType, type Postcondition, type SiteCheck, type SiteModel } from "../lib/sitemodel.ts";
+import { acceptedGapFor, approvedReads, frameAddress, literalSearchTermNl, NOT_OPENED_ON_PAGE_TYPE, POSTCONDITION_NOT_HELD_NL, SEARCH_TERM_PLACEHOLDER, notOpenedAdviceNl, pageTypesToCheck, readSiteModel, REVIEW_MISSING, searchTermForRun, sendsToCandidates, sendsToReplayProblem, SITE_CHECK_FILE, SITE_MODEL_FILE, validateSiteModel, withRunTerms, type ModelContext, type PageType, type Postcondition, type SiteCheck, type SiteModel } from "../lib/sitemodel.ts";
 import { LOOK_COMMANDS } from "../lib/verdict.ts";
 import { readObservation } from "../session/observations.ts";
 import { holds, loadRecipes, MAX_RECIPE_STEPS, replayEnv, replayFromClean, replaySteps } from "../session/recipe.ts";
@@ -426,7 +426,7 @@ export async function checkSite(runDir: string, options: { navigationDelayMs?: n
       // In a run with a login: a recipe that fails because the session ran out says nothing about the model.
       await confirmLogin(browser);
       // The read requests of the model passed the validator above; a recipe that searches is replayed with them, as the sweep will.
-      const env: Env = { ...(await replayEnv(browser, runDir, options.navigationDelayMs === undefined ? {} : { navigationDelayMs: options.navigationDelayMs })), reads: model.readRequests ?? [] };
+      const env: Env = { ...(await replayEnv(browser, runDir, options.navigationDelayMs === undefined ? {} : { navigationDelayMs: options.navigationDelayMs })), reads: withRunTerms(runDir, model.readRequests ?? []) };
       const term = searchTermForRun(runDir);
       for (const entry of entries) {
         const recipe = recipes[entry.recipe]!;
@@ -505,7 +505,7 @@ export async function checkSite(runDir: string, options: { navigationDelayMs?: n
   const check: SiteCheck = { ok: problems.length === 0, siteSha256: await sha256File(path), checkedAt: new Date().toISOString(), problems, replays, unusedRecipes, ...(operables ? { operables } : {}), ...(hintsNl.length > 0 ? { hintsNl } : {}) };
   await writeJson(join(runDir, SITE_CHECK_FILE), check);
   // Which read requests the run lets through is part of its record, as the permission to write is.
-  if (check.ok) await recordReads(runDir, (await readSiteModel(runDir))?.readRequests ?? []);
+  if (check.ok) await recordReads(runDir, withRunTerms(runDir, (await readSiteModel(runDir))?.readRequests ?? []));
   await writeManifest(runDir, { command: "check-site", startedAt, ok: check.ok, problems: problems.length, replays: replays.length });
   return check;
 }
