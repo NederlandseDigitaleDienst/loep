@@ -1,0 +1,225 @@
+{
+  "criteria": {
+    "bothFailed": [],
+    "criteria": 55,
+    "falsePassRate": null,
+    "missed": [],
+    "neitherFailed": {
+      "cantTell": 6,
+      "inapplicable": 6,
+      "passed": 40
+    },
+    "onlyOurs": [
+      "1.4.10",
+      "2.4.3",
+      "4.1.2"
+    ],
+    "recall": null,
+    "site": "Gemeente Berkenveen",
+    "undecidedRate": null,
+    "wcagVersion": "2.2"
+  },
+  "findings": [],
+  "ours": {
+    "agreement": 1,
+    "classes": {
+      "discutabel": {
+        "a": 2,
+        "agreed": 2,
+        "b": 2
+      },
+      "onterecht": {
+        "a": 0,
+        "agreed": 0,
+        "b": 0
+      },
+      "tegenhanger": {
+        "a": 0,
+        "agreed": 0,
+        "b": 0
+      },
+      "terecht": {
+        "a": 1,
+        "agreed": 1,
+        "b": 1
+      }
+    },
+    "disagreed": 0,
+    "duplicates": {
+      "a": {
+        "referenceFindings": 0,
+        "surplus": 0
+      },
+      "agreed": {
+        "referenceFindings": 0,
+        "surplus": 0
+      },
+      "b": {
+        "referenceFindings": 0,
+        "surplus": 0
+      }
+    },
+    "shareWithoutCounterpart": {
+      "discutabel": {
+        "a": 0.667,
+        "agreed": 0.667,
+        "b": 0.667
+      },
+      "onterecht": {
+        "a": 0,
+        "agreed": 0,
+        "b": 0
+      },
+      "terecht": {
+        "a": 0.333,
+        "agreed": 0.333,
+        "b": 0.333
+      }
+    },
+    "total": 3
+  },
+  "ownFindings": [
+    {
+      "a": "terecht",
+      "agreed": "terecht",
+      "b": "terecht",
+      "criterion": "1.4.10",
+      "id": "GEME-1.4.10-0681",
+      "reasonNl": {
+        "a": "De meting in WebKit op P13 en P08 geeft 337 pixels inhoud in een venster van 320. Op het beeld valt de knop Zoeken in de kop deels buiten beeld. Opzij schuiven is nodig, dus afkeuren in Safari klopt.",
+        "b": "De meting in WebKit geeft op 320 pixels een inhoud van 337 pixels. Op de opname valt de knop Zoeken in de kop deels buiten beeld. De pagina schuift dan opzij. Dat is een echte fout."
+      },
+      "titleNl": "Zoekveld in de kop maakt de pagina in Safari te breed"
+    },
+    {
+      "a": "discutabel",
+      "agreed": "discutabel",
+      "b": "discutabel",
+      "criterion": "2.4.3",
+      "id": "GEME-2.4.3-e17b",
+      "reasonNl": {
+        "a": "Klopt: met de chat open gaat Tab alleen rond in de chat. Maar de chat sluit met een knop of Escape en de volgorde binnen de chat is logisch. Veel onderzoekers keuren dit niet af op 2.4.3.",
+        "b": "Klopt: met de chat open blijft Tab in het chatvenster. Dat is het gewone gedrag van een chatvenster, en het venster sluit met een knop. De meeste onderzoekers keuren 2.4.3 hier niet op af."
+      },
+      "titleNl": "Met de chat open slaat Tab de zichtbare pagina over"
+    },
+    {
+      "a": "discutabel",
+      "agreed": "discutabel",
+      "b": "discutabel",
+      "criterion": "4.1.2",
+      "id": "GEME-4.1.2-3049",
+      "reasonNl": {
+        "a": "Klopt: audio op P07 en video op P10 hebben geen aria-label of title. Maar de knoppen van de browser in de speler hebben wel een naam en de kop erboven zegt wat het is. Een onderzoeker keurt hier meestal niet op af.",
+        "b": "Klopt: audio op P07 en video op P10 hebben geen naam. Het zijn gewone spelers van de browser; de knoppen erin hebben wel een naam. Een onderzoeker keurt 4.1.2 daar meestal niet op af."
+      },
+      "titleNl": "Speler voor geluid en video zonder naam"
+    }
+  ],
+  "provenance": {
+    "classificationSha256": {
+      "a": "c8b894cea7cded3e30fa6ea0a403b716c11d0857757cae3545dcc2b794c8684a",
+      "b": "483a8549b430d80f5a42687dfbf9dfa8625ec60441b5b8096fd01d01389ed132"
+    },
+    "evaluationSha256": "16b1974ba520fa5b34152df903fcda5f9984f83f0785dc2903814687d7e5b9e9",
+    "inputSha256": "02ae3dcbdc2118e16617bea1f938d6d1be21fa53572b3556d5d4110d11e60ffe",
+    "promptSha256": "f1f5e55792880bceff07e783347360c72ec2346c22a84f5886948346abf1e8fe"
+  },
+  "reference": {
+    "agreement": null,
+    "agreementCoarse": null,
+    "classes": {
+      "buiten-bereik": {
+        "a": 0,
+        "agreed": 0,
+        "b": 0
+      },
+      "deels": {
+        "a": 0,
+        "agreed": 0,
+        "b": 0
+      },
+      "gemist-bewijs-beoordeling": {
+        "a": 0,
+        "agreed": 0,
+        "b": 0
+      },
+      "gemist-bewijs-dossier": {
+        "a": 0,
+        "agreed": 0,
+        "b": 0
+      },
+      "gemist-geen-bewijs": {
+        "a": 0,
+        "agreed": 0,
+        "b": 0
+      },
+      "gevonden": {
+        "a": 0,
+        "agreed": 0,
+        "b": 0
+      },
+      "niet-meer-aanwezig": {
+        "a": 0,
+        "agreed": 0,
+        "b": 0
+      }
+    },
+    "coarse": {
+      "buiten-bereik": {
+        "a": 0,
+        "agreed": 0,
+        "b": 0
+      },
+      "deels": {
+        "a": 0,
+        "agreed": 0,
+        "b": 0
+      },
+      "gemist": {
+        "a": 0,
+        "agreed": 0,
+        "b": 0
+      },
+      "gevonden": {
+        "a": 0,
+        "agreed": 0,
+        "b": 0
+      },
+      "niet-meer-aanwezig": {
+        "a": 0,
+        "agreed": 0,
+        "b": 0
+      }
+    },
+    "counted": 0,
+    "disagreed": 0,
+    "disagreedCoarse": 0,
+    "documents": 0,
+    "documentsOutOfReach": 0,
+    "foundShare": {
+      "a": {
+        "ofCounted": null,
+        "ofStillPresent": null
+      },
+      "agreed": {
+        "ofCounted": null,
+        "ofStillPresent": null
+      },
+      "b": {
+        "ofCounted": null,
+        "ofStillPresent": null
+      }
+    },
+    "leftOut": 0,
+    "stillPresent": {
+      "a": 0,
+      "agreed": 0,
+      "b": 0
+    },
+    "total": 0
+  },
+  "referenceKind": "answer-key",
+  "schema": "loep/compare-findings-summary/2",
+  "site": "Gemeente Berkenveen"
+}

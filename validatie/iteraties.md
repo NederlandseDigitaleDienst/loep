@@ -374,3 +374,21 @@ Per gebrek wijkt een run af bij zeven gebreken. Twee mist elke run (1.3.2-zoekvo
 A2 en C1 liepen in twee delen door de weeklimiet; hun duur en tokens tellen de agents die bij de limiet stopten en opnieuw begonnen mee, en zijn daarom hoger en niet te vergelijken met A1 en B. B1 en B2 tegen A1: geen meerverbruik, binnen de grens van 20 procent uit #318.
 
 Het aandeel "vastgesteld door een agent" is gerekend met de definitie na #361: een uitkomst rust op een instrument als ze iets aanhaalt wat de browser zelf antwoordt (ook `ax`, `html`, `tab`, `key`, `click`), en op een eigen waarneming van een agent als ze alleen een beeld aanhaalt (`look`, `crop`, een schermafbeelding). Met de eerste definitie in #361, die alleen meetcommando's telde, kwam 3.3.1 in B1 en B2 op "vastgesteld door een agent"; dat was te laag geteld. Op deze testsite rust elke uitkomst op een instrument; wat het label op een echte site zegt, is nog niet gezien.
+
+## Meting op 0.25.0, 10 november 2026
+
+Issue #498. De eerste meting van een hele versie sinds 0.11.0, en de eerste volledige run op de schone tweeling. Gemeten is de kandidaat voor 0.25.0 (branch `meting/0.25.0`, commit `b2bc8d4`: main na #497, met #465 en #471). Elke run werkte op een kopie van een bevroren veegronde per variant, gemaakt met de kandidaat, met versturen toegestaan (ten hoogste 30). Opzet, stopregel en marge stonden in #498 voordat een run startte. De uitwerking staat in [testsite/2026-11-10-meting-0.25.0/](testsite/2026-11-10-meting-0.25.0/uitkomst.md).
+
+| | L1 | L2 | B1 (tweeling) |
+|---|---|---|---|
+| Criteria zoals de sleutel, van 56 | 56 | 56 | 47 (3 afgekeurd, 6 open voor een mens) |
+| Gebreken gevonden waar beide vergelijkers het eens zijn, van 79 | 79 | 79 | n.v.t. |
+| Meldingen zonder tegenhanger | 6 | 11 | 3 |
+| Onterecht volgens beide vergelijkers | 0 | 0 | 0 |
+| Agents, uitval | 129, 0 | 129, 0 | 131, 0 (één afmaakronde) |
+| Duur, tokens | 81 min, 16,0 miljoen | 81 min, 16,0 miljoen | 91 min, 17,5 miljoen |
+
+- **Marge gehaald.** Gevonden gebreken 100% tegen 98% bij 0.11.0. Meldingen zonder tegenhanger 6 en 11 tegen 11 en 13. Geen criterium open door loep. Geen derde run nodig: L1 en L2 hadden bij alle 56 criteria dezelfde uitkomst.
+- **1.4.12 nu afgekeurd.** 0.11.0 miste het in beide runs; sinds #271 meet 1.4.12 of er tekst verdwijnt.
+- **Tweeling.** De afkeuring van 1.4.10 is een fout in de testsite zelf (#499). Die zit ook op Lindewaard, buiten de sleutel. 2.4.3 (Tab blijft in de open chat) en 4.1.2 (`<audio>` en `<video>` zonder eigen naam) noemen beide vergelijkers discutabel. De zes open criteria vragen een video die niet te meten is, kennis van de eigenaar over de chat, of een testaccount.
+- **Niet gemeten.** De spreiding op de tweeling (één run), VoiceOver, een site met login, het doel `verantwoorden`.
