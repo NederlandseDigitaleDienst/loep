@@ -1,1 +1,0 @@
-Een agent kan nu een bestand kiezen in een formulier: `session upload <ref>` zet een klein testbestand van loep in een bestandsveld (of het veld van een label), zonder te versturen. Zo is te beoordelen wat het formulier toont na een gekozen of geweigerd bestand. De stap telt als commando, hoort bij het recept en speelt opnieuw af.
