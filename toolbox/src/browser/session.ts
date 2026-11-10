@@ -490,7 +490,9 @@ export async function newContext(browser: Browser, options: ContextOptions = {},
       // A socket opens a connection of its own, and on this machine WebKit does that past the proxy.
       if (withoutConnections.has(context) && isThisMachine(new URL(socket.url()).hostname)) return void socket.close();
       const server = socket.connectToServer();
-      const free = isWriteOrigin(writes, socket.url());
+      // The socket of Cloudflare's check passes what the page says, as its other requests pass: Cloudflare answers it and the site never gets it.
+      const challenge = isChallenge(socket.url(), (host) => viaCloudflare.has(host));
+      const free = !challenge && isWriteOrigin(writes, socket.url());
       const frames = new SocketFrames(MESSAGE_VALUES);
       // The answer to a real message is recorded, and a message that was sent before is played from its recording, as in a session.
       const recordings = free ? socketRecordings(writes!.runDir, writes!.source, MESSAGE_VALUES) : null;
@@ -509,6 +511,7 @@ export async function newContext(browser: Browser, options: ContextOptions = {},
         });
       }
       socket.onMessage((message) => {
+        if (challenge) return void server.send(message);
         if (free) {
           // A frame takes one from the budget of the run, and past it, or too soon, it is held back; only a heartbeat or a message of the protocol is just noted.
           // The sweep acts on the page all the time, so no frame counts as sent by the page by itself.

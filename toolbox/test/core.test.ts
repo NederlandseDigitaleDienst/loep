@@ -679,7 +679,12 @@ test("only Cloudflare's own check counts as its check, on its own host and subdo
   assert.equal(isChallenge("https://challenges.cloudflare.com.voorbeeld.nl/x", behind), false);
   assert.equal(isChallenge("https://notchallenges.cloudflare.com/x", behind), false);
   assert.equal(isChallenge("https://cloudflare.com/x", behind), false);
-  assert.equal(isChallenge("ws://player.vimeo.com/cdn-cgi/challenge-platform/x", behind), false);
+  // The check also talks over a WebSocket, to the same host and paths (#489).
+  assert.equal(isChallenge("wss://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/w", () => false), true);
+  assert.equal(isChallenge("wss://player.vimeo.com/cdn-cgi/challenge-platform/h/b/w", behind), true);
+  assert.equal(isChallenge("wss://www.voorbeeld.nl/cdn-cgi/challenge-platform/h/b/w", behind), false);
+  assert.equal(isChallenge("wss://player.vimeo.com/chat", behind), false);
+  assert.equal(isChallenge("ftp://challenges.cloudflare.com/x", () => false), false);
 });
 test("a limit of a procedure about a screen reader or a login follows the run", () => {
   const limits = loadProcedure("1.3.1").limitsNl!;
