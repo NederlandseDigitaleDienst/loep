@@ -2,7 +2,7 @@
 
 [![status: experimenteel](https://img.shields.io/badge/status-experimenteel-orange.svg)](#loep)
 
-Wat loep is en hoe het werkt, in het kort: [nederlandsedigitaledienst.github.io/loep](https://nederlandsedigitaledienst.github.io/loep/).
+Wat loep is en hoe het werkt, in het kort: [toon.rijks.app/nldd/loep](https://toon.rijks.app/nldd/loep/).
 
 loep neemt een website onder de loep: het maakt een toegankelijkheidsonderzoek en de toegankelijkheidsverklaring die erop steunt. Het instrument meet en legt bewijs vast; het oordeel is van de mens die het rapport aftekent. Het onderzoek toetst op WCAG 2.2 en WCAG 2.1, niveau A en AA, volgens WCAG-EM. Scripts verzamelen het bewijs, een taalmodel beoordeelt elk succescriterium volgens een vaste procedure en met meetinstrumenten, en één mens tekent voor de uitkomst.
 
