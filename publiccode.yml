@@ -4,7 +4,7 @@ publiccodeYmlVersion: '0.7'
 
 name: loep
 url: https://github.com/NederlandseDigitaleDienst/loep
-landingURL: https://github.com/NederlandseDigitaleDienst/loep
+landingURL: https://toon.rijks.app/nldd/loep/
 
 organisation:
   name: Nederlandse Digitale Dienst
