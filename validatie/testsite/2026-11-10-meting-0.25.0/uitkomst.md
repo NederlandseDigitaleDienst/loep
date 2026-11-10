@@ -14,7 +14,7 @@ Issue #498. Twee volledige runs van de kandidaat voor 0.25.0 op de testsite Lind
 
 ## Uitkomst
 
-De kandidaat haalt de marge op elk punt. Een derde run was niet nodig: L1 en L2 gaven bij alle 56 criteria dezelfde uitkomst.
+De kandidaat haalt de marge op drie van de vier punten. Op de tweeling bleven drie criteria open door een grens van loep (zie hieronder, #505). Een derde run was niet nodig: L1 en L2 gaven bij alle 56 criteria dezelfde uitkomst.
 
 | | L1 | L2 | B1 |
 |---|---|---|---|
@@ -49,13 +49,13 @@ Volgens de sleutel hoort geen enkel criterium te worden afgekeurd. B1 keurde er 
 - **2.4.3.** Met de chat open gaat Tab alleen rond in de chat. A en B noemen het discutabel, want de chat sluit met een knop en met Escape.
 - **4.1.2.** `<audio>` en `<video>` hebben geen eigen naam. A en B noemen het discutabel, want de knoppen van de speler in de browser hebben wel een naam.
 
-Zes criteria bleven open, en elk vraagt iets wat een onderzoeker zonder hulp van de eigenaar ook niet kan vaststellen:
+Zes criteria bleven open:
 
-- 1.2.1, 1.2.3 en 1.2.5: de externe videospeler speelt geen bestand dat te meten is. Iemand moet de video bekijken.
-- 2.2.1: of de server een chatgesprek na een tijd sluit, weet alleen de gemeente of de leverancier.
-- 3.3.4 en 3.3.8: die liggen achter de inlog, en de meting had geen testaccount.
+- 1.2.1, 1.2.3 en 1.2.5: loep kon de video in de externe speler niet bekijken. Een auditor zet de video aan; loep leest alleen een bestand, en de speler levert er geen. Dit is een grens van loep, en daarmee is de marge op dit punt niet gehaald. Bij het eerste verslag telde het ten onrechte als "open voor een mens". Daarbij komt dat de speler op de testsite geen video bevat, zodat de goede uitkomst niet vastligt (#505).
+- 2.2.1: of de server een chatgesprek na een tijd sluit, weet alleen de gemeente of de leverancier. Dat moet een auditor ook vragen.
+- 3.3.4 en 3.3.8: die liggen achter de inlog, en de meting had geen testaccount. Dat was een keuze van de opzet.
 
-Daarom telt de toets ze niet als "open door loep". Op Lindewaard deden deze punten niet mee, want daar keurde een ander gebrek die criteria al af.
+Op Lindewaard deden deze punten niet mee, want daar keurde een ander gebrek die criteria al af.
 
 ## Wat dit niet zegt
 
