@@ -1,5 +1,8 @@
 import { gotoEnd } from "../browser/onward.ts";
 import { writeFile } from "node:fs/promises";
+import { basename } from "node:path";
+import { fileURLToPath } from "node:url";
+import type { ElementHandle } from "playwright";
 import { PNG } from "pngjs";
 import { axInfo, type AxInfo } from "../browser/call.ts";
 import { clipboardMark, clipboardReport, clipboardSince } from "../browser/clipboard.ts";
@@ -255,6 +258,51 @@ const select: Handler = async (context, args) => {
   if (options[index]!.disabled) throw new UsageError(`optie "${options[index]!.label}" is uitgeschakeld`);
   const acted = await act(context, SETTLE_MS, () => handle.selectOption({ index }, { timeout: ACTION_TIMEOUT_MS }).then(() => undefined).catch((error: Error) => Promise.reject(actionError("kiezen", error))));
   return { result: { ...acted.result, chosen: options[index]!.label, index: index + 1, options: options.map((option) => option.label) }, print: { chosen: options[index]!.label, ...acted.print } };
+};
+
+/** The one file an agent can choose in a form: small, harmless and saying it is a test file of loep. */
+export const TEST_FILE = fileURLToPath(new URL("../../data/loep-testbestand.txt", import.meta.url));
+
+/**
+ * Choose the test file in a file field, as a user does with the file dialog, and report what the
+ * form does with it. Nothing is sent: a form that uploads on change meets the same guard as every write.
+ * The ref is the <input type="file"> itself, or a <label> of one, which is what a styled field often shows.
+ */
+const upload: Handler = async (context) => {
+  const handle = await handleOrThrow(context);
+  const field = await handle.evaluateHandle((element) => {
+    const isFile = (node: Element | null | undefined): node is HTMLInputElement => node?.localName === "input" && (node as HTMLInputElement).type === "file";
+    if (isFile(element)) return element;
+    const control = element.localName === "label" ? (element as HTMLLabelElement).control : null;
+    return isFile(control) ? control : null;
+  });
+  const input = field.asElement() as ElementHandle<HTMLInputElement> | null;
+  if (!input) {
+    const target = needTarget(context);
+    throw new UsageError(`dit is geen bestandsveld maar een <${target.tag}>${target.role ? ` met rol ${target.role}` : ""}: upload verwacht een <input type="file"> of een <label> ervan; zoek het veld met find 'css:input[type=file]'`);
+  }
+  if (await input.evaluate((element) => element.disabled)) throw new UsageError("het bestandsveld is uitgeschakeld");
+  const acted = await act(context, SETTLE_MS, () => input.setInputFiles(TEST_FILE, { timeout: ACTION_TIMEOUT_MS }).catch((error: Error) => Promise.reject(actionError("een bestand kiezen", error))));
+  const state = await input
+    .evaluate((element) => ({
+      files: [...(element.files ?? [])].map((file) => file.name),
+      accept: element.getAttribute("accept"),
+      ariaInvalid: element.getAttribute("aria-invalid"),
+      nativeInvalid: !element.checkValidity(),
+      validationMessage: element.validationMessage || null,
+    }))
+    .catch(() => null);
+  const chosen = basename(TEST_FILE);
+  return {
+    result: { ...acted.result, file: chosen, field: state },
+    print: {
+      chosen,
+      ...(state && state.files.length === 0 ? { kept: "nee: het veld heeft het bestand niet gehouden" } : {}),
+      ...(state?.accept ? { accept: state.accept } : {}),
+      ...(state?.ariaInvalid === "true" || state?.nativeInvalid ? { invalid: state.validationMessage ?? "aria-invalid" } : {}),
+      ...acted.print,
+    },
+  };
 };
 
 const hover: Handler = async (context) => {
@@ -1015,6 +1063,7 @@ export const COMMANDS: Record<string, Spec> = {
   tab: { target: "none", changes: true, run: actWith(tab) },
   type: { target: "first-argument", changes: true, run: actWith(type) },
   select: { target: "first-argument", changes: true, run: actWith(select) },
+  upload: { target: "first-argument", changes: true, run: actWith(upload) },
   // Paste and press in parts live in inputs.ts.
   paste: { target: "first-argument", changes: true, run: actWith(paste) },
   press: { target: "first-argument", changes: true, run: press },
