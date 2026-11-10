@@ -1,0 +1,336 @@
+<!doctype html>
+<html lang="nl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>loep: toegankelijkheidsonderzoek voor overheidssites</title>
+  <meta name="description" content="loep onderzoekt een overheidssite op WCAG 2.2 en 2.1, niveau A en AA, volgens WCAG-EM, en maakt de toegankelijkheidsverklaring die erop steunt. Een mens tekent.">
+  <link rel="icon" type="image/svg+xml" href="https://cdn.jsdelivr.net/npm/@nldd/design-system@0.21.1/dist/favicon.svg">
+  <link rel="apple-touch-icon" href="https://cdn.jsdelivr.net/npm/@nldd/design-system@0.21.1/dist/touch-icon.png">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@nldd/design-system@0.21.1/dist/css/global.css">
+  <script type="module" src="https://cdn.jsdelivr.net/npm/@nldd/design-system@0.21.1/dist/cdn/autoloader.js"></script>
+</head>
+<body>
+<nldd-shell>
+  <nldd-page>
+    <nldd-skip-link slot="header">
+      <nldd-top-navigation-bar
+        logo-title="Nederlandse Digitale Dienst"
+        logo-subtitle="Ministerie van Economische Zaken en Klimaat"
+        website-title="loep"
+      ></nldd-top-navigation-bar>
+    </nldd-skip-link>
+
+    <nldd-hero main-background="accent" padding-bottom="0">
+      <nldd-title color="inherit" size="1">
+        <h1>Een WCAG-onderzoek,<br>zo vaak als je wilt</h1>
+      </nldd-title>
+      <nldd-spacer size="16"></nldd-spacer>
+      <nldd-rich-text color="inherit">
+        <p>loep onderzoekt een overheidssite op WCAG 2.2 en 2.1, niveau A en AA, volgens WCAG-EM. Agents meten met vaste instrumenten en leggen elk bewijs vast. Daarna maakt loep de toegankelijkheidsverklaring. Jij leest het rapport en tekent.</p>
+      </nldd-rich-text>
+      <nldd-spacer size="24"></nldd-spacer>
+      <nldd-button-group>
+        <nldd-button appearance="inherit-filled" text="Begin met je assistent" href="#assistent"></nldd-button>
+        <nldd-button appearance="inherit-tinted" text="Bekijk de code" href="https://github.com/NederlandseDigitaleDienst/loep"></nldd-button>
+      </nldd-button-group>
+    </nldd-hero>
+
+    <nldd-simple-section id="cijfers">
+      <nldd-title slot="header" size="2" text="Elk oordeel rust op een waarneming" heading-level="2"></nldd-title>
+      <nldd-spacer slot="header" size="16"></nldd-spacer>
+      <nldd-rich-text slot="header">
+        <p>loep kijkt met meer instrumenten tegelijk dan iemand met de hand bijhoudt. Een goedkeuring krijgt bewijs. Wat niet vast te stellen was, staat in het rapport als kan niet bepalen, met de reden.</p>
+      </nldd-rich-text>
+      <nldd-container layout="grid" sm-gap="16" md-gap="24" lg-gap="24" sm-column-count="2" md-column-count="3" lg-column-count="3">
+        <nldd-card>
+          <nldd-container padding="16">
+            <nldd-icon icon="checkbox-list" size="32"></nldd-icon>
+            <nldd-spacer size="4"></nldd-spacer>
+            <nldd-title size="1" text="56" supporting-text="succescriteria, elk met een eigen procedure" heading-level="3"></nldd-title>
+          </nldd-container>
+        </nldd-card>
+        <nldd-card>
+          <nldd-container padding="16">
+            <nldd-icon icon="microscope" size="32"></nldd-icon>
+            <nldd-spacer size="4"></nldd-spacer>
+            <nldd-title size="1" text="4" supporting-text="regel-engines naast elkaar, in licht en donker" heading-level="3"></nldd-title>
+          </nldd-container>
+        </nldd-card>
+        <nldd-card>
+          <nldd-container padding="16">
+            <nldd-icon icon="pencil-ruler" size="32"></nldd-icon>
+            <nldd-spacer size="4"></nldd-spacer>
+            <nldd-title size="1" text="26" supporting-text="meetinstrumenten die een agent kan inzetten" heading-level="3"></nldd-title>
+          </nldd-container>
+        </nldd-card>
+        <nldd-card>
+          <nldd-container padding="16">
+            <nldd-icon icon="ear" size="32"></nldd-icon>
+            <nldd-spacer size="4"></nldd-spacer>
+            <nldd-title size="1" text="5" supporting-text="methoden voor de naam die een schermlezer voorleest" heading-level="3"></nldd-title>
+          </nldd-container>
+        </nldd-card>
+        <nldd-card>
+          <nldd-container padding="16">
+            <nldd-icon icon="person-2" size="32"></nldd-icon>
+            <nldd-spacer size="4"></nldd-spacer>
+            <nldd-title size="1" text="2" supporting-text="agents per criterium: de tweede controleert vanaf een verse pagina" heading-level="3"></nldd-title>
+          </nldd-container>
+        </nldd-card>
+        <nldd-card>
+          <nldd-container padding="16">
+            <nldd-icon icon="seal-check-mark" size="32"></nldd-icon>
+            <nldd-spacer size="4"></nldd-spacer>
+            <nldd-title size="1" text="1" supporting-text="mens tekent, voor een zegel over elk bestand" heading-level="3"></nldd-title>
+          </nldd-container>
+        </nldd-card>
+      </nldd-container>
+    </nldd-simple-section>
+
+    <nldd-one-half-one-half-section id="waarom" background="tinted">
+      <nldd-title slot="header" size="2" text="Een site verandert elke week, een onderzoek eens in de paar jaar" heading-level="2"></nldd-title>
+      <nldd-rich-text slot="left">
+        <p>Een toegankelijkheidsverklaring rust op een onderzoek. Dat gebeurt meestal eens in de drie jaar, op een steekproef van een pagina of vijftien, en het rapport noemt alleen wat er mis is.</p>
+        <p>loep draait zo vaak als je wilt. Bij elk criterium staat wat er is onderzocht, waarmee, en op welke pagina's. Een tweede keer meet alleen wat er veranderd is.</p>
+      </nldd-rich-text>
+      <nldd-list slot="right" dividers="never" accessible-label="Wat loep onderzoekt">
+        <nldd-list-item>
+          <nldd-icon-cell size="32" icon="documents"></nldd-icon-cell>
+          <nldd-spacer-cell size="12"></nldd-spacer-cell>
+          <nldd-title-cell text="Tot zestig pagina's: de hele site" supporting-text="Daarboven een steekproef volgens WCAG-EM, met elk paginatype erin"></nldd-title-cell>
+        </nldd-list-item>
+        <nldd-list-item>
+          <nldd-icon-cell size="32" icon="file-pdf"></nldd-icon-cell>
+          <nldd-spacer-cell size="12"></nldd-spacer-cell>
+          <nldd-title-cell text="De documenten waar de site naar linkt" supporting-text="Tags, koppen, tabellen en tekstalternatieven, en bij een pdf veraPDF"></nldd-title-cell>
+        </nldd-list-item>
+        <nldd-list-item>
+          <nldd-icon-cell size="32" icon="lock-closed"></nldd-icon-cell>
+          <nldd-spacer-cell size="12"></nldd-spacer-cell>
+          <nldd-title-cell text="Wat achter een inlog staat" supporting-text="Je logt zelf in met een testaccount; de agents krijgen alleen de sessie"></nldd-title-cell>
+        </nldd-list-item>
+        <nldd-list-item>
+          <nldd-icon-cell size="32" icon="rectangle-stack"></nldd-icon-cell>
+          <nldd-spacer-cell size="12"></nldd-spacer-cell>
+          <nldd-title-cell text="Menu's, dialogen en ingesloten vensters" supporting-text="Ook de chat of het formulier van een andere partij, op de pagina waar het staat"></nldd-title-cell>
+        </nldd-list-item>
+      </nldd-list>
+    </nldd-one-half-one-half-section>
+
+    <nldd-one-half-one-half-section id="werkwijze">
+      <nldd-title slot="header" size="2" text="Van adres tot getekend rapport" heading-level="2"></nldd-title>
+      <nldd-rich-text slot="left">
+        <p>Wat een script kan meten, meet een script. Een taalmodel komt pas bij het oordeel, en ook dan handelt en meet het alleen via de instrumenten van loep, met een vaste procedure per criterium.</p>
+        <p>Een agent die het oordeel schrijft, ziet het werk van de ander niet. De controleur opent de pagina opnieuw en maakt elke bevinding zelf na. Wat hij niet terugziet, staat niet in het rapport.</p>
+        <h3>Bewijs eerst</h3>
+        <p>Een bewijspoort toetst vóór het oordelen of de metingen bruikbaar zijn. Is het bewijs onvoldoende, dan meet loep opnieuw, en anders volgt er geen oordeel.</p>
+      </nldd-rich-text>
+      <nldd-list slot="right" dividers="never" accessible-label="De stappen van een onderzoek">
+        <nldd-list-item>
+          <nldd-step-cell size="md" marker-offset="0.7125rem" position="first" text="1"></nldd-step-cell>
+          <nldd-spacer-cell size="12"></nldd-spacer-cell>
+          <nldd-title-cell text="Pagina's en documenten vinden" supporting-text="Ook via links in shadow DOM en op andere origins van de site"></nldd-title-cell>
+        </nldd-list-item>
+        <nldd-list-item>
+          <nldd-step-cell size="md" marker-offset="0.7125rem" position="between" text="2"></nldd-step-cell>
+          <nldd-spacer-cell size="12"></nldd-spacer-cell>
+          <nldd-title-cell text="De site verkennen" supporting-text="Een agent beschrijft paginatypen en onderdelen; loep speelt elk recept na"></nldd-title-cell>
+        </nldd-list-item>
+        <nldd-list-item>
+          <nldd-step-cell size="md" marker-offset="0.7125rem" position="between" text="3"></nldd-step-cell>
+          <nldd-spacer-cell size="12"></nldd-spacer-cell>
+          <nldd-title-cell text="Meten zonder taalmodel" supporting-text="axe-core, Alfa, IBM en QualWeb, het toetsenbord, reflow, zoom en contrast op het getekende beeld"></nldd-title-cell>
+        </nldd-list-item>
+        <nldd-list-item>
+          <nldd-step-cell size="md" marker-offset="0.7125rem" position="between" text="4"></nldd-step-cell>
+          <nldd-spacer-cell size="12"></nldd-spacer-cell>
+          <nldd-title-cell text="Beoordelen per criterium" supporting-text="Een agent per criterium, met de procedure en eigen metingen in een browser"></nldd-title-cell>
+        </nldd-list-item>
+        <nldd-list-item>
+          <nldd-step-cell size="md" marker-offset="0.7125rem" position="between" text="5"></nldd-step-cell>
+          <nldd-spacer-cell size="12"></nldd-spacer-cell>
+          <nldd-title-cell text="Controleren vanaf een verse pagina" supporting-text="Een tweede agent maakt elke bevinding na en schrijft het eindoordeel"></nldd-title-cell>
+        </nldd-list-item>
+        <nldd-list-item>
+          <nldd-step-cell size="md" marker-offset="0.7125rem" position="last" text="6"></nldd-step-cell>
+          <nldd-spacer-cell size="12"></nldd-spacer-cell>
+          <nldd-title-cell text="Lezen en tekenen" supporting-text="Een zegel over elk bestand; een mens tekent ervoor in een terminal"></nldd-title-cell>
+        </nldd-list-item>
+      </nldd-list>
+    </nldd-one-half-one-half-section>
+
+    <nldd-one-half-one-half-section id="bevinding" background="tinted" vertical-alignment="center">
+      <nldd-title slot="left" size="2" text="Een bevinding die je kunt nalopen" heading-level="2"></nldd-title>
+      <nldd-spacer slot="left" size="16"></nldd-spacer>
+      <nldd-rich-text slot="left">
+        <p>Elke bevinding noemt de plek in de woorden van de pagina, citeert de code en wijst naar de waarnemingen waarop ze rust. Wie het rapport naast de broncode legt, vindt de regel.</p>
+        <p>Hier zag loep in een logo een andere tekst dan in de naam die een schermlezer of spraakbediening krijgt. Het verschil is één letter, in tekst die niemand ziet.</p>
+      </nldd-rich-text>
+      <nldd-card slot="right">
+        <nldd-container padding="24" sm-padding="16">
+          <nldd-container layout="wrap" gap="8" vertical-alignment="center">
+            <nldd-tag text="2.5.3 Label in naam" color="accent"></nldd-tag>
+            <nldd-tag text="Voldoet niet" color="critical"></nldd-tag>
+            <nldd-tag text="Ernst laag"></nldd-tag>
+          </nldd-container>
+          <nldd-spacer size="12"></nldd-spacer>
+          <nldd-title size="4" text="Verborgen tekst van de logolink mist een letter uit het logo" heading-level="3"></nldd-title>
+          <nldd-spacer size="8"></nldd-spacer>
+          <nldd-text>Het logo toont Gemeente Voorbeeldstad. De naam van de link komt uit verborgen tekst:</nldd-text>
+          <nldd-spacer size="8"></nldd-spacer>
+          <nldd-code-viewer appearance="box-tinted" language="html" wrap no-copy>&lt;a href="/" class="logo"&gt;
+  &lt;svg aria-hidden="true"&gt;…&lt;/svg&gt;
+  &lt;span class="visually-hidden"&gt;Logo Gemeente Voorbeldstad, naar de startpagina&lt;/span&gt;
+&lt;/a&gt;</nldd-code-viewer>
+          <nldd-spacer size="12"></nldd-spacer>
+          <nldd-text size="sm" color="secondary">Gelezen met tekstherkenning op het logo, de naam volgens vijf methoden. Op twee pagina's, breed en op 320 pixels.</nldd-text>
+          <nldd-spacer size="16"></nldd-spacer>
+          <nldd-inline-dialog variant="success" text="Bevestigd vanaf een verse pagina" supporting-text="Een tweede agent, in een eigen sessie, kwam op hetzelfde uit."></nldd-inline-dialog>
+        </nldd-container>
+      </nldd-card>
+    </nldd-one-half-one-half-section>
+
+    <nldd-simple-section id="grenzen">
+      <nldd-title slot="header" size="2" text="Wat een agent niet mag" heading-level="2"></nldd-title>
+      <nldd-spacer slot="header" size="16"></nldd-spacer>
+      <nldd-rich-text slot="header">
+        <p>Op een echte site gaat er niets weg dat iets kan wijzigen. Die grenzen zitten in de toolbox zelf, niet in een opdracht die een model kan vergeten.</p>
+      </nldd-rich-text>
+      <nldd-container layout="grid" sm-gap="16" md-gap="24" lg-gap="24" sm-column-count="1" md-column-count="2" lg-column-count="4">
+        <nldd-card>
+          <nldd-container padding="16">
+            <nldd-icon icon="paper-plane" size="32"></nldd-icon>
+            <nldd-spacer size="12"></nldd-spacer>
+            <nldd-title size="4" text="Iets versturen" heading-level="3"></nldd-title>
+            <nldd-spacer size="8"></nldd-spacer>
+            <nldd-rich-text><p>Een formulier of chatbericht wordt tegengehouden, behalve op een testomgeving die iemand met naam en functie heeft verklaard.</p></nldd-rich-text>
+          </nldd-container>
+        </nldd-card>
+        <nldd-card>
+          <nldd-container padding="16">
+            <nldd-icon icon="key" size="32"></nldd-icon>
+            <nldd-spacer size="12"></nldd-spacer>
+            <nldd-title size="4" text="Een wachtwoord zien" heading-level="3"></nldd-title>
+            <nldd-spacer size="8"></nldd-spacer>
+            <nldd-rich-text><p>Inloggen doe je zelf, in een browservenster. loep bewaart de sessie; het wachtwoord komt nergens.</p></nldd-rich-text>
+          </nldd-container>
+        </nldd-card>
+        <nldd-card>
+          <nldd-container padding="16">
+            <nldd-icon icon="seal-check-mark" size="32"></nldd-icon>
+            <nldd-spacer size="12"></nldd-spacer>
+            <nldd-title size="4" text="Tekenen" heading-level="3"></nldd-title>
+            <nldd-spacer size="8"></nldd-spacer>
+            <nldd-rich-text><p>Je tekent in een terminal en typt daarbij het begin van het zegel. Elke latere wijziging van de run is zichtbaar.</p></nldd-rich-text>
+          </nldd-container>
+        </nldd-card>
+        <nldd-card>
+          <nldd-container padding="16">
+            <nldd-icon icon="shield-lock" size="32"></nldd-icon>
+            <nldd-spacer size="12"></nldd-spacer>
+            <nldd-title size="4" text="De site noemen" heading-level="3"></nldd-title>
+            <nldd-spacer size="8"></nldd-spacer>
+            <nldd-rich-text><p>Een melding over een gebrek in loep zelf heeft geen adres of naam van de site, en gaat pas weg na jouw ja.</p></nldd-rich-text>
+          </nldd-container>
+        </nldd-card>
+      </nldd-container>
+    </nldd-simple-section>
+
+    <nldd-two-thirds-one-third-section id="verklaring" background="tinted">
+      <nldd-title slot="left" size="2" text="Van onderzoek naar verklaring" heading-level="2"></nldd-title>
+      <nldd-spacer slot="left" size="16"></nldd-spacer>
+      <nldd-rich-text slot="left">
+        <p>Na het tekenen loop je de gebreken langs, de zwaarste eerst. Herken je het, wie gaat erover, en wat gaat er gebeuren? loep legt elk besluit vast naast het zegel, en het rapport krijgt een hoofdstuk met de maatregelen.</p>
+        <p>Daaruit maakt loep de toegankelijkheidsverklaring volgens het wettelijke model, met een invulblad voor het register. De status rekent loep uit. Wat het niet weet, blijft open staan voor jou; publiceren doe je zelf.</p>
+      </nldd-rich-text>
+      <nldd-card slot="right">
+        <nldd-list accessible-label="Wat een onderzoek oplevert">
+          <nldd-list-item>
+            <nldd-icon-cell size="24" icon="file-pdf"></nldd-icon-cell>
+            <nldd-spacer-cell size="12"></nldd-spacer-cell>
+            <nldd-title-cell text="Rapport" supporting-text="Per criterium de uitkomst en het bewijs"></nldd-title-cell>
+          </nldd-list-item>
+          <nldd-list-item>
+            <nldd-icon-cell size="24" icon="file-pdf"></nldd-icon-cell>
+            <nldd-spacer-cell size="12"></nldd-spacer-cell>
+            <nldd-title-cell text="Kort rapport" supporting-text="Zonder de onderbouwing per criterium"></nldd-title-cell>
+          </nldd-list-item>
+          <nldd-list-item>
+            <nldd-icon-cell size="24" icon="file-text-badge-check-mark"></nldd-icon-cell>
+            <nldd-spacer-cell size="12"></nldd-spacer-cell>
+            <nldd-title-cell text="Toegankelijkheidsverklaring" supporting-text="Volgens het wettelijke model"></nldd-title-cell>
+          </nldd-list-item>
+          <nldd-list-item>
+            <nldd-icon-cell size="24" icon="clipboard-pencil"></nldd-icon-cell>
+            <nldd-spacer-cell size="12"></nldd-spacer-cell>
+            <nldd-title-cell text="Invulblad" supporting-text="Voor de invulassistent van het register"></nldd-title-cell>
+          </nldd-list-item>
+        </nldd-list>
+      </nldd-card>
+    </nldd-two-thirds-one-third-section>
+
+    <nldd-one-third-two-thirds-section id="assistent" vertical-alignment="center">
+      <nldd-title slot="header" size="2" text="Een adres is genoeg" heading-level="2"></nldd-title>
+      <nldd-spacer slot="header" size="16"></nldd-spacer>
+      <nldd-rich-text slot="header">
+        <p>loep is gemaakt om door een AI-assistent bediend te worden. Je vraagt in gewone taal om een onderzoek, en de assistent doet de rest met drie skills.</p>
+      </nldd-rich-text>
+      <nldd-list slot="left" dividers="never" accessible-label="De skills">
+        <nldd-list-item>
+          <nldd-icon-cell size="32" icon="magnifier"></nldd-icon-cell>
+          <nldd-spacer-cell size="12"></nldd-spacer-cell>
+          <nldd-title-cell text="Maak een onderzoek" supporting-text="nldd-a11y-audit"></nldd-title-cell>
+        </nldd-list-item>
+        <nldd-list-item>
+          <nldd-icon-cell size="32" icon="text-document"></nldd-icon-cell>
+          <nldd-spacer-cell size="12"></nldd-spacer-cell>
+          <nldd-title-cell text="Maak de verklaring" supporting-text="nldd-a11y-statement"></nldd-title-cell>
+        </nldd-list-item>
+        <nldd-list-item>
+          <nldd-icon-cell size="32" icon="signpost"></nldd-icon-cell>
+          <nldd-spacer-cell size="12"></nldd-spacer-cell>
+          <nldd-title-cell text="Vind de weg" supporting-text="nldd-a11y"></nldd-title-cell>
+        </nldd-list-item>
+      </nldd-list>
+      <nldd-card slot="right">
+        <nldd-container padding="24" sm-padding="16">
+          <nldd-text>Installeer de plugin in Claude Code:</nldd-text>
+          <nldd-spacer size="8"></nldd-spacer>
+          <nldd-code-viewer appearance="box-tinted" language="bash">/plugin marketplace add NederlandseDigitaleDienst/ai-plugins
+/plugin install nldd-a11y@nldd</nldd-code-viewer>
+          <nldd-spacer size="16"></nldd-spacer>
+          <nldd-text>Vraag dan:</nldd-text>
+          <nldd-spacer size="8"></nldd-spacer>
+          <nldd-code-viewer appearance="box-tinted" wrap no-copy>Toets https://voorbeeld.nl op toegankelijkheid.</nldd-code-viewer>
+          <nldd-spacer size="16"></nldd-spacer>
+          <nldd-text color="secondary">Eerst komen in één bericht de vragen die alleen jij kunt beantwoorden: inlog, versturen, afbakening. Dan rekent loep uit hoe lang het duurt en wat het kost. Voor ongeveer dertig pagina's is dat 3 tot 7 uur, zonder dat jij erbij hoeft te zijn.</nldd-text>
+        </nldd-container>
+      </nldd-card>
+    </nldd-one-third-two-thirds-section>
+
+    <nldd-simple-section id="status" background="tinted">
+      <nldd-title slot="header" size="2" text="Nog experimenteel" heading-level="2"></nldd-title>
+      <nldd-spacer slot="header" size="16"></nldd-spacer>
+      <nldd-rich-text slot="header">
+        <p>loep is een werkend concept. Op een testsite met 79 ingebouwde gebreken vond versie 0.11.0 er 77 en 78, in twee runs met dezelfde uitkomst bij alle 56 criteria. Dat is gemeten tegen de sleutel van die testsite, niet tegen het oordeel van een deskundige, en latere versies zijn niet als geheel opnieuw gemeten.</p>
+        <p>Geen toezichthouder heeft zich over de methode uitgesproken. Lees de methode voordat je een rapport ergens voor gebruikt.</p>
+        <p>De broncode staat op <a href="https://github.com/NederlandseDigitaleDienst/loep">GitHub</a>, onder de open licentie EUPL.</p>
+      </nldd-rich-text>
+      <nldd-button-group>
+        <nldd-button appearance="primary" text="Lees de methode" href="https://github.com/NederlandseDigitaleDienst/loep/blob/main/docs/methode.md"></nldd-button>
+        <nldd-button appearance="secondary" text="Bekijk de metingen" href="https://github.com/NederlandseDigitaleDienst/loep/blob/main/validatie/iteraties.md"></nldd-button>
+      </nldd-button-group>
+    </nldd-simple-section>
+
+    <nldd-page-footer slot="footer">
+      <nldd-page-footer-legal-bar slot="legal-bar">
+        <nldd-page-footer-legal-bar-item slot="start" text="Nederlandse Digitale Dienst"></nldd-page-footer-legal-bar-item>
+        <nldd-page-footer-legal-bar-item slot="end" href="https://github.com/NederlandseDigitaleDienst/loep" text="Broncode"></nldd-page-footer-legal-bar-item>
+        <nldd-page-footer-legal-bar-item slot="end" href="https://digitaledienst.overheid.nl/over/privacy/" text="Privacy"></nldd-page-footer-legal-bar-item>
+      </nldd-page-footer-legal-bar>
+    </nldd-page-footer>
+  </nldd-page>
+</nldd-shell>
+</body>
+</html>
