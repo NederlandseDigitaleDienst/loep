@@ -488,8 +488,21 @@ export function evaluationDocuments(documents: DocumentData[], population: { onS
   };
 }
 
-/** What holds for documents in this evaluation, as sentences for the scope and the limitations. */
-export function documentScopeNl(documents: EvaluationDocuments | null, origins: string | readonly string[], elsewhere: number): { includedNl: string[]; excludedNl: string[]; limitationsNl: string[] } {
+/** How many addresses an inventory found and did not visit because its limit on pages was reached, as `pageLimitReason` of the inventory records it. */
+export const omittedByPageLimit = (skipped: readonly { reason: string }[]): number => skipped.filter((entry) => /^page limit of \d+ reached$/.test(entry.reason)).length;
+
+/**
+ * Said with "no documents found" when the inventory stopped at its limit on pages: the documents of a
+ * site often sit on the pages left out, such as an archive, and then "none found" is no finding (#479).
+ */
+const NO_DOCUMENTS_UNDER_LIMIT_NL = (omitted: number): string =>
+  `De inventaris stopte bij de grens op het aantal pagina's en heeft ${plural(omitted, "gevonden pagina", "gevonden pagina's")} niet bezocht. Daar kunnen documenten staan. De criteria die ook voor documenten gelden, zijn dus alleen op webpagina's beoordeeld: een uitkomst "voldoet" zegt niets over documenten op de site.`;
+
+/**
+ * What holds for documents in this evaluation, as sentences for the scope and the limitations.
+ * `omittedByLimit` is the number of pages the inventory found and did not visit because of its limit.
+ */
+export function documentScopeNl(documents: EvaluationDocuments | null, origins: string | readonly string[], elsewhere: number, omittedByLimit = 0): { includedNl: string[]; excludedNl: string[]; limitationsNl: string[] } {
   const origin = originsNl(typeof origins === "string" ? [origins] : origins);
   const readKinds = listNl(READ_KINDS.map((kind) => (kind === "text" ? "platte tekst" : kind)));
   const otherOrigins = elsewhere > 0 ? `Documenten op andere domeinen waarnaar de site linkt (${elsewhere} geteld)` : "Documenten op andere domeinen waarnaar de site linkt";
@@ -497,7 +510,7 @@ export function documentScopeNl(documents: EvaluationDocuments | null, origins: 
     return {
       includedNl: [],
       excludedNl: [otherOrigins],
-      limitationsNl: [`Documenten: op de site zijn geen documenten gevonden (pdf, kantoorbestanden, platte tekst of epub). Gezocht is naar links op de pagina's en in de sitemap. Een document dat alleen via een script of na het versturen van een formulier te bereiken is, is niet gevonden.${elsewhere > 0 ? ` ${plural(elsewhere, "document staat", "documenten staan")} op een ander domein en ${elsewhere === 1 ? "is" : "zijn"} niet onderzocht.` : ""}`],
+      limitationsNl: [`Documenten: op de site zijn geen documenten gevonden (pdf, kantoorbestanden, platte tekst of epub). Gezocht is naar links op de pagina's en in de sitemap. Een document dat alleen via een script of na het versturen van een formulier te bereiken is, is niet gevonden.${omittedByLimit > 0 ? ` ${NO_DOCUMENTS_UNDER_LIMIT_NL(omittedByLimit)}` : ""}${elsewhere > 0 ? ` ${plural(elsewhere, "document staat", "documenten staan")} op een ander domein en ${elsewhere === 1 ? "is" : "zijn"} niet onderzocht.` : ""}`],
     };
   }
   const read = documents.items.filter((item) => item.status === "read");

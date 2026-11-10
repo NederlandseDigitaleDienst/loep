@@ -267,20 +267,33 @@ export function noteVisited(visited: Map<string, number>, url: string, origins: 
  * breadth. Of the candidates, the one in the part of the site (first path segment) with the
  * fewest visited pages goes first; within that part, the one in the sub-part with the fewest,
  * and so on down the path. A shallower address goes before a deeper one with the same counts,
- * and the address itself decides a tie, so the order never depends on timing. A part full of
+ * and the address itself decides a tie, so the order never depends on timing. Where two addresses
+ * first differ in a part of the path that starts with a year, the later year goes first: an archive
+ * by year is then visited from its newest pages, not from 1988 on (#479). A part full of
  * tag pages or pages of a list (`/blog/tag/x/page/2`) thus gets its turn like any other part,
  * instead of filling the limit because its addresses come first in the alphabet. With more than
  * one origin, the origin comes before the first path segment (see visitLevels).
  */
 export function nextAddress(candidates: Iterable<string>, visited: Map<string, number>, origins: readonly string[] = []): string | undefined {
-  let best: { url: string; counts: number[] } | undefined;
+  let best: { url: string; counts: number[]; levels: string[] } | undefined;
   for (const url of candidates) {
     const levels = visitLevels(url, origins);
     const counts = levels.map((_, index) => visited.get(levelKey(levels, index + 1)) ?? 0);
-    const order = best === undefined ? -1 : compareCounts(counts, best.counts) || (url < best.url ? -1 : 1);
-    if (order < 0) best = { url, counts };
+    const order = best === undefined ? -1 : compareCounts(counts, best.counts) || compareTied(url, levels, best.url, best.levels);
+    if (order < 0) best = { url, counts, levels };
   }
   return best?.url;
+}
+
+/** A part of a path that starts with a year, such as `2024` or `2024-05-01-besluit`. */
+const YEAR_FIRST = /^(?:19|20)\d{2}(?!\d)/;
+
+/** The order of two addresses with the same counts: the later year where they first differ in a year, and otherwise the alphabet. */
+function compareTied(a: string, aLevels: string[], b: string, bLevels: string[]): number {
+  const differs = aLevels.findIndex((level, index) => level !== bLevels[index]);
+  const [left, right] = [aLevels[differs], bLevels[differs]];
+  if (left !== undefined && right !== undefined && YEAR_FIRST.test(left) && YEAR_FIRST.test(right)) return left > right ? -1 : 1;
+  return a < b ? -1 : 1;
 }
 
 function compareCounts(a: number[], b: number[]): number {
@@ -315,7 +328,7 @@ const SECTIONS_NAMED = 12;
  * many pages were visited and how many were left out. What is left out never reaches the sample,
  * and the line with the totals does not say which part is missing. Null when the limit was not reached.
  */
-export function pageLimitNl(found: Pick<Inventory, "origin" | "notFoundProbe" | "pages" | "skipped"> & Partial<Pick<Inventory, "origins" | "notFoundProbes">>, maxPages: number): string | null {
+export function pageLimitNl(found: Pick<Inventory, "origin" | "notFoundProbe" | "pages" | "skipped"> & Partial<Pick<Inventory, "origins" | "notFoundProbes" | "documentTotals">>, maxPages: number): string | null {
   const omitted = found.skipped.filter((entry) => entry.reason === pageLimitReason(maxPages));
   if (omitted.length === 0) return null;
   const origins = siteOrigins(found);
@@ -341,6 +354,8 @@ export function pageLimitNl(found: Pick<Inventory, "origin" | "notFoundProbe" | 
   return [
     `LET OP: de grens van ${maxPages} pagina's (--max-pages) is bereikt. ${omitted.length === 1 ? "Eén gevonden pagina is" : `${omitted.length} gevonden pagina's zijn`} niet bezocht, en wat alleen via die pagina's te vinden is, ontbreekt ook in deze telling. De bezochte pagina's zijn over de gedeelten van de site verdeeld. Per gedeelte (${origins.length > 1 ? "de origin en het eerste deel van het pad" : "het eerste deel van het pad"}):`,
     ...lines,
+    // No document on the visited pages says nothing about the pages left out: an archive often holds them all.
+    ...(found.documentTotals?.onSite === 0 ? ["Op de bezochte pagina's staat geen enkel document. Onder de weggelaten pagina's kunnen er wel staan, en dan is een criterium dat op documenten wordt beoordeeld niet op documenten onderzocht."] : []),
     "Wat niet is bezocht, komt niet in de steekproef. Ontbreekt een gedeelte dat erbij hoort, of is het aandeel van een gedeelte veel kleiner dan op de site, begin dan opnieuw met inventory in een nieuwe map, met een hogere --max-pages of met --urls.",
   ].join("\n");
 }

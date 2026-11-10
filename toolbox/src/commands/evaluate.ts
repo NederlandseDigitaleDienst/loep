@@ -8,7 +8,7 @@ import { approvedReads, frameStanding, type AcceptedGapDecider } from "../lib/si
 import { readJson, sha256File } from "../lib/canonical.ts";
 import { aiGeneratedMark, allCriteriaSorted, carryFindingIds, ESTABLISHED_BY_NL, evaluationHash, idsAcrossVersionsNl, knownCommit, OUTCOME_LABEL, markVendor, openCriteria, resolveCriterion, summarise, versionAccuracyProblems, type BrowserUse, type CriterionResult, type Evaluation, type PointAnswer, type RoundVerdicts, type VersionAccuracy } from "../lib/evaluation.ts";
 import { matchFindings, sideOf } from "../lib/difference.ts";
-import { documentScopeNl, evaluationDocuments, siteDocuments } from "../lib/documents.ts";
+import { documentScopeNl, evaluationDocuments, omittedByPageLimit, siteDocuments } from "../lib/documents.ts";
 import { pagesInScopeNl, siteOrigins } from "../lib/origins.ts";
 import { type Manifest, stepStart, sweepToolchain, writeManifest } from "../lib/manifest.ts";
 import { agentPhaseTimings } from "../lib/timing.ts";
@@ -248,7 +248,7 @@ export async function evaluate(options: EvaluateOptions): Promise<Evaluation> {
   const origins = siteOrigins(run.inventory);
   const population = run.sample.documentPopulation;
   const documents = population ? evaluationDocuments(run.documents ?? [], population, procedures.filter((procedure) => procedure.evidence.includes("documents")).map((procedure) => procedure.id)) : null;
-  const documentScope = searchedForDocuments ? documentScopeNl(documents, origins, siteDocuments(run.inventory).elsewhere) : null;
+  const documentScope = searchedForDocuments ? documentScopeNl(documents, origins, siteDocuments(run.inventory).elsewhere, omittedByPageLimit(run.inventory.skipped ?? [])) : null;
 
   const limitations = [
     browsersNl,

@@ -7,6 +7,7 @@ import { after, before, test } from "node:test";
 import { startFixture } from "../fixtures/serve.ts";
 import { addressLevels, inventory, linksToFollow, nextAddress, noteVisited, pageLimitNl, pageLimitReason, readsOutsideRunNl, readsOutsideRunOfRunNl, type Inventory } from "../src/commands/inventory.ts";
 import { buildSample } from "../src/commands/sample.ts";
+import { omittedByPageLimit } from "../src/lib/documents.ts";
 
 /** Visit every candidate in the order `inventory` would, when all are known from the start. */
 function visitOrder(urls: string[], limit: number): string[] {
@@ -29,6 +30,19 @@ test("a query is one level below the path it belongs to", () => {
   assert.deepEqual(addressLevels(`${site}/`), []);
   assert.deepEqual(addressLevels(`${site}/blog/`), ["blog"]);
   assert.deepEqual(addressLevels(`${site}/blog/tag/a?page=2`), ["blog", "tag", "a", "?page=2"]);
+});
+
+test("an archive by year is visited from its newest year, and other parts in the order of the alphabet (#479)", () => {
+  const years = Array.from({ length: 30 }, (_, index) => 1988 + index);
+  const archive = years.flatMap((year) => [`${site}/documenten/${year}/01/besluit-a`, `${site}/documenten/${year}/02/besluit-b`]);
+  const order = visitOrder([`${site}/`, ...archive, `${site}/documenten/instructies`, `${site}/documenten/vraag-en-antwoord`], 8);
+  const visitedYears = order.map((url) => url.match(/\/documenten\/(\d{4})\//)?.[1]).filter(Boolean);
+  assert.deepEqual(visitedYears, ["2017", "2016", "2015", "2014", "2013"], "one page per year, the newest year first");
+  assert.ok(order.includes(`${site}/documenten/instructies`) && order.includes(`${site}/documenten/vraag-en-antwoord`), "a part without a year keeps its turn");
+  // A slug that starts with a date counts as its year; a number that is no year does not.
+  assert.equal(nextAddress([`${site}/nieuws/2019-03-01-a`, `${site}/nieuws/2024-11-05-b`], new Map()), `${site}/nieuws/2024-11-05-b`);
+  assert.equal(nextAddress([`${site}/lijst/page/2`, `${site}/lijst/page/10`], new Map()), `${site}/lijst/page/10`);
+  assert.equal(nextAddress([`${site}/a/20245`, `${site}/a/20231`], new Map()), `${site}/a/20231`);
 });
 
 test("the order takes turns between the parts of the site, and a part full of tags waits within its part", () => {
@@ -65,7 +79,13 @@ test("the warning about the limit names per part what was visited and what was l
   assert.ok(!said.includes("bestaat-niet"), "the probe for a missing page is not a part of the site");
   assert.match(said, /hogere --max-pages of met --urls\.$/);
   assert.equal(pageLimitNl({ ...found, skipped: found.skipped.slice(4) }, 6), null, "without the limit there is nothing to say");
+  // No document on the visited pages, with pages left out: the documents may be on those (#479).
+  const none = { onSite: 0, byKind: {}, elsewhere: 0, elsewhereByKind: {} };
+  assert.match(pageLimitNl({ ...found, documentTotals: none }, 6)!, /\nOp de bezochte pagina's staat geen enkel document\. Onder de weggelaten pagina's kunnen er wel staan/);
+  assert.ok(!pageLimitNl({ ...found, documentTotals: { ...none, onSite: 2 } }, 6)!.includes("geen enkel document"));
+  assert.ok(!said.includes("geen enkel document"), "an inventory that did not count documents says nothing about them");
 
+  assert.equal(omittedByPageLimit(found.skipped), 4, "the report counts what the limit left out by the same reason");
   const many = { ...found, skipped: Array.from({ length: 15 }, (_, index) => ({ url: `${site}/deel-${String(index).padStart(2, "0")}/pagina`, reason: pageLimitReason(6) })) };
   assert.match(pageLimitNl(many, 6)!, /\n  en 6 andere gedeelten: samen 0 bezocht, 6 weggelaten\n/, "beyond twelve parts the rest is summed up");
 });
