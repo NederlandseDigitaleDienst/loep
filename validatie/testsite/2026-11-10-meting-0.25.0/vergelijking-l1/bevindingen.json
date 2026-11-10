@@ -1,0 +1,3364 @@
+{
+  "criteria": {
+    "bothFailed": [
+      "1.1.1",
+      "1.2.1",
+      "1.2.2",
+      "1.2.3",
+      "1.2.5",
+      "1.3.1",
+      "1.3.2",
+      "1.3.3",
+      "1.3.4",
+      "1.3.5",
+      "1.4.1",
+      "1.4.2",
+      "1.4.3",
+      "1.4.4",
+      "1.4.5",
+      "1.4.10",
+      "1.4.11",
+      "1.4.12",
+      "1.4.13",
+      "2.1.1",
+      "2.1.2",
+      "2.1.4",
+      "2.2.1",
+      "2.2.2",
+      "2.4.1",
+      "2.4.2",
+      "2.4.3",
+      "2.4.4",
+      "2.4.6",
+      "2.4.7",
+      "2.4.11",
+      "2.5.1",
+      "2.5.2",
+      "2.5.3",
+      "2.5.7",
+      "2.5.8",
+      "3.1.1",
+      "3.1.2",
+      "3.2.1",
+      "3.2.2",
+      "3.2.3",
+      "3.2.4",
+      "3.2.6",
+      "3.3.1",
+      "3.3.2",
+      "3.3.3",
+      "3.3.4",
+      "3.3.7",
+      "3.3.8",
+      "4.1.2",
+      "4.1.3"
+    ],
+    "criteria": 55,
+    "falsePassRate": 0,
+    "missed": [],
+    "neitherFailed": {
+      "inapplicable": 2,
+      "passed": 2
+    },
+    "onlyOurs": [],
+    "recall": 1,
+    "site": "Gemeente Lindewaard",
+    "undecidedRate": 0,
+    "wcagVersion": "2.2"
+  },
+  "findings": [
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "1.1.1",
+      "descriptionNl": "Het logo in de cookiemelding heeft als tekstalternatief het woord \"logo\".",
+      "id": "1.1.1-logo-melding",
+      "ours": {
+        "a": [
+          "GEME-1.1.1-7302"
+        ],
+        "b": [
+          "GEME-1.1.1-7302"
+        ]
+      },
+      "page": "alle",
+      "reasonNl": {
+        "a": "Wij melden het wapen in de cookiemelding met alleen de alt-tekst \"logo\".",
+        "b": "Het wapen in de cookiemelding heeft als alt-tekst alleen \"logo\". Onze bevinding noemt dit op dezelfde plek."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "1.1.1",
+      "descriptionNl": "De foto van de fietsenstalling heeft geen alt-attribuut.",
+      "id": "1.1.1-artikelfoto",
+      "ours": {
+        "a": [
+          "GEME-1.1.1-ed36"
+        ],
+        "b": [
+          "GEME-1.1.1-ed36"
+        ]
+      },
+      "page": "/nieuws/nieuwe-fietsenstalling.html",
+      "reasonNl": {
+        "a": "Wij melden de nieuwsfoto op de pagina over de fietsenstalling zonder alt-attribuut.",
+        "b": "De foto onder de kop van het nieuwsbericht heeft geen alt. Onze bevinding noemt dezelfde foto."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "1.1.1",
+      "descriptionNl": "Het logo van het waterschap heeft een bestandsnaam als tekstalternatief.",
+      "id": "1.1.1-bestandsnaam",
+      "ours": {
+        "a": [
+          "GEME-1.1.1-5608"
+        ],
+        "b": [
+          "GEME-1.1.1-5608"
+        ]
+      },
+      "page": "/",
+      "reasonNl": {
+        "a": "Wij melden het logo van het waterschap op de startpagina met alt \"IMG_2041.jpg\".",
+        "b": "Het eerste partnerlogo heeft alt \"IMG_2041.jpg\". Onze bevinding noemt hetzelfde logo."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "1.1.1",
+      "descriptionNl": "De tarieven staan alleen in een afbeelding van een tabel, met een leeg alt.",
+      "id": "1.1.1-tarieven",
+      "ours": {
+        "a": [
+          "GEME-1.1.1-fc24",
+          "GEME-1.4.5-b062"
+        ],
+        "b": [
+          "GEME-1.1.1-fc24",
+          "GEME-1.4.5-b062"
+        ]
+      },
+      "page": "/veelgestelde-vragen.html",
+      "reasonNl": {
+        "a": "Wij melden de tabel met tarieven als afbeelding met lege alt in het tweede antwoord, ook onder 1.4.5.",
+        "b": "De tabel met tarieven in het tweede antwoord is een afbeelding met lege alt. Twee bevindingen van ons noemen dit, onder 1.1.1 en 1.4.5."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "1.2.1",
+      "descriptionNl": "Het gesprek met de wethouder is alleen te beluisteren; er is geen uitgeschreven tekst.",
+      "id": "1.2.1-gesprek",
+      "ours": {
+        "a": [
+          "GEME-1.2.1-0dfa"
+        ],
+        "b": [
+          "GEME-1.2.1-0dfa"
+        ]
+      },
+      "page": "/nieuws/nieuwe-fietsenstalling.html",
+      "reasonNl": {
+        "a": "Wij melden het geluidsfragment van de wethouder zonder tekstversie.",
+        "b": "Het geluidsfragment van de wethouder heeft geen uitgeschreven tekst. Onze bevinding noemt hetzelfde fragment."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "1.2.2",
+      "descriptionNl": "De video heeft gesproken tekst en geen ondertitels.",
+      "id": "1.2.2-ondertitels",
+      "ours": {
+        "a": [
+          "GEME-1.2.2-0a71"
+        ],
+        "b": [
+          "GEME-1.2.2-0a71"
+        ]
+      },
+      "page": "/raadsvergadering.html",
+      "reasonNl": {
+        "a": "Wij melden de video van de raadsvergadering zonder ondertitels.",
+        "b": "De video van de raadsvergadering heeft geen ondertitels. Onze bevinding noemt dezelfde video."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "1.2.3",
+      "descriptionNl": "De dia in beeld toont de agenda en de uitslag van de stemming (14 voor, 5 tegen). De spreker noemt die niet en er is geen uitgeschreven tekst.",
+      "id": "1.2.3-beschrijving",
+      "ours": {
+        "a": [
+          "GEME-1.2.3-f0df"
+        ],
+        "b": [
+          "GEME-1.2.3-f0df"
+        ]
+      },
+      "page": "/raadsvergadering.html",
+      "reasonNl": {
+        "a": "Wij melden dat agenda en stemuitslag in de video niet worden beschreven.",
+        "b": "Agenda en stemuitslag staan alleen in beeld. Onze bevinding noemt dit bij dezelfde video."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "1.2.5",
+      "descriptionNl": "Er is geen audiodescriptie voor de informatie die alleen in beeld staat.",
+      "id": "1.2.5-audiodescriptie",
+      "ours": {
+        "a": [
+          "GEME-1.2.5-4676"
+        ],
+        "b": [
+          "GEME-1.2.5-4676"
+        ]
+      },
+      "page": "/raadsvergadering.html",
+      "reasonNl": {
+        "a": "Wij melden de video zonder audiodescriptie van agenda en stemuitslag.",
+        "b": "Geen audiodescriptie voor agenda en stemuitslag. Onze bevinding noemt dit bij dezelfde video."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "1.3.1",
+      "descriptionNl": "Een tussenkop is opgemaakt als vette alinea in plaats van als kop.",
+      "id": "1.3.1-vette-tussenkop",
+      "ours": {
+        "a": [
+          "GEME-1.3.1-39dc"
+        ],
+        "b": [
+          "GEME-1.3.1-39dc"
+        ]
+      },
+      "page": "/nieuws/nieuwe-fietsenstalling.html",
+      "reasonNl": {
+        "a": "Onze bevinding noemt de vette tussenkop in het nieuwsbericht als gewone alinea.",
+        "b": "\"Wat verandert er voor u?\" is een vette alinea. Onze bevinding noemt p > strong op het nieuwsbericht."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "1.3.1",
+      "descriptionNl": "Een opsomming is gemaakt met streepjes en regeleinden in één alinea.",
+      "id": "1.3.1-lijst-als-alinea",
+      "ours": {
+        "a": [
+          "GEME-1.3.1-f2e7"
+        ],
+        "b": [
+          "GEME-1.3.1-f2e7"
+        ]
+      },
+      "page": "/nieuws/nieuwe-fietsenstalling.html",
+      "reasonNl": {
+        "a": "Wij melden de drie regels met streepjes in een alinea met br in het nieuwsbericht.",
+        "b": "De drie regels met streepjes staan in één alinea met br. Onze bevinding noemt dit op het nieuwsbericht."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "1.3.1",
+      "descriptionNl": "Twee tussenkoppen in een dichte uitklapper zijn vette alinea's.",
+      "id": "1.3.1-tussenkop-uitklapper",
+      "ours": {
+        "a": [
+          "GEME-1.3.1-39dc"
+        ],
+        "b": [
+          "GEME-1.3.1-39dc"
+        ]
+      },
+      "page": "/veelgestelde-vragen.html",
+      "reasonNl": {
+        "a": "Onze bevinding noemt de vette b-alinea's in het derde antwoord als tussenkop.",
+        "b": "De vette tussenkoppen in het derde antwoord zijn geen kop. Onze bevinding noemt #antwoord-3 p > b."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "1.3.1",
+      "descriptionNl": "De kopcellen van de rijen en kolommen zijn gewone cellen met een vette opmaak.",
+      "id": "1.3.1-tabelkoppen",
+      "ours": {
+        "a": [
+          "GEME-1.3.1-d138"
+        ],
+        "b": [
+          "GEME-1.3.1-d138"
+        ]
+      },
+      "page": "/openingstijden.html",
+      "reasonNl": {
+        "a": "Wij melden de tabel met openingstijden zonder th-cellen.",
+        "b": "De tabel met openingstijden heeft geen th. Onze bevinding noemt dezelfde tabel."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "1.3.1",
+      "descriptionNl": "De titels boven de kolommen in de voet zijn spans en geen koppen.",
+      "id": "1.3.1-voetkop",
+      "ours": {
+        "a": [
+          "GEME-1.3.1-39dc"
+        ],
+        "b": [
+          "GEME-1.3.1-39dc"
+        ]
+      },
+      "page": "alle",
+      "reasonNl": {
+        "a": "Onze bevinding noemt de spans Bezoekadres, Over deze website en Volg ons in de voet.",
+        "b": "De titels in de voet zijn spans. Onze bevinding noemt span.voet-titel."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "1.3.1",
+      "descriptionNl": "De groep keuzerondjes heeft geen fieldset en legend; de vraag is een losse alinea.",
+      "id": "1.3.1-keuzegroep",
+      "ours": {
+        "a": [
+          "GEME-1.3.1-f81b"
+        ],
+        "b": [
+          "GEME-1.3.1-f81b"
+        ]
+      },
+      "page": "/contact.html",
+      "reasonNl": {
+        "a": "Wij melden de keuzerondjes zonder groep, met de vraag als losse alinea.",
+        "b": "De keuzerondjes staan niet in een groep; de vraag is een p. Onze bevinding noemt dit in het contactformulier."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "1.3.2",
+      "descriptionNl": "Het aantal resultaten en de links onder \"Veel gezocht\" staan in de code na de resultaten en zijn met CSS order naar boven gezet.",
+      "id": "1.3.2-zoekvolgorde",
+      "ours": {
+        "a": [
+          "GEME-1.3.2-9e4e"
+        ],
+        "b": [
+          "GEME-1.3.2-9e4e"
+        ]
+      },
+      "page": "/zoeken.html, /zoeken.html?q=afval",
+      "reasonNl": {
+        "a": "Wij melden dat aantal resultaten en Veel gezocht in de code na de resultaten staan en met CSS order boven komen.",
+        "b": "Aantal resultaten en Veel gezocht staan in de code na de resultaten en worden met CSS order verplaatst. Onze bevinding noemt dit."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "1.3.2",
+      "descriptionNl": "In de code staat eerst de samenvatting, dan de datum en als laatste de kop. Op het scherm is de volgorde omgedraaid.",
+      "id": "1.3.2-kaart-omgekeerd",
+      "ours": {
+        "a": [
+          "GEME-1.3.2-3ee4"
+        ],
+        "b": [
+          "GEME-1.3.2-3ee4"
+        ]
+      },
+      "page": "/nieuws/",
+      "reasonNl": {
+        "a": "Wij melden dat de kop van de nieuwskaarten in de code na samenvatting en datum staat.",
+        "b": "De kop van elke nieuwskaart staat in de code na samenvatting en datum. Onze bevinding noemt dit."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "1.3.3",
+      "descriptionNl": "De instructie verwijst naar \"de ronde groene knop rechtsonder\" en noemt de naam van de knop niet.",
+      "id": "1.3.3-ronde-knop",
+      "ours": {
+        "a": [
+          "GEME-1.3.3-9150"
+        ],
+        "b": [
+          "GEME-1.3.3-9150"
+        ]
+      },
+      "page": "/contact.html",
+      "reasonNl": {
+        "a": "Wij melden de zin over de ronde groene knop rechtsonder boven het contactformulier.",
+        "b": "De zin noemt \"de ronde groene knop rechtsonder\" en niet de naam. Onze bevinding noemt dezelfde zin."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "1.3.4",
+      "descriptionNl": "Op een scherm in staande stand tot 900 pixels breed is de tabel verborgen en staat er dat de bezoeker het toestel moet draaien.",
+      "id": "1.3.4-draai",
+      "ours": {
+        "a": [
+          "GEME-1.3.4-5449"
+        ],
+        "b": [
+          "GEME-1.3.4-5449"
+        ]
+      },
+      "page": "/openingstijden.html",
+      "reasonNl": {
+        "a": "Wij melden dat de tabel met openingstijden staand verborgen is met een draai-melding.",
+        "b": "In staande stand is de tabel verborgen met een melding om te draaien. Onze bevinding noemt dit."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "1.3.5",
+      "descriptionNl": "De velden voor persoonsgegevens hebben geen autocomplete-attribuut.",
+      "id": "1.3.5-autocomplete",
+      "ours": {
+        "a": [
+          "GEME-1.3.5-12d9",
+          "GEME-1.3.5-5e01",
+          "GEME-1.3.5-dd72"
+        ],
+        "b": [
+          "GEME-1.3.5-12d9",
+          "GEME-1.3.5-5e01",
+          "GEME-1.3.5-dd72"
+        ]
+      },
+      "page": "/contact.html",
+      "reasonNl": {
+        "a": "Wij melden naam, e-mailadres en telefoonnummer zonder autocomplete, elk apart.",
+        "b": "Naam, e-mailadres en telefoon hebben geen autocomplete. Drie bevindingen van ons noemen elk veld."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "1.4.1",
+      "descriptionNl": "Links in de tekst zijn niet onderstreept en verschillen alleen in kleur van de tekst eromheen (donkerblauw naast bijna zwart, contrast onder 3 op 1).",
+      "id": "1.4.1-tekstlink",
+      "ours": {
+        "a": [
+          "GEME-1.4.1-bb6a"
+        ],
+        "b": [
+          "GEME-1.4.1-bb6a"
+        ]
+      },
+      "page": "alle",
+      "reasonNl": {
+        "a": "Wij melden links in lopende tekst die alleen in kleur verschillen, zonder onderstreping.",
+        "b": "Links in de tekst zijn alleen anders van kleur, 1,7 op 1, zonder onderstreping. Onze bevinding noemt dit."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "1.4.1",
+      "descriptionNl": "Verplichte velden zijn alleen aan de rode kleur van het label te herkennen.",
+      "id": "1.4.1-verplicht",
+      "ours": {
+        "a": [
+          "GEME-1.4.1-cb42",
+          "GEME-1.3.3-d594"
+        ],
+        "b": [
+          "GEME-1.4.1-cb42",
+          "GEME-1.3.3-d594"
+        ]
+      },
+      "page": "/contact.html",
+      "reasonNl": {
+        "a": "Wij melden de verplichte velden die alleen met rode labels zijn aangegeven, onder 1.4.1 en 1.3.3.",
+        "b": "Verplichte velden zijn alleen aan rode labels te herkennen. Onze bevindingen onder 1.4.1 en 1.3.3 noemen dezelfde labels."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "1.4.2",
+      "descriptionNl": "Bij het openen van de startpagina begint een melodie die blijft herhalen. Er is geen knop om het geluid te stoppen.",
+      "id": "1.4.2-melodie",
+      "ours": {
+        "a": [
+          "GEME-1.4.2-d6af"
+        ],
+        "b": [
+          "GEME-1.4.2-d6af"
+        ]
+      },
+      "page": "/",
+      "reasonNl": {
+        "a": "Wij melden de verborgen audio met autoplay en loop zonder stopknop op de startpagina.",
+        "b": "Een verborgen audio met autoplay en loop, zonder stopknop. Onze bevinding noemt dit."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "1.4.3",
+      "descriptionNl": "De datum is lichtgrijs op wit (ongeveer 2,6 op 1).",
+      "id": "1.4.3-datum",
+      "ours": {
+        "a": [
+          "GEME-1.4.3-7322"
+        ],
+        "b": [
+          "GEME-1.4.3-7322"
+        ]
+      },
+      "page": "alle",
+      "reasonNl": {
+        "a": "Wij melden de grijze datum bij nieuwsberichten, 2,6 op 1.",
+        "b": "De datum is #a0a0a0 op wit, 2,6 op 1. Onze bevinding noemt dit."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "1.4.3",
+      "descriptionNl": "Witte tekst staat direct op de foto. Het linkerdeel van de foto is licht, daar is het contrast te laag.",
+      "id": "1.4.3-tekst-op-foto",
+      "ours": {
+        "a": [
+          "GEME-1.4.3-a2b5",
+          "GEME-1.4.3-4ad3"
+        ],
+        "b": [
+          "GEME-1.4.3-4ad3",
+          "GEME-1.4.3-a2b5"
+        ]
+      },
+      "page": "/",
+      "reasonNl": {
+        "a": "Wij melden de witte kop en de witte inleiding op het lichte deel van de foto apart.",
+        "b": "Witte kop en inleiding op het lichte deel van de foto. Onze twee bevindingen noemen de kop en de inleiding."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "1.4.3",
+      "descriptionNl": "Bij aanwijzen met de muis wordt een menulink grijs op lichtgrijs (ongeveer 2 op 1).",
+      "id": "1.4.3-menu-aanwijzen",
+      "ours": {
+        "a": [
+          "GEME-1.4.3-3e50"
+        ],
+        "b": [
+          "GEME-1.4.3-3e50"
+        ]
+      },
+      "page": "alle",
+      "reasonNl": {
+        "a": "Wij melden menulinks die bij aanwijzen grijs op lichtgrijs worden, 2 op 1.",
+        "b": "Menulinks worden bij aanwijzen grijs op lichtgrijs, 2 op 1. Onze bevinding noemt dit."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "1.4.4",
+      "descriptionNl": "De pagina verbiedt inzoomen op een aanraakscherm (user-scalable=no, maximum-scale=1).",
+      "id": "1.4.4-zoom-uit",
+      "ours": {
+        "a": [
+          "GEME-1.4.4-1986"
+        ],
+        "b": [
+          "GEME-1.4.4-1986"
+        ]
+      },
+      "page": "alle",
+      "reasonNl": {
+        "a": "Wij melden de viewport met user-scalable=no en maximum-scale=1.",
+        "b": "De viewport heeft user-scalable=no en maximum-scale=1. Onze bevinding noemt dit."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "1.4.4",
+      "descriptionNl": "De alinea heeft een vaste hoogte. Bij 200% vergroten valt het einde van de tekst weg.",
+      "id": "1.4.4-inleiding",
+      "ours": {
+        "a": [
+          "GEME-1.4.4-9370"
+        ],
+        "b": [
+          "GEME-1.4.4-9370"
+        ]
+      },
+      "page": "/producten.html",
+      "reasonNl": {
+        "a": "Wij melden de inleiding op de productenpagina met vaste hoogte die bij 200% afkapt.",
+        "b": "De inleiding op de productenpagina heeft een vaste hoogte en wordt afgekapt op 200%. Onze bevinding noemt dit."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "1.4.5",
+      "descriptionNl": "De aankondiging is een afbeelding van tekst. Het alt geeft de tekst wel weer.",
+      "id": "1.4.5-zomerfeest",
+      "ours": {
+        "a": [
+          "GEME-1.4.5-d923"
+        ],
+        "b": [
+          "GEME-1.4.5-d923"
+        ]
+      },
+      "page": "/",
+      "reasonNl": {
+        "a": "Wij melden de aankondiging van het zomerfeest als afbeelding van tekst.",
+        "b": "De aankondiging van het zomerfeest is een afbeelding van tekst. Onze bevinding noemt dit."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "1.4.10",
+      "descriptionNl": "Op 320 pixels breed staan de knoppen op één rij en valt \"Weigeren\" buiten beeld.",
+      "id": "1.4.10-weigerknop",
+      "ours": {
+        "a": [
+          "GEME-1.4.10-ebc7"
+        ],
+        "b": [
+          "GEME-1.4.10-ebc7"
+        ]
+      },
+      "page": "alle",
+      "reasonNl": {
+        "a": "Wij melden dat Weigeren op 320 pixels buiten beeld valt.",
+        "b": "Op 320 pixels valt Weigeren in de cookiemelding buiten beeld. Onze bevinding noemt dit."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "1.4.10",
+      "descriptionNl": "Het rooster heeft een vaste breedte van 720 pixels. Op 320 pixels breed moet de bezoeker opzij schuiven.",
+      "id": "1.4.10-rooster",
+      "ours": {
+        "a": [
+          "GEME-1.4.10-3a99"
+        ],
+        "b": [
+          "GEME-1.4.10-3a99"
+        ]
+      },
+      "page": "/producten.html",
+      "reasonNl": {
+        "a": "Wij melden het rooster van 720 pixels dat op 320 pixels opzij schuift.",
+        "b": "Het productrooster is 720 pixels breed en schuift opzij op 320 pixels. Onze bevinding noemt dit."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "1.4.11",
+      "descriptionNl": "De rand van de invoervelden is lichtgrijs op wit (ongeveer 1,4 op 1).",
+      "id": "1.4.11-veldrand",
+      "ours": {
+        "a": [
+          "GEME-1.4.11-f2d1"
+        ],
+        "b": [
+          "GEME-1.4.11-f2d1"
+        ]
+      },
+      "page": "alle",
+      "reasonNl": {
+        "a": "Wij melden de lichtgrijze rand van invoervelden, 1,4 op 1.",
+        "b": "De rand van invoervelden is #d9d9d9 op wit, 1,4 op 1. Onze bevinding noemt dit."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "1.4.12",
+      "descriptionNl": "De tegels hebben een vaste hoogte. Met ruimere tekstafstand past de tekst niet meer en valt de laatste regel weg.",
+      "id": "1.4.12-tegel",
+      "ours": {
+        "a": [
+          "GEME-1.4.12-1b23"
+        ],
+        "b": [
+          "GEME-1.4.12-1b23"
+        ]
+      },
+      "page": "/",
+      "reasonNl": {
+        "a": "Wij melden dat de tweede regel in de tegels onder Snel regelen wegvalt bij ruimere tekstafstand.",
+        "b": "De tegels onder Snel regelen verliezen de tweede regel met ruimere tekstafstand. Onze bevinding noemt dit."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "1.4.13",
+      "descriptionNl": "De uitleg verschijnt bij aanwijzen of focus. Hij is niet met Escape te sluiten en verdwijnt als de muis naar de uitleg zelf gaat.",
+      "id": "1.4.13-uitleg",
+      "ours": {
+        "a": [
+          "GEME-1.4.13-02ca",
+          "GEME-1.4.13-4b09"
+        ],
+        "b": [
+          "GEME-1.4.13-02ca",
+          "GEME-1.4.13-4b09"
+        ]
+      },
+      "page": "/openingstijden.html",
+      "reasonNl": {
+        "a": "Wij melden dat de uitleg niet met Escape sluit en verdwijnt bij aanwijzen, in twee bevindingen.",
+        "b": "De uitleg bij het i-teken sluit niet met Escape en verdwijnt bij aanwijzen. Onze twee bevindingen noemen beide delen."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "2.1.1",
+      "descriptionNl": "Een kaart opent het bericht bij een klik, maar is geen link. De klik wordt afgehandeld op de lijst eromheen. Met het toetsenbord is het bericht niet te openen.",
+      "id": "2.1.1-nieuwskaart",
+      "ours": {
+        "a": [
+          "GEME-2.1.1-7243",
+          "GEME-4.1.2-e33d"
+        ],
+        "b": [
+          "GEME-2.1.1-7243",
+          "GEME-4.1.2-e33d"
+        ]
+      },
+      "page": "/nieuws/",
+      "reasonNl": {
+        "a": "Wij melden de nieuwskaarten als div met klik, zonder link en zonder focus, onder 2.1.1 en 4.1.2.",
+        "b": "De nieuwskaarten zijn divs met een klik, geen link, zonder focus. Onze bevindingen onder 2.1.1 en 4.1.2 noemen dit."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "2.1.1",
+      "descriptionNl": "Een kaart opent een venster met uitleg bij een klik, maar is geen knop en krijgt geen focus.",
+      "id": "2.1.1-productkaart",
+      "ours": {
+        "a": [
+          "GEME-2.1.1-6382",
+          "GEME-4.1.2-bc00"
+        ],
+        "b": [
+          "GEME-2.1.1-6382",
+          "GEME-4.1.2-bc00"
+        ]
+      },
+      "page": "/producten.html",
+      "reasonNl": {
+        "a": "Wij melden de productkaarten als div zonder knop en focus, onder 2.1.1 en 4.1.2.",
+        "b": "De productkaarten zijn divs zonder rol of focus die een venster openen. Onze bevindingen onder 2.1.1 en 4.1.2 noemen dit."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "2.1.1",
+      "descriptionNl": "Het echte selectievakje is verborgen met display:none en vervangen door een getekend vakje. Het is niet met Tab te bereiken.",
+      "id": "2.1.1-vinkje",
+      "ours": {
+        "a": [
+          "GEME-2.1.1-3bcc",
+          "GEME-4.1.2-d147"
+        ],
+        "b": [
+          "GEME-2.1.1-3bcc",
+          "GEME-4.1.2-d147"
+        ]
+      },
+      "page": "/contact.html",
+      "reasonNl": {
+        "a": "Wij melden het selectievakje met display none, niet te bereiken, onder 2.1.1 en 4.1.2.",
+        "b": "Het selectievakje voor een kopie staat op display:none en krijgt geen focus. Onze bevindingen onder 2.1.1 en 4.1.2 noemen dit."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "2.1.1",
+      "descriptionNl": "De link heeft geen href en werkt alleen met de muis.",
+      "id": "2.1.1-naar-boven",
+      "ours": {
+        "a": [
+          "GEME-2.1.1-08a2",
+          "GEME-4.1.2-aa03"
+        ],
+        "b": [
+          "GEME-2.1.1-08a2",
+          "GEME-4.1.2-aa03"
+        ]
+      },
+      "page": "alle",
+      "reasonNl": {
+        "a": "Wij melden Naar boven als a zonder href die alleen met de muis werkt.",
+        "b": "\"Naar boven\" is een a zonder href, geen Tab-stop. Onze bevindingen onder 2.1.1 en 4.1.2 noemen dit."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "2.1.1",
+      "descriptionNl": "Het kruisje om de chat te sluiten is een div die alleen op een klik reageert.",
+      "id": "2.1.1-chat-sluit",
+      "ours": {
+        "a": [
+          "GEME-4.1.2-efe1"
+        ],
+        "b": [
+          "GEME-4.1.2-efe1"
+        ]
+      },
+      "page": "alle",
+      "reasonNl": {
+        "a": "Onze bevinding noemt het kruisje in het chatvenster als div zonder rol die alleen op een klik sluit.",
+        "b": "Het kruisje in het chatvenster is een div die alleen op een klik reageert. Onze bevinding onder 4.1.2 noemt dit kruisje."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "2.1.2",
+      "descriptionNl": "Staat de focus in het invoerveld van de chat, dan doet Tab niets meer. Escape sluit de chat niet.",
+      "id": "2.1.2-chat",
+      "ours": {
+        "a": [
+          "GEME-2.1.2-b5c9"
+        ],
+        "b": [
+          "GEME-2.1.2-b5c9"
+        ]
+      },
+      "page": "alle",
+      "reasonNl": {
+        "a": "Wij melden dat de focus vastzit in het invoerveld van de chat en Escape niet sluit.",
+        "b": "In het invoerveld van de chat doen Tab en Escape niets. Onze bevinding noemt dit."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "2.1.4",
+      "descriptionNl": "De letter z zet de focus in het zoekveld en de letter c opent de chat. De sneltoetsen zijn niet uit te zetten of te wijzigen.",
+      "id": "2.1.4-sneltoets",
+      "ours": {
+        "a": [
+          "GEME-2.1.4-8219",
+          "GEME-2.1.4-59ed"
+        ],
+        "b": [
+          "GEME-2.1.4-8219",
+          "GEME-2.1.4-59ed"
+        ]
+      },
+      "page": "alle",
+      "reasonNl": {
+        "a": "Wij melden de losse toetsen c en z apart, zonder manier om ze uit te zetten.",
+        "b": "De letters c en z zijn sneltoetsen die niet uit te zetten zijn. Onze twee bevindingen noemen elk een toets."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "2.2.1",
+      "descriptionNl": "Na tien minuten gaat de pagina vanzelf terug naar de startpagina. De tijd is niet te verlengen of uit te zetten.",
+      "id": "2.2.1-tijdslimiet",
+      "ours": {
+        "a": [
+          "GEME-2.2.1-f604"
+        ],
+        "b": [
+          "GEME-2.2.1-f604"
+        ]
+      },
+      "page": "/contact.html",
+      "reasonNl": {
+        "a": "Wij melden de terugkeer naar de startpagina na tien minuten zonder verlengen.",
+        "b": "Na tien minuten gaat de contactpagina terug naar de startpagina, zonder verlengen. Onze bevinding noemt dit."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "2.2.2",
+      "descriptionNl": "Het blok wisselt elke vier seconden vanzelf van bericht. Er is geen knop om het te pauzeren.",
+      "id": "2.2.2-uitgelicht",
+      "ours": {
+        "a": [
+          "GEME-2.2.2-200c"
+        ],
+        "b": [
+          "GEME-2.2.2-200c"
+        ]
+      },
+      "page": "/",
+      "reasonNl": {
+        "a": "Wij melden het blok Uitgelicht dat elke vier seconden wisselt zonder pauzeknop.",
+        "b": "Het blok Uitgelicht wisselt elke vier seconden zonder pauzeknop. Onze bevinding noemt dit."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "2.4.1",
+      "descriptionNl": "De skiplink wijst naar #inhoud, maar dat id bestaat niet. Er gebeurt niets bij activeren.",
+      "id": "2.4.1-skiplink",
+      "ours": {
+        "a": [
+          "GEME-2.4.1-5c2c"
+        ],
+        "b": [
+          "GEME-2.4.1-5c2c"
+        ]
+      },
+      "page": "alle",
+      "reasonNl": {
+        "a": "Wij melden de skiplink naar #inhoud die niet bestaat.",
+        "b": "De skiplink wijst naar #inhoud, dat niet bestaat. Onze bevinding noemt dit."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "2.4.2",
+      "descriptionNl": "De titel is \"Home - Gemeente Lindewaard - Gemeente Lindewaard % % %\": de naam staat er dubbel en er staan resten van een sjabloon in.",
+      "id": "2.4.2-sjabloonrest",
+      "ours": {
+        "a": [
+          "GEME-2.4.2-6550"
+        ],
+        "b": [
+          "GEME-2.4.2-6550"
+        ]
+      },
+      "page": "/",
+      "reasonNl": {
+        "a": "Wij melden de titel van de startpagina met dubbele naam en procenttekens.",
+        "b": "De titel van de startpagina heeft de naam dubbel en procenttekens. Onze bevinding noemt dit."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "2.4.2",
+      "descriptionNl": "Beide pagina's hebben alleen \"Gemeente Lindewaard\" als titel.",
+      "id": "2.4.2-zelfde-titel",
+      "ours": {
+        "a": [
+          "GEME-2.4.2-7584"
+        ],
+        "b": [
+          "GEME-2.4.2-7584"
+        ]
+      },
+      "page": "/veelgestelde-vragen.html, /afval.html",
+      "reasonNl": {
+        "a": "Wij melden dat Afval en Veelgestelde vragen alleen \"Gemeente Lindewaard\" als titel hebben.",
+        "b": "Afval en Veelgestelde vragen hebben alleen \"Gemeente Lindewaard\" als titel. Onze bevinding noemt beide pagina's."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "2.4.3",
+      "descriptionNl": "De velden hebben tabindex 1, 3 en 2. De focus begint midden op de pagina en gaat van naam naar telefoonnummer naar e-mailadres.",
+      "id": "2.4.3-tabindex",
+      "ours": {
+        "a": [
+          "GEME-2.4.3-9147"
+        ],
+        "b": [
+          "GEME-2.4.3-9147"
+        ]
+      },
+      "page": "/contact.html",
+      "reasonNl": {
+        "a": "Wij melden de tabindex 1, 3 en 2 op de velden van het contactformulier.",
+        "b": "De velden hebben tabindex 1, 3 en 2. Onze bevinding noemt dezelfde volgorde."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "2.4.3",
+      "descriptionNl": "Het menu staat in de code na de voet. Na het openen moet de bezoeker met Tab eerst door de hele pagina voordat de focus in het menu komt.",
+      "id": "2.4.3-mobiel-menu",
+      "ours": {
+        "a": [
+          "GEME-2.4.3-f9c3"
+        ],
+        "b": [
+          "GEME-2.4.3-f9c3"
+        ]
+      },
+      "page": "alle",
+      "reasonNl": {
+        "a": "Wij melden dat het smalle menu na de voettekst in de Tab-volgorde komt.",
+        "b": "Het smalle menu staat in de code na de voet en komt als laatste. Onze bevinding noemt dit."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "2.4.4",
+      "descriptionNl": "De link naar de parkeervergunning heet \"Klik hier\" en staat alleen in een eigen alinea.",
+      "id": "2.4.4-klik-hier",
+      "ours": {
+        "a": [
+          "GEME-2.4.4-3f6e"
+        ],
+        "b": [
+          "GEME-2.4.4-3f6e"
+        ]
+      },
+      "page": "/nieuws/nieuwe-fietsenstalling.html",
+      "reasonNl": {
+        "a": "Wij melden de link \"Klik hier\" naar de vergunning in een eigen alinea.",
+        "b": "De link \"Klik hier\" naar de vergunning staat in een eigen alinea. Onze bevinding noemt dit."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "2.4.4",
+      "descriptionNl": "De links bestaan alleen uit een pictogram en hebben geen naam.",
+      "id": "2.4.4-sociaal",
+      "ours": {
+        "a": [
+          "GEME-2.4.4-9d17",
+          "GEME-4.1.2-d450",
+          "GEME-1.1.1-0312"
+        ],
+        "b": [
+          "GEME-2.4.4-9d17",
+          "GEME-1.1.1-0312",
+          "GEME-4.1.2-d450"
+        ]
+      },
+      "page": "alle",
+      "reasonNl": {
+        "a": "Wij melden de pictogramlinks onder Volg ons zonder naam, onder 2.4.4, 4.1.2 en 1.1.1.",
+        "b": "De pictogramlinks onder Volg ons hebben geen naam. Onze bevindingen onder 2.4.4, 1.1.1 en 4.1.2 noemen dit."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "2.4.6",
+      "descriptionNl": "Twee verschillende onderdelen hebben allebei de kop \"Informatie\".",
+      "id": "2.4.6-informatie",
+      "ours": {
+        "a": [
+          "GEME-2.4.6-7ef4"
+        ],
+        "b": [
+          "GEME-2.4.6-7ef4"
+        ]
+      },
+      "page": "/nieuws/nieuwe-fietsenstalling.html",
+      "reasonNl": {
+        "a": "Wij melden de twee koppen \"Informatie\" in het nieuwsbericht.",
+        "b": "Twee koppen \"Informatie\" boven video en geluidsfragment. Onze bevinding noemt dit."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "2.4.7",
+      "descriptionNl": "De focusrand is weggehaald (outline: none) en er is niets voor in de plaats gekomen.",
+      "id": "2.4.7-menu",
+      "ours": {
+        "a": [
+          "GEME-2.4.7-d5df"
+        ],
+        "b": [
+          "GEME-2.4.7-d5df"
+        ]
+      },
+      "page": "alle",
+      "reasonNl": {
+        "a": "Wij melden geen focusaanduiding op de menulinks, breed en smal.",
+        "b": "De menulinks tonen geen focus. Onze bevinding noemt dit, breed en smal."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "2.4.11",
+      "descriptionNl": "De cookiemelding ligt als vaste laag over de onderkant van de pagina en houdt de focus niet vast. Een element dat focus krijgt onderaan het scherm ligt helemaal achter de melding. De melding zelf komt pas als laatste in de Tab-volgorde.",
+      "id": "2.4.11-melding",
+      "ours": {
+        "a": [
+          "GEME-2.4.11-0ed1",
+          "GEME-2.4.3-e622"
+        ],
+        "b": [
+          "GEME-2.4.11-0ed1",
+          "GEME-2.4.3-e622"
+        ]
+      },
+      "page": "alle",
+      "reasonNl": {
+        "a": "Wij melden dat de cookiemelding links met focus bedekt en dat haar knoppen als laatste komen.",
+        "b": "De cookiemelding bedekt links met focus en komt als laatste in de Tab-volgorde. Onze bevindingen onder 2.4.11 en 2.4.3 noemen dit."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "2.5.1",
+      "descriptionNl": "De volgende foto is alleen te bereiken door te vegen. Er zijn geen knoppen.",
+      "id": "2.5.1-galerij",
+      "ours": {
+        "a": [
+          "GEME-2.5.1-7a69",
+          "GEME-2.1.1-9000"
+        ],
+        "b": [
+          "GEME-2.5.1-7a69",
+          "GEME-2.1.1-9000"
+        ]
+      },
+      "page": "/nieuws/nieuwe-fietsenstalling.html",
+      "reasonNl": {
+        "a": "Wij melden de fotoserie die alleen met vegen werkt, onder 2.5.1 en 2.1.1.",
+        "b": "De fotoserie werkt alleen met vegen, zonder knoppen. Onze bevindingen onder 2.5.1 en 2.1.1 noemen dit."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "2.5.2",
+      "descriptionNl": "De knoppen werken al bij het indrukken van de muisknop. Wegschuiven en loslaten maakt het niet ongedaan.",
+      "id": "2.5.2-feedback",
+      "ours": {
+        "a": [
+          "GEME-2.5.2-b13b"
+        ],
+        "b": [
+          "GEME-2.5.2-b13b"
+        ]
+      },
+      "page": "/veelgestelde-vragen.html",
+      "reasonNl": {
+        "a": "Wij melden dat Ja en Nee al bij indrukken werken en niet af te breken zijn.",
+        "b": "Ja en Nee werken al bij indrukken. Onze bevinding noemt dit."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "2.5.3",
+      "descriptionNl": "Op de knop staat \"Zoeken\", de toegankelijke naam is \"Opdracht versturen\".",
+      "id": "2.5.3-zoekknop",
+      "ours": {
+        "a": [
+          "GEME-2.5.3-9f4d"
+        ],
+        "b": [
+          "GEME-2.5.3-9f4d"
+        ]
+      },
+      "page": "alle",
+      "reasonNl": {
+        "a": "Wij melden de zoekknop \"Zoeken\" met de naam \"Opdracht versturen\".",
+        "b": "Op de knop staat Zoeken, de naam is \"Opdracht versturen\". Onze bevinding noemt dit."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "2.5.7",
+      "descriptionNl": "De schuif werkt alleen door het bolletje te slepen. Klikken op de balk doet niets en het bolletje krijgt geen focus.",
+      "id": "2.5.7-schuif",
+      "ours": {
+        "a": [
+          "GEME-2.5.7-cfe1",
+          "GEME-2.1.1-4d08"
+        ],
+        "b": [
+          "GEME-2.5.7-cfe1",
+          "GEME-2.1.1-4d08"
+        ]
+      },
+      "page": "/producten.html",
+      "reasonNl": {
+        "a": "Wij melden de prijsschuif die alleen met slepen werkt, onder 2.5.7 en 2.1.1.",
+        "b": "De prijsschuif werkt alleen met slepen en de knop krijgt geen focus. Onze bevindingen onder 2.5.7 en 2.1.1 noemen dit."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "2.5.8",
+      "descriptionNl": "De links zijn 18 bij 18 pixels en staan 3 pixels uit elkaar.",
+      "id": "2.5.8-paginering",
+      "ours": {
+        "a": [
+          "GEME-2.5.8-84b4"
+        ],
+        "b": [
+          "GEME-2.5.8-84b4"
+        ]
+      },
+      "page": "/nieuws/",
+      "reasonNl": {
+        "a": "Wij melden de kleine paginalinks die 3 pixels uit elkaar staan.",
+        "b": "De paginanummers zijn klein en staan 3 pixels uit elkaar. Onze bevinding noemt dit."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "3.1.1",
+      "descriptionNl": "De pagina heeft geen taalcode.",
+      "id": "3.1.1-taal",
+      "ours": {
+        "a": [
+          "GEME-3.1.1-4611"
+        ],
+        "b": [
+          "GEME-3.1.1-4611"
+        ]
+      },
+      "page": "alle",
+      "reasonNl": {
+        "a": "Wij melden het ontbrekende lang-attribuut op de foutpagina en het nieuwsbericht.",
+        "b": "Het html-element van het nieuwsbericht en de foutpagina heeft geen lang. Onze bevinding noemt beide."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "3.1.2",
+      "descriptionNl": "Een Engelse zin heeft geen taalcode.",
+      "id": "3.1.2-engels",
+      "ours": {
+        "a": [
+          "GEME-3.1.2-0ceb"
+        ],
+        "b": [
+          "GEME-3.1.2-0ceb"
+        ]
+      },
+      "page": "/nieuws/nieuwe-fietsenstalling.html",
+      "reasonNl": {
+        "a": "Wij melden het Engelse citaat van de jury zonder taalcode.",
+        "b": "Het Engelse citaat heeft geen taalcode. Onze bevinding noemt dit."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "3.2.1",
+      "descriptionNl": "Zodra de link focus krijgt, haalt een script de focus weer weg. De link is daardoor niet met het toetsenbord te gebruiken.",
+      "id": "3.2.1-voetlink",
+      "ours": {
+        "a": [
+          "GEME-3.2.1-a494",
+          "GEME-2.4.7-f2b0"
+        ],
+        "b": [
+          "GEME-3.2.1-a494",
+          "GEME-2.4.7-f2b0"
+        ]
+      },
+      "page": "alle",
+      "reasonNl": {
+        "a": "Wij melden de link Openingstijden in de voet die de focus weghaalt, onder 3.2.1 en 2.4.7.",
+        "b": "De link Openingstijden in de voet haalt de focus weg. Onze bevindingen onder 3.2.1 en 2.4.7 noemen dit."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "3.2.2",
+      "descriptionNl": "Bij het kiezen van een wijk laadt de pagina direct opnieuw, zonder waarschuwing en zonder knop.",
+      "id": "3.2.2-wijk",
+      "ours": {
+        "a": [
+          "GEME-3.2.2-cfa6"
+        ],
+        "b": [
+          "GEME-3.2.2-cfa6"
+        ]
+      },
+      "page": "/afval.html",
+      "reasonNl": {
+        "a": "Wij melden dat kiezen van een wijk direct een nieuwe pagina laadt.",
+        "b": "Een wijk kiezen laadt direct een andere pagina. Onze bevinding noemt dit."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "3.2.3",
+      "descriptionNl": "Op de contactpagina staat \"Contact\" vooraan in het menu. Op alle andere pagina's staat het achteraan.",
+      "id": "3.2.3-menuvolgorde",
+      "ours": {
+        "a": [
+          "GEME-3.2.3-04f9",
+          "GEME-3.2.6-2f1b"
+        ],
+        "b": [
+          "GEME-3.2.3-04f9",
+          "GEME-3.2.6-2f1b"
+        ]
+      },
+      "page": "/contact.html",
+      "reasonNl": {
+        "a": "Wij melden Contact vooraan in het menu op de contactpagina, onder 3.2.3 en 3.2.6.",
+        "b": "Contact staat op de contactpagina vooraan in het menu. Onze bevindingen onder 3.2.3 en 3.2.6 noemen dit."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "3.2.4",
+      "descriptionNl": "De knop heet hier \"Vind\". Dezelfde functie heet in de kop en op de pagina voor een onbekend adres \"Zoeken\".",
+      "id": "3.2.4-zoekknop",
+      "ours": {
+        "a": [
+          "GEME-3.2.4-9001"
+        ],
+        "b": [
+          "GEME-3.2.4-9001"
+        ]
+      },
+      "page": "/zoeken.html",
+      "reasonNl": {
+        "a": "Wij melden de knop \"Vind\" op de zoekpagina tegenover \"Zoeken\" op de foutpagina.",
+        "b": "De zoekknop heet \"Vind\" op de zoekpagina en \"Zoeken\" elders. Onze bevinding noemt dit."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "3.2.6",
+      "descriptionNl": "Op de nieuwspagina's staat het hulpblok in de kop, vóór het menu. Op alle andere pagina's staat het in de voet.",
+      "id": "3.2.6-hulp",
+      "ours": {
+        "a": [
+          "GEME-3.2.6-abb3",
+          "GEME-3.2.3-2142"
+        ],
+        "b": [
+          "GEME-3.2.6-abb3",
+          "GEME-3.2.3-2142"
+        ]
+      },
+      "page": "alle",
+      "reasonNl": {
+        "a": "Wij melden het hulpblok in de kop op de nieuwspagina's en in de voet elders.",
+        "b": "Het hulpblok staat op de nieuwspagina's in de kop. Onze bevindingen onder 3.2.6 en 3.2.3 noemen dit."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "3.3.1",
+      "descriptionNl": "Een verplicht veld dat leeg is, krijgt alleen een rode rand. Er staat geen tekst die zegt wat er mis is.",
+      "id": "3.3.1-rode-rand",
+      "ours": {
+        "a": [
+          "GEME-3.3.1-3956",
+          "GEME-3.3.3-e763",
+          "GEME-1.4.1-fee6"
+        ],
+        "b": [
+          "GEME-3.3.1-3956",
+          "GEME-1.4.1-fee6",
+          "GEME-3.3.3-e763"
+        ]
+      },
+      "page": "/contact.html",
+      "reasonNl": {
+        "a": "Wij melden dat lege verplichte velden alleen een rode rand krijgen, zonder tekst.",
+        "b": "Lege verplichte velden krijgen alleen een rode rand. Onze bevindingen onder 3.3.1, 1.4.1 en 3.3.3 noemen dit."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "3.3.2",
+      "descriptionNl": "De velden hebben geen label, alleen een voorbeeldtekst in het veld die verdwijnt bij typen.",
+      "id": "3.3.2-plaatshouder",
+      "ours": {
+        "a": [
+          "GEME-3.3.2-5236"
+        ],
+        "b": [
+          "GEME-3.3.2-5236"
+        ]
+      },
+      "page": "/contact.html",
+      "reasonNl": {
+        "a": "Wij melden e-mailadres en telefoonnummer met alleen een voorbeeldtekst.",
+        "b": "E-mail en telefoon hebben alleen een voorbeeldtekst als label. Onze bevinding noemt dit."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "3.3.3",
+      "descriptionNl": "Bij een datum in de verkeerde vorm staat er alleen \"Ongeldige invoer.\" De gewenste vorm wordt nergens genoemd.",
+      "id": "3.3.3-datum",
+      "ours": {
+        "a": [
+          "GEME-3.3.3-ed9f",
+          "GEME-3.3.2-df8a"
+        ],
+        "b": [
+          "GEME-3.3.3-ed9f",
+          "GEME-3.3.2-df8a"
+        ]
+      },
+      "page": "/contact.html",
+      "reasonNl": {
+        "a": "Wij melden \"Ongeldige invoer.\" bij de datum zonder de gewenste vorm.",
+        "b": "Bij de datum staat alleen \"Ongeldige invoer.\" zonder vorm. Onze bevindingen onder 3.3.3 en 3.3.2 noemen dit."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "3.3.4",
+      "descriptionNl": "De aanvraag met betaalverplichting wordt na stap 2 direct verstuurd. Er is geen stap om de gegevens te controleren of te wijzigen.",
+      "id": "3.3.4-controle",
+      "ours": {
+        "a": [
+          "GEME-3.3.4-9ddf"
+        ],
+        "b": [
+          "GEME-3.3.4-9ddf"
+        ]
+      },
+      "page": "/vergunning.html",
+      "reasonNl": {
+        "a": "Wij melden dat de aanvraag na stap 2 direct wordt verstuurd zonder controle.",
+        "b": "De aanvraag wordt na stap 2 direct verstuurd, zonder controle. Onze bevinding noemt dit."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "3.3.7",
+      "descriptionNl": "Het adres uit stap 1 moet in stap 2 opnieuw worden getypt voor de rekening.",
+      "id": "3.3.7-adres",
+      "ours": {
+        "a": [
+          "GEME-3.3.7-914b"
+        ],
+        "b": [
+          "GEME-3.3.7-914b"
+        ]
+      },
+      "page": "/vergunning.html",
+      "reasonNl": {
+        "a": "Wij melden dat het adres in stap 2 opnieuw getypt moet worden.",
+        "b": "Het adres moet in stap 2 opnieuw worden getypt. Onze bevinding noemt dit."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "3.3.8",
+      "descriptionNl": "Plakken in het wachtwoordveld is geblokkeerd en automatisch invullen staat uit. Daarnaast moet de bezoeker twee letters van een geheim woord uit het hoofd typen.",
+      "id": "3.3.8-wachtwoord",
+      "ours": {
+        "a": [
+          "GEME-3.3.8-2a00",
+          "GEME-3.3.8-04bb",
+          "GEME-1.3.5-3af0"
+        ],
+        "b": [
+          "GEME-3.3.8-04bb",
+          "GEME-3.3.8-2a00",
+          "GEME-1.3.5-3af0"
+        ]
+      },
+      "page": "/inloggen.html",
+      "reasonNl": {
+        "a": "Wij melden geheime letters, geblokkeerd plakken en autocomplete uit op het wachtwoordveld.",
+        "b": "Plakken geblokkeerd, autocomplete uit en letters van een geheim woord. Onze bevindingen onder 3.3.8 en 1.3.5 noemen deze delen."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "4.1.2",
+      "descriptionNl": "De tabbladen zijn divs met een klikhandler, zonder rol, zonder toestand en zonder focus.",
+      "id": "4.1.2-tabs",
+      "ours": {
+        "a": [
+          "GEME-4.1.2-de61",
+          "GEME-2.1.1-b294"
+        ],
+        "b": [
+          "GEME-4.1.2-de61",
+          "GEME-2.1.1-b294"
+        ]
+      },
+      "page": "/afval.html",
+      "reasonNl": {
+        "a": "Wij melden de tabbladen als div zonder rol, toestand en focus.",
+        "b": "De tabbladen zijn divs zonder rol, toestand of focus. Onze bevindingen onder 4.1.2 en 2.1.1 noemen dit."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "4.1.2",
+      "descriptionNl": "De knoppen melden niet of het antwoord open of dicht is.",
+      "id": "4.1.2-uitklapper",
+      "ours": {
+        "a": [
+          "GEME-4.1.2-8221"
+        ],
+        "b": [
+          "GEME-4.1.2-8221"
+        ]
+      },
+      "page": "/veelgestelde-vragen.html",
+      "reasonNl": {
+        "a": "Wij melden dat de vraagknoppen niet melden of het antwoord open is.",
+        "b": "De vraagknoppen melden niet of het antwoord open is. Onze bevinding noemt dit."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "4.1.2",
+      "descriptionNl": "De knop heeft geen naam en meldt niet of het menu open is.",
+      "id": "4.1.2-menuknop",
+      "ours": {
+        "a": [
+          "GEME-4.1.2-c8b1",
+          "GEME-4.1.2-25b3"
+        ],
+        "b": [
+          "GEME-4.1.2-c8b1",
+          "GEME-4.1.2-25b3"
+        ]
+      },
+      "page": "alle",
+      "reasonNl": {
+        "a": "Wij melden de menuknop zonder naam en zonder toestand, apart.",
+        "b": "De menuknop heeft geen naam en geen expanded. Onze twee bevindingen noemen beide delen."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "4.1.2",
+      "descriptionNl": "De afbeelding heeft role=\"logo\". Die rol bestaat niet.",
+      "id": "4.1.2-rol-logo",
+      "ours": {
+        "a": [
+          "GEME-4.1.2-26d7"
+        ],
+        "b": [
+          "GEME-4.1.2-26d7"
+        ]
+      },
+      "page": "alle",
+      "reasonNl": {
+        "a": "Wij melden het wapen in de voet met role=\"logo\".",
+        "b": "Het logo in de voet heeft role=\"logo\". Onze bevinding noemt dit."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "4.1.2",
+      "descriptionNl": "Het venster van de videospeler heeft geen titel.",
+      "id": "4.1.2-kadertitel",
+      "ours": {
+        "a": [
+          "GEME-4.1.2-9ad6"
+        ],
+        "b": [
+          "GEME-4.1.2-9ad6"
+        ]
+      },
+      "page": "/nieuws/nieuwe-fietsenstalling.html, /raadsvergadering.html",
+      "reasonNl": {
+        "a": "Wij melden het iframe van de videospeler zonder title op beide pagina's.",
+        "b": "Het iframe van de videospeler heeft geen title. Onze bevinding noemt dit op beide pagina's."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "4.1.2",
+      "descriptionNl": "Het venster heeft geen rol dialog en geen naam. De focus gaat er niet heen en het kruisje is een div.",
+      "id": "4.1.2-venster",
+      "ours": {
+        "a": [
+          "GEME-4.1.2-c4be",
+          "GEME-2.4.3-2683",
+          "GEME-2.1.1-52a3",
+          "GEME-4.1.2-efe1"
+        ],
+        "b": [
+          "GEME-4.1.2-c4be",
+          "GEME-2.4.3-2683",
+          "GEME-2.1.1-52a3"
+        ]
+      },
+      "page": "/producten.html",
+      "reasonNl": {
+        "a": "Wij melden het venster zonder rol dialog, de focus die er niet heen gaat en het kruisje als div.",
+        "b": "Het productvenster is geen dialog, de focus gaat er niet heen en het kruisje is een div. Onze drie bevindingen noemen deze delen."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "4.1.3",
+      "descriptionNl": "\"Bedankt voor uw reactie.\" verschijnt zonder dat hulpsoftware het meldt.",
+      "id": "4.1.3-bedankt",
+      "ours": {
+        "a": [
+          "GEME-4.1.3-cf30"
+        ],
+        "b": [
+          "GEME-4.1.3-cf30"
+        ]
+      },
+      "page": "/veelgestelde-vragen.html",
+      "reasonNl": {
+        "a": "Wij melden dat het bedankje na Ja of Nee niet wordt gemeld.",
+        "b": "\"Bedankt voor uw reactie.\" wordt niet gemeld. Onze bevinding noemt dit."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "4.1.3",
+      "descriptionNl": "Bij typen in het zoekveld verandert het aantal gevonden producten zonder dat hulpsoftware het meldt.",
+      "id": "4.1.3-aantal",
+      "ours": {
+        "a": [
+          "GEME-4.1.3-8c06"
+        ],
+        "b": [
+          "GEME-4.1.3-8c06"
+        ]
+      },
+      "page": "/producten.html",
+      "reasonNl": {
+        "a": "Wij melden dat het aantal gevonden producten niet wordt gemeld.",
+        "b": "Het aantal gevonden producten wordt niet gemeld. Onze bevinding noemt dit."
+      }
+    },
+    {
+      "a": "gevonden",
+      "agreed": "gevonden",
+      "agreedCoarse": "gevonden",
+      "b": "gevonden",
+      "criterion": "4.1.3",
+      "descriptionNl": "Nieuwe berichten in de chat worden niet gemeld aan hulpsoftware.",
+      "id": "4.1.3-chat",
+      "ours": {
+        "a": [
+          "GEME-4.1.3-9498"
+        ],
+        "b": [
+          "GEME-4.1.3-9498"
+        ]
+      },
+      "page": "alle",
+      "reasonNl": {
+        "a": "Wij melden dat nieuwe chatberichten niet worden gemeld.",
+        "b": "Nieuwe chatberichten worden niet gemeld. Onze bevinding noemt dit."
+      }
+    }
+  ],
+  "ours": {
+    "agreement": 0.991,
+    "classes": {
+      "discutabel": {
+        "a": 1,
+        "agreed": 1,
+        "b": 2
+      },
+      "onterecht": {
+        "a": 0,
+        "agreed": 0,
+        "b": 0
+      },
+      "tegenhanger": {
+        "a": 105,
+        "agreed": 105,
+        "b": 105
+      },
+      "terecht": {
+        "a": 5,
+        "agreed": 4,
+        "b": 4
+      }
+    },
+    "disagreed": 1,
+    "duplicates": {
+      "a": {
+        "referenceFindings": 23,
+        "surplus": 29
+      },
+      "agreed": {
+        "referenceFindings": 23,
+        "surplus": 28
+      },
+      "b": {
+        "referenceFindings": 23,
+        "surplus": 28
+      }
+    },
+    "shareWithoutCounterpart": {
+      "discutabel": {
+        "a": 0.167,
+        "agreed": 0.167,
+        "b": 0.333
+      },
+      "onterecht": {
+        "a": 0,
+        "agreed": 0,
+        "b": 0
+      },
+      "terecht": {
+        "a": 0.833,
+        "agreed": 0.667,
+        "b": 0.667
+      }
+    },
+    "total": 111
+  },
+  "ownFindings": [
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "1.1.1",
+      "id": "GEME-1.1.1-ed36",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Nieuwsfoto zonder tekstalternatief"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "1.1.1",
+      "id": "GEME-1.1.1-5608",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Partnerlogo met bestandsnaam als alt-tekst"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "1.1.1",
+      "id": "GEME-1.1.1-7302",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Wapen in de cookiemelding heet alleen 'logo'"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "1.1.1",
+      "id": "GEME-1.1.1-fc24",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Tabel met tarieven als afbeelding zonder tekstalternatief"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "1.1.1",
+      "id": "GEME-1.1.1-0312",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Pictogramlinks in de voettekst zonder naam"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "1.2.1",
+      "id": "GEME-1.2.1-0dfa",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Geluidsfragment van de wethouder zonder tekstversie"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "1.2.2",
+      "id": "GEME-1.2.2-0a71",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Video van de raadsvergadering heeft geen ondertitels"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "1.2.3",
+      "id": "GEME-1.2.3-f0df",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Informatie in beeld van de video van de raadsvergadering wordt niet beschreven"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "1.2.5",
+      "id": "GEME-1.2.5-4676",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Video van de raadsvergadering zonder audiodescriptie van agenda en stemuitslag"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "1.3.1",
+      "id": "GEME-1.3.1-39dc",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Titels die werken als kop zijn geen kop"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "1.3.1",
+      "id": "GEME-1.3.1-f2e7",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Opsommingen en kaarten zijn geen lijst"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "1.3.1",
+      "id": "GEME-1.3.1-f81b",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Contactformulier legt groep en verplichte velden niet vast"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "1.3.1",
+      "id": "GEME-1.3.1-d138",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Tabel met openingstijden heeft geen kopcellen"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "1.3.2",
+      "id": "GEME-1.3.2-3ee4",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Nieuwskaarten: kop staat in de code na de samenvatting"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "1.3.2",
+      "id": "GEME-1.3.2-9e4e",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Zoekpagina: aantal resultaten en uitleg staan in de code na het formulier"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "1.3.3",
+      "id": "GEME-1.3.3-9150",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Uitleg wijst de verzendknop aan met vorm, kleur en plek"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "1.3.3",
+      "id": "GEME-1.3.3-d594",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Verplichte velden alleen met de kleur rood aangewezen"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "1.3.4",
+      "id": "GEME-1.3.4-5449",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Tabel met openingstijden alleen liggend te zien"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "1.3.5",
+      "id": "GEME-1.3.5-12d9",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Naamveld in het contactformulier zegt niet dat het om de naam vraagt"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "1.3.5",
+      "id": "GEME-1.3.5-5e01",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "E-mailveld in het contactformulier zegt niet dat het om het e-mailadres vraagt"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "1.3.5",
+      "id": "GEME-1.3.5-dd72",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Telefoonveld in het contactformulier zegt niet dat het om het telefoonnummer vraagt"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "1.3.5",
+      "id": "GEME-1.3.5-3af0",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Wachtwoordveld bij inloggen heeft autocomplete uit"
+    },
+    {
+      "a": "terecht",
+      "agreed": "terecht",
+      "b": "terecht",
+      "criterion": "1.3.5",
+      "id": "GEME-1.3.5-3c9e",
+      "reasonNl": {
+        "a": "In page.html heeft #factuurstraat geen autocomplete. Het veld vraagt het eigen adres voor de rekening, dus 1.3.5 is van toepassing.",
+        "b": "Het veld #factuurstraat voor het eigen adres heeft in de code geen autocomplete. Dat is een gebrek onder 1.3.5."
+      },
+      "titleNl": "Straatveld voor de rekening zegt niet dat het om het adres vraagt"
+    },
+    {
+      "a": "terecht",
+      "agreed": "terecht",
+      "b": "terecht",
+      "criterion": "1.3.5",
+      "id": "GEME-1.3.5-28cb",
+      "reasonNl": {
+        "a": "In page.html heeft #factuurpostcode geen autocomplete. Het veld vraagt de eigen postcode voor de rekening, dus 1.3.5 is van toepassing.",
+        "b": "Het veld #factuurpostcode voor de eigen postcode heeft in de code geen autocomplete. Dat is een gebrek onder 1.3.5."
+      },
+      "titleNl": "Postcodeveld voor de rekening zegt niet dat het om de postcode vraagt"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "1.4.1",
+      "id": "GEME-1.4.1-bb6a",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Links in lopende tekst alleen herkenbaar aan kleur"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "1.4.1",
+      "id": "GEME-1.4.1-cb42",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Verplichte velden alleen aangegeven met rode labels"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "1.4.1",
+      "id": "GEME-1.4.1-fee6",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Fouten in het contactformulier alleen met een rode rand"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "1.4.2",
+      "id": "GEME-1.4.2-d6af",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Muziek op de startpagina start vanzelf en is niet te stoppen"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "1.4.3",
+      "id": "GEME-1.4.3-a2b5",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Witte kop op lichte foto op de startpagina"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "1.4.3",
+      "id": "GEME-1.4.3-4ad3",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Witte inleiding op lichte foto op de startpagina"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "1.4.3",
+      "id": "GEME-1.4.3-7322",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Grijze datums bij nieuwsberichten"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "1.4.3",
+      "id": "GEME-1.4.3-3e50",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Menulinks bij aanwijzen grijs op lichtgrijs"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "1.4.4",
+      "id": "GEME-1.4.4-1986",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Vergroten op telefoon is geblokkeerd"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "1.4.4",
+      "id": "GEME-1.4.4-9370",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Inleiding op de productenpagina wordt afgekapt bij vergroten"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "1.4.5",
+      "id": "GEME-1.4.5-d923",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Aankondiging van het zomerfeest staat als tekst in een afbeelding"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "1.4.5",
+      "id": "GEME-1.4.5-b062",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Tabel met tarieven staat als afbeelding in het antwoord over paspoort en rijbewijs"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "1.4.10",
+      "id": "GEME-1.4.10-ebc7",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Knop Weigeren van de cookiemelding valt op een smal scherm buiten beeld"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "1.4.10",
+      "id": "GEME-1.4.10-3a99",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Productpagina schuift op een smal scherm opzij"
+    },
+    {
+      "a": "terecht",
+      "agreed": null,
+      "b": "discutabel",
+      "criterion": "1.4.10",
+      "id": "GEME-1.4.10-d889",
+      "reasonNl": {
+        "a": "In WebKit is de pagina op 320 pixels 337 breed; de knop Zoeken valt deels buiten beeld. Niet ingebouwd, maar Safari-gebruikers moeten opzij schuiven.",
+        "b": "Alleen in WebKit is de inhoud 337 pixels breed; de knop Zoeken steekt 17 pixels uit. In Chromium past alles. Een onderzoeker keurt hier waarschijnlijk niet op af."
+      },
+      "titleNl": "Zoekbalk in de kop laat de pagina in Safari opzij schuiven"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "1.4.11",
+      "id": "GEME-1.4.11-f2d1",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Rand van tekstvelden is te licht"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "1.4.12",
+      "id": "GEME-1.4.12-1b23",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Tweede regel van de tegels onder Snel regelen verdwijnt"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "1.4.13",
+      "id": "GEME-1.4.13-02ca",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Uitleg bij het i-teken is niet met Escape te sluiten"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "1.4.13",
+      "id": "GEME-1.4.13-4b09",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Uitleg bij het i-teken verdwijnt als de muis ernaartoe gaat"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "2.1.1",
+      "id": "GEME-2.1.1-7243",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Nieuwskaarten werken alleen met de muis"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "2.1.1",
+      "id": "GEME-2.1.1-6382",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Productkaarten openen hun venster alleen met de muis"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "2.1.1",
+      "id": "GEME-2.1.1-b294",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Tabbladen bij afval zijn niet met het toetsenbord te kiezen"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "2.1.1",
+      "id": "GEME-2.1.1-4d08",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Prijsschuif werkt alleen door te slepen"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "2.1.1",
+      "id": "GEME-2.1.1-9000",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Fotoserie werkt alleen door te vegen"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "2.1.1",
+      "id": "GEME-2.1.1-52a3",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Sluitkruis van het productvenster werkt alleen met de muis"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "2.1.1",
+      "id": "GEME-2.1.1-3bcc",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Vinkje voor een kopie is niet met het toetsenbord aan te zetten"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "2.1.1",
+      "id": "GEME-2.1.1-08a2",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "\"Naar boven\" werkt alleen met de muis"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "2.1.2",
+      "id": "GEME-2.1.2-b5c9",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Toetsenbord zit vast in het invoerveld van de chat"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "2.1.4",
+      "id": "GEME-2.1.4-8219",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Losse toets c opent de chat"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "2.1.4",
+      "id": "GEME-2.1.4-59ed",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Losse toets z zet de focus in het zoekveld"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "2.2.1",
+      "id": "GEME-2.2.1-f604",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Contactformulier stuurt na tien minuten terug naar de startpagina"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "2.2.2",
+      "id": "GEME-2.2.2-200c",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Blok Uitgelicht wisselt vanzelf zonder pauzeknop"
+    },
+    {
+      "a": "discutabel",
+      "agreed": "discutabel",
+      "b": "discutabel",
+      "criterion": "2.2.2",
+      "id": "GEME-2.2.2-4928",
+      "reasonNl": {
+        "a": "De klok telt echt af, maar hoort bij de tijdslimiet die al onder 2.2.1 is gemeld. Een onderzoeker keurt 2.2.2 hier waarschijnlijk niet af.",
+        "b": "De aftelklok in p.tijdslimiet verandert elke seconde. Het hoort bij de tijdslimiet die al onder 2.2.1 is gemeld; afkeuren op 2.2.2 is een strenge lezing."
+      },
+      "titleNl": "Aftelklok verandert elke seconde zonder manier om te stoppen"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "2.4.1",
+      "id": "GEME-2.4.1-5c2c",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Skiplink 'Direct naar de inhoud' wijst naar een doel dat niet bestaat"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "2.4.2",
+      "id": "GEME-2.4.2-6550",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Titel van de startpagina met losse procenttekens en een dubbele naam"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "2.4.2",
+      "id": "GEME-2.4.2-7584",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Titel noemt alleen de naam van de gemeente, niet het onderwerp"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "2.4.3",
+      "id": "GEME-2.4.3-9147",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Velden van het contactformulier hebben een eigen volgorde"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "2.4.3",
+      "id": "GEME-2.4.3-e622",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "De knoppen van de cookiemelding komen als laatste aan de beurt"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "2.4.3",
+      "id": "GEME-2.4.3-f9c3",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Het menu op een smal scherm komt na de voettekst"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "2.4.3",
+      "id": "GEME-2.4.3-2683",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "De focus gaat niet naar het productvenster"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "2.4.4",
+      "id": "GEME-2.4.4-9d17",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Pictogramlinks onder 'Volg ons' hebben geen naam"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "2.4.4",
+      "id": "GEME-2.4.4-3f6e",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Link 'Klik hier' zegt niet waar hij heen gaat"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "2.4.6",
+      "id": "GEME-2.4.6-7ef4",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Twee koppen \"Informatie\" boven verschillende onderdelen"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "2.4.7",
+      "id": "GEME-2.4.7-d5df",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Geen focusaanduiding op de links van het hoofdmenu"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "2.4.7",
+      "id": "GEME-2.4.7-f2b0",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Link Openingstijden in de voettekst haalt de focus weg"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "2.4.11",
+      "id": "GEME-2.4.11-0ed1",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Cookiemelding bedekt links met focus helemaal"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "2.5.1",
+      "id": "GEME-2.5.1-7a69",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Fotoserie werkt alleen met vegen"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "2.5.2",
+      "id": "GEME-2.5.2-b13b",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Oordeel Ja of Nee gaat al weg bij het indrukken"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "2.5.3",
+      "id": "GEME-2.5.3-9f4d",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "aria-label van de zoekknop bevat het zichtbare woord Zoeken niet"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "2.5.7",
+      "id": "GEME-2.5.7-cfe1",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Prijsschuif werkt alleen met slepen"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "2.5.8",
+      "id": "GEME-2.5.8-84b4",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Paginanummers zijn te klein en staan te dicht op elkaar"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "3.1.1",
+      "id": "GEME-3.1.1-4611",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Pagina geeft geen taal op in de code"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "3.1.2",
+      "id": "GEME-3.1.2-0ceb",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Engels citaat zonder eigen taal"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "3.2.1",
+      "id": "GEME-3.2.1-a494",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Link Openingstijden in de voet haalt de focus weg"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "3.2.2",
+      "id": "GEME-3.2.2-cfa6",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Een wijk kiezen laadt meteen een nieuwe pagina"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "3.2.3",
+      "id": "GEME-3.2.3-04f9",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Contact staat op de contactpagina vooraan in het hoofdmenu"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "3.2.3",
+      "id": "GEME-3.2.3-2142",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Telefoonnummer en link om een bericht te sturen wisselen van plaats tegenover het menu"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "3.2.4",
+      "id": "GEME-3.2.4-9001",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Zoekknop heet \"Vind\" op de zoekpagina en \"Zoeken\" op de foutpagina"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "3.2.6",
+      "id": "GEME-3.2.6-abb3",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Telefoonnummer en berichtlink staan op nieuwspagina's in de kop in plaats van in de voet"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "3.2.6",
+      "id": "GEME-3.2.6-2f1b",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Link Contact staat op de contactpagina vooraan in het menu"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "3.3.1",
+      "id": "GEME-3.3.1-3956",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Fouten in het contactformulier alleen met rood aangegeven"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "3.3.2",
+      "id": "GEME-3.3.2-5236",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Velden voor e-mailadres en telefoonnummer hebben alleen een voorbeeldtekst"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "3.3.2",
+      "id": "GEME-3.3.2-df8a",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Datumveld keurt invoer af zonder te zeggen hoe je de datum schrijft"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "3.3.3",
+      "id": "GEME-3.3.3-ed9f",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Foutmelding bij de datum zegt niet hoe het wel moet"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "3.3.3",
+      "id": "GEME-3.3.3-e763",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Leeg verplicht veld krijgt alleen een rode rand"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "3.3.4",
+      "id": "GEME-3.3.4-9ddf",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Aanvraag met betaling gaat direct definitief weg"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "3.3.7",
+      "id": "GEME-3.3.7-914b",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Adres moet in stap 2 van de aanvraag opnieuw worden ingetypt"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "3.3.8",
+      "id": "GEME-3.3.8-2a00",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Inloggen vraagt letters uit een geheim woord"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "3.3.8",
+      "id": "GEME-3.3.8-04bb",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Plakken in het wachtwoordveld wordt tegengehouden"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "4.1.2",
+      "id": "GEME-4.1.2-d450",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Pictogramlinks onder Volg ons hebben geen naam"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "4.1.2",
+      "id": "GEME-4.1.2-c8b1",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Menuknop op een smal scherm heeft geen naam"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "4.1.2",
+      "id": "GEME-4.1.2-25b3",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Menuknop meldt niet of het menu open is"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "4.1.2",
+      "id": "GEME-4.1.2-26d7",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Wapen in de voettekst heeft een rol die niet bestaat"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "4.1.2",
+      "id": "GEME-4.1.2-de61",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Tabbladen bij afvalsoorten zijn geen tabbladen voor hulpsoftware"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "4.1.2",
+      "id": "GEME-4.1.2-d147",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Selectievakje voor een kopie is onzichtbaar voor hulpsoftware"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "4.1.2",
+      "id": "GEME-4.1.2-e33d",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Nieuwskaarten zijn klikbaar maar geen link"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "4.1.2",
+      "id": "GEME-4.1.2-bc00",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Productkaarten openen uitleg maar zijn geen knop"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "4.1.2",
+      "id": "GEME-4.1.2-c4be",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Venster met productuitleg is geen dialoog"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "4.1.2",
+      "id": "GEME-4.1.2-efe1",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Sluitkruisjes zijn geen knop"
+    },
+    {
+      "a": "terecht",
+      "agreed": "terecht",
+      "b": "terecht",
+      "criterion": "4.1.2",
+      "id": "GEME-4.1.2-4cf1",
+      "reasonNl": {
+        "a": "In page.html is de schuif opgebouwd uit div-elementen zonder rol slider, naam of waarde. Dat is een eigen gebrek naast slepen.",
+        "b": "De schuif is gebouwd uit div-elementen (.schuif-knop) zonder rol slider, naam of waarde. Dat is een gebrek onder 4.1.2."
+      },
+      "titleNl": "Prijsschuif heeft geen rol, naam of waarde"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "4.1.2",
+      "id": "GEME-4.1.2-9ad6",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Ingesloten videospeler heeft geen naam"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "4.1.2",
+      "id": "GEME-4.1.2-8221",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Vraagknoppen melden niet of het antwoord open is"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "4.1.2",
+      "id": "GEME-4.1.2-aa03",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Link Naar boven heeft geen adres en geen vaste rol"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "4.1.3",
+      "id": "GEME-4.1.3-8c06",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Aantal gevonden producten wordt niet voorgelezen"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "4.1.3",
+      "id": "GEME-4.1.3-cf30",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Bedankje na Ja of Nee wordt niet voorgelezen"
+    },
+    {
+      "a": "terecht",
+      "agreed": "terecht",
+      "b": "terecht",
+      "criterion": "4.1.3",
+      "id": "GEME-4.1.3-8c59",
+      "reasonNl": {
+        "a": "De melding is een p.veldmelding zonder rol of aria-live, en de focus blijft op de knop. Hulpsoftware meldt de fout niet.",
+        "b": "Na versturen verschijnt \"Ongeldige invoer.\" zonder live-regio; de focus blijft op de knop. Hulpsoftware hoort de melding niet."
+      },
+      "titleNl": "Foutmelding bij de datum wordt niet voorgelezen"
+    },
+    {
+      "a": "tegenhanger",
+      "agreed": "tegenhanger",
+      "b": "tegenhanger",
+      "criterion": "4.1.3",
+      "id": "GEME-4.1.3-9498",
+      "reasonNl": {
+        "a": null,
+        "b": null
+      },
+      "titleNl": "Nieuwe berichten in de chat worden niet voorgelezen"
+    }
+  ],
+  "provenance": {
+    "classificationSha256": {
+      "a": "e56657200f6722daaaf4e9ffe7380ad135e650d32a92112922830bac8ba901aa",
+      "b": "b7761ff20df500bf793b79b6740b2a7e4f0a88fb8af218e46ee52918129ee9da"
+    },
+    "evaluationSha256": "90722342c02515ed38527e8e7c8e3a581f9988a55371253da4982fdf2400f3d1",
+    "inputSha256": "d4d234fe57c613747356d9701f9e37ab7d7164b64a712c24c2e96ebc18eee19a",
+    "promptSha256": "f1f5e55792880bceff07e783347360c72ec2346c22a84f5886948346abf1e8fe"
+  },
+  "reference": {
+    "agreement": 1,
+    "agreementCoarse": 1,
+    "classes": {
+      "buiten-bereik": {
+        "a": 0,
+        "agreed": 0,
+        "b": 0
+      },
+      "deels": {
+        "a": 0,
+        "agreed": 0,
+        "b": 0
+      },
+      "gemist-bewijs-beoordeling": {
+        "a": 0,
+        "agreed": 0,
+        "b": 0
+      },
+      "gemist-bewijs-dossier": {
+        "a": 0,
+        "agreed": 0,
+        "b": 0
+      },
+      "gemist-geen-bewijs": {
+        "a": 0,
+        "agreed": 0,
+        "b": 0
+      },
+      "gevonden": {
+        "a": 79,
+        "agreed": 79,
+        "b": 79
+      },
+      "niet-meer-aanwezig": {
+        "a": 0,
+        "agreed": 0,
+        "b": 0
+      }
+    },
+    "coarse": {
+      "buiten-bereik": {
+        "a": 0,
+        "agreed": 0,
+        "b": 0
+      },
+      "deels": {
+        "a": 0,
+        "agreed": 0,
+        "b": 0
+      },
+      "gemist": {
+        "a": 0,
+        "agreed": 0,
+        "b": 0
+      },
+      "gevonden": {
+        "a": 79,
+        "agreed": 79,
+        "b": 79
+      },
+      "niet-meer-aanwezig": {
+        "a": 0,
+        "agreed": 0,
+        "b": 0
+      }
+    },
+    "counted": 79,
+    "disagreed": 0,
+    "disagreedCoarse": 0,
+    "documents": 0,
+    "documentsOutOfReach": 0,
+    "foundShare": {
+      "a": {
+        "ofCounted": 1,
+        "ofStillPresent": 1
+      },
+      "agreed": {
+        "ofCounted": 1,
+        "ofStillPresent": 1
+      },
+      "b": {
+        "ofCounted": 1,
+        "ofStillPresent": 1
+      }
+    },
+    "leftOut": 0,
+    "stillPresent": {
+      "a": 79,
+      "agreed": 79,
+      "b": 79
+    },
+    "total": 79
+  },
+  "referenceKind": "answer-key",
+  "schema": "loep/compare-findings-summary/2",
+  "site": "Gemeente Lindewaard"
+}
