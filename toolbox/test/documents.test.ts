@@ -875,7 +875,7 @@ const REPORTED: EvaluationDocuments = {
 test("the scope and the limitations say which documents were read, which were not, and what was not looked at", () => {
   const scope = documentScopeNl(REPORTED, "https://voorbeeld.overheid.example", 4);
   assert.deepEqual(scope.includedNl, ["Documenten op https://voorbeeld.overheid.example (pdf, kantoorbestanden en platte tekst): 3 van 30 in de steekproef, 1 ingelezen"]);
-  assert.deepEqual(scope.excludedNl, ["Documenten op andere domeinen waarnaar de site linkt (4 geteld)", "Documenten van een soort die niet wordt ingelezen (1 Word (doc))"]);
+  assert.deepEqual(scope.excludedNl, ["Documenten buiten de site waarnaar de site linkt (4 geteld)", "Documenten van een soort die niet wordt ingelezen (1 Word (doc))"]);
   const text = scope.limitationsNl.join("\n");
   assert.match(text, /op de site staan 30 documenten \(27 pdf, 2 Word \(docx\), 1 Word \(doc\)\)\. De toolbox leest de soorten pdf, docx, odt, pptx, odp, xlsx, ods en platte tekst in\. 1 document is ingelezen en beoordeeld \(D01\)/);
   assert.match(text, /beoordeeld op de criteria 1\.1\.1, 1\.3\.1 en 2\.4\.2/);
