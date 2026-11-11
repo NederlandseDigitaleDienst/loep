@@ -13,7 +13,7 @@
 <body>
 <nldd-shell>
   <nldd-page>
-    <nldd-skip-link slot="header">
+    <nldd-skip-link slot="header" text="Naar de hoofdinhoud">
       <nldd-top-navigation-bar
         logo-title="Nederlandse Digitale Dienst"
         logo-subtitle="Ministerie van Economische Zaken en Klimaat"
@@ -77,43 +77,43 @@
       <nldd-rich-text slot="header">
         <p>Onze eigen site, nerds.digitaledienst.overheid.nl, met 29 pagina's, op 29 oktober 2026.</p>
       </nldd-rich-text>
-      <nldd-container layout="grid" sm-gap="16" md-gap="24" lg-gap="24" sm-column-count="2" md-column-count="3" lg-column-count="3">
-        <nldd-card>
+      <nldd-container role="list" layout="grid" sm-gap="16" md-gap="24" lg-gap="24" sm-column-count="2" md-column-count="3" lg-column-count="3">
+        <nldd-card role="listitem">
           <nldd-container padding="16">
             <nldd-icon icon="checkbox-list" size="32"></nldd-icon>
             <nldd-spacer size="4"></nldd-spacer>
             <nldd-title size="1" text="56" supporting-text="succescriteria beoordeeld, elk met een eigen procedure" heading-level="3"></nldd-title>
           </nldd-container>
         </nldd-card>
-        <nldd-card>
+        <nldd-card role="listitem">
           <nldd-container padding="16">
             <nldd-icon icon="person-2" size="32"></nldd-icon>
             <nldd-spacer size="4"></nldd-spacer>
             <nldd-title size="1" text="131" supporting-text="sessies van agents, elk met een eigen browser" heading-level="3"></nldd-title>
           </nldd-container>
         </nldd-card>
-        <nldd-card>
+        <nldd-card role="listitem">
           <nldd-container padding="16">
             <nldd-icon icon="eye" size="32"></nldd-icon>
             <nldd-spacer size="4"></nldd-spacer>
             <nldd-title size="1" text="7.241" supporting-text="waarnemingen vastgelegd, met 5.428 beelden" heading-level="3"></nldd-title>
           </nldd-container>
         </nldd-card>
-        <nldd-card>
+        <nldd-card role="listitem">
           <nldd-container padding="16">
             <nldd-icon icon="pencil-ruler" size="32"></nldd-icon>
             <nldd-spacer size="4"></nldd-spacer>
             <nldd-title size="1" text="13.538" supporting-text="contrastmetingen op het getekende scherm" heading-level="3"></nldd-title>
           </nldd-container>
         </nldd-card>
-        <nldd-card>
+        <nldd-card role="listitem">
           <nldd-container padding="16">
             <nldd-icon icon="check-mark-circle" size="32"></nldd-icon>
             <nldd-spacer size="4"></nldd-spacer>
             <nldd-title size="1" text="0" supporting-text="criteria die open bleven" heading-level="3"></nldd-title>
           </nldd-container>
         </nldd-card>
-        <nldd-card>
+        <nldd-card role="listitem">
           <nldd-container padding="16">
             <nldd-icon icon="seal-check-mark" size="32"></nldd-icon>
             <nldd-spacer size="4"></nldd-spacer>
@@ -129,22 +129,22 @@
       <nldd-rich-text slot="header">
         <p>Hetzelfde onderzoek, in negen stappen. Bij elke stap staat wie het werk doet.</p>
       </nldd-rich-text>
-      <nldd-container layout="grid" sm-gap="16" md-gap="24" lg-gap="24" sm-column-count="1" md-column-count="3" lg-column-count="3">
-        <nldd-card>
+      <nldd-container role="list" layout="grid" sm-gap="16" md-gap="24" lg-gap="24" sm-column-count="1" md-column-count="3" lg-column-count="3">
+        <nldd-card role="listitem">
           <nldd-container padding="16">
             <nldd-tag color="groen" text="Script"></nldd-tag>
             <nldd-spacer size="8"></nldd-spacer>
             <nldd-rich-text><p>Code die bij dezelfde pagina elke keer hetzelfde doet. Er komt geen taalmodel aan te pas.</p></nldd-rich-text>
           </nldd-container>
         </nldd-card>
-        <nldd-card>
+        <nldd-card role="listitem">
           <nldd-container padding="16">
             <nldd-tag color="paars" text="Agent"></nldd-tag>
             <nldd-spacer size="8"></nldd-spacer>
             <nldd-rich-text><p>Een taalmodel dat alleen via de commando's van loep werkt. Een script controleert zijn antwoord voordat het telt.</p></nldd-rich-text>
           </nldd-container>
         </nldd-card>
-        <nldd-card>
+        <nldd-card role="listitem">
           <nldd-container padding="16">
             <nldd-tag color="oranje" text="Mens"></nldd-tag>
             <nldd-spacer size="8"></nldd-spacer>
@@ -176,38 +176,38 @@
       </nldd-card>
       <nldd-container slot="right" layout="stack" gap="8">
         <nldd-text size="sm" color="secondary"><code>inventory</code> · 29 pagina's, opgeteld</nldd-text>
-        <nldd-container layout="grid" column-count="3" sm-column-count="2" gap="8">
-          <nldd-box>
+        <nldd-container role="list" layout="grid" column-count="3" sm-column-count="2" gap="8">
+          <nldd-box role="listitem">
             <nldd-container padding="16" layout="stack" gap="4">
               <nldd-text size="display-6">39.042</nldd-text>
               <nldd-text size="sm" color="secondary">elementen</nldd-text>
             </nldd-container>
           </nldd-box>
-          <nldd-box>
+          <nldd-box role="listitem">
             <nldd-container padding="16" layout="stack" gap="4">
               <nldd-text size="display-6">6.442</nldd-text>
               <nldd-text size="sm" color="secondary">shadow roots</nldd-text>
             </nldd-container>
           </nldd-box>
-          <nldd-box>
+          <nldd-box role="listitem">
             <nldd-container padding="16" layout="stack" gap="4">
               <nldd-text size="display-6">1.013</nldd-text>
               <nldd-text size="sm" color="secondary">afbeeldingen</nldd-text>
             </nldd-container>
           </nldd-box>
-          <nldd-box>
+          <nldd-box role="listitem">
             <nldd-container padding="16" layout="stack" gap="4">
               <nldd-text size="display-6">623</nldd-text>
               <nldd-text size="sm" color="secondary">koppen</nldd-text>
             </nldd-container>
           </nldd-box>
-          <nldd-box>
+          <nldd-box role="listitem">
             <nldd-container padding="16" layout="stack" gap="4">
               <nldd-text size="display-6">84</nldd-text>
               <nldd-text size="sm" color="secondary">dialogen</nldd-text>
             </nldd-container>
           </nldd-box>
-          <nldd-box>
+          <nldd-box role="listitem">
             <nldd-container padding="16" layout="stack" gap="4">
               <nldd-text size="display-6">58</nldd-text>
               <nldd-text size="sm" color="secondary">formulieren</nldd-text>
@@ -581,8 +581,8 @@
       <nldd-rich-text slot="header">
         <p>Op een echte site houdt de toolbox elk verzoek tegen dat iets kan wijzigen, wat een agent ook probeert.</p>
       </nldd-rich-text>
-      <nldd-container layout="grid" sm-gap="16" md-gap="24" lg-gap="24" sm-column-count="1" md-column-count="3" lg-column-count="3">
-        <nldd-card>
+      <nldd-container role="list" layout="grid" sm-gap="16" md-gap="24" lg-gap="24" sm-column-count="1" md-column-count="3" lg-column-count="3">
+        <nldd-card role="listitem">
           <nldd-container padding="16">
             <nldd-icon icon="paper-plane" size="32"></nldd-icon>
             <nldd-spacer size="12"></nldd-spacer>
@@ -591,7 +591,7 @@
             <nldd-rich-text><p>Formulieren en chatberichten gaan alleen weg op een testomgeving die iemand met naam en functie heeft verklaard.</p></nldd-rich-text>
           </nldd-container>
         </nldd-card>
-        <nldd-card>
+        <nldd-card role="listitem">
           <nldd-container padding="16">
             <nldd-icon icon="key" size="32"></nldd-icon>
             <nldd-spacer size="12"></nldd-spacer>
@@ -600,7 +600,7 @@
             <nldd-rich-text><p>Je logt zelf in, in een browservenster. loep bewaart de sessie en krijgt het wachtwoord nooit te zien.</p></nldd-rich-text>
           </nldd-container>
         </nldd-card>
-        <nldd-card>
+        <nldd-card role="listitem">
           <nldd-container padding="16">
             <nldd-icon icon="shield-lock" size="32"></nldd-icon>
             <nldd-spacer size="12"></nldd-spacer>
@@ -618,97 +618,97 @@
       <nldd-rich-text slot="header">
         <p>loep bouwt op open software die onderzoekers al gebruiken. Versies en licenties staan in <a href="https://github.com/NederlandseDigitaleDienst/loep/blob/main/toolbox/THIRD-PARTY.md">THIRD-PARTY.md</a>.</p>
       </nldd-rich-text>
-      <nldd-container layout="lanes" sm-gap="16" md-gap="24" lg-gap="24" sm-column-count="1" md-column-count="2" lg-column-count="3">
-        <nldd-card>
+      <nldd-container role="list" layout="lanes" sm-gap="16" md-gap="24" lg-gap="24" sm-column-count="1" md-column-count="2" lg-column-count="3">
+        <nldd-card role="listitem">
           <nldd-container padding="16">
             <nldd-icon icon="microscope" size="32"></nldd-icon>
             <nldd-spacer size="12"></nldd-spacer>
             <nldd-title size="4" text="Regel-engines" heading-level="3"></nldd-title>
             <nldd-spacer size="8"></nldd-spacer>
-            <nldd-container layout="wrap" gap="8">
-              <nldd-tag size="sm" text="axe-core"></nldd-tag>
-              <nldd-tag size="sm" text="Alfa"></nldd-tag>
-              <nldd-tag size="sm" text="IBM Equal Access"></nldd-tag>
-              <nldd-tag size="sm" text="QualWeb"></nldd-tag>
+            <nldd-container role="list" layout="wrap" gap="8">
+              <nldd-tag role="listitem" size="sm" text="axe-core"></nldd-tag>
+              <nldd-tag role="listitem" size="sm" text="Alfa"></nldd-tag>
+              <nldd-tag role="listitem" size="sm" text="IBM Equal Access"></nldd-tag>
+              <nldd-tag role="listitem" size="sm" text="QualWeb"></nldd-tag>
             </nldd-container>
             <nldd-spacer size="8"></nldd-spacer>
             <nldd-rich-text><p>axe-core en Alfa draaien op elke pagina, in licht en donker. IBM en QualWeb zet een agent erbij met <code>rules</code>. Hoe vaak elk gelijk heeft, meet loep op de testgevallen die W3C bij de ACT-regels onderhoudt.</p></nldd-rich-text>
           </nldd-container>
         </nldd-card>
-        <nldd-card>
+        <nldd-card role="listitem">
           <nldd-container padding="16">
             <nldd-icon icon="ear" size="32"></nldd-icon>
             <nldd-spacer size="12"></nldd-spacer>
             <nldd-title size="4" text="Toegankelijke naam" heading-level="3"></nldd-title>
             <nldd-spacer size="8"></nldd-spacer>
-            <nldd-container layout="wrap" gap="8">
-              <nldd-tag size="sm" text="Chromium"></nldd-tag>
-              <nldd-tag size="sm" text="Alfa"></nldd-tag>
-              <nldd-tag size="sm" text="axe-core"></nldd-tag>
-              <nldd-tag size="sm" text="Playwright"></nldd-tag>
-              <nldd-tag size="sm" text="dom-accessibility-api"></nldd-tag>
+            <nldd-container role="list" layout="wrap" gap="8">
+              <nldd-tag role="listitem" size="sm" text="Chromium"></nldd-tag>
+              <nldd-tag role="listitem" size="sm" text="Alfa"></nldd-tag>
+              <nldd-tag role="listitem" size="sm" text="axe-core"></nldd-tag>
+              <nldd-tag role="listitem" size="sm" text="Playwright"></nldd-tag>
+              <nldd-tag role="listitem" size="sm" text="dom-accessibility-api"></nldd-tag>
             </nldd-container>
             <nldd-spacer size="8"></nldd-spacer>
             <nldd-rich-text><p>Vijf berekeningen van de naam die hulpsoftware krijgt. Zijn ze het oneens, dan kijkt de agent dichterbij en kiest nooit het gunstigste antwoord.</p></nldd-rich-text>
           </nldd-container>
         </nldd-card>
-        <nldd-card>
+        <nldd-card role="listitem">
           <nldd-container padding="16">
             <nldd-icon icon="speaker-volume-high" size="32"></nldd-icon>
             <nldd-spacer size="12"></nldd-spacer>
             <nldd-title size="4" text="Schermlezers" heading-level="3"></nldd-title>
             <nldd-spacer size="8"></nldd-spacer>
-            <nldd-container layout="wrap" gap="8">
-              <nldd-tag size="sm" text="Guidepup Virtual Screen Reader"></nldd-tag>
-              <nldd-tag size="sm" text="VoiceOver"></nldd-tag>
+            <nldd-container role="list" layout="wrap" gap="8">
+              <nldd-tag role="listitem" size="sm" text="Guidepup Virtual Screen Reader"></nldd-tag>
+              <nldd-tag role="listitem" size="sm" text="VoiceOver"></nldd-tag>
             </nldd-container>
             <nldd-spacer size="8"></nldd-spacer>
             <nldd-rich-text><p>Een nagebootste schermlezer in de pagina, en als je dat aanzet VoiceOver met Safari in een virtuele Mac.</p></nldd-rich-text>
           </nldd-container>
         </nldd-card>
-        <nldd-card>
+        <nldd-card role="listitem">
           <nldd-container padding="16">
             <nldd-icon icon="display" size="32"></nldd-icon>
             <nldd-spacer size="12"></nldd-spacer>
             <nldd-title size="4" text="Browsers" heading-level="3"></nldd-title>
             <nldd-spacer size="8"></nldd-spacer>
-            <nldd-container layout="wrap" gap="8">
-              <nldd-tag size="sm" text="Chromium"></nldd-tag>
-              <nldd-tag size="sm" text="WebKit"></nldd-tag>
-              <nldd-tag size="sm" text="Firefox"></nldd-tag>
+            <nldd-container role="list" layout="wrap" gap="8">
+              <nldd-tag role="listitem" size="sm" text="Chromium"></nldd-tag>
+              <nldd-tag role="listitem" size="sm" text="WebKit"></nldd-tag>
+              <nldd-tag role="listitem" size="sm" text="Firefox"></nldd-tag>
             </nldd-container>
             <nldd-spacer size="8"></nldd-spacer>
             <nldd-rich-text><p>Gemeten wordt in Chromium. WebKit en Firefox zijn er voor een tweede meting.</p></nldd-rich-text>
           </nldd-container>
         </nldd-card>
-        <nldd-card>
+        <nldd-card role="listitem">
           <nldd-container padding="16">
             <nldd-icon icon="file-pdf" size="32"></nldd-icon>
             <nldd-spacer size="12"></nldd-spacer>
             <nldd-title size="4" text="Documenten" heading-level="3"></nldd-title>
             <nldd-spacer size="8"></nldd-spacer>
-            <nldd-container layout="wrap" gap="8">
-              <nldd-tag size="sm" text="veraPDF"></nldd-tag>
-              <nldd-tag size="sm" text="qpdf"></nldd-tag>
-              <nldd-tag size="sm" text="Poppler"></nldd-tag>
-              <nldd-tag size="sm" text="Tesseract"></nldd-tag>
+            <nldd-container role="list" layout="wrap" gap="8">
+              <nldd-tag role="listitem" size="sm" text="veraPDF"></nldd-tag>
+              <nldd-tag role="listitem" size="sm" text="qpdf"></nldd-tag>
+              <nldd-tag role="listitem" size="sm" text="Poppler"></nldd-tag>
+              <nldd-tag role="listitem" size="sm" text="Tesseract"></nldd-tag>
             </nldd-container>
             <nldd-spacer size="8"></nldd-spacer>
             <nldd-rich-text><p>Tags, koppen, tabellen en tekstalternatieven uit het bestand zelf, PDF/UA-1 met veraPDF, en tekstherkenning voor scans.</p></nldd-rich-text>
           </nldd-container>
         </nldd-card>
-        <nldd-card>
+        <nldd-card role="listitem">
           <nldd-container padding="16">
             <nldd-icon icon="text-format-size" size="32"></nldd-icon>
             <nldd-spacer size="12"></nldd-spacer>
             <nldd-title size="4" text="Code en taal" heading-level="3"></nldd-title>
             <nldd-spacer size="8"></nldd-spacer>
-            <nldd-container layout="wrap" gap="8">
-              <nldd-tag size="sm" text="Nu Html Checker"></nldd-tag>
-              <nldd-tag size="sm" text="html-validate"></nldd-tag>
-              <nldd-tag size="sm" text="CLD3"></nldd-tag>
-              <nldd-tag size="sm" text="eld"></nldd-tag>
-              <nldd-tag size="sm" text="tabbable"></nldd-tag>
+            <nldd-container role="list" layout="wrap" gap="8">
+              <nldd-tag role="listitem" size="sm" text="Nu Html Checker"></nldd-tag>
+              <nldd-tag role="listitem" size="sm" text="html-validate"></nldd-tag>
+              <nldd-tag role="listitem" size="sm" text="CLD3"></nldd-tag>
+              <nldd-tag role="listitem" size="sm" text="eld"></nldd-tag>
+              <nldd-tag role="listitem" size="sm" text="tabbable"></nldd-tag>
             </nldd-container>
             <nldd-spacer size="8"></nldd-spacer>
             <nldd-rich-text><p>De HTML zoals de server hem stuurt, de taal van de tekst tegenover de taal in de code, en de tabvolgorde die uit de code volgt.</p></nldd-rich-text>
@@ -722,67 +722,67 @@
           <nldd-spacer size="8"></nldd-spacer>
           <nldd-rich-text><p>Een agent opent zelf pagina's in een browser van loep. Elk commando legt een waarneming vast, en daar verwijst een oordeel naar.</p></nldd-rich-text>
             <nldd-spacer size="16"></nldd-spacer>
-            <nldd-text size="sm" color="secondary">Kijken</nldd-text>
+            <nldd-text id="groep-kijken" size="sm" color="secondary">Kijken</nldd-text>
             <nldd-spacer size="8"></nldd-spacer>
-            <nldd-container layout="wrap" gap="8">
-              <nldd-tag size="sm" text="open"></nldd-tag>
-              <nldd-tag size="sm" text="look"></nldd-tag>
-              <nldd-tag size="sm" text="find"></nldd-tag>
-              <nldd-tag size="sm" text="crop"></nldd-tag>
-              <nldd-tag size="sm" text="ax"></nldd-tag>
-              <nldd-tag size="sm" text="html"></nldd-tag>
-              <nldd-tag size="sm" text="style"></nldd-tag>
+            <nldd-container role="list" aria-labelledby="groep-kijken" layout="wrap" gap="8">
+              <nldd-tag role="listitem" size="sm" text="open"></nldd-tag>
+              <nldd-tag role="listitem" size="sm" text="look"></nldd-tag>
+              <nldd-tag role="listitem" size="sm" text="find"></nldd-tag>
+              <nldd-tag role="listitem" size="sm" text="crop"></nldd-tag>
+              <nldd-tag role="listitem" size="sm" text="ax"></nldd-tag>
+              <nldd-tag role="listitem" size="sm" text="html"></nldd-tag>
+              <nldd-tag role="listitem" size="sm" text="style"></nldd-tag>
             </nldd-container>
             <nldd-spacer size="16"></nldd-spacer>
-            <nldd-text size="sm" color="secondary">Bedienen</nldd-text>
+            <nldd-text id="groep-bedienen" size="sm" color="secondary">Bedienen</nldd-text>
             <nldd-spacer size="8"></nldd-spacer>
-            <nldd-container layout="wrap" gap="8">
-              <nldd-tag size="sm" text="click"></nldd-tag>
-              <nldd-tag size="sm" text="hover"></nldd-tag>
-              <nldd-tag size="sm" text="key"></nldd-tag>
-              <nldd-tag size="sm" text="tab"></nldd-tag>
-              <nldd-tag size="sm" text="type"></nldd-tag>
-              <nldd-tag size="sm" text="select"></nldd-tag>
-              <nldd-tag size="sm" text="drag"></nldd-tag>
-              <nldd-tag size="sm" text="swipe"></nldd-tag>
-              <nldd-tag size="sm" text="paste"></nldd-tag>
-              <nldd-tag size="sm" text="press"></nldd-tag>
+            <nldd-container role="list" aria-labelledby="groep-bedienen" layout="wrap" gap="8">
+              <nldd-tag role="listitem" size="sm" text="click"></nldd-tag>
+              <nldd-tag role="listitem" size="sm" text="hover"></nldd-tag>
+              <nldd-tag role="listitem" size="sm" text="key"></nldd-tag>
+              <nldd-tag role="listitem" size="sm" text="tab"></nldd-tag>
+              <nldd-tag role="listitem" size="sm" text="type"></nldd-tag>
+              <nldd-tag role="listitem" size="sm" text="select"></nldd-tag>
+              <nldd-tag role="listitem" size="sm" text="drag"></nldd-tag>
+              <nldd-tag role="listitem" size="sm" text="swipe"></nldd-tag>
+              <nldd-tag role="listitem" size="sm" text="paste"></nldd-tag>
+              <nldd-tag role="listitem" size="sm" text="press"></nldd-tag>
             </nldd-container>
             <nldd-spacer size="16"></nldd-spacer>
-            <nldd-text size="sm" color="secondary">Meten</nldd-text>
+            <nldd-text id="groep-meten" size="sm" color="secondary">Meten</nldd-text>
             <nldd-spacer size="8"></nldd-spacer>
-            <nldd-container layout="wrap" gap="8">
-              <nldd-tag size="sm" text="name"></nldd-tag>
-              <nldd-tag size="sm" text="contrast"></nldd-tag>
-              <nldd-tag size="sm" text="distinct"></nldd-tag>
-              <nldd-tag size="sm" text="focus"></nldd-tag>
-              <nldd-tag size="sm" text="target"></nldd-tag>
-              <nldd-tag size="sm" text="taborder"></nldd-tag>
-              <nldd-tag size="sm" text="order"></nldd-tag>
-              <nldd-tag size="sm" text="reflow"></nldd-tag>
-              <nldd-tag size="sm" text="zoom"></nldd-tag>
-              <nldd-tag size="sm" text="spacing"></nldd-tag>
-              <nldd-tag size="sm" text="forced"></nldd-tag>
-              <nldd-tag size="sm" text="rules"></nldd-tag>
-              <nldd-tag size="sm" text="lang"></nldd-tag>
-              <nldd-tag size="sm" text="parse"></nldd-tag>
-              <nldd-tag size="sm" text="ocr"></nldd-tag>
-              <nldd-tag size="sm" text="motion"></nldd-tag>
-              <nldd-tag size="sm" text="timers"></nldd-tag>
-              <nldd-tag size="sm" text="media"></nldd-tag>
+            <nldd-container role="list" aria-labelledby="groep-meten" layout="wrap" gap="8">
+              <nldd-tag role="listitem" size="sm" text="name"></nldd-tag>
+              <nldd-tag role="listitem" size="sm" text="contrast"></nldd-tag>
+              <nldd-tag role="listitem" size="sm" text="distinct"></nldd-tag>
+              <nldd-tag role="listitem" size="sm" text="focus"></nldd-tag>
+              <nldd-tag role="listitem" size="sm" text="target"></nldd-tag>
+              <nldd-tag role="listitem" size="sm" text="taborder"></nldd-tag>
+              <nldd-tag role="listitem" size="sm" text="order"></nldd-tag>
+              <nldd-tag role="listitem" size="sm" text="reflow"></nldd-tag>
+              <nldd-tag role="listitem" size="sm" text="zoom"></nldd-tag>
+              <nldd-tag role="listitem" size="sm" text="spacing"></nldd-tag>
+              <nldd-tag role="listitem" size="sm" text="forced"></nldd-tag>
+              <nldd-tag role="listitem" size="sm" text="rules"></nldd-tag>
+              <nldd-tag role="listitem" size="sm" text="lang"></nldd-tag>
+              <nldd-tag role="listitem" size="sm" text="parse"></nldd-tag>
+              <nldd-tag role="listitem" size="sm" text="ocr"></nldd-tag>
+              <nldd-tag role="listitem" size="sm" text="motion"></nldd-tag>
+              <nldd-tag role="listitem" size="sm" text="timers"></nldd-tag>
+              <nldd-tag role="listitem" size="sm" text="media"></nldd-tag>
             </nldd-container>
             <nldd-spacer size="16"></nldd-spacer>
-            <nldd-text size="sm" color="secondary">Voorlezen</nldd-text>
+            <nldd-text id="groep-voorlezen" size="sm" color="secondary">Voorlezen</nldd-text>
             <nldd-spacer size="8"></nldd-spacer>
-            <nldd-container layout="wrap" gap="8">
-              <nldd-tag size="sm" text="speak"></nldd-tag>
-              <nldd-tag size="sm" text="voiceover"></nldd-tag>
+            <nldd-container role="list" aria-labelledby="groep-voorlezen" layout="wrap" gap="8">
+              <nldd-tag role="listitem" size="sm" text="speak"></nldd-tag>
+              <nldd-tag role="listitem" size="sm" text="voiceover"></nldd-tag>
             </nldd-container>
             <nldd-spacer size="16"></nldd-spacer>
-            <nldd-text size="sm" color="secondary">Documenten</nldd-text>
+            <nldd-text id="groep-documenten" size="sm" color="secondary">Documenten</nldd-text>
             <nldd-spacer size="8"></nldd-spacer>
-            <nldd-container layout="wrap" gap="8">
-              <nldd-tag size="sm" text="document"></nldd-tag>
+            <nldd-container role="list" aria-labelledby="groep-documenten" layout="wrap" gap="8">
+              <nldd-tag role="listitem" size="sm" text="document"></nldd-tag>
             </nldd-container>
         </nldd-container>
       </nldd-card>
