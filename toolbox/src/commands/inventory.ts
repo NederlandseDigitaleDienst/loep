@@ -614,7 +614,8 @@ export async function inventory(options: InventoryOptions): Promise<Inventory> {
   const sitemap: string[] = [];
   if (!fixed && !login) for (const each of origins) sitemap.push(...(await fetchSitemapUrls(each)).filter((url) => isInScope(url, origins, prefix)));
   // The page for a missing address, asked for on every origin: each can have its own.
-  const missingPages = origins.map((each) => `${each}${NOT_FOUND_PATH}`);
+  // On the first origin it is asked under the path of the site: a host shared with other sites can answer for each of them.
+  const missingPages = origins.map((each, index) => (index === 0 ? `${prefix}${NOT_FOUND_PATH.slice(1)}` : `${each}${NOT_FOUND_PATH}`));
   const notFoundProbe = missingPages[0]!;
 
   const foundVia = new Map<string, Set<string>>();
@@ -748,7 +749,7 @@ export async function inventory(options: InventoryOptions): Promise<Inventory> {
         }
         for (const anchor of anchors) {
           const linked = documentKind(anchor.href);
-          if (!ownOrigin(anchor.href)) {
+          if (!isInScope(anchor.href, origins, prefix)) {
             if (linked) elsewhere.set(anchor.href, linked);
             continue;
           }
