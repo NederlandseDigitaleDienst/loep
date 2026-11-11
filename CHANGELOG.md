@@ -6,6 +6,16 @@ Wat er per versie van loep is veranderd. De versie staat op het voorblad en onde
 
 <!-- towncrier: een nieuwe versie komt hieronder -->
 
+## 0.26.0 (2026-11-11)
+
+Deze versie is uitgebracht zonder meting: Niet gemeten: sinds 0.25.0 veranderden de opdrachten, procedures, instrumenten en oordeelsregels niet. Nieuw zijn het rapport als HTML en een fix aan de testsite die op 320 pixels in WebKit per ongeluk uitstak (#499); de ingebouwde gebreken bleven gelijk.
+
+### Verder
+
+- De zoekbalk van de testsite steekt in WebKit op 320 pixels niet meer buiten beeld. Op de schone tweeling keurde loep daardoor 1.4.10 terecht af, terwijl de sleutel geen gebrek noemt. ([#499](https://github.com/NederlandseDigitaleDienst/loep/issues/499))
+- Het rapport komt nu ook als `rapport.html`: één bestand dat offline werkt, in het NLDD Designsysteem. Het toont de pagina's van de site met een genummerde markering op elk gebrek, de werklijst met uitsneden en een knop voor de details, en de bijlagen op een eigen tabblad.
+- Met `render --run <run> --embedded` schrijft loep het HTML-rapport als fragment naar stdout, zonder kop, voet of designsysteem. Het past in een pagina van een site die `@nldd/design-system` zelf laadt, in de opmaak van die site. Zo staat het rapport van de landingspagina van loep nu als voorbeeld op die site, en `just site-rapport <run>` zet een nieuw rapport daar neer.
+
 ## 0.25.0 (2026-11-10)
 
 ### Wat een uitkomst kan veranderen

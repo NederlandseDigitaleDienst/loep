@@ -1,1 +1,0 @@
-Met `render --run <run> --embedded` schrijft loep het HTML-rapport als fragment naar stdout, zonder kop, voet of designsysteem. Het past in een pagina van een site die `@nldd/design-system` zelf laadt, in de opmaak van die site. Zo staat het rapport van de landingspagina van loep nu als voorbeeld op die site, en `just site-rapport <run>` zet een nieuw rapport daar neer.
