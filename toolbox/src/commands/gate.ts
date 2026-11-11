@@ -590,6 +590,53 @@ export function tile(source: PNG): PNG {
   return out;
 }
 
+/** Rows kept above and below a row with a Tab stop, and the height of the band that stands for what was left out. */
+const STOP_CONTEXT = 120;
+const COLLAPSED_BAND = 24;
+
+/**
+ * The picture of the Tab order with the stretches without a stop folded into a grey band, so a
+ * long page with a part without links or buttons still shows every stop in its tile (#507). A
+ * stop is a row with the colour of its frame; a picture without one stays as it is.
+ */
+export function collapseWithoutStops(source: PNG, colour: readonly [number, number, number] = TILE_COLOUR): PNG {
+  const marked = new Array<boolean>(source.height).fill(false);
+  for (let y = 0; y < source.height; y++) {
+    for (let x = 0; x < source.width; x++) {
+      const offset = (y * source.width + x) * 4;
+      if (source.data[offset] === colour[0] && source.data[offset + 1] === colour[1] && source.data[offset + 2] === colour[2]) {
+        marked[y] = true;
+        break;
+      }
+    }
+  }
+  if (!marked.includes(true)) return source;
+  const keep = marked.map((_, y) => marked.slice(Math.max(0, y - STOP_CONTEXT), y + STOP_CONTEXT + 1).includes(true));
+  // Each run of rows to leave out becomes one band; a run shorter than the band is kept as it is.
+  const parts: ({ from: number; to: number } | "band")[] = [];
+  for (let y = 0; y < source.height; ) {
+    let end = y;
+    while (end < source.height && keep[end] === keep[y]) end++;
+    if (keep[y] || end - y <= COLLAPSED_BAND) parts.push({ from: y, to: end });
+    else parts.push("band");
+    y = end;
+  }
+  if (!parts.includes("band")) return source;
+  const height = parts.reduce((sum, part) => sum + (part === "band" ? COLLAPSED_BAND : part.to - part.from), 0);
+  const out = new PNG({ width: source.width, height });
+  let y = 0;
+  for (const part of parts) {
+    if (part === "band") {
+      for (let row = 0; row < COLLAPSED_BAND; row++) for (let x = 0; x < source.width; x++) out.data.set(row % 6 < 3 ? [200, 200, 200, 255] : [235, 235, 235, 255], ((y + row) * source.width + x) * 4);
+      y += COLLAPSED_BAND;
+    } else {
+      PNG.bitblt(source, out, 0, part.from, source.width, part.to - part.from, 0, y);
+      y += part.to - part.from;
+    }
+  }
+  return out;
+}
+
 /** Put numbered tiles next to each other on one white sheet. */
 export function contactSheet(tiles: PNG[]): PNG {
   const rows: PNG[][] = [];
@@ -631,7 +678,7 @@ export async function buildSheets(run: RunData, runDir: string, outDir: string):
     const candidates: Omit<Tile, "nr">[] = [
       { state: "default", file: `${type.page.dir}/screenshot-light.png`, descriptionNl: "de pagina zoals ze is gemeten, breed scherm (bovenste deel)" },
       { state: "narrow", file: `${type.page.dir}/probes/reflow.png`, descriptionNl: "dezelfde pagina op een smal scherm van 320 pixels (bovenste deel)" },
-      { state: "taborder", file: `${type.page.dir}/probes/tabwalk.png`, descriptionNl: "de pagina met de Tab-stops genummerd in de volgorde van de Tab-toets; een stop met een gestippeld kader en \"alleen bij focus\" is er zonder focus niet, en dat is geen fout van dit beeld" },
+      { state: "taborder", file: `${type.page.dir}/probes/tabwalk.png`, descriptionNl: "de pagina met de Tab-stops genummerd in de volgorde van de Tab-toets; een stop met een gestippeld kader en \"alleen bij focus\" is er zonder focus niet, en dat is geen fout van dit beeld; een grijs gestreepte band staat voor een stuk van de pagina zonder Tab-stop dat is weggelaten" },
     ];
     const components: string[] = [];
     const everywhere: string[] = [];
@@ -656,7 +703,7 @@ export async function buildSheets(run: RunData, runDir: string, outDir: string):
     if (present.length === 0) continue;
     const tiles = present.map((candidate, index) => ({ nr: index + 1, ...candidate }));
     const file = join("gate", `sheet-${type.id}.png`);
-    const bytes = PNG.sync.write(contactSheet(tiles.map((entry) => tile(PNG.sync.read(readFileSync(join(runDir, entry.file)))))));
+    const bytes = PNG.sync.write(contactSheet(tiles.map((entry) => tile((entry.state === "taborder" ? collapseWithoutStops : (picture: PNG) => picture)(PNG.sync.read(readFileSync(join(runDir, entry.file))))))));
     await writeFileAtomic(join(outDir, file), bytes);
     sheets.push({ pageType: type.id, page: type.page.label, url: type.page.item.url, file, sha256: sha256(bytes), tiles, componentsNl: components, ...(everywhere.length > 0 ? { everywhereNl: everywhere } : {}), ...(processes.length > 0 ? { processesNl: processes } : {}), contentNl: (model?.content ?? []).filter((content) => content.pageTypes.includes(type.id)).map((content) => `${content.id} (${content.kind}): ${content.descriptionNl}`), framesNl: framesOn(type.page, model), keysNl: keysOn(type.page, run) });
   }
