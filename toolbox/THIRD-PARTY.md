@@ -29,6 +29,9 @@ De toolbox zelf valt onder EUPL-1.2. Dit overzicht noemt wat de toolbox van ande
 | `pngjs` | 7.0.0 | MIT | Schermafbeeldingen lezen en schrijven |
 | `yaml` | 2.9.1 | ISC | Procedures lezen |
 | `mockttp` | 4.6.5 | Apache-2.0 | Proxy op de eigen machine voor een run met geheimen (`src/browser/boundary.ts`); alleen geladen in zo'n run. Brengt 209 pakketten mee, geen daarvan onder GPL; toegevoegd en gelezen op 30 oktober 2026 |
+| `@nldd/design-system` | 0.21.1 | EUPL-1.2 | Het rapport als HTML (`src/lib/report-html.ts`): de componenten, de stylesheets en de lettertypen gaan in het bestand mee. Brengt 76 pakketten mee (MIT, BSD-2-Clause, BSD-3-Clause, ISC), geen daarvan onder GPL; het rapport bundelt daaruit `lit` (BSD-3-Clause) en `@floating-ui` (MIT) met de componenten die het toont. Toegevoegd en gelezen op 11 november 2026 |
+| `esbuild` | 0.25.10 | MIT | Bundelt voor het HTML-rapport alleen de componenten van `@nldd/design-system` die het rapport toont; de licenties van wat erin zit staan aan het eind van het script. Brengt het programma voor het eigen platform mee (`@esbuild/<platform>`, MIT). Toegevoegd en gelezen op 11 november 2026 |
+| `jpeg-js` | 0.4.4 | BSD-3-Clause | Schermafbeeldingen van pagina's als JPEG in het HTML-rapport (`src/lib/page-shots.ts`), zodat het bestand klein blijft. Geen eigen afhankelijkheden. Toegevoegd en gelezen op 11 november 2026 |
 | `@types/pngjs` | 6.0.5 | MIT | Typen |
 | `typescript` (alleen ontwikkeling) | 7.0.2 | Apache-2.0 | Typecontrole |
 | `@types/node` (alleen ontwikkeling) | 22.18.0 | MIT | Typen |
@@ -38,6 +41,8 @@ De vijf pakketten van QualWeb hebben geen licentiebestand in het pakket; de lice
 ## Pakketten die daarmee meekomen
 
 Alle 138 pakketten die bij een installatie zonder ontwikkelpakketten in `node_modules` staan, hebben een van deze licenties: MIT (119), ISC (10), Apache-2.0 (6), MPL-2.0 (1), BSD-3-Clause (1), 0BSD (1). Geen daarvan is een copyleftlicentie die de toolbox raakt.
+
+In het HTML-rapport staan twee lettertypen uit `@nldd/design-system`: Inter en JetBrains Mono, allebei onder de SIL Open Font License 1.1 (zie `NOTICES.md` in dat pakket). Het rapport gebruikt Inter en niet RijksSans, omdat RijksSans alleen voor de Rijksoverheid is en iedereen loep mag draaien.
 
 `npm audit` meldt drie kwetsbaarheden, alle drie via `nanoid` 2.1.11 dat met `cld3-asm` meekomt (`cld3-asm` > `emscripten-wasm-loader` > `nanoid`). De toolbox geeft daar geen invoer van buiten aan door: de lader gebruikt het om een naam te maken bij het starten van de WebAssembly-module. De zeventien pakketten die met `@guidepup/virtual-screen-reader` meekomen, voegen geen melding toe.
 
