@@ -5,7 +5,7 @@ import { redactor } from "../src/commands/feedback.ts";
 import { formPagesNl, pageLimitNl, pageLimitReason, type Inventory, type InventoryPage } from "../src/commands/inventory.ts";
 import { buildSample } from "../src/commands/sample.ts";
 import { documentScopeNl } from "../src/lib/documents.ts";
-import { isPrivateHost, notFoundProbes, originsNl, originsOfRun, pagesInScopeNl, parseOrigin, privateFromPublicSite, scopeHost, scopeHostOf, siteHosts, siteLabel, siteOrigins } from "../src/lib/origins.ts";
+import { isPrivateHost, notFoundProbes, originsNl, originsOfRun, pagesInScopeNl, parseOrigin, isInScope, scopePrefix, privateFromPublicSite, scopeHost, scopeHostOf, siteHosts, siteLabel, siteOrigins } from "../src/lib/origins.ts";
 import { otherDomains } from "../src/lib/statement.ts";
 import { urlInScope } from "../src/session/safety.ts";
 
@@ -62,6 +62,10 @@ test("the origins given at inventory are scheme, host and port, each once, the s
 test("the scope names every origin of the site, documents too", () => {
   assert.equal(pagesInScopeNl([main]), "Alle pagina's op https://example.nl", "one origin reads as it always did");
   assert.equal(pagesInScopeNl([main, docs]), "Alle pagina's op https://example.nl en https://docs.example.nl");
+  assert.equal(pagesInScopeNl([main], `${main}/`), "Alle pagina's op https://example.nl", "a start on the root is the whole origin");
+  assert.equal(pagesInScopeNl([main], `${main}/start`), "Alle pagina's op https://example.nl");
+  assert.equal(pagesInScopeNl([main], `${main}/team/site/`), "Alle pagina's onder https://example.nl/team/site/", "a site under a path of a shared host is that path");
+  assert.equal(pagesInScopeNl([main, docs], `${main}/team/site/`), "Alle pagina's onder https://example.nl/team/site/, en alle pagina's op https://docs.example.nl");
   const documents = { onSite: 2, byKind: { pdf: 2 }, elsewhere: 0, notChosen: 0, notChosenByKind: {}, criteria: ["1.1.1"], items: [] };
   assert.match(documentScopeNl(documents, [main, docs], 0).includedNl[0]!, /^Documenten op https:\/\/example\.nl en https:\/\/docs\.example\.nl \(pdf/);
   assert.match(documentScopeNl(documents, main, 0).includedNl[0]!, /^Documenten op https:\/\/example\.nl \(pdf/);
@@ -135,4 +139,17 @@ test("each origin keeps its own start page in the sample, and each its own page 
 test("what goes to the repository of loep names no host of the site, on any of its origins", () => {
   const redact = redactor({ name: "Voorbeeld", baseUrl: `${main}/`, origins: [main, docs], organisation: null });
   assert.equal(redact("Op docs.example.nl en op example.nl"), "Op <site> en op <site>");
+});
+
+test("a start address under a path bounds the run to that path on its own origin", () => {
+  assert.equal(scopePrefix(`${main}/team/site/`), `${main}/team/site/`);
+  assert.equal(scopePrefix(`${main}/team/site/index.html`), `${main}/team/site/`);
+  assert.equal(scopePrefix(`${main}/`), `${main}/`);
+  const prefix = scopePrefix(`${main}/team/site/`);
+  assert.ok(isInScope(`${main}/team/site/rapport/`, [main, docs], prefix));
+  assert.ok(isInScope(`${main}/team/site`, [main, docs], prefix), "the path without its slash is the same site");
+  assert.ok(!isInScope(`${main}/team/other/`, [main, docs], prefix), "another site on the same host");
+  assert.ok(!isInScope(`${main}/`, [main, docs], prefix));
+  assert.ok(isInScope(`${docs}/anything`, [main, docs], prefix), "a further origin is whole");
+  assert.ok(!isInScope("https://other.example/team/site/", [main, docs], prefix));
 });

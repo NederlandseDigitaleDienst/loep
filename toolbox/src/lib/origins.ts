@@ -76,9 +76,29 @@ export function notFoundProbes(inventory: { notFoundProbe: string; notFoundProbe
   return inventory.notFoundProbes && inventory.notFoundProbes.length > 0 ? [...inventory.notFoundProbes] : [inventory.notFoundProbe];
 }
 
-/** The first line of the scope of an evaluation: every page on every origin of the site. */
-export function pagesInScopeNl(origins: readonly string[]): string {
-  return `Alle pagina's op ${originsNl(origins)}`;
+/**
+ * The part of the first origin that the run is about: the start address up to its last slash.
+ * A site that lives under a path of a host shared with other sites (`https://host/team/site/`)
+ * is only that path; a start address on the root gives the whole origin, with its slash.
+ */
+export function scopePrefix(baseUrl: string): string {
+  const parsed = new URL(baseUrl);
+  return `${parsed.origin}${parsed.pathname.slice(0, parsed.pathname.lastIndexOf("/") + 1)}`;
+}
+
+/** Whether an address lies within the run: under the prefix on the first origin, anywhere on a further origin. */
+export function isInScope(url: string, origins: readonly string[], prefix: string): boolean {
+  if (!isOwnAddress(url, origins)) return false;
+  const parsed = new URL(url);
+  return parsed.origin !== origins[0] || `${parsed.origin}${parsed.pathname}`.startsWith(prefix) || `${parsed.origin}${parsed.pathname}/` === prefix;
+}
+
+/** The first line of the scope of an evaluation: every page under the start path of the first origin, and every page on each further origin. */
+export function pagesInScopeNl(origins: readonly string[], baseUrl?: string): string {
+  const prefix = baseUrl === undefined ? null : scopePrefix(baseUrl);
+  if (prefix === null || prefix === `${origins[0]}/`) return `Alle pagina's op ${originsNl(origins)}`;
+  const under = `Alle pagina's onder ${prefix}`;
+  return origins.length <= 1 ? under : `${under}, en alle pagina's op ${originsNl(origins.slice(1))}`;
 }
 
 /** The origins of a new inventory: the one of the start address first, then each further one once, in the order given. */
