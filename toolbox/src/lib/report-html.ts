@@ -279,6 +279,7 @@ const LOEP_SITE = {
   backText: "loep",
   source: "https://github.com/NederlandseDigitaleDienst/loep",
   privacy: "https://digitaledienst.overheid.nl/over/privacy/",
+  contact: "https://digitaledienst.overheid.nl/contact/",
 } as const;
 
 export interface HtmlOptions {
@@ -440,6 +441,7 @@ function siteFooter({ derived, evaluation }: Context, home: string): string {
         children: [
           el({ tag: "nldd-page-footer-legal-bar-item", attrs: { slot: "start", text: LOEP_SITE.logoTitle } }),
           el({ tag: "nldd-page-footer-legal-bar-item", attrs: { slot: "start", text: `Versie van de evaluatie ${derived.hashShort}` } }),
+          el({ tag: "nldd-page-footer-legal-bar-item", attrs: { slot: "end", href: LOEP_SITE.contact, text: "Contact" } }),
           el({ tag: "nldd-page-footer-legal-bar-item", attrs: { slot: "end", href: LOEP_SITE.source, text: "Broncode" } }),
           el({ tag: "nldd-page-footer-legal-bar-item", attrs: { slot: "end", href: LOEP_SITE.privacy, text: "Privacy" } }),
         ].join(""),

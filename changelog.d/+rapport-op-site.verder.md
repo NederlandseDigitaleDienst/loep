@@ -1,0 +1,1 @@
+Met `render --run <run> --embedded <bestand>` schrijft loep het HTML-rapport in de opmaak van de eigen site naar een bestand buiten de run. Zo staat het rapport van de landingspagina van loep nu als voorbeeld op die site.
