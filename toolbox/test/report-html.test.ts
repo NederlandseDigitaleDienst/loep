@@ -35,7 +35,7 @@ const pictures = (evaluation: Evaluation): CutoutPictures => ({ [allFindings(eva
 
 /** The headings in document order: the levels of nldd-title and of the headings inside rich text. */
 function headingLevels(html: string): number[] {
-  const body = html.slice(html.indexOf("<body>"), html.indexOf("<script>"));
+  const body = html.slice(Math.max(0, html.indexOf("<body>")), html.indexOf("<script>"));
   return [...body.matchAll(/<nldd-title\b[^>]*\bheading-level="(\d)"|<h([1-6])\b/g)].map((match) => Number(match[1] ?? match[2]));
 }
 
@@ -94,24 +94,26 @@ test("nldd lint finds nothing, also with the rule that everything comes from the
   assert.deepEqual(findings.filter((finding) => finding.severity !== "hint").map((finding) => `${finding.rule}: ${finding.message}`), []);
 });
 
-test("the report is the same in its own page and inside the site of loep; only the frame differs", () => {
+test("the report is the same in its own page and as a fragment; only the frame differs", () => {
   const evaluation = grouped();
   // The tiles of the outcomes are the one part whose place follows the frame: in the summary, or under the title.
-  const content = (html: string): string => html.slice(html.indexOf('<nldd-one-third-two-thirds-section id="samenvatting"'), html.indexOf("<nldd-page-footer")).replace(/<nldd-spacer size="24"><\/nldd-spacer><nldd-image src="data:image\/svg\+xml[^>]*><\/nldd-image>/, "");
+  const content = (html: string, end: string): string => html.slice(html.indexOf('<nldd-one-third-two-thirds-section id="samenvatting"'), html.indexOf(end)).replace(/<nldd-spacer size="24"><\/nldd-spacer><nldd-image src="data:image\/svg\+xml[^>]*><\/nldd-image>/, "");
   const standalone = renderHtml(evaluation, undefined, pictures(evaluation));
-  const embedded = renderHtml(evaluation, undefined, pictures(evaluation), { frame: "embedded", homeHref: "../" });
-  assert.ok(content(standalone).length > 1000);
-  assert.equal(content(embedded), content(standalone));
-  assert.ok(standalone.includes("<nldd-hero") && !embedded.includes("<nldd-hero"), "a cover only on a page of its own");
-  assert.ok(embedded.includes('website-title="loep (experiment)"') && embedded.includes('back-href="../"'), "inside the site, the bar of the site");
-  for (const html of [standalone, embedded]) assert.equal(headingLevels(html).filter((level) => level === 1).length, 1);
+  const fragment = renderHtml(evaluation, undefined, pictures(evaluation), { frame: "embedded" });
+  assert.ok(content(standalone, "<nldd-page-footer").length > 1000);
+  assert.equal(content(fragment, '<nldd-sheet id="detail"'), content(standalone, "<nldd-page-footer"));
+  assert.ok(standalone.includes("<nldd-hero") && !fragment.includes("<nldd-hero"), "a cover only on a page of its own");
+  // The site around it has its own page, bar, footer and design system.
+  for (const part of ["<html", "<head", "<body", "<nldd-shell", "<nldd-top-navigation-bar", "<nldd-page-footer", "<nldd-skip-link", "@font-face", "customElements"]) assert.ok(!fragment.includes(part), `no ${part} in the fragment`);
+  assert.ok(fragment.length < standalone.length / 2, "the fragment holds none of the design system");
+  for (const html of [standalone, fragment]) assert.equal(headingLevels(html).filter((level) => level === 1).length, 1);
 });
 
 test("the script holds the components the report shows, and the report shows no other", () => {
   const evaluation = grouped();
   for (const frame of ["standalone", "embedded"] as const) {
     const html = renderHtml(evaluation, undefined, pictures(evaluation), { frame });
-    const used = new Set([...html.slice(html.indexOf("<body>"), html.indexOf("<script>")).matchAll(/<(nldd-[a-z-]+)/g)].map((match) => match[1]!));
+    const used = new Set([...html.slice(Math.max(0, html.indexOf("<body>")), html.indexOf("<script>")).matchAll(/<(nldd-[a-z-]+)/g)].map((match) => match[1]!));
     assert.deepEqual([...used].filter((tag) => !(REPORT_COMPONENTS as readonly string[]).includes(tag)), [], `${frame}: every component is in the bundle`);
   }
   // Much smaller than the bundle of the whole design system, and with the licenses of what it holds.

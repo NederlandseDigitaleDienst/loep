@@ -4,7 +4,7 @@ Toon allows scripts and styles from jsDelivr, but no fonts or images from
 elsewhere. This copies site/ to the output directory, embeds the design
 system's fonts as data URIs in a stylesheet of the site's own, loads the rest
 of global.css without its font stylesheets, and serves the favicon and touch
-icon from the site itself.
+icon from the site itself, on every page of the site.
 
 Usage: python3 site-toon.py <site-dir> <out-dir>
 """
@@ -49,23 +49,29 @@ def main(site: Path, out: Path) -> None:
             f"font-display: swap; src: url(data:font/woff2;base64,{data}) format('woff2-variations'); }}"
         )
     (out / "fonts.css").write_text("\n".join(faces) + "\n")
-
     for icon in ICONS:
         (out / icon).write_bytes(fetch(dist + icon))
-        html = html.replace(dist + icon, icon)
 
     # global.css imports the font stylesheets, whose fonts Toon would refuse;
     # load the rest of what it imports, and the embedded fonts in their place.
-    stylesheet = f'<link rel="stylesheet" href="{dist}css/global.css">'
-    if stylesheet not in html:
-        sys.exit("index.html does not load global.css")
     imports = re.findall(r'@import "\./([\w-]+\.css)";', fetch(dist + "css/global.css").decode())
     parts = list(dict.fromkeys(name for name in imports if not name.endswith("-font.css") and not name.endswith("-fonts.css")))
     if "variables.css" not in parts:
         sys.exit("global.css no longer imports variables.css; check this script")
-    links = ['<link rel="stylesheet" href="fonts.css">'] + [f'<link rel="stylesheet" href="{dist}css/{name}">' for name in parts]
-    html = html.replace(stylesheet, "\n  ".join(links))
-    (out / "index.html").write_text(html)
+    stylesheet = f'<link rel="stylesheet" href="{dist}css/global.css">'
+
+    # Every page of the site, also the report under rapport/, loads the design system the same way.
+    for page in sorted(out.rglob("*.html")):
+        text = page.read_text()
+        if dist not in text:
+            continue
+        if stylesheet not in text:
+            sys.exit(f"{page.relative_to(out)} does not load global.css")
+        root = "../" * (len(page.relative_to(out).parts) - 1)
+        for icon in ICONS:
+            text = text.replace(dist + icon, root + icon)
+        links = [f'<link rel="stylesheet" href="{root}fonts.css">'] + [f'<link rel="stylesheet" href="{dist}css/{name}">' for name in parts]
+        page.write_text(text.replace(stylesheet, "\n  ".join(links)))
 
 
 if __name__ == "__main__":

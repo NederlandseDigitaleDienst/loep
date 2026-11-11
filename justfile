@@ -132,6 +132,16 @@ gaps run *meer:
 feedback run *flags:
     {{cli}} feedback --run {{run}} {{flags}}
 
+# Zet het rapport van een run als voorbeeld op de site van loep: het fragment komt tussen <!-- rapport --> en <!-- /rapport --> in site/rapport/index.html, in de kop en voet van de site
+site-rapport run:
+    #!/usr/bin/env sh
+    set -e
+    fragment="$(mktemp)"
+    {{cli}} render --run "{{run}}" --embedded > "$fragment"
+    node -e 'const fs = require("node:fs"); const [page, fragment] = process.argv.slice(1); const html = fs.readFileSync(page, "utf8"); const start = "<!-- rapport -->\n", end = "<!-- /rapport -->"; const from = html.indexOf(start), to = html.indexOf(end); if (from < 0 || to < from) throw new Error(page + " heeft geen <!-- rapport --> en <!-- /rapport -->"); fs.writeFileSync(page, html.slice(0, from + start.length) + fs.readFileSync(fragment, "utf8") + html.slice(to));' "{{justfile_directory()}}/site/rapport/index.html" "$fragment"
+    rm -f "$fragment"
+    echo "site/rapport/index.html bijgewerkt"
+
 # Maak de evaluatie en het rapport van een run waarvan alle opdrachten klaar zijn, en verzegel de run
 report run naam organisatie model:
     {{cli}} evaluate --run {{run}} --name "{{naam}}" --organisation "{{organisatie}}" --model "{{model}}"

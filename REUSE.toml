@@ -105,13 +105,3 @@ SPDX-License-Identifier = "LicenseRef-W3C-Document AND EUPL-1.2"
 # in de repository (zie .gitignore). Rechthebbende en licentie hierboven gelden
 # voor de vastlegging en de vergelijking; wie een bevinding uit zo'n onderzoek
 # wil aanhalen, gaat naar het rapport waar bron.json naar verwijst.
-
-# Het rapport van de landingspagina, gemaakt met `render --embedded`. Het bundelt
-# componenten van @nldd/design-system (EUPL-1.2) met lit (BSD-3-Clause) en
-# floating-ui (MIT), en de lettertypen RijksSans en JetBrains Mono (OFL-1.1). De
-# licentieteksten van lit en floating-ui staan aan het eind van het script in het bestand.
-[[annotations]]
-path = ["site/rapport/index.html"]
-precedence = "override"
-SPDX-FileCopyrightText = ["Staat der Nederlanden (Ministerie van Economische Zaken en Klimaat)", "Google LLC (lit)", "Floating UI contributors"]
-SPDX-License-Identifier = "EUPL-1.2 AND BSD-3-Clause AND MIT AND OFL-1.1"

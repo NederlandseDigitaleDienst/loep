@@ -266,29 +266,17 @@ interface Chapter {
  * The frame around the report. The content is the same in both.
  * - standalone: a page of its own, such as one per evaluated site, with a cover. Anyone may run
  *   loep, so it uses the open typeface and neither the logo nor the ribbon of the Rijksoverheid.
- * - embedded: a page of the site of loep (site/index.html), with the same bar, typeface and footer,
- *   and the title as an ordinary heading.
+ * - embedded: no page, only the report, to go into a page of a site that has its own bar and footer:
+ *   the title as an ordinary heading, then the summary and the chapters. The site loads the design
+ *   system itself, so the fragment holds none of it; it brings only its own few rules and script.
  */
 export type HtmlFrame = "standalone" | "embedded";
 
-/** The bar and footer of the site of loep, as site/index.html has them, for the embedded frame. */
-const LOEP_SITE = {
-  logoTitle: "Nederlandse Digitale Dienst",
-  logoSubtitle: "Ministerie van Economische Zaken en Klimaat",
-  websiteTitle: "loep (experiment)",
-  backText: "loep",
-  source: "https://github.com/NederlandseDigitaleDienst/loep",
-  privacy: "https://digitaledienst.overheid.nl/over/privacy/",
-  contact: "https://digitaledienst.overheid.nl/contact/",
-} as const;
-
 export interface HtmlOptions {
-  /** Standalone (the default) or embedded in the site of loep. */
+  /** Standalone (the default), or a fragment for a page of another site. */
   frame?: HtmlFrame;
   /** Per page label the picture of the page with the places of its findings, from `pageShots`. Without it the pages are a table. */
   pageShots?: Record<string, PageShot>;
-  /** In the embedded frame: where the start page of the site of loep is, for the back button and the breadcrumb. */
-  homeHref?: string;
   /**
    * True (the default) puts the stylesheets, fonts and components inside the file. False links to
    * them in the installed package instead: for `nldd lint --pure`, which cannot tell the system's
@@ -336,10 +324,22 @@ export function renderHtml(input: Evaluation, decisions: DecisionLayer = { decis
     ...(derived.rechecks ? [{ id: "bijlage-c", titleNl: REPORT_TEXT.rechecks.title, body: appendixC(context) }] : []),
   ];
   const documentTitle = `${evaluation.site.name} · ${REPORT_TEXT.title}`;
-  const embed = options.embed ?? true;
   const frame = options.frame ?? "standalone";
+  if (frame === "embedded") {
+    return [
+      `<!-- ${attr(documentTitle)}, versie van de evaluatie ${attr(derived.hashShort)}. ${attr(derived.madeWithShortNl)}. Zet dit fragment in een nldd-page van een pagina die @nldd/design-system ${DESIGN_SYSTEM_VERSION} laadt. Het script aan het eind schakelt de tabbladen en de knoppen Meer: zet een framework het fragment als tekst in de pagina, voer dat script dan zelf uit. -->`,
+      `<style>${OWN_CSS}</style>`,
+      pageTitle(context),
+      summary(context),
+      body(context, report, appendices),
+      detailSheet(),
+      `<script>${OWN_SCRIPT}</script>`,
+      "",
+    ].join("\n");
+  }
+  const embed = options.embed ?? true;
   const { css, script, dist } = loadAssets();
-  const sheet = frame === "embedded" ? "global.css" : "global-open-font.css";
+  const sheet = "global-open-font.css";
   return [
     "<!doctype html>",
     '<html lang="nl">',
@@ -357,13 +357,13 @@ export function renderHtml(input: Evaluation, decisions: DecisionLayer = { decis
     "<nldd-shell>",
     "<nldd-page>",
     // Without the logo bar the top bar has no room above its title on md and lg (6 px on sm only): a spacer gives it that room.
-    ...(frame === "standalone" ? [el({ tag: "nldd-spacer", attrs: { slot: "header", size: 24, "sm-size": "12" } })] : []),
-    el({ tag: "nldd-skip-link", attrs: { slot: "header", text: "Direct naar de inhoud", href: "#samenvatting" }, children: frame === "embedded" ? siteBar(options.homeHref ?? "../") : el({ tag: "nldd-top-navigation-bar", attrs: { "no-logo": true, "website-title": REPORT_TEXT.title } }) }),
-    frame === "embedded" ? pageTitle(context) : cover(context),
+    el({ tag: "nldd-spacer", attrs: { slot: "header", size: 24, "sm-size": "12" } }),
+    el({ tag: "nldd-skip-link", attrs: { slot: "header", text: "Direct naar de inhoud", href: "#samenvatting" }, children: el({ tag: "nldd-top-navigation-bar", attrs: { "no-logo": true, "website-title": REPORT_TEXT.title } }) }),
+    cover(context),
     // The content: the same in either frame.
     summary(context),
     body(context, report, appendices),
-    frame === "embedded" ? siteFooter(context, options.homeHref ?? "../") : footer(context),
+    footer(context),
     "</nldd-page>",
     "</nldd-shell>",
     detailSheet(),
@@ -379,8 +379,6 @@ export function renderHtml(input: Evaluation, decisions: DecisionLayer = { decis
 
 function cover(context: Context): string {
   const { evaluation, derived } = context;
-  const signature = evaluation.signature;
-  const state = signature ? `Afgetekend door ${signature.role} (${signature.organisation}) op ${derived.signedDateNl}` : REPORT_TEXT.concept;
   // The same make as the hero of the site of loep (site/index.html), and as quiet: the name, where and
   // when, and whether it is signed. The outcome is the first thing in the summary under it.
   const facts = [link(evaluation.site.baseUrl, attr(evaluation.site.baseUrl)), ...alsoOnNl(evaluation).map((line) => inline(line.replace(/[<>]/g, ""))), `onderzocht op ${attr(derived.dateNl)}`].join(" · ");
@@ -392,7 +390,7 @@ function cover(context: Context): string {
       spacer(16),
       rich(`<p>${facts}</p>`, { color: "inherit" }),
       spacer(24),
-      tag(state, signature ? "success" : "neutral", { size: "md" }),
+      signedState(context, "inherit"),
       ...(derived.signatureStale ? [spacer(8), text(attr(REPORT_TEXT.staleSignature), { color: "inherit" })] : []),
     ].join(""),
   });
@@ -404,16 +402,9 @@ function statusLetter(derived: ReportDerived): "A" | "B" | "C" | null {
   return legal === latest && legal !== "geen" ? legal : null;
 }
 
-/** The bar of the site of loep, with a way back to its start page. */
-function siteBar(home: string): string {
-  return el({ tag: "nldd-top-navigation-bar", attrs: { "logo-title": LOEP_SITE.logoTitle, "logo-subtitle": LOEP_SITE.logoSubtitle, "website-title": LOEP_SITE.websiteTitle, "back-text": LOEP_SITE.backText, "back-href": home } });
-}
-
-/** In the site of loep the title is an ordinary heading at the top of the page. */
+/** In a page of another site the title is an ordinary heading at the top of the fragment. */
 function pageTitle(context: Context): string {
   const { evaluation, derived } = context;
-  const signature = evaluation.signature;
-  const state = signature ? `Afgetekend door ${signature.role} (${signature.organisation}) op ${derived.signedDateNl}` : REPORT_TEXT.concept;
   return el({
     tag: "nldd-simple-section",
     attrs: { "padding-bottom": 0 },
@@ -421,33 +412,22 @@ function pageTitle(context: Context): string {
       title(`${REPORT_TEXT.title} ${evaluation.site.name}`, 1, 1, { slot: "header" }),
       rich(`<p>${link(evaluation.site.baseUrl, attr(evaluation.site.baseUrl))} · Onderzocht op ${attr(derived.dateNl)}</p>`),
       spacer(12),
-      tags([tag(state, signature ? "success" : "neutral", { size: "md" })]),
-      // Inside the site of loep the tiles stand under the title; on a page of its own, in the summary.
+      signedState(context),
+      // In a fragment the tiles stand under the title; on a page of its own, in the summary.
       spacer(24),
       fingerprintImage(context),
     ].join(""),
   });
 }
 
-function siteFooter({ derived, evaluation }: Context, home: string): string {
-  return el({
-    tag: "nldd-page-footer",
-    attrs: { slot: "footer" },
-    children: [
-      el({ tag: "nldd-breadcrumbs", attrs: { slot: "breadcrumbs" }, children: [el({ tag: "nldd-breadcrumbs-item", attrs: { text: LOEP_SITE.backText, href: home } }), el({ tag: "nldd-breadcrumbs-item", attrs: { text: `${REPORT_TEXT.title} ${evaluation.site.name}`, current: true } })].join("") }),
-      el({
-        tag: "nldd-page-footer-legal-bar",
-        attrs: { slot: "legal-bar" },
-        children: [
-          el({ tag: "nldd-page-footer-legal-bar-item", attrs: { slot: "start", text: LOEP_SITE.logoTitle } }),
-          el({ tag: "nldd-page-footer-legal-bar-item", attrs: { slot: "start", text: `Versie van de evaluatie ${derived.hashShort}` } }),
-          el({ tag: "nldd-page-footer-legal-bar-item", attrs: { slot: "end", href: LOEP_SITE.contact, text: "Contact" } }),
-          el({ tag: "nldd-page-footer-legal-bar-item", attrs: { slot: "end", href: LOEP_SITE.source, text: "Broncode" } }),
-          el({ tag: "nldd-page-footer-legal-bar-item", attrs: { slot: "end", href: LOEP_SITE.privacy, text: "Privacy" } }),
-        ].join(""),
-      }),
-    ].join(""),
-  });
+/**
+ * Whether the report is signed: a short tag, and who signed it and when as text after it. A tag
+ * does not wrap, so the whole sentence in one tag ran past the screen at 320 pixels.
+ */
+function signedState({ evaluation, derived }: Context, color?: string): string {
+  const signature = evaluation.signature;
+  if (!signature) return tag(REPORT_TEXT.concept, "neutral", { size: "md" });
+  return stack([tag("Afgetekend", "success", { size: "md" }), text(`door ${attr(signature.role)} (${attr(signature.organisation)}) op ${attr(derived.signedDateNl ?? "")}`, color ? { color } : {})].join(""), { layout: "wrap", gap: 8, "vertical-alignment": "center" });
 }
 
 /** The letter of the status, or the whole heading when the two versions differ or there is none. */
