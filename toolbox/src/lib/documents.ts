@@ -506,7 +506,7 @@ const NO_DOCUMENTS_UNDER_LIMIT_NL = (omitted: number): string =>
 export function documentScopeNl(documents: EvaluationDocuments | null, origins: string | readonly string[], elsewhere: number, omittedByLimit = 0): { includedNl: string[]; excludedNl: string[]; limitationsNl: string[] } {
   const origin = originsNl(typeof origins === "string" ? [origins] : origins);
   const readKinds = listNl(READ_KINDS.map((kind) => (kind === "text" ? "platte tekst" : kind)));
-  const otherOrigins = elsewhere > 0 ? `Documenten op andere domeinen waarnaar de site linkt (${elsewhere} geteld)` : "Documenten op andere domeinen waarnaar de site linkt";
+  const otherOrigins = elsewhere > 0 ? `Documenten buiten de site waarnaar de site linkt (${elsewhere} geteld)` : "Documenten buiten de site waarnaar de site linkt";
   if (!documents) {
     return {
       includedNl: [],
