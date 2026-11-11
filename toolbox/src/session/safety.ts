@@ -8,7 +8,7 @@ import { readJson } from "../lib/canonical.ts";
 import { mailboxForRun, ownRegistration, readMailboxState } from "../lib/mailbox.ts";
 import { maskFile, shieldForRun } from "../lib/secrets.ts";
 import { isChallenge } from "../lib/challenge.ts";
-import { privateFromPublicSite, scopeHost, scopeHostOf, siteOrigins, WEB_SCHEMES } from "../lib/origins.ts";
+import { notFoundProbes, privateFromPublicSite, scopeHost, scopeHostOf, scopePrefix, siteOrigins, WEB_SCHEMES } from "../lib/origins.ts";
 import { loginCookieHeader, logsOut } from "../lib/login.ts";
 import { onReadOrigin, pathOf, readDecision, readRuleFor, type ReadRequest } from "../lib/reads.ts";
 import { searchServicesOf, type SearchServiceId } from "../lib/searchbody.ts";
@@ -57,6 +57,13 @@ export interface Scope {
    */
   strict: boolean;
   /**
+   * The path the site lives under on its first origin, when that is not the root (`https://host/team/site/`):
+   * a host shared with other sites. A page outside it is another site, so a session does not open it.
+   */
+  sitePath?: string;
+  /** The addresses the inventory asked for to see the page for a missing address: an older run asked for it on the root, outside `sitePath`. */
+  notFoundProbes?: string[];
+  /**
    * The origins of a test environment that may be written to, when the run was given
    * that at inventory. Absent or null: every write is refused, as on any live site.
    */
@@ -72,11 +79,17 @@ export interface Scope {
 export async function scopeForRun(runDir: string, extra: { scopeUrl?: string | undefined; allowHosts?: string[]; strict?: boolean }): Promise<Scope> {
   const hosts = new Set<string>((extra.allowHosts ?? []).map(scopeHostOf));
   let baseUrl: string | null = null;
+  let sitePath: string | undefined;
+  let probes: string[] = [];
   const inventoryPath = join(runDir, "inventory.json");
   if (existsSync(inventoryPath)) {
-    const inventory = await readJson<{ baseUrl: string; origin: string; origins?: string[]; pages: { url: string }[] }>(inventoryPath);
+    const inventory = await readJson<{ baseUrl: string; origin: string; origins?: string[]; notFoundProbe: string; notFoundProbes?: string[]; pages: { url: string }[] }>(inventoryPath);
     baseUrl = inventory.baseUrl;
     const origins = siteOrigins(inventory);
+    if (scopePrefix(baseUrl) !== `${origins[0]}/`) {
+      sitePath = scopePrefix(baseUrl);
+      probes = notFoundProbes(inventory);
+    }
     // Every origin of the site, also one where no page was found.
     for (const origin of origins) hosts.add(scopeHost(new URL(origin)));
     for (const page of inventory.pages) {
@@ -96,7 +109,7 @@ export async function scopeForRun(runDir: string, extra: { scopeUrl?: string | u
   // Inside a command of the sweep the log names that command; a session names itself.
   const ambient = runWrites();
   const writes = permission ? (ambient?.origin === permission.origin ? ambient : writeAccess(runDir, permission, "session")) : null;
-  return { hosts: [...hosts].sort(), baseUrl, runDir, strict: extra.strict ?? false, ...(writes ? { writes } : {}), ...(linkOrigins ? { linkOrigins } : {}) };
+  return { hosts: [...hosts].sort(), baseUrl, runDir, strict: extra.strict ?? false, ...(sitePath ? { sitePath, notFoundProbes: probes } : {}), ...(writes ? { writes } : {}), ...(linkOrigins ? { linkOrigins } : {}) };
 }
 
 /**
@@ -204,6 +217,28 @@ export const inScope = (scope: Scope, url: string): boolean => {
 
 export const urlInScope = inScope;
 
+/** Whether an address is a page of another site on the host the site shares: on its first origin, outside the path of the site. */
+export const outsideSitePath = (scope: Pick<Scope, "sitePath" | "notFoundProbes">, url: string): boolean => {
+  if (scope.sitePath === undefined || scope.notFoundProbes?.includes(url)) return false;
+  try {
+    const parsed = new URL(url);
+    const prefix = new URL(scope.sitePath);
+    const page = `${parsed.origin}${parsed.pathname}`;
+    return parsed.origin === prefix.origin && !page.startsWith(scope.sitePath) && `${page}/` !== scope.sitePath;
+  } catch {
+    return false;
+  }
+};
+
+/** Whether a request opens a page in the tab itself, not in an embedded frame. */
+const opensPage = (request: Request): boolean => {
+  try {
+    return request.isNavigationRequest() && request.frame().parentFrame() === null;
+  } catch {
+    return false;
+  }
+};
+
 /**
  * Everything a session page may not do, enforced where requests leave the browser: no
  * method other than GET or HEAD, nothing to a host outside the scope, and no message over
@@ -303,6 +338,11 @@ export async function guardContext(context: BrowserContext, scope: Scope, guard:
       // Whether the body has the form of a search: what the explorer needs to record a read request, never the body itself.
       const search = method === "POST" ? searchServicesOf(body, pathOf(url), terms) : [];
       guard.blocked.push({ at: new Date().toISOString(), kind: "method", method, url: url.slice(0, MAX_URL), resourceType: type, ...(search.length > 0 ? { search } : {}) });
+      return refuse();
+    }
+    // Another site on the same host: the session does not open it, as it would not open any site outside the run.
+    if (opensPage(request) && outsideSitePath(scope, url)) {
+      note("scope", method, url, type);
       return refuse();
     }
     if (inScope(scope, url) || throughParty(scope, request)) {

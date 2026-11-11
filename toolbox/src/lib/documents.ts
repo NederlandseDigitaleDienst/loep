@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { isOwnAddress, originsNl, siteOrigins, type OriginSource } from "./origins.ts";
+import { isInScope, originsNl, scopePrefix, siteOrigins, type OriginSource } from "./origins.ts";
 
 /**
  * Documents a site publishes next to its pages: PDF, word processor, presentation and
@@ -204,9 +204,9 @@ export interface DocumentTotals {
  */
 export const REDIRECTS_ELSEWHERE_NL = "het adres verwijst door naar een ander domein";
 
-/** Whether a document of an inventory lies on the site: on one of its origins, and not redirecting to a host outside it. */
-export function isSiteDocument(document: InventoryDocument, origins: readonly string[]): boolean {
-  return isOwnAddress(document.url, origins) && document.notAsked !== REDIRECTS_ELSEWHERE_NL;
+/** Whether a document of an inventory lies on the site: on one of its origins, under the path of the site on the first, and not redirecting to a host outside it. */
+export function isSiteDocument(document: InventoryDocument, origins: readonly string[], prefix = `${origins[0]}/`): boolean {
+  return isInScope(document.url, origins, prefix) && document.notAsked !== REDIRECTS_ELSEWHERE_NL;
 }
 
 /**
@@ -217,7 +217,8 @@ export function isSiteDocument(document: InventoryDocument, origins: readonly st
 export function siteDocuments(inventory: OriginSource & { documents?: InventoryDocument[] | undefined; documentTotals?: DocumentTotals | undefined }): { onSite: InventoryDocument[]; elsewhere: number } {
   const origins = siteOrigins(inventory);
   const all = inventory.documents ?? [];
-  const onSite = all.filter((document) => isSiteDocument(document, origins));
+  const prefix = inventory.baseUrl === undefined ? `${origins[0]}/` : scopePrefix(inventory.baseUrl);
+  const onSite = all.filter((document) => isSiteDocument(document, origins, prefix));
   return { onSite, elsewhere: (inventory.documentTotals?.elsewhere ?? 0) + all.length - onSite.length };
 }
 
