@@ -8,7 +8,7 @@ Wat er per versie van loep is veranderd. De versie staat op het voorblad en onde
 
 ## 0.26.0 (2026-11-11)
 
-Deze versie is uitgebracht zonder meting: Niet gemeten: sinds 0.25.0 veranderden de opdrachten, procedures, instrumenten en oordeelsregels niet. Nieuw zijn het rapport als HTML en een fix aan de testsite die op 320 pixels in WebKit per ongeluk uitstak (#499); de ingebouwde gebreken bleven gelijk.
+Deze versie is uitgebracht zonder meting: sinds 0.25.0 veranderden de opdrachten, procedures, instrumenten en oordeelsregels niet. Nieuw zijn het rapport als HTML en een fix aan de testsite die op 320 pixels in WebKit per ongeluk uitstak (#499); de ingebouwde gebreken bleven gelijk.
 
 ### Verder
 
