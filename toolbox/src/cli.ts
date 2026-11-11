@@ -694,7 +694,7 @@ async function main(): Promise<void> {
       }
       const { render } = await import("./commands/render.ts");
       const result = await render(values.run);
-      process.stdout.write(`${result.markdown}\n${result.pdf ?? "(geen pdf)"}\n${result.shortPdf ? `${result.shortPdf}\n` : ""}`);
+      process.stdout.write(`${result.markdown}\n${result.html}\n${result.pdf ?? "(geen pdf)"}\n${result.shortPdf ? `${result.shortPdf}\n` : ""}`);
       for (const problem of result.pdfChecks) process.stdout.write(`- ${problem}\n`);
       for (const note of result.cutoutNotes) process.stdout.write(`- ${note}\n`);
       for (const warning of result.pdfWarnings) process.stdout.write(`LET OP: ${warning}\n`);

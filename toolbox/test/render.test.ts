@@ -909,6 +909,7 @@ test("an unsigned report shows the status the outcomes lead to, marked as provis
   assert.deepEqual(status, {
     headingNl: "Voorlopige status: C (eerste maatregelen genomen)",
     provisional: true,
+    status: { "2.1": "C", "2.2": "C" },
     noteNl: "Deze status volgt uit de uitkomsten in dit rapport. Ze telt pas als een persoon met naam het rapport heeft afgetekend.",
   });
   assert.match(openNl, /^Open criteria: \d+[.,] /);
@@ -922,7 +923,7 @@ test("an unsigned report shows the status the outcomes lead to, marked as provis
   assert.ok(markdown.split("## Samenvatting")[1]!.split("\n## ")[0]!.includes("**Voorlopige status: C (eerste maatregelen genomen)**"));
 
   const withSignature = signed(exampleEvaluation());
-  assert.deepEqual(deriveReport(withSignature).statusLine, { headingNl: "Status: C (eerste maatregelen genomen)", provisional: false, noteNl: null, openNl, unfinished });
+  assert.deepEqual(deriveReport(withSignature).statusLine, { headingNl: "Status: C (eerste maatregelen genomen)", provisional: false, status: { "2.1": "C", "2.2": "C" }, noteNl: null, openNl, unfinished });
   assert.ok(!renderMarkdown(withSignature).includes("Voorlopige status"));
 
   const stale = signed(exampleEvaluation());

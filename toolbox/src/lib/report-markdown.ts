@@ -51,13 +51,13 @@ export const OUTCOME_SYMBOL: Record<ShownOutcome, string> = {
 };
 
 const SEVERITY_RANK: Record<ReportFinding["severity"], number> = { blokkerend: 0, hoog: 1, midden: 2, laag: 3 };
-const STATUS_LABEL: Record<ComplianceStatus, string> = {
+export const STATUS_LABEL: Record<ComplianceStatus, string> = {
   A: "status A (voldoet volledig)",
   B: "status B (voldoet gedeeltelijk)",
   C: "status C (eerste maatregelen genomen)",
   geen: "geen status",
 };
-const VERSIONS: WcagVersion[] = ["2.2", "2.1"];
+export const VERSIONS: WcagVersion[] = ["2.2", "2.1"];
 /** The summary also shows the second step of severity that occurs, as long as the list then stays this short. */
 const TOP_WITH_SECOND_STEP = 10;
 const OWNER_ORDER = ["techniek", "content", "design", "leverancier"];
@@ -199,6 +199,8 @@ export interface StatusLine {
   openNl: string;
   /** True when a criterion is open through the evaluation itself: the evaluation is not finished. */
   unfinished: boolean;
+  /** The status per WCAG version that the heading names, for a rendering that shows the letter on its own. */
+  status: Record<WcagVersion, ComplianceStatus>;
 }
 
 /** The texts about how the judgment was reached: a judge and a verifier, both with instruments. */
@@ -611,6 +613,7 @@ function statusLine(evaluation: Evaluation, stale: boolean): StatusLine {
   return {
     headingNl: `${provisional ? "Voorlopige status" : "Status"}: ${value}`,
     provisional,
+    status: { "2.1": legal, "2.2": latest },
     noteNl: provisional ? `Deze status volgt uit de uitkomsten in dit rapport. Ze telt pas als een persoon met naam het rapport heeft afgetekend.${stale ? ` ${REPORT_TEXT.staleSignature}` : ""}` : null,
     ...openCount(evaluation),
   };
@@ -943,7 +946,7 @@ function deriveDefects(evaluation: Evaluation, labels: string[]): DefectsDerived
 }
 
 /** The lines under a decision: what, when, the alternative, who decided and how it was recorded. */
-function decisionLines(decision: Decision): string[] {
+export function decisionLines(decision: Decision): string[] {
   const text = REPORT_TEXT.measures;
   const date = decision.decision === "gepland" || decision.decision === "opgelost" ? decision.date : null;
   return [
@@ -1065,7 +1068,7 @@ function meaning(evaluation: Evaluation, stale: boolean): string[] {
 }
 
 /** The evaluation as the report treats it: a signature for another version is set aside. */
-function withCurrentSignature(evaluation: Evaluation): { evaluation: Evaluation; stale: boolean } {
+export function withCurrentSignature(evaluation: Evaluation): { evaluation: Evaluation; stale: boolean } {
   const stale = evaluation.signature !== null && !signatureIsCurrent(evaluation);
   return { evaluation: stale ? { ...evaluation, signature: null } : evaluation, stale };
 }
@@ -1179,7 +1182,7 @@ const findingLink = (finding: ReportFinding): string => `[${finding.id}](#${find
 const bullets = (items: string[]): string[] => items.map((item) => `- ${item}`);
 
 /** The line under the address for a site on more than one origin: the further origins it covers. Nothing for a site on one. */
-const alsoOnNl = (evaluation: Evaluation): string[] => {
+export const alsoOnNl = (evaluation: Evaluation): string[] => {
   const further = siteOrigins(evaluation.site).slice(1);
   return further.length > 0 ? [`Ook onderdeel van de site: ${further.map((origin) => `<${origin}>`).join(", ")}`] : [];
 };
@@ -1189,20 +1192,20 @@ function table(header: string[], rows: string[][], numeric: number[] = []): stri
   return [header, align, ...rows].map((row) => `| ${row.join(" | ")} |`);
 }
 
-function versionNote(criterion: CriterionResult): string | null {
+export function versionNote(criterion: CriterionResult): string | null {
   if (!criterion.versions.includes("2.2")) return "Alleen in WCAG 2.1";
   if (!criterion.versions.includes("2.1")) return "Nieuw in WCAG 2.2";
   return null;
 }
 
-interface Grouping {
+export interface Grouping {
   key: string;
   name: string;
   criteria: CriterionResult[];
 }
 
 /** Criteria grouped by the leading parts of their number, in WCAG order. */
-function groupCriteria(criteria: CriterionResult[], depth: 1 | 2): Grouping[] {
+export function groupCriteria(criteria: CriterionResult[], depth: 1 | 2): Grouping[] {
   const groups = new Map<string, Grouping>();
   for (const criterion of criteria) {
     const key = criterion.id.split(".").slice(0, depth).join(".");
@@ -1243,7 +1246,7 @@ const placeNl = (location: { heading?: string; text?: string; where: string }): 
 const whereLines = (finding: ReportFinding, titles: Map<string, string>): string[] => finding.locations.map((location) => `${esc(location.page)}${titles.has(location.page) ? ` ${esc(titles.get(location.page)!)}` : ""}: ${placeNl(location)}`);
 
 /** The cutouts `render` made, by finding: the file relative to the report and its alternative text. */
-export type CutoutPictures = Record<string, { file: string; altNl: string }>;
+export type CutoutPictures = Record<string, { file: string; altNl: string; /** In pixels, for a rendering that reserves the room; the Markdown does without. */ width?: number; height?: number }>;
 
 /** The cutout of a finding as an image line, or nothing when it has none. */
 const pictureLines = (finding: ReportFinding, pictures: CutoutPictures): string[] => (pictures[finding.id] ? [`![${esc(pictures[finding.id]!.altNl)}](${pictures[finding.id]!.file})`, ""] : []);

@@ -1,0 +1,1 @@
+Het rapport komt nu ook als `rapport.html`: één bestand dat offline werkt, in het NLDD Designsysteem. Het toont de pagina's van de site met een genummerde markering op elk gebrek, de werklijst met uitsneden en een knop voor de details, en de bijlagen op een eigen tabblad.

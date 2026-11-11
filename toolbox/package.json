@@ -17,6 +17,7 @@
   },
   "dependencies": {
     "@guidepup/virtual-screen-reader": "0.33.0",
+    "@nldd/design-system": "0.21.1",
     "@qualweb/act-rules": "0.8.6",
     "@qualweb/locale": "0.2.3",
     "@qualweb/qw-page": "0.3.8",
@@ -33,7 +34,9 @@
     "cld3-asm": "4.0.0",
     "dom-accessibility-api": "0.7.1",
     "eld": "2.1.0",
+    "esbuild": "0.25.10",
     "html-validate": "11.16.4",
+    "jpeg-js": "0.4.4",
     "mockttp": "4.6.5",
     "playwright": "1.63.0",
     "pngjs": "7.0.0",

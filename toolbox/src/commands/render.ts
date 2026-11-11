@@ -1,8 +1,10 @@
-import { rm } from "node:fs/promises";
+import { readFile, rm } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { writeFileAtomic } from "../lib/canonical.ts";
 import { writeCutouts } from "../lib/cutout.ts";
 import { loadDecisions } from "../lib/decisions.ts";
+import { pageShots } from "../lib/page-shots.ts";
+import { renderHtml } from "../lib/report-html.ts";
 import { deriveReport, renderMarkdown, REPORT_TEXT } from "../lib/report-markdown.ts";
 import { makePdf } from "../lib/typst.ts";
 import { loadRechecks } from "./recheck.ts";
@@ -11,6 +13,8 @@ import { SIGNED_DIR } from "./verify.ts";
 
 export interface RenderResult {
   markdown: string;
+  /** The same report as one HTML file that holds everything it needs, the cutouts included. */
+  html: string;
   /** The full report. */
   pdf: string | null;
   /** The same report without appendix A, which is most of its pages; null when no PDF could be made. */
@@ -27,7 +31,7 @@ export interface RenderResult {
 export const CUTOUT_DIR = "uitsneden";
 
 /**
- * Write the report for a run: Markdown always, and a PDF when Typst is available.
+ * Write the report for a run: Markdown and HTML always, and a PDF when Typst is available.
  * All come from evaluation.json and nothing else, so none is edited by hand; the pieces of
  * screenshots at the findings are cut from the pictures of the run that the evaluation names,
  * by path and sha256.
@@ -52,6 +56,12 @@ export async function render(runDir: string): Promise<RenderResult> {
   const cutouts = await writeCutouts(runDir, evaluation, join(dir, CUTOUT_DIR));
   const pictures = Object.fromEntries(Object.entries(cutouts.files).map(([id, file]) => [id, { file: `${CUTOUT_DIR}/${file.file}`, altNl: file.altNl }]));
   await writeFileAtomic(markdown, renderMarkdown(evaluation, decisions, pictures));
+  // The HTML carries its cutouts inside, so it can be passed on as one file.
+  const html = join(dir, "rapport.html");
+  const embedded = Object.fromEntries(
+    await Promise.all(Object.entries(cutouts.files).map(async ([id, file]) => [id, { file: `data:image/png;base64,${(await readFile(file.absolute)).toString("base64")}`, altNl: file.altNl, width: file.width, height: file.height }] as const)),
+  );
+  await writeFileAtomic(html, renderHtml(evaluation, decisions, embedded, { pageShots: pageShots(runDir, evaluation) }));
 
   const title = `${REPORT_TEXT.title} ${evaluation.site.name}`;
   const request = {
@@ -62,10 +72,11 @@ export async function render(runDir: string): Promise<RenderResult> {
   };
   const full = await makePdf({ ...request, output: join(dir, "rapport.pdf"), title });
   // Without Typst there is one message about that, not two.
-  if (full.pdf === null) return { markdown, pdf: null, shortPdf: null, pdfChecks: full.pdfChecks, pdfWarnings: [], cutoutNotes: cutouts.problems };
+  if (full.pdf === null) return { markdown, html, pdf: null, shortPdf: null, pdfChecks: full.pdfChecks, pdfWarnings: [], cutoutNotes: cutouts.problems };
   const short = await makePdf({ ...request, inputs: { ...request.inputs, part: "short" }, output: join(dir, "rapport-kort.pdf"), title: `${title}, ${REPORT_TEXT.shortVersion}` });
   return {
     markdown,
+    html,
     pdf: full.pdf,
     shortPdf: short.pdf,
     pdfChecks: [...full.pdfChecks, ...short.pdfChecks.map((problem) => `Korte versie: ${problem}`)],
