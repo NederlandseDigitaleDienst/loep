@@ -96,6 +96,8 @@ const USAGE = `loep <command> [options]
                                          Confirmed at an interactive terminal, or --recorded-via gesprek (see below)
   render --run <run>                     Write the report (Markdown and PDF) from evaluation.json; after signing with the
                                          decisions about each defect
+  render --run <run> --embedded <file>  Write only the HTML report in the frame of the site of loep to <file>, outside the run;
+                                         nothing in the run changes, so a sealed run stays sealed
   render --run <run> --rechecks          Write only the working file with the rechecks (rechecks/nametingen.md), outside
                                          the seal; the report is not touched. A signed report has them in appendix C
   recheck --run <run> (--finding <id> | --criterion <id>)
@@ -295,6 +297,7 @@ async function main(): Promise<void> {
       finding: { type: "string" },
       at: { type: "string" },
       rechecks: { type: "boolean", default: false },
+      embedded: { type: "string" },
       format: { type: "string" },
       help: { type: "boolean", short: "h" },
     },
@@ -690,6 +693,11 @@ async function main(): Promise<void> {
         const { renderRechecks } = await import("./commands/recheck.ts");
         const written = await renderRechecks(values.run);
         process.stdout.write(`${written.path}\n${written.checked} ${written.checked === 1 ? "nameting" : "nametingen"} van een bevinding${written.unchecked > 0 ? `; ${written.unchecked} niet getoond, omdat de controle (check-recheck) niet slaagde of het resultaat daarna veranderde` : ""}. Het rapport en het zegel zijn niet aangeraakt.\n`);
+        return;
+      }
+      if (values.embedded) {
+        const { renderEmbedded } = await import("./commands/render.ts");
+        process.stdout.write(`${await renderEmbedded(values.run, values.embedded)}\n`);
         return;
       }
       const { render } = await import("./commands/render.ts");
