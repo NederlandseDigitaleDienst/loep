@@ -8,6 +8,12 @@
   <link rel="icon" type="image/svg+xml" href="https://cdn.jsdelivr.net/npm/@nldd/design-system@0.21.1/dist/favicon.svg">
   <link rel="apple-touch-icon" href="https://cdn.jsdelivr.net/npm/@nldd/design-system@0.21.1/dist/touch-icon.png">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@nldd/design-system@0.21.1/dist/css/global.css">
+  <script type="module">
+    // Workaround for design-system#378 (fixed after 0.21.1): define nldd-list and nldd-list-item
+    // in one task before the autoloader, so a row never reads a list that is not upgraded yet.
+    import "https://cdn.jsdelivr.net/npm/@nldd/design-system@0.21.1/dist/cdn/chunks/list-CaWl3q0Z.js";
+    import "https://cdn.jsdelivr.net/npm/@nldd/design-system@0.21.1/dist/cdn/chunks/list-item-Cagnf6eG.js";
+  </script>
   <script type="module" src="https://cdn.jsdelivr.net/npm/@nldd/design-system@0.21.1/dist/cdn/autoloader.js"></script>
 </head>
 <body>
