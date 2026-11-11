@@ -88,11 +88,11 @@ export async function render(runDir: string): Promise<RenderResult> {
 }
 
 /**
- * Write the report as HTML in the frame of the site of loep, to a file outside the run: for the
- * example on that site. It reads the run and writes nothing in it, so a sealed run stays as it
- * was. The cutouts are made in a temporary directory and go into the file.
+ * The report as an HTML fragment: for a page of a site that has its own bar and footer and loads
+ * the design system itself. It reads the run and writes nothing in it, so a sealed run stays as
+ * it was. The cutouts are made in a temporary directory and go into the fragment.
  */
-export async function renderEmbedded(runDir: string, output: string, homeHref = "../"): Promise<string> {
+export async function renderEmbedded(runDir: string): Promise<string> {
   const evaluation = await readEvaluation(resolve(runDir, "evaluation.json"));
   const signed = signatureIsCurrent(evaluation);
   const decisions = signed ? { ...(await loadDecisions(runDir, evaluation.defects)), rechecks: loadRechecks(runDir) } : { decisions: [], sha256: null };
@@ -102,9 +102,7 @@ export async function renderEmbedded(runDir: string, output: string, homeHref = 
     const pictures = Object.fromEntries(
       await Promise.all(Object.entries(cutouts.files).map(async ([id, file]) => [id, { file: `data:image/png;base64,${(await readFile(file.absolute)).toString("base64")}`, altNl: file.altNl, width: file.width, height: file.height }] as const)),
     );
-    const out = resolve(output);
-    await writeFileAtomic(out, renderHtml(evaluation, decisions, pictures, { pageShots: pageShots(runDir, evaluation), frame: "embedded", homeHref }));
-    return out;
+    return renderHtml(evaluation, decisions, pictures, { pageShots: pageShots(runDir, evaluation), frame: "embedded" });
   } finally {
     await rm(scratch, { recursive: true, force: true });
   }
