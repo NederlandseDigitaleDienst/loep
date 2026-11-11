@@ -118,7 +118,8 @@ test("the script holds the components the report shows, and the report shows no 
   const html = renderHtml(evaluation);
   const script = html.slice(html.indexOf("<script>"), html.indexOf("</script>"));
   assert.ok(script.length < 1_500_000, `the script is ${script.length} bytes`);
-  assert.match(script, /SPDX-License-Identifier: BSD-3-Clause/);
+  // Split, so that REUSE does not read this line as the license of this file.
+  assert.match(script, new RegExp(["SPDX", "License-Identifier: BSD-3-Clause"].join("-")));
 });
 
 test("a page of the sample is shown with a numbered mark at each defect, and the same marks as a list of links under it", () => {
