@@ -490,6 +490,12 @@ test("linksToFollow: a redirect to another site does not take the inventory alon
   assert.deepEqual(linksToFollow(links, ["https://site.example"], false), ["https://site.example/a"]);
 });
 
+test("linksToFollow: a site under a path of a shared host stays under that path", () => {
+  const links = ["https://host.example/team/site/a", "https://host.example/team/other/", "https://host.example/"];
+  assert.deepEqual(linksToFollow(links, ["https://host.example"], false, "https://host.example/team/site/"), ["https://host.example/team/site/a"]);
+  assert.deepEqual(linksToFollow(links, ["https://host.example"], true, "https://host.example/team/site/"), ["https://host.example/team/site/a"], "the start page too");
+});
+
 test("linksToFollow: the start address may redirect", () => {
   const links = ["https://www.site.example/a"];
   assert.deepEqual(linksToFollow(links, ["https://site.example"], true), links);

@@ -324,7 +324,7 @@ export async function evaluate(options: EvaluateOptions): Promise<Evaluation> {
     },
     standards: { wcag: ["WCAG 2.2 niveau A en AA", "WCAG 2.1 niveau A en AA"], en301549: documents ? "EN 301 549 v3.2.1, hoofdstuk 9 (webpagina's) en hoofdstuk 10 (documenten)" : "EN 301 549 v3.2.1, hoofdstuk 9" },
     scope: {
-      includedNl: [pagesInScopeNl(origins), ...(documentScope?.includedNl ?? [])],
+      includedNl: [pagesInScopeNl(origins, run.inventory.baseUrl), ...(documentScope?.includedNl ?? [])],
       excludedNl: ["Websites van derden waarnaar wordt gelinkt, ook inloggen bij DigiD, eHerkenning of eIDAS: die diensten hebben een eigen toegankelijkheidsverklaring", ...(documentScope ? documentScope.excludedNl : ["Pdf-bestanden en andere documenten die geen webpagina zijn, ook als ze op de site zelf staan"])],
       ...(scopeFrames.length > 0 ? { frames: scopeFrames } : {}),
     },

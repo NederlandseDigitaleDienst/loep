@@ -7,7 +7,7 @@ import type { Vendor } from "../lib/evaluation.ts";
 import { trialFetch } from "../lib/writes.ts";
 import { ignoreSecrets, isLogout, loginCookieHeader, LoginExpired, noteLogoutUrl, runLoginMark } from "../lib/login.ts";
 import { stepStart, writeManifest } from "../lib/manifest.ts";
-import { notFoundProbes, originsOfRun, privateFromPublicSite, siteOrigins } from "../lib/origins.ts";
+import { isInScope, isOwnAddress, notFoundProbes, originsOfRun, privateFromPublicSite, scopePrefix, siteOrigins } from "../lib/origins.ts";
 import { rankSearchTerms, type SearchTermPage } from "../lib/searchterm.ts";
 
 export interface InventoryPage {
@@ -237,8 +237,8 @@ const levelKey = (levels: string[], depth: number): string => levels.slice(0, de
  * the links of that site as its own, so without this the rest of the inventory walks that site. The
  * start address may redirect: the address a person gave is the site, wherever it landed.
  */
-export function linksToFollow(links: readonly string[], origins: readonly string[], isStart: boolean): string[] {
-  return isStart ? [...links] : links.filter((link) => origins.includes(new URL(link).origin));
+export function linksToFollow(links: readonly string[], origins: readonly string[], isStart: boolean, prefix = `${origins[0]}/`): string[] {
+  return links.filter((link) => (isStart && !isOwnAddress(link, origins)) || isInScope(link, origins, prefix));
 }
 
 /**
@@ -602,6 +602,8 @@ export async function inventory(options: InventoryOptions): Promise<Inventory> {
   const origin = origins[0]!;
   const ownOrigin = (url: string): boolean => origins.includes(new URL(url).origin);
   const start = normaliseUrl(options.baseUrl);
+  // A site under a path of a shared host is that path: the inventory stays below it.
+  const prefix = scopePrefix(start);
   const fixed = options.fixedUrls?.map(normaliseUrl);
   // A run with a login: the session a person left behind, and the page that person pointed at.
   const login = runLoginMark();
@@ -610,7 +612,7 @@ export async function inventory(options: InventoryOptions): Promise<Inventory> {
   ignoreSecrets(options.out);
   // Behind a login there is no sitemap to go by: the pages are found by following links with the session.
   const sitemap: string[] = [];
-  if (!fixed && !login) for (const each of origins) sitemap.push(...(await fetchSitemapUrls(each)));
+  if (!fixed && !login) for (const each of origins) sitemap.push(...(await fetchSitemapUrls(each)).filter((url) => isInScope(url, origins, prefix)));
   // The page for a missing address, asked for on every origin: each can have its own.
   const missingPages = origins.map((each) => `${each}${NOT_FOUND_PATH}`);
   const notFoundProbe = missingPages[0]!;
@@ -774,7 +776,7 @@ export async function inventory(options: InventoryOptions): Promise<Inventory> {
         }
         // As with links, Chromium accepts some frame addresses that Node's URL rejects: only that frame is left out (#342).
         if (!embedded) for (const frame of frames) if (URL.canParse(frame)) noteFrame(normaliseUrl(frame), next);
-        if (!fixed && !embedded && !missingPages.includes(next)) for (const link of linksToFollow(links, origins, next === start)) note(normaliseUrl(link), "link");
+        if (!fixed && !embedded && !missingPages.includes(next)) for (const link of linksToFollow(links, origins, next === start, prefix)) note(normaliseUrl(link), "link");
         process.stderr.write(`inventory ${pages.length} ${next}\n`);
       } catch (error) {
         if (error instanceof LoginExpired) throw error;
