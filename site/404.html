@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="nl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!-- Toon shows this page for every missing address under the site, at any depth: links and the files the build adds resolve from the root of the site. -->
+  <base href="/nldd/loep/">
+  <title>Pagina niet gevonden · loep (experiment)</title>
+  <meta name="robots" content="noindex">
+  <link rel="icon" type="image/svg+xml" href="https://cdn.jsdelivr.net/npm/@nldd/design-system@0.21.1/dist/favicon.svg">
+  <link rel="apple-touch-icon" href="https://cdn.jsdelivr.net/npm/@nldd/design-system@0.21.1/dist/touch-icon.png">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@nldd/design-system@0.21.1/dist/css/global.css">
+  <script type="module" src="https://cdn.jsdelivr.net/npm/@nldd/design-system@0.21.1/dist/cdn/autoloader.js"></script>
+</head>
+<body>
+<nldd-shell>
+  <nldd-page>
+    <nldd-skip-link slot="header" text="Naar de hoofdinhoud">
+      <nldd-top-navigation-bar
+        logo-title="Nederlandse Digitale Dienst"
+        logo-subtitle="Ministerie van Economische Zaken en Klimaat"
+        website-title="loep (experiment)"
+        back-text="loep"
+        back-href="./"
+      ></nldd-top-navigation-bar>
+    </nldd-skip-link>
+
+    <nldd-simple-section>
+      <nldd-title slot="header" heading-level="1" text="Deze pagina bestaat niet"></nldd-title>
+      <nldd-spacer slot="header" size="16"></nldd-spacer>
+      <nldd-rich-text>
+        <p>Misschien is het adres verkeerd getypt, of staat de pagina niet meer op deze plek.</p>
+      </nldd-rich-text>
+      <nldd-spacer size="24"></nldd-spacer>
+      <nldd-container layout="wrap" gap="12">
+        <nldd-button appearance="primary" text="Naar de startpagina van loep" href="./"></nldd-button>
+        <nldd-button appearance="secondary" text="Bekijk het rapport van deze site" href="rapport/"></nldd-button>
+      </nldd-container>
+    </nldd-simple-section>
+
+    <nldd-page-footer slot="footer">
+      <nldd-page-footer-legal-bar slot="legal-bar">
+        <nldd-page-footer-legal-bar-item slot="start" text="Nederlandse Digitale Dienst"></nldd-page-footer-legal-bar-item>
+        <nldd-page-footer-legal-bar-item slot="end" href="rapport/" text="Toegankelijkheid"></nldd-page-footer-legal-bar-item>
+        <nldd-page-footer-legal-bar-item slot="end" href="https://digitaledienst.overheid.nl/contact/" text="Contact"></nldd-page-footer-legal-bar-item>
+        <nldd-page-footer-legal-bar-item slot="end" href="https://github.com/NederlandseDigitaleDienst/loep" text="Broncode"></nldd-page-footer-legal-bar-item>
+        <nldd-page-footer-legal-bar-item slot="end" href="https://digitaledienst.overheid.nl/over/privacy/" text="Privacy"></nldd-page-footer-legal-bar-item>
+      </nldd-page-footer-legal-bar>
+    </nldd-page-footer>
+  </nldd-page>
+</nldd-shell>
+</body>
+</html>
