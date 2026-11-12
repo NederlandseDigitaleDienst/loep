@@ -235,7 +235,10 @@ export async function writeCutouts(runDir: string, evaluation: Evaluation, dir: 
   for (const finding of findings) {
     const cutout = finding.cutout!;
     const key = sha256(JSON.stringify([cutout.fromSha256, cutout.at, cutout.element]));
-    const altNl = `Uitsnede van ${cutout.page}: het element van de bevinding, rood omlijnd.`;
+    // Say which spot the piece shows, in the words of the finding's own location on that page (WCAG 1.1.1).
+    const place = finding.locations.find((location) => location.page === cutout.page && (location.heading || location.text));
+    const spot = place ? [place.heading ? ` onder de kop “${place.heading}”` : "", place.text ? `${place.heading ? "," : ""} bij “${place.text}”` : ""].join("") : "";
+    const altNl = `Uitsnede van ${cutout.page}${spot}: het element van de bevinding, rood omlijnd.`;
     const known = made.get(key);
     if (known) {
       files[finding.id] = known;
