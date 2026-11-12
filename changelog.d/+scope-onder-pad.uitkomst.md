@@ -1,1 +1,0 @@
-Heeft het startadres een pad, zoals `https://host.nl/team/site/`, dan volgt `inventory` alleen links onder dat pad, en noemt de scope in het rapport dat pad in plaats van de hele host. Een site die een host deelt met andere sites, kreeg eerst "Alle pagina's op" de hele host in de scope.
