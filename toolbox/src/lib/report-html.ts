@@ -182,25 +182,37 @@ const text = (html: string, attrs: Element["attrs"] = {}): string => el({ tag: "
 const spacer = (size: number, attrs: Element["attrs"] = {}): string => el({ tag: "nldd-spacer", attrs: { size, ...attrs } });
 const stack = (children: string, attrs: Element["attrs"] = {}): string => el({ tag: "nldd-container", attrs, children });
 const tag = (label: string, color = "neutral", attrs: Element["attrs"] = {}): string => el({ tag: "nldd-tag", attrs: { color, size: "sm", text: label, ...attrs } });
-const tags = (items: string[]): string => (items.length > 0 ? stack(items.join(""), { layout: "wrap", gap: 8 }) : "");
+/** A row of tags; two or more are a list, so a screen reader hears where the group starts and how many there are (WCAG 1.3.1). */
+const tags = (items: string[]): string => {
+  if (items.length === 0) return "";
+  if (items.length === 1) return stack(items[0]!, { layout: "wrap", gap: 8 });
+  return stack(items.map((item) => item.replace(/^<nldd-tag /, '<nldd-tag role="listitem" ')).join(""), { layout: "wrap", gap: 8, role: "list" });
+};
 const list = (items: string[], ordered = false): string => (items.length > 0 ? `<${ordered ? "ol" : "ul"}>${items.map((item) => `<li>${item}</li>`).join("")}</${ordered ? "ol" : "ul"}>` : "");
 const facts = (rows: [string, string][]): string => (rows.length > 0 ? `<dl>${rows.map(([name, value]) => `<dt>${attr(name)}</dt><dd>${value}</dd>`).join("")}</dl>` : "");
+/**
+ * A label above a block of text that is a heading for a screen reader, and looks like the bold label it was (WCAG 1.3.1).
+ * `level` is its place under the heading above it; aria-level allows more than 6, so it is capped there.
+ */
+const subhead = (label: string, level: number): string => `<p role="heading" aria-level="${Math.min(level, 6)}" data-level="${Math.min(level, 6)}"><strong>${attr(label)}</strong></p>`;
+/** A hash as code that may break every 8 characters, so it fits a narrow screen (WCAG 1.4.10); `<wbr>` adds no character, so a copy stays the same hash. */
+const longCode = (value: string): string => `<code>${(attr(value).match(/.{1,8}/g) ?? []).join("<wbr>")}</code>`;
 
-/** A table of the design system: a header row and body rows of text cells. A cell is plain text, or HTML in its default slot. */
+/**
+ * A table of the design system: a header row and body rows of text cells. A cell is plain text, or HTML in its default slot.
+ * No column is hidden on a narrow screen: what a column says stands nowhere else, so the table scrolls in its own box instead (WCAG 1.4.10).
+ */
 interface Column {
   label: string;
+  /** A CSS grid track; its minimum keeps the column readable, and a table wider than the screen scrolls by itself. */
   track: string;
-  /** Hidden on a narrow table, where the other columns say enough. */
-  wideOnly?: boolean;
   numeric?: boolean;
-  /** What the header shows on a narrow table instead of the label, such as the shape of an outcome; the label is still read out. */
-  short?: string;
 }
 type Cell = string | { html: string } | { text: string; supporting?: string };
 
 function table(label: string, columns: Column[], rows: { cells: Cell[]; id?: string }[], header = true): string {
   const cell = (value: Cell, column: Column, index: number): string => {
-    const common = { "row-header": index === 0 ? true : undefined, "hide-below": column.wideOnly ? "md" : undefined, "horizontal-alignment": column.numeric ? "right" : undefined, "vertical-alignment": "top" };
+    const common = { "row-header": index === 0 ? true : undefined, "horizontal-alignment": column.numeric ? "right" : undefined, "vertical-alignment": "top" };
     if (typeof value === "string") return el({ tag: "nldd-text-cell", attrs: { ...common, text: plain(value) } });
     // Inline markup reaches its style only inside a component that styles it, such as nldd-text.
     if ("html" in value) return el({ tag: "nldd-text-cell", attrs: common, children: value.html.startsWith("<nldd-") ? value.html : text(value.html) });
@@ -210,21 +222,12 @@ function table(label: string, columns: Column[], rows: { cells: Cell[]; id?: str
     ? el({
         tag: "nldd-table-row",
         attrs: { slot: "header" },
-        children: columns
-          .map((column) => {
-            const align = column.numeric ? "right" : undefined;
-            const full = el({ tag: "nldd-text-cell", attrs: { text: column.label, "hide-below": column.wideOnly || column.short ? "md" : undefined, "horizontal-alignment": align } });
-            // One of the two shows at a time, so the column has one header at every width.
-            const short = column.short ? el({ tag: "nldd-text-cell", attrs: { "hide-above": "sm", "horizontal-alignment": align }, children: text(`<span aria-hidden="true">${attr(column.short)}</span>${el({ tag: "nldd-visually-hidden", children: attr(column.label) })}`) }) : "";
-            return short + full;
-          })
-          .join(""),
+        children: columns.map((column) => el({ tag: "nldd-text-cell", attrs: { text: column.label, "horizontal-alignment": column.numeric ? "right" : undefined } })).join(""),
       })
     : "";
-  const narrow = columns.filter((column) => !column.wideOnly).map((column) => column.track).join(" ");
   return el({
     tag: "nldd-table",
-    attrs: { "accessible-label": label, columns: columns.map((column) => column.track).join(" "), "sm-columns": columns.some((column) => column.wideOnly) ? narrow : undefined },
+    attrs: { "accessible-label": label, columns: columns.map((column) => column.track).join(" ") },
     children: head + rows.map((row) => el({ tag: "nldd-table-row", attrs: { id: row.id }, children: row.cells.map((value, index) => cell(value, columns[index]!, index)).join("") })).join(""),
   });
 }
@@ -460,11 +463,12 @@ function numberCards({ derived }: Context): string {
       .map(([label, count, outcome]) =>
         el({
           tag: "nldd-card",
+          attrs: { role: "listitem" },
           children: stack([text(String(count), { size: "display-1", "lg-custom-size": "64px", color: count === 0 ? "secondary" : TEXT_COLOR[outcome] }), spacer(4), text(`${OUTCOME_SYMBOL[outcome]} ${attr(label)}`, { size: "md", weight: "medium" })].join(""), { padding: 20 }),
         }),
       )
       .join(""),
-    { layout: "grid", "column-count": 2, gap: 16 },
+    { layout: "grid", "column-count": 2, gap: 16, role: "list" },
   );
 }
 
@@ -560,7 +564,7 @@ function scoreTable({ evaluation, derived }: Context, version: WcagVersion): str
   const relevant = evaluation.criteria.filter((criterion) => criterion.versions.includes(version));
   const order = derived.outcomeOrder;
   const tally = derived.tally[version];
-  const columns: Column[] = [{ label: "Principe", track: "minmax(8.5rem, 3fr)" }, ...order.map((outcome) => ({ label: outcomeLabel(outcome, derived), track: "minmax(1.5rem, 1fr)", numeric: true, short: OUTCOME_SYMBOL[outcome] })), { label: "Totaal", track: "minmax(3rem, 1fr)", numeric: true, wideOnly: true }];
+  const columns: Column[] = [{ label: "Principe", track: "minmax(8.5rem, 3fr)" }, ...order.map((outcome) => ({ label: outcomeLabel(outcome, derived), track: "minmax(5.5rem, 1fr)", numeric: true })), { label: "Totaal", track: "minmax(3rem, 1fr)", numeric: true }];
   const rows = groupCriteria(relevant, 1).map((group) => ({ cells: [`${group.key} ${group.name}`, ...order.map((outcome) => String(group.criteria.filter((criterion) => derived.shown[criterion.id] === outcome).length)), String(group.criteria.length)] as Cell[] }));
   rows.push({ cells: ["**Totaal**", ...order.map((outcome): Cell => `**${tally[outcome]}**`), `**${tally.total}**`] });
   return table(`WCAG ${version} niveau A en AA, uitkomst per principe`, columns, rows);
@@ -693,24 +697,24 @@ export function firstSentence(value: string): string {
  * The short form of a finding on a card: the start of the fix, and a button to the rest. The rest
  * stands right under it, hidden: the button shows it in a sheet, and printing shows it in place.
  */
-function findingBrief(finding: ReportFinding, titleNl: string, titles: Map<string, string>): string {
+function findingBrief(finding: ReportFinding, titleNl: string, titles: Map<string, string>, level: number): string {
   const start = firstSentence(finding.fixNl);
   return [
     rich(`<p><strong>Oplossing:</strong> ${inline(start)}${start.length < finding.fixNl.replace(/\s+/g, " ").trim().length ? " \u2026" : ""}</p>`, { spacing: "tight" }),
     spacer(12),
     el({ tag: "nldd-button", attrs: { id: `meer-${finding.id}`, appearance: "secondary", size: "sm", text: "Meer", "accessible-label": `Meer over ${plain(titleNl)}`, "popup-type": "dialog", "end-icon": "chevron-right" } }),
-    el({ tag: "nldd-container", attrs: { id: `details-${finding.id}`, hidden: true, "padding-top": 16 }, children: findingText(finding, titles) }),
+    el({ tag: "nldd-container", attrs: { id: `details-${finding.id}`, hidden: true, "padding-top": 16 }, children: findingText(finding, titles, level + 1) }),
   ].join("");
 }
 
 /** What is wrong, who suffers, the fix and where: the four parts every finding has, under labels. */
-function findingText(finding: ReportFinding, titles: Map<string, string>): string {
+function findingText(finding: ReportFinding, titles: Map<string, string>, level: number): string {
   return rich(
     [
-      `<p><strong>Wat is er mis</strong></p><p>${inline(finding.observedNl)}</p>`,
-      `<p><strong>Wie heeft er last van</strong></p><p>${inline(finding.impactNl)}</p>`,
-      `<p><strong>Oplossing</strong></p><p>${inline(finding.fixNl)}</p>`,
-      `<p><strong>Waar</strong></p>${list(whereItems(finding, titles))}`,
+      `${subhead("Wat is er mis", level)}<p>${inline(finding.observedNl)}</p>`,
+      `${subhead("Wie heeft er last van", level)}<p>${inline(finding.impactNl)}</p>`,
+      `${subhead("Oplossing", level)}<p>${inline(finding.fixNl)}</p>`,
+      `${subhead("Waar", level)}${list(whereItems(finding, titles))}`,
     ].join(""),
     { spacing: "tight" },
   );
@@ -748,7 +752,7 @@ function defectCard(defect: Defect, context: Context, level: number): string {
         meta,
         ...(pictures[main.id] ? [spacer(16), picture(main, pictures)] : []),
         spacer(16),
-        findingBrief(main, defect.titleNl, titles),
+        findingBrief(main, defect.titleNl, titles, level),
       ].join(""),
       { padding: 24, "sm-padding": 16 },
     ),
@@ -795,10 +799,10 @@ function whatNext(context: Context): string {
         "Werklijst",
         [
           { label: "Gebrek", track: "minmax(10rem, 3fr)" },
-          { label: "Eigenaar", track: "minmax(6rem, 0.8fr)", wideOnly: true },
+          { label: "Eigenaar", track: "minmax(6rem, 0.8fr)" },
           { label: "Ernst", track: "minmax(5.5rem, 0.7fr)" },
-          { label: "Criterium", track: "minmax(5rem, 0.8fr)", wideOnly: true },
-          { label: "Pagina's", track: "minmax(6rem, 1fr)", wideOnly: true },
+          { label: "Criterium", track: "minmax(5rem, 0.8fr)" },
+          { label: "Pagina's", track: "minmax(6rem, 1fr)" },
         ],
         derived.defects.fix.flatMap((group) =>
           group.defectIds.map((id) => {
@@ -891,7 +895,7 @@ function whatNext(context: Context): string {
                 [
                   title(item.titleNl, 4, 5, { "supporting-text": `${item.id} · bij ${criterion.id} ${criterion.titleNl}, aanbeveling ${item.rule} van de procedure` }),
                   spacer(12),
-                  rich(`<p><strong>Gezien</strong></p><p>${inline(item.observedNl)}</p><p><strong>Aanbeveling</strong></p><p>${inline(item.recommendationNl)}</p><p><strong>Waar</strong></p>${list(item.placesNl.map(inline))}`, { spacing: "tight" }),
+                  rich(`${subhead("Gezien", 5)}<p>${inline(item.observedNl)}</p>${subhead("Aanbeveling", 5)}<p>${inline(item.recommendationNl)}</p>${subhead("Waar", 5)}${list(item.placesNl.map(inline))}`, { spacing: "tight" }),
                 ].join(""),
                 { padding: 20 },
               ),
@@ -995,7 +999,7 @@ function sample(context: Context): string {
       "Pagina's in de steekproef",
       [
         { label: "Pagina", track: "minmax(10rem, 2fr)" },
-        { label: "Soort", track: "minmax(6rem, 1fr)", wideOnly: true },
+        { label: "Soort", track: "minmax(6rem, 1fr)" },
         { label: "Reden", track: "minmax(10rem, 3fr)" },
       ],
       evaluation.sample.items.map((item, index) => {
@@ -1061,7 +1065,7 @@ function tools({ evaluation, derived }: Context): string {
         "Meetmethoden van de agents",
         [
           { label: "Hulpmiddel", track: "minmax(8rem, 1.2fr)" },
-          { label: "Versie", track: "minmax(6rem, 1fr)", wideOnly: true },
+          { label: "Versie", track: "minmax(6rem, 1fr)" },
           { label: "Gebruikt voor", track: "minmax(10rem, 2fr)" },
           { label: "Metingen", track: "minmax(4rem, 0.6fr)", numeric: true },
         ],
@@ -1118,7 +1122,7 @@ function findingUnderCriterion(finding: ReportFinding, context: Context): string
         rich(`<p>${finding.component ? `Onderdeel: ${inline(finding.component)}. ` : ""}Pagina's: ${inline(finding.pagesAffected)}${defectNl ? ` ${defectNl}` : ""}</p>`, { spacing: "tight" }),
         ...(pictures[finding.id] ? [spacer(16), picture(finding, pictures)] : []),
         spacer(16),
-        findingBrief(finding, finding.titleNl, titles),
+        findingBrief(finding, finding.titleNl, titles, 6),
       ].join(""),
       { padding: 20, "sm-padding": 16 },
     ),
@@ -1142,7 +1146,7 @@ function criterionBlock(criterion: CriterionResult, context: Context): string {
     criterionFacts(criterion, brief, true),
     spacer(12),
     rich(`<p>${inline(criterion.summaryNl)}</p>${extra.join("")}`),
-    ...(criterion.findings.length > 0 ? [spacer(16), text(`<strong>Bevindingen (${criterion.findings.length})</strong>`), spacer(8), stack(criterion.findings.map((finding) => findingUnderCriterion(finding, context)).join(""), { gap: 12 })] : []),
+    ...(criterion.findings.length > 0 ? [spacer(16), rich(subhead(`Bevindingen (${criterion.findings.length})`, 6)), spacer(8), stack(criterion.findings.map((finding) => findingUnderCriterion(finding, context)).join(""), { gap: 12 })] : []),
     spacer(40),
   ].join("");
 }
@@ -1156,10 +1160,10 @@ function results(context: Context): string {
       "Uitkomst per criterium",
       [
         { label: "Criterium", track: "minmax(10rem, 3fr)" },
-        { label: "Niveau", track: "minmax(3rem, 0.5fr)", wideOnly: true },
+        { label: "Niveau", track: "minmax(3rem, 0.5fr)" },
         { label: "Uitkomst", track: "minmax(8rem, 1.5fr)" },
-        { label: REPORT_TEXT.establishedBy, track: "minmax(7rem, 1fr)", wideOnly: true },
-        { label: "Bevindingen", track: "minmax(8rem, 0.8fr)", numeric: true, wideOnly: true },
+        { label: REPORT_TEXT.establishedBy, track: "minmax(7rem, 1fr)" },
+        { label: "Bevindingen", track: "minmax(8rem, 0.8fr)", numeric: true },
       ],
       evaluation.criteria.map((criterion) => ({
         cells: [
@@ -1184,9 +1188,9 @@ function results(context: Context): string {
         REPORT_TEXT.quietTitle,
         [
           { label: "Criterium", track: "minmax(9rem, 2fr)" },
-          { label: "Niveau", track: "minmax(3rem, 0.5fr)", wideOnly: true },
+          { label: "Niveau", track: "minmax(3rem, 0.5fr)" },
           { label: "Uitkomst", track: "minmax(7rem, 1fr)" },
-          { label: "Toelichting", track: "minmax(12rem, 4fr)", wideOnly: true },
+          { label: "Toelichting", track: "minmax(12rem, 4fr)" },
         ],
         quietCriteria.map((criterion) => ({ id: ID.criterion(criterion.id), cells: [{ html: criterionLink(criterion, ID.appendix(criterion.id)) }, criterion.level, outcomeLabel(criterion.outcome, derived), criterion.summaryNl] })),
       ),
@@ -1321,8 +1325,8 @@ function appendixEntry(criterion: CriterionResult, context: Context): string {
   const block = (label: string, items: string[]): string => (items.length > 0 ? `<p>${attr(label)}:</p>${list(items.map(inline))}` : "");
   const basis = [criterion.rule ? `Beslisregel ${attr(criterion.rule)}` : null, criterion.procedure ? `procedure versie ${attr(String(criterion.procedure.version))} (${inline(criterion.procedure.class)})` : "geen procedure vastgelegd"].filter(Boolean);
   const html = [
-    observations.length > 0 ? `<p><strong>Hoe is dit vastgesteld</strong></p>${list(observations, true)}` : "",
-    `<p><strong>Hoe zeker is dit oordeel</strong></p><p>${inline(brief.roundsNl)}</p>`,
+    observations.length > 0 ? `${subhead("Hoe is dit vastgesteld", 4)}${list(observations, true)}` : "",
+    `${subhead("Hoe zeker is dit oordeel", 4)}<p>${inline(brief.roundsNl)}</p>`,
     block(REPORT_TEXT.answers, brief.answersNl),
     block(REPORT_TEXT.before, brief.beforeNl),
     criterion.challengeNl ? `<p>${attr(chain.challengeLabel)}: ${inline(criterion.challengeNl)}</p>` : "",
@@ -1357,9 +1361,9 @@ function appendixB({ evaluation, derived }: Context): string {
   return [
     rich(
       `<p>${attr(REPORT_TEXT.traceIntro)}</p>${facts([
-        ["Hash van de evaluatie", `<code>${attr(derived.hash)}</code>`],
-        ["Commit van de toolbox", derived.toolboxCommit ? `<code>${attr(derived.toolboxCommit)}</code>${derived.toolboxChanged ? " (met niet vastgelegde wijzigingen)" : ""}` : attr(REPORT_TEXT.commitUnknown)],
-        ["Hash van de lockfile", `<code>${attr(evaluation.toolchain.toolbox.lockfileSha256)}</code>`],
+        ["Hash van de evaluatie", longCode(derived.hash)],
+        ["Commit van de toolbox", derived.toolboxCommit ? `${longCode(derived.toolboxCommit)}${derived.toolboxChanged ? " (met niet vastgelegde wijzigingen)" : ""}` : attr(REPORT_TEXT.commitUnknown)],
+        ["Hash van de lockfile", longCode(evaluation.toolchain.toolbox.lockfileSha256)],
         ...derived.speechModels.map((model): [string, string] => [`Hash van het spraakmodel ${model.name}`, `<code>${attr(model.sha256)}</code>`]),
       ])}`,
     ),
@@ -1369,10 +1373,10 @@ function appendixB({ evaluation, derived }: Context): string {
       [
         { label: "Criterium", track: "minmax(4rem, 0.8fr)" },
         { label: "Procedure", track: "minmax(7rem, 1.2fr)" },
-        { label: "Dossier", track: "minmax(6rem, 1fr)", wideOnly: true },
-        { label: REPORT_TEXT.trace.judge, track: "minmax(6rem, 1fr)", wideOnly: true },
+        { label: "Dossier", track: "minmax(6rem, 1fr)" },
+        { label: REPORT_TEXT.trace.judge, track: "minmax(6rem, 1fr)" },
         { label: REPORT_TEXT.trace.final, track: "minmax(6rem, 1fr)" },
-        ...(withFinish ? [{ label: REPORT_TEXT.trace.finish, track: "minmax(6rem, 1fr)", wideOnly: true }] : []),
+        ...(withFinish ? [{ label: REPORT_TEXT.trace.finish, track: "minmax(6rem, 1fr)" }] : []),
       ],
       evaluation.criteria.map((criterion) => ({
         cells: [
@@ -1491,6 +1495,7 @@ const OWN_SCRIPT = `(() => {
   const putBack = () => {
     if (!shown) return;
     shown.details.hidden = true;
+    for (const heading of shown.details.querySelectorAll("[data-level]")) heading.setAttribute("aria-level", heading.dataset.level);
     shown.placeholder.replaceWith(shown.details);
     shown.button.expanded = false;
     shown = null;
@@ -1503,6 +1508,8 @@ const OWN_SCRIPT = `(() => {
     const placeholder = document.createComment("");
     details.before(placeholder);
     sheetBody.append(details);
+    // In the sheet the labels sit under its title, an h2.
+    for (const heading of details.querySelectorAll("[data-level]")) heading.setAttribute("aria-level", "3");
     details.hidden = false;
     const heading = button.closest("nldd-card")?.querySelector("nldd-title");
     sheetBar.text = heading ? heading.getAttribute("text") : sheetBar.text;

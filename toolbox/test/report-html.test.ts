@@ -33,10 +33,10 @@ const grouped = (): Evaluation => {
 /** A cutout for the first finding, so the picture is part of what is checked. */
 const pictures = (evaluation: Evaluation): CutoutPictures => ({ [allFindings(evaluation)[0]!.id]: { file: "data:image/png;base64,iVBORw0KGgo=", altNl: "Uitsnede van P1: het element van de bevinding, rood omlijnd.", width: 120, height: 80 } });
 
-/** The headings in document order: the levels of nldd-title and of the headings inside rich text. */
+/** The headings in document order: the levels of nldd-title, of the headings inside rich text and of the labels that are headings. */
 function headingLevels(html: string): number[] {
   const body = html.slice(Math.max(0, html.indexOf("<body>")), html.indexOf("<script>"));
-  return [...body.matchAll(/<nldd-title\b[^>]*\bheading-level="(\d)"|<h([1-6])\b/g)].map((match) => Number(match[1] ?? match[2]));
+  return [...body.matchAll(/<nldd-title\b[^>]*\bheading-level="(\d)"|<h([1-6])\b|<p role="heading" aria-level="(\d)"/g)].map((match) => Number(match[1] ?? match[2] ?? match[3]));
 }
 
 test("the same evaluation gives the same HTML, byte for byte", () => {
@@ -57,6 +57,15 @@ test("the HTML has one h1 and never skips a heading level", () => {
       if (index > 0) assert.ok(level <= levels[index - 1]! + 1, `heading ${index} goes from h${levels[index - 1]} to h${level}`);
     });
   }
+});
+
+test("no column is hidden on a narrow screen, labels above text are headings, and rows of tags are lists", () => {
+  const full = renderHtml(grouped(), undefined, pictures(grouped()));
+  const html = full.slice(full.indexOf("<body>"), full.indexOf("<script>"));
+  assert.doesNotMatch(html, / (hide-below|hide-above|sm-columns)=/, "a hidden column says what stands nowhere else (WCAG 1.4.10)");
+  assert.doesNotMatch(html, /<p><strong>(Wat is er mis|Wie heeft er last van|Oplossing|Waar|Hoe is dit vastgesteld)<\/strong><\/p>/, "a bold label is a heading (WCAG 1.3.1)");
+  assert.match(html, /<p role="heading" aria-level="\d" data-level="\d"><strong>Wie heeft er last van<\/strong><\/p>/);
+  assert.match(html, /<nldd-container layout="wrap" gap="8" role="list"><nldd-tag role="listitem" /);
 });
 
 test("every id is unique, every link inside the report lands, and every finding can be reached", () => {
