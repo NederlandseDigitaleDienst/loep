@@ -6,6 +6,17 @@ Wat er per versie van loep is veranderd. De versie staat op het voorblad en onde
 
 <!-- towncrier: een nieuwe versie komt hieronder -->
 
+## 0.27.1 (2026-11-12)
+
+Deze versie is uitgebracht zonder meting: sinds 0.27.0 veranderde alleen de opmaak van het rapport; de procedures, instrumenten en oordeelsregels bleven gelijk.
+
+### Verder
+
+- De alt-tekst van een uitsnede bij een bevinding noemt nu de tekst van het getoonde element, en niet meer alleen wat voor uitsnede het is.
+- De inhoudsopgave van het HTML-rapport markeert geen huidig onderdeel meer met een grijs vlak. Dat vlak haalde 1.4.1 en 1.4.11 niet.
+- De vette tussenkoppen in het HTML-rapport zijn echte koppen met een niveau. De rijen labels en de tegels met tellingen zijn lijsten.
+- Op een smal scherm scrollen de tabellen in het HTML-rapport in een eigen vak, en verdwijnen er geen kolommen meer. Lange hashes breken af, en de kolomkoppen staan er voluit.
+
 ## 0.27.0 (2026-11-12)
 
 Deze versie is uitgebracht zonder meting: Lindewaard en Berkenveen starten op de root van hun origin; de grens bij het pad van het startadres verandert daar niets aan.
