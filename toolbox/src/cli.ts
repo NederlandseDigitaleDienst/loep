@@ -99,6 +99,11 @@ const USAGE = `loep <command> [options]
   render --run <run> --embedded         Write only the HTML report as a fragment to stdout, for a page of a site with its
                                          own bar and footer that loads @nldd/design-system itself;
                                          nothing in the run changes, so a sealed run stays sealed
+  publish --run <run> --out <dir> [--site <name>]
+                                         Put the report in a directory to publish: <dir>/<site>/<date>/ with the report as
+                                         one HTML page, the PDFs that render made and publicatie.json, and <dir>/<site>/index.html
+                                         with every round published there. Only what the report shows; nothing in the run changes.
+                                         <site> is the host and path of the site unless --site names it
   render --run <run> --rechecks          Write only the working file with the rechecks (rechecks/nametingen.md), outside
                                          the seal; the report is not touched. A signed report has them in appendix C
   recheck --run <run> (--finding <id> | --criterion <id>)
@@ -299,6 +304,7 @@ async function main(): Promise<void> {
       at: { type: "string" },
       rechecks: { type: "boolean", default: false },
       embedded: { type: "boolean" },
+      site: { type: "string" },
       format: { type: "string" },
       help: { type: "boolean", short: "h" },
     },
@@ -686,6 +692,14 @@ async function main(): Promise<void> {
       for (const problem of problems) process.stdout.write(`- ${problem}\n`);
       process.stdout.write(problems.length === 0 ? "OK: het voorstel voldoet aan de regels\n" : `${problems.length} problemen\n`);
       process.exitCode = problems.length === 0 ? 0 : 1;
+      return;
+    }
+    case "publish": {
+      if (!values.run || !values.out) throw new Error("publish needs --run <run> --out <dir>");
+      const { publish } = await import("./commands/publish.ts");
+      const result = await publish(values.run, values.out, values.site ? { site: values.site } : {});
+      process.stdout.write(`${result.round}\n${result.index}\n`);
+      for (const note of result.notesNl) process.stdout.write(`- ${note}\n`);
       return;
     }
     case "render": {

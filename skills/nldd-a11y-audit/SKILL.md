@@ -195,6 +195,8 @@ Een agent starten betekent steeds: een aparte agent die alleen dit krijgt: "Lees
    ```
    `sign` weigert als het doel niet verantwoorden is, als een criterium geen oordeel heeft (een onderzoek dat niet af is, kan niet worden getekend), en als de run niet is verzegeld of na het verzegelen is veranderd; verzegel dan opnieuw en laat het rapport opnieuw lezen. De handtekening komt in `RUN/signed/signature.json` en noemt de hash van het zegel en van de evaluatie. Ze staat buiten het zegel: tekenen verandert niets aan wat verzegeld is. `render` schrijft daarna het rapport dat zegt wie tekende in `RUN/signed/`; het concept in `RUN/report/` blijft zoals het is gelezen. `verify` moet daarna nul afwijkingen melden en zeggen dat er is afgetekend.
 
+   Moet het rapport online, zodat de verklaring ernaar kan linken, dan zet `LOEP publish --run RUN --out <map>` het in `<map>/<site>/<datum>/` met een index per site. Waar die map online komt, kiest de gebruiker; zet hem nergens zelf neer.
+
    Wordt een afgetekende run opnieuw verzegeld nadat er iets is veranderd, dan vervalt de handtekening: `seal` verwijdert `RUN/signed/` en zegt dat. Er moet dan opnieuw worden gelezen en getekend.
 
 11. **Wat nu?** Na het tekenen begint het werk voor de eigenaar van de site: bij elk gebrek beslist de organisatie wat ermee gebeurt. Het register van toegankelijkheidsverklaringen kijkt ook of de maatregelen en alternatieven goed zijn beschreven. Deze stap is een gesprek met de gebruiker, geen lijst met commando's. Besluiten komen na het tekenen: `decide` weigert een run die niet is afgetekend.

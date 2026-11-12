@@ -64,6 +64,8 @@ De assistent draait de stappen uit de [README](../README.md#hoe-het-werkt) en st
 6. **Vier rondes agents.** Per paginatype een rondgang, per criterium een beoordelaar, dan per criterium een verifieerder die elke bevinding opnieuw maakt vanaf een verse pagina. Blijft een criterium open door het onderzoek zelf, dan meet een afmaakronde wat ontbrak. Dit is het grootste deel van de tijd.
 7. **Het rapport.** In de map van de run, onder `report/`: `rapport.md`, `rapport.html`, `rapport.pdf` en `rapport-kort.pdf` zonder bijlage A, als concept. `rapport.html` is één bestand dat offline werkt, in het NLDD Designsysteem, met de pagina's van de site en de gebreken erop.
 
+Wil je het rapport online zetten, zodat de toegankelijkheidsverklaring ernaar kan linken? `LOEP publish --run RUN --out <map>` zet het in `<map>/<site>/<datum>/`, met de pdf's ernaast en een `index.html` per site die elke ronde toont. Er komt alleen in wat het rapport al toont: geen namen, geen antwoorden, geen waarnemingen. Waar die map online komt, kies je zelf. Op Toon is dat `toon publish <map>/<site> --site <groep>/<site> --preview <naam>`.
+
 Hij onderbreekt je alleen als iets van jou afhangt: een pagina met een wachtwoordveld terwijl er geen inlog was afgesproken, formulieren terwijl versturen niet ter sprake kwam, inhoud die een pagina ophaalt van een adres buiten het onderzoek, of een inlogsessie die is verlopen. Al het andere loopt door.
 
 ### Wat je terugkrijgt
