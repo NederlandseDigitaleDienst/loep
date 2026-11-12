@@ -217,6 +217,53 @@ export interface CutoutFile {
   altNl: string;
 }
 
+/** The first words of a text, cut at a word, for an alt text that says what a piece shows. */
+function opening(text: string, max = 80): string {
+  const clean = text.replace(/\s+/g, " ").trim();
+  // find keeps the first 80 characters of a text, so one that long may stop mid-word.
+  if (clean.length < max - 2) return clean;
+  const cut = clean.slice(0, max);
+  return `${cut.slice(0, Math.max(cut.lastIndexOf(" "), 1))}\u2026`;
+}
+
+/**
+ * What the piece shows, for its alt text (WCAG 1.1.1). A piece is a `crop` of an element an earlier
+ * command in the same session found: its own text says which element it is. Without that, the
+ * finding's location on the page, but only when it has one there: with more, which one the piece
+ * shows is unknown, and a wrong one says more than none.
+ */
+export function spotOf(runDir: string, finding: ReportFinding, cutout: FindingCutout): string {
+  const text = elementText(runDir, cutout.boxFrom);
+  if (text) return ` met de tekst “${opening(text)}”`;
+  const places = finding.locations.filter((location) => location.page === cutout.page && (location.heading || location.text));
+  if (places.length !== 1) return "";
+  const place = places[0]!;
+  return [place.heading ? ` onder de kop “${place.heading}”` : "", place.text ? `${place.heading ? "," : ""} bij “${place.text}”` : ""].join("");
+}
+
+/** The text of the element a `crop` observation cut out, from the command in its session that found it. */
+function elementText(runDir: string, observationId: string | undefined): string | null {
+  const match = observationId?.match(/^(.+)-(\d{4})$/);
+  if (!match) return null;
+  const [, session, nr] = match;
+  const read = (n: number): { command?: string; args?: string[]; result?: { items?: { ref?: number; text?: string | null }[] } } | null => {
+    const path = join(runDir, "observations", session!, `${String(n).padStart(4, "0")}.json`);
+    try {
+      return existsSync(path) ? JSON.parse(readFileSync(path, "utf8")) : null;
+    } catch {
+      return null;
+    }
+  };
+  const crop = read(Number(nr));
+  const ref = crop?.command === "crop" ? Number(crop.args?.[0]) : NaN;
+  if (!Number.isInteger(ref)) return null;
+  for (let n = Number(nr) - 1; n > 0; n--) {
+    const item = read(n)?.result?.items?.find((candidate) => candidate.ref === ref);
+    if (item) return item.text?.trim() || null;
+  }
+  return null;
+}
+
 /**
  * Cut the pieces for every finding that has a cutout, outline the element and write them to
  * `dir`. A piece whose picture is gone or changed since the evaluation is left out with a
@@ -235,10 +282,7 @@ export async function writeCutouts(runDir: string, evaluation: Evaluation, dir: 
   for (const finding of findings) {
     const cutout = finding.cutout!;
     const key = sha256(JSON.stringify([cutout.fromSha256, cutout.at, cutout.element]));
-    // Say which spot the piece shows, in the words of the finding's own location on that page (WCAG 1.1.1).
-    const place = finding.locations.find((location) => location.page === cutout.page && (location.heading || location.text));
-    const spot = place ? [place.heading ? ` onder de kop “${place.heading}”` : "", place.text ? `${place.heading ? "," : ""} bij “${place.text}”` : ""].join("") : "";
-    const altNl = `Uitsnede van ${cutout.page}${spot}: het element van de bevinding, rood omlijnd.`;
+    const altNl = `Uitsnede van ${cutout.page}${spotOf(runDir, finding, cutout)}: het element van de bevinding, rood omlijnd.`;
     const known = made.get(key);
     if (known) {
       files[finding.id] = known;
