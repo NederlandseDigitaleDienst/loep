@@ -36,7 +36,7 @@ import {
  * The layout is made of `nldd-*` components and their attributes only. Two small things are the
  * report's own: a stylesheet the design system's content page pattern asks for (the button that
  * opens the table of contents on a narrow screen), and a script that switches between the report
- * and its appendices, keeps the table of contents current, and opens everything for printing.
+ * and its appendices, and opens everything for printing.
  */
 
 /** The version of the design system this rendering is written against; package.json pins the same. */
@@ -615,13 +615,15 @@ function summary(context: Context): string {
 // ---------------------------------------------------------------- the body: table of contents, tabs and chapters
 
 function body(context: Context, report: Chapter[], appendices: Chapter[]): string {
-  const row = (chapter: Chapter, first: boolean): string =>
-    el({ tag: "nldd-list-item", attrs: { href: `#${chapter.id}`, current: first, "current-type": "location" }, children: el({ tag: "nldd-text-cell", attrs: { text: plain(chapter.titleNl) } }) });
+  // No row is marked as the current one: the design system marks it with a grey block alone, which fails
+  // WCAG 1.4.1 and 1.4.11, and the heading on the screen already says where the reader is.
+  const row = (chapter: Chapter): string =>
+    el({ tag: "nldd-list-item", attrs: { href: `#${chapter.id}`, "current-type": "location" }, children: el({ tag: "nldd-text-cell", attrs: { text: plain(chapter.titleNl) } }) });
   const toc = stack(
     [
       title("In dit rapport", 2, 5, { id: "inhoud-kop" }),
       spacer(8),
-      el({ tag: "nldd-list", attrs: { type: "navigation", appearance: "simple", dividers: "never", "accessible-label": "In dit rapport" }, children: [row({ id: "samenvatting", titleNl: "Samenvatting", body: "" }, true), ...report.map((chapter) => row(chapter, false)), ...appendices.map((chapter) => row(chapter, false))].join("") }),
+      el({ tag: "nldd-list", attrs: { type: "navigation", appearance: "simple", dividers: "never", "accessible-label": "In dit rapport" }, children: [row({ id: "samenvatting", titleNl: "Samenvatting", body: "" }), ...report.map((chapter) => row(chapter)), ...appendices.map((chapter) => row(chapter))].join("") }),
     ].join(""),
     { slot: "sidebar", padding: 16, "padding-bottom": 8 },
   );
@@ -1430,7 +1432,7 @@ const OWN_CSS = [
 
 /**
  * Switches between the report and its appendices, follows a link into the part that is hidden,
- * keeps the row of the table of contents current, and shows every part while printing.
+ * and shows every part while printing.
  */
 const OWN_SCRIPT = `(() => {
   const bar = document.getElementById("delen");
@@ -1475,18 +1477,6 @@ const OWN_SCRIPT = `(() => {
   openButton.addEventListener("click", () => section.show());
   section.addEventListener("open", () => { openButton.expanded = true; });
   section.addEventListener("close", () => { openButton.expanded = false; });
-  const rows = [...document.querySelectorAll('nldd-list[type="navigation"] nldd-list-item')];
-  const headings = rows.map((row) => document.getElementById(row.getAttribute("href").slice(1))).filter(Boolean);
-  const mark = () => {
-    const visible = headings.filter((heading) => heading.getClientRects().length > 0);
-    let current = visible[0];
-    for (const heading of visible) if (heading.getBoundingClientRect().top < window.innerHeight / 3) current = heading;
-    for (const row of rows) row.current = current !== undefined && row.getAttribute("href") === "#" + current.id;
-  };
-  let pending = false;
-  const schedule = () => { if (!pending) { pending = true; setTimeout(() => { pending = false; mark(); }, 100); } };
-  window.addEventListener("scroll", schedule, { passive: true });
-  bar.addEventListener("tabchange", schedule);
   // "Meer" on a card: the hidden rest of the card goes into the sheet, and back when the sheet closes.
   const sheet = document.getElementById("detail");
   const sheetBar = document.getElementById("detail-titel");
