@@ -68,6 +68,14 @@ test("no column is hidden on a narrow screen, labels above text are headings, an
   assert.match(html, /<nldd-container layout="wrap" gap="8" role="list"><nldd-tag role="listitem" /);
 });
 
+test("the table of contents marks no row as current: the design system shows that with a grey block alone (WCAG 1.4.1, 1.4.11)", () => {
+  const full = renderHtml(grouped());
+  const toc = full.slice(full.indexOf('<nldd-list type="navigation"'), full.indexOf("</nldd-list>", full.indexOf('<nldd-list type="navigation"')));
+  assert.ok(toc.length > 0, "the table of contents is there");
+  assert.doesNotMatch(toc, /\scurrent[\s=>]/);
+  assert.doesNotMatch(full, /row\.current\s*=/, "no script marks a row while scrolling");
+});
+
 test("every id is unique, every link inside the report lands, and every finding can be reached", () => {
   for (const evaluation of [exampleEvaluation(), grouped()]) {
     const html = renderHtml(evaluation, undefined, pictures(evaluation));
