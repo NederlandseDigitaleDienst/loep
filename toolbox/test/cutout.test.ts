@@ -12,7 +12,7 @@ import { INPAGE_PATH, launchBrowser, loadPage, newContext } from "../src/browser
 import { collectFacts } from "../src/instruments/facts.ts";
 import { canonicalJson, sha256 } from "../src/lib/canonical.ts";
 import { tool } from "../src/lib/typst.ts";
-import { cutPiece, CUTOUT_MARGIN, CUTOUT_MAX, drawOutline, findingCutout, pieceAround, writeCutouts, type FindingCutout } from "../src/lib/cutout.ts";
+import { cutPiece, CUTOUT_MARGIN, CUTOUT_MAX, drawOutline, findingCutout, pieceAround, spotOf, writeCutouts, type FindingCutout } from "../src/lib/cutout.ts";
 import type { Evaluation } from "../src/lib/evaluation.ts";
 import { indexObservations } from "../src/lib/verdict.ts";
 import { cutoutOutcome } from "../src/session/cutout-command.ts";
@@ -202,4 +202,21 @@ test("cutout refuses an --at that is not a whole box inside the picture, and say
 test("a cutout is a look that can be made again without a page to open", () => {
   const index = indexObservations([{ id: "b-111-0001", command: "cutout", error: null, state: { start: null }, result: {} }]);
   assert.equal(index.get("b-111-0001")!.replayable, true);
+});
+
+test("the alt text of a piece names the text of the element it shows, and guesses no place when the finding has more than one", () => {
+  const run = mkdtempSync(join(tmpdir(), "loep-spot-"));
+  mkdirSync(join(run, "observations", "v-131"), { recursive: true });
+  const write = (nr: string, body: unknown) => writeFileSync(join(run, "observations", "v-131", `${nr}.json`), JSON.stringify(body));
+  write("0001", { command: "find", result: { items: [{ ref: 7, text: "Iets anders" }, { ref: 45, text: "Een agent opent zelf pagina's in een browser van loep. Elk commando legt een waa" }] } });
+  write("0002", { command: "crop", args: ["45"], result: {} });
+  const cutout = { page: "P1", boxFrom: "v-131-0002" } as FindingCutout;
+  const two = { locations: [{ page: "P1", heading: "Regel-engines", text: "IBM Equal Access", where: "a" }, { page: "P1", heading: "38 commando's voor de agents", text: "Kijken", where: "b" }] } as never;
+  assert.equal(spotOf(run, two, cutout), " met de tekst “Een agent opent zelf pagina's in een browser van loep. Elk commando legt een…”");
+  // Without a crop to follow: one place on the page is named, two are not guessed between.
+  const look = { page: "P1", boxFrom: "v-131-0001" } as FindingCutout;
+  assert.equal(spotOf(run, two, look), "");
+  const one = { locations: [{ page: "P1", heading: "Samenvatting", text: "2 ✕ Voldoet niet", where: "a" }] } as never;
+  assert.equal(spotOf(run, one, look), " onder de kop “Samenvatting”, bij “2 ✕ Voldoet niet”");
+  rmSync(run, { recursive: true, force: true });
 });
