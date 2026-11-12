@@ -1,1 +1,0 @@
-Op een site onder een pad van een gedeelde host opent een sessie geen pagina's van de andere sites op die host, telt een document van een andere site als document elders, en vraagt `inventory` de pagina voor een ontbrekend adres op onder het pad van de site.
