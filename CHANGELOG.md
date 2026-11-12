@@ -6,6 +6,22 @@ Wat er per versie van loep is veranderd. De versie staat op het voorblad en onde
 
 <!-- towncrier: een nieuwe versie komt hieronder -->
 
+## 0.27.0 (2026-11-12)
+
+Deze versie is uitgebracht zonder meting: Lindewaard en Berkenveen starten op de root van hun origin; de grens bij het pad van het startadres verandert daar niets aan.
+
+### Wat een uitkomst kan veranderen
+
+- Heeft het startadres een pad, zoals `https://host.nl/team/site/`, dan volgt `inventory` alleen links onder dat pad, en noemt de scope in het rapport dat pad in plaats van de hele host. Een site die een host deelt met andere sites, kreeg eerst "Alle pagina's op" de hele host in de scope.
+- Op een site onder een pad van een gedeelde host opent een sessie geen pagina's van de andere sites op die host, telt een document van een andere site als document elders, en vraagt `inventory` de pagina voor een ontbrekend adres op onder het pad van de site.
+
+### Verder
+
+- Nieuw: `publish --run <run> --out <map>` zet het rapport klaar om online te zetten, in `<map>/<site>/<datum>/` met de pdf's en `publicatie.json`, en `<map>/<site>/index.html` met elke ronde. Er komt alleen in wat het rapport al toont, en de run verandert niet. ([#151](https://github.com/NederlandseDigitaleDienst/loep/issues/151))
+- Op het overzichtsblad van de poort is een stuk van een lange pagina zonder Tab-stop ingeklapt tot een grijze band. Zo staat elke stop in het vak, en hoeft de run niet meer terug naar de verkenner voor een gat dat er niet is. ([#507](https://github.com/NederlandseDigitaleDienst/loep/issues/507))
+- Een document buiten de site heet in de scope nu "buiten de site" in plaats van "op andere domeinen": bij een site onder een pad van een gedeelde host kan het op hetzelfde domein staan.
+- `publish --toon <groep>/<site>` zet de map van een site op Toon, standaard als preview en met `--live` voor bezoekers. Ronden die al online staan en niet in de map, haalt het eerst op. Een site met andere inhoud vervangt het nooit.
+
 ## 0.26.0 (2026-11-11)
 
 Deze versie is uitgebracht zonder meting: sinds 0.25.0 veranderden de opdrachten, procedures, instrumenten en oordeelsregels niet. Nieuw zijn het rapport als HTML en een fix aan de testsite die op 320 pixels in WebKit per ongeluk uitstak (#499); de ingebouwde gebreken bleven gelijk.
