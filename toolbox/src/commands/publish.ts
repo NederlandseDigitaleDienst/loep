@@ -36,6 +36,14 @@ export interface PublishResult {
 
 export const PUBLICATION_FILE = "publicatie.json";
 
+/** The list of rounds at the root of a site: what a copy elsewhere is compared with before it is replaced. */
+export const ROUNDS_FILE = "ronden.json";
+
+export interface Rounds {
+  schema: "loep/rounds/1";
+  rounds: { dir: string; evaluationSha256: string; files: string[] }[];
+}
+
 /** The name of the directory of a site: its host and path, in letters, digits and hyphens. */
 export function siteSlug(baseUrl: string): string {
   const url = new URL(baseUrl);
@@ -99,13 +107,25 @@ export async function publish(runDir: string, out: string, options: { site?: str
     files,
   };
   await writeJson(join(dir, PUBLICATION_FILE), publication);
-  const index = join(siteDir, "index.html");
-  await writeFileAtomic(index, siteIndex(evaluation, await roundsOf(siteDir)));
+  const index = await writeSiteIndex(siteDir, evaluation);
   return { round: dir, index, publication, notesNl };
 }
 
+/** Write the index of a site and its list of rounds again, from the rounds that are in its directory. */
+/** What the index of a site says about the site itself. */
+export type SiteOf = { site: Pick<Evaluation["site"], "name" | "baseUrl"> };
+
+export async function writeSiteIndex(siteDir: string, evaluation: SiteOf): Promise<string> {
+  const rounds = await roundsOf(siteDir);
+  const index = join(siteDir, "index.html");
+  await writeFileAtomic(index, siteIndex(evaluation, rounds));
+  const list: Rounds = { schema: "loep/rounds/1", rounds: rounds.map(({ dir, publication }) => ({ dir, evaluationSha256: publication.evaluationSha256, files: publication.files })) };
+  await writeJson(join(siteDir, ROUNDS_FILE), list);
+  return index;
+}
+
 /** Every round published under a site, newest first, with its directory name. */
-async function roundsOf(siteDir: string): Promise<{ dir: string; publication: Publication }[]> {
+export async function roundsOf(siteDir: string): Promise<{ dir: string; publication: Publication }[]> {
   const rounds: { dir: string; publication: Publication }[] = [];
   for (const entry of await readdir(siteDir, { withFileTypes: true })) {
     const file = join(siteDir, entry.name, PUBLICATION_FILE);
@@ -121,7 +141,7 @@ const dateNl = (iso: string): string => new Date(iso).toLocaleDateString("nl-NL"
 const statusNl = (status: string): string => (status === "geen" ? "geen status" : `status ${status}`);
 
 /** The index of a site: one row per round, the newest first. A plain page that needs nothing from elsewhere. */
-export function siteIndex(evaluation: Pick<Evaluation, "site">, rounds: { dir: string; publication: Publication }[]): string {
+export function siteIndex(evaluation: SiteOf, rounds: { dir: string; publication: Publication }[]): string {
   const name = escape(evaluation.site.name);
   const rows = rounds.map(({ dir, publication }) => {
     const links = [`<a href="${dir}/">Rapport</a>`, ...(publication.files.includes("rapport.pdf") ? [`<a href="${dir}/rapport.pdf">pdf</a>`] : []), ...(publication.files.includes("rapport-kort.pdf") ? [`<a href="${dir}/rapport-kort.pdf">korte pdf</a>`] : [])];

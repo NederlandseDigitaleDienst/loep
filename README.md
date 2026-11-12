@@ -78,7 +78,7 @@ De derde skill, `nldd-a11y`, wijst bij een algemene vraag ("hoe laat ik zien dat
 9. `evaluate`, `render` en `statement` maken het rapport (Markdown, een volledige pdf en een korte pdf zonder bijlage A), de conceptverklaring en het invulblad voor het register.
 10. `seal` legt de hash van elk bestand van het onderzoek vast. Een mens leest het rapport en tekent met `sign` voor precies dat zegel. `verify` maakt elke wijziging achteraf zichtbaar.
 11. `decide` legt na het tekenen per gebrek vast wat de organisatie besluit: opgelost, gepland met een datum, een andere zienswijze, onevenredige last of nog niet besloten. De besluiten staan naast het zegel, als eigen laag met een eigen hash; `render` zet ze in het afgetekende rapport en `statement` neemt er de maatregelen uit.
-12. `publish` zet het rapport klaar om online te zetten: per site een map met elke ronde en een index, met alleen wat het rapport toont.
+12. `publish` zet het rapport klaar om online te zetten: per site een map met elke ronde en een index, met alleen wat het rapport toont. Met `--toon <groep>/<site>` komt die map ook op Toon, als preview of met `--live`.
 
 De stappen 1, 2, 4, 5 en 6 gebruiken geen taalmodel. Waar een agent werkt, handelt en meet die alleen via de instrumenten van de toolbox, met vaste opdrachten onder versiebeheer uit [templates/](templates/) en [procedures/](procedures/README.md). Elke uitspraak wijst naar een vastgelegde waarneming.
 

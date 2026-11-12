@@ -104,6 +104,10 @@ const USAGE = `loep <command> [options]
                                          one HTML page, the PDFs that render made and publicatie.json, and <dir>/<site>/index.html
                                          with every round published there. Only what the report shows; nothing in the run changes.
                                          <site> is the host and path of the site unless --site names it
+          [--toon <group/site> [--toon-host <admin>] [--toon-url <url>] [--live] [--preview <ref>] [--replace-unseen]]
+                                         Then put <dir>/<site> on a Toon site of its own, with the session of toon login:
+                                         a preview, or live with --live. Rounds already online are fetched first and stay;
+                                         a site with other content is never replaced
   render --run <run> --rechecks          Write only the working file with the rechecks (rechecks/nametingen.md), outside
                                          the seal; the report is not touched. A signed report has them in appendix C
   recheck --run <run> (--finding <id> | --criterion <id>)
@@ -305,6 +309,12 @@ async function main(): Promise<void> {
       rechecks: { type: "boolean", default: false },
       embedded: { type: "boolean" },
       site: { type: "string" },
+      toon: { type: "string" },
+      "toon-host": { type: "string" },
+      "toon-url": { type: "string" },
+      live: { type: "boolean", default: false },
+      preview: { type: "string" },
+      "replace-unseen": { type: "boolean", default: false },
       format: { type: "string" },
       help: { type: "boolean", short: "h" },
     },
@@ -696,10 +706,25 @@ async function main(): Promise<void> {
     }
     case "publish": {
       if (!values.run || !values.out) throw new Error("publish needs --run <run> --out <dir>");
+      if (values.toon === undefined && (values.live || values.preview !== undefined || values["replace-unseen"] || values["toon-host"] !== undefined || values["toon-url"] !== undefined)) throw new Error("--live, --preview, --replace-unseen, --toon-host en --toon-url horen bij --toon <groep/site>");
       const { publish } = await import("./commands/publish.ts");
       const result = await publish(values.run, values.out, values.site ? { site: values.site } : {});
       process.stdout.write(`${result.round}\n${result.index}\n`);
       for (const note of result.notesNl) process.stdout.write(`- ${note}\n`);
+      if (values.toon === undefined) return;
+      const { publishToToon } = await import("./commands/publish-toon.ts");
+      const { dirname } = await import("node:path");
+      const online = await publishToToon(dirname(result.index), { name: result.publication.site, baseUrl: result.publication.baseUrl }, {
+        site: values.toon,
+        ...(values["toon-host"] !== undefined ? { host: values["toon-host"] } : {}),
+        ...(values["toon-url"] !== undefined ? { siteUrl: values["toon-url"] } : {}),
+        live: values.live,
+        ...(values.preview !== undefined ? { preview: values.preview } : {}),
+        replaceUnseen: values["replace-unseen"],
+      });
+      if (online.fetched.length > 0) process.stdout.write(`- opgehaald van de site, zodat ze blijven: ${online.fetched.join(", ")}\n`);
+      process.stdout.write(`${online.url}\n`);
+      for (const note of online.notesNl) process.stdout.write(`- ${note}\n`);
       return;
     }
     case "render": {
