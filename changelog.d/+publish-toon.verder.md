@@ -1,0 +1,1 @@
+`publish --toon <groep>/<site>` zet de map van een site op Toon, standaard als preview en met `--live` voor bezoekers. Ronden die al online staan en niet in de map, haalt het eerst op. Een site met andere inhoud vervangt het nooit.

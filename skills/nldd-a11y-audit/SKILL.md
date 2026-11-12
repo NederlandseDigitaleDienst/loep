@@ -195,7 +195,7 @@ Een agent starten betekent steeds: een aparte agent die alleen dit krijgt: "Lees
    ```
    `sign` weigert als het doel niet verantwoorden is, als een criterium geen oordeel heeft (een onderzoek dat niet af is, kan niet worden getekend), en als de run niet is verzegeld of na het verzegelen is veranderd; verzegel dan opnieuw en laat het rapport opnieuw lezen. De handtekening komt in `RUN/signed/signature.json` en noemt de hash van het zegel en van de evaluatie. Ze staat buiten het zegel: tekenen verandert niets aan wat verzegeld is. `render` schrijft daarna het rapport dat zegt wie tekende in `RUN/signed/`; het concept in `RUN/report/` blijft zoals het is gelezen. `verify` moet daarna nul afwijkingen melden en zeggen dat er is afgetekend.
 
-   Moet het rapport online, zodat de verklaring ernaar kan linken, dan zet `LOEP publish --run RUN --out <map>` het in `<map>/<site>/<datum>/` met een index per site. Waar die map online komt, kiest de gebruiker; zet hem nergens zelf neer.
+   Moet het rapport online, zodat de verklaring ernaar kan linken, dan zet `LOEP publish --run RUN --out <map>` het in `<map>/<site>/<datum>/` met een index per site. Waar die map online komt, kiest de gebruiker; zet hem nergens zelf neer. Noemt de gebruiker een Toon-site, dan zet `--toon <groep>/<site>` hem daar als preview. Geef `--live` alleen mee als de gebruiker in het gesprek letterlijk om live vraagt, en `--replace-unseen` alleen als de gebruiker zegt dat er op die site niets staat wat moet blijven. Inloggen bij Toon (`toon login`) doet de gebruiker zelf.
 
    Wordt een afgetekende run opnieuw verzegeld nadat er iets is veranderd, dan vervalt de handtekening: `seal` verwijdert `RUN/signed/` en zegt dat. Er moet dan opnieuw worden gelezen en getekend.
 
