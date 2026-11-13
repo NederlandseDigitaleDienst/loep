@@ -1107,6 +1107,9 @@ function criterionFacts(criterion: CriterionResult, brief: CriterionBrief, appen
 }
 
 /** A finding under its criterion: in full when its text stands nowhere else, as one row to its defect when the work list has it. */
+/** A text that ends as a sentence, so the next one does not run into it. */
+const sentence = (value: string): string => (/[.!?…]$/.test(value.trim()) ? value.trim() : `${value.trim()}.`);
+
 /** A finding that is described at its defect in the work list: under its criterion it is one line with a link. */
 function listedUnderDefect(finding: ReportFinding, context: Context): boolean {
   const place = context.derived.defects?.ofFinding[finding.id];
@@ -1119,26 +1122,26 @@ function findingUnderCriterion(finding: ReportFinding, context: Context): string
   const defect = place ? defects.get(place.defectId) : undefined;
   if (defect && place && listedUnderDefect(finding, context)) {
     return el({
-      tag: "nldd-list",
-      attrs: { "accessible-label": `Bevinding ${finding.id}`, appearance: "box-base" },
-      children: el({
-        tag: "nldd-list-item",
-        attrs: { href: `#${defect.id}` },
-        children: [el({ tag: "nldd-text-cell", attrs: { text: plain(finding.titleNl), "supporting-text": plain(`${finding.id} · ernst ${finding.severity} · beschreven bij ${REPORT_TEXT.defect.label.toLowerCase()} ${defect.id} in de werklijst`) } }), el({ tag: "nldd-icon-cell", attrs: { icon: "chevron-right", size: 20, color: "secondary" } })].join(""),
-      }),
+      tag: "nldd-list-item",
+      attrs: { href: `#${defect.id}` },
+      children: [el({ tag: "nldd-text-cell", attrs: { text: plain(finding.titleNl), "supporting-text": plain(`${finding.id} · ernst ${finding.severity} · beschreven bij ${REPORT_TEXT.defect.label.toLowerCase()} ${defect.id} in de werklijst`) } }), el({ tag: "nldd-icon-cell", attrs: { icon: "chevron-right", size: 20, color: "secondary" } })].join(""),
     });
   }
   const defectNl = defect ? `${REPORT_TEXT.defect.label}: ${link(`#${defect.id}`, attr(defect.id))}. ${REPORT_TEXT.defect.main}: ${attr(defect.mainCriterion)}, zie ${link(`#${defect.mainFindingId}`, attr(defect.mainFindingId))}.` : "";
   return el({
     tag: "nldd-card",
-    attrs: { id: finding.id },
+    attrs: { id: finding.id, role: "listitem" },
     children: stack(
       [
-        title(finding.titleNl, 6, 5, { "supporting-text": finding.id }),
+        // An item of the list under the heading Bevindingen at level 6, the deepest there is: its
+        // title is no heading of its own, or the card would sit beside that heading (WCAG 1.3.1).
+        text(inline(finding.titleNl), { size: "lg", weight: "bold", "data-title": plain(finding.titleNl) }),
+        spacer(4),
+        text(attr(finding.id), { size: "sm", color: "secondary" }),
         spacer(12),
         tags(findingFacts(finding, derived)),
         spacer(12),
-        rich(`<p>${finding.component ? `Onderdeel: ${inline(finding.component)}. ` : ""}Pagina's: ${inline(finding.pagesAffected)}${defectNl ? ` ${defectNl}` : ""}</p>`, { spacing: "tight" }),
+        rich(`<p>${finding.component ? `Onderdeel: ${inline(finding.component)}. ` : ""}Pagina's: ${inline(sentence(finding.pagesAffected))}${defectNl ? ` ${defectNl}` : ""}</p>`, { spacing: "tight" }),
         ...(pictures[finding.id] ? [spacer(16), picture(finding, pictures)] : []),
         spacer(16),
         findingBrief(finding, finding.titleNl, titles, 6),
@@ -1146,6 +1149,20 @@ function findingUnderCriterion(finding: ReportFinding, context: Context): string
       { padding: 20, "sm-padding": 16 },
     ),
   });
+}
+
+/**
+ * The findings under a criterion, under the heading Bevindingen: the ones described at their
+ * defect as one list of links, the others as a list of cards.
+ */
+function findingsUnderCriterion(criterion: CriterionResult, context: Context): string {
+  const listed = criterion.findings.filter((finding) => listedUnderDefect(finding, context));
+  const cards = criterion.findings.filter((finding) => !listedUnderDefect(finding, context));
+  return [
+    listed.length > 0 ? el({ tag: "nldd-list", attrs: { "accessible-label": `Bevindingen bij ${criterion.id}, beschreven in de werklijst`, appearance: "box-base" }, children: listed.map((finding) => findingUnderCriterion(finding, context)).join("") }) : "",
+    listed.length > 0 && cards.length > 0 ? spacer(12) : "",
+    cards.length > 0 ? stack(cards.map((finding) => findingUnderCriterion(finding, context)).join(""), { gap: 12, role: "list", "aria-label": `Bevindingen bij ${criterion.id}` }) : "",
+  ].join("");
 }
 
 function criterionBlock(criterion: CriterionResult, context: Context): string {
@@ -1165,9 +1182,7 @@ function criterionBlock(criterion: CriterionResult, context: Context): string {
     criterionFacts(criterion, brief, true),
     spacer(12),
     rich(`<p>${inline(criterion.summaryNl)}</p>${extra.join("")}`),
-    // A card under a criterion has a title at level 6, the deepest there is: over a card the label
-    // is no heading, or the card would sit beside it instead of under it (WCAG 1.3.1).
-    ...(criterion.findings.length > 0 ? [spacer(16), rich(criterion.findings.every((finding) => listedUnderDefect(finding, context)) ? subhead(`Bevindingen (${criterion.findings.length})`, 6) : `<p><strong>Bevindingen (${criterion.findings.length})</strong></p>`), spacer(8), stack(criterion.findings.map((finding) => findingUnderCriterion(finding, context)).join(""), { gap: 12 })] : []),
+    ...(criterion.findings.length > 0 ? [spacer(16), rich(subhead(`Bevindingen (${criterion.findings.length})`, 6)), spacer(8), findingsUnderCriterion(criterion, context)] : []),
     spacer(40),
   ].join("");
 }
@@ -1524,8 +1539,8 @@ const OWN_SCRIPT = `(() => {
     // In the sheet the labels sit under its title, an h2.
     for (const heading of details.querySelectorAll("[data-level]")) heading.setAttribute("aria-level", "3");
     details.hidden = false;
-    const heading = button.closest("nldd-card")?.querySelector("nldd-title");
-    if (heading) sheetBar.text = sheetHeading.text = heading.getAttribute("text");
+    const heading = button.closest("nldd-card")?.querySelector("nldd-title, [data-title]");
+    if (heading) sheetBar.text = sheetHeading.text = heading.getAttribute("text") || heading.dataset.title;
     shown = { details, placeholder, button };
     button.expanded = true;
     sheet.show();

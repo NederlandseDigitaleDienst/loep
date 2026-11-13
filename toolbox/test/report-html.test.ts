@@ -171,16 +171,20 @@ test("a card shows the first sentence of the fix; the rest waits behind a button
   assert.ok(html.includes('window.addEventListener("beforeprint"') && html.includes("details.hidden = false"), "printing shows the rest");
 });
 
-test("a card under a criterion sits under its label, not beside it: over a card the label is no heading (WCAG 1.3.1)", () => {
+test("the findings under a criterion are a list under the heading Bevindingen, and a card there has no heading of its own (WCAG 1.3.1)", () => {
   let cards = 0;
   for (const evaluation of [exampleEvaluation(), grouped()]) {
     const full = renderHtml(evaluation);
     const html = full.slice(full.indexOf("<body>"), full.indexOf("<script>"));
+    assert.doesNotMatch(html, /<p><strong>Bevindingen/, "Bevindingen is a heading everywhere");
     for (const match of html.matchAll(/<p role="heading" aria-level="6" data-level="6"><strong>Bevindingen \(\d+\)<\/strong><\/p>/g)) {
-      const next = html.slice(match.index! + match[0].length).match(/<nldd-title\b[^>]*\bheading-level="(\d)"|<p role="heading" aria-level="(\d)"/);
-      assert.notEqual(Number(next?.[1] ?? next?.[2]), 6, "the next heading after a Bevindingen heading is no card title at the same level");
+      const rest = html.slice(match.index! + match[0].length);
+      // The labels in the hidden rest of a card are no part of this: they show in the sheet, at level 3.
+      const next = rest.match(/<nldd-title\b[^>]*\bheading-level="(\d)"/);
+      assert.ok(!next || Number(next[1]) < 6, "no title at level 6 follows Bevindingen before the next criterion");
+      assert.match(rest, /^<\/nldd-rich-text><nldd-spacer[^>]*><\/nldd-spacer>(<nldd-list |<nldd-container [^>]*role="list")/, "a list follows the heading");
     }
-    cards += [...html.matchAll(/<p><strong>Bevindingen \(\d+\)<\/strong><\/p>/g)].length;
+    cards += [...html.matchAll(/<nldd-card id="[^"]+" role="listitem">/g)].length;
   }
   assert.ok(cards > 0, "the example has a criterion with a card under it");
 });
