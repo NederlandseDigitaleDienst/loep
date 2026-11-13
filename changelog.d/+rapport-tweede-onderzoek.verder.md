@@ -1,0 +1,1 @@
+In het rapport zijn de markeringen in een schermafbeelding verborgen voor hulpsoftware, krijgt het venster met details een kop die mag afbreken, en staat het label van de controle in een paar woorden. Bevindingen boven een kaart is geen kop meer.

@@ -213,10 +213,26 @@ test("the alt text of a piece names the text of the element it shows, and guesse
   const cutout = { page: "P1", boxFrom: "v-131-0002" } as FindingCutout;
   const two = { locations: [{ page: "P1", heading: "Regel-engines", text: "IBM Equal Access", where: "a" }, { page: "P1", heading: "38 commando's voor de agents", text: "Kijken", where: "b" }] } as never;
   assert.equal(spotOf(run, two, cutout), " met de tekst “Een agent opent zelf pagina's in een browser van loep. Elk commando legt een…”");
-  // Without a crop to follow: one place on the page is named, two are not guessed between.
-  const look = { page: "P1", boxFrom: "v-131-0001" } as FindingCutout;
-  assert.equal(spotOf(run, two, look), "");
-  const one = { locations: [{ page: "P1", heading: "Samenvatting", text: "2 ✕ Voldoet niet", where: "a" }] } as never;
-  assert.equal(spotOf(run, one, look), " onder de kop “Samenvatting”, bij “2 ✕ Voldoet niet”");
+  // An element without text, such as an image, is named by the heading above it.
+  write("0003", { command: "find", result: { items: [{ ref: 1, text: "", heading: "Groepen labels zijn geen lijst" }] } });
+  write("0004", { command: "crop", args: ["1"], result: {} });
+  assert.equal(spotOf(run, two, { page: "P1", boxFrom: "v-131-0004" } as FindingCutout), " onder de kop “Groepen labels zijn geen lijst”");
+  // A look: the element whose box is the outline, not the text of the finding's location.
+  write("0005", {
+    command: "look",
+    result: {
+      items: [
+        { ref: 4, text: "56", box: { x: 72, y: 379, width: 329, height: 41 } },
+        { ref: 5, text: "131", box: { x: 469, y: 379, width: 329, height: 41 } },
+      ],
+    },
+  });
+  const one = { locations: [{ page: "P1", heading: "Eén onderzoek in cijfers", text: "56", where: "a" }] } as never;
+  const shown = { page: "P1", boxFrom: "v-131-0005", at: { x: 445, y: 355, width: 377, height: 89 }, element: { x: 24, y: 24, width: 329, height: 41 } } as FindingCutout;
+  assert.equal(spotOf(run, one, shown), " met de tekst “131”");
+  // No element with the outlined box: only the heading of one place on the page, never its text; two places are not guessed between.
+  const elsewhere = { ...shown, element: { x: 0, y: 0, width: 10, height: 10 } } as FindingCutout;
+  assert.equal(spotOf(run, one, elsewhere), " onder de kop “Eén onderzoek in cijfers”");
+  assert.equal(spotOf(run, two, elsewhere), "");
   rmSync(run, { recursive: true, force: true });
 });

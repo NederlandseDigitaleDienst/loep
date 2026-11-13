@@ -727,9 +727,20 @@ function findingFacts(finding: ReportFinding, derived: ReportDerived): string[] 
     severityTag(finding.severity),
     tag(`Eigenaar: ${finding.owner}`),
     ...(finding.vendorTags ?? []).map((name) => tag(`Leverancier: ${name}`, "accent")),
-    ...(finding.verification ? [tag(derived.chain.verification[finding.verification.status])] : []),
+    ...(finding.verification ? [tag(VERIFICATION_TAG[finding.verification.status])] : []),
   ];
 }
+
+/**
+ * The verification of a finding in a few words: a tag does not wrap (nldd-tag, design-system#428),
+ * so a longer label is cut off on a narrow screen. The full sentence stays in the Markdown report,
+ * and the section on the method says what the rounds are.
+ */
+const VERIFICATION_TAG: Record<"reproduced" | "unverified" | "repeated", string> = {
+  reproduced: "Bevestigd",
+  unverified: "Eén keer gezien",
+  repeated: "Twee keer gezien",
+};
 
 /** A defect in the work list: its main finding in full, with the cutout, and links to the other findings. */
 function defectCard(defect: Defect, context: Context, level: number): string {
@@ -1096,11 +1107,17 @@ function criterionFacts(criterion: CriterionResult, brief: CriterionBrief, appen
 }
 
 /** A finding under its criterion: in full when its text stands nowhere else, as one row to its defect when the work list has it. */
+/** A finding that is described at its defect in the work list: under its criterion it is one line with a link. */
+function listedUnderDefect(finding: ReportFinding, context: Context): boolean {
+  const place = context.derived.defects?.ofFinding[finding.id];
+  return Boolean(place && place.role !== "other" && context.defects.get(place.defectId));
+}
+
 function findingUnderCriterion(finding: ReportFinding, context: Context): string {
   const { derived, defects, titles, pictures } = context;
   const place = derived.defects?.ofFinding[finding.id];
   const defect = place ? defects.get(place.defectId) : undefined;
-  if (defect && place && place.role !== "other") {
+  if (defect && place && listedUnderDefect(finding, context)) {
     return el({
       tag: "nldd-list",
       attrs: { "accessible-label": `Bevinding ${finding.id}`, appearance: "box-base" },
@@ -1148,7 +1165,9 @@ function criterionBlock(criterion: CriterionResult, context: Context): string {
     criterionFacts(criterion, brief, true),
     spacer(12),
     rich(`<p>${inline(criterion.summaryNl)}</p>${extra.join("")}`),
-    ...(criterion.findings.length > 0 ? [spacer(16), rich(subhead(`Bevindingen (${criterion.findings.length})`, 6)), spacer(8), stack(criterion.findings.map((finding) => findingUnderCriterion(finding, context)).join(""), { gap: 12 })] : []),
+    // A card under a criterion has a title at level 6, the deepest there is: over a card the label
+    // is no heading, or the card would sit beside it instead of under it (WCAG 1.3.1).
+    ...(criterion.findings.length > 0 ? [spacer(16), rich(criterion.findings.every((finding) => listedUnderDefect(finding, context)) ? subhead(`Bevindingen (${criterion.findings.length})`, 6) : `<p><strong>Bevindingen (${criterion.findings.length})</strong></p>`), spacer(8), stack(criterion.findings.map((finding) => findingUnderCriterion(finding, context)).join(""), { gap: 12 })] : []),
     spacer(40),
   ].join("");
 }
@@ -1231,8 +1250,9 @@ function annotatedPage(label: string, pageTitle: string, picture: PagePart, numb
   const marks = numbered.map(({ id, n, box }) => {
     const cx = Math.max(16, Math.min(picture.width - 16, box.x));
     const cy = Math.max(16, Math.min(picture.height - 16, box.y));
-    // Out of the tab order and hidden as part of the image: the list under the image has the same links.
-    return `<a href="#${attr(id)}" tabindex="-1"><rect x="${box.x}" y="${box.y}" width="${box.width}" height="${box.height}" fill="none" stroke="#c22a1f" stroke-width="3" rx="2"/><circle cx="${cx}" cy="${cy}" r="15" fill="#c22a1f" stroke="#ffffff" stroke-width="2.5"/><text x="${cx}" y="${cy + 1}" fill="#ffffff" font-family="system-ui, sans-serif" font-size="15" font-weight="700" text-anchor="middle" dominant-baseline="middle">${n}</text></a>`;
+    // Out of the tab order and out of the accessibility tree: the list under the image has the same
+    // links with the name of each defect, and a link named only "1" says nothing (WCAG 2.4.4).
+    return `<a href="#${attr(id)}" tabindex="-1" aria-hidden="true"><rect x="${box.x}" y="${box.y}" width="${box.width}" height="${box.height}" fill="none" stroke="#c22a1f" stroke-width="3" rx="2"/><circle cx="${cx}" cy="${cy}" r="15" fill="#c22a1f" stroke="#ffffff" stroke-width="2.5"/><text x="${cx}" y="${cy + 1}" fill="#ffffff" font-family="system-ui, sans-serif" font-size="15" font-weight="700" text-anchor="middle" dominant-baseline="middle">${n}</text></a>`;
   });
   const numbers = numbered.map(({ n }) => n);
   const range = numbers.length === 1 ? `markering ${numbers[0]}` : `de markeringen ${numbers[0]} tot en met ${numbers[numbers.length - 1]}`;
@@ -1409,8 +1429,10 @@ function detailSheet(): string {
     children: el({
       tag: "nldd-page",
       children: [
-        el({ tag: "nldd-top-title-bar", attrs: { slot: "header", id: "detail-titel", text: "Meer over dit gebrek", "dismiss-text": "Sluit", "heading-level": 2 } }),
-        el({ tag: "nldd-simple-section", attrs: { id: "detail-inhoud" } }),
+        // The bar cuts its title off on one line; the full title is a heading at the top of the
+        // content that wraps (WCAG 1.4.12), and the bar takes it over once it scrolls away.
+        el({ tag: "nldd-top-title-bar", attrs: { slot: "header", id: "detail-titel", text: "Meer over dit gebrek", "dismiss-text": "Sluit", "heading-level": 2, "collapse-anchor": "detail-kop" } }),
+        el({ tag: "nldd-simple-section", attrs: { id: "detail-inhoud" }, children: title("Meer over dit gebrek", 2, 4, { slot: "header", id: "detail-kop" }) }),
       ].join(""),
     }),
   });
@@ -1481,6 +1503,7 @@ const OWN_SCRIPT = `(() => {
   const sheet = document.getElementById("detail");
   const sheetBar = document.getElementById("detail-titel");
   const sheetBody = document.getElementById("detail-inhoud");
+  const sheetHeading = document.getElementById("detail-kop");
   let shown = null;
   const putBack = () => {
     if (!shown) return;
@@ -1502,7 +1525,7 @@ const OWN_SCRIPT = `(() => {
     for (const heading of details.querySelectorAll("[data-level]")) heading.setAttribute("aria-level", "3");
     details.hidden = false;
     const heading = button.closest("nldd-card")?.querySelector("nldd-title");
-    sheetBar.text = heading ? heading.getAttribute("text") : sheetBar.text;
+    if (heading) sheetBar.text = sheetHeading.text = heading.getAttribute("text");
     shown = { details, placeholder, button };
     button.expanded = true;
     sheet.show();
