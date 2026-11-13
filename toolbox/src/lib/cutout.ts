@@ -227,26 +227,36 @@ function opening(text: string, max = 80): string {
 }
 
 /**
- * What the piece shows, for its alt text (WCAG 1.1.1). A piece is a `crop` of an element an earlier
- * command in the same session found: its own text says which element it is. Without that, the
- * finding's location on the page, but only when it has one there: with more, which one the piece
- * shows is unknown, and a wrong one says more than none.
+ * What the piece shows, for its alt text (WCAG 1.1.1). The element in the piece comes from the
+ * observation that gave its box: a `crop` of an element an earlier command in the same session
+ * found, or a look whose list holds an element with exactly the outlined box. Its own text says
+ * which element it is; an element without text, such as an image, is named by the heading above it.
+ * Without either, only the heading of the finding's location on the page, and only when it has one
+ * there: the text of a location is one element in that part of the page, not always the one the
+ * piece shows, and a wrong text says more than none.
  */
 export function spotOf(runDir: string, finding: ReportFinding, cutout: FindingCutout): string {
-  const text = elementText(runDir, cutout.boxFrom);
-  if (text) return ` met de tekst “${opening(text)}”`;
-  const places = finding.locations.filter((location) => location.page === cutout.page && (location.heading || location.text));
+  const element = shownElement(runDir, cutout);
+  if (element?.text) return ` met de tekst “${opening(element.text)}”`;
+  if (element?.heading) return ` onder de kop “${opening(element.heading)}”`;
+  const places = finding.locations.filter((location) => location.page === cutout.page && location.heading);
   if (places.length !== 1) return "";
-  const place = places[0]!;
-  return [place.heading ? ` onder de kop “${place.heading}”` : "", place.text ? `${place.heading ? "," : ""} bij “${place.text}”` : ""].join("");
+  return ` onder de kop “${opening(places[0]!.heading!)}”`;
 }
 
-/** The text of the element a `crop` observation cut out, from the command in its session that found it. */
-function elementText(runDir: string, observationId: string | undefined): string | null {
-  const match = observationId?.match(/^(.+)-(\d{4})$/);
+interface ListedElement {
+  ref?: number;
+  text?: string | null;
+  heading?: string | null;
+  box?: { x: number; y: number; width: number; height: number };
+}
+
+/** The element the piece outlines, from the observation that gave its box. */
+function shownElement(runDir: string, cutout: FindingCutout): { text: string | null; heading: string | null } | null {
+  const match = cutout.boxFrom?.match(/^(.+)-(\d{4})$/);
   if (!match) return null;
   const [, session, nr] = match;
-  const read = (n: number): { command?: string; args?: string[]; result?: { items?: { ref?: number; text?: string | null }[] } } | null => {
+  const read = (n: number): { command?: string; args?: string[]; result?: { items?: ListedElement[] } } | null => {
     const path = join(runDir, "observations", session!, `${String(n).padStart(4, "0")}.json`);
     try {
       return existsSync(path) ? JSON.parse(readFileSync(path, "utf8")) : null;
@@ -254,14 +264,26 @@ function elementText(runDir: string, observationId: string | undefined): string 
       return null;
     }
   };
-  const crop = read(Number(nr));
-  const ref = crop?.command === "crop" ? Number(crop.args?.[0]) : NaN;
-  if (!Number.isInteger(ref)) return null;
-  for (let n = Number(nr) - 1; n > 0; n--) {
-    const item = read(n)?.result?.items?.find((candidate) => candidate.ref === ref);
-    if (item) return item.text?.trim() || null;
+  const own = read(Number(nr));
+  const named = (item: ListedElement) => ({ text: item.text?.trim() || null, heading: item.heading?.trim() || null });
+  if (own?.command === "crop") {
+    const ref = Number(own.args?.[0]);
+    if (!Number.isInteger(ref)) return null;
+    for (let n = Number(nr) - 1; n > 0; n--) {
+      const item = read(n)?.result?.items?.find((candidate) => candidate.ref === ref);
+      if (item) return named(item);
+    }
+    return null;
   }
-  return null;
+  // A look lists every element in the window with its box in pixels of its picture: the outlined
+  // element is the one whose box is the outline. Two with that box (a heading and its link) are
+  // not guessed between.
+  if (!cutout.at || !cutout.element) return null;
+  const x = cutout.at.x + cutout.element.x;
+  const y = cutout.at.y + cutout.element.y;
+  const near = (a: number, b: number) => Math.abs(a - b) <= 1;
+  const same = (own?.result?.items ?? []).filter(({ box }) => box && near(box.x, x) && near(box.y, y) && near(box.width, cutout.element.width) && near(box.height, cutout.element.height));
+  return same.length === 1 ? named(same[0]!) : null;
 }
 
 /**

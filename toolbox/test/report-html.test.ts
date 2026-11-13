@@ -148,7 +148,9 @@ test("a page of the sample is shown with a numbered mark at each defect, and the
   const section = html.slice(html.indexOf(`id="pagina-${label}"`));
   const svg = section.slice(section.indexOf("<svg"), section.indexOf("</svg>"));
   assert.match(svg, /role="img" aria-label="Schermafbeelding van [^"]+markering/, "the picture has a text alternative");
-  const marked = [...svg.matchAll(/<a href="#([^"]+)" tabindex="-1">/g)].map((match) => match[1]!);
+  // A mark is out of the tab order and hidden from assistive technology: the list has the same links, with names (WCAG 2.4.4).
+  const marked = [...svg.matchAll(/<a href="#([^"]+)" tabindex="-1" aria-hidden="true">/g)].map((match) => match[1]!);
+  assert.equal([...svg.matchAll(/<a /g)].length, marked.length, "every mark is hidden");
   assert.ok(marked.length > 0, "at least one mark");
   const listed = [...section.slice(section.indexOf("<ol>"), section.indexOf("</ol>")).matchAll(/<a href="#([^"]+)">/g)].map((match) => match[1]!);
   assert.deepEqual(listed, marked, "the list names the marks in the same order, as links");
@@ -167,4 +169,32 @@ test("a card shows the first sentence of the fix; the rest waits behind a button
   assert.ok(html.includes(`id="meer-${defect.mainFindingId}"`), "a button per card");
   assert.match(html, new RegExp(`<nldd-container id="details-${defect.mainFindingId.replace(/[.]/g, "\\.")}" hidden`), "the rest is in the card, hidden");
   assert.ok(html.includes('window.addEventListener("beforeprint"') && html.includes("details.hidden = false"), "printing shows the rest");
+});
+
+test("a card under a criterion sits under its label, not beside it: over a card the label is no heading (WCAG 1.3.1)", () => {
+  let cards = 0;
+  for (const evaluation of [exampleEvaluation(), grouped()]) {
+    const full = renderHtml(evaluation);
+    const html = full.slice(full.indexOf("<body>"), full.indexOf("<script>"));
+    for (const match of html.matchAll(/<p role="heading" aria-level="6" data-level="6"><strong>Bevindingen \(\d+\)<\/strong><\/p>/g)) {
+      const next = html.slice(match.index! + match[0].length).match(/<nldd-title\b[^>]*\bheading-level="(\d)"|<p role="heading" aria-level="(\d)"/);
+      assert.notEqual(Number(next?.[1] ?? next?.[2]), 6, "the next heading after a Bevindingen heading is no card title at the same level");
+    }
+    cards += [...html.matchAll(/<p><strong>Bevindingen \(\d+\)<\/strong><\/p>/g)].length;
+  }
+  assert.ok(cards > 0, "the example has a criterion with a card under it");
+});
+
+test("the sheet with the rest of a card has a heading that wraps, and its bar takes the title over from it (WCAG 1.4.12)", () => {
+  const html = renderHtml(grouped());
+  assert.match(html, /<nldd-top-title-bar [^>]*id="detail-titel"[^>]*collapse-anchor="detail-kop"/);
+  assert.match(html, /<nldd-simple-section id="detail-inhoud"><nldd-title [^>]*heading-level="2"[^>]*slot="header"[^>]*id="detail-kop"|<nldd-simple-section id="detail-inhoud"><nldd-title [^>]*id="detail-kop"/);
+  assert.ok(html.includes("sheetBar.text = sheetHeading.text ="), "the script sets both to the title of the card");
+});
+
+test("the tag with the verification of a finding is a few words, since a tag does not wrap (WCAG 1.4.10)", () => {
+  const html = renderHtml(grouped());
+  const labels = [...html.matchAll(/<nldd-tag [^>]*text="([^"]+)"/g)].map((match) => match[1]!);
+  assert.ok(labels.length > 0);
+  for (const label of labels.filter((text) => !text.startsWith("Leverancier: "))) assert.ok(label.length <= 30, `tag "${label}" is ${label.length} characters`);
 });
