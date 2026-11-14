@@ -10,7 +10,7 @@ Deze repository is zelf de plugin `nldd-a11y`: de manifesten staan in `.claude-p
 | `nldd-a11y-audit` | Maakt het toegankelijkheidsonderzoek, stap voor stap. |
 | `nldd-a11y-statement` | Maakt van een getekend onderzoek de toegankelijkheidsverklaring. |
 
-Hoe je de skills gebruikt, staat in [gebruik.md](gebruik.md). De skills roepen de toolbox in `toolbox/` aan. Wie de plugin installeert, heeft dus de hele repository nodig en draait één keer `just install`; `just doctor` zegt welke hulpprogramma's ontbreken.
+Hoe je de skills gebruikt, staat in [gebruik.md](gebruik.md). De skills roepen de toolbox in `toolbox/` aan. Wie de plugin installeert, heeft dus de hele repository nodig en draait `just install`, ook na elke update: elke versie staat in een eigen map. `just doctor` zegt wat ontbreekt.
 
 ## In de marketplace van de Nederlandse Digitale Dienst
 

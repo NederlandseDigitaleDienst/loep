@@ -46,8 +46,17 @@ doctor:
     echo "Nodig:"
     # Node: toolbox/package.json asks for 22.18, the first version that runs TypeScript without a flag.
     if command -v node >/dev/null; then vanaf "node" "$(node --version | sed 's/^v//')" 22.18 "de toolbox draait TypeScript direct met node en heeft Node.js 22.18 of nieuwer nodig (engines in toolbox/package.json)"; else mist "node" "installeer Node.js 22.18 of nieuwer"; fi
-    if [ -d "{{toolbox}}/node_modules" ]; then ok "pakketten van de toolbox"; else mist "pakketten van de toolbox" "just install"; fi
-    if (cd "{{toolbox}}" && npx playwright install --dry-run chromium 2>/dev/null | grep -q "Install location" && [ -d "$(cd "{{toolbox}}" && npx playwright install --dry-run chromium 2>/dev/null | awk '/Install location/ {print $3; exit}')" ]); then ok "Chromium voor de metingen"; else mist "Chromium voor de metingen" "just install"; fi
+    # npm ls fails when a package is missing or has another version than package.json asks for, such as after an update of the plugin or a pull.
+    if [ -d "{{toolbox}}/node_modules" ] && (cd "{{toolbox}}" && npm ls --depth=0 >/dev/null 2>&1); then ok "pakketten van de toolbox"; else mist "pakketten van de toolbox, in de versies die deze versie van loep vraagt" "just install"; fi
+    # The Playwright of the toolbox itself: npx would fetch the newest one when node_modules is missing, and report on its browsers instead.
+    browsers_present() {
+      playwright="{{toolbox}}/node_modules/.bin/playwright"
+      [ -x "$playwright" ] || return 1
+      locations="$("$playwright" install --dry-run chromium firefox webkit 2>/dev/null | awk '/Install location/ {print $3}')"
+      [ -n "$locations" ] || return 1
+      printf '%s\n' "$locations" | while read -r location; do [ -d "$location" ] || exit 1; done
+    }
+    if browsers_present; then ok "Chromium, Firefox en WebKit voor de metingen"; else mist "Chromium, Firefox en WebKit voor de metingen, in de versies van deze Playwright" "just install"; fi
     echo "Voor een deel van het werk:"
     # typst: the report is compiled with --pdf-standard ua-1 and the template uses pdf.artifact; both came with typst 0.14.
     if command -v typst >/dev/null; then vanaf "typst (rapport en verklaring als pdf)" "$(eerste typst --version | awk '{print $2}')" 0.14 "het rapport wordt gemaakt als PDF/UA-1 (--pdf-standard ua-1, pdf.artifact); dat kan vanaf typst 0.14"; else mist "typst (rapport en verklaring als pdf)" "just tools; zonder typst krijg je alleen Markdown"; fi
