@@ -99,6 +99,8 @@ export interface DifferenceItem {
   defectId: string | null;
   /** For a finding that stayed: its identifier in the previous evaluation. */
   previousId?: string;
+  /** For a finding that stayed with another severity: the severity it had in the previous evaluation. */
+  previousSeverity?: string;
   /** For a new finding: whether the place was examined then. For one that is gone: whether it was examined now. */
   examined?: Examined;
   examinedNl?: string;
@@ -193,7 +195,9 @@ export function compareEvaluations(previous: Evaluation, current: Evaluation): D
   });
   const findingsNow = current.criteria.flatMap((criterion) => criterion.findings);
   const findingsThen = previous.criteria.flatMap((criterion) => criterion.findings);
-  const remained = findingsNow.filter((finding) => matches.has(finding)).map((finding) => ({ ...item(finding, current), previousId: matches.get(finding)!.id }));
+  const remained = findingsNow
+    .filter((finding) => matches.has(finding))
+    .map((finding) => ({ ...item(finding, current), previousId: matches.get(finding)!.id, ...(matches.get(finding)!.severity !== finding.severity ? { previousSeverity: matches.get(finding)!.severity } : {}) }));
   const fresh = findingsNow.filter((finding) => !matches.has(finding)).map((finding) => ({ ...item(finding, current), ...examinedIn(finding, current, now, previous, "toen") }));
   const resolved = findingsThen.filter((finding) => !matchedThen.has(finding)).map((finding) => ({ ...item(finding, previous), ...examinedIn(finding, previous, then, current, "nu") }));
 

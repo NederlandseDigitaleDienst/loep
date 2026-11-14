@@ -529,6 +529,9 @@ test("two evaluations side by side: solved, stayed and new, linked by place and 
   kept.id = "VOOR-nieuw-kenmerk";
   const gone = failing[1]!.findings.shift()!;
   if (failing[1]!.findings.length === 0) failing[1]!.outcome = "passed";
+  // The same place with another severity stays, and says what it was.
+  const previousSeverity = kept.severity;
+  kept.severity = previousSeverity === "laag" ? "midden" : "laag";
   const added = { ...kept, id: "VOOR-erbij", titleNl: previous.criteria.find((criterion) => criterion.id === kept.criterion)!.findings[0]!.titleNl, component: "kaart op de contactpagina", locations: [{ page: "P02", where: "#kaart > iframe.plattegrond" }], targets: [{ page: "P02", path: ["#kaart > iframe.plattegrond"], state: null }] };
   failing[0]!.findings.push(added);
   const difference = compareEvaluations(previous, current);
@@ -537,6 +540,8 @@ test("two evaluations side by side: solved, stayed and new, linked by place and 
   assert.deepEqual(difference.fresh.map((item) => item.id), ["VOOR-erbij"], "the same title at another place is another finding");
   assert.equal(difference.remained.length, before - 1);
   assert.equal(difference.remained.find((item) => item.id === "VOOR-nieuw-kenmerk")!.previousId, previous.criteria.find((criterion) => criterion.id === kept.criterion)!.findings[0]!.id);
+  assert.equal(difference.remained.find((item) => item.id === "VOOR-nieuw-kenmerk")!.previousSeverity, previousSeverity);
+  assert.equal(difference.remained.filter((item) => item.previousSeverity !== undefined).length, 1, "a finding with the same severity says nothing about it");
   // The page was examined both times and the criterion was judged: missed then or arisen since, which the two evaluations cannot tell apart.
   assert.equal(difference.fresh[0]!.examined, "examined");
   assert.equal(difference.resolved[0]!.examined, "examined");
@@ -545,6 +550,7 @@ test("two evaluations side by side: solved, stayed and new, linked by place and 
 
   const markdown = renderDifference(difference);
   assert.match(markdown, /^> \*\*Werkdocument, geen onderdeel van het rapport\.\*\*/m);
+  assert.ok(markdown.includes(`ernst ${kept.severity}`) && markdown.includes(`toen ernst ${previousSeverity})`), "a severity that changed is named with what it was");
   assert.ok(markdown.includes(`\`${evaluationHash(previous).slice(0, 12)}\` | \`${evaluationHash(current).slice(0, 12)}\``), "both evaluations are named by hash");
   assert.ok(markdown.includes("| Afgetekend | nee, concept | nee, concept |"));
   assert.ok(markdown.includes("| Gemaakt met | loep 0.0.1, commit 000000000000 | loep 0.0.1, commit 000000000000 |"));

@@ -72,7 +72,7 @@ export function renderDifference(difference: Difference): string {
     ...(difference.resolved.length === 0 ? ["Geen.", ""] : ["De kenmerken en paginanummers zijn die van de vorige evaluatie.", "", ...grouped(difference.resolved, GONE_HEADING, ["examined", "notExamined", "unknown"])]),
     `## Gebleven (${difference.remained.length})`,
     "",
-    ...(difference.remained.length === 0 ? ["Geen.", ""] : [...difference.remained.map((item) => line(item, item.previousId && item.previousId !== item.id ? [`toen \`${item.previousId}\``] : [])), ""]),
+    ...(difference.remained.length === 0 ? ["Geen.", ""] : [...difference.remained.map((item) => line(item, [...(item.previousId && item.previousId !== item.id ? [`toen \`${item.previousId}\``] : []), ...(item.previousSeverity ? [`toen ernst ${item.previousSeverity}`] : [])])), ""]),
     `## Nieuw (${difference.fresh.length})`,
     "",
     ...(difference.fresh.length === 0 ? ["Geen.", ""] : grouped(difference.fresh, NEW_HEADING, ["notExamined", "examined", "unknown"])),
