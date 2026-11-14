@@ -98,9 +98,13 @@ export interface WeighingProposal {
   together?: Together[];
 }
 
+/** Why a weighing that is there does not count: not validated (or changed since), made for other findings, or made with another task text. */
+export type StaleReason = "unchecked" | "findings" | "task";
+
 export interface WeighingRecord {
-  /** "stale": there is a weighing, but it was validated against other findings or another task text, so it is not applied. */
+  /** "stale": there is a weighing, but it is not applied; `reason` says why. */
   status: "not-run" | "stale" | "applied";
+  reason?: StaleReason;
   templateSha256?: string;
   proposalSha256?: string;
   /** The core tasks of the site, as the step named them. */
@@ -145,6 +149,7 @@ const DISMISSALS: [RegExp, string][] = [
   [/\brandgeval/i, "randgeval"],
   [/\bbijza(?:ak|ken)/i, "bijzaak"],
   [/\bvalt (?:\S+ ){0,5}mee\b/i, "valt mee"],
+  [/\bmeeval/i, "valt mee"],
   [/\bzeldza/i, "zeldzaam"],
   [/\bkleine(?:re)? groep/i, "kleine groep"],
   [/\bweinig (?:mensen|bezoekers|gebruikers)\b/i, "weinig mensen"],

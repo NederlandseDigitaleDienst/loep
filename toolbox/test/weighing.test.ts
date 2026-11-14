@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { cpSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { checkMerge, merge } from "../src/commands/merge.ts";
-import { checkWeigh, weigh } from "../src/commands/weigh.ts";
+import { checkWeigh, weigh, weighingLineNl } from "../src/commands/weigh.ts";
 import { canonicalJson, readJson } from "../src/lib/canonical.ts";
 import { mergeFindings } from "../src/lib/defects.ts";
 import { summarise, type Evaluation, type ReportFinding } from "../src/lib/evaluation.ts";
@@ -186,6 +186,7 @@ test("a sentence that weighs a group away is refused", () => {
     ["Dit raakt alleen kleine groepen bezoekers van de site.", "kleine groep"],
     ["Voor de meesten is dit gewoon te lezen.", "de meeste mensen"],
     ["Het contrast valt in de praktijk best wel mee.", "valt mee"],
+    ["De tekst is lichter, maar dat zal wel meevallen.", "valt mee"],
   ] as const) {
     assert.match(refused(evaluation, (proposal) => (proposal.findings[0]!.affected[0]!.textNl = sentence)), new RegExp(`textNl says "${word}": write what happens to this group`), sentence);
   }
@@ -319,7 +320,7 @@ test("the step writes its task, applies a weighing that was checked, and drops i
   assert.equal((await checkWeigh(dir)).length, 1);
   // There is a weighing, but not one that counts: the evaluation says so, and keeps the judges' severities.
   assert.equal((await weigh(dir)).weighing, "stale");
-  assert.deepEqual((await readJson<Evaluation>(path)).weighing, { status: "stale" });
+  assert.deepEqual((await readJson<Evaluation>(path)).weighing, { status: "stale", reason: "unchecked" });
 
   writeFileSync(join(dir, "verdicts", "weging.json"), JSON.stringify(weighingFor()));
   assert.deepEqual(await checkWeigh(dir), []);
@@ -352,7 +353,8 @@ test("the step writes its task, applies a weighing that was checked, and drops i
   const third = await weigh(dir);
   assert.equal(third.weighing, "stale");
   const dropped = await readJson<Evaluation>(path);
-  assert.deepEqual(dropped.weighing, { status: "stale" });
+  assert.deepEqual(dropped.weighing, { status: "stale", reason: "findings" });
+  assert.match(weighingLineNl(third), /^De weging is gemaakt voor andere bevindingen dan deze\. Ze is niet toegepast: de ernst is die van de beoordelaars\. Weeg opnieuw; de opdracht staat in /);
   assert.ok(dropped.defects!.every((defect) => defect.weighing === undefined && defect.judgedSeverity === undefined));
   assert.ok(dropped.criteria.every((criterion) => criterion.findings.every((entry) => entry.weighing === undefined && entry.judgedSeverity === undefined)));
 });
@@ -383,7 +385,7 @@ test("grouping again with other defects leaves the weighing behind, and the comm
   const regrouped = await merge(dir);
   assert.equal(regrouped.weighed!.weighing, "stale");
   const after = await readJson<Evaluation>(path);
-  assert.deepEqual(after.weighing, { status: "stale" });
+  assert.deepEqual(after.weighing, { status: "stale", reason: "findings" });
   assert.ok(after.criteria.every((criterion) => criterion.findings.every((entry) => entry.weighing === undefined && entry.judgedSeverity === undefined)));
 });
 
@@ -450,4 +452,40 @@ test("a defect stands with the core task of a finding that gives it its severity
   });
   const [defect] = evaluation.defects!;
   assert.deepEqual([defect!.mainFindingId, defect!.severity, defect!.weighing!.task], ["T-4.1.2-1", "midden", "zoeken"]);
+});
+
+test("a weighing that is not applied says why, and a run that was moved keeps its weighing", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "weigh-why-"));
+  const path = join(dir, "evaluation.json");
+  writeFileSync(path, canonicalJson(weighCase()));
+  await weigh(dir);
+  mkdirSync(join(dir, "verdicts"), { recursive: true });
+  const proposal = join(dir, "verdicts", "weging.json");
+  // Written but not checked: the weighing may be fine, it only has to go through the check.
+  writeFileSync(proposal, JSON.stringify(weighingFor()));
+  const unchecked = await weigh(dir);
+  assert.deepEqual([unchecked.weighing, unchecked.reason], ["stale", "unchecked"]);
+  assert.match(weighingLineNl(unchecked), /^Er staat een weging die check-weigh niet heeft goedgekeurd, of die daarna is gewijzigd\. Ze is niet toegepast: de ernst is die van de beoordelaars\. Draai check-weigh$/);
+  assert.deepEqual(await checkWeigh(dir), []);
+  assert.equal((await weigh(dir)).weighing, "applied");
+  // Changed after the check: the stamp is for another answer.
+  const changed = weighingFor();
+  changed.findings[0]!.affected[0]!.textNl = "Ze lezen de pagina met de schermlezer. Het venster heeft geen kop.";
+  writeFileSync(proposal, JSON.stringify(changed));
+  assert.equal((await weigh(dir)).reason, "unchecked");
+  writeFileSync(proposal, JSON.stringify(weighingFor()));
+  assert.equal((await weigh(dir)).weighing, "applied");
+  // The run copied to another place: the task names other paths, and is the same task.
+  const moved = mkdtempSync(join(tmpdir(), "weigh-moved-"));
+  cpSync(dir, moved, { recursive: true });
+  assert.notEqual(readFileSync(join(moved, "tasks", "weeg", "taak.md"), "utf8"), "");
+  const there = await weigh(moved);
+  assert.equal(there.weighing, "applied");
+  assert.ok(readFileSync(join(moved, "tasks", "weeg", "taak.md"), "utf8").includes(moved), "the task was written again for the new place");
+  // Another task text: the weighing was made with other instructions.
+  const stamp = join(moved, "verdicts", "weging.stamp.json");
+  writeFileSync(stamp, JSON.stringify({ ...JSON.parse(readFileSync(stamp, "utf8")), promptSha256: "0".repeat(64) }));
+  const other = await weigh(moved);
+  assert.deepEqual([other.weighing, other.reason], ["stale", "task"]);
+  assert.match(weighingLineNl(other), /^De weging is gemaakt met een andere versie van de opdracht\. /);
 });
