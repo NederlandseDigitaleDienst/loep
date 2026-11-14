@@ -1,5 +1,5 @@
 {
- "sleutel": {
+ "key": {
   "1.1.1-logo-melding": [
    "GEME-1.1.1-7302"
   ],
@@ -267,7 +267,7 @@
    "GEME-4.1.3-9498"
   ]
  },
- "beoordelaars": {
+ "judged": {
   "GEME-1.1.1-ed36": "hoog",
   "GEME-1.1.1-5608": "hoog",
   "GEME-1.1.1-7302": "laag",
@@ -380,7 +380,7 @@
   "GEME-4.1.3-8c59": "midden",
   "GEME-4.1.3-9498": "hoog"
  },
- "weging": {
+ "weighing": {
   "tasks": [
    {
     "id": "afval",

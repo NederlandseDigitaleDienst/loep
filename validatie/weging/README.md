@@ -88,7 +88,7 @@ Deze doelen zijn gesteld bij de start van het werk, in het plan van aanpak. Ze z
 | --- | --- |
 | Het oordeel per criterium en de bevindingen veranderen niet | Gehaald. De opdrachten van beoordelaar, verifieerder en afmaakronde en de procedures zijn niet gewijzigd, en een test legt vast dat de bevindingen na de weging gelijk zijn op de ernst na |
 | De ernst is niet slechter dan die van de beoordelaars, getoetst aan een sleutel | Niet gemeten: er is geen sleutel met de juiste ernst |
-| Bij herhaling niet wisselvalliger dan de beoordelaars (63 van 79 gelijk, 16 één trede), en nooit twee treden | Tussen twee onderzoeken van de testsite, waar de maat van de beoordelaars vandaan komt: vaker gelijk (63 tot 71 tegen 63). Twee treden verschil kwam in vijf van de zes ronden voor, bij één tot drie gebreken. Op dezelfde evaluatie is er geen maat van de beoordelaars; daar kwam het sinds ronde 4 niet tot twee treden |
+| Bij herhaling niet wisselvalliger dan de beoordelaars (63 van 79 gelijk, 16 één trede), en nooit twee treden | Tussen twee onderzoeken van de testsite, waar de maat van de beoordelaars vandaan komt: even vaak of vaker gelijk (63 tot 71 tegen 63). Twee treden verschil kwam in vijf van de zes ronden voor, bij één tot drie gebreken. Op dezelfde evaluatie is er geen maat van de beoordelaars; daar kwam het sinds ronde 4 niet tot twee treden |
 | Geen bevinding zonder groep, geen tekst die een groep klein noemt | De controle weigert een tekst die een groep klein of onbelangrijk noemt. Een bevinding zonder groep staat ze alleen toe met een zin per groep, en niet bij een gemeten grens. Dat is drie keer gebruikt |
 | Onder 5 procent van de tokens van een onderzoek | Niet gehaald: 8 tot 9 procent |
 | Stoppen als een ronde slechter uitkomt dan de nulmeting, en eerst de oorzaak zoeken | Toegepast na ronde 2 (wegen per gebrek) en na ronde 4 (valse blokkades) |
@@ -137,6 +137,7 @@ De agents meldden aan het eind van elke weging wat ze onduidelijk vonden. Wat ro
 - **Opnieuw laden als uitweg.** De opdracht zegt dat een hindernis de taak tegenhoudt als opnieuw laden de enige uitweg is en ze dan terugkomt. Eén agent telde opnieuw laden toch als wegdoen.
 - **Een feit van een andere plek.** Een feit uit een bevinding over dezelfde plek mag worden gebruikt. Agents gebruiken ook feiten uit bevindingen die de invoer als aparte plek geeft, of noemen het ontbreken ervan als twijfel.
 - **Wat samen tegenhoudt.** Twee agents beoordeelden dezelfde combinatie op de testsite verschillend. De opdracht zegt niet wanneer "de tijd loopt af" een taak tegenhoudt.
+- **De lijst van wat de controle weigert.** Ze noemt niet dat een groep buiten het criterium een reden nodig heeft, en niet welke vorm het id van een kerntaak heeft. Regel 4 gebruikt zelf het woord "even", dat regel 10 de agent afraadt.
 - **Een onderzoek zonder beschrijving van de site.** Oudere onderzoeken hebben die niet. De agent haalt de kerntaken dan alleen uit de titels van de pagina's.
 
 Ze zijn na ronde 8 niet meer in de opdracht verwerkt: dan was de gemeten opdracht niet meer de uitgebrachte.

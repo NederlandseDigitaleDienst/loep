@@ -4,44 +4,36 @@
  * Run from the root of the repository: node validatie/weging/ronde-8/vergelijk.ts
  */
 import { readFileSync } from "node:fs";
+import { SEVERITIES, type Severity } from "../../../toolbox/src/lib/verdict.ts";
+import { severityOf, type Weighing } from "../../../toolbox/src/lib/weighing.ts";
 
-type Severity = "blokkerend" | "hoog" | "midden" | "laag";
-interface Entry {
-  finding: string;
-  task: string | null;
-  affected: { consequence: "cannot" | "detour" | "effort" }[];
-}
 interface Run {
   /** Per defect of the key, the findings of this run matched to it. */
-  sleutel: Record<string, string[]>;
+  key: Record<string, string[]>;
   /** The severity the judges gave each finding. */
-  beoordelaars: Record<string, Severity>;
-  weging: { findings: Entry[] };
+  judged: Record<string, Severity>;
+  weighing: { findings: ({ finding: string } & Weighing)[] };
 }
 
-const RANK: Severity[] = ["blokkerend", "hoog", "midden", "laag"];
 const read = (name: string): Run => JSON.parse(readFileSync(new URL(`./${name}.json`, import.meta.url), "utf8"));
-/** The table of toolbox/src/lib/weighing.ts. */
-const weighed = (entry: Entry): Severity => {
-  const has = (consequence: string): boolean => entry.affected.some((group) => group.consequence === consequence);
-  return has("cannot") ? (entry.task !== null ? "blokkerend" : "hoog") : has("detour") ? "midden" : "laag";
-};
-const heaviest = (severities: Severity[]): Severity => [...severities].sort((a, b) => RANK.indexOf(a) - RANK.indexOf(b))[0]!;
+const rank = (severity: Severity): number => SEVERITIES.indexOf(severity);
+const heaviest = (severities: Severity[]): Severity => [...severities].sort((a, b) => rank(a) - rank(b))[0]!;
 
 const [l1, l2] = [read("l1"), read("l2")];
-const keys = Object.keys(l1.sleutel).filter((key) => l1.sleutel[key]!.length > 0 && (l2.sleutel[key] ?? []).length > 0);
-const perKey = (run: Run, of: Record<string, Severity>): Record<string, Severity> => Object.fromEntries(keys.map((key) => [key, heaviest(run.sleutel[key]!.map((id) => of[id]!))]));
-const bySteps = (run: Run): Record<string, Severity> => Object.fromEntries(run.weging.findings.map((entry) => [entry.finding, weighed(entry)]));
+const defects = Object.keys(l1.key).filter((defect) => l1.key[defect]!.length > 0 && (l2.key[defect] ?? []).length > 0);
+const perDefect = (run: Run, of: Record<string, Severity>): Record<string, Severity> => Object.fromEntries(defects.map((defect) => [defect, heaviest(run.key[defect]!.map((id) => of[id]!))]));
+/** The severity of each finding by the table of the toolbox. */
+const weighed = (run: Run): Record<string, Severity> => Object.fromEntries(run.weighing.findings.map((entry) => [entry.finding, severityOf(entry)]));
 
 function compare(name: string, a: Record<string, Severity>, b: Record<string, Severity>): void {
-  const apart = keys.map((key) => Math.abs(RANK.indexOf(a[key]!) - RANK.indexOf(b[key]!)));
+  const apart = defects.map((defect) => Math.abs(rank(a[defect]!) - rank(b[defect]!)));
   const same = apart.filter((steps) => steps === 0).length;
-  const count = (of: Record<string, Severity>, severity: Severity): number => keys.filter((key) => of[key] === severity).length;
-  const chance = RANK.reduce((sum, severity) => sum + count(a, severity) * count(b, severity), 0) / keys.length ** 2;
-  const blocking = (of: Record<string, Severity>): string[] => keys.filter((key) => of[key] === "blokkerend");
-  console.log(`${name}: gelijk ${same}, een trede ${apart.filter((steps) => steps === 1).length}, twee of meer ${apart.filter((steps) => steps >= 2).length}, van ${keys.length}; kappa ${((same / keys.length - chance) / (1 - chance)).toFixed(2)}`);
-  console.log(`  blokkerend in L1 ${blocking(a).length}, in L2 ${blocking(b).length}, in beide ${blocking(a).filter((key) => blocking(b).includes(key)).length}`);
+  const count = (of: Record<string, Severity>, severity: Severity): number => defects.filter((defect) => of[defect] === severity).length;
+  const chance = SEVERITIES.reduce((sum, severity) => sum + count(a, severity) * count(b, severity), 0) / defects.length ** 2;
+  const blocking = (of: Record<string, Severity>): string[] => defects.filter((defect) => of[defect] === "blokkerend");
+  console.log(`${name}: gelijk ${same}, een trede ${apart.filter((steps) => steps === 1).length}, twee of meer ${apart.filter((steps) => steps >= 2).length}, van ${defects.length}; kappa ${((same / defects.length - chance) / (1 - chance)).toFixed(2)}`);
+  console.log(`  blokkerend in L1 ${blocking(a).length}, in L2 ${blocking(b).length}, in beide ${blocking(a).filter((defect) => blocking(b).includes(defect)).length}`);
 }
 
-compare("beoordelaars", perKey(l1, l1.beoordelaars), perKey(l2, l2.beoordelaars));
-compare("weging ronde 8", perKey(l1, bySteps(l1)), perKey(l2, bySteps(l2)));
+compare("beoordelaars", perDefect(l1, l1.judged), perDefect(l2, l2.judged));
+compare("weging ronde 8", perDefect(l1, weighed(l1)), perDefect(l2, weighed(l2)));
