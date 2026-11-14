@@ -6,13 +6,13 @@ De toolbox zelf valt onder EUPL-1.2. Dit overzicht noemt wat de toolbox van ande
 
 | Pakket | Versie | Licentie | Waarvoor |
 |---|---|---|---|
-| `playwright` | 1.63.0 | Apache-2.0 | Browsers aansturen; eigen naamberekening (`ariaSnapshot`) |
+| `playwright` | 1.65.1 | Apache-2.0 | Browsers aansturen; eigen naamberekening (`ariaSnapshot`) |
 | `axe-core` | 4.14.0 | MPL-2.0 | Regel-engine; naamberekening |
-| `@siteimprove/alfa-act` | 0.119.0 | MIT | Regel-engine Alfa |
-| `@siteimprove/alfa-rules` | 0.119.0 | MIT | Regels van Alfa |
-| `@siteimprove/alfa-playwright` | 0.84.2 | MIT | Kopie van de pagina voor Alfa |
-| `@siteimprove/alfa-aria` | 0.119.0 | MIT | Naamberekening van Alfa |
-| `@siteimprove/alfa-dom` | 0.119.0 | MIT | Elementen terugvinden in de kopie van Alfa |
+| `@siteimprove/alfa-act` | 0.120.0 | MIT | Regel-engine Alfa |
+| `@siteimprove/alfa-rules` | 0.120.0 | MIT | Regels van Alfa |
+| `@siteimprove/alfa-playwright` | 0.84.3 | MIT | Kopie van de pagina voor Alfa |
+| `@siteimprove/alfa-aria` | 0.120.0 | MIT | Naamberekening van Alfa |
+| `@siteimprove/alfa-dom` | 0.120.0 | MIT | Elementen terugvinden in de kopie van Alfa |
 | `accessibility-checker-engine` | 4.0.34 | Apache-2.0 | Regel-engine van IBM (Equal Access) |
 | `@qualweb/act-rules` | 0.8.6 | ISC | Regel-engine QualWeb, ACT-regels |
 | `@qualweb/wcag-techniques` | 0.4.9 | ISC | Regel-engine QualWeb, WCAG-technieken |
@@ -22,15 +22,15 @@ De toolbox zelf valt onder EUPL-1.2. Dit overzicht noemt wat de toolbox van ande
 | `dom-accessibility-api` | 0.7.1 | MIT | Naamberekening |
 | `@guidepup/virtual-screen-reader` | 0.33.0 | MIT | Nagebootste schermlezer in de pagina (`loep speak`); toegevoegd en gelezen op 13 oktober 2026 |
 | `tabbable` | 6.5.0 | MIT | Voorspelde tabvolgorde |
-| `eld` | 2.1.0 | Apache-2.0 | Taalherkenning |
+| `eld` | 2.1.1 | Apache-2.0 | Taalherkenning |
 | `cld3-asm` | 4.0.0 | MIT | Taalherkenning (CLD3 van Google, Apache-2.0, als WebAssembly) |
-| `html-validate` | 11.16.2 | MIT | Validatie van de bron |
-| `vnu-jar` | 26.10.11 | MIT | Nu Html Checker; vraagt Java op de machine |
+| `html-validate` | 11.19.0 | MIT | Validatie van de bron |
+| `vnu-jar` | 26.11.4 | MIT | Nu Html Checker; vraagt Java op de machine |
 | `pngjs` | 7.0.0 | MIT | Schermafbeeldingen lezen en schrijven |
 | `yaml` | 2.9.1 | ISC | Procedures lezen |
 | `mockttp` | 4.6.5 | Apache-2.0 | Proxy op de eigen machine voor een run met geheimen (`src/browser/boundary.ts`); alleen geladen in zo'n run. Brengt 209 pakketten mee, geen daarvan onder GPL; toegevoegd en gelezen op 30 oktober 2026 |
 | `@nldd/design-system` | 0.21.1 | EUPL-1.2 | Het rapport als HTML (`src/lib/report-html.ts`): de componenten, de stylesheets en de lettertypen gaan in het bestand mee. Brengt 76 pakketten mee (MIT, BSD-2-Clause, BSD-3-Clause, ISC), geen daarvan onder GPL; het rapport bundelt daaruit `lit` (BSD-3-Clause) en `@floating-ui` (MIT) met de componenten die het toont. Toegevoegd en gelezen op 11 november 2026 |
-| `esbuild` | 0.25.10 | MIT | Bundelt voor het HTML-rapport alleen de componenten van `@nldd/design-system` die het rapport toont; de licenties van wat erin zit staan aan het eind van het script. Brengt het programma voor het eigen platform mee (`@esbuild/<platform>`, MIT). Toegevoegd en gelezen op 11 november 2026 |
+| `esbuild` | 0.28.2 | MIT | Bundelt voor het HTML-rapport alleen de componenten van `@nldd/design-system` die het rapport toont; de licenties van wat erin zit staan aan het eind van het script. Brengt het programma voor het eigen platform mee (`@esbuild/<platform>`, MIT). Toegevoegd en gelezen op 11 november 2026 |
 | `jpeg-js` | 0.4.4 | BSD-3-Clause | Schermafbeeldingen van pagina's als JPEG in het HTML-rapport (`src/lib/page-shots.ts`), zodat het bestand klein blijft. Geen eigen afhankelijkheden. Toegevoegd en gelezen op 11 november 2026 |
 | `@types/pngjs` | 6.0.5 | MIT | Typen |
 | `typescript` (alleen ontwikkeling) | 7.0.2 | Apache-2.0 | Typecontrole |

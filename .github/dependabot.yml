@@ -33,12 +33,6 @@ updates:
       # Met types van een nieuwere Node, ook 22.20, compileert code die op 22.18 niet draait.
       # Verhoog ze met de hand, samen met de laagste Node.
       - dependency-name: "@types/node"
-      # Playwright 1.64 laat in Chromium een klik eindeloos wachten op een navigatie die
-      # met 204 No Content is tegengehouden; zo houdt de toolbox navigaties tegen.
-      # microsoft/playwright#43279 is gesloten, maar 1.64.1 heeft het nog. Haal dit weg
-      # zodra een versie de tests van session.test.ts en writes.test.ts haalt.
-      - dependency-name: "playwright"
-        versions: ["1.64.x"]
   - package-ecosystem: github-actions
     directory: /
     schedule:
