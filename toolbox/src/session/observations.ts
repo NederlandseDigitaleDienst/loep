@@ -27,6 +27,8 @@ export interface Step {
   target: string[] | null;
   /** Other ways to find the element of the step when its selector chain no longer leads to it, such as an id that differs per page load. */
   locators?: Locators | null;
+  /** For a step without a target, such as a key: the selector chain of the element that had focus when it was taken. Not used to replay the step. */
+  focus?: string[] | null;
 }
 
 export interface Locators {

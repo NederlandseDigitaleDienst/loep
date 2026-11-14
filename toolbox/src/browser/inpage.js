@@ -2020,7 +2020,9 @@
       const group = groups.get(key) ?? { key, kind, path: path(container).join(" >>> "), region: region(container), inMain: closestComposed(element, "main,[role=main]") !== null, text: "", members: [], names: [] };
       // A form with a search field in it, or in a search region, is a search form.
       if (form && (operableKind(element) === "search" || closestComposed(form, "[role=search],search"))) group.kind = "search";
-      group.members.push({ path: path(element).join(" >>> "), structural: structuralPath(element).join(" >>> "), kind: operableKind(element) });
+      // A click on a label operates its control: the way to use a radio button or checkbox that is visually hidden.
+      const labels = member(element, "labels") ? [...member(element, "labels")].map((label) => ({ path: path(label).join(" >>> "), structural: structuralPath(label).join(" >>> ") })) : [];
+      group.members.push({ path: path(element).join(" >>> "), structural: structuralPath(element).join(" >>> "), kind: operableKind(element), ...(labels.length > 0 ? { labels } : {}) });
       const name = nameOf(element);
       if (name && !group.names.includes(name)) group.names.push(name);
       groups.set(key, group);

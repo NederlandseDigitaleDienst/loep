@@ -338,6 +338,11 @@ test("engines run on the current state, also inside an opened dialog", async () 
   assert.ok(!(seen.outline as string[]).some((line) => line.includes("Naar het formulier")));
   const escaped = await loep("key", ["Escape"]);
   assert.equal(escaped.dialogs, "1 -> 0");
+  // A key has no target; the step says what had focus, so the check of the site model knows what the key operated.
+  const keyStep = observation((await loep("look")).id).state.steps.at(-1)!;
+  assert.equal(keyStep.command, "key");
+  assert.equal(keyStep.target, null);
+  assert.ok(Array.isArray(keyStep.focus) && keyStep.focus.length > 0, JSON.stringify(keyStep));
   assert.equal((await raw("key", ["F13"])).ok, false, "keys outside the list are refused");
 });
 

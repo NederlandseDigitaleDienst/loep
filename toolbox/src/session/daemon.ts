@@ -815,12 +815,12 @@ export class Daemon {
   }
 }
 
-/** The context a command runs in: the document of its element, or for a key the document that has focus. */
-async function atHome(context: Context, spec: Spec): Promise<Context> {
-  if (context.target) return { ...context, ...(await homeOf(context.surface, context.target)) };
-  if (spec.target !== "focus") return context;
+/** The context a command runs in: the document of its element, or for a key the document that has focus, with the chain of what has focus. */
+async function atHome(context: Context, spec: Spec): Promise<{ home: Context; focus: string[] | null }> {
+  if (context.target) return { home: { ...context, ...(await homeOf(context.surface, context.target)) }, focus: null };
+  if (spec.target !== "focus") return { home: context, focus: null };
   const focus = (await pageFacts(context.surface))?.focus;
-  return focus?.frame ? { ...context, surface: (await homeOf(context.surface, focus)).surface } : context;
+  return { home: focus?.frame ? { ...context, surface: (await homeOf(context.surface, focus)).surface } : context, focus: focus?.path ?? null };
 }
 
 /**
@@ -830,12 +830,12 @@ async function atHome(context: Context, spec: Spec): Promise<Context> {
  */
 export async function execute(context: Context, command: string, args: string[], options: Options, recorded?: Locators | null): Promise<Outcome> {
   const spec = COMMANDS[command]!;
-  const home = await atHome(context, spec);
+  const { home, focus } = await atHome(context, spec);
   // Noted before the action: afterwards the element may be gone. A replayed step keeps what was noted when it was recorded.
   const changes = typeof spec.changes === "function" ? spec.changes(options) : spec.changes;
   const locators = !changes || !home.target ? null : recorded !== undefined ? recorded : await tgs<Locators | null>(home.surface, "locatorsFor", home.target.ref).catch(() => null);
   const outcome = await spec.run(home, args, options);
-  if (changes) context.surface.steps.push({ command, ...(outcome.step ?? { args, options }), target: context.target?.path ?? null, ...(locators ? { locators } : {}) });
+  if (changes) context.surface.steps.push({ command, ...(outcome.step ?? { args, options }), target: context.target?.path ?? null, ...(locators ? { locators } : {}), ...(focus ? { focus } : {}) });
   return outcome;
 }
 

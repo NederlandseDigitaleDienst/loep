@@ -25,7 +25,8 @@ export interface OperableGroup {
   inMain: boolean;
   /** Visible names of the first controls in it. */
   text: string;
-  members: { path: string; structural: string; kind: string }[];
+  /** With the labels of a control: a click on one of them operates the control, as `label.control` says. */
+  members: { path: string; structural: string; kind: string; labels?: { path: string; structural: string }[] }[];
   /** Only there in the narrow window, such as the button a menu sits behind. */
   onlyNarrow?: boolean;
   /** For an embedded window with controls of its own: its address without query, as `frames` of the site model has it, and how many controls it holds. */
@@ -101,7 +102,9 @@ export function modelTouches(model: SiteModel, recipes: Record<string, RecipeSte
           // Kept on the page before.
         }
       }
+      // A key goes to the element that had focus: an arrow key on a radio button operates that group.
       if (step.target) touches.push({ url, path: step.target.join(" >>> "), structural: step.locators?.structural?.join(" >>> ") ?? null, declaredTypes: "pageTypes" in entry ? entry.pageTypes : [] });
+      else if (step.focus) touches.push({ url, path: step.focus.join(" >>> "), structural: null, declaredTypes: "pageTypes" in entry ? entry.pageTypes : [] });
     }
   }
   return touches;
@@ -148,7 +151,7 @@ export interface Uncovered {
 
 /**
  * Lay what was counted next to the model. A group is accounted for when a recipe touches
- * one of its controls on a page of that type, or on a page type the component says it
+ * one of its controls, or a label of one, on a page of that type, or on a page type the component says it
  * occurs on; when a component without a recipe of a fitting type names the page type; or,
  * for a player that only has the controls of the browser, when `content` names it. An
  * embedded window with controls of its own is such a group too: that it is classified under
@@ -159,8 +162,10 @@ export interface Uncovered {
  */
 export function uncoveredOperables(model: SiteModel, recipes: Record<string, RecipeSteps>, counted: CountedPage[]): { counted: number; uncovered: Uncovered[] } {
   const touches = modelTouches(model, recipes);
+  const hits = (element: { path: string; structural: string }, touch: Touch): boolean => element.path === touch.path || (touch.structural !== null && element.structural === touch.structural);
+  // A control is touched itself, or through one of its labels.
   const touched = (group: OperableGroup, pageType: string | null): boolean =>
-    touches.some((touch) => (pageType === null || touch.declaredTypes.includes(pageType) || pageTypeOf(model, touch.url) === pageType) && group.members.some((member) => member.path === touch.path || (touch.structural !== null && member.structural === touch.structural)));
+    touches.some((touch) => (pageType === null || touch.declaredTypes.includes(pageType) || pageTypeOf(model, touch.url) === pageType) && group.members.some((member) => hits(member, touch) || (member.labels ?? []).some((label) => hits(label, touch))));
   const withoutRecipe = (group: OperableGroup, pageType: string | null): boolean => model.components.some((component) => component.recipe === null && (pageType === null || component.pageTypes.includes(pageType)) && KINDS_OF_TYPE[component.type]?.includes(group.kind));
   const named = (group: OperableGroup, pageType: string | null): boolean => group.kind === "player" && group.members.every((member) => member.kind === "player") && (model.content ?? []).some((content) => (content.kind === "video" || content.kind === "audio") && (pageType === null || content.pageTypes.includes(pageType)));
   // An embedded window is accounted for by the component that names its address, opened or not.

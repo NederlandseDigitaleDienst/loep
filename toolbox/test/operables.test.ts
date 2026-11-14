@@ -103,6 +103,22 @@ test("what only the narrow window shows is added and said to be there only", () 
   assert.match(uncovered[0]!.problemNl, /een uitklapper met de tekst "Menu" op header > button, in header \(alleen op een smal scherm\) staat niet/);
 });
 
+test("a click on the label of a control operates the control, and a key operates what had focus", () => {
+  // Radio buttons that are visually hidden: a visitor clicks the label, the input itself refuses a click.
+  const choice = group("choice", "#grafiek", "Grafiek, Tabel", ["#grafiek", "#tabel"]);
+  choice.members[0]!.labels = [{ path: "label:nth-of-type(1)", structural: "html > body > main > label:nth-of-type(1)" }];
+  choice.members[1]!.labels = [{ path: "label:nth-of-type(2)", structural: "html > body > main > label:nth-of-type(2)" }];
+  const counted: CountedPage[] = [{ pageType: "start", url: "https://site.nl/", groups: [choice] }];
+  const withChoice = (steps: RecipeSteps["steps"]): [SiteModel, Record<string, RecipeSteps>] => [
+    { ...model(), components: [...model().components, { id: "weergave", type: "other", descriptionNl: "Grafiek of tabel", pageTypes: ["start"], viewport: null, recipe: "component-weergave", postcondition: { kind: "visible", selector: "table" } }] },
+    { ...RECIPES, "component-weergave": { start: { url: "https://site.nl/" }, steps } },
+  ];
+  assert.equal(uncoveredOperables(model(), RECIPES, counted).uncovered.length, 1, "without a recipe the choice is not covered");
+  assert.deepEqual(uncoveredOperables(...withChoice([step("label:nth-of-type(2)")]), counted).uncovered, [], "a click on the label covers it");
+  assert.deepEqual(uncoveredOperables(...withChoice([{ command: "key", args: ["ArrowDown"], options: {}, target: null, focus: ["#grafiek"] }]), counted).uncovered, [], "a key on the focused radio button covers it");
+  assert.equal(uncoveredOperables(...withChoice([{ command: "key", args: ["ArrowDown"], options: {}, target: null }]), counted).uncovered.length, 1, "a key without what had focus says nothing");
+});
+
 test("the page is counted in groups: a form with its fields, tabs, a player, alike buttons, and no plain links", async () => {
   const browser = await launchBrowser();
   try {
@@ -118,6 +134,7 @@ test("the page is counted in groups: a form with its fields, tabs, a player, ali
 <label for="prijs">Hoogste prijs</label><input type="range" id="prijs">
 <div class="speler"><video controls width="200" height="100"></video><button>Afspelen</button></div>
 <details><summary>Meer uitleg</summary><p>Tekst</p></details>
+<fieldset><legend>Weergave</legend><input type="radio" name="w" id="grafiek" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)"><label for="grafiek">Grafiek</label><label><input type="radio" name="w" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)"> Tabel</label></fieldset>
 <button disabled>Uit</button><button hidden>Weg</button><a href="/y">Nog een link</a>
 </main></body></html>`);
     const groups = await call<OperableGroup[]>(page, "operables");
@@ -132,8 +149,13 @@ test("the page is counted in groups: a form with its fields, tabs, a player, ali
         ["slider", true, 1, "Hoogste prijs"],
         ["player", true, 2, "Afspelen"],
         ["disclosure", true, 1, "Meer uitleg"],
+        ["choice", true, 1, "Grafiek"],
+        ["choice", true, 1, "Tabel"],
       ],
     );
+    // A visually hidden radio button knows its label, by `for` or by standing in it.
+    assert.deepEqual([groups[8]!, groups[9]!].map((entry) => entry.members[0]!.labels?.map((label) => label.path)), [["html > body > main > fieldset > label:nth-of-type(1)"], ["html > body > main > fieldset > label:nth-of-type(2)"]]);
+    assert.equal(groups[2]!.members[2]!.labels, undefined, "a button without a label has none");
     assert.equal(groups[2]!.path, "#contact");
     assert.deepEqual(groups[2]!.members.map((member) => member.path), ["#naam", "#soort", "#contact > button"]);
     assert.equal(groups[4]!.members[1]!.structural, "html > body > main > ul > li:nth-of-type(2) > h2 > button");

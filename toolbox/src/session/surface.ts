@@ -76,8 +76,8 @@ export interface Surface {
 export function stateOf(surface: Surface | null): StateRecord {
   const start = surface?.start ?? null;
   const steps = surface ? surface.steps.map((step) => ({ ...step })) : [];
-  // The extra locators of a step are help for finding its element again, not part of what the state is.
-  return { id: sha256(canonicalJson({ start, steps: steps.map(({ locators: _locators, ...step }) => step) })).slice(0, 12), start, steps };
+  // The extra locators of a step are help for finding its element again, and the focus says what a key went to: neither is part of what the state is.
+  return { id: sha256(canonicalJson({ start, steps: steps.map(({ locators: _locators, focus: _focus, ...step }) => step) })).slice(0, 12), start, steps };
 }
 
 /**
