@@ -487,15 +487,15 @@
       <nldd-title slot="left" size="3" text="Wegen" heading-level="3"></nldd-title>
       <nldd-spacer slot="left" size="12"></nldd-spacer>
       <nldd-rich-text slot="left">
-          <p>Een agent leest alle bevindingen en zegt per bevinding welke groepen bezoekers uit EN 301 549 ze hindert. Per groep kiest hij wat er gebeurt: het lukt niet, alleen met een omweg, of met extra moeite. Daaruit volgt de ernst, met een vaste tabel. Blokkerend is alleen wat een groep een kerntaak van de site niet laat afmaken.</p>
-          <p><code>check-weigh</code> weigert een zin die een groep wegstreept, en een aanhaling die niet in de bevinding staat. Drie wegingen van hetzelfde onderzoek gaven bij 94 tot 97 procent van de bevindingen dezelfde ernst. Of die ernst juist is, is niet getoetst.</p>
+          <p>Na <code>evaluate</code> leest een agent alle bevindingen. Per bevinding zegt hij welke groepen bezoekers uit EN 301 549 er last van hebben, en hoe: ze kunnen het niet, ze moeten een omweg zoeken, of het kost extra moeite. Hij leidt ook de kerntaken van de site af, zoals inloggen of een formulier invullen, en zegt of een bevinding daarbij hoort. Een vaste tabel maakt daar de ernst van. Blokkerend is alleen wat een groep een kerntaak niet laat afmaken.</p>
+          <p><code>check-weigh</code> weigert een tekst die een groep klein of onbelangrijk noemt, zoals "dat is een randgeval", en een aanhaling die niet in de bevinding staat. Twee wegingen van hetzelfde onderzoek gaven op vier sites bij 93 tot 96 procent van de bevindingen dezelfde ernst. Twee onderzoeken van dezelfde testsite gaven bij 71 van de 79 gebreken dezelfde ernst. Of die ernst juist is, is niet getoetst.</p>
       </nldd-rich-text>
       <nldd-spacer slot="left" size="12"></nldd-spacer>
       <nldd-card slot="left">
         <nldd-container padding="16">
-          <nldd-text size="sm" color="secondary">Op 29 oktober</nldd-text>
+          <nldd-text size="sm" color="secondary">Het onderzoek van 29 oktober, gewogen op 14 november</nldd-text>
           <nldd-spacer size="4"></nldd-spacer>
-          <nldd-text>Achteraf gewogen, op 14 november. Van de 9 bevindingen werd er één lichter: de focus buiten beeld in het feedbackvenster ging van midden naar laag. Geen groep loopt vast bij een kerntaak.</nldd-text>
+          <nldd-text>Van de 9 bevindingen werd er één lichter en één zwaarder. De focus buiten beeld in het feedbackvenster ging van midden naar laag, links met alleen een nummer als tekst van laag naar midden. Geen groep loopt vast bij een kerntaak.</nldd-text>
         </nldd-container>
       </nldd-card>
       <nldd-container slot="right" layout="stack" gap="8">
@@ -515,7 +515,7 @@
           </nldd-table-row>
           <nldd-table-row>
             <nldd-text-cell row-header size="sm" color="secondary" text="In het rapport"></nldd-text-cell>
-            <nldd-cell><nldd-text size="sm">Ze zetten de pagina op 200 procent om te kunnen lezen. De tekst in de citaatblokken wordt dan minder groot dan de rest, dus ze moeten verder inzoomen of dichter op het scherm. Te lezen blijft hij wel.</nldd-text></nldd-cell>
+            <nldd-cell><nldd-text size="sm">Mensen die slecht zien kunnen dit gebruiken, maar het kost extra moeite. Ze zetten de pagina over contact en bijdragen op 200 procent of maken alleen de tekst groter. De tekst in de drie citaatblokken groeit minder mee dan de rest van de pagina, dus ze moeten verder vergroten of dichter op het scherm kijken om die alinea's te lezen. Ze komen er langs de eigen weg, maar het kost meer moeite. Daarom is de ernst laag.</nldd-text></nldd-cell>
           </nldd-table-row>
           <nldd-table-row>
             <nldd-text-cell row-header size="sm" color="secondary" text="Kerntaak"></nldd-text-cell>
@@ -526,7 +526,7 @@
             <nldd-cell><nldd-text size="sm">Laag, net als bij de beoordelaar</nldd-text></nldd-cell>
           </nldd-table-row>
         </nldd-table>
-        <nldd-text size="sm" color="secondary">De zin per groep is afgeleid uit de bevinding, niet zelf waargenomen.</nldd-text>
+        <nldd-text size="sm" color="secondary">De eerste en de laatste twee zinnen schrijft het rapport, de rest de agent. Die tekst is afgeleid uit de bevinding, niet zelf waargenomen.</nldd-text>
       </nldd-container>
     </nldd-one-half-one-half-section>
 
@@ -540,7 +540,7 @@
       <nldd-title slot="left" size="3" text="Rapport en zegel" heading-level="3"></nldd-title>
       <nldd-spacer slot="left" size="12"></nldd-spacer>
       <nldd-rich-text slot="left">
-          <p><code>evaluate</code> en <code>render</code> maken het rapport, een korte versie zonder bijlage en de werklijst. Een nieuw rapport begint met wie vastloopt, per kerntaak van de site. <code>seal</code> legt de hash van elk bestand van het onderzoek vast.</p>
+          <p><code>evaluate</code> en <code>render</code> maken het rapport, een korte versie zonder bijlage en de werklijst. In een nieuw rapport zegt de samenvatting eerst wie vastloopt, per kerntaak van de site. <code>seal</code> legt de hash van elk bestand van het onderzoek vast.</p>
           <p>Een mens leest het rapport en tekent in een terminal door de eerste acht tekens van het zegel over te typen. Dat doet nooit de assistent. <code>verify</code> toont elke latere wijziging.</p>
       </nldd-rich-text>
       <nldd-spacer slot="left" size="12"></nldd-spacer>

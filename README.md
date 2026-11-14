@@ -100,7 +100,7 @@ De overige commando's:
 | `skip`, `unskip` | `skip` legt vast dat een rondgang of oordeel niet komt, zodat de volgende fase kan beginnen, met de soort "geen geldig resultaat" of "storing" (het model was er niet: een limiet of een storing van de dienst). `unskip` zet zo'n opdracht terug |
 | `answer` | Legt het antwoord van een persoon vast op een open punt dat geen instrument kan sluiten: wat is gedaan of besloten, wat dat betekent voor het criterium, en in welke functie. De naam blijft in een bestand van de run; het rapport noemt de functie. Zie [docs/methode.md](docs/methode.md#wat-een-mens-moet-vaststellen) |
 | `merge`, `check-merge` | De stap naar keuze die voorstelt welke bevindingen nog meer bij elkaar horen |
-| `weigh`, `check-weigh` | De stap die per gebrek vastlegt welke groepen bezoekers het hindert, waarna de ernst daaruit volgt |
+| `weigh`, `check-weigh` | De stap die per bevinding vastlegt welke groepen bezoekers ze hindert, waarna de ernst daaruit volgt |
 | `diff` | Legt twee evaluaties van dezelfde site naast elkaar: opgelost, gebleven en nieuw, als werkdocument `verschil.md` |
 | `compare` | Legt een onderzoek naast een bestaand onderzoek van dezelfde site; zie [validatie/README.md](validatie/README.md) |
 | `procedures` | Controleert de procedures |
