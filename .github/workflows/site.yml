@@ -23,7 +23,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - run: python3 .github/scripts/site-toon.py site toon-dist
-      - uses: DigiGilde/toon/actions/publish@3c0427f19f9ea7e367d9f6574e74d51fd789d0d7
+      - uses: DigiGilde/toon/actions/publish@5658b607a0df334d933968ea56805e5a600f4189
         with:
           site: nldd/loep
           site-id: ee7f5a1c-62d6-4fe5-a3db-58d0aea5c6de
