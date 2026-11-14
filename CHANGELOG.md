@@ -6,6 +6,23 @@ Wat er per versie van loep is veranderd. De versie staat op het voorblad en onde
 
 <!-- towncrier: een nieuwe versie komt hieronder -->
 
+## 0.30.0 (2026-11-14)
+
+Deze versie is uitgebracht zonder meting: de opdrachten van beoordelaar en verifieerder, de procedures en de oordeelregels zijn niet veranderd; de wijzigingen aan de bewijspoort, de dekking in het sitemodel en find zijn met tests en de regressietoets van de veegronde op de testsite nagegaan.
+
+### Wat een uitkomst kan veranderen
+
+- De poort geeft geen beperking `needs-host-outside-run` meer voor een adres buiten de run dat de pagina ook bij gewoon laden gebruikt, zoals een CDN met de stylesheets van het designsysteem. Als basis telt nu wat de veegronde bij gewoon laden van dezelfde pagina zag opvragen, ook op een site zonder blokkade. Daarvoor legt `collect` per pagina vast welke adressen ze opvraagt, en daarom meet een volgende veegronde elke pagina opnieuw. ([#530](https://github.com/NederlandseDigitaleDienst/loep/issues/530))
+- Een pagina zonder iets om te bedienen, zoals een kale foutpagina, krijgt van de poort geen gat `review-taborder` meer. Telde de veegronde op die pagina geen Tab-stop, geen zichtbare link of knop en geen formulier, dan telt het antwoord op de vraag naar de Tab-volgorde niet. De agent van de poort leest bij zo'n blad dat een leeg vak 3 klopt. ([#531](https://github.com/NederlandseDigitaleDienst/loep/issues/531))
+
+### Verder
+
+- `find tag:html` en `find tag:title` vinden het element nu, zodat `loep html <ref>` de code ervan toont. Met `tag:` zoekt `find` alleen in `html` en `head` als het om een element van de head vraagt (`html`, `head`, `title`, `meta`, `link`, `base`). Een `css:`-selector zoekt eerst in de body en pas daarbuiten als daar niets past, zodat een `css:`-verwijzing die in de body uniek was, uniek blijft. Tekst en rollen zoekt `find` nog steeds alleen in de body. ([#535](https://github.com/NederlandseDigitaleDienst/loep/issues/535))
+- De controle van het sitemodel telt een klik op een label als bediening van het veld dat het label bestuurt, en een toets als bediening van wat op dat moment de focus had. Een visueel verborgen keuzerondje dat een recept via zijn label of met de pijltoetsen bedient, staat daardoor niet meer als gat in het model, en een onderdeel met `"recipe": null` om de controle te halen is niet meer nodig. ([#544](https://github.com/NederlandseDigitaleDienst/loep/issues/544))
+- `estimate` rekent de weging nu mee, met een eigen regel in de tabel en haar tokens in het totaal en bij de rollen. Vóór `evaluate` is het aantal bevindingen onbekend en toont de regel een band; daarna rekent hij met het echte aantal, en zodra de agent zijn antwoord schreef, staat er de gemeten duur. De schatting rust op één meting. Het voorstel tot samenvoegen krijgt alleen een regel als die stap in de run is gedaan; anders noemt `estimate` het onder wat het niet dekt. ([#545](https://github.com/NederlandseDigitaleDienst/loep/issues/545))
+- Het rapport noemt de weging per groep bezoekers als die is toegepast. De werkwijze heeft een stap "Wegen" na "Samenvoegen", en "Type onderzoek" en de eerste alinea over betrouwbaarheid zeggen dat een taalmodel per bevinding heeft gewogen wie ze hindert, waaruit de ernst volgt. `just report` stopt nu na `evaluate` en zegt welke agent de bevindingen weegt; `just render` past daarna de weging toe, maakt het rapport en verzegelt de run. Eerder sloeg `just report` de weging over. ([#553](https://github.com/NederlandseDigitaleDienst/loep/issues/553))
+- Een beperking of aanvaard gat van de bewijspoort over een pagina die niet in de steekproef staat, noemt in het rapport het adres. Er stond "Deze pagina laadde niet tijdens de inventaris", zonder te zeggen welke; nu staat er "De pagina <adres> laadde niet tijdens de inventaris". Dat geldt voor elke controle van de bewijspoort met een adres. ([#554](https://github.com/NederlandseDigitaleDienst/loep/issues/554))
+
 ## 0.29.0 (2026-11-14)
 
 ### Wat een uitkomst kan veranderen
