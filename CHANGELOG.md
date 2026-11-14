@@ -6,6 +6,17 @@ Wat er per versie van loep is veranderd. De versie staat op het voorblad en onde
 
 <!-- towncrier: een nieuwe versie komt hieronder -->
 
+## 0.29.0 (2026-11-14)
+
+### Wat een uitkomst kan veranderen
+
+- Nieuwe browsers en regel-engines: Playwright 1.65.1 met Chromium 159, Firefox 159 en WebKit 27.2, en Alfa 0.120. Chromium 159 dicht CVE-2026-106378. Via dat lek kon een site die in het GPU-proces van Chrome code draaide, op macOS toetsaanslagen naar het bureaublad sturen als de terminal toegang voor Toegankelijkheid heeft. Andere browsers en een andere Alfa kunnen een uitkomst veranderen, ook de namen die Playwright zelf berekent. Draai na de update `just install`, anders mist de toolbox de nieuwe browsers. ([#546](https://github.com/NederlandseDigitaleDienst/loep/issues/546))
+
+### Verder
+
+- Deze versie is als geheel gemeten op de testsite, met de nieuwe browsers en Alfa 0.120: in twee runs alle 79 ingebouwde gebreken gevonden, met dezelfde uitkomst bij alle 56 criteria als de sleutel, en op de schone tweeling geen bevinding die beide vergelijkers onterecht noemen. De README en de pagina op Toon noemen deze meting. ([#546](https://github.com/NederlandseDigitaleDienst/loep/issues/546))
+- `just doctor` meldt nu ook pakketten van de toolbox in een andere versie dan loep vraagt, en Firefox en WebKit naast Chromium. In een map zonder pakketten keek hij eerder naar de browsers van de nieuwste Playwright in plaats van die van loep. De skill draait `just doctor` bij elk onderzoek en `just install` als er iets ontbreekt, ook na een update van de plugin, want elke versie staat in een eigen map.
+
 ## 0.28.0 (2026-11-14)
 
 Deze versie is uitgebracht zonder meting: de opdrachten van beoordelaar en verifieerder, de procedures en de instrumenten zijn niet veranderd, dus de uitkomsten per criterium en de bevindingen blijven gelijk. Nieuw is de weegstap, die alleen de ernst bepaalt; die is apart gemeten in negen ronden, zie validatie/weging.
