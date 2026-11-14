@@ -6,6 +6,22 @@ Wat er per versie van loep is veranderd. De versie staat op het voorblad en onde
 
 <!-- towncrier: een nieuwe versie komt hieronder -->
 
+## 0.28.0 (2026-11-14)
+
+Deze versie is uitgebracht zonder meting: de opdrachten van beoordelaar en verifieerder, de procedures en de instrumenten zijn niet veranderd, dus de uitkomsten per criterium en de bevindingen blijven gelijk. Nieuw is de weegstap, die alleen de ernst bepaalt; die is apart gemeten in negen ronden, zie validatie/weging.
+
+### Wat een uitkomst kan veranderen
+
+- De ernst van een bevinding volgt uit wie ze hindert. Na de oordelen legt een eigen stap (`weigh`, `check-weigh`) per bevinding vast welke groepen bezoekers ze hindert, wat er voor elke groep gebeurt en of bezoekers dit deel nodig hebben voor een kerntaak van de site. De groepen zijn de gebruikersbehoeften uit EN 301 549, paragraaf 4.2. De ernst volgt uit een vaste tabel: een groep kan iets niet wat nodig is voor een kerntaak (blokkerend), kan iets anders niet (hoog), komt er alleen met een omweg (midden), of het kost extra moeite (laag). De samenvatting van het rapport zegt per kerntaak welke groepen vastlopen en waarom, en telt de gebreken per kerntaak en per groep. Bij elke bevinding staat per groep wat er gebeurt en waarom dat deze ernst geeft. De oordelen per criterium en de bevindingen veranderen niet. Zonder de stap blijft de ernst van de beoordelaars staan. In de export van de werklijst staan twee kolommen erbij (`groepen`, `kerntaak`), en de kolom `wie_heeft_er_last_van` heeft na een weging een zin per groep in plaats van de tekst van de beoordelaar. ([#189](https://github.com/NederlandseDigitaleDienst/loep/issues/189))
+
+### Verder
+
+- `diff` zegt het als een bevinding die bleef een andere ernst heeft dan in het vorige onderzoek. Is maar een van de twee evaluaties gewogen per groep bezoekers, dan vergelijkt `diff` de ernst niet en zegt het dat. ([#414](https://github.com/NederlandseDigitaleDienst/loep/issues/414))
+- De alt-tekst van een uitsnede noemt de tekst van het element dat in beeld staat, ook bij een uitsnede uit een overzicht van het venster; een element zonder tekst heet naar de kop erboven.
+- In de pdf staan de feiten onder de titel van een bevinding (eigenaar, onderdeel, pagina's, gebrek, controle) elk op een eigen regel, met het label ervoor. Ze liepen als één regel door elkaar.
+- In het rapport zijn de markeringen in een schermafbeelding verborgen voor hulpsoftware, krijgt het venster met details een kop die mag afbreken, en staat het label van de controle in een paar woorden. Bevindingen boven een kaart is geen kop meer.
+- Onder een criterium is Bevindingen overal een kop; de bevindingen eronder zijn een lijst, en een kaart daarin heeft geen eigen kop meer.
+
 ## 0.27.1 (2026-11-12)
 
 Deze versie is uitgebracht zonder meting: sinds 0.27.0 veranderde alleen de opmaak van het rapport; de procedures, instrumenten en oordeelsregels bleven gelijk.
