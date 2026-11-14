@@ -156,13 +156,20 @@ report run naam organisatie model:
     {{cli}} evaluate --run {{run}} --name "{{naam}}" --organisation "{{organisatie}}" --model "{{model}}"
     @echo "Start nu één agent met {{run}}/tasks/weeg/taak.md: hij legt per bevinding vast wie ze hindert, en daaruit volgt de ernst. Draai daarna just render {{run}}. Zonder weging houdt elke bevinding de ernst van haar beoordelaar, en het rapport zegt dat."
 
-# Pas de weging toe als de weegagent een antwoord schreef, maak het rapport en verzegel de run
+# Pas de weging toe als de weegagent een antwoord schreef, maak het rapport en verzegel de run. Is de run al afgetekend, dan maakt het alleen het afgetekende rapport opnieuw: wegen en verzegelen zou de handtekening laten vervallen
 render run:
-    if [ -f "{{run}}/verdicts/weging.json" ]; then {{cli}} check-weigh --run {{run}}; fi
-    {{cli}} weigh --run {{run}}
-    {{cli}} render --run {{run}}
-    {{cli}} seal --run {{run}}
-    @echo "Rapport: {{run}}/report/rapport.pdf, rapport-kort.pdf (zonder bijlage A) en rapport.md. Het is een verzegeld concept tot iemand het leest en tekent met: {{cli}} sign --run {{run}} --name ... --role ... --organisation ... Daarna maakt {{cli}} render --run {{run}} het afgetekende rapport in {{run}}/signed/"
+    #!/usr/bin/env sh
+    set -e
+    if [ -f "{{run}}/signed/signature.json" ]; then
+      {{cli}} render --run "{{run}}"
+      echo "De run is afgetekend: alleen het afgetekende rapport in {{run}}/signed/ is opnieuw gemaakt. Er is niet gewogen en niet verzegeld."
+      exit 0
+    fi
+    if [ -f "{{run}}/verdicts/weging.json" ]; then {{cli}} check-weigh --run "{{run}}"; fi
+    {{cli}} weigh --run "{{run}}"
+    {{cli}} render --run "{{run}}"
+    {{cli}} seal --run "{{run}}"
+    echo "Rapport: {{run}}/report/rapport.pdf, rapport-kort.pdf (zonder bijlage A) en rapport.md. Het is een verzegeld concept tot iemand het leest en tekent met: {{cli}} sign --run {{run}} --name ... --role ... --organisation ... Daarna maakt just render {{run}} het afgetekende rapport in {{run}}/signed/"
 
 # Leg twee evaluaties van dezelfde site naast elkaar (opgelost, gebleven, nieuw) en schrijf het werkdocument verschil.md in de map uit
 diff vorige nieuwe uit:
