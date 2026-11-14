@@ -165,6 +165,16 @@ test("find, ax, style, html and crop describe one element", async () => {
   observation(crop.id);
 });
 
+test("find reaches html and head when a tag or a selector asks for them, and html reads what it found (#535)", async () => {
+  await loep("open", ["/"]);
+  assert.equal((await loep("find", ["tag:html"])).total, 1);
+  assert.match((await loep("html", [await ref("tag:html")])).html as string, /^<html lang="nl">/);
+  assert.equal((await loep("html", [await ref("tag:title")])).html, "<title>Start - Testsite sessie</title>");
+  assert.equal((await loep("find", ["css:meta[name=viewport]"])).total, 1);
+  // Text is still searched in the body only: the title of the page is not a text on it.
+  assert.equal((await loep("find", ["Start - Testsite sessie"])).total, 0);
+});
+
 test("contrast measures text and the boundary of a control in the current state", async () => {
   await loep("open", ["/"]);
   const pale = await loep("contrast", [await ref("css:#pale")]);

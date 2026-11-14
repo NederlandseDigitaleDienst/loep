@@ -349,7 +349,11 @@
     const library = loep();
     const matches = matchers[kind](wanted);
     const found = [];
-    for (const element of library.deepElements(document.body)) {
+    // Text and roles live in the body. A tag or a selector may ask for html itself or for what is in head
+    // (tag:html, tag:title, css:meta[name=viewport]): those are searched from the root of the document (#535).
+    const root = kind === "tag" || kind === "css" ? document.documentElement : document.body;
+    if (!root) return { total: 0, hidden: 0, items: [] };
+    for (const element of library.deepElements(root)) {
       if (["script", "style", "noscript", "template"].includes(element.localName)) continue;
       if (matches(element)) found.push(element);
     }
