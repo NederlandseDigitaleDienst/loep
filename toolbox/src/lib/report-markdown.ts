@@ -1182,7 +1182,8 @@ function deriveWeighing(evaluation: Evaluation): WeighingDerived | null {
           ? `Bij ${free.length === 1 ? "de andere kerntaak" : "de andere kerntaken"}, ${namesNl(free)}, loopt op de onderzochte pagina's geen groep vast. Wat daar een omweg of extra moeite geeft, staat in de werklijst.`
           : // The headline counts the tasks, and the table per core task names them.
             "Het onderzoek vond op de onderzochte pagina's geen gebrek waardoor een groep vastloopt. Wat een omweg of extra moeite geeft, staat in de werklijst.",
-    limitsNl: `Elke bevinding is apart gewogen. Dat meer gebreken op dezelfde weg een groep samen tegenhouden, staat hier alleen als het uit de bevindingen bleek.${open.length === 0 ? "" : ` Over ${plural(open.length, "criterium", "criteria")} heeft het onderzoek nog geen oordeel; ook daar kan een groep vastlopen.`}`,
+    // Measured: which defects stop a group is the least repeatable part of the weighing (validatie/weging/README.md), so the list says so itself.
+    limitsNl: `Deze lijst komt uit één weging door een taalmodel. Bij een tweede weging kan er een enkel gebrek bij komen of af vallen. Elke bevinding is apart gewogen. Dat meer gebreken op dezelfde weg een groep samen tegenhouden, staat hier alleen als het uit de bevindingen bleek.${open.length === 0 ? "" : ` Over ${plural(open.length, "criterium", "criteria")} heeft het onderzoek nog geen oordeel; ook daar kan een groep vastlopen.`}`,
     beside:
       high.length === 0
         ? null

@@ -129,7 +129,7 @@ test("a weighed report says in the summary who is stopped at which core task, an
   assert.match(html, /<nldd-container layout="lanes" column-count="2" sm-column-count="1" gap="24"><nldd-card>/);
   // What stops a group only together says so before its rows, and what the section can not show is said in smaller letters.
   assert.match(html, /text="Bij elke kerntaak"><\/nldd-title><nldd-spacer size="12"><\/nldd-spacer><nldd-text weight="medium">Mensen die slecht zien lopen hier vast door gebreken die samenkomen\.<\/nldd-text>(?:(?!<nldd-card>).)*<nldd-text>Geen van deze gebreken houdt hen alleen tegen:<\/nldd-text><nldd-spacer size="12"><\/nldd-spacer><nldd-list /);
-  assert.ok(html.includes('<nldd-text size="sm" color="secondary">Elke bevinding is apart gewogen. '));
+  assert.ok(html.includes('<nldd-text size="sm" color="secondary">Deze lijst komt uit één weging door een taalmodel. Bij een tweede weging kan er een enkel gebrek bij komen of af vallen. Elke bevinding is apart gewogen. '));
   // What explains a table stands under it: the consequences as a list of terms, then where the groups come from.
   assert.match(html, /<\/nldd-table><nldd-spacer size="8"><\/nldd-spacer><nldd-text size="sm" color="secondary">De tabel telt per kerntaak de gebreken met elke ernst\./);
   assert.ok(html.includes("<nldd-rich-text><dl><dt>Kan het niet</dt><dd>Langs de eigen manier van werken is er geen weg.</dd><dt>Alleen met een omweg</dt><dd>De bezoeker moet een andere weg zoeken, zoals een andere pagina.</dd><dt>Met extra moeite</dt><dd>De eigen weg werkt, maar kost meer tijd of zoeken.</dd></dl></nldd-rich-text>"));

@@ -777,7 +777,7 @@ test("a weighed report says per core task which groups are stopped, and counts t
   // Something stops a group at every task, so no task is called free of it.
   assert.ok(!summary.includes("geen gebrek waardoor een groep vastloopt"));
   // What the section can not show is said with it: findings are weighed one by one, and criteria without a verdict can hide more.
-  assert.ok(summary.includes("Elke bevinding is apart gewogen. Dat meer gebreken op dezelfde weg een groep samen tegenhouden, staat hier alleen als het uit de bevindingen bleek. Over 4 criteria heeft het onderzoek nog geen oordeel; ook daar kan een groep vastlopen."));
+  assert.ok(summary.includes("Deze lijst komt uit één weging door een taalmodel. Bij een tweede weging kan er een enkel gebrek bij komen of af vallen. Elke bevinding is apart gewogen. Dat meer gebreken op dezelfde weg een groep samen tegenhouden, staat hier alleen als het uit de bevindingen bleek. Over 4 criteria heeft het onderzoek nog geen oordeel; ook daar kan een groep vastlopen."));
   // What stops a group at a core task alone is what the table calls blokkerend: the two lists are the same defects.
   const derived = deriveReport(evaluation);
   const alone = derived.weighing!.stopped.flatMap((task) => task.causes.filter((cause) => !cause.together));
