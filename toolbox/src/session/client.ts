@@ -41,7 +41,7 @@ export const SESSION_USAGE = `  session start --run <run> [--session <name>] [--
       look:    look [--full] [--max n] [--plain] [--vision deuteranopia|protanopia|tritanopia|achromatopsia|blurredVision|reducedContrast],
                crop <ref> [--margin n], cutout <picture in the run> --at x,y,width,height (a piece of a screenshot that is
                in the run already, such as one of the sweep; needs no open page), ax <ref>, style <ref> [a,b,c], html <ref> [--max n],
-               find <text | role:x | tag:x | css:selector> (text and role search the body; tag and css also html and head, such as tag:html or tag:title)
+               find <text | role:x | tag:x | css:selector> (searches the body; tag:html, tag:head, tag:title, tag:meta, tag:link and tag:base also the document head, and a css selector that matches nothing in the body is tried on html and head)
       dossier [<part> [<chunk>]] [--criterion x.y.z]   the dossier of the task of this session, in a compact form: without a
                part an overview with sizes and what is read; a part (controls, keyboard.walk, legend.P03, rows.4) in
                chunks of at most 20.000 characters, printed as text under the line of JSON. Read from the run: needs no

@@ -345,18 +345,28 @@
     },
   };
 
+  /** Elements that belong to the document and its head rather than to the page a visitor sees. */
+  const HEAD_TAGS = new Set(["html", "head", "title", "meta", "link", "base"]);
+
   function find(kind, wanted, max) {
     const library = loep();
     const matches = matchers[kind](wanted);
-    const found = [];
-    // Text and roles live in the body. A tag or a selector may ask for html itself or for what is in head
-    // (tag:html, tag:title, css:meta[name=viewport]): those are searched from the root of the document (#535).
-    const root = kind === "tag" || kind === "css" ? document.documentElement : document.body;
-    if (!root) return { total: 0, hidden: 0, items: [] };
-    for (const element of library.deepElements(root)) {
-      if (["script", "style", "noscript", "template"].includes(element.localName)) continue;
-      if (matches(element)) found.push(element);
-    }
+    const collect = (root) => {
+      const hits = [];
+      if (!root) return hits;
+      for (const element of library.deepElements(root)) {
+        if (["script", "style", "noscript", "template"].includes(element.localName)) continue;
+        if (matches(element)) hits.push(element);
+      }
+      return hits;
+    };
+    // The body is where an agent acts, and a css: ref must match exactly one element, so a selector
+    // that was unique in the body stays unique. html itself and what is in head are searched only
+    // when asked for (#535): a tag of the document head, or a selector that matches nothing in the body.
+    let found = collect(document.body);
+    const outsideBody = () => [document.documentElement, ...collect(document.head)].filter((element) => element && matches(element));
+    if (kind === "tag" && HEAD_TAGS.has(wanted)) found = [...outsideBody(), ...found];
+    else if (kind === "css" && found.length === 0) found = outsideBody();
     // What is on screen comes first; hidden matches still count, an agent may be looking for exactly those.
     const visible = found.filter((element) => library.isVisible(element));
     const hidden = found.filter((element) => !library.isVisible(element));
