@@ -114,8 +114,7 @@ export const REPORT_TEXT = {
     togetherMore: "Geen van deze gebreken houdt hen alleen tegen:",
     beside: "Wat een groep niet kan, buiten de kerntaken",
     perTask: "Gebreken per kerntaak",
-    perTaskIntro: "De tabel telt per kerntaak de gebreken met elke ernst. Bij dezelfde ernst staat in de werklijst eerst wat bij een kerntaak hoort.",
-    taskColumns: ["Kerntaak", "Blokkerend", "Hoog", "Midden", "Laag"],
+    taskColumns: ["Kerntaak", "Blokkerend", "Midden", "Laag"],
     everyTask: "Elke kerntaak",
     noTask: "Geen kerntaak",
     perGroup: "Gebreken per groep",
@@ -475,7 +474,9 @@ export interface WeighingDerived {
   limitsNl: string;
   /** The defects a group can not use that no core task needs: severity "hoog". Null when there are none. */
   beside: { defectIds: string[]; noteNl: string } | null;
-  /** Per core task the number of defects of each severity, heaviest first; then what belongs to every task and to none. */
+  /** What the table per core task counts, and where the defects are that it leaves out. */
+  tasksIntroNl: string;
+  /** Per core task the number of defects that are "blokkerend", "midden" and "laag"; then what belongs to every task and to none. "Hoog" has no column: what a group can not use at a core task is "blokkerend", so "hoog" never belongs to a task. */
   tasks: { taskNl: string; counts: number[] }[];
   /** Per group of EN 301 549: how many defects with each consequence, and how many criteria essential for the group have no verdict yet. A defect counts once per group, with the worst that happens to it. "Alle bezoekers" only when a defect names it, without a number of criteria. */
   groups: { groupNl: string; cannot: number; detour: number; effort: number; open: number | null }[];
@@ -1134,7 +1135,7 @@ function deriveWeighing(evaluation: Evaluation): WeighingDerived | null {
   const count = (group: AffectedGroup, consequence: Consequence): number => sorted.filter((defect) => defect.weighing!.affected.some((entry) => entry.group === group && entry.consequence === consequence)).length;
   const high = sorted.filter((defect) => defect.severity === "hoog");
   const lighter = SEVERITIES.filter((severity) => SEVERITY_RANK[severity] > SEVERITY_RANK.hoog).map((severity) => ({ severity, defects: sorted.filter((defect) => defect.severity === severity).length })).filter((step) => step.defects > 0);
-  const taskRow = (taskNl: string, of: (defect: Defect) => boolean): { taskNl: string; counts: number[] } => ({ taskNl, counts: SEVERITIES.map((severity) => sorted.filter((defect) => defect.severity === severity && of(defect)).length) });
+  const taskRow = (taskNl: string, of: (defect: Defect) => boolean): { taskNl: string; counts: number[] } => ({ taskNl, counts: SEVERITIES.filter((severity) => severity !== "hoog").map((severity) => sorted.filter((defect) => defect.severity === severity && of(defect)).length) });
   return {
     introNl: `Een kerntaak is iets waarvoor bezoekers naar de site komen. Het onderzoek heeft er ${tasks.length} uit de site afgeleid. Hier staat bij welke kerntaak een groep bezoekers vastloopt: de groep kan iets niet wat voor die taak nodig is.`,
     // What stops the most stands first; the order of the tasks themselves breaks a tie.
@@ -1157,6 +1158,7 @@ function deriveWeighing(evaluation: Evaluation): WeighingDerived | null {
             defectIds: high.map((defect) => defect.id),
             noteNl: `${high.length === 1 ? "Dit gebrek heeft" : "Deze gebreken hebben"} ernst hoog: een groep kan het deel niet gebruiken, maar de kerntaken lukken zonder.${lighter.length === 0 ? "" : ` De gebreken met een lichtere ernst (${lighter.map((step) => `${step.defects} met ernst ${step.severity}`).join(", ")}) staan in de werklijst hierna.`}`,
           },
+    tasksIntroNl: `De tabel telt per kerntaak de gebreken met elke ernst. Bij dezelfde ernst staat in de werklijst eerst wat bij een kerntaak hoort.${high.length === 0 ? "" : ` ${high.length === 1 ? "Het ene gebrek met ernst hoog hoort" : `De ${high.length} gebreken met ernst hoog horen`} bij geen kerntaak en ${high.length === 1 ? "staat" : "staan"} hierboven.`}`,
     tasks: [
       ...tasks.map((task) => taskRow(task.nameNl, (defect) => defect.weighing!.task === task.id)),
       taskRow(REPORT_TEXT.weighing.everyTask, (defect) => defect.weighing!.task === TASK_ALL),
@@ -1734,7 +1736,7 @@ export function renderMarkdown(input: Evaluation, decisions: DecisionLayer = { d
   if (grouping && weighing) {
     // What stops a group at a core task stands above; here what a group can not use beside the tasks.
     if (weighing.beside) lines.push(`### ${REPORT_TEXT.weighing.beside}`, "", ...table(["Gebrek", "Criterium", "Pagina's"], weighing.beside.defectIds.map((id) => defects.get(id)!).map((defect) => [`[${esc(defect.titleNl)}](#${defect.id})`, `${defect.mainCriterion}${alsoText(defect)}`, grouping.derived.pagesNl[defect.id]!])), "", weighing.beside.noteNl, "");
-    lines.push(`### ${REPORT_TEXT.weighing.perTask}`, "", REPORT_TEXT.weighing.perTaskIntro, "", ...table([...REPORT_TEXT.weighing.taskColumns], weighing.tasks.map((row) => [esc(row.taskNl), ...row.counts.map(String)]), [1, 2, 3, 4]), "");
+    lines.push(`### ${REPORT_TEXT.weighing.perTask}`, "", weighing.tasksIntroNl, "", ...table([...REPORT_TEXT.weighing.taskColumns], weighing.tasks.map((row) => [esc(row.taskNl), ...row.counts.map(String)]), [1, 2, 3]), "");
     lines.push(`### ${REPORT_TEXT.weighing.perGroup}`, "", REPORT_TEXT.weighing.perGroupIntro, "");
     lines.push(...table([...REPORT_TEXT.weighing.columns], weighing.groups.map((row) => [row.groupNl, String(row.cannot), String(row.detour), String(row.effort), row.open === null ? "" : String(row.open)]), [1, 2, 3, 4]), "");
   } else if (grouping) {

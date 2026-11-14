@@ -573,11 +573,12 @@ function weighingSections(context: Context): string[] {
   const perTask = [
     title(labels.perTask, 3, 4),
     spacer(8),
-    rich(`<p>${attr(labels.perTaskIntro)}</p>`),
+    rich(`<p>${inline(weighing.tasksIntroNl)}</p>`),
     spacer(12),
     table(
       labels.perTask,
-      labels.taskColumns.map((label, index) => (index === 0 ? { label, track: "minmax(10rem, 3fr)" } : { label, ...number })),
+      // The name of a severity is one word: its column is at least as wide as that word, so it does not break in the middle.
+      labels.taskColumns.map((label, index) => (index === 0 ? { label, track: "minmax(8rem, 3fr)" } : { label, track: "minmax(max-content, 1fr)", numeric: true })),
       weighing.tasks.map((row) => ({ cells: [row.taskNl, ...row.counts.map(String)] })),
     ),
   ];

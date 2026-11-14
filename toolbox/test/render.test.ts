@@ -785,8 +785,10 @@ test("a weighed report says per core task which groups are stopped, and counts t
   for (const cause of derived.weighing!.stopped.flatMap((task) => task.causes)) assert.ok(cause.whyNl.length > 0 && /lopen hier vast( door gebreken die samenkomen)?\.$/.test(cause.whoNl), cause.whoNl);
 
   // Per core task the defects of each severity; what belongs to every task and to none has a row of its own.
-  assert.ok(summary.includes("| Kerntaak | Blokkerend | Hoog | Midden | Laag |\n| --- | ---: | ---: | ---: | ---: |\n| Een vergunning aanvragen | 2 | 0 | 0 | 0 |\n| Contact opnemen | 0 | 0 | 0 | 0 |\n| Elke kerntaak | 0 | 0 | 2 | 0 |\n| Geen kerntaak | 0 | 0 | 0 | 2 |\n"), summary);
-  assert.equal(derived.weighing!.tasks.reduce((total, row) => total + row.counts.reduce((sum, value) => sum + value, 0), 0), evaluation.defects!.length, "every defect stands in one row");
+  assert.ok(summary.includes("| Kerntaak | Blokkerend | Midden | Laag |\n| --- | ---: | ---: | ---: |\n| Een vergunning aanvragen | 2 | 0 | 0 |\n| Contact opnemen | 0 | 0 | 0 |\n| Elke kerntaak | 0 | 2 | 0 |\n| Geen kerntaak | 0 | 0 | 2 |\n"), summary);
+  // "Hoog" has no column: such a defect belongs to no core task, and the sentence above the table says where those are.
+  assert.equal(derived.weighing!.tasks.reduce((total, row) => total + row.counts.reduce((sum, value) => sum + value, 0), 0), evaluation.defects!.filter((defect) => defect.severity !== "hoog").length, "every other defect stands in one row");
+  assert.ok(evaluation.defects!.every((defect) => defect.severity !== "hoog" || defect.weighing!.task === null));
   // Per group, a defect counts once, with the worst that happens to that group. Every group of the standard has a row,
   // also one no defect names, with the criteria that are essential for it and still open.
   assert.ok(summary.includes("| Groep | Kan het niet | Alleen met een omweg | Met extra moeite | Criteria nog open |\n| --- | ---: | ---: | ---: | ---: |\n| Alle bezoekers | 0 | 0 | 1 |  |\n| Mensen die niet zien | 2 | 1 | 1 | "), summary);
@@ -873,6 +875,7 @@ test("a group that can not use a part no core task needs stands beside the tasks
   const summary = markdown.slice(markdown.indexOf("### Wat een groep niet kan, buiten de kerntaken"), markdown.indexOf("### Gebreken per kerntaak"));
   assert.ok(summary.includes(`| [${defect.titleNl}](#${defect.id}) | `), summary);
   assert.ok(summary.includes("Dit gebrek heeft ernst hoog: een groep kan het deel niet gebruiken, maar de kerntaken lukken zonder. De gebreken met een lichtere ernst ("));
+  assert.ok(markdown.includes("Bij dezelfde ernst staat in de werklijst eerst wat bij een kerntaak hoort. Het ene gebrek met ernst hoog hoort bij geen kerntaak en staat hierboven."));
   const card = markdown.slice(markdown.indexOf(`###### ${beside.id} `), markdown.indexOf("<a id=", markdown.indexOf(`###### ${beside.id} `)));
   // The finding stands under another criterion than its defect, so its card is set close: the same facts in running text.
   assert.ok(card.includes(" Kerntaak: geen."));

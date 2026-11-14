@@ -512,10 +512,10 @@
 
   == #t.weighing.perTask
 
-  #t.weighing.perTaskIntro
+  #weighing.tasksIntroNl
 
   #table(
-    columns: (1fr, 22mm, 16mm, 18mm, 16mm),
+    columns: (1fr, 22mm, 18mm, 16mm),
     inset: (x: 5pt, y: 3.8pt),
     align: (x, y) => if x == 0 { left + top } else { right + top },
     table.header(th(t.weighing.taskColumns.at(0)), ..t.weighing.taskColumns.slice(1).map(th-right)),
