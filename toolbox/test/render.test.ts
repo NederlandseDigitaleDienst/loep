@@ -764,8 +764,8 @@ test("a weighed report says per core task which groups are stopped, and counts t
   assert.ok(stopped.length >= 2, "the example has defects that stop a group");
   // Who is stopped comes before the scores: it is what a reader with ten minutes needs.
   assert.ok(markdown.indexOf("### Wie loopt vast") < markdown.indexOf("**WCAG 2.2 niveau A en AA"));
-  // The section says what a core task is and how many the step named.
-  assert.ok(summary.startsWith("### Wie loopt vast\n\nEen kerntaak is iets waarvoor bezoekers naar de site komen. Het onderzoek heeft er 2 uit de site afgeleid."));
+  // The section gives the answer first, at how many of the core tasks a group is stopped, then what a core task is.
+  assert.ok(summary.startsWith("### Wie loopt vast\n\nBij beide kerntaken loopt een groep bezoekers vast.\n\nEen kerntaak is iets waarvoor bezoekers naar de site komen. Het onderzoek heeft de kerntaken uit de site afgeleid. Vastlopen betekent dat een groep iets niet kan wat voor de taak nodig is.\n"), summary);
   // Under the task: who is stopped there and why the task can not be finished, then the defects, heaviest first.
   assert.ok(summary.includes(`**Een vergunning aanvragen**\n\nMensen die niet zien lopen hier vast. Zonder dit onderdeel is de aanvraag niet te versturen. Dat komt door deze gebreken:\n\n${stopped.map((defect) => `- [${defect.titleNl}](#${defect.id})`).join("\n")}\n`), summary);
   // Findings that stop a group only together stand with their task, and say that none of them does alone.
@@ -791,6 +791,8 @@ test("a weighed report says per core task which groups are stopped, and counts t
   assert.ok(evaluation.defects!.every((defect) => defect.severity !== "hoog" || defect.weighing!.task === null));
   // Per group, a defect counts once, with the worst that happens to that group. Every group of the standard has a row,
   // also one no defect names, with the criteria that are essential for it and still open.
+  // What each consequence means stands as a list under the first sentence, not as labels in a paragraph.
+  assert.ok(summary.includes("De tabel telt per groep bezoekers hoeveel gebreken haar hinderen, en met welk gevolg.\n\n- Kan het niet: langs de eigen manier van werken is er geen weg.\n- Alleen met een omweg: de bezoeker moet een andere weg zoeken, zoals een andere pagina.\n- Met extra moeite: de eigen weg werkt, maar kost meer tijd of zoeken.\n\nDe laatste kolom telt de criteria"), summary);
   assert.ok(summary.includes("| Groep | Kan het niet | Alleen met een omweg | Met extra moeite | Criteria nog open |\n| --- | ---: | ---: | ---: | ---: |\n| Alle bezoekers | 0 | 0 | 1 |  |\n| Mensen die niet zien | 2 | 1 | 1 | "), summary);
   assert.equal(derived.weighing!.groups.length, 11);
   assert.match(summary, /\| Mensen die gevoelig zijn voor flitsen \| 0 \| 0 \| 0 \| \d+ \|/);
@@ -835,18 +837,24 @@ test("what stops a group at every core task leaves no task free, and a task alon
   // Nothing stops a group together any more: the one task without a stopping defect is named.
   evaluation.weighing!.together = [];
   const one = renderMarkdown(evaluation);
-  assert.ok(one.includes("Bij de andere kerntaak vond het onderzoek op de onderzochte pagina's geen gebrek waardoor een groep vastloopt. Dat is “Contact opnemen”. Wat daar een omweg of extra moeite geeft, staat in de werklijst."));
+  assert.ok(one.includes("Bij 1 van de 2 kerntaken loopt een groep bezoekers vast.\n"));
+  assert.ok(one.includes("Bij de andere kerntaak, “Contact opnemen”, loopt op de onderzochte pagina's geen groep vast. Wat daar een omweg of extra moeite geeft, staat in de werklijst."));
   // Without any defect that stops a group, the report says so of every task.
   const calm = weighed(withDefects());
   calm.weighing!.together = [];
   for (const finding of calm.criteria.flatMap((criterion) => criterion.findings)) if (finding.weighing!.task !== null && finding.weighing!.affected.some((entry) => entry.consequence === "cannot")) Object.assign(finding.weighing!, { task: null, blocksNl: undefined });
-  assert.ok(renderMarkdown(calm).includes("Bij geen van de kerntaken vond het onderzoek op de onderzochte pagina's een gebrek waardoor een groep vastloopt. De kerntaken zijn “Een vergunning aanvragen” en “Contact opnemen”. Wat een omweg of extra moeite geeft, staat in de werklijst."));
+  // The headline counts the tasks and the table per core task names them, so the sentence does not name them again.
+  const quiet = renderMarkdown(calm);
+  assert.ok(quiet.includes("### Wie loopt vast\n\nBij geen van de 2 kerntaken loopt een groep bezoekers vast.\n"));
+  assert.ok(quiet.includes("Het onderzoek vond op de onderzochte pagina's geen gebrek waardoor een groep vastloopt. Wat een omweg of extra moeite geeft, staat in de werklijst."));
+  assert.ok(quiet.includes("\n| Een vergunning aanvragen | ") && quiet.includes("\n| Contact opnemen | "));
   // A defect that stops a group at every task: no task is free, so the sentence about the other tasks is left out.
   const everywhere = weighed(withDefects());
   everywhere.weighing!.together = [];
   const first = everywhere.criteria.flatMap((criterion) => criterion.findings)[0]!;
   first.weighing!.task = "all";
   const markdown = renderMarkdown(everywhere);
+  assert.ok(markdown.includes("Bij beide kerntaken loopt een groep bezoekers vast.\n"));
   assert.ok(markdown.includes("**Bij elke kerntaak**\n\nMensen die niet zien lopen hier vast. Zonder dit onderdeel is de aanvraag niet te versturen. Dat komt door het gebrek ["));
   assert.ok(!markdown.includes("geen gebrek waardoor een groep vastloopt"));
 });
@@ -907,7 +915,7 @@ test("a group that can not use a part no core task needs stands beside the tasks
   const summary = markdown.slice(markdown.indexOf("### Wat een groep niet kan, buiten de kerntaken"), markdown.indexOf("### Gebreken per kerntaak"));
   assert.ok(summary.includes(`| [${defect.titleNl}](#${defect.id}) | `), summary);
   assert.ok(summary.includes("Dit gebrek heeft ernst hoog: een groep kan het deel niet gebruiken, maar de kerntaken lukken zonder. De gebreken met een lichtere ernst ("));
-  assert.ok(markdown.includes("Bij dezelfde ernst staat in de werklijst eerst wat bij een kerntaak hoort. Het ene gebrek met ernst hoog hoort bij geen kerntaak en staat hierboven."));
+  assert.ok(markdown.includes("Bij dezelfde ernst staat in de werklijst eerst wat bij een kerntaak hoort. Het ene gebrek met ernst hoog hoort bij geen kerntaak en staat onder “Wat een groep niet kan, buiten de kerntaken”."));
   const card = markdown.slice(markdown.indexOf(`###### ${beside.id} `), markdown.indexOf("<a id=", markdown.indexOf(`###### ${beside.id} `)));
   // The finding stands under another criterion than its defect, so its card is set close: the same facts in running text.
   assert.ok(card.includes(" Kerntaak: geen."));
@@ -1087,7 +1095,7 @@ test("the PDF is made for an evaluation with and without defects, passes its che
       const flat = text.stdout.replace(/\s+/g, " ");
       assert.equal(flat.includes("Wie loopt vast"), name === "weighed", `${name}: the part on who is stopped`);
       assert.equal(flat.includes("Gebreken per groep"), name === "weighed", name);
-      if (name === "weighed") for (const expected of ["Een vergunning aanvragen", "Mensen die niet zien kunnen dit niet gebruiken.", "Dit deel is nodig voor de kerntaak", "Zonder dit onderdeel is de aanvraag niet te versturen.", "lopen hier vast door gebreken die samenkomen", "Elke bevinding is apart gewogen.", "Gebreken per kerntaak", "De ernst kan anders uitvallen. Of dezelfde tekst ook elders", "krijgen hier hetzelfde als andere bezoekers", "Kerntaak"]) assert.ok(flat.includes(expected), `weighed: the PDF says "${expected}"`);
+      if (name === "weighed") for (const expected of ["Een vergunning aanvragen", "Mensen die niet zien kunnen dit niet gebruiken.", "Dit deel is nodig voor de kerntaak", "Zonder dit onderdeel is de aanvraag niet te versturen.", "lopen hier vast door gebreken die samenkomen", "Elke bevinding is apart gewogen.", "Gebreken per kerntaak", "Bij beide kerntaken loopt een groep bezoekers vast.", "Met extra moeite: de eigen weg werkt", "De ernst kan anders uitvallen. Of dezelfde tekst ook elders", "krijgen hier hetzelfde als andere bezoekers", "Kerntaak"]) assert.ok(flat.includes(expected), `weighed: the PDF says "${expected}"`);
       assert.ok(pages[0]!.includes("Gemaakt met loep 0.0.1, commit 000000000000"), `${name}: the cover says what made the report`);
       assert.deepEqual(pages.slice(1).filter((page) => !page.includes("Gemaakt met loep 0.0.1")).length, 0, `${name}: every page says what made the report`);
     }

@@ -118,9 +118,12 @@ export const REPORT_TEXT = {
     everyTask: "Elke kerntaak",
     noTask: "Geen kerntaak",
     perGroup: "Gebreken per groep",
-    perGroupIntro:
-      "De tabel telt per groep bezoekers hoeveel gebreken haar hinderen, en met welk gevolg. Kan het niet: langs de eigen manier van werken is er geen weg. Alleen met een omweg: de bezoeker moet een andere weg zoeken, zoals een andere pagina. Met extra moeite: de eigen weg werkt, maar kost meer tijd of zoeken. De laatste kolom telt de criteria die voor deze groep nodig zijn en waarover het onderzoek nog geen oordeel heeft. Wat daar wordt gevonden, kan de telling veranderen. De groepen komen uit EN 301 549, de norm waar de wet naar verwijst. Een groep is geen aandoening: één bezoeker kan in meer groepen vallen, en een gebrek dat meer groepen hindert, telt bij elke groep.",
+    perGroupIntro: "De tabel telt per groep bezoekers hoeveel gebreken haar hinderen, en met welk gevolg.",
     columns: ["Groep", "Kan het niet", "Alleen met een omweg", "Met extra moeite", "Criteria nog open"],
+    /** What each consequence means, in the order of the columns 2 to 4; it follows the name of its column. */
+    consequences: ["langs de eigen manier van werken is er geen weg.", "de bezoeker moet een andere weg zoeken, zoals een andere pagina.", "de eigen weg werkt, maar kost meer tijd of zoeken."],
+    perGroupNote:
+      "De laatste kolom telt de criteria die voor deze groep nodig zijn en waarover het onderzoek nog geen oordeel heeft. Wat daar wordt gevonden, kan de telling veranderen. De groepen komen uit EN 301 549, de norm waar de wet naar verwijst. Een groep is geen aandoening: één bezoeker kan in meer groepen vallen, en een gebrek dat meer groepen hindert, telt bij elke groep.",
     task: "Kerntaak",
     noGroup: "Uit de bevinding blijkt geen gevolg voor een groep bezoekers.",
     unsure: "De ernst kan anders uitvallen.",
@@ -459,7 +462,9 @@ export interface DefectWeighingDerived {
 
 /** The weighing as the report shows it; only when the step ran. */
 export interface WeighingDerived {
-  /** What a core task is, how many the step named, and what the section shows. */
+  /** The answer before the account: at how many of the core tasks a group is stopped. */
+  headlineNl: string;
+  /** What a core task is, where the tasks come from, and what being stopped means. */
   introNl: string;
   /**
    * Per core task at which a group is stopped, the task with the most defects first and what
@@ -1149,8 +1154,21 @@ function deriveWeighing(evaluation: Evaluation): WeighingDerived | null {
   const high = sorted.filter((defect) => defect.severity === "hoog");
   const lighter = SEVERITIES.filter((severity) => SEVERITY_RANK[severity] > SEVERITY_RANK.hoog).map((severity) => ({ severity, defects: sorted.filter((defect) => defect.severity === severity).length })).filter((step) => step.defects > 0);
   const taskRow = (taskNl: string, of: (defect: Defect) => boolean): { taskNl: string; counts: number[] } => ({ taskNl, counts: SEVERITIES.filter((severity) => severity !== "hoog").map((severity) => sorted.filter((defect) => defect.severity === severity && of(defect)).length) });
+  // Something that stops a group at every task stops it at each of them.
+  const stoppedTasks = everywhere ? tasks.length : perTask.filter((task) => !task.all && task.causes.length > 0).length;
+  const headlineNl =
+    tasks.length === 0
+      ? "Het onderzoek heeft geen kerntaken uit de site afgeleid."
+      : tasks.length === 1
+        ? `Bij de enige kerntaak loopt ${stoppedTasks === 0 ? "geen" : "een"} groep bezoekers vast.`
+        : stoppedTasks === 0
+          ? `Bij geen van de ${tasks.length} kerntaken loopt een groep bezoekers vast.`
+          : stoppedTasks === tasks.length
+            ? `Bij ${tasks.length === 2 ? "beide" : `alle ${tasks.length}`} kerntaken loopt een groep bezoekers vast.`
+            : `Bij ${stoppedTasks} van de ${tasks.length} kerntaken loopt een groep bezoekers vast.`;
   return {
-    introNl: `Een kerntaak is iets waarvoor bezoekers naar de site komen. Het onderzoek heeft er ${tasks.length} uit de site afgeleid. Hier staat bij welke kerntaak een groep bezoekers vastloopt: de groep kan iets niet wat voor die taak nodig is.`,
+    headlineNl,
+    introNl: "Een kerntaak is iets waarvoor bezoekers naar de site komen. Het onderzoek heeft de kerntaken uit de site afgeleid. Vastlopen betekent dat een groep iets niet kan wat voor de taak nodig is.",
     // What stops the most stands first; the order of the tasks themselves breaks a tie.
     stopped: perTask
       .filter((task) => task.causes.length > 0)
@@ -1161,8 +1179,9 @@ function deriveWeighing(evaluation: Evaluation): WeighingDerived | null {
       free.length === 0 || everywhere
         ? null
         : anyStopped
-          ? `Bij ${free.length === 1 ? "de andere kerntaak" : "de andere kerntaken"} vond het onderzoek op de onderzochte pagina's geen gebrek waardoor een groep vastloopt. ${free.length === 1 ? "Dat is" : "Dat zijn"} ${namesNl(free)}. Wat daar een omweg of extra moeite geeft, staat in de werklijst.`
-          : `Bij geen van de kerntaken vond het onderzoek op de onderzochte pagina's een gebrek waardoor een groep vastloopt. ${free.length === 1 ? "De kerntaak is" : "De kerntaken zijn"} ${namesNl(free)}. Wat een omweg of extra moeite geeft, staat in de werklijst.`,
+          ? `Bij ${free.length === 1 ? "de andere kerntaak" : "de andere kerntaken"}, ${namesNl(free)}, loopt op de onderzochte pagina's geen groep vast. Wat daar een omweg of extra moeite geeft, staat in de werklijst.`
+          : // The headline counts the tasks, and the table per core task names them.
+            "Het onderzoek vond op de onderzochte pagina's geen gebrek waardoor een groep vastloopt. Wat een omweg of extra moeite geeft, staat in de werklijst.",
     limitsNl: `Elke bevinding is apart gewogen. Dat meer gebreken op dezelfde weg een groep samen tegenhouden, staat hier alleen als het uit de bevindingen bleek.${open.length === 0 ? "" : ` Over ${plural(open.length, "criterium", "criteria")} heeft het onderzoek nog geen oordeel; ook daar kan een groep vastlopen.`}`,
     beside:
       high.length === 0
@@ -1171,7 +1190,7 @@ function deriveWeighing(evaluation: Evaluation): WeighingDerived | null {
             defectIds: high.map((defect) => defect.id),
             noteNl: `${high.length === 1 ? "Dit gebrek heeft" : "Deze gebreken hebben"} ernst hoog: een groep kan het deel niet gebruiken, maar de kerntaken lukken zonder.${lighter.length === 0 ? "" : ` De gebreken met een lichtere ernst (${lighter.map((step) => `${step.defects} met ernst ${step.severity}`).join(", ")}) staan in de werklijst hierna.`}`,
           },
-    tasksIntroNl: `De tabel telt per kerntaak de gebreken met elke ernst. Bij dezelfde ernst staat in de werklijst eerst wat bij een kerntaak hoort.${high.length === 0 ? "" : ` ${high.length === 1 ? "Het ene gebrek met ernst hoog hoort" : `De ${high.length} gebreken met ernst hoog horen`} bij geen kerntaak en ${high.length === 1 ? "staat" : "staan"} hierboven.`}`,
+    tasksIntroNl: `De tabel telt per kerntaak de gebreken met elke ernst. Bij dezelfde ernst staat in de werklijst eerst wat bij een kerntaak hoort.${high.length === 0 ? "" : ` ${high.length === 1 ? "Het ene gebrek met ernst hoog hoort" : `De ${high.length} gebreken met ernst hoog horen`} bij geen kerntaak en ${high.length === 1 ? "staat" : "staan"} onder “${REPORT_TEXT.weighing.beside}”.`}`,
     tasks: [
       ...tasks.map((task) => taskRow(task.nameNl, (defect) => defect.weighing!.task === task.id)),
       taskRow(REPORT_TEXT.weighing.everyTask, (defect) => defect.weighing!.task === TASK_ALL),
@@ -1729,7 +1748,7 @@ export function renderMarkdown(input: Evaluation, decisions: DecisionLayer = { d
   const weighing = grouping ? derived.weighing : null;
   if (weighing) {
     const linkTo = (id: string): string => `[${esc(defects.get(id)!.titleNl)}](#${id})`;
-    lines.push(`### ${REPORT_TEXT.weighing.stopped}`, "", weighing.introNl, "");
+    lines.push(`### ${REPORT_TEXT.weighing.stopped}`, "", weighing.headlineNl, "", weighing.introNl, "");
     for (const task of weighing.stopped) {
       lines.push(`**${esc(task.taskNl)}**`, "");
       for (const cause of task.causes) {
@@ -1750,7 +1769,7 @@ export function renderMarkdown(input: Evaluation, decisions: DecisionLayer = { d
     // What stops a group at a core task stands above; here what a group can not use beside the tasks.
     if (weighing.beside) lines.push(`### ${REPORT_TEXT.weighing.beside}`, "", ...table(["Gebrek", "Criterium", "Pagina's"], weighing.beside.defectIds.map((id) => defects.get(id)!).map((defect) => [`[${esc(defect.titleNl)}](#${defect.id})`, `${defect.mainCriterion}${alsoText(defect)}`, grouping.derived.pagesNl[defect.id]!])), "", weighing.beside.noteNl, "");
     lines.push(`### ${REPORT_TEXT.weighing.perTask}`, "", weighing.tasksIntroNl, "", ...table([...REPORT_TEXT.weighing.taskColumns], weighing.tasks.map((row) => [esc(row.taskNl), ...row.counts.map(String)]), [1, 2, 3]), "");
-    lines.push(`### ${REPORT_TEXT.weighing.perGroup}`, "", REPORT_TEXT.weighing.perGroupIntro, "");
+    lines.push(`### ${REPORT_TEXT.weighing.perGroup}`, "", REPORT_TEXT.weighing.perGroupIntro, "", ...bullets(REPORT_TEXT.weighing.consequences.map((meaning, index) => `${REPORT_TEXT.weighing.columns[index + 1]}: ${meaning}`)), "", REPORT_TEXT.weighing.perGroupNote, "");
     lines.push(...table([...REPORT_TEXT.weighing.columns], weighing.groups.map((row) => [row.groupNl, String(row.cannot), String(row.detour), String(row.effort), row.open === null ? "" : String(row.open)]), [1, 2, 3, 4]), "");
   } else if (grouping) {
     lines.push("### Zwaarste gebreken", "");

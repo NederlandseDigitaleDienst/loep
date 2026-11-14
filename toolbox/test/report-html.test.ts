@@ -119,14 +119,21 @@ test("a weighed report says in the summary who is stopped at which core task, an
   const html = full.slice(full.indexOf("<body>"), full.indexOf("<script>"));
   const stopped = evaluation.defects!.filter((defect) => defect.severity === "blokkerend");
   assert.ok(stopped.length > 0);
-  // The summary: a heading, what a core task is, the task as a heading under it, and a paragraph on who is stopped there, why, and by which defects.
-  assert.match(html, /<nldd-title size="4" heading-level="3" text="Wie loopt vast"><\/nldd-title>/);
-  assert.ok(html.includes("<p>Een kerntaak is iets waarvoor bezoekers naar de site komen. Het onderzoek heeft er 2 uit de site afgeleid."));
-  assert.match(html, /<p role="heading" aria-level="4" data-level="4"><strong>Een vergunning aanvragen<\/strong><\/p><p>Mensen die niet zien lopen hier vast\. Zonder dit onderdeel is de aanvraag niet te versturen\. Dat komt door deze gebreken:<\/p><ul><li><a href="#VRB-G-\w+">[^<]+<\/a><\/li><li><a href="#VRB-G-\w+">[^<]+<\/a><\/li><\/ul>/);
-  for (const defect of stopped) assert.ok(html.includes(`<a href="#${defect.id}">`), defect.id);
-  // What stops a group only together stands with its task, and what the section can not show is said.
-  assert.match(html, /<strong>Bij elke kerntaak<\/strong><\/p><p>Mensen die slecht zien lopen hier vast door gebreken die samenkomen\. [^<]+ Geen van deze gebreken houdt hen alleen tegen:<\/p><ul><li>/);
-  assert.ok(html.includes("<p>Elke bevinding is apart gewogen. "));
+  // The summary: a heading, the answer in one line, what a core task is, then a card per task with the task as a heading.
+  assert.match(html, /<nldd-title size="4" heading-level="3" text="Wie loopt vast"><\/nldd-title><nldd-spacer size="8"><\/nldd-spacer><nldd-text size="lg" weight="medium">Bij beide kerntaken loopt een groep bezoekers vast\.<\/nldd-text>/);
+  assert.ok(html.includes("<nldd-text>Een kerntaak is iets waarvoor bezoekers naar de site komen. Het onderzoek heeft de kerntaken uit de site afgeleid."));
+  // Who is stopped and why are sentences of their own; the defects are a list of rows that lead to the work list, one tab stop each.
+  assert.match(html, /<nldd-card><nldd-container padding="24" sm-padding="16"><nldd-title size="5" heading-level="4" text="Een vergunning aanvragen"><\/nldd-title><nldd-spacer size="12"><\/nldd-spacer><nldd-text weight="medium">Mensen die niet zien lopen hier vast\.<\/nldd-text><nldd-spacer size="4"><\/nldd-spacer><nldd-text>Zonder dit onderdeel is de aanvraag niet te versturen\.<\/nldd-text><nldd-spacer size="12"><\/nldd-spacer><nldd-list accessible-label="Waardoor ze vastlopen" appearance="box-tinted"><nldd-list-item href="#VRB-G-\w+"><nldd-text-cell text="[^"]+"><\/nldd-text-cell><nldd-icon-cell icon="chevron-right"[^>]*><\/nldd-icon-cell><\/nldd-list-item><nldd-list-item href="#VRB-G-\w+">/);
+  for (const defect of stopped) assert.ok(html.includes(`<nldd-list-item href="#${defect.id}">`), defect.id);
+  // On a wide screen the cards stand in two columns, on a narrow one in one.
+  assert.match(html, /<nldd-container layout="lanes" column-count="2" sm-column-count="1" gap="24"><nldd-card>/);
+  // What stops a group only together says so before its rows, and what the section can not show is said in smaller letters.
+  assert.match(html, /text="Bij elke kerntaak"><\/nldd-title><nldd-spacer size="12"><\/nldd-spacer><nldd-text weight="medium">Mensen die slecht zien lopen hier vast door gebreken die samenkomen\.<\/nldd-text>(?:(?!<nldd-card>).)*<nldd-text>Geen van deze gebreken houdt hen alleen tegen:<\/nldd-text><nldd-spacer size="12"><\/nldd-spacer><nldd-list /);
+  assert.ok(html.includes('<nldd-text size="sm" color="secondary">Elke bevinding is apart gewogen. '));
+  // What explains a table stands under it: the consequences as a list of terms, then where the groups come from.
+  assert.match(html, /<\/nldd-table><nldd-spacer size="8"><\/nldd-spacer><nldd-text size="sm" color="secondary">De tabel telt per kerntaak de gebreken met elke ernst\./);
+  assert.ok(html.includes("<nldd-rich-text><dl><dt>Kan het niet</dt><dd>Langs de eigen manier van werken is er geen weg.</dd><dt>Alleen met een omweg</dt><dd>De bezoeker moet een andere weg zoeken, zoals een andere pagina.</dd><dt>Met extra moeite</dt><dd>De eigen weg werkt, maar kost meer tijd of zoeken.</dd></dl></nldd-rich-text>"));
+  assert.ok(html.includes('<nldd-text size="sm" color="secondary">De laatste kolom telt de criteria die voor deze groep nodig zijn'));
   // The tables per core task and per group have a row header and numbers set to the right; every group of the standard has a row.
   assert.match(html, /<nldd-table accessible-label="Gebreken per kerntaak" [^>]*><nldd-table-row slot="header"><nldd-text-cell text="Kerntaak"><\/nldd-text-cell><nldd-text-cell text="Blokkerend" horizontal-alignment="right">/);
   assert.match(html, /<nldd-table accessible-label="Gebreken per groep" [^>]*><nldd-table-row slot="header"><nldd-text-cell text="Groep"><\/nldd-text-cell><nldd-text-cell text="Kan het niet" horizontal-alignment="right">/);
@@ -140,6 +147,19 @@ test("a weighed report says in the summary who is stopped at which core task, an
   assert.ok(html.includes("<p>De ernst kan anders uitvallen. Of dezelfde tekst ook elders op de pagina staat, is niet bekend.</p>"));
   assert.match(html, /<p>Uit de bevinding blijkt geen gevolg voor een groep bezoekers\.<\/p><p>Mensen die [^<]+ krijgen hier hetzelfde als andere bezoekers\. /);
   assert.ok(!/Niet vastgesteld:|Dit hoort bij|van de drie gevolgen/.test(html));
+});
+
+test("without a stopped task the account is short and stands beside the table per core task", () => {
+  const evaluation = weighed(grouped());
+  evaluation.weighing!.together = [];
+  for (const finding of evaluation.criteria.flatMap((criterion) => criterion.findings)) if (finding.weighing!.task !== null && finding.weighing!.affected.some((entry) => entry.consequence === "cannot")) Object.assign(finding.weighing!, { task: null, blocksNl: undefined });
+  const full = renderHtml(evaluation);
+  const html = full.slice(full.indexOf("<body>"), full.indexOf("<script>"));
+  assert.match(html, /<nldd-one-half-one-half-section padding-top="0"><nldd-container slot="left"><nldd-title size="4" heading-level="3" text="Wie loopt vast"><\/nldd-title><nldd-spacer size="8"><\/nldd-spacer><nldd-text size="lg" weight="medium">Bij geen van de 2 kerntaken loopt een groep bezoekers vast\.<\/nldd-text>(?:(?!<\/nldd-container>).)*<\/nldd-container><nldd-container slot="right"><nldd-title size="4" heading-level="3" text="Gebreken per kerntaak">/);
+  assert.ok(!html.includes('<nldd-list accessible-label="Waardoor ze vastlopen"'), "no card without a stopped task");
+  // The headings stay in order: no level is skipped.
+  const levels = headingLevels(full);
+  for (const [index, level] of levels.entries()) if (index > 0) assert.ok(level <= levels[index - 1]! + 1, `heading ${index} jumps from ${levels[index - 1]} to ${level}`);
 });
 
 test("the report is the same in its own page and as a fragment; only the frame differs", () => {

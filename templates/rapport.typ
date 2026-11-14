@@ -459,6 +459,8 @@
 #if grouping != none and weighing != none [
   == #t.weighing.stopped
 
+  #weighing.headlineNl
+
   #weighing.introNl
 
   #for task in weighing.stopped [
@@ -525,6 +527,10 @@
   == #t.weighing.perGroup
 
   #t.weighing.perGroupIntro
+
+  #list(..t.weighing.consequences.enumerate().map(((index, meaning)) => [#t.weighing.columns.at(index + 1): #meaning]))
+
+  #t.weighing.perGroupNote
 
   #table(
     columns: (1fr, 20mm, 26mm, 24mm, 22mm),
