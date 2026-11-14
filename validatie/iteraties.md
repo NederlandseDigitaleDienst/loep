@@ -392,3 +392,20 @@ Issue #498. De eerste meting van een hele versie sinds 0.11.0, en de eerste voll
 - **1.4.12 nu afgekeurd.** 0.11.0 miste het in beide runs; sinds #271 meet 1.4.12 of er tekst verdwijnt.
 - **Tweeling.** De afkeuring van 1.4.10 is een fout in de testsite zelf (#499). Die zit ook op Lindewaard, buiten de sleutel. 2.4.3 (Tab blijft in de open chat) en 4.1.2 (`<audio>` en `<video>` zonder eigen naam) noemen beide vergelijkers discutabel. Van de zes open criteria komen er drie door loep (de video, #505); de andere drie vragen kennis van de eigenaar over de chat of een testaccount.
 - **Niet gemeten.** De spreiding op de tweeling (één run), VoiceOver, een site met login, het doel `verantwoorden`.
+
+## Meting op 0.29.0, 14 november 2026
+
+Issue #546. Gemeten is de kandidaat voor 0.29.0 (branch `meting/0.29.0`, commit `2e6f0a1`: main na #547 en #548), met Playwright 1.65.1 (Chromium 159, Firefox 159, WebKit 27.2) en Alfa 0.120 in plaats van Playwright 1.63.0 en Alfa 0.119. De code van loep zelf veranderde niet. Opzet en marge gelijk aan die van 0.25.0. De uitwerking staat in [testsite/2026-11-14-meting-0.29.0/](testsite/2026-11-14-meting-0.29.0/uitkomst.md).
+
+| | L1 | B1 (tweeling) |
+|---|---|---|
+| Criteria zoals de sleutel, van 56 | 56 | 50 (1 afgekeurd, 5 open) |
+| Gebreken gevonden waar beide vergelijkers het eens zijn, van 79 | 79 | n.v.t. |
+| Meldingen zonder tegenhanger | 8 | 1 |
+| Onterecht volgens beide vergelijkers | 0 | 0 |
+| Duur zonder pauze, tokens | 84 min, 17,0 miljoen | 92 min, 18,6 miljoen |
+
+- **Marge gehaald** op elk punt dat L1 en B1 meten. Op de tweeling één afkeuring in plaats van drie, beide vergelijkers noemen haar discutabel.
+- **Geen L2.** 0.29.0 brengt de fix voor CVE-2026-106378 en is uitgebracht op L1 en B1. De spreiding komt later.
+- **Verkenner.** Bediende dit keer het controlevenster en de externe videospeler wel. Op de tweeling is 1.2.1 daardoor vermoedelijk niet meer open.
+- **Weeklimiet.** Beide runs pauzeerden op de weeklimiet van het abonnement en gingen daarna verder zonder iets over te slaan.

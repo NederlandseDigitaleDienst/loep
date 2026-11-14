@@ -1,0 +1,199 @@
+{
+  "criteria": {
+    "bothFailed": [],
+    "criteria": 55,
+    "falsePassRate": null,
+    "missed": [],
+    "neitherFailed": {
+      "cantTell": 5,
+      "inapplicable": 4,
+      "passed": 45
+    },
+    "onlyOurs": [
+      "2.4.3"
+    ],
+    "recall": null,
+    "site": "Gemeente Berkenveen",
+    "undecidedRate": null,
+    "wcagVersion": "2.2"
+  },
+  "findings": [],
+  "ours": {
+    "agreement": 1,
+    "classes": {
+      "discutabel": {
+        "a": 1,
+        "agreed": 1,
+        "b": 1
+      },
+      "onterecht": {
+        "a": 0,
+        "agreed": 0,
+        "b": 0
+      },
+      "tegenhanger": {
+        "a": 0,
+        "agreed": 0,
+        "b": 0
+      },
+      "terecht": {
+        "a": 0,
+        "agreed": 0,
+        "b": 0
+      }
+    },
+    "disagreed": 0,
+    "duplicates": {
+      "a": {
+        "referenceFindings": 0,
+        "surplus": 0
+      },
+      "agreed": {
+        "referenceFindings": 0,
+        "surplus": 0
+      },
+      "b": {
+        "referenceFindings": 0,
+        "surplus": 0
+      }
+    },
+    "shareWithoutCounterpart": {
+      "discutabel": {
+        "a": 1,
+        "agreed": 1,
+        "b": 1
+      },
+      "onterecht": {
+        "a": 0,
+        "agreed": 0,
+        "b": 0
+      },
+      "terecht": {
+        "a": 0,
+        "agreed": 0,
+        "b": 0
+      }
+    },
+    "total": 1
+  },
+  "ownFindings": [
+    {
+      "a": "discutabel",
+      "agreed": "discutabel",
+      "b": "discutabel",
+      "criterion": "2.4.3",
+      "id": "GEME-2.4.3-12cb",
+      "reasonNl": {
+        "a": "Echte Tab-aanslagen blijven in de open chat rond langs vijf stops. Dat klopt. Maar de knop Chat met ons, de sluitknop en Escape halen je eruit. Een onderzoeker keurt zo'n vaste chat meestal niet af.",
+        "b": "Echte Tab-aanslagen op P05, P06 en P08 gaan met de chat open alleen rond langs vijf stops. Dat klopt. Maar de chat heeft een sluitknop en houdt de focus vast zoals een venster. De sleutel noemt dit goed; afkeuren op 2.4.3 is streng."
+      },
+      "titleNl": "Open chatvenster houdt de Tab-toets vast"
+    }
+  ],
+  "provenance": {
+    "classificationSha256": {
+      "a": "a048b8e7ce046fcbba397687a8dc9cf05dd85239bfe0dd679baeec6f2ca4f329",
+      "b": "07311141863534abc1d811cc7e6f127fc18a0daf3e925c62b64869e37fcadb7a"
+    },
+    "evaluationSha256": "0de2a4f8a0469952f7ee5b0ce8ac22933d17613d8e640825d60af637a4e865bd",
+    "inputSha256": "d5b9c11eedc160c0d045237f66845e8fddcd60afddb745a617a7419fcad28426",
+    "promptSha256": "f1f5e55792880bceff07e783347360c72ec2346c22a84f5886948346abf1e8fe"
+  },
+  "reference": {
+    "agreement": null,
+    "agreementCoarse": null,
+    "classes": {
+      "buiten-bereik": {
+        "a": 0,
+        "agreed": 0,
+        "b": 0
+      },
+      "deels": {
+        "a": 0,
+        "agreed": 0,
+        "b": 0
+      },
+      "gemist-bewijs-beoordeling": {
+        "a": 0,
+        "agreed": 0,
+        "b": 0
+      },
+      "gemist-bewijs-dossier": {
+        "a": 0,
+        "agreed": 0,
+        "b": 0
+      },
+      "gemist-geen-bewijs": {
+        "a": 0,
+        "agreed": 0,
+        "b": 0
+      },
+      "gevonden": {
+        "a": 0,
+        "agreed": 0,
+        "b": 0
+      },
+      "niet-meer-aanwezig": {
+        "a": 0,
+        "agreed": 0,
+        "b": 0
+      }
+    },
+    "coarse": {
+      "buiten-bereik": {
+        "a": 0,
+        "agreed": 0,
+        "b": 0
+      },
+      "deels": {
+        "a": 0,
+        "agreed": 0,
+        "b": 0
+      },
+      "gemist": {
+        "a": 0,
+        "agreed": 0,
+        "b": 0
+      },
+      "gevonden": {
+        "a": 0,
+        "agreed": 0,
+        "b": 0
+      },
+      "niet-meer-aanwezig": {
+        "a": 0,
+        "agreed": 0,
+        "b": 0
+      }
+    },
+    "counted": 0,
+    "disagreed": 0,
+    "disagreedCoarse": 0,
+    "documents": 0,
+    "documentsOutOfReach": 0,
+    "foundShare": {
+      "a": {
+        "ofCounted": null,
+        "ofStillPresent": null
+      },
+      "agreed": {
+        "ofCounted": null,
+        "ofStillPresent": null
+      },
+      "b": {
+        "ofCounted": null,
+        "ofStillPresent": null
+      }
+    },
+    "leftOut": 0,
+    "stillPresent": {
+      "a": 0,
+      "agreed": 0,
+      "b": 0
+    },
+    "total": 0
+  },
+  "referenceKind": "answer-key",
+  "schema": "loep/compare-findings-summary/2",
+  "site": "Gemeente Berkenveen"
+}
