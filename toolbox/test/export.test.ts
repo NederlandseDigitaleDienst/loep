@@ -10,6 +10,7 @@ import { mergeFindings } from "../src/lib/defects.ts";
 import { summarise, type Evaluation, type ReportFinding } from "../src/lib/evaluation.ts";
 import { deriveReport } from "../src/lib/report-markdown.ts";
 import { exampleEvaluation } from "./fixtures/example-evaluation.ts";
+import { weighed } from "./fixtures/weighed.ts";
 
 const dir = mkdtempSync(join(tmpdir(), "loep-export-"));
 after(() => rmSync(dir, { recursive: true, force: true }));
@@ -70,7 +71,7 @@ function parseCsv(text: string): string[][] {
 
 test("the CSV has a row per line of the work list: three findings on one element are one row with the three criteria", () => {
   const rows = parseCsv(workListCsv(evaluation()));
-  assert.deepEqual(rows[0], ["gebrek", "titel", "ernst", "eigenaar", "hoofdcriterium", "criteria", "paginas", "onderdeel", "element", "wat_is_er_mis", "wie_heeft_er_last_van", "oplossing", "bevindingen"]);
+  assert.deepEqual(rows[0], ["gebrek", "titel", "ernst", "eigenaar", "hoofdcriterium", "criteria", "paginas", "onderdeel", "element", "wat_is_er_mis", "wie_heeft_er_last_van", "oplossing", "bevindingen", "groepen", "kerntaak"]);
   assert.equal(rows.length, 3, "a header and two lines");
   // The heaviest first, as in the report.
   const [link, block] = rows.slice(1);
@@ -78,7 +79,24 @@ test("the CSV has a row per line of the work list: three findings on one element
   assert.equal(link![1], 'Link "Lees meer", zonder doel');
   assert.deepEqual([block![1], block![2], block![3], block![4], block![5], block![6], block![7]], ["Huidige pagina in het menu alleen met een grijs vlak aangegeven", "midden", "design", "1.4.1", "1.4.1 1.4.3 1.4.11", "P01", "zijmenu"]);
   assert.equal(block![12], "T-1.4.1-1 T-1.4.3-1 T-1.4.11-1");
+  // Without a weighing: what the judge wrote, and no groups or core task.
+  assert.deepEqual([block![10], block![13], block![14]], ["Wie slecht ziet, ziet niet waar hij is.", "", ""]);
   assert.match(block![0]!, /^T-G-[0-9a-f]{4}$/);
+});
+
+test("a weighed work list names the groups with the worst that happens to each, and the core task", () => {
+  const rows = parseCsv(workListCsv(weighed(evaluation())));
+  // The grey block is heaviest now: one of its findings stops a group at a core task.
+  const [block, link] = rows.slice(1);
+  assert.deepEqual([block![1], block![2], block![14]], ["Huidige pagina in het menu alleen met een grijs vlak aangegeven", "blokkerend", "Een vergunning aanvragen"]);
+  // Three findings, one line: a group stands once, with the worst of the three.
+  assert.equal(block![13], "mensen die niet zien (kan dit niet); alle bezoekers (alleen met een omweg); mensen die slecht zien (alleen met een omweg); mensen die kleuren niet onderscheiden (kost extra moeite)");
+  assert.ok(block![10]!.startsWith("Mensen die niet zien (kan dit niet): Gaat met de schermlezer van kop naar kop door de pagina. Het onderdeel heeft geen naam, dus de bezoeker weet niet wat het is. Alle bezoekers (alleen met een omweg): "), block![10]);
+  // No group hindered: still a line of the work list, on the lowest step.
+  assert.deepEqual([link![2], link![10], link![13], link![14]], ["laag", "Uit de bevindingen blijkt geen gevolg voor een groep bezoekers. Het blijft een afwijking van de norm.", "", ""]);
+  const issue = workListIssues(weighed(evaluation())).find((entry) => entry.title.startsWith("Huidige pagina"))!;
+  assert.ok(issue.body.includes("- Ernst: blokkerend\n") && issue.body.includes("- Kerntaak: Een vergunning aanvragen\n"));
+  assert.ok(issue.body.includes("## Wie heeft er last van\n\nMensen die niet zien (kan dit niet): "));
 });
 
 test("the issues have a title and a body per line, and export writes them to files or standard output, never into the run", async () => {
@@ -92,7 +110,7 @@ test("the issues have a title and a body per line, and export writes them to fil
 
   writeFileSync(join(dir, "evaluation.json"), canonicalJson(evaluation()));
   const csv = await exportWorkList({ run: dir, format: "csv" });
-  assert.equal(csv.text!.split("\r\n")[0], "gebrek,titel,ernst,eigenaar,hoofdcriterium,criteria,paginas,onderdeel,element,wat_is_er_mis,wie_heeft_er_last_van,oplossing,bevindingen");
+  assert.equal(csv.text!.split("\r\n")[0], "gebrek,titel,ernst,eigenaar,hoofdcriterium,criteria,paginas,onderdeel,element,wat_is_er_mis,wie_heeft_er_last_van,oplossing,bevindingen,groepen,kerntaak");
   const out = join(dir, "issues");
   const written = await exportWorkList({ run: dir, format: "issues", out });
   assert.equal(written.written.length, 2);

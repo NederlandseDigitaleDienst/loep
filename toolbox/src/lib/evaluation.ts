@@ -5,6 +5,7 @@ import type { EvaluationDocuments } from "./documents.ts";
 import { sha256, stableId } from "./canonical.ts";
 import type { FindingCutout } from "./cutout.ts";
 import type { Defect, MergeRecord } from "./defects.ts";
+import type { Weighing, WeighingRecord } from "./weighing.ts";
 import type { Manifest, SweepToolchain } from "./manifest.ts";
 import type { RoleExtensions } from "./budget.ts";
 import { MODEL_UNKNOWN, type RoleModels } from "./models.ts";
@@ -90,6 +91,10 @@ export function markVendor(finding: ReportFinding, vendor: Vendor): void {
 export interface ReportFinding extends Omit<Finding, "owner"> {
   /** Who repairs it. What the judge named, unless the recorded names show that the repair lies inside a component of the vendor. */
   owner: string;
+  /** The severity the judge gave, when the weighing step set `severity` from what it recorded. */
+  judgedSeverity?: Finding["severity"];
+  /** Which groups the finding hinders, what happens to them and for which core task; absent until the weighing step ran. */
+  weighing?: Weighing;
   /** The owner the judge named, when `owner` was set to the vendor because the code says so. Absent when they are the same. */
   judgedOwner?: string;
   /** Why `owner` differs from `judgedOwner`, as a clause a report can print. */
@@ -363,6 +368,8 @@ export interface Evaluation {
   /** Findings grouped into the things to repair. Absent in an evaluation from before this step existed. */
   defects?: Defect[];
   merge?: MergeRecord;
+  /** Whether the step ran that weighs each finding by the groups it hinders, and the core tasks it named. Absent in an evaluation from before this step existed. */
+  weighing?: WeighingRecord;
   /** Per page label, the states in which the page was measured besides the way it loads. */
   measuredStates?: Record<string, string[]>;
   /** The documents of the site: found, examined and not examined. Absent when the site has none, and in older evaluations. */

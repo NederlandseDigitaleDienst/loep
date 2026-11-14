@@ -111,6 +111,8 @@ Elke stap leest bestanden uit de run en schrijft er nieuwe bij. De namen hierond
 
 **Evaluatie** (`evaluate`). Het script neemt per criterium het eindoordeel van de verifieerder, of dat van de afmaakronde als die er was, en alleen als het stempel nog klopt met het dossier, de procedure, de opdracht en de aangehaalde waarnemingen (`gatherVerdicts`). Daarna tellen de antwoorden van een persoon op de open punten van dat oordeel mee (`applyAnswers` in `toolbox/src/lib/evaluation.ts`). Per criterium staat in de evaluatie door wie of wat de uitkomst is vastgesteld (`established.by`: de verificatie, de afmaakronde, een persoon of, bij 2.2.1, de sessieproef) en wat het oordeel ervoor was. Het script meldt hoeveel criteria open zijn, in drie groepen: wat een mens of een keuze vraagt, wat alleen open is omdat de run niet mocht versturen (`versturen niet toegestaan`, te sluiten met een testomgeving bij `inventory`), en wat het onderzoek zelf niet vaststelde. Alleen bij dat laatste waarschuwt het. Bevindingen over dezelfde plek worden één gebrek. Aanbevelingen uit het oordeel gaan met een eigen nummer mee, los van de uitkomst. Eruit komt `evaluation.json`: het enige bestand waar rapport en verklaring uit worden gemaakt.
 
+**Weging** (`weigh` en `check-weigh`, `toolbox/src/commands/weigh.ts`). De beoordelaars geven elke bevinding een ernst. Daarna legt één agent per bevinding vast welke groepen bezoekers ze hindert, wat er voor elke groep gebeurt en of bezoekers dit deel nodig hebben voor een kerntaak (opdracht `tasks/weeg/taak.md`, uit `templates/weeg.md`; antwoord `verdicts/weging.json`). De agent leest alleen de bevindingen. `check-weigh` keurt het antwoord en zet een stempel; `weigh` en `evaluate` passen een weging toe waarvan het stempel nog klopt met de bevindingen en de opdracht. De ernst volgt dan uit een vaste tabel (`severityOf` in `toolbox/src/lib/weighing.ts`), en een gebrek heeft de hoogste ernst van zijn bevindingen. Zonder geldige weging blijft de ernst van de beoordelaars staan. De groepen en welke groepen bij een criterium horen, staan in `toolbox/data/groups.json` (`toolbox/src/lib/groups.ts`).
+
 **Rapport** (`render`). Uit `evaluation.json` komen `report/rapport.md`, `report/rapport.html`, `report/rapport.pdf` en `report/rapport-kort.pdf`. `rapport.html` staat op zichzelf: de componenten van `@nldd/design-system` die het toont (gebundeld met esbuild), de lettertypen, de uitsneden en de schermafbeeldingen van de pagina's zitten erin, en dezelfde evaluatie geeft hetzelfde bestand. Is de run afgetekend, dan schrijft `render` dezelfde vier bestanden in `signed/`, met de functie van wie tekende (de naam staat alleen in `signed/signature.json`); het concept in `report/` blijft staan. De pdf wordt met Typst gemaakt als PDF/UA-1 en daarna zelf gecontroleerd. Emoji in tekst van de site staan in de pdf in Noto Emoji. Een teken dat geen meegeleverd lettertype heeft, zoals Chinees schrift, staat in de pdf als codepunt (`[U+4E2D]`); `rapport.md` houdt de tekst zoals hij is. Komt zo'n tekst uit de gegevens die het sjabloon krijgt en niet uit de broncode van een sjabloon, dan is het tekst van de site en geeft `render` een waarschuwing; anders is het een fout in loep en eindigt `render` met afsluitcode 1.
 
 **Verschiloverzicht** (`diff`). Twee evaluaties van dezelfde site naast elkaar: opgelost, gebleven en nieuw, gekoppeld op criterium, pagina en plek. Het schrijft `verschil.md` in een map naar keuze. Het is een werkdocument en geen deel van het rapport.
@@ -136,7 +138,7 @@ Een agent krijgt alleen zijn opdrachtbestand en begint met een schone context. D
 | Verifieerder | `tasks/<criterium>/verifieer.md`, het oordeel van de beoordelaar, het dossier, `kandidaten-verificatie.json`; de site via een sessie `v-<nummer>` | `verdicts/<criterium>/final.json` | 20 commando's, plus 5 per bevinding, 3 per weggezette kandidaat en 30 als de beoordelaar niet afkeurde; 30 minuten. Dat is de ondergrens; hooguit 240 en 90 | `check-verdict --round final`: zie onder de tabel |
 | Afmaakagent | `tasks/<criterium>/afmaak.md` met de open punten en de procedure erin, de oordelen tot nu toe, het dossier, `kandidaten-afmaak.json`; de site via een sessie `a-<nummer>` | `verdicts/<criterium>/afmaak.json` | 280 commando's, 105 minuten: dat van een beoordelaar maal 3,5 (`FINISH_FACTOR`), als ondergrens; hooguit 420 en 158 | `check-verdict --round finish`: zie onder de tabel |
 
-Elke agent met een sessie krijgt ook een eigen werkmap, `werk/<sessie>/`, die het commando dat de opdracht schrijft (`explore` of `tasks`) aanmaakt. De agents van de poort en van het samenvoegen hebben geen sessie en krijgen `werk/poort-<n>/` en `werk/samenvoeg/`. Hulpbestanden en hulpscripts horen daar en nergens anders. Laat een worktree een agent niet in de map van de run schrijven, dan maakt hij een map met dezelfde naam in de map waar hij wel mag schrijven, zoals `<scratchpad>/<sessie>/`, en zet hij nooit een bestand met een algemene naam in een gedeelde map. Die regel staat één keer in `templates/werkmap.md`; `readTemplate` in `toolbox/src/lib/templates.ts` zet hem in elke opdracht, voordat de opdracht wordt ingevuld, zodat de hash van de opdracht hem dekt. Agents werken tegelijk in één run; twee agents schreven eens een hulpscript met dezelfde naam op een gedeelde plek, elk met zijn eigen sessie erin, en daarna mat de een onder de sessie van de ander. De sessie kan dat zelf niet zien: een agent heeft geen kenmerk dat de sessie kan controleren, en een sleutel per sessie zou in hetzelfde gedeelde script belanden.
+Elke agent met een sessie krijgt ook een eigen werkmap, `werk/<sessie>/`, die het commando dat de opdracht schrijft (`explore` of `tasks`) aanmaakt. De agents van de poort, van het samenvoegen en van het wegen hebben geen sessie en krijgen `werk/poort-<n>/`, `werk/samenvoeg/` en `werk/weeg/`. Hulpbestanden en hulpscripts horen daar en nergens anders. Laat een worktree een agent niet in de map van de run schrijven, dan maakt hij een map met dezelfde naam in de map waar hij wel mag schrijven, zoals `<scratchpad>/<sessie>/`, en zet hij nooit een bestand met een algemene naam in een gedeelde map. Die regel staat één keer in `templates/werkmap.md`; `readTemplate` in `toolbox/src/lib/templates.ts` zet hem in elke opdracht, voordat de opdracht wordt ingevuld, zodat de hash van de opdracht hem dekt. Agents werken tegelijk in één run; twee agents schreven eens een hulpscript met dezelfde naam op een gedeelde plek, elk met zijn eigen sessie erin, en daarna mat de een onder de sessie van de ander. De sessie kan dat zelf niet zien: een agent heeft geen kenmerk dat de sessie kan controleren, en een sleutel per sessie zou in hetzelfde gedeelde script belanden.
 
 Wat `check-verdict` weigert, staat in `toolbox/src/lib/verdict.ts`; de regels over `budget op` (`budgetPointProblems`) en `versturen niet toegestaan` (`notSentPointProblems`) worden in `toolbox/src/commands/instrument-tasks.ts` toegepast, omdat ze de sessie en de toestemming van de run nodig hebben. De belangrijkste regels:
 
@@ -168,7 +170,7 @@ flowchart TD
   subgraph commandos["Commando's van de keten, src/commands"]
     meten["inventory, sample, collect,<br/>contrast, states, documents"]
     sturen["explore, gate, instrument-tasks"]
-    afmaken["evaluate, merge, render,<br/>statement, sign, verify, diff"]
+    afmaken["evaluate, merge, weigh, render,<br/>statement, sign, verify, diff"]
   end
   subgraph sessie["Sessie, src/session"]
     client["client.ts<br/>klein proces per commando"]
@@ -185,7 +187,7 @@ flowchart TD
   subgraph bibliotheek["Bibliotheek, src/lib"]
     dossier["rundata.ts, extractors.ts, dossier.ts<br/>van run naar dossier"]
     oordeel["verdict.ts, procedures.ts<br/>regels voor een oordeel"]
-    evaluatie["evaluation.ts, defects.ts<br/>evaluatie en gebreken"]
+    evaluatie["evaluation.ts, defects.ts, weighing.ts<br/>evaluatie, gebreken en ernst"]
     rapport["report-markdown.ts, typst.ts,<br/>statement.ts, difference.ts"]
     vast["canonical.ts, manifest.ts, sweepstamp.ts<br/>vaste bytes, hashes, stempels"]
   end
@@ -230,7 +232,7 @@ flowchart TD
 
 **Bibliotheek** (`toolbox/src/lib/`). Gedeelde code die meer commando's gebruiken. Het grootste deel leest en schrijft alleen bestanden en is zonder browser te testen. `rundata.ts` leest een run in, `extractors.ts` maakt per onderdeel van het bewijs een uittreksel en `dossier.ts` stelt daaruit het dossier van één criterium samen. `verdict.ts` bevat elke regel waaraan een oordeel moet voldoen. `evaluation.ts` is de enige plek waar een criterium zijn uitkomst krijgt (`resolveCriterion`) en waar de status wordt berekend. `report-markdown.ts` levert het rapport als Markdown en alles wat het Typst-sjabloon nodig heeft; `difference.ts` koppelt bevindingen van twee evaluaties.
 
-**Sjablonen en procedures** (`templates/` en `procedures/`, buiten de toolbox). De sjablonen zijn de vaste opdrachten aan de agents en de opmaak van rapport en verklaring. `templates/gereedschap.md` wordt ingevoegd in de opdrachten van rondgang, beoordelaar, verifieerder en afmaakronde; `templates/bevinding.md` in die van beoordelaar, verifieerder en afmaakronde. `templates/werkmap.md`, waar hulpbestanden horen, komt in elke opdracht met een werkmap: ook in die van verkenner, poort en samenvoegen. De procedures zijn één bestand per succescriterium; zie [procedures/README.md](../procedures/README.md).
+**Sjablonen en procedures** (`templates/` en `procedures/`, buiten de toolbox). De sjablonen zijn de vaste opdrachten aan de agents en de opmaak van rapport en verklaring. `templates/gereedschap.md` wordt ingevoegd in de opdrachten van rondgang, beoordelaar, verifieerder en afmaakronde; `templates/bevinding.md` in die van beoordelaar, verifieerder en afmaakronde. `templates/werkmap.md`, waar hulpbestanden horen, komt in elke opdracht met een werkmap: ook in die van verkenner, poort, samenvoegen en wegen. De procedures zijn één bestand per succescriterium; zie [procedures/README.md](../procedures/README.md).
 
 ## 5. Een sessiecommando van begin tot eind
 
@@ -307,11 +309,12 @@ Alles van één onderzoek staat in één map. Elk JSON-bestand wordt geschreven 
   gate.json                uitkomst van de poort, met de gaten
   gate/                    bladen, opdracht, antwoorden en hun stempel
   observations/<sessie>/   session.json, en per commando <nr>.json met beelden
-  werk/<sessie>/           hulpbestanden en hulpscripts van de agent van die sessie (of van poort-<n>, samenvoeg)
+  werk/<sessie>/           hulpbestanden en hulpscripts van de agent van die sessie (of van poort-<n>, samenvoeg, weeg)
   rondgang/                opdracht en kandidaten per paginatype
   tasks/index.json         alle opdrachten met hun hashes
   tasks/<criterium>/       dossier.json, opdrachten, kandidaten
   verdicts/<criterium>/    oordeel.json en final.json, en afmaak.json na een afmaakronde, elk met een stempel
+  verdicts/weging.json     per bevinding wie ze hindert en bij welke kerntaak, met een stempel; de opdracht staat in tasks/weeg/
   antwoorden/<criterium>.json  wat een persoon vastlegde over een open punt, met naam en functie
   evaluation.json          de evaluatie: uitkomst per criterium en gebreken, zonder handtekening
   report/                  het conceptrapport: rapport.md, rapport.html, rapport.pdf, rapport-kort.pdf

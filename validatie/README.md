@@ -4,6 +4,8 @@ Voor de vergelijking met een bestaand onderzoek van een onafhankelijke onderzoek
 
 De map `ijkset/` is van een andere soort: daar staat hoe vaak de regelsets en de eigen metingen gelijk hebben op de testgevallen van de ACT-regels van W3C. Zie [ijkset/README.md](ijkset/README.md).
 
+De map `weging/` zegt hoe de stap is gemeten die per bevinding vastlegt wie ze hindert en waar de ernst uit volgt: hoe vaak de ernst gelijk uitkomt bij herhaling, en wat daarbij niet is getoetst. Zie [weging/README.md](weging/README.md).
+
 De map `versies/` zegt per versie van loep wanneer die het laatst als geheel is gemeten, waartegen en wat daar uitkwam, in een bestand `<versie>.json`:
 
 ```json

@@ -1,0 +1,638 @@
+{
+  "sourceNl": "De groepen zijn de gebruikersbehoeften uit EN 301 549 V3.2.1, paragraaf 4.2.1 tot en met 4.2.10 (functional performance statements). Welke groepen een succescriterium raakt, komt uit tabel B.2 van bijlage B van die norm: primary is daar P, secondary is S. De criteria die alleen in WCAG 2.2 staan, komen in die tabel niet voor; hun groepen komen uit het deel Benefits van het Understanding-document van het criterium. Bij 1.3.5 noemt de tabel alleen beperkt zicht; het Understanding-document noemt ook geheugen en motoriek, en die zijn toegevoegd.",
+  "groups": [
+    {
+      "id": "no-vision",
+      "clause": "4.2.1",
+      "labelNl": "mensen die niet zien",
+      "howNl": "Gebruikt een schermlezer met spraak of met een brailleleesregel. Leest een pagina zelden van boven naar beneden: springt van kop naar kop, langs gebieden van de pagina, of door een lijst met links of formuliervelden. Hoort van elk onderdeel de naam, de rol en de toestand. Opmaak, kleur, de plek op het scherm en een afbeelding zonder tekst bestaan voor deze bezoeker niet. Merkt een verandering elders op de pagina alleen als die wordt gemeld of als de focus erheen gaat. Bedient alles met het toetsenbord of met veegbewegingen."
+    },
+    {
+      "id": "low-vision",
+      "clause": "4.2.2",
+      "labelNl": "mensen die slecht zien",
+      "howNl": "Vergroot de pagina tot 200 of 400 procent, of gebruikt een loep op het scherm. Ziet daardoor maar een klein deel tegelijk: wat ver uit elkaar staat, hoort niet meer bij elkaar. Stelt vaak eigen kleuren, een groter lettertype of meer ruimte tussen regels in. Volgt de muisaanwijzer of de focus om te weten waar hij is. Tekst met weinig contrast, dunne randen en kleine pictogrammen vallen weg. Laat soms ook voorlezen."
+    },
+    {
+      "id": "no-color",
+      "clause": "4.2.3",
+      "labelNl": "mensen die kleuren niet onderscheiden",
+      "howNl": "Ziet sommige kleuren of alle kleuren niet als verschillend. Vertrouwt op tekst, vorm, patroon en onderstreping. Een verschil dat alleen in kleur zit, zoals een rode rand om een fout veld of een link die alleen blauw is, bestaat voor deze bezoeker niet."
+    },
+    {
+      "id": "no-hearing",
+      "clause": "4.2.4",
+      "labelNl": "mensen die niet horen",
+      "howNl": "Leest ondertiteling en uitgeschreven tekst bij video en geluid. Een geluidssignaal bestaat niet. Kan niet bellen en heeft een andere weg nodig om contact op te nemen. Voor wie Nederlandse Gebarentaal als eerste taal heeft, is geschreven Nederlands een tweede taal."
+    },
+    {
+      "id": "low-hearing",
+      "clause": "4.2.5",
+      "labelNl": "mensen die slecht horen",
+      "howNl": "Verstaat spraak slecht als er muziek of ander geluid doorheen loopt. Zet het geluid harder, gebruikt een hoortoestel of een koptelefoon, en leest ondertiteling mee."
+    },
+    {
+      "id": "no-speech",
+      "clause": "4.2.6",
+      "labelNl": "mensen die niet of moeilijk spreken",
+      "howNl": "Kan niet bellen en kan een site niet met de stem bedienen. Heeft voor contact en voor elke functie een weg nodig die zonder spreken werkt."
+    },
+    {
+      "id": "limited-manipulation",
+      "clause": "4.2.7",
+      "labelNl": "mensen die hun handen moeilijk gebruiken",
+      "howNl": "Ziet het scherm, maar gebruikt geen muis of geen gewone muis. Bedient met alleen het toetsenbord, met een schakelaar die de onderdelen een voor een afloopt, met spraakbediening of met oogbesturing. Wie met spraak bedient, zegt de tekst die op een knop of link staat. Moet kunnen zien waar de focus is. Elke extra toets of stap kost tijd en kracht. Slepen, precies mikken, twee toetsen tegelijk en snel reageren lukken niet of slecht."
+    },
+    {
+      "id": "limited-reach",
+      "clause": "4.2.8",
+      "labelNl": "mensen met een beperkt bereik",
+      "howNl": "Gebruikt een telefoon of tablet in een vaste stand, bijvoorbeeld op een houder aan een rolstoel, of bedient met een hand. Kan het apparaat niet draaien, kantelen of schudden."
+    },
+    {
+      "id": "photosensitive",
+      "clause": "4.2.9",
+      "labelNl": "mensen die gevoelig zijn voor flitsen",
+      "howNl": "Kan een epileptische aanval krijgen van beeld dat flitst. Er is geen omweg: het beeld is al gezien voordat het is weg te klikken."
+    },
+    {
+      "id": "cognitive",
+      "clause": "4.2.10",
+      "labelNl": "mensen die moeite hebben met lezen, onthouden of concentreren",
+      "howNl": "Leest langzaam, of laat tekst voorlezen. Vertrouwt op vaste plekken, duidelijke koppen en labels, en gedrag dat te voorspellen is. Laat de browser bekende gegevens invullen, omdat onthouden en overtypen fout gaat. Raakt de draad kwijt als iets beweegt, onverwacht verandert of onder tijdsdruk moet. Heeft bij een fout een melding nodig die zegt wat er mis is en hoe het goed moet."
+    }
+  ],
+  "criteria": {
+    "1.1.1": {
+      "primary": [
+        "no-vision",
+        "low-vision",
+        "no-hearing"
+      ],
+      "secondary": [
+        "low-hearing",
+        "cognitive"
+      ],
+      "source": "EN 301 549 V3.2.1, tabel B.2"
+    },
+    "1.2.1": {
+      "primary": [
+        "no-vision",
+        "low-vision",
+        "no-hearing",
+        "low-hearing"
+      ],
+      "secondary": [
+        "cognitive"
+      ],
+      "source": "EN 301 549 V3.2.1, tabel B.2"
+    },
+    "1.2.2": {
+      "primary": [
+        "no-hearing",
+        "low-hearing"
+      ],
+      "secondary": [
+        "cognitive"
+      ],
+      "source": "EN 301 549 V3.2.1, tabel B.2"
+    },
+    "1.2.3": {
+      "primary": [
+        "no-vision"
+      ],
+      "secondary": [
+        "low-vision",
+        "cognitive"
+      ],
+      "source": "EN 301 549 V3.2.1, tabel B.2"
+    },
+    "1.2.4": {
+      "primary": [
+        "no-hearing",
+        "low-hearing"
+      ],
+      "secondary": [
+        "cognitive"
+      ],
+      "source": "EN 301 549 V3.2.1, tabel B.2"
+    },
+    "1.2.5": {
+      "primary": [
+        "no-vision"
+      ],
+      "secondary": [
+        "low-vision",
+        "cognitive"
+      ],
+      "source": "EN 301 549 V3.2.1, tabel B.2"
+    },
+    "1.3.1": {
+      "primary": [
+        "no-vision"
+      ],
+      "secondary": [
+        "low-vision",
+        "cognitive"
+      ],
+      "source": "EN 301 549 V3.2.1, tabel B.2"
+    },
+    "1.3.2": {
+      "primary": [
+        "no-vision"
+      ],
+      "secondary": [
+        "low-vision",
+        "cognitive"
+      ],
+      "source": "EN 301 549 V3.2.1, tabel B.2"
+    },
+    "1.3.3": {
+      "primary": [
+        "no-vision",
+        "low-vision",
+        "no-color",
+        "no-hearing",
+        "low-hearing"
+      ],
+      "secondary": [
+        "cognitive"
+      ],
+      "source": "EN 301 549 V3.2.1, tabel B.2"
+    },
+    "1.3.4": {
+      "primary": [
+        "limited-manipulation",
+        "limited-reach"
+      ],
+      "secondary": [
+        "cognitive"
+      ],
+      "source": "EN 301 549 V3.2.1, tabel B.2"
+    },
+    "1.3.5": {
+      "primary": [
+        "low-vision",
+        "limited-manipulation",
+        "cognitive"
+      ],
+      "secondary": [],
+      "source": "EN 301 549 V3.2.1, tabel B.2, aangevuld uit Understanding WCAG 2.2, Benefits"
+    },
+    "1.4.1": {
+      "primary": [
+        "no-vision",
+        "low-vision",
+        "no-color"
+      ],
+      "secondary": [
+        "cognitive"
+      ],
+      "source": "EN 301 549 V3.2.1, tabel B.2"
+    },
+    "1.4.2": {
+      "primary": [
+        "no-vision",
+        "low-hearing"
+      ],
+      "secondary": [
+        "cognitive"
+      ],
+      "source": "EN 301 549 V3.2.1, tabel B.2"
+    },
+    "1.4.3": {
+      "primary": [
+        "low-vision",
+        "no-color"
+      ],
+      "secondary": [
+        "cognitive"
+      ],
+      "source": "EN 301 549 V3.2.1, tabel B.2"
+    },
+    "1.4.4": {
+      "primary": [
+        "low-vision"
+      ],
+      "secondary": [],
+      "source": "EN 301 549 V3.2.1, tabel B.2"
+    },
+    "1.4.5": {
+      "primary": [
+        "low-vision",
+        "no-color"
+      ],
+      "secondary": [
+        "cognitive"
+      ],
+      "source": "EN 301 549 V3.2.1, tabel B.2"
+    },
+    "1.4.10": {
+      "primary": [
+        "low-vision"
+      ],
+      "secondary": [],
+      "source": "EN 301 549 V3.2.1, tabel B.2"
+    },
+    "1.4.11": {
+      "primary": [
+        "low-vision",
+        "no-color"
+      ],
+      "secondary": [
+        "cognitive"
+      ],
+      "source": "EN 301 549 V3.2.1, tabel B.2"
+    },
+    "1.4.12": {
+      "primary": [
+        "low-vision",
+        "cognitive"
+      ],
+      "secondary": [],
+      "source": "EN 301 549 V3.2.1, tabel B.2"
+    },
+    "1.4.13": {
+      "primary": [
+        "low-vision",
+        "cognitive"
+      ],
+      "secondary": [],
+      "source": "EN 301 549 V3.2.1, tabel B.2"
+    },
+    "2.1.1": {
+      "primary": [
+        "no-vision",
+        "low-vision",
+        "limited-manipulation"
+      ],
+      "secondary": [
+        "no-speech"
+      ],
+      "source": "EN 301 549 V3.2.1, tabel B.2"
+    },
+    "2.1.2": {
+      "primary": [
+        "no-vision",
+        "low-vision",
+        "limited-manipulation"
+      ],
+      "secondary": [
+        "no-speech"
+      ],
+      "source": "EN 301 549 V3.2.1, tabel B.2"
+    },
+    "2.1.4": {
+      "primary": [
+        "limited-manipulation",
+        "limited-reach"
+      ],
+      "secondary": [
+        "cognitive"
+      ],
+      "source": "EN 301 549 V3.2.1, tabel B.2"
+    },
+    "2.2.1": {
+      "primary": [
+        "no-vision",
+        "low-vision",
+        "no-hearing",
+        "low-hearing",
+        "limited-manipulation",
+        "cognitive"
+      ],
+      "secondary": [],
+      "source": "EN 301 549 V3.2.1, tabel B.2"
+    },
+    "2.2.2": {
+      "primary": [
+        "no-vision",
+        "low-vision",
+        "no-hearing",
+        "low-hearing",
+        "limited-manipulation",
+        "cognitive"
+      ],
+      "secondary": [],
+      "source": "EN 301 549 V3.2.1, tabel B.2"
+    },
+    "2.3.1": {
+      "primary": [
+        "photosensitive"
+      ],
+      "secondary": [],
+      "source": "EN 301 549 V3.2.1, tabel B.2"
+    },
+    "2.4.1": {
+      "primary": [
+        "no-vision",
+        "low-vision",
+        "limited-manipulation",
+        "cognitive"
+      ],
+      "secondary": [
+        "no-speech"
+      ],
+      "source": "EN 301 549 V3.2.1, tabel B.2"
+    },
+    "2.4.2": {
+      "primary": [
+        "no-vision",
+        "low-vision",
+        "limited-manipulation",
+        "cognitive"
+      ],
+      "secondary": [],
+      "source": "EN 301 549 V3.2.1, tabel B.2"
+    },
+    "2.4.3": {
+      "primary": [
+        "no-vision",
+        "low-vision",
+        "limited-manipulation",
+        "cognitive"
+      ],
+      "secondary": [],
+      "source": "EN 301 549 V3.2.1, tabel B.2"
+    },
+    "2.4.4": {
+      "primary": [
+        "no-vision",
+        "low-vision",
+        "limited-manipulation",
+        "cognitive"
+      ],
+      "secondary": [
+        "no-speech"
+      ],
+      "source": "EN 301 549 V3.2.1, tabel B.2"
+    },
+    "2.4.5": {
+      "primary": [
+        "no-vision",
+        "low-vision",
+        "limited-manipulation",
+        "cognitive"
+      ],
+      "secondary": [
+        "no-speech"
+      ],
+      "source": "EN 301 549 V3.2.1, tabel B.2"
+    },
+    "2.4.6": {
+      "primary": [
+        "no-vision",
+        "low-vision",
+        "limited-manipulation",
+        "cognitive"
+      ],
+      "secondary": [
+        "no-hearing",
+        "no-speech"
+      ],
+      "source": "EN 301 549 V3.2.1, tabel B.2"
+    },
+    "2.4.7": {
+      "primary": [
+        "no-vision",
+        "low-vision",
+        "limited-manipulation",
+        "cognitive"
+      ],
+      "secondary": [
+        "no-speech"
+      ],
+      "source": "EN 301 549 V3.2.1, tabel B.2"
+    },
+    "2.4.11": {
+      "primary": [
+        "low-vision",
+        "limited-manipulation",
+        "cognitive"
+      ],
+      "secondary": [],
+      "source": "Understanding WCAG 2.2, Benefits"
+    },
+    "2.5.1": {
+      "primary": [
+        "limited-manipulation",
+        "limited-reach",
+        "cognitive"
+      ],
+      "secondary": [],
+      "source": "EN 301 549 V3.2.1, tabel B.2"
+    },
+    "2.5.2": {
+      "primary": [
+        "low-vision",
+        "limited-manipulation",
+        "limited-reach",
+        "cognitive"
+      ],
+      "secondary": [],
+      "source": "EN 301 549 V3.2.1, tabel B.2"
+    },
+    "2.5.3": {
+      "primary": [
+        "limited-manipulation",
+        "limited-reach"
+      ],
+      "secondary": [
+        "cognitive"
+      ],
+      "source": "EN 301 549 V3.2.1, tabel B.2"
+    },
+    "2.5.4": {
+      "primary": [
+        "limited-manipulation",
+        "limited-reach"
+      ],
+      "secondary": [
+        "no-vision",
+        "low-vision",
+        "cognitive"
+      ],
+      "source": "EN 301 549 V3.2.1, tabel B.2"
+    },
+    "2.5.7": {
+      "primary": [
+        "limited-manipulation"
+      ],
+      "secondary": [],
+      "source": "Understanding WCAG 2.2, Benefits"
+    },
+    "2.5.8": {
+      "primary": [
+        "limited-manipulation"
+      ],
+      "secondary": [],
+      "source": "Understanding WCAG 2.2, Benefits"
+    },
+    "3.1.1": {
+      "primary": [
+        "no-vision"
+      ],
+      "secondary": [
+        "low-vision",
+        "no-hearing",
+        "low-hearing",
+        "cognitive"
+      ],
+      "source": "EN 301 549 V3.2.1, tabel B.2"
+    },
+    "3.1.2": {
+      "primary": [
+        "no-vision"
+      ],
+      "secondary": [
+        "low-vision",
+        "no-hearing",
+        "low-hearing",
+        "cognitive"
+      ],
+      "source": "EN 301 549 V3.2.1, tabel B.2"
+    },
+    "3.2.1": {
+      "primary": [
+        "no-vision",
+        "low-vision",
+        "limited-manipulation",
+        "cognitive"
+      ],
+      "secondary": [],
+      "source": "EN 301 549 V3.2.1, tabel B.2"
+    },
+    "3.2.2": {
+      "primary": [
+        "no-vision",
+        "low-vision",
+        "limited-manipulation",
+        "cognitive"
+      ],
+      "secondary": [],
+      "source": "EN 301 549 V3.2.1, tabel B.2"
+    },
+    "3.2.3": {
+      "primary": [
+        "no-vision",
+        "low-vision",
+        "cognitive"
+      ],
+      "secondary": [],
+      "source": "EN 301 549 V3.2.1, tabel B.2"
+    },
+    "3.2.4": {
+      "primary": [
+        "low-vision",
+        "cognitive"
+      ],
+      "secondary": [
+        "no-vision"
+      ],
+      "source": "EN 301 549 V3.2.1, tabel B.2"
+    },
+    "3.2.6": {
+      "primary": [
+        "cognitive"
+      ],
+      "secondary": [],
+      "source": "Understanding WCAG 2.2, Benefits"
+    },
+    "3.3.1": {
+      "primary": [
+        "no-vision",
+        "low-vision",
+        "no-color",
+        "cognitive"
+      ],
+      "secondary": [],
+      "source": "EN 301 549 V3.2.1, tabel B.2"
+    },
+    "3.3.2": {
+      "primary": [
+        "no-vision",
+        "low-vision",
+        "cognitive"
+      ],
+      "secondary": [
+        "no-speech",
+        "limited-manipulation"
+      ],
+      "source": "EN 301 549 V3.2.1, tabel B.2"
+    },
+    "3.3.3": {
+      "primary": [
+        "no-vision",
+        "low-vision",
+        "cognitive"
+      ],
+      "secondary": [
+        "no-speech",
+        "limited-manipulation"
+      ],
+      "source": "EN 301 549 V3.2.1, tabel B.2"
+    },
+    "3.3.4": {
+      "primary": [
+        "no-vision",
+        "low-vision",
+        "cognitive"
+      ],
+      "secondary": [
+        "limited-manipulation"
+      ],
+      "source": "EN 301 549 V3.2.1, tabel B.2"
+    },
+    "3.3.7": {
+      "primary": [
+        "limited-manipulation",
+        "cognitive"
+      ],
+      "secondary": [],
+      "source": "Understanding WCAG 2.2, Benefits"
+    },
+    "3.3.8": {
+      "primary": [
+        "cognitive"
+      ],
+      "secondary": [],
+      "source": "Understanding WCAG 2.2, Benefits"
+    },
+    "4.1.1": {
+      "primary": [
+        "no-vision"
+      ],
+      "secondary": [
+        "low-vision"
+      ],
+      "source": "EN 301 549 V3.2.1, tabel B.2"
+    },
+    "4.1.2": {
+      "primary": [
+        "no-vision",
+        "low-vision"
+      ],
+      "secondary": [
+        "limited-manipulation"
+      ],
+      "source": "EN 301 549 V3.2.1, tabel B.2"
+    },
+    "4.1.3": {
+      "primary": [
+        "no-vision",
+        "low-vision",
+        "no-color",
+        "no-hearing",
+        "low-hearing",
+        "limited-manipulation",
+        "limited-reach",
+        "photosensitive",
+        "cognitive"
+      ],
+      "secondary": [
+        "no-speech"
+      ],
+      "source": "EN 301 549 V3.2.1, tabel B.2"
+    }
+  }
+}

@@ -13,6 +13,7 @@ import type { PageShot } from "../src/lib/page-shots.ts";
 import { pageLabels } from "../src/lib/report-markdown.ts";
 import type { Evaluation } from "../src/lib/evaluation.ts";
 import { exampleEvaluation } from "./fixtures/example-evaluation.ts";
+import { weighed } from "./fixtures/weighed.ts";
 
 const run = promisify(execFile);
 /** A picture of the first page with a mark for every finding that points at a place on it. */
@@ -49,7 +50,7 @@ test("the same evaluation gives the same HTML, byte for byte", () => {
 });
 
 test("the HTML has one h1 and never skips a heading level", () => {
-  for (const evaluation of [exampleEvaluation(), grouped()]) {
+  for (const evaluation of [exampleEvaluation(), grouped(), weighed(grouped())]) {
     const levels = headingLevels(renderHtml(evaluation));
     assert.equal(levels.filter((level) => level === 1).length, 1, "one h1");
     assert.equal(levels[0], 1, "the h1 comes first");
@@ -77,7 +78,7 @@ test("the table of contents marks no row as current: the design system shows tha
 });
 
 test("every id is unique, every link inside the report lands, and every finding can be reached", () => {
-  for (const evaluation of [exampleEvaluation(), grouped()]) {
+  for (const evaluation of [exampleEvaluation(), grouped(), weighed(grouped())]) {
     const html = renderHtml(evaluation, undefined, pictures(evaluation));
     const ids = [...html.matchAll(/\sid="([^"]+)"/g)].map((match) => match[1]!);
     assert.deepEqual(ids.filter((id, index) => ids.indexOf(id) !== index), [], "no id twice");
@@ -104,11 +105,37 @@ test("nldd lint finds nothing, also with the rule that everything comes from the
   const dir = mkdtempSync(join(tmpdir(), "report-html-"));
   const file = join(dir, "rapport.html");
   // Linked, not embedded: inside the page the linter cannot tell the system's stylesheet from one of the report.
-  const evaluation = grouped();
-  writeFileSync(file, renderHtml(evaluation, undefined, pictures(evaluation), { embed: false, pageShots: shots(evaluation) }));
-  const result = await run(process.execPath, [LINT, "lint", "--pure", "--format", "json", file], { cwd: dir }).catch((error: { stdout: string }) => error);
-  const findings = (JSON.parse(result.stdout) as { findings: { rule: string; severity: string; message: string }[] }).findings;
-  assert.deepEqual(findings.filter((finding) => finding.severity !== "hint").map((finding) => `${finding.rule}: ${finding.message}`), []);
+  for (const evaluation of [grouped(), weighed(grouped())]) {
+    writeFileSync(file, renderHtml(evaluation, undefined, pictures(evaluation), { embed: false, pageShots: shots(evaluation) }));
+    const result = await run(process.execPath, [LINT, "lint", "--pure", "--format", "json", file], { cwd: dir }).catch((error: { stdout: string }) => error);
+    const findings = (JSON.parse(result.stdout) as { findings: { rule: string; severity: string; message: string }[] }).findings;
+    assert.deepEqual(findings.filter((finding) => finding.severity !== "hint").map((finding) => `${finding.rule}: ${finding.message}`), []);
+  }
+});
+
+test("a weighed report says in the summary who is stopped at which core task, and at each finding what happens per group", () => {
+  const evaluation = weighed(grouped());
+  const full = renderHtml(evaluation, undefined, pictures(evaluation));
+  const html = full.slice(full.indexOf("<body>"), full.indexOf("<script>"));
+  const stopped = evaluation.defects!.filter((defect) => defect.severity === "blokkerend");
+  assert.ok(stopped.length > 0);
+  // The summary: a heading, the task as a heading under it, and each defect that stops a group there with the groups and the reason.
+  assert.match(html, /<nldd-title size="4" heading-level="3" text="Wie loopt vast"><\/nldd-title>/);
+  assert.match(html, /<p role="heading" aria-level="4" data-level="4"><strong>Een vergunning aanvragen<\/strong><\/p><ul><li><a href="#VRB-G-\w+">[^<]+<\/a>, voor mensen die niet zien\. Zonder dit onderdeel is de aanvraag niet te versturen\.<\/li>/);
+  for (const defect of stopped) assert.ok(html.includes(`<a href="#${defect.id}">`), defect.id);
+  assert.ok(html.includes("geen gebrek waardoor een groep vastloopt: Contact opnemen."));
+  // The table per group has a row header and numbers set to the right.
+  assert.match(html, /<nldd-table accessible-label="Gebreken per groep" [^>]*><nldd-table-row slot="header"><nldd-text-cell text="Groep"><\/nldd-text-cell><nldd-text-cell text="Kan dit niet" horizontal-alignment="right">/);
+  assert.match(html, /<nldd-text-cell row-header vertical-alignment="top" text="Mensen die niet zien"><\/nldd-text-cell><nldd-text-cell horizontal-alignment="right" vertical-alignment="top" text="\d+">/);
+  // A defect in the work list says who in a line; the full account per group stands with the finding.
+  assert.match(html, /<p>Wie: mensen die niet zien \(kan dit niet\); alle bezoekers \(alleen met een omweg\); mensen die slecht zien \(kost extra moeite\)\. Kerntaak: Een vergunning aanvragen\.<\/p>/);
+  assert.match(html, /<strong>Wie heeft er last van<\/strong><\/p><ul><li><strong>Mensen die niet zien: kan dit niet\.<\/strong> Gaat met de schermlezer van kop naar kop door de pagina\. Het onderdeel heeft geen naam, dus de bezoeker weet niet wat het is\.<\/li>/);
+  assert.ok(html.includes("<p>Ernst blokkerend: een groep bezoekers kan dit niet, bij de kerntaak \u201cEen vergunning aanvragen\u201d. Zonder dit onderdeel is de aanvraag niet te versturen.</p>"));
+  assert.ok(html.includes("<p>Niet vastgesteld: Of dezelfde tekst ook elders op de pagina staat, is niet bekend.</p>"));
+  assert.ok(html.includes("<p>Voor elke groep waarvoor dit criterium nodig is, staat hier hoe zij hetzelfde krijgt:</p><ul><li>Mensen die "));
+  // Without a weighing none of this is there, and the finding says what the judge wrote.
+  const plain = renderHtml(grouped());
+  assert.ok(!plain.includes("Wie loopt vast") && !plain.includes("Gebreken per groep") && !plain.includes("<p>Wie: "));
 });
 
 test("the report is the same in its own page and as a fragment; only the frame differs", () => {

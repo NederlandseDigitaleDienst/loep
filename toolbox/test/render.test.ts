@@ -14,6 +14,7 @@ import { deriveReport, renderMarkdown } from "../src/lib/report-markdown.ts";
 import { makePdf, TEMPLATES, tool, unshownCheck, unshownPattern, unshownTexts, unshownWarning } from "../src/lib/typst.ts";
 import { SEVERITIES } from "../src/lib/verdict.ts";
 import { exampleEvaluation } from "./fixtures/example-evaluation.ts";
+import { weighed } from "./fixtures/weighed.ts";
 
 const CLI = fileURLToPath(new URL("../src/cli.ts", import.meta.url));
 
@@ -718,7 +719,7 @@ test("the Markdown report has no stray punctuation, empty brackets or placeholde
   const stray = [/\. \./, /[^.]\.\.(?!\.)/, /: \./, /, \./, /\(\s*\)/, /\bnull\b/, /\bundefined\b/, /\bNaN\b/, /\b0 (vraagt|vragen|is|zijn) (een mens|door dit onderzoek)/];
   const described = withInstruments();
   described.browsers = browserUse("153.0.8010.12", secondBrowserUse(new Map()));
-  for (const [name, evaluation] of [["plain", exampleEvaluation()], ["defects", withDefects()], ["instruments", described]] as const) {
+  for (const [name, evaluation] of [["plain", exampleEvaluation()], ["defects", withDefects()], ["weighed", weighed(withDefects())], ["instruments", described]] as const) {
     const markdown = renderMarkdown(evaluation);
     for (const pattern of stray) assert.doesNotMatch(markdown, pattern, `${name}: ${pattern}`);
   }
@@ -751,6 +752,85 @@ test("a quote in a limitation ends at a whole word, also in an evaluation made b
 test("the report has no em-dashes of its own", () => {
   const dashes = new RegExp(`[${String.fromCharCode(0x2013, 0x2014)}]`);
   assert.ok(!dashes.test(renderMarkdown(exampleEvaluation())));
+  assert.ok(!dashes.test(renderMarkdown(weighed(withDefects()))));
+});
+
+test("a weighed report says per core task which groups are stopped, and per group how many defects hinder it", () => {
+  const evaluation = weighed(withDefects());
+  const markdown = renderMarkdown(evaluation);
+  const summary = markdown.slice(markdown.indexOf("### Wie loopt vast"), markdown.indexOf("### Wat betekent dit"));
+  const title = (id: string): string => evaluation.defects!.find((defect) => defect.findingIds.includes(id))!.titleNl;
+  const stopped = evaluation.defects!.filter((defect) => defect.severity === "blokkerend");
+  assert.ok(stopped.length >= 2, "the example has defects that stop a group");
+  // Under the task: every defect that stops a group there, heaviest first, with the groups and why the task can not be finished.
+  assert.ok(summary.includes(`**Een vergunning aanvragen**\n\n- [${stopped[0]!.titleNl}](#${stopped[0]!.id}), voor mensen die niet zien. Zonder dit onderdeel is de aanvraag niet te versturen.\n`), summary);
+  for (const defect of stopped) assert.ok(summary.includes(`[${defect.titleNl}](#${defect.id}), voor `), defect.id);
+  // A task without such a defect is named too, with what that does and does not say.
+  assert.ok(summary.includes("Bij deze kerntaak vond het onderzoek op de onderzochte pagina's geen gebrek waardoor een groep vastloopt: Contact opnemen. Gebreken die daar een omweg of extra moeite geven, staan in de werklijst."));
+  // What stops a group at a core task is what the table calls blokkerend: the two lists are the same defects.
+  const derived = deriveReport(evaluation);
+  assert.deepEqual([...new Set(derived.weighing!.stopped.flatMap((task) => task.defects.map((entry) => entry.defectId)))].sort(), stopped.map((defect) => defect.id).sort());
+  for (const entry of derived.weighing!.stopped.flatMap((task) => task.defects)) assert.ok(entry.blocksNl.length > 0 && entry.groupsNl.length > 0, `${entry.defectId} says who is stopped and why`);
+  // Per group, a defect counts once, with the worst that happens to that group.
+  assert.ok(summary.includes("| Groep | Kan dit niet | Alleen met een omweg | Kost extra moeite |\n| --- | ---: | ---: | ---: |\n| Alle bezoekers | 0 | 1 | 0 |\n| Mensen die niet zien | "), summary);
+  for (const row of derived.weighing!.groups) assert.ok(row.cannot + row.detour + row.effort <= evaluation.defects!.length, row.groupNl);
+  // The work list says who, in a line, and for which core task.
+  assert.match(markdown, /- <a id="VRB-G-\w+"><\/a>blokkerend: \*\*Statuspictogram zonder tekstalternatief\*\* \(VRB-G-\w+\)\n  - Hoofdcriterium 1\.1\.1\. Pagina's: P04\.\n  - Wie: mensen die niet zien \(kan dit niet\); alle bezoekers \(alleen met een omweg\); mensen die slecht zien \(kost extra moeite\)\. Kerntaak: Een vergunning aanvragen\.\n/);
+  assert.ok(title("VRB-1.1.1-f9a8").length > 0);
+  // How the severity came about is said with the other notes on reliability.
+  assert.ok(markdown.includes("De ernst van een gebrek volgt uit wat per gebrek is vastgelegd"));
+  assert.ok(renderMarkdown(withDefects()).includes("De ernst van een gebrek is de hoogste ernst die de beoordelaars aan zijn bevindingen gaven. De stap die per gebrek vastlegt welke groepen bezoekers het hindert, is niet uitgevoerd."));
+  assert.ok(!renderMarkdown(withDefects()).includes("Wie loopt vast"), "without a weighing the report has no such part");
+});
+
+test("a weighed finding says per group what happens and why that gives its severity; without a weighing it says what the judge wrote", () => {
+  const evaluation = weighed(withDefects());
+  const markdown = renderMarkdown(evaluation);
+  const findings = evaluation.criteria.flatMap((criterion) => criterion.findings);
+  const card = (id: string): string => markdown.slice(markdown.indexOf(`###### ${id} `), markdown.indexOf("<a id=", markdown.indexOf(`###### ${id} `)));
+  const first = findings[0]!;
+  assert.ok(
+    card(first.id).includes(
+      "**Wie heeft er last van**\n\n- **Mensen die niet zien: kan dit niet.** Gaat met de schermlezer van kop naar kop door de pagina. Het onderdeel heeft geen naam, dus de bezoeker weet niet wat het is.\n- **Alle bezoekers: alleen met een omweg.** Klikt op het onderdeel om verder te gaan. Er gebeurt niets, en de bezoeker moet een andere weg zoeken.\n",
+    ),
+    card(first.id),
+  );
+  assert.ok(card(first.id).includes('\nErnst blokkerend: een groep bezoekers kan dit niet, bij de kerntaak \u201cEen vergunning aanvragen\u201d. Zonder dit onderdeel is de aanvraag niet te versturen.\n'));
+  assert.ok(!card(first.id).includes(first.impactNl), "the weighing stands in the place of what the judge wrote");
+  // A detour at a part every core task needs, more effort beside the tasks with a fact that is missing, and no group hindered.
+  const at = (reason: string): string => card(findings.find((finding) => card(finding.id).includes(reason))!.id);
+  assert.ok(at("alleen met een omweg, bij elke kerntaak").includes("Ernst midden: een groep bezoekers komt er alleen met een omweg, bij elke kerntaak."));
+  assert.ok(at("extra moeite, buiten de kerntaken").includes("Ernst laag: het kost een groep bezoekers extra moeite, buiten de kerntaken.\n\nNiet vastgesteld: Of dezelfde tekst ook elders op de pagina staat, is niet bekend."));
+  const none = at("Voor elke groep waarvoor dit criterium nodig is");
+  assert.match(none, /Voor elke groep waarvoor dit criterium nodig is, staat hier hoe zij hetzelfde krijgt:\n\n- Mensen die [^\n]+: Krijgt langs de eigen weg dezelfde tekst te horen of te zien\.\n/);
+  assert.ok(none.includes("Ernst laag: uit de bevindingen blijkt geen gevolg voor een groep bezoekers; het blijft een afwijking van de norm."));
+  // The severity on a card is the one the report sorts on, for every finding.
+  for (const finding of findings) assert.ok(card(finding.id).includes(`Ernst: ${finding.severity}`) && card(finding.id).includes(`Ernst ${finding.severity}: `), finding.id);
+  // Without a weighing: the judge's own words.
+  const plain = withDefects();
+  assert.ok(renderMarkdown(plain).includes(`**Wie heeft er last van**\n\n${plain.criteria.flatMap((criterion) => criterion.findings)[0]!.impactNl}`));
+});
+
+test("within one severity the work list puts what visitors need for a core task first", () => {
+  const evaluation = weighed(withDefects());
+  const derived = deriveReport(evaluation);
+  const order = derived.defects!.fix.flatMap((group) => group.defectIds).map((id) => evaluation.defects!.find((defect) => defect.id === id)!);
+  for (const owner of new Set(order.map((defect) => defect.owner))) {
+    const own = order.filter((defect) => defect.owner === owner);
+    for (const [index, defect] of own.entries()) {
+      const next = own[index + 1];
+      if (!next) continue;
+      const rank = (severity: string): number => (SEVERITIES as readonly string[]).indexOf(severity);
+      assert.ok(rank(defect.severity) <= rank(next.severity), "heaviest first");
+      if (defect.severity === next.severity) assert.ok(Number(defect.weighing!.task !== null) >= Number(next.weighing!.task !== null), `${defect.id} before ${next.id}: a core task first`);
+    }
+  }
+  // Two defects of one severity: the one at a core task leads, also with fewer pages.
+  const [beside, core] = [evaluation.defects![0]!, evaluation.defects![1]!];
+  Object.assign(beside, { severity: "midden", pages: ["P01", "P02", "P03"], weighing: { task: null, affected: [] } });
+  Object.assign(core, { severity: "midden", pages: ["P01"], weighing: { task: "aanvragen", affected: [] } });
+  const sorted = deriveReport(evaluation).defects!.fix.flatMap((group) => group.defectIds);
+  if (beside.owner === core.owner) assert.ok(sorted.indexOf(core.id) < sorted.indexOf(beside.id));
 });
 
 /**
@@ -836,7 +916,7 @@ test("the PDF is made for an evaluation with and without defects, passes its che
   described.scope.frames = SCOPE_FRAMES;
   described.browsers = browserUse("153.0.8010.12", [{ browser: "webkit", version: "26.0 build 2359", commands: new Set(["name", "taborder"]), count: 7 }]);
   described.judgment.models = AGENT_MODELS;
-  for (const [name, evaluation] of [["plain", exampleEvaluation()], ["defects", withDefects()], ["instruments", described]] as const) {
+  for (const [name, evaluation] of [["plain", exampleEvaluation()], ["defects", withDefects()], ["weighed", weighed(withDefects())], ["instruments", described]] as const) {
     if (name === "defects") {
       evaluation.criteria.flatMap((criterion) => criterion.findings)[0]!.verification = { status: "reproduced", evidence: [] };
       evaluation.measuredStates = { P01: ["menu-open"] };
@@ -853,6 +933,11 @@ test("the PDF is made for an evaluation with and without defects, passes its che
     const text = await tool("pdftotext", ["-layout", result.pdf, "-"]);
     if (text.found) {
       const pages = text.stdout.split("\f").filter((page) => page.trim() !== "");
+      // Only a weighed evaluation says who is stopped at which core task, and why a finding has its severity.
+      const flat = text.stdout.replace(/\s+/g, " ");
+      assert.equal(flat.includes("Wie loopt vast"), name === "weighed", `${name}: the part on who is stopped`);
+      assert.equal(flat.includes("Gebreken per groep"), name === "weighed", name);
+      if (name === "weighed") for (const expected of ["Een vergunning aanvragen", "Mensen die niet zien: kan dit niet.", "Ernst blokkerend: een groep bezoekers kan dit niet, bij de kerntaak", "Zonder dit onderdeel is de aanvraag niet te versturen.", "Niet vastgesteld: Of dezelfde tekst ook elders", "Voor elke groep waarvoor dit criterium nodig is"]) assert.ok(flat.includes(expected), `weighed: the PDF says "${expected}"`);
       assert.ok(pages[0]!.includes("Gemaakt met loep 0.0.1, commit 000000000000"), `${name}: the cover says what made the report`);
       assert.deepEqual(pages.slice(1).filter((page) => !page.includes("Gemaakt met loep 0.0.1")).length, 0, `${name}: every page says what made the report`);
     }

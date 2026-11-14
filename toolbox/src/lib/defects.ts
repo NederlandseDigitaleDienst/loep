@@ -1,5 +1,6 @@
 import { pageLabels, stableId } from "./canonical.ts";
 import type { Evaluation, ReportFinding } from "./evaluation.ts";
+import type { DefectWeighing } from "./weighing.ts";
 import { compareCriterionIds } from "./wcag.ts";
 
 /**
@@ -33,6 +34,10 @@ export interface Defect {
   element: string | null;
   /** The highest severity among its findings. */
   severity: ReportFinding["severity"];
+  /** The highest severity the judges gave its findings, kept when the weighing step set the severity of the findings. */
+  judgedSeverity?: ReportFinding["severity"];
+  /** Its findings together, after the weighing step: per group the worst that happens to it, and the core task of the finding that gives the severity. */
+  weighing?: DefectWeighing;
   /** Who repairs the cause: the owner of the main finding. */
   owner: ReportFinding["owner"];
   /** Which rules joined the findings; empty for a defect with one finding. */

@@ -6,8 +6,10 @@ import { applyProposal, carryDefectIds, MERGE_RULES_VERSION, mergeFindings, prop
 import type { Evaluation } from "../lib/evaluation.ts";
 import { stepStart, writeManifest } from "../lib/manifest.ts";
 import { readTemplate } from "../lib/templates.ts";
+import { clearWeighing } from "../lib/weighing.ts";
 import { makeWorkDir } from "../lib/workdir.ts";
 import { readEvaluation, signatureIsCurrent, writeEvaluation } from "./sign.ts";
+import { weighInto } from "./weigh.ts";
 
 const TASK = join("tasks", "samenvoeg", "taak.md");
 const INPUT = join("tasks", "samenvoeg", "invoer.json");
@@ -82,6 +84,8 @@ async function writeTask(runDir: string, evaluation: Evaluation, byRules: Defect
  * this prompt; without one the result of the rules stands and the evaluation says so.
  */
 export async function mergeInto(runDir: string, evaluation: Evaluation, previous?: Evaluation): Promise<MergeResult> {
+  // Grouping reads the severities the judges gave; an evaluation that was weighed holds those of its defects.
+  clearWeighing(evaluation);
   const byRules = mergeFindings(evaluation);
   const inputSha256 = await writeTask(runDir, evaluation, byRules);
   let defects = byRules;
@@ -106,6 +110,8 @@ export async function merge(runDir: string, previousPath?: string): Promise<Merg
   // Defects are part of what is signed; changing them would quietly turn the report back into a concept.
   if (signatureIsCurrent(evaluation)) throw new Error("the evaluation is signed; grouping its findings again would change what was signed");
   const result = await mergeInto(runDir, evaluation, previousPath ? await readJson<Evaluation>(previousPath) : evaluation);
+  // A weighing was made for the defects as they were: it counts again only when they are the same.
+  await weighInto(runDir, evaluation);
   await writeEvaluation(path, evaluation);
   await writeManifest(runDir, { command: "merge", startedAt, findings: result.findings, defects: result.defects, proposal: result.proposal });
   return result;
@@ -114,6 +120,7 @@ export async function merge(runDir: string, previousPath?: string): Promise<Merg
 /** Validate the proposal of the second step against the findings as they are now; a proposal that passes is stamped. */
 export async function checkMerge(runDir: string): Promise<string[]> {
   const evaluation = await readJson<Evaluation>(join(runDir, "evaluation.json"));
+  clearWeighing(evaluation);
   const byRules = mergeFindings(evaluation);
   const input = proposalInput(evaluation, byRules);
   if (!existsSync(join(runDir, INPUT)) || canonicalJson(await readJson(join(runDir, INPUT))) !== canonicalJson(input)) return [`${INPUT} does not match the evaluation; run "merge" first`];

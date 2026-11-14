@@ -100,7 +100,11 @@ export const toolboxVersion = (): string => (JSON.parse(readFileSync(join(TOOLBO
  * folder of their own with a manifest of their own, and touch no walk, verdict or sweep of the run. A version check would
  * only force whoever retests a finding to keep an old toolbox. The appendix names both versions when they differ.
  */
-export const MEASURES_NOTHING = ["pending", "estimate", "gaps", "feedback", "verify", "procedures", "render", "publish", "export", "statement", "compare", "decide", "sign", "seal", "recheck", "check-recheck"];
+/*
+ * `weigh` and `check-weigh` write a task, but one that stands on the evaluation alone: no walk or verdict of the run is
+ * done again, and the stamp of the weighing names the prompt it was made with. So a run from before the step can be weighed.
+ */
+export const MEASURES_NOTHING = ["pending", "estimate", "gaps", "feedback", "verify", "procedures", "render", "publish", "export", "statement", "compare", "decide", "sign", "seal", "recheck", "check-recheck", "weigh", "check-weigh"];
 
 /**
  * The commands of the agent phases. They work on the evidence of the sweep and measure nothing of the site, so in a copy

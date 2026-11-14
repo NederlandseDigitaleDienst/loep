@@ -2,7 +2,9 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import type { Defect } from "../lib/defects.ts";
 import { evaluationHash, type Evaluation, type ReportFinding } from "../lib/evaluation.ts";
+import { groupLabelNl } from "../lib/groups.ts";
 import { pageLabels, sortDefects } from "../lib/report-markdown.ts";
+import { CONSEQUENCE_NL, TASK_ALL } from "../lib/weighing.ts";
 import { compareCriterionIds } from "../lib/wcag.ts";
 import { readEvaluation } from "./sign.ts";
 
@@ -12,6 +14,11 @@ import { readEvaluation } from "./sign.ts";
  * the same place with the same cause, under every criterion they break. Nothing is sent: the
  * blocks are written for `gh issue create`, and whoever runs that decides what goes out.
  */
+
+/** For a defect that was weighed and hinders no group: it stays a defect. */
+const NO_GROUP_NL = "Uit de bevindingen blijkt geen gevolg voor een groep bezoekers. Het blijft een afwijking van de norm.";
+
+const upperFirst = (text: string): string => `${text.charAt(0).toUpperCase()}${text.slice(1)}`;
 
 export const EXPORT_FORMATS = ["csv", "issues"] as const;
 export type ExportFormat = (typeof EXPORT_FORMATS)[number];
@@ -31,6 +38,12 @@ export interface WorkLine {
   element: string | null;
   main: ReportFinding;
   findings: ReportFinding[];
+  /** Who the defect hinders, a sentence per group with the worst that happens to it; without a weighing, what the judge of the main finding wrote. */
+  impactNl: string;
+  /** The hindered groups with what happens to each, in a few words; empty without a weighing and when no group is hindered. */
+  groupsNl: string;
+  /** The core task visitors need the part for, "elke kerntaak", or empty. */
+  taskNl: string;
 }
 
 /** The lines of the work list, heaviest first as in the report. An evaluation from before defects existed gives a line per finding. */
@@ -41,7 +54,16 @@ export function workLines(evaluation: Evaluation): WorkLine[] {
     evaluation.defects ??
     findings.map((finding) => ({ id: finding.id, titleNl: finding.titleNl, mainCriterion: finding.criterion, mainFindingId: finding.id, alsoCriteria: [], findingIds: [finding.id], pages: [...new Set(finding.locations.map((location) => location.page))], morePages: false, component: finding.component, element: null, severity: finding.severity, owner: finding.owner, mergedBy: [], mainReasonNl: null }));
   const labels = pageLabels(evaluation);
+  const tasks = evaluation.weighing?.tasks ?? [];
+  const closed = (text: string): string => text.trim().replace(/([^.!?])$/, "$1.");
   return sortDefects(defects).map((defect) => ({
+    impactNl: !defect.weighing
+      ? byId.get(defect.mainFindingId)!.impactNl
+      : defect.weighing.affected.length > 0
+        ? defect.weighing.affected.map((entry) => `${upperFirst(groupLabelNl(entry.group))} (${CONSEQUENCE_NL[entry.consequence]}): ${closed(entry.howNl)} ${closed(entry.whatNl)}`).join(" ")
+        : NO_GROUP_NL,
+    groupsNl: (defect.weighing?.affected ?? []).map((entry) => `${groupLabelNl(entry.group)} (${CONSEQUENCE_NL[entry.consequence]})`).join("; "),
+    taskNl: !defect.weighing || defect.weighing.task === null ? "" : defect.weighing.task === TASK_ALL ? "elke kerntaak" : (tasks.find((task) => task.id === defect.weighing!.task)?.nameNl ?? defect.weighing.task),
     id: defect.id,
     titleNl: defect.titleNl,
     severity: defect.severity,
@@ -57,7 +79,7 @@ export function workLines(evaluation: Evaluation): WorkLine[] {
   }));
 }
 
-const CSV_HEADER = ["gebrek", "titel", "ernst", "eigenaar", "hoofdcriterium", "criteria", "paginas", "onderdeel", "element", "wat_is_er_mis", "wie_heeft_er_last_van", "oplossing", "bevindingen"];
+const CSV_HEADER = ["gebrek", "titel", "ernst", "eigenaar", "hoofdcriterium", "criteria", "paginas", "onderdeel", "element", "wat_is_er_mis", "wie_heeft_er_last_van", "oplossing", "bevindingen", "groepen", "kerntaak"];
 
 /** A field as RFC 4180 writes it: in double quotes when it holds a comma, a quote or a line break, with a quote doubled. */
 const csvField = (value: string): string => (/[",\r\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value);
@@ -75,9 +97,11 @@ export function workListCsv(evaluation: Evaluation): string {
     line.component ?? "",
     line.element ?? "",
     line.main.observedNl,
-    line.main.impactNl,
+    line.impactNl,
     line.main.fixNl,
     line.findings.map((finding) => finding.id).join(" "),
+    line.groupsNl,
+    line.taskNl,
   ]);
   return `${[CSV_HEADER, ...rows].map((row) => row.map(csvField).join(",")).join("\r\n")}\r\n`;
 }
@@ -101,6 +125,7 @@ export function workListIssues(evaluation: Evaluation): IssueBlock[] {
       `- Eigenaar: ${line.owner}`,
       `- WCAG-succescriteria: ${line.mainCriterion} (hoofdcriterium)${others.length > 0 ? `, raakt ook ${others.join(", ")}` : ""}`,
       `- Pagina's: ${line.pages.join(", ")}${line.morePages ? " en meer" : ""}`,
+      ...(line.taskNl ? [`- Kerntaak: ${line.taskNl}`] : []),
       ...(line.component ? [`- Onderdeel: ${line.component}`] : []),
       ...(line.element ? [`- Element: \`${line.element.replace(/`/g, "'")}\``] : []),
       "",
@@ -110,7 +135,7 @@ export function workListIssues(evaluation: Evaluation): IssueBlock[] {
       "",
       "## Wie heeft er last van",
       "",
-      line.main.impactNl,
+      line.impactNl,
       "",
       "## Oplossing",
       "",

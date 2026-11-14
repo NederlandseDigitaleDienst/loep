@@ -29,6 +29,7 @@ import { METHODS } from "../instruments/methods/registry.ts";
 import type { Gate } from "./gate.ts";
 import { readEvaluation, signatureIsCurrent, writeEvaluation } from "./sign.ts";
 import { mergeInto } from "./merge.ts";
+import { weighInto } from "./weigh.ts";
 import { countingVerdict, loadAnswers } from "./answer.ts";
 import { instrumentVerdictIsCurrent, isInstrumentRun, loadInstrumentIndex, crossLoops, loadObservations, NO_TASKS_NL, skippedForOutage, unruledCrossPoints, type InstrumentTask } from "./instrument-tasks.ts";
 
@@ -364,6 +365,9 @@ export async function evaluate(options: EvaluateOptions): Promise<Evaluation> {
   // Findings about the same place become one defect; the findings themselves stay as they are.
   const merged = await mergeInto(options.run, evaluation, earlier);
   process.stderr.write(`${merged.defects} gebreken uit ${merged.findings} bevindingen\n`);
+  // A weighing that was validated against exactly these defects sets their severity; without one the judges' stands.
+  const weighed = await weighInto(options.run, evaluation);
+  if (weighed.findings > 0) process.stderr.write(weighed.weighing === "applied" ? `weging toegepast: ${weighed.raised} bevindingen zwaarder dan de beoordelaars gaven, ${weighed.lowered} lichter\n` : `weging niet uitgevoerd: de ernst is die van de beoordelaars; de opdracht staat in ${weighed.task}\n`);
   await writeEvaluation(join(options.run, "evaluation.json"), evaluation);
   const based = (basis: Basis): number => criteria.filter((criterion) => criterion.basis === basis).length;
   process.stdout.write(`zekerheid: ${based("measured")} criteria ${BASIS_NL.measured}, ${based("observed")} ${BASIS_NL.observed}, ${based("person")} ${BASIS_NL.person}, ${based("open")} open\n`);

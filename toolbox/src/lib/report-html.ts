@@ -25,6 +25,7 @@ import {
   type OpenGroup,
   type ReportDerived,
   type ShownOutcome,
+  type FindingWeighingDerived,
 } from "./report-markdown.ts";
 
 /**
@@ -513,6 +514,39 @@ function fingerprintImage({ evaluation, derived }: Context, attrs: Element["attr
   return el({ tag: "nldd-image", attrs: { src: `data:image/svg+xml;base64,${Buffer.from(svg).toString("base64")}`, alt, width, "aspect-ratio": `${width}/${height}`, "object-fit": "contain", loading: "eager", ...attrs } });
 }
 
+/** Per core task the groups a defect stops, and per group how many defects hinder it: only when the defects were weighed. */
+function weighingSection(context: Context): string {
+  const { derived, defects } = context;
+  const weighing = derived.weighing!;
+  const labels = REPORT_TEXT.weighing;
+  const stopped = rich(
+    [
+      `<p>${attr(labels.stoppedIntro)}</p>`,
+      ...weighing.stopped.map((task) => `${subhead(task.taskNl, 4)}${list(task.defects.map((entry) => `${link(`#${entry.defectId}`, inline(defects.get(entry.defectId)!.titleNl))}, voor ${attr(entry.groupsNl)}. ${inline(entry.blocksNl)}`.trim()))}`),
+      weighing.notStoppedNl ? `<p>${inline(weighing.notStoppedNl)}</p>` : "",
+    ].join(""),
+  );
+  const perGroup =
+    weighing.groups.length > 0
+      ? [
+          title(labels.perGroup, 3, 4),
+          spacer(8),
+          rich(`<p>${attr(labels.perGroupIntro)}</p>`),
+          spacer(12),
+          table(
+            labels.perGroup,
+            labels.columns.map((label, index) => (index === 0 ? { label, track: "minmax(10rem, 2fr)" } : { label, track: "minmax(5rem, 1fr)", numeric: true })),
+            weighing.groups.map((row) => ({ cells: [row.groupNl, String(row.cannot), String(row.detour), String(row.effort)] })),
+          ),
+        ]
+      : [];
+  return el({
+    tag: "nldd-one-half-one-half-section",
+    attrs: { "padding-top": 0 },
+    children: [stack([title(labels.stopped, 3, 4), spacer(8), stopped].join(""), { slot: "left" }), stack(perGroup.join(""), { slot: "right" })].join(""),
+  });
+}
+
 function topList(context: Context): string {
   const { derived, defects } = context;
   if (derived.defects) {
@@ -592,6 +626,7 @@ function summary(context: Context): string {
         stack([numberCards(context), ...(derived.defects ? [spacer(12), text(`Het onderzoek vond ${inline(derived.defects.countsNl)}.`, { color: "secondary" })] : []), ...(context.frame === "standalone" ? [spacer(24), fingerprintImage(context)] : [])].join(""), { slot: "right" }),
       ].join(""),
     }),
+    ...(derived.defects && derived.weighing ? [weighingSection(context)] : []),
     el({
       tag: "nldd-one-half-one-half-section",
       attrs: { "padding-top": 0 },
@@ -699,22 +734,33 @@ export function firstSentence(value: string): string {
  * The short form of a finding on a card: the start of the fix, and a button to the rest. The rest
  * stands right under it, hidden: the button shows it in a sheet, and printing shows it in place.
  */
-function findingBrief(finding: ReportFinding, titleNl: string, titles: Map<string, string>, level: number): string {
+function findingBrief(finding: ReportFinding, titleNl: string, titles: Map<string, string>, level: number, weighed?: FindingWeighingDerived): string {
   const start = firstSentence(finding.fixNl);
   return [
     rich(`<p><strong>Oplossing:</strong> ${inline(start)}${start.length < finding.fixNl.replace(/\s+/g, " ").trim().length ? " \u2026" : ""}</p>`, { spacing: "tight" }),
     spacer(12),
     el({ tag: "nldd-button", attrs: { id: `meer-${finding.id}`, appearance: "secondary", size: "sm", text: "Meer", "accessible-label": `Meer over ${plain(titleNl)}`, "popup-type": "dialog", "end-icon": "chevron-right" } }),
-    el({ tag: "nldd-container", attrs: { id: `details-${finding.id}`, hidden: true, "padding-top": 16 }, children: findingText(finding, titles, level + 1) }),
+    el({ tag: "nldd-container", attrs: { id: `details-${finding.id}`, hidden: true, "padding-top": 16 }, children: findingText(finding, titles, level + 1, weighed) }),
+  ].join("");
+}
+
+/** Who a finding hinders: per group what happens, then why that gives this severity. */
+function whoHtml(weighed: FindingWeighingDerived, severity: ReportFinding["severity"]): string {
+  return [
+    weighed.groups.length > 0
+      ? list(weighed.groups.map((group) => `<strong>${attr(group.groupNl)}: ${attr(group.consequenceNl)}.</strong> ${inline(group.textNl)}`))
+      : `<p>${attr(REPORT_TEXT.weighing.noGroup)}</p>${list(weighed.unaffected.map((group) => `${attr(group.groupNl)}: ${inline(group.textNl)}`))}`,
+    `<p>Ernst ${severity}: ${inline(weighed.reasonNl)}.${weighed.blocksNl ? ` ${inline(weighed.blocksNl)}` : ""}</p>`,
+    weighed.unsureNl ? `<p>${attr(REPORT_TEXT.weighing.unsure)}: ${inline(weighed.unsureNl)}</p>` : "",
   ].join("");
 }
 
 /** What is wrong, who suffers, the fix and where: the four parts every finding has, under labels. */
-function findingText(finding: ReportFinding, titles: Map<string, string>, level: number): string {
+function findingText(finding: ReportFinding, titles: Map<string, string>, level: number, weighed?: FindingWeighingDerived): string {
   return rich(
     [
       `${subhead("Wat is er mis", level)}<p>${inline(finding.observedNl)}</p>`,
-      `${subhead("Wie heeft er last van", level)}<p>${inline(finding.impactNl)}</p>`,
+      `${subhead("Wie heeft er last van", level)}${weighed ? whoHtml(weighed, finding.severity) : `<p>${inline(finding.impactNl)}</p>`}`,
       `${subhead("Oplossing", level)}<p>${inline(finding.fixNl)}</p>`,
       `${subhead("Waar", level)}${list(whereItems(finding, titles))}`,
     ].join(""),
@@ -749,8 +795,10 @@ function defectCard(defect: Defect, context: Context, level: number): string {
   const others = defect.findingIds.filter((id) => id !== defect.mainFindingId);
   const toCriterion = (id: string): string => link(`#${ID.criterion(id)}`, attr(id));
   const criteriaNl = `${attr(REPORT_TEXT.defect.main)} ${toCriterion(defect.mainCriterion)}${defect.alsoCriteria.length > 0 ? `, ${attr(REPORT_TEXT.defect.also.toLowerCase())} ${defect.alsoCriteria.map(toCriterion).join(", ")}` : ""}`;
+  const weighed = derived.weighing?.ofDefect[defect.id];
+  const whoNl = weighed ? `<p>${attr(REPORT_TEXT.weighing.who)}: ${weighed.whoNl ? inline(weighed.whoNl) : "geen gevolg gevonden voor een groep bezoekers"}.${weighed.taskNl ? ` ${attr(REPORT_TEXT.weighing.task)}: ${inline(weighed.taskNl)}.` : ""}</p>` : "";
   const meta = rich(
-    `<p>${criteriaNl}.${main.component ? ` Onderdeel: ${inline(main.component)}.` : ""} Pagina's: ${attr(derived.defects!.pagesNl[defect.id]!.replace(/\.$/, ""))}. ${others.length > 0 ? `Ook ${others.length === 1 ? "bevinding" : "bevindingen"} ${others.map((id) => link(`#${id}`, attr(id))).join(", ")}.` : ""}</p>`,
+    `<p>${criteriaNl}.${main.component ? ` Onderdeel: ${inline(main.component)}.` : ""} Pagina's: ${attr(derived.defects!.pagesNl[defect.id]!.replace(/\.$/, ""))}. ${others.length > 0 ? `Ook ${others.length === 1 ? "bevinding" : "bevindingen"} ${others.map((id) => link(`#${id}`, attr(id))).join(", ")}.` : ""}</p>${whoNl}`,
     { spacing: "tight" },
   );
   return el({
@@ -765,7 +813,7 @@ function defectCard(defect: Defect, context: Context, level: number): string {
         meta,
         ...(pictures[main.id] ? [spacer(16), picture(main, pictures)] : []),
         spacer(16),
-        findingBrief(main, defect.titleNl, titles, level),
+        findingBrief(main, defect.titleNl, titles, level, derived.weighing?.ofFinding[main.id]),
       ].join(""),
       { padding: 24, "sm-padding": 16 },
     ),
@@ -1144,7 +1192,7 @@ function findingUnderCriterion(finding: ReportFinding, context: Context): string
         rich(`<p>${finding.component ? `Onderdeel: ${inline(finding.component)}. ` : ""}Pagina's: ${inline(sentence(finding.pagesAffected))}${defectNl ? ` ${defectNl}` : ""}</p>`, { spacing: "tight" }),
         ...(pictures[finding.id] ? [spacer(16), picture(finding, pictures)] : []),
         spacer(16),
-        findingBrief(finding, finding.titleNl, titles, 6),
+        findingBrief(finding, finding.titleNl, titles, 6, derived.weighing?.ofFinding[finding.id]),
       ].join(""),
       { padding: 20, "sm-padding": 16 },
     ),
@@ -1341,7 +1389,7 @@ function reliability({ evaluation, derived }: Context): string {
       derived.chain.stepsNl.length > 0 ? `<h3 id="werkwijze">Werkwijze</h3>${list(derived.chain.stepsNl.map((step) => `<strong>${attr(step.nameNl)}.</strong> ${inline(step.textNl)}`), true)}` : "",
       `<p>${inline(derived.disagreementNl)}</p>`,
       gate && gate.acceptedNl.length + gate.limitationsNl.length > 0 ? `<p>Wat de bewijspoort heeft vastgesteld:</p>${list([...gate.acceptedNl, ...gate.limitationsNl].map(inline))}` : "",
-      derived.defects ? `<p>${inline(derived.defects.mergeNl)}</p>` : "",
+      derived.defects ? `<p>${inline(derived.defects.mergeNl)}</p><p>${inline(derived.defects.severityNl)}</p>` : "",
       derived.generalLimitationsNl.length > 0 ? `<p>Beperkingen van dit onderzoek:</p>${list(derived.generalLimitationsNl.map(inline))}` : "",
       derived.procedureLimitations > 0 ? `<p>Bij ${derived.procedureLimitations === 1 ? "1 criterium" : `${derived.procedureLimitations} criteria`} heeft de procedure een eigen beperking. ${attr(REPORT_TEXT.procedureLimits)}</p>` : "",
     ].join(""),
