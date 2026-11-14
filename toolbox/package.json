@@ -17,7 +17,7 @@
   },
   "dependencies": {
     "@guidepup/virtual-screen-reader": "0.33.0",
-    "@nldd/design-system": "0.21.1",
+    "@nldd/design-system": "0.22.0",
     "@qualweb/act-rules": "0.8.6",
     "@qualweb/locale": "0.2.3",
     "@qualweb/qw-page": "0.3.8",
