@@ -49,8 +49,18 @@ export const USAGE_BASELINE = {
   },
 } as const;
 
-export type UsageRole = keyof typeof USAGE_BASELINE.roles;
-const USAGE_ROLES = Object.keys(USAGE_BASELINE.roles) as UsageRole[];
+/**
+ * The agent that weighs the findings per group (`tasks/weeg/taak.md`, then `check-weigh` and `weigh`),
+ * on one measurement: 15 findings in 97 seconds and about 84 thousand tokens, one agent on Opus 5.5
+ * with loep 0.28.0, 14 November 2026. The tokens were counted as a total, not by kind: to reckon a
+ * cost, the split over kinds is taken from the small agents that ask what is open
+ * (`USAGE_BASELINE.roles.status`), which also read one input and write one answer.
+ */
+export const WEIGHING_BASELINE = { date: "2026-11-14", toolboxVersion: "0.28.0", modelNl: "Opus 5.5", findings: 15, seconds: 97, tokens: 84_000 } as const;
+
+type BaselineRole = keyof typeof USAGE_BASELINE.roles;
+export type UsageRole = BaselineRole | "weighing" | "merge";
+const USAGE_ROLES: UsageRole[] = [...(Object.keys(USAGE_BASELINE.roles) as BaselineRole[]), "weighing", "merge"];
 
 /**
  * Every number the estimate uses, with where it comes from. All times are minutes. "Local" is a
@@ -123,7 +133,29 @@ export const COEFFICIENTS = {
    * Wider above than below: a larger dossier means more turns, and every turn reads the whole context again.
    */
   tokensMargin: { low: 0.8, high: 1.35 },
+  /**
+   * The agent that weighs the findings, and the optional one that proposes to merge them, which is
+   * not measured and reckoned as the weighing. A start plus a little per finding, fitted to the one
+   * measurement of `WEIGHING_BASELINE` (60 + 15 × 2.5 = 97.5 seconds, 60 000 + 15 × 1 600 = 84 000
+   * tokens); how the time grows with the findings is a guess. Before `evaluate` nobody knows how many
+   * findings there are: reckoned with `findings.expected`, shown as a band from none (no findings, no
+   * agent) to `findings.high`. With a known number the band runs from `band.low` to `band.high` times
+   * the estimate, wide because one measurement carries no spread.
+   */
+  weighing: { startSeconds: 60, secondsPerFinding: 2.5, startTokens: 60_000, tokensPerFinding: 1_600, findings: { expected: 30, high: 120 }, band: { low: 0.5, high: 2 } },
 } as const;
+
+/** Seconds of one agent that weighs (or proposes to merge) so many findings; none without findings. */
+export function weighingSeconds(findings: number): number {
+  const weighing = COEFFICIENTS.weighing;
+  return findings <= 0 ? 0 : Math.round(weighing.startSeconds + weighing.secondsPerFinding * findings);
+}
+
+/** Tokens of one agent that weighs (or proposes to merge) so many findings. */
+export function weighingTokens(findings: number): number {
+  const weighing = COEFFICIENTS.weighing;
+  return findings <= 0 ? 0 : weighing.startTokens + weighing.tokensPerFinding * findings;
+}
 
 /** What a run with this code is not calibrated for, said with every estimate. A slow site is, once the inventory timed its pages. */
 export const NOT_COVERED_NL = [
@@ -140,7 +172,7 @@ export const SLOW_SITE_NOT_COVERED_NL = "een trage site: deze inventaris heeft d
 export const SLOW_SITE_NOTE = "een site die tijdens het onderzoek trager wordt dan bij de inventaris, of die meer pagina's tegelijk slecht verdraagt";
 
 export type Scheduling = "pool" | "groups";
-export type RowId = "inventory" | "explore" | "collect" | "contrast" | "states" | "gate" | AgentPhaseId | "report" | "between";
+export type RowId = "inventory" | "explore" | "collect" | "contrast" | "states" | "gate" | AgentPhaseId | "weighing" | "merge" | "report" | "between";
 
 /** What the estimate is computed from, and where each number was read. */
 export interface EstimateBasis {
@@ -160,6 +192,8 @@ export interface EstimateBasis {
   scheduling: Scheduling;
   /** The criteria that get a finishing round, once the tasks say so. Absent while nobody knows: then the estimate reckons with a share of the criteria and shows a band. */
   finishers?: number;
+  /** The findings of the evaluation, once `evaluate` made one. Absent before: the weighing is then a band. */
+  findings?: number;
 }
 
 /** What the run says is done, and how long it took. */
@@ -174,6 +208,14 @@ export interface Progress {
   running?: Partial<Record<SweepCommand, StepProgress>>;
   /** When the estimate is made: a step that runs went on since it last wrote its progress. */
   now?: string;
+  /**
+   * The agents after `evaluate`, measured from the step that wrote their task to their last
+   * validated answer; null when the run does not say. The merge proposal is optional: absent
+   * means not done in this run, and it gets no row.
+   */
+  agentSteps?: { weighing?: number | null; merge?: number | null };
+  /** The run was evaluated by a version without the weighing: it gets no row. */
+  withoutWeighing?: boolean;
 }
 
 export interface EstimateRow {
@@ -230,6 +272,8 @@ const LABEL_NL: Record<RowId, string> = {
   judges: "beoordelen",
   verifiers: "verifiëren",
   finishers: "afmaakronde",
+  merge: "voorstel tot samenvoegen (één agent)",
+  weighing: "weging (één agent)",
   report: "rapport (evaluate, render, seal)",
   between: "tussen de stappen",
 };
@@ -279,6 +323,9 @@ export function estimate(basis: EstimateBasis, progress: Progress = { stages: {}
   const finishBand = finishUnknown
     ? ([COEFFICIENTS.finishShare.low, COEFFICIENTS.finishShare.high].map((share) => Math.round(phaseMinutes("finishers", Math.ceil(basis.criteria * share), basis) * 60)) as [number, number])
     : null;
+  const findings = basis.findings ?? COEFFICIENTS.weighing.findings.expected;
+  const hasWeighing = !progress.withoutWeighing;
+  const hasMerge = progress.agentSteps?.merge !== undefined;
   const work = basis.sweep ?? typicalSweep(basis);
   const plans = sweepPlans(work, basis.sweepAtOnce ?? 1, basis.local);
   const running: Partial<Record<SweepCommand, RunningStep>> = Object.fromEntries(
@@ -294,18 +341,22 @@ export function estimate(basis: EstimateBasis, progress: Progress = { stages: {}
     judges: phaseMinutes("judges", agents.judges, basis),
     verifiers: phaseMinutes("verifiers", agents.verifiers, basis),
     finishers: phaseMinutes("finishers", agents.finishers, basis),
+    merge: weighingSeconds(findings) / 60,
+    weighing: weighingSeconds(findings) / 60,
     report: COEFFICIENTS.reportMinutes,
     between: COEFFICIENTS.betweenMinutes,
   };
   const rows: EstimateRow[] = [];
   const phaseOf = (id: RowId): AgentPhaseTiming | undefined => progress.phases.find((phase) => phase.phase === id);
-  for (const id of ["inventory", "explore", "collect", "contrast", "states", "gate", "walks", "judges", "verifiers", "finishers", "report"] as const) {
+  for (const id of ["inventory", "explore", "collect", "contrast", "states", "gate", "walks", "judges", "verifiers", "finishers", "merge", "weighing", "report"] as const) {
     if (id === "finishers" && noFinish) continue;
-    const estimatedSeconds = id === "inventory" ? null : Math.round(minutes[id] * 60);
+    const afterEvaluate = id === "weighing" || id === "merge";
+    if ((id === "weighing" && !hasWeighing) || (id === "merge" && !hasMerge)) continue;
+    const estimatedSeconds = id === "inventory" ? null : afterEvaluate ? weighingSeconds(findings) : Math.round(minutes[id] * 60);
     const phase = phaseOf(id);
-    const stage = PHASE_IDS.includes(id) ? undefined : progress.stages[id as StepStage];
+    const stage = PHASE_IDS.includes(id) || afterEvaluate ? undefined : progress.stages[id as StepStage];
     const done = progress.done.includes(id);
-    const measuredSeconds = phase?.seconds ?? stage?.seconds ?? null;
+    const measuredSeconds = phase?.seconds ?? stage?.seconds ?? (afterEvaluate ? progress.agentSteps?.[id] : null) ?? null;
     let remainingSeconds = done || estimatedSeconds === null ? 0 : estimatedSeconds;
     let status: EstimateRow["status"] = done ? "done" : "todo";
     let noteNl: string | undefined;
@@ -334,12 +385,21 @@ export function estimate(basis: EstimateBasis, progress: Progress = { stages: {}
       else if (agents.finishers === 0) noteNl = "niet nodig: geen criterium bleef open door het onderzoek zelf";
       else noteNl = `${agents.finishers} criteria bleven open door het onderzoek zelf; niet gemeten`;
     }
-    rows.push({ id, labelNl: LABEL_NL[id], estimatedSeconds, measuredSeconds: ongoing ? ongoing.elapsedSeconds : done || phase ? measuredSeconds : null, status, derived: done && (stage?.derived ?? false), remainingSeconds, ...(noteNl ? { noteNl } : {}), ...(id === "finishers" && finishBand && !done ? { bandSeconds: finishBand } : {}) });
+    let bandSeconds = id === "finishers" && finishBand && !done ? finishBand : undefined;
+    if (afterEvaluate && basis.findings === 0) noteNl = "niet nodig: geen bevindingen";
+    else if (afterEvaluate && !done) {
+      const { findings: counts, band } = COEFFICIENTS.weighing;
+      bandSeconds = basis.findings === undefined ? [0, weighingSeconds(counts.high)] : [Math.round(estimatedSeconds! * band.low), Math.round(estimatedSeconds! * band.high)];
+      const size = basis.findings === undefined ? `aantal bevindingen vooraf onbekend: gerekend met ${findings}, ${durationNl(bandSeconds[0])} (geen) tot ${durationNl(bandSeconds[1])} (${counts.high})` : `${findings} bevindingen, ${durationNl(bandSeconds[0])} tot ${durationNl(bandSeconds[1])}`;
+      noteNl = `${size}; ${id === "merge" ? "gerekend als de weging, niet gemeten" : "rust op één meting"}`;
+    }
+    rows.push({ id, labelNl: LABEL_NL[id], estimatedSeconds, measuredSeconds: ongoing ? ongoing.elapsedSeconds : done || phase ? measuredSeconds : null, status, derived: done && (stage?.derived ?? false), remainingSeconds, ...(noteNl ? { noteNl } : {}), ...(bandSeconds ? { bandSeconds } : {}) });
   }
   // What nobody's step is: the share of it that is still to come follows the share of the work that is.
   const workEstimated = rows.reduce((sum, row) => sum + (row.estimatedSeconds ?? 0), 0);
   const workRemaining = rows.reduce((sum, row) => sum + row.remainingSeconds, 0);
-  const finished = progress.done.includes("report");
+  // The run is over when the evaluation was made and, where the run has one to do, the weighing is in.
+  const finished = progress.done.includes("report") && (!hasWeighing || basis.findings === 0 || progress.done.includes("weighing"));
   const betweenEstimated = Math.round(minutes.between * 60);
   const measuredParts = rows.reduce((sum, row) => sum + (row.measuredSeconds ?? 0), 0);
   rows.push({
@@ -353,11 +413,13 @@ export function estimate(basis: EstimateBasis, progress: Progress = { stages: {}
   });
   const estimatedSeconds = workEstimated + betweenEstimated;
   const remainingSeconds = rows.reduce((sum, row) => sum + row.remainingSeconds, 0);
-  // The margin holds for what is counted; a part of unknown size widens it by its own band, from nothing to its most.
-  const band = rows.find((row) => row.bandSeconds && row.remainingSeconds > 0);
-  const [less, more] = band ? [band.remainingSeconds - band.bandSeconds![0], band.bandSeconds![1] - band.remainingSeconds] : [0, 0];
+  // The margin holds for what is counted; a part of uncertain size widens it by its own band, from its least to its most.
+  const bands = rows.filter((row) => row.bandSeconds && row.remainingSeconds > 0);
+  const less = bands.reduce((sum, row) => sum + Math.max(0, row.remainingSeconds - row.bandSeconds![0]), 0);
+  const more = bands.reduce((sum, row) => sum + Math.max(0, row.bandSeconds![1] - row.remainingSeconds), 0);
   const range = (seconds: number): [number, number] => [Math.round((seconds - less) * COEFFICIENTS.margin.low), Math.round((seconds + more) * COEFFICIENTS.margin.high)];
-  const usage = usageOf({ ...agents, status: COEFFICIENTS.statusRounds + (agents.finishers > 0 ? 1 : 0) });
+  const anyFindings = basis.findings !== 0;
+  const usage = usageOf({ ...agents, status: COEFFICIENTS.statusRounds + (agents.finishers > 0 ? 1 : 0), weighing: hasWeighing && anyFindings ? 1 : 0, merge: hasMerge && anyFindings ? 1 : 0 }, weighingTokens(findings));
   return {
     basis,
     rows,
@@ -371,17 +433,25 @@ export function estimate(basis: EstimateBasis, progress: Progress = { stages: {}
       steps: Object.fromEntries((["collect", "contrast", "states"] as const).map((command) => [command, { seconds: plans[command].seconds, atOnce: plans[command].atOnce, lanes: Object.fromEntries(plans[command].lanes.map((lane) => [lane.id, Math.round(lane.parts.reduce((total, part) => total + part.units.reduce((a, b) => a + b, 0), 0) * plans[command].slowdown)])) }])) as Estimate["sweep"]["steps"],
     },
     calibration: CALIBRATION,
-    notCoveredNl: loadSecondsOf(work) ? [...NOT_COVERED_NL, SLOW_SITE_NOTE] : [SLOW_SITE_NOT_COVERED_NL, ...NOT_COVERED_NL],
+    notCoveredNl: [...(loadSecondsOf(work) ? [...NOT_COVERED_NL, SLOW_SITE_NOTE] : [SLOW_SITE_NOT_COVERED_NL, ...NOT_COVERED_NL]), ...(hasMerge ? [] : [MERGE_NOT_COVERED_NL])],
   };
 }
 
-/** The tokens and their cost for so many agents per role: each agent as the average agent of its role in `USAGE_BASELINE`. */
-function usageOf(agents: Record<UsageRole, number>): Pick<Estimate, "tokens" | "cost"> {
+/** Said when the run has no merge proposal: the optional agent after `evaluate` is then not counted. */
+export const MERGE_NOT_COVERED_NL = "het voorstel tot samenvoegen, de agent die na evaluate bevindingen kan voorstellen om samen te voegen: die stap is optioneel en telt pas mee als hij in de run is gedaan";
+
+/**
+ * The tokens and their cost for so many agents per role: each agent as the average agent of its role in
+ * `USAGE_BASELINE`, and the weighing and the merge proposal each at `perWeighing` tokens, split over the
+ * kinds as the status agents are (`WEIGHING_BASELINE`).
+ */
+function usageOf(agents: Record<UsageRole, number>, perWeighing: number): Pick<Estimate, "tokens" | "cost"> {
   const sum: Tokens = { input: 0, cacheWrite: 0, cacheRead: 0, output: 0 };
   const byRole = {} as Estimate["tokens"]["byRole"];
   for (const role of USAGE_ROLES) {
-    const { agents: measured, ...used } = USAGE_BASELINE.roles[role];
-    const share = agents[role] / measured;
+    const afterEvaluate = role === "weighing" || role === "merge";
+    const { agents: measured, ...used } = USAGE_BASELINE.roles[afterEvaluate ? "status" : role];
+    const share = afterEvaluate ? (agents[role] * perWeighing) / totalTokens(used) : agents[role] / measured;
     for (const kind of Object.keys(sum) as (keyof Tokens)[]) sum[kind] += used[kind] * share;
     byRole[role] = { agents: agents[role], tokens: Math.round(totalTokens(used) * share) };
   }
@@ -470,14 +540,16 @@ export function estimateTextNl(result: Estimate, runName: string, notesNl: strin
   } else {
     const [low, high] = totals.remainingRange;
     // A part of unknown size makes the margin wider than the percentages: from none of it to its most.
-    const unknown = result.rows.some((row) => row.bandSeconds && row.remainingSeconds > 0) ? ", en de afmaakronde van niets tot haar meeste" : "";
+    const bandNl: Partial<Record<RowId, string>> = { finishers: "de afmaakronde van niets tot haar meeste", merge: "het voorstel tot samenvoegen van zijn minste tot zijn meeste", weighing: "de weging van haar minste tot haar meeste" };
+    const named = result.rows.filter((row) => row.bandSeconds && row.remainingSeconds > 0).map((row) => bandNl[row.id]).filter((text): text is string => Boolean(text));
+    const unknown = named.length === 0 ? "" : `, en ${named.length === 1 ? named[0] : `${named.slice(0, -1).join(", ")} en ${named.at(-1)}`}`;
     lines.push(`Nog te gaan: ongeveer ${durationNl(totals.remainingSeconds)} (marge ${durationNl(low)} tot ${durationNl(high)}: ${percent}${unknown}).`);
     if (totals.measuredSeconds > 0) lines.push(`Tot nu toe ${durationNl(totals.measuredSeconds)}; het geheel komt daarmee op ongeveer ${durationNl(totals.measuredSeconds + totals.remainingSeconds)}.`);
   }
   if (result.rows.some((row) => row.derived)) lines.push("~ gemeten vanaf de stap ervoor: deze run legde het begin van een stap nog niet vast.");
   const { tokens, cost } = result;
-  const roleNl: Record<UsageRole, string> = { judges: "beoordelaars", verifiers: "verifieerders", walks: "rondgangen", finishers: "afmaakronde", status: "stand" };
-  const byRole = (["judges", "verifiers", "walks", "finishers", "status"] as const).filter((role) => tokens.byRole[role].agents > 0).map((role) => `${roleNl[role]} ${millionsNl(tokens.byRole[role].tokens)}`);
+  const roleNl: Record<UsageRole, string> = { judges: "beoordelaars", verifiers: "verifieerders", walks: "rondgangen", finishers: "afmaakronde", weighing: "weging", merge: "samenvoegen", status: "stand" };
+  const byRole = (["judges", "verifiers", "walks", "finishers", "weighing", "merge", "status"] as const).filter((role) => tokens.byRole[role].agents > 0).map((role) => `${roleNl[role]} ${millionsNl(tokens.byRole[role].tokens)}`);
   lines.push(`Tokens voor de ${tokens.agents} agents van de werkstroom: ongeveer ${millionsNl(tokens.estimated)} miljoen (marge ${millionsNl(tokens.range[0])} tot ${millionsNl(tokens.range[1])}), waarvan ${Math.round((tokens.cacheRead / tokens.estimated) * 100)} procent uit de cache. Per rol, in miljoenen: ${byRole.join(", ")}.`);
   lines.push(`Kosten met de prijzen van de API voor ${USAGE_BASELINE.modelNl} van ${dateNl(PRICES_SOURCE.date)}: ongeveer ${cost.dollars} dollar (marge ${cost.range[0]} tot ${cost.range[1]}). Een token uit de cache kost een fractie van een gewoon token; het aantal tokens zegt dus weinig over de kosten.`);
   lines.push("Op een abonnement betaal je niet per token, maar telt het verbruik mee voor de limiet van het abonnement: een run als deze kan een groot deel van de weeklimiet gebruiken. Hoe groot die limiet is, verschilt per abonnement.");
@@ -487,6 +559,12 @@ export function estimateTextNl(result: Estimate, runName: string, notesNl: strin
   const calibration = result.calibration;
   lines.push(`Geijkt op ${calibration.runs.length} runs op twee sites (${calibration.runs.map((run) => run.name).join(", ")}), gemaakt met loep ${calibration.toolboxVersion} tot en met commit ${calibration.commit} van ${calibration.date}. De veegronde werd tussen die runs trager omdat de toolbox meer ging meten: de schatting hoort bij deze versie. Zes runs op twee sites is weinig; de marge is een keuze en geen statistiek.`);
   lines.push(`De tokens zijn per rol gerekend uit de nulmeting van ${dateNl(USAGE_BASELINE.date)} (validatie/verbruik/README.md): één onderzoek met loep ${USAGE_BASELINE.toolboxVersion}, alle agents op ${USAGE_BASELINE.modelNl}. Het verbruik van een agent volgt zijn aantal beurten; een groter dossier, een ander model of een nieuwere versie van loep geeft andere getallen. Ook die marge is een keuze.`);
+  if (result.rows.some((row) => row.id === "weighing")) {
+    const { startSeconds, secondsPerFinding, startTokens, tokensPerFinding, band } = COEFFICIENTS.weighing;
+    const base = WEIGHING_BASELINE;
+    const merge = result.rows.some((row) => row.id === "merge") ? " Het voorstel tot samenvoegen is niet gemeten en gerekend als de weging." : "";
+    lines.push(`De weging is gerekend als een aanloop van ${startSeconds} seconden plus ${decimalNl(secondsPerFinding)} seconde per bevinding, en ${startTokens / 1000} duizend tokens plus ${decimalNl(tokensPerFinding / 1000)} duizend per bevinding. Dat rust op één meting: ${base.findings} bevindingen in ${base.seconds} seconden en ongeveer ${base.tokens / 1000} duizend tokens, met loep ${base.toolboxVersion} op ${base.modelNl}. Daarom is de band ruim, van ${decimalNl(band.low)} tot ${decimalNl(band.high)} keer de schatting.${merge}`);
+  }
   if (basis.scheduling === "pool") lines.push("De fasen met agents zijn gerekend met een pool die steeds het volle aantal agents laat lopen. Zo is nog geen run gemeten: de zes runs liepen in groepen (reken die na met --groups).");
   lines.push(`Niet gedekt: ${result.notCoveredNl.join("; ")}.`);
   return `${lines.join("\n")}\n`;

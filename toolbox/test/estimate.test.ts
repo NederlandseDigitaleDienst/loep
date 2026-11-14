@@ -60,32 +60,36 @@ test("the estimate on a fixed basis: every part, the total with its range, and t
   const seconds = Object.fromEntries(result.rows.map((entry) => [entry.id, entry.estimatedSeconds]));
   // 29 pages on a site elsewhere, 18 page types, 56 criteria, 8 agents at a time in a pool. How many criteria need a
   // finishing round nobody knows yet: reckoned with 15 percent of them, 9, at the time of a judge times the room the round gets.
-  assert.deepEqual(seconds, { explore: 600, collect: SWEEP_OF_REMOTE.collect.seconds, contrast: SWEEP_OF_REMOTE.contrast.seconds, states: SWEEP_OF_REMOTE.states.seconds, gate: 90, walks: 1188, judges: 2256, verifiers: 1767, finishers: 2097, report: 60, between: 210 });
+  assert.deepEqual(seconds, { explore: 600, collect: SWEEP_OF_REMOTE.collect.seconds, contrast: SWEEP_OF_REMOTE.contrast.seconds, states: SWEEP_OF_REMOTE.states.seconds, gate: 90, walks: 1188, judges: 2256, verifiers: 1767, finishers: 2097, weighing: 135, report: 60, between: 210 });
   near(row(result, "finishers").estimatedSeconds, 4.7 * FINISH_FACTOR * (9 / 8 + 1) * 60, "afmaakronde");
   const counted = OTHER_SECONDS + SWEEP_SECONDS;
-  assert.equal(result.totals.estimatedSeconds, counted + 2097);
-  assert.equal(result.totals.remainingSeconds, counted + 2097, "nothing is done, so everything is still to come");
+  // Before the evaluation nobody knows how many findings the weighing has: reckoned with 30, a start of a minute and 2.5 seconds each.
+  assert.equal(row(result, "weighing").estimatedSeconds, 135);
+  assert.deepEqual(row(result, "weighing").bandSeconds, [0, 360]);
+  assert.equal(result.totals.estimatedSeconds, counted + 2097 + 135);
+  assert.equal(result.totals.remainingSeconds, counted + 2097 + 135, "nothing is done, so everything is still to come");
   assert.equal(result.totals.finished, false);
   assert.ok(result.rows.every((entry) => entry.status === "todo" && entry.measuredSeconds === null));
   // The band of the round, from no criterion to 30 percent of them, widens the margin on both sides.
   const band = row(result, "finishers").bandSeconds!;
   assert.equal(band[0], 0);
   near(band[1], 4.7 * FINISH_FACTOR * (17 / 8 + 1) * 60, "afmaakronde op haar meest");
-  assert.deepEqual(result.totals.estimatedRange, [Math.round(counted * 0.75), Math.round((counted + band[1]) * 1.4)]);
+  assert.deepEqual(result.totals.estimatedRange, [Math.round(counted * 0.75), Math.round((counted + band[1] + 360) * 1.4)], "both bands widen it");
   assert.match(row(result, "finishers").noteNl!, /^aantal vooraf onbekend: gerekend met 9 van 56 criteria, 0 s \(geen\) tot 51 min \(17\); niet gemeten$/);
   assert.match(estimateTextNl(result, "run"), /^afmaakronde +35 min +aantal vooraf onbekend/m);
-  assert.match(estimateTextNl(result, "run"), /40 procent langer, en de afmaakronde van niets tot haar meeste\)/);
+  assert.match(estimateTextNl(result, "run"), /40 procent langer, en de afmaakronde van niets tot haar meeste en de weging van haar minste tot haar meeste\)/);
   // Tokens per role as the average agent of that role in the baseline: 18 walks, 56 judges, 56 verifiers, 9 finishers and 5 rounds asking what is open.
-  assert.deepEqual(Object.fromEntries(Object.entries(result.tokens.byRole).map(([role, use]) => [role, use.agents])), { walks: 18, judges: 56, verifiers: 56, finishers: 9, status: 5 });
-  assert.equal(result.tokens.agents, 18 + 56 + 56 + 9 + 5);
+  assert.deepEqual(Object.fromEntries(Object.entries(result.tokens.byRole).map(([role, use]) => [role, use.agents])), { walks: 18, judges: 56, verifiers: 56, finishers: 9, status: 5, weighing: 1, merge: 0 });
+  assert.equal(result.tokens.agents, 18 + 56 + 56 + 9 + 5 + 1);
+  assert.equal(result.tokens.byRole.weighing.tokens, 60_000 + 30 * 1_600, "the weighing as on its one measurement, with 30 findings");
   assert.equal(result.tokens.byRole.finishers.tokens, Math.round(9 * (74 + 120_000 + 3_700_000 + 5_669)));
 
   // Once the tasks say how many criteria the evaluation left open, the round is a number: none here, and the estimate is the one from before the round existed.
   const none = estimate({ ...REMOTE, finishers: 0 });
   assert.deepEqual([row(none, "finishers").estimatedSeconds, row(none, "finishers").bandSeconds, row(none, "finishers").noteNl], [0, undefined, "niet nodig: geen criterium bleef open door het onderzoek zelf"]);
-  assert.equal(none.totals.estimatedSeconds, counted);
-  assert.deepEqual(none.totals.estimatedRange, [Math.round(counted * 0.75), Math.round(counted * 1.4)]);
-  assert.deepEqual([none.tokens.agents, none.tokens.byRole.finishers.tokens, none.tokens.byRole.status.agents], [18 + 56 + 56 + 4, 0, 4], "no finishing round: no finishers and no round asking for them");
+  assert.equal(none.totals.estimatedSeconds, counted + 135);
+  assert.deepEqual(none.totals.estimatedRange, [Math.round(counted * 0.75), Math.round((counted + 360) * 1.4)]);
+  assert.deepEqual([none.tokens.agents, none.tokens.byRole.finishers.tokens, none.tokens.byRole.status.agents], [18 + 56 + 56 + 4 + 1, 0, 4], "no finishing round: no finishers and no round asking for them");
   assert.ok(none.tokens.estimated < result.tokens.estimated && none.cost.dollars < result.cost.dollars);
   const eight = estimate({ ...REMOTE, finishers: 8 });
   near(row(eight, "finishers").estimatedSeconds, 4.7 * FINISH_FACTOR * 1.75 * 60, "acht agents op acht plaatsen: zo lang als de traagste");
@@ -105,10 +109,10 @@ test("the estimate on a fixed basis: every part, the total with its range, and t
 test("tokens and cost: the baseline of 19 October reckoned again, with the share from the cache, a range and the subscription", () => {
   // The audit the baseline was counted on: 16 page types, 56 criteria, one criterion in the finishing round.
   const baseline = estimate({ ...REMOTE, pages: 31, pageTypes: 16, atOnce: 10, finishers: 1 });
-  assert.equal(baseline.tokens.agents, 134);
+  assert.equal(baseline.tokens.agents, 135, "the 134 agents of the baseline and the weighing, which came after it");
   assert.ok(Math.abs(baseline.tokens.estimated - 526_000_000) < 1_000_000, `ongeveer 526 miljoen: ${baseline.tokens.estimated}`);
   assert.equal(Math.round((baseline.tokens.cacheRead / baseline.tokens.estimated) * 100), 97);
-  assert.deepEqual(baseline.cost, { model: "claude-opus-5-5", dollars: 184, range: [147, 248] });
+  assert.deepEqual(baseline.cost, { model: "claude-opus-5-5", dollars: 184, range: [147, 249] });
   assert.deepEqual(baseline.tokens.range, [Math.round(baseline.tokens.estimated * 0.8), Math.round(baseline.tokens.estimated * 1.35)]);
   assert.equal(Math.round((baseline.tokens.byRole.judges.tokens / baseline.tokens.estimated) * 100), 57, "the judges, as in the table of the baseline");
   // Twice the criteria is twice the judges and the verifiers, not twice the walks.
@@ -117,8 +121,8 @@ test("tokens and cost: the baseline of 19 October reckoned again, with the share
   assert.equal(fewer.tokens.byRole.walks.tokens, baseline.tokens.byRole.walks.tokens);
 
   const text = estimateTextNl(baseline, "run");
-  assert.match(text, /^Tokens voor de 134 agents van de werkstroom: ongeveer 526,\d miljoen \(marge 420,\d tot 710,\d\), waarvan 97 procent uit de cache\. Per rol, in miljoenen: beoordelaars 301,7, verifieerders 159,0, rondgangen 61,2, afmaakronde 3,8, stand 0,4\.$/m);
-  assert.match(text, /^Kosten met de prijzen van de API voor Opus 5\.5 van 19 oktober 2026: ongeveer 184 dollar \(marge 147 tot 248\)\./m);
+  assert.match(text, /^Tokens voor de 135 agents van de werkstroom: ongeveer 526,\d miljoen \(marge 420,\d tot 710,\d\), waarvan 97 procent uit de cache\. Per rol, in miljoenen: beoordelaars 301,7, verifieerders 159,0, rondgangen 61,2, afmaakronde 3,8, weging 0,1, stand 0,4\.$/m);
+  assert.match(text, /^Kosten met de prijzen van de API voor Opus 5\.5 van 19 oktober 2026: ongeveer 184 dollar \(marge 147 tot 249\)\./m);
   assert.match(text, /groot deel van de weeklimiet gebruiken\. Hoe groot die limiet is, verschilt per abonnement\.$/m);
   assert.match(text, /nulmeting van 19 oktober 2026 \(validatie\/verbruik\/README\.md\): één onderzoek met loep 0\.10\.0/);
   assert.doesNotMatch(text, /afmaakronde 0,0/);
@@ -208,20 +212,22 @@ test("halfway a run the estimate shows what was measured and what is still to co
   session(run, "verken", at(1), at(9));
   const sweep = estimateRun(run);
   assert.deepEqual([sweep.basis.local, sweep.basis.atOnce, sweep.basis.atOnceSource], [true, 3, "session"], "one of the four sessions is that of whoever leads");
-  assert.deepEqual(sweep.rows.map((entry) => `${entry.id} ${entry.status}`), ["inventory done", "explore done", "collect done", "contrast done", "states todo", "gate todo", "walks todo", "judges todo", "verifiers todo", "finishers todo", "report todo", "between running"]);
+  assert.deepEqual(sweep.rows.map((entry) => `${entry.id} ${entry.status}`), ["inventory done", "explore done", "collect done", "contrast done", "states todo", "gate todo", "walks todo", "judges todo", "verifiers todo", "finishers todo", "weighing todo", "report todo", "between running"]);
   assert.deepEqual([row(sweep, "inventory").measuredSeconds, row(sweep, "explore").measuredSeconds, row(sweep, "collect").measuredSeconds, row(sweep, "contrast").measuredSeconds], [60, 540, 900, 60]);
   assert.equal(row(sweep, "inventory").estimatedSeconds, null, "the inventory is over before there is anything to estimate from");
   assert.equal(row(sweep, "states").measuredSeconds, null);
   assert.equal(row(sweep, "collect").remainingSeconds, 0);
   assert.equal(row(sweep, "states").remainingSeconds, sweep.sweep.steps.states.seconds, "states is still to come as a whole");
   near(row(sweep, "walks").remainingSeconds, 5.2 * (5 / 3 + 0.5) * 60, "rondgangen");
-  const open = ["states", "gate", "walks", "judges", "verifiers", "finishers", "report", "between"] as const;
+  const open = ["states", "gate", "walks", "judges", "verifiers", "finishers", "weighing", "report", "between"] as const;
   assert.equal(sweep.totals.remainingSeconds, open.reduce((sum, id) => sum + row(sweep, id).remainingSeconds, 0));
   assert.ok(sweep.totals.remainingSeconds < sweep.totals.estimatedSeconds);
   assert.equal(sweep.totals.measuredSeconds, 27 * 60);
-  // The finishing round is still of unknown size: the margin runs from without it to with its most.
+  // The finishing round and the weighing are still of unknown size: the margin runs from without them to with their most.
   const finish = row(sweep, "finishers");
-  assert.deepEqual(sweep.totals.remainingRange, [Math.round((sweep.totals.remainingSeconds - finish.remainingSeconds) * 0.75), Math.round((sweep.totals.remainingSeconds - finish.remainingSeconds + finish.bandSeconds![1]) * 1.4)]);
+  const weighing = row(sweep, "weighing");
+  const certain = sweep.totals.remainingSeconds - finish.remainingSeconds - weighing.remainingSeconds;
+  assert.deepEqual(sweep.totals.remainingRange, [Math.round(certain * 0.75), Math.round((certain + finish.bandSeconds![1] + weighing.bandSeconds![1]) * 1.4)]);
   assert.deepEqual(sweep.notesNl, []);
   const text = estimateTextNl(sweep, sweep.run, sweep.notesNl);
   assert.match(text, /^collect +\d+ min +15 min +klaar$/m);
@@ -314,7 +320,9 @@ test("the finishing round: a band while nobody knows, a number once the tasks sa
   const decided = estimateRun(run);
   assert.equal(decided.basis.finishers, 2);
   assert.deepEqual([row(decided, "finishers").bandSeconds, row(decided, "finishers").noteNl], [undefined, "2 criteria bleven open door het onderzoek zelf; niet gemeten"]);
-  assert.deepEqual(decided.totals.remainingRange, [Math.round(decided.totals.remainingSeconds * 0.75), Math.round(decided.totals.remainingSeconds * 1.4)], "a known number has the usual margin");
+  // A known number has the usual margin; only the weighing, whose findings nobody knows yet, still widens it.
+  const weighing = row(decided, "weighing");
+  assert.deepEqual(decided.totals.remainingRange, [Math.round((decided.totals.remainingSeconds - weighing.remainingSeconds) * 0.75), Math.round((decided.totals.remainingSeconds - weighing.remainingSeconds + weighing.bandSeconds![1]) * 1.4)]);
   // The round runs: the verifiers are over, one of its two agents is done.
   session(run, "a-0", at(60), at(75));
   session(run, "a-1", at(60), null);
@@ -331,6 +339,62 @@ test("the finishing round: a band while nobody knows, a number once the tasks sa
   const finished = estimateRun(none);
   assert.deepEqual([row(finished, "finishers").status, row(finished, "finishers").estimatedSeconds, row(finished, "finishers").measuredSeconds], ["done", 0, null]);
   assert.match(estimateTextNl(finished, finished.run), /^afmaakronde +0 s +klaar, niet nodig: geen criterium bleef open door het onderzoek zelf$/m);
+});
+
+test("the weighing: a band before the evaluation, the findings once it is there, measured once its agent answered; the merge proposal only when it was done", () => {
+  const steps: ManifestStep[] = [
+    { command: "inventory", startedAt: at(0), at: at(1), seconds: 60 },
+    { command: "gate", startedAt: at(30), at: at(31), seconds: 60, sufficient: true },
+  ];
+  const run = makeRun({ baseUrl: "https://voorbeeld.example/", templates: ["a"], sample: 1, pageTypes: 1, tasks: { walks: 1, criteria: 2 }, steps });
+  const before = estimateRun(run);
+  assert.deepEqual([row(before, "weighing").status, row(before, "weighing").bandSeconds], ["todo", [0, 360]]);
+  assert.ok(!before.rows.some((entry) => entry.id === "merge"), "nobody proposed to merge: no row");
+  assert.ok(before.notCoveredNl.some((line) => line.startsWith("het voorstel tot samenvoegen")), "and the explanation says it is not counted");
+
+  // The evaluation is there with 15 findings and set out the task of the weighing; its agent has not answered yet.
+  const evaluated = [...steps, { command: "evaluate", startedAt: at(80), at: at(81), seconds: 60 }];
+  writeFileSync(join(run, "manifest.json"), JSON.stringify({ steps: evaluated }));
+  writeFileSync(join(run, "evaluation.json"), JSON.stringify({ criteria: [{ findings: Array.from({ length: 10 }, () => ({})) }, { findings: Array.from({ length: 5 }, () => ({})) }] }));
+  mkdirSync(join(run, "tasks", "weeg"), { recursive: true });
+  writeFileSync(join(run, "tasks", "weeg", "taak.md"), "weeg");
+  const waiting = estimateRun(run);
+  assert.equal(waiting.basis.findings, 15);
+  assert.deepEqual([row(waiting, "weighing").status, row(waiting, "weighing").estimatedSeconds, row(waiting, "weighing").bandSeconds], ["todo", 98, [49, 196]], "15 findings: as on the one measurement, from half to twice");
+  assert.equal(waiting.totals.finished, false, "the evaluation is there, the weighing is not");
+  assert.equal(waiting.tokens.byRole.weighing.tokens, 84_000);
+  const text = estimateTextNl(waiting, waiting.run);
+  assert.match(text, /^weging \(één agent\) +2 min +15 bevindingen, 49 s tot 3 min; rust op één meting$/m);
+  assert.match(estimateTextNl(before, before.run), /^afmaakronde .*\nweging \(één agent\) .*\nrapport /m, "between the finishing round and the report");
+  assert.match(text, /^De weging is gerekend als een aanloop van 60 seconden .* Dat rust op één meting: 15 bevindingen in 97 seconden/m);
+
+  // The agent answered: check-weigh stamped its answer 97 seconds after the evaluation, and weigh took it in.
+  mkdirSync(join(run, "verdicts"), { recursive: true });
+  writeFileSync(join(run, "verdicts", "weging.json"), "{}");
+  writeFileSync(join(run, "verdicts", "weging.stamp.json"), JSON.stringify({ stampedAt: new Date(Date.parse(at(81)) + 97_000).toISOString() }));
+  writeFileSync(join(run, "manifest.json"), JSON.stringify({ steps: [...evaluated, { command: "weigh", startedAt: at(84), at: at(84), seconds: 1 }] }));
+  const weighed = estimateRun(run);
+  assert.deepEqual([row(weighed, "weighing").status, row(weighed, "weighing").measuredSeconds, row(weighed, "weighing").remainingSeconds], ["done", 97, 0]);
+  assert.equal(weighed.totals.finished, true);
+  assert.match(estimateTextNl(weighed, weighed.run), /^weging \(één agent\) +2 min +2 min +klaar$/m);
+
+  // Someone had the findings merged first: that agent answered 2 minutes after the evaluation, and merge set out the weighing again.
+  writeFileSync(join(run, "verdicts", "samenvoeg.json"), "{}");
+  writeFileSync(join(run, "verdicts", "samenvoeg.stamp.json"), JSON.stringify({ stampedAt: at(83) }));
+  writeFileSync(join(run, "verdicts", "weging.stamp.json"), JSON.stringify({ stampedAt: at(85) }));
+  writeFileSync(join(run, "manifest.json"), JSON.stringify({ steps: [...evaluated, { command: "merge", startedAt: at(83.5), at: at(83.5), seconds: 1 }, { command: "weigh", startedAt: at(86), at: at(86), seconds: 1 }] }));
+  const merged = estimateRun(run);
+  assert.deepEqual(merged.rows.map((entry) => entry.id).slice(-4), ["merge", "weighing", "report", "between"]);
+  assert.deepEqual([row(merged, "merge").status, row(merged, "merge").measuredSeconds, row(merged, "weighing").measuredSeconds], ["done", 120, 90]);
+  assert.ok(!merged.notCoveredNl.some((line) => line.startsWith("het voorstel tot samenvoegen")));
+  assert.equal(merged.tokens.byRole.merge.agents, 1);
+  assert.match(estimateTextNl(merged, merged.run), /Per rol, in miljoenen: .*weging 0,1, samenvoegen 0,1, stand/);
+
+  // An evaluation without findings has nothing to weigh, and the run is over without it.
+  const empty = makeRun({ baseUrl: "https://voorbeeld.example/", templates: ["a"], sample: 1, pageTypes: 1, tasks: { walks: 1, criteria: 2 }, steps: evaluated });
+  writeFileSync(join(empty, "evaluation.json"), JSON.stringify({ criteria: [{ findings: [] }] }));
+  const nothing = estimateRun(empty);
+  assert.deepEqual([row(nothing, "weighing").status, row(nothing, "weighing").estimatedSeconds, row(nothing, "weighing").noteNl, nothing.totals.finished, nothing.tokens.byRole.weighing.agents], ["done", 0, "niet nodig: geen bevindingen", true, 0]);
 });
 
 test("the estimate names no path and no person, and keeps its numbers in one place", () => {

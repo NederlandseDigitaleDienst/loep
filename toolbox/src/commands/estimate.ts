@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
 import { sweepAtOnce } from "../lib/atonce.ts";
 import { CALIBRATION, durationNl, type Estimate, type EstimateBasis, estimate, estimateTextNl, type Progress, type RowId, type Scheduling } from "../lib/estimate.ts";
@@ -118,6 +118,25 @@ export interface RunEstimate extends Estimate {
 
 const readIfThere = <T>(path: string): T | null => (existsSync(path) ? (JSON.parse(readFileSync(path, "utf8")) as T) : null);
 
+/** The steps after which an agent of the evaluation gets a fresh task: each writes the tasks of the weighing and the merge proposal again. */
+const WRITES_AGENT_TASKS = ["evaluate", "merge", "weigh"];
+
+/**
+ * How long an agent after `evaluate` worked: from the step that last wrote its task to its last
+ * answer that passed the check (the stamp), or else to `command` (`weigh`, `merge`) as the step that
+ * took the answer in, or else to when the answer was written. The same reading as the explorer and
+ * the gate: the time between two steps is the agent's. Null when the run does not say.
+ */
+function agentSeconds(runDir: string, steps: ManifestStep[], answer: string, command: string): number | null {
+  const stamp = readIfThere<{ stampedAt?: string }>(join(runDir, "verdicts", answer.replace(/\.json$/, ".stamp.json")));
+  const path = join(runDir, "verdicts", answer);
+  const taken = steps.findLast((step) => step.command === command);
+  const end = stamp?.stampedAt ? Date.parse(stamp.stampedAt) : taken ? Date.parse(taken.at) : existsSync(path) ? statSync(path).mtimeMs : NaN;
+  if (!Number.isFinite(end)) return null;
+  const start = steps.filter((step) => WRITES_AGENT_TASKS.includes(step.command) && Date.parse(step.at) < end).at(-1);
+  return start ? Math.round((end - Date.parse(start.at)) / 1000) : null;
+}
+
 /**
  * The expected time of a run, from what the run already knows about the site, next to what
  * its steps and sessions say was measured. Reads the run and writes nothing.
@@ -132,6 +151,7 @@ export function estimateRun(runDir: string, options: EstimateOptions = {}): RunE
   // Only the steps and the toolchain are read from the manifest; what else it holds is not the estimate's to read.
   const manifest = readIfThere<{ steps?: ManifestStep[]; toolbox?: { commit?: string | null } }>(join(runDir, "manifest.json"));
   const steps = manifest?.steps ?? [];
+  const evaluation = readIfThere<{ criteria?: { findings?: unknown[] }[]; weighing?: { status?: string }; merge?: { proposal?: { status?: string } } }>(join(runDir, "evaluation.json"));
 
   const limit = sessionLimit(runDir);
   const templates = new Set(inventory.pages.map((page) => page.templateHash).filter(Boolean)).size;
@@ -162,6 +182,8 @@ export function estimateRun(runDir: string, options: EstimateOptions = {}): RunE
     scheduling: (options.groups ? "groups" : "pool") satisfies Scheduling,
     // Known only once every verifier is in: then the tasks say which criteria the evaluation itself left open.
     ...(index?.finishDecided && index.tasks ? { finishers: index.tasks.filter((task) => task.finish).length } : {}),
+    // Known once the evaluation is there: the agents after it work through its findings.
+    ...(evaluation?.criteria ? { findings: evaluation.criteria.reduce((total, criterion) => total + (criterion.findings?.length ?? 0), 0) } : {}),
   };
 
   const phases = agentPhaseTimings(runDir);
@@ -181,6 +203,12 @@ export function estimateRun(runDir: string, options: EstimateOptions = {}): RunE
   // The finishing round runs only when a criterion needs it: without one it is over when the evaluation is made.
   if (finished && !done.includes("finishers")) done.push("finishers");
   if (finished) done.push("report");
+  // The weighing is done once its agent wrote its answer, or the evaluation holds one. An evaluation with findings and no task for it was made by a version without the step.
+  const withoutWeighing = finished && basis.findings !== 0 && !existsSync(join(runDir, "tasks", "weeg", "taak.md"));
+  if (existsSync(join(runDir, "verdicts", "weging.json")) || evaluation?.weighing?.status === "applied" || (finished && basis.findings === 0)) done.push("weighing");
+  // `evaluate` always sets out the task of the merge proposal; the step counts as done in this run only once its agent answered.
+  const merged = existsSync(join(runDir, "verdicts", "samenvoeg.json")) || evaluation?.merge?.proposal?.status === "applied";
+  if (merged) done.push("merge");
 
   const first = steps[0];
   // A step that runs goes on until now; the run with it.
@@ -192,6 +220,8 @@ export function estimateRun(runDir: string, options: EstimateOptions = {}): RunE
     elapsedSeconds: finished ? elapsedSeconds(steps) : first ? Math.round((lastSeen - Date.parse(first.startedAt ?? first.at)) / 1000) : 0,
     running,
     ...(Object.keys(running).length > 0 ? { now: (options.now ?? new Date()).toISOString() } : {}),
+    agentSteps: { weighing: done.includes("weighing") ? agentSeconds(runDir, steps, "weging.json", "weigh") : null, ...(merged ? { merge: agentSeconds(runDir, steps, "samenvoeg.json", "merge") } : {}) },
+    ...(withoutWeighing ? { withoutWeighing } : {}),
   };
 
   const notesNl: string[] = [];
