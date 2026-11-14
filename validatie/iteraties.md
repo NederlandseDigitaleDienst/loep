@@ -397,15 +397,14 @@ Issue #498. De eerste meting van een hele versie sinds 0.11.0, en de eerste voll
 
 Issue #546. Gemeten is de kandidaat voor 0.29.0 (branch `meting/0.29.0`, commit `2e6f0a1`: main na #547 en #548), met Playwright 1.65.1 (Chromium 159, Firefox 159, WebKit 27.2) en Alfa 0.120 in plaats van Playwright 1.63.0 en Alfa 0.119. De code van loep zelf veranderde niet. Opzet en marge gelijk aan die van 0.25.0. De uitwerking staat in [testsite/2026-11-14-meting-0.29.0/](testsite/2026-11-14-meting-0.29.0/uitkomst.md).
 
-| | L1 | B1 (tweeling) |
-|---|---|---|
-| Criteria zoals de sleutel, van 56 | 56 | 50 (1 afgekeurd, 5 open) |
-| Gebreken gevonden waar beide vergelijkers het eens zijn, van 79 | 79 | n.v.t. |
-| Meldingen zonder tegenhanger | 8 | 1 |
-| Onterecht volgens beide vergelijkers | 0 | 0 |
-| Duur zonder pauze, tokens | 84 min, 17,0 miljoen | 92 min, 18,6 miljoen |
+| | L1 | L2 | B1 (tweeling) |
+|---|---|---|---|
+| Criteria zoals de sleutel, van 56 | 56 | 56 | 50 (1 afgekeurd, 5 open) |
+| Gebreken gevonden waar beide vergelijkers het eens zijn, van 79 | 79 | 79 | n.v.t. |
+| Meldingen zonder tegenhanger | 8 | 8 | 1 |
+| Onterecht volgens beide vergelijkers | 0 | 0 | 0 |
+| Duur zonder pauze, tokens | 84 min, 17,0 miljoen | 74 min, 15,8 miljoen | 92 min, 18,6 miljoen |
 
-- **Marge gehaald** op elk punt dat L1 en B1 meten. Op de tweeling één afkeuring in plaats van drie, beide vergelijkers noemen haar discutabel.
-- **Geen L2.** 0.29.0 brengt de fix voor CVE-2026-106378 en is uitgebracht op L1 en B1. De spreiding komt later.
+- **Marge gehaald** op elk punt. Geen derde run nodig: L1 en L2 hadden bij alle 56 criteria en alle 79 gebreken dezelfde uitkomst. Op de tweeling één afkeuring in plaats van drie, beide vergelijkers noemen haar discutabel.
 - **Verkenner.** Bediende dit keer het controlevenster en de externe videospeler wel. Op de tweeling is 1.2.1 daardoor vermoedelijk niet meer open.
-- **Weeklimiet.** Beide runs pauzeerden op de weeklimiet van het abonnement en gingen daarna verder zonder iets over te slaan.
+- **Weeklimiet.** L1 en B1 pauzeerden op de weeklimiet van het abonnement en gingen daarna verder zonder iets over te slaan.
