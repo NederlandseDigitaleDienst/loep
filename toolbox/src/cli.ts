@@ -697,6 +697,11 @@ async function main(): Promise<void> {
       const { merge } = await import("./commands/merge.ts");
       const result = await merge(values.run, values.previous);
       process.stdout.write(`${result.defects} gebreken, ${result.findings} bevindingen onder ${result.criteria} criteria (vaste regels: ${result.byRules}; voorstel: ${result.proposal === "applied" ? "toegepast" : "niet uitgevoerd"})\n${result.task}\n`);
+      // Grouping the findings again can leave a weighing behind that was made for other defects: say so here.
+      if (result.weighed && result.weighed.findings > 0) {
+        const { weighingLineNl } = await import("./commands/weigh.ts");
+        process.stdout.write(`${weighingLineNl(result.weighed)}\n`);
+      }
       return;
     }
     case "check-merge": {
@@ -712,11 +717,8 @@ async function main(): Promise<void> {
       if (!values.run) throw new Error("weigh needs --run <run>");
       const { weigh } = await import("./commands/weigh.ts");
       const result = await weigh(values.run);
-      process.stdout.write(
-        result.weighing === "applied"
-          ? `${result.findings} bevindingen gewogen: ${result.raised} zwaarder dan de beoordelaars gaven, ${result.lowered} lichter, ${result.same} gelijk; ${result.noEffect} zonder gevolg voor een groep, ${result.unsure} met een feit dat ontbrak\n${result.task}\n`
-          : `${result.findings} bevindingen, weging niet uitgevoerd: de ernst is die van de beoordelaars\n${result.task}\n`,
-      );
+      const { weighingLineNl } = await import("./commands/weigh.ts");
+      process.stdout.write(`${result.findings} bevindingen; ${weighingLineNl(result)}\n${result.weighing === "applied" ? `${result.task}\n` : ""}`);
       return;
     }
     case "check-weigh": {

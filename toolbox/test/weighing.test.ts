@@ -154,11 +154,19 @@ test("a group the criterion of a finding does not name needs a reason, and every
   const evaluation = weighCase();
   assert.match(refused(evaluation, (proposal) => proposal.findings[LINK]!.affected.push(affected("no-hearing", "effort"))), /whyGroupNl \(1\.4\.3 does not name "no-hearing"; say why it is hindered\) is missing/);
   assert.equal(refused(evaluation, (proposal) => proposal.findings[LINK]!.affected.push(affected("no-hearing", "effort", { whyGroupNl: "De link opent een video zonder ondertiteling." }))), "");
-  assert.equal(refused(evaluation, (proposal) => proposal.findings[LINK]!.affected.push(affected(EVERYONE, "detour"))), "");
+  assert.equal(refused(evaluation, (proposal) => (proposal.findings[LINK]!.affected = [affected(EVERYONE, "detour")])), "");
   assert.match(refused(evaluation, (proposal) => (proposal.findings[LINK]!.affected[0]!.whyGroupNl = "De norm noemt deze groep bij het criterium.")), /whyGroupNl is only for a group the criterion of the finding does not name/);
   // The groups are those of the finding's own criterion, not of the other findings at the same place.
   assert.match(refused(evaluation, (proposal) => proposal.findings[WINDOW_HEADING]!.affected.push(affected("limited-manipulation", "effort"))), /1\.3\.1 does not name "limited-manipulation"/);
   assert.equal(refused(evaluation, (proposal) => proposal.findings[WINDOW_NAME]!.affected.push(affected("limited-manipulation", "effort"))), "");
+});
+
+test("next to everyone a group stands only when it is hit harder", () => {
+  const evaluation = weighCase();
+  // What goes wrong for everyone goes wrong for each group: the same or a lighter consequence says nothing more.
+  assert.match(refused(evaluation, (proposal) => proposal.findings[LINK]!.affected.push(affected(EVERYONE, "detour"))), /"low-vision" stands next to "everyone" with the same or a lighter consequence/);
+  assert.match(refused(evaluation, (proposal) => (proposal.findings[LINK]!.affected = [affected(EVERYONE, "detour"), affected("low-vision", "detour")])), /"low-vision" stands next to "everyone"/);
+  assert.equal(refused(evaluation, (proposal) => (proposal.findings[LINK]!.affected = [affected(EVERYONE, "effort"), affected("low-vision", "detour")])), "");
 });
 
 test("a sentence that weighs a group away is refused", () => {
@@ -172,24 +180,39 @@ test("a sentence that weighs a group away is refused", () => {
     ["Dit raakt maar een kleine groep van de bezoekers.", "kleine groep"],
     ["Weinig mensen gebruiken deze knop op de pagina.", "weinig mensen"],
     ["De meeste bezoekers merken hier helemaal niets van.", "de meeste mensen"],
+    // Other forms of the same words.
+    ["Dit is een zeldzame situatie op deze pagina.", "zeldzaam"],
+    ["Zulke knoppen zijn bijzaken naast de tekst zelf.", "bijzaak"],
+    ["Dit raakt alleen kleine groepen bezoekers van de site.", "kleine groep"],
+    ["Voor de meesten is dit gewoon te lezen.", "de meeste mensen"],
+    ["Het contrast valt in de praktijk best wel mee.", "valt mee"],
   ] as const) {
     assert.match(refused(evaluation, (proposal) => (proposal.findings[0]!.affected[0]!.textNl = sentence)), new RegExp(`textNl says "${word}": write what happens to this group`), sentence);
   }
   assert.match(refused(evaluation, (proposal) => (proposal.findings[LOGO]!.unaffected![0]!.sameNl = "Dit is een randgeval dat bijna nooit voorkomt.")), /sameNl says "randgeval"/);
+  // A word the finding itself uses, quoted from it, is not the step weighing a group away.
+  evaluation.criteria.find((criterion) => criterion.id === "1.3.1")!.findings[0]!.observedNl = 'Op de knop staat "Niemand thuis? Bel ons".';
+  assert.equal(refused(evaluation, (proposal) => (proposal.findings[WINDOW_HEADING]!.affected[0]!.textNl = 'Ze horen de knop "Niemand thuis? Bel ons" zonder dat er een kop boven staat.')), "");
 });
 
 test("that a group can not finish a core task is said in so many words, and only then", () => {
   const evaluation = weighCase();
   // The highest step is a claim about the task: without the sentence it is refused.
   assert.match(refused(evaluation, (proposal) => delete proposal.findings[WINDOW_NAME]!.blocksNl), /blocksNl \(a group can not do this and task names a core task: say why that task can not be finished without this part, or set task to null when it can\) is missing/);
-  // Beside the tasks the group still can not use the part, and nothing is said about a task.
+  // Beside the tasks the group still can not use the part. That the tasks work without it is a claim too, and is said.
+  const beside = (proposal: WeighingProposal): void => {
+    proposal.findings[WINDOW_NAME]!.task = null;
+    delete proposal.findings[WINDOW_NAME]!.blocksNl;
+  };
+  assert.match(refused(evaluation, beside), /withoutNl \(a group can not do this and task is null: say how the core tasks still work without this part, or name the task that stops\) is missing/);
   assert.equal(
     refused(evaluation, (proposal) => {
-      proposal.findings[WINDOW_NAME]!.task = null;
-      delete proposal.findings[WINDOW_NAME]!.blocksNl;
+      beside(proposal);
+      proposal.findings[WINDOW_NAME]!.withoutNl = "Zonder het zoekvenster is het antwoord ook via het menu te vinden.";
     }),
     "",
   );
+  assert.match(refused(evaluation, (proposal) => (proposal.findings[WINDOW_HEADING]!.withoutNl = "Zonder de kop is het venster nog te gebruiken voor het zoeken.")), /withoutNl is only for a finding where a group can not do something \(cannot\) and task is null/);
   assert.match(refused(evaluation, (proposal) => (proposal.findings[WINDOW_NAME]!.task = null)), /blocksNl is only for a finding where a group can not do something \(cannot\) and task names a core task/);
   // A detour at a core task stops nobody.
   assert.match(refused(evaluation, (proposal) => (proposal.findings[WINDOW_HEADING]!.blocksNl = "Zonder kop is het venster niet te vinden voor deze bezoeker.")), /blocksNl is only for a finding where a group can not do something/);
@@ -207,8 +230,16 @@ test("a quotation in a sentence has to stand in the finding: the step sees no pa
   assert.equal(refused(evaluation, (proposal) => (proposal.findings[WINDOW_NAME]!.affected[0]!.textNl = 'Boven het venster staat "Zoeken", maar dat is geen naam.')), "");
   assert.match(
     refused(evaluation, (proposal) => (proposal.findings[WINDOW_NAME]!.affected[0]!.textNl = 'De schermlezer zegt alleen "dialoogvenster" en verder niets.')),
-    /textNl: the quoted text "dialoogvenster" is not found literally in the finding; quote only what the finding says/,
+    /textNl: the quoted text "dialoogvenster" is not found literally in the input for this finding; quote only what the input says/,
   );
+  // What the step read next to the finding may be quoted as well: the other finding at the same place, and the title of the page.
+  evaluation.criteria.find((criterion) => criterion.id === "1.3.1")!.findings[0]!.observedNl = 'De titel "Zoek op deze site" is geen kop.';
+  assert.equal(refused(evaluation, (proposal) => (proposal.findings[WINDOW_NAME]!.affected[0]!.textNl = 'Boven het venster staat "Zoek op deze site", maar dat is geen naam.')), "");
+  const pageTitle = evaluation.sample.items[0]!.title;
+  assert.ok(pageTitle.length > 0);
+  assert.equal(refused(evaluation, (proposal) => (proposal.findings[WINDOW_NAME]!.affected[0]!.textNl = `Op de pagina "${pageTitle}" opent het venster zonder dat het een naam heeft.`)), "");
+  // A finding at another place is not what the step read here.
+  assert.match(refused(evaluation, (proposal) => (proposal.findings[LINK]!.affected[0]!.textNl = 'De link staat onder "Zoek op deze site" en is te licht om te lezen.')), /the quoted text "zoek op deze site" is not found literally/i);
   // An apostrophe inside a word is no quotation.
   assert.equal(refused(evaluation, (proposal) => (proposal.findings[WINDOW_NAME]!.affected[0]!.textNl = "Zo'n venster zonder naam is op alle pagina's hetzelfde.")), "");
 });
@@ -218,6 +249,7 @@ test("that no group is hindered is said per group the criterion is essential for
   assert.match(refused(evaluation, (proposal) => delete proposal.findings[LOGO]!.unaffected), /affected is empty; name a group and what happens to it, or say under unaffected for each of limited-manipulation, limited-reach how that group gets the same/);
   assert.match(refused(evaluation, (proposal) => proposal.findings[LOGO]!.unaffected!.pop()), /unaffected does not say how "limited-reach" gets the same, and 2.5.3 is essential for that group/);
   assert.match(refused(evaluation, (proposal) => (proposal.findings[0]!.unaffected = [{ group: "no-vision", sameNl: "Hoort de titel van het venster gewoon voorlezen." }])), /unaffected is only for a finding without affected groups/);
+  assert.match(refused(evaluation, (proposal) => proposal.findings[LOGO]!.unaffected!.push({ ...proposal.findings[LOGO]!.unaffected![0]! })), /unaffected\[2\]: group "limited-manipulation" is named twice/);
   // Contrast below the limit hinders by the standard's own measure.
   assert.match(
     refused(evaluation, (proposal) => {
@@ -285,7 +317,9 @@ test("the step writes its task, applies a weighing that was checked, and drops i
   wrong.findings[0]!.affected[0]!.textNl = "Dit hindert vrijwel niemand op deze site.";
   writeFileSync(join(dir, "verdicts", "weging.json"), JSON.stringify(wrong));
   assert.equal((await checkWeigh(dir)).length, 1);
-  assert.equal((await weigh(dir)).weighing, "not-run");
+  // There is a weighing, but not one that counts: the evaluation says so, and keeps the judges' severities.
+  assert.equal((await weigh(dir)).weighing, "stale");
+  assert.deepEqual((await readJson<Evaluation>(path)).weighing, { status: "stale" });
 
   writeFileSync(join(dir, "verdicts", "weging.json"), JSON.stringify(weighingFor()));
   assert.deepEqual(await checkWeigh(dir), []);
@@ -316,8 +350,104 @@ test("the step writes its task, applies a weighing that was checked, and drops i
   changed.criteria.find((criterion) => criterion.id === "1.4.3")!.findings[0]!.observedNl = "De link in de voet is lichter dan gemeten.";
   writeFileSync(path, canonicalJson(changed));
   const third = await weigh(dir);
-  assert.equal(third.weighing, "not-run");
+  assert.equal(third.weighing, "stale");
   const dropped = await readJson<Evaluation>(path);
+  assert.deepEqual(dropped.weighing, { status: "stale" });
   assert.ok(dropped.defects!.every((defect) => defect.weighing === undefined && defect.judgedSeverity === undefined));
   assert.ok(dropped.criteria.every((criterion) => criterion.findings.every((entry) => entry.weighing === undefined && entry.judgedSeverity === undefined)));
+});
+
+test("an evaluation from before the grouping is not weighed: the step reads the findings under their defect", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "weigh-old-"));
+  const evaluation = weighCase();
+  delete evaluation.defects;
+  writeFileSync(join(dir, "evaluation.json"), canonicalJson(evaluation));
+  await assert.rejects(weigh(dir), /the evaluation has no defects yet; run "evaluate" on this run first/);
+});
+
+test("grouping again with other defects leaves the weighing behind, and the command says so", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "weigh-merge-"));
+  const path = join(dir, "evaluation.json");
+  writeFileSync(path, canonicalJson(weighCase()));
+  await weigh(dir);
+  mkdirSync(join(dir, "verdicts"), { recursive: true });
+  writeFileSync(join(dir, "verdicts", "weging.json"), JSON.stringify(weighingFor()));
+  assert.deepEqual(await checkWeigh(dir), []);
+  assert.equal((await weigh(dir)).weighing, "applied");
+  // The same findings grouped the same way: the weighing still counts, and `merge` reports it.
+  assert.equal((await merge(dir)).weighed!.weighing, "applied");
+  // One finding moves to another place, so the defects differ: the weighing was made for other input.
+  const moved = await readJson<Evaluation>(path);
+  moved.criteria.find((criterion) => criterion.id === "1.3.1")!.findings[0]!.locations[0]!.where = "#page > main > h2";
+  writeFileSync(path, canonicalJson(moved));
+  const regrouped = await merge(dir);
+  assert.equal(regrouped.weighed!.weighing, "stale");
+  const after = await readJson<Evaluation>(path);
+  assert.deepEqual(after.weighing, { status: "stale" });
+  assert.ok(after.criteria.every((criterion) => criterion.findings.every((entry) => entry.weighing === undefined && entry.judgedSeverity === undefined)));
+});
+
+test("findings that stop a group together are named with their task, and only when none of them does alone", () => {
+  // Two findings on the way to one task that each give people with low vision a detour.
+  const evaluation = evaluationWith({
+    "1.4.10": [{ where: "#page > header > a.login", severity: "midden" }],
+    "1.4.3": [{ where: "#page > main > button", severity: "midden" }],
+    "4.1.2": [{ where: "#modalSearch > header > div", severity: "midden" }],
+  });
+  const STOPS = "Na de omweg naar de inlogpagina vinden ze de lichte knop Verder niet terug, en zonder die knop is er geen afspraak.";
+  const proposal = (): WeighingProposal => ({
+    tasks: [
+      { id: "afspraak", nameNl: "Een afspraak maken" },
+      { id: "zoeken", nameNl: "Iets opzoeken" },
+    ],
+    findings: [
+      { finding: "T-1.4.10-1", task: "afspraak", affected: [affected("low-vision", "detour")] },
+      { finding: "T-1.4.3-1", task: "all", affected: [affected("low-vision", "detour")] },
+      { finding: "T-4.1.2-1", task: "zoeken", blocksNl: "Zonder naam weet de bezoeker niet dat dit het zoekvenster is, en zoeken is de enige weg naar het antwoord.", affected: [affected("no-vision", "cannot"), affected("low-vision", "effort")] },
+    ],
+    together: [{ task: "afspraak", group: "low-vision", findings: ["T-1.4.10-1", "T-1.4.3-1"], stopsNl: STOPS }],
+  });
+  const problems = (change: (value: WeighingProposal) => void): string => {
+    const value = proposal();
+    change(value);
+    return validateWeighing(value, evaluation).join("\n");
+  };
+  assert.equal(problems(() => {}), "");
+  // Without the list, and with an empty one, nothing is claimed.
+  assert.equal(problems((value) => delete value.together), "");
+  assert.equal(problems((value) => (value.together = [])), "");
+  assert.match(problems((value) => (value.together![0]!.findings = ["T-1.4.10-1"])), /together\[0\]: findings must name at least two different findings/);
+  assert.match(problems((value) => (value.together![0]!.findings = ["T-1.4.10-1", "T-1.4.10-1"])), /at least two different findings/);
+  assert.match(problems((value) => value.together![0]!.findings.push("T-9.9.9-1")), /"T-9\.9\.9-1" is not a finding weighed here/);
+  // A finding of another task is not on the way to this one.
+  assert.match(problems((value) => value.together![0]!.findings.push("T-4.1.2-1")), /T-4\.1\.2-1 does not have task "afspraak" or "all"/);
+  // The group has to be hindered by each finding, with a detour or more effort.
+  assert.match(problems((value) => (value.together![0]!.group = "cognitive")), /T-1\.4\.10-1 does not give "cognitive" a detour or more effort/);
+  // A group one finding stops already is in the report with that finding.
+  assert.match(problems((value) => (value.together = [{ task: "zoeken", group: "no-vision", findings: ["T-4.1.2-1", "T-1.4.3-1"], stopsNl: STOPS }])), /T-4\.1\.2-1 already stops "no-vision" at this task by itself/);
+  assert.match(problems((value) => (value.together![0]!.task = "betalen")), /needs task \(the id of one of the tasks, or "all"\), group and a list findings/);
+  assert.match(problems((value) => value.together!.push({ ...value.together![0]! })), /task "afspraak" and group "low-vision" are named twice/);
+  // The reason is a sentence like the others: present, and without a word that weighs the group away.
+  assert.match(problems((value) => (value.together![0]!.stopsNl = "Kort.")), /stopsNl .* is missing or shorter than 4 words/);
+  assert.match(problems((value) => (value.together![0]!.stopsNl = "Dit hindert vrijwel niemand bij het maken van een afspraak.")), /stopsNl .*says "niemand"/);
+  // It changes no severity: both findings stay what the table gives.
+  applyWeighing(evaluation, proposal());
+  assert.deepEqual(evaluation.criteria.flatMap((criterion) => criterion.findings).map((finding) => finding.severity).sort(), ["blokkerend", "midden", "midden"]);
+});
+
+test("a defect stands with the core task of a finding that gives it its severity", () => {
+  // Two findings at one place, both a detour: the main one beside the tasks, the other at a task.
+  const evaluation = evaluationWith({
+    "1.3.1": [{ where: "#modalSearch > header > div", severity: "laag" }],
+    "4.1.2": [{ where: "#modalSearch > header > div", severity: "midden" }],
+  });
+  applyWeighing(evaluation, {
+    tasks: [{ id: "zoeken", nameNl: "Iets opzoeken" }],
+    findings: [
+      { finding: "T-4.1.2-1", task: null, affected: [affected("no-vision", "detour")] },
+      { finding: "T-1.3.1-1", task: "zoeken", affected: [affected("no-vision", "detour")] },
+    ],
+  });
+  const [defect] = evaluation.defects!;
+  assert.deepEqual([defect!.mainFindingId, defect!.severity, defect!.weighing!.task], ["T-4.1.2-1", "midden", "zoeken"]);
 });

@@ -23,7 +23,7 @@
       "id": "no-hearing",
       "clause": "4.2.4",
       "labelNl": "mensen die niet horen",
-      "howNl": "Leest ondertiteling en uitgeschreven tekst bij video en geluid. Een geluidssignaal bestaat niet. Kan niet bellen en heeft een andere weg nodig om contact op te nemen. Voor wie Nederlandse Gebarentaal als eerste taal heeft, is geschreven Nederlands een tweede taal."
+      "howNl": "Leest ondertiteling en uitgeschreven tekst bij video en geluid. Een geluidssignaal bestaat niet. Belt niet, of alleen via een tolkdienst, en heeft daarom een weg zonder bellen nodig om contact op te nemen. Voor wie Nederlandse Gebarentaal als eerste taal heeft, is geschreven Nederlands een tweede taal."
     },
     {
       "id": "low-hearing",
@@ -35,13 +35,13 @@
       "id": "no-speech",
       "clause": "4.2.6",
       "labelNl": "mensen die niet of moeilijk spreken",
-      "howNl": "Kan niet bellen en kan een site niet met de stem bedienen. Heeft voor contact en voor elke functie een weg nodig die zonder spreken werkt."
+      "howNl": "Belt niet, of alleen via een tolkdienst, en kan een site niet met de stem bedienen. Heeft voor contact en voor elke functie een weg nodig die zonder spreken werkt."
     },
     {
       "id": "limited-manipulation",
       "clause": "4.2.7",
       "labelNl": "mensen die hun handen moeilijk gebruiken",
-      "howNl": "Ziet het scherm, maar gebruikt geen muis of geen gewone muis. Bedient met alleen het toetsenbord, met een schakelaar die de onderdelen een voor een afloopt, met spraakbediening of met oogbesturing. Wie met spraak bedient, zegt de tekst die op een knop of link staat. Moet kunnen zien waar de focus is. Elke extra toets of stap kost tijd en kracht. Slepen, precies mikken, twee toetsen tegelijk en snel reageren lukken niet of slecht."
+      "howNl": "Ziet het scherm, maar gebruikt geen muis of geen gewone muis. Bedient met alleen het toetsenbord, met een schakelaar die de onderdelen een voor een afloopt, met spraakbediening of met oogbesturing. Wie met spraak bedient, zegt de naam van een knop, link of veld. Heeft het geen naam of geen rol, dan valt er niets te zeggen en blijven alleen nummers of een raster over de pagina over. Moet kunnen zien waar de focus is. Elke extra toets of stap kost tijd en kracht. Slepen, precies mikken, twee toetsen tegelijk en snel reageren lukken niet of slecht."
     },
     {
       "id": "limited-reach",

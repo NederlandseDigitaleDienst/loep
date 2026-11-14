@@ -9,7 +9,7 @@ import { readTemplate } from "../lib/templates.ts";
 import { clearWeighing } from "../lib/weighing.ts";
 import { makeWorkDir } from "../lib/workdir.ts";
 import { readEvaluation, signatureIsCurrent, writeEvaluation } from "./sign.ts";
-import { weighInto } from "./weigh.ts";
+import { weighInto, type WeighResult } from "./weigh.ts";
 
 const TASK = join("tasks", "samenvoeg", "taak.md");
 const INPUT = join("tasks", "samenvoeg", "invoer.json");
@@ -35,6 +35,8 @@ export interface MergeResult {
   defects: number;
   proposal: "not-run" | "applied";
   task: string;
+  /** What became of the weighing after the defects were grouped again; only from the command, not from `evaluate`. */
+  weighed?: WeighResult;
 }
 
 function template(): string {
@@ -111,10 +113,10 @@ export async function merge(runDir: string, previousPath?: string): Promise<Merg
   if (signatureIsCurrent(evaluation)) throw new Error("the evaluation is signed; grouping its findings again would change what was signed");
   const result = await mergeInto(runDir, evaluation, previousPath ? await readJson<Evaluation>(previousPath) : evaluation);
   // A weighing was made for the defects as they were: it counts again only when they are the same.
-  await weighInto(runDir, evaluation);
+  const weighed = await weighInto(runDir, evaluation);
   await writeEvaluation(path, evaluation);
-  await writeManifest(runDir, { command: "merge", startedAt, findings: result.findings, defects: result.defects, proposal: result.proposal });
-  return result;
+  await writeManifest(runDir, { command: "merge", startedAt, findings: result.findings, defects: result.defects, proposal: result.proposal, weighing: weighed.weighing });
+  return { ...result, weighed };
 }
 
 /** Validate the proposal of the second step against the findings as they are now; a proposal that passes is stamped. */
