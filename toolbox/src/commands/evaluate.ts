@@ -409,9 +409,28 @@ const SECOND = { webkit: { name: "WebKit", nameNl: "WebKit (de motor van Safari)
 
 const ACCEPTED_BY_NL: Record<AcceptedGapDecider, string> = { verkenner: "Aanvaard door de verkenner, niet door een persoon.", persoon: "Aanvaard door een persoon, volgens het sitemodel; loep gaat dat niet na." };
 
+/** How a text of the gate refers to the place it is about, with the words that name that place by its address. */
+const PLACE_BY_ADDRESS_NL: [RegExp, string][] = [
+  [/^Deze pagina\b/, "De pagina"],
+  [/^Dit ingesloten venster\b/, "Het ingesloten venster"],
+  [/^Dit adres\b/, "Het adres"],
+];
+
+/**
+ * A text of the gate about a place that is not a page of the sample has no label in front of it,
+ * so the reader does not know which place "deze pagina" is. The address goes into the sentence,
+ * or after it as a sentence of its own when the text does not start by pointing at the place.
+ */
+function withAddressNl(missingNl: string, url: string | null | undefined): string {
+  if (!url) return missingNl;
+  const pointer = PLACE_BY_ADDRESS_NL.find(([pattern]) => pattern.test(missingNl));
+  if (pointer) return missingNl.replace(pointer[0], `${pointer[1]} ${url}`);
+  return `${missingNl.replace(/[^.!?]$/, "$&.")} Dit gaat over ${url}.`;
+}
+
 /** A gap or limitation of the gate as the report lists it, with who accepted it for an accepted gap. A gate.json from before that was asked does not say. */
-export function gateLineNl(gap: { page?: string | null; missingNl: string; reasonNl?: string; decidedBy?: AcceptedGapDecider }): string {
-  const line = `${gap.page ? `${gap.page}: ` : ""}${gap.missingNl}${gap.reasonNl ? ` ${gap.reasonNl}` : ""}`;
+export function gateLineNl(gap: { page?: string | null; url?: string | null; missingNl: string; reasonNl?: string; decidedBy?: AcceptedGapDecider }): string {
+  const line = `${gap.page ? `${gap.page}: ` : ""}${gap.page ? gap.missingNl : withAddressNl(gap.missingNl, gap.url)}${gap.reasonNl ? ` ${gap.reasonNl}` : ""}`;
   return gap.decidedBy ? `${line.replace(/[^.!?]$/, "$&.")} ${ACCEPTED_BY_NL[gap.decidedBy]}` : line;
 }
 

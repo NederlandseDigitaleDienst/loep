@@ -12,6 +12,7 @@ import { mergeFindings } from "../src/lib/defects.ts";
 import { aiGeneratedMark, closeCutQuote, evaluationHash, idsAcrossVersionsNl, madeWith, markVendor, quoteStart, summarise, vendorTagsOf, VERSION_NOT_MEASURED_NL, type Evaluation, type ReportFinding } from "../src/lib/evaluation.ts";
 import { reportedModels } from "../src/lib/models.ts";
 import { deriveReport, renderMarkdown } from "../src/lib/report-markdown.ts";
+import { renderHtml } from "../src/lib/report-html.ts";
 import { makePdf, TEMPLATES, tool, unshownCheck, unshownPattern, unshownTexts, unshownWarning } from "../src/lib/typst.ts";
 import { SEVERITIES } from "../src/lib/verdict.ts";
 import { exampleEvaluation } from "./fixtures/example-evaluation.ts";
@@ -1330,6 +1331,43 @@ test("an evaluation is described as it was made: a judge and a verifier, both wi
   assert.ok(appendix.includes("Eerste beoordeling: Voldoet. Controle, tevens eindoordeel: Kan niet bepalen."));
   assert.ok(appendix.includes("Poging om het oordeel onderuit te halen: Met de Tab-toets is gezocht"));
   assert.ok(appendix.includes("Vervallen bij de controle:\n\n- Knop zonder naam (P02): niet opnieuw gezien."));
+});
+
+test("a weighing that counts is named as a step of the method, in the type of evaluation and in what the model did", () => {
+  const STEP = "Per bevinding legt een taalmodel vast welke groepen bezoekers ze hindert en wat er voor elke groep gebeurt. Daarbij staat ook of bezoekers dit deel nodig hebben voor een kerntaak van de site. Het model werkt vanuit de bevindingen en bezoekt de site niet; de ernst in het rapport volgt met een vaste tabel uit wat het vastlegde.";
+  const SENTENCE = "Daarna heeft een taalmodel per bevinding gewogen wie ze hindert; daaruit volgt de ernst.";
+  const evaluation = weighed(withDefects());
+  const steps = deriveReport(evaluation).chain.stepsNl;
+  assert.deepEqual(steps.at(-1), { nameNl: "Wegen", textNl: STEP });
+  assert.equal(steps.at(-2)!.nameNl, "Samenvoegen");
+  const markdown = renderMarkdown(evaluation);
+  assert.ok(markdown.includes(`**Wegen.** ${STEP}`));
+  assert.ok(markdown.includes(`en in een tweede ronde elk oordeel gecontroleerd. ${SENTENCE} "Voldoet" betekent`));
+  assert.ok(markdown.includes(`- Type onderzoek: ${evaluation.method.typeNl} ${SENTENCE}`));
+  // The stored type stays as evaluate wrote it: the weighing comes after.
+  assert.ok(!evaluation.method.typeNl.includes(SENTENCE));
+  const html = renderHtml(evaluation);
+  assert.ok(html.includes("<strong>Wegen.</strong>") && html.includes("daaruit volgt de ernst"));
+  assert.equal(html.split(SENTENCE.replace(/;.*/, "")).length - 1, 2, "the HTML report names the weighing in the type and in what the model did");
+  // A weighing that is not applied did not set the severity, and an evaluation without one says nothing of it.
+  const stale = withDefects();
+  stale.weighing = { status: "stale", reason: "findings" };
+  for (const other of [stale, withDefects()]) {
+    assert.ok(!deriveReport(other).chain.stepsNl.some((step) => step.nameNl === "Wegen"));
+    assert.ok(!renderMarkdown(other).includes(SENTENCE) && !renderHtml(other).includes("<strong>Wegen.</strong>"));
+  }
+});
+
+test("a line of the gate about a place outside the sample names its address in the sentence", () => {
+  const url = "https://voorbeeld.nl/zoeken?pagina=2";
+  assert.equal(gateLineNl({ page: null, url, missingNl: "Deze pagina laadde niet tijdens de inventaris en is niet onderzocht (failed to load: page.goto: Timeout 45000ms exceeded.)." }), `De pagina ${url} laadde niet tijdens de inventaris en is niet onderzocht (failed to load: page.goto: Timeout 45000ms exceeded.).`);
+  assert.equal(gateLineNl({ page: null, url, missingNl: "Dit ingesloten venster is niet los gemeten (timeout)." }), `Het ingesloten venster ${url} is niet los gemeten (timeout).`);
+  assert.equal(gateLineNl({ page: null, url, missingNl: "Dit adres is geen pagina: de browser bood het aan als download." }), `Het adres ${url} is geen pagina: de browser bood het aan als download.`);
+  // A text that does not point at its place gets the address as a sentence of its own, before the reason of an accepted gap.
+  assert.equal(gateLineNl({ page: null, url, missingNl: "In deze toestand zijn geen losse toetsen ingedrukt", reasonNl: "De site reageert niet op toetsen.", decidedBy: "verkenner" }), `In deze toestand zijn geen losse toetsen ingedrukt. Dit gaat over ${url}. De site reageert niet op toetsen. Aanvaard door de verkenner, niet door een persoon.`);
+  // A page of the sample keeps its label, and a line without an address stays as it was.
+  assert.equal(gateLineNl({ page: "P03", url, missingNl: "Deze pagina is 20000 pixels hoog." }), "P03: Deze pagina is 20000 pixels hoog.");
+  assert.equal(gateLineNl({ page: null, url: null, missingNl: "De contrastmeting (contrast) heeft niet gedraaid." }), "De contrastmeting (contrast) heeft niet gedraaid.");
 });
 
 test("a finding that touches an element of the vendor keeps its owner and is listed per element", () => {

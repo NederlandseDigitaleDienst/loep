@@ -1,4 +1,4 @@
-# Taken voor loep. Een onderzoek in volgorde: install, explore, (verkenner-agent), sweep, tasks, (agents), report. De namen volgen de commando's van de toolbox.
+# Taken voor loep. Een onderzoek in volgorde: install, explore, (verkenner-agent), sweep, tasks, (agents), report, (weegagent), render. De namen volgen de commando's van de toolbox.
 
 toolbox := justfile_directory() / "toolbox"
 cli := "node " + toolbox / "src/cli.ts"
@@ -151,9 +151,15 @@ site-rapport run:
     rm -f "$fragment"
     echo "site/rapport/index.html bijgewerkt"
 
-# Maak de evaluatie en het rapport van een run waarvan alle opdrachten klaar zijn, en verzegel de run
+# Maak de evaluatie van een run waarvan alle opdrachten klaar zijn, en de opdracht voor de agent die de bevindingen weegt. Het rapport maakt daarna just render
 report run naam organisatie model:
     {{cli}} evaluate --run {{run}} --name "{{naam}}" --organisation "{{organisatie}}" --model "{{model}}"
+    @echo "Start nu één agent met {{run}}/tasks/weeg/taak.md: hij legt per bevinding vast wie ze hindert, en daaruit volgt de ernst. Draai daarna just render {{run}}. Zonder weging houdt elke bevinding de ernst van haar beoordelaar, en het rapport zegt dat."
+
+# Pas de weging toe als de weegagent een antwoord schreef, maak het rapport en verzegel de run
+render run:
+    if [ -f "{{run}}/verdicts/weging.json" ]; then {{cli}} check-weigh --run {{run}}; fi
+    {{cli}} weigh --run {{run}}
     {{cli}} render --run {{run}}
     {{cli}} seal --run {{run}}
     @echo "Rapport: {{run}}/report/rapport.pdf, rapport-kort.pdf (zonder bijlage A) en rapport.md. Het is een verzegeld concept tot iemand het leest en tekent met: {{cli}} sign --run {{run}} --name ... --role ... --organisation ... Daarna maakt {{cli}} render --run {{run}} het afgetekende rapport in {{run}}/signed/"

@@ -752,9 +752,11 @@ function chainText(evaluation: Evaluation): ChainText {
   // Engines that only ran in the sessions of the agents: named apart from the two that ran on every page.
   const ON_EVERY_PAGE = ["axe-core", "alfa"];
   const sessionEngines = (evaluation.instruments ?? []).filter((tool) => tool.usedForNl.includes("toetsregels") && !ON_EVERY_PAGE.includes(tool.implementation)).map((tool) => `${tool.implementation}${tool.version ? ` ${tool.version}` : ""}`);
+  // Only a weighing that counts: one that is there but not applied did not set the severity.
+  const weighed = evaluation.weighing?.status === "applied";
   return {
     honestNl:
-      "Dit is een automatisch onderzoek. Scripts hebben de site gemeten. Een taalmodel heeft daarna elk paginatype bekeken, per criterium geoordeeld met meetinstrumenten, en in een tweede ronde elk oordeel gecontroleerd. \"Voldoet\" betekent dat in het onderzochte bewijs geen afwijking is gevonden, ook niet toen de controle ernaar zocht. Het is geen garantie dat er geen probleem bestaat. \"Kan niet bepalen\" betekent dat de vraag nog open is.",
+      `Dit is een automatisch onderzoek. Scripts hebben de site gemeten. Een taalmodel heeft daarna elk paginatype bekeken, per criterium geoordeeld met meetinstrumenten, en in een tweede ronde elk oordeel gecontroleerd. ${weighed ? `${WEIGHED_NL} ` : ""}"Voldoet" betekent dat in het onderzochte bewijs geen afwijking is gevonden, ook niet toen de controle ernaar zocht. Het is geen garantie dat er geen probleem bestaat. "Kan niet bepalen" betekent dat de vraag nog open is.`,
     agreementNl:
       (finishedCount > 0 ? `Bij ${criteriaCount(finishedCount)} bleef het oordeel na de controle open door een beperking van het onderzoek; daar heeft een aanvullende meting het eindoordeel vastgesteld. Die wordt niet nog eens gecontroleerd: ${repeated === 0 ? "ze leverde geen bevinding op" : `de ${findingsCount(repeated)} uit die meting ${repeated === 1 ? "is" : "zijn"} twee keer door dezelfde beoordelaar vastgelegd, de tweede keer vanaf een verse pagina`}, en een goedkeuring uit die meting is niet door een tweede beoordelaar aangevallen. ` : "") +
       (personCount > 0 ? `Bij ${criteriaCount(personCount)} is de uitkomst vastgesteld door een persoon, niet door een instrument; dat staat bij het criterium, met de functie van die persoon. ` : "") +
@@ -784,6 +786,7 @@ function chainText(evaluation: Evaluation): ChainText {
       ...(finishedCount > 0 ? [{ nameNl: "Afmaken", textNl: "Bleef een criterium na de controle open door een beperking van het onderzoek (iets was niet gemeten, een proef stopte bij een grens, de tijd was op), dan meet een aparte beoordelaar met meer tijd wat ontbrak en komt tot een oordeel. Dat oordeel is dan het eindoordeel; het eerdere blijft bewaard. In het rapport heet dit de aanvullende meting." }] : []),
       ...(answeredCount > 0 ? [{ nameNl: "Antwoord van een persoon", textNl: "Wat geen instrument kan vaststellen, of wat een keuze van de eigenaar vraagt, heeft een persoon vastgelegd: wat is gedaan of besloten, en wat dat betekent voor het criterium. Zo'n uitkomst is vastgesteld door een persoon, niet door een instrument." }] : []),
       ...(evaluation.defects ? [{ nameNl: "Samenvoegen", textNl: "Bevindingen over dezelfde plek worden één gebrek. De bevindingen en de uitkomst per criterium blijven zoals ze zijn." }] : []),
+      ...(weighed ? [{ nameNl: "Wegen", textNl: "Per bevinding legt een taalmodel vast welke groepen bezoekers ze hindert en wat er voor elke groep gebeurt. Daarbij staat ook of bezoekers dit deel nodig hebben voor een kerntaak van de site. Het model werkt vanuit de bevindingen en bezoekt de site niet; de ernst in het rapport volgt met een vaste tabel uit wat het vastlegde." }] : []),
     ],
     writesNl: evaluation.chain ? (evaluation.chain.writes.allowed ? `Toegestaan: ${evaluation.chain.writes.noteNl}.` : `Niet toegestaan: ${evaluation.chain.writes.noteNl}.`) : null,
     readsNl: evaluation.chain?.reads && evaluation.chain.reads.length > 0 ? `${readsAllowedNl(evaluation.chain.reads)}.` : null,
@@ -791,6 +794,17 @@ function chainText(evaluation: Evaluation): ChainText {
     droppedLabel: "Vervallen bij de controle",
     verification: { reproduced: "Bij de controle bevestigd", unverified: "Toegevoegd bij de controle, één keer gezien", repeated: "Uit de aanvullende meting, twee keer gezien door één beoordelaar" },
   };
+}
+
+/** What the report says about the weighing, after what the model did before it. */
+const WEIGHED_NL = "Daarna heeft een taalmodel per bevinding gewogen wie ze hindert; daaruit volgt de ernst.";
+
+/**
+ * The type of evaluation as the report names it. The weighing runs after `evaluate` wrote
+ * `method.typeNl`, so the sentence about it is added here, when the weighing counts.
+ */
+export function methodTypeNl(evaluation: Evaluation): string {
+  return evaluation.weighing?.status === "applied" ? `${evaluation.method.typeNl} ${WEIGHED_NL}` : evaluation.method.typeNl;
 }
 
 /**
@@ -1885,7 +1899,7 @@ export function renderMarkdown(input: Evaluation, decisions: DecisionLayer = { d
       `Datum: ${derived.dateNl}`,
       `Norm: ${[...evaluation.standards.wcag, evaluation.standards.en301549].map(esc).join("; ")}`,
       `Methode: [${esc(evaluation.method.name)} ${esc(evaluation.method.version)}](${evaluation.method.url})`,
-      `Type onderzoek: ${esc(evaluation.method.typeNl)}`,
+      `Type onderzoek: ${esc(methodTypeNl(evaluation))}`,
       `${REPORT_TEXT.madeWith}: ${esc(derived.instrumentNl)}`,
       `Uitgevoerd door: ${REPORT_TEXT.performedBy.toLowerCase()}`,
       ...(derived.followsUpNl ? [`${REPORT_TEXT.followsUp}: ${derived.followsUpNl}`] : []),
