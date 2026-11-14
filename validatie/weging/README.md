@@ -130,9 +130,13 @@ Een weging van 111 bevindingen kostte in ronde 8 1,3 tot 1,7 miljoen tokens en a
 
 De agents meldden aan het eind van elke weging wat ze onduidelijk vonden. Wat ronde 6 en 7 opleverden, is in de opdracht van ronde 8 verwerkt: een hindernis met een uitweg, een bevinding op meer plekken, gebreken zonder vast geval, een feit uit een andere bevinding, en alle bezoekers naast één groep. Uit ronde 8 staat nog open:
 
-- **Een pictogram dat zegt wat een link doet.** Het vaste geval "informatie die alleen in beeld staat" geeft "kan niet", terwijl de bezoeker het bij de volgende stap merkt. Agents wijken daar af naar extra moeite.
-- **Spraakbediening bij een criterium dat die groep niet noemt.** Het vaste geval noemt wie met spraak bedient bij een knop zonder naam, ook onder 1.1.1. De norm noemt die groep daar niet, dus de controle vraagt een reden.
-- **Een onderzoek zonder beschrijving van de site.** Oudere onderzoeken hebben die niet. De agent haalt de kerntaken dan alleen uit de titels van de pagina's.
+- **Een zoekveld zonder naam.** Het vaste geval zegt "kan niet", met een uitzondering als de rol al zegt wat het is. Op één onderzoek hield de agent "kan niet" aan en werd het zoekveld blokkerend; op een ander koos de agent twee keer extra moeite, omdat de voorbeeldtekst of de ingevulde zoekterm in het veld staat. Dit is de plek waar een blokkade bij kwam.
+- **De controle tegen robots.** Het vaste geval noemt wie slecht ziet en wie moeite heeft met lezen. Gaat de bevinding alleen over een ontbrekend tekstalternatief, dan namen de drie wegingen van hetzelfde onderzoek die groepen de ene keer wel en de andere keer niet op.
+- **Iets wat maar een beetje wegvalt.** "Verdwijnt of wordt afgekapt" geeft "kan niet", ook bij één letter, een voorbeeldtekst naast een label of de naam van de site. Agents wijken daar af naar extra moeite.
+- **Een grens die precies wordt geraakt.** Een focusring van precies 1,5 op 1 valt niet onder "onder 1,5 op 1" en blijft extra moeite. De review noemde juist die bevinding te licht.
+- **Opnieuw laden als uitweg.** De opdracht zegt dat een hindernis de taak tegenhoudt als opnieuw laden de enige uitweg is en ze dan terugkomt. Eén agent telde opnieuw laden toch als wegdoen.
+- **Een feit van een andere plek.** Een feit uit een bevinding over dezelfde plek mag worden gebruikt. Agents gebruiken ook feiten uit bevindingen die de invoer als aparte plek geeft, of noemen het ontbreken ervan als twijfel.
 - **Wat samen tegenhoudt.** Twee agents beoordeelden dezelfde combinatie op de testsite verschillend. De opdracht zegt niet wanneer "de tijd loopt af" een taak tegenhoudt.
+- **Een onderzoek zonder beschrijving van de site.** Oudere onderzoeken hebben die niet. De agent haalt de kerntaken dan alleen uit de titels van de pagina's.
 
 Ze zijn na ronde 8 niet meer in de opdracht verwerkt: dan was de gemeten opdracht niet meer de uitgebrachte.
