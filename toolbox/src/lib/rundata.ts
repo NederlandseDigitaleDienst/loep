@@ -263,6 +263,8 @@ export interface PageData {
   narrow?: { links: Facts["links"]; controls: Facts["controls"] };
   /** The forms and loose controls of the page, in the default window and what the narrow one adds. Absent in older runs. */
   operables?: OperableGroup[];
+  /** Every host the page asked something of on a plain load in the default window, its own included. Absent in older runs. */
+  requestedHosts?: string[];
   /** The order of the code against the order on screen, in the default window and at 320 pixels wide. Absent in older runs. */
   order?: OrderReport;
   order320?: OrderReport;
@@ -544,6 +546,7 @@ export async function loadRun(dir: string): Promise<RunData> {
       ...(existsSync(join(pageDir, "probes", "timelimits.json")) ? { timeLimits: await probe<TimeLimitProbe>("timelimits") } : {}),
       ...(existsSync(join(pageDir, "probes", "pictures.json")) ? { pictures: await probe<PictureReport>("pictures") } : {}),
       ...(existsSync(join(pageDir, "probes", "widths.json")) ? { widths: await probe<NonNullable<PageData["widths"]>>("widths") } : {}),
+      ...(existsSync(join(pageDir, "probes", "hosts.json")) ? { requestedHosts: (await probe<{ hosts: string[] }>("hosts")).hosts } : {}),
       ...(existsSync(join(pageDir, "probes", "operables.json")) ? { operables: mergeWidths(await probe<OperableGroup[]>("operables"), existsSync(join(pageDir, "probes", "operables-narrow.json")) ? await probe<OperableGroup[]>("operables-narrow") : []) } : {}),
     });
   }

@@ -124,6 +124,18 @@ async function collectPage(browser: Browser, entry: SampleItem, runDir: string, 
 
   for (const scheme of ["light", "dark"] as ColorScheme[]) {
     const context = await open({ colorScheme: scheme });
+    // The hosts a plain load asks something of: a host refused in a state of the model that the page asks anyway says nothing about that state.
+    const requested = new Set<string>();
+    if (scheme === "light") {
+      context.on("request", (request) => {
+        try {
+          const target = new URL(request.url());
+          if (target.protocol === "http:" || target.protocol === "https:" || target.protocol === "ws:" || target.protocol === "wss:") requested.add(target.host);
+        } catch {
+          // Not an address with a host.
+        }
+      });
+    }
     try {
       const { page, placement } = await loadSampled(await context.newPage(), entry, (tab) => sweep.dismiss(context, tab, `collect:${scheme}`, scheme));
       if (scheme === "light") noted.content = await contentOf(page);
@@ -167,6 +179,8 @@ async function collectPage(browser: Browser, entry: SampleItem, runDir: string, 
         await writeJson(join(dir, "probes", "pictures.json"), pictures);
         noted.pictures = pictures;
         summary.pictures = { found: pictures.pictures.length, recognised: pictures.recognised };
+        // Taken before the arrow keys and the timers change the page: what the page asked for as it loaded, was scrolled and walked.
+        await writeJson(join(dir, "probes", "hosts.json"), { hosts: [...requested].sort() });
         // The arrow keys can change the page itself: a slide deck turns to the next slide on every
         // stop. So they come after everything that shows the page as it loaded.
         walk.arrowReach = await arrowReach(page, walk.stops as { path: string[]; tag: string; inputType?: string | null }[]);

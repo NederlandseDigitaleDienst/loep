@@ -16,6 +16,7 @@ import { acceptedGapFor, frameAddress, frameEntry, frameStanding, NOT_OPENED_ON_
 import { isLasting, refusedRunNl } from "../session/blockade.ts";
 import { drawMarks } from "../session/marks.ts";
 import { coversContent, type Overlay } from "../session/recipe.ts";
+import type { CapturedState } from "./modelsweep.ts";
 
 /**
  * The evidence gate: is what the sweep collected good enough to judge a site on? First
@@ -95,6 +96,8 @@ export interface Sheet {
   framesNl?: string[];
   /** The single-character keys the page reacted to in the sweep, with what changed. Absent in older runs. */
   keysNl?: string[];
+  /** Set when the sweep counted no Tab stop and nothing to operate on the page: the answer about the Tab order is then no gap. */
+  nothingToOperate?: true;
 }
 
 export interface Gate {
@@ -527,13 +530,24 @@ export function gateChecks(run: RunData): { checks: Check[]; gaps: Gap[]; warnin
 }
 
 /** Per state of the site model, the hosts outside the run that were refused while it was open and that a plain page load does not ask for. */
-export function hostsRefusedInStates(run: Pick<RunData, "siteStates">): Map<string, string[]> {
+export function hostsRefusedInStates(run: Pick<RunData, "siteStates"> & Partial<Pick<RunData, "siteModel" | "pages">>): Map<string, string[]> {
   const states = run.siteStates?.states ?? [];
-  // Hosts outside the run that are refused on a plain page load as well say nothing about a component: those are left out for its state.
-  const baseline = new Set(states.filter((state) => state.kind === "blocker").flatMap((state) => (state.refused ?? []).filter((entry) => entry.kind === "scope").map((entry) => entry.address.split("/")[0]!)));
+  const hostOf = (address: string): string => address.split("/")[0]!;
+  // Hosts outside the run that are refused with a blocker on the page say nothing about a component: those are left out for its state.
+  const refusedWithBlocker = new Set(states.filter((state) => state.kind === "blocker").flatMap((state) => (state.refused ?? []).filter((entry) => entry.kind === "scope").map((entry) => hostOf(entry.address))));
+  // Nor do the hosts collect saw a plain load of the same page ask for; without that page, those of the pages of the state's page types.
+  const withoutHash = (url: string): string => url.split("#")[0]!;
+  const askedOnPlainLoad = (state: CapturedState): Set<string> => {
+    const pages = run.pages ?? [];
+    const same = state.url ? pages.filter((page) => withoutHash(page.item.url) === withoutHash(state.url!)) : [];
+    const typed = new Set((run.siteModel?.pageTypes ?? []).filter((type) => state.pageTypes.includes(type.id)).flatMap((type) => [type.representative, ...type.pages]));
+    const chosen = same.length > 0 ? same : pages.filter((page) => typed.has(page.item.url));
+    return new Set(chosen.flatMap((page) => page.requestedHosts ?? []));
+  };
   const found = new Map<string, string[]>();
   for (const state of states.filter((entry) => entry.kind !== "blocker")) {
-    const hosts = [...new Set((state.refused ?? []).filter((entry) => entry.kind === "scope").map((entry) => entry.address.split("/")[0]!))].filter((host) => !baseline.has(host));
+    const plain = askedOnPlainLoad(state);
+    const hosts = [...new Set((state.refused ?? []).filter((entry) => entry.kind === "scope").map((entry) => hostOf(entry.address)))].filter((host) => !refusedWithBlocker.has(host) && !plain.has(host));
     if (hosts.length > 0) found.set(state.id, hosts);
   }
   return found;
@@ -705,10 +719,19 @@ export async function buildSheets(run: RunData, runDir: string, outDir: string):
     const file = join("gate", `sheet-${type.id}.png`);
     const bytes = PNG.sync.write(contactSheet(tiles.map((entry) => tile((entry.state === "taborder" ? collapseWithoutStops : (picture: PNG) => picture)(PNG.sync.read(readFileSync(join(runDir, entry.file))))))));
     await writeFileAtomic(join(outDir, file), bytes);
-    sheets.push({ pageType: type.id, page: type.page.label, url: type.page.item.url, file, sha256: sha256(bytes), tiles, componentsNl: components, ...(everywhere.length > 0 ? { everywhereNl: everywhere } : {}), ...(processes.length > 0 ? { processesNl: processes } : {}), contentNl: (model?.content ?? []).filter((content) => content.pageTypes.includes(type.id)).map((content) => `${content.id} (${content.kind}): ${content.descriptionNl}`), framesNl: framesOn(type.page, model), keysNl: keysOn(type.page, run) });
+    sheets.push({ pageType: type.id, page: type.page.label, url: type.page.item.url, file, sha256: sha256(bytes), tiles, componentsNl: components, ...(everywhere.length > 0 ? { everywhereNl: everywhere } : {}), ...(processes.length > 0 ? { processesNl: processes } : {}), contentNl: (model?.content ?? []).filter((content) => content.pageTypes.includes(type.id)).map((content) => `${content.id} (${content.kind}): ${content.descriptionNl}`), framesNl: framesOn(type.page, model), keysNl: keysOn(type.page, run), ...(nothingToOperate(type.page) ? { nothingToOperate: true as const } : {}) });
   }
   return sheets;
 }
+
+/** Whether the sweep found nothing on a page to Tab to: no Tab stop, no visible link or control, no form or group of controls. */
+export function nothingToOperate(page: Pick<PageData, "tabwalk" | "facts" | "operables">): boolean {
+  // Without a Tab walk (data built by hand) nothing was counted, so the question counts.
+  return page.tabwalk?.stopCount === 0 && !(page.facts?.links ?? []).some((link) => link.visible) && !(page.facts?.controls ?? []).some((control) => control.visible) && (page.operables ?? []).length === 0;
+}
+
+/** The questions that count for a sheet: on a page without anything to operate, an empty Tab order is what the picture should show. */
+const countsFor = (sheet: Pick<Sheet, "nothingToOperate">, question: { id: string }): boolean => !(question.id === "taborder" && sheet.nothingToOperate);
 
 /** What the reviewing agent reads beside one sheet: the picture, its tiles and the lists of what is known. */
 export function sheetText(sheet: Sheet, absoluteOut: string): string {
@@ -723,6 +746,7 @@ export function sheetText(sheet: Sheet, absoluteOut: string): string {
       `- Vak ${entry.nr}: ${entry.descriptionNl}`,
       ...((entry.refusedHosts ?? []).length > 0 ? [`  - In deze toestand zijn verzoeken naar adressen buiten de run tegengehouden (${entry.refusedHosts!.join(", ")}). Wat daarvandaan komt, zoals een speler of een kaart, ontbreekt in dit vak; op die plek kan een leeg of zwart vlak staan. Beoordeel of te zien is wat er openging, los van die inhoud.`] : []),
     ]),
+    ...(sheet.nothingToOperate ? ["", "De veegronde vond op deze pagina geen Tab-stop en niets om te bedienen. Een vak 3 zonder genummerde stops klopt dan: antwoord bij `taborder` `ja`."] : []),
     "",
     sheet.componentsNl.length > 0 ? `Onderdelen van dit paginatype volgens het sitemodel: ${sheet.componentsNl.join("; ")}.` : (sheet.everywhereNl ?? []).length > 0 ? "Het sitemodel noemt voor dit paginatype geen eigen onderdelen." : "Het sitemodel noemt voor dit paginatype geen onderdelen.",
     ...((sheet.everywhereNl ?? []).length > 0 ? ["", `Op elke pagina, ook deze, volgens het sitemodel: ${sheet.everywhereNl!.join("; ")}. Die horen bij de lijst met onderdelen.`] : []),
@@ -784,8 +808,10 @@ export function validateAnswers(value: unknown, sheets: Sheet[]): string[] {
   const problems: string[] = [];
   const given = (value as Answers | null)?.sheets;
   if (!Array.isArray(given)) return ["het antwoord heeft geen lijst sheets"];
-  const checkAnswer = (entry: GivenAnswer | undefined, whereNl: string, bad: Answer | null): void => {
+  // `bad` "none": no answer is a problem, so none needs a note.
+  const checkAnswer = (entry: GivenAnswer | undefined, whereNl: string, bad: Answer | null | "none"): void => {
     if (!entry || !ANSWERS.includes(entry.answer as Answer)) return void problems.push(`${whereNl}: answer moet ja, nee of onduidelijk zijn`);
+    if (bad === "none") return;
     const needsNote = entry.answer === "onduidelijk" || (bad === null ? entry.answer === "nee" : entry.answer === bad);
     if (needsNote && (typeof entry.noteNl !== "string" || entry.noteNl.trim().length < 10)) problems.push(`${whereNl}: bij dit antwoord hoort in noteNl wat je zag en waar (minstens een korte zin)`);
   };
@@ -800,7 +826,7 @@ export function validateAnswers(value: unknown, sheets: Sheet[]): string[] {
       problems.push(typeof entry.reviewedAs === "string" ? `${sheet.pageType}: het blad is veranderd sinds dit antwoord (reviewedAs ${entry.reviewedAs}, het blad heeft nu ${reviewedAs(sheet)}); bekijk het blad opnieuw en beantwoord alle vragen opnieuw` : `${sheet.pageType}: reviewedAs ontbreekt; neem het kenmerk van het blad over uit de opdracht, nadat je het blad hebt bekeken`);
       continue;
     }
-    for (const question of QUESTIONS) checkAnswer(entry.answers?.[question.id], `${sheet.pageType}.${question.id}`, question.bad);
+    for (const question of QUESTIONS) checkAnswer(entry.answers?.[question.id], `${sheet.pageType}.${question.id}`, countsFor(sheet, question) ? question.bad : "none");
     for (const key of Object.keys(entry.answers ?? {})) if (!QUESTIONS.some((question) => question.id === key)) problems.push(`${sheet.pageType}: onbekende vraag "${key}"`);
     const stateTiles = sheet.tiles.filter((candidate) => candidate.nr > 3);
     for (const stateTile of stateTiles) checkAnswer((entry.stateTiles ?? []).find((candidate) => candidate?.tile === stateTile.nr), `${sheet.pageType}, vak ${stateTile.nr}`, null);
@@ -820,7 +846,7 @@ export function reviewGaps(answers: Answers, sheets: Sheet[]): { gaps: Gap[]; wa
       if (answer.answer !== "onduidelijk" && !bad) return;
       (bad ? gaps : warnings).push({ check, page: sheet.page, url: sheet.url, state, missingNl: String(answer.noteNl ?? "") });
     };
-    for (const question of QUESTIONS) {
+    for (const question of QUESTIONS.filter((candidate) => countsFor(sheet, candidate))) {
       const answer = entry.answers[question.id]!;
       note(answer, question.tileState === "default" ? "default" : question.tileState, `review-${question.id}`, answer.answer === question.bad);
     }

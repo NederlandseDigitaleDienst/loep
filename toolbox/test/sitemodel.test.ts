@@ -11,7 +11,7 @@ import { PNG } from "pngjs";
 import { INPAGE_PATH, launchBrowser, loadPage, newContext } from "../src/browser/session.ts";
 import { collect } from "../src/commands/collect.ts";
 import { checkSite, explore, exploreContext } from "../src/commands/explore.ts";
-import { afterEveryReturn, buildSheets, checkGate, commonBlock, contactSheet, fixedByReason, gate, gateChecks, hostsRefusedInStates, keysOn, MAX_RESWEEPS, MAX_RETURNS_TO_EXPLORER, MIN_TAB_REACH, reviewedAs, openedBetweenWidths, reviewGaps, reviewParts, route, SHEETS_PER_TASK, sheetGaps, sheetText, tile, validateAnswers, type Answers, type Gap, type Sheet } from "../src/commands/gate.ts";
+import { afterEveryReturn, buildSheets, checkGate, commonBlock, contactSheet, fixedByReason, gate, gateChecks, hostsRefusedInStates, keysOn, MAX_RESWEEPS, MAX_RETURNS_TO_EXPLORER, MIN_TAB_REACH, nothingToOperate, reviewedAs, openedBetweenWidths, reviewGaps, reviewParts, route, SHEETS_PER_TASK, sheetGaps, sheetText, tile, validateAnswers, type Answers, type Gap, type Sheet } from "../src/commands/gate.ts";
 import { inventory, type Inventory, type InventoryPage } from "../src/commands/inventory.ts";
 import { ModelSweep, type SiteStates } from "../src/commands/modelsweep.ts";
 import { DownRun, HoverRun, probePointerInStates } from "../src/commands/states.ts";
@@ -708,6 +708,27 @@ test("answers of the reviewing agent are validated against the sheets and turned
   assert.match(validateAnswers({ sheets: [{ ...good.sheets[0]!, reviewedAs: undefined }] }, sheets)[0]!, /^start: reviewedAs ontbreekt/);
 });
 
+test("a page without anything to operate gets no gap for its empty Tab order", () => {
+  const bare = gatePage("P1", "https://site.nl/404", { links: 0 });
+  assert.equal(nothingToOperate(bare), true);
+  assert.equal(nothingToOperate(gatePage("P2", "https://site.nl/")), false, "a page with links has a Tab order to judge");
+  assert.equal(nothingToOperate({ ...bare, tabwalk: { ...bare.tabwalk, stopCount: 0 }, facts: { ...bare.facts, links: [element("a0")] as unknown as PageData["facts"]["links"] } }), false, "a visible link without a Tab stop is what the question is about");
+  assert.equal(nothingToOperate({ ...bare, operables: [{ kind: "form" }] as unknown as PageData["operables"] }), false);
+
+  const sheet: Sheet = { pageType: "fout", page: "P1", url: "https://site.nl/404", file: "gate/sheet-fout.png", sha256: "x", componentsNl: [], tiles: [1, 2, 3].map((nr) => ({ nr, state: ["default", "narrow", "taborder"][nr - 1]!, file: "f.png", descriptionNl: "" })), nothingToOperate: true };
+  const answers: Answers = { sheets: [{ pageType: "fout", reviewedAs: reviewedAs(sheet), answers: { content: { answer: "ja" }, covered: { answer: "nee" }, narrow: { answer: "ja" }, taborder: { answer: "nee" }, missing: { answer: "nee" } }, stateTiles: [] }] };
+  assert.deepEqual(validateAnswers(answers, [sheet]), [], "an honest no about an empty Tab order needs no note");
+  assert.deepEqual(reviewGaps(answers, [sheet]), { gaps: [], warnings: [] });
+  answers.sheets[0]!.answers.taborder = { answer: "onduidelijk" };
+  assert.deepEqual(reviewGaps(answers, [sheet]), { gaps: [], warnings: [] });
+  assert.match(sheetText(sheet, "/run"), /geen Tab-stop en niets om te bedienen\. Een vak 3 zonder genummerde stops klopt dan: antwoord bij `taborder` `ja`\./);
+
+  const counted: Sheet = { ...sheet, nothingToOperate: undefined };
+  answers.sheets[0]!.answers.taborder = { answer: "nee", noteNl: "Vak 3 toont geen enkele genummerde stop." };
+  assert.deepEqual(reviewGaps(answers, [counted]).gaps.map((gap) => gap.check), ["review-taborder"], "on a page with something to operate the answer still counts");
+  assert.doesNotMatch(sheetText(counted, "/run"), /niets om te bedienen/);
+});
+
 test("every page type gets a sheet: the sheets are divided over tasks, and a type without one is a gap", () => {
   const sheet = (nr: number): Sheet => ({ pageType: `type-${nr}`, page: `P${nr}`, url: `https://site.nl/${nr}`, file: `gate/sheet-type-${nr}.png`, sha256: "x", componentsNl: [], tiles: [] });
   const sixteen = Array.from({ length: 16 }, (_, index) => sheet(index + 1));
@@ -740,6 +761,19 @@ test("the review is told which hosts outside the run were refused in a state, an
 
   assert.deepEqual([...hostsRefusedInStates(run)], [["component-video", ["www.youtube-nocookie.com"]]], "a host also refused on a plain page load says nothing about a state");
   assert.deepEqual(gateChecks(run).limitations.filter((gap) => gap.check === "needs-host-outside-run").map((gap) => gap.state), ["component-video"]);
+
+  // Without a blocker: a host the plain load of the page asks for as well (a CDN with the design system) says nothing about a state either.
+  const plain = { ...gatePage("P1", "https://site.nl/"), requestedHosts: ["site.nl", "cdn.example"] } as PageData;
+  const cdn = [state("component-menu", "component", ["cdn.example/npm/huisstijl/variables.css"]), state("component-video", "component", ["cdn.example/npm/speler.js", "www.youtube-nocookie.com/embed/abc"])];
+  const noBlocker = gateRun([plain], { siteModel: model, siteStates: { siteSha256: "", seeded: { blockers: [], cookies: 0, storedValues: 0 }, dismissals: [], states: cdn } });
+  assert.deepEqual([...hostsRefusedInStates(noBlocker)], [["component-video", ["www.youtube-nocookie.com"]]]);
+  assert.deepEqual(gateChecks(noBlocker).limitations.filter((gap) => gap.check === "needs-host-outside-run").map((gap) => gap.state), ["component-video"]);
+  // A state opened on a page outside the sample takes what the pages of its page type asked for.
+  const elsewhere = gateRun([plain], { siteModel: model, siteStates: { siteSha256: "", seeded: { blockers: [], cookies: 0, storedValues: 0 }, dismissals: [], states: cdn.map((entry) => ({ ...entry, url: "https://site.nl/andere" })) } });
+  assert.deepEqual([...hostsRefusedInStates(elsewhere)], [["component-video", ["www.youtube-nocookie.com"]]]);
+  // An older run without the hosts of a plain load keeps counting them.
+  const older = gateRun([gatePage("P1", "https://site.nl/")], { siteModel: model, siteStates: { siteSha256: "", seeded: { blockers: [], cookies: 0, storedValues: 0 }, dismissals: [], states: cdn } });
+  assert.deepEqual([...hostsRefusedInStates(older)].map(([id]) => id), ["component-menu", "component-video"]);
 
   const dir = mkdtempSync(join(tmpdir(), "loep-gate-sheets-"));
   try {
