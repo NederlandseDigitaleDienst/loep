@@ -522,7 +522,12 @@ function weighingSection(context: Context): string {
   const stopped = rich(
     [
       `<p>${attr(labels.stoppedIntro)}</p>`,
-      ...weighing.stopped.map((task) => `${subhead(task.taskNl, 4)}${list(task.defects.map((entry) => `${link(`#${entry.defectId}`, inline(defects.get(entry.defectId)!.titleNl))}, voor ${attr(entry.groupsNl)}. ${inline(entry.blocksNl)}`.trim()))}`),
+      ...weighing.stopped.map((task) => {
+        // One defect closes the paragraph as a sentence; more of them stand under it as a list.
+        const causes = task.defectIds.map((id) => link(`#${id}`, inline(defects.get(id)!.titleNl)));
+        const because = causes.length === 1 ? `${attr(labels.becauseOne)} ${causes[0]}.` : attr(labels.becauseMore);
+        return `${subhead(task.taskNl, 4)}<p>${[attr(task.whoNl), task.blocksNl ? inline(sentence(task.blocksNl)) : "", because].filter(Boolean).join(" ")}</p>${causes.length > 1 ? list(causes) : ""}`;
+      }),
       weighing.notStoppedNl ? `<p>${inline(weighing.notStoppedNl)}</p>` : "",
     ].join(""),
   );
@@ -744,13 +749,13 @@ function findingBrief(finding: ReportFinding, titleNl: string, titles: Map<strin
   ].join("");
 }
 
-/** Who a finding hinders: per group what happens, then why that gives this severity. */
-function whoHtml(weighed: FindingWeighingDerived, severity: ReportFinding["severity"]): string {
+/** Who a finding hinders: per group a paragraph that starts with what happens to it, then why that gives this severity. */
+function whoHtml(weighed: FindingWeighingDerived): string {
   return [
     weighed.groups.length > 0
-      ? list(weighed.groups.map((group) => `<strong>${attr(group.groupNl)}: ${attr(group.consequenceNl)}.</strong> ${inline(group.textNl)}`))
+      ? weighed.groups.map((group) => `<p>${attr(group.leadNl)} ${inline(group.textNl)}</p>`).join("")
       : `<p>${attr(REPORT_TEXT.weighing.noGroup)}</p>${list(weighed.unaffected.map((group) => `${attr(group.groupNl)}: ${inline(group.textNl)}`))}`,
-    `<p>Ernst ${severity}: ${inline(weighed.reasonNl)}.${weighed.blocksNl ? ` ${inline(weighed.blocksNl)}` : ""}</p>`,
+    `<p>${inline(weighed.reasonNl)}</p>`,
     weighed.unsureNl ? `<p>${attr(REPORT_TEXT.weighing.unsure)}: ${inline(weighed.unsureNl)}</p>` : "",
   ].join("");
 }
@@ -760,7 +765,7 @@ function findingText(finding: ReportFinding, titles: Map<string, string>, level:
   return rich(
     [
       `${subhead("Wat is er mis", level)}<p>${inline(finding.observedNl)}</p>`,
-      `${subhead("Wie heeft er last van", level)}${weighed ? whoHtml(weighed, finding.severity) : `<p>${inline(finding.impactNl)}</p>`}`,
+      `${subhead("Wie heeft er last van", level)}${weighed ? whoHtml(weighed) : `<p>${inline(finding.impactNl)}</p>`}`,
       `${subhead("Oplossing", level)}<p>${inline(finding.fixNl)}</p>`,
       `${subhead("Waar", level)}${list(whereItems(finding, titles))}`,
     ].join(""),
@@ -796,7 +801,7 @@ function defectCard(defect: Defect, context: Context, level: number): string {
   const toCriterion = (id: string): string => link(`#${ID.criterion(id)}`, attr(id));
   const criteriaNl = `${attr(REPORT_TEXT.defect.main)} ${toCriterion(defect.mainCriterion)}${defect.alsoCriteria.length > 0 ? `, ${attr(REPORT_TEXT.defect.also.toLowerCase())} ${defect.alsoCriteria.map(toCriterion).join(", ")}` : ""}`;
   const weighed = derived.weighing?.ofDefect[defect.id];
-  const whoNl = weighed ? `<p>${attr(REPORT_TEXT.weighing.who)}: ${weighed.whoNl ? inline(weighed.whoNl) : "geen gevolg gevonden voor een groep bezoekers"}.${weighed.taskNl ? ` ${attr(REPORT_TEXT.weighing.task)}: ${inline(weighed.taskNl)}.` : ""}</p>` : "";
+  const whoNl = weighed ? `<p>${inline(weighed.whoNl)}</p>` : "";
   const meta = rich(
     `<p>${criteriaNl}.${main.component ? ` Onderdeel: ${inline(main.component)}.` : ""} Pagina's: ${attr(derived.defects!.pagesNl[defect.id]!.replace(/\.$/, ""))}. ${others.length > 0 ? `Ook ${others.length === 1 ? "bevinding" : "bevindingen"} ${others.map((id) => link(`#${id}`, attr(id))).join(", ")}.` : ""}</p>${whoNl}`,
     { spacing: "tight" },

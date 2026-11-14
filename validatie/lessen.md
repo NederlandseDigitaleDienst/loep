@@ -125,6 +125,18 @@ Twee volledige runs van 0.11.0 en twee varianten op negen criteria, alle op éé
 | Een meting op de testsite zegt weinig over echte sites. De testsite is door hetzelfde systeem gebouwd en makkelijker; op de negen criteria is elke uitkomst "voldoet niet", dus kappa en de toets op criteriumniveau maken geen onderscheid; en de schone variant is niet gedraaid. | Het bestand `validatie/versies/0.11.0.json` zegt dat de uitkomst tegen de sleutel van de testsite is gemeten en niet tegen een deskundige. | open |
 | Het gereedschap voor een meting had gaten: `sweep-check` kiest willekeurige poorten en ruimt de run op, het verzendbudget eist ook lokaal 120 seconden pauze, `compare --findings` loopt bij `--only` alle gebreken langs, en het verbruik per agent moest met een los script uit de transcripts. | Hersteld: `compare --findings` deelt bij een deel van de criteria alleen die gebreken in (#249), `sweep-check --fixed-ports` (#247), en op een lokale site geen wachttijd tussen verzendingen (#250). Open: het verbruik uit de transcripts (#243). | deels hersteld |
 
+## Meting van de weegstap (14 november 2026)
+
+Zeven ronden op bestaande evaluaties: één onderzoek van een echte site drie keer gewogen, de twee runs van de testsite uit de meting van 0.25.0, en vier andere bestaande onderzoeken. De cijfers staan in [weging/README.md](weging/README.md).
+
+| Les | Wat er nu is | Status |
+|---|---|---|
+| Een opdracht die op één onderzoek is afgesteld, gaf op vier andere onderzoeken valse blokkades. Te lichte puntjes in een paginering werden blokkerend: de agent zag dat een groep dat deel niet kan waarnemen en dat de pagina bij een kerntaak hoort. Op het onderzoek waarop was afgesteld, kwam dat niet voor. | De controle vraagt bij de hoogste trede een zin die zegt waarom de kerntaak zonder dit deel niet af te maken is. | hersteld; gemeten op dezelfde vier onderzoeken |
+| Het feit dat het minst herhaalbaar is, hoort de tabel het minst te sturen. Twee agents waren het over "nodig voor een kerntaak" minder vaak eens dan over het gevolg. Een tabel waarin de kerntaak elke trede verhoogde, gaf die onzekerheid aan elke bevinding door. | De kerntaak beslist alleen tussen blokkerend en hoog, en bepaalt verder de volgorde binnen een trede. | hersteld |
+| Een weging per gebrek erft de verschillen van het samenvoegen. Een formulier met dertien bevindingen kreeg één weging, en welke bevindingen de regels samenvoegen, verschilt per run. | Wegen per bevinding; een gebrek neemt de zwaarste. | hersteld |
+| Een vast geval dat twee kanten op kan, wordt twee kanten op gebruikt. "Een veld zonder naam is kan niet, tenzij de tekst eromheen zegt wat het is" gaf bij formulieren in pdf vier verschillen van twee treden of meer. | Het vaste geval noemt nu de soort veld, en de uitzondering alleen waar de rol al zegt wat het is. | hersteld |
+| Dat twee beoordelingen door een taalmodel op dezelfde volgorde uitkomen, is geen ijking: beide kunnen dezelfde blinde vlek hebben. De wegingen kwamen grotendeels overeen met een eerdere indeling door een model, en dat zegt niets over of ze kloppen. | Het staat bij de beperkingen in de methode en in het verslag van de meting. | open: de vaste gevallen en de beschrijving van de groepen zijn door niemand van buiten nagelopen |
+
 ## Over het werken zelf
 
 - **Meten voor bouwen.** Tests zeggen dat de code doet wat bedoeld was, niet dat het onderzoek beter wordt. Na elke reeks wijzigingen eerst een kleine meting op de criteria die geraakt zijn, pas daarna verder bouwen.

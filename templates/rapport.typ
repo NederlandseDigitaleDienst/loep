@@ -469,7 +469,14 @@
 
   #for task in weighing.stopped [
     #heading(level: 3, outlined: false, task.taskNl)
-    #list(..task.defects.map(entry => [#link(label(entry.defectId), defect-by-id.at(entry.defectId).titleNl), voor #entry.groupsNl. #prose(entry.blocksNl)]))
+    // One defect closes the paragraph as a sentence; more of them stand under it as a list.
+    #let causes = task.defectIds.map(id => link(label(id), defect-by-id.at(id).titleNl))
+    #if causes.len() == 1 [
+      #par[#task.whoNl #prose(task.blocksNl) #t.weighing.becauseOne #causes.first().]
+    ] else [
+      #par[#task.whoNl #prose(task.blocksNl) #t.weighing.becauseMore]
+      #list(..causes)
+    ]
   ]
 
   #if weighing.notStoppedNl != none { par(weighing.notStoppedNl) }
@@ -591,7 +598,7 @@
           let weighed = if weighing == none { none } else { weighing.ofDefect.at(defect.id, default: none) }
           if weighed != none {
             linebreak()
-            [#t.weighing.who: #if weighed.whoNl != none { weighed.whoNl } else [geen gevolg gevonden voor een groep bezoekers].#if weighed.taskNl != none [ #t.weighing.task: #weighed.taskNl.]]
+            weighed.whoNl
           }
         },
         {
@@ -993,12 +1000,12 @@
   let weighed = weighed-of(finding)
   if weighed == none { prose(finding.impactNl) } else {
     if weighed.groups.len() > 0 {
-      list(..weighed.groups.map(group => [#text(weight: 700)[#group.groupNl: #group.consequenceNl.] #prose(group.textNl)]))
+      for group in weighed.groups { par[#group.leadNl #prose(group.textNl)] }
     } else {
       par(t.weighing.noGroup)
       list(..weighed.unaffected.map(group => [#group.groupNl: #prose(group.textNl)]))
     }
-    par[Ernst #finding.severity: #prose(weighed.reasonNl).#if weighed.blocksNl != none [ #prose(weighed.blocksNl)]]
+    par(prose(weighed.reasonNl))
     if weighed.unsureNl != none { par[#t.weighing.unsure: #prose(weighed.unsureNl)] }
   }
 }
@@ -1007,10 +1014,9 @@
   let weighed = weighed-of(finding)
   if weighed == none { prose(finding.impactNl) } else {
     if weighed.groups.len() > 0 {
-      weighed.groups.map(group => [#group.groupNl (#group.consequenceNl): #prose(group.textNl)]).join(" ")
+      weighed.groups.map(group => [#group.leadNl #prose(group.textNl)]).join(" ")
     } else [#t.weighing.noGroup #weighed.unaffected.map(group => [#group.groupNl: #prose(group.textNl)]).join(" ")]
-    [ Ernst #finding.severity: #prose(weighed.reasonNl).]
-    if weighed.blocksNl != none [ #prose(weighed.blocksNl)]
+    [ #prose(weighed.reasonNl)]
     if weighed.unsureNl != none [ #t.weighing.unsure: #prose(weighed.unsureNl)]
   }
 }

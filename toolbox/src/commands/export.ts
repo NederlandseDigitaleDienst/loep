@@ -4,7 +4,7 @@ import type { Defect } from "../lib/defects.ts";
 import { evaluationHash, type Evaluation, type ReportFinding } from "../lib/evaluation.ts";
 import { groupLabelNl } from "../lib/groups.ts";
 import { pageLabels, sortDefects } from "../lib/report-markdown.ts";
-import { CONSEQUENCE_NL, TASK_ALL } from "../lib/weighing.ts";
+import { CONSEQUENCE_CLAUSE_NL, CONSEQUENCE_NL, TASK_ALL } from "../lib/weighing.ts";
 import { compareCriterionIds } from "../lib/wcag.ts";
 import { readEvaluation } from "./sign.ts";
 
@@ -60,7 +60,7 @@ export function workLines(evaluation: Evaluation): WorkLine[] {
     impactNl: !defect.weighing
       ? byId.get(defect.mainFindingId)!.impactNl
       : defect.weighing.affected.length > 0
-        ? defect.weighing.affected.map((entry) => `${upperFirst(groupLabelNl(entry.group))} (${CONSEQUENCE_NL[entry.consequence]}): ${closed(entry.howNl)} ${closed(entry.whatNl)}`).join(" ")
+        ? defect.weighing.affected.map((entry) => `${upperFirst(groupLabelNl(entry.group))} ${CONSEQUENCE_CLAUSE_NL[entry.consequence]}. ${closed(entry.textNl)}`).join(" ")
         : NO_GROUP_NL,
     groupsNl: (defect.weighing?.affected ?? []).map((entry) => `${groupLabelNl(entry.group)} (${CONSEQUENCE_NL[entry.consequence]})`).join("; "),
     taskNl: !defect.weighing || defect.weighing.task === null ? "" : defect.weighing.task === TASK_ALL ? "elke kerntaak" : (tasks.find((task) => task.id === defect.weighing!.task)?.nameNl ?? defect.weighing.task),

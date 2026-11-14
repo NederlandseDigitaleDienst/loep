@@ -119,23 +119,23 @@ test("a weighed report says in the summary who is stopped at which core task, an
   const html = full.slice(full.indexOf("<body>"), full.indexOf("<script>"));
   const stopped = evaluation.defects!.filter((defect) => defect.severity === "blokkerend");
   assert.ok(stopped.length > 0);
-  // The summary: a heading, the task as a heading under it, and each defect that stops a group there with the groups and the reason.
+  // The summary: a heading, the task as a heading under it, and a paragraph on who is stopped there, why, and by which defects.
   assert.match(html, /<nldd-title size="4" heading-level="3" text="Wie loopt vast"><\/nldd-title>/);
-  assert.match(html, /<p role="heading" aria-level="4" data-level="4"><strong>Een vergunning aanvragen<\/strong><\/p><ul><li><a href="#VRB-G-\w+">[^<]+<\/a>, voor mensen die niet zien\. Zonder dit onderdeel is de aanvraag niet te versturen\.<\/li>/);
+  assert.match(html, /<p role="heading" aria-level="4" data-level="4"><strong>Een vergunning aanvragen<\/strong><\/p><p>Mensen die niet zien lopen hier vast\. Zonder dit onderdeel is de aanvraag niet te versturen\. Dat komt door deze gebreken:<\/p><ul><li><a href="#VRB-G-\w+">[^<]+<\/a><\/li><li><a href="#VRB-G-\w+">[^<]+<\/a><\/li><\/ul>/);
   for (const defect of stopped) assert.ok(html.includes(`<a href="#${defect.id}">`), defect.id);
-  assert.ok(html.includes("geen gebrek waardoor een groep vastloopt: Contact opnemen."));
+  assert.ok(html.includes("geen gebrek waardoor een groep vastloopt. Dat is \u201cContact opnemen\u201d."));
   // The table per group has a row header and numbers set to the right.
   assert.match(html, /<nldd-table accessible-label="Gebreken per groep" [^>]*><nldd-table-row slot="header"><nldd-text-cell text="Groep"><\/nldd-text-cell><nldd-text-cell text="Kan dit niet" horizontal-alignment="right">/);
   assert.match(html, /<nldd-text-cell row-header vertical-alignment="top" text="Mensen die niet zien"><\/nldd-text-cell><nldd-text-cell horizontal-alignment="right" vertical-alignment="top" text="\d+">/);
   // A defect in the work list says who in a line; the full account per group stands with the finding.
-  assert.match(html, /<p>Wie: mensen die niet zien \(kan dit niet\); alle bezoekers \(alleen met een omweg\); mensen die slecht zien \(kost extra moeite\)\. Kerntaak: Een vergunning aanvragen\.<\/p>/);
-  assert.match(html, /<strong>Wie heeft er last van<\/strong><\/p><ul><li><strong>Mensen die niet zien: kan dit niet\.<\/strong> Gaat met de schermlezer van kop naar kop door de pagina\. Het onderdeel heeft geen naam, dus de bezoeker weet niet wat het is\.<\/li>/);
-  assert.ok(html.includes("<p>Ernst blokkerend: een groep bezoekers kan dit niet, bij de kerntaak \u201cEen vergunning aanvragen\u201d. Zonder dit onderdeel is de aanvraag niet te versturen.</p>"));
+  assert.ok(html.includes("<p>Mensen die niet zien kunnen dit niet. Alle bezoekers komen er alleen met een omweg. Mensen die slecht zien kost het extra moeite. Dit hoort bij de kerntaak \u201cEen vergunning aanvragen\u201d.</p>"));
+  assert.match(html, /<strong>Wie heeft er last van<\/strong><\/p><p>Mensen die niet zien kunnen dit niet\. Ze gaan met de schermlezer van kop naar kop door de pagina\. Het onderdeel heeft geen naam, dus ze weten niet wat het is\.<\/p><p>/);
+  assert.ok(html.includes("<p>Het zwaarste gevolg telt. Niet kunnen is het zwaarste van de drie gevolgen, en dit deel is nodig voor de kerntaak \u201cEen vergunning aanvragen\u201d. Zonder dit onderdeel is de aanvraag niet te versturen. Daarom is de ernst blokkerend.</p>"));
   assert.ok(html.includes("<p>Niet vastgesteld: Of dezelfde tekst ook elders op de pagina staat, is niet bekend.</p>"));
   assert.ok(html.includes("<p>Voor elke groep waarvoor dit criterium nodig is, staat hier hoe zij hetzelfde krijgt:</p><ul><li>Mensen die "));
   // Without a weighing none of this is there, and the finding says what the judge wrote.
   const plain = renderHtml(grouped());
-  assert.ok(!plain.includes("Wie loopt vast") && !plain.includes("Gebreken per groep") && !plain.includes("<p>Wie: "));
+  assert.ok(!plain.includes("Wie loopt vast") && !plain.includes("Gebreken per groep") && !plain.includes("kost het extra moeite"));
 });
 
 test("the report is the same in its own page and as a fragment; only the frame differs", () => {

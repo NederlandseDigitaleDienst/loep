@@ -51,9 +51,8 @@ const weighCase = (): Evaluation =>
     "2.5.3": [{ where: "#page > header > a.logo", severity: "laag" }],
   });
 
-const HOW = "Springt met de schermlezer van kop naar kop.";
-const WHAT = "Het venster heeft geen kop en geen naam.";
-const affected = (group: Affected["group"], consequence: Affected["consequence"], rest: Partial<Affected> = {}): Affected => ({ group, consequence, howNl: HOW, whatNl: WHAT, ...rest });
+const TEXT = "Ze springen met de schermlezer van kop naar kop. Het venster heeft geen kop en geen naam.";
+const affected = (group: Affected["group"], consequence: Affected["consequence"], rest: Partial<Affected> = {}): Affected => ({ group, consequence, textNl: TEXT, ...rest });
 
 /** A weighing of the case that passes: the window needed to search, the link beside every task, the logo without a consequence. */
 function weighingFor(): WeighingProposal {
@@ -143,8 +142,11 @@ test("a weighing names every finding once, with groups that exist and what happe
   assert.match(refused(evaluation, (proposal) => (proposal.findings[0]!.affected[0]!.group = "blind" as never)), /group must be one of no-vision, .* or everyone/);
   assert.match(refused(evaluation, (proposal) => (proposal.findings[0]!.affected[0]!.consequence = "none" as never)), /consequence must be one of cannot, detour, effort/);
   assert.match(refused(evaluation, (proposal) => proposal.findings[0]!.affected.push(affected("no-vision", "detour"))), /group "no-vision" is named twice/);
-  assert.match(refused(evaluation, (proposal) => (proposal.findings[0]!.affected[0]!.howNl = "Leest.")), /howNl is missing or shorter than 4 words/);
-  assert.match(refused(evaluation, (proposal) => (proposal.findings[0]!.affected[0]!.whatNl = Array(41).fill("woord").join(" "))), /whatNl is longer than 40 words/);
+  assert.match(refused(evaluation, (proposal) => (proposal.findings[0]!.affected[0]!.textNl = "Ze lezen.")), /textNl is missing or shorter than 4 words/);
+  // The account per group is a few sentences; the other sentences are one or two.
+  assert.equal(refused(evaluation, (proposal) => (proposal.findings[0]!.affected[0]!.textNl = Array(60).fill("woord").join(" "))), "");
+  assert.match(refused(evaluation, (proposal) => (proposal.findings[0]!.affected[0]!.textNl = Array(61).fill("woord").join(" "))), /textNl is longer than 60 words/);
+  assert.match(refused(evaluation, (proposal) => (proposal.findings[0]!.unsureNl = Array(41).fill("woord").join(" "))), /unsureNl is longer than 40 words/);
   assert.match(refused(evaluation, (proposal) => (proposal.findings[0]!.unsureNl = "Kort.")), /unsureNl is missing or shorter than 4 words/);
 });
 
@@ -171,7 +173,7 @@ test("a sentence that weighs a group away is refused", () => {
     ["Weinig mensen gebruiken deze knop op de pagina.", "weinig mensen"],
     ["De meeste bezoekers merken hier helemaal niets van.", "de meeste mensen"],
   ] as const) {
-    assert.match(refused(evaluation, (proposal) => (proposal.findings[0]!.affected[0]!.whatNl = sentence)), new RegExp(`whatNl says "${word}": write what happens to this group`), sentence);
+    assert.match(refused(evaluation, (proposal) => (proposal.findings[0]!.affected[0]!.textNl = sentence)), new RegExp(`textNl says "${word}": write what happens to this group`), sentence);
   }
   assert.match(refused(evaluation, (proposal) => (proposal.findings[LOGO]!.unaffected![0]!.sameNl = "Dit is een randgeval dat bijna nooit voorkomt.")), /sameNl says "randgeval"/);
 });
@@ -202,13 +204,13 @@ test("a quotation in a sentence has to stand in the finding: the step sees no pa
   const evaluation = weighCase();
   const window = evaluation.criteria.find((criterion) => criterion.id === "4.1.2")!.findings[0]!;
   window.observedNl = 'Het venster heeft geen naam. De titel "Zoeken" is een `div`.';
-  assert.equal(refused(evaluation, (proposal) => (proposal.findings[WINDOW_NAME]!.affected[0]!.whatNl = 'Boven het venster staat "Zoeken", maar dat is geen naam.')), "");
+  assert.equal(refused(evaluation, (proposal) => (proposal.findings[WINDOW_NAME]!.affected[0]!.textNl = 'Boven het venster staat "Zoeken", maar dat is geen naam.')), "");
   assert.match(
-    refused(evaluation, (proposal) => (proposal.findings[WINDOW_NAME]!.affected[0]!.whatNl = 'De schermlezer zegt alleen "dialoogvenster" en verder niets.')),
-    /whatNl: the quoted text "dialoogvenster" is not found literally in the finding; quote only what the finding says/,
+    refused(evaluation, (proposal) => (proposal.findings[WINDOW_NAME]!.affected[0]!.textNl = 'De schermlezer zegt alleen "dialoogvenster" en verder niets.')),
+    /textNl: the quoted text "dialoogvenster" is not found literally in the finding; quote only what the finding says/,
   );
   // An apostrophe inside a word is no quotation.
-  assert.equal(refused(evaluation, (proposal) => (proposal.findings[WINDOW_NAME]!.affected[0]!.whatNl = "Zo'n venster zonder naam is op alle pagina's hetzelfde.")), "");
+  assert.equal(refused(evaluation, (proposal) => (proposal.findings[WINDOW_NAME]!.affected[0]!.textNl = "Zo'n venster zonder naam is op alle pagina's hetzelfde.")), "");
 });
 
 test("that no group is hindered is said per group the criterion is essential for, and never at a measured limit", () => {
@@ -280,7 +282,7 @@ test("the step writes its task, applies a weighing that was checked, and drops i
   // A weighing that breaks the rules is not stamped and therefore not applied.
   mkdirSync(join(dir, "verdicts"), { recursive: true });
   const wrong = weighingFor();
-  wrong.findings[0]!.affected[0]!.whatNl = "Dit hindert vrijwel niemand op deze site.";
+  wrong.findings[0]!.affected[0]!.textNl = "Dit hindert vrijwel niemand op deze site.";
   writeFileSync(join(dir, "verdicts", "weging.json"), JSON.stringify(wrong));
   assert.equal((await checkWeigh(dir)).length, 1);
   assert.equal((await weigh(dir)).weighing, "not-run");

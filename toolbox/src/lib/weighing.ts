@@ -22,16 +22,16 @@ import { criterionById } from "./wcag.ts";
 export const CONSEQUENCES = ["cannot", "detour", "effort"] as const;
 export type Consequence = (typeof CONSEQUENCES)[number];
 
-/** As a report says it after the name of a group. */
+/** As a table says it after the name of a group. */
 export const CONSEQUENCE_NL: Record<Consequence, string> = { cannot: "kan dit niet", detour: "alleen met een omweg", effort: "kost extra moeite" };
+/** As a sentence ends that starts with the names of the groups: "Mensen die niet zien kunnen dit niet". */
+export const CONSEQUENCE_CLAUSE_NL: Record<Consequence, string> = { cannot: "kunnen dit niet", detour: "komen er alleen met een omweg", effort: "kost het extra moeite" };
 
 export interface Affected {
   group: AffectedGroup;
   consequence: Consequence;
-  /** How this group works at this place. */
-  howNl: string;
-  /** What then happens. */
-  whatNl: string;
+  /** How this group works at this place and what then happens, in a few sentences that follow on the report's own sentence about the group. */
+  textNl: string;
   /** Why this group, when table B.2 does not name it for the criterion of the finding. */
   whyGroupNl?: string;
 }
@@ -132,6 +132,8 @@ export const TASKS_MIN = 1;
 export const TASKS_MAX = 8;
 export const WORDS_MIN = 4;
 export const WORDS_MAX = 40;
+/** The account per group is a few sentences, not one. */
+export const TEXT_WORDS_MAX = 60;
 
 const words = (text: string): number => text.trim().split(/\s+/).filter(Boolean).length;
 const isObject = (value: unknown): value is Record<string, unknown> => value !== null && typeof value === "object" && !Array.isArray(value);
@@ -145,10 +147,10 @@ const findingText = (finding: ReportFinding): string =>
  * a group away, and with nothing between quotation marks that the finding does not say. The
  * step sees no page: what it quotes can only come from the finding.
  */
-function sentenceProblems(value: unknown, at: string, source: string): string[] {
+function sentenceProblems(value: unknown, at: string, source: string, longest = WORDS_MAX): string[] {
   if (typeof value !== "string" || words(value) < WORDS_MIN) return [`${at} is missing or shorter than ${WORDS_MIN} words`];
   const problems: string[] = [];
-  if (words(value) > WORDS_MAX) problems.push(`${at} is longer than ${WORDS_MAX} words`);
+  if (words(value) > longest) problems.push(`${at} is longer than ${longest} words`);
   for (const [pattern, word] of DISMISSALS) {
     if (pattern.test(value)) problems.push(`${at} says "${word}": write what happens to this group, not how many people it is or how little it matters; for something that works for no visitor use the group "${EVERYONE}"`);
   }
@@ -226,7 +228,7 @@ export function validateWeighing(input: unknown, evaluation: Evaluation): string
       if (groups.has(affected.group)) problems.push(`${here}: group "${affected.group}" is named twice; give a group its worst consequence once`);
       groups.add(affected.group);
       if (!(CONSEQUENCES as readonly unknown[]).includes(affected.consequence)) problems.push(`${here}: consequence must be one of ${CONSEQUENCES.join(", ")}`);
-      problems.push(...sentenceProblems(affected.howNl, `${here}: howNl`, source), ...sentenceProblems(affected.whatNl, `${here}: whatNl`, source));
+      problems.push(...sentenceProblems(affected.textNl, `${here}: textNl`, source, TEXT_WORDS_MAX));
       if (!allowed.has(affected.group)) problems.push(...sentenceProblems(affected.whyGroupNl, `${here}: whyGroupNl (${finding.criterion} does not name "${affected.group}"; say why it is hindered)`, source));
       else if (affected.whyGroupNl !== undefined) problems.push(`${here}: whyGroupNl is only for a group the criterion of the finding does not name`);
     }
@@ -286,7 +288,7 @@ export function applyWeighing(evaluation: Evaluation, proposal: WeighingProposal
     const finding = findings.get(entry.finding)!;
     const weighing: Weighing = {
       task: entry.task,
-      affected: entry.affected.map((affected) => ({ group: affected.group, consequence: affected.consequence, howNl: affected.howNl.trim(), whatNl: affected.whatNl.trim(), ...(affected.whyGroupNl ? { whyGroupNl: affected.whyGroupNl.trim() } : {}) })),
+      affected: entry.affected.map((affected) => ({ group: affected.group, consequence: affected.consequence, textNl: affected.textNl.trim(), ...(affected.whyGroupNl ? { whyGroupNl: affected.whyGroupNl.trim() } : {}) })),
       ...(entry.blocksNl ? { blocksNl: entry.blocksNl.trim() } : {}),
       ...(entry.affected.length === 0 ? { unaffected: entry.unaffected!.map((unaffected) => ({ group: unaffected.group, sameNl: unaffected.sameNl.trim() })) } : {}),
       ...(entry.unsureNl ? { unsureNl: entry.unsureNl.trim() } : {}),
@@ -351,6 +353,8 @@ export function weighingInput(evaluation: Evaluation): Record<string, unknown> {
   return {
     site: { name: evaluation.site.name, descriptionNl: evaluation.site.descriptionNl ?? null },
     pages: Object.fromEntries(labels.map((label, index) => [label, { title: evaluation.sample.items[index]!.title || null, url: evaluation.sample.items[index]!.url }])),
+    // A finding names a document by its label; what the document is, says its title or its address.
+    documents: Object.fromEntries((evaluation.documents?.items ?? []).map((document) => [document.label, { kind: document.kind, title: document.title, url: document.url }])),
     places,
   };
 }

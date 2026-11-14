@@ -2,7 +2,7 @@
 
 De weegstap (`weigh`, `check-weigh`, opdracht `templates/weeg.md`) legt per bevinding vast welke groepen bezoekers ze hindert, wat er voor elke groep gebeurt en of bezoekers dit deel nodig hebben voor een kerntaak. De ernst volgt daar met een vaste tabel uit. Zie [docs/methode.md](../../docs/methode.md#ernst-en-eigenaar-van-een-bevinding).
 
-Dit verslag zegt wat er op 14 november 2026 is gemeten, in vijf ronden, en wat niet.
+Dit verslag zegt wat er op 14 november 2026 is gemeten, in zeven ronden, en wat niet. Ronde 7 draaide op de opdracht zoals ze is uitgebracht.
 
 ## Wat is gemeten en wat niet
 
@@ -13,9 +13,9 @@ Gemeten is **herhaalbaarheid**: komt de ernst gelijk uit als de stap vaker draai
 
 **Niet gemeten is of de ernst juist is.** Er is geen sleutel met de juiste ernst, en geen deskundige of gebruiker van hulpsoftware heeft de wegingen, de beschrijving van de groepen of de vaste gevallen in de opdracht nagelopen. Dat een tweede beoordeling door een taalmodel op dezelfde volgorde uitkomt, is geen toets: beide kunnen dezelfde blinde vlek hebben.
 
-Alle agents draaiden op hetzelfde model (Opus 5.5). De oordelen per criterium en de bevindingen zijn niet opnieuw gemaakt: de stap las bestaande evaluaties.
+De agents draaiden op Opus 5.5, behalve in de vergelijking van twee modellen hieronder. De oordelen per criterium en de bevindingen zijn niet opnieuw gemaakt: de stap las bestaande evaluaties.
 
-## De vijf ronden
+## De zeven ronden
 
 | Ronde | Wat er anders was | Dezelfde evaluatie: gelijk per paar | Paren met twee treden of meer | Testsite L1 tegen L2: gelijk, één trede, twee of meer (van 79) |
 | --- | --- | --- | --- | --- |
@@ -25,6 +25,8 @@ Alle agents draaiden op hetzelfde model (Opus 5.5). De oordelen per criterium en
 | 3 | Wegen per bevinding, een gebrek neemt de zwaarste. Vaste gevallen in de opdracht | 90, 92 en 93 procent | 0, 4 en 4 | 68, 10, 1 |
 | 4 | Vaste gevallen aangescherpt: een formulierveld zonder naam, een knop zonder naam, een document zonder tags | 92, 93 en 94 procent | 0, 0 en 0 | 70, 6, 3 |
 | 5 | Wie "kan niet bij een kerntaak" kiest, zegt in een zin waarom de taak dan niet af te maken is. Contrast is pas onder 1,5 op 1 "kan niet" | 95, 96 en 98 procent | 0, 0 en 0 | 64, 14, 1 |
+| 6 | De agent schrijft per groep één doorlopende tekst voor het rapport, in plaats van twee losse zinnen | 95, 96 en 98 procent | 0, 0 en 0 | 63, 15, 1 |
+| 7 | De opdracht zoals ze is uitgebracht: verduidelijkingen na ronde 6, geen andere regels | 94, 95 en 97 procent | 0, 0 en 0 | 69, 10, 0 |
 
 Wat elke ronde leerde:
 
@@ -35,6 +37,8 @@ Wat elke ronde leerde:
 5. **Ronde 4.** Met dat geval rechtgezet is er bij dezelfde evaluatie geen verschil van twee treden meer. De zes blokkerende en vijf hoge gebreken zijn in alle drie de wegingen dezelfde. De verschillen die blijven, zijn tussen midden en laag: omweg of extra moeite.
 6. **Ronde 4, vier andere onderzoeken.** De stap is daarna één keer gedraaid op vier andere bestaande onderzoeken van sites van de overheid (27 tot 83 bevindingen). Daar bleek de hoogste trede niet scherp genoeg. Een deel van de vijftien gebreken die blokkerend werden, was dat niet: puntjes in een paginering die te licht zijn, een melding met te weinig contrast, een foto waarvan het alternatief de tekst op een bord mist. De agent zag dat een groep dat deel niet kan waarnemen, en dat de pagina bij een kerntaak hoort, en maakte daar "kan de kerntaak niet afmaken" van.
 7. **Ronde 5.** Sindsdien vraagt de controle bij elke bevinding op de hoogste trede een zin die zegt waarom de taak zonder dit deel niet af te maken is. Op dezelfde vier onderzoeken bleven er vier blokkerende gebreken over, elk met de reden erbij: formulieren in pdf waarvan de velden geen naam hebben, en een rekenvraag die een fout antwoord zonder melding tegenhoudt. Wat een groep niet kan maar waar de taak ook zonder lukt, staat nu op hoog. Op het eerste onderzoek zijn de zes blokkerende en vijf hoge gebreken in alle drie de wegingen weer dezelfde.
+8. **Ronde 6.** Een andere vorm van de tekst veranderde de ernst niet: dezelfde cijfers als ronde 5, en op de vier andere onderzoeken dezelfde blokkerende gebreken. De agents meldden wel twee dingen die de controle afkeurde en de opdracht niet noemde: de naam van een kerntaak mag hooguit acht woorden zijn, en bij "alle bezoekers" hoort geen reden. Beide staan nu in de opdracht.
+9. **Ronde 7.** In acht van de negen wegingen slaagde de controle de eerste keer. De zes blokkerende en vijf hoge gebreken van het eerste onderzoek zijn in de zes wegingen van ronde 6 en 7 dezelfde. De vier andere onderzoeken zijn nu twee keer gewogen, in ronde 6 en in ronde 7: de ernst is gelijk bij 99, 95, 93 en 89 procent van de bevindingen, en de blokkerende gebreken zijn op alle vier dezelfde. Eén bevinding op één onderzoek verschilt twee treden. Tussen de twee onderzoeken van de testsite is er in deze ronde geen verschil van twee treden.
 
 ## Wat vooraf was vastgelegd
 
@@ -42,34 +46,51 @@ Wat elke ronde leerde:
 | --- | --- |
 | Het oordeel per criterium en de bevindingen veranderen niet | Gehaald. De opdrachten van beoordelaar, verifieerder en afmaakronde en de procedures zijn niet gewijzigd, en een test legt vast dat de bevindingen na de weging gelijk zijn op de ernst na |
 | De ernst is niet slechter dan die van de beoordelaars, getoetst aan een sleutel | Niet gemeten: er is geen sleutel met de juiste ernst |
-| Bij herhaling niet wisselvalliger dan de beoordelaars (63 van 79 gelijk, 16 één trede), en nooit twee treden | Gehaald op dezelfde evaluatie. Tussen twee onderzoeken: gelijk of iets beter in het aantal dat gelijk is, niet in "nooit twee treden" |
+| Bij herhaling niet wisselvalliger dan de beoordelaars (63 van 79 gelijk, 16 één trede), en nooit twee treden | Gehaald op dezelfde evaluatie. Tussen twee onderzoeken: gelijk of iets beter in het aantal dat gelijk is. "Nooit twee treden" is daar in ronde 7 gehaald en in ronde 2 tot en met 6 niet |
 | Geen bevinding zonder groep, geen zin die een groep wegstreept | Gehaald: de controle weigert het |
 | Onder 5 procent van de tokens van een onderzoek | Niet gehaald: ongeveer 7 procent |
 | Stoppen als een ronde slechter uitkomt dan de nulmeting, en eerst de oorzaak zoeken | Toegepast na ronde 2 (wegen per gebrek) en na ronde 4 (valse blokkades) |
+| De opdracht die is gemeten, is de opdracht die is uitgebracht | Gehaald: ronde 7 draaide op de opdracht zoals ze in de repository staat |
 | Een deskundige leest een werklijst voor en na | Niet gedaan |
 
 ## Wat de stap verandert aan de ernst
 
-Op het bestaande onderzoek van de eerste meting, per gebrek, gemiddeld over de drie wegingen van ronde 5:
+Op het bestaande onderzoek van de eerste meting, per gebrek, gemiddeld over de drie wegingen van ronde 7:
 
 | | blokkerend | hoog | midden | laag |
 | --- | ---: | ---: | ---: | ---: |
 | Beoordelaars | 1 | 16 | 58 | 30 |
-| Na weging | 6 | 5 | 34 | 60 |
+| Na weging | 6 | 5 | 30 | 64 |
 
-Van de bevindingen werd 8 procent zwaarder en 34 procent lichter. De ene blokkerende van de beoordelaars (een link die op dezelfde pagina blijft) is na weging midden: iedereen moet een andere weg zoeken. De zes blokkerende na weging zijn een controleplaatje zonder alternatief en formulieren in pdf: velden zonder naam, geen tags, vragen die los staan van de velden. Bij de beoordelaars stonden die tussen zestien gebreken met ernst hoog.
+Van de bevindingen werd 8 procent zwaarder en 38 procent lichter. De ene blokkerende van de beoordelaars (een link die op dezelfde pagina blijft) is na weging midden: iedereen moet een andere weg zoeken. De zes blokkerende na weging zijn een controleplaatje zonder alternatief en formulieren in pdf: velden zonder naam, geen tags, vragen die los staan van de velden. Bij de beoordelaars stonden die tussen zestien gebreken met ernst hoog.
 
-Geen enkele agent gebruikte in welke ronde ook de mogelijkheid om te zeggen dat een bevinding geen groep hindert (0 van ruim 3.000 wegingen in 31 opdrachten). Twee tot veertien keer per opdracht noemde de agent een feit dat de bevinding niet gaf.
+Geen enkele agent gebruikte in welke ronde ook de mogelijkheid om te zeggen dat een bevinding geen groep hindert (0 van ruim 4.600 wegingen in 49 opdrachten). Eén tot vijftien keer per opdracht noemde de agent een feit dat de bevinding niet gaf.
+
+## Twee modellen
+
+Met de opdracht van ronde 5 is dezelfde evaluatie ook drie keer gewogen op Fable 5.2. Binnen elk model komt de ernst bij 95 tot 96 procent van de bevindingen gelijk uit, tussen de twee modellen bij 94 procent, en nergens twee treden uit elkaar. De zes blokkerende bevindingen zijn in alle zes de wegingen dezelfde. Op deze opdracht maakt het model dus weinig uit. Dat zegt iets over de opdracht en de vaste gevallen, niet over of de ernst juist is: twee modellen van dezelfde maker kunnen dezelfde blinde vlek hebben.
 
 ## Kosten
 
-Een weging van 111 bevindingen kostte in ronde 5 1,1 tot 1,2 miljoen tokens (waarvan ongeveer een miljoen uit de cache gelezen en 40.000 tot 46.000 geschreven) en zes tot zeven minuten. Dat is ongeveer 7 procent van de tokens van een onderzoek van de testsite (16 tot 17,5 miljoen). Het doel vooraf was onder de 5 procent; dat is niet gehaald.
+Een weging van 111 bevindingen kostte in ronde 7 1,0 tot 1,3 miljoen tokens (waarvan 0,7 tot 1,1 miljoen uit de cache gelezen en 41.000 tot 68.000 geschreven) en zes tot tien minuten. Dat is 6 tot 8 procent van de tokens van een onderzoek van de testsite (16 tot 17,5 miljoen). Het doel vooraf was onder de 5 procent; dat is niet gehaald. Een onderzoek met 27 bevindingen kostte 0,6 miljoen tokens en twee minuten.
 
 ## Wat hieruit volgt
 
-- Bij herhaling op dezelfde evaluatie komt de ernst in ronde 5 bij 95 tot 98 procent van de bevindingen gelijk uit, en sinds ronde 4 nooit twee treden uit elkaar.
-- Tussen twee onderzoeken van de testsite komt de ernst bij 64 tot 70 van de 79 gebreken gelijk uit (ronde 3 tot en met 5), tegen 63 bij de beoordelaars. Dat is niet slechter, en niet aantoonbaar beter: elk onderzoek is per ronde één keer gewogen, dus het verschil tussen 64 en 70 is ook toeval. Eén tot drie gebreken verschillen daar twee treden, bij de beoordelaars geen. Dat komt door de tabel: "kan niet bij een kerntaak" (blokkerend) ligt twee treden boven "omweg" (midden), en of er een omweg is, is het moeilijkste oordeel. Het doel vooraf, geen verschil van twee treden, is gehaald op dezelfde evaluatie en niet tussen twee onderzoeken.
+- Bij herhaling op dezelfde evaluatie komt de ernst in ronde 5 tot en met 7 bij 94 tot 98 procent van de bevindingen gelijk uit, en sinds ronde 4 nooit twee treden uit elkaar.
+- Tussen twee onderzoeken van de testsite komt de ernst bij 63 tot 70 van de 79 gebreken gelijk uit (ronde 3 tot en met 7), tegen 63 bij de beoordelaars. Dat is niet slechter, en niet aantoonbaar beter: elk onderzoek is per ronde één keer gewogen, dus het verschil tussen 63 en 70 is ook toeval. Nul tot drie gebreken verschillen daar twee treden, bij de beoordelaars geen. Dat komt door de tabel: "kan niet bij een kerntaak" (blokkerend) ligt twee treden boven "omweg" (midden), en of er een omweg is, is het moeilijkste oordeel. Het doel vooraf, geen verschil van twee treden, is gehaald op dezelfde evaluatie. Tussen twee onderzoeken is het één keer gehaald, in ronde 7, en dat kan toeval zijn.
 - Of de zinnen per groep kloppen, weet niemand. Ze zijn afgeleid uit de bevinding. De controle weigert een aanhaling die niet in de bevinding staat, maar een zin zonder aanhaling kan nog steeds iets beweren over hulpsoftware wat niet is waargenomen.
 - De vaste gevallen in de opdracht zijn de ijking. Ze zijn op deze meting bijgesteld en door niemand van buiten nagelopen.
-- De kerntaken leidt elke weging opnieuw af. De namen verschillen per weging; welke gebreken een groep bij een kerntaak tegenhouden, was in ronde 4 en 5 drie keer gelijk.
+- De kerntaken leidt elke weging opnieuw af. De namen verschillen per weging; welke gebreken een groep bij een kerntaak tegenhouden, was op het eerste onderzoek sinds ronde 4 in elke weging gelijk.
 - De valse blokkades van ronde 4 kwamen pas aan het licht op andere onderzoeken dan dat waarop de opdracht was afgesteld. Elk nieuw onderzoek kan er meer laten zien: lees bij een eerste gebruik de lijst "Wie loopt vast" na.
+
+## Wat de opdracht nog open laat
+
+De agents van ronde 6 en 7 meldden aan het eind wat ze onduidelijk vonden. Wat de controle afkeurde zonder dat de opdracht het noemde, is hersteld. Dit staat nog open in de opdracht zoals ze is uitgebracht:
+
+- **Een hindernis met een uitweg.** Iets wat over de pagina ligt of de focus vasthoudt, telt als hindernis voor een kerntaak. Gaat het weg met Escape of door de pagina opnieuw te laden, dan kozen agents de ene keer een kerntaak en de andere keer geen. Dit is de plek waar een verschil van twee treden vandaan kan komen.
+- **Een bevinding op meer plekken.** De regel "de kerntaak van de plek die de bevinding het eerst noemt" zegt niet wat te doen als die eerste plek bij geen kerntaak hoort.
+- **Gebreken zonder vast geval.** Tekst die wegvalt bij ruimere tekstafstand, een verkeerde klik die niet terug te draaien is, focus die achter een venster verdwijnt, een veld met een verkeerde naam. Die wegen de agents met de algemene regels.
+- **Een feit uit een andere bevinding.** De opdracht staat toe het te gebruiken, maar zegt niet of het een afwijking van een vast geval rechtvaardigt.
+- **Alle bezoekers of één groep.** Bij iets wat voor iedereen misgaat maar één groep het zwaarst treft, staat niet welke van de twee de agent kiest.
+
+Ze zijn na ronde 7 niet meer in de opdracht verwerkt: dan was de gemeten opdracht niet meer de uitgebrachte.

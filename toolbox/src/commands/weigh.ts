@@ -6,7 +6,7 @@ import type { Evaluation } from "../lib/evaluation.ts";
 import { GROUPS } from "../lib/groups.ts";
 import { stepStart, writeManifest } from "../lib/manifest.ts";
 import { readTemplate } from "../lib/templates.ts";
-import { applyWeighing, clearWeighing, TASKS_MAX, TASKS_MIN, validateWeighing, weighingInput, WORDS_MAX, WORDS_MIN, type WeighingProposal } from "../lib/weighing.ts";
+import { applyWeighing, clearWeighing, TASKS_MAX, TASKS_MIN, TEXT_WORDS_MAX, validateWeighing, weighingInput, WORDS_MAX, WORDS_MIN, type WeighingProposal } from "../lib/weighing.ts";
 import { makeWorkDir } from "../lib/workdir.ts";
 import { readEvaluation, signatureIsCurrent, writeEvaluation } from "./sign.ts";
 
@@ -68,6 +68,7 @@ async function writeTask(runDir: string, evaluation: Evaluation): Promise<string
     tasksMax: String(TASKS_MAX),
     wordsMin: String(WORDS_MIN),
     wordsMax: String(WORDS_MAX),
+    textMax: String(TEXT_WORDS_MAX),
     workDir: await makeWorkDir(runDir, WEIGH_WORK),
     workName: WEIGH_WORK,
   };

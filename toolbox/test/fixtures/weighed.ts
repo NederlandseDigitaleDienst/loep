@@ -15,7 +15,6 @@ export const WEIGHED_TASKS = [
  */
 export function weighed(evaluation: Evaluation): Evaluation {
   const findings = evaluation.criteria.flatMap((criterion) => criterion.findings);
-  const how = "Gaat met de schermlezer van kop naar kop door de pagina.";
   const proposal: WeighingProposal = {
     tasks: WEIGHED_TASKS,
     findings: findings.map((finding, index): { finding: string } & Weighing => {
@@ -27,9 +26,9 @@ export function weighed(evaluation: Evaluation): Evaluation {
         task: turn === 0 ? "aanvragen" : turn === 1 ? "all" : null,
         ...(turn === 0 ? { blocksNl: "Zonder dit onderdeel is de aanvraag niet te versturen." } : {}),
         affected: [
-          { group: first!, consequence: turn === 0 ? "cannot" : turn === 1 ? "detour" : "effort", howNl: how, whatNl: "Het onderdeel heeft geen naam, dus de bezoeker weet niet wat het is." },
-          ...(second ? [{ group: second, consequence: "effort", howNl: "Vergroot de pagina en volgt de focus.", whatNl: "Het onderdeel valt weg tegen de achtergrond en kost tijd om te vinden." } satisfies Affected] : []),
-          ...(index === 0 ? [{ group: EVERYONE, consequence: "detour", howNl: "Klikt op het onderdeel om verder te gaan.", whatNl: "Er gebeurt niets, en de bezoeker moet een andere weg zoeken." } satisfies Affected] : []),
+          { group: first!, consequence: turn === 0 ? "cannot" : turn === 1 ? "detour" : "effort", textNl: "Ze gaan met de schermlezer van kop naar kop door de pagina. Het onderdeel heeft geen naam, dus ze weten niet wat het is." },
+          ...(second ? [{ group: second, consequence: "effort", textNl: "Ze vergroten de pagina en volgen de focus. Het onderdeel valt weg tegen de achtergrond en kost tijd om te vinden." } satisfies Affected] : []),
+          ...(index === 0 ? [{ group: EVERYONE, consequence: "detour", textNl: "Ze klikken op het onderdeel om verder te gaan. Er gebeurt niets, en ze moeten een andere weg zoeken." } satisfies Affected] : []),
         ],
         ...(turn === 2 ? { unsureNl: "Of dezelfde tekst ook elders op de pagina staat, is niet bekend." } : {}),
       };
