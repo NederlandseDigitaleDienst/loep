@@ -24,7 +24,7 @@
 #let findings = criteria.map(c => c.findings).flatten()
 // Findings grouped into things to repair; absent in an evaluation from before that step existed.
 #let grouping = derived.defects
-// Who each defect hinders and at which core task; none when the step that weighs the defects did not run.
+// Who each finding and each defect hinders and at which core task; none when the step that weighs the findings did not run.
 #let weighing = derived.weighing
 #let defects = evaluation.at("defects", default: ())
 #let defect-by-id = defects.fold((:), (acc, defect) => {
@@ -456,33 +456,84 @@
   })
 }
 
+#if grouping != none and weighing != none [
+  == #t.weighing.stopped
+
+  #weighing.introNl
+
+  #for task in weighing.stopped [
+    #heading(level: 3, outlined: false, task.taskNl)
+    #for cause in task.causes [
+      // One defect closes the paragraph as a sentence; more of them stand under it as a list.
+      #let causes = cause.defectIds.map(id => link(label(id), defect-by-id.at(id).titleNl))
+      #let (one, more) = if cause.together { (t.weighing.togetherOne, t.weighing.togetherMore) } else { (t.weighing.becauseOne, t.weighing.becauseMore) }
+      #if causes.len() == 1 [
+        #par[#cause.whoNl #prose(cause.whyNl) #one #causes.first().]
+      ] else [
+        #par[#cause.whoNl #prose(cause.whyNl) #more]
+        #list(..causes)
+      ]
+    ]
+  ]
+
+  #if weighing.notStoppedNl != none { par(weighing.notStoppedNl) }
+
+  #par(weighing.limitsNl)
+]
+
 #if grouping != none [Het onderzoek vond #grouping.countsNl.]
 
 #score-table("2.2")
 #score-table("2.1")
 #text(size: 9pt, fill: muted, derived.scoreNoteNl)
 
+#let count-cell(value) = text(fill: if value == 0 { muted } else { ink }, str(value))
+
 #if grouping != none and weighing != none [
-  == #t.weighing.stopped
+  // What stops a group at a core task stands above; here what a group can not use beside the tasks.
+  #if weighing.beside != none [
+    == #t.weighing.beside
 
-  #t.weighing.stoppedIntro
-
-  #for task in weighing.stopped [
-    #heading(level: 3, outlined: false, task.taskNl)
-    // One defect closes the paragraph as a sentence; more of them stand under it as a list.
-    #let causes = task.defectIds.map(id => link(label(id), defect-by-id.at(id).titleNl))
-    #if causes.len() == 1 [
-      #par[#task.whoNl #prose(task.blocksNl) #t.weighing.becauseOne #causes.first().]
-    ] else [
-      #par[#task.whoNl #prose(task.blocksNl) #t.weighing.becauseMore]
-      #list(..causes)
-    ]
+    #table(
+      columns: (1fr, 24mm, 27mm),
+      inset: (x: 5pt, y: 3.8pt),
+      table.header(th[Gebrek], th[Criterium], th[Pagina's]),
+      ..weighing.beside.defectIds.map(id => defect-by-id.at(id)).map(defect => (
+        link(label(defect.id), text(weight: 600, defect.titleNl)),
+        {
+          criterion-link(defect.mainCriterion, defect.mainCriterion)
+          if defect.alsoCriteria.len() > 0 { text(size: 8.5pt, fill: muted)[\ #also-criteria(defect)] }
+        },
+        grouping.pagesNl.at(defect.id),
+      )).flatten(),
+    )
+    #text(size: 9pt, fill: muted, weighing.beside.noteNl)
   ]
 
-  #if weighing.notStoppedNl != none { par(weighing.notStoppedNl) }
-]
+  == #t.weighing.perTask
 
-#if grouping != none [
+  #t.weighing.perTaskIntro
+
+  #table(
+    columns: (1fr, 22mm, 16mm, 18mm, 16mm),
+    inset: (x: 5pt, y: 3.8pt),
+    align: (x, y) => if x == 0 { left + top } else { right + top },
+    table.header(th(t.weighing.taskColumns.at(0)), ..t.weighing.taskColumns.slice(1).map(th-right)),
+    ..weighing.tasks.map(row => (row.taskNl, ..row.counts.map(count-cell))).flatten(),
+  )
+
+  == #t.weighing.perGroup
+
+  #t.weighing.perGroupIntro
+
+  #table(
+    columns: (1fr, 20mm, 26mm, 24mm, 22mm),
+    inset: (x: 5pt, y: 3.8pt),
+    align: (x, y) => if x == 0 { left + top } else { right + top },
+    table.header(th(t.weighing.columns.at(0)), ..t.weighing.columns.slice(1).map(th-right)),
+    ..weighing.groups.map(row => (row.groupNl, count-cell(row.cannot), count-cell(row.detour), count-cell(row.effort), if row.open == none [] else { count-cell(row.open) })).flatten(),
+  )
+] else if grouping != none [
   == Zwaarste gebreken
 
   #{
@@ -524,23 +575,6 @@
       )
       text(size: 9pt, fill: muted, derived.topFindingsNoteNl)
     }
-  }
-]
-
-#if grouping != none and weighing != none and weighing.groups.len() > 0 [
-  == #t.weighing.perGroup
-
-  #t.weighing.perGroupIntro
-
-  #{
-    let number(value) = text(fill: if value == 0 { muted } else { ink }, str(value))
-    table(
-      columns: (1fr, 24mm, 34mm, 30mm),
-      inset: (x: 5pt, y: 3.8pt),
-      align: (x, y) => if x == 0 { left + top } else { right + top },
-      table.header(th(t.weighing.columns.at(0)), ..t.weighing.columns.slice(1).map(th-right)),
-      ..weighing.groups.map(row => (row.groupNl, number(row.cannot), number(row.detour), number(row.effort))).flatten(),
-    )
   }
 ]
 
@@ -599,6 +633,7 @@
           if weighed != none {
             linebreak()
             weighed.whoNl
+            if weighed.taskNl != none [ #t.weighing.task: #weighed.taskNl.]
           }
         },
         {
@@ -999,25 +1034,20 @@
 #let who(finding) = {
   let weighed = weighed-of(finding)
   if weighed == none { prose(finding.impactNl) } else {
-    if weighed.groups.len() > 0 {
-      for group in weighed.groups { par[#group.leadNl #prose(group.textNl)] }
-    } else {
-      par(t.weighing.noGroup)
-      list(..weighed.unaffected.map(group => [#group.groupNl: #prose(group.textNl)]))
-    }
+    if weighed.groups.len() == 0 { par(t.weighing.noGroup) }
+    for group in if weighed.groups.len() > 0 { weighed.groups } else { weighed.unaffected } { par[#group.leadNl #prose(group.textNl)] }
     par(prose(weighed.reasonNl))
-    if weighed.unsureNl != none { par[#t.weighing.unsure: #prose(weighed.unsureNl)] }
+    if weighed.unsureNl != none { par(prose(weighed.unsureNl)) }
   }
 }
 // The same in running text, for a card that is set close.
 #let who-inline(finding) = {
   let weighed = weighed-of(finding)
   if weighed == none { prose(finding.impactNl) } else {
-    if weighed.groups.len() > 0 {
-      weighed.groups.map(group => [#group.leadNl #prose(group.textNl)]).join(" ")
-    } else [#t.weighing.noGroup #weighed.unaffected.map(group => [#group.groupNl: #prose(group.textNl)]).join(" ")]
+    if weighed.groups.len() == 0 [#t.weighing.noGroup ]
+    (if weighed.groups.len() > 0 { weighed.groups } else { weighed.unaffected }).map(group => [#group.leadNl #prose(group.textNl)]).join(" ")
     [ #prose(weighed.reasonNl)]
-    if weighed.unsureNl != none [ #t.weighing.unsure: #prose(weighed.unsureNl)]
+    if weighed.unsureNl != none [ #prose(weighed.unsureNl)]
   }
 }
 
@@ -1042,6 +1072,7 @@
         if finding.at("vendorTags", default: ()).len() > 0 { ("Raakt", finding.vendorTags.join(", ")) },
         ("Onderdeel", or-none(finding.component, "geen")),
         ("Pagina's", finding.pagesAffected),
+        if weighed-of(finding) != none { (t.weighing.task, weighed-of(finding).taskNl) },
         (t.defect.label, link(label(defect.id), id-text(defect.id, size: 0.95em))),
         (t.defect.main, [#criterion-link(defect.mainCriterion, defect.mainCriterion), zie #link(label(defect.mainFindingId), id-text(defect.mainFindingId, size: 0.95em))]),
         if check != none { (t.defect.check, chain.verification.at(check.status)) },
@@ -1084,6 +1115,7 @@
         if finding.at("vendorTags", default: ()).len() > 0 { ("Raakt", finding.vendorTags.join(", ")) },
         ("Onderdeel", or-none(finding.component, "geen")),
         ("Pagina's", finding.pagesAffected),
+        if weighed-of(finding) != none { (t.weighing.task, weighed-of(finding).taskNl) },
         if defect != none { (t.defect.label, link(label(defect.id), id-text(defect.id, size: 0.95em))) },
         if place != none and place.role == "main" { (t.defect.main, [dit criterium]) },
         if place != none and place.role == "main" { (t.defect.also, if defect.alsoCriteria.len() > 0 { defect.alsoCriteria.map(id => criterion-link(id, id)).join(", ") } else [geen ander criterium]) },
@@ -1092,18 +1124,30 @@
       ))
     })
     cutout-of(finding)
-    keep(limit: 110mm, grid(
-      columns: (1fr, 1fr),
-      column-gutter: 8mm,
-      [
+    if weighed-of(finding) == none {
+      keep(limit: 110mm, grid(
+        columns: (1fr, 1fr),
+        column-gutter: 8mm,
+        [
+          #heading(level: 6, outlined: false)[Wat is er mis]
+          #prose(finding.observedNl)
+        ],
+        [
+          #heading(level: 6, outlined: false)[Wie heeft er last van]
+          #who(finding)
+        ],
+      ))
+    } else {
+      // With an account per group the right column is much longer than the left: under each other the card breaks between its parts.
+      keep(limit: 110mm, [
         #heading(level: 6, outlined: false)[Wat is er mis]
         #prose(finding.observedNl)
-      ],
-      [
+      ])
+      keep(limit: 110mm, above: 11pt, [
         #heading(level: 6, outlined: false)[Wie heeft er last van]
         #who(finding)
-      ],
-    ))
+      ])
+    }
     keep(limit: 110mm, above: 11pt, block(width: 100%, fill: white, stroke: (left: 3pt + accent), radius: (right: 3pt), inset: (x: 11pt, top: 2pt, bottom: 10pt), [
       #heading(level: 6, outlined: false)[Oplossing]
       #prose(finding.fixNl)

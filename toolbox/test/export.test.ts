@@ -90,13 +90,13 @@ test("a weighed work list names the groups with the worst that happens to each, 
   const [block, link] = rows.slice(1);
   assert.deepEqual([block![1], block![2], block![14]], ["Huidige pagina in het menu alleen met een grijs vlak aangegeven", "blokkerend", "Een vergunning aanvragen"]);
   // Three findings, one line: a group stands once, with the worst of the three.
-  assert.equal(block![13], "mensen die niet zien (kan dit niet); alle bezoekers (alleen met een omweg); mensen die slecht zien (alleen met een omweg); mensen die kleuren niet onderscheiden (kost extra moeite)");
-  assert.ok(block![10]!.startsWith("Mensen die niet zien kunnen dit niet. Ze gaan met de schermlezer van kop naar kop door de pagina. Het onderdeel heeft geen naam, dus ze weten niet wat het is. Alle bezoekers komen er alleen met een omweg. "), block![10]);
+  assert.equal(block![13], "mensen die niet zien (kan dit niet); mensen die slecht zien (alleen met een omweg); alle bezoekers (kost extra moeite); mensen die kleuren niet onderscheiden (kost extra moeite)");
+  assert.ok(block![10]!.startsWith("Mensen die niet zien kunnen dit niet gebruiken. Ze gaan met de schermlezer van kop naar kop door de pagina. Het onderdeel heeft geen naam, dus ze weten niet wat het is. "), block![10]);
   // No group hindered: still a line of the work list, on the lowest step.
   assert.deepEqual([link![2], link![10], link![13], link![14]], ["laag", "Uit de bevindingen blijkt geen gevolg voor een groep bezoekers. Het blijft een afwijking van de norm.", "", ""]);
   const issue = workListIssues(weighed(evaluation())).find((entry) => entry.title.startsWith("Huidige pagina"))!;
   assert.ok(issue.body.includes("- Ernst: blokkerend\n") && issue.body.includes("- Kerntaak: Een vergunning aanvragen\n"));
-  assert.ok(issue.body.includes("## Wie heeft er last van\n\nMensen die niet zien kunnen dit niet. "));
+  assert.ok(issue.body.includes("## Wie heeft er last van\n\nMensen die niet zien kunnen dit niet gebruiken. "));
 });
 
 test("the issues have a title and a body per line, and export writes them to files or standard output, never into the run", async () => {

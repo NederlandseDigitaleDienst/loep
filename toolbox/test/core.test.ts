@@ -551,6 +551,15 @@ test("two evaluations side by side: solved, stayed and new, linked by place and 
   const markdown = renderDifference(difference);
   assert.match(markdown, /^> \*\*Werkdocument, geen onderdeel van het rapport\.\*\*/m);
   assert.ok(markdown.includes(`ernst ${kept.severity}`) && markdown.includes(`toen ernst ${previousSeverity})`), "a severity that changed is named with what it was");
+  // One evaluation weighed and the other not: the two severities are not on one scale, so the difference is not reported as a change.
+  current.weighing = { status: "applied" };
+  const mixed = compareEvaluations(previous, current);
+  assert.equal(mixed.remained.filter((item) => item.previousSeverity !== undefined).length, 0);
+  assert.ok(renderDifference(mixed).includes("In de nieuwe evaluatie volgt de ernst uit de weging per groep bezoekers, in de andere uit het oordeel van de beoordelaars. Een andere ernst bij een bevinding die bleef, is daarom niet gemeld."));
+  previous.weighing = { status: "applied" };
+  assert.equal(compareEvaluations(previous, current).remained.filter((item) => item.previousSeverity !== undefined).length, 1, "both weighed: compared again");
+  delete previous.weighing;
+  delete current.weighing;
   assert.ok(markdown.includes(`\`${evaluationHash(previous).slice(0, 12)}\` | \`${evaluationHash(current).slice(0, 12)}\``), "both evaluations are named by hash");
   assert.ok(markdown.includes("| Afgetekend | nee, concept | nee, concept |"));
   assert.ok(markdown.includes("| Gemaakt met | loep 0.0.1, commit 000000000000 | loep 0.0.1, commit 000000000000 |"));

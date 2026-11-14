@@ -195,9 +195,11 @@ export function compareEvaluations(previous: Evaluation, current: Evaluation): D
   });
   const findingsNow = current.criteria.flatMap((criterion) => criterion.findings);
   const findingsThen = previous.criteria.flatMap((criterion) => criterion.findings);
+  // A severity from the weighing and one a judge gave are not on one scale: another severity then says nothing about the site.
+  const sameScale = (previous.weighing?.status === "applied") === (current.weighing?.status === "applied");
   const remained = findingsNow
     .filter((finding) => matches.has(finding))
-    .map((finding) => ({ ...item(finding, current), previousId: matches.get(finding)!.id, ...(matches.get(finding)!.severity !== finding.severity ? { previousSeverity: matches.get(finding)!.severity } : {}) }));
+    .map((finding) => ({ ...item(finding, current), previousId: matches.get(finding)!.id, ...(sameScale && matches.get(finding)!.severity !== finding.severity ? { previousSeverity: matches.get(finding)!.severity } : {}) }));
   const fresh = findingsNow.filter((finding) => !matches.has(finding)).map((finding) => ({ ...item(finding, current), ...examinedIn(finding, current, now, previous, "toen") }));
   const resolved = findingsThen.filter((finding) => !matchedThen.has(finding)).map((finding) => ({ ...item(finding, previous), ...examinedIn(finding, previous, then, current, "nu") }));
 
@@ -211,6 +213,7 @@ export function compareEvaluations(previous: Evaluation, current: Evaluation): D
     "Bevindingen zijn gekoppeld op criterium, pagina en plek, niet op de titel. Een gebrek dat nu onder een ander criterium is gemeld, of waarvan de plek heel anders is beschreven, staat daardoor als opgelost en ook als nieuw.",
     "\"Opgelost\" betekent: toen gevonden en nu niet meer. Dat kan ook komen doordat deze meting het niet opnieuw zag. \"Nieuw\" betekent: nu gevonden en toen niet. Of het gebrek toen al op de site stond, is uit twee evaluaties niet op te maken; wel of de plek toen is onderzocht.",
     ...(previous.defects && current.defects ? [] : [`${previous.defects ? "De nieuwe" : current.defects ? "De vorige" : "Geen van beide"} evaluatie${previous.defects || current.defects ? " kent" : "s kent"} geen gebreken (bevindingen die bij elkaar horen). Daarom is op bevindingen vergeleken.`]),
+    ...(sameScale ? [] : [`In ${current.weighing?.status === "applied" ? "de nieuwe" : "de vorige"} evaluatie volgt de ernst uit de weging per groep bezoekers, in de andere uit het oordeel van de beoordelaars. Een andere ernst bij een bevinding die bleef, is daarom niet gemeld.`]),
     ...(previous.chain?.kind === current.chain?.kind ? [] : ["De twee evaluaties zijn met een andere werkwijze gemaakt. De vorige legt niet vast op welk element een bevinding is gemeten en welke vensters en menu's zijn geopend; waar dat nodig was om te zeggen of een plek toen is onderzocht, staat \"niet te bepalen\"."]),
   ];
 
