@@ -1,7 +1,7 @@
 /**
- * Recompute the comparison of the two investigations of the test site (L1 and L2) in round 8.
+ * Recompute the comparison of the two investigations of the test site (L1 and L2) in round 9.
  * Per defect of the key: the heaviest severity among the findings matched to it, in each run.
- * Run from the root of the repository: node validatie/weging/ronde-8/vergelijk.ts
+ * Run from the root of the repository: node validatie/weging/ronde-9/vergelijk.ts
  */
 import { readFileSync } from "node:fs";
 import { SEVERITIES, type Severity } from "../../../toolbox/src/lib/verdict.ts";
@@ -36,4 +36,4 @@ function compare(name: string, a: Record<string, Severity>, b: Record<string, Se
 }
 
 compare("beoordelaars", perDefect(l1, l1.judged), perDefect(l2, l2.judged));
-compare("weging ronde 8", perDefect(l1, weighed(l1)), perDefect(l2, weighed(l2)));
+compare("weging ronde 9", perDefect(l1, weighed(l1)), perDefect(l2, weighed(l2)));

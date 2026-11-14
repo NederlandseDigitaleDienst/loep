@@ -1,0 +1,2240 @@
+{
+ "key": {
+  "1.1.1-logo-melding": [
+   "GEME-1.1.1-7302"
+  ],
+  "1.1.1-artikelfoto": [
+   "GEME-1.1.1-ed36"
+  ],
+  "1.1.1-bestandsnaam": [
+   "GEME-1.1.1-5608"
+  ],
+  "1.1.1-tarieven": [
+   "GEME-1.1.1-fc24",
+   "GEME-1.4.5-b062"
+  ],
+  "1.2.1-gesprek": [
+   "GEME-1.2.1-0dfa"
+  ],
+  "1.2.2-ondertitels": [
+   "GEME-1.2.2-0a71"
+  ],
+  "1.2.3-beschrijving": [
+   "GEME-1.2.3-f0df"
+  ],
+  "1.2.5-audiodescriptie": [
+   "GEME-1.2.5-4676"
+  ],
+  "1.3.1-vette-tussenkop": [
+   "GEME-1.3.1-39dc"
+  ],
+  "1.3.1-lijst-als-alinea": [
+   "GEME-1.3.1-f2e7"
+  ],
+  "1.3.1-tussenkop-uitklapper": [
+   "GEME-1.3.1-39dc"
+  ],
+  "1.3.1-tabelkoppen": [
+   "GEME-1.3.1-d138"
+  ],
+  "1.3.1-voetkop": [
+   "GEME-1.3.1-39dc"
+  ],
+  "1.3.1-keuzegroep": [
+   "GEME-1.3.1-f81b"
+  ],
+  "1.3.2-zoekvolgorde": [
+   "GEME-1.3.2-9e4e"
+  ],
+  "1.3.2-kaart-omgekeerd": [
+   "GEME-1.3.2-3ee4"
+  ],
+  "1.3.3-ronde-knop": [
+   "GEME-1.3.3-9150"
+  ],
+  "1.3.4-draai": [
+   "GEME-1.3.4-5449"
+  ],
+  "1.3.5-autocomplete": [
+   "GEME-1.3.5-12d9",
+   "GEME-1.3.5-5e01",
+   "GEME-1.3.5-dd72"
+  ],
+  "1.4.1-tekstlink": [
+   "GEME-1.4.1-bb6a"
+  ],
+  "1.4.1-verplicht": [
+   "GEME-1.4.1-cb42",
+   "GEME-1.3.3-d594"
+  ],
+  "1.4.2-melodie": [
+   "GEME-1.4.2-d6af"
+  ],
+  "1.4.3-datum": [
+   "GEME-1.4.3-7322"
+  ],
+  "1.4.3-tekst-op-foto": [
+   "GEME-1.4.3-a2b5",
+   "GEME-1.4.3-4ad3"
+  ],
+  "1.4.3-menu-aanwijzen": [
+   "GEME-1.4.3-3e50"
+  ],
+  "1.4.4-zoom-uit": [
+   "GEME-1.4.4-1986"
+  ],
+  "1.4.4-inleiding": [
+   "GEME-1.4.4-9370"
+  ],
+  "1.4.5-zomerfeest": [
+   "GEME-1.4.5-d923"
+  ],
+  "1.4.10-weigerknop": [
+   "GEME-1.4.10-ebc7"
+  ],
+  "1.4.10-rooster": [
+   "GEME-1.4.10-3a99"
+  ],
+  "1.4.11-veldrand": [
+   "GEME-1.4.11-f2d1"
+  ],
+  "1.4.12-tegel": [
+   "GEME-1.4.12-1b23"
+  ],
+  "1.4.13-uitleg": [
+   "GEME-1.4.13-02ca",
+   "GEME-1.4.13-4b09"
+  ],
+  "2.1.1-nieuwskaart": [
+   "GEME-2.1.1-7243",
+   "GEME-4.1.2-e33d"
+  ],
+  "2.1.1-productkaart": [
+   "GEME-2.1.1-6382",
+   "GEME-4.1.2-bc00"
+  ],
+  "2.1.1-vinkje": [
+   "GEME-2.1.1-3bcc",
+   "GEME-4.1.2-d147"
+  ],
+  "2.1.1-naar-boven": [
+   "GEME-2.1.1-08a2",
+   "GEME-4.1.2-aa03"
+  ],
+  "2.1.1-chat-sluit": [
+   "GEME-4.1.2-efe1"
+  ],
+  "2.1.2-chat": [
+   "GEME-2.1.2-b5c9"
+  ],
+  "2.1.4-sneltoets": [
+   "GEME-2.1.4-8219",
+   "GEME-2.1.4-59ed"
+  ],
+  "2.2.1-tijdslimiet": [
+   "GEME-2.2.1-f604"
+  ],
+  "2.2.2-uitgelicht": [
+   "GEME-2.2.2-200c"
+  ],
+  "2.4.1-skiplink": [
+   "GEME-2.4.1-5c2c"
+  ],
+  "2.4.2-sjabloonrest": [
+   "GEME-2.4.2-6550"
+  ],
+  "2.4.2-zelfde-titel": [
+   "GEME-2.4.2-7584"
+  ],
+  "2.4.3-tabindex": [
+   "GEME-2.4.3-9147"
+  ],
+  "2.4.3-mobiel-menu": [
+   "GEME-2.4.3-f9c3"
+  ],
+  "2.4.4-klik-hier": [
+   "GEME-2.4.4-3f6e"
+  ],
+  "2.4.4-sociaal": [
+   "GEME-2.4.4-9d17",
+   "GEME-4.1.2-d450",
+   "GEME-1.1.1-0312"
+  ],
+  "2.4.6-informatie": [
+   "GEME-2.4.6-7ef4"
+  ],
+  "2.4.7-menu": [
+   "GEME-2.4.7-d5df"
+  ],
+  "2.4.11-melding": [
+   "GEME-2.4.11-0ed1",
+   "GEME-2.4.3-e622"
+  ],
+  "2.5.1-galerij": [
+   "GEME-2.5.1-7a69",
+   "GEME-2.1.1-9000"
+  ],
+  "2.5.2-feedback": [
+   "GEME-2.5.2-b13b"
+  ],
+  "2.5.3-zoekknop": [
+   "GEME-2.5.3-9f4d"
+  ],
+  "2.5.7-schuif": [
+   "GEME-2.5.7-cfe1",
+   "GEME-2.1.1-4d08"
+  ],
+  "2.5.8-paginering": [
+   "GEME-2.5.8-84b4"
+  ],
+  "3.1.1-taal": [
+   "GEME-3.1.1-4611"
+  ],
+  "3.1.2-engels": [
+   "GEME-3.1.2-0ceb"
+  ],
+  "3.2.1-voetlink": [
+   "GEME-3.2.1-a494",
+   "GEME-2.4.7-f2b0"
+  ],
+  "3.2.2-wijk": [
+   "GEME-3.2.2-cfa6"
+  ],
+  "3.2.3-menuvolgorde": [
+   "GEME-3.2.3-04f9",
+   "GEME-3.2.6-2f1b"
+  ],
+  "3.2.4-zoekknop": [
+   "GEME-3.2.4-9001"
+  ],
+  "3.2.6-hulp": [
+   "GEME-3.2.6-abb3",
+   "GEME-3.2.3-2142"
+  ],
+  "3.3.1-rode-rand": [
+   "GEME-3.3.1-3956",
+   "GEME-3.3.3-e763",
+   "GEME-1.4.1-fee6"
+  ],
+  "3.3.2-plaatshouder": [
+   "GEME-3.3.2-5236"
+  ],
+  "3.3.3-datum": [
+   "GEME-3.3.3-ed9f",
+   "GEME-3.3.2-df8a"
+  ],
+  "3.3.4-controle": [
+   "GEME-3.3.4-9ddf"
+  ],
+  "3.3.7-adres": [
+   "GEME-3.3.7-914b"
+  ],
+  "3.3.8-wachtwoord": [
+   "GEME-3.3.8-2a00",
+   "GEME-3.3.8-04bb",
+   "GEME-1.3.5-3af0"
+  ],
+  "4.1.2-tabs": [
+   "GEME-4.1.2-de61",
+   "GEME-2.1.1-b294"
+  ],
+  "4.1.2-uitklapper": [
+   "GEME-4.1.2-8221"
+  ],
+  "4.1.2-menuknop": [
+   "GEME-4.1.2-c8b1",
+   "GEME-4.1.2-25b3"
+  ],
+  "4.1.2-rol-logo": [
+   "GEME-4.1.2-26d7"
+  ],
+  "4.1.2-kadertitel": [
+   "GEME-4.1.2-9ad6"
+  ],
+  "4.1.2-venster": [
+   "GEME-4.1.2-c4be",
+   "GEME-2.4.3-2683",
+   "GEME-2.1.1-52a3",
+   "GEME-4.1.2-efe1"
+  ],
+  "4.1.3-bedankt": [
+   "GEME-4.1.3-cf30"
+  ],
+  "4.1.3-aantal": [
+   "GEME-4.1.3-8c06"
+  ],
+  "4.1.3-chat": [
+   "GEME-4.1.3-9498"
+  ]
+ },
+ "judged": {
+  "GEME-1.1.1-ed36": "hoog",
+  "GEME-1.1.1-5608": "hoog",
+  "GEME-1.1.1-7302": "laag",
+  "GEME-1.1.1-fc24": "hoog",
+  "GEME-1.1.1-0312": "hoog",
+  "GEME-1.2.1-0dfa": "hoog",
+  "GEME-1.2.2-0a71": "hoog",
+  "GEME-1.2.3-f0df": "hoog",
+  "GEME-1.2.5-4676": "hoog",
+  "GEME-1.3.1-39dc": "laag",
+  "GEME-1.3.1-f2e7": "laag",
+  "GEME-1.3.1-f81b": "midden",
+  "GEME-1.3.1-d138": "midden",
+  "GEME-1.3.2-3ee4": "midden",
+  "GEME-1.3.2-9e4e": "midden",
+  "GEME-1.3.3-9150": "midden",
+  "GEME-1.3.3-d594": "midden",
+  "GEME-1.3.4-5449": "hoog",
+  "GEME-1.3.5-12d9": "midden",
+  "GEME-1.3.5-5e01": "midden",
+  "GEME-1.3.5-dd72": "midden",
+  "GEME-1.3.5-3af0": "midden",
+  "GEME-1.3.5-3c9e": "midden",
+  "GEME-1.3.5-28cb": "midden",
+  "GEME-1.4.1-bb6a": "midden",
+  "GEME-1.4.1-cb42": "midden",
+  "GEME-1.4.1-fee6": "midden",
+  "GEME-1.4.2-d6af": "hoog",
+  "GEME-1.4.3-a2b5": "midden",
+  "GEME-1.4.3-4ad3": "midden",
+  "GEME-1.4.3-7322": "laag",
+  "GEME-1.4.3-3e50": "laag",
+  "GEME-1.4.4-1986": "hoog",
+  "GEME-1.4.4-9370": "hoog",
+  "GEME-1.4.5-d923": "midden",
+  "GEME-1.4.5-b062": "midden",
+  "GEME-1.4.10-ebc7": "midden",
+  "GEME-1.4.10-3a99": "midden",
+  "GEME-1.4.10-d889": "laag",
+  "GEME-1.4.11-f2d1": "midden",
+  "GEME-1.4.12-1b23": "midden",
+  "GEME-1.4.13-02ca": "midden",
+  "GEME-1.4.13-4b09": "midden",
+  "GEME-2.1.1-7243": "hoog",
+  "GEME-2.1.1-6382": "hoog",
+  "GEME-2.1.1-b294": "hoog",
+  "GEME-2.1.1-4d08": "hoog",
+  "GEME-2.1.1-9000": "hoog",
+  "GEME-2.1.1-52a3": "hoog",
+  "GEME-2.1.1-3bcc": "hoog",
+  "GEME-2.1.1-08a2": "laag",
+  "GEME-2.1.2-b5c9": "hoog",
+  "GEME-2.1.4-8219": "midden",
+  "GEME-2.1.4-59ed": "laag",
+  "GEME-2.2.1-f604": "hoog",
+  "GEME-2.2.2-200c": "midden",
+  "GEME-2.2.2-4928": "laag",
+  "GEME-2.4.1-5c2c": "hoog",
+  "GEME-2.4.2-6550": "laag",
+  "GEME-2.4.2-7584": "midden",
+  "GEME-2.4.3-9147": "midden",
+  "GEME-2.4.3-e622": "midden",
+  "GEME-2.4.3-f9c3": "midden",
+  "GEME-2.4.3-2683": "midden",
+  "GEME-2.4.4-9d17": "hoog",
+  "GEME-2.4.4-3f6e": "midden",
+  "GEME-2.4.6-7ef4": "midden",
+  "GEME-2.4.7-d5df": "hoog",
+  "GEME-2.4.7-f2b0": "hoog",
+  "GEME-2.4.11-0ed1": "midden",
+  "GEME-2.5.1-7a69": "hoog",
+  "GEME-2.5.2-b13b": "midden",
+  "GEME-2.5.3-9f4d": "midden",
+  "GEME-2.5.7-cfe1": "midden",
+  "GEME-2.5.8-84b4": "laag",
+  "GEME-3.1.1-4611": "midden",
+  "GEME-3.1.2-0ceb": "midden",
+  "GEME-3.2.1-a494": "hoog",
+  "GEME-3.2.2-cfa6": "midden",
+  "GEME-3.2.3-04f9": "midden",
+  "GEME-3.2.3-2142": "laag",
+  "GEME-3.2.4-9001": "midden",
+  "GEME-3.2.6-abb3": "midden",
+  "GEME-3.2.6-2f1b": "laag",
+  "GEME-3.3.1-3956": "hoog",
+  "GEME-3.3.2-5236": "midden",
+  "GEME-3.3.2-df8a": "midden",
+  "GEME-3.3.3-ed9f": "midden",
+  "GEME-3.3.3-e763": "hoog",
+  "GEME-3.3.4-9ddf": "midden",
+  "GEME-3.3.7-914b": "midden",
+  "GEME-3.3.8-2a00": "hoog",
+  "GEME-3.3.8-04bb": "hoog",
+  "GEME-4.1.2-d450": "hoog",
+  "GEME-4.1.2-c8b1": "hoog",
+  "GEME-4.1.2-25b3": "midden",
+  "GEME-4.1.2-26d7": "laag",
+  "GEME-4.1.2-de61": "hoog",
+  "GEME-4.1.2-d147": "hoog",
+  "GEME-4.1.2-e33d": "hoog",
+  "GEME-4.1.2-bc00": "hoog",
+  "GEME-4.1.2-c4be": "midden",
+  "GEME-4.1.2-efe1": "midden",
+  "GEME-4.1.2-4cf1": "hoog",
+  "GEME-4.1.2-9ad6": "hoog",
+  "GEME-4.1.2-8221": "midden",
+  "GEME-4.1.2-aa03": "midden",
+  "GEME-4.1.3-8c06": "midden",
+  "GEME-4.1.3-cf30": "laag",
+  "GEME-4.1.3-8c59": "midden",
+  "GEME-4.1.3-9498": "hoog"
+ },
+ "weighing": {
+  "tasks": [
+   {
+    "id": "afval",
+    "nameNl": "Ophaaldag en sorteren van afval opzoeken"
+   },
+   {
+    "id": "openingstijden",
+    "nameNl": "Opzoeken wanneer gemeentehuis en milieustraat open zijn"
+   },
+   {
+    "id": "producten",
+    "nameNl": "Een product bekijken en een afspraak maken"
+   },
+   {
+    "id": "vergunning",
+    "nameNl": "Een parkeervergunning aanvragen en betalen"
+   },
+   {
+    "id": "contact",
+    "nameNl": "Een vraag of melding sturen aan de gemeente"
+   },
+   {
+    "id": "inloggen",
+    "nameNl": "Inloggen bij Mijn Lindewaard"
+   },
+   {
+    "id": "nieuws",
+    "nameNl": "Nieuws lezen en de raadsvergadering terugkijken"
+   },
+   {
+    "id": "zoeken",
+    "nameNl": "Iets zoeken of een veelgestelde vraag lezen"
+   }
+  ],
+  "findings": [
+   {
+    "finding": "GEME-1.1.1-0312",
+    "task": null,
+    "affected": [
+     {
+      "group": "no-vision",
+      "consequence": "detour",
+      "textNl": "Ze gaan met de schermlezer door de voettekst en komen bij twee links zonder naam. Om te weten waar ze heen gaan, moeten ze elke link openen en kijken op welke pagina ze uitkomen."
+     },
+     {
+      "group": "limited-manipulation",
+      "consequence": "detour",
+      "textNl": "Ze bedienen de site met spraak en willen een van de ronde links in de voettekst openen. Er is geen naam om uit te spreken, dus ze moeten nummers of een raster over de pagina leggen.",
+      "whyGroupNl": "Wie met spraak bedient, roept een link aan bij zijn naam, en deze twee links hebben geen naam."
+     }
+    ]
+   },
+   {
+    "finding": "GEME-1.1.1-5608",
+    "task": null,
+    "withoutNl": "Geen van de kerntaken gaat via de lijst met partners, dus ze lukken ook zonder de naam bij dit logo.",
+    "unsureNl": "Of de naam van het waterschap ergens anders op de startpagina als tekst staat, staat niet in de bevinding.",
+    "affected": [
+     {
+      "group": "no-vision",
+      "consequence": "cannot",
+      "textNl": "Ze lopen met de schermlezer de lijst met partners langs. Bij het eerste logo horen ze een bestandsnaam in plaats van de naam van het waterschap, dus ze weten niet wie deze partner is."
+     }
+    ]
+   },
+   {
+    "finding": "GEME-1.1.1-7302",
+    "task": null,
+    "affected": [
+     {
+      "group": "no-vision",
+      "consequence": "effort",
+      "textNl": "Bij de cookiemelding horen ze bij het wapen alleen het woord logo. Dat de melding van de gemeente komt, moeten ze afleiden uit de site zelf, want de titel van de pagina noemt Gemeente Lindewaard."
+     }
+    ]
+   },
+   {
+    "finding": "GEME-1.1.1-ed36",
+    "task": null,
+    "withoutNl": "Het nieuwsbericht over de fietsenstalling is zonder de foto als tekst te lezen.",
+    "unsureNl": "Of de tekst van het bericht beschrijft wat de foto laat zien, staat niet in de bevinding.",
+    "affected": [
+     {
+      "group": "no-vision",
+      "consequence": "cannot",
+      "textNl": "Ze lezen het nieuwsbericht over de stalling met de schermlezer. De foto onder de kop heeft geen tekstalternatief, dus wat erop staat komen ze niet te weten, en mogelijk horen ze een bestandsnaam."
+     }
+    ]
+   },
+   {
+    "finding": "GEME-1.1.1-fc24",
+    "task": "zoeken",
+    "blocksNl": "Wie wil weten wat een paspoort, identiteitskaart of rijbewijs kost, vindt de bedragen nergens anders op de pagina, dus de vraag blijft onbeantwoord.",
+    "affected": [
+     {
+      "group": "no-vision",
+      "consequence": "cannot",
+      "textNl": "Ze openen de vraag over wat een paspoort of rijbewijs kost en lezen het antwoord met de schermlezer. De prijzen staan alleen in een afbeelding zonder tekst, dus het antwoord krijgen ze niet."
+     }
+    ]
+   },
+   {
+    "finding": "GEME-1.2.1-0dfa",
+    "task": null,
+    "withoutNl": "Het nieuwsbericht over de stalling blijft zonder het fragment als tekst te lezen.",
+    "affected": [
+     {
+      "group": "no-hearing",
+      "consequence": "cannot",
+      "textNl": "Ze komen in het bericht over de stalling bij het geluidsfragment van de wethouder. Er is geen tekstversie en het meeste van wat hij zegt staat niet op de pagina, dus ze missen waarom de stalling er komt."
+     },
+     {
+      "group": "low-hearing",
+      "consequence": "effort",
+      "textNl": "Ze zetten het geluid harder of gebruiken een koptelefoon om de wethouder te verstaan. Er is geen tekst om mee te lezen, dus wat ze niet verstaan, moeten ze opnieuw afspelen."
+     }
+    ]
+   },
+   {
+    "finding": "GEME-1.2.2-0a71",
+    "task": "nieuws",
+    "blocksNl": "Wat er in de samenvatting wordt gezegd, staat nergens als tekst, dus wie de vergadering wil terugkijken, mist de uitleg over de begroting.",
+    "unsureNl": "Of de hele vergadering in de speler op dezelfde pagina wel ondertitels heeft, staat niet in de bevinding.",
+    "affected": [
+     {
+      "group": "no-hearing",
+      "consequence": "cannot",
+      "textNl": "Ze kijken de samenvatting van de raadsvergadering. Er zijn geen ondertitels en er is geen tekstversie, dus wat er over de vergadering van 12 maart en de begroting wordt gezegd, komen ze niet te weten."
+     },
+     {
+      "group": "low-hearing",
+      "consequence": "effort",
+      "textNl": "Ze zetten het geluid harder of gebruiken een koptelefoon. Er zijn geen ondertitels om mee te lezen, dus wat ze niet verstaan, moeten ze opnieuw afspelen."
+     }
+    ]
+   },
+   {
+    "finding": "GEME-1.2.3-f0df",
+    "task": "nieuws",
+    "blocksNl": "De uitslag van de stemming staat alleen in beeld, en zonder die uitslag weten ze niet wat de raad over de begroting heeft besloten.",
+    "affected": [
+     {
+      "group": "no-vision",
+      "consequence": "cannot",
+      "textNl": "Ze luisteren naar de samenvatting van de raadsvergadering. De agenda en de uitslag van de stemming over de begroting staan alleen in beeld en worden niet uitgesproken, dus die komen ze niet te weten."
+     }
+    ]
+   },
+   {
+    "finding": "GEME-1.2.5-4676",
+    "task": "nieuws",
+    "blocksNl": "Juist de uitslag van de stemming is het nieuws van deze video, en die staat alleen in beeld zonder beschrijving.",
+    "affected": [
+     {
+      "group": "no-vision",
+      "consequence": "cannot",
+      "textNl": "Ze luisteren naar de video van de raadsvergadering. De stem noemt de agendapunten niet en ook niet dat de begroting is aangenomen met 14 stemmen voor en 5 tegen, dus dat nieuws gaat aan ze voorbij."
+     }
+    ]
+   },
+   {
+    "finding": "GEME-1.3.1-39dc",
+    "task": null,
+    "affected": [
+     {
+      "group": "no-vision",
+      "consequence": "effort",
+      "textNl": "Ze springen met de schermlezer van kop naar kop. De titels in de voettekst, de titel van de cookiemelding en de vette tussenkoppen in twee teksten zijn geen kop, dus ze slaan die blokken over en moeten de tekst doorlezen om ze te vinden."
+     }
+    ]
+   },
+   {
+    "finding": "GEME-1.3.1-d138",
+    "task": "openingstijden",
+    "affected": [
+     {
+      "group": "no-vision",
+      "consequence": "effort",
+      "textNl": "Ze lezen de tabel met openingstijden cel voor cel met de schermlezer. Bij een tijd horen ze niet bij welke dag en welke plek die hoort, dus ze moeten steeds terug naar de eerste rij en kolom om dat na te gaan."
+     }
+    ]
+   },
+   {
+    "finding": "GEME-1.3.1-f2e7",
+    "task": "nieuws",
+    "affected": [
+     {
+      "group": "no-vision",
+      "consequence": "effort",
+      "textNl": "Ze lezen met de schermlezer de opsomming in het bericht en de reeksen kaarten met nieuws en producten. Er wordt niet gemeld dat er een lijst komt en hoeveel onderdelen die heeft, dus ze merken pas door verder te lezen waar de reeks ophoudt."
+     }
+    ]
+   },
+   {
+    "finding": "GEME-1.3.2-3ee4",
+    "task": "nieuws",
+    "affected": [
+     {
+      "group": "no-vision",
+      "consequence": "detour",
+      "textNl": "Ze lezen het nieuwsoverzicht met de schermlezer. Na de kop van een bericht horen ze de samenvatting en de datum van het volgende bericht, dus ze moeten de hele lijst doorlezen en zelf uitzoeken welke tekst bij welk bericht hoort."
+     }
+    ]
+   },
+   {
+    "finding": "GEME-1.3.2-9e4e",
+    "task": "zoeken",
+    "affected": [
+     {
+      "group": "no-vision",
+      "consequence": "effort",
+      "textNl": "Ze gebruiken de zoekpagina met de schermlezer. De uitleg horen ze pas na het veld en de knop, en het aantal resultaten pas nadat alle resultaten zijn voorgelezen."
+     }
+    ]
+   },
+   {
+    "finding": "GEME-1.3.4-5449",
+    "task": "openingstijden",
+    "blocksNl": "De tijden van gemeentehuis en milieustraat staan in deze tabel, dus zonder de tabel is niet op te zoeken wanneer ze open zijn.",
+    "unsureNl": "Of de openingstijden ook op een andere pagina als tekst staan, staat niet in de bevinding.",
+    "affected": [
+     {
+      "group": "limited-reach",
+      "consequence": "cannot",
+      "textNl": "Hun tablet of telefoon staat staand vast, bijvoorbeeld op een houder aan de rolstoel. In die stand verbergt de pagina de tabel en vraagt ze het toestel te draaien, en dat kunnen ze niet."
+     }
+    ]
+   },
+   {
+    "finding": "GEME-1.3.5-28cb",
+    "task": "vergunning",
+    "affected": [
+     {
+      "group": "low-vision",
+      "consequence": "effort",
+      "textNl": "Ze vullen de aanvraag vergroot in en zien een deel tegelijk. De browser vult de postcode voor de rekening niet vanzelf in, dus ze moeten dat zelf typen en nalezen."
+     },
+     {
+      "group": "limited-manipulation",
+      "consequence": "effort",
+      "textNl": "Ze typen met moeite, met een schakelaar of met spraak. De browser vult de postcode voor de rekening niet vanzelf in, dus elke letter kost ze een eigen stap."
+     },
+     {
+      "group": "cognitive",
+      "consequence": "effort",
+      "textNl": "Ze laten de browser hun gegevens invullen, omdat onthouden en overtypen fout gaat. Bij de postcode voor de rekening gebeurt dat niet, dus ze moeten het zelf opzoeken en intypen."
+     }
+    ]
+   },
+   {
+    "finding": "GEME-1.3.5-3c9e",
+    "task": "vergunning",
+    "affected": [
+     {
+      "group": "low-vision",
+      "consequence": "effort",
+      "textNl": "Ze vullen de aanvraag vergroot in en zien een deel tegelijk. De browser vult de straat en het huisnummer voor de rekening niet vanzelf in, dus ze moeten dat zelf typen en nalezen."
+     },
+     {
+      "group": "limited-manipulation",
+      "consequence": "effort",
+      "textNl": "Ze typen met moeite, met een schakelaar of met spraak. De browser vult de straat en het huisnummer voor de rekening niet vanzelf in, dus elke letter kost ze een eigen stap."
+     },
+     {
+      "group": "cognitive",
+      "consequence": "effort",
+      "textNl": "Ze laten de browser hun gegevens invullen, omdat onthouden en overtypen fout gaat. Bij de straat en het huisnummer voor de rekening gebeurt dat niet, dus ze moeten het zelf opzoeken en intypen."
+     }
+    ]
+   },
+   {
+    "finding": "GEME-1.3.5-3af0",
+    "task": "inloggen",
+    "affected": [
+     {
+      "group": "low-vision",
+      "consequence": "effort",
+      "textNl": "Ze loggen in op een vergrote pagina en laten het wachtwoord graag door de browser invullen. Dat lukt hier minder goed, dus ze moeten het wachtwoord vaker zelf intypen."
+     },
+     {
+      "group": "limited-manipulation",
+      "consequence": "effort",
+      "textNl": "Ze typen met moeite of met een schakelaar. De wachtwoordbeheerder vult het wachtwoord minder goed in, dus ze moeten het vaker letter voor letter zelf typen."
+     },
+     {
+      "group": "cognitive",
+      "consequence": "effort",
+      "textNl": "Ze laten een wachtwoordbeheerder het wachtwoord invullen, omdat onthouden en overtypen fout gaat. Dat lukt hier minder goed, dus ze moeten het wachtwoord vaker zelf weten en intypen."
+     }
+    ]
+   },
+   {
+    "finding": "GEME-3.3.8-04bb",
+    "task": "inloggen",
+    "blocksNl": "Op de pagina staat geen andere manier om in te loggen, dus wie het wachtwoord niet kan plakken of uit het hoofd typen, komt niet in Mijn Lindewaard.",
+    "affected": [
+     {
+      "group": "cognitive",
+      "consequence": "cannot",
+      "textNl": "Ze plakken hun wachtwoord uit een wachtwoordbeheerder of een notitie, omdat onthouden en overtypen fout gaat. Het veld houdt het plakken tegen, dus ze moeten het wachtwoord uit het hoofd overtypen, en daar lopen ze vast."
+     },
+     {
+      "group": "limited-manipulation",
+      "consequence": "effort",
+      "textNl": "Ze typen met moeite of met een schakelaar en plakken het wachtwoord om dat te sparen. Plakken werkt niet, dus ze moeten het hele wachtwoord letter voor letter typen.",
+      "whyGroupNl": "Wie zijn handen moeilijk gebruikt, plakt een wachtwoord om het typen te sparen, en dat plakken houdt dit veld tegen."
+     }
+    ]
+   },
+   {
+    "finding": "GEME-1.4.1-bb6a",
+    "task": null,
+    "affected": [
+     {
+      "group": "no-color",
+      "consequence": "detour",
+      "textNl": "Ze lezen de lopende tekst, en de links daarin hebben alleen een andere kleur. Dat verschil zien ze niet, dus ze missen de verwijzing en moeten de pagina zelf zoeken via het menu of de zoekfunctie."
+     },
+     {
+      "group": "low-vision",
+      "consequence": "detour",
+      "textNl": "Ze lezen de tekst vergroot of met eigen kleuren. De links verschillen 1,7 op 1 van de tekst eromheen en zijn niet onderstreept, dus ze zien de verwijzing niet en moeten de pagina via het menu of de zoekfunctie zoeken."
+     }
+    ]
+   },
+   {
+    "finding": "GEME-1.4.1-cb42",
+    "task": "contact",
+    "affected": [
+     {
+      "group": "no-color",
+      "consequence": "effort",
+      "textNl": "Ze lezen dat de rode velden verplicht zijn, maar zien niet welke labels rood zijn. Ze vullen daarom voor de zekerheid alle velden in."
+     },
+     {
+      "group": "low-vision",
+      "consequence": "effort",
+      "textNl": "Ze vullen het formulier vergroot of met eigen kleuren in. Het rood van de verplichte labels verschilt 2,6 op 1 van de andere labels, dus ze vullen voor de zekerheid alle velden in."
+     },
+     {
+      "group": "no-vision",
+      "consequence": "effort",
+      "textNl": "Ze gaan met de schermlezer door het formulier. Bij de velden staat geen woord of teken dat ze verplicht zijn, dus ze vullen voor de zekerheid alle velden in."
+     }
+    ]
+   },
+   {
+    "finding": "GEME-1.4.1-fee6",
+    "task": "contact",
+    "blocksNl": "Het formulier gaat pas weg als de fouten zijn hersteld, en zonder te weten welk veld fout is, komt het bericht niet bij de gemeente.",
+    "unsureNl": "Of de chat of het telefoonnummer voor deze bezoekers een andere weg naar de gemeente is, staat niet in deze bevinding.",
+    "affected": [
+     {
+      "group": "no-vision",
+      "consequence": "cannot",
+      "textNl": "Ze versturen het formulier en blijven op dezelfde pagina. De fout zit alleen in een rode rand, zonder tekst of pictogram, dus ze kunnen nergens vinden welk veld fout is."
+     },
+     {
+      "group": "no-color",
+      "consequence": "detour",
+      "textNl": "Ze versturen het formulier en zien dat het niet weggaat. De fout zit in een rand die ze niet als rood herkennen, dus ze moeten het formulier veld voor veld nalopen om te raden wat er mis is."
+     },
+     {
+      "group": "low-vision",
+      "consequence": "detour",
+      "textNl": "Ze zien vergroot een deel van het formulier tegelijk. De fout is een rand die rood en iets dikker wordt, dus ze moeten elk veld nalopen en vergelijken om te vinden welk veld fout is."
+     },
+     {
+      "group": "cognitive",
+      "consequence": "detour",
+      "textNl": "Ze zien een rode rand om drie velden, maar er staat niet bij wat er fout is of hoe het goed moet. Ze moeten zelf raden wat er mis is, bijvoorbeeld met het e-mailadres, en het opnieuw proberen."
+     }
+    ]
+   },
+   {
+    "finding": "GEME-1.4.2-d6af",
+    "task": "all",
+    "affected": [
+     {
+      "group": "no-vision",
+      "consequence": "detour",
+      "textNl": "Op de startpagina speelt steeds dezelfde muziek door de voorleesstem heen, zonder knop om die te stoppen. Zetten ze het geluid van de computer uit, dan zwijgt ook de schermlezer, dus ze moeten de startpagina zo snel mogelijk verlaten om de stem weer goed te verstaan."
+     },
+     {
+      "group": "low-hearing",
+      "consequence": "effort",
+      "textNl": "Op de startpagina speelt steeds dezelfde muziek, zonder knop om die zachter te zetten of te stoppen. Ze kunnen het geluid alleen kwijt door al het geluid van de computer uit te zetten."
+     },
+     {
+      "group": "cognitive",
+      "consequence": "effort",
+      "textNl": "De muziek op de startpagina herhaalt zich zonder einde en is niet te stoppen. Dat leidt ze af terwijl ze zoeken waar hun taak begint."
+     }
+    ]
+   },
+   {
+    "finding": "GEME-1.4.3-3e50",
+    "task": "all",
+    "affected": [
+     {
+      "group": "low-vision",
+      "consequence": "detour",
+      "textNl": "Ze wijzen met de muis een link in het hoofdmenu aan en volgen de aanwijzer. Op dat moment wordt de tekst grijs op lichtgrijs, dus ze moeten de muis weer weghalen of de tekst selecteren om te lezen welke link het is."
+     }
+    ]
+   },
+   {
+    "finding": "GEME-1.4.3-4ad3",
+    "task": null,
+    "withoutNl": "Zonder de inleiding zijn de tegels onder Snel regelen en het hoofdmenu nog te gebruiken om een taak te beginnen.",
+    "affected": [
+     {
+      "group": "low-vision",
+      "consequence": "cannot",
+      "textNl": "Ze lezen de inleiding onder de kop op de grote foto. Op het lichte deel van de foto is het contrast 1,2 op 1, dus het begin van de tekst valt weg tegen de achtergrond."
+     }
+    ]
+   },
+   {
+    "finding": "GEME-1.4.3-7322",
+    "task": null,
+    "affected": [
+     {
+      "group": "low-vision",
+      "consequence": "detour",
+      "textNl": "Ze zoeken bij een nieuwsbericht wanneer het is verschenen. De grijze datum heeft een contrast van 2,6 op 1, dus ze moeten eigen kleuren instellen, de tekst selecteren of sterk vergroten om haar te lezen."
+     }
+    ]
+   },
+   {
+    "finding": "GEME-1.4.3-a2b5",
+    "task": null,
+    "withoutNl": "Zonder de kop zijn de tegels onder Snel regelen en het hoofdmenu nog te lezen, en daar beginnen de taken.",
+    "affected": [
+     {
+      "group": "low-vision",
+      "consequence": "cannot",
+      "textNl": "Ze lezen de kop van de startpagina op de grote foto. Wit op het lichte deel heeft een contrast van 1,2 tot 1,5 op 1, dus de kop valt weg tegen de achtergrond."
+     }
+    ]
+   },
+   {
+    "finding": "GEME-1.4.4-1986",
+    "task": "all",
+    "affected": [
+     {
+      "group": "low-vision",
+      "consequence": "detour",
+      "textNl": "Ze willen op hun telefoon of tablet de pagina met twee vingers groter maken, maar de site houdt dat tegen. Ze moeten de vergroting van het toestel zelf aanzetten en daarmee over het hele scherm schuiven."
+     }
+    ]
+   },
+   {
+    "finding": "GEME-1.4.4-9370",
+    "task": null,
+    "affected": [
+     {
+      "group": "low-vision",
+      "consequence": "detour",
+      "textNl": "Ze vergroten de pagina tot 200 procent en lezen de uitleg onder de kop. De laatste regel valt half weg en er is geen scrollbalk, dus ze moeten de vergroting terugzetten om het eind van de uitleg te lezen."
+     }
+    ]
+   },
+   {
+    "finding": "GEME-1.4.5-b062",
+    "task": "zoeken",
+    "affected": [
+     {
+      "group": "low-vision",
+      "consequence": "detour",
+      "textNl": "Ze maken de tekst groter of zetten eigen kleuren aan om de prijzen te lezen. De tabel is een plaatje en verandert niet mee, dus ze moeten de hele pagina vergroten, en dan worden de bedragen wazig."
+     }
+    ]
+   },
+   {
+    "finding": "GEME-1.4.5-d923",
+    "task": null,
+    "affected": [
+     {
+      "group": "low-vision",
+      "consequence": "detour",
+      "textNl": "Ze passen letters, kleuren of regelafstand aan om de aankondiging van het zomerfeest te lezen. De datum en de tijd staan in een plaatje dat niet meeverandert en bij vergroten wazig wordt, dus ze moeten het bericht over het zomerfeest op de pagina Nieuws opzoeken."
+     }
+    ]
+   },
+   {
+    "finding": "GEME-1.4.10-3a99",
+    "task": "producten",
+    "affected": [
+     {
+      "group": "low-vision",
+      "consequence": "effort",
+      "textNl": "Ze vergroten de pagina of gebruiken een smal scherm. Het rooster houdt drie kolommen, dus ze moeten opzij scrollen om de kaarten rechts buiten beeld te zien."
+     }
+    ]
+   },
+   {
+    "finding": "GEME-1.4.10-d889",
+    "task": "zoeken",
+    "affected": [
+     {
+      "group": "low-vision",
+      "consequence": "effort",
+      "textNl": "Ze gebruiken Safari op een smal of vergroot scherm. De knop Zoeken in de kop steekt rechts buiten beeld, dus ze moeten op elke pagina opzij scrollen om hem helemaal te zien."
+     }
+    ]
+   },
+   {
+    "finding": "GEME-1.4.10-ebc7",
+    "task": null,
+    "affected": [
+     {
+      "group": "low-vision",
+      "consequence": "detour",
+      "textNl": "Ze gebruiken een smal of vergroot scherm en willen cookies weigeren. De knop Weigeren valt buiten beeld en vegen helpt niet, dus ze moeten via Aanpassen hun keuze maken."
+     }
+    ]
+   },
+   {
+    "finding": "GEME-1.4.11-f2d1",
+    "task": "contact",
+    "affected": [
+     {
+      "group": "low-vision",
+      "consequence": "effort",
+      "textNl": "Ze zoeken op een vergrote pagina waar een veld begint en eindigt. De rand is te licht en het veld is wit op wit, dus ze moeten op het label afgaan en zoeken waar ze kunnen klikken."
+     }
+    ]
+   },
+   {
+    "finding": "GEME-1.4.12-1b23",
+    "task": null,
+    "affected": [
+     {
+      "group": "low-vision",
+      "consequence": "effort",
+      "textNl": "Ze zetten meer ruimte tussen regels en letters om beter te lezen. In de tegels onder Snel regelen valt dan de tweede regel weg, dus ze weten pas na het openen van een tegel waar die precies over gaat."
+     },
+     {
+      "group": "cognitive",
+      "consequence": "effort",
+      "textNl": "Ze vergroten de afstand tussen regels en letters om de tekst te kunnen volgen. Bij Balie verdwijnt dan dat het om tijden gaat, dus ze moeten de tegel openen om te zien waar hij heen gaat."
+     }
+    ]
+   },
+   {
+    "finding": "GEME-1.4.13-02ca",
+    "task": "openingstijden",
+    "affected": [
+     {
+      "group": "low-vision",
+      "consequence": "effort",
+      "textNl": "Ze wijzen het i-teken aan of zetten er de focus op terwijl de pagina vergroot is. De uitleg ligt dan over de kop Milieustraat en de tijden van maandag en gaat niet weg met Escape, dus ze moeten eerst de muis of de focus weghalen."
+     },
+     {
+      "group": "cognitive",
+      "consequence": "effort",
+      "textNl": "Ze lezen de tijden in de tabel, en de uitleg verschijnt over de tijden van maandag heen. Met Escape gaat ze niet weg, dus ze moeten zelf uitzoeken hoe ze de tijden weer te zien krijgen."
+     },
+     {
+      "group": "limited-manipulation",
+      "consequence": "effort",
+      "textNl": "Ze gaan met het toetsenbord door de pagina en komen op het i-teken. De uitleg bedekt dan de tijden van maandag en Escape helpt niet, dus ze moeten een extra stap zetten om de focus weg te halen.",
+      "whyGroupNl": "Wie met het toetsenbord werkt en het scherm ziet, krijgt de uitleg bij focus over de tijden heen en kan haar niet met Escape sluiten."
+     }
+    ]
+   },
+   {
+    "finding": "GEME-1.4.13-4b09",
+    "task": null,
+    "affected": [
+     {
+      "group": "low-vision",
+      "consequence": "detour",
+      "textNl": "Ze werken met vergroting en bewegen de muis over de uitleg om haar te lezen. De uitleg verdwijnt dan, dus ze moeten met Tab de focus op het i-teken zetten om haar te laten staan."
+     }
+    ]
+   },
+   {
+    "finding": "GEME-2.1.1-08a2",
+    "task": null,
+    "withoutNl": "Met de toets Home komen ze ook bovenaan de pagina, en geen kerntaak gaat via deze link.",
+    "affected": [
+     {
+      "group": "limited-manipulation",
+      "consequence": "cannot",
+      "textNl": "Ze gaan met het toetsenbord of een schakelaar door de voettekst. Naar boven krijgt geen focus, dus ze kunnen deze link niet gebruiken."
+     },
+     {
+      "group": "no-vision",
+      "consequence": "cannot",
+      "textNl": "Ze gaan met de schermlezer en het toetsenbord door de voettekst. Naar boven krijgt geen focus en is niet te bedienen."
+     }
+    ]
+   },
+   {
+    "finding": "GEME-2.1.1-52a3",
+    "task": "producten",
+    "blocksNl": "Het venster blijft over de productenpagina liggen, dus wie daarna een ander product wil bekijken, komt niet meer bij de kaarten zonder de pagina opnieuw te laden.",
+    "affected": [
+     {
+      "group": "limited-manipulation",
+      "consequence": "cannot",
+      "textNl": "Ze werken met het toetsenbord of een schakelaar en willen het productvenster sluiten. Het kruisje krijgt geen focus en Escape doet niets, dus het venster blijft over de pagina liggen."
+     },
+     {
+      "group": "no-vision",
+      "consequence": "cannot",
+      "textNl": "Ze zoeken met het toetsenbord een manier om het productvenster te sluiten. Het kruisje krijgt geen focus en Escape sluit het venster niet."
+     }
+    ]
+   },
+   {
+    "finding": "GEME-2.1.1-6382",
+    "task": "producten",
+    "blocksNl": "De uitleg per product en de link Maak een afspraak staan in het venster achter de kaart, dus zonder de kaart te openen komen ze niet bij de afspraak.",
+    "unsureNl": "Of er buiten het productvenster een andere weg is om een afspraak te maken, staat niet in de invoer.",
+    "affected": [
+     {
+      "group": "limited-manipulation",
+      "consequence": "cannot",
+      "textNl": "Ze gaan met het toetsenbord of een schakelaar langs de productkaarten. De kaarten krijgen geen focus, dus het venster met uitleg en de link Maak een afspraak gaat niet open."
+     },
+     {
+      "group": "no-vision",
+      "consequence": "cannot",
+      "textNl": "Ze gaan met de schermlezer en het toetsenbord langs de productkaarten. De kaarten krijgen geen focus en zijn niet te bedienen, dus de uitleg per product blijft dicht."
+     }
+    ]
+   },
+   {
+    "finding": "GEME-2.1.1-7243",
+    "task": "nieuws",
+    "blocksNl": "De kaarten zijn op het overzicht de enige weg naar de berichten, en zonder een bericht te openen is het nieuws niet te lezen.",
+    "unsureNl": "Of de berichten ook via de startpagina of de zoekfunctie te openen zijn, staat niet in de bevinding.",
+    "affected": [
+     {
+      "group": "limited-manipulation",
+      "consequence": "cannot",
+      "textNl": "Ze gaan met het toetsenbord of een schakelaar door het nieuwsoverzicht. Tab komt niet langs de kaarten, dus ze kunnen geen bericht openen."
+     },
+     {
+      "group": "no-vision",
+      "consequence": "cannot",
+      "textNl": "Ze gaan met de schermlezer en het toetsenbord door het nieuwsoverzicht. De kaarten krijgen geen focus en de links op de pagina wijzen alleen naar de pagina's van het overzicht, dus ze openen geen bericht."
+     }
+    ]
+   },
+   {
+    "finding": "GEME-2.1.1-9000",
+    "task": null,
+    "withoutNl": "Het bericht over de stalling is ook zonder foto 2 en 3 te lezen.",
+    "affected": [
+     {
+      "group": "limited-manipulation",
+      "consequence": "cannot",
+      "textNl": "Ze gaan met het toetsenbord of een schakelaar door het bericht. De fotoserie krijgt geen focus en de pijltjestoets doet niets, dus foto 2 en 3 krijgen ze niet te zien."
+     },
+     {
+      "group": "no-vision",
+      "consequence": "cannot",
+      "textNl": "Ze gaan met de schermlezer door het bericht. De fotoserie heeft geen knoppen en krijgt geen focus, dus foto 2 en 3 blijven verborgen."
+     }
+    ]
+   },
+   {
+    "finding": "GEME-2.5.1-7a69",
+    "task": null,
+    "withoutNl": "Het bericht over de stalling is ook zonder foto 2 en 3 te lezen.",
+    "affected": [
+     {
+      "group": "limited-manipulation",
+      "consequence": "cannot",
+      "textNl": "Ze werken met een hoofdmuis, een aanwijsstok of een trillende hand en kunnen niet vegen. Een klik op de foto doet niets en er zijn geen knoppen, dus foto 2 en 3 krijgen ze niet te zien."
+     }
+    ]
+   },
+   {
+    "finding": "GEME-2.1.2-b5c9",
+    "task": "all",
+    "blocksNl": "De chat staat op elke gewone pagina, en wie erin vastzit, kan op die pagina niets meer doen zonder opnieuw te laden en kwijt te raken wat hij deed.",
+    "unsureNl": "Of de focus ook in het invoerveld komt als de chat met de losse toets c opengaat, staat niet in deze bevinding.",
+    "affected": [
+     {
+      "group": "limited-manipulation",
+      "consequence": "cannot",
+      "textNl": "Ze openen met het toetsenbord de chat, en de focus komt in het veld Uw bericht. Tab, Shift+Tab en Escape laten de focus daar, dus ze komen niet bij Verstuur, het sluitteken of de rest van de pagina zonder opnieuw te laden."
+     },
+     {
+      "group": "no-vision",
+      "consequence": "cannot",
+      "textNl": "Ze openen de chat met het toetsenbord en de schermlezer. De focus blijft in het invoerveld en het venster zegt niet welke toets wel werkt, dus ze komen nergens anders meer zonder de pagina opnieuw te laden."
+     }
+    ]
+   },
+   {
+    "finding": "GEME-2.1.4-59ed",
+    "task": "all",
+    "affected": [
+     {
+      "group": "limited-manipulation",
+      "consequence": "detour",
+      "textNl": "Ze bedienen de site met spraak of raken per ongeluk een toets. Een losse z zet de focus in het zoekveld bovenaan, dus ze zijn hun plek kwijt en moeten vanaf de kop weer terug naar waar ze waren."
+     },
+     {
+      "group": "cognitive",
+      "consequence": "effort",
+      "textNl": "Een losse z zet de focus onverwacht in het zoekveld bovenaan. Ze raken de draad kwijt en moeten zoeken waar ze waren gebleven."
+     }
+    ]
+   },
+   {
+    "finding": "GEME-2.1.4-8219",
+    "task": "all",
+    "unsureNl": "Of de focus na de toets c in de chat komt of op de pagina blijft, staat niet in deze bevinding.",
+    "affected": [
+     {
+      "group": "limited-manipulation",
+      "consequence": "detour",
+      "textNl": "Ze bedienen de site met spraak of raken per ongeluk een toets. Een losse c opent de chat over de pagina, en het sluitteken krijgt geen focus, dus ze moeten de pagina opnieuw laden om de chat kwijt te raken."
+     },
+     {
+      "group": "cognitive",
+      "consequence": "effort",
+      "textNl": "Een losse c opent zonder dat ze het willen het chatvenster. Dat haalt ze uit het lezen, en ze moeten uitzoeken wat er gebeurde."
+     }
+    ]
+   },
+   {
+    "finding": "GEME-2.2.1-f604",
+    "task": "contact",
+    "affected": [
+     {
+      "group": "no-vision",
+      "consequence": "detour",
+      "textNl": "Ze vullen het formulier met de schermlezer in, en dat kost tijd. Na tien minuten gaat de pagina zonder verlengen naar de startpagina en is het bericht weg, dus ze moeten het eerst ergens anders schrijven en dan in het formulier plakken."
+     },
+     {
+      "group": "low-vision",
+      "consequence": "detour",
+      "textNl": "Ze vullen het formulier vergroot in en zien een deel tegelijk, en dat kost tijd. Na tien minuten is alles weg, dus ze moeten het bericht eerst ergens anders schrijven of opnieuw beginnen."
+     },
+     {
+      "group": "limited-manipulation",
+      "consequence": "detour",
+      "textNl": "Ze typen met moeite, met een schakelaar of met spraak, en dat kost tijd. Na tien minuten gaat de pagina naar de startpagina en is het bericht weg, dus ze moeten opnieuw beginnen of eerst ergens anders schrijven."
+     },
+     {
+      "group": "cognitive",
+      "consequence": "detour",
+      "textNl": "Ze lezen langzaam of worden afgeleid en hebben meer tijd nodig. De tijd is niet te verlengen en daarna is het bericht weg, dus ze moeten opnieuw beginnen of het eerst ergens anders opschrijven."
+     }
+    ]
+   },
+   {
+    "finding": "GEME-2.2.2-200c",
+    "task": "all",
+    "affected": [
+     {
+      "group": "low-vision",
+      "consequence": "detour",
+      "textNl": "Ze lezen het blok Uitgelicht op een vergrote pagina. Na vier seconden wisselt de tekst al, zonder knop om te pauzeren, dus ze moeten het bericht op de pagina Nieuws opzoeken om het uit te lezen."
+     },
+     {
+      "group": "cognitive",
+      "consequence": "detour",
+      "textNl": "Ze lezen langzaam en raken de draad kwijt als iets beweegt. Het blok wisselt elke vier seconden en leidt ook af bij de rest van de startpagina, dus ze moeten de berichten via de pagina Nieuws lezen."
+     },
+     {
+      "group": "limited-manipulation",
+      "consequence": "detour",
+      "textNl": "Ze willen een link in het blok Uitgelicht aanwijzen of uitspreken, en dat kost tijd. Na vier seconden staat er een ander bericht, dus ze moeten het bericht via de pagina Nieuws openen."
+     }
+    ]
+   },
+   {
+    "finding": "GEME-2.2.2-4928",
+    "task": "contact",
+    "affected": [
+     {
+      "group": "cognitive",
+      "consequence": "effort",
+      "textNl": "Ze vullen het contactformulier in terwijl de klok erboven elke seconde verandert. Dat leidt ze af en jaagt ze op, en er is geen knop om de klok te verbergen."
+     }
+    ]
+   },
+   {
+    "finding": "GEME-2.4.1-5c2c",
+    "task": "all",
+    "affected": [
+     {
+      "group": "limited-manipulation",
+      "consequence": "effort",
+      "textNl": "Ze kiezen bovenaan Direct naar de inhoud, maar de focus blijft op die link. Op elke pagina moeten ze daarna langs alle links in de kop, en voor wie met een schakelaar werkt, is elke stap werk."
+     },
+     {
+      "group": "no-vision",
+      "consequence": "effort",
+      "textNl": "Ze kiezen de link om naar de inhoud te springen, maar er gebeurt niets. Ze moeten zelf met koppen of gebieden naar de inhoud gaan, of langs alle links in de kop."
+     },
+     {
+      "group": "low-vision",
+      "consequence": "effort",
+      "textNl": "Ze werken vergroot met het toetsenbord en kiezen Direct naar de inhoud. De focus blijft staan, dus op elke pagina moeten ze eerst langs alle links in de kop."
+     },
+     {
+      "group": "cognitive",
+      "consequence": "effort",
+      "textNl": "Ze kiezen de link die belooft naar de inhoud te gaan, maar er gebeurt niets. Dat is verwarrend, en ze moeten zelf langs de kop naar de inhoud."
+     }
+    ]
+   },
+   {
+    "finding": "GEME-2.4.2-6550",
+    "task": null,
+    "affected": [
+     {
+      "group": "no-vision",
+      "consequence": "effort",
+      "textNl": "De schermlezer leest bij het openen van de startpagina eerst de titel voor. Ze horen de naam van de gemeente twee keer en drie losse procenttekens, en moeten daarna nagaan op welke pagina ze zijn."
+     },
+     {
+      "group": "cognitive",
+      "consequence": "effort",
+      "textNl": "Ze zien in het tabblad en bij favorieten een rommelige titel met losse procenttekens. Dat verwart, en ze moeten op de pagina zelf kijken waar ze zijn."
+     }
+    ]
+   },
+   {
+    "finding": "GEME-2.4.2-7584",
+    "task": null,
+    "affected": [
+     {
+      "group": "no-vision",
+      "consequence": "effort",
+      "textNl": "Op de pagina over afval en op de veelgestelde vragen is de titel alleen de naam van de gemeente. Ze moeten de kop van de pagina zoeken om te weten waar ze zijn."
+     },
+     {
+      "group": "cognitive",
+      "consequence": "effort",
+      "textNl": "Ze hebben meer tabbladen open en zoeken de pagina over afval of de veelgestelde vragen terug. Beide tabbladen heten hetzelfde, dus ze moeten ze een voor een openen."
+     }
+    ]
+   },
+   {
+    "finding": "GEME-2.4.3-2683",
+    "task": "producten",
+    "affected": [
+     {
+      "group": "no-vision",
+      "consequence": "detour",
+      "textNl": "Ze openen het venster over Paspoort, maar de focus gaat er niet heen. De volgende Tab gaat naar het zoekveld achter de grijze laag, dus ze moeten zelf zoeken waar de uitleg over het product staat."
+     },
+     {
+      "group": "limited-manipulation",
+      "consequence": "effort",
+      "textNl": "Ze openen het venster en drukken op Tab. De focus komt eerst op het bedekte zoekveld en pas daarna op Maak een afspraak, dus ze zetten een extra stap en zien een moment niet waar de focus is."
+     },
+     {
+      "group": "low-vision",
+      "consequence": "effort",
+      "textNl": "Ze volgen op een vergrote pagina de focus en openen het venster. De focus springt naar het zoekveld achter de grijze laag, dus ze raken kwijt waar ze zijn tot de volgende Tab bij Maak een afspraak komt."
+     },
+     {
+      "group": "cognitive",
+      "consequence": "effort",
+      "textNl": "De focus springt na het openen van het venster naar een veld dat bedekt is. Dat is niet te voorspellen, en ze moeten zoeken waar ze verder kunnen."
+     }
+    ]
+   },
+   {
+    "finding": "GEME-2.4.3-e622",
+    "task": null,
+    "affected": [
+     {
+      "group": "limited-manipulation",
+      "consequence": "detour",
+      "textNl": "De cookiemelding ligt onderaan over de pagina, maar de knoppen komen als laatste. Ze moeten eerst met het toetsenbord of een schakelaar langs de hele pagina voordat ze de melding kunnen sluiten."
+     },
+     {
+      "group": "low-vision",
+      "consequence": "detour",
+      "textNl": "Ze werken vergroot met het toetsenbord en willen de melding sluiten. De knoppen komen pas na kop, inhoud en voettekst, en onderweg valt de focus soms onder de melding, dus ze moeten de hele pagina door."
+     },
+     {
+      "group": "no-vision",
+      "consequence": "effort",
+      "textNl": "Ze horen de knoppen van de cookiemelding pas na de hele pagina. Ze moeten zelf naar het eind gaan om hun keuze over cookies te maken."
+     },
+     {
+      "group": "cognitive",
+      "consequence": "effort",
+      "textNl": "De melding staat in beeld, maar de focus gaat eerst langs de hele pagina. Dat is niet te voorspellen en kost ze moeite om te volgen."
+     }
+    ]
+   },
+   {
+    "finding": "GEME-2.4.3-f9c3",
+    "task": "all",
+    "affected": [
+     {
+      "group": "limited-manipulation",
+      "consequence": "detour",
+      "textNl": "Ze openen op een smal scherm het menu met het toetsenbord. De focus blijft op de menuknop en de menulinks komen pas na de voettekst, dus ze moeten eerst langs de hele pagina."
+     },
+     {
+      "group": "low-vision",
+      "consequence": "detour",
+      "textNl": "Ze werken vergroot, dus de site toont het menu achter een knop. Na het openen staan de menulinks pas na de voettekst, dus ze moeten met Tab de hele pagina door om erbij te komen."
+     },
+     {
+      "group": "no-vision",
+      "consequence": "detour",
+      "textNl": "Ze openen op een smal scherm het menu met de schermlezer. De menulinks staan na de voettekst, dus ze moeten de hele pagina door om bij het menu te komen."
+     },
+     {
+      "group": "cognitive",
+      "consequence": "effort",
+      "textNl": "Ze openen het menu, maar de focus gaat naar de inhoud en niet naar de menulinks. Dat is niet te voorspellen, en ze moeten zoeken waar het menu gebleven is."
+     }
+    ]
+   },
+   {
+    "finding": "GEME-3.2.3-04f9",
+    "task": "all",
+    "affected": [
+     {
+      "group": "no-vision",
+      "consequence": "effort",
+      "textNl": "Ze kennen de volgorde van het hoofdmenu en springen er met de schermlezer doorheen. Op de contactpagina staat Contact vooraan, dus elke link staat een plek verder dan ze gewend zijn."
+     },
+     {
+      "group": "low-vision",
+      "consequence": "effort",
+      "textNl": "Ze zien vergroot een deel van het menu en zoeken een link op de plek die ze kennen. Op de contactpagina staat alles een plek verschoven, dus ze moeten opnieuw zoeken."
+     },
+     {
+      "group": "cognitive",
+      "consequence": "effort",
+      "textNl": "Ze onthouden het menu op de plaats van de links. Op de contactpagina staat Contact vooraan, dus ze klikken makkelijk mis en moeten opnieuw kijken."
+     }
+    ]
+   },
+   {
+    "finding": "GEME-2.4.4-3f6e",
+    "task": null,
+    "affected": [
+     {
+      "group": "no-vision",
+      "consequence": "effort",
+      "textNl": "Ze vragen met de schermlezer een lijst van links op of gaan met Tab door het bericht. Ze horen Klik hier en moeten in de tekst eromheen zoeken dat de link over de parkeervergunning gaat."
+     },
+     {
+      "group": "low-vision",
+      "consequence": "effort",
+      "textNl": "Ze zien op een vergrote pagina de link Klik hier in een eigen alinea. Waar hij heen gaat, moeten ze afleiden uit de alinea ervoor."
+     },
+     {
+      "group": "cognitive",
+      "consequence": "effort",
+      "textNl": "Ze lezen Klik hier en weten niet waar de link heen gaat. Ze moeten de tekst ervoor terugzoeken om te begrijpen dat het om de parkeervergunning gaat."
+     }
+    ]
+   },
+   {
+    "finding": "GEME-2.4.4-9d17",
+    "task": null,
+    "affected": [
+     {
+      "group": "no-vision",
+      "consequence": "detour",
+      "textNl": "Ze gaan met de schermlezer door de voettekst en komen onder Volg ons bij twee links zonder naam. Om te weten waar ze heen gaan, moeten ze elke link openen."
+     },
+     {
+      "group": "limited-manipulation",
+      "consequence": "detour",
+      "textNl": "Ze bedienen de site met spraak en willen een link onder Volg ons openen. Er is geen naam om uit te spreken, dus ze moeten nummers of een raster over de pagina leggen."
+     }
+    ]
+   },
+   {
+    "finding": "GEME-4.1.2-d450",
+    "task": null,
+    "affected": [
+     {
+      "group": "no-vision",
+      "consequence": "detour",
+      "textNl": "Ze komen met de schermlezer onder Volg ons bij twee links zonder naam. Ze moeten elke link openen om te weten waar hij heen gaat."
+     },
+     {
+      "group": "limited-manipulation",
+      "consequence": "detour",
+      "textNl": "Ze bedienen de site met spraak en willen een van de pictogramlinks in de voettekst openen. Er is geen naam om te zeggen, dus ze moeten nummers of een raster over de pagina leggen."
+     }
+    ]
+   },
+   {
+    "finding": "GEME-2.4.6-7ef4",
+    "task": null,
+    "affected": [
+     {
+      "group": "no-vision",
+      "consequence": "effort",
+      "textNl": "Ze springen met de schermlezer van kop naar kop door het bericht. Ze horen twee keer Informatie, dus ze moeten onder elke kop verder lezen om te weten waar de video staat en waar het geluidsfragment."
+     },
+     {
+      "group": "cognitive",
+      "consequence": "effort",
+      "textNl": "Ze vertrouwen op duidelijke koppen om de weg te vinden. Twee koppen met hetzelfde woord zeggen niet wat eronder staat, dus ze moeten de tekst onder beide lezen."
+     }
+    ]
+   },
+   {
+    "finding": "GEME-2.4.7-d5df",
+    "task": "all",
+    "affected": [
+     {
+      "group": "limited-manipulation",
+      "consequence": "detour",
+      "textNl": "Ze gaan met het toetsenbord of een schakelaar door het hoofdmenu. Er is niet te zien op welke link de focus staat, dus ze moeten de stappen tellen of Enter proberen en kijken welke pagina opengaat."
+     },
+     {
+      "group": "low-vision",
+      "consequence": "detour",
+      "textNl": "Ze volgen de focus om te weten waar ze zijn, maar in het hoofdmenu verandert er niets bij focus. Ze moeten de stappen tellen of een link openen om te zien waar ze terechtkomen."
+     }
+    ]
+   },
+   {
+    "finding": "GEME-2.4.7-f2b0",
+    "task": null,
+    "withoutNl": "De pagina met openingstijden is ook via links in de tekst te bereiken, zoals op de contactpagina, en Contact staat ook in het hoofdmenu.",
+    "affected": [
+     {
+      "group": "limited-manipulation",
+      "consequence": "cannot",
+      "textNl": "Ze gaan met het toetsenbord door de voettekst. Bij Openingstijden verdwijnt de focus en Tab bereikt de zeven stops erna niet, dus die link en de links erna kunnen ze niet gebruiken."
+     },
+     {
+      "group": "no-vision",
+      "consequence": "cannot",
+      "textNl": "Ze gaan met de schermlezer en het toetsenbord door de voettekst. Bij Openingstijden verdwijnt de focus, dus die link en de zeven stops erna zijn niet te bereiken."
+     }
+    ]
+   },
+   {
+    "finding": "GEME-3.2.1-a494",
+    "task": null,
+    "withoutNl": "De pagina met openingstijden is ook via links in de tekst te bereiken, zoals op de contactpagina, en Contact staat ook in het hoofdmenu.",
+    "affected": [
+     {
+      "group": "limited-manipulation",
+      "consequence": "cannot",
+      "textNl": "Ze gaan met Tab door de voet. Zodra Openingstijden de focus krijgt, verlaat de focus de pagina, dus ze komen niet bij deze link en de links erna."
+     },
+     {
+      "group": "no-vision",
+      "consequence": "cannot",
+      "textNl": "Ze gaan met de schermlezer en Tab door de voet. Bij Openingstijden haalt de pagina de focus weg, dus ze raken hun plek kwijt en komen niet bij de links daarna."
+     }
+    ]
+   },
+   {
+    "finding": "GEME-2.4.11-0ed1",
+    "task": null,
+    "affected": [
+     {
+      "group": "limited-manipulation",
+      "consequence": "detour",
+      "textNl": "Ze gaan met het toetsenbord door de pagina terwijl de cookiemelding open staat. Links met focus liggen helemaal onder de melding, dus ze moeten eerst langs de hele pagina naar de knoppen van de melding om haar te sluiten."
+     },
+     {
+      "group": "low-vision",
+      "consequence": "detour",
+      "textNl": "Ze volgen op een vergrote pagina de focus, maar die verdwijnt onder de cookiemelding. Ze moeten eerst de melding sluiten, en de knoppen daarvan komen pas aan het eind van de pagina."
+     }
+    ]
+   },
+   {
+    "finding": "GEME-2.5.2-b13b",
+    "task": null,
+    "affected": [
+     {
+      "group": "limited-manipulation",
+      "consequence": "detour",
+      "textNl": "Ze raken met een trillende hand of een hoofdmuis de verkeerde knop. Het oordeel staat er al bij het indrukken en de andere knop gaat uit, dus herstellen kan alleen nog via de gemeente."
+     },
+     {
+      "group": "limited-reach",
+      "consequence": "detour",
+      "textNl": "Ze bedienen de telefoon met een hand en raken makkelijk de verkeerde knop. Wegschuiven voor het loslaten helpt niet en de andere knop gaat uit, dus herstellen kan alleen via de gemeente."
+     },
+     {
+      "group": "cognitive",
+      "consequence": "detour",
+      "textNl": "Ze drukken per ongeluk op Ja of Nee. Ze kunnen dat niet afbreken of veranderen, dus een verkeerd oordeel is alleen via de gemeente te herstellen."
+     }
+    ]
+   },
+   {
+    "finding": "GEME-2.5.3-9f4d",
+    "task": "zoeken",
+    "affected": [
+     {
+      "group": "limited-manipulation",
+      "consequence": "detour",
+      "textNl": "Ze bedienen de site met spraak en zeggen het woord dat op de knop staat, Zoeken. De knop heet in de code anders, dus er gebeurt niets en ze moeten nummers of een raster gebruiken."
+     },
+     {
+      "group": "no-vision",
+      "consequence": "effort",
+      "textNl": "Ze gaan met de schermlezer door de zoekbalk en horen bij de knop een andere naam dan het woord Zoeken op het scherm. Ze moeten raden dat deze knop de zoekopdracht verstuurt.",
+      "whyGroupNl": "De schermlezer leest de naam uit de code voor, en die naam is een ander woord dan het woord op de knop."
+     },
+     {
+      "group": "cognitive",
+      "consequence": "effort",
+      "textNl": "Wie de tekst laat voorlezen, hoort bij de knop een ander woord dan op het scherm staat. Dat geeft een moment van twijfel of dit de knop is om te zoeken."
+     }
+    ]
+   },
+   {
+    "finding": "GEME-2.5.8-84b4",
+    "task": "nieuws",
+    "affected": [
+     {
+      "group": "limited-manipulation",
+      "consequence": "effort",
+      "textNl": "Ze tikken of klikken met een trillende hand of een grove muisbeweging op een paginanummer. De nummers zijn 16 bij 18 pixels en staan 3 pixels uit elkaar, dus ze raken makkelijk de buurlink en moeten terug."
+     }
+    ]
+   },
+   {
+    "finding": "GEME-3.1.1-4611",
+    "task": "nieuws",
+    "affected": [
+     {
+      "group": "no-vision",
+      "consequence": "effort",
+      "textNl": "Op de foutpagina en het bericht over de stalling weet de schermlezer niet in welke taal hij moet voorlezen. Ze horen de tekst met de stem die ze zelf hebben ingesteld, en staat die op een andere taal, dan klinkt het Nederlands verkeerd."
+     },
+     {
+      "group": "cognitive",
+      "consequence": "effort",
+      "textNl": "Ze laten de tekst voorlezen. Zonder taal in de code kiest de voorleesfunctie de eigen ingestelde stem, en staat die op een andere taal, dan is de tekst moeilijk te volgen."
+     }
+    ]
+   },
+   {
+    "finding": "GEME-3.1.2-0ceb",
+    "task": null,
+    "affected": [
+     {
+      "group": "no-vision",
+      "consequence": "effort",
+      "textNl": "Ze laten het bericht voorlezen en komen bij het Engelse citaat van de jury. De schermlezer leest de Engelse zin met een Nederlandse uitspraak, dus ze verstaan het citaat slecht."
+     },
+     {
+      "group": "low-vision",
+      "consequence": "effort",
+      "textNl": "Ze laten het bericht voorlezen. Het Engelse citaat klinkt met een Nederlandse uitspraak, dus ze moeten het citaat zelf vergroot lezen of opnieuw beluisteren."
+     }
+    ]
+   },
+   {
+    "finding": "GEME-3.2.2-cfa6",
+    "task": "afval",
+    "affected": [
+     {
+      "group": "no-vision",
+      "consequence": "detour",
+      "textNl": "Ze bladeren met de pijltoetsen door de keuzelijst Uw wijk. Bij de eerste pijltoets laadt al een nieuwe pagina en zijn ze hun plek kwijt, dus ze moeten de lijst steeds opnieuw zoeken tot ze bij hun eigen wijk zijn."
+     },
+     {
+      "group": "limited-manipulation",
+      "consequence": "detour",
+      "textNl": "Ze kiezen hun wijk met het toetsenbord of een schakelaar. Elke pijltoets laadt een nieuwe pagina, dus ze moeten de keuzelijst steeds opnieuw opzoeken en een wijk verder gaan tot ze bij de hunne zijn."
+     },
+     {
+      "group": "cognitive",
+      "consequence": "effort",
+      "textNl": "Ze kiezen een wijk en de pagina laadt meteen opnieuw, zonder dat dat vooraf is gezegd. Dat verrast ze, en ze moeten nagaan of de ophaaldag bij de goede wijk hoort."
+     }
+    ]
+   },
+   {
+    "finding": "GEME-3.2.3-2142",
+    "task": "contact",
+    "affected": [
+     {
+      "group": "no-vision",
+      "consequence": "effort",
+      "textNl": "Ze zoeken het telefoonnummer en de link om een bericht te sturen in de voet, waar ze op andere pagina's staan. Op de nieuwspagina's staan ze in de kop, dus ze zoeken eerst tevergeefs en moeten dan bovenaan kijken."
+     },
+     {
+      "group": "low-vision",
+      "consequence": "effort",
+      "textNl": "Ze zien vergroot een deel van de pagina en zoeken de hulp in de voet. Op de nieuwspagina's staat die bovenaan in de kop, dus ze moeten terug naar boven schuiven en daar zoeken."
+     },
+     {
+      "group": "cognitive",
+      "consequence": "effort",
+      "textNl": "Ze rekenen op de vaste plek in de voet voor het telefoonnummer en de berichtlink. Op de nieuwspagina's staan die in de kop, dus ze moeten op een andere plek zoeken."
+     }
+    ]
+   },
+   {
+    "finding": "GEME-3.2.4-9001",
+    "task": "zoeken",
+    "affected": [
+     {
+      "group": "limited-manipulation",
+      "consequence": "detour",
+      "textNl": "Ze bedienen de site met spraak en volgen de uitleg om Zoeken te kiezen. Op de zoekpagina heet de knop Vind, dus er gebeurt niets en ze moeten de knop met nummers of een raster bereiken.",
+      "whyGroupNl": "Wie met spraak bedient, zegt de naam van een knop, en deze knop heet op de twee pagina's anders."
+     },
+     {
+      "group": "no-vision",
+      "consequence": "effort",
+      "textNl": "De uitleg zegt dat ze Zoeken moeten kiezen, maar de knop naast het veld heet Vind. Ze moeten raden dat dit de knop is die de uitleg bedoelt."
+     },
+     {
+      "group": "cognitive",
+      "consequence": "effort",
+      "textNl": "Ze volgen de uitleg en zoeken een knop Zoeken. Op de zoekpagina heet de knop Vind, dus ze twijfelen of het dezelfde knop is."
+     }
+    ]
+   },
+   {
+    "finding": "GEME-3.2.6-2f1b",
+    "task": "all",
+    "affected": [
+     {
+      "group": "cognitive",
+      "consequence": "effort",
+      "textNl": "Ze zoeken de link Contact op zijn vaste plek aan het eind van het menu. Op de contactpagina staat hij vooraan, dus ze moeten het menu opnieuw nalopen."
+     }
+    ]
+   },
+   {
+    "finding": "GEME-3.2.6-abb3",
+    "task": "contact",
+    "affected": [
+     {
+      "group": "cognitive",
+      "consequence": "effort",
+      "textNl": "Ze zoeken het telefoonnummer en de berichtlink onder Hulp nodig? in de voet. Op de nieuwspagina's staan ze daar niet maar bovenaan in de kop, dus ze moeten ze op een andere plek terugzoeken."
+     },
+     {
+      "group": "low-vision",
+      "consequence": "effort",
+      "textNl": "Ze zien vergroot een deel van de pagina en zoeken de hulp in de voet, waar die op andere pagina's staat. Op de nieuwspagina's staat die bovenaan, dus ze moeten terug naar boven schuiven en daar zoeken.",
+      "whyGroupNl": "Wie vergroot, ziet een deel van de pagina tegelijk en zoekt de hulp op de plek waar die op andere pagina's staat."
+     }
+    ]
+   },
+   {
+    "finding": "GEME-3.3.2-5236",
+    "task": "contact",
+    "affected": [
+     {
+      "group": "cognitive",
+      "consequence": "effort",
+      "textNl": "Ze kijken het formulier na voor ze het versturen. Bij E-mailadres en Telefoonnummer staat na het invullen niets meer, dus ze moeten uit wat ze typten afleiden welk veld wat vraagt."
+     },
+     {
+      "group": "low-vision",
+      "consequence": "effort",
+      "textNl": "Ze zien vergroot een deel van het formulier. De grijze voorbeeldtekst is het enige wat zegt wat het veld vraagt, en na het invullen is die weg."
+     }
+    ]
+   },
+   {
+    "finding": "GEME-1.3.1-f81b",
+    "task": "contact",
+    "affected": [
+     {
+      "group": "no-vision",
+      "consequence": "effort",
+      "textNl": "Ze gaan met de schermlezer door het formulier. De keuzes Vraag, Melding en Klacht komen zonder de vraag erbij, en bij geen veld wordt gemeld dat het verplicht is, dus ze moeten terug naar de tekst erboven en vullen voor de zekerheid alles in."
+     }
+    ]
+   },
+   {
+    "finding": "GEME-1.3.3-9150",
+    "task": "contact",
+    "affected": [
+     {
+      "group": "no-vision",
+      "consequence": "effort",
+      "textNl": "Ze horen dat ze op de ronde groene knop rechtsonder moeten klikken, maar vorm, kleur en plek bestaan voor ze niet. Ze moeten na het formulier zelf de knop Bericht versturen zoeken."
+     },
+     {
+      "group": "low-vision",
+      "consequence": "detour",
+      "textNl": "Ze zien vergroot een deel van de pagina en volgen de uitleg naar rechtsonder. Daar staat de knop Chat met ons, dus ze moeten terug naar het formulier om de knop Bericht versturen te vinden."
+     },
+     {
+      "group": "cognitive",
+      "consequence": "detour",
+      "textNl": "Ze volgen de uitleg letterlijk en zoeken de ronde groene knop rechtsonder. Daar komen ze bij de chatknop uit, dus ze moeten terug naar het formulier en de knop Bericht versturen zelf vinden."
+     }
+    ]
+   },
+   {
+    "finding": "GEME-1.3.3-d594",
+    "task": "contact",
+    "affected": [
+     {
+      "group": "no-vision",
+      "consequence": "effort",
+      "textNl": "Ze horen dat de rode velden verplicht zijn, maar kleur bestaat voor ze niet en de velden zijn ook in de code niet verplicht. Ze moeten raden welke velden moeten, of alles invullen."
+     },
+     {
+      "group": "no-color",
+      "consequence": "effort",
+      "textNl": "Ze lezen dat de rode velden verplicht zijn, maar zien niet welke labels rood zijn. Ze vullen daarom voor de zekerheid alle velden in."
+     },
+     {
+      "group": "low-vision",
+      "consequence": "effort",
+      "textNl": "Ze zien vergroot of met eigen kleuren het rood van twee labels slecht. Ze vullen daarom voor de zekerheid alle velden in."
+     }
+    ]
+   },
+   {
+    "finding": "GEME-1.3.5-12d9",
+    "task": "contact",
+    "affected": [
+     {
+      "group": "low-vision",
+      "consequence": "effort",
+      "textNl": "Ze vullen het contactformulier vergroot in en zien een deel tegelijk. De browser vult de naam niet vanzelf in, dus ze moeten dat zelf typen en nalezen."
+     },
+     {
+      "group": "limited-manipulation",
+      "consequence": "effort",
+      "textNl": "Ze typen met moeite, met een schakelaar of met spraak. De browser vult de naam niet vanzelf in, dus elke letter kost ze een eigen stap."
+     },
+     {
+      "group": "cognitive",
+      "consequence": "effort",
+      "textNl": "Ze laten de browser hun gegevens invullen, omdat onthouden en overtypen fout gaat. Bij de naam gebeurt dat niet, dus ze moeten het zelf opzoeken en intypen."
+     }
+    ]
+   },
+   {
+    "finding": "GEME-1.3.5-5e01",
+    "task": "contact",
+    "affected": [
+     {
+      "group": "low-vision",
+      "consequence": "effort",
+      "textNl": "Ze vullen het contactformulier vergroot in en zien een deel tegelijk. De browser vult het e-mailadres niet vanzelf in, dus ze moeten dat zelf typen en nalezen."
+     },
+     {
+      "group": "limited-manipulation",
+      "consequence": "effort",
+      "textNl": "Ze typen met moeite, met een schakelaar of met spraak. De browser vult het e-mailadres niet vanzelf in, dus elke letter kost ze een eigen stap."
+     },
+     {
+      "group": "cognitive",
+      "consequence": "effort",
+      "textNl": "Ze laten de browser hun gegevens invullen, omdat onthouden en overtypen fout gaat. Bij het e-mailadres gebeurt dat niet, dus ze moeten het zelf opzoeken en intypen."
+     }
+    ]
+   },
+   {
+    "finding": "GEME-1.3.5-dd72",
+    "task": "contact",
+    "affected": [
+     {
+      "group": "low-vision",
+      "consequence": "effort",
+      "textNl": "Ze vullen het contactformulier vergroot in en zien een deel tegelijk. De browser vult het telefoonnummer niet vanzelf in, dus ze moeten dat zelf typen en nalezen."
+     },
+     {
+      "group": "limited-manipulation",
+      "consequence": "effort",
+      "textNl": "Ze typen met moeite, met een schakelaar of met spraak. De browser vult het telefoonnummer niet vanzelf in, dus elke letter kost ze een eigen stap."
+     },
+     {
+      "group": "cognitive",
+      "consequence": "effort",
+      "textNl": "Ze laten de browser hun gegevens invullen, omdat onthouden en overtypen fout gaat. Bij het telefoonnummer gebeurt dat niet, dus ze moeten het zelf opzoeken en intypen."
+     }
+    ]
+   },
+   {
+    "finding": "GEME-2.4.3-9147",
+    "task": "contact",
+    "affected": [
+     {
+      "group": "limited-manipulation",
+      "consequence": "detour",
+      "textNl": "Ze gaan met het toetsenbord of een schakelaar door het formulier. Na Naam komt Telefoonnummer, dan E-mailadres, en daarna springt de focus naar het begin van de pagina, dus ze moeten opnieuw vanaf boven door de pagina om bij de rest van het formulier te komen."
+     },
+     {
+      "group": "no-vision",
+      "consequence": "detour",
+      "textNl": "Ze gaan met de schermlezer en Tab door het formulier. De velden komen in een andere volgorde dan ze op het scherm staan en na E-mailadres springt de focus naar boven, dus ze moeten de rest van het formulier opnieuw opzoeken."
+     },
+     {
+      "group": "low-vision",
+      "consequence": "detour",
+      "textNl": "Ze volgen op een vergrote pagina de focus door het formulier. Die springt van Naam naar Telefoonnummer, dan terug naar E-mailadres en daarna naar de kop van de pagina, dus ze moeten het formulier opnieuw opzoeken."
+     },
+     {
+      "group": "cognitive",
+      "consequence": "effort",
+      "textNl": "De focus springt in het formulier heen en weer en daarna naar boven. Dat is niet te voorspellen, dus ze moeten nagaan welk veld ze nu invullen."
+     }
+    ]
+   },
+   {
+    "finding": "GEME-3.3.1-3956",
+    "task": "contact",
+    "blocksNl": "Het formulier gaat pas weg als elk veld goed is, en zonder te weten welk veld fout is, komt het bericht niet bij de gemeente.",
+    "unsureNl": "Of de chat of het telefoonnummer voor deze bezoekers een andere weg naar de gemeente is, staat niet in deze bevinding.",
+    "affected": [
+     {
+      "group": "no-vision",
+      "consequence": "cannot",
+      "textNl": "Ze versturen het formulier en merken niet dat het niet is verstuurd. De fouten zijn alleen een rode rand en rode labels, zonder tekst, dus ze kunnen nergens vinden welk veld fout is."
+     },
+     {
+      "group": "no-color",
+      "consequence": "detour",
+      "textNl": "Ze versturen het formulier, dat niet weggaat. De fouten zitten in rode randen en rode labels, die ze niet als rood herkennen, dus ze moeten elk veld nalopen om te raden wat er mis is."
+     },
+     {
+      "group": "low-vision",
+      "consequence": "detour",
+      "textNl": "Ze zien vergroot een deel van het formulier. De fout is alleen een rode rand zonder tekst, dus ze moeten veld voor veld nalopen welk veld fout is."
+     },
+     {
+      "group": "cognitive",
+      "consequence": "detour",
+      "textNl": "Ze zien rode randen, maar er staat niet bij wat er fout is. Bij het e-mailadres moeten ze zelf raden wat er mis is en het opnieuw proberen."
+     }
+    ]
+   },
+   {
+    "finding": "GEME-3.3.2-df8a",
+    "task": "contact",
+    "affected": [
+     {
+      "group": "cognitive",
+      "consequence": "detour",
+      "textNl": "Het label bij het datumveld zegt niet hoe ze de datum moeten schrijven. Ze moeten raden, krijgen een fout zonder uitleg en moeten andere schrijfwijzen proberen tot er een goed is."
+     },
+     {
+      "group": "no-vision",
+      "consequence": "detour",
+      "textNl": "Ze horen bij het datumveld het label, maar niet hoe ze de datum moeten schrijven. Ze moeten een schrijfwijze raden en na een fout opnieuw proberen."
+     }
+    ]
+   },
+   {
+    "finding": "GEME-3.3.3-e763",
+    "task": "contact",
+    "blocksNl": "Het formulier gaat niet weg zolang de verplichte velden leeg zijn, en zonder te weten welke dat zijn, komt het bericht niet bij de gemeente.",
+    "unsureNl": "Of de chat of het telefoonnummer voor deze bezoekers een andere weg naar de gemeente is, staat niet in deze bevinding.",
+    "affected": [
+     {
+      "group": "no-vision",
+      "consequence": "cannot",
+      "textNl": "Ze versturen het formulier en het blijft staan. Bij de lege verplichte velden komt alleen een rode rand en geen tekst, dus ze kunnen nergens vinden wat er nog moet worden ingevuld."
+     },
+     {
+      "group": "low-vision",
+      "consequence": "detour",
+      "textNl": "Ze zien vergroot een deel van het formulier. Er komt geen tekst bij de lege velden, dus ze moeten veld voor veld zoeken welke rood zijn geworden."
+     },
+     {
+      "group": "cognitive",
+      "consequence": "detour",
+      "textNl": "Ze versturen het formulier en het gaat niet weg. Er staat niet bij wat er moet gebeuren, dus ze moeten zelf uitzoeken welke velden nog leeg zijn en waarom."
+     }
+    ]
+   },
+   {
+    "finding": "GEME-3.3.3-ed9f",
+    "task": "contact",
+    "affected": [
+     {
+      "group": "cognitive",
+      "consequence": "detour",
+      "textNl": "Onder het datumveld staat na versturen alleen Ongeldige invoer, zonder vorm of voorbeeld. Ze moeten andere schrijfwijzen proberen tot het formulier ze accepteert."
+     },
+     {
+      "group": "no-vision",
+      "consequence": "detour",
+      "textNl": "Als ze de melding onder het datumveld vinden, horen ze niet hoe de datum wel moet. Ze moeten schrijfwijzen proberen en elke keer opnieuw versturen."
+     },
+     {
+      "group": "low-vision",
+      "consequence": "detour",
+      "textNl": "Ze lezen vergroot de melding onder het datumveld, maar die zegt niet hoe het wel moet. Ze moeten schrijfwijzen proberen en elke keer opnieuw versturen."
+     }
+    ]
+   },
+   {
+    "finding": "GEME-4.1.3-8c59",
+    "task": "contact",
+    "affected": [
+     {
+      "group": "no-vision",
+      "consequence": "detour",
+      "textNl": "Ze versturen het formulier en de focus blijft op de knop. De melding onder het datumveld wordt niet voorgelezen, dus ze moeten zelf terug door het formulier zoeken om te merken dat er iets mis is."
+     }
+    ]
+   },
+   {
+    "finding": "GEME-3.3.4-9ddf",
+    "task": "vergunning",
+    "affected": [
+     {
+      "group": "no-vision",
+      "consequence": "detour",
+      "textNl": "Ze vullen de aanvraag met de schermlezer in en horen een tikfout niet altijd. Stap 2 toont hun gegevens niet en heeft geen knop terug, en na Aanvragen en betalen is de aanvraag definitief, dus herstellen kan alleen nog via de gemeente."
+     },
+     {
+      "group": "low-vision",
+      "consequence": "detour",
+      "textNl": "Ze vullen de aanvraag vergroot in en zien een deel tegelijk. Stap 2 toont hun gegevens niet om na te lezen, en na Aanvragen en betalen is de aanvraag definitief, dus herstellen kan alleen nog via de gemeente."
+     },
+     {
+      "group": "cognitive",
+      "consequence": "detour",
+      "textNl": "Ze vergissen zich makkelijker bij lezen of typen. Ze kunnen de aanvraag niet nalezen of verbeteren voordat ze betalen, dus een fout is alleen nog via de gemeente te herstellen."
+     },
+     {
+      "group": "limited-manipulation",
+      "consequence": "detour",
+      "textNl": "Ze typen met moeite en raken makkelijk een verkeerde toets. Ze kunnen hun gegevens niet nalezen voordat de aanvraag met betaling definitief is, dus een fout herstellen kan alleen via de gemeente."
+     }
+    ]
+   },
+   {
+    "finding": "GEME-3.3.7-914b",
+    "task": "vergunning",
+    "affected": [
+     {
+      "group": "limited-manipulation",
+      "consequence": "effort",
+      "textNl": "Ze typen met moeite of met een schakelaar. In stap 2 moeten ze hun adres opnieuw typen, terwijl ze het in stap 1 al gaven, en elke letter kost ze een stap."
+     },
+     {
+      "group": "cognitive",
+      "consequence": "effort",
+      "textNl": "Ze moeten in stap 2 het adres opnieuw typen dat ze in stap 1 al invulden. Overtypen gaat makkelijk fout, en er is geen keuze om het adres over te nemen."
+     }
+    ]
+   },
+   {
+    "finding": "GEME-3.3.8-2a00",
+    "task": "inloggen",
+    "blocksNl": "Op de pagina staat geen andere manier om in te loggen, dus zonder deze letters komen ze niet in Mijn Lindewaard.",
+    "affected": [
+     {
+      "group": "cognitive",
+      "consequence": "cannot",
+      "textNl": "Ze moeten de derde en de zesde letter van hun geheime woord typen. Dat vraagt onthouden en uitpluizen, en de browser kan het veld niet invullen, dus hier lopen ze vast."
+     }
+    ]
+   },
+   {
+    "finding": "GEME-4.1.2-26d7",
+    "task": null,
+    "affected": [
+     {
+      "group": "no-vision",
+      "consequence": "effort",
+      "textNl": "Ze komen in de voettekst bij het wapen van de gemeente. Afhankelijk van browser en schermlezer krijgen ze een afbeelding of iets zonder rol, dus het is niet zeker wat ze voor zich hebben."
+     }
+    ]
+   },
+   {
+    "finding": "GEME-4.1.2-4cf1",
+    "task": null,
+    "withoutNl": "Zonder de schuif is de lijst met zes producten nog van boven naar beneden te doorlopen, en het veld Zoek in de producten filtert ook.",
+    "affected": [
+     {
+      "group": "no-vision",
+      "consequence": "cannot",
+      "textNl": "Ze gaan met de schermlezer door de pagina met producten. De schuif voor de hoogste prijs heeft geen rol, naam of waarde, dus ze weten niet dat hij er is en kunnen niet op prijs filteren."
+     },
+     {
+      "group": "limited-manipulation",
+      "consequence": "detour",
+      "textNl": "Ze bedienen de site met spraak en willen de schuif voor de hoogste prijs gebruiken. Er is geen naam om uit te spreken, dus ze moeten nummers of een raster over de pagina leggen."
+     }
+    ]
+   },
+   {
+    "finding": "GEME-2.1.1-4d08",
+    "task": null,
+    "withoutNl": "Zonder de schuif is de lijst met zes producten nog van boven naar beneden te doorlopen, en het veld Zoek in de producten filtert ook.",
+    "affected": [
+     {
+      "group": "limited-manipulation",
+      "consequence": "cannot",
+      "textNl": "Ze werken met het toetsenbord of een schakelaar. De knop van de schuif krijgt geen focus, dus ze kunnen niet op prijs filteren."
+     },
+     {
+      "group": "no-vision",
+      "consequence": "cannot",
+      "textNl": "Ze gaan met de schermlezer en het toetsenbord langs de schuif. De knop krijgt geen focus, dus de prijs is niet in te stellen."
+     }
+    ]
+   },
+   {
+    "finding": "GEME-2.5.7-cfe1",
+    "task": null,
+    "withoutNl": "Zonder de schuif zijn de prijzen in de lijst met zes producten nog na te lezen.",
+    "affected": [
+     {
+      "group": "limited-manipulation",
+      "consequence": "cannot",
+      "textNl": "Ze kunnen de muis niet ingedrukt houden en tegelijk bewegen, bijvoorbeeld door trillende handen of met een hoofdmuis. Een klik op de baan doet niets en er is geen veld voor de prijs, dus filteren op prijs lukt ze niet."
+     }
+    ]
+   },
+   {
+    "finding": "GEME-4.1.2-8221",
+    "task": "zoeken",
+    "affected": [
+     {
+      "group": "no-vision",
+      "consequence": "effort",
+      "textNl": "Ze openen met de schermlezer een vraag. Er wordt niet gemeld of het antwoord open of dicht is, dus ze merken pas door verder te lezen dat er tekst is verschenen."
+     }
+    ]
+   },
+   {
+    "finding": "GEME-4.1.2-9ad6",
+    "task": "nieuws",
+    "affected": [
+     {
+      "group": "no-vision",
+      "consequence": "effort",
+      "textNl": "Ze komen in het bericht en op de pagina van de raadsvergadering bij een frame zonder naam. Wat erin staat, merken ze pas als ze het frame ingaan en bij de knoppen van de speler komen."
+     }
+    ]
+   },
+   {
+    "finding": "GEME-4.1.2-aa03",
+    "task": null,
+    "affected": [
+     {
+      "group": "no-vision",
+      "consequence": "effort",
+      "textNl": "Ze komen in de voettekst bij Naar boven. Per browser en schermlezer krijgen ze een link of alleen tekst, dus het is niet zeker wat het is en of ze er iets mee kunnen."
+     }
+    ]
+   },
+   {
+    "finding": "GEME-4.1.2-bc00",
+    "task": "producten",
+    "blocksNl": "De uitleg per product en de link Maak een afspraak staan in het venster achter de kaart, dus zonder de kaart te openen komen ze niet bij de afspraak.",
+    "unsureNl": "Of er buiten het productvenster een andere weg is om een afspraak te maken, staat niet in de invoer.",
+    "affected": [
+     {
+      "group": "no-vision",
+      "consequence": "cannot",
+      "textNl": "Ze gaan met de schermlezer langs de productkaarten en vinden alleen koppen en tekst. De kaarten zijn geen knop, dus ze kunnen de uitleg en de link Maak een afspraak niet openen."
+     },
+     {
+      "group": "limited-manipulation",
+      "consequence": "detour",
+      "textNl": "Ze bedienen de site met spraak en willen een productkaart openen. De kaart heeft geen naam en geen rol, dus ze moeten nummers of een raster over de pagina leggen."
+     }
+    ]
+   },
+   {
+    "finding": "GEME-4.1.2-c4be",
+    "task": "producten",
+    "unsureNl": "Waar het venster in de code staat, en dus of de schermlezer de uitleg bij de volgende stap voorleest, staat niet in de bevinding.",
+    "affected": [
+     {
+      "group": "no-vision",
+      "consequence": "effort",
+      "textNl": "Ze openen het venster over een product. Er wordt niet gemeld dat er een venster open is en de titel wordt niet genoemd, dus ze moeten uit de tekst afleiden waar ze zijn."
+     }
+    ]
+   },
+   {
+    "finding": "GEME-4.1.2-c8b1",
+    "task": "all",
+    "affected": [
+     {
+      "group": "no-vision",
+      "consequence": "detour",
+      "textNl": "Ze gebruiken een telefoon met de schermlezer en komen in de kop bij een knop zonder naam. Ze moeten die knop proberen om te weten dat hij het hoofdmenu opent."
+     },
+     {
+      "group": "limited-manipulation",
+      "consequence": "detour",
+      "textNl": "Ze bedienen de site op een smal scherm met spraak en willen het menu openen. De knop heeft geen naam om uit te spreken, dus ze moeten nummers of een raster over de pagina leggen."
+     }
+    ]
+   },
+   {
+    "finding": "GEME-4.1.2-25b3",
+    "task": "all",
+    "affected": [
+     {
+      "group": "no-vision",
+      "consequence": "detour",
+      "textNl": "Ze openen met de schermlezer het menu op een smal scherm. Er wordt niet gemeld dat het menu open is, en de menulinks staan pas na de voettekst, dus ze moeten de pagina doorzoeken om te merken dat er links bij zijn gekomen."
+     }
+    ]
+   },
+   {
+    "finding": "GEME-4.1.2-d147",
+    "task": null,
+    "withoutNl": "Het bericht is ook zonder kopie naar de gemeente te versturen.",
+    "affected": [
+     {
+      "group": "no-vision",
+      "consequence": "cannot",
+      "textNl": "Ze gaan met de schermlezer door het contactformulier. Het vakje voor een kopie bestaat voor hun hulpsoftware niet, dus ze kunnen geen kopie van het bericht vragen."
+     },
+     {
+      "group": "limited-manipulation",
+      "consequence": "detour",
+      "textNl": "Ze bedienen de site met spraak en willen het vakje voor een kopie aanvinken. Het vakje heeft voor hun software geen naam en geen rol, dus ze moeten nummers of een raster gebruiken om op het label te klikken."
+     }
+    ]
+   },
+   {
+    "finding": "GEME-2.1.1-3bcc",
+    "task": null,
+    "withoutNl": "Het bericht is ook zonder kopie naar de gemeente te versturen.",
+    "affected": [
+     {
+      "group": "limited-manipulation",
+      "consequence": "cannot",
+      "textNl": "Ze gaan met het toetsenbord of een schakelaar door het formulier. Het vakje voor een kopie krijgt geen focus, dus ze kunnen geen kopie vragen."
+     },
+     {
+      "group": "no-vision",
+      "consequence": "cannot",
+      "textNl": "Ze gaan met de schermlezer en het toetsenbord door het formulier. Het vakje voor een kopie kan geen focus krijgen, dus aanvinken lukt niet."
+     }
+    ]
+   },
+   {
+    "finding": "GEME-4.1.2-de61",
+    "task": "afval",
+    "blocksNl": "Wat in welke container hoort, staat voor papier en voor groente en tuin in de andere tabbladen, dus zonder die tabbladen krijgen ze die uitleg niet.",
+    "unsureNl": "Of dezelfde uitleg over papier ook bij de veelgestelde vragen staat, staat niet in de bevinding.",
+    "affected": [
+     {
+      "group": "no-vision",
+      "consequence": "cannot",
+      "textNl": "Ze lezen de uitleg onder Wat hoort waar? met de schermlezer. De tabbladen zijn losse tekst zonder rol of toestand, dus ze weten niet dat er tabbladen zijn en krijgen de uitleg over papier en groente en tuin niet."
+     },
+     {
+      "group": "limited-manipulation",
+      "consequence": "detour",
+      "textNl": "Ze bedienen de site met spraak en willen het tabblad Papier kiezen. Het tabblad heeft geen naam en geen rol, dus ze moeten nummers of een raster over de pagina leggen."
+     }
+    ]
+   },
+   {
+    "finding": "GEME-2.1.1-b294",
+    "task": "afval",
+    "blocksNl": "Wat in welke container hoort, staat voor papier en voor groente en tuin in de andere tabbladen, dus zonder die tabbladen krijgen ze die uitleg niet.",
+    "unsureNl": "Of dezelfde uitleg over papier ook bij de veelgestelde vragen staat, staat niet in de bevinding.",
+    "affected": [
+     {
+      "group": "limited-manipulation",
+      "consequence": "cannot",
+      "textNl": "Ze gaan met het toetsenbord of een schakelaar door de pagina over afval. Tab gaat van de keuzelijst naar de voettekst, dus ze zien alleen de uitleg over restafval."
+     },
+     {
+      "group": "no-vision",
+      "consequence": "cannot",
+      "textNl": "Ze gaan met de schermlezer en het toetsenbord langs de tabbladen. Papier krijgt geen focus, dus de uitleg over de blauwe container gaat niet open."
+     }
+    ]
+   },
+   {
+    "finding": "GEME-4.1.2-e33d",
+    "task": "nieuws",
+    "blocksNl": "De kaarten zijn op het overzicht de enige weg naar de berichten, en zonder een bericht te openen is het nieuws niet te lezen.",
+    "unsureNl": "Of de berichten ook via de startpagina of de zoekfunctie te openen zijn, staat niet in de bevinding.",
+    "affected": [
+     {
+      "group": "no-vision",
+      "consequence": "cannot",
+      "textNl": "Ze gaan met de schermlezer door het nieuwsoverzicht en vinden alleen tekst. De kaarten zijn geen link en bevatten er geen, dus ze kunnen vanaf deze pagina geen bericht openen."
+     },
+     {
+      "group": "limited-manipulation",
+      "consequence": "detour",
+      "textNl": "Ze bedienen de site met spraak en willen een nieuwsbericht openen. De kaart heeft geen naam en geen rol, dus ze moeten nummers of een raster over de pagina leggen."
+     }
+    ]
+   },
+   {
+    "finding": "GEME-4.1.2-efe1",
+    "task": null,
+    "withoutNl": "Met de schermlezer blijft de pagina achter het venster te lezen en te bedienen, dus de taken lukken ook als het venster open blijft.",
+    "unsureNl": "Of de knop Chat met ons de chat ook weer sluit, staat niet in de bevinding.",
+    "affected": [
+     {
+      "group": "no-vision",
+      "consequence": "cannot",
+      "textNl": "Ze zoeken met de schermlezer een knop om de chat of het productvenster te sluiten. Het kruisje heeft geen rol en geen naam, dus ze vinden geen knop om het venster te sluiten."
+     },
+     {
+      "group": "limited-manipulation",
+      "consequence": "detour",
+      "textNl": "Ze bedienen de site met spraak en willen het venster sluiten. Het kruisje heeft geen naam om uit te spreken, dus ze moeten nummers of een raster over de pagina leggen."
+     }
+    ]
+   },
+   {
+    "finding": "GEME-4.1.3-8c06",
+    "task": "producten",
+    "affected": [
+     {
+      "group": "no-vision",
+      "consequence": "effort",
+      "textNl": "Ze typen in het veld Zoek in de producten. Het nieuwe aantal producten wordt niet voorgelezen, dus ze moeten zelf naar de alinea onder het veld gaan om te horen hoeveel producten er over zijn."
+     }
+    ]
+   },
+   {
+    "finding": "GEME-4.1.3-9498",
+    "task": "contact",
+    "affected": [
+     {
+      "group": "no-vision",
+      "consequence": "detour",
+      "textNl": "Ze sturen een bericht in de chat en de focus blijft op Verstuur of in het veld. Het antwoord van de gemeente wordt niet voorgelezen, dus ze moeten na elk bericht zelf in het venster terugzoeken of er iets is bijgekomen."
+     }
+    ]
+   },
+   {
+    "finding": "GEME-4.1.3-cf30",
+    "task": null,
+    "affected": [
+     {
+      "group": "no-vision",
+      "consequence": "effort",
+      "textNl": "Ze kiezen Ja of Nee en de focus gaat naar het hele hoofddeel. Het bedankje wordt niet voorgelezen, dus ze merken pas door verder te lezen dat hun reactie is ontvangen."
+     }
+    ]
+   }
+  ],
+  "together": []
+ }
+}
