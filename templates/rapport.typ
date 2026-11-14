@@ -464,11 +464,11 @@
   #for task in weighing.stopped [
     #heading(level: 3, outlined: false, task.taskNl)
     #for cause in task.causes [
-      // One defect closes the paragraph as a sentence; more of them stand under it as a list.
-      #let causes = cause.defectIds.map(id => link(label(id), defect-by-id.at(id).titleNl))
+      // One defect closes the paragraph as a sentence; more of them stand under it as a list, each with its own reason when they differ.
+      #let causes = cause.defects.map(defect => [#link(label(defect.id), defect.titleNl)#if defect.whyNl != "" [. #prose(defect.whyNl)]])
       #let (one, more) = if cause.together { (t.weighing.togetherOne, t.weighing.togetherMore) } else { (t.weighing.becauseOne, t.weighing.becauseMore) }
       #if causes.len() == 1 [
-        #par[#cause.whoNl #prose(cause.whyNl) #one #causes.first().]
+        #par[#cause.whoNl #prose(cause.whyNl) #one #link(label(cause.defects.first().id), cause.defects.first().titleNl).]
       ] else [
         #par[#cause.whoNl #prose(cause.whyNl) #more]
         #list(..causes)

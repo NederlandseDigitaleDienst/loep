@@ -463,11 +463,12 @@ export interface WeighingDerived {
   introNl: string;
   /**
    * Per core task at which a group is stopped, the task with the most defects first and what
-   * holds for every task before that. Each cause is one set of groups: who is stopped, why the
-   * task can not be finished, and the defects. `together` marks findings that stop a group only
-   * together.
+   * holds for every task before that. Each cause is one set of groups: who is stopped, and the
+   * defects with why the task can not be finished. A reason the defects share stands once, in
+   * `whyNl`; otherwise each defect carries its own. `together` marks findings that stop a group
+   * only together.
    */
-  stopped: { taskNl: string; causes: { whoNl: string; whyNl: string; together: boolean; defectIds: string[] }[] }[];
+  stopped: { taskNl: string; causes: { whoNl: string; whyNl: string; together: boolean; defects: { id: string; titleNl: string; whyNl: string }[] }[] }[];
   /** The core tasks at which no defect stops a group, in sentences; null when every task has one or something stops a group at every task. */
   notStoppedNl: string | null;
   /** What the section can not show: findings are weighed one by one, and criteria without a verdict can hide more. */
@@ -1028,7 +1029,7 @@ function deriveDefects(evaluation: Evaluation, labels: string[]): DefectsDerived
       evaluation.weighing?.status === "applied"
         ? `De ernst van een bevinding volgt uit wat per bevinding is vastgelegd: welke groepen bezoekers ze hindert, wat er voor elke groep gebeurt, en of bezoekers dit deel nodig hebben voor een kerntaak van de site. Een taalmodel heeft dat vastgelegd uit de bevindingen. De ernst zelf volgt daarna uit een vaste tabel. Kan een groep iets niet wat nodig is voor een kerntaak, dan is de ernst blokkerend. Kan een groep iets anders niet, dan is ze hoog. Lukt het alleen met een omweg, dan is ze midden, en kost het extra moeite, dan laag. De groep die het zwaarst wordt geraakt telt; hoe groot die groep is, telt niet. Een gebrek heeft de hoogste ernst van zijn bevindingen. De groepen zijn de gebruikersbehoeften uit EN 301 549, paragraaf 4.2. Wat bij een bevinding over een groep staat, is afgeleid uit de bevinding en niet met hulpsoftware of met bezoekers waargenomen. Deze stap geeft niet elke keer dezelfde uitkomst. Ze kan geen gebrek schrappen en geen oordeel over een criterium veranderen, en een vaste controle weigert een tekst die een groep klein of onbelangrijk noemt.`
         : evaluation.weighing?.status === "stale"
-          ? "De ernst van een gebrek is de hoogste ernst die de beoordelaars aan zijn bevindingen gaven. Er is een weging van de bevindingen per groep bezoekers, maar die hoort bij andere bevindingen dan deze en is daarom niet toegepast."
+          ? `De ernst van een gebrek is de hoogste ernst die de beoordelaars aan zijn bevindingen gaven. Er is een weging van de bevindingen per groep bezoekers, maar die is niet toegepast: ${{ unchecked: "ze is niet gecontroleerd, of na de controle gewijzigd", findings: "ze is gemaakt voor andere bevindingen dan deze", task: "ze is gemaakt met een andere versie van de opdracht" }[evaluation.weighing.reason ?? "findings"]}.`
           : evaluation.weighing
             ? "De ernst van een gebrek is de hoogste ernst die de beoordelaars aan zijn bevindingen gaven. De stap die per bevinding vastlegt welke groepen bezoekers ze hindert, is niet uitgevoerd."
             : // An evaluation from before the step existed says nothing about it.
@@ -1049,10 +1050,11 @@ const listNl = (items: string[]): string => (items.length <= 1 ? items.join("") 
  * Who a defect hinders, for a line in the work list: the groups with the heaviest consequence
  * in one sentence, and how many other groups it hinders. The finding cards give every group.
  */
-function whoSentencesNl(affected: { group: AffectedGroup; consequence: Consequence }[]): string {
+function whoSentencesNl(affected: { group: AffectedGroup; consequence: Consequence }[], stopped: AffectedGroup[] | null): string {
   const worst = CONSEQUENCES.find((consequence) => affected.some((entry) => entry.consequence === consequence));
   if (worst === undefined) return "Uit de bevindingen blijkt geen gevolg voor een groep bezoekers.";
-  const heaviest = affected.filter((entry) => entry.consequence === worst).map((entry) => groupLabelNl(entry.group));
+  // A defect that stops a group at a core task names the groups it stops there: another group can be unable to use a part of it that no task needs.
+  const heaviest = affected.filter((entry) => (stopped ? stopped.includes(entry.group) : entry.consequence === worst)).map((entry) => groupLabelNl(entry.group));
   const others = affected.length - heaviest.length;
   return `${upperFirst(listNl(heaviest))} ${CONSEQUENCE_CLAUSE_NL[worst]}.${others === 0 ? "" : others === 1 ? " Ook één andere groep heeft er last van." : ` Ook ${others} andere groepen hebben er last van.`}`;
 }
@@ -1106,27 +1108,38 @@ function deriveWeighing(evaluation: Evaluation): WeighingDerived | null {
         ];
       }),
   );
-  const ofDefect = Object.fromEntries(sorted.map((defect) => [defect.id, { whoNl: whoSentencesNl(defect.weighing!.affected), taskNl: defect.weighing!.task === null ? null : factNl(defect.weighing!.task) }]));
+  const stoppedBy = (defect: Defect): AffectedGroup[] | null => {
+    if (defect.severity !== "blokkerend") return null;
+    const members = defect.findingIds.map((id) => findings.get(id)!).filter((finding) => finding.weighing && finding.weighing.task !== null);
+    return order.filter((group) => members.some((finding) => finding.weighing!.affected.some((entry) => entry.group === group && entry.consequence === "cannot")));
+  };
+  const ofDefect = Object.fromEntries(sorted.map((defect) => [defect.id, { whoNl: whoSentencesNl(defect.weighing!.affected, stoppedBy(defect)), taskNl: defect.weighing!.task === null ? null : factNl(defect.weighing!.task) }]));
   const defectOf = new Map(sorted.flatMap((defect) => defect.findingIds.map((id): [string, string] => [id, defect.id])));
   const stoppedNl = (groups: AffectedGroup[], together: boolean): string => `${upperFirst(listNl(order.filter((group) => groups.includes(group)).map((group) => groupLabelNl(group))))} lopen hier vast${together ? " door gebreken die samenkomen" : ""}.`;
   // A defect stops a group at a task when one of its findings says so: that finding names the task and says why it can not be finished.
   const stopping = (defect: Defect, task: string): ReportFinding[] =>
     [defect.mainFindingId, ...defect.findingIds.filter((id) => id !== defect.mainFindingId)].map((id) => findings.get(id)!).filter((finding) => finding.weighing?.task === task && finding.weighing.affected.some((entry) => entry.consequence === "cannot"));
   const perTask = [{ id: TASK_ALL, nameNl: "Bij elke kerntaak" }, ...tasks].map((task) => {
-    // The defects that stop the same groups share a paragraph, with the reason of the heaviest of them: a reason is never put with a group it was not written for.
-    const causes = new Map<string, { groups: AffectedGroup[]; whyNl: string; defectIds: string[] }>();
+    // The defects that stop the same groups share a paragraph. Each keeps the reason that was written for it, under the title of the finding that stops the group.
+    const causes = new Map<string, { groups: AffectedGroup[]; defects: { id: string; titleNl: string; whyNl: string }[] }>();
     for (const defect of sorted) {
       const by = stopping(defect, task.id);
       if (by.length === 0) continue;
       const groups = order.filter((group) => by.some((finding) => finding.weighing!.affected.some((entry) => entry.group === group && entry.consequence === "cannot")));
-      const cause = causes.get(groups.join(" ")) ?? { groups, whyNl: "", defectIds: [] };
-      cause.whyNl ||= closedSentence(by.map((finding) => finding.weighing!.blocksNl ?? "").find((text) => text !== "") ?? "");
-      cause.defectIds.push(defect.id);
+      const cause = causes.get(groups.join(" ")) ?? { groups, defects: [] };
+      // The title of a defect is that of its main finding; when another finding stops the group, the defect is named by that one.
+      cause.defects.push({ id: defect.id, titleNl: by.some((finding) => finding.id === defect.mainFindingId) ? defect.titleNl : by[0]!.titleNl, whyNl: closedSentence(by.map((finding) => finding.weighing!.blocksNl ?? "").find((text) => text !== "") ?? "") });
       causes.set(groups.join(" "), cause);
     }
-    const together = (record.together ?? []).filter((entry) => entry.task === task.id).map((entry) => ({ whoNl: stoppedNl([entry.group], true), whyNl: closedSentence(entry.stopsNl), together: true, defectIds: [...new Set(entry.findings.map((id) => defectOf.get(id)).filter((id): id is string => id !== undefined))] }));
-    const alone = [...causes.values()].map((cause) => ({ whoNl: stoppedNl(cause.groups, false), whyNl: cause.whyNl, together: false, defectIds: cause.defectIds }));
-    return { taskNl: task.nameNl, all: task.id === TASK_ALL, defects: alone.reduce((total, cause) => total + cause.defectIds.length, 0), causes: [...alone, ...together] };
+    const alone = [...causes.values()].map((cause) => {
+      const shared = cause.defects.every((defect) => defect.whyNl === cause.defects[0]!.whyNl);
+      return { whoNl: stoppedNl(cause.groups, false), whyNl: shared ? cause.defects[0]!.whyNl : "", together: false, defects: cause.defects.map((defect) => ({ ...defect, whyNl: shared ? "" : defect.whyNl })) };
+    });
+    const titleOf = new Map(sorted.map((defect) => [defect.id, defect.titleNl]));
+    const together = (record.together ?? [])
+      .filter((entry) => entry.task === task.id)
+      .map((entry) => ({ whoNl: stoppedNl([entry.group], true), whyNl: closedSentence(entry.stopsNl), together: true, defects: [...new Set(entry.findings.map((id) => defectOf.get(id)).filter((id): id is string => id !== undefined))].map((id) => ({ id, titleNl: titleOf.get(id)!, whyNl: "" })) }));
+    return { taskNl: task.nameNl, all: task.id === TASK_ALL, defects: alone.reduce((total, cause) => total + cause.defects.length, 0), causes: [...alone, ...together] };
   });
   const everywhere = perTask.some((task) => task.all && task.causes.length > 0);
   const free = perTask.filter((task) => !task.all && task.causes.length === 0).map((task) => task.taskNl);
@@ -1720,11 +1733,11 @@ export function renderMarkdown(input: Evaluation, decisions: DecisionLayer = { d
     for (const task of weighing.stopped) {
       lines.push(`**${esc(task.taskNl)}**`, "");
       for (const cause of task.causes) {
-        // One defect closes the paragraph as a sentence; more of them stand under it as a list.
-        const links = cause.defectIds.map(linkTo);
+        // One defect closes the paragraph as a sentence; more of them stand under it as a list, each with its own reason when they differ.
+        const links = cause.defects.map((defect) => `[${esc(defect.titleNl)}](#${defect.id})`);
         const [one, more] = cause.together ? [REPORT_TEXT.weighing.togetherOne, REPORT_TEXT.weighing.togetherMore] : [REPORT_TEXT.weighing.becauseOne, REPORT_TEXT.weighing.becauseMore];
         lines.push(`${cause.whoNl} ${esc(cause.whyNl)} ${links.length === 1 ? `${one} ${links[0]}.` : more}`.replace(/\s+/g, " "), "");
-        if (links.length > 1) lines.push(...links.map((link) => `- ${link}`), "");
+        if (links.length > 1) lines.push(...cause.defects.map((defect, index) => `- ${links[index]}${defect.whyNl ? `. ${esc(defect.whyNl)}` : ""}`), "");
       }
     }
     if (weighing.notStoppedNl) lines.push(esc(weighing.notStoppedNl), "");

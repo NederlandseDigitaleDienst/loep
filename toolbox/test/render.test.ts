@@ -781,8 +781,8 @@ test("a weighed report says per core task which groups are stopped, and counts t
   // What stops a group at a core task alone is what the table calls blokkerend: the two lists are the same defects.
   const derived = deriveReport(evaluation);
   const alone = derived.weighing!.stopped.flatMap((task) => task.causes.filter((cause) => !cause.together));
-  assert.deepEqual([...new Set(alone.flatMap((cause) => cause.defectIds))].sort(), stopped.map((defect) => defect.id).sort());
-  for (const cause of derived.weighing!.stopped.flatMap((task) => task.causes)) assert.ok(cause.whyNl.length > 0 && /lopen hier vast( door gebreken die samenkomen)?\.$/.test(cause.whoNl), cause.whoNl);
+  assert.deepEqual([...new Set(alone.flatMap((cause) => cause.defects.map((defect) => defect.id)))].sort(), stopped.map((defect) => defect.id).sort());
+  for (const cause of derived.weighing!.stopped.flatMap((task) => task.causes)) assert.ok((cause.whyNl.length > 0 || cause.defects.every((defect) => defect.whyNl.length > 0)) && /lopen hier vast( door gebreken die samenkomen)?\.$/.test(cause.whoNl), cause.whoNl);
 
   // Per core task the defects of each severity; what belongs to every task and to none has a row of its own.
   assert.ok(summary.includes("| Kerntaak | Blokkerend | Midden | Laag |\n| --- | ---: | ---: | ---: |\n| Een vergunning aanvragen | 2 | 0 | 0 |\n| Contact opnemen | 0 | 0 | 0 |\n| Elke kerntaak | 0 | 2 | 0 |\n| Geen kerntaak | 0 | 0 | 2 |\n"), summary);
@@ -817,8 +817,10 @@ test("without a weighing the report says why: not run, made for other findings, 
   notRun.weighing = { status: "not-run" };
   assert.ok(renderMarkdown(notRun).includes("De ernst van een gebrek is de hoogste ernst die de beoordelaars aan zijn bevindingen gaven. De stap die per bevinding vastlegt welke groepen bezoekers ze hindert, is niet uitgevoerd."));
   const stale = withDefects();
-  stale.weighing = { status: "stale" };
-  assert.ok(renderMarkdown(stale).includes("Er is een weging van de bevindingen per groep bezoekers, maar die hoort bij andere bevindingen dan deze en is daarom niet toegepast."));
+  stale.weighing = { status: "stale", reason: "findings" };
+  assert.ok(renderMarkdown(stale).includes("Er is een weging van de bevindingen per groep bezoekers, maar die is niet toegepast: ze is gemaakt voor andere bevindingen dan deze."));
+  stale.weighing = { status: "stale", reason: "unchecked" };
+  assert.ok(renderMarkdown(stale).includes("maar die is niet toegepast: ze is niet gecontroleerd, of na de controle gewijzigd."));
   // An evaluation from before the step says nothing about a step that did not exist.
   const old = renderMarkdown(withDefects());
   assert.ok(old.includes("De ernst van een gebrek is de hoogste ernst die de beoordelaars aan zijn bevindingen gaven.") && !/De stap die per bevinding vastlegt/.test(old));
@@ -860,6 +862,36 @@ test("a reason for a stopped task is never put with a group it was not written f
   const markdown = renderMarkdown(evaluation);
   const summary = markdown.slice(markdown.indexOf("### Wie loopt vast"), markdown.indexOf("Het onderzoek vond"));
   assert.match(summary, /Mensen die niet zien lopen hier vast\. Zonder dit onderdeel is de aanvraag niet te versturen\. Dat komt door het gebrek \[[^\]]+\]\(#VRB-G-\w+\)\.\n\nMensen die hun handen moeilijk gebruiken lopen hier vast\. Het filter van de aanvraag werkt alleen door te slepen\. Dat komt door het gebrek \[/);
+});
+
+test("two defects that stop the same group each keep their own reason, under the finding that stops the group", () => {
+  const evaluation = weighed(withDefects());
+  evaluation.weighing!.together = [];
+  const findings = evaluation.criteria.flatMap((criterion) => criterion.findings);
+  const [one, main] = findings.filter((finding) => finding.weighing!.task === "aanvragen");
+  const first = evaluation.defects!.find((defect) => defect.findingIds.includes(one!.id))!;
+  const second = evaluation.defects!.find((defect) => defect.findingIds.includes(main!.id))!;
+  assert.deepEqual([second.mainFindingId, second.findingIds.length], [main!.id, 2]);
+  // In the second defect the finding it is named after costs a group effort; its other finding stops the group, for a reason of its own.
+  const other = findings.find((finding) => second.findingIds.includes(finding.id) && finding.id !== main!.id)!;
+  main!.weighing = { task: null, affected: [{ group: "no-hearing", consequence: "cannot", textNl: "Ze lezen de pagina. Het geluid bij het veld heeft geen tekst." }], withoutNl: "Zonder het geluid is de aanvraag nog te versturen." };
+  main!.severity = "hoog";
+  other.weighing = { task: "aanvragen", blocksNl: "Zonder naam weet de bezoeker niet wat het veld vraagt.", affected: [{ group: "no-vision", consequence: "cannot", textNl: "Ze horen een veld zonder naam." }, { group: "low-vision", consequence: "effort", textNl: "Ze zoeken het veld op de vergrote pagina." }] };
+  other.severity = "blokkerend";
+  second.weighing = { task: "aanvragen", blocksNl: other.weighing.blocksNl!, affected: [other.weighing.affected[0]!, main!.weighing.affected[0]!, other.weighing.affected[1]!] };
+  const markdown = renderMarkdown(evaluation);
+  const summary = markdown.slice(markdown.indexOf("### Wie loopt vast"), markdown.indexOf("Het onderzoek vond"));
+  // The same group, another reason: the paragraph names the group once and each defect says why, under the finding that stops the group.
+  assert.notEqual(other.titleNl, second.titleNl);
+  assert.ok(
+    summary.includes(
+      `**Een vergunning aanvragen**\n\nMensen die niet zien lopen hier vast. Dat komt door deze gebreken:\n\n- [${first.titleNl}](#${first.id}). Zonder dit onderdeel is de aanvraag niet te versturen.\n- [${other.titleNl}](#${second.id}). Zonder naam weet de bezoeker niet wat het veld vraagt.\n`,
+    ),
+    summary,
+  );
+  // A group that can not use a part of the defect no task needs is not said to be stopped: not in the summary, and not in the work list.
+  assert.ok(!summary.includes("niet horen"));
+  assert.equal(deriveReport(evaluation).weighing!.ofDefect[second.id]!.whoNl, "Mensen die niet zien kunnen dit niet gebruiken. Ook 2 andere groepen hebben er last van.");
 });
 
 test("a group that can not use a part no core task needs stands beside the tasks, with how the tasks still work", () => {

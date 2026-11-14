@@ -523,7 +523,6 @@ function weighingSections(context: Context): string[] {
   const { derived, defects } = context;
   const weighing = derived.weighing!;
   const labels = REPORT_TEXT.weighing;
-  const toDefect = (id: string): string => link(`#${id}`, inline(defects.get(id)!.titleNl));
   const stopped = rich(
     [
       `<p>${inline(weighing.introNl)}</p>`,
@@ -532,10 +531,10 @@ function weighingSections(context: Context): string[] {
           subhead(task.taskNl, 4) +
           task.causes
             .map((cause) => {
-              // One defect closes the paragraph as a sentence; more of them stand under it as a list.
-              const links = cause.defectIds.map(toDefect);
+              // One defect closes the paragraph as a sentence; more of them stand under it as a list, each with its own reason when they differ.
+              const links = cause.defects.map((defect) => link(`#${defect.id}`, inline(defect.titleNl)));
               const [one, more] = cause.together ? [labels.togetherOne, labels.togetherMore] : [labels.becauseOne, labels.becauseMore];
-              return `<p>${[attr(cause.whoNl), inline(cause.whyNl), links.length === 1 ? `${attr(one)} ${links[0]}.` : attr(more)].filter(Boolean).join(" ")}</p>${links.length > 1 ? list(links) : ""}`;
+              return `<p>${[attr(cause.whoNl), inline(cause.whyNl), links.length === 1 ? `${attr(one)} ${links[0]}.` : attr(more)].filter(Boolean).join(" ")}</p>${links.length > 1 ? list(cause.defects.map((defect, index) => `${links[index]}${defect.whyNl ? `. ${inline(defect.whyNl)}` : ""}`)) : ""}`;
             })
             .join(""),
       ),
