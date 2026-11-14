@@ -130,7 +130,7 @@ test("every command that takes a number works on an element in a frame of anothe
   assert.deepEqual(key.states, ["#play: aria-pressed=true -> aria-pressed=false"]);
 
   const contrast = await loep("contrast", [play]);
-  assert.deepEqual(observation(contrast.id).state.steps.at(-1), { command: "key", args: ["k"], options: {}, target: null }, "the key is a step like any other");
+  assert.deepEqual(observation(contrast.id).state.steps.at(-1), { command: "key", args: ["k"], options: {}, target: null, focus: ["#third", "#play"] }, "the key is a step like any other, with what had focus");
   const text = (contrast.text as { fg: string; bg: string; ratio: number; outcome: string }[])[0]!;
   assert.deepEqual([text.fg, text.bg, text.ratio, text.outcome], ["#9a9a9a", "#ffffff", 2.8, "failed"]);
   assert.equal((contrast.control as { outcome: string }).outcome, "duidelijk");
