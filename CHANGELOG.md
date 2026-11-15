@@ -6,6 +6,21 @@ Wat er per versie van loep is veranderd. De versie staat op het voorblad en onde
 
 <!-- towncrier: een nieuwe versie komt hieronder -->
 
+## 0.32.0 (2026-11-15)
+
+Deze versie is uitgebracht zonder meting: de veegronde meet een pagina opnieuw als een regelset daar geen uitslag gaf en ziet een pagina eerder als stil, en dat is met tests en de regressietoets van de veegronde op de testsite gedekt; versturen naar een lokale site en een verklaarde chat in één run is met tests gedekt; quick, contribute en het regelregister zijn nieuw en raken geen onderzoek; een meting van alle criteria op de testsite is niet gedaan.
+
+### Wat een uitkomst kan veranderen
+
+- Gaf een regelset op een pagina of in een toestand geen uitslag omdat haar tijd op was, dan meet de volgende `collect` die pagina of toestand nog één keer, met de reden "regelset gaf eerder geen uitslag". De poort geeft daarvoor eerst afsluitcode 3 (opnieuw meten) in plaats van meteen een beperking. Loopt de regelset bij die tweede meting weer tegen de tijdgrens aan, of zijn de twee keer opnieuw meten na een verkenning op, dan wordt het een beperking zoals voorheen. Een andere fout van een regelset blijft meteen een beperking. ([#580](https://github.com/NederlandseDigitaleDienst/loep/issues/580))
+- Een pagina geldt na het laden als stil zodra er een halve seconde geen verzoek openstaat dat jonger is dan 2 seconden. Een verbinding die op nieuws wacht of een meetverzoek dat blijft hangen, hield eerder elke pagina 10 seconden vast; nu noemen inventory.json (`settle`) en de waarneming van `open` welke verzoeken dat waren. De veegronde meet daarom opnieuw.
+
+### Verder
+
+- Een snelle meting voor in een pipeline: `quick` meet zonder taalmodel een vaste lijst pagina's of een kleine steekproef met de regelsets en met proeven voor reflow, zoom, tekstafstand, volgorde, geluid dat vanzelf start en de wandeling met Tab. Het zegt per criterium wat ze aanwijzen en vergelijkt met `--baseline` tegen een eerdere meting, per element (exitcode 1 als iets slechter is volgens twee of meer regelsets of een proef, 2 als de meting zelf mislukt; met `--strict` telt ook wat één regelset meldt). Met `--dismiss <selector>` sluit het eerst een cookiemelding. De skill `nldd-a11y-quick` zet het op. Het staat los van een onderzoek: `explore` weigert zo'n run. ([#578](https://github.com/NederlandseDigitaleDienst/loep/issues/578))
+- Een meetblad en een regelregister. `contribute` maakt van een afgerond onderzoek een meetblad: wat het zegt over loep, zonder adres, pagina, selector of zin van de site. Met `--under` voor elk onderzoek onder een map. Het verstuurt niets; de skill `nldd-a11y-contribute` stuurt het na een ja in naar een besloten verzameling. `just rule-register` maakt uit de ijkmeting en de meetbladen een register per regel van elke regelset. De ijkmeting schrijft daarvoor ook `regels.json`. Niets in een onderzoek leest het register. ([#588](https://github.com/NederlandseDigitaleDienst/loep/issues/588))
+- Een site op deze machine en een chat op een adres dat niet lokaal is, kunnen in één run versturen: `inventory` neemt `--allow-writes` samen met `--test-environment <origin van de chat> --declared-by "<naam>, <functie>"`. De site houdt het lokale budget zonder wachttijd en zonder verklaring; de chat de verklaring in een terminal, het gewone budget met de wachttijd en de verdeling voor wie nog niets verstuurde. `--max-writes` geldt dan voor de chat, en `writes --origin <origin>` zegt welk budget omhoog gaat. Het rapport en `manifest.json` noemen beide; een run van daarvoor leest en telt zoals voorheen. Een lokaal adres verklaren blijft geweigerd. ([#591](https://github.com/NederlandseDigitaleDienst/loep/issues/591))
+
 ## 0.31.0 (2026-11-15)
 
 Deze versie is uitgebracht zonder meting: de procedure voor 2.5.3 en de opdracht van de weger veranderden alleen voor een naam die maar een letter, woordvorm of leesteken afwijkt van de zichtbare tekst, en zo'n gebrek zit niet op de testsite; de nieuwe versies van html-validate en vnu-jar, en de veegronde die adressen buiten de run tegenhoudt zoals de sessie, zijn met tests en de regressietoets van de veegronde op de testsite nagegaan; het zoekformulier als leesverzoek is met tests nagegaan, niet op een echte site.
