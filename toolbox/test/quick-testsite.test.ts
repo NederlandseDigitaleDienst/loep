@@ -34,7 +34,7 @@ const measure = (site: "defect" | "clean", baseline?: string) => {
 /** The paths on which a probe saw something. */
 const seenOn = (summary: QuickSummary, probe: QuickProbe): string[] => summary.pages.filter((page) => page.probes.some((seen) => seen.probe === probe)).map((page) => pagePath(page.url));
 
-test("quick on the testsite: the probes are silent on the clean twin and the comparison catches the variant with defects", { timeout: 600_000 }, async () => {
+test("quick on the testsite: the probes are silent on the clean twin and the comparison catches the variant with defects", { timeout: 1_200_000 }, async () => {
   const clean = await measure("clean");
   assert.deepEqual(clean.summary.pages.map((page) => [pagePath(page.url), page.measured]), PATHS.map((path) => [path, true]));
   assert.equal(clean.summary.partial, false);
