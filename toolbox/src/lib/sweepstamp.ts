@@ -28,9 +28,10 @@ import type { Blocker, Postcondition } from "./sitemodel.ts";
  * or a press that asks for full screen is a reaction (2.1.4, 2.5.2). 13: the numbered Tab picture is taken right after the
  * walk, before the arrow keys move a slide. 14: the boxes on that picture follow sticky and fixed elements to where the
  * picture shows them, and the Tab walks run without smooth scrolling, so a focus clip is no longer taken on the way there.
- * 15: per page the hosts a plain load asks something of, the baseline for hosts refused in a state of the model.
+ * 15: per page the hosts a plain load asks something of, the baseline for hosts refused in a state of the model. 16: a read of
+ * data (fetch, XHR) from a host outside the scope of the run is refused, as in a session, so what it would fill is no longer measured.
  */
-export const SWEEP_STAMP_VERSION = 15;
+export const SWEEP_STAMP_VERSION = 16;
 
 /**
  * How the content of a page is read for its stamp. Raise when that changes: an older hash can then never match,

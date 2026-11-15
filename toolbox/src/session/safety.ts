@@ -1,4 +1,4 @@
-import { createWriteStream, existsSync } from "node:fs";
+import { createWriteStream, existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { BrowserContext, CDPSession, Frame, Page, Request } from "playwright";
 import { answeredByCloudflare, bodyOf, fulfillAnswer, opensNoConnection, passOn, proceed, sendOrReplay } from "../browser/session.ts";
@@ -70,6 +70,49 @@ export interface Scope {
   writes?: WriteAccess | null;
 }
 
+/** What of an inventory decides the hosts of the scope. */
+type ScopeInventory = { origin: string; origins?: string[]; pages: { url: string }[] };
+
+/** The hosts of the scope that the inventory sets: every origin of the site, also one where no page was found, and every host of a page it recorded. */
+function inventoryHosts(inventory: ScopeInventory): string[] {
+  const origins = siteOrigins(inventory);
+  const hosts = new Set(origins.map((origin) => scopeHost(new URL(origin))));
+  for (const page of inventory.pages) {
+    const url = new URL(page.url);
+    if (WEB_SCHEMES.includes(url.protocol) && !privateFromPublicSite(page.url, origins)) hosts.add(scopeHost(url));
+  }
+  return [...hosts].sort();
+}
+
+/** The scope of the run for the commands of the sweep in this process (see `setRunScope`); null outside a run. */
+let sweepScope: Pick<Scope, "hosts"> | null = null;
+
+/**
+ * Give the commands of the sweep in this process the scope of the run, as a session without
+ * `--strict` has it: the hosts the inventory set, without the ones a session adds with `--allow-host`.
+ * A browser of the sweep then refuses what a session refuses on the ground of that scope (see
+ * `sweepRefusesOutsideScope`), so content that only a host outside the run delivers stays empty in
+ * every measurement. Without an inventory there is no scope and nothing is refused; null takes it away.
+ */
+export function setRunScope(runDir: string | null): void {
+  const path = runDir === null ? null : join(runDir, "inventory.json");
+  sweepScope = path !== null && existsSync(path) ? { hosts: inventoryHosts(JSON.parse(readFileSync(path, "utf8")) as ScopeInventory) } : null;
+}
+
+export const runScope = (): Pick<Scope, "hosts"> | null => sweepScope;
+
+/**
+ * Whether a GET or HEAD of the sweep goes where a session without `--strict` refuses it: a read of
+ * data (fetch, XHR) by the page from a host outside the scope. A read by an embedded window in the
+ * scope passes, as in a session: a player fetches its stream from its own servers. Stylesheets,
+ * scripts, images, fonts and media from elsewhere pass in both.
+ */
+export function sweepRefusesOutsideScope(scope: Pick<Scope, "hosts">, request: Request): boolean {
+  if (!READ_TYPES.has(request.resourceType())) return false;
+  if (!/^https?:/.test(request.url()) || inScope(scope, request.url())) return false;
+  return !fromEmbeddedInScope(scope, request);
+}
+
 /**
  * The hosts in scope for a run, each with its port when that is not 80 or 443 (`scopeHost`):
  * the site itself and every host that the inventory recorded as a page, which includes the
@@ -83,19 +126,14 @@ export async function scopeForRun(runDir: string, extra: { scopeUrl?: string | u
   let probes: string[] = [];
   const inventoryPath = join(runDir, "inventory.json");
   if (existsSync(inventoryPath)) {
-    const inventory = await readJson<{ baseUrl: string; origin: string; origins?: string[]; notFoundProbe: string; notFoundProbes?: string[]; pages: { url: string }[] }>(inventoryPath);
+    const inventory = await readJson<ScopeInventory & { baseUrl: string; notFoundProbe: string; notFoundProbes?: string[] }>(inventoryPath);
     baseUrl = inventory.baseUrl;
     const origins = siteOrigins(inventory);
     if (scopePrefix(baseUrl) !== `${origins[0]}/`) {
       sitePath = scopePrefix(baseUrl);
       probes = notFoundProbes(inventory);
     }
-    // Every origin of the site, also one where no page was found.
-    for (const origin of origins) hosts.add(scopeHost(new URL(origin)));
-    for (const page of inventory.pages) {
-      const url = new URL(page.url);
-      if (WEB_SCHEMES.includes(url.protocol) && !privateFromPublicSite(page.url, origins)) hosts.add(scopeHost(url));
-    }
+    for (const host of inventoryHosts(inventory)) hosts.add(host);
   }
   if (extra.scopeUrl) {
     const url = new URL(extra.scopeUrl);
@@ -157,7 +195,7 @@ const MAX_URL = 300;
 const STOPPED = /ERR_ABORTED|ERR_BLOCKED_BY_CLIENT|NS_BINDING_ABORTED|NS_ERROR_ABORT|cancelled/i;
 
 /** Whether a request comes from an embedded window whose address is in the scope. A request of a worker has no frame and does not count. */
-function fromEmbeddedInScope(scope: Scope, request: Request): boolean {
+function fromEmbeddedInScope(scope: Pick<Scope, "hosts">, request: Request): boolean {
   try {
     let frame: Frame | null = request.frame();
     if (frame.parentFrame() === null) return false;
@@ -206,7 +244,7 @@ export interface PassedRead {
 }
 
 /** Whether an address is in the scope: http, https, ws or wss, on a host of the run with the same port. Any other scheme never is. */
-export const inScope = (scope: Scope, url: string): boolean => {
+export const inScope = (scope: Pick<Scope, "hosts">, url: string): boolean => {
   try {
     const parsed = new URL(url);
     return WEB_SCHEMES.includes(parsed.protocol) && scope.hosts.includes(scopeHost(parsed));

@@ -171,6 +171,11 @@ export async function startServer(port = 0): Promise<FixtureServer> {
       response.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" }).end(`<!doctype html><html lang="nl"><head><meta charset="utf-8"><title>Melding - Testsite sessie</title></head><body><main><h1>Melding</h1>${kept ? '<p role="status">Uw bericht is ontvangen.</p>' : ""}</main></body></html>`);
       return;
     }
+    // The settings of a feedback window of another party, which its script fetches before it shows the window.
+    if (path === "/survey-config") {
+      response.writeHead(200, { "content-type": "application/json", "access-control-allow-origin": "*", "cache-control": "no-store" }).end(JSON.stringify({ title: "Wat vindt u van deze pagina?" }));
+      return;
+    }
     // A page that never answers.
     if (path === "/slow") return;
     // A site that says the visitor asked too much, with ?retry=<seconds> as the time to wait.

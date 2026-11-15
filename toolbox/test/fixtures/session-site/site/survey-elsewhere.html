@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="nl">
+<head><meta charset="utf-8"><title>Enquête van elders - Testsite sessie</title><link rel="stylesheet" href="/site.css"></head>
+<body>
+<main id="inhoud"><h1>Een pagina met een enquêtevenster</h1>
+<p id="eigen"></p></main>
+<script>
+// The script of a feedback window of another party: it fetches its settings from its own host, and only then shows the window.
+fetch("__OTHER_ORIGIN__/survey-config")
+  .then((answer) => answer.json())
+  .then((config) => {
+    const dialog = document.createElement("div");
+    dialog.id = "enquete";
+    dialog.setAttribute("role", "dialog");
+    dialog.setAttribute("aria-label", "Feedbackformulier");
+    dialog.innerHTML = '<p></p><button type="button">Feedbackformulier sluiten</button><button type="button">Verzenden</button>';
+    dialog.querySelector("p").textContent = config.title;
+    document.body.append(dialog);
+  })
+  .catch(() => undefined);
+// The same settings from the site itself: a read inside the run, which arrives.
+fetch("/survey-config")
+  .then((answer) => answer.json())
+  .then((config) => { document.getElementById("eigen").textContent = config.title; })
+  .catch(() => undefined);
+</script>
+</body>
+</html>

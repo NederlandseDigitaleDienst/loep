@@ -230,6 +230,8 @@ async function repeatReadsOutsideRun(runDir: string): Promise<void> {
 const NOT_EXPLORED_NL ="deze run heeft geen sitemodel (site.json): verken de site eerst met explore en check-site, en draai daarna collect, contrast, states en gate";
 /** The commands that measure or judge a site that was mapped first. */
 const NEEDS_SITE_MODEL = ["collect", "contrast", "states", "gate", "tasks"];
+/** The commands of the sweep that load pages of the site in a browser. */
+const SWEEP_COMMANDS = ["collect", "contrast", "states"];
 
 async function main(): Promise<void> {
   // Comparing per finding has its own steps and options; it parses them itself.
@@ -376,6 +378,8 @@ async function main(): Promise<void> {
   if (command !== "inventory" && command !== "login" && !readsOnly && values.run) setRunLogin(values.run);
   // A site that refused the evaluation (blockades.json in the run) is asked nothing by the sweep either, and a 429 it gives the sweep ends the asking for the sessions too.
   if (command !== "inventory" && !readsOnly && values.run) (await import("./session/blockade.ts")).setRunBlockade(values.run);
+  // The commands of the sweep refuse what a session refuses on the ground of the scope of the run: a read of data from a host outside it.
+  if (SWEEP_COMMANDS.includes(command) && values.run) (await import("./session/safety.ts")).setRunScope(values.run);
   if (NEEDS_SITE_MODEL.includes(command) && values.run && !existsSync(join(values.run, "site.json"))) throw new Error(NOT_EXPLORED_NL);
   switch (command) {
     case "login": {

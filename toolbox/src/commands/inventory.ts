@@ -82,7 +82,7 @@ export interface Inventory {
   searchTermAlternatives?: string[];
   /**
    * Origins outside the run that a page of the site read content from with GET (fetch or XHR), with the
-   * pages that did and how many such answers came. A session refuses those requests, so what they load
+   * pages that did and how many such answers came. A session and the sweep refuse those requests, so what they load
    * stays empty in every measurement unless the origin is given with `--also-origin`. Absent in older runs.
    */
   readsOutsideRun?: ReadOutsideRun[];
@@ -171,7 +171,7 @@ export function formPagesNl(pages: Pick<InventoryPage, "url" | "counts" | "found
 
 /**
  * The pages that read content from an origin outside the run, said right after the inventory. A
- * session refuses such a request, so a block filled by it stays empty in every measurement; which
+ * session and the sweep refuse such a request, so a block filled by it stays empty in every measurement; which
  * origins belong to the run is decided here and cannot change later. Null when there is nothing to say.
  */
 export function readsOutsideRunNl(reads: readonly ReadOutsideRun[] | undefined): string | null {
@@ -182,7 +182,7 @@ export function readsOutsideRunNl(reads: readonly ReadOutsideRun[] | undefined):
   const flags = reads.length <= 3 ? reads.map((entry) => `--also-origin ${entry.origin}`).join(" ") : "--also-origin <origin> voor elk adres dat erbij hoort";
   return (
     `let op: ${pages === 1 ? "één pagina haalt" : `${pages} pagina's halen`} met GET inhoud op van een adres buiten de run: ${listed.join(", ")}. ` +
-    `Een sessie houdt die verzoeken tegen, dus wat zo in de pagina komt, blijft in elke meting leeg. ` +
+    `Een sessie en de veegronde houden die verzoeken tegen, dus wat zo in de pagina komt, blijft in elke meting leeg. ` +
     `Hoort die inhoud bij het onderzoek, begin dan opnieuw met inventory, in een nieuwe map, met ${flags}. Zo niet, dan valt ze buiten de afbakening`
   );
 }
