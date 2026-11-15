@@ -11,6 +11,8 @@ Voor iedereen die meedoet, in issues, voorstellen en elders, geldt de [gedragsco
 - **Een oordeel dat je niet deelt:** dat is welkom als issue, met het criterium, de plek en de tekst van de norm waarop je je baseert. Een procedure volgt de normtekst, niet de testsite.
 - **Code of tekst:** open eerst een issue als het om meer gaat dan een kleine reparatie, zodat we vooraf kunnen zeggen of het past bij [PLAN.md](PLAN.md). Een voorstel (pull request) gaat naar `main`, volgt de afspraken hieronder en haalt de controle. Het komt binnen via een merge queue, met de controle `volledig` als enige verplichte check; een review is niet verplicht. Een voorstel van buiten het team zet een beheerder in de queue als het past. Hoe besluiten vallen staat in [GOVERNANCE.md](GOVERNANCE.md).
 
+- **Een meetblad van je onderzoek:** loep wordt beter van veel onderzoeken van veel mensen. `contribute` maakt van een afgerond onderzoek een meetblad: wat het zegt over loep, zonder de site. Insturen gaat naar een besloten verzameling en vraagt toegang; de skill `nldd-a11y-contribute` doet het met je, ook voor onderzoeken van vroeger. Wat erop staat en wat nooit: [docs/meetblad.md](docs/meetblad.md).
+
 Wat je bijdraagt valt onder de EUPL-1.2, zoals de rest van de repository.
 
 ## Afspraken

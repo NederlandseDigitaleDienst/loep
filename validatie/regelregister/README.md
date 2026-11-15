@@ -76,4 +76,6 @@ axe-core staat bijna nooit alleen. QualWeb keurt 48 keer zo veel elementen af al
 
 ## Wat volgt
 
-Het register gebruiken waar geen beoordelaar tussen zit: in `quick` mag een regel met een goed record alleen tellen, en `just quick-key` zegt wat dat oplevert. Daarna, als gemeten variant op een bevroren veegronde, in een onderzoek. Een record mag kijken nooit vervangen.
+Eerst verzamelen. Op 15 november 2026 is besloten het register nog nergens te gebruiken: met 13 sites rusten de meeste records op te weinig om een poort op te laten beslissen. Onderzoeken worden nu ingestuurd als meetblad ([../../docs/meetblad.md](../../docs/meetblad.md)), en het register wordt opnieuw gemaakt als de verzameling groeit.
+
+Daarna: het register gebruiken waar geen beoordelaar tussen zit. In `quick` mag een regel met een goed record dan alleen tellen, en `just quick-key` zegt wat dat oplevert. Daarna, als gemeten variant op een bevroren veegronde, in een onderzoek. Een record mag kijken nooit vervangen.
