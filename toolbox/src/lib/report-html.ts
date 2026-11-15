@@ -43,7 +43,7 @@ import {
  */
 
 /** The version of the design system this rendering is written against; package.json pins the same. */
-export const DESIGN_SYSTEM_VERSION = "0.21.1";
+export const DESIGN_SYSTEM_VERSION = "0.22.0";
 
 const require = createRequire(import.meta.url);
 
@@ -179,7 +179,7 @@ function el({ tag, attrs = {}, children = "" }: Element): string {
   return `<${tag}${list}>${children}</${tag}>`;
 }
 
-const title = (text: string, level: number, size: number, extra: Element["attrs"] = {}): string => el({ tag: "nldd-title", attrs: { size, "heading-level": level, text: plain(text), ...extra } });
+const title = (text: string, level: number, size: number, extra: Element["attrs"] = {}): string => el({ tag: "nldd-title", attrs: { size: `display-${size}`, "heading-level": level, text: plain(text), ...extra } });
 const rich = (html: string, attrs: Element["attrs"] = {}): string => (html ? el({ tag: "nldd-rich-text", attrs, children: html }) : "");
 const text = (html: string, attrs: Element["attrs"] = {}): string => el({ tag: "nldd-text", attrs, children: html });
 const spacer = (size: number, attrs: Element["attrs"] = {}): string => el({ tag: "nldd-spacer", attrs: { size, ...attrs } });
