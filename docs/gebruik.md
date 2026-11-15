@@ -17,13 +17,14 @@ Daarna, in de map van de plugin: `just install` voor de pakketten en browsers, e
 
 Reken op een middag. Voor een site elders met 30 pagina's en vier paginatypen, met drie agents tegelijk, komt de formule achter `estimate` op ruim vier uur, met een marge van ruim drie tot bijna zes uur. Blijven er na de verificatie criteria open, dan komt daar een afmaakronde bij, bij acht open criteria ongeveer een uur. Een onderzoek van ongeveer 30 pagina's met alle criteria kost in de orde van 150 tot 250 dollar aan prijzen van de API: in de nulmeting van 19 oktober 2026 gebruikten 134 agents ongeveer 526 miljoen tokens, waarvan 97 procent uit de cache, voor ongeveer 184 dollar ([validatie/verbruik/README.md](../validatie/verbruik/README.md)). Op een abonnement kan zo'n run een groot deel van de weeklimiet gebruiken; die limiet verschilt per abonnement. `estimate` noemt tokens en kosten voor jouw run. Hoe die getallen tot stand komen, staat in [methode.md](methode.md#hoe-lang-een-onderzoek-duurt). Houd de sessie van de assistent open en de machine wakker zolang het loopt.
 
-## Drie skills
+## Vier skills
 
 | Je zegt bijvoorbeeld | Skill | Wat eruit komt |
 |---|---|---|
 | "Toets https://voorbeeld.nl op toegankelijkheid." | `nldd-a11y-audit` | Een onderzoek met rapport, als concept dat een mens leest en tekent |
 | "Maak de toegankelijkheidsverklaring bij het onderzoek van vorige week." | `nldd-a11y-statement` | Een verklaring volgens het wettelijke model en het invulblad voor het register |
-| "Hoe laat ik zien dat onze site toegankelijk is?" | `nldd-a11y` | Een korte uitleg die naar een van de twee andere wijst |
+| "Zet in onze pipeline een check die zegt of de site slechter is geworden." | `nldd-a11y-quick` | Een snelle meting met een basislijn, en de stap voor de pipeline |
+| "Hoe laat ik zien dat onze site toegankelijk is?" | `nldd-a11y` | Een korte uitleg die naar een van de andere wijst |
 
 Je hoeft de naam van een skill niet te noemen: de assistent kiest haar aan wat je vraagt. Wil je het zeker weten, roep haar dan bij naam aan, in Claude Code met `/nldd-a11y:nldd-a11y-audit https://voorbeeld.nl`.
 
@@ -97,7 +98,7 @@ Noem de map van het vorige onderzoek. Een bevinding op dezelfde plek houdt dan h
 
 ## Een snelle meting in een pipeline
 
-Een onderzoek duurt uren. Voor de vraag "is deze release slechter dan de vorige" is er `quick`: een meting van een paar minuten zonder taalmodel, die je in een pipeline zet.
+Een onderzoek duurt uren. Voor de vraag "is deze release slechter dan de vorige" is er `quick`: een meting van een paar minuten zonder taalmodel, die je in een pipeline zet. De skill `nldd-a11y-quick` zet haar met je op: de lijst met pagina's, de basislijn en de stap voor je pipeline. Met de hand gaat het zo.
 
 Zet de adressen die je wilt bewaken in een bestand, één per regel, en meet ze:
 
@@ -142,4 +143,4 @@ Je krijgt de verklaring en een invulblad met de waarden per stap van de invulass
 - Het rapport met de hand bijwerken of mooier maken dan het is.
 - Een issue versturen zonder dat jij de tekst hebt gelezen en ja hebt gezegd.
 
-Hoe de assistent dit precies doet, staat in [skills/nldd-a11y-audit/SKILL.md](../skills/nldd-a11y-audit/SKILL.md) en [skills/nldd-a11y-statement/SKILL.md](../skills/nldd-a11y-statement/SKILL.md).
+Hoe de assistent dit precies doet, staat in [skills/nldd-a11y-audit/SKILL.md](../skills/nldd-a11y-audit/SKILL.md), [skills/nldd-a11y-statement/SKILL.md](../skills/nldd-a11y-statement/SKILL.md) en [skills/nldd-a11y-quick/SKILL.md](../skills/nldd-a11y-quick/SKILL.md).

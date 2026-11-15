@@ -6,10 +6,10 @@ De afspraak dat een wijziging in gedrag in dezelfde commit de beschrijving bijwe
 
 | Document | Soort | Wat het is |
 |---|---|---|
-| [gebruik.md](gebruik.md) | beschrijving | Een onderzoek en een verklaring laten maken door een AI-assistent: wat je vraagt, welke vragen terugkomen, wat er gebeurt en wat daarna van jou is |
+| [gebruik.md](gebruik.md) | beschrijving | Een onderzoek en een verklaring laten maken door een AI-assistent: wat je vraagt, welke vragen terugkomen, wat er gebeurt en wat daarna van jou is. Ook de snelle meting voor in een pipeline |
 | [methode.md](methode.md) | beschrijving | Hoe een onderzoek tot stand komt, ook achter een inlog, wat een uitkomst betekent en wat de methode niet kan |
 | [architectuur.md](architectuur.md) | beschrijving | Hoe de toolbox is opgezet: de keten, de rollen, de lagen in de code, de gegevens van een run, en recepten om uit te breiden |
-| [plugin.md](plugin.md) | beschrijving | Hoe de repository als plugin met drie skills is opgezet |
+| [plugin.md](plugin.md) | beschrijving | Hoe de repository als plugin met vier skills is opgezet |
 | [voiceover.md](voiceover.md) | beschrijving | Het optionele onderdeel dat een echte schermlezer laat voorlezen: VoiceOver in een virtuele Mac, wat het kost en wat het niet kan |
 | [niet-ingebouwd.md](niet-ingebouwd.md) | lijst van keuzes van 10 oktober 2026 | Gereedschap dat is bekeken en bewust niet is opgenomen, met de reden |
 

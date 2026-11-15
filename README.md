@@ -63,7 +63,11 @@ Je krijgt per criterium de uitkomst, wie of wat haar vaststelde, en wat nog open
 
 Na het tekenen en de besluiten per gebrek: "Maak de toegankelijkheidsverklaring bij het onderzoek in `toegankelijkheid/onderzoeken/2026-10-15`." De skill `nldd-a11y-statement` controleert of het onderzoek getekend en ongewijzigd is, neemt de maatregelen uit de besluiten, vraagt de gegevens van de organisatie (contact, klachten, ombudsman en data), en schrijft de verklaring volgens het wettelijke model met een invulblad voor het register. Wat je niet weet, blijft staan als `[nog invullen: ...]`. De status rekent de toolbox uit; publiceren doe je zelf.
 
-De derde skill, `nldd-a11y`, wijst bij een algemene vraag ("hoe laat ik zien dat onze site toegankelijk is?") de weg naar deze twee. Het hele verloop, met de vragen en wat je terugkrijgt, staat in [docs/gebruik.md](docs/gebruik.md).
+### Bewaken dat het niet slechter wordt
+
+"Zet in onze pipeline een check die zegt of de site slechter is geworden." De skill `nldd-a11y-quick` zet een snelle meting op zonder taalmodel: een lijst met pagina's, een basislijn, en een stap die faalt als een release meer fouten heeft dan de vorige. Ze vindt ongeveer een kwart van wat een onderzoek afkeurt, en vervangt het dus niet.
+
+De vierde skill, `nldd-a11y`, wijst bij een algemene vraag ("hoe laat ik zien dat onze site toegankelijk is?") de weg naar de andere. Het hele verloop, met de vragen en wat je terugkrijgt, staat in [docs/gebruik.md](docs/gebruik.md).
 
 ## Hoe het werkt
 
@@ -125,7 +129,7 @@ just render runs/voorbeeld                        # na de weegagent: de weging t
 
 Tussen die stappen werken agents. Na `explore` is dat een verkenner, na `tasks` zijn het rondgangen, beoordelaars, verifieerders en zo nodig een afmaakronde, en na `report` weegt één agent de bevindingen. In Claude Code doet de skill `nldd-a11y-audit` dat stap voor stap, met deze commando's; zie [skills/nldd-a11y-audit/SKILL.md](skills/nldd-a11y-audit/SKILL.md). De werkstroom voor de agents staat ernaast in `skills/nldd-a11y-audit/onderzoek.workflow.js`. `just status <run>` zegt in welke fase een run is, `just verify <run>` rekent de hashes na en `just diff <vorige>/evaluation.json <nieuwe>/evaluation.json <map>` schrijft het verschil met een eerder onderzoek. `just` zonder iets toont alle taken.
 
-Wie bij elke release wil weten of de site slechter is geworden, gebruikt `quick`. Het meet zonder taalmodel en zonder agents, in een paar minuten, en vergelijkt met de vorige meting:
+Wie bij elke release wil weten of de site slechter is geworden, gebruikt `quick`, met de hand of in een pipeline. Het meet zonder taalmodel en zonder agents, in een paar minuten, en vergelijkt met de vorige meting:
 
 ```
 just quick https://voorbeeld.nl runs/snel --urls paginas.txt --baseline vorige/summary.json

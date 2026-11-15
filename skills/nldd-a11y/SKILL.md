@@ -1,6 +1,6 @@
 ---
 name: nldd-a11y
-description: "Digitale toegankelijkheid van overheidswebsites onderzoeken en verantwoorden met loep: WCAG-onderzoek, toegankelijkheidsverklaring, register van toegankelijkheidsverklaringen. Wijst door naar nldd-a11y-audit en nldd-a11y-statement."
+description: "Digitale toegankelijkheid van overheidswebsites onderzoeken en verantwoorden met loep: WCAG-onderzoek, toegankelijkheidsverklaring, register van toegankelijkheidsverklaringen. Wijst door naar nldd-a11y-audit, nldd-a11y-statement en nldd-a11y-quick."
 metadata:
   status: concept
 ---
@@ -11,6 +11,8 @@ loep is de toolbox achter deze skills: hij meet en legt bewijs vast, een mens oo
 
 1. `nldd-a11y-audit`: maakt het onderzoek. Scripts verzamelen het bewijs, een taalmodel beoordeelt elk succescriterium met meetinstrumenten, een tweede beoordeling maakt elke bevinding opnieuw vanaf een verse pagina, en er komt een rapport uit waar een mens voor tekent. Daarna legt de organisatie per gebrek vast wat ze besluit.
 2. `nldd-a11y-statement`: maakt van een getekend onderzoek de toegankelijkheidsverklaring volgens het model dat sinds 1 oktober 2026 geldt, en het invulblad voor het register.
+
+Daarnaast is er `nldd-a11y-quick`: een snelle meting zonder taalmodel voor in een pipeline, die bij elke release zegt of de site slechter is geworden dan de vorige keer. Dat is geen onderzoek en geen grond voor een verklaring.
 
 Gaat de vraag over hoe je toegankelijk bouwt en niet over toetsen, gebruik dan de skill `nerds-toegankelijkheid` of de skills van het designsysteem waarmee de site is gebouwd.
 
