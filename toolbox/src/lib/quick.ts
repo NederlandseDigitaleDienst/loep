@@ -56,7 +56,7 @@ export interface GroupedElement {
 }
 
 export interface RulesResult {
-  methods?: { implementation: string; version: string }[];
+  methods?: { implementation: string; version: string; result?: { findings?: { where?: string; html?: string }[] } }[];
   grouped?: { elements?: GroupedElement[] };
   failed?: unknown[];
   pending?: unknown[];
@@ -92,6 +92,8 @@ export interface QuickFinding {
   criterion: string;
   page: string;
   where: string | null;
+  /** What the element is, apart from where it stands: see `elementMark`. */
+  element: string;
   message: string | null;
   engines: string[];
   rules: string[];
@@ -121,6 +123,8 @@ export interface QuickCount {
   criterion: string;
   /** Engine and rule, as `axe-core:color-contrast`. */
   rule: string;
+  /** What the element is (`elementMark`), so one defect gone and another new do not cancel out. */
+  element: string;
   places: number;
 }
 
@@ -153,17 +157,53 @@ const lossSeen = (answer: LayoutAnswer | null): boolean => Boolean(answer && (an
 
 const plural = (count: number, one: string, more: string): string => `${count} ${count === 1 ? one : more}`;
 
+/** Attributes that say what an element is. A class or a style says how it looks, and changes with a redesign. */
+const MARK_ATTRIBUTES = ["id", "href", "src", "name", "type", "role", "for", "alt", "aria-label", "title", "lang"];
+const LANDMARK = /^(header|nav|main|footer|aside|form|dialog)\b/;
+
+/**
+ * A mark for an element that stays the same when the element moves and differs between two
+ * elements that are not the same thing: its tag, the attributes that say what it is, and the part
+ * of the page it is in. Built from the selector and, when an engine gave it, the opening tag. A
+ * comparison counts places per mark: a paragraph among paragraphs has no mark of its own, a link
+ * to another address does.
+ */
+export function elementMark(where: string | null, html: string | null): string {
+  const bare = (segment: string): string => segment.replace(/:nth-(?:of-type|child)\(\d+\)/g, "");
+  const path = (where ?? "").split(">").map((segment) => bare(segment.trim())).filter(Boolean);
+  const region = path.slice(0, -1).reverse().find((segment) => segment.startsWith("#") || LANDMARK.test(segment)) ?? "";
+  const opening = html ? /^<([a-z][\w-]*)([^>]*)>/i.exec(html.trim()) : null;
+  const attributes: string[] = [];
+  for (const [, name, value] of (opening?.[2] ?? "").matchAll(/([\w:-]+)\s*=\s*"([^"]*)"/g)) {
+    if (!MARK_ATTRIBUTES.includes(name!.toLowerCase())) continue;
+    // An id a framework numbers anew on every load says nothing.
+    if (name === "id" && /\d{3,}|^:/.test(value!)) continue;
+    // Without the origin, so a preview and the live site give the same mark.
+    const local = /^https?:\/\//.test(value!) && URL.canParse(value!) ? `${new URL(value!).pathname}${new URL(value!).search}${new URL(value!).hash}` : value!;
+    attributes.push(`[${name!.toLowerCase()}="${local}"]`);
+  }
+  const tag = opening?.[1]?.toLowerCase() ?? path.at(-1) ?? "";
+  return `${tag}${attributes.sort().join("")}${region ? ` in ${region}` : ""}`;
+}
+
 /**
  * The findings of a quick measurement: a place is an element of a page under one criterion, light
  * and dark together. Failing in one scheme is failing; a pass in the other does not undo it.
  */
 export function quickFindings(pages: readonly QuickPage[]): QuickFinding[] {
-  interface Place extends Omit<QuickFinding, "engines" | "rules" | "agreement"> {
+  interface Place extends Omit<QuickFinding, "engines" | "rules" | "agreement" | "element"> {
     failed: Set<string>;
     passed: Set<string>;
     ruleIds: Set<string>;
   }
   const places = new Map<string, Place>();
+  // The opening tag of an element, from whichever engine gave it: Alfa gives none, and the selectors are the same over the engines.
+  const tags = new Map<string, string>();
+  for (const page of pages) {
+    for (const measurement of page.measurements) {
+      for (const method of measurement.rules?.methods ?? []) for (const finding of method.result?.findings ?? []) if (finding.where && finding.html && !tags.has(`${page.url}\n${finding.where}`)) tags.set(`${page.url}\n${finding.where}`, finding.html);
+    }
+  }
   for (const page of pages) {
     for (const measurement of page.measurements) {
       for (const element of measurement.rules?.grouped?.elements ?? []) {
@@ -191,7 +231,7 @@ export function quickFindings(pages: readonly QuickPage[]): QuickFinding[] {
     if (place.failed.size === 0) continue;
     const passedOnly = [...place.passed].filter((engine) => !place.failed.has(engine));
     const agreement: Agreement = place.failed.size > 1 ? "agreed" : passedOnly.length > 0 ? "contradicted" : "alone";
-    findings.push({ criterion: place.criterion, page: place.page, where: place.where, message: place.message, engines: [...place.failed].sort(), rules: [...place.ruleIds].sort(), agreement, schemes: place.schemes });
+    findings.push({ criterion: place.criterion, page: place.page, where: place.where, element: elementMark(place.where, tags.get(`${place.page}\n${place.where}`) ?? null), message: place.message, engines: [...place.failed].sort(), rules: [...place.ruleIds].sort(), agreement, schemes: place.schemes });
   }
   return findings.sort((a, b) => AGREEMENTS.indexOf(a.agreement) - AGREEMENTS.indexOf(b.agreement) || compareCriterionIds(a.criterion, b.criterion) || a.page.localeCompare(b.page) || (a.where ?? "").localeCompare(b.where ?? ""));
 }
@@ -253,13 +293,13 @@ export function quickCounts(findings: readonly QuickFinding[]): QuickCount[] {
   for (const finding of findings) {
     for (const rule of finding.rules) {
       const path = pagePath(finding.page);
-      const key = `${path}\n${finding.criterion}\n${rule}`;
-      const count = counts.get(key) ?? { path, criterion: finding.criterion, rule, places: 0 };
+      const key = `${path}\n${finding.criterion}\n${rule}\n${finding.element}`;
+      const count = counts.get(key) ?? { path, criterion: finding.criterion, rule, element: finding.element, places: 0 };
       count.places += 1;
       counts.set(key, count);
     }
   }
-  return [...counts.values()].sort((a, b) => a.path.localeCompare(b.path) || compareCriterionIds(a.criterion, b.criterion) || a.rule.localeCompare(b.rule));
+  return [...counts.values()].sort((a, b) => a.path.localeCompare(b.path) || compareCriterionIds(a.criterion, b.criterion) || a.rule.localeCompare(b.rule) || a.element.localeCompare(b.element));
 }
 
 export interface SummaryInput {
@@ -343,6 +383,8 @@ export interface QuickChange {
   criterion: string;
   /** A rule of an engine, or `reflow` or `zoom` for a layout probe. */
   rule: string;
+  /** The mark of the element; empty for a layout probe, which counts per page. */
+  element: string;
   before: number;
   now: number;
   sentenceNl: string;
@@ -367,8 +409,10 @@ const layoutLoss = (answer: LayoutAnswer | null): number => (answer ? (answer.of
 
 /**
  * Hold a measurement against an earlier one of the same pages. A place more under a rule on a page
- * is worse, a place fewer is better. Something both measurements report the same way never stops
- * a pipeline, also when it is a false alarm of an engine.
+ * is worse, a place fewer is better. Places are counted per element mark, so a defect that is gone
+ * and another that is new show as one better and one worse, and an element that only moved is no
+ * change. Something both measurements report the same way never stops a pipeline, also when it is
+ * a false alarm of an engine.
  */
 export function compareQuick(baseline: QuickSummary, current: QuickSummary): QuickComparison {
   const measuredPaths = (summary: QuickSummary): Set<string> => new Set(summary.pages.filter((page) => page.measured).map((page) => pagePath(page.url)));
@@ -376,12 +420,12 @@ export function compareQuick(baseline: QuickSummary, current: QuickSummary): Qui
   const now = measuredPaths(current);
   const table = (summary: QuickSummary): Map<string, QuickCount> => {
     const rows = new Map<string, QuickCount>();
-    for (const count of summary.counts) rows.set(`${count.path}\n${count.criterion}\n${count.rule}`, count);
+    for (const count of summary.counts) rows.set(`${count.path}\n${count.criterion}\n${count.rule}\n${count.element}`, count);
     for (const page of summary.pages) {
       if (!page.measured) continue;
       const path = pagePath(page.url);
       for (const [criterion, rule, answer] of [["1.4.10", "reflow", page.reflow], ["1.4.4", "zoom", page.zoom]] as const) {
-        if (layoutLoss(answer) > 0) rows.set(`${path}\n${criterion}\n${rule}`, { path, criterion, rule, places: layoutLoss(answer) });
+        if (layoutLoss(answer) > 0) rows.set(`${path}\n${criterion}\n${rule}\n`, { path, criterion, rule, element: "", places: layoutLoss(answer) });
       }
     }
     return rows;
@@ -399,10 +443,10 @@ export function compareQuick(baseline: QuickSummary, current: QuickSummary): Qui
     if (a === b) continue;
     const title = criterionById(row.criterion)?.titleNl;
     const what = row.rule === "reflow" ? "bij 320 pixels breed" : row.rule === "zoom" ? "bij 200 procent zoom" : `regel ${row.rule}`;
-    const sentenceNl = `${row.path}: ${row.criterion}${title ? ` ${title}` : ""}, ${what}, van ${plural(a, "plek", "plekken")} naar ${b}.`;
-    (b > a ? worse : better).push({ path: row.path, criterion: row.criterion, rule: row.rule, before: a, now: b, sentenceNl });
+    const sentenceNl = `${row.path}: ${row.criterion}${title ? ` ${title}` : ""}, ${what}${row.element ? `, ${row.element}` : ""}, van ${plural(a, "plek", "plekken")} naar ${b}.`;
+    (b > a ? worse : better).push({ path: row.path, criterion: row.criterion, rule: row.rule, element: row.element, before: a, now: b, sentenceNl });
   }
-  const order = (a: QuickChange, b: QuickChange): number => a.path.localeCompare(b.path) || compareCriterionIds(a.criterion, b.criterion) || a.rule.localeCompare(b.rule);
+  const order = (a: QuickChange, b: QuickChange): number => a.path.localeCompare(b.path) || compareCriterionIds(a.criterion, b.criterion) || a.rule.localeCompare(b.rule) || a.element.localeCompare(b.element);
   const notMeasured = [...before].filter((path) => !now.has(path)).sort();
   return {
     schema: QUICK_SCHEMA,
@@ -430,12 +474,16 @@ export function groupedChangesNl(changes: readonly QuickChange[]): string[] {
   return [...groups.values()].map((group) => {
     const first = group[0]!;
     const title = criterionById(first.criterion)?.titleNl;
-    const places = Math.max(...group.map((change) => Math.abs(change.now - change.before)));
     const direction = first.now > first.before ? "erbij" : "minder";
     const layout = group.find((change) => change.rule === "reflow" || change.rule === "zoom");
-    const engines = new Set(group.filter((change) => change !== layout).map((change) => change.rule.split(":")[0]));
-    const by = [...(engines.size > 0 ? [plural(engines.size, "meetprogramma", "meetprogramma's")] : []), ...(layout ? [layout.rule === "reflow" ? "de proef op 320 pixels breed" : "de proef op 200 procent zoom"] : [])].join(" en ");
-    return `${first.path}: ${first.criterion}${title ? ` ${title}` : ""}, ${plural(places, "plek", "plekken")} ${direction} volgens ${by}.`;
+    // Four engines that see the same three places are three places: the engine that sees most says how many.
+    const perEngine = new Map<string, number>();
+    for (const change of group) if (change !== layout) perEngine.set(change.rule.split(":")[0]!, (perEngine.get(change.rule.split(":")[0]!) ?? 0) + Math.abs(change.now - change.before));
+    const places = Math.max(layout ? Math.abs(layout.now - layout.before) : 0, ...perEngine.values());
+    const by = [...(perEngine.size > 0 ? [plural(perEngine.size, "meetprogramma", "meetprogramma's")] : []), ...(layout ? [layout.rule === "reflow" ? "de proef op 320 pixels breed" : "de proef op 200 procent zoom"] : [])].join(" en ");
+    const elements = [...new Set(group.map((change) => change.element).filter(Boolean))];
+    const which = elements.length === 0 ? "" : ` Het gaat om ${elements.slice(0, 3).map((element) => `\`${element}\``).join(", ")}${elements.length > 3 ? ` en ${elements.length - 3} meer` : ""}.`;
+    return `${first.path}: ${first.criterion}${title ? ` ${title}` : ""}, ${plural(places, "plek", "plekken")} ${direction} volgens ${by}.${which}`;
   });
 }
 

@@ -141,7 +141,7 @@ export async function quick(options: QuickOptions): Promise<{ summary: QuickSumm
   let comparison: QuickComparison | null = null;
   if (options.baseline) {
     const baseline = await readJson<QuickSummary>(options.baseline);
-    if (baseline.kind !== "quick" || !Array.isArray(baseline.counts)) throw new Error(`${options.baseline} is geen summary.json van een snelle meting`);
+    if (baseline.kind !== "quick" || !Array.isArray(baseline.counts) || baseline.counts.some((count) => typeof count.element !== "string")) throw new Error(`${options.baseline} is geen summary.json van een snelle meting`);
     comparison = compareQuick(baseline, summary);
     await writeJson(join(run, "quick", "verschil.json"), comparison);
     await writeFileAtomic(join(run, "quick", "verschil.md"), quickComparisonMarkdown(comparison));

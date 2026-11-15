@@ -114,6 +114,10 @@ explore url run:
 quick url run *flags:
     {{cli}} quick {{url}} --out {{run}} {{flags}}
 
+# Tel hoeveel ingebouwde gebreken van de testsite de vergelijking van quick vangt: de run van de variant met gebreken, gemeten met --baseline van de schone tweeling. Zie validatie/snelle-meting/README.md
+quick-key run:
+    node {{toolbox}}/scripts/quick-key.ts {{run}}
+
 # Na de verkenner: controleer het sitemodel, trek de steekproef opnieuw (vensters van derden vallen eruit), meet alles, ook de documenten, en vraag de poort. Een tweede keer meet alleen wat veranderd is; met --fresh alles opnieuw. Met --at-once <n> meet de veegronde n pagina's tegelijk, als de eigenaar van de site meer agents toestaat: nooit meer dan het sessieproces van de run toelaat, met dezelfde tijd tussen twee navigaties
 sweep run *flags:
     {{cli}} check-site --run {{run}}

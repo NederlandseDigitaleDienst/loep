@@ -36,6 +36,26 @@ Het is wel de meetlat voor een nieuw signaal: het is de moeite waard als het voo
 
 Geprobeerd en nog niet ingebouwd, met het aandeel terechte aanwijzingen op dezelfde 12 sites: een afwijkende koppenstructuur voor 1.3.1 en 2.4.6 (22 van 24), het contrast van bedieningselementen voor 1.4.11 (10 van 12) en een tekstalternatief in een andere taal voor 3.1.2 (8 van 11). Die cijfers zijn gekozen en getoetst op dezelfde sites en vallen op andere sites lager uit.
 
+## Ingebouwde gebreken van de testsite
+
+De terugrekening hierboven meet tegen een onderzoek. Voor een poort telt iets anders: maakt een release iets stuk, slaat de vergelijking dan aan? De testsite heeft een sleutel met 79 gebreken die met opzet zijn ingebouwd, en een schone tweeling met dezelfde paden. De schone tweeling is gemeten als basislijn, daarna de variant met gebreken ertegen, op 15 pagina's. `just quick-key <run>` telt per gebrek of de vergelijking zijn criterium als slechter meldt op een van zijn pagina's.
+
+| | Gevangen |
+|---|---|
+| Alle gebreken | 31 van 79 |
+| Meetbaar met een instrument | 22 van 41 |
+| Vraagt kijken | 6 van 18 |
+| Vraagt een handeling | 3 van 20 |
+| In de begintoestand van de pagina | 23 van 50 |
+
+Nog 9 gebreken zijn alleen gemeld onder een ander criterium dat de sleutel bij het gebrek noemt. Vijf keer meldde de vergelijking iets slechter waar de sleutel geen gebrek heeft. De sleutel noemt alleen wat met opzet fout is gemaakt, dus dat hoeven geen valse meldingen te zijn; nagelopen zijn ze niet.
+
+De telling is grover dan het gebrek: een ander gebrek onder hetzelfde criterium op dezelfde pagina telt ook. Wat de poort mist in de begintoestand en wat meetbaar is, zijn onder meer de leesvolgorde (1.3.2), `autocomplete` (1.3.5), de rand van een veld (1.4.11) en bediening met het toetsenbord (2.1.1). Wat een handeling vraagt, zoals een menu openen of een formulier invullen, ziet ze bijna niet.
+
+Vergelijken per element in plaats van per telling ving op deze proef één gebrek meer (31 tegen 30). De winst zit in een geval dat de tweeling niet heeft: één gebrek hersteld en een ander erbij op dezelfde pagina, onder dezelfde regel. Dat geval is door tests gedekt, niet op een site gemeten.
+
+Op de schone tweeling keurde één regelset (QualWeb, twee regels over toetsenbord en focus) ruim 400 links af die de andere drie niet afkeuren. In de basislijn houdt dat niets tegen, maar het staat wel in de samenvatting onder "Eén meetprogramma".
+
 ## Herhaalbaarheid
 
 Een poort in een pipeline mag niet op toeval falen. Op de testsite gaf `quick` twee keer achter elkaar dezelfde uitkomst, op zes pagina's: dezelfde 108 plekken en dezelfde uitkomst van reflow en zoom. De schone tweeling als basislijn en dezelfde tweeling opnieuw gaf exitcode 0, de variant met gebreken op dezelfde paden exitcode 1. Op een echte site, met inhoud die tussen twee metingen verandert, is dit nog niet gemeten.
