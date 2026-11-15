@@ -143,6 +143,7 @@ Wie aan de toolbox werkt: `just check` controleert de types, `just test` draait 
 - Video en geluid worden beluisterd en bekeken als het bestand op te halen is (spraak naast ondertitels en paginatekst, beelden, flitsen). Dat geldt ook voor een speler in een ingesloten venster, als die een bestand afspeelt dat op te halen is. Of een audiodescriptie goed genoeg is blijft een oordeel, de flitsmeting is een benadering van de norm, en een stream of live-uitzending blijft open.
 - Het kan niet controleren welk taalmodel draaide. Elke agent geeft bij de start van zijn sessie zelf zijn model op; het rapport toont dat per rol, naast wat de uitvoerder opgaf.
 - Het publiceert niets en vult het register niet in.
+- Of het register van toegankelijkheidsverklaringen een onderzoek met loep aanvaardt als onderbouwing van status A of B, is niet bevestigd: BZK en Logius is dat nog niet gevraagd. Een verklaring met status A of B op een loep-rapport publiceer je op eigen risico, en `statement` zegt dat er dan bij.
 
 De volledige lijst van beperkingen, en wat alleen door tests is gedekt, staat in [docs/methode.md](docs/methode.md).
 

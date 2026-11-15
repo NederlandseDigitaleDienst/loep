@@ -187,3 +187,11 @@ test("the documents for the PDF carry the status, the open items and the nine st
     { type: "list", items: [{ spans: [{ text: "een" }], items: [] }, { spans: [{ text: "twee" }], items: [] }] },
   ]);
 });
+
+test("at status A or B the statement says the register has not confirmed a study by loep as its basis (#193); at C or D it says nothing", async () => {
+  const { registerCaveatNl } = await import("../src/lib/statement.ts");
+  assert.match(registerCaveatNl("A") ?? "", /onderbouwing van status A, is niet bevestigd\. BZK en Logius is dat nog niet gevraagd\..*op eigen risico$/);
+  assert.match(registerCaveatNl("B") ?? "", /status B/);
+  assert.equal(registerCaveatNl("C"), null);
+  assert.equal(registerCaveatNl("D"), null);
+});

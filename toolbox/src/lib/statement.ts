@@ -574,3 +574,12 @@ export function renderAnswerSheet(evaluation: Evaluation, input: StatementInput,
   ];
   return `${lines.join("\n")}`;
 }
+
+/**
+ * Whether the register accepts a study by loep as the basis for status A or B has not been asked of
+ * BZK and Logius (#193). Until it has, `statement` says so at A or B; at C or D the statement claims no compliance.
+ */
+export function registerCaveatNl(status: string): string | null {
+  if (status !== "A" && status !== "B") return null;
+  return `of het register van toegankelijkheidsverklaringen een onderzoek met loep aanvaardt als onderbouwing van status ${status}, is niet bevestigd. BZK en Logius is dat nog niet gevraagd. Een verklaring met status ${status} op dit onderzoek publiceer je op eigen risico`;
+}

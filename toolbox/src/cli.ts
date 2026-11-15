@@ -841,6 +841,9 @@ async function main(): Promise<void> {
       const result = await statement(values.run, values.concept);
       process.stdout.write(`status ${result.status}; ${result.openItems.length} punten nog in te vullen\n${result.files.join("\n")}\n`);
       if (result.missingMeasuresNl) process.stdout.write(`LET OP: ${result.missingMeasuresNl}\n`);
+      const { registerCaveatNl } = await import("./lib/statement.ts");
+      const caveat = registerCaveatNl(result.status);
+      if (caveat) process.stdout.write(`LET OP: ${caveat}\n`);
       for (const problem of result.pdfChecks) process.stdout.write(`- ${problem}\n`);
       for (const warning of result.pdfWarnings) process.stdout.write(`LET OP: ${warning}\n`);
       if (result.pdfChecks.length > 0) process.exitCode = 1;
