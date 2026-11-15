@@ -6,6 +6,27 @@ Wat er per versie van loep is veranderd. De versie staat op het voorblad en onde
 
 <!-- towncrier: een nieuwe versie komt hieronder -->
 
+## 0.31.0 (2026-11-15)
+
+Deze versie is uitgebracht zonder meting: de procedure voor 2.5.3 en de opdracht van de weger veranderden alleen voor een naam die maar een letter, woordvorm of leesteken afwijkt van de zichtbare tekst, en zo'n gebrek zit niet op de testsite; de nieuwe versies van html-validate en vnu-jar, en de veegronde die adressen buiten de run tegenhoudt zoals de sessie, zijn met tests en de regressietoets van de veegronde op de testsite nagegaan; het zoekformulier als leesverzoek is met tests nagegaan, niet op een echte site.
+
+### Wat een uitkomst kan veranderen
+
+- Een weging telt weer bij de eerste `render` na een update of verhuizing van de plugin. De opdracht van de weging noemt het pad naar de toolbox; dat pad telt niet meer mee als de opdracht wordt vergeleken. Een weging werd zo ten onrechte niet toegepast, en de ernst bleef dan die van de beoordelaars. ([#562](https://github.com/NederlandseDigitaleDienst/loep/issues/562))
+- De veegronde houdt nu dezelfde verzoeken tegen als een sessie: haalt een pagina met fetch of XHR gegevens op bij een host buiten de run, dan krijgt ze die niet. Zo meet de veegronde geen inhoud die een agent in een sessie niet kan openen en die buiten de afbakening valt, zoals een enquêtevenster van een andere partij. Een ingesloten venster dat bij de run hoort, mag zulke gegevens wel ophalen, net als in een sessie. Een veegronde meet daarom alles opnieuw. ([#566](https://github.com/NederlandseDigitaleDienst/loep/issues/566))
+- Een zoekfunctie die haar zoekvraag als formulier met een POST naar een pagina van de site stuurt, zoals een zoekveld dat de resultaten op de eigen pagina toont, herkent loep nu als leesverzoek (`searchform`). Dat geldt alleen als de zoekterm van de run de waarde van een veld is en elk ander ingevuld veld een korte keuze is, een knop of een veld van het framework, zonder bestand, e-mailadres of veld dat iets wijzigt. De verkenner legt het adres vast in `readRequests`, en wat pas na zoeken te zien is, wordt dan gemeten. Eerder werd zo'n verzoek altijd tegengehouden. ([#570](https://github.com/NederlandseDigitaleDienst/loep/issues/570))
+- Een toegankelijke naam die maar een letter, een woordvorm of een leesteken afwijkt van de zichtbare tekst (2.5.3), blijft een bevinding, maar met ernst laag. Spraakbediening kiest het onderdeel waarvan de naam het meest lijkt op wat de bezoeker zegt, en vindt het dan vrijwel zeker. Eerder viel de weging terug op het geval van een knop zonder naam en werd de ernst midden, met de stelling dat de link niet reageert. Een naam die iets anders zegt, of waarin een heel woord mist, blijft midden.
+- html-validate gaat naar 11.21.0 en de Nu Html Checker (vnu-jar) naar 26.11.9. Een melding van een van beide over de bron kan daardoor anders uitvallen.
+
+### Verder
+
+- Bij status A of B zeggen `statement` en de README dat niet bevestigd is dat het register een onderzoek met loep aanvaardt als onderbouwing, en dat je zo'n verklaring op eigen risico publiceert. BZK en Logius is dat nog niet gevraagd. ([#193](https://github.com/NederlandseDigitaleDienst/loep/issues/193))
+- `check-site` schrijft per recept een regel terwijl het loopt, met de tijd tot dan, zodat een controle die een tijdgrens afkapt laat zien hoe ver ze kwam. Het legt ook vast hoe lang de controle duurde, en de opdracht van een volgende verkenning noemt dat, met vanaf vijf minuten de raad om de controle op de achtergrond te draaien. ([#460](https://github.com/NederlandseDigitaleDienst/loep/issues/460))
+- `feedback` noemt nu ook de criteria die open bleven door inhoud van een adres buiten de afbakening, met hoe je ze meet: een nieuw onderzoek met dat adres erbij (`inventory --also-origin`). Eerder sloeg het die stil over. ([#466](https://github.com/NederlandseDigitaleDienst/loep/issues/466))
+- De schermafbeeldingen van pagina's in het HTML-rapport zijn scherper. Ze houden hun eigen breedte van 1280 pixels in plaats van te worden verkleind tot 1024, en worden opgeslagen met JPEG-kwaliteit 85 in plaats van 72. Kleine tekst is daardoor gelijkmatig, zonder vlekken eromheen, en de genummerde markeringen blijven even groot. De beelden worden ongeveer 1,8 keer zo groot: bij het rapport over de landingspagina van loep 0,39 MB in plaats van 0,21 MB. ([#524](https://github.com/NederlandseDigitaleDienst/loep/issues/524))
+- Of VoiceOver echt voorleest, is nu te zien: `loep voiceover status` zegt of de virtuele Mac draait en is opgewarmd, of een start nog loopt en hoe de laatste afliep. `estimate`, `pending` en de werkstroom melden het als hij is ingericht maar niet voorleest. Een start op de achtergrond die mislukte, bleef eerder onopgemerkt, en de beoordelaars werkten dan zonder VoiceOver. Verder zag `start` een virtuele Mac die al was opgewarmd nooit als opgewarmd, en warmde hem dus opnieuw op. ([#565](https://github.com/NederlandseDigitaleDienst/loep/issues/565))
+- Het rapport als HTML en de site van loep gebruiken @nldd/design-system 0.22.0. Koppen houden hun grootte; kleine knoppen zijn 2 pixels hoger.
+
 ## 0.30.0 (2026-11-14)
 
 Deze versie is uitgebracht zonder meting: de opdrachten van beoordelaar en verifieerder, de procedures en de oordeelregels zijn niet veranderd; de wijzigingen aan de bewijspoort, de dekking in het sitemodel en find zijn met tests en de regressietoets van de veegronde op de testsite nagegaan.
