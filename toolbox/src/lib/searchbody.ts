@@ -6,7 +6,9 @@
  * search and change something.
  */
 
-export const SEARCH_SERVICE_IDS = ["typesense", "algolia", "elasticsearch", "meilisearch", "graphql", "searchui", "searchterm"] as const;
+export const SEARCH_SERVICE_IDS = ["typesense", "algolia", "elasticsearch", "meilisearch", "graphql", "searchui", "searchterm", "searchform"] as const;
+/** The services recognised by the search terms of the run: a rule of these gets the terms when it is approved. */
+export const TERM_SERVICES: readonly SearchServiceId[] = ["searchterm", "searchform"];
 export type SearchServiceId = (typeof SEARCH_SERVICE_IDS)[number];
 
 export type Verdict = { search: true } | { search: false; reasonNl: string };
@@ -471,6 +473,90 @@ function searchTerm(body: string, _path?: string, terms?: readonly string[]): Ve
   return yes;
 }
 
+/**
+ * Fields a framework puts in every post of a page form, with no input of the visitor in them:
+ * the state of ASP.NET WebForms, a token against forged posts, the id of a Drupal form.
+ */
+const FORM_STATE_KEY = /^(?:__[A-Za-z]+|__RequestVerificationToken|authenticity_token|_token|csrf_?token|csrfmiddlewaretoken|_csrf|form_build_id|form_id|form_token|_wpnonce)$/i;
+/** The button that sent the form carries its own label, such as "Zoeken"; under these names that is all it is. */
+const FORM_BUTTON_KEY = /^(?:submit|op|btn[\w-]*|button[\w-]*|zoek(?:en|knop)?|search(?:button|btn|submit)?|[\w$-]*\$(?:btn|button)[\w$-]*)$/i;
+/** Longer than a filter, a sort order or a page number; a field this long, or with more words, that is not the term carries text of its own. */
+const FORM_CHOICE_MAX = 64;
+const FORM_CHOICE_WORDS = 4;
+const FORM_FIELDS_MAX = 300;
+
+/** The fields of a body sent as `application/x-www-form-urlencoded`, or null when it is not one. */
+function urlEncodedFields(body: string): [string, string][] | null {
+  if (!/^[^=&\s{[]+=[^&]*(?:&[^=&]+(?:=[^&]*)?)*&?$/.test(body.trim())) return null;
+  try {
+    return body
+      .trim()
+      .split("&")
+      .filter((part) => part !== "")
+      .map((part) => {
+        const at = part.indexOf("=");
+        const decode = (text: string): string => decodeURIComponent(text.replace(/\+/g, " "));
+        return at === -1 ? [decode(part), ""] : [decode(part.slice(0, at)), decode(part.slice(at + 1))];
+      });
+  } catch {
+    return null;
+  }
+}
+
+/** The fields of a body sent as `multipart/form-data`, or null when it is not one; a file in it gives "file". */
+function multipartFields(body: string): [string, string][] | "file" | null {
+  const boundary = /^--([^\r\n]+)\r?\n/.exec(body)?.[1];
+  if (!boundary) return null;
+  const fields: [string, string][] = [];
+  for (const part of body.split(`--${boundary}`).slice(1)) {
+    if (part.startsWith("--")) break;
+    const split = /\r?\n\r?\n/.exec(part);
+    if (!split) return null;
+    const head = part.slice(0, split.index);
+    const name = /content-disposition:\s*form-data;[^\r\n]*\bname="([^"]*)"/i.exec(head)?.[1];
+    if (name === undefined) return null;
+    if (/\bfilename="/i.test(head)) return "file";
+    fields.push([name, part.slice(split.index + split[0].length).replace(/\r?\n$/, "")]);
+  }
+  return fields.length > 0 ? fields : null;
+}
+
+/**
+ * A search form posted to a page of the site, such as one that shows its results on the page
+ * that receives the post: the term of the run is the value of a field, and every other field
+ * with a value is a short choice (a filter, a sort order, a page, the label of the button) or
+ * state the framework adds. An empty field carries nothing, so a whole page sent as one form
+ * (ASP.NET WebForms) passes as long as only the search was filled in.
+ */
+function searchForm(body: string, _path?: string, terms?: readonly string[]): Verdict {
+  const known = (terms ?? []).filter((term) => term.trim() !== "");
+  if (known.length === 0) return no("loep kent de zoekterm van deze run hier niet, en alleen daaraan is een zoekformulier te herkennen");
+  if (parseJson(body).ok) return no("de body is JSON en geen formulier");
+  const parsed = urlEncodedFields(body) ?? multipartFields(body);
+  if (parsed === "file") return no("het formulier stuurt een bestand mee, en een zoekvraag doet dat niet");
+  if (parsed === null) return no("de body is geen formulier (application/x-www-form-urlencoded of multipart/form-data)");
+  if (parsed.length > FORM_FIELDS_MAX) return no(`het formulier heeft meer dan ${FORM_FIELDS_MAX} velden`);
+  let term = false;
+  for (const [key, value] of parsed) {
+    if (EMAIL_LIKE.test(value)) return no(`het veld "${key}" bevat iets dat op een e-mailadres lijkt, en een zoekvraag heeft dat niet`);
+    if (value.trim() === "" || FORM_STATE_KEY.test(key)) continue;
+    if (known.some((candidate) => sameTerm(value, candidate))) {
+      term = true;
+      continue;
+    }
+    const bare = key.toLowerCase().replace(/[-_\s.]/g, "");
+    const leaf = key.split(/[$:.[\]]/).filter(Boolean).pop()?.toLowerCase().replace(/[-_\s]/g, "") ?? bare;
+    if (FORM_BUTTON_KEY.test(key) || FORM_BUTTON_KEY.test(leaf)) {
+      if (value.length > FORM_CHOICE_MAX) return no(`de knop "${key}" heeft een waarde van meer dan ${FORM_CHOICE_MAX} tekens`);
+      continue;
+    }
+    if (TERM_WRITE_KEYS.has(bare) || TERM_WRITE_KEYS.has(leaf)) return no(`het veld "${key}" is ingevuld, en dat wijst op een verzoek dat iets wijzigt of persoonsgegevens meestuurt`);
+    if (value.length > FORM_CHOICE_MAX || value.trim().split(/\s+/).length > FORM_CHOICE_WORDS) return no(`het veld "${key}" is niet de zoekterm en heeft meer dan ${FORM_CHOICE_WORDS} woorden of ${FORM_CHOICE_MAX} tekens: dat is tekst van een bezoeker, geen keuze`);
+  }
+  if (!term) return no("de zoekterm van de run is niet de waarde van een veld in het formulier");
+  return yes;
+}
+
 export const SEARCH_SERVICES: Record<SearchServiceId, SearchService> = {
   typesense: { id: "typesense", nameNl: "Typesense", formNl: 'JSON met "searches", een lijst van zoekvragen (POST /multi_search)', recognise: typesense },
   algolia: { id: "algolia", nameNl: "Algolia", formNl: 'JSON met "requests", elk met "indexName" en "params" of met "indexName" en losse zoekparameters zoals "query" en "hitsPerPage", of met alleen "params", of losse zoekparameters aan POST /1/indexes/<index>/query', recognise: algolia },
@@ -483,6 +569,12 @@ export const SEARCH_SERVICES: Record<SearchServiceId, SearchService> = {
     nameNl: "een zoekdienst met de zoekterm van de run in de body",
     formNl: "JSON waarin de zoekterm van de run (of de term die niets vindt) letterlijk als waarde staat, ook genest, zonder velden die iets wijzigen of persoonsgegevens dragen, zoals bij Google Discovery Engine (…:searchLite) of /api/v2/search",
     recognise: searchTerm,
+  },
+  searchform: {
+    id: "searchform",
+    nameNl: "een zoekformulier met de zoekterm van de run als veld",
+    formNl: "een formulier (application/x-www-form-urlencoded of multipart/form-data) waarin de zoekterm van de run de waarde van een veld is. Verder alleen lege velden, korte keuzes zoals een filter, de sortering, de pagina of de tekst van de zoekknop, en velden die het framework zelf toevoegt (zoals __VIEWSTATE of een token tegen vervalste verzoeken). Geen bestand, geen e-mailadres en geen ingevuld veld dat iets wijzigt of persoonsgegevens draagt. Zoals een zoekfunctie die met een POST naar de eigen pagina de resultaten toont",
+    recognise: searchForm,
   },
 };
 

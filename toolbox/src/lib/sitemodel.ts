@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { readJson, sha256, sha256File } from "./canonical.ts";
 import { addressOf, readMatches, readRequestProblems, type ReadRequest } from "./reads.ts";
+import { TERM_SERVICES } from "./searchbody.ts";
 import { SEARCH_FALLBACK, SEARCH_NONE, SEARCH_TERM_FORM } from "./searchterm.ts";
 
 /**
@@ -728,9 +729,9 @@ export function searchTermForRun(runDir: string): string {
 /** The terms loep types in a search of this run: the term of the run, and the term that finds nothing. */
 export const searchTermsForRun = (runDir: string): string[] => [searchTermForRun(runDir), SEARCH_NONE];
 
-/** The rules with the search terms of the run on each rule of `searchterm`, the only service that is recognised by them. */
+/** The rules with the search terms of the run on each rule of a service recognised by them (`searchterm`, `searchform`). */
 export const withRunTerms = (runDir: string, rules: readonly ReadRequest[]): ReadRequest[] =>
-  rules.map((rule) => (rule.service === "searchterm" ? { ...rule, terms: searchTermsForRun(runDir) } : rule));
+  rules.map((rule) => (TERM_SERVICES.includes(rule.service) ? { ...rule, terms: searchTermsForRun(runDir) } : rule));
 
 /**
  * The read requests of a model that passed `check-site` and has not changed since; empty

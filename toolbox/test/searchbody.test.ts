@@ -144,6 +144,10 @@ const CASES: Record<SearchServiceId, { search: [string, string][]; not: [string,
     search: [],
     not: [["any body without the terms of the run", json({ query: "afval" }), /kent de zoekterm van deze run hier niet/]],
   },
+  searchform: {
+    search: [],
+    not: [["any form without the terms of the run", "q=afval", /kent de zoekterm van deze run hier niet/]],
+  },
 };
 
 for (const service of SEARCH_SERVICE_IDS) {
@@ -251,7 +255,42 @@ test("form-encoded search parameters keep working as they did, and the terms cha
   assert.deepEqual(recogniseSearch("algolia", algolia, "/1/indexes/*/queries", TERMS), { search: true });
   assert.deepEqual(searchServicesOf(algolia, "/1/indexes/*/queries", TERMS), ["algolia"], "a form-encoded string holding the term is not the term as a value");
   assert.deepEqual(searchServicesOf(json({ params: "query=afvalkalender" }), "/1/indexes/g/query", TERMS), ["algolia"]);
-  assert.deepEqual(searchServicesOf("q=afvalkalender&page=1", "/zoeken", TERMS), [], "a form-encoded body is held back as before");
+  // Since #570 a form with the term of the run as a field is a search form; a rule in readRequests still has to name its address.
+  assert.deepEqual(searchServicesOf("q=afvalkalender&page=1", "/zoeken", TERMS), ["searchform"]);
+  assert.deepEqual(searchServicesOf("q=afvalkalender&page=1", "/zoeken"), [], "without terms nothing changes");
   assert.deepEqual(searchServicesOf(json({ q: "afvalkalender" }), "/indexes/a/search"), ["meilisearch"], "without terms nothing changes");
   assert.deepEqual(searchServicesOf(json({ q: "afvalkalender" }), "/indexes/a/search", TERMS), ["meilisearch", "searchterm"]);
+});
+
+test("a search form posted to a page: the term of the run is a field, everything else is empty, a short choice, a button or state of the framework (#570)", () => {
+  const TERMS = ["afvalkalender", "loepqzx"];
+  const form = (fields: Record<string, string>): string => new URLSearchParams(fields).toString();
+  const yes = (name: string, body: string): void => assert.deepEqual(recogniseSearch("searchform", body, "/zoeken", TERMS), { search: true }, name);
+  const not = (name: string, body: string, reason: RegExp): void => {
+    const verdict = recogniseSearch("searchform", body, "/zoeken", TERMS);
+    assert.equal(verdict.search, false, `${name} must not count as a search`);
+    if (!verdict.search) assert.match(verdict.reasonNl, reason, name);
+  };
+  yes("a plain search form", form({ q: "afvalkalender" }));
+  yes("with filters, a sort order, a page and the button", form({ zoekterm: "Afvalkalender", type: "nieuws", thema: "Afval en grondstoffen", sort: "datum", page: "2", submit: "Zoeken" }));
+  yes("the term that finds nothing", form({ keyword: "loepqzx" }));
+  yes("Drupal, with its form id and token", form({ keys: "afvalkalender", form_build_id: "form-abc123", form_id: "search_block_form", op: "Zoeken" }));
+  // ASP.NET WebForms posts the whole page as one form: the newsletter field next to the search is there, empty.
+  yes(
+    "ASP.NET WebForms, with the state of the page and an empty newsletter field",
+    form({ __VIEWSTATE: "x".repeat(4000), __VIEWSTATEGENERATOR: "CA0B0334", __EVENTVALIDATION: "y".repeat(500), __EVENTTARGET: "", "ctl00$Header$txtZoek": "afvalkalender", "ctl00$Header$btnZoek": "Zoek", "ctl00$Footer$txtEmail": "" }),
+  );
+  yes("multipart/form-data", '--b1\r\nContent-Disposition: form-data; name="q"\r\n\r\nafvalkalender\r\n--b1\r\nContent-Disposition: form-data; name="type"\r\n\r\nalles\r\n--b1--\r\n');
+
+  not("a contact form with the term in it", form({ q: "afvalkalender", naam: "Test", bericht: "Hallo" }), /het veld "naam" is ingevuld/);
+  not("a newsletter sign-up next to the search, filled in", form({ "ctl00$Header$txtZoek": "afvalkalender", "ctl00$Footer$txtEmail": "test@example.nl" }), /e-mailadres/);
+  not("a login form", form({ q: "afvalkalender", password: "geheim" }), /het veld "password" is ingevuld/);
+  not("a field with free text that is not the term", form({ q: "afvalkalender", toelichting: "Ik wil graag een afspraak maken over mijn container" }), /is niet de zoekterm en heeft meer dan 4 woorden of 64 tekens: dat is tekst van een bezoeker/);
+  not("a form without the term", form({ q: "iets anders" }), /zoekterm van de run is niet de waarde van een veld/);
+  not("a file", '--b1\r\nContent-Disposition: form-data; name="q"\r\n\r\nafvalkalender\r\n--b1\r\nContent-Disposition: form-data; name="bijlage"; filename="a.pdf"\r\n\r\n%PDF\r\n--b1--\r\n', /bestand/);
+  not("JSON", json({ q: "afvalkalender" }), /JSON en geen formulier/);
+  not("plain text", "afvalkalender", /geen formulier/);
+  not("a button with a long value", form({ q: "afvalkalender", submit: "x".repeat(80) }), /knop "submit"/);
+  // The term only passes as a whole value, not inside a longer one.
+  not("the term inside a longer value", form({ vraag: "afvalkalender 2026" }), /zoekterm van de run is niet de waarde/);
 });

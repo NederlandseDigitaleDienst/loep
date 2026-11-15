@@ -27,7 +27,7 @@ export interface ReadRequest {
   /** Id of the session observation in which the request was held back. */
   observation: string;
   /**
-   * The search terms of the run, for a rule of `searchterm`: added by loep when the rule is
+   * The search terms of the run, for a rule of `searchterm` or `searchform`: added by loep when the rule is
    * approved (see `withRunTerms`), never written by the explorer, so a body passes only with
    * the terms loep itself types.
    */
