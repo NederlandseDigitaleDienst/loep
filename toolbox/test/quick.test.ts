@@ -66,7 +66,7 @@ test("the summary leaves AAA out, names the engines and says what it is not", ()
   const summary = summaryOf([page("https://voorbeeld.test/", [element("1.4.6", "p", { "axe-core": "failed", alfa: "failed" }), element("1.4.3", "p", { "axe-core": "failed", alfa: "failed" })])]);
   assert.deepEqual(summary.signals.map((signal) => signal.criterion), ["1.4.3"]);
   assert.deepEqual(summary.engines, [{ id: "axe-core", version: "4.14.0" }, { id: "ibm", version: "4.0.34" }]);
-  assert.deepEqual(summary.counts, [{ path: "/", criterion: "1.4.3", rule: "alfa:regel-1.4.3", element: "p", places: 1 }, { path: "/", criterion: "1.4.3", rule: "axe-core:regel-1.4.3", element: "p", places: 1 }]);
+  assert.deepEqual(summary.counts, [{ path: "/", criterion: "1.4.3", rule: "alfa:regel-1.4.3", element: "p", strong: true, places: 1 }, { path: "/", criterion: "1.4.3", rule: "axe-core:regel-1.4.3", element: "p", strong: true, places: 1 }]);
   assert.equal(summary.partial, false);
   const text = quickSummaryMarkdown(summary);
   assert.match(text, /geen oordeel over toegankelijkheid/);
@@ -105,8 +105,12 @@ test("a place more under a rule is worse, a place fewer is better, and a false a
   ]);
   assert.deepEqual(comparison.better.map((change) => [change.criterion, change.before, change.now]), [["2.4.4", 1, 0]]);
   assert.deepEqual(groupedChangesNl(comparison.worse), ["/: 1.4.3 Contrast (minimum), 2 plekken erbij volgens 2 meetprogramma's. Het gaat om `p.grijs`, `p.klein`.", "/: 1.4.10 Reflow, 3 plekken erbij volgens de proef op 320 pixels breed."]);
-  // Better alone never stops a pipeline.
-  assert.equal(compareQuick(after, before).ok, false);
+  // The other way round the link that one engine fails is new. One engine alone stops nothing, unless the pipeline asks for it.
+  const back = compareQuick(after, before);
+  assert.deepEqual([back.ok, back.worse, back.weak.map((change) => [change.criterion, change.rule, change.strong])], [true, [], [["2.4.4", "axe-core:regel-2.4.4", false]]]);
+  assert.match(quickComparisonMarkdown(back), /## Zwakke aanwijzingen\n\nEén meetprogramma meldt meer plekken en de andere niet, of een proef die niet elke keer hetzelfde meet ziet iets\. Dat houdt niets tegen/);
+  const strict = compareQuick(after, before, true);
+  assert.deepEqual([strict.ok, strict.worse.length, strict.weak], [false, 1, []]);
   assert.equal(compareQuick(before, summaryOf([page("https://voorbeeld.test/", [alarm])])).ok, true);
 });
 
@@ -181,6 +185,53 @@ test("the summary says what lay over the pages and how to close it", () => {
   assert.doesNotMatch(quickSummaryMarkdown(summaryOf([page("https://voorbeeld.test/", [])])), /--dismiss/);
 });
 
+test("a rule of one engine that fails every link does not stop a release that adds a link", () => {
+  const link = (nr: number) => ({ ...element("2.1.1", `nav > a:nth-of-type(${nr})`, { qualweb: "failed" }), rules: { qualweb: ["QW-WCAG-T24"] } });
+  const tags = (count: number) => Object.fromEntries(Array.from({ length: count }, (_, index) => [`nav > a:nth-of-type(${index + 1})`, `<a href="/pagina-${index + 1}">`]));
+  const before = summaryOf([withTags(page("https://voorbeeld.test/", [link(1), link(2)]), tags(2))]);
+  const after = summaryOf([withTags(page("https://voorbeeld.test/", [link(1), link(2), link(3)]), tags(3))]);
+  const comparison = compareQuick(before, after);
+  assert.deepEqual([comparison.ok, comparison.worse], [true, []]);
+  assert.deepEqual(groupedChangesNl(comparison.weak), ['/: 2.1.1 Toetsenbord, 1 plek erbij volgens 1 meetprogramma. Het gaat om `a[href="/pagina-3"] in nav`.']);
+  // The same link failed by two engines is a release that broke something.
+  const both = summaryOf([withTags(page("https://voorbeeld.test/", [link(1), link(2), element("2.1.1", "nav > a:nth-of-type(3)", { qualweb: "failed", alfa: "failed" })]), tags(3))]);
+  assert.equal(compareQuick(before, both).ok, false);
+});
+
+test("the summary gives what one engine alone fails a line per engine, not a line per criterion", () => {
+  const links = Array.from({ length: 5 }, (_, index) => ({ ...element("2.1.1", `nav > a:nth-of-type(${index + 1})`, { qualweb: "failed" }), rules: { qualweb: ["QW-WCAG-T24"] } }));
+  const summary = summaryOf([page("https://voorbeeld.test/", [...links, { ...element("3.2.1", "nav > a:nth-of-type(1)", { qualweb: "failed" }), rules: { qualweb: ["QW-WCAG-T24"] } }, element("1.4.3", "p", { alfa: "failed", "axe-core": "passed" })])]);
+  assert.deepEqual(summary.single, [
+    { engine: "qualweb", places: 6, criteria: ["2.1.1", "3.2.1"], mostRule: { rule: "QW-WCAG-T24", places: 6 } },
+    { engine: "alfa", places: 1, criteria: ["1.4.3"], mostRule: { rule: "regel-1.4.3", places: 1 } },
+  ]);
+  const text = quickSummaryMarkdown(summary);
+  assert.match(text, /## Alleen volgens één meetprogramma/);
+  assert.match(text, /- QualWeb: 6 plekken onder 2 criteria \(2\.1\.1, 3\.2\.1\)\. Het vaakst regel QW-WCAG-T24, 6 keer\./);
+  assert.match(text, /- Alfa: 1 plek onder 1 criterium \(1\.4\.3\)\./);
+  assert.doesNotMatch(text, /## Eén meetprogramma|## Meetprogramma's spreken elkaar tegen/);
+});
+
+test("the probe for text spacing was not repeatable on a real site, so it stops no pipeline", () => {
+  const lost = { probe: "spacing" as const, element: 'span "Meer opties" in nav' };
+  const before = summaryOf([page("https://voorbeeld.test/", [])]);
+  const after = summaryOf([{ ...page("https://voorbeeld.test/", []), probes: [lost, { probe: "focus-invisible" as const, element: "a in nav" }] }]);
+  assert.deepEqual(after.counts.map((count) => [count.rule, count.strong]), [["loep:spacing", false], ["loep:focus-invisible", true]]);
+  const comparison = compareQuick(before, after);
+  assert.deepEqual([comparison.worse.map((change) => change.rule), comparison.weak.map((change) => change.rule)], [["loep:focus-invisible"], ["loep:spacing"]]);
+  const only = compareQuick(before, summaryOf([{ ...page("https://voorbeeld.test/", []), probes: [lost] }]));
+  assert.deepEqual([only.ok, only.weak.length], [true, 1]);
+  assert.equal(compareQuick(before, summaryOf([{ ...page("https://voorbeeld.test/", []), probes: [lost] }]), true).ok, false);
+});
+
+test("the same part on every page is one thing a probe saw", () => {
+  const header = { probe: "order" as const, element: 'div "Menu" in header' };
+  const summary = summaryOf([{ ...page("https://voorbeeld.test/", []), probes: [header] }, { ...page("https://voorbeeld.test/contact", []), probes: [header] }]);
+  assert.equal(summary.signals[0]!.sentenceNl, "De volgorde op het scherm wijkt op 1 plek af van de volgorde in de code. Dat is gezien op 2 pagina's.");
+  // The comparison still counts per page: the part gone from one page is one better there.
+  assert.equal(summary.counts.length, 2);
+});
+
 test("a criterion one engine fails names the rule behind most places", () => {
   const links = Array.from({ length: 5 }, (_, index) => ({ ...element("2.1.1", `nav > a:nth-of-type(${index + 1})`, { qualweb: "failed" }), rules: { qualweb: ["QW-WCAG-T24"] } }));
   const summary = summaryOf([page("https://voorbeeld.test/", [...links, { ...element("2.1.1", "main > div", { qualweb: "failed" }), rules: { qualweb: ["QW-ACT-R62"] } }])]);
@@ -191,7 +242,7 @@ test("a criterion one engine fails names the rule behind most places", () => {
 test("the figures every summary quotes are the ones the validation file has", () => {
   const validation = readFileSync(new URL("../../validatie/snelle-meting/README.md", import.meta.url), "utf8");
   const { testsite, precision, recall, sites } = QUICK_BACKTEST;
-  assert.ok(validation.includes(`| Alle gebreken | 31 van 79 | ${testsite.caught} van ${testsite.defects} |`), "de testsite");
+  assert.ok(validation.includes(`| Alle gebreken | 31 van 79 | 41 van 79 | ${testsite.caught} van ${testsite.defects} |`), "de testsite");
   assert.ok(validation.includes(`(${Math.round(precision * 100)}%) | ${Math.round(recall * 100)}% |`), "precisie en vangst");
   assert.ok(validation.includes(`van elk van ${sites} sites`), "het aantal sites");
   assert.ok(QUICK_BACKTEST.textNl.includes(`${testsite.caught} van de ${testsite.defects}`) && QUICK_BACKTEST.textNl.includes(`${sites} sites`));

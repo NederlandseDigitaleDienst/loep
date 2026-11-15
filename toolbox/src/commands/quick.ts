@@ -39,6 +39,8 @@ export interface QuickOptions {
   urlsFile?: string | undefined;
   /** The summary.json of an earlier measurement to hold this one against. */
   baseline?: string | undefined;
+  /** Count what only one engine reports as worse too. */
+  strict?: boolean | undefined;
   /** Selectors of what to click after opening a page, such as the button that closes a cookie banner. One that is not there is passed by. */
   dismiss?: readonly string[] | undefined;
   /** For tests: runs a command of loep and gives what it printed. */
@@ -117,7 +119,7 @@ export async function quick(options: QuickOptions): Promise<{ summary: QuickSumm
   if (typeof started.error === "string") throw new Error(`de browsersessie startte niet: ${started.error}`);
 
   const baseline = options.baseline ? await readJson<QuickSummary>(options.baseline) : null;
-  if (baseline && (baseline.kind !== "quick" || !Array.isArray(baseline.counts) || baseline.counts.some((count) => typeof count.element !== "string"))) throw new Error(`${options.baseline} is geen summary.json van een snelle meting`);
+  if (baseline && (baseline.kind !== "quick" || !Array.isArray(baseline.counts) || baseline.counts.some((count) => typeof count.element !== "string" || typeof count.strong !== "boolean"))) throw new Error(`${options.baseline} is geen summary.json van een snelle meting`);
 
   const measurePage = async (url: string): Promise<QuickPage> => {
     const page: QuickPage = { url, title: null, httpStatus: null, screenshot: null, measurements: [], reflow: null, zoom: null, probes: [] };
@@ -147,7 +149,7 @@ export async function quick(options: QuickOptions): Promise<{ summary: QuickSumm
     }
     summary = summaryOf(pages);
     if (baseline) {
-      comparison = compareQuick(baseline, summary);
+      comparison = compareQuick(baseline, summary, options.strict ?? false);
       // Before a pipeline stops on it: the pages that look worse or went unmeasured once more. Chance does not come twice.
       const doubted = new Set([...comparison.worse.map((change) => change.path), ...comparison.notMeasured]);
       if (doubted.size > 0) {
@@ -159,7 +161,7 @@ export async function quick(options: QuickOptions): Promise<{ summary: QuickSumm
             again.push(await measurePage(page.url));
           }
         }
-        comparison = confirmComparison(comparison, compareQuick(baseline, summaryOf(again)));
+        comparison = confirmComparison(comparison, compareQuick(baseline, summaryOf(again), options.strict ?? false));
       }
     }
   } finally {
@@ -262,6 +264,7 @@ export function quickDoneNl(run: string, summary: QuickSummary, comparison: Quic
             ? `Vergeleken met de vorige meting: niets slechter${comparison.better.length > 0 ? `, ${comparison.better.length} beter` : ""}${comparison.unstable.length > 0 ? `. ${comparison.unstable.length} ${comparison.unstable.length === 1 ? "verschil is" : "verschillen zijn"} in een tweede meting niet bevestigd en ${comparison.unstable.length === 1 ? "telt" : "tellen"} niet` : ""}.`
             : `Vergeleken met de vorige meting, en bevestigd met een tweede meting van die pagina's: ${comparison.worse.length} slechter${comparison.notMeasured.length > 0 ? `, ${comparison.notMeasured.length} ${comparison.notMeasured.length === 1 ? "pagina" : "pagina's"} niet meer gemeten` : ""}. Zie ${join(run, "quick", "verschil.md")}`,
           ...groupedChangesNl(comparison.worse).slice(0, 10).map((line) => `  ${line}`),
+          ...(comparison.weak.length > 0 ? [`Op ${new Set(comparison.weak.map((change) => change.path)).size} ${new Set(comparison.weak.map((change) => change.path)).size === 1 ? "pagina" : "pagina's"} is er een zwakke aanwijzing bij gekomen. Dat houdt niets tegen; met --strict telt het wel.`] : []),
         ]
       : []),
     "",

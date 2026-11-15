@@ -40,7 +40,7 @@ Dit is geen onderzoek. Vraagt de gebruiker of de site aan WCAG voldoet, of wil h
    LOEP quick https://preview.voorbeeld.nl --out <nieuwe map> --urls <lijst voor de preview> --baseline toegankelijkheid/snel/basislijn.json
    ```
 
-   Pagina's worden vergeleken op hun pad. Een preview op een ander adres heeft dus een lijst met dezelfde paden en haar eigen begin. Het commando eindigt met 1 als een pagina meer plekken heeft onder een regel, of als een pagina uit de basislijn niet gemeten kon worden. Wat er veranderde staat in `quick/verschil.md`. Eindigt het met 2, dan is de meting zelf mislukt en zegt dat niets over de site: lees de foutmelding.
+   Pagina's worden vergeleken op hun pad. Een preview op een ander adres heeft dus een lijst met dezelfde paden en haar eigen begin. Het commando eindigt met 1 als een pagina meer plekken heeft die twee of meer meetprogramma's afkeuren of die een proef van loep ziet, of als een pagina uit de basislijn niet gemeten kon worden. Wat één meetprogramma alleen meldt, houdt niets tegen. Zet `--strict` er alleen bij als de gebruiker daarom vraagt: dan faalt de stap ook op een nieuwe link die één regelset afkeurt. Wat er veranderde staat in `quick/verschil.md`. Eindigt het met 2, dan is de meting zelf mislukt en zegt dat niets over de site: lees de foutmelding.
 
 4. **Zet het in de pipeline, als de gebruiker dat wil.** De stap haalt loep op bij een versie, installeert de pakketten en Chromium (de snelle meting gebruikt geen andere browser), start de site of wijst naar de preview, en draait het commando van stap 3. Faalt het commando, dan faalt de stap. Bewaar `quick/verschil.md` en `quick/samenvatting.md` als artefact, zodat iemand kan lezen waarom. Vraag welk systeem de gebruiker heeft en schrijf de stap in de vorm van dat systeem. Verzin geen action of image die niet bestaat.
 
@@ -57,7 +57,8 @@ Dit is geen onderzoek. Vraagt de gebruiker of de site aan WCAG voldoet, of wil h
 - **Slechter.** Lees `verschil.md` en open de pagina erbij. Per pagina en criterium staat hoeveel plekken erbij kwamen en volgens hoeveel meetprogramma's. De plekken zelf staan in `summary.json` onder `findings`.
 - **Niet bevestigd.** Een pagina die slechter leek, is twee keer gemeten en gaf de tweede keer iets anders. Dat houdt niets tegen. Komt hetzelfde vaak terug, dan laadt dat deel van de pagina wisselend; zeg dat tegen de gebruiker.
 - **Niet meer gemeten.** Een pagina uit de basislijn gaf een fout of bestaat niet meer. Is ze bewust weg, haal haar dan uit de lijst en maak een nieuwe basislijn.
-- **Een melding die niet klopt.** Staat ze ook in de basislijn, dan houdt ze niets tegen. Is ze nieuw, dan beslist de gebruiker: herstellen, of de basislijn opschuiven en zeggen waarom.
+- **Zwakke aanwijzingen.** Wat één meetprogramma alleen meldt, of de proef voor tekstafstand. Dat houdt niets tegen. Noem het, en zeg dat het een zwakke aanwijzing is.
+- **Een melding die niet klopt.** Is ze slechter gemeld en klopt ze niet, dan beslist de gebruiker: de basislijn opschuiven en zeggen waarom.
 - **Niets veranderd.** Zeg erbij wat de meting niet ziet: wat pas na een handeling verschijnt (een menu, een foutmelding), formulieren, documenten, en of een tekstalternatief of kop klopt. Daarvoor is een onderzoek.
 
 Hoe de meting werkt en wat ze waard is, staat in `docs/methode.md` onder "De snelle meting" en in `validatie/snelle-meting/README.md`.

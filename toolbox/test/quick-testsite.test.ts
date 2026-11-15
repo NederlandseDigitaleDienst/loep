@@ -57,7 +57,9 @@ test("quick on the testsite: the probes are silent on the clean twin and the com
 
   assert.equal(defect.comparison!.ok, false);
   const worse = new Set(defect.comparison!.worse.map((change) => `${change.path} ${change.criterion}`));
-  for (const expected of ["/ 1.4.2", "/ 1.4.3", "/ 1.4.10", "/ 1.4.12", "/ 2.4.4", "/ 2.4.7", "/ 3.2.1", "/contact.html 2.4.3", "/nieuws/ 1.3.2"]) assert.ok(worse.has(expected), `${expected} hoort slechter te zijn`);
+  for (const expected of ["/ 1.4.2", "/ 1.4.3", "/ 1.4.10", "/ 2.4.4", "/ 2.4.7", "/ 3.2.1", "/contact.html 2.4.3", "/nieuws/ 1.3.2"]) assert.ok(worse.has(expected), `${expected} hoort slechter te zijn`);
+  // Text spacing is seen, and listed as a weak ground: it stops no pipeline.
+  assert.ok(defect.comparison!.weak.some((change) => change.path === "/" && change.rule === "loep:spacing"), "tekstafstand bij de zwakke aanwijzingen");
   assert.deepEqual([defect.comparison!.notMeasured, defect.comparison!.newPages], [[], []]);
 
   // Nothing was sent to either site.

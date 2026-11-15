@@ -30,10 +30,16 @@ const summary = read<QuickSummary>(join(run, "quick", "summary.json"));
 const comparison = read<QuickComparison>(join(run, "quick", "verschil.json"));
 
 const measured = new Set(summary.pages.filter((page) => page.measured).map((page) => pagePath(page.url)));
-const worse = new Map<string, Set<string>>();
-for (const change of comparison.worse) worse.set(change.path, (worse.get(change.path) ?? new Set()).add(change.criterion));
+const byPath = (changes: QuickComparison["worse"]): Map<string, Set<string>> => {
+  const found = new Map<string, Set<string>>();
+  for (const change of changes) found.set(change.path, (found.get(change.path) ?? new Set()).add(change.criterion));
+  return found;
+};
+const worse = byPath(comparison.worse);
+/** With what one engine alone reports too, as `--strict` counts it. */
+const strict = byPath([...comparison.worse, ...(comparison.weak ?? [])]);
 const pagesOf = (defect: Defect): string[] => (defect.pages.includes("*") ? [...measured] : defect.pages.filter((path) => measured.has(path)));
-const reported = (defect: Defect, criteria: string[]): boolean => pagesOf(defect).some((path) => criteria.some((criterion) => worse.get(path)?.has(criterion)));
+const reported = (defect: Defect, criteria: string[], changes = worse): boolean => pagesOf(defect).some((path) => criteria.some((criterion) => changes.get(path)?.has(criterion)));
 
 const rows = key.defects.map((defect) => ({ defect, reach: pagesOf(defect).length > 0, caught: reported(defect, [defect.criterion]), other: reported(defect, defect.alsoCriteria ?? []) }));
 const tally = (field: "class" | "state"): string => {
@@ -53,6 +59,7 @@ process.stdout.write(
   [
     `${rows.length} gebreken in de sleutel, ${rows.filter((row) => row.reach).length} op een gemeten pagina.`,
     `Gevangen onder het eigen criterium: ${rows.filter((row) => row.caught).length}. Alleen onder een ander criterium van het gebrek: ${rows.filter((row) => !row.caught && row.other).length}.`,
+    `Met ook wat één meetprogramma alleen meldt (--strict): ${rows.filter((row) => reported(row.defect, [row.defect.criterion], strict)).length}.`,
     `Per soort: ${tally("class")}.`,
     `Per toestand: ${tally("state")}.`,
     `Slechter gemeld waar de sleutel geen gebrek heeft: ${unexpected.length}${unexpected.length > 0 ? ` (${unexpected.join("; ")})` : ""}.`,

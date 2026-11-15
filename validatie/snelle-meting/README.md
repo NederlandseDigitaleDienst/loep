@@ -40,24 +40,27 @@ Geprobeerd en nog niet ingebouwd, met het aandeel terechte aanwijzingen op dezel
 
 De terugrekening hierboven meet tegen een onderzoek. Voor een poort telt iets anders: maakt een release iets stuk, slaat de vergelijking dan aan? De testsite heeft een sleutel met 79 gebreken die met opzet zijn ingebouwd, en een schone tweeling met dezelfde paden. De schone tweeling is gemeten als basislijn, daarna de variant met gebreken ertegen, op 15 pagina's. `just quick-key <run>` telt per gebrek of de vergelijking zijn criterium als slechter meldt op een van zijn pagina's.
 
-| | Regelsets, reflow en zoom | Met de proeven van loep erbij |
-|---|---|---|
-| Alle gebreken | 31 van 79 | 41 van 79 |
-| Meetbaar met een instrument | 22 van 41 | 31 van 41 |
-| Vraagt kijken | 6 van 18 | 6 van 18 |
-| Vraagt een handeling | 3 van 20 | 4 van 20 |
-| In de begintoestand van de pagina | 23 van 50 | 27 van 50 |
-| Duur voor 15 pagina's | ongeveer 2 minuten | 3 tot 4,5 minuten |
+| | Regelsets, reflow en zoom, elke melding telt | Met de proeven erbij, elke melding telt (`--strict`) | Met de proeven erbij, alleen sterke gronden (standaard) |
+|---|---|---|---|
+| Alle gebreken | 31 van 79 | 41 van 79 | 33 van 79 |
+| Meetbaar met een instrument | 22 van 41 | 31 van 41 | 26 van 41 |
+| Vraagt kijken | 6 van 18 | 6 van 18 | 4 van 18 |
+| Vraagt een handeling | 3 van 20 | 4 van 20 | 3 van 20 |
+| In de begintoestand van de pagina | 23 van 50 | 27 van 50 | 22 van 50 |
+| Gemeld waar de sleutel geen gebrek heeft | 5 | 5 | 3 |
+| Duur voor 15 pagina's | ongeveer 2 minuten | 3 tot 4,5 minuten | 3 tot 4,5 minuten |
+
+De standaard telt alleen een sterke grond: twee of meer regelsets keuren de plek af, of een proef van loep ziet het. Dat kost 8 gebreken tegenover elke melding laten tellen. Zeven daarvan ziet maar één regelset; het achtste is tekstafstand, waarvan de proef een zwakke aanwijzing is geworden (zie Herhaalbaarheid). Waarom dat de standaard is: een regel van één regelset die elke link afkeurt, keurt ook de link af die een release toevoegt, en dan is er niets stuk. Op een echte site kwamen zo 1618 plekken van één regelset.
 
 De proeven die erbij kwamen: tekstafstand, de volgorde van de code tegenover het scherm, geluid dat vanzelf start, een wandeling met Tab, en dubbele paginatitels. Op de schone tweeling meldden ze samen één plek, op de variant met gebreken 159. Welk criterium bij welke proef hoort, is gekozen met deze sleutel ernaast. Op echte sites zijn deze proeven niet teruggerekend: de cijfers bovenaan dit bestand gaan alleen over de regelsets, reflow en zoom.
 
-Nog 8 gebreken zijn alleen gemeld onder een ander criterium dat de sleutel bij het gebrek noemt. Vijf keer meldde de vergelijking iets slechter waar de sleutel geen gebrek heeft, voor en na de nieuwe proeven dezelfde vijf. De sleutel noemt alleen wat met opzet fout is gemaakt, dus dat hoeven geen valse meldingen te zijn; nagelopen zijn ze niet.
+De sleutel noemt alleen wat met opzet fout is gemaakt, dus een melding waar ze geen gebrek heeft hoeft geen valse melding te zijn; nagelopen zijn ze niet.
 
 De telling is grover dan het gebrek: een ander gebrek onder hetzelfde criterium op dezelfde pagina telt ook. Van wat een instrument kan meten, mist de poort nog `autocomplete` (1.3.5), de rand van een veld (1.4.11), een bedieningselement dat Tab niet bereikt (2.1.1), sneltoetsen (2.1.4), een blok dat vanzelf wisselt (2.2.2) en de volgorde van het menu over pagina's (3.2.3). Wat een handeling vraagt, zoals een menu openen of een formulier invullen, ziet ze bijna niet.
 
 Vergelijken per element in plaats van per telling ving, vóór de nieuwe proeven, één gebrek meer (31 tegen 30). De winst zit in een geval dat de tweeling niet heeft: één gebrek hersteld en een ander erbij op dezelfde pagina, onder dezelfde regel. Dat geval is door tests gedekt, niet op een site gemeten.
 
-Op de schone tweeling keurde één regelset (QualWeb, twee regels over toetsenbord en focus) ruim 400 links af die de andere drie niet afkeuren. In de basislijn houdt dat niets tegen, maar het staat wel in de samenvatting onder "Eén meetprogramma".
+Op de schone tweeling keurde één regelset (QualWeb, twee regels over toetsenbord en focus) ruim 400 links af die de andere drie niet afkeuren. In de samenvatting staat dat als één regel onder "Alleen volgens één meetprogramma", en in een vergelijking houdt het niets tegen.
 
 ## Herhaalbaarheid
 
@@ -65,12 +68,16 @@ Een poort in een pipeline mag niet op toeval falen.
 
 **Op de testsite.** De variant met gebreken is twee keer gemeten op 15 pagina's, met alle proeven, en de tweede meting is tegen de eerste gehouden: geen plek erbij en geen plek minder, exitcode 0. De schone tweeling als basislijn en de variant met gebreken op dezelfde paden gaf exitcode 1.
 
-**Op een echte site.** Tien pagina's van een documentatiesite van de overheid zijn op 15 november 2026 drie keer achter elkaar gemeten, de tweede en derde tegen de eerste. Elke meting duurde ongeveer zes minuten, een halve minuut per pagina, en alle tien pagina's werden gemeten. Beide vergelijkingen gaven exitcode 0. Over 2131 plekken en 1236 tellingen verschilde één melding: de proef voor tekstafstand zag op één pagina een menuknop wegvallen in de eerste en derde meting, en niet in de tweede. In deze volgorde was dat "beter" en hield het niets tegen. Andersom had het een release tegengehouden.
+**Op een echte site.** Tien pagina's van een documentatiesite van de overheid zijn op 15 november 2026 zeven keer gemeten, in twee reeksen, steeds tegen de eerste meting van de reeks. Een meting duurde ongeveer zes minuten, een halve minuut per pagina, en alle tien pagina's werden elke keer gemeten.
 
-Daarom meet `quick` een pagina die slechter lijkt een tweede keer en telt het alleen wat beide metingen slechter vinden. Dat is na deze meting gebouwd en door tests gedekt; op de echte site is het niet opnieuw gemeten. Drie metingen op één site op één middag zeggen ook niets over een site waarvan de inhoud tussen twee releases verandert.
+Over 2131 plekken en ruim 1200 tellingen verschilde tussen de metingen steeds hetzelfde: de proef voor tekstafstand zag op één of twee pagina's een menuknop wegvallen in de ene meting en niet in de andere. In de eerste reeks viel dat toevallig goed uit. In de tweede gaf het twee keer exitcode 1 op een site waar niets was veranderd. De tweede meting ter bevestiging hielp niet: binnen één sessie kwam de melding beide keren terug.
 
-Wat de samenvatting van die site liet zien: geen enkel criterium waar twee regelsets het eens zijn. Alles onder "Eén meetprogramma" komt van QualWeb of Alfa, waaronder 262 plekken voor contrast. De proeven voor volgorde en tekstafstand melden op elke pagina hetzelfde onderdeel van de kop. Of dat gebreken zijn, is niet nagelopen.
+De oorzaak zit in het instrument. Het wacht een vaste kwart seconde nadat het de afstanden zet, en een menu dat zichzelf opnieuw indeelt, is dan niet altijd klaar. Dat geldt ook voor een onderzoek, waar een agent dezelfde meting doet. De proef is daarom in `quick` een zwakke aanwijzing: ze staat in de samenvatting en houdt niets tegen. Met de vergelijking zoals ze nu is, opnieuw gerekend op de bewaarde metingen van de tweede reeks, geven beide exitcode 0. Een meting met de definitieve code op die site is er niet.
+
+Geen andere proef en geen regelset gaf over de zeven metingen een verschil. Zeven metingen van één site op één middag zeggen niets over een site waarvan de inhoud tussen twee releases verandert.
+
+Wat de samenvatting van die site liet zien: geen enkel criterium waar twee regelsets het eens zijn, op 19 tellingen na die een proef van loep gaf. Wat één regelset alleen afkeurt: QualWeb 1618 plekken onder tien criteria, Alfa 500 onder één, IBM 13. De proef voor volgorde meldt op elke pagina hetzelfde onderdeel van de kop. Of dat gebreken zijn, is niet nagelopen.
 
 ## Wat de test bewaakt
 
-`toolbox/test/quick-testsite.test.ts` draait `quick` in de volledige controle met een echte browser op drie pagina's van beide tweelingen. Elke proef moet het gebrek vinden dat ervoor is ingebouwd, de proeven moeten op de schone tweeling zwijgen, en er mag niets verstuurd zijn. De telling van 41 van de 79 zit daar niet in: die vraagt 15 pagina's van beide tweelingen en duurt acht minuten. Wie een proef wijzigt, draait `just quick-key` met de hand.
+`toolbox/test/quick-testsite.test.ts` draait `quick` in de volledige controle met een echte browser op drie pagina's van beide tweelingen. Elke proef moet het gebrek vinden dat ervoor is ingebouwd, de proeven moeten op de schone tweeling zwijgen, en er mag niets verstuurd zijn. De telling op de sleutel zit daar niet in: die vraagt 15 pagina's van beide tweelingen en duurt acht minuten. Wie een proef wijzigt, draait `just quick-key` met de hand.

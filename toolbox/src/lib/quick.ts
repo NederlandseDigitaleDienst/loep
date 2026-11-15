@@ -29,9 +29,9 @@ export const QUICK_BACKTEST = {
   precision: 0.83,
   recall: 0.24,
   /** The built-in defects of the testsite the comparison catches against the clean twin (`just quick-key`). */
-  testsite: { caught: 41, defects: 79 },
+  testsite: { caught: 33, defects: 79 },
   textNl:
-    "De regelsets, reflow en zoom wezen op 12 sites met een volledig onderzoek een kwart van de afgekeurde criteria aan, en ruim acht op de tien aanwijzingen klopten. De andere proeven zijn daar niet op teruggerekend. Op de testsite van loep vangt de hele meting 41 van de 79 ingebouwde gebreken. Een lege lijst zegt dus weinig.",
+    "De regelsets, reflow en zoom wezen op 12 sites met een volledig onderzoek een kwart van de afgekeurde criteria aan, en ruim acht op de tien aanwijzingen klopten. De andere proeven zijn daar niet op teruggerekend. Op de testsite van loep vangt de vergelijking 33 van de 79 ingebouwde gebreken. Een lege lijst zegt dus weinig.",
 } as const;
 
 export const QUICK_EXPLORE_REFUSAL_NL =
@@ -76,14 +76,19 @@ export interface LayoutAnswer {
 export const QUICK_PROBES = {
   order: { criterion: "1.3.2", nl: (places: number) => `De volgorde op het scherm wijkt op ${plural(places, "plek", "plekken")} af van de volgorde in de code.` },
   tabindex: { criterion: "2.4.3", nl: (places: number) => `${plural(places, "element heeft", "elementen hebben")} een eigen plek in de tabvolgorde gekregen, met een tabindex groter dan 0.` },
-  spacing: { criterion: "1.4.12", nl: (places: number) => `Met ruimere tekstafstand verdwijnt tekst op ${plural(places, "plek", "plekken")}.` },
+  // Not a ground to stop a pipeline on: on a real site the same page gave this finding in one session and not in the next (validatie/snelle-meting). The instrument waits a fixed time after it sets the spacing, and a menu that rearranges itself is not always done by then.
+  spacing: { criterion: "1.4.12", weak: true, nl: (places: number) => `Met ruimere tekstafstand verdwijnt tekst op ${plural(places, "plek", "plekken")}.` },
   autoplay: { criterion: "1.4.2", nl: () => "Geluid begint vanzelf en er is geen knop gevonden die het stopt." },
   "focus-invisible": { criterion: "2.4.7", nl: (places: number) => `Bij ${plural(places, "element", "elementen")} verandert er niets zichtbaars als het de focus krijgt.` },
   "focus-covered": { criterion: "2.4.11", nl: (places: number) => `${plural(places, "element", "elementen")} met de focus ${places === 1 ? "ligt" : "liggen"} onder iets anders.` },
   "focus-thrown": { criterion: "3.2.1", nl: (places: number) => `${plural(places, "element gooit", "elementen gooien")} de focus weg zodra ${places === 1 ? "het" : "ze"} die ${places === 1 ? "krijgt" : "krijgen"}.` },
-  title: { criterion: "2.4.2", nl: (places: number) => `${plural(places, "pagina heeft", "pagina's hebben")} dezelfde titel als een andere pagina.` },
+  // Counted per page: the title is the same thing on each, and each page is one to repair.
+  title: { criterion: "2.4.2", nl: (_places: number, pages: number) => `${plural(pages, "pagina heeft", "pagina's hebben")} dezelfde titel als een andere pagina.` },
 } as const;
 export type QuickProbe = keyof typeof QUICK_PROBES;
+
+/** Whether what a probe sees may stop a pipeline. A probe that was not repeatable on a real site is listed and counts only with `strict`. */
+export const probeIsStrong = (probe: QuickProbe): boolean => !("weak" in QUICK_PROBES[probe]);
 
 /** One thing a probe saw on a page. */
 export interface QuickProbeFinding {
@@ -224,6 +229,8 @@ export interface QuickCount {
   rule: string;
   /** What the element is (`elementMark`), so one defect gone and another new do not cancel out. */
   element: string;
+  /** True when two or more engines fail the place, or a probe of loep saw it. One engine alone is false: it stops no pipeline. */
+  strong: boolean;
   places: number;
 }
 
@@ -239,6 +246,8 @@ export interface QuickSummary {
   notMeasuredNl: string[];
   coverage: { maxPages: number; pagesFound: number | null; pageLimitReached: boolean; planned: number; measured: number; failed: number; schemes: readonly QuickScheme[] };
   engines: { id: string; version: string }[];
+  /** What only one engine fails, per engine: a weak ground, shown in one line each. */
+  single: { engine: string; places: number; criteria: string[]; mostRule: { rule: string; places: number } | null }[];
   /** What lay over the page while it was measured, and the selectors given to close it first. */
   covering: { layers: string[]; pages: number; dismiss: string[] };
   signals: QuickSignal[];
@@ -364,7 +373,7 @@ function signalSentence(signal: Omit<QuickSignal, "sentenceNl">): string {
 
 /** Per criterion what the measurement points at, strongest ground first. */
 export function quickSignals(pages: readonly QuickPage[], findings: readonly QuickFinding[]): QuickSignal[] {
-  const perCriterion = new Map<string, { counts: Record<Agreement, number>; pages: Set<string>; probePages: Set<string>; probes: Map<QuickProbe, number>; single: Record<"alone" | "contradicted", Map<string, number>> }>();
+  const perCriterion = new Map<string, { counts: Record<Agreement, number>; pages: Set<string>; probePages: Set<string>; probes: Map<QuickProbe, { elements: Set<string>; pages: Set<string> }>; single: Record<"alone" | "contradicted", Map<string, number>> }>();
   const entry = (criterion: string) => {
     if (!perCriterion.has(criterion)) perCriterion.set(criterion, { counts: { agreed: 0, alone: 0, contradicted: 0 }, pages: new Set(), probePages: new Set(), probes: new Map(), single: { alone: new Map(), contradicted: new Map() } });
     return perCriterion.get(criterion)!;
@@ -384,7 +393,11 @@ export function quickSignals(pages: readonly QuickPage[], findings: readonly Qui
     }
     for (const seen of page.probes ?? []) {
       const found = entry(QUICK_PROBES[seen.probe].criterion);
-      found.probes.set(seen.probe, (found.probes.get(seen.probe) ?? 0) + 1);
+      // The same part on ten pages, such as a button in the header, is one thing to repair.
+      const probe = found.probes.get(seen.probe) ?? { elements: new Set<string>(), pages: new Set<string>() };
+      probe.elements.add(seen.element);
+      probe.pages.add(page.url);
+      found.probes.set(seen.probe, probe);
       found.probePages.add(page.url);
       found.pages.add(page.url);
     }
@@ -396,7 +409,7 @@ export function quickSignals(pages: readonly QuickPage[], findings: readonly Qui
     // Counted over the places the sentence is about: those one engine fails alone, or those another engine passes.
     const [most] = ground === "engine-alone" || ground === "engines-contradict" ? [...found.single[ground === "engine-alone" ? "alone" : "contradicted"]].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])) : [];
     const mostRule = most ? { engine: most[0].slice(0, most[0].indexOf(":")), rule: most[0].slice(most[0].indexOf(":") + 1), places: most[1] } : null;
-    const signal = { criterion, titleNl: known?.titleNl ?? null, level: known?.level ?? null, ground, mostRule, ...found.counts, probePages: found.probePages.size, probesNl: [...found.probes].map(([probe, places]) => QUICK_PROBES[probe].nl(places)), pages: found.pages.size };
+    const signal = { criterion, titleNl: known?.titleNl ?? null, level: known?.level ?? null, ground, mostRule, ...found.counts, probePages: found.probePages.size, probesNl: [...found.probes].map(([probe, seen]) => QUICK_PROBES[probe].nl(seen.elements.size, seen.pages.size)), pages: found.pages.size };
     signals.push({ ...signal, sentenceNl: signalSentence(signal) });
   }
   return signals.sort((a, b) => GROUND_ORDER.indexOf(a.ground) - GROUND_ORDER.indexOf(b.ground) || compareCriterionIds(a.criterion, b.criterion));
@@ -423,8 +436,9 @@ export function quickCounts(findings: readonly QuickFinding[], pages: readonly Q
     for (const seen of page.probes ?? []) {
       const path = pagePath(page.url);
       const criterion = QUICK_PROBES[seen.probe].criterion;
-      const key = `${path}\n${criterion}\nloep:${seen.probe}\n${seen.element}`;
-      const count = counts.get(key) ?? { path, criterion, rule: `loep:${seen.probe}`, element: seen.element, places: 0 };
+      const strong = probeIsStrong(seen.probe);
+      const key = `${path}\n${criterion}\nloep:${seen.probe}\n${seen.element}\n${strong}`;
+      const count = counts.get(key) ?? { path, criterion, rule: `loep:${seen.probe}`, element: seen.element, strong, places: 0 };
       count.places += 1;
       counts.set(key, count);
     }
@@ -432,13 +446,14 @@ export function quickCounts(findings: readonly QuickFinding[], pages: readonly Q
   for (const finding of findings) {
     for (const rule of finding.rules) {
       const path = pagePath(finding.page);
-      const key = `${path}\n${finding.criterion}\n${rule}\n${finding.element}`;
-      const count = counts.get(key) ?? { path, criterion: finding.criterion, rule, element: finding.element, places: 0 };
+      const strong = finding.agreement === "agreed";
+      const key = `${path}\n${finding.criterion}\n${rule}\n${finding.element}\n${strong}`;
+      const count = counts.get(key) ?? { path, criterion: finding.criterion, rule, element: finding.element, strong, places: 0 };
       count.places += 1;
       counts.set(key, count);
     }
   }
-  return [...counts.values()].sort((a, b) => a.path.localeCompare(b.path) || compareCriterionIds(a.criterion, b.criterion) || a.rule.localeCompare(b.rule) || a.element.localeCompare(b.element));
+  return [...counts.values()].sort((a, b) => a.path.localeCompare(b.path) || compareCriterionIds(a.criterion, b.criterion) || a.rule.localeCompare(b.rule) || a.element.localeCompare(b.element) || Number(b.strong) - Number(a.strong));
 }
 
 export interface SummaryInput {
@@ -452,6 +467,27 @@ export interface SummaryInput {
   pages: readonly QuickPage[];
   /** Selectors of what the measurement clicked after opening a page, to close a layer over it. */
   dismiss?: readonly string[];
+}
+
+/** The places only one engine fails, gathered per engine. */
+export function singleEngines(findings: readonly QuickFinding[]): QuickSummary["single"] {
+  const engines = new Map<string, { places: number; criteria: Set<string>; rules: Map<string, number> }>();
+  for (const finding of findings) {
+    if (finding.agreement === "agreed") continue;
+    for (const engine of finding.engines) {
+      const found = engines.get(engine) ?? { places: 0, criteria: new Set<string>(), rules: new Map<string, number>() };
+      found.places += 1;
+      found.criteria.add(finding.criterion);
+      for (const rule of finding.rules) if (rule.startsWith(`${engine}:`)) found.rules.set(rule.slice(engine.length + 1), (found.rules.get(rule.slice(engine.length + 1)) ?? 0) + 1);
+      engines.set(engine, found);
+    }
+  }
+  return [...engines]
+    .map(([engine, found]) => {
+      const [most] = [...found.rules].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+      return { engine, places: found.places, criteria: [...found.criteria].sort(compareCriterionIds), mostRule: most ? { rule: most[0], places: most[1] } : null };
+    })
+    .sort((a, b) => b.places - a.places || a.engine.localeCompare(b.engine));
 }
 
 export function buildQuickSummary(given: SummaryInput): QuickSummary {
@@ -476,6 +512,7 @@ export function buildQuickSummary(given: SummaryInput): QuickSummary {
     notMeasuredNl: QUICK_NOT_MEASURED_NL,
     coverage: { maxPages: input.maxPages, pagesFound: input.pagesFound, pageLimitReached: input.pageLimitReached, planned: input.planned, measured: measuredPages, failed: input.pages.length - measuredPages, schemes: QUICK_SCHEMES },
     engines: [...versions].map(([id, version]) => ({ id, version })).sort((a, b) => a.id.localeCompare(b.id)),
+    single: singleEngines(findings),
     covering: { layers: [...new Set(input.pages.flatMap((page) => page.covering ?? []))].sort(), pages: input.pages.filter((page) => (page.covering ?? []).length > 0).length, dismiss: [...(input.dismiss ?? [])] },
     signals: quickSignals(input.pages, findings),
     findings: findings.slice(0, TOP_FINDINGS),
@@ -520,11 +557,20 @@ export function quickSummaryMarkdown(summary: QuickSummary): string {
     );
   }
   if (summary.signals.length === 0) lines.push("De meetprogramma's vonden op deze pagina's niets. Dat zegt weinig: de meeste afkeuringen van een volledig onderzoek ziet deze meting niet.", "");
-  for (const ground of GROUND_ORDER) {
+  for (const ground of ["engines-agree", "probe"] as const) {
     const signals = summary.signals.filter((signal) => signal.ground === ground);
     if (signals.length === 0) continue;
     lines.push(`## ${GROUND_HEADING_NL[ground]}`, "");
     for (const signal of signals) lines.push(`- ${signal.criterion} ${signal.titleNl ?? ""}`.trimEnd() + `. ${signal.sentenceNl}`);
+    lines.push("");
+  }
+  // One engine alone is a weak ground, and it can be many places: a line per engine, the places in summary.json.
+  if (summary.single.length > 0) {
+    lines.push("## Alleen volgens één meetprogramma", "", "Deze plekken keurt één meetprogramma af; de andere zeggen er niets over of keuren ze goed. Dat is een zwakke aanwijzing: op de schone testsite van loep keurt één regelset zo ruim 400 links af. In een vergelijking houdt het niets tegen.", "");
+    for (const single of summary.single) {
+      const criteria = single.criteria.length <= 6 ? single.criteria.join(", ") : `${single.criteria.slice(0, 6).join(", ")} en ${single.criteria.length - 6} meer`;
+      lines.push(`- ${ENGINE_NAMES[single.engine] ?? single.engine}: ${plural(single.places, "plek", "plekken")} onder ${plural(single.criteria.length, "criterium", "criteria")} (${criteria}).${single.mostRule ? ` Het vaakst regel ${single.mostRule.rule}, ${single.mostRule.places} keer.` : ""}`);
+    }
     lines.push("");
   }
   lines.push("## Niet gemeten", "");
@@ -540,6 +586,8 @@ export interface QuickChange {
   rule: string;
   /** The mark of the element; empty for a layout probe, which counts per page. */
   element: string;
+  /** Whether the ground is strong: engines that agree, or a probe of loep. */
+  strong: boolean;
   before: number;
   now: number;
   sentenceNl: string;
@@ -560,6 +608,10 @@ export interface QuickComparison {
   newPages: string[];
   /** Worse in one of two measurements of the same page: not counted, because a pipeline may not stop on chance. */
   unstable: QuickChange[];
+  /** More places that only one engine fails. Listed, and counted as worse only with `strict`. */
+  weak: QuickChange[];
+  /** Whether what one engine alone reports counted as worse. */
+  strict: boolean;
 }
 
 const layoutLoss = (answer: LayoutAnswer | null): number => (answer ? (answer.offenders ?? 0) + (answer.horizontalScroll ? 1 : 0) : 0);
@@ -570,19 +622,23 @@ const layoutLoss = (answer: LayoutAnswer | null): number => (answer ? (answer.of
  * and another that is new show as one better and one worse, and an element that only moved is no
  * change. Something both measurements report the same way never stops a pipeline, also when it is
  * a false alarm of an engine.
+ *
+ * Only a strong ground is worse: two or more engines that fail the place, or a probe of loep. A
+ * rule of one engine that fails every link fails the link a release adds too, and nothing is
+ * broken then. Such a change is listed as weak. With `strict` it counts.
  */
-export function compareQuick(baseline: QuickSummary, current: QuickSummary): QuickComparison {
+export function compareQuick(baseline: QuickSummary, current: QuickSummary, strict = false): QuickComparison {
   const measuredPaths = (summary: QuickSummary): Set<string> => new Set(summary.pages.filter((page) => page.measured).map((page) => pagePath(page.url)));
   const before = measuredPaths(baseline);
   const now = measuredPaths(current);
   const table = (summary: QuickSummary): Map<string, QuickCount> => {
     const rows = new Map<string, QuickCount>();
-    for (const count of summary.counts) rows.set(`${count.path}\n${count.criterion}\n${count.rule}\n${count.element}`, count);
+    for (const count of summary.counts) rows.set(`${count.path}\n${count.criterion}\n${count.rule}\n${count.element}\n${count.strong}`, count);
     for (const page of summary.pages) {
       if (!page.measured) continue;
       const path = pagePath(page.url);
       for (const [criterion, rule, answer] of [["1.4.10", "reflow", page.reflow], ["1.4.4", "zoom", page.zoom]] as const) {
-        if (layoutLoss(answer) > 0) rows.set(`${path}\n${criterion}\n${rule}\n`, { path, criterion, rule, element: "", places: layoutLoss(answer) });
+        if (layoutLoss(answer) > 0) rows.set(`${path}\n${criterion}\n${rule}\n\ntrue`, { path, criterion, rule, element: "", strong: true, places: layoutLoss(answer) });
       }
     }
     return rows;
@@ -591,6 +647,7 @@ export function compareQuick(baseline: QuickSummary, current: QuickSummary): Qui
   const is = table(current);
   const worse: QuickChange[] = [];
   const better: QuickChange[] = [];
+  const weak: QuickChange[] = [];
   for (const key of new Set([...was.keys(), ...is.keys()])) {
     const row = (is.get(key) ?? was.get(key))!;
     // Only pages both measured: a page that is new or gone says nothing about a change.
@@ -601,7 +658,7 @@ export function compareQuick(baseline: QuickSummary, current: QuickSummary): Qui
     const title = criterionById(row.criterion)?.titleNl;
     const what = row.rule === "reflow" ? "bij 320 pixels breed" : row.rule === "zoom" ? "bij 200 procent zoom" : row.rule.startsWith("loep:") ? `proef ${row.rule.slice(5)}` : `regel ${row.rule}`;
     const sentenceNl = `${row.path}: ${row.criterion}${title ? ` ${title}` : ""}, ${what}${row.element ? `, ${row.element}` : ""}, van ${plural(a, "plek", "plekken")} naar ${b}.`;
-    (b > a ? worse : better).push({ path: row.path, criterion: row.criterion, rule: row.rule, element: row.element, before: a, now: b, sentenceNl });
+    (b < a ? better : row.strong || strict ? worse : weak).push({ path: row.path, criterion: row.criterion, rule: row.rule, element: row.element, strong: row.strong, before: a, now: b, sentenceNl });
   }
   const order = (a: QuickChange, b: QuickChange): number => a.path.localeCompare(b.path) || compareCriterionIds(a.criterion, b.criterion) || a.rule.localeCompare(b.rule) || a.element.localeCompare(b.element);
   const notMeasured = [...before].filter((path) => !now.has(path)).sort();
@@ -616,10 +673,12 @@ export function compareQuick(baseline: QuickSummary, current: QuickSummary): Qui
     notMeasured,
     newPages: [...now].filter((path) => !before.has(path)).sort(),
     unstable: [],
+    weak: weak.sort(order),
+    strict,
   };
 }
 
-const changeKey = (change: QuickChange): string => `${change.path}\n${change.criterion}\n${change.rule}\n${change.element}`;
+const changeKey = (change: QuickChange): string => `${change.path}\n${change.criterion}\n${change.rule}\n${change.element}\n${change.strong}`;
 
 /**
  * Keep as worse only what a second measurement of the same pages also found worse. A page that
@@ -681,6 +740,11 @@ export function quickComparisonMarkdown(comparison: QuickComparison): string {
   if (comparison.unstable.length > 0) {
     lines.push("## Niet bevestigd", "", "Gezien in één van twee metingen van dezelfde pagina. Dat telt niet als slechter.", "");
     for (const line of groupedChangesNl(comparison.unstable)) lines.push(`- ${line}`);
+    lines.push("");
+  }
+  if (comparison.weak.length > 0) {
+    lines.push("## Zwakke aanwijzingen", "", "Eén meetprogramma meldt meer plekken en de andere niet, of een proef die niet elke keer hetzelfde meet ziet iets. Dat houdt niets tegen: een regel die elke link afkeurt, keurt ook een nieuwe link af. Met --strict telt het wel.", "");
+    for (const line of groupedChangesNl(comparison.weak)) lines.push(`- ${line}`);
     lines.push("");
   }
   if (comparison.better.length > 0) {
