@@ -442,6 +442,41 @@ test("a rule engine without an answer is a limitation of the gate, not a clean r
   assert.deepEqual(gateChecks(gateRun([page])).limitations, [], "engines that ran are no limitation");
 });
 
+test("a rule engine that ran out of time is measured once more before it is a limitation", () => {
+  const page = gatePage("P1", "https://site.nl/zoeken");
+  const engines = (alfa: { ok: boolean; error?: string }, axe: { ok: boolean; error?: string } = { ok: true }, extra: Record<string, unknown> = {}) => ({ status: { "axe-core": { version: "4", ...axe }, alfa: { version: "1", ...alfa } }, ...extra });
+  const timeout = { ok: false, error: "geen antwoord binnen 90 s" };
+  const firstSweep = [{ command: "explore" }, { command: "sample" }, { command: "collect" }, { command: "contrast" }, { command: "states" }, { command: "gate" }];
+  const none = () => false;
+
+  // The first time: a measurement that failed, which a new sweep can close (code 3), not a limitation yet.
+  const slow = gateChecks(gateRun([{ ...page, engines: { light: engines(timeout), dark: engines({ ok: true }) } } as unknown as PageData]));
+  assert.deepEqual(slow.limitations, []);
+  assert.deepEqual(slow.gaps.map((gap) => [gap.check, gap.page, gap.fixedBy]), [["engine-without-result", "P1", "sweep"]]);
+  assert.match(slow.gaps[0]!.missingNl, /geen uitslag binnen de tijd \(alfa in licht: geen antwoord binnen 90 s\)\. .*Draai collect opnieuw/);
+  assert.equal(slow.checks.find((check) => check.name === "engine-without-result")?.ok, false);
+  assert.equal(route(slow.gaps, [], false, firstSweep, none).next, "sweep");
+
+  // After the retry the same time limit is a limitation, as any other failure of an engine is straight away.
+  const retried = gateChecks(gateRun([{ ...page, engines: { light: engines(timeout, { ok: true }, { retriedAfterTimeout: true }), dark: engines({ ok: true }, { ok: true }, { retriedAfterTimeout: true }) } } as unknown as PageData]));
+  assert.deepEqual(retried.gaps, []);
+  assert.deepEqual(retried.limitations.map((gap) => [gap.check, gap.page]), [["engine-without-result", "P1"]]);
+  assert.match(retried.limitations[0]!.missingNl, /^Een regelset gaf op deze pagina geen uitslag \(alfa in licht: geen antwoord binnen 90 s\)\. Wat die regelset hier zou vinden/);
+  const both = gateChecks(gateRun([{ ...page, engines: { light: engines(timeout, { ok: false, error: "de pagina heeft window.axe zelf vastgezet" }), dark: engines({ ok: true }) } } as unknown as PageData]));
+  assert.deepEqual([both.gaps.map((gap) => gap.missingNl.includes("alfa")), both.limitations.map((gap) => gap.missingNl.includes("axe-core"))], [[true], [true]], "a crash next to a time limit is a limitation at once");
+
+  // A state of the site model the same way.
+  const state = { id: "component-zoekresultaten", kind: "component", modelId: "zoekresultaten", url: "https://site.nl/zoeken", reached: true, pageTypes: [], files: {} };
+  const inState = gateChecks(gateRun([page], { siteStates: { states: [state], dismissals: [] }, stateEvidence: { [state.id]: { engines: engines(timeout) } } } as unknown as Partial<RunData>));
+  assert.deepEqual(inState.gaps.filter((gap) => gap.check === "engine-without-result").map((gap) => [gap.state, gap.fixedBy]), [[state.id, "sweep"]]);
+
+  // Code 3 comes at most MAX_RESWEEPS times after one round of the explorer: then the time limit is a limitation, not a task for the explorer.
+  const spent = route(slow.gaps, [], false, [...firstSweep, { command: "collect" }, { command: "gate" }, { command: "collect" }, { command: "gate" }], none);
+  assert.deepEqual([spent.resweepsLeft, spent.next, spent.gaps], [0, "review", []]);
+  assert.deepEqual(spent.limitations.map((gap) => [gap.check, gap.page, gap.fixedBy]), [["engine-without-result", "P1", undefined]]);
+  assert.match(spent.limitations[0]!.missingNl, /^Een regelset gaf op deze pagina geen uitslag \(alfa in licht/);
+});
+
 test("the gate sends back a run in which the measurements that close a criterion are missing", () => {
   const withModel = (pages: PageData[], extra: Partial<RunData> = {}, states: SiteStates["states"] = []): RunData => gateRun(pages, { siteModel: validModel(), siteStates: { siteSha256: "", seeded: { blockers: [], cookies: 0, storedValues: 0 }, dismissals: [], states }, ...extra });
   const complete = gatePage("P1", "https://site.nl/");

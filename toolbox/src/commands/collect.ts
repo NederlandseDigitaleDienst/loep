@@ -8,7 +8,7 @@ import { wholePageScreenshot, type ScreenshotClip } from "../browser/screenshot.
 import { confirmLogin, firstLineOf, INPAGE_PATH, launchBrowser, loadSampled, newContext, PageContexts, RENDERING, retryOnce, withinPageTime, type ColorScheme, type ContextOptions } from "../browser/session.ts";
 import { LoginExpired } from "../lib/login.ts";
 import { readJson, sha256, writeFileAtomic, writeJson } from "../lib/canonical.ts";
-import { runEngines } from "../lib/engines.ts";
+import { enginesToRetry, runEngines, type EngineRun } from "../lib/engines.ts";
 import { stepStart, writeManifest } from "../lib/manifest.ts";
 import { ProgressFile } from "../lib/progress.ts";
 import { collectFacts, collectNamed } from "../instruments/facts.ts";
@@ -110,8 +110,11 @@ async function noteFailed(runDir: string, entry: SampleItem, error: string): Pro
   await rm(pageStampPath(runDir, entry.slug), { force: true });
 }
 
-/** `sweep` closes what covers the page before anything is measured. Every browser context is opened through `contexts`, which closes them all when the time is up. */
-async function collectPage(browser: Browser, entry: SampleItem, runDir: string, sweep: ModelSweep, noted: Noted = {}, contexts = new PageContexts()): Promise<Record<string, unknown>> {
+/**
+ * `sweep` closes what covers the page before anything is measured. Every browser context is opened through `contexts`, which closes them all when the time is up.
+ * `retriedAfterTimeout` marks the runs of the rule engines as the one retry after an engine ran out of time on this page before.
+ */
+async function collectPage(browser: Browser, entry: SampleItem, runDir: string, sweep: ModelSweep, noted: Noted = {}, contexts = new PageContexts(), retriedAfterTimeout = false): Promise<Record<string, unknown>> {
   const open = async (options: ContextOptions): Promise<BrowserContext> => {
     const context = contexts.add(await newContext(browser, options, sweep.guard));
     await context.addInitScript({ path: INPAGE_PATH });
@@ -149,7 +152,7 @@ async function collectPage(browser: Browser, entry: SampleItem, runDir: string, 
       const shot = await wholePageScreenshot(page, { path: join(dir, `screenshot-${scheme}.png`) });
       if (scheme === "light") clippedAt = shot.clippedAt;
       const engines = await runEngines(page);
-      await writeJson(join(dir, `engines-${scheme}.json`), engines);
+      await writeJson(join(dir, `engines-${scheme}.json`), retriedAfterTimeout ? { ...engines, retriedAfterTimeout: true } : engines);
       summary[`engines-${scheme}`] = engines.summary;
       if (scheme === "light") {
         const facts = await collectFacts(page);
@@ -330,6 +333,8 @@ export async function collect(options: CollectOptions): Promise<void> {
           // A page an earlier sweep measured under the same blockers, and that still has the same content, is not measured again.
           const key = pageKey(sweep.blockersKey, entry);
           const stamp = options.fresh ? null : await readStamp<PageStamp>(pageStampPath(options.run, entry.slug));
+          // A rule engine that ran out of time on this page before gets one more try; the measurement taken now is that try, whatever else made it.
+          const timedOut = stamp ? enginesToRetry(await Promise.all(["light", "dark"].map((scheme) => readStamp<EngineRun>(join(options.run, "pages", entry.slug, `engines-${scheme}.json`))))) : [];
           const reason = options.fresh
             ? "met --fresh wordt alles opnieuw gemeten"
             : await remeasureReason(
@@ -338,6 +343,7 @@ export async function collect(options: CollectOptions): Promise<void> {
                 sweep.blockersKey,
                 () => crowd.together(() => contentNow(browser, entry, scope)),
                 () => readFile(pageContentPath(options.run, entry.slug), "utf8").then((text) => text.replace(/\n$/, ""), () => null),
+                timedOut,
               );
           if (stamp && reason === null) {
             scope.restore(stamp as Parameters<ModelSweep["restore"]>[0]);
@@ -350,7 +356,7 @@ export async function collect(options: CollectOptions): Promise<void> {
             // A page that keeps the browser busy never answers: when the time is up, the contexts of the try are closed.
             const measureOnce = (): Promise<Record<string, unknown>> => {
               const contexts = new PageContexts();
-              return withinPageTime(PAGE_LIMIT_MS, () => collectPage(browser, entry, options.run, scope, noted, contexts), () => contexts.closeAll());
+              return withinPageTime(PAGE_LIMIT_MS, () => collectPage(browser, entry, options.run, scope, noted, contexts, timedOut.length > 0), () => contexts.closeAll());
             };
             const summary = await sayingItRuns(`collect ${index + 1}/${pages.length} ${entry.url}`, () => retryOnce(entry.url, measureOnce, crowd));
             return { summary, key, noted, reused: false, reason, started, scope };

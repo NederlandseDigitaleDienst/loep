@@ -44,6 +44,8 @@ export interface EngineRun {
   status: Record<"axe-core" | "alfa", { ok: boolean; error?: string; version: string }>;
   summary: Record<string, number>;
   results: EngineResult[];
+  /** Set when this run is the one retry after an engine ran out of time in the measurement before: a time limit now is not tried again. Absent otherwise. */
+  retriedAfterTimeout?: true;
 }
 
 interface AxeNode {
@@ -174,6 +176,24 @@ export function enginesWithoutResult(run: Pick<EngineRun, "status"> | undefined)
   return Object.entries(run?.status ?? {})
     .filter(([, status]) => status?.ok === false)
     .map(([engine, status]) => ({ engine, error: status.error ?? "geen foutmelding vastgelegd" }));
+}
+
+/** What an engine says when its time ran out: Alfa's thread that was stopped, or a wait of the browser. */
+const TIMED_OUT = /geen antwoord binnen \d+ ?(?:s|seconden)\b|Timeout \d+ ?ms exceeded/i;
+
+/** Whether an engine gave no answer because its time ran out, which on a busy machine says more about the machine than about the page. */
+export const engineTimedOut = (error: string): boolean => TIMED_OUT.test(error);
+
+/**
+ * The engines that ran out of time in the runs of one measurement (a page in light and dark, or a state), when that
+ * measurement was not already the retry: measuring once more may give their answer. Empty after the retry, so that an
+ * engine that keeps running out of time on a page is not measured again for ever. Any other failure is not retried:
+ * an engine that breaks off on a page does so again.
+ */
+export function enginesToRetry(runs: (Pick<EngineRun, "status" | "retriedAfterTimeout"> | null | undefined)[]): { engine: string; error: string }[] {
+  if (runs.some((run) => run?.retriedAfterTimeout)) return [];
+  const found = runs.flatMap((run) => enginesWithoutResult(run ?? undefined).filter((entry) => engineTimedOut(entry.error)));
+  return found.filter((entry, index) => found.findIndex((other) => other.engine === entry.engine && other.error === entry.error) === index);
 }
 
 const OUTCOME_ORDER: EngineOutcome[] = ["failed", "cantTell", "passed", "inapplicable"];

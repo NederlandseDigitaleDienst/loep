@@ -116,14 +116,25 @@ export function firstDifference(before: string, now: string): string {
 }
 
 /**
+ * Why a measurement is taken again because a rule engine ran out of time in it, given what `enginesToRetry` says of it;
+ * null when none did. An engine that runs out of time again in the retry is not tried a third time: the gate makes it a limitation.
+ */
+export function engineRetryReason(timedOut: { engine: string; error: string }[]): string | null {
+  return timedOut.length === 0 ? null : `regelset gaf eerder geen uitslag (${timedOut.map((entry) => `${entry.engine}: ${entry.error.slice(0, 120)}`).join("; ")})`;
+}
+
+/**
  * Why a page of the sample is measured again instead of keeping what an earlier sweep measured, in one
  * line for the person who runs it; null when the earlier measurement still holds. `now` is only asked
- * for when the stamp and the key agree: loading the page costs time.
+ * for when the stamp and the key agree: loading the page costs time. `timedOut` is what `enginesToRetry`
+ * says of the earlier measurement: a rule engine that ran out of time there gets one more try.
  */
-export async function remeasureReason(stamp: PageStamp | null, key: string, blockers: string, now: () => Promise<ContentNow | null>, before: () => Promise<string | null>): Promise<string | null> {
+export async function remeasureReason(stamp: PageStamp | null, key: string, blockers: string, now: () => Promise<ContentNow | null>, before: () => Promise<string | null>, timedOut: { engine: string; error: string }[] = []): Promise<string | null> {
   if (!stamp) return "geen stempel van een eerdere meting";
   if (stamp.version !== SWEEP_STAMP_VERSION || stamp.contentVersion !== CONTENT_VERSION) return "stempel van een andere versie van loep";
   if (stamp.key !== key) return stamp.blockers !== blockers ? "blokkades of hoe ze worden gesloten anders" : "pagina anders in de steekproef (soort of ingesloten venster)";
+  const retry = engineRetryReason(timedOut);
+  if (retry) return retry;
   const current = await now();
   if (!current) return "pagina niet te laden om de inhoud te vergelijken";
   if (current.sha256 === stamp.contentSha256) return null;

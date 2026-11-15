@@ -4,7 +4,7 @@ import { basename, join, resolve } from "node:path";
 import { PNG } from "pngjs";
 import { readJson, sha256, sha256File, writeFileAtomic, writeJson } from "../lib/canonical.ts";
 import { startedDownload } from "../lib/documents.ts";
-import { enginesWithoutResult, type EngineRun } from "../lib/engines.ts";
+import { enginesToRetry, enginesWithoutResult, type EngineRun } from "../lib/engines.ts";
 import { expectedFocusable, pageCoverage, reachedByKeyboard, representativePages, stateCoverage } from "../lib/extractors.ts";
 import { type Manifest, type ManifestStep, stepStart, writeManifest } from "../lib/manifest.ts";
 import { readTemplate } from "../lib/templates.ts";
@@ -60,6 +60,8 @@ export interface Gap {
   measured?: Record<string, unknown>;
   /** Who can close it: "sweep" when running the sweep again can (a measurement failed, timed out or is missing), "explorer" otherwise. Absent in a gate.json from before this was asked. */
   fixedBy?: "sweep" | "explorer";
+  /** For a gap of the sweep that the explorer cannot close either: what it says as a limitation when no new sweep is left, instead of going to the explorer. Absent otherwise. */
+  limitationNl?: string;
 }
 
 export interface Check {
@@ -375,15 +377,28 @@ export function gateChecks(run: RunData): { checks: Check[]; gaps: Gap[]; warnin
   }
 
   // A rule engine that gave no answer on a page or in a state: what it would have found there cannot be established, and its silence must not read as clean (#143).
-  const withoutResult = (runs: [string, EngineRun | undefined][]): string => runs.flatMap(([where, engines]) => enginesWithoutResult(engines).map((entry) => `${entry.engine}${where ? ` ${where}` : ""}: ${entry.error.slice(0, 200)}`)).join("; ");
-  for (const page of run.pages) {
-    const told = withoutResult([["in licht", page.engines?.light], ["in donker", page.engines?.dark]]);
-    if (told) limitations.push({ check: "engine-without-result", ...on(page), state: "default", missingNl: `Een regelset gaf op deze pagina geen uitslag (${told}). Wat die regelset hier zou vinden, kan niet worden vastgesteld; dat er geen bevinding van in het bewijs staat, betekent niet dat de pagina zonder fouten is.` });
+  // An engine that ran out of time and was not tried again yet is a measurement that failed: a new sweep measures it once more
+  // (enginesToRetry), and only when it runs out of time again is it a limitation. Any other failure of an engine is one straight away.
+  const withoutResult = (runs: [string, EngineRun | undefined][]): { again: string; stays: string } => {
+    const retry = enginesToRetry(runs.map(([, engines]) => engines));
+    const told = runs.flatMap(([where, engines]) => enginesWithoutResult(engines).map((entry) => ({ again: retry.some((other) => other.engine === entry.engine && other.error === entry.error), text: `${entry.engine}${where ? ` ${where}` : ""}: ${entry.error.slice(0, 200)}` })));
+    const listed = (again: boolean): string => told.filter((entry) => entry.again === again).map((entry) => entry.text).join("; ");
+    return { again: listed(true), stays: listed(false) };
+  };
+  const engineGaps: Gap[] = [];
+  const limitationNl = (where: "pagina" | "toestand", told: string): string => `Een regelset gaf ${where === "pagina" ? "op deze pagina" : "in deze toestand"} geen uitslag (${told}). Wat die regelset hier zou vinden, kan niet worden vastgesteld; dat er geen bevinding van in het bewijs staat, betekent niet dat de ${where} zonder fouten is.`;
+  const retryNl = (where: "pagina" | "toestand", told: string): string => `Een regelset gaf ${where === "pagina" ? "op deze pagina" : "in deze toestand"} geen uitslag binnen de tijd (${told}). Dat ligt meestal aan een drukke machine. Draai collect opnieuw: dat meet dit nog één keer. Geeft de regelset dan weer geen uitslag, dan wordt het een beperking.`;
+  type EngineCheck = { place: Pick<Gap, "page" | "url" | "state">; where: "pagina" | "toestand"; runs: [string, EngineRun | undefined][] };
+  const engineChecks: EngineCheck[] = [
+    ...run.pages.map((page): EngineCheck => ({ place: { ...on(page), state: "default" }, where: "pagina", runs: [["in licht", page.engines?.light], ["in donker", page.engines?.dark]] })),
+    ...(run.siteStates?.states ?? []).map((state): EngineCheck => ({ place: { page: null, url: state.url, state: state.id }, where: "toestand", runs: [["", run.stateEvidence?.[state.id]?.engines]] })),
+  ];
+  for (const { place, where, runs } of engineChecks) {
+    const told = withoutResult(runs);
+    if (told.again) engineGaps.push({ check: "engine-without-result", ...place, missingNl: retryNl(where, told.again), fixedBy: "sweep", limitationNl: limitationNl(where, told.again) });
+    if (told.stays) limitations.push({ check: "engine-without-result", ...place, missingNl: limitationNl(where, told.stays) });
   }
-  for (const state of run.siteStates?.states ?? []) {
-    const told = withoutResult([["", run.stateEvidence?.[state.id]?.engines]]);
-    if (told) limitations.push({ check: "engine-without-result", page: null, url: state.url, state: state.id, missingNl: `Een regelset gaf in deze toestand geen uitslag (${told}). Wat die regelset hier zou vinden, kan niet worden vastgesteld; dat er geen bevinding van in het bewijs staat, betekent niet dat de toestand zonder fouten is.` });
-  }
+  add("engine-without-result", engineGaps, "geen regelset wacht na een tijdgrens nog op een nieuwe meting");
 
   // 5. The sweep itself must be complete.
   const incomplete: Gap[] = [];
@@ -985,11 +1000,13 @@ async function currentAnswers(runDir: string, sheets: Sheet[]): Promise<Answers 
  * Where the run goes from the gate. Pure: the gaps of the fixed checks and of the review, whether the review is answered for
  * the current sheets, the steps of the manifest and which gaps the site model accepts. Every gap it returns says who can close it.
  */
-export function route(fixedGaps: Gap[], reviewedGaps: Gap[], answered: boolean, steps: Pick<ManifestStep, "command">[], isAccepted: (gap: Gap) => boolean): Pick<Gate, "sufficient" | "stage" | "exploreRound" | "returnsLeft" | "gaps"> & Required<Pick<Gate, "next" | "resweeps" | "resweepsLeft">> & { all: Gap[] } {
+export function route(fixedGaps: Gap[], reviewedGaps: Gap[], answered: boolean, steps: Pick<ManifestStep, "command">[], isAccepted: (gap: Gap) => boolean): Pick<Gate, "sufficient" | "stage" | "exploreRound" | "returnsLeft" | "gaps" | "limitations"> & Required<Pick<Gate, "next" | "resweeps" | "resweepsLeft">> & { all: Gap[] } {
   const exploreRound = steps.filter((step) => step.command === "explore").length;
   const returnsLeft = Math.max(0, MAX_RETURNS_TO_EXPLORER - Math.max(0, exploreRound - 1));
   const resweeps = Math.max(0, steps.slice(steps.findLastIndex((step) => step.command === "explore") + 1).filter((step) => step.command === "collect").length - 1);
   const resweepsLeft = Math.max(0, MAX_RESWEEPS - resweeps);
+  // A gap of the sweep that the explorer cannot close either is a limitation once no new sweep is left.
+  const limitations = resweepsLeft > 0 ? [] : fixedGaps.filter((gap) => gap.fixedBy === "sweep" && gap.limitationNl !== undefined).map(({ limitationNl, fixedBy: _fixedBy, ...gap }) => ({ ...gap, missingNl: limitationNl! }));
   // A measurement that still fails after every new sweep is no longer the sweep's: the explorer chooses another page or accepts it.
   const owner = (gap: Gap): Gap =>
     gap.fixedBy !== "sweep"
@@ -997,7 +1014,7 @@ export function route(fixedGaps: Gap[], reviewedGaps: Gap[], answered: boolean, 
       : resweepsLeft > 0
         ? gap
         : { ...gap, fixedBy: "explorer", missingNl: `${gap.missingNl} De veegronde is na de laatste verkenning ${resweeps} keer opnieuw gedraaid en mat dit nog steeds niet. Ligt dat aan de pagina, kies dan voor het paginatype een pagina die wel te meten is, of leg in acceptedGaps vast dat het aan de site ligt.` };
-  const fixed = fixedGaps.map(owner);
+  const fixed = fixedGaps.filter((gap) => resweepsLeft > 0 || gap.fixedBy !== "sweep" || gap.limitationNl === undefined).map(owner);
   const all = [...fixed, ...reviewedGaps.map(owner)];
   const gaps = all.filter((gap) => !isAccepted(gap));
   const forSweep = gaps.some((gap) => gap.fixedBy === "sweep");
@@ -1006,7 +1023,7 @@ export function route(fixedGaps: Gap[], reviewedGaps: Gap[], answered: boolean, 
   const stage: Gate["stage"] = answered ? "complete" : forSweep || (fixedOpen && returnsLeft === 0) ? "deterministic" : "review-pending";
   const sufficient = stage === "complete" && gaps.length === 0;
   const next = sufficient ? "proceed" : forSweep ? "sweep" : stage === "review-pending" ? "review" : returnsLeft > 0 ? "explore" : "stop";
-  return { sufficient, stage, next, exploreRound, returnsLeft, resweeps, resweepsLeft, gaps, all };
+  return { sufficient, stage, next, exploreRound, returnsLeft, resweeps, resweepsLeft, gaps, limitations, all };
 }
 
 /**
@@ -1117,7 +1134,7 @@ export async function gate(runDir: string, outDir: string = runDir): Promise<Gat
     gaps,
     accepted,
     warnings: [...fixed.warnings, ...reviewed.warnings],
-    limitations: [...fixed.limitations, ...degradedLimitations],
+    limitations: [...fixed.limitations, ...routed.limitations, ...degradedLimitations],
     remarks,
     review: {
       task: join(absoluteOut, parts[0]!.task),

@@ -17,10 +17,10 @@ import { controlKey, overflowAtSize, spacingEffect, spacingFromLoad, TEXT_SPACIN
 import { withinTime } from "../instruments/limit.ts";
 import { readJson, sha256File, writeFileAtomic, writeJson } from "../lib/canonical.ts";
 import { inOrder } from "../lib/atonce.ts";
-import { runEngines } from "../lib/engines.ts";
+import { enginesToRetry, runEngines, type EngineRun } from "../lib/engines.ts";
 import type { RecipeSteps } from "../lib/operables.ts";
 import { frameStanding, loadSiteModel, pageTypeOf, SITE_MODEL_FILE, type Component, type Postcondition, type SiteModel } from "../lib/sitemodel.ts";
-import { blockersKey, readStamp, STATE_STAMP, stateKey } from "../lib/sweepstamp.ts";
+import { blockersKey, engineRetryReason, readStamp, STATE_STAMP, stateKey } from "../lib/sweepstamp.ts";
 import { writeOriginsOf, writesForRun } from "../lib/writes.ts";
 import { spokenByItself, type SpokenByItself } from "../instruments/methods/speech.ts";
 import type { LastStepSpeech, Recipe } from "../session/daemon.ts";
@@ -596,7 +596,7 @@ export class ModelSweep {
   }
 
   /** `outer` is the tab: the postcondition is checked from there. `page` is what is measured: the tab, or an embedded window as a page. */
-  private async measure(outer: Page, page: Page, id: string, post: Postcondition | null, files: Record<string, string>): Promise<Pick<CapturedState, "dir" | "files" | "engineSummary" | "contrast" | "largestOverlayShare" | "stillReachedAfterMeasuring"> & { clippedBefore: { path: string[] }[] }> {
+  private async measure(outer: Page, page: Page, id: string, post: Postcondition | null, files: Record<string, string>, retriedAfterTimeout = false): Promise<Pick<CapturedState, "dir" | "files" | "engineSummary" | "contrast" | "largestOverlayShare" | "stillReachedAfterMeasuring"> & { clippedBefore: { path: string[] }[] }> {
     const dir = join("site-states", id);
     const absolute = join(this.runDir, dir);
     const file = this.fileIn(id, files);
@@ -606,7 +606,7 @@ export class ModelSweep {
     const covering = await overlays(page);
     await writeJson(file("overlays", "overlays.json"), covering);
     const engines = await runEngines(page);
-    await writeJson(file("engines", "engines.json"), engines);
+    await writeJson(file("engines", "engines.json"), retriedAfterTimeout ? { ...engines, retriedAfterTimeout: true } : engines);
     await writeJson(file("facts", "facts.json"), await collectFacts(page));
     await writeFileAtomic(file("accessibilityTree", "aria.yaml"), `${await page.locator("body").ariaSnapshot()}\n`);
     await writeJson(file("targets", "targets.json"), await call(page, "targetSizes"));
@@ -707,7 +707,8 @@ export class ModelSweep {
     return { contrastDark, ...(notReached.length > 0 ? { variantsNotReached: notReached } : {}) };
   }
 
-  private async capture(opener: StateOpener & { open: NonNullable<StateOpener["open"]> }): Promise<CapturedState> {
+  /** `retriedAfterTimeout` marks the run of the rule engines as the one retry after an engine ran out of time in this state before. */
+  private async capture(opener: StateOpener & { open: NonNullable<StateOpener["open"]> }, retriedAfterTimeout = false): Promise<CapturedState> {
     const { base } = opener;
     const empty = { url: null, viewport: null, stillReachedAfterMeasuring: null, dir: null, files: {}, engineSummary: null, contrast: null, largestOverlayShare: null };
     const surfaces: Surface[] = [];
@@ -722,7 +723,7 @@ export class ModelSweep {
       const where = { url: opened.surface?.page.url() ?? null, viewport: opened.surface?.page.viewportSize() ?? null, ...(opened.firstTimeoutNl !== undefined ? { firstTimeoutNl: opened.firstTimeoutNl } : {}) };
       if (!opened.reached || !opened.surface) return { ...base, ...empty, ...where, reached: false, reasonNl: opened.reasonNl };
       const { view, frame } = await this.viewOf(opened.surface.page, opener.frame);
-      const { clippedBefore: clipped, ...measured } = await this.measure(opened.surface.page, view, base.id, opened.post, {});
+      const { clippedBefore: clipped, ...measured } = await this.measure(opened.surface.page, view, base.id, opened.post, {}, retriedAfterTimeout);
       clippedBefore = clipped;
       return { ...base, ...where, reached: true, reasonNl: null, ...measured, ...(frame ? { frame } : {}), ...(opened.spoken ? { spokenByItself: opened.spoken } : {}) };
     });
@@ -885,14 +886,19 @@ export class ModelSweep {
     const stampPath = join(root, opener.base.id, STATE_STAMP);
     const stamp = await readStamp<{ key: string; state: CapturedState }>(stampPath);
     let state: CapturedState;
-    const reused = stamp !== null && stamp.key === opener.key && stamp.state.reached;
+    // A rule engine that ran out of time in this state before gets one more try; the measurement taken now is that try, whatever else made it.
+    const engines = stamp?.state.files.engines;
+    const timedOut = engines ? enginesToRetry([await readStamp<EngineRun>(join(this.runDir, engines))]) : [];
+    const reused = stamp !== null && stamp.key === opener.key && stamp.state.reached && timedOut.length === 0;
     if (reused) {
       // The measurement stands; what the model says about the state (the page types it belongs to) is taken from the model as it is now.
       state = { ...stamp.state, ...opener.base };
       process.stderr.write(`sitemodel: ${state.id} al vastgelegd met dit recept, niet opnieuw gemeten\n`);
     } else {
+      const retry = engineRetryReason(timedOut);
+      if (retry) process.stderr.write(`sitemodel: ${opener.base.id} opnieuw gemeten: ${retry}\n`);
       await rm(join(root, opener.base.id), { recursive: true, force: true });
-      state = await this.capture({ ...opener, open: opener.open });
+      state = await this.capture({ ...opener, open: opener.open }, timedOut.length > 0);
       // A state that did not open is tried again by the next sweep.
       if (state.reached) await writeJson(stampPath, { key: opener.key, state });
     }
