@@ -2,7 +2,7 @@
 
 Voor de vergelijking met een bestaand onderzoek van een onafhankelijke onderzoeker hoort per site een map met dat onderzoek en per run van de toolbox de vergelijking daarmee. Die mappen staan niet in de openbare repository: ze gaan over websites van andere organisaties, en een deel is een toetsset die geheim moet blijven tot de eindmeting. Hieronder staat hoe zo'n map eruitziet. De map `testsite/` bevat de metingen op de eigen testsite uit `toolbox/fixtures/`. Ook in de repository staan `nerds.digitaledienst.overheid.nl/`, met de terugkoppeling van het team van die site op de eerste rapporten, en `voiceover/`, met de proefpagina's voor VoiceOver. Het logboek van alle rondes staat in [iteraties.md](iteraties.md). Wat een meting ons leerde en wat ermee is gedaan, staat in [lessen.md](lessen.md).
 
-De map `ijkset/` is van een andere soort: daar staat hoe vaak de regelsets en de eigen metingen gelijk hebben op de testgevallen van de ACT-regels van W3C. Zie [ijkset/README.md](ijkset/README.md).
+De map `ijkset/` is van een andere soort: daar staat hoe vaak de regelsets en de eigen metingen gelijk hebben op de testgevallen van de ACT-regels van W3C. Zie [ijkset/README.md](ijkset/README.md). In `snelle-meting/` staat hoe goed `quick`, de meting zonder taalmodel voor een pipeline, de uitkomst van een onderzoek voorspelt. Zie [snelle-meting/README.md](snelle-meting/README.md).
 
 De map `weging/` zegt hoe de stap is gemeten die per bevinding vastlegt wie ze hindert en waar de ernst uit volgt: hoe vaak de ernst gelijk uitkomt bij herhaling, en wat daarbij niet is getoetst. Zie [weging/README.md](weging/README.md).
 

@@ -125,6 +125,14 @@ just render runs/voorbeeld                        # na de weegagent: de weging t
 
 Tussen die stappen werken agents. Na `explore` is dat een verkenner, na `tasks` zijn het rondgangen, beoordelaars, verifieerders en zo nodig een afmaakronde, en na `report` weegt één agent de bevindingen. In Claude Code doet de skill `nldd-a11y-audit` dat stap voor stap, met deze commando's; zie [skills/nldd-a11y-audit/SKILL.md](skills/nldd-a11y-audit/SKILL.md). De werkstroom voor de agents staat ernaast in `skills/nldd-a11y-audit/onderzoek.workflow.js`. `just status <run>` zegt in welke fase een run is, `just verify <run>` rekent de hashes na en `just diff <vorige>/evaluation.json <nieuwe>/evaluation.json <map>` schrijft het verschil met een eerder onderzoek. `just` zonder iets toont alle taken.
 
+Wie bij elke release wil weten of de site slechter is geworden, gebruikt `quick`. Het meet zonder taalmodel en zonder agents, in een paar minuten, en vergelijkt met de vorige meting:
+
+```
+just quick https://voorbeeld.nl runs/snel --urls paginas.txt --baseline vorige/summary.json
+```
+
+Dat is geen onderzoek: het vindt ongeveer een kwart van wat een onderzoek afkeurt. Zie [docs/gebruik.md](docs/gebruik.md#een-snelle-meting-in-een-pipeline).
+
 Nodig: Node 22.18 of nieuwer en `just`. Voor de pdf van het rapport `typst`; voor pdf-bestanden van de site `poppler`, `qpdf` en `verapdf`; voor tekst in beeld `tesseract`; voor video en geluid `ffmpeg` en `whisper-cpp`; voor geldige HTML en veraPDF ook Java. `just doctor` zegt wat ontbreekt, toont de versie van elk hulpprogramma en de sha256 van het spraakmodel, en waarschuwt waar de toolbox een nieuwere versie nodig heeft (Node 22.18, typst 0.14, qpdf 11, Java 11).
 
 Duur en kosten: een onderzoek van ongeveer 30 pagina's met alle criteria duurt 3 tot 7 uur en kost in de orde van 150 tot 250 dollar aan prijzen van de API. Dat volgt uit de nulmeting van 19 oktober 2026: 134 agents op Opus 5.5, ongeveer 526 miljoen tokens, waarvan 97 procent uit de cache, voor ongeveer 184 dollar ([validatie/verbruik/README.md](validatie/verbruik/README.md)). Op een abonnement kan zo'n run een groot deel van de weeklimiet gebruiken; hoe groot die limiet is, verschilt per abonnement. `just estimate <run>` rekent het voor een run uit, per rol en met een marge. Een herhaling na een wijziging kost naar rato van wat er veranderd is.

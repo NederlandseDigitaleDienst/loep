@@ -538,6 +538,18 @@ De getallen zeggen of een instrument op een bekende, kleine situatie het antwoor
 
 Het rapport van een onderzoek noemt deze getallen niet.
 
+## De snelle meting
+
+`quick` is geen onderzoek. Het is een meting zonder taalmodel voor wie bij elke release wil weten of een site slechter is geworden. Het draait de stappen die geen sitemodel nodig hebben: `inventory` en `sample`, of een vaste lijst adressen, en daarna in één sessie per pagina de vier regelsets in licht en donker, en reflow en zoom in licht. Het stuurt niets en sluit geen melding die over de pagina ligt.
+
+De samenvatting noemt per criterium op welke grond het is aangewezen, van sterk naar zwak: twee of meer regelsets keuren dezelfde plek af; er valt inhoud buiten beeld bij 320 pixels breed (1.4.10) of bij 200 procent zoom (1.4.4); één regelset keurt af en de andere zeggen niets; één regelset keurt af en een andere keurt dezelfde plek goed. Een plek is een element van een pagina bij één criterium, licht en donker samen. Alleen criteria van niveau A en AA tellen.
+
+Met `--baseline` wordt de meting tegen een eerdere gehouden, per pagina (op pad, zonder origin), criterium en regel. Meer plekken onder een regel is slechter, minder is beter. Een pagina die de basislijn had en die nu niet gemeten kon worden, telt als slechter, omdat niemand kan zeggen dat ze het niet is. Een pagina die nieuw is, wordt genoemd en niet vergeleken.
+
+Hoe goed deze signalen de uitkomst van een onderzoek voorspellen, is teruggerekend op afgeronde onderzoeken; zie [validatie/snelle-meting/README.md](../validatie/snelle-meting/README.md). De samenvatting noemt die cijfers, zodat een lezer weet wat een lege lijst waard is.
+
+De run krijgt een bestand `quick.json`. `explore` weigert een run die dat heeft: de inventaris is klein gehouden, en waarnemingen die niemand beoordeelde horen niet in een onderzoek.
+
 ## Hoe lang een onderzoek duurt
 
 `estimate` rekent uit hoe lang een onderzoek duurt. Het leest wat de run al weet over de site en geeft per onderdeel de verwachte duur, het totaal met een marge en het verwachte aantal tokens. Het kan direct na `inventory`, en wordt scherper na `sample` (de steekproef in plaats van alle pagina's), na de verkenner (de paginatypen uit het sitemodel in plaats van een telling van pagina's met dezelfde opbouw), na `collect` (wat er per pagina te bedienen is, zoals gemeten) en na `tasks` (het echte aantal opdrachten). Een onderdeel dat klaar is, toont wat het werkelijk kostte in plaats van de schatting. Een stap van de veegronde die nog loopt, rekent het door met het tempo dat die stap tot nu toe haalde. Halverwege zegt het commando dus wat er nog komt, en op een afgeronde run staan geschat en gemeten naast elkaar. Het schrijft niets in de run.

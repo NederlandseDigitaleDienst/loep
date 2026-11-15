@@ -17,6 +17,15 @@ const USAGE = `loep <command> [options]
   inventory <url> --out <run> [--also-origin <url>]... [--navigation-delay <s>] [--allow-writes | --test-environment <origin>... --declared-by "<name>, <role>"] [--max-writes <n>] [--mailbox <mailbox> [--mail-link-origin <origin>]...]
                                          Find every page and count what is on it. In a run with a login the pages are found
                                          by following links from the page the person pointed at; a link that logs out is never followed
+  quick <url> --out <run> [--urls <file>] [--max-pages <n>] [--baseline <summary.json>]
+                                         A measurement of minutes without a language model, apart from an evaluation, for a
+                                         pipeline: runs the rule engines in light and dark, and reflow and zoom, on the pages
+                                         in --urls (one address per line) or on a sample of at most 15 pages it finds, and
+                                         writes per criterion what they point at (quick/samenvatting.md and summary.json).
+                                         With --baseline it holds the outcome against the summary.json of an earlier
+                                         measurement, by path, and exits 1 when a page has more places under a rule or was
+                                         not measured (quick/verschil.md). It predicts part of what an evaluation fails; it
+                                         judges nothing. With --run <run> it measures a sample that is already there
   explore --run <run>                    Write the task for the agent that maps the site before it is measured
   check-site --run <run>                 Validate site.json, replay every recipe in it and open every component on each of its
                                          page types as the sweep does; non-zero exit on problems
@@ -251,6 +260,7 @@ async function main(): Promise<void> {
     options: {
       out: { type: "string" },
       run: { type: "string" },
+      baseline: { type: "string" },
       "max-pages": { type: "string", default: "200" },
       idle: { type: "boolean", default: false },
       gaps: { type: "string" },
@@ -471,8 +481,23 @@ async function main(): Promise<void> {
       await repeatReadsOutsideRun(values.run);
       return;
     }
+    case "quick": {
+      // A measurement of minutes without a language model, in a run of its own. With a URL it finds the pages itself; with --run it measures a sample that is there.
+      const quickRun = target ? values.out : values.run;
+      if (!quickRun) throw new Error("quick needs a URL and --out <run>, or --run <run> with an inventory and a sample");
+      const { quick, quickDoneNl } = await import("./commands/quick.ts");
+      const { QUICK_DEFAULT_PAGES } = await import("./lib/quick.ts");
+      // --max-pages has the default of inventory; a quick measurement has a smaller one of its own.
+      const given = process.argv.includes("--max-pages") || process.argv.some((token) => token.startsWith("--max-pages="));
+      const { summary, comparison } = await quick({ url: target, run: quickRun, maxPages: given ? Number(values["max-pages"]) : QUICK_DEFAULT_PAGES, urlsFile: values.urls, baseline: values.baseline });
+      process.stdout.write(quickDoneNl(quickRun, summary, comparison));
+      // For a pipeline: worse than the baseline, or a page of it not measured, is a failure.
+      if (comparison && !comparison.ok) process.exitCode = 1;
+      return;
+    }
     case "explore": {
       if (!values.run) throw new Error("explore needs --run <run>");
+      if (existsSync(join(values.run, "quick.json"))) throw new Error((await import("./lib/quick.ts")).QUICK_EXPLORE_REFUSAL_NL);
       const { explore } = await import("./commands/explore.ts");
       const result = await explore(values.run);
       process.stdout.write(`${result.task}\nronde ${result.round}: ${result.pages} pagina's, ${result.frames} ingesloten vensters\n`);

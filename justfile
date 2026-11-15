@@ -94,7 +94,7 @@ test-shard i n:
 
 # Draai alleen de tests die geen browser starten: een paar seconden, voor tussendoor en voor de snelle controle bij een push
 test-quick:
-    cd {{toolbox}} && node --test test/compare-findings.test.ts test/contrast.test.ts test/core.test.ts test/defects.test.ts test/docs.test.ts test/estimate.test.ts test/release.test.ts test/seal-os-metadata.test.ts test/searchbody.test.ts test/extractors.test.ts test/feedback.test.ts test/instrument-tasks.test.ts test/origins.test.ts test/portrait.test.ts test/render.test.ts test/sequence.test.ts test/statement.test.ts test/sweepstamp.test.ts test/timing.test.ts test/atonce.test.ts test/verdict.test.ts test/voiceover.test.ts test/again.test.ts test/raise-budget.test.ts test/sweep-check.test.ts test/test-shard.test.ts test/answer-to-file.test.ts test/report-html.test.ts test/weighing.test.ts test/export.test.ts
+    cd {{toolbox}} && node --test test/compare-findings.test.ts test/contrast.test.ts test/core.test.ts test/defects.test.ts test/docs.test.ts test/estimate.test.ts test/release.test.ts test/seal-os-metadata.test.ts test/searchbody.test.ts test/extractors.test.ts test/feedback.test.ts test/instrument-tasks.test.ts test/origins.test.ts test/portrait.test.ts test/render.test.ts test/sequence.test.ts test/statement.test.ts test/sweepstamp.test.ts test/timing.test.ts test/atonce.test.ts test/verdict.test.ts test/voiceover.test.ts test/again.test.ts test/raise-budget.test.ts test/sweep-check.test.ts test/test-shard.test.ts test/answer-to-file.test.ts test/report-html.test.ts test/weighing.test.ts test/export.test.ts test/quick.test.ts
 
 # Controleer de types
 check:
@@ -109,6 +109,10 @@ explore url run:
     {{cli}} inventory {{url}} --out {{run}}
     {{cli}} sample --run {{run}}
     {{cli}} explore --run {{run}}
+
+# Een snelle meting zonder taalmodel, voor een pipeline: de regelsets in licht en donker, reflow en zoom, op de pagina's in --urls <bestand> of op een kleine steekproef. Met --baseline <summary.json> vergelijkt het met een eerdere meting en faalt het als iets slechter is. Los van een onderzoek: explore weigert zo'n run
+quick url run *flags:
+    {{cli}} quick {{url}} --out {{run}} {{flags}}
 
 # Na de verkenner: controleer het sitemodel, trek de steekproef opnieuw (vensters van derden vallen eruit), meet alles, ook de documenten, en vraag de poort. Een tweede keer meet alleen wat veranderd is; met --fresh alles opnieuw. Met --at-once <n> meet de veegronde n pagina's tegelijk, als de eigenaar van de site meer agents toestaat: nooit meer dan het sessieproces van de run toelaat, met dezelfde tijd tussen twee navigaties
 sweep run *flags:
