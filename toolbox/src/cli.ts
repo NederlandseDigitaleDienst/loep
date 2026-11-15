@@ -89,7 +89,7 @@ const USAGE = `loep <command> [options]
                                          nodig, keuze nodig) and per criterion, equal points taken together and counted: the
                                          work list for whoever improves the sweep. Writes nothing
   contribute --run <run> | --under <folder> [--out <dir>] [--json] [--key <file>]
-                                         The sheet of a finished run (meetblad.json): what it says about loep and nothing about
+                                         The sheet of a finished run (a meetblad): what it says about loep and nothing about
                                          the site. Rule ids, criteria, outcomes and counts; no address, selector or sentence.
                                          With --under the sheet of every finished run under a folder, for the runs made before.
                                          Without --out it only says what is on the sheet. It reads a run of any version, writes
@@ -513,7 +513,7 @@ async function main(): Promise<void> {
       if (!values.run) throw new Error("contribute vraagt --run <run>, of --under <map> voor elk afgerond onderzoek daaronder");
       const result = contribute(values.run, { outDir: values.out, key: contributorKey(values.key, values.out !== undefined) });
       if (result.leaks.length > 0) {
-        process.stderr.write(`loep: het meetblad is geweigerd omdat er iets van de site op staat: ${result.leaks.join(", ")}\n`);
+        process.stderr.write(`loep: het meetblad is geweigerd: ${result.leaks.join("; ")}\n`);
         process.exitCode = 1;
         // Not printed as JSON: what is refused is not given out in another form.
         if (values.json) return;

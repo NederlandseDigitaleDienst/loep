@@ -11,7 +11,7 @@ just calibrate
 just rule-register --sheets <map met meetbladen>
 ```
 
-Alleen het meetblad van een onderzoek telt; een snelle meting heeft geen oordeel om een regel tegen te houden. Elke run telt één keer.
+Alleen het meetblad van een onderzoek telt; een snelle meting heeft geen oordeel om een regel tegen te houden. Elke run telt één keer. Een ijkmeting van een deel van de regels (`--only`) wordt geweigerd als basis.
 
 De ijkmeting schrijft `regels.json`: elke regel die een regelset draaide, met de criteria en ACT-regels die de regelset er zelf bij noemt. De meetbladen komen uit `contribute` of uit de besloten verzameling waar onderzoeken worden ingestuurd ([../../docs/methode.md](../../docs/methode.md#het-meetblad-en-het-regelregister)). Met `--runs <bestand>` leest het mappen van onderzoeken op de eigen machine, elk zoals het meetblad ervan zou zijn. Een register uit meetbladen en een uit de onderzoeken zelf zijn gelijk; dat is nagegaan op de onderzoeken hieronder. Het is het een of het ander: dezelfde site op beide manieren zou twee keer tellen.
 

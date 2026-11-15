@@ -1,5 +1,5 @@
 /**
- * `contribute`: make the sheet of a finished run (`meetblad.json`): what the run says about loep,
+ * `contribute`: make the sheet of a finished run (a meetblad, written as `<id>.json`): what the run says about loep,
  * without what it says about the site. Rule ids, criteria, outcomes and counts. It reads the run
  * and writes nothing in it, so a sealed run stays sealed, and it works on a run of any version.
  *
@@ -7,15 +7,21 @@
  * nldd-a11y-contribute asks, and pushes with that person's own access.
  */
 import { createHash, randomBytes } from "node:crypto";
-import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, isAbsolute, join } from "node:path";
+import { engineName } from "../lib/quick.ts";
+import { loadRechecks } from "./recheck.ts";
 import { buildSheet, sheetLeaks, type RunSheet, type SheetSource } from "../lib/run-sheet.ts";
 
 const readJson = <T>(path: string): T => JSON.parse(readFileSync(path, "utf8")) as T;
 
 /** Where the key stands that turns the address of a site into its key on a sheet. It never leaves this machine. */
-export const defaultKeyFile = (): string => join(process.env.XDG_CONFIG_HOME ?? join(homedir(), ".config"), "loep", "bijdrage.sleutel");
+export function defaultKeyFile(): string {
+  // An empty XDG_CONFIG_HOME, or one that is not a full path, counts as not set: the key must not land in whatever folder the command runs from.
+  const config = process.env.XDG_CONFIG_HOME && isAbsolute(process.env.XDG_CONFIG_HOME) ? process.env.XDG_CONFIG_HOME : join(homedir(), ".config");
+  return join(config, "loep", "bijdrage.sleutel");
+}
 
 /**
  * The key of this contributor. With it the same site gets the same key on every sheet from this
@@ -36,8 +42,6 @@ export function contributorKey(file = defaultKeyFile(), create = true): string {
   chmodSync(file, 0o600);
   return key;
 }
-
-const ENGINE_OF_METHOD: Record<string, string> = { "accessibility-checker-engine": "ibm" };
 
 interface RulesObservation {
   command?: string;
@@ -71,7 +75,7 @@ export function sessionElements(runDir: string): SheetSource["sessionElements"] 
       const failed = new Set<string>();
       const methods = observation.result?.methods;
       for (const method of methods ?? []) {
-        const engine = ENGINE_OF_METHOD[method.implementation ?? ""] ?? method.implementation ?? "";
+        const engine = engineName(method.implementation ?? "");
         for (const finding of method.result?.findings ?? []) if (finding.outcome === "failed") failed.add(`${engine}\n${finding.rule}\n${finding.where ?? ""}`);
       }
       for (const element of observation.result?.grouped?.elements ?? []) {
@@ -123,7 +127,14 @@ export function sheetSource(runDir: string): SheetSource | null {
         .map((name) => jsonOr<{ decision?: string }>(join(decisionsDir, name), {}).decision)
         .filter((decision): decision is string => typeof decision === "string")
     : undefined;
-  const rechecksDir = join(runDir, "rechecks");
+  const inventory = jsonOr<{ baseUrl?: string }>(inventoryFile, {});
+  // The findings that were measured again and whose outcome holds: not the rechecks that were only ordered.
+  let rechecks: number | undefined;
+  try {
+    rechecks = existsSync(join(runDir, "rechecks")) ? loadRechecks(runDir).checked.length : undefined;
+  } catch {
+    rechecks = undefined;
+  }
   const quick = existsSync(quickFile) ? { summary: jsonOr<NonNullable<SheetSource["quick"]>["summary"]>(quickFile, {} as never), comparison: jsonOr<NonNullable<SheetSource["quick"]>["comparison"]>(join(runDir, "quick", "verschil.json"), null) } : undefined;
   return {
     evaluationText,
@@ -132,13 +143,14 @@ export function sheetSource(runDir: string): SheetSource | null {
     sweepPages,
     steps: manifest.steps ?? [],
     runMark,
+    baseUrl: inventory.baseUrl,
     // The signature stands in a file of its own; `sign` never writes it into the evaluation.
     signed: existsSync(join(runDir, "signed", "signature.json")),
     toolboxVersion: manifest.toolbox?.version,
     collectPages: existsSync(join(runDir, "collect.json")) ? (jsonOr<{ pages?: SheetSource["collectPages"] }>(join(runDir, "collect.json"), {}).pages ?? []) : undefined,
     gate: existsSync(join(runDir, "gate.json")) ? jsonOr<NonNullable<SheetSource["gate"]>>(join(runDir, "gate.json"), {}) : undefined,
     decisions,
-    rechecks: existsSync(rechecksDir) ? readdirSync(rechecksDir, { withFileTypes: true }).filter((entry) => entry.isDirectory()).length : undefined,
+    rechecks,
     statementStatus: jsonOr<{ status?: string }>(join(runDir, "verklaring", "verklaring.json"), {}).status,
     quick,
   };
@@ -150,6 +162,8 @@ export interface Contribution {
   leaks: string[];
   /** Where the sheet was written, when asked. */
   file: string | null;
+  /** When the run was evaluated: of a run that stands in two folders, the sheet of the later one counts. */
+  evaluatedAt: string;
 }
 
 /** Make the sheet of a run and, with `outDir`, write it there under its id. A sheet with a word of the site in it is refused. */
@@ -159,11 +173,12 @@ export function contribute(runDir: string, options: { outDir?: string | undefine
   const sheet = buildSheet(source, options.key);
   const site = (source.evaluation as { site?: { baseUrl?: string; name?: string; organisation?: string } }).site ?? {};
   const leaks = sheetLeaks(sheet, { baseUrl: site.baseUrl ?? source.quick?.summary.site, names: [site.name, site.organisation] });
-  if (leaks.length > 0 || !options.outDir) return { sheet, leaks, file: null };
+  const evaluatedAt = source.evaluation.evaluatedAt ?? "";
+  if (leaks.length > 0 || !options.outDir) return { sheet, leaks, file: null, evaluatedAt };
   mkdirSync(options.outDir, { recursive: true });
   const file = join(options.outDir, `${sheet.id}.json`);
   writeFileSync(file, `${JSON.stringify(sheet, null, 2)}\n`);
-  return { sheet, leaks, file };
+  return { sheet, leaks, file, evaluatedAt };
 }
 
 /**
@@ -172,6 +187,8 @@ export function contribute(runDir: string, options: { outDir?: string | undefine
  * is not a run. A folder that may not be read is passed by and counted.
  */
 export function runsUnder(root: string): { runs: string[]; unreadable: number } {
+  // A folder that is not there is a mistyped path, not a folder without runs.
+  if (!existsSync(root) || !statSync(root).isDirectory()) throw new Error(`${root} bestaat niet of is geen map`);
   const runs: string[] = [];
   let unreadable = 0;
   const walk = (dir: string, depth: number): void => {
@@ -217,10 +234,8 @@ export function contributeAll(root: string, options: { outDir?: string | undefin
   const newest = new Map<string, { sheet: RunSheet; at: string }>();
   for (const run of found.runs) {
     let one: Contribution;
-    let at: string;
     try {
       one = contribute(run, { key: options.key });
-      at = sheetSource(run)?.evaluation.evaluatedAt ?? "";
     } catch {
       result.failed += 1;
       continue;
@@ -228,7 +243,7 @@ export function contributeAll(root: string, options: { outDir?: string | undefin
     if (one.leaks.length > 0) result.refused.push({ id: one.sheet.id, leaks: one.leaks });
     else {
       if (newest.has(one.sheet.id)) result.duplicates += 1;
-      if (!newest.has(one.sheet.id) || newest.get(one.sheet.id)!.at < at) newest.set(one.sheet.id, { sheet: one.sheet, at });
+      if (!newest.has(one.sheet.id) || newest.get(one.sheet.id)!.at < one.evaluatedAt) newest.set(one.sheet.id, { sheet: one.sheet, at: one.evaluatedAt });
     }
   }
   result.sheets = [...newest.values()].map((entry) => entry.sheet);
@@ -273,7 +288,8 @@ export function contributionNl(result: Contribution): string {
     "Niet erop: het adres en de naam van de site, pagina's, selectors, de tekst van een oordeel of bevinding, schermafbeeldingen, en wie tekende of besloot.",
     "De site staat erop als een sleutel die alleen op deze machine uit het adres te maken is.",
     "Let op: is het rapport van dit onderzoek openbaar, dan kan iemand met toegang tot de verzameling het meetblad eraan koppelen, door de uitkomsten per criterium naast elkaar te leggen.",
-    ...(result.leaks.length > 0 ? [`GEWEIGERD: op het meetblad staat iets van de site: ${result.leaks.join(", ")}. Het is niet geschreven. Meld dit bij de makers van loep.`] : []),
+    // What is named is the kind and the field, never the value: this line is what gets reported, in the open.
+    ...(result.leaks.length > 0 ? [`GEWEIGERD: op het meetblad staat iets dat er niet hoort: ${result.leaks.join("; ")}. Het is niet geschreven. Meld dit bij de makers van loep; de melding noemt de site niet.`] : []),
     ...(result.file ? [`Geschreven: ${result.file}`] : result.leaks.length === 0 ? ["Niets geschreven. Met --out <map> komt het meetblad in die map. Er wordt niets verstuurd."] : []),
     "",
   ].join("\n");

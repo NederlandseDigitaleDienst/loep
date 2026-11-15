@@ -380,8 +380,8 @@ async function measurePage(browser: Browser, url: string, origin: string, wanted
 
 /** What an engine says about a rule it ran, and every rule the engines ran: the same list a rule register reads. */
 export type SeenRule = CatalogueRule;
-/** The list per engine of this toolbox: the catalogue the register reads, with the four engines as its keys. */
-export type RuleCatalogue = Record<EngineId, Record<string, CatalogueRule>>;
+/** The catalogue the register reads, with the four engines of this toolbox as its keys. */
+export type SeenRules = Record<EngineId, Record<string, CatalogueRule>>;
 
 export interface CalibrateOptions {
   /** The directory with the cached copy of the test cases. */
@@ -394,7 +394,7 @@ export interface CalibrateOptions {
 }
 
 /** Run the calibration on a cached copy of the test cases and give the report and the outcome per case. */
-export async function runCalibration(options: CalibrateOptions): Promise<{ report: CalibrationReport; cases: ReturnType<typeof calibrate>["cases"]; rules: RuleCatalogue }> {
+export async function runCalibration(options: CalibrateOptions): Promise<{ report: CalibrationReport; cases: ReturnType<typeof calibrate>["cases"]; rules: SeenRules }> {
   const log = options.log ?? (() => undefined);
   const concurrency = Math.max(1, options.concurrency ?? 4);
   const started = Date.now();
@@ -486,7 +486,7 @@ export async function runCalibration(options: CalibrateOptions): Promise<{ repor
   };
   // Sorted, so two calibrations lie next to each other line by line.
   const sorted = (rules: Record<string, SeenRule>): Record<string, SeenRule> => Object.fromEntries(Object.entries(rules).sort(([a], [b]) => a.localeCompare(b, "en", { numeric: true })));
-  const rules = Object.fromEntries(ENGINE_IDS.map((engine) => [engine, sorted(seen[engine] ?? {})])) as RuleCatalogue;
+  const rules = Object.fromEntries(ENGINE_IDS.map((engine) => [engine, sorted(seen[engine] ?? {})])) as SeenRules;
   // Alfa's package names no ACT rules; the report W3C publishes does, and the calibration counts by it.
   for (const [rule, info] of Object.entries(rules.alfa)) if (info.act.length === 0 && alfa.perRule[rule]) info.act = [...alfa.perRule[rule]].sort();
   return { report, cases, rules };

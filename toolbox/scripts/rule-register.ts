@@ -37,10 +37,13 @@ function fieldRun(dir: string): FieldRun | null {
 
 const { values } = parseArgs({ options: { calibration: { type: "string" }, sheets: { type: "string" }, runs: { type: "string" }, out: { type: "string" } } });
 const calibrations = join(ROOT, "validatie", "ijkset");
-const newest = readdirSync(calibrations).filter((name) => existsSync(join(calibrations, name, "regels.json"))).sort().at(-1);
+// A calibration of part of the rules (`--only`) has a catalogue of part of the rules: never the base of a register.
+const whole = (dir: string): boolean => existsSync(join(dir, "regels.json")) && existsSync(join(dir, "uitkomst.json")) && read<CalibrationReport>(join(dir, "uitkomst.json")).run.only === null;
+const newest = readdirSync(calibrations).filter((name) => whole(join(calibrations, name))).sort().at(-1);
 const calibrationDir = values.calibration ?? (newest ? join(calibrations, newest) : null);
-if (!calibrationDir || !existsSync(join(calibrationDir, "regels.json"))) throw new Error("geen ijkmeting met regels.json gevonden; draai eerst: just calibrate");
+if (!calibrationDir || !existsSync(join(calibrationDir, "regels.json"))) throw new Error("geen volledige ijkmeting met regels.json gevonden; draai eerst: just calibrate");
 const calibration = read<CalibrationReport>(join(calibrationDir, "uitkomst.json"));
+if (calibration.run.only !== null) throw new Error(`${calibrationDir} is een ijkmeting van een deel van de regels (--only): een register daaruit zou de meeste regels missen. Draai just calibrate zonder --only`);
 const catalogue = read<RuleCatalogue>(join(calibrationDir, "regels.json"));
 const folders = values.runs ? readFileSync(values.runs, "utf8").split("\n").map((line) => line.trim()).filter((line) => line && !line.startsWith("#")) : [];
 // One or the other: a folder is read with a key of this build and a sheet carries the key of its contributor, so one site given both ways would count as two.

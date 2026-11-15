@@ -11,7 +11,7 @@ Het adres of de naam van de site, een pagina, een selector, een zin uit een oord
 Dat is op drie plekken geborgd:
 
 - **Bij het maken.** Elke waarde komt uit een vaste lijst, is een regelnummer of een criterium, of is een getal. Een tekst die geen woord van loep is, wordt niet overgenomen.
-- **Bij het schrijven.** `contribute` houdt het meetblad tegen wat erop mag staan: alleen de eigen velden, alleen waarden die een woord van loep zijn, alleen technieken die loep kent, niets dat op een adres lijkt, niet de host van de site, en niet de naam van de site als model of als regel. Vindt het iets, dan schrijft het niets en eindigt het met 1. Het zoekt niet naar losse woorden van de site: een site die "open" heet, heeft een meetblad vol met het veld `open`.
+- **Bij het schrijven.** `contribute` houdt het meetblad tegen wat erop mag staan: alleen de eigen velden, alleen waarden die een woord van loep zijn, alleen technieken die loep kent, niets dat op een adres lijkt, niet de host van de site, en niet de naam van de site als model of als regel. Vindt het iets, dan schrijft het niets en eindigt het met 1. Het zoekt niet naar losse woorden van de site: een site die "open" heet, heeft een meetblad vol met het veld `open`, en een site op de host `web` een meetblad vol met `qualweb`. De melding noemt het soort en het veld, nooit de waarde, omdat ze wordt doorgegeven aan de makers van loep.
 - **Bij het insturen.** `check.mjs` in de verzameling weigert een bestand met een onbekend veld, een waarde die geen woord van loep is, of iets dat op een adres lijkt.
 
 ## Wat een meetblad wel prijsgeeft
@@ -26,7 +26,7 @@ De uitkomst per criterium is zelf die vingerafdruk, en zonder haar is een meetbl
 |---|---|
 | `schema`, `kind` | `1` en `run-sheet` |
 | `id` | Zestien tekens van een hash van wat de run mat (het zaad van het manifest, of bij een oude run de inventaris) en van zijn oordelen. Hetzelfde na opnieuw evalueren, wegen, tekenen of een besluit, zodat een run die twee keer wordt ingestuurd één bestand blijft dat wordt bijgewerkt. Anders voor een tweede beoordeling van dezelfde veegronde. Een kopie van een run in een andere map geeft hetzelfde nummer |
-| `siteKey` | Zestien tekens: een hash met sleutel van het adres van de site (de origin en het eerste deel van het pad). De sleutel staat in een bestand op de machine van de inzender |
+| `siteKey` | Zestien tekens: een hash met sleutel van het adres van de site: de host zonder `www.` en het eerste deel van het pad van het startadres uit de inventaris. Niet het protocol, en niet een bestand zoals `index.html`. De sleutel staat in een bestand op de machine van de inzender |
 | `month` | Jaar en maand van het onderzoek. Niet de dag |
 | `toolbox.version`, `browser`, `engines` | De versie van loep, van Chromium en van elk van de vier regelsets |
 | `models` | De taalmodellen, als het id dat de agents opgaven |
@@ -42,7 +42,7 @@ De uitkomst per criterium is zelf die vingerafdruk, en zonder haar is een meetbl
 | `probes` | De proeven van de veegronde: op hoeveel pagina's reflow, zoom en tekstafstand iets zagen, en hoe vaak de wandeling met Tab niet rond kwam |
 | `gate` | De bewijspoort: voldoende of niet, het aantal rondes van de verkenner, het aantal keren opnieuw vegen, en het aantal aanvaarde gaten |
 | `defects` | Het aantal gebreken, geteld naar ernst en naar eigenaar |
-| `human` | Wat mensen deden, als aantallen: getekend of niet (uit `signed/signature.json`), criteria die een persoon vaststelde, besluiten per soort, nametingen, en de status van de verklaring (A tot en met D) |
+| `human` | Wat mensen deden, als aantallen: getekend of niet (uit `signed/signature.json`), criteria die een persoon vaststelde, besluiten per soort, het aantal bevindingen dat opnieuw is gemeten met een uitkomst die standhoudt, en de status van de verklaring (A tot en met D) |
 | `seconds` | De duur per commando, opgeteld |
 | `sessionsPerRole` | Per rol het aantal sessies en hoe vaak het budget is verlengd |
 | `quick` | Alleen bij een snelle meting: het aantal pagina's, of er iets over de pagina lag en of er is weggeklikt, per regel en proef het aantal plekken op een sterke en op een zwakke grond, en hoe de vergelijking met de basislijn afliep |
@@ -53,7 +53,7 @@ Een onderzoek van een oude versie van loep heeft minder: een beoordelaar legt pa
 
 Runs van dezelfde site moeten bij elkaar te houden zijn, anders telt een site met zeven onderzoeken zeven keer. Een gewone hash van het adres zou te raden zijn: wie een lijst van overheidssites heeft, probeert ze allemaal. Daarom maakt `contribute` een hash met een sleutel uit een bestand op de machine van de inzender (`bijdrage.sleutel` in de configuratiemap van loep), dat daar blijft. Het bestand wordt gemaakt bij het eerste meetblad dat wordt geschreven, niet bij alleen kijken. Een bestand met minder dan 32 tekens wordt geweigerd.
 
-Het gevolg: dezelfde site, ingestuurd door twee mensen, heeft twee sleutels en telt als twee sites. Raakt het bestand weg, dan krijgen dezelfde sites een nieuwe sleutel.
+Het gevolg: dezelfde site, ingestuurd door twee mensen, heeft twee sleutels en telt als twee sites. Raakt het bestand weg, dan krijgen dezelfde sites een nieuwe sleutel. Twee startadressen van één site die in hun eerste map verschillen, zoals `/` en `/nl/`, geven ook twee sleutels: aan het adres is niet te zien dat ze één site zijn.
 
 ## Wat er nog niet op staat
 

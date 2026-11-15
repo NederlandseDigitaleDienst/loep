@@ -1,5 +1,5 @@
 /**
- * The sheet of a run (`meetblad.json`): what a finished evaluation says about loep itself, without
+ * The sheet of a run (a meetblad, written as `<id>.json`): what a finished evaluation says about loep itself, without
  * what it says about the site. Rule ids, criterion ids, outcomes and counts, and nothing else: no
  * address, no selector, no sentence of a page or of a verdict. It is what a run contributes to a
  * shared collection, and what the rule register reads.
@@ -8,13 +8,13 @@
  * a field added later that carries text of the site should fail here, not in a repository.
  */
 import { createHash, createHmac } from "node:crypto";
-import type { QuickComparison, QuickSummary } from "./quick.ts";
+import { ESTABLISHED_BY_NL } from "./evaluation.ts";
+import { lossSeen, type QuickComparison, type QuickSummary } from "./quick.ts";
 import { RULINGS, type FieldRun, type Ruling } from "./rule-register.ts";
 import { openPoint } from "./verdict.ts";
 import { compareCriterionIds } from "./wcag.ts";
 
 export const SHEET_SCHEMA = 1;
-export const SHEET_FILE = "meetblad.json";
 
 const ENGINE_PACKAGES: Record<string, string> = { "axe-core": "axe-core", alfa: "@siteimprove/alfa-rules", ibm: "accessibility-checker-engine", qualweb: "@qualweb/act-rules" };
 const OUTCOMES = ["failed", "passed", "cantTell", "inapplicable", "untested"];
@@ -123,6 +123,8 @@ export interface SheetSource {
   sweepPages: { page: string; results: { engine?: string; rule?: string; outcome?: string; nodeCount?: number }[] }[];
   /** The steps of the manifest. */
   steps: { command?: string; seconds?: number }[];
+  /** The start address of the run, from its inventory. */
+  baseUrl?: string | undefined;
   /** What tells this run from another run of the same site: the seed of its manifest, or the hash of its inventory. */
   runMark?: string | undefined;
   /** Whether a person signed the run: the signature stands in a file of its own, not in the evaluation. */
@@ -165,11 +167,18 @@ export function modelId(text: string): string | null {
   return id && /^[a-z0-9.-]{3,60}$/.test(id) ? id : null;
 }
 
-/** The address of a site as far as it tells one site from another: the origin and the first part of the path. */
+/**
+ * The address of a site as far as it tells one site from another: the host without "www." and
+ * the first part of the path, so a site under a path on a shared host is a site of its own. Not
+ * the scheme, and not a file such as index.html: the same site reached another way is the same
+ * site. Two start addresses of one site that differ in their first folder, such as / and /nl/,
+ * stay two: nothing in the address says they are one.
+ */
 export function siteAddress(baseUrl: string | undefined): string | null {
   if (!baseUrl || !URL.canParse(baseUrl)) return null;
   const url = new URL(baseUrl);
-  return `${url.origin}/${url.pathname.split("/").filter(Boolean)[0] ?? ""}`;
+  const first = url.pathname.split("/").filter(Boolean)[0] ?? "";
+  return `${url.host.toLowerCase().replace(/^www\./, "")}/${first.includes(".") ? "" : first}`;
 }
 
 export function buildSheet(source: SheetSource, key: string): RunSheet {
@@ -257,10 +266,10 @@ export function buildSheet(source: SheetSource, key: string): RunSheet {
     for (const [model, count] of [...agents].sort(([a], [b]) => a.localeCompare(b))) perRole.push({ role: name, model, agents: count });
     if ((role.notGiven ?? 0) > 0) perRole.push({ role: name, model: "notGiven", agents: role.notGiven! });
   }
-  const loss = (answer: { horizontalScroll?: boolean; offenders?: number } | undefined): boolean => Boolean(answer && (answer.horizontalScroll || (answer.offenders ?? 0) > 0));
   const collected = source.collectPages;
   const quick = source.quick ? quickPart(source.quick.summary, source.quick.comparison) : null;
-  const address = siteAddress(evaluation.site?.baseUrl ?? source.quick?.summary.site);
+  // The start address of the run, as the inventory has it: the same for an evaluation and a quick measurement of one site.
+  const address = siteAddress(source.baseUrl ?? evaluation.site?.baseUrl ?? source.quick?.summary.site);
   const byRule = <T extends { rule: string }>(a: T, b: T): number => a.rule.localeCompare(b.rule, "en", { numeric: true });
 
   return {
@@ -287,7 +296,8 @@ export function buildSheet(source: SheetSource, key: string): RunSheet {
         outcome: outcome(criterion.outcome) ?? "untested",
         basis: safeWord(criterion.basis, /^[a-z-]{1,40}$/),
         agreement: safeWord(criterion.agreement, /^[a-z-]{1,40}$/),
-        establishedBy: safeWord(criterion.established?.by, /^[a-z-]{1,40}$/),
+        // One of the ways loep knows, as it writes them: `sessionWatch` has a capital.
+        establishedBy: typeof criterion.established?.by === "string" && criterion.established.by in ESTABLISHED_BY_NL ? criterion.established.by : null,
         rounds: { a: outcome(criterion.rounds?.a), b: outcome(criterion.rounds?.b), final: outcome(criterion.rounds?.final) },
         findings: findingsBucket(criterion.findings?.length ?? 0),
         // Only the kind of an open point: the sentence after it is about the site.
@@ -298,7 +308,7 @@ export function buildSheet(source: SheetSource, key: string): RunSheet {
     sessions: [...sessions.values()].sort((a, b) => a.engine.localeCompare(b.engine) || byRule(a, b) || compareCriterionIds(a.criterion, b.criterion)),
     sweep: [...sweep.values()].map((entry) => ({ engine: entry.engine, rule: entry.rule, pagesFailed: entry.failed.size, pagesCantTell: entry.cantTell.size, pagesPassed: [...entry.passed].filter((page) => !entry.failed.has(page)).length, elementsFailed: entry.elementsFailed })).sort((a, b) => a.engine.localeCompare(b.engine) || byRule(a, b)),
     probes: collected
-      ? { pages: collected.length, reflow: collected.filter((page) => loss(page.reflow)).length, zoom: collected.filter((page) => loss(page.zoom200)).length, textSpacing: collected.filter((page) => (page.textspacing?.newlyClipped ?? 0) > 0).length, tabWalkNotCompleted: collected.filter((page) => page.tabwalk?.outcome !== undefined && page.tabwalk.outcome !== "completed").length }
+      ? { pages: collected.length, reflow: collected.filter((page) => lossSeen(page.reflow)).length, zoom: collected.filter((page) => lossSeen(page.zoom200)).length, textSpacing: collected.filter((page) => (page.textspacing?.newlyClipped ?? 0) > 0).length, tabWalkNotCompleted: collected.filter((page) => page.tabwalk?.outcome !== undefined && page.tabwalk.outcome !== "completed").length }
       : null,
     gate: source.gate ? { sufficient: source.gate.sufficient === true, exploreRounds: source.gate.exploreRound ?? 0, resweeps: source.gate.resweeps ?? 0, accepted: source.gate.accepted?.length ?? 0 } : null,
     defects: { total: evaluation.defects?.length ?? 0, bySeverity: count(evaluation.defects ?? [], (defect) => safeWord(defect.severity, /^[a-z]{1,20}$/)), byOwner: count(evaluation.defects ?? [], (defect) => safeWord(defect.owner, /^[a-z]{1,20}$/)) },
@@ -349,36 +359,46 @@ function runIdentity(source: SheetSource): string {
 
 const SHEET_FIELDS = ["schema", "kind", "id", "siteKey", "month", "toolbox", "browser", "engines", "models", "modelsPerRole", "followsUp", "purpose", "technologies", "size", "criteria", "rulings", "sessions", "sweep", "probes", "gate", "defects", "human", "seconds", "sessionsPerRole", "quick"];
 
-/** Every string in a value, also the names of its fields. */
-function stringsOf(value: unknown, into: string[] = []): string[] {
-  if (typeof value === "string") into.push(value);
-  else if (Array.isArray(value)) for (const entry of value) stringsOf(entry, into);
-  else if (value && typeof value === "object") for (const [name, entry] of Object.entries(value)) stringsOf(entry, stringsOf(name, into));
+/** Every string in a value with where it stands, also the names of its fields. */
+function stringsOf(value: unknown, at = "", into: { at: string; text: string }[] = []): { at: string; text: string }[] {
+  if (typeof value === "string") into.push({ at, text: value });
+  else if (Array.isArray(value)) for (const entry of value) stringsOf(entry, at, into);
+  else if (value && typeof value === "object") {
+    for (const [name, entry] of Object.entries(value)) {
+      into.push({ at: at || name, text: name });
+      stringsOf(entry, at ? `${at}.${name}` : name, into);
+    }
+  }
   return into;
 }
 
 /**
  * What is wrong with a sheet: a field that is not one of its own, a value that is not a word of
- * loep, something that looks like an address, or the host of the site. A sheet holds none of these
- * by construction; this is the check that it stays so. It holds a sheet to what it may contain,
- * not to a list of words of the site: a site called "open" has a sheet full of the field `open`.
+ * loep, something that looks like an address, or the host or name of the site. A sheet holds none
+ * of these by construction; this is the check that it stays so. It holds a sheet to what it may
+ * contain, not to a list of words of the site: a site called "open" has a sheet full of the field
+ * `open`, and a site on the host "web" a sheet full of "qualweb".
+ *
+ * Each problem names the kind and the field, never the value: what is said here is passed on to
+ * the makers of loep, in the open.
  */
 export function sheetLeaks(sheet: RunSheet, site: { baseUrl?: string | undefined; names?: readonly (string | undefined)[] }): string[] {
   const found = new Set<string>();
-  for (const field of Object.keys(sheet)) if (!SHEET_FIELDS.includes(field)) found.add(`een veld dat niet op een meetblad hoort: ${field}`);
+  for (const field of Object.keys(sheet)) if (!SHEET_FIELDS.includes(field)) found.add("een veld dat niet op een meetblad hoort");
   const strings = stringsOf(sheet);
-  for (const text of strings) {
-    if (!/^[\w.:+ ()-]{1,80}$/.test(text)) found.add(`een waarde die geen woord van loep is: ${text.slice(0, 40)}`);
-    else if (/https?:|\/\//i.test(text) || /[a-z0-9-]+\.(nl|com|org|net|eu|app|io|dev|be|de|info|frl|amsterdam)\b/i.test(text)) found.add("een adres");
+  for (const { at, text } of strings) {
+    if (!/^[\w.:+ ()-]{1,80}$/.test(text)) found.add(`een waarde die geen woord van loep is, in ${at}`);
+    else if (/https?:|\/\//i.test(text) || /[a-z0-9-]+\.(nl|com|org|net|eu|app|io|dev|be|de|info|frl|amsterdam)\b/i.test(text)) found.add(`een adres, in ${at}`);
   }
-  for (const technology of sheet.technologies) if (!TECHNOLOGIES.includes(technology)) found.add(`een techniek die loep niet kent: ${technology.slice(0, 40)}`);
-  const host = site.baseUrl && URL.canParse(site.baseUrl) ? new URL(site.baseUrl).hostname.toLowerCase() : null;
-  // The host of the site, whole or without "www.", anywhere in a value.
-  if (host) for (const text of strings) if (text.toLowerCase().includes(host) || text.toLowerCase().includes(host.replace(/^www\./, ""))) found.add(host);
-  // The name of the site as a model or a rule: the strings an agent or an engine gave, not the words of the sheet itself. A site called "open" has a sheet full of the field `open`.
+  if (sheet.technologies.some((technology) => !TECHNOLOGIES.includes(technology))) found.add("een techniek die loep niet kent, in technologies");
+  // The strings an agent or an engine gave: a model, a rule. Everything else on a sheet is a word of loep itself.
+  const given = [...sheet.models.map((text) => ({ at: "models", text })), ...sheet.modelsPerRole.map((entry) => ({ at: "modelsPerRole", text: entry.model })), ...sheet.rulings.map((entry) => ({ at: "rulings", text: entry.rule })), ...sheet.sessions.map((entry) => ({ at: "sessions", text: entry.rule })), ...sheet.sweep.map((entry) => ({ at: "sweep", text: entry.rule })), ...(sheet.quick?.rules ?? []).map((entry) => ({ at: "quick.rules", text: entry.rule }))];
+  const host = site.baseUrl && URL.canParse(site.baseUrl) ? new URL(site.baseUrl).hostname.toLowerCase().replace(/^www\./, "") : null;
+  // A host with a dot in it is no word of loep: anywhere in a value it is the site. A host of one word, such as "web" in a pipeline, is part of many words of loep, and counts only as a whole value an agent or engine gave.
+  if (host && host.includes(".")) for (const { at, text } of strings) if (text.toLowerCase().includes(host)) found.add(`de host van de site, in ${at}`);
+  if (host && !host.includes(".")) for (const { at, text } of given) if (text.toLowerCase() === host) found.add(`de host van de site, in ${at}`);
   const names = (site.names ?? []).filter((name): name is string => typeof name === "string" && name.trim().length >= 4).map((name) => name.trim().toLowerCase());
-  const given = [...sheet.models, ...sheet.modelsPerRole.map((entry) => entry.model), ...sheet.rulings.map((entry) => entry.rule), ...sheet.sessions.map((entry) => entry.rule), ...sheet.sweep.map((entry) => entry.rule), ...(sheet.quick?.rules ?? []).map((entry) => entry.rule)];
-  for (const text of given) if (names.includes(text.trim().toLowerCase())) found.add(text.trim().toLowerCase());
+  for (const { at, text } of given) if (names.includes(text.trim().toLowerCase())) found.add(`de naam van de site, in ${at}`);
   return [...found].sort();
 }
 

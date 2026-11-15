@@ -261,9 +261,11 @@ export interface QuickSummary {
 const TOP_FINDINGS = 50;
 const GROUND_ORDER: QuickSignal["ground"][] = ["engines-agree", "probe", "engine-alone", "engines-contradict"];
 
-const engineName = (implementation: string): string => (implementation === "accessibility-checker-engine" ? "ibm" : implementation);
+/** The id of an engine as loep names it, out of the name of its package. */
+export const engineName = (implementation: string): string => (implementation === "accessibility-checker-engine" ? "ibm" : implementation);
 
-const lossSeen = (answer: LayoutAnswer | null): boolean => Boolean(answer && (answer.horizontalScroll || (answer.offenders ?? 0) > 0));
+/** Whether a layout probe saw content fall outside the window. */
+export const lossSeen = (answer: Pick<LayoutAnswer, "horizontalScroll" | "offenders"> | null | undefined): boolean => Boolean(answer && (answer.horizontalScroll || (answer.offenders ?? 0) > 0));
 
 const plural = (count: number, one: string, more: string): string => `${count} ${count === 1 ? one : more}`;
 

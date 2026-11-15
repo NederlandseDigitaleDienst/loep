@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { chmodSync } from "node:fs";
-import { contribute, contributeAll, contributionNl, contributorKey, manyContributionsNl, runsUnder, sessionElements } from "../src/commands/contribute.ts";
+import { contribute, contributeAll, contributionNl, contributorKey, defaultKeyFile, manyContributionsNl, runsUnder, sessionElements } from "../src/commands/contribute.ts";
 import { buildRegister, type RuleCatalogue } from "../src/lib/rule-register.ts";
 import { buildSheet, fieldRunOfSheet, findingsBucket, modelId, populationBucket, sheetLeaks, siteAddress, TECHNOLOGIES, type SheetSource } from "../src/lib/run-sheet.ts";
 
@@ -129,9 +129,15 @@ test("the key of a site is the same for one contributor and different for anothe
   assert.notEqual(mine.siteKey, buildSheet(SOURCE, "hun-sleutel").siteKey);
   assert.match(mine.siteKey, /^[0-9a-f]{16}$/);
   // A site under a path on a shared host is a site of its own; a page deeper is not.
-  assert.equal(siteAddress("https://www.voorbeeldstad.nl/inwoners/afval/"), "https://www.voorbeeldstad.nl/inwoners");
-  assert.equal(siteAddress("https://www.voorbeeldstad.nl/"), "https://www.voorbeeldstad.nl/");
+  assert.equal(siteAddress("https://www.voorbeeldstad.nl/inwoners/afval/"), "voorbeeldstad.nl/inwoners");
+  // The same site reached another way is the same site: with or without www, over http, by its index file, in capitals.
+  for (const address of ["https://voorbeeldstad.nl/", "https://www.voorbeeldstad.nl/", "http://voorbeeldstad.nl/", "https://voorbeeldstad.nl/index.html", "https://WWW.Voorbeeldstad.NL"]) assert.equal(siteAddress(address), "voorbeeldstad.nl/", address);
+  // A port tells one site on a machine from another.
+  assert.equal(siteAddress("http://localhost:8080/"), "localhost:8080/");
   assert.equal(siteAddress(undefined), null);
+  // An evaluation and a quick measurement of one site, from the same contributor: one key, by the start address of the inventory.
+  const quick = buildSheet({ ...SOURCE, baseUrl: "https://voorbeeldstad.nl/inwoners/index.html", evaluation: { criteria: [] } }, "mijn-sleutel");
+  assert.equal(quick.siteKey, mine.siteKey);
 });
 
 test("the id is of the run: the same after it is evaluated or weighed again, another for a second judging or another run", () => {
@@ -154,26 +160,36 @@ test("the id is of the run: the same after it is evaluated or weighed again, ano
   assert.notEqual(id({ evaluation: old("passed") }), id({ evaluation: old("failed") }));
 });
 
-test("the check holds a sheet to what it may contain, and a site with an ordinary name is not refused", () => {
+test("the check holds a sheet to what it may contain, and a site with an ordinary name or host is not refused", () => {
   const sheet = buildSheet(SOURCE, "een-sleutel");
   // Names that are words of the sheet itself: the field `open`, `siteKey`, a year, a number.
   for (const site of [{ baseUrl: "https://open.overheid.nl/" }, { baseUrl: "https://www.example.nl/jaarverslag/2026/", names: ["Demo site"] }, { baseUrl: "http://127.0.0.1:8080/" }, { baseUrl: "https://www.voorbeeld.nl/", names: ["Open", "HTML", "judge"] }]) {
     assert.deepEqual(sheetLeaks(sheet, site), [], JSON.stringify(site));
   }
+  // A host of one word, as in a pipeline: part of "qualweb", "inapplicable", "siteKey" and "untested", and no leak.
+  for (const host of ["web", "app", "site", "test", "localhost"]) assert.deepEqual(sheetLeaks(sheet, { baseUrl: `http://${host}:8080/` }), [], host);
+  // That same host as a model or a rule an agent gave is one.
+  assert.deepEqual(sheetLeaks({ ...sheet, models: ["web"] }, { baseUrl: "http://web:8080/" }), ["de host van de site, in models"]);
   const site = { baseUrl: EVALUATION.site.baseUrl, names: [EVALUATION.site.name, EVALUATION.site.organisation] };
   assert.deepEqual(sheetLeaks(sheet, site), []);
-  // The host of the site in a value, with or without www.
-  assert.deepEqual(sheetLeaks({ ...sheet, purpose: "www.voorbeeldstad.nl" }, site), ["een adres", "www.voorbeeldstad.nl"]);
-  assert.deepEqual(sheetLeaks({ ...sheet, models: ["voorbeeldstad.nl-model"] }, site), ["een adres", "www.voorbeeldstad.nl"]);
+  // The host of the site in a value, with or without www. What is said names the kind and the field, never the value: it is passed on in the open.
+  assert.deepEqual(sheetLeaks({ ...sheet, purpose: "www.voorbeeldstad.nl" }, site), ["de host van de site, in purpose", "een adres, in purpose"]);
+  assert.deepEqual(sheetLeaks({ ...sheet, models: ["voorbeeldstad.nl-model"] }, site), ["de host van de site, in models", "een adres, in models"]);
   // The name of the site where an agent or an engine gave a string: as a model, as a rule.
-  assert.deepEqual(sheetLeaks({ ...sheet, models: ["Voorbeeldstad"] }, site), ["voorbeeldstad"]);
-  assert.deepEqual(sheetLeaks({ ...sheet, sweep: [{ ...sheet.sweep[0]!, rule: "voorbeeldstad" }] }, site), ["voorbeeldstad"]);
+  assert.deepEqual(sheetLeaks({ ...sheet, models: ["Voorbeeldstad"] }, site), ["de naam van de site, in models"]);
+  assert.deepEqual(sheetLeaks({ ...sheet, sweep: [{ ...sheet.sweep[0]!, rule: "voorbeeldstad" }] }, site), ["de naam van de site, in sweep"]);
   // Anything that is not a word of loep, a technology it does not know, a field that is not of a sheet.
-  assert.deepEqual(sheetLeaks({ ...sheet, purpose: "zie https://elders.test" }, site), ["een waarde die geen woord van loep is: zie https://elders.test"]);
-  assert.deepEqual(sheetLeaks({ ...sheet, purpose: "elders.nl" }, site), ["een adres"]);
-  assert.deepEqual(sheetLeaks({ ...sheet, purpose: "een zin, met een komma" }, site), ["een waarde die geen woord van loep is: een zin, met een komma"]);
-  assert.deepEqual(sheetLeaks({ ...sheet, technologies: ["Thema Voorbeeld"] }, site), ["een techniek die loep niet kent: Thema Voorbeeld"]);
-  assert.deepEqual(sheetLeaks({ ...sheet, pagina: "x" } as never, site), ["een veld dat niet op een meetblad hoort: pagina"]);
+  assert.deepEqual(sheetLeaks({ ...sheet, purpose: "zie https://elders.test" }, site), ["een waarde die geen woord van loep is, in purpose"]);
+  assert.deepEqual(sheetLeaks({ ...sheet, purpose: "elders.nl" }, site), ["een adres, in purpose"]);
+  assert.deepEqual(sheetLeaks({ ...sheet, technologies: ["Thema Voorbeeld"] }, site), ["een techniek die loep niet kent, in technologies"]);
+  assert.deepEqual(sheetLeaks({ ...sheet, pagina: "x" } as never, site), ["een veld dat niet op een meetblad hoort"]);
+  for (const leak of sheetLeaks({ ...sheet, purpose: "www.voorbeeldstad.nl", models: ["Voorbeeldstad"], technologies: ["Thema Voorbeeldstad"] }, site)) assert.doesNotMatch(leak, /voorbeeld/i);
+});
+
+test("how a criterion was established is copied as loep writes it, capital and all", () => {
+  const by = (value: string) => buildSheet({ ...SOURCE, evaluation: { ...EVALUATION, criteria: [{ id: "2.2.1", outcome: "passed", established: { by: value } }] } }, "een-sleutel").criteria[0]!.establishedBy;
+  assert.deepEqual(["verification", "finishing", "person", "sessionWatch"].map(by), ["verification", "finishing", "person", "sessionWatch"]);
+  assert.equal(by("iets van voorbeeldstad"), null);
 });
 
 test("the id of a model out of what an agent wrote", () => {
@@ -233,7 +249,11 @@ test("contribute reads a run, writes nothing in it, and writes the sheet under i
   mkdirSync(join(run, "besluiten"));
   for (const [id, decision] of [["G-1", "opgelost"], ["G-2", "opgelost"], ["G-3", "gepland"]]) writeFileSync(join(run, "besluiten", `${id}.json`), JSON.stringify({ decision, name: "Een Naam", role: "webredacteur", summaryNl: "Hersteld op voorbeeldstad.nl" }));
   writeFileSync(join(run, "besluiten", "index.json"), JSON.stringify({ decisions: 3 }));
-  for (const finding of ["VOOR-2.4.4-1a2b", "VOOR-1.1.1-3c4d"]) mkdirSync(join(run, "rechecks", finding), { recursive: true });
+  // Two rechecks that were ordered and never measured: no finding was measured again.
+  for (const finding of ["VOOR-2.4.4-1a2b", "VOOR-1.1.1-3c4d"]) {
+    mkdirSync(join(run, "rechecks", finding, "2026-11-10T10-00-00Z"), { recursive: true });
+    writeFileSync(join(run, "rechecks", finding, "2026-11-10T10-00-00Z", "opdracht.json"), JSON.stringify({ criterion: "2.4.4", findings: [{ id: finding, titleNl: "Link van Voorbeeldstad" }] }));
+  }
   writeFileSync(join(run, "rechecks", "nametingen.md"), "# Nametingen van voorbeeldstad.nl");
   mkdirSync(join(run, "verklaring"));
   writeFileSync(join(run, "verklaring", "verklaring.json"), JSON.stringify({ status: "B", site: { name: "Voorbeeldstad" }, signature: { name: "Een Naam" } }));
@@ -252,13 +272,16 @@ test("contribute reads a run, writes nothing in it, and writes the sheet under i
   // What people did with the run, as counts: decisions per kind, findings measured again, the status of the statement. Not who.
   // Signed: the signature stands in signed/signature.json, as `sign` writes it, and not in the evaluation.
   assert.equal(JSON.parse(SOURCE.evaluationText).signature, undefined);
-  assert.deepEqual(dry.sheet.human, { signed: true, criteriaByPerson: 1, decisions: { gepland: 1, opgelost: 2 }, rechecks: 2, statement: "B" });
+  assert.deepEqual(dry.sheet.human, { signed: true, criteriaByPerson: 1, decisions: { gepland: 1, opgelost: 2 }, rechecks: 0, statement: "B" });
   assert.deepEqual(dry.sheet.probes, { pages: 3, reflow: 2, zoom: 1, textSpacing: 1, tabWalkNotCompleted: 1 });
   assert.deepEqual(dry.sheet.gate, { sufficient: true, exploreRounds: 2, resweeps: 1, accepted: 1 });
   assert.doesNotMatch(JSON.stringify(dry.sheet), /Een Naam|webredacteur|voorbeeld/i);
   assert.match(contributionNl(dry), /Niets geschreven\. Met --out <map> komt het meetblad in die map\. Er wordt niets verstuurd\./);
   assert.match(contributionNl(dry), /Niet erop: het adres en de naam van de site/);
   assert.doesNotMatch(contributionNl(dry), /voorbeeld/i);
+  // A refusal names the kind and the field, and not the value: the line is what gets reported, in the open.
+  const refused = contributionNl({ sheet: dry.sheet, leaks: ["de host van de site, in purpose"], file: null, evaluatedAt: "" });
+  assert.match(refused, /GEWEIGERD: op het meetblad staat iets dat er niet hoort: de host van de site, in purpose\. Het is niet geschreven\./);
 
   const out = join(folder, "meetbladen");
   const written = contribute(run, { outDir: out, key: "een-sleutel" });
@@ -307,6 +330,9 @@ test("every finished run under a folder gives a sheet, and the same run in two f
   assert.doesNotMatch(text.replace(out, ""), /voorbeeldstad|anderestad|kopie/);
   // Without a folder to write in: the same count, nothing written.
   assert.deepEqual([contributeAll(root, { key: "een-sleutel" }).written, contributeAll(root, { key: "een-sleutel" }).sheets.length], [0, 2]);
+  // A folder that is not there is a mistyped path, not a folder without runs.
+  assert.throws(() => runsUnder(join(root, "bestaat-niet")), /bestaat niet of is geen map/);
+  assert.throws(() => contributeAll(join(root, "een-bestand-dat-er-niet-is"), { key: "een-sleutel" }), /bestaat niet of is geen map/);
   // A folder that cannot be written in is said out loud: nothing would be contributed.
   writeFileSync(join(root, "een-bestand"), "geen map");
   assert.throws(() => contributeAll(root, { outDir: join(root, "een-bestand", "meetbladen"), key: "een-sleutel" }), /ENOTDIR|EEXIST/);
@@ -346,7 +372,7 @@ test("a quick measurement gives a sheet too: per rule the places on a strong and
   // The same site as the evaluation above, from the same contributor: the same key.
   assert.equal(sheet.siteKey, buildSheet(SOURCE, "een-sleutel").siteKey);
   assert.doesNotMatch(JSON.stringify(sheet), /voorbeeld|inwoners|afval|cookiemelding|http/i);
-  assert.match(contributionNl({ sheet, leaks, file: null }), /Meetblad [0-9a-f]{16} van een snelle meting: loep 0\.32\.0, 2026-11, 2 pagina's\./);
+  assert.match(contributionNl({ sheet, leaks, file: null, evaluatedAt: "" }), /Meetblad [0-9a-f]{16} van een snelle meting: loep 0\.32\.0, 2026-11, 2 pagina's\./);
 });
 
 test("the key of a contributor is made once, for that person only, and not by someone who only looks", () => {
@@ -366,4 +392,17 @@ test("the key of a contributor is made once, for that person only, and not by so
   assert.throws(() => contributorKey(file), /bevat geen sleutel van 32 tekens of meer/);
   writeFileSync(file, "kort\n");
   assert.throws(() => contributorKey(file, false), /bevat geen sleutel/);
+  // An empty XDG_CONFIG_HOME, or one that is no full path, counts as not set: the key must not land in the folder the command runs from.
+  const before = process.env.XDG_CONFIG_HOME;
+  try {
+    for (const value of ["", "relatief/pad"]) {
+      process.env.XDG_CONFIG_HOME = value;
+      assert.match(defaultKeyFile(), /^\/.*\/\.config\/loep\/bijdrage\.sleutel$/, JSON.stringify(value));
+    }
+    process.env.XDG_CONFIG_HOME = "/een/eigen/map";
+    assert.equal(defaultKeyFile(), "/een/eigen/map/loep/bijdrage.sleutel");
+  } finally {
+    if (before === undefined) delete process.env.XDG_CONFIG_HOME;
+    else process.env.XDG_CONFIG_HOME = before;
+  }
 });
