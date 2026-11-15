@@ -245,7 +245,7 @@ interface Wanted {
 
 interface Measured extends PageMeasurement {
   /** Per engine the rules that gave an outcome, with the ACT rules the engine names for them. */
-  seen: Partial<Record<EngineId, Record<string, string[]>>>;
+  seen: Partial<Record<EngineId, Record<string, SeenRule>>>;
   refused: number;
 }
 
@@ -339,7 +339,7 @@ async function measurePage(browser: Browser, url: string, origin: string, wanted
     const rules = await runRuleEngines(page, browsers);
     for (const method of rules.methods) {
       const engine = engineOf(method);
-      measured.seen[engine] = Object.fromEntries(Object.entries(method.result.rules).map(([rule, info]) => [rule, info.act]));
+      measured.seen[engine] = Object.fromEntries(Object.entries(method.result.rules).map(([rule, info]) => [rule, { act: info.act, criteria: info.criteria, ...(info.title ? { title: info.title } : {}) }]));
       measured.engines[engine] = {};
     }
     for (const failure of rules.failed) measured.engines[engineOf(failure)] = failure.reason;
@@ -377,6 +377,16 @@ async function measurePage(browser: Browser, url: string, origin: string, wanted
   }
 }
 
+/** What an engine says about a rule it ran: the ACT rules it implements and the success criteria it reports under. */
+export interface SeenRule {
+  act: string[];
+  criteria: string[];
+  title?: string;
+}
+
+/** Every rule an engine ran on the test cases, with what the engine says about it: the list a rule register starts from. */
+export type RuleCatalogue = Record<EngineId, Record<string, SeenRule>>;
+
 export interface CalibrateOptions {
   /** The directory with the cached copy of the test cases. */
   dir: string;
@@ -388,7 +398,7 @@ export interface CalibrateOptions {
 }
 
 /** Run the calibration on a cached copy of the test cases and give the report and the outcome per case. */
-export async function runCalibration(options: CalibrateOptions): Promise<{ report: CalibrationReport; cases: ReturnType<typeof calibrate>["cases"] }> {
+export async function runCalibration(options: CalibrateOptions): Promise<{ report: CalibrationReport; cases: ReturnType<typeof calibrate>["cases"]; rules: RuleCatalogue }> {
   const log = options.log ?? (() => undefined);
   const concurrency = Math.max(1, options.concurrency ?? 4);
   const started = Date.now();
@@ -398,7 +408,7 @@ export async function runCalibration(options: CalibrateOptions): Promise<{ repor
   const server = await serveTestcases(options.dir);
   const browser = await launchBrowser();
   const pages = new Map<string, PageMeasurement>();
-  const seen: Partial<Record<EngineId, Record<string, string[]>>> = {};
+  const seen: Partial<Record<EngineId, Record<string, SeenRule>>> = {};
   let refused = 0;
   let statics: { axe: Record<string, string[]>; ibm: Catalogue };
   try {
@@ -444,7 +454,7 @@ export async function runCalibration(options: CalibrateOptions): Promise<{ repor
     "axe-core": Object.fromEntries(Object.entries(statics.axe).map(([rule, act]) => [rule, { act, runs: ran("axe-core").includes(rule) }])),
     alfa: Object.fromEntries([...new Set([...ran("alfa"), ...Object.keys(alfa.perRule)])].map((rule) => [rule, { act: alfa.perRule[rule] ?? [], runs: ran("alfa").includes(rule) }])),
     ibm: statics.ibm,
-    qualweb: Object.fromEntries(Object.entries(seen.qualweb ?? {}).map(([rule, act]) => [rule, { act, runs: true }])),
+    qualweb: Object.fromEntries(Object.entries(seen.qualweb ?? {}).map(([rule, info]) => [rule, { act: info.act, runs: true }])),
   };
   const counted = calibrate(testcases, pages, catalogues);
   const chain = toolchain(browser.version());
@@ -478,13 +488,18 @@ export async function runCalibration(options: CalibrateOptions): Promise<{ repor
     run: { seconds: Math.round((Date.now() - started) / 100) / 10, concurrency, pagesMeasured: pages.size, pagesNotLoaded: [...pages.values()].filter((page) => page.loadError).length, requestsRefused: refused, only: options.only ?? null },
     ...rest,
   };
-  return { report, cases };
+  // Sorted, so two calibrations lie next to each other line by line.
+  const sorted = (rules: Record<string, SeenRule>): Record<string, SeenRule> => Object.fromEntries(Object.entries(rules).sort(([a], [b]) => a.localeCompare(b, "en", { numeric: true })));
+  const rules = Object.fromEntries(ENGINE_IDS.map((engine) => [engine, sorted(seen[engine] ?? {})])) as RuleCatalogue;
+  // Alfa's package names no ACT rules; the report W3C publishes does, and the calibration counts by it.
+  for (const [rule, info] of Object.entries(rules.alfa)) if (info.act.length === 0 && alfa.perRule[rule]) info.act = [...alfa.perRule[rule]].sort();
+  return { report, cases, rules };
 }
 
 const USAGE = `loep calibrate [--out <dir>] [--only <ACT rule ids>] [--concurrency <n>] [--commit <sha>]
 
 Measures every instrument of the toolbox against the test cases of the ACT rules of W3C and
-writes uitkomst.json, uitkomst.md and gevallen.json. Not a step of an evaluation.
+writes uitkomst.json, uitkomst.md, gevallen.json and regels.json. Not a step of an evaluation.
 
   --out <dir>          Where to write (default: validatie/ijkset/<today> in the repository)
   --only <ids>         Only the cases of these ACT rules, comma-separated; the outcome then says it is not complete
@@ -505,13 +520,15 @@ export async function cli(argv: string[]): Promise<void> {
   const commit = values.commit ?? ACT_SOURCE.commit;
   const dir = await fetchTestcases(commit, log);
   const only = values.only?.split(",").map((id) => id.trim()).filter(Boolean);
-  const { report, cases } = await runCalibration({ dir, commit, ...(only && only.length > 0 ? { only } : {}), ...(values.concurrency ? { concurrency: Number(values.concurrency) } : {}), log });
+  const { report, cases, rules } = await runCalibration({ dir, commit, ...(only && only.length > 0 ? { only } : {}), ...(values.concurrency ? { concurrency: Number(values.concurrency) } : {}), log });
   const out = values.out ?? join(TOOLBOX_ROOT, "..", "validatie", "ijkset", report.date);
   await mkdir(out, { recursive: true });
   await writeFile(join(out, "uitkomst.json"), `${JSON.stringify(report, null, 2)}\n`);
   await writeFile(join(out, "uitkomst.md"), calibrationMarkdown(report));
   // One case per line, so two measurements can be laid next to each other.
   await writeFile(join(out, "gevallen.json"), `[\n${cases.map((entry) => JSON.stringify(entry)).join(",\n")}\n]\n`);
+  // Every rule an engine ran, also the ones no ACT rule stands behind: what a rule register starts from.
+  await writeFile(join(out, "regels.json"), `${JSON.stringify(rules, null, 2)}\n`);
   for (const instrument of report.instruments) {
     const total = report.totals[instrument.id]!;
     if (total.judged > 0) process.stdout.write(`${instrument.id}: ${total.judged} gevallen, ${total.found} terecht gevonden, ${total.missed} gemist, ${total.falseAlarm} onterecht gemeld, ${total.unsureOnFailure + total.unsureOnOther} twijfel\n`);

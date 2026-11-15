@@ -18,6 +18,7 @@ De gevallen komen in een map buiten de repository: de map uit de omgevingsvariab
 |---|---|
 | `uitkomst.md` | De leesbare uitkomst: bron en hashes, versies, totalen per instrument, de regelsets naast elkaar, en een tabel per ACT-regel |
 | `uitkomst.json` | Dezelfde uitkomst als gegevens, met de gevallen waarop de regelsets het oneens zijn |
+| `regels.json` | Per regelset elke regel die op de gevallen draaide, met de criteria en de ACT-regels die de regelset er zelf bij noemt. Ook de regels waar geen ACT-regel achter staat. Hieruit begint het regelregister, zie [../regelregister/README.md](../regelregister/README.md) |
 | `gevallen.json` | Per testgeval de verwachte uitkomst en wat elk instrument zei. Alleen het nummer van de regel en van het geval; de pagina zelf niet |
 
 ## Bron

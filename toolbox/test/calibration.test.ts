@@ -192,8 +192,16 @@ test("the copy of the test cases is described by its hashes and served under the
 });
 
 test("a run on a handful of own cases: every rule set finds the button without a name, and nothing is asked outside this machine", async () => {
-  const { report, cases } = await runCalibration({ dir: FIXTURE, commit: "een-commit", concurrency: 2 });
+  const { report, cases, rules: catalogue } = await runCalibration({ dir: FIXTURE, commit: "een-commit", concurrency: 2 });
   assert.equal(report.run.pagesMeasured, 7);
+  // Every rule an engine ran is listed with what the engine says about it, also a rule no ACT rule stands behind: a rule register starts from this.
+  assert.deepEqual(Object.keys(catalogue), ["axe-core", "alfa", "ibm", "qualweb"]);
+  assert.deepEqual(catalogue["axe-core"]["button-name"]!.criteria, ["4.1.2"]);
+  assert.ok(catalogue["axe-core"]["button-name"]!.act.includes("97a4e1"));
+  assert.ok(Object.values(catalogue.qualweb).some((rule) => rule.act.length === 0 && rule.criteria.length > 0), "geen regel van QualWeb zonder ACT-regel in de lijst");
+  // Alfa's package names no ACT rule; the list takes it from the report in the copy.
+  assert.deepEqual(catalogue.alfa["sia-r12"]!.act, ["97a4e1"]);
+  for (const engine of ["axe-core", "alfa", "ibm", "qualweb"] as const) assert.deepEqual(Object.keys(catalogue[engine]), Object.keys(catalogue[engine]).sort((a, b) => a.localeCompare(b, "en", { numeric: true })), `${engine} staat niet op volgorde`);
   assert.equal(report.run.pagesNotLoaded, 0);
   // One page names an image on another machine; the request was refused.
   assert.ok(report.run.requestsRefused >= 1, "het verzoek naar buiten is niet geweigerd");

@@ -1,0 +1,2773 @@
+{
+  "axe-core": {
+    "area-alt": {
+      "act": [
+        "c487ae"
+      ],
+      "criteria": [
+        "2.4.4",
+        "4.1.2"
+      ],
+      "title": "Active <area> elements must have alternative text"
+    },
+    "aria-allowed-attr": {
+      "act": [
+        "5c01ea"
+      ],
+      "criteria": [
+        "4.1.2"
+      ],
+      "title": "Elements must only use supported ARIA attributes"
+    },
+    "aria-braille-equivalent": {
+      "act": [],
+      "criteria": [
+        "4.1.2"
+      ],
+      "title": "aria-braille attributes must have a non-braille equivalent"
+    },
+    "aria-command-name": {
+      "act": [
+        "97a4e1"
+      ],
+      "criteria": [
+        "4.1.2"
+      ],
+      "title": "ARIA commands must have an accessible name"
+    },
+    "aria-conditional-attr": {
+      "act": [
+        "5c01ea"
+      ],
+      "criteria": [
+        "4.1.2"
+      ],
+      "title": "ARIA attributes must be used as specified for the element's role"
+    },
+    "aria-deprecated-role": {
+      "act": [
+        "674b10"
+      ],
+      "criteria": [
+        "4.1.2"
+      ],
+      "title": "Deprecated ARIA roles must not be used"
+    },
+    "aria-hidden-body": {
+      "act": [],
+      "criteria": [
+        "1.3.1",
+        "4.1.2"
+      ],
+      "title": "aria-hidden=\"true\" must not be present on the document body"
+    },
+    "aria-hidden-focus": {
+      "act": [
+        "6cfa84"
+      ],
+      "criteria": [
+        "4.1.2"
+      ],
+      "title": "ARIA hidden element must not be focusable or contain focusable elements"
+    },
+    "aria-input-field-name": {
+      "act": [
+        "e086e5"
+      ],
+      "criteria": [
+        "4.1.2"
+      ],
+      "title": "ARIA input fields must have an accessible name"
+    },
+    "aria-meter-name": {
+      "act": [],
+      "criteria": [
+        "1.1.1"
+      ],
+      "title": "ARIA meter nodes must have an accessible name"
+    },
+    "aria-progressbar-name": {
+      "act": [],
+      "criteria": [
+        "1.1.1"
+      ],
+      "title": "ARIA progressbar nodes must have an accessible name"
+    },
+    "aria-prohibited-attr": {
+      "act": [
+        "5c01ea"
+      ],
+      "criteria": [
+        "4.1.2"
+      ],
+      "title": "Elements must only use permitted ARIA attributes"
+    },
+    "aria-required-attr": {
+      "act": [
+        "4e8ab6"
+      ],
+      "criteria": [
+        "4.1.2"
+      ],
+      "title": "Required ARIA attributes must be provided"
+    },
+    "aria-required-children": {
+      "act": [
+        "bc4a75",
+        "ff89c9"
+      ],
+      "criteria": [
+        "1.3.1"
+      ],
+      "title": "Certain ARIA roles must contain particular children"
+    },
+    "aria-required-parent": {
+      "act": [
+        "ff89c9"
+      ],
+      "criteria": [
+        "1.3.1"
+      ],
+      "title": "Certain ARIA roles must be contained by particular parents"
+    },
+    "aria-roles": {
+      "act": [
+        "674b10"
+      ],
+      "criteria": [
+        "4.1.2"
+      ],
+      "title": "ARIA roles used must conform to valid values"
+    },
+    "aria-tab-name": {
+      "act": [],
+      "criteria": [
+        "4.1.2"
+      ],
+      "title": "ARIA tab nodes must have an accessible name"
+    },
+    "aria-toggle-field-name": {
+      "act": [
+        "e086e5"
+      ],
+      "criteria": [
+        "4.1.2"
+      ],
+      "title": "ARIA toggle fields must have an accessible name"
+    },
+    "aria-tooltip-name": {
+      "act": [],
+      "criteria": [
+        "4.1.2"
+      ],
+      "title": "ARIA tooltip nodes must have an accessible name"
+    },
+    "aria-valid-attr": {
+      "act": [
+        "5f99a7"
+      ],
+      "criteria": [
+        "4.1.2"
+      ],
+      "title": "ARIA attributes must conform to valid names"
+    },
+    "aria-valid-attr-value": {
+      "act": [
+        "6a7281"
+      ],
+      "criteria": [
+        "4.1.2"
+      ],
+      "title": "ARIA attributes must conform to valid values"
+    },
+    "autocomplete-valid": {
+      "act": [
+        "73f2c2"
+      ],
+      "criteria": [
+        "1.3.5"
+      ],
+      "title": "autocomplete attribute must be used correctly"
+    },
+    "avoid-inline-spacing": {
+      "act": [
+        "24afc2",
+        "9e45ec",
+        "78fd32"
+      ],
+      "criteria": [
+        "1.4.12"
+      ],
+      "title": "Inline text spacing must be adjustable with custom stylesheets"
+    },
+    "blink": {
+      "act": [],
+      "criteria": [
+        "2.2.2"
+      ],
+      "title": "<blink> elements are deprecated and must not be used"
+    },
+    "button-name": {
+      "act": [
+        "97a4e1",
+        "m6b1q3"
+      ],
+      "criteria": [
+        "4.1.2"
+      ],
+      "title": "Buttons must have discernible text"
+    },
+    "bypass": {
+      "act": [
+        "cf77f2",
+        "047fe0",
+        "b40fd1",
+        "3e12e1",
+        "ye5d6e"
+      ],
+      "criteria": [
+        "2.4.1"
+      ],
+      "title": "Page must have means to bypass repeated blocks"
+    },
+    "color-contrast": {
+      "act": [
+        "afw4f7",
+        "09o5cg"
+      ],
+      "criteria": [
+        "1.4.3"
+      ],
+      "title": "Elements must meet minimum color contrast ratio thresholds"
+    },
+    "definition-list": {
+      "act": [],
+      "criteria": [
+        "1.3.1"
+      ],
+      "title": "<dl> elements must only directly contain properly-ordered <dt> and <dd> groups, <script>, <template> or <div> elements"
+    },
+    "dlitem": {
+      "act": [],
+      "criteria": [
+        "1.3.1"
+      ],
+      "title": "<dt> and <dd> elements must be contained by a <dl>"
+    },
+    "document-title": {
+      "act": [
+        "2779a5"
+      ],
+      "criteria": [
+        "2.4.2"
+      ],
+      "title": "Documents must have <title> element to aid in navigation"
+    },
+    "duplicate-id-aria": {
+      "act": [
+        "3ea0c8"
+      ],
+      "criteria": [
+        "4.1.2"
+      ],
+      "title": "IDs used in ARIA and labels must be unique"
+    },
+    "form-field-multiple-labels": {
+      "act": [],
+      "criteria": [
+        "3.3.2"
+      ],
+      "title": "Form field must not have multiple label elements"
+    },
+    "frame-focusable-content": {
+      "act": [
+        "akn7bn"
+      ],
+      "criteria": [
+        "2.1.1"
+      ],
+      "title": "Frames with focusable content must not have tabindex=-1"
+    },
+    "frame-tested": {
+      "act": [],
+      "criteria": [],
+      "title": "Frames should be tested with axe-core"
+    },
+    "frame-title": {
+      "act": [
+        "cae760"
+      ],
+      "criteria": [
+        "4.1.2"
+      ],
+      "title": "Frames must have an accessible name"
+    },
+    "frame-title-unique": {
+      "act": [
+        "4b1c6c"
+      ],
+      "criteria": [
+        "4.1.2"
+      ],
+      "title": "Frames must have a unique title attribute"
+    },
+    "html-has-lang": {
+      "act": [
+        "b5c3f8"
+      ],
+      "criteria": [
+        "3.1.1"
+      ],
+      "title": "<html> element must have a lang attribute"
+    },
+    "html-lang-valid": {
+      "act": [
+        "bf051a"
+      ],
+      "criteria": [
+        "3.1.1"
+      ],
+      "title": "<html> element must have a valid value for the lang attribute"
+    },
+    "html-xml-lang-mismatch": {
+      "act": [
+        "5b7ae0"
+      ],
+      "criteria": [
+        "3.1.1"
+      ],
+      "title": "HTML elements with lang and xml:lang must have the same base language"
+    },
+    "image-alt": {
+      "act": [
+        "23a2a8"
+      ],
+      "criteria": [
+        "1.1.1"
+      ],
+      "title": "Images must have alternative text"
+    },
+    "input-button-name": {
+      "act": [
+        "97a4e1"
+      ],
+      "criteria": [
+        "4.1.2"
+      ],
+      "title": "Input buttons must have discernible text"
+    },
+    "input-image-alt": {
+      "act": [
+        "59796f"
+      ],
+      "criteria": [
+        "1.1.1",
+        "4.1.2"
+      ],
+      "title": "Image buttons must have alternative text"
+    },
+    "label": {
+      "act": [
+        "e086e5"
+      ],
+      "criteria": [
+        "4.1.2"
+      ],
+      "title": "Form elements must have labels"
+    },
+    "label-content-name-mismatch": {
+      "act": [
+        "2ee8b8"
+      ],
+      "criteria": [
+        "2.5.3"
+      ],
+      "title": "Elements must have their visible text as part of their accessible name"
+    },
+    "link-in-text-block": {
+      "act": [],
+      "criteria": [
+        "1.4.1"
+      ],
+      "title": "Links must be distinguishable without relying on color"
+    },
+    "link-name": {
+      "act": [
+        "c487ae"
+      ],
+      "criteria": [
+        "2.4.4",
+        "4.1.2"
+      ],
+      "title": "Links must have discernible text"
+    },
+    "list": {
+      "act": [],
+      "criteria": [
+        "1.3.1"
+      ],
+      "title": "<ul> and <ol> must only directly contain <li>, <script> or <template> elements"
+    },
+    "listitem": {
+      "act": [],
+      "criteria": [
+        "1.3.1"
+      ],
+      "title": "<li> elements must be contained in a <ul> or <ol>"
+    },
+    "marquee": {
+      "act": [],
+      "criteria": [
+        "2.2.2"
+      ],
+      "title": "<marquee> elements are deprecated and must not be used"
+    },
+    "meta-refresh": {
+      "act": [
+        "bc659a",
+        "bisz58"
+      ],
+      "criteria": [
+        "2.2.1"
+      ],
+      "title": "Delayed refresh under 20 hours must not be used"
+    },
+    "meta-viewport": {
+      "act": [
+        "b4f0c3"
+      ],
+      "criteria": [
+        "1.4.4"
+      ],
+      "title": "Zooming and scaling must not be disabled"
+    },
+    "nested-interactive": {
+      "act": [
+        "307n5z"
+      ],
+      "criteria": [
+        "4.1.2"
+      ],
+      "title": "Interactive controls must not be nested"
+    },
+    "no-autoplay-audio": {
+      "act": [
+        "80f0bf"
+      ],
+      "criteria": [
+        "1.4.2"
+      ],
+      "title": "<video> or <audio> elements must not play automatically"
+    },
+    "object-alt": {
+      "act": [
+        "8fc3b6"
+      ],
+      "criteria": [
+        "1.1.1"
+      ],
+      "title": "<object> elements must have alternative text"
+    },
+    "role-img-alt": {
+      "act": [
+        "23a2a8"
+      ],
+      "criteria": [
+        "1.1.1"
+      ],
+      "title": "[role=\"img\"] and [role=\"image\"] elements must have alternative text"
+    },
+    "scrollable-region-focusable": {
+      "act": [
+        "0ssw9k"
+      ],
+      "criteria": [
+        "2.1.1",
+        "2.1.3"
+      ],
+      "title": "Scrollable region must have keyboard access"
+    },
+    "select-name": {
+      "act": [
+        "e086e5"
+      ],
+      "criteria": [
+        "4.1.2"
+      ],
+      "title": "Select element must have an accessible name"
+    },
+    "server-side-image-map": {
+      "act": [],
+      "criteria": [
+        "2.1.1"
+      ],
+      "title": "Server-side image maps must not be used"
+    },
+    "summary-name": {
+      "act": [],
+      "criteria": [
+        "4.1.2"
+      ],
+      "title": "Summary elements must have discernible text"
+    },
+    "svg-img-alt": {
+      "act": [
+        "7d6734"
+      ],
+      "criteria": [
+        "1.1.1"
+      ],
+      "title": "<svg> elements with an img or image role must have alternative text"
+    },
+    "target-size": {
+      "act": [],
+      "criteria": [
+        "2.5.8"
+      ],
+      "title": "All touch targets must be 24px large, or leave sufficient space"
+    },
+    "td-headers-attr": {
+      "act": [
+        "a25f45"
+      ],
+      "criteria": [
+        "1.3.1"
+      ],
+      "title": "Table cell headers attributes must refer to other <th> elements in the same table"
+    },
+    "th-has-data-cells": {
+      "act": [
+        "d0f69e"
+      ],
+      "criteria": [
+        "1.3.1"
+      ],
+      "title": "Table headers in a data table must refer to data cells"
+    },
+    "valid-lang": {
+      "act": [
+        "de46e4"
+      ],
+      "criteria": [
+        "3.1.2"
+      ],
+      "title": "lang attribute must have a valid value"
+    },
+    "video-caption": {
+      "act": [
+        "eac66b"
+      ],
+      "criteria": [
+        "1.2.2"
+      ],
+      "title": "<video> elements must have captions"
+    }
+  },
+  "alfa": {
+    "sia-r1": {
+      "act": [
+        "2779a5"
+      ],
+      "criteria": [
+        "2.4.2"
+      ]
+    },
+    "sia-r2": {
+      "act": [
+        "23a2a8"
+      ],
+      "criteria": [
+        "1.1.1"
+      ]
+    },
+    "sia-r4": {
+      "act": [
+        "b5c3f8"
+      ],
+      "criteria": [
+        "3.1.1"
+      ]
+    },
+    "sia-r5": {
+      "act": [
+        "bf051a"
+      ],
+      "criteria": [
+        "3.1.1"
+      ]
+    },
+    "sia-r7": {
+      "act": [
+        "de46e4"
+      ],
+      "criteria": [
+        "3.1.2"
+      ]
+    },
+    "sia-r8": {
+      "act": [
+        "e086e5"
+      ],
+      "criteria": [
+        "4.1.2"
+      ]
+    },
+    "sia-r9": {
+      "act": [
+        "bc659a"
+      ],
+      "criteria": [
+        "2.2.1",
+        "2.2.4",
+        "3.2.5"
+      ]
+    },
+    "sia-r10": {
+      "act": [
+        "73f2c2"
+      ],
+      "criteria": [
+        "1.3.5"
+      ]
+    },
+    "sia-r11": {
+      "act": [
+        "c487ae"
+      ],
+      "criteria": [
+        "2.4.4",
+        "2.4.9",
+        "4.1.2"
+      ]
+    },
+    "sia-r12": {
+      "act": [
+        "97a4e1"
+      ],
+      "criteria": [
+        "4.1.2"
+      ]
+    },
+    "sia-r13": {
+      "act": [
+        "cae760"
+      ],
+      "criteria": [
+        "4.1.2"
+      ]
+    },
+    "sia-r14": {
+      "act": [
+        "2ee8b8"
+      ],
+      "criteria": [
+        "2.5.3"
+      ]
+    },
+    "sia-r15": {
+      "act": [
+        "4b1c6c"
+      ],
+      "criteria": [
+        "4.1.2"
+      ]
+    },
+    "sia-r16": {
+      "act": [
+        "4e8ab6"
+      ],
+      "criteria": [
+        "1.3.1",
+        "4.1.2"
+      ]
+    },
+    "sia-r17": {
+      "act": [
+        "6cfa84"
+      ],
+      "criteria": [
+        "4.1.2"
+      ]
+    },
+    "sia-r18": {
+      "act": [
+        "5c01ea",
+        "kb1m8s"
+      ],
+      "criteria": []
+    },
+    "sia-r19": {
+      "act": [
+        "6a7281"
+      ],
+      "criteria": []
+    },
+    "sia-r20": {
+      "act": [
+        "5f99a7"
+      ],
+      "criteria": []
+    },
+    "sia-r21": {
+      "act": [],
+      "criteria": []
+    },
+    "sia-r22": {
+      "act": [],
+      "criteria": []
+    },
+    "sia-r23": {
+      "act": [],
+      "criteria": []
+    },
+    "sia-r24": {
+      "act": [],
+      "criteria": [
+        "1.2.8"
+      ]
+    },
+    "sia-r25": {
+      "act": [],
+      "criteria": []
+    },
+    "sia-r26": {
+      "act": [],
+      "criteria": []
+    },
+    "sia-r27": {
+      "act": [],
+      "criteria": [
+        "1.2.2"
+      ]
+    },
+    "sia-r28": {
+      "act": [
+        "59796f"
+      ],
+      "criteria": [
+        "1.1.1",
+        "4.1.2"
+      ]
+    },
+    "sia-r29": {
+      "act": [],
+      "criteria": []
+    },
+    "sia-r30": {
+      "act": [],
+      "criteria": [
+        "1.2.1"
+      ]
+    },
+    "sia-r31": {
+      "act": [],
+      "criteria": []
+    },
+    "sia-r32": {
+      "act": [],
+      "criteria": []
+    },
+    "sia-r33": {
+      "act": [],
+      "criteria": []
+    },
+    "sia-r35": {
+      "act": [],
+      "criteria": [
+        "1.2.1"
+      ]
+    },
+    "sia-r37": {
+      "act": [],
+      "criteria": [
+        "1.2.5"
+      ]
+    },
+    "sia-r38": {
+      "act": [],
+      "criteria": [
+        "1.2.3",
+        "1.2.5",
+        "1.2.8"
+      ]
+    },
+    "sia-r39": {
+      "act": [],
+      "criteria": [
+        "1.1.1"
+      ]
+    },
+    "sia-r40": {
+      "act": [],
+      "criteria": []
+    },
+    "sia-r41": {
+      "act": [
+        "b20e66"
+      ],
+      "criteria": [
+        "2.4.9"
+      ]
+    },
+    "sia-r42": {
+      "act": [
+        "ff89c9"
+      ],
+      "criteria": [
+        "1.3.1"
+      ]
+    },
+    "sia-r43": {
+      "act": [
+        "7d6734"
+      ],
+      "criteria": [
+        "1.1.1"
+      ]
+    },
+    "sia-r44": {
+      "act": [
+        "b33eff"
+      ],
+      "criteria": [
+        "1.3.4"
+      ]
+    },
+    "sia-r45": {
+      "act": [
+        "a25f45"
+      ],
+      "criteria": [
+        "1.3.1"
+      ]
+    },
+    "sia-r46": {
+      "act": [
+        "d0f69e"
+      ],
+      "criteria": [
+        "1.3.1"
+      ]
+    },
+    "sia-r47": {
+      "act": [
+        "b4f0c3"
+      ],
+      "criteria": [
+        "1.4.4"
+      ]
+    },
+    "sia-r48": {
+      "act": [],
+      "criteria": []
+    },
+    "sia-r49": {
+      "act": [],
+      "criteria": []
+    },
+    "sia-r50": {
+      "act": [],
+      "criteria": [
+        "1.4.2"
+      ]
+    },
+    "sia-r53": {
+      "act": [],
+      "criteria": []
+    },
+    "sia-r54": {
+      "act": [],
+      "criteria": []
+    },
+    "sia-r55": {
+      "act": [],
+      "criteria": []
+    },
+    "sia-r56": {
+      "act": [],
+      "criteria": []
+    },
+    "sia-r57": {
+      "act": [],
+      "criteria": []
+    },
+    "sia-r59": {
+      "act": [],
+      "criteria": []
+    },
+    "sia-r60": {
+      "act": [],
+      "criteria": []
+    },
+    "sia-r61": {
+      "act": [],
+      "criteria": []
+    },
+    "sia-r62": {
+      "act": [],
+      "criteria": [
+        "1.4.1"
+      ]
+    },
+    "sia-r63": {
+      "act": [
+        "8fc3b6"
+      ],
+      "criteria": [
+        "1.1.1"
+      ]
+    },
+    "sia-r64": {
+      "act": [
+        "ffd0e9"
+      ],
+      "criteria": [
+        "1.3.1"
+      ]
+    },
+    "sia-r65": {
+      "act": [
+        "oj04fd"
+      ],
+      "criteria": [
+        "2.4.7"
+      ]
+    },
+    "sia-r66": {
+      "act": [
+        "09o5cg"
+      ],
+      "criteria": [
+        "1.4.6"
+      ]
+    },
+    "sia-r67": {
+      "act": [],
+      "criteria": [
+        "1.1.1"
+      ]
+    },
+    "sia-r68": {
+      "act": [
+        "bc4a75"
+      ],
+      "criteria": [
+        "1.3.1"
+      ]
+    },
+    "sia-r69": {
+      "act": [
+        "afw4f7"
+      ],
+      "criteria": [
+        "1.4.3",
+        "1.4.6"
+      ]
+    },
+    "sia-r70": {
+      "act": [],
+      "criteria": []
+    },
+    "sia-r71": {
+      "act": [],
+      "criteria": [
+        "1.4.8"
+      ]
+    },
+    "sia-r72": {
+      "act": [],
+      "criteria": []
+    },
+    "sia-r73": {
+      "act": [],
+      "criteria": [
+        "1.4.8"
+      ]
+    },
+    "sia-r74": {
+      "act": [],
+      "criteria": [
+        "1.4.8"
+      ]
+    },
+    "sia-r75": {
+      "act": [],
+      "criteria": []
+    },
+    "sia-r76": {
+      "act": [],
+      "criteria": [
+        "1.3.1"
+      ]
+    },
+    "sia-r77": {
+      "act": [],
+      "criteria": [
+        "1.3.1"
+      ]
+    },
+    "sia-r78": {
+      "act": [],
+      "criteria": []
+    },
+    "sia-r79": {
+      "act": [],
+      "criteria": []
+    },
+    "sia-r80": {
+      "act": [],
+      "criteria": [
+        "1.4.8"
+      ]
+    },
+    "sia-r81": {
+      "act": [
+        "fd3a94"
+      ],
+      "criteria": [
+        "2.4.4",
+        "2.4.9"
+      ]
+    },
+    "sia-r84": {
+      "act": [
+        "0ssw9k"
+      ],
+      "criteria": [
+        "2.1.1",
+        "2.1.3"
+      ]
+    },
+    "sia-r85": {
+      "act": [],
+      "criteria": []
+    },
+    "sia-r86": {
+      "act": [
+        "46ca7f"
+      ],
+      "criteria": []
+    },
+    "sia-r87": {
+      "act": [],
+      "criteria": []
+    },
+    "sia-r90": {
+      "act": [
+        "307n5z"
+      ],
+      "criteria": [
+        "4.1.2"
+      ]
+    },
+    "sia-r91": {
+      "act": [
+        "24afc2"
+      ],
+      "criteria": [
+        "1.4.12"
+      ]
+    },
+    "sia-r92": {
+      "act": [
+        "9e45ec"
+      ],
+      "criteria": [
+        "1.4.12"
+      ]
+    },
+    "sia-r93": {
+      "act": [
+        "78fd32"
+      ],
+      "criteria": [
+        "1.4.12"
+      ]
+    },
+    "sia-r94": {
+      "act": [
+        "m6b1q3"
+      ],
+      "criteria": [
+        "4.1.2"
+      ]
+    },
+    "sia-r95": {
+      "act": [
+        "akn7bn"
+      ],
+      "criteria": [
+        "2.1.1"
+      ]
+    },
+    "sia-r96": {
+      "act": [
+        "bisz58"
+      ],
+      "criteria": [
+        "2.2.4",
+        "3.2.5"
+      ]
+    },
+    "sia-r110": {
+      "act": [
+        "674b10"
+      ],
+      "criteria": [
+        "1.3.1"
+      ]
+    },
+    "sia-r111": {
+      "act": [],
+      "criteria": [
+        "2.5.5"
+      ]
+    },
+    "sia-r113": {
+      "act": [],
+      "criteria": [
+        "2.5.8"
+      ]
+    },
+    "sia-r116": {
+      "act": [
+        "2t702h"
+      ],
+      "criteria": [
+        "4.1.2"
+      ]
+    }
+  },
+  "ibm": {
+    "a_text_purpose": {
+      "act": [
+        "c487ae"
+      ],
+      "criteria": [
+        "2.4.4",
+        "4.1.2"
+      ]
+    },
+    "area_alt_exists": {
+      "act": [],
+      "criteria": [
+        "1.1.1"
+      ]
+    },
+    "aria_accessiblename_exists": {
+      "act": [
+        "23a2a8"
+      ],
+      "criteria": [
+        "4.1.2",
+        "ARIA"
+      ]
+    },
+    "aria_activedescendant_tabindex_valid": {
+      "act": [],
+      "criteria": [
+        "2.1.1"
+      ]
+    },
+    "aria_attribute_allowed": {
+      "act": [
+        "5f99a7"
+      ],
+      "criteria": [
+        "4.1.2"
+      ]
+    },
+    "aria_attribute_exists": {
+      "act": [
+        "6a7281"
+      ],
+      "criteria": [
+        "4.1.2"
+      ]
+    },
+    "aria_attribute_required": {
+      "act": [
+        "4e8ab6"
+      ],
+      "criteria": [
+        "4.1.2"
+      ]
+    },
+    "aria_attribute_value_valid": {
+      "act": [
+        "6a7281"
+      ],
+      "criteria": [
+        "4.1.2"
+      ]
+    },
+    "aria_banner_single": {
+      "act": [],
+      "criteria": [
+        "1.3.1"
+      ]
+    },
+    "aria_child_tabbable": {
+      "act": [],
+      "criteria": [
+        "2.1.1"
+      ]
+    },
+    "aria_child_valid": {
+      "act": [
+        "bc4a75"
+      ],
+      "criteria": [
+        "1.3.1"
+      ]
+    },
+    "aria_complementary_labelled": {
+      "act": [],
+      "criteria": [
+        "1.3.1"
+      ]
+    },
+    "aria_content_in_landmark": {
+      "act": [],
+      "criteria": [
+        "1.3.1"
+      ]
+    },
+    "aria_descendant_valid": {
+      "act": [
+        "307n5z"
+      ],
+      "criteria": [
+        "4.1.2"
+      ]
+    },
+    "aria_eventhandler_role_valid": {
+      "act": [],
+      "criteria": [
+        "4.1.2"
+      ]
+    },
+    "aria_form_label_unique": {
+      "act": [],
+      "criteria": [
+        "1.3.1"
+      ]
+    },
+    "aria_hidden_nontabbable": {
+      "act": [
+        "6cfa84"
+      ],
+      "criteria": [
+        "1.3.1",
+        "4.1.2"
+      ]
+    },
+    "aria_id_unique": {
+      "act": [
+        "59796f",
+        "6a7281"
+      ],
+      "criteria": [
+        "4.1.2"
+      ]
+    },
+    "aria_keyboard_handler_exists": {
+      "act": [],
+      "criteria": [
+        "2.1.1"
+      ]
+    },
+    "aria_landmark_name_unique": {
+      "act": [],
+      "criteria": [
+        "1.3.1"
+      ]
+    },
+    "aria_main_label_unique": {
+      "act": [],
+      "criteria": [
+        "1.3.1"
+      ]
+    },
+    "aria_main_label_visible": {
+      "act": [],
+      "criteria": [
+        "1.3.1"
+      ]
+    },
+    "aria_navigation_label_unique": {
+      "act": [],
+      "criteria": [
+        "1.3.1"
+      ]
+    },
+    "aria_parent_required": {
+      "act": [
+        "ff89c9"
+      ],
+      "criteria": [
+        "1.3.1"
+      ]
+    },
+    "aria_role_allowed": {
+      "act": [
+        "674b10"
+      ],
+      "criteria": [
+        "4.1.2"
+      ]
+    },
+    "aria_role_valid": {
+      "act": [],
+      "criteria": [
+        "4.1.2"
+      ]
+    },
+    "aria_widget_labelled": {
+      "act": [
+        "m6b1q3"
+      ],
+      "criteria": [
+        "4.1.2"
+      ]
+    },
+    "blink_css_review": {
+      "act": [],
+      "criteria": [
+        "2.2.2"
+      ]
+    },
+    "blockquote_cite_exists": {
+      "act": [],
+      "criteria": [
+        "1.3.1"
+      ]
+    },
+    "canvas_content_described": {
+      "act": [],
+      "criteria": [
+        "1.1.1",
+        "2.1.1",
+        "4.1.2"
+      ]
+    },
+    "caption_track_exists": {
+      "act": [],
+      "criteria": [
+        "1.2.2"
+      ]
+    },
+    "combobox_autocomplete_valid": {
+      "act": [],
+      "criteria": [
+        "4.1.2"
+      ]
+    },
+    "combobox_design_valid": {
+      "act": [],
+      "criteria": [
+        "4.1.2"
+      ]
+    },
+    "combobox_focusable_elements": {
+      "act": [],
+      "criteria": [
+        "4.1.2"
+      ]
+    },
+    "combobox_haspopup_valid": {
+      "act": [],
+      "criteria": [
+        "4.1.2"
+      ]
+    },
+    "combobox_popup_reference": {
+      "act": [
+        "4e8ab6"
+      ],
+      "criteria": [
+        "4.1.2"
+      ]
+    },
+    "element_lang_valid": {
+      "act": [
+        "de46e4"
+      ],
+      "criteria": [
+        "3.1.2"
+      ]
+    },
+    "element_mouseevent_keyboard": {
+      "act": [],
+      "criteria": [
+        "2.1.1"
+      ]
+    },
+    "element_orientation_unlocked": {
+      "act": [
+        "b33eff"
+      ],
+      "criteria": [
+        "1.3.4"
+      ]
+    },
+    "element_tabbable_role_valid": {
+      "act": [],
+      "criteria": [
+        "4.1.2"
+      ]
+    },
+    "element_tabbable_unobscured": {
+      "act": [],
+      "criteria": [
+        "2.4.11"
+      ]
+    },
+    "element_tabbable_visible": {
+      "act": [],
+      "criteria": [
+        "2.4.7"
+      ]
+    },
+    "fieldset_label_valid": {
+      "act": [],
+      "criteria": [
+        "1.3.1",
+        "3.3.2"
+      ]
+    },
+    "fieldset_legend_valid": {
+      "act": [],
+      "criteria": [
+        "1.3.1"
+      ]
+    },
+    "figure_label_exists": {
+      "act": [],
+      "criteria": [
+        "1.1.1"
+      ]
+    },
+    "form_font_color": {
+      "act": [],
+      "criteria": [
+        "1.4.1"
+      ]
+    },
+    "form_label_unique": {
+      "act": [],
+      "criteria": [
+        "1.3.1"
+      ]
+    },
+    "form_submit_button_exists": {
+      "act": [],
+      "criteria": [
+        "3.2.2"
+      ]
+    },
+    "frame_src_valid": {
+      "act": [],
+      "criteria": [
+        "2.4.1"
+      ]
+    },
+    "frame_title_exists": {
+      "act": [
+        "cae760"
+      ],
+      "criteria": [
+        "4.1.2"
+      ]
+    },
+    "heading_content_exists": {
+      "act": [],
+      "criteria": [
+        "2.4.6"
+      ]
+    },
+    "heading_markup_misuse": {
+      "act": [],
+      "criteria": [
+        "1.3.1"
+      ]
+    },
+    "html_lang_exists": {
+      "act": [
+        "b5c3f8",
+        "5b7ae0"
+      ],
+      "criteria": [
+        "3.1.1"
+      ]
+    },
+    "html_lang_valid": {
+      "act": [
+        "b5c3f8",
+        "bf051a"
+      ],
+      "criteria": [
+        "3.1.1"
+      ]
+    },
+    "html_skipnav_exists": {
+      "act": [],
+      "criteria": [
+        "2.4.1"
+      ]
+    },
+    "iframe_interactive_tabbable": {
+      "act": [
+        "akn7bn"
+      ],
+      "criteria": [
+        "2.1.1"
+      ]
+    },
+    "imagebutton_alt_exists": {
+      "act": [
+        "59796f"
+      ],
+      "criteria": [
+        "1.1.1"
+      ]
+    },
+    "imagemap_alt_exists": {
+      "act": [],
+      "criteria": [
+        "1.1.1"
+      ]
+    },
+    "img_alt_background": {
+      "act": [],
+      "criteria": [
+        "1.1.1"
+      ]
+    },
+    "img_alt_decorative": {
+      "act": [],
+      "criteria": [
+        "1.1.1"
+      ]
+    },
+    "img_alt_misuse": {
+      "act": [],
+      "criteria": [
+        "1.1.1"
+      ]
+    },
+    "img_alt_null": {
+      "act": [
+        "46ca7f"
+      ],
+      "criteria": [
+        "1.1.1",
+        "ARIA"
+      ]
+    },
+    "img_alt_redundant": {
+      "act": [],
+      "criteria": [
+        "1.1.1",
+        "2.4.4"
+      ]
+    },
+    "img_alt_valid": {
+      "act": [
+        "23a2a8"
+      ],
+      "criteria": [
+        "1.1.1"
+      ]
+    },
+    "input_autocomplete_valid": {
+      "act": [
+        "73f2c2"
+      ],
+      "criteria": [
+        "1.3.5"
+      ]
+    },
+    "input_checkboxes_grouped": {
+      "act": [],
+      "criteria": [
+        "1.3.1"
+      ]
+    },
+    "input_fields_grouped": {
+      "act": [],
+      "criteria": [
+        "1.3.1"
+      ]
+    },
+    "input_label_after": {
+      "act": [],
+      "criteria": [
+        "3.3.2"
+      ]
+    },
+    "input_label_before": {
+      "act": [],
+      "criteria": [
+        "3.3.2"
+      ]
+    },
+    "input_label_exists": {
+      "act": [
+        "97a4e1",
+        "e086e5"
+      ],
+      "criteria": [
+        "4.1.2"
+      ]
+    },
+    "input_label_visible": {
+      "act": [],
+      "criteria": [
+        "2.5.3",
+        "3.3.2"
+      ]
+    },
+    "label_content_exists": {
+      "act": [],
+      "criteria": [
+        "4.1.2"
+      ]
+    },
+    "label_name_visible": {
+      "act": [
+        "2ee8b8"
+      ],
+      "criteria": [
+        "2.5.3"
+      ]
+    },
+    "label_ref_valid": {
+      "act": [],
+      "criteria": [
+        "1.3.1"
+      ]
+    },
+    "list_children_valid": {
+      "act": [],
+      "criteria": [
+        "4.1.2"
+      ]
+    },
+    "list_structure_proper": {
+      "act": [],
+      "criteria": [
+        "1.3.1"
+      ]
+    },
+    "media_alt_brief": {
+      "act": [],
+      "criteria": [
+        "1.1.1"
+      ]
+    },
+    "media_alt_exists": {
+      "act": [],
+      "criteria": [
+        "1.1.1"
+      ]
+    },
+    "media_audio_transcribed": {
+      "act": [],
+      "criteria": [
+        "1.2.1"
+      ]
+    },
+    "media_keyboard_controllable": {
+      "act": [],
+      "criteria": [
+        "2.1.1"
+      ]
+    },
+    "media_live_captioned": {
+      "act": [],
+      "criteria": [
+        "1.2.4"
+      ]
+    },
+    "media_track_available": {
+      "act": [],
+      "criteria": [
+        "1.2.3",
+        "1.2.5"
+      ]
+    },
+    "meta_refresh_delay": {
+      "act": [
+        "bc659a"
+      ],
+      "criteria": [
+        "2.2.1"
+      ]
+    },
+    "meta_viewport_zoomable": {
+      "act": [
+        "b4f0c3"
+      ],
+      "criteria": [
+        "1.4.4"
+      ]
+    },
+    "object_text_exists": {
+      "act": [
+        "8fc3b6"
+      ],
+      "criteria": [
+        "1.1.1"
+      ]
+    },
+    "page_title_exists": {
+      "act": [
+        "2779a5"
+      ],
+      "criteria": [
+        "2.4.2"
+      ]
+    },
+    "page_title_valid": {
+      "act": [],
+      "criteria": [
+        "2.4.2"
+      ]
+    },
+    "script_focus_blur_review": {
+      "act": [],
+      "criteria": [
+        "2.1.1",
+        "2.4.7",
+        "3.2.1"
+      ]
+    },
+    "script_onclick_avoid": {
+      "act": [],
+      "criteria": [
+        "2.1.1"
+      ]
+    },
+    "script_onclick_misuse": {
+      "act": [],
+      "criteria": [
+        "2.1.1"
+      ]
+    },
+    "script_select_review": {
+      "act": [],
+      "criteria": [
+        "3.2.1"
+      ]
+    },
+    "select_options_grouped": {
+      "act": [],
+      "criteria": [
+        "1.3.1"
+      ]
+    },
+    "skip_main_described": {
+      "act": [],
+      "criteria": [
+        "2.4.1"
+      ]
+    },
+    "skip_main_exists": {
+      "act": [],
+      "criteria": [
+        "2.4.1"
+      ]
+    },
+    "style_background_decorative": {
+      "act": [],
+      "criteria": [
+        "1.1.1"
+      ]
+    },
+    "style_color_misuse": {
+      "act": [],
+      "criteria": [
+        "1.4.1"
+      ]
+    },
+    "style_focus_visible": {
+      "act": [],
+      "criteria": [
+        "2.4.7"
+      ]
+    },
+    "style_highcontrast_visible": {
+      "act": [],
+      "criteria": [
+        "1.1.1",
+        "1.3.2",
+        "1.4.11"
+      ]
+    },
+    "style_hover_persistent": {
+      "act": [],
+      "criteria": [
+        "1.4.13"
+      ]
+    },
+    "style_viewport_resizable": {
+      "act": [],
+      "criteria": [
+        "1.4.4",
+        "1.4.10"
+      ]
+    },
+    "svg_graphics_labelled": {
+      "act": [
+        "7d6734"
+      ],
+      "criteria": [
+        "1.1.1"
+      ]
+    },
+    "table_aria_descendants": {
+      "act": [],
+      "criteria": [
+        "4.1.2"
+      ]
+    },
+    "table_caption_empty": {
+      "act": [],
+      "criteria": [
+        "1.3.1"
+      ]
+    },
+    "table_caption_nested": {
+      "act": [],
+      "criteria": [
+        "1.3.1"
+      ]
+    },
+    "table_headers_exists": {
+      "act": [],
+      "criteria": [
+        "1.3.1"
+      ]
+    },
+    "table_headers_ref_valid": {
+      "act": [
+        "a25f45"
+      ],
+      "criteria": [
+        "1.3.1"
+      ]
+    },
+    "table_headers_related": {
+      "act": [],
+      "criteria": [
+        "1.3.1"
+      ]
+    },
+    "table_layout_linearized": {
+      "act": [],
+      "criteria": [
+        "1.3.1"
+      ]
+    },
+    "table_scope_valid": {
+      "act": [],
+      "criteria": [
+        "1.3.1"
+      ]
+    },
+    "table_structure_misuse": {
+      "act": [],
+      "criteria": [
+        "1.3.1"
+      ]
+    },
+    "target_spacing_sufficient": {
+      "act": [],
+      "criteria": [
+        "2.5.8"
+      ]
+    },
+    "text_block_heading": {
+      "act": [],
+      "criteria": [
+        "1.3.1"
+      ]
+    },
+    "text_contrast_sufficient": {
+      "act": [
+        "afw4f7"
+      ],
+      "criteria": [
+        "1.4.3"
+      ]
+    },
+    "text_quoted_correctly": {
+      "act": [],
+      "criteria": [
+        "1.3.1"
+      ]
+    },
+    "text_sensory_misuse": {
+      "act": [],
+      "criteria": [
+        "1.3.3"
+      ]
+    },
+    "text_spacing_valid": {
+      "act": [
+        "9e45ec",
+        "24afc2",
+        "78fd32"
+      ],
+      "criteria": [
+        "1.4.12"
+      ]
+    },
+    "text_whitespace_valid": {
+      "act": [],
+      "criteria": [
+        "1.3.2"
+      ]
+    },
+    "widget_tabbable_exists": {
+      "act": [],
+      "criteria": [
+        "2.1.1"
+      ]
+    },
+    "widget_tabbable_single": {
+      "act": [],
+      "criteria": [
+        "2.1.1",
+        "2.4.3"
+      ]
+    }
+  },
+  "qualweb": {
+    "QW-ACT-R1": {
+      "act": [
+        "2779a5"
+      ],
+      "criteria": [
+        "2.4.2"
+      ],
+      "title": "HTML Page has a title"
+    },
+    "QW-ACT-R2": {
+      "act": [
+        "b5c3f8"
+      ],
+      "criteria": [
+        "3.1.1"
+      ],
+      "title": "HTML has lang attribute"
+    },
+    "QW-ACT-R4": {
+      "act": [
+        "bc659a"
+      ],
+      "criteria": [
+        "2.2.1",
+        "2.2.4",
+        "3.2.5"
+      ],
+      "title": "Meta-refresh no delay"
+    },
+    "QW-ACT-R5": {
+      "act": [
+        "bf051a"
+      ],
+      "criteria": [
+        "3.1.1"
+      ],
+      "title": "Validity of HTML Lang attribute"
+    },
+    "QW-ACT-R6": {
+      "act": [
+        "59796f"
+      ],
+      "criteria": [
+        "1.1.1",
+        "4.1.2"
+      ],
+      "title": "Image button has accessible name"
+    },
+    "QW-ACT-R7": {
+      "act": [
+        "b33eff"
+      ],
+      "criteria": [
+        "1.3.4"
+      ],
+      "title": "Orientation of the page is not restricted using CSS transform property"
+    },
+    "QW-ACT-R9": {
+      "act": [
+        "b20e66"
+      ],
+      "criteria": [
+        "2.4.9"
+      ],
+      "title": "Links with identical accessible names have equivalent purpose"
+    },
+    "QW-ACT-R10": {
+      "act": [
+        "4b1c6c"
+      ],
+      "criteria": [
+        "4.1.2"
+      ],
+      "title": "`iframe` elements with identical accessible names have equivalent purpose"
+    },
+    "QW-ACT-R11": {
+      "act": [
+        "97a4e1"
+      ],
+      "criteria": [
+        "4.1.2"
+      ],
+      "title": "Button has accessible name"
+    },
+    "QW-ACT-R12": {
+      "act": [
+        "c487ae"
+      ],
+      "criteria": [
+        "2.4.4",
+        "2.4.9",
+        "4.1.2"
+      ],
+      "title": "Link has accessible name"
+    },
+    "QW-ACT-R13": {
+      "act": [
+        "6cfa84"
+      ],
+      "criteria": [
+        "4.1.2"
+      ],
+      "title": "Element with `aria-hidden` has no focusable content"
+    },
+    "QW-ACT-R14": {
+      "act": [
+        "b4f0c3"
+      ],
+      "criteria": [
+        "1.4.4"
+      ],
+      "title": "meta viewport does not prevent zoom"
+    },
+    "QW-ACT-R15": {
+      "act": [
+        "80f0bf"
+      ],
+      "criteria": [
+        "1.4.2"
+      ],
+      "title": "audio or video has no audio that plays automatically"
+    },
+    "QW-ACT-R16": {
+      "act": [
+        "e086e5"
+      ],
+      "criteria": [
+        "4.1.2"
+      ],
+      "title": "Form control has accessible name"
+    },
+    "QW-ACT-R17": {
+      "act": [
+        "23a2a8"
+      ],
+      "criteria": [
+        "1.1.1"
+      ],
+      "title": "Image has accessible name"
+    },
+    "QW-ACT-R19": {
+      "act": [
+        "cae760"
+      ],
+      "criteria": [
+        "4.1.2"
+      ],
+      "title": "iframe element has accessible name"
+    },
+    "QW-ACT-R20": {
+      "act": [
+        "674b10"
+      ],
+      "criteria": [],
+      "title": "role attribute has valid value"
+    },
+    "QW-ACT-R21": {
+      "act": [
+        "7d6734"
+      ],
+      "criteria": [
+        "1.1.1"
+      ],
+      "title": "svg element with explicit role has accessible name"
+    },
+    "QW-ACT-R22": {
+      "act": [
+        "de46e4"
+      ],
+      "criteria": [
+        "3.1.2"
+      ],
+      "title": "Element within body has valid lang attribute"
+    },
+    "QW-ACT-R23": {
+      "act": [
+        "c5a4ea"
+      ],
+      "criteria": [
+        "1.2.3"
+      ],
+      "title": "video element visual content has accessible alternative"
+    },
+    "QW-ACT-R24": {
+      "act": [
+        "73f2c2"
+      ],
+      "criteria": [
+        "1.3.5"
+      ],
+      "title": "autocomplete attribute has valid value"
+    },
+    "QW-ACT-R25": {
+      "act": [
+        "5c01ea"
+      ],
+      "criteria": [],
+      "title": "ARIA state or property is permitted"
+    },
+    "QW-ACT-R26": {
+      "act": [
+        "eac66b"
+      ],
+      "criteria": [
+        "1.2.2"
+      ],
+      "title": "video element auditory content has accessible alternative"
+    },
+    "QW-ACT-R27": {
+      "act": [
+        "5f99a7"
+      ],
+      "criteria": [],
+      "title": "aria-* attribute is defined in WAI-ARIA"
+    },
+    "QW-ACT-R28": {
+      "act": [
+        "4e8ab6"
+      ],
+      "criteria": [],
+      "title": "Element with role attribute has required states and properties"
+    },
+    "QW-ACT-R29": {
+      "act": [
+        "e7aa44"
+      ],
+      "criteria": [
+        "1.2.1"
+      ],
+      "title": "Audio element content has text alternative"
+    },
+    "QW-ACT-R30": {
+      "act": [
+        "2ee8b8"
+      ],
+      "criteria": [
+        "2.5.3"
+      ],
+      "title": "Visible label is part of accessible name"
+    },
+    "QW-ACT-R31": {
+      "act": [
+        "c3232f"
+      ],
+      "criteria": [
+        "1.2.1"
+      ],
+      "title": "Video element visual-only content has accessible alternative"
+    },
+    "QW-ACT-R32": {
+      "act": [
+        "1ec09b"
+      ],
+      "criteria": [
+        "1.2.5"
+      ],
+      "title": "video element visual content has strict accessible alternative"
+    },
+    "QW-ACT-R33": {
+      "act": [
+        "ff89c9"
+      ],
+      "criteria": [
+        "1.3.1"
+      ],
+      "title": "ARIA required context role"
+    },
+    "QW-ACT-R34": {
+      "act": [
+        "6a7281"
+      ],
+      "criteria": [],
+      "title": "ARIA state or property has valid value"
+    },
+    "QW-ACT-R35": {
+      "act": [
+        "ffd0e9"
+      ],
+      "criteria": [],
+      "title": "Heading has accessible name"
+    },
+    "QW-ACT-R36": {
+      "act": [
+        "a25f45"
+      ],
+      "criteria": [
+        "1.3.1"
+      ],
+      "title": "Headers attribute specified on a cell refers to cells in the same table element"
+    },
+    "QW-ACT-R37": {
+      "act": [
+        "afw4f7"
+      ],
+      "criteria": [
+        "1.4.3"
+      ],
+      "title": "Text has minimum contrast"
+    },
+    "QW-ACT-R38": {
+      "act": [
+        "bc4a75"
+      ],
+      "criteria": [
+        "1.3.1"
+      ],
+      "title": "ARIA required owned elements"
+    },
+    "QW-ACT-R39": {
+      "act": [
+        "d0f69e"
+      ],
+      "criteria": [
+        "1.3.1"
+      ],
+      "title": "All table header cells have assigned data cells"
+    },
+    "QW-ACT-R41": {
+      "act": [
+        "36b590"
+      ],
+      "criteria": [
+        "3.3.1"
+      ],
+      "title": "Error message describes invalid form field value"
+    },
+    "QW-ACT-R42": {
+      "act": [
+        "8fc3b6"
+      ],
+      "criteria": [
+        "1.1.1"
+      ],
+      "title": "Object element has non-empty accessible name"
+    },
+    "QW-ACT-R43": {
+      "act": [
+        "0ssw9k"
+      ],
+      "criteria": [
+        "2.1.1",
+        "2.1.3"
+      ],
+      "title": "Scrollable element is keyboard accessible"
+    },
+    "QW-ACT-R44": {
+      "act": [
+        "fd3a94"
+      ],
+      "criteria": [
+        "2.4.4"
+      ],
+      "title": "Links with identical accessible names and context serve equivalent purpose"
+    },
+    "QW-ACT-R48": {
+      "act": [
+        "46ca7f"
+      ],
+      "criteria": [],
+      "title": "Element marked as decorative is not exposed"
+    },
+    "QW-ACT-R49": {
+      "act": [
+        "aaa1bf"
+      ],
+      "criteria": [],
+      "title": "Audio or video that plays automatically has no audio that lasts more than 3 seconds"
+    },
+    "QW-ACT-R50": {
+      "act": [
+        "4c31df"
+      ],
+      "criteria": [],
+      "title": "audio or video that plays automatically has a control mechanism"
+    },
+    "QW-ACT-R51": {
+      "act": [
+        "fd26cf"
+      ],
+      "criteria": [],
+      "title": "video element visual-only content is media alternative for text"
+    },
+    "QW-ACT-R53": {
+      "act": [
+        "ee13b5"
+      ],
+      "criteria": [],
+      "title": "video element visual-only content has transcript"
+    },
+    "QW-ACT-R54": {
+      "act": [
+        "d7ba54"
+      ],
+      "criteria": [],
+      "title": "video element visual-only content has audio track alternative"
+    },
+    "QW-ACT-R55": {
+      "act": [
+        "1ea59c"
+      ],
+      "criteria": [],
+      "title": "video element visual content has audio description"
+    },
+    "QW-ACT-R56": {
+      "act": [
+        "ab4d13"
+      ],
+      "criteria": [],
+      "title": "video element content is media alternative for text"
+    },
+    "QW-ACT-R58": {
+      "act": [
+        "2eb176"
+      ],
+      "criteria": [],
+      "title": "audio element content has transcript"
+    },
+    "QW-ACT-R59": {
+      "act": [
+        "afb423"
+      ],
+      "criteria": [],
+      "title": "audio element content is media alternative for text"
+    },
+    "QW-ACT-R60": {
+      "act": [
+        "f51b46"
+      ],
+      "criteria": [],
+      "title": "video element auditory content has captions"
+    },
+    "QW-ACT-R61": {
+      "act": [
+        "1a02b0"
+      ],
+      "criteria": [
+        "1.2.8"
+      ],
+      "title": "Audio and visuals of video element have transcript"
+    },
+    "QW-ACT-R62": {
+      "act": [
+        "oj04fd"
+      ],
+      "criteria": [
+        "2.4.7"
+      ],
+      "title": "Element in sequential focus order has visible focus"
+    },
+    "QW-ACT-R63": {
+      "act": [
+        "b40fd1"
+      ],
+      "criteria": [],
+      "title": "Document has a landmark with non-repeated content"
+    },
+    "QW-ACT-R64": {
+      "act": [
+        "047fe0"
+      ],
+      "criteria": [],
+      "title": "Document has heading for non-repeated content"
+    },
+    "QW-ACT-R65": {
+      "act": [
+        "307n5z"
+      ],
+      "criteria": [
+        "4.1.2"
+      ],
+      "title": "Element with presentational children has no focusable content"
+    },
+    "QW-ACT-R66": {
+      "act": [
+        "m6b1q3"
+      ],
+      "criteria": [
+        "4.1.2"
+      ],
+      "title": "Menuitem has non-empty accessible name"
+    },
+    "QW-ACT-R67": {
+      "act": [
+        "24afc2"
+      ],
+      "criteria": [
+        "1.4.12"
+      ],
+      "title": "Letter spacing in style attributes is not !important"
+    },
+    "QW-ACT-R68": {
+      "act": [
+        "78fd32"
+      ],
+      "criteria": [
+        "1.4.12"
+      ],
+      "title": "Line height in style attributes is not !important"
+    },
+    "QW-ACT-R69": {
+      "act": [
+        "9e45ec"
+      ],
+      "criteria": [
+        "1.4.12"
+      ],
+      "title": "Word spacing in style attributes is not !important"
+    },
+    "QW-ACT-R70": {
+      "act": [
+        "akn7bn"
+      ],
+      "criteria": [
+        "2.1.1"
+      ],
+      "title": "iframe with negative tabindex has no interactive elements"
+    },
+    "QW-ACT-R71": {
+      "act": [
+        "bisz58"
+      ],
+      "criteria": [
+        "2.2.4",
+        "3.2.5"
+      ],
+      "title": "`meta` element has no refresh delay (no exception)"
+    },
+    "QW-ACT-R73": {
+      "act": [
+        "3e12e1"
+      ],
+      "criteria": [],
+      "title": "Block of repeated content is collapsible"
+    },
+    "QW-ACT-R74": {
+      "act": [
+        "ye5d6e"
+      ],
+      "criteria": [],
+      "title": "Document has an instrument to move focus to non-repeated content"
+    },
+    "QW-ACT-R75": {
+      "act": [
+        "cf77f2"
+      ],
+      "criteria": [
+        "2.4.1"
+      ],
+      "title": "Bypass Blocks of Repeated Content"
+    },
+    "QW-ACT-R76": {
+      "act": [
+        "09o5cg"
+      ],
+      "criteria": [
+        "1.4.6"
+      ],
+      "title": "Text has enhanced contrast"
+    },
+    "QW-ACT-R77": {
+      "act": [
+        "in6db8"
+      ],
+      "criteria": [],
+      "title": "ARIA required ID references exist"
+    },
+    "QW-WCAG-T1": {
+      "act": [],
+      "criteria": [
+        "1.1.1",
+        "2.4.4",
+        "2.4.9"
+      ],
+      "title": "Providing text alternatives for the area elements of image maps"
+    },
+    "QW-WCAG-T2": {
+      "act": [],
+      "criteria": [
+        "1.3.1"
+      ],
+      "title": "Using caption elements to associate data table captions with data tables"
+    },
+    "QW-WCAG-T3": {
+      "act": [],
+      "criteria": [
+        "1.3.1",
+        "3.3.2"
+      ],
+      "title": "Providing a description for groups of form controls using `fieldset` and `legend` elements"
+    },
+    "QW-WCAG-T4": {
+      "act": [],
+      "criteria": [
+        "1.3.1"
+      ],
+      "title": "Using the summary attribute of the table element to give an overview of data tables"
+    },
+    "QW-WCAG-T5": {
+      "act": [],
+      "criteria": [
+        "1.1.1"
+      ],
+      "title": "Using alt attributes on images used as submit buttons"
+    },
+    "QW-WCAG-T6": {
+      "act": [],
+      "criteria": [
+        "2.1.1"
+      ],
+      "title": "Using both keyboard and other device-specific functions"
+    },
+    "QW-WCAG-T7": {
+      "act": [],
+      "criteria": [
+        "3.1.4"
+      ],
+      "title": "Providing definitions for abbreviations by using the abbr element"
+    },
+    "QW-WCAG-T8": {
+      "act": [],
+      "criteria": [
+        "1.1.1",
+        "1.2.1"
+      ],
+      "title": "Failure of Success Criterion 1.1.1 and 1.2.1 due to using text alternatives that are not alternatives"
+    },
+    "QW-WCAG-T9": {
+      "act": [],
+      "criteria": [
+        "1.3.1",
+        "2.4.10"
+      ],
+      "title": "Organizing a page using headings"
+    },
+    "QW-WCAG-T10": {
+      "act": [],
+      "criteria": [
+        "1.1.1",
+        "2.4.4",
+        "2.4.9"
+      ],
+      "title": "Combining adjacent image and text links for the same resource"
+    },
+    "QW-WCAG-T11": {
+      "act": [],
+      "criteria": [
+        "1.1.1"
+      ],
+      "title": "Providing text alternatives on applet elements"
+    },
+    "QW-WCAG-T12": {
+      "act": [],
+      "criteria": [
+        "1.3.1"
+      ],
+      "title": "Failure of Success Criterion 1.3.1 due to using th elements, caption elements, or non-empty summary attributes in layout tables"
+    },
+    "QW-WCAG-T13": {
+      "act": [],
+      "criteria": [
+        "2.2.2"
+      ],
+      "title": "Failure of Success Criterion 2.2.2 due to using the blink element"
+    },
+    "QW-WCAG-T14": {
+      "act": [],
+      "criteria": [
+        "1.3.1"
+      ],
+      "title": "Using id and headers attributes to associate data cells with header cells in data tables"
+    },
+    "QW-WCAG-T15": {
+      "act": [],
+      "criteria": [
+        "2.4.5",
+        "2.4.8"
+      ],
+      "title": "Using the link element and navigation tools"
+    },
+    "QW-WCAG-T16": {
+      "act": [],
+      "criteria": [
+        "4.1.1",
+        "4.1.2"
+      ],
+      "title": "Using HTML according to spec"
+    },
+    "QW-WCAG-T17": {
+      "act": [],
+      "criteria": [
+        "1.3.1",
+        "3.3.2"
+      ],
+      "title": "Positioning labels to maximize predictability of relationships"
+    },
+    "QW-WCAG-T18": {
+      "act": [],
+      "criteria": [
+        "1.3.1"
+      ],
+      "title": "Using table markup to present tabular information"
+    },
+    "QW-WCAG-T19": {
+      "act": [],
+      "criteria": [
+        "3.2.2"
+      ],
+      "title": "Providing submit buttons"
+    },
+    "QW-WCAG-T20": {
+      "act": [],
+      "criteria": [
+        "2.4.4",
+        "2.4.9"
+      ],
+      "title": "Supplementing link text with the title attribute"
+    },
+    "QW-WCAG-T21": {
+      "act": [],
+      "criteria": [
+        "2.4.4",
+        "2.4.9",
+        "4.1.2"
+      ],
+      "title": "Failure of Success Criteria 2.4.4, 2.4.9 and 4.1.2 due to not providing an accessible name for an image which is the only content in a link"
+    },
+    "QW-WCAG-T22": {
+      "act": [],
+      "criteria": [
+        "3.2.5"
+      ],
+      "title": "Failure of Success Criterion 3.2.1 and 3.2.5 due to opening a new window as soon as a new page is loaded"
+    },
+    "QW-WCAG-T23": {
+      "act": [],
+      "criteria": [
+        "2.4.1"
+      ],
+      "title": "Adding a link at the top of each page that goes directly to the main content area"
+    },
+    "QW-WCAG-T24": {
+      "act": [],
+      "criteria": [
+        "2.1.1",
+        "2.4.7",
+        "3.2.1"
+      ],
+      "title": "Failure of Success Criteria 2.1.1, 2.4.7, and 3.2.1 due to using script to remove focus when focus is received"
+    },
+    "QW-WCAG-T25": {
+      "act": [],
+      "criteria": [
+        "1.3.1"
+      ],
+      "title": "Using the scope attribute to associate header cells and data cells in data tables"
+    },
+    "QW-WCAG-T26": {
+      "act": [],
+      "criteria": [
+        "4.1.2"
+      ],
+      "title": "Failure of Success Criterion 4.1.2 due to using script to make div or span a user interface control in HTML without providing a role for the control"
+    },
+    "QW-WCAG-T27": {
+      "act": [],
+      "criteria": [
+        "1.4.8"
+      ],
+      "title": "Failure of Success Criterion 1.4.8 due to using text that is justified (aligned to both the left and the right margins)"
+    },
+    "QW-WCAG-T28": {
+      "act": [],
+      "criteria": [
+        "1.4.4",
+        "1.4.5",
+        "1.4.8",
+        "1.4.9"
+      ],
+      "title": "Using `percent, em, names` for font sizes"
+    },
+    "QW-WCAG-T29": {
+      "act": [],
+      "criteria": [
+        "1.4.8"
+      ],
+      "title": "Specifying alignment either to the left or right in CSS"
+    },
+    "QW-WCAG-T30": {
+      "act": [],
+      "criteria": [
+        "2.2.2"
+      ],
+      "title": "Failure of Success Criterion 2.2.2 due to using text-decoration:blink without a mechanism to stop it in less than five seconds"
+    },
+    "QW-WCAG-T31": {
+      "act": [],
+      "criteria": [
+        "1.4.3",
+        "1.4.6",
+        "1.4.8"
+      ],
+      "title": "Failure of Success Criterion 1.4.3, 1.4.6 and 1.4.8 due to specifying foreground colors without specifying background colors or vice versa"
+    },
+    "QW-WCAG-T32": {
+      "act": [],
+      "criteria": [
+        "1.3.1"
+      ],
+      "title": "Using ol, ul and dl for lists or groups of links"
+    },
+    "QW-WCAG-T33": {
+      "act": [],
+      "criteria": [
+        "3.1.3"
+      ],
+      "title": "Using description lists - dd,dt"
+    },
+    "QW-WCAG-T34": {
+      "act": [],
+      "criteria": [
+        "3.1.3"
+      ],
+      "title": "Using description lists - dl"
+    }
+  }
+}
