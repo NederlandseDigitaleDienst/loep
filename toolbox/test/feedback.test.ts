@@ -163,3 +163,15 @@ test("a criterion without a verdict because the model was not there is no fault 
   assert.match(feedbackTextNl(result), /Niet terug te melden: criterium 2\.1\.1 is niet beoordeeld door een storing van het model .*LOEP unskip --run <run> --criterion <id>/);
   assert.ok(!feedbackTextNl(result).includes("budget op"));
 });
+
+test("a criterion open by content of an address outside the scope is no fault of loep: no draft, but named apart with the way to measure it (#466)", () => {
+  const OUTSIDE = "buiten de afbakening: het blok met openingstijden haalt zijn gegevens van https://data.example.nl, dat niet bij de run hoort; het bleef leeg.";
+  const result = feedback(run("outside-scope", [criterion("1.3.1", "cantTell", [OUTSIDE]), criterion("1.4.3", "cantTell", [OUTSIDE, "proef werkte niet: de contrastmeting op P02 gaf geen antwoord."]), criterion("1.1.1", "passed", [])]));
+  assert.deepEqual(result.drafts.map((draft) => draft.title), [`${TITLE_PREFIX} 1.4.3 proef werkte niet`]);
+  assert.ok(!result.drafts[0]!.bodyMd.includes("data.example"), "the point about the scope stays out of the draft");
+  assert.deepEqual(result.outsideScope, ["1.3.1", "1.4.3"]);
+  assert.match(feedbackTextNl(result), /^Niet terug te melden: criteria 1\.3\.1, 1\.4\.3 bleven ook open door inhoud van een adres buiten de afbakening\. .*inventory --also-origin <adres>/m);
+  const only = feedback(run("outside-scope-only", [criterion("1.3.1", "cantTell", [OUTSIDE])]));
+  assert.deepEqual(only.drafts, []);
+  assert.match(feedbackTextNl(only), /^Niets terug te melden uit outside-scope-only: geen criterium is open door loep zelf\.\n\nNiet terug te melden: criterium 1\.3\.1 bleef ook open door inhoud van een adres buiten de afbakening/);
+});

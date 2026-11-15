@@ -3,7 +3,7 @@ import { basename, join, resolve } from "node:path";
 import { madeWith, openCriteria, type CriterionResult, type Evaluation } from "../lib/evaluation.ts";
 import { siteOrigins } from "../lib/origins.ts";
 import { SHOWN_LABEL, shownOutcome } from "../lib/report-markdown.ts";
-import { NOT_SENT, OPEN_POINT_KINDS, openPoint, SENDING_BUDGET_OUT, UNREACHABLE } from "../lib/verdict.ts";
+import { NOT_SENT, OPEN_POINT_KINDS, openPoint, OUTSIDE_SCOPE, SENDING_BUDGET_OUT, UNREACHABLE } from "../lib/verdict.ts";
 import { compareCriterionIds } from "../lib/wcag.ts";
 
 /*
@@ -61,6 +61,12 @@ export interface Feedback {
    * finishing round once the part loads again.
    */
   unreachable: string[];
+  /**
+   * Open criteria with a point "buiten de afbakening": loep held back a request to an address outside
+   * the run, by the scope that was chosen. No fault of loep, so no draft (#466); named so the person who
+   * runs this knows a new run with that address (`inventory --also-origin`) measures them.
+   */
+  outsideScope: string[];
   /**
    * Criteria without the verdict that counts because the model was not there: a round was skipped
    * with the kind "storing". No fault of loep, so no draft; named so the person who runs this can
@@ -155,7 +161,7 @@ export function feedback(runDir: string, options: { out?: string | undefined } =
   }
   const open = openCriteria(evaluation.criteria);
   const withKind = (prefix: string, also: (point: string) => boolean = () => true): string[] => [...open.owner, ...open.evaluation].filter((id) => evaluation.criteria.find((criterion) => criterion.id === id)!.missingNl.some((point) => openPoint(point).kind?.prefix === prefix && also(point))).sort(compareCriterionIds);
-  return { run: basename(resolve(runDir)), repository: REPOSITORY, madeWithNl: madeWith(evaluation, true), drafts, notSent: withKind(NOT_SENT, (point) => !SENDING_BUDGET_OUT.test(point)), budgetOut: withKind(NOT_SENT, (point) => SENDING_BUDGET_OUT.test(point)), unreachable: withKind(UNREACHABLE), outage: evaluation.criteria.filter((criterion) => criterion.outage).map((criterion) => criterion.id).sort(compareCriterionIds) };
+  return { run: basename(resolve(runDir)), repository: REPOSITORY, madeWithNl: madeWith(evaluation, true), drafts, notSent: withKind(NOT_SENT, (point) => !SENDING_BUDGET_OUT.test(point)), budgetOut: withKind(NOT_SENT, (point) => SENDING_BUDGET_OUT.test(point)), unreachable: withKind(UNREACHABLE), outsideScope: withKind(OUTSIDE_SCOPE), outage: evaluation.criteria.filter((criterion) => criterion.outage).map((criterion) => criterion.id).sort(compareCriterionIds) };
 }
 
 /** The drafts as a text to read: what to check first, then per draft the title and the body or where it is. */
@@ -175,12 +181,17 @@ export function feedbackTextNl(result: Feedback): string {
     result.unreachable.length > 0
       ? `\nNiet terug te melden: ${result.unreachable.length === 1 ? "criterium" : "criteria"} ${result.unreachable.join(", ")} ${result.unreachable.length === 1 ? "bleef" : "bleven"} ook open omdat een deel van de site tijdens het onderzoek niet bereikbaar was. Dat is geen fout in loep. Laadt het deel weer, dan meet een nieuwe afmaakronde het: LOEP tasks --run <run> --again ${result.unreachable.join(",")}; LOEP gaps telt deze punten onder "${UNREACHABLE}".\n`
       : "";
+  // Nor is content of an address outside the scope: the scope was chosen, and a run with that address measures it.
+  const outsideScope =
+    result.outsideScope.length > 0
+      ? `\nNiet terug te melden: ${result.outsideScope.length === 1 ? "criterium" : "criteria"} ${result.outsideScope.join(", ")} ${result.outsideScope.length === 1 ? "bleef" : "bleven"} ook open door inhoud van een adres buiten de afbakening. Dat is een keuze bij het begin van het onderzoek, geen fout in loep. Een nieuw onderzoek met dat adres erbij (inventory --also-origin <adres>) meet het; het adres staat bij het criterium in het rapport, en LOEP gaps telt deze punten onder "${OUTSIDE_SCOPE}".\n`
+      : "";
   // Nor is a model that was not there: the skip can be taken back and the round done again.
   const outage =
     result.outage.length > 0
       ? `\nNiet terug te melden: ${result.outage.length === 1 ? "criterium" : "criteria"} ${result.outage.join(", ")} ${result.outage.length === 1 ? "is" : "zijn"} niet beoordeeld door een storing van het model (een limiet of een storing van de dienst). Dat is geen fout in loep. Zet de opdracht terug met LOEP unskip --run <run> --criterion <id> [--round final|finish] en start de werkstroom opnieuw.\n`
       : "";
-  const apart = `${notSent}${budgetOut}${unreachable}${outage}`;
+  const apart = `${notSent}${budgetOut}${unreachable}${outsideScope}${outage}`;
   if (result.drafts.length === 0) return `Niets terug te melden uit ${result.run}: geen criterium is open door loep zelf.\n${apart}`;
   const criteria = new Set(result.drafts.map((draft) => draft.criterion)).size;
   const lines = [
