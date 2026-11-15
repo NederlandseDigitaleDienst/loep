@@ -17,13 +17,14 @@ Daarna, in de map van de plugin: `just install` voor de pakketten en browsers, e
 
 Reken op een middag. Voor een site elders met 30 pagina's en vier paginatypen, met drie agents tegelijk, komt de formule achter `estimate` op ruim vier uur, met een marge van ruim drie tot bijna zes uur. Blijven er na de verificatie criteria open, dan komt daar een afmaakronde bij, bij acht open criteria ongeveer een uur. Een onderzoek van ongeveer 30 pagina's met alle criteria kost in de orde van 150 tot 250 dollar aan prijzen van de API: in de nulmeting van 19 oktober 2026 gebruikten 134 agents ongeveer 526 miljoen tokens, waarvan 97 procent uit de cache, voor ongeveer 184 dollar ([validatie/verbruik/README.md](../validatie/verbruik/README.md)). Op een abonnement kan zo'n run een groot deel van de weeklimiet gebruiken; die limiet verschilt per abonnement. `estimate` noemt tokens en kosten voor jouw run. Hoe die getallen tot stand komen, staat in [methode.md](methode.md#hoe-lang-een-onderzoek-duurt). Houd de sessie van de assistent open en de machine wakker zolang het loopt.
 
-## Vier skills
+## Vijf skills
 
 | Je zegt bijvoorbeeld | Skill | Wat eruit komt |
 |---|---|---|
 | "Toets https://voorbeeld.nl op toegankelijkheid." | `nldd-a11y-audit` | Een onderzoek met rapport, als concept dat een mens leest en tekent |
 | "Maak de toegankelijkheidsverklaring bij het onderzoek van vorige week." | `nldd-a11y-statement` | Een verklaring volgens het wettelijke model en het invulblad voor het register |
 | "Zet in onze pipeline een check die zegt of de site slechter is geworden." | `nldd-a11y-quick` | Een snelle meting met een basislijn, en de stap voor de pipeline |
+| "Stuur het meetblad van dit onderzoek in." | `nldd-a11y-contribute` | Een meetblad zonder de site in de gedeelde verzameling, nadat je zag wat erop staat |
 | "Hoe laat ik zien dat onze site toegankelijk is?" | `nldd-a11y` | Een korte uitleg die naar een van de andere wijst |
 
 Je hoeft de naam van een skill niet te noemen: de assistent kiest haar aan wat je vraagt. Wil je het zeker weten, roep haar dan bij naam aan, in Claude Code met `/nldd-a11y:nldd-a11y-audit https://voorbeeld.nl`.
@@ -129,6 +130,21 @@ Wat je ervan mag verwachten:
 
 Een run van `quick` is geen begin van een onderzoek. De inventaris is klein gehouden, en `explore` weigert de map. Een onderzoek begint in een eigen map.
 
+## Een meetblad insturen
+
+loep wordt beter van veel onderzoeken van veel mensen. Na een onderzoek kun je het meetblad ervan insturen naar een gedeelde verzameling: "Stuur het meetblad van dit onderzoek in." Dat kan ook voor onderzoeken van vroeger, in één keer voor een hele map.
+
+Een meetblad zegt iets over loep en niets over de site. Er staat op: de uitkomst per criterium, wat een beoordelaar over een regel van een regelset zei, welke regels afkeurden, gebreken geteld naar ernst en eigenaar, de versies en de duur per stap. Er staat niet op: het adres of de naam van de site, een pagina, een selector, een zin uit een oordeel of bevinding, een schermafbeelding, of wie tekende. De site staat erop als een sleutel die alleen op jouw machine uit het adres te maken is.
+
+De assistent laat eerst zien wat erop komt en vraagt dan of het mag. Zonder ja gaat er niets weg, ook niet aan het eind van een onderzoek. Met de hand kijk je zo, zonder dat er iets wordt geschreven of verstuurd:
+
+```
+node toolbox/src/cli.ts contribute --run toegankelijkheid/onderzoeken/2026-10-15
+node toolbox/src/cli.ts contribute --under toegankelijkheid/onderzoeken
+```
+
+De verzameling is een besloten repository. Wie erin mag schrijven, kan alles lezen wat erin staat. Hoe insturen met de hand gaat, staat in de README van die repository.
+
 ## De verklaring
 
 Vraag erom zodra het onderzoek is getekend: "Maak de toegankelijkheidsverklaring bij `toegankelijkheid/onderzoeken/2026-10-15`." De assistent controleert eerst of het onderzoek getekend is en sinds het zegel niet is veranderd. Is het niet getekend, dan kan alleen een concept.
@@ -147,4 +163,4 @@ Je krijgt de verklaring en een invulblad met de waarden per stap van de invulass
 - Het rapport met de hand bijwerken of mooier maken dan het is.
 - Een issue versturen zonder dat jij de tekst hebt gelezen en ja hebt gezegd.
 
-Hoe de assistent dit precies doet, staat in [skills/nldd-a11y-audit/SKILL.md](../skills/nldd-a11y-audit/SKILL.md), [skills/nldd-a11y-statement/SKILL.md](../skills/nldd-a11y-statement/SKILL.md) en [skills/nldd-a11y-quick/SKILL.md](../skills/nldd-a11y-quick/SKILL.md).
+Hoe de assistent dit precies doet, staat in [skills/nldd-a11y-audit/SKILL.md](../skills/nldd-a11y-audit/SKILL.md), [skills/nldd-a11y-statement/SKILL.md](../skills/nldd-a11y-statement/SKILL.md), [skills/nldd-a11y-quick/SKILL.md](../skills/nldd-a11y-quick/SKILL.md) en [skills/nldd-a11y-contribute/SKILL.md](../skills/nldd-a11y-contribute/SKILL.md).

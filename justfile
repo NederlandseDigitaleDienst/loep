@@ -94,7 +94,7 @@ test-shard i n:
 
 # Draai alleen de tests die geen browser starten: een paar seconden, voor tussendoor en voor de snelle controle bij een push
 test-quick:
-    cd {{toolbox}} && node --test test/compare-findings.test.ts test/contrast.test.ts test/core.test.ts test/defects.test.ts test/docs.test.ts test/estimate.test.ts test/release.test.ts test/seal-os-metadata.test.ts test/searchbody.test.ts test/extractors.test.ts test/feedback.test.ts test/instrument-tasks.test.ts test/origins.test.ts test/portrait.test.ts test/render.test.ts test/sequence.test.ts test/statement.test.ts test/sweepstamp.test.ts test/timing.test.ts test/atonce.test.ts test/verdict.test.ts test/voiceover.test.ts test/again.test.ts test/raise-budget.test.ts test/sweep-check.test.ts test/test-shard.test.ts test/answer-to-file.test.ts test/report-html.test.ts test/weighing.test.ts test/export.test.ts test/quick.test.ts
+    cd {{toolbox}} && node --test test/compare-findings.test.ts test/contrast.test.ts test/core.test.ts test/defects.test.ts test/docs.test.ts test/estimate.test.ts test/release.test.ts test/seal-os-metadata.test.ts test/searchbody.test.ts test/extractors.test.ts test/feedback.test.ts test/instrument-tasks.test.ts test/origins.test.ts test/portrait.test.ts test/render.test.ts test/sequence.test.ts test/statement.test.ts test/sweepstamp.test.ts test/timing.test.ts test/atonce.test.ts test/verdict.test.ts test/voiceover.test.ts test/again.test.ts test/raise-budget.test.ts test/sweep-check.test.ts test/test-shard.test.ts test/answer-to-file.test.ts test/report-html.test.ts test/weighing.test.ts test/export.test.ts test/quick.test.ts test/rule-register.test.ts test/run-sheet.test.ts
 
 # Controleer de types
 check:
@@ -186,6 +186,10 @@ diff vorige nieuwe uit:
 # IJk de instrumenten op de testgevallen van de ACT-regels van W3C: per instrument en per regel terecht gevonden, gemist en onterecht gemeld. Geen stap van een onderzoek. Haalt de gevallen één keer op naar een map buiten de repository en serveert ze lokaal; de uitkomst komt in validatie/ijkset/<datum>
 calibrate *flags:
     {{cli}} calibrate {{flags}}
+
+# Maak het regelregister: per regel van elke regelset wat de ijkmeting en afgeronde onderzoeken erover zeggen. Met --runs <bestand> een lijst mappen van afgeronde onderzoeken, één per regel; zonder alleen de ijkmeting. Geen stap van een onderzoek en niets leest het; de uitkomst komt in validatie/regelregister/<datum>
+rule-register *flags:
+    node {{toolbox}}/scripts/rule-register.ts {{flags}}
 
 # Controleer dat elk bestand een rechthebbende en een licentie heeft (REUSE); nieuwe bestandstypes komen in REUSE.toml
 reuse:

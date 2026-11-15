@@ -88,6 +88,13 @@ const USAGE = `loep <command> [options]
                                          werkte niet, niet bereikbaar, versturen niet toegestaan, buiten de afbakening, mens
                                          nodig, keuze nodig) and per criterion, equal points taken together and counted: the
                                          work list for whoever improves the sweep. Writes nothing
+  contribute --run <run> | --under <folder> [--out <dir>] [--json] [--key <file>]
+                                         The sheet of a finished run (meetblad.json): what it says about loep and nothing about
+                                         the site. Rule ids, criteria, outcomes and counts; no address, selector or sentence.
+                                         With --under the sheet of every finished run under a folder, for the runs made before.
+                                         Without --out it only says what is on the sheet. It reads a run of any version, writes
+                                         nothing in it and sends nothing. The site is on it as a key made with a key file that
+                                         stays on this machine
   feedback --run <run> [--out <dir>] [--json]
                                          Draft issues for the makers of loep: one per criterion and kind that stayed open
                                          because of loep itself, without the address or name of the site. Criteria open
@@ -265,6 +272,8 @@ async function main(): Promise<void> {
       out: { type: "string" },
       run: { type: "string" },
       baseline: { type: "string" },
+      key: { type: "string" },
+      under: { type: "string" },
       dismiss: { type: "string", multiple: true },
       strict: { type: "boolean", default: false },
       "max-pages": { type: "string", default: "200" },
@@ -380,7 +389,7 @@ async function main(): Promise<void> {
   }
   // `gaps` and `feedback` read the verdicts and the evaluation of finished runs and nothing else of them: they need no permission to write and no login.
   // A recheck only reads the run and writes in a folder of its own; its session runs in that folder, not here.
-  const readsOnly = command === "gaps" || command === "feedback" || command === "recheck" || command === "check-recheck";
+  const readsOnly = command === "gaps" || command === "feedback" || command === "contribute" || command === "recheck" || command === "check-recheck";
   if (command !== "inventory" && !readsOnly && values.run) {
     const permission = writesForRun(values.run);
     if (permission) setRunWrites(writeAccess(values.run, permission, command));
@@ -485,6 +494,22 @@ async function main(): Promise<void> {
       if (result.documents) process.stdout.write(`${result.documents.length} of ${result.documentPopulation!.onSite} documents\n`);
       if (result.method === "fixed-list" && result.note.includes(" In de lijst staan ")) process.stdout.write(`LET OP:${result.note.slice(result.note.indexOf(" In de lijst staan "))}\n`);
       await repeatReadsOutsideRun(values.run);
+      return;
+    }
+    case "contribute": {
+      const { contribute, contributeAll, contributionNl, contributorKey, manyContributionsNl } = await import("./commands/contribute.ts");
+      if (values.under) {
+        // Every finished run under a folder: the runs made before there was a collection.
+        const many = contributeAll(values.under, { outDir: values.out, key: contributorKey(values.key) });
+        process.stdout.write(values.json ? `${JSON.stringify(many.sheets, null, 2)}\n` : manyContributionsNl(many, values.out));
+        if (many.refused.length > 0) process.exitCode = 1;
+        return;
+      }
+      if (!values.run) throw new Error("contribute needs --run <run>, or --under <folder> for every finished run under it");
+      const result = contribute(values.run, { outDir: values.out, key: contributorKey(values.key) });
+      process.stdout.write(values.json ? `${JSON.stringify(result.sheet, null, 2)}\n` : contributionNl(result));
+      // A sheet with a word of the site on it is a fault of loep, and it must not pass unseen.
+      if (result.leaks.length > 0) process.exitCode = 1;
       return;
     }
     case "quick": {

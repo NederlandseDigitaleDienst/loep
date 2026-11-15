@@ -1,0 +1,56 @@
+#!/usr/bin/env node
+/**
+ * Build the rule register: what is known about each rule of each rule engine.
+ *
+ *   node scripts/rule-register.ts [--calibration <dir>] [--sheets <dir>] [--runs <file>] [--out <dir>]
+ *
+ * --calibration  a folder of `just calibrate` with uitkomst.json and regels.json; default the newest in validatie/ijkset
+ * --sheets       a folder with sheets of runs (`contribute --out`), such as a clone of the collection
+ * --runs         a file with the folders of finished evaluations, one per line: each is read as its sheet
+ *                would be. Without --sheets and --runs the register holds the calibration only. Nothing
+ *                that tells a site is written: sites are counted, not named.
+ * --out          default validatie/regelregister/<date>
+ *
+ * A measurement, not a step of an evaluation: nothing reads the register yet.
+ */
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { sheetSource } from "../src/commands/contribute.ts";
+import { buildSheet, fieldRunOfSheet, type RunSheet } from "../src/lib/run-sheet.ts";
+import { join, relative } from "node:path";
+import { fileURLToPath } from "node:url";
+import { parseArgs } from "node:util";
+import type { CalibrationReport } from "../src/lib/calibration.ts";
+import { buildRegister, registerMarkdown, type FieldRun, type RuleCatalogue } from "../src/lib/rule-register.ts";
+
+const ROOT = fileURLToPath(new URL("../..", import.meta.url));
+const read = <T>(path: string): T => JSON.parse(readFileSync(path, "utf8")) as T;
+
+/**
+ * A finished evaluation in a folder, read the way a contributed sheet is: the register sees of a run
+ * what a sheet holds and nothing more, so a register from folders and one from sheets are the same.
+ */
+function fieldRun(dir: string): FieldRun | null {
+  const source = sheetSource(dir);
+  // The key only has to tell the sites of this one build apart; nothing made with it is written.
+  return source ? fieldRunOfSheet(buildSheet(source, "rule-register")) : null;
+}
+
+const { values } = parseArgs({ options: { calibration: { type: "string" }, sheets: { type: "string" }, runs: { type: "string" }, out: { type: "string" } } });
+const calibrations = join(ROOT, "validatie", "ijkset");
+const newest = readdirSync(calibrations).filter((name) => existsSync(join(calibrations, name, "regels.json"))).sort().at(-1);
+const calibrationDir = values.calibration ?? (newest ? join(calibrations, newest) : null);
+if (!calibrationDir || !existsSync(join(calibrationDir, "regels.json"))) throw new Error("geen ijkmeting met regels.json gevonden; draai eerst: just calibrate");
+const calibration = read<CalibrationReport>(join(calibrationDir, "uitkomst.json"));
+const catalogue = read<RuleCatalogue>(join(calibrationDir, "regels.json"));
+const folders = values.runs ? readFileSync(values.runs, "utf8").split("\n").map((line) => line.trim()).filter((line) => line && !line.startsWith("#")) : [];
+const sheets = values.sheets ? readdirSync(values.sheets).filter((name) => name.endsWith(".json")).map((name) => read<RunSheet>(join(values.sheets!, name))).filter((sheet) => sheet.kind === "run-sheet") : [];
+const runs = [...folders.map(fieldRun).filter((run): run is FieldRun => run !== null), ...sheets.map(fieldRunOfSheet)];
+if (runs.length < folders.length) process.stderr.write(`${folders.length - runs.length} van de ${folders.length} mappen hebben geen evaluation.json en tellen niet mee\n`);
+
+const date = new Date().toISOString().slice(0, 10);
+const register = buildRegister({ date, catalogue, calibration, runs });
+const out = values.out ?? join(ROOT, "validatie", "regelregister", date);
+mkdirSync(out, { recursive: true });
+writeFileSync(join(out, "register.json"), `${JSON.stringify(register, null, 2)}\n`);
+writeFileSync(join(out, "register.md"), registerMarkdown(register));
+process.stdout.write(`${register.rules.length} regels, ${register.field.runs} onderzoeken van ${register.field.sites} sites; uitkomst in ${relative(ROOT, out)}\n`);

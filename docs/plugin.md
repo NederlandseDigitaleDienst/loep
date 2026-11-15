@@ -10,6 +10,7 @@ Deze repository is zelf de plugin `nldd-a11y`: de manifesten staan in `.claude-p
 | `nldd-a11y-audit` | Maakt het toegankelijkheidsonderzoek, stap voor stap. |
 | `nldd-a11y-statement` | Maakt van een getekend onderzoek de toegankelijkheidsverklaring. |
 | `nldd-a11y-quick` | Zet een snelle meting zonder taalmodel op die in een pipeline met de vorige release vergelijkt. |
+| `nldd-a11y-contribute` | Stuurt het meetblad van een onderzoek in naar de gedeelde verzameling, ook van onderzoeken van vroeger. |
 
 Hoe je de skills gebruikt, staat in [gebruik.md](gebruik.md). De skills roepen de toolbox in `toolbox/` aan. Wie de plugin installeert, heeft dus de hele repository nodig en draait `just install`, ook na elke update: elke versie staat in een eigen map. `just doctor` zegt wat ontbreekt.
 
@@ -21,7 +22,7 @@ De plugin staat in de marketplace `NederlandseDigitaleDienst/ai-plugins` (naam `
 {
   "name": "nldd-a11y",
   "displayName": "NLDD loep",
-  "description": "Experimenteel. loep maakt een toegankelijkheidsonderzoek van een website (WCAG 2.2 en 2.1, niveau A en AA, WCAG-EM) en de toegankelijkheidsverklaring die erop steunt. Vier skills: nldd-a11y wijst de weg, nldd-a11y-audit maakt het onderzoek (scripts meten, agents beoordelen elk criterium met meetinstrumenten en maken elke bevinding opnieuw vanaf een verse pagina, een mens tekent) nldd-a11y-statement maakt van een getekend onderzoek de verklaring, en nldd-a11y-quick bewaakt in een pipeline zonder taalmodel dat een site niet slechter wordt. Het register van toegankelijkheidsverklaringen heeft een onderzoek met loep niet bevestigd als onderbouwing van status A of B. Vereist Node en just; zie de README.",
+  "description": "Experimenteel. loep maakt een toegankelijkheidsonderzoek van een website (WCAG 2.2 en 2.1, niveau A en AA, WCAG-EM) en de toegankelijkheidsverklaring die erop steunt. Vijf skills: nldd-a11y wijst de weg, nldd-a11y-audit maakt het onderzoek (scripts meten, agents beoordelen elk criterium met meetinstrumenten en maken elke bevinding opnieuw vanaf een verse pagina, een mens tekent) nldd-a11y-statement maakt van een getekend onderzoek de verklaring, nldd-a11y-quick bewaakt in een pipeline zonder taalmodel dat een site niet slechter wordt, en nldd-a11y-contribute stuurt van een onderzoek een meetblad zonder de site in naar een gedeelde verzameling. Het register van toegankelijkheidsverklaringen heeft een onderzoek met loep niet bevestigd als onderbouwing van status A of B. Vereist Node en just; zie de README.",
   "author": { "name": "Nederlandse Digitale Dienst" },
   "source": { "source": "github", "repo": "NederlandseDigitaleDienst/loep", "ref": "v0.24.1" },
   "category": "productivity",

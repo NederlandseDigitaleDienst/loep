@@ -575,6 +575,18 @@ Het commando eindigt met 0 als er geen basislijn is of niets slechter is, met 1 
 
 De run krijgt een bestand `quick.json`. `explore` weigert een run die dat heeft: de inventaris is klein gehouden, en waarnemingen die niemand beoordeelde horen niet in een onderzoek.
 
+## Het meetblad en het regelregister
+
+loep legt vier regelsets naast elkaar. Hoe ver een regel te vertrouwen is, verschilt per regel, en dat is alleen te zien over veel onderzoeken. Daarvoor zijn er twee dingen. Geen van beide is een stap van een onderzoek, en niets in een onderzoek leest ze.
+
+**Het meetblad.** `contribute` maakt van een afgerond onderzoek één bestand met wat het onderzoek zegt over loep: de uitkomst per criterium en hoe die tot stand kwam, wat een beoordelaar zei over een regel die hij noemde (bevinding, niets aan de hand, ander criterium, open), welke regels in de veegronde en in een sessie afkeurden, het soort van elk open punt, gebreken geteld naar ernst en eigenaar, de versies en de duur per stap. Het bevat geen adres, geen pagina, geen selector en geen zin: alleen regelnummers, criteria, woorden uit een vaste lijst en aantallen. Het commando controleert dat zelf en weigert een meetblad waar een woord van de site op staat. De site staat erop als een sleutel, gemaakt met een sleutelbestand dat op de machine van de inzender blijft; niemand anders kan er een adres uit afleiden of adressen tegen proberen. Het leest een run van elke versie, schrijft er niets in en verstuurt niets. Insturen doet een mens, met de skill `nldd-a11y-contribute` of met de hand.
+
+Wat blijft: wie een onderzoek al heeft, kan het meetblad erbij terugvinden aan de maand, de versie en het aantal pagina's.
+
+**Het regelregister.** `just rule-register` maakt per regel van elke regelset een record uit drie bronnen: wat de regelset zelf over de regel zegt, hoe de regel het deed op de testgevallen van de ACT-regels, en wat de meetbladen zeggen. Uit de meetbladen komen twee tellingen, steeds per site: op hoeveel sites een beoordelaar de regel bevestigde of verwierp, en hoe het criterium eindigde in het onderzoek waarin de regel afkeurde, naast hoe vaak dat criterium over alle sites is afgekeurd.
+
+De tellingen uit het veld zijn oordelen van loep zelf. Die zijn niet tegen deskundigen gelegd, en een beoordelaar zag wat de regelset meldde. Ze rangschikken regels; ze bewijzen niets. De uitkomst en wat ze niet zegt, staan in [validatie/regelregister/README.md](../validatie/regelregister/README.md).
+
 ## Hoe lang een onderzoek duurt
 
 `estimate` rekent uit hoe lang een onderzoek duurt. Het leest wat de run al weet over de site en geeft per onderdeel de verwachte duur, het totaal met een marge en het verwachte aantal tokens. Het kan direct na `inventory`, en wordt scherper na `sample` (de steekproef in plaats van alle pagina's), na de verkenner (de paginatypen uit het sitemodel in plaats van een telling van pagina's met dezelfde opbouw), na `collect` (wat er per pagina te bedienen is, zoals gemeten) en na `tasks` (het echte aantal opdrachten). Een onderdeel dat klaar is, toont wat het werkelijk kostte in plaats van de schatting. Een stap van de veegronde die nog loopt, rekent het door met het tempo dat die stap tot nu toe haalde. Halverwege zegt het commando dus wat er nog komt, en op een afgeronde run staan geschat en gemeten naast elkaar. Het schrijft niets in de run.

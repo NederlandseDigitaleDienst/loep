@@ -67,7 +67,11 @@ Na het tekenen en de besluiten per gebrek: "Maak de toegankelijkheidsverklaring 
 
 "Zet in onze pipeline een check die zegt of de site slechter is geworden." De skill `nldd-a11y-quick` zet een snelle meting op zonder taalmodel: een lijst met pagina's, een basislijn, en een stap die faalt als een release meer fouten heeft dan de vorige. Ze vindt ongeveer een kwart van wat een onderzoek afkeurt, en vervangt het dus niet.
 
-De vierde skill, `nldd-a11y`, wijst bij een algemene vraag ("hoe laat ik zien dat onze site toegankelijk is?") de weg naar de andere. Het hele verloop, met de vragen en wat je terugkrijgt, staat in [docs/gebruik.md](docs/gebruik.md).
+### Bijdragen aan loep
+
+"Stuur het meetblad van dit onderzoek in." De skill `nldd-a11y-contribute` maakt van een afgerond onderzoek een meetblad: wat het onderzoek zegt over loep, zonder de site. Ze laat zien wat erop staat, vraagt of het mag en stuurt het in naar een besloten verzameling. Dat kan ook voor alle onderzoeken van vroeger in één keer. Uit die verzameling wordt gemeten hoe betrouwbaar elke regel van een regelset is.
+
+De vijfde skill, `nldd-a11y`, wijst bij een algemene vraag ("hoe laat ik zien dat onze site toegankelijk is?") de weg naar de andere. Het hele verloop, met de vragen en wat je terugkrijgt, staat in [docs/gebruik.md](docs/gebruik.md).
 
 ## Hoe het werkt
 
