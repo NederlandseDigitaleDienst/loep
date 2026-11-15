@@ -834,6 +834,8 @@ export interface SiteCheck {
   ok: boolean;
   siteSha256: string;
   checkedAt: string;
+  /** How long the check took, in whole seconds; the next task of the explorer names it (#460). Absent in a check from before 0.31.0. */
+  seconds?: number;
   problems: string[];
   replays: {
     kind: "blocker" | "component" | "process";

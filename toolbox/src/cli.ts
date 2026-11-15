@@ -482,7 +482,7 @@ async function main(): Promise<void> {
     case "check-site": {
       if (!values.run) throw new Error("check-site needs --run <run>");
       const { checkSite } = await import("./commands/explore.ts");
-      const check = await checkSite(values.run);
+      const check = await checkSite(values.run, { progress: (line) => process.stderr.write(`${line}\n`) });
       for (const replay of check.replays) process.stdout.write(`${replay.ok ? "ok  " : "FOUT"} ${replay.kind} ${replay.id} (recept ${replay.recipe})\n`);
       for (const problem of check.problems) process.stdout.write(`- ${problem}\n`);
       for (const hint of check.hintsNl ?? []) process.stdout.write(`tip: ${hint}\n`);

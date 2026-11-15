@@ -104,6 +104,9 @@ export async function explore(runDir: string): Promise<{ task: string; pages: nu
   const modelProblems = existsSync(join(runDir, SITE_MODEL_FILE)) ? await staticProblems(runDir, inventory) : [];
   // And the search questions any session held back because no rule of the checked model covers their address.
   const searches = existsSync(join(runDir, SITE_MODEL_FILE)) ? await searchesHeldBack(runDir) : [];
+  // How long the last check took, so the explorer gives the command a time limit that fits, or runs it in the background (#460).
+  const lastCheck = existsSync(join(runDir, SITE_CHECK_FILE)) ? await readJson<SiteCheck>(join(runDir, SITE_CHECK_FILE)).catch(() => null) : null;
+  const lastCheckNl = lastCheck?.seconds !== undefined ? lastCheckDurationNl(lastCheck.seconds, lastCheck.replays.length) : null;
   const previous = !existsSync(join(runDir, SITE_MODEL_FILE))
     ? ""
     : [
@@ -111,6 +114,7 @@ export async function explore(runDir: string): Promise<{ task: string; pages: nu
         "",
         `Er is al een \`site.json\` (${join(absoluteRun, SITE_MODEL_FILE)}). Lees het bestaande model en pas het aan op de punten hieronder. Begin niet opnieuw: wat klopt, blijft staan. Recepten die al werken hoef je niet opnieuw op te nemen.`,
         "",
+        ...(lastCheckNl ? [lastCheckNl, ""] : []),
         ...(modelProblems.length > 0 ? ["De controle keurt het model nu af op:", "", ...modelProblems.map((problem) => `- ${problem}`), ""] : []),
         ...(forExplorer.length > 0 ? ["De bewijspoort vond na het meten deze gaten:", "", ...forExplorer.map((gap) => `- **${gap.check}**${gap.url ? `, ${gap.url}` : ""}${gap.state && gap.state !== "default" ? `, toestand ${gap.state}` : ""}: ${gap.missingNl}`), ""] : []),
         ...(searches.length > 0 ? ["Deze zoekvragen hield loep tegen omdat geen leesverzoek hun adres dekt; wat pas na zoeken te zien is, kon daardoor niet worden gemeten. Leg elk adres vast in `readRequests` (stap 4), met de genoemde dienst in `service` en de genoemde waarneming in `observation`, en draai de controle van stap 7:", "", ...searches.map((search) => `- ${heldBackSearchNl(search)}`), ""] : []),
@@ -394,8 +398,11 @@ async function searchTermProblem(env: Env, chosen: { term: string; page: string 
  * a component that does not open on one of its page types, as the sweep will open it. The
  * outcome is written next to the model; the sweep only accepts a model that passed.
  */
-export async function checkSite(runDir: string, options: { navigationDelayMs?: number } = {}): Promise<SiteCheck> {
+export async function checkSite(runDir: string, options: { navigationDelayMs?: number; progress?: (line: string) => void } = {}): Promise<SiteCheck> {
   const startedAt = stepStart();
+  const began = Date.now();
+  // While it runs, a line per recipe: a check that a time limit cuts off still shows how far it came (#460).
+  const say = (line: string): void => options.progress?.(`[${String(Math.round((Date.now() - began) / 1000)).padStart(4)} s] ${line}`);
   const path = join(runDir, SITE_MODEL_FILE);
   if (!existsSync(path)) throw new Error(`er is geen ${SITE_MODEL_FILE} in ${runDir}`);
   const inventory = await readJson<Inventory>(join(runDir, "inventory.json"));
@@ -428,7 +435,8 @@ export async function checkSite(runDir: string, options: { navigationDelayMs?: n
       // The read requests of the model passed the validator above; a recipe that searches is replayed with them, as the sweep will.
       const env: Env = { ...(await replayEnv(browser, runDir, options.navigationDelayMs === undefined ? {} : { navigationDelayMs: options.navigationDelayMs })), reads: withRunTerms(runDir, model.readRequests ?? []) };
       const term = searchTermForRun(runDir);
-      for (const entry of entries) {
+      say(`${entries.length} ${entries.length === 1 ? "recept" : "recepten"} afspelen`);
+      for (const [index, entry] of entries.entries()) {
         const recipe = recipes[entry.recipe]!;
         let reasonNl: string | null = null;
         let before = "";
@@ -463,6 +471,7 @@ export async function checkSite(runDir: string, options: { navigationDelayMs?: n
           if (literal) reasonNl = `${reasonNl}. ${literal}`;
         }
         const onPageTypes = entry.kind === "component" && reasonNl === null && recipe.start ? await componentOnPageTypes(env, model, entry.id, { ...recipe, start: recipe.start }, entry.postcondition) : undefined;
+        say(`${index + 1}/${entries.length} ${reasonNl === null ? "ok  " : "FOUT"} ${entry.kind} ${entry.id} (recept ${entry.recipe})`);
         replays.push({ kind: entry.kind, id: entry.id, recipe: entry.recipe, ok: reasonNl === null, reasonNl, before, after, ...(onPageTypes ? { onPageTypes } : {}), ...(sendsTo ? { sendsTo } : {}) });
         if (reasonNl !== null) problems.push(`${entry.kind} "${entry.id}" (recept ${entry.recipe}): ${reasonNl}`);
         for (const row of onPageTypes ?? []) {
@@ -477,6 +486,7 @@ export async function checkSite(runDir: string, options: { navigationDelayMs?: n
       }
       // What there is to operate on each page type, next to what the model says. Only with the blockers closing: otherwise their buttons are counted as parts of the page.
       if (replays.every((replay) => replay.kind !== "blocker" || replay.ok)) {
+        say("tellen wat er te bedienen is op elk paginatype");
         const { counted, problems: notCounted, widths, leftScope } = await countOperables(env, model, recipes);
         const compared = uncoveredOperables(model, recipes, counted);
         hintsNl.push(...widthHints(model, recipes, widths));
@@ -502,10 +512,19 @@ export async function checkSite(runDir: string, options: { navigationDelayMs?: n
       unusedRecipes.push(name);
     }
   }
-  const check: SiteCheck = { ok: problems.length === 0, siteSha256: await sha256File(path), checkedAt: new Date().toISOString(), problems, replays, unusedRecipes, ...(operables ? { operables } : {}), ...(hintsNl.length > 0 ? { hintsNl } : {}) };
+  const check: SiteCheck = { ok: problems.length === 0, siteSha256: await sha256File(path), checkedAt: new Date().toISOString(), seconds: Math.round((Date.now() - began) / 1000), problems, replays, unusedRecipes, ...(operables ? { operables } : {}), ...(hintsNl.length > 0 ? { hintsNl } : {}) };
   await writeJson(join(runDir, SITE_CHECK_FILE), check);
   // Which read requests the run lets through is part of its record, as the permission to write is.
   if (check.ok) await recordReads(runDir, withRunTerms(runDir, (await readSiteModel(runDir))?.readRequests ?? []));
   await writeManifest(runDir, { command: "check-site", startedAt, ok: check.ok, problems: problems.length, replays: replays.length });
   return check;
+}
+
+/** For the next task of the explorer: how long the last check took, and what that means for the command. */
+export function lastCheckDurationNl(seconds: number, replays: number): string {
+  const minutes = Math.max(1, Math.round(seconds / 60));
+  const span = `${minutes} ${minutes === 1 ? "minuut" : "minuten"} voor ${replays} ${replays === 1 ? "recept" : "recepten"}`;
+  return seconds >= 300
+    ? `De vorige controle van stap 7 duurde ${span}. Geeft je shell een commando minder tijd, start de controle dan op de achtergrond en lees haar uitvoer als ze klaar is: ze schrijft per recept een regel terwijl ze loopt.`
+    : `De vorige controle van stap 7 duurde ${span}.`;
 }

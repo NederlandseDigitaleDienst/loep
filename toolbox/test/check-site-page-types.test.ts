@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, test } from "node:test";
 import { startFixture, type FixtureServer } from "../fixtures/serve.ts";
-import { checkSite, exploreContext, redirectLeftScope } from "../src/commands/explore.ts";
+import { checkSite, exploreContext, lastCheckDurationNl, redirectLeftScope } from "../src/commands/explore.ts";
 import { inventory } from "../src/commands/inventory.ts";
 import { readJson } from "../src/lib/canonical.ts";
 import { ALL_PAGE_TYPES, NOT_OPENED_ON_PAGE_TYPE, notOpenedAdviceNl, searchTermForRun, type SiteModel } from "../src/lib/sitemodel.ts";
@@ -97,7 +97,13 @@ const write = (): void => writeFileSync(join(run, "site.json"), JSON.stringify(m
 test("a component that does not open on the representative page of one of its page types is refused, with the page type and the reason", { timeout: 300_000 }, async () => {
   write();
   const started = Date.now();
-  const check = await checkSite(run, { navigationDelayMs: 20 });
+  const lines: string[] = [];
+  const check = await checkSite(run, { navigationDelayMs: 20, progress: (line) => lines.push(line) });
+  // While it runs, a line per recipe with the time so far, and one before counting (#460); the duration is kept.
+  assert.match(lines[0]!, /^\[\s*\d+ s\] \d+ recepten? afspelen$/);
+  assert.ok(lines.some((line) => /^\[\s*\d+ s\] \d+\/\d+ (ok  |FOUT) component vraag \(recept component-vraag\)$/.test(line)), lines.join("\n"));
+  assert.ok(lines.some((line) => line.endsWith("tellen wat er te bedienen is op elk paginatype")), lines.join("\n"));
+  assert.equal(typeof check.seconds, "number");
   process.stderr.write(`check-site met ${model.components.filter((component) => component.recipe).length} recept en 2 paginatypen: ${Math.round((Date.now() - started) / 100) / 10} s\n`);
   assert.equal(check.ok, false);
   const expected = new RegExp(`^component "vraag" \\(recept component-vraag\\): gaat op paginatype "${typeWithoutQuestions}" \\(${representativeWithout.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\) niet open in een staand venster van 800 bij 1280: stap \\d+ \\(click\\) vond het element niet terug\\. ${notOpenedAdviceNl("stap 1 (click) vond het element niet terug").replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`);
@@ -230,4 +236,9 @@ test("check-site replays a part with sendsTo twice, and refuses a pattern that o
 test("redirectLeftScope: alleen een doorverwijzing naar buiten de run", () => {
   assert.equal(redirectLeftScope("page.goto: net::ERR_BLOCKED_BY_CLIENT at https://site.example/a (geweigerd: GET https://other.example/a (doorverwijzing vanaf https://site.example/a))"), true);
   assert.equal(redirectLeftScope("page.goto: net::ERR_CONNECTION_REFUSED at https://site.example/a"), false);
+});
+
+test("the next task names how long the last check took, and from five minutes on says to run it in the background (#460)", () => {
+  assert.equal(lastCheckDurationNl(70, 1), "De vorige controle van stap 7 duurde 1 minuut voor 1 recept.");
+  assert.match(lastCheckDurationNl(1800, 24), /^De vorige controle van stap 7 duurde 30 minuten voor 24 recepten\. .*op de achtergrond/);
 });
