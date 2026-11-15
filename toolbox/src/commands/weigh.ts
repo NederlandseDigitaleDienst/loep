@@ -56,15 +56,19 @@ function template(): string {
   return readTemplate("weeg");
 }
 
-const CLI = resolve(new URL("../cli.ts", import.meta.url).pathname);
+/** The CLI as the task names it: `node`, then the path of any installation up to its `src/cli.ts`. */
+const CLI_IN_TASK = /node [^\n`]*?[\\/]src[\\/]cli\.ts/g;
 
 /**
- * The hash of the task as the agent got it, without the paths of this run and this installation.
- * A run that was moved or copied, and a toolbox installed somewhere else, have the same task.
+ * The hash of the task as the agent got it, without the paths of this run and of the installation.
+ * A run that was moved or copied, and a task written by a toolbox installed somewhere else (another
+ * version, or the plugin in another folder), have the same task. Every CLI path counts, not only
+ * the one of the installation that hashes: check-weigh hashes the task on disk, which an earlier
+ * installation may have written.
  */
 async function taskSha256(runDir: string): Promise<string> {
   const text = await readFile(join(runDir, TASK), "utf8");
-  return sha256(text.split(resolve(runDir)).join("<run>").split(CLI).join("<cli>"));
+  return sha256(text.split(resolve(runDir)).join("<run>").replace(CLI_IN_TASK, "node <cli>"));
 }
 
 async function currentStamp(runDir: string, inputSha256: string): Promise<Omit<WeighStamp, "stampedAt"> | null> {
