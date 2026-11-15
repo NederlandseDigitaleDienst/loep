@@ -120,12 +120,33 @@ export async function fetchSitemapUrls(origin: string): Promise<string[]> {
     seen.add(sitemap);
     const response = await trialFetch(sitemap).catch(() => null);
     if (!response?.ok) continue;
-    for (const location of parseSitemap(await response.text())) {
-      if (location.endsWith(".xml") || location.endsWith(".xml.gz")) queue.push(location);
-      else if (new URL(location).origin === origin) urls.add(normaliseUrl(location));
-    }
+    const found = sitemapEntries(await response.text(), sitemap, origin);
+    queue.push(...found.sitemaps);
+    for (const page of found.pages) urls.add(page);
   }
   return [...urls].sort();
+}
+
+/**
+ * The nested sitemaps and the pages on the origin that one sitemap names. A relative location is
+ * read against the address of the sitemap; one that is no address at all is skipped, so that one
+ * broken entry does not stop the inventory.
+ */
+export function sitemapEntries(text: string, sitemap: string, origin: string): { sitemaps: string[]; pages: string[] } {
+  const sitemaps: string[] = [];
+  const pages: string[] = [];
+  for (const location of parseSitemap(text)) {
+    let url: URL;
+    try {
+      url = new URL(location, sitemap);
+    } catch {
+      continue;
+    }
+    if (url.protocol !== "http:" && url.protocol !== "https:") continue;
+    if (url.pathname.endsWith(".xml") || url.pathname.endsWith(".xml.gz")) sitemaps.push(url.href);
+    else if (url.origin === origin) pages.push(normaliseUrl(url.href));
+  }
+  return { sitemaps, pages };
 }
 
 /**

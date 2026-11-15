@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { aliasRepresentatives, checkSite, exploreContext } from "../src/commands/explore.ts";
 import { buildSample, CENSUS_LIMIT, chooseOnVariation, contentKindsOfType, extraPagesFor, LEGACY_SEED, MAX_EXTRA_PER_TYPE, sample, seededOrder } from "../src/commands/sample.ts";
-import { contentReadOutside, formPagesNl, landingAddress, parseSitemap, passwordPagesNl, readsOutsideRunNl, type Inventory, type InventoryPage } from "../src/commands/inventory.ts";
+import { contentReadOutside, formPagesNl, landingAddress, parseSitemap, passwordPagesNl, readsOutsideRunNl, sitemapEntries, type Inventory, type InventoryPage } from "../src/commands/inventory.ts";
 import { progressLine, sayingItRuns } from "../src/instruments/limit.ts";
 import { canonicalJson, sha256, slugForUrl, stableId } from "../src/lib/canonical.ts";
 import { isChallenge } from "../src/lib/challenge.ts";
@@ -63,6 +63,14 @@ test("inventory says when pages show a password field and nobody logged in", () 
   assert.match(one!, /één pagina toont een wachtwoordveld \(https:\/\/a\.nl\/p002\)/);
   assert.match(one!, /loep login/);
   assert.match(passwordPagesNl([withField, { ...page(3), counts: { passwordFields: 2 } }], false)!, /2 pagina's tonen een wachtwoordveld \(https:\/\/a\.nl\/p002 en 1 meer\)/);
+});
+
+test("sitemapEntries skips a location that is no address and reads a relative one against the sitemap", () => {
+  const text = "<urlset><url><loc>https://a.nl/x</loc></url><url><loc>http://</loc></url><url><loc>/y</loc></url><url><loc>https://b.nl/z</loc></url><url><loc>mailto:info@a.nl</loc></url><url><loc>/nested.xml</loc></url></urlset>";
+  const found = sitemapEntries(text, "https://a.nl/sitemap.xml", "https://a.nl");
+  assert.deepEqual(found.sitemaps, ["https://a.nl/nested.xml"]);
+  assert.equal(found.pages.length, 2);
+  assert.ok(found.pages.every((page) => page.startsWith("https://a.nl/")));
 });
 
 test("inventory says when pages have a form or a frame on another origin has one, and the run may not send", () => {
