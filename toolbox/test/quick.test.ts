@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { quick } from "../src/commands/quick.ts";
-import { buildQuickSummary, compareQuick, elementMark, groupedChangesNl, mediaProbe, orderProbe, spacingProbe, tabProbe, QUICK_MARK_FILE, quickComparisonMarkdown, quickFindings, quickSignals, quickSummaryMarkdown, type GroupedElement, type QuickPage, type QuickSummary } from "../src/lib/quick.ts";
+import { buildQuickSummary, compareQuick, confirmComparison, coveringLayers, elementMark, groupedChangesNl, mediaProbe, orderProbe, QUICK_BACKTEST, spacingProbe, tabProbe, QUICK_MARK_FILE, quickComparisonMarkdown, quickFindings, quickSignals, quickSummaryMarkdown, type GroupedElement, type QuickPage, type QuickSummary } from "../src/lib/quick.ts";
 
 const element = (criterion: string, where: string, verdicts: Record<string, string>): GroupedElement => ({
   criterion,
@@ -57,7 +57,7 @@ test("the strongest ground of a criterion comes first, and a layout probe is a g
     page("https://voorbeeld.test/contact", [element("1.3.1", "ul", { qualweb: "failed" })]),
   ];
   const signals = quickSignals(pages, quickFindings(pages));
-  assert.deepEqual(signals.map((signal) => [signal.criterion, signal.ground, signal.pages]), [["2.4.4", "engines-agree", 1], ["1.4.10", "layout-probe", 1], ["1.3.1", "engine-alone", 2]]);
+  assert.deepEqual(signals.map((signal) => [signal.criterion, signal.ground, signal.pages]), [["2.4.4", "engines-agree", 1], ["1.4.10", "probe", 1], ["1.3.1", "engine-alone", 2]]);
   assert.match(signals[1]!.sentenceNl, /Bij 320 pixels breed valt er inhoud buiten beeld op 1 pagina\./);
   assert.match(signals[2]!.sentenceNl, /Eén meetprogramma keurt 2 plekken af, op 2 pagina's/);
 });
@@ -144,37 +144,64 @@ test("an element that only moved, or got another class, is no change", () => {
   assert.deepEqual([comparison.ok, comparison.worse, comparison.better], [true, [], []]);
 });
 
-test("the probes of loep read what a session command answers, without the measures that differ per run", () => {
-  assert.deepEqual(orderProbe({ reversed: ["div: Vanaf maandag kunt u uw fiets gratis en  (column-reverse)"], positiveTabindex: ["input:  (tabindex 3)"], jumps: ["omhoog: 36 a: Openingstijden -> 37 h2: Hulp nodig?"] }), [
-    { probe: "order", element: "div: Vanaf maandag kunt u uw fiets gratis en" },
-    { probe: "tabindex", element: "input:" },
+test("the probes of loep read the result of an observation, not a sentence of an answer", () => {
+  assert.deepEqual(orderProbe({ reversed: [{ tag: "div", text: "Vanaf maandag kunt u uw fiets gratis en bewaakt stallen ", region: "main" }], cssOrder: [{ tag: "nav", text: "Veel gezocht" }], positiveTabindex: [{ tag: "input", text: "", region: "form" }] }), [
+    { probe: "order", element: 'div "Vanaf maandag kunt u uw fiets gratis en bewaakt stallen" in main' },
+    { probe: "order", element: 'nav "Veel gezocht"' },
+    { probe: "tabindex", element: "input in form" },
   ]);
-  assert.deepEqual(spacingProbe({ textLost: 3, first: ["a: Paspoort of rijbewijs (tekst verdwijnt: 1 regel(s) tot 33px buiten beeld, 1 helemaal)", "a: Afval (grofvuil) (tekst verdwijnt: 2 regel(s))"] }), [
-    { probe: "spacing", element: "a: Paspoort of rijbewijs" },
-    { probe: "spacing", element: "a: Afval (grofvuil)" },
-    { probe: "spacing", element: "meer tekst" },
-  ]);
-  assert.deepEqual(spacingProbe({ newlyClipped: 2, textLost: 0 }), []);
-  assert.deepEqual(mediaProbe({ media: ["audio #hoofddeel > audio:nth-of-type(2): autoplay; loop; geen controls; geluidsspoor; geen knop gevonden die het stopt of dempt", "video main > video: controls; geluidsspoor", "video main > video: autoplay; geen geluidsspoor; geen knop gevonden die het stopt of dempt"] }), [{ probe: "autoplay", element: "audio #hoofddeel > audio" }]);
+  assert.deepEqual(orderProbe({}), []);
+  // Text that is clipped but not lost, such as a line that wraps, is no finding.
+  assert.deepEqual(spacingProbe({ newlyClipped: [{ tag: "a", text: "Paspoort of rijbewijs", region: "main", textCut: { lost: true } }, { tag: "p", text: "Lang", textCut: { lost: false } }, { tag: "p", text: "Geen", textCut: null }] }), [{ probe: "spacing", element: 'a "Paspoort of rijbewijs" in main' }]);
+  const sound = { tag: "audio", src: "https://voorbeeld.test/media/melodie.ogg", attributes: { autoplay: true }, audioTrack: true, muted: false, canBePausedOrMuted: false };
+  assert.deepEqual(mediaProbe({ elements: [sound, { ...sound, canBePausedOrMuted: true }, { ...sound, audioTrack: false }, { ...sound, muted: true }, { ...sound, attributes: { autoplay: false } }] }), [{ probe: "autoplay", element: "audio /media/melodie.ogg" }]);
   const stops = [
     { path: ["header > nav > ul > li:nth-of-type(2) > a"], href: "/nieuws/", focusPixelShare: 0, coveredBy: null },
     { path: ["header > a"], href: "/", focusPixelShare: 0.11, coveredBy: null },
-    { path: ["#hoofddeel > p > a"], href: "/contact.html", focusPixelShare: 0, coveredBy: ["#cookiemelding"] },
+    { path: ["#hoofddeel > p > a"], href: "/contact.html", focusPixelShare: 0, coveredBy: ["#cookiemelding > div:nth-of-type(1) > p"] },
     { path: ["main > a"], href: "/x", focusPixelShare: 0, coveredBy: null, focusNotMeasured: "het element stond niet op de plek" },
   ];
-  assert.deepEqual(tabProbe({ notReached: ["overgeslagen door Tab, hoewel de DOM het als stop voorspelt: #naam", 'krijgt focus en gooit die meteen weg: a "Openingstijden", button "Sluit, nu"'] }, stops), [
+  const walk = { methods: [{ result: { stops } }], focusLost: { next: "#top > footer > div:nth-of-type(1) > a:nth-of-type(2)", throwsAway: true } };
+  assert.deepEqual(tabProbe(walk), [
     { probe: "focus-invisible", element: "a in nav naar /nieuws/" },
     { probe: "focus-covered", element: "a in #hoofddeel naar /contact.html" },
-    { probe: "focus-thrown", element: 'a "Openingstijden"' },
-    { probe: "focus-thrown", element: 'button "Sluit, nu"' },
+    { probe: "focus-thrown", element: "a in footer" },
   ]);
+  // A walk that ended because the page has no more stops threw nothing away.
+  assert.deepEqual(tabProbe({ methods: [{ result: { stops: [] } }], focusLost: { next: "a", throwsAway: false } }), []);
+  assert.deepEqual(coveringLayers(walk), ["#cookiemelding"]);
+});
+
+test("the summary says what lay over the pages and how to close it", () => {
+  const covered: QuickPage = { ...page("https://voorbeeld.test/", []), covering: ["#cookiemelding"] };
+  const text = quickSummaryMarkdown(summaryOf([covered, page("https://voorbeeld.test/contact", [])]));
+  assert.match(text, /Over 1 pagina lag iets, zoals een cookiemelding: `#cookiemelding`\. De proeven hebben met die laag gemeten\. Geef de knop die haar sluit mee met --dismiss/);
+  const still = buildQuickSummary({ site: "https://voorbeeld.test/", startedAt: "2026-11-15T10:00:00.000Z", finishedAt: "2026-11-15T10:01:00.000Z", maxPages: 15, pagesFound: 1, pageLimitReached: false, planned: 1, pages: [covered], dismiss: ["#weigeren"] });
+  assert.match(quickSummaryMarkdown(still), /lag nog iets, ook na het klikken op wat met --dismiss is opgegeven/);
+  assert.doesNotMatch(quickSummaryMarkdown(summaryOf([page("https://voorbeeld.test/", [])])), /--dismiss/);
+});
+
+test("a criterion one engine fails names the rule behind most places", () => {
+  const links = Array.from({ length: 5 }, (_, index) => ({ ...element("2.1.1", `nav > a:nth-of-type(${index + 1})`, { qualweb: "failed" }), rules: { qualweb: ["QW-WCAG-T24"] } }));
+  const summary = summaryOf([page("https://voorbeeld.test/", [...links, { ...element("2.1.1", "main > div", { qualweb: "failed" }), rules: { qualweb: ["QW-ACT-R62"] } }])]);
+  assert.deepEqual(summary.signals[0]!.mostRule, { engine: "qualweb", rule: "QW-WCAG-T24", places: 5 });
+  assert.equal(summary.signals[0]!.sentenceNl, "Eén meetprogramma keurt 6 plekken af, op 1 pagina, en de andere zeggen er niets over. Het vaakst: regel QW-WCAG-T24 van QualWeb, 5 keer.");
+});
+
+test("the figures every summary quotes are the ones the validation file has", () => {
+  const validation = readFileSync(new URL("../../validatie/snelle-meting/README.md", import.meta.url), "utf8");
+  const { testsite, precision, recall, sites } = QUICK_BACKTEST;
+  assert.ok(validation.includes(`| Alle gebreken | 31 van 79 | ${testsite.caught} van ${testsite.defects} |`), "de testsite");
+  assert.ok(validation.includes(`(${Math.round(precision * 100)}%) | ${Math.round(recall * 100)}% |`), "precisie en vangst");
+  assert.ok(validation.includes(`van elk van ${sites} sites`), "het aantal sites");
+  assert.ok(QUICK_BACKTEST.textNl.includes(`${testsite.caught} van de ${testsite.defects}`) && QUICK_BACKTEST.textNl.includes(`${sites} sites`));
 });
 
 test("what a probe saw is a signal under its criterion and a count the comparison holds", () => {
   const home: QuickPage = { ...page("https://voorbeeld.test/", []), title: "Gemeente", probes: [{ probe: "focus-invisible", element: "a in nav naar /nieuws/" }, { probe: "focus-invisible", element: "a in nav naar /afval/" }] };
   const news: QuickPage = { ...page("https://voorbeeld.test/nieuws/", []), title: "Gemeente" };
   const summary = summaryOf([home, news]);
-  assert.deepEqual(summary.signals.map((signal) => [signal.criterion, signal.ground, signal.probePages]), [["2.4.2", "layout-probe", 2], ["2.4.7", "layout-probe", 1]]);
+  assert.deepEqual(summary.signals.map((signal) => [signal.criterion, signal.ground, signal.probePages]), [["2.4.2", "probe", 2], ["2.4.7", "probe", 1]]);
   assert.equal(summary.signals[0]!.sentenceNl, "2 pagina's hebben dezelfde titel als een andere pagina. Dat is gezien op 2 pagina's.");
   assert.equal(summary.signals[1]!.sentenceNl, "Bij 2 elementen verandert er niets zichtbaars als het de focus krijgt. Dat is gezien op 1 pagina.");
   assert.deepEqual(summary.counts.map((count) => [count.path, count.criterion, count.rule]), [["/", "2.4.2", "loep:title"], ["/", "2.4.7", "loep:focus-invisible"], ["/", "2.4.7", "loep:focus-invisible"], ["/nieuws/", "2.4.2", "loep:title"]]);
@@ -199,9 +226,29 @@ test("a page of the baseline that is not measured now fails the comparison; a ne
   assert.deepEqual([added.ok, added.newPages, added.worse], [true, ["/contact"], []]);
 });
 
+test("what only one of two measurements finds worse stops nothing; what both find does", () => {
+  const failing = { "axe-core": "failed", alfa: "failed" };
+  const before = summaryOf([page("https://voorbeeld.test/", []), page("https://voorbeeld.test/contact", [])]);
+  const real = element("2.4.4", "a.meer", failing);
+  const chance = element("1.4.3", "p.laat", failing);
+  const first = compareQuick(before, summaryOf([page("https://voorbeeld.test/", [real, chance]), page("https://voorbeeld.test/contact", [])]));
+  const second = compareQuick(before, summaryOf([page("https://voorbeeld.test/", [real]), page("https://voorbeeld.test/contact", [])]));
+  const confirmed = confirmComparison(first, second);
+  assert.equal(confirmed.ok, false);
+  assert.deepEqual([...new Set(confirmed.worse.map((change) => change.criterion))], ["2.4.4"]);
+  assert.deepEqual([...new Set(confirmed.unstable.map((change) => change.criterion))], ["1.4.3"]);
+  assert.match(quickComparisonMarkdown(confirmed), /## Niet bevestigd\n\nGezien in één van twee metingen van dezelfde pagina\. Dat telt niet als slechter\./);
+  // Only chance: the comparison passes, and says what it left out.
+  const onlyChance = confirmComparison(compareQuick(before, summaryOf([page("https://voorbeeld.test/", [chance]), page("https://voorbeeld.test/contact", [])])), compareQuick(before, before));
+  assert.deepEqual([onlyChance.ok, onlyChance.worse.length, onlyChance.unstable.length], [true, 0, 2]);
+  // Something the second measurement finds and the first did not is chance too.
+  assert.equal(confirmComparison(compareQuick(before, before), first).ok, true);
+});
+
 /** A loep that answers as the real one does, without a browser. */
-function fakeLoep(run: string, calls: string[][], options: { failOpen?: string } = {}) {
+function fakeLoep(run: string, calls: string[][], options: { failOpen?: string; zoomOnce?: boolean; zoomAlways?: boolean } = {}) {
   let nr = 0;
+  let zooms = 0;
   return async (args: string[]): Promise<{ code: number; stdout: string; stderr: string }> => {
     calls.push(args);
     const answer = (value: unknown) => ({ code: 0, stdout: `${JSON.stringify(value)}\n`, stderr: "" });
@@ -218,15 +265,22 @@ function fakeLoep(run: string, calls: string[][], options: { failOpen?: string }
     if (command === "start" || command === "stop") return answer({ session: "quick" });
     if (command === "open") return first === options.failOpen ? answer({ error: "time-out" }) : answer({ status: 200, url: first, title: `Pagina ${new URL(first!).pathname}` });
     if (command === "look") return answer({ image: "observations/quick/0001.png" });
-    if (command === "reflow") return answer({ horizontalScroll: false, offenders: 1, first: ["button: Menu"] });
-    if (command === "zoom") return answer({ horizontalScroll: false, offenders: 0 });
-    if (command === "rules") {
+    const observe = (result: unknown) => {
       nr += 1;
       mkdirSync(join(run, "observations", "quick"), { recursive: true });
       const number = String(nr).padStart(4, "0");
-      writeFileSync(join(run, "observations", "quick", `${number}.json`), JSON.stringify({ id: `quick-${number}`, result: { methods: [{ implementation: "axe-core", version: "4.14.0" }], grouped: { elements: [element("2.4.4", "a.meer", { "axe-core": "failed", alfa: "failed" })] } } }));
+      writeFileSync(join(run, "observations", "quick", `${number}.json`), JSON.stringify({ id: `quick-${number}`, result }));
       return answer({ id: `quick-${number}` });
-    }
+    };
+    if (command === "find") return answer(first === "css:#weigeren" ? { total: 1, found: ["4 button: Weigeren"] } : first === "css:button" ? { total: 4, hidden: 1 } : { total: 0, found: [] });
+    if (command === "click") return answer({ id: "quick-klik" });
+    if (command === "order") return observe({ methods: [{ result: { reversed: [], cssOrder: [], positiveTabindex: [{ tag: "input", text: "", region: "form" }] } }] });
+    if (command === "media") return observe({ elements: [] });
+    if (command === "taborder") return observe({ methods: [{ result: { stops: [{ path: ["nav > a"], href: "/nieuws/", focusPixelShare: 0, coveredBy: ["#cookiemelding > div"] }] } }], focusLost: null });
+    if (command === "spacing") return observe({ methods: [{ result: { newlyClipped: [] } }] });
+    if (command === "reflow") return answer({ horizontalScroll: false, offenders: 1, first: ["button: Menu"] });
+    if (command === "zoom") return answer({ horizontalScroll: false, offenders: options.zoomAlways || (options.zoomOnce && zooms++ === 0) ? 2 : 0 });
+    if (command === "rules") return observe({ methods: [{ implementation: "axe-core", version: "4.14.0" }], grouped: { elements: [element("2.4.4", "a.meer", { "axe-core": "failed", alfa: "failed" })] } });
     return { code: 1, stdout: "", stderr: `onbekend: ${args.join(" ")}` };
   };
 }
@@ -234,8 +288,12 @@ function fakeLoep(run: string, calls: string[][], options: { failOpen?: string }
 test("quick finds the pages, measures its own origin in light and dark, marks the run and writes the summary", async () => {
   const run = join(mkdtempSync(join(tmpdir(), "loep-quick-")), "run");
   const calls: string[][] = [];
-  const { summary, comparison } = await quick({ url: "https://voorbeeld.test/", run, maxPages: 2, loep: fakeLoep(run, calls), say: () => undefined });
+  const { summary, comparison } = await quick({ url: "https://voorbeeld.test/", run, maxPages: 2, dismiss: ["#weigeren"], loep: fakeLoep(run, calls), say: () => undefined });
   assert.equal(comparison, null);
+  // The layer over the page is clicked away after every opening, before anything is measured.
+  const commands = calls.filter((args) => args[0] === "session").map((args) => args[1]);
+  assert.deepEqual(commands.slice(0, 15), ["start", "open", "find", "click", "look", "rules", "order", "media", "taborder", "reflow", "zoom", "spacing", "open", "find", "click"]);
+  assert.deepEqual(summary.covering, { layers: ["#cookiemelding"], pages: 2, dismiss: ["#weigeren"] });
   assert.deepEqual(calls[0], ["inventory", "https://voorbeeld.test/", "--out", run, "--max-pages", "2"]);
   // The window of someone else in the sample is not measured.
   assert.deepEqual(summary.pages.map((entry) => entry.url), ["https://voorbeeld.test/", "https://voorbeeld.test/contact"]);
@@ -247,11 +305,11 @@ test("quick finds the pages, measures its own origin in light and dark, marks th
   ]);
   assert.equal(calls.filter((args) => args[1] === "reflow").length, 2);
   assert.deepEqual(calls.at(-1), ["session", "stop", "--run", run]);
-  assert.deepEqual(summary.signals.map((signal) => [signal.criterion, signal.ground]), [["2.4.4", "engines-agree"], ["1.4.10", "layout-probe"]]);
+  assert.deepEqual(summary.signals.map((signal) => [signal.criterion, signal.ground]), [["2.4.4", "engines-agree"], ["1.4.10", "probe"], ["2.4.3", "probe"], ["2.4.11", "probe"]]);
   assert.equal(summary.coverage.pageLimitReached, true);
   assert.ok(existsSync(join(run, QUICK_MARK_FILE)));
   assert.match(readFileSync(join(run, "quick", "samenvatting.md"), "utf8"), /# Snelle meting van https:\/\/voorbeeld\.test\//);
-  assert.deepEqual(JSON.parse(readFileSync(join(run, "quick", "summary.json"), "utf8")).counts.length, 4);
+  assert.deepEqual(JSON.parse(readFileSync(join(run, "quick", "summary.json"), "utf8")).counts.length, 8);
   const steps = (JSON.parse(readFileSync(join(run, "manifest.json"), "utf8")) as { steps: { command: string }[] }).steps;
   assert.equal(steps.at(-1)!.command, "quick");
 });
@@ -268,7 +326,30 @@ test("quick holds the outcome against a baseline, stops the session when a page 
   assert.ok(existsSync(join(second, "quick", "verschil.md")));
   assert.deepEqual(calls.at(-1), ["session", "stop", "--run", second]);
 
+  // The page that failed was opened once more before the comparison failed on it.
+  assert.equal(calls.filter((args) => args[1] === "open" && args[2] === "https://voorbeeld.test/contact").length, 4);
+  assert.equal(calls.filter((args) => args[1] === "open" && args[2] === "https://voorbeeld.test/").length, 2);
+
+  // A finding that is there the first time and gone the second does not stop a pipeline; one that stays does.
+  const base = join(first, "quick", "summary.json");
+  const chance = join(folder, "toeval");
+  const once = await quick({ url: "https://voorbeeld.test/", run: chance, maxPages: 2, baseline: base, loep: fakeLoep(chance, [], { zoomOnce: true }), say: () => undefined });
+  assert.deepEqual([once.comparison!.ok, once.comparison!.worse.length, once.comparison!.unstable.map((change) => `${change.path} ${change.rule}`)], [true, 0, ["/ zoom"]]);
+  const stays = join(folder, "blijft");
+  const twice = await quick({ url: "https://voorbeeld.test/", run: stays, maxPages: 2, baseline: base, loep: fakeLoep(stays, [], { zoomAlways: true }), say: () => undefined });
+  assert.deepEqual([twice.comparison!.ok, twice.comparison!.worse.map((change) => `${change.path} ${change.rule}`), twice.comparison!.unstable], [false, ["/ zoom", "/contact zoom"], []]);
+
   await assert.rejects(quick({ url: "https://voorbeeld.test/", run: first, maxPages: 2, loep: fakeLoep(first, []), say: () => undefined }), /heeft al een inventaris/);
+  // A selector that names more than one element is a mistake to say out loud, not a layer to measure along; the session is stopped all the same.
+  const third = join(folder, "derde");
+  const dismissCalls: string[][] = [];
+  await assert.rejects(quick({ url: "https://voorbeeld.test/", run: third, maxPages: 2, dismiss: ["button"], loep: fakeLoep(third, dismissCalls), say: () => undefined }), /--dismiss "button" past op 4 elementen/);
+  assert.deepEqual(dismissCalls.at(-1), ["session", "stop", "--run", third]);
+  // A selector that is not on the page clicks nothing and measures on.
+  const fourth = join(folder, "vierde");
+  const quietCalls: string[][] = [];
+  await quick({ url: "https://voorbeeld.test/", run: fourth, maxPages: 2, dismiss: ["#bestaat-niet"], loep: fakeLoep(fourth, quietCalls), say: () => undefined });
+  assert.equal(quietCalls.filter((args) => args[1] === "click").length, 0);
   writeFileSync(join(first, "site.json"), "{}");
   await assert.rejects(quick({ run: first, maxPages: 2, loep: fakeLoep(first, []), say: () => undefined }), /heeft een sitemodel en is dus van een onderzoek/);
   await assert.rejects(quick({ run: second, maxPages: 2, baseline: join(first, "manifest.json"), loep: fakeLoep(second, []), say: () => undefined }), /geen summary\.json van een snelle meting/);

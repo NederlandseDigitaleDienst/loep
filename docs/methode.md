@@ -540,7 +540,7 @@ Het rapport van een onderzoek noemt deze getallen niet.
 
 ## De snelle meting
 
-`quick` is geen onderzoek. Het is een meting zonder taalmodel voor wie bij elke release wil weten of een site slechter is geworden. Het draait de stappen die geen sitemodel nodig hebben: `inventory` en `sample`, of een vaste lijst adressen, en daarna in één sessie per pagina de vier regelsets in licht en donker. In licht komen daar proeven van loep zelf bij: reflow, zoom, tekstafstand, de volgorde van de code tegenover het scherm, geluid dat vanzelf start, en een wandeling met Tab langs hooguit 60 stops. Over de pagina's samen kijkt het of twee pagina's dezelfde titel hebben. Het stuurt niets en sluit geen melding die over de pagina ligt.
+`quick` is geen onderzoek. Het is een meting zonder taalmodel voor wie bij elke release wil weten of een site slechter is geworden. Het draait de stappen die geen sitemodel nodig hebben: `inventory` en `sample`, of een vaste lijst adressen, en daarna in één sessie per pagina de vier regelsets in licht en donker. In licht komen daar proeven van loep zelf bij: reflow, zoom, tekstafstand, de volgorde van de code tegenover het scherm, geluid dat vanzelf start, en een wandeling met Tab langs hooguit 60 stops. Over de pagina's samen kijkt het of twee pagina's dezelfde titel hebben. Het stuurt niets. Een melding die over de pagina ligt, sluit het alleen als de eigenaar zegt hoe: met `--dismiss <selector>` klikt het na elke keer openen op dat element. Wat er bij de wandeling met Tab over een stop lag, staat in de samenvatting.
 
 De samenvatting noemt per criterium op welke grond het is aangewezen, van sterk naar zwak: twee of meer regelsets keuren dezelfde plek af; een proef van loep ziet het; één regelset keurt af en de andere zeggen niets; één regelset keurt af en een andere keurt dezelfde plek goed. Een plek is een element van een pagina bij één criterium, licht en donker samen. Alleen criteria van niveau A en AA tellen.
 
@@ -561,7 +561,13 @@ Een proef meldt wat ze ziet en oordeelt niet. Inhoud die met CSS is omgezet kan 
 
 Met `--baseline` wordt de meting tegen een eerdere gehouden, per pagina (op pad, zonder origin), criterium, regel en element. Meer plekken onder een regel is slechter, minder is beter. Een element wordt herkend aan wat het is en niet aan waar het staat: de tag, de attributen die zeggen wat het is (zoals `href`, `name`, `alt` en `aria-label`, geen `class`) en het deel van de pagina waarin het staat. Zo is één gebrek dat verdwijnt en een ander dat erbij komt zichtbaar als één beter en één slechter, en telt een element dat alleen verschuift niet als nieuw. Twee elementen die op die punten gelijk zijn, zoals twee alinea's in hetzelfde deel, zijn voor de vergelijking hetzelfde: daar telt alleen het aantal. Een pagina die de basislijn had en die nu niet gemeten kon worden, telt als slechter, omdat niemand kan zeggen dat ze het niet is. Een pagina die nieuw is, wordt genoemd en niet vergeleken.
 
+Een pipeline mag niet op toeval stoppen. Een pagina die een deel laat laadt, geeft een melding de ene keer wel en de andere keer niet. Lijkt een pagina slechter, of kon ze niet gemeten worden, dan meet `quick` haar daarom een tweede keer. Alleen wat beide metingen slechter vinden, telt. Wat maar één van de twee zag, staat in `verschil.md` onder "Niet bevestigd" en houdt niets tegen.
+
 Hoe goed deze signalen de uitkomst van een onderzoek voorspellen, is teruggerekend op afgeronde onderzoeken; zie [validatie/snelle-meting/README.md](../validatie/snelle-meting/README.md). De samenvatting noemt die cijfers, zodat een lezer weet wat een lege lijst waard is.
+
+De proeven lezen wat een sessiecommando in zijn waarneming vastlegt, niet de zin die het teruggeeft. `test/quick-testsite.test.ts` draait `quick` met een echte browser op de testsite en eist dat elke proef het gebrek vindt dat ervoor is ingebouwd, en dat de proeven op de schone tweeling zwijgen. Verandert een sessiecommando wat het vastlegt, dan faalt die test.
+
+Het commando eindigt met 0 als er geen basislijn is of niets slechter is, met 1 als de site slechter is dan de basislijn, en met 2 als de meting zelf mislukte.
 
 De run krijgt een bestand `quick.json`. `explore` weigert een run die dat heeft: de inventaris is klein gehouden, en waarnemingen die niemand beoordeelde horen niet in een onderzoek.
 

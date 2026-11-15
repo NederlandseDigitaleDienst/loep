@@ -28,8 +28,10 @@ export const QUICK_BACKTEST = {
   sites: 12,
   precision: 0.83,
   recall: 0.24,
+  /** The built-in defects of the testsite the comparison catches against the clean twin (`just quick-key`). */
+  testsite: { caught: 41, defects: 79 },
   textNl:
-    "Op 12 sites met een volledig onderzoek wees deze soort meting een kwart van de afgekeurde criteria aan. Van wat ze aanwees, keurde het onderzoek ruim acht op de tien af. Driekwart van de afkeuringen vindt alleen een volledig onderzoek.",
+    "De regelsets, reflow en zoom wezen op 12 sites met een volledig onderzoek een kwart van de afgekeurde criteria aan, en ruim acht op de tien aanwijzingen klopten. De andere proeven zijn daar niet op teruggerekend. Op de testsite van loep vangt de hele meting 41 van de 79 ingebouwde gebreken. Een lege lijst zegt dus weinig.",
 } as const;
 
 export const QUICK_EXPLORE_REFUSAL_NL =
@@ -40,7 +42,6 @@ export const QUICK_NOT_MEASURED_NL = [
   "Formulieren, documenten, beweging en wat pas na een handeling verschijnt, zoals een menu of een foutmelding, zijn niet gemeten.",
   "Van het toetsenbord is alleen gemeten wat Tab bereikt, tot 60 stops per pagina. Of een onderdeel daarna met het toetsenbord te bedienen is, is niet gemeten.",
   "Contrast komt uit de regels van de meetprogramma's, niet uit schermafbeeldingen.",
-  "Een melding die over de pagina ligt, zoals een cookiemelding, is niet gesloten. De proeven zijn dan met die melding gemeten.",
   "Niemand heeft beoordeeld of een tekstalternatief, kop of linktekst klopt.",
 ];
 
@@ -91,40 +92,43 @@ export interface QuickProbeFinding {
   element: string;
 }
 
-const strings = (value: unknown): string[] => (Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === "string") : []);
-/** "a: Paspoort of rijbewijs (tekst verdwijnt: 1 regel(s) ...)" without the detail at its end, which holds measures that differ between two runs. */
-function beforeDetail(text: string): string {
-  const trimmed = text.trim();
-  if (!trimmed.endsWith(")")) return trimmed;
-  let depth = 0;
-  for (let index = trimmed.length - 1; index >= 0; index -= 1) {
-    if (trimmed[index] === ")") depth += 1;
-    if (trimmed[index] === "(" && --depth === 0) return trimmed.slice(0, index).trim();
-  }
-  return trimmed;
+/** An element as the instruments of loep list it. */
+interface Listed {
+  tag?: string;
+  text?: string;
+  region?: string | null;
 }
+/** A mark for a listed element: what it is, what it says, and the part of the page. */
+const listedMark = (item: Listed): string => `${item.tag ?? "element"}${item.text?.trim() ? ` "${item.text.trim().slice(0, 60)}"` : ""}${item.region ? ` in ${item.region}` : ""}`;
 
-/** What `session order` says: content that CSS put somewhere else than the code has it, and a tabindex above zero. */
-export function orderProbe(answer: Record<string, unknown>): QuickProbeFinding[] {
+/** The result of `session order`: content that CSS put somewhere else than the code has it, and a tabindex above zero. */
+export function orderProbe(result: { reversed?: Listed[]; cssOrder?: Listed[]; positiveTabindex?: Listed[] }): QuickProbeFinding[] {
   return [
-    ...[...strings(answer.reversed), ...strings(answer.cssOrder)].map((text) => ({ probe: "order" as const, element: beforeDetail(text) })),
-    ...strings(answer.positiveTabindex).map((text) => ({ probe: "tabindex" as const, element: beforeDetail(text) })),
+    ...[...(result.reversed ?? []), ...(result.cssOrder ?? [])].map((item) => ({ probe: "order" as const, element: listedMark(item) })),
+    ...(result.positiveTabindex ?? []).map((item) => ({ probe: "tabindex" as const, element: listedMark(item) })),
   ];
 }
 
-/** What `session spacing` says: text that is lost with the text spacing of 1.4.12. */
-export function spacingProbe(answer: Record<string, unknown>): QuickProbeFinding[] {
-  if (typeof answer.textLost !== "number" || answer.textLost === 0) return [];
-  const named = strings(answer.first).map(beforeDetail);
-  // `first` names the first few; the rest counts under one text.
-  return Array.from({ length: answer.textLost }, (_, index) => ({ probe: "spacing" as const, element: named[index] ?? "meer tekst" }));
+/** The result of `session spacing`: text that is lost with the text spacing of 1.4.12. */
+export function spacingProbe(result: { newlyClipped?: (Listed & { textCut?: { lost?: boolean } | null })[] }): QuickProbeFinding[] {
+  return (result.newlyClipped ?? []).filter((item) => item.textCut?.lost === true).map((item) => ({ probe: "spacing" as const, element: listedMark(item) }));
 }
 
-/** What `session media` says: sound that starts by itself with nothing found that stops it. */
-export function mediaProbe(answer: Record<string, unknown>): QuickProbeFinding[] {
-  return strings(answer.media)
-    .filter((text) => /\bautoplay\b/.test(text) && /(?<!geen )geluidsspoor/.test(text) && /geen knop gevonden die het stopt/.test(text))
-    .map((text) => ({ probe: "autoplay" as const, element: text.split(":")[0]!.replace(/:nth-(?:of-type|child)\(\d+\)/g, "") }));
+/** An audio or video element as `session media` records it. */
+export interface MediaElement {
+  tag?: string;
+  src?: string | null;
+  attributes?: { autoplay?: boolean };
+  audioTrack?: boolean;
+  muted?: boolean;
+  canBePausedOrMuted?: boolean;
+}
+
+/** The result of `session media`: sound that starts by itself with nothing found that stops it. */
+export function mediaProbe(result: { elements?: MediaElement[] }): QuickProbeFinding[] {
+  return (result.elements ?? [])
+    .filter((element) => element.attributes?.autoplay === true && element.audioTrack === true && element.muted !== true && element.canBePausedOrMuted === false)
+    .map((element) => ({ probe: "autoplay" as const, element: `${element.tag ?? "media"}${element.src && URL.canParse(element.src) ? ` ${new URL(element.src).pathname}` : ""}` }));
 }
 
 /** A stop of the Tab walk, as the keyboard method records it. */
@@ -137,19 +141,24 @@ export interface TabStop {
   focusNotMeasured?: string | null;
 }
 
-/** What `session taborder` says: a stop without a visible focus, a stop under something else, an element that throws the focus away. */
-export function tabProbe(answer: Record<string, unknown>, stops: readonly TabStop[]): QuickProbeFinding[] {
+const coveringOf = (stop: TabStop): string[] => (Array.isArray(stop.coveredBy) ? stop.coveredBy : stop.coveredBy ? [stop.coveredBy] : []);
+
+/** The result of `session taborder`: a stop without a visible focus, a stop under something else, an element that throws the focus away. */
+export function tabProbe(result: { methods?: { result?: { stops?: TabStop[] } }[]; focusLost?: { next?: string; throwsAway?: boolean } | null }): QuickProbeFinding[] {
+  const stops = result.methods?.[0]?.result?.stops ?? [];
   const mark = (stop: TabStop): string => `${elementMark(stop.path?.at(-1) ?? null, null)}${stop.href ? ` naar ${stop.href}` : ""}`;
-  const covered = (stop: TabStop): boolean => (Array.isArray(stop.coveredBy) ? stop.coveredBy.length > 0 : Boolean(stop.coveredBy));
   return [
     // Not a pixel changed with the focus, on an element that was in view and measured: nothing shows where the focus is.
-    ...stops.filter((stop) => stop.focusPixelShare === 0 && !covered(stop) && !stop.focusNotMeasured).map((stop) => ({ probe: "focus-invisible" as const, element: mark(stop) })),
-    ...stops.filter(covered).map((stop) => ({ probe: "focus-covered" as const, element: mark(stop) })),
-    ...strings(answer.notReached)
-      .filter((text) => text.startsWith("krijgt focus en gooit die meteen weg:"))
-      .flatMap((text) => text.slice(text.indexOf(":") + 1).split(/,\s*(?=\w+ ")/))
-      .map((text) => ({ probe: "focus-thrown" as const, element: text.trim() })),
+    ...stops.filter((stop) => stop.focusPixelShare === 0 && coveringOf(stop).length === 0 && !stop.focusNotMeasured).map((stop) => ({ probe: "focus-invisible" as const, element: mark(stop) })),
+    ...stops.filter((stop) => coveringOf(stop).length > 0).map((stop) => ({ probe: "focus-covered" as const, element: mark(stop) })),
+    ...(result.focusLost?.throwsAway === true && result.focusLost.next ? [{ probe: "focus-thrown" as const, element: elementMark(result.focusLost.next, null) }] : []),
   ];
+}
+
+/** What lies over the stops of a Tab walk, such as a cookie banner: the first part of each selector, once. */
+export function coveringLayers(result: { methods?: { result?: { stops?: TabStop[] } }[] }): string[] {
+  const layers = (result.methods?.[0]?.result?.stops ?? []).flatMap(coveringOf).map((selector) => selector.split(">")[0]!.trim().replace(/:nth-(?:of-type|child)\(\d+\)/g, ""));
+  return [...new Set(layers)].sort();
 }
 
 export interface QuickMeasurement {
@@ -170,6 +179,8 @@ export interface QuickPage {
   zoom: LayoutAnswer | null;
   /** What the other probes saw. Absent in a summary from before they were there. */
   probes?: QuickProbeFinding[];
+  /** What lay over stops of the Tab walk, such as a cookie banner. */
+  covering?: string[];
 }
 
 export interface QuickFinding {
@@ -190,7 +201,7 @@ export interface QuickSignal {
   titleNl: string | null;
   level: string | null;
   /** The strongest ground: engines that agree, a layout probe, one engine alone, or engines that contradict each other. */
-  ground: "engines-agree" | "layout-probe" | "engine-alone" | "engines-contradict";
+  ground: "engines-agree" | "probe" | "engine-alone" | "engines-contradict";
   agreed: number;
   alone: number;
   contradicted: number;
@@ -198,6 +209,8 @@ export interface QuickSignal {
   probePages: number;
   /** What the probes saw, in a sentence each. */
   probesNl: string[];
+  /** For a criterion only one engine fails: the rule that fails most places, so a reader can look it up. */
+  mostRule: { engine: string; rule: string; places: number } | null;
   pages: number;
   sentenceNl: string;
 }
@@ -226,6 +239,8 @@ export interface QuickSummary {
   notMeasuredNl: string[];
   coverage: { maxPages: number; pagesFound: number | null; pageLimitReached: boolean; planned: number; measured: number; failed: number; schemes: readonly QuickScheme[] };
   engines: { id: string; version: string }[];
+  /** What lay over the page while it was measured, and the selectors given to close it first. */
+  covering: { layers: string[]; pages: number; dismiss: string[] };
   signals: QuickSignal[];
   findings: QuickFinding[];
   findingsTotal: number;
@@ -235,7 +250,7 @@ export interface QuickSummary {
 }
 
 const TOP_FINDINGS = 50;
-const GROUND_ORDER: QuickSignal["ground"][] = ["engines-agree", "layout-probe", "engine-alone", "engines-contradict"];
+const GROUND_ORDER: QuickSignal["ground"][] = ["engines-agree", "probe", "engine-alone", "engines-contradict"];
 
 const engineName = (implementation: string): string => (implementation === "accessibility-checker-engine" ? "ibm" : implementation);
 
@@ -322,34 +337,43 @@ export function quickFindings(pages: readonly QuickPage[]): QuickFinding[] {
   return findings.sort((a, b) => AGREEMENTS.indexOf(a.agreement) - AGREEMENTS.indexOf(b.agreement) || compareCriterionIds(a.criterion, b.criterion) || a.page.localeCompare(b.page) || (a.where ?? "").localeCompare(b.where ?? ""));
 }
 
+const ENGINE_NAMES: Record<string, string> = { "axe-core": "axe-core", alfa: "Alfa", ibm: "IBM", qualweb: "QualWeb" };
+
+/** The rule behind most of the places, by name: the reader looks it up and decides what it is worth. */
+function mostNl(signal: Pick<QuickSignal, "mostRule">): string {
+  if (!signal.mostRule) return "";
+  return ` Het vaakst: regel ${signal.mostRule.rule} van ${ENGINE_NAMES[signal.mostRule.engine] ?? signal.mostRule.engine}, ${signal.mostRule.places} keer.`;
+}
+
 function signalSentence(signal: Omit<QuickSignal, "sentenceNl">): string {
   const onPages = `op ${plural(signal.pages, "pagina", "pagina's")}`;
   switch (signal.ground) {
     case "engines-agree":
       return `Twee of meer meetprogramma's keuren ${plural(signal.agreed, "plek", "plekken")} af, ${onPages}. Een volledig onderzoek keurt dit criterium waarschijnlijk af.`;
-    case "layout-probe":
+    case "probe":
       if (signal.probesNl.length > 0) return `${signal.probesNl.join(" ")} Dat is gezien op ${plural(signal.probePages, "pagina", "pagina's")}.`;
       return signal.criterion === "1.4.10"
         ? `Bij 320 pixels breed valt er inhoud buiten beeld op ${plural(signal.probePages, "pagina", "pagina's")}. Een volledig onderzoek keurt dit criterium waarschijnlijk af.`
         : `Bij 200 procent zoom valt er inhoud buiten beeld op ${plural(signal.probePages, "pagina", "pagina's")}. Een volledig onderzoek keurt dit criterium vaak af.`;
     case "engine-alone":
-      return `Eén meetprogramma keurt ${plural(signal.alone, "plek", "plekken")} af, ${onPages}, en de andere zeggen er niets over. Dat vraagt een tweede blik.`;
+      return `Eén meetprogramma keurt ${plural(signal.alone, "plek", "plekken")} af, ${onPages}, en de andere zeggen er niets over.${mostNl(signal)}`;
     case "engines-contradict":
-      return `Eén meetprogramma keurt ${plural(signal.contradicted, "plek", "plekken")} af, ${onPages}, terwijl een ander dezelfde plek goedkeurt. Dat beoordeelt een mens.`;
+      return `Eén meetprogramma keurt ${plural(signal.contradicted, "plek", "plekken")} af, ${onPages}, terwijl een ander dezelfde plek goedkeurt.${mostNl(signal)}`;
   }
 }
 
 /** Per criterion what the measurement points at, strongest ground first. */
 export function quickSignals(pages: readonly QuickPage[], findings: readonly QuickFinding[]): QuickSignal[] {
-  const perCriterion = new Map<string, { counts: Record<Agreement, number>; pages: Set<string>; probePages: Set<string>; probes: Map<QuickProbe, number> }>();
+  const perCriterion = new Map<string, { counts: Record<Agreement, number>; pages: Set<string>; probePages: Set<string>; probes: Map<QuickProbe, number>; single: Record<"alone" | "contradicted", Map<string, number>> }>();
   const entry = (criterion: string) => {
-    if (!perCriterion.has(criterion)) perCriterion.set(criterion, { counts: { agreed: 0, alone: 0, contradicted: 0 }, pages: new Set(), probePages: new Set(), probes: new Map() });
+    if (!perCriterion.has(criterion)) perCriterion.set(criterion, { counts: { agreed: 0, alone: 0, contradicted: 0 }, pages: new Set(), probePages: new Set(), probes: new Map(), single: { alone: new Map(), contradicted: new Map() } });
     return perCriterion.get(criterion)!;
   };
   for (const finding of findings) {
     const found = entry(finding.criterion);
     found.counts[finding.agreement] += 1;
     found.pages.add(finding.page);
+    if (finding.agreement !== "agreed") for (const rule of finding.rules) found.single[finding.agreement].set(rule, (found.single[finding.agreement].get(rule) ?? 0) + 1);
   }
   for (const page of pages) {
     for (const [criterion, answer] of [["1.4.10", page.reflow], ["1.4.4", page.zoom]] as const) {
@@ -367,9 +391,12 @@ export function quickSignals(pages: readonly QuickPage[], findings: readonly Qui
   }
   const signals: QuickSignal[] = [];
   for (const [criterion, found] of perCriterion) {
-    const ground: QuickSignal["ground"] = found.counts.agreed > 0 ? "engines-agree" : found.probePages.size > 0 ? "layout-probe" : found.counts.alone > 0 ? "engine-alone" : "engines-contradict";
+    const ground: QuickSignal["ground"] = found.counts.agreed > 0 ? "engines-agree" : found.probePages.size > 0 ? "probe" : found.counts.alone > 0 ? "engine-alone" : "engines-contradict";
     const known = criterionById(criterion);
-    const signal = { criterion, titleNl: known?.titleNl ?? null, level: known?.level ?? null, ground, ...found.counts, probePages: found.probePages.size, probesNl: [...found.probes].map(([probe, places]) => QUICK_PROBES[probe].nl(places)), pages: found.pages.size };
+    // Counted over the places the sentence is about: those one engine fails alone, or those another engine passes.
+    const [most] = ground === "engine-alone" || ground === "engines-contradict" ? [...found.single[ground === "engine-alone" ? "alone" : "contradicted"]].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])) : [];
+    const mostRule = most ? { engine: most[0].slice(0, most[0].indexOf(":")), rule: most[0].slice(most[0].indexOf(":") + 1), places: most[1] } : null;
+    const signal = { criterion, titleNl: known?.titleNl ?? null, level: known?.level ?? null, ground, mostRule, ...found.counts, probePages: found.probePages.size, probesNl: [...found.probes].map(([probe, places]) => QUICK_PROBES[probe].nl(places)), pages: found.pages.size };
     signals.push({ ...signal, sentenceNl: signalSentence(signal) });
   }
   return signals.sort((a, b) => GROUND_ORDER.indexOf(a.ground) - GROUND_ORDER.indexOf(b.ground) || compareCriterionIds(a.criterion, b.criterion));
@@ -423,6 +450,8 @@ export interface SummaryInput {
   pageLimitReached: boolean;
   planned: number;
   pages: readonly QuickPage[];
+  /** Selectors of what the measurement clicked after opening a page, to close a layer over it. */
+  dismiss?: readonly string[];
 }
 
 export function buildQuickSummary(given: SummaryInput): QuickSummary {
@@ -447,6 +476,7 @@ export function buildQuickSummary(given: SummaryInput): QuickSummary {
     notMeasuredNl: QUICK_NOT_MEASURED_NL,
     coverage: { maxPages: input.maxPages, pagesFound: input.pagesFound, pageLimitReached: input.pageLimitReached, planned: input.planned, measured: measuredPages, failed: input.pages.length - measuredPages, schemes: QUICK_SCHEMES },
     engines: [...versions].map(([id, version]) => ({ id, version })).sort((a, b) => a.id.localeCompare(b.id)),
+    covering: { layers: [...new Set(input.pages.flatMap((page) => page.covering ?? []))].sort(), pages: input.pages.filter((page) => (page.covering ?? []).length > 0).length, dismiss: [...(input.dismiss ?? [])] },
     signals: quickSignals(input.pages, findings),
     findings: findings.slice(0, TOP_FINDINGS),
     findingsTotal: findings.length,
@@ -467,7 +497,7 @@ export function buildQuickSummary(given: SummaryInput): QuickSummary {
 
 const GROUND_HEADING_NL: Record<QuickSignal["ground"], string> = {
   "engines-agree": "Meetprogramma's zijn het eens",
-  "layout-probe": "Een proef van loep ziet het",
+  "probe": "Een proef van loep ziet het",
   "engine-alone": "Eén meetprogramma",
   "engines-contradict": "Meetprogramma's spreken elkaar tegen",
 };
@@ -480,6 +510,15 @@ export function quickSummaryMarkdown(summary: QuickSummary): string {
     `Gemeten: ${plural(coverage.measured, "pagina", "pagina's")} van de ${coverage.planned} in de steekproef, in licht en donker.${coverage.failed > 0 ? ` ${plural(coverage.failed, "pagina is", "pagina's zijn")} niet gemeten.` : ""}${coverage.pageLimitReached ? ` De site heeft meer pagina's dan de ${coverage.maxPages} die zijn bezocht.` : ""}`,
     "",
   );
+  if (summary.covering.layers.length > 0) {
+    const layers = summary.covering.layers.map((layer) => `\`${layer}\``).join(", ");
+    lines.push(
+      summary.covering.dismiss.length > 0
+        ? `Over ${plural(summary.covering.pages, "pagina", "pagina's")} lag nog iets, ook na het klikken op wat met --dismiss is opgegeven: ${layers}. De proeven hebben daar met die laag gemeten.`
+        : `Over ${plural(summary.covering.pages, "pagina", "pagina's")} lag iets, zoals een cookiemelding: ${layers}. De proeven hebben met die laag gemeten. Geef de knop die haar sluit mee met --dismiss "<selector>", dan klikt de meting die eerst.`,
+      "",
+    );
+  }
   if (summary.signals.length === 0) lines.push("De meetprogramma's vonden op deze pagina's niets. Dat zegt weinig: de meeste afkeuringen van een volledig onderzoek ziet deze meting niet.", "");
   for (const ground of GROUND_ORDER) {
     const signals = summary.signals.filter((signal) => signal.ground === ground);
@@ -519,6 +558,8 @@ export interface QuickComparison {
   notMeasured: string[];
   /** Pages the baseline does not have: listed, not compared. */
   newPages: string[];
+  /** Worse in one of two measurements of the same page: not counted, because a pipeline may not stop on chance. */
+  unstable: QuickChange[];
 }
 
 const layoutLoss = (answer: LayoutAnswer | null): number => (answer ? (answer.offenders ?? 0) + (answer.horizontalScroll ? 1 : 0) : 0);
@@ -574,7 +615,25 @@ export function compareQuick(baseline: QuickSummary, current: QuickSummary): Qui
     better: better.sort(order),
     notMeasured,
     newPages: [...now].filter((path) => !before.has(path)).sort(),
+    unstable: [],
   };
+}
+
+const changeKey = (change: QuickChange): string => `${change.path}\n${change.criterion}\n${change.rule}\n${change.element}`;
+
+/**
+ * Keep as worse only what a second measurement of the same pages also found worse. A page that
+ * loads a part late gives a finding one time and not the next; a release that broke something
+ * gives it both times. What only one of the two saw is listed as unstable and stops nothing.
+ */
+export function confirmComparison(first: QuickComparison, second: QuickComparison): QuickComparison {
+  const again = new Set(second.worse.map(changeKey));
+  const worse = first.worse.filter((change) => again.has(changeKey(change)));
+  const seen = new Set(first.worse.map(changeKey));
+  const unstable = [...first.worse.filter((change) => !again.has(changeKey(change))), ...second.worse.filter((change) => !seen.has(changeKey(change)))];
+  // A page that could not be measured the first time and could the second is measured.
+  const notMeasured = first.notMeasured.filter((path) => second.notMeasured.includes(path));
+  return { ...first, worse, unstable, notMeasured, ok: worse.length === 0 && notMeasured.length === 0 };
 }
 
 /**
@@ -617,6 +676,11 @@ export function quickComparisonMarkdown(comparison: QuickComparison): string {
   if (comparison.notMeasured.length > 0) {
     lines.push("## Niet meer gemeten", "", "Deze pagina's had de vorige meting wel. Zonder meting is niet te zeggen of ze slechter zijn.", "");
     for (const path of comparison.notMeasured) lines.push(`- ${path}`);
+    lines.push("");
+  }
+  if (comparison.unstable.length > 0) {
+    lines.push("## Niet bevestigd", "", "Gezien in één van twee metingen van dezelfde pagina. Dat telt niet als slechter.", "");
+    for (const line of groupedChangesNl(comparison.unstable)) lines.push(`- ${line}`);
     lines.push("");
   }
   if (comparison.better.length > 0) {

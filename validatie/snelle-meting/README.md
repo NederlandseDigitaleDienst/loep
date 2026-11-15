@@ -61,4 +61,16 @@ Op de schone tweeling keurde één regelset (QualWeb, twee regels over toetsenbo
 
 ## Herhaalbaarheid
 
-Een poort in een pipeline mag niet op toeval falen. De variant met gebreken is twee keer gemeten op 15 pagina's, met alle proeven, en de tweede meting is tegen de eerste gehouden: geen plek erbij en geen plek minder, exitcode 0. De schone tweeling als basislijn en de variant met gebreken op dezelfde paden gaf exitcode 1. Op een echte site, met inhoud die tussen twee metingen verandert, is dit nog niet gemeten.
+Een poort in een pipeline mag niet op toeval falen.
+
+**Op de testsite.** De variant met gebreken is twee keer gemeten op 15 pagina's, met alle proeven, en de tweede meting is tegen de eerste gehouden: geen plek erbij en geen plek minder, exitcode 0. De schone tweeling als basislijn en de variant met gebreken op dezelfde paden gaf exitcode 1.
+
+**Op een echte site.** Tien pagina's van een documentatiesite van de overheid zijn op 15 november 2026 drie keer achter elkaar gemeten, de tweede en derde tegen de eerste. Elke meting duurde ongeveer zes minuten, een halve minuut per pagina, en alle tien pagina's werden gemeten. Beide vergelijkingen gaven exitcode 0. Over 2131 plekken en 1236 tellingen verschilde één melding: de proef voor tekstafstand zag op één pagina een menuknop wegvallen in de eerste en derde meting, en niet in de tweede. In deze volgorde was dat "beter" en hield het niets tegen. Andersom had het een release tegengehouden.
+
+Daarom meet `quick` een pagina die slechter lijkt een tweede keer en telt het alleen wat beide metingen slechter vinden. Dat is na deze meting gebouwd en door tests gedekt; op de echte site is het niet opnieuw gemeten. Drie metingen op één site op één middag zeggen ook niets over een site waarvan de inhoud tussen twee releases verandert.
+
+Wat de samenvatting van die site liet zien: geen enkel criterium waar twee regelsets het eens zijn. Alles onder "Eén meetprogramma" komt van QualWeb of Alfa, waaronder 262 plekken voor contrast. De proeven voor volgorde en tekstafstand melden op elke pagina hetzelfde onderdeel van de kop. Of dat gebreken zijn, is niet nagelopen.
+
+## Wat de test bewaakt
+
+`toolbox/test/quick-testsite.test.ts` draait `quick` in de volledige controle met een echte browser op drie pagina's van beide tweelingen. Elke proef moet het gebrek vinden dat ervoor is ingebouwd, de proeven moeten op de schone tweeling zwijgen, en er mag niets verstuurd zijn. De telling van 41 van de 79 zit daar niet in: die vraagt 15 pagina's van beide tweelingen en duurt acht minuten. Wie een proef wijzigt, draait `just quick-key` met de hand.

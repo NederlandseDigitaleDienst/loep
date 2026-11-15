@@ -112,7 +112,9 @@ In `runs/snel/quick/` staan daarna `samenvatting.md` en `summary.json`. Bewaar `
 node toolbox/src/cli.ts quick https://preview.voorbeeld.nl --out runs/snel-2 --urls paginas-preview.txt --baseline basislijn/summary.json
 ```
 
-Pagina's worden vergeleken op hun pad, dus een preview op een ander adres kan naast de live site liggen. Het commando eindigt met exitcode 1 als een pagina meer plekken heeft onder een regel dan in de basislijn, of als een pagina uit de basislijn niet gemeten kon worden. In `verschil.md` staat wat slechter en wat beter is. Is de release goed, dan wordt haar `summary.json` de nieuwe basislijn.
+Pagina's worden vergeleken op hun pad, dus een preview op een ander adres kan naast de live site liggen. Het commando eindigt met exitcode 1 als een pagina meer plekken heeft onder een regel dan in de basislijn, of als een pagina uit de basislijn niet gemeten kon worden. Exitcode 2 betekent dat de meting zelf is mislukt; dat zegt niets over de site. In `verschil.md` staat wat slechter en wat beter is. Een pagina die slechter lijkt, wordt eerst nog een keer gemeten; alleen wat beide keren slechter is, telt.
+
+Ligt er een cookiemelding over de pagina's, dan zegt de samenvatting dat. Geef de knop die haar sluit mee met `--dismiss "<selector>"`: de meting klikt die na het openen van elke pagina. Zonder dat meten de proeven de melding mee. Is de release goed, dan wordt haar `summary.json` de nieuwe basislijn.
 
 Zonder `--urls` zoekt `quick` zelf hooguit 15 pagina's en trekt daar een steekproef uit. Voor een vergelijking is een vaste lijst beter: dan zijn het elke keer dezelfde pagina's.
 
@@ -120,10 +122,10 @@ Wat je ervan mag verwachten:
 
 - Het meet met vier regelsets in licht en donker. Daarnaast kijkt het of er inhoud buiten beeld valt bij 320 pixels breed, bij 200 procent zoom en bij ruimere tekstafstand, of de volgorde op het scherm afwijkt van de code, of geluid vanzelf start, en loopt het met Tab langs de pagina: is de focus te zien, ligt ze ergens onder, gooit een element haar weg.
 - Wat pas na een handeling verschijnt, zoals een menu of een foutmelding, meet het niet. Formulieren en documenten ook niet, en niemand beoordeelt of een tekstalternatief of kop klopt.
-- Reken op 10 tot 20 seconden per pagina.
+- Reken op ongeveer een halve minuut per pagina. In de pipeline is alleen Chromium nodig.
 - Op 12 sites met een volledig onderzoek wees deze soort meting ongeveer een kwart van de afgekeurde criteria aan. Een lege lijst zegt dus weinig over de site. Wat ze wel aanwijst, keurde het onderzoek in ruim acht van de tien gevallen ook af.
 - Een melding van een regelset die niet klopt, staat ook in de basislijn. Ze houdt een release niet tegen.
-- Er wordt niets verstuurd en een cookiemelding wordt niet gesloten.
+- Er wordt niets verstuurd. Een klik met `--dismiss` die een verzoek zou versturen, wordt tegengehouden zoals elk ander.
 
 Een run van `quick` is geen begin van een onderzoek. De inventaris is klein gehouden, en `explore` weigert de map. Een onderzoek begint in een eigen map.
 

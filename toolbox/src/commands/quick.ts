@@ -15,7 +15,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { readJson, writeFileAtomic, writeJson } from "../lib/canonical.ts";
 import { stepStart, writeManifest } from "../lib/manifest.ts";
-import { buildQuickSummary, compareQuick, groupedChangesNl, QUICK_MARK_FILE, QUICK_SCHEMES, quickComparisonMarkdown, quickSummaryMarkdown, mediaProbe, orderProbe, spacingProbe, tabProbe, type LayoutAnswer, type QuickProbeFinding, type TabStop, type QuickComparison, type QuickMeasurement, type QuickPage, type QuickScheme, type QuickSummary, type RulesResult } from "../lib/quick.ts";
+import { buildQuickSummary, compareQuick, confirmComparison, groupedChangesNl, pagePath, QUICK_MARK_FILE, QUICK_SCHEMES, quickComparisonMarkdown, quickSummaryMarkdown, coveringLayers, mediaProbe, orderProbe, spacingProbe, tabProbe, type LayoutAnswer, type QuickProbeFinding, type QuickComparison, type QuickMeasurement, type QuickPage, type QuickScheme, type QuickSummary, type RulesResult } from "../lib/quick.ts";
 import { isOwnAddress, siteOrigins, type OriginSource } from "../lib/origins.ts";
 import { readObservation } from "../session/observations.ts";
 
@@ -39,6 +39,8 @@ export interface QuickOptions {
   urlsFile?: string | undefined;
   /** The summary.json of an earlier measurement to hold this one against. */
   baseline?: string | undefined;
+  /** Selectors of what to click after opening a page, such as the button that closes a cookie banner. One that is not there is passed by. */
+  dismiss?: readonly string[] | undefined;
   /** For tests: runs a command of loep and gives what it printed. */
   loep?: (args: string[]) => Promise<{ code: number; stdout: string; stderr: string }>;
   say?: (line: string) => void;
@@ -111,40 +113,64 @@ export async function quick(options: QuickOptions): Promise<{ summary: QuickSumm
     return answer;
   };
 
-  const started = await session(["start", "--max-commands", String(urls.length * COMMANDS_PER_PAGE + SPARE_COMMANDS), "--max-minutes", String(urls.length * MINUTES_PER_PAGE + 10), "--single-browser"]);
+  const started = await session(["start", "--max-commands", String(urls.length * (COMMANDS_PER_PAGE + 2 * (options.dismiss?.length ?? 0)) * (options.baseline ? 2 : 1) + SPARE_COMMANDS), "--max-minutes", String(urls.length * MINUTES_PER_PAGE * (options.baseline ? 2 : 1) + 10), "--single-browser"]);
   if (typeof started.error === "string") throw new Error(`de browsersessie startte niet: ${started.error}`);
 
+  const baseline = options.baseline ? await readJson<QuickSummary>(options.baseline) : null;
+  if (baseline && (baseline.kind !== "quick" || !Array.isArray(baseline.counts) || baseline.counts.some((count) => typeof count.element !== "string"))) throw new Error(`${options.baseline} is geen summary.json van een snelle meting`);
+
+  const measurePage = async (url: string): Promise<QuickPage> => {
+    const page: QuickPage = { url, title: null, httpStatus: null, screenshot: null, measurements: [], reflow: null, zoom: null, probes: [] };
+    for (const scheme of QUICK_SCHEMES) page.measurements.push(await measure(page, scheme, session, run, options.dismiss ?? []));
+    return page;
+  };
+  const summaryOf = (pages: readonly QuickPage[]): QuickSummary =>
+    buildQuickSummary({
+      site: inventory.baseUrl ?? inventory.origin ?? options.url ?? urls[0]!,
+      startedAt,
+      finishedAt: new Date().toISOString(),
+      maxPages: options.maxPages,
+      pagesFound: inventory.pages?.length ?? null,
+      pageLimitReached: (inventory.skipped ?? []).some((entry) => /page limit/.test(entry.reason)),
+      planned: urls.length,
+      pages,
+      dismiss: options.dismiss ?? [],
+    });
+
   const pages: QuickPage[] = [];
+  let summary: QuickSummary;
+  let comparison: QuickComparison | null = null;
   try {
     for (const [index, url] of urls.entries()) {
       say(`pagina ${index + 1} van ${urls.length}: ${url}`);
-      const page: QuickPage = { url, title: null, httpStatus: null, screenshot: null, measurements: [], reflow: null, zoom: null, probes: [] };
-      pages.push(page);
-      for (const scheme of QUICK_SCHEMES) page.measurements.push(await measure(page, scheme, session, run));
+      pages.push(await measurePage(url));
+    }
+    summary = summaryOf(pages);
+    if (baseline) {
+      comparison = compareQuick(baseline, summary);
+      // Before a pipeline stops on it: the pages that look worse or went unmeasured once more. Chance does not come twice.
+      const doubted = new Set([...comparison.worse.map((change) => change.path), ...comparison.notMeasured]);
+      if (doubted.size > 0) {
+        const again: QuickPage[] = [];
+        for (const page of pages) {
+          if (!doubted.has(pagePath(page.url))) again.push(page);
+          else {
+            say(`nog een keer, om te bevestigen: ${page.url}`);
+            again.push(await measurePage(page.url));
+          }
+        }
+        comparison = confirmComparison(comparison, compareQuick(baseline, summaryOf(again)));
+      }
     }
   } finally {
     await loep(["session", "stop", "--run", run]);
   }
 
-  const summary = buildQuickSummary({
-    site: inventory.baseUrl ?? inventory.origin ?? options.url ?? urls[0]!,
-    startedAt,
-    finishedAt: new Date().toISOString(),
-    maxPages: options.maxPages,
-    pagesFound: inventory.pages?.length ?? null,
-    pageLimitReached: (inventory.skipped ?? []).some((entry) => /page limit/.test(entry.reason)),
-    planned: urls.length,
-    pages,
-  });
   await mkdir(join(run, "quick"), { recursive: true });
   await writeJson(join(run, "quick", "summary.json"), summary);
   await writeFileAtomic(join(run, "quick", "samenvatting.md"), quickSummaryMarkdown(summary));
   await writeManifest(run, { command: "quick", startedAt, pages: summary.coverage.measured, maxPages: options.maxPages });
-  let comparison: QuickComparison | null = null;
-  if (options.baseline) {
-    const baseline = await readJson<QuickSummary>(options.baseline);
-    if (baseline.kind !== "quick" || !Array.isArray(baseline.counts) || baseline.counts.some((count) => typeof count.element !== "string")) throw new Error(`${options.baseline} is geen summary.json van een snelle meting`);
-    comparison = compareQuick(baseline, summary);
+  if (comparison) {
     await writeJson(join(run, "quick", "verschil.json"), comparison);
     await writeFileAtomic(join(run, "quick", "verschil.md"), quickComparisonMarkdown(comparison));
   }
@@ -161,7 +187,7 @@ const layoutOf = (answer: Record<string, unknown>): LayoutAnswer | null =>
         ...(typeof answer.image === "string" ? { image: answer.image } : {}),
       };
 
-async function measure(page: QuickPage, scheme: QuickScheme, session: (args: string[]) => Promise<Record<string, unknown>>, run: string): Promise<QuickMeasurement> {
+async function measure(page: QuickPage, scheme: QuickScheme, session: (args: string[]) => Promise<Record<string, unknown>>, run: string, dismiss: readonly string[]): Promise<QuickMeasurement> {
   const failed = (reasonNl: string): QuickMeasurement => ({ scheme, observation: null, reasonNl, rules: null });
   const open = (): Promise<Record<string, unknown>> => session(["open", page.url, "--scheme", scheme]);
   let opened = await open();
@@ -176,6 +202,26 @@ async function measure(page: QuickPage, scheme: QuickScheme, session: (args: str
   if (typeof opened.status === "number" && opened.status >= 500) return failed(`de site antwoordde met HTTP ${opened.status}, dus de pagina zelf is niet gemeten`);
   if (typeof opened.url === "string" && new URL(opened.url).origin !== new URL(page.url).origin) return failed(`de pagina verwees door naar ${opened.url}`);
 
+  // A layer over the page, closed as its owner said. Where it is not there, the click fails and nothing is lost.
+  for (const selector of dismiss) {
+    const found = await session(["find", `css:${selector}`]);
+    if (typeof found.error === "string") throw new Error(`--dismiss "${selector}": ${found.error}`);
+    const total = typeof found.total === "number" ? found.total : 0;
+    // More than one match is a mistake in the selector, and a measurement that goes on would measure the layer without saying why.
+    if (total > 1) throw new Error(`--dismiss "${selector}" past op ${total} elementen op ${page.url}; geef een selector die alleen de knop aanwijst die de laag sluit`);
+    // Not there, or there and hidden: the layer is closed already, as on every page after the first.
+    if (total === 1 && !found.hidden) await session(["click", `css:${selector}`]);
+  }
+
+  /** What a probe recorded: the result of its observation, or null when it gave none. */
+  const observed = async (args: string[]): Promise<Record<string, unknown> | null> => {
+    const answer = await session(args);
+    if (typeof answer.error === "string" || typeof answer.id !== "string") return null;
+    return (await readObservation(run, answer.id)).result as Record<string, unknown>;
+  };
+  /** Most probes are one method: its result is what the probe reads. */
+  const ofMethod = (result: Record<string, unknown> | null): Record<string, unknown> => ((result?.methods as { result?: Record<string, unknown> }[] | undefined)?.[0]?.result ?? {});
+
   if (scheme === "light") {
     const look = await session(["look", "--plain", "--max", "1"]);
     if (typeof look.image === "string") page.screenshot = look.image;
@@ -185,16 +231,16 @@ async function measure(page: QuickPage, scheme: QuickScheme, session: (args: str
   const result = (await readObservation(run, rules.id)).result as RulesResult;
   // Reflow and zoom change the window, so they come after the rules, and only once: a layout does not depend on the colours.
   if (scheme === "light") {
-    // What reads the page as it stands comes first; the Tab walk, and then the three that change the window.
-    const probes: QuickProbeFinding[] = [...orderProbe(await session(["order"])), ...mediaProbe(await session(["media"]))];
-    const walk = await session(["taborder", "--max", String(MAX_TAB_STOPS)]);
-    if (typeof walk.id === "string" && typeof walk.error !== "string") {
-      const walked = (await readObservation(run, walk.id)).result as { methods?: { result?: { stops?: TabStop[] } }[] };
-      probes.push(...tabProbe(walk, walked.methods?.[0]?.result?.stops ?? []));
+    // What reads the page as it stands comes first; then the Tab walk, and then the three that change the window.
+    const probes: QuickProbeFinding[] = [...orderProbe(ofMethod(await observed(["order"]))), ...mediaProbe((await observed(["media"])) ?? {})];
+    const walk = await observed(["taborder", "--max", String(MAX_TAB_STOPS)]);
+    if (walk) {
+      probes.push(...tabProbe(walk));
+      page.covering = coveringLayers(walk);
     }
     page.reflow = layoutOf(await session(["reflow"]));
     page.zoom = layoutOf(await session(["zoom"]));
-    probes.push(...spacingProbe(await session(["spacing"])));
+    probes.push(...spacingProbe(ofMethod(await observed(["spacing"]))));
     page.probes = probes;
   }
   return { scheme, observation: rules.id, reasonNl: null, rules: result };
@@ -202,7 +248,7 @@ async function measure(page: QuickPage, scheme: QuickScheme, session: (args: str
 
 /** The lines `quick` prints when it is done. */
 export function quickDoneNl(run: string, summary: QuickSummary, comparison: QuickComparison | null = null): string {
-  const strong = summary.signals.filter((signal) => signal.ground === "engines-agree" || signal.ground === "layout-probe");
+  const strong = summary.signals.filter((signal) => signal.ground === "engines-agree" || signal.ground === "probe");
   const other = summary.signals.length - strong.length;
   return [
     `${summary.coverage.measured} van ${summary.coverage.planned} pagina's gemeten${summary.partial ? ", niet alles is gelukt" : ""}.`,
@@ -213,8 +259,8 @@ export function quickDoneNl(run: string, summary: QuickSummary, comparison: Quic
     ...(comparison
       ? [
           comparison.ok
-            ? `Vergeleken met de vorige meting: niets slechter${comparison.better.length > 0 ? `, ${comparison.better.length} beter` : ""}.`
-            : `Vergeleken met de vorige meting: ${comparison.worse.length} slechter${comparison.notMeasured.length > 0 ? `, ${comparison.notMeasured.length} ${comparison.notMeasured.length === 1 ? "pagina" : "pagina's"} niet meer gemeten` : ""}. Zie ${join(run, "quick", "verschil.md")}`,
+            ? `Vergeleken met de vorige meting: niets slechter${comparison.better.length > 0 ? `, ${comparison.better.length} beter` : ""}${comparison.unstable.length > 0 ? `. ${comparison.unstable.length} ${comparison.unstable.length === 1 ? "verschil is" : "verschillen zijn"} in een tweede meting niet bevestigd en ${comparison.unstable.length === 1 ? "telt" : "tellen"} niet` : ""}.`
+            : `Vergeleken met de vorige meting, en bevestigd met een tweede meting van die pagina's: ${comparison.worse.length} slechter${comparison.notMeasured.length > 0 ? `, ${comparison.notMeasured.length} ${comparison.notMeasured.length === 1 ? "pagina" : "pagina's"} niet meer gemeten` : ""}. Zie ${join(run, "quick", "verschil.md")}`,
           ...groupedChangesNl(comparison.worse).slice(0, 10).map((line) => `  ${line}`),
         ]
       : []),

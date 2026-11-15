@@ -17,15 +17,17 @@ const USAGE = `loep <command> [options]
   inventory <url> --out <run> [--also-origin <url>]... [--navigation-delay <s>] [--allow-writes | --test-environment <origin>... --declared-by "<name>, <role>"] [--max-writes <n>] [--mailbox <mailbox> [--mail-link-origin <origin>]...]
                                          Find every page and count what is on it. In a run with a login the pages are found
                                          by following links from the page the person pointed at; a link that logs out is never followed
-  quick <url> --out <run> [--urls <file>] [--max-pages <n>] [--baseline <summary.json>]
+  quick <url> --out <run> [--urls <file>] [--max-pages <n>] [--baseline <summary.json>] [--dismiss <selector>]...
                                          A measurement of minutes without a language model, apart from an evaluation, for a
                                          pipeline: runs the rule engines in light and dark, and reflow and zoom, on the pages
                                          in --urls (one address per line) or on a sample of at most 15 pages it finds, and
                                          writes per criterion what they point at (quick/samenvatting.md and summary.json).
                                          With --baseline it holds the outcome against the summary.json of an earlier
                                          measurement, by path, and exits 1 when a page has more places under a rule or was
-                                         not measured (quick/verschil.md). It predicts part of what an evaluation fails; it
-                                         judges nothing. With --run <run> it measures a sample that is already there
+                                         not measured (quick/verschil.md); 2 means the measurement itself failed. With
+                                         --dismiss it first clicks that selector on every page, to close a cookie banner. It
+                                         predicts part of what an evaluation fails; it judges nothing. With --run <run> it
+                                         measures a sample that is already there
   explore --run <run>                    Write the task for the agent that maps the site before it is measured
   check-site --run <run>                 Validate site.json, replay every recipe in it and open every component on each of its
                                          page types as the sweep does; non-zero exit on problems
@@ -261,6 +263,7 @@ async function main(): Promise<void> {
       out: { type: "string" },
       run: { type: "string" },
       baseline: { type: "string" },
+      dismiss: { type: "string", multiple: true },
       "max-pages": { type: "string", default: "200" },
       idle: { type: "boolean", default: false },
       gaps: { type: "string" },
@@ -489,10 +492,15 @@ async function main(): Promise<void> {
       const { QUICK_DEFAULT_PAGES } = await import("./lib/quick.ts");
       // --max-pages has the default of inventory; a quick measurement has a smaller one of its own.
       const given = process.argv.includes("--max-pages") || process.argv.some((token) => token.startsWith("--max-pages="));
-      const { summary, comparison } = await quick({ url: target, run: quickRun, maxPages: given ? Number(values["max-pages"]) : QUICK_DEFAULT_PAGES, urlsFile: values.urls, baseline: values.baseline });
-      process.stdout.write(quickDoneNl(quickRun, summary, comparison));
-      // For a pipeline: worse than the baseline, or a page of it not measured, is a failure.
-      if (comparison && !comparison.ok) process.exitCode = 1;
+      // For a pipeline the exit code says which of two things went wrong: 1 is the site (worse than the baseline, or a page of it not measured), 2 is the measurement itself.
+      try {
+        const { summary, comparison } = await quick({ url: target, run: quickRun, maxPages: given ? Number(values["max-pages"]) : QUICK_DEFAULT_PAGES, urlsFile: values.urls, baseline: values.baseline, dismiss: values.dismiss });
+        process.stdout.write(quickDoneNl(quickRun, summary, comparison));
+        if (comparison && !comparison.ok) process.exitCode = 1;
+      } catch (error) {
+        process.stderr.write(`loep: ${(error as Error).message}\n`);
+        process.exitCode = 2;
+      }
       return;
     }
     case "explore": {
