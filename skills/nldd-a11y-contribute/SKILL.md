@@ -35,7 +35,7 @@ Een meetblad zegt iets over loep en niets over de site. Er staan regelnummers, c
 
    Geef de uitvoer door zoals ze is: hoeveel meetbladen, wat erop staat en wat niet. Wil de gebruiker het hele meetblad zien, geef dan `--json` mee. Meldt loep `GEWEIGERD`, stop dan en zeg dat dit bij de makers van loep gemeld moet worden.
 
-3. **Vraag of het mag.** Zeg erbij waar het heen gaat, dat iedereen met schrijfrechten op de verzameling het kan lezen, en dat het in de geschiedenis van git blijft staan ook als het bestand later wordt verwijderd. Ga alleen verder na een uitdrukkelijk ja.
+3. **Vraag of het mag.** Zeg erbij waar het heen gaat, dat iedereen met schrijfrechten op de verzameling het kan lezen, en dat het in de geschiedenis van git blijft staan ook als het bestand later wordt verwijderd. Zeg ook dit, in deze woorden of korter: is het rapport van het onderzoek openbaar, dan kan iemand met toegang het meetblad eraan koppelen en weet hij van welke site het is. Ga alleen verder na een uitdrukkelijk ja.
 
 4. **Haal de verzameling op**, in een map buiten het onderzoek:
 
@@ -53,7 +53,7 @@ Een meetblad zegt iets over loep en niets over de site. Er staan regelnummers, c
    node <map>/check.mjs
    ```
 
-   Een meetblad dat er al staat, heeft dezelfde naam en verandert niets. Faalt de controle, stuur dan niets in en laat zien wat ze meldt.
+   Een onderzoek dat eerder is ingestuurd, houdt zijn nummer, ook als het daarna opnieuw is geëvalueerd, gewogen of getekend: het bestand wordt bijgewerkt. Faalt de controle, stuur dan niets in en laat zien wat ze meldt.
 
 6. **Stuur in**, vanuit de map van de verzameling:
 
@@ -70,7 +70,7 @@ Een meetblad zegt iets over loep en niets over de site. Er staan regelnummers, c
 
 ## Wat de gebruiker moet weten
 
-- **De site staat erop als een sleutel.** Die wordt gemaakt met een sleutelbestand dat loep bij de eerste keer op deze machine zet en dat er blijft. Twee meetbladen van dezelfde site vanaf deze machine horen daardoor bij elkaar, en niemand anders kan er een adres uit afleiden.
-- **Wie het onderzoek al heeft, kan het meetblad erbij terugvinden** aan de maand, de versie van loep en het aantal pagina's.
+- **De site staat erop als een sleutel.** Die wordt gemaakt met een sleutelbestand dat loep op deze machine zet bij het eerste meetblad dat het schrijft, en dat er blijft. Alleen kijken maakt het niet aan. Twee meetbladen van dezelfde site vanaf deze machine horen daardoor bij elkaar, en niemand anders kan er een adres uit afleiden.
+- **Een meetblad is te koppelen aan een openbaar rapport** van hetzelfde onderzoek, door de uitkomsten per criterium naast elkaar te leggen. Zonder openbaar rapport kan dat niet.
 - **Weghalen kan:** het bestand verwijderen en pushen. Het blijft in de geschiedenis staan.
 - **Is het onderzoek van de site van een ander,** dan staat er nog steeds geen site op het meetblad. Wil de gebruiker het toch eerst vragen, dan is dat aan hem.

@@ -500,16 +500,25 @@ async function main(): Promise<void> {
       const { contribute, contributeAll, contributionNl, contributorKey, manyContributionsNl } = await import("./commands/contribute.ts");
       if (values.under) {
         // Every finished run under a folder: the runs made before there was a collection.
-        const many = contributeAll(values.under, { outDir: values.out, key: contributorKey(values.key) });
+        // The key file is made when a sheet is written, not when someone only looks.
+        const many = contributeAll(values.under, { outDir: values.out, key: contributorKey(values.key, values.out !== undefined) });
+        if (many.refused.length > 0) {
+          // A sheet with something of the site on it is a fault of loep, and it must not pass unseen: also not behind --json.
+          process.stderr.write(`loep: ${many.refused.length} meetbladen geweigerd omdat er iets van de site op staat (${many.refused.map((entry) => entry.id).join(", ")})\n`);
+          process.exitCode = 1;
+        }
         process.stdout.write(values.json ? `${JSON.stringify(many.sheets, null, 2)}\n` : manyContributionsNl(many, values.out));
-        if (many.refused.length > 0) process.exitCode = 1;
         return;
       }
-      if (!values.run) throw new Error("contribute needs --run <run>, or --under <folder> for every finished run under it");
-      const result = contribute(values.run, { outDir: values.out, key: contributorKey(values.key) });
+      if (!values.run) throw new Error("contribute vraagt --run <run>, of --under <map> voor elk afgerond onderzoek daaronder");
+      const result = contribute(values.run, { outDir: values.out, key: contributorKey(values.key, values.out !== undefined) });
+      if (result.leaks.length > 0) {
+        process.stderr.write(`loep: het meetblad is geweigerd omdat er iets van de site op staat: ${result.leaks.join(", ")}\n`);
+        process.exitCode = 1;
+        // Not printed as JSON: what is refused is not given out in another form.
+        if (values.json) return;
+      }
       process.stdout.write(values.json ? `${JSON.stringify(result.sheet, null, 2)}\n` : contributionNl(result));
-      // A sheet with a word of the site on it is a fault of loep, and it must not pass unseen.
-      if (result.leaks.length > 0) process.exitCode = 1;
       return;
     }
     case "quick": {

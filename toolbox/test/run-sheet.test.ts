@@ -3,23 +3,23 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, statSync
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { contribute, contributeAll, contributionNl, contributorKey, manyContributionsNl, runsUnder } from "../src/commands/contribute.ts";
+import { chmodSync } from "node:fs";
+import { contribute, contributeAll, contributionNl, contributorKey, manyContributionsNl, runsUnder, sessionElements } from "../src/commands/contribute.ts";
 import { buildRegister, type RuleCatalogue } from "../src/lib/rule-register.ts";
-import { buildSheet, fieldRunOfSheet, modelId, sheetLeaks, siteAddress, type SheetSource } from "../src/lib/run-sheet.ts";
+import { buildSheet, fieldRunOfSheet, findingsBucket, modelId, populationBucket, sheetLeaks, siteAddress, TECHNOLOGIES, type SheetSource } from "../src/lib/run-sheet.ts";
 
 /** An evaluation with the name and address of the site in every place a sentence can stand. */
 const EVALUATION = {
   evaluatedAt: "2026-11-02T22:27:36.379Z",
   site: { baseUrl: "https://www.voorbeeldstad.nl/inwoners/", name: "Voorbeeldstad", organisation: "Gemeente Voorbeeldstad" },
   toolchain: { toolbox: { version: "0.31.0" }, browser: { version: "153.0.8010.12" }, packages: { "axe-core": "4.14.0", "@siteimprove/alfa-rules": "0.120.0", "accessibility-checker-engine": "4.0.34", "@qualweb/act-rules": "0.8.6", "een-ander-pakket": "1.0.0" } },
-  judgment: { models: [{ role: "judge", notGiven: 1, models: [{ model: "Claude Opus 5.5 (claude-opus-5-5)", agents: 2 }, { model: "claude-opus-5-5", agents: 1 }] }], extensions: [{ role: "judge", sessions: 56, extended: 5, extensions: 6 }] },
+  judgment: { models: [{ role: "judge", notGiven: 1, models: [{ model: "Claude Opus 5.5 (claude-opus-5-5)", agents: 2 }, { model: "claude-opus-5-5[1m]", agents: 1 }, { model: "Claude Opus 4.5", agents: 4 }] }], extensions: [{ role: "judge", sessions: 56, extended: 5, extensions: 6 }] },
   purpose: "verbeteren",
   technologies: ["HTML", "Web Components (shadow DOM)", "Iets van https://www.voorbeeldstad.nl/"],
   sample: { items: [{ url: "https://www.voorbeeldstad.nl/inwoners/afval" }, { url: "https://www.voorbeeldstad.nl/inwoners/paspoort" }], pageTypes: [{ id: "afval" }], populationSize: 199, documents: [] },
   scope: { frames: [{ address: "https://kaart.voorbeeldstad.nl/" }] },
   defects: [{ severity: "hoog", owner: "techniek", titleNl: "Knop van Voorbeeldstad heeft geen naam" }, { severity: "laag", owner: "content" }, { severity: "hoog", owner: "content" }],
   aiGenerated: { humanReview: { criteriaByPerson: ["2.4.4"] } },
-  signature: { name: "Een Naam", role: "webredacteur" },
   criteria: [
     {
       id: "2.4.4",
@@ -28,6 +28,7 @@ const EVALUATION = {
       agreement: "eens",
       established: { by: "verification", noteNl: "Vastgesteld bij de controle op voorbeeldstad.nl" },
       rounds: { a: "failed", b: null, final: "failed" },
+      provenance: { verdictSha256: { a: "aaa1", b: null, final: "fff1" } },
       summaryNl: "Op de pagina over afval van Voorbeeldstad staat een link zonder naam.",
       findings: [{ where: "#afvalwijzer > a", observedNl: "De link naar https://www.voorbeeldstad.nl/inwoners/afval heeft geen naam" }],
       missingNl: ["mens nodig: het formulier achter de inlog van Voorbeeldstad is niet bekeken.", "veegronde mist: de kaart van voorbeeldstad.nl laadde niet", "iets zonder soort over voorbeeldstad"],
@@ -47,8 +48,11 @@ const SOURCE: SheetSource = {
   evaluationText: JSON.stringify(EVALUATION),
   evaluation: EVALUATION,
   sessionElements: [
-    { criterion: "2.4.4", where: "#afvalwijzer > a", message: "Link has no name", verdicts: { "axe-core": "failed", alfa: "failed", ibm: "passed", onbekend: "failed" }, rules: { "axe-core": ["link-name"], alfa: ["sia-r11"], onbekend: ["x"] } } as never,
-    { criterion: "2.4.4", verdicts: { "axe-core": "failed" }, rules: { "axe-core": ["link-name"] } },
+    { criterion: "2.4.4", page: "https://www.voorbeeldstad.nl/inwoners/afval", where: "#afvalwijzer > a", verdicts: { "axe-core": "failed", alfa: "failed", ibm: "passed", onbekend: "failed" }, rules: { "axe-core": ["link-name"], alfa: ["sia-r11"], onbekend: ["x"] } },
+    // The same element of the same page, asked for by a second agent: counted once.
+    { criterion: "2.4.4", page: "https://www.voorbeeldstad.nl/inwoners/afval", where: "#afvalwijzer > a", verdicts: { "axe-core": "failed", alfa: "failed", ibm: "passed" }, rules: { "axe-core": ["link-name"], alfa: ["sia-r11"] } },
+    // The same selector on another page is another element.
+    { criterion: "2.4.4", page: "https://www.voorbeeldstad.nl/inwoners/paspoort", where: "#afvalwijzer > a", verdicts: { "axe-core": "failed" }, rules: { "axe-core": ["link-name"] } },
     { criterion: "2.1.1", verdicts: { qualweb: "failed" }, rules: { qualweb: ["QW-WCAG-T24"] } },
   ],
   sweepPages: [
@@ -57,6 +61,8 @@ const SOURCE: SheetSource = {
     { page: "paspoort-3c4d", results: [{ engine: "axe-core", rule: "link-name", outcome: "failed", nodeCount: 1 }] },
   ],
   steps: [{ command: "collect", seconds: 100 }, { command: "collect", seconds: 20 }, { command: "inventory", seconds: 30 }, { command: "sample" }],
+  runMark: "zaad-van-deze-run",
+  signed: true,
 };
 
 test("a sheet holds rule ids, criteria, outcomes and counts, and no word of the site", () => {
@@ -65,18 +71,19 @@ test("a sheet holds rule ids, criteria, outcomes and counts, and no word of the 
   assert.deepEqual(sheet.engines, { "axe-core": "4.14.0", alfa: "0.120.0", ibm: "4.0.34", qualweb: "0.8.6" });
   // A label that carries an address is not one of loep's own words: it is left out.
   assert.deepEqual(sheet.technologies, ["HTML", "Web Components (shadow DOM)"]);
-  assert.deepEqual(sheet.size, { pages: 2, pageTypes: 1, population: 199, documents: 0, frames: 1 });
+  // The pages of the site as a range, and the findings under a criterion too: exact, they tie a sheet to a published report.
+  assert.deepEqual(sheet.size, { pages: 2, pageTypes: 1, population: "50-199", documents: 0, frames: 1 });
   assert.deepEqual(sheet.criteria, [
-    { id: "1.1.1", outcome: "passed", basis: "observed", agreement: "onvolledig", establishedBy: null, rounds: { a: null, b: null, final: null }, findings: 0, open: {} },
+    { id: "1.1.1", outcome: "passed", basis: "observed", agreement: "onvolledig", establishedBy: null, rounds: { a: null, b: null, final: null }, findings: "0", open: {} },
     // Of an open point only the kind: the sentence after it is about the site.
-    { id: "2.4.4", outcome: "failed", basis: "measured", agreement: "eens", establishedBy: "verification", rounds: { a: "failed", b: null, final: "failed" }, findings: 1, open: { anders: 1, "mens nodig": 2, "veegronde mist": 1 } },
+    { id: "2.4.4", outcome: "failed", basis: "measured", agreement: "eens", establishedBy: "verification", rounds: { a: "failed", b: null, final: "failed" }, findings: "1", open: { anders: 1, "mens nodig": 2, "veegronde mist": 1 } },
   ]);
   // A ruling that does not exist and a rule name that is no rule id are not copied.
   assert.deepEqual(sheet.rulings, [
     { rule: "link-name", criterion: "2.4.4", finding: 1, noIssue: 0, otherCriterion: 0, open: 0 },
     { rule: "sia-r11", criterion: "2.4.4", finding: 1, noIssue: 1, otherCriterion: 0, open: 0 },
   ]);
-  // On the first element two engines fail and a third passes: agreed. On the second only axe-core has a verdict: alone.
+  // On the first element two engines fail and a third passes: agreed, and counted once though two agents asked. On the other page only axe-core has a verdict: alone.
   assert.deepEqual(sheet.sessions, [
     { engine: "alfa", rule: "sia-r11", criterion: "2.4.4", elements: 1, agreed: 1, alone: 0, contradicted: 0 },
     { engine: "axe-core", rule: "link-name", criterion: "2.4.4", elements: 2, agreed: 1, alone: 1, contradicted: 0 },
@@ -89,7 +96,8 @@ test("a sheet holds rule ids, criteria, outcomes and counts, and no word of the 
     { engine: "axe-core", rule: "region", pagesFailed: 0, pagesCantTell: 0, pagesPassed: 1, elementsFailed: 0 },
   ]);
   // Which model ran in which role, with how many agents: the id only, not what an agent wrote around it.
-  assert.deepEqual(sheet.modelsPerRole, [{ role: "judge", model: "claude-opus-5-5", agents: 3 }, { role: "judge", model: "notGiven", agents: 1 }]);
+  // An agent that named its model in words without an id still ran: under "other", not gone.
+  assert.deepEqual(sheet.modelsPerRole, [{ role: "judge", model: "claude-opus-5-5", agents: 3 }, { role: "judge", model: "other", agents: 4 }, { role: "judge", model: "notGiven", agents: 1 }]);
   assert.deepEqual([sheet.followsUp, sheet.probes, sheet.gate, sheet.quick], [false, null, null, null]);
   assert.deepEqual(sheet.defects, { total: 3, bySeverity: { hoog: 2, laag: 1 }, byOwner: { content: 2, techniek: 1 } });
   assert.deepEqual(sheet.human, { signed: true, criteriaByPerson: 1, decisions: {}, rechecks: 0, statement: null });
@@ -99,15 +107,26 @@ test("a sheet holds rule ids, criteria, outcomes and counts, and no word of the 
   assert.doesNotMatch(JSON.stringify(sheet), /voorbeeld|afval|paspoort|inwoners|Naam|redacteur|http/i);
 });
 
-test("the key of a site is the same for one contributor and different for another, and the id is of the run", () => {
+test("a judge names a rule in its own words: only a name an engine of the run gave is copied", () => {
+  const evaluation = { ...EVALUATION, criteria: [{ id: "2.4.4", outcome: "failed", observations: [{ engineRules: ["link-name", "voorbeeldstad", "nav-hoofdmenu", "sia-r11"], ruling: "finding" }] }] };
+  const sheet = buildSheet({ ...SOURCE, evaluation, sessionElements: [], sweepPages: [{ page: "p", results: [{ engine: "axe-core", rule: "link-name", outcome: "passed" }] }] }, "een-sleutel");
+  // sia-r11 is a real rule, and no engine of this run gave it: not copied either. The sheet takes no one's word for a name.
+  assert.deepEqual(sheet.rulings.map((entry) => entry.rule), ["link-name"]);
+});
+
+test("the technologies a sheet may name are the ones evaluate can name", () => {
+  const source = readFileSync(new URL("../src/commands/evaluate.ts", import.meta.url), "utf8");
+  const named = new Set([...source.matchAll(/technologies\.add\("([^"]+)"\)/g)].map((match) => match[1]!));
+  for (const label of /const technologies = new Set<string>\(\[([^\]]*)\]\)/.exec(source)![1]!.matchAll(/"([^"]+)"/g)) named.add(label[1]!);
+  assert.deepEqual([...named].sort(), [...TECHNOLOGIES].sort());
+  assert.deepEqual([findingsBucket(0), findingsBucket(1), findingsBucket(2), findingsBucket(5), findingsBucket(6)], ["0", "1", "2-5", "2-5", "6+"]);
+  assert.deepEqual([populationBucket(49), populationBucket(50), populationBucket(199), populationBucket(200), populationBucket(1000), populationBucket(undefined)], ["0-49", "50-199", "50-199", "200-999", "1000+", null]);
+});
+
+test("the key of a site is the same for one contributor and different for another", () => {
   const mine = buildSheet(SOURCE, "mijn-sleutel");
-  const again = buildSheet({ ...SOURCE, evaluationText: `${SOURCE.evaluationText} ` }, "mijn-sleutel");
-  const theirs = buildSheet(SOURCE, "hun-sleutel");
-  assert.equal(mine.siteKey, again.siteKey);
-  assert.notEqual(mine.siteKey, theirs.siteKey);
-  // Another evaluation of the same site is another run.
-  assert.notEqual(mine.id, again.id);
-  assert.equal(mine.id, theirs.id);
+  assert.equal(mine.siteKey, buildSheet({ ...SOURCE, runMark: "een-andere-run" }, "mijn-sleutel").siteKey);
+  assert.notEqual(mine.siteKey, buildSheet(SOURCE, "hun-sleutel").siteKey);
   assert.match(mine.siteKey, /^[0-9a-f]{16}$/);
   // A site under a path on a shared host is a site of its own; a page deeper is not.
   assert.equal(siteAddress("https://www.voorbeeldstad.nl/inwoners/afval/"), "https://www.voorbeeldstad.nl/inwoners");
@@ -115,20 +134,57 @@ test("the key of a site is the same for one contributor and different for anothe
   assert.equal(siteAddress(undefined), null);
 });
 
-test("the check finds a word of the site when a sheet does carry one", () => {
+test("the id is of the run: the same after it is evaluated or weighed again, another for a second judging or another run", () => {
+  const id = (change: Partial<SheetSource>, key = "een-sleutel"): string => buildSheet({ ...SOURCE, ...change }, key).id;
+  const first = id({});
+  // The evaluation written again: other bytes, a person who established a criterion, a decision more. The same run.
+  assert.equal(id({ evaluationText: `${SOURCE.evaluationText} ` }), first);
+  const answered = { ...EVALUATION, criteria: EVALUATION.criteria.map((criterion) => ({ ...criterion, outcome: "passed", established: { by: "person" } })) };
+  assert.equal(id({ evaluation: answered, decisions: ["opgelost"], signed: false }), first);
+  // Who contributes it makes no difference to which run it is.
+  assert.equal(id({}, "hun-sleutel"), first);
+  // The same sweep judged a second time: other verdicts, another run.
+  const again = { ...EVALUATION, criteria: EVALUATION.criteria.map((criterion) => ({ ...criterion, provenance: { verdictSha256: { final: "een-ander-oordeel" } } })) };
+  assert.notEqual(id({ evaluation: again }), first);
+  // Another run of the same site.
+  assert.notEqual(id({ runMark: "een-andere-run" }), first);
+  // A run from before a verdict had a hash is told by the outcomes of its rounds.
+  const old = (final: string) => ({ ...EVALUATION, criteria: [{ id: "1.1.1", outcome: "passed", rounds: { a: "passed", b: null, final } }] });
+  assert.equal(id({ evaluation: old("passed") }), id({ evaluation: { ...old("passed"), criteria: [{ ...old("passed").criteria[0]!, outcome: "failed" }] } }));
+  assert.notEqual(id({ evaluation: old("passed") }), id({ evaluation: old("failed") }));
+});
+
+test("the check holds a sheet to what it may contain, and a site with an ordinary name is not refused", () => {
   const sheet = buildSheet(SOURCE, "een-sleutel");
+  // Names that are words of the sheet itself: the field `open`, `siteKey`, a year, a number.
+  for (const site of [{ baseUrl: "https://open.overheid.nl/" }, { baseUrl: "https://www.example.nl/jaarverslag/2026/", names: ["Demo site"] }, { baseUrl: "http://127.0.0.1:8080/" }, { baseUrl: "https://www.voorbeeld.nl/", names: ["Open", "HTML", "judge"] }]) {
+    assert.deepEqual(sheetLeaks(sheet, site), [], JSON.stringify(site));
+  }
   const site = { baseUrl: EVALUATION.site.baseUrl, names: [EVALUATION.site.name, EVALUATION.site.organisation] };
-  assert.deepEqual(sheetLeaks({ ...sheet, technologies: ["Thema van Voorbeeldstad"] }, site), ["voorbeeldstad"]);
-  assert.deepEqual(sheetLeaks({ ...sheet, purpose: "www.voorbeeldstad.nl" }, site), ["voorbeeldstad", "www.voorbeeldstad.nl"]);
-  assert.deepEqual(sheetLeaks({ ...sheet, purpose: "/inwoners/" }, site), ["inwoners"]);
-  assert.deepEqual(sheetLeaks({ ...sheet, purpose: "zie https://elders.test" }, site), ["een adres (http)"]);
+  assert.deepEqual(sheetLeaks(sheet, site), []);
+  // The host of the site in a value, with or without www.
+  assert.deepEqual(sheetLeaks({ ...sheet, purpose: "www.voorbeeldstad.nl" }, site), ["een adres", "www.voorbeeldstad.nl"]);
+  assert.deepEqual(sheetLeaks({ ...sheet, models: ["voorbeeldstad.nl-model"] }, site), ["een adres", "www.voorbeeldstad.nl"]);
+  // The name of the site where an agent or an engine gave a string: as a model, as a rule.
+  assert.deepEqual(sheetLeaks({ ...sheet, models: ["Voorbeeldstad"] }, site), ["voorbeeldstad"]);
+  assert.deepEqual(sheetLeaks({ ...sheet, sweep: [{ ...sheet.sweep[0]!, rule: "voorbeeldstad" }] }, site), ["voorbeeldstad"]);
+  // Anything that is not a word of loep, a technology it does not know, a field that is not of a sheet.
+  assert.deepEqual(sheetLeaks({ ...sheet, purpose: "zie https://elders.test" }, site), ["een waarde die geen woord van loep is: zie https://elders.test"]);
+  assert.deepEqual(sheetLeaks({ ...sheet, purpose: "elders.nl" }, site), ["een adres"]);
+  assert.deepEqual(sheetLeaks({ ...sheet, purpose: "een zin, met een komma" }, site), ["een waarde die geen woord van loep is: een zin, met een komma"]);
+  assert.deepEqual(sheetLeaks({ ...sheet, technologies: ["Thema Voorbeeld"] }, site), ["een techniek die loep niet kent: Thema Voorbeeld"]);
+  assert.deepEqual(sheetLeaks({ ...sheet, pagina: "x" } as never, site), ["een veld dat niet op een meetblad hoort: pagina"]);
 });
 
 test("the id of a model out of what an agent wrote", () => {
   assert.equal(modelId("Claude Opus 5.5 (claude-opus-5-5)"), "claude-opus-5-5");
   assert.equal(modelId("claude-sonnet-5-5"), "claude-sonnet-5-5");
+  // A dot in the id is part of it, and a suffix in brackets is not: two spellings of one model are one.
+  assert.equal(modelId("claude-opus-4.5"), "claude-opus-4.5");
+  assert.equal(modelId("claude-opus-5-5[1m] (Opus 5.5)"), "claude-opus-5-5");
   assert.equal(modelId("Kimi-K3-prepaid"), "kimi-k3-prepaid");
-  assert.equal(modelId("niet opgegeven"), null);
+  // No id in the text: null, and the sheet counts the agent under "other". It copies no free text.
+  for (const text of ["Claude Opus 4.5", "o3", "gemini 2.5 pro", "onbekend", "niet opgegeven"]) assert.equal(modelId(text), null, text);
 });
 
 test("the register reads a sheet as it reads the run: the same record either way", () => {
@@ -151,7 +207,26 @@ test("contribute reads a run, writes nothing in it, and writes the sheet under i
   mkdirSync(join(run, "observations", "v-244"), { recursive: true });
   writeFileSync(join(run, "evaluation.json"), SOURCE.evaluationText);
   writeFileSync(join(run, "pages", "afval-1a2b", "engines-light.json"), JSON.stringify({ results: SOURCE.sweepPages[0]!.results }));
-  writeFileSync(join(run, "observations", "v-244", "0001.json"), JSON.stringify({ command: "rules", result: { grouped: { elements: [SOURCE.sessionElements[1]] } } }));
+  // Under the element stand two rules of axe-core: one failed it, one only doubted it. Only the first counts.
+  const where = "#afvalwijzer > a";
+  const observation = {
+    command: "rules",
+    page: { url: "https://www.voorbeeldstad.nl/inwoners/afval" },
+    result: {
+      grouped: { elements: [{ criterion: "2.4.4", where, verdicts: { "axe-core": "failed", ibm: "failed" }, rules: { "axe-core": ["link-name", "link-in-text-block"], ibm: ["a_text_purpose"] } }] },
+      methods: [
+        { implementation: "axe-core", result: { findings: [{ rule: "link-name", where, outcome: "failed" }, { rule: "link-in-text-block", where, outcome: "cantTell" }] } },
+        { implementation: "accessibility-checker-engine", result: { findings: [{ rule: "a_text_purpose", where, outcome: "failed" }] } },
+      ],
+    },
+  };
+  writeFileSync(join(run, "observations", "v-244", "0001.json"), JSON.stringify(observation));
+  // The same page asked again in another session.
+  mkdirSync(join(run, "observations", "a-244"), { recursive: true });
+  writeFileSync(join(run, "observations", "a-244", "0001.json"), JSON.stringify(observation));
+  mkdirSync(join(run, "signed"));
+  writeFileSync(join(run, "signed", "signature.json"), JSON.stringify({ name: "Een Naam", role: "webredacteur" }));
+  writeFileSync(join(run, "inventory.json"), JSON.stringify({ baseUrl: "https://www.voorbeeldstad.nl/inwoners/" }));
   writeFileSync(join(run, "observations", "v-244", "0002.json"), JSON.stringify({ command: "look", result: { items: [] } }));
   writeFileSync(join(run, "observations", "v-244", "0003.json"), "{ afgebroken");
   writeFileSync(join(run, "manifest.json"), JSON.stringify({ steps: SOURCE.steps }));
@@ -167,8 +242,16 @@ test("contribute reads a run, writes nothing in it, and writes the sheet under i
   const before = readdirSync(run).sort();
 
   const dry = contribute(run, { key: "een-sleutel" });
-  assert.deepEqual([dry.file, dry.leaks, dry.sheet.sessions.length, dry.sheet.sweep.length, dry.sheet.seconds.collect], [null, [], 1, 3, 120]);
+  assert.deepEqual([dry.file, dry.leaks, dry.sheet.sweep.length, dry.sheet.seconds.collect], [null, [], 3, 120]);
+  // The rule that only doubted the element is not among the rules that failed it, and two sessions on one page are one element.
+  assert.deepEqual(sessionElements(run).map((element) => element.rules), [{ "axe-core": ["link-name"], ibm: ["a_text_purpose"] }, { "axe-core": ["link-name"], ibm: ["a_text_purpose"] }]);
+  assert.deepEqual(dry.sheet.sessions, [
+    { engine: "axe-core", rule: "link-name", criterion: "2.4.4", elements: 1, agreed: 1, alone: 0, contradicted: 0 },
+    { engine: "ibm", rule: "a_text_purpose", criterion: "2.4.4", elements: 1, agreed: 1, alone: 0, contradicted: 0 },
+  ]);
   // What people did with the run, as counts: decisions per kind, findings measured again, the status of the statement. Not who.
+  // Signed: the signature stands in signed/signature.json, as `sign` writes it, and not in the evaluation.
+  assert.equal(JSON.parse(SOURCE.evaluationText).signature, undefined);
   assert.deepEqual(dry.sheet.human, { signed: true, criteriaByPerson: 1, decisions: { gepland: 1, opgelost: 2 }, rechecks: 2, statement: "B" });
   assert.deepEqual(dry.sheet.probes, { pages: 3, reflow: 2, zoom: 1, textSpacing: 1, tabWalkNotCompleted: 1 });
   assert.deepEqual(dry.sheet.gate, { sufficient: true, exploreRounds: 2, resweeps: 1, accepted: 1 });
@@ -186,32 +269,47 @@ test("contribute reads a run, writes nothing in it, and writes the sheet under i
   assert.throws(() => contribute(join(folder, "leeg"), { key: "een-sleutel" }), /alleen een afgerond onderzoek of een snelle meting heeft een meetblad/);
 });
 
-test("every finished run under a folder gives a sheet, and a copy of a run gives the same sheet once", () => {
+test("every finished run under a folder gives a sheet, and the same run in two folders gives one, of the folder evaluated last", () => {
   const root = mkdtempSync(join(tmpdir(), "loep-runs-"));
-  const write = (folder: string, text: string): void => {
+  const write = (folder: string, evaluation: unknown, mark: string): void => {
     mkdirSync(join(root, folder), { recursive: true });
-    writeFileSync(join(root, folder, "evaluation.json"), text);
+    writeFileSync(join(root, folder, "evaluation.json"), typeof evaluation === "string" ? evaluation : JSON.stringify(evaluation));
+    writeFileSync(join(root, folder, "manifest.json"), JSON.stringify({ seed: mark }));
   };
-  write("voorbeeldstad.nl/2026-11-02", SOURCE.evaluationText);
-  // The same run in another folder, and its evaluation once more in the report of the run.
-  write("kopie/2026-11-02", SOURCE.evaluationText);
-  write("voorbeeldstad.nl/2026-11-02/report", SOURCE.evaluationText);
-  write("anderestad.nl/pad/2026-11-03", JSON.stringify({ ...EVALUATION, evaluatedAt: "2026-11-03T10:00:00.000Z", site: { baseUrl: "https://www.anderestad.nl/", name: "Anderestad" } }));
-  write("stuk/2026-11-04", "{ geen json");
+  write("voorbeeldstad.nl/2026-11-02", EVALUATION, "run-een");
+  // The same run copied and weighed again later: other bytes, a decision more, the same run.
+  write("kopie/2026-11-14-weging", { ...EVALUATION, evaluatedAt: "2026-11-14T09:00:00.000Z", purpose: "verantwoorden" }, "run-een");
+  // Its evaluation once more in the report of the run is not a run.
+  write("voorbeeldstad.nl/2026-11-02/report", EVALUATION, "run-een");
+  write("anderestad.nl/pad/2026-11-03", { ...EVALUATION, site: { baseUrl: "https://www.anderestad.nl/", name: "Anderestad" } }, "run-twee");
+  write("stuk/2026-11-04", "{ geen json", "run-drie");
   mkdirSync(join(root, "leeg", "2026-11-05"), { recursive: true });
-  assert.deepEqual(runsUnder(root).map((run) => run.slice(root.length + 1)), ["anderestad.nl/pad/2026-11-03", "kopie/2026-11-02", "stuk/2026-11-04", "voorbeeldstad.nl/2026-11-02"]);
+  // A folder that may not be read is passed by and counted, and does not stop the rest.
+  mkdirSync(join(root, "dicht"));
+  chmodSync(join(root, "dicht"), 0o000);
+  const found = runsUnder(root);
+  assert.deepEqual(found.runs.map((run) => run.slice(root.length + 1)), ["anderestad.nl/pad/2026-11-03", "kopie/2026-11-14-weging", "stuk/2026-11-04", "voorbeeldstad.nl/2026-11-02"]);
+  assert.equal(found.unreadable, process.getuid?.() === 0 ? 0 : 1);
 
   const out = join(root, "..", `${root.split("/").at(-1)}-meetbladen`);
   const many = contributeAll(root, { outDir: out, key: "een-sleutel" });
-  assert.deepEqual([many.runs, many.sheets.length, many.written, many.refused, many.failed], [4, 2, 2, [], 1]);
+  chmodSync(join(root, "dicht"), 0o700);
+  assert.deepEqual([many.runs, many.sheets.length, many.written, many.refused], [4, 2, 2, []]);
+  assert.equal(many.failed, 1 + found.unreadable);
   assert.deepEqual(readdirSync(out).sort(), many.sheets.map((sheet) => `${sheet.id}.json`).sort());
+  // Of the run that stands twice, the sheet of the folder evaluated last.
+  assert.deepEqual(many.sheets.map((sheet) => [sheet.month, sheet.purpose]).sort(), [["2026-11", "verantwoorden"], ["2026-11", "verbeteren"]]);
   const text = manyContributionsNl(many, out);
   assert.match(text, /4 afgeronde onderzoeken en snelle metingen gevonden, 2 meetbladen van 2 sites \(1 keer dezelfde run in een andere map\)\./);
-  assert.match(text, /1 map was niet te lezen\./);
+  assert.match(text, /mappen waren niet te lezen\.|map was niet te lezen\./);
+  assert.match(text, /is het rapport van een onderzoek openbaar, dan kan iemand met toegang tot de verzameling het meetblad eraan koppelen/);
   // What is said about the runs names no folder and no site.
   assert.doesNotMatch(text.replace(out, ""), /voorbeeldstad|anderestad|kopie/);
   // Without a folder to write in: the same count, nothing written.
   assert.deepEqual([contributeAll(root, { key: "een-sleutel" }).written, contributeAll(root, { key: "een-sleutel" }).sheets.length], [0, 2]);
+  // A folder that cannot be written in is said out loud: nothing would be contributed.
+  writeFileSync(join(root, "een-bestand"), "geen map");
+  assert.throws(() => contributeAll(root, { outDir: join(root, "een-bestand", "meetbladen"), key: "een-sleutel" }), /ENOTDIR|EEXIST/);
 });
 
 test("a quick measurement gives a sheet too: per rule the places on a strong and on a weak ground, and how the comparison ended", () => {
@@ -251,11 +349,21 @@ test("a quick measurement gives a sheet too: per rule the places on a strong and
   assert.match(contributionNl({ sheet, leaks, file: null }), /Meetblad [0-9a-f]{16} van een snelle meting: loep 0\.32\.0, 2026-11, 2 pagina's\./);
 });
 
-test("the key of a contributor is made once, for that person only, and read after that", () => {
+test("the key of a contributor is made once, for that person only, and not by someone who only looks", () => {
   const file = join(mkdtempSync(join(tmpdir(), "loep-sleutel-")), "loep", "bijdrage.sleutel");
+  // A look at what a sheet holds writes nothing: a key for that one look, and no file.
+  const looking = contributorKey(file, false);
+  assert.match(looking, /^[0-9a-f]{64}$/);
+  assert.equal(existsSync(file), false);
   const key = contributorKey(file);
   assert.match(key, /^[0-9a-f]{64}$/);
+  assert.notEqual(key, looking);
   assert.equal(statSync(file).mode & 0o777, 0o600);
   assert.equal(contributorKey(file), key);
-  assert.ok(existsSync(file));
+  assert.equal(contributorKey(file, false), key);
+  // An empty or short file would make the key of a site guessable: refused.
+  writeFileSync(file, "\n");
+  assert.throws(() => contributorKey(file), /bevat geen sleutel van 32 tekens of meer/);
+  writeFileSync(file, "kort\n");
+  assert.throws(() => contributorKey(file, false), /bevat geen sleutel/);
 });

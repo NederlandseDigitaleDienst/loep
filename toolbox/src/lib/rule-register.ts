@@ -121,8 +121,9 @@ export function calibrationRecords(report: Pick<CalibrationReport, "rules">): Ma
   return records;
 }
 
-const RULINGS = ["finding", "noIssue", "otherCriterion", "open"] as const;
-type Ruling = (typeof RULINGS)[number];
+/** What a judge can rule about a rule of an engine it names. */
+export const RULINGS = ["finding", "noIssue", "otherCriterion", "open"] as const;
+export type Ruling = (typeof RULINGS)[number];
 
 /**
  * What the judges ruled about each rule they named. A verdict names a rule without its engine;

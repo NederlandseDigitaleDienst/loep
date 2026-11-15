@@ -1,3 +1,4 @@
+import type { CatalogueRule } from "../lib/rule-register.ts";
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
 import { createReadStream, existsSync, readdirSync, readFileSync, statSync } from "node:fs";
@@ -377,15 +378,10 @@ async function measurePage(browser: Browser, url: string, origin: string, wanted
   }
 }
 
-/** What an engine says about a rule it ran: the ACT rules it implements and the success criteria it reports under. */
-export interface SeenRule {
-  act: string[];
-  criteria: string[];
-  title?: string;
-}
-
-/** Every rule an engine ran on the test cases, with what the engine says about it: the list a rule register starts from. */
-export type RuleCatalogue = Record<EngineId, Record<string, SeenRule>>;
+/** What an engine says about a rule it ran, and every rule the engines ran: the same list a rule register reads. */
+export type SeenRule = CatalogueRule;
+/** The list per engine of this toolbox: the catalogue the register reads, with the four engines as its keys. */
+export type RuleCatalogue = Record<EngineId, Record<string, CatalogueRule>>;
 
 export interface CalibrateOptions {
   /** The directory with the cached copy of the test cases. */

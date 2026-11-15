@@ -32,7 +32,7 @@ const read = <T>(path: string): T => JSON.parse(readFileSync(path, "utf8")) as T
 function fieldRun(dir: string): FieldRun | null {
   const source = sheetSource(dir);
   // The key only has to tell the sites of this one build apart; nothing made with it is written.
-  return source ? fieldRunOfSheet(buildSheet(source, "rule-register")) : null;
+  return source && source.evaluation.criteria.length > 0 ? fieldRunOfSheet(buildSheet(source, "rule-register")) : null;
 }
 
 const { values } = parseArgs({ options: { calibration: { type: "string" }, sheets: { type: "string" }, runs: { type: "string" }, out: { type: "string" } } });
@@ -43,9 +43,17 @@ if (!calibrationDir || !existsSync(join(calibrationDir, "regels.json"))) throw n
 const calibration = read<CalibrationReport>(join(calibrationDir, "uitkomst.json"));
 const catalogue = read<RuleCatalogue>(join(calibrationDir, "regels.json"));
 const folders = values.runs ? readFileSync(values.runs, "utf8").split("\n").map((line) => line.trim()).filter((line) => line && !line.startsWith("#")) : [];
-const sheets = values.sheets ? readdirSync(values.sheets).filter((name) => name.endsWith(".json")).map((name) => read<RunSheet>(join(values.sheets!, name))).filter((sheet) => sheet.kind === "run-sheet") : [];
-const runs = [...folders.map(fieldRun).filter((run): run is FieldRun => run !== null), ...sheets.map(fieldRunOfSheet)];
-if (runs.length < folders.length) process.stderr.write(`${folders.length - runs.length} van de ${folders.length} mappen hebben geen evaluation.json en tellen niet mee\n`);
+// One or the other: a folder is read with a key of this build and a sheet carries the key of its contributor, so one site given both ways would count as two.
+if (values.sheets && values.runs) throw new Error("geef --sheets of --runs, niet allebei: dezelfde site zou dan twee keer tellen");
+// Only the sheet of an evaluation: a quick measurement has no verdicts to hold a rule against. Each run once.
+const sheets = new Map<string, RunSheet>();
+for (const name of values.sheets ? readdirSync(values.sheets).filter((entry) => entry.endsWith(".json")) : []) {
+  const sheet = read<RunSheet>(join(values.sheets!, name));
+  if (sheet.kind === "run-sheet" && sheet.criteria.length > 0) sheets.set(sheet.id, sheet);
+}
+const fromFolders = folders.map(fieldRun).filter((run): run is FieldRun => run !== null);
+if (fromFolders.length < folders.length) process.stderr.write(`${folders.length - fromFolders.length} van de ${folders.length} mappen hebben geen afgerond onderzoek en tellen niet mee\n`);
+const runs = [...fromFolders, ...[...sheets.values()].map(fieldRunOfSheet)];
 
 const date = new Date().toISOString().slice(0, 10);
 const register = buildRegister({ date, catalogue, calibration, runs });

@@ -14,8 +14,8 @@
   "field": {
     "runs": 29,
     "sites": 13,
-    "runsWithRulings": 12,
-    "runsWithSessions": 19,
+    "runsWithRulings": 13,
+    "runsWithSessions": 20,
     "rulesNotInCatalogue": []
   },
   "rules": [
@@ -259,7 +259,7 @@
         "dismissed": 0,
         "other": 0,
         "rulings": {
-          "finding": 2,
+          "finding": 3,
           "noIssue": 0,
           "otherCriterion": 0,
           "open": 0
@@ -340,7 +340,7 @@
         "dismissed": 0,
         "other": 0,
         "rulings": {
-          "finding": 1,
+          "finding": 2,
           "noIssue": 1,
           "otherCriterion": 0,
           "open": 0
@@ -1441,7 +1441,7 @@
         "dismissed": 0,
         "other": 0,
         "rulings": {
-          "finding": 4,
+          "finding": 5,
           "noIssue": 0,
           "otherCriterion": 0,
           "open": 0
@@ -2166,7 +2166,7 @@
         "other": 0,
         "rulings": {
           "finding": 0,
-          "noIssue": 1,
+          "noIssue": 2,
           "otherCriterion": 0,
           "open": 0
         }
@@ -2266,7 +2266,7 @@
         "dismissed": 0,
         "other": 0,
         "rulings": {
-          "finding": 2,
+          "finding": 3,
           "noIssue": 0,
           "otherCriterion": 0,
           "open": 0
@@ -2493,7 +2493,7 @@
         "dismissed": 0,
         "other": 0,
         "rulings": {
-          "finding": 1,
+          "finding": 2,
           "noIssue": 0,
           "otherCriterion": 0,
           "open": 0
@@ -2832,8 +2832,8 @@
       "sessions": [
         {
           "criterion": "4.1.2",
-          "sites": 3,
-          "criterionFailed": 3,
+          "sites": 1,
+          "criterionFailed": 1,
           "criterionPassed": 0,
           "criterionOther": 0,
           "base": {
@@ -2874,7 +2874,7 @@
         "dismissed": 0,
         "other": 0,
         "rulings": {
-          "finding": 1,
+          "finding": 2,
           "noIssue": 1,
           "otherCriterion": 0,
           "open": 0
@@ -2976,7 +2976,7 @@
         "dismissed": 0,
         "other": 0,
         "rulings": {
-          "finding": 2,
+          "finding": 3,
           "noIssue": 0,
           "otherCriterion": 0,
           "open": 0
@@ -4113,7 +4113,7 @@
         "other": 0,
         "rulings": {
           "finding": 1,
-          "noIssue": 1,
+          "noIssue": 2,
           "otherCriterion": 0,
           "open": 0
         }
@@ -8089,19 +8089,7 @@
         "rightlySilent": 8
       },
       "rulings": null,
-      "sessions": [
-        {
-          "criterion": "2.4.4",
-          "sites": 1,
-          "criterionFailed": 1,
-          "criterionPassed": 0,
-          "criterionOther": 0,
-          "base": {
-            "sites": 13,
-            "failed": 12
-          }
-        }
-      ]
+      "sessions": []
     },
     {
       "engine": "qualweb",
@@ -8443,19 +8431,7 @@
         "rightlySilent": 3
       },
       "rulings": null,
-      "sessions": [
-        {
-          "criterion": "2.4.7",
-          "sites": 4,
-          "criterionFailed": 3,
-          "criterionPassed": 1,
-          "criterionOther": 0,
-          "base": {
-            "sites": 13,
-            "failed": 10
-          }
-        }
-      ]
+      "sessions": []
     },
     {
       "engine": "qualweb",
@@ -9060,19 +9036,7 @@
       "catalogued": true,
       "calibration": null,
       "rulings": null,
-      "sessions": [
-        {
-          "criterion": "1.3.1",
-          "sites": 3,
-          "criterionFailed": 3,
-          "criterionPassed": 0,
-          "criterionOther": 0,
-          "base": {
-            "sites": 13,
-            "failed": 13
-          }
-        }
-      ]
+      "sessions": []
     },
     {
       "engine": "qualweb",
@@ -9532,8 +9496,8 @@
       "sessions": [
         {
           "criterion": "1.3.1",
-          "sites": 5,
-          "criterionFailed": 5,
+          "sites": 4,
+          "criterionFailed": 4,
           "criterionPassed": 0,
           "criterionOther": 0,
           "base": {

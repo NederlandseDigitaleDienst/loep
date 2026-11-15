@@ -11,7 +11,9 @@ just calibrate
 just rule-register --sheets <map met meetbladen>
 ```
 
-De ijkmeting schrijft `regels.json`: elke regel die een regelset draaide, met de criteria en ACT-regels die de regelset er zelf bij noemt. De meetbladen komen uit `contribute` of uit de besloten verzameling waar onderzoeken worden ingestuurd ([../../docs/methode.md](../../docs/methode.md#het-meetblad-en-het-regelregister)). Met `--runs <bestand>` leest het mappen van onderzoeken op de eigen machine, elk zoals het meetblad ervan zou zijn. Een register uit meetbladen en een uit de onderzoeken zelf zijn gelijk; dat is nagegaan op de onderzoeken hieronder.
+Alleen het meetblad van een onderzoek telt; een snelle meting heeft geen oordeel om een regel tegen te houden. Elke run telt één keer.
+
+De ijkmeting schrijft `regels.json`: elke regel die een regelset draaide, met de criteria en ACT-regels die de regelset er zelf bij noemt. De meetbladen komen uit `contribute` of uit de besloten verzameling waar onderzoeken worden ingestuurd ([../../docs/methode.md](../../docs/methode.md#het-meetblad-en-het-regelregister)). Met `--runs <bestand>` leest het mappen van onderzoeken op de eigen machine, elk zoals het meetblad ervan zou zijn. Een register uit meetbladen en een uit de onderzoeken zelf zijn gelijk; dat is nagegaan op de onderzoeken hieronder. Het is het een of het ander: dezelfde site op beide manieren zou twee keer tellen.
 
 ## Wat er in een record staat
 
@@ -26,7 +28,7 @@ Alles uit het veld telt per site. Een site met zeven onderzoeken telt één keer
 
 ## De eerste meting, 15 november 2026
 
-De ijkmeting van die dag, en 29 afgeronde onderzoeken van 13 sites van Nederlandse overheden, gemaakt met loep 0.0.1 tot en met 0.30.0. De sites staan niet in deze repository.
+De ijkmeting van die dag, en de meetbladen van 29 afgeronde onderzoeken van 13 sites van Nederlandse overheden, gemaakt met loep 0.0.1 tot en met 0.30.0, uit de besloten verzameling. De sites staan niet in deze repository.
 
 **Er zijn 376 regels**: 89 van Alfa, 65 van axe-core, 121 van IBM en 101 van QualWeb. Van QualWeb zijn 34 techniekregels (`QW-WCAG-T`), zonder ACT-regel erachter.
 
@@ -34,32 +36,32 @@ De ijkmeting van die dag, en 29 afgeronde onderzoeken van 13 sites van Nederland
 
 **De ijkmeting is herhaalbaar.** Alfa, IBM en QualWeb gaven op 15 november precies de getallen van 13 oktober. axe-core ging van 4.13.0 naar 4.14.0: 723 beoordeelde gevallen tegen 687, 178 gevonden tegen 162, en 6 onterechte meldingen tegen 10.
 
-**Uitspraken van beoordelaars zijn er weinig.** Een beoordelaar legt pas sinds loep 0.18 per regel een uitspraak vast. Dat geeft 12 onderzoeken, 81 uitspraken en 33 regels, alleen van axe-core en Alfa, de twee regelsets van de veegronde. Zeven van die regels hebben een uitspraak op drie of meer sites.
+**Uitspraken van beoordelaars zijn er weinig.** Een beoordelaar legt pas sinds loep 0.18 per regel een uitspraak vast. Dat geeft 13 onderzoeken, 90 uitspraken en 33 regels, alleen van axe-core en Alfa, de twee regelsets van de veegronde. Zeven van die regels hebben een uitspraak op drie of meer sites.
 
 - 21 regels zijn op elke site bevestigd waar een beoordelaar zich erover uitsprak.
 - 8 regels zijn alleen verworpen. Zes daarvan op één site.
 - `sia-r84` van Alfa is op alle drie de sites verworpen, `sia-r17` op beide.
 
-**Uit de sessies komt iets voor alle vier.** In 19 onderzoeken draaide een agent de regelsets in een sessie: 97 regels, 105 paren van regel en criterium.
+**Uit de sessies komt iets voor alle vier.** In 20 onderzoeken draaide een agent de regelsets in een sessie: 94 regels, 102 paren van regel en criterium.
 
 | Soort regel | Keren dat een regel afkeurde op een site | Criterium daar afgekeurd | Criterium daar goedgekeurd |
 |---|---|---|---|
-| ACT-regel | 165 | 141 | 20 |
-| Techniekregel | 67 | 44 | 18 |
+| ACT-regel | 158 | 135 | 19 |
+| Techniekregel | 63 | 40 | 18 |
 | Overig | 23 | 21 | 2 |
 
 Een techniekregel keurt dus ruim twee keer zo vaak af waar het onderzoek het criterium goedkeurt. `QW-WCAG-T24` keurde op vier sites af onder 2.1.1; het onderzoek keurde 2.1.1 daar op geen enkele af.
 
-**Hoe vaak een regelset alleen staat.** Een meetblad legt bij elk element dat een regel in een sessie afkeurde vast hoe de andere regelsets erover dachten. Over de 28 onderzoeken:
+**Hoe vaak een regelset alleen staat.** Een meetblad legt bij elk element dat een regel in een sessie afkeurde vast hoe de andere regelsets erover dachten. Een element van een pagina telt één keer per regel, hoe vaak een agent er ook naar vroeg, en alleen een regel die afkeurde telt, niet een die twijfelde. Over de 29 onderzoeken:
 
 | Regelset | Afgekeurde elementen | Een andere regelset keurde het ook af | Alleen: de andere zeiden niets | Een andere keurde het goed |
 |---|---|---|---|---|
-| axe-core | 160 | 120 | 2 | 38 |
-| IBM | 282 | 93 | 81 | 108 |
-| Alfa | 1027 | 141 | 651 | 235 |
-| QualWeb | 6993 | 145 | 4374 | 2474 |
+| axe-core | 97 | 72 | 2 | 23 |
+| IBM | 229 | 73 | 70 | 86 |
+| Alfa | 863 | 85 | 589 | 189 |
+| QualWeb | 6587 | 104 | 4325 | 2158 |
 
-axe-core staat bijna nooit alleen. QualWeb keurt 48 keer zo veel elementen af als het met een ander deelt. Het register leest deze telling nog niet; ze staat op de meetbladen.
+axe-core staat bijna nooit alleen. QualWeb staat bij twee derde van wat het afkeurt alleen, en deelt minder dan twee procent met een andere regelset. De aantallen hangen af van welke pagina's de agents bekeken; de verhoudingen zeggen meer dan de getallen. Het register leest deze telling nog niet; ze staat op de meetbladen.
 
 **Waar de drie bronnen hetzelfde zeggen.** Voor `sia-r84` wijzen ze één kant op: op de testgevallen vond de regel de twee gebreken en meldde ze er twee onterecht, beoordelaars verwierpen haar op drie van de drie sites, en in de sessies keurde het onderzoek het criterium goed op alle drie de sites waar ze afkeurde, terwijl dat criterium op 4 van de 13 sites is afgekeurd. Dat is de regel die op een echte site 500 plekken alleen afkeurde.
 

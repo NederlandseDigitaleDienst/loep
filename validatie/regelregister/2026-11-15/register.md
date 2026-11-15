@@ -1,6 +1,6 @@
 # Regelregister van 2026-11-15
 
-Wat er per regel van elke regelset bekend is. De ijkmeting is van 2026-11-15, met axe-core 4.14.0, Alfa 0.120.0, IBM 4.0.34, QualWeb 0.8.6. Het veld is 29 afgeronde onderzoeken van 13 sites: in 12 daarvan legde een beoordelaar per regel een uitspraak vast, in 19 draaide een agent de regelsets in een sessie.
+Wat er per regel van elke regelset bekend is. De ijkmeting is van 2026-11-15, met axe-core 4.14.0, Alfa 0.120.0, IBM 4.0.34, QualWeb 0.8.6. Het veld is 29 afgeronde onderzoeken van 13 sites: in 13 daarvan legde een beoordelaar per regel een uitspraak vast, in 20 draaide een agent de regelsets in een sessie.
 
 ## Hoeveel er is
 
@@ -9,7 +9,7 @@ Wat er per regel van elke regelset bekend is. De ijkmeting is van 2026-11-15, me
 | Alfa | 89 | 44 | 0 | 45 | 44 | 15 | 16 |
 | axe-core | 65 | 47 | 0 | 18 | 45 | 18 | 20 |
 | IBM | 121 | 34 | 0 | 87 | 31 | 0 | 27 |
-| QualWeb | 101 | 67 | 34 | 0 | 66 | 0 | 34 |
+| QualWeb | 101 | 67 | 34 | 0 | 66 | 0 | 31 |
 
 Van de 33 regels met een uitspraak van een beoordelaar rusten er 26 op minder dan drie sites.
 
