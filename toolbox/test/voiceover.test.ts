@@ -9,7 +9,7 @@ import { setupLines } from "../src/commands/voiceover.ts";
 import { speechDifferences } from "../src/instruments/methods/speech.ts";
 import { GUEST_VERSION, METHODS, toolStatus } from "../src/instruments/methods/registry.ts";
 import { MEASURE_COMMANDS } from "../src/lib/verdict.ts";
-import { addressFor, COPIED_FILES, framed, GuestQueue, job, LIMITS, read, readingOf, shutdown, SILENT_NOTE, start, VOICEOVER, VOICEOVER_NOTE, type Clock, type Guest, type GuestAnswer, type GuestState, type Versions } from "../src/lib/voiceover.ts";
+import { addressFor, COPIED_FILES, FIRST_NUMBER, framed, GuestQueue, isReady, job, LIMITS, read, readingOf, recordedStart, shutdown, SILENT_NOTE, start, statusNl, VOICEOVER, VOICEOVER_NOTE, voiceoverStatus, voiceoverWarningNl, type Clock, type Guest, type GuestAnswer, type GuestState, type Versions } from "../src/lib/voiceover.ts";
 import { guardLines, planSteps, playedOf, policyOf, testPage } from "../src/lib/voiceover-page.ts";
 import type { Step } from "../src/session/observations.ts";
 
@@ -437,4 +437,65 @@ test("what the page wrote into its address is read back, encoded or not", () => 
   assert.equal(playedOf(null), null);
   assert.equal(playedOf("file:///p.html#loep-played=%7Bnot"), null);
   assert.deepEqual(guardLines(playedOf(encoded)), ["verzoek tegengehouden: POST https://site.example/submit"]);
+});
+
+/** A guest for the status: what lume says, and what the guest answers to the question when it booted and when it was warmed up. */
+function statusGuest(state: GuestState, answer: string | null): Guest {
+  return { state: async () => state, boot: async () => undefined, halt: async () => undefined, exec: async () => answer };
+}
+
+test("status: VoiceOver reads only when the virtual Mac runs and was warmed up since this boot", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "voiceover-status-"));
+  try {
+    const ready = await voiceoverStatus(statusGuest("running", "1763193600 1763193600"), "vm", dir);
+    assert.deepEqual([isReady(ready), ready.warm, ready.bootedAt], [true, true, "2025-11-15T08:00:00.000Z"]);
+    assert.equal(voiceoverWarningNl(ready), null);
+    assert.match(statusNl(ready), /^draait sinds \d\d:\d\d en is opgewarmd/);
+    // Warmed up before the last boot: the marker is older than the boot, so it does not count.
+    const cold = await voiceoverStatus(statusGuest("running", "1763193600 1763100000"), "vm", dir);
+    assert.equal(isReady(cold), false);
+    assert.match(voiceoverWarningNl(cold) ?? "", /^LET OP: de virtuele Mac met VoiceOver draait sinds \d\d:\d\d maar is niet opgewarmd.*loep voiceover start/);
+    // Running, but no answer over ssh: still booting or stuck.
+    assert.match(statusNl(await voiceoverStatus(statusGuest("running", null), "vm", dir)), /geeft geen antwoord: hij start nog op of hangt/);
+    // Not set up: no warning, since a run without VoiceOver is as it was.
+    assert.equal(voiceoverWarningNl(await voiceoverStatus(statusGuest("absent", null), "vm", dir)), null);
+    assert.equal(voiceoverWarningNl(await voiceoverStatus(statusGuest("no-lume", null), "vm", dir)), null);
+    assert.match(voiceoverWarningNl(await voiceoverStatus(statusGuest("stopped", null), "vm", dir)) ?? "", /is ingericht maar draait niet\. Start hem met loep voiceover start/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("status: a start in the background leaves word while it runs, and a failed start is still seen afterwards", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "voiceover-status-"));
+  try {
+    let during: Awaited<ReturnType<typeof voiceoverStatus>> | null = null;
+    const failed = await recordedStart(async () => {
+      during = await voiceoverStatus(statusGuest("running", null), "vm", dir);
+      return { ok: false, boots: 3, seconds: 1500, attempts: [], error: "opwarmen mislukt na drie starts" };
+    }, "vm", dir);
+    assert.equal(failed.ok, false);
+    assert.equal(during!.starting?.pid, process.pid);
+    assert.match(statusNl(during!), /wordt gestart sinds \d\d:\d\d \(loep voiceover start, proces \d+\)/);
+    const after = await voiceoverStatus(statusGuest("stopped", null), "vm", dir);
+    assert.equal(after.starting, undefined);
+    assert.deepEqual([after.lastStart?.ok, after.lastStart?.error], [false, "opwarmen mislukt na drie starts"]);
+    assert.match(voiceoverWarningNl(after) ?? "", /de laatste start, om \d\d:\d\d, mislukte: opwarmen mislukt na drie starts/);
+    // A start that throws is recorded as failed too.
+    await assert.rejects(recordedStart(async () => { throw new Error("lume weg"); }, "vm", dir));
+    assert.match((await voiceoverStatus(statusGuest("stopped", null), "vm", dir)).lastStart?.error ?? "", /de start brak af: lume weg/);
+    // A start file left by a process that is gone does not count as a start that runs.
+    writeFileSync(join(dir, "vm.starting.json"), JSON.stringify({ pid: 2 ** 22 + 12345, since: "2026-11-15T08:00:00Z" }));
+    assert.equal((await voiceoverStatus(statusGuest("stopped", null), "vm", dir)).starting, undefined);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("the boot second is the seconds of kern.boottime, as reader.js writes it, not the microseconds after it", async () => {
+  const { execFileSync } = await import("node:child_process");
+  const line = "{ sec = 1794713662, usec = 745489 } Sat Nov 14 19:34:22 2026";
+  assert.equal(execFileSync("sh", ["-c", `echo '${line}' | ${FIRST_NUMBER}`], { encoding: "utf8" }).trim(), "1794713662");
+  // reader.js reads it with the first match of /sec = (\d+)/.
+  assert.equal(/sec = (\d+)/.exec(line)?.[1], "1794713662");
 });

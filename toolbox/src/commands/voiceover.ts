@@ -3,7 +3,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
-import { COPIED_FILES, GUEST_DIR, GuestQueue, lumeGuest, putFile, read, realClock, shutdown, start, VM_NAME, type Clock, type Guest } from "../lib/voiceover.ts";
+import { COPIED_FILES, GUEST_DIR, GuestQueue, isReady, lumeGuest, putFile, read, realClock, recordedStart, shutdown, start, statusNl, VM_NAME, voiceoverStatus, type Clock, type Guest } from "../lib/voiceover.ts";
 
 const run = promisify(execFile);
 const GUEST_FILES = fileURLToPath(new URL("../../voiceover/guest/", import.meta.url));
@@ -12,7 +12,10 @@ export const VOICEOVER_USAGE = `loep voiceover <command>
 
   start                                  Boot the virtual Mac and warm it up: three spoken sentences, then VoiceOver on and off
                                          once. A boot whose warm-up fails is shut down and done again, at most three boots.
-                                         Progress with times on stderr; 9 minutes, 20 to 30 with a restart. Leave it running during an evaluation
+                                         Progress with times on stderr; 9 minutes, 20 to 30 with a restart. Leave it running during an evaluation.
+                                         Leaves word on this machine while it runs and how it ended, for status
+  status                                 Whether VoiceOver can read aloud now: the virtual Mac runs and was warmed up since it booted.
+                                         Also a start that still runs, and the last start that failed. Exit 0 when it can read, 1 when not
   read --url <address or file> [--steps <n>] [--press <name>] [--out <file>]
                                          Open the page in Safari in the virtual Mac, go into the web content, and give what
                                          VoiceOver says per step (default 15). A file on this machine is copied into the virtual
@@ -37,7 +40,7 @@ const MEMORY = "6GB";
 
 /** `loep voiceover start`: exit 0 when VoiceOver is ready to read. */
 export async function voiceoverStart(guest: Guest = lumeGuest()): Promise<number> {
-  const started = await start(guest, (line) => process.stderr.write(`${line}\n`));
+  const started = await recordedStart(() => start(guest, (line) => process.stderr.write(`${line}\n`)));
   process.stdout.write(`${JSON.stringify({ ok: started.ok, boots: started.boots, seconds: started.seconds, attempts: started.attempts, ...(started.versions ? { versions: started.versions } : {}), ...(started.error ? { error: started.error } : {}) })}\n`);
   return started.ok ? 0 : 1;
 }
@@ -59,6 +62,13 @@ export async function voiceoverRead(flags: ReadFlags, guest: Guest = lumeGuest()
   if (flags.out) writeFileSync(flags.out, `${JSON.stringify({ ...reading.result, waited }, null, 2)}\n`);
   process.stdout.write(`${JSON.stringify({ ...reading.print, ...(waited.seconds > 0 ? { waited: `${waited.seconds} s gewacht op de virtuele Mac` } : {}) })}\n`);
   return 0;
+}
+
+/** `loep voiceover status`: exit 0 when VoiceOver can read aloud now. */
+export async function voiceoverStatusCommand(guest: Guest = lumeGuest()): Promise<number> {
+  const status = await voiceoverStatus(guest);
+  process.stdout.write(`${JSON.stringify({ ready: isReady(status), ...status, text: `de virtuele Mac met VoiceOver ${statusNl(status)}` })}\n`);
+  return isReady(status) ? 0 : 1;
 }
 
 /** `loep voiceover stop` */

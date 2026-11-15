@@ -73,6 +73,7 @@ const PENDING = {
     finishers: { type: 'array', items: ITEM },
     siteOutage: { type: 'string', description: 'alleen als de site een storing heeft' },
     sendingLow: { type: 'string', description: 'alleen als het budget voor versturen bijna op is' },
+    voiceover: { type: 'string', description: 'alleen als de virtuele Mac met VoiceOver is ingericht maar niet voorleest' },
     again: { type: 'array', items: { type: 'string' }, description: 'alleen bij done: criteria die na een storing van de site een nieuwe afmaakronde kunnen krijgen' },
     note: { type: 'string' },
   },
@@ -148,6 +149,7 @@ async function pool(items, limit, start) {
 const skipped = []
 const history = []
 let pendingSkips = []
+let voiceover = null
 let attempted = []
 let last = null
 let paused = null
@@ -196,6 +198,12 @@ for (let round = 1; round <= MAX_ROUNDS; round++) {
     history.push({ round, phase: 'storing van de site', note: state.siteOutage })
     break
   }
+  // The virtual Mac is set up but VoiceOver does not read: the run goes on as without, and whoever leads hears it once (#565).
+  if (state.voiceover && state.voiceover !== voiceover) {
+    voiceover = state.voiceover
+    log(`ronde ${round}: ${voiceover}`)
+    history.push({ round, phase: state.phase, note: voiceover })
+  }
   if (state.sendingLow && !sendingAccepted) {
     paused = `${SENDING_PAUSED_NL} (stand ${round}: ${state.sendingLow})`
     history.push({ round, phase: 'budget voor versturen', note: state.sendingLow })
@@ -239,4 +247,4 @@ if (paused) {
 // Twenty rounds without the toolbox saying it is done: the run is not finished, and that is said, not left to be guessed (#318).
 const stopped = !paused && rounds === MAX_ROUNDS && last !== 'done' && last !== 'error' ? `na ${MAX_ROUNDS} rondes nog niet klaar (laatste fase: ${last}); draai pending om te zien wat er nog open staat, en start de werkstroom opnieuw` : null
 if (stopped) log(stopped)
-return { history, skipped, last, paused, stopped, models: Object.fromEntries(ROLES.map((role) => [role, MODEL[role] || null])) }
+return { history, skipped, last, paused, stopped, voiceover, models: Object.fromEntries(ROLES.map((role) => [role, MODEL[role] || null])) }

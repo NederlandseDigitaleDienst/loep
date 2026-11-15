@@ -154,7 +154,7 @@ const USAGE = `loep <command> [options]
   seal --run <run> --open                Open the seal on purpose, to measure in the run itself again (tasks --again): the seal
                                          and a signature lapse; seal again afterwards, and read and sign again
   verify --run <run>                     Recompute every hash in the run
-  voiceover start|read|stop|setup        Optional, outside an evaluation: a real screen reader (VoiceOver in a virtual Mac) as a
+  voiceover start|status|read|stop|setup Optional, outside an evaluation: a real screen reader (VoiceOver in a virtual Mac) as a
                                          second source next to session speak; loep voiceover --help
 
 Options:
@@ -639,7 +639,10 @@ async function main(): Promise<void> {
       const { isInstrumentRun, instrumentPending, briefPending, NO_TASKS_NL } = await import("./commands/instrument-tasks.ts");
       if (!isInstrumentRun(values.run)) throw new Error(NO_TASKS_NL);
       const pending = await instrumentPending(values.run);
-      process.stdout.write(`${JSON.stringify(values.brief ? briefPending(pending) : pending)}\n`);
+      // In a phase with agents: whether VoiceOver can read, when the virtual Mac is set up. Asked of lume, not read from the run.
+      const { voiceoverStatus, voiceoverWarningNl } = await import("./lib/voiceover.ts");
+      const voiceover = pending.phase === "done" ? null : voiceoverWarningNl(await voiceoverStatus());
+      process.stdout.write(`${JSON.stringify({ ...(values.brief ? briefPending(pending) : pending), ...(voiceover ? { voiceover } : {}) })}\n`);
       return;
     }
     case "estimate": {
@@ -647,9 +650,8 @@ async function main(): Promise<void> {
       const atOnce = parseAtOnce(values["at-once"], "agents");
       const { estimateOutput } = await import("./commands/estimate.ts");
       // Whether the virtual Mac for VoiceOver is there: then the estimate says when to start it.
-      const { lumeGuest } = await import("./lib/voiceover.ts");
-      const guest = await lumeGuest().state();
-      process.stdout.write(estimateOutput(values.run, { atOnce, groups: values.groups, json: values.json, voiceover: guest === "running" || guest === "stopped" ? guest : null }));
+      const { voiceoverStatus } = await import("./lib/voiceover.ts");
+      process.stdout.write(estimateOutput(values.run, { atOnce, groups: values.groups, json: values.json, voiceover: await voiceoverStatus() }));
       return;
     }
     case "gaps": {
@@ -884,12 +886,13 @@ async function main(): Promise<void> {
     }
     case "voiceover": {
       // Outside a run: a virtual Mac with VoiceOver that stays up for as long as the person keeps it.
-      const { voiceoverRead, voiceoverSetup, voiceoverStart, voiceoverStop } = await import("./commands/voiceover.ts");
+      const { voiceoverRead, voiceoverSetup, voiceoverStart, voiceoverStatusCommand, voiceoverStop } = await import("./commands/voiceover.ts");
       if (target === "start") process.exitCode = await voiceoverStart();
       else if (target === "read") process.exitCode = await voiceoverRead({ url: values.url, steps: values.steps, press: values.press, out: values.out });
+      else if (target === "status") process.exitCode = await voiceoverStatusCommand();
       else if (target === "stop") process.exitCode = await voiceoverStop();
       else if (target === "setup") process.exitCode = await voiceoverSetup();
-      else throw new Error(`voiceover kent start, read, stop en setup, niet "${target}"`);
+      else throw new Error(`voiceover kent start, status, read, stop en setup, niet "${target}"`);
       break;
     }
     default:

@@ -1,5 +1,5 @@
 import { execFile, spawn } from "node:child_process";
-import { closeSync, mkdirSync, openSync, readFileSync, rmSync, writeSync } from "node:fs";
+import { closeSync, mkdirSync, openSync, readFileSync, rmSync, writeFileSync, writeSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -62,7 +62,7 @@ export function lumeGuest(name = VM_NAME()): Guest {
       }
     },
     async boot() {
-      const logs = join(homedir(), ".cache", "loep", "voiceover");
+      const logs = stateDir();
       mkdirSync(logs, { recursive: true });
       const log = openSync(join(logs, `${name}.log`), "a");
       // Detached and with its own output: lume run stays in the foreground for as long as the virtual Mac runs.
@@ -189,9 +189,101 @@ export interface Started {
   error?: string;
 }
 
+/** The first number of `{ sec = 1794713662, usec = 745489 } Sat Nov 14 ...`: the seconds, not the microseconds. */
+export const FIRST_NUMBER = `sed 's/^[^0-9]*\\([0-9]*\\).*/\\1/'`;
+/** The second the guest booted; the warm-up in reader.js writes the same number to a file. */
+const BOOT_SECONDS = `sysctl -n kern.boottime | ${FIRST_NUMBER}`;
+
 /** Whether the guest was warmed up since it booted: then VoiceOver can start at once. */
 async function isWarm(guest: Guest): Promise<boolean> {
-  return (await guest.exec(`[ "$(cat "$HOME/.loep-voiceover-warm" 2>/dev/null)" = "$(sysctl -n kern.boottime | sed 's/.*sec = \\([0-9]*\\).*/\\1/')" ] && echo warm`, 15))?.trim() === "warm";
+  return (await guest.exec(`[ "$(cat "$HOME/.loep-voiceover-warm" 2>/dev/null)" = "$(${BOOT_SECONDS})" ] && echo warm`, 15))?.trim() === "warm";
+}
+
+/** Where `start` leaves word of itself on this machine: a start that runs, and how the last one ended. */
+export const stateDir = (): string => join(homedir(), ".cache", "loep", "voiceover");
+const startingFile = (dir: string, name: string): string => join(dir, `${name}.starting.json`);
+const lastStartFile = (dir: string, name: string): string => join(dir, `${name}.last-start.json`);
+
+export interface StartRecord {
+  ok: boolean;
+  at: string;
+  error?: string;
+}
+
+/** Around a `start`: while it runs a file with its process, after it how it ended. A start in the background that fails is then still seen. */
+export async function recordedStart(run: () => Promise<Started>, name = VM_NAME(), dir = stateDir(), now: () => Date = () => new Date()): Promise<Started> {
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(startingFile(dir, name), `${JSON.stringify({ pid: process.pid, since: now().toISOString() })}\n`);
+  let started: Started = { ok: false, boots: 0, seconds: 0, attempts: [], error: "de start brak af" };
+  try {
+    started = await run();
+    return started;
+  } catch (error) {
+    started = { ...started, error: `de start brak af: ${(error as Error).message}` };
+    throw error;
+  } finally {
+    const record: StartRecord = { ok: started.ok, at: now().toISOString(), ...(started.error ? { error: started.error } : {}) };
+    writeFileSync(lastStartFile(dir, name), `${JSON.stringify(record)}\n`);
+    rmSync(startingFile(dir, name), { force: true });
+  }
+}
+
+/** What `voiceover status` knows: what lume says, and for a running guest whether it was warmed up since it booted. */
+export interface VoiceoverStatus {
+  state: GuestState;
+  /** Only for a running guest that answered: warmed up since it booted. */
+  warm?: boolean;
+  /** Only for a running guest that answered. */
+  bootedAt?: string;
+  /** A `start` that still runs. */
+  starting?: { pid: number; since: string };
+  lastStart?: StartRecord;
+}
+
+const readRecord = <T>(path: string): T | null => {
+  try {
+    return JSON.parse(readFileSync(path, "utf8")) as T;
+  } catch {
+    return null;
+  }
+};
+
+export async function voiceoverStatus(guest: Guest = lumeGuest(), name = VM_NAME(), dir = stateDir()): Promise<VoiceoverStatus> {
+  const state = await guest.state();
+  const starting = readRecord<{ pid: number; since: string }>(startingFile(dir, name));
+  const lastStart = readRecord<StartRecord>(lastStartFile(dir, name));
+  const status: VoiceoverStatus = { state, ...(starting && alive(starting.pid) ? { starting } : {}), ...(lastStart ? { lastStart } : {}) };
+  if (state !== "running") return status;
+  const answer = (await guest.exec(`echo "$(${BOOT_SECONDS}) $(cat "$HOME/.loep-voiceover-warm" 2>/dev/null)"`, 15))?.trim().split(/\s+/);
+  const booted = Number(answer?.[0]);
+  if (!Number.isFinite(booted) || booted <= 0) return status;
+  return { ...status, warm: answer?.[1] === answer?.[0], bootedAt: new Date(booted * 1000).toISOString() };
+}
+
+/** Set up on this machine: lume is there and so is the virtual Mac. */
+export const isSetUp = (status: VoiceoverStatus): boolean => status.state === "running" || status.state === "stopped";
+/** VoiceOver can read aloud now. */
+export const isReady = (status: VoiceoverStatus): boolean => status.state === "running" && status.warm === true;
+
+const hhmm = (iso: string): string => new Date(iso).toLocaleTimeString("nl-NL", { hour: "2-digit", minute: "2-digit" });
+const START_HINT = "loep voiceover start, op de achtergrond: 9 minuten, of 20 tot 30 met een herstart";
+
+/** The state in one sentence that follows "de virtuele Mac met VoiceOver". */
+export function statusNl(status: VoiceoverStatus): string {
+  if (status.state === "no-lume") return "is er niet: lume staat niet op deze machine (zie docs/voiceover.md)";
+  if (status.state === "absent") return "is er niet op deze machine (just voiceover-setup richt hem in)";
+  if (isReady(status)) return `draait sinds ${hhmm(status.bootedAt!)} en is opgewarmd: VoiceOver leest voor`;
+  if (status.starting) return `wordt gestart sinds ${hhmm(status.starting.since)} (loep voiceover start, proces ${status.starting.pid}): dat duurt 9 minuten, of 20 tot 30 met een herstart`;
+  const failed = status.lastStart && !status.lastStart.ok ? `; de laatste start, om ${hhmm(status.lastStart.at)}, mislukte: ${status.lastStart.error ?? "onbekende reden"}` : "";
+  if (status.state === "stopped") return `is ingericht maar draait niet${failed}. Start hem met ${START_HINT}`;
+  if (!status.bootedAt) return `draait maar geeft geen antwoord: hij start nog op of hangt${failed}. Draai ${START_HINT}; die start hem zo nodig opnieuw`;
+  return `draait sinds ${hhmm(status.bootedAt)} maar is niet opgewarmd, dus VoiceOver leest niet voor${failed}. Draai ${START_HINT}; die warmt hem op of start hem opnieuw`;
+}
+
+/** For whoever leads a phase with agents: a warning when the virtual Mac is set up but VoiceOver cannot read; null otherwise. */
+export function voiceoverWarningNl(status: VoiceoverStatus): string | null {
+  if (!isSetUp(status) || isReady(status)) return null;
+  return `LET OP: de virtuele Mac met VoiceOver ${statusNl(status)}. Zonder hem lezen beoordelaars, verifieerders en de afmaakronde niet voor met VoiceOver; het onderzoek gaat verder zoals zonder`;
 }
 
 /**
@@ -352,7 +444,7 @@ export interface Waited {
 }
 
 /** The lock that holds the one virtual Mac for one reading, also against another process of loep. */
-export const lockFile = (name = VM_NAME()): string => join(homedir(), ".cache", "loep", "voiceover", `${name}.lock`);
+export const lockFile = (name = VM_NAME()): string => join(stateDir(), `${name}.lock`);
 
 const alive = (pid: number): boolean => {
   try {

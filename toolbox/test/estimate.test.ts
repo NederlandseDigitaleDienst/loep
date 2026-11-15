@@ -192,10 +192,15 @@ test("a budget for sending that is used up stops the next phase: pending and est
 test("with the virtual Mac for VoiceOver set up, the estimate says to start it with the sweep and stop it at the end; without one it says nothing", () => {
   const run = makeRun({ baseUrl: "https://voorbeeld.example/", templates: ["a"], sample: 1, pageTypes: 1 });
   assert.deepEqual(estimateRun(run, { voiceover: null }).notesNl, []);
-  const stopped = estimateRun(run, { voiceover: "stopped" }).notesNl;
+  assert.deepEqual(estimateRun(run, { voiceover: { state: "absent" } }).notesNl, []);
+  const stopped = estimateRun(run, { voiceover: { state: "stopped" } }).notesNl;
   assert.equal(stopped.length, 1);
-  assert.match(stopped[0]!, /start hem tegelijk met de veegronde \(loep voiceover start, 9 minuten, of 20 tot 30 met een herstart\).*loep voiceover stop/);
-  assert.match(estimateRun(run, { voiceover: "running" }).notesNl[0]!, /draait: beoordelaars, verifieerders en de afmaakronde/);
+  assert.match(stopped[0]!, /start hem tegelijk met de veegronde \(loep voiceover start, 9 minuten, of 20 tot 30 met een herstart\).*loep voiceover status.*loep voiceover stop/);
+  const ready = { state: "running", warm: true, bootedAt: "2026-11-15T08:00:00Z" } as const;
+  assert.match(estimateRun(run, { voiceover: ready }).notesNl[0]!, /draait en is opgewarmd: beoordelaars, verifieerders en de afmaakronde/);
+  // Running but not warmed up, or a start that failed: the estimate says so, and what to do.
+  assert.match(estimateRun(run, { voiceover: { state: "running", warm: false, bootedAt: "2026-11-15T08:00:00Z" } }).notesNl[0]!, /niet opgewarmd, dus VoiceOver leest niet voor/);
+  assert.match(estimateRun(run, { voiceover: { state: "stopped", lastStart: { ok: false, at: "2026-11-15T08:00:00Z", error: "geen bureaublad" } } }).notesNl[0]!, /De laatste start mislukte: geen bureaublad\./);
 });
 
 test("halfway a run the estimate shows what was measured and what is still to come", () => {

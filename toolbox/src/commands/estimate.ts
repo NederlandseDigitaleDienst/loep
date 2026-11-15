@@ -13,6 +13,7 @@ import { BLOCKER_VARIANTS } from "./modelsweep.ts";
 import { MAX_DOWN_TARGETS, MAX_HOVER_TARGETS } from "./states.ts";
 import { AGENT_PHASES, agentPhaseTimings, elapsedSeconds, sessionLimit, sessionLimits, stageTimings } from "../lib/timing.ts";
 import { budgetEmptyNl, isLocalHost, writeBudget, writeBudgetNl, writesForRun } from "../lib/writes.ts";
+import { isReady, isSetUp, statusNl, type VoiceoverStatus } from "../lib/voiceover.ts";
 import { DEFAULT_DAEMON_LIMITS } from "../session/safety.ts";
 
 /** Agents at the same time when nobody says and no session process runs: what the workflow starts by default. */
@@ -26,8 +27,8 @@ export interface EstimateOptions {
   atOnce?: number | undefined;
   /** Count the phases with agents in groups that each wait for their slowest agent, as the workflow did before it had a pool. */
   groups?: boolean | undefined;
-  /** The virtual Mac for VoiceOver: set up and stopped, running, or not there (null). Asked of lume by the command, not read from the run. */
-  voiceover?: "stopped" | "running" | null | undefined;
+  /** The virtual Mac for VoiceOver, or null without one. Asked of lume by the command, not read from the run. */
+  voiceover?: VoiceoverStatus | null | undefined;
   /** The moment the estimate is made, to tell a step that runs from one that stopped. */
   now?: Date | undefined;
 }
@@ -105,9 +106,11 @@ function runningSteps(runDir: string, steps: ManifestStep[]): Partial<Record<Swe
 /** What the estimate says about the virtual Mac for VoiceOver, when there is one. */
 export function voiceoverNoteNl(state: EstimateOptions["voiceover"]): string | null {
   const reading = "elke voorlezing door VoiceOver duurt ongeveer een minuut en ze gaan één voor één; die tijd valt binnen het budget van de agents en is niet apart meegeteld. Stop de virtuele Mac na de laatste fase met agents (loep voiceover stop)";
-  if (state === "running") return `de virtuele Mac met VoiceOver draait: beoordelaars, verifieerders en de afmaakronde lezen er zelf mee voor; ${reading}`;
-  if (state === "stopped") return `de virtuele Mac met VoiceOver is ingericht: start hem tegelijk met de veegronde (loep voiceover start, 9 minuten, of 20 tot 30 met een herstart), dan kost het opstarten geen extra tijd; ${reading}`;
-  return null;
+  if (!state || !isSetUp(state)) return null;
+  if (isReady(state)) return `de virtuele Mac met VoiceOver draait en is opgewarmd: beoordelaars, verifieerders en de afmaakronde lezen er zelf mee voor; ${reading}`;
+  const failed = state.lastStart && !state.lastStart.ok ? ` De laatste start mislukte: ${state.lastStart.error ?? "onbekende reden"}.` : "";
+  if (state.state === "stopped" && !state.starting) return `de virtuele Mac met VoiceOver is ingericht: start hem tegelijk met de veegronde (loep voiceover start, 9 minuten, of 20 tot 30 met een herstart), dan kost het opstarten geen extra tijd. Kijk vóór de fase met agents met loep voiceover status of hij voorleest.${failed} ${reading}`;
+  return `de virtuele Mac met VoiceOver ${statusNl(state)}. ${reading}`;
 }
 
 export interface RunEstimate extends Estimate {
