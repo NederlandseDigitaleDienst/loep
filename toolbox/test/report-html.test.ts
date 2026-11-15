@@ -281,3 +281,15 @@ test("a defect card shows the severity of the defect, and says which finding giv
   for (const finding of same.criteria.flatMap((criterion) => criterion.findings)) if (same.defects!.find((entry) => entry.findingIds.length > 1)!.findingIds.includes(finding.id)) finding.severity = "blokkerend";
   assert.ok(!renderHtml(same, undefined, pictures(same)).includes("komt van bevinding"));
 });
+
+test("a picture of a page at its own width of 1280 keeps marks as large on screen as on one of 1024 (#524)", () => {
+  const evaluation = grouped();
+  const wide = Object.fromEntries(Object.entries(shots(evaluation)).map(([label, shot]) => [label, { parts: shot.parts.map((part) => ({ ...part, width: 1280, height: 1125 })) }]));
+  const narrow = renderHtml(evaluation, undefined, pictures(evaluation), { pageShots: shots(evaluation) });
+  const html = renderHtml(evaluation, undefined, pictures(evaluation), { pageShots: wide });
+  assert.match(narrow, /<circle [^>]*r="15" [^>]*stroke-width="2.5"\/>/);
+  assert.match(html, /viewBox="0 0 1280 1125"/);
+  // 15 and 2.5 at 1024 are 18.8 and 3.1 at 1280: the same share of the width of the picture.
+  assert.match(html, /<circle [^>]*r="18.8" [^>]*stroke-width="3.1"\/>/);
+  assert.match(html, /font-size="18.8" font-weight="700"/);
+});

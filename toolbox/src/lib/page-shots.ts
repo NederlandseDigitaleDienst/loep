@@ -35,8 +35,11 @@ export interface PageShot {
   parts: PagePart[];
 }
 
-/** The width of the picture in the report: wide enough to recognise the page, small enough for one file. */
-export const SHOT_WIDTH = 1024;
+/**
+ * The widest picture in the report. A screenshot of the sweep (1280 wide) is kept at its own width:
+ * shrinking it to 1024 averaged pixels and made small text uneven, which is what a reader needs to read (#524).
+ */
+export const SHOT_WIDTH = 1280;
 /** A page up to this height is shown whole, down to a little below its lowest mark. */
 const SHORT_PAGE = 1800;
 /** Below the lowest mark the picture goes on this far, in pixels of the page, and no further. */
@@ -46,7 +49,8 @@ const CLUSTER_GAP = 480;
 /** Around a band, so the reader sees where on the page it is. */
 const BAND_MARGIN = 160;
 const BAND_MIN_HEIGHT = 520;
-const JPEG_QUALITY = 72;
+/** At 72, text and thin lines got smudges around them; 85 is as clear as PNG to the eye at half the size (#524). */
+const JPEG_QUALITY = 85;
 /** A box bigger than this share of the page says nothing about where the defect is. */
 const MAX_SHARE = 0.6;
 const MIN_SIDE = 4;

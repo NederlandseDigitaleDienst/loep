@@ -1392,12 +1392,15 @@ function byComponent(context: Context): string {
 
 /** A picture of (a part of) the page with a numbered mark at the place of each defect; the links are in the list under it. */
 function annotatedPage(label: string, pageTitle: string, picture: PagePart, numbered: { id: string; n: number; box: { x: number; y: number; width: number; height: number } }[], which: string): string {
+  // The marks are drawn in pixels of the picture and shown at the width of the column: they keep the size they had on a picture 1024 wide.
+  const k = picture.width / 1024;
+  const px = (value: number): number => Math.round(value * k * 10) / 10;
   const marks = numbered.map(({ id, n, box }) => {
-    const cx = Math.max(16, Math.min(picture.width - 16, box.x));
-    const cy = Math.max(16, Math.min(picture.height - 16, box.y));
+    const cx = Math.max(px(16), Math.min(picture.width - px(16), box.x));
+    const cy = Math.max(px(16), Math.min(picture.height - px(16), box.y));
     // Out of the tab order and out of the accessibility tree: the list under the image has the same
     // links with the name of each defect, and a link named only "1" says nothing (WCAG 2.4.4).
-    return `<a href="#${attr(id)}" tabindex="-1" aria-hidden="true"><rect x="${box.x}" y="${box.y}" width="${box.width}" height="${box.height}" fill="none" stroke="#c22a1f" stroke-width="3" rx="2"/><circle cx="${cx}" cy="${cy}" r="15" fill="#c22a1f" stroke="#ffffff" stroke-width="2.5"/><text x="${cx}" y="${cy + 1}" fill="#ffffff" font-family="system-ui, sans-serif" font-size="15" font-weight="700" text-anchor="middle" dominant-baseline="middle">${n}</text></a>`;
+    return `<a href="#${attr(id)}" tabindex="-1" aria-hidden="true"><rect x="${box.x}" y="${box.y}" width="${box.width}" height="${box.height}" fill="none" stroke="#c22a1f" stroke-width="${px(3)}" rx="${px(2)}"/><circle cx="${cx}" cy="${cy}" r="${px(15)}" fill="#c22a1f" stroke="#ffffff" stroke-width="${px(2.5)}"/><text x="${cx}" y="${cy + px(1)}" fill="#ffffff" font-family="system-ui, sans-serif" font-size="${px(15)}" font-weight="700" text-anchor="middle" dominant-baseline="middle">${n}</text></a>`;
   });
   const numbers = numbered.map(({ n }) => n);
   const range = numbers.length === 1 ? `markering ${numbers[0]}` : `de markeringen ${numbers[0]} tot en met ${numbers[numbers.length - 1]}`;
