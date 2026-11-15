@@ -40,22 +40,25 @@ Geprobeerd en nog niet ingebouwd, met het aandeel terechte aanwijzingen op dezel
 
 De terugrekening hierboven meet tegen een onderzoek. Voor een poort telt iets anders: maakt een release iets stuk, slaat de vergelijking dan aan? De testsite heeft een sleutel met 79 gebreken die met opzet zijn ingebouwd, en een schone tweeling met dezelfde paden. De schone tweeling is gemeten als basislijn, daarna de variant met gebreken ertegen, op 15 pagina's. `just quick-key <run>` telt per gebrek of de vergelijking zijn criterium als slechter meldt op een van zijn pagina's.
 
-| | Gevangen |
-|---|---|
-| Alle gebreken | 31 van 79 |
-| Meetbaar met een instrument | 22 van 41 |
-| Vraagt kijken | 6 van 18 |
-| Vraagt een handeling | 3 van 20 |
-| In de begintoestand van de pagina | 23 van 50 |
+| | Regelsets, reflow en zoom | Met de proeven van loep erbij |
+|---|---|---|
+| Alle gebreken | 31 van 79 | 41 van 79 |
+| Meetbaar met een instrument | 22 van 41 | 31 van 41 |
+| Vraagt kijken | 6 van 18 | 6 van 18 |
+| Vraagt een handeling | 3 van 20 | 4 van 20 |
+| In de begintoestand van de pagina | 23 van 50 | 27 van 50 |
+| Duur voor 15 pagina's | ongeveer 2 minuten | 3 tot 4,5 minuten |
 
-Nog 9 gebreken zijn alleen gemeld onder een ander criterium dat de sleutel bij het gebrek noemt. Vijf keer meldde de vergelijking iets slechter waar de sleutel geen gebrek heeft. De sleutel noemt alleen wat met opzet fout is gemaakt, dus dat hoeven geen valse meldingen te zijn; nagelopen zijn ze niet.
+De proeven die erbij kwamen: tekstafstand, de volgorde van de code tegenover het scherm, geluid dat vanzelf start, een wandeling met Tab, en dubbele paginatitels. Op de schone tweeling meldden ze samen één plek, op de variant met gebreken 159. Welk criterium bij welke proef hoort, is gekozen met deze sleutel ernaast. Op echte sites zijn deze proeven niet teruggerekend: de cijfers bovenaan dit bestand gaan alleen over de regelsets, reflow en zoom.
 
-De telling is grover dan het gebrek: een ander gebrek onder hetzelfde criterium op dezelfde pagina telt ook. Wat de poort mist in de begintoestand en wat meetbaar is, zijn onder meer de leesvolgorde (1.3.2), `autocomplete` (1.3.5), de rand van een veld (1.4.11) en bediening met het toetsenbord (2.1.1). Wat een handeling vraagt, zoals een menu openen of een formulier invullen, ziet ze bijna niet.
+Nog 8 gebreken zijn alleen gemeld onder een ander criterium dat de sleutel bij het gebrek noemt. Vijf keer meldde de vergelijking iets slechter waar de sleutel geen gebrek heeft, voor en na de nieuwe proeven dezelfde vijf. De sleutel noemt alleen wat met opzet fout is gemaakt, dus dat hoeven geen valse meldingen te zijn; nagelopen zijn ze niet.
 
-Vergelijken per element in plaats van per telling ving op deze proef één gebrek meer (31 tegen 30). De winst zit in een geval dat de tweeling niet heeft: één gebrek hersteld en een ander erbij op dezelfde pagina, onder dezelfde regel. Dat geval is door tests gedekt, niet op een site gemeten.
+De telling is grover dan het gebrek: een ander gebrek onder hetzelfde criterium op dezelfde pagina telt ook. Van wat een instrument kan meten, mist de poort nog `autocomplete` (1.3.5), de rand van een veld (1.4.11), een bedieningselement dat Tab niet bereikt (2.1.1), sneltoetsen (2.1.4), een blok dat vanzelf wisselt (2.2.2) en de volgorde van het menu over pagina's (3.2.3). Wat een handeling vraagt, zoals een menu openen of een formulier invullen, ziet ze bijna niet.
+
+Vergelijken per element in plaats van per telling ving, vóór de nieuwe proeven, één gebrek meer (31 tegen 30). De winst zit in een geval dat de tweeling niet heeft: één gebrek hersteld en een ander erbij op dezelfde pagina, onder dezelfde regel. Dat geval is door tests gedekt, niet op een site gemeten.
 
 Op de schone tweeling keurde één regelset (QualWeb, twee regels over toetsenbord en focus) ruim 400 links af die de andere drie niet afkeuren. In de basislijn houdt dat niets tegen, maar het staat wel in de samenvatting onder "Eén meetprogramma".
 
 ## Herhaalbaarheid
 
-Een poort in een pipeline mag niet op toeval falen. Op de testsite gaf `quick` twee keer achter elkaar dezelfde uitkomst, op zes pagina's: dezelfde 108 plekken en dezelfde uitkomst van reflow en zoom. De schone tweeling als basislijn en dezelfde tweeling opnieuw gaf exitcode 0, de variant met gebreken op dezelfde paden exitcode 1. Op een echte site, met inhoud die tussen twee metingen verandert, is dit nog niet gemeten.
+Een poort in een pipeline mag niet op toeval falen. De variant met gebreken is twee keer gemeten op 15 pagina's, met alle proeven, en de tweede meting is tegen de eerste gehouden: geen plek erbij en geen plek minder, exitcode 0. De schone tweeling als basislijn en de variant met gebreken op dezelfde paden gaf exitcode 1. Op een echte site, met inhoud die tussen twee metingen verandert, is dit nog niet gemeten.

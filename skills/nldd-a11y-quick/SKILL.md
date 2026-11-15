@@ -7,7 +7,7 @@ metadata:
 
 # Snelle meting
 
-Je zet een meting op die bij elke release zegt of de site slechter is geworden dan de vorige keer. Ze duurt een paar minuten, gebruikt geen taalmodel en verstuurt niets naar de site.
+Je zet een meting op die bij elke release zegt of de site slechter is geworden dan de vorige keer. Ze duurt 10 tot 20 seconden per pagina, gebruikt geen taalmodel en verstuurt niets naar de site.
 
 Dit is geen onderzoek. Vraagt de gebruiker of de site aan WCAG voldoet, of wil hij een rapport of een verklaring, gebruik dan `nldd-a11y-audit`.
 
@@ -55,6 +55,6 @@ Dit is geen onderzoek. Vraagt de gebruiker of de site aan WCAG voldoet, of wil h
 - **Slechter.** Lees `verschil.md` en open de pagina erbij. Per pagina en criterium staat hoeveel plekken erbij kwamen en volgens hoeveel meetprogramma's. De plekken zelf staan in `summary.json` onder `findings`.
 - **Niet meer gemeten.** Een pagina uit de basislijn gaf een fout of bestaat niet meer. Is ze bewust weg, haal haar dan uit de lijst en maak een nieuwe basislijn.
 - **Een melding die niet klopt.** Staat ze ook in de basislijn, dan houdt ze niets tegen. Is ze nieuw, dan beslist de gebruiker: herstellen, of de basislijn opschuiven en zeggen waarom.
-- **Niets veranderd.** Zeg erbij wat de meting niet ziet: toetsenbord, zichtbare focus, formulieren, documenten, en of een tekstalternatief of kop klopt. Daarvoor is een onderzoek.
+- **Niets veranderd.** Zeg erbij wat de meting niet ziet: wat pas na een handeling verschijnt (een menu, een foutmelding), formulieren, documenten, en of een tekstalternatief of kop klopt. Daarvoor is een onderzoek.
 
 Hoe de meting werkt en wat ze waard is, staat in `docs/methode.md` onder "De snelle meting" en in `validatie/snelle-meting/README.md`.

@@ -118,7 +118,9 @@ Zonder `--urls` zoekt `quick` zelf hooguit 15 pagina's en trekt daar een steekpr
 
 Wat je ervan mag verwachten:
 
-- Het meet met vier regelsets in licht en donker, en kijkt of er bij 320 pixels breed en bij 200 procent zoom inhoud buiten beeld valt. Toetsenbord, focus, formulieren en documenten meet het niet, en niemand beoordeelt of een tekstalternatief of kop klopt.
+- Het meet met vier regelsets in licht en donker. Daarnaast kijkt het of er inhoud buiten beeld valt bij 320 pixels breed, bij 200 procent zoom en bij ruimere tekstafstand, of de volgorde op het scherm afwijkt van de code, of geluid vanzelf start, en loopt het met Tab langs de pagina: is de focus te zien, ligt ze ergens onder, gooit een element haar weg.
+- Wat pas na een handeling verschijnt, zoals een menu of een foutmelding, meet het niet. Formulieren en documenten ook niet, en niemand beoordeelt of een tekstalternatief of kop klopt.
+- Reken op 10 tot 20 seconden per pagina.
 - Op 12 sites met een volledig onderzoek wees deze soort meting ongeveer een kwart van de afgekeurde criteria aan. Een lege lijst zegt dus weinig over de site. Wat ze wel aanwijst, keurde het onderzoek in ruim acht van de tien gevallen ook af.
 - Een melding van een regelset die niet klopt, staat ook in de basislijn. Ze houdt een release niet tegen.
 - Er wordt niets verstuurd en een cookiemelding wordt niet gesloten.

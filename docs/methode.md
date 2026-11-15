@@ -540,9 +540,24 @@ Het rapport van een onderzoek noemt deze getallen niet.
 
 ## De snelle meting
 
-`quick` is geen onderzoek. Het is een meting zonder taalmodel voor wie bij elke release wil weten of een site slechter is geworden. Het draait de stappen die geen sitemodel nodig hebben: `inventory` en `sample`, of een vaste lijst adressen, en daarna in één sessie per pagina de vier regelsets in licht en donker, en reflow en zoom in licht. Het stuurt niets en sluit geen melding die over de pagina ligt.
+`quick` is geen onderzoek. Het is een meting zonder taalmodel voor wie bij elke release wil weten of een site slechter is geworden. Het draait de stappen die geen sitemodel nodig hebben: `inventory` en `sample`, of een vaste lijst adressen, en daarna in één sessie per pagina de vier regelsets in licht en donker. In licht komen daar proeven van loep zelf bij: reflow, zoom, tekstafstand, de volgorde van de code tegenover het scherm, geluid dat vanzelf start, en een wandeling met Tab langs hooguit 60 stops. Over de pagina's samen kijkt het of twee pagina's dezelfde titel hebben. Het stuurt niets en sluit geen melding die over de pagina ligt.
 
-De samenvatting noemt per criterium op welke grond het is aangewezen, van sterk naar zwak: twee of meer regelsets keuren dezelfde plek af; er valt inhoud buiten beeld bij 320 pixels breed (1.4.10) of bij 200 procent zoom (1.4.4); één regelset keurt af en de andere zeggen niets; één regelset keurt af en een andere keurt dezelfde plek goed. Een plek is een element van een pagina bij één criterium, licht en donker samen. Alleen criteria van niveau A en AA tellen.
+De samenvatting noemt per criterium op welke grond het is aangewezen, van sterk naar zwak: twee of meer regelsets keuren dezelfde plek af; een proef van loep ziet het; één regelset keurt af en de andere zeggen niets; één regelset keurt af en een andere keurt dezelfde plek goed. Een plek is een element van een pagina bij één criterium, licht en donker samen. Alleen criteria van niveau A en AA tellen.
+
+| Proef | Criterium | Wat ze meldt |
+|---|---|---|
+| Reflow | 1.4.10 | Inhoud valt buiten beeld bij 320 pixels breed |
+| Zoom | 1.4.4 | Inhoud valt buiten beeld bij 200 procent |
+| Tekstafstand | 1.4.12 | Tekst verdwijnt bij de afstanden van het criterium |
+| Volgorde | 1.3.2 | Inhoud die met CSS in een andere volgorde staat dan in de code |
+| Volgorde | 2.4.3 | Een tabindex groter dan 0 |
+| Geluid | 1.4.2 | Geluid dat vanzelf start, zonder gevonden knop die het stopt |
+| Tabwandeling | 2.4.7 | Een stop waar met de focus geen pixel verandert |
+| Tabwandeling | 2.4.11 | Een stop die onder een ander element ligt |
+| Tabwandeling | 3.2.1 | Een element dat de focus weggooit zodra het die krijgt |
+| Titels | 2.4.2 | Twee gemeten pagina's met dezelfde titel |
+
+Een proef meldt wat ze ziet en oordeelt niet. Inhoud die met CSS is omgezet kan in de goede leesvolgorde staan, en een stop onder een cookiemelding verdwijnt als iemand de melding sluit. Daarom staat een proef in de samenvatting los van de regelsets, en telt ze in de vergelijking alleen als er meer bij komt.
 
 Met `--baseline` wordt de meting tegen een eerdere gehouden, per pagina (op pad, zonder origin), criterium, regel en element. Meer plekken onder een regel is slechter, minder is beter. Een element wordt herkend aan wat het is en niet aan waar het staat: de tag, de attributen die zeggen wat het is (zoals `href`, `name`, `alt` en `aria-label`, geen `class`) en het deel van de pagina waarin het staat. Zo is één gebrek dat verdwijnt en een ander dat erbij komt zichtbaar als één beter en één slechter, en telt een element dat alleen verschuift niet als nieuw. Twee elementen die op die punten gelijk zijn, zoals twee alinea's in hetzelfde deel, zijn voor de vergelijking hetzelfde: daar telt alleen het aantal. Een pagina die de basislijn had en die nu niet gemeten kon worden, telt als slechter, omdat niemand kan zeggen dat ze het niet is. Een pagina die nieuw is, wordt genoemd en niet vergeleken.
 

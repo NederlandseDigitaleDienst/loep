@@ -15,16 +15,18 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { readJson, writeFileAtomic, writeJson } from "../lib/canonical.ts";
 import { stepStart, writeManifest } from "../lib/manifest.ts";
-import { buildQuickSummary, compareQuick, groupedChangesNl, QUICK_MARK_FILE, QUICK_SCHEMES, quickComparisonMarkdown, quickSummaryMarkdown, type LayoutAnswer, type QuickComparison, type QuickMeasurement, type QuickPage, type QuickScheme, type QuickSummary, type RulesResult } from "../lib/quick.ts";
+import { buildQuickSummary, compareQuick, groupedChangesNl, QUICK_MARK_FILE, QUICK_SCHEMES, quickComparisonMarkdown, quickSummaryMarkdown, mediaProbe, orderProbe, spacingProbe, tabProbe, type LayoutAnswer, type QuickProbeFinding, type TabStop, type QuickComparison, type QuickMeasurement, type QuickPage, type QuickScheme, type QuickSummary, type RulesResult } from "../lib/quick.ts";
 import { isOwnAddress, siteOrigins, type OriginSource } from "../lib/origins.ts";
 import { readObservation } from "../session/observations.ts";
 
 const CLI = fileURLToPath(new URL("../cli.ts", import.meta.url));
 const SESSION = "quick";
-/** Per page: open, look, rules, reflow and zoom in light; open and rules in dark. */
-const COMMANDS_PER_PAGE = 7;
+/** Per page: open, look, rules, order, media, taborder, reflow, zoom and spacing in light; open and rules in dark. */
+const COMMANDS_PER_PAGE = 11;
+/** The Tab walk stops here: a page with hundreds of links would take minutes, and the first stops are the header and the menu every page has. */
+const MAX_TAB_STOPS = 60;
 const SPARE_COMMANDS = 10;
-const MINUTES_PER_PAGE = 3;
+const MINUTES_PER_PAGE = 4;
 const RETRY_DELAY_MS = 2_000;
 
 export interface QuickOptions {
@@ -116,7 +118,7 @@ export async function quick(options: QuickOptions): Promise<{ summary: QuickSumm
   try {
     for (const [index, url] of urls.entries()) {
       say(`pagina ${index + 1} van ${urls.length}: ${url}`);
-      const page: QuickPage = { url, title: null, httpStatus: null, screenshot: null, measurements: [], reflow: null, zoom: null };
+      const page: QuickPage = { url, title: null, httpStatus: null, screenshot: null, measurements: [], reflow: null, zoom: null, probes: [] };
       pages.push(page);
       for (const scheme of QUICK_SCHEMES) page.measurements.push(await measure(page, scheme, session, run));
     }
@@ -183,8 +185,17 @@ async function measure(page: QuickPage, scheme: QuickScheme, session: (args: str
   const result = (await readObservation(run, rules.id)).result as RulesResult;
   // Reflow and zoom change the window, so they come after the rules, and only once: a layout does not depend on the colours.
   if (scheme === "light") {
+    // What reads the page as it stands comes first; the Tab walk, and then the three that change the window.
+    const probes: QuickProbeFinding[] = [...orderProbe(await session(["order"])), ...mediaProbe(await session(["media"]))];
+    const walk = await session(["taborder", "--max", String(MAX_TAB_STOPS)]);
+    if (typeof walk.id === "string" && typeof walk.error !== "string") {
+      const walked = (await readObservation(run, walk.id)).result as { methods?: { result?: { stops?: TabStop[] } }[] };
+      probes.push(...tabProbe(walk, walked.methods?.[0]?.result?.stops ?? []));
+    }
     page.reflow = layoutOf(await session(["reflow"]));
     page.zoom = layoutOf(await session(["zoom"]));
+    probes.push(...spacingProbe(await session(["spacing"])));
+    page.probes = probes;
   }
   return { scheme, observation: rules.id, reasonNl: null, rules: result };
 }
@@ -195,7 +206,7 @@ export function quickDoneNl(run: string, summary: QuickSummary, comparison: Quic
   const other = summary.signals.length - strong.length;
   return [
     `${summary.coverage.measured} van ${summary.coverage.planned} pagina's gemeten${summary.partial ? ", niet alles is gelukt" : ""}.`,
-    strong.length > 0 ? `Waarschijnlijk afgekeurd in een volledig onderzoek: ${strong.map((signal) => signal.criterion).join(", ")}.` : "Geen criterium waar de meetprogramma's het over eens zijn.",
+    strong.length > 0 ? `Aangewezen door meetprogramma's die het eens zijn of door een proef van loep: ${strong.map((signal) => signal.criterion).join(", ")}.` : "Geen criterium waar de meetprogramma's het over eens zijn of dat een proef van loep aanwijst.",
     ...(other > 0 ? [`Nog ${other} ${other === 1 ? "criterium vraagt" : "criteria vragen"} een tweede blik.`] : []),
     summary.backtest.textNl,
     `Samenvatting: ${join(run, "quick", "samenvatting.md")} en summary.json`,

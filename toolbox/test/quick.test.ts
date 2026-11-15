@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { quick } from "../src/commands/quick.ts";
-import { buildQuickSummary, compareQuick, elementMark, groupedChangesNl, QUICK_MARK_FILE, quickComparisonMarkdown, quickFindings, quickSignals, quickSummaryMarkdown, type GroupedElement, type QuickPage, type QuickSummary } from "../src/lib/quick.ts";
+import { buildQuickSummary, compareQuick, elementMark, groupedChangesNl, mediaProbe, orderProbe, spacingProbe, tabProbe, QUICK_MARK_FILE, quickComparisonMarkdown, quickFindings, quickSignals, quickSummaryMarkdown, type GroupedElement, type QuickPage, type QuickSummary } from "../src/lib/quick.ts";
 
 const element = (criterion: string, where: string, verdicts: Record<string, string>): GroupedElement => ({
   criterion,
@@ -22,7 +22,7 @@ const withTags = (measured: QuickPage, tags: Record<string, string>): QuickPage 
 
 const page = (url: string, light: GroupedElement[], dark: GroupedElement[] = light, layout: Partial<Pick<QuickPage, "reflow" | "zoom">> = {}): QuickPage => ({
   url,
-  title: "Pagina",
+  title: `Pagina ${new URL(url).pathname}`,
   httpStatus: 200,
   screenshot: null,
   reflow: layout.reflow ?? { horizontalScroll: false, offenders: 0 },
@@ -144,6 +144,51 @@ test("an element that only moved, or got another class, is no change", () => {
   assert.deepEqual([comparison.ok, comparison.worse, comparison.better], [true, [], []]);
 });
 
+test("the probes of loep read what a session command answers, without the measures that differ per run", () => {
+  assert.deepEqual(orderProbe({ reversed: ["div: Vanaf maandag kunt u uw fiets gratis en  (column-reverse)"], positiveTabindex: ["input:  (tabindex 3)"], jumps: ["omhoog: 36 a: Openingstijden -> 37 h2: Hulp nodig?"] }), [
+    { probe: "order", element: "div: Vanaf maandag kunt u uw fiets gratis en" },
+    { probe: "tabindex", element: "input:" },
+  ]);
+  assert.deepEqual(spacingProbe({ textLost: 3, first: ["a: Paspoort of rijbewijs (tekst verdwijnt: 1 regel(s) tot 33px buiten beeld, 1 helemaal)", "a: Afval (grofvuil) (tekst verdwijnt: 2 regel(s))"] }), [
+    { probe: "spacing", element: "a: Paspoort of rijbewijs" },
+    { probe: "spacing", element: "a: Afval (grofvuil)" },
+    { probe: "spacing", element: "meer tekst" },
+  ]);
+  assert.deepEqual(spacingProbe({ newlyClipped: 2, textLost: 0 }), []);
+  assert.deepEqual(mediaProbe({ media: ["audio #hoofddeel > audio:nth-of-type(2): autoplay; loop; geen controls; geluidsspoor; geen knop gevonden die het stopt of dempt", "video main > video: controls; geluidsspoor", "video main > video: autoplay; geen geluidsspoor; geen knop gevonden die het stopt of dempt"] }), [{ probe: "autoplay", element: "audio #hoofddeel > audio" }]);
+  const stops = [
+    { path: ["header > nav > ul > li:nth-of-type(2) > a"], href: "/nieuws/", focusPixelShare: 0, coveredBy: null },
+    { path: ["header > a"], href: "/", focusPixelShare: 0.11, coveredBy: null },
+    { path: ["#hoofddeel > p > a"], href: "/contact.html", focusPixelShare: 0, coveredBy: ["#cookiemelding"] },
+    { path: ["main > a"], href: "/x", focusPixelShare: 0, coveredBy: null, focusNotMeasured: "het element stond niet op de plek" },
+  ];
+  assert.deepEqual(tabProbe({ notReached: ["overgeslagen door Tab, hoewel de DOM het als stop voorspelt: #naam", 'krijgt focus en gooit die meteen weg: a "Openingstijden", button "Sluit, nu"'] }, stops), [
+    { probe: "focus-invisible", element: "a in nav naar /nieuws/" },
+    { probe: "focus-covered", element: "a in #hoofddeel naar /contact.html" },
+    { probe: "focus-thrown", element: 'a "Openingstijden"' },
+    { probe: "focus-thrown", element: 'button "Sluit, nu"' },
+  ]);
+});
+
+test("what a probe saw is a signal under its criterion and a count the comparison holds", () => {
+  const home: QuickPage = { ...page("https://voorbeeld.test/", []), title: "Gemeente", probes: [{ probe: "focus-invisible", element: "a in nav naar /nieuws/" }, { probe: "focus-invisible", element: "a in nav naar /afval/" }] };
+  const news: QuickPage = { ...page("https://voorbeeld.test/nieuws/", []), title: "Gemeente" };
+  const summary = summaryOf([home, news]);
+  assert.deepEqual(summary.signals.map((signal) => [signal.criterion, signal.ground, signal.probePages]), [["2.4.2", "layout-probe", 2], ["2.4.7", "layout-probe", 1]]);
+  assert.equal(summary.signals[0]!.sentenceNl, "2 pagina's hebben dezelfde titel als een andere pagina. Dat is gezien op 2 pagina's.");
+  assert.equal(summary.signals[1]!.sentenceNl, "Bij 2 elementen verandert er niets zichtbaars als het de focus krijgt. Dat is gezien op 1 pagina.");
+  assert.deepEqual(summary.counts.map((count) => [count.path, count.criterion, count.rule]), [["/", "2.4.2", "loep:title"], ["/", "2.4.7", "loep:focus-invisible"], ["/", "2.4.7", "loep:focus-invisible"], ["/nieuws/", "2.4.2", "loep:title"]]);
+  const clean = summaryOf([{ ...home, title: "Home", probes: [] }, { ...news, title: "Nieuws" }]);
+  const comparison = compareQuick(clean, summary);
+  assert.equal(comparison.ok, false);
+  assert.deepEqual(groupedChangesNl(comparison.worse), [
+    "/: 2.4.2 Paginatitel, 1 plek erbij volgens een proef van loep. Het gaat om `Gemeente`.",
+    "/: 2.4.7 Focus zichtbaar, 2 plekken erbij volgens een proef van loep. Het gaat om `a in nav naar /afval/`, `a in nav naar /nieuws/`.",
+    "/nieuws/: 2.4.2 Paginatitel, 1 plek erbij volgens een proef van loep. Het gaat om `Gemeente`.",
+  ]);
+  assert.equal(compareQuick(summary, clean).ok, true);
+});
+
 test("a page of the baseline that is not measured now fails the comparison; a new page does not", () => {
   const home = page("https://voorbeeld.test/", []);
   const contact = page("https://voorbeeld.test/contact", [element("3.3.2", "input", { "axe-core": "failed", ibm: "failed" })]);
@@ -171,7 +216,7 @@ function fakeLoep(run: string, calls: string[][], options: { failOpen?: string }
     }
     const [, command, first] = args;
     if (command === "start" || command === "stop") return answer({ session: "quick" });
-    if (command === "open") return first === options.failOpen ? answer({ error: "time-out" }) : answer({ status: 200, url: first, title: "Pagina" });
+    if (command === "open") return first === options.failOpen ? answer({ error: "time-out" }) : answer({ status: 200, url: first, title: `Pagina ${new URL(first!).pathname}` });
     if (command === "look") return answer({ image: "observations/quick/0001.png" });
     if (command === "reflow") return answer({ horizontalScroll: false, offenders: 1, first: ["button: Menu"] });
     if (command === "zoom") return answer({ horizontalScroll: false, offenders: 0 });

@@ -37,9 +37,10 @@ export const QUICK_EXPLORE_REFUSAL_NL =
 
 /** Why a full evaluation should not grow out of this run. */
 export const QUICK_NOT_MEASURED_NL = [
-  "Toetsenbord, focus, tekstafstand, beweging, formulieren en documenten zijn niet gemeten.",
+  "Formulieren, documenten, beweging en wat pas na een handeling verschijnt, zoals een menu of een foutmelding, zijn niet gemeten.",
+  "Van het toetsenbord is alleen gemeten wat Tab bereikt, tot 60 stops per pagina. Of een onderdeel daarna met het toetsenbord te bedienen is, is niet gemeten.",
   "Contrast komt uit de regels van de meetprogramma's, niet uit schermafbeeldingen.",
-  "Een melding die over de pagina ligt, zoals een cookiemelding, is niet gesloten. Reflow en zoom zijn dan met die melding gemeten.",
+  "Een melding die over de pagina ligt, zoals een cookiemelding, is niet gesloten. De proeven zijn dan met die melding gemeten.",
   "Niemand heeft beoordeeld of een tekstalternatief, kop of linktekst klopt.",
 ];
 
@@ -70,6 +71,87 @@ export interface LayoutAnswer {
   image?: string;
 }
 
+/** The probes of loep itself next to the rule engines, each with the criterion it says something about. */
+export const QUICK_PROBES = {
+  order: { criterion: "1.3.2", nl: (places: number) => `De volgorde op het scherm wijkt op ${plural(places, "plek", "plekken")} af van de volgorde in de code.` },
+  tabindex: { criterion: "2.4.3", nl: (places: number) => `${plural(places, "element heeft", "elementen hebben")} een eigen plek in de tabvolgorde gekregen, met een tabindex groter dan 0.` },
+  spacing: { criterion: "1.4.12", nl: (places: number) => `Met ruimere tekstafstand verdwijnt tekst op ${plural(places, "plek", "plekken")}.` },
+  autoplay: { criterion: "1.4.2", nl: () => "Geluid begint vanzelf en er is geen knop gevonden die het stopt." },
+  "focus-invisible": { criterion: "2.4.7", nl: (places: number) => `Bij ${plural(places, "element", "elementen")} verandert er niets zichtbaars als het de focus krijgt.` },
+  "focus-covered": { criterion: "2.4.11", nl: (places: number) => `${plural(places, "element", "elementen")} met de focus ${places === 1 ? "ligt" : "liggen"} onder iets anders.` },
+  "focus-thrown": { criterion: "3.2.1", nl: (places: number) => `${plural(places, "element gooit", "elementen gooien")} de focus weg zodra ${places === 1 ? "het" : "ze"} die ${places === 1 ? "krijgt" : "krijgen"}.` },
+  title: { criterion: "2.4.2", nl: (places: number) => `${plural(places, "pagina heeft", "pagina's hebben")} dezelfde titel als een andere pagina.` },
+} as const;
+export type QuickProbe = keyof typeof QUICK_PROBES;
+
+/** One thing a probe saw on a page. */
+export interface QuickProbeFinding {
+  probe: QuickProbe;
+  /** What it is about, in words that stay the same when it moves: the comparison counts per text. */
+  element: string;
+}
+
+const strings = (value: unknown): string[] => (Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === "string") : []);
+/** "a: Paspoort of rijbewijs (tekst verdwijnt: 1 regel(s) ...)" without the detail at its end, which holds measures that differ between two runs. */
+function beforeDetail(text: string): string {
+  const trimmed = text.trim();
+  if (!trimmed.endsWith(")")) return trimmed;
+  let depth = 0;
+  for (let index = trimmed.length - 1; index >= 0; index -= 1) {
+    if (trimmed[index] === ")") depth += 1;
+    if (trimmed[index] === "(" && --depth === 0) return trimmed.slice(0, index).trim();
+  }
+  return trimmed;
+}
+
+/** What `session order` says: content that CSS put somewhere else than the code has it, and a tabindex above zero. */
+export function orderProbe(answer: Record<string, unknown>): QuickProbeFinding[] {
+  return [
+    ...[...strings(answer.reversed), ...strings(answer.cssOrder)].map((text) => ({ probe: "order" as const, element: beforeDetail(text) })),
+    ...strings(answer.positiveTabindex).map((text) => ({ probe: "tabindex" as const, element: beforeDetail(text) })),
+  ];
+}
+
+/** What `session spacing` says: text that is lost with the text spacing of 1.4.12. */
+export function spacingProbe(answer: Record<string, unknown>): QuickProbeFinding[] {
+  if (typeof answer.textLost !== "number" || answer.textLost === 0) return [];
+  const named = strings(answer.first).map(beforeDetail);
+  // `first` names the first few; the rest counts under one text.
+  return Array.from({ length: answer.textLost }, (_, index) => ({ probe: "spacing" as const, element: named[index] ?? "meer tekst" }));
+}
+
+/** What `session media` says: sound that starts by itself with nothing found that stops it. */
+export function mediaProbe(answer: Record<string, unknown>): QuickProbeFinding[] {
+  return strings(answer.media)
+    .filter((text) => /\bautoplay\b/.test(text) && /(?<!geen )geluidsspoor/.test(text) && /geen knop gevonden die het stopt/.test(text))
+    .map((text) => ({ probe: "autoplay" as const, element: text.split(":")[0]!.replace(/:nth-(?:of-type|child)\(\d+\)/g, "") }));
+}
+
+/** A stop of the Tab walk, as the keyboard method records it. */
+export interface TabStop {
+  path?: string[];
+  href?: string | null;
+  /** The share of the pixels around the element that change when it gets the focus. */
+  focusPixelShare?: number | null;
+  coveredBy?: string | string[] | null;
+  focusNotMeasured?: string | null;
+}
+
+/** What `session taborder` says: a stop without a visible focus, a stop under something else, an element that throws the focus away. */
+export function tabProbe(answer: Record<string, unknown>, stops: readonly TabStop[]): QuickProbeFinding[] {
+  const mark = (stop: TabStop): string => `${elementMark(stop.path?.at(-1) ?? null, null)}${stop.href ? ` naar ${stop.href}` : ""}`;
+  const covered = (stop: TabStop): boolean => (Array.isArray(stop.coveredBy) ? stop.coveredBy.length > 0 : Boolean(stop.coveredBy));
+  return [
+    // Not a pixel changed with the focus, on an element that was in view and measured: nothing shows where the focus is.
+    ...stops.filter((stop) => stop.focusPixelShare === 0 && !covered(stop) && !stop.focusNotMeasured).map((stop) => ({ probe: "focus-invisible" as const, element: mark(stop) })),
+    ...stops.filter(covered).map((stop) => ({ probe: "focus-covered" as const, element: mark(stop) })),
+    ...strings(answer.notReached)
+      .filter((text) => text.startsWith("krijgt focus en gooit die meteen weg:"))
+      .flatMap((text) => text.slice(text.indexOf(":") + 1).split(/,\s*(?=\w+ ")/))
+      .map((text) => ({ probe: "focus-thrown" as const, element: text.trim() })),
+  ];
+}
+
 export interface QuickMeasurement {
   scheme: QuickScheme;
   /** Null when the page could not be measured in this scheme. */
@@ -86,6 +168,8 @@ export interface QuickPage {
   measurements: QuickMeasurement[];
   reflow: LayoutAnswer | null;
   zoom: LayoutAnswer | null;
+  /** What the other probes saw. Absent in a summary from before they were there. */
+  probes?: QuickProbeFinding[];
 }
 
 export interface QuickFinding {
@@ -110,8 +194,10 @@ export interface QuickSignal {
   agreed: number;
   alone: number;
   contradicted: number;
-  /** Pages on which a layout probe saw loss, for 1.4.10 and 1.4.4. */
+  /** Pages on which a probe of loep saw something. */
   probePages: number;
+  /** What the probes saw, in a sentence each. */
+  probesNl: string[];
   pages: number;
   sentenceNl: string;
 }
@@ -145,7 +231,7 @@ export interface QuickSummary {
   findingsTotal: number;
   /** Every count, not cut off: the baseline of a comparison. */
   counts: QuickCount[];
-  pages: { url: string; title: string | null; httpStatus: number | null; screenshot: string | null; measured: boolean; reasonsNl: string[]; reflow: LayoutAnswer | null; zoom: LayoutAnswer | null }[];
+  pages: { url: string; title: string | null; httpStatus: number | null; screenshot: string | null; measured: boolean; reasonsNl: string[]; reflow: LayoutAnswer | null; zoom: LayoutAnswer | null; probes: QuickProbeFinding[] }[];
 }
 
 const TOP_FINDINGS = 50;
@@ -242,6 +328,7 @@ function signalSentence(signal: Omit<QuickSignal, "sentenceNl">): string {
     case "engines-agree":
       return `Twee of meer meetprogramma's keuren ${plural(signal.agreed, "plek", "plekken")} af, ${onPages}. Een volledig onderzoek keurt dit criterium waarschijnlijk af.`;
     case "layout-probe":
+      if (signal.probesNl.length > 0) return `${signal.probesNl.join(" ")} Dat is gezien op ${plural(signal.probePages, "pagina", "pagina's")}.`;
       return signal.criterion === "1.4.10"
         ? `Bij 320 pixels breed valt er inhoud buiten beeld op ${plural(signal.probePages, "pagina", "pagina's")}. Een volledig onderzoek keurt dit criterium waarschijnlijk af.`
         : `Bij 200 procent zoom valt er inhoud buiten beeld op ${plural(signal.probePages, "pagina", "pagina's")}. Een volledig onderzoek keurt dit criterium vaak af.`;
@@ -254,9 +341,9 @@ function signalSentence(signal: Omit<QuickSignal, "sentenceNl">): string {
 
 /** Per criterion what the measurement points at, strongest ground first. */
 export function quickSignals(pages: readonly QuickPage[], findings: readonly QuickFinding[]): QuickSignal[] {
-  const perCriterion = new Map<string, { counts: Record<Agreement, number>; pages: Set<string>; probePages: number }>();
+  const perCriterion = new Map<string, { counts: Record<Agreement, number>; pages: Set<string>; probePages: Set<string>; probes: Map<QuickProbe, number> }>();
   const entry = (criterion: string) => {
-    if (!perCriterion.has(criterion)) perCriterion.set(criterion, { counts: { agreed: 0, alone: 0, contradicted: 0 }, pages: new Set(), probePages: 0 });
+    if (!perCriterion.has(criterion)) perCriterion.set(criterion, { counts: { agreed: 0, alone: 0, contradicted: 0 }, pages: new Set(), probePages: new Set(), probes: new Map() });
     return perCriterion.get(criterion)!;
   };
   for (const finding of findings) {
@@ -268,15 +355,21 @@ export function quickSignals(pages: readonly QuickPage[], findings: readonly Qui
     for (const [criterion, answer] of [["1.4.10", page.reflow], ["1.4.4", page.zoom]] as const) {
       if (!lossSeen(answer)) continue;
       const found = entry(criterion);
-      found.probePages += 1;
+      found.probePages.add(page.url);
+      found.pages.add(page.url);
+    }
+    for (const seen of page.probes ?? []) {
+      const found = entry(QUICK_PROBES[seen.probe].criterion);
+      found.probes.set(seen.probe, (found.probes.get(seen.probe) ?? 0) + 1);
+      found.probePages.add(page.url);
       found.pages.add(page.url);
     }
   }
   const signals: QuickSignal[] = [];
   for (const [criterion, found] of perCriterion) {
-    const ground: QuickSignal["ground"] = found.counts.agreed > 0 ? "engines-agree" : found.probePages > 0 ? "layout-probe" : found.counts.alone > 0 ? "engine-alone" : "engines-contradict";
+    const ground: QuickSignal["ground"] = found.counts.agreed > 0 ? "engines-agree" : found.probePages.size > 0 ? "layout-probe" : found.counts.alone > 0 ? "engine-alone" : "engines-contradict";
     const known = criterionById(criterion);
-    const signal = { criterion, titleNl: known?.titleNl ?? null, level: known?.level ?? null, ground, ...found.counts, probePages: found.probePages, pages: found.pages.size };
+    const signal = { criterion, titleNl: known?.titleNl ?? null, level: known?.level ?? null, ground, ...found.counts, probePages: found.probePages.size, probesNl: [...found.probes].map(([probe, places]) => QUICK_PROBES[probe].nl(places)), pages: found.pages.size };
     signals.push({ ...signal, sentenceNl: signalSentence(signal) });
   }
   return signals.sort((a, b) => GROUND_ORDER.indexOf(a.ground) - GROUND_ORDER.indexOf(b.ground) || compareCriterionIds(a.criterion, b.criterion));
@@ -288,8 +381,27 @@ export const pagePath = (url: string): string => {
   return `${parsed.pathname}${parsed.search}`;
 };
 
-export function quickCounts(findings: readonly QuickFinding[]): QuickCount[] {
+/** Pages that carry the same title as another measured page: nothing in the title tells them apart. */
+export function sameTitles(pages: readonly QuickPage[]): Map<string, QuickProbeFinding> {
+  const byTitle = new Map<string, string[]>();
+  for (const page of pages) if (page.title) byTitle.set(page.title, [...(byTitle.get(page.title) ?? []), page.url]);
+  const found = new Map<string, QuickProbeFinding>();
+  for (const [title, urls] of byTitle) if (new Set(urls.map(pagePath)).size > 1) for (const url of urls) found.set(url, { probe: "title", element: title });
+  return found;
+}
+
+export function quickCounts(findings: readonly QuickFinding[], pages: readonly QuickPage[] = []): QuickCount[] {
   const counts = new Map<string, QuickCount>();
+  for (const page of pages) {
+    for (const seen of page.probes ?? []) {
+      const path = pagePath(page.url);
+      const criterion = QUICK_PROBES[seen.probe].criterion;
+      const key = `${path}\n${criterion}\nloep:${seen.probe}\n${seen.element}`;
+      const count = counts.get(key) ?? { path, criterion, rule: `loep:${seen.probe}`, element: seen.element, places: 0 };
+      count.places += 1;
+      counts.set(key, count);
+    }
+  }
   for (const finding of findings) {
     for (const rule of finding.rules) {
       const path = pagePath(finding.page);
@@ -313,7 +425,10 @@ export interface SummaryInput {
   pages: readonly QuickPage[];
 }
 
-export function buildQuickSummary(input: SummaryInput): QuickSummary {
+export function buildQuickSummary(given: SummaryInput): QuickSummary {
+  // A title two pages share is only seen over the pages together.
+  const titles = sameTitles(given.pages);
+  const input = { ...given, pages: given.pages.map((page) => (titles.has(page.url) && page.measurements.some((measurement) => measurement.observation !== null) ? { ...page, probes: [...(page.probes ?? []), titles.get(page.url)!] } : page)) };
   const findings = quickFindings(input.pages).filter((finding) => EVALUATED.has(finding.criterion));
   const versions = new Map<string, string>();
   for (const page of input.pages) for (const measurement of page.measurements) for (const method of measurement.rules?.methods ?? []) versions.set(engineName(method.implementation), method.version);
@@ -335,7 +450,7 @@ export function buildQuickSummary(input: SummaryInput): QuickSummary {
     signals: quickSignals(input.pages, findings),
     findings: findings.slice(0, TOP_FINDINGS),
     findingsTotal: findings.length,
-    counts: quickCounts(findings),
+    counts: quickCounts(findings, input.pages),
     pages: input.pages.map((page) => ({
       url: page.url,
       title: page.title,
@@ -345,13 +460,14 @@ export function buildQuickSummary(input: SummaryInput): QuickSummary {
       reasonsNl: page.measurements.flatMap((measurement) => (measurement.reasonNl ? [`${measurement.scheme === "light" ? "licht" : "donker"}: ${measurement.reasonNl}`] : [])),
       reflow: page.reflow,
       zoom: page.zoom,
+      probes: page.probes ?? [],
     })),
   };
 }
 
 const GROUND_HEADING_NL: Record<QuickSignal["ground"], string> = {
   "engines-agree": "Meetprogramma's zijn het eens",
-  "layout-probe": "Inhoud valt buiten beeld",
+  "layout-probe": "Een proef van loep ziet het",
   "engine-alone": "Eén meetprogramma",
   "engines-contradict": "Meetprogramma's spreken elkaar tegen",
 };
@@ -442,7 +558,7 @@ export function compareQuick(baseline: QuickSummary, current: QuickSummary): Qui
     const b = is.get(key)?.places ?? 0;
     if (a === b) continue;
     const title = criterionById(row.criterion)?.titleNl;
-    const what = row.rule === "reflow" ? "bij 320 pixels breed" : row.rule === "zoom" ? "bij 200 procent zoom" : `regel ${row.rule}`;
+    const what = row.rule === "reflow" ? "bij 320 pixels breed" : row.rule === "zoom" ? "bij 200 procent zoom" : row.rule.startsWith("loep:") ? `proef ${row.rule.slice(5)}` : `regel ${row.rule}`;
     const sentenceNl = `${row.path}: ${row.criterion}${title ? ` ${title}` : ""}, ${what}${row.element ? `, ${row.element}` : ""}, van ${plural(a, "plek", "plekken")} naar ${b}.`;
     (b > a ? worse : better).push({ path: row.path, criterion: row.criterion, rule: row.rule, element: row.element, before: a, now: b, sentenceNl });
   }
@@ -478,9 +594,11 @@ export function groupedChangesNl(changes: readonly QuickChange[]): string[] {
     const layout = group.find((change) => change.rule === "reflow" || change.rule === "zoom");
     // Four engines that see the same three places are three places: the engine that sees most says how many.
     const perEngine = new Map<string, number>();
-    for (const change of group) if (change !== layout) perEngine.set(change.rule.split(":")[0]!, (perEngine.get(change.rule.split(":")[0]!) ?? 0) + Math.abs(change.now - change.before));
-    const places = Math.max(layout ? Math.abs(layout.now - layout.before) : 0, ...perEngine.values());
-    const by = [...(perEngine.size > 0 ? [plural(perEngine.size, "meetprogramma", "meetprogramma's")] : []), ...(layout ? [layout.rule === "reflow" ? "de proef op 320 pixels breed" : "de proef op 200 procent zoom"] : [])].join(" en ");
+    const probes = new Set(group.filter((change) => change.rule.startsWith("loep:")).map((change) => change.rule));
+    for (const change of group) if (change !== layout && !probes.has(change.rule)) perEngine.set(change.rule.split(":")[0]!, (perEngine.get(change.rule.split(":")[0]!) ?? 0) + Math.abs(change.now - change.before));
+    const perProbe = [...probes].map((rule) => group.filter((change) => change.rule === rule).reduce((sum, change) => sum + Math.abs(change.now - change.before), 0));
+    const places = Math.max(layout ? Math.abs(layout.now - layout.before) : 0, ...perEngine.values(), ...perProbe);
+    const by = [...(perEngine.size > 0 ? [plural(perEngine.size, "meetprogramma", "meetprogramma's")] : []), ...(probes.size > 0 ? ["een proef van loep"] : []), ...(layout ? [layout.rule === "reflow" ? "de proef op 320 pixels breed" : "de proef op 200 procent zoom"] : [])].join(" en ");
     const elements = [...new Set(group.map((change) => change.element).filter(Boolean))];
     const which = elements.length === 0 ? "" : ` Het gaat om ${elements.slice(0, 3).map((element) => `\`${element}\``).join(", ")}${elements.length > 3 ? ` en ${elements.length - 3} meer` : ""}.`;
     return `${first.path}: ${first.criterion}${title ? ` ${title}` : ""}, ${plural(places, "plek", "plekken")} ${direction} volgens ${by}.${which}`;
