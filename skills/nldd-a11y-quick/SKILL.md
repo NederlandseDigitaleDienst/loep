@@ -52,6 +52,10 @@ Dit is geen onderzoek. Vraagt de gebruiker of de site aan WCAG voldoet, of wil h
 
 5. **Zeg wanneer de basislijn opschuift.** Na een release die goed is, wordt haar `summary.json` de nieuwe basislijn. Wat is opgelost, kan dan niet ongemerkt terugkomen. Dat is een commit van de gebruiker, niet van jou.
 
+## Het meetblad insturen
+
+Ook een snelle meting heeft een meetblad: per regel en proef het aantal plekken, en hoe de vergelijking afliep. Geen adres, geen pagina, geen element. Vraag na de eerste meting, één keer, of het naar de verzameling van loep mag (`NederlandseDigitaleDienst/loep-meetbladen`), en of eerdere metingen en onderzoeken ook mee mogen. Bij ja volg je de skill `nldd-a11y-contribute`. Zet het insturen niet in de pipeline: het is een keuze van een mens, per keer.
+
 ## De uitkomst uitleggen
 
 - **Slechter.** Lees `verschil.md` en open de pagina erbij. Per pagina en criterium staat hoeveel plekken erbij kwamen en volgens hoeveel meetprogramma's. De plekken zelf staan in `summary.json` onder `findings`.

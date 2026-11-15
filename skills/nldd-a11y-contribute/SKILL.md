@@ -7,9 +7,9 @@ metadata:
 
 # Een meetblad insturen
 
-Je stuurt van een afgerond onderzoek het meetblad in naar de verzameling van loep. Uit die verzameling wordt gemeten hoe betrouwbaar elke regel van een regelset is, en hoe loep het doet over veel sites.
+Je stuurt van een afgerond onderzoek of een snelle meting het meetblad in naar de verzameling van loep: de besloten repository `NederlandseDigitaleDienst/loep-meetbladen`. Uit die verzameling wordt gemeten hoe betrouwbaar elke regel van een regelset is, en hoe loep het doet over veel sites.
 
-Een meetblad zegt iets over loep en niets over de site. Er staan regelnummers, criteria, uitkomsten en aantallen op. Geen adres, geen pagina, geen selector, geen zin uit een oordeel, geen schermafbeelding, en niet wie tekende.
+Een meetblad zegt iets over loep en niets over de site. Er staan regelnummers, criteria, uitkomsten, versies, het taalmodel per rol en aantallen op. Geen adres, geen pagina, geen selector, geen zin uit een oordeel, geen schermafbeelding, en niet wie tekende of besloot.
 
 ## Wat je nooit doet
 
@@ -24,7 +24,7 @@ Een meetblad zegt iets over loep en niets over de site. Er staan regelnummers, c
 
 `LOEP` is `node <map van deze plugin>/toolbox/src/cli.ts`. De verzameling is `NederlandseDigitaleDienst/loep-meetbladen`, tenzij de gebruiker een andere noemt.
 
-1. **Vraag wat er ingestuurd wordt.** Eén onderzoek (de map ervan), of alle onderzoeken onder een map, zoals de map waar iemand zijn onderzoeken bewaart.
+1. **Vraag wat er ingestuurd wordt, en vraag altijd ook naar vroeger.** Eén onderzoek of snelle meting (de map ervan), of alles onder een map. Noemt de gebruiker één onderzoek, vraag dan of er eerdere zijn: in de map ernaast, of waar hij ze bewaart. De verzameling heeft het meest aan oude onderzoeken, omdat ze met andere versies van loep zijn gemaakt. `LOEP contribute --under <map>` telt ze, zonder iets te schrijven of te versturen. Noem het aantal en vraag of ze mee mogen.
 
 2. **Laat zien wat erop komt.** Dit schrijft en verstuurt niets:
 

@@ -50,6 +50,17 @@ De ijkmeting van die dag, en 29 afgeronde onderzoeken van 13 sites van Nederland
 
 Een techniekregel keurt dus ruim twee keer zo vaak af waar het onderzoek het criterium goedkeurt. `QW-WCAG-T24` keurde op vier sites af onder 2.1.1; het onderzoek keurde 2.1.1 daar op geen enkele af.
 
+**Hoe vaak een regelset alleen staat.** Een meetblad legt bij elk element dat een regel in een sessie afkeurde vast hoe de andere regelsets erover dachten. Over de 28 onderzoeken:
+
+| Regelset | Afgekeurde elementen | Een andere regelset keurde het ook af | Alleen: de andere zeiden niets | Een andere keurde het goed |
+|---|---|---|---|---|
+| axe-core | 160 | 120 | 2 | 38 |
+| IBM | 282 | 93 | 81 | 108 |
+| Alfa | 1027 | 141 | 651 | 235 |
+| QualWeb | 6993 | 145 | 4374 | 2474 |
+
+axe-core staat bijna nooit alleen. QualWeb keurt 48 keer zo veel elementen af als het met een ander deelt. Het register leest deze telling nog niet; ze staat op de meetbladen.
+
 **Waar de drie bronnen hetzelfde zeggen.** Voor `sia-r84` wijzen ze één kant op: op de testgevallen vond de regel de twee gebreken en meldde ze er twee onterecht, beoordelaars verwierpen haar op drie van de drie sites, en in de sessies keurde het onderzoek het criterium goed op alle drie de sites waar ze afkeurde, terwijl dat criterium op 4 van de 13 sites is afgekeurd. Dat is de regel die op een echte site 500 plekken alleen afkeurde.
 
 **Twee regels van IBM** keurden op een site af en gaven op geen enkel testgeval een uitkomst. Ze staan in het register met alleen een record uit het veld.

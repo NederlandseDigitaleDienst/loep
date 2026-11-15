@@ -134,16 +134,16 @@ Een run van `quick` is geen begin van een onderzoek. De inventaris is klein geho
 
 loep wordt beter van veel onderzoeken van veel mensen. Na een onderzoek kun je het meetblad ervan insturen naar een gedeelde verzameling: "Stuur het meetblad van dit onderzoek in." Dat kan ook voor onderzoeken van vroeger, in één keer voor een hele map.
 
-Een meetblad zegt iets over loep en niets over de site. Er staat op: de uitkomst per criterium, wat een beoordelaar over een regel van een regelset zei, welke regels afkeurden, gebreken geteld naar ernst en eigenaar, de versies en de duur per stap. Er staat niet op: het adres of de naam van de site, een pagina, een selector, een zin uit een oordeel of bevinding, een schermafbeelding, of wie tekende. De site staat erop als een sleutel die alleen op jouw machine uit het adres te maken is.
+Een meetblad zegt iets over loep en niets over de site. Er staat op: de uitkomst per criterium, welk taalmodel in welke rol draaide, wat een beoordelaar over een regel van een regelset zei, welke regels afkeurden en of de regelsets het eens waren, gebreken geteld naar ernst en eigenaar, wat mensen besloten en lieten nameten als aantallen, de versies en de duur per stap. Er staat niet op: het adres of de naam van de site, een pagina, een selector, een zin uit een oordeel of bevinding, een schermafbeelding, of wie tekende. De site staat erop als een sleutel die alleen op jouw machine uit het adres te maken is.
 
-De assistent laat eerst zien wat erop komt en vraagt dan of het mag. Zonder ja gaat er niets weg, ook niet aan het eind van een onderzoek. Met de hand kijk je zo, zonder dat er iets wordt geschreven of verstuurd:
+Aan het eind van een onderzoek, een verklaring en een eerste snelle meting vraagt de assistent één keer of het meetblad mag worden ingestuurd, en of onderzoeken van vroeger ook mee mogen. Hij laat eerst zien wat erop komt. Zonder ja gaat er niets weg. Met de hand kijk je zo, zonder dat er iets wordt geschreven of verstuurd:
 
 ```
 node toolbox/src/cli.ts contribute --run toegankelijkheid/onderzoeken/2026-10-15
 node toolbox/src/cli.ts contribute --under toegankelijkheid/onderzoeken
 ```
 
-De verzameling is een besloten repository. Wie erin mag schrijven, kan alles lezen wat erin staat. Hoe insturen met de hand gaat, staat in de README van die repository.
+De verzameling is de besloten repository `NederlandseDigitaleDienst/loep-meetbladen`. Wie erin mag schrijven, kan alles lezen wat erin staat. Hoe insturen met de hand gaat, staat in de README van die repository.
 
 ## De verklaring
 

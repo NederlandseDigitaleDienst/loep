@@ -46,26 +46,58 @@ export function sessionElements(runDir: string): SheetSource["sessionElements"] 
   return elements;
 }
 
-/** What of a run a sheet is built from. Null when the run has no evaluation: an unfinished run has nothing to contribute yet. */
+const jsonOr = <T>(path: string, fallback: T): T => {
+  if (!existsSync(path)) return fallback;
+  try {
+    return readJson<T>(path);
+  } catch {
+    return fallback;
+  }
+};
+
+/** Whether a folder holds something a sheet can be made of: a finished evaluation, or a quick measurement. */
+export const hasSheet = (runDir: string): boolean => existsSync(join(runDir, "evaluation.json")) || existsSync(join(runDir, "quick", "summary.json"));
+
+/** What of a run a sheet is built from. Null when the run has neither an evaluation nor a quick measurement: an unfinished run has nothing to contribute yet. */
 export function sheetSource(runDir: string): SheetSource | null {
   const evaluationFile = join(runDir, "evaluation.json");
-  if (!existsSync(evaluationFile)) return null;
-  const evaluationText = readFileSync(evaluationFile, "utf8");
+  const quickFile = join(runDir, "quick", "summary.json");
+  if (!existsSync(evaluationFile) && !existsSync(quickFile)) return null;
+  const evaluated = existsSync(evaluationFile);
+  const evaluationText = readFileSync(evaluated ? evaluationFile : quickFile, "utf8");
   const sweepPages: SheetSource["sweepPages"] = [];
   const pages = join(runDir, "pages");
   for (const page of existsSync(pages) ? readdirSync(pages, { withFileTypes: true }).filter((entry) => entry.isDirectory()) : []) {
     for (const scheme of ["light", "dark"]) {
-      const file = join(pages, page.name, `engines-${scheme}.json`);
-      if (!existsSync(file)) continue;
-      try {
-        sweepPages.push({ page: page.name, results: readJson<{ results?: SheetSource["sweepPages"][number]["results"] }>(file).results ?? [] });
-      } catch {
-        continue;
-      }
+      const results = jsonOr<{ results?: SheetSource["sweepPages"][number]["results"] }>(join(pages, page.name, `engines-${scheme}.json`), {}).results;
+      if (results) sweepPages.push({ page: page.name, results });
     }
   }
-  const manifest = existsSync(join(runDir, "manifest.json")) ? readJson<{ steps?: SheetSource["steps"] }>(join(runDir, "manifest.json")) : {};
-  return { evaluationText, evaluation: JSON.parse(evaluationText) as SheetSource["evaluation"], sessionElements: sessionElements(runDir), sweepPages, steps: manifest.steps ?? [] };
+  const manifest = jsonOr<{ steps?: SheetSource["steps"]; toolbox?: { version?: string } }>(join(runDir, "manifest.json"), {});
+  const decisionsDir = join(runDir, "besluiten");
+  // One file per defect, next to an index: the kind of decision is all the sheet takes.
+  const decisions = existsSync(decisionsDir)
+    ? readdirSync(decisionsDir)
+        .filter((name) => name.endsWith(".json") && name !== "index.json")
+        .map((name) => jsonOr<{ decision?: string }>(join(decisionsDir, name), {}).decision)
+        .filter((decision): decision is string => typeof decision === "string")
+    : undefined;
+  const rechecksDir = join(runDir, "rechecks");
+  const quick = existsSync(quickFile) ? { summary: jsonOr<NonNullable<SheetSource["quick"]>["summary"]>(quickFile, {} as never), comparison: jsonOr<NonNullable<SheetSource["quick"]>["comparison"]>(join(runDir, "quick", "verschil.json"), null) } : undefined;
+  return {
+    evaluationText,
+    evaluation: evaluated ? (JSON.parse(evaluationText) as SheetSource["evaluation"]) : { criteria: [] },
+    sessionElements: evaluated ? sessionElements(runDir) : [],
+    sweepPages,
+    steps: manifest.steps ?? [],
+    toolboxVersion: manifest.toolbox?.version,
+    collectPages: existsSync(join(runDir, "collect.json")) ? (jsonOr<{ pages?: SheetSource["collectPages"] }>(join(runDir, "collect.json"), {}).pages ?? []) : undefined,
+    gate: existsSync(join(runDir, "gate.json")) ? jsonOr<NonNullable<SheetSource["gate"]>>(join(runDir, "gate.json"), {}) : undefined,
+    decisions,
+    rechecks: existsSync(rechecksDir) ? readdirSync(rechecksDir, { withFileTypes: true }).filter((entry) => entry.isDirectory()).length : undefined,
+    statementStatus: jsonOr<{ status?: string }>(join(runDir, "verklaring", "verklaring.json"), {}).status,
+    quick,
+  };
 }
 
 export interface Contribution {
@@ -79,10 +111,10 @@ export interface Contribution {
 /** Make the sheet of a run and, with `outDir`, write it there under its id. A sheet with a word of the site in it is refused. */
 export function contribute(runDir: string, options: { outDir?: string | undefined; key: string }): Contribution {
   const source = sheetSource(runDir);
-  if (!source) throw new Error(`${runDir} heeft geen evaluation.json: alleen een afgerond onderzoek heeft een meetblad`);
+  if (!source) throw new Error(`${runDir} heeft geen evaluation.json en geen quick/summary.json: alleen een afgerond onderzoek of een snelle meting heeft een meetblad`);
   const sheet = buildSheet(source, options.key);
   const site = (source.evaluation as { site?: { baseUrl?: string; name?: string; organisation?: string } }).site ?? {};
-  const leaks = sheetLeaks(sheet, { baseUrl: site.baseUrl, names: [site.name, site.organisation] });
+  const leaks = sheetLeaks(sheet, { baseUrl: site.baseUrl ?? source.quick?.summary.site, names: [site.name, site.organisation] });
   if (leaks.length > 0 || !options.outDir) return { sheet, leaks, file: null };
   mkdirSync(options.outDir, { recursive: true });
   const file = join(options.outDir, `${sheet.id}.json`);
@@ -90,11 +122,11 @@ export function contribute(runDir: string, options: { outDir?: string | undefine
   return { sheet, leaks, file };
 }
 
-/** Folders under `root` that hold a finished evaluation: every run someone kept there, however deep. A copy of the evaluation in the report or the signed folder of a run is not a run. */
+/** Folders under `root` that hold a finished evaluation or a quick measurement: every run someone kept there, however deep. A copy of the evaluation in the report or the signed folder of a run is not a run. */
 export function runsUnder(root: string): string[] {
   const found: string[] = [];
   const walk = (dir: string, depth: number): void => {
-    if (existsSync(join(dir, "evaluation.json"))) {
+    if (hasSheet(dir)) {
       found.push(dir);
       return;
     }
@@ -141,10 +173,10 @@ export function manyContributionsNl(result: ManyContributions, outDir: string | 
   const sites = new Set(result.sheets.map((sheet) => sheet.siteKey)).size;
   const versions = [...new Set(result.sheets.map((sheet) => sheet.toolbox.version ?? "onbekend"))].sort((a, b) => a.localeCompare(b, "en", { numeric: true }));
   return [
-    `${result.runs} afgeronde onderzoeken gevonden, ${result.sheets.length} meetbladen van ${sites} ${sites === 1 ? "site" : "sites"}${result.runs - result.sheets.length - result.refused.length - result.failed > 0 ? ` (${result.runs - result.sheets.length - result.refused.length - result.failed} keer dezelfde run in een andere map)` : ""}.`,
+    `${result.runs} afgeronde onderzoeken en snelle metingen gevonden, ${result.sheets.length} meetbladen van ${sites} ${sites === 1 ? "site" : "sites"}${result.runs - result.sheets.length - result.refused.length - result.failed > 0 ? ` (${result.runs - result.sheets.length - result.refused.length - result.failed} keer dezelfde run in een andere map)` : ""}.`,
     ...(result.sheets.length > 0 ? [`Versies van loep: ${versions.join(", ")}.`] : []),
-    "Op een meetblad: de uitkomst per criterium, wat beoordelaars over een regel zeiden, welke regels afkeurden, gebreken geteld naar ernst en eigenaar, en de duur per stap.",
-    "Niet erop: het adres en de naam van de site, pagina's, selectors, de tekst van een oordeel of bevinding, schermafbeeldingen, en wie tekende.",
+    "Op een meetblad: de uitkomst per criterium, het taalmodel per rol, wat beoordelaars over een regel zeiden, welke regels afkeurden en of de regelsets het eens waren, gebreken geteld naar ernst en eigenaar, wat mensen besloten (alleen aantallen), en de duur per stap.",
+    "Niet erop: het adres en de naam van de site, pagina's, selectors, de tekst van een oordeel of bevinding, schermafbeeldingen, en wie tekende of besloot.",
     ...(result.refused.length > 0 ? [`GEWEIGERD: ${result.refused.length} ${result.refused.length === 1 ? "meetblad bevat" : "meetbladen bevatten"} iets van de site en ${result.refused.length === 1 ? "is" : "zijn"} niet geschreven (${result.refused.map((entry) => entry.id).join(", ")}). Meld dit bij de makers van loep.`] : []),
     ...(result.failed > 0 ? [`${result.failed} ${result.failed === 1 ? "map was" : "mappen waren"} niet te lezen.`] : []),
     outDir ? `Geschreven: ${result.written} in ${outDir}. Er is niets verstuurd.` : "Niets geschreven. Met --out <map> komen de meetbladen in die map. Er wordt niets verstuurd.",
@@ -156,10 +188,15 @@ export function manyContributionsNl(result: ManyContributions, outDir: string | 
 export function contributionNl(result: Contribution): string {
   const { sheet } = result;
   const failed = sheet.criteria.filter((criterion) => criterion.outcome === "failed").length;
+  const models = sheet.models.length > 0 ? `, model ${sheet.models.join(" en ")}` : "";
   return [
-    `Meetblad ${sheet.id}: loep ${sheet.toolbox.version ?? "onbekend"}, ${sheet.month}, ${sheet.size.pages} pagina's, ${sheet.criteria.length} criteria waarvan ${failed} afgekeurd.`,
-    `Erop: de uitkomst per criterium, ${sheet.rulings.length} uitspraken van een beoordelaar over een regel, ${sheet.sessions.length} regels die in een sessie afkeurden, ${sheet.sweep.length} regels uit de veegronde, ${sheet.defects.total} gebreken geteld naar ernst en eigenaar, en de duur per stap.`,
-    "Niet erop: het adres en de naam van de site, pagina's, selectors, de tekst van een oordeel of bevinding, schermafbeeldingen, en wie tekende.",
+    sheet.quick && sheet.criteria.length === 0
+      ? `Meetblad ${sheet.id} van een snelle meting: loep ${sheet.toolbox.version ?? "onbekend"}, ${sheet.month}, ${sheet.quick.pages} pagina's.`
+      : `Meetblad ${sheet.id}: loep ${sheet.toolbox.version ?? "onbekend"}, ${sheet.month}${models}, ${sheet.size.pages} pagina's, ${sheet.criteria.length} criteria waarvan ${failed} afgekeurd.`,
+    sheet.quick && sheet.criteria.length === 0
+      ? `Erop: ${sheet.quick.rules.length} regels en proeven met het aantal plekken op een sterke en op een zwakke grond${sheet.quick.comparison ? ", en hoe de vergelijking met de basislijn afliep" : ""}.`
+      : `Erop: de uitkomst per criterium, het taalmodel per rol, ${sheet.rulings.length} uitspraken van een beoordelaar over een regel, ${sheet.sessions.length} regels die in een sessie afkeurden en of de andere regelsets het daarmee eens waren, ${sheet.sweep.length} regels uit de veegronde, ${sheet.defects.total} gebreken geteld naar ernst en eigenaar, wat mensen besloten en lieten nameten (alleen aantallen), en de duur per stap.`,
+    "Niet erop: het adres en de naam van de site, pagina's, selectors, de tekst van een oordeel of bevinding, schermafbeeldingen, en wie tekende of besloot.",
     `De site staat erop als ${sheet.siteKey}: een sleutel die alleen op deze machine uit het adres te maken is.`,
     ...(result.leaks.length > 0 ? [`GEWEIGERD: op het meetblad staat iets van de site: ${result.leaks.join(", ")}. Het is niet geschreven. Meld dit bij de makers van loep.`] : []),
     ...(result.file ? [`Geschreven: ${result.file}`] : result.leaks.length === 0 ? ["Niets geschreven. Met --out <map> komt het meetblad in die map. Er wordt niets verstuurd."] : []),

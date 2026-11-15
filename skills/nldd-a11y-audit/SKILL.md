@@ -267,6 +267,17 @@ Ook dit meld je, met hetzelfde ja van de gebruiker en zonder het adres van de si
 - Een gesloten issue dat terugkomt: maak een nieuw issue en noem het oude erin (`Eerder: #<nummer>`). De oplossing van toen was dan niet genoeg.
 - Twijfel je of het hetzelfde is, laat de gebruiker dan kiezen: de gevonden issues met hun titel, en wat jij zou doen.
 
+## Het meetblad insturen
+
+loep wordt beter van veel onderzoeken van veel mensen. Vraag daarom na stap 8, één keer per gesprek, of het meetblad van dit onderzoek naar de verzameling van loep mag: de besloten repository `NederlandseDigitaleDienst/loep-meetbladen`. Doe dat ook als de gebruiker stap 9 en 10 overslaat.
+
+1. Zeg in twee zinnen wat een meetblad is. Erop staat wat het onderzoek zegt over loep: de uitkomst per criterium, welk taalmodel in welke rol draaide, wat een beoordelaar over een regel zei, welke regels afkeurden, en aantallen. Er staat niet op: het adres of de naam van de site, een pagina, een selector, een zin uit een oordeel of bevinding, een schermafbeelding, of wie tekende.
+2. Vraag in dezelfde vraag naar onderzoeken van vroeger. Staan er meer onderzoeken naast dit, of bewaart de gebruiker ze ergens, dan telt `LOEP contribute --under <die map>` hoeveel meetbladen dat zijn. Dat schrijft en verstuurt niets. Noem het aantal: "Er staan nog 11 eerdere onderzoeken. Mogen die ook mee?"
+3. Zegt de gebruiker ja, volg dan de skill `nldd-a11y-contribute`. Die laat eerst zien wat erop staat en stuurt daarna in, met de toegang van de gebruiker zelf.
+4. Zegt de gebruiker nee, of antwoordt hij niet, dan gaat er niets weg en vraag je het in dit gesprek niet opnieuw.
+
+Stuur nooit iets in zonder dat ja, ook niet omdat het bij een eerder onderzoek mocht. Loopt het onderzoek zonder gebruiker, zoals in een dienst, sla dit dan over.
+
 ## Als iets niet lukt
 
 - `LOEP collect`, `contrast`, `states`, `gate` of `tasks` meldt dat de run geen sitemodel heeft: stap 3 is overgeslagen. Zonder verkenning wordt er niet gemeten en niet beoordeeld; ga terug naar stap 3.

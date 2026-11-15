@@ -8,6 +8,7 @@
  * a field added later that carries text of the site should fail here, not in a repository.
  */
 import { createHash, createHmac } from "node:crypto";
+import type { QuickComparison, QuickSummary } from "./quick.ts";
 import type { FieldRun } from "./rule-register.ts";
 import { openPoint } from "./verdict.ts";
 import { compareCriterionIds } from "./wcag.ts";
@@ -37,34 +38,61 @@ export interface RunSheet {
   engines: Record<string, string>;
   /** Model ids as the agents gave them, reduced to the id. */
   models: string[];
+  /** Per role which model how many agents said they ran on; `notGiven` counts the agents that said nothing. */
+  modelsPerRole: { role: string; model: string; agents: number }[];
+  /** Whether the evaluation follows up on an earlier one of the same site. */
+  followsUp: boolean;
   purpose: string | null;
   technologies: string[];
   size: { pages: number; pageTypes: number; population: number | null; documents: number; frames: number };
   criteria: { id: string; outcome: string; basis: string | null; agreement: string | null; establishedBy: string | null; rounds: { a: string | null; b: string | null; final: string | null }; findings: number; open: Record<string, number> }[];
   /** What a judge ruled where it named a rule of an engine. */
   rulings: ({ rule: string; criterion: string } & Record<Ruling, number>)[];
-  /** Where an agent ran the engines in a session: how many elements a rule failed under a criterion. */
-  sessions: { engine: string; rule: string; criterion: string; elements: number }[];
-  /** The sweep: on how many pages a rule failed or could not tell, and on how many elements. */
-  sweep: { engine: string; rule: string; pagesFailed: number; pagesCantTell: number; elementsFailed: number }[];
+  /**
+   * Where an agent ran the engines in a session: how many elements a rule failed under a criterion,
+   * and how the other engines stood on those elements. Agreed: another engine failed it too.
+   * Contradicted: no other failed it and one passed it. Alone: the others said nothing.
+   */
+  sessions: { engine: string; rule: string; criterion: string; elements: number; agreed: number; alone: number; contradicted: number }[];
+  /** The sweep: on how many pages a rule failed, could not tell or passed, and on how many elements it failed. */
+  sweep: { engine: string; rule: string; pagesFailed: number; pagesCantTell: number; pagesPassed: number; elementsFailed: number }[];
+  /** The probes of the sweep: on how many pages each saw something. Null for a run without a sweep. */
+  probes: { pages: number; reflow: number; zoom: number; textSpacing: number; tabWalkNotCompleted: number } | null;
+  /** The evidence gate. Null for a run without one. */
+  gate: { sufficient: boolean; exploreRounds: number; resweeps: number; accepted: number } | null;
   defects: { total: number; bySeverity: Record<string, number>; byOwner: Record<string, number> };
-  human: { signed: boolean; criteriaByPerson: number };
+  /**
+   * What people did with the evaluation: signed it, established a criterion themselves, decided on
+   * a defect (per kind of decision), had a finding measured again, and made a statement with a status.
+   */
+  human: { signed: boolean; criteriaByPerson: number; decisions: Record<string, number>; rechecks: number; statement: string | null };
   /** Seconds per command of the run, added up. */
   seconds: Record<string, number>;
   /** Sessions and extensions of their budget, per role. */
   sessionsPerRole: { role: string; sessions: number; extended: number; extensions: number }[];
+  /** For a quick measurement: what it counted, per rule and probe. Null for an evaluation. */
+  quick: {
+    pages: number;
+    dismissed: boolean;
+    covered: boolean;
+    /** Places per rule (`engine:rule`, or `loep:probe`): on a strong ground, on a weak one, and on how many pages. */
+    rules: { rule: string; criterion: string; strong: number; weak: number; pages: number }[];
+    /** Held against a baseline: how it ended. */
+    comparison: { ok: boolean; strict: boolean; worse: number; weak: number; unstable: number; better: number; notMeasured: number } | null;
+  } | null;
 }
 
 /** What of a run the sheet is built from. Every field is optional but the evaluation: an old run has less. */
 export interface SheetSource {
-  /** The bytes of evaluation.json: the id is their hash. */
+  /** The bytes of evaluation.json, or of the summary of a quick measurement: the id is their hash. */
   evaluationText: string;
   evaluation: {
+    followsUp?: unknown;
     evaluatedAt?: string;
     site?: { baseUrl?: string };
     criteria: { id: string; outcome: string; basis?: string | null; agreement?: string | null; established?: { by?: string } | null; rounds?: { a?: string | null; b?: string | null; final?: string | null } | null; findings?: unknown[]; missingNl?: string[]; limitsNl?: string[]; observations?: { engineRules?: string[]; ruling?: string }[] }[];
     toolchain?: { toolbox?: { version?: string }; browser?: { version?: string }; packages?: Record<string, string> };
-    judgment?: { models?: { models?: { model?: string }[] }[]; extensions?: { role?: string; sessions?: number; extended?: number; extensions?: number }[] };
+    judgment?: { models?: { role?: string; notGiven?: number; models?: { model?: string; agents?: number }[] }[]; extensions?: { role?: string; sessions?: number; extended?: number; extensions?: number }[] };
     purpose?: string | null;
     technologies?: string[];
     sample?: { items?: unknown[]; pageTypes?: unknown[]; populationSize?: number; documents?: unknown[] };
@@ -79,6 +107,20 @@ export interface SheetSource {
   sweepPages: { page: string; results: { engine?: string; rule?: string; outcome?: string; nodeCount?: number }[] }[];
   /** The steps of the manifest. */
   steps: { command?: string; seconds?: number }[];
+  /** The version of the toolbox in the manifest, for a run whose evaluation does not say. */
+  toolboxVersion?: string | undefined;
+  /** What the sweep summed up per page (collect.json). */
+  collectPages?: { reflow?: { horizontalScroll?: boolean; offenders?: number }; zoom200?: { horizontalScroll?: boolean; offenders?: number }; textspacing?: { newlyClipped?: number }; tabwalk?: { outcome?: string } }[] | undefined;
+  /** gate.json. */
+  gate?: { sufficient?: boolean; exploreRound?: number; resweeps?: number; accepted?: unknown[] } | undefined;
+  /** The kind of each decision on a defect (besluiten/). */
+  decisions?: string[] | undefined;
+  /** How many findings were measured again (rechecks/). */
+  rechecks?: number | undefined;
+  /** The status of the statement, when there is one. */
+  statementStatus?: string | undefined;
+  /** quick/summary.json and quick/verschil.json of a quick measurement. */
+  quick?: { summary: QuickSummary; comparison: QuickComparison | null } | undefined;
 }
 
 /** A word loep itself made: letters, digits and the few marks its ids and labels use. Anything else is not copied. */
@@ -123,30 +165,35 @@ export function buildSheet(source: SheetSource, key: string): RunSheet {
 
   const sessions = new Map<string, RunSheet["sessions"][number]>();
   for (const element of source.sessionElements) {
-    for (const [engine, verdict] of Object.entries(element.verdicts ?? {})) {
-      if (verdict !== "failed" || !(engine in ENGINE_PACKAGES)) continue;
+    const verdicts = Object.entries(element.verdicts ?? {}).filter(([engine]) => engine in ENGINE_PACKAGES);
+    const failing = verdicts.filter(([, verdict]) => verdict === "failed").length;
+    const stand = failing > 1 ? "agreed" : verdicts.some(([, verdict]) => verdict === "passed") ? "contradicted" : "alone";
+    for (const [engine, verdict] of verdicts) {
+      if (verdict !== "failed") continue;
       for (const named of element.rules?.[engine] ?? []) {
         const rule = safeWord(named, /^[\w.:-]{1,80}$/);
         if (!rule) continue;
-        const entry = sessions.get(`${engine}\n${rule}\n${element.criterion}`) ?? { engine, rule, criterion: element.criterion, elements: 0 };
+        const entry = sessions.get(`${engine}\n${rule}\n${element.criterion}`) ?? { engine, rule, criterion: element.criterion, elements: 0, agreed: 0, alone: 0, contradicted: 0 };
         entry.elements += 1;
+        entry[stand] += 1;
         sessions.set(`${engine}\n${rule}\n${element.criterion}`, entry);
       }
     }
   }
 
   // Per rule, the pages it failed on: light and dark of one page are one page.
-  const sweep = new Map<string, { engine: string; rule: string; failed: Set<string>; cantTell: Set<string>; elementsFailed: number }>();
+  const sweep = new Map<string, { engine: string; rule: string; failed: Set<string>; cantTell: Set<string>; passed: Set<string>; elementsFailed: number }>();
   for (const { page, results } of source.sweepPages) {
     for (const result of results) {
       const rule = safeWord(result.rule, /^[\w.:-]{1,80}$/);
-      if (!rule || !result.engine || !(result.engine in ENGINE_PACKAGES) || (result.outcome !== "failed" && result.outcome !== "cantTell")) continue;
-      const entry = sweep.get(`${result.engine}\n${rule}`) ?? { engine: result.engine, rule, failed: new Set<string>(), cantTell: new Set<string>(), elementsFailed: 0 };
+      if (!rule || !result.engine || !(result.engine in ENGINE_PACKAGES) || (result.outcome !== "failed" && result.outcome !== "cantTell" && result.outcome !== "passed")) continue;
+      const entry = sweep.get(`${result.engine}\n${rule}`) ?? { engine: result.engine, rule, failed: new Set<string>(), cantTell: new Set<string>(), passed: new Set<string>(), elementsFailed: 0 };
       if (result.outcome === "failed") {
         // The same elements fail in light and in dark: counted once, on the first scheme that has them.
         if (!entry.failed.has(page)) entry.elementsFailed += result.nodeCount ?? 0;
         entry.failed.add(page);
-      } else entry.cantTell.add(page);
+      } else if (result.outcome === "cantTell") entry.cantTell.add(page);
+      else entry.passed.add(page);
       sweep.set(`${result.engine}\n${rule}`, entry);
     }
   }
@@ -158,7 +205,22 @@ export function buildSheet(source: SheetSource, key: string): RunSheet {
   }
   const models = new Set<string>();
   for (const role of evaluation.judgment?.models ?? []) for (const entry of role.models ?? []) if (entry.model && modelId(entry.model)) models.add(modelId(entry.model)!);
-  const address = siteAddress(evaluation.site?.baseUrl);
+  const perRole: RunSheet["modelsPerRole"] = [];
+  for (const role of evaluation.judgment?.models ?? []) {
+    const name = safeWord(role.role, /^[a-z-]{1,40}$/);
+    if (!name) continue;
+    const agents = new Map<string, number>();
+    for (const entry of role.models ?? []) {
+      const id = entry.model ? modelId(entry.model) : null;
+      if (id) agents.set(id, (agents.get(id) ?? 0) + (entry.agents ?? 1));
+    }
+    for (const [model, count] of [...agents].sort(([a], [b]) => a.localeCompare(b))) perRole.push({ role: name, model, agents: count });
+    if ((role.notGiven ?? 0) > 0) perRole.push({ role: name, model: "notGiven", agents: role.notGiven! });
+  }
+  const loss = (answer: { horizontalScroll?: boolean; offenders?: number } | undefined): boolean => Boolean(answer && (answer.horizontalScroll || (answer.offenders ?? 0) > 0));
+  const collected = source.collectPages;
+  const quick = source.quick ? quickPart(source.quick.summary, source.quick.comparison) : null;
+  const address = siteAddress(evaluation.site?.baseUrl ?? source.quick?.summary.site);
   const byRule = <T extends { rule: string }>(a: T, b: T): number => a.rule.localeCompare(b.rule, "en", { numeric: true });
 
   return {
@@ -166,14 +228,19 @@ export function buildSheet(source: SheetSource, key: string): RunSheet {
     kind: "run-sheet",
     id: createHash("sha256").update(source.evaluationText).digest("hex").slice(0, 16),
     siteKey: createHmac("sha256", key).update(address ?? source.evaluationText).digest("hex").slice(0, 16),
-    month: /^\d{4}-\d{2}/.exec(evaluation.evaluatedAt ?? "")?.[0] ?? "onbekend",
-    toolbox: { version: safeWord(evaluation.toolchain?.toolbox?.version, /^[\w.+-]{1,40}$/) },
+    month: /^\d{4}-\d{2}/.exec(evaluation.evaluatedAt ?? source.quick?.summary.finishedAt ?? "")?.[0] ?? "onbekend",
+    toolbox: { version: safeWord(evaluation.toolchain?.toolbox?.version ?? source.toolboxVersion, /^[\w.+-]{1,40}$/) },
     browser: safeWord(evaluation.toolchain?.browser?.version, /^[\w.+ -]{1,40}$/),
-    engines: Object.fromEntries(Object.entries(ENGINE_PACKAGES).flatMap(([engine, name]) => (safeWord(packages[name], /^[\w.+-]{1,40}$/) ? [[engine, packages[name]!]] : []))),
+    engines: {
+      ...Object.fromEntries(Object.entries(ENGINE_PACKAGES).flatMap(([engine, name]) => (safeWord(packages[name], /^[\w.+-]{1,40}$/) ? [[engine, packages[name]!]] : []))),
+      ...Object.fromEntries((source.quick?.summary.engines ?? []).flatMap((engine) => (engine.id in ENGINE_PACKAGES && safeWord(engine.version, /^[\w.+-]{1,40}$/) ? [[engine.id, engine.version]] : []))),
+    },
     models: [...models].sort(),
+    modelsPerRole: perRole,
+    followsUp: evaluation.followsUp != null,
     purpose: safeWord(evaluation.purpose, /^[a-z-]{1,40}$/),
     technologies: (evaluation.technologies ?? []).map((name) => safeWord(name)).filter((name): name is string => name !== null).sort(),
-    size: { pages: evaluation.sample?.items?.length ?? 0, pageTypes: evaluation.sample?.pageTypes?.length ?? 0, population: evaluation.sample?.populationSize ?? null, documents: evaluation.sample?.documents?.length ?? 0, frames: evaluation.scope?.frames?.length ?? 0 },
+    size: { pages: evaluation.sample?.items?.length ?? quick?.pages ?? 0, pageTypes: evaluation.sample?.pageTypes?.length ?? 0, population: evaluation.sample?.populationSize ?? null, documents: evaluation.sample?.documents?.length ?? 0, frames: evaluation.scope?.frames?.length ?? 0 },
     criteria: evaluation.criteria
       .map((criterion) => ({
         id: criterion.id,
@@ -189,11 +256,43 @@ export function buildSheet(source: SheetSource, key: string): RunSheet {
       .sort((a, b) => compareCriterionIds(a.id, b.id)),
     rulings: [...rulings.values()].sort((a, b) => byRule(a, b) || compareCriterionIds(a.criterion, b.criterion)),
     sessions: [...sessions.values()].sort((a, b) => a.engine.localeCompare(b.engine) || byRule(a, b) || compareCriterionIds(a.criterion, b.criterion)),
-    sweep: [...sweep.values()].map((entry) => ({ engine: entry.engine, rule: entry.rule, pagesFailed: entry.failed.size, pagesCantTell: entry.cantTell.size, elementsFailed: entry.elementsFailed })).sort((a, b) => a.engine.localeCompare(b.engine) || byRule(a, b)),
+    sweep: [...sweep.values()].map((entry) => ({ engine: entry.engine, rule: entry.rule, pagesFailed: entry.failed.size, pagesCantTell: entry.cantTell.size, pagesPassed: [...entry.passed].filter((page) => !entry.failed.has(page)).length, elementsFailed: entry.elementsFailed })).sort((a, b) => a.engine.localeCompare(b.engine) || byRule(a, b)),
+    probes: collected
+      ? { pages: collected.length, reflow: collected.filter((page) => loss(page.reflow)).length, zoom: collected.filter((page) => loss(page.zoom200)).length, textSpacing: collected.filter((page) => (page.textspacing?.newlyClipped ?? 0) > 0).length, tabWalkNotCompleted: collected.filter((page) => page.tabwalk?.outcome !== undefined && page.tabwalk.outcome !== "completed").length }
+      : null,
+    gate: source.gate ? { sufficient: source.gate.sufficient === true, exploreRounds: source.gate.exploreRound ?? 0, resweeps: source.gate.resweeps ?? 0, accepted: source.gate.accepted?.length ?? 0 } : null,
     defects: { total: evaluation.defects?.length ?? 0, bySeverity: count(evaluation.defects ?? [], (defect) => safeWord(defect.severity, /^[a-z]{1,20}$/)), byOwner: count(evaluation.defects ?? [], (defect) => safeWord(defect.owner, /^[a-z]{1,20}$/)) },
-    human: { signed: evaluation.signature != null, criteriaByPerson: evaluation.aiGenerated?.humanReview?.criteriaByPerson?.length ?? 0 },
+    human: {
+      signed: evaluation.signature != null,
+      criteriaByPerson: evaluation.aiGenerated?.humanReview?.criteriaByPerson?.length ?? 0,
+      decisions: count(source.decisions ?? [], (decision) => safeWord(decision, /^[a-z-]{1,40}$/)),
+      rechecks: source.rechecks ?? 0,
+      statement: safeWord(source.statementStatus, /^[A-D]$/),
+    },
     seconds: Object.fromEntries(Object.entries(seconds).sort(([a], [b]) => a.localeCompare(b))),
     sessionsPerRole: (evaluation.judgment?.extensions ?? []).flatMap((entry) => (safeWord(entry.role, /^[a-z-]{1,40}$/) ? [{ role: entry.role!, sessions: entry.sessions ?? 0, extended: entry.extended ?? 0, extensions: entry.extensions ?? 0 }] : [])),
+    quick,
+  };
+}
+
+/** What a quick measurement counted, without the pages and the elements it counted them on. */
+function quickPart(summary: QuickSummary, comparison: QuickComparison | null): NonNullable<RunSheet["quick"]> {
+  const rules = new Map<string, { rule: string; criterion: string; strong: number; weak: number; pages: Set<string> }>();
+  for (const entry of summary.counts ?? []) {
+    const rule = safeWord(entry.rule, /^[\w.:-]{1,80}$/);
+    // A summary from before a count said how strong its ground is cannot be split: left out, not guessed.
+    if (!rule || typeof entry.strong !== "boolean") continue;
+    const found = rules.get(`${rule}\n${entry.criterion}`) ?? { rule, criterion: entry.criterion, strong: 0, weak: 0, pages: new Set<string>() };
+    found[entry.strong ? "strong" : "weak"] += entry.places;
+    found.pages.add(entry.path);
+    rules.set(`${rule}\n${entry.criterion}`, found);
+  }
+  return {
+    pages: summary.coverage?.measured ?? 0,
+    dismissed: (summary.covering?.dismiss ?? []).length > 0,
+    covered: (summary.covering?.layers ?? []).length > 0,
+    rules: [...rules.values()].map((entry) => ({ rule: entry.rule, criterion: entry.criterion, strong: entry.strong, weak: entry.weak, pages: entry.pages.size })).sort((a, b) => a.rule.localeCompare(b.rule, "en", { numeric: true }) || compareCriterionIds(a.criterion, b.criterion)),
+    comparison: comparison ? { ok: comparison.ok, strict: comparison.strict === true, worse: comparison.worse.length, weak: (comparison.weak ?? []).length, unstable: (comparison.unstable ?? []).length, better: comparison.better.length, notMeasured: comparison.notMeasured.length } : null,
   };
 }
 

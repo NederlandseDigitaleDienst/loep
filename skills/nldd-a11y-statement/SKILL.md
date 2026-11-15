@@ -43,6 +43,7 @@ Je maakt de verklaring uit een onderzoek dat al bestaat. Heeft de gebruiker nog 
 3. Maak de verklaring: `LOEP statement --run RUN` (of met `--concept` zolang het onderzoek niet is afgetekend). De maatregelen komen uit de besluiten over de gebreken onder elk criterium dat niet voldoet. Bij status B vraagt elke afwijking een maatregel met een datum: elk gebrek eronder moet `gepland` met een datum of `opgelost` zijn. Ontbreekt dat, dan meldt de opdracht `LET OP` met de criteria, en staat er in de verklaring `[nog invullen: maatregel met een datum]`. Ga dan met de gebruiker terug naar die gebreken; vul zelf geen maatregel of datum in. De verklaring en `verklaring-invoer.json` staan buiten het zegel van het onderzoek: ze maken of aanpassen verandert niets aan wat is afgetekend, en `LOEP verify --run RUN` blijft kloppen.
 4. Laat de gebruiker zien wat er nog open staat. De opdracht meldt het aantal punten; ze staan in `RUN/verklaring/verklaring.json` onder `openItems`.
 5. Wijs de gebruiker op `RUN/verklaring/invulassistent.md`: de waarden per stap van de invulassistent, om over te nemen.
+6. Vraag, als dat in dit gesprek nog niet is gevraagd, of het meetblad van het onderzoek naar de verzameling van loep mag (`NederlandseDigitaleDienst/loep-meetbladen`), en of onderzoeken van vroeger ook mee mogen. Op een meetblad staat wat het onderzoek zegt over loep en niets over de site: geen adres, geen pagina, geen tekst, niet wie tekende. Bij ja volg je de skill `nldd-a11y-contribute`; bij nee gaat er niets weg.
 
 ## Wat de gebruiker moet weten
 
