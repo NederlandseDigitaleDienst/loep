@@ -716,7 +716,7 @@ export class Daemon {
       await rm(scratch, { recursive: true, force: true });
     }
     const facts = await pageFacts(surface);
-    const result = { status, url: facts?.url ?? load.finalUrl, title: facts?.title ?? null, contentType: load.contentType, viewport: { width: start.width, height: start.height }, scheme: start.scheme, state: recipe ? { name: recipe.name, reproduced, ...(detail ? { postcondition: detail } : {}) } : null, blockersClosed: closed, blockersNotClosed: notClosed, locators: matches, dialogs: facts?.dialogs ?? 0 };
+    const result = { status, url: facts?.url ?? load.finalUrl, title: facts?.title ?? null, contentType: load.contentType, viewport: { width: start.width, height: start.height }, scheme: start.scheme, state: recipe ? { name: recipe.name, reproduced, ...(detail ? { postcondition: detail } : {}) } : null, blockersClosed: closed, blockersNotClosed: notClosed, locators: matches, dialogs: facts?.dialogs ?? 0, ...(load.settle ? { settle: load.settle } : {}) };
     return {
       result,
       print: {

@@ -1,6 +1,7 @@
 import { join } from "node:path";
 import type { BrowserContext, Page, Response } from "playwright";
 import { confirmLogin, INPAGE_PATH, launchBrowser, loadPage, newContext, withinPageTime } from "../browser/session.ts";
+import type { SettleNote } from "../browser/settle.ts";
 import { sha256, slugForUrl, writeFileAtomic, writeJson } from "../lib/canonical.ts";
 import { countByKind, documentKind, kindOfContentType, REDIRECTS_ELSEWHERE_NL, startedDownload, type DocumentKind, type DocumentTotals, type InventoryDocument } from "../lib/documents.ts";
 import type { Vendor } from "../lib/evaluation.ts";
@@ -32,6 +33,8 @@ export interface InventoryPage {
   breakpoints?: number[];
   /** Milliseconds from asking for the page until it was loaded and quiet, as every step of the sweep waits for it. Absent in older runs. */
   loadMs?: number;
+  /** What held the network while the page settled: requests that took too long, or what held it until the cap. Absent when nothing was slow, and in older runs. */
+  settle?: SettleNote;
   /** What there is to operate: links, and the other controls. The sweep takes longer the more there is. Absent in older runs. */
   operable?: { links: number; controls: number };
 }
@@ -584,6 +587,7 @@ async function inspect(page: Page, url: string, mayBeDocument: boolean, offered:
     words: result.words,
     breakpoints: result.breakpoints,
     loadMs,
+    ...(loaded.settle ? { settle: loaded.settle } : {}),
     operable: result.operable,
     links: result.links,
     frames: result.frames,

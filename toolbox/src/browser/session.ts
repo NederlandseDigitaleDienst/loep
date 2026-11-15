@@ -14,6 +14,7 @@ import { refusedByBrowser, type ClipboardWrite } from "./clipboard.ts";
 import { frameAsPage } from "./frame.ts";
 import { gotoEnd, ONWARD_HEADER, onwardPage, passOnwardPage, REFUSED_ANSWER } from "./onward.ts";
 import { boundaryForContext, markInsideBoundary, shieldedFetch, shieldOf } from "./boundary.ts";
+import { trackRequests, waitForQuietNetwork, type SettleNote } from "./settle.ts";
 
 /** The read-only helper library that is injected into every page under test. */
 export const INPAGE_PATH = fileURLToPath(new URL("./inpage.js", import.meta.url));
@@ -441,6 +442,8 @@ export async function newContext(browser: Browser, options: ContextOptions = {},
   if (boundary.proxy && browser.browserType().name() === "webkit") withoutConnections.add(context);
   if (boundary.proxy) await markInsideBoundary(context, runDir!, boundary.proxy);
   context.setDefaultNavigationTimeout(RENDERING.navigationTimeoutMs);
+  // Settling counts the requests of a page, also those from before it was asked to settle.
+  context.on("page", trackRequests);
   const viaCloudflare = new Set<string>();
   cloudflareHosts.set(context, viaCloudflare);
   // The blockade of the run, in a command of the sweep: a site that refused the evaluation is asked nothing, and a 429 it gives ends the asking.
@@ -549,10 +552,12 @@ export interface LoadResult {
   status: number | null;
   finalUrl: string;
   contentType: string | null;
+  /** What held the network of the page while it settled: absent when nothing was slow. */
+  settle?: SettleNote;
 }
 
 /**
- * Navigate and wait until the page has stopped changing: network idle, fonts and custom elements ready.
+ * Navigate and wait until the page has stopped changing: network quiet, fonts and custom elements ready.
  * `referer` is the page that embeds the address, when an embedded window is opened on its own: a
  * visitor's browser names that page when it loads the window, and a player that may only play on
  * the site refuses without it.
@@ -565,22 +570,24 @@ export async function loadPage(page: Page, url: string, referer?: string): Promi
   const blockade = runBlockade()?.blockade;
   const refused = await blockade?.pause(url, LONGEST_FAILURE_PAUSE_SECONDS);
   if (refused) throw new OriginBlocked(url, refused);
+  trackRequests(page);
   let response = await gotoEnd(page, url, options);
   if (blockade && response?.status() === 429) {
     const again = await blockade.pause(url);
     if (again) throw new OriginBlocked(url, again);
     response = await gotoEnd(page, url, options);
   }
-  await settlePage(page);
+  let settle = await settlePage(page);
   // In a run with a login: a page that looks like the login screen is checked, and the page is loaded again when the session still holds.
   if (await watchLogin(page, url)) {
     response = await gotoEnd(page, url, options);
-    await settlePage(page);
+    settle = await settlePage(page);
   }
   return {
     status: response?.status() ?? null,
     finalUrl: page.url(),
     contentType: response?.headers()["content-type"] ?? null,
+    ...(settle ? { settle } : {}),
   };
 }
 
@@ -730,11 +737,13 @@ export class PageContexts {
 
 /**
  * Wait until a page that has just loaded has stopped changing, then record the listeners it registered itself.
+ * The network counts as quiet without a request that took too long (see `waitForQuietNetwork`); what
+ * comes back says which requests those were, or what held the page until the cap, and is null when nothing did.
  * A page that does not answer within `SETTLE_ANSWER_MS` throws a `PageBusy`; the caller closes it.
  */
-export async function settlePage(page: Page): Promise<void> {
+export async function settlePage(page: Page): Promise<SettleNote | null> {
   if (page.context().browser()?.browserType().name() !== "chromium") await passOnwardPage(page, SETTLE_ANSWER_MS);
-  await page.waitForLoadState("networkidle", { timeout: RENDERING.settleTimeoutMs }).catch(() => undefined);
+  const note = await waitForQuietNetwork(page, RENDERING.settleTimeoutMs);
   const settled = page
     .evaluate(async (timeout) => {
       const names = new Set<string>();
@@ -763,4 +772,5 @@ export async function settlePage(page: Page): Promise<void> {
       if (frame === page.mainFrame()) throw error;
     });
   }
+  return note;
 }

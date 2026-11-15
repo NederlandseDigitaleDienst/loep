@@ -1,0 +1,1 @@
+Een pagina geldt na het laden als stil zodra er een halve seconde geen verzoek openstaat dat jonger is dan 2 seconden. Een verbinding die op nieuws wacht of een meetverzoek dat blijft hangen, hield eerder elke pagina 10 seconden vast; nu noemen inventory.json (`settle`) en de waarneming van `open` welke verzoeken dat waren. De veegronde meet daarom opnieuw.
