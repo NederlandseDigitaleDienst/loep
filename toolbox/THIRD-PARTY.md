@@ -24,8 +24,8 @@ De toolbox zelf valt onder EUPL-1.2. Dit overzicht noemt wat de toolbox van ande
 | `tabbable` | 6.5.0 | MIT | Voorspelde tabvolgorde |
 | `eld` | 2.1.1 | Apache-2.0 | Taalherkenning |
 | `cld3-asm` | 4.0.0 | MIT | Taalherkenning (CLD3 van Google, Apache-2.0, als WebAssembly) |
-| `html-validate` | 11.19.0 | MIT | Validatie van de bron |
-| `vnu-jar` | 26.11.4 | MIT | Nu Html Checker; vraagt Java op de machine |
+| `html-validate` | 11.21.0 | MIT | Validatie van de bron |
+| `vnu-jar` | 26.11.9 | MIT | Nu Html Checker; vraagt Java op de machine |
 | `pngjs` | 7.0.0 | MIT | Schermafbeeldingen lezen en schrijven |
 | `yaml` | 2.9.1 | ISC | Procedures lezen |
 | `mockttp` | 4.6.5 | Apache-2.0 | Proxy op de eigen machine voor een run met geheimen (`src/browser/boundary.ts`); alleen geladen in zo'n run. Brengt 209 pakketten mee, geen daarvan onder GPL; toegevoegd en gelezen op 30 oktober 2026 |
