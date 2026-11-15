@@ -176,3 +176,10 @@ test("every picture is cut out and read once, also when it stands on a second pa
   assert.deepEqual(second.pictures.map((picture) => picture.ocr), first.pictures.map((picture) => picture.ocr));
   await page.context().close();
 });
+
+test("content that a page shows only when it comes into view is shown after loading, and the page is back at the top", async () => {
+  const page = await open("/reveal.html");
+  const state = await page.evaluate(() => ({ opacity: getComputedStyle(document.getElementById("late")!).opacity, top: window.scrollY }));
+  assert.deepEqual(state, { opacity: "1", top: 0 });
+  await page.context().close();
+});

@@ -583,12 +583,44 @@ export async function loadPage(page: Page, url: string, referer?: string): Promi
     response = await gotoEnd(page, url, options);
     settle = await settlePage(page);
   }
+  if (await revealOnScroll(page)) settle = (await settlePage(page)) ?? settle;
   return {
     status: response?.status() ?? null,
     finalUrl: page.url(),
     contentType: response?.headers()["content-type"] ?? null,
     ...(settle ? { settle } : {}),
   };
+}
+
+/** Steps and pause of the scroll through a page after loading; a page that keeps growing is not followed. */
+export const REVEAL = { maxSteps: 40, stepFraction: 0.8, pauseMs: 150 } as const;
+
+/**
+ * Scroll once through the page as a visitor does, and back to the top. Content that a page shows
+ * only when it comes into view (an IntersectionObserver that adds a class, a lazy image) is then
+ * there for every measurement, as it is for anyone who reads the page; without this, the rule
+ * engines, the contrast and the pictures see it hidden. Only the height the page had before the
+ * scroll is walked, so an endless list does not keep loading. True when the page was scrolled.
+ */
+export async function revealOnScroll(page: Page): Promise<boolean> {
+  const plan = await page
+    .evaluate(({ maxSteps, stepFraction }) => {
+      const height = document.scrollingElement?.scrollHeight ?? document.body?.scrollHeight ?? 0;
+      const step = Math.max(1, Math.floor(window.innerHeight * stepFraction));
+      if (height <= window.innerHeight + 1) return [];
+      const stops: number[] = [];
+      for (let y = step; y < height && stops.length < maxSteps; y += step) stops.push(y);
+      stops.push(height);
+      return stops;
+    }, REVEAL)
+    .catch(() => [] as number[]);
+  if (plan.length === 0) return false;
+  for (const y of plan) {
+    await page.evaluate((top) => window.scrollTo({ top, behavior: "instant" as ScrollBehavior }), y).catch(() => undefined);
+    await page.waitForTimeout(REVEAL.pauseMs);
+  }
+  await page.evaluate(() => window.scrollTo({ top: 0, behavior: "instant" as ScrollBehavior })).catch(() => undefined);
+  return true;
 }
 
 /**
