@@ -53,7 +53,7 @@ import { CRITERIA, criterionById } from "../lib/wcag.ts";
 import { agentLoginNl } from "../lib/login.ts";
 import { agentMailboxNl } from "../lib/mailbox.ts";
 import { readsAllowedNl } from "../lib/reads.ts";
-import { budgetEmptyNl, criterionSender, DEFAULT_MAX_WRITES, DEFAULT_WRITE_SPACING_SECONDS, reservedNl, reservedWrites, spacingNl, WRITES_BLOCKED_NL, writeBudget, writeBudgetNl, writesAfterRaises, writesAllowedNl, writesForRun, writesLow, type WritePermission } from "../lib/writes.ts";
+import { budgetEmptyNl, criterionSender, DEFAULT_MAX_WRITES, DEFAULT_WRITE_SPACING_SECONDS, grantOriginsOf, grantsOf, reservedNl, reservedWrites, spacingNl, WRITES_BLOCKED_NL, writeBudget, writeBudgets, writeBudgetsNl, writesAfterRaises, writesAllowedNl, writesForRun, writesLow, type WriteBudget, type WriteGrant, type WritePermission } from "../lib/writes.ts";
 import { sweepCandidates } from "../lib/statusmessages.ts";
 import { makeWorkDir } from "../lib/workdir.ts";
 import { refuseUnderSeal } from "../lib/seal.ts";
@@ -764,7 +764,13 @@ async function writeTasks(runDir: string, options: TaskOptions, previous: Instru
   const base = { run: absoluteRun, cli, siteModel: join(absoluteRun, "site.json"), login: `${agentLoginNl(run.login)}${agentMailboxNl(runDir, `node ${cli} mail`, absoluteRun)}` };
   const readsNl = readsAllowedNl(run.reads ?? []);
   // The budget as it was set, not what is left of it: the task stays the same while agents send, and its hash with it.
-  const budgetNlOf = (writes: WritePermission): string => `. Het budget voor versturen is ${writes.maxWrites ?? DEFAULT_MAX_WRITES} verzendingen voor de hele run${spacingNl(writes.spacingSeconds ?? DEFAULT_WRITE_SPACING_SECONDS)}, gedeeld door alle agents en de veegronde${reservedWrites(writes) > 0 ? `; ${reservedNl(reservedWrites(writes))}. De sessies van één criterium (beoordelaar, verifieerder, afmaker) tellen samen als één` : ""}; wat er nog over is, zegt \`session list\``;
+  const grantBudgetNl = (grant: WriteGrant): string => `${grant.maxWrites ?? DEFAULT_MAX_WRITES} verzendingen voor de hele run${spacingNl(grant.spacingSeconds ?? DEFAULT_WRITE_SPACING_SECONDS)}, gedeeld door alle agents en de veegronde${reservedWrites(grant) > 0 ? `; ${reservedNl(reservedWrites(grant))}. De sessies van één criterium (beoordelaar, verifieerder, afmaker) tellen samen als één` : ""}`;
+  // A run with more than one grant names the budget of each, with its origins.
+  const budgetNlOf = (writes: WritePermission): string => {
+    const grants = grantsOf(writes);
+    const budgetsNl = grants.length === 1 ? `Het budget voor versturen is ${grantBudgetNl(grants[0]!)}` : `Elke origin heeft een eigen budget voor versturen. ${grants.map((grant) => `Naar ${grantOriginsOf(grant).join(" en ")}: ${grantBudgetNl(grant)}`).join(". ")}`;
+    return `. ${budgetsNl}; wat er nog over is, zegt \`session list\``;
+  };
   const writesNlOf = (writes: WritePermission | null | undefined): string => `${writes ? `ja, ${writesAllowedNl(writes)}${budgetNlOf(writes)}. ${REPLAY_TASK_NL}` : `nee, ${WRITES_BLOCKED_NL}`}${readsNl ? `. Wel gaat door: ${readsNl} (in het dossier onder \`reads\`)` : ""}`;
   // A raise reaches a task when it is written, and leaves a task alone whose verdict holds (`renew`): a person raises the budget to finish what ran out, not to measure everything again.
   const raises = run.writes?.raised?.length ?? 0;
@@ -1175,10 +1181,13 @@ export async function instrumentPending(runDir: string): Promise<InstrumentPendi
   const siteOutage = phase === "done" ? null : await siteOutageNl(runDir);
   const again = phase === "done" ? await againAfterOutage(runDir, index, observations) : [];
   const permission = phase === "done" ? null : writesForRun(runDir);
-  const budget = permission ? writeBudget(runDir, permission) : null;
+  // Each grant of the run on its own: the chat that was declared can run low while the local site has plenty.
+  const budgets = permission ? grantsOf(permission).map((grant) => ({ grant, budget: writeBudget(runDir, permission, undefined, undefined, grant.origin) })) : [];
   // On a local run without a share kept, only an empty budget stops anything: there is no recipient to spare.
-  const sendingLow = budget && (budget.left === 0 || ((permission!.declaredBy || budget.reserved > 0) && writesLow(budget))) ? writeBudgetNl(budget) : null;
-  const emptyNl = budget?.left === 0 ? `${budgetEmptyNl(budget)}. ` : "";
+  const low = budgets.filter(({ grant, budget }) => budget.left === 0 || ((grant.declaredBy || budget.reserved > 0) && writesLow(budget))).map(({ budget }) => budget);
+  const sendingLow = low.length > 0 ? writeBudgetsNl(low) : null;
+  const empty = budgets.find(({ budget }) => budget.left === 0)?.budget;
+  const emptyNl = empty ? `${budgetEmptyNl(empty)}. ` : "";
   const againNl = again.length > 0 ? ` De site antwoordt weer na een storing, en ${again.join(", ")} ${again.length === 1 ? "staat" : "staan"} open met een punt "${UNREACHABLE}" van daarvoor: zet een nieuwe afmaakronde klaar met tasks --again ${again.join(",")} en draai daarna pending.` : "";
   return {
     flow: INSTRUMENT_FLOW,
@@ -1282,7 +1291,13 @@ export async function checkInstrumentVerdict(runDir: string, criterionId: string
   // Read only once the verdict has its form: it walks the findings and what they cite.
   if (problems.length === 0) problems.push(...frameFocusProblems(verdict, dossier.legend, observations.records));
   const permission = writesForRun(runDir);
-  problems.push(...notSentPointProblems(verdict.missingNl, permission, permission ? writeBudget(runDir, permission, Date.now(), criterionSender(task.criterion)) : null));
+  // The budget of the origin the point names; a point that names none is held against the budget with the least left.
+  const budgetOf = (origins: string[]): WriteBudget | null => {
+    if (!permission) return null;
+    const budgets = origins.length > 0 ? [writeBudget(runDir, permission, Date.now(), criterionSender(task.criterion), origins[0])] : writeBudgets(runDir, permission, Date.now(), criterionSender(task.criterion));
+    return budgets.reduce((least, budget) => (budget.left < least.left ? budget : least));
+  };
+  problems.push(...notSentPointProblems(verdict.missingNl, permission, budgetOf));
   // A run without an inventory has no scope to hold a point against.
   const scope = await scopeForRun(runDir, {}).catch(() => null);
   if (scope) problems.push(...outsideScopePointProblems(verdict.missingNl, (url) => inScope(scope, url)));

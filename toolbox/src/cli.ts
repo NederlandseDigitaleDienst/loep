@@ -14,7 +14,7 @@ const USAGE = `loep <command> [options]
   watch-session --run <run> [--gaps 5,10,20,40,80] [--max-hours 8]
                                          The watch on the session of a run with a login. collect starts it in the background
                                          and evaluate stops it; a second start on the same run leaves the running one alone
-  inventory <url> --out <run> [--also-origin <url>]... [--navigation-delay <s>] [--allow-writes | --test-environment <origin>... --declared-by "<name>, <role>"] [--max-writes <n>] [--mailbox <mailbox> [--mail-link-origin <origin>]...]
+  inventory <url> --out <run> [--also-origin <url>]... [--navigation-delay <s>] [--allow-writes] [--test-environment <origin>... --declared-by "<name>, <role>"] [--max-writes <n>] [--mailbox <mailbox> [--mail-link-origin <origin>]...]
                                          Find every page and count what is on it. In a run with a login the pages are found
                                          by following links from the page the person pointed at; a link that logs out is never followed
   quick <url> --out <run> [--urls <file>] [--max-pages <n>] [--baseline <summary.json>] [--strict] [--dismiss <selector>]...
@@ -163,7 +163,9 @@ const USAGE = `loep <command> [options]
   compare --run <run> --reference <file> --out <dir>
                                          Compare the evaluation with an existing audit of the same site
   purpose --run <run> [verbeteren|verantwoorden]
-  writes --run <run> --max-writes <n>    Raise the budget for sending. Confirmed at an interactive terminal, or --recorded-via gesprek (see below)
+  writes --run <run> --max-writes <n> [--origin <origin>]
+                                         Raise the budget for sending. Confirmed at an interactive terminal, or --recorded-via gesprek (see below).
+                                         In a run with a budget per origin, --origin says which one
                                          What the investigation is for. Verbeteren (the default): a team wants to know what
                                          to fix, and the report is not signed. Verantwoorden: the report backs a statement,
                                          says what is still missing for status B, and is signed. Choose or change it at the
@@ -194,11 +196,14 @@ Options:
                     submit forms and send other requests that change something. On any other site, name the test
                     environment and who declares it to be one: --test-environment <origin> --declared-by "<name>, <role>"
                     The name is kept in the manifest of the run; the report shows only the role. The declaration
-                    is confirmed at an interactive terminal by typing the origin; an agent never records it
+                    is confirmed at an interactive terminal by typing the origin; an agent never records it.
+                    On a site on this machine both may go together, for a chat on an address that is not local:
+                    each keeps its own rules and its own budget. A local address is never declared
   --max-writes <n>  With --allow-writes or --test-environment: the most requests that change something the whole run
                     may send to that origin, over every session and the sweep together: default 5, at least 120 s
-                    apart; on a local address default 50, without a pause. Past it every write is held back as in
-                    a run without permission. Kept in the manifest
+                    apart; on a local address default 50, without a pause. With both flags it is the budget of the
+                    declared origins; the local one keeps 50. Past it every write is held back as in a run without
+                    permission. Kept in the manifest
   --mailbox <m>     With inventory, for a run that may send: imap://<host>:993 (any real mailbox) or mailpit://localhost:8025 (a site
                     on this machine). The user name and password never go here: they come from the environment
                     (LOEP_IMAP_USER, LOEP_IMAP_PASSWORD) or the keychain. A mailbox on another machine is confirmed at an
@@ -324,6 +329,7 @@ async function main(): Promise<void> {
       "test-environment": { type: "string", multiple: true },
       "declared-by": { type: "string" },
       "max-writes": { type: "string" },
+      origin: { type: "string" },
       mailbox: { type: "string" },
       "mail-link-origin": { type: "string", multiple: true },
       session: { type: "string" },
@@ -364,10 +370,11 @@ async function main(): Promise<void> {
     return;
   }
   // A run that was given a test environment at inventory may write there; every other run holds all writes back.
-  const { confirmDeclaration, decideWrites, DEFAULT_WRITE_SPACING_SECONDS, recordWrites, setRunWrites, raiseWrites, spacingNl, writeAccess, writeOriginsNl, writesForRun } = await import("./lib/writes.ts");
+  const { confirmDeclaration, decideWrites, DEFAULT_WRITE_SPACING_SECONDS, grantOriginsOf, grantsOf, recordWrites, setRunWrites, raiseWrites, spacingNl, writeAccess, writesForRun } = await import("./lib/writes.ts");
   if (command !== "inventory" && (values["allow-writes"] || values["test-environment"] !== undefined || values["declared-by"] !== undefined || (values["max-writes"] !== undefined && command !== "writes"))) {
     throw new Error("--allow-writes, --test-environment, --declared-by en --max-writes horen bij inventory: daar wordt voor de hele run vastgelegd of er verstuurd mag worden, en hoe vaak");
   }
+  if (command !== "writes" && values.origin !== undefined) throw new Error("--origin hoort bij writes: het zegt welk budget omhoog gaat in een run met een budget per origin");
   // How a statement of a person came about is recorded with it. An answer and a decision may be recorded by the agent in the
   // conversation; a signature and the declaration for sending only by a person at an interactive terminal.
   const { HUMAN_AT_TERMINAL_NL, parseRecordedVia } = await import("./lib/recorded.ts");
@@ -425,7 +432,7 @@ async function main(): Promise<void> {
       if (!target || !values.out) throw new Error("inventory needs a URL and --out <run>");
       const permission = decideWrites(target, { allowWrites: values["allow-writes"], testEnvironment: values["test-environment"], declaredBy: values["declared-by"], maxWrites: values["max-writes"] });
       // A declared test environment is confirmed by a person at a terminal before anything starts.
-      if (permission?.declaredBy) Object.assign(permission, await confirmDeclaration(permission));
+      if (permission && grantsOf(permission).some((grant) => grant.declaredBy)) Object.assign(permission, await confirmDeclaration(permission));
       const { confirmMailbox, decideMailbox, recordMailbox, runAddress } = await import("./lib/mailbox.ts");
       const mailbox = values.mailbox === undefined ? null : decideMailbox(values.mailbox, permission, undefined, values["mail-link-origin"]);
       // A mailbox on another machine holds real mail: a person confirms it before anything starts.
@@ -465,11 +472,13 @@ async function main(): Promise<void> {
         await recordMailbox(values.out, mailbox.mark);
         process.stdout.write(`mailbox aangesloten (${mailbox.mark.kind}): de testwaarde email in een formulier gaat naar het adres van deze run, en mail wait neemt de links uit de mail. Adres en codes staan alleen in secrets.json, buiten het zegel en het rapport.\n`);
       }
-      if (permission) {
-        process.stdout.write(`versturen toegestaan naar ${writeOriginsNl(permission)}${permission.declaredBy ? `, verklaard door ${permission.declaredBy.name} (${permission.declaredBy.role})` : ""}\n`);
-        process.stdout.write(`budget voor versturen: ten hoogste ${permission.maxWrites} verzendingen naar ${permission.alsoOrigins ? "die origins samen" : "die origin"} voor de hele run, alle agents en de veegronde samen${spacingNl(permission.spacingSeconds ?? DEFAULT_WRITE_SPACING_SECONDS)}. Zoveel berichten of formulieren krijgt de ontvanger ten hoogste.\n`);
+      // One block per grant: a site on this machine and a chat declared next to it each have their own budget.
+      for (const grant of permission ? grantsOf(permission) : []) {
+        const origins = grantOriginsOf(grant);
+        process.stdout.write(`versturen toegestaan naar ${origins.join(" en ")}${grant.declaredBy ? `, verklaard door ${grant.declaredBy.name} (${grant.declaredBy.role})` : ""}\n`);
+        process.stdout.write(`budget voor versturen: ten hoogste ${grant.maxWrites} verzendingen naar ${origins.length > 1 ? "die origins samen" : "die origin"} voor de hele run, alle agents en de veegronde samen${spacingNl(grant.spacingSeconds ?? DEFAULT_WRITE_SPACING_SECONDS)}. Zoveel berichten of formulieren krijgt de ontvanger ten hoogste.\n`);
         // Say where the declaration ends up, so nobody finds their name somewhere they did not expect.
-        if (permission.declaredBy) process.stdout.write(`let op: de naam staat in manifest.json van deze run; het rapport en de verklaring noemen alleen de functie (${permission.declaredBy.role}). Wie de map van de run deelt of publiceert, deelt ook de naam.\n`);
+        if (grant.declaredBy) process.stdout.write(`let op: de naam staat in manifest.json van deze run; het rapport en de verklaring noemen alleen de functie (${grant.declaredBy.role}). Wie de map van de run deelt of publiceert, deelt ook de naam.\n`);
       }
       if (origins.length > 1) process.stdout.write(`één site op ${origins.length} origins: ${originsNl(origins)}\n`);
       process.stdout.write(`${result.pages.length} pages, ${result.skipped.length} skipped, ${result.sitemapUrls} in sitemap\n`);
@@ -675,8 +684,9 @@ async function main(): Promise<void> {
       if (!values.run || !values["max-writes"]) throw new Error("writes needs --run <run> and --max-writes <n>");
       const { refuseUnderSeal } = await import("./lib/seal.ts");
       refuseUnderSeal(`${values.run}/manifest.json`);
-      const raised = await raiseWrites(values.run, values["max-writes"], recording);
-      process.stdout.write(`budget voor versturen: ten hoogste ${raised.maxWrites} verzendingen voor de hele run. Open punten over een budget dat op was, meet een nieuwe afmaakronde: tasks --again <criteria>\n`);
+      const raised = await raiseWrites(values.run, values["max-writes"], recording, undefined, values.origin);
+      const grant = grantsOf(raised).find((candidate) => values.origin === undefined || grantOriginsOf(candidate).includes(new URL(values.origin).origin))!;
+      process.stdout.write(`budget voor versturen${raised.alsoGrants ? ` naar ${grantOriginsOf(grant).join(" en ")}` : ""}: ten hoogste ${grant.maxWrites} verzendingen voor de hele run. Open punten over een budget dat op was, meet een nieuwe afmaakronde: tasks --again <criteria>\n`);
       return;
     }
     case "mail": {

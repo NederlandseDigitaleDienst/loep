@@ -12,7 +12,7 @@ import { DOWN_EVENTS } from "../instruments/pointer.ts";
 import { BLOCKER_VARIANTS } from "./modelsweep.ts";
 import { MAX_DOWN_TARGETS, MAX_HOVER_TARGETS } from "./states.ts";
 import { AGENT_PHASES, agentPhaseTimings, elapsedSeconds, sessionLimit, sessionLimits, stageTimings } from "../lib/timing.ts";
-import { budgetEmptyNl, isLocalHost, writeBudget, writeBudgetNl, writesForRun } from "../lib/writes.ts";
+import { budgetEmptyNl, isLocalHost, writeBudgetNl, writeBudgets, writesForRun } from "../lib/writes.ts";
 import { isReady, isSetUp, statusNl, type VoiceoverStatus } from "../lib/voiceover.ts";
 import { DEFAULT_DAEMON_LIMITS } from "../session/safety.ts";
 
@@ -245,8 +245,8 @@ export function estimateRun(runDir: string, options: EstimateOptions = {}): RunE
   }
   // What is left of the budget for sending, for whoever decides whether a criterion still waits on a message.
   const permission = writesForRun(runDir);
-  if (permission) {
-    const budget = writeBudget(runDir, permission, now);
+  // One note per grant: a site on this machine and a chat declared next to it each have a budget of their own.
+  for (const budget of permission ? writeBudgets(runDir, permission, now) : []) {
     if (budget.left === 0) notesNl.push(budgetEmptyNl(budget));
     notesNl.push(`versturen: ${writeBudgetNl(budget)}`);
   }

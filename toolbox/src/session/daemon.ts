@@ -14,7 +14,7 @@ import { Jobs } from "./jobs.ts";
 import { cleanModel } from "../lib/models.ts";
 import { refuseUnderSeal, underSeal } from "../lib/seal.ts";
 import { toolchain } from "../lib/manifest.ts";
-import { budgetOutPointNl, writeBudget, writeBudgetNl, writesForRun, type WriteBudget } from "../lib/writes.ts";
+import { budgetOutPointNl, writeBudget, writeBudgets, writeBudgetsNl, writesForRun, type WriteBudget } from "../lib/writes.ts";
 import { SEARCH_HELD_BACK_NL } from "../lib/reads.ts";
 import { loadSiteModel, STEP_NOT_FOUND_NL, type Postcondition, type SiteModel } from "../lib/sitemodel.ts";
 import { Images, ObservationLog, observationId, readObservation, type Locators, type Observation, type StartState, type StateRecord, type Step, type TargetRecord } from "./observations.ts";
@@ -205,8 +205,8 @@ export class Daemon {
     this.lastCommandAt = Date.now();
     try {
       if (request.op === "list") {
-        const sending = this.writeBudget();
-        return { ok: true, print: { sessions: [...this.sessions.values()].map((session) => this.budget(session)), ...printedScope(this.env.scope.hosts), ...(sending ? { writes: writeBudgetNl(sending) } : {}) } };
+        const sending = this.writeBudgets();
+        return { ok: true, print: { sessions: [...this.sessions.values()].map((session) => this.budget(session)), ...printedScope(this.env.scope.hosts), ...(sending ? { writes: writeBudgetsNl(sending) } : {}) } };
       }
       const name = request.session ?? "main";
       if (!SESSION_NAME.test(name)) throw new Error(`"${name}" is geen geldige sessienaam (kleine letters, cijfers, - en _)`);
@@ -232,10 +232,18 @@ export class Daemon {
   }
 
   /** What is left of the budget for sending of the run, read from the run each time: the sweep sends from processes of its own. Null for a run that may not send. */
-  private writeBudget(): WriteBudget | null {
+  private writeBudget(url: string): WriteBudget | null {
     if (!this.env.scope.writes) return null;
     const permission = writesForRun(this.runDir);
-    return permission ? writeBudget(this.runDir, permission) : null;
+    // The budget of the grant the write went to: a run may have one per origin.
+    return permission ? writeBudget(this.runDir, permission, Date.now(), undefined, url) : null;
+  }
+
+  /** Every budget of the run, one per grant. Null for a run that may not send. */
+  private writeBudgets(): WriteBudget[] | null {
+    if (!this.env.scope.writes) return null;
+    const permission = writesForRun(this.runDir);
+    return permission ? writeBudgets(this.runDir, permission) : null;
   }
 
   private budget(session: Session): Record<string, unknown> {
@@ -501,7 +509,7 @@ export class Daemon {
     // A write the budget for sending held back: the agent hears why, and what to write when nothing more can be sent.
     const heldBack = blocked.find((entry) => entry.writeBudget === "out") ?? blocked.find((entry) => entry.writeBudget === "share") ?? blocked.find((entry) => entry.writeBudget === "spacing");
     if (heldBack) {
-      const sending = this.writeBudget();
+      const sending = this.writeBudget(heldBack.url);
       print.sending =
         heldBack.writeBudget === "out" && sending
           ? `het budget voor versturen van deze run is op: ${sending.sent} van ${sending.max} verstuurd, door alle sessies en de veegronde samen. Er gaat niets meer weg. Wat daardoor niet te zien is, schrijf je als open punt: "${budgetOutPointNl(sending)}: <wat er pas na versturen te zien was>"`

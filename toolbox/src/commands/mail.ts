@@ -8,7 +8,7 @@ import { pathOf } from "../lib/reads.ts";
 import { linksOf, secretsInText, secretsInUrl, spelledSecretsInUrl, withoutLinks } from "../lib/mailparse.ts";
 import { refuseUnderSeal } from "../lib/seal.ts";
 import { keepPrivate, readPrivate, readSecretsFile, registerGuarded, registerSecret, registerSecrets, scanRun, shieldForRun, type NewSecret, type Shield } from "../lib/secrets.ts";
-import { claimRegistration, CLEANUP_SENDER, registrationUsed, senderOf, sentOn, usedLinks, withAsyncLock, writeBudget, writeOriginsOf, writesForRun, type WritePermission } from "../lib/writes.ts";
+import { claimRegistration, CLEANUP_SENDER, grantOriginsOf, registrationUsed, senderOf, sentOn, usedLinks, withAsyncLock, writeBudget, writesForRun, type WritePermission } from "../lib/writes.ts";
 import { guardContext, guardRedirects, scopeForRun, TEST_VALUES, type Blocked, type Guard } from "../session/safety.ts";
 
 /*
@@ -65,7 +65,8 @@ export async function startMailbox(runDir: string, server: MailServer, address: 
   // A second inventory on the same run: its address has mail under way, and its links are in use.
   if (readMailboxState(runDir) && readSecretsFile(runDir)?.secrets.some((secret) => secret.source === MAIL_ADDRESS_SOURCE)) return;
   keepPrivate(runDir, MAIL_PRIVATE, server);
-  registerSecret(runDir, address, { source: MAIL_ADDRESS_SOURCE, origins: writeOriginsOf(permission), alias: TEST_VALUES.email! });
+  // The address of the run goes to the site, the first grant: not to a chat of another party that was declared next to it.
+  registerSecret(runDir, address, { source: MAIL_ADDRESS_SOURCE, origins: grantOriginsOf(permission), alias: TEST_VALUES.email! });
   await writeMailboxState(runDir, { kind: mark.kind, local: mark.local, since: mark.declaredAt, messages: [], links: [], refusedOrigins: [], registrations: [{ id: SHARED_REGISTRATION }] });
 }
 

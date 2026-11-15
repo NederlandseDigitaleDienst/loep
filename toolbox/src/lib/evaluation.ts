@@ -389,7 +389,12 @@ export interface EvaluationChain {
   /** What the evidence gate found before anything was judged; null when the run has no gate result. */
   gate: { sufficient: boolean; checks: number; checksPassed: number; exploreRounds: number; acceptedNl: string[]; limitationsNl: string[]; /** The pictures an agent looked at after the fixed checks: how many sheets, and how many page types had none. Absent when nobody looked, and in older evaluations. */ review?: { sheets: number; pageTypesWithoutSheet: number } } | null;
   /** Whether requests that can change something were let through, and on what ground. */
-  writes: { allowed: boolean; noteNl: string };
+  writes: {
+    allowed: boolean;
+    noteNl: string;
+    /** The site was on this machine and could send with --allow-writes: a new evaluation that declares a chat next to it keeps that flag. Absent otherwise, and in older evaluations. */
+    local?: true;
+  };
   /** POST requests that only read and were let through, such as a question to a search service. Absent when there were none, and in older evaluations. */
   reads?: { method: string; origin: string; path: string; /** The search service whose form a body had to have; absent in evaluations from before it was asked. */ service?: string; reasonNl: string }[];
 }

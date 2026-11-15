@@ -4,15 +4,14 @@ import { readJson, writeJson } from "./canonical.ts";
 import { confirmByTyping, processTerminal, recordedNl, recordStatement, type RecordedVia, type Recording, type RecordingFlags, type Terminal } from "./recorded.ts";
 
 /**
- * Permission to send requests that can change something (anything but GET and HEAD, and
- * messages over a socket) to the origins named here. Without it every such request is held back, on every
- * site. It exists only for a test environment: a machine of one's own, or an environment
- * that a named person declared to be one.
+ * Where a run may send, with a budget of its own: one origin, or origins a person declared together.
+ * A run on this machine that also has a declared chat has two: the site with the local rules, and the
+ * chat with a declaration, the normal budget and the pause (see `WritePermission.alsoGrants`).
  */
-export interface WritePermission {
+export interface WriteGrant {
   /** The first origin that may be written to, e.g. "https://test.example.nl". */
   origin: string;
-  /** Further origins a person declared, such as the site next to the chat embedded in it. All origins share one budget (see `writeOriginsOf`). */
+  /** Further origins a person declared, such as the site next to the chat embedded in it. They share the budget of the grant. */
   alsoOrigins?: string[];
   /** True for an address that cannot be a live site: this machine, or a name ending in .localhost or .test. */
   local: boolean;
@@ -21,14 +20,29 @@ export interface WritePermission {
   declaredAt: string;
   /** How the declaration came about: confirmed by a person at a terminal (`confirmDeclaration`), never by an agent. `declaredAt` is the moment of that confirmation. */
   recordedVia?: RecordedVia;
-  /** Most writes the whole run may send to the origin, over every session and the sweep together. Absent in a manifest from before the budget: `DEFAULT_MAX_WRITES`. */
+  /** Most writes the whole run may send to the origins of the grant, over every session and the sweep together. Absent in a manifest from before the budget: `DEFAULT_MAX_WRITES`. */
   maxWrites?: number;
   /** Shortest time between two writes that pass, in seconds. Absent: `DEFAULT_WRITE_SPACING_SECONDS`. Not a flag: a test sets it in the manifest. */
   spacingSeconds?: number;
   /** Set at inventory for a run with a mailbox: on a local address too, the last part of the budget is kept (see `reservedWrites`). */
   keepShare?: boolean;
-  /** Each time a person raised `maxWrites` after inventory (see `raiseWrites`), oldest first. */
-  raised?: ({ from: number; to: number; at: string } & Recording)[];
+}
+
+/** A raise of the budget of one grant. `origin` names the grant in a run with more than one; absent, the first. */
+export type WriteRaise = { from: number; to: number; at: string; origin?: string } & Recording;
+
+/**
+ * Permission to send requests that can change something (anything but GET and HEAD, and
+ * messages over a socket) to the origins named here. Without it every such request is held back, on every
+ * site. It exists only for a test environment: a machine of one's own, or an environment
+ * that a named person declared to be one. The permission is its first grant; `alsoGrants` holds
+ * the others, so a manifest from before there could be more than one reads as it did.
+ */
+export interface WritePermission extends WriteGrant {
+  /** Grants next to the first, each with its own budget, pause and declaration: a chat a person declared next to a site on this machine. */
+  alsoGrants?: WriteGrant[];
+  /** Each time a person raised `maxWrites` of a grant after inventory (see `raiseWrites`), oldest first. */
+  raised?: WriteRaise[];
 }
 
 /**
@@ -48,11 +62,42 @@ export const LOCAL_WRITE_SPACING_SECONDS = 0;
 /** What a registration of its own takes from the budget: the form, the link that confirms it, and the press that ends it. */
 export const REGISTRATION_WRITES = 3;
 
-/** Every origin of a permission, the first one first. */
-export const writeOriginsOf = (permission: Pick<WritePermission, "origin" | "alsoOrigins">): string[] => [permission.origin, ...(permission.alsoOrigins ?? [])];
+/** The grants of a permission, the first one first. */
+export const grantsOf = (permission: WritePermission): WriteGrant[] => {
+  const { alsoGrants, raised: _raised, ...first } = permission;
+  return [first, ...(alsoGrants ?? [])];
+};
+
+/** The origins of one grant, the first one first. */
+export const grantOriginsOf = (grant: Pick<WriteGrant, "origin" | "alsoOrigins">): string[] => [grant.origin, ...(grant.alsoOrigins ?? [])];
+
+/** Every origin of a permission, over all its grants, the first one first. */
+export const writeOriginsOf = (permission: Pick<WritePermission, "origin" | "alsoOrigins" | "alsoGrants">): string[] => [...grantOriginsOf(permission), ...(permission.alsoGrants ?? []).flatMap(grantOriginsOf)];
 
 /** The origins of a permission for in a sentence. */
-export const writeOriginsNl = (permission: Pick<WritePermission, "origin" | "alsoOrigins">): string => writeOriginsOf(permission).join(" en ");
+export const writeOriginsNl = (permission: Pick<WritePermission, "origin" | "alsoOrigins" | "alsoGrants">): string => writeOriginsOf(permission).join(" en ");
+
+/** The origin of an address as a write to it is counted: a socket by its http(s) twin. Null for what is no address. */
+function writeOriginOf(url: string): string | null {
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol === "ws:") parsed.protocol = "http:";
+    if (parsed.protocol === "wss:") parsed.protocol = "https:";
+    return parsed.origin;
+  } catch {
+    return null;
+  }
+}
+
+/** The grant an address falls under; the first grant for an address of none of them. */
+export function grantFor(permission: WritePermission, url: string): WriteGrant {
+  const origin = writeOriginOf(url);
+  const grants = grantsOf(permission);
+  return grants.find((grant) => origin !== null && grantOriginsOf(grant).includes(origin)) ?? grants[0]!;
+}
+
+/** Whether a line of the log of writes counts for this grant. A line without an origin is from a run with one grant, and counts for the first. */
+const inGrant = (permission: WritePermission, grant: WriteGrant, entry: { origin?: string }): boolean => (entry.origin === undefined ? permission.origin : grantFor(permission, entry.origin).origin) === grant.origin;
 
 /** The part of a sentence about the pause between two writes, starting with a comma. */
 export const spacingNl = (seconds: number): string => (seconds > 0 ? `, met minstens ${seconds} s ertussen` : ", zonder wachttijd ertussen");
@@ -74,8 +119,10 @@ export const WRITES_BLOCKED_NL = "verzoeken die iets kunnen wijzigen zijn tegeng
  * declared the test environment, not the name: a report is shared and published, and the name
  * of the person stays in the manifest of the run, where the declaration can be traced.
  */
-export const writesAllowedNl = (permission: WritePermission): string =>
-  `onderzocht op een testomgeving waar versturen is toegestaan: ${writeOriginsNl(permission)}${permission.declaredBy ? `, verklaard door iemand met de functie ${permission.declaredBy.role}${permission.recordedVia ? `, ${recordedNl(permission, permission.declaredAt)}` : ""} (de naam staat in het dossier van het onderzoek, niet in dit rapport)` : " (lokaal adres)"}${raisedNl(permission)}`;
+export const writesAllowedNl = (permission: WritePermission): string => `onderzocht op een testomgeving waar versturen is toegestaan: ${grantsOf(permission).map(grantNl).join("; ")}${raisedNl(permission)}`;
+
+const grantNl = (grant: WriteGrant): string =>
+  `${grantOriginsOf(grant).join(" en ")}${grant.declaredBy ? `, verklaard door iemand met de functie ${grant.declaredBy.role}${grant.recordedVia ? `, ${recordedNl(grant, grant.declaredAt)}` : ""} (de naam staat in het dossier van het onderzoek, niet in dit rapport)` : " (lokaal adres)"}`;
 
 /**
  * The permission as it stood after the first `count` raises. A person raises the budget to finish
@@ -83,13 +130,18 @@ export const writesAllowedNl = (permission: WritePermission): string =>
  * for as long as its verdict holds, and a dossier names none (see `instrumentTasks`).
  */
 export const writesAfterRaises = (permission: WritePermission, count: number): WritePermission => {
-  const next = permission.raised?.[count];
-  if (!next) return permission;
-  const { raised, ...rest } = permission;
-  return { ...rest, ...(count > 0 ? { raised: raised!.slice(0, count) } : {}), maxWrites: next.from };
+  const later = (permission.raised ?? []).slice(count);
+  if (later.length === 0) return permission;
+  const { raised, alsoGrants, ...first } = permission;
+  // Each grant gets the budget from before the first raise of it that is left out.
+  const before = <T extends WriteGrant>(grant: T): T => {
+    const next = later.find((raise) => (raise.origin ?? permission.origin) === grant.origin);
+    return next ? { ...grant, maxWrites: next.from } : grant;
+  };
+  return { ...before(first), ...(alsoGrants ? { alsoGrants: alsoGrants.map(before) } : {}), ...(count > 0 ? { raised: raised!.slice(0, count) } : {}) };
 };
 
-const raisedNl = (permission: WritePermission): string => (permission.raised ?? []).map((raise) => `; budget voor versturen verhoogd van ${raise.from} naar ${raise.to}, ${recordedNl(raise, raise.at)}`).join("");
+const raisedNl = (permission: WritePermission): string => (permission.raised ?? []).map((raise) => `; budget voor versturen${raise.origin ? ` naar ${raise.origin}` : ""} verhoogd van ${raise.from} naar ${raise.to}, ${recordedNl(raise, raise.at)}`).join("");
 
 /** Hosts that cannot be a live site: the machine itself and the names reserved for testing. */
 /**
@@ -134,13 +186,27 @@ export function decideWrites(baseUrl: string, flags: WriteFlags, now = new Date(
     return null;
   }
   const declared = [...new Set([flags.testEnvironment ?? []].flat().map((address) => originOf(address, "--test-environment")))];
-  const origin = declared[0] ?? originOf(baseUrl, "het adres van de site");
-  const local = isLocalHost(new URL(origin).hostname);
-  if (declared.length > 1 && declared.some((address) => isLocalHost(new URL(address).hostname))) throw new Error("een lokaal adres verklaar je niet naast een ander adres: een lokaal adres krijgt --allow-writes en een eigen run");
-  if (local) {
+  const site = originOf(baseUrl, "het adres van de site");
+  const isLocal = (address: string): boolean => isLocalHost(new URL(address).hostname);
+  const localRefusedNl = "een lokaal adres verklaar je niet naast een ander adres: een lokaal adres krijgt --allow-writes";
+  if (declared.length > 1 && declared.some(isLocal)) throw new Error(localRefusedNl);
+  // A site on this machine with a chat of another party on an address of its own: the site keeps the local rules, the chat gets a declaration.
+  if (flags.allowWrites && isLocal(site) && declared.length > 0 && declared.some((address) => address !== site)) {
+    if (declared.some(isLocal)) throw new Error(localRefusedNl);
+    const grant = declaredGrant(declared, flags, now);
+    return { origin: site, local: true, declaredBy: null, declaredAt: now.toISOString(), maxWrites: LOCAL_MAX_WRITES, spacingSeconds: LOCAL_WRITE_SPACING_SECONDS, alsoGrants: [grant] };
+  }
+  const origin = declared[0] ?? site;
+  if (isLocal(origin)) {
     if (!flags.allowWrites) throw new Error(`versturen naar ${origin} is alleen toegestaan met --allow-writes erbij`);
     return { origin, local: true, declaredBy: null, declaredAt: now.toISOString(), maxWrites: maxWritesOf(flags.maxWrites, LOCAL_MAX_WRITES), spacingSeconds: LOCAL_WRITE_SPACING_SECONDS };
   }
+  return declaredGrant(declared.length > 0 ? declared : [origin], flags, now);
+}
+
+/** The grant for origins a person declares to be a test environment, with the normal budget and pause. */
+function declaredGrant(declared: string[], flags: WriteFlags, now: Date): WriteGrant {
+  const origin = declared[0]!;
   const budget = { maxWrites: maxWritesOf(flags.maxWrites, DEFAULT_MAX_WRITES), spacingSeconds: DEFAULT_WRITE_SPACING_SECONDS };
   if (flags.testEnvironment === undefined || flags.declaredBy === undefined) {
     throw new Error(
@@ -160,21 +226,31 @@ export function decideWrites(baseUrl: string, flags: WriteFlags, now = new Date(
  * role and types each origin back; without one the declaration is refused before anything starts.
  */
 export async function confirmDeclaration(permission: WritePermission, terminal: Terminal = processTerminal()): Promise<WritePermission> {
-  if (!permission.declaredBy) return permission;
-  const origins = writeOriginsOf(permission);
-  const shownNl = [
-    `Verklaring dat ${writeOriginsNl(permission)} ${origins.length > 1 ? "testomgevingen zijn" : "een testomgeving is"} waar versturen geen gevolgen heeft.`,
-    ...origins.map((origin) => `Origin: ${origin}`),
-    `Naam: ${permission.declaredBy.name}`,
-    `Functie: ${permission.declaredBy.role}`,
-    `De run mag daarheen ${origins.length > 1 ? "samen " : ""}ten hoogste ${permission.maxWrites ?? DEFAULT_MAX_WRITES} keer iets versturen. De naam komt in manifest.json van de run; het rapport en de verklaring noemen alleen de functie.`,
-  ].join("\n");
-  let recording: { recordedVia: "terminal" } | undefined;
-  for (const [position, origin] of origins.entries()) {
-    const whatNl = origins.length > 1 ? `origin ${position + 1} van ${origins.length}, met http:// of https://` : "de origin, met http:// of https://";
-    recording = await confirmByTyping("inventory --declared-by", position === 0 ? shownNl : "Nog een origin.", origin, whatNl, terminal);
-  }
-  return { ...permission, declaredAt: new Date().toISOString(), ...recording };
+  const confirm = async <T extends WriteGrant>(grant: T): Promise<T> => {
+    if (!grant.declaredBy) return grant;
+    const origins = grantOriginsOf(grant);
+    const local = grantsOf(permission).find((other) => other.local);
+    const shownNl = [
+      `Verklaring dat ${origins.join(" en ")} ${origins.length > 1 ? "testomgevingen zijn" : "een testomgeving is"} waar versturen geen gevolgen heeft.`,
+      ...origins.map((origin) => `Origin: ${origin}`),
+      `Naam: ${grant.declaredBy.name}`,
+      `Functie: ${grant.declaredBy.role}`,
+      `De run mag daarheen ${origins.length > 1 ? "samen " : ""}ten hoogste ${grant.maxWrites ?? DEFAULT_MAX_WRITES} keer iets versturen. De naam komt in manifest.json van de run; het rapport en de verklaring noemen alleen de functie.`,
+      ...(local ? [`Naar ${local.origin} op deze machine verstuurt de run apart, met een eigen budget, zonder verklaring.`] : []),
+    ].join("\n");
+    let recording: { recordedVia: "terminal" } | undefined;
+    for (const [position, origin] of origins.entries()) {
+      const whatNl = origins.length > 1 ? `origin ${position + 1} van ${origins.length}, met http:// of https://` : "de origin, met http:// of https://";
+      recording = await confirmByTyping("inventory --declared-by", position === 0 ? shownNl : "Nog een origin.", origin, whatNl, terminal);
+    }
+    return { ...grant, declaredAt: new Date().toISOString(), ...recording };
+  };
+  const first = await confirm(permission);
+  if (!permission.alsoGrants) return first;
+  // One after the other: each asks at the terminal.
+  const alsoGrants: WriteGrant[] = [];
+  for (const grant of permission.alsoGrants) alsoGrants.push(await confirm(grant));
+  return { ...first, alsoGrants };
 }
 
 function maxWritesOf(text: string | undefined, fallback: number): number {
@@ -189,15 +265,26 @@ function maxWritesOf(text: string | undefined, fallback: number): number {
  * in the conversation, like an answer or a decision (`recordStatement`). Where may be sent stays with
  * the declaration at inventory. What runs picks up the new budget at the next write.
  */
-export async function raiseWrites(runDir: string, text: string, flags: RecordingFlags = {}, terminal: Terminal = processTerminal()): Promise<WritePermission> {
+export async function raiseWrites(runDir: string, text: string, flags: RecordingFlags = {}, terminal: Terminal = processTerminal(), origin?: string): Promise<WritePermission> {
   const permission = writesForRun(runDir);
   if (!permission) throw new Error("deze run mag niet versturen: dat ligt vast bij inventory, en een budget verhogen verandert dat niet");
-  const from = permission.maxWrites ?? DEFAULT_MAX_WRITES;
+  const grants = grantsOf(permission);
+  // In a run with more than one budget a person says which one goes up.
+  if (grants.length > 1 && origin === undefined) throw new Error(`deze run heeft een eigen budget per origin: zeg welk omhoog gaat met --origin ${grants.map((grant) => grant.origin).join(" of --origin ")}`);
+  const grant = origin === undefined ? grants[0]! : grants.find((candidate) => grantOriginsOf(candidate).includes(originOf(origin, "--origin")));
+  if (!grant) throw new Error(`${origin} is geen origin waar deze run naartoe mag versturen (${writeOriginsNl(permission)})`);
+  const from = grant.maxWrites ?? DEFAULT_MAX_WRITES;
   const to = maxWritesOf(text, from);
   if (to <= from) throw new Error(`--max-writes moet hoger zijn dan het huidige budget (${from})`);
-  const shownNl = [`Verhoging van het budget voor versturen van ${from} naar ${to} verzendingen voor de hele run.`, `Origins: ${writeOriginsNl(permission)}`, "Elke verzending komt echt aan bij wie het bericht ontvangt."].join("\n");
+  const shownNl = [`Verhoging van het budget voor versturen van ${from} naar ${to} verzendingen voor de hele run.`, `Origins: ${grantOriginsOf(grant).join(" en ")}`, "Elke verzending komt echt aan bij wie het bericht ontvangt."].join("\n");
   const recording = await recordStatement("writes --max-writes", flags, shownNl, terminal);
-  const raised = { ...permission, maxWrites: to, raised: [...(permission.raised ?? []), { from, to, at: new Date().toISOString(), ...recording }] };
+  const raise: WriteRaise = { from, to, at: new Date().toISOString(), ...(grants.length > 1 ? { origin: grant.origin } : {}), ...recording };
+  const first = grant.origin === permission.origin;
+  const raised: WritePermission = {
+    ...permission,
+    ...(first ? { maxWrites: to } : { alsoGrants: permission.alsoGrants!.map((other) => (other.origin === grant.origin ? { ...other, maxWrites: to } : other)) }),
+    raised: [...(permission.raised ?? []), raise],
+  };
   await recordWrites(runDir, raised);
   return raised;
 }
@@ -378,7 +465,7 @@ export const criterionSender = (criterion: string): string => `criterium ${crite
  * is no recipient, and the budget there is for an agent in a loop. Unless the run has a mailbox: then
  * a form starts a route that agents go on with, and without it the walks used up all 50.
  */
-export const reservedWrites = (permission: WritePermission): number => (permission.local && !permission.keepShare ? 0 : Math.floor((permission.maxWrites ?? DEFAULT_MAX_WRITES) / 2));
+export const reservedWrites = (grant: WriteGrant): number => (grant.local && !grant.keepShare ? 0 : Math.floor((grant.maxWrites ?? DEFAULT_MAX_WRITES) / 2));
 
 function readLog(runDir: string): PassedWrite[] {
   const path = join(runDir, WRITES_LOG);
@@ -399,26 +486,35 @@ function readLog(runDir: string): PassedWrite[] {
 /**
  * The budget for sending of a run, from its permission and its log of writes. The log is in the run,
  * so a new process goes on with what was sent. With a sender, `left` is what that sender may still
- * send: a sender that has sent before does not get the reserved writes.
+ * send: a sender that has sent before does not get the reserved writes. In a run with more than one
+ * grant each has a budget of its own: `origin` says which, absent the first.
  */
-export function writeBudget(runDir: string, permission: WritePermission, now = Date.now(), sender?: string): WriteBudget {
+export function writeBudget(runDir: string, permission: WritePermission, now = Date.now(), sender?: string, origin?: string): WriteBudget {
+  const grant = origin === undefined ? grantsOf(permission)[0]! : grantFor(permission, origin);
   // A person can raise the budget while sessions run: what the manifest says now counts.
   const stored = writesForRun(runDir);
-  const max = (stored?.raised ? stored.maxWrites : undefined) ?? permission.maxWrites ?? DEFAULT_MAX_WRITES;
-  const spacingSeconds = permission.spacingSeconds ?? DEFAULT_WRITE_SPACING_SECONDS;
-  const log = readLog(runDir);
+  const storedGrant = stored ? grantsOf(stored).find((candidate) => candidate.origin === grant.origin) : undefined;
+  const max = (stored?.raised ? storedGrant?.maxWrites : undefined) ?? grant.maxWrites ?? DEFAULT_MAX_WRITES;
+  const spacingSeconds = grant.spacingSeconds ?? DEFAULT_WRITE_SPACING_SECONDS;
+  const log = readLog(runDir).filter((entry) => inGrant(permission, grant, entry));
   const counted = log.filter(counts);
   // What cleanup sends costs nothing, but the service on the other side still sees it.
   const spaced = log.filter((entry) => counts(entry) || entry.cleanup);
   const last = spaced.length > 0 ? Date.parse(spaced.at(-1)!.at) : Number.NEGATIVE_INFINITY;
   const waitSeconds = Math.max(0, Math.ceil((last + spacingSeconds * 1000 - now) / 1000));
-  const reserved = reservedWrites(permission);
+  const reserved = reservedWrites(grant);
   const isSender = (entry: PassedWrite): boolean => sender !== undefined && senderOf(entry.source) === senderOf(sender);
   const sentBefore = counted.some(isSender);
   // A registration of its own has a route that takes several writes, so its sender may go on into what is kept, as far as that route goes.
   const paidFor = log.filter((entry) => entry.registration && isSender(entry)).length * REGISTRATION_WRITES;
-  return { origin: writeOriginsNl(permission), max, sent: counted.length, left: Math.max(0, max - counted.length - (sentBefore ? Math.max(0, reserved - paidFor) : 0)), reserved, spacingSeconds, waitSeconds };
+  return { origin: grantOriginsOf(grant).join(" en "), max, sent: counted.length, left: Math.max(0, max - counted.length - (sentBefore ? Math.max(0, reserved - paidFor) : 0)), reserved, spacingSeconds, waitSeconds };
 }
+
+/** The budget of each grant of a run, the first one first. */
+export const writeBudgets = (runDir: string, permission: WritePermission, now = Date.now(), sender?: string): WriteBudget[] => grantsOf(permission).map((grant) => writeBudget(runDir, permission, now, sender, grant.origin));
+
+/** The budgets of a run for in one line: each with its own origins. */
+export const writeBudgetsNl = (budgets: readonly WriteBudget[]): string => budgets.map(writeBudgetNl).join("; ");
 
 /**
  * Take a registration of its own for a sender, or say why not, in Dutch. Nothing is sent yet: the route
@@ -428,7 +524,8 @@ export function claimRegistration(runDir: string, permission: WritePermission, i
   return withLock(runDir, () => {
     const { max, sent } = writeBudget(runDir, permission, now);
     if (max - sent < REGISTRATION_WRITES) return `een eigen aanmelding kost ${REGISTRATION_WRITES} verzendingen (het formulier, de bevestiging en het afmelden of verwijderen), en van het budget zijn er nog ${Math.max(0, max - sent)} van ${max} over. Laat iemand beslissen of het omhoog gaat (writes --run <run> --max-writes <aantal>)`;
-    const entry: PassedWrite = { at: new Date(now).toISOString(), source: sender, method: "REGISTER", path: "", registration: id };
+    // A registration is on the site, the first grant; it says so in a run with more than one.
+    const entry: PassedWrite = { at: new Date(now).toISOString(), source: sender, method: "REGISTER", path: "", ...(permission.alsoGrants ? { origin: permission.origin } : {}), registration: id };
     appendFileSync(join(runDir, WRITES_LOG), `${JSON.stringify(entry)}\n`);
     return null;
   });
@@ -571,7 +668,7 @@ export function withLock<T>(runDir: string, work: () => T, name: string = LOCK):
 
 export function writeAccess(runDir: string, permission: WritePermission, source: string, now: () => number = Date.now): WriteAccess {
   const append = (method: string, url: string, repeat: boolean, message = false, sender = source, link?: string): PassedWrite => {
-    const entry: PassedWrite = { at: new Date(now()).toISOString(), source: sender, method, path: new URL(url).pathname, ...(permission.alsoOrigins ? { origin: new URL(url).origin } : {}), ...(repeat ? { repeat: true as const } : {}), ...(message ? { message: true as const } : {}), ...(link ? { link } : {}), ...(sender === CLEANUP_SENDER && !repeat ? { cleanup: true as const } : {}) };
+    const entry: PassedWrite = { at: new Date(now()).toISOString(), source: sender, method, path: new URL(url).pathname, ...(permission.alsoOrigins || permission.alsoGrants ? { origin: new URL(url).origin } : {}), ...(repeat ? { repeat: true as const } : {}), ...(message ? { message: true as const } : {}), ...(link ? { link } : {}), ...(sender === CLEANUP_SENDER && !repeat ? { cleanup: true as const } : {}) };
     mkdirSync(runDir, { recursive: true });
     // Appended at once and synchronously: the line is there even when the run is cut off right after.
     appendFileSync(join(runDir, WRITES_LOG), `${JSON.stringify(entry)}\n`);
@@ -587,7 +684,8 @@ export function writeAccess(runDir: string, permission: WritePermission, source:
       mkdirSync(runDir, { recursive: true });
       const sender = options?.sender ?? source;
       return withLock(runDir, (): WriteClaim => {
-        const budget = writeBudget(runDir, permission, now(), sender);
+        // Each grant has a budget and a pause of its own: a form on this machine does not wait for the chat that was declared next to it.
+        const budget = writeBudget(runDir, permission, now(), sender, grantFor(permission, url).origin);
         const free = sender === CLEANUP_SENDER;
         if (!free && budget.left === 0 && budget.sent < budget.max) return { ok: false, budget: "share", reasonNl: `${senderOf(sender) === sender ? sender : "dit criterium"} heeft al verstuurd, en er zijn nog ${budget.max - budget.sent} van ${budget.max} verzendingen naar ${budget.origin} over: ${reservedNl(budget.reserved)}` };
         if (!free && budget.left === 0) return { ok: false, budget: "out", reasonNl: `het budget voor versturen van deze run is op: ${budget.sent} van ${budget.max} verzendingen naar ${budget.origin} zijn gedaan, door alle sessies en de veegronde samen` };
@@ -600,13 +698,6 @@ export function writeAccess(runDir: string, permission: WritePermission, source:
 
 /** Whether a request or socket goes to an origin that may be written to. A socket counts by the origin of its http(s) twin. */
 export function isWriteOrigin(access: WriteAccess | null | undefined, url: string): boolean {
-  if (!access) return false;
-  try {
-    const parsed = new URL(url);
-    if (parsed.protocol === "ws:") parsed.protocol = "http:";
-    if (parsed.protocol === "wss:") parsed.protocol = "https:";
-    return access.origins.includes(parsed.origin);
-  } catch {
-    return false;
-  }
+  const origin = access ? writeOriginOf(url) : null;
+  return origin !== null && access!.origins.includes(origin);
 }

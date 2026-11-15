@@ -926,9 +926,10 @@ function budgetSpent(evaluation: Evaluation, missingNl: string[]): boolean {
  * The declaration that would have closed the points "versturen niet toegestaan": a test
  * environment at inventory. `--test-environment` may be the origin of an embedded frame alone, so
  * nothing is sent to the rest of the site, and it may be repeated. The flags carry the origins the
- * points name.
+ * points name. A site on this machine that could send keeps `--allow-writes` next to it.
  */
-const testEnvironmentFlags = (origins: string[]): string => (origins.length > 0 ? origins : ["<origin>"]).map((origin) => `--test-environment ${origin}`).join(" ");
+const testEnvironmentFlags = (evaluation: Evaluation, origins: string[]): string =>
+  `${evaluation.chain?.writes.local ? "--allow-writes " : ""}${(origins.length > 0 ? origins : ["<origin>"]).map((origin) => `--test-environment ${origin}`).join(" ")}`;
 
 function notSentDeclaration(evaluation: Evaluation, items: OpenGroup[]): NotSent {
   const origins = notSentOrigins(evaluation.criteria.flatMap((criterion) => criterion.missingNl));
@@ -944,7 +945,7 @@ function notSentDeclaration(evaluation: Evaluation, items: OpenGroup[]): NotSent
       items,
       onlyCriteria: items.map((item) => item.criterion).filter((id) => waitsOnlyOnSending(evaluation.criteria.find((criterion) => criterion.id === id)?.missingNl ?? [])),
       declarationNl: "Dit onderzoek mocht versturen, maar het budget voor versturen was op voordat deze punten aan de beurt kwamen. Een nieuw onderzoek met dezelfde verklaring en een groter budget meet ze:",
-      flags: `${testEnvironmentFlags(origins)} --declared-by "<naam>, <functie>" --max-writes <aantal>`,
+      flags: `${testEnvironmentFlags(evaluation, origins)} --declared-by "<naam>, <functie>" --max-writes <aantal>`,
       originNl: `${named}Elk bericht komt echt aan bij wie de chat of het formulier ontvangt. Kies daarom een budget dat de ontvanger verwacht.`,
     };
   const already = evaluation.chain?.writes.allowed ? "Dit onderzoek mocht alleen versturen naar de testomgeving die bij de onderzoeksgegevens staat; deze punten gaan over een ander adres. " : "";
@@ -952,7 +953,7 @@ function notSentDeclaration(evaluation: Evaluation, items: OpenGroup[]): NotSent
     items,
     onlyCriteria: items.map((item) => item.criterion).filter((id) => waitsOnlyOnSending(evaluation.criteria.find((criterion) => criterion.id === id)?.missingNl ?? [])),
     declarationNl: "Een nieuw onderzoek meet deze punten als bij inventory een testomgeving wordt verklaard, door iemand met naam en functie:",
-    flags: `${testEnvironmentFlags(origins)} --declared-by "<naam>, <functie>"`,
+    flags: `${testEnvironmentFlags(evaluation, origins)} --declared-by "<naam>, <functie>"`,
     originNl:
       `${already}${named}Dat mag de origin van alleen een ingesloten venster zijn, zoals een chat of een formulier van een andere partij: dan gaat alleen daarheen iets weg en wordt naar de rest van de site niets verstuurd. Gaan berichten naar meer adressen, geef dan elke origin met een eigen --test-environment. ` +
       "Neem de origin waar het bericht naartoe gaat; meestal is dat die van het venster zelf. Verklaar het alleen als versturen daar geen gevolgen heeft. Het rapport noemt dan de functie van wie het verklaarde; de naam staat in het dossier van het onderzoek.",

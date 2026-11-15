@@ -6,7 +6,7 @@ import { readJson, writeJson } from "./canonical.ts";
 import { looksSecret } from "./mailparse.ts";
 import { siteOrigins } from "./origins.ts";
 import { registerSecrets, renewSecrets, shieldForRun, type NewSecret } from "./secrets.ts";
-import { isLocalHost, writeOriginsOf, writesForRun, type WritePermission } from "./writes.ts";
+import { grantOriginsOf, grantsOf, isLocalHost, writesForRun, type WritePermission } from "./writes.ts";
 
 /**
  * A site behind a login. A person logs in, in a browser on a screen; the toolbox takes over
@@ -260,7 +260,7 @@ export async function storeLoginSession(runDir: string, session: LoginSession): 
  */
 export function loginRefusalNl(origin: string, writes: WritePermission | null): string | null {
   if (isLocalHost(new URL(origin).hostname)) return null;
-  if (writes && !writes.local && writes.declaredBy && writeOriginsOf(writes).includes(origin)) return null;
+  if (writes && grantsOf(writes).some((grant) => !grant.local && grant.declaredBy && grantOriginsOf(grant).includes(origin))) return null;
   return (
     `deze run heeft een inlogsessie voor ${origin}, en dat is geen lokaal adres. Achter een inlog verandert bijna elke klik iets en tonen schermafbeeldingen gegevens van het account. ` +
     `Een ingelogde site wordt daarom alleen onderzocht op een verklaarde testomgeving: begin de run met inventory <adres> --out <run> --test-environment ${origin} --declared-by "<naam>, <functie>". ` +
