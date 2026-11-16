@@ -122,6 +122,9 @@ const USAGE = `loep <command> [options]
                                          one the report opens as loep writes it. Run it after weigh and before render
   check-summary --run <run>              Hold that summary to the report: length, status, numbers, words that soften; non-zero
                                          exit on problems
+  check-reading --run <run>              Hold the reading of the second reader (tasks/samenvatting/lees.md) to the summary and
+                                         the report: a verdict for every sentence, each quote literally in the report; lists
+                                         the sentences the report does not carry. Non-zero exit on a fault in the reading
   answer --run <run> --criterion <id> [--point <n> --did <text> --outcome passed|failed|inapplicable --name <who> --role <function>]
                                          For an open point that asks a person or a choice of the owner: record what a person
                                          did or decided and what follows for the criterion. Without --point: list the open
@@ -817,7 +820,7 @@ async function main(): Promise<void> {
       if (!values.run) throw new Error("summarize vraagt --run <run>");
       const { summarize, summaryLineNl } = await import("./commands/summarize.ts");
       const result = await summarize(values.run);
-      process.stdout.write(`${summaryLineNl(result)}\n${result.summary === "applied" ? "" : `${result.task}\n`}`);
+      process.stdout.write(`${summaryLineNl(result)}\n${result.summary === "applied" ? "" : `${result.reason === "unread" ? result.readTask : result.task}\n`}`);
       return;
     }
     case "check-summary": {
@@ -826,6 +829,16 @@ async function main(): Promise<void> {
       const problems = await checkSummary(values.run);
       for (const problem of problems) process.stdout.write(`- ${problem}\n`);
       process.stdout.write(problems.length === 0 ? "OK: de samenvatting houdt zich aan het rapport\n" : `${problems.length} problemen\n`);
+      process.exitCode = problems.length === 0 ? 0 : 1;
+      return;
+    }
+    case "check-reading": {
+      if (!values.run) throw new Error("check-reading vraagt --run <run>");
+      const { checkReading } = await import("./commands/summarize.ts");
+      const { problems, refuted } = await checkReading(values.run);
+      for (const problem of problems) process.stdout.write(`- ${problem}\n`);
+      for (const sentence of refuted) process.stdout.write(`niet gedragen, zin ${sentence.n}: ${sentence.sentence}\n  ${sentence.noteNl}\n`);
+      process.stdout.write(problems.length > 0 ? `${problems.length} problemen\n` : refuted.length > 0 ? `OK: het oordeel is volledig. ${refuted.length === 1 ? "1 zin is" : `${refuted.length} zinnen zijn`} niet gedragen; de samenvatting komt zo niet in het rapport\n` : "OK: het rapport draagt elke zin van de samenvatting\n");
       process.exitCode = problems.length === 0 ? 0 : 1;
       return;
     }

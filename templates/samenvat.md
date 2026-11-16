@@ -72,6 +72,14 @@ Draai daarna de controle:
 
 Ze houdt je tekst aan het rapport: de lengte, de status, elk getal, de woorden die niet mogen, en of `sources` naar iets bestaands wijst. Meldt ze iets, herstel dat in het bestand en draai haar opnieuw, tot ze niets meer meldt. Verander verder niets in de run.
 
-De controle ziet niet of een zin in gewone woorden iets beweert wat het rapport niet zegt. Dat is aan jou: lees je tekst na het schrijven nog één keer naast het rapport.
+De controle ziet niet of een zin in gewone woorden iets beweert wat het rapport niet zegt. Daarna legt een tweede lezer elke zin naast het rapport en wijst aan waar die staat. Een zin die het rapport niet draagt, houdt de hele samenvatting uit het rapport. Lees je tekst daarom na het schrijven nog één keer naast het rapport, zin voor zin.
+
+Staat er al een oordeel van de tweede lezer over een eerdere tekst, dan staat het hier:
+
+```
+{{reading}}
+```
+
+Lees het als het er is. Wat daar niet-gedragen heet, herstel je uit het rapport, niet door de zin anders te verwoorden.
 
 Je werkmap is `{{workDir}}`. Schrijf daar wat je tussendoor wilt bewaren.

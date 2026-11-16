@@ -3,11 +3,11 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { checkSummary, summarize, summaryLineNl } from "../src/commands/summarize.ts";
-import { canonicalJson, sha256 } from "../src/lib/canonical.ts";
+import { checkReading, checkSummary, summarize, summaryLineNl } from "../src/commands/summarize.ts";
+import { canonicalJson, sha256, sha256File } from "../src/lib/canonical.ts";
 import { mergeFindings } from "../src/lib/defects.ts";
 import type { Evaluation } from "../src/lib/evaluation.ts";
-import { SUMMARY_WORDS_MAX, validateSummary, type SummaryProposal } from "../src/lib/executive-summary.ts";
+import { readingSentences, SUMMARY_WORDS_MAX, validateReading, validateSummary, type SummaryProposal } from "../src/lib/executive-summary.ts";
 import { renderHtml } from "../src/lib/report-html.ts";
 import { deriveReport, renderMarkdown, summarySourceText } from "../src/lib/report-markdown.ts";
 import { exampleEvaluation } from "./fixtures/example-evaluation.ts";
@@ -110,7 +110,7 @@ test("what the writer reads is the report without its appendices and without wha
   for (const chapter of ["## Samenvatting", "## Wat nu", "## Resultaten per criterium", "## Betrouwbaarheid en beperkingen"]) assert.ok(text.includes(chapter), chapter);
   for (const left of ["## Bijlage A", "## Bijlage B", "Versie van de evaluatie", "Gemaakt met", "## Gereedschap", "- Toolbox:", "- Runtime:", "Datum van het onderzoek"]) assert.ok(!text.includes(left), left);
   // The same text with a summary in the evaluation, and after the evaluation was made again on another day.
-  const later: Evaluation = { ...evaluation, evaluatedAt: "2026-10-12T09:30:00.000Z", executiveSummary: { status: "applied", paragraphs: ["Een tekst."], sources: [["status"]], templateSha256: "a", proposalSha256: "b" } };
+  const later: Evaluation = { ...evaluation, evaluatedAt: "2026-10-12T09:30:00.000Z", executiveSummary: { status: "applied", paragraphs: ["Een tekst."], sources: [["status"]], templateSha256: "a", proposalSha256: "b", readingSha256: "c" } };
   assert.equal(summarySourceText(later), text);
   // And with another version of loep, of Node or of a package: the report says the same.
   const upgraded = structuredClone(evaluation);
@@ -125,6 +125,14 @@ test("summarize writes the task and the report, and puts in only a summary that 
     writeFileSync(path, canonicalJson(example()));
     writeFileSync(join(dir, "manifest.json"), JSON.stringify({ steps: [] }));
     const read = (): Evaluation => ({ ...(JSON.parse(readFileSync(path, "utf8")) as Evaluation), signature: null });
+    const QUOTE = "# Toegankelijkheidsonderzoek Voorbeeldgemeente";
+    // The second reader, for the summary that stands now: every sentence carried, unless `change` says otherwise.
+    const readBy = async (change: (sentences: Record<string, unknown>[]) => void = () => undefined): Promise<void> => {
+      const proposal = JSON.parse(readFileSync(join(dir, "verdicts", "samenvatting.json"), "utf8")) as SummaryProposal;
+      const sentences: Record<string, unknown>[] = readingSentences(proposal).map((_sentence, index) => ({ n: index + 1, verdict: "gedragen", quotes: [QUOTE] }));
+      change(sentences);
+      writeFileSync(join(dir, "verdicts", "samenvatting-lezing.json"), JSON.stringify({ reportSha256: sha256(summarySourceText(read())), proposalSha256: await sha256File(join(dir, "verdicts", "samenvatting.json")), model: "lezer-model-5", sentences }));
+    };
     const written = (proposal: object = good()): string => JSON.stringify({ reportSha256: sha256(summarySourceText(read())), ...proposal });
 
     // No summary yet: the task and the report as text are there, the evaluation has none.
@@ -144,8 +152,34 @@ test("summarize writes the task and the report, and puts in only a summary that 
     writeFileSync(join(dir, "verdicts", "samenvatting.json"), written());
     assert.deepEqual([(await summarize(dir)).summary, read().executiveSummary], ["stale", { status: "stale", reason: "unchecked" }]);
 
-    // Checked: in the evaluation, and the report opens with it in every form.
+    // Checked, and not read by a second reader yet: not in the report, and the task of the reader is there.
     assert.deepEqual(await checkSummary(dir), []);
+    const unread = await summarize(dir);
+    assert.deepEqual([unread.summary, unread.reason, read().executiveSummary], ["stale", "unread", { status: "stale", reason: "unread" }]);
+    assert.match(summaryLineNl(unread), /een tweede lezer heeft haar nog niet naast dit rapport gelegd\. Ze staat niet in het rapport\. Start een nieuwe agent, niet de schrijver/);
+    const readTask = readFileSync(join(dir, "tasks", "samenvatting", "lees.md"), "utf8");
+    assert.doesNotMatch(readTask, /\{\{/);
+    assert.match(readTask, /^1\. De site van Voorbeeldgemeente voldoet niet aan WCAG 2\.2 niveau A en AA, de norm voor toegankelijkheid\.$/m);
+    assert.deepEqual((await checkReading(dir)).problems, ["verdicts/samenvatting-lezing.json ontbreekt"]);
+
+    // The reader found a sentence the report does not carry: the summary stays out, and the line says how many.
+    await readBy((sentences) => void Object.assign(sentences[2]!, { verdict: "niet-gedragen", quotes: undefined, noteNl: "Het rapport noemt hier mensen die niet zien, niet mensen die slecht horen." }));
+    const refuted = await summarize(dir);
+    assert.deepEqual([refuted.summary, refuted.reason, refuted.refuted], ["stale", "refuted", 1]);
+    assert.match(summaryLineNl(refuted), /iets wat het rapport niet draagt\. Ze staat niet in het rapport\. Het gaat om 1 zin/);
+    assert.deepEqual([(await checkReading(dir)).problems, (await checkReading(dir)).refuted.map((entry) => entry.n)], [[], [3]]);
+
+    // A reading with a quote that is not in the report, or without a verdict for a sentence, is no reading.
+    await readBy((sentences) => void (sentences[0]!.quotes = ["Dit staat nergens in het rapport."]));
+    assert.match((await checkReading(dir)).problems.join(" | "), /zin 1: "Dit staat nergens in het rapport\." staat niet letterlijk in het rapport/);
+    assert.equal((await summarize(dir)).reason, "unread");
+    await readBy((sentences) => void sentences.pop());
+    assert.match((await checkReading(dir)).problems.join(" | "), /zin \d+ heeft geen oordeel/);
+    assert.equal((await summarize(dir)).reason, "unread");
+
+    // Read, every sentence carried: in the evaluation, and the report opens with it in every form.
+    await readBy();
+    assert.deepEqual(await checkReading(dir), { problems: [], refuted: [] });
     assert.equal((await summarize(dir)).summary, "applied");
     const applied = read();
     assert.equal(applied.executiveSummary!.status, "applied");
@@ -155,7 +189,7 @@ test("summarize writes the task and the report, and puts in only a summary that 
     // Who wrote it is said with the tools, next to the models of the agents, not under the text.
     assert.doesNotMatch(opening, /taalmodel/);
     const tools = markdown.slice(markdown.indexOf("## Gereedschap"), markdown.indexOf("## Betrouwbaarheid"));
-    assert.match(tools, /- Samenvatting bovenaan het rapport: Geschreven door een taalmodel \(voorbeeld-model-5\), uit de tekst van dit rapport zonder de bijlagen\./);
+    assert.match(tools, /- Samenvatting bovenaan het rapport: Geschreven door een taalmodel \(voorbeeld-model-5\), uit de tekst van dit rapport zonder de bijlagen\..* kan het script niet zien\. Daarom heeft een tweede taalmodel \(lezer-model-5\) elke zin naast het rapport gelegd en aangewezen waar die staat\. Ook dat model kan zich vergissen; wie het rapport tekent, leest de samenvatting mee\./);
     // It takes the place of the sentence loep writes itself; the status loep computed stays next to it.
     assert.ok(!opening.includes(deriveReport(applied).statusSentenceNl));
     assert.match(opening, /\*\*Voorlopige status: C/);
@@ -169,6 +203,9 @@ test("summarize writes the task and the report, and puts in only a summary that 
     writeFileSync(join(dir, "verdicts", "samenvatting.json"), written({ ...good(), model: "ander-model" }));
     assert.deepEqual([(await summarize(dir)).summary, read().executiveSummary], ["stale", { status: "stale", reason: "unchecked" }]);
     assert.deepEqual(await checkSummary(dir), []);
+    // The reading was of the earlier text: the new one waits for a reader.
+    assert.equal((await summarize(dir)).reason, "unread");
+    await readBy();
     assert.equal((await summarize(dir)).summary, "applied");
 
     // The report changed: the summary was written for another report.
@@ -192,4 +229,12 @@ test("summarize writes the task and the report, and puts in only a summary that 
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
+});
+
+test("a reading is held to the summary: a number that is no sentence, a verdict that is none, a quote too short", () => {
+  const evaluation = example();
+  const sentences = readingSentences(good());
+  const { problems } = validateReading({ sentences: [{ n: 99, verdict: "gedragen", quotes: ["x"] }, { n: 1, verdict: "misschien" }, { n: 2, verdict: "gedragen", quotes: ["Voorbeeld"] }, { n: 3, verdict: "niet-gedragen" }] }, sentences, summarySourceText(evaluation));
+  for (const expected of [/zin 99 bestaat niet/, /zin 1: verdict is "gedragen" of "niet-gedragen"/, /zin 2: "Voorbeeld" is te kort/, /zin 3: niet-gedragen, maar noteNl zegt niet/, /hebben geen oordeel/]) assert.ok(problems.some((problem) => expected.test(problem)), `${expected}: ${problems.join(" | ")}`);
+  assert.deepEqual(validateReading({}, sentences, ""), { problems: ['het antwoord heeft geen lijst "sentences"'], refuted: [] });
 });

@@ -80,7 +80,7 @@ export const REPORT_TEXT = {
   defectsOverview: "Overzicht van de gebreken",
   /** In the chapter about the tools, next to the models of the agents: who wrote the summary for the leadership and what holds it to the report. `{model}` is the model the writer gave. */
   executiveLabel: "Samenvatting bovenaan het rapport",
-  executiveNote: "Geschreven door een taalmodel{model}, uit de tekst van dit rapport zonder de bijlagen. Een script heeft de tekst aan het rapport gehouden: de status, de norm, elk getal en de gebreken waarop ze rust komen uit het onderzoek. Of een zin iets zegt wat het rapport niet zegt, kan het script niet zien; wie het rapport tekent, leest de samenvatting mee.",
+  executiveNote: "Geschreven door een taalmodel{model}, uit de tekst van dit rapport zonder de bijlagen. Een script heeft de tekst aan het rapport gehouden: de status, de norm, elk getal en de gebreken waarop ze rust komen uit het onderzoek. Of een zin iets zegt wat het rapport niet zegt, kan het script niet zien. Daarom heeft een tweede taalmodel{reader} elke zin naast het rapport gelegd en aangewezen waar die staat. Ook dat model kan zich vergissen; wie het rapport tekent, leest de samenvatting mee.",
   concept: "Concept, niet afgetekend",
   staleSignature: "De handtekening hoort bij een eerdere versie van dit onderzoek.",
   scoreNote: "\"Niet van toepassing\" telt niet mee als \"Voldoet\". \"Kan niet bepalen\" en \"Niet beoordeeld\" zijn open: daar is nog geen oordeel.",
@@ -1403,7 +1403,7 @@ export function deriveReport(input: Evaluation, decisions: DecisionLayer = { dec
     signatureStale: stale,
     status: { "2.1": complianceStatus(evaluation, "2.1"), "2.2": complianceStatus(evaluation, "2.2") },
     statusSentenceNl: statusSentence(evaluation),
-    executive: evaluation.executiveSummary?.status === "applied" ? { paragraphs: evaluation.executiveSummary.paragraphs, noteNl: REPORT_TEXT.executiveNote.replace("{model}", evaluation.executiveSummary.model ? ` (${evaluation.executiveSummary.model})` : "") } : null,
+    executive: evaluation.executiveSummary?.status === "applied" ? { paragraphs: evaluation.executiveSummary.paragraphs, noteNl: REPORT_TEXT.executiveNote.replace("{model}", evaluation.executiveSummary.model ? ` (${evaluation.executiveSummary.model})` : "").replace("{reader}", evaluation.executiveSummary.readerModel ? ` (${evaluation.executiveSummary.readerModel})` : "") } : null,
     forB: forStatusB(evaluation),
     statusLine: statusLine(evaluation, stale),
     followsUpNl: evaluation.followsUp ? `Dit is een heronderzoek. Het vorige onderzoek is van ${dateNl(evaluation.followsUp.evaluatedAt)}, afgetekend op ${dateNl(evaluation.followsUp.signedAt)}, met kenmerk ${evaluation.followsUp.sha256.slice(0, 12)}.` : null,

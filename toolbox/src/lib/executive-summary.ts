@@ -17,11 +17,20 @@ export interface SummaryProposal {
 }
 
 /** Why a summary that is there is not in the report. */
-export type SummaryStaleReason = "unchecked" | "report" | "task";
+/** "unread": no second reader held it to the report yet; "refuted": the second reader found a sentence the report does not carry. */
+export type SummaryStaleReason = "unchecked" | "report" | "task" | "unread" | "refuted";
+
+/** What the second reader hands in: for each sentence of the summary where the report says it, or that it does not. */
+export interface SummaryReading {
+  reportSha256?: string;
+  proposalSha256?: string;
+  model?: string;
+  sentences: { n: number; verdict: "gedragen" | "niet-gedragen"; quotes?: string[]; noteNl?: string }[];
+}
 
 /** What the evaluation says about the summary: in the report, or there and not used. */
 export type SummaryRecord =
-  | { status: "applied"; paragraphs: string[]; sources: string[][]; model?: string; templateSha256: string; proposalSha256: string }
+  | { status: "applied"; paragraphs: string[]; sources: string[][]; model?: string; readerModel?: string; templateSha256: string; proposalSha256: string; readingSha256: string }
   | { status: "stale"; reason: SummaryStaleReason };
 
 export const SUMMARY_WORDS_MAX = 220;
@@ -167,6 +176,50 @@ export function validateSummary(proposal: unknown, evaluation: Evaluation, repor
   const stopping = new Set(stoppingDefects);
   if (stopping.size > 0 && ![...used].some((source) => stopping.has(source))) problems.push(`een groep bezoekers loopt vast bij een kerntaak; een alinea noemt dat, met in sources het gebrek waardoor (${[...stopping].slice(0, 4).join(", ")})`);
   return problems;
+}
+
+/** The sentences of a summary as the second reader gets them, in order. */
+export const readingSentences = (proposal: SummaryProposal): string[] => proposal.paragraphs.flatMap((paragraph) => paragraph.textNl.trim().split(/(?<=[.!?])\s+/).filter(Boolean));
+
+const QUOTE_MIN = 12;
+const flat = (text: string): string => text.replace(/\s+/g, " ").trim();
+
+/**
+ * Hold a reading to the summary and the report: every sentence has a verdict, a sentence the report
+ * carries comes with text that is literally in the report, one it does not carry says why.
+ * `problems` are faults in the reading itself; `refuted` are the sentences the reader did not find in the report.
+ */
+export function validateReading(reading: unknown, sentences: readonly string[], reportText: string): { problems: string[]; refuted: { n: number; sentence: string; noteNl: string }[] } {
+  const problems: string[] = [];
+  const refuted: { n: number; sentence: string; noteNl: string }[] = [];
+  const entries = (reading as SummaryReading | null)?.sentences;
+  if (!Array.isArray(entries)) return { problems: ['het antwoord heeft geen lijst "sentences"'], refuted };
+  const report = flat(reportText);
+  const seen = new Set<number>();
+  for (const entry of entries) {
+    const n = entry?.n;
+    if (!Number.isInteger(n) || n < 1 || n > sentences.length) {
+      problems.push(`zin ${String(n)} bestaat niet; de samenvatting heeft de zinnen 1 tot en met ${sentences.length}`);
+      continue;
+    }
+    if (seen.has(n)) problems.push(`zin ${n} staat er twee keer`);
+    seen.add(n);
+    if (entry.verdict === "gedragen") {
+      const quotes = Array.isArray(entry.quotes) ? entry.quotes.filter((quote): quote is string => typeof quote === "string" && quote.trim() !== "") : [];
+      if (quotes.length === 0) problems.push(`zin ${n}: gedragen, maar zonder stuk uit het rapport in quotes`);
+      for (const quote of quotes) {
+        if (flat(quote).length < QUOTE_MIN) problems.push(`zin ${n}: "${flat(quote)}" is te kort om een plek in het rapport aan te wijzen`);
+        else if (!report.includes(flat(quote))) problems.push(`zin ${n}: "${flat(quote).slice(0, 80)}" staat niet letterlijk in het rapport; kopieer het stuk uit het rapport`);
+      }
+    } else if (entry.verdict === "niet-gedragen") {
+      const noteNl = typeof entry.noteNl === "string" ? entry.noteNl.trim() : "";
+      if (noteNl === "") problems.push(`zin ${n}: niet-gedragen, maar noteNl zegt niet wat er niet klopt`);
+      refuted.push({ n, sentence: sentences[n - 1]!, noteNl });
+    } else problems.push(`zin ${n}: verdict is "gedragen" of "niet-gedragen"`);
+  }
+  const missing = sentences.map((_sentence, index) => index + 1).filter((n) => !seen.has(n));
+  if (missing.length > 0) problems.push(`${missing.length === 1 ? "zin" : "de zinnen"} ${missing.join(", ")} ${missing.length === 1 ? "heeft" : "hebben"} geen oordeel`);
+  return { problems, refuted };
 }
 
 export function clearSummary(evaluation: Evaluation): void {
