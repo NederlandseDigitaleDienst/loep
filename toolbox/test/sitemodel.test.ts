@@ -357,6 +357,13 @@ test("the gate warns, without a gap, for each tagged pdf whose tag text was not 
   assert.deepEqual(checked.warnings.map((warning) => [warning.check, warning.page]), [["document-tag-text-not-read", "D01"]]);
 });
 
+test("a document of the sample that documents never measured is a gap for the sweep", () => {
+  const documents = [{ label: "D01", item: { url: "https://site.nl/a.pdf" }, facts: null }, { label: "D02", item: { url: "https://site.nl/b.pdf" }, facts: { status: "notRead" } }, { label: "D03", item: { url: "https://site.nl/c.pdf" }, facts: null }] as unknown as RunData["documents"];
+  const checked = gateChecks(gateRun([gatePage("P1", "https://site.nl/")], { documents }));
+  assert.deepEqual(checked.gaps.map((gap) => [gap.check, gap.fixedBy, gap.measured]), [["coverage", "sweep", { missing: ["D01", "D03"] }]]);
+  assert.match(checked.gaps[0]!.missingNl, /^Van 2 documenten in de steekproef is niets gemeten \(D01, D03\).* Draai documents\.$/);
+});
+
 test("the gate flags a Tab walk that reached less than the threshold, and not one just above it", () => {
   assert.equal(MIN_TAB_REACH, 0.5);
   assert.deepEqual(names(gateRun([gatePage("P1", "https://site.nl/", { links: 10, reached: 4 })])), ["tab-reach:P1"]);

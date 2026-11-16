@@ -326,6 +326,9 @@ export function gateChecks(run: RunData): { checks: Check[]; gaps: Gap[]; warnin
     const share = expected.filter((element) => stops.has(where(element))).length / expected.length;
     if (share < MIN_TAB_REACH) warnings.push({ check: "tab-reach-narrow", ...on(page), state: "default", missingNl: `In het smalle venster bereikte de Tab-proef ${percent(share)} van de ${expected.length} links en bedieningselementen (${stops.size} stops, uitkomst ${page.tabwalkNarrow.outcome}).` });
   }
+  // A document of the sample without facts was never fetched: the judges would see only its link.
+  const unmeasured = (run.documents ?? []).filter((document) => document.facts === null);
+  if (unmeasured.length > 0) coverageGaps.push({ check: "coverage", page: null, url: null, state: "default", missingNl: `Van ${unmeasured.length === 1 ? "1 document" : `${unmeasured.length} documenten`} in de steekproef is niets gemeten (${unmeasured.map((document) => document.label).join(", ")}), dus de beoordelaars zouden alleen de link zien. Draai documents.`, measured: { missing: unmeasured.map((document) => document.label) }, fixedBy: "sweep" });
   // The single keys in the states of the model belong to the interaction probe.
   if (model && run.siteStates && run.states) {
     const inStates = run.states.singleKeys?.states;
