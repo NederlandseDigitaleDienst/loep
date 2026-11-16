@@ -885,9 +885,24 @@ export function isTimeout(error: unknown): boolean {
   return false;
 }
 
+/** How long a step waits for its element to appear: a notice or a panel that a script adds just after the load. */
+export const STEP_APPEAR_MS = 5000;
+const STEP_POLL_MS = 250;
+
+/** The element of a step, looked for again for a short while when it is not there yet. Null when it did not appear. */
+async function resolveStepWaiting(surface: Surface, step: Step): Promise<Awaited<ReturnType<typeof resolveStep>>> {
+  const wanted = { target: step.target!, locators: step.locators ?? null };
+  const until = Date.now() + STEP_APPEAR_MS;
+  for (;;) {
+    const info = await resolveStep(surface, wanted);
+    if (info || Date.now() >= until) return info;
+    await new Promise((resolve) => setTimeout(resolve, STEP_POLL_MS));
+  }
+}
+
 export async function runSteps(env: Env, surface: Surface, steps: Step[], images: Images, matches?: string[], speech?: LastStepSpeech): Promise<{ index: number; command: string; reason: string; timedOut?: boolean } | null> {
   for (const [index, step] of steps.entries()) {
-    const info = step.target ? await resolveStep(surface, { target: step.target, locators: step.locators ?? null }) : null;
+    const info = step.target ? await resolveStepWaiting(surface, step) : null;
     if (step.target && !info) return { index, command: step.command, reason: STEP_NOT_FOUND_NL };
     // The reader listens in the tab itself, and in the embedded frame the step acts in.
     const listening: Surface["page"][] = [];

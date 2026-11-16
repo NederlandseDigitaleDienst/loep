@@ -542,6 +542,18 @@ test("state save and open --state reproduce a state", async () => {
   assert.equal((await raw("open", [], { state: "bestaat-niet" })).ok, false);
 });
 
+test("a step whose element a script adds just after the load waits for it, so replaying the state does not fail on timing", async () => {
+  await loep("open", ["/late.html"]);
+  await new Promise((resolve) => setTimeout(resolve, 2000));
+  await loep("click", [await ref("css:#late")]);
+  assert.equal((await loep("state", ["save", "late-open"])).steps, 1);
+  // A fresh page: the button is not there yet when the steps start.
+  const opened = await loep("open", [], { state: "late-open" }, "main");
+  assert.equal(opened.ok ?? true, true, JSON.stringify(opened));
+  const after = await loep("ax", [await ref("css:#late")]);
+  assert.equal((after.states as { expanded: boolean }).expanded, true);
+});
+
 test("replay reports same for an unchanged page and different after the page changes", async () => {
   site.setVariant(0);
   await loep("open", ["/changing.html"]);

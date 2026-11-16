@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="nl">
+<head><meta charset="utf-8"><title>Laat</title></head>
+<body>
+<main>
+<h1>Een knop die na het laden verschijnt</h1>
+<p id="status">dicht</p>
+</main>
+<script>
+  // A notice that a script adds a moment after the load, as a cookie notice often does.
+  setTimeout(() => {
+    const button = document.createElement("button");
+    button.id = "late";
+    button.textContent = "Oké";
+    button.setAttribute("aria-expanded", "false");
+    button.addEventListener("click", () => {
+      button.setAttribute("aria-expanded", "true");
+      document.getElementById("status").textContent = "open";
+    });
+    document.querySelector("main").append(button);
+  }, 1500);
+</script>
+</body>
+</html>
