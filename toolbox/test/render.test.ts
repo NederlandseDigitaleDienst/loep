@@ -1201,8 +1201,11 @@ test("the report goes from what is wrong and what to do, to how each criterion c
   const evaluation = exampleEvaluation();
   evaluation.site.descriptionNl = "Dit is de website van een gemeente.";
   const chapters = [...renderMarkdown(evaluation).matchAll(/^## (.+)$/gm)].map((match) => match[1]!);
-  const order = ["Samenvatting", "Wat nu", "Overzicht van de gebreken", "Bevindingen per onderdeel", "Resultaten per criterium", "Over deze website", "Onderzoeksgegevens", "Scope", "Basisniveau van ondersteuning", "Steekproef", "Gereedschap", "Betrouwbaarheid en beperkingen", "Bijlage A: onderbouwing per criterium", "Bijlage B: herleidbaarheid"];
+  const order = ["Samenvatting", "Overzicht van de gebreken", "Wat nu", "Bevindingen per onderdeel", "Resultaten per criterium", "Over deze website", "Onderzoeksgegevens", "Scope", "Basisniveau van ondersteuning", "Steekproef", "Gereedschap", "Betrouwbaarheid en beperkingen", "Bijlage A: onderbouwing per criterium", "Bijlage B: herleidbaarheid"];
   assert.deepEqual(chapters.filter((chapter) => order.includes(chapter)), order);
+  // What points at another chapter points the right way: the overview says the work list comes after it.
+  const withDefects = renderMarkdown(weighed({ ...evaluation, defects: mergeFindings(evaluation) }));
+  for (const match of withDefects.matchAll(/werklijst hierna/g)) assert.ok(match.index! < withDefects.indexOf("## Wat nu"), "\"de werklijst hierna\" staat voor de werklijst");
   // The scores per principle open the results; they are no longer in the summary.
   const markdown = renderMarkdown(evaluation);
   assert.ok(markdown.indexOf("**WCAG 2.2 niveau A en AA") > markdown.indexOf("## Resultaten per criterium"));

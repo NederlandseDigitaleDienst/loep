@@ -78,8 +78,9 @@ export const REPORT_TEXT = {
   scopeFrames: "Ingesloten vensters, per venster wat het is en of het meetelt",
   title: "Toegankelijkheidsonderzoek",
   defectsOverview: "Overzicht van de gebreken",
-  /** Under the summary for the leadership: who wrote it and what holds it to the report. `{model}` is the model the writer gave. */
-  executiveNote: "Deze samenvatting is geschreven door een taalmodel{model}, uit de tekst van dit rapport. Een script heeft haar aan het rapport gehouden: de status, de getallen en de gebreken waarop ze rust komen uit het onderzoek. Wat hieronder staat, is de herleidbare versie.",
+  /** In the chapter about the tools, next to the models of the agents: who wrote the summary for the leadership and what holds it to the report. `{model}` is the model the writer gave. */
+  executiveLabel: "Samenvatting bovenaan het rapport",
+  executiveNote: "Geschreven door een taalmodel{model}, uit de tekst van dit rapport zonder de bijlagen. Een script heeft de tekst aan het rapport gehouden: de status, de norm, elk getal en de gebreken waarop ze rust komen uit het onderzoek. Of een zin iets zegt wat het rapport niet zegt, kan het script niet zien; wie het rapport tekent, leest de samenvatting mee.",
   concept: "Concept, niet afgetekend",
   staleSignature: "De handtekening hoort bij een eerdere versie van dit onderzoek.",
   scoreNote: "\"Niet van toepassing\" telt niet mee als \"Voldoet\". \"Kan niet bepalen\" en \"Niet beoordeeld\" zijn open: daar is nog geen oordeel.",
@@ -351,7 +352,7 @@ export interface ReportDerived {
   signatureStale: boolean;
   status: Record<WcagVersion, { status: ComplianceStatus; reasonNl: string }>;
   statusSentenceNl: string;
-  /** The summary for the leadership, when one was written and passed its check: it opens the report in place of `statusSentenceNl`. */
+  /** The summary for the leadership, when one was written and passed its check: it opens the report in place of `statusSentenceNl`. `noteNl` says who wrote it, in the chapter about the tools. */
   executive: { paragraphs: string[]; noteNl: string } | null;
   statusLine: StatusLine;
   /**
@@ -1720,10 +1721,12 @@ export function findingsByComponent(evaluation: Evaluation): { component: string
 export type ReportBlock = (typeof REPORT_ORDER)[number];
 
 /**
- * The order of the report, for every form it takes: first what is wrong and for whom, then what
- * to do, then how each criterion came out, and last how the evaluation was made.
+ * The order of the report, for every form it takes: first what is wrong and for whom, with the
+ * defects counted per core task and per group, then what to do, then how each criterion came out,
+ * and last how the evaluation was made. The overview stands before the work list: it is short and
+ * says what the list is about, and the list is most of the pages before the results.
  */
-export const REPORT_ORDER = ["title", "summary", "whatNext", "measures", "overview", "byComponent", "byPage", "resultsHead", "scores", "results", "about", "facts", "scope", "baseline", "sample", "tools", "reliability", "appendixA", "appendixB", "rechecks"] as const;
+export const REPORT_ORDER = ["title", "summary", "overview", "whatNext", "measures", "byComponent", "byPage", "resultsHead", "scores", "results", "about", "facts", "scope", "baseline", "sample", "tools", "reliability", "appendixA", "appendixB", "rechecks"] as const;
 
 /** What the writer of the summary does not read: the appendices, which repeat per criterion what the chapters say and are most of the pages. */
 const NOT_SUMMARY_SOURCE: readonly ReportBlock[] = ["appendixA", "appendixB", "rechecks"];
@@ -1778,7 +1781,7 @@ function reportBlocks(input: Evaluation, decisions: DecisionLayer = { decisions:
   begin("summary");
   section("Samenvatting");
   // A summary written for the leadership opens the report; without one the sentence loep makes itself does.
-  if (derived.executive) lines.push(...derived.executive.paragraphs.flatMap((paragraph) => [esc(paragraph), ""]), `*${derived.executive.noteNl}*`, "");
+  if (derived.executive) lines.push(...derived.executive.paragraphs.flatMap((paragraph) => [esc(paragraph), ""]));
   else lines.push(derived.statusSentenceNl, "");
   lines.push(`**${derived.statusLine.headingNl}**`, "");
   if (derived.statusLine.noteNl) lines.push(derived.statusLine.noteNl, "");
@@ -2007,6 +2010,7 @@ function reportBlocks(input: Evaluation, decisions: DecisionLayer = { decisions:
       `Wachttijden: ${toolchain.rendering.navigationTimeoutMs / 1000} seconden voor het laden van een pagina, ${toolchain.rendering.settleTimeoutMs / 1000} seconden voor het tot rust komen`,
       `${REPORT_TEXT.model}: ${esc(evaluation.judgment.model)} (${agentModels ? REPORT_TEXT.modelNoteOperator : REPORT_TEXT.modelNote})`,
       ...(agentModels ? [`${REPORT_TEXT.agentModels}: ${agentModels.perRoleNl.map(esc).join("; ")}. ${REPORT_TEXT.agentModelsNote}${agentModels.differsNl ? ` ${esc(agentModels.differsNl)}` : ""}`] : []),
+      ...(derived.executive ? [`${REPORT_TEXT.executiveLabel}: ${esc(derived.executive.noteNl)}`] : []),
       `Rondes: ${evaluation.judgment.rounds.map(esc).join(", ")}`,
       ...(derived.extensionsNl ? [`${REPORT_TEXT.extensions}: ${esc(derived.extensionsNl)}. ${REPORT_TEXT.extensionsNote}`] : []),
       `Opdrachtsjablonen: ${Object.keys(evaluation.judgment.promptTemplates).sort().map((name) => `${esc(name)} ${shortHash(evaluation.judgment.promptTemplates[name])}`).join(", ")}`,

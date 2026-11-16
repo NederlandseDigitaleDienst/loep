@@ -24,7 +24,7 @@ const STOPPING = ["VRB-G-9fc8", "VRB-G-0518", "VRB-G-e7cb", "VRB-G-69e6"];
 const good = (): SummaryProposal => ({
   model: "voorbeeld-model-5",
   paragraphs: [
-    { textNl: "De site van Voorbeeldgemeente voldoet niet aan de eisen voor toegankelijkheid. Van de 55 criteria zijn er 5 niet gehaald en 4 open, en daaruit volgt status C.", sources: ["status"] },
+    { textNl: "De site van Voorbeeldgemeente voldoet niet aan WCAG 2.2 niveau A en AA, de norm voor toegankelijkheid. Van de 55 criteria zijn er 5 niet gehaald en 4 open, en daaruit volgt status C.", sources: ["status"] },
     { textNl: "Mensen die niet zien kunnen geen vergunning aanvragen, omdat de knop om te versturen voor hen geen naam heeft. Mensen die slecht zien stranden op grijze hulptekst en een zoekveld zonder naam.", sources: ["vastlopen", "VRB-G-e7cb", "VRB-G-9fc8"] },
     { textNl: "Herstel eerst het formulier voor de vergunning. Over 4 criteria is niets vastgesteld; ook daar kan een groep vastlopen.", sources: ["wat-nu", "open"] },
   ],
@@ -51,9 +51,9 @@ test("the check holds a summary to the report: length, form, numbers, status and
   refused("too long", add("woord ".repeat(SUMMARY_WORDS_MAX).trim()), new RegExp(`hooguit ${SUMMARY_WORDS_MAX}`));
   refused("one paragraph", (proposal) => void proposal.paragraphs.splice(1), /het zijn er 2 tot 4/);
   refused("a number that is not in the report", add("Dat raakt 37 pagina's."), /het getal 37 staat niet in het rapport/);
-  refused("another status", first("De site voldoet niet. Van de 55 criteria zijn er 5 niet gehaald, en daaruit volgt status B."), /noemt status B; het rapport komt uit op status C/);
-  refused("no status", first("De site voldoet niet. Van de 55 criteria zijn er 5 niet gehaald en 4 open."), /noemt status C niet/);
-  refused("says the site conforms", first("De site voldoet aan de eisen, op 5 van de 55 criteria na. Daaruit volgt status C."), /voldoet niet|zegt dat de site voldoet/);
+  refused("another status", first("De site voldoet niet aan WCAG 2.2 niveau A en AA. Van de 55 criteria zijn er 5 niet gehaald, en daaruit volgt status B."), /noemt status B; het rapport komt uit op status C/);
+  refused("no status", first("De site voldoet niet aan WCAG 2.2 niveau A en AA. Van de 55 criteria zijn er 5 niet gehaald en 4 open."), /noemt status C niet/);
+  refused("says the site conforms", first("De site voldoet aan WCAG 2.2 niveau A en AA, op 5 van de 55 criteria na. Daaruit volgt status C."), /voldoet niet|zegt dat de site voldoet/);
   refused("softens", add("Over het algemeen is de site goed te gebruiken."), /"over het algemeen" maakt kleiner/);
   refused("speaks for every visitor", add("Niemand merkt daar iets van."), /"niemand"/);
   refused("a failure called formal", add("Dat is een formele afwijking."), /"formele"/);
@@ -63,11 +63,15 @@ test("the check holds a summary to the report: length, form, numbers, status and
   refused("about signing", add("De status is voorlopig."), /"voorlopig" gaat over het tekenen/);
   refused("a dash", add("Het formulier — het belangrijkste deel — werkt niet."), /gedachtestreepje/);
   refused("brackets", add("Het formulier (voor de vergunning) werkt niet."), /zonder haakjes/);
-  refused("a list", first("- De site voldoet niet. Van de 55 criteria zijn er 5 niet gehaald en 4 open, en daaruit volgt status C."), /lopende tekst/);
+  refused("a list", first("- De site voldoet niet aan WCAG 2.2 niveau A en AA. Van de 55 criteria zijn er 5 niet gehaald en 4 open, en daaruit volgt status C."), /lopende tekst/);
   refused("emphasis", add("Dat is **het zwaarste** gebrek."), /lopende tekst/);
   refused("an address", add("Zie https://voorbeeld.example/contact."), /noem geen adres/);
   refused("no source", (proposal) => void (proposal.paragraphs[1]!.sources = []), /sources is leeg/);
   refused("a source that is not in the report", (proposal) => void proposal.paragraphs[1]!.sources.push("VRB-G-0000"), /"VRB-G-0000" in sources is geen gebrek of criterium/);
+  // The norm by its name: "the norm for accessibility" alone does not say against what the site was held.
+  refused("the norm not named", first("De site van Voorbeeldgemeente voldoet niet aan de norm voor toegankelijkheid. Van de 55 criteria zijn er 5 niet gehaald en 4 open, en daaruit volgt status C."), /noemt de norm niet; zeg één keer in een zin "WCAG 2\.2 niveau A en AA"/);
+  // A defect without who it hinders.
+  refused("a defect without a group", (proposal) => void (proposal.paragraphs[1]!.textNl = "De knop om de aanvraag te versturen heeft geen naam. Grijze hulptekst is slecht te lezen."), /noemt niet voor wie het geldt/);
   // A group is stopped at a core task: a paragraph rests on a defect that stops it.
   refused("silent about who is stopped", (proposal) => void (proposal.paragraphs[1]!.sources = ["groepen"]), /een groep bezoekers loopt vast bij een kerntaak/);
   // Open criteria stay open: a paragraph says what was not established.
@@ -111,7 +115,7 @@ test("summarize writes the task and the report, and puts in only a summary that 
     assert.equal(first.summary, "not-run");
     assert.match(summaryLineNl(first), /niet geschreven: het rapport opent met de zin van loep/);
     const task = readFileSync(join(dir, "tasks", "samenvatting", "taak.md"), "utf8");
-    assert.match(task, /hooguit 150 woorden/i);
+    assert.match(task, /hooguit 180 woorden/i);
     assert.doesNotMatch(task, /\{\{/);
     assert.doesNotMatch(task, /\b[Hh]ij\b/);
     assert.equal(readFileSync(join(dir, "tasks", "samenvatting", "rapport.md"), "utf8"), summarySourceText(read()));
@@ -129,8 +133,11 @@ test("summarize writes the task and the report, and puts in only a summary that 
     assert.equal(applied.executiveSummary!.status, "applied");
     const markdown = renderMarkdown(applied);
     const opening = markdown.slice(markdown.indexOf("## Samenvatting"), markdown.indexOf("### Wie loopt vast"));
-    assert.match(opening, /De site van Voorbeeldgemeente voldoet niet aan de eisen voor toegankelijkheid\./);
-    assert.match(opening, /geschreven door een taalmodel \(voorbeeld-model-5\)/);
+    assert.match(opening, /De site van Voorbeeldgemeente voldoet niet aan WCAG 2\.2 niveau A en AA, de norm voor toegankelijkheid\./);
+    // Who wrote it is said with the tools, next to the models of the agents, not under the text.
+    assert.doesNotMatch(opening, /taalmodel/);
+    const tools = markdown.slice(markdown.indexOf("## Gereedschap"), markdown.indexOf("## Betrouwbaarheid"));
+    assert.match(tools, /- Samenvatting bovenaan het rapport: Geschreven door een taalmodel \(voorbeeld-model-5\), uit de tekst van dit rapport zonder de bijlagen\./);
     // It takes the place of the sentence loep writes itself; the status loep computed stays next to it.
     assert.ok(!opening.includes(deriveReport(applied).statusSentenceNl));
     assert.match(opening, /\*\*Voorlopige status: C/);
@@ -151,7 +158,7 @@ test("summarize writes the task and the report, and puts in only a summary that 
     const stale = await summarize(dir);
     assert.deepEqual([stale.summary, stale.reason], ["stale", "report"]);
     assert.match(summaryLineNl(stale), /geschreven voor een rapport dat sindsdien is veranderd\. Ze staat niet in het rapport\. Laat haar opnieuw schrijven/);
-    assert.ok(!renderMarkdown(read()).includes("De site van Voorbeeldgemeente voldoet niet aan de eisen"));
+    assert.ok(!renderMarkdown(read()).includes("De site van Voorbeeldgemeente voldoet niet aan WCAG 2.2 niveau A en AA, de norm"));
 
     // A summary that breaks a rule is not stamped.
     writeFileSync(join(dir, "verdicts", "samenvatting.json"), JSON.stringify({ paragraphs: [{ textNl: "Over het algemeen goed.", sources: ["status"] }] }));

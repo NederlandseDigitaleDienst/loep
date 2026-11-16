@@ -431,7 +431,6 @@
 #let executive = derived.at("executive", default: none)
 #if executive != none {
   for paragraph in executive.paragraphs { par(text(size: 11pt, prose(paragraph))) }
-  text(size: 8.5pt, fill: muted, executive.noteNl)
 } else {
   text(size: 13.5pt, weight: 600, derived.statusSentenceNl)
 }
@@ -491,6 +490,113 @@
 ]
 
 #if grouping != none [Het onderzoek vond #grouping.countsNl.]
+
+// ---------------------------------------------------------------- overview of the defects
+
+#let count-cell(value) = text(fill: if value == 0 { muted } else { ink }, str(value))
+
+= #t.defectsOverview
+
+#if grouping != none and weighing != none [
+  // What stops a group at a core task stands above; here what a group can not use beside the tasks.
+  #if weighing.beside != none [
+    == #t.weighing.beside
+
+    #table(
+      columns: (1fr, 24mm, 27mm),
+      inset: (x: 5pt, y: 3.8pt),
+      table.header(th[Gebrek], th[Criterium], th[Pagina's]),
+      ..weighing.beside.defectIds.map(id => defect-by-id.at(id)).map(defect => (
+        link(label(defect.id), text(weight: 600, defect.titleNl)),
+        {
+          criterion-link(defect.mainCriterion, defect.mainCriterion)
+          if defect.alsoCriteria.len() > 0 { text(size: 8.5pt, fill: muted)[\ #also-criteria(defect)] }
+        },
+        grouping.pagesNl.at(defect.id),
+      )).flatten(),
+    )
+    #text(size: 9pt, fill: muted, weighing.beside.noteNl)
+  ]
+
+  == #t.weighing.perTask
+
+  #weighing.tasksIntroNl
+
+  #table(
+    columns: (1fr, 22mm, 18mm, 16mm),
+    inset: (x: 5pt, y: 3.8pt),
+    align: (x, y) => if x == 0 { left + top } else { right + top },
+    table.header(th(t.weighing.taskColumns.at(0)), ..t.weighing.taskColumns.slice(1).map(th-right)),
+    ..weighing.tasks.map(row => (row.taskNl, ..row.counts.map(count-cell))).flatten(),
+  )
+
+  == #t.weighing.perGroup
+
+  #t.weighing.perGroupIntro
+
+  #list(..t.weighing.consequences.enumerate().map(((index, meaning)) => [#t.weighing.columns.at(index + 1): #meaning]))
+
+  #t.weighing.perGroupNote
+
+  #table(
+    columns: (1fr, 20mm, 26mm, 24mm, 22mm),
+    inset: (x: 5pt, y: 3.8pt),
+    align: (x, y) => if x == 0 { left + top } else { right + top },
+    table.header(th(t.weighing.columns.at(0)), ..t.weighing.columns.slice(1).map(th-right)),
+    ..weighing.groups.map(row => (row.groupNl, count-cell(row.cannot), count-cell(row.detour), count-cell(row.effort), if row.open == none [] else { count-cell(row.open) })).flatten(),
+  )
+] else if grouping != none [
+  == Zwaarste gebreken
+
+  #{
+    let top = grouping.topIds.map(id => defect-by-id.at(id))
+    if top.len() == 0 [Er zijn geen gebreken.] else {
+      table(
+        columns: (auto, 1fr, 24mm, 27mm),
+        inset: (x: 5pt, y: 3.8pt),
+        table.header(th[Ernst], th[Gebrek], th[Criterium], th[Pagina's]),
+        ..top.map(defect => (
+          severity(defect.severity),
+          link(label(defect.id), text(weight: 600, defect.titleNl)),
+          {
+            criterion-link(defect.mainCriterion, defect.mainCriterion)
+            if defect.alsoCriteria.len() > 0 { text(size: 8.5pt, fill: muted)[\ #also-criteria(defect)] }
+          },
+          grouping.pagesNl.at(defect.id),
+        )).flatten(),
+      )
+      text(size: 9pt, fill: muted, grouping.topNoteNl)
+    }
+  }
+] else [
+  == Zwaarste bevindingen
+
+  #{
+    let top = derived.topFindingIds.map(id => findings.find(f => f.id == id))
+    if top.len() == 0 [Er zijn geen bevindingen.] else {
+      table(
+        columns: (auto, 1fr, auto, 30%),
+        inset: (x: 5pt, y: 3.8pt),
+        table.header(th[Ernst], th[Bevinding], th[Criterium], th[Pagina's]),
+        ..top.map(finding => (
+          severity(finding.severity),
+          link(label(finding.id), text(weight: 600, finding.titleNl)),
+          criterion-link(finding.criterion, finding.criterion),
+          finding.pagesAffected,
+        )).flatten(),
+      )
+      text(size: 9pt, fill: muted, derived.topFindingsNoteNl)
+    }
+  }
+]
+
+== Wat betekent dit
+
+#{
+  set text(size: 10pt)
+  set par(leading: 0.62em)
+  for paragraph in derived.meaningNl { block(above: 11pt, below: 11pt, prose(paragraph)) }
+}
 
 // ---------------------------------------------------------------- what next
 
@@ -670,113 +776,6 @@
   }
   #par(text(size: 9pt, fill: muted, measures.layerNl))
 ]
-
-// ---------------------------------------------------------------- overview of the defects
-
-#let count-cell(value) = text(fill: if value == 0 { muted } else { ink }, str(value))
-
-= #t.defectsOverview
-
-#if grouping != none and weighing != none [
-  // What stops a group at a core task stands above; here what a group can not use beside the tasks.
-  #if weighing.beside != none [
-    == #t.weighing.beside
-
-    #table(
-      columns: (1fr, 24mm, 27mm),
-      inset: (x: 5pt, y: 3.8pt),
-      table.header(th[Gebrek], th[Criterium], th[Pagina's]),
-      ..weighing.beside.defectIds.map(id => defect-by-id.at(id)).map(defect => (
-        link(label(defect.id), text(weight: 600, defect.titleNl)),
-        {
-          criterion-link(defect.mainCriterion, defect.mainCriterion)
-          if defect.alsoCriteria.len() > 0 { text(size: 8.5pt, fill: muted)[\ #also-criteria(defect)] }
-        },
-        grouping.pagesNl.at(defect.id),
-      )).flatten(),
-    )
-    #text(size: 9pt, fill: muted, weighing.beside.noteNl)
-  ]
-
-  == #t.weighing.perTask
-
-  #weighing.tasksIntroNl
-
-  #table(
-    columns: (1fr, 22mm, 18mm, 16mm),
-    inset: (x: 5pt, y: 3.8pt),
-    align: (x, y) => if x == 0 { left + top } else { right + top },
-    table.header(th(t.weighing.taskColumns.at(0)), ..t.weighing.taskColumns.slice(1).map(th-right)),
-    ..weighing.tasks.map(row => (row.taskNl, ..row.counts.map(count-cell))).flatten(),
-  )
-
-  == #t.weighing.perGroup
-
-  #t.weighing.perGroupIntro
-
-  #list(..t.weighing.consequences.enumerate().map(((index, meaning)) => [#t.weighing.columns.at(index + 1): #meaning]))
-
-  #t.weighing.perGroupNote
-
-  #table(
-    columns: (1fr, 20mm, 26mm, 24mm, 22mm),
-    inset: (x: 5pt, y: 3.8pt),
-    align: (x, y) => if x == 0 { left + top } else { right + top },
-    table.header(th(t.weighing.columns.at(0)), ..t.weighing.columns.slice(1).map(th-right)),
-    ..weighing.groups.map(row => (row.groupNl, count-cell(row.cannot), count-cell(row.detour), count-cell(row.effort), if row.open == none [] else { count-cell(row.open) })).flatten(),
-  )
-] else if grouping != none [
-  == Zwaarste gebreken
-
-  #{
-    let top = grouping.topIds.map(id => defect-by-id.at(id))
-    if top.len() == 0 [Er zijn geen gebreken.] else {
-      table(
-        columns: (auto, 1fr, 24mm, 27mm),
-        inset: (x: 5pt, y: 3.8pt),
-        table.header(th[Ernst], th[Gebrek], th[Criterium], th[Pagina's]),
-        ..top.map(defect => (
-          severity(defect.severity),
-          link(label(defect.id), text(weight: 600, defect.titleNl)),
-          {
-            criterion-link(defect.mainCriterion, defect.mainCriterion)
-            if defect.alsoCriteria.len() > 0 { text(size: 8.5pt, fill: muted)[\ #also-criteria(defect)] }
-          },
-          grouping.pagesNl.at(defect.id),
-        )).flatten(),
-      )
-      text(size: 9pt, fill: muted, grouping.topNoteNl)
-    }
-  }
-] else [
-  == Zwaarste bevindingen
-
-  #{
-    let top = derived.topFindingIds.map(id => findings.find(f => f.id == id))
-    if top.len() == 0 [Er zijn geen bevindingen.] else {
-      table(
-        columns: (auto, 1fr, auto, 30%),
-        inset: (x: 5pt, y: 3.8pt),
-        table.header(th[Ernst], th[Bevinding], th[Criterium], th[Pagina's]),
-        ..top.map(finding => (
-          severity(finding.severity),
-          link(label(finding.id), text(weight: 600, finding.titleNl)),
-          criterion-link(finding.criterion, finding.criterion),
-          finding.pagesAffected,
-        )).flatten(),
-      )
-      text(size: 9pt, fill: muted, derived.topFindingsNoteNl)
-    }
-  }
-]
-
-== Wat betekent dit
-
-#{
-  set text(size: 10pt)
-  set par(leading: 0.62em)
-  for paragraph in derived.meaningNl { block(above: 11pt, below: 11pt, prose(paragraph)) }
-}
 
 // ---------------------------------------------------------------- findings, regrouped
 
@@ -1335,6 +1334,9 @@
     (t.model, [#evaluation.judgment.model (#if agent-models != none { t.modelNoteOperator } else { t.modelNote })]),
     ..if agent-models != none {
       ((t.agentModels, [#agent-models.perRoleNl.join(linebreak())\ #t.agentModelsNote#if agent-models.differsNl != none [ #agent-models.differsNl]]),)
+    },
+    ..if derived.at("executive", default: none) != none {
+      ((t.executiveLabel, derived.executive.noteNl),)
     },
     ("Rondes", evaluation.judgment.rounds.join(", ")),
     ..if derived.at("extensionsNl", default: none) != none {

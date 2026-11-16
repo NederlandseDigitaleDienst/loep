@@ -308,11 +308,11 @@ export function renderHtml(input: Evaluation, decisions: DecisionLayer = { decis
     shots: options.pageShots ?? {},
     frame: options.frame ?? "standalone",
   };
-  // The same order as the other forms of the report (`REPORT_ORDER`): what to do, the defects in overview and by place, how each criterion came out, how the evaluation was made.
+  // The same order as the other forms of the report (`REPORT_ORDER`): the defects in overview, what to do, the defects by place, how each criterion came out, how the evaluation was made.
   const report: Chapter[] = [
+    { id: "overzicht", titleNl: REPORT_TEXT.defectsOverview, body: defectsOverview(context) },
     { id: "wat-nu", titleNl: "Wat nu", body: whatNext(context) },
     ...(derived.measures ? [{ id: "maatregelen", titleNl: REPORT_TEXT.measures.title, body: measures(context) }] : []),
-    { id: "overzicht", titleNl: REPORT_TEXT.defectsOverview, body: defectsOverview(context) },
     { id: "per-onderdeel", titleNl: "Bevindingen per onderdeel", body: byComponent(context) },
     { id: "per-pagina", titleNl: context.defects.size > 0 || evaluation.defects ? "Gebreken per pagina" : "Bevindingen per pagina", body: byPage(context) },
     { id: "resultaten", titleNl: "Resultaten per criterium", body: results(context) },
@@ -690,12 +690,21 @@ function summary(context: Context): string {
       tag: "nldd-one-third-two-thirds-section",
       attrs: { id: "samenvatting" },
       children: [
-        // A summary written for the leadership opens the report; without one the sentence loep makes itself does.
-        stack([title("Samenvatting", 2, 2), spacer(12), ...(derived.executive ? [rich(derived.executive.paragraphs.map((paragraph) => `<p>${inline(paragraph)}</p>`).join("")), spacer(8), text(inline(derived.executive.noteNl), { size: "sm", color: "secondary" })] : [text(inline(derived.statusSentenceNl), { size: "lg" })])].join(""), { slot: "header" }),
+        // The status and the numbers are what a reader sees first, in one screen; a summary written for the leadership stands right under them.
+        stack([title("Samenvatting", 2, 2), ...(derived.executive ? [] : [spacer(12), text(inline(derived.statusSentenceNl), { size: "lg" })])].join(""), { slot: "header" }),
         stack(statusCard(context), { slot: "left" }),
         stack([numberCards(context), ...(derived.defects ? [spacer(12), text(`Het onderzoek vond ${inline(derived.defects.countsNl)}.`, { color: "secondary" })] : []), ...(context.frame === "standalone" ? [spacer(24), fingerprintImage(context)] : [])].join(""), { slot: "right" }),
       ].join(""),
     }),
+    ...(derived.executive
+      ? [
+          el({
+            tag: "nldd-simple-section",
+            attrs: { "padding-top": 0 },
+            children: rich(derived.executive.paragraphs.map((paragraph) => `<p>${inline(paragraph)}</p>`).join("")),
+          }),
+        ]
+      : []),
     // With a weighing the summary says who is stopped where; the tables and the scores stand in their own chapters.
     ...(derived.defects && derived.weighing ? weighingSections(context).stopped : []),
     ...(forB ? [el({ tag: "nldd-simple-section", attrs: { "padding-top": 0 }, children: forB })] : []),
@@ -1168,6 +1177,7 @@ function tools({ evaluation, derived }: Context): string {
     ["Wachttijden", `${toolchain.rendering.navigationTimeoutMs / 1000} seconden voor het laden van een pagina, ${toolchain.rendering.settleTimeoutMs / 1000} seconden voor het tot rust komen`],
     [REPORT_TEXT.model, `${inline(evaluation.judgment.model)} (${attr(agentModels ? REPORT_TEXT.modelNoteOperator : REPORT_TEXT.modelNote)})`],
     ...(agentModels ? [[REPORT_TEXT.agentModels, `${agentModels.perRoleNl.map(inline).join("; ")}. ${attr(REPORT_TEXT.agentModelsNote)}${agentModels.differsNl ? ` ${inline(agentModels.differsNl)}` : ""}`] as [string, string]] : []),
+    ...(derived.executive ? [[REPORT_TEXT.executiveLabel, inline(derived.executive.noteNl)] as [string, string]] : []),
     ["Rondes", evaluation.judgment.rounds.map(inline).join(", ")],
     ...(derived.extensionsNl ? [[REPORT_TEXT.extensions, `${inline(derived.extensionsNl)}. ${attr(REPORT_TEXT.extensionsNote)}`] as [string, string]] : []),
     ["Opdrachtsjablonen", Object.keys(evaluation.judgment.promptTemplates).sort().map((name) => `${attr(name)} ${short(evaluation.judgment.promptTemplates[name])}`).join(", ")],
@@ -1385,7 +1395,9 @@ function annotatedPage(label: string, pageTitle: string, picture: PagePart, numb
   const numbers = numbered.map(({ n }) => n);
   const range = numbers.length === 1 ? `markering ${numbers[0]}` : `de markeringen ${numbers[0]} tot en met ${numbers[numbers.length - 1]}`;
   const alt = `${which} van ${label} ${pageTitle}, met ${range} op de plek van een gebrek. De lijst onder de afbeeldingen noemt ze met dezelfde nummers.`;
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" role="img" aria-label="${attr(alt)}" viewBox="0 0 ${picture.width} ${picture.height}"><image href="${picture.src}" width="${picture.width}" height="${picture.height}"/>${marks.join("")}</svg>`;
+  // The picture alone is the image with the text alternative; the marks stand next to it in the drawing. Inside an element with the role of an
+  // image nothing can take focus, also not a link that is out of the tab order: assistive technology may still land on it (axe: nested-interactive).
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${picture.width} ${picture.height}"><g role="img" aria-label="${attr(alt)}"><image href="${picture.src}" width="${picture.width}" height="${picture.height}"/></g>${marks.join("")}</svg>`;
   // The design system has no image with links in it, such as an image map; a mark is an <a> in the drawing.
   return el({ tag: "nldd-image", attrs: { shape: "rounded", caption: which === "Schermafbeelding" ? undefined : which }, children: `\n<!-- nldd-lint-disable-next-line html-no-control -- een markering op de afbeelding is een link in de tekening; het systeem heeft geen afbeelding met links -->\n${svg}\n` });
 }

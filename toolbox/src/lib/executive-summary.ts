@@ -22,7 +22,7 @@ export type SummaryRecord =
   | { status: "applied"; paragraphs: string[]; sources: string[][]; model?: string; templateSha256: string; proposalSha256: string }
   | { status: "stale"; reason: SummaryStaleReason };
 
-export const SUMMARY_WORDS_MAX = 150;
+export const SUMMARY_WORDS_MAX = 180;
 export const SUMMARY_PARAGRAPHS_MIN = 2;
 export const SUMMARY_PARAGRAPHS_MAX = 4;
 
@@ -48,6 +48,11 @@ const PROCESS = ["veegronde", "afmaakronde", "rondgang", "beoordelaar", "verifie
  * in the signed report unchanged; the status next to it says whether it is provisional.
  */
 const SIGNING = ["voorlopig", "concept", "afgetekend", "aftekent", "aftekenen", "aftekening", "ondertekend", "ondertekening"];
+
+/** A paragraph that tells of a defect says who it hinders: a group as the report names it ("mensen die niet zien"), or "wie" with what they do. */
+const PEOPLE = /(?<![\p{L}])(?:mensen|bezoekers|gebruikers|iedereen|wie)(?![\p{L}])/iu;
+/** The norm by its name, version and level, as the report gives it: said once, so the reader knows against what the site was held. */
+const NORM = /WCAG 2\.2\b[^.]*\bniveau A en AA\b/;
 
 const wordsOf = (text: string): string[] => text.trim().split(/\s+/).filter(Boolean);
 const hasPhrase = (text: string, phrase: string): boolean => new RegExp(`(?<![\\p{L}\\p{N}])${phrase.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![\\p{L}\\p{N}])`, "iu").test(text);
@@ -97,6 +102,8 @@ export function validateSummary(proposal: unknown, evaluation: Evaluation, repor
     for (const number of numbersOf(text)) if (!known.has(number)) problems.push(`${where}: het getal ${number} staat niet in het rapport; neem getallen letterlijk over en reken niets uit`);
     const sources = Array.isArray(paragraph.sources) ? paragraph.sources.filter((source): source is string => typeof source === "string") : [];
     if (sources.length === 0) problems.push(`${where}: sources is leeg; noem waar in het rapport de alinea op rust`);
+    // A defect is told with who it hinders: a paragraph that rests on one names people.
+    if (sources.some((source) => defects.has(source)) && !PEOPLE.test(text)) problems.push(`${where}: de alinea rust op een gebrek en noemt niet voor wie het geldt; zeg welke groep bezoekers het hindert, zoals het rapport dat doet`);
     for (const source of sources) {
       if (!defects.has(source) && !criteria.has(source) && !(source in SUMMARY_PARTS)) problems.push(`${where}: "${source}" in sources is geen gebrek of criterium van dit rapport en geen van ${Object.keys(SUMMARY_PARTS).join(", ")}`);
       used.add(source);
@@ -114,6 +121,7 @@ export function validateSummary(proposal: unknown, evaluation: Evaluation, repor
   // Whether the site meets the norm is said as the evaluation has it, never rounder.
   const failed = evaluation.criteria.some((criterion) => criterion.outcome === "failed");
   const open = evaluation.criteria.some((criterion) => criterion.outcome === "cantTell" || criterion.outcome === "untested");
+  if (!NORM.test(all)) problems.push('de samenvatting noemt de norm niet; zeg één keer in een zin "WCAG 2.2 niveau A en AA", zoals het rapport');
   if (failed && !/voldoet niet/i.test(all)) problems.push('het rapport keurt criteria af; de samenvatting zegt met de woorden "voldoet niet" dat de site niet voldoet');
   if ((failed || open) && /voldoet (?:volledig |geheel |helemaal |wel )?aan/i.test(all)) problems.push('de samenvatting zegt dat de site voldoet, en dat draagt het rapport niet');
   // An open criterion stays open: the summary says what was not established.
