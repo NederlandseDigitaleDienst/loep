@@ -6,7 +6,7 @@
  * search and change something.
  */
 
-export const SEARCH_SERVICE_IDS = ["typesense", "algolia", "elasticsearch", "meilisearch", "graphql", "searchui", "searchterm", "searchform"] as const;
+export const SEARCH_SERVICE_IDS = ["typesense", "algolia", "elasticsearch", "meilisearch", "graphql", "searchui", "searchterm", "searchform", "filterform"] as const;
 /** The services recognised by the search terms of the run: a rule of these gets the terms when it is approved. */
 export const TERM_SERVICES: readonly SearchServiceId[] = ["searchterm", "searchform"];
 export type SearchServiceId = (typeof SEARCH_SERVICE_IDS)[number];
@@ -557,6 +557,85 @@ function searchForm(body: string, _path?: string, terms?: readonly string[]): Ve
   return yes;
 }
 
+/**
+ * What the name of a field has to say for it to count as a choice that only narrows, orders or
+ * pages a list. This is the anchor of `filterform`: a search form is known by the term loep typed
+ * itself, a filter has no such term, so the names of its fields have to tell. A poll, a consent or
+ * a preference is a form of only choices too, and it records something: its fields are not named
+ * like these.
+ */
+const FILTER_WORDS = new Set([
+  "sort", "sortby", "sorteer", "sorteren", "sortering", "orderby", "volgorde", "richting", "direction", "asc", "desc",
+  "filter", "filters", "facet", "facets", "categorie", "categorieen", "category", "categories", "thema", "themas", "theme", "type", "types", "soort", "tag", "tags",
+  "jaar", "jaren", "year", "years", "maand", "month", "periode", "period", "datum", "date",
+  "page", "pagina", "pager", "pagesize", "perpage", "limit", "offset", "aantal", "resultaten", "results",
+]);
+/** A name written in one piece, such as "ddljaar" for a dropdown: it counts when it ends in one of these. */
+const FILTER_ENDINGS = ["sortering", "sorteren", "filter", "categorie", "category", "thema", "jaar", "year", "maand", "month", "periode", "datum", "pagina"];
+/** What a choice or a button must not say: then the form does something, whatever its fields are called. */
+const FORM_ACTION_WORDS = new Set([
+  "verwijder", "verwijderen", "delete", "remove", "wis", "wissen", "opslaan", "bewaar", "bewaren", "save", "verstuur", "versturen", "verzend", "verzenden", "send",
+  "stem", "stemmen", "vote", "bestel", "bestellen", "order", "betaal", "betalen", "pay", "aanmelden", "afmelden", "inschrijven", "uitschrijven", "subscribe", "unsubscribe",
+  "akkoord", "accepteer", "accepteren", "accept", "weiger", "weigeren", "bevestig", "bevestigen", "confirm", "registreer", "registreren", "register", "login", "inloggen", "logout", "uitloggen",
+  "wijzig", "wijzigen", "update", "create", "maak", "toevoegen", "add", "reageer", "reageren", "plaats", "plaatsen", "like", "volg", "volgen", "follow",
+]);
+
+/** The lowercase words of a name or a value: cut on everything that is no letter or digit, and on a change of case ("ddlJaar" gives "ddl" and "jaar"). */
+const formWords = (text: string): string[] =>
+  text
+    .replace(/([a-z0-9])(?=[A-Z])/g, "$1 ")
+    .toLowerCase()
+    .split(/[^a-z0-9\u00c0-\u024f]+/)
+    .filter(Boolean);
+
+/** The last part of the name of a field, where a framework writes the whole path of the control: `ctl00$Main$ddlJaar`, `filter[jaar]`. */
+const leafOf = (key: string): string => key.split(/[$:.[\]]/).filter(Boolean).pop() ?? key;
+
+const namesFilter = (key: string): boolean => {
+  const words = [...formWords(leafOf(key)), ...formWords(key)];
+  return words.some((word) => FILTER_WORDS.has(word) || FILTER_ENDINGS.some((ending) => word.length > ending.length && word.endsWith(ending)));
+};
+
+/**
+ * A filter or a sort order posted to a page of the site, such as a list that loads the results for
+ * another year with a POST to itself. There is no term of the run in it, so the form has to show
+ * by itself that it only asks: every field with a value is state of the framework, a button, or a
+ * short choice in a field named as a filter, a sort order or a page, and at least one such choice
+ * is there. What the framework posts as the control that set it off (`__EVENTTARGET` of ASP.NET
+ * WebForms) has to be such a field too: under that name any button of the page can be pressed.
+ */
+function filterForm(body: string): Verdict {
+  if (parseJson(body).ok) return no("de body is JSON en geen formulier");
+  const parsed = urlEncodedFields(body) ?? multipartFields(body);
+  if (parsed === "file") return no("het formulier stuurt een bestand mee, en een filter doet dat niet");
+  if (parsed === null) return no("de body is geen formulier (application/x-www-form-urlencoded of multipart/form-data)");
+  if (parsed.length > FORM_FIELDS_MAX) return no(`het formulier heeft meer dan ${FORM_FIELDS_MAX} velden`);
+  let choices = 0;
+  for (const [key, value] of parsed) {
+    if (EMAIL_LIKE.test(value)) return no(`het veld "${key}" bevat iets dat op een e-mailadres lijkt, en een filter heeft dat niet`);
+    if (value.trim() === "") continue;
+    if (/^__EVENTTARGET$/i.test(key)) {
+      if (!namesFilter(value)) return no(`het formulier is verstuurd door "${leafOf(value)}", en die naam wijst niet op een filter, een sortering of een pagina`);
+      continue;
+    }
+    if (FORM_STATE_KEY.test(key)) continue;
+    const acts = formWords(value).find((word) => FORM_ACTION_WORDS.has(word));
+    if (acts) return no(`het veld "${key}" heeft de waarde "${acts}", en dat wijst op een verzoek dat iets doet`);
+    const bare = key.toLowerCase().replace(/[-_\s.]/g, "");
+    const leaf = leafOf(key).toLowerCase().replace(/[-_\s]/g, "");
+    if (FORM_BUTTON_KEY.test(key) || FORM_BUTTON_KEY.test(leaf)) {
+      if (value.length > FORM_CHOICE_MAX) return no(`de knop "${key}" heeft een waarde van meer dan ${FORM_CHOICE_MAX} tekens`);
+      continue;
+    }
+    if (TERM_WRITE_KEYS.has(bare) || TERM_WRITE_KEYS.has(leaf)) return no(`het veld "${key}" is ingevuld, en dat wijst op een verzoek dat iets wijzigt of persoonsgegevens meestuurt`);
+    if (!namesFilter(key)) return no(`het veld "${key}" is ingevuld en heet niet als een filter, een sortering of een pagina: loep kan niet zien dat het alleen iets opvraagt`);
+    if (value.length > FORM_CHOICE_MAX || value.trim().split(/\s+/).length > FORM_CHOICE_WORDS) return no(`het veld "${key}" heeft meer dan ${FORM_CHOICE_WORDS} woorden of ${FORM_CHOICE_MAX} tekens: dat is tekst van een bezoeker, geen keuze`);
+    choices += 1;
+  }
+  if (choices === 0) return no("het formulier heeft geen ingevuld veld dat als een filter, een sortering of een pagina heet");
+  return yes;
+}
+
 export const SEARCH_SERVICES: Record<SearchServiceId, SearchService> = {
   typesense: { id: "typesense", nameNl: "Typesense", formNl: 'JSON met "searches", een lijst van zoekvragen (POST /multi_search)', recognise: typesense },
   algolia: { id: "algolia", nameNl: "Algolia", formNl: 'JSON met "requests", elk met "indexName" en "params" of met "indexName" en losse zoekparameters zoals "query" en "hitsPerPage", of met alleen "params", of losse zoekparameters aan POST /1/indexes/<index>/query', recognise: algolia },
@@ -575,6 +654,12 @@ export const SEARCH_SERVICES: Record<SearchServiceId, SearchService> = {
     nameNl: "een zoekformulier met de zoekterm van de run als veld",
     formNl: "een formulier (application/x-www-form-urlencoded of multipart/form-data) waarin de zoekterm van de run de waarde van een veld is. Verder alleen lege velden, korte keuzes zoals een filter, de sortering, de pagina of de tekst van de zoekknop, en velden die het framework zelf toevoegt (zoals __VIEWSTATE of een token tegen vervalste verzoeken). Geen bestand, geen e-mailadres en geen ingevuld veld dat iets wijzigt of persoonsgegevens draagt. Zoals een zoekfunctie die met een POST naar de eigen pagina de resultaten toont",
     recognise: searchForm,
+  },
+  filterform: {
+    id: "filterform",
+    nameNl: "een filter of sortering als formulier",
+    formNl: "een formulier (application/x-www-form-urlencoded of multipart/form-data) zonder zoekterm, waarin elk ingevuld veld een korte keuze is in een veld dat als een filter, een sortering of een pagina heet (zoals jaar, categorie, sort of page), de tekst van een knop, of een veld dat het framework zelf toevoegt. Minstens één zo'n keuze. Geen bestand, geen e-mailadres, geen veld met een andere naam, en geen keuze of knop die iets doet (zoals stemmen, opslaan of verwijderen). Zoals een lijst die met een POST naar de eigen pagina de resultaten van een ander jaar laadt",
+    recognise: filterForm,
   },
 };
 

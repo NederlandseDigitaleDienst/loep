@@ -6,7 +6,8 @@ import { recogniseSearch, SEARCH_SERVICE_IDS, SEARCH_SERVICES, type SearchServic
 /**
  * A request that only reads although its method is not GET: a question to a search service,
  * such as Typesense (`POST /multi_search`), Algolia (`POST /1/indexes/<index>/queries`) or a
- * GraphQL endpoint with only queries. Every other request that can change something stays held
+ * GraphQL endpoint with only queries, or a list that filters, sorts or pages with a form posted
+ * to its own page (`filterform`). Every other request that can change something stays held
  * back on a live site. The explorer records such a request in the site model, with the session
  * observation in which it was held back and in which loep recognised its body; `check-site`
  * tests the rule. A rule of a model that passed lets a request through only when method, origin

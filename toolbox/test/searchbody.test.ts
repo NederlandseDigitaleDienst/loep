@@ -148,6 +148,11 @@ const CASES: Record<SearchServiceId, { search: [string, string][]; not: [string,
     search: [],
     not: [["any form without the terms of the run", "q=afval", /kent de zoekterm van deze run hier niet/]],
   },
+  // Recognised by the names of its fields; see the tests below.
+  filterform: {
+    search: [["a year chosen in a list", "jaar=2025"]],
+    not: [["a form with a field that is no filter", "q=afval", /heet niet als een filter/]],
+  },
 };
 
 for (const service of SEARCH_SERVICE_IDS) {
@@ -293,4 +298,45 @@ test("a search form posted to a page: the term of the run is a field, everything
   not("a button with a long value", form({ q: "afvalkalender", submit: "x".repeat(80) }), /knop "submit"/);
   // The term only passes as a whole value, not inside a longer one.
   not("the term inside a longer value", form({ vraag: "afvalkalender 2026" }), /zoekterm van de run is niet de waarde/);
+});
+
+test("a filter or sort order posted to a page: every field with a value is named as a filter, a sort order or a page, and nothing in it does something (#595)", () => {
+  const form = (fields: Record<string, string>): string => new URLSearchParams(fields).toString();
+  const yes = (name: string, body: string): void => assert.deepEqual(recogniseSearch("filterform", body, "/agenda"), { search: true }, name);
+  const not = (name: string, body: string, reason: RegExp): void => {
+    const verdict = recogniseSearch("filterform", body, "/agenda");
+    assert.equal(verdict.search, false, `${name} must not count as a filter`);
+    if (!verdict.search) assert.match(verdict.reasonNl, reason, name);
+  };
+  yes("a year", form({ jaar: "2025" }));
+  yes("a sort order and a page, with the button", form({ sort: "datum-aflopend", page: "2", submit: "Toon" }));
+  yes("a category and a theme, with empty fields next to them", form({ categorie: "Nieuws", thema: "Wonen en bouwen", zoekterm: "", email: "" }));
+  yes("Drupal, with its form id and token", form({ "filter[jaar]": "2024", form_build_id: "form-abc123", form_id: "views_exposed_form", op: "Toepassen" }));
+  // ASP.NET WebForms: the dropdown posts the page itself, and names itself as what set the post off.
+  yes(
+    "ASP.NET WebForms, a dropdown that posts the page",
+    form({ __VIEWSTATE: "x".repeat(4000), __EVENTVALIDATION: "y".repeat(500), __EVENTTARGET: "ctl00$Main$ddlJaar", __EVENTARGUMENT: "", "ctl00$Main$ddlJaar": "2025", "ctl00$Main$ddlSortering": "Datum", "ctl00$Footer$txtEmail": "" }),
+  );
+  yes("a name in one piece", form({ ddljaar: "2025" }));
+  yes("multipart/form-data", '--b1\r\nContent-Disposition: form-data; name="periode"\r\n\r\n2025-Q1\r\n--b1--\r\n');
+
+  // A form of only choices that records something: its fields are not named as a filter.
+  not("a poll", form({ poll: "3", form_id: "poll_view_voting", op: "Stem" }), /heeft de waarde "stem"|heet niet als een filter/);
+  not("a poll without a telling button", form({ keuze: "3", submit: "OK" }), /het veld "keuze" is ingevuld en heet niet als een filter/);
+  not("a cookie consent", form({ consent: "all" }), /heet niet als een filter/);
+  not("a preference", form({ nieuwsbrief: "ja" }), /heet niet als een filter/);
+  // Named as a filter, and still doing something.
+  not("a button that deletes", form({ jaar: "2025", submit: "Verwijderen" }), /heeft de waarde "verwijderen"/);
+  not("a choice that does something", form({ type: "delete" }), /heeft de waarde "delete"/);
+  not("ASP.NET WebForms, another button of the page set the post off", form({ __EVENTTARGET: "ctl00$Main$btnVerwijder", "ctl00$Main$ddlJaar": "2025" }), /verstuurd door "btnVerwijder", en die naam wijst niet op een filter/);
+  // Only state and a button: nothing was chosen, so nothing says it is a filter. A logout is such a post.
+  not("only a token and a button", form({ _token: "abc", submit: "Verder" }), /geen ingevuld veld dat als een filter/);
+  not("an e-mail address", form({ jaar: "2025", "ctl00$Footer$txtEmail": "test@example.nl" }), /e-mailadres/);
+  not("a field that carries personal data", form({ jaar: "2025", naam: "Test" }), /het veld "naam" is ingevuld/);
+  not("text of a visitor in a field named as a filter", form({ filter: "ik wil graag weten wanneer de container wordt opgehaald" }), /meer dan 4 woorden of 64 tekens/);
+  not("a file", '--b1\r\nContent-Disposition: form-data; name="jaar"\r\n\r\n2025\r\n--b1\r\nContent-Disposition: form-data; name="bijlage"; filename="a.pdf"\r\n\r\n%PDF\r\n--b1--\r\n', /bestand/);
+  not("JSON", json({ jaar: "2025" }), /JSON en geen formulier/);
+  // A search form is not a filter: the term is a field of another name, and only the term of the run lets it through.
+  not("a search form", form({ q: "afvalkalender", page: "1" }), /het veld "q" is ingevuld en heet niet als een filter/);
+  assert.deepEqual(searchServicesOf(form({ jaar: "2025", sort: "datum" }), "/agenda"), ["filterform"]);
 });
