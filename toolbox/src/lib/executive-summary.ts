@@ -73,7 +73,11 @@ const NORM = /WCAG 2\.2\b[^.]*\bniveau A en AA\b/;
 /** Numbers as words: a count the check cannot hold to the report. One that the report writes the same way, as "zes maanden", stays. */
 const NUMBER_WORD = /(?<![\p{L}])(twee|drie|vier|vijf|zes|zeven|acht|negen|tien|elf|twaalf|twintig|dertig|veertig|vijftig|honderd|handvol|dozijn|tientallen|honderden|duizenden)(?![\p{L}])(?:\s+([\p{L}]+))?/giu;
 
-const sentencesOf = (text: string): string[] => text.split(/(?<=[.!?])\s+/).filter(Boolean);
+/** Sentences end where a capital, a digit or a quote follows: "bijv. het" is no end. */
+const SENTENCE_END = /(?<=[.!?])\s+(?=[\p{Lu}\d"'“‘])/u;
+const sentencesOf = (text: string): string[] => text.split(SENTENCE_END).filter(Boolean);
+/** Abbreviations with a full stop: they break a sentence in two for whoever reads it per sentence, and a reader who does not know them. */
+const ABBREVIATION = /(?<![\p{L}])(?:bijv|bv|o\.a|d\.w\.z|m\.b\.t|i\.v\.m|t\.o\.v|z\.s\.m|m\.n|evt|enz|etc|nl|incl|excl|ca|resp)\./iu;
 
 const wordsOf = (text: string): string[] => text.trim().split(/\s+/).filter(Boolean);
 const hasPhrase = (text: string, phrase: string): boolean => new RegExp(`(?<![\\p{L}\\p{N}])${phrase.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![\\p{L}\\p{N}])`, "iu").test(text);
@@ -121,6 +125,8 @@ export function validateSummary(proposal: unknown, evaluation: Evaluation, repor
     if (/[\n\r]/.test(text)) problems.push(`${where}: een alinea is één stuk tekst, zonder regeleinde`);
     if (/[—–]/.test(text)) problems.push(`${where}: gebruik geen gedachtestreepje; maak er twee zinnen van of gebruik een komma`);
     if (/[*#|`_<>[\]]|^\s*[-•]\s/.test(text)) problems.push(`${where}: schrijf lopende tekst, zonder opmaak, lijsttekens of code`);
+    const abbreviation = ABBREVIATION.exec(text);
+    if (abbreviation) problems.push(`${where}: schrijf "${abbreviation[0]}" voluit; de lezers kennen de afkorting niet allemaal`);
     if (/[()]/.test(text)) problems.push(`${where}: schrijf zonder haakjes; wat erbij hoort, staat in de zin`);
     if (/https?:\/\/|www\./i.test(text)) problems.push(`${where}: noem geen adres; het rapport noemt de pagina's`);
     const criterion = /\b[1-4]\.\d\.\d{1,2}\b/.exec(text);
@@ -128,7 +134,8 @@ export function validateSummary(proposal: unknown, evaluation: Evaluation, repor
     for (const phrase of SOFTENING) if (hasPhrase(text, phrase)) problems.push(`${where}: "${phrase}" maakt kleiner wat het rapport zegt, of spreekt voor alle bezoekers; zeg voor welke groep wat geldt`);
     for (const phrase of PROCESS) if (hasPhrase(text, phrase)) problems.push(`${where}: "${phrase}" is een woord van het onderzoek zelf; de lezer kent het niet`);
     for (const phrase of SIGNING) if (hasPhrase(text, phrase)) problems.push(`${where}: "${phrase}" gaat over het tekenen van het rapport; dat staat bij de status en verandert nog, de samenvatting niet`);
-    for (const match of text.matchAll(NUMBER_WORD)) if (!hasPhrase(reportText, match[0])) problems.push(`${where}: "${match[0]}" is een aantal in letters dat zo niet in het rapport staat; schrijf het getal in cijfers, zoals het rapport`);
+    // A number word stands when the report writes the same word before the same noun ("zes maanden"); alone it is a count the check cannot hold.
+    for (const match of text.matchAll(NUMBER_WORD)) if (!(match[1]!.toLowerCase() === "acht" && /(?<![\p{L}])in\s+$/iu.test(text.slice(0, match.index))) && (match[2] === undefined || !hasPhrase(reportText, match[0]))) problems.push(`${where}: "${match[0]}" is een aantal in letters dat zo niet in het rapport staat; schrijf het getal in cijfers, zoals het rapport`);
     for (const number of numbersOf(text)) if (!known.has(number)) problems.push(`${where}: het getal ${number} staat niet in het rapport; neem getallen letterlijk over en reken niets uit`);
     const sources = Array.isArray(paragraph.sources) ? paragraph.sources.filter((source): source is string => typeof source === "string") : [];
     if (sources.length === 0) problems.push(`${where}: sources is leeg; noem waar in het rapport de alinea op rust`);
@@ -167,18 +174,20 @@ export function validateSummary(proposal: unknown, evaluation: Evaluation, repor
   // A sentence that says the site meets something says more than the report, unless it denies it, leaves it open, speaks of
   // WCAG 2.1, or uses the name of status B.
   const meets = /(?<![\p{L}])voldoet(?![\p{L}])/iu;
-  const notMeeting = /(?<![\p{L}])(?:niet|open|of)(?![\p{L}])|2\.1/iu;
+  const older = evaluation.summary["2.1"];
+  const olderMeets = older.failed === 0 && older.cantTell + older.untested === 0;
+  const notMeeting = olderMeets ? /(?<![\p{L}])(?:niet|open|of)(?![\p{L}])|2\.1/iu : /(?<![\p{L}])(?:niet|open|of)(?![\p{L}])/iu;
   if (failed || open) for (const sentence of sentencesOf(all)) if (meets.test(sentence) && !notMeeting.test(sentence) && !(own === "B" && /voldoet gedeeltelijk/i.test(sentence))) problems.push(`"${sentence.trim()}" zegt dat de site voldoet, en dat draagt het rapport niet`);
   // The two counts the reader decides on are the ones of the evaluation. A count belongs to the words after it:
   // "4 niet gehaald en 5 open" with the two turned around names both numbers and says something else.
-  const countBefore = (sentence: string, index: number): string | undefined => numbersOf(sentence.slice(0, index)).filter((number) => number !== String(tally.total) && number !== "2.2").at(-1);
+  const countBefore = (sentence: string, index: number, wanted: number): string | undefined => numbersOf(sentence.slice(0, index)).filter((number) => number === String(wanted) || (number !== String(tally.total) && number !== "2.2" && number !== "2.1")).at(-1);
   if (failed) {
-    const counted = sentencesOf(all).flatMap((sentence) => [...sentence.matchAll(/niet gehaald/gi)].map((match) => countBefore(sentence, match.index)).filter((count): count is string => count !== undefined));
+    const counted = sentencesOf(all).flatMap((sentence) => [...sentence.matchAll(/niet gehaald/gi)].map((match) => countBefore(sentence, match.index, tally.failed)).filter((count): count is string => count !== undefined));
     if (counted.length === 0) problems.push(`de samenvatting zegt niet hoeveel criteria niet zijn gehaald; zet het getal ${tally.failed} vóór de woorden "niet gehaald"`);
-    else if (counted[0] !== String(tally.failed)) problems.push(`de samenvatting zegt dat ${counted[0]} criteria niet zijn gehaald; het rapport heeft er ${tally.failed}, ${openCount} open en ${tally.total} in totaal`);
+    else if (!counted.includes(String(tally.failed))) problems.push(`de samenvatting zegt dat ${counted[0]} criteria niet zijn gehaald; het rapport heeft er ${tally.failed}, ${openCount} open en ${tally.total} in totaal`);
   }
   const openWord = /vastgesteld|(?<![\p{L}])open(?![\p{L}])/giu;
-  const saysOpen = sentencesOf(all).some((sentence) => [...sentence.matchAll(openWord)].some((match) => countBefore(sentence, match.index) === String(openCount)));
+  const saysOpen = sentencesOf(all).some((sentence) => [...sentence.matchAll(openWord)].some((match) => countBefore(sentence, match.index, openCount) === String(openCount)));
   if (open && !saysOpen) problems.push(`de samenvatting noemt niet dat ${openCount} criteria niet zijn vastgesteld; zet het getal ${openCount} vóór de woorden "niet vastgesteld" of "open"`);
   // An open criterion stays open: the summary says what was not established.
   if (open && !used.has("open")) problems.push('het rapport heeft open criteria; een alinea zegt wat niet is vastgesteld, met "open" in sources');
@@ -189,10 +198,12 @@ export function validateSummary(proposal: unknown, evaluation: Evaluation, repor
 }
 
 /** The sentences of a summary as the second reader gets them, in order. */
-export const readingSentences = (proposal: SummaryProposal): string[] => proposal.paragraphs.flatMap((paragraph) => paragraph.textNl.trim().split(/(?<=[.!?])\s+/).filter(Boolean));
+export const readingSentences = (proposal: SummaryProposal): string[] => proposal.paragraphs.flatMap((paragraph) => sentencesOf(paragraph.textNl.trim()));
 
 const QUOTE_MIN = 12;
 const QUOTE_WORDS_MIN = 3;
+/** A piece of the report points at a place: a paragraph at most, never a chapter. */
+const QUOTE_MAX = 300;
 /** How many sentences one piece of the report may carry: a line that carries everything carries nothing. */
 const QUOTE_USES_MAX = 2;
 const flat = (text: string): string => text.replace(/\s+/g, " ").trim();
@@ -211,7 +222,7 @@ export function validateReading(reading: unknown, sentences: readonly string[], 
   if (!Array.isArray(entries)) return { problems: ['het antwoord heeft geen lijst "sentences"'], refuted };
   const report = flat(reportText);
   const seen = new Set<number>();
-  const uses = new Map<string, number>();
+  const places: { n: number; from: number; to: number }[] = [];
   for (const entry of entries) {
     const n = entry?.n;
     if (!Number.isInteger(n) || n < 1 || n > sentences.length) {
@@ -229,20 +240,27 @@ export function validateReading(reading: unknown, sentences: readonly string[], 
       let shared = 0;
       for (const quote of quotes) {
         const text = flat(quote);
+        const at = report.indexOf(text);
         if (text.length < QUOTE_MIN || (text.match(/[\p{L}]{2,}/gu) ?? []).length < QUOTE_WORDS_MIN) problems.push(`zin ${n}: "${text}" is te kort om een plek in het rapport aan te wijzen; geef een stuk van minstens ${QUOTE_WORDS_MIN} woorden`);
-        else if (!report.includes(text)) problems.push(`zin ${n}: "${text.slice(0, 80)}" staat niet letterlijk in het rapport; kopieer het stuk uit het rapport`);
-        uses.set(text, (uses.get(text) ?? 0) + 1);
+        else if (text.length > QUOTE_MAX) problems.push(`zin ${n}: een stuk van ${text.length} tekens wijst geen plek aan; geef de zin of de paar zinnen waar het staat, hooguit ${QUOTE_MAX} tekens`);
+        else if (at < 0) problems.push(`zin ${n}: "${text.slice(0, 80)}" staat niet letterlijk in het rapport; kopieer het stuk uit het rapport`);
+        else places.push({ n, from: at, to: at + text.length });
         shared = Math.max(shared, [...stemsOf(text)].filter((stem) => wanted.has(stem)).length);
       }
-      // Not proof that the sentence follows, but a piece that shares no word or number with it cannot be where the report says it.
-      if (quotes.length > 0 && shared < Math.min(2, wanted.size)) problems.push(`zin ${n}: geen van de stukken in quotes gaat over wat de zin zegt; wijs de plek aan waar het rapport dit zegt, of noem de zin niet-gedragen`);
+      // A sentence in other words than the report shares none with its piece: then the reader says in a line why it follows.
+      // Whether it follows, no script can see.
+      if (quotes.length > 0 && shared === 0 && wanted.size > 0 && (typeof entry.noteNl !== "string" || entry.noteNl.trim() === "")) problems.push(`zin ${n}: het stuk in quotes deelt geen woord of getal met de zin; zeg in noteNl in één zin waarom de zin eruit volgt, of noem de zin niet-gedragen`);
     } else if (entry.verdict === "niet-gedragen") {
       const noteNl = typeof entry.noteNl === "string" ? entry.noteNl.trim() : "";
       if (noteNl === "") problems.push(`zin ${n}: niet-gedragen, maar noteNl zegt niet wat er niet klopt`);
       refuted.push({ n, sentence: sentences[n - 1]!, noteNl });
     } else problems.push(`zin ${n}: verdict is "gedragen" of "niet-gedragen"`);
   }
-  for (const [text, count] of uses) if (count > QUOTE_USES_MAX) problems.push(`"${text.slice(0, 80)}" draagt ${count} zinnen; een stuk uit het rapport draagt er hooguit ${QUOTE_USES_MAX}`);
+  // One place carries at most two sentences, however it is cut out: pieces that mostly overlap are one place.
+  for (const place of places) {
+    const same = new Set(places.filter((other) => Math.min(place.to, other.to) - Math.max(place.from, other.from) > Math.min(place.to - place.from, other.to - other.from) / 2).map((other) => other.n));
+    if (same.size > QUOTE_USES_MAX && place.n === Math.min(...same)) problems.push(`de zinnen ${[...same].sort((a, b) => a - b).join(", ")} rusten op dezelfde plek in het rapport ("${report.slice(place.from, place.from + 60)}…"); een plek draagt hooguit ${QUOTE_USES_MAX} zinnen`);
+  }
   const missing = sentences.map((_sentence, index) => index + 1).filter((n) => !seen.has(n));
   if (missing.length > 0) problems.push(`${missing.length === 1 ? "zin" : "de zinnen"} ${missing.join(", ")} ${missing.length === 1 ? "heeft" : "hebben"} geen oordeel`);
   return { problems, refuted };

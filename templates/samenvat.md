@@ -31,6 +31,7 @@ Lees het helemaal, in delen als het groot is. Gebruik niets van buiten het rappo
 - Zeg met de woorden "niet gehaald" hoeveel criteria niet zijn gehaald, en noem in een zin met "niet vastgesteld" of "open" hoeveel er open staan. In de zin met "niet gehaald" staan alleen die aantallen en het totaal.
 - Noem de status met de letter uit het rapport, als "status C", en zeg in dezelfde zin waardoor ze dat is. Status C komt door de criteria die niet zijn vastgesteld, niet door het aantal dat niet is gehaald. Schrijf dus niet "daaruit volgt status C" achter de twee aantallen. Noem geen andere letter. Zeg niet of de status voorlopig is en schrijf niets over tekenen of over een concept: dat staat bij de status zelf, en jouw tekst blijft staan als het rapport is afgetekend.
 - Geen woorden van het onderzoek zelf, zoals veegronde, beoordelaar, taalmodel of run.
+- Geen afkortingen met een punt, zoals "bijv." of "o.a."; schrijf ze voluit. Gebruik de woorden "niet gehaald" alleen bij het aantal criteria.
 - Geen gedachtestreepjes. Geen rijtje van drie als stijlmiddel. Geen slotzin die de opening herhaalt.
 
 ## Wat je inlevert
@@ -55,7 +56,7 @@ In deze vorm:
 }
 ```
 
-`reportSha256` en `taskSha256` neem je letterlijk over: ze zeggen uit welk rapport en met welke opdracht je schreef. Verandert het rapport, dan krijg je een nieuwe opdracht met een andere waarde, en schrijf je de samenvatting opnieuw uit het nieuwe rapport.
+`reportSha256` en `taskSha256` neem je letterlijk over: ze zeggen uit welk rapport en met welke versie van deze opdracht je schreef. Het zijn kenmerken die loep uitrekent, niet de hash van dit bestand. Verandert het rapport, dan krijg je een nieuwe opdracht met een andere waarde, en schrijf je de samenvatting opnieuw uit het nieuwe rapport.
 
 Bij elke alinea staat in `sources` waar ze in het rapport op rust. Dat is het nummer van een gebrek zoals het rapport het geeft, het nummer van een criterium, of een van deze delen:
 

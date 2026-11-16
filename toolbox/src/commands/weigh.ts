@@ -153,7 +153,9 @@ export async function weigh(runDir: string): Promise<WeighResult> {
   if (!evaluation.defects) throw new Error('the evaluation has no defects yet; run "evaluate" on this run first');
   const result = await weighInto(runDir, evaluation);
   // A weighing changes the report; the summary for the leadership counts again only when the report is the same.
-  await (await import("./summarize.ts")).summaryInto(runDir, evaluation);
+  const { summaryInto, summaryLineNl } = await import("./summarize.ts");
+  const summarized = await summaryInto(runDir, evaluation);
+  if (summarized.summary === "stale") process.stderr.write(`${summaryLineNl(summarized)}\n`);
   await writeEvaluation(path, evaluation);
   await writeManifest(runDir, { command: "weigh", startedAt, findings: result.findings, weighing: result.weighing });
   return result;

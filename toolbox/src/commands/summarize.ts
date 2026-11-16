@@ -126,7 +126,8 @@ async function writeReadTask(runDir: string, evaluation: Evaluation, proposal: S
   const cli = resolve(new URL("../cli.ts", import.meta.url).pathname);
   // A verdict on an earlier text is not left where the next reader writes: it goes to the work folder of the writer, who needed it to repair.
   const earlier = existsSync(join(runDir, READING)) ? await readJson<SummaryReading | null>(join(runDir, READING)).catch(() => null) : undefined;
-  if (earlier !== undefined && earlier?.proposalSha256 !== (await sha256File(join(runDir, PROPOSAL)))) await rename(join(runDir, READING), join(await makeWorkDir(runDir, WORK), `lezing-${new Date().toISOString().replace(/[:.]/g, "-")}.json`));
+  // Only a reading that names another text is moved; one a reader is still working on, or that another command moved just now, is left alone.
+  if (typeof earlier?.proposalSha256 === "string" && earlier.proposalSha256 !== (await sha256File(join(runDir, PROPOSAL)))) await rename(join(runDir, READING), join(await makeWorkDir(runDir, WORK), `lezing-${new Date().toISOString().replace(/[:.]/g, "-")}.json`)).catch(() => undefined);
   const values: Record<string, string> = {
     site: evaluation.site.name,
     source: join(absoluteRun, SOURCE),
@@ -156,9 +157,9 @@ async function standingReading(runDir: string, proposal: SummaryProposal, source
     return { reading: { sentences: [] }, problems: [`${READING} is niet te lezen: ${(error as Error).message}`], refuted: [] };
   }
   const problems: string[] = [];
-  if (reading?.reportSha256 !== sha256(source)) problems.push(`het oordeel is over een ander rapport dan dat van nu: reportSha256 is niet ${sha256(source)}`);
+  if (reading?.reportSha256 !== sha256(source)) problems.push(`het oordeel is over een ander rapport dan dat van nu; neem reportSha256 over uit ${READ_TASK}`);
   if (reading?.proposalSha256 !== (await sha256File(join(runDir, PROPOSAL)))) problems.push("het oordeel is over een andere tekst van de samenvatting dan die er nu staat: proposalSha256 klopt niet");
-  if (reading?.taskSha256 !== sha256(readTemplate("samenvat-lees"))) problems.push(`het oordeel is gemaakt met een andere versie van de opdracht dan die van nu: taskSha256 is niet ${sha256(readTemplate("samenvat-lees"))}. Lees ${READ_TASK} opnieuw en oordeel opnieuw`);
+  if (reading?.taskSha256 !== sha256(readTemplate("samenvat-lees"))) problems.push(`het oordeel is gemaakt met een andere versie van de opdracht dan die van nu. Draai eerst summarize: dat schrijft ${READ_TASK} opnieuw. Lees die opdracht, oordeel opnieuw en neem taskSha256 eruit over`);
   const held = validateReading(reading, readingSentences(proposal), source);
   return { reading, problems: [...problems, ...held.problems], refuted: held.refuted };
 }
@@ -249,8 +250,8 @@ export async function checkSummary(runDir: string): Promise<string[]> {
     return [`${PROPOSAL} is niet te lezen: ${(error as Error).message}`];
   }
   // A summary written from another report is not held to this one: the numbers may fit by chance, the rest was never read against it.
-  if ((proposal as SummaryProposal | null)?.taskSha256 !== sha256(readTemplate("samenvat"))) return [`de samenvatting is geschreven met een andere versie van de opdracht: taskSha256 is niet ${sha256(readTemplate("samenvat"))}. Lees ${TASK} opnieuw, schrijf de samenvatting naar de opdracht van nu en neem taskSha256 eruit over`];
-  if ((proposal as SummaryProposal | null)?.reportSha256 !== sha256(source)) return [`de samenvatting is geschreven voor een ander rapport dan dat van nu: reportSha256 is niet ${sha256(source)}. Lees ${SOURCE} opnieuw, schrijf de samenvatting opnieuw en neem reportSha256 over uit de opdracht`];
+  if ((proposal as SummaryProposal | null)?.taskSha256 !== sha256(readTemplate("samenvat"))) return [`de samenvatting is geschreven met een andere versie van de opdracht dan die van nu. Draai eerst summarize: dat schrijft ${TASK} opnieuw. Lees die opdracht, schrijf de samenvatting ernaar en neem taskSha256 eruit over`];
+  if ((proposal as SummaryProposal | null)?.reportSha256 !== sha256(source)) return [`de samenvatting is geschreven voor een ander rapport dan dat van nu. Lees ${SOURCE} opnieuw, schrijf de samenvatting opnieuw en neem reportSha256 over uit ${TASK}`];
   const problems = validateSummary(proposal, evaluation, source, stoppingDefects(evaluation));
   if (problems.length > 0) return problems;
   const stamp = { sourceSha256: sha256(source), promptSha256: await taskSha256(runDir), proposalSha256: await sha256File(join(runDir, PROPOSAL)) };

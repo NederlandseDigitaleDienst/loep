@@ -64,7 +64,7 @@ In deze vorm, met een regel voor elke zin:
 }
 ```
 
-`reportSha256`, `proposalSha256` en `taskSha256` neem je letterlijk over. In `sentence` staat de zin waarover je oordeelt, letterlijk zoals hierboven. Een stuk in `quotes` is minstens drie woorden lang, staat teken voor teken zo in het rapport en gaat over wat de zin zegt: het deelt woorden of getallen met de zin. Kopieer het, typ het niet over. Eén stuk draagt hooguit twee zinnen; een kop of een regel die overal bij past, wijst geen plek aan.
+`reportSha256`, `proposalSha256` en `taskSha256` neem je letterlijk over. In `sentence` staat de zin waarover je oordeelt, letterlijk zoals hierboven. Een stuk in `quotes` is minstens drie woorden en hooguit 300 tekens lang, en staat teken voor teken zo in het rapport. Kopieer het, typ het niet over. Geef de zin of de paar zinnen waar het staat, niet de alinea eromheen; twee stukken mag ook. Eén plek in het rapport draagt hooguit twee zinnen: een kop of een regel die overal bij past, wijst geen plek aan. Zegt de zin het in andere woorden dan het rapport, zodat het stuk geen woord of getal met de zin deelt, zeg dan bij die zin in `noteNl` in één zin waarom ze eruit volgt. `taskSha256` is een kenmerk dat loep uitrekent, niet de hash van dit bestand.
 
 ## Controleren
 
@@ -74,6 +74,6 @@ Draai daarna de controle:
 {{check}}
 ```
 
-Ze kijkt of elke zin een oordeel heeft en of elk stuk in `quotes` letterlijk in het rapport staat. Meldt ze iets, herstel dat in het bestand en draai haar opnieuw. Ze meldt ook hoeveel zinnen je niet-gedragen vond; dat is geen fout van jou en je past je oordeel er niet op aan. Verander verder niets in de run.
+Ze kijkt of elke zin een oordeel heeft en of elk stuk in `quotes` letterlijk in het rapport staat. Of een zin uit een stuk volgt, ziet ze niet: dat is jouw oordeel, en daarvoor ben je hier. Meldt ze iets, herstel dat in het bestand en draai haar opnieuw. Ze meldt ook hoeveel zinnen je niet-gedragen vond; dat is geen fout van jou en je past je oordeel er niet op aan. Verander verder niets in de run.
 
 Je werkmap is `{{workDir}}`. Schrijf daar wat je tussendoor wilt bewaren.

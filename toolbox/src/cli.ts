@@ -126,8 +126,10 @@ const USAGE = `loep <command> [options]
   check-summary --run <run>              Hold that summary to the report: length, status, numbers, words that soften; non-zero
                                          exit on problems
   check-reading --run <run>              Hold the reading of the second reader (tasks/samenvatting/lees.md) to the summary and
-                                         the report: a verdict for every sentence, each quote literally in the report; lists
-                                         the sentences the report does not carry. Non-zero exit on a fault in the reading
+                                         the report: a verdict for every sentence as it stands now, each quote literally in the
+                                         report, of at most 300 characters, one place for at most two sentences; lists the
+                                         sentences the report does not carry. Whether a sentence follows from its quote is
+                                         the reader's judgment, not this check. Non-zero exit on a fault in the reading
   answer --run <run> --criterion <id> [--point <n> --did <text> --outcome passed|failed|inapplicable --name <who> --role <function>]
                                          For an open point that asks a person or a choice of the owner: record what a person
                                          did or decided and what follows for the criterion. Without --point: list the open

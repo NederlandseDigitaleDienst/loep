@@ -9,7 +9,7 @@ import { readTemplate } from "../lib/templates.ts";
 import { clearWeighing } from "../lib/weighing.ts";
 import { makeWorkDir } from "../lib/workdir.ts";
 import { readEvaluation, signatureIsCurrent, writeEvaluation } from "./sign.ts";
-import { summaryInto } from "./summarize.ts";
+import { summaryInto, summaryLineNl } from "./summarize.ts";
 import { weighInto, type WeighResult } from "./weigh.ts";
 
 const TASK = join("tasks", "samenvoeg", "taak.md");
@@ -116,7 +116,8 @@ export async function merge(runDir: string, previousPath?: string): Promise<Merg
   // A weighing was made for the defects as they were: it counts again only when they are the same.
   const weighed = await weighInto(runDir, evaluation);
   // And the summary for the report as it was: it counts again only when the report is the same.
-  await summaryInto(runDir, evaluation);
+  const summarized = await summaryInto(runDir, evaluation);
+  if (summarized.summary === "stale") process.stderr.write(`${summaryLineNl(summarized)}\n`);
   await writeEvaluation(path, evaluation);
   await writeManifest(runDir, { command: "merge", startedAt, findings: result.findings, defects: result.defects, proposal: result.proposal, weighing: weighed.weighing });
   return { ...result, weighed };

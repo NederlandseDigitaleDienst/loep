@@ -34,7 +34,7 @@ const good = (): SummaryProposal => ({
 /** A reading that carries every sentence: for each the line of the report that shares most with it, no line more than twice. */
 const carried = (sentences: string[], report: string): { n: number; sentence: string; verdict: string; quotes: string[] }[] => {
   const stems = (text: string): Set<string> => new Set([...(text.match(/\d+(?:[.,]\d+)*/g) ?? []), ...(text.toLowerCase().match(/[\p{L}]{5,}/gu) ?? []).map((word) => word.slice(0, 5))]);
-  const lines = report.split("\n").map((line) => line.replace(/\s+/g, " ").trim()).filter((line) => (line.match(/[\p{L}]{2,}/gu) ?? []).length >= 3);
+  const lines = report.split("\n").map((line) => line.replace(/\s+/g, " ").trim()).filter((line) => (line.match(/[\p{L}]{2,}/gu) ?? []).length >= 3 && line.length <= 300);
   const used = new Map<string, number>();
   return sentences.map((sentence, index) => {
     const wanted = stems(sentence);
@@ -90,6 +90,8 @@ test("the check holds a summary to the report: length, form, numbers, status and
   // The two counts are the ones of the evaluation, not any two numbers the report has somewhere.
   refused("other counts", first("De site voldoet niet aan WCAG 2.2 niveau A en AA. Van de 55 criteria zijn er 4 niet gehaald en 5 open, en door die open criteria is het status C."), /zegt dat 4 criteria niet zijn gehaald; het rapport heeft er 5, 4 open en 55 in totaal/);
   refused("a count in words at the end of a clause", add("Het zijn er acht."), /"acht" is een aantal in letters/);
+  refused("an abbreviation", add("Dat geldt bijv. voor het zoekveld."), /schrijf "bijv\." voluit/);
+  refused("a count in words that the report has in a title only", add("Het gaat om vier."), /"vier" is een aantal in letters/);
   refused("meets, with what was established", add("Op alles wat is vastgesteld voldoet de site verder."), /zegt dat de site voldoet/);
   refused("a count in words", first("De site voldoet niet aan WCAG 2.2 niveau A en AA. Van de 55 criteria zijn er vijf niet gehaald en 4 open, en door die 4 open criteria is het status C."), /"vijf niet" is een aantal in letters/);
   refused("meets with another adverb", add("Aan de overige eisen voldoet de site ruimschoots."), /zegt dat de site voldoet|ruimschoots/);
@@ -109,6 +111,9 @@ test("sentences a writer would write pass: the count before the total, a colon, 
     "De site voldoet niet aan WCAG 2.2 niveau A en AA: 5 criteria van WCAG 2.2 niveau A en AA zijn niet gehaald. Het is status C: 4 criteria zijn niet vastgesteld.",
     "De site voldoet niet aan WCAG 2.2 niveau A en AA. Van de 55 criteria zijn er 5 niet gehaald. Of de site aan 4 andere voldoet, is open, en daardoor is het status C. Wat niet gehaald is, staat hieronder.",
   ]) assert.deepEqual(problemsOf(first(text)), [], text);
+  // A later sentence with the same words and another number does not take the place of the count.
+  assert.deepEqual(problemsOf((proposal) => void (proposal.paragraphs[2]!.textNl += " Bij 1 kerntaak is het doel niet gehaald.")), []);
+  assert.deepEqual(problemsOf((proposal) => void (proposal.paragraphs[2]!.textNl += " De gemeente moet de regels in acht nemen.")), []);
   // Words of a site, not of the evaluation.
   assert.deepEqual(problemsOf((proposal) => void (proposal.paragraphs[2]!.textNl += " De sessie verloopt zonder waarschuwing.")), []);
 });
@@ -285,9 +290,20 @@ test("a reading without reading in it is no reading: one line for every sentence
   const report = summarySourceText(evaluation);
   const sentences = readingSentences(good());
   assert.deepEqual(validateReading({ sentences: carried(sentences, report) }, sentences, report), { problems: [], refuted: [] });
-  const lazy = validateReading({ sentences: sentences.map((sentence, index) => ({ n: index + 1, sentence, verdict: "gedragen", quotes: ["# Toegankelijkheidsonderzoek Voorbeeldgemeente"] })) }, sentences, report).problems.join(" | ");
-  assert.match(lazy, /draagt \d+ zinnen; een stuk uit het rapport draagt er hooguit 2/);
-  assert.match(lazy, /geen van de stukken in quotes gaat over wat de zin zegt/);
+  const stems = (text: string): string[] => (text.toLowerCase().match(/[\p{L}]{5,}/gu) ?? []).map((word) => word.slice(0, 5));
+  // A line of the report that is about something else than sentence 2.
+  const line = report.split("\n").map((entry) => entry.replace(/\s+/g, " ").trim()).find((entry) => (entry.match(/[\p{L}]{2,}/gu) ?? []).length >= 4 && entry.length <= 300 && !/\d/.test(entry) && !stems(entry).some((stem) => stems(sentences[1]!).includes(stem)))!;
+  const lazy = validateReading({ sentences: sentences.map((sentence, index) => ({ n: index + 1, sentence, verdict: "gedragen", quotes: [line] })) }, sentences, report).problems.join(" | ");
+  assert.match(lazy, /de zinnen 1, 2, 3[\d, ]* rusten op dezelfde plek in het rapport .*; een plek draagt hooguit 2 zinnen/);
+  assert.match(lazy, /zin 2: het stuk in quotes deelt geen woord of getal met de zin; zeg in noteNl in één zin waarom/);
+  // The same place cut out a character shorter each time is still one place, and the whole report is no place.
+  assert.match(validateReading({ sentences: sentences.map((sentence, index) => ({ n: index + 1, sentence, verdict: "gedragen", noteNl: "Volgt eruit.", quotes: [line.slice(0, line.length - index)] })) }, sentences, report).problems.join(" | "), /rusten op dezelfde plek/);
+  assert.match(validateReading({ sentences: sentences.map((sentence, index) => ({ n: index + 1, sentence, verdict: "gedragen", quotes: [report.slice(0, report.length - index)] })) }, sentences, report).problems.join(" | "), /wijst geen plek aan; geef de zin of de paar zinnen waar het staat, hooguit 300 tekens/);
+  // A sentence in other words than the report stands with a line that says why it follows.
+  const other = carried(sentences, report).map((entry) => (entry.quotes[0] === line ? { ...entry, quotes: [report.split("\n").map((candidate) => candidate.replace(/\s+/g, " ").trim()).find((candidate) => candidate !== line && candidate.length <= 300 && stems(candidate).some((stem) => stems(entry.sentence).includes(stem)))!] } : entry));
+  const paraphrase = { ...other[1]!, quotes: [line] };
+  assert.match(validateReading({ sentences: [other[0], paraphrase, ...other.slice(2)] }, sentences, report).problems.join(" | "), /zin 2: het stuk in quotes deelt geen woord of getal/);
+  assert.deepEqual(validateReading({ sentences: [other[0], { ...paraphrase, noteNl: "Het rapport zegt dit hier in andere woorden." }, ...other.slice(2)] }, sentences, report).problems, []);
   assert.match(validateReading({ sentences: sentences.map((sentence, index) => ({ n: index + 1, sentence, verdict: "gedragen", quotes: ["| --- | ---: | ---: |"] })) }, sentences, report).problems.join(" | "), /is te kort om een plek in het rapport aan te wijzen/);
   // The same verdicts, for a text in which one sentence was rewritten since.
   const rewritten = [...sentences];
