@@ -6,6 +6,20 @@ Wat er per versie van loep is veranderd. De versie staat op het voorblad en onde
 
 <!-- towncrier: een nieuwe versie komt hieronder -->
 
+## 0.34.0 (2026-11-16)
+
+Deze versie is uitgebracht zonder meting: de samenvatting voor de leiding en de volgorde van het rapport raken geen uitkomst; ze zijn met tests gedekt en geprobeerd op kopieën van drie bestaande onderzoeken, niet in een nieuw onderzoek; de nieuwe afmaakronde na een doorgegeven kandidaat, de pauze voor een ingesloten venster en de laatste controle van de verkenner zijn met tests gedekt; een meting van alle criteria op de testsite is niet gedaan.
+
+### Wat een uitkomst kan veranderen
+
+- Gaf een afmaakronde een kandidaat door aan een ander criterium waarvan de afmaakronde al klaar was, dan bleef dat criterium open met "veegronde mist". `pending` noemt zulke criteria nu bij `done` onder `again`, en de werkstroom zet er één keer per start een nieuwe afmaakronde voor klaar. Een criterium dat al afkeurt valt erbuiten. ([#615](https://github.com/NederlandseDigitaleDienst/loep/issues/615))
+
+### Verder
+
+- Het rapport opent met een samenvatting voor de leiding van hooguit 220 woorden: wat de uitkomst is, voor wie het misgaat, wat eerst moet gebeuren en wat niet is vastgesteld. Een agent schrijft haar uit het rapport (`summarize`, opdracht `templates/samenvat.md`) en `check-summary` houdt haar aan het rapport: elk getal, de status met de reden, de norm bij naam, de woorden "voldoet niet", en geen woord dat een afkeuring kleiner maakt. Daarna legt een tweede agent elke zin naast het rapport (`check-reading`); één zin die het rapport niet draagt houdt de samenvatting eruit. Zonder samenvatting die beide doorstond opent het rapport zoals voorheen. De hoofdstukken staan in Markdown, html en beide pdf's in één nieuwe volgorde: samenvatting, overzicht per kerntaak en groep, werklijst, uitkomsten, en daarna de verantwoording van het onderzoek. In de html staat het overzicht per kerntaak daardoor bovenaan. De afbeeldingen met genummerde markeringen in de html geven geen melding `nested-interactive` meer. ([#590](https://github.com/NederlandseDigitaleDienst/loep/issues/590))
+- Is het budget van de verkenner op, dan draait die na het schrijven van `site.json` de controle nog één keer en verandert daarna niets meer. Eerder schreef een verkenner het sitemodel soms na zijn laatste controle, en weigerde `collect` met "site.json is gewijzigd na de laatste controle". ([#610](https://github.com/NederlandseDigitaleDienst/loep/issues/610))
+- Een ingesloten venster van een andere partij, zoals een video, geeft geen storing van de site meer. Liepen navigaties naar zo'n venster af, dan hield `pending` de hele werkstroom tegen terwijl de site gewoon antwoordde. Een origin die volgens de inventaris niet bij de site hoort, krijgt nu alleen een pauze, en een storing die een eerdere versie daarvoor noteerde wordt genegeerd. ([#611](https://github.com/NederlandseDigitaleDienst/loep/issues/611))
+
 ## 0.33.0 (2026-11-16)
 
 Deze versie is uitgebracht zonder meting: de veegronde scrolt een pagina na het laden door en de poort meldt een document zonder meting als gat, en dat is met tests en de regressietoets van de veegronde op de testsite gedekt; het filterformulier als leesverzoek is met tests gedekt en niet op een echte site geprobeerd; sweep, handout en de opwarming van VoiceOver raken geen uitkomst; een meting van alle criteria op de testsite is niet gedaan.
