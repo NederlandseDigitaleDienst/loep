@@ -147,6 +147,9 @@ const USAGE = `loep <command> [options]
   check-recheck --run <run> (--finding <id> | --criterion <id>) [--at <moment>]
                                          Validate the outcome of a recheck (the latest, or the one at that moment); non-zero
                                          exit on problems
+  handout --run <run> --out <dir>        Copy the report to a folder outside the run under a name that says which site and
+                                         which day: rapport-<site>-<date>.pdf, rapport-kort-..., rapport-....html, with -concept
+                                         while it is not signed. The names in the run stay as they are
   export --run <run> --format csv|issues [--out <file or dir>]
                                          The work list as CSV (one row per defect, with its criteria), or as one Markdown block
                                          per defect with a title and a body for an issue tracker. Without --out to standard
@@ -400,7 +403,7 @@ async function main(): Promise<void> {
   }
   // `gaps` and `feedback` read the verdicts and the evaluation of finished runs and nothing else of them: they need no permission to write and no login.
   // A recheck only reads the run and writes in a folder of its own; its session runs in that folder, not here.
-  const readsOnly = command === "gaps" || command === "feedback" || command === "contribute" || command === "recheck" || command === "check-recheck";
+  const readsOnly = command === "gaps" || command === "feedback" || command === "contribute" || command === "handout" || command === "recheck" || command === "check-recheck";
   if (command !== "inventory" && !readsOnly && values.run) {
     const permission = writesForRun(values.run);
     if (permission) setRunWrites(writeAccess(values.run, permission, command));
@@ -865,6 +868,15 @@ async function main(): Promise<void> {
       for (const problem of problems) process.stdout.write(`- ${problem}\n`);
       process.stdout.write(problems.length === 0 ? "OK: de nameting wijst naar eigen, nieuwe waarnemingen en is vastgelegd\n" : `${problems.length} problemen\n`);
       process.exitCode = problems.length === 0 ? 0 : 1;
+      return;
+    }
+    case "handout": {
+      if (!values.run || !values.out) throw new Error("handout vraagt --run <run> en --out <map buiten de run>");
+      const { handout } = await import("./commands/handout.ts");
+      const result = await handout(values.run, values.out);
+      for (const file of result.written) process.stdout.write(`${file}\n`);
+      if (!result.signed) process.stdout.write("Het rapport is niet afgetekend: de naam zegt concept.\n");
+      if (result.missing.length > 0) process.stdout.write(`Niet in de run: ${result.missing.join(", ")}.\n`);
       return;
     }
     case "export": {

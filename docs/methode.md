@@ -403,6 +403,8 @@ Bij elke bevinding staat in het rapport een uitsnede: het element met wat marge,
 
 `export` zet de werklijst om voor wie ermee verder werkt: `export --run <run> --format csv` geeft een rij per gebrek, `--format issues` een Markdown-blok per gebrek met titel en body, klaar voor `gh issue create`. Het maakt zelf geen issues aan.
 
+`handout` kopieert het rapport naar een map buiten de run, onder een naam die de site en de dag noemt: `handout --run <run> --out <map>` geeft `rapport-<site>-<datum>.pdf`, `rapport-kort-<site>-<datum>.pdf` en `rapport-<site>-<datum>.html`, met `-concept` zolang het rapport niet is afgetekend. In de run heten de bestanden voor elke site gelijk, en dat blijft zo: het zegel, een publicatie en de verwijzingen in het rapport rusten op die namen. Na het tekenen kopieert het de afgetekende versie.
+
 ## Aanbevelingen
 
 Niet alles wat een site beter maakt, eist de norm. Een aanbeveling is een patroon dat helpt en dat WCAG niet vraagt: bijvoorbeeld de datum van een kaart in de code na haar titel, zodat wie met een schermlezer van kop naar kop springt haar hoort. Het rapport zet aanbevelingen apart, onder "Aanbevelingen" bij "Wat nu", na wat fout of open is. Ze tellen niet mee voor de uitkomst van een criterium, niet voor de status en niet in de verklaring.

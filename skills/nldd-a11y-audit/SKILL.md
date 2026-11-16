@@ -167,6 +167,8 @@ Een agent starten betekent steeds: een aparte agent die alleen dit krijgt: "Lees
    LOEP render --run RUN
    LOEP seal --run RUN
    ```
+   Geef je de gebruiker het rapport als bestand, of zet je het ergens buiten de run neer, kopieer het dan met `LOEP handout --run RUN --out <map buiten de run>`. In de run heet het voor elke site `rapport.pdf`; de kopie heet naar de site en de dag, zoals `rapport-example.nl-2026-11-15-concept.pdf`, en na het tekenen zonder `-concept`.
+
    De naam en de organisatie zijn wat de gebruiker vooraf opgaf. Geef bij `--model` het model op waarmee de agents volgens jou draaiden. Elke agent geeft daarnaast zelf zijn model op als hij zijn sessie start (`session start --model`, zoals zijn opdracht zegt; de agent van de poort in zijn antwoord). Het rapport toont per rol wat de agents opgaven en zegt het als dat verschilt van wat jij opgaf. De toolbox kan geen van beide controleren.
 
    `evaluate` neemt per criterium het eindoordeel van de verificatie, of dat van de afmaakronde als die er was, telt de antwoorden van een persoon mee (stap 9), bewaart vervallen bevindingen met hun reden, en voegt bevindingen over dezelfde plek samen tot één gebrek. Het meldt door wie of wat de uitkomsten zijn vastgesteld en welke criteria open zijn. Staat er `LET OP: het onderzoek is niet af`, dan zijn er criteria die door het onderzoek zelf niet zijn vastgesteld: ga terug naar stap 6 (`LOEP tasks` en `LOEP pending`) en laat de afmaakronde lopen voordat je het rapport laat lezen. Wil je ook het voorstel voor verder samenvoegen: start één agent met `RUN/tasks/samenvoeg/taak.md`, draai `LOEP check-merge --run RUN` en daarna `LOEP merge --run RUN`, vóór het wegen.
