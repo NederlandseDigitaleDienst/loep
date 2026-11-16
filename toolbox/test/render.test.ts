@@ -1192,8 +1192,21 @@ test("the description of the website is a section of its own, and is left out wh
   evaluation.site.descriptionNl = "Dit is de website van een gemeente. Inwoners vragen er een vergunning aan.";
   const markdown = renderMarkdown(evaluation);
   const [before, after] = markdown.split("## Over deze website");
-  assert.ok(before!.includes("## Samenvatting") && !before!.includes("## Onderzoeksgegevens"));
-  assert.ok(after!.startsWith("\n\nDit is de website van een gemeente. Inwoners vragen er een vergunning aan.\n\n## Wat nu"));
+  // It opens the account of the evaluation: after what is wrong and how each criterion came out, before the facts of the evaluation.
+  assert.ok(before!.includes("## Resultaten per criterium") && !before!.includes("## Onderzoeksgegevens"));
+  assert.ok(after!.startsWith("\n\nDit is de website van een gemeente. Inwoners vragen er een vergunning aan.\n\n## Onderzoeksgegevens"));
+});
+
+test("the report goes from what is wrong and what to do, to how each criterion came out, to how the evaluation was made", () => {
+  const evaluation = exampleEvaluation();
+  evaluation.site.descriptionNl = "Dit is de website van een gemeente.";
+  const chapters = [...renderMarkdown(evaluation).matchAll(/^## (.+)$/gm)].map((match) => match[1]!);
+  const order = ["Samenvatting", "Wat nu", "Overzicht van de gebreken", "Bevindingen per onderdeel", "Resultaten per criterium", "Over deze website", "Onderzoeksgegevens", "Scope", "Basisniveau van ondersteuning", "Steekproef", "Gereedschap", "Betrouwbaarheid en beperkingen", "Bijlage A: onderbouwing per criterium", "Bijlage B: herleidbaarheid"];
+  assert.deepEqual(chapters.filter((chapter) => order.includes(chapter)), order);
+  // The scores per principle open the results; they are no longer in the summary.
+  const markdown = renderMarkdown(evaluation);
+  assert.ok(markdown.indexOf("**WCAG 2.2 niveau A en AA") > markdown.indexOf("## Resultaten per criterium"));
+  assert.ok(markdown.indexOf("**WCAG 2.2 niveau A en AA") < markdown.indexOf("### 1 Waarneembaar"));
 });
 
 const AGENT_MODELS: NonNullable<Evaluation["judgment"]["models"]> = [

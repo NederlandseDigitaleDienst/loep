@@ -77,6 +77,9 @@ export const scopeFrameNl = (frame: ScopeFrame): string =>
 export const REPORT_TEXT = {
   scopeFrames: "Ingesloten vensters, per venster wat het is en of het meetelt",
   title: "Toegankelijkheidsonderzoek",
+  overview: "Overzicht van de gebreken",
+  /** Under the summary for the leadership: who wrote it and what holds it to the report. `{model}` is the model the writer gave. */
+  executiveNote: "Deze samenvatting is geschreven door een taalmodel{model}, uit de tekst van dit rapport. Een script heeft haar aan het rapport gehouden: de status, de getallen en de gebreken waarop ze rust komen uit het onderzoek. Wat hieronder staat, is de herleidbare versie.",
   concept: "Concept, niet afgetekend",
   staleSignature: "De handtekening hoort bij een eerdere versie van dit onderzoek.",
   scoreNote: "\"Niet van toepassing\" telt niet mee als \"Voldoet\". \"Kan niet bepalen\" en \"Niet beoordeeld\" zijn open: daar is nog geen oordeel.",
@@ -348,6 +351,8 @@ export interface ReportDerived {
   signatureStale: boolean;
   status: Record<WcagVersion, { status: ComplianceStatus; reasonNl: string }>;
   statusSentenceNl: string;
+  /** The summary for the leadership, when one was written and passed its check: it opens the report in place of `statusSentenceNl`. */
+  executive: { paragraphs: string[]; noteNl: string } | null;
   statusLine: StatusLine;
   /**
    * For an investigation to account for (#318): what the outcomes rest on, and per open criterion
@@ -1397,6 +1402,7 @@ export function deriveReport(input: Evaluation, decisions: DecisionLayer = { dec
     signatureStale: stale,
     status: { "2.1": complianceStatus(evaluation, "2.1"), "2.2": complianceStatus(evaluation, "2.2") },
     statusSentenceNl: statusSentence(evaluation),
+    executive: evaluation.executiveSummary?.status === "applied" ? { paragraphs: evaluation.executiveSummary.paragraphs, noteNl: REPORT_TEXT.executiveNote.replace("{model}", evaluation.executiveSummary.model ? ` (${evaluation.executiveSummary.model})` : "") } : null,
     forB: forStatusB(evaluation),
     statusLine: statusLine(evaluation, stale),
     followsUpNl: evaluation.followsUp ? `Dit is een heronderzoek. Het vorige onderzoek is van ${dateNl(evaluation.followsUp.evaluatedAt)}, afgetekend op ${dateNl(evaluation.followsUp.signedAt)}, met kenmerk ${evaluation.followsUp.sha256.slice(0, 12)}.` : null,
@@ -1710,7 +1716,19 @@ export function findingsByComponent(evaluation: Evaluation): { component: string
   return [...named, ...(loose.length > 0 ? [{ component: null, findings: loose }] : [])];
 }
 
-export function renderMarkdown(input: Evaluation, decisions: DecisionLayer = { decisions: [], sha256: null }, pictures: CutoutPictures = {}): string {
+/** The chapters of the report, each as the lines of its Markdown. */
+export type ReportBlock = (typeof REPORT_ORDER)[number];
+
+/**
+ * The order of the report, for every form it takes: first what is wrong and for whom, then what
+ * to do, then how each criterion came out, and last how the evaluation was made.
+ */
+export const REPORT_ORDER = ["title", "summary", "whatNext", "measures", "overview", "byComponent", "byPage", "resultsHead", "scores", "results", "about", "facts", "scope", "baseline", "sample", "tools", "reliability", "appendixA", "appendixB", "rechecks"] as const;
+
+/** What the writer of the summary does not read: the appendices, which repeat per criterion what the chapters say and are most of the pages. */
+const NOT_SUMMARY_SOURCE: readonly ReportBlock[] = ["appendixA", "appendixB", "rechecks"];
+
+function reportBlocks(input: Evaluation, decisions: DecisionLayer = { decisions: [], sha256: null }, pictures: CutoutPictures = {}): Map<ReportBlock, string[]> {
   const derived = deriveReport(input, decisions);
   const { evaluation } = withCurrentSignature(input);
   const staleNote = derived.signatureStale ? ` ${REPORT_TEXT.staleSignature}` : "";
@@ -1723,10 +1741,16 @@ export function renderMarkdown(input: Evaluation, decisions: DecisionLayer = { d
   const defects = new Map((evaluation.defects ?? []).map((defect) => [defect.id, defect]));
   const grouping = derived.defects ? { defects, derived: derived.defects, weighing: derived.weighing } : null;
   const alsoText = (defect: Defect): string => (defect.alsoCriteria.length > 0 ? `, ${REPORT_TEXT.defect.also.toLowerCase()} ${defect.alsoCriteria.join(", ")}` : "");
-  const lines: string[] = [];
+  // Each chapter is written into a block of its own; `REPORT_ORDER` says in which order they stand.
+  const blocks = new Map<ReportBlock, string[]>();
+  let lines: string[] = [];
+  const begin = (name: ReportBlock): void => {
+    lines = [];
+    blocks.set(name, lines);
+  };
   const section = (title: string): void => void lines.push(`## ${title}`, "");
 
-  // Title block
+  begin("title");
   lines.push(`# ${REPORT_TEXT.title} ${esc(evaluation.site.name)}`, "");
   lines.push(
     signature
@@ -1751,8 +1775,11 @@ export function renderMarkdown(input: Evaluation, decisions: DecisionLayer = { d
     "",
   );
 
+  begin("summary");
   section("Samenvatting");
-  lines.push(derived.statusSentenceNl, "");
+  // A summary written for the leadership opens the report; without one the sentence loep makes itself does.
+  if (derived.executive) lines.push(...derived.executive.paragraphs.flatMap((paragraph) => [esc(paragraph), ""]), `*${derived.executive.noteNl}*`, "");
+  else lines.push(derived.statusSentenceNl, "");
   lines.push(`**${derived.statusLine.headingNl}**`, "");
   if (derived.statusLine.noteNl) lines.push(derived.statusLine.noteNl, "");
   lines.push(derived.statusLine.openNl, "");
@@ -1779,8 +1806,11 @@ export function renderMarkdown(input: Evaluation, decisions: DecisionLayer = { d
     lines.push(weighing.limitsNl, "");
   }
   if (grouping) lines.push(`Het onderzoek vond ${grouping.derived.countsNl}.`, "");
+  begin("scores");
   for (const version of VERSIONS) lines.push(`**WCAG ${version} niveau A en AA (${evaluation.summary[version].total} criteria)**`, "", ...scoreTable(evaluation, version), "");
   lines.push(derived.scoreNoteNl, "");
+  begin("overview");
+  section(REPORT_TEXT.overview);
   if (grouping && weighing) {
     // What stops a group at a core task stands above; here what a group can not use beside the tasks.
     if (weighing.beside) lines.push(`### ${REPORT_TEXT.weighing.beside}`, "", ...table(["Gebrek", "Criterium", "Pagina's"], weighing.beside.defectIds.map((id) => defects.get(id)!).map((defect) => [`[${esc(defect.titleNl)}](#${defect.id})`, `${defect.mainCriterion}${alsoText(defect)}`, grouping.derived.pagesNl[defect.id]!])), "", weighing.beside.noteNl, "");
@@ -1800,11 +1830,13 @@ export function renderMarkdown(input: Evaluation, decisions: DecisionLayer = { d
   }
   lines.push("### Wat betekent dit", "", derived.meaningNl.join("\n\n"), "");
 
+  begin("about");
   if (evaluation.site.descriptionNl) {
     section("Over deze website");
     lines.push(...evaluation.site.descriptionNl.split(/\n\s*\n/).flatMap((paragraph) => [esc(paragraph), ""]));
   }
 
+  begin("whatNext");
   section("Wat nu");
   lines.push(REPORT_TEXT.todoIntro, "");
   lines.push("### Oplossen", "");
@@ -1879,6 +1911,7 @@ export function renderMarkdown(input: Evaluation, decisions: DecisionLayer = { d
     lines.push("");
   }
 
+  begin("measures");
   if (derived.measures) {
     section(REPORT_TEXT.measures.title);
     lines.push(REPORT_TEXT.measures.intro, "", derived.measures.countsNl, "");
@@ -1890,6 +1923,7 @@ export function renderMarkdown(input: Evaluation, decisions: DecisionLayer = { d
     lines.push("", derived.measures.layerNl, "");
   }
 
+  begin("facts");
   section("Onderzoeksgegevens");
   lines.push(
     ...bullets([
@@ -1914,11 +1948,13 @@ export function renderMarkdown(input: Evaluation, decisions: DecisionLayer = { d
   if (signature) lines.push(`Verklaring bij de ondertekening: ${esc(signature.statementNl)}`, "", `Getekend voor evaluatie ${code(signature.evaluationSha256.slice(0, 12))}, verzegeld als ${code(signature.sealSha256.slice(0, 12))}.`, "");
   if (evaluation.method.deviationsNl.length > 0) lines.push("Afwijkingen van de methode:", "", ...bullets(evaluation.method.deviationsNl.map(esc)), "");
 
+  begin("scope");
   section("Scope");
   lines.push("Binnen de scope:", "", ...bullets(evaluation.scope.includedNl.map(esc)), "");
   lines.push("Buiten de scope:", "", ...(evaluation.scope.excludedNl.length > 0 ? bullets(evaluation.scope.excludedNl.map(esc)) : ["Niets uitgesloten."]), "");
   if (derived.scopeFramesNl.length > 0) lines.push(`${REPORT_TEXT.scopeFrames}:`, "", ...bullets(derived.scopeFramesNl.map(esc)), "");
 
+  begin("baseline");
   section("Basisniveau van ondersteuning");
   lines.push("Browsers:", "", ...bullets(evaluation.baseline.browsers.map((browser) => `${esc(browser.name)} ${browser.version ? esc(browser.version) : "(versie onbekend)"}, motor ${esc(browser.engine)}`)), "");
   if (evaluation.baseline.assistiveTechnology.length === 0) lines.push("Hulpsoftware: geen.", "");
@@ -1927,6 +1963,7 @@ export function renderMarkdown(input: Evaluation, decisions: DecisionLayer = { d
   if (baselineNote) lines.push(esc(baselineNote), "");
   lines.push(`Technologieën waarop de site steunt: ${evaluation.technologies.map(esc).join(", ")}.`, "");
 
+  begin("sample");
   section("Steekproef");
   lines.push(esc(evaluation.sample.note), "");
   lines.push(
@@ -1956,6 +1993,7 @@ export function renderMarkdown(input: Evaluation, decisions: DecisionLayer = { d
     lines.push("");
   }
 
+  begin("tools");
   section("Gereedschap");
   lines.push(
     ...bullets([
@@ -1990,7 +2028,9 @@ export function renderMarkdown(input: Evaluation, decisions: DecisionLayer = { d
   if (derived.toolboxChanged) lines.push(`> ${REPORT_TEXT.dirty}`, "");
   lines.push(derived.chain.enginesNl, "");
 
+  begin("resultsHead");
   section("Resultaten per criterium");
+  begin("results");
   lines.push(REPORT_TEXT.overviewIntro, "");
   lines.push(
     ...table(
@@ -2020,6 +2060,7 @@ export function renderMarkdown(input: Evaluation, decisions: DecisionLayer = { d
     }
   }
 
+  begin("byComponent");
   section("Bevindingen per onderdeel");
   if (findings.length === 0) lines.push("Er zijn geen bevindingen.", "");
   else {
@@ -2027,6 +2068,7 @@ export function renderMarkdown(input: Evaluation, decisions: DecisionLayer = { d
     lines.push(...table(["Onderdeel", "Bevindingen"], findingsByComponent(evaluation).map((group) => [group.component ? esc(group.component) : "Zonder onderdeel", group.findings.map(findingLink).join(", ")])), "");
   }
 
+  begin("byPage");
   section(grouping ? "Gebreken per pagina" : "Bevindingen per pagina");
   if (findings.length === 0) lines.push("Er zijn geen bevindingen.", "");
   else {
@@ -2044,6 +2086,7 @@ export function renderMarkdown(input: Evaluation, decisions: DecisionLayer = { d
     lines.push(...table(["Pagina", grouping ? "Gebreken" : "Bevindingen"], rows), "");
   }
 
+  begin("reliability");
   section("Betrouwbaarheid en beperkingen");
   lines.push(derived.chain.honestNl, "");
   lines.push(`### ${REPORT_TEXT.versionAccuracy}`, "", esc(derived.versionAccuracyNl), "");
@@ -2055,10 +2098,12 @@ export function renderMarkdown(input: Evaluation, decisions: DecisionLayer = { d
   if (derived.generalLimitationsNl.length > 0) lines.push("Beperkingen van dit onderzoek:", "", ...bullets(derived.generalLimitationsNl.map(esc)), "");
   if (derived.procedureLimitations > 0) lines.push(`Bij ${criteriaCount(derived.procedureLimitations)} heeft de procedure een eigen beperking. ${REPORT_TEXT.procedureLimits}`, "");
 
+  begin("appendixA");
   section("Bijlage A: onderbouwing per criterium");
   lines.push(REPORT_TEXT.appendixIntro, "");
   for (const criterion of evaluation.criteria) lines.push(...appendixEntry(criterion, derived.briefs[criterion.id]!, derived.chain, quiet.has(criterion.id)));
 
+  begin("appendixB");
   section("Bijlage B: herleidbaarheid");
   lines.push(REPORT_TEXT.traceIntro, "");
   // The verdict of a finishing round gets a column only in an evaluation that had such a round.
@@ -2080,10 +2125,32 @@ export function renderMarkdown(input: Evaluation, decisions: DecisionLayer = { d
     "",
   );
 
+  begin("rechecks");
   if (derived.rechecks) {
     section(REPORT_TEXT.rechecks.title);
     lines.push(REPORT_TEXT.rechecks.intro, "", ...rechecksMarkdownLines(derived.rechecks, true), "");
   }
 
-  return `${lines.join("\n").replace(/\n{3,}/g, "\n\n").trimEnd()}\n`;
+  return blocks;
+}
+
+const joined = (lines: string[]): string => `${lines.join("\n").replace(/\n{3,}/g, "\n\n").trimEnd()}\n`;
+
+/** The report as Markdown, its chapters in the order of `REPORT_ORDER`. */
+export function renderMarkdown(input: Evaluation, decisions: DecisionLayer = { decisions: [], sha256: null }, pictures: CutoutPictures = {}): string {
+  const blocks = reportBlocks(input, decisions, pictures);
+  return joined(REPORT_ORDER.flatMap((name) => blocks.get(name) ?? []));
+}
+
+/**
+ * What whoever writes the summary for the leadership reads: the whole report as a reader has it,
+ * without the summary itself and without the appendices. The
+ * lines that name the version of the evaluation and of loep are left out: they change when the
+ * same evaluation is made again, and the summary would then count as written for another report.
+ */
+export function summarySourceText(input: Evaluation): string {
+  const { executiveSummary: _summary, ...evaluation } = input;
+  const blocks = reportBlocks(evaluation as Evaluation);
+  const lines = REPORT_ORDER.filter((name) => !NOT_SUMMARY_SOURCE.includes(name)).flatMap((name) => blocks.get(name) ?? []).filter((line) => !/^- (?:Versie van de evaluatie|Gemaakt met loep)\b/.test(line));
+  return joined(lines);
 }

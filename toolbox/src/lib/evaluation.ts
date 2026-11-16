@@ -6,6 +6,7 @@ import { sha256, stableId } from "./canonical.ts";
 import type { FindingCutout } from "./cutout.ts";
 import type { Defect, MergeRecord } from "./defects.ts";
 import type { Weighing, WeighingRecord } from "./weighing.ts";
+import type { SummaryRecord } from "./executive-summary.ts";
 import type { Manifest, SweepToolchain } from "./manifest.ts";
 import type { RoleExtensions } from "./budget.ts";
 import { MODEL_UNKNOWN, type RoleModels } from "./models.ts";
@@ -370,6 +371,8 @@ export interface Evaluation {
   merge?: MergeRecord;
   /** Whether the step ran that weighs each finding by the groups it hinders, and the core tasks it named. Absent in an evaluation from before this step existed. */
   weighing?: WeighingRecord;
+  /** The summary for whoever leads the organisation, written by a language model and held to the report by a check. Absent when none was written. */
+  executiveSummary?: SummaryRecord;
   /** Per page label, the states in which the page was measured besides the way it loads. */
   measuredStates?: Record<string, string[]>;
   /** The documents of the site: found, examined and not examined. Absent when the site has none, and in older evaluations. */
