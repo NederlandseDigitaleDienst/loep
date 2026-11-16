@@ -35,6 +35,10 @@ const USAGE = `loep <command> [options]
                                          page types as the sweep does; non-zero exit on problems
   sample --run <run> [--seed <text>]     Choose the pages to evaluate (all of them on a small site). Without --seed the random
                                          part follows the seed inventory made for the run
+  sweep --run <run> [--fresh] [--at-once <n>]
+                                         The whole sweep as one command: collect, contrast, states and documents, in that order,
+                                         with the same options. It stops at the first one that fails and names it. Each of the
+                                         four can still be run alone
   collect --run <run> [--fresh] [--at-once <n>]
                                          Gather facts, engine results and probe evidence per page. The sweep (collect, contrast,
                                          states, gate) needs the site model of explore. A second run of collect, contrast or
@@ -252,11 +256,11 @@ async function repeatReadsOutsideRun(runDir: string): Promise<void> {
   if (said) process.stdout.write(`${said}\n`);
 }
 
-const NOT_EXPLORED_NL ="deze run heeft geen sitemodel (site.json): verken de site eerst met explore en check-site, en draai daarna collect, contrast, states en gate";
+const NOT_EXPLORED_NL ="deze run heeft geen sitemodel (site.json): verken de site eerst met explore en check-site, en draai daarna sweep en gate";
 /** The commands that measure or judge a site that was mapped first. */
-const NEEDS_SITE_MODEL = ["collect", "contrast", "states", "gate", "tasks"];
+const NEEDS_SITE_MODEL = ["sweep", "collect", "contrast", "states", "gate", "tasks"];
 /** The commands of the sweep that load pages of the site in a browser. */
-const SWEEP_COMMANDS = ["collect", "contrast", "states"];
+const SWEEP_COMMANDS = ["sweep", "collect", "contrast", "states"];
 
 async function main(): Promise<void> {
   // Comparing per finding has its own steps and options; it parses them itself.
@@ -584,7 +588,7 @@ async function main(): Promise<void> {
       const verdict = {
         proceed: "bewijs voldoende",
         review: result.gaps.length === 0 ? `vaste controles voldoende; de beelden zijn nog niet bekeken: ${tasksNl}` : `${counted(result.gaps.length)} in de vaste controles voor de verkenner; eerst de beelden bekijken, zodat de verkenner alle gaten in één keer krijgt: ${tasksNl}`,
-        sweep: `bewijs onvoldoende: een nieuwe veegronde kan ${forSweep} van de ${counted(result.gaps.length)} sluiten, want daar mislukte of ontbreekt een meting. Draai collect, contrast, states en documents opnieuw en daarna gate; dat kost geen terugkeer naar de verkenner (nog ${result.resweepsLeft} keer opnieuw meten na deze verkenning)`,
+        sweep: `bewijs onvoldoende: een nieuwe veegronde kan ${forSweep} van de ${counted(result.gaps.length)} sluiten, want daar mislukte of ontbreekt een meting. Draai sweep opnieuw (collect, contrast, states en documents) en daarna gate; dat kost geen terugkeer naar de verkenner (nog ${result.resweepsLeft} keer opnieuw meten na deze verkenning)`,
         explore: `bewijs onvoldoende: ${counted(result.gaps.length)}${result.stage === "deterministic" ? " in de vaste controles" : ""}; nog ${result.returnsLeft} keer terug naar de verkenner`,
         stop: `bewijs onvoldoende: ${counted(result.gaps.length)}${result.stage === "deterministic" ? " in de vaste controles" : ""}; de run is ${MAX_RETURNS_TO_EXPLORER} keer terug geweest naar de verkenner, en er valt niets te beoordelen: de site weigert de run, of meer dan de helft van de steekproef laadde niet. Er komt geen beoordeling`,
       }[result.next!];
@@ -603,40 +607,20 @@ async function main(): Promise<void> {
       process.exitCode = problems.length === 0 ? 0 : 1;
       return;
     }
-    case "collect": {
-      if (!values.run) throw new Error("collect needs --run <run>");
-      const { collect } = await import("./commands/collect.ts");
-      await collect({ run: values.run, only: values.only, fresh: values.fresh, atOnce: parseAtOnce(values["at-once"], "pagina's") });
+    case "sweep": {
+      if (!values.run) throw new Error("sweep needs --run <run>");
+      const { sweep } = await import("./commands/sweep.ts");
+      await sweep({ run: values.run, only: values.only, fresh: values.fresh, atOnce: parseAtOnce(values["at-once"], "pagina's, rondes of groepen proeven") }, (line) => process.stdout.write(`${line}\n`));
       return;
     }
-    case "contrast": {
-      if (!values.run) throw new Error("contrast needs --run <run>");
-      const { contrast } = await import("./commands/contrast.ts");
-      const atOnce = parseAtOnce(values["at-once"], "rondes");
-      const pages = await contrast(values.run, { fresh: values.fresh, ...(atOnce ? { atOnce } : {}) });
-      const all = pages.flatMap((page) => page.measurements);
-      const count = (outcome: string): number => all.filter((entry) => entry.outcome === outcome).length;
-      process.stdout.write(`${all.length} stukken tekst (standaardvenster en 320 breed, licht en donker): ${count("passed")} voldoende, ${count("failed")} onvoldoende, ${count("cantTell")} niet te meten, ${count("exempt")} uitgezonderd\n`);
-      return;
-    }
-    case "states": {
-      if (!values.run) throw new Error("states needs --run <run>");
-      const { states } = await import("./commands/states.ts");
-      const atOnce = parseAtOnce(values["at-once"], "groepen proeven");
-      const result = await states(values.run, { fresh: values.fresh, ...(atOnce ? { atOnce } : {}) });
-      process.stdout.write(`${result.examined.triggers} triggers, ${result.dialogs.filter((dialog) => dialog.opened).length} opened something, ${result.examined.forms} forms, ${result.singleKeys.reactions.length} key reactions, ${result.hover.length} hover appearances\n`);
-      // A limit that cut something off is said here too, not only in the dossier.
-      const press = result.downEventCoverage;
-      if (press) process.stdout.write(`indrukproef: ${press.examined} van ${press.kindsFound} soorten bedieningselementen onderzocht${press.notExamined > 0 ? `, ${press.notExamined} niet (grens ${press.limit})` : ""}\n`);
-      if (result.hoverCoverage?.kinds !== undefined) process.stdout.write(`aanwijzen en focus: ${result.hoverCoverage.found} bedieningselementen in ${result.hoverCoverage.kinds} soorten, ${result.hoverCoverage.examined} aangewezen${result.hoverCoverage.notExamined > 0 ? `, ${result.hoverCoverage.notExamined} soorten niet (grens ${result.hoverCoverage.limit})` : ""}\n`);
-      else if ((result.hoverCoverage?.notExamined ?? 0) > 0) process.stdout.write(`aanwijzen en focus: ${result.hoverCoverage!.notExamined} van ${result.hoverCoverage!.found} bedieningselementen niet onderzocht (grens ${result.hoverCoverage!.limit})\n`);
-      return;
-    }
+    case "collect":
+    case "contrast":
+    case "states":
     case "documents": {
-      if (!values.run) throw new Error("documents needs --run <run>");
-      const { documents } = await import("./commands/documents.ts");
-      const result = await documents(values.run);
-      process.stdout.write(result.documents === 0 ? "geen documenten in de steekproef\n" : `${result.documents} documenten: ${result.read} ingelezen, ${result.notRead} van een soort die niet wordt ingelezen, ${result.failed} niet op te halen of te openen\n`);
+      if (!values.run) throw new Error(`${command} needs --run <run>`);
+      const { sweepStep } = await import("./commands/sweep.ts");
+      const what = { collect: "pagina's", contrast: "rondes", states: "groepen proeven", documents: "documenten" }[command];
+      for (const line of await sweepStep(command, { run: values.run, only: command === "collect" ? values.only : undefined, fresh: values.fresh, atOnce: parseAtOnce(values["at-once"], what) })) process.stdout.write(`${line}\n`);
       return;
     }
     case "tasks": {

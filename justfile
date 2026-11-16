@@ -122,10 +122,7 @@ quick-key run:
 sweep run *flags:
     {{cli}} check-site --run {{run}}
     {{cli}} sample --run {{run}}
-    {{cli}} collect --run {{run}} {{flags}}
-    {{cli}} contrast --run {{run}} {{flags}}
-    {{cli}} states --run {{run}} {{flags}}
-    {{cli}} documents --run {{run}}
+    {{cli}} sweep --run {{run}} {{flags}}
     -{{cli}} gate --run {{run}}
 
 # Zet de opdrachten voor de agents klaar en zeg welke nog open staan (rondgangen, beoordelingen, verificaties)
