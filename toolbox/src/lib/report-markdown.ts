@@ -2145,12 +2145,13 @@ export function renderMarkdown(input: Evaluation, decisions: DecisionLayer = { d
 /**
  * What whoever writes the summary for the leadership reads: the whole report as a reader has it,
  * without the summary itself and without the appendices. The
- * lines that name the version of the evaluation and of loep are left out: they change when the
- * same evaluation is made again, and the summary would then count as written for another report.
+ * lines that name the day and the version of the evaluation and of loep are left out: they change
+ * when the same evaluation is made again, and the summary would then count as written for another report.
  */
 export function summarySourceText(input: Evaluation): string {
+  // Without the summary itself, and without a signature: the text is the same before and after signing.
   const { executiveSummary: _summary, ...evaluation } = input;
-  const blocks = reportBlocks(evaluation as Evaluation);
-  const lines = REPORT_ORDER.filter((name) => !NOT_SUMMARY_SOURCE.includes(name)).flatMap((name) => blocks.get(name) ?? []).filter((line) => !/^- (?:Versie van de evaluatie|Gemaakt met loep)\b/.test(line));
+  const blocks = reportBlocks({ ...evaluation, signature: null } as Evaluation);
+  const lines = REPORT_ORDER.filter((name) => !NOT_SUMMARY_SOURCE.includes(name)).flatMap((name) => blocks.get(name) ?? []).filter((line) => !/^- (?:Versie van de evaluatie|Gemaakt met loep|Datum van het onderzoek|Datum)\b/.test(line));
   return joined(lines);
 }

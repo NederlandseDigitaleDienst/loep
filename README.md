@@ -109,6 +109,7 @@ De overige commando's:
 | `answer` | Legt het antwoord van een persoon vast op een open punt dat geen instrument kan sluiten: wat is gedaan of besloten, wat dat betekent voor het criterium, en in welke functie. De naam blijft in een bestand van de run; het rapport noemt de functie. Zie [docs/methode.md](docs/methode.md#wat-een-mens-moet-vaststellen) |
 | `merge`, `check-merge` | De stap naar keuze die voorstelt welke bevindingen nog meer bij elkaar horen |
 | `weigh`, `check-weigh` | De stap die per bevinding vastlegt welke groepen bezoekers ze hindert, waarna de ernst daaruit volgt |
+| `summarize`, `check-summary` | De samenvatting voor de leiding waarmee het rapport opent: één agent schrijft haar uit de tekst van het rapport, een controle houdt haar aan het rapport |
 | `diff` | Legt twee evaluaties van dezelfde site naast elkaar: opgelost, gebleven en nieuw, als werkdocument `verschil.md` |
 | `compare` | Legt een onderzoek naast een bestaand onderzoek van dezelfde site; zie [validatie/README.md](validatie/README.md) |
 | `procedures` | Controleert de procedures |

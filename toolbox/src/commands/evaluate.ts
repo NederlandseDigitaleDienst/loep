@@ -29,6 +29,7 @@ import { METHODS } from "../instruments/methods/registry.ts";
 import type { Gate } from "./gate.ts";
 import { readEvaluation, signatureIsCurrent, writeEvaluation } from "./sign.ts";
 import { mergeInto } from "./merge.ts";
+import { summaryInto, summaryLineNl } from "./summarize.ts";
 import { weighInto, weighingLineNl } from "./weigh.ts";
 import { countingVerdict, loadAnswers } from "./answer.ts";
 import { instrumentVerdictIsCurrent, isInstrumentRun, loadInstrumentIndex, crossLoops, loadObservations, NO_TASKS_NL, skippedForOutage, unruledCrossPoints, type InstrumentTask } from "./instrument-tasks.ts";
@@ -368,6 +369,9 @@ export async function evaluate(options: EvaluateOptions): Promise<Evaluation> {
   // A weighing that was validated against exactly these defects sets their severity; without one the judges' stands.
   const weighed = await weighInto(options.run, evaluation);
   if (weighed.findings > 0) process.stderr.write(`${weighingLineNl(weighed)}\n`);
+  // The summary for the leadership counts only for the report it was written from: after anything changed it is written again.
+  const summarized = await summaryInto(options.run, evaluation);
+  process.stderr.write(`${summaryLineNl(summarized)}\n`);
   await writeEvaluation(join(options.run, "evaluation.json"), evaluation);
   const based = (basis: Basis): number => criteria.filter((criterion) => criterion.basis === basis).length;
   process.stdout.write(`zekerheid: ${based("measured")} criteria ${BASIS_NL.measured}, ${based("observed")} ${BASIS_NL.observed}, ${based("person")} ${BASIS_NL.person}, ${based("open")} open\n`);

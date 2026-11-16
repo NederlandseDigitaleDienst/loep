@@ -116,6 +116,12 @@ const USAGE = `loep <command> [options]
                                          hinders, what happens to them and for which core task; apply a weighing that
                                          passed check-weigh, so the severity of each finding follows from those facts
   check-weigh --run <run>                Validate the weighing of that step; non-zero exit on problems
+  summarize --run <run>                  Write the task for the summary for the leadership: one agent reads the report as text
+                                         (tasks/samenvatting/rapport.md) and writes a few paragraphs that open the report. A
+                                         summary that passed check-summary for this report is put into the evaluation; without
+                                         one the report opens as loep writes it. Run it after weigh and before render
+  check-summary --run <run>              Hold that summary to the report: length, status, numbers, words that soften; non-zero
+                                         exit on problems
   answer --run <run> --criterion <id> [--point <n> --did <text> --outcome passed|failed|inapplicable --name <who> --role <function>]
                                          For an open point that asks a person or a choice of the owner: record what a person
                                          did or decided and what follows for the criterion. Without --point: list the open
@@ -804,6 +810,22 @@ async function main(): Promise<void> {
       const problems = await checkWeigh(values.run);
       for (const problem of problems) process.stdout.write(`- ${problem}\n`);
       process.stdout.write(problems.length === 0 ? "OK: de weging voldoet aan de regels\n" : `${problems.length} problemen\n`);
+      process.exitCode = problems.length === 0 ? 0 : 1;
+      return;
+    }
+    case "summarize": {
+      if (!values.run) throw new Error("summarize vraagt --run <run>");
+      const { summarize, summaryLineNl } = await import("./commands/summarize.ts");
+      const result = await summarize(values.run);
+      process.stdout.write(`${summaryLineNl(result)}\n${result.summary === "applied" ? "" : `${result.task}\n`}`);
+      return;
+    }
+    case "check-summary": {
+      if (!values.run) throw new Error("check-summary vraagt --run <run>");
+      const { checkSummary } = await import("./commands/summarize.ts");
+      const problems = await checkSummary(values.run);
+      for (const problem of problems) process.stdout.write(`- ${problem}\n`);
+      process.stdout.write(problems.length === 0 ? "OK: de samenvatting houdt zich aan het rapport\n" : `${problems.length} problemen\n`);
       process.exitCode = problems.length === 0 ? 0 : 1;
       return;
     }
