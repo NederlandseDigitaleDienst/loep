@@ -25,7 +25,8 @@ Een zin is **niet-gedragen** als ze op één punt iets anders zegt dan het rappo
 - een gebrek dat het rapport niet heeft;
 - lichter of zwaarder dan het rapport: "lukt met een omweg" waar het rapport zegt dat een groep vastloopt, of andersom;
 - een criterium dat open staat en in de zin als goed of als zonder probleem klinkt;
-- een oorzaak, een volgorde of een termijn die het rapport niet geeft;
+- een oorzaak, een volgorde of een termijn die het rapport niet geeft. Een volgorde van herstel die volgt uit hoe het rapport de werklijst sorteert (de zwaarste eerst, bij dezelfde ernst eerst wat bij een kerntaak hoort), geeft het rapport wel;
+- iets wat de eigenaar doet, gaat doen of heeft toegezegd, terwijl het rapport het alleen aanraadt: "de eigenaar herstelt de gebreken" waar het rapport een werklijst geeft;
 - een gevolg voor bezoekers dat het rapport niet beschrijft.
 
 Twee dingen tellen niet tegen een zin:

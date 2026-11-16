@@ -90,6 +90,8 @@ test("the check holds a summary to the report: length, form, numbers, status and
   // The two counts are the ones of the evaluation, not any two numbers the report has somewhere.
   refused("other counts", first("De site voldoet niet aan WCAG 2.2 niveau A en AA. Van de 55 criteria zijn er 4 niet gehaald en 5 open, en door die open criteria is het status C."), /zegt dat 4 criteria niet zijn gehaald; het rapport heeft er 5, 4 open en 55 in totaal/);
   refused("a count in words at the end of a clause", add("Het zijn er acht."), /"acht" is een aantal in letters/);
+  refused("what the owner does, as a fact", add("De eigenaar herstelt de gebreken, het formulier eerst."), /"De eigenaar herstelt" zegt wat de eigenaar doet, alsof dat is toegezegd/);
+  refused("what the municipality does, as a fact", add("De gemeente laat binnen zes maanden aanvullend onderzoek doen."), /"De gemeente laat" zegt wat de eigenaar doet/);
   refused("an abbreviation", add("Dat geldt bijv. voor het zoekveld."), /schrijf "bijv\." voluit/);
   refused("a count in words that the report has in a title only", add("Het gaat om vier."), /"vier" is een aantal in letters/);
   refused("meets, with what was established", add("Op alles wat is vastgesteld voldoet de site verder."), /zegt dat de site voldoet/);
@@ -114,6 +116,8 @@ test("sentences a writer would write pass: the count before the total, a colon, 
   // A later sentence with the same words and another number does not take the place of the count.
   assert.deepEqual(problemsOf((proposal) => void (proposal.paragraphs[2]!.textNl += " Bij 1 kerntaak is het doel niet gehaald.")), []);
   assert.deepEqual(problemsOf((proposal) => void (proposal.paragraphs[2]!.textNl += " De gemeente moet de regels in acht nemen.")), []);
+  // What the owner can do or must do is advice, no commitment.
+  assert.deepEqual(problemsOf((proposal) => void (proposal.paragraphs[2]!.textNl += " De eigenaar kan versturen op een testomgeving toestaan.")), []);
   // Words of a site, not of the evaluation.
   assert.deepEqual(problemsOf((proposal) => void (proposal.paragraphs[2]!.textNl += " De sessie verloopt zonder waarschuwing.")), []);
 });

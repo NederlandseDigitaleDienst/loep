@@ -65,6 +65,12 @@ const PROCESS = ["veegronde", "afmaakronde", "rondgang", "beoordelaar", "verifie
  */
 const SIGNING = ["voorlopig", "voorlopige", "een concept", "dit concept", "conceptrapport", "afgetekend", "aftekent", "aftekenen", "aftekening", "ondertekend", "ondertekening"];
 
+/**
+ * What the owner does, said as a fact: "de eigenaar herstelt de gebreken". The report advises and
+ * the owner has promised nothing; a reader who decides takes such a sentence for a commitment.
+ */
+const COMMITMENT = /(?<![\p{L}])de\s+(?:eigenaar|site-eigenaar|gemeente|organisatie|beheerder|redactie|leverancier|provincie|dienst|minister|ministerie)\s+(?:herstelt|repareert|verhelpt|lost|zet|pakt|past|voegt|vervangt|maakt|begint|start|gaat|zal|neemt|laat|zorgt|werkt|heeft\s+toegezegd)(?![\p{L}])/iu;
+
 /** A paragraph that tells of a defect says who it hinders: a group as the report names it ("mensen die niet zien"), or "wie" with what they do. */
 const PEOPLE = /(?<![\p{L}])(?:mensen|bezoekers|gebruikers|iedereen|wie)(?![\p{L}])/iu;
 /** The norm by its name, version and level, as the report gives it: said once, so the reader knows against what the site was held. */
@@ -125,6 +131,8 @@ export function validateSummary(proposal: unknown, evaluation: Evaluation, repor
     if (/[\n\r]/.test(text)) problems.push(`${where}: een alinea is één stuk tekst, zonder regeleinde`);
     if (/[—–]/.test(text)) problems.push(`${where}: gebruik geen gedachtestreepje; maak er twee zinnen van of gebruik een komma`);
     if (/[*#|`_<>[\]]|^\s*[-•]\s/.test(text)) problems.push(`${where}: schrijf lopende tekst, zonder opmaak, lijsttekens of code`);
+    const commitment = COMMITMENT.exec(text);
+    if (commitment) problems.push(`${where}: "${commitment[0]}" zegt wat de eigenaar doet, alsof dat is toegezegd; het rapport raadt aan en de eigenaar heeft niets beloofd. Schrijf het als advies, zoals "Herstel eerst" of "Het onderzoek raadt aan"`);
     const abbreviation = ABBREVIATION.exec(text);
     if (abbreviation) problems.push(`${where}: schrijf "${abbreviation[0]}" voluit; de lezers kennen de afkorting niet allemaal`);
     if (/[()]/.test(text)) problems.push(`${where}: schrijf zonder haakjes; wat erbij hoort, staat in de zin`);
