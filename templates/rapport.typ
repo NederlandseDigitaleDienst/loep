@@ -427,7 +427,14 @@
 #pagebreak(weak: true)
 = Samenvatting
 
-#text(size: 13.5pt, weight: 600, derived.statusSentenceNl)
+// A summary written for the leadership opens the report; without one the sentence loep makes itself does.
+#let executive = derived.at("executive", default: none)
+#if executive != none {
+  for paragraph in executive.paragraphs { par(text(size: 11pt, prose(paragraph))) }
+  text(size: 8.5pt, fill: muted, executive.noteNl)
+} else {
+  text(size: 13.5pt, weight: 600, derived.statusSentenceNl)
+}
 
 #callout(fill: panel, bar: ink, {
   text(weight: 700, status-line.headingNl)
@@ -485,125 +492,12 @@
 
 #if grouping != none [Het onderzoek vond #grouping.countsNl.]
 
-#score-table("2.2")
-#score-table("2.1")
-#text(size: 9pt, fill: muted, derived.scoreNoteNl)
-
-#let count-cell(value) = text(fill: if value == 0 { muted } else { ink }, str(value))
-
-#if grouping != none and weighing != none [
-  // What stops a group at a core task stands above; here what a group can not use beside the tasks.
-  #if weighing.beside != none [
-    == #t.weighing.beside
-
-    #table(
-      columns: (1fr, 24mm, 27mm),
-      inset: (x: 5pt, y: 3.8pt),
-      table.header(th[Gebrek], th[Criterium], th[Pagina's]),
-      ..weighing.beside.defectIds.map(id => defect-by-id.at(id)).map(defect => (
-        link(label(defect.id), text(weight: 600, defect.titleNl)),
-        {
-          criterion-link(defect.mainCriterion, defect.mainCriterion)
-          if defect.alsoCriteria.len() > 0 { text(size: 8.5pt, fill: muted)[\ #also-criteria(defect)] }
-        },
-        grouping.pagesNl.at(defect.id),
-      )).flatten(),
-    )
-    #text(size: 9pt, fill: muted, weighing.beside.noteNl)
-  ]
-
-  == #t.weighing.perTask
-
-  #weighing.tasksIntroNl
-
-  #table(
-    columns: (1fr, 22mm, 18mm, 16mm),
-    inset: (x: 5pt, y: 3.8pt),
-    align: (x, y) => if x == 0 { left + top } else { right + top },
-    table.header(th(t.weighing.taskColumns.at(0)), ..t.weighing.taskColumns.slice(1).map(th-right)),
-    ..weighing.tasks.map(row => (row.taskNl, ..row.counts.map(count-cell))).flatten(),
-  )
-
-  == #t.weighing.perGroup
-
-  #t.weighing.perGroupIntro
-
-  #list(..t.weighing.consequences.enumerate().map(((index, meaning)) => [#t.weighing.columns.at(index + 1): #meaning]))
-
-  #t.weighing.perGroupNote
-
-  #table(
-    columns: (1fr, 20mm, 26mm, 24mm, 22mm),
-    inset: (x: 5pt, y: 3.8pt),
-    align: (x, y) => if x == 0 { left + top } else { right + top },
-    table.header(th(t.weighing.columns.at(0)), ..t.weighing.columns.slice(1).map(th-right)),
-    ..weighing.groups.map(row => (row.groupNl, count-cell(row.cannot), count-cell(row.detour), count-cell(row.effort), if row.open == none [] else { count-cell(row.open) })).flatten(),
-  )
-] else if grouping != none [
-  == Zwaarste gebreken
-
-  #{
-    let top = grouping.topIds.map(id => defect-by-id.at(id))
-    if top.len() == 0 [Er zijn geen gebreken.] else {
-      table(
-        columns: (auto, 1fr, 24mm, 27mm),
-        inset: (x: 5pt, y: 3.8pt),
-        table.header(th[Ernst], th[Gebrek], th[Criterium], th[Pagina's]),
-        ..top.map(defect => (
-          severity(defect.severity),
-          link(label(defect.id), text(weight: 600, defect.titleNl)),
-          {
-            criterion-link(defect.mainCriterion, defect.mainCriterion)
-            if defect.alsoCriteria.len() > 0 { text(size: 8.5pt, fill: muted)[\ #also-criteria(defect)] }
-          },
-          grouping.pagesNl.at(defect.id),
-        )).flatten(),
-      )
-      text(size: 9pt, fill: muted, grouping.topNoteNl)
-    }
-  }
-] else [
-  == Zwaarste bevindingen
-
-  #{
-    let top = derived.topFindingIds.map(id => findings.find(f => f.id == id))
-    if top.len() == 0 [Er zijn geen bevindingen.] else {
-      table(
-        columns: (auto, 1fr, auto, 30%),
-        inset: (x: 5pt, y: 3.8pt),
-        table.header(th[Ernst], th[Bevinding], th[Criterium], th[Pagina's]),
-        ..top.map(finding => (
-          severity(finding.severity),
-          link(label(finding.id), text(weight: 600, finding.titleNl)),
-          criterion-link(finding.criterion, finding.criterion),
-          finding.pagesAffected,
-        )).flatten(),
-      )
-      text(size: 9pt, fill: muted, derived.topFindingsNoteNl)
-    }
-  }
-]
-
-== Wat betekent dit
-
-#{
-  set text(size: 10pt)
-  set par(leading: 0.62em)
-  for paragraph in derived.meaningNl { block(above: 11pt, below: 11pt, prose(paragraph)) }
-}
-
 // ---------------------------------------------------------------- what next
 
 #let intro-toolbox = t.investigate.toolboxIntro
 // A reference to the entry of a criterion in appendix A.
 #let appendix-ref(id) = appendix-link(id)[bijlage A]
 
-// What the site is, right after what was found and before what has to be done about it.
-#if site.at("descriptionNl", default: none) != none [
-  = Over deze website
-
-  #for paragraph in site.descriptionNl.split(regex("\n\s*\n")) { par(paragraph) }
-]
 
 #pagebreak(weak: true)
 = Wat nu
@@ -777,229 +671,186 @@
   #par(text(size: 9pt, fill: muted, measures.layerNl))
 ]
 
-// ---------------------------------------------------------------- facts
+// ---------------------------------------------------------------- overview of the defects
 
-#pagebreak(weak: true)
-= Onderzoeksgegevens
+#let count-cell(value) = text(fill: if value == 0 { muted } else { ink }, str(value))
 
-#facts(
-  ("Site", site.name),
-  ("URL", url-link(site.baseUrl)),
-  // A site on more than one origin (inventory --also-origin): the further origins it covers.
-  ..if site.at("origins", default: ()).len() > 1 { (("Ook onderdeel van de site", site.origins.slice(1).map(url-link).join(linebreak())),) },
-  ("Organisatie", or-none(site.organisation, "Niet opgegeven")),
-  ("Datum", derived.dateNl),
-  ("Norm", (..evaluation.standards.wcag, evaluation.standards.en301549).join(linebreak())),
-  ("Methode", link(evaluation.method.url)[#evaluation.method.name #evaluation.method.version]),
-  ("Type onderzoek", evaluation.method.typeNl),
-  (t.madeWith, derived.instrumentNl),
-  ("Uitgevoerd door", t.performedBy),
-  ..if derived.followsUpNl != none { ((t.followsUp, derived.followsUpNl),) },
-  ..if chain.writesNl != none { (("Versturen van formulieren", chain.writesNl),) },
-  ..if chain.at("readsNl", default: none) != none { (("Leesverzoeken", chain.readsNl),) },
-  (
-    "Afgetekend door",
-    if unsigned { text(weight: 700, t.notSigned) + if stale-note != none [. #stale-note] } else [#signature.role, #signature.organisation, op #derived.signedDateNl#if derived.at("signatureRecordedNl", default: none) != none [, #derived.signatureRecordedNl]],
-  ),
-  ..if unsigned { () } else {
-    (("Verklaring", [#signature.statementNl\ Getekend voor evaluatie #mono(signature.evaluationSha256.slice(0, calc.min(12, signature.evaluationSha256.len()))), verzegeld als #mono(signature.sealSha256.slice(0, calc.min(12, signature.sealSha256.len()))).]),)
-  },
-)
+= #t.defectsOverview
 
-#if evaluation.method.deviationsNl.len() > 0 [
-  == Afwijkingen van de methode
-  #plain-list(evaluation.method.deviationsNl)
-]
+#if grouping != none and weighing != none [
+  // What stops a group at a core task stands above; here what a group can not use beside the tasks.
+  #if weighing.beside != none [
+    == #t.weighing.beside
 
-= Scope
+    #table(
+      columns: (1fr, 24mm, 27mm),
+      inset: (x: 5pt, y: 3.8pt),
+      table.header(th[Gebrek], th[Criterium], th[Pagina's]),
+      ..weighing.beside.defectIds.map(id => defect-by-id.at(id)).map(defect => (
+        link(label(defect.id), text(weight: 600, defect.titleNl)),
+        {
+          criterion-link(defect.mainCriterion, defect.mainCriterion)
+          if defect.alsoCriteria.len() > 0 { text(size: 8.5pt, fill: muted)[\ #also-criteria(defect)] }
+        },
+        grouping.pagesNl.at(defect.id),
+      )).flatten(),
+    )
+    #text(size: 9pt, fill: muted, weighing.beside.noteNl)
+  ]
 
-#grid(
-  columns: (1fr, 1fr),
-  column-gutter: 10mm,
-  [
-    #heading(level: 2, outlined: false)[Binnen de scope]
-    #plain-list(evaluation.scope.includedNl)
-  ],
-  [
-    #heading(level: 2, outlined: false)[Buiten de scope]
-    #if evaluation.scope.excludedNl.len() > 0 { plain-list(evaluation.scope.excludedNl) } else [Niets uitgesloten.]
-  ],
-)
+  == #t.weighing.perTask
 
-#if derived.scopeFramesNl.len() > 0 [
-  #heading(level: 2, outlined: false)[#t.scopeFrames]
-  #plain-list(derived.scopeFramesNl)
-]
+  #weighing.tasksIntroNl
 
-= Basisniveau van ondersteuning
-
-#facts(
-  (
-    "Browsers",
-    evaluation.baseline.browsers.map(browser => [#browser.name #or-none(browser.version, "(versie onbekend)"), motor #browser.engine]).join(linebreak()),
-  ),
-  (
-    "Hulpsoftware",
-    {
-      let tools = evaluation.baseline.assistiveTechnology
-      if tools.len() == 0 {
-        text(weight: 700, "Geen. ")
-        or-none(evaluation.baseline.noteNl, t.noAssistiveTechnology)
-      } else {
-        tools.map(tool => [#tool.name #tool.version]).join(linebreak())
-        if evaluation.baseline.noteNl != "" {
-          linebreak()
-          evaluation.baseline.noteNl
-        }
-      }
-    },
-  ),
-  ("Technologieën", evaluation.technologies.join(", ")),
-)
-
-// ---------------------------------------------------------------- sample
-
-= Steekproef
-
-#evaluation.sample.note
-
-#facts(
-  ("Werkwijze", t.sampleMethod.at(evaluation.sample.method)),
-  ("Unieke pagina's in de inventaris", str(evaluation.sample.populationSize)),
-  ("Onderzochte pagina's", str(sample-items.len())),
-  ("Seed voor de willekeurige keuze", mono(evaluation.sample.seed)),
-)
-
-#v(6pt)
-#table(
-  columns: (auto, 1fr, auto, 27%),
-  table.header(th[Nr.], th[Pagina], th[Soort], th[Reden]),
-  ..sample-items.enumerate().map(((index, item)) => (
-    text(weight: 700, page-labels.at(index)),
-    {
-      text(weight: 600, or-none(item.title, "(geen titel)"))
-      linebreak()
-      link(item.url, mono(item.url, size: 0.88em))
-      if item.aliases.len() > 0 {
-        linebreak()
-        text(size: 0.9em, fill: muted)[Dezelfde inhoud staat ook op: #item.aliases.map(alias => mono(alias, size: 0.95em)).join(", ")]
-      }
-      let states = measured-states.at(page-labels.at(index), default: ())
-      if states.len() > 0 {
-        linebreak()
-        text(size: 0.9em, fill: muted)[#t.measuredStates: #states.join(", ")]
-      }
-    },
-    t.sampleKind.at(item.kind),
-    item.reason,
-  )).flatten(),
-)
-
-#if evaluation.sample.at("pageTypes", default: none) != none [
-  == Paginatypen
-
-  #t.samplePageTypes
-
-  #v(6pt)
   #table(
-    columns: (1fr, auto, auto, 40%),
-    table.header(th[Paginatype], th-right[Pagina's], th-right[Bekeken], th[Waarom deze]),
-    ..evaluation.sample.pageTypes.map(type => (
-      {
-        text(weight: 600, type.id)
-        if type.descriptionNl != "" {
-          linebreak()
-          text(size: 0.9em, fill: muted, type.descriptionNl)
-        }
-      },
-      align(right, str(type.pages)),
-      align(right, str(type.examined)),
-      type.reasonNl,
-    )).flatten(),
+    columns: (1fr, 22mm, 18mm, 16mm),
+    inset: (x: 5pt, y: 3.8pt),
+    align: (x, y) => if x == 0 { left + top } else { right + top },
+    table.header(th(t.weighing.taskColumns.at(0)), ..t.weighing.taskColumns.slice(1).map(th-right)),
+    ..weighing.tasks.map(row => (row.taskNl, ..row.counts.map(count-cell))).flatten(),
   )
-]
 
-#if documents != none [
-  == Documenten
+  == #t.weighing.perGroup
 
-  #facts(..documents.factsNl.map(pair => (pair.at(0), pair.at(1))))
+  #t.weighing.perGroupIntro
 
-  #v(6pt)
+  #list(..t.weighing.consequences.enumerate().map(((index, meaning)) => [#t.weighing.columns.at(index + 1): #meaning]))
+
+  #t.weighing.perGroupNote
+
   #table(
-    columns: (auto, 1fr, auto, 27%),
-    table.header(th[Nr.], th[Document], th[Soort], th[Ingelezen]),
-    ..documents.rows.map(row => (
-      text(weight: 700, row.label),
-      {
-        text(weight: 600, row.title)
-        linebreak()
-        link(row.url, mono(row.url, size: 0.88em))
-        linebreak()
-        text(size: 0.9em, fill: muted, row.reasonNl)
-      },
-      row.kindNl,
-      row.statusNl,
-    )).flatten(),
+    columns: (1fr, 20mm, 26mm, 24mm, 22mm),
+    inset: (x: 5pt, y: 3.8pt),
+    align: (x, y) => if x == 0 { left + top } else { right + top },
+    table.header(th(t.weighing.columns.at(0)), ..t.weighing.columns.slice(1).map(th-right)),
+    ..weighing.groups.map(row => (row.groupNl, count-cell(row.cannot), count-cell(row.detour), count-cell(row.effort), if row.open == none [] else { count-cell(row.open) })).flatten(),
   )
+] else if grouping != none [
+  == Zwaarste gebreken
+
+  #{
+    let top = grouping.topIds.map(id => defect-by-id.at(id))
+    if top.len() == 0 [Er zijn geen gebreken.] else {
+      table(
+        columns: (auto, 1fr, 24mm, 27mm),
+        inset: (x: 5pt, y: 3.8pt),
+        table.header(th[Ernst], th[Gebrek], th[Criterium], th[Pagina's]),
+        ..top.map(defect => (
+          severity(defect.severity),
+          link(label(defect.id), text(weight: 600, defect.titleNl)),
+          {
+            criterion-link(defect.mainCriterion, defect.mainCriterion)
+            if defect.alsoCriteria.len() > 0 { text(size: 8.5pt, fill: muted)[\ #also-criteria(defect)] }
+          },
+          grouping.pagesNl.at(defect.id),
+        )).flatten(),
+      )
+      text(size: 9pt, fill: muted, grouping.topNoteNl)
+    }
+  }
+] else [
+  == Zwaarste bevindingen
+
+  #{
+    let top = derived.topFindingIds.map(id => findings.find(f => f.id == id))
+    if top.len() == 0 [Er zijn geen bevindingen.] else {
+      table(
+        columns: (auto, 1fr, auto, 30%),
+        inset: (x: 5pt, y: 3.8pt),
+        table.header(th[Ernst], th[Bevinding], th[Criterium], th[Pagina's]),
+        ..top.map(finding => (
+          severity(finding.severity),
+          link(label(finding.id), text(weight: 600, finding.titleNl)),
+          criterion-link(finding.criterion, finding.criterion),
+          finding.pagesAffected,
+        )).flatten(),
+      )
+      text(size: 9pt, fill: muted, derived.topFindingsNoteNl)
+    }
+  }
 ]
 
-// ---------------------------------------------------------------- tools
-
-= Gereedschap
+== Wat betekent dit
 
 #{
-  let toolchain = evaluation.toolchain
-  let rendering = toolchain.rendering
-  let agent-models = derived.at("agentModels", default: none)
-  facts(
-    ("Toolbox", [loep, versie #toolchain.toolbox.version, commit #if derived.toolboxCommit == none { t.commitUnknown } else { short-hash(derived.toolboxCommit, length: 12) }]),
-    ..if derived.at("sweepNl", default: none) != none { (("Toolbox van de veegronde", derived.sweepNl),) } else { () },
-    ("Lockfile", short-hash(toolchain.toolbox.lockfileSha256)),
-    ("Runtime", [Node #toolchain.runtime.node op #toolchain.runtime.platform #toolchain.runtime.osRelease (#toolchain.runtime.arch)]),
-    ("Pakketten", toolchain.packages.keys().sorted().map(name => [#mono(name) #toolchain.packages.at(name)]).join(linebreak())),
-    (if derived.browsersNl.len() > 1 { "Browsers" } else { "Browser" }, derived.browsersNl.join(linebreak())),
-    (
-      "Weergave",
-      [venster #rendering.viewport.width × #rendering.viewport.height, schaalfactor #rendering.deviceScaleFactor, taal #rendering.locale, tijdzone #rendering.timezoneId, voorkeur voor minder beweging: #if rendering.reducedMotion == "reduce" [aan] else [uit]],
-    ),
-    (
-      "Wachttijden",
-      [#(rendering.navigationTimeoutMs / 1000) seconden voor het laden van een pagina, #(rendering.settleTimeoutMs / 1000) seconden voor het tot rust komen],
-    ),
-    (t.model, [#evaluation.judgment.model (#if agent-models != none { t.modelNoteOperator } else { t.modelNote })]),
-    ..if agent-models != none {
-      ((t.agentModels, [#agent-models.perRoleNl.join(linebreak())\ #t.agentModelsNote#if agent-models.differsNl != none [ #agent-models.differsNl]]),)
-    },
-    ("Rondes", evaluation.judgment.rounds.join(", ")),
-    ..if derived.at("extensionsNl", default: none) != none {
-      ((t.extensions, [#derived.extensionsNl. #t.extensionsNote]),)
-    },
-    (
-      "Opdrachtsjablonen",
-      evaluation.judgment.promptTemplates.keys().sorted().map(name => [#name #short-hash(evaluation.judgment.promptTemplates.at(name))]).join(", "),
-    ),
-  )
-  let instruments = evaluation.at("instruments", default: ())
-  if instruments.len() > 0 {
-    block(sticky: true, par(text(weight: 700)[Meetmethoden van de agents]))
-    block(sticky: true, par(t.instrumentsIntro))
-    set text(size: 8.8pt)
-    table(
-      // A long name or version would otherwise squeeze what the tool was used for.
-      columns: (28%, 20%, 1fr, auto),
-      table.header(th[Hulpmiddel], th[Versie], th[Gebruikt voor], th[Metingen]),
-      ..instruments.enumerate().map(((index, tool)) => (mono(tool.implementation, size: 8.4pt), derived.instrumentVersions.at(index), tool.usedForNl.join(", "), str(tool.measurements))).flatten(),
-    )
-  }
-  if derived.toolboxChanged { callout(fill: panel, bar: ink, text(weight: 600, t.dirty)) }
+  set text(size: 10pt)
+  set par(leading: 0.62em)
+  for paragraph in derived.meaningNl { block(above: 11pt, below: 11pt, prose(paragraph)) }
 }
 
-#chain.enginesNl
+// ---------------------------------------------------------------- findings, regrouped
+
+= Bevindingen per onderdeel
+
+#if findings.len() == 0 [Er zijn geen bevindingen.] else {
+  // The introduction stays with its table, so the heading does not stand alone at the foot of a page.
+  block(sticky: true, par(t.componentIntro))
+  let groups = (:)
+  let names = (:)
+  let loose = ()
+  for finding in findings {
+    if finding.component == none or finding.component.trim() == "" {
+      loose.push(finding)
+    } else {
+      let key = lower(finding.component).replace(regex("\s+"), " ").trim()
+      if key not in groups {
+        groups.insert(key, ())
+        names.insert(key, finding.component.trim())
+      }
+      groups.at(key).push(finding)
+    }
+  }
+  // A name that starts with an element of the site, such as nldd-card, keeps that element as it is written.
+  let elements = findings.map(finding => finding.at("vendorTags", default: ())).flatten()
+  let section-name(name) = if name.split(" ").first() in elements { name } else { capitalise(name) }
+  let sections = groups.keys().sorted().map(key => (name: section-name(names.at(key)), items: groups.at(key)))
+  if loose.len() > 0 { sections.push((name: "Zonder onderdeel", items: loose)) }
+  table(
+    columns: (34%, 1fr),
+    table.header(th[Onderdeel], th[Bevindingen]),
+    ..sections.map(section => (text(weight: 700, section.name), section.items.map(finding => finding-link(finding)).join(", "))).flatten(),
+  )
+}
+
+#if grouping != none [= Gebreken per pagina] else [= Bevindingen per pagina]
+
+#if findings.len() == 0 [Er zijn geen bevindingen.] else {
+  block(sticky: true, par(if grouping != none { t.defectPageIntro } else { t.pageIntro }))
+  table(
+    columns: (auto, 40%, 1fr),
+    table.header(th[Nr.], th[Pagina], if grouping != none { th[Gebreken] } else { th[Bevindingen] }),
+    ..sample-items.enumerate().map(((index, item)) => {
+      let page-label = page-labels.at(index)
+      let here = if grouping != none {
+        grouping.byPage.at(page-label).map(id => link(label(id), defect-by-id.at(id).titleNl))
+      } else {
+        findings.filter(finding => finding.locations.any(location => location.page == page-label)).map(finding => link(label(finding.id), finding.titleNl))
+      }
+      (
+        text(weight: 700, page-label),
+        text(weight: 600, or-none(item.title, "(geen titel)")),
+        if here.len() == 0 { text(fill: muted, if grouping != none [Geen gebrek met een plek op deze pagina.] else [Geen bevinding met een plek op deze pagina.]) } else { here.join(linebreak()) },
+      )
+    }).flatten(),
+    ..(if documents == none { () } else {
+      documents.rows.map(row => (
+        text(weight: 700, row.label),
+        text(weight: 600, row.title),
+        if row.here.len() > 0 { row.here.map(entry => link(label(entry.id), entry.titleNl)).join(linebreak()) } else if row.statusNl.starts-with("Ingelezen") { text(fill: muted, if grouping != none [Geen gebrek met een plek in dit document.] else [Geen bevinding met een plek in dit document.]) } else { text(fill: muted, row.statusNl) },
+      )).flatten()
+    }),
+  )
+}
 
 // ---------------------------------------------------------------- results
 
 #pagebreak(weak: true)
 = Resultaten per criterium
+
+// How the criteria came out per principle, before each of them.
+#score-table("2.2")
+#score-table("2.1")
+#text(size: 9pt, fill: muted, derived.scoreNoteNl)
 
 #block(sticky: true, par(t.overviewIntro))
 
@@ -1283,69 +1134,233 @@
   }
 }
 
-// ---------------------------------------------------------------- findings, regrouped
+// ---------------------------------------------------------------- about the site
 
-= Bevindingen per onderdeel
+// What the site is: it opens the account of how the evaluation was made.
+#if site.at("descriptionNl", default: none) != none [
+  = Over deze website
 
-#if findings.len() == 0 [Er zijn geen bevindingen.] else {
-  // The introduction stays with its table, so the heading does not stand alone at the foot of a page.
-  block(sticky: true, par(t.componentIntro))
-  let groups = (:)
-  let names = (:)
-  let loose = ()
-  for finding in findings {
-    if finding.component == none or finding.component.trim() == "" {
-      loose.push(finding)
-    } else {
-      let key = lower(finding.component).replace(regex("\s+"), " ").trim()
-      if key not in groups {
-        groups.insert(key, ())
-        names.insert(key, finding.component.trim())
-      }
-      groups.at(key).push(finding)
-    }
-  }
-  // A name that starts with an element of the site, such as nldd-card, keeps that element as it is written.
-  let elements = findings.map(finding => finding.at("vendorTags", default: ())).flatten()
-  let section-name(name) = if name.split(" ").first() in elements { name } else { capitalise(name) }
-  let sections = groups.keys().sorted().map(key => (name: section-name(names.at(key)), items: groups.at(key)))
-  if loose.len() > 0 { sections.push((name: "Zonder onderdeel", items: loose)) }
-  table(
-    columns: (34%, 1fr),
-    table.header(th[Onderdeel], th[Bevindingen]),
-    ..sections.map(section => (text(weight: 700, section.name), section.items.map(finding => finding-link(finding)).join(", "))).flatten(),
-  )
-}
+  #for paragraph in site.descriptionNl.split(regex("\n\s*\n")) { par(paragraph) }
+]
 
-#if grouping != none [= Gebreken per pagina] else [= Bevindingen per pagina]
+// ---------------------------------------------------------------- facts
 
-#if findings.len() == 0 [Er zijn geen bevindingen.] else {
-  block(sticky: true, par(if grouping != none { t.defectPageIntro } else { t.pageIntro }))
-  table(
-    columns: (auto, 40%, 1fr),
-    table.header(th[Nr.], th[Pagina], if grouping != none { th[Gebreken] } else { th[Bevindingen] }),
-    ..sample-items.enumerate().map(((index, item)) => {
-      let page-label = page-labels.at(index)
-      let here = if grouping != none {
-        grouping.byPage.at(page-label).map(id => link(label(id), defect-by-id.at(id).titleNl))
+#pagebreak(weak: true)
+= Onderzoeksgegevens
+
+#facts(
+  ("Site", site.name),
+  ("URL", url-link(site.baseUrl)),
+  // A site on more than one origin (inventory --also-origin): the further origins it covers.
+  ..if site.at("origins", default: ()).len() > 1 { (("Ook onderdeel van de site", site.origins.slice(1).map(url-link).join(linebreak())),) },
+  ("Organisatie", or-none(site.organisation, "Niet opgegeven")),
+  ("Datum", derived.dateNl),
+  ("Norm", (..evaluation.standards.wcag, evaluation.standards.en301549).join(linebreak())),
+  ("Methode", link(evaluation.method.url)[#evaluation.method.name #evaluation.method.version]),
+  ("Type onderzoek", evaluation.method.typeNl),
+  (t.madeWith, derived.instrumentNl),
+  ("Uitgevoerd door", t.performedBy),
+  ..if derived.followsUpNl != none { ((t.followsUp, derived.followsUpNl),) },
+  ..if chain.writesNl != none { (("Versturen van formulieren", chain.writesNl),) },
+  ..if chain.at("readsNl", default: none) != none { (("Leesverzoeken", chain.readsNl),) },
+  (
+    "Afgetekend door",
+    if unsigned { text(weight: 700, t.notSigned) + if stale-note != none [. #stale-note] } else [#signature.role, #signature.organisation, op #derived.signedDateNl#if derived.at("signatureRecordedNl", default: none) != none [, #derived.signatureRecordedNl]],
+  ),
+  ..if unsigned { () } else {
+    (("Verklaring", [#signature.statementNl\ Getekend voor evaluatie #mono(signature.evaluationSha256.slice(0, calc.min(12, signature.evaluationSha256.len()))), verzegeld als #mono(signature.sealSha256.slice(0, calc.min(12, signature.sealSha256.len()))).]),)
+  },
+)
+
+#if evaluation.method.deviationsNl.len() > 0 [
+  == Afwijkingen van de methode
+  #plain-list(evaluation.method.deviationsNl)
+]
+
+= Scope
+
+#grid(
+  columns: (1fr, 1fr),
+  column-gutter: 10mm,
+  [
+    #heading(level: 2, outlined: false)[Binnen de scope]
+    #plain-list(evaluation.scope.includedNl)
+  ],
+  [
+    #heading(level: 2, outlined: false)[Buiten de scope]
+    #if evaluation.scope.excludedNl.len() > 0 { plain-list(evaluation.scope.excludedNl) } else [Niets uitgesloten.]
+  ],
+)
+
+#if derived.scopeFramesNl.len() > 0 [
+  #heading(level: 2, outlined: false)[#t.scopeFrames]
+  #plain-list(derived.scopeFramesNl)
+]
+
+= Basisniveau van ondersteuning
+
+#facts(
+  (
+    "Browsers",
+    evaluation.baseline.browsers.map(browser => [#browser.name #or-none(browser.version, "(versie onbekend)"), motor #browser.engine]).join(linebreak()),
+  ),
+  (
+    "Hulpsoftware",
+    {
+      let tools = evaluation.baseline.assistiveTechnology
+      if tools.len() == 0 {
+        text(weight: 700, "Geen. ")
+        or-none(evaluation.baseline.noteNl, t.noAssistiveTechnology)
       } else {
-        findings.filter(finding => finding.locations.any(location => location.page == page-label)).map(finding => link(label(finding.id), finding.titleNl))
+        tools.map(tool => [#tool.name #tool.version]).join(linebreak())
+        if evaluation.baseline.noteNl != "" {
+          linebreak()
+          evaluation.baseline.noteNl
+        }
       }
-      (
-        text(weight: 700, page-label),
-        text(weight: 600, or-none(item.title, "(geen titel)")),
-        if here.len() == 0 { text(fill: muted, if grouping != none [Geen gebrek met een plek op deze pagina.] else [Geen bevinding met een plek op deze pagina.]) } else { here.join(linebreak()) },
-      )
-    }).flatten(),
-    ..(if documents == none { () } else {
-      documents.rows.map(row => (
-        text(weight: 700, row.label),
-        text(weight: 600, row.title),
-        if row.here.len() > 0 { row.here.map(entry => link(label(entry.id), entry.titleNl)).join(linebreak()) } else if row.statusNl.starts-with("Ingelezen") { text(fill: muted, if grouping != none [Geen gebrek met een plek in dit document.] else [Geen bevinding met een plek in dit document.]) } else { text(fill: muted, row.statusNl) },
-      )).flatten()
-    }),
+    },
+  ),
+  ("Technologieën", evaluation.technologies.join(", ")),
+)
+
+// ---------------------------------------------------------------- sample
+
+= Steekproef
+
+#evaluation.sample.note
+
+#facts(
+  ("Werkwijze", t.sampleMethod.at(evaluation.sample.method)),
+  ("Unieke pagina's in de inventaris", str(evaluation.sample.populationSize)),
+  ("Onderzochte pagina's", str(sample-items.len())),
+  ("Seed voor de willekeurige keuze", mono(evaluation.sample.seed)),
+)
+
+#v(6pt)
+#table(
+  columns: (auto, 1fr, auto, 27%),
+  table.header(th[Nr.], th[Pagina], th[Soort], th[Reden]),
+  ..sample-items.enumerate().map(((index, item)) => (
+    text(weight: 700, page-labels.at(index)),
+    {
+      text(weight: 600, or-none(item.title, "(geen titel)"))
+      linebreak()
+      link(item.url, mono(item.url, size: 0.88em))
+      if item.aliases.len() > 0 {
+        linebreak()
+        text(size: 0.9em, fill: muted)[Dezelfde inhoud staat ook op: #item.aliases.map(alias => mono(alias, size: 0.95em)).join(", ")]
+      }
+      let states = measured-states.at(page-labels.at(index), default: ())
+      if states.len() > 0 {
+        linebreak()
+        text(size: 0.9em, fill: muted)[#t.measuredStates: #states.join(", ")]
+      }
+    },
+    t.sampleKind.at(item.kind),
+    item.reason,
+  )).flatten(),
+)
+
+#if evaluation.sample.at("pageTypes", default: none) != none [
+  == Paginatypen
+
+  #t.samplePageTypes
+
+  #v(6pt)
+  #table(
+    columns: (1fr, auto, auto, 40%),
+    table.header(th[Paginatype], th-right[Pagina's], th-right[Bekeken], th[Waarom deze]),
+    ..evaluation.sample.pageTypes.map(type => (
+      {
+        text(weight: 600, type.id)
+        if type.descriptionNl != "" {
+          linebreak()
+          text(size: 0.9em, fill: muted, type.descriptionNl)
+        }
+      },
+      align(right, str(type.pages)),
+      align(right, str(type.examined)),
+      type.reasonNl,
+    )).flatten(),
   )
+]
+
+#if documents != none [
+  == Documenten
+
+  #facts(..documents.factsNl.map(pair => (pair.at(0), pair.at(1))))
+
+  #v(6pt)
+  #table(
+    columns: (auto, 1fr, auto, 27%),
+    table.header(th[Nr.], th[Document], th[Soort], th[Ingelezen]),
+    ..documents.rows.map(row => (
+      text(weight: 700, row.label),
+      {
+        text(weight: 600, row.title)
+        linebreak()
+        link(row.url, mono(row.url, size: 0.88em))
+        linebreak()
+        text(size: 0.9em, fill: muted, row.reasonNl)
+      },
+      row.kindNl,
+      row.statusNl,
+    )).flatten(),
+  )
+]
+
+// ---------------------------------------------------------------- tools
+
+= Gereedschap
+
+#{
+  let toolchain = evaluation.toolchain
+  let rendering = toolchain.rendering
+  let agent-models = derived.at("agentModels", default: none)
+  facts(
+    ("Toolbox", [loep, versie #toolchain.toolbox.version, commit #if derived.toolboxCommit == none { t.commitUnknown } else { short-hash(derived.toolboxCommit, length: 12) }]),
+    ..if derived.at("sweepNl", default: none) != none { (("Toolbox van de veegronde", derived.sweepNl),) } else { () },
+    ("Lockfile", short-hash(toolchain.toolbox.lockfileSha256)),
+    ("Runtime", [Node #toolchain.runtime.node op #toolchain.runtime.platform #toolchain.runtime.osRelease (#toolchain.runtime.arch)]),
+    ("Pakketten", toolchain.packages.keys().sorted().map(name => [#mono(name) #toolchain.packages.at(name)]).join(linebreak())),
+    (if derived.browsersNl.len() > 1 { "Browsers" } else { "Browser" }, derived.browsersNl.join(linebreak())),
+    (
+      "Weergave",
+      [venster #rendering.viewport.width × #rendering.viewport.height, schaalfactor #rendering.deviceScaleFactor, taal #rendering.locale, tijdzone #rendering.timezoneId, voorkeur voor minder beweging: #if rendering.reducedMotion == "reduce" [aan] else [uit]],
+    ),
+    (
+      "Wachttijden",
+      [#(rendering.navigationTimeoutMs / 1000) seconden voor het laden van een pagina, #(rendering.settleTimeoutMs / 1000) seconden voor het tot rust komen],
+    ),
+    (t.model, [#evaluation.judgment.model (#if agent-models != none { t.modelNoteOperator } else { t.modelNote })]),
+    ..if agent-models != none {
+      ((t.agentModels, [#agent-models.perRoleNl.join(linebreak())\ #t.agentModelsNote#if agent-models.differsNl != none [ #agent-models.differsNl]]),)
+    },
+    ("Rondes", evaluation.judgment.rounds.join(", ")),
+    ..if derived.at("extensionsNl", default: none) != none {
+      ((t.extensions, [#derived.extensionsNl. #t.extensionsNote]),)
+    },
+    (
+      "Opdrachtsjablonen",
+      evaluation.judgment.promptTemplates.keys().sorted().map(name => [#name #short-hash(evaluation.judgment.promptTemplates.at(name))]).join(", "),
+    ),
+  )
+  let instruments = evaluation.at("instruments", default: ())
+  if instruments.len() > 0 {
+    block(sticky: true, par(text(weight: 700)[Meetmethoden van de agents]))
+    block(sticky: true, par(t.instrumentsIntro))
+    set text(size: 8.8pt)
+    table(
+      // A long name or version would otherwise squeeze what the tool was used for.
+      columns: (28%, 20%, 1fr, auto),
+      table.header(th[Hulpmiddel], th[Versie], th[Gebruikt voor], th[Metingen]),
+      ..instruments.enumerate().map(((index, tool)) => (mono(tool.implementation, size: 8.4pt), derived.instrumentVersions.at(index), tool.usedForNl.join(", "), str(tool.measurements))).flatten(),
+    )
+  }
+  if derived.toolboxChanged { callout(fill: panel, bar: ink, text(weight: 600, t.dirty)) }
 }
+
+#chain.enginesNl
 
 // ---------------------------------------------------------------- reliability
 
