@@ -191,12 +191,21 @@ export interface Started {
 
 /** The first number of `{ sec = 1794713662, usec = 745489 } Sat Nov 14 ...`: the seconds, not the microseconds. */
 export const FIRST_NUMBER = `sed 's/^[^0-9]*\\([0-9]*\\).*/\\1/'`;
-/** The second the guest booted; the warm-up in reader.js writes the same number to a file. */
+/** The second the guest booted: for saying since when it runs. It moves when the clock of the guest is set, so it does not tell one boot from another. */
 const BOOT_SECONDS = `sysctl -n kern.boottime | ${FIRST_NUMBER}`;
+/**
+ * What tells this boot from every other: the id macOS gives a boot, which stays the same until the
+ * next one. The warm-up in reader.js writes the same to a file. The boot second was used before,
+ * and a guest whose clock was set after the warm-up then counted as not warmed up (#596); it is
+ * the fallback where the id is not there.
+ */
+const BOOT_ID = `(sysctl -n kern.bootsessionuuid 2>/dev/null || ${BOOT_SECONDS})`;
+/** Where the warm-up leaves the id of the boot it warmed up. */
+const WARM_MARK = `"$HOME/.loep-voiceover-warm-boot"`;
 
 /** Whether the guest was warmed up since it booted: then VoiceOver can start at once. */
 async function isWarm(guest: Guest): Promise<boolean> {
-  return (await guest.exec(`[ "$(cat "$HOME/.loep-voiceover-warm" 2>/dev/null)" = "$(${BOOT_SECONDS})" ] && echo warm`, 15))?.trim() === "warm";
+  return (await guest.exec(`[ "$(cat ${WARM_MARK} 2>/dev/null)" = "$(${BOOT_ID})" ] && echo warm`, 15))?.trim() === "warm";
 }
 
 /** Where `start` leaves word of itself on this machine: a start that runs, and how the last one ended. */
@@ -235,6 +244,8 @@ export interface VoiceoverStatus {
   warm?: boolean;
   /** Only for a running guest that answered. */
   bootedAt?: string;
+  /** Only for a running guest that is not warm: why. No mark of a warm-up, or a mark of another boot. Kept so the cause can be found afterwards. */
+  notWarm?: "noMark" | "otherBoot";
   /** A `start` that still runs. */
   starting?: { pid: number; since: string };
   lastStart?: StartRecord;
@@ -254,10 +265,12 @@ export async function voiceoverStatus(guest: Guest = lumeGuest(), name = VM_NAME
   const lastStart = readRecord<StartRecord>(lastStartFile(dir, name));
   const status: VoiceoverStatus = { state, ...(starting && alive(starting.pid) ? { starting } : {}), ...(lastStart ? { lastStart } : {}) };
   if (state !== "running") return status;
-  const answer = (await guest.exec(`echo "$(${BOOT_SECONDS}) $(cat "$HOME/.loep-voiceover-warm" 2>/dev/null)"`, 15))?.trim().split(/\s+/);
+  const answer = (await guest.exec(`echo "$(${BOOT_SECONDS}) $(${BOOT_ID}) $(cat ${WARM_MARK} 2>/dev/null)"`, 15))?.trim().split(/\s+/);
   const booted = Number(answer?.[0]);
   if (!Number.isFinite(booted) || booted <= 0) return status;
-  return { ...status, warm: answer?.[1] === answer?.[0], bootedAt: new Date(booted * 1000).toISOString() };
+  const [, boot, mark] = answer!;
+  const warm = boot !== undefined && mark === boot;
+  return { ...status, warm, bootedAt: new Date(booted * 1000).toISOString(), ...(warm ? {} : { notWarm: mark === undefined ? ("noMark" as const) : ("otherBoot" as const) }) };
 }
 
 /** Set up on this machine: lume is there and so is the virtual Mac. */
@@ -277,12 +290,34 @@ export function statusNl(status: VoiceoverStatus): string {
   const failed = status.lastStart && !status.lastStart.ok ? `; de laatste start, om ${hhmm(status.lastStart.at)}, mislukte: ${status.lastStart.error ?? "onbekende reden"}` : "";
   if (status.state === "stopped") return `is ingericht maar draait niet${failed}. Start hem met ${START_HINT}`;
   if (!status.bootedAt) return `draait maar geeft geen antwoord: hij start nog op of hangt${failed}. Draai ${START_HINT}; die start hem zo nodig opnieuw`;
-  return `draait sinds ${hhmm(status.bootedAt)} maar is niet opgewarmd, dus VoiceOver leest niet voor${failed}. Draai ${START_HINT}; die warmt hem op of start hem opnieuw`;
+  const why = status.notWarm === "otherBoot" ? " (het merkteken van de opwarming is van een eerdere start)" : status.notWarm === "noMark" ? " (er is geen merkteken van een opwarming)" : "";
+  return `draait sinds ${hhmm(status.bootedAt)} maar is niet opgewarmd${why}, dus VoiceOver leest niet voor${failed}. Draai ${START_HINT}; die warmt hem op of start hem opnieuw`;
+}
+
+/** How long after a start that failed no new one is tried by itself: a guest that cannot warm up is not booted again at every look. */
+const RETRY_AFTER_MS = 30 * 60 * 1000;
+
+/**
+ * Whether a look at the state should warm the guest up by itself: it runs and answers, was not
+ * warmed up, no start runs, and none failed just now. That is the cheap case, about a minute
+ * without a boot. A guest that is stopped is for whoever leads the run: that takes 9 to 30 minutes.
+ */
+export function warmUpDue(status: VoiceoverStatus, now: Date = new Date()): boolean {
+  if (status.state !== "running" || !status.bootedAt || status.warm !== false || status.starting) return false;
+  return !(status.lastStart && !status.lastStart.ok && now.getTime() - new Date(status.lastStart.at).getTime() < RETRY_AFTER_MS);
+}
+
+/** Leave word that a start runs, for a start that was just set off in another process: a second look does not set off a second one. */
+export function markStarting(pid: number, name = VM_NAME(), dir = stateDir(), now: Date = new Date()): void {
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(startingFile(dir, name), `${JSON.stringify({ pid, since: now.toISOString() })}\n`);
 }
 
 /** For whoever leads a phase with agents: a warning when the virtual Mac is set up but VoiceOver cannot read; null otherwise. */
-export function voiceoverWarningNl(status: VoiceoverStatus): string | null {
+export function voiceoverWarningNl(status: VoiceoverStatus, warming = false): string | null {
   if (!isSetUp(status) || isReady(status)) return null;
+  // Set off by the look itself: said, so whoever leads knows the first agents may still work without.
+  if (warming) return `LET OP: de virtuele Mac met VoiceOver ${statusNl(status).split(". Draai ")[0]}. loep warmt hem nu op de achtergrond op, meestal in een minuut; tot dan lezen agents niet voor met VoiceOver`;
   return `LET OP: de virtuele Mac met VoiceOver ${statusNl(status)}. Zonder hem lezen beoordelaars, verifieerders en de afmaakronde niet voor met VoiceOver; het onderzoek gaat verder zoals zonder`;
 }
 

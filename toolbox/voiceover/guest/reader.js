@@ -18,6 +18,7 @@ const path = require("node:path");
 const HOME = os.homedir();
 const FOCUS_WEB = path.join(__dirname, "focus-web.applescript");
 const WARM_MARKER = path.join(HOME, ".loep-voiceover-warm");
+const WARM_BOOT_MARKER = path.join(HOME, ".loep-voiceover-warm-boot");
 const OSASCRIPT_MS = 15_000;
 const SAY_MS = 600_000;
 const PAUSE_MS = 8_000;
@@ -47,6 +48,11 @@ const osascript = (...lines) => run("/usr/bin/osascript", lines.flatMap((line) =
 
 function bootTime() {
   return /sec = (\d+)/.exec(run("/usr/sbin/sysctl", ["-n", "kern.boottime"]) ?? "")?.[1] ?? "unknown";
+}
+
+/** What tells this boot from every other. The boot second moves when the clock is set; the id of the boot does not. */
+function bootId() {
+  return run("/usr/sbin/sysctl", ["-n", "kern.bootsessionuuid"]) || bootTime();
 }
 
 function versions() {
@@ -137,6 +143,8 @@ async function warmup() {
   const phrase = attempts > 0 ? lastPhrase() : null;
   await stopVoiceOver();
   if (attempts === 0) return { ok: false, error: "VoiceOver startte niet na de gesproken opwarming", says, notes };
+  fs.writeFileSync(WARM_BOOT_MARKER, `${bootId()}\n`);
+  // For a toolbox of before the id of the boot was used: it reads this file.
   fs.writeFileSync(WARM_MARKER, `${bootTime()}\n`);
   return { ok: true, says, startAttempts: attempts, firstPhrase: phrase, notes, versions: versions() };
 }
@@ -169,7 +177,7 @@ async function waitPlayed() {
 }
 
 async function read(url, steps, press, played) {
-  if (!fs.existsSync(WARM_MARKER) || fs.readFileSync(WARM_MARKER, "utf8").trim() !== bootTime()) return { ok: false, error: "de spraak van de virtuele Mac is sinds het opstarten niet opgewarmd: draai eerst loep voiceover start" };
+  if (!fs.existsSync(WARM_BOOT_MARKER) || fs.readFileSync(WARM_BOOT_MARKER, "utf8").trim() !== bootId()) return { ok: false, error: "de spraak van de virtuele Mac is sinds het opstarten niet opgewarmd: draai eerst loep voiceover start" };
   const notes = [];
   run("/usr/bin/killall", ["VoiceOver"]);
   osascript('tell application "Safari" to quit');

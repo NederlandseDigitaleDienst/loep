@@ -9,7 +9,7 @@ import { setupLines } from "../src/commands/voiceover.ts";
 import { speechDifferences } from "../src/instruments/methods/speech.ts";
 import { GUEST_VERSION, METHODS, toolStatus } from "../src/instruments/methods/registry.ts";
 import { MEASURE_COMMANDS } from "../src/lib/verdict.ts";
-import { addressFor, COPIED_FILES, FIRST_NUMBER, framed, GuestQueue, isReady, job, LIMITS, read, readingOf, recordedStart, shutdown, SILENT_NOTE, start, statusNl, VOICEOVER, VOICEOVER_NOTE, voiceoverStatus, voiceoverWarningNl, type Clock, type Guest, type GuestAnswer, type GuestState, type Versions } from "../src/lib/voiceover.ts";
+import { addressFor, COPIED_FILES, FIRST_NUMBER, framed, GuestQueue, isReady, job, LIMITS, read, readingOf, markStarting, recordedStart, shutdown, SILENT_NOTE, start, statusNl, VOICEOVER, VOICEOVER_NOTE, voiceoverStatus, warmUpDue, voiceoverWarningNl, type Clock, type Guest, type GuestAnswer, type GuestState, type Versions } from "../src/lib/voiceover.ts";
 import { guardLines, planSteps, playedOf, policyOf, testPage } from "../src/lib/voiceover-page.ts";
 import type { Step } from "../src/session/observations.ts";
 
@@ -447,14 +447,21 @@ function statusGuest(state: GuestState, answer: string | null): Guest {
 test("status: VoiceOver reads only when the virtual Mac runs and was warmed up since this boot", async () => {
   const dir = mkdtempSync(join(tmpdir(), "voiceover-status-"));
   try {
-    const ready = await voiceoverStatus(statusGuest("running", "1763193600 1763193600"), "vm", dir);
+    const ready = await voiceoverStatus(statusGuest("running", "1763193600 6AF54551-C4D8 6AF54551-C4D8"), "vm", dir);
     assert.deepEqual([isReady(ready), ready.warm, ready.bootedAt], [true, true, "2025-11-15T08:00:00.000Z"]);
     assert.equal(voiceoverWarningNl(ready), null);
     assert.match(statusNl(ready), /^draait sinds \d\d:\d\d en is opgewarmd/);
-    // Warmed up before the last boot: the marker is older than the boot, so it does not count.
-    const cold = await voiceoverStatus(statusGuest("running", "1763193600 1763100000"), "vm", dir);
-    assert.equal(isReady(cold), false);
-    assert.match(voiceoverWarningNl(cold) ?? "", /^LET OP: de virtuele Mac met VoiceOver draait sinds \d\d:\d\d maar is niet opgewarmd.*loep voiceover start/);
+    // Warmed up before the last boot: the mark is of another boot, so it does not count. Why is kept, so the cause can be found.
+    const cold = await voiceoverStatus(statusGuest("running", "1763193600 6AF54551-C4D8 11111111-AAAA"), "vm", dir);
+    assert.deepEqual([isReady(cold), cold.notWarm], [false, "otherBoot"]);
+    assert.match(voiceoverWarningNl(cold) ?? "", /^LET OP: de virtuele Mac met VoiceOver draait sinds \d\d:\d\d maar is niet opgewarmd \(het merkteken van de opwarming is van een eerdere start\).*loep voiceover start/);
+    // Never warmed up: no mark at all.
+    const unmarked = await voiceoverStatus(statusGuest("running", "1763193600 6AF54551-C4D8"), "vm", dir);
+    assert.deepEqual([isReady(unmarked), unmarked.notWarm], [false, "noMark"]);
+    assert.match(statusNl(unmarked), /niet opgewarmd \(er is geen merkteken van een opwarming\)/);
+    // The clock of the guest was set after the warm-up, so the boot second moved: the boot is the same, and it still counts as warmed up (#596).
+    const clockSet = await voiceoverStatus(statusGuest("running", "1763193603 6AF54551-C4D8 6AF54551-C4D8"), "vm", dir);
+    assert.deepEqual([isReady(clockSet), clockSet.notWarm], [true, undefined]);
     // Running, but no answer over ssh: still booting or stuck.
     assert.match(statusNl(await voiceoverStatus(statusGuest("running", null), "vm", dir)), /geeft geen antwoord: hij start nog op of hangt/);
     // Not set up: no warning, since a run without VoiceOver is as it was.
@@ -487,6 +494,31 @@ test("status: a start in the background leaves word while it runs, and a failed 
     // A start file left by a process that is gone does not count as a start that runs.
     writeFileSync(join(dir, "vm.starting.json"), JSON.stringify({ pid: 2 ** 22 + 12345, since: "2026-11-15T08:00:00Z" }));
     assert.equal((await voiceoverStatus(statusGuest("stopped", null), "vm", dir)).starting, undefined);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("a look at the state warms a running guest up by itself, once, and not right after a start that failed", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "voiceover-status-"));
+  try {
+    const cold = await voiceoverStatus(statusGuest("running", "1763193600 6AF54551-C4D8 11111111-AAAA"), "vm", dir);
+    assert.equal(warmUpDue(cold), true);
+    assert.match(voiceoverWarningNl(cold, true) ?? "", /niet opgewarmd \(het merkteken van de opwarming is van een eerdere start\), dus VoiceOver leest niet voor\. loep warmt hem nu op de achtergrond op, meestal in een minuut; tot dan lezen agents niet voor met VoiceOver$/);
+    // A start that runs, set off by another look: not a second one.
+    markStarting(process.pid, "vm", dir);
+    assert.equal(warmUpDue(await voiceoverStatus(statusGuest("running", "1763193600 6AF54551-C4D8 11111111-AAAA"), "vm", dir)), false);
+    rmSync(join(dir, "vm.starting.json"));
+    // Warm, stopped, or not answering: nothing to warm up from here. A stopped guest takes a boot, and that is for whoever leads.
+    assert.equal(warmUpDue(await voiceoverStatus(statusGuest("running", "1763193600 6AF54551-C4D8 6AF54551-C4D8"), "vm", dir)), false);
+    assert.equal(warmUpDue(await voiceoverStatus(statusGuest("stopped", null), "vm", dir)), false);
+    assert.equal(warmUpDue(await voiceoverStatus(statusGuest("running", null), "vm", dir)), false);
+    // A start failed ten minutes ago: not again by itself. After half an hour it is.
+    const failedAt = new Date("2026-11-15T20:00:00Z");
+    const afterFailure = { ...cold, lastStart: { ok: false, at: failedAt.toISOString(), error: "opwarmen mislukt" } };
+    assert.equal(warmUpDue(afterFailure, new Date(failedAt.getTime() + 10 * 60_000)), false);
+    assert.equal(warmUpDue(afterFailure, new Date(failedAt.getTime() + 31 * 60_000)), true);
+    assert.equal(warmUpDue({ ...cold, lastStart: { ok: true, at: failedAt.toISOString() } }, new Date(failedAt.getTime() + 60_000)), true);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

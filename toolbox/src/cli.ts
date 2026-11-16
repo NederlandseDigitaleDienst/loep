@@ -708,8 +708,12 @@ async function main(): Promise<void> {
       if (!isInstrumentRun(values.run)) throw new Error(NO_TASKS_NL);
       const pending = await instrumentPending(values.run);
       // In a phase with agents: whether VoiceOver can read, when the virtual Mac is set up. Asked of lume, not read from the run.
-      const { voiceoverStatus, voiceoverWarningNl } = await import("./lib/voiceover.ts");
-      const voiceover = pending.phase === "done" ? null : voiceoverWarningNl(await voiceoverStatus());
+      // Running but not warmed up costs a minute to mend and a phase of agents without VoiceOver to leave: it is warmed up from here, in the background (#596).
+      const { voiceoverStatus, voiceoverWarningNl, warmUpDue } = await import("./lib/voiceover.ts");
+      const status = pending.phase === "done" ? null : await voiceoverStatus();
+      const warming = status !== null && warmUpDue(status);
+      if (warming) (await import("./commands/voiceover.ts")).startInBackground();
+      const voiceover = status === null ? null : voiceoverWarningNl(status, warming);
       process.stdout.write(`${JSON.stringify({ ...(values.brief ? briefPending(pending) : pending), ...(voiceover ? { voiceover } : {}) })}\n`);
       return;
     }

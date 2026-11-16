@@ -3,7 +3,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
-import { COPIED_FILES, GUEST_DIR, GuestQueue, isReady, lumeGuest, putFile, read, realClock, recordedStart, shutdown, start, statusNl, VM_NAME, voiceoverStatus, type Clock, type Guest } from "../lib/voiceover.ts";
+import { COPIED_FILES, GUEST_DIR, GuestQueue, isReady, lumeGuest, markStarting, putFile, read, realClock, recordedStart, shutdown, start, statusNl, VM_NAME, voiceoverStatus, type Clock, type Guest } from "../lib/voiceover.ts";
 
 const run = promisify(execFile);
 const GUEST_FILES = fileURLToPath(new URL("../../voiceover/guest/", import.meta.url));
@@ -62,6 +62,13 @@ export async function voiceoverRead(flags: ReadFlags, guest: Guest = lumeGuest()
   if (flags.out) writeFileSync(flags.out, `${JSON.stringify({ ...reading.result, waited }, null, 2)}\n`);
   process.stdout.write(`${JSON.stringify({ ...reading.print, ...(waited.seconds > 0 ? { waited: `${waited.seconds} s gewacht op de virtuele Mac` } : {}) })}\n`);
   return 0;
+}
+
+/** Set off `loep voiceover start` as a process of its own and go on: for a look at the state that finds the guest running but not warmed up. */
+export function startInBackground(): void {
+  const child = spawn(process.execPath, [fileURLToPath(new URL("../cli.ts", import.meta.url)), "voiceover", "start"], { detached: true, stdio: "ignore" });
+  child.unref();
+  if (child.pid) markStarting(child.pid);
 }
 
 /** `loep voiceover status`: exit 0 when VoiceOver can read aloud now. */
