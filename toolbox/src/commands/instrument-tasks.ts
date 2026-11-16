@@ -696,6 +696,15 @@ function keepTaskFiles(runDir: string): { restore: () => void; drop: () => void 
   };
 }
 
+/** Why rounds of a finished run are open again: the dossiers that changed, or else that it was not the dossier. */
+function changedNl(previous: InstrumentIndex | null, tasks: InstrumentTask[]): string {
+  const changed = tasks.filter((task) => previous?.tasks.find((entry) => entry.criterion === task.criterion)?.dossierSha256 !== task.dossierSha256).map((task) => task.criterion);
+  return changed.length > 0 ? `het dossier van ${changed.length} ${changed.length === 1 ? "criterium" : "criteria"} veranderde (${changed.slice(0, 5).join(", ")}${changed.length > 5 ? ", ..." : ""})` : "hun opdracht of een oordeel waarop ze rusten veranderde, niet het dossier";
+}
+
+/** The one way on when a judge or verifier is open again, and what it costs: said where `--again` would only refuse. */
+const REOPEN_ONLY_NL = "Verder gaan kan alleen met tasks --reopen: de werkstroom start dan voor elk van die criteria opnieuw een beoordelaar en een verifieerder";
+
 /**
  * What a call of `tasks` would undo in a finished run: the rounds that are open again, and why. A
  * refusal costs a command; going on costs an agent for each criterion, and the workflow starts them
@@ -707,10 +716,10 @@ function reopensNl(previous: InstrumentIndex, pending: InstrumentPending, tasks:
     [pending.judges.length, "beoordelingen", pending.judges.map((judge) => judge.criterion)],
     [pending.verifiers.length, "verificaties", pending.verifiers.map((verifier) => verifier.criterion)],
   ] as const;
-  const changed = tasks.filter((task) => previous.tasks.find((entry) => entry.criterion === task.criterion)?.dossierSha256 !== task.dossierSha256).map((task) => task.criterion);
   const listed = rounds.filter(([count]) => count > 0).map(([count, name, ids]) => `${count} ${name} (${ids.slice(0, 5).join(", ")}${ids.length > 5 ? ", ..." : ""})`).join(" en ");
-  const why = changed.length > 0 ? `het dossier van ${changed.length} ${changed.length === 1 ? "criterium" : "criteria"} veranderde (${changed.slice(0, 5).join(", ")}${changed.length > 5 ? ", ..." : ""})` : "hun opdracht of een oordeel waarop ze rusten veranderde, niet het dossier";
-  return `tasks: deze run is af, en dit zou ${listed} opnieuw openzetten: ${why}. Er is niets gewijzigd. Wil je alleen een nieuwe afmaakronde, gebruik dan tasks --again <criteria>. Moet de run echt terug, draai dan tasks --reopen`;
+  // With a judge or verifier open again, `--again` refuses too: naming it here sent people in a circle (#599).
+  const wayOn = pending.judges.length + pending.verifiers.length > 0 ? `Een nieuwe afmaakronde (tasks --again) kan dan niet, want die rust op deze oordelen. ${REOPEN_ONLY_NL}` : "Wil je alleen een nieuwe afmaakronde, gebruik dan tasks --again <criteria>. Moet de run echt terug, draai dan tasks --reopen";
+  return `tasks: deze run is af, en dit zou ${listed} opnieuw openzetten: ${changedNl(previous, tasks)}. Er is niets gewijzigd. ${wayOn}`;
 }
 
 /**
@@ -939,7 +948,11 @@ async function writeTasks(runDir: string, options: TaskOptions, previous: Instru
     for (const task of tasks) if (task.verify && !(await instrumentVerdictIsCurrent(runDir, task, "final", observations)) && !skipped(runDir, task.verify.output)) verifiersOpen++;
   }
   const finishDecided = judgesOpen === 0 && verifiersOpen === 0;
-  if (again.size > 0 && !finishDecided) throw new Error("--again: de afmaakronde is niet meer aan de beurt, want er staat weer een beoordeling of verificatie open. Er is niets gewijzigd; wat er veranderde, zegt tasks zonder --again");
+  // Said here in full, with the cause: a pointer to `tasks` without `--again` led back to this refusal (#599).
+  if (again.size > 0 && !finishDecided) {
+    const open = judgesOpen > 0 ? `${judgesOpen} ${judgesOpen === 1 ? "beoordeling staat" : "beoordelingen staan"}` : `${verifiersOpen} ${verifiersOpen === 1 ? "verificatie staat" : "verificaties staan"}`;
+    throw new Error(`--again: de afmaakronde is niet aan de beurt, want ${open} weer open: ${changedNl(previous, tasks)}. Er is niets gewijzigd. Een afmaakronde rust op die oordelen. ${REOPEN_ONLY_NL}`);
+  }
   let finishers = 0;
   if (finishDecided) {
     // What every round passed on to another criterion. The finishing round comes after every verifier, so it gets what they passed on;

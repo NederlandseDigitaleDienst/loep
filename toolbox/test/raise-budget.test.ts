@@ -162,20 +162,23 @@ test("a raise while the run is under way reaches the tasks that are still to sta
 });
 
 test("a plain tasks does not take a finished run back to the judges: it refuses, says what would change and changes nothing", async () => {
-  const { dir, dossier, options, task, toVerdicts, finishProbe, sessions, taskFile } = await newRun();
+  const { dir, run, dossier, options, task, toVerdicts, finishProbe, sessions, taskFile } = await newRun();
   await toVerdicts();
   await finishProbe();
   const before = { index: taskFile(join("tasks", "index.json")), dossier: taskFile((await task(CRITERIA.passed)).dossier), sessions: await sessions() };
 
   // A new sweep changed what the dossiers hold.
   dossier.value = { ...dossier.value, evidence: { contrast: { changed: true } } };
-  await assert.rejects(instrumentTasks(dir, options), /deze run is af, en dit zou 3 beoordelingen \(.*\) opnieuw openzetten: het dossier van 3 criteria veranderde \(.*\)\. Er is niets gewijzigd\..*tasks --again <criteria>.*tasks --reopen/);
+  await assert.rejects(instrumentTasks(dir, options), /deze run is af, en dit zou 3 beoordelingen \(.*\) opnieuw openzetten: het dossier van 3 criteria veranderde \(.*\)\. Er is niets gewijzigd\. Een nieuwe afmaakronde \(tasks --again\) kan dan niet, want die rust op deze oordelen\. Verder gaan kan alleen met tasks --reopen: de werkstroom start dan voor elk van die criteria opnieuw een beoordelaar en een verifieerder$/);
   assert.equal(taskFile(join("tasks", "index.json")), before.index);
   assert.equal(taskFile((await task(CRITERIA.passed)).dossier), before.dossier);
   assert.equal((await instrumentPending(dir)).phase, "done");
 
   // An --again in that state does not go on either, and leaves the run as it was.
-  await assert.rejects(instrumentTasks(dir, { ...options, again: [CRITERIA.finished] }), /--again/);
+  // The same for a criterion that may have a new finishing round. It says why itself and names the one way on: the two refusals used to point at each other.
+  run.writes = await raiseWrites(dir, "10", CONVERSATION);
+  await assert.rejects(instrumentTasks(dir, { ...options, again: [CRITERIA.sending] }), /--again: de afmaakronde is niet aan de beurt, want 3 beoordelingen staan weer open: het dossier van 3 criteria veranderde \(.*\)\. Er is niets gewijzigd\. Een afmaakronde rust op die oordelen\. Verder gaan kan alleen met tasks --reopen/);
+  await assert.rejects(instrumentTasks(dir, { ...options, again: [CRITERIA.sending] }), (error: Error) => !/zegt tasks zonder --again|gebruik dan tasks --again/.test(error.message));
   assert.equal(taskFile(join("tasks", "index.json")), before.index);
   assert.deepEqual(await sessions(), before.sessions);
   assert.ok(!existsSync(join(dir, "verdicts", CRITERIA.finished, "afmaak-1.json")));
