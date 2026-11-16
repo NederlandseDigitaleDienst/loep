@@ -178,7 +178,7 @@ export function validateSummary(proposal: unknown, evaluation: Evaluation, repor
   if (!used.has("status")) problems.push('geen alinea rust op "status": de samenvatting zegt of de site voldoet en hoeveel criteria niet zijn gehaald');
   // Whether the site meets the norm is said as the evaluation has it for WCAG 2.2, never rounder.
   if (!NORM.test(all)) problems.push('de samenvatting noemt de norm niet; zeg één keer in een zin "WCAG 2.2 niveau A en AA", zoals het rapport');
-  if (failed && !/voldoet niet/i.test(all)) problems.push('het rapport keurt criteria af; de samenvatting zegt met de woorden "voldoet niet" dat de site niet voldoet');
+  if (failed && !/voldoet niet/i.test(all)) problems.push('het rapport keurt criteria af, en de woorden "voldoet niet" staan niet in de samenvatting; schrijf ze zo, aaneen ("de site voldoet niet aan"), niet als "niet voldoet"');
   // A sentence that says the site meets something says more than the report, unless it denies it, leaves it open, speaks of
   // WCAG 2.1, or uses the name of status B.
   const meets = /(?<![\p{L}])voldoet(?![\p{L}])/iu;

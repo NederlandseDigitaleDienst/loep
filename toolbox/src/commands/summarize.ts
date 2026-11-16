@@ -44,13 +44,15 @@ export interface SummarizeResult {
   readTask?: string;
   /** How many sentences the second reader did not find in the report. */
   refuted?: number;
+  /** With "unread": what is wrong with the reading that is there; absent when no reader wrote one yet. */
+  readingProblems?: number;
 }
 
 const STALE_NL: Record<SummaryStaleReason, string> = {
   unchecked: "Er staat een samenvatting die check-summary niet heeft goedgekeurd, of die daarna is gewijzigd.",
   report: "De samenvatting is geschreven voor een rapport dat sindsdien is veranderd.",
   task: "De samenvatting is geschreven met een andere versie van de opdracht.",
-  unread: "De samenvatting doorstond check-summary, maar er is geen geldig oordeel van een tweede lezer over deze tekst en dit rapport.",
+  unread: "De samenvatting doorstond check-summary. Nu legt een tweede lezer haar naast het rapport; een geldig oordeel over deze tekst is er nog niet.",
   refuted: "De tweede lezer vond in de samenvatting iets wat het rapport niet draagt.",
 };
 
@@ -61,7 +63,8 @@ export function summaryLineNl(result: SummarizeResult): string {
   const reason = result.reason ?? "report";
   const next =
     reason === "unchecked" ? "Draai check-summary"
-    : reason === "unread" ? `Start een nieuwe agent, niet de schrijver, met ${result.readTask}. Die draait zelf check-reading. Draai daarna summarize opnieuw`
+    : reason === "unread" && result.readingProblems ? `Het oordeel dat er ligt heeft ${result.readingProblems === 1 ? "1 probleem" : `${result.readingProblems} problemen`}; check-reading noemt ze. Laat de tweede lezer het herstellen met ${result.readTask}, en draai daarna summarize opnieuw`
+    : reason === "unread" ? `De opdracht voor die lezer is nu geschreven. Start een nieuwe agent, niet de schrijver, met ${result.readTask}. Die draait zelf check-reading. Draai daarna summarize opnieuw`
     : reason === "refuted" ? `Het gaat om ${result.refuted === 1 ? "1 zin" : `${result.refuted} zinnen`}; wat de lezer vond staat in ${READING}. Laat de schrijver haar herstellen met ${result.task}, en draai daarna check-summary en summarize voor een nieuwe leesopdracht`
     : `Laat haar opnieuw schrijven; de opdracht staat in ${result.task}`;
   return `${STALE_NL[reason]} Ze staat niet in het rapport. ${next}`;
@@ -204,7 +207,7 @@ export async function summaryInto(runDir: string, evaluation: Evaluation): Promi
   const read = await standingReading(runDir, proposal, summarySourceText(evaluation));
   if (!read || read.problems.length > 0) {
     evaluation.executiveSummary = { status: "stale", reason: "unread" };
-    return { ...none, summary: "stale", reason: "unread", readTask };
+    return { ...none, summary: "stale", reason: "unread", readTask, ...(read ? { readingProblems: read.problems.length } : {}) };
   }
   if (read.refuted.length > 0) {
     evaluation.executiveSummary = { status: "stale", reason: "refuted" };

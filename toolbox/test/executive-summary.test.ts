@@ -191,7 +191,7 @@ test("summarize writes the task and the report, and puts in only a summary that 
     assert.deepEqual(await checkSummary(dir), []);
     const unread = await summarize(dir);
     assert.deepEqual([unread.summary, unread.reason, read().executiveSummary], ["stale", "unread", { status: "stale", reason: "unread" }]);
-    assert.match(summaryLineNl(unread), /er is geen geldig oordeel van een tweede lezer over deze tekst en dit rapport\. Ze staat niet in het rapport\. Start een nieuwe agent, niet de schrijver/);
+    assert.match(summaryLineNl(unread), /Nu legt een tweede lezer haar naast het rapport; een geldig oordeel over deze tekst is er nog niet\. Ze staat niet in het rapport\. De opdracht voor die lezer is nu geschreven\. Start een nieuwe agent, niet de schrijver/);
     const readTask = readFileSync(join(dir, "tasks", "samenvatting", "lees.md"), "utf8");
     assert.doesNotMatch(readTask, /\{\{/);
     assert.match(readTask, /^1\. De site van Voorbeeldgemeente voldoet niet aan WCAG 2\.2 niveau A en AA, de norm voor toegankelijkheid\.$/m);
@@ -207,7 +207,9 @@ test("summarize writes the task and the report, and puts in only a summary that 
     // A reading with a quote that is not in the report, or without a verdict for a sentence, is no reading.
     await readBy((sentences) => void (sentences[0]!.quotes = ["Dit staat nergens in het rapport."]));
     assert.match((await checkReading(dir)).problems.join(" | "), /zin 1: "Dit staat nergens in het rapport\." staat niet letterlijk in het rapport/);
-    assert.equal((await summarize(dir)).reason, "unread");
+    const faulty = await summarize(dir);
+    assert.equal(faulty.reason, "unread");
+    assert.match(summaryLineNl(faulty), /Het oordeel dat er ligt heeft \d+ problem(?:en)?; check-reading noemt ze\. Laat de tweede lezer het herstellen/);
     await readBy((sentences) => void sentences.pop());
     assert.match((await checkReading(dir)).problems.join(" | "), /zin \d+ heeft geen oordeel/);
     assert.equal((await summarize(dir)).reason, "unread");

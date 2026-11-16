@@ -833,7 +833,7 @@ async function main(): Promise<void> {
       const { checkSummary } = await import("./commands/summarize.ts");
       const problems = await checkSummary(values.run);
       for (const problem of problems) process.stdout.write(`- ${problem}\n`);
-      process.stdout.write(problems.length === 0 ? "OK: de samenvatting houdt zich aan het rapport\n" : `${problems.length} problemen\n`);
+      process.stdout.write(problems.length === 0 ? "OK: de samenvatting houdt zich aan het rapport\n" : `${problems.length} ${problems.length === 1 ? "probleem" : "problemen"}\n`);
       process.exitCode = problems.length === 0 ? 0 : 1;
       return;
     }
@@ -843,7 +843,7 @@ async function main(): Promise<void> {
       const { problems, refuted } = await checkReading(values.run);
       for (const problem of problems) process.stdout.write(`- ${problem}\n`);
       for (const sentence of refuted) process.stdout.write(`niet gedragen, zin ${sentence.n}: ${sentence.sentence}\n  ${sentence.noteNl}\n`);
-      process.stdout.write(problems.length > 0 ? `${problems.length} problemen\n` : refuted.length > 0 ? `OK: het oordeel is volledig. ${refuted.length === 1 ? "1 zin is" : `${refuted.length} zinnen zijn`} niet gedragen; de samenvatting komt zo niet in het rapport\n` : "OK: het rapport draagt elke zin van de samenvatting\n");
+      process.stdout.write(problems.length > 0 ? `${problems.length} ${problems.length === 1 ? "probleem" : "problemen"}\n` : refuted.length > 0 ? `OK: het oordeel is volledig. ${refuted.length === 1 ? "1 zin is" : `${refuted.length} zinnen zijn`} niet gedragen; de samenvatting komt zo niet in het rapport\n` : "OK: het rapport draagt elke zin van de samenvatting\n");
       process.exitCode = problems.length === 0 ? 0 : 1;
       return;
     }
@@ -887,6 +887,9 @@ async function main(): Promise<void> {
       const result = await render(values.run);
       process.stdout.write(`${result.markdown}\n${result.html}\n${result.pdf ?? "(geen pdf)"}\n${result.shortPdf ? `${result.shortPdf}\n` : ""}`);
       for (const problem of result.pdfChecks) process.stdout.write(`- ${problem}\n`);
+      // Whoever leads the run sees here whether the summary is in the report that was just written.
+      const summary = (await (await import("./commands/sign.ts")).readEvaluation(join(values.run, "evaluation.json"))).executiveSummary;
+      process.stdout.write(summary?.status === "applied" ? "met de samenvatting voor de leiding\n" : `zonder samenvatting voor de leiding: het rapport opent met de zin van loep${summary ? "; draai summarize om te zien waarom" : ""}\n`);
       for (const note of result.cutoutNotes) process.stdout.write(`- ${note}\n`);
       for (const warning of result.pdfWarnings) process.stdout.write(`LET OP: ${warning}\n`);
       // A report whose PDF fails its own accessibility check is not fit to hand over.

@@ -14,7 +14,7 @@ Dit zijn de zinnen van de samenvatting, genummerd:
 
 ## Wat je per zin doet
 
-Zoek in het rapport de plek waar staat wat de zin zegt. Zoek met de woorden van het rapport, niet met die van de samenvatting, en lees de plek zelf. Ga er niet van uit dat de schrijver gelijk heeft.
+Je leest alleen het rapport en deze opdracht, niet de opdracht van de schrijver of wat die verder achterliet. Zoek in het rapport de plek waar staat wat de zin zegt. Zoek met de woorden van het rapport, niet met die van de samenvatting, en lees de plek zelf. Ga er niet van uit dat de schrijver gelijk heeft.
 
 Een zin is **gedragen** als alles wat ze beweert in het rapport staat. Je geeft dan één of meer stukken tekst die je letterlijk uit het rapport kopieert en waaruit de zin volgt.
 
@@ -22,7 +22,7 @@ Een zin is **niet-gedragen** als ze op één punt iets anders zegt dan het rappo
 
 - een andere groep bezoekers dan het rapport bij dit gebrek noemt, of een groep minder zonder dat de zin dat zegt;
 - een andere pagina, een ander onderdeel of een andere kerntaak;
-- een gebrek dat het rapport niet heeft;
+- een gebrek dat het rapport niet heeft, of iets wat het rapport bij één gebrek zegt en de zin aan twee gebreken toeschrijft;
 - lichter of zwaarder dan het rapport: "lukt met een omweg" waar het rapport zegt dat een groep vastloopt, of andersom;
 - een criterium dat open staat en in de zin als goed of als zonder probleem klinkt;
 - een oorzaak, een volgorde of een termijn die het rapport niet geeft. Een volgorde van herstel die volgt uit hoe het rapport de werklijst sorteert (de zwaarste eerst, bij dezelfde ernst eerst wat bij een kerntaak hoort), geeft het rapport wel;
@@ -65,7 +65,7 @@ In deze vorm, met een regel voor elke zin:
 }
 ```
 
-`reportSha256`, `proposalSha256` en `taskSha256` neem je letterlijk over. In `sentence` staat de zin waarover je oordeelt, letterlijk zoals hierboven. Een stuk in `quotes` is minstens drie woorden en hooguit 300 tekens lang, en staat teken voor teken zo in het rapport. Kopieer het, typ het niet over. Geef de zin of de paar zinnen waar het staat, niet de alinea eromheen; twee stukken mag ook. Eén plek in het rapport draagt hooguit twee zinnen: een kop of een regel die overal bij past, wijst geen plek aan. Zegt de zin het in andere woorden dan het rapport, zodat het stuk geen woord of getal met de zin deelt, zeg dan bij die zin in `noteNl` in één zin waarom ze eruit volgt. `taskSha256` is een kenmerk dat loep uitrekent, niet de hash van dit bestand.
+`reportSha256`, `proposalSha256` en `taskSha256` neem je letterlijk over. In `sentence` staat de zin waarover je oordeelt, letterlijk zoals hierboven. Een stuk in `quotes` is minstens drie woorden en hooguit 300 tekens lang, en staat teken voor teken zo in het rapport. Kopieer het, typ het niet over. Geef de zin of de paar zinnen waar het staat, niet de alinea eromheen; twee stukken mag ook. Eén plek in het rapport draagt hooguit twee zinnen: een kop of een regel die overal bij past, wijst geen plek aan. Een plek is het stuk tekst dat je kopieert; twee stukken uit dezelfde alinea die elkaar niet voor meer dan de helft overlappen, zijn twee plekken. Zegt de zin het in andere woorden dan het rapport, zodat het stuk geen woord of getal met de zin deelt, zeg dan bij die zin in `noteNl` in één zin waarom ze eruit volgt. `taskSha256` is een kenmerk dat loep uitrekent, niet de hash van dit bestand.
 
 ## Controleren
 

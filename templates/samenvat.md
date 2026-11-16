@@ -20,15 +20,15 @@ Lees het helemaal, in delen als het groot is. Gebruik niets van buiten het rappo
 
 ## Regels
 
-- Hooguit {{wordsMax}} woorden, in {{paragraphsMin}} tot {{paragraphsMax}} alinea's. Dat is weinig: kies, en laat weg wat de lezers niet nodig hebben om te beslissen. Schrap eerder een gebrek dan de groep bij een gebrek.
+- Hooguit {{wordsMax}} woorden, geteld als stukken tekst tussen spaties, in {{paragraphsMin}} tot {{paragraphsMax}} alinea's. Dat is weinig: kies, en laat weg wat de lezers niet nodig hebben om te beslissen. Schrap eerder een gebrek dan de groep bij een gebrek.
 - Lopende zinnen. Geen opsommingstekens, geen kopjes, geen vet, geen haakjes, geen webadressen. De naam van de site mag.
 - Nederlands, voor iemand die WCAG niet kent. Noem de norm één keer bij naam, als "WCAG 2.2 niveau A en AA", en leg er verder niets van uit. Een criterium noem je in woorden, zoals "contrast van tekst", nooit met een nummer.
 - Begin niet met de zin waarmee het rapport zelf opent. Zeg de uitkomst in je eigen woorden.
-- De tekst spreekt het rapport nergens tegen en verzacht niets. Keurt het rapport criteria af, dan staan de woorden "voldoet niet" in je tekst.
+- De tekst spreekt het rapport nergens tegen en verzacht niets. Keurt het rapport criteria af, dan staan de woorden "voldoet niet" in je tekst, aaneen en in die volgorde: "de site voldoet niet aan", niet "niet voldoet".
 - Ernst telt per groep bezoekers, en de zwaarste groep telt. Een afkeuring is nooit "formeel" of "technisch". Schrijf nooit dat niemand er last van heeft.
 - Een criterium dat open staat, is niet goedgekeurd. Zeg dat het niet is vastgesteld.
 - Elk getal neem je letterlijk over uit het rapport. Een aantal schrijf je in cijfers, ook als het klein is; een termijn die het rapport in letters schrijft, zoals "zes maanden", neem je zo over. Reken niets uit en rond niets af.
-- Zeg met de woorden "niet gehaald" hoeveel criteria niet zijn gehaald, en noem in een zin met "niet vastgesteld" of "open" hoeveel er open staan. In de zin met "niet gehaald" staan alleen die aantallen en het totaal.
+- Zeg met de woorden "niet gehaald" hoeveel criteria niet zijn gehaald, en noem in een zin met "niet vastgesteld" of "open" hoeveel er open staan. Het aantal open criteria mag in dezelfde zin staan als het aantal dat niet is gehaald, of in een eigen zin.
 - Noem de status met de letter uit het rapport, als "status C", en zeg in dezelfde zin waardoor ze dat is. Status C komt door de criteria die niet zijn vastgesteld, niet door het aantal dat niet is gehaald. Schrijf dus niet "daaruit volgt status C" achter de twee aantallen. Noem geen andere letter. Zeg niet of de status voorlopig is en schrijf niets over tekenen of over een concept: dat staat bij de status zelf, en jouw tekst blijft staan als het rapport is afgetekend.
 - Geen woorden van het onderzoek zelf, zoals veegronde, beoordelaar, taalmodel of run.
 - Geen afkortingen met een punt, zoals "bijv." of "o.a."; schrijf ze voluit. Gebruik de woorden "niet gehaald" alleen bij het aantal criteria.
@@ -72,7 +72,7 @@ Draai daarna de controle:
 {{check}}
 ```
 
-Ze houdt je tekst aan het rapport: de lengte, de status, elk getal, de woorden die niet mogen, en of `sources` naar iets bestaands wijst. Meldt ze iets, herstel dat in het bestand en draai haar opnieuw, tot ze niets meer meldt. Verander verder niets in de run.
+Ze houdt je tekst aan het rapport: de lengte, de status, elk getal, de woorden die niet mogen, en of `sources` naar iets bestaands wijst. Meldt ze iets, herstel dat in het bestand en draai haar opnieuw, tot ze niets meer meldt. Ze legt zelf vast dat je tekst haar doorstond, in een bestand naast het jouwe; dat is niet van jou. Verander verder niets in de run.
 
 De controle ziet niet of een zin in gewone woorden iets beweert wat het rapport niet zegt. Daarna legt een tweede lezer elke zin naast het rapport en wijst aan waar die staat. Een zin die het rapport niet draagt, houdt de hele samenvatting uit het rapport. Lees je tekst daarom na het schrijven nog één keer naast het rapport, zin voor zin.
 
