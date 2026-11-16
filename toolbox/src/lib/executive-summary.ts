@@ -22,7 +22,7 @@ export type SummaryRecord =
   | { status: "applied"; paragraphs: string[]; sources: string[][]; model?: string; templateSha256: string; proposalSha256: string }
   | { status: "stale"; reason: SummaryStaleReason };
 
-export const SUMMARY_WORDS_MAX = 180;
+export const SUMMARY_WORDS_MAX = 220;
 export const SUMMARY_PARAGRAPHS_MIN = 2;
 export const SUMMARY_PARAGRAPHS_MAX = 4;
 
@@ -121,6 +121,11 @@ export function validateSummary(proposal: unknown, evaluation: Evaluation, repor
   const named = [...all.matchAll(/\bstatus\s+([A-D])\b/g)].map((match) => match[1]!);
   for (const letter of named) if (!statuses.includes(letter)) problems.push(`de samenvatting noemt status ${letter}; het rapport komt uit op ${statuses.length > 0 ? `status ${statuses.join(" en ")}` : "geen status"}`);
   for (const status of statuses) if (!named.includes(status)) problems.push(`de samenvatting noemt status ${status} niet; zeg welke status uit het rapport volgt`);
+  // Status C comes from what was not established, never from how many criteria failed: the sentence that names it says so.
+  if (statuses.includes("C") && named.includes("C")) {
+    const naming = all.split(/(?<=[.!?])\s+/).filter((sentence) => /\bstatus\s+C\b/.test(sentence));
+    if (!naming.some((sentence) => /vastgesteld|onderzocht|(?<![\p{L}])open(?![\p{L}])/iu.test(sentence))) problems.push("de samenvatting zegt niet waardoor de status C is; zeg in de zin met de status dat ze komt door de criteria die niet zijn vastgesteld, niet door het aantal dat niet is gehaald");
+  }
   if (!used.has("status")) problems.push('geen alinea rust op "status": de samenvatting zegt of de site voldoet en hoeveel criteria niet zijn gehaald');
   // Whether the site meets the norm is said as the evaluation has it, never rounder.
   const failed = evaluation.criteria.some((criterion) => criterion.outcome === "failed");

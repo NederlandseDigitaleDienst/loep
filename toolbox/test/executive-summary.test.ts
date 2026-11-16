@@ -24,7 +24,7 @@ const STOPPING = ["VRB-G-9fc8", "VRB-G-0518", "VRB-G-e7cb", "VRB-G-69e6"];
 const good = (): SummaryProposal => ({
   model: "voorbeeld-model-5",
   paragraphs: [
-    { textNl: "De site van Voorbeeldgemeente voldoet niet aan WCAG 2.2 niveau A en AA, de norm voor toegankelijkheid. Van de 55 criteria zijn er 5 niet gehaald en 4 open, en daaruit volgt status C.", sources: ["status"] },
+    { textNl: "De site van Voorbeeldgemeente voldoet niet aan WCAG 2.2 niveau A en AA, de norm voor toegankelijkheid. Van de 55 criteria zijn er 5 niet gehaald en 4 open, en door die 4 open criteria is het status C.", sources: ["status"] },
     { textNl: "Mensen die niet zien kunnen geen vergunning aanvragen, omdat de knop om te versturen voor hen geen naam heeft. Mensen die slecht zien stranden op grijze hulptekst en een zoekveld zonder naam.", sources: ["vastlopen", "VRB-G-e7cb", "VRB-G-9fc8"] },
     { textNl: "Herstel eerst het formulier voor de vergunning. Over 4 criteria is niets vastgesteld; ook daar kan een groep vastlopen.", sources: ["wat-nu", "open"] },
   ],
@@ -52,6 +52,7 @@ test("the check holds a summary to the report: length, form, numbers, status and
   refused("one paragraph", (proposal) => void proposal.paragraphs.splice(1), /het zijn er 2 tot 4/);
   refused("a number that is not in the report", add("Dat raakt 37 pagina's."), /het getal 37 staat niet in het rapport/);
   refused("another status", first("De site voldoet niet aan WCAG 2.2 niveau A en AA. Van de 55 criteria zijn er 5 niet gehaald, en daaruit volgt status B."), /noemt status B; het rapport komt uit op status C/);
+  refused("status without its cause", first("De site voldoet niet aan WCAG 2.2 niveau A en AA. Van de 55 criteria zijn er 5 niet gehaald en 4 open. Daaruit volgt status C."), /zegt niet waardoor de status C is/);
   refused("no status", first("De site voldoet niet aan WCAG 2.2 niveau A en AA. Van de 55 criteria zijn er 5 niet gehaald en 4 open."), /noemt status C niet/);
   refused("says the site conforms", first("De site voldoet aan WCAG 2.2 niveau A en AA, op 5 van de 55 criteria na. Daaruit volgt status C."), /voldoet niet|zegt dat de site voldoet/);
   refused("softens", add("Over het algemeen is de site goed te gebruiken."), /"over het algemeen" maakt kleiner/);
@@ -63,13 +64,13 @@ test("the check holds a summary to the report: length, form, numbers, status and
   refused("about signing", add("De status is voorlopig."), /"voorlopig" gaat over het tekenen/);
   refused("a dash", add("Het formulier — het belangrijkste deel — werkt niet."), /gedachtestreepje/);
   refused("brackets", add("Het formulier (voor de vergunning) werkt niet."), /zonder haakjes/);
-  refused("a list", first("- De site voldoet niet aan WCAG 2.2 niveau A en AA. Van de 55 criteria zijn er 5 niet gehaald en 4 open, en daaruit volgt status C."), /lopende tekst/);
+  refused("a list", first("- De site voldoet niet aan WCAG 2.2 niveau A en AA. Van de 55 criteria zijn er 5 niet gehaald en 4 open, en door die 4 open criteria is het status C."), /lopende tekst/);
   refused("emphasis", add("Dat is **het zwaarste** gebrek."), /lopende tekst/);
   refused("an address", add("Zie https://voorbeeld.example/contact."), /noem geen adres/);
   refused("no source", (proposal) => void (proposal.paragraphs[1]!.sources = []), /sources is leeg/);
   refused("a source that is not in the report", (proposal) => void proposal.paragraphs[1]!.sources.push("VRB-G-0000"), /"VRB-G-0000" in sources is geen gebrek of criterium/);
   // The norm by its name: "the norm for accessibility" alone does not say against what the site was held.
-  refused("the norm not named", first("De site van Voorbeeldgemeente voldoet niet aan de norm voor toegankelijkheid. Van de 55 criteria zijn er 5 niet gehaald en 4 open, en daaruit volgt status C."), /noemt de norm niet; zeg één keer in een zin "WCAG 2\.2 niveau A en AA"/);
+  refused("the norm not named", first("De site van Voorbeeldgemeente voldoet niet aan de norm voor toegankelijkheid. Van de 55 criteria zijn er 5 niet gehaald en 4 open, en door die 4 open criteria is het status C."), /noemt de norm niet; zeg één keer in een zin "WCAG 2\.2 niveau A en AA"/);
   // A defect without who it hinders.
   refused("a defect without a group", (proposal) => void (proposal.paragraphs[1]!.textNl = "De knop om de aanvraag te versturen heeft geen naam. Grijze hulptekst is slecht te lezen."), /noemt bij de gebreken VRB-G-e7cb, VRB-G-9fc8 niet voor wie het geldt/);
   // A group is stopped at a core task: a paragraph rests on a defect that stops it.
@@ -119,7 +120,7 @@ test("summarize writes the task and the report, and puts in only a summary that 
     assert.equal(first.summary, "not-run");
     assert.match(summaryLineNl(first), /niet geschreven: het rapport opent met de zin van loep/);
     const task = readFileSync(join(dir, "tasks", "samenvatting", "taak.md"), "utf8");
-    assert.match(task, /hooguit 180 woorden/i);
+    assert.match(task, new RegExp(`hooguit ${SUMMARY_WORDS_MAX} woorden`, "i"));
     assert.doesNotMatch(task, /\{\{/);
     assert.doesNotMatch(task, /\b[Hh]ij\b/);
     assert.equal(readFileSync(join(dir, "tasks", "samenvatting", "rapport.md"), "utf8"), summarySourceText(read()));
