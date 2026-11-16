@@ -129,6 +129,7 @@ async function writeReadTask(runDir: string, evaluation: Evaluation, proposal: S
     output: join(absoluteRun, READING),
     reportSha256: sourceSha256,
     proposalSha256: await sha256File(join(runDir, PROPOSAL)),
+    taskSha256: sha256(readTemplate("samenvat-lees")),
     check: `node ${cli} check-reading --run ${absoluteRun}`,
     workDir: await makeWorkDir(runDir, READ_WORK),
   };
@@ -151,6 +152,7 @@ async function standingReading(runDir: string, proposal: SummaryProposal, source
   const problems: string[] = [];
   if (reading?.reportSha256 !== sha256(source)) problems.push(`het oordeel is over een ander rapport dan dat van nu: reportSha256 is niet ${sha256(source)}`);
   if (reading?.proposalSha256 !== (await sha256File(join(runDir, PROPOSAL)))) problems.push("het oordeel is over een andere tekst van de samenvatting dan die er nu staat: proposalSha256 klopt niet");
+  if (reading?.taskSha256 !== sha256(readTemplate("samenvat-lees"))) problems.push(`het oordeel is gemaakt met een andere versie van de opdracht dan die van nu: taskSha256 is niet ${sha256(readTemplate("samenvat-lees"))}. Lees ${READ_TASK} opnieuw en oordeel opnieuw`);
   const held = validateReading(reading, readingSentences(proposal), source);
   return { reading, problems: [...problems, ...held.problems], refuted: held.refuted };
 }

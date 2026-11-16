@@ -9,6 +9,7 @@ import { mergeFindings } from "../src/lib/defects.ts";
 import type { Evaluation } from "../src/lib/evaluation.ts";
 import { readingSentences, SUMMARY_WORDS_MAX, validateReading, validateSummary, type SummaryProposal } from "../src/lib/executive-summary.ts";
 import { renderHtml } from "../src/lib/report-html.ts";
+import { readTemplate } from "../src/lib/templates.ts";
 import { deriveReport, renderMarkdown, summarySourceText } from "../src/lib/report-markdown.ts";
 import { exampleEvaluation } from "./fixtures/example-evaluation.ts";
 import { weighed } from "./fixtures/weighed.ts";
@@ -127,11 +128,11 @@ test("summarize writes the task and the report, and puts in only a summary that 
     const read = (): Evaluation => ({ ...(JSON.parse(readFileSync(path, "utf8")) as Evaluation), signature: null });
     const QUOTE = "# Toegankelijkheidsonderzoek Voorbeeldgemeente";
     // The second reader, for the summary that stands now: every sentence carried, unless `change` says otherwise.
-    const readBy = async (change: (sentences: Record<string, unknown>[]) => void = () => undefined): Promise<void> => {
+    const readBy = async (change: (sentences: Record<string, unknown>[]) => void = () => undefined, extra: object = {}): Promise<void> => {
       const proposal = JSON.parse(readFileSync(join(dir, "verdicts", "samenvatting.json"), "utf8")) as SummaryProposal;
       const sentences: Record<string, unknown>[] = readingSentences(proposal).map((_sentence, index) => ({ n: index + 1, verdict: "gedragen", quotes: [QUOTE] }));
       change(sentences);
-      writeFileSync(join(dir, "verdicts", "samenvatting-lezing.json"), JSON.stringify({ reportSha256: sha256(summarySourceText(read())), proposalSha256: await sha256File(join(dir, "verdicts", "samenvatting.json")), model: "lezer-model-5", sentences }));
+      writeFileSync(join(dir, "verdicts", "samenvatting-lezing.json"), JSON.stringify({ reportSha256: sha256(summarySourceText(read())), proposalSha256: await sha256File(join(dir, "verdicts", "samenvatting.json")), taskSha256: sha256(readTemplate("samenvat-lees")), model: "lezer-model-5", sentences, ...extra }));
     };
     const written = (proposal: object = good()): string => JSON.stringify({ reportSha256: sha256(summarySourceText(read())), ...proposal });
 
@@ -175,6 +176,11 @@ test("summarize writes the task and the report, and puts in only a summary that 
     assert.equal((await summarize(dir)).reason, "unread");
     await readBy((sentences) => void sentences.pop());
     assert.match((await checkReading(dir)).problems.join(" | "), /zin \d+ heeft geen oordeel/);
+    assert.equal((await summarize(dir)).reason, "unread");
+
+    // A reading made under another version of the reader's task does not count.
+    await readBy(() => undefined, { taskSha256: "van-een-eerdere-opdracht" });
+    assert.match((await checkReading(dir)).problems.join(" | "), /gemaakt met een andere versie van de opdracht/);
     assert.equal((await summarize(dir)).reason, "unread");
 
     // Read, every sentence carried: in the evaluation, and the report opens with it in every form.

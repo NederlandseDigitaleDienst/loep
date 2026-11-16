@@ -31,7 +31,7 @@ Een zin is **niet-gedragen** als ze op één punt iets anders zegt dan het rappo
 Twee dingen tellen niet tegen een zin:
 
 - De zin noemt de status zonder "voorlopig" en zonder iets over tekenen. Dat hoort zo: of de status voorlopig is, staat bij de status zelf, naast de samenvatting, en de schrijver mag er niets over zeggen.
-- De zin zegt wie vastloopt of een omweg nodig heeft, en het rapport noemt daarnaast een groep die alleen extra moeite heeft. Het gaat om de groepen waarvoor het rapport het gevolg noemt waar de zin over gaat. Ontbreekt een groep met datzelfde gevolg, dan is de zin niet-gedragen.
+- De zin zegt zelf, in haar eigen woorden, dat ze alleen gaat over wie vastloopt of over wie een omweg nodig heeft, en noemt daarvan elke groep die het rapport noemt. Een groep die volgens het rapport alleen extra moeite heeft, hoeft er dan niet bij. Zegt de zin algemener voor wie een gebrek geldt, wie het treft of wie er last van heeft, dan horen alle groepen erbij die het rapport bij dat gebrek noemt, ook een groep met alleen extra moeite. Ontbreekt er dan één, dan is de zin niet-gedragen. Dat de zin ervoor over omwegen ging, is niet genoeg.
 
 Lees een zin in haar verband: "zij", "daar" en "dezelfde groepen" betekenen wat de zinnen ervoor zeggen.
 
@@ -55,6 +55,7 @@ In deze vorm, met een regel voor elke zin:
 {
   "reportSha256": "{{reportSha256}}",
   "proposalSha256": "{{proposalSha256}}",
+  "taskSha256": "{{taskSha256}}",
   "model": "<het model waarmee je draait, zoals je het zelf kent>",
   "sentences": [
     { "n": 1, "verdict": "gedragen", "quotes": ["<letterlijk uit het rapport>"] },
@@ -63,7 +64,7 @@ In deze vorm, met een regel voor elke zin:
 }
 ```
 
-`reportSha256` en `proposalSha256` neem je letterlijk over. Een stuk in `quotes` is minstens een paar woorden lang en staat teken voor teken zo in het rapport; kopieer het, typ het niet over.
+`reportSha256`, `proposalSha256` en `taskSha256` neem je letterlijk over. Een stuk in `quotes` is minstens een paar woorden lang en staat teken voor teken zo in het rapport; kopieer het, typ het niet over.
 
 ## Controleren
 

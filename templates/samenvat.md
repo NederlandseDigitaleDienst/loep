@@ -14,7 +14,7 @@ Lees het helemaal, in delen als het groot is. Gebruik niets van buiten het rappo
 
 1. Wat is de uitkomst: voldoet de site, hoeveel criteria zijn niet gehaald en hoeveel staan open, welke status het is en waardoor.
 2. Voor wie gaat het mis en bij welke taak. Noem de groep bezoekers en wat hun gebeurt. Loopt een groep vast bij een kerntaak, dan is dat het eerste wat de lezers horen na de uitkomst. Loopt geen groep vast, zeg dat dan, en zeg erbij dat dit alleen geldt voor wat is onderzocht als er criteria open staan.
-3. De gebreken die het zwaarst wegen, in gewone woorden. Kies er hooguit vier, en zeg bij elk voor welke groep bezoekers het geldt. Twee gebreken aan hetzelfde onderdeel mag je als één noemen.
+3. De gebreken die het zwaarst wegen, in gewone woorden. Kies er hooguit vier, en zeg bij elk voor welke groep bezoekers het geldt. Noem alle groepen die het rapport bij dat gebrek noemt. Noem je alleen wie vastloopt of een omweg nodig heeft, zeg dat dan in de zin zelf, zoals "een omweg is nodig voor mensen die niet zien"; schrijf niet "dat treft" of "dat geldt voor" met een groep minder dan het rapport. Twee gebreken aan hetzelfde onderdeel mag je als één noemen.
 4. Wat de eigenaar nu moet doen, en wat daarvan eerst komt.
 5. Wat het onderzoek niet heeft kunnen vaststellen.
 

@@ -1590,6 +1590,8 @@ const OWN_CSS = [
   "nldd-sidebar-section:not([collapsed]) #inhoud-openen { display: none; }",
   "/* nldd-lint-disable-next-line stylesheet-no-own -- nldd-sidebar-section kan een knop nog niet alleen in de ingeklapte stand tonen */",
   "nldd-sidebar-section[collapsed] #inhoud-kop { display: none; }",
+  "/* nldd-lint-disable-next-line stylesheet-no-own -- nldd-rich-text breekt een lang woord zonder spatie (een hash, een adres) nog niet af, en dan wordt de pagina bij ruimere tekstafstand breder dan een smal scherm */",
+  "nldd-rich-text :is(dd, dt, p, li) { overflow-wrap: anywhere; }",
 ].join("\n");
 
 /**

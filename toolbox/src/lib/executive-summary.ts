@@ -24,6 +24,8 @@ export type SummaryStaleReason = "unchecked" | "report" | "task" | "unread" | "r
 export interface SummaryReading {
   reportSha256?: string;
   proposalSha256?: string;
+  /** The task the reader worked from, by the hash the task gave: a reading made under an earlier task does not count. */
+  taskSha256?: string;
   model?: string;
   sentences: { n: number; verdict: "gedragen" | "niet-gedragen"; quotes?: string[]; noteNl?: string }[];
 }
