@@ -308,15 +308,15 @@ export function renderHtml(input: Evaluation, decisions: DecisionLayer = { decis
     shots: options.pageShots ?? {},
     frame: options.frame ?? "standalone",
   };
+  // The same order as the other forms of the report (`REPORT_ORDER`): what to do, the defects in overview and by place, how each criterion came out, how the evaluation was made.
   const report: Chapter[] = [
-    ...(evaluation.site.descriptionNl ? [{ id: "over-deze-website", titleNl: "Over deze website", body: rich(paragraphs(evaluation.site.descriptionNl)) }] : []),
-    // The reader sees the own site first, with the defects on it.
-    { id: "per-pagina", titleNl: context.defects.size > 0 || evaluation.defects ? "Gebreken per pagina" : "Bevindingen per pagina", body: byPage(context) },
     { id: "wat-nu", titleNl: "Wat nu", body: whatNext(context) },
     ...(derived.measures ? [{ id: "maatregelen", titleNl: REPORT_TEXT.measures.title, body: measures(context) }] : []),
-    // The criteria follow the work list directly: what is wrong, then how each criterion came out.
-    { id: "resultaten", titleNl: "Resultaten per criterium", body: results(context) },
+    { id: "overzicht", titleNl: REPORT_TEXT.defectsOverview, body: defectsOverview(context) },
     { id: "per-onderdeel", titleNl: "Bevindingen per onderdeel", body: byComponent(context) },
+    { id: "per-pagina", titleNl: context.defects.size > 0 || evaluation.defects ? "Gebreken per pagina" : "Bevindingen per pagina", body: byPage(context) },
+    { id: "resultaten", titleNl: "Resultaten per criterium", body: results(context) },
+    ...(evaluation.site.descriptionNl ? [{ id: "over-deze-website", titleNl: "Over deze website", body: rich(paragraphs(evaluation.site.descriptionNl)) }] : []),
     { id: "onderzoeksgegevens", titleNl: "Onderzoeksgegevens", body: evaluationFacts(context) },
     { id: "scope", titleNl: "Scope", body: scope(context) },
     { id: "basisniveau", titleNl: "Basisniveau van ondersteuning", body: baseline(context) },
@@ -527,27 +527,14 @@ const linkRow = (id: string, titleNl: string, supporting: string): string =>
     children: [el({ tag: "nldd-text-cell", attrs: { text: plain(titleNl), "supporting-text": supporting ? plain(supporting) : undefined } }), el({ tag: "nldd-icon-cell", attrs: { icon: "chevron-right", size: 20, color: "secondary" } })].join(""),
   });
 
-/** Blocks two by two, side by side on a wide screen; one left over gets the width. */
-function halves(blocks: string[]): string[] {
-  const sections: string[] = [];
-  for (let index = 0; index < blocks.length; index += 2) {
-    const [left, right] = [blocks[index]!, blocks[index + 1]];
-    sections.push(
-      right === undefined
-        ? el({ tag: "nldd-simple-section", attrs: { "padding-top": 0 }, children: left })
-        : el({ tag: "nldd-one-half-one-half-section", attrs: { "padding-top": 0 }, children: [stack(left, { slot: "left" }), stack(right, { slot: "right" })].join("") }),
-    );
-  }
-  return sections;
-}
-
 /**
  * What the weighing adds to the summary, only when the findings were weighed: at which core task
  * a group is stopped and why, what a group can not use beside the tasks, and the defects counted
  * per core task and per group. The answer comes first, each stopped task is a card of its own, and
  * what explains a table stands under it in smaller letters.
  */
-function weighingSections(context: Context): string[] {
+/** The weighing in two parts: who is stopped, for the summary, and the tables per task and per group, for the chapter that gives the overview of the defects. */
+function weighingSections(context: Context): { stopped: string[]; overview: string } {
   const { derived, defects } = context;
   const weighing = derived.weighing!;
   const labels = REPORT_TEXT.weighing;
@@ -632,9 +619,16 @@ function weighingSections(context: Context): string[] {
     text(attr(labels.perGroupNote), { size: "sm", color: "secondary" }),
   ].join("");
   const meaning = [title("Wat betekent dit", 3, 4), spacer(8), rich(derived.meaningNl.map((paragraph) => `<p>${inline(paragraph)}</p>`).join(""))].join("");
-  // Without a stopped task the account is short, and stands beside the table per core task.
-  const blocks = [...(stopped ? [] : [[head, spacer(16), notes].join("")]), ...(beside ? [beside] : []), perTask, perGroup, meaning];
-  return [...(stopped ? [stopped] : []), ...halves(blocks)];
+  // Without a stopped task the account is short: the answer and what it rests on.
+  const none = el({ tag: "nldd-simple-section", attrs: { "padding-top": 0 }, children: [head, spacer(16), notes].join("") });
+  return { stopped: [stopped ?? none], overview: [...(beside ? [beside] : []), perTask, perGroup, meaning].join(spacer(40)) };
+}
+
+/** The chapter after the work list: the defects counted per core task and per group, or the heaviest ones when nothing was weighed. */
+function defectsOverview(context: Context): string {
+  const { derived } = context;
+  if (derived.defects && derived.weighing) return weighingSections(context).overview;
+  return [title(derived.defects ? "Zwaarste gebreken" : "Zwaarste bevindingen", 3, 4), spacer(12), topList(context), spacer(40), title("Wat betekent dit", 3, 4), spacer(8), rich(derived.meaningNl.map((paragraph) => `<p>${inline(paragraph)}</p>`).join(""))].join("");
 }
 
 function topList(context: Context): string {
@@ -696,33 +690,15 @@ function summary(context: Context): string {
       tag: "nldd-one-third-two-thirds-section",
       attrs: { id: "samenvatting" },
       children: [
-        stack([title("Samenvatting", 2, 2), spacer(12), text(inline(derived.statusSentenceNl), { size: "lg" })].join(""), { slot: "header" }),
+        // A summary written for the leadership opens the report; without one the sentence loep makes itself does.
+        stack([title("Samenvatting", 2, 2), spacer(12), ...(derived.executive ? [rich(derived.executive.paragraphs.map((paragraph) => `<p>${inline(paragraph)}</p>`).join("")), spacer(8), text(inline(derived.executive.noteNl), { size: "sm", color: "secondary" })] : [text(inline(derived.statusSentenceNl), { size: "lg" })])].join(""), { slot: "header" }),
         stack(statusCard(context), { slot: "left" }),
         stack([numberCards(context), ...(derived.defects ? [spacer(12), text(`Het onderzoek vond ${inline(derived.defects.countsNl)}.`, { color: "secondary" })] : []), ...(context.frame === "standalone" ? [spacer(24), fingerprintImage(context)] : [])].join(""), { slot: "right" }),
       ].join(""),
     }),
-    // With a weighing the summary says who is stopped where; without one it lists the heaviest defects.
-    ...(derived.defects && derived.weighing
-      ? weighingSections(context)
-      : [
-      el({
-      tag: "nldd-one-half-one-half-section",
-      attrs: { "padding-top": 0 },
-      children: [
-        stack([title(derived.defects ? "Zwaarste gebreken" : "Zwaarste bevindingen", 3, 4), spacer(12), topList(context)].join(""), { slot: "left" }),
-        stack([title("Wat betekent dit", 3, 4), spacer(8), rich(derived.meaningNl.map((paragraph) => `<p>${inline(paragraph)}</p>`).join(""))].join(""), { slot: "right" }),
-      ].join(""),
-    }),
-        ]),
-    el({
-      tag: "nldd-simple-section",
-      attrs: { "padding-top": 0 },
-      children: [
-        ...(forB ? [forB, spacer(24)] : []),
-        ...VERSIONS.flatMap((version) => [title(`WCAG ${version} niveau A en AA (${evaluation.summary[version].total} criteria)`, 3, 5), spacer(8), scoreTable(context, version), spacer(24)]),
-        text(inline(derived.scoreNoteNl), { size: "sm", color: "secondary" }),
-      ].join(""),
-    }),
+    // With a weighing the summary says who is stopped where; the tables and the scores stand in their own chapters.
+    ...(derived.defects && derived.weighing ? weighingSections(context).stopped : []),
+    ...(forB ? [el({ tag: "nldd-simple-section", attrs: { "padding-top": 0 }, children: forB })] : []),
   ].join("\n");
 }
 
@@ -1320,6 +1296,10 @@ function criterionBlock(criterion: CriterionResult, context: Context): string {
 function results(context: Context): string {
   const { evaluation, derived, quiet } = context;
   const parts = [
+    // How the criteria came out per principle, before each of them.
+    ...VERSIONS.flatMap((version) => [title(`WCAG ${version} niveau A en AA (${evaluation.summary[version].total} criteria)`, 3, 5), spacer(8), scoreTable(context, version), spacer(24)]),
+    text(inline(derived.scoreNoteNl), { size: "sm", color: "secondary" }),
+    spacer(32),
     rich(`<p>${attr(REPORT_TEXT.overviewIntro)}</p>`),
     spacer(16),
     table(

@@ -77,7 +77,7 @@ export const scopeFrameNl = (frame: ScopeFrame): string =>
 export const REPORT_TEXT = {
   scopeFrames: "Ingesloten vensters, per venster wat het is en of het meetelt",
   title: "Toegankelijkheidsonderzoek",
-  overview: "Overzicht van de gebreken",
+  defectsOverview: "Overzicht van de gebreken",
   /** Under the summary for the leadership: who wrote it and what holds it to the report. `{model}` is the model the writer gave. */
   executiveNote: "Deze samenvatting is geschreven door een taalmodel{model}, uit de tekst van dit rapport. Een script heeft haar aan het rapport gehouden: de status, de getallen en de gebreken waarop ze rust komen uit het onderzoek. Wat hieronder staat, is de herleidbare versie.",
   concept: "Concept, niet afgetekend",
@@ -1810,7 +1810,7 @@ function reportBlocks(input: Evaluation, decisions: DecisionLayer = { decisions:
   for (const version of VERSIONS) lines.push(`**WCAG ${version} niveau A en AA (${evaluation.summary[version].total} criteria)**`, "", ...scoreTable(evaluation, version), "");
   lines.push(derived.scoreNoteNl, "");
   begin("overview");
-  section(REPORT_TEXT.overview);
+  section(REPORT_TEXT.defectsOverview);
   if (grouping && weighing) {
     // What stops a group at a core task stands above; here what a group can not use beside the tasks.
     if (weighing.beside) lines.push(`### ${REPORT_TEXT.weighing.beside}`, "", ...table(["Gebrek", "Criterium", "Pagina's"], weighing.beside.defectIds.map((id) => defects.get(id)!).map((defect) => [`[${esc(defect.titleNl)}](#${defect.id})`, `${defect.mainCriterion}${alsoText(defect)}`, grouping.derived.pagesNl[defect.id]!])), "", weighing.beside.noteNl, "");

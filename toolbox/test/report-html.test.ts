@@ -149,13 +149,16 @@ test("a weighed report says in the summary who is stopped at which core task, an
   assert.ok(!/Niet vastgesteld:|Dit hoort bij|van de drie gevolgen/.test(html));
 });
 
-test("without a stopped task the account is short and stands beside the table per core task", () => {
+test("without a stopped task the account is short, and the tables per core task and per group stand in the overview of the defects", () => {
   const evaluation = weighed(grouped());
   evaluation.weighing!.together = [];
   for (const finding of evaluation.criteria.flatMap((criterion) => criterion.findings)) if (finding.weighing!.task !== null && finding.weighing!.affected.some((entry) => entry.consequence === "cannot")) Object.assign(finding.weighing!, { task: null, blocksNl: undefined });
   const full = renderHtml(evaluation);
   const html = full.slice(full.indexOf("<body>"), full.indexOf("<script>"));
-  assert.match(html, /<nldd-one-half-one-half-section padding-top="0"><nldd-container slot="left"><nldd-title size="display-4" heading-level="3" text="Wie loopt vast"><\/nldd-title><nldd-spacer size="8"><\/nldd-spacer><nldd-text size="lg" weight="medium">Bij geen van de 2 kerntaken loopt een groep bezoekers vast\.<\/nldd-text>(?:(?!<\/nldd-container>).)*<\/nldd-container><nldd-container slot="right"><nldd-title size="display-4" heading-level="3" text="Gebreken per kerntaak">/);
+  assert.match(html, /<nldd-simple-section padding-top="0"><nldd-title size="display-4" heading-level="3" text="Wie loopt vast"><\/nldd-title><nldd-spacer size="8"><\/nldd-spacer><nldd-text size="lg" weight="medium">Bij geen van de 2 kerntaken loopt een groep bezoekers vast\.<\/nldd-text>/);
+  // The table per core task is in the chapter after the work list, not in the summary.
+  assert.ok(html.indexOf('text="Gebreken per kerntaak"') > html.indexOf('id="overzicht"'), "the tables stand in the overview");
+  assert.ok(html.indexOf('id="overzicht"') > html.indexOf('id="wat-nu"'), "the overview follows the work list");
   assert.ok(!html.includes('<nldd-list accessible-label="Waardoor ze vastlopen"'), "no card without a stopped task");
   // The headings stay in order: no level is skipped.
   const levels = headingLevels(full);
