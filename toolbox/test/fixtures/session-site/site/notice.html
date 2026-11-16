@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="nl">
+<head><meta charset="utf-8"><title>Melding</title></head>
+<body>
+<main>
+<h1>Een pagina met een melding die soms al weg is</h1>
+<button id="toggle" type="button" aria-expanded="false">Meer</button>
+</main>
+<script>
+  // The notice only shows when the address asks for it: the same page with and without it.
+  if (new URLSearchParams(location.search).has("melding")) {
+    const notice = document.createElement("div");
+    notice.id = "notice";
+    notice.innerHTML = '<p>Deze site gebruikt cookies.</p><button id="ok" type="button">Oké</button>';
+    document.body.prepend(notice);
+    document.getElementById("ok").addEventListener("click", () => notice.remove());
+  }
+  const toggle = document.getElementById("toggle");
+  toggle.addEventListener("click", () => toggle.setAttribute("aria-expanded", "true"));
+</script>
+</body>
+</html>

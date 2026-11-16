@@ -900,9 +900,24 @@ async function resolveStepWaiting(surface: Surface, step: Step): Promise<Awaited
   }
 }
 
+/**
+ * How many steps at the start of a recipe close a blocker of the site model: the same steps as that
+ * blocker's recipe. The sweep and check-site close the blockers before a recipe runs, so when such a
+ * step finds nothing, the blocker is already gone and its steps are skipped (#623).
+ */
+export const blockerSteps = new WeakMap<Step[], number>();
+
 export async function runSteps(env: Env, surface: Surface, steps: Step[], images: Images, matches?: string[], speech?: LastStepSpeech): Promise<{ index: number; command: string; reason: string; timedOut?: boolean } | null> {
+  const closing = blockerSteps.get(steps) ?? 0;
+  let skipTo = -1;
   for (const [index, step] of steps.entries()) {
+    if (index < skipTo) continue;
     const info = step.target ? await resolveStepWaiting(surface, step) : null;
+    if (step.target && !info && index < closing) {
+      skipTo = closing;
+      matches?.push(`stap ${index + 1} tot en met ${closing} overgeslagen: de blokkade die ze sluiten, was er al niet meer`);
+      continue;
+    }
     if (step.target && !info) return { index, command: step.command, reason: STEP_NOT_FOUND_NL };
     // The reader listens in the tab itself, and in the embedded frame the step acts in.
     const listening: Surface["page"][] = [];
@@ -916,6 +931,12 @@ export async function runSteps(env: Env, surface: Surface, steps: Step[], images
       await execute({ env, surface, images, target: info }, step.command, step.args, step.options, step.locators ?? null);
       await leftScope(env, surface);
     } catch (error) {
+      // A step that closes a blocker and cannot act on its element: the blocker is there in the code but not in view, so it is gone as well.
+      if (index < closing) {
+        skipTo = closing;
+        matches?.push(`stap ${index + 1} tot en met ${closing} overgeslagen: de blokkade die ze sluiten, stond niet in beeld (${firstLine(error)})`);
+        continue;
+      }
       return { index, command: step.command, reason: firstLine(error), ...(isTimeout(error) ? { timedOut: true } : {}) };
     } finally {
       for (const page of listening) {

@@ -3,9 +3,9 @@ import { mkdtemp, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Browser, BrowserContext, Frame, Page } from "playwright";
-import { readJson } from "../lib/canonical.ts";
+import { canonicalJson, readJson } from "../lib/canonical.ts";
 import { frameAddress, POSTCONDITION_NOT_HELD_NL, type Postcondition } from "../lib/sitemodel.ts";
-import { runSteps, type LastStepSpeech, type Recipe } from "./daemon.ts";
+import { blockerSteps, runSteps, type LastStepSpeech, type Recipe } from "./daemon.ts";
 import { Images, type StartState, type Step } from "./observations.ts";
 import { DEFAULT_DAEMON_LIMITS, Politeness, scopeForRun, type DaemonLimits } from "./safety.ts";
 import { openSurface, SESSION_INPAGE_PATH, topSurface, type Env, type Surface } from "./surface.ts";
@@ -27,7 +27,24 @@ export async function loadRecipes(runDir: string): Promise<Record<string, Recipe
   const recipes: Record<string, Recipe> = {};
   if (!existsSync(dir)) return recipes;
   for (const file of (await readdir(dir)).filter((name) => name.endsWith(".json")).sort()) recipes[file.slice(0, -5)] = await readJson<Recipe>(join(dir, file));
+  await markBlockerSteps(runDir, recipes);
   return recipes;
+}
+
+const sameStep = (first: Step, second: Step): boolean => first.command === second.command && canonicalJson(first.args) === canonicalJson(second.args) && canonicalJson(first.target) === canonicalJson(second.target);
+
+/** Note for each recipe how many of its first steps are the recipe of a blocker in site.json (`blockerSteps`). The recipes themselves stay as they are. */
+async function markBlockerSteps(runDir: string, recipes: Record<string, Recipe>): Promise<void> {
+  const path = join(runDir, "site.json");
+  if (!existsSync(path)) return;
+  const model = await readJson<{ blockers?: { recipe?: string | null }[] }>(path).catch(() => null);
+  const names = new Set((model?.blockers ?? []).map((blocker) => blocker.recipe).filter((name): name is string => typeof name === "string"));
+  const closers = [...names].map((name) => recipes[name]?.steps.slice(0, Math.max(0, recipes[name]!.steps.findIndex((step) => step.command === "goto")) || recipes[name]!.steps.length) ?? []).filter((steps) => steps.length > 0);
+  for (const [name, recipe] of Object.entries(recipes)) {
+    if (names.has(name)) continue;
+    const length = Math.max(0, ...closers.map((steps) => (steps.length < recipe.steps.length && steps.every((step, index) => sameStep(step, recipe.steps[index]!)) ? steps.length : 0)));
+    if (length > 0) blockerSteps.set(recipe.steps, length);
+  }
 }
 
 /** Everything a replay shares with a session: the scope of the run and the spacing between navigations. */
