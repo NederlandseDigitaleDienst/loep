@@ -3,7 +3,7 @@ import { execFile } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { after, before, test } from "node:test";
+import { after, before, mock, test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { chromium as chromiumType, firefox, webkit, type Page } from "playwright";
@@ -16,7 +16,7 @@ import { probeTrigger } from "../src/instruments/dialog.ts";
 import type { TextScaling } from "../src/instruments/textsize.ts";
 import { canonicalJson, sha256 } from "../src/lib/canonical.ts";
 import { indexObservations } from "../src/lib/verdict.ts";
-import { Daemon, ownedSessionNl, tooManySessionsNl, type Response } from "../src/session/daemon.ts";
+import { ABANDONED_AFTER_MINUTES, abandonedNl, Daemon, ownedSessionNl, tooManySessionsNl, type Response } from "../src/session/daemon.ts";
 import type { Observation } from "../src/session/observations.ts";
 import { scopeForRun } from "../src/session/safety.ts";
 import { printedScope } from "../src/session/safety.ts";
@@ -622,6 +622,27 @@ test("a session too many is refused with what to do, and a start that counted on
     await small.handle({ op: "stop", session: "b-111" });
     assert.equal((await small.handle({ op: "start", session: "b-112" })).ok, true, "a place came free");
   } finally {
+    await small.close();
+  }
+});
+
+test("a session whose agent is gone, past its minutes and without a request for a while, is stopped to make room; one that never measured stays", async () => {
+  const small = await Daemon.create(run, { hosts: [new URL(site.origin).host], baseUrl: `${site.origin}/`, strict: false }, { maxSessions: 2, navigationDelayMs: 0, secondBrowsers: false });
+  try {
+    assert.equal((await small.handle({ op: "start", session: "regie" })).ok, true);
+    assert.equal((await small.handle({ op: "start", session: "b-121", limits: { maxMinutes: 1 } })).ok, true);
+    assert.equal((await small.handle({ op: "command", session: "b-121", command: "open", args: ["/"], options: {} })).ok, true);
+    // Within its time, or soon after, the session keeps its place.
+    assert.equal((await small.handle({ op: "start", session: "b-122" })).print.error, tooManySessionsNl(2, 2));
+    // Its agent was stopped from outside: no request came, and its minutes are long over.
+    mock.timers.enable({ apis: ["Date"], now: Date.now() + (1 + ABANDONED_AFTER_MINUTES + 1) * 60_000 });
+    const started = await small.handle({ op: "start", session: "b-122" });
+    assert.equal(started.ok, true);
+    assert.equal(started.print.released, abandonedNl(["b-121"]));
+    assert.match(started.print.released as string, /^sessie b-121 stond al minstens 15 minuten over haar tijd zonder verzoek en is gestopt om plaats te maken/);
+    assert.deepEqual(((await small.handle({ op: "list" })).print.sessions as { session: string }[]).map((entry) => entry.session).sort(), ["b-122", "regie"], "the session that never measured stays");
+  } finally {
+    mock.timers.reset();
     await small.close();
   }
 });

@@ -65,6 +65,13 @@ export const ownedSessionNl = (name: string, wrongKey: boolean): string =>
 export const tooManySessionsNl = (running: number, max: number): string =>
   `er lopen al ${running} sessies en dit sessieproces laat er hooguit ${max} tegelijk toe. Wacht tot een agent zijn sessie stopt, of stop een sessie die is blijven hangen (session list toont ze, session stop --session <naam> stopt er een). Start naast je eigen sessie hooguit ${Math.max(max - 1, 1)} ${max > 2 ? "agents" : "agent"} tegelijk. Meer kan alleen als de eigenaar van de site het toestaat: stop dan alle sessies (session stop) en start opnieuw met session start --max-sessions <aantal>`;
 
+/** How long a session past its minutes may sit without a request before a new start may stop it. */
+export const ABANDONED_AFTER_MINUTES = 15;
+
+/** What a start says when it stopped sessions whose agent was gone. */
+export const abandonedNl = (names: string[]): string =>
+  `${names.length === 1 ? "sessie" : "sessies"} ${names.join(", ")} ${names.length === 1 ? "stond" : "stonden"} al minstens ${ABANDONED_AFTER_MINUTES} minuten over ${names.length === 1 ? "haar" : "hun"} tijd zonder verzoek en ${names.length === 1 ? "is" : "zijn"} gestopt om plaats te maken; wie zo'n sessie weer start, gaat verder met wat er gebruikt was`;
+
 export interface Response {
   ok: boolean;
   print: Record<string, unknown>;
@@ -89,6 +96,8 @@ interface Session {
   blockedTotal: number;
   /** The slow methods of this session that run in the background. */
   jobs: Jobs;
+  /** When the agent of this session last asked anything of it, also a command that was refused. */
+  lastActiveAt: number;
 }
 
 /** A saved state: how to get from a fresh page to the state a session was in. */
@@ -221,6 +230,7 @@ export class Daemon {
       if (request.op === "stop") return await this.stop(request.session);
       const session = this.sessions.get(name);
       if (!session) throw new Error(`sessie "${name}" is niet gestart; start hem met: session start --run <run> --session ${name}`);
+      session.lastActiveAt = Date.now();
       if (request.op === "extend") return await this.extend(session, request.reason);
       // One command at a time per session; other sessions carry on.
       const turn = session.queue.then(() => this.command(session, request.command ?? "", request.args ?? [], request.options ?? {}));
@@ -326,6 +336,7 @@ export class Daemon {
       }
       return { ok: true, print: { ...this.budget(existing), ...(existing.models.length > 0 ? { model: existing.models.join(", ") } : {}), key: existing.key, note: "de sessie liep al; je gaat verder met je eigen sessie", limits: { maxSessions: this.limits.maxSessions } } };
     }
+    const released = this.sessions.size >= this.limits.maxSessions ? await this.releaseAbandoned() : [];
     if (this.sessions.size >= this.limits.maxSessions) throw new Error(tooManySessionsNl(this.sessions.size, this.limits.maxSessions));
     const log = new ObservationLog(this.runDir, name);
     await log.init();
@@ -348,7 +359,7 @@ export class Daemon {
     // Who starts the session says which model it runs on; a later start on another model is added, not put in its place.
     const models = (resumed && Array.isArray(resumed.models) ? resumed.models : []).map(cleanModel).filter((entry): entry is string => entry !== null);
     if (model && !models.includes(model)) models.push(model);
-    const session: Session = { name, log, limits: kept, extensions, startedAt: resumed ? Date.parse(resumed.startedAt!) : Date.now(), models, key: randomBytes(4).toString("hex"), commands: resumed?.commands ?? 0, surface: null, queue: Promise.resolve(), blockedTotal: resumed?.blocked ?? 0, jobs: new Jobs() };
+    const session: Session = { name, log, limits: kept, extensions, startedAt: resumed ? Date.parse(resumed.startedAt!) : Date.now(), models, key: randomBytes(4).toString("hex"), commands: resumed?.commands ?? 0, surface: null, queue: Promise.resolve(), blockedTotal: resumed?.blocked ?? 0, jobs: new Jobs(), lastActiveAt: Date.now() };
     this.sessions.set(name, session);
     await this.writeSessionFile(session);
     if (!this.toolsRecorded) {
@@ -366,8 +377,22 @@ export class Daemon {
         ...printedScope(this.env.scope.hosts),
         observations: `${log.relativeDir}/<nr>.json`,
         limits: { commandTimeoutSeconds: this.limits.commandTimeoutMs / 1000, navigationDelayMs: this.limits.navigationDelayMs, maxSessions: this.limits.maxSessions },
+        ...(released.length > 0 ? { released: abandonedNl(released) } : {}),
       },
     };
+  }
+
+  /**
+   * Stop the sessions whose agent is gone, to make room: past their minutes, so every measuring
+   * command is refused, and nothing asked of them for a while. An agent that is stopped from outside
+   * (the workflow, a full disk) cannot stop its session, and it would hold a place for the rest of
+   * the run. A session that never measured anything, such as the one of whoever runs the evaluation, stays.
+   */
+  private async releaseAbandoned(): Promise<string[]> {
+    const now = Date.now();
+    const abandoned = [...this.sessions.values()].filter((session) => session.commands > 0 && (now - session.startedAt) / 60_000 >= session.limits.maxMinutes + ABANDONED_AFTER_MINUTES && (now - session.lastActiveAt) / 60_000 >= ABANDONED_AFTER_MINUTES);
+    for (const session of abandoned) await this.stop(session.name);
+    return abandoned.map((session) => session.name);
   }
 
   private async stop(name: string | undefined): Promise<Response> {
