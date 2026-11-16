@@ -24,7 +24,7 @@ Een meetblad zegt iets over loep en niets over de site. Er staan regelnummers, c
 
 `LOEP` is `node <map van deze plugin>/toolbox/src/cli.ts`. De verzameling is `NederlandseDigitaleDienst/loep-meetbladen`, tenzij de gebruiker een andere noemt.
 
-1. **Vraag wat er ingestuurd wordt, en vraag altijd ook naar vroeger.** Eén onderzoek of snelle meting (de map ervan), of alles onder een map. Noemt de gebruiker één onderzoek, vraag dan of er eerdere zijn en in welke map ze staan. Kies die map niet zelf: een map hoger kan onderzoeken van andere sites bevatten. De verzameling heeft het meest aan oude onderzoeken, omdat ze met andere versies van loep zijn gemaakt.
+1. **Vraag wat er ingestuurd wordt, en vraag altijd ook naar vroeger.** Eén onderzoek of snelle meting (de map ervan), of alles onder een map. Noemt de gebruiker één onderzoek, vraag dan of er eerdere zijn en in welke map ze staan. Kies die map niet zelf: een map hoger kan onderzoeken van andere sites bevatten. Eerdere onderzoeken tellen even zwaar mee als nieuwe: het zijn er meer, een site van toen is niet opnieuw te meten, en samen laten ze zien of een regel na een wijziging in loep betrouwbaarder werd.
 
 2. **Laat zien wat erop komt.** Kies één van de twee. Dit schrijft en verstuurt niets:
 
