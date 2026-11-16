@@ -162,8 +162,21 @@ export interface Contribution {
   leaks: string[];
   /** Where the sheet was written, when asked. */
   file: string | null;
+  /** What writing changed in that folder: a sheet that was not there, one that differed, or one that stood there as it is. Null when nothing was written. */
+  state: SheetState | null;
   /** When the run was evaluated: of a run that stands in two folders, the sheet of the later one counts. */
   evaluatedAt: string;
+}
+
+/** What writing a sheet changed in the folder it went to. Sending is a commit of that folder, so this is what the commit will hold. */
+export type SheetState = "new" | "changed" | "same";
+
+function writeSheet(outDir: string, sheet: RunSheet): { file: string; state: SheetState } {
+  const file = join(outDir, `${sheet.id}.json`);
+  const text = `${JSON.stringify(sheet, null, 2)}\n`;
+  const state: SheetState = !existsSync(file) ? "new" : readFileSync(file, "utf8") === text ? "same" : "changed";
+  if (state !== "same") writeFileSync(file, text);
+  return { file, state };
 }
 
 /** Make the sheet of a run and, with `outDir`, write it there under its id. A sheet with a word of the site in it is refused. */
@@ -174,11 +187,9 @@ export function contribute(runDir: string, options: { outDir?: string | undefine
   const site = (source.evaluation as { site?: { baseUrl?: string; name?: string; organisation?: string } }).site ?? {};
   const leaks = sheetLeaks(sheet, { baseUrl: site.baseUrl ?? source.quick?.summary.site, names: [site.name, site.organisation] });
   const evaluatedAt = source.evaluation.evaluatedAt ?? "";
-  if (leaks.length > 0 || !options.outDir) return { sheet, leaks, file: null, evaluatedAt };
+  if (leaks.length > 0 || !options.outDir) return { sheet, leaks, file: null, state: null, evaluatedAt };
   mkdirSync(options.outDir, { recursive: true });
-  const file = join(options.outDir, `${sheet.id}.json`);
-  writeFileSync(file, `${JSON.stringify(sheet, null, 2)}\n`);
-  return { sheet, leaks, file, evaluatedAt };
+  return { sheet, leaks, ...writeSheet(options.outDir, sheet), evaluatedAt };
 }
 
 /**
@@ -215,6 +226,10 @@ export interface ManyContributions {
   /** Sheets, one per run: the same run in two folders gives one sheet, of the folder that was evaluated last. */
   sheets: RunSheet[];
   written: number;
+  /** Of the sheets written: how many were not in the folder yet, how many differed from what stood there, and how many stood there as they are. */
+  added: number;
+  changed: number;
+  unchanged: number;
   /** Runs whose sheet held something of their site: not written. Named by the id of the sheet, not by the folder. */
   refused: { id: string; leaks: string[] }[];
   /** Runs and folders that could not be read. */
@@ -230,7 +245,7 @@ export interface ManyContributions {
  */
 export function contributeAll(root: string, options: { outDir?: string | undefined; key: string }): ManyContributions {
   const found = runsUnder(root);
-  const result: ManyContributions = { runs: found.runs.length, sheets: [], written: 0, refused: [], failed: found.unreadable, duplicates: 0 };
+  const result: ManyContributions = { runs: found.runs.length, sheets: [], written: 0, added: 0, changed: 0, unchanged: 0, refused: [], failed: found.unreadable, duplicates: 0 };
   const newest = new Map<string, { sheet: RunSheet; at: string }>();
   for (const run of found.runs) {
     let one: Contribution;
@@ -250,25 +265,33 @@ export function contributeAll(root: string, options: { outDir?: string | undefin
   if (options.outDir) {
     mkdirSync(options.outDir, { recursive: true });
     for (const sheet of result.sheets) {
-      writeFileSync(join(options.outDir, `${sheet.id}.json`), `${JSON.stringify(sheet, null, 2)}\n`);
+      const { state } = writeSheet(options.outDir, sheet);
       result.written += 1;
+      result[state === "new" ? "added" : state === "changed" ? "changed" : "unchanged"] += 1;
     }
   }
   return result;
 }
 
+/** A count with its noun: "1 regel", "3 regels". */
+const counted = (count: number, one: string, many: string): string => `${count} ${count === 1 ? one : many}`;
+
+/** Said after writing, where someone has just agreed to sending: what the folder now holds, and that the sending is still to come. */
+const NOT_SENT = "loep verstuurt zelf niets: insturen is de commit en de push van die map.";
+
 export function manyContributionsNl(result: ManyContributions, outDir: string | undefined): string {
   const sites = new Set(result.sheets.map((sheet) => sheet.siteKey)).size;
   const versions = [...new Set(result.sheets.map((sheet) => sheet.toolbox.version ?? "onbekend"))].sort((a, b) => a.localeCompare(b, "en", { numeric: true }));
   return [
-    `${result.runs} afgeronde onderzoeken en snelle metingen gevonden, ${result.sheets.length} meetbladen van ${sites} ${sites === 1 ? "site" : "sites"}${result.duplicates > 0 ? ` (${result.duplicates} keer dezelfde run in een andere map)` : ""}.`,
+    `${result.runs} afgeronde onderzoeken en snelle metingen gevonden, ${result.sheets.length} meetbladen van ${sites} ${sites === 1 ? "site" : "sites"}${result.duplicates > 0 ? ` (${result.duplicates === 1 ? "1 run staat" : `${result.duplicates} runs staan`} ook in een andere map en ${result.duplicates === 1 ? "telt" : "tellen"} één keer)` : ""}.`,
     ...(result.sheets.length > 0 ? [`Versies van loep: ${versions.join(", ")}.`] : []),
     "Op een meetblad: de uitkomst per criterium, het taalmodel per rol, wat beoordelaars over een regel zeiden, welke regels afkeurden en of de regelsets het eens waren, gebreken geteld naar ernst en eigenaar, wat mensen besloten (alleen aantallen), en de duur per stap.",
     "Niet erop: het adres en de naam van de site, pagina's, selectors, de tekst van een oordeel of bevinding, schermafbeeldingen, en wie tekende of besloot.",
+    "Elke site staat erop als een sleutel die alleen op deze machine uit het adres te maken is.",
     ...(result.refused.length > 0 ? [`GEWEIGERD: ${result.refused.length} ${result.refused.length === 1 ? "meetblad bevat" : "meetbladen bevatten"} iets van de site en ${result.refused.length === 1 ? "is" : "zijn"} niet geschreven (${result.refused.map((entry) => entry.id).join(", ")}). Meld dit bij de makers van loep.`] : []),
     ...(result.failed > 0 ? [`${result.failed} ${result.failed === 1 ? "map was" : "mappen waren"} niet te lezen.`] : []),
     "Let op: is het rapport van een onderzoek openbaar, dan kan iemand met toegang tot de verzameling het meetblad eraan koppelen, door de uitkomsten per criterium naast elkaar te leggen.",
-    outDir ? `Geschreven: ${result.written} in ${outDir}. Er is niets verstuurd.` : "Niets geschreven. Met --out <map> komen de meetbladen in die map. Er wordt niets verstuurd.",
+    outDir ? `In ${outDir}: ${result.added} nieuw, ${result.changed} bijgewerkt, ${result.unchanged} ${result.unchanged === 1 ? "stond" : "stonden"} er al ongewijzigd. ${NOT_SENT}` : "Niets geschreven. Met --out <map> komen de meetbladen in die map. Er wordt niets verstuurd.",
     "",
   ].join("\n");
 }
@@ -280,17 +303,17 @@ export function contributionNl(result: Contribution): string {
   const models = sheet.models.length > 0 ? `, model ${sheet.models.join(" en ")}` : "";
   return [
     sheet.quick && sheet.criteria.length === 0
-      ? `Meetblad ${sheet.id} van een snelle meting: loep ${sheet.toolbox.version ?? "onbekend"}, ${sheet.month}, ${sheet.quick.pages} pagina's.`
-      : `Meetblad ${sheet.id}: loep ${sheet.toolbox.version ?? "onbekend"}, ${sheet.month}${models}, ${sheet.size.pages} pagina's, ${sheet.criteria.length} criteria waarvan ${failed} afgekeurd.`,
+      ? `Meetblad ${sheet.id} van een snelle meting: loep ${sheet.toolbox.version ?? "onbekend"}, ${sheet.month}, ${counted(sheet.quick.pages, "pagina", "pagina's")}.`
+      : `Meetblad ${sheet.id}: loep ${sheet.toolbox.version ?? "onbekend"}, ${sheet.month}${models}, ${counted(sheet.size.pages, "pagina", "pagina's")}, ${sheet.criteria.length} criteria waarvan ${failed} afgekeurd.`,
     sheet.quick && sheet.criteria.length === 0
       ? `Erop: ${sheet.quick.rules.length} regels en proeven met het aantal plekken op een sterke en op een zwakke grond${sheet.quick.comparison ? ", en hoe de vergelijking met de basislijn afliep" : ""}.`
-      : `Erop: de uitkomst per criterium, het taalmodel per rol, ${sheet.rulings.length} uitspraken van een beoordelaar over een regel, ${sheet.sessions.length} regels die in een sessie afkeurden en of de andere regelsets het daarmee eens waren, ${sheet.sweep.length} regels uit de veegronde, ${sheet.defects.total} gebreken geteld naar ernst en eigenaar, wat mensen besloten en lieten nameten (alleen aantallen), en de duur per stap.`,
+      : `Erop: de uitkomst per criterium, het taalmodel per rol, ${counted(sheet.rulings.length, "uitspraak", "uitspraken")} van een beoordelaar over een regel, ${counted(sheet.sessions.length, "regel die in een sessie afkeurde", "regels die in een sessie afkeurden")} en of de andere regelsets het daarmee eens waren, ${counted(sheet.sweep.length, "regel", "regels")} uit de veegronde, ${counted(sheet.defects.total, "gebrek", "gebreken")} geteld naar ernst en eigenaar, wat mensen besloten en lieten nameten (alleen aantallen), en de duur per stap.`,
     "Niet erop: het adres en de naam van de site, pagina's, selectors, de tekst van een oordeel of bevinding, schermafbeeldingen, en wie tekende of besloot.",
     "De site staat erop als een sleutel die alleen op deze machine uit het adres te maken is.",
     "Let op: is het rapport van dit onderzoek openbaar, dan kan iemand met toegang tot de verzameling het meetblad eraan koppelen, door de uitkomsten per criterium naast elkaar te leggen.",
     // What is named is the kind and the field, never the value: this line is what gets reported, in the open.
     ...(result.leaks.length > 0 ? [`GEWEIGERD: op het meetblad staat iets dat er niet hoort: ${result.leaks.join("; ")}. Het is niet geschreven. Meld dit bij de makers van loep; de melding noemt de site niet.`] : []),
-    ...(result.file ? [`Geschreven: ${result.file}`] : result.leaks.length === 0 ? ["Niets geschreven. Met --out <map> komt het meetblad in die map. Er wordt niets verstuurd."] : []),
+    ...(result.file ? [`${result.state === "new" ? "Geschreven" : result.state === "changed" ? "Bijgewerkt" : "Stond er al ongewijzigd"}: ${result.file}. ${NOT_SENT}`] : result.leaks.length === 0 ? ["Niets geschreven. Met --out <map> komt het meetblad in die map. Er wordt niets verstuurd."] : []),
     "",
   ].join("\n");
 }

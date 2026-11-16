@@ -280,12 +280,21 @@ test("contribute reads a run, writes nothing in it, and writes the sheet under i
   assert.match(contributionNl(dry), /Niet erop: het adres en de naam van de site/);
   assert.doesNotMatch(contributionNl(dry), /voorbeeld/i);
   // A refusal names the kind and the field, and not the value: the line is what gets reported, in the open.
-  const refused = contributionNl({ sheet: dry.sheet, leaks: ["de host van de site, in purpose"], file: null, evaluatedAt: "" });
+  const refused = contributionNl({ sheet: dry.sheet, leaks: ["de host van de site, in purpose"], file: null, state: null, evaluatedAt: "" });
   assert.match(refused, /GEWEIGERD: op het meetblad staat iets dat er niet hoort: de host van de site, in purpose\. Het is niet geschreven\./);
 
   const out = join(folder, "meetbladen");
   const written = contribute(run, { outDir: out, key: "een-sleutel" });
   assert.equal(written.file, join(out, `${written.sheet.id}.json`));
+  // What the folder gained is said, because sending is the commit of that folder: new the first time, as it stood the second.
+  assert.equal(written.state, "new");
+  assert.match(contributionNl(written), /Geschreven: .*\.json\. loep verstuurt zelf niets: insturen is de commit en de push van die map\./);
+  const again = contribute(run, { outDir: out, key: "een-sleutel" });
+  assert.equal(again.state, "same");
+  assert.match(contributionNl(again), /Stond er al ongewijzigd: /);
+  writeFileSync(written.file!, "{}\n");
+  assert.equal(contribute(run, { outDir: out, key: "een-sleutel" }).state, "changed");
+  assert.equal(dry.state, null);
   assert.deepEqual(JSON.parse(readFileSync(written.file!, "utf8")), written.sheet);
   // The run is as it was: a sealed run stays sealed.
   assert.deepEqual(readdirSync(run).sort(), before);
@@ -318,12 +327,20 @@ test("every finished run under a folder gives a sheet, and the same run in two f
   const many = contributeAll(root, { outDir: out, key: "een-sleutel" });
   chmodSync(join(root, "dicht"), 0o700);
   assert.deepEqual([many.runs, many.sheets.length, many.written, many.refused], [4, 2, 2, []]);
+  assert.deepEqual([many.added, many.changed, many.unchanged], [2, 0, 0]);
   assert.equal(many.failed, 1 + found.unreadable);
   assert.deepEqual(readdirSync(out).sort(), many.sheets.map((sheet) => `${sheet.id}.json`).sort());
   // Of the run that stands twice, the sheet of the folder evaluated last.
   assert.deepEqual(many.sheets.map((sheet) => [sheet.month, sheet.purpose]).sort(), [["2026-11", "verantwoorden"], ["2026-11", "verbeteren"]]);
   const text = manyContributionsNl(many, out);
-  assert.match(text, /4 afgeronde onderzoeken en snelle metingen gevonden, 2 meetbladen van 2 sites \(1 keer dezelfde run in een andere map\)\./);
+  assert.match(text, /4 afgeronde onderzoeken en snelle metingen gevonden, 2 meetbladen van 2 sites \(1 run staat ook in een andere map en telt één keer\)\./);
+  assert.match(text, /: 2 nieuw, 0 bijgewerkt, 0 stonden er al ongewijzigd\. loep verstuurt zelf niets/);
+  assert.match(text, /Elke site staat erop als een sleutel die alleen op deze machine uit het adres te maken is\./);
+  // A second time into the same folder: nothing new, and a sheet someone changed there is put back.
+  writeFileSync(join(out, `${many.sheets[0]!.id}.json`), "{}\n");
+  const second = contributeAll(root, { outDir: out, key: "een-sleutel" });
+  assert.deepEqual([second.added, second.changed, second.unchanged], [0, 1, 1]);
+  assert.match(manyContributionsNl(second, out), /0 nieuw, 1 bijgewerkt, 1 stond er al ongewijzigd\./);
   assert.match(text, /mappen waren niet te lezen\.|map was niet te lezen\./);
   assert.match(text, /is het rapport van een onderzoek openbaar, dan kan iemand met toegang tot de verzameling het meetblad eraan koppelen/);
   // What is said about the runs names no folder and no site.
@@ -372,7 +389,7 @@ test("a quick measurement gives a sheet too: per rule the places on a strong and
   // The same site as the evaluation above, from the same contributor: the same key.
   assert.equal(sheet.siteKey, buildSheet(SOURCE, "een-sleutel").siteKey);
   assert.doesNotMatch(JSON.stringify(sheet), /voorbeeld|inwoners|afval|cookiemelding|http/i);
-  assert.match(contributionNl({ sheet, leaks, file: null, evaluatedAt: "" }), /Meetblad [0-9a-f]{16} van een snelle meting: loep 0\.32\.0, 2026-11, 2 pagina's\./);
+  assert.match(contributionNl({ sheet, leaks, file: null, state: null, evaluatedAt: "" }), /Meetblad [0-9a-f]{16} van een snelle meting: loep 0\.32\.0, 2026-11, 2 pagina's\./);
 });
 
 test("the key of a contributor is made once, for that person only, and not by someone who only looks", () => {

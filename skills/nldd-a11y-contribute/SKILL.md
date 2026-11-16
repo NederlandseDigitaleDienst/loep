@@ -24,51 +24,58 @@ Een meetblad zegt iets over loep en niets over de site. Er staan regelnummers, c
 
 `LOEP` is `node <map van deze plugin>/toolbox/src/cli.ts`. De verzameling is `NederlandseDigitaleDienst/loep-meetbladen`, tenzij de gebruiker een andere noemt.
 
-1. **Vraag wat er ingestuurd wordt, en vraag altijd ook naar vroeger.** Eén onderzoek of snelle meting (de map ervan), of alles onder een map. Noemt de gebruiker één onderzoek, vraag dan of er eerdere zijn: in de map ernaast, of waar hij ze bewaart. De verzameling heeft het meest aan oude onderzoeken, omdat ze met andere versies van loep zijn gemaakt. `LOEP contribute --under <map>` telt ze, zonder iets te schrijven of te versturen. Noem het aantal en vraag of ze mee mogen.
+1. **Vraag wat er ingestuurd wordt, en vraag altijd ook naar vroeger.** Eén onderzoek of snelle meting (de map ervan), of alles onder een map. Noemt de gebruiker één onderzoek, vraag dan of er eerdere zijn en in welke map ze staan. Kies die map niet zelf: een map hoger kan onderzoeken van andere sites bevatten. De verzameling heeft het meest aan oude onderzoeken, omdat ze met andere versies van loep zijn gemaakt.
 
-2. **Laat zien wat erop komt.** Dit schrijft en verstuurt niets:
+2. **Laat zien wat erop komt.** Kies één van de twee. Dit schrijft en verstuurt niets:
 
    ```
    LOEP contribute --run <map van het onderzoek>
    LOEP contribute --under <map met onderzoeken>
    ```
 
-   Geef de uitvoer door zoals ze is: hoeveel meetbladen, wat erop staat en wat niet. Wil de gebruiker het hele meetblad zien, geef dan `--json` mee. Meldt loep `GEWEIGERD`, stop dan en zeg dat dit bij de makers van loep gemeld moet worden.
+   `--under` neemt elk afgerond onderzoek onder die map mee, ook het onderzoek dat de gebruiker noemde. Geef de uitvoer door zoals ze is. Het aantal dat telt is het aantal meetbladen: een onderzoek dat in twee mappen staat, geeft er één. Bied aan een heel meetblad te laten zien, met `--run <map> --json`. Meldt loep `GEWEIGERD`, stop dan en zeg dat dit bij de makers van loep gemeld moet worden.
 
-3. **Vraag of het mag.** Zeg erbij waar het heen gaat, dat iedereen met schrijfrechten op de verzameling het kan lezen, en dat het in de geschiedenis van git blijft staan ook als het bestand later wordt verwijderd. Zeg ook dit, in deze woorden of korter: is het rapport van het onderzoek openbaar, dan kan iemand met toegang het meetblad eraan koppelen en weet hij van welke site het is. Ga alleen verder na een uitdrukkelijk ja.
+3. **Vraag of het mag.** Zeg erbij:
 
-4. **Haal de verzameling op**, in een map buiten het onderzoek:
+   - waar het heen gaat, en dat iedereen met toegang tot de verzameling het kan lezen;
+   - dat het in de geschiedenis van git blijft staan, ook als het bestand later wordt verwijderd;
+   - dat loep bij het eerste meetblad een sleutelbestand op deze machine zet, in `~/.config/loep`, en dat het daar blijft.
+
+   De koppeling met een openbaar rapport staat al in de uitvoer van stap 2. Herhaal haar niet, tenzij de gebruiker die uitvoer niet zag. Ga alleen verder na een uitdrukkelijk ja.
+
+4. **Haal de verzameling op**, in een map buiten het onderzoek. Staat er nog een kloon van een vorige keer, gebruik die dan en draai er `git pull --rebase` in.
 
    ```
    gh repo clone NederlandseDigitaleDienst/loep-meetbladen <map>
    ```
 
-   Lukt dat niet, dan heeft de gebruiker geen toegang. Zeg dat, en dat een beheerder van de verzameling die geeft. Probeer geen andere weg.
+   Noemde de gebruiker een andere verzameling, kloon die dan met `git clone <adres> <map>`. Lukt het klonen niet, laat dan de melding zien. Zegt ze dat de repository niet bestaat of niet te lezen is, dan heeft de gebruiker geen toegang, en geeft een beheerder van de verzameling die. Probeer geen andere weg.
 
-5. **Schrijf de meetbladen erin en controleer ze:**
+5. **Schrijf de meetbladen erin en controleer ze**, met hetzelfde commando als in stap 2 en `--out` erbij:
 
    ```
-   LOEP contribute --run <map van het onderzoek> --out <map>/meetbladen
    LOEP contribute --under <map met onderzoeken> --out <map>/meetbladen
    node <map>/check.mjs
    ```
 
-   Een onderzoek dat eerder is ingestuurd, houdt zijn nummer, ook als het daarna opnieuw is geëvalueerd, gewogen of getekend: het bestand wordt bijgewerkt. Faalt de controle, stuur dan niets in en laat zien wat ze meldt.
+   loep zegt hoeveel meetbladen nieuw zijn, hoeveel het bijwerkte en hoeveel er al ongewijzigd stonden. Een onderzoek dat eerder is ingestuurd, houdt zijn nummer. Het wordt alleen bijgewerkt als het daarna opnieuw is geëvalueerd, gewogen of getekend. `check.mjs` telt alle meetbladen in de verzameling, ook die van anderen. Faalt de controle, stuur dan niets in, laat zien wat ze meldt en zet de map terug met `git checkout -- meetbladen && git clean -f meetbladen`.
 
-6. **Stuur in**, vanuit de map van de verzameling:
+6. **Stuur in**, vanuit de map van de verzameling. Zijn er geen nieuwe en geen bijgewerkte meetbladen, dan valt er niets in te sturen: sla deze stap over. In het bericht staan de aantallen van loep uit stap 5:
 
    ```
    git add meetbladen
-   git commit -m "meetbladen: <aantal> onderzoeken"
+   git commit -m "meetbladen: <aantal> nieuw, <aantal> bijgewerkt"
    git pull --rebase
    git push
    ```
 
-   Zegt git dat er niets te committen is, dan stonden ze er al. Zeg dat.
+   Weigert de push omdat iemand anders net instuurde, draai dan `git pull --rebase` en `git push` nog een keer. Elk meetblad is een eigen bestand, dus een conflict hoort niet voor te komen. Komt er toch een, stop dan en laat de melding zien.
 
-7. **Zeg wat er is gebeurd:** hoeveel meetbladen er zijn ingestuurd en hoeveel er al stonden. Noem geen site.
+7. **Zeg wat er is gebeurd,** met de aantallen van loep uit stap 5: hoeveel meetbladen nieuw zijn ingestuurd, hoeveel er zijn bijgewerkt en hoeveel er al stonden. Zeg erbij dat weghalen kan. Noem geen site.
 
 ## Wat de gebruiker moet weten
+
+Zeg dit als de gebruiker ernaar vraagt, of twijfelt bij de vraag in stap 3.
 
 - **De site staat erop als een sleutel.** Die wordt gemaakt met een sleutelbestand dat loep op deze machine zet bij het eerste meetblad dat het schrijft, en dat er blijft. Alleen kijken maakt het niet aan. Twee meetbladen van dezelfde site vanaf deze machine horen daardoor bij elkaar, en niemand anders kan er een adres uit afleiden.
 - **Een meetblad is te koppelen aan een openbaar rapport** van hetzelfde onderzoek, door de uitkomsten per criterium naast elkaar te leggen. Zonder openbaar rapport kan dat niet.
