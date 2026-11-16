@@ -80,6 +80,8 @@ export function validateSummary(proposal: unknown, evaluation: Evaluation, repor
   const criteria = new Set(evaluation.criteria.map((criterion) => criterion.id));
   const known = new Set(numbersOf(reportText));
   const used = new Set<string>();
+  const toldWithPeople = new Set<string>();
+  const toldWithout = new Set<string>();
   let words = 0;
   for (const [index, paragraph] of paragraphs.entries()) {
     const where = `alinea ${index + 1}`;
@@ -102,13 +104,15 @@ export function validateSummary(proposal: unknown, evaluation: Evaluation, repor
     for (const number of numbersOf(text)) if (!known.has(number)) problems.push(`${where}: het getal ${number} staat niet in het rapport; neem getallen letterlijk over en reken niets uit`);
     const sources = Array.isArray(paragraph.sources) ? paragraph.sources.filter((source): source is string => typeof source === "string") : [];
     if (sources.length === 0) problems.push(`${where}: sources is leeg; noem waar in het rapport de alinea op rust`);
-    // A defect is told with who it hinders: a paragraph that rests on one names people.
-    if (sources.some((source) => defects.has(source)) && !PEOPLE.test(text)) problems.push(`${where}: de alinea rust op een gebrek en noemt niet voor wie het geldt; zeg welke groep bezoekers het hindert, zoals het rapport dat doet`);
+    // A defect is told with who it hinders, once: where it is told, not again where the summary says what to repair first.
+    for (const source of sources) if (defects.has(source)) (PEOPLE.test(text) ? toldWithPeople : toldWithout).add(source);
     for (const source of sources) {
       if (!defects.has(source) && !criteria.has(source) && !(source in SUMMARY_PARTS)) problems.push(`${where}: "${source}" in sources is geen gebrek of criterium van dit rapport en geen van ${Object.keys(SUMMARY_PARTS).join(", ")}`);
       used.add(source);
     }
   }
+  const nobody = [...toldWithout].filter((id) => !toldWithPeople.has(id));
+  if (nobody.length > 0) problems.push(`de samenvatting noemt bij ${nobody.length === 1 ? "het gebrek" : "de gebreken"} ${nobody.join(", ")} niet voor wie het geldt; zeg in een alinea die erop rust welke groep bezoekers het hindert, zoals het rapport dat doet`);
   if (words > SUMMARY_WORDS_MAX) problems.push(`de samenvatting heeft ${words} woorden; het zijn er hooguit ${SUMMARY_WORDS_MAX}`);
 
   const all = paragraphs.map((paragraph) => (typeof paragraph?.textNl === "string" ? paragraph.textNl : "")).join(" ");

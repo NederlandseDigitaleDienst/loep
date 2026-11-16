@@ -71,11 +71,15 @@ test("the check holds a summary to the report: length, form, numbers, status and
   // The norm by its name: "the norm for accessibility" alone does not say against what the site was held.
   refused("the norm not named", first("De site van Voorbeeldgemeente voldoet niet aan de norm voor toegankelijkheid. Van de 55 criteria zijn er 5 niet gehaald en 4 open, en daaruit volgt status C."), /noemt de norm niet; zeg één keer in een zin "WCAG 2\.2 niveau A en AA"/);
   // A defect without who it hinders.
-  refused("a defect without a group", (proposal) => void (proposal.paragraphs[1]!.textNl = "De knop om de aanvraag te versturen heeft geen naam. Grijze hulptekst is slecht te lezen."), /noemt niet voor wie het geldt/);
+  refused("a defect without a group", (proposal) => void (proposal.paragraphs[1]!.textNl = "De knop om de aanvraag te versturen heeft geen naam. Grijze hulptekst is slecht te lezen."), /noemt bij de gebreken VRB-G-e7cb, VRB-G-9fc8 niet voor wie het geldt/);
   // A group is stopped at a core task: a paragraph rests on a defect that stops it.
   refused("silent about who is stopped", (proposal) => void (proposal.paragraphs[1]!.sources = ["groepen"]), /een groep bezoekers loopt vast bij een kerntaak/);
   // Open criteria stay open: a paragraph says what was not established.
   refused("silent about what is open", (proposal) => void (proposal.paragraphs[2]!.sources = ["wat-nu"]), /het rapport heeft open criteria/);
+});
+
+test("who a defect hinders is said once: the paragraph that says what to repair first need not say it again", () => {
+  assert.deepEqual(problemsOf((proposal) => void proposal.paragraphs[2]!.sources.push("VRB-G-e7cb")), []);
 });
 
 test("without paragraphs there is one problem, and it says what is missing", () => {
