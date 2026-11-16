@@ -183,12 +183,20 @@ export class Blockade {
   private readonly probing = new Map<string, Promise<void>>();
   /** When the file in the run last changed, as this process read it. */
   private seen = -1;
+  /** The origins of the site, from the inventory; null without one. An embedded frame of another party can fail, but that is no outage of the site. */
+  private readonly ownOrigins: Set<string> | null;
 
   constructor(runDir: string, now: () => number = Date.now, probe: Probe = probeSite) {
     this.runDir = runDir;
     this.now = now;
     this.probe = probe;
+    this.ownOrigins = originsOfSite(runDir);
     this.sync();
+  }
+
+  /** Whether an outage of this origin is one of the site: always without an inventory. */
+  private ofSite(origin: string): boolean {
+    return this.ownOrigins === null || this.ownOrigins.has(origin);
   }
 
   /** Take in what another process noted: the sweep and the session process can run at the same time, and share the file. */
@@ -261,7 +269,7 @@ export class Blockade {
   async outages(): Promise<BlockadeEntry[]> {
     this.sync();
     const down: BlockadeEntry[] = [];
-    for (const origin of new Set(this.entries.filter((entry) => entry.reason === "outage").map((entry) => entry.origin))) {
+    for (const origin of new Set(this.entries.filter((entry) => entry.reason === "outage" && this.ofSite(entry.origin)).map((entry) => entry.origin))) {
       let outage = this.outageOf(origin).at(-1);
       if (outage && endOf(outage)! <= this.now()) {
         await this.probeOnce(outage);
@@ -326,7 +334,8 @@ export class Blockade {
     if (streak.count < MAX_FAILED_NAVIGATIONS) return;
     this.failures.delete(origin);
     // Something else of the site loaded meanwhile: this origin fails, not the site. Nothing else did: the site, or the network of this machine, is down.
-    if (![...this.loadedOrigins].some(([other, at]) => other !== origin && at >= streak.since)) return this.noteOutage(origin, url);
+    // An embedded frame of another party that fails is a pause for that frame, never an outage of the site.
+    if (this.ofSite(origin) && ![...this.loadedOrigins].some(([other, at]) => other !== origin && at >= streak.since)) return this.noteOutage(origin, url);
     const before = this.entries.filter((entry) => entry.origin === origin && entry.reason === "failures").length;
     const seconds = Math.min(FAILURE_PAUSE_SECONDS * 2 ** before, LONGEST_FAILURE_PAUSE_SECONDS);
     const now = this.now();
@@ -341,6 +350,18 @@ export class Blockade {
 
   private write(): void {
     writeFileSync(join(this.runDir, BLOCKADES_FILE), canonicalJson({ origins: this.entries }));
+  }
+}
+
+/** The origins of the site in the inventory of the run, or null when the run has none (yet). */
+function originsOfSite(runDir: string): Set<string> | null {
+  const path = join(runDir, "inventory.json");
+  if (!existsSync(path)) return null;
+  try {
+    const origins = siteOrigins(JSON.parse(readFileSync(path, "utf8")) as OriginSource);
+    return origins.length > 0 ? new Set(origins) : null;
+  } catch {
+    return null;
   }
 }
 

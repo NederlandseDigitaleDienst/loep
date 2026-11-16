@@ -347,3 +347,20 @@ test("the sweep asks a blocked origin nothing, notes a 429 it gets itself, and s
     await browser.close();
   }
 });
+
+test("an embedded frame of another party that keeps failing is paused, never an outage of the site, and pending does not stop the run for it", async () => {
+  const run = newRun();
+  writeFileSync(join(run, "inventory.json"), JSON.stringify({ baseUrl: "https://www.example.nl/", origins: ["https://www.example.nl"], pages: [{ url: "https://www.example.nl/" }, { url: "https://video.example.com/embed/1" }] }));
+  const clock = Date.parse("2026-11-16T09:41:00Z");
+  const blockade = new Blockade(run, () => clock, async () => false);
+  for (let attempt = 0; attempt < MAX_FAILED_NAVIGATIONS; attempt++) blockade.failed(`https://video.example.com/embed/${attempt}`);
+  assert.equal(blockade.refuses("https://video.example.com/embed/9")?.reason, "failures");
+  assert.equal(blockade.refuses("https://www.example.nl/"), null, "the site itself is asked as before");
+  assert.deepEqual(await new Blockade(run, () => clock, async () => false).outages(), []);
+  // An outage of the frame that an older version noted does not stop the run either.
+  writeFileSync(join(run, BLOCKADES_FILE), JSON.stringify({ origins: [{ origin: "https://video.example.com", reason: "outage", at: new Date(clock - 60_000).toISOString(), until: new Date(clock + 240_000).toISOString(), url: "https://video.example.com/embed/2" }] }));
+  assert.deepEqual(await new Blockade(run, () => clock, async () => false).outages(), []);
+  // The site itself still has an outage when nothing of it loads.
+  for (let attempt = 0; attempt < MAX_FAILED_NAVIGATIONS; attempt++) blockade.failed(`https://www.example.nl/${attempt}`);
+  assert.deepEqual((await new Blockade(run, () => clock, async () => false).outages()).map((entry) => entry.origin), ["https://www.example.nl"]);
+});
