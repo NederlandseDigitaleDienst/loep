@@ -474,10 +474,14 @@ test("what a verifier passes on reaches the finishing round of that criterion, a
   assert.deepEqual(await checkInstrumentVerdict(cross.dir, CRITERIA.passed, "finish"), []);
   assert.equal((await resolved(CRITERIA.passed)).outcome, "passed");
 
-  // The finishing round of 1.4.5 does not come by itself: the finishing rounds run side by side. 1.4.5 stays open with it until a round has ruled on it.
+  // The finishing round of 1.4.5 does not come by itself: the finishing rounds run side by side. 1.4.5 stays open with it until a round has ruled on it,
+  // and pending names it under again, so the workflow asks for that round once.
   await tasks();
   assert.ok(!(await cross.task(CRITERIA.person)).finish);
-  assert.equal((await instrumentPending(cross.dir)).phase, "done");
+  const done = await instrumentPending(cross.dir);
+  assert.equal(done.phase, "done");
+  assert.deepEqual(done.again, [CRITERIA.person]);
+  assert.match(done.noteNl, /Een afmaakronde gaf iets door aan 1\.4\.5 waarover nog niemand besliste\. Zet een nieuwe afmaakronde klaar met tasks --again 1\.4\.5 en draai daarna pending\./);
   const passedOn = "veegronde mist: de afmaakronde van 1.4.11 zag op P2 (knop Verzenden) iets dat bij dit criterium hoort, en geen verifieerder of afmaakronde heeft dat beoordeeld (XA1411-01): De tekst op de knop Verzenden is een afbeelding van tekst.";
   assert.deepEqual((await resolved(CRITERIA.person)).missingNl, [PERSON, passedOn]);
   await assert.rejects(tasks([CRITERIA.passed]), /--again: het eindoordeel van 1\.4\.11 staat niet open met een punt "proef werkte niet" of "niet bereikbaar", en niets wat een ander criterium eraan doorgaf, is nog onbeoordeeld/);

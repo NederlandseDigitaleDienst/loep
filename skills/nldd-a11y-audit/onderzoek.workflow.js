@@ -74,7 +74,7 @@ const PENDING = {
     siteOutage: { type: 'string', description: 'alleen als de site een storing heeft' },
     sendingLow: { type: 'string', description: 'alleen als het budget voor versturen bijna op is' },
     voiceover: { type: 'string', description: 'alleen als de virtuele Mac met VoiceOver is ingericht maar niet voorleest' },
-    again: { type: 'array', items: { type: 'string' }, description: 'alleen bij done: criteria die na een storing van de site een nieuwe afmaakronde kunnen krijgen' },
+    again: { type: 'array', items: { type: 'string' }, description: 'alleen bij done: criteria die een nieuwe afmaakronde kunnen krijgen, na een storing van de site of omdat een andere afmaakronde er iets aan doorgaf' },
     note: { type: 'string' },
   },
   required: ['phase', 'walks', 'judges', 'verifiers', 'finishers'],
@@ -154,7 +154,7 @@ let attempted = []
 let last = null
 let paused = null
 let rounds = 0
-// Criteria that get a new finishing round once the site answers again after an outage: once per start of the workflow.
+// Criteria that get a new finishing round once the site answers again after an outage, or because another finishing round passed them something: once per start of the workflow.
 let again = []
 let askedAgain = false
 
@@ -185,7 +185,7 @@ for (let round = 1; round <= MAX_ROUNDS; round++) {
   if (state.phase === 'done' && Array.isArray(state.again) && state.again.length > 0 && !askedAgain) {
     askedAgain = true
     again = state.again
-    log(`ronde ${round}: de site antwoordt weer, nieuwe afmaakronde voor ${again.join(', ')}`)
+    log(`ronde ${round}: nieuwe afmaakronde voor ${again.join(', ')}`)
     history.push({ round, phase: 'done', again })
     continue
   }

@@ -1100,6 +1100,22 @@ async function againAfterOutage(runDir: string, index: InstrumentIndex, observat
   return ids;
 }
 
+/**
+ * The criteria another finishing round passed something on to that none of their verdicts ruled
+ * on: the finishing rounds run side by side, so that reaches no round by itself (#302 keeps it from
+ * going back and forth). A criterion that failed needs nothing more; `tasks --again` takes the rest.
+ */
+async function againForHandover(runDir: string, index: InstrumentIndex, observations: ReturnType<typeof loadObservations>): Promise<string[]> {
+  const passing = await passingOf(runDir, index.tasks, observations);
+  const ids: string[] = [];
+  for (const task of index.tasks) {
+    const own = passing.get(task.criterion);
+    if (unruledCrossPoints(passing, task.criterion, [own?.final, own?.finish], observations.records, ["finish"]).length === 0) continue;
+    if (Array.isArray(await pointsForAgain(runDir, index, task.criterion, observations))) ids.push(task.criterion);
+  }
+  return ids;
+}
+
 const sizeOf = (path: string): number => {
   try {
     return statSync(path).size;
@@ -1192,7 +1208,9 @@ export async function instrumentPending(runDir: string): Promise<InstrumentPendi
             : "Alles is beoordeeld en geverifieerd, en niets bleef open door het onderzoek zelf. Ga door met `evaluate`.";
   const bySize = <T extends { criterion: string }>(list: T[], round: string): T[] => longestFirst(list, (entry) => sizeOf(candidatesOf.get(`${round} ${entry.criterion}`) ?? ""));
   const siteOutage = phase === "done" ? null : await siteOutageNl(runDir);
-  const again = phase === "done" ? await againAfterOutage(runDir, index, observations) : [];
+  const afterOutage = phase === "done" ? await againAfterOutage(runDir, index, observations) : [];
+  const handedOver = phase === "done" ? (await againForHandover(runDir, index, observations)).filter((id) => !afterOutage.includes(id)) : [];
+  const again = [...afterOutage, ...handedOver];
   const permission = phase === "done" ? null : writesForRun(runDir);
   // Each grant of the run on its own: the chat that was declared can run low while the local site has plenty.
   const budgets = permission ? grantsOf(permission).map((grant) => ({ grant, budget: writeBudget(runDir, permission, undefined, undefined, grant.origin) })) : [];
@@ -1201,7 +1219,9 @@ export async function instrumentPending(runDir: string): Promise<InstrumentPendi
   const sendingLow = low.length > 0 ? writeBudgetsNl(low) : null;
   const empty = budgets.find(({ budget }) => budget.left === 0)?.budget;
   const emptyNl = empty ? `${budgetEmptyNl(empty)}. ` : "";
-  const againNl = again.length > 0 ? ` De site antwoordt weer na een storing, en ${again.join(", ")} ${again.length === 1 ? "staat" : "staan"} open met een punt "${UNREACHABLE}" van daarvoor: zet een nieuwe afmaakronde klaar met tasks --again ${again.join(",")} en draai daarna pending.` : "";
+  const outageNl = afterOutage.length > 0 ? ` De site antwoordt weer na een storing, en ${afterOutage.join(", ")} ${afterOutage.length === 1 ? "staat" : "staan"} open met een punt "${UNREACHABLE}" van daarvoor.` : "";
+  const handedNl = handedOver.length > 0 ? ` Een afmaakronde gaf iets door aan ${handedOver.join(", ")} waarover nog niemand besliste.` : "";
+  const againNl = again.length > 0 ? `${outageNl}${handedNl} Zet een nieuwe afmaakronde klaar met tasks --again ${again.join(",")} en draai daarna pending.` : "";
   return {
     flow: INSTRUMENT_FLOW,
     phase,

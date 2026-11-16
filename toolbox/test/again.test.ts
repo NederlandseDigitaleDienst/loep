@@ -123,7 +123,7 @@ test("a part of the site that did not load gets a finishing round, and stays ope
   outage(Date.now() + 60_000);
   const back = await instrumentPending(dir);
   assert.deepEqual([back.phase, back.again, briefPending(back).again], ["done", [CRITERIA.unreachable], [CRITERIA.unreachable]]);
-  assert.match(back.noteNl, /zet een nieuwe afmaakronde klaar met tasks --again 2\.4\.3 en draai daarna pending\.$/);
+  assert.match(back.noteNl, /Zet een nieuwe afmaakronde klaar met tasks --again 2\.4\.3 en draai daarna pending\.$/);
   rmSync(join(dir, BLOCKADES_FILE));
 
   // evaluate counts it as not established by the evaluation, and the report says what did not load and when.
