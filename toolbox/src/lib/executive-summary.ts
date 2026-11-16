@@ -124,7 +124,7 @@ export function validateSummary(proposal: unknown, evaluation: Evaluation, repor
   // Status C comes from what was not established, never from how many criteria failed: the sentence that names it says so.
   if (statuses.includes("C") && named.includes("C")) {
     const naming = all.split(/(?<=[.!?])\s+/).filter((sentence) => /\bstatus\s+C\b/.test(sentence));
-    if (!naming.some((sentence) => /vastgesteld|onderzocht|(?<![\p{L}])open(?![\p{L}])/iu.test(sentence))) problems.push("de samenvatting zegt niet waardoor de status C is; zeg in de zin met de status dat ze komt door de criteria die niet zijn vastgesteld, niet door het aantal dat niet is gehaald");
+    if (!naming.some((sentence) => /vastgesteld|onderzocht|dekt|(?<![\p{L}])open(?![\p{L}])/iu.test(sentence))) problems.push("de samenvatting zegt niet waardoor de status C is; zeg in de zin met de status dat ze komt door de criteria die niet zijn vastgesteld, niet door het aantal dat niet is gehaald");
   }
   if (!used.has("status")) problems.push('geen alinea rust op "status": de samenvatting zegt of de site voldoet en hoeveel criteria niet zijn gehaald');
   // Whether the site meets the norm is said as the evaluation has it, never rounder.
