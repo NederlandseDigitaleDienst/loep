@@ -131,7 +131,8 @@ async function writeReadTask(runDir: string, evaluation: Evaluation, proposal: S
     proposalSha256: await sha256File(join(runDir, PROPOSAL)),
     taskSha256: sha256(readTemplate("samenvat-lees")),
     check: `node ${cli} check-reading --run ${absoluteRun}`,
-    workDir: await makeWorkDir(runDir, READ_WORK),
+    // A work folder of its own for every text that is read: a reader must not find the verdict of an earlier reader there.
+    workDir: await makeWorkDir(runDir, `${READ_WORK}-${(await sha256File(join(runDir, PROPOSAL))).slice(0, 8)}`),
   };
   const text = readTemplate("samenvat-lees").replace(/\{\{(\w+)\}\}/g, (_match, key: string) => {
     if (!(key in values)) throw new Error(`template placeholder {{${key}}} has no value`);
