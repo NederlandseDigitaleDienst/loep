@@ -46,6 +46,7 @@ In deze vorm:
 ```json
 {
   "reportSha256": "{{reportSha256}}",
+  "taskSha256": "{{taskSha256}}",
   "model": "<het model waarmee je draait, zoals je het zelf kent>",
   "paragraphs": [
     { "textNl": "<de eerste alinea>", "sources": ["status"] },
@@ -54,7 +55,7 @@ In deze vorm:
 }
 ```
 
-`reportSha256` neem je letterlijk over: het zegt uit welk rapport je schreef. Verandert het rapport, dan krijg je een nieuwe opdracht met een andere waarde, en schrijf je de samenvatting opnieuw uit het nieuwe rapport.
+`reportSha256` en `taskSha256` neem je letterlijk over: ze zeggen uit welk rapport en met welke opdracht je schreef. Verandert het rapport, dan krijg je een nieuwe opdracht met een andere waarde, en schrijf je de samenvatting opnieuw uit het nieuwe rapport.
 
 Bij elke alinea staat in `sources` waar ze in het rapport op rust. Dat is het nummer van een gebrek zoals het rapport het geeft, het nummer van een criterium, of een van deze delen:
 

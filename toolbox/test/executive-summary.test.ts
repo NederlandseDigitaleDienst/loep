@@ -31,6 +31,19 @@ const good = (): SummaryProposal => ({
   ],
 });
 
+/** A reading that carries every sentence: for each the line of the report that shares most with it, no line more than twice. */
+const carried = (sentences: string[], report: string): { n: number; sentence: string; verdict: string; quotes: string[] }[] => {
+  const stems = (text: string): Set<string> => new Set([...(text.match(/\d+(?:[.,]\d+)*/g) ?? []), ...(text.toLowerCase().match(/[\p{L}]{5,}/gu) ?? []).map((word) => word.slice(0, 5))]);
+  const lines = report.split("\n").map((line) => line.replace(/\s+/g, " ").trim()).filter((line) => (line.match(/[\p{L}]{2,}/gu) ?? []).length >= 3);
+  const used = new Map<string, number>();
+  return sentences.map((sentence, index) => {
+    const wanted = stems(sentence);
+    const best = lines.filter((line) => (used.get(line) ?? 0) < 2).map((line) => [line, [...stems(line)].filter((stem) => wanted.has(stem)).length] as const).sort((a, b) => b[1] - a[1])[0]!;
+    used.set(best[0], (used.get(best[0]) ?? 0) + 1);
+    return { n: index + 1, sentence, verdict: "gedragen", quotes: [best[0]] };
+  });
+};
+
 const problemsOf = (change: (proposal: SummaryProposal) => void, evaluation = example()): string[] => {
   const proposal = good();
   change(proposal);
@@ -75,7 +88,9 @@ test("the check holds a summary to the report: length, form, numbers, status and
   // A defect without who it hinders.
   refused("a defect without a group", (proposal) => void (proposal.paragraphs[1]!.textNl = "De knop om de aanvraag te versturen heeft geen naam. Grijze hulptekst is slecht te lezen."), /noemt bij de gebreken VRB-G-e7cb, VRB-G-9fc8 niet voor wie het geldt/);
   // The two counts are the ones of the evaluation, not any two numbers the report has somewhere.
-  refused("other counts", first("De site voldoet niet aan WCAG 2.2 niveau A en AA. Van de 55 criteria zijn er 4 niet gehaald en 5 open, en door die open criteria is het status C."), /de zin met "niet gehaald" noemt 55, 4, 5; het rapport heeft 5 criteria die niet zijn gehaald, 4 open/);
+  refused("other counts", first("De site voldoet niet aan WCAG 2.2 niveau A en AA. Van de 55 criteria zijn er 4 niet gehaald en 5 open, en door die open criteria is het status C."), /zegt dat 4 criteria niet zijn gehaald; het rapport heeft er 5, 4 open en 55 in totaal/);
+  refused("a count in words at the end of a clause", add("Het zijn er acht."), /"acht" is een aantal in letters/);
+  refused("meets, with what was established", add("Op alles wat is vastgesteld voldoet de site verder."), /zegt dat de site voldoet/);
   refused("a count in words", first("De site voldoet niet aan WCAG 2.2 niveau A en AA. Van de 55 criteria zijn er vijf niet gehaald en 4 open, en door die 4 open criteria is het status C."), /"vijf niet" is een aantal in letters/);
   refused("meets with another adverb", add("Aan de overige eisen voldoet de site ruimschoots."), /zegt dat de site voldoet|ruimschoots/);
   refused("meets, turned around", add("Aan de meeste eisen voldoet de site wel."), /zegt dat de site voldoet/);
@@ -85,6 +100,17 @@ test("the check holds a summary to the report: length, form, numbers, status and
   refused("silent about who is stopped", (proposal) => void (proposal.paragraphs[1]!.sources = ["groepen"]), /een groep bezoekers loopt vast bij een kerntaak/);
   // Open criteria stay open: a paragraph says what was not established.
   refused("silent about what is open", (proposal) => void (proposal.paragraphs[2]!.sources = ["wat-nu"]), /het rapport heeft open criteria/);
+});
+
+test("sentences a writer would write pass: the count before the total, a colon, what is open, a second mention", () => {
+  const first = (text: string) => (proposal: SummaryProposal) => void (proposal.paragraphs[0]!.textNl = text);
+  for (const text of [
+    "De site voldoet niet aan WCAG 2.2 niveau A en AA. 5 van de 55 criteria zijn niet gehaald en 4 zijn open, en door die open criteria is het status C.",
+    "De site voldoet niet aan WCAG 2.2 niveau A en AA: 5 criteria van WCAG 2.2 niveau A en AA zijn niet gehaald. Het is status C: 4 criteria zijn niet vastgesteld.",
+    "De site voldoet niet aan WCAG 2.2 niveau A en AA. Van de 55 criteria zijn er 5 niet gehaald. Of de site aan 4 andere voldoet, is open, en daardoor is het status C. Wat niet gehaald is, staat hieronder.",
+  ]) assert.deepEqual(problemsOf(first(text)), [], text);
+  // Words of a site, not of the evaluation.
+  assert.deepEqual(problemsOf((proposal) => void (proposal.paragraphs[2]!.textNl += " De sessie verloopt zonder waarschuwing.")), []);
 });
 
 test("who a defect hinders is said once: the paragraph that says what to repair first need not say it again", () => {
@@ -126,15 +152,14 @@ test("summarize writes the task and the report, and puts in only a summary that 
     writeFileSync(path, canonicalJson(example()));
     writeFileSync(join(dir, "manifest.json"), JSON.stringify({ steps: [] }));
     const read = (): Evaluation => ({ ...(JSON.parse(readFileSync(path, "utf8")) as Evaluation), signature: null });
-    const QUOTE = "# Toegankelijkheidsonderzoek Voorbeeldgemeente";
-    // The second reader, for the summary that stands now: every sentence carried, unless `change` says otherwise.
+    // The second reader, for the summary that stands now: every sentence carried by a line of the report that is about it, unless `change` says otherwise.
     const readBy = async (change: (sentences: Record<string, unknown>[]) => void = () => undefined, extra: object = {}): Promise<void> => {
       const proposal = JSON.parse(readFileSync(join(dir, "verdicts", "samenvatting.json"), "utf8")) as SummaryProposal;
-      const sentences: Record<string, unknown>[] = readingSentences(proposal).map((_sentence, index) => ({ n: index + 1, verdict: "gedragen", quotes: [QUOTE] }));
+      const sentences: Record<string, unknown>[] = carried(readingSentences(proposal), summarySourceText(read()));
       change(sentences);
       writeFileSync(join(dir, "verdicts", "samenvatting-lezing.json"), JSON.stringify({ reportSha256: sha256(summarySourceText(read())), proposalSha256: await sha256File(join(dir, "verdicts", "samenvatting.json")), taskSha256: sha256(readTemplate("samenvat-lees")), model: "lezer-model-5", sentences, ...extra }));
     };
-    const written = (proposal: object = good()): string => JSON.stringify({ reportSha256: sha256(summarySourceText(read())), ...proposal });
+    const written = (proposal: object = good()): string => JSON.stringify({ reportSha256: sha256(summarySourceText(read())), taskSha256: sha256(readTemplate("samenvat")), ...proposal });
 
     // No summary yet: the task and the report as text are there, the evaluation has none.
     const first = await summarize(dir);
@@ -157,7 +182,7 @@ test("summarize writes the task and the report, and puts in only a summary that 
     assert.deepEqual(await checkSummary(dir), []);
     const unread = await summarize(dir);
     assert.deepEqual([unread.summary, unread.reason, read().executiveSummary], ["stale", "unread", { status: "stale", reason: "unread" }]);
-    assert.match(summaryLineNl(unread), /een tweede lezer heeft haar nog niet naast dit rapport gelegd\. Ze staat niet in het rapport\. Start een nieuwe agent, niet de schrijver/);
+    assert.match(summaryLineNl(unread), /er is geen geldig oordeel van een tweede lezer over deze tekst en dit rapport\. Ze staat niet in het rapport\. Start een nieuwe agent, niet de schrijver/);
     const readTask = readFileSync(join(dir, "tasks", "samenvatting", "lees.md"), "utf8");
     assert.doesNotMatch(readTask, /\{\{/);
     assert.match(readTask, /^1\. De site van Voorbeeldgemeente voldoet niet aan WCAG 2\.2 niveau A en AA, de norm voor toegankelijkheid\.$/m);
@@ -228,6 +253,16 @@ test("summarize writes the task and the report, and puts in only a summary that 
     assert.match(again[0]!, /geschreven voor een ander rapport dan dat van nu/);
     assert.deepEqual([(await summarize(dir)).summary, read().executiveSummary?.status], ["stale", "stale"]);
 
+    // A stamp that cannot be read stops no command: the summary is then not checked.
+    writeFileSync(join(dir, "verdicts", "samenvatting.json"), written());
+    assert.deepEqual(await checkSummary(dir), []);
+    writeFileSync(join(dir, "verdicts", "samenvatting.stamp.json"), "{ half");
+    assert.equal((await summarize(dir)).reason, "unchecked");
+    // Written under another version of the task: checking it again does not make it a text of this task.
+    writeFileSync(join(dir, "verdicts", "samenvatting.json"), written({ ...good(), taskSha256: "van-een-eerdere-opdracht" }));
+    assert.match((await checkSummary(dir)).join(" | "), /geschreven met een andere versie van de opdracht/);
+    assert.equal((await summarize(dir)).summary, "stale");
+
     // A summary that breaks a rule is not stamped.
     writeFileSync(join(dir, "verdicts", "samenvatting.json"), written({ paragraphs: [{ textNl: "Over het algemeen goed.", sources: ["status"] }] }));
     assert.ok((await checkSummary(dir)).length > 0);
@@ -240,7 +275,22 @@ test("summarize writes the task and the report, and puts in only a summary that 
 test("a reading is held to the summary: a number that is no sentence, a verdict that is none, a quote too short", () => {
   const evaluation = example();
   const sentences = readingSentences(good());
-  const { problems } = validateReading({ sentences: [{ n: 99, verdict: "gedragen", quotes: ["x"] }, { n: 1, verdict: "misschien" }, { n: 2, verdict: "gedragen", quotes: ["Voorbeeld"] }, { n: 3, verdict: "niet-gedragen" }] }, sentences, summarySourceText(evaluation));
+  const { problems } = validateReading({ sentences: [{ n: 99, verdict: "gedragen", quotes: ["x"] }, { n: 1, sentence: sentences[0], verdict: "misschien" }, { n: 2, sentence: sentences[1], verdict: "gedragen", quotes: ["Voorbeeld"] }, { n: 3, sentence: sentences[2], verdict: "niet-gedragen" }] }, sentences, summarySourceText(evaluation));
   for (const expected of [/zin 99 bestaat niet/, /zin 1: verdict is "gedragen" of "niet-gedragen"/, /zin 2: "Voorbeeld" is te kort/, /zin 3: niet-gedragen, maar noteNl zegt niet/, /hebben geen oordeel/]) assert.ok(problems.some((problem) => expected.test(problem)), `${expected}: ${problems.join(" | ")}`);
   assert.deepEqual(validateReading({}, sentences, ""), { problems: ['het antwoord heeft geen lijst "sentences"'], refuted: [] });
+});
+
+test("a reading without reading in it is no reading: one line for every sentence, a line about something else, a verdict on another sentence", () => {
+  const evaluation = example();
+  const report = summarySourceText(evaluation);
+  const sentences = readingSentences(good());
+  assert.deepEqual(validateReading({ sentences: carried(sentences, report) }, sentences, report), { problems: [], refuted: [] });
+  const lazy = validateReading({ sentences: sentences.map((sentence, index) => ({ n: index + 1, sentence, verdict: "gedragen", quotes: ["# Toegankelijkheidsonderzoek Voorbeeldgemeente"] })) }, sentences, report).problems.join(" | ");
+  assert.match(lazy, /draagt \d+ zinnen; een stuk uit het rapport draagt er hooguit 2/);
+  assert.match(lazy, /geen van de stukken in quotes gaat over wat de zin zegt/);
+  assert.match(validateReading({ sentences: sentences.map((sentence, index) => ({ n: index + 1, sentence, verdict: "gedragen", quotes: ["| --- | ---: | ---: |"] })) }, sentences, report).problems.join(" | "), /is te kort om een plek in het rapport aan te wijzen/);
+  // The same verdicts, for a text in which one sentence was rewritten since.
+  const rewritten = [...sentences];
+  rewritten[1] = "Mensen die niet horen kunnen geen contact opnemen met de gemeente.";
+  assert.match(validateReading({ sentences: carried(sentences, report) }, rewritten, report).problems.join(" | "), /zin 2: "sentence" is niet de zin die er nu staat/);
 });

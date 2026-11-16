@@ -117,9 +117,12 @@ const USAGE = `loep <command> [options]
                                          passed check-weigh, so the severity of each finding follows from those facts
   check-weigh --run <run>                Validate the weighing of that step; non-zero exit on problems
   summarize --run <run>                  Write the task for the summary for the leadership: one agent reads the report as text
-                                         (tasks/samenvatting/rapport.md) and writes a few paragraphs that open the report. A
-                                         summary that passed check-summary for this report is put into the evaluation; without
-                                         one the report opens as loep writes it. Run it after weigh and before render
+                                         (tasks/samenvatting/rapport.md) and writes a few paragraphs that open the report. Once
+                                         that passed check-summary, summarize writes the task of a second reader
+                                         (tasks/samenvatting/lees.md). Only a summary that passed check-summary and that the
+                                         second reader found carried by the report, sentence by sentence, is put into the
+                                         evaluation; without one the report opens as loep writes it. Run it after weigh,
+                                         again after the reader, and before render
   check-summary --run <run>              Hold that summary to the report: length, status, numbers, words that soften; non-zero
                                          exit on problems
   check-reading --run <run>              Hold the reading of the second reader (tasks/samenvatting/lees.md) to the summary and

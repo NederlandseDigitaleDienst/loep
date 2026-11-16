@@ -5,7 +5,7 @@
  * The pattern is the one of the weighing (`weigh`, `check-weigh`).
  */
 import { existsSync } from "node:fs";
-import { mkdir, readFile } from "node:fs/promises";
+import { mkdir, readFile, rename } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { readJson, sha256, sha256File, writeFileAtomic, writeJson } from "../lib/canonical.ts";
 import type { Evaluation } from "../lib/evaluation.ts";
@@ -50,7 +50,7 @@ const STALE_NL: Record<SummaryStaleReason, string> = {
   unchecked: "Er staat een samenvatting die check-summary niet heeft goedgekeurd, of die daarna is gewijzigd.",
   report: "De samenvatting is geschreven voor een rapport dat sindsdien is veranderd.",
   task: "De samenvatting is geschreven met een andere versie van de opdracht.",
-  unread: "De samenvatting doorstond check-summary, maar een tweede lezer heeft haar nog niet naast dit rapport gelegd.",
+  unread: "De samenvatting doorstond check-summary, maar er is geen geldig oordeel van een tweede lezer over deze tekst en dit rapport.",
   refuted: "De tweede lezer vond in de samenvatting iets wat het rapport niet draagt.",
 };
 
@@ -61,8 +61,8 @@ export function summaryLineNl(result: SummarizeResult): string {
   const reason = result.reason ?? "report";
   const next =
     reason === "unchecked" ? "Draai check-summary"
-    : reason === "unread" ? `Start een nieuwe agent, niet de schrijver, met ${result.readTask}, en draai daarna summarize opnieuw`
-    : reason === "refuted" ? `Het gaat om ${result.refuted === 1 ? "1 zin" : `${result.refuted} zinnen`}; wat de lezer vond staat in ${READING}. Laat de schrijver haar herstellen met ${result.task}`
+    : reason === "unread" ? `Start een nieuwe agent, niet de schrijver, met ${result.readTask}. Die draait zelf check-reading. Draai daarna summarize opnieuw`
+    : reason === "refuted" ? `Het gaat om ${result.refuted === 1 ? "1 zin" : `${result.refuted} zinnen`}; wat de lezer vond staat in ${READING}. Laat de schrijver haar herstellen met ${result.task}, en draai daarna check-summary en summarize voor een nieuwe leesopdracht`
     : `Laat haar opnieuw schrijven; de opdracht staat in ${result.task}`;
   return `${STALE_NL[reason]} Ze staat niet in het rapport. ${next}`;
 }
@@ -82,8 +82,9 @@ const stoppingDefects = (evaluation: Evaluation): string[] => (deriveReport(eval
 async function standing(runDir: string, sourceSha256: string): Promise<"none" | "current" | SummaryStaleReason> {
   if (!existsSync(join(runDir, PROPOSAL))) return "none";
   if (!existsSync(join(runDir, STAMP))) return "unchecked";
-  const stamp = await readJson<SummaryStamp>(join(runDir, STAMP));
-  if (stamp.proposalSha256 !== (await sha256File(join(runDir, PROPOSAL)))) return "unchecked";
+  // A stamp that cannot be read is no stamp: the summary is optional, and no command may stop on it.
+  const stamp = await readJson<SummaryStamp>(join(runDir, STAMP)).catch(() => null);
+  if (!stamp || stamp.proposalSha256 !== (await sha256File(join(runDir, PROPOSAL)))) return "unchecked";
   if (stamp.sourceSha256 !== sourceSha256) return "report";
   return stamp.promptSha256 === (await taskSha256(runDir)) ? "current" : "task";
 }
@@ -100,6 +101,7 @@ async function writeTask(runDir: string, evaluation: Evaluation): Promise<string
     site: evaluation.site.name,
     source: join(absoluteRun, SOURCE),
     reportSha256: sourceSha256,
+    taskSha256: sha256(readTemplate("samenvat")),
     output: join(absoluteRun, PROPOSAL),
     check: `node ${cli} check-summary --run ${absoluteRun}`,
     reading: join(absoluteRun, READING),
@@ -122,6 +124,9 @@ async function writeTask(runDir: string, evaluation: Evaluation): Promise<string
 async function writeReadTask(runDir: string, evaluation: Evaluation, proposal: SummaryProposal, sourceSha256: string): Promise<void> {
   const absoluteRun = resolve(runDir);
   const cli = resolve(new URL("../cli.ts", import.meta.url).pathname);
+  // A verdict on an earlier text is not left where the next reader writes: it goes to the work folder of the writer, who needed it to repair.
+  const earlier = existsSync(join(runDir, READING)) ? await readJson<SummaryReading | null>(join(runDir, READING)).catch(() => null) : undefined;
+  if (earlier !== undefined && earlier?.proposalSha256 !== (await sha256File(join(runDir, PROPOSAL)))) await rename(join(runDir, READING), join(await makeWorkDir(runDir, WORK), `lezing-${new Date().toISOString().replace(/[:.]/g, "-")}.json`));
   const values: Record<string, string> = {
     site: evaluation.site.name,
     source: join(absoluteRun, SOURCE),
@@ -173,11 +178,20 @@ export async function summaryInto(runDir: string, evaluation: Evaluation): Promi
     evaluation.executiveSummary = { status: "stale", reason: state };
     return { ...none, summary: "stale", reason: state };
   }
-  const proposal = await readJson<SummaryProposal>(join(runDir, PROPOSAL));
+  const proposal = await readJson<SummaryProposal | null>(join(runDir, PROPOSAL)).catch(() => null);
+  if (!proposal) {
+    evaluation.executiveSummary = { status: "stale", reason: "unchecked" };
+    return { ...none, summary: "stale", reason: "unchecked" };
+  }
   // The stamp says a check passed once; the check of this version of loep is the one that counts, and it is cheap.
   if (proposal.reportSha256 !== sourceSha256) {
     evaluation.executiveSummary = { status: "stale", reason: "report" };
     return { ...none, summary: "stale", reason: "report" };
+  }
+  // Written under another version of the task: checking it again does not make it a text of this task.
+  if (proposal.taskSha256 !== sha256(readTemplate("samenvat"))) {
+    evaluation.executiveSummary = { status: "stale", reason: "task" };
+    return { ...none, summary: "stale", reason: "task" };
   }
   if (validateSummary(proposal, evaluation, summarySourceText(evaluation), stoppingDefects(evaluation)).length > 0) {
     evaluation.executiveSummary = { status: "stale", reason: "unchecked" };
@@ -200,7 +214,7 @@ export async function summaryInto(runDir: string, evaluation: Evaluation): Promi
   evaluation.executiveSummary = {
     status: "applied",
     paragraphs: proposal.paragraphs.map((paragraph) => paragraph.textNl.trim()),
-    sources: proposal.paragraphs.map((paragraph) => paragraph.sources),
+    sources: proposal.paragraphs.map((paragraph) => paragraph.sources.filter((source): source is string => typeof source === "string")),
     ...(model ? { model } : {}),
     ...(readerModel ? { readerModel } : {}),
     templateSha256: sha256(readTemplate("samenvat")),
@@ -235,6 +249,7 @@ export async function checkSummary(runDir: string): Promise<string[]> {
     return [`${PROPOSAL} is niet te lezen: ${(error as Error).message}`];
   }
   // A summary written from another report is not held to this one: the numbers may fit by chance, the rest was never read against it.
+  if ((proposal as SummaryProposal | null)?.taskSha256 !== sha256(readTemplate("samenvat"))) return [`de samenvatting is geschreven met een andere versie van de opdracht: taskSha256 is niet ${sha256(readTemplate("samenvat"))}. Lees ${TASK} opnieuw, schrijf de samenvatting naar de opdracht van nu en neem taskSha256 eruit over`];
   if ((proposal as SummaryProposal | null)?.reportSha256 !== sha256(source)) return [`de samenvatting is geschreven voor een ander rapport dan dat van nu: reportSha256 is niet ${sha256(source)}. Lees ${SOURCE} opnieuw, schrijf de samenvatting opnieuw en neem reportSha256 over uit de opdracht`];
   const problems = validateSummary(proposal, evaluation, source, stoppingDefects(evaluation));
   if (problems.length > 0) return problems;
@@ -258,7 +273,8 @@ export async function checkReading(runDir: string): Promise<{ problems: string[]
   const evaluation = await readEvaluation(join(runDir, "evaluation.json"));
   const source = summarySourceText(evaluation);
   if (!existsSync(join(runDir, PROPOSAL))) return { problems: [`${PROPOSAL} ontbreekt; er is geen samenvatting om te lezen`], refuted: [] };
-  const proposal = await readJson<SummaryProposal>(join(runDir, PROPOSAL));
+  const proposal = await readJson<SummaryProposal | null>(join(runDir, PROPOSAL)).catch(() => null);
+  if (!Array.isArray(proposal?.paragraphs) || proposal.paragraphs.some((paragraph) => typeof paragraph?.textNl !== "string")) return { problems: [`${PROPOSAL} is geen samenvatting die te lezen is; draai eerst check-summary`], refuted: [] };
   const read = await standingReading(runDir, proposal, source);
   if (!read) return { problems: [`${READING} ontbreekt`], refuted: [] };
   return { problems: read.problems, refuted: read.refuted };

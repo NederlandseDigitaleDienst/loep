@@ -167,6 +167,9 @@ Een agent starten betekent steeds: een aparte agent die alleen dit krijgt: "Lees
    # start één agent met RUN/tasks/samenvatting/taak.md, daarna:
    LOEP check-summary --run RUN
    LOEP summarize --run RUN
+   # start een tweede, nieuwe agent met RUN/tasks/samenvatting/lees.md, daarna:
+   LOEP check-reading --run RUN
+   LOEP summarize --run RUN
    LOEP render --run RUN
    LOEP seal --run RUN
    ```

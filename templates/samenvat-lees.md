@@ -58,13 +58,13 @@ In deze vorm, met een regel voor elke zin:
   "taskSha256": "{{taskSha256}}",
   "model": "<het model waarmee je draait, zoals je het zelf kent>",
   "sentences": [
-    { "n": 1, "verdict": "gedragen", "quotes": ["<letterlijk uit het rapport>"] },
-    { "n": 2, "verdict": "niet-gedragen", "noteNl": "<wat er niet klopt en wat het rapport wel zegt>" }
+    { "n": 1, "sentence": "<zin 1, letterlijk>", "verdict": "gedragen", "quotes": ["<letterlijk uit het rapport>"] },
+    { "n": 2, "sentence": "<zin 2, letterlijk>", "verdict": "niet-gedragen", "noteNl": "<wat er niet klopt en wat het rapport wel zegt>" }
   ]
 }
 ```
 
-`reportSha256`, `proposalSha256` en `taskSha256` neem je letterlijk over. Een stuk in `quotes` is minstens een paar woorden lang en staat teken voor teken zo in het rapport; kopieer het, typ het niet over.
+`reportSha256`, `proposalSha256` en `taskSha256` neem je letterlijk over. In `sentence` staat de zin waarover je oordeelt, letterlijk zoals hierboven. Een stuk in `quotes` is minstens drie woorden lang, staat teken voor teken zo in het rapport en gaat over wat de zin zegt: het deelt woorden of getallen met de zin. Kopieer het, typ het niet over. Eén stuk draagt hooguit twee zinnen; een kop of een regel die overal bij past, wijst geen plek aan.
 
 ## Controleren
 
