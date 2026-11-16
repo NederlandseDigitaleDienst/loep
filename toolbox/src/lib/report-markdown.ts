@@ -1729,7 +1729,8 @@ export type ReportBlock = (typeof REPORT_ORDER)[number];
 export const REPORT_ORDER = ["title", "summary", "overview", "whatNext", "measures", "byComponent", "byPage", "resultsHead", "scores", "results", "about", "facts", "scope", "baseline", "sample", "tools", "reliability", "appendixA", "appendixB", "rechecks"] as const;
 
 /** What the writer of the summary does not read: the appendices, which repeat per criterion what the chapters say and are most of the pages. */
-const NOT_SUMMARY_SOURCE: readonly ReportBlock[] = ["appendixA", "appendixB", "rechecks"];
+/** Not what the writer of the summary reads: the appendices, and the tools chapter, which changes with every version of loep, of a package or of Node. */
+const NOT_SUMMARY_SOURCE: readonly ReportBlock[] = ["appendixA", "appendixB", "rechecks", "tools"];
 
 function reportBlocks(input: Evaluation, decisions: DecisionLayer = { decisions: [], sha256: null }, pictures: CutoutPictures = {}): Map<ReportBlock, string[]> {
   const derived = deriveReport(input, decisions);
@@ -2156,6 +2157,6 @@ export function summarySourceText(input: Evaluation): string {
   // Without the summary itself, and without a signature: the text is the same before and after signing.
   const { executiveSummary: _summary, ...evaluation } = input;
   const blocks = reportBlocks({ ...evaluation, signature: null } as Evaluation);
-  const lines = REPORT_ORDER.filter((name) => !NOT_SUMMARY_SOURCE.includes(name)).flatMap((name) => blocks.get(name) ?? []).filter((line) => !/^- (?:Versie van de evaluatie|Gemaakt met loep|Datum van het onderzoek|Datum)\b/.test(line));
+  const lines = REPORT_ORDER.filter((name) => !NOT_SUMMARY_SOURCE.includes(name)).flatMap((name) => blocks.get(name) ?? []).filter((line) => !/^- (?:Versie van de evaluatie|Gemaakt met|Datum van het onderzoek|Datum)\b/.test(line));
   return joined(lines);
 }

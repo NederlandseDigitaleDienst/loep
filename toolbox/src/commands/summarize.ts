@@ -77,11 +77,13 @@ async function writeTask(runDir: string, evaluation: Evaluation): Promise<string
   const absoluteRun = resolve(runDir);
   const cli = resolve(new URL("../cli.ts", import.meta.url).pathname);
   const source = summarySourceText(evaluation);
+  const sourceSha256 = sha256(source);
   await mkdir(join(runDir, "tasks", "samenvatting"), { recursive: true });
   await writeFileAtomic(join(runDir, SOURCE), source);
   const values: Record<string, string> = {
     site: evaluation.site.name,
     source: join(absoluteRun, SOURCE),
+    reportSha256: sourceSha256,
     output: join(absoluteRun, PROPOSAL),
     check: `node ${cli} check-summary --run ${absoluteRun}`,
     wordsMax: String(SUMMARY_WORDS_MAX),
@@ -96,7 +98,7 @@ async function writeTask(runDir: string, evaluation: Evaluation): Promise<string
   });
   await writeFileAtomic(join(runDir, TASK), text);
   await mkdir(join(runDir, "verdicts"), { recursive: true });
-  return sha256(source);
+  return sourceSha256;
 }
 
 /**
@@ -115,6 +117,15 @@ export async function summaryInto(runDir: string, evaluation: Evaluation): Promi
     return { ...none, summary: "stale", reason: state };
   }
   const proposal = await readJson<SummaryProposal>(join(runDir, PROPOSAL));
+  // The stamp says a check passed once; the check of this version of loep is the one that counts, and it is cheap.
+  if (proposal.reportSha256 !== sourceSha256) {
+    evaluation.executiveSummary = { status: "stale", reason: "report" };
+    return { ...none, summary: "stale", reason: "report" };
+  }
+  if (validateSummary(proposal, evaluation, summarySourceText(evaluation), stoppingDefects(evaluation)).length > 0) {
+    evaluation.executiveSummary = { status: "stale", reason: "unchecked" };
+    return { ...none, summary: "stale", reason: "unchecked" };
+  }
   const model = cleanModel(proposal.model);
   evaluation.executiveSummary = {
     status: "applied",
@@ -151,10 +162,17 @@ export async function checkSummary(runDir: string): Promise<string[]> {
   } catch (error) {
     return [`${PROPOSAL} is niet te lezen: ${(error as Error).message}`];
   }
+  // A summary written from another report is not held to this one: the numbers may fit by chance, the rest was never read against it.
+  if ((proposal as SummaryProposal | null)?.reportSha256 !== sha256(source)) return [`de samenvatting is geschreven voor een ander rapport dan dat van nu: reportSha256 is niet ${sha256(source)}. Lees ${SOURCE} opnieuw, schrijf de samenvatting opnieuw en neem reportSha256 over uit de opdracht`];
   const problems = validateSummary(proposal, evaluation, source, stoppingDefects(evaluation));
-  if (problems.length === 0) {
-    const stamp: SummaryStamp = { sourceSha256: sha256(source), promptSha256: await taskSha256(runDir), proposalSha256: await sha256File(join(runDir, PROPOSAL)), stampedAt: new Date().toISOString() };
-    await writeJson(join(runDir, STAMP), stamp);
+  if (problems.length > 0) return problems;
+  const stamp = { sourceSha256: sha256(source), promptSha256: await taskSha256(runDir), proposalSha256: await sha256File(join(runDir, PROPOSAL)) };
+  // A stamp that says the same already is left as it is: the file is under the seal of the run.
+  if (existsSync(join(runDir, STAMP))) {
+    const standingStamp = await readJson<SummaryStamp>(join(runDir, STAMP));
+    if (standingStamp.sourceSha256 === stamp.sourceSha256 && standingStamp.promptSha256 === stamp.promptSha256 && standingStamp.proposalSha256 === stamp.proposalSha256) return [];
   }
-  return problems;
+  if (signatureIsCurrent(evaluation)) return ["het rapport is afgetekend; een nieuwe controle zou veranderen wat is getekend"];
+  await writeJson(join(runDir, STAMP), { ...stamp, stampedAt: new Date().toISOString() } satisfies SummaryStamp);
+  return [];
 }

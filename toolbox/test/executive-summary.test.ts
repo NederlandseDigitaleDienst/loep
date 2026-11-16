@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { checkSummary, summarize, summaryLineNl } from "../src/commands/summarize.ts";
-import { canonicalJson } from "../src/lib/canonical.ts";
+import { canonicalJson, sha256 } from "../src/lib/canonical.ts";
 import { mergeFindings } from "../src/lib/defects.ts";
 import type { Evaluation } from "../src/lib/evaluation.ts";
 import { SUMMARY_WORDS_MAX, validateSummary, type SummaryProposal } from "../src/lib/executive-summary.ts";
@@ -73,6 +73,13 @@ test("the check holds a summary to the report: length, form, numbers, status and
   refused("the norm not named", first("De site van Voorbeeldgemeente voldoet niet aan de norm voor toegankelijkheid. Van de 55 criteria zijn er 5 niet gehaald en 4 open, en door die 4 open criteria is het status C."), /noemt de norm niet; zeg één keer in een zin "WCAG 2\.2 niveau A en AA"/);
   // A defect without who it hinders.
   refused("a defect without a group", (proposal) => void (proposal.paragraphs[1]!.textNl = "De knop om de aanvraag te versturen heeft geen naam. Grijze hulptekst is slecht te lezen."), /noemt bij de gebreken VRB-G-e7cb, VRB-G-9fc8 niet voor wie het geldt/);
+  // The two counts are the ones of the evaluation, not any two numbers the report has somewhere.
+  refused("other counts", first("De site voldoet niet aan WCAG 2.2 niveau A en AA. Van de 55 criteria zijn er 4 niet gehaald en 5 open, en door die open criteria is het status C."), /de zin met "niet gehaald" noemt 55, 4, 5; het rapport heeft 5 criteria die niet zijn gehaald, 4 open/);
+  refused("a count in words", first("De site voldoet niet aan WCAG 2.2 niveau A en AA. Van de 55 criteria zijn er vijf niet gehaald en 4 open, en door die 4 open criteria is het status C."), /"vijf niet" is een aantal in letters/);
+  refused("meets with another adverb", add("Aan de overige eisen voldoet de site ruimschoots."), /zegt dat de site voldoet|ruimschoots/);
+  refused("meets, turned around", add("Aan de meeste eisen voldoet de site wel."), /zegt dat de site voldoet/);
+  refused("another status with a capital", add("Status A is daarmee bereikt."), /noemt status A; het rapport komt uit op status C/);
+  refused("softer words", add("De meeste bezoekers merken hier nauwelijks iets van."), /"nauwelijks" maakt kleiner/);
   // A group is stopped at a core task: a paragraph rests on a defect that stops it.
   refused("silent about who is stopped", (proposal) => void (proposal.paragraphs[1]!.sources = ["groepen"]), /een groep bezoekers loopt vast bij een kerntaak/);
   // Open criteria stay open: a paragraph says what was not established.
@@ -101,10 +108,14 @@ test("what the writer reads is the report without its appendices and without wha
   const text = summarySourceText(evaluation);
   assert.match(text, /^# Toegankelijkheidsonderzoek Voorbeeldgemeente/);
   for (const chapter of ["## Samenvatting", "## Wat nu", "## Resultaten per criterium", "## Betrouwbaarheid en beperkingen"]) assert.ok(text.includes(chapter), chapter);
-  for (const left of ["## Bijlage A", "## Bijlage B", "Versie van de evaluatie", "Gemaakt met loep", "Datum van het onderzoek"]) assert.ok(!text.includes(left), left);
+  for (const left of ["## Bijlage A", "## Bijlage B", "Versie van de evaluatie", "Gemaakt met", "## Gereedschap", "- Toolbox:", "- Runtime:", "Datum van het onderzoek"]) assert.ok(!text.includes(left), left);
   // The same text with a summary in the evaluation, and after the evaluation was made again on another day.
   const later: Evaluation = { ...evaluation, evaluatedAt: "2026-10-12T09:30:00.000Z", executiveSummary: { status: "applied", paragraphs: ["Een tekst."], sources: [["status"]], templateSha256: "a", proposalSha256: "b" } };
   assert.equal(summarySourceText(later), text);
+  // And with another version of loep, of Node or of a package: the report says the same.
+  const upgraded = structuredClone(evaluation);
+  upgraded.toolchain.toolbox.version = "99.0.0";
+  assert.equal(summarySourceText(upgraded), text);
 });
 
 test("summarize writes the task and the report, and puts in only a summary that was checked for this report", async () => {
@@ -114,6 +125,7 @@ test("summarize writes the task and the report, and puts in only a summary that 
     writeFileSync(path, canonicalJson(example()));
     writeFileSync(join(dir, "manifest.json"), JSON.stringify({ steps: [] }));
     const read = (): Evaluation => ({ ...(JSON.parse(readFileSync(path, "utf8")) as Evaluation), signature: null });
+    const written = (proposal: object = good()): string => JSON.stringify({ reportSha256: sha256(summarySourceText(read())), ...proposal });
 
     // No summary yet: the task and the report as text are there, the evaluation has none.
     const first = await summarize(dir);
@@ -122,13 +134,14 @@ test("summarize writes the task and the report, and puts in only a summary that 
     const task = readFileSync(join(dir, "tasks", "samenvatting", "taak.md"), "utf8");
     assert.match(task, new RegExp(`hooguit ${SUMMARY_WORDS_MAX} woorden`, "i"));
     assert.doesNotMatch(task, /\{\{/);
+    assert.ok(task.includes(`"reportSha256": "${sha256(summarySourceText(read()))}"`), "the task gives the hash of the report to copy");
     assert.doesNotMatch(task, /\b[Hh]ij\b/);
     assert.equal(readFileSync(join(dir, "tasks", "samenvatting", "rapport.md"), "utf8"), summarySourceText(read()));
     assert.equal(read().executiveSummary, undefined);
 
     // Written and not checked: not in the report.
     mkdirSync(join(dir, "verdicts"), { recursive: true });
-    writeFileSync(join(dir, "verdicts", "samenvatting.json"), JSON.stringify(good()));
+    writeFileSync(join(dir, "verdicts", "samenvatting.json"), written());
     assert.deepEqual([(await summarize(dir)).summary, read().executiveSummary], ["stale", { status: "stale", reason: "unchecked" }]);
 
     // Checked: in the evaluation, and the report opens with it in every form.
@@ -148,10 +161,12 @@ test("summarize writes the task and the report, and puts in only a summary that 
     assert.match(opening, /\*\*Voorlopige status: C/);
     assert.match(renderHtml(applied), /Mensen die niet zien kunnen geen vergunning aanvragen/);
     // Checking again changes nothing: the summary in the evaluation is not part of what the writer read.
+    const stampBefore = readFileSync(join(dir, "verdicts", "samenvatting.stamp.json"), "utf8");
     assert.deepEqual(await checkSummary(dir), []);
+    assert.equal(readFileSync(join(dir, "verdicts", "samenvatting.stamp.json"), "utf8"), stampBefore, "a second check leaves the stamp as it is: it is under the seal");
 
     // Changed after the check: not in the report until it is checked again.
-    writeFileSync(join(dir, "verdicts", "samenvatting.json"), JSON.stringify({ ...good(), model: "ander-model" }));
+    writeFileSync(join(dir, "verdicts", "samenvatting.json"), written({ ...good(), model: "ander-model" }));
     assert.deepEqual([(await summarize(dir)).summary, read().executiveSummary], ["stale", { status: "stale", reason: "unchecked" }]);
     assert.deepEqual(await checkSummary(dir), []);
     assert.equal((await summarize(dir)).summary, "applied");
@@ -164,9 +179,14 @@ test("summarize writes the task and the report, and puts in only a summary that 
     assert.deepEqual([stale.summary, stale.reason], ["stale", "report"]);
     assert.match(summaryLineNl(stale), /geschreven voor een rapport dat sindsdien is veranderd\. Ze staat niet in het rapport\. Laat haar opnieuw schrijven/);
     assert.ok(!renderMarkdown(read()).includes("De site van Voorbeeldgemeente voldoet niet aan WCAG 2.2 niveau A en AA, de norm"));
+    // Checking the old text again does not bring it back: it was written from another report, whatever its numbers.
+    const again = await checkSummary(dir);
+    assert.equal(again.length, 1);
+    assert.match(again[0]!, /geschreven voor een ander rapport dan dat van nu/);
+    assert.deepEqual([(await summarize(dir)).summary, read().executiveSummary?.status], ["stale", "stale"]);
 
     // A summary that breaks a rule is not stamped.
-    writeFileSync(join(dir, "verdicts", "samenvatting.json"), JSON.stringify({ paragraphs: [{ textNl: "Over het algemeen goed.", sources: ["status"] }] }));
+    writeFileSync(join(dir, "verdicts", "samenvatting.json"), written({ paragraphs: [{ textNl: "Over het algemeen goed.", sources: ["status"] }] }));
     assert.ok((await checkSummary(dir)).length > 0);
     assert.equal((await summarize(dir)).summary, "stale");
   } finally {
