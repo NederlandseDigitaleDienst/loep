@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="nl">
+<head><meta charset="utf-8"><title>Getoonde melding</title></head>
+<body>
+<main>
+<h1>Een pagina met een melding die al in de code staat en net na het laden verschijnt</h1>
+<p>De inhoud van de pagina.</p>
+</main>
+<div id="notice" hidden style="position:fixed;inset:0;background:#fff;padding:2rem">
+<p>Deze site gebruikt cookies.</p><button id="ok" type="button">Oké</button>
+</div>
+<script>
+  // A notice that is in the markup from the start and that a script shows a moment after the load.
+  const notice = document.getElementById("notice");
+  setTimeout(() => (notice.hidden = false), 1500);
+  document.getElementById("ok").addEventListener("click", () => notice.remove());
+</script>
+</body>
+</html>

@@ -890,7 +890,7 @@ export const STEP_APPEAR_MS = 5000;
 const STEP_POLL_MS = 250;
 
 /** The element of a step, looked for again for a short while when it is not there yet. Null when it did not appear. */
-export async function resolveStepWaiting(surface: Surface, step: Step): Promise<Awaited<ReturnType<typeof resolveStep>>> {
+async function resolveStepWaiting(surface: Surface, step: Step): Promise<Awaited<ReturnType<typeof resolveStep>>> {
   const wanted = { target: step.target!, locators: step.locators ?? null };
   const until = Date.now() + STEP_APPEAR_MS;
   for (;;) {
