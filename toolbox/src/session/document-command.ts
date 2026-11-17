@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { readFile } from "node:fs/promises";
+import { copyFile, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { renderPage } from "../instruments/documents/pdf.ts";
 import { readJson } from "../lib/canonical.ts";
@@ -70,6 +70,10 @@ export async function documentOutcome(runDir: string, args: string[], options: O
       const picture = await renderPage(join(runDir, originalPath(document.item)), page, images.image(), LOOK_DPI);
       if (picture) image = images.relative(picture);
       else imageNote = "geen beeld: pdftoppm (poppler) is niet geïnstalleerd of kon de pagina niet tekenen";
+    } else if (facts.kind === "image" && facts.files.pageImages[0]) {
+      const picture = images.image();
+      await copyFile(join(runDir, facts.files.pageImages[0]), picture);
+      image = images.relative(picture);
     } else imageNote = facts.plain ? "geen beeld: platte tekst heeft geen opmaak om te tekenen" : "geen beeld: van een kantoorbestand wordt geen pagina getekend";
     const pageFacts = {
       headings: facts.headings.filter((entry) => entry.page === page),
@@ -126,10 +130,11 @@ export async function documentOutcome(runDir: string, args: string[], options: O
       links: first(facts.links.map((link) => `${link.text || "(geen tekst)"}${link.href ? ` -> ${link.href.slice(0, 80)}` : ""}`), 25),
       ...(facts.fields.length > 0 ? { fields: first(facts.fields.map((field) => `${field.type} ${field.id}: ${field.name ?? "(geen naam)"}`), 25) } : {}),
       ...(facts.office ? { paragraphsThatLookLikeAHeading: first(facts.office.fakeHeadings.map((entry) => entry.text), 15), lists: facts.office.lists, ...(facts.office.slides ? { slideTitles: first(facts.office.slides.map((slide) => `${slide.slide}: ${slide.title ?? "(geen titel)"}`), 40) } : {}), ...(facts.office.sheets ? { sheetList: facts.office.sheets.map((sheet) => `${sheet.name}: ${sheet.headerRowDefined ? "kopregel vastgelegd" : "geen kopregel vastgelegd"}; eerste rij: ${sheet.firstRow.join(" | ").slice(0, 100)}`) } : {}), partsWithOwnLanguage: first(facts.office.languageParts, 8) } : {}),
+      ...(facts.image ? { picture: facts.image } : {}),
       ...(facts.plain ? { plainText: { format: facts.plain.format, contentType: facts.plain.contentType, charset: facts.plain.charset ?? "(geen)", validUtf8: facts.plain.validUtf8, lines: facts.plain.lines, ...(charsetNoteNl(facts.plain) ? { charsetNote: charsetNoteNl(facts.plain) } : {}) } } : {}),
       ...(facts.notMeasuredNl.length > 0 ? { notMeasured: facts.notMeasuredNl } : {}),
       files: facts.files,
-      note: `gelezen uit het bestand, zonder schermlezer; met --page n zie je één ${unit}${facts.kind === "pdf" ? " met beeld, tekst en tags; met --tags de tagboom" : " met tekst"}`,
+      note: `gelezen uit het bestand, zonder schermlezer; met --page n zie je één ${unit}${facts.kind === "pdf" ? " met beeld, tekst en tags; met --tags de tagboom" : facts.kind === "image" ? " met beeld en de herkende tekst" : " met tekst"}`,
     },
   };
 }

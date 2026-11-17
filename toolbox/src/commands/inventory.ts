@@ -3,7 +3,7 @@ import type { BrowserContext, Page, Response } from "playwright";
 import { confirmLogin, INPAGE_PATH, launchBrowser, loadPage, newContext, withinPageTime } from "../browser/session.ts";
 import type { SettleNote } from "../browser/settle.ts";
 import { sha256, slugForUrl, writeFileAtomic, writeJson } from "../lib/canonical.ts";
-import { countByKind, documentKind, kindOfContentType, REDIRECTS_ELSEWHERE_NL, startedDownload, type DocumentKind, type DocumentTotals, type InventoryDocument } from "../lib/documents.ts";
+import { countByKind, documentKind, isImageFile, kindOfContentType, REDIRECTS_ELSEWHERE_NL, startedDownload, type DocumentKind, type DocumentTotals, type InventoryDocument } from "../lib/documents.ts";
 import type { Vendor } from "../lib/evaluation.ts";
 import { trialFetch } from "../lib/writes.ts";
 import { ignoreSecrets, isLogout, loginCookieHeader, LoginExpired, noteLogoutUrl, runLoginMark } from "../lib/login.ts";
@@ -440,17 +440,30 @@ export function landingAddress(requested: string, landed: string): string {
 
 const NON_PAGE = /\.(pdf|png|jpe?g|gif|svg|webp|ico|css|js|json|xml|txt|zip|woff2?|ttf|mp4|mp3|docx?|xlsx?|pptx?|odt|csv)$/i;
 
-/** A link on a page: where it leads, its text, and the file name of its `download` attribute (null without one, "" when it names none). */
+/**
+ * A link on a page: where it leads, its text, and the file name of its `download` attribute (null without one, "" when it names none).
+ * `pictured`: the link has no text of its own and holds a picture, as a thumbnail that opens the picture enlarged.
+ */
 interface Anchor {
   href: string;
   text: string;
   download: string | null;
+  pictured: boolean;
+}
+
+/**
+ * The kind of document a link leads to: by the extension of its address, or a picture file
+ * linked with a text of its own, such as an organisation chart only offered as a picture. A
+ * picture behind a thumbnail is that picture enlarged, and no document.
+ */
+export function linkedDocumentKind(anchor: Pick<Anchor, "href" | "pictured">): DocumentKind | null {
+  return documentKind(anchor.href) ?? (isImageFile(anchor.href) && !anchor.pictured ? "image" : null);
 }
 
 /** Every link on the page with its text, through shadow roots. Which of them lead to a document is decided outside the page. */
 function linksWithText(page: Page): Promise<Anchor[]> {
   return page.evaluate(() => {
-    const found: { href: string; text: string; download: string | null }[] = [];
+    const found: { href: string; text: string; download: string | null; pictured: boolean }[] = [];
     const visit = (root: Document | ShadowRoot): void => {
       for (const element of root.querySelectorAll("*")) {
         if (element.shadowRoot) visit(element.shadowRoot);
@@ -462,7 +475,8 @@ function linksWithText(page: Page): Promise<Anchor[]> {
           if (url.protocol !== "http:" && url.protocol !== "https:") continue;
           url.hash = "";
           const text = element.getAttribute("aria-label") || element.textContent?.trim() || element.querySelector("img")?.getAttribute("alt") || element.getAttribute("alt") || "";
-          found.push({ href: url.href, text: text.replace(/\s+/g, " ").trim().slice(0, 200), download: element.getAttribute("download") });
+          const pictured = !element.textContent?.trim() && element.querySelector("img, picture, svg, canvas") !== null;
+          found.push({ href: url.href, text: text.replace(/\s+/g, " ").trim().slice(0, 200), download: element.getAttribute("download"), pictured });
         } catch {
           // Not a URL; nothing to follow.
         }
@@ -732,6 +746,8 @@ export async function inventory(options: InventoryOptions): Promise<Inventory> {
         noteDocument(next, kind);
         continue;
       }
+      // A picture file a link with text leads to is already a document.
+      if (documents.has(next)) continue;
       // Offered as a download: a document unless the server sends HTML. A type that stays unknown because nothing answered is a document too.
       if (downloads.has(next) && failedLoadsProbed++ < MAX_DOCUMENT_PROBES) {
         const probe = await probeDocument(next, origins);
@@ -773,7 +789,7 @@ export async function inventory(options: InventoryOptions): Promise<Inventory> {
           noteLogoutUrl(anchor.href);
         }
         for (const anchor of anchors) {
-          const linked = documentKind(anchor.href);
+          const linked = linkedDocumentKind(anchor);
           if (!isInScope(anchor.href, origins, prefix)) {
             if (linked) elsewhere.set(anchor.href, linked);
             continue;
@@ -836,6 +852,9 @@ export async function inventory(options: InventoryOptions): Promise<Inventory> {
     noteDocument(entry.url, documentKind(entry.url));
     pages.splice(pages.indexOf(entry), 1);
   }
+
+  // A picture file skipped where only a thumbnail led to it is a document all the same when a link with text on a later page leads to it.
+  for (let index = skipped.length - 1; index >= 0; index--) if (documents.has(skipped[index]!.url)) skipped.splice(index, 1);
 
   const totals: Record<string, number> = {};
   for (const entry of pages) {

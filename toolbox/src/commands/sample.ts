@@ -429,7 +429,7 @@ export const DOCUMENT_CENSUS_LIMIT = 20;
 const STRUCTURED_PER_KIND = 2;
 
 /** "het pdf-bestand", "het tekstbestand": a file of one kind in the reason for choosing it. */
-const fileOfKindNl = (kind: DocumentKind): string => (kind === "text" ? "tekstbestand" : kind === "other" ? "bestand van een andere soort" : `${kind}-bestand`);
+const fileOfKindNl = (kind: DocumentKind): string => (kind === "text" ? "tekstbestand" : kind === "image" ? "beeldbestand" : kind === "other" ? "bestand van een andere soort" : `${kind}-bestand`);
 
 /**
  * Which documents are examined. Few: all of them. Many: per kind the document most pages

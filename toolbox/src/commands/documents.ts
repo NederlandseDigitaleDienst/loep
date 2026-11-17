@@ -43,6 +43,13 @@ export async function measureDocument(runDir: string, document: SampleDocument, 
       Object.assign(facts, measured.facts);
       await writeFileAtomic(join(runDir, dir, "text.txt"), measured.text);
       facts.files.text = join(dir, "text.txt");
+    } else if (document.kind === "image") {
+      const { measureImage } = await import("../instruments/documents/image.ts");
+      const measured = await measureImage(file, join(runDir, dir, "page-1.png"), scratch);
+      Object.assign(facts, measured.facts);
+      facts.files.pageImages.push(join(dir, "page-1.png"));
+      await writeFileAtomic(join(runDir, dir, "text.txt"), measured.text);
+      facts.files.text = join(dir, "text.txt");
     } else {
       const { measureOffice } = await import("../instruments/documents/office.ts");
       const measured = await measureOffice(file, document.kind);

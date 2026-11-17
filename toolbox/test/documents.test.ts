@@ -6,6 +6,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, test } from "node:test";
 import { fileURLToPath } from "node:url";
+import { encode as encodeJpeg } from "jpeg-js";
+import { PNG } from "pngjs";
 import { crc32 } from "node:zlib";
 import { documents as measureDocuments } from "../src/commands/documents.ts";
 import { inventory, probeDocument, type Inventory } from "../src/commands/inventory.ts";
@@ -752,6 +754,86 @@ test("plain text offered for download is a document, not a page: inventory count
   }
 });
 
+test("a picture file a link with text leads to is a document: inventory counts it, documents measures size and text in it; a picture behind a thumbnail is not (#617)", async (context) => {
+  const textPicture = readFileSync(fileURLToPath(new URL("./fixtures/session-site/site/textimg.png", import.meta.url)));
+  const decoded = PNG.sync.read(textPicture);
+  const files: Record<string, { type: string; body: Buffer }> = {
+    "/organogram.png": { type: "image/png", body: textPicture },
+    "/plattegrond.jpg": { type: "image/jpeg", body: encodeJpeg({ width: decoded.width, height: decoded.height, data: decoded.data }, 95).data },
+    "/foto.png": { type: "image/png", body: readFileSync(join(FIXTURES, "figure.png")) },
+    "/foto-groot.png": { type: "image/png", body: readFileSync(join(FIXTURES, "figure.png")) },
+    "/later-groot.png": { type: "image/png", body: readFileSync(join(FIXTURES, "figure.png")) },
+  };
+  const pages: Record<string, string> = {
+    "/": `<!doctype html><html lang="nl"><head><title>Start</title></head><body><h1>Start</h1>
+      <p><a href="/organogram.png">Organogram (png)</a> <a href="/plattegrond.jpg">Plattegrond</a></p>
+      <p><a href="/foto-groot.png"><img src="/foto.png" alt="Het gebouw"></a> <a href="/later-groot.png"><img src="/foto.png" alt="De zaal"></a> <a href="/tweede">Tweede pagina</a></p></body></html>`,
+    "/tweede": `<!doctype html><html lang="nl"><head><title>Tweede</title></head><body><h1>Tweede</h1><p><a href="/later-groot.png">Bekijk de zaal als afbeelding</a></p></body></html>`,
+  };
+  const pictureServer = createServer((request, response) => {
+    const path = new URL(request.url!, "http://x").pathname;
+    const file = files[path];
+    if (file) {
+      response.writeHead(200, { "content-type": file.type, "content-length": file.body.length });
+      response.end(request.method === "HEAD" ? undefined : file.body);
+    } else if (pages[path]) {
+      response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+      response.end(pages[path]);
+    } else {
+      response.writeHead(404, { "content-type": "text/html; charset=utf-8" });
+      response.end("<!doctype html><html lang=nl><head><title>Niet gevonden</title></head><body><h1>Niet gevonden</h1></body></html>");
+    }
+  });
+  await new Promise<void>((resolve) => pictureServer.listen(0, "127.0.0.1", resolve));
+  const site = `http://127.0.0.1:${(pictureServer.address() as { port: number }).port}`;
+  try {
+    const run = join(scratch, "run-pictures");
+    let stock: Inventory;
+    try {
+      stock = await inventory({ baseUrl: `${site}/`, out: run, maxPages: 20 });
+    } catch (error) {
+      if (/Executable doesn't exist|browserType.launch/.test((error as Error).message)) return context.skip("no browser available");
+      throw error;
+    }
+    const path = (url: string): string => new URL(url).pathname;
+    assert.deepEqual(stock.documents!.map((document) => [path(document.url), document.kind]).sort(), [["/later-groot.png", "image"], ["/organogram.png", "image"], ["/plattegrond.jpg", "image"]], "a picture linked with text is a document, also when a thumbnail elsewhere led to it first");
+    assert.deepEqual(stock.skipped.map((entry) => [path(entry.url), entry.reason]), [["/foto-groot.png", "not an HTML page"]], "a picture only shown enlarged from a thumbnail stays out");
+    assert.deepEqual(stock.documents!.find((document) => path(document.url) === "/organogram.png")!.linkedFrom, [{ page: `${site}/`, text: "Organogram (png)" }]);
+
+    const sample = withDocuments(buildSample(stock, "seed"), stock, "seed");
+    await writeJson(join(run, "sample.json"), sample);
+    assert.match(sample.note, /3 afbeelding \(png, jpg\)/);
+    assert.deepEqual(await measureDocuments(run), { documents: 3, read: 3, notRead: 0, failed: 0 });
+    const loaded = loadDocuments(run, sample.documents);
+    const facts = new Map(loaded.map((document) => [path(document.item.url), document.facts!]));
+    for (const [file, format] of [["/organogram.png", "png"], ["/plattegrond.jpg", "jpeg"]] as const) {
+      const picture = facts.get(file)!;
+      assert.equal(picture.status, "read");
+      assert.deepEqual([picture.image!.format, picture.image!.width, picture.image!.height, picture.pages], [format, 400, 60, 1]);
+      assert.ok(existsSync(join(run, picture.files.pageImages[0]!)), "the picture lies in the run as a png to look at");
+      if (TESSERACT) assert.match(picture.image!.recognisedText!, /Aanvraag indienen voor 1 maart/);
+    }
+
+    const data = { dir: run, inventory: stock, sample, pages: [], states: null, contrast: null, documents: loaded } as unknown as RunData;
+    const label = loaded.find((document) => document.item.url.endsWith("/organogram.png"))!.label;
+    const ofText = documentsExtractor(data, "1.4.5") as { read: string[]; documents: { document: string; kind: string; linkTexts: string[]; pictureFile?: { width: number; recognisedText: string | null } }[] };
+    assert.equal(ofText.read.length, 3);
+    const ours = ofText.documents.find((document) => document.document === label)!;
+    assert.equal(ours.kind, "afbeelding (png, jpg)");
+    assert.deepEqual(ours.linkTexts, ["Organogram (png)"]);
+    assert.equal(ours.pictureFile!.width, 400);
+    if (TESSERACT) assert.match(ours.pictureFile!.recognisedText!, /Aanvraag/);
+    const alternatives = documentsExtractor(data, "1.1.1") as { documents: { document: string; pictureFile?: unknown; images: { withoutAlternative: { total: number } } }[] };
+    assert.ok(alternatives.documents.find((document) => document.document === label)!.pictureFile);
+
+    mkdirSync(join(run, "observations", "main"), { recursive: true });
+    const look = await documentOutcome(run, [label], { page: "1" }, new Images(run, "observations/main/0201"));
+    assert.ok(existsSync(join(run, String(look.print.image))), "the judge sees the picture itself");
+  } finally {
+    await new Promise<void>((resolve) => void pictureServer.close(() => resolve()));
+  }
+});
+
 test("a file nobody could place is read as text in another character set, and a zip that is no office file is not read", async () => {
   const files: Record<string, { type: string; body: Buffer }> = {
     "/bijlage-1": { type: "application/octet-stream", body: readFileSync(join(FIXTURES, "windows-1252.txt")) },
@@ -877,7 +959,7 @@ test("the scope and the limitations say which documents were read, which were no
   assert.deepEqual(scope.includedNl, ["Documenten op https://voorbeeld.overheid.example (pdf, kantoorbestanden en platte tekst): 3 van 30 in de steekproef, 1 ingelezen"]);
   assert.deepEqual(scope.excludedNl, ["Documenten buiten de site waarnaar de site linkt (4 geteld)", "Documenten van een soort die niet wordt ingelezen (1 Word (doc))"]);
   const text = scope.limitationsNl.join("\n");
-  assert.match(text, /op de site staan 30 documenten \(27 pdf, 2 Word \(docx\), 1 Word \(doc\)\)\. De toolbox leest de soorten pdf, docx, odt, pptx, odp, xlsx, ods en platte tekst in\. 1 document is ingelezen en beoordeeld \(D01\)/);
+  assert.match(text, /op de site staan 30 documenten \(27 pdf, 2 Word \(docx\), 1 Word \(doc\)\)\. De toolbox leest de soorten pdf, docx, odt, pptx, odp, xlsx, ods, platte tekst en afbeeldingen \(png, jpg\) in\. 1 document is ingelezen en beoordeeld \(D01\)/);
   assert.match(text, /beoordeeld op de criteria 1\.1\.1, 1\.3\.1 en 2\.4\.2/);
   assert.match(text, /1 document is van een soort die niet wordt ingelezen \(1 Word \(doc\): D02\) en is niet onderzocht\. Dat is een open punt, geen goedkeuring\./);
   assert.match(text, /1 document was niet op te halen of niet te openen en is niet onderzocht: D03 \(niet op te halen: de server antwoordt met 404\)\./);

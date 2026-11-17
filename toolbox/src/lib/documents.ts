@@ -11,14 +11,15 @@ import { isInScope, originsNl, scopePrefix, siteOrigins, type OriginSource } fro
  */
 
 /**
- * "text" is plain text: Markdown, txt, csv, and agenda items and business cards (ics, vcf). "other" is a file a link offers for download
+ * "text" is plain text: Markdown, txt, csv, and agenda items and business cards (ics, vcf). "image" is a picture file a page links to
+ * with a text of its own, such as an organisation chart: for the visitor a document, not a picture shown enlarged. "other" is a file a link offers for download
  * (the `download` attribute) whose kind is none of these: counted as a document, not read.
  */
-export const DOCUMENT_KINDS = ["pdf", "docx", "odt", "rtf", "pptx", "odp", "xlsx", "ods", "text", "epub", "doc", "xls", "ppt", "other"] as const;
+export const DOCUMENT_KINDS = ["pdf", "docx", "odt", "rtf", "pptx", "odp", "xlsx", "ods", "text", "epub", "doc", "xls", "ppt", "image", "other"] as const;
 export type DocumentKind = (typeof DOCUMENT_KINDS)[number];
 
 /** The kinds the toolbox opens and measures. The others are recorded as not read. */
-export const READ_KINDS: readonly DocumentKind[] = ["pdf", "docx", "odt", "pptx", "odp", "xlsx", "ods", "text"];
+export const READ_KINDS: readonly DocumentKind[] = ["pdf", "docx", "odt", "pptx", "odp", "xlsx", "ods", "text", "image"];
 
 /** Why a kind is not read, in Dutch: it goes into the facts and the report. */
 export const NOT_READ_REASON_NL: Partial<Record<DocumentKind, string>> = {
@@ -44,6 +45,7 @@ export const KIND_NAME_NL: Record<DocumentKind, string> = {
   doc: "Word (doc)",
   xls: "Excel (xls)",
   ppt: "PowerPoint (ppt)",
+  image: "afbeelding (png, jpg)",
   other: "ander bestand",
 };
 
@@ -85,6 +87,22 @@ export function documentKind(url: string): DocumentKind | null {
   const extension = /\.([a-z0-9]+)$/i.exec(path)?.[1]?.toLowerCase() ?? "";
   if (extension in BY_EXTENSION) return BY_EXTENSION[extension]!;
   return extension !== "text" && extension !== "other" && (DOCUMENT_KINDS as readonly string[]).includes(extension) ? (extension as DocumentKind) : null;
+}
+
+/** Picture files a link can lead to that are read as a document: the formats the toolbox can decode for text recognition. */
+const IMAGE_FILE = /\.(png|jpe?g)$/i;
+
+/**
+ * Whether an address points at a picture file that is read as a document when a page links to it
+ * with a text of its own. A link that holds only a picture shows that picture enlarged, and that
+ * is no document; that decision is the inventory's, by the link.
+ */
+export function isImageFile(url: string): boolean {
+  try {
+    return IMAGE_FILE.test(new URL(url).pathname);
+  } catch {
+    return false;
+  }
 }
 
 /** How much of a file is looked at to tell its kind by what is in it. */
@@ -384,6 +402,17 @@ export interface OfficeFacts {
   languageParts: { lang: string; text: string }[];
 }
 
+/** A picture file read as a document: its size, and the text recognition found in it. */
+export interface ImageFacts {
+  format: "png" | "jpeg";
+  width: number;
+  height: number;
+  /** Words recognised with confidence; null when text recognition was not available. */
+  recognisedWords: number | null;
+  /** The recognised text, cut off at 400 characters; null when text recognition was not available. */
+  recognisedText: string | null;
+}
+
 /** Everything measured in one document. Nothing here judges anything. */
 export interface DocumentFacts {
   label: string;
@@ -408,6 +437,7 @@ export interface DocumentFacts {
   pdf?: PdfFacts;
   office?: OfficeFacts;
   plain?: PlainTextFacts;
+  image?: ImageFacts;
   /** Files next to facts.json, relative to the run: the text and the pictures of the first pages. */
   files: { text: string | null; tagTree: string | null; pageImages: string[] };
   /** Programs that were missing, and what was therefore not measured. */
@@ -505,7 +535,7 @@ const NO_DOCUMENTS_UNDER_LIMIT_NL = (omitted: number): string =>
  */
 export function documentScopeNl(documents: EvaluationDocuments | null, origins: string | readonly string[], elsewhere: number, omittedByLimit = 0): { includedNl: string[]; excludedNl: string[]; limitationsNl: string[] } {
   const origin = originsNl(typeof origins === "string" ? [origins] : origins);
-  const readKinds = listNl(READ_KINDS.map((kind) => (kind === "text" ? "platte tekst" : kind)));
+  const readKinds = listNl(READ_KINDS.map((kind) => (kind === "text" ? "platte tekst" : kind === "image" ? "afbeeldingen (png, jpg)" : kind)));
   const otherOrigins = elsewhere > 0 ? `Documenten buiten de site waarnaar de site linkt (${elsewhere} geteld)` : "Documenten buiten de site waarnaar de site linkt";
   if (!documents) {
     return {

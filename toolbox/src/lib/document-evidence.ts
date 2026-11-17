@@ -58,7 +58,22 @@ const pdfUa = (facts: DocumentFacts, criterion: string): Record<string, unknown>
   return { pdfUa: { examined: true, compliant: ua.compliant, failedRulesInTotal: ua.failedRules.length, failedRulesForThisCriterion: rules.map((rule) => ({ rule: `${rule.clause}-${rule.test}`, times: rule.failedChecks, description: rule.description })) } };
 };
 
+/** A picture file read as a document: what it is, and what text recognition found in it. */
+const pictureFile = (facts: DocumentFacts): Record<string, unknown> =>
+  facts.image
+    ? {
+        pictureFile: {
+          width: facts.image.width,
+          height: facts.image.height,
+          recognisedWords: facts.image.recognisedWords,
+          recognisedText: facts.image.recognisedText,
+          note: "Het document is zelf een afbeelding, waar een pagina met een link met tekst naartoe leidt. Een tekstalternatief kan het bestand niet hebben; de tekst van de link staat in linkTexts. Bekijk het met `document <label> --page 1`.",
+        },
+      }
+    : {};
+
 const images: Part = (facts) => ({
+  ...pictureFile(facts),
   images: { total: facts.pdf?.counts.images ?? facts.images.length, withAlternative: facts.images.filter((image) => image.alt).length, decorative: facts.images.filter((image) => image.decorative).length, withoutAlternative: capped(facts.images.filter((image) => !image.alt && !image.decorative).map((image) => ({ page: image.page, context: image.context }))), alternatives: capped(facts.images.filter((image) => image.alt).map((image) => ({ page: image.page, alt: image.alt }))) },
   ...(facts.pdf ? { tagged: facts.pdf.tagged, imageObjectsInContent: facts.pdf.imageObjects, scanPages: facts.pdf.scanPages, ...(facts.pdf.scanNotCheckedNl ? { scanNotCheckedNl: facts.pdf.scanNotCheckedNl } : {}) } : {}),
 });
@@ -79,9 +94,10 @@ const order: Part = (facts) => ({
 });
 
 const imagesOfText: Part = (facts) => ({
+  ...pictureFile(facts),
   ...(facts.pdf ? { scanPages: facts.pdf.scanPages, pagesWithoutText: facts.pdf.pageText.filter((page) => page.characters < 20).map((page) => ({ page: page.page, recognisedWords: page.recognisedWords, scanOnly: page.scanOnly })), ...(facts.pdf.scanNotCheckedNl ? { scanNotCheckedNl: facts.pdf.scanNotCheckedNl } : {}), imageObjectsInContent: facts.pdf.imageObjects } : {}),
   images: capped(facts.images.map((image) => ({ page: image.page, alt: image.alt, context: image.context }))),
-  note: "Of een afbeelding tekst bevat, is niet per afbeelding gemeten. Bekijk de pagina's met `document <label> --page n`.",
+  note: facts.image ? "Tekstherkenning is op het hele bestand gedaan; zie pictureFile." : "Of een afbeelding tekst bevat, is niet per afbeelding gemeten. Bekijk de pagina's met `document <label> --page n`.",
 });
 
 const title: Part = (facts) => ({ title: facts.title, fileName: decodeURIComponent(new URL(facts.url).pathname.split("/").pop() ?? ""), ...(facts.pdf ? { titleShownInTitleBar: facts.pdf.displayDocTitle } : {}), firstHeading: facts.headings[0]?.text ?? facts.office?.slides?.[0]?.title ?? null, ...(facts.plain ? { titleProperty: false, notApplicableNl: PLAIN_TITLE_NOT_APPLICABLE_NL } : {}) });
