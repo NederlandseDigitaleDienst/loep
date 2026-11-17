@@ -504,6 +504,13 @@ test("the probes and the capture of a state work inside a window that counts, on
     assert.match(row[label]!.measured!, /De proeven met formulieren, knoppen, losse toetsen, aanwijzen en indrukken zijn ook daar gedaan, binnen het venster$/);
     const onPage = data.pages.find((entry) => entry.item.url === page)!.label;
     assert.equal(row[onPage]!.states!.find((state) => state.state === "component-speler")!.frame, `gemeten in het ingesloten venster ${player}, op de pagina waar het staat`);
+
+    // A states.json from before the pointer measured the non-text contrast is measured again, not taken over with nothing found.
+    assert.ok(result.hoverNonText!.length > 0);
+    const statesPath = join(dir, "states.json");
+    const { hoverNonText: _measured, ...older } = JSON.parse(readFileSync(statesPath, "utf8")) as Record<string, unknown>;
+    writeFileSync(statesPath, JSON.stringify(older));
+    assert.deepEqual((await states(dir)).hoverNonText, result.hoverNonText);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

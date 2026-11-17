@@ -926,7 +926,8 @@ export async function states(runDir: string, options: { fresh?: boolean; atOnce?
   const pagesNow = run.sample.items.every((item) => measured[item.slug]?.key === pageKey(blockers, item)) ? sha256(canonicalJson(run.sample.items.map((item) => [item.slug, measured[item.slug]]))) : null;
   const stateKeys = Object.fromEntries(sweep.openers().filter((opener) => opener.primary).map((opener) => [opener.base.id, opener.key]));
   const stamp = options.fresh ? null : await readStamp<StatesStamp>(join(runDir, STATES_STAMP));
-  if (stamp && run.states && pagesNow !== null && stamp.pages === pagesNow) {
+  // A states.json from before the non-text contrast under the pointer was measured is not taken over: its pages would count as measured with nothing found.
+  if (stamp && run.states && run.states.hoverNonText !== undefined && pagesNow !== null && stamp.pages === pagesNow) {
     try {
       const before = run.states.singleKeys.states ?? [];
       let pressedAgain = 0;
