@@ -10,7 +10,12 @@ const MAX_PIXELS = 50_000_000;
 
 /** The picture of a PNG or JPEG file as a PNG, by the signature of the file, not its name. */
 function decodePicture(bytes: Buffer): { format: ImageFacts["format"]; picture: PNG } {
-  if (bytes.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return { format: "png", picture: PNG.sync.read(bytes) };
+  if (bytes.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) {
+    // The size is in the header chunk that follows the signature: checked before the whole picture is decoded.
+    const pixels = bytes.length >= 24 ? bytes.readUInt32BE(16) * bytes.readUInt32BE(20) : 0;
+    if (pixels > MAX_PIXELS) throw new Error(`de afbeelding is ${Math.round(pixels / 1_000_000)} miljoen pixels; de grens is ${MAX_PIXELS / 1_000_000} miljoen`);
+    return { format: "png", picture: PNG.sync.read(bytes) };
+  }
   if (bytes[0] === 0xff && bytes[1] === 0xd8) {
     const jpeg = decode(bytes, { useTArray: true, formatAsRGBA: true, maxResolutionInMP: MAX_PIXELS / 1_000_000 });
     const picture = new PNG({ width: jpeg.width, height: jpeg.height });
@@ -27,13 +32,14 @@ function decodePicture(bytes: Buffer): { format: ImageFacts["format"]; picture: 
  */
 export async function measureImage(file: string, picturePath: string, scratch: string): Promise<{ facts: Partial<DocumentFacts>; text: string }> {
   const { format, picture } = decodePicture(await readFile(file));
-  await writeFile(picturePath, PNG.sync.write(picture));
+  const png = PNG.sync.write(picture);
+  await writeFile(picturePath, png);
   const notMeasuredNl: string[] = [];
   let recognised: { words: number; text: string } | null = null;
   try {
     // On a copy in the scratch directory: recognition writes an enlarged picture next to what it reads.
     const copy = join(scratch, "picture.png");
-    await writeFile(copy, PNG.sync.write(picture));
+    await writeFile(copy, png);
     recognised = await ocr(copy);
   } catch (error) {
     notMeasuredNl.push(`tekstherkenning is niet beschikbaar (${((error as Error).message ?? String(error)).split("\n")[0]!.slice(0, 140)}); of de afbeelding tekst bevat, is niet nagegaan`);

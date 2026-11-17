@@ -390,6 +390,8 @@ export function charsetNoteNl(plain: PlainTextFacts): string | null {
  */
 export const PLAIN_TITLE_NOT_APPLICABLE_NL = "Platte tekst heeft geen titeleigenschap. WCAG2ICT vervangt 2.4.2 voor documenten door '2.4.2 Non-web Document Titled', dat alleen geldt voor formaten met een titeleigenschap die in de gangbare programma's te bewerken is. Voor dit bestand is 2.4.2 daarom niet van toepassing; de bestandsnaam en de eerste kop zijn een waarneming.";
 export const PLAIN_LANGUAGE_NOT_APPLICABLE_NL = "Platte tekst kan geen taal opgeven: het formaat heeft daar geen eigenschap of opmaak voor. WCAG2ICT maakt daarvoor bij documenten geen uitzondering; bij software merkt het op dat techniek waarin hulpsoftware de taal niet kan bepalen, het criterium niet kan halen. De toolbox telt 3.1.1 en 3.1.2 voor dit bestand als niet van toepassing, niet als fout en niet als open punt. Een andere onderzoeker kan dat anders wegen.";
+export const IMAGE_TITLE_NOT_APPLICABLE_NL = "Een png- of jpg-bestand heeft geen titeleigenschap die de gangbare programma's tonen of laten bewerken. WCAG2ICT vervangt 2.4.2 voor documenten door '2.4.2 Non-web Document Titled', dat alleen geldt voor formaten met zo'n titeleigenschap. Voor dit bestand is 2.4.2 daarom niet van toepassing; de bestandsnaam en de tekst van de link zijn een waarneming.";
+export const IMAGE_LANGUAGE_NOT_APPLICABLE_NL = "Een png- of jpg-bestand kan geen taal opgeven waar hulpsoftware op let. De toolbox telt 3.1.1 en 3.1.2 voor dit bestand als niet van toepassing, niet als fout en niet als open punt, zoals bij platte tekst. Een andere onderzoeker kan dat anders wegen.";
 
 export interface OfficeFacts {
   /** Paragraphs that are short and wholly bold but have no heading style. */

@@ -825,6 +825,13 @@ test("a picture file a link with text leads to is a document: inventory counts i
     if (TESSERACT) assert.match(ours.pictureFile!.recognisedText!, /Aanvraag/);
     const alternatives = documentsExtractor(data, "1.1.1") as { documents: { document: string; pictureFile?: unknown; images: { withoutAlternative: { total: number } } }[] };
     assert.ok(alternatives.documents.find((document) => document.document === label)!.pictureFile);
+    // A picture file has no title or language property: 2.4.2 and 3.1.1 do not apply, as with plain text, and the judge is told so.
+    const titled = (documentsExtractor(data, "2.4.2") as { documents: { document: string; titleProperty?: boolean; notApplicableNl?: string }[] }).documents.find((document) => document.document === label)!;
+    assert.equal(titled.titleProperty, false);
+    assert.match(titled.notApplicableNl!, /niet van toepassing/);
+    const spoken = (documentsExtractor(data, "3.1.1") as { documents: { document: string; languageProperty?: boolean; notApplicableNl?: string }[] }).documents.find((document) => document.document === label)!;
+    assert.equal(spoken.languageProperty, false);
+    assert.match(spoken.notApplicableNl!, /niet van toepassing/);
 
     mkdirSync(join(run, "observations", "main"), { recursive: true });
     const look = await documentOutcome(run, [label], { page: "1" }, new Images(run, "observations/main/0201"));
@@ -832,6 +839,20 @@ test("a picture file a link with text leads to is a document: inventory counts i
   } finally {
     await new Promise<void>((resolve) => void pictureServer.close(() => resolve()));
   }
+});
+
+test("a png too large to decode is not decoded: the size in its header is checked first (#617)", async () => {
+  const { measureImage } = await import("../src/instruments/documents/image.ts");
+  const header = Buffer.alloc(33);
+  Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]).copy(header);
+  header.writeUInt32BE(13, 8);
+  header.write("IHDR", 12, "latin1");
+  header.writeUInt32BE(20_000, 16);
+  header.writeUInt32BE(20_000, 20);
+  const dir = join(scratch, "huge-png");
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, "huge.png"), header);
+  await assert.rejects(measureImage(join(dir, "huge.png"), join(dir, "page-1.png"), dir), /400 miljoen pixels; de grens is 50 miljoen/);
 });
 
 test("a file nobody could place is read as text in another character set, and a zip that is no office file is not read", async () => {

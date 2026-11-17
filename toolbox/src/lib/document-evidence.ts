@@ -1,4 +1,4 @@
-import { charsetNoteNl, KIND_NAME_NL, PLAIN_LANGUAGE_NOT_APPLICABLE_NL, PLAIN_TITLE_NOT_APPLICABLE_NL, type DocumentFacts } from "./documents.ts";
+import { charsetNoteNl, IMAGE_LANGUAGE_NOT_APPLICABLE_NL, IMAGE_TITLE_NOT_APPLICABLE_NL, KIND_NAME_NL, PLAIN_LANGUAGE_NOT_APPLICABLE_NL, PLAIN_TITLE_NOT_APPLICABLE_NL, type DocumentFacts } from "./documents.ts";
 import type { RunData } from "./rundata.ts";
 
 /**
@@ -100,7 +100,7 @@ const imagesOfText: Part = (facts) => ({
   note: facts.image ? "Tekstherkenning is op het hele bestand gedaan; zie pictureFile." : "Of een afbeelding tekst bevat, is niet per afbeelding gemeten. Bekijk de pagina's met `document <label> --page n`.",
 });
 
-const title: Part = (facts) => ({ title: facts.title, fileName: decodeURIComponent(new URL(facts.url).pathname.split("/").pop() ?? ""), ...(facts.pdf ? { titleShownInTitleBar: facts.pdf.displayDocTitle } : {}), firstHeading: facts.headings[0]?.text ?? facts.office?.slides?.[0]?.title ?? null, ...(facts.plain ? { titleProperty: false, notApplicableNl: PLAIN_TITLE_NOT_APPLICABLE_NL } : {}) });
+const title: Part = (facts) => ({ title: facts.title, fileName: decodeURIComponent(new URL(facts.url).pathname.split("/").pop() ?? ""), ...(facts.pdf ? { titleShownInTitleBar: facts.pdf.displayDocTitle } : {}), firstHeading: facts.headings[0]?.text ?? facts.office?.slides?.[0]?.title ?? null, ...(facts.plain ? { titleProperty: false, notApplicableNl: PLAIN_TITLE_NOT_APPLICABLE_NL } : facts.image ? { titleProperty: false, notApplicableNl: IMAGE_TITLE_NOT_APPLICABLE_NL } : {}) });
 
 const links: Part = (facts) => ({ links: capped(facts.links), ...(facts.pdf ? { linkAnnotationsOnPages: facts.pdf.linkAnnotations, linksInTags: facts.pdf.counts.links + facts.pdf.nestedLinks, nestedLinks: facts.pdf.nestedLinks, tagTextRead: facts.pdf.tagTextRead } : {}) });
 
@@ -112,7 +112,7 @@ const headings: Part = (facts) => ({
   fieldNames: capped(facts.fields.map((field) => ({ page: field.page, type: field.type, name: field.name }))),
 });
 
-const language: Part = (facts) => ({ language: facts.language, partsWithOwnLanguage: capped(facts.pdf?.languageParts ?? facts.office?.languageParts ?? []), ...(facts.plain ? { languageProperty: false, notApplicableNl: PLAIN_LANGUAGE_NOT_APPLICABLE_NL } : {}) });
+const language: Part = (facts) => ({ language: facts.language, partsWithOwnLanguage: capped(facts.pdf?.languageParts ?? facts.office?.languageParts ?? []), ...(facts.plain ? { languageProperty: false, notApplicableNl: PLAIN_LANGUAGE_NOT_APPLICABLE_NL } : facts.image ? { languageProperty: false, notApplicableNl: IMAGE_LANGUAGE_NOT_APPLICABLE_NL } : {}) });
 
 const nameRoleValue: Part = (facts) => ({
   fields: { total: facts.fields.length, withoutName: capped(facts.fields.filter((field) => !field.name)), withName: capped(facts.fields.filter((field) => field.name)) },
