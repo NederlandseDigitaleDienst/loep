@@ -72,6 +72,10 @@ test("pages that differ only in a number are one kind, so a kind one level deepe
   assert.ok(count(/^\/groep\/vergelijk\/\d+$/) >= 10, "the comparisons come in");
   assert.ok(count(/^\/groep\/download\/\d+$/) >= 10, "the downloads come in");
   assert.ok(count(/^\/groep\/\d+$/) >= 10, "the groups themselves still come in");
+  // Ids that run through the years (`/groep/2005`) are numbers like their neighbors, not years of an archive.
+  const throughYears = Array.from({ length: 300 }, (_, index) => `${site}/groep/${1900 + index}`);
+  const deeper = visitOrder([`${site}/`, ...throughYears, ...throughYears.map((group) => `${group}/onderdeel/1`)], 100);
+  assert.ok(deeper.filter((url) => url.includes("/onderdeel/")).length >= 10, "the pages below a group whose id looks like a year come in");
   // A uuid or a long hash identifies a page as a number does; a year keeps its own turn (#479).
   const visited = new Map<string, number>();
   noteVisited(visited, `${site}/zaak/3f2c1a9e-8b7d-4c6e-9a1b-2d3e4f5a6b7c`);

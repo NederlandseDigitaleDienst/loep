@@ -284,22 +284,43 @@ const ID_SEGMENT = /^(?:\d+|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9
 /** Where an address ends: the page itself, as a level next to the parts below it. */
 const PAGE_ITSELF = "\u0000";
 
+/** The levels of an address with each numbering or identifying segment as `N`, years too. */
+const shapeOf = (levels: string[]): string[] => levels.map((level) => (ID_SEGMENT.test(level) ? "N" : level));
+
+/**
+ * The key in `visited` that marks a place in the site where a number is no year (`/groep/1630`):
+ * there a number that looks like a year (`/groep/2005`) is a number like its neighbors. The key
+ * starts with a character no path does, so it never meets a count.
+ */
+const numbersAt = (shape: string[], index: number): string => `\u0001${levelKey(shape, index)}`;
+
+/** Mark the places in the address where a number is no year (see numbersAt). */
+function noteNumbers(visited: Map<string, number>, levels: string[]): void {
+  const shape = shapeOf(levels);
+  levels.forEach((level, index) => {
+    if (/^\d+$/.test(level) && !YEAR.test(level)) visited.set(numbersAt(shape, index), 1);
+  });
+}
+
 /**
  * The levels by which visits are counted: the levels of the address with each numbering or
  * identifying segment as `N`, and the page itself as a last level. Pages of one kind
  * (`/groep/1630`, `/groep/1631`) then share their counts, and a kind one level deeper
  * (`/groep/N/onderdeel/N`) competes with them for its share of the limit instead of waiting
- * until every page of the kind above it is visited (#620). For an address that shares its levels
- * with no other, the last level changes nothing in the order.
+ * until every page of the kind above it is visited (#620). A year stays itself, unless a number
+ * that is no year was found at the same place: the ids of a site run through the years too.
+ * For an address that shares its levels with no other, the last level changes nothing in the order.
  */
-function countLevels(url: string, origins: readonly string[]): string[] {
-  const levels = visitLevels(url, origins).map((level) => (level.startsWith("?") || YEAR.test(level) || !ID_SEGMENT.test(level) ? level : "N"));
-  return [...levels, PAGE_ITSELF];
+function countLevels(levels: string[], visited: Map<string, number>): string[] {
+  const shape = shapeOf(levels);
+  return [...shape.map((level, index) => (level === "N" && YEAR.test(levels[index]!) && !visited.has(numbersAt(shape, index)) ? levels[index]! : level)), PAGE_ITSELF];
 }
 
 /** Record that an address was visited: every part of the site it sits in has one more page. */
 export function noteVisited(visited: Map<string, number>, url: string, origins: readonly string[] = []): void {
-  const levels = countLevels(url, origins);
+  const raw = visitLevels(url, origins);
+  noteNumbers(visited, raw);
+  const levels = countLevels(raw, visited);
   for (let depth = 1; depth <= levels.length; depth++) {
     const key = levelKey(levels, depth);
     visited.set(key, (visited.get(key) ?? 0) + 1);
@@ -316,13 +337,17 @@ export function noteVisited(visited: Map<string, number>, url: string, origins: 
  * by year is then visited from its newest pages, not from 1988 on (#479). A part full of
  * tag pages or pages of a list (`/blog/tag/x/page/2`) thus gets its turn like any other part,
  * instead of filling the limit because its addresses come first in the alphabet. With more than
- * one origin, the origin comes before the first path segment (see visitLevels).
+ * one origin, the origin comes before the first path segment (see visitLevels). The places where
+ * a candidate has a number that is no year are marked in `visited` (see numbersAt).
  */
 export function nextAddress(candidates: Iterable<string>, visited: Map<string, number>, origins: readonly string[] = []): string | undefined {
+  const urls = [...candidates];
+  // The places where a number is no year, from every address known so far, before any is counted.
+  for (const url of urls) noteNumbers(visited, visitLevels(url, origins));
   let best: { url: string; counts: number[]; levels: string[] } | undefined;
-  for (const url of candidates) {
+  for (const url of urls) {
     const levels = visitLevels(url, origins);
-    const counted = countLevels(url, origins);
+    const counted = countLevels(levels, visited);
     const counts = counted.map((_, index) => visited.get(levelKey(counted, index + 1)) ?? 0);
     const order = best === undefined ? -1 : compareCounts(counts, best.counts) || compareTied(url, levels, best.url, best.levels);
     if (order < 0) best = { url, counts, levels };
