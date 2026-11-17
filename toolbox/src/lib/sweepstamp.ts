@@ -118,6 +118,73 @@ export function firstDifference(before: string, now: string): string {
   return `regel ${at + 1}: ${shown(old[at])} werd ${shown(current[at])}`;
 }
 
+const depthOf = (line: string): number => (line.length - line.trimStart().length) / 2;
+
+/** The opening lines of an element and of each of its ancestors, from the element up: where it stands on the page. */
+function ancestry(lines: string[], at: number): string[] {
+  const chain = [lines[at]!];
+  for (let index = at - 1, depth = depthOf(lines[at]!); index >= 0 && depth > 0; index--) {
+    if (depthOf(lines[index]!) < depth && lines[index]!.trimStart().startsWith("<")) {
+      chain.push(lines[index]!);
+      depth = depthOf(lines[index]!);
+    }
+  }
+  return chain;
+}
+
+/** Where the subtree of the element on line `at` ends: the first line after it that is not inside it. */
+function subtreeEnd(lines: string[], at: number, from = at + 1): number {
+  let end = from;
+  while (end < lines.length && depthOf(lines[end]!) > depthOf(lines[at]!)) end++;
+  return end;
+}
+
+/** The elements of a stretch of lines by depth and tag only: what a part with another text in it keeps. */
+const skeleton = (lines: string[]): string => lines.filter((line) => line.trimStart().startsWith("<")).map((line) => line.replace(/^(\s*<[^\s>]+).*$/, "$1")).join("\n");
+
+/**
+ * The part of the page that holds every difference between two snapshots of it, when that part stands on every other
+ * page in `others` too, in the same place, with the same fixed lines around what differs and the same elements inside:
+ * a panel or a carousel that shows another text on every load. Null when the difference is anywhere else, or when the
+ * part has no fixed text or attribute of its own that tells it apart (a paragraph of the main text is on every page too).
+ * Such a difference is one of the part, not of the page: measuring every page again for it would measure the same part every time.
+ */
+export function siteWidePart(before: string, now: string, others: string[]): string | null {
+  if (others.length < 2) return null;
+  const [old, current] = [before.split("\n"), now.split("\n")];
+  let start = 0;
+  while (start < old.length && start < current.length && old[start] === current[start]) start++;
+  let [endOld, endCurrent] = [old.length, current.length];
+  while (endOld > start && endCurrent > start && old[endOld - 1] === current[endCurrent - 1]) [endOld, endCurrent] = [endOld - 1, endCurrent - 1];
+  const changed = [...old.slice(start, endOld), ...current.slice(start, endCurrent)];
+  if (changed.length === 0) return null;
+  const changedDepth = Math.min(...changed.map(depthOf));
+  // From the nearest element that holds every changed line up to the children of <body>: the first that is on every other page.
+  for (let at = start - 1, depth = changedDepth; at >= 0; at--) {
+    const line = old[at]!;
+    if (depthOf(line) >= depth || !line.trimStart().startsWith("<")) continue;
+    depth = depthOf(line);
+    if (depth === 0) return null;
+    const head = old.slice(at, start);
+    const tail = old.slice(endOld, subtreeEnd(old, at, endOld));
+    const fixed = [...head, ...tail];
+    if (!fixed.slice(1).some((entry) => entry.trimStart().startsWith('"')) && !fixed.some((entry) => /^\s*<.*=/.test(entry))) continue;
+    const chain = ancestry(old, at).join("\n");
+    const middle = skeleton(old.slice(start, endOld));
+    const onPage = (other: string): boolean => {
+      const lines = other.split("\n");
+      return lines.some((entry, index) => {
+        if (entry !== line || lines.slice(index, index + head.length).join("\n") !== head.join("\n")) return false;
+        const end = subtreeEnd(lines, index);
+        if (end - tail.length < index + head.length || lines.slice(end - tail.length, end).join("\n") !== tail.join("\n")) return false;
+        return skeleton(lines.slice(index + head.length, end - tail.length)) === middle && ancestry(lines, index).join("\n") === chain;
+      });
+    };
+    if (others.every(onPage)) return line.trim().length > 80 ? `${line.trim().slice(0, 77)}...` : line.trim();
+  }
+  return null;
+}
+
 /**
  * Why a measurement is taken again because a rule engine ran out of time in it, given what `enginesToRetry` says of it;
  * null when none did. An engine that runs out of time again in the retry is not tried a third time: the gate makes it a limitation.
@@ -130,9 +197,18 @@ export function engineRetryReason(timedOut: { engine: string; error: string }[])
  * Why a page of the sample is measured again instead of keeping what an earlier sweep measured, in one
  * line for the person who runs it; null when the earlier measurement still holds. `now` is only asked
  * for when the stamp and the key agree: loading the page costs time. `timedOut` is what `enginesToRetry`
- * says of the earlier measurement: a rule engine that ran out of time there gets one more try.
+ * says of the earlier measurement: a rule engine that ran out of time there gets one more try. With `siteWide`, a
+ * difference only in a part that stands on every other page (`siteWidePart`) keeps the earlier measurement, and is noted.
  */
-export async function remeasureReason(stamp: PageStamp | null, key: string, blockers: string, now: () => Promise<ContentNow | null>, before: () => Promise<string | null>, timedOut: { engine: string; error: string }[] = []): Promise<string | null> {
+export async function remeasureReason(
+  stamp: PageStamp | null,
+  key: string,
+  blockers: string,
+  now: () => Promise<ContentNow | null>,
+  before: () => Promise<string | null>,
+  timedOut: { engine: string; error: string }[] = [],
+  siteWide?: { others: () => Promise<string[]>; noted: (part: string) => void },
+): Promise<string | null> {
   if (!stamp) return "geen stempel van een eerdere meting";
   if (stamp.version !== SWEEP_STAMP_VERSION || stamp.contentVersion !== CONTENT_VERSION) return "stempel van een andere versie van loep";
   if (stamp.key !== key) return stamp.blockers !== blockers ? "blokkades of hoe ze worden gesloten anders" : "pagina anders in de steekproef (soort of ingesloten venster)";
@@ -142,7 +218,14 @@ export async function remeasureReason(stamp: PageStamp | null, key: string, bloc
   if (!current) return "pagina niet te laden om de inhoud te vergelijken";
   if (current.sha256 === stamp.contentSha256) return null;
   const earlier = await before();
-  return earlier === null ? "inhoud anders" : `inhoud anders, ${firstDifference(earlier, current.snapshot)}`;
+  if (earlier === null) return "inhoud anders";
+  // A difference only in a part that stands on every page is kept as the earlier measurement of that part.
+  const part = siteWide ? siteWidePart(earlier, current.snapshot, await siteWide.others()) : null;
+  if (part !== null) {
+    siteWide!.noted(part);
+    return null;
+  }
+  return `inhoud anders, ${firstDifference(earlier, current.snapshot)}`;
 }
 
 /** The pages of the sample as `collect` last measured them: what `contrast` and `states` hold their own measurements against. */

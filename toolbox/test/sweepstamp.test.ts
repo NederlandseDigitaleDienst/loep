@@ -94,3 +94,53 @@ test("the first difference of two snapshots names the line, shortened", () => {
   const long = `"${"a".repeat(200)}"`;
   assert.match(firstDifference(long, "x"), /^regel 1: "a{76}\.\.\. werd x$/);
 });
+
+/** A page of a site as its content snapshot reads, with a panel on every page that shows another explanation on every load. */
+const withPanel = (title: string, text: string, tip: string): string =>
+  [
+    `title "${title}"`,
+    "lang nl",
+    "<body>",
+    "  <header>",
+    '    <a href="/">',
+    '      "Home"',
+    "  <main>",
+    "    <h1>",
+    `      "${title}"`,
+    "    <p>",
+    `      "${text}"`,
+    '  <aside aria-label="Uitleg">',
+    "    <h2>",
+    '      "Wist u dat?"',
+    "    <p>",
+    `      "${tip}"`,
+    '    <button type="button">',
+    '      "Sluiten"',
+    "  <footer>",
+    '    <a href="/contact">',
+    '      "Contact"',
+  ].join("\n");
+
+test("a difference only in a part that stands on every page does not make each page measured again", async () => {
+  const blockers = blockersKey([], {});
+  const key = pageKey(blockers, { url: "https://site.nl/diensten", slug: "diensten", kind: "structured" });
+  const stamp: PageStamp = { key, version: SWEEP_STAMP_VERSION, contentVersion: CONTENT_VERSION, blockers, contentSha256: "earlier", summary: {}, dismissals: [], refusedWrites: [] };
+  const earlier = withPanel("Diensten", "Aanvragen kan online.", "U kunt ook bellen.");
+  const others = [withPanel("Contact", "Bel ons op werkdagen.", "Er is een app."), withPanel("Nieuws", "Het laatste nieuws.", "U kunt ook bellen.")];
+  const noted: string[] = [];
+  const reasonFor = (snapshot: string, pages = others) =>
+    remeasureReason(stamp, key, blockers, async () => ({ sha256: "now", snapshot }), async () => earlier, [], { others: async () => pages, noted: (part) => noted.push(part) });
+
+  assert.equal(await reasonFor(withPanel("Diensten", "Aanvragen kan online.", "Er is een app.")), null, "only the explanation in the panel differs");
+  assert.deepEqual(noted, ['<aside aria-label="Uitleg">']);
+
+  // Every other difference still makes the page measured again, also when the part it is in has the same place on every page.
+  assert.match((await reasonFor(withPanel("Diensten", "Aanvragen kon online.", "U kunt ook bellen.")))!, /^inhoud anders, regel 11:/, "the main text of the page");
+  assert.match((await reasonFor(withPanel("Diensten", "Aanvragen kon online.", "Er is een app.")))!, /^inhoud anders/, "the main text and the panel");
+  assert.match((await reasonFor(withPanel("Diensten", "Aanvragen kan online.", "Er is een app."), [others[0]!, others[0]!.replace(/  <aside[^]*(?=  <footer>)/, "")]))!, /^inhoud anders/, "a panel that is not on every page");
+  assert.match((await reasonFor(withPanel("Diensten", "Aanvragen kan online.", "Er is een app."), [others[0]!]))!, /^inhoud anders/, "one other page says nothing about every page");
+  const changedMain = earlier.replace(/    <h1>[^]*(?=  <aside)/, '    <h1>\n      "Diensten"\n    <ul>\n      <li>\n        "Paspoort"\n');
+  assert.match((await reasonFor(changedMain))!, /^inhoud anders/, "a new main part");
+  assert.equal(noted.length, 1);
+  assert.match((await remeasureReason(stamp, key, blockers, async () => ({ sha256: "now", snapshot: withPanel("Diensten", "Aanvragen kan online.", "Er is een app.") }), async () => earlier))!, /^inhoud anders/, "without the other pages nothing is known about them");
+});

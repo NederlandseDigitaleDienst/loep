@@ -320,7 +320,15 @@ export async function collect(options: CollectOptions): Promise<void> {
     // The pictures read on the pages before: a picture counts as read on the first page that has it, as with one page after the other.
     const seenPictures = new Set<string>();
     const crowd = new Crowd();
-    type Measured = { summary: Record<string, unknown>; key: string; noted: Noted; reused: boolean; reason: string | null; started: number; scope: ModelSweep; failed?: string };
+    // The content of the other pages as an earlier sweep measured it, read once: what tells a part that stands on every page.
+    let earlierContent: Promise<Map<string, string>> | null = null;
+    const othersThan = async (entry: SampleItem): Promise<string[]> => {
+      earlierContent ??= Promise.all(
+        sample.items.filter((item) => item.kind !== "embedded").map(async (item) => [item.slug, await readFile(pageContentPath(options.run, item.slug), "utf8").then((text) => text.replace(/\n$/, ""), () => null)] as const),
+      ).then((read) => new Map(read.filter((pair): pair is readonly [string, string] => pair[1] !== null)));
+      return [...(await earlierContent)].filter(([slug]) => slug !== entry.slug).map(([, text]) => text);
+    };
+    type Measured = { summary: Record<string, unknown>; key: string; noted: Noted; reused: boolean; reason: string | null; started: number; scope: ModelSweep; failed?: string; part?: string };
     await withSpacing(settings, () =>
       inOrder(
         pages.length,
@@ -335,6 +343,7 @@ export async function collect(options: CollectOptions): Promise<void> {
           const stamp = options.fresh ? null : await readStamp<PageStamp>(pageStampPath(options.run, entry.slug));
           // A rule engine that ran out of time on this page before gets one more try; the measurement taken now is that try, whatever else made it.
           const timedOut = stamp ? enginesToRetry(await Promise.all(["light", "dark"].map((scheme) => readStamp<EngineRun>(join(options.run, "pages", entry.slug, `engines-${scheme}.json`))))) : [];
+          let part: string | undefined;
           const reason = options.fresh
             ? "met --fresh wordt alles opnieuw gemeten"
             : await remeasureReason(
@@ -344,10 +353,11 @@ export async function collect(options: CollectOptions): Promise<void> {
                 () => crowd.together(() => contentNow(browser, entry, scope)),
                 () => readFile(pageContentPath(options.run, entry.slug), "utf8").then((text) => text.replace(/\n$/, ""), () => null),
                 timedOut,
+                entry.kind === "embedded" ? undefined : { others: () => othersThan(entry), noted: (found) => (part = found) },
               );
           if (stamp && reason === null) {
             scope.restore(stamp as Parameters<ModelSweep["restore"]>[0]);
-            return { summary: stamp.summary, key, noted: {}, reused: true, reason, started, scope };
+            return { summary: stamp.summary, key, noted: {}, reused: true, reason, started, scope, ...(part ? { part } : {}) };
           }
           const noted: Noted = {};
           // A page gets one retry, alone: a page that loaded too slowly once, or a crashed renderer, must not cost the whole run.
@@ -380,7 +390,8 @@ export async function collect(options: CollectOptions): Promise<void> {
           }
           if (measured.reused) {
             reused++;
-            process.stderr.write(`collect ${index + 1}/${pages.length} ${entry.url} niet veranderd, niet opnieuw gemeten (${Date.now() - measured.started}ms)\n`);
+            const unchanged = measured.part ? `alleen anders in ${measured.part}, een onderdeel dat op elke pagina staat` : "niet veranderd";
+            process.stderr.write(`collect ${index + 1}/${pages.length} ${entry.url} ${unchanged}, niet opnieuw gemeten (${Date.now() - measured.started}ms)\n`);
             return;
           }
           process.stderr.write(`collect ${index + 1}/${pages.length} ${entry.url} opnieuw gemeten: ${measured.reason}\n`);
