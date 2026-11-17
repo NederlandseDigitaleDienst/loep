@@ -145,8 +145,10 @@ const skeleton = (lines: string[]): string => lines.filter((line) => line.trimSt
 /**
  * The part of the page that holds every difference between two snapshots of it, when that part stands on every other
  * page in `others` too, in the same place, with the same fixed lines around what differs and the same elements inside:
- * a panel or a carousel that shows another text on every load. Null when the difference is anywhere else, or when the
- * part has no fixed text or attribute of its own that tells it apart (a paragraph of the main text is on every page too).
+ * a panel or a carousel that shows another text on every load. Null when the difference is anywhere else, when the
+ * part has no fixed text or attribute of its own that tells it apart (a paragraph of the main text is on every page too),
+ * when the elements inside it changed, or when no other page shows it with another text than this page had: a part
+ * that reads the same on every page and now reads otherwise is a change of the site, not a text that varies by itself.
  * Such a difference is one of the part, not of the page: measuring every page again for it would measure the same part every time.
  */
 export function siteWidePart(before: string, now: string, others: string[]): string | null {
@@ -158,6 +160,8 @@ export function siteWidePart(before: string, now: string, others: string[]): str
   while (endOld > start && endCurrent > start && old[endOld - 1] === current[endCurrent - 1]) [endOld, endCurrent] = [endOld - 1, endCurrent - 1];
   const changed = [...old.slice(start, endOld), ...current.slice(start, endCurrent)];
   if (changed.length === 0) return null;
+  const middle = old.slice(start, endOld);
+  if (skeleton(current.slice(start, endCurrent)) !== skeleton(middle)) return null;
   const changedDepth = Math.min(...changed.map(depthOf));
   // From the nearest element that holds every changed line up to the children of <body>: the first that is on every other page.
   for (let at = start - 1, depth = changedDepth; at >= 0; at--) {
@@ -170,17 +174,20 @@ export function siteWidePart(before: string, now: string, others: string[]): str
     const fixed = [...head, ...tail];
     if (!fixed.slice(1).some((entry) => entry.trimStart().startsWith('"')) && !fixed.some((entry) => /^\s*<.*=/.test(entry))) continue;
     const chain = ancestry(old, at).join("\n");
-    const middle = skeleton(old.slice(start, endOld));
-    const onPage = (other: string): boolean => {
+    // What the part holds between its fixed lines on another page, or null when the part is not there.
+    const middleOn = (other: string): string | null => {
       const lines = other.split("\n");
-      return lines.some((entry, index) => {
-        if (entry !== line || lines.slice(index, index + head.length).join("\n") !== head.join("\n")) return false;
+      for (const [index, entry] of lines.entries()) {
+        if (entry !== line || lines.slice(index, index + head.length).join("\n") !== head.join("\n")) continue;
         const end = subtreeEnd(lines, index);
-        if (end - tail.length < index + head.length || lines.slice(end - tail.length, end).join("\n") !== tail.join("\n")) return false;
-        return skeleton(lines.slice(index + head.length, end - tail.length)) === middle && ancestry(lines, index).join("\n") === chain;
-      });
+        if (end - tail.length < index + head.length || lines.slice(end - tail.length, end).join("\n") !== tail.join("\n")) continue;
+        const inside = lines.slice(index + head.length, end - tail.length);
+        if (skeleton(inside) === skeleton(middle) && ancestry(lines, index).join("\n") === chain) return inside.join("\n");
+      }
+      return null;
     };
-    if (others.every(onPage)) return line.trim().length > 80 ? `${line.trim().slice(0, 77)}...` : line.trim();
+    const elsewhere = others.map(middleOn);
+    if (elsewhere.every((inside) => inside !== null) && elsewhere.some((inside) => inside !== middle.join("\n"))) return line.trim().length > 80 ? `${line.trim().slice(0, 77)}...` : line.trim();
   }
   return null;
 }

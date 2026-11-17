@@ -141,6 +141,11 @@ test("a difference only in a part that stands on every page does not make each p
   assert.match((await reasonFor(withPanel("Diensten", "Aanvragen kan online.", "Er is een app."), [others[0]!]))!, /^inhoud anders/, "one other page says nothing about every page");
   const changedMain = earlier.replace(/    <h1>[^]*(?=  <aside)/, '    <h1>\n      "Diensten"\n    <ul>\n      <li>\n        "Paspoort"\n');
   assert.match((await reasonFor(changedMain))!, /^inhoud anders/, "a new main part");
+  // A part that read the same on every page and now reads otherwise is a change of the site, such as a renamed item of the menu.
+  const alike = [withPanel("Contact", "Bel ons op werkdagen.", "U kunt ook bellen."), withPanel("Nieuws", "Het laatste nieuws.", "U kunt ook bellen.")];
+  assert.match((await reasonFor(withPanel("Diensten", "Aanvragen kan online.", "Er is een app."), alike))!, /^inhoud anders/, "a part that read the same everywhere");
+  const withLink = withPanel("Diensten", "Aanvragen kan online.", "Er is een app.").replace('    <button type="button">', '    <a href="/app">\n      "Download"\n    <button type="button">');
+  assert.match((await reasonFor(withLink))!, /^inhoud anders/, "new elements in the part");
   assert.equal(noted.length, 1);
   assert.match((await remeasureReason(stamp, key, blockers, async () => ({ sha256: "now", snapshot: withPanel("Diensten", "Aanvragen kan online.", "Er is een app.") }), async () => earlier))!, /^inhoud anders/, "without the other pages nothing is known about them");
 });
