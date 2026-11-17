@@ -161,6 +161,37 @@ test("the hover probe measures the text of a link while it is pointed at and whi
   await page.context().close();
 });
 
+test("the hover probe measures the boundary and the drawing of a control while it is pointed at, and leaves a link without a boundary out", async () => {
+  const page = await open("/hover-boundary.html");
+  const targets = await call<Described[]>(page, "hoverTargets");
+  const nonText: NonNullable<States["hoverNonText"]> = [];
+  const outDir = await mkdtemp(join(tmpdir(), "loep-hover-"));
+  for (const id of ["#faint", "#search", "#plain"]) await probeHoverTarget(page, targets.find((entry) => entry.path.join() === id)!, { label: "P1", outDir, screenshot: (trigger) => `${trigger}.png`, nonText });
+  const of = (id: string) => nonText.find((row) => row.where === id);
+  // The border is dark at rest and pale under the pointer: only this probe sees the pale one.
+  assert.deepEqual([of("#faint")!.boundary!.edge, of("#faint")!.boundary!.outcome], ["#e6e6e6", "kandidaat"]);
+  // The magnifier turns pale under the pointer.
+  const lines = of("#search")!.shapes.filter((shape) => shape.part === "lijn");
+  assert.ok(lines.length > 0);
+  assert.ok(lines.every((shape) => shape.foreground === "#dcdcdc" && shape.outcome === "kandidaat"), JSON.stringify(lines));
+  // A link that only changes the colour of its text belongs to 1.4.3.
+  assert.equal(of("#plain"), undefined);
+  // Only under the pointer: focus is measured by the Tab walk.
+  assert.equal(nonText.length, 2);
+
+  // The dossier of 1.4.11 lists what does not reach 3:1, once per control, part and colours.
+  const run = { pages: [{ label: "P1", item: { slug: "hover" }, tabwalk: { stops: [] }, tabwalkDark: null }], contrast: [{ url: "x", slug: "hover", scheme: "light", measurements: [], controls: [], graphics: [] }], states: { hoverNonText: nonText } } as unknown as RunData;
+  const pointedAt = (uiContrast(run, "1.4.11") as { pointedAt: { examined: boolean; controlsMeasured: number; candidates: { where: string; part: string; foreground: string; ratio: number }[] } }).pointedAt;
+  assert.equal(pointedAt.examined, true);
+  assert.equal(pointedAt.controlsMeasured, 2);
+  assert.ok(pointedAt.candidates.some((row) => row.where === "#faint" && row.part === "rand" && row.foreground === "#e6e6e6"), JSON.stringify(pointedAt.candidates));
+  assert.ok(pointedAt.candidates.some((row) => row.where === "#search" && row.part === "lijn van de tekening" && row.foreground === "#dcdcdc"));
+  assert.ok(pointedAt.candidates.every((row) => row.ratio < 3));
+  // A run from before this probe says that it was not looked at.
+  assert.equal((uiContrast({ ...run, states: {} } as unknown as RunData, "1.4.11") as { pointedAt: { examined: boolean } }).pointedAt.examined, false);
+  await page.context().close();
+});
+
 test("the wider text spacing can be in force from the moment a document loads, before anything is opened", async () => {
   const context = await newContext(browser);
   await spacingFromLoad(context);

@@ -14,6 +14,8 @@ export interface HoverProbeOptions {
   screenshot: (trigger: "hover" | "focus") => string;
   /** When given: the contrast of the text of a link or button while it is pointed at and while it has focus is added here (WCAG 1.4.3). */
   contrast?: NonNullable<States["hoverContrast"]>;
+  /** When given: the boundary, icon and drawing of the control while it is pointed at are added here (WCAG 1.4.11). */
+  nonText?: NonNullable<States["hoverNonText"]>;
 }
 
 /** Point at one control and give it focus, and record content that appears and whether Escape dismisses it (WCAG 1.4.13). */
@@ -32,10 +34,18 @@ export async function probeHoverTarget(page: Page, target: Described, options: H
     await page.waitForTimeout(700);
     const appeared = (await call<string[]>(page, "textChunks")).filter((chunk) => !before.has(chunk));
     const dialogsAfter = (await call<unknown[]>(page, "visibleDialogs")).length;
-    if (options.contrast && COLOURED_ON_HOVER(target)) {
+    const text = options.contrast !== undefined && COLOURED_ON_HOVER(target);
+    // Focus indicators are measured by the Tab walk; what changes under the pointer only shows here.
+    const nonText = options.nonText !== undefined && trigger === "hover";
+    if (text || nonText) {
       // Measured on the window as it is, with the pointer or focus still on the control, and after the new content was read: measuring may scroll.
       const measured = await elementContrast(page, target.path).catch(() => null);
-      if (measured && measured.text.length > 0) options.contrast.push({ page: options.label, control: `${target.tag} "${target.text.slice(0, 40)}" [${target.region ?? "-"}]`, where: target.path.join(" >>> "), trigger, texts: measured.text.map((entry) => ({ text: entry.text.slice(0, 60), foreground: entry.foreground, background: entry.background, ratio: entry.ratio, required: entry.required, outcome: entry.outcome, reason: entry.reason })) });
+      const control = `${target.tag} "${target.text.slice(0, 40)}" [${target.region ?? "-"}]`;
+      const where = target.path.join(" >>> ");
+      if (text && measured && measured.text.length > 0) options.contrast!.push({ page: options.label, control, where, trigger, texts: measured.text.map((entry) => ({ text: entry.text.slice(0, 60), foreground: entry.foreground, background: entry.background, ratio: entry.ratio, required: entry.required, outcome: entry.outcome, reason: entry.reason })) });
+      // A link without a boundary of its own is recognised by its text: a change of its text colour belongs to 1.4.3.
+      const boundary = measured?.control && measured.control.outcome !== "tekstlink" ? measured.control : null;
+      if (nonText && measured && (boundary || measured.graphic || measured.shapes.length > 0)) options.nonText!.push({ page: options.label, control, where, boundary, graphic: measured.graphic, shapes: measured.shapes });
     }
     if (appeared.length === 0 && dialogsAfter === dialogsBefore) continue;
     const shot = options.screenshot(trigger);

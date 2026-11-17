@@ -24,6 +24,7 @@ import type { Sample, SampleItem } from "../commands/sample.ts";
 import { pageLabels, readJson } from "./canonical.ts";
 import { loadDocuments, type DocumentData } from "./documents.ts";
 import type { PageContrast } from "../commands/contrast.ts";
+import type { ControlContrast, GraphicContrast, ShapeContrast } from "../instruments/contrast.ts";
 
 /** What was measured in one captured state of the site model. */
 /** One element a skip link can point at, and whether it can take focus at all. */
@@ -401,6 +402,12 @@ export interface States {
   };
   /** Contrast of the text of links and buttons while pointed at and while they have focus, one measurement per distinct control (WCAG 1.4.3). Light scheme only. */
   hoverContrast?: { page: string; control: string; where: string; trigger: "hover" | "focus"; state?: string; viewport?: "smal"; texts: { text: string; foreground: string; background: string | null; ratio: number | null; required: number; outcome: string; reason: string | null }[] }[];
+  /**
+   * What is not text in a control while it is pointed at: its boundary against what is around it, its icon and the lines and
+   * areas of its drawing (WCAG 1.4.11). A link without a boundary of its own has `boundary` null: a change of only its text
+   * colour belongs to 1.4.3. Light scheme only; absent in older runs.
+   */
+  hoverNonText?: { page: string; control: string; where: string; state?: string; viewport?: "smal"; boundary: ControlContrast | null; graphic: GraphicContrast | null; shapes: ShapeContrast[] }[];
   /** What the press probe examined and what it left out. Absent in older runs, which stopped at 40 kinds without saying so. */
   downEventCoverage?: {
     limit: number;

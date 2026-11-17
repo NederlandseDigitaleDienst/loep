@@ -381,6 +381,7 @@ interface PageTurn {
 interface HoverRows {
   hover: States["hover"];
   contrast: NonNullable<States["hoverContrast"]>;
+  nonText: NonNullable<States["hoverNonText"]>;
   iconOnly: NonNullable<HoverCoverage["iconOnly"]>;
   nonControls: number;
 }
@@ -395,6 +396,7 @@ interface HoverRows {
 export class HoverRun implements HoverRows {
   readonly hover: States["hover"] = [];
   readonly contrast: NonNullable<States["hoverContrast"]> = [];
+  readonly nonText: NonNullable<States["hoverNonText"]> = [];
   readonly iconOnly: NonNullable<HoverCoverage["iconOnly"]> = [];
   private readonly kinds = new Map<string, { controls: Set<string>; examined: number; example: { page: string; control: string } }>();
   examined = 0;
@@ -409,13 +411,14 @@ export class HoverRun implements HoverRows {
   }
 
   static rows(): HoverRows {
-    return { hover: [], contrast: [], iconOnly: [], nonControls: 0 };
+    return { hover: [], contrast: [], nonText: [], iconOnly: [], nonControls: 0 };
   }
 
   /** Take over what a place found, in the order of the places. */
   keep(rows: HoverRows): void {
     this.hover.push(...rows.hover);
     this.contrast.push(...rows.contrast);
+    this.nonText.push(...rows.nonText);
     this.iconOnly.push(...rows.iconOnly);
     this.nonControls += rows.nonControls;
   }
@@ -453,10 +456,12 @@ export class HoverRun implements HoverRows {
 
   private async point(page: Page, place: Place, target: HoverTarget, number: number, named: { page: string; control: string }, into: HoverRows): Promise<void> {
     const measured: NonNullable<States["hoverContrast"]> = [];
-    const rows = await probeHoverTarget(page, target, { label: place.label, outDir: this.runDir, contrast: measured, screenshot: (trigger) => join("states", `${place.shot}-${trigger}-${number}.png`) });
+    const nonText: NonNullable<States["hoverNonText"]> = [];
+    const rows = await probeHoverTarget(page, target, { label: place.label, outDir: this.runDir, contrast: measured, nonText, screenshot: (trigger) => join("states", `${place.shot}-${trigger}-${number}.png`) });
     const where = { ...(place.state ? { state: place.state } : {}), ...(place.narrow ? { viewport: "smal" as const } : {}) };
     for (const row of rows) into.hover.push({ ...row, ...where });
     for (const row of measured) into.contrast.push({ ...row, ...where });
+    for (const row of nonText) into.nonText.push({ ...row, ...where });
     // A button with only a pictogram, or a control with a title or description: say what pointing at it showed, also when that is nothing.
     if (target.nonControl) into.nonControls++;
     if (target.iconOnly || target.nonControl || (target.showsMore ?? []).length > 0) into.iconOnly.push({ ...named, ...where, ...(target.nonControl ? { nonControl: true } : {}), iconOnly: target.iconOnly === true, title: target.title ?? null, describedBy: target.describedBy ?? null, contentAppeared: rows.map((row) => row.trigger) });
@@ -941,6 +946,7 @@ export async function states(runDir: string, options: { fresh?: boolean; atOnce?
         const stands = (row: { state?: string }): boolean => row.state === undefined || (row.state in stateKeys && !again.hover.some((entry) => entry.state === row.state));
         run.states.hover = [...run.states.hover.filter(stands), ...hovering.hover];
         run.states.hoverContrast = [...(run.states.hoverContrast ?? []).filter(stands), ...hovering.contrast];
+        run.states.hoverNonText = [...(run.states.hoverNonText ?? []).filter(stands), ...hovering.nonText];
         run.states.downEvents = [...(run.states.downEvents ?? []).filter(stands), ...pressing.results];
         run.states.hoverCoverage = { ...run.states.hoverCoverage!, iconOnly: [...(run.states.hoverCoverage!.iconOnly ?? []).filter(stands), ...hovering.iconOnly], states: [...hoverBefore.filter(stands), ...again.hover] };
         run.states.downEventCoverage = { ...run.states.downEventCoverage!, states: [...downBefore.filter(stands), ...again.down] };
@@ -1101,6 +1107,7 @@ export async function states(runDir: string, options: { fresh?: boolean; atOnce?
     result.hover = hovering.hover;
     result.examined.hoverTargets = hovering.examined;
     result.hoverContrast = hovering.contrast;
+    result.hoverNonText = hovering.nonText;
     // A kind that the limit left out is named wherever it was found, on a page or in a state.
     const leftOut = hovering.coverage();
     result.hoverCoverage = { ...pagesHover, notExamined: leftOut.notExamined, notExaminedExamples: leftOut.notExaminedExamples, nonControlsExamined: leftOut.nonControlsExamined, iconOnly: hovering.iconOnly, narrowPages: pointed.hoveredNarrow, states: inStates.hover };

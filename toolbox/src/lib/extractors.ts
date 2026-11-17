@@ -1977,6 +1977,39 @@ function forcedColours(run: RunData, label: Map<string, string>): Record<string,
   };
 }
 
+/**
+ * Boundaries, icons and drawings of controls while they are pointed at (WCAG 1.4.11): what does not reach 3:1
+ * is a candidate, one row per control, part and colours.
+ */
+function pointedAtNonText(run: RunData): Record<string, unknown> {
+  const rows = run.states?.hoverNonText;
+  if (!rows) return { examined: false, note: "Het contrast van rand, vlak en pictogram bij aanwijzen is in deze run niet gemeten." };
+  type Candidate = { control: string; part: string; foreground: string | null; background: string | null; ratio: number | null; outcome: string; reason?: string | null; on: string; where: string };
+  const candidates = new Map<string, Candidate & { occurrences: number }>();
+  const add = (row: (typeof rows)[number], candidate: Omit<Candidate, "control" | "on" | "where">): void => {
+    if (candidate.outcome === "duidelijk") return;
+    const key = [row.where, candidate.part, candidate.foreground, candidate.background, candidate.outcome].join("|");
+    const known = candidates.get(key);
+    if (known) known.occurrences++;
+    else candidates.set(key, { control: row.control, ...candidate, on: row.state ?? (row.viewport ? `${row.page} (smal)` : row.page), where: row.where, occurrences: 1 });
+  };
+  for (const row of rows) {
+    // The boundary stands out when its edge or its fill does: the better of the two is the one shown.
+    const edgeWins = (row.boundary?.edgeRatio ?? 0) >= (row.boundary?.fillRatio ?? 0);
+    if (row.boundary) add(row, { part: edgeWins ? "rand" : "vlak van de knop", foreground: edgeWins ? row.boundary.edge : row.boundary.fill, background: row.boundary.outside, ratio: edgeWins ? row.boundary.edgeRatio : row.boundary.fillRatio, outcome: row.boundary.outcome });
+    if (row.graphic) add(row, { part: "pictogram", foreground: row.graphic.foreground, background: row.graphic.background, ratio: row.graphic.ratio, outcome: row.graphic.outcome });
+    for (const shape of row.shapes) add(row, { part: `${shape.part} van de tekening`, foreground: shape.foreground, background: shape.background, ratio: shape.ratio, outcome: shape.outcome, reason: shape.reason });
+  }
+  const listed = [...candidates.values()].sort((a, b) => (a.ratio ?? 0) - (b.ratio ?? 0) || a.where.localeCompare(b.where));
+  return {
+    examined: true,
+    method: "Bij de proef met aanwijzen is van elk aangewezen bedieningselement, terwijl de muis erboven stond, de rand en het vlak vergeleken met de omgeving, en het pictogram en de lijnen en vlakken van de tekening erin met wat eronder ligt. Wat 3:1 niet haalt, staat hier als kandidaat. Een link zonder eigen rand of vlak valt hierbuiten: verandert bij aanwijzen alleen de kleur van de tekst, dan hoort dat bij 1.4.3. Alleen in het lichte kleurenschema; de rust- en focustoestand staan elders in dit dossier.",
+    controlsMeasured: new Set(rows.map((row) => `${row.state ?? ""}|${row.viewport ?? ""}|${row.where}`)).size,
+    candidates: listed.filter((row) => row.outcome === "kandidaat"),
+    cantTell: listed.filter((row) => row.outcome === "cantTell"),
+  };
+}
+
 /** Contrast of control boundaries, small graphics and focus indicators (WCAG 1.4.11). */
 export const uiContrast: Extractor = (run) => {
   if (!run.contrast) return { examined: false, note: "Het contrast van bedieningselementen en pictogrammen is in deze run niet gemeten." };
@@ -2006,6 +2039,7 @@ export const uiContrast: Extractor = (run) => {
     pagesExamined: run.pages.length,
     controls: { totals: tally(controls), candidates: controls.filter((row) => row.outcome === "kandidaat" || row.outcome === "cantTell"), clearExamples: controls.filter((row) => row.outcome === "duidelijk").slice(0, 6) },
     graphics: { totals: tally(graphics), candidates: graphics.filter((row) => row.outcome !== "duidelijk"), clearExamples: graphics.filter((row) => row.outcome === "duidelijk").slice(0, 6) },
+    pointedAt: pointedAtNonText(run),
     focusIndicators: { examined: stops.length > 0, darkSchemeExamined: run.pages.every((page) => page.tabwalkDark !== null), below3to1: stops.filter((stop) => (stop.ratio ?? 0) < 3), lowestPassing: stops.filter((stop) => (stop.ratio ?? 0) >= 3).sort((a, b) => (a.ratio ?? 0) - (b.ratio ?? 0)).slice(0, 8), combinations: stops.length },
     forcedColours: forcedColours(run, label),
   };
