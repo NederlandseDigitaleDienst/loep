@@ -1,0 +1,8 @@
+<!doctype html><html lang="nl"><head><meta charset="utf-8"><title>t</title><style>.a{opacity:0;transform:translateY(100px);transition:opacity .6s .2s,transform .6s .2s}.a.in{opacity:1;transform:none}section{height:1600px}</style></head><body>
+<section><h1>Boven</h1></section><section><p class="a" id="late">Verschijnt bij scrollen en verdwijnt weer</p></section><section><p>Einde</p></section>
+<script>
+// As an animate-on-scroll library that animates again on every pass: the class comes when the element is well in view and goes once it is below the window again.
+const els=[...document.querySelectorAll('.a')];
+function check(){els.forEach(e=>{const top=e.getBoundingClientRect().top;e.classList.toggle('in',top<innerHeight-120)})}
+addEventListener('scroll',check);check();
+</script></body></html>

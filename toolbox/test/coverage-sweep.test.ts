@@ -183,3 +183,15 @@ test("content that a page shows only when it comes into view is shown after load
   assert.deepEqual(state, { opacity: "1", top: 0 });
   await page.context().close();
 });
+
+test("text that an animation on scroll hides again once it is out of view stays shown after loading, at the end of its animation", async () => {
+  const page = await open("/reveal-mirror.html");
+  // The pictures of the sweep come later, when a transition back to hidden would have ended.
+  await page.waitForTimeout(1200);
+  const state = await page.evaluate(() => {
+    const late = getComputedStyle(document.getElementById("late")!);
+    return { opacity: late.opacity, transform: late.transform, top: window.scrollY };
+  });
+  assert.deepEqual(state, { opacity: "1", transform: "none", top: 0 });
+  await page.context().close();
+});

@@ -593,7 +593,7 @@ export async function loadPage(page: Page, url: string, referer?: string): Promi
 }
 
 /** Steps and pause of the scroll through a page after loading; a page that keeps growing is not followed. */
-export const REVEAL = { maxSteps: 40, stepFraction: 0.8, pauseMs: 150 } as const;
+export const REVEAL = { maxSteps: 40, stepFraction: 0.8, pauseMs: 150, maxHidden: 500 } as const;
 
 /**
  * Scroll once through the page as a visitor does, and back to where it was (the top, or the target of an anchor). Content that a page shows
@@ -601,6 +601,10 @@ export const REVEAL = { maxSteps: 40, stepFraction: 0.8, pauseMs: 150 } as const
  * there for every measurement, as it is for anyone who reads the page; without this, the rule
  * engines, the contrast and the pictures see it hidden. Only the height the page had before the
  * scroll is walked, so an endless list does not keep loading. True when the page was scrolled.
+ *
+ * Text that an animation on scroll fades in and hides again once it leaves the view (a library
+ * that animates on every pass) would be hidden again at the top. Its shown state is taken where
+ * it is in view, with its transition run to the end, and kept on the element when the page is back.
  */
 export async function revealOnScroll(page: Page): Promise<boolean> {
   const plan = await page
@@ -615,12 +619,72 @@ export async function revealOnScroll(page: Page): Promise<boolean> {
     }, REVEAL)
     .catch(() => null);
   if (!plan) return false;
+  await page.evaluate(markHiddenText, REVEAL.maxHidden).catch(() => undefined);
+  let shown = 0;
   for (const y of plan.stops) {
     await page.evaluate((top) => window.scrollTo({ top, behavior: "instant" as ScrollBehavior }), y).catch(() => undefined);
     await page.waitForTimeout(REVEAL.pauseMs);
+    shown = (await page.evaluate(takeShownState, SHOWN_PROPERTIES).catch(() => null)) ?? shown;
   }
   await page.evaluate(({ left, top }) => window.scrollTo({ left, top, behavior: "instant" as ScrollBehavior }), plan).catch(() => undefined);
+  // The page gets the time to hide again what it hides on the way back, before it is kept shown.
+  if (shown > 0) await page.waitForTimeout(REVEAL.pauseMs);
+  await page.evaluate(keepShownState).catch(() => undefined);
   return true;
+}
+
+/** The properties an animation on scroll starts from; the shown state of each is kept. */
+const SHOWN_PROPERTIES = ["opacity", "transform", "translate", "scale", "rotate", "visibility", "filter", "clip-path"];
+
+interface HiddenText {
+  element: Element;
+  shown?: Record<string, string>;
+}
+
+declare global {
+  interface Window {
+    __loepHiddenText?: HiddenText[];
+  }
+}
+
+/** Mark the outermost elements with text that are fully transparent before the scroll: the ones an animation on scroll may fade in. */
+function markHiddenText(max: number): void {
+  const hidden: HiddenText[] = [];
+  for (const element of document.querySelectorAll("body *")) {
+    if (hidden.length >= max) break;
+    // What is inside a marked element is hidden with it.
+    if (hidden.at(-1)?.element.contains(element)) continue;
+    if (getComputedStyle(element).opacity === "0" && element.textContent?.trim()) hidden.push({ element });
+  }
+  window.__loepHiddenText = hidden;
+}
+
+/** For each marked element in view: run its transitions to the end, and take its state when it has become visible. The number of elements with a shown state. */
+function takeShownState(properties: readonly string[]): number {
+  for (const item of window.__loepHiddenText ?? []) {
+    if (item.shown) continue;
+    const box = item.element.getBoundingClientRect();
+    if (box.bottom <= 0 || box.top >= window.innerHeight || (box.width === 0 && box.height === 0)) continue;
+    for (const animation of item.element.getAnimations()) if (animation.effect?.getTiming().iterations !== Infinity) animation.finish();
+    const style = getComputedStyle(item.element);
+    if (style.opacity === "0") continue;
+    item.shown = Object.fromEntries(properties.map((property) => [property, style.getPropertyValue(property)]));
+  }
+  return (window.__loepHiddenText ?? []).filter((item) => item.shown).length;
+}
+
+/** Keep the shown state on the elements that are hiding again, or already hid, once the page is back where it was. */
+function keepShownState(): void {
+  for (const { element, shown } of window.__loepHiddenText ?? []) {
+    if (!shown || !(element instanceof HTMLElement || element instanceof SVGElement)) continue;
+    const style = getComputedStyle(element);
+    // A looping animation is left alone: only a transition back, or a state that differs, counts as hiding.
+    const hiding = element.getAnimations().some((animation) => animation instanceof CSSTransition) || Object.entries(shown).some(([property, value]) => style.getPropertyValue(property) !== value);
+    if (!hiding) continue;
+    element.style.setProperty("transition", "none", "important");
+    for (const [property, value] of Object.entries(shown)) element.style.setProperty(property, value, "important");
+  }
+  delete window.__loepHiddenText;
 }
 
 /**
