@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { after, before, test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { crc32 } from "node:zlib";
-import { documents as measureDocuments } from "../src/commands/documents.ts";
+import { documents as measureDocuments, MAX_DOCUMENT_BYTES } from "../src/commands/documents.ts";
 import { inventory, probeDocument, type Inventory } from "../src/commands/inventory.ts";
 import { buildSample, chooseDocuments, DOCUMENT_CENSUS_LIMIT, withDocuments } from "../src/commands/sample.ts";
 import { measureOffice } from "../src/instruments/documents/office.ts";
@@ -791,6 +791,19 @@ test("a file nobody could place is read as text in another character set, and a 
   } finally {
     await new Promise<void>((resolve) => void site.close(() => resolve()));
   }
+});
+
+test("a report of 72 MB is within the limit, and a document above it is not fetched and names the limit of loep", async () => {
+  assert.ok(MAX_DOCUMENT_BYTES >= 150 * 1024 * 1024);
+  const run = join(scratch, "run-too-large");
+  mkdirSync(run, { recursive: true });
+  await writeJson(join(run, "inventory.json"), { baseUrl: "https://site.example/", origin: "https://site.example", pages: [] });
+  // The size the server gave in the inventory is enough: nothing is asked of the site.
+  const chosen = [{ label: "D01", url: "https://site.example/groot.pdf", kind: "pdf", slug: "groot", reason: "test", linkedFrom: [], bytes: MAX_DOCUMENT_BYTES + 1, lastModified: null }];
+  await writeJson(join(run, "sample.json"), { documents: chosen });
+  assert.deepEqual(await measureDocuments(run), { documents: 1, read: 0, notRead: 0, failed: 1 });
+  const facts = loadDocuments(run, chosen as never)[0]!.facts!;
+  assert.deepEqual([facts.status, facts.limit], ["failed", "size"]);
 });
 
 test("an observation of a document counts as one that can be made again, without a page being open", () => {

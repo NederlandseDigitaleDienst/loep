@@ -9,9 +9,9 @@ import { LONGEST_FAILURE_PAUSE_SECONDS, runBlockade } from "../session/blockade.
 import { guardedDownload, scopeForRun, type Guard, type Scope } from "../session/safety.ts";
 import type { Sample } from "./sample.ts";
 
-/** A document larger than this is not fetched; the reason is recorded. */
-export const MAX_DOCUMENT_BYTES = 50 * 1024 * 1024;
-const DOWNLOAD_MS = 60_000;
+/** A document larger than this is not fetched; the reason is recorded. A report of a government with many photos and maps can be 150 MB, and the file is streamed to disk. */
+export const MAX_DOCUMENT_BYTES = 250 * 1024 * 1024;
+const DOWNLOAD_MS = 300_000;
 /** Pause between two downloads from the same site. */
 const POLITE_MS = 500;
 
@@ -65,7 +65,7 @@ async function fetchAndMeasure(runDir: string, found: SampleDocument, scope: Sco
   const reason = NOT_READ_REASON_NL[document.kind];
   // A file of a kind nobody could place is fetched and looked at: by its content it may be a known format or plain text after all.
   if (!READ_KINDS.includes(document.kind) && document.kind !== "other") return emptyFacts(document.label, document.url, document.kind, "notRead", reason ?? "deze soort wordt niet ingelezen");
-  if (document.bytes !== null && document.bytes > MAX_DOCUMENT_BYTES) return emptyFacts(document.label, document.url, document.kind, "failed", `het bestand is ${Math.round(document.bytes / 1024 / 1024)} MB; de grens is ${MAX_DOCUMENT_BYTES / 1024 / 1024} MB`);
+  if (document.bytes !== null && document.bytes > MAX_DOCUMENT_BYTES) return { ...emptyFacts(document.label, document.url, document.kind, "failed", `het bestand is ${Math.ceil(document.bytes / 1024 / 1024)} MB; de grens is ${MAX_DOCUMENT_BYTES / 1024 / 1024} MB`), limit: "size" };
   await mkdir(join(runDir, documentDir(document)), { recursive: true });
   const file = join(runDir, originalPath(document));
   // A pause is waited out first; an origin that refused the evaluation is not asked.
@@ -75,7 +75,7 @@ async function fetchAndMeasure(runDir: string, found: SampleDocument, scope: Sco
   if (!fetched.ok) return emptyFacts(document.label, document.url, document.kind, "failed", `niet op te halen: ${fetched.reason}`);
   if (fetched.truncated) {
     await rm(file, { force: true });
-    return emptyFacts(document.label, document.url, document.kind, "failed", fetched.truncated === "size" ? `het bestand is groter dan ${MAX_DOCUMENT_BYTES / 1024 / 1024} MB` : "het bestand kwam niet binnen de tijd binnen");
+    return { ...emptyFacts(document.label, document.url, document.kind, "failed", fetched.truncated === "size" ? `het bestand is groter dan ${MAX_DOCUMENT_BYTES / 1024 / 1024} MB` : "het bestand kwam niet binnen de tijd binnen"), limit: fetched.truncated };
   }
   if (document.kind !== "other") return measureDocument(runDir, document, file, fetched.bytes, fetched.contentType);
   const byContent = kindOfContent(await readFile(file), charsetOf(fetched.contentType));

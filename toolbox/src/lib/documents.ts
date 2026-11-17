@@ -393,6 +393,8 @@ export interface DocumentFacts {
   status: "read" | "notRead" | "failed";
   /** With "notRead" and "failed": why. */
   reasonNl: string | null;
+  /** With "failed": the limit of loep the document ran into, when that is why it was not read. Absent otherwise. */
+  limit?: "size" | "time";
   bytes: number | null;
   sha256: string | null;
   measuredAt: string;

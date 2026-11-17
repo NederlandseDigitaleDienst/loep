@@ -329,6 +329,14 @@ export function gateChecks(run: RunData): { checks: Check[]; gaps: Gap[]; warnin
   // A document of the sample without facts was never fetched: the judges would see only its link.
   const unmeasured = (run.documents ?? []).filter((document) => document.facts === null);
   if (unmeasured.length > 0) coverageGaps.push({ check: "coverage", page: null, url: null, state: "default", missingNl: `Van ${unmeasured.length === 1 ? "1 document" : `${unmeasured.length} documenten`} in de steekproef is niets gemeten (${unmeasured.map((document) => document.label).join(", ")}), dus de beoordelaars zouden alleen de link zien. Draai documents.`, measured: { missing: unmeasured.map((document) => document.label) }, fixedBy: "sweep" });
+  // A document that ran into a limit of loep is not read, which is no property of the site: a verdict "voldoet" on a criterion for documents does not hold for it (#612).
+  for (const document of (run.documents ?? []).filter((entry) => entry.facts?.status === "failed" && entry.facts.limit !== undefined)) {
+    const facts = document.facts!;
+    const notHeldNl = `Een uitkomst "voldoet" bij een criterium dat ook voor documenten geldt, geldt niet voor dit document.`;
+    const place = { check: "document-limit", page: document.label, url: document.item.url, state: "default", measured: { limit: facts.limit, reasonNl: facts.reasonNl } };
+    if (facts.limit === "time") coverageGaps.push({ ...place, missingNl: `Het document kwam niet binnen de tijd binnen en is niet ingelezen. Draai documents opnieuw: dat haalt het nog een keer op.`, fixedBy: "sweep", limitationNl: `Het document kwam ook bij een nieuwe poging niet binnen de tijd binnen en is niet ingelezen. ${notHeldNl}` });
+    else limitations.push({ ...place, missingNl: `Het document is te groot voor loep en is niet ingelezen (${facts.reasonNl}). ${notHeldNl}` });
+  }
   // The single keys in the states of the model belong to the interaction probe.
   if (model && run.siteStates && run.states) {
     const inStates = run.states.singleKeys?.states;

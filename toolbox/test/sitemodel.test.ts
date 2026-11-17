@@ -364,6 +364,16 @@ test("a document of the sample that documents never measured is a gap for the sw
   assert.match(checked.gaps[0]!.missingNl, /^Van 2 documenten in de steekproef is niets gemeten \(D01, D03\).* Draai documents\.$/);
 });
 
+test("a document that ran into a limit of loep is a limitation when too large and a gap for the sweep when too slow, and a verdict on it does not hold", () => {
+  const failed = (label: string, limit?: "size" | "time") => ({ label, item: { url: `https://site.nl/${label}.pdf` }, facts: { status: "failed", reasonNl: "reden", ...(limit ? { limit } : {}) } });
+  const documents = [failed("D01", "size"), failed("D02", "time"), failed("D03")] as unknown as RunData["documents"];
+  const checked = gateChecks(gateRun([gatePage("P1", "https://site.nl/")], { documents }));
+  assert.deepEqual(checked.gaps.map((gap) => [gap.check, gap.page, gap.fixedBy]), [["document-limit", "D02", "sweep"]]);
+  assert.match(checked.gaps[0]!.limitationNl!, /geldt niet voor dit document/);
+  assert.deepEqual(checked.limitations.filter((entry) => entry.check === "document-limit").map((entry) => entry.page), ["D01"]);
+  assert.match(checked.limitations.find((entry) => entry.check === "document-limit")!.missingNl, /te groot voor loep.*"voldoet".*geldt niet voor dit document\./);
+});
+
 test("the gate flags a Tab walk that reached less than the threshold, and not one just above it", () => {
   assert.equal(MIN_TAB_REACH, 0.5);
   assert.deepEqual(names(gateRun([gatePage("P1", "https://site.nl/", { links: 10, reached: 4 })])), ["tab-reach:P1"]);
