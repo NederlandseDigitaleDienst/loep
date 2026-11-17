@@ -195,3 +195,11 @@ test("text that an animation on scroll hides again once it is out of view stays 
   assert.deepEqual(state, { opacity: "1", transform: "none", top: 0 });
   await page.context().close();
 });
+
+test("what a page hides apart from the scroll stays hidden after loading: a fixed button to the top, and a slide that is not shown", async () => {
+  const page = await open("/reveal-not-scroll.html");
+  await page.waitForTimeout(1200);
+  const state = await page.evaluate(() => Object.fromEntries(["top", "first", "second"].map((id) => [id, getComputedStyle(document.getElementById(id)!).opacity])));
+  assert.deepEqual(state, { top: "0", first: "1", second: "0" });
+  await page.context().close();
+});

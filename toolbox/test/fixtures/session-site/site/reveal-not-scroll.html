@@ -1,0 +1,12 @@
+<!doctype html><html lang="nl"><head><meta charset="utf-8"><title>t</title><style>section{height:1600px}.top{position:fixed;bottom:1em;right:1em;opacity:0;transition:opacity .3s}.top.in{opacity:1}.slide{position:absolute;opacity:0}.slide.on{opacity:1}</style></head><body>
+<section><h1>Boven</h1></section><section><div class="slides"><p class="slide on" id="first">Eerste dia</p><p class="slide" id="second" aria-hidden="true">Tweede dia</p></div></section><section><p>Einde</p></section>
+<a class="top" id="top" href="#">Naar boven</a>
+<script>
+// A button to the top that fades in once the page is scrolled down, and out again at the top.
+const top_=document.getElementById('top');
+addEventListener('scroll',()=>top_.classList.toggle('in',scrollY>300));
+// A carousel that fades its slides, here moved on and back once it is near, so the test does not depend on how long loading takes.
+const slides=[...document.querySelectorAll('.slide')];
+function show(i){slides.forEach((s,j)=>{s.classList.toggle('on',i===j);s.setAttribute('aria-hidden',String(i!==j))})}
+let moved=false;addEventListener('scroll',()=>{if(moved||scrollY<900)return;moved=true;show(1);setTimeout(()=>show(0),400)});
+</script></body></html>

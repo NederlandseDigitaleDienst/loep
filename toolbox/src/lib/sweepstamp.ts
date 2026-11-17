@@ -32,9 +32,10 @@ import type { Blocker, Postcondition } from "./sitemodel.ts";
  * data (fetch, XHR) from a host outside the scope of the run is refused, as in a session, so what it would fill is no longer measured.
  * 17: a page is quiet after 500 ms without a request in flight that is younger than 2 s, instead of after 500 ms without any
  * request: a long-poll or a hanging beacon no longer holds every page until the cap of 10 s. 18: after loading, the page is
- * scrolled through once and back to the top, so content that only shows when it comes into view is measured as shown.
+ * scrolled through once and back to the top, so content that only shows when it comes into view is measured as shown. 19: text
+ * that an animation on scroll hides again once it is out of view keeps its shown state when the page is back at the top.
  */
-export const SWEEP_STAMP_VERSION = 18;
+export const SWEEP_STAMP_VERSION = 19;
 
 /**
  * How the content of a page is read for its stamp. Raise when that changes: an older hash can then never match,

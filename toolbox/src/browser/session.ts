@@ -677,6 +677,12 @@ function takeShownState(properties: readonly string[]): number {
 function keepShownState(): void {
   for (const { element, shown } of window.__loepHiddenText ?? []) {
     if (!shown || !(element instanceof HTMLElement || element instanceof SVGElement)) continue;
+    // What the page hides apart from the scroll stays hidden: an element the page marks hidden (a slide that is not shown),
+    // or one in a fixed or sticky box, which does not come into view by scrolling (a button to the top that shows lower down).
+    if (element.closest('[aria-hidden="true"], [inert]')) continue;
+    let pinned = false;
+    for (let box: Element | null = element; box && !pinned; box = box.parentElement) pinned = ["fixed", "sticky"].includes(getComputedStyle(box).position);
+    if (pinned) continue;
     const style = getComputedStyle(element);
     // A looping animation is left alone: only a transition back, or a state that differs, counts as hiding.
     const hiding = element.getAnimations().some((animation) => animation instanceof CSSTransition) || Object.entries(shown).some(([property, value]) => style.getPropertyValue(property) !== value);
