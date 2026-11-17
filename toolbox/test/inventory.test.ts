@@ -60,6 +60,24 @@ test("the order takes turns between the parts of the site, and a part full of ta
   assert.deepEqual(visitOrder([...knowledge].reverse(), 99), visitOrder(knowledge, 99), "the order does not depend on the order in which addresses were found");
 });
 
+test("pages that differ only in a number are one kind, so a kind one level deeper gets its share of the limit (#620)", () => {
+  const groups = Array.from({ length: 300 }, (_, index) => `${site}/groep/${1000 + index}`);
+  const parts = groups.flatMap((group) => [1, 2, 3].map((part) => `${group}/onderdeel/${part}`));
+  const compare = Array.from({ length: 50 }, (_, index) => `${site}/groep/vergelijk/${index}`);
+  const download = Array.from({ length: 50 }, (_, index) => `${site}/groep/download/${index}`);
+  const search = Array.from({ length: 300 }, (_, index) => `${site}/zoek?page=${index + 1}`);
+  const order = visitOrder([`${site}/`, `${site}/zoek`, ...groups, ...parts, ...compare, ...download, ...search], 200);
+  const count = (pattern: RegExp): number => order.filter((url) => pattern.test(new URL(url).pathname)).length;
+  assert.ok(count(/^\/groep\/\d+\/onderdeel\/\d+$/) >= 10, "the pages one level below a group come in");
+  assert.ok(count(/^\/groep\/vergelijk\/\d+$/) >= 10, "the comparisons come in");
+  assert.ok(count(/^\/groep\/download\/\d+$/) >= 10, "the downloads come in");
+  assert.ok(count(/^\/groep\/\d+$/) >= 10, "the groups themselves still come in");
+  // A uuid or a long hash identifies a page as a number does; a year keeps its own turn (#479).
+  const visited = new Map<string, number>();
+  noteVisited(visited, `${site}/zaak/3f2c1a9e-8b7d-4c6e-9a1b-2d3e4f5a6b7c`);
+  assert.equal(nextAddress([`${site}/zaak/0b1c2d3e-4f5a-4b6c-8d7e-9f0a1b2c3d4e`, `${site}/zaak/3f2c1a9e-8b7d-4c6e-9a1b-2d3e4f5a6b7c/stukken`], visited), `${site}/zaak/3f2c1a9e-8b7d-4c6e-9a1b-2d3e4f5a6b7c/stukken`);
+});
+
 test("the warning about the limit names per part what was visited and what was left out", () => {
   const page = (path: string): Inventory["pages"][number] => ({ url: `${site}${path}`, slug: path, status: 200, title: "", lang: "nl", templateHash: "", contentHash: "", foundVia: ["link"], counts: {} });
   const found = {
