@@ -5,7 +5,7 @@ import { join } from "node:path";
 import type { Browser, BrowserContext, Frame, Page } from "playwright";
 import { canonicalJson, readJson } from "../lib/canonical.ts";
 import { frameAddress, POSTCONDITION_NOT_HELD_NL, type Postcondition } from "../lib/sitemodel.ts";
-import { blockerSteps, runSteps, type LastStepSpeech, type Recipe } from "./daemon.ts";
+import { blockerSteps, resolveStepWaiting, runSteps, type LastStepSpeech, type Recipe } from "./daemon.ts";
 import { Images, type StartState, type Step } from "./observations.ts";
 import { DEFAULT_DAEMON_LIMITS, Politeness, scopeForRun, type DaemonLimits } from "./safety.ts";
 import { openSurface, SESSION_INPAGE_PATH, topSurface, type Env, type Surface } from "./surface.ts";
@@ -196,7 +196,8 @@ export interface CleanReplay extends Replayed {
 /**
  * Replay a recipe from a clean page, with every limit of a session in place. The
  * postcondition must not hold before the steps and must hold after them: a condition
- * that is true on a fresh page proves nothing. The caller closes the surface's context.
+ * that is true on a fresh page proves nothing. When it does hold, the element of the first step gets a
+ * moment to appear first, as a notice added just after the load does. The caller closes the surface's context.
  */
 export async function replayFromClean(env: Env, recipe: Recipe, post: Postcondition | null, start: Partial<StartState> = {}, onContext?: (context: BrowserContext) => void, speech?: LastStepSpeech): Promise<CleanReplay> {
   if (!recipe.start) return { ok: false, reasonNl: "de toestand heeft geen beginpagina", before: null, after: null, surface: null };
@@ -206,7 +207,10 @@ export async function replayFromClean(env: Env, recipe: Recipe, post: Postcondit
   } catch (error) {
     return { ok: false, reasonNl: `de beginpagina laadt niet: ${(error as Error).message.split("\n")[0]}`, before: null, after: null, surface: null };
   }
-  const before = post ? await holds(surface.page, post) : null;
+  let before = post ? await holds(surface.page, post) : null;
+  // A notice that a script adds just after the load is not there yet: give the element of the first step a moment to appear, then look again.
+  const first = recipe.steps[0];
+  if (before?.holds && first?.target && (await resolveStepWaiting(surface, first))) before = await holds(surface.page, post!);
   if (before?.holds) return { ok: false, reasonNl: `de postconditie geldt al op de verse pagina, voor de eerste stap (${before.detail}); ze bewijst dus niets`, before, after: null, surface };
   const replayed = await replaySteps(env, surface, recipe.steps, post, speech);
   return { ...replayed, before, surface };

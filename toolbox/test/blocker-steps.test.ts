@@ -65,3 +65,17 @@ test("a recipe that starts by closing a blocker skips those steps when the block
   await withNotice.surface?.context.close();
   assert.equal(withNotice.ok, true, withNotice.reasonNl ?? "");
 });
+
+test("the check that a blocker's postcondition does not already hold waits for a notice that a script adds just after the load", async () => {
+  await loep("open", ["/late-notice.html"]);
+  await new Promise((resolve) => setTimeout(resolve, 2000));
+  await click("css:#ok");
+  await loep("state", ["save", "blocker-late"]);
+  const recipes = await loadRecipes(run);
+  const env: Env = { browser, runDir: run, scope: { hosts: [new URL(site.origin).host], baseUrl: `${site.origin}/`, strict: false }, politeness: new Politeness(0), limits: { ...DEFAULT_DAEMON_LIMITS, navigationDelayMs: 0 } };
+  // On the fresh page the notice is not there yet when the check starts.
+  const replay = await replayFromClean(env, recipes["blocker-late"]!, { kind: "not-covering", selector: "#notice" } as never);
+  await replay.surface?.context.close();
+  assert.equal(replay.ok, true, replay.reasonNl ?? "");
+  assert.equal(replay.before?.holds, false, replay.before?.detail ?? "");
+});

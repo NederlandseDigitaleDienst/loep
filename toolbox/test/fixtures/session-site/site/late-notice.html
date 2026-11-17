@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="nl">
+<head><meta charset="utf-8"><title>Late melding</title></head>
+<body>
+<main>
+<h1>Een pagina met een melding die net na het laden verschijnt</h1>
+<p>De inhoud van de pagina.</p>
+</main>
+<script>
+  // A notice over the whole window that a script adds a moment after the load, as a cookie notice often does.
+  setTimeout(() => {
+    const notice = document.createElement("div");
+    notice.id = "notice";
+    notice.style.cssText = "position:fixed;inset:0;background:#fff;padding:2rem";
+    notice.innerHTML = '<p>Deze site gebruikt cookies.</p><button id="ok" type="button">Oké</button>';
+    document.body.append(notice);
+    document.getElementById("ok").addEventListener("click", () => notice.remove());
+  }, 1500);
+</script>
+</body>
+</html>
