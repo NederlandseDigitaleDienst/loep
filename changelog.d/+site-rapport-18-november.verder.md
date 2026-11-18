@@ -1,1 +1,1 @@
-De site van loep toont het afgetekende onderzoek van de eigen site van 18 november 2026, gemaakt met loep 0.35.0 na de overstap naar @nldd/design-system 0.26.2: status B, 4 van de 55 criteria voldoen niet en er staat geen criterium open.
+De site van loep toont het afgetekende onderzoek van de eigen site van 18 november 2026, gemaakt met loep 0.35.0 na de overstap naar @nldd/design-system 0.26.2: status B, 4 van de 55 criteria voldoen niet en er staat geen criterium open. Bij drie van de vier gebreken staat dat ze zijn opgelost en op 18 november zijn nagemeten.
