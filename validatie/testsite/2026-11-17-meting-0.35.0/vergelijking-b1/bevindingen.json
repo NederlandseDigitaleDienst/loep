@@ -1,0 +1,238 @@
+{
+  "criteria": {
+    "bothFailed": [],
+    "criteria": 55,
+    "falsePassRate": null,
+    "missed": [],
+    "neitherFailed": {
+      "cantTell": 3,
+      "inapplicable": 5,
+      "passed": 43
+    },
+    "onlyOurs": [
+      "1.3.1",
+      "2.4.3",
+      "2.5.8",
+      "3.3.1"
+    ],
+    "recall": null,
+    "site": "Berkenveen",
+    "undecidedRate": null,
+    "wcagVersion": "2.2"
+  },
+  "findings": [],
+  "ours": {
+    "agreement": 1,
+    "classes": {
+      "discutabel": {
+        "a": 3,
+        "agreed": 3,
+        "b": 3
+      },
+      "onterecht": {
+        "a": 1,
+        "agreed": 1,
+        "b": 1
+      },
+      "tegenhanger": {
+        "a": 0,
+        "agreed": 0,
+        "b": 0
+      },
+      "terecht": {
+        "a": 0,
+        "agreed": 0,
+        "b": 0
+      }
+    },
+    "disagreed": 0,
+    "duplicates": {
+      "a": {
+        "referenceFindings": 0,
+        "surplus": 0
+      },
+      "agreed": {
+        "referenceFindings": 0,
+        "surplus": 0
+      },
+      "b": {
+        "referenceFindings": 0,
+        "surplus": 0
+      }
+    },
+    "shareWithoutCounterpart": {
+      "discutabel": {
+        "a": 0.75,
+        "agreed": 0.75,
+        "b": 0.75
+      },
+      "onterecht": {
+        "a": 0.25,
+        "agreed": 0.25,
+        "b": 0.25
+      },
+      "terecht": {
+        "a": 0,
+        "agreed": 0,
+        "b": 0
+      }
+    },
+    "total": 4
+  },
+  "ownFindings": [
+    {
+      "a": "onterecht",
+      "agreed": "onterecht",
+      "b": "onterecht",
+      "criterion": "1.3.1",
+      "id": "BERK-1.3.1-bd6f",
+      "reasonNl": {
+        "a": "Op P13 staat de kop Zoekresultaten met een lege lijst, zowel op het scherm als in de code. Scherm en code zeggen hetzelfde, er gaat geen structuur verloren. Dat valt niet onder 1.3.1.",
+        "b": "De kop Zoekresultaten met een lege lijst staat zo op het scherm en ook zo in de code. Er gaat geen verband verloren. Dit valt niet onder 1.3.1."
+      },
+      "titleNl": "Kop Zoekresultaten zonder inhoud bij nul resultaten"
+    },
+    {
+      "a": "discutabel",
+      "agreed": "discutabel",
+      "b": "discutabel",
+      "criterion": "2.4.3",
+      "id": "BERK-2.4.3-e862",
+      "reasonNl": {
+        "a": "De meting klopt: met de chat open gaat Tab rond in de chat en slaat de voet over. Wie met het toetsenbord opent, staat in de chat en kan die sluiten. Dat werkt als een venster; afkeuren is streng.",
+        "b": "Met de chat open blijft Tab in de chat rondgaan. Dat klopt. Maar de chat sluit met de knop en met Escape, en de volgorde in de chat is logisch. Een onderzoeker keurt hier waarschijnlijk niet op af."
+      },
+      "titleNl": "Open chat houdt de Tab-toets weg van de rest van de pagina"
+    },
+    {
+      "a": "discutabel",
+      "agreed": "discutabel",
+      "b": "discutabel",
+      "criterion": "2.5.8",
+      "id": "BERK-2.5.8-ef67",
+      "reasonNl": {
+        "a": "Na Weigeren ligt de skiplink met focus over het logo; dat klopt. Het logo zelf is groot genoeg en de bedekking duurt alleen zolang de skiplink focus heeft. Een onderzoeker keurt hier waarschijnlijk niet op af.",
+        "b": "De skiplink ligt over het logo zolang hij de focus heeft. Dat is een korte toestand na Weigeren. De skiplink zelf is groot genoeg. Een onderzoeker keurt het logo hier waarschijnlijk niet op af."
+      },
+      "titleNl": "Skiplink bedekt het logo na het sluiten van de cookiemelding"
+    },
+    {
+      "a": "discutabel",
+      "agreed": "discutabel",
+      "b": "discutabel",
+      "criterion": "3.3.1",
+      "id": "BERK-3.3.1-8345",
+      "reasonNl": {
+        "a": "Verstuur met een leeg chatveld doet niets en het veld is niet verplicht of ongeldig gemarkeerd. Een leeg bericht negeren is geen duidelijke invoerfout. Afkeuren op 3.3.1 is een strenge lezing.",
+        "b": "Een leeg chatbericht wordt niet verstuurd en er komt geen melding. Dat klopt. Het veld is niet verplicht gemaakt en negeren van een leeg bericht is gewoon gedrag. Bij de afvalwijzer gold hetzelfde als geen fout."
+      },
+      "titleNl": "Chatvenster houdt een leeg bericht tegen zonder melding"
+    }
+  ],
+  "provenance": {
+    "classificationSha256": {
+      "a": "3fb62d38e1ca2e8a0dc34fb77273e44e970ce8482bfeeda0391bfdb5e9d1cacc",
+      "b": "bfd22c6eb8558d47b6f43ea3b009878cba7f8e48acc68bec86c8522ba7533f0e"
+    },
+    "evaluationSha256": "2249f837803d732f91120ef62b864c7036421bab7d2bd844f34ef8d8639679f1",
+    "inputSha256": "a8dd66fe709392533e7612a2094373a6e1f1438c780465e56aaea812fea9168b",
+    "promptSha256": "f1f5e55792880bceff07e783347360c72ec2346c22a84f5886948346abf1e8fe"
+  },
+  "reference": {
+    "agreement": null,
+    "agreementCoarse": null,
+    "classes": {
+      "buiten-bereik": {
+        "a": 0,
+        "agreed": 0,
+        "b": 0
+      },
+      "deels": {
+        "a": 0,
+        "agreed": 0,
+        "b": 0
+      },
+      "gemist-bewijs-beoordeling": {
+        "a": 0,
+        "agreed": 0,
+        "b": 0
+      },
+      "gemist-bewijs-dossier": {
+        "a": 0,
+        "agreed": 0,
+        "b": 0
+      },
+      "gemist-geen-bewijs": {
+        "a": 0,
+        "agreed": 0,
+        "b": 0
+      },
+      "gevonden": {
+        "a": 0,
+        "agreed": 0,
+        "b": 0
+      },
+      "niet-meer-aanwezig": {
+        "a": 0,
+        "agreed": 0,
+        "b": 0
+      }
+    },
+    "coarse": {
+      "buiten-bereik": {
+        "a": 0,
+        "agreed": 0,
+        "b": 0
+      },
+      "deels": {
+        "a": 0,
+        "agreed": 0,
+        "b": 0
+      },
+      "gemist": {
+        "a": 0,
+        "agreed": 0,
+        "b": 0
+      },
+      "gevonden": {
+        "a": 0,
+        "agreed": 0,
+        "b": 0
+      },
+      "niet-meer-aanwezig": {
+        "a": 0,
+        "agreed": 0,
+        "b": 0
+      }
+    },
+    "counted": 0,
+    "disagreed": 0,
+    "disagreedCoarse": 0,
+    "documents": 0,
+    "documentsOutOfReach": 0,
+    "foundShare": {
+      "a": {
+        "ofCounted": null,
+        "ofStillPresent": null
+      },
+      "agreed": {
+        "ofCounted": null,
+        "ofStillPresent": null
+      },
+      "b": {
+        "ofCounted": null,
+        "ofStillPresent": null
+      }
+    },
+    "leftOut": 0,
+    "stillPresent": {
+      "a": 0,
+      "agreed": 0,
+      "b": 0
+    },
+    "total": 0
+  },
+  "referenceKind": "answer-key",
+  "schema": "loep/compare-findings-summary/2",
+  "site": "Berkenveen"
+}

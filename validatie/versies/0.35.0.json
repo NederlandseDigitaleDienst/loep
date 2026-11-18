@@ -1,0 +1,6 @@
+{
+  "version": "0.35.0",
+  "measuredAt": "2026-11-18",
+  "againstNl": "De sleutel van de eigen testsite, met 79 ingebouwde gebreken, en de schone tweeling zonder gebreken, niet het oordeel van een menselijke deskundige. Gemeten is de kandidaat voor deze versie (commit 81390b3), op alle 56 criteria (#642), en daarna 1.3.1 opnieuw na een aanpassing van regel R9.",
+  "resultNl": "In twee volledige runs op hetzelfde vastgelegde bewijs vond loep elk van de 79 gebreken, en kreeg elk van de 56 criteria in beide runs de uitkomst die de sleutel geeft. Geen eigen bevinding was volgens beide vergelijkers onterecht. Op de schone tweeling haalde de eerste meting de lat niet: loep keurde 1.3.1 af op een kop boven een lege lijst met zoekresultaten, en beide vergelijkers noemden dat onterecht. Na een aanpassing van de regel voor koppen zonder inhoud is alleen 1.3.1 opnieuw gemeten: op de tweeling voldoet het nu, op de variant met gebreken vond loep alle zes gebreken onder 1.3.1 weer. Drie andere afkeuringen op de tweeling noemen beide vergelijkers discutabel, en drie criteria bleven open omdat ze een bestand van een externe videospeler of een testaccount vragen. De testsite is makkelijker dan een echte site, dus deze cijfers zeggen niet hoe loep op een echte site presteert."
+}

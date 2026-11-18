@@ -1,0 +1,3292 @@
+{
+  "agreement": {
+    "baseline": {
+      "kappa": null,
+      "runs": 1,
+      "unanimous": [
+        56,
+        56
+      ]
+    },
+    "variant": {
+      "kappa": null,
+      "runs": 1,
+      "unanimous": [
+        56,
+        56
+      ]
+    }
+  },
+  "criteria": [
+    "1.1.1",
+    "1.2.1",
+    "1.2.2",
+    "1.2.3",
+    "1.2.4",
+    "1.2.5",
+    "1.3.1",
+    "1.3.2",
+    "1.3.3",
+    "1.3.4",
+    "1.3.5",
+    "1.4.1",
+    "1.4.2",
+    "1.4.3",
+    "1.4.4",
+    "1.4.5",
+    "1.4.10",
+    "1.4.11",
+    "1.4.12",
+    "1.4.13",
+    "2.1.1",
+    "2.1.2",
+    "2.1.4",
+    "2.2.1",
+    "2.2.2",
+    "2.3.1",
+    "2.4.1",
+    "2.4.2",
+    "2.4.3",
+    "2.4.4",
+    "2.4.5",
+    "2.4.6",
+    "2.4.7",
+    "2.4.11",
+    "2.5.1",
+    "2.5.2",
+    "2.5.3",
+    "2.5.4",
+    "2.5.7",
+    "2.5.8",
+    "3.1.1",
+    "3.1.2",
+    "3.2.1",
+    "3.2.2",
+    "3.2.3",
+    "3.2.4",
+    "3.2.6",
+    "3.3.1",
+    "3.3.2",
+    "3.3.3",
+    "3.3.4",
+    "3.3.7",
+    "3.3.8",
+    "4.1.1",
+    "4.1.2",
+    "4.1.3"
+  ],
+  "defects": [
+    {
+      "baseline": [
+        "gevonden"
+      ],
+      "criterion": "1.1.1",
+      "descriptionNl": "De foto van de fietsenstalling heeft geen alt-attribuut.",
+      "foundBaseline": [
+        1,
+        1
+      ],
+      "foundVariant": [
+        1,
+        1
+      ],
+      "id": "1.1.1-artikelfoto",
+      "variant": [
+        "gevonden"
+      ]
+    },
+    {
+      "baseline": [
+        "gevonden"
+      ],
+      "criterion": "1.1.1",
+      "descriptionNl": "Het logo van het waterschap heeft een bestandsnaam als tekstalternatief.",
+      "foundBaseline": [
+        1,
+        1
+      ],
+      "foundVariant": [
+        1,
+        1
+      ],
+      "id": "1.1.1-bestandsnaam",
+      "variant": [
+        "gevonden"
+      ]
+    },
+    {
+      "baseline": [
+        "gevonden"
+      ],
+      "criterion": "1.1.1",
+      "descriptionNl": "Het logo in de cookiemelding heeft als tekstalternatief het woord \"logo\".",
+      "foundBaseline": [
+        1,
+        1
+      ],
+      "foundVariant": [
+        1,
+        1
+      ],
+      "id": "1.1.1-logo-melding",
+      "variant": [
+        "gevonden"
+      ]
+    },
+    {
+      "baseline": [
+        "gevonden"
+      ],
+      "criterion": "1.1.1",
+      "descriptionNl": "De tarieven staan alleen in een afbeelding van een tabel, met een leeg alt.",
+      "foundBaseline": [
+        1,
+        1
+      ],
+      "foundVariant": [
+        1,
+        1
+      ],
+      "id": "1.1.1-tarieven",
+      "variant": [
+        "gevonden"
+      ]
+    },
+    {
+      "baseline": [
+        "gevonden"
+      ],
+      "criterion": "1.2.1",
+      "descriptionNl": "Het gesprek met de wethouder is alleen te beluisteren; er is geen uitgeschreven tekst.",
+      "foundBaseline": [
+        1,
+        1
+      ],
+      "foundVariant": [
+        1,
+        1
+      ],
+      "id": "1.2.1-gesprek",
+      "variant": [
+        "gevonden"
+      ]
+    },
+    {
+      "baseline": [
+        "gevonden"
+      ],
+      "criterion": "1.2.2",
+      "descriptionNl": "De video heeft gesproken tekst en geen ondertitels.",
+      "foundBaseline": [
+        1,
+        1
+      ],
+      "foundVariant": [
+        1,
+        1
+      ],
+      "id": "1.2.2-ondertitels",
+      "variant": [
+        "gevonden"
+      ]
+    },
+    {
+      "baseline": [
+        "gevonden"
+      ],
+      "criterion": "1.2.3",
+      "descriptionNl": "De dia in beeld toont de agenda en de uitslag van de stemming (14 voor, 5 tegen). De spreker noemt die niet en er is geen uitgeschreven tekst.",
+      "foundBaseline": [
+        1,
+        1
+      ],
+      "foundVariant": [
+        1,
+        1
+      ],
+      "id": "1.2.3-beschrijving",
+      "variant": [
+        "gevonden"
+      ]
+    },
+    {
+      "baseline": [
+        "gevonden"
+      ],
+      "criterion": "1.2.5",
+      "descriptionNl": "Er is geen audiodescriptie voor de informatie die alleen in beeld staat.",
+      "foundBaseline": [
+        1,
+        1
+      ],
+      "foundVariant": [
+        1,
+        1
+      ],
+      "id": "1.2.5-audiodescriptie",
+      "variant": [
+        "gevonden"
+      ]
+    },
+    {
+      "baseline": [
+        "gevonden"
+      ],
+      "criterion": "1.3.1",
+      "descriptionNl": "De groep keuzerondjes heeft geen fieldset en legend; de vraag is een losse alinea.",
+      "foundBaseline": [
+        1,
+        1
+      ],
+      "foundVariant": [
+        1,
+        1
+      ],
+      "id": "1.3.1-keuzegroep",
+      "variant": [
+        "gevonden"
+      ]
+    },
+    {
+      "baseline": [
+        "gevonden"
+      ],
+      "criterion": "1.3.1",
+      "descriptionNl": "Een opsomming is gemaakt met streepjes en regeleinden in één alinea.",
+      "foundBaseline": [
+        1,
+        1
+      ],
+      "foundVariant": [
+        1,
+        1
+      ],
+      "id": "1.3.1-lijst-als-alinea",
+      "variant": [
+        "gevonden"
+      ]
+    },
+    {
+      "baseline": [
+        "gevonden"
+      ],
+      "criterion": "1.3.1",
+      "descriptionNl": "De kopcellen van de rijen en kolommen zijn gewone cellen met een vette opmaak.",
+      "foundBaseline": [
+        1,
+        1
+      ],
+      "foundVariant": [
+        1,
+        1
+      ],
+      "id": "1.3.1-tabelkoppen",
+      "variant": [
+        "gevonden"
+      ]
+    },
+    {
+      "baseline": [
+        "gevonden"
+      ],
+      "criterion": "1.3.1",
+      "descriptionNl": "Twee tussenkoppen in een dichte uitklapper zijn vette alinea's.",
+      "foundBaseline": [
+        1,
+        1
+      ],
+      "foundVariant": [
+        1,
+        1
+      ],
+      "id": "1.3.1-tussenkop-uitklapper",
+      "variant": [
+        "gevonden"
+      ]
+    },
+    {
+      "baseline": [
+        "gevonden"
+      ],
+      "criterion": "1.3.1",
+      "descriptionNl": "Een tussenkop is opgemaakt als vette alinea in plaats van als kop.",
+      "foundBaseline": [
+        1,
+        1
+      ],
+      "foundVariant": [
+        1,
+        1
+      ],
+      "id": "1.3.1-vette-tussenkop",
+      "variant": [
+        "gevonden"
+      ]
+    },
+    {
+      "baseline": [
+        "gevonden"
+      ],
+      "criterion": "1.3.1",
+      "descriptionNl": "De titels boven de kolommen in de voet zijn spans en geen koppen.",
+      "foundBaseline": [
+        1,
+        1
+      ],
+      "foundVariant": [
+        1,
+        1
+      ],
+      "id": "1.3.1-voetkop",
+      "variant": [
+        "gevonden"
+      ]
+    },
+    {
+      "baseline": [
+        "gevonden"
+      ],
+      "criterion": "1.3.2",
+      "descriptionNl": "In de code staat eerst de samenvatting, dan de datum en als laatste de kop. Op het scherm is de volgorde omgedraaid.",
+      "foundBaseline": [
+        1,
+        1
+      ],
+      "foundVariant": [
+        1,
+        1
+      ],
+      "id": "1.3.2-kaart-omgekeerd",
+      "variant": [
+        "gevonden"
+      ]
+    },
+    {
+      "baseline": [
+        "gevonden"
+      ],
+      "criterion": "1.3.2",
+      "descriptionNl": "Het aantal resultaten en de links onder \"Veel gezocht\" staan in de code na de resultaten en zijn met CSS order naar boven gezet.",
+      "foundBaseline": [
+        1,
+        1
+      ],
+      "foundVariant": [
+        1,
+        1
+      ],
+      "id": "1.3.2-zoekvolgorde",
+      "variant": [
+        "gevonden"
+      ]
+    },
+    {
+      "baseline": [
+        "gevonden"
+      ],
+      "criterion": "1.3.3",
+      "descriptionNl": "De instructie verwijst naar \"de ronde groene knop rechtsonder\" en noemt de naam van de knop niet.",
+      "foundBaseline": [
+        1,
+        1
+      ],
+      "foundVariant": [
+        1,
+        1
+      ],
+      "id": "1.3.3-ronde-knop",
+      "variant": [
+        "gevonden"
+      ]
+    },
+    {
+      "baseline": [
+        "gevonden"
+      ],
+      "criterion": "1.3.4",
+      "descriptionNl": "Op een scherm in staande stand tot 900 pixels breed is de tabel verborgen en staat er dat de bezoeker het toestel moet draaien.",
+      "foundBaseline": [
+        1,
+        1
+      ],
+      "foundVariant": [
+        1,
+        1
+      ],
+      "id": "1.3.4-draai",
+      "variant": [
+        "gevonden"
+      ]
+    },
+    {
+      "baseline": [
+        "gevonden"
+      ],
+      "criterion": "1.3.5",
+      "descriptionNl": "De velden voor persoonsgegevens hebben geen autocomplete-attribuut.",
+      "foundBaseline": [
+        1,
+        1
+      ],
+      "foundVariant": [
+        1,
+        1
+      ],
+      "id": "1.3.5-autocomplete",
+      "variant": [
+        "gevonden"
+      ]
+    },
+    {
+      "baseline": [
+        "gevonden"
+      ],
+      "criterion": "1.4.1",
+      "descriptionNl": "Links in de tekst zijn niet onderstreept en verschillen alleen in kleur van de tekst eromheen (donkerblauw naast bijna zwart, contrast onder 3 op 1).",
+      "foundBaseline": [
+        1,
+        1
+      ],
+      "foundVariant": [
+        1,
+        1
+      ],
+      "id": "1.4.1-tekstlink",
+      "variant": [
+        "gevonden"
+      ]
+    },
+    {
+      "baseline": [
+        "gevonden"
+      ],
+      "criterion": "1.4.1",
+      "descriptionNl": "Verplichte velden zijn alleen aan de rode kleur van het label te herkennen.",
+      "foundBaseline": [
+        1,
+        1
+      ],
+      "foundVariant": [
+        1,
+        1
+      ],
+      "id": "1.4.1-verplicht",
+      "variant": [
+        "gevonden"
+      ]
+    },
+    {
+      "baseline": [
+        "gevonden"
+      ],
+      "criterion": "1.4.2",
+      "descriptionNl": "Bij het openen van de startpagina begint een melodie die blijft herhalen. Er is geen knop om het geluid te stoppen.",
+      "foundBaseline": [
+        1,
+        1
+      ],
+      "foundVariant": [
+        1,
+        1
+      ],
+      "id": "1.4.2-melodie",
+      "variant": [
+        "gevonden"
+      ]
+    },
+    {
+      "baseline": [
+        "gevonden"
+      ],
+      "criterion": "1.4.3",
+      "descriptionNl": "De datum is lichtgrijs op wit (ongeveer 2,6 op 1).",
+      "foundBaseline": [
+        1,
+        1
+      ],
+      "foundVariant": [
+        1,
+        1
+      ],
+      "id": "1.4.3-datum",
+      "variant": [
+        "gevonden"
+      ]
+    },
+    {
+      "baseline": [
+        "gevonden"
+      ],
+      "criterion": "1.4.3",
+      "descriptionNl": "Bij aanwijzen met de muis wordt een menulink grijs op lichtgrijs (ongeveer 2 op 1).",
+      "foundBaseline": [
+        1,
+        1
+      ],
+      "foundVariant": [
+        1,
+        1
+      ],
+      "id": "1.4.3-menu-aanwijzen",
+      "variant": [
+        "gevonden"
+      ]
+    },
+    {
+      "baseline": [
+        "gevonden"
+      ],
+      "criterion": "1.4.3",
+      "descriptionNl": "Witte tekst staat direct op de foto. Het linkerdeel van de foto is licht, daar is het contrast te laag.",
+      "foundBaseline": [
+        1,
+        1
+      ],
+      "foundVariant": [
+        1,
+        1
+      ],
+      "id": "1.4.3-tekst-op-foto",
+      "variant": [
+        "gevonden"
+      ]
+    },
+    {
+      "baseline": [
+        "gevonden"
+      ],
+      "criterion": "1.4.4",
+      "descriptionNl": "De alinea heeft een vaste hoogte. Bij 200% vergroten valt het einde van de tekst weg.",
+      "foundBaseline": [
+        1,
+        1
+      ],
+      "foundVariant": [
+        1,
+        1
+      ],
+      "id": "1.4.4-inleiding",
+      "variant": [
+        "gevonden"
+      ]
+    },
+    {
+      "baseline": [
+        "gevonden"
+      ],
+      "criterion": "1.4.4",
+      "descriptionNl": "De pagina verbiedt inzoomen op een aanraakscherm (user-scalable=no, maximum-scale=1).",
+      "foundBaseline": [
+        1,
+        1
+      ],
+      "foundVariant": [
+        1,
+        1
+      ],
+      "id": "1.4.4-zoom-uit",
+      "variant": [
+        "gevonden"
+      ]
+    },
+    {
+      "baseline": [
+        "gevonden"
+      ],
+      "criterion": "1.4.5",
+      "descriptionNl": "De aankondiging is een afbeelding van tekst. Het alt geeft de tekst wel weer.",
+      "foundBaseline": [
+        1,
+        1
+      ],
+      "foundVariant": [
+        1,
+        1
+      ],
+      "id": "1.4.5-zomerfeest",
+      "variant": [
+        "gevonden"
+      ]
+    },
+    {
+      "baseline": [
+        "gevonden"
+      ],
+      "criterion": "1.4.10",
+      "descriptionNl": "Het rooster heeft een vaste breedte van 720 pixels. Op 320 pixels breed moet de bezoeker opzij schuiven.",
+      "foundBaseline": [
+        1,
+        1
+      ],
+      "foundVariant": [
+        1,
+        1
+      ],
+      "id": "1.4.10-rooster",
+      "variant": [
+        "gevonden"
+      ]
+    },
+    {
+      "baseline": [
+        "gevonden"
+      ],
+      "criterion": "1.4.10",
+      "descriptionNl": "Op 320 pixels breed staan de knoppen op één rij en valt \"Weigeren\" buiten beeld.",
+      "foundBaseline": [
+        1,
+        1
+      ],
+      "foundVariant": [
+        1,
+        1
+      ],
+      "id": "1.4.10-weigerknop",
+      "variant": [
+        "gevonden"
+      ]
+    },
+    {
+      "baseline": [
+        "gevonden"
+      ],
+      "criterion": "1.4.11",
+      "descriptionNl": "De rand van de invoervelden is lichtgrijs op wit (ongeveer 1,4 op 1).",
+      "foundBaseline": [
+        1,
+        1
+      ],
+      "foundVariant": [
+        1,
+        1
+      ],
+      "id": "1.4.11-veldrand",
+      "variant": [
+        "gevonden"
+      ]
+    },
+    {
+      "baseline": [
+        "gevonden"
+      ],
+      "criterion": "1.4.12",
+      "descriptionNl": "De tegels hebben een vaste hoogte. Met ruimere tekstafstand past de tekst niet meer en valt de laatste regel weg.",
+      "foundBaseline": [
+        1,
+        1
+      ],
+      "foundVariant": [
+        1,
+        1
+      ],
+      "id": "1.4.12-tegel",
+      "variant": [
+        "gevonden"
+      ]
+    },
+    {
+      "baseline": [
+        "gevonden"
+      ],
+      "criterion": "1.4.13",
+      "descriptionNl": "De uitleg verschijnt bij aanwijzen of focus. Hij is niet met Escape te sluiten en verdwijnt als de muis naar de uitleg zelf gaat.",
+      "foundBaseline": [
+        1,
+        1
+      ],
+      "foundVariant": [
+        1,
+        1
+      ],
+      "id": "1.4.13-uitleg",
+      "variant": [
+        "gevonden"
+      ]
+    },
+    {
+      "baseline": [
+        "gevonden"
+      ],
+      "criterion": "2.1.1",
+      "descriptionNl": "Het kruisje om de chat te sluiten is een div die alleen op een klik reageert.",
+      "foundBaseline": [
+        1,
+        1
+      ],
+      "foundVariant": [
+        1,
+        1
+      ],
+      "id": "2.1.1-chat-sluit",
+      "variant": [
+        "gevonden"
+      ]
+    },
+    {
+      "baseline": [
+        "gevonden"
+      ],
+      "criterion": "2.1.1",
+      "descriptionNl": "De link heeft geen href en werkt alleen met de muis.",
+      "foundBaseline": [
+        1,
+        1
+      ],
+      "foundVariant": [
+        1,
+        1
+      ],
+      "id": "2.1.1-naar-boven",
+      "variant": [
+        "gevonden"
+      ]
+    },
+    {
+      "baseline": [
+        "gevonden"
+      ],
+      "criterion": "2.1.1",
+      "descriptionNl": "Een kaart opent het bericht bij een klik, maar is geen link. De klik wordt afgehandeld op de lijst eromheen. Met het toetsenbord is het bericht niet te openen.",
+      "foundBaseline": [
+        1,
+        1
+      ],
+      "foundVariant": [
+        1,
+        1
+      ],
+      "id": "2.1.1-nieuwskaart",
+      "variant": [
+        "gevonden"
+      ]
+    },
+    {
+      "baseline": [
+        "gevonden"
+      ],
+      "criterion": "2.1.1",
+      "descriptionNl": "Een kaart opent een venster met uitleg bij een klik, maar is geen knop en krijgt geen focus.",
+      "foundBaseline": [
+        1,
+        1
+      ],
+      "foundVariant": [
+        1,
+        1
+      ],
+      "id": "2.1.1-productkaart",
+      "variant": [
+        "gevonden"
+      ]
+    },
+    {
+      "baseline": [
+        "gevonden"
+      ],
+      "criterion": "2.1.1",
+      "descriptionNl": "Het echte selectievakje is verborgen met display:none en vervangen door een getekend vakje. Het is niet met Tab te bereiken.",
+      "foundBaseline": [
+        1,
+        1
+      ],
+      "foundVariant": [
+        1,
+        1
+      ],
+      "id": "2.1.1-vinkje",
+      "variant": [
+        "gevonden"
+      ]
+    },
+    {
+      "baseline": [
+        "gevonden"
+      ],
+      "criterion": "2.1.2",
+      "descriptionNl": "Staat de focus in het invoerveld van de chat, dan doet Tab niets meer. Escape sluit de chat niet.",
+      "foundBaseline": [
+        1,
+        1
+      ],
+      "foundVariant": [
+        1,
+        1
+      ],
+      "id": "2.1.2-chat",
+      "variant": [
+        "gevonden"
+      ]
+    },
+    {
+      "baseline": [
+        "gevonden"
+      ],
+      "criterion": "2.1.4",
+      "descriptionNl": "De letter z zet de focus in het zoekveld en de letter c opent de chat. De sneltoetsen zijn niet uit te zetten of te wijzigen.",
+      "foundBaseline": [
+        1,
+        1
+      ],
+      "foundVariant": [
+        1,
+        1
+      ],
+      "id": "2.1.4-sneltoets",
+      "variant": [
+        "gevonden"
+      ]
+    },
+    {
+      "baseline": [
+        "gevonden"
+      ],
+      "criterion": "2.2.1",
+      "descriptionNl": "Na tien minuten gaat de pagina vanzelf terug naar de startpagina. De tijd is niet te verlengen of uit te zetten.",
+      "foundBaseline": [
+        1,
+        1
+      ],
+      "foundVariant": [
+        1,
+        1
+      ],
+      "id": "2.2.1-tijdslimiet",
+      "variant": [
+        "gevonden"
+      ]
+    },
+    {
+      "baseline": [
+        "gevonden"
+      ],
+      "criterion": "2.2.2",
+      "descriptionNl": "Het blok wisselt elke vier seconden vanzelf van bericht. Er is geen knop om het te pauzeren.",
+      "foundBaseline": [
+        1,
+        1
+      ],
+      "foundVariant": [
+        1,
+        1
+      ],
+      "id": "2.2.2-uitgelicht",
+      "variant": [
+        "gevonden"
+      ]
+    },
+    {
+      "baseline": [
+        "gevonden"
+      ],
+      "criterion": "2.4.1",
+      "descriptionNl": "De skiplink wijst naar #inhoud, maar dat id bestaat niet. Er gebeurt niets bij activeren.",
+      "foundBaseline": [
+        1,
+        1
+      ],
+      "foundVariant": [
+        1,
+        1
+      ],
+      "id": "2.4.1-skiplink",
+      "variant": [
+        "gevonden"
+      ]
+    },
+    {
+      "baseline": [
+        "gevonden"
+      ],
+      "criterion": "2.4.2",
+      "descriptionNl": "De titel is \"Home - Gemeente Lindewaard - Gemeente Lindewaard % % %\": de naam staat er dubbel en er staan resten van een sjabloon in.",
+      "foundBaseline": [
+        1,
+        1
+      ],
+      "foundVariant": [
+        1,
+        1
+      ],
+      "id": "2.4.2-sjabloonrest",
+      "variant": [
+        "gevonden"
+      ]
+    },
+    {
+      "baseline": [
+        "gevonden"
+      ],
+      "criterion": "2.4.2",
+      "descriptionNl": "Beide pagina's hebben alleen \"Gemeente Lindewaard\" als titel.",
+      "foundBaseline": [
+        1,
+        1
+      ],
+      "foundVariant": [
+        1,
+        1
+      ],
+      "id": "2.4.2-zelfde-titel",
+      "variant": [
+        "gevonden"
+      ]
+    },
+    {
+      "baseline": [
+        "gevonden"
+      ],
+      "criterion": "2.4.3",
+      "descriptionNl": "Het menu staat in de code na de voet. Na het openen moet de bezoeker met Tab eerst door de hele pagina voordat de focus in het menu komt.",
+      "foundBaseline": [
+        1,
+        1
+      ],
+      "foundVariant": [
+        1,
+        1
+      ],
+      "id": "2.4.3-mobiel-menu",
+      "variant": [
+        "gevonden"
+      ]
+    },
+    {
+      "baseline": [
+        "gevonden"
+      ],
+      "criterion": "2.4.3",
+      "descriptionNl": "De velden hebben tabindex 1, 3 en 2. De focus begint midden op de pagina en gaat van naam naar telefoonnummer naar e-mailadres.",
+      "foundBaseline": [
+        1,
+        1
+      ],
+      "foundVariant": [
+        1,
+        1
+      ],
+      "id": "2.4.3-tabindex",
+      "variant": [
+        "gevonden"
+      ]
+    },
+    {
+      "baseline": [
+        "gevonden"
+      ],
+      "criterion": "2.4.4",
+      "descriptionNl": "De link naar de parkeervergunning heet \"Klik hier\" en staat alleen in een eigen alinea.",
+      "foundBaseline": [
+        1,
+        1
+      ],
+      "foundVariant": [
+        1,
+        1
+      ],
+      "id": "2.4.4-klik-hier",
+      "variant": [
+        "gevonden"
+      ]
+    },
+    {
+      "baseline": [
+        "gevonden"
+      ],
+      "criterion": "2.4.4",
+      "descriptionNl": "De links bestaan alleen uit een pictogram en hebben geen naam.",
+      "foundBaseline": [
+        1,
+        1
+      ],
+      "foundVariant": [
+        1,
+        1
+      ],
+      "id": "2.4.4-sociaal",
+      "variant": [
+        "gevonden"
+      ]
+    },
+    {
+      "baseline": [
+        "gevonden"
+      ],
+      "criterion": "2.4.6",
+      "descriptionNl": "Twee verschillende onderdelen hebben allebei de kop \"Informatie\".",
+      "foundBaseline": [
+        1,
+        1
+      ],
+      "foundVariant": [
+        1,
+        1
+      ],
+      "id": "2.4.6-informatie",
+      "variant": [
+        "gevonden"
+      ]
+    },
+    {
+      "baseline": [
+        "gevonden"
+      ],
+      "criterion": "2.4.7",
+      "descriptionNl": "De focusrand is weggehaald (outline: none) en er is niets voor in de plaats gekomen.",
+      "foundBaseline": [
+        1,
+        1
+      ],
+      "foundVariant": [
+        1,
+        1
+      ],
+      "id": "2.4.7-menu",
+      "variant": [
+        "gevonden"
+      ]
+    },
+    {
+      "baseline": [
+        "gevonden"
+      ],
+      "criterion": "2.4.11",
+      "descriptionNl": "De cookiemelding ligt als vaste laag over de onderkant van de pagina en houdt de focus niet vast. Een element dat focus krijgt onderaan het scherm ligt helemaal achter de melding. De melding zelf komt pas als laatste in de Tab-volgorde.",
+      "foundBaseline": [
+        1,
+        1
+      ],
+      "foundVariant": [
+        1,
+        1
+      ],
+      "id": "2.4.11-melding",
+      "variant": [
+        "gevonden"
+      ]
+    },
+    {
+      "baseline": [
+        "gevonden"
+      ],
+      "criterion": "2.5.1",
+      "descriptionNl": "De volgende foto is alleen te bereiken door te vegen. Er zijn geen knoppen.",
+      "foundBaseline": [
+        1,
+        1
+      ],
+      "foundVariant": [
+        1,
+        1
+      ],
+      "id": "2.5.1-galerij",
+      "variant": [
+        "gevonden"
+      ]
+    },
+    {
+      "baseline": [
+        "gevonden"
+      ],
+      "criterion": "2.5.2",
+      "descriptionNl": "De knoppen werken al bij het indrukken van de muisknop. Wegschuiven en loslaten maakt het niet ongedaan.",
+      "foundBaseline": [
+        1,
+        1
+      ],
+      "foundVariant": [
+        1,
+        1
+      ],
+      "id": "2.5.2-feedback",
+      "variant": [
+        "gevonden"
+      ]
+    },
+    {
+      "baseline": [
+        "gevonden"
+      ],
+      "criterion": "2.5.3",
+      "descriptionNl": "Op de knop staat \"Zoeken\", de toegankelijke naam is \"Opdracht versturen\".",
+      "foundBaseline": [
+        1,
+        1
+      ],
+      "foundVariant": [
+        1,
+        1
+      ],
+      "id": "2.5.3-zoekknop",
+      "variant": [
+        "gevonden"
+      ]
+    },
+    {
+      "baseline": [
+        "gevonden"
+      ],
+      "criterion": "2.5.7",
+      "descriptionNl": "De schuif werkt alleen door het bolletje te slepen. Klikken op de balk doet niets en het bolletje krijgt geen focus.",
+      "foundBaseline": [
+        1,
+        1
+      ],
+      "foundVariant": [
+        1,
+        1
+      ],
+      "id": "2.5.7-schuif",
+      "variant": [
+        "gevonden"
+      ]
+    },
+    {
+      "baseline": [
+        "gevonden"
+      ],
+      "criterion": "2.5.8",
+      "descriptionNl": "De links zijn 18 bij 18 pixels en staan 3 pixels uit elkaar.",
+      "foundBaseline": [
+        1,
+        1
+      ],
+      "foundVariant": [
+        1,
+        1
+      ],
+      "id": "2.5.8-paginering",
+      "variant": [
+        "gevonden"
+      ]
+    },
+    {
+      "baseline": [
+        "gevonden"
+      ],
+      "criterion": "3.1.1",
+      "descriptionNl": "De pagina heeft geen taalcode.",
+      "foundBaseline": [
+        1,
+        1
+      ],
+      "foundVariant": [
+        1,
+        1
+      ],
+      "id": "3.1.1-taal",
+      "variant": [
+        "gevonden"
+      ]
+    },
+    {
+      "baseline": [
+        "gevonden"
+      ],
+      "criterion": "3.1.2",
+      "descriptionNl": "Een Engelse zin heeft geen taalcode.",
+      "foundBaseline": [
+        1,
+        1
+      ],
+      "foundVariant": [
+        1,
+        1
+      ],
+      "id": "3.1.2-engels",
+      "variant": [
+        "gevonden"
+      ]
+    },
+    {
+      "baseline": [
+        "gevonden"
+      ],
+      "criterion": "3.2.1",
+      "descriptionNl": "Zodra de link focus krijgt, haalt een script de focus weer weg. De link is daardoor niet met het toetsenbord te gebruiken.",
+      "foundBaseline": [
+        1,
+        1
+      ],
+      "foundVariant": [
+        1,
+        1
+      ],
+      "id": "3.2.1-voetlink",
+      "variant": [
+        "gevonden"
+      ]
+    },
+    {
+      "baseline": [
+        "gevonden"
+      ],
+      "criterion": "3.2.2",
+      "descriptionNl": "Bij het kiezen van een wijk laadt de pagina direct opnieuw, zonder waarschuwing en zonder knop.",
+      "foundBaseline": [
+        1,
+        1
+      ],
+      "foundVariant": [
+        1,
+        1
+      ],
+      "id": "3.2.2-wijk",
+      "variant": [
+        "gevonden"
+      ]
+    },
+    {
+      "baseline": [
+        "gevonden"
+      ],
+      "criterion": "3.2.3",
+      "descriptionNl": "Op de contactpagina staat \"Contact\" vooraan in het menu. Op alle andere pagina's staat het achteraan.",
+      "foundBaseline": [
+        1,
+        1
+      ],
+      "foundVariant": [
+        1,
+        1
+      ],
+      "id": "3.2.3-menuvolgorde",
+      "variant": [
+        "gevonden"
+      ]
+    },
+    {
+      "baseline": [
+        "gevonden"
+      ],
+      "criterion": "3.2.4",
+      "descriptionNl": "De knop heet hier \"Vind\". Dezelfde functie heet in de kop en op de pagina voor een onbekend adres \"Zoeken\".",
+      "foundBaseline": [
+        1,
+        1
+      ],
+      "foundVariant": [
+        1,
+        1
+      ],
+      "id": "3.2.4-zoekknop",
+      "variant": [
+        "gevonden"
+      ]
+    },
+    {
+      "baseline": [
+        "gevonden"
+      ],
+      "criterion": "3.2.6",
+      "descriptionNl": "Op de nieuwspagina's staat het hulpblok in de kop, vóór het menu. Op alle andere pagina's staat het in de voet.",
+      "foundBaseline": [
+        1,
+        1
+      ],
+      "foundVariant": [
+        1,
+        1
+      ],
+      "id": "3.2.6-hulp",
+      "variant": [
+        "gevonden"
+      ]
+    },
+    {
+      "baseline": [
+        "gevonden"
+      ],
+      "criterion": "3.3.1",
+      "descriptionNl": "Een verplicht veld dat leeg is, krijgt alleen een rode rand. Er staat geen tekst die zegt wat er mis is.",
+      "foundBaseline": [
+        1,
+        1
+      ],
+      "foundVariant": [
+        1,
+        1
+      ],
+      "id": "3.3.1-rode-rand",
+      "variant": [
+        "gevonden"
+      ]
+    },
+    {
+      "baseline": [
+        "gevonden"
+      ],
+      "criterion": "3.3.2",
+      "descriptionNl": "De velden hebben geen label, alleen een voorbeeldtekst in het veld die verdwijnt bij typen.",
+      "foundBaseline": [
+        1,
+        1
+      ],
+      "foundVariant": [
+        1,
+        1
+      ],
+      "id": "3.3.2-plaatshouder",
+      "variant": [
+        "gevonden"
+      ]
+    },
+    {
+      "baseline": [
+        "gevonden"
+      ],
+      "criterion": "3.3.3",
+      "descriptionNl": "Bij een datum in de verkeerde vorm staat er alleen \"Ongeldige invoer.\" De gewenste vorm wordt nergens genoemd.",
+      "foundBaseline": [
+        1,
+        1
+      ],
+      "foundVariant": [
+        1,
+        1
+      ],
+      "id": "3.3.3-datum",
+      "variant": [
+        "gevonden"
+      ]
+    },
+    {
+      "baseline": [
+        "gevonden"
+      ],
+      "criterion": "3.3.4",
+      "descriptionNl": "De aanvraag met betaalverplichting wordt na stap 2 direct verstuurd. Er is geen stap om de gegevens te controleren of te wijzigen.",
+      "foundBaseline": [
+        1,
+        1
+      ],
+      "foundVariant": [
+        1,
+        1
+      ],
+      "id": "3.3.4-controle",
+      "variant": [
+        "gevonden"
+      ]
+    },
+    {
+      "baseline": [
+        "gevonden"
+      ],
+      "criterion": "3.3.7",
+      "descriptionNl": "Het adres uit stap 1 moet in stap 2 opnieuw worden getypt voor de rekening.",
+      "foundBaseline": [
+        1,
+        1
+      ],
+      "foundVariant": [
+        1,
+        1
+      ],
+      "id": "3.3.7-adres",
+      "variant": [
+        "gevonden"
+      ]
+    },
+    {
+      "baseline": [
+        "gevonden"
+      ],
+      "criterion": "3.3.8",
+      "descriptionNl": "Plakken in het wachtwoordveld is geblokkeerd en automatisch invullen staat uit. Daarnaast moet de bezoeker twee letters van een geheim woord uit het hoofd typen.",
+      "foundBaseline": [
+        1,
+        1
+      ],
+      "foundVariant": [
+        1,
+        1
+      ],
+      "id": "3.3.8-wachtwoord",
+      "variant": [
+        "gevonden"
+      ]
+    },
+    {
+      "baseline": [
+        "gevonden"
+      ],
+      "criterion": "4.1.2",
+      "descriptionNl": "Het venster van de videospeler heeft geen titel.",
+      "foundBaseline": [
+        1,
+        1
+      ],
+      "foundVariant": [
+        1,
+        1
+      ],
+      "id": "4.1.2-kadertitel",
+      "variant": [
+        "gevonden"
+      ]
+    },
+    {
+      "baseline": [
+        "gevonden"
+      ],
+      "criterion": "4.1.2",
+      "descriptionNl": "De knop heeft geen naam en meldt niet of het menu open is.",
+      "foundBaseline": [
+        1,
+        1
+      ],
+      "foundVariant": [
+        1,
+        1
+      ],
+      "id": "4.1.2-menuknop",
+      "variant": [
+        "gevonden"
+      ]
+    },
+    {
+      "baseline": [
+        "gevonden"
+      ],
+      "criterion": "4.1.2",
+      "descriptionNl": "De afbeelding heeft role=\"logo\". Die rol bestaat niet.",
+      "foundBaseline": [
+        1,
+        1
+      ],
+      "foundVariant": [
+        1,
+        1
+      ],
+      "id": "4.1.2-rol-logo",
+      "variant": [
+        "gevonden"
+      ]
+    },
+    {
+      "baseline": [
+        "gevonden"
+      ],
+      "criterion": "4.1.2",
+      "descriptionNl": "De tabbladen zijn divs met een klikhandler, zonder rol, zonder toestand en zonder focus.",
+      "foundBaseline": [
+        1,
+        1
+      ],
+      "foundVariant": [
+        1,
+        1
+      ],
+      "id": "4.1.2-tabs",
+      "variant": [
+        "gevonden"
+      ]
+    },
+    {
+      "baseline": [
+        "gevonden"
+      ],
+      "criterion": "4.1.2",
+      "descriptionNl": "De knoppen melden niet of het antwoord open of dicht is.",
+      "foundBaseline": [
+        1,
+        1
+      ],
+      "foundVariant": [
+        1,
+        1
+      ],
+      "id": "4.1.2-uitklapper",
+      "variant": [
+        "gevonden"
+      ]
+    },
+    {
+      "baseline": [
+        "gevonden"
+      ],
+      "criterion": "4.1.2",
+      "descriptionNl": "Het venster heeft geen rol dialog en geen naam. De focus gaat er niet heen en het kruisje is een div.",
+      "foundBaseline": [
+        1,
+        1
+      ],
+      "foundVariant": [
+        1,
+        1
+      ],
+      "id": "4.1.2-venster",
+      "variant": [
+        "gevonden"
+      ]
+    },
+    {
+      "baseline": [
+        "gevonden"
+      ],
+      "criterion": "4.1.3",
+      "descriptionNl": "Bij typen in het zoekveld verandert het aantal gevonden producten zonder dat hulpsoftware het meldt.",
+      "foundBaseline": [
+        1,
+        1
+      ],
+      "foundVariant": [
+        1,
+        1
+      ],
+      "id": "4.1.3-aantal",
+      "variant": [
+        "gevonden"
+      ]
+    },
+    {
+      "baseline": [
+        "gevonden"
+      ],
+      "criterion": "4.1.3",
+      "descriptionNl": "\"Bedankt voor uw reactie.\" verschijnt zonder dat hulpsoftware het meldt.",
+      "foundBaseline": [
+        1,
+        1
+      ],
+      "foundVariant": [
+        1,
+        1
+      ],
+      "id": "4.1.3-bedankt",
+      "variant": [
+        "gevonden"
+      ]
+    },
+    {
+      "baseline": [
+        "gevonden"
+      ],
+      "criterion": "4.1.3",
+      "descriptionNl": "Nieuwe berichten in de chat worden niet gemeld aan hulpsoftware.",
+      "foundBaseline": [
+        1,
+        1
+      ],
+      "foundVariant": [
+        1,
+        1
+      ],
+      "id": "4.1.3-chat",
+      "variant": [
+        "gevonden"
+      ]
+    }
+  ],
+  "reference": "reference-lindewaard.json",
+  "rows": [
+    {
+      "baseline": [
+        "failed"
+      ],
+      "criterion": "1.1.1",
+      "keyFails": true,
+      "spreadBaseline": null,
+      "spreadBetween": 0,
+      "spreadVariant": null,
+      "titleNl": "Niet-tekstuele content",
+      "variant": [
+        "failed"
+      ]
+    },
+    {
+      "baseline": [
+        "failed"
+      ],
+      "criterion": "1.2.1",
+      "keyFails": true,
+      "spreadBaseline": null,
+      "spreadBetween": 0,
+      "spreadVariant": null,
+      "titleNl": "Louter-geluid en louter-videobeeld (vooraf opgenomen)",
+      "variant": [
+        "failed"
+      ]
+    },
+    {
+      "baseline": [
+        "failed"
+      ],
+      "criterion": "1.2.2",
+      "keyFails": true,
+      "spreadBaseline": null,
+      "spreadBetween": 0,
+      "spreadVariant": null,
+      "titleNl": "Ondertitels voor doven en slechthorenden (vooraf opgenomen)",
+      "variant": [
+        "failed"
+      ]
+    },
+    {
+      "baseline": [
+        "failed"
+      ],
+      "criterion": "1.2.3",
+      "keyFails": true,
+      "spreadBaseline": null,
+      "spreadBetween": 0,
+      "spreadVariant": null,
+      "titleNl": "Audiodescriptie of media-alternatief (vooraf opgenomen)",
+      "variant": [
+        "failed"
+      ]
+    },
+    {
+      "baseline": [
+        "inapplicable"
+      ],
+      "criterion": "1.2.4",
+      "keyFails": false,
+      "spreadBaseline": null,
+      "spreadBetween": 0,
+      "spreadVariant": null,
+      "titleNl": "Ondertitels voor doven en slechthorenden (live)",
+      "variant": [
+        "inapplicable"
+      ]
+    },
+    {
+      "baseline": [
+        "failed"
+      ],
+      "criterion": "1.2.5",
+      "keyFails": true,
+      "spreadBaseline": null,
+      "spreadBetween": 0,
+      "spreadVariant": null,
+      "titleNl": "Audiodescriptie (vooraf opgenomen)",
+      "variant": [
+        "failed"
+      ]
+    },
+    {
+      "baseline": [
+        "failed"
+      ],
+      "criterion": "1.3.1",
+      "keyFails": true,
+      "spreadBaseline": null,
+      "spreadBetween": 0,
+      "spreadVariant": null,
+      "titleNl": "Info en relaties",
+      "variant": [
+        "failed"
+      ]
+    },
+    {
+      "baseline": [
+        "failed"
+      ],
+      "criterion": "1.3.2",
+      "keyFails": true,
+      "spreadBaseline": null,
+      "spreadBetween": 0,
+      "spreadVariant": null,
+      "titleNl": "Betekenisvolle volgorde",
+      "variant": [
+        "failed"
+      ]
+    },
+    {
+      "baseline": [
+        "failed"
+      ],
+      "criterion": "1.3.3",
+      "keyFails": true,
+      "spreadBaseline": null,
+      "spreadBetween": 0,
+      "spreadVariant": null,
+      "titleNl": "Zintuiglijke eigenschappen",
+      "variant": [
+        "failed"
+      ]
+    },
+    {
+      "baseline": [
+        "failed"
+      ],
+      "criterion": "1.3.4",
+      "keyFails": true,
+      "spreadBaseline": null,
+      "spreadBetween": 0,
+      "spreadVariant": null,
+      "titleNl": "Weergavestand",
+      "variant": [
+        "failed"
+      ]
+    },
+    {
+      "baseline": [
+        "failed"
+      ],
+      "criterion": "1.3.5",
+      "keyFails": true,
+      "spreadBaseline": null,
+      "spreadBetween": 0,
+      "spreadVariant": null,
+      "titleNl": "Identificeer het doel van de input",
+      "variant": [
+        "failed"
+      ]
+    },
+    {
+      "baseline": [
+        "failed"
+      ],
+      "criterion": "1.4.1",
+      "keyFails": true,
+      "spreadBaseline": null,
+      "spreadBetween": 0,
+      "spreadVariant": null,
+      "titleNl": "Gebruik van kleur",
+      "variant": [
+        "failed"
+      ]
+    },
+    {
+      "baseline": [
+        "failed"
+      ],
+      "criterion": "1.4.2",
+      "keyFails": true,
+      "spreadBaseline": null,
+      "spreadBetween": 0,
+      "spreadVariant": null,
+      "titleNl": "Geluidsbediening",
+      "variant": [
+        "failed"
+      ]
+    },
+    {
+      "baseline": [
+        "failed"
+      ],
+      "criterion": "1.4.3",
+      "keyFails": true,
+      "spreadBaseline": null,
+      "spreadBetween": 0,
+      "spreadVariant": null,
+      "titleNl": "Contrast (minimum)",
+      "variant": [
+        "failed"
+      ]
+    },
+    {
+      "baseline": [
+        "failed"
+      ],
+      "criterion": "1.4.4",
+      "keyFails": true,
+      "spreadBaseline": null,
+      "spreadBetween": 0,
+      "spreadVariant": null,
+      "titleNl": "Herschalen van tekst",
+      "variant": [
+        "failed"
+      ]
+    },
+    {
+      "baseline": [
+        "failed"
+      ],
+      "criterion": "1.4.5",
+      "keyFails": true,
+      "spreadBaseline": null,
+      "spreadBetween": 0,
+      "spreadVariant": null,
+      "titleNl": "Afbeeldingen van tekst",
+      "variant": [
+        "failed"
+      ]
+    },
+    {
+      "baseline": [
+        "failed"
+      ],
+      "criterion": "1.4.10",
+      "keyFails": true,
+      "spreadBaseline": null,
+      "spreadBetween": 0,
+      "spreadVariant": null,
+      "titleNl": "Reflow",
+      "variant": [
+        "failed"
+      ]
+    },
+    {
+      "baseline": [
+        "failed"
+      ],
+      "criterion": "1.4.11",
+      "keyFails": true,
+      "spreadBaseline": null,
+      "spreadBetween": 0,
+      "spreadVariant": null,
+      "titleNl": "Contrast van niet-tekstuele content",
+      "variant": [
+        "failed"
+      ]
+    },
+    {
+      "baseline": [
+        "failed"
+      ],
+      "criterion": "1.4.12",
+      "keyFails": true,
+      "spreadBaseline": null,
+      "spreadBetween": 0,
+      "spreadVariant": null,
+      "titleNl": "Tekstafstand",
+      "variant": [
+        "failed"
+      ]
+    },
+    {
+      "baseline": [
+        "failed"
+      ],
+      "criterion": "1.4.13",
+      "keyFails": true,
+      "spreadBaseline": null,
+      "spreadBetween": 0,
+      "spreadVariant": null,
+      "titleNl": "Content bij hover of focus",
+      "variant": [
+        "failed"
+      ]
+    },
+    {
+      "baseline": [
+        "failed"
+      ],
+      "criterion": "2.1.1",
+      "keyFails": true,
+      "spreadBaseline": null,
+      "spreadBetween": 0,
+      "spreadVariant": null,
+      "titleNl": "Toetsenbord",
+      "variant": [
+        "failed"
+      ]
+    },
+    {
+      "baseline": [
+        "failed"
+      ],
+      "criterion": "2.1.2",
+      "keyFails": true,
+      "spreadBaseline": null,
+      "spreadBetween": 0,
+      "spreadVariant": null,
+      "titleNl": "Geen toetsenbordval",
+      "variant": [
+        "failed"
+      ]
+    },
+    {
+      "baseline": [
+        "failed"
+      ],
+      "criterion": "2.1.4",
+      "keyFails": true,
+      "spreadBaseline": null,
+      "spreadBetween": 0,
+      "spreadVariant": null,
+      "titleNl": "Enkel teken sneltoetsen",
+      "variant": [
+        "failed"
+      ]
+    },
+    {
+      "baseline": [
+        "failed"
+      ],
+      "criterion": "2.2.1",
+      "keyFails": true,
+      "spreadBaseline": null,
+      "spreadBetween": 0,
+      "spreadVariant": null,
+      "titleNl": "Timing aanpasbaar",
+      "variant": [
+        "failed"
+      ]
+    },
+    {
+      "baseline": [
+        "failed"
+      ],
+      "criterion": "2.2.2",
+      "keyFails": true,
+      "spreadBaseline": null,
+      "spreadBetween": 0,
+      "spreadVariant": null,
+      "titleNl": "Pauzeren, stoppen, verbergen",
+      "variant": [
+        "failed"
+      ]
+    },
+    {
+      "baseline": [
+        "passed"
+      ],
+      "criterion": "2.3.1",
+      "keyFails": false,
+      "spreadBaseline": null,
+      "spreadBetween": 0,
+      "spreadVariant": null,
+      "titleNl": "Drie flitsen of beneden drempelwaarde",
+      "variant": [
+        "passed"
+      ]
+    },
+    {
+      "baseline": [
+        "failed"
+      ],
+      "criterion": "2.4.1",
+      "keyFails": true,
+      "spreadBaseline": null,
+      "spreadBetween": 0,
+      "spreadVariant": null,
+      "titleNl": "Blokken omzeilen",
+      "variant": [
+        "failed"
+      ]
+    },
+    {
+      "baseline": [
+        "failed"
+      ],
+      "criterion": "2.4.2",
+      "keyFails": true,
+      "spreadBaseline": null,
+      "spreadBetween": 0,
+      "spreadVariant": null,
+      "titleNl": "Paginatitel",
+      "variant": [
+        "failed"
+      ]
+    },
+    {
+      "baseline": [
+        "failed"
+      ],
+      "criterion": "2.4.3",
+      "keyFails": true,
+      "spreadBaseline": null,
+      "spreadBetween": 0,
+      "spreadVariant": null,
+      "titleNl": "Focus volgorde",
+      "variant": [
+        "failed"
+      ]
+    },
+    {
+      "baseline": [
+        "failed"
+      ],
+      "criterion": "2.4.4",
+      "keyFails": true,
+      "spreadBaseline": null,
+      "spreadBetween": 0,
+      "spreadVariant": null,
+      "titleNl": "Linkdoel (in context)",
+      "variant": [
+        "failed"
+      ]
+    },
+    {
+      "baseline": [
+        "passed"
+      ],
+      "criterion": "2.4.5",
+      "keyFails": false,
+      "spreadBaseline": null,
+      "spreadBetween": 0,
+      "spreadVariant": null,
+      "titleNl": "Meerdere manieren",
+      "variant": [
+        "passed"
+      ]
+    },
+    {
+      "baseline": [
+        "failed"
+      ],
+      "criterion": "2.4.6",
+      "keyFails": true,
+      "spreadBaseline": null,
+      "spreadBetween": 0,
+      "spreadVariant": null,
+      "titleNl": "Koppen en labels",
+      "variant": [
+        "failed"
+      ]
+    },
+    {
+      "baseline": [
+        "failed"
+      ],
+      "criterion": "2.4.7",
+      "keyFails": true,
+      "spreadBaseline": null,
+      "spreadBetween": 0,
+      "spreadVariant": null,
+      "titleNl": "Focus zichtbaar",
+      "variant": [
+        "failed"
+      ]
+    },
+    {
+      "baseline": [
+        "failed"
+      ],
+      "criterion": "2.4.11",
+      "keyFails": true,
+      "spreadBaseline": null,
+      "spreadBetween": 0,
+      "spreadVariant": null,
+      "titleNl": "Focus niet bedekt (minimum)",
+      "variant": [
+        "failed"
+      ]
+    },
+    {
+      "baseline": [
+        "failed"
+      ],
+      "criterion": "2.5.1",
+      "keyFails": true,
+      "spreadBaseline": null,
+      "spreadBetween": 0,
+      "spreadVariant": null,
+      "titleNl": "Aanwijzergebaren",
+      "variant": [
+        "failed"
+      ]
+    },
+    {
+      "baseline": [
+        "failed"
+      ],
+      "criterion": "2.5.2",
+      "keyFails": true,
+      "spreadBaseline": null,
+      "spreadBetween": 0,
+      "spreadVariant": null,
+      "titleNl": "Aanwijzerannulering",
+      "variant": [
+        "failed"
+      ]
+    },
+    {
+      "baseline": [
+        "failed"
+      ],
+      "criterion": "2.5.3",
+      "keyFails": true,
+      "spreadBaseline": null,
+      "spreadBetween": 0,
+      "spreadVariant": null,
+      "titleNl": "Label in naam",
+      "variant": [
+        "failed"
+      ]
+    },
+    {
+      "baseline": [
+        "inapplicable"
+      ],
+      "criterion": "2.5.4",
+      "keyFails": false,
+      "spreadBaseline": null,
+      "spreadBetween": 0,
+      "spreadVariant": null,
+      "titleNl": "Bewegingsactivering",
+      "variant": [
+        "inapplicable"
+      ]
+    },
+    {
+      "baseline": [
+        "failed"
+      ],
+      "criterion": "2.5.7",
+      "keyFails": true,
+      "spreadBaseline": null,
+      "spreadBetween": 0,
+      "spreadVariant": null,
+      "titleNl": "Sleepbewegingen",
+      "variant": [
+        "failed"
+      ]
+    },
+    {
+      "baseline": [
+        "failed"
+      ],
+      "criterion": "2.5.8",
+      "keyFails": true,
+      "spreadBaseline": null,
+      "spreadBetween": 0,
+      "spreadVariant": null,
+      "titleNl": "Grootte van het aanwijsgebied (minimum)",
+      "variant": [
+        "failed"
+      ]
+    },
+    {
+      "baseline": [
+        "failed"
+      ],
+      "criterion": "3.1.1",
+      "keyFails": true,
+      "spreadBaseline": null,
+      "spreadBetween": 0,
+      "spreadVariant": null,
+      "titleNl": "Taal van de pagina",
+      "variant": [
+        "failed"
+      ]
+    },
+    {
+      "baseline": [
+        "failed"
+      ],
+      "criterion": "3.1.2",
+      "keyFails": true,
+      "spreadBaseline": null,
+      "spreadBetween": 0,
+      "spreadVariant": null,
+      "titleNl": "Taal van onderdelen",
+      "variant": [
+        "failed"
+      ]
+    },
+    {
+      "baseline": [
+        "failed"
+      ],
+      "criterion": "3.2.1",
+      "keyFails": true,
+      "spreadBaseline": null,
+      "spreadBetween": 0,
+      "spreadVariant": null,
+      "titleNl": "Bij focus",
+      "variant": [
+        "failed"
+      ]
+    },
+    {
+      "baseline": [
+        "failed"
+      ],
+      "criterion": "3.2.2",
+      "keyFails": true,
+      "spreadBaseline": null,
+      "spreadBetween": 0,
+      "spreadVariant": null,
+      "titleNl": "Bij input",
+      "variant": [
+        "failed"
+      ]
+    },
+    {
+      "baseline": [
+        "failed"
+      ],
+      "criterion": "3.2.3",
+      "keyFails": true,
+      "spreadBaseline": null,
+      "spreadBetween": 0,
+      "spreadVariant": null,
+      "titleNl": "Consistente navigatie",
+      "variant": [
+        "failed"
+      ]
+    },
+    {
+      "baseline": [
+        "failed"
+      ],
+      "criterion": "3.2.4",
+      "keyFails": true,
+      "spreadBaseline": null,
+      "spreadBetween": 0,
+      "spreadVariant": null,
+      "titleNl": "Consistente identificatie",
+      "variant": [
+        "failed"
+      ]
+    },
+    {
+      "baseline": [
+        "failed"
+      ],
+      "criterion": "3.2.6",
+      "keyFails": true,
+      "spreadBaseline": null,
+      "spreadBetween": 0,
+      "spreadVariant": null,
+      "titleNl": "Consistente hulp",
+      "variant": [
+        "failed"
+      ]
+    },
+    {
+      "baseline": [
+        "failed"
+      ],
+      "criterion": "3.3.1",
+      "keyFails": true,
+      "spreadBaseline": null,
+      "spreadBetween": 0,
+      "spreadVariant": null,
+      "titleNl": "Foutidentificatie",
+      "variant": [
+        "failed"
+      ]
+    },
+    {
+      "baseline": [
+        "failed"
+      ],
+      "criterion": "3.3.2",
+      "keyFails": true,
+      "spreadBaseline": null,
+      "spreadBetween": 0,
+      "spreadVariant": null,
+      "titleNl": "Labels of instructies",
+      "variant": [
+        "failed"
+      ]
+    },
+    {
+      "baseline": [
+        "failed"
+      ],
+      "criterion": "3.3.3",
+      "keyFails": true,
+      "spreadBaseline": null,
+      "spreadBetween": 0,
+      "spreadVariant": null,
+      "titleNl": "Foutsuggestie",
+      "variant": [
+        "failed"
+      ]
+    },
+    {
+      "baseline": [
+        "failed"
+      ],
+      "criterion": "3.3.4",
+      "keyFails": true,
+      "spreadBaseline": null,
+      "spreadBetween": 0,
+      "spreadVariant": null,
+      "titleNl": "Foutpreventie (wettelijk, financieel, gegevens)",
+      "variant": [
+        "failed"
+      ]
+    },
+    {
+      "baseline": [
+        "failed"
+      ],
+      "criterion": "3.3.7",
+      "keyFails": true,
+      "spreadBaseline": null,
+      "spreadBetween": 0,
+      "spreadVariant": null,
+      "titleNl": "Overbodige invoer",
+      "variant": [
+        "failed"
+      ]
+    },
+    {
+      "baseline": [
+        "failed"
+      ],
+      "criterion": "3.3.8",
+      "keyFails": true,
+      "spreadBaseline": null,
+      "spreadBetween": 0,
+      "spreadVariant": null,
+      "titleNl": "Toegankelijke authenticatie (minimum)",
+      "variant": [
+        "failed"
+      ]
+    },
+    {
+      "baseline": [
+        "passed"
+      ],
+      "criterion": "4.1.1",
+      "keyFails": false,
+      "spreadBaseline": null,
+      "spreadBetween": 0,
+      "spreadVariant": null,
+      "titleNl": "Parsen",
+      "variant": [
+        "passed"
+      ]
+    },
+    {
+      "baseline": [
+        "failed"
+      ],
+      "criterion": "4.1.2",
+      "keyFails": true,
+      "spreadBaseline": null,
+      "spreadBetween": 0,
+      "spreadVariant": null,
+      "titleNl": "Naam, rol, waarde",
+      "variant": [
+        "failed"
+      ]
+    },
+    {
+      "baseline": [
+        "failed"
+      ],
+      "criterion": "4.1.3",
+      "keyFails": true,
+      "spreadBaseline": null,
+      "spreadBetween": 0,
+      "spreadVariant": null,
+      "titleNl": "Statusberichten",
+      "variant": [
+        "failed"
+      ]
+    }
+  ],
+  "runs": [
+    {
+      "commit": "81390b3eb9becd3e7dd459a12139400edc90c50a",
+      "criteria": [
+        "1.1.1",
+        "1.2.1",
+        "1.2.2",
+        "1.2.3",
+        "1.2.4",
+        "1.2.5",
+        "1.3.1",
+        "1.3.2",
+        "1.3.3",
+        "1.3.4",
+        "1.3.5",
+        "1.4.1",
+        "1.4.2",
+        "1.4.3",
+        "1.4.4",
+        "1.4.5",
+        "1.4.10",
+        "1.4.11",
+        "1.4.12",
+        "1.4.13",
+        "2.1.1",
+        "2.1.2",
+        "2.1.4",
+        "2.2.1",
+        "2.2.2",
+        "2.3.1",
+        "2.4.1",
+        "2.4.2",
+        "2.4.3",
+        "2.4.4",
+        "2.4.5",
+        "2.4.6",
+        "2.4.7",
+        "2.4.11",
+        "2.5.1",
+        "2.5.2",
+        "2.5.3",
+        "2.5.4",
+        "2.5.7",
+        "2.5.8",
+        "3.1.1",
+        "3.1.2",
+        "3.2.1",
+        "3.2.2",
+        "3.2.3",
+        "3.2.4",
+        "3.2.6",
+        "3.3.1",
+        "3.3.2",
+        "3.3.3",
+        "3.3.4",
+        "3.3.7",
+        "3.3.8",
+        "4.1.1",
+        "4.1.2",
+        "4.1.3"
+      ],
+      "defects": {
+        "1.1.1-artikelfoto": "gevonden",
+        "1.1.1-bestandsnaam": "gevonden",
+        "1.1.1-logo-melding": "gevonden",
+        "1.1.1-tarieven": "gevonden",
+        "1.2.1-gesprek": "gevonden",
+        "1.2.2-ondertitels": "gevonden",
+        "1.2.3-beschrijving": "gevonden",
+        "1.2.5-audiodescriptie": "gevonden",
+        "1.3.1-keuzegroep": "gevonden",
+        "1.3.1-lijst-als-alinea": "gevonden",
+        "1.3.1-tabelkoppen": "gevonden",
+        "1.3.1-tussenkop-uitklapper": "gevonden",
+        "1.3.1-vette-tussenkop": "gevonden",
+        "1.3.1-voetkop": "gevonden",
+        "1.3.2-kaart-omgekeerd": "gevonden",
+        "1.3.2-zoekvolgorde": "gevonden",
+        "1.3.3-ronde-knop": "gevonden",
+        "1.3.4-draai": "gevonden",
+        "1.3.5-autocomplete": "gevonden",
+        "1.4.1-tekstlink": "gevonden",
+        "1.4.1-verplicht": "gevonden",
+        "1.4.10-rooster": "gevonden",
+        "1.4.10-weigerknop": "gevonden",
+        "1.4.11-veldrand": "gevonden",
+        "1.4.12-tegel": "gevonden",
+        "1.4.13-uitleg": "gevonden",
+        "1.4.2-melodie": "gevonden",
+        "1.4.3-datum": "gevonden",
+        "1.4.3-menu-aanwijzen": "gevonden",
+        "1.4.3-tekst-op-foto": "gevonden",
+        "1.4.4-inleiding": "gevonden",
+        "1.4.4-zoom-uit": "gevonden",
+        "1.4.5-zomerfeest": "gevonden",
+        "2.1.1-chat-sluit": "gevonden",
+        "2.1.1-naar-boven": "gevonden",
+        "2.1.1-nieuwskaart": "gevonden",
+        "2.1.1-productkaart": "gevonden",
+        "2.1.1-vinkje": "gevonden",
+        "2.1.2-chat": "gevonden",
+        "2.1.4-sneltoets": "gevonden",
+        "2.2.1-tijdslimiet": "gevonden",
+        "2.2.2-uitgelicht": "gevonden",
+        "2.4.1-skiplink": "gevonden",
+        "2.4.11-melding": "gevonden",
+        "2.4.2-sjabloonrest": "gevonden",
+        "2.4.2-zelfde-titel": "gevonden",
+        "2.4.3-mobiel-menu": "gevonden",
+        "2.4.3-tabindex": "gevonden",
+        "2.4.4-klik-hier": "gevonden",
+        "2.4.4-sociaal": "gevonden",
+        "2.4.6-informatie": "gevonden",
+        "2.4.7-menu": "gevonden",
+        "2.5.1-galerij": "gevonden",
+        "2.5.2-feedback": "gevonden",
+        "2.5.3-zoekknop": "gevonden",
+        "2.5.7-schuif": "gevonden",
+        "2.5.8-paginering": "gevonden",
+        "3.1.1-taal": "gevonden",
+        "3.1.2-engels": "gevonden",
+        "3.2.1-voetlink": "gevonden",
+        "3.2.2-wijk": "gevonden",
+        "3.2.3-menuvolgorde": "gevonden",
+        "3.2.4-zoekknop": "gevonden",
+        "3.2.6-hulp": "gevonden",
+        "3.3.1-rode-rand": "gevonden",
+        "3.3.2-plaatshouder": "gevonden",
+        "3.3.3-datum": "gevonden",
+        "3.3.4-controle": "gevonden",
+        "3.3.7-adres": "gevonden",
+        "3.3.8-wachtwoord": "gevonden",
+        "4.1.2-kadertitel": "gevonden",
+        "4.1.2-menuknop": "gevonden",
+        "4.1.2-rol-logo": "gevonden",
+        "4.1.2-tabs": "gevonden",
+        "4.1.2-uitklapper": "gevonden",
+        "4.1.2-venster": "gevonden",
+        "4.1.3-aantal": "gevonden",
+        "4.1.3-bedankt": "gevonden",
+        "4.1.3-chat": "gevonden"
+      },
+      "defectsNl": null,
+      "falseReports": {
+        "1.1.1": 0,
+        "1.2.1": 0,
+        "1.2.2": 0,
+        "1.2.3": 0,
+        "1.2.4": 0,
+        "1.2.5": 0,
+        "1.3.1": 0,
+        "1.3.2": 0,
+        "1.3.3": 0,
+        "1.3.4": 0,
+        "1.3.5": 0,
+        "1.4.1": 0,
+        "1.4.10": 0,
+        "1.4.11": 0,
+        "1.4.12": 0,
+        "1.4.13": 0,
+        "1.4.2": 0,
+        "1.4.3": 0,
+        "1.4.4": 0,
+        "1.4.5": 0,
+        "2.1.1": 0,
+        "2.1.2": 0,
+        "2.1.4": 0,
+        "2.2.1": 0,
+        "2.2.2": 0,
+        "2.3.1": 0,
+        "2.4.1": 0,
+        "2.4.11": 0,
+        "2.4.2": 0,
+        "2.4.3": 0,
+        "2.4.4": 0,
+        "2.4.5": 0,
+        "2.4.6": 0,
+        "2.4.7": 0,
+        "2.5.1": 0,
+        "2.5.2": 0,
+        "2.5.3": 0,
+        "2.5.4": 0,
+        "2.5.7": 0,
+        "2.5.8": 0,
+        "3.1.1": 0,
+        "3.1.2": 0,
+        "3.2.1": 0,
+        "3.2.2": 0,
+        "3.2.3": 0,
+        "3.2.4": 0,
+        "3.2.6": 0,
+        "3.3.1": 0,
+        "3.3.2": 0,
+        "3.3.3": 0,
+        "3.3.4": 0,
+        "3.3.7": 0,
+        "3.3.8": 0,
+        "4.1.1": 0,
+        "4.1.2": 0,
+        "4.1.3": 0
+      },
+      "findings": {
+        "1.1.1": 5,
+        "1.2.1": 2,
+        "1.2.2": 1,
+        "1.2.3": 1,
+        "1.2.4": 0,
+        "1.2.5": 1,
+        "1.3.1": 9,
+        "1.3.2": 2,
+        "1.3.3": 2,
+        "1.3.4": 1,
+        "1.3.5": 6,
+        "1.4.1": 2,
+        "1.4.10": 3,
+        "1.4.11": 1,
+        "1.4.12": 1,
+        "1.4.13": 2,
+        "1.4.2": 1,
+        "1.4.3": 4,
+        "1.4.4": 2,
+        "1.4.5": 2,
+        "2.1.1": 8,
+        "2.1.2": 1,
+        "2.1.4": 1,
+        "2.2.1": 1,
+        "2.2.2": 2,
+        "2.3.1": 0,
+        "2.4.1": 1,
+        "2.4.11": 1,
+        "2.4.2": 2,
+        "2.4.3": 4,
+        "2.4.4": 2,
+        "2.4.5": 0,
+        "2.4.6": 1,
+        "2.4.7": 2,
+        "2.5.1": 1,
+        "2.5.2": 1,
+        "2.5.3": 1,
+        "2.5.4": 0,
+        "2.5.7": 2,
+        "2.5.8": 1,
+        "3.1.1": 1,
+        "3.1.2": 1,
+        "3.2.1": 1,
+        "3.2.2": 1,
+        "3.2.3": 1,
+        "3.2.4": 1,
+        "3.2.6": 2,
+        "3.3.1": 1,
+        "3.3.2": 2,
+        "3.3.3": 3,
+        "3.3.4": 1,
+        "3.3.7": 1,
+        "3.3.8": 2,
+        "4.1.1": 0,
+        "4.1.2": 14,
+        "4.1.3": 4
+      },
+      "openPoints": {
+        "mens nodig": 3
+      },
+      "openPointsByCriterion": {
+        "1.1.1": 0,
+        "1.2.1": 0,
+        "1.2.2": 0,
+        "1.2.3": 0,
+        "1.2.4": 0,
+        "1.2.5": 1,
+        "1.3.1": 0,
+        "1.3.2": 0,
+        "1.3.3": 0,
+        "1.3.4": 0,
+        "1.3.5": 0,
+        "1.4.1": 0,
+        "1.4.10": 0,
+        "1.4.11": 0,
+        "1.4.12": 0,
+        "1.4.13": 0,
+        "1.4.2": 0,
+        "1.4.3": 0,
+        "1.4.4": 0,
+        "1.4.5": 0,
+        "2.1.1": 0,
+        "2.1.2": 0,
+        "2.1.4": 0,
+        "2.2.1": 0,
+        "2.2.2": 0,
+        "2.3.1": 0,
+        "2.4.1": 0,
+        "2.4.11": 0,
+        "2.4.2": 0,
+        "2.4.3": 0,
+        "2.4.4": 0,
+        "2.4.5": 0,
+        "2.4.6": 0,
+        "2.4.7": 0,
+        "2.5.1": 0,
+        "2.5.2": 0,
+        "2.5.3": 0,
+        "2.5.4": 0,
+        "2.5.7": 0,
+        "2.5.8": 0,
+        "3.1.1": 0,
+        "3.1.2": 0,
+        "3.2.1": 0,
+        "3.2.2": 0,
+        "3.2.3": 0,
+        "3.2.4": 0,
+        "3.2.6": 0,
+        "3.3.1": 0,
+        "3.3.2": 0,
+        "3.3.3": 0,
+        "3.3.4": 1,
+        "3.3.7": 1,
+        "3.3.8": 0,
+        "4.1.1": 0,
+        "4.1.2": 0,
+        "4.1.3": 0
+      },
+      "outcomes": {
+        "1.1.1": "failed",
+        "1.2.1": "failed",
+        "1.2.2": "failed",
+        "1.2.3": "failed",
+        "1.2.4": "inapplicable",
+        "1.2.5": "failed",
+        "1.3.1": "failed",
+        "1.3.2": "failed",
+        "1.3.3": "failed",
+        "1.3.4": "failed",
+        "1.3.5": "failed",
+        "1.4.1": "failed",
+        "1.4.10": "failed",
+        "1.4.11": "failed",
+        "1.4.12": "failed",
+        "1.4.13": "failed",
+        "1.4.2": "failed",
+        "1.4.3": "failed",
+        "1.4.4": "failed",
+        "1.4.5": "failed",
+        "2.1.1": "failed",
+        "2.1.2": "failed",
+        "2.1.4": "failed",
+        "2.2.1": "failed",
+        "2.2.2": "failed",
+        "2.3.1": "passed",
+        "2.4.1": "failed",
+        "2.4.11": "failed",
+        "2.4.2": "failed",
+        "2.4.3": "failed",
+        "2.4.4": "failed",
+        "2.4.5": "passed",
+        "2.4.6": "failed",
+        "2.4.7": "failed",
+        "2.5.1": "failed",
+        "2.5.2": "failed",
+        "2.5.3": "failed",
+        "2.5.4": "inapplicable",
+        "2.5.7": "failed",
+        "2.5.8": "failed",
+        "3.1.1": "failed",
+        "3.1.2": "failed",
+        "3.2.1": "failed",
+        "3.2.2": "failed",
+        "3.2.3": "failed",
+        "3.2.4": "failed",
+        "3.2.6": "failed",
+        "3.3.1": "failed",
+        "3.3.2": "failed",
+        "3.3.3": "failed",
+        "3.3.4": "failed",
+        "3.3.7": "failed",
+        "3.3.8": "failed",
+        "4.1.1": "passed",
+        "4.1.2": "failed",
+        "4.1.3": "failed"
+      },
+      "roles": [
+        {
+          "agents": 13,
+          "commands": 711,
+          "costUsd": null,
+          "role": "walk",
+          "roleNl": "rondgang",
+          "sessionSeconds": 3273,
+          "tokens": null,
+          "turns": null
+        },
+        {
+          "agents": 56,
+          "commands": 1913,
+          "costUsd": null,
+          "role": "judge",
+          "roleNl": "beoordelaar",
+          "sessionSeconds": 9568,
+          "tokens": null,
+          "turns": null
+        },
+        {
+          "agents": 56,
+          "commands": 1110,
+          "costUsd": null,
+          "role": "verifier",
+          "roleNl": "verifieerder",
+          "sessionSeconds": 7014,
+          "tokens": null,
+          "turns": null
+        }
+      ],
+      "run": "l1",
+      "side": "baseline",
+      "sweep": {
+        "run": "bevroren-defect",
+        "version": "0.34.0"
+      },
+      "variant": "l1",
+      "version": "0.34.0",
+      "withoutCounterpart": {
+        "agreed": {
+          "discutabel": 4,
+          "onterecht": 0,
+          "terecht": 5
+        },
+        "disagreed": {},
+        "total": 9
+      }
+    },
+    {
+      "commit": "81390b3eb9becd3e7dd459a12139400edc90c50a",
+      "criteria": [
+        "1.1.1",
+        "1.2.1",
+        "1.2.2",
+        "1.2.3",
+        "1.2.4",
+        "1.2.5",
+        "1.3.1",
+        "1.3.2",
+        "1.3.3",
+        "1.3.4",
+        "1.3.5",
+        "1.4.1",
+        "1.4.2",
+        "1.4.3",
+        "1.4.4",
+        "1.4.5",
+        "1.4.10",
+        "1.4.11",
+        "1.4.12",
+        "1.4.13",
+        "2.1.1",
+        "2.1.2",
+        "2.1.4",
+        "2.2.1",
+        "2.2.2",
+        "2.3.1",
+        "2.4.1",
+        "2.4.2",
+        "2.4.3",
+        "2.4.4",
+        "2.4.5",
+        "2.4.6",
+        "2.4.7",
+        "2.4.11",
+        "2.5.1",
+        "2.5.2",
+        "2.5.3",
+        "2.5.4",
+        "2.5.7",
+        "2.5.8",
+        "3.1.1",
+        "3.1.2",
+        "3.2.1",
+        "3.2.2",
+        "3.2.3",
+        "3.2.4",
+        "3.2.6",
+        "3.3.1",
+        "3.3.2",
+        "3.3.3",
+        "3.3.4",
+        "3.3.7",
+        "3.3.8",
+        "4.1.1",
+        "4.1.2",
+        "4.1.3"
+      ],
+      "defects": {
+        "1.1.1-artikelfoto": "gevonden",
+        "1.1.1-bestandsnaam": "gevonden",
+        "1.1.1-logo-melding": "gevonden",
+        "1.1.1-tarieven": "gevonden",
+        "1.2.1-gesprek": "gevonden",
+        "1.2.2-ondertitels": "gevonden",
+        "1.2.3-beschrijving": "gevonden",
+        "1.2.5-audiodescriptie": "gevonden",
+        "1.3.1-keuzegroep": "gevonden",
+        "1.3.1-lijst-als-alinea": "gevonden",
+        "1.3.1-tabelkoppen": "gevonden",
+        "1.3.1-tussenkop-uitklapper": "gevonden",
+        "1.3.1-vette-tussenkop": "gevonden",
+        "1.3.1-voetkop": "gevonden",
+        "1.3.2-kaart-omgekeerd": "gevonden",
+        "1.3.2-zoekvolgorde": "gevonden",
+        "1.3.3-ronde-knop": "gevonden",
+        "1.3.4-draai": "gevonden",
+        "1.3.5-autocomplete": "gevonden",
+        "1.4.1-tekstlink": "gevonden",
+        "1.4.1-verplicht": "gevonden",
+        "1.4.10-rooster": "gevonden",
+        "1.4.10-weigerknop": "gevonden",
+        "1.4.11-veldrand": "gevonden",
+        "1.4.12-tegel": "gevonden",
+        "1.4.13-uitleg": "gevonden",
+        "1.4.2-melodie": "gevonden",
+        "1.4.3-datum": "gevonden",
+        "1.4.3-menu-aanwijzen": "gevonden",
+        "1.4.3-tekst-op-foto": "gevonden",
+        "1.4.4-inleiding": "gevonden",
+        "1.4.4-zoom-uit": "gevonden",
+        "1.4.5-zomerfeest": "gevonden",
+        "2.1.1-chat-sluit": "gevonden",
+        "2.1.1-naar-boven": "gevonden",
+        "2.1.1-nieuwskaart": "gevonden",
+        "2.1.1-productkaart": "gevonden",
+        "2.1.1-vinkje": "gevonden",
+        "2.1.2-chat": "gevonden",
+        "2.1.4-sneltoets": "gevonden",
+        "2.2.1-tijdslimiet": "gevonden",
+        "2.2.2-uitgelicht": "gevonden",
+        "2.4.1-skiplink": "gevonden",
+        "2.4.11-melding": "gevonden",
+        "2.4.2-sjabloonrest": "gevonden",
+        "2.4.2-zelfde-titel": "gevonden",
+        "2.4.3-mobiel-menu": "gevonden",
+        "2.4.3-tabindex": "gevonden",
+        "2.4.4-klik-hier": "gevonden",
+        "2.4.4-sociaal": "gevonden",
+        "2.4.6-informatie": "gevonden",
+        "2.4.7-menu": "gevonden",
+        "2.5.1-galerij": "gevonden",
+        "2.5.2-feedback": "gevonden",
+        "2.5.3-zoekknop": "gevonden",
+        "2.5.7-schuif": "gevonden",
+        "2.5.8-paginering": "gevonden",
+        "3.1.1-taal": "gevonden",
+        "3.1.2-engels": "gevonden",
+        "3.2.1-voetlink": "gevonden",
+        "3.2.2-wijk": "gevonden",
+        "3.2.3-menuvolgorde": "gevonden",
+        "3.2.4-zoekknop": "gevonden",
+        "3.2.6-hulp": "gevonden",
+        "3.3.1-rode-rand": "gevonden",
+        "3.3.2-plaatshouder": "gevonden",
+        "3.3.3-datum": "gevonden",
+        "3.3.4-controle": "gevonden",
+        "3.3.7-adres": "gevonden",
+        "3.3.8-wachtwoord": "gevonden",
+        "4.1.2-kadertitel": "gevonden",
+        "4.1.2-menuknop": "gevonden",
+        "4.1.2-rol-logo": "gevonden",
+        "4.1.2-tabs": "gevonden",
+        "4.1.2-uitklapper": "gevonden",
+        "4.1.2-venster": "gevonden",
+        "4.1.3-aantal": "gevonden",
+        "4.1.3-bedankt": "gevonden",
+        "4.1.3-chat": "gevonden"
+      },
+      "defectsNl": null,
+      "falseReports": {
+        "1.1.1": 0,
+        "1.2.1": 0,
+        "1.2.2": 0,
+        "1.2.3": 0,
+        "1.2.4": 0,
+        "1.2.5": 0,
+        "1.3.1": 0,
+        "1.3.2": 0,
+        "1.3.3": 0,
+        "1.3.4": 0,
+        "1.3.5": 0,
+        "1.4.1": 0,
+        "1.4.10": 0,
+        "1.4.11": 0,
+        "1.4.12": 0,
+        "1.4.13": 0,
+        "1.4.2": 0,
+        "1.4.3": 0,
+        "1.4.4": 0,
+        "1.4.5": 0,
+        "2.1.1": 0,
+        "2.1.2": 0,
+        "2.1.4": 0,
+        "2.2.1": 0,
+        "2.2.2": 0,
+        "2.3.1": 0,
+        "2.4.1": 0,
+        "2.4.11": 0,
+        "2.4.2": 0,
+        "2.4.3": 0,
+        "2.4.4": 0,
+        "2.4.5": 0,
+        "2.4.6": 0,
+        "2.4.7": 0,
+        "2.5.1": 0,
+        "2.5.2": 0,
+        "2.5.3": 0,
+        "2.5.4": 0,
+        "2.5.7": 0,
+        "2.5.8": 0,
+        "3.1.1": 0,
+        "3.1.2": 0,
+        "3.2.1": 0,
+        "3.2.2": 0,
+        "3.2.3": 0,
+        "3.2.4": 0,
+        "3.2.6": 0,
+        "3.3.1": 0,
+        "3.3.2": 0,
+        "3.3.3": 0,
+        "3.3.4": 0,
+        "3.3.7": 0,
+        "3.3.8": 0,
+        "4.1.1": 0,
+        "4.1.2": 0,
+        "4.1.3": 0
+      },
+      "findings": {
+        "1.1.1": 5,
+        "1.2.1": 2,
+        "1.2.2": 1,
+        "1.2.3": 1,
+        "1.2.4": 0,
+        "1.2.5": 1,
+        "1.3.1": 8,
+        "1.3.2": 2,
+        "1.3.3": 2,
+        "1.3.4": 1,
+        "1.3.5": 6,
+        "1.4.1": 2,
+        "1.4.10": 2,
+        "1.4.11": 1,
+        "1.4.12": 1,
+        "1.4.13": 2,
+        "1.4.2": 1,
+        "1.4.3": 4,
+        "1.4.4": 2,
+        "1.4.5": 2,
+        "2.1.1": 8,
+        "2.1.2": 1,
+        "2.1.4": 2,
+        "2.2.1": 1,
+        "2.2.2": 2,
+        "2.3.1": 0,
+        "2.4.1": 1,
+        "2.4.11": 1,
+        "2.4.2": 2,
+        "2.4.3": 4,
+        "2.4.4": 2,
+        "2.4.5": 0,
+        "2.4.6": 1,
+        "2.4.7": 2,
+        "2.5.1": 1,
+        "2.5.2": 1,
+        "2.5.3": 1,
+        "2.5.4": 0,
+        "2.5.7": 1,
+        "2.5.8": 1,
+        "3.1.1": 1,
+        "3.1.2": 1,
+        "3.2.1": 1,
+        "3.2.2": 1,
+        "3.2.3": 2,
+        "3.2.4": 1,
+        "3.2.6": 2,
+        "3.3.1": 1,
+        "3.3.2": 2,
+        "3.3.3": 2,
+        "3.3.4": 1,
+        "3.3.7": 1,
+        "3.3.8": 2,
+        "4.1.1": 0,
+        "4.1.2": 14,
+        "4.1.3": 4
+      },
+      "openPoints": {
+        "mens nodig": 6
+      },
+      "openPointsByCriterion": {
+        "1.1.1": 0,
+        "1.2.1": 0,
+        "1.2.2": 2,
+        "1.2.3": 1,
+        "1.2.4": 0,
+        "1.2.5": 2,
+        "1.3.1": 0,
+        "1.3.2": 0,
+        "1.3.3": 0,
+        "1.3.4": 0,
+        "1.3.5": 0,
+        "1.4.1": 0,
+        "1.4.10": 0,
+        "1.4.11": 0,
+        "1.4.12": 0,
+        "1.4.13": 0,
+        "1.4.2": 0,
+        "1.4.3": 0,
+        "1.4.4": 0,
+        "1.4.5": 0,
+        "2.1.1": 0,
+        "2.1.2": 0,
+        "2.1.4": 0,
+        "2.2.1": 0,
+        "2.2.2": 0,
+        "2.3.1": 0,
+        "2.4.1": 0,
+        "2.4.11": 0,
+        "2.4.2": 0,
+        "2.4.3": 0,
+        "2.4.4": 0,
+        "2.4.5": 0,
+        "2.4.6": 0,
+        "2.4.7": 0,
+        "2.5.1": 0,
+        "2.5.2": 0,
+        "2.5.3": 0,
+        "2.5.4": 0,
+        "2.5.7": 0,
+        "2.5.8": 0,
+        "3.1.1": 0,
+        "3.1.2": 0,
+        "3.2.1": 0,
+        "3.2.2": 0,
+        "3.2.3": 0,
+        "3.2.4": 0,
+        "3.2.6": 0,
+        "3.3.1": 0,
+        "3.3.2": 0,
+        "3.3.3": 0,
+        "3.3.4": 1,
+        "3.3.7": 0,
+        "3.3.8": 0,
+        "4.1.1": 0,
+        "4.1.2": 0,
+        "4.1.3": 0
+      },
+      "outcomes": {
+        "1.1.1": "failed",
+        "1.2.1": "failed",
+        "1.2.2": "failed",
+        "1.2.3": "failed",
+        "1.2.4": "inapplicable",
+        "1.2.5": "failed",
+        "1.3.1": "failed",
+        "1.3.2": "failed",
+        "1.3.3": "failed",
+        "1.3.4": "failed",
+        "1.3.5": "failed",
+        "1.4.1": "failed",
+        "1.4.10": "failed",
+        "1.4.11": "failed",
+        "1.4.12": "failed",
+        "1.4.13": "failed",
+        "1.4.2": "failed",
+        "1.4.3": "failed",
+        "1.4.4": "failed",
+        "1.4.5": "failed",
+        "2.1.1": "failed",
+        "2.1.2": "failed",
+        "2.1.4": "failed",
+        "2.2.1": "failed",
+        "2.2.2": "failed",
+        "2.3.1": "passed",
+        "2.4.1": "failed",
+        "2.4.11": "failed",
+        "2.4.2": "failed",
+        "2.4.3": "failed",
+        "2.4.4": "failed",
+        "2.4.5": "passed",
+        "2.4.6": "failed",
+        "2.4.7": "failed",
+        "2.5.1": "failed",
+        "2.5.2": "failed",
+        "2.5.3": "failed",
+        "2.5.4": "inapplicable",
+        "2.5.7": "failed",
+        "2.5.8": "failed",
+        "3.1.1": "failed",
+        "3.1.2": "failed",
+        "3.2.1": "failed",
+        "3.2.2": "failed",
+        "3.2.3": "failed",
+        "3.2.4": "failed",
+        "3.2.6": "failed",
+        "3.3.1": "failed",
+        "3.3.2": "failed",
+        "3.3.3": "failed",
+        "3.3.4": "failed",
+        "3.3.7": "failed",
+        "3.3.8": "failed",
+        "4.1.1": "passed",
+        "4.1.2": "failed",
+        "4.1.3": "failed"
+      },
+      "roles": [
+        {
+          "agents": 13,
+          "commands": 737,
+          "costUsd": null,
+          "role": "walk",
+          "roleNl": "rondgang",
+          "sessionSeconds": 3510,
+          "tokens": null,
+          "turns": null
+        },
+        {
+          "agents": 56,
+          "commands": 1855,
+          "costUsd": null,
+          "role": "judge",
+          "roleNl": "beoordelaar",
+          "sessionSeconds": 10641,
+          "tokens": null,
+          "turns": null
+        },
+        {
+          "agents": 56,
+          "commands": 1134,
+          "costUsd": null,
+          "role": "verifier",
+          "roleNl": "verifieerder",
+          "sessionSeconds": 6818,
+          "tokens": null,
+          "turns": null
+        }
+      ],
+      "run": "l2",
+      "side": "variant",
+      "sweep": {
+        "run": "bevroren-defect",
+        "version": "0.34.0"
+      },
+      "variant": "l2",
+      "version": "0.34.0",
+      "withoutCounterpart": {
+        "agreed": {
+          "discutabel": 4,
+          "onterecht": 0,
+          "terecht": 3
+        },
+        "disagreed": {},
+        "total": 7
+      }
+    }
+  ],
+  "schema": "loep/variant-comparison/3",
+  "scopeNl": null,
+  "verdict": {
+    "falseReports": {
+      "baseline": {
+        "high": 0,
+        "low": 0,
+        "value": 0
+      },
+      "difference": {
+        "high": 0,
+        "low": 0,
+        "value": 0
+      },
+      "leftOutNl": null,
+      "ok": true,
+      "units": 56,
+      "variant": {
+        "high": 0,
+        "low": 0,
+        "value": 0
+      }
+    },
+    "found": {
+      "baseline": {
+        "high": 1,
+        "low": 1,
+        "value": 1
+      },
+      "difference": {
+        "high": 0,
+        "low": 0,
+        "value": 0
+      },
+      "leftOutNl": null,
+      "ok": true,
+      "units": 79,
+      "variant": {
+        "high": 1,
+        "low": 1,
+        "value": 1
+      }
+    },
+    "margin": 0.05,
+    "notWorse": true,
+    "openPoints": {
+      "baseline": {
+        "high": 7,
+        "low": 0,
+        "value": 3
+      },
+      "difference": {
+        "high": 9,
+        "low": -1,
+        "value": 3
+      },
+      "leftOutNl": null,
+      "units": 56,
+      "variant": {
+        "high": 13,
+        "low": 1,
+        "value": 6
+      }
+    },
+    "reportMargin": 1,
+    "resamples": 10000,
+    "seed": 20261020
+  }
+}
