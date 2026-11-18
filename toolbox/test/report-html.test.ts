@@ -230,7 +230,8 @@ test("a card shows the first sentence of the fix; the rest waits behind a button
 
 test("the tabs of the report listen to the event the tab bar of the installed design system fires", () => {
   const html = renderHtml(grouped());
-  const listened = /bar\.addEventListener\("([a-z-]+)"/.exec(html)?.[1];
+  const ownScript = html.slice(html.lastIndexOf("<script"));
+  const listened = /\bbar\.addEventListener\("([a-z-]+)"/.exec(ownScript)?.[1];
   assert.ok(listened, "the script listens on the tab bar");
   const source = readFileSync(new URL("../node_modules/@nldd/design-system/dist/components/navigation/tab-bar/tab-bar.js", import.meta.url), "utf8");
   assert.ok(source.includes(`new CustomEvent('${listened}'`), `nldd-tab-bar fires ${listened}`);

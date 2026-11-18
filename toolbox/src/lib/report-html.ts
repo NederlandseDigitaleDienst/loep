@@ -1644,7 +1644,8 @@ const OWN_SCRIPT = `(() => {
   const openButton = document.getElementById("inhoud-openen");
   const section = openButton.closest("nldd-sidebar-section");
   openButton.addEventListener("click", () => section.show());
-  section.addEventListener("open", () => { openButton.expanded = true; });
+  // A popover inside the section fires a bubbling "open" too: only the section itself counts.
+  section.addEventListener("open", (event) => { if (event.target === section) openButton.expanded = true; });
   section.addEventListener("close", () => { openButton.expanded = false; });
   // "Meer" on a card: the hidden rest of the card goes into the sheet, and back when the sheet closes.
   const sheet = document.getElementById("detail");
