@@ -1,1 +1,0 @@
-De skill `nldd-a11y-contribute` zegt niet meer dat de verzameling het meest heeft aan oude onderzoeken. Elk meetblad telt even zwaar; de skill vraagt nog steeds naar eerdere onderzoeken, met de reden dat het er meer zijn en dat een site van toen niet opnieuw te meten is.

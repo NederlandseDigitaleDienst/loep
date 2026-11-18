@@ -1,1 +1,0 @@
-Een stap in een recept zoekt zijn element nu tot 5 seconden lang opnieuw voordat hij opgeeft. Een knop die een script net na het laden toevoegt, liet `check-site` en de veegronde eerder falen met "vond het element niet terug", op steeds een andere pagina.
