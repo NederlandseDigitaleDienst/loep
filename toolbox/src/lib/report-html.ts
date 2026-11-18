@@ -43,7 +43,7 @@ import {
  */
 
 /** The version of the design system this rendering is written against; package.json pins the same. */
-export const DESIGN_SYSTEM_VERSION = "0.22.0";
+export const DESIGN_SYSTEM_VERSION = "0.26.2";
 
 const require = createRequire(import.meta.url);
 
@@ -181,15 +181,19 @@ function el({ tag, attrs = {}, children = "" }: Element): string {
 
 const title = (text: string, level: number, size: number, extra: Element["attrs"] = {}): string => el({ tag: "nldd-title", attrs: { size: `display-${size}`, "heading-level": level, text: plain(text), ...extra } });
 const rich = (html: string, attrs: Element["attrs"] = {}): string => (html ? el({ tag: "nldd-rich-text", attrs, children: html }) : "");
-const text = (html: string, attrs: Element["attrs"] = {}): string => el({ tag: "nldd-text", attrs, children: html });
+/** nldd-text takes its text in a paragraph of its own: text straight in the element does not render since design system 0.25.0. */
+const text = (html: string, attrs: Element["attrs"] = {}): string => el({ tag: "nldd-text", attrs, children: `<p>${html}</p>` });
+/** The same inside a paragraph that is already there, such as the one of a table cell: a paragraph cannot hold another. */
+const textInline = (html: string, attrs: Element["attrs"] = {}): string => el({ tag: "nldd-text", attrs, children: `<span>${html}</span>` });
 const spacer = (size: number, attrs: Element["attrs"] = {}): string => el({ tag: "nldd-spacer", attrs: { size, ...attrs } });
+/** A list is `list: true`: since design system 0.23.0 the container takes a role="list" of the page away again. */
 const stack = (children: string, attrs: Element["attrs"] = {}): string => el({ tag: "nldd-container", attrs, children });
 const tag = (label: string, color = "neutral", attrs: Element["attrs"] = {}): string => el({ tag: "nldd-tag", attrs: { color, size: "sm", text: label, ...attrs } });
 /** A row of tags; two or more are a list, so a screen reader hears where the group starts and how many there are (WCAG 1.3.1). */
 const tags = (items: string[]): string => {
   if (items.length === 0) return "";
   if (items.length === 1) return stack(items[0]!, { layout: "wrap", gap: 8 });
-  return stack(items.map((item) => item.replace(/^<nldd-tag /, '<nldd-tag role="listitem" ')).join(""), { layout: "wrap", gap: 8, role: "list" });
+  return stack(items.join(""), { layout: "wrap", gap: 8, list: true });
 };
 const list = (items: string[], ordered = false): string => (items.length > 0 ? `<${ordered ? "ol" : "ul"}>${items.map((item) => `<li>${item}</li>`).join("")}</${ordered ? "ol" : "ul"}>` : "");
 const facts = (rows: [string, string][]): string => (rows.length > 0 ? `<dl>${rows.map(([name, value]) => `<dt>${attr(name)}</dt><dd>${value}</dd>`).join("")}</dl>` : "");
@@ -217,8 +221,8 @@ function table(label: string, columns: Column[], rows: { cells: Cell[]; id?: str
   const cell = (value: Cell, column: Column, index: number): string => {
     const common = { "row-header": index === 0 ? true : undefined, "horizontal-alignment": column.numeric ? "right" : undefined, "vertical-alignment": "top" };
     if (typeof value === "string") return el({ tag: "nldd-text-cell", attrs: { ...common, text: plain(value) } });
-    // Inline markup reaches its style only inside a component that styles it, such as nldd-text.
-    if ("html" in value) return el({ tag: "nldd-text-cell", attrs: common, children: value.html.startsWith("<nldd-") ? value.html : text(value.html) });
+    // The slot of a cell takes a paragraph. Inline markup reaches its style only inside a component that styles it, such as nldd-text.
+    if ("html" in value) return el({ tag: "nldd-text-cell", attrs: common, children: `<p>${value.html.startsWith("<nldd-") ? value.html : textInline(value.html)}</p>` });
     return el({ tag: "nldd-text-cell", attrs: { ...common, text: plain(value.text), "supporting-text": value.supporting ? plain(value.supporting) : undefined } });
   };
   const head = header
@@ -392,12 +396,12 @@ function cover(context: Context): string {
     tag: "nldd-hero",
     attrs: { "main-background": "accent", "padding-bottom": 0 },
     children: [
-      title(evaluation.site.name, 1, 1, { color: "inherit" }),
+      title(evaluation.site.name, 1, 1),
       spacer(16),
-      rich(`<p>${facts}</p>`, { color: "inherit" }),
+      rich(`<p>${facts}</p>`),
       spacer(24),
-      signedState(context, "inherit"),
-      ...(derived.signatureStale ? [spacer(8), text(attr(REPORT_TEXT.staleSignature), { color: "inherit" })] : []),
+      signedState(context),
+      ...(derived.signatureStale ? [spacer(8), text(attr(REPORT_TEXT.staleSignature))] : []),
     ].join(""),
   });
 }
@@ -430,10 +434,10 @@ function pageTitle(context: Context): string {
  * Whether the report is signed: a short tag, and who signed it and when as text after it. A tag
  * does not wrap, so the whole sentence in one tag ran past the screen at 320 pixels.
  */
-function signedState({ evaluation, derived }: Context, color?: string): string {
+function signedState({ evaluation, derived }: Context): string {
   const signature = evaluation.signature;
   if (!signature) return tag(REPORT_TEXT.concept, "neutral", { size: "md" });
-  return stack([tag("Afgetekend", "success", { size: "md" }), text(`door ${attr(signature.role)} (${attr(signature.organisation)}) op ${attr(derived.signedDateNl ?? "")}`, color ? { color } : {})].join(""), { layout: "wrap", gap: 8, "vertical-alignment": "center" });
+  return stack([tag("Afgetekend", "success", { size: "md" }), text(`door ${attr(signature.role)} (${attr(signature.organisation)}) op ${attr(derived.signedDateNl ?? "")}`)].join(""), { layout: "wrap", gap: 8, "vertical-alignment": "center" });
 }
 
 /** The letter of the status, or the whole heading when the two versions differ or there is none. */
@@ -466,12 +470,11 @@ function numberCards({ derived }: Context): string {
       .map(([label, count, outcome]) =>
         el({
           tag: "nldd-card",
-          attrs: { role: "listitem" },
           children: stack([text(String(count), { size: "display-1", "lg-custom-size": "64px", color: count === 0 ? "secondary" : TEXT_COLOR[outcome] }), spacer(4), text(`${OUTCOME_SYMBOL[outcome]} ${attr(label)}`, { size: "md", weight: "medium" })].join(""), { padding: 20 }),
         }),
       )
       .join(""),
-    { layout: "grid", "column-count": 2, gap: 16, role: "list" },
+    { layout: "grid", "column-count": 2, gap: 16, list: true },
   );
 }
 
@@ -1246,7 +1249,7 @@ function findingUnderCriterion(finding: ReportFinding, context: Context): string
   const defectNl = defect ? `${REPORT_TEXT.defect.label}: ${link(`#${defect.id}`, attr(defect.id))}. ${REPORT_TEXT.defect.main}: ${attr(defect.mainCriterion)}, zie ${link(`#${defect.mainFindingId}`, attr(defect.mainFindingId))}.` : "";
   return el({
     tag: "nldd-card",
-    attrs: { id: finding.id, role: "listitem" },
+    attrs: { id: finding.id },
     children: stack(
       [
         // An item of the list under the heading Bevindingen at level 6, the deepest there is: its
@@ -1277,7 +1280,7 @@ function findingsUnderCriterion(criterion: CriterionResult, context: Context): s
   return [
     listed.length > 0 ? el({ tag: "nldd-list", attrs: { "accessible-label": `Bevindingen bij ${criterion.id}, beschreven in de werklijst`, appearance: "box-base" }, children: listed.map((finding) => findingUnderCriterion(finding, context)).join("") }) : "",
     listed.length > 0 && cards.length > 0 ? spacer(12) : "",
-    cards.length > 0 ? stack(cards.map((finding) => findingUnderCriterion(finding, context)).join(""), { gap: 12, role: "list", "aria-label": `Bevindingen bij ${criterion.id}` }) : "",
+    cards.length > 0 ? stack(cards.map((finding) => findingUnderCriterion(finding, context)).join(""), { gap: 12, list: true, "aria-label": `Bevindingen bij ${criterion.id}` }) : "",
   ].join("");
 }
 
@@ -1325,7 +1328,7 @@ function results(context: Context): string {
         cells: [
           { html: criterionLink(criterion) },
           criterion.level,
-          { html: text(`${OUTCOME_SYMBOL[derived.shown[criterion.id]!]} ${attr(derived.outcomeLabel[derived.shown[criterion.id]!])}`, { size: "sm", weight: "medium", color: TEXT_COLOR[derived.shown[criterion.id]!] === "secondary" ? undefined : TEXT_COLOR[derived.shown[criterion.id]!] }) },
+          { html: textInline(`${OUTCOME_SYMBOL[derived.shown[criterion.id]!]} ${attr(derived.outcomeLabel[derived.shown[criterion.id]!])}`, { size: "sm", weight: "medium", color: TEXT_COLOR[derived.shown[criterion.id]!] === "secondary" ? undefined : TEXT_COLOR[derived.shown[criterion.id]!] }) },
           derived.briefs[criterion.id]!.establishedNl,
           String(criterion.findings.length),
         ],
@@ -1568,6 +1571,8 @@ function detailSheet(): string {
     attrs: { id: "detail", placement: "right", width: "560px" },
     children: el({
       tag: "nldd-page",
+      // Without a sticky header the bar scrolls away with the content and never takes over the title.
+      attrs: { "sticky-header": true },
       children: [
         // The bar cuts its title off on one line; the full title is a heading at the top of the
         // content that wraps (WCAG 1.4.12), and the bar takes it over once it scrolls away.
