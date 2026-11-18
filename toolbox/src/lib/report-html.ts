@@ -474,7 +474,7 @@ function numberCards({ derived }: Context): string {
         }),
       )
       .join(""),
-    { layout: "grid", "column-count": 2, gap: 16, list: true },
+    { layout: "grid", "column-count": 2, "sm-column-count": 1, gap: 16, list: true },
   );
 }
 
@@ -1599,8 +1599,10 @@ const OWN_CSS = [
   "nldd-sidebar-section[collapsed] #inhoud-kop { display: none; }",
   "/* nldd-lint-disable-next-line stylesheet-no-own -- nldd-rich-text breekt een lang woord zonder spatie (een hash, een adres) nog niet af, en dan wordt de pagina bij ruimere tekstafstand breder dan een smal scherm */",
   "nldd-rich-text :is(dd, dt, p, li) { overflow-wrap: anywhere; }",
-  "/* nldd-lint-disable-next-line stylesheet-no-own -- nldd-sheet geeft de pagina erin op een smal scherm nog de schuifstand van nldd-shell door, en dan schuift in het venster niets */",
+  "/* nldd-lint-disable-next-line stylesheet-no-own -- nldd-page leest zijn schuifstand voordat nldd-sheet er is en neemt dan die van nldd-shell over; dan schuift in het venster niets */",
   "#detail > nldd-page { --context-scroll-mode: nested; }",
+  "/* nldd-lint-disable-next-line stylesheet-no-own -- de inhoud van het venster is een eigen Tab-stop en krijgt de focusring van het designsysteem, binnen de rand omdat het venster afsnijdt */",
+  "#detail-inhoud:focus-visible { outline: var(--semantics-focus-ring-outline); outline-offset: -4px; }",
 ].join("\n");
 
 /**
