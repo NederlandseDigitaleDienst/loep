@@ -1577,7 +1577,9 @@ function detailSheet(): string {
         // The bar cuts its title off on one line; the full title is a heading at the top of the
         // content that wraps (WCAG 1.4.12), and the bar takes it over once it scrolls away.
         el({ tag: "nldd-top-title-bar", attrs: { slot: "header", id: "detail-titel", text: "Meer over dit gebrek", "dismiss-text": "Sluit", "heading-level": 2, "collapse-anchor": "detail-kop" } }),
-        el({ tag: "nldd-simple-section", attrs: { id: "detail-inhoud" }, children: title("Meer over dit gebrek", 2, 4, { slot: "header", id: "detail-kop" }) }),
+        // A Tab stop of its own: the sheet often holds more text than fits and nothing else in it takes focus,
+        // so without it the keys that scroll move the page behind the sheet (WCAG 2.1.1).
+        el({ tag: "nldd-simple-section", attrs: { id: "detail-inhoud", tabindex: 0, role: "region", "aria-label": "Meer over dit gebrek" }, children: title("Meer over dit gebrek", 2, 4, { slot: "header", id: "detail-kop" }) }),
       ].join(""),
     }),
   });
@@ -1597,6 +1599,8 @@ const OWN_CSS = [
   "nldd-sidebar-section[collapsed] #inhoud-kop { display: none; }",
   "/* nldd-lint-disable-next-line stylesheet-no-own -- nldd-rich-text breekt een lang woord zonder spatie (een hash, een adres) nog niet af, en dan wordt de pagina bij ruimere tekstafstand breder dan een smal scherm */",
   "nldd-rich-text :is(dd, dt, p, li) { overflow-wrap: anywhere; }",
+  "/* nldd-lint-disable-next-line stylesheet-no-own -- nldd-sheet geeft de pagina erin op een smal scherm nog de schuifstand van nldd-shell door, en dan schuift in het venster niets */",
+  "#detail > nldd-page { --context-scroll-mode: nested; }",
 ].join("\n");
 
 /**
@@ -1673,7 +1677,10 @@ const OWN_SCRIPT = `(() => {
     for (const heading of details.querySelectorAll("[data-level]")) heading.setAttribute("aria-level", "3");
     details.hidden = false;
     const heading = button.closest("nldd-card")?.querySelector("nldd-title, [data-title]");
-    if (heading) sheetBar.text = sheetHeading.text = heading.getAttribute("text") || heading.dataset.title;
+    if (heading) {
+      sheetBar.text = sheetHeading.text = heading.getAttribute("text") || heading.dataset.title;
+      sheetBody.setAttribute("aria-label", sheetHeading.text);
+    }
     shown = { details, placeholder, button };
     button.expanded = true;
     sheet.show();

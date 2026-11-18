@@ -258,7 +258,9 @@ test("the findings under a criterion are a list under the heading Bevindingen, a
 test("the sheet with the rest of a card has a heading that wraps, and its bar takes the title over from it (WCAG 1.4.12)", () => {
   const html = renderHtml(grouped());
   assert.match(html, /<nldd-top-title-bar [^>]*id="detail-titel"[^>]*collapse-anchor="detail-kop"/);
-  assert.match(html, /<nldd-simple-section id="detail-inhoud"><nldd-title [^>]*heading-level="2"[^>]*slot="header"[^>]*id="detail-kop"|<nldd-simple-section id="detail-inhoud"><nldd-title [^>]*id="detail-kop"/);
+  assert.match(html, /<nldd-simple-section id="detail-inhoud" tabindex="0" role="region" aria-label="Meer over dit gebrek"><nldd-title [^>]*heading-level="2"[^>]*slot="header"[^>]*id="detail-kop"|<nldd-simple-section id="detail-inhoud" tabindex="0" role="region" aria-label="Meer over dit gebrek"><nldd-title [^>]*id="detail-kop"/);
+  assert.ok(html.includes("#detail > nldd-page { --context-scroll-mode: nested; }"), "the page in the sheet scrolls itself, also on a narrow screen (WCAG 2.1.1)");
+  assert.ok(html.includes('sheetBody.setAttribute("aria-label", sheetHeading.text)'), "the region in the sheet is named after the defect");
   assert.ok(html.includes("sheetBar.text = sheetHeading.text ="), "the script sets both to the title of the card");
 });
 
