@@ -239,7 +239,7 @@ test("the findings under a criterion are a list under the heading Bevindingen, a
       // The labels in the hidden rest of a card are no part of this: they show in the sheet, at level 3.
       const next = rest.match(/<nldd-title\b[^>]*\bheading-level="(\d)"/);
       assert.ok(!next || Number(next[1]) < 6, "no title at level 6 follows Bevindingen before the next criterion");
-      assert.match(rest, /^<\/nldd-rich-text><nldd-spacer[^>]*><\/nldd-spacer>(<nldd-list |<nldd-container [^>]*\blist\b)/, "a list follows the heading");
+      assert.match(rest, /^<\/nldd-rich-text><nldd-spacer[^>]*><\/nldd-spacer>(<nldd-list |<nldd-container (?:[^>]* )?list[ >])/, "a list follows the heading");
     }
     cards += [...html.matchAll(/<nldd-card id="[^"]+">/g)].length;
   }

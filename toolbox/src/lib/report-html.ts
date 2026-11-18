@@ -183,7 +183,7 @@ const title = (text: string, level: number, size: number, extra: Element["attrs"
 const rich = (html: string, attrs: Element["attrs"] = {}): string => (html ? el({ tag: "nldd-rich-text", attrs, children: html }) : "");
 /** nldd-text takes its text in a paragraph of its own: text straight in the element does not render since design system 0.25.0. */
 const text = (html: string, attrs: Element["attrs"] = {}): string => el({ tag: "nldd-text", attrs, children: `<p>${html}</p>` });
-/** The same inside a paragraph that is already there, such as the one of a table cell: a paragraph cannot hold another. */
+/** The same where the text is no paragraph of its own: a number, or text inside the paragraph of a table cell, which cannot hold another. */
 const textInline = (html: string, attrs: Element["attrs"] = {}): string => el({ tag: "nldd-text", attrs, children: `<span>${html}</span>` });
 const spacer = (size: number, attrs: Element["attrs"] = {}): string => el({ tag: "nldd-spacer", attrs: { size, ...attrs } });
 /** A list is `list: true`: since design system 0.23.0 the container takes a role="list" of the page away again. */
@@ -446,12 +446,12 @@ function statusCard({ derived }: Context): string {
   const letter = statusLetter(derived);
   const head = line.provisional ? "Voorlopige status" : "Status";
   const main = letter
-    ? [text(attr(head), { size: "sm", weight: "medium" }), text(letter, { size: "display-1", "sm-custom-size": "72px", "md-custom-size": "88px", "lg-custom-size": "104px" }), text(attr(STATUS_LABEL[letter].replace(/^status \w \(|\)$/g, "")), { size: "lg", weight: "medium" })].join("")
+    ? [text(attr(head), { size: "sm", weight: "medium" }), textInline(letter, { size: "display-1", "sm-custom-size": "72px", "md-custom-size": "88px", "lg-custom-size": "104px" }), text(attr(STATUS_LABEL[letter].replace(/^status \w \(|\)$/g, "")), { size: "lg", weight: "medium" })].join("")
     : [text(attr(head), { size: "sm", weight: "medium" }), spacer(8), title(line.headingNl.replace(/^[^:]+: /, ""), 3, 4)].join("");
   return el({
     tag: "nldd-card",
     attrs: { background: "accent-tinted" },
-    children: stack([main, spacer(16), text(attr(line.noteNl ?? ""), { size: "sm" }), spacer(8), text(`${line.unfinished ? "<strong>Het onderzoek is onvolledig.</strong> " : ""}${inline(line.openNl)}`, { size: "sm" })].join(""), { padding: 24, "sm-padding": 16 }),
+    children: stack([main, spacer(16), ...(line.noteNl ? [text(attr(line.noteNl), { size: "sm" }), spacer(8)] : []), text(`${line.unfinished ? "<strong>Het onderzoek is onvolledig.</strong> " : ""}${inline(line.openNl)}`, { size: "sm" })].join(""), { padding: 24, "sm-padding": 16 }),
   });
 }
 
@@ -470,7 +470,7 @@ function numberCards({ derived }: Context): string {
       .map(([label, count, outcome]) =>
         el({
           tag: "nldd-card",
-          children: stack([text(String(count), { size: "display-1", "lg-custom-size": "64px", color: count === 0 ? "secondary" : TEXT_COLOR[outcome] }), spacer(4), text(`${OUTCOME_SYMBOL[outcome]} ${attr(label)}`, { size: "md", weight: "medium" })].join(""), { padding: 20 }),
+          children: stack([textInline(String(count), { size: "display-1", "lg-custom-size": "64px", color: count === 0 ? "secondary" : TEXT_COLOR[outcome] }), spacer(4), text(`${OUTCOME_SYMBOL[outcome]} ${attr(label)}`, { size: "md", weight: "medium" })].join(""), { padding: 20 }),
         }),
       )
       .join(""),
