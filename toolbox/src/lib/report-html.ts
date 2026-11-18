@@ -1611,7 +1611,7 @@ const OWN_SCRIPT = `(() => {
     for (const panel of panels) panel.hidden = panel.id !== panelId;
     for (const tab of tabs) tab.current = tab.getAttribute("controls") === panelId;
   };
-  bar.addEventListener("tabchange", (event) => show(event.detail.item.getAttribute("controls")));
+  bar.addEventListener("tab-change", (event) => show(event.detail.item.getAttribute("controls")));
   const panelOf = (element) => panels.find((panel) => panel.contains(element)) || null;
   const reveal = (id) => {
     const target = id && document.getElementById(id);

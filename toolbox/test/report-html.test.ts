@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -226,6 +226,14 @@ test("a card shows the first sentence of the fix; the rest waits behind a button
   assert.ok(html.includes(`id="meer-${defect.mainFindingId}"`), "a button per card");
   assert.match(html, new RegExp(`<nldd-container id="details-${defect.mainFindingId.replace(/[.]/g, "\\.")}" hidden`), "the rest is in the card, hidden");
   assert.ok(html.includes('window.addEventListener("beforeprint"') && html.includes("details.hidden = false"), "printing shows the rest");
+});
+
+test("the tabs of the report listen to the event the tab bar of the installed design system fires", () => {
+  const html = renderHtml(grouped());
+  const listened = /bar\.addEventListener\("([a-z-]+)"/.exec(html)?.[1];
+  assert.ok(listened, "the script listens on the tab bar");
+  const source = readFileSync(new URL("../node_modules/@nldd/design-system/dist/components/navigation/tab-bar/tab-bar.js", import.meta.url), "utf8");
+  assert.ok(source.includes(`new CustomEvent('${listened}'`), `nldd-tab-bar fires ${listened}`);
 });
 
 test("the findings under a criterion are a list under the heading Bevindingen, and a card there has no heading of its own (WCAG 1.3.1)", () => {
