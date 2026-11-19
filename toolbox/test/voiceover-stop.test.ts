@@ -3,11 +3,16 @@ import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "nod
 import { createServer, type Server } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { test } from "node:test";
+import { after, test } from "node:test";
 import { stopRefusedNl, voiceoverStop } from "../src/commands/voiceover.ts";
 import { sha256 } from "../src/lib/canonical.ts";
 import type { Guest, GuestState } from "../src/lib/voiceover.ts";
 import { otherSessionProcesses, type SessionProcess } from "../src/session/client.ts";
+
+// The word a stop leaves on this machine (see markStopping) goes to a home directory of the test's own.
+const home = mkdtempSync(join(tmpdir(), "loep-voiceover-stop-"));
+process.env.HOME = home;
+after(() => rmSync(home, { recursive: true, force: true }));
 
 /** A guest that stops when it is shut down from the inside, and keeps what was asked of it. */
 function fakeGuest(state: GuestState) {

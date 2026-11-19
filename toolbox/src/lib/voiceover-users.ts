@@ -1,7 +1,7 @@
-import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { sha256 } from "./canonical.ts";
-import { runningStart, stateDir, VM_NAME } from "./voiceover.ts";
+import { alive, LIMITS, readRecord, realClock, runningStart, stateDir, VM_NAME, type Clock } from "./voiceover.ts";
 
 /**
  * Which runs use the one virtual Mac of this machine. `voiceover start --run` enters a run and
@@ -10,7 +10,9 @@ import { runningStart, stateDir, VM_NAME } from "./voiceover.ts";
  * the sweep or between two rounds. One file per run, so two runs never write the same file.
  *
  * A run that broke off without taking itself out would hold the virtual Mac for good. So an entry
- * lapses when its run has written nothing for `USER_IDLE_MS`, or when the run is gone.
+ * does not count while its run has written nothing for `USER_IDLE_MS`, and is removed when the run
+ * is gone. A run that comes back after a longer pause, as on a weekly limit, renews its entry with
+ * `pending` (`renewUser`).
  */
 
 /** Longer than a pause for a usage limit (five hours), shorter than a day. */
@@ -22,7 +24,7 @@ const MAX_ENTRIES = 5000;
 export interface VoiceoverUser {
   /** The run directory, as a full path. */
   run: string;
-  /** When the run was entered. */
+  /** When the run was entered, or its entry last renewed. */
   since: string;
   /** The last write in the run, or null when it could not be read. */
   lastWrite: string | null;
@@ -32,11 +34,23 @@ const usersDir = (dir: string, name: string): string => join(dir, `${name}.users
 const entryFile = (dir: string, name: string, runDir: string): string => join(usersDir(dir, name), `${sha256(runDir).slice(0, 16)}.json`);
 const fullPath = (runDir: string): string => (existsSync(runDir) ? realpathSync(runDir) : runDir);
 
+/** Write a file whole or not at all: a stop that reads at the same time never sees half an entry. */
+function writeWhole(path: string, text: string): void {
+  const temporary = `${path}.${process.pid}.tmp`;
+  writeFileSync(temporary, text);
+  renameSync(temporary, path);
+}
+
 /** Enter a run as a user of the virtual Mac, or renew its entry. */
 export function enterUser(runDir: string, name = VM_NAME(), dir = stateDir(), now: Date = new Date()): void {
   const run = fullPath(runDir);
   mkdirSync(usersDir(dir, name), { recursive: true });
-  writeFileSync(entryFile(dir, name, run), `${JSON.stringify({ run, since: now.toISOString() })}\n`);
+  writeWhole(entryFile(dir, name, run), `${JSON.stringify({ run, since: now.toISOString() })}\n`);
+}
+
+/** Renew the entry of a run that is entered, also one that no longer counts after a long pause; a run that was never entered stays out. */
+export function renewUser(runDir: string, name = VM_NAME(), dir = stateDir(), now: Date = new Date()): void {
+  if (existsSync(entryFile(dir, name, fullPath(runDir)))) enterUser(runDir, name, dir, now);
 }
 
 /** Take a run out again; nothing happens when it was not entered. */
@@ -75,8 +89,9 @@ export function lastWrite(runDir: string): number | null {
 }
 
 /**
- * The runs entered as users of the virtual Mac, except `ownRun`. An entry of a run that is gone, or
- * that wrote nothing for `idleMs` since it was entered, lapses and is removed.
+ * The runs entered as users of the virtual Mac, except `ownRun`. An entry of a run that wrote
+ * nothing for `idleMs` since it was entered or renewed does not count; one of a run that is gone is
+ * removed.
  */
 export function otherUsers(ownRun?: string, name = VM_NAME(), dir = stateDir(), now: Date = new Date(), idleMs = USER_IDLE_MS): VoiceoverUser[] {
   const own = ownRun === undefined ? null : fullPath(ownRun);
@@ -102,11 +117,11 @@ export function otherUsers(ownRun?: string, name = VM_NAME(), dir = stateDir(), 
     }
     if (record.run === own) continue;
     const written = existsSync(record.run) ? lastWrite(record.run) : null;
-    const latest = Math.max(written ?? 0, Date.parse(record.since) || 0);
-    if (written === null || now.getTime() - latest > idleMs) {
+    if (written === null) {
       rmSync(path, { force: true });
       continue;
     }
+    if (now.getTime() - Math.max(written, Date.parse(record.since) || 0) > idleMs) continue;
     found.push({ run: record.run, since: record.since, lastWrite: new Date(written).toISOString() });
   }
   return found;
@@ -119,3 +134,31 @@ export interface InUse {
 }
 
 export const inUse = (ownRun?: string): InUse => ({ users: otherUsers(ownRun), starting: runningStart() });
+
+/**
+ * A stop that shuts the virtual Mac down leaves word first, and only then looks at the entries; a
+ * start leaves word first (its entry, the file of a start that runs), and only then looks for a
+ * stop. So of a stop and a start at the same moment, at least one sees the other: the stop refuses,
+ * or the start waits until the virtual Mac is down and boots it again.
+ */
+const stoppingFile = (dir: string, name: string): string => join(dir, `${name}.stopping.json`);
+
+/** Leave word that a stop runs; the function given back takes it away again. */
+export function markStopping(name = VM_NAME(), dir = stateDir(), now: Date = new Date()): () => void {
+  mkdirSync(dir, { recursive: true });
+  const path = stoppingFile(dir, name);
+  writeWhole(path, `${JSON.stringify({ pid: process.pid, since: now.toISOString() })}\n`);
+  return () => rmSync(path, { force: true });
+}
+
+/** Wait while a stop of another process runs, at most as long as a shutdown may take. True when one was waited for. */
+export async function awaitStop(name = VM_NAME(), dir = stateDir(), clock: Clock = realClock): Promise<boolean> {
+  const deadline = clock.now() + (LIMITS.shutdownSeconds + 60) * 1000;
+  let waited = false;
+  for (;;) {
+    const stopping = readRecord<{ pid: number }>(stoppingFile(dir, name));
+    if (!stopping || stopping.pid === process.pid || !alive(stopping.pid) || clock.now() >= deadline) return waited;
+    waited = true;
+    await clock.sleep(2000);
+  }
+}

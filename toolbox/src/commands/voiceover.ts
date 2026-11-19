@@ -3,7 +3,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
-import { enterUser, inUse, leaveUser, type InUse } from "../lib/voiceover-users.ts";
+import { awaitStop, enterUser, inUse, leaveUser, markStopping, type InUse } from "../lib/voiceover-users.ts";
 import { COPIED_FILES, GUEST_DIR, GuestQueue, isReady, lumeGuest, markStarting, putFile, read, realClock, recordedStart, shutdown, start, statusNl, VM_NAME, voiceoverStatus, type Clock, type Guest } from "../lib/voiceover.ts";
 import { otherSessionProcesses, type SessionProcess } from "../session/client.ts";
 
@@ -47,7 +47,11 @@ const MEMORY = "6GB";
 /** `loep voiceover start`: exit 0 when VoiceOver is ready to read. With a run, the run is entered as a user first. */
 export async function voiceoverStart(flags: { run?: string | undefined } = {}, guest: Guest = lumeGuest()): Promise<number> {
   if (flags.run) enterUser(flags.run);
-  const started = await recordedStart(() => start(guest, (line) => process.stderr.write(`${line}\n`)));
+  // Entered and the file of a start written, then a stop that runs now is waited for: see markStopping.
+  const started = await recordedStart(async () => {
+    if (await awaitStop()) process.stderr.write("een stop liep nog; de virtuele Mac is nu afgesloten en start opnieuw\n");
+    return start(guest, (line) => process.stderr.write(`${line}\n`));
+  });
   process.stdout.write(`${JSON.stringify({ ok: started.ok, boots: started.boots, seconds: started.seconds, attempts: started.attempts, ...(started.versions ? { versions: started.versions } : {}), ...(started.error ? { error: started.error } : {}) })}\n`);
   return started.ok ? 0 : 1;
 }
@@ -115,17 +119,23 @@ export function inUseNl({ users, starting }: InUse): string {
  */
 export async function voiceoverStop(flags: StopFlags = {}, guest: Guest = lumeGuest(), others: () => Promise<SessionProcess[]> = () => otherSessionProcesses(flags.run), check: () => InUse = () => inUse(flags.run)): Promise<number> {
   if (flags.run) leaveUser(flags.run);
-  if (!flags.force && (await guest.state()) === "running") {
-    const found = check();
-    const sessions = found.users.length > 0 || found.starting ? [] : await others();
-    if (found.users.length > 0 || found.starting || sessions.length > 0) {
-      process.stdout.write(`${JSON.stringify({ ok: false, stopped: "niet gestopt", error: sessions.length > 0 ? stopRefusedNl(sessions) : inUseNl(found) })}\n`);
-      return 1;
+  // Word of this stop first, the entries after: a start at the same moment then waits for it (see markStopping).
+  const done = markStopping();
+  try {
+    if (!flags.force && (await guest.state()) === "running") {
+      const found = check();
+      const sessions = found.users.length > 0 || found.starting ? [] : await others();
+      if (found.users.length > 0 || found.starting || sessions.length > 0) {
+        process.stdout.write(`${JSON.stringify({ ok: false, stopped: "niet gestopt", error: sessions.length > 0 ? stopRefusedNl(sessions) : inUseNl(found) })}\n`);
+        return 1;
+      }
     }
+    const how = await shutdown(guest);
+    process.stdout.write(`${JSON.stringify({ ok: true, stopped: how === "clean" ? "netjes afgesloten" : how === "forced" ? "afsluiten in de gast lukte niet: hard gestopt" : "de virtuele Mac draaide niet" })}\n`);
+    return 0;
+  } finally {
+    done();
   }
-  const how = await shutdown(guest);
-  process.stdout.write(`${JSON.stringify({ ok: true, stopped: how === "clean" ? "netjes afgesloten" : how === "forced" ? "afsluiten in de gast lukte niet: hard gestopt" : "de virtuele Mac draaide niet" })}\n`);
-  return 0;
 }
 
 /** One line of a step of the setup, as provision.sh and install.sh in the guest print them. */

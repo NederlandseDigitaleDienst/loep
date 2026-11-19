@@ -12,7 +12,7 @@ process.env.LOEP_VOICEOVER_VM = "loep-voiceover-test";
 after(() => rmSync(home, { recursive: true, force: true }));
 
 const { voiceoverStart, voiceoverStop } = await import("../src/commands/voiceover.ts");
-const { enterUser, leaveUser, otherUsers, USER_IDLE_MS } = await import("../src/lib/voiceover-users.ts");
+const { awaitStop, enterUser, leaveUser, markStopping, otherUsers, renewUser, USER_IDLE_MS } = await import("../src/lib/voiceover-users.ts");
 const { stateDir, VM_NAME } = await import("../src/lib/voiceover.ts");
 type Guest = import("../src/lib/voiceover.ts").Guest;
 type GuestState = import("../src/lib/voiceover.ts").GuestState;
@@ -87,7 +87,39 @@ test("an entry lapses when its run wrote nothing for six hours or is gone; a wri
   // A file written in a folder deeper down changes the time of that folder.
   writeFileSync(join(busy, "pages", "a", "states.json"), "{}");
   assert.deepEqual(otherUsers(undefined, VM_NAME(), stateDir(), now).map((user) => user.run), [busy]);
-  assert.equal(readdirSync(join(stateDir(), `${VM_NAME()}.users`)).length, 1, "the entries that lapsed are removed");
+  assert.equal(readdirSync(join(stateDir(), `${VM_NAME()}.users`)).length, 2, "the entry of the run that is gone is removed, the idle one is kept");
+
+  // Back after a pause longer than six hours, as on a weekly limit: pending renews the entry, and it counts again.
+  renewUser(idle, VM_NAME(), stateDir(), now);
+  assert.deepEqual(otherUsers(undefined, VM_NAME(), stateDir(), now).map((user) => user.run).sort(), [busy, idle].sort());
+  // A run that was never entered is not entered by a renewal.
+  const never = makeRun();
+  renewUser(never, VM_NAME(), stateDir(), now);
+  assert.ok(!otherUsers(undefined, VM_NAME(), stateDir(), now).some((user) => user.run === never));
+});
+
+test("a start waits while a stop of another process shuts the virtual Mac down, and not for a stop that is gone", async () => {
+  const clock = { at: 0, sleeps: 0, now: () => clock.at, sleep: async (ms: number) => void ((clock.at += ms), (clock.sleeps += 1)) };
+  const marker = join(stateDir(), `${VM_NAME()}.stopping.json`);
+  mkdirSync(stateDir(), { recursive: true });
+  // The parent of this test stands in for another process that is still stopping.
+  writeFileSync(marker, `${JSON.stringify({ pid: process.ppid, since: new Date().toISOString() })}\n`);
+  const ended = clock.sleep;
+  clock.sleep = async (ms: number) => {
+    await ended(ms);
+    if (clock.sleeps === 3) rmSync(marker, { force: true });
+  };
+  assert.equal(await awaitStop(VM_NAME(), stateDir(), clock), true);
+  assert.equal(clock.sleeps, 3);
+  // A stop whose process is gone is not waited for.
+  writeFileSync(marker, `${JSON.stringify({ pid: 2 ** 22 + 1, since: new Date().toISOString() })}\n`);
+  assert.equal(await awaitStop(VM_NAME(), stateDir(), clock), false);
+  rmSync(marker, { force: true });
+  // The own stop leaves word while it runs, and takes it away again.
+  const done = markStopping();
+  assert.equal(await awaitStop(VM_NAME(), stateDir(), clock), false, "not for the own process");
+  done();
+  assert.ok(!readdirSync(stateDir()).includes(`${VM_NAME()}.stopping.json`));
 });
 
 test("stop leaves the virtual Mac up while another run is entered, and takes the own run out", async () => {

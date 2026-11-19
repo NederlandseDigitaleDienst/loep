@@ -725,6 +725,8 @@ async function main(): Promise<void> {
       const { isInstrumentRun, instrumentPending, briefPending, NO_TASKS_NL } = await import("./commands/instrument-tasks.ts");
       if (!isInstrumentRun(values.run)) throw new Error(NO_TASKS_NL);
       const pending = await instrumentPending(values.run);
+      // A run that comes back after a long pause, as on a weekly limit, counts again as a user of the virtual Mac (#665).
+      if (pending.phase !== "done") (await import("./lib/voiceover-users.ts")).renewUser(values.run);
       // In a phase with agents: whether VoiceOver can read, when the virtual Mac is set up. Asked of lume, not read from the run.
       // Running but not warmed up costs a minute to mend and a phase of agents without VoiceOver to leave: it is warmed up from here, in the background (#596).
       const { voiceoverStatus, voiceoverWarningNl, warmUpDue } = await import("./lib/voiceover.ts");

@@ -302,7 +302,7 @@ export interface VoiceoverStatus {
   lastStart?: StartRecord;
 }
 
-const readRecord = <T>(path: string): T | null => {
+export const readRecord = <T>(path: string): T | null => {
   try {
     return JSON.parse(readFileSync(path, "utf8")) as T;
   } catch {
@@ -588,7 +588,7 @@ export interface Waited {
 /** The lock that holds the one virtual Mac for one reading, also against another process of loep. */
 export const lockFile = (name = VM_NAME()): string => join(stateDir(), `${name}.lock`);
 
-const alive = (pid: number): boolean => {
+export const alive = (pid: number): boolean => {
   try {
     process.kill(pid, 0);
     return true;
