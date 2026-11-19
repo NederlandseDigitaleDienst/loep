@@ -116,11 +116,28 @@ test("a request passes only when a rule covers its address and its body is a que
   // WordPress: the rule names admin-ajax.php, and the action of each request decides (#630).
   const ajax = [rule({ origin: "https://www.example.nl", path: "/wp-admin/admin-ajax.php", service: "wordpressajax" })];
   const ajaxAt = "https://www.example.nl/wp-admin/admin-ajax.php";
-  assert.equal(readDecision(ajax, "POST", ajaxAt, {}, "action=filter&cat=3")?.pass, true, "a filter to admin-ajax.php");
-  assert.equal(readDecision(ajax, "POST", ajaxAt, {}, "action=submit_form&naam=Test")?.pass, false, "a form sent to the same address");
-  // WordPress reads the action from the query too, and from the query alone when PHP does not parse the body as a form.
-  assert.equal(readDecision(ajax, "POST", `${ajaxAt}?action=contact_form_submit`, { "content-type": "text/plain" }, "action=filter&cat=3")?.pass, false, "an action in the query");
-  assert.equal(readDecision(ajax, "POST", `${ajaxAt}?lang=nl`, {}, "action=filter&cat=3")?.pass, true, "a query without an action");
+  const asForm = { "content-type": "application/x-www-form-urlencoded; charset=UTF-8" };
+  assert.equal(readDecision(ajax, "POST", ajaxAt, asForm, "action=alm_get_posts&paged=2")?.pass, true, "the next page of a list to admin-ajax.php");
+  assert.equal(readDecision(ajax, "POST", ajaxAt, { "Content-Type": "application/x-www-form-urlencoded" }, "action=alm_get_posts&paged=2")?.pass, true, "the header in another case");
+  assert.equal(readDecision(ajax, "POST", ajaxAt, asForm, "action=submit_form&naam=Test")?.pass, false, "a form sent to the same address");
+  for (const action of ["publish_get_posts", "trash_load_posts", "approve_get_items", "savepost_load_more", "sendmail_get_results", "save2_get_posts"]) {
+    assert.equal(readDecision(ajax, "POST", ajaxAt, asForm, `action=${action}`)?.pass, false, `an action off the list: ${action}`);
+  }
+  assert.equal(readDecision(ajax, "POST", ajaxAt, asForm, "action=alm_get_posts&action%00filter=submit_comment")?.pass, false, "NUL in a name");
+  for (const extra of ["op=trash", "submit=publish", "__task=wpcf7_submit&__data=anything"]) {
+    assert.equal(readDecision(ajax, "POST", ajaxAt, asForm, `action=alm_get_posts&${extra}`)?.pass, false, `a field that steers: ${extra}`);
+  }
+  // PHP parses the body as the header says: only a form whose header loep sees as application/x-www-form-urlencoded passes.
+  assert.equal(readDecision(ajax, "POST", ajaxAt, {}, "action=alm_get_posts&paged=2")?.pass, false, "no Content-Type");
+  assert.equal(readDecision(ajax, "POST", ajaxAt, { "content-type": "text/plain" }, "action=alm_get_posts&paged=2")?.pass, false, "another Content-Type");
+  const multipart = '--A\r\nContent-Disposition: form-data; name="action"\r\n\r\nalm_get_posts\r\n--A\r\nContent-Disposition: form-data; name="x"\r\n\r\ny\r\n--B\r\nContent-Disposition: form-data; name="action"\r\n\r\nsubmit_comment\r\n--B--\r\n--A--\r\n';
+  assert.equal(readDecision(ajax, "POST", ajaxAt, { "content-type": "multipart/form-data; boundary=B" }, multipart)?.pass, false, "multipart with another boundary in the header");
+  assert.equal(readDecision(ajax, "POST", ajaxAt, { "content-type": "multipart/form-data; boundary=A" }, multipart)?.pass, false, "multipart at all");
+  // WordPress reads the action and every other field from the query too.
+  assert.equal(readDecision(ajax, "POST", `${ajaxAt}?action=contact_form_submit`, asForm, "action=alm_get_posts")?.pass, false, "an action in the query");
+  assert.equal(readDecision(ajax, "POST", `${ajaxAt}?op=trash`, asForm, "action=alm_get_posts")?.pass, false, "a field that steers in the query");
+  assert.equal(readDecision(ajax, "POST", `${ajaxAt}?act%00ion=x`, asForm, "action=alm_get_posts")?.pass, false, "NUL in a name in the query");
+  assert.equal(readDecision(ajax, "POST", `${ajaxAt}?lang=nl`, asForm, "action=alm_get_posts")?.pass, true, "a query without an action");
   assert.equal(readsAllowedNl([]), null);
   assert.equal(readsAllowedNl(rules), `één adres is toegelaten voor leesverzoeken: POST https://zoek.example.nl/1/indexes/*/queries, zoekvraag aan Algolia (${REASON.slice(0, -1)}). Een verzoek daarheen ging alleen door als loep de body herkende als zoekvraag aan die dienst; elk ander verzoek dat iets kan wijzigen is tegengehouden`);
 });

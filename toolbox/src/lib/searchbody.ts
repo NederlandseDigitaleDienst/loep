@@ -605,22 +605,15 @@ const namesFilter = (key: string): boolean => {
  * WebForms) has to be such a field too: under that name any button of the page can be pressed.
  */
 function filterForm(body: string): Verdict {
-  const parsed = formOf(body);
-  if (!Array.isArray(parsed)) return parsed;
-  const fields = filterFields(parsed);
-  if (!("choices" in fields)) return fields;
-  if (fields.choices === 0) return no("het formulier heeft geen ingevuld veld dat als een filter, een sortering of een pagina heet");
-  return yes;
-}
-
-/** The fields of a form body, or why it is no form a filter would send. */
-function formOf(body: string): [string, string][] | Verdict {
   if (parseJson(body).ok) return no("de body is JSON en geen formulier");
   const parsed = urlEncodedFields(body) ?? multipartFields(body);
   if (parsed === "file") return no("het formulier stuurt een bestand mee, en een filter doet dat niet");
   if (parsed === null) return no("de body is geen formulier (application/x-www-form-urlencoded of multipart/form-data)");
   if (parsed.length > FORM_FIELDS_MAX) return no(`het formulier heeft meer dan ${FORM_FIELDS_MAX} velden`);
-  return parsed;
+  const fields = filterFields(parsed);
+  if (!("choices" in fields)) return fields;
+  if (fields.choices === 0) return no("het formulier heeft geen ingevuld veld dat als een filter, een sortering of een pagina heet");
+  return yes;
 }
 
 /**
@@ -656,56 +649,53 @@ function filterFields(parsed: readonly [string, string][], names: ReadonlySet<st
 
 // WordPress sends what a plugin or theme asks for without a page load to one address, `/wp-admin/admin-ajax.php`,
 // and the field `action` says which handler answers. That address serves every handler, also the ones that send a
-// form, place a comment, log in or count a view, so the address says nothing and only the action can tell. This rule
-// holds for the CMS and not for one site: an action passes only when one of its words asks for a list (filter, sort,
-// page, load more, search) and none of them does something. Whatever else is filled in has to be what `filterform`
-// accepts, so a filter that carries a name, an e-mail address or text of a visitor stays held back.
+// form, place a comment, log in or count a view, so the address says nothing and only the action can tell. The words
+// of an action do not tell either: a handler named `publish_get_posts` may do what its prefix says. So an action passes
+// only when it is, exactly, one of a short list of handlers of known plugins whose source shows that they only read.
+// This rule holds for the CMS and not for one site. Whatever else is filled in has to be what `filterform` accepts,
+// so a filter that carries a name, an e-mail address or text of a visitor stays held back.
 const WORDPRESS_AJAX_PATH = /(?:^|\/)wp-admin\/admin-ajax\.php$/;
-/** The words of an action that ask for a list: at least one of these. */
-const WORDPRESS_READ_ACTION_WORDS = new Set([
-  "filter", "filters", "filteren", "facet", "facets", "facetwp", "sort", "sorteer", "sorteren", "page", "paged", "paginate", "pagination", "pagina",
-  "load", "loadmore", "more", "meer", "laad", "fetch", "get", "query", "search", "zoek", "zoeken", "refresh", "results", "resultaten",
-]);
-/** The words of an action that do something, on top of what a choice of a filter must not say: one of these and it stays held back. */
-const WORDPRESS_WRITE_ACTION_WORDS = new Set([
-  ...FORM_ACTION_WORDS, "submit", "upload", "edit", "set", "reset", "insert", "import", "comment", "comments", "reactie", "review", "rate", "rating", "poll",
-  "cart", "checkout", "basket", "winkelwagen", "booking", "reserve", "reserveer", "reservering", "afspraak", "appointment",
-  "contact", "form", "formulier", "mail", "email", "newsletter", "nieuwsbrief", "signup", "signin", "signout", "password", "wachtwoord", "user", "account", "profile",
-  "heartbeat", "view", "views", "count", "counter", "hit", "hits", "track", "tracking", "log", "stats", "statistics", "session", "cookie", "cookies", "consent", "dismiss", "notice",
-  "visit", "visits", "visitor", "click", "clicks", "impression", "impressions", "share", "download", "increment", "record", "store", "history", "toggle", "mark",
-  "favorite", "favourite", "bookmark", "wishlist", "upvote", "downvote", "notify", "report", "flag", "purge", "clear", "flush", "cache", "auth", "otp", "verify", "ping", "beacon",
+/** The actions that only read a list: the exact name a plugin registers with `wp_ajax_nopriv_<action>`. */
+const WORDPRESS_READ_ACTIONS: ReadonlySet<string> = new Set([
+  // Ajax Load More (ajax-load-more): `alm_query_posts` runs a WP_Query and renders the posts of the next page.
+  "alm_get_posts",
 ]);
 /**
- * The other words an action may have besides those that ask for a list: what is listed and the glue of a handler name.
- * Only the first word of an action may be something else, the prefix a plugin puts before its handlers (`alm_get_posts`),
- * so a word that does something and that loep does not know yet (`search_click`, `refresh_cache`) holds the action back.
+ * A name of a field PHP keeps as it is. PHP turns a space or a dot in a name into an underscore and cuts a name off
+ * at NUL, so a name with any other character may reach a plugin as another field than the one loep read.
  */
-const WORDPRESS_LIST_WORDS = new Set([
-  ...FILTER_WORDS, "ajax", "wp", "by", "and", "all", "next", "prev", "previous", "infinite", "scroll", "list", "lists", "grid", "items", "item", "posts", "post",
-  "content", "archive", "archives", "news", "nieuws", "events", "agenda", "products", "projects", "publications", "publicaties", "articles", "artikelen", "jobs", "vacatures",
-  "cat", "cats", "taxonomy", "term", "terms", "tax",
-]);
+const WORDPRESS_FIELD_NAME = /^[A-Za-z0-9_-][A-Za-z0-9_\-[\]]{0,127}$/;
+/** Fields with which a handler may be told what to do, whatever their value: these hold the request back. */
+const WORDPRESS_STEERING_KEY = /^(?:op|submit|task|do|method|_method|__.*)$/i;
 /** The fields that carry the nonce of WordPress against forged requests: state of the CMS, short and with no input of the visitor. */
 const WORDPRESS_NONCE_KEY = /^(?:nonce|security|_ajax_nonce|_wpnonce|wpnonce)$/i;
 /** Names WordPress itself gives to a choice of a list, as in its query variables. */
 const WORDPRESS_FILTER_NAMES = new Set(["paged", "cat", "cats", "taxonomy", "term", "terms"]);
 
+/** The name PHP files a field under: what comes before the first bracket. */
+const phpBaseOf = (key: string): string => key.replace(/\[.*$/, "");
+
+/** Why a field of an address or a body to admin-ajax.php may steer the handler, or null when it does not. */
+export function wordpressFieldRefusal(key: string): string | null {
+  if (!WORDPRESS_FIELD_NAME.test(key)) return `de veldnaam "${key.replace(/[^\x20-\x7e]/g, "?")}" heeft een teken dat PHP anders kan lezen dan loep`;
+  if (WORDPRESS_STEERING_KEY.test(phpBaseOf(key)) || WORDPRESS_STEERING_KEY.test(leafOf(key))) return `het veld "${key}" kan zeggen wat de handler doet`;
+  return null;
+}
+
 function wordpressAjax(body: string, path?: string): Verdict {
   if (path === undefined || !WORDPRESS_AJAX_PATH.test(path)) return no("het adres is niet /wp-admin/admin-ajax.php van WordPress");
-  const parsed = formOf(body);
-  if (!Array.isArray(parsed)) return parsed;
-  const actions = parsed.filter(([key]) => key === "action");
-  if (actions.length !== 1) return no('het verzoek heeft niet precies één veld "action", en daaraan alleen is te zien wat WordPress ermee doet');
-  const action = actions[0]![1].trim();
-  if (!/^[A-Za-z0-9_-]{1,64}$/.test(action)) return no('het veld "action" is geen korte naam van een handler');
-  const words = formWords(action);
-  const writes = words.find((word) => WORDPRESS_WRITE_ACTION_WORDS.has(word));
-  if (writes) return no(`de actie "${action}" bevat "${writes}", en dat wijst op een verzoek dat iets doet`);
-  if (!words.some((word) => WORDPRESS_READ_ACTION_WORDS.has(word))) return no(`de actie "${action}" noemt geen filter, sortering, pagina of zoekvraag: loep kan niet zien dat ze alleen iets opvraagt`);
-  const unknown = words.slice(1).find((word) => !WORDPRESS_READ_ACTION_WORDS.has(word) && !WORDPRESS_LIST_WORDS.has(word));
-  if (unknown) return no(`de actie "${action}" bevat "${unknown}", en loep kan niet zien dat dat woord alleen om een lijst vraagt`);
+  if (parseJson(body).ok) return no("de body is JSON en geen formulier");
+  const parsed = urlEncodedFields(body);
+  if (parsed === null) return no("de body is geen formulier als application/x-www-form-urlencoded");
+  if (parsed.length > FORM_FIELDS_MAX) return no(`het formulier heeft meer dan ${FORM_FIELDS_MAX} velden`);
+  const actions = parsed.filter(([key]) => phpBaseOf(key).toLowerCase() === "action");
+  if (actions.length !== 1 || actions[0]![0] !== "action") return no('het verzoek heeft niet precies één veld "action", en daaraan alleen is te zien wat WordPress ermee doet');
+  const action = actions[0]![1];
+  if (!WORDPRESS_READ_ACTIONS.has(action)) return no(`de actie "${action.slice(0, 64)}" staat niet in de lijst van acties van plugins die alleen een lijst opvragen`);
   const rest: [string, string][] = [];
   for (const [key, value] of parsed) {
+    const refusal = wordpressFieldRefusal(key);
+    if (refusal) return no(refusal);
     if (key === "action") continue;
     if (WORDPRESS_NONCE_KEY.test(key)) {
       if (!/^[A-Za-z0-9]{0,32}$/.test(value)) return no(`het veld "${key}" is geen nonce van WordPress`);
@@ -747,7 +737,7 @@ export const SEARCH_SERVICES: Record<SearchServiceId, SearchService> = {
   wordpressajax: {
     id: "wordpressajax",
     nameNl: "een filter of sortering via admin-ajax.php van WordPress",
-    formNl: 'een formulier aan /wp-admin/admin-ajax.php van WordPress met precies één veld "action", waarvan een woord om een lijst vraagt (zoals filter, sort, page, load_more of search) en geen woord iets doet (zoals submit, comment, vote, login, contact of view). Elk ander woord van de actie dan het eerste (het voorvoegsel van een plugin) noemt een lijst of wat erin staat, zoals posts of items. Verder alleen de nonce van WordPress, lege velden en wat ook in een filter of sortering als formulier mag staan. Zoals een lijst die met action=filter de resultaten van een andere categorie laadt',
+    formNl: 'een formulier als application/x-www-form-urlencoded aan /wp-admin/admin-ajax.php van WordPress met precies één veld "action", dat precies een actie noemt van een plugin die alleen een lijst opvraagt (alm_get_posts van Ajax Load More). Veldnamen van letters, cijfers, _, - en haken, geen veld als op, submit, task, do, method of een naam die met __ begint, en verder alleen de nonce van WordPress, lege velden en wat ook in een filter of sortering als formulier mag staan. Zoals Ajax Load More die de volgende pagina van een lijst laadt',
     recognise: wordpressAjax,
   },
 };

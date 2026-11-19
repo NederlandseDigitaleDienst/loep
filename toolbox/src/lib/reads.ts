@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { appendRunLine, readJson, writeJson } from "./canonical.ts";
-import { recogniseSearch, SEARCH_SERVICE_IDS, SEARCH_SERVICES, type SearchServiceId } from "./searchbody.ts";
+import { recogniseSearch, SEARCH_SERVICE_IDS, SEARCH_SERVICES, wordpressFieldRefusal, type SearchServiceId } from "./searchbody.ts";
 
 /**
  * A request that only reads although its method is not GET: a question to a search service,
@@ -192,22 +192,34 @@ export function readDecision(rules: readonly ReadRequest[], method: string, url:
   const rule = rules.length > 0 ? readRuleFor(rules, method, url, headers) : null;
   if (!rule) return null;
   if (method.toUpperCase() === "OPTIONS") return { rule, pass: true };
-  // WordPress takes `action` from the query as well as from the body, and a body PHP does not parse as a form leaves
-  // only the one in the query: then the action loep read in the body is not the handler that answers.
-  if (rule.service === "wordpressajax" && actionInQuery(url)) {
-    return { rule, pass: false, reasonNl: `past bij leesverzoek "${rule.id}", maar het adres noemt een "action" in de query, en dan beslist WordPress misschien niet aan de actie in de body` };
+  if (rule.service === "wordpressajax") {
+    const refused = wordpressRefusal(url, headers);
+    if (refused) return { rule, pass: false, reasonNl: `past bij leesverzoek "${rule.id}", maar ${refused}` };
   }
   const verdict = recogniseSearch(rule.service, body, pathOf(url), rule.terms);
   return verdict.search ? { rule, pass: true } : { rule, pass: false, reasonNl: `past bij leesverzoek "${rule.id}", maar de body is geen zoekvraag aan ${SEARCH_SERVICES[rule.service].nameNl}: ${verdict.reasonNl}` };
 }
 
-/** Whether the query of an address has a field PHP reads as `action` (it drops leading spaces of a name), or the address is none. */
-function actionInQuery(url: string): boolean {
+/**
+ * Why a request to admin-ajax.php is held back before its body is read, or null. PHP parses the body as the
+ * Content-Type of the request says, not as loep reads it, so only a form whose header loep sees passes. WordPress
+ * also reads `action` and every other field from the query, so the query may hold no action and nothing that steers.
+ */
+function wordpressRefusal(url: string, headers: Record<string, string>): string | null {
+  const type = Object.entries(headers).find(([name]) => name.toLowerCase() === "content-type")?.[1];
+  if (type === undefined || !/^\s*application\/x-www-form-urlencoded\s*(?:;[^,]*)?$/i.test(type)) return "het verzoek is volgens de kop Content-Type geen formulier als application/x-www-form-urlencoded";
+  let keys: string[];
   try {
-    return [...new URL(url).searchParams.keys()].some((key) => /^\s*action(?:$|\[)/.test(key));
+    keys = [...new URL(url).searchParams.keys()];
   } catch {
-    return true;
+    return "het adres is geen geldig adres";
   }
+  if (keys.some((key) => /action/i.test(key))) return 'het adres noemt een "action" in de query, en dan beslist WordPress misschien niet aan de actie in de body';
+  for (const key of keys) {
+    const refusal = wordpressFieldRefusal(key);
+    if (refusal) return `in de query: ${refusal}`;
+  }
+  return null;
 }
 
 /** The pathname of an address, or undefined when it is none. */
