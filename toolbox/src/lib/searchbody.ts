@@ -6,7 +6,7 @@
  * search and change something.
  */
 
-export const SEARCH_SERVICE_IDS = ["typesense", "algolia", "elasticsearch", "meilisearch", "graphql", "searchui", "searchterm", "searchform", "filterform"] as const;
+export const SEARCH_SERVICE_IDS = ["typesense", "algolia", "elasticsearch", "meilisearch", "graphql", "searchui", "searchterm", "searchform", "filterform", "wordpressajax"] as const;
 /** The services recognised by the search terms of the run: a rule of these gets the terms when it is approved. */
 export const TERM_SERVICES: readonly SearchServiceId[] = ["searchterm", "searchform"];
 export type SearchServiceId = (typeof SEARCH_SERVICE_IDS)[number];
@@ -605,11 +605,30 @@ const namesFilter = (key: string): boolean => {
  * WebForms) has to be such a field too: under that name any button of the page can be pressed.
  */
 function filterForm(body: string): Verdict {
+  const parsed = formOf(body);
+  if (!Array.isArray(parsed)) return parsed;
+  const fields = filterFields(parsed);
+  if (!("choices" in fields)) return fields;
+  if (fields.choices === 0) return no("het formulier heeft geen ingevuld veld dat als een filter, een sortering of een pagina heet");
+  return yes;
+}
+
+/** The fields of a form body, or why it is no form a filter would send. */
+function formOf(body: string): [string, string][] | Verdict {
   if (parseJson(body).ok) return no("de body is JSON en geen formulier");
   const parsed = urlEncodedFields(body) ?? multipartFields(body);
   if (parsed === "file") return no("het formulier stuurt een bestand mee, en een filter doet dat niet");
   if (parsed === null) return no("de body is geen formulier (application/x-www-form-urlencoded of multipart/form-data)");
   if (parsed.length > FORM_FIELDS_MAX) return no(`het formulier heeft meer dan ${FORM_FIELDS_MAX} velden`);
+  return parsed;
+}
+
+/**
+ * Whether every field with a value is state of the framework, a button, or a short choice in a
+ * field named as a filter, a sort order or a page (or one of `names`), with the number of such
+ * choices; otherwise why not.
+ */
+function filterFields(parsed: readonly [string, string][], names: ReadonlySet<string> = new Set()): { choices: number } | Verdict {
   let choices = 0;
   for (const [key, value] of parsed) {
     if (EMAIL_LIKE.test(value)) return no(`het veld "${key}" bevat iets dat op een e-mailadres lijkt, en een filter heeft dat niet`);
@@ -628,12 +647,62 @@ function filterForm(body: string): Verdict {
       continue;
     }
     if (TERM_WRITE_KEYS.has(bare) || TERM_WRITE_KEYS.has(leaf)) return no(`het veld "${key}" is ingevuld, en dat wijst op een verzoek dat iets wijzigt of persoonsgegevens meestuurt`);
-    if (!namesFilter(key)) return no(`het veld "${key}" is ingevuld en heet niet als een filter, een sortering of een pagina: loep kan niet zien dat het alleen iets opvraagt`);
+    if (!namesFilter(key) && !names.has(leaf)) return no(`het veld "${key}" is ingevuld en heet niet als een filter, een sortering of een pagina: loep kan niet zien dat het alleen iets opvraagt`);
     if (value.length > FORM_CHOICE_MAX || value.trim().split(/\s+/).length > FORM_CHOICE_WORDS) return no(`het veld "${key}" heeft meer dan ${FORM_CHOICE_WORDS} woorden of ${FORM_CHOICE_MAX} tekens: dat is tekst van een bezoeker, geen keuze`);
     choices += 1;
   }
-  if (choices === 0) return no("het formulier heeft geen ingevuld veld dat als een filter, een sortering of een pagina heet");
-  return yes;
+  return { choices };
+}
+
+// WordPress sends what a plugin or theme asks for without a page load to one address, `/wp-admin/admin-ajax.php`,
+// and the field `action` says which handler answers. That address serves every handler, also the ones that send a
+// form, place a comment, log in or count a view, so the address says nothing and only the action can tell. This rule
+// holds for the CMS and not for one site: an action passes only when one of its words asks for a list (filter, sort,
+// page, load more, search) and none of them does something. Whatever else is filled in has to be what `filterform`
+// accepts, so a filter that carries a name, an e-mail address or text of a visitor stays held back.
+const WORDPRESS_AJAX_PATH = /(?:^|\/)wp-admin\/admin-ajax\.php$/;
+/** The words of an action that ask for a list: at least one of these. */
+const WORDPRESS_READ_ACTION_WORDS = new Set([
+  "filter", "filters", "filteren", "facet", "facets", "facetwp", "sort", "sorteer", "sorteren", "page", "paged", "paginate", "pagination", "pagina",
+  "load", "loadmore", "more", "meer", "laad", "fetch", "get", "query", "search", "zoek", "zoeken", "refresh", "results", "resultaten",
+]);
+/** The words of an action that do something, on top of what a choice of a filter must not say: one of these and it stays held back. */
+const WORDPRESS_WRITE_ACTION_WORDS = new Set([
+  ...FORM_ACTION_WORDS, "submit", "upload", "edit", "set", "reset", "insert", "import", "comment", "comments", "reactie", "review", "rate", "rating", "poll",
+  "cart", "checkout", "basket", "winkelwagen", "booking", "reserve", "reserveer", "reservering", "afspraak", "appointment",
+  "contact", "form", "formulier", "mail", "email", "newsletter", "nieuwsbrief", "signup", "signin", "signout", "password", "wachtwoord", "user", "account", "profile",
+  "heartbeat", "view", "views", "count", "counter", "hit", "hits", "track", "tracking", "log", "stats", "statistics", "session", "cookie", "cookies", "consent", "dismiss", "notice",
+]);
+/** The fields that carry the nonce of WordPress against forged requests: state of the CMS, short and with no input of the visitor. */
+const WORDPRESS_NONCE_KEY = /^(?:nonce|security|_ajax_nonce|_wpnonce|wpnonce)$/i;
+/** Names WordPress itself gives to a choice of a list, as in its query variables. */
+const WORDPRESS_FILTER_NAMES = new Set(["paged", "cat", "cats", "taxonomy", "term", "terms"]);
+
+function wordpressAjax(body: string, path?: string): Verdict {
+  if (path === undefined || !WORDPRESS_AJAX_PATH.test(path)) return no("het adres is niet /wp-admin/admin-ajax.php van WordPress");
+  const parsed = formOf(body);
+  if (!Array.isArray(parsed)) return parsed;
+  const actions = parsed.filter(([key]) => key === "action");
+  if (actions.length !== 1) return no('het verzoek heeft niet precies één veld "action", en daaraan alleen is te zien wat WordPress ermee doet');
+  const action = actions[0]![1].trim();
+  if (!/^[A-Za-z0-9_-]{1,64}$/.test(action)) return no('het veld "action" is geen korte naam van een handler');
+  const words = formWords(action);
+  const writes = words.find((word) => WORDPRESS_WRITE_ACTION_WORDS.has(word));
+  if (writes) return no(`de actie "${action}" bevat "${writes}", en dat wijst op een verzoek dat iets doet`);
+  if (!words.some((word) => WORDPRESS_READ_ACTION_WORDS.has(word))) return no(`de actie "${action}" noemt geen filter, sortering, pagina of zoekvraag: loep kan niet zien dat ze alleen iets opvraagt`);
+  const rest: [string, string][] = [];
+  for (const [key, value] of parsed) {
+    if (key === "action") continue;
+    if (WORDPRESS_NONCE_KEY.test(key)) {
+      if (!/^[A-Za-z0-9]{0,32}$/.test(value)) return no(`het veld "${key}" is geen nonce van WordPress`);
+      continue;
+    }
+    // WordPress names the direction of a sort order "order"; elsewhere that name points at an order.
+    if (key === "order" && /^(?:asc|desc)$/i.test(value)) continue;
+    rest.push([key, value]);
+  }
+  const fields = filterFields(rest, WORDPRESS_FILTER_NAMES);
+  return "choices" in fields ? yes : fields;
 }
 
 export const SEARCH_SERVICES: Record<SearchServiceId, SearchService> = {
@@ -660,6 +729,12 @@ export const SEARCH_SERVICES: Record<SearchServiceId, SearchService> = {
     nameNl: "een filter of sortering als formulier",
     formNl: "een formulier (application/x-www-form-urlencoded of multipart/form-data) zonder zoekterm, waarin elk ingevuld veld een korte keuze is in een veld dat als een filter, een sortering of een pagina heet (zoals jaar, categorie, sort of page), de tekst van een knop, of een veld dat het framework zelf toevoegt. Minstens één zo'n keuze. Geen bestand, geen e-mailadres, geen veld met een andere naam, en geen keuze of knop die iets doet (zoals stemmen, opslaan of verwijderen). Zoals een lijst die met een POST naar de eigen pagina de resultaten van een ander jaar laadt",
     recognise: filterForm,
+  },
+  wordpressajax: {
+    id: "wordpressajax",
+    nameNl: "een filter of sortering via admin-ajax.php van WordPress",
+    formNl: 'een formulier aan /wp-admin/admin-ajax.php van WordPress met precies één veld "action", waarvan een woord om een lijst vraagt (zoals filter, sort, page, load_more of search) en geen woord iets doet (zoals submit, comment, vote, login, contact of view). Verder alleen de nonce van WordPress, lege velden en wat ook in een filter of sortering als formulier mag staan. Zoals een lijst die met action=filter de resultaten van een andere categorie laadt',
+    recognise: wordpressAjax,
   },
 };
 

@@ -48,7 +48,7 @@ test("a read request names one origin, a narrow path and the search service whos
   };
   refused({ method: "PUT" }, /method moet "POST" zijn/);
   refused({ method: "GET" }, /GET en HEAD gaan al door/);
-  refused({ service: "solr" }, /service moet een van typesense, algolia, elasticsearch, meilisearch, graphql, searchui, searchterm, searchform, filterform zijn/);
+  refused({ service: "solr" }, /service moet een van typesense, algolia, elasticsearch, meilisearch, graphql, searchui, searchterm, searchform, filterform, wordpressajax zijn/);
   refused({ service: undefined }, /service moet een van/);
   refused({ origin: "https://zoek.example.nl/" }, /alleen schema, host en poort/);
   refused({ origin: "https://*.example.nl" }, /origin/);
@@ -113,6 +113,11 @@ test("a request passes only when a rule covers its address and its body is a que
   assert.equal(readDecision(rules, "OPTIONS", at, { "access-control-request-method": "DELETE" }, null), null);
   assert.equal(readRuleFor(rules, "OPTIONS", at), null);
   assert.equal(readDecision([], "POST", at, {}, QUESTION), null);
+  // WordPress: the rule names admin-ajax.php, and the action of each request decides (#630).
+  const ajax = [rule({ origin: "https://www.example.nl", path: "/wp-admin/admin-ajax.php", service: "wordpressajax" })];
+  const ajaxAt = "https://www.example.nl/wp-admin/admin-ajax.php";
+  assert.equal(readDecision(ajax, "POST", ajaxAt, {}, "action=filter&cat=3")?.pass, true, "a filter to admin-ajax.php");
+  assert.equal(readDecision(ajax, "POST", ajaxAt, {}, "action=submit_form&naam=Test")?.pass, false, "a form sent to the same address");
   assert.equal(readsAllowedNl([]), null);
   assert.equal(readsAllowedNl(rules), `één adres is toegelaten voor leesverzoeken: POST https://zoek.example.nl/1/indexes/*/queries, zoekvraag aan Algolia (${REASON.slice(0, -1)}). Een verzoek daarheen ging alleen door als loep de body herkende als zoekvraag aan die dienst; elk ander verzoek dat iets kan wijzigen is tegengehouden`);
 });

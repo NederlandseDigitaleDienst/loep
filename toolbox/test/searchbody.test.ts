@@ -153,6 +153,11 @@ const CASES: Record<SearchServiceId, { search: [string, string][]; not: [string,
     search: [["a year chosen in a list", "jaar=2025"]],
     not: [["a form with a field that is no filter", "q=afval", /heet niet als een filter/]],
   },
+  // Recognised only on the address of WordPress; see the tests below.
+  wordpressajax: {
+    search: [],
+    not: [["any form on another address", "action=filter&cat=3", /niet \/wp-admin\/admin-ajax\.php/]],
+  },
 };
 
 for (const service of SEARCH_SERVICE_IDS) {
@@ -339,4 +344,54 @@ test("a filter or sort order posted to a page: every field with a value is named
   // A search form is not a filter: the term is a field of another name, and only the term of the run lets it through.
   not("a search form", form({ q: "afvalkalender", page: "1" }), /het veld "q" is ingevuld en heet niet als een filter/);
   assert.deepEqual(searchServicesOf(form({ jaar: "2025", sort: "datum" }), "/agenda"), ["filterform"]);
+});
+
+test("a filter of WordPress posted to admin-ajax.php: the action asks for a list and does nothing, and every other field is a choice of a filter (#630)", () => {
+  const form = (fields: [string, string][]): string => new URLSearchParams(fields).toString();
+  const AJAX = "/wp-admin/admin-ajax.php";
+  const yes = (name: string, body: string, path = AJAX): void => assert.deepEqual(recogniseSearch("wordpressajax", body, path), { search: true }, name);
+  const not = (name: string, body: string, reason: RegExp, path = AJAX): void => {
+    const verdict = recogniseSearch("wordpressajax", body, path);
+    assert.equal(verdict.search, false, `${name} must not count as a read`);
+    if (!verdict.search) assert.match(verdict.reasonNl, reason, name);
+  };
+  yes("a filter with a category and a nonce", form([["action", "filter"], ["cat", "3"], ["nonce", "a1b2c3d4e5"]]));
+  yes("only the action", form([["action", "filter"]]));
+  yes("load more, with the page and the sort order of WordPress", form([["action", "load_more_posts"], ["paged", "2"], ["orderby", "date"], ["order", "DESC"], ["security", "0f1e2d3c4b"]]));
+  yes("a filter with terms of a taxonomy, and empty fields", form([["action", "ajaxFilterPosts"], ["taxonomy", "onderwerp"], ["term[]", "wonen"], ["term[]", "zorg"], ["s", ""]]));
+  yes("WordPress in a subdirectory", form([["action", "get_results"], ["jaar", "2025"]]), "/nieuws/wp-admin/admin-ajax.php");
+  yes("multipart/form-data", '--b1\r\nContent-Disposition: form-data; name="action"\r\n\r\nfacetwp_refresh\r\n--b1--\r\n');
+  // The filter of the page itself is no read to admin-ajax.php: the action is a field filterform does not know.
+  assert.equal(recogniseSearch("filterform", form([["action", "filter"], ["cat", "3"]]), AJAX).search, false);
+  assert.deepEqual(searchServicesOf(form([["action", "filter"], ["cat", "3"]]), AJAX), ["wordpressajax"]);
+  assert.deepEqual(searchServicesOf(form([["action", "filter"], ["cat", "3"]]), "/agenda"), []);
+
+  // The same address serves every handler: an action that sends, writes, logs in or counts stays held back.
+  not("a contact form", form([["action", "contact_form_submit"], ["naam", "Test"]]), /bevat "contact"/);
+  not("a comment", form([["action", "post_comment"], ["comment", "Mooi"]]), /bevat "comment"/);
+  not("a subscription to a newsletter that names a filter", form([["action", "filter_subscribe"], ["cat", "3"]]), /bevat "subscribe"/);
+  not("a log in", form([["action", "ajax_login"], ["username", "test"]]), /bevat "login"/);
+  not("an order", form([["action", "add_to_cart"], ["product_id", "12"]]), /bevat "add"/);
+  not("a poll", form([["action", "poll_vote"], ["answer", "2"]]), /bevat "poll"/);
+  not("a counter of views", form([["action", "get_post_views"], ["post_id", "12"]]), /bevat "views"/);
+  not("the heartbeat of WordPress, which saves drafts", form([["action", "heartbeat"], ["data[wp-refresh-post-lock][post_id]", "12"]]), /bevat "heartbeat"/);
+  not("a form that loads more and saves", form([["action", "load_more_save"]]), /bevat "save"/);
+  // An action that does not say it asks for a list: in doubt, held back.
+  not("an action of its own name", form([["action", "my_handler"], ["cat", "3"]]), /noemt geen filter/);
+  not("no action", form([["cat", "3"]]), /precies één veld "action"/);
+  not("two actions", form([["action", "filter"], ["action", "vote"]]), /precies één veld "action"/);
+  not("an action that is no name", form([["action", "filter posts now"]]), /geen korte naam/);
+  // The other fields are held to what a filter may carry.
+  not("a name next to a filter", form([["action", "filter"], ["cat", "3"], ["naam", "Test"]]), /het veld "naam" is ingevuld/);
+  not("an e-mail address", form([["action", "filter"], ["cat", "3"], ["mail", "test@example.nl"]]), /e-mailadres/);
+  not("a field that is no filter", form([["action", "filter"], ["bericht_id", "12"]]), /heet niet als een filter/);
+  not("a choice that does something", form([["action", "filter"], ["type", "delete"]]), /heeft de waarde "delete"/);
+  not("text of a visitor", form([["action", "filter"], ["filter", "ik wil graag weten wanneer de container komt"]]), /meer dan 4 woorden/);
+  not("a nonce that carries more", form([["action", "filter"], ["nonce", "abc def@example.nl"]]), /e-mailadres|geen nonce/);
+  not("order with another value than a direction", form([["action", "filter"], ["order", "12"]]), /het veld "order" is ingevuld/);
+  not("a file", '--b1\r\nContent-Disposition: form-data; name="action"\r\n\r\nfilter\r\n--b1\r\nContent-Disposition: form-data; name="bijlage"; filename="a.pdf"\r\n\r\n%PDF\r\n--b1--\r\n', /bestand/);
+  not("JSON", json({ action: "filter" }), /JSON en geen formulier/);
+  // Another address: a POST to the page itself or to the REST API of WordPress is not this rule.
+  not("the REST API", form([["action", "filter"]]), /niet \/wp-admin\/admin-ajax\.php/, "/wp-json/wp/v2/posts");
+  not("a look-alike path", form([["action", "filter"]]), /niet \/wp-admin\/admin-ajax\.php/, "/wp-admin/admin-ajax.php.bak");
 });
