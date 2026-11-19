@@ -32,6 +32,8 @@ Het antwoord geeft een `key`: de sleutel van je sessie. Moet je de sessie later 
 
 Daarna is elk commando: `node {{cli}} session <commando> --run {{run}} --session {{session}}`
 
+Geef elk commando voluit en als een eigen aanroep van je shell: geen shell-functie, geen lus, geen shellvariabele en niet meer dan één commando per aanroep. Een omgeving met bewaking weigert een samengestelde regel die ze niet kan nalopen.
+
 {{workRules}}
 
 Geef in elk commando je eigen sessienaam mee, `--session {{session}}`: voluit zoals hierboven, ook in een hulpscript. Een script met de sessienaam van een ander erin laat jou onder zijn sessie meten, en een `open` van jou gooit dan zijn toestand weg.

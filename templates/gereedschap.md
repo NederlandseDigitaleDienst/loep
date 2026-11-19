@@ -8,15 +8,13 @@ Vul bij `--model` de exacte naam en versie in van het model waarop je draait, zo
 
 Het antwoord geeft een `key`: de sleutel van je sessie. Moet je de sessie later opnieuw starten, bijvoorbeeld na een herstart, zet dan `--key <key>` achter hetzelfde startcommando. Zonder die sleutel weigert `session start` een sessie die al loopt. Krijg je die weigering bij je eerste start, dan meet er al een andere agent onder jouw sessienaam: meet dan niet verder en meld dat in je antwoord.
 
-Zet daarna deze regel vooraan in elke shell-aanroep; dan is elk commando `loep <commando>`:
+Daarna is elk commando: `node {{cli}} session <commando> --run {{run}} --session {{session}}`
 
-```
-loep() { node {{cli}} session "$@" --run {{run}} --session {{session}}; }
-```
+Geef elk commando voluit en als een eigen aanroep van je shell: geen shell-functie, geen lus, geen shellvariabele en niet meer dan één commando per aanroep. Een omgeving met bewaking weigert een samengestelde regel die ze niet kan nalopen. Waar de procedure of deze opdracht `loep <commando>` schrijft, is dat de korte schrijfwijze van dat volledige commando: `loep` zelf is geen programma.
 
 {{workRules}}
 
-Geef in elk commando je eigen sessienaam mee, `--session {{session}}`: met de regel hierboven of voluit, ook in een hulpscript. Een script met de sessienaam van een ander erin laat jou onder zijn sessie meten, en een `open` van jou gooit dan zijn toestand weg.
+Geef in elk commando je eigen sessienaam mee, `--session {{session}}`: voluit zoals hierboven, ook in een hulpscript. Een script met de sessienaam van een ander erin laat jou onder zijn sessie meten, en een `open` van jou gooit dan zijn toestand weg.
 
 | Commando | Wat het doet |
 |---|---|

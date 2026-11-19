@@ -238,7 +238,7 @@ flowchart TD
 
 ## 5. Een sessiecommando van begin tot eind
 
-Op de opdrachtregel is een sessiecommando `session <commando>`: via de `bin` van het pakket dus `loep session open P01`, `loep session look` en `loep session contrast 3`, naast `session start`, `session stop`, `session list` en `session extend`. Geen sessiecommando heet zoals een van die vier; een test bewaakt dat. Een agent typt korter. Zijn opdracht geeft hem een shellfunctie die `session`, de run en zijn sessienaam invult, zodat hij `loep contrast 3` schrijft. Zo staan de commando's ook in de procedures.
+Op de opdrachtregel is een sessiecommando `session <commando>`: via de `bin` van het pakket dus `loep session open P01`, `loep session look` en `loep session contrast 3`, naast `session start`, `session stop`, `session list` en `session extend`. Geen sessiecommando heet zoals een van die vier; een test bewaakt dat. De procedures schrijven korter: `loep contrast 3`. Een agent geeft het commando voluit, met `session`, de run en de eigen sessienaam, en één per aanroep: de opdracht schrijft dat voor, omdat een omgeving met bewaking een shellfunctie of een samengestelde regel kan weigeren.
 
 ```mermaid
 sequenceDiagram

@@ -58,7 +58,7 @@ Een meetblad zegt iets over loep en niets over de site. Er staan regelnummers, c
    node <map>/check.mjs
    ```
 
-   loep zegt hoeveel meetbladen nieuw zijn, hoeveel het bijwerkte en hoeveel er al ongewijzigd stonden. Een onderzoek dat eerder is ingestuurd, houdt zijn nummer. Het wordt alleen bijgewerkt als het daarna opnieuw is geëvalueerd, gewogen of getekend. `check.mjs` telt alle meetbladen in de verzameling, ook die van anderen. Faalt de controle, stuur dan niets in, laat zien wat ze meldt en zet de map terug met `git checkout -- meetbladen && git clean -f meetbladen`.
+   loep zegt hoeveel meetbladen nieuw zijn, hoeveel het bijwerkte en hoeveel er al ongewijzigd stonden. Een onderzoek dat eerder is ingestuurd, houdt zijn nummer. Het wordt alleen bijgewerkt als het daarna opnieuw is geëvalueerd, gewogen of getekend. `check.mjs` telt alle meetbladen in de verzameling, ook die van anderen. Faalt de controle, stuur dan niets in, laat zien wat ze meldt en zet de map terug met `git checkout -- meetbladen` en daarna, als eigen commando, `git clean -f meetbladen`.
 
 6. **Stuur in**, vanuit de map van de verzameling. Zijn er geen nieuwe en geen bijgewerkte meetbladen, dan valt er niets in te sturen: sla deze stap over. In het bericht staan de aantallen van loep uit stap 5:
 

@@ -44,7 +44,7 @@ const PROCEDURES = readdirSync(join(ROOT, "procedures")).filter((file) => file.e
 /**
  * What is wrong with the calls of the toolbox in one piece of code. The toolbox is called as
  * `cli.ts`, as the variable LOEP of a skill, as `{{cli}}` in a task, or as `loep` at the start
- * of a line: the installed name, or the shell function of an agent that stands for `session`.
+ * of a line: the installed name, or the short form a procedure writes for `session <command>`.
  */
 function wrongCalls(code: string): string[] {
   const problems: string[] = [];
@@ -113,9 +113,9 @@ test("the tasks and the procedures an agent works from call the toolbox by comma
   const problems: string[] = [];
   for (const file of [...TEMPLATES, ...PROCEDURES]) for (const code of codeOf(read(file))) for (const problem of wrongCalls(code)) problems.push(`${file}: ${problem}`);
   assert.deepEqual(problems, []);
-  // The shell function an agent types its commands with stands for `session`, and the explorer is told the same form.
-  assert.match(read("templates/gereedschap.md"), /^loep\(\) \{ node \{\{cli\}\} session "\$@" /m);
-  assert.match(read("templates/verken.md"), /`node \{\{cli\}\} session <commando> /);
+  // Every agent is told the command in full, and that `loep <command>` in a procedure is short for it (#652).
+  for (const file of ["templates/gereedschap.md", "templates/verken.md"]) assert.match(read(file), /`node \{\{cli\}\} session <commando> /, file);
+  assert.match(read("templates/gereedschap.md"), /`loep <commando>` schrijft, is dat de korte schrijfwijze van dat volledige commando/);
 });
 
 test("the task of the explorer ends a recipe while the part is there, and makes what removes it a part of its own (#395)", () => {
