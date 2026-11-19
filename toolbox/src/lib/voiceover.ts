@@ -1,5 +1,6 @@
 import { execFile, spawn } from "node:child_process";
 import { closeSync, mkdirSync, openSync, readFileSync, rmSync, writeFileSync, writeSync } from "node:fs";
+import { createConnection } from "node:net";
 import { homedir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -31,7 +32,47 @@ export interface Guest {
   exec(command: string, seconds: number): Promise<string | null>;
   /** Pull the plug: only when a clean shutdown in the guest did not work. */
   halt(): Promise<void>;
+  /** Whether this process can reach the guest at all, asked when the guest gives no answer over ssh. A guest without it is not asked. */
+  reach?(): Promise<Reach>;
 }
+
+/** What a connection from this process to the ssh port of the guest gives, and what lume says of the guest at that moment. */
+export interface Reach {
+  state: GuestState;
+  /** The address `lume get` gives; null when it gives none. */
+  address: string | null;
+  /** "open" when the connection was made, "timeout", or the code of the error, such as EHOSTUNREACH or ECONNREFUSED. Null without an address. */
+  port22: string | null;
+}
+
+/**
+ * The host keeps this process from the guest: lume says the guest runs, and a connection to it
+ * ends at once with "No route to host". macOS does that to a process without access to the
+ * local network; the same guest answers a process that has it (#657).
+ */
+export const hostRefuses = (reach: Reach | undefined): reach is Reach => reach?.state === "running" && reach.port22 === "EHOSTUNREACH";
+
+/** What the commands of lume and a connection to the guest are made with; a test passes its own. */
+export interface LumeTools {
+  lume(args: string[], options: { timeout: number }): Promise<{ stdout: string }>;
+  /** Try a TCP connection: "open", "timeout", or the code of the error. */
+  connect(address: string, port: number, seconds: number): Promise<string>;
+}
+
+export function connectTo(address: string, port: number, seconds: number): Promise<string> {
+  return new Promise((resolve) => {
+    const socket = createConnection({ host: address, port });
+    const done = (result: string): void => {
+      socket.destroy();
+      resolve(result);
+    };
+    socket.setTimeout(seconds * 1000, () => done("timeout"));
+    socket.once("connect", () => done("open"));
+    socket.once("error", (error) => done((error as NodeJS.ErrnoException).code ?? "error"));
+  });
+}
+
+const LUME_TOOLS: LumeTools = { lume: (args, options) => run("lume", args, options), connect: connectTo };
 
 export const VM_NAME = (): string => process.env.LOEP_VOICEOVER_VM ?? "loep-voiceover";
 export const GUEST_DIR = "loep-voiceover";
@@ -50,16 +91,24 @@ export function framed(output: string): string | null {
 }
 
 /** The virtual Mac through the lume command. */
-export function lumeGuest(name = VM_NAME()): Guest {
+export function lumeGuest(name = VM_NAME(), tools: LumeTools = LUME_TOOLS): Guest {
+  /** What `lume get` says: the state, and the address of a guest that has one. */
+  const get = async (): Promise<{ state: GuestState; address: string | null }> => {
+    try {
+      const { stdout } = await tools.lume(["get", name, "--format", "json"], { timeout: 20_000 });
+      const found = (JSON.parse(stdout) as { status?: string; ipAddress?: string | null }[])[0];
+      return { state: found?.status === "running" ? "running" : "stopped", address: found?.ipAddress || null };
+    } catch (error) {
+      return { state: (error as NodeJS.ErrnoException).code === "ENOENT" ? "no-lume" : "absent", address: null };
+    }
+  };
   return {
     async state() {
-      try {
-        const { stdout } = await run("lume", ["get", name, "--format", "json"], { timeout: 20_000 });
-        const found = (JSON.parse(stdout) as { status?: string }[])[0];
-        return found?.status === "running" ? "running" : "stopped";
-      } catch (error) {
-        return (error as NodeJS.ErrnoException).code === "ENOENT" ? "no-lume" : "absent";
-      }
+      return (await get()).state;
+    },
+    async reach() {
+      const { state, address } = await get();
+      return { state, address, port22: address ? await tools.connect(address, 22, 5) : null };
     },
     async boot() {
       const logs = stateDir();
@@ -122,8 +171,8 @@ export interface GuestAnswer {
   marks?: { start: string | null; end: string | null };
 }
 
-/** `queueSeconds`: how long a reading waits for the virtual Mac before it gives up; `staleLockSeconds`: when a lock of another process counts as left behind. */
-export const LIMITS = { boots: 3, desktopSeconds: 240, calmSeconds: 600, calmLoad: 3, warmupSeconds: 900, readSeconds: 300, shutdownSeconds: 180, pollSeconds: 4, queueSeconds: 600, staleLockSeconds: 420 };
+/** `refusedAfterSeconds`: how long a guest that was just booted may be silent before a refused connection counts, since it has no network at first. `queueSeconds`: how long a reading waits for the virtual Mac before it gives up; `staleLockSeconds`: when a lock of another process counts as left behind. */
+export const LIMITS = { boots: 3, desktopSeconds: 240, calmSeconds: 600, calmLoad: 3, warmupSeconds: 900, readSeconds: 300, shutdownSeconds: 180, pollSeconds: 4, refusedAfterSeconds: 60, queueSeconds: 600, staleLockSeconds: 420 };
 
 const quoted = (text: string): string => `'${text.replace(/'/g, `'\\''`)}'`;
 
@@ -246,6 +295,8 @@ export interface VoiceoverStatus {
   bootedAt?: string;
   /** Only for a running guest that is not warm: why. No mark of a warm-up, or a mark of another boot. Kept so the cause can be found afterwards. */
   notWarm?: "noMark" | "otherBoot";
+  /** Only for a running guest that gave no answer, and that the host keeps this process from. */
+  refused?: Reach;
   /** A `start` that still runs. */
   starting?: { pid: number; since: string };
   lastStart?: StartRecord;
@@ -267,7 +318,10 @@ export async function voiceoverStatus(guest: Guest = lumeGuest(), name = VM_NAME
   if (state !== "running") return status;
   const answer = (await guest.exec(`echo "$(${BOOT_SECONDS}) $(${BOOT_ID}) $(cat ${WARM_MARK} 2>/dev/null)"`, 15))?.trim().split(/\s+/);
   const booted = Number(answer?.[0]);
-  if (!Number.isFinite(booted) || booted <= 0) return status;
+  if (!Number.isFinite(booted) || booted <= 0) {
+    const reach = answer ? undefined : await guest.reach?.();
+    return hostRefuses(reach) ? { ...status, refused: reach } : status;
+  }
   const [, boot, mark] = answer!;
   const warm = boot !== undefined && mark === boot;
   return { ...status, warm, bootedAt: new Date(booted * 1000).toISOString(), ...(warm ? {} : { notWarm: mark === undefined ? ("noMark" as const) : ("otherBoot" as const) }) };
@@ -279,6 +333,12 @@ export const isSetUp = (status: VoiceoverStatus): boolean => status.state === "r
 export const isReady = (status: VoiceoverStatus): boolean => status.state === "running" && status.warm === true;
 
 const hhmm = (iso: string): string => new Date(iso).toLocaleTimeString("nl-NL", { hour: "2-digit", minute: "2-digit" });
+/** Why the guest is out of reach and where to look, after "niet bereikbaar: ". */
+const refusedNl = (reach: Reach): string =>
+  `een verbinding naar poort 22 van ${reach.address} geeft "No route to host" (EHOSTUNREACH), terwijl lume meldt dat de virtuele Mac draait. De host weigert dus het verkeer naar de virtuele Mac. Kijk onder Systeeminstellingen > Privacy en beveiliging > Lokaal netwerk of het programma waarin loep draait daar aan staat`;
+/** What the port of ssh said for a guest that gave no answer, after "geen antwoord over ssh binnen ... seconden". */
+const reachNl = (reach: Reach | undefined): string =>
+  !reach ? "" : reach.address === null ? "; lume geeft geen adres voor de virtuele Mac" : reach.port22 === "open" ? `; poort 22 van ${reach.address} neemt wel een verbinding aan` : `; een verbinding naar poort 22 van ${reach.address} geeft ${reach.port22}`;
 const START_HINT = "loep voiceover start, op de achtergrond: 9 minuten, of 20 tot 30 met een herstart";
 
 /** The state in one sentence that follows "de virtuele Mac met VoiceOver". */
@@ -289,6 +349,7 @@ export function statusNl(status: VoiceoverStatus): string {
   if (status.starting) return `wordt gestart sinds ${hhmm(status.starting.since)} (loep voiceover start, proces ${status.starting.pid}): dat duurt 9 minuten, of 20 tot 30 met een herstart`;
   const failed = status.lastStart && !status.lastStart.ok ? `; de laatste start, om ${hhmm(status.lastStart.at)}, mislukte: ${status.lastStart.error ?? "onbekende reden"}` : "";
   if (status.state === "stopped") return `is ingericht maar draait niet${failed}. Start hem met ${START_HINT}`;
+  if (status.refused) return `draait maar is vanuit dit proces niet bereikbaar: ${refusedNl(status.refused)}`;
   if (!status.bootedAt) return `draait maar geeft geen antwoord: hij start nog op of hangt${failed}. Draai ${START_HINT}; die start hem zo nodig opnieuw`;
   const why = status.notWarm === "otherBoot" ? " (het merkteken van de opwarming is van een eerdere start)" : status.notWarm === "noMark" ? " (er is geen merkteken van een opwarming)" : "";
   return `draait sinds ${hhmm(status.bootedAt)} maar is niet opgewarmd${why}, dus VoiceOver leest niet voor${failed}. Draai ${START_HINT}; die warmt hem op of start hem opnieuw`;
@@ -322,6 +383,31 @@ export function voiceoverWarningNl(status: VoiceoverStatus, warming = false): st
 }
 
 /**
+ * Wait for the desktop of the guest, and tell three ends apart: the Dock runs, the guest answers
+ * but the Dock does not run, and the guest gives no answer over ssh at all. For the last one the
+ * port of ssh is tried; when the host keeps this process from the guest the wait ends at once,
+ * since no boot changes that.
+ */
+async function awaitDesktop(guest: Guest, clock: Clock, graceSeconds: number): Promise<{ found: "desktop" | "no-dock" | "no-answer" | "refused"; reach?: Reach }> {
+  const began = clock.now();
+  const deadline = began + LIMITS.desktopSeconds * 1000;
+  let answered = false;
+  for (;;) {
+    const answer = await guest.exec("pgrep -x Dock >/dev/null && echo desktop", 10);
+    if (answer?.trim() === "desktop") return { found: "desktop" };
+    if (answer !== null) answered = true;
+    const late = clock.now() >= deadline;
+    if (!answered && (late || clock.now() - began >= graceSeconds * 1000)) {
+      const reach = await guest.reach?.();
+      if (hostRefuses(reach)) return { found: "refused", reach };
+      if (late) return { found: "no-answer", ...(reach ? { reach } : {}) };
+    }
+    if (late) return { found: answered ? "no-dock" : "no-answer" };
+    await clock.sleep(3000);
+  }
+}
+
+/**
  * Boot the virtual Mac and warm it up, at most three boots. Each boot: wait for the desktop,
  * wait until the guest is calm, copy the files, speak three sentences, start and stop
  * VoiceOver once. A boot whose warm-up fails is shut down and done again.
@@ -348,12 +434,27 @@ export async function start(guest: Guest, progress: (line: string) => void, cloc
       if (how === "forced") say("afsluiten in de gast lukte niet: de virtuele Mac is hard gestopt");
       running = false;
     };
+    // A guest that ran already has its network; one booted here gets time to come up.
+    let grace = 0;
     if (!running) {
       say(`start ${boot} van hooguit ${LIMITS.boots}: de virtuele Mac start`);
       await guest.boot();
       running = true;
+      grace = LIMITS.refusedAfterSeconds;
     } else say("de virtuele Mac draait al maar is niet opgewarmd");
-    if (!(await until(clock, LIMITS.desktopSeconds, 3, async () => ((await guest.exec("pgrep -x Dock >/dev/null && echo desktop", 10))?.trim() === "desktop" ? true : null)))) {
+    const desktop = await awaitDesktop(guest, clock, grace);
+    if (desktop.found === "refused") {
+      // Not a matter of this boot: the guest is left as it is, and no other boot is tried.
+      const error = `de virtuele Mac is vanuit dit proces niet bereikbaar: ${refusedNl(desktop.reach!)}. De virtuele Mac is niet gestopt en niet opnieuw gestart, want dat lost dit niet op`;
+      attempts.push(`start ${boot}: de host weigert het verkeer naar de virtuele Mac`);
+      say(error);
+      return { ok: false, boots: boot, seconds: elapsed(), attempts, error };
+    }
+    if (desktop.found === "no-answer") {
+      await fail(`geen antwoord over ssh binnen ${LIMITS.desktopSeconds} seconden${reachNl(desktop.reach)}`);
+      continue;
+    }
+    if (desktop.found === "no-dock") {
       await fail(`geen bureaublad binnen ${LIMITS.desktopSeconds} seconden (logt de virtuele Mac automatisch in?)`);
       continue;
     }
