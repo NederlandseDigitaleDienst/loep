@@ -25,6 +25,8 @@ export interface PlannedStep {
   value?: string;
   /** For `speak --type`: what is done after filling in, as in the session (leave with Tab, or send with Enter). */
   after?: "Tab" | "Enter";
+  /** For `tab <n>`: how many times the key is pressed. */
+  times?: number;
   note?: string;
 }
 
@@ -34,6 +36,12 @@ export interface Unplayable {
   command: string;
   reason: string;
 }
+
+const IN_FRAME = "het element staat in een ingesloten venster; de proefpagina kan daar niet in";
+/** How often `tab` presses the key at most, as in the session. */
+const MAX_TABS = 50;
+/** A chain that goes on after a frame element: the rest is in the document of that frame. A frame named by its id is not seen here; the test page says so when it plays the step. */
+const throughFrame = (chain: string[] | null | undefined): boolean => (chain ?? []).slice(0, -1).some((segment) => /(^| > )i?frame(:nth-of-type\(\d+\))?$/.test(segment));
 
 const SKIPPED_NOTE = "een meting zonder blijvend gevolg voor wat er wordt voorgelezen; in Safari niet herhaald";
 
@@ -45,6 +53,7 @@ export function planSteps(steps: Step[], values: Record<string, string> = TEST_V
     const base = { command: step.command, target: step.target, ...(step.locators ? { locators: step.locators } : {}) };
     const refuse = (reason: string): void => void unplayable.push({ step: index + 1, command: step.command, reason });
     const value = (kind: string | undefined): string | null => (kind !== undefined && kind in values ? values[kind]! : null);
+    const before = planned.length;
     switch (step.command) {
       case "click":
         planned.push({ ...base, how: "click" });
@@ -70,8 +79,7 @@ export function planSteps(steps: Step[], values: Record<string, string> = TEST_V
         break;
       case "key": {
         const name = step.args[0] ?? "";
-        if (/(^|\+)Tab$/.test(name)) refuse("Tab verplaatst de focus zoals de browser dat doet; de proefpagina kan dat niet nadoen");
-        else planned.push({ ...base, how: "key", value: name });
+        planned.push({ ...base, how: "key", value: name });
         break;
       }
       case "hover":
@@ -94,7 +102,7 @@ export function planSteps(steps: Step[], values: Record<string, string> = TEST_V
         planned.push({ ...base, how: "skip", note: SKIPPED_NOTE });
         break;
       case "tab":
-        refuse("Tab verplaatst de focus zoals de browser dat doet; de proefpagina kan dat niet nadoen");
+        planned.push({ ...base, how: "key", value: step.options.shift ? "Shift+Tab" : "Tab", times: Math.max(1, Math.min(MAX_TABS, Number(step.args[0] ?? 1) || 1)) });
         break;
       case "press":
         refuse("indrukken zonder loslaten is in de proefpagina niet na te doen");
@@ -109,6 +117,11 @@ export function planSteps(steps: Step[], values: Record<string, string> = TEST_V
         break;
       default:
         refuse("deze stap kent de proefpagina niet");
+    }
+    // Known before Safari is asked: an element inside a frame, or a key pressed while focus was in one.
+    if (planned.length > before && planned[before]!.how !== "skip" && (throughFrame(step.target) || throughFrame(step.focus))) {
+      planned.pop();
+      refuse(IN_FRAME);
     }
   }
   return { planned, unplayable };
@@ -157,7 +170,7 @@ export function testPage(input: TestPageInput): string {
   } catch {
     // An unreadable base of the page itself: the address of the page is the base.
   }
-  const config = { hosts: input.hosts, noPopup: input.noPopup === true, noMailto: input.noMailto === true, steps: input.steps, ...PLAY_TIMES };
+  const config = { url: input.url, hosts: input.hosts, noPopup: input.noPopup === true, noMailto: input.noMailto === true, steps: input.steps, ...PLAY_TIMES };
   const head = `<meta charset="utf-8"><base href="${attribute(base)}"><meta http-equiv="Content-Security-Policy" content="${attribute(policyOf(input.hosts, input.strict))}"><script>${SCRIPT}(${JSON.stringify(config).replace(/</g, "\\u003c")});</script>`;
   // The page's own base is replaced by the one above, which already holds it: the first base counts.
   const html = input.html.replace(/<base\b[^>]*>/gi, "");
@@ -183,6 +196,18 @@ export interface Played {
   done: boolean;
   steps: { i: number; c: string; ok: boolean; note: string | null }[];
   guard: { kind: "method" | "scope" | "socket" | "form" | "popup" | "mailto"; method: string; url: string }[];
+  /** Whether the page's own scripts worked in Safari, as far as the page can tell. */
+  page?: Loaded;
+}
+
+export interface Loaded {
+  /** Elements with a custom element name on the page, and how many of them nobody defined. */
+  custom: number;
+  undefined: number;
+  /** The names of the ones not defined, at most eight. */
+  names: string[];
+  /** Scripts Safari could not load, at most five. */
+  scripts: { url: string; module: boolean }[];
 }
 
 /** Read back what the page wrote into its address; null when there is nothing (readable). */
@@ -194,7 +219,7 @@ export function playedOf(address: string | null | undefined): Played | null {
   for (const text of [raw, (() => { try { return decodeURIComponent(raw); } catch { return ""; } })()]) {
     try {
       const value = JSON.parse(text) as Played;
-      if (Array.isArray(value.steps) && Array.isArray(value.guard)) return { done: value.done === true, steps: value.steps, guard: value.guard };
+      if (Array.isArray(value.steps) && Array.isArray(value.guard)) return { done: value.done === true, steps: value.steps, guard: value.guard, ...(value.page && Array.isArray(value.page.names) && Array.isArray(value.page.scripts) ? { page: value.page } : {}) };
     } catch {
       // Not this form; try the other.
     }
@@ -213,3 +238,22 @@ const GUARD_NL: Record<Played["guard"][number]["kind"], string> = {
 
 /** One line per thing the page held back, for the answer to an agent. */
 export const guardLines = (played: Played | null): string[] => (played?.guard ?? []).map((entry) => `${GUARD_NL[entry.kind] ?? entry.kind}: ${entry.method} ${entry.url.slice(0, 100)}`);
+
+const few = (count: number, one: string, more: string): string => `${count} ${count === 1 ? one : more}`;
+
+/**
+ * Whether the page's own scripts worked in the test page, in one line for the answer to an agent:
+ * `scripts` when nothing is wrong, `notLoaded` when a script did not load or a custom element was
+ * never defined. A reading with little in it is then no evidence about the site.
+ */
+export function loadedLine(played: Played | null): { scripts?: string; notLoaded?: string } {
+  const page = played?.page;
+  if (!page) return {};
+  if (page.undefined === 0 && page.scripts.length === 0) return { scripts: page.custom === 0 ? "Safari kon elk script van de pagina ophalen; de pagina heeft geen custom elements" : `Safari kon elk script van de pagina ophalen, en de ${few(page.custom, "custom element", "custom elements")} op de pagina ${page.custom === 1 ? "is" : "zijn"} gedefinieerd` };
+  const parts = [
+    ...(page.undefined > 0 ? [`${page.undefined} van de ${few(page.custom, "custom element", "custom elements")} ${page.undefined === 1 ? "is" : "zijn"} in Safari niet gedefinieerd (${page.names.join(", ")})`] : []),
+    ...(page.scripts.length > 0 ? [`Safari kon ${few(page.scripts.length, "script", "scripts")} niet ophalen (${page.scripts.map((script) => script.url).join(", ")})`] : []),
+  ];
+  const cors = page.scripts.some((script) => script.module) ? " Een script van het type module haalt Safari voor de proefpagina alleen op als de site dat aan een andere origin toestaat (CORS)." : "";
+  return { notLoaded: `${parts.join("; ")}. De scripts van de site werkten in de proefpagina niet allemaal. Wat VoiceOver hier niet voorlas of niet vond, is geen bewijs dat het op de site ontbreekt.${cors}` };
+}

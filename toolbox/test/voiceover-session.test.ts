@@ -23,7 +23,7 @@ let run: string;
 let pages: string;
 let daemon: Daemon;
 let browser: Browser;
-const guest = { running: true, seen: [] as { dialogOpen: boolean; kind: string; message: string; ownScript: string | null }[] };
+const guest = { running: true, seen: [] as { dialogOpen: boolean; kind: string; message: string; ownScript: string | null }[], keys: [] as { focus: string; skipShown: boolean; menuOpen: boolean; onTestPage: boolean }[] };
 
 /** What the reader in the guest answers for a test page: played in Chromium, with the control pressed by its name. */
 async function playInBrowser(files: Map<string, Buffer>, url: string, steps: number, press: string | null): Promise<GuestAnswer> {
@@ -36,6 +36,8 @@ async function playInBrowser(files: Map<string, Buffer>, url: string, steps: num
     await page.waitForFunction(() => location.hash.includes("%22done%22%3Atrue"), null, { timeout: 15_000 });
     const start = page.url();
     guest.seen.push(await page.evaluate(() => ({ dialogOpen: (document.getElementById("feedback") as HTMLDialogElement | null)?.open === true, kind: (document.getElementById("kind") as HTMLSelectElement | null)?.value ?? "", message: (document.getElementById("message") as HTMLTextAreaElement | null)?.value ?? "", ownScript: document.documentElement.dataset.ownScript ?? null })));
+    // Where focus is after the steps, whether the skip link shows, whether the menu in the shadow root opened, and whether Safari is still on the test page.
+    guest.keys.push(await page.evaluate(() => ({ focus: document.activeElement?.id || document.activeElement?.localName || "", skipShown: (document.getElementById("skip")?.getBoundingClientRect().left ?? -1) >= 0, menuOpen: document.querySelector("site-menu")?.shadowRoot?.querySelector("button")?.getAttribute("aria-expanded") === "true", onTestPage: location.protocol === "file:" })));
     const spoken = await page.evaluate(() => [...document.querySelectorAll("dialog[open] h2, dialog[open] button")].map((element) => `${element.textContent!.trim()} ${element.localName === "button" ? "button" : "heading level 2"}`));
     let pressed: GuestAnswer["press"];
     if (press) {
@@ -210,12 +212,53 @@ test("a saved state is read by its name, and a state with a step Safari cannot p
   const named = await loep("voiceover", [], { state: "feedback-ingevuld" });
   assert.equal(named.state, "toestand feedback-ingevuld: 3 van 3 stappen in Safari gespeeld");
 
-  await openFilled();
-  await loep("tab");
+  // A click in an embedded frame: the test page cannot get in there, and that is known before Safari is asked.
+  await loep("open", ["/voiceover-keys.html"]);
+  const inFrame = String(((await loep("find", ["Knop in het kader"])).found as string[])[0]).split(" ")[0]!;
+  assert.equal((await loep("click", [inFrame])).error, undefined);
   const spent = await used();
   const refused = await loep("voiceover");
-  assert.match(String(refused.error), /niet na te spelen: stap 4 \(tab\) Tab verplaatst de focus/);
+  assert.match(String(refused.error), /niet na te spelen: stap 1 \(click\) het element staat in een ingesloten venster.*Dit commando kostte niets/);
   assert.equal(await used(), spent);
+});
+
+test("a state that starts with Tab is played: the skip link gets focus, following it stays on the test page, and the next Tab goes on in the content", async () => {
+  await loep("open", ["/voiceover-keys.html"]);
+  await loep("tab");
+  const first = await loep("voiceover");
+  assert.equal(first.error, undefined, JSON.stringify(first));
+  assert.equal(first.state, "de toestand van je sessie: 1 van 1 stappen in Safari gespeeld");
+  assert.deepEqual(guest.keys.at(-1), { focus: "skip", skipShown: true, menuOpen: false, onTestPage: true });
+
+  await loep("key", ["Enter"]);
+  // Where the browser of the session itself lands: the first link of the content, past the menu.
+  assert.match(String(((await loep("tab")).stops as string[])[0]), /Naar het formulier/);
+  const followed = await loep("voiceover");
+  assert.equal(followed.state, "de toestand van je sessie: 3 van 3 stappen in Safari gespeeld");
+  assert.equal(followed.notReached, undefined);
+  assert.deepEqual(guest.keys.at(-1), { focus: "first-in-content", skipShown: false, menuOpen: false, onTestPage: true });
+  const plan = (record(followed.id).result as { testPage: { plan: { how: string }[]; played: { steps: { note: string | null }[] } } }).testPage;
+  assert.deepEqual(plan.plan.map((step) => step.how), ["key", "key", "key"]);
+  assert.match(plan.played.steps[0]!.note!, /Tab nagedaan in de pagina/);
+});
+
+test("a button in a shadow root is found and pressed, and the answer says which scripts of the page did not work in Safari", async () => {
+  await loep("open", ["/voiceover-keys.html"]);
+  const menu = ((await loep("find", ["Menu"])).found as string[]).find((line) => / button: /.test(line))!.split(" ")[0]!;
+  assert.equal((await loep("click", [menu])).error, undefined);
+  const answer = await loep("voiceover");
+  assert.equal(answer.state, "de toestand van je sessie: 1 van 1 stappen in Safari gespeeld");
+  assert.equal(guest.keys.at(-1)!.menuOpen, true);
+  // The module comes from another origin than the file of the test page: the browser does not fetch it, and its element stays undefined.
+  assert.match(String(answer.notLoaded), /^1 van de 2 custom elements is in Safari niet gedefinieerd \(site-late\); Safari kon 1 script niet ophalen \(http:\/\/[^)]*\/voiceover-late\.js\)\. .*geen bewijs dat het op de site ontbreekt\. Een script van het type module/);
+  assert.equal(answer.scripts, undefined);
+  assert.deepEqual((record(answer.id).result as { testPage: { loaded: { custom: number; undefined: number; names: string[] } } }).testPage.loaded.names, ["site-late"]);
+
+  // A page whose scripts all came: one line that says so.
+  await loep("open", ["/voiceover.html"]);
+  const whole = await loep("voiceover");
+  assert.equal(whole.scripts, "Safari kon elk script van de pagina ophalen; de pagina heeft geen custom elements");
+  assert.equal(whole.notLoaded, undefined);
 });
 
 test("two agents that ask at the same time are read one after the other, and the second hears it waited", async () => {

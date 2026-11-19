@@ -15,8 +15,32 @@
   var report = { v: 1, done: false, steps: [], guard: [], options: { noPopup: config.noPopup, noMailto: config.noMailto } };
   var MAX_GUARD = 20;
   var documentUrl = String(location.href).split("#")[0];
+  // Whether the page's own scripts worked here: a script Safari could not load, and custom elements nobody defined.
+  var failedScripts = [];
+  window.addEventListener(
+    "error",
+    function (event) {
+      var element = event.target;
+      if (element && element.localName === "script" && element.src && failedScripts.length < 5) failedScripts.push({ url: String(element.src).slice(0, 160), module: element.type === "module" });
+    },
+    true,
+  );
+  var loaded = function () {
+    var custom = 0;
+    var missing = 0;
+    var names = [];
+    allElements().forEach(function (element) {
+      if (element.localName.indexOf("-") === -1) return;
+      custom += 1;
+      if (element.matches(":defined")) return;
+      missing += 1;
+      if (names.indexOf(element.localName) === -1 && names.length < 8) names.push(element.localName.slice(0, 40));
+    });
+    return { custom: custom, undefined: missing, names: names, scripts: failedScripts };
+  };
   var write = function () {
     try {
+      if (report.done) report.page = loaded();
       history.replaceState(history.state, "", documentUrl + "#loep-played=" + encodeURIComponent(JSON.stringify(report)));
     } catch (error) {
       // A page that forbids changing its address keeps its own; the reader then says nothing came back.
@@ -138,6 +162,40 @@
       true,
     );
   }
+  // A link to a place in the page itself. Its address resolves against <base>, so Safari would
+  // leave the test page for the site. What the browser does on such a link is done here: scroll
+  // to the target and give it focus, or make it the place the next Tab starts from.
+  var pageUrl = String(config.url || "").split("#")[0];
+  var focusStart = null;
+  window.addEventListener("focusin", function () {
+    focusStart = null;
+  });
+  window.addEventListener("click", function (event) {
+    if (event.defaultPrevented || pageUrl === "") return;
+    var path = event.composedPath ? event.composedPath() : [event.target];
+    var link = null;
+    for (var index = 0; index < path.length && !link; index++) if (path[index] && path[index].localName === "a" && path[index].getAttribute && path[index].hasAttribute("href")) link = path[index];
+    if (!link || link.getAttribute("target") === "_blank") return;
+    var href = absolute(link.getAttribute("href"));
+    var hash = href.indexOf("#");
+    if (hash === -1 || href.slice(0, hash) !== pageUrl) return;
+    event.preventDefault();
+    var id = href.slice(hash + 1);
+    try {
+      id = decodeURIComponent(id);
+    } catch (error) {
+      // A fragment that is no valid encoding is looked up as it is written.
+    }
+    var target = id === "" ? null : document.getElementById(id) || document.getElementsByName(id)[0] || null;
+    if (!target && id !== "" && id.toLowerCase() !== "top") return;
+    if (target) target.scrollIntoView();
+    else window.scrollTo(0, 0);
+    if (target && target.focus) target.focus();
+    if (target && deepActive() === target) return;
+    var active = deepActive();
+    if (active && active.blur) active.blur();
+    focusStart = target;
+  });
   if (config.noMailto && window.navigation && window.navigation.addEventListener) {
     window.navigation.addEventListener("navigate", function (event) {
       if (event.destination && mailto(event.destination.url) && event.cancelable) {
@@ -160,7 +218,7 @@
   var nameOf = function (element) {
     return (element.getAttribute("aria-label") || element.textContent || "").replace(/\s+/g, " ").trim().slice(0, 80);
   };
-  var allElements = function () {
+  function allElements() {
     var out = [];
     var walk = function (root) {
       var elements = root.querySelectorAll("*");
@@ -171,7 +229,7 @@
     };
     walk(document);
     return out;
-  };
+  }
   /** The element at the end of a chain; "frame" when the chain goes on into an embedded frame. */
   var resolve = function (chain) {
     var root = document;
@@ -219,10 +277,94 @@
     if (byStructure && byStructure !== "frame" && byStructure.localName === locators.tag) return byStructure;
     return byChain;
   };
-  var deepActive = function () {
+  function deepActive() {
     var active = document.activeElement;
     while (active && active.shadowRoot && active.shadowRoot.activeElement) active = active.shadowRoot.activeElement;
     return active || document.body;
+  }
+  // Tab. The browser itself does not move focus on a key event a script made, so the test page
+  // does: to the next stop in the order a browser follows, through shadow roots and slots.
+  var flatChildren = function (element) {
+    if (element.shadowRoot) return [].slice.call(element.shadowRoot.children);
+    var assigned = element.localName === "slot" && element.assignedElements ? element.assignedElements() : [];
+    return assigned.length > 0 ? assigned : [].slice.call(element.children);
+  };
+  /** Every element a visitor can reach, in the order of the page as it is drawn; with a modal dialog open only what is in it. */
+  var flatElements = function () {
+    var modal = null;
+    allElements().forEach(function (element) {
+      try {
+        if (element.localName === "dialog" && element.matches(":modal")) modal = element;
+      } catch (error) {
+        // A browser without :modal: the whole page counts.
+      }
+    });
+    var out = [];
+    var walk = function (element) {
+      if (element.hasAttribute("inert")) return;
+      out.push(element);
+      flatChildren(element).forEach(walk);
+    };
+    walk(modal || document.documentElement);
+    return out;
+  };
+  var tabIndexOf = function (element) {
+    var written = parseInt(element.getAttribute("tabindex") || "", 10);
+    return isNaN(written) ? 0 : written;
+  };
+  var isTabStop = function (element) {
+    var tag = element.localName;
+    var native = /^(button|select|textarea|iframe)$/.test(tag) || (tag === "input" && element.type !== "hidden") || (tag === "a" && element.hasAttribute("href")) || (tag === "summary" && element.parentElement && element.parentElement.localName === "details") || ((tag === "audio" || tag === "video") && element.hasAttribute("controls"));
+    if (!native && !element.hasAttribute("tabindex") && !element.isContentEditable) return false;
+    if (tabIndexOf(element) < 0 || element.matches(":disabled")) return false;
+    // A host that hands focus on to its shadow root is no stop itself.
+    if (element.shadowRoot && element.shadowRoot.delegatesFocus) return false;
+    if (element.getClientRects().length === 0 || getComputedStyle(element).visibility !== "visible") return false;
+    if (tag === "input" && element.type === "radio" && element.name && !element.checked) {
+      // Of a group of radio buttons one is a stop: the chosen one, or the first when none is chosen.
+      var group = [].slice.call(element.getRootNode().querySelectorAll("input[type=radio]")).filter(function (other) {
+        return other.name === element.name && other.form === element.form;
+      });
+      var chosen = group.filter(function (other) {
+        return other.checked;
+      });
+      if (chosen.length > 0 || group[0] !== element) return false;
+    }
+    return true;
+  };
+  var moveFocus = function (backward) {
+    var order = flatElements();
+    var plain = order.filter(isTabStop);
+    // A positive tabindex goes first, lowest first; the rest follows in the order of the page.
+    var stops = plain
+      .filter(function (element) {
+        return tabIndexOf(element) > 0;
+      })
+      .sort(function (a, b) {
+        return tabIndexOf(a) - tabIndexOf(b);
+      })
+      .concat(
+        plain.filter(function (element) {
+          return tabIndexOf(element) === 0;
+        }),
+      );
+    var active = deepActive();
+    var at = stops.indexOf(active);
+    var next;
+    if (at !== -1) next = stops[at + (backward ? -1 : 1)];
+    else {
+      // From an element that is no stop itself, or from where a link within the page led: the nearest stop in the order of the page.
+      var from = focusStart && focusStart.isConnected ? focusStart : active;
+      var place = from && from !== document.body && from !== document.documentElement ? order.indexOf(from) : -1;
+      var near = stops.filter(function (element) {
+        return place === -1 || (backward ? order.indexOf(element) < place : order.indexOf(element) > place);
+      });
+      next = backward ? near[near.length - 1] : near[0];
+    }
+    if (!next) throw new Error("Tab verlaat hier de pagina, naar de balk van de browser; dat kan de proefpagina niet nadoen");
+    next.focus({ focusVisible: true });
+    if (deepActive() !== next) throw new Error("het volgende onderdeel in de tabvolgorde nam de focus niet aan");
+    return next;
   };
   var fire = function (element, type, init) {
     var Kind = /^(pointer)/.test(type) && typeof PointerEvent !== "undefined" ? PointerEvent : /^(mouse|click)/.test(type) ? MouseEvent : Event;
@@ -259,8 +401,11 @@
     var target = deepActive();
     var down = new KeyboardEvent("keydown", Object.assign({ bubbles: true, composed: true, cancelable: true }, init));
     var allowed = target.dispatchEvent(down);
-    target.dispatchEvent(new KeyboardEvent("keyup", Object.assign({ bubbles: true, composed: true, cancelable: true }, init)));
+    // The key comes up where focus is then: after a Tab that is the next stop.
+    var stop = allowed && keyName === "Tab" ? moveFocus(init.shiftKey) : null;
+    (stop || target).dispatchEvent(new KeyboardEvent("keyup", Object.assign({ bubbles: true, composed: true, cancelable: true }, init)));
     if (!allowed) return "de pagina handelde de toets zelf af";
+    if (stop) return "Tab nagedaan in de pagina: de focus is naar het volgende onderdeel in de tabvolgorde gezet" + (stop.localName === "iframe" ? "; dat is een ingesloten venster, en daarbinnen komt de proefpagina niet" : "");
     // What the browser itself does on the key, for the keys where that is plain.
     var tag = target.localName;
     var kind = (target.getAttribute && target.getAttribute("type")) || "";
@@ -327,7 +472,18 @@
       document.head.appendChild(style);
       return Promise.resolve({ ok: true });
     }
-    if (how === "key") return Promise.resolve({ ok: true, note: key(step.value) });
+    if (how === "key") {
+      // `tab 3` is the key three times, with a moment between them for what the page does on focus.
+      var again = function (left) {
+        var said = key(step.value);
+        return left <= 1 ? { ok: true, note: said } : wait(50).then(function () {
+          return again(left - 1);
+        });
+      };
+      return Promise.resolve().then(function () {
+        return again(step.times || 1);
+      });
+    }
     if (how === "scroll" && !step.target) {
       var to = step.value;
       if (to === "top" || to === "bottom") window.scrollTo(0, to === "top" ? 0 : document.documentElement.scrollHeight);

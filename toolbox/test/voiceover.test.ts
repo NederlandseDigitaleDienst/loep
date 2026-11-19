@@ -10,7 +10,7 @@ import { speechDifferences } from "../src/instruments/methods/speech.ts";
 import { GUEST_VERSION, METHODS, toolStatus } from "../src/instruments/methods/registry.ts";
 import { MEASURE_COMMANDS } from "../src/lib/verdict.ts";
 import { addressFor, COPIED_FILES, FIRST_NUMBER, framed, GuestQueue, isReady, job, LIMITS, read, readingOf, markStarting, recordedStart, shutdown, SILENT_NOTE, start, statusNl, VOICEOVER, VOICEOVER_NOTE, voiceoverStatus, warmUpDue, voiceoverWarningNl, type Clock, type Guest, type GuestAnswer, type GuestState, type Versions } from "../src/lib/voiceover.ts";
-import { guardLines, planSteps, playedOf, policyOf, testPage } from "../src/lib/voiceover-page.ts";
+import { guardLines, loadedLine, planSteps, playedOf, policyOf, testPage } from "../src/lib/voiceover-page.ts";
 import type { Step } from "../src/session/observations.ts";
 
 // These tests run without a virtual Mac and without lume: the guest is played by a small
@@ -408,10 +408,23 @@ test("the steps of a state become steps the test page plays; a step it cannot pl
   assert.deepEqual([planned[3]!.value, planned[3]!.after], ["loep-test@example.com", "Enter"]);
   assert.match(planned[6]!.note!, /in Safari niet herhaald/);
 
-  const refused = planSteps([step("click"), step("tab", ["2"], {}, null), step("key", ["Shift+Tab"], {}, null), step("goto", ["https://example.test/b"], {}, null), step("press", [], { hold: true })]).unplayable;
-  assert.deepEqual(refused.map((entry) => [entry.step, entry.command]), [[2, "tab"], [3, "key"], [4, "goto"], [5, "press"]]);
-  assert.match(refused[0]!.reason, /Tab verplaatst de focus/);
-  assert.match(refused[2]!.reason, /naar een andere pagina/);
+  // Tab is a key the test page plays itself: `tab 2` twice, `tab --shift` backwards.
+  const tabs = planSteps([step("tab", ["2"], {}, null), step("tab", [], { shift: true }, null), step("key", ["Shift+Tab"], {}, null), step("tab", ["900"], {}, null)]);
+  assert.deepEqual(tabs.unplayable, []);
+  assert.deepEqual(tabs.planned.map((entry) => [entry.how, entry.value, entry.times]), [["key", "Tab", 2], ["key", "Shift+Tab", 1], ["key", "Shift+Tab", undefined], ["key", "Tab", 50]]);
+
+  const refused = planSteps([step("click"), step("goto", ["https://example.test/b"], {}, null), step("press", [], { hold: true })]).unplayable;
+  assert.deepEqual(refused.map((entry) => [entry.step, entry.command]), [[2, "goto"], [3, "press"]]);
+  assert.match(refused[0]!.reason, /naar een andere pagina/);
+});
+
+test("a step in an embedded frame is refused before Safari is asked; a measurement there is skipped as anywhere", () => {
+  const inFrame = ["html > body > main > iframe:nth-of-type(2)", "html > body > button"];
+  const { planned, unplayable } = planSteps([step("click", [], {}, inFrame), { ...step("key", ["Enter"], {}, null), focus: inFrame }, step("reflow", [], {}, inFrame), step("click", [], {}, ["html > body > iframe"]), step("focus", [], {}, ["html > body > frame", "html > body > a"])]);
+  assert.deepEqual(unplayable.map((entry) => [entry.step, entry.command]), [[1, "click"], [2, "key"], [5, "focus"]]);
+  assert.match(unplayable[0]!.reason, /ingesloten venster/);
+  // The frame element itself is in the page, and so is a click on it.
+  assert.deepEqual(planned.map((entry) => entry.how), ["skip", "click"]);
 });
 
 test("the test page keeps the page and puts a base, a policy and the script at the top; the page's own base stays the base", () => {
@@ -443,6 +456,17 @@ test("what the page wrote into its address is read back, encoded or not", () => 
 function statusGuest(state: GuestState, answer: string | null): Guest {
   return { state: async () => state, boot: async () => undefined, halt: async () => undefined, exec: async () => answer };
 }
+
+test("what the page says about its own scripts becomes one line: all there, or what is missing and that the reading proves nothing", () => {
+  const played = (page: object): ReturnType<typeof playedOf> => playedOf(`file:///p.html#loep-played=${encodeURIComponent(JSON.stringify({ done: true, steps: [], guard: [], page }))}`);
+  assert.deepEqual(loadedLine(played({ custom: 12, undefined: 0, names: [], scripts: [] })), { scripts: "Safari kon elk script van de pagina ophalen, en de 12 custom elements op de pagina zijn gedefinieerd" });
+  const missing = loadedLine(played({ custom: 12, undefined: 3, names: ["app-button", "app-list"], scripts: [{ url: "https://site.example/app.js", module: false }, { url: "https://site.example/more.js", module: false }] })).notLoaded!;
+  assert.match(missing, /^3 van de 12 custom elements zijn in Safari niet gedefinieerd \(app-button, app-list\); Safari kon 2 scripts niet ophalen \(https:\/\/site\.example\/app\.js, https:\/\/site\.example\/more\.js\)\. /);
+  assert.doesNotMatch(missing, /CORS/);
+  // An answer of a test page of before this was written: nothing is said.
+  assert.deepEqual(loadedLine(playedOf('file:///p.html#loep-played={"done":true,"steps":[],"guard":[]}')), {});
+  assert.deepEqual(loadedLine(null), {});
+});
 
 test("status: VoiceOver reads only when the virtual Mac runs and was warmed up since this boot", async () => {
   const dir = mkdtempSync(join(tmpdir(), "voiceover-status-"));

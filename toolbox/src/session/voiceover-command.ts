@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { runLoginMark } from "../lib/login.ts";
 import { isLocalHost } from "../lib/writes.ts";
 import { GuestQueue, LIMITS, lumeGuest, read, realClock, type Clock, type Guest, type Waited } from "../lib/voiceover.ts";
-import { decodePage, guardLines, planSteps, playedOf, testPage, type Played } from "../lib/voiceover-page.ts";
+import { decodePage, guardLines, loadedLine, planSteps, playedOf, testPage, type Played } from "../lib/voiceover-page.ts";
 import { UsageError, type Options, type Outcome } from "./commands.ts";
 import type { Images, StateRecord } from "./observations.ts";
 import { guardedDownload, testValuesForRun, type Blocked, type Guard } from "./safety.ts";
@@ -132,6 +132,7 @@ export async function voiceoverOutcome(request: VoiceOverRequest): Promise<Outco
     plan: planned.map((step) => ({ command: step.command, how: step.how, ...(step.note ? { note: step.note } : {}) })),
     played: before,
     heldBack: after?.guard ?? [],
+    loaded: after?.page ?? null,
     reached,
     changed,
     differs,
@@ -147,6 +148,7 @@ function printOf(reading: Record<string, unknown>, waited: Waited, name: string 
     state: `${name ? `toestand ${name}` : "de toestand van je sessie"}: ${planned === 0 ? "de pagina zonder handelingen vooraf" : before === null ? `${planned} stappen; of Safari ze speelde, kwam niet terug` : `${before.steps.filter((step) => step.ok).length} van ${planned} stappen in Safari gespeeld`}`,
     ...(planned > 0 && !reached ? { notReached: failed ? `stap ${failed.i} (${failed.c}): ${failed.note ?? "mislukt"}. VoiceOver las de pagina in een andere toestand dan gevraagd: gebruik dit niet als bewijs voor die toestand` : "niet zeker dat de toestand in Safari is bereikt: gebruik dit niet als bewijs voor die toestand" } : {}),
     ...reading,
+    ...loadedLine(after),
     ...(held.length > 0 ? { heldBack: held } : {}),
     ...(changed.length > 0 ? { changed } : {}),
     ...(differs.length > 0 ? { differs } : {}),
