@@ -16,12 +16,13 @@
   var MAX_GUARD = 20;
   var documentUrl = String(location.href).split("#")[0];
   // Whether the page's own scripts worked here: a script Safari could not load, and custom elements nobody defined.
+  // In a run with a strict scope the policy of the test page keeps a script of another host out: that one is marked as held.
   var failedScripts = [];
   window.addEventListener(
     "error",
     function (event) {
       var element = event.target;
-      if (element && element.localName === "script" && element.src && failedScripts.length < 5) failedScripts.push({ url: String(element.src).slice(0, 160), module: element.type === "module" });
+      if (element && element.localName === "script" && element.src && failedScripts.length < 5) failedScripts.push({ url: String(element.src).slice(0, 160), module: element.type === "module", held: config.strict === true && !inScope(element.src) });
     },
     true,
   );
@@ -187,11 +188,15 @@
       // A fragment that is no valid encoding is looked up as it is written.
     }
     var target = id === "" ? null : document.getElementById(id) || document.getElementsByName(id)[0] || null;
-    if (!target && id !== "" && id.toLowerCase() !== "top") return;
-    if (target) target.scrollIntoView();
-    else window.scrollTo(0, 0);
-    if (target && target.focus) target.focus();
-    if (target && deepActive() === target) return;
+    if (!target) {
+      // The top of the page: a browser scrolls there and leaves focus where it is. Any other fragment without a target does nothing in a browser but change the address, which a page may listen for: that is said.
+      if (id === "" || id.toLowerCase() === "top") window.scrollTo(0, 0);
+      else note("fragment", "GET", href);
+      return;
+    }
+    target.scrollIntoView();
+    if (target.focus) target.focus();
+    if (deepActive() === target) return;
     var active = deepActive();
     if (active && active.blur) active.blur();
     focusStart = target;
@@ -320,6 +325,10 @@
     // A host that hands focus on to its shadow root is no stop itself.
     if (element.shadowRoot && element.shadowRoot.delegatesFocus) return false;
     if (element.getClientRects().length === 0 || getComputedStyle(element).visibility !== "visible") return false;
+    // What a closed <details> or content-visibility keeps undrawn still has a box in some browsers.
+    if (element.checkVisibility && !element.checkVisibility()) return false;
+    // A host with a negative tabindex takes its whole shadow tree out of the order.
+    for (var root = element.getRootNode(); root && root.host; root = root.host.getRootNode()) if (tabIndexOf(root.host) < 0) return false;
     if (tag === "input" && element.type === "radio" && element.name && !element.checked) {
       // Of a group of radio buttons one is a stop: the chosen one, or the first when none is chosen.
       var group = [].slice.call(element.getRootNode().querySelectorAll("input[type=radio]")).filter(function (other) {
@@ -349,6 +358,8 @@
         }),
       );
     var active = deepActive();
+    // From a frame the browser goes on inside it, to stops the test page cannot see: going on past it would put focus somewhere else than in the session.
+    if (active.localName === "iframe" || active.localName === "frame") throw new Error("de focus staat op een ingesloten venster; een Tab gaat daarbinnen verder, en daar komt de proefpagina niet");
     var at = stops.indexOf(active);
     var next;
     if (at !== -1) next = stops[at + (backward ? -1 : 1)];

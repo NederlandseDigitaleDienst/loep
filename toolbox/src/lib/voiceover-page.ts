@@ -170,7 +170,7 @@ export function testPage(input: TestPageInput): string {
   } catch {
     // An unreadable base of the page itself: the address of the page is the base.
   }
-  const config = { url: input.url, hosts: input.hosts, noPopup: input.noPopup === true, noMailto: input.noMailto === true, steps: input.steps, ...PLAY_TIMES };
+  const config = { url: input.url, hosts: input.hosts, strict: input.strict, noPopup: input.noPopup === true, noMailto: input.noMailto === true, steps: input.steps, ...PLAY_TIMES };
   const head = `<meta charset="utf-8"><base href="${attribute(base)}"><meta http-equiv="Content-Security-Policy" content="${attribute(policyOf(input.hosts, input.strict))}"><script>${SCRIPT}(${JSON.stringify(config).replace(/</g, "\\u003c")});</script>`;
   // The page's own base is replaced by the one above, which already holds it: the first base counts.
   const html = input.html.replace(/<base\b[^>]*>/gi, "");
@@ -195,7 +195,7 @@ export function decodePage(bytes: Uint8Array, contentType: string | null): strin
 export interface Played {
   done: boolean;
   steps: { i: number; c: string; ok: boolean; note: string | null }[];
-  guard: { kind: "method" | "scope" | "socket" | "form" | "popup" | "mailto"; method: string; url: string }[];
+  guard: { kind: "method" | "scope" | "socket" | "form" | "popup" | "mailto" | "fragment"; method: string; url: string }[];
   /** Whether the page's own scripts worked in Safari, as far as the page can tell. */
   page?: Loaded;
 }
@@ -206,8 +206,8 @@ export interface Loaded {
   undefined: number;
   /** The names of the ones not defined, at most eight. */
   names: string[];
-  /** Scripts Safari could not load, at most five. */
-  scripts: { url: string; module: boolean }[];
+  /** Scripts that did not load, at most five. `held`: kept out by the policy of the test page, in a run with a strict scope. */
+  scripts: { url: string; module: boolean; held?: boolean }[];
 }
 
 /** Read back what the page wrote into its address; null when there is nothing (readable). */
@@ -234,6 +234,7 @@ const GUARD_NL: Record<Played["guard"][number]["kind"], string> = {
   form: "formulier niet verstuurd",
   popup: "nieuw venster niet geopend",
   mailto: "e-mailprogramma niet geopend",
+  fragment: "link naar een plek die niet op de pagina staat, niet gevolgd",
 };
 
 /** One line per thing the page held back, for the answer to an agent. */
@@ -243,17 +244,35 @@ const few = (count: number, one: string, more: string): string => `${count} ${co
 
 /**
  * Whether the page's own scripts worked in the test page, in one line for the answer to an agent:
- * `scripts` when nothing is wrong, `notLoaded` when a script did not load or a custom element was
- * never defined. A reading with little in it is then no evidence about the site.
+ * `scripts` when every script came, `notLoaded` when one did not. A reading with little in it is
+ * then no evidence about the site. A custom element nobody defined is no alarm by itself: a site
+ * may use such names without defining them, or define them later.
  */
 export function loadedLine(played: Played | null): { scripts?: string; notLoaded?: string } {
   const page = played?.page;
   if (!page) return {};
-  if (page.undefined === 0 && page.scripts.length === 0) return { scripts: page.custom === 0 ? "Safari kon elk script van de pagina ophalen; de pagina heeft geen custom elements" : `Safari kon elk script van de pagina ophalen, en de ${few(page.custom, "custom element", "custom elements")} op de pagina ${page.custom === 1 ? "is" : "zijn"} gedefinieerd` };
+  const missing = page.undefined > 0 ? `${page.undefined} van de ${few(page.custom, "custom element", "custom elements")} ${page.undefined === 1 ? "is" : "zijn"} in Safari niet gedefinieerd (${page.names.join(", ")})` : null;
+  if (page.scripts.length === 0) {
+    if (missing) return { scripts: `Safari kon elk script van de pagina ophalen. ${missing}. Dat past bij een site die zulke namen gebruikt zonder ze te definiëren, en ook bij een component waarvan het script in Safari niet werkte. Mist de voorlezing wat \`speak\` op die plek wel voorleest, dan is dat geen bewijs over de site` };
+    return { scripts: page.custom === 0 ? "Safari kon elk script van de pagina ophalen; de pagina heeft geen custom elements" : `Safari kon elk script van de pagina ophalen, en de ${few(page.custom, "custom element", "custom elements")} op de pagina ${page.custom === 1 ? "is" : "zijn"} gedefinieerd` };
+  }
+  const urls = (scripts: Loaded["scripts"]): string => scripts.map((script) => script.url).join(", ");
+  const failed = page.scripts.filter((script) => !script.held);
+  const held = page.scripts.filter((script) => script.held);
   const parts = [
-    ...(page.undefined > 0 ? [`${page.undefined} van de ${few(page.custom, "custom element", "custom elements")} ${page.undefined === 1 ? "is" : "zijn"} in Safari niet gedefinieerd (${page.names.join(", ")})`] : []),
-    ...(page.scripts.length > 0 ? [`Safari kon ${few(page.scripts.length, "script", "scripts")} niet ophalen (${page.scripts.map((script) => script.url).join(", ")})`] : []),
+    ...(missing ? [missing] : []),
+    ...(failed.length > 0 ? [`Safari kon ${few(failed.length, "script", "scripts")} niet ophalen (${urls(failed)})`] : []),
+    ...(held.length > 0 ? [`de proefpagina hield ${few(held.length, "script", "scripts")} van buiten de scope van de run tegen (${urls(held)})`] : []),
   ];
-  const cors = page.scripts.some((script) => script.module) ? " Een script van het type module haalt Safari voor de proefpagina alleen op als de site dat aan een andere origin toestaat (CORS)." : "";
+  const cors = failed.some((script) => script.module) ? " Een script van het type module haalt Safari voor de proefpagina alleen op als de site dat aan een andere origin toestaat (CORS)." : "";
   return { notLoaded: `${parts.join("; ")}. De scripts van de site werkten in de proefpagina niet allemaal. Wat VoiceOver hier niet voorlas of niet vond, is geen bewijs dat het op de site ontbreekt.${cors}` };
 }
+
+/**
+ * Said in the answer when a step of the state is a Tab: the test page moved focus itself, by its
+ * own reading of the tab order, and no key was pressed in Safari.
+ */
+export const imitatedLine = (planned: PlannedStep[]): { imitated?: string } =>
+  planned.some((step) => step.how === "key" && /(^|\+)Tab$/.test(step.value ?? ""))
+    ? { imitated: "Tab is in Safari niet ingedrukt. De proefpagina zette de focus zelf op het onderdeel dat volgens de opbouw van de pagina volgt. Waar de focus in een browser komt en of ze zichtbaar is, meet je met `tab` in je sessie en niet met deze voorlezing" }
+    : {};

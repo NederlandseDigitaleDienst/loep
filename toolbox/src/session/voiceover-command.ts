@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { runLoginMark } from "../lib/login.ts";
 import { isLocalHost } from "../lib/writes.ts";
 import { GuestQueue, LIMITS, lumeGuest, read, realClock, type Clock, type Guest, type Waited } from "../lib/voiceover.ts";
-import { decodePage, guardLines, loadedLine, planSteps, playedOf, testPage, type Played } from "../lib/voiceover-page.ts";
+import { decodePage, guardLines, imitatedLine, loadedLine, planSteps, playedOf, testPage, type Played } from "../lib/voiceover-page.ts";
 import { UsageError, type Options, type Outcome } from "./commands.ts";
 import type { Images, StateRecord } from "./observations.ts";
 import { guardedDownload, testValuesForRun, type Blocked, type Guard } from "./safety.ts";
@@ -138,7 +138,7 @@ export async function voiceoverOutcome(request: VoiceOverRequest): Promise<Outco
     differs,
     sent: "niets: alleen GET en HEAD binnen de scope, en geen formulier, beacon of bericht over een websocket",
   };
-  return { result: { ...reading.result, testPage: testPageRecord, waited }, print: printOf(reading.print, waited, state.name, planned.length, before, after, reached, changed, differs) };
+  return { result: { ...reading.result, testPage: testPageRecord, waited }, print: { ...printOf(reading.print, waited, state.name, planned.length, before, after, reached, changed, differs), ...imitatedLine(planned) } };
 }
 
 function printOf(reading: Record<string, unknown>, waited: Waited, name: string | null, planned: number, before: Played | null, after: Played | null, reached: boolean, changed: string[], differs: string[]): Record<string, unknown> {

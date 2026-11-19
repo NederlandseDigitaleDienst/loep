@@ -229,6 +229,8 @@ test("a state that starts with Tab is played: the skip link gets focus, followin
   assert.equal(first.error, undefined, JSON.stringify(first));
   assert.equal(first.state, "de toestand van je sessie: 1 van 1 stappen in Safari gespeeld");
   assert.deepEqual(guest.keys.at(-1), { focus: "skip", skipShown: true, menuOpen: false, onTestPage: true });
+  // The answer says the Tab was not a key in Safari.
+  assert.match(String(first.imitated), /^Tab is in Safari niet ingedrukt/);
 
   await loep("key", ["Enter"]);
   // Where the browser of the session itself lands: the first link of the content, past the menu.
@@ -240,6 +242,24 @@ test("a state that starts with Tab is played: the skip link gets focus, followin
   const plan = (record(followed.id).result as { testPage: { plan: { how: string }[]; played: { steps: { note: string | null }[] } } }).testPage;
   assert.deepEqual(plan.plan.map((step) => step.how), ["key", "key", "key"]);
   assert.match(plan.played.steps[0]!.note!, /Tab nagedaan in de pagina/);
+});
+
+test("Tab passes what a closed details hides, a link to the top keeps focus, and a Tab from an embedded frame is not guessed", async () => {
+  await loep("open", ["/voiceover-keys.html"]);
+  // The session: skip link, menu button, summary, first link of the content, link to the top. The link inside the closed details is no stop.
+  const stops = (await loep("tab", ["5"])).stops as string[];
+  assert.match(String(stops[3]), /Naar het formulier/);
+  assert.match(String(stops[4]), /Naar boven/);
+  await loep("key", ["Enter"]);
+  const top = await loep("voiceover");
+  assert.equal(top.notReached, undefined, JSON.stringify(top));
+  assert.equal(guest.keys.at(-1)!.focus, "to-top");
+  assert.equal(guest.keys.at(-1)!.onTestPage, true);
+
+  // One Tab further is the frame, and the next goes on inside it, where the test page cannot follow.
+  await loep("tab", ["2"]);
+  const inFrame = await loep("voiceover");
+  assert.match(String(inFrame.notReached), /^stap 3 \(tab\): de focus staat op een ingesloten venster/);
 });
 
 test("a button in a shadow root is found and pressed, and the answer says which scripts of the page did not work in Safari", async () => {
@@ -259,6 +279,7 @@ test("a button in a shadow root is found and pressed, and the answer says which 
   const whole = await loep("voiceover");
   assert.equal(whole.scripts, "Safari kon elk script van de pagina ophalen; de pagina heeft geen custom elements");
   assert.equal(whole.notLoaded, undefined);
+  assert.equal(whole.imitated, undefined);
 });
 
 test("two agents that ask at the same time are read one after the other, and the second hears it waited", async () => {

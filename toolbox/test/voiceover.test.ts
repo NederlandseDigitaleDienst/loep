@@ -463,6 +463,14 @@ test("what the page says about its own scripts becomes one line: all there, or w
   const missing = loadedLine(played({ custom: 12, undefined: 3, names: ["app-button", "app-list"], scripts: [{ url: "https://site.example/app.js", module: false }, { url: "https://site.example/more.js", module: false }] })).notLoaded!;
   assert.match(missing, /^3 van de 12 custom elements zijn in Safari niet gedefinieerd \(app-button, app-list\); Safari kon 2 scripts niet ophalen \(https:\/\/site\.example\/app\.js, https:\/\/site\.example\/more\.js\)\. /);
   assert.doesNotMatch(missing, /CORS/);
+  // Elements nobody defined while every script came: a site may use such names as they are. No alarm, but it is said.
+  const plain = loadedLine(played({ custom: 4, undefined: 4, names: ["app-root", "app-header"], scripts: [] }));
+  assert.equal(plain.notLoaded, undefined);
+  assert.match(plain.scripts!, /^Safari kon elk script van de pagina ophalen\. 4 van de 4 custom elements zijn in Safari niet gedefinieerd \(app-root, app-header\)\. /);
+  // A script the policy of a strict run kept out is not one Safari failed to fetch.
+  const held = loadedLine(played({ custom: 0, undefined: 0, names: [], scripts: [{ url: "https://elders.example/lib.js", module: true, held: true }] })).notLoaded!;
+  assert.match(held, /^de proefpagina hield 1 script van buiten de scope van de run tegen \(https:\/\/elders\.example\/lib\.js\)\. /);
+  assert.doesNotMatch(held, /niet ophalen|CORS/);
   // An answer of a test page of before this was written: nothing is said.
   assert.deepEqual(loadedLine(playedOf('file:///p.html#loep-played={"done":true,"steps":[],"guard":[]}')), {});
   assert.deepEqual(loadedLine(null), {});
