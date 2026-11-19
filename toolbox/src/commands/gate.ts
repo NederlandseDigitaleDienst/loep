@@ -431,19 +431,22 @@ export function gateChecks(run: RunData): { checks: Check[]; gaps: Gap[]; warnin
   add("state-resource-not-loaded", notLoadedGaps, "elke toestand is vastgelegd met de stylesheets en scripts van de site zelf");
 
   // A page measured while a stylesheet or script of the site itself did not arrive: what was measured is not the page a visitor gets.
-  const pageNotLoadedGaps: Gap[] = run.pages
-    .filter((page) => (page.facts.notLoaded ?? []).length > 0)
-    .map((page) => {
-      const missed = page.facts.notLoaded!;
-      return {
-        check: "page-resource-not-loaded",
-        ...on(page),
-        state: "default",
-        missingNl: `Bij het meten van deze pagina ${missedNl(missed)}. Metingen van deze pagina zijn daardoor gedaan zonder ${missed.length === 1 ? "dat bestand" : "die bestanden"}, en niet op de pagina zoals een bezoeker haar krijgt. Draai collect opnieuw: dat meet deze pagina nog een keer.`,
-        fixedBy: "sweep" as const,
-        limitationNl: `Bij het meten van deze pagina ${missedNl(missed, true)}. Metingen van deze pagina zijn gedaan zonder ${missed.length === 1 ? "dat bestand" : "die bestanden"}. Of een bezoeker ${missed.length === 1 ? "het" : "ze"} wel krijgt, is niet vastgesteld.`,
-      };
-    });
+  // A new sweep measures it once more; missed again there, it is a limitation: a file that keeps missing can be the site itself.
+  const pageNotLoadedGaps: Gap[] = [];
+  for (const page of run.pages) {
+    const missed = page.facts.notLoaded ?? [];
+    if (missed.length === 0) continue;
+    const limitationNl = `Bij het meten van deze pagina ${missedNl(missed, true)}. Metingen van deze pagina zijn gedaan zonder ${missed.length === 1 ? "dat bestand" : "die bestanden"}. Of een bezoeker ${missed.length === 1 ? "het" : "ze"} wel krijgt, is niet vastgesteld.`;
+    const place = { check: "page-resource-not-loaded", ...on(page), state: "default" };
+    if (page.facts.notLoadedAgain) limitations.push({ ...place, missingNl: limitationNl });
+    else
+      pageNotLoadedGaps.push({
+        ...place,
+        missingNl: `Bij het meten van deze pagina ${missedNl(missed)}. Metingen van deze pagina zijn daardoor gedaan zonder ${missed.length === 1 ? "dat bestand" : "die bestanden"}, en niet op de pagina zoals een bezoeker haar krijgt. Draai collect opnieuw: dat meet deze pagina nog een keer. Komt het bestand dan weer niet binnen, dan wordt het een beperking.`,
+        fixedBy: "sweep",
+        limitationNl,
+      });
+  }
   add("page-resource-not-loaded", pageNotLoadedGaps, "elke pagina is gemeten met de stylesheets en scripts van de site zelf");
 
   // 5. The sweep itself must be complete.

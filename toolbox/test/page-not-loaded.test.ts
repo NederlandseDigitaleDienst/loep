@@ -94,6 +94,20 @@ test("a page measured without a stylesheet of the site says so, the gate hands i
   const once = await collectWith(1);
   assert.equal(once.facts.notLoaded, undefined);
   assert.equal(once.loads, again.loads + 1, "one load more than a measurement in which everything arrived");
+
+  // A stylesheet that keeps missing can be the site itself: the next collect is the one more try, and missed there it is a
+  // limitation at once. It does not send the run back again, and the collect after it keeps that measurement.
+  rmSync(pageStampPath(run, "start"));
+  assert.equal((await collectWith(Number.POSITIVE_INFINITY)).facts.notLoadedAgain, undefined);
+  const twice = await collectWith(Number.POSITIVE_INFINITY);
+  assert.equal(twice.facts.notLoadedAgain, true);
+  const stays = gateChecks(await loadRun(run));
+  assert.deepEqual(stays.gaps.filter((gap) => gap.check === "page-resource-not-loaded"), []);
+  assert.deepEqual(stays.limitations.filter((gap) => gap.check === "page-resource-not-loaded").map((gap) => gap.page), ["P1"]);
+  assert.match(stays.limitations.find((gap) => gap.check === "page-resource-not-loaded")!.missingNl, /^Bij het meten van deze pagina kwam de stylesheet \S+\/style\.css ook bij een nieuwe poging niet binnen\. /);
+  const kept = await collectWith(Number.POSITIVE_INFINITY);
+  assert.equal(kept.loads, 1, "only loaded to compare the content");
+  assert.equal(kept.facts.notLoadedAgain, true);
 });
 
 test("a stamp that says a stylesheet did not arrive is measured again, before the content is compared", async () => {
@@ -104,4 +118,6 @@ test("a stamp that says a stylesheet did not arrive is measured again, before th
   assert.equal(reason, "bij de vorige meting kwam de stylesheet example.org/style.css niet binnen (HTTP 503)");
   assert.equal(loaded, false, "the page is not loaded to compare");
   assert.equal(await remeasureReason({ ...fitting, summary: {} }, "k", "b", async () => ({ sha256: "c", snapshot: "" }), async () => ""), null);
+  // A measurement that was the one more try already is kept while the content stays the same.
+  assert.equal(await remeasureReason({ ...fitting, summary: { ...fitting.summary, notLoadedAgain: true } }, "k", "b", async () => ({ sha256: "c", snapshot: "" }), async () => ""), null);
 });

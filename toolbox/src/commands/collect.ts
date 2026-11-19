@@ -16,7 +16,7 @@ import { arrowReach, skipLinkProbe, tabWalk } from "../instruments/keyboard.ts";
 import { mediaReport } from "../instruments/media.ts";
 import { pageOperables } from "../instruments/operables.ts";
 import { controlsOnlyWithSpacing, overflowProbe, textSpacing, visibleControlKeys, VIEWPORT_PROBES } from "../instruments/overflow.ts";
-import { CONTENT_VERSION, missedNl, missedResources, pageContentPath, pageKey, pageStampPath, readStamp, remeasureReason, SWEEP_STAMP_VERSION, type ContentNow, type PageStamp } from "../lib/sweepstamp.ts";
+import { CONTENT_VERSION, missedNl, missedResources, missedToRetry, pageContentPath, pageKey, pageStampPath, readStamp, remeasureReason, SWEEP_STAMP_VERSION, type ContentNow, type PageStamp } from "../lib/sweepstamp.ts";
 import { runScope, watchNotLoaded, type NotLoaded } from "../session/safety.ts";
 import { languagesOf } from "../instruments/languages.ts";
 import { visualOrder } from "../instruments/order.ts";
@@ -114,8 +114,9 @@ async function noteFailed(runDir: string, entry: SampleItem, error: string): Pro
 /**
  * `sweep` closes what covers the page before anything is measured. Every browser context is opened through `contexts`, which closes them all when the time is up.
  * `retriedAfterTimeout` marks the runs of the rule engines as the one retry after an engine ran out of time on this page before.
+ * `retriedAfterMiss` marks this measurement as the one retry after an earlier one missed a stylesheet or script of the site.
  */
-async function collectPage(browser: Browser, entry: SampleItem, runDir: string, sweep: ModelSweep, noted: Noted = {}, contexts = new PageContexts(), retriedAfterTimeout = false): Promise<Record<string, unknown>> {
+async function collectPage(browser: Browser, entry: SampleItem, runDir: string, sweep: ModelSweep, noted: Noted = {}, contexts = new PageContexts(), retriedAfterTimeout = false, retriedAfterMiss = false): Promise<Record<string, unknown>> {
   // Stylesheets and scripts of the site itself that did not arrive in any load of the page: what was measured then is not what a visitor gets.
   const missed: NotLoaded[] = [];
   const scope = runScope();
@@ -317,9 +318,11 @@ async function collectPage(browser: Browser, entry: SampleItem, runDir: string, 
   const notLoaded = missedResources(missed);
   if (notLoaded.length > 0) {
     process.stderr.write(`collect: ${entry.url}: bij het meten ${missedNl(notLoaded)}\n`);
+    // Missed again on the one more try: the gate makes it a limitation, and the next collect keeps this measurement.
+    const again = retriedAfterMiss ? { notLoadedAgain: true } : {};
     const facts = await readJson<Record<string, unknown>>(join(dir, "facts.json"));
-    await writeJson(join(dir, "facts.json"), { ...facts, notLoaded });
-    summary.notLoaded = notLoaded;
+    await writeJson(join(dir, "facts.json"), { ...facts, notLoaded, ...again });
+    Object.assign(summary, { notLoaded, ...again });
   }
   return summary;
 }
@@ -392,7 +395,7 @@ export async function collect(options: CollectOptions): Promise<void> {
             // A page that keeps the browser busy never answers: when the time is up, the contexts of the try are closed.
             const measureOnce = (): Promise<Record<string, unknown>> => {
               const contexts = new PageContexts();
-              return withinPageTime(PAGE_LIMIT_MS, () => collectPage(browser, entry, options.run, scope, noted, contexts, timedOut.length > 0), () => contexts.closeAll());
+              return withinPageTime(PAGE_LIMIT_MS, () => collectPage(browser, entry, options.run, scope, noted, contexts, timedOut.length > 0, missedToRetry(stamp).length > 0), () => contexts.closeAll());
             };
             const summary = await sayingItRuns(`collect ${index + 1}/${pages.length} ${entry.url}`, () => retryOnce(entry.url, measureOnce, crowd));
             return { summary, key, noted, reused: false, reason, started, scope };

@@ -232,6 +232,13 @@ export function missedResources(entries: readonly { resourceType: string; url: s
 }
 
 /**
+ * What the earlier measurement of a page did not get of the site, when that measurement gets one more try. Nothing when it
+ * was that try already (`notLoadedAgain`): a file that keeps missing can be the site itself, and becomes a limitation.
+ */
+export const missedToRetry = (stamp: Pick<PageStamp, "summary"> | null): Missed[] =>
+  stamp && stamp.summary?.notLoadedAgain !== true ? ((stamp.summary?.notLoaded ?? []) as Missed[]) : [];
+
+/**
  * Why a page of the sample is measured again instead of keeping what an earlier sweep measured, in one
  * line for the person who runs it; null when the earlier measurement still holds. `now` is only asked
  * for when the stamp and the key agree: loading the page costs time. `timedOut` is what `enginesToRetry`
@@ -250,8 +257,8 @@ export async function remeasureReason(
   if (!stamp) return "geen stempel van een eerdere meting";
   if (stamp.version !== SWEEP_STAMP_VERSION || stamp.contentVersion !== CONTENT_VERSION) return "stempel van een andere versie van loep";
   if (stamp.key !== key) return stamp.blockers !== blockers ? "blokkades of hoe ze worden gesloten anders" : "pagina anders in de steekproef (soort of ingesloten venster)";
-  // A page measured while a stylesheet or script of the site did not arrive is measured again, also with the same content.
-  const missed = (stamp.summary?.notLoaded ?? []) as Missed[];
+  // A page measured while a stylesheet or script of the site did not arrive is measured again once, also with the same content.
+  const missed = missedToRetry(stamp);
   if (missed.length > 0) return `bij de vorige meting ${missedNl(missed)}`;
   const retry = engineRetryReason(timedOut);
   if (retry) return retry;

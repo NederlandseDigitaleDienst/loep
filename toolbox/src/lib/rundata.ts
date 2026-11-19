@@ -198,6 +198,8 @@ export interface Facts {
   collectError?: string;
   /** Stylesheets and scripts of the site that did not arrive while collect measured this page, also not when it was loaded once more. The next collect measures it again. Absent when all arrived. */
   notLoaded?: Missed[];
+  /** Set with `notLoaded` when this measurement was already the one more try after an earlier one missed a file of the site: the gate makes it a limitation. */
+  notLoadedAgain?: true;
 }
 
 export interface TabStop extends Element {
