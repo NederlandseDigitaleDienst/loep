@@ -3,8 +3,8 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
+import { enterUser, inUse, leaveUser, type InUse } from "../lib/voiceover-users.ts";
 import { COPIED_FILES, GUEST_DIR, GuestQueue, isReady, lumeGuest, markStarting, putFile, read, realClock, recordedStart, shutdown, start, statusNl, VM_NAME, voiceoverStatus, type Clock, type Guest } from "../lib/voiceover.ts";
-
 import { otherSessionProcesses, type SessionProcess } from "../session/client.ts";
 
 const run = promisify(execFile);
@@ -12,10 +12,11 @@ const GUEST_FILES = fileURLToPath(new URL("../../voiceover/guest/", import.meta.
 
 export const VOICEOVER_USAGE = `loep voiceover <command>
 
-  start                                  Boot the virtual Mac and warm it up: three spoken sentences, then VoiceOver on and off
+  start [--run <run>]                    Boot the virtual Mac and warm it up: three spoken sentences, then VoiceOver on and off
                                          once. A boot whose warm-up fails is shut down and done again, at most three boots.
                                          Progress with times on stderr; 9 minutes, 20 to 30 with a restart. Leave it running during an evaluation.
-                                         Leaves word on this machine while it runs and how it ended, for status
+                                         Leaves word on this machine while it runs and how it ended, for status. --run enters
+                                         the run as a user of the virtual Mac until stop --run, or until it writes nothing for 6 hours
   status                                 Whether VoiceOver can read aloud now: the virtual Mac runs and was warmed up since it booted.
                                          Also a start that still runs, and the last start that failed. Exit 0 when it can read, 1 when not
   read --url <address or file> [--steps <n>] [--press <name>] [--out <file>]
@@ -26,9 +27,10 @@ export const VOICEOVER_USAGE = `loep voiceover <command>
                                          shape of session speak; --out keeps the full answer, with every version. After a press
                                          VoiceOver is listened to for six seconds. Waits while another reading uses the virtual Mac.
                                          In an evaluation an agent reads with the session command voiceover instead
-  stop [--run <run>] [--force]           Shut the virtual Mac down. Refuses while another run on this machine still has sessions:
-                                         there is one virtual Mac, and that run may still read with it. --run names your own run,
-                                         whose sessions do not count; --force shuts down anyway
+  stop [--run <run>] [--force]           Shut the virtual Mac down. Refuses while another run is entered by start --run, a start
+                                         still runs, or another run on this machine still has sessions: there is one virtual Mac, and
+                                         that run may still read with it. --run takes your own run out, and its sessions do not count;
+                                         --force shuts down anyway
   setup                                  Check lume and the virtual Mac, and set up inside it what can be set without a person;
                                          says per step what is done and what you have to do yourself (just voiceover-setup)
 
@@ -42,8 +44,9 @@ const IMAGE = "macos-tahoe-vanilla:latest";
 const CPUS = "4";
 const MEMORY = "6GB";
 
-/** `loep voiceover start`: exit 0 when VoiceOver is ready to read. */
-export async function voiceoverStart(guest: Guest = lumeGuest()): Promise<number> {
+/** `loep voiceover start`: exit 0 when VoiceOver is ready to read. With a run, the run is entered as a user first. */
+export async function voiceoverStart(flags: { run?: string | undefined } = {}, guest: Guest = lumeGuest()): Promise<number> {
+  if (flags.run) enterUser(flags.run);
   const started = await recordedStart(() => start(guest, (line) => process.stderr.write(`${line}\n`)));
   process.stdout.write(`${JSON.stringify({ ok: started.ok, boots: started.boots, seconds: started.seconds, attempts: started.attempts, ...(started.versions ? { versions: started.versions } : {}), ...(started.error ? { error: started.error } : {}) })}\n`);
   return started.ok ? 0 : 1;
@@ -69,8 +72,8 @@ export async function voiceoverRead(flags: ReadFlags, guest: Guest = lumeGuest()
 }
 
 /** Set off `loep voiceover start` as a process of its own and go on: for a look at the state that finds the guest running but not warmed up. */
-export function startInBackground(): void {
-  const child = spawn(process.execPath, [fileURLToPath(new URL("../cli.ts", import.meta.url)), "voiceover", "start"], { detached: true, stdio: "ignore" });
+export function startInBackground(run?: string): void {
+  const child = spawn(process.execPath, [fileURLToPath(new URL("../cli.ts", import.meta.url)), "voiceover", "start", ...(run ? ["--run", run] : [])], { detached: true, stdio: "ignore" });
   child.unref();
   if (child.pid) markStarting(child.pid);
 }
@@ -83,28 +86,40 @@ export async function voiceoverStatusCommand(guest: Guest = lumeGuest()): Promis
 }
 
 export interface StopFlags {
-  /** Shut down although another run still holds sessions. */
+  /** Shut down although another run is entered or still holds sessions, or a start still runs. */
   force?: boolean | undefined;
-  /** The run of the caller: its own sessions do not keep the virtual Mac up. */
+  /** The run of the caller: it is taken out as a user, and its own sessions do not keep the virtual Mac up. */
   run?: string | undefined;
 }
 
-/** Why `voiceover stop` leaves the virtual Mac up, and what to do. */
+/** Why `voiceover stop` leaves the virtual Mac up because another run holds sessions, and what to do. */
 export function stopRefusedNl(others: SessionProcess[]): string {
   const known = others.filter((other) => other.run !== null);
   const runs = known.length > 0 ? ` Het gaat om ${known.map((other) => `${other.run} (${other.sessions ?? "onbekend aantal"} ${other.sessions === 1 ? "sessie" : "sessies"})`).join(" en ")}.` : "";
   return `geweigerd: de virtuele Mac blijft aan. Op deze machine ${others.length === 1 ? "heeft een ander onderzoek" : `hebben ${others.length} andere onderzoeken`} nog sessies lopen, en ${others.length === 1 ? "dat kan" : "die kunnen"} VoiceOver nog nodig hebben.${runs} Het onderzoek dat als laatste klaar is, stopt de virtuele Mac. Is het je eigen run, geef die dan mee: loep voiceover stop --run <run>. Weet je zeker dat geen onderzoek hem nog gebruikt, stop hem dan met: loep voiceover stop --force`;
 }
 
+/** Why `voiceover stop` leaves the virtual Mac up because another run is entered or a start runs, and what to do. */
+export function inUseNl({ users, starting }: InUse): string {
+  const runs = users.length === 0 ? "" : `${users.length === 1 ? "een ander onderzoek gebruikt" : `${users.length} andere onderzoeken gebruiken`} hem nog (${users.map((user) => user.run).join(" en ")})`;
+  const start = starting ? `een start loopt nog (proces ${starting.pid})` : "";
+  return `geweigerd: de virtuele Mac blijft aan, want ${[runs, start].filter(Boolean).join(" en ")}. Het onderzoek dat als laatste klaar is, stopt de virtuele Mac. Is het je eigen run, geef die dan mee: loep voiceover stop --run <run>. Een onderzoek dat 6 uur niets schreef, telt niet meer mee. Weet je zeker dat niemand hem nog gebruikt, stop hem dan met: loep voiceover stop --force`;
+}
+
 /**
- * `loep voiceover stop`: there is one virtual Mac per machine, so a run that is done does not
- * shut it down while the session process of another run still holds sessions.
+ * `loep voiceover stop`: there is one virtual Mac per machine, so a run that is done does not shut
+ * it down while another run is entered as a user, a start runs, or the session process of another
+ * run still holds sessions. The entries are looked at first: they also cover a run that holds no
+ * session now, as during the sweep. With --run the own run is taken out first, also when the
+ * virtual Mac stays up.
  */
-export async function voiceoverStop(flags: StopFlags = {}, guest: Guest = lumeGuest(), others: () => Promise<SessionProcess[]> = () => otherSessionProcesses(flags.run)): Promise<number> {
+export async function voiceoverStop(flags: StopFlags = {}, guest: Guest = lumeGuest(), others: () => Promise<SessionProcess[]> = () => otherSessionProcesses(flags.run), check: () => InUse = () => inUse(flags.run)): Promise<number> {
+  if (flags.run) leaveUser(flags.run);
   if (!flags.force && (await guest.state()) === "running") {
-    const inUse = await others();
-    if (inUse.length > 0) {
-      process.stdout.write(`${JSON.stringify({ ok: false, stopped: "niet gestopt", error: stopRefusedNl(inUse) })}\n`);
+    const found = check();
+    const sessions = found.users.length > 0 || found.starting ? [] : await others();
+    if (found.users.length > 0 || found.starting || sessions.length > 0) {
+      process.stdout.write(`${JSON.stringify({ ok: false, stopped: "niet gestopt", error: sessions.length > 0 ? stopRefusedNl(sessions) : inUseNl(found) })}\n`);
       return 1;
     }
   }

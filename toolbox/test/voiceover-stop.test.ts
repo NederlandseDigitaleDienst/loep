@@ -49,12 +49,15 @@ function listen(path: string, answer: Record<string, unknown> | null): Promise<S
   return new Promise((resolve) => server.listen(path, () => resolve(server)));
 }
 
+/** No run entered as a user and no start: the entries of this machine are not looked at. */
+const nobody = () => ({ users: [], starting: null });
+
 const socketOf = (runDir: string): string => `loep-${sha256(realpathSync(runDir)).slice(0, 16)}.sock`;
 
 test("voiceover stop leaves the virtual Mac up while another run on this machine has sessions", async () => {
   const other: SessionProcess[] = [{ run: "/runs/other", sessions: 3 }];
   const busy = fakeGuest("running");
-  const refused = await stop({}, busy.api, async () => other);
+  const refused = await stop({}, busy.api, async () => other, nobody);
   assert.equal(refused.code, 1);
   assert.equal(refused.printed.ok, false);
   assert.equal(busy.guest.state, "running");
@@ -69,7 +72,7 @@ test("voiceover stop leaves the virtual Mac up while another run on this machine
 
   // No other run at work: as before.
   const free = fakeGuest("running");
-  const done = await stop({}, free.api, async () => []);
+  const done = await stop({}, free.api, async () => [], nobody);
   assert.deepEqual([done.code, done.printed.ok, done.printed.stopped, free.guest.state], [0, true, "netjes afgesloten", "stopped"]);
 
   // A virtual Mac that does not run has nothing to refuse.

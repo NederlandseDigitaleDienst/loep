@@ -328,6 +328,12 @@ export async function voiceoverStatus(guest: Guest = lumeGuest(), name = VM_NAME
   return { ...status, warm, bootedAt: new Date(booted * 1000).toISOString(), ...(warm ? {} : { notWarm: mark === undefined ? ("noMark" as const) : ("otherBoot" as const) }) };
 }
 
+/** A `start` that still runs on this machine, or null. */
+export function runningStart(name = VM_NAME(), dir = stateDir()): { pid: number; since: string } | null {
+  const starting = readRecord<{ pid: number; since: string }>(startingFile(dir, name));
+  return starting && alive(starting.pid) ? starting : null;
+}
+
 /** Set up on this machine: lume is there and so is the virtual Mac. */
 export const isSetUp = (status: VoiceoverStatus): boolean => status.state === "running" || status.state === "stopped";
 /** VoiceOver can read aloud now. */

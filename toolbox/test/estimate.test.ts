@@ -195,7 +195,7 @@ test("with the virtual Mac for VoiceOver set up, the estimate says to start it w
   assert.deepEqual(estimateRun(run, { voiceover: { state: "absent" } }).notesNl, []);
   const stopped = estimateRun(run, { voiceover: { state: "stopped" } }).notesNl;
   assert.equal(stopped.length, 1);
-  assert.match(stopped[0]!, /start hem tegelijk met de veegronde \(loep voiceover start, 9 minuten, of 20 tot 30 met een herstart\).*loep voiceover status.*loep voiceover stop/);
+  assert.match(stopped[0]!, /start hem tegelijk met de veegronde \(loep voiceover start --run <run>, 9 minuten, of 20 tot 30 met een herstart\).*loep voiceover status.*loep voiceover stop --run <run>\)/);
   const ready = { state: "running", warm: true, bootedAt: "2026-11-15T08:00:00Z" } as const;
   assert.match(estimateRun(run, { voiceover: ready }).notesNl[0]!, /draait en is opgewarmd: beoordelaars, verifieerders en de afmaakronde/);
   // Running but not warmed up, or a start that failed: the estimate says so, and what to do.

@@ -40,19 +40,20 @@ Daarna richt `just voiceover-setup` de virtuele Mac in, zie "Gebruik".
 
 ```
 just voiceover-setup
-node toolbox/src/cli.ts voiceover start
+node toolbox/src/cli.ts voiceover start --run <run>
 node toolbox/src/cli.ts voiceover status
 node toolbox/src/cli.ts voiceover read --url <adres of bestand> --steps 10
 node toolbox/src/cli.ts voiceover read --url <adres of bestand> --steps 10 --press "Verstuur" --out antwoord.json
-node toolbox/src/cli.ts voiceover stop
+node toolbox/src/cli.ts voiceover stop --run <run>
 ```
 
 - `start` start de virtuele Mac, wacht tot hij rustig is en warmt hem op. Voortgang met tijden komt op stderr. Laat hem daarna draaien zolang het onderzoek duurt.
+- Met `--run <run>` meldt `start` de run aan als gebruiker van de virtuele Mac, en `stop --run <run>` meldt haar weer af. Zolang een andere run is aangemeld, of een `start` nog loopt, weigert `stop` met afsluitcode 1 en blijft de virtuele Mac aan. Met `--force` sluit hij toch af. De aanmeldingen staan per run in `~/.cache/loep/voiceover/<naam>.users/`. Een aanmelding vervalt als de run 6 uur niets schreef of niet meer bestaat, zodat een afgebroken run de virtuele Mac niet voor altijd bezet houdt.
 - `status` zegt of VoiceOver nu kan voorlezen: de virtuele Mac draait en is opgewarmd sinds hij opstartte. Opgewarmd is hij als het merkteken van de opwarming het nummer draagt dat macOS aan deze start gaf (`kern.bootsessionuuid`); is hij het niet, dan zegt `status` onder `notWarm` of het merkteken ontbreekt of van een eerdere start is. `pending` warmt een virtuele Mac die draait maar niet is opgewarmd zelf op de achtergrond op. Het noemt ook een `start` die nog loopt en hoe de laatste `start` afliep; die laat daarvoor een bestand achter in `~/.cache/loep/voiceover/`. Afsluitcode 0 als VoiceOver voorleest, anders 1. `estimate` en `pending` melden hetzelfde zolang de virtuele Mac is ingericht maar niet voorleest.
 - `read` opent de pagina in Safari, gaat de webinhoud in en geeft per stap de zin die VoiceOver uitsprak. Een bestand op de eigen machine wordt naar de virtuele Mac gekopieerd. Een adres op localhost van de eigen machine weigert het commando: in de virtuele Mac is dat een andere machine.
 - Met `--press` drukt VoiceOver het eerste onderdeel in waarvan de uitgesproken zin die tekst bevat, met de toetsen VO-spatie. Geef daarom de naam met de rol erbij (`--press "Verstuur button"`). Het antwoord bewaart wat VoiceOver in de 6 seconden daarna uit zichzelf zei.
 - `--out` bewaart het volledige antwoord, met de versies van macOS, Safari en node in de virtuele Mac en de voorkeuren waarmee VoiceOver draaide.
-- `stop` sluit de virtuele Mac af. Er is één virtuele Mac per machine. Daarom weigert `stop` zolang het sessieproces van een andere run op deze machine nog sessies heeft: dat onderzoek kan VoiceOver nog nodig hebben. Met `--run <run>` tellen de sessies van je eigen run niet mee, en met `--force` sluit hij toch af. Een onderzoek dat op dat moment geen sessie heeft, zoals tijdens de veegronde, ziet `stop` niet.
+- `stop` sluit de virtuele Mac af. Er is één virtuele Mac per machine. Daarom weigert `stop` zolang het sessieproces van een andere run op deze machine nog sessies heeft: dat onderzoek kan VoiceOver nog nodig hebben. Met `--run <run>` tellen de sessies van je eigen run niet mee, en met `--force` sluit hij toch af. Een onderzoek dat op dat moment geen sessie heeft, zoals tijdens de veegronde, ziet `stop` aan zijn aanmelding (hierboven).
 
 De afdruk van `read` heeft de sleutels van `speak --steps`: `steps`, `reader` en `readerNote`. Het volledige antwoord heeft `methods`, `agreement` en `differences` zoals elke meting met meer bronnen, met VoiceOver als bron die niet is nagebootst (`simulated: false`) en de taal van de uitspraak (`language`).
 
@@ -87,6 +88,8 @@ Het antwoord heeft de sleutels van `voiceover read` en daarnaast:
 De waarneming bewaart de proefpagina naast zich (`<nr>-proefpagina.html`, met haar hash in `images`), de hash van de opgehaalde pagina, welke stappen hoe zijn nagespeeld, wat is tegengehouden en de versies van macOS en Safari. De methode heet `screen-reader` met implementatie `voiceover`. `evaluate` neemt haar op bij de gebruikte instrumenten, en het rapport noemt VoiceOver met Safari en de versies onder de hulpsoftware en in de beperkingen.
 
 **Eén virtuele Mac, een wachtrij.** VoiceOver leest één pagina tegelijk. Voorlezingen van de agents van één sessieproces gaan na elkaar, in de volgorde waarin ze kwamen; een slot op schijf (`~/.cache/loep/voiceover/<naam>.lock`) houdt een voorlezing van een ander proces buiten, ook `voiceover read` met de hand. Een slot van een proces dat niet meer bestaat, of dat ouder is dan 7 minuten, wordt overgenomen. Na 10 minuten wachten geeft een voorlezing het op. Het commando mag daarom langer duren dan de gewone 90 seconden: tot 17 minuten. Het wachten telt mee in de minuten van de agent.
+
+**Eén virtuele Mac voor alle onderzoeken.** Er is één virtuele Mac per machine. Een onderzoek meldt zich bij de start aan en houdt de virtuele Mac zo het hele onderzoek bezet, ook als het even geen sessie heeft, zoals tijdens de veegronde, tussen twee rondes en na een pauze. `pending` warmt een virtuele Mac op met de run erbij en meldt haar daarmee ook aan.
 
 **Niet beschikbaar.** Draait de virtuele Mac niet, dan antwoordt het commando meteen dat VoiceOver niet beschikbaar is en dat de agent verder werkt zoals zonder. Het kost dan niets, net als een toestand die Safari niet kan naspelen. De opdrachten aan de agents (`templates/gereedschap.md`, `beoordeel.md`, `verifieer.md`, `afmaak.md`) zeggen wanneer ze het gebruiken: waar de nagebootste lezer zegt "probeer het met een echte schermlezer", en waar het oordeel afhangt van wat een schermlezer werkelijk voorleest, voordat ze `mens nodig` schrijven.
 
