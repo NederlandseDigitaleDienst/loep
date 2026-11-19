@@ -202,6 +202,13 @@ export function engineRetryReason(timedOut: { engine: string; error: string }[])
 }
 
 /**
+ * What did not arrive, in a few words for the person who runs the sweep and for the gate, with how the browser or the server
+ * said so. With `again` for the reader of the report: it did not arrive on a new attempt either, without the technical reason.
+ */
+export const missedNl = (missed: { resourceType: string; address: string; error: string }[], again = false): string =>
+  `${missed.length === 1 ? "kwam" : "kwamen"} ${missed.slice(0, 3).map((entry) => `${entry.resourceType === "stylesheet" ? "de stylesheet" : "het script"} ${entry.address}`).join(", ")}${missed.length > 3 ? ` en ${missed.length - 3} andere` : ""} ${again ? "ook bij een nieuwe poging niet binnen" : `niet binnen (${missed[0]!.error})`}`;
+
+/**
  * Why a page of the sample is measured again instead of keeping what an earlier sweep measured, in one
  * line for the person who runs it; null when the earlier measurement still holds. `now` is only asked
  * for when the stamp and the key agree: loading the page costs time. `timedOut` is what `enginesToRetry`

@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { once } from "node:events";
+import { createServer, type AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -9,7 +11,7 @@ import { setupLines } from "../src/commands/voiceover.ts";
 import { speechDifferences } from "../src/instruments/methods/speech.ts";
 import { GUEST_VERSION, METHODS, toolStatus } from "../src/instruments/methods/registry.ts";
 import { MEASURE_COMMANDS } from "../src/lib/verdict.ts";
-import { addressFor, COPIED_FILES, FIRST_NUMBER, framed, GuestQueue, isReady, job, LIMITS, read, readingOf, markStarting, recordedStart, shutdown, SILENT_NOTE, start, statusNl, VOICEOVER, VOICEOVER_NOTE, voiceoverStatus, warmUpDue, voiceoverWarningNl, type Clock, type Guest, type GuestAnswer, type GuestState, type Versions } from "../src/lib/voiceover.ts";
+import { addressFor, connectTo, COPIED_FILES, FIRST_NUMBER, framed, GuestQueue, hostRefuses, isReady, job, LIMITS, lumeGuest, read, readingOf, markStarting, recordedStart, shutdown, SILENT_NOTE, start, statusNl, VOICEOVER, VOICEOVER_NOTE, voiceoverStatus, warmUpDue, voiceoverWarningNl, type Clock, type Guest, type GuestAnswer, type GuestState, type Reach, type Versions } from "../src/lib/voiceover.ts";
 import { guardLines, loadedLine, planSteps, playedOf, policyOf, testPage } from "../src/lib/voiceover-page.ts";
 import type { Step } from "../src/session/observations.ts";
 
@@ -562,4 +564,142 @@ test("the boot second is the seconds of kern.boottime, as reader.js writes it, n
   assert.equal(execFileSync("sh", ["-c", `echo '${line}' | ${FIRST_NUMBER}`], { encoding: "utf8" }).trim(), "1794713662");
   // reader.js reads it with the first match of /sec = (\d+)/.
   assert.equal(/sec = (\d+)/.exec(line)?.[1], "1794713662");
+});
+
+/** A guest lume calls running that gives no answer over ssh, with what the port of ssh says from this process. */
+function silentGuest(reach: Omit<Reach, "state">) {
+  const guest = { state: "running" as GuestState, boots: 0, halts: 0, commands: [] as string[], reaches: 0 };
+  const api: Guest = {
+    state: async () => guest.state,
+    boot: async () => void ((guest.boots += 1), (guest.state = "running")),
+    halt: async () => void ((guest.halts += 1), (guest.state = "stopped")),
+    exec: async (command) => (guest.commands.push(command), null),
+    reach: async () => ((guest.reaches += 1), { state: guest.state, ...reach }),
+  };
+  return { guest, api };
+}
+
+test("start: a guest the host keeps this process from ends the start at once, with the setting to look at, and is not booted again", async () => {
+  const refused = { address: "192.0.2.7", port22: "EHOSTUNREACH" };
+  // Running already: nothing to wait for.
+  const ran = silentGuest(refused);
+  const clock = fakeClock();
+  const lines: string[] = [];
+  const started = await start(ran.api, (line) => lines.push(line), clock, () => Buffer.from(""));
+  assert.equal(started.ok, false);
+  assert.match(started.error!, /niet bereikbaar/);
+  assert.match(started.error!, /poort 22 van 192\.0\.2\.7 geeft "No route to host"/);
+  assert.match(started.error!, /Privacy en beveiliging > Lokaal netwerk/);
+  assert.doesNotMatch(started.error!, /bureaublad|automatisch in/);
+  assert.equal(clock.slept, 0, "no wait for a desktop that cannot be seen");
+  assert.equal(ran.guest.boots, 0);
+  assert.equal(ran.guest.halts, 0, "the guest is fine and stays up");
+  assert.ok(!ran.guest.commands.some((command) => command.includes("shutdown")));
+  assert.deepEqual(started.attempts, ["start 1: de host weigert het verkeer naar de virtuele Mac"]);
+  assert.ok(lines.some((line) => line.includes("Lokaal netwerk")));
+
+  assert.match(started.error!, /loep voiceover stop/, "the way out when the setting is on and the guest hangs");
+
+  // Booted here: a guest that boots has no network yet, so it gets the whole wait a boot may take.
+  const booted = silentGuest(refused);
+  booted.guest.state = "stopped";
+  const second = fakeClock();
+  const again = await start(booted.api, () => undefined, second, () => Buffer.from(""));
+  assert.match(again.error!, /Lokaal netwerk/);
+  assert.equal(booted.guest.boots, 1, "one boot, not three");
+  assert.equal(booted.guest.halts, 0);
+  assert.equal(second.slept, LIMITS.desktopSeconds * 1000);
+  assert.equal(booted.guest.reaches, 1, "the port is not tried before the guest had time to come up");
+});
+
+test("start: a guest booted here that has no route for its first minutes and then comes up is warmed up, not called refused", async () => {
+  const { guest, api } = fakeGuest();
+  const clock = fakeClock();
+  let up = Infinity;
+  let reaches = 0;
+  const slow: Guest = {
+    ...api,
+    boot: async () => (await api.boot(), void (up = clock.now() + 150_000)),
+    exec: async (command, seconds) => (clock.now() < up ? null : api.exec(command, seconds)),
+    reach: async () => ((reaches += 1), { state: guest.state, address: "192.0.2.7", port22: clock.now() < up ? "EHOSTUNREACH" : "open" }),
+  };
+  const started = await start(slow, () => undefined, clock, files);
+  assert.equal(started.ok, true, started.error);
+  assert.equal(guest.boots, 1);
+  assert.equal(reaches, 0);
+});
+
+test("start: a guest that gives no answer over ssh is not called a guest without a desktop, and what port 22 said is told", async () => {
+  for (const [reach, told] of [
+    [{ address: "192.0.2.7", port22: "open" }, /geen antwoord over ssh binnen 240 seconden; poort 22 van 192\.0\.2\.7 neemt wel een verbinding aan/],
+    [{ address: "192.0.2.7", port22: "ECONNREFUSED" }, /geen antwoord over ssh binnen 240 seconden; een verbinding naar poort 22 van 192\.0\.2\.7 geeft ECONNREFUSED/],
+    [{ address: "192.0.2.7", port22: "timeout" }, /geen antwoord over ssh binnen 240 seconden; poort 22 van 192\.0\.2\.7 neemt binnen 5 seconden geen verbinding aan/],
+    [{ address: null, port22: null }, /geen antwoord over ssh binnen 240 seconden; lume geeft geen adres voor de virtuele Mac/],
+  ] as const) {
+    const { guest, api } = silentGuest(reach);
+    const started = await start(api, () => undefined, fakeClock(), () => Buffer.from(""));
+    assert.equal(started.ok, false);
+    assert.equal(started.attempts.length, LIMITS.boots, "another boot can help here, so it is tried");
+    for (const attempt of started.attempts) {
+      assert.match(attempt, told);
+      assert.doesNotMatch(attempt, /bureaublad/);
+    }
+    assert.equal(guest.boots, LIMITS.boots - 1);
+  }
+  // No route to a guest lume does not call running is not the host refusing.
+  assert.equal(hostRefuses({ state: "stopped", address: "192.0.2.7", port22: "EHOSTUNREACH" }), false);
+  // A guest that answers but shows no Dock keeps the message about the desktop, and the port is not tried.
+  const { guest, api } = fakeGuest({ noDesktopOnBoot: [1, 2, 3] });
+  const started = await start(api, () => undefined, fakeClock(), () => Buffer.from(""));
+  assert.match(started.attempts[0]!, /geen bureaublad binnen 240 seconden/);
+  assert.equal(guest.boots, LIMITS.boots);
+});
+
+test("the guest of lume tries port 22 of the address lume get gives, and passes on what the connection said", async () => {
+  const asked: string[] = [];
+  const tools = (get: string, connect: string) => ({
+    lume: async () => ({ stdout: get }),
+    connect: async (address: string, port: number) => (asked.push(`${address}:${port}`), connect),
+  });
+  const running = JSON.stringify([{ name: "vm", status: "running", ipAddress: "192.0.2.7" }]);
+  const reach = await lumeGuest("vm", tools(running, "EHOSTUNREACH")).reach!();
+  assert.deepEqual(reach, { state: "running", address: "192.0.2.7", port22: "EHOSTUNREACH" });
+  assert.equal(hostRefuses(reach), true);
+  assert.deepEqual(asked, ["192.0.2.7:22"]);
+  assert.equal(await lumeGuest("vm", tools(running, "open")).state(), "running");
+  // A guest without an address: nothing to connect to.
+  assert.deepEqual(await lumeGuest("vm", tools(JSON.stringify([{ name: "vm", status: "stopped", ipAddress: null }]), "open")).reach!(), { state: "stopped", address: null, port22: null });
+  assert.equal(asked.length, 1);
+});
+
+test("a connection says open for a port that listens and gives the code of the error for one that does not", async () => {
+  const server = createServer().listen(0, "127.0.0.1");
+  await once(server, "listening");
+  const { port } = server.address() as AddressInfo;
+  assert.equal(await connectTo("127.0.0.1", port, 5), "open");
+  server.close();
+  await once(server, "close");
+  assert.equal(await connectTo("127.0.0.1", port, 5), "ECONNREFUSED");
+});
+
+test("status: a running guest the host keeps this process from is said to be out of reach, with the setting to look at", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "loep-voiceover-"));
+  try {
+    const status = await voiceoverStatus(silentGuest({ address: "192.0.2.7", port22: "EHOSTUNREACH" }).api, "vm", dir);
+    assert.deepEqual(status.refused, { state: "running", address: "192.0.2.7", port22: "EHOSTUNREACH" });
+    assert.equal(isReady(status), false);
+    assert.match(statusNl(status), /^draait maar is vanuit dit proces niet bereikbaar: .*Privacy en beveiliging > Lokaal netwerk/);
+    // While a start runs the guest may still boot: the port says nothing then.
+    markStarting(process.pid, "vm", dir);
+    const starting = await voiceoverStatus(silentGuest({ address: "192.0.2.7", port22: "EHOSTUNREACH" }).api, "vm", dir);
+    assert.equal(starting.refused, undefined);
+    assert.match(statusNl(starting), /^wordt gestart/);
+    rmSync(join(dir, "vm.starting.json"));
+    // Silent for another reason: as before.
+    const silent = await voiceoverStatus(silentGuest({ address: "192.0.2.7", port22: "open" }).api, "vm", dir);
+    assert.equal(silent.refused, undefined);
+    assert.match(statusNl(silent), /geeft geen antwoord: hij start nog op of hangt/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
