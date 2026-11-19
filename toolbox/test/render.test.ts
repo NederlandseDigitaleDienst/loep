@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
-import { browserUse, gateLineNl, readVersionAccuracy, repeatedInBrowsersNl, secondBrowserUse, voiceOverSessions } from "../src/commands/evaluate.ts";
+import { browserUse, gateLineNl, implementationUse, readVersionAccuracy, repeatedInBrowsersNl, screenReaderUse, secondBrowserUse, voiceOverSessions } from "../src/commands/evaluate.ts";
 import { render } from "../src/commands/render.ts";
 import { canonicalJson } from "../src/lib/canonical.ts";
 import { mergeFindings } from "../src/lib/defects.ts";
@@ -1625,4 +1625,25 @@ test("a session counts as one in which a real screen reader read aloud only when
     record("b-143-0001", [{ method: "contrast", implementation: "loep" }]),
   ]);
   assert.deepEqual([...voiceOverSessions(records)], ["b-131"]);
+});
+
+test("a reading by VoiceOver of a test page whose scripts did not load is no use of a screen reader", () => {
+  const voiceover = { method: "screen-reader", implementation: "voiceover", version: "macOS 26.4 (25E246), Safari 26.4, node v24.21.0" };
+  const reading = (id: string, scripts: { url: string; module: boolean; held?: boolean }[]) =>
+    [id, { id, command: "voiceover", result: { methods: [voiceover], testPage: { loaded: { custom: 3, undefined: scripts.length > 0 ? 3 : 0, names: [], scripts } } } }] as const;
+  const records = new Map([
+    reading("b-131-0001", [{ url: "https://site.example/app.js", module: true }]),
+    reading("b-143-0001", [{ url: "https://elders.example/lib.js", module: true, held: true }]),
+  ]);
+  assert.deepEqual([...voiceOverSessions(records)], []);
+  const without = implementationUse(records);
+  assert.deepEqual(without, []);
+  assert.deepEqual(screenReaderUse(without).assistiveTechnology, []);
+
+  // With the scripts in, the same reading counts: in its session, in the instruments and as assistive technology.
+  records.set(...reading("b-150-0001", []));
+  assert.deepEqual([...voiceOverSessions(records)], ["b-150"]);
+  const used = implementationUse(records);
+  assert.deepEqual(used.map((entry) => [entry.implementation, entry.measurements]), [["voiceover", 1]]);
+  assert.equal(screenReaderUse(used).assistiveTechnology.length, 1);
 });

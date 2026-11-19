@@ -224,16 +224,7 @@ export async function evaluate(options: EvaluateOptions): Promise<Evaluation> {
   const QUESTION_NL: Record<string, string> = { name: "naam, rol en toestand", ax: "naam, rol en toestand", rules: "toetsregels", contrast: "contrast", target: "aanwijsgebied", taborder: "Tab-volgorde", focus: "focusaanduiding", ocr: "tekst in beeld", lang: "taal", source: "geldige HTML", motion: "beweging", media: "video en geluid", document: "documenten van de site", order: "volgorde in code en beeld", reflow: "reflow op 320 pixels", spacing: "tekstafstand", zoom: "vergroten tot 200%", speak: "volgens de standaard voorgelezen", forced: "geforceerde kleuren en meer contrast", distinct: "kleur als enig onderscheid", voiceover: "voorgelezen door een echte schermlezer (VoiceOver met Safari)" };
   // The licence of each implementation comes from the register of methods, so it does not depend on a session having asked for the list.
   const licences = new Map(METHODS.map((method) => [method.implementation, method.licence]));
-  const used = new Map<string, { implementation: string; version: string | null; commands: Set<string>; measurements: number }>();
-  for (const { command, method } of methodAnswers(observations.records)) {
-    if (typeof method.implementation !== "string" || method.error) continue;
-    const version = typeof method.version === "string" ? method.version : null;
-    const entry = used.get(`${method.implementation} ${version}`) ?? { implementation: method.implementation, version, commands: new Set<string>(), measurements: 0 };
-    entry.commands.add(command);
-    entry.measurements++;
-    used.set(`${method.implementation} ${version}`, entry);
-  }
-  const instruments: NonNullable<Evaluation["instruments"]> = [...used.values()]
+  const instruments: NonNullable<Evaluation["instruments"]> = implementationUse(observations.records)
     .sort((a, b) => a.implementation.localeCompare(b.implementation) || String(a.version).localeCompare(String(b.version)))
     .map((entry) => ({ implementation: entry.implementation, version: entry.version, licence: licences.get(entry.implementation) || null, usedForNl: [...new Set([...entry.commands].sort().map((command) => QUESTION_NL[command] ?? command))], measurements: entry.measurements }));
   const screenReader = screenReaderUse(instruments);
@@ -526,27 +517,59 @@ interface AnsweredMethod {
  * picked it up: it counts for the command it completes, and only when the record of that
  * command did not have the answer yet.
  */
-export function* methodAnswers(records: ReadonlyMap<string, { command: string; result: unknown }>): Generator<{ command: string; method: AnsweredMethod }> {
+export function* methodAnswers(records: ReadonlyMap<string, { command: string; result: unknown }>): Generator<{ command: string; method: AnsweredMethod; result: unknown }> {
   const methodsOf = (result: unknown): AnsweredMethod[] => {
     const methods = (result as { methods?: unknown } | null)?.methods;
     return Array.isArray(methods) ? (methods as AnsweredMethod[]) : [];
   };
   const key = (method: AnsweredMethod): string => `${String(method.method)} ${String(method.implementation)}`;
   for (const record of records.values()) {
-    for (const method of methodsOf(record.result)) yield { command: record.command, method };
+    for (const method of methodsOf(record.result)) yield { command: record.command, method, result: record.result };
     const completed = (record.result as { completed?: unknown } | null)?.completed;
     for (const entry of Array.isArray(completed) ? (completed as { completes?: string; command?: string; result?: unknown }[]) : []) {
       const had = new Set(methodsOf(records.get(entry.completes ?? "")?.result).map(key));
-      for (const method of methodsOf(entry.result)) if (!had.has(key(method))) yield { command: entry.command ?? record.command, method };
+      for (const method of methodsOf(entry.result)) if (!had.has(key(method))) yield { command: entry.command ?? record.command, method, result: entry.result };
     }
   }
 }
 
-/** The sessions in which a real screen reader read aloud: VoiceOver answered a measurement without an error. */
+/**
+ * Every implementation that answered a measurement, per version, with the commands it answered
+ * and how often. A method that failed is not a measurement, and neither is a reading by VoiceOver
+ * of a test page without the site's scripts.
+ */
+export function implementationUse(records: ReadonlyMap<string, { command: string; result: unknown }>): { implementation: string; version: string | null; commands: Set<string>; measurements: number }[] {
+  const used = new Map<string, { implementation: string; version: string | null; commands: Set<string>; measurements: number }>();
+  for (const { command, method, result } of methodAnswers(records)) {
+    if (typeof method.implementation !== "string" || method.error) continue;
+    if (method.implementation === "voiceover" && !readByVoiceOver(method, result)) continue;
+    const version = typeof method.version === "string" ? method.version : null;
+    const entry = used.get(`${method.implementation} ${version}`) ?? { implementation: method.implementation, version, commands: new Set<string>(), measurements: 0 };
+    entry.commands.add(command);
+    entry.measurements++;
+    used.set(`${method.implementation} ${version}`, entry);
+  }
+  return [...used.values()];
+}
+
+/**
+ * Whether a reading by VoiceOver was of a test page whose own scripts did not all load in Safari
+ * (`notLoaded` in the answer): what VoiceOver read there is not the site, so it is no use of a
+ * screen reader on the site.
+ */
+export function readWithoutScripts(result: unknown): boolean {
+  const scripts = (result as { testPage?: { loaded?: { scripts?: unknown } | null } } | null)?.testPage?.loaded?.scripts;
+  return Array.isArray(scripts) && scripts.length > 0;
+}
+
+/** Whether an answer counts as a reading by a real screen reader: VoiceOver answered without an error, on a page whose scripts loaded. */
+const readByVoiceOver = (method: AnsweredMethod, result: unknown): boolean => method.implementation === "voiceover" && !method.error && !readWithoutScripts(result);
+
+/** The sessions in which a real screen reader read aloud: VoiceOver answered a measurement without an error, on a page whose scripts loaded. */
 export function voiceOverSessions(records: ReadonlyMap<string, { id: string; command: string; result: unknown }>): Set<string> {
   const sessions = new Set<string>();
   for (const record of records.values()) {
-    for (const { method } of methodAnswers(new Map([[record.id, record]]))) if (method.implementation === "voiceover" && !method.error) sessions.add(sessionOfObservation(record.id));
+    for (const { method, result } of methodAnswers(new Map([[record.id, record]]))) if (readByVoiceOver(method, result)) sessions.add(sessionOfObservation(record.id));
   }
   return sessions;
 }
