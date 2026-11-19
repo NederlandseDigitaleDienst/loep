@@ -192,8 +192,22 @@ export function readDecision(rules: readonly ReadRequest[], method: string, url:
   const rule = rules.length > 0 ? readRuleFor(rules, method, url, headers) : null;
   if (!rule) return null;
   if (method.toUpperCase() === "OPTIONS") return { rule, pass: true };
+  // WordPress takes `action` from the query as well as from the body, and a body PHP does not parse as a form leaves
+  // only the one in the query: then the action loep read in the body is not the handler that answers.
+  if (rule.service === "wordpressajax" && actionInQuery(url)) {
+    return { rule, pass: false, reasonNl: `past bij leesverzoek "${rule.id}", maar het adres noemt een "action" in de query, en dan beslist WordPress misschien niet aan de actie in de body` };
+  }
   const verdict = recogniseSearch(rule.service, body, pathOf(url), rule.terms);
   return verdict.search ? { rule, pass: true } : { rule, pass: false, reasonNl: `past bij leesverzoek "${rule.id}", maar de body is geen zoekvraag aan ${SEARCH_SERVICES[rule.service].nameNl}: ${verdict.reasonNl}` };
+}
+
+/** Whether the query of an address has a field PHP reads as `action` (it drops leading spaces of a name), or the address is none. */
+function actionInQuery(url: string): boolean {
+  try {
+    return [...new URL(url).searchParams.keys()].some((key) => /^\s*action(?:$|\[)/.test(key));
+  } catch {
+    return true;
+  }
 }
 
 /** The pathname of an address, or undefined when it is none. */

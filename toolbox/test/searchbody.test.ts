@@ -376,6 +376,13 @@ test("a filter of WordPress posted to admin-ajax.php: the action asks for a list
   not("a counter of views", form([["action", "get_post_views"], ["post_id", "12"]]), /bevat "views"/);
   not("the heartbeat of WordPress, which saves drafts", form([["action", "heartbeat"], ["data[wp-refresh-post-lock][post_id]", "12"]]), /bevat "heartbeat"/);
   not("a form that loads more and saves", form([["action", "load_more_save"]]), /bevat "save"/);
+  // A word that asks for a list does not make the rest of the action harmless: every word but the prefix of a plugin has to be known.
+  not("a counter of visits to a page", form([["action", "page_visit"], ["nonce", "a1b2c3"]]), /bevat "visit"/);
+  not("a click on a search result that is logged", form([["action", "search_click"]]), /bevat "click"/);
+  not("a cache that is purged", form([["action", "purge_page_cache"]]), /bevat "purge"/);
+  not("a log in split in words", form([["action", "getSignIn"]]), /bevat "sign"/);
+  not("a word loep does not know", form([["action", "get_subscription_page"]]), /bevat "subscription"/);
+  not("a word loep does not know after a filter", form([["action", "filter_and_store"]]), /bevat "store"/);
   // An action that does not say it asks for a list: in doubt, held back.
   not("an action of its own name", form([["action", "my_handler"], ["cat", "3"]]), /noemt geen filter/);
   not("no action", form([["cat", "3"]]), /precies één veld "action"/);

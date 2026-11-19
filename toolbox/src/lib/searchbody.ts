@@ -672,6 +672,18 @@ const WORDPRESS_WRITE_ACTION_WORDS = new Set([
   "cart", "checkout", "basket", "winkelwagen", "booking", "reserve", "reserveer", "reservering", "afspraak", "appointment",
   "contact", "form", "formulier", "mail", "email", "newsletter", "nieuwsbrief", "signup", "signin", "signout", "password", "wachtwoord", "user", "account", "profile",
   "heartbeat", "view", "views", "count", "counter", "hit", "hits", "track", "tracking", "log", "stats", "statistics", "session", "cookie", "cookies", "consent", "dismiss", "notice",
+  "visit", "visits", "visitor", "click", "clicks", "impression", "impressions", "share", "download", "increment", "record", "store", "history", "toggle", "mark",
+  "favorite", "favourite", "bookmark", "wishlist", "upvote", "downvote", "notify", "report", "flag", "purge", "clear", "flush", "cache", "auth", "otp", "verify", "ping", "beacon",
+]);
+/**
+ * The other words an action may have besides those that ask for a list: what is listed and the glue of a handler name.
+ * Only the first word of an action may be something else, the prefix a plugin puts before its handlers (`alm_get_posts`),
+ * so a word that does something and that loep does not know yet (`search_click`, `refresh_cache`) holds the action back.
+ */
+const WORDPRESS_LIST_WORDS = new Set([
+  ...FILTER_WORDS, "ajax", "wp", "by", "and", "all", "next", "prev", "previous", "infinite", "scroll", "list", "lists", "grid", "items", "item", "posts", "post",
+  "content", "archive", "archives", "news", "nieuws", "events", "agenda", "products", "projects", "publications", "publicaties", "articles", "artikelen", "jobs", "vacatures",
+  "cat", "cats", "taxonomy", "term", "terms", "tax",
 ]);
 /** The fields that carry the nonce of WordPress against forged requests: state of the CMS, short and with no input of the visitor. */
 const WORDPRESS_NONCE_KEY = /^(?:nonce|security|_ajax_nonce|_wpnonce|wpnonce)$/i;
@@ -690,6 +702,8 @@ function wordpressAjax(body: string, path?: string): Verdict {
   const writes = words.find((word) => WORDPRESS_WRITE_ACTION_WORDS.has(word));
   if (writes) return no(`de actie "${action}" bevat "${writes}", en dat wijst op een verzoek dat iets doet`);
   if (!words.some((word) => WORDPRESS_READ_ACTION_WORDS.has(word))) return no(`de actie "${action}" noemt geen filter, sortering, pagina of zoekvraag: loep kan niet zien dat ze alleen iets opvraagt`);
+  const unknown = words.slice(1).find((word) => !WORDPRESS_READ_ACTION_WORDS.has(word) && !WORDPRESS_LIST_WORDS.has(word));
+  if (unknown) return no(`de actie "${action}" bevat "${unknown}", en loep kan niet zien dat dat woord alleen om een lijst vraagt`);
   const rest: [string, string][] = [];
   for (const [key, value] of parsed) {
     if (key === "action") continue;
@@ -733,7 +747,7 @@ export const SEARCH_SERVICES: Record<SearchServiceId, SearchService> = {
   wordpressajax: {
     id: "wordpressajax",
     nameNl: "een filter of sortering via admin-ajax.php van WordPress",
-    formNl: 'een formulier aan /wp-admin/admin-ajax.php van WordPress met precies één veld "action", waarvan een woord om een lijst vraagt (zoals filter, sort, page, load_more of search) en geen woord iets doet (zoals submit, comment, vote, login, contact of view). Verder alleen de nonce van WordPress, lege velden en wat ook in een filter of sortering als formulier mag staan. Zoals een lijst die met action=filter de resultaten van een andere categorie laadt',
+    formNl: 'een formulier aan /wp-admin/admin-ajax.php van WordPress met precies één veld "action", waarvan een woord om een lijst vraagt (zoals filter, sort, page, load_more of search) en geen woord iets doet (zoals submit, comment, vote, login, contact of view). Elk ander woord van de actie dan het eerste (het voorvoegsel van een plugin) noemt een lijst of wat erin staat, zoals posts of items. Verder alleen de nonce van WordPress, lege velden en wat ook in een filter of sortering als formulier mag staan. Zoals een lijst die met action=filter de resultaten van een andere categorie laadt',
     recognise: wordpressAjax,
   },
 };

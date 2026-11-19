@@ -118,6 +118,9 @@ test("a request passes only when a rule covers its address and its body is a que
   const ajaxAt = "https://www.example.nl/wp-admin/admin-ajax.php";
   assert.equal(readDecision(ajax, "POST", ajaxAt, {}, "action=filter&cat=3")?.pass, true, "a filter to admin-ajax.php");
   assert.equal(readDecision(ajax, "POST", ajaxAt, {}, "action=submit_form&naam=Test")?.pass, false, "a form sent to the same address");
+  // WordPress reads the action from the query too, and from the query alone when PHP does not parse the body as a form.
+  assert.equal(readDecision(ajax, "POST", `${ajaxAt}?action=contact_form_submit`, { "content-type": "text/plain" }, "action=filter&cat=3")?.pass, false, "an action in the query");
+  assert.equal(readDecision(ajax, "POST", `${ajaxAt}?lang=nl`, {}, "action=filter&cat=3")?.pass, true, "a query without an action");
   assert.equal(readsAllowedNl([]), null);
   assert.equal(readsAllowedNl(rules), `één adres is toegelaten voor leesverzoeken: POST https://zoek.example.nl/1/indexes/*/queries, zoekvraag aan Algolia (${REASON.slice(0, -1)}). Een verzoek daarheen ging alleen door als loep de body herkende als zoekvraag aan die dienst; elk ander verzoek dat iets kan wijzigen is tegengehouden`);
 });
