@@ -16,7 +16,8 @@ import { arrowReach, skipLinkProbe, tabWalk } from "../instruments/keyboard.ts";
 import { mediaReport } from "../instruments/media.ts";
 import { pageOperables } from "../instruments/operables.ts";
 import { controlsOnlyWithSpacing, overflowProbe, textSpacing, visibleControlKeys, VIEWPORT_PROBES } from "../instruments/overflow.ts";
-import { CONTENT_VERSION, pageContentPath, pageKey, pageStampPath, readStamp, remeasureReason, SWEEP_STAMP_VERSION, type ContentNow, type PageStamp } from "../lib/sweepstamp.ts";
+import { CONTENT_VERSION, missedNl, missedResources, pageContentPath, pageKey, pageStampPath, readStamp, remeasureReason, SWEEP_STAMP_VERSION, type ContentNow, type PageStamp } from "../lib/sweepstamp.ts";
+import { runScope, watchNotLoaded, type NotLoaded } from "../session/safety.ts";
 import { languagesOf } from "../instruments/languages.ts";
 import { visualOrder } from "../instruments/order.ts";
 import { picturesWithText, recountRecognised, type PictureReport } from "../instruments/pictures.ts";
@@ -115,8 +116,12 @@ async function noteFailed(runDir: string, entry: SampleItem, error: string): Pro
  * `retriedAfterTimeout` marks the runs of the rule engines as the one retry after an engine ran out of time on this page before.
  */
 async function collectPage(browser: Browser, entry: SampleItem, runDir: string, sweep: ModelSweep, noted: Noted = {}, contexts = new PageContexts(), retriedAfterTimeout = false): Promise<Record<string, unknown>> {
+  // Stylesheets and scripts of the site itself that did not arrive in any load of the page: what was measured then is not what a visitor gets.
+  const missed: NotLoaded[] = [];
+  const scope = runScope();
   const open = async (options: ContextOptions): Promise<BrowserContext> => {
     const context = contexts.add(await newContext(browser, options, sweep.guard));
+    if (scope) watchNotLoaded(context, scope, (entry) => missed.push(entry));
     await context.addInitScript({ path: INPAGE_PATH });
     await sweep.install(context);
     return context;
@@ -126,21 +131,34 @@ async function collectPage(browser: Browser, entry: SampleItem, runDir: string, 
   let clippedAt: ScreenshotClip | null = null;
 
   for (const scheme of ["light", "dark"] as ColorScheme[]) {
-    const context = await open({ colorScheme: scheme });
     // The hosts a plain load asks something of: a host refused in a state of the model that the page asks anyway says nothing about that state.
     const requested = new Set<string>();
-    if (scheme === "light") {
-      context.on("request", (request) => {
-        try {
-          const target = new URL(request.url());
-          if (target.protocol === "http:" || target.protocol === "https:" || target.protocol === "ws:" || target.protocol === "wss:") requested.add(target.host);
-        } catch {
-          // Not an address with a host.
-        }
-      });
-    }
+    const openScheme = async (): Promise<BrowserContext> => {
+      const opened = await open({ colorScheme: scheme });
+      if (scheme === "light") {
+        opened.on("request", (request) => {
+          try {
+            const target = new URL(request.url());
+            if (target.protocol === "http:" || target.protocol === "https:" || target.protocol === "ws:" || target.protocol === "wss:") requested.add(target.host);
+          } catch {
+            // Not an address with a host.
+          }
+        });
+      }
+      return opened;
+    };
+    let context = await openScheme();
     try {
-      const { page, placement } = await loadSampled(await context.newPage(), entry, (tab) => sweep.dismiss(context, tab, `collect:${scheme}`, scheme));
+      let loaded = await loadSampled(await context.newPage(), entry, (tab) => sweep.dismiss(context, tab, `collect:${scheme}`, scheme));
+      // A stylesheet or script of the site itself that failed on the first load: the page is loaded once more, before anything is measured.
+      if (scheme === "light" && missed.length > 0) {
+        await context.close().catch(() => undefined);
+        process.stderr.write(`collect: ${entry.url} nog een keer geladen: ${missedNl(missedResources(missed.splice(0)))}\n`);
+        requested.clear();
+        context = await openScheme();
+        loaded = await loadSampled(await context.newPage(), entry, (tab) => sweep.dismiss(context, tab, `collect:${scheme}`, scheme));
+      }
+      const { page, placement } = loaded;
       if (scheme === "light") noted.content = await contentOf(page);
       // Where an embedded window was measured: on the page it stands on, or on its own and why.
       if (scheme === "light" && placement) {
@@ -294,6 +312,14 @@ async function collectPage(browser: Browser, entry: SampleItem, runDir: string, 
     summary.textspacing = { newlyClipped: spacing.newlyClipped.length };
   } finally {
     await context.close().catch(() => undefined);
+  }
+  // What did not arrive goes with the facts for the gate, and with the summary in the stamp: the next collect measures the page again.
+  const notLoaded = missedResources(missed);
+  if (notLoaded.length > 0) {
+    process.stderr.write(`collect: ${entry.url}: bij het meten ${missedNl(notLoaded)}\n`);
+    const facts = await readJson<Record<string, unknown>>(join(dir, "facts.json"));
+    await writeJson(join(dir, "facts.json"), { ...facts, notLoaded });
+    summary.notLoaded = notLoaded;
   }
   return summary;
 }

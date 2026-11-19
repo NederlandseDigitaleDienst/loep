@@ -205,8 +205,31 @@ export function engineRetryReason(timedOut: { engine: string; error: string }[])
  * What did not arrive, in a few words for the person who runs the sweep and for the gate, with how the browser or the server
  * said so. With `again` for the reader of the report: it did not arrive on a new attempt either, without the technical reason.
  */
-export const missedNl = (missed: { resourceType: string; address: string; error: string }[], again = false): string =>
+export const missedNl = (missed: Missed[], again = false): string =>
   `${missed.length === 1 ? "kwam" : "kwamen"} ${missed.slice(0, 3).map((entry) => `${entry.resourceType === "stylesheet" ? "de stylesheet" : "het script"} ${entry.address}`).join(", ")}${missed.length > 3 ? ` en ${missed.length - 3} andere` : ""} ${again ? "ook bij een nieuwe poging niet binnen" : `niet binnen (${missed[0]!.error})`}`;
+
+/** A stylesheet or script of the site that did not arrive, by host and path. */
+export interface Missed {
+  resourceType: string;
+  address: string;
+  error: string;
+}
+
+/** What a guard noted as not arrived (`watchNotLoaded`), each address once, without its query. */
+export function missedResources(entries: readonly { resourceType: string; url: string; error: string }[]): Missed[] {
+  const found = new Map<string, Missed>();
+  for (const entry of entries) {
+    let address = entry.url;
+    try {
+      const parsed = new URL(entry.url);
+      address = `${parsed.host}${parsed.pathname}`;
+    } catch {
+      // Kept as it was recorded.
+    }
+    if (!found.has(address)) found.set(address, { resourceType: entry.resourceType, address, error: entry.error });
+  }
+  return [...found.values()].slice(0, 20);
+}
 
 /**
  * Why a page of the sample is measured again instead of keeping what an earlier sweep measured, in one
@@ -227,6 +250,9 @@ export async function remeasureReason(
   if (!stamp) return "geen stempel van een eerdere meting";
   if (stamp.version !== SWEEP_STAMP_VERSION || stamp.contentVersion !== CONTENT_VERSION) return "stempel van een andere versie van loep";
   if (stamp.key !== key) return stamp.blockers !== blockers ? "blokkades of hoe ze worden gesloten anders" : "pagina anders in de steekproef (soort of ingesloten venster)";
+  // A page measured while a stylesheet or script of the site did not arrive is measured again, also with the same content.
+  const missed = (stamp.summary?.notLoaded ?? []) as Missed[];
+  if (missed.length > 0) return `bij de vorige meting ${missedNl(missed)}`;
   const retry = engineRetryReason(timedOut);
   if (retry) return retry;
   const current = await now();

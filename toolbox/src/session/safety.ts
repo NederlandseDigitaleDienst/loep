@@ -247,6 +247,27 @@ export interface NotLoaded {
   error: string;
 }
 
+/**
+ * Note every stylesheet and script on a host of the scope that does not arrive in a context because the connection broke off or
+ * gave no answer, or because the server was too busy (`BUSY_STATUS`). A stylesheet or script of the site itself that did not
+ * arrive says the page is not the page a visitor gets: a failure of the connection, not of the site. The sweep watches its own
+ * contexts with this too.
+ */
+export function watchNotLoaded(context: BrowserContext, scope: Pick<Scope, "hosts">, noted: (entry: NotLoaded) => void): void {
+  const notLoaded = (request: Request, error: string): void => {
+    const type = request.resourceType();
+    if ((type !== "stylesheet" && type !== "script") || !inScope(scope, request.url())) return;
+    noted({ resourceType: type, url: request.url().slice(0, MAX_URL), error: error.slice(0, 120) });
+  };
+  context.on("requestfailed", (request) => {
+    const error = request.failure()?.errorText ?? "";
+    if (CONNECTION_LOST.test(error)) notLoaded(request, error);
+  });
+  context.on("response", (response) => {
+    if (BUSY_STATUS.has(response.status())) notLoaded(response.request(), `HTTP ${response.status()}`);
+  });
+}
+
 export interface PassedChallenge {
   at: string;
   method: string;
@@ -318,19 +339,7 @@ export async function guardContext(context: BrowserContext, scope: Scope, guard:
   const note = (kind: Blocked["kind"], method: string, url: string, resourceType: string): void => {
     guard.blocked.push({ at: new Date().toISOString(), kind, method, url: url.slice(0, MAX_URL), resourceType });
   };
-  // A stylesheet or script of the site itself that did not arrive says the page is not the page a visitor gets: a failure of the connection, not of the site.
-  const notLoaded = (request: Request, error: string): void => {
-    const type = request.resourceType();
-    if ((type !== "stylesheet" && type !== "script") || !inScope(scope, request.url())) return;
-    (guard.notLoaded ??= []).push({ resourceType: type, url: request.url().slice(0, MAX_URL), error: error.slice(0, 120) });
-  };
-  context.on("requestfailed", (request) => {
-    const error = request.failure()?.errorText ?? "";
-    if (CONNECTION_LOST.test(error)) notLoaded(request, error);
-  });
-  context.on("response", (response) => {
-    if (BUSY_STATUS.has(response.status())) notLoaded(response.request(), `HTTP ${response.status()}`);
-  });
+  watchNotLoaded(context, scope, (entry) => (guard.notLoaded ??= []).push(entry));
   // What the boundary refused is no answer of the site: it stands in what the session reports, as anything the guard holds back.
   // Only with a boundary: elsewhere such a header comes from the site.
   if (runDir !== undefined && shieldForRun(runDir)) {

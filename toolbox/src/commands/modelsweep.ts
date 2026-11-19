@@ -19,8 +19,8 @@ import { readJson, sha256File, writeFileAtomic, writeJson } from "../lib/canonic
 import { inOrder } from "../lib/atonce.ts";
 import { enginesToRetry, runEngines, type EngineRun } from "../lib/engines.ts";
 import type { RecipeSteps } from "../lib/operables.ts";
-import { frameStanding, loadSiteModel, pageTypeOf, SITE_MODEL_FILE, type Component, type Postcondition, type SiteModel } from "../lib/sitemodel.ts";
-import { blockersKey, engineRetryReason, missedNl, readStamp, STATE_STAMP, stateKey } from "../lib/sweepstamp.ts";
+import { frameStanding, loadSiteModel, pageTypeOf, REVIEW_STATE_CHECK, SITE_MODEL_FILE, type Component, type Postcondition, type SiteModel } from "../lib/sitemodel.ts";
+import { blockersKey, engineRetryReason, missedNl, missedResources, readStamp, STATE_STAMP, stateKey, type Missed } from "../lib/sweepstamp.ts";
 import { writeOriginsOf, writesForRun } from "../lib/writes.ts";
 import { spokenByItself, type SpokenByItself } from "../instruments/methods/speech.ts";
 import type { LastStepSpeech, Recipe } from "../session/daemon.ts";
@@ -91,23 +91,26 @@ export interface CapturedState {
    * opened once more: what was captured is not what a visitor gets. The next sweep captures the state again. Absent when all
    * arrived, and in older runs.
    */
-  notLoaded?: { resourceType: string; address: string; error: string }[];
+  notLoaded?: Missed[];
 }
 
 /** The stylesheets and scripts of the site that did not arrive on a surface, each address once. */
-function missedResources(surface: Surface): NonNullable<CapturedState["notLoaded"]> {
-  const found = new Map<string, NonNullable<CapturedState["notLoaded"]>[number]>();
-  for (const entry of surface.guard.notLoaded ?? []) {
-    let address = entry.url;
-    try {
-      const parsed = new URL(entry.url);
-      address = `${parsed.host}${parsed.pathname}`;
-    } catch {
-      // Kept as it was recorded.
-    }
-    if (!found.has(address)) found.set(address, { resourceType: entry.resourceType, address, error: entry.error });
+const missedOn = (surface: Surface): Missed[] => missedResources(surface.guard.notLoaded ?? []);
+
+/**
+ * The pictures of states that the review of the last gate rejected (`review-state`), by state and hash of the picture. A gap the
+ * site model accepts is not among the gaps of the gate, and a gate.json from before the hash was kept gives nothing.
+ */
+export async function rejectedPictures(runDir: string): Promise<Map<string, Set<string>>> {
+  const found = new Map<string, Set<string>>();
+  const gate = await readStamp<{ gaps?: { check?: unknown; state?: unknown; measured?: { screenshotSha256?: unknown } }[] }>(join(runDir, "gate.json"));
+  for (const gap of gate?.gaps ?? []) {
+    const hash = gap.measured?.screenshotSha256;
+    if (gap.check !== REVIEW_STATE_CHECK || typeof gap.state !== "string" || typeof hash !== "string") continue;
+    if (!found.has(gap.state)) found.set(gap.state, new Set());
+    found.get(gap.state)!.add(hash);
   }
-  return [...found.values()].slice(0, 20);
+  return found;
 }
 
 /** One component opened on one page type, in a portrait window. */
@@ -124,6 +127,8 @@ export interface StateInstance {
   rotatedQuarterTurn: number;
   /** Why the first attempt on this page stopped, when a step timed out and the recipe was played once more on a freshly loaded page. */
   firstTimeoutNl?: string;
+  /** Stylesheets and scripts of the site that did not arrive on this page, also not when it was opened once more. The next sweep opens it again. Absent when all arrived. */
+  notLoaded?: Missed[];
 }
 
 /** The portrait window a component that was recorded in the default window is opened in on each page type. */
@@ -743,8 +748,8 @@ export class ModelSweep {
     const limited = await withinTime(STATE_TIMEOUT_MS, async (): Promise<CapturedState> => {
       let opened = await open();
       // A stylesheet or script of the site itself that failed on the way: the state is opened once more, before anything is measured.
-      if (opened.surface && missedResources(opened.surface).length > 0) {
-        process.stderr.write(`sitemodel: ${base.id} nog een keer geopend: ${missedNl(missedResources(opened.surface))}\n`);
+      if (opened.surface && missedOn(opened.surface).length > 0) {
+        process.stderr.write(`sitemodel: ${base.id} nog een keer geopend: ${missedNl(missedOn(opened.surface))}\n`);
         await opened.surface.context.close().catch(() => undefined);
         surfaces.length = 0;
         opened = await open();
@@ -769,7 +774,7 @@ export class ModelSweep {
       refusals.set(key, { kind: entry.kind, method: entry.method, address, count: (refusals.get(key)?.count ?? 0) + 1 });
     }
     const state: CapturedState = { ...(limited.ok ? limited.value : { ...base, ...empty, reached: false, reasonNl: limited.reason }), refused: [...refusals.values()].sort((a, b) => b.count - a.count).slice(0, 20) };
-    const missed = surfaces[0] ? missedResources(surfaces[0]) : [];
+    const missed = surfaces[0] ? missedOn(surfaces[0]) : [];
     if (missed.length > 0) state.notLoaded = missed;
     if (state.reached) {
       // A limit of its own: what the first opening measured stands, whatever happens here.
@@ -860,7 +865,8 @@ export class ModelSweep {
     for (const typeId of state.pageTypes) {
       const type = this.model.pageTypes.find((entry) => entry.id === typeId);
       if (!type) continue;
-      const known = state.perPageType?.find((entry) => entry.pageType === typeId && entry.url === type.representative && entry.reached);
+      // A row opened while a stylesheet or script of the site did not arrive is opened again.
+      const known = state.perPageType?.find((entry) => entry.pageType === typeId && entry.url === type.representative && entry.reached && (entry.notLoaded ?? []).length === 0);
       if (known) {
         rows.push(known);
         continue;
@@ -869,14 +875,22 @@ export class ModelSweep {
       const shot = join("site-states", state.id, "types", `${typeId.replace(/[^a-z0-9-]/gi, "_")}.png`);
       let surface: Surface | null = null;
       const limited = await withinTime(INSTANCE_TIMEOUT_MS, async (): Promise<StateInstance> => {
-        const opened = await openOn(type.representative, size);
+        let opened = await openOn(type.representative, size);
         surface = opened.surface;
+        // A stylesheet or script of the site itself that failed on the way: the page is opened once more, before it is pictured.
+        if (opened.surface && missedOn(opened.surface).length > 0) {
+          process.stderr.write(`sitemodel: ${state.id} op ${typeId} nog een keer geopend: ${missedNl(missedOn(opened.surface))}\n`);
+          await opened.surface.context.close().catch(() => undefined);
+          opened = await openOn(type.representative, size);
+          surface = opened.surface;
+        }
         const retried = opened.firstTimeoutNl !== undefined ? { firstTimeoutNl: opened.firstTimeoutNl } : {};
         if (retried.firstTimeoutNl !== undefined) process.stderr.write(`sitemodel: ${state.id} op ${typeId}: tweede poging na een time-out (${retried.firstTimeoutNl})\n`);
         if (!opened.reached || !opened.surface) return { ...base, reached: false, reasonNl: opened.reasonNl, opened: [], screenshot: null, rotatedQuarterTurn: 0, ...retried };
         await opened.surface.page.screenshot({ path: join(this.runDir, shot), animations: "disabled" });
         const content = await call<ContentInventory>(opened.surface.page, "contentInventory");
-        return { ...base, reached: true, reasonNl: null, opened: opened.opened, screenshot: shot, rotatedQuarterTurn: content.rotatedQuarterTurn.length, ...retried };
+        const missed = missedOn(opened.surface);
+        return { ...base, reached: true, reasonNl: null, opened: opened.opened, screenshot: shot, rotatedQuarterTurn: content.rotatedQuarterTurn.length, ...retried, ...(missed.length > 0 ? { notLoaded: missed } : {}) };
       });
       await (surface as Surface | null)?.context.close().catch(() => undefined);
       rows.push(limited.ok ? limited.value : { ...base, reached: false, reasonNl: limited.reason, opened: [], screenshot: null, rotatedQuarterTurn: 0 });
@@ -897,7 +911,8 @@ export class ModelSweep {
     // What an earlier sweep captured under names the model no longer has must not linger next to the new states.
     if (options.fresh) await rm(root, { recursive: true, force: true });
     else for (const name of existsSync(root) ? await readdir(root) : []) if (!openers.some((opener) => opener.base.id === name)) await rm(join(root, name), { recursive: true, force: true });
-    const captured = await inOrder(openers.length, options.atOnce ?? 1, (index) => this.captureOne(openers[index]!, root), (_, entry) => void (entry.reused && this.reusedStates.push(entry.state.id)));
+    const rejected = await rejectedPictures(this.runDir);
+    const captured = await inOrder(openers.length, options.atOnce ?? 1, (index) => this.captureOne(openers[index]!, root, rejected), (_, entry) => void (entry.reused && this.reusedStates.push(entry.state.id)));
     // A picture that two states read at the same time counts where it would have with one state after the other.
     const seen = options.seenPictures ?? new Set<string>();
     for (const { state, reused } of captured) {
@@ -910,7 +925,7 @@ export class ModelSweep {
   }
 
   /** One state: kept from an earlier sweep, or captured now. */
-  private async captureOne(opener: StateOpener, root: string): Promise<{ state: CapturedState; reused: boolean }> {
+  private async captureOne(opener: StateOpener, root: string, rejected: Map<string, Set<string>> = new Map()): Promise<{ state: CapturedState; reused: boolean }> {
     if (!opener.open) {
       return { state: { ...opener.base, refused: [], url: null, viewport: null, reached: false, reasonNl: `de verkenner kon het niet openen: ${opener.notOpenedNl ?? ""}`, stillReachedAfterMeasuring: null, dir: null, files: {}, engineSummary: null, contrast: null, largestOverlayShare: null }, reused: false };
     }
@@ -922,7 +937,10 @@ export class ModelSweep {
     const timedOut = engines ? enginesToRetry([await readStamp<EngineRun>(join(this.runDir, engines))]) : [];
     // A state captured while a stylesheet or script of the site did not arrive is captured again, also with the same recipe.
     const missed = stamp?.state.notLoaded ?? [];
-    const reused = stamp !== null && stamp.key === opener.key && stamp.state.reached && timedOut.length === 0 && missed.length === 0;
+    // A state whose picture the review of the gate rejected is captured again, also when the explorer left its recipe as it was.
+    const shot = stamp?.state.files.screenshot;
+    const refused = shot !== undefined && rejected.has(opener.base.id) && existsSync(join(this.runDir, shot)) && rejected.get(opener.base.id)!.has(await sha256File(join(this.runDir, shot)));
+    const reused = stamp !== null && stamp.key === opener.key && stamp.state.reached && timedOut.length === 0 && missed.length === 0 && !refused;
     if (reused) {
       // The measurement stands; what the model says about the state (the page types it belongs to) is taken from the model as it is now.
       state = { ...stamp.state, ...opener.base };
@@ -930,6 +948,7 @@ export class ModelSweep {
     } else {
       const retry = engineRetryReason(timedOut);
       if (retry) process.stderr.write(`sitemodel: ${opener.base.id} opnieuw gemeten: ${retry}\n`);
+      if (refused && stamp?.key === opener.key) process.stderr.write(`sitemodel: ${opener.base.id} opnieuw gemeten: de poort keurde het beeld van de vorige opname af\n`);
       if (missed.length > 0 && stamp?.key === opener.key) process.stderr.write(`sitemodel: ${opener.base.id} opnieuw gemeten: bij de vorige opname ${missedNl(missed)}\n`);
       await rm(join(root, opener.base.id), { recursive: true, force: true });
       state = await this.capture({ ...opener, open: opener.open }, timedOut.length > 0);
