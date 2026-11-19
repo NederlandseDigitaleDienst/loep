@@ -6,6 +6,22 @@ Wat er per versie van loep is veranderd. De versie staat op het voorblad en onde
 
 <!-- towncrier: een nieuwe versie komt hieronder -->
 
+## 0.37.0 (2026-11-19)
+
+Deze versie is uitgebracht zonder meting: de procedures en de oordeelregels zijn niet veranderd, en 0.35.0 is op 18 november op alle 56 criteria gemeten; de veegronde meet een pagina waarvan een stylesheet of script van de site niet binnenkwam nog een keer, en een voorlezing met VoiceOver zonder de scripts van de site telt niet meer als gebruik van een schermlezer, en beide zijn met tests gedekt en niet in een nieuw onderzoek geprobeerd; het deel over status B in het afgetekende rapport raakt geen uitkomst en is geprobeerd op een kopie van één afgetekend onderzoek; een meting van alle criteria op de testsite is niet gedaan.
+
+### Wat een uitkomst kan veranderen
+
+- Kwam bij het meten van een pagina van de steekproef een stylesheet of script van de site zelf niet binnen, dan laadt de veegronde de pagina nog een keer; mist het bestand dan nog, dan stuurt de poort de run terug naar de veegronde en meet een volgende ronde de pagina nog één keer opnieuw, ook met dezelfde inhoud; mist het bestand ook daar, dan wordt het een beperking. Een onderdeel op een paginatype wordt in dat geval ook nog een keer geopend, en een toestand waarvan de poort het beeld afkeurde, legt de veegronde opnieuw vast, ook als het recept gelijk bleef. ([#667](https://github.com/NederlandseDigitaleDienst/loep/issues/667))
+- Een voorlezing met VoiceOver van een proefpagina waarop Safari een script van de site niet kon ophalen (`notLoaded`), telt in het rapport niet meer als gebruik van een schermlezer. Het rapport noemt VoiceOver dan niet onder de hulpsoftware, en de beperking dat geen schermlezer is gebruikt blijft staan bij de criteria die alleen zo zijn voorgelezen. Een script dat in een run met een strikte scope is tegengehouden, telt daarbij niet: de browser van de sessie hield het ook tegen. ([#668](https://github.com/NederlandseDigitaleDienst/loep/issues/668))
+
+### Verder
+
+- Een plek die een andere beoordelaar doorgaf aan een criterium dat al niet voldoet, staat nu in de werklijst onder "Ook nakijken bij een criterium dat niet voldoet". Zo ziet wie het criterium herstelt ook wat nog niemand heeft beoordeeld; de uitkomst verandert er niet door. ([#629](https://github.com/NederlandseDigitaleDienst/loep/issues/629))
+- `voiceover start --run <run>` meldt een onderzoek aan als gebruiker van de virtuele Mac, en `voiceover stop` weigert zolang een ander onderzoek is aangemeld of een start nog loopt, ook als dat onderzoek op dat moment geen sessie heeft. Een aanmelding telt niet mee zolang de run 6 uur niets schreef, en weer wel zodra `pending` de run na zo'n pauze ziet; met `--force` sluit de virtuele Mac toch af. ([#665](https://github.com/NederlandseDigitaleDienst/loep/issues/665))
+- De controle op GitHub haalt de pakketten van Ubuntu weer uit een cache die elke nacht wordt bijgewerkt, en wijkt bij een trage spiegel ook op AWS uit naar het hoofdarchief van Ubuntu, zodat een testdeel in de merge queue niet meer op de tijdgrens loopt. ([#669](https://github.com/NederlandseDigitaleDienst/loep/issues/669))
+- Een afgetekend rapport om te verantwoorden telt bovenaan de besluiten per gebrek. Heeft elk gebrek een maatregel met een datum, dan heet het deel "Waar status B op rust" in plaats van "Wat er nog ontbreekt voor status B". Ontbreekt die bij een gebrek, dan noemt het rapport dat gebrek, en `decide` zegt het al bij het vastleggen van een andere zienswijze of onevenredige last. Onder een samenvatting voor de leiding staat dat ze van vóór de besluiten is. Opnieuw `render` draaien is genoeg. ([#678](https://github.com/NederlandseDigitaleDienst/loep/issues/678))
+
 ## 0.36.0 (2026-11-19)
 
 Deze versie is uitgebracht zonder meting: de procedures en de oordeelregels zijn niet veranderd, en 0.35.0 is een dag eerder op alle 56 criteria gemeten; de opdrachten schrijven elk commando nu voluit voor en de rondgang noemt voor een toestand de breedte van het recept, wat niets verandert aan wat een agent beoordeelt; de nieuwe versies van html-validate, vnu-jar en de checker van IBM gaven op de testsite dezelfde meldingen als de vorige; de wijzigingen aan de veegronde en de bewijspoort zijn met tests en de regressietoets van de veegronde op de testsite nagegaan; van VoiceOver zijn op de virtuele Mac alleen de start en één voorlezing geprobeerd; een meting van alle criteria op de testsite is niet gedaan.
