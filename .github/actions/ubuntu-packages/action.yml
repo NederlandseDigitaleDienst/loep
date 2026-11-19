@@ -4,16 +4,18 @@ description: >
   hulpprogramma's van `just tools`) uit de cache. De spiegel van Ubuntu leverde op 22 oktober 2026
   soms een paar kB per seconde; het inrichten kostte toen tot 23 minuten (#320). apt kiest nog steeds
   zelf welke versie het installeert en controleert elk pakket tegen zijn index: de cache scheelt
-  alleen het downloaden. Opslaan doet browsers-and-tools, alleen op main. Zet daarnaast
-  `$APT_FALLBACK` klaar: een stap die ermee begint, krijgt vijf minuten en gaat daarna verder
-  via het hoofdarchief van Ubuntu in plaats van de spiegel in Azure.
+  alleen het downloaden. Opslaan doet browsers-and-tools, alleen op main, en telkens als de
+  pakketten anders zijn dan wat de cache gaf: de sleutel eindigt op een vingerafdruk van de
+  bestanden. Zet daarnaast `$APT_FALLBACK` klaar: een stap die ermee begint, krijgt vijf minuten
+  (of `$LOEP_APT_LIMIT` seconden) en gaat daarna verder via het hoofdarchief van Ubuntu in plaats
+  van de spiegel van de cloud waarin de runner draait (Azure of AWS).
 outputs:
-  key:
-    description: De sleutel waaronder de pakketten van deze versie van de runner horen.
-    value: ${{ steps.apt.outputs.key }}
-  hit:
-    description: true als de cache precies deze sleutel had.
-    value: ${{ steps.restore.outputs.cache-hit }}
+  prefix:
+    description: Het begin van de sleutel voor deze versie van de runner; de vingerafdruk komt erachter.
+    value: ${{ steps.apt.outputs.prefix }}
+  matched:
+    description: De sleutel van de cache die is teruggezet, leeg als er geen was.
+    value: ${{ steps.restore.outputs.cache-matched-key }}
 runs:
   using: composite
   steps:
@@ -26,13 +28,14 @@ runs:
         # For the steps that install: a slow mirror gets five minutes, then the main archive takes over.
         echo "APT_FALLBACK=$GITHUB_ACTION_PATH/mirror-fallback.sh" >> "$GITHUB_ENV"
         echo "os=apt-$ImageOS-" >> "$GITHUB_OUTPUT"
-        echo "key=apt-$ImageOS-$ImageVersion" >> "$GITHUB_OUTPUT"
+        echo "prefix=apt-$ImageOS-$ImageVersion-" >> "$GITHUB_OUTPUT"
 
-    # A runner of last week still has most packages; apt fetches only what changed.
+    # The key ends in a fingerprint of the packages, so the prefix matches the newest cache of this
+    # runner version. A runner of last week still has most packages; apt fetches only what changed.
     - name: Pakketten van Ubuntu uit de cache
       id: restore
       uses: actions/cache/restore@v6
       with:
         path: ~/.cache/apt/*.deb
-        key: ${{ steps.apt.outputs.key }}
+        key: ${{ steps.apt.outputs.prefix }}
         restore-keys: ${{ steps.apt.outputs.os }}

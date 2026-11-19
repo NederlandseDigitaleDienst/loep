@@ -21,25 +21,38 @@ runs:
         path: ~/.cache/ms-playwright
         key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
 
-    # With the browsers from the cache this only installs what they need from the system.
+    # With the browsers from the cache this only installs what they need from the system. With the
+    # packages from the cache too, each of these two steps takes a minute or two: a mirror that is
+    # slower than that gets three minutes, not five, before the main archive takes over.
     - name: Browsers
       shell: bash
+      env:
+        LOEP_APT_LIMIT: "180"
       run: cd toolbox && "$APT_FALLBACK" npx playwright install --with-deps chromium firefox webkit
 
     - name: Hulpprogramma's
       shell: bash
+      env:
+        LOEP_APT_LIMIT: "180"
       run: '"$APT_FALLBACK" just tools'
 
     # A cache made in the merge queue is only visible to that one run; the nightly run and a run by
     # hand on main make the one that the queue reads. Packages that apt no longer offers go first.
-    - name: Oude pakketten van Ubuntu weg
-      if: github.ref == 'refs/heads/main' && steps.apt.outputs.hit != 'true'
+    # Ubuntu updates packages every few days: a cache that is only saved when its key is missing
+    # stays at the day it was made, and every run fetches the updates from the mirror again.
+    - name: Oude pakketten van Ubuntu weg, en de sleutel van wat overblijft
+      id: fingerprint
+      if: github.ref == 'refs/heads/main'
       shell: bash
-      run: sudo apt-get autoclean -qq
+      env:
+        PREFIX: ${{ steps.apt.outputs.prefix }}
+      run: |
+        sudo apt-get autoclean -qq
+        echo "key=$PREFIX$(find "$HOME/.cache/apt" -maxdepth 1 -name '*.deb' -printf '%f\n' | LC_ALL=C sort | sha256sum | cut -c1-16)" >> "$GITHUB_OUTPUT"
 
     - name: Pakketten van Ubuntu in de cache
-      if: github.ref == 'refs/heads/main' && steps.apt.outputs.hit != 'true'
+      if: github.ref == 'refs/heads/main' && steps.fingerprint.outputs.key != steps.apt.outputs.matched
       uses: actions/cache/save@v6
       with:
         path: ~/.cache/apt/*.deb
-        key: ${{ steps.apt.outputs.key }}
+        key: ${{ steps.fingerprint.outputs.key }}

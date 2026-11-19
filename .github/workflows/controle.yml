@@ -38,7 +38,7 @@
 # Wat elke job inricht, komt zoveel mogelijk uit een cache: de pakketten van npm (setup-node),
 # de browsers van Playwright en de pakketten van Ubuntu die apt binnenhaalt (zie
 # .github/actions/). Een cache die de queue maakt, ziet alleen die ene run; de nachtelijke run op
-# main maakt de cache die de queue leest.
+# main maakt de cache die de queue leest, en maakt een nieuwe zodra Ubuntu pakketten heeft bijgewerkt.
 #
 # De veegronde van Lindewaard bepaalt de duur: ongeveer 14 minuten. Zonder de veegronde duurt
 # alles samen ongeveer 11 minuten.
