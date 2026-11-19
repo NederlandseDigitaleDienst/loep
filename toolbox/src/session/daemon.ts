@@ -2,7 +2,7 @@ import { randomBytes } from "node:crypto";
 import { existsSync } from "node:fs";
 import { mkdtemp, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import type { Browser, BrowserContext } from "playwright";
 import { launchBrowser } from "../browser/session.ts";
 import { withinTime } from "../instruments/limit.ts";
@@ -75,6 +75,8 @@ export const abandonedNl = (names: string[]): string =>
 export interface Response {
   ok: boolean;
   print: Record<string, unknown>;
+  /** With `list`: the run directory of this process, for a caller that found it by its socket. Not printed. */
+  run?: string;
 }
 
 interface Session {
@@ -215,7 +217,7 @@ export class Daemon {
     try {
       if (request.op === "list") {
         const sending = this.writeBudgets();
-        return { ok: true, print: { sessions: [...this.sessions.values()].map((session) => this.budget(session)), ...printedScope(this.env.scope.hosts), ...(sending ? { writes: writeBudgetsNl(sending) } : {}) } };
+        return { ok: true, run: resolve(this.runDir), print: { sessions: [...this.sessions.values()].map((session) => this.budget(session)), ...printedScope(this.env.scope.hosts), ...(sending ? { writes: writeBudgetsNl(sending) } : {}) } };
       }
       const name = request.session ?? "main";
       if (!SESSION_NAME.test(name)) throw new Error(`"${name}" is geen geldige sessienaam (kleine letters, cijfers, - en _)`);

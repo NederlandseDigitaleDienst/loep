@@ -5,6 +5,8 @@ import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { COPIED_FILES, GUEST_DIR, GuestQueue, isReady, lumeGuest, markStarting, putFile, read, realClock, recordedStart, shutdown, start, statusNl, VM_NAME, voiceoverStatus, type Clock, type Guest } from "../lib/voiceover.ts";
 
+import { otherSessionProcesses, type SessionProcess } from "../session/client.ts";
+
 const run = promisify(execFile);
 const GUEST_FILES = fileURLToPath(new URL("../../voiceover/guest/", import.meta.url));
 
@@ -24,7 +26,9 @@ export const VOICEOVER_USAGE = `loep voiceover <command>
                                          shape of session speak; --out keeps the full answer, with every version. After a press
                                          VoiceOver is listened to for six seconds. Waits while another reading uses the virtual Mac.
                                          In an evaluation an agent reads with the session command voiceover instead
-  stop                                   Shut the virtual Mac down
+  stop [--run <run>] [--force]           Shut the virtual Mac down. Refuses while another run on this machine still has sessions:
+                                         there is one virtual Mac, and that run may still read with it. --run names your own run,
+                                         whose sessions do not count; --force shuts down anyway
   setup                                  Check lume and the virtual Mac, and set up inside it what can be set without a person;
                                          says per step what is done and what you have to do yourself (just voiceover-setup)
 
@@ -78,8 +82,32 @@ export async function voiceoverStatusCommand(guest: Guest = lumeGuest()): Promis
   return isReady(status) ? 0 : 1;
 }
 
-/** `loep voiceover stop` */
-export async function voiceoverStop(guest: Guest = lumeGuest()): Promise<number> {
+export interface StopFlags {
+  /** Shut down although another run still holds sessions. */
+  force?: boolean | undefined;
+  /** The run of the caller: its own sessions do not keep the virtual Mac up. */
+  run?: string | undefined;
+}
+
+/** Why `voiceover stop` leaves the virtual Mac up, and what to do. */
+export function stopRefusedNl(others: SessionProcess[]): string {
+  const known = others.filter((other) => other.run !== null);
+  const runs = known.length > 0 ? ` Het gaat om ${known.map((other) => `${other.run} (${other.sessions ?? "onbekend aantal"} ${other.sessions === 1 ? "sessie" : "sessies"})`).join(" en ")}.` : "";
+  return `geweigerd: de virtuele Mac blijft aan. Op deze machine ${others.length === 1 ? "heeft een ander onderzoek" : `hebben ${others.length} andere onderzoeken`} nog sessies lopen, en ${others.length === 1 ? "dat kan" : "die kunnen"} VoiceOver nog nodig hebben.${runs} Het onderzoek dat als laatste klaar is, stopt de virtuele Mac. Is het je eigen run, geef die dan mee: loep voiceover stop --run <run>. Weet je zeker dat geen onderzoek hem nog gebruikt, stop hem dan met: loep voiceover stop --force`;
+}
+
+/**
+ * `loep voiceover stop`: there is one virtual Mac per machine, so a run that is done does not
+ * shut it down while the session process of another run still holds sessions.
+ */
+export async function voiceoverStop(flags: StopFlags = {}, guest: Guest = lumeGuest(), others: () => Promise<SessionProcess[]> = () => otherSessionProcesses(flags.run)): Promise<number> {
+  if (!flags.force && (await guest.state()) === "running") {
+    const inUse = await others();
+    if (inUse.length > 0) {
+      process.stdout.write(`${JSON.stringify({ ok: false, stopped: "niet gestopt", error: stopRefusedNl(inUse) })}\n`);
+      return 1;
+    }
+  }
   const how = await shutdown(guest);
   process.stdout.write(`${JSON.stringify({ ok: true, stopped: how === "clean" ? "netjes afgesloten" : how === "forced" ? "afsluiten in de gast lukte niet: hard gestopt" : "de virtuele Mac draaide niet" })}\n`);
   return 0;

@@ -297,6 +297,7 @@ async function main(): Promise<void> {
     options: {
       out: { type: "string" },
       run: { type: "string" },
+      force: { type: "boolean" },
       baseline: { type: "string" },
       key: { type: "string" },
       under: { type: "string" },
@@ -1020,7 +1021,7 @@ async function main(): Promise<void> {
       if (target === "start") process.exitCode = await voiceoverStart();
       else if (target === "read") process.exitCode = await voiceoverRead({ url: values.url, steps: values.steps, press: values.press, out: values.out });
       else if (target === "status") process.exitCode = await voiceoverStatusCommand();
-      else if (target === "stop") process.exitCode = await voiceoverStop();
+      else if (target === "stop") process.exitCode = await voiceoverStop({ force: values.force, run: values.run });
       else if (target === "setup") process.exitCode = await voiceoverSetup();
       else throw new Error(`voiceover kent start, status, read, stop en setup, niet "${target}"`);
       break;

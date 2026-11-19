@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { after, before, mock, test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
@@ -653,6 +653,8 @@ test("a session whose agent is gone, past its minutes and without a request for 
     assert.equal(started.print.released, abandonedNl(["b-121"]));
     assert.match(started.print.released as string, /^sessie b-121 stond al minstens 15 minuten over haar tijd zonder verzoek en is gestopt om plaats te maken/);
     assert.deepEqual(((await small.handle({ op: "list" })).print.sessions as { session: string }[]).map((entry) => entry.session).sort(), ["b-122", "regie"], "the session that never measured stays");
+    // A caller that found the process by its socket learns which run it is, without it being printed.
+    assert.equal((await small.handle({ op: "list" })).run, resolve(run));
   } finally {
     mock.timers.reset();
     await small.close();

@@ -52,7 +52,7 @@ node toolbox/src/cli.ts voiceover stop
 - `read` opent de pagina in Safari, gaat de webinhoud in en geeft per stap de zin die VoiceOver uitsprak. Een bestand op de eigen machine wordt naar de virtuele Mac gekopieerd. Een adres op localhost van de eigen machine weigert het commando: in de virtuele Mac is dat een andere machine.
 - Met `--press` drukt VoiceOver het eerste onderdeel in waarvan de uitgesproken zin die tekst bevat, met de toetsen VO-spatie. Geef daarom de naam met de rol erbij (`--press "Verstuur button"`). Het antwoord bewaart wat VoiceOver in de 6 seconden daarna uit zichzelf zei.
 - `--out` bewaart het volledige antwoord, met de versies van macOS, Safari en node in de virtuele Mac en de voorkeuren waarmee VoiceOver draaide.
-- `stop` sluit de virtuele Mac af.
+- `stop` sluit de virtuele Mac af. Er is één virtuele Mac per machine. Daarom weigert `stop` zolang het sessieproces van een andere run op deze machine nog sessies heeft: dat onderzoek kan VoiceOver nog nodig hebben. Met `--run <run>` tellen de sessies van je eigen run niet mee, en met `--force` sluit hij toch af. Een onderzoek dat nog geen sessie heeft gestart, zoals tijdens de veegronde, ziet `stop` niet.
 
 De afdruk van `read` heeft de sleutels van `speak --steps`: `steps`, `reader` en `readerNote`. Het volledige antwoord heeft `methods`, `agreement` en `differences` zoals elke meting met meer bronnen, met VoiceOver als bron die niet is nagebootst (`simulated: false`) en de taal van de uitspraak (`language`).
 
@@ -88,7 +88,7 @@ De waarneming bewaart de proefpagina naast zich (`<nr>-proefpagina.html`, met ha
 
 **Niet beschikbaar.** Draait de virtuele Mac niet, dan antwoordt het commando meteen dat VoiceOver niet beschikbaar is en dat de agent verder werkt zoals zonder. Het kost dan niets, net als een toestand die Safari niet kan naspelen. De opdrachten aan de agents (`templates/gereedschap.md`, `beoordeel.md`, `verifieer.md`, `afmaak.md`) zeggen wanneer ze het gebruiken: waar de nagebootste lezer zegt "probeer het met een echte schermlezer", en waar het oordeel afhangt van wat een schermlezer werkelijk voorleest, voordat ze `mens nodig` schrijven.
 
-**Opstarten in een onderzoek.** De skill start de virtuele Mac tegelijk met de veegronde, als `just doctor` zegt dat hij er is, en stopt hem na de laatste fase met agents. Het commando `estimate` zegt hetzelfde als de virtuele Mac is ingericht.
+**Opstarten in een onderzoek.** De skill start de virtuele Mac tegelijk met de veegronde, als `just doctor` zegt dat hij er is, en stopt hem na de laatste fase met agents, als er geen ander onderzoek op deze machine loopt. Het commando `estimate` zegt hetzelfde als de virtuele Mac is ingericht.
 
 ## Wat het kost
 

@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { existsSync, fstatSync, mkdirSync, openSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, fstatSync, mkdirSync, openSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { connect, createServer, type Server } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -81,13 +81,15 @@ export const SESSION_USAGE = `  session start --run <run> [--session <name>] [--
  * holds a small file that says where it is.
  */
 const pointerPath = (runDir: string): string => join(runDir, "session-daemon.json");
-const socketPath = (runDir: string): string => join(tmpdir(), `loep-${sha256(realpathSync(runDir)).slice(0, 16)}.sock`);
+const socketName = (runDir: string): string => `loep-${sha256(realpathSync(runDir)).slice(0, 16)}.sock`;
+const socketPath = (runDir: string): string => join(tmpdir(), socketName(runDir));
 const logPath = (runDir: string): string => join(tmpdir(), `loep-${sha256(realpathSync(runDir)).slice(0, 16)}.log`);
 
-function send(socket: string, request: Request): Promise<Response> {
+function send(socket: string, request: Request, timeoutMs?: number): Promise<Response> {
   return new Promise((resolve, reject) => {
     const connection = connect(socket);
     let received = "";
+    if (timeoutMs !== undefined) connection.setTimeout(timeoutMs, () => connection.destroy(new Error("timeout")));
     connection.on("connect", () => connection.write(`${JSON.stringify(request)}\n`));
     connection.on("data", (chunk) => (received += chunk.toString("utf8")));
     connection.on("end", () => {
@@ -111,6 +113,35 @@ function runningSocket(runDir: string): string | null {
 }
 
 const alive = (socket: string): Promise<boolean> => send(socket, { op: "list" }).then(() => true, () => false);
+
+/** A session process of a run on this machine that holds sessions now. */
+export interface SessionProcess {
+  /** The run directory, as the process says it; null for a process that did not answer in time or runs on older code. */
+  run: string | null;
+  /** How many sessions it holds; null when it did not say. */
+  sessions: number | null;
+}
+
+/**
+ * The session processes on this machine that hold at least one session, except that of `ownRun`.
+ * Every process listens on a socket in the temporary directory, so the sockets that answer are
+ * the runs at work: a process that died answers nothing, and one that is left alone stops by
+ * itself. A process that is too busy to answer in time counts as at work.
+ */
+export async function otherSessionProcesses(ownRun?: string, dir: string = tmpdir(), timeoutMs = 3000): Promise<SessionProcess[]> {
+  const own = ownRun !== undefined && existsSync(ownRun) ? socketName(ownRun) : null;
+  const found: SessionProcess[] = [];
+  for (const name of readdirSync(dir).filter((entry) => /^loep-[0-9a-f]{16}\.sock$/.test(entry) && entry !== own).sort()) {
+    try {
+      const response = await send(join(dir, name), { op: "list" }, timeoutMs);
+      const sessions = Array.isArray(response.print?.sessions) ? response.print.sessions.length : null;
+      if (sessions !== 0) found.push({ run: typeof response.run === "string" ? response.run : null, sessions });
+    } catch (error) {
+      if ((error as Error).message === "timeout") found.push({ run: null, sessions: null });
+    }
+  }
+  return found;
+}
 
 interface ServeOptions {
   scopeUrl?: string | undefined;
