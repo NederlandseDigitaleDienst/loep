@@ -225,6 +225,17 @@ export interface Guard {
   idle?: boolean;
   /** The session whose page this is, for its share of the budget for sending. Absent: the source the access to send was made for. */
   sender?: string;
+  /**
+   * Stylesheets and scripts on a host of the run whose request failed on the way (a connection that was reset, no answer),
+   * not one the guard, the page or a new navigation stopped: the page was drawn or ran without them. Absent until the first one.
+   */
+  notLoaded?: NotLoaded[];
+}
+
+export interface NotLoaded {
+  resourceType: string;
+  url: string;
+  error: string;
 }
 
 export interface PassedChallenge {
@@ -298,6 +309,13 @@ export async function guardContext(context: BrowserContext, scope: Scope, guard:
   const note = (kind: Blocked["kind"], method: string, url: string, resourceType: string): void => {
     guard.blocked.push({ at: new Date().toISOString(), kind, method, url: url.slice(0, MAX_URL), resourceType });
   };
+  // A stylesheet or script of the site itself that did not arrive says the page is not the page a visitor gets: a failure of the connection, not of the site.
+  context.on("requestfailed", (request) => {
+    const type = request.resourceType();
+    const error = request.failure()?.errorText ?? "";
+    if ((type !== "stylesheet" && type !== "script") || !inScope(scope, request.url()) || STOPPED.test(error)) return;
+    (guard.notLoaded ??= []).push({ resourceType: type, url: request.url().slice(0, MAX_URL), error: error.slice(0, 120) });
+  });
   // What the boundary refused is no answer of the site: it stands in what the session reports, as anything the guard holds back.
   // Only with a boundary: elsewhere such a header comes from the site.
   if (runDir !== undefined && shieldForRun(runDir)) {

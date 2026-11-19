@@ -20,7 +20,7 @@ import { inOrder } from "../lib/atonce.ts";
 import { enginesToRetry, runEngines, type EngineRun } from "../lib/engines.ts";
 import type { RecipeSteps } from "../lib/operables.ts";
 import { frameStanding, loadSiteModel, pageTypeOf, SITE_MODEL_FILE, type Component, type Postcondition, type SiteModel } from "../lib/sitemodel.ts";
-import { blockersKey, engineRetryReason, readStamp, STATE_STAMP, stateKey } from "../lib/sweepstamp.ts";
+import { blockersKey, engineRetryReason, missedNl, readStamp, STATE_STAMP, stateKey } from "../lib/sweepstamp.ts";
 import { writeOriginsOf, writesForRun } from "../lib/writes.ts";
 import { spokenByItself, type SpokenByItself } from "../instruments/methods/speech.ts";
 import type { LastStepSpeech, Recipe } from "../session/daemon.ts";
@@ -86,6 +86,28 @@ export interface CapturedState {
   perPageType?: StateInstance[];
   /** Why the first opening stopped when a step of the recipe timed out and the sweep tried once more on a freshly loaded page. Absent when the first attempt decided it. */
   firstTimeoutNl?: string;
+  /**
+   * Stylesheets and scripts of the site itself that did not arrive while the state was opened and measured, also not when it was
+   * opened once more: what was captured is not what a visitor gets. The next sweep captures the state again. Absent when all
+   * arrived, and in older runs.
+   */
+  notLoaded?: { resourceType: string; address: string; error: string }[];
+}
+
+/** The stylesheets and scripts of the site that did not arrive on a surface, each address once. */
+function missedResources(surface: Surface): NonNullable<CapturedState["notLoaded"]> {
+  const found = new Map<string, NonNullable<CapturedState["notLoaded"]>[number]>();
+  for (const entry of surface.guard.notLoaded ?? []) {
+    let address = entry.url;
+    try {
+      const parsed = new URL(entry.url);
+      address = `${parsed.host}${parsed.pathname}`;
+    } catch {
+      // Kept as it was recorded.
+    }
+    if (!found.has(address)) found.set(address, { resourceType: entry.resourceType, address, error: entry.error });
+  }
+  return [...found.values()].slice(0, 20);
 }
 
 /** One component opened on one page type, in a portrait window. */
@@ -719,7 +741,14 @@ export class ModelSweep {
     };
     let clippedBefore: { path: string[] }[] = [];
     const limited = await withinTime(STATE_TIMEOUT_MS, async (): Promise<CapturedState> => {
-      const opened = await open();
+      let opened = await open();
+      // A stylesheet or script of the site itself that failed on the way: the state is opened once more, before anything is measured.
+      if (opened.surface && missedResources(opened.surface).length > 0) {
+        process.stderr.write(`sitemodel: ${base.id} nog een keer geopend: ${missedNl(missedResources(opened.surface))}\n`);
+        await opened.surface.context.close().catch(() => undefined);
+        surfaces.length = 0;
+        opened = await open();
+      }
       const where = { url: opened.surface?.page.url() ?? null, viewport: opened.surface?.page.viewportSize() ?? null, ...(opened.firstTimeoutNl !== undefined ? { firstTimeoutNl: opened.firstTimeoutNl } : {}) };
       if (!opened.reached || !opened.surface) return { ...base, ...empty, ...where, reached: false, reasonNl: opened.reasonNl };
       const { view, frame } = await this.viewOf(opened.surface.page, opener.frame);
@@ -740,6 +769,8 @@ export class ModelSweep {
       refusals.set(key, { kind: entry.kind, method: entry.method, address, count: (refusals.get(key)?.count ?? 0) + 1 });
     }
     const state: CapturedState = { ...(limited.ok ? limited.value : { ...base, ...empty, reached: false, reasonNl: limited.reason }), refused: [...refusals.values()].sort((a, b) => b.count - a.count).slice(0, 20) };
+    const missed = surfaces[0] ? missedResources(surfaces[0]) : [];
+    if (missed.length > 0) state.notLoaded = missed;
     if (state.reached) {
       // A limit of its own: what the first opening measured stands, whatever happens here.
       const again = await withinTime(STATE_TIMEOUT_MS, () => this.reopened(opener, open, state.files, clippedBefore));
@@ -889,7 +920,9 @@ export class ModelSweep {
     // A rule engine that ran out of time in this state before gets one more try; the measurement taken now is that try, whatever else made it.
     const engines = stamp?.state.files.engines;
     const timedOut = engines ? enginesToRetry([await readStamp<EngineRun>(join(this.runDir, engines))]) : [];
-    const reused = stamp !== null && stamp.key === opener.key && stamp.state.reached && timedOut.length === 0;
+    // A state captured while a stylesheet or script of the site did not arrive is captured again, also with the same recipe.
+    const missed = stamp?.state.notLoaded ?? [];
+    const reused = stamp !== null && stamp.key === opener.key && stamp.state.reached && timedOut.length === 0 && missed.length === 0;
     if (reused) {
       // The measurement stands; what the model says about the state (the page types it belongs to) is taken from the model as it is now.
       state = { ...stamp.state, ...opener.base };
@@ -897,6 +930,7 @@ export class ModelSweep {
     } else {
       const retry = engineRetryReason(timedOut);
       if (retry) process.stderr.write(`sitemodel: ${opener.base.id} opnieuw gemeten: ${retry}\n`);
+      if (missed.length > 0 && stamp?.key === opener.key) process.stderr.write(`sitemodel: ${opener.base.id} opnieuw gemeten: bij de vorige opname ${missedNl(missed)}\n`);
       await rm(join(root, opener.base.id), { recursive: true, force: true });
       state = await this.capture({ ...opener, open: opener.open }, timedOut.length > 0);
       // A state that did not open is tried again by the next sweep.

@@ -17,6 +17,7 @@ import { isLasting, refusedRunNl } from "../session/blockade.ts";
 import { drawMarks } from "../session/marks.ts";
 import { coversContent, type Overlay } from "../session/recipe.ts";
 import type { CapturedState } from "./modelsweep.ts";
+import { missedNl } from "../lib/sweepstamp.ts";
 
 /**
  * The evidence gate: is what the sweep collected good enough to judge a site on? First
@@ -410,6 +411,21 @@ export function gateChecks(run: RunData): { checks: Check[]; gaps: Gap[]; warnin
     if (told.stays) limitations.push({ check: "engine-without-result", ...place, missingNl: limitationNl(where, told.stays) });
   }
   add("engine-without-result", engineGaps, "geen regelset wacht na een tijdgrens nog op een nieuwe meting");
+
+  // A state captured while a stylesheet or script of the site itself did not arrive: the picture and the measurements are not
+  // those of the state a visitor gets. A new sweep captures it again; the explorer has nothing to change in the model.
+  const notLoadedGaps: Gap[] = (run.siteStates?.states ?? [])
+    .filter((state) => state.reached && (state.notLoaded ?? []).length > 0)
+    .map((state) => ({
+      check: "state-resource-not-loaded",
+      page: null,
+      url: state.url,
+      state: state.id,
+      missingNl: `Bij het vastleggen van deze toestand ${missedNl(state.notLoaded!)}. Het beeld en de metingen zijn daardoor niet die van de toestand zoals een bezoeker haar krijgt. Draai collect opnieuw: dat legt deze toestand nog een keer vast.`,
+      fixedBy: "sweep" as const,
+      limitationNl: `Bij het vastleggen van deze toestand ${missedNl(state.notLoaded!)}, ook niet in een nieuwe veegronde. Het beeld en de metingen van deze toestand zijn gemaakt zonder dat bestand en tonen niet wat een bezoeker krijgt.`,
+    }));
+  add("state-resource-not-loaded", notLoadedGaps, "elke toestand is vastgelegd met de stylesheets en scripts van de site zelf");
 
   // 5. The sweep itself must be complete.
   const incomplete: Gap[] = [];
