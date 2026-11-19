@@ -104,7 +104,11 @@ export const toolboxVersion = (): string => (JSON.parse(readFileSync(join(TOOLBO
  * `weigh` and `check-weigh` write a task, but one that stands on the evaluation alone: no walk or verdict of the run is
  * done again, and the stamp of the weighing names the prompt it was made with. So a run from before the step can be weighed.
  */
-export const MEASURES_NOTHING = ["pending", "estimate", "gaps", "feedback", "contribute", "verify", "procedures", "render", "publish", "handout", "export", "statement", "compare", "decide", "sign", "seal", "recheck", "check-recheck", "weigh", "check-weigh", "summarize", "check-summary", "check-reading"];
+/*
+ * `voiceover stop --run` takes the run only to tell its own session process from that of another run: it reads and
+ * writes nothing in the run.
+ */
+export const MEASURES_NOTHING = ["pending", "estimate", "gaps", "feedback", "contribute", "verify", "procedures", "render", "publish", "handout", "export", "statement", "compare", "decide", "sign", "seal", "recheck", "check-recheck", "weigh", "check-weigh", "summarize", "check-summary", "check-reading", "voiceover"];
 
 /**
  * The commands of the agent phases. They work on the evidence of the sweep and measure nothing of the site, so in a copy

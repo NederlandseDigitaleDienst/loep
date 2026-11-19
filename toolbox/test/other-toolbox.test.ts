@@ -32,6 +32,8 @@ test("reading a run of another version, the same version, a run without a manife
   for (const command of ["pending", "estimate", "gaps", "feedback", "verify", "procedures"]) assert.equal(otherToolboxNl(other, command, false), null, command);
   // A finished, possibly sealed run is still rendered, signed and decided on after a release: these measure nothing.
   for (const command of ["render", "statement", "compare", "decide", "sign", "seal"]) assert.equal(otherToolboxNl(other, command, false), null, command);
+  // `voiceover stop --run` only tells the session process of the own run from that of another run.
+  assert.equal(otherToolboxNl(other, "voiceover", false), null);
   // What measures or writes tasks still refuses.
   for (const command of ["collect", "contrast", "states", "tasks", "evaluate", "merge"]) assert.notEqual(otherToolboxNl(other, command, false), null, command);
   assert.equal(otherToolboxNl(other, "tasks", true), null);
