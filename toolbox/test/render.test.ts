@@ -14,7 +14,7 @@ import { reportedModels } from "../src/lib/models.ts";
 import { deriveReport, renderMarkdown } from "../src/lib/report-markdown.ts";
 import { renderHtml } from "../src/lib/report-html.ts";
 import { makePdf, TEMPLATES, tool, unshownCheck, unshownPattern, unshownTexts, unshownWarning } from "../src/lib/typst.ts";
-import { SEVERITIES } from "../src/lib/verdict.ts";
+import { passedOnPlace, passedOnPointNl, SEVERITIES } from "../src/lib/verdict.ts";
 import { exampleEvaluation } from "./fixtures/example-evaluation.ts";
 import { weighed } from "./fixtures/weighed.ts";
 
@@ -182,6 +182,30 @@ test("the work list names every finding to fix and every open criterion", () => 
   const section = renderMarkdown(evaluation).split("## Wat nu")[1]!.split("\n## ")[0]!;
   assert.ok(section.includes("### Oplossen") && section.includes("### Nog uitzoeken"));
   for (const id of ids) assert.ok(section.includes(`](#${id})`), `${id} is missing from the work list`);
+});
+
+test("a place passed on to a failed criterion that nobody ruled on stands in the work list as a place to check (#629)", () => {
+  const evaluation = exampleEvaluation();
+  const failed = evaluation.criteria.find((entry) => entry.outcome === "failed")!;
+  const point = passedOnPointNl({ fromNl: "de verifieerder van 1.4.10", page: "P02", where: "knop Zoeken (rechtsboven)", id: "XV1410-01", noteNl: "De knop heeft geen toegankelijke naam." });
+  const own = "veegronde mist: het contrast op 320 pixels breed is op geen pagina gemeten.";
+  failed.limitsNl = [point, own];
+  const { todo } = deriveReport(evaluation);
+  assert.deepEqual(
+    todo.investigate.toCheck.map((group) => [group.criterion, group.outcomeNl, group.pointsNl]),
+    [[failed.id, "voldoet niet", ["Op P02 (knop Zoeken (rechtsboven)), gezien door de verifieerder van 1.4.10: De knop heeft geen toegankelijke naam."]]],
+    "only the place that was passed on, not a limit of the criterion's own round",
+  );
+  const worklist = renderMarkdown(evaluation).split("### Nog uitzoeken")[1]!.split("\n## ")[0]!;
+  assert.ok(worklist.includes("**Ook nakijken bij een criterium dat niet voldoet**"));
+  assert.ok(worklist.includes("De knop heeft geen toegankelijke naam."));
+  assert.ok(renderHtml(evaluation).includes("Ook nakijken bij een criterium dat niet voldoet"));
+  // The outcome stays as it was, and so do the limits in the appendix.
+  assert.equal(failed.outcome, "failed");
+  assert.deepEqual(failed.limitsNl, [point, own]);
+  // The point is read back from its text, so an evaluation written before this change shows it too.
+  assert.equal(passedOnPlace(own), null);
+  assert.deepEqual(passedOnPlace(point), { fromNl: "de verifieerder van 1.4.10", page: "P02", where: "knop Zoeken (rechtsboven)", id: "XV1410-01", noteNl: "De knop heeft geen toegankelijke naam." });
 });
 
 test("the status is explained once when both WCAG versions share it", () => {

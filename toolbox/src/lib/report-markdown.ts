@@ -6,7 +6,7 @@ import { modelOf } from "../instruments/methods/registry.ts";
 import { signatureIsCurrent } from "../commands/sign.ts";
 import { extensionsNl } from "./budget.ts";
 import { modelsNl } from "./models.ts";
-import { NOT_SENT, notSentOrigins, OPEN_POINT_KINDS, openPoint, OUTSIDE_SCOPE, SEVERITIES, UNREACHABLE, waitsOnlyOnSending, type CrossLoop, type Outcome } from "./verdict.ts";
+import { NOT_SENT, notSentOrigins, OPEN_POINT_KINDS, openPoint, OUTSIDE_SCOPE, passedOnPlace, SEVERITIES, UNREACHABLE, waitsOnlyOnSending, type CrossLoop, type Outcome } from "./verdict.ts";
 import { siteOrigins } from "./origins.ts";
 import { readsAllowedNl } from "./reads.ts";
 import { compareCriterionIds, type WcagVersion } from "./wcag.ts";
@@ -156,6 +156,9 @@ export const REPORT_TEXT = {
   investigate: {
     owner: "Dit moet een mens nagaan",
     ownerIntro: "Wat geen instrument kan vaststellen, of wat een keuze vraagt. Achter elk criterium staat de uitkomst die het nu heeft.",
+    toCheck: "Ook nakijken bij een criterium dat niet voldoet",
+    toCheckIntro:
+      "De beoordelaar van een ander criterium zag op deze plekken iets dat bij het criterium hoort. Daarna heeft niemand het beoordeeld, omdat het criterium al niet voldeed en de uitkomst er niet door verandert. Kijk deze plekken na bij het herstel van het criterium, want er kan een gebrek zitten dat nog niet in de werklijst staat.",
     notSent: "Pas te meten als het onderzoek mag versturen",
     notSentIntro:
       "Wat pas verschijnt nadat een bericht of formulier is verstuurd, zoals het antwoord van een chat, is hier niet gemeten: dit onderzoek mocht daar niets versturen. Een persoon is er niet voor nodig. Een instrument meet het zodra versturen mag, en dat is een keuze van de eigenaar van de site. Achter elk criterium staat de uitkomst die het nu heeft.",
@@ -395,7 +398,7 @@ export interface ReportDerived {
   quiet: string[];
   /** The recommendations of every criterion, in the order of the criteria: never part of an outcome. Empty when there is none. */
   recommendations: RecommendationItem[];
-  todo: { /** Criteria a person found failing: there is no finding of an instrument behind them, so they stand here by name. */ person: { criterion: string; textNl: string }[]; fix: { owner: string; findingIds: string[] }[]; /** Findings that touch an element of the vendor, per element; null when no vendor was given. */ vendor: { nameNl: string; elements: { tag: string; findingIds: string[] }[] } | null; /** Every open point of the evaluation by whose work it is. The owner's points and those without a kind stand here in full; those about the evaluation itself are counted here and stand in appendix A. */ investigate: { owner: OpenGroup[]; /** The points that stay open only because the run may not send, with the declaration that would have let it; null when there are none. */ notSent: NotSent | null; /** The points about a part of the site that did not load while the rest did, in full: they say what and when. */ unreachable: OpenGroup[]; unsorted: OpenGroup[]; toolbox: { criterion: string; outcomeNl: string; countNl: string; kindsNl: string; /** What was measured, for a criterion without a deviation that was not fully measured. */ coverageNl: string | null; anchor: boolean }[] } };
+  todo: { /** Criteria a person found failing: there is no finding of an instrument behind them, so they stand here by name. */ person: { criterion: string; textNl: string }[]; fix: { owner: string; findingIds: string[] }[]; /** Findings that touch an element of the vendor, per element; null when no vendor was given. */ vendor: { nameNl: string; elements: { tag: string; findingIds: string[] }[] } | null; /** Every open point of the evaluation by whose work it is. The owner's points and those without a kind stand here in full; those about the evaluation itself are counted here and stand in appendix A. */ investigate: { owner: OpenGroup[]; /** Places another round passed on to a failed criterion that nobody ruled on: no open point, since the outcome stands, but work for the owner when repairing it (#629). */ toCheck: OpenGroup[]; /** The points that stay open only because the run may not send, with the declaration that would have let it; null when there are none. */ notSent: NotSent | null; /** The points about a part of the site that did not load while the rest did, in full: they say what and when. */ unreachable: OpenGroup[]; unsorted: OpenGroup[]; toolbox: { criterion: string; outcomeNl: string; countNl: string; kindsNl: string; /** What was measured, for a criterion without a deviation that was not fully measured. */ coverageNl: string | null; anchor: boolean }[] } };
   /** The findings grouped into things to repair; null for an evaluation from before that step existed. */
   defects: DefectsDerived | null;
   /** Who each finding and each defect hinders and at which core task; null when the step that weighs the findings did not run. */
@@ -971,7 +974,7 @@ function investigate(evaluation: Evaluation): ReportDerived["todo"]["investigate
   const isOpen = (criterion: CriterionResult): boolean => criterion.outcome === "cantTell" || criterion.outcome === "untested";
   // The criteria without a verdict first: those are what the status waits for.
   const criteria = [...evaluation.criteria.filter(isOpen), ...evaluation.criteria.filter((criterion) => !isOpen(criterion))];
-  const result: ReportDerived["todo"]["investigate"] = { owner: [], notSent: null, unreachable: [], unsorted: [], toolbox: [] };
+  const result: ReportDerived["todo"]["investigate"] = { owner: [], toCheck: [], notSent: null, unreachable: [], unsorted: [], toolbox: [] };
   const placed = new Set<string>();
   const anchor = (id: string): boolean => !placed.has(id) && placed.add(id).has(id);
   const full = (wanted: (point: ReturnType<typeof openPoint>) => boolean): OpenGroup[] =>
@@ -982,6 +985,12 @@ function investigate(evaluation: Evaluation): ReportDerived["todo"]["investigate
     });
   // What waits only for permission to send stands apart: no person is needed for it, one declaration is.
   result.owner = full((point) => point.kind?.reader === "owner" && point.kind.prefix !== NOT_SENT);
+  // A failed criterion gets no finishing round for what was passed on to it; the places stay in its limits, and stand here for whoever repairs it.
+  result.toCheck = criteria.flatMap((criterion) => {
+    const places = criterion.outcome === "failed" ? (criterion.limitsNl ?? []).map(passedOnPlace).filter((place) => place !== null) : [];
+    if (places.length === 0) return [];
+    return [{ criterion: criterion.id, outcomeNl: SHOWN_LABEL[shownOutcome(criterion)].toLowerCase(), pointsNl: places.map((place) => `Op ${place.page} (${place.where}), gezien door ${place.fromNl}: ${place.noteNl}`), anchor: anchor(criterion.id) }];
+  });
   const notSent = full((point) => point.kind?.prefix === NOT_SENT);
   result.notSent = notSent.length > 0 ? notSentDeclaration(evaluation, notSent) : null;
   result.unreachable = full((point) => point.kind?.prefix === UNREACHABLE);
@@ -1876,7 +1885,7 @@ function reportBlocks(input: Evaluation, decisions: DecisionLayer = { decisions:
   }
   lines.push("### Nog uitzoeken", "");
   const open = derived.todo.investigate;
-  if (open.owner.length + (open.notSent?.items.length ?? 0) + open.unreachable.length + open.unsorted.length + open.toolbox.length === 0) lines.push("Er zijn geen open punten.", "");
+  if (open.owner.length + open.toCheck.length + (open.notSent?.items.length ?? 0) + open.unreachable.length + open.unsorted.length + open.toolbox.length === 0) lines.push("Er zijn geen open punten.", "");
   else {
     lines.push(REPORT_TEXT.investigateIntro, "");
     const head = (item: { criterion: string; outcomeNl: string; anchor: boolean }): string => {
@@ -1885,6 +1894,7 @@ function reportBlocks(input: Evaluation, decisions: DecisionLayer = { decisions:
     };
     const groups: [string, string[], OpenGroup[]][] = [
       [REPORT_TEXT.investigate.owner, [REPORT_TEXT.investigate.ownerIntro], open.owner],
+      [REPORT_TEXT.investigate.toCheck, [REPORT_TEXT.investigate.toCheckIntro], open.toCheck],
       ...(open.notSent ? [[REPORT_TEXT.investigate.notSent, [REPORT_TEXT.investigate.notSentIntro, `${open.notSent.declarationNl} ${code(open.notSent.flags)}`, esc(open.notSent.originNl)], open.notSent.items] as [string, string[], OpenGroup[]]] : []),
       [REPORT_TEXT.investigate.unreachable, [REPORT_TEXT.investigate.unreachableIntro], open.unreachable],
       [REPORT_TEXT.investigate.unsorted, [REPORT_TEXT.investigate.unsortedIntro], open.unsorted],

@@ -47,6 +47,7 @@ import {
   type ObservationRecordLike,
   type Verdict,
   outsideScopePointProblems,
+  passedOnPointNl,
   SENDING_BUDGET_OUT,
 } from "../lib/verdict.ts";
 import { CRITERIA, criterionById } from "../lib/wcag.ts";
@@ -662,7 +663,7 @@ export function unruledCrossPoints(verdicts: Map<string, PassingVerdicts>, crite
   const { closed } = crossLoops(verdicts, criterion, records, from);
   return crossCandidates(verdicts, criterion, from)
     .filter((candidate) => !ruled.has(candidate.id) && !closed.has(candidate.id))
-    .map((candidate) => `veegronde mist: ${crossSource(candidate.id)} zag op ${candidate.page} (${candidate.where}) iets dat bij dit criterium hoort, en geen verifieerder of afmaakronde heeft dat beoordeeld (${candidate.id}): ${candidate.noteNl}`);
+    .map((candidate) => passedOnPointNl({ fromNl: crossSource(candidate.id), page: candidate.page, where: candidate.where, id: candidate.id, noteNl: candidate.noteNl }));
 }
 
 /**

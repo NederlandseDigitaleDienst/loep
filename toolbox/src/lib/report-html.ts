@@ -986,12 +986,13 @@ function whatNext(context: Context): string {
   }
   parts.push(title("Nog uitzoeken", 3, 3), spacer(12));
   const open = derived.todo.investigate;
-  if (open.owner.length + (open.notSent?.items.length ?? 0) + open.unreachable.length + open.unsorted.length + open.toolbox.length === 0) parts.push(rich("<p>Er zijn geen open punten.</p>"));
+  if (open.owner.length + open.toCheck.length + (open.notSent?.items.length ?? 0) + open.unreachable.length + open.unsorted.length + open.toolbox.length === 0) parts.push(rich("<p>Er zijn geen open punten.</p>"));
   else {
     parts.push(rich(`<p>${attr(REPORT_TEXT.investigateIntro)}</p>`), spacer(24));
     parts.push(
       openGroups(context, [
         [REPORT_TEXT.investigate.owner, [attr(REPORT_TEXT.investigate.ownerIntro)], open.owner],
+        [REPORT_TEXT.investigate.toCheck, [attr(REPORT_TEXT.investigate.toCheckIntro)], open.toCheck],
         ...(open.notSent ? [[REPORT_TEXT.investigate.notSent, [attr(REPORT_TEXT.investigate.notSentIntro), `${attr(open.notSent.declarationNl)} <code>${attr(open.notSent.flags)}</code>`, inline(open.notSent.originNl)], open.notSent.items] as [string, string[], OpenGroup[]]] : []),
         [REPORT_TEXT.investigate.unreachable, [attr(REPORT_TEXT.investigate.unreachableIntro)], open.unreachable],
         [REPORT_TEXT.investigate.unsorted, [attr(REPORT_TEXT.investigate.unsortedIntro)], open.unsorted],

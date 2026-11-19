@@ -325,6 +325,29 @@ export function openPoint(point: string): { kind: OpenPointKind | null; textNl: 
   return { kind, textNl: `${text.charAt(0).toUpperCase()}${text.slice(1)}` };
 }
 
+/** A candidate another round passed on to a criterion, which no verdict of that criterion ruled on. */
+export interface PassedOnPlace {
+  /** Who passed it on, such as "de verifieerder van 1.4.10". */
+  fromNl: string;
+  page: string;
+  where: string;
+  /** The identifier of the candidate, such as "XV1410-01". */
+  id: string;
+  noteNl: string;
+}
+
+/** The open point loep writes for a candidate passed on to a criterion that nobody there ruled on. `passedOnPlace` reads it back. */
+export const passedOnPointNl = (place: PassedOnPlace): string =>
+  `veegronde mist: ${place.fromNl} zag op ${place.page} (${place.where}) iets dat bij dit criterium hoort, en geen verifieerder of afmaakronde heeft dat beoordeeld (${place.id}): ${place.noteNl}`;
+
+const PASSED_ON = /^veegronde mist: (de \S+ van \d+\.\d+\.\d+) zag op (.+?) \((.*)\) iets dat bij dit criterium hoort, en geen verifieerder of afmaakronde heeft dat beoordeeld \((X[VA]?\d+-\d+)\): ([\s\S]*)$/;
+
+/** The place in an open point written by `passedOnPointNl`; null for any other point. Also reads the points in evaluations written before it existed. */
+export function passedOnPlace(point: string): PassedOnPlace | null {
+  const match = PASSED_ON.exec(point.replace(/\s+/g, " ").trim());
+  return match ? { fromNl: match[1]!, page: match[2]!, where: match[3]!, id: match[4]!, noteNl: match[5]! } : null;
+}
+
 type SendingBudget = { sent: number; max: number; left: number };
 
 /**
