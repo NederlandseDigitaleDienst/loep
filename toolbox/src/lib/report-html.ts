@@ -678,12 +678,13 @@ function scoreTable({ evaluation, derived }: Context, version: WcagVersion): str
 
 function summary(context: Context): string {
   const { derived, evaluation } = context;
+  const measuresLink = link("#maatregelen", attr(REPORT_TEXT.measures.title));
   const forB = derived.forB
     ? el({
         tag: "nldd-card",
         attrs: { background: "tinted" },
         children: stack(
-          [title("Wat er nog ontbreekt voor status B", 3, 5), spacer(8), rich(`<p>Waarop de uitkomsten rusten: ${inline(derived.forB.basisNl)}</p>${derived.forB.doneNl ? `<p>${inline(derived.forB.doneNl)}</p>` : list(derived.forB.openNl.map((row) => `${link(`#${ID.criterion(row.criterion)}`, attr(row.criterion))}: ${inline(row.closesNl)}`))}`)].join(""),
+          [title(derived.forB.headingNl, 3, 5), spacer(8), rich(`<p>Waarop de uitkomsten rusten: ${inline(derived.forB.basisNl)}</p>${derived.forB.doneNl ? `<p>${inline(derived.forB.doneNl)}${derived.forB.decided ? ` ${attr(REPORT_TEXT.forB.chapter)} ${measuresLink}.` : ""}</p>` : list(derived.forB.openNl.map((row) => `${link(`#${ID.criterion(row.criterion)}`, attr(row.criterion))}: ${inline(row.closesNl)}`))}`)].join(""),
           { padding: 20 },
         ),
       })
@@ -704,7 +705,7 @@ function summary(context: Context): string {
           el({
             tag: "nldd-simple-section",
             attrs: { "padding-top": 0 },
-            children: rich(derived.executive.paragraphs.map((paragraph) => `<p>${inline(paragraph)}</p>`).join("")),
+            children: rich(`${derived.executive.paragraphs.map((paragraph) => `<p>${inline(paragraph)}</p>`).join("")}${derived.executive.beforeDecisions ? `<p>${attr(REPORT_TEXT.executiveBeforeDecisions)} ${measuresLink}.</p>` : ""}`),
           }),
         ]
       : []),

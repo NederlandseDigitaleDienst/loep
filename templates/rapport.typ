@@ -431,6 +431,8 @@
 #let executive = derived.at("executive", default: none)
 #if executive != none {
   for paragraph in executive.paragraphs { par(text(size: 11pt, prose(paragraph))) }
+  // The summary is sealed with the evaluation; the decisions came after it.
+  if executive.at("beforeDecisions", default: false) { par(text(size: 9.5pt, fill: muted)[#t.executiveBeforeDecisions #t.measures.title.]) }
 } else {
   text(size: 13.5pt, weight: 600, derived.statusSentenceNl)
 }
@@ -447,12 +449,13 @@
 
 #if derived.forB != none {
   callout(fill: panel, bar: ink, {
-    text(weight: 700)[Wat er nog ontbreekt voor status B]
+    text(weight: 700, derived.forB.headingNl)
     linebreak()
     text(size: 9.5pt)[Waarop de uitkomsten rusten: #derived.forB.basisNl]
     if derived.forB.doneNl != none {
       linebreak()
       text(size: 9.5pt, derived.forB.doneNl)
+      if derived.forB.decided { text(size: 9.5pt)[ #t.forB.chapter #t.measures.title.] }
     } else {
       set text(size: 9.5pt)
       for row in derived.forB.openNl [

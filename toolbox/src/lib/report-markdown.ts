@@ -12,7 +12,7 @@ import { readsAllowedNl } from "./reads.ts";
 import { compareCriterionIds, type WcagVersion } from "./wcag.ts";
 import { EVERYONE, GROUPS, groupLabelNl, groupsFor, type AffectedGroup } from "./groups.ts";
 import { CONSEQUENCE_CLAUSE_NL, CONSEQUENCES, TASK_ALL, type Consequence } from "./weighing.ts";
-import { DECISION_LABEL_NL, decisionLabelNl, NOT_REMEASURED_NL, remeasuredNl, type Decision, type DecisionKind, type DecisionLayer } from "./decisions.ts";
+import { DECISION_LABEL_NL, decisionLabelNl, measureDate, NO_DATED_MEASURE_NL, NOT_REMEASURED_NL, remeasuredNl, type Decision, type DecisionKind, type DecisionLayer } from "./decisions.ts";
 import { dateTimeNl, recordedNl } from "./recorded.ts";
 import type { CheckedRecheck, RecheckPlace } from "../commands/recheck.ts";
 
@@ -192,6 +192,13 @@ export const REPORT_TEXT = {
     "fixed-list": "Vaste lijst van pagina's, vooraf opgegeven",
   },
   sampleKind: { structured: "Gericht", random: "Willekeurig", embedded: "Ingesloten venster" },
+  forB: {
+    missing: "Wat er nog ontbreekt voor status B",
+    rests: "Waar status B op rust",
+    restsNoDefect: "Waar de status op rust",
+    chapter: "De besluiten staan in het hoofdstuk",
+  },
+  executiveBeforeDecisions: "Deze samenvatting is geschreven vóór de besluiten van de organisatie. Wat er per gebrek is besloten, staat in het hoofdstuk",
   measures: {
     title: "Maatregelen en beslissingen",
     intro:
@@ -353,14 +360,16 @@ export interface ReportDerived {
   status: Record<WcagVersion, { status: ComplianceStatus; reasonNl: string }>;
   statusSentenceNl: string;
   /** The summary for the leadership, when one was written and passed its check: it opens the report in place of `statusSentenceNl`. `noteNl` says who wrote it, in the chapter about the tools. */
-  executive: { paragraphs: string[]; noteNl: string } | null;
+  /** `beforeDecisions`: the summary is part of the sealed evaluation, so it was written before any decision the report now shows. */
+  executive: { paragraphs: string[]; noteNl: string; beforeDecisions: boolean } | null;
   statusLine: StatusLine;
   /**
    * For an investigation to account for (#318): what the outcomes rest on, and per open criterion
    * what would close it, so whoever signs sees what is still missing for status B. Null for an
    * investigation to improve.
    */
-  forB: { basisNl: string; openNl: { criterion: string; closesNl: string }[]; doneNl: string | null } | null;
+  /** `decided`: at least one defect has a decision, so the block points to the chapter with the decisions. */
+  forB: { headingNl: string; basisNl: string; openNl: { criterion: string; closesNl: string }[]; doneNl: string | null; decided: boolean } | null;
   /** One line when this evaluation follows up a signed one: its date and mark. Null otherwise; a concept is never named. */
   followsUpNl: string | null;
   /** When this version of loep was last measured as a whole and what came out, or that it never was: always said. */
@@ -887,7 +896,45 @@ const CLOSES_NL: Record<string, string> = {
   "niet bereikbaar": "een nieuwe afmaakronde (tasks --again) zodra het deel weer laadt",
 };
 
-function forStatusB(evaluation: Evaluation): ReportDerived["forB"] {
+/** How a count of decisions of one kind reads in a sentence. */
+const DECIDED_NL: Record<Exclude<DecisionKind, "onbesloten">, string> = {
+  gepland: "herstel gepland",
+  opgelost: "opgelost volgens de organisatie",
+  zienswijze: "een andere zienswijze",
+  onevenredig: "onevenredige last",
+};
+
+/** The decisions that count in a signed report: one per defect of the evaluation, without "onbesloten". */
+function decidedDefects(evaluation: Evaluation, layer: DecisionLayer): Map<string, Decision> {
+  const ids = new Set((evaluation.signature ? (evaluation.defects ?? []) : []).map((defect) => defect.id));
+  return new Map(layer.decisions.filter((decision) => ids.has(decision.defect.id) && decision.decision !== "onbesloten").map((decision) => [decision.defect.id, decision]));
+}
+
+/**
+ * What the decisions mean for status B, once nothing is open and the report is signed: how many
+ * defects have one, of which kind, and which defect has no measure with a date. The statement
+ * asks the same (`measureFor`), so the report says it before the statement does (#678).
+ */
+function decisionsForB(evaluation: Evaluation, layer: DecisionLayer): { textNl: string; complete: boolean; decided: boolean } | null {
+  const defects = evaluation.signature ? sortDefects(evaluation.defects ?? []) : [];
+  if (defects.length === 0) return null;
+  const decisions = decidedDefects(evaluation, layer);
+  const kinds = (Object.keys(DECIDED_NL) as (keyof typeof DECIDED_NL)[]).map((kind) => ({ kind, count: [...decisions.values()].filter((decision) => decision.decision === kind).length })).filter((entry) => entry.count > 0);
+  const countNl =
+    decisions.size === 0
+      ? defects.length === 1
+        ? "Bij het gebrek staat nog geen besluit."
+        : `Bij geen van de ${defects.length} gebreken staat een besluit.`
+      : `Bij ${decisions.size} van de ${plural(defects.length, "gebrek", "gebreken")} staat een besluit: ${listNl(kinds.map((entry) => `${entry.count} keer ${DECIDED_NL[entry.kind]}`))}.`;
+  const undated = defects.filter((defect) => !decisions.has(defect.id) || measureDate(decisions.get(defect.id)!) === null).map((defect) => defect.id);
+  const textNl =
+    undated.length === 0
+      ? `${countNl} Elk besluit is een maatregel met een datum, en dat is wat status B bij een gebrek vraagt.`
+      : `${countNl} Status B vraagt bij elk gebrek een maatregel met een datum. Die ontbreekt bij ${listNl(undated)}. ${NO_DATED_MEASURE_NL}`;
+  return { textNl, complete: undated.length === 0, decided: decisions.size > 0 };
+}
+
+function forStatusB(evaluation: Evaluation, layer: DecisionLayer): ReportDerived["forB"] {
   if (evaluation.purpose !== "verantwoorden") return null;
   const count = (basis: string): number => evaluation.criteria.filter((criterion) => criterion.basis === basis).length;
   const basisNl = `${count("measured")} criteria ${BASIS_NL.measured}, ${count("observed")} ${BASIS_NL.observed}, ${count("person")} ${BASIS_NL.person}, ${count("open")} open.`;
@@ -899,8 +946,13 @@ function forStatusB(evaluation: Evaluation): ReportDerived["forB"] {
     return { criterion: criterion.id, closesNl: [...new Set(closes)].join("; ") };
   });
   const failed = evaluation.criteria.filter((criterion) => criterion.outcome === "failed").length;
-  const doneNl = open.length === 0 ? `Er staat geen criterium open. Een gebrek houdt status B niet tegen, als er per gebrek een maatregel bij staat${failed > 0 ? ` (${failed === 1 ? "1 criterium voldoet" : `${failed} criteria voldoen`} niet)` : ""}.` : null;
-  return { basisNl, openNl, doneNl };
+  if (open.length > 0) return { headingNl: REPORT_TEXT.forB.missing, basisNl, openNl, doneNl: null, decided: false };
+  const decisions = decisionsForB(evaluation, layer);
+  if (decisions) return { headingNl: decisions.complete ? REPORT_TEXT.forB.rests : REPORT_TEXT.forB.missing, basisNl, openNl, doneNl: `Er staat geen criterium open. ${decisions.textNl}`, decided: decisions.decided };
+  if (failed === 0) return { headingNl: REPORT_TEXT.forB.restsNoDefect, basisNl, openNl, doneNl: "Er staat geen criterium open.", decided: false };
+  // Before signing there is no decision yet, so the measures are what is still missing.
+  const doneNl = `Er staat geen criterium open. Een gebrek houdt status B niet tegen, als er per gebrek een maatregel bij staat (${failed === 1 ? "1 criterium voldoet" : `${failed} criteria voldoen`} niet).`;
+  return { headingNl: REPORT_TEXT.forB.missing, basisNl, openNl, doneNl, decided: false };
 }
 
 /** The work that follows from the evaluation: what to fix, by owner, and what to find out. */
@@ -1403,8 +1455,8 @@ export function deriveReport(input: Evaluation, decisions: DecisionLayer = { dec
     signatureStale: stale,
     status: { "2.1": complianceStatus(evaluation, "2.1"), "2.2": complianceStatus(evaluation, "2.2") },
     statusSentenceNl: statusSentence(evaluation),
-    executive: evaluation.executiveSummary?.status === "applied" ? { paragraphs: evaluation.executiveSummary.paragraphs, noteNl: REPORT_TEXT.executiveNote.replace("{model}", evaluation.executiveSummary.model ? ` (${evaluation.executiveSummary.model})` : "").replace("{reader}", evaluation.executiveSummary.readerModel ? ` (${evaluation.executiveSummary.readerModel})` : "") } : null,
-    forB: forStatusB(evaluation),
+    executive: evaluation.executiveSummary?.status === "applied" ? { paragraphs: evaluation.executiveSummary.paragraphs, beforeDecisions: decidedDefects(evaluation, decisions).size > 0, noteNl: REPORT_TEXT.executiveNote.replace("{model}", evaluation.executiveSummary.model ? ` (${evaluation.executiveSummary.model})` : "").replace("{reader}", evaluation.executiveSummary.readerModel ? ` (${evaluation.executiveSummary.readerModel})` : "") } : null,
+    forB: forStatusB(evaluation, decisions),
     statusLine: statusLine(evaluation, stale),
     followsUpNl: evaluation.followsUp ? `Dit is een heronderzoek. Het vorige onderzoek is van ${dateNl(evaluation.followsUp.evaluatedAt)}, afgetekend op ${dateNl(evaluation.followsUp.signedAt)}, met kenmerk ${evaluation.followsUp.sha256.slice(0, 12)}.` : null,
     chain,
@@ -1782,14 +1834,15 @@ function reportBlocks(input: Evaluation, decisions: DecisionLayer = { decisions:
   begin("summary");
   section("Samenvatting");
   // A summary written for the leadership opens the report; without one the sentence loep makes itself does.
-  if (derived.executive) lines.push(...derived.executive.paragraphs.flatMap((paragraph) => [esc(paragraph), ""]));
+  const measuresLink = `[${REPORT_TEXT.measures.title}](#${REPORT_TEXT.measures.title.toLowerCase().replaceAll(" ", "-")})`;
+  if (derived.executive) lines.push(...derived.executive.paragraphs.flatMap((paragraph) => [esc(paragraph), ""]), ...(derived.executive.beforeDecisions ? [`${REPORT_TEXT.executiveBeforeDecisions} ${measuresLink}.`, ""] : []));
   else lines.push(derived.statusSentenceNl, "");
   lines.push(`**${derived.statusLine.headingNl}**`, "");
   if (derived.statusLine.noteNl) lines.push(derived.statusLine.noteNl, "");
   lines.push(derived.statusLine.openNl, "");
   if (derived.forB) {
-    lines.push("**Wat er nog ontbreekt voor status B**", "", `Waarop de uitkomsten rusten: ${derived.forB.basisNl}`, "");
-    if (derived.forB.doneNl) lines.push(derived.forB.doneNl, "");
+    lines.push(`**${derived.forB.headingNl}**`, "", `Waarop de uitkomsten rusten: ${derived.forB.basisNl}`, "");
+    if (derived.forB.doneNl) lines.push(`${derived.forB.doneNl}${derived.forB.decided ? ` ${REPORT_TEXT.forB.chapter} ${measuresLink}.` : ""}`, "");
     else lines.push(...bullets(derived.forB.openNl.map((row) => `${row.criterion}: ${esc(row.closesNl)}`)), "");
   }
   const weighing = grouping ? derived.weighing : null;

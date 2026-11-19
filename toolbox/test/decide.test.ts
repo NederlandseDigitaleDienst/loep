@@ -19,7 +19,7 @@ import { mergeFindings } from "../src/lib/defects.ts";
 import { evaluationHash, summarise, type Evaluation } from "../src/lib/evaluation.ts";
 import { writeManifest } from "../src/lib/manifest.ts";
 import { parseRecordedVia, recordStatement } from "../src/lib/recorded.ts";
-import { dateNl, renderMarkdown } from "../src/lib/report-markdown.ts";
+import { dateNl, deriveReport, renderMarkdown } from "../src/lib/report-markdown.ts";
 import { renderAnswerSheet, renderStatement } from "../src/lib/statement.ts";
 import { confirmDeclaration, decideWrites, writesAllowedNl } from "../src/lib/writes.ts";
 import { exampleEvaluation } from "./fixtures/example-evaluation.ts";
@@ -44,11 +44,11 @@ function withDefects(): Evaluation {
 }
 
 /** A run as it stands after evaluate, (render) and seal: what the signer reads. */
-async function sealedRun(withReport: boolean): Promise<string> {
+async function sealedRun(withReport: boolean, evaluation: Evaluation = withDefects()): Promise<string> {
   const run = mkdtempSync(join(tmpdir(), "decide-"));
   mkdirSync(join(run, "pages", "start"), { recursive: true });
   writeFileSync(join(run, "pages", "start", "facts.json"), canonicalJson({ title: "Start" }));
-  await writeEvaluation(join(run, "evaluation.json"), withDefects());
+  await writeEvaluation(join(run, "evaluation.json"), evaluation);
   await writeManifest(run, { command: "evaluate" });
   if (withReport) await render(run);
   await seal(run);
@@ -179,6 +179,60 @@ const decision = (defect: NonNullable<Evaluation["defects"]>[number], fields: Pa
   recordedVia: "terminal",
   sealSha256: "5".repeat(64),
   ...fields,
+});
+
+test("the part about status B in a signed report counts the decisions and names the defect without a measure with a date (#678)", () => {
+  const evaluation = statusB();
+  const defects = evaluation.defects!;
+  const layer = (decisions: Decision[]) => ({ decisions: decisions.map((entry) => ({ ...entry, previous: [] })), sha256: "a".repeat(64) });
+
+  // Before any decision: the measures are what is missing, and nothing points to decisions that are not there.
+  const none = deriveReport(evaluation).forB!;
+  assert.equal(none.headingNl, "Wat er nog ontbreekt voor status B");
+  assert.equal(none.decided, false);
+  assert.ok(none.doneNl!.includes(`Bij geen van de ${defects.length} gebreken staat een besluit. Status B vraagt bij elk gebrek een maatregel met een datum. Die ontbreekt bij ${defects[0]!.id}`), none.doneNl!);
+
+  // Every defect planned with a date: nothing is missing, and the heading says so.
+  const planned = layer(defects.map((defect) => decision(defect, {})));
+  const all = deriveReport(evaluation, planned).forB!;
+  assert.equal(all.headingNl, "Waar status B op rust");
+  assert.equal(all.doneNl, `Er staat geen criterium open. Bij ${defects.length} van de ${defects.length} ${defects.length === 1 ? "gebrek" : "gebreken"} staat een besluit: ${defects.length} keer herstel gepland. Elk besluit is een maatregel met een datum, en dat is wat status B bij een gebrek vraagt.`);
+  const markdown = renderMarkdown(evaluation, planned);
+  assert.ok(markdown.includes("**Waar status B op rust**"));
+  assert.ok(!markdown.includes("Wat er nog ontbreekt voor status B"));
+  assert.ok(markdown.includes("De besluiten staan in het hoofdstuk [Maatregelen en beslissingen](#maatregelen-en-beslissingen)."));
+  assert.ok(markdown.includes("\n## Maatregelen en beslissingen\n"), "the chapter the link points to");
+
+  // Another view has no date: the part says which defect, as the statement will.
+  const [first, ...rest] = defects;
+  const view = layer([decision(first!, { decision: "zienswijze", date: null, whatNl: "De organisatie ziet dit anders." }), ...rest.map((defect) => decision(defect, {}))]);
+  const mixed = deriveReport(evaluation, view).forB!;
+  assert.equal(mixed.headingNl, "Wat er nog ontbreekt voor status B");
+  assert.ok(mixed.doneNl!.includes("1 keer een andere zienswijze."), mixed.doneNl!);
+  assert.ok(mixed.doneNl!.includes(`Status B vraagt bij elk gebrek een maatregel met een datum. Die ontbreekt bij ${first!.id}. Een andere zienswijze, onevenredige last of een gebrek zonder besluit is geen maatregel met een datum`), mixed.doneNl!);
+
+  // A summary for the leadership is sealed before the decisions: the report says so once there is one.
+  const { signature, ...unsigned } = evaluation;
+  const withSummary = { ...unsigned, executiveSummary: { status: "applied" as const, paragraphs: ["De site voldoet gedeeltelijk."], sources: [["status"]], templateSha256: "1".repeat(64), proposalSha256: "2".repeat(64), readingSha256: "3".repeat(64) } } as Evaluation;
+  const summarised: Evaluation = { ...withSummary, signature: { ...signature!, evaluationSha256: evaluationHash(withSummary) } };
+  assert.equal(deriveReport(summarised).executive!.beforeDecisions, false);
+  assert.ok(renderMarkdown(summarised, planned).includes("Deze samenvatting is geschreven vóór de besluiten van de organisatie. Wat er per gebrek is besloten, staat in het hoofdstuk [Maatregelen en beslissingen](#maatregelen-en-beslissingen)."));
+});
+
+test("the HTML and the PDF of a signed report with a dated measure for every defect say what status B rests on (#678)", async (context) => {
+  const { signature: _signature, ...unsigned } = statusB();
+  const run = await sealedRun(true, unsigned as Evaluation);
+  await sign({ run, ...SIGNER, terminal: typesSeal() });
+  for (const defect of unsigned.defects!) await decide({ run, defect: defect.id, decision: "gepland", what: "Het team past het component aan.", date: "2026-12-01", ...WHO, ...IN_CONVERSATION });
+  const result = await render(run);
+  const html = readFileSync(result.html, "utf8");
+  assert.ok(html.includes('text="Waar status B op rust"') && !html.includes("Wat er nog ontbreekt voor status B"));
+  assert.ok(html.includes('De besluiten staan in het hoofdstuk <a href="#maatregelen">Maatregelen en beslissingen</a>.'));
+  assert.ok(html.includes('id="maatregelen"'), "the chapter the link points to");
+  if (result.pdf === null) return context.skip("Typst is not installed");
+  const text = (await promisify(execFile)("pdftotext", [result.pdf, "-"])).stdout.replace(/\s+/g, " ");
+  assert.match(text, /Waar status B op rust Waarop de uitkomsten rusten:/);
+  assert.ok(text.includes("dat is wat status B bij een gebrek vraagt. De besluiten staan in het hoofdstuk Maatregelen en beslissingen."), text.slice(text.indexOf("Waar status B"), text.indexOf("Waar status B") + 600));
 });
 
 test("the statement takes its measures from the decisions, says how each was recorded, and status B says which deviation has no measure with a date", () => {

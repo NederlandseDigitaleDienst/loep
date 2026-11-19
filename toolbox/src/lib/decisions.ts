@@ -31,6 +31,9 @@ export const DECISION_LABEL_NL: Record<DecisionKind, string> = {
   onbesloten: "Nog niet besloten",
 };
 
+/** Said by the report and by `decide` about a decision that is no measure with a date (`measureDate`). */
+export const NO_DATED_MEASURE_NL = "Een andere zienswijze, onevenredige last of een gebrek zonder besluit is geen maatregel met een datum; dat is alleen herstel gepland of opgelost.";
+
 /** What `whatNl` holds for each kind, for the messages of `decide`. */
 export const DECISION_WHAT_NL: Record<DecisionKind, string> = {
   opgelost: "wat er is hersteld",
