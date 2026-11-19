@@ -566,21 +566,42 @@ test("start: a guest the host keeps this process from ends the start at once, wi
   assert.deepEqual(started.attempts, ["start 1: de host weigert het verkeer naar de virtuele Mac"]);
   assert.ok(lines.some((line) => line.includes("Lokaal netwerk")));
 
-  // Booted here: silence in the first minute is a guest that has no network yet.
+  assert.match(started.error!, /loep voiceover stop/, "the way out when the setting is on and the guest hangs");
+
+  // Booted here: a guest that boots has no network yet, so it gets the whole wait a boot may take.
   const booted = silentGuest(refused);
   booted.guest.state = "stopped";
   const second = fakeClock();
   const again = await start(booted.api, () => undefined, second, () => Buffer.from(""));
   assert.match(again.error!, /Lokaal netwerk/);
   assert.equal(booted.guest.boots, 1, "one boot, not three");
-  assert.equal(second.slept, LIMITS.refusedAfterSeconds * 1000);
+  assert.equal(booted.guest.halts, 0);
+  assert.equal(second.slept, LIMITS.desktopSeconds * 1000);
   assert.equal(booted.guest.reaches, 1, "the port is not tried before the guest had time to come up");
+});
+
+test("start: a guest booted here that has no route for its first minutes and then comes up is warmed up, not called refused", async () => {
+  const { guest, api } = fakeGuest();
+  const clock = fakeClock();
+  let up = Infinity;
+  let reaches = 0;
+  const slow: Guest = {
+    ...api,
+    boot: async () => (await api.boot(), void (up = clock.now() + 150_000)),
+    exec: async (command, seconds) => (clock.now() < up ? null : api.exec(command, seconds)),
+    reach: async () => ((reaches += 1), { state: guest.state, address: "192.0.2.7", port22: clock.now() < up ? "EHOSTUNREACH" : "open" }),
+  };
+  const started = await start(slow, () => undefined, clock, files);
+  assert.equal(started.ok, true, started.error);
+  assert.equal(guest.boots, 1);
+  assert.equal(reaches, 0);
 });
 
 test("start: a guest that gives no answer over ssh is not called a guest without a desktop, and what port 22 said is told", async () => {
   for (const [reach, told] of [
     [{ address: "192.0.2.7", port22: "open" }, /geen antwoord over ssh binnen 240 seconden; poort 22 van 192\.0\.2\.7 neemt wel een verbinding aan/],
     [{ address: "192.0.2.7", port22: "ECONNREFUSED" }, /geen antwoord over ssh binnen 240 seconden; een verbinding naar poort 22 van 192\.0\.2\.7 geeft ECONNREFUSED/],
+    [{ address: "192.0.2.7", port22: "timeout" }, /geen antwoord over ssh binnen 240 seconden; poort 22 van 192\.0\.2\.7 neemt binnen 5 seconden geen verbinding aan/],
     [{ address: null, port22: null }, /geen antwoord over ssh binnen 240 seconden; lume geeft geen adres voor de virtuele Mac/],
   ] as const) {
     const { guest, api } = silentGuest(reach);
@@ -636,6 +657,12 @@ test("status: a running guest the host keeps this process from is said to be out
     assert.deepEqual(status.refused, { state: "running", address: "192.0.2.7", port22: "EHOSTUNREACH" });
     assert.equal(isReady(status), false);
     assert.match(statusNl(status), /^draait maar is vanuit dit proces niet bereikbaar: .*Privacy en beveiliging > Lokaal netwerk/);
+    // While a start runs the guest may still boot: the port says nothing then.
+    markStarting(process.pid, "vm", dir);
+    const starting = await voiceoverStatus(silentGuest({ address: "192.0.2.7", port22: "EHOSTUNREACH" }).api, "vm", dir);
+    assert.equal(starting.refused, undefined);
+    assert.match(statusNl(starting), /^wordt gestart/);
+    rmSync(join(dir, "vm.starting.json"));
     // Silent for another reason: as before.
     const silent = await voiceoverStatus(silentGuest({ address: "192.0.2.7", port22: "open" }).api, "vm", dir);
     assert.equal(silent.refused, undefined);
