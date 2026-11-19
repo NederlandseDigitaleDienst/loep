@@ -60,4 +60,8 @@ test("beside the sheet stands how many stops the walk counted, and whether tile 
   // A list with one Tab stop: the rows behind the band have no number, and the count says there is none to miss.
   assert.match(sheetText({ ...sheet, tabStops: { count: 1, cut: false } }, "/run"), /telde op deze pagina 1 Tab-stop\. Vak 3 toont de pagina tot onderaan\./);
   assert.match(sheetText({ ...sheet, tabStops: { count: 80, cut: true } }, "/run"), /80 Tab-stops, genummerd van 1 tot en met 80\. Vak 3 houdt op vóór het eind van de pagina\. Een stop met een hoger nummer dan het laatste in beeld is met Tab bereikt en staat onder de rand van het vak\./);
+  // A walk that stopped in a trap or at its limit: the rest of the page has no numbers, and that is not the same as no Tab stops.
+  const early = sheetText({ ...sheet, tabStops: { count: 250, cut: false, endedEarly: true } }, "/run");
+  assert.match(early, /De Tab-proef stopte vóór het eind van de Tab-volgorde: wat na stop 250 komt, heeft geen nummer en is niet met Tab onderzocht\./);
+  assert.doesNotMatch(early, /staat geen Tab-stop/);
 });

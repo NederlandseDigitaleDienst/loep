@@ -100,8 +100,8 @@ export interface Sheet {
   keysNl?: string[];
   /** Set when the sweep counted no Tab stop and nothing to operate on the page: the answer about the Tab order is then no gap. */
   nothingToOperate?: true;
-  /** How many Tab stops the walk counted on the page, and whether tile 3 ends before the bottom of its picture. Absent in older runs. */
-  tabStops?: { count: number; cut: boolean };
+  /** How many Tab stops the walk counted on the page, whether tile 3 ends before the bottom of the page, and whether the walk stopped before the end of the Tab order. Absent in older runs. */
+  tabStops?: { count: number; cut: boolean; endedEarly?: true };
 }
 
 export interface Gate {
@@ -768,7 +768,9 @@ export async function buildSheets(run: RunData, runDir: string, outDir: string):
       const source = PNG.sync.read(readFileSync(join(runDir, entry.file)));
       if (entry.state !== "taborder") return tile(source);
       const { picture, cut } = tabOrderPicture(source);
-      if (type.page.tabwalk && type.page.tabwalk.stopCount > 0) tabStops = { count: type.page.tabwalk.stopCount, cut };
+      // The picture of a page taller than a screenshot may be ends at that limit too, and a walk that stopped early left the rest of the page without numbers.
+      const walk = type.page.tabwalk;
+      if (walk && walk.stopCount > 0) tabStops = { count: walk.stopCount, cut: cut || type.page.facts?.screenshotClippedAt !== undefined, ...(ENDED_EARLY.has(walk.outcome) ? { endedEarly: true as const } : {}) };
       return tile(picture);
     })));
     await writeFileAtomic(join(outDir, file), bytes);
@@ -786,10 +788,14 @@ export function nothingToOperate(page: Pick<PageData, "tabwalk" | "facts" | "ope
 /** The questions that count for a sheet: on a page without anything to operate, an empty Tab order is what the picture should show. */
 const countsFor = (sheet: Pick<Sheet, "nothingToOperate">, question: { id: string }): boolean => !(question.id === "taborder" && sheet.nothingToOperate);
 
+/** Outcomes of a Tab walk that stopped before the end of the Tab order: what comes after its last stop was not examined. */
+const ENDED_EARLY = new Set(["trapped", "limit-reached", "navigated-on-focus", "focus-lost"]);
+
 /** What tile 3 does not show by itself: how many stops there are, so that "not in view" is not taken for "not reachable". */
 function tabStopsText(stops: NonNullable<Sheet["tabStops"]>): string {
   const counted = stops.count === 1 ? "De Tab-proef telde op deze pagina 1 Tab-stop." : `De Tab-proef telde op deze pagina ${stops.count} Tab-stops, genummerd van 1 tot en met ${stops.count}.`;
   if (stops.cut) return `${counted} Vak 3 houdt op vóór het eind van de pagina. Een stop met een hoger nummer dan het laatste in beeld is met Tab bereikt en staat onder de rand van het vak.`;
+  if (stops.endedEarly) return `${counted} Vak 3 toont de pagina tot onderaan. De Tab-proef stopte vóór het eind van de Tab-volgorde: wat na stop ${stops.count} komt, heeft geen nummer en is niet met Tab onderzocht.`;
   return `${counted} Vak 3 toont de pagina tot onderaan. In een stuk zonder nummer, ook achter een grijs gestreepte band, staat geen Tab-stop.`;
 }
 
