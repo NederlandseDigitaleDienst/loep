@@ -12,6 +12,7 @@ import { readsAllowedNl } from "./reads.ts";
 import { compareCriterionIds, type WcagVersion } from "./wcag.ts";
 import { EVERYONE, GROUPS, groupLabelNl, groupsFor, type AffectedGroup } from "./groups.ts";
 import { CONSEQUENCE_CLAUSE_NL, CONSEQUENCES, TASK_ALL, type Consequence } from "./weighing.ts";
+import { LEGAL_VERSION } from "./statement.ts";
 import { DECISION_LABEL_NL, decisionLabelNl, measureDate, NO_DATED_MEASURE_NL, NOT_REMEASURED_NL, remeasuredNl, type Decision, type DecisionKind, type DecisionLayer } from "./decisions.ts";
 import { dateTimeNl, recordedNl } from "./recorded.ts";
 import type { CheckedRecheck, RecheckPlace } from "../commands/recheck.ts";
@@ -912,26 +913,36 @@ function decidedDefects(evaluation: Evaluation, layer: DecisionLayer): Map<strin
 
 /**
  * What the decisions mean for status B, once nothing is open and the report is signed: how many
- * defects have one, of which kind, and which defect has no measure with a date. The statement
- * asks the same (`measureFor`), so the report says it before the statement does (#678).
+ * defects have one, of which kind, and which defect has a decision without a date. The statement
+ * asks a dated measure per failed criterion of the legal version (`measureFor`); this part says
+ * what the decisions leave open before the statement does (#678).
  */
 function decisionsForB(evaluation: Evaluation, layer: DecisionLayer): { textNl: string; complete: boolean; decided: boolean } | null {
   const defects = evaluation.signature ? sortDefects(evaluation.defects ?? []) : [];
   if (defects.length === 0) return null;
   const decisions = decidedDefects(evaluation, layer);
   const kinds = (Object.keys(DECIDED_NL) as (keyof typeof DECIDED_NL)[]).map((kind) => ({ kind, count: [...decisions.values()].filter((decision) => decision.decision === kind).length })).filter((entry) => entry.count > 0);
+  const kindsNl = listNl(kinds.map((entry) => `${entry.count} keer ${DECIDED_NL[entry.kind]}`));
   const countNl =
     decisions.size === 0
       ? defects.length === 1
         ? "Bij het gebrek staat nog geen besluit."
         : `Bij geen van de ${defects.length} gebreken staat een besluit.`
-      : `Bij ${decisions.size} van de ${plural(defects.length, "gebrek", "gebreken")} staat een besluit: ${listNl(kinds.map((entry) => `${entry.count} keer ${DECIDED_NL[entry.kind]}`))}.`;
-  const undated = defects.filter((defect) => !decisions.has(defect.id) || measureDate(decisions.get(defect.id)!) === null).map((defect) => defect.id);
+      : defects.length === 1
+        ? `Bij het gebrek staat een besluit: ${DECIDED_NL[kinds[0]!.kind]}.`
+        : `Bij ${decisions.size} van de ${defects.length} gebreken staat een besluit: ${kindsNl}.`;
+  // The statement is about the version the law names: a defect under a criterion of 2.2 alone needs no measure there.
+  const legal = new Set(evaluation.criteria.filter((criterion) => criterion.versions.includes(LEGAL_VERSION) && criterion.outcome === "failed").flatMap((criterion) => criterion.findings.map((finding) => finding.id)));
+  const undated = defects.filter((defect) => defect.findingIds.some((id) => legal.has(id)) && (!decisions.has(defect.id) || measureDate(decisions.get(defect.id)!) === null)).map((defect) => defect.id);
+  const asksNl = "Status B vraagt bij elk gebrek een maatregel met een datum.";
+  // Without any decision the measures can still come from the input of the statement, so no defect is named.
   const textNl =
     undated.length === 0
-      ? `${countNl} Elk besluit is een maatregel met een datum, en dat is wat status B bij een gebrek vraagt.`
-      : `${countNl} Status B vraagt bij elk gebrek een maatregel met een datum. Die ontbreekt bij ${listNl(undated)}. ${NO_DATED_MEASURE_NL}`;
-  return { textNl, complete: undated.length === 0, decided: decisions.size > 0 };
+      ? `${countNl} ${decisions.size === 0 ? asksNl : "Elk besluit is een maatregel met een datum, en dat is wat status B bij een gebrek vraagt."}`
+      : decisions.size === 0
+        ? `${countNl} ${asksNl}`
+        : `${countNl} ${asksNl} Bij ${listNl(undated)} staat geen besluit met een datum. ${NO_DATED_MEASURE_NL}`;
+  return { textNl, complete: undated.length === 0 && decisions.size > 0, decided: decisions.size > 0 };
 }
 
 function forStatusB(evaluation: Evaluation, layer: DecisionLayer): ReportDerived["forB"] {

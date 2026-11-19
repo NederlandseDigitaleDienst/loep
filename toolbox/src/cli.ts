@@ -956,7 +956,7 @@ async function main(): Promise<void> {
       process.stdout.write(`${defectLineNl(view)}\nPagina's: ${view.pages.join(", ") || "geen plek"}\n${view.proposalsNl.length === 1 ? "Voorstel uit het rapport" : "Voorstellen uit het rapport"}:\n${view.proposalsNl.map((text) => `- ${text}`).join("\n")}\n`);
       for (const earlier of view.current?.previous ?? []) process.stdout.write(`eerder: ${decisionLabelNl(earlier.decision, earlier.date)}, vastgelegd op ${earlier.decidedAt.slice(0, 10)}\n`);
       if (result.written === null) process.stdout.write(`Een besluit vastleggen: --decision opgelost|gepland|zienswijze|onevenredig|onbesloten --what "<wat>" [--date jjjj-mm-dd] [--alternative "<alternatief>"] --name "<naam>" --role "<functie>". Let op: ${DECISION_PRIVACY_NL}.\n`);
-      else process.stdout.write(`besluit vastgelegd in ${result.written}; nog ${result.left} ${result.left === 1 ? "gebrek" : "gebreken"} zonder besluit. render zet het in het afgetekende rapport, statement in de verklaring.${view.current && measureDate(view.current) === null ? ` Voor status B vraagt de verklaring bij elk gebrek een maatregel met een datum. ${NO_DATED_MEASURE_NL}` : ""} Let op: ${DECISION_PRIVACY_NL}.\n`);
+      else process.stdout.write(`besluit vastgelegd in ${result.written}; nog ${result.left} ${result.left === 1 ? "gebrek" : "gebreken"} zonder besluit. render zet het in het afgetekende rapport, statement in de verklaring.${view.current && measureDate(view.current) === null ? ` Een verklaring met status B vraagt bij een afwijking een maatregel met een datum. ${NO_DATED_MEASURE_NL}` : ""} Let op: ${DECISION_PRIVACY_NL}.\n`);
       return;
     }
     case "statement": {

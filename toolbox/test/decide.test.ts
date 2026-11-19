@@ -190,13 +190,13 @@ test("the part about status B in a signed report counts the decisions and names 
   const none = deriveReport(evaluation).forB!;
   assert.equal(none.headingNl, "Wat er nog ontbreekt voor status B");
   assert.equal(none.decided, false);
-  assert.ok(none.doneNl!.includes(`Bij geen van de ${defects.length} gebreken staat een besluit. Status B vraagt bij elk gebrek een maatregel met een datum. Die ontbreekt bij ${defects[0]!.id}`), none.doneNl!);
+  assert.ok(none.doneNl!.includes(`Bij geen van de ${defects.length} gebreken staat een besluit. Status B vraagt bij elk gebrek een maatregel met een datum.`) && !none.doneNl!.includes(defects[0]!.id), none.doneNl!);
 
   // Every defect planned with a date: nothing is missing, and the heading says so.
   const planned = layer(defects.map((defect) => decision(defect, {})));
   const all = deriveReport(evaluation, planned).forB!;
   assert.equal(all.headingNl, "Waar status B op rust");
-  assert.equal(all.doneNl, `Er staat geen criterium open. Bij ${defects.length} van de ${defects.length} ${defects.length === 1 ? "gebrek" : "gebreken"} staat een besluit: ${defects.length} keer herstel gepland. Elk besluit is een maatregel met een datum, en dat is wat status B bij een gebrek vraagt.`);
+  assert.equal(all.doneNl, `Er staat geen criterium open. Bij ${defects.length} van de ${defects.length} gebreken staat een besluit: ${defects.length} keer herstel gepland. Elk besluit is een maatregel met een datum, en dat is wat status B bij een gebrek vraagt.`);
   const markdown = renderMarkdown(evaluation, planned);
   assert.ok(markdown.includes("**Waar status B op rust**"));
   assert.ok(!markdown.includes("Wat er nog ontbreekt voor status B"));
@@ -209,7 +209,26 @@ test("the part about status B in a signed report counts the decisions and names 
   const mixed = deriveReport(evaluation, view).forB!;
   assert.equal(mixed.headingNl, "Wat er nog ontbreekt voor status B");
   assert.ok(mixed.doneNl!.includes("1 keer een andere zienswijze."), mixed.doneNl!);
-  assert.ok(mixed.doneNl!.includes(`Status B vraagt bij elk gebrek een maatregel met een datum. Die ontbreekt bij ${first!.id}. Een andere zienswijze, onevenredige last of een gebrek zonder besluit is geen maatregel met een datum`), mixed.doneNl!);
+  assert.ok(mixed.doneNl!.includes(`Status B vraagt bij elk gebrek een maatregel met een datum. Bij ${first!.id} staat geen besluit met een datum. Een andere zienswijze, onevenredige last of een gebrek zonder besluit is geen maatregel met een datum`), mixed.doneNl!);
+
+  // The report and the statement agree on the same decisions.
+  const input = { organisation: "Gemeente Voorbeeld" };
+  assert.equal(renderStatement(evaluation, input, { concept: false, decisions: planned.decisions }).missingMeasuresNl, null);
+  assert.notEqual(renderStatement(evaluation, input, { concept: false, decisions: view.decisions }).missingMeasuresNl, null);
+  const resign = (changed: Evaluation): Evaluation => {
+    const { signature: old, ...rest } = changed;
+    return { ...rest, signature: { ...old!, evaluationSha256: evaluationHash(rest as Evaluation) } } as Evaluation;
+  };
+  // A defect under a criterion of 2.2 alone needs no measure in the statement, so the report does not name it.
+  const later = structuredClone(evaluation);
+  later.criteria.find((criterion) => criterion.id === first!.mainCriterion)!.versions = ["2.2"];
+  const only22 = resign(later);
+  assert.equal(renderStatement(only22, input, { concept: false, decisions: view.decisions }).missingMeasuresNl, null);
+  assert.equal(deriveReport(only22, view).forB!.headingNl, "Waar status B op rust");
+  // One defect reads as one.
+  const single = resign({ ...structuredClone(evaluation), defects: [first!] });
+  assert.ok(deriveReport(single, layer([decision(first!, {})])).forB!.doneNl!.includes("Bij het gebrek staat een besluit: herstel gepland."));
+  assert.ok(deriveReport(single).forB!.doneNl!.includes("Bij het gebrek staat nog geen besluit."));
 
   // A summary for the leadership is sealed before the decisions: the report says so once there is one.
   const { signature, ...unsigned } = evaluation;
