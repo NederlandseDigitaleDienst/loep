@@ -1,0 +1,1 @@
+De checker van IBM (accessibility-checker-engine) gaat naar 4.0.35, html-validate naar 11.21.1 en de Nu Html Checker (vnu-jar) naar 26.11.14. Op de testsite gaven ze dezelfde meldingen als de vorige versies; op een andere site kan een melding anders uitvallen.
