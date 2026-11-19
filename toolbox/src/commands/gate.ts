@@ -100,6 +100,8 @@ export interface Sheet {
   keysNl?: string[];
   /** Set when the sweep counted no Tab stop and nothing to operate on the page: the answer about the Tab order is then no gap. */
   nothingToOperate?: true;
+  /** How many Tab stops the walk counted on the page, and whether tile 3 ends before the bottom of its picture. Absent in older runs. */
+  tabStops?: { count: number; cut: boolean };
 }
 
 export interface Gate {
@@ -639,7 +641,7 @@ const COLLAPSED_BAND = 24;
  * long page with a part without links or buttons still shows every stop in its tile (#507). A
  * stop is a row with the colour of its frame; a picture without one stays as it is.
  */
-export function collapseWithoutStops(source: PNG, colour: readonly [number, number, number] = TILE_COLOUR): PNG {
+export function collapseWithoutStops(source: PNG, colour: readonly [number, number, number] = TILE_COLOUR, context = STOP_CONTEXT): PNG {
   const marked = new Array<boolean>(source.height).fill(false);
   for (let y = 0; y < source.height; y++) {
     for (let x = 0; x < source.width; x++) {
@@ -651,7 +653,7 @@ export function collapseWithoutStops(source: PNG, colour: readonly [number, numb
     }
   }
   if (!marked.includes(true)) return source;
-  const keep = marked.map((_, y) => marked.slice(Math.max(0, y - STOP_CONTEXT), y + STOP_CONTEXT + 1).includes(true));
+  const keep = marked.map((_, y) => marked.slice(Math.max(0, y - context), y + context + 1).includes(true));
   // Each run of rows to leave out becomes one band; a run shorter than the band is kept as it is.
   const parts: ({ from: number; to: number } | "band")[] = [];
   for (let y = 0; y < source.height; ) {
@@ -675,6 +677,24 @@ export function collapseWithoutStops(source: PNG, colour: readonly [number, numb
     }
   }
   return out;
+}
+
+/** Less and less of the page around each stop, for a page whose stops do not fit in the tile with the usual context. */
+const STOP_CONTEXTS = [STOP_CONTEXT, 60, 30, 10, 0];
+
+/**
+ * The picture for the tile with the Tab order: folded with the most context that still lets the
+ * tile take all of it, so the last stops of a long page with many stops, those in its footer,
+ * are in view (#653). `cut` says the tile ends before the bottom even with the least context.
+ */
+export function tabOrderPicture(source: PNG): { picture: PNG; cut: boolean } {
+  const fits = (picture: PNG): boolean => Math.round(picture.height / Math.max(1, picture.width / TILE_WIDTH)) <= TILE_MAX_HEIGHT;
+  let picture = source;
+  for (const context of STOP_CONTEXTS) {
+    picture = collapseWithoutStops(source, TILE_COLOUR, context);
+    if (fits(picture)) return { picture, cut: false };
+  }
+  return { picture, cut: true };
 }
 
 /** Put numbered tiles next to each other on one white sheet. */
@@ -743,9 +763,16 @@ export async function buildSheets(run: RunData, runDir: string, outDir: string):
     if (present.length === 0) continue;
     const tiles = present.map((candidate, index) => ({ nr: index + 1, ...candidate }));
     const file = join("gate", `sheet-${type.id}.png`);
-    const bytes = PNG.sync.write(contactSheet(tiles.map((entry) => tile((entry.state === "taborder" ? collapseWithoutStops : (picture: PNG) => picture)(PNG.sync.read(readFileSync(join(runDir, entry.file))))))));
+    let tabStops: Sheet["tabStops"];
+    const bytes = PNG.sync.write(contactSheet(tiles.map((entry) => {
+      const source = PNG.sync.read(readFileSync(join(runDir, entry.file)));
+      if (entry.state !== "taborder") return tile(source);
+      const { picture, cut } = tabOrderPicture(source);
+      if (type.page.tabwalk && type.page.tabwalk.stopCount > 0) tabStops = { count: type.page.tabwalk.stopCount, cut };
+      return tile(picture);
+    })));
     await writeFileAtomic(join(outDir, file), bytes);
-    sheets.push({ pageType: type.id, page: type.page.label, url: type.page.item.url, file, sha256: sha256(bytes), tiles, componentsNl: components, ...(everywhere.length > 0 ? { everywhereNl: everywhere } : {}), ...(processes.length > 0 ? { processesNl: processes } : {}), contentNl: (model?.content ?? []).filter((content) => content.pageTypes.includes(type.id)).map((content) => `${content.id} (${content.kind}): ${content.descriptionNl}`), framesNl: framesOn(type.page, model), keysNl: keysOn(type.page, run), ...(nothingToOperate(type.page) ? { nothingToOperate: true as const } : {}) });
+    sheets.push({ pageType: type.id, page: type.page.label, url: type.page.item.url, file, sha256: sha256(bytes), tiles, componentsNl: components, ...(everywhere.length > 0 ? { everywhereNl: everywhere } : {}), ...(processes.length > 0 ? { processesNl: processes } : {}), contentNl: (model?.content ?? []).filter((content) => content.pageTypes.includes(type.id)).map((content) => `${content.id} (${content.kind}): ${content.descriptionNl}`), framesNl: framesOn(type.page, model), keysNl: keysOn(type.page, run), ...(nothingToOperate(type.page) ? { nothingToOperate: true as const } : {}), ...(tabStops ? { tabStops } : {}) });
   }
   return sheets;
 }
@@ -758,6 +785,13 @@ export function nothingToOperate(page: Pick<PageData, "tabwalk" | "facts" | "ope
 
 /** The questions that count for a sheet: on a page without anything to operate, an empty Tab order is what the picture should show. */
 const countsFor = (sheet: Pick<Sheet, "nothingToOperate">, question: { id: string }): boolean => !(question.id === "taborder" && sheet.nothingToOperate);
+
+/** What tile 3 does not show by itself: how many stops there are, so that "not in view" is not taken for "not reachable". */
+function tabStopsText(stops: NonNullable<Sheet["tabStops"]>): string {
+  const counted = stops.count === 1 ? "De Tab-proef telde op deze pagina 1 Tab-stop." : `De Tab-proef telde op deze pagina ${stops.count} Tab-stops, genummerd van 1 tot en met ${stops.count}.`;
+  if (stops.cut) return `${counted} Vak 3 houdt op vóór het eind van de pagina. Een stop met een hoger nummer dan het laatste in beeld is met Tab bereikt en staat onder de rand van het vak.`;
+  return `${counted} Vak 3 toont de pagina tot onderaan. In een stuk zonder nummer, ook achter een grijs gestreepte band, staat geen Tab-stop.`;
+}
 
 /** What the reviewing agent reads beside one sheet: the picture, its tiles and the lists of what is known. */
 export function sheetText(sheet: Sheet, absoluteOut: string): string {
@@ -772,6 +806,7 @@ export function sheetText(sheet: Sheet, absoluteOut: string): string {
       `- Vak ${entry.nr}: ${entry.descriptionNl}`,
       ...((entry.refusedHosts ?? []).length > 0 ? [`  - In deze toestand zijn verzoeken naar adressen buiten de run tegengehouden (${entry.refusedHosts!.join(", ")}). Wat daarvandaan komt, zoals een speler of een kaart, ontbreekt in dit vak; op die plek kan een leeg of zwart vlak staan. Beoordeel of te zien is wat er openging, los van die inhoud.`] : []),
     ]),
+    ...(sheet.tabStops ? ["", tabStopsText(sheet.tabStops)] : []),
     ...(sheet.nothingToOperate ? ["", "De veegronde vond op deze pagina geen Tab-stop en niets om te bedienen. Een vak 3 zonder genummerde stops klopt dan: antwoord bij `taborder` `ja`."] : []),
     "",
     sheet.componentsNl.length > 0 ? `Onderdelen van dit paginatype volgens het sitemodel: ${sheet.componentsNl.join("; ")}.` : (sheet.everywhereNl ?? []).length > 0 ? "Het sitemodel noemt voor dit paginatype geen eigen onderdelen." : "Het sitemodel noemt voor dit paginatype geen onderdelen.",
