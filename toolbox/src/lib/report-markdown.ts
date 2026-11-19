@@ -989,7 +989,7 @@ function investigate(evaluation: Evaluation): ReportDerived["todo"]["investigate
   result.toCheck = criteria.flatMap((criterion) => {
     const places = criterion.outcome === "failed" ? (criterion.limitsNl ?? []).map(passedOnPlace).filter((place) => place !== null) : [];
     if (places.length === 0) return [];
-    return [{ criterion: criterion.id, outcomeNl: SHOWN_LABEL[shownOutcome(criterion)].toLowerCase(), pointsNl: places.map((place) => `Op ${place.page} (${place.where}), gezien door ${place.fromNl}: ${place.noteNl}`), anchor: anchor(criterion.id) }];
+    return [{ criterion: criterion.id, outcomeNl: SHOWN_LABEL[shownOutcome(criterion)].toLowerCase(), pointsNl: places.map((place) => `Op ${place.page} (${place.where}), gezien bij criterium ${place.criterion}: ${place.noteNl}`), anchor: anchor(criterion.id) }];
   });
   const notSent = full((point) => point.kind?.prefix === NOT_SENT);
   result.notSent = notSent.length > 0 ? notSentDeclaration(evaluation, notSent) : null;

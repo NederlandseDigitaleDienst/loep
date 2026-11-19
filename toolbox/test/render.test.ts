@@ -193,7 +193,7 @@ test("a place passed on to a failed criterion that nobody ruled on stands in the
   const { todo } = deriveReport(evaluation);
   assert.deepEqual(
     todo.investigate.toCheck.map((group) => [group.criterion, group.outcomeNl, group.pointsNl]),
-    [[failed.id, "voldoet niet", ["Op P02 (knop Zoeken (rechtsboven)), gezien door de verifieerder van 1.4.10: De knop heeft geen toegankelijke naam."]]],
+    [[failed.id, "voldoet niet", ["Op P02 (knop Zoeken (rechtsboven)), gezien bij criterium 1.4.10: De knop heeft geen toegankelijke naam."]]],
     "only the place that was passed on, not a limit of the criterion's own round",
   );
   const worklist = renderMarkdown(evaluation).split("### Nog uitzoeken")[1]!.split("\n## ")[0]!;
@@ -205,7 +205,22 @@ test("a place passed on to a failed criterion that nobody ruled on stands in the
   assert.deepEqual(failed.limitsNl, [point, own]);
   // The point is read back from its text, so an evaluation written before this change shows it too.
   assert.equal(passedOnPlace(own), null);
-  assert.deepEqual(passedOnPlace(point), { fromNl: "de verifieerder van 1.4.10", page: "P02", where: "knop Zoeken (rechtsboven)", id: "XV1410-01", noteNl: "De knop heeft geen toegankelijke naam." });
+  assert.deepEqual(passedOnPlace(point), { fromNl: "de verifieerder van 1.4.10", criterion: "1.4.10", page: "P02", where: "knop Zoeken (rechtsboven)", id: "XV1410-01", noteNl: "De knop heeft geen toegankelijke naam." });
+});
+
+test("the PDF shows a place passed on to a failed criterion in the work list (#629)", async (context) => {
+  const dir = mkdtempSync(join(tmpdir(), "render-to-check-"));
+  const evaluation = exampleEvaluation();
+  const failed = evaluation.criteria.find((entry) => entry.outcome === "failed")!;
+  failed.limitsNl = [passedOnPointNl({ fromNl: "de verifieerder van 1.4.10", page: "P02", where: "knop Zoeken", id: "XV1410-01", noteNl: "De knop heeft geen toegankelijke naam." })];
+  writeFileSync(join(dir, "evaluation.json"), canonicalJson(evaluation));
+  const result = await render(dir);
+  if (result.pdf === null) return context.skip("Typst is not installed");
+  const text = await tool("pdftotext", [result.pdf, "-"]);
+  if (!text.found) return context.skip("pdftotext is not installed");
+  const flat = text.stdout.replace(/\s+/g, " ");
+  assert.ok(flat.includes("Ook nakijken bij een criterium dat niet voldoet"));
+  assert.ok(flat.includes("Op P02 (knop Zoeken), gezien bij criterium 1.4.10: De knop heeft geen toegankelijke naam."));
 });
 
 test("the status is explained once when both WCAG versions share it", () => {

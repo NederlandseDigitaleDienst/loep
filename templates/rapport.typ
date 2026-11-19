@@ -692,6 +692,8 @@
 #let not-sent = open-points.at("notSent", default: none)
 #let open-groups = (
   (t.investigate.owner, (t.investigate.ownerIntro,), open-points.owner),
+  // Places passed on to a failed criterion that nobody ruled on: work for whoever repairs it.
+  (t.investigate.toCheck, (t.investigate.toCheckIntro,), open-points.at("toCheck", default: ())),
   ..if not-sent != none { ((t.investigate.notSent, (t.investigate.notSentIntro, [#not-sent.declarationNl #mono(not-sent.flags)], not-sent.originNl), not-sent.items),) },
   // A part of the site that did not load: in full, because each point says what and when.
   (t.investigate.unreachable, (t.investigate.unreachableIntro,), open-points.at("unreachable", default: ())),

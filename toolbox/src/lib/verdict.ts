@@ -340,12 +340,12 @@ export interface PassedOnPlace {
 export const passedOnPointNl = (place: PassedOnPlace): string =>
   `veegronde mist: ${place.fromNl} zag op ${place.page} (${place.where}) iets dat bij dit criterium hoort, en geen verifieerder of afmaakronde heeft dat beoordeeld (${place.id}): ${place.noteNl}`;
 
-const PASSED_ON = /^veegronde mist: (de \S+ van \d+\.\d+\.\d+) zag op (.+?) \((.*)\) iets dat bij dit criterium hoort, en geen verifieerder of afmaakronde heeft dat beoordeeld \((X[VA]?\d+-\d+)\): ([\s\S]*)$/;
+const PASSED_ON = /^veegronde mist: (de \S+ van (\d+\.\d+\.\d+)) zag op (.+?) \((.*)\) iets dat bij dit criterium hoort, en geen verifieerder of afmaakronde heeft dat beoordeeld \((X[VA]?\d+-\d+)\): ([\s\S]*)$/;
 
-/** The place in an open point written by `passedOnPointNl`; null for any other point. Also reads the points in evaluations written before it existed. */
-export function passedOnPlace(point: string): PassedOnPlace | null {
+/** The place in an open point written by `passedOnPointNl`, with the criterion it was passed on from; null for any other point. Also reads the points in evaluations written before it existed. */
+export function passedOnPlace(point: string): (PassedOnPlace & { criterion: string }) | null {
   const match = PASSED_ON.exec(point.replace(/\s+/g, " ").trim());
-  return match ? { fromNl: match[1]!, page: match[2]!, where: match[3]!, id: match[4]!, noteNl: match[5]! } : null;
+  return match ? { fromNl: match[1]!, criterion: match[2]!, page: match[3]!, where: match[4]!, id: match[5]!, noteNl: match[6]! } : null;
 }
 
 type SendingBudget = { sent: number; max: number; left: number };
