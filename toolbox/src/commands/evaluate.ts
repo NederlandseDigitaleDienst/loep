@@ -553,13 +553,15 @@ export function implementationUse(records: ReadonlyMap<string, { command: string
 }
 
 /**
- * Whether a reading by VoiceOver was of a test page whose own scripts did not all load in Safari
- * (`notLoaded` in the answer): what VoiceOver read there is not the site, so it is no use of a
- * screen reader on the site.
+ * Whether a reading by VoiceOver was of a test page on which Safari could not fetch one of the
+ * page's own scripts: what VoiceOver read there is not the site, so it is no use of a screen
+ * reader on the site. A script the test page held back in a run with a strict scope does not
+ * count: the browser of the session kept it out as well, so VoiceOver read the page the session
+ * measured. A reading from before the test page reported its scripts counts as it did.
  */
 export function readWithoutScripts(result: unknown): boolean {
   const scripts = (result as { testPage?: { loaded?: { scripts?: unknown } | null } } | null)?.testPage?.loaded?.scripts;
-  return Array.isArray(scripts) && scripts.length > 0;
+  return Array.isArray(scripts) && scripts.some((script) => (script as { held?: unknown } | null)?.held !== true);
 }
 
 /** Whether an answer counts as a reading by a real screen reader: VoiceOver answered without an error, on a page whose scripts loaded. */

@@ -1627,23 +1627,24 @@ test("a session counts as one in which a real screen reader read aloud only when
   assert.deepEqual([...voiceOverSessions(records)], ["b-131"]);
 });
 
-test("a reading by VoiceOver of a test page whose scripts did not load is no use of a screen reader", () => {
+test("a reading by VoiceOver of a test page on which Safari could not fetch a script of the site is no use of a screen reader", () => {
   const voiceover = { method: "screen-reader", implementation: "voiceover", version: "macOS 26.4 (25E246), Safari 26.4, node v24.21.0" };
-  const reading = (id: string, scripts: { url: string; module: boolean; held?: boolean }[]) =>
-    [id, { id, command: "voiceover", result: { methods: [voiceover], testPage: { loaded: { custom: 3, undefined: scripts.length > 0 ? 3 : 0, names: [], scripts } } } }] as const;
-  const records = new Map([
-    reading("b-131-0001", [{ url: "https://site.example/app.js", module: true }]),
-    reading("b-143-0001", [{ url: "https://elders.example/lib.js", module: true, held: true }]),
-  ]);
+  const reading = (id: string, scripts: { url: string; module: boolean; held?: boolean }[] | null) =>
+    [id, { id, command: "voiceover", result: { methods: [voiceover], testPage: { loaded: scripts === null ? null : { custom: 3, undefined: scripts.length > 0 ? 3 : 0, names: [], scripts } } } }] as const;
+  const records = new Map<string, { id: string; command: string; result: unknown }>([reading("b-131-0001", [{ url: "https://site.example/app.js", module: true, held: false }])]);
   assert.deepEqual([...voiceOverSessions(records)], []);
   const without = implementationUse(records);
   assert.deepEqual(without, []);
   assert.deepEqual(screenReaderUse(without).assistiveTechnology, []);
 
-  // With the scripts in, the same reading counts: in its session, in the instruments and as assistive technology.
+  // A reading counts when every script came, when the test page did not report its scripts (from
+  // before it did), and when the only script missing is one a strict scope kept out of the session too.
+  records.set(...reading("b-143-0001", [{ url: "https://elders.example/statistiek.js", module: false, held: true }]));
   records.set(...reading("b-150-0001", []));
-  assert.deepEqual([...voiceOverSessions(records)], ["b-150"]);
+  records.set(...reading("b-160-0001", null));
+  records.set("b-170-0001", { id: "b-170-0001", command: "voiceover", result: { methods: [voiceover] } });
+  assert.deepEqual([...voiceOverSessions(records)].sort(), ["b-143", "b-150", "b-160", "b-170"]);
   const used = implementationUse(records);
-  assert.deepEqual(used.map((entry) => [entry.implementation, entry.measurements]), [["voiceover", 1]]);
+  assert.deepEqual(used.map((entry) => [entry.implementation, entry.measurements]), [["voiceover", 4]]);
   assert.equal(screenReaderUse(used).assistiveTechnology.length, 1);
 });
