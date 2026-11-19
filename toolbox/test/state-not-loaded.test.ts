@@ -15,8 +15,10 @@ import type { RunData } from "../src/lib/rundata.ts";
 import { Daemon } from "../src/session/daemon.ts";
 
 // A page with a menu behind a button and one stylesheet of its own. While the page was loaded no more than
-// `brokenUpTo` times, the connection for the stylesheet is cut before an answer: the page is drawn without it.
-const PAGE = `<!doctype html><html lang="nl"><head><meta charset="utf-8"><title>Start - Proefsite</title><link rel="stylesheet" href="/style.css"></head>
+// `brokenUpTo` times, the stylesheet does not arrive: the connection is cut before an answer, or with `busy` the
+// server answers 503. The page is drawn without it. The page also asks for a script the site does not have and for
+// one the server sends in a broken packing: both fail for every visitor, and are the site as it is.
+const PAGE = `<!doctype html><html lang="nl"><head><meta charset="utf-8"><title>Start - Proefsite</title><link rel="stylesheet" href="/style.css"><script src="/missing.js"></script><script src="/broken.js"></script></head>
 <body><header><button type="button" id="menuknop" aria-expanded="false" aria-controls="paneel">Menu</button><div id="paneel" hidden><a href="/">Alles over ons</a></div></header><main><h1>Start</h1></main>
 <script>document.getElementById("menuknop").addEventListener("click", (event) => { event.currentTarget.setAttribute("aria-expanded", "true"); document.getElementById("paneel").hidden = false; });</script></body></html>`;
 
@@ -26,14 +28,16 @@ let run: string;
 let browser: Browser;
 let pageLoads = 0;
 let brokenUpTo = 0;
+let busy = false;
 
 before(async () => {
   server = createServer((request, response) => {
     const path = new URL(request.url ?? "/", "http://site").pathname;
     if (path === "/style.css") {
-      if (pageLoads <= brokenUpTo) return void request.socket.destroy();
+      if (pageLoads <= brokenUpTo) return busy ? void response.writeHead(503, { "content-type": "text/plain" }).end("busy") : void request.socket.destroy();
       return void response.writeHead(200, { "content-type": "text/css", "cache-control": "no-store" }).end("body { font-family: sans-serif; color: #111; background: #fff }");
     }
+    if (path === "/broken.js") return void response.writeHead(200, { "content-type": "text/javascript", "content-encoding": "gzip" }).end("not packed");
     if (path !== "/") return void response.writeHead(404).end();
     pageLoads++;
     response.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" }).end(PAGE);
@@ -92,6 +96,7 @@ async function sweepStates(broken: number): Promise<{ menu: CapturedState; reuse
 
 test("a state captured without a stylesheet of the site says so, and the next sweep captures it again with the same recipe", { timeout: 600_000 }, async () => {
   // The stylesheet never arrives: the state is opened once more, and then recorded with what was missing.
+  // The scripts that fail for every visitor are not among it.
   const without = await sweepStates(Number.POSITIVE_INFINITY);
   assert.equal(without.menu.reached, true, without.menu.reasonNl ?? "");
   assert.deepEqual(without.menu.notLoaded?.map((entry) => [entry.resourceType, entry.address]), [["stylesheet", `${new URL(origin).host}/style.css`]]);
@@ -102,6 +107,10 @@ test("a state captured without a stylesheet of the site says so, and the next sw
   assert.deepEqual(gaps.map((gap) => [gap.state, gap.fixedBy]), [["component-menu", "sweep"]]);
   assert.match(gaps[0]!.missingNl, /kwam de stylesheet \S+\/style\.css niet binnen/);
   assert.equal(route(gaps, [], false, [{ command: "explore" }, { command: "collect" }, { command: "gate" }], () => false).next, "sweep");
+  const spent = route(gaps, [], false, [{ command: "explore" }, { command: "collect" }, { command: "collect" }, { command: "collect" }, { command: "gate" }], () => false);
+  assert.deepEqual(spent.gaps, []);
+  assert.match(spent.limitations[0]!.missingNl, /^Bij het vastleggen van deze toestand kwam de stylesheet \S+\/style\.css ook bij een nieuwe poging niet binnen\. /);
+  assert.doesNotMatch(spent.limitations[0]!.missingNl, /veegronde|net::|\(/);
 
   // The same recipe, and the stylesheet arrives now: captured again, nothing missing. One load fewer than before, without the second opening.
   const again = await sweepStates(0);
@@ -117,4 +126,9 @@ test("a state captured without a stylesheet of the site says so, and the next sw
   const once = await sweepStates(1);
   assert.equal(once.menu.notLoaded, undefined);
   assert.equal(once.loads, again.loads + 1, "one more load than a capture in which everything arrived");
+
+  // A server too busy to hand out the stylesheet answers, and the page is as bare as without an answer.
+  rmSync(join(run, "site-states"), { recursive: true, force: true });
+  busy = true;
+  assert.deepEqual((await sweepStates(Number.POSITIVE_INFINITY)).menu.notLoaded, [{ resourceType: "stylesheet", address: `${new URL(origin).host}/style.css`, error: "HTTP 503" }]);
 });

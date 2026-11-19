@@ -193,6 +193,14 @@ const READ_TYPES = new Set(["fetch", "xhr"]);
 const MAX_URL = 300;
 /** How a browser says that a navigation was stopped on purpose (by the page, by the guard, by a new navigation); that is no failure of the site. */
 const STOPPED = /ERR_ABORTED|ERR_BLOCKED_BY_CLIENT|NS_BINDING_ABORTED|NS_ERROR_ABORT|cancelled/i;
+/**
+ * How a browser says that a connection broke off or gave no answer: what a busy server or network does one moment and not the
+ * next. Anything else that fails a request (a content security policy, a refused type, a certificate, a host that does not
+ * exist) fails it the same way for every visitor, and is the site as it is.
+ */
+const CONNECTION_LOST = /ERR_(CONNECTION_(RESET|CLOSED|ABORTED|TIMED_OUT)|EMPTY_RESPONSE|TIMED_OUT|NETWORK_CHANGED|INTERNET_DISCONNECTED|SOCKET_NOT_CONNECTED|HTTP2_\w+|QUIC_\w+|INCOMPLETE_CHUNKED_ENCODING|CONTENT_LENGTH_MISMATCH)/;
+/** What a server, or the gateway in front of it, answers while it has too much to do. Any other error status is taken as what the site answers every visitor. */
+const BUSY_STATUS = new Set([429, 502, 503, 504]);
 
 /** Whether a request comes from an embedded window whose address is in the scope. A request of a worker has no frame and does not count. */
 function fromEmbeddedInScope(scope: Pick<Scope, "hosts">, request: Request): boolean {
@@ -226,8 +234,9 @@ export interface Guard {
   /** The session whose page this is, for its share of the budget for sending. Absent: the source the access to send was made for. */
   sender?: string;
   /**
-   * Stylesheets and scripts on a host of the run whose request failed on the way (a connection that was reset, no answer),
-   * not one the guard, the page or a new navigation stopped: the page was drawn or ran without them. Absent until the first one.
+   * Stylesheets and scripts on a host of the run that did not arrive because the connection broke off or gave no answer, or
+   * because the server was too busy to answer (`BUSY_STATUS`): the page was drawn or ran without them. Not what the guard, the
+   * page, a new navigation or a rule of the browser stopped, and not what the site does not have. Absent until the first one.
    */
   notLoaded?: NotLoaded[];
 }
@@ -310,11 +319,17 @@ export async function guardContext(context: BrowserContext, scope: Scope, guard:
     guard.blocked.push({ at: new Date().toISOString(), kind, method, url: url.slice(0, MAX_URL), resourceType });
   };
   // A stylesheet or script of the site itself that did not arrive says the page is not the page a visitor gets: a failure of the connection, not of the site.
-  context.on("requestfailed", (request) => {
+  const notLoaded = (request: Request, error: string): void => {
     const type = request.resourceType();
-    const error = request.failure()?.errorText ?? "";
-    if ((type !== "stylesheet" && type !== "script") || !inScope(scope, request.url()) || STOPPED.test(error)) return;
+    if ((type !== "stylesheet" && type !== "script") || !inScope(scope, request.url())) return;
     (guard.notLoaded ??= []).push({ resourceType: type, url: request.url().slice(0, MAX_URL), error: error.slice(0, 120) });
+  };
+  context.on("requestfailed", (request) => {
+    const error = request.failure()?.errorText ?? "";
+    if (CONNECTION_LOST.test(error)) notLoaded(request, error);
+  });
+  context.on("response", (response) => {
+    if (BUSY_STATUS.has(response.status())) notLoaded(response.request(), `HTTP ${response.status()}`);
   });
   // What the boundary refused is no answer of the site: it stands in what the session reports, as anything the guard holds back.
   // Only with a boundary: elsewhere such a header comes from the site.

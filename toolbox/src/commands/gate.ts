@@ -423,7 +423,8 @@ export function gateChecks(run: RunData): { checks: Check[]; gaps: Gap[]; warnin
       state: state.id,
       missingNl: `Bij het vastleggen van deze toestand ${missedNl(state.notLoaded!)}. Het beeld en de metingen zijn daardoor niet die van de toestand zoals een bezoeker haar krijgt. Draai collect opnieuw: dat legt deze toestand nog een keer vast.`,
       fixedBy: "sweep" as const,
-      limitationNl: `Bij het vastleggen van deze toestand ${missedNl(state.notLoaded!)}, ook niet in een nieuwe veegronde. Het beeld en de metingen van deze toestand zijn gemaakt zonder dat bestand en tonen niet wat een bezoeker krijgt.`,
+      // For the reader of the report. Whether a visitor gets the file is not known: a file that keeps missing can be the site itself.
+      limitationNl: `Bij het vastleggen van deze toestand ${missedNl(state.notLoaded!, true)}. Het beeld en de metingen van deze toestand zijn gemaakt zonder ${state.notLoaded!.length === 1 ? "dat bestand" : "die bestanden"}. Of een bezoeker ${state.notLoaded!.length === 1 ? "het" : "ze"} wel krijgt, is niet vastgesteld.`,
     }));
   add("state-resource-not-loaded", notLoadedGaps, "elke toestand is vastgelegd met de stylesheets en scripts van de site zelf");
 
