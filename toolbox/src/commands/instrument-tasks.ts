@@ -285,15 +285,40 @@ export function loadObservations(runDir: string): { index: ObservationIndex; rec
   return { index: indexObservations(records.values()), records, sha: (id) => hashes.get(id) ?? null };
 }
 
+/** What the walk-through prompt reads of a saved recipe. */
+interface WalkRecipe {
+  start?: { url?: string; width?: number } | null;
+  steps?: { command: string; args: string[] }[];
+}
+
+/** The narrow window a walk opens a component in when nothing says at which width its recipe was recorded. */
+const NARROW_WALK_WIDTH = 360;
+
+/**
+ * The window width at which a walk opens a component that only exists up to a certain width: the
+ * width its recipe was recorded at, or else a width within the limits of the component. A fixed
+ * narrow width can lie above `maxWidth`, where the component is not there.
+ */
+export function walkWidthFor(viewport: { minWidth?: number; maxWidth?: number }, recordedWidth: number | undefined): number {
+  const max = viewport.maxWidth ?? Infinity;
+  const min = viewport.minWidth ?? 0;
+  if (recordedWidth !== undefined && recordedWidth <= max && recordedWidth >= min) return recordedWidth;
+  return Math.max(Math.min(NARROW_WALK_WIDTH, max), Math.min(min, max));
+}
+
 /** The states a walk goes through, one line each as the walk-through prompt shows them. Empty when the site model names none for the page type. */
-function stateLinesFor(run: RunData, typeId: string, recipes: Record<string, { start?: { url?: string } | null; steps?: { command: string; args: string[] }[] }>): string[] {
+function stateLinesFor(run: RunData, typeId: string, recipes: Record<string, WalkRecipe>): string[] {
   const model = run.siteModel!;
   const type = model.pageTypes.find((entry) => entry.id === typeId)!;
   const lines: string[] = [];
   for (const blocker of model.blockers) lines.push(`- Over de pagina ligt: ${blocker.descriptionNl.replace(/\.$/, "")}. Een gewone \`open\` sluit dit vanzelf; met \`--with-blockers\` blijft het staan (stap 1).`);
   for (const component of model.components.filter((entry) => entry.pageTypes.includes(typeId))) {
-    const narrow = component.viewport?.maxWidth ? ` Bestaat alleen tot ${component.viewport.maxWidth} pixels breed: open met \`--width 360\`.` : "";
-    if (component.recipe) lines.push(`- \`${component.recipe}\`: ${component.descriptionNl.replace(/\.$/, "")}.${narrow}`);
+    const start = component.recipe ? recipes[component.recipe]?.start : undefined;
+    const width = component.viewport?.maxWidth ? walkWidthFor(component.viewport, start?.width) : null;
+    const narrow = width === null ? "" : ` Bestaat alleen tot ${component.viewport!.maxWidth} pixels breed: open met \`--width ${width}\`.`;
+    // A recipe is recorded on one page; on a page of another type its steps may not find their controls.
+    const elsewhere = typeof start?.url === "string" && !type.pages.includes(start.url) ? ` Het recept is opgenomen op een pagina van een ander paginatype. Gaat de toestand hier niet open, open het onderdeel dan zelf${width === null ? "" : ` op ${width} pixels breed`} en bewaar de toestand (\`state save rondgang-<naam>\`).` : "";
+    if (component.recipe) lines.push(`- \`${component.recipe}\`: ${component.descriptionNl.replace(/\.$/, "")}.${narrow}${elsewhere}`);
     else lines.push(`- geen recept: ${component.descriptionNl.replace(/\.$/, "")}. ${component.notOpenedNl ?? ""} Probeer het zelf te openen.`);
   }
   for (const process of model.processes) {
@@ -325,9 +350,9 @@ export function coverageOf(run: RunData, procedure: Pick<Procedure, "inapplicabl
   return { pageTypes: types.length, states: types.length === 0 ? 0 : components + model.processes.length + model.blockers.length };
 }
 
-async function readRecipes(runDir: string): Promise<Record<string, { start?: { url?: string } | null; steps?: { command: string; args: string[] }[] }>> {
+async function readRecipes(runDir: string): Promise<Record<string, WalkRecipe>> {
   const dir = join(runDir, "recipes");
-  const recipes: Record<string, { start?: { url?: string } | null; steps?: { command: string; args: string[] }[] }> = {};
+  const recipes: Record<string, WalkRecipe> = {};
   for (const file of existsSync(dir) ? readdirSync(dir).filter((name) => name.endsWith(".json")).sort() : []) recipes[file.slice(0, -5)] = await readJson(join(dir, file));
   return recipes;
 }

@@ -4,7 +4,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, wri
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, test } from "node:test";
-import { checkInstrumentVerdict, checkWalk, instrumentPending, instrumentTasks, loadInstrumentIndex, skip } from "../src/commands/instrument-tasks.ts";
+import { checkInstrumentVerdict, checkWalk, instrumentPending, instrumentTasks, loadInstrumentIndex, skip, walkWidthFor } from "../src/commands/instrument-tasks.ts";
 import { useFactor } from "../src/lib/budget.ts";
 import { sha256 } from "../src/lib/canonical.ts";
 import { resolveCriterion } from "../src/lib/evaluation.ts";
@@ -98,6 +98,29 @@ test("a run with a site model starts with a walk per page type and a judge task 
   const taskSizes = pending.walks.map((walk) => statSync(walk.task).size);
   assert.deepEqual(taskSizes, [...taskSizes].sort((a, b) => b - a), "the walks come longest first");
   assert.deepEqual(pending.judges, [], "judges wait for the walks");
+});
+
+test("654: a walk opens a component at the width its recipe was recorded at, and says so when the recipe starts on another page type", async () => {
+  const narrowRun = mkdtempSync(join(tmpdir(), "loep-tasks-narrow-"));
+  try {
+    writeFileSync(join(narrowRun, "sample.json"), JSON.stringify({ items: [{ url: HOME }, { url: CONTACT }] }));
+    mkdirSync(join(narrowRun, "recipes"));
+    writeFileSync(join(narrowRun, "recipes", "process-contact.json"), JSON.stringify({ start: { url: HOME }, steps: [{ command: "goto", args: [CONTACT] }] }));
+    // A button that is only there below 340 pixels, on both page types, recorded on the start page at 320.
+    writeFileSync(join(narrowRun, "recipes", "component-more.json"), JSON.stringify({ start: { url: HOME, width: 320, height: 740 }, steps: [{ command: "click", args: [] }] }));
+    const more = { id: "more", type: "menu", descriptionNl: "Knop met drie puntjes.", pageTypes: ["start", "contact"], viewport: { maxWidth: 339 }, recipe: "component-more", postcondition: null };
+    await instrumentTasks(narrowRun, { ...options, run: { ...run, dir: narrowRun, siteModel: { ...run.siteModel!, components: [more] } } as unknown as RunData });
+    const line = (type: string): string => readFileSync(join(narrowRun, "rondgang", `${type}.md`), "utf8").split("\n").find((entry) => entry.startsWith("- `component-more`"))!;
+    assert.match(line("start"), /tot 339 pixels breed: open met `--width 320`\.$/, "the width of the recording, and nothing about another page type");
+    assert.match(line("contact"), /open met `--width 320`\. Het recept is opgenomen op een pagina van een ander paginatype\. .*zelf op 320 pixels breed.*`state save rondgang-<naam>`/);
+    assert.doesNotMatch(line("start") + line("contact"), /--width 360/);
+  } finally {
+    rmSync(narrowRun, { recursive: true, force: true });
+  }
+  assert.equal(walkWidthFor({ maxWidth: 339 }, undefined), 339, "without a recording: a width at which the component exists");
+  assert.equal(walkWidthFor({ maxWidth: 767 }, undefined), 360);
+  assert.equal(walkWidthFor({ maxWidth: 339 }, 360), 339, "a recording outside the limits is not followed");
+  assert.equal(walkWidthFor({ minWidth: 400, maxWidth: 600 }, undefined), 400);
 });
 
 test("10: a mail that comes in changes no task, so a verdict on that task stays valid, and the links are not in it", async () => {
