@@ -4,7 +4,7 @@ import type { Crowd } from "../lib/atonce.ts";
 import { CLOUDFLARE_HEADER, isChallenge } from "../lib/challenge.ts";
 import { confirmLoginOn, LoginExpired, logsOut, registerSessionSecrets, runLoginMark, runLoginState, runOfLogin, sessionWithAliases, throwIfLoginExpired, watchLogin } from "../lib/login.ts";
 import { addressOf, fixedReadFor, noteRefusedRead, readDecision, readRuleFor, runReads, type ReadRequest } from "../lib/reads.ts";
-import { claimLink, isThisMachine, isWriteOrigin, runWrites, SocketFrames, type PassedWrite, type WriteAccess } from "../lib/writes.ts";
+import { claimInTurn, claimLink, isThisMachine, isWriteOrigin, runWrites, SocketFrames, type PassedWrite, type SendDeadline, type WriteAccess } from "../lib/writes.ts";
 import { LONGEST_FAILURE_PAUSE_SECONDS, OriginBlocked, runBlockade } from "../session/blockade.ts";
 import { MESSAGE_VALUES } from "../session/safety.ts";
 import { answerRefusalNl, httpRecordings, httpReplayNl, httpSendOf, keptHeaders, playRecording, socketRecordings, type HttpRecordings, type PassedReplay, type Recorder } from "../lib/recordings.ts";
@@ -213,8 +213,9 @@ export type WriteOutcome =
  * no. The answer to a request with a test value in its body is recorded. Where the server sends the
  * browser next has to be allowed by `mayFollow`; a redirect that repeats the request (307, 308) only goes
  * to the test environment, and that repeat is noted, not counted again. `sender`: the session whose page it is.
+ * `until`: a write held back only for the spacing waits for its turn until then (see `claimInTurn`); absent, it does not wait.
  */
-export async function sendOrReplay(context: BrowserContext, route: Route, writes: WriteAccess, options: { sender?: string | undefined; mayFollow?: (url: string) => boolean } = {}): Promise<WriteOutcome> {
+export async function sendOrReplay(context: BrowserContext, route: Route, writes: WriteAccess, options: { sender?: string | undefined; mayFollow?: (url: string) => boolean; until?: SendDeadline } = {}): Promise<WriteOutcome> {
   const request = route.request();
   const method = request.method();
   const url = request.url();
@@ -229,7 +230,7 @@ export async function sendOrReplay(context: BrowserContext, route: Route, writes
     const replay = recordings.replayed(url, recording, options.sender);
     return { kind: "replayed", replay, noteNl: httpReplayNl(recording, replay.matchedOn) };
   }
-  const claim = writes.claim(method, url, { sender: options.sender });
+  const claim = await claimInTurn(writes, method, url, { sender: options.sender }, options.until ?? null);
   if (!claim.ok) {
     await (request.isNavigationRequest() ? route.fulfill({ status: 204, body: "" }) : route.abort("blockedbyclient")).catch(() => undefined);
     return { kind: "refused", budget: claim.budget, reasonNl: claim.reasonNl };
