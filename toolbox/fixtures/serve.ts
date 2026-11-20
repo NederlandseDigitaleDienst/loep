@@ -29,6 +29,7 @@ import { ACCOUNT, ACCOUNT_HOME, DEFAULT_SESSION_SECONDS, LOGIN_PAGE, LOGOUT_PATH
 import { LARGE_DOCUMENTS, paddedPdf } from "./documents.ts";
 import { createDisruptions, type Disruptions } from "./disruptions.ts";
 import { createMailRoute, type MailRoute } from "./mailroute.ts";
+import { answerRead } from "./readroute.ts";
 
 const ROOT = dirname(fileURLToPath(import.meta.url));
 
@@ -56,7 +57,8 @@ const TEXT = new Set([".html", ".css", ".js", ".xml", ".txt"]);
 export interface LogEntry {
   time: string;
   site: SiteKey;
-  kind: "request" | "ws-open" | "ws-message" | "login" | "logout" | "challenge";
+  /** read: a POST or preflight that only asks (readroute.ts), never a write. */
+  kind: "request" | "ws-open" | "ws-message" | "login" | "logout" | "challenge" | "read";
   method?: string;
   path: string;
   body?: string;
@@ -178,6 +180,7 @@ export async function startFixture(options: { ports?: Partial<Record<SiteKey, nu
     if (disruptions?.answer(site, request, response, challenge(site))) return;
     if (site === "thirdParty" ? mailRoute.service(request, response) : site === "clean" && mailRoute.site(request, response, origins.clean, origins.thirdParty)) return;
     const root = join(ROOT, "sites", DIRECTORIES[site]);
+    if (answerRead(site, request, response, root, log)) return;
     const url = new URL(request.url ?? "/", "http://127.0.0.1");
     const method = request.method ?? "GET";
     // An address that ends the session does so whatever the method, as a link on a real site would.

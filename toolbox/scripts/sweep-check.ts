@@ -21,7 +21,7 @@
  * now missing, when the twin shows evidence the baseline did not have, when the sweep sent
  * anything to the fixture site (a write request or a chat message), or when it logged out.
  */
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -44,6 +44,7 @@ import { sample } from "../src/commands/sample.ts";
 import { states } from "../src/commands/states.ts";
 import { canonicalJson, pageLabels, sha256 } from "../src/lib/canonical.ts";
 import { setRunLogin } from "../src/lib/login.ts";
+import { EXTRA_FIXED_READS_ENV, EXTRA_FIXED_READS_FILE, setFixedReads } from "../src/lib/reads.ts";
 
 const TOOLBOX = join(dirname(fileURLToPath(import.meta.url)), "..");
 const MODEL_DIR = join(TOOLBOX, "fixtures", "sweep");
@@ -96,6 +97,19 @@ export function installModel(run: string, variant: Variant, origins: { site: str
  * with fixed ports those of `just testsite`, so the addresses in the runs open again afterwards.
  */
 export const fixturePorts = (fixed: boolean): Record<SiteKey, number> => (fixed ? { ...DEFAULT_PORTS } : { defect: 0, clean: 0, thirdParty: 0 });
+
+/**
+ * The fixed read rules of the test server (fixtures/fixed-reads.json) with the address of the third party as it runs
+ * now, written to `dir` and given to this process with LOEP_EXTRA_FIXED_READS. Each run gets a copy as well
+ * (EXTRA_FIXED_READS_FILE), so a measurement on it uses them without the variable.
+ */
+export function useFixtureReads(dir: string, thirdParty: string): string {
+  const path = join(dir, "fixed-reads.json");
+  writeFileSync(path, readFileSync(join(TOOLBOX, "fixtures", "fixed-reads.json"), "utf8").replaceAll(`http://127.0.0.1:${DEFAULT_PORTS.thirdParty}`, thirdParty));
+  process.env[EXTRA_FIXED_READS_ENV] = path;
+  setFixedReads(null);
+  return path;
+}
 
 export type SweepTimes = Record<string, number>;
 
@@ -354,9 +368,11 @@ async function main(): Promise<void> {
     });
     try {
       // One variant after the other: the login of a run holds for the whole process.
+      const extraReads = useFixtureReads(out, fixture.origins.thirdParty);
       for (const variant of measured) {
         try {
           const result = await sweepVariant(runs[variant]!, variant, { site: fixture.origins[variant], thirdParty: fixture.origins.thirdParty }, atOnce, fixture.disruptions ?? undefined);
+          copyFileSync(extraReads, join(runs[variant]!, EXTRA_FIXED_READS_FILE));
           seconds[variant] = result.seconds;
           problems.push(...result.checkProblems.map((problem) => `${VARIANT_NL[variant]}: check-site: ${problem}`));
         } catch (error) {

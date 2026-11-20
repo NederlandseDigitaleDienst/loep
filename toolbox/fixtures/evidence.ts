@@ -86,6 +86,8 @@ export const EVIDENCE: Evidence[] = [
     found: (look) => list(look.run("site-states/component-faq/pictures.json")?.pictures).some((picture) => look.at(picture.where) && picture.alt === "" && picture.ocr?.hasText === true),
   },
   { defect: "1.1.1-pictogram", whereNl: ENGINES_NL, found: engines(["1.1.1"]) },
+  { defect: "1.1.1-regioblok", whereNl: `${ENGINES_NL}; het blok is met GET bij een andere partij opgehaald`, found: engines(["1.1.1"]) },
+  { defect: "1.1.1-afvalwijzer", agentNl: "Alleen na een zoekvraag te zien, en die POST gaat pas door met een leesverzoek dat de verkenner in een sessie vastlegt; het vaste sitemodel van de toets heeft geen sessie om dat leesverzoek op te baseren." },
   // 1.2.x
   { defect: "1.2.1-gesprek", agentNl: "Of er een uitgeschreven tekst bij het gesprek staat, vraagt luisteren en lezen." },
   { defect: "1.2.2-ondertitels", agentNl: "Of de video gesproken tekst heeft die ondertitels nodig heeft, vraagt luisteren." },
@@ -231,6 +233,7 @@ export const EVIDENCE: Evidence[] = [
       return tree.includes("Neem een pasfoto") && !/^\s*- dialog\b/m.test(tree);
     },
   },
+  { defect: "4.1.2-vragenlijst", whereNl: `${ENGINES_NL}; de vragen kwamen met een POST die de vaste leesregel voor de testserver doorlaat`, found: engines(["4.1.2"]) },
   { defect: "4.1.3-bedankt", whereNl: "site-states/component-faq-oordeel/aria.yaml: het bedankje is een gewone alinea, geen status", found: (look) => /- (?!status)\w+: Bedankt voor uw reactie/.test(String(look.run("site-states/component-faq-oordeel/aria.yaml") ?? "")) },
   { defect: "4.1.3-aantal", whereNl: "site-states/component-producten-filter/aria.yaml: het aantal is een gewone alinea, geen status", found: (look) => /- (?!status)\w+: \d+ producten gevonden/.test(String(look.run("site-states/component-producten-filter/aria.yaml") ?? "")) },
   {

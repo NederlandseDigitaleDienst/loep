@@ -1,6 +1,6 @@
 # Testsite met ingebouwde gebreken
 
-Twee keer dezelfde kleine gemeentesite, lokaal en statisch. Lindewaard bevat de gebreken, Berkenveen is de tweeling waarin dezelfde plekken goed zijn gedaan. Een derde adres (Kijkpunt) speelt een externe videodienst en formulierdienst. Hiermee tellen we wat een vergelijking met een bestaand rapport niet kan tellen: gemiste gebreken, valse meldingen en onterechte goedkeuringen.
+Twee keer dezelfde kleine gemeentesite, lokaal en statisch. Lindewaard bevat de gebreken, Berkenveen is de tweeling waarin dezelfde plekken goed zijn gedaan. Een derde adres (Kijkpunt) speelt een externe videodienst en formulierdienst, en levert een blok met berichten en een vragenlijst. Hiermee tellen we wat een vergelijking met een bestaand rapport niet kan tellen: gemiste gebreken, valse meldingen en onterechte goedkeuringen.
 
 ## Gebruiken
 
@@ -20,7 +20,7 @@ node src/cli.ts compare --findings tasks --run runs/<naam> --reference fixtures/
 
 Voor Berkenveen is `reference-berkenveen.json` de referentie: geen enkel criterium hoort daar te worden afgekeurd, dus alles onder "alleen wij" is een valse melding of een gebrek dat er per ongeluk in zit.
 
-De server schrijft elk verzoek dat geen GET of HEAD is en elk bericht over de WebSocket van de chat naar het logbestand (standaard `runs/fixture-server.log`), één JSON-object per regel. Het log wordt nooit geleegd. Tel de regels met `kind` gelijk aan `request` of `ws-message` voor en na een run: het verschil hoort nul te zijn. Een inlog met het testaccount staat er als `login`, zonder de verzonden gegevens, en elk bezoek dat een sessie beëindigt als `logout`. Een `login` telt niet als verzonden. Tel die regels daarom apart: na `just testsite-login` hoort er tijdens de run geen bij te komen.
+De server schrijft elk verzoek dat geen GET of HEAD is en elk bericht over de WebSocket van de chat naar het logbestand (standaard `runs/fixture-server.log`), één JSON-object per regel. Het log wordt nooit geleegd. Tel de regels met `kind` gelijk aan `request` of `ws-message` voor en na een run: het verschil hoort nul te zijn. Een inlog met het testaccount staat er als `login`, zonder de verzonden gegevens, en elk bezoek dat een sessie beëindigt als `logout`. Een `login` telt niet als verzonden. Tel die regels daarom apart: na `just testsite-login` hoort er tijdens de run geen bij te komen. Een verzoek dat alleen leest (zie [Lezen bij een andere partij](#lezen-bij-een-andere-partij)) staat er met `kind` gelijk aan `read` en telt niet mee.
 
 ## Regressietoets van de veegronde
 
@@ -46,6 +46,28 @@ De uitkomst is een tabel per gebrek (gevonden, ontbreekt, niet door een script t
 | `sweep/disruptions.json` | De paginatypen die het sitemodel erbij krijgt met `--disruptions` |
 
 Op GitHub draait de toets bij elk voorstel dat `toolbox/src/`, `toolbox/package-lock.json`, de testsite of de toets zelf raakt, Lindewaard en Berkenveen in twee jobs naast elkaar, met de tabel als artefact.
+
+## Lezen bij een andere partij
+
+Drie stukken inhoud verschijnen pas na een verzoek, elk met een sleutelgebrek op Lindewaard en het goede geval op Berkenveen:
+
+| Pagina | Verzoek | Gaat door | Gebrek |
+|---|---|---|---|
+| `/openingstijden.html` | GET van een blok bij Kijkpunt (`/blok/regio-1.html` of `-2`) | altijd, ook in de veegronde | `1.1.1-regioblok` |
+| `/veelgestelde-vragen.html` | POST naar Kijkpunt `/vragenlijst/start`, na een preflight | alleen met de vaste leesregel voor de testserver | `4.1.2-vragenlijst` |
+| `/afval.html` | POST in JSON (de vorm van Typesense) naar `/zoekdienst/multi_search` op de site | alleen met een leesverzoek in het sitemodel | `1.1.1-afvalwijzer` |
+
+De vragenlijst meldt daarnaast elk bezoek met een POST naar Kijkpunt `/vragenlijst/bezoek`. Dat verzoek legt iets vast en moet tegengehouden blijven: de server logt het als `request`, dus een run die het doorlaat, faalt op de telling hierboven. Een browser zonder loep verstuurt het wel; de test van de selectors houdt het daarom zelf tegen.
+
+De vaste leesregel voor de testserver staat in `fixed-reads.json`, niet in de regels van loep zelf (`toolbox/data/fixed-reads.json`). Loep leest zo'n extra bestand uit `fixed-reads-extra.json` in de run, of uit het pad in de omgevingsvariabele `LOEP_EXTRA_FIXED_READS`, en weigert daarin een regel voor een adres dat niet op deze machine is (127.0.0.1, localhost of [::1]). `just sweep-check` schrijft een kopie met de poort waarop Kijkpunt dan draait in elke run. Een meting op die runs, en op kopieën ervan, gebruikt de regel dus vanzelf, ook in de sessies van de agents. Het rapport noemt een extra regel die iets doorliet apart van de vaste regels van loep.
+
+Maak je een run op de testsite op een andere manier, zet dan de variabele voor elk proces, of leg het bestand zelf in de run:
+
+```
+cp toolbox/fixtures/fixed-reads.json <run>/fixed-reads-extra.json
+```
+
+Het bestand noemt Kijkpunt op poort 4712, zoals bij `just testsite` en `just sweep-check --fixed-ports`. Het leesverzoek voor de afvalwijzer staat niet in het vaste model van de toets: check-site wil daarvoor een waarneming uit een sessie, waarin loep de zoekvraag tegenhield. In een meting legt de verkenner het vast; in de toets telt het gebrek als iets wat alleen een agent ziet.
 
 ## Het deel achter een inlog
 
@@ -110,6 +132,8 @@ Voor een meting met agents: maak de bevroren veegronde met `just sweep-check --o
 | `documents.ts` | Welk document elke site op welk adres serveert, en welk document de server groter maakt | nee |
 | `src/documenten/` | De documenten, per site een bestand (`.a` voor Lindewaard, `.b` voor Berkenveen), met in `bron/` de bronnen en `make.sh` | ja, via `sites/` |
 | `disruptions.ts` | Storingen en blokkades met `--disruptions`, en de drempel per geval | nee |
+| `readroute.ts` | De verzoeken die alleen lezen: de start van de vragenlijst, de preflight ervoor en de zoekvraag van de afvalwijzer | nee |
+| `fixed-reads.json` | De vaste leesregel voor de testserver, voor `LOEP_EXTRA_FIXED_READS` | nee |
 
 In wat wordt geserveerd staat niets dat het antwoord verraadt: geen aanwijzing in adressen, klassenamen, commentaar of tekst. Een test bewaakt dat.
 

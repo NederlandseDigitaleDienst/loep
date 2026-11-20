@@ -226,6 +226,8 @@ describe("fixture server", () => {
       const context = await browser.newContext();
       await context.addCookies([{ name: SESSION_COOKIE, value: /=([a-f0-9]+)/.exec(loggedIn.headers.get("set-cookie") ?? "")![1]!, url: fixture.origins[key] }]);
       const page = await context.newPage();
+      // A browser without loep reports the visit to the survey of the third party; loep holds that back (sweep-check).
+      await page.route("**/vragenlijst/bezoek", (route) => route.abort());
       for (const [path, defects] of byPath) {
         await page.goto(`${fixture.origins[key]}${path}`, { waitUntil: "load" });
         const counts = await page.evaluate((selectors) => selectors.map((selector) => document.querySelectorAll(selector).length), defects.map((defect) => defect.selector));

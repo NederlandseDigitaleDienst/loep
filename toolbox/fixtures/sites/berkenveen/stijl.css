@@ -60,6 +60,7 @@ button, .knop { font: inherit; padding: 0.5rem 1rem; border-radius: 4px; border:
 .knop-rustig { background: #ffffff; color: #154273; }
 label { display: block; font-weight: 600; margin: 1rem 0 0.25rem; }
 .veld-uitleg { margin: 0 0 0.25rem; font-size: 0.95rem; }
+.regio-lijst img, .afval-bak { vertical-align: middle; margin-right: 0.5rem; }
 
 .datum { font-size: 0.9rem; margin: 0;
   color: #595959;

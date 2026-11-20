@@ -2,7 +2,7 @@
   "kind": "answer-key",
   "wcagVersion": "2.2",
   "sampleNote": "De testsite Lindewaard heeft 17 paginatypen. De sleutel noemt per gebrek de pagina's waarop het zit.",
-  "outcomeNote": "De sleutel bevat 88 ingebouwde gebreken onder 51 criteria, waarvan 6 in een document. Wat de sleutel niet noemt, is niet met opzet fout gemaakt.",
+  "outcomeNote": "De sleutel bevat 91 ingebouwde gebreken onder 51 criteria, waarvan 6 in een document. Wat de sleutel niet noemt, is niet met opzet fout gemaakt.",
   "failed": [
     "1.1.1",
     "1.2.1",
@@ -57,7 +57,7 @@
     "4.1.3"
   ],
   "failedOnlyInDocuments": [],
-  "problemCount": 88,
+  "problemCount": 91,
   "findings": [
     {
       "id": "1.1.1-logo-melding",
@@ -106,6 +106,24 @@
       "descriptionNl": "Het envelopje is decoratief maar heeft geen alt-attribuut, dus een schermlezer leest de bestandsnaam voor.",
       "where": "img.pictogram:not([alt]) (Het envelopje voor \"Uw berichten\" op het overzicht na het inloggen.)",
       "state": "Direct na het laden, ingelogd.",
+      "medium": "web"
+    },
+    {
+      "id": "1.1.1-regioblok",
+      "criterion": "1.1.1",
+      "page": "/openingstijden.html",
+      "descriptionNl": "Alleen het pictogram zegt of een weg is afgesloten of dat er een omleiding is, en de pictogrammen hebben geen alt-attribuut.",
+      "where": ".regioblok (De pictogrammen in het blok \"Werkzaamheden aan wegen in de regio\", dat een script bij het laden met GET ophaalt bij een andere partij.)",
+      "state": "Na het laden, zodra het blok van de andere partij is opgehaald.",
+      "medium": "web"
+    },
+    {
+      "id": "1.1.1-afvalwijzer",
+      "criterion": "1.1.1",
+      "page": "/afval.html",
+      "descriptionNl": "Waar een afvalsoort heen moet, staat alleen in het pictogram van de bak, en dat pictogram heeft geen alt-attribuut.",
+      "where": ".afvalwijzer-resultaten (De resultaten van de afvalwijzer onder \"Waar moet het heen?\". De zoekvraag gaat met een POST in JSON naar de zoekdienst van de site.)",
+      "state": "Na typen in \"Waar moet het heen?\"; alleen met een leesverzoek voor de zoekdienst in het sitemodel komen er resultaten.",
       "medium": "web"
     },
     {
@@ -838,6 +856,19 @@
       "alsoCriteria": [
         "2.4.3",
         "2.1.2"
+      ]
+    },
+    {
+      "id": "4.1.2-vragenlijst",
+      "criterion": "4.1.2",
+      "page": "/veelgestelde-vragen.html",
+      "descriptionNl": "De vijf keuzerondjes hebben geen label: het cijfer staat er los naast.",
+      "where": ".vragenlijst (De vragenlijst \"Wat vindt u van deze website?\" onderaan de pagina met vragen. Een script van een andere partij haalt de vragen bij het laden op met een POST.)",
+      "state": "Na het laden, zodra de vragenlijst haar vragen heeft opgehaald; alleen met de vaste leesregel voor de testserver.",
+      "medium": "web",
+      "alsoCriteria": [
+        "1.3.1",
+        "3.3.2"
       ]
     },
     {
