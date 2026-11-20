@@ -13,6 +13,27 @@
       "origin": "https://www.youtube-nocookie.com",
       "path": "/youtubei/v1/player",
       "reasonNl": "De ingesloten YouTube-speler zonder cookies vraagt hiermee de gegevens op van de video die hij gaat afspelen, zoals de adressen van beeld en geluid en de ondertitels. Het verzoek vraagt alleen op en wijzigt niets op de site."
+    },
+    {
+      "id": "kcm-survey-start",
+      "method": "POST",
+      "origin": "https://viewerapi.kcmg.nl",
+      "path": "/StartSurvey",
+      "reasonNl": "Een ingesloten vragenlijst over tevredenheid haalt hiermee bij het laden haar vragen en opmaak op. Het verzoek stuurt alleen het adres van de pagina mee, zoals bij elke bezoeker, en verstuurt geen antwoorden."
+    },
+    {
+      "id": "readspeaker-simple-text",
+      "method": "POST",
+      "origin": "https://wrapi-eu.readspeaker.com",
+      "path": "/v1/",
+      "reasonNl": "De voorleesspeler maakt hiermee een eenvoudige versie van de tekst van de pagina. Het verzoek stuurt die tekst mee en krijgt de eenvoudige tekst terug; er wordt niets op de site of bij de dienst vastgelegd."
+    },
+    {
+      "id": "google-waa-integrity",
+      "method": "POST",
+      "origin": "https://jnn-pa.googleapis.com",
+      "path": "/$rpc/google.internal.waa.v1.Waa/GenerateIT",
+      "reasonNl": "Een ingesloten YouTube-speler vraagt hiermee een token op waarmee Google nagaat dat de speler in een gewone browser draait. Het verzoek haalt alleen dat token op en verstuurt niets namens de bezoeker."
     }
   ]
 }

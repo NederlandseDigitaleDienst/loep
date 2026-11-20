@@ -94,11 +94,12 @@ export function readRequestProblems(value: unknown, where: string): string[] {
   return problems;
 }
 
-function pathProblems(path: string, where: string): string[] {
+function pathProblems(path: string, where: string, closingSlash = false): string[] {
   if (!path.startsWith("/")) return [`${where}: path begint met een schuine streep, zoals "/multi_search"`];
   if (/[?#]/.test(path)) return [`${where}: path is het pad zonder query en zonder anker`];
-  const segments = path.slice(1).split("/");
-  if (segments.some((segment) => segment === "")) return [`${where}: path "${path}" heeft een leeg deel; schrijf het pad zoals het verzoek het had, zonder dubbele of afsluitende schuine streep`];
+  // A fixed rule matches the path exactly, so one closing slash is part of the path as the service has it ("/v1/").
+  const segments = (closingSlash ? path.slice(1).replace(/\/$/, "") : path.slice(1)).split("/");
+  if (segments.some((segment) => segment === "")) return [`${where}: path "${path}" heeft een leeg deel; schrijf het pad zoals het verzoek het had, zonder dubbele${closingSlash ? "" : " of afsluitende"} schuine streep`];
   const wild = segments.filter((segment) => segment === "*").length;
   const problems: string[] = [];
   if (segments.some((segment) => segment !== "*" && (!SEGMENT.test(segment) || segment.includes("*") || segment === "." || segment === ".."))) {
@@ -219,7 +220,7 @@ export function fixedReadProblems(value: unknown, where: string): string[] {
   if (!isText(value.path)) problems.push(`${where}: path ontbreekt`);
   else {
     if (value.path.split("/").includes("*")) problems.push(`${where}: een vaste leesregel noemt een exact pad, zonder jokerteken`);
-    problems.push(...pathProblems(value.path, where));
+    problems.push(...pathProblems(value.path, where, true));
   }
   if (!isText(value.reasonNl) || value.reasonNl.trim().split(/\s+/).length < 6) problems.push(`${where}: reasonNl ontbreekt of is te kort`);
   return problems;
