@@ -653,6 +653,15 @@ test("a search to an origin that may be written to goes the way of a read reques
     assert.deepEqual(read.reads?.map((entry) => `${entry.rule} ${entry.url}`), [`zoekdienst ${at}`]);
     assert.deepEqual(writesReceived(), [`POST ${new URL(site.origin).hostname}/1/indexes/*/queries`]);
     assert.deepEqual(logged(dir), [], "searching takes nothing from the budget");
+    // A form whose fields only look like a filter, such as a consent, can record something: where sending is allowed it is sent, not held back as a search.
+    site.requests.length = 0;
+    const { surface } = await openSurface({ browser, runDir: dir, scope, limits: DEFAULT_DAEMON_LIMITS, politeness: new Politeness(0), reads: [] }, { url: `${site.origin}/callback.html`, width: 1280, height: 800, scheme: "light" });
+    await surface.page.evaluate((url) => fetch(url, { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body: "categorie=analytisch" }).catch(() => undefined), `${site.origin}/cookies`);
+    await settle();
+    await surface.context.close();
+    assert.deepEqual(surface.guard.blocked.filter((entry) => entry.kind === "method"), []);
+    assert.deepEqual(writesReceived(), [`POST ${new URL(site.origin).hostname}/cookies`]);
+    assert.equal(logged(dir).length, 1, "the form took one from the budget");
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
