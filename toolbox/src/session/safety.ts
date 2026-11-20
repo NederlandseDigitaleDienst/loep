@@ -9,7 +9,7 @@ import { mailboxForRun, ownRegistration, readMailboxState } from "../lib/mailbox
 import { maskFile, shieldForRun } from "../lib/secrets.ts";
 import { isChallenge } from "../lib/challenge.ts";
 import { notFoundProbes, privateFromPublicSite, scopeHost, scopeHostOf, scopePrefix, siteOrigins, WEB_SCHEMES } from "../lib/origins.ts";
-import { loginCookieHeader, logsOut } from "../lib/login.ts";
+import { IDLE_SESSION_FILE, LOGIN_SESSION_FILE, loginCookieHeader, logsOut } from "../lib/login.ts";
 import { fixedReadFor, onReadOrigin, pathOf, readDecision, readRuleFor, type ReadRequest } from "../lib/reads.ts";
 import { searchServicesOf, type SearchServiceId } from "../lib/searchbody.ts";
 import { SEARCH_FALLBACK, SEARCH_NONE } from "../lib/searchterm.ts";
@@ -102,13 +102,27 @@ export function setRunScope(runDir: string | null): void {
 export const runScope = (): Pick<Scope, "hosts" | "runDir"> | null => sweepScope;
 
 const AUTHORIZATION_OUTSIDE_NL = "het verzoek naar een host buiten de run droeg een authorization-header, zoals een inlogtoken; zoiets gaat nooit naar een andere partij";
-const SECRET_OUTSIDE_NL = "het adres of een header van het verzoek naar een host buiten de run bevatte een geheim van de run, zoals een inlogtoken of een cookie van de site; zoiets gaat nooit naar een andere partij";
+const SECRET_OUTSIDE_NL = "het adres, een header, de body of een cookie van het verzoek naar een host buiten de run bevatte een geheim van de run, zoals een inlogtoken of een cookie van de site; zoiets gaat nooit naar een andere partij";
+const TOKEN_OUTSIDE_NL = "in deze run is ingelogd, en het verzoek naar een host buiten de run droeg iets wat een inlogtoken kan zijn (een JWT, of een header met een naam als token of session); zoiets gaat nooit naar een andere partij";
+
+/**
+ * The name of a header that holds a token of a session, as sites name it (`x-auth-token`, `x-csrftoken`, `x-session-id`).
+ * Not the name of a parameter of the query: a map service asks for its tiles with `token=` too.
+ */
+const TOKEN_NAME = /token|session|jwt|csrf|xsrf|(?:^|[-_])auth(?:$|[-_])/i;
+/** A JSON Web Token: two parts in base64url that each start with `{"`, and a signature. */
+const JWT = /eyJ[\w-]{8,}\.eyJ[\w-]{8,}\.[\w-]*/;
+
+/** Whether a run has a login: then the page can hold a token the site gave it after the login, which is in no register. */
+const hasLogin = (runDir: string): boolean => existsSync(join(runDir, LOGIN_SESSION_FILE)) || existsSync(join(runDir, IDLE_SESSION_FILE));
 
 /**
  * Why a request to a host outside the run may not go, or null when it may: it carries an `authorization` header, or
- * its address, a header or a cookie the browser holds for that address has a secret of the run in it, as alias or as
- * the value itself. A cookie the other party set itself stays its own (see `Shield.carriedTo`). Asked for every
- * request that leaves the run: a read with GET, a rendering resource and a fixed read rule alike.
+ * its address, a header, its body or a cookie the browser holds for that address has a secret of the run in it, as
+ * alias or as the value itself. A cookie the other party set itself stays its own (see `Shield.carriedTo`). In a run
+ * with a login a token the page got from the site after it is in no register, so there a JWT anywhere, and a header
+ * named for a token, count as well; a token of another shape in the query or the path is not recognized. Asked for
+ * every request that leaves the run: a read with GET, a rendering resource and a fixed read rule alike.
  */
 export async function secretLeavesRunNl(context: BrowserContext, scope: Pick<Scope, "hosts" | "runDir">, request: Request): Promise<string | null> {
   const url = request.url();
@@ -116,13 +130,19 @@ export async function secretLeavesRunNl(context: BrowserContext, scope: Pick<Sco
   // A preflight asks whether the request with that header may follow: it is held back as that request would be.
   const preflight = (headers["access-control-request-headers"] ?? "").toLowerCase().split(",").map((name) => name.trim());
   if (Object.keys(headers).some((name) => name.toLowerCase() === "authorization") || preflight.includes("authorization")) return AUTHORIZATION_OUTSIDE_NL;
-  const shield = scope.runDir !== undefined ? shieldForRun(scope.runDir) : null;
+  if (scope.runDir === undefined) return null;
+  const body = request.method() === "GET" || request.method() === "HEAD" ? null : bodyOf(request);
+  const sent = [url, ...Object.entries(headers).map(([name, value]) => `${name}: ${value}`), ...(body ? [body] : [])];
+  if (hasLogin(scope.runDir)) {
+    const names = [...Object.keys(headers), ...preflight];
+    if (names.some((name) => TOKEN_NAME.test(name)) || sent.some((part) => JWT.test(part))) return TOKEN_OUTSIDE_NL;
+  }
+  const shield = shieldForRun(scope.runDir);
   if (!shield) return null;
   // The browser adds its cookies after the route, so they are asked of the context: a cookie of the site on its whole domain also reaches a host of that domain outside the run.
   const cookies = await context.cookies(url).catch(() => []);
-  const parts = [url, ...Object.entries(headers).map(([name, value]) => `${name}: ${value}`), ...cookies.map((cookie) => `${cookie.name}=${cookie.value}`)];
   const site = scope.hosts.flatMap((host) => [`https://${host}/`, `http://${host}/`]);
-  return shield.carriedTo(url, parts, site).length > 0 ? SECRET_OUTSIDE_NL : null;
+  return shield.carriedTo(url, [...sent, ...cookies.map((cookie) => `${cookie.name}=${cookie.value}`)], site).length > 0 ? SECRET_OUTSIDE_NL : null;
 }
 
 /**

@@ -18,6 +18,7 @@ import { boundaryForContext, boundaryPortsForTest, LOCAL_ONLY_ENV, MAX_REQUEST_B
 import { loadPage, newContext, settlePage } from "../src/browser/session.ts";
 import { absorbAll } from "../src/commands/mail.ts";
 import { seal } from "../src/commands/verify.ts";
+import { setFixedReads } from "../src/lib/reads.ts";
 import { appendRunLine, writeFileAtomic, writeJson } from "../src/lib/canonical.ts";
 import { IDLE_SESSION_FILE, LOGIN_SESSION_FILE, RUN_SECRETS_FILE, registerSessionSecrets, renewSessionSecrets, SESSION_COOKIE_SOURCE, sessionWithAliases, setRunLogin, writeLoginFile, type LoginSession } from "../src/lib/login.ts";
 import { endContextSecrets, MAX_PREVIOUS, MAX_SLOTS, MIN_BINARY_VALUE, maskBytes, maskText, readPrivate, readSecretEvents, readSecretsFile, registerSecret, scanRun, secretLimitationsNl, secretsLinesNl, Shield, shieldForRun, type RunSecret } from "../src/lib/secrets.ts";
@@ -25,7 +26,7 @@ import type { ReceivedMail } from "../src/lib/mailbox.ts";
 import { notHashed } from "../src/lib/seal.ts";
 import { cookieFitsHost } from "../src/lib/timelimits.ts";
 import { decideWrites, isThisMachine, recordWrites, trialFetch } from "../src/lib/writes.ts";
-import { guardContext, guardedDownload, guardRedirects, guardRedirectsByRoute, scopeForRun, type Guard } from "../src/session/safety.ts";
+import { guardContext, guardedDownload, guardRedirects, guardRedirectsByRoute, scopeForRun, setRunScope, type Guard } from "../src/session/safety.ts";
 import { SecondBrowsers } from "../src/session/second.ts";
 
 /*
@@ -1328,6 +1329,56 @@ test("a value of another party that may go only to that party is its own: a read
     assert.equal(shield.carriedTo("http://ander.test/a", [`http://ander.test/a?id=${alias}`], ["http://127.0.0.1:1/"]).length, 1, "and to no other");
     assert.equal(shield.carriedTo("http://ander.test/a", [`http://ander.test/a?id=${encodeURIComponent(COOKIE)}`], ["http://127.0.0.1:1/"]).length, 1, "the value itself counts as its alias");
   } finally {
+    rmSync(run, { recursive: true, force: true });
+  }
+});
+
+const JWT = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ0ZXN0YWNjb3VudCIsImlhdCI6MTcwMDAwMDAwMH0.Qm9ndXNTaWduYXR1cmVGb3JUZXN0aW5nT25seQ";
+
+test("in a run with a login, a token the page got from the site afterwards stays off a host outside the run: a JWT in the query, the path or the body of a fixed read, and a header named for a token", async () => {
+  const api = await siteWith((_request, response) => void response.writeHead(200, { "access-control-allow-origin": "*", "access-control-allow-headers": "*" }).end("api"));
+  const site = await siteWith((request, response) => (request.url === "/sessie" ? void response.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ token: JWT })) : html(response, "<h1>App</h1>")));
+  const run = runOn(site.origin);
+  // Without a cookie: on 127.0.0.1 a cookie of the site would reach the other server as well, and hold back every request to it.
+  writeLoginFile(join(run, LOGIN_SESSION_FILE), { ...loginSession(site.origin), storageState: { ...loginSession(site.origin).storageState, cookies: [] } });
+  setRunLogin(run);
+  setFixedReads([{ id: "test-speler", method: "POST", origin: api.origin, path: "/speler", reasonNl: "Een speler in de test vraagt hiermee zijn gegevens op en wijzigt niets." }]);
+  const session = await sessionOn(run, await launched("chromium"));
+  try {
+    await loadPage(session.page, `${site.origin}/`);
+    await session.page.evaluate(async (url) => {
+      const { token } = (await (await fetch("/sessie")).json()) as { token: string };
+      const quiet = (promise: Promise<unknown>): Promise<unknown> => promise.catch(() => undefined);
+      await quiet(fetch(`${url}/kop`, { headers: { "x-auth-token": token } }));
+      await quiet(fetch(`${url}/query?access_token=${token}`));
+      await quiet(fetch(`${url}/pad/${token}`));
+      await quiet(fetch(`${url}/speler`, { method: "POST", body: JSON.stringify({ token }) }));
+      // The stored token of the login is in the register: the browser has its alias, and that stays off the other host too.
+      await quiet(fetch(`${url}/speler`, { method: "POST", body: JSON.stringify({ stored: localStorage.getItem("token") }) }));
+      await quiet(fetch(`${url}/speler`, { method: "POST", body: JSON.stringify({ video: "abc" }) }));
+    }, api.origin);
+    await session.page.evaluate((url) => fetch(`${url}/openbaar`).catch(() => undefined), api.origin);
+    assert.deepEqual(api.heard.map((request) => request.url), ["/speler", "/openbaar"], "only the read and the fixed read without a token reach the other host");
+    assert.equal(api.heard[0]!.body, JSON.stringify({ video: "abc" }));
+    const held = session.guard.blocked.filter((entry) => entry.kind === "scope" && entry.url.startsWith(api.origin));
+    assert.equal(held.length, 5, JSON.stringify(held));
+    assert.ok(held.every((entry) => /inlogtoken/.test(entry.reasonNl ?? "")));
+
+    // The sweep holds them back the same way.
+    setRunScope(run);
+    const sweep = await newContext(await launched("chromium"), { runDir: run });
+    const swept = await sweep.newPage();
+    await loadPage(swept, `${site.origin}/`);
+    await swept.evaluate(([url, token]) => Promise.all([fetch(`${url}/veeg?access_token=${token}`), fetch(`${url}/speler`, { method: "POST", body: token! })].map((sent) => sent.catch(() => undefined))), [api.origin, JWT]);
+    await sweep.close();
+    assert.deepEqual(api.heard.map((request) => request.url), ["/speler", "/openbaar"], "the sweep sent nothing more");
+  } finally {
+    setRunScope(null);
+    setFixedReads(null);
+    setRunLogin(null);
+    await session.close();
+    await api.close();
+    await site.close();
     rmSync(run, { recursive: true, force: true });
   }
 });
