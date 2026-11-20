@@ -1274,6 +1274,9 @@
     {
       "id": "3.3.8-wachtwoord",
       "criterion": "3.3.8",
+      "alsoCriteria": [
+        "1.3.5"
+      ],
       "pages": [
         "/inloggen.html"
       ],

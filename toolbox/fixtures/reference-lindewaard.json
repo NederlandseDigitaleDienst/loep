@@ -759,7 +759,10 @@
       "descriptionNl": "Plakken in het wachtwoordveld is geblokkeerd en automatisch invullen staat uit. Daarnaast moet de bezoeker twee letters van een geheim woord uit het hoofd typen.",
       "where": "#wachtwoord[onpaste] (Het inlogformulier.)",
       "state": "Direct na het laden.",
-      "medium": "web"
+      "medium": "web",
+      "alsoCriteria": [
+        "1.3.5"
+      ]
     },
     {
       "id": "3.3.8-wachtwoord-wijzigen",
