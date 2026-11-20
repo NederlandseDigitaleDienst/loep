@@ -34,13 +34,16 @@ SPDX-FileCopyrightText = "Staat der Nederlanden (Ministerie van Economische Zake
 SPDX-License-Identifier = "EUPL-1.2"
 
 # De testsite en de testbestanden zijn voor deze toolbox gemaakt: de tekeningen,
-# de korte video's en geluidsfragmenten (zie toolbox/fixtures/README.md) en de
+# de korte video's en geluidsfragmenten, de documenten (zie toolbox/fixtures/README.md) en de
 # testdocumenten.
 [[annotations]]
 path = [
   "toolbox/fixtures/**.svg",
   "toolbox/fixtures/**.ogg",
   "toolbox/fixtures/**.webm",
+  "toolbox/fixtures/**.pdf",
+  "toolbox/fixtures/**.docx",
+  "toolbox/fixtures/**.png",
   "toolbox/test/fixtures/**.svg",
   "toolbox/test/fixtures/**.png",
   "toolbox/test/fixtures/**.pdf",

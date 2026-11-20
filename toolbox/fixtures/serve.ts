@@ -22,6 +22,7 @@ import type { Duplex } from "node:stream";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import { ACCOUNT, ACCOUNT_HOME, DEFAULT_SESSION_SECONDS, LOGIN_PAGE, LOGOUT_PATHS, SESSION_COOKIE } from "./account.ts";
+import { LARGE_DOCUMENTS, paddedPdf } from "./documents.ts";
 import { createMailRoute, type MailRoute } from "./mailroute.ts";
 
 const ROOT = dirname(fileURLToPath(import.meta.url));
@@ -41,6 +42,9 @@ const TYPES: Record<string, string> = {
   ".vtt": "text/vtt; charset=utf-8",
   ".webm": "video/webm",
   ".ogg": "audio/ogg",
+  ".pdf": "application/pdf",
+  ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  ".png": "image/png",
 };
 const TEXT = new Set([".html", ".css", ".js", ".xml", ".txt"]);
 
@@ -127,6 +131,25 @@ export async function startFixture(options: { ports?: Partial<Record<SiteKey, nu
     response.end(head ? undefined : body);
   };
 
+  /** A document larger than the file in the repository: the original, a run of zeros, and a tail that makes it a valid PDF again. Streamed, never held whole. */
+  const sendLarge = (response: ServerResponse, path: string, size: number, head: boolean): void => {
+    const { head: start, zeros, tail } = paddedPdf(readFileSync(path), size);
+    response.writeHead(200, { "content-type": TYPES[extname(path)] ?? "application/octet-stream", "content-length": size, "cache-control": "no-store" });
+    if (head) return void response.end();
+    const block = Buffer.alloc(1024 * 1024);
+    let left = zeros;
+    const pump = (): void => {
+      while (left > 0) {
+        const part = Math.min(left, block.length);
+        left -= part;
+        if (!response.write(part === block.length ? block : block.subarray(0, part))) return void response.once("drain", pump);
+      }
+      response.end(tail);
+    };
+    response.write(start);
+    pump();
+  };
+
   /** Sessions of the part behind the login: per token the site it is for and the moment it ends. */
   const sessions = new Map<string, { site: SiteKey; until: number }>();
   const sessionMs = (options.sessionSeconds ?? DEFAULT_SESSION_SECONDS) * 1000;
@@ -182,6 +205,7 @@ export async function startFixture(options: { ports?: Partial<Record<SiteKey, nu
     const path = normalize(join(root, pathname));
     const inside = path.startsWith(root + sep);
     if (inside && existsSync(path) && statSync(path).isFile() && pathname !== "/404.html") {
+      if (site !== "thirdParty" && LARGE_DOCUMENTS[pathname]) return sendLarge(response, path, LARGE_DOCUMENTS[pathname]!, method === "HEAD");
       sendFile(response, path, 200, method === "HEAD");
       return;
     }

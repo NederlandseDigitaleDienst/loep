@@ -8,6 +8,8 @@ import { chromium, type Browser } from "playwright";
 import { ACCOUNT, SESSION_COOKIE } from "../fixtures/account.ts";
 import { ACCOUNT_PAGES, PAGES, SITES, staleOutput } from "../fixtures/build.ts";
 import { CRITERIA_EXPECTED, DEFECTS, TRAPS } from "../fixtures/defects.ts";
+import { DOCUMENTS, LARGE_DOCUMENTS, paddedPdf } from "../fixtures/documents.ts";
+import { MAX_DOCUMENT_BYTES } from "../src/commands/documents.ts";
 import { startFixture, type FixtureServer } from "../fixtures/serve.ts";
 import type { ReferenceAudit } from "../src/commands/compare.ts";
 import { DECLARED_ORIGIN, readHttpRecordings, RECORD_QUIET_MS } from "../src/lib/recordings.ts";
@@ -116,6 +118,41 @@ describe("fixture site", () => {
     assert.deepEqual(clean.failed, []);
     assert.deepEqual(clean.findings, []);
   });
+
+  test("every document defect names a document that both twins link to, and its finding has the address of the document", () => {
+    const defect = JSON.parse(readFileSync(join(FIXTURES, `reference-${SITES.defect.dir}.json`), "utf8")) as ReferenceAudit;
+    const documents = DEFECTS.filter((entry) => entry.document);
+    assert.ok(documents.length >= 6);
+    for (const entry of documents) {
+      const finding = defect.findings!.find((each) => each.id === entry.id)!;
+      assert.deepEqual([finding.medium, finding.page], ["document", entry.document], entry.id);
+      const served = DOCUMENTS.find((each) => `/${each.path}` === new URL(entry.document!, "http://127.0.0.1:4710").pathname)!;
+      assert.ok(served, `${entry.id}: no document is served at ${entry.document}`);
+      assert.ok(DOCUMENTS.some((each) => each.plants === entry.id), entry.id);
+      if (served.on === "site") for (const key of ["defect", "clean"] as const) assert.ok(existsSync(join(SERVED, SITES[key].dir, served.path)), `${key} ${served.path}`);
+      else assert.ok(existsSync(join(SERVED, SITES.thirdParty.dir, served.path)), served.path);
+    }
+    // The documents differ between the twins where the defect is in the file itself.
+    for (const served of DOCUMENTS.filter((each) => each.on === "site")) {
+      const read = (key: "defect" | "clean"): Buffer => readFileSync(join(SERVED, SITES[key].dir, served.path));
+      assert.notDeepEqual(read("defect"), read("clean"), served.path);
+    }
+    for (const size of Object.values(LARGE_DOCUMENTS)) assert.ok(size > MAX_DOCUMENT_BYTES, "a large document stays above the limit of the toolbox");
+  });
+
+  test("a padded PDF has the size asked for and a cross-reference section that points at the object and back at the original", () => {
+    const original = readFileSync(join(FIXTURES, "src", "documenten", "begroting.b.pdf"));
+    const { head, zeros, tail } = paddedPdf(original, 200_000);
+    assert.equal(head.length + zeros + tail.length, 200_000);
+    const whole = Buffer.concat([head, Buffer.alloc(zeros), tail]).toString("latin1");
+    const xref = Number(/startxref\n(\d+)\n%%EOF\n$/.exec(whole)![1]);
+    assert.ok(whole.startsWith("xref\n", xref));
+    const [, number, offset] = /^xref\n(\d+) 1\n(\d{10}) 00000 n \n/.exec(whole.slice(xref))!;
+    assert.ok(whole.startsWith(`${number} 0 obj\n<< /Length ${String(zeros).padStart(12, "0")} >>\nstream\n`, Number(offset)));
+    const previous = Number(/\/Prev (\d+)/.exec(whole.slice(xref))![1]);
+    assert.ok(whole.startsWith("xref", previous), "the trailer points back at the table of the original");
+    assert.match(whole.slice(xref), /\/Root \d+ 0 R/);
+  });
 });
 
 describe("fixture server", () => {
@@ -148,6 +185,26 @@ describe("fixture server", () => {
     }
     assert.equal((await fetch(`${fixture.origins.thirdParty}/speler.html?film=raad`)).status, 200);
     assert.deepEqual(fixture.writes(), []);
+  });
+
+  test("serves the documents with their type, and the large one with its full size on HEAD and the start of a PDF on GET", async () => {
+    for (const served of DOCUMENTS) {
+      const origin = served.on === "site" ? fixture.origins.defect : fixture.origins.thirdParty;
+      const answer = await fetch(`${origin}/${served.path}`, { method: "HEAD" });
+      assert.equal(answer.status, 200, served.path);
+      assert.notEqual(answer.headers.get("content-type"), "application/octet-stream", served.path);
+    }
+    for (const [path, size] of Object.entries(LARGE_DOCUMENTS)) {
+      for (const key of ["defect", "clean"] as const) {
+        const head = await fetch(`${fixture.origins[key]}${path}`, { method: "HEAD" });
+        assert.deepEqual([head.status, head.headers.get("content-type"), Number(head.headers.get("content-length"))], [200, "application/pdf", size]);
+        const get = await fetch(`${fixture.origins[key]}${path}`);
+        const reader = get.body!.getReader();
+        const { value } = await reader.read();
+        await reader.cancel();
+        assert.equal(Buffer.from(value!).subarray(0, 5).toString("latin1"), "%PDF-");
+      }
+    }
   });
 
   test("every selector in the key resolves in the defect variant, and in the clean twin only where the key says so", async (context) => {

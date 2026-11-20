@@ -68,6 +68,11 @@ const formAttempt = (look: Look, input: string): Entry[] =>
     .flatMap((form) => list(form.attempts).filter((attempt) => attempt.input === input));
 /** What contrast.json measured on this page, in every window and scheme. */
 const contrastOf = (look: Look): Entry[] => list(look.run("contrast.json")).filter((page) => page.url === look.url);
+/** What `documents` measured in the document of the sample at this path or address; null when it is not in the sample. */
+const documentFacts = (look: Look, path: string): Entry | null => {
+  const item = list(look.run("sample.json")?.documents).find((entry) => new URL(entry.url).pathname === new URL(path, look.url).pathname);
+  return item ? (look.run(`documents/${item.slug}/facts.json`) as Entry | null) : null;
+};
 const control = (look: Look): Entry[] => list(look.page("facts.json")?.controls).filter((entry) => look.at(entry.path));
 
 export const EVIDENCE: Evidence[] = [
@@ -233,4 +238,11 @@ export const EVIDENCE: Evidence[] = [
       return tree.includes("Chat met de gemeente") && !/^\s*- log\b/m.test(tree);
     },
   },
+  // Documents: the facts that `documents` writes per document of the sample.
+  { defect: "1.3.1-agenda-pdf", whereNl: "documents/<document>/facts.json: de pdf is gelezen en heeft geen tags", found: (look) => { const facts = documentFacts(look, "/documenten/agenda-raadsvergadering-2026-03-12.pdf"); return facts?.status === "read" && facts.pdf?.tagged === false; } },
+  { defect: "1.3.1-begroting-pdf", agentNl: "Het bestand is groter dan de 250 MB die de toolbox ophaalt. Dat het geen tags heeft, ziet alleen wie het zelf opent." },
+  { defect: "1.3.1-ontheffing-docx", whereNl: "documents/<document>/facts.json: office.fakeHeadings noemt de vette alinea's", found: (look) => list(documentFacts(look, "/documenten/ontheffing-parkeren.docx")?.office?.fakeHeadings).length > 0 },
+  { defect: "1.3.1-afvalwijzer-extern", agentNl: "Het document staat op een ander domein. De toolbox telt het en haalt het niet op." },
+  { defect: "1.4.5-plattegrond", whereNl: "documents/<document>/facts.json: tekstherkenning leest woorden in de afbeelding", found: (look) => (documentFacts(look, "/documenten/plattegrond-gemeentehuis.png")?.image?.recognisedWords ?? 0) > 0 },
+  { defect: "2.4.2-besluitenlijst-pdf", whereNl: "documents/<document>/facts.json: de pdf heeft tags en geen titel", found: (look) => { const facts = documentFacts(look, "/documenten/besluitenlijst-2026-03-12.pdf"); return facts?.status === "read" && facts.pdf?.tagged === true && !facts.title; } },
 ];

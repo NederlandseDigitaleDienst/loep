@@ -10,7 +10,7 @@
  *
  * On both variants of the fixture site (Lindewaard with the planted defects, Berkenveen as the
  * clean twin) it runs inventory, installs the fixed site model of fixtures/sweep/, runs check-site,
- * sample, collect, contrast and states, and then looks per defect of the key whether the evidence
+ * sample, collect, contrast, states and documents, and then looks per defect of the key whether the evidence
  * a script can see is in the dossier, at the place fixtures/evidence.ts names. On the twin the same
  * places must hold no such evidence.
  *
@@ -30,6 +30,7 @@ import { DEFAULT_PORTS, type SiteKey, startFixture } from "../fixtures/serve.ts"
 import { launchBrowser } from "../src/browser/session.ts";
 import { collect } from "../src/commands/collect.ts";
 import { contrast } from "../src/commands/contrast.ts";
+import { documents } from "../src/commands/documents.ts";
 import { checkSite } from "../src/commands/explore.ts";
 import { inventory } from "../src/commands/inventory.ts";
 import { sample } from "../src/commands/sample.ts";
@@ -88,7 +89,7 @@ export const fixturePorts = (fixed: boolean): Record<SiteKey, number> => (fixed 
 
 export type SweepTimes = Record<string, number>;
 
-/** inventory, the fixed model, check-site, sample and the three steps of the sweep, on one variant. */
+/** inventory, the fixed model, check-site, sample, the three steps of the sweep and documents, on one variant. */
 export async function sweepVariant(run: string, variant: Variant, origins: { site: string; thirdParty: string }, atOnce: number): Promise<{ seconds: SweepTimes; checkProblems: string[] }> {
   const seconds: SweepTimes = {};
   const timed = async <T>(name: string, step: () => Promise<T>): Promise<T> => {
@@ -107,6 +108,7 @@ export async function sweepVariant(run: string, variant: Variant, origins: { sit
   await timed("collect", () => collect({ run, atOnce }));
   await timed("contrast", () => contrast(run, { atOnce }));
   await timed("states", () => states(run, { atOnce }));
+  await timed("documents", () => documents(run));
   return { seconds, checkProblems: [] };
 }
 
