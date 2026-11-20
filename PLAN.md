@@ -6,7 +6,7 @@ Stand: 20 november 2026. De laatste versie is 0.37.0.
 
 ## Waar het staat
 
-Als geheel gemeten zijn 0.11.0, 0.25.0, 0.29.0 en 0.35.0, elk met twee runs op de testsite met gebreken; vanaf 0.25.0 ook met een run op de schone tweeling. De uitwerking staat in [validatie/iteraties.md](validatie/iteraties.md). Bij de laatste meting, van 0.35.0 op 18 november, vond loep in beide runs alle 79 ingebouwde gebreken, met dezelfde uitkomst bij alle 56 criteria. De versies daartussen zijn uitgebracht zonder meting met agents; de CHANGELOG zegt bij elke versie waarom. Gemeten is steeds tegen de sleutel van de testsite, niet tegen het oordeel van een deskundige.
+Als geheel gemeten zijn 0.11.0, 0.25.0, 0.29.0 en 0.35.0, elk met twee runs op de testsite met gebreken; vanaf 0.25.0 ook met een run op de schone tweeling. De uitwerking staat in [validatie/iteraties.md](validatie/iteraties.md), die van 0.35.0 in [validatie/testsite/2026-11-17-meting-0.35.0/](validatie/testsite/2026-11-17-meting-0.35.0/uitkomst.md). Bij de laatste meting, van 0.35.0 op 18 november, vond loep in beide runs alle 79 ingebouwde gebreken, met dezelfde uitkomst bij alle 56 criteria. De andere versies zijn uitgebracht met een meting van een paar criteria of zonder meting met agents; de CHANGELOG zegt bij elke versie waarom. Gemeten is steeds tegen de sleutel van de testsite, niet tegen het oordeel van een deskundige.
 
 Op 19 oktober is een onderzoek van een echte site gedaan met 0.10.0 uit de plugin, alle 56 criteria, met een afmaakronde voor één criterium. Het verbruik daarvan is de nulmeting in [validatie/verbruik/README.md](validatie/verbruik/README.md): 134 agents, ongeveer 526 miljoen tokens en 184 dollar met de prijzen van de API. De uitkomsten ervan staan niet in het logboek.
 

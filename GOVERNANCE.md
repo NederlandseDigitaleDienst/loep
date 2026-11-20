@@ -21,7 +21,7 @@ Voor de methode gelden twee extra regels:
 
 ## Meten: het doel en hoe ver we zijn
 
-Het doel is dat elke versie die een uitkomst kan veranderen (het middelste getal, zie [CONTRIBUTING.md](CONTRIBUTING.md#versies)) eerst is gemeten op de testsite, met de uitkomst in [validatie/](validatie/README.md). Dat halen we nu niet. Als geheel gemeten zijn 0.11.0, 0.25.0, 0.29.0 en 0.35.0, elk met twee runs van dezelfde code op de testsite, zodat ook te zien is hoeveel twee runs van elkaar verschillen. De versies daartussen zijn uitgebracht zonder meting met agents; de CHANGELOG zegt bij elke versie waarom. Wat er loopt en wat daarna komt, staat in [PLAN.md](PLAN.md).
+Het doel is dat elke versie die een uitkomst kan veranderen (het middelste getal, zie [CONTRIBUTING.md](CONTRIBUTING.md#versies)) eerst is gemeten op de testsite, met de uitkomst in [validatie/](validatie/README.md). Dat halen we nu niet. Als geheel gemeten zijn 0.11.0, 0.25.0, 0.29.0 en 0.35.0, elk met twee runs van dezelfde code op de testsite, zodat ook te zien is hoeveel twee runs van elkaar verschillen. De andere versies zijn uitgebracht met een meting van een paar criteria of zonder meting met agents; de CHANGELOG zegt bij elke versie waarom. Wat er loopt en wat daarna komt, staat in [PLAN.md](PLAN.md).
 
 ## Wat openstaat
 
