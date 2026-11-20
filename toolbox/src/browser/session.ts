@@ -4,7 +4,7 @@ import type { Crowd } from "../lib/atonce.ts";
 import { CLOUDFLARE_HEADER, isChallenge } from "../lib/challenge.ts";
 import { confirmLoginOn, LoginExpired, logsOut, registerSessionSecrets, runLoginMark, runLoginState, runOfLogin, sessionWithAliases, throwIfLoginExpired, watchLogin } from "../lib/login.ts";
 import { addressOf, noteRefusedRead, readDecision, readRuleFor, runReads, type ReadRequest } from "../lib/reads.ts";
-import { claimInTurn, claimLink, isThisMachine, isWriteOrigin, runWrites, SocketFrames, type PassedWrite, type WriteAccess } from "../lib/writes.ts";
+import { claimInTurn, claimLink, isThisMachine, isWriteOrigin, runWrites, SocketFrames, type PassedWrite, type SendDeadline, type WriteAccess } from "../lib/writes.ts";
 import { LONGEST_FAILURE_PAUSE_SECONDS, OriginBlocked, runBlockade } from "../session/blockade.ts";
 import { MESSAGE_VALUES, runScope, sweepRefusesOutsideScope } from "../session/safety.ts";
 import { answerRefusalNl, httpRecordings, httpReplayNl, httpSendOf, keptHeaders, playRecording, socketRecordings, type HttpRecordings, type PassedReplay, type Recorder } from "../lib/recordings.ts";
@@ -215,7 +215,7 @@ export type WriteOutcome =
  * to the test environment, and that repeat is noted, not counted again. `sender`: the session whose page it is.
  * `until`: a write held back only for the spacing waits for its turn until then (see `claimInTurn`); absent, it does not wait.
  */
-export async function sendOrReplay(context: BrowserContext, route: Route, writes: WriteAccess, options: { sender?: string | undefined; mayFollow?: (url: string) => boolean; until?: number | null } = {}): Promise<WriteOutcome> {
+export async function sendOrReplay(context: BrowserContext, route: Route, writes: WriteAccess, options: { sender?: string | undefined; mayFollow?: (url: string) => boolean; until?: SendDeadline } = {}): Promise<WriteOutcome> {
   const request = route.request();
   const method = request.method();
   const url = request.url();

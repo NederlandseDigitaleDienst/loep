@@ -12,7 +12,7 @@ import { INPAGE_PATH, launchBrowser, loadPage, newContext } from "../src/browser
 import { probeForms } from "../src/instruments/forms.ts";
 import { formErrors } from "../src/lib/extractors.ts";
 import { REGULAR_PATH, type RunData } from "../src/lib/rundata.ts";
-import { budgetOutPointNl, claimInTurn, claimLinkInTurn, confirmDeclaration, raiseWrites, writesLow, criterionSender, decideWrites, isOurMessage, isWriteOrigin, isProtocolFrame, reservedWrites, senderOf, SocketFrames, DEFAULT_MAX_WRITES, DEFAULT_WRITE_SPACING_SECONDS, recordWrites, WRITES_BLOCKED_NL, writeAccess, writeBudget, writeBudgetNl, writeOriginsOf, writesAllowedNl, writesForRun, type PassedWrite, type WritePermission } from "../src/lib/writes.ts";
+import { budgetOutPointNl, claimInTurn, claimLinkInTurn, confirmDeclaration, sendDeadlineOf, setSendDeadline, raiseWrites, writesLow, criterionSender, decideWrites, isOurMessage, isWriteOrigin, isProtocolFrame, reservedWrites, senderOf, SocketFrames, DEFAULT_MAX_WRITES, DEFAULT_WRITE_SPACING_SECONDS, recordWrites, WRITES_BLOCKED_NL, writeAccess, writeBudget, writeBudgetNl, writeOriginsOf, writesAllowedNl, writesForRun, type PassedWrite, type WritePermission } from "../src/lib/writes.ts";
 import { answerRefusalNl, DECLARED_ORIGIN, httpSendOf, RECORD_QUIET_MS, readHttpRecordings, readRecordings, readReplays, recordingKey, replayNl, replaysNl, socketRecordings, type HttpRecording } from "../src/lib/recordings.ts";
 import { notSentPointProblems } from "../src/lib/verdict.ts";
 import { approvedSendsTo, sendsToMatches, sendsToProblems, sendsToReplayProblem } from "../src/lib/sitemodel.ts";
@@ -1257,6 +1257,48 @@ test("senders that wait for their turn go in the order they came; one that canno
     assert.equal(now.ok ? null : now.budget, "spacing");
     assert.equal(existsSync(join(dir, "writes-queue.json")), false, "a sender that does not wait takes no place in the queue");
   } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("a kept turn holds until the time its sender was told, also when the sender before it never comes", () => {
+  const dir = mkdtempSync(join(tmpdir(), "loep-writes-turn-kept-"));
+  try {
+    let clock = 0;
+    const access = writeAccess(dir, { ...declared(10), spacingSeconds: 1 }, "test", () => Date.parse("2026-11-20T12:00:00Z") + clock);
+    const url = `${site.origin}/callback`;
+    assert.equal(access.claim("POST", url, { sender: "b-111" }).ok, true);
+    // Two senders could not wait: the first hears its turn is in 1 s, the second in 2 s.
+    assert.equal(access.claim("POST", url, { sender: "b-200", queue: true }).ok, false);
+    const told = access.claim("POST", url, { sender: "b-300", queue: true });
+    assert.equal(told.ok ? null : told.waitMs, 2000);
+    // The first never comes back. Past its kept turn, the second still has what it was told: until 60 s after 2 s.
+    clock = 61_500;
+    assert.equal(access.claim("POST", url, { sender: "b-400" }).ok, false, "nobody else goes before the turn that was promised");
+    assert.equal(access.claim("POST", url, { sender: "b-300" }).ok, true);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("a write that waits for its turn stops waiting when its command ends, and is not sent after it", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "loep-writes-turn-ended-"));
+  try {
+    const access = writeAccess(dir, { ...declared(10), spacingSeconds: 3 }, "test");
+    const url = `${site.origin}/callback`;
+    assert.equal(access.claim("POST", url, { sender: "b-111" }).ok, true);
+    setSendDeadline("b-412", Date.now() + 60_000);
+    const waiting = claimInTurn(access, "POST", url, { sender: "b-412" }, sendDeadlineOf("b-412"));
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    setSendDeadline("b-412", null);
+    const started = Date.now();
+    const claim = await waiting;
+    assert.ok(Date.now() - started < 1500, "it stops soon after the command ends");
+    assert.equal(claim.ok ? null : claim.budget, "spacing");
+    assert.match(claim.ok ? "" : claim.reasonNl, /De beurt is vastgehouden/);
+    assert.deepEqual(logged(dir).map((line) => line.source), ["b-111"], "nothing went after the command");
+  } finally {
+    setSendDeadline("b-412", null);
     rmSync(dir, { recursive: true, force: true });
   }
 });
