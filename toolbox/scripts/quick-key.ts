@@ -20,6 +20,7 @@ interface Defect {
   pages: string[];
   state: string;
   class: string;
+  document?: string;
 }
 
 const run = process.argv[2];
@@ -38,7 +39,8 @@ const byPath = (changes: QuickComparison["worse"]): Map<string, Set<string>> => 
 const worse = byPath(comparison.worse);
 /** With what one engine alone reports too, as `--strict` counts it. */
 const strict = byPath([...comparison.worse, ...(comparison.weak ?? [])]);
-const pagesOf = (defect: Defect): string[] => (defect.pages.includes("*") ? [...measured] : defect.pages.filter((path) => measured.has(path)));
+// A defect in a document is on no page that quick measures: its pages are where the link is.
+const pagesOf = (defect: Defect): string[] => (defect.document ? [] : defect.pages.includes("*") ? [...measured] : defect.pages.filter((path) => measured.has(path)));
 const reported = (defect: Defect, criteria: string[], changes = worse): boolean => pagesOf(defect).some((path) => criteria.some((criterion) => changes.get(path)?.has(criterion)));
 
 const rows = key.defects.map((defect) => ({ defect, reach: pagesOf(defect).length > 0, caught: reported(defect, [defect.criterion]), other: reported(defect, defect.alsoCriteria ?? []) }));

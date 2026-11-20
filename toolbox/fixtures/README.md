@@ -32,7 +32,7 @@ just sweep-check --out pad --fixed-ports # op de poorten van just testsite, voor
 
 De runs blijven staan in `<out>/runs/defect` en `<out>/runs/clean`; een volgende keer met dezelfde `--out` maakt die map eerst leeg. Zonder `--fixed-ports` draait de testsite op willekeurige vrije poorten, zodat de toets nergens mee botst, maar zijn de adressen in de runs daarna niet meer te openen. Met `--fixed-ports` gebruikt hij 4710, 4711 en 4712, net als `just testsite`, zodat een meting de runs als bevroren veegronde kan gebruiken (zie [validatie/verbruik/README.md](../../validatie/verbruik/README.md)). Draait `just testsite` al, dan stopt de toets met die melding.
 
-Zonder taalmodel en zonder verkenner. Op beide varianten draaien `inventory` (de pagina's waarop een gebrek staat, als vaste lijst), het vaste sitemodel uit `sweep/` (met `check-site`), `sample`, `collect`, `contrast` en `states`. Daarna zoekt de toets per gebrek het bewijs op de plek in het dossier die `evidence.ts` noemt. Een gebrek dat alleen een agent kan zien (kijken, luisteren of een oordeel over tekst) staat daar met de reden en telt niet mee. Op Berkenveen draait dezelfde toets op dezelfde plek: daar hoort niets te staan.
+Zonder taalmodel en zonder verkenner. Op beide varianten draaien `inventory` (de pagina's waarop een gebrek staat, als vaste lijst), het vaste sitemodel uit `sweep/` (met `check-site`), `sample`, `collect`, `contrast`, `states` en `documents`. Daarna zoekt de toets per gebrek het bewijs op de plek in het dossier die `evidence.ts` noemt. Een gebrek dat alleen een agent kan zien (kijken, luisteren of een oordeel over tekst) staat daar met de reden en telt niet mee. Op Berkenveen draait dezelfde toets op dezelfde plek: daar hoort niets te staan.
 
 De uitkomst is een tabel per gebrek (gevonden, ontbreekt, niet door een script te zien) in `sweep-check.md` en `sweep-check.json`. De toets faalt als een gebrek dat in de basislijn (`sweep/baseline.json`) werd gevonden nu ontbreekt, of als er op Berkenveen bewijs bijkomt. Wordt iets beter, dan zegt de tabel dat; werk dan de basislijn bij. Doe dat met de uitkomst van de CI, niet van een eigen machine, want lettertypen en hulpprogramma's verschillen: haal de artefacten `veegronde-Lindewaard` en `veegronde-Berkenveen` op en draai `just sweep-check --from-report <lindewaard>/sweep-check.json --from-report <berkenveen>/sweep-check.json --update-baseline`.
 
@@ -76,6 +76,8 @@ In de test staat de mail in `fixture.mailRoute.outbox`, en `fixture.mailRoute.ma
 | `sites/` | De gegenereerde sites. Staan in git; de server bouwt niets | ja |
 | `serve.ts` | De server, alleen Node zelf. Houdt de sessies van het deel achter de inlog bij | nee |
 | `mailroute.ts` | De moeilijke mailroute: formulier, mail, mailingdienst en afmelden | nee |
+| `documents.ts` | Welk document elke site op welk adres serveert, en welk document de server groter maakt | nee |
+| `src/documenten/` | De documenten, per site een bestand (`.a` voor Lindewaard, `.b` voor Berkenveen), met in `bron/` de bronnen en `make.sh` | ja, via `sites/` |
 
 In wat wordt geserveerd staat niets dat het antwoord verraadt: geen aanwijzing in adressen, klassenamen, commentaar of tekst. Een test bewaakt dat.
 
@@ -89,9 +91,27 @@ In wat wordt geserveerd staat niets dat het antwoord verraadt: geen aanwijzing i
 
 `src/media/` bevat een korte video (dia met agenda en uitslag, met gesproken tekst) in twee versies, een gesproken fragment en een melodie. Ze zijn eenmalig gemaakt met de spraaksynthese van het besturingssysteem en ffmpeg en staan als bestand in git. In Berkenveen leest de spreker voor wat op de dia staat; in Lindewaard niet.
 
+## Documenten
+
+Beide sites linken naar dezelfde documenten op dezelfde adressen. In Lindewaard zit het gebrek in het bestand, in Berkenveen is hetzelfde bestand goed gemaakt. De sleutel noemt bij zo'n gebrek het adres van het document, met `medium: document` in de referentie; de selector is de link op de pagina.
+
+| Document | Pagina | Lindewaard | Berkenveen |
+|---|---|---|---|
+| Agenda (pdf) | `/raadsvergadering.html` | geen tags | tags |
+| Besluitenlijst (pdf) | `/raadsvergadering.html` | tags, geen titel | tags en titel |
+| Begroting (pdf, 262 MB) | `/raadsvergadering.html` | geen tags | tags |
+| Aanvraagformulier (docx) | `/vergunning.html` | vette alinea's als tussenkop | kopstijlen |
+| Plattegrond (png achter een link met tekst) | `/contact.html` | namen van ruimtes alleen in beeld | geen tekst in beeld, de ruimtes als lijst op de pagina |
+| Afvalwijzer (pdf op Kijkpunt) | `/afval.html` | geen tags | tags |
+
+De begroting staat klein in de repository. De server zegt bij HEAD dat ze 262 MB is en levert bij GET een geldige pdf van die grootte: het origineel met een ongebruikt object van nullen erachter. Dat is boven de 250 MB die `documents` ophaalt, dus de toolbox leest haar nooit in; een rapport hoort dat te zeggen. De afvalwijzer staat bij de afvaldienst op Kijkpunt, een ander domein: de toolbox telt hem en haalt hem niet op, en `compare --findings` deelt het gebrek erin vast in als buiten bereik.
+
+De bestanden zijn eenmalig gemaakt met typst, qpdf en pandoc (`sh fixtures/src/documenten/bron/make.sh` vanuit `toolbox/`) en staan in git; `build.ts` kopieert ze alleen. Een nieuwere typst of pandoc schrijft andere bytes, dus draai `make.sh` alleen als een bron verandert.
+
 ## Grenzen
 
 - "Voldoet" voor Berkenveen is de bedoeling, geen bewezen feit. Een bevinding daar kan terecht zijn.
 - De sleutel noemt alleen wat met opzet fout is gemaakt. Lindewaard kan meer gebreken hebben.
-- De testsite heeft geen documenten: geen pdf, geen kantoorbestanden en geen platte tekst. Het meten van documenten is alleen getest in `toolbox/test/documents.test.ts`: pdf op bestanden in `toolbox/test/fixtures/documents/`, kantoorbestanden en platte tekst op inhoud die de test zelf opbouwt.
+- De testsite heeft vijf documenten op de site en één op Kijkpunt (zie Documenten): pdf, docx en png. Geen odt, pptx, xlsx, platte tekst, gescande pdf of document achter de inlog; die zijn alleen getest in `toolbox/test/documents.test.ts`, op bestanden in `toolbox/test/fixtures/documents/` en op inhoud die de test zelf opbouwt.
+- Twee gebreken in documenten kan de toolbox per definitie niet vinden: het gebrek in de begroting (boven de grens) en dat in de afvalwijzer (ander domein). Ze tellen in de sleutel mee; in de veegronde staan ze als "niet door een script te zien".
 - Drie criteria zijn in beide sites niet van toepassing (1.2.4, 2.3.1, 2.5.4) en twee zijn in beide goed (2.4.5, 4.1.1). Die meten valse meldingen.
