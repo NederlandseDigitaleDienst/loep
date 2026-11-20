@@ -67,9 +67,9 @@ export const DISRUPTION_CASE_PAGES = [...new Set(DISRUPTIONS.map((entry) => (ent
 /**
  * Pages of the key that --only-disruptions measures as well. The questionnaire on the page with questions comes with a
  * POST that only the fixed read rule lets through, and the scope of a run with disruptions once kept it out: the fast
- * check has to see that.
+ * check has to see that. The regional block on the page with opening hours is a GET to the other party that the same scope decides.
  */
-export const KEY_PAGES_WITH_DISRUPTIONS = ["/veelgestelde-vragen.html"];
+export const KEY_PAGES_WITH_DISRUPTIONS = ["/veelgestelde-vragen.html", "/openingstijden.html"];
 
 export type SweepStep = "login" | "inventory" | "check-site" | "sample" | "collect" | "collect-again" | "contrast" | "states" | "documents";
 export type SweepMode = "plain" | "disruptions" | "only-disruptions";
