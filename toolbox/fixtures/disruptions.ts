@@ -4,9 +4,10 @@
  * `startFixture`); without them every page is served as before.
  *
  * Each case is on a fixed page of both variants, so a run knows which page it is about and what the
- * outcome should be. A case that happens once does so once per variant after `arm()`: the server arms them when
- * it starts with `--disruptions`, and the regression check of the sweep arms them only right before
- * collect, so that the inventory and check-site do not use them up.
+ * outcome should be. A case that happens once does so once per variant after `arm()`. Only the regression check
+ * of the sweep arms them, right before collect of that variant, so that the inventory and check-site do not use
+ * them up. `--disruptions` on the command line never arms them: whatever asks first would get them, the
+ * inventory of a run or a session of some agent on a frozen sweep, and never the step the threshold is about.
  *
  * Nothing here is served as a file, and the texts below name nothing that gives a case away.
  */
@@ -135,8 +136,8 @@ const CHECK_JS = `fetch(${JSON.stringify(CHECK_FLOW)} + Date.now().toString(16),
 
 /** The state of the disruptions of one server: which once-only cases are still to come. */
 export interface Disruptions {
-  /** Arm the cases that happen once: the next request that meets one gets it. */
-  arm(): void;
+  /** Arm the cases that happen once, on one variant or on both: the next request of that variant that meets one gets it. */
+  arm(variant?: "defect" | "clean"): void;
   /**
    * Answer a request when a case is about it; false when the server answers as usual. `log` notes a
    * POST of the robot check, which Cloudflare answers itself and which never reaches a site.
@@ -156,8 +157,9 @@ const pathOf = (address: string | undefined): string | null => {
 export function createDisruptions(options: { armed: boolean }): Disruptions {
   // Per variant, so that both get each once-only case.
   const pending = new Set<string>();
-  const arm = (): void => {
-    for (const site of ["defect", "clean"]) for (const id of ONCE) pending.add(`${site} ${id}`);
+  // One variant at a time, so that arming the second does not arm the first again, and arming the first leaves the inventory of the second alone.
+  const arm = (variant?: "defect" | "clean"): void => {
+    for (const site of variant ? [variant] : ["defect", "clean"]) for (const id of ONCE) pending.add(`${site} ${id}`);
   };
   if (options.armed) arm();
   const send = (response: ServerResponse, status: number, headers: Record<string, string | number>, body = ""): true => {
