@@ -174,9 +174,12 @@ export function privateFromPublicSite(url: string, origins: readonly string[]): 
 /** The national login services a site can send a visitor to, with the hosts they live on and the word a link or button names them by. */
 const LOGIN_SERVICES: readonly { name: string; hosts: readonly string[]; word: RegExp }[] = [
   { name: "DigiD", hosts: ["digid.nl"], word: /\bdigid\b/i },
-  { name: "eHerkenning", hosts: ["eherkenning.nl"], word: /\be-?herkenning\b/i },
+  { name: "eHerkenning", hosts: ["eherkenning.nl"], word: /\b(e-?herkenning|erecognition)\b/i },
   { name: "eIDAS", hosts: [], word: /\beidas\b/i },
 ];
+
+/** Words that say a link or control logs the visitor in, in Dutch and in English. */
+const LOGIN_WORD = /\b(inlog\w*|in te loggen|log ?in|login|aanmelden|meld (u|je) aan|sign ?in|log ?on)\b/i;
 
 /** A link or a control as the scope reads it: where it goes and what it is called. */
 export interface NamedElement {
@@ -187,7 +190,8 @@ export interface NamedElement {
 
 /**
  * The login services the site sends a visitor to, in a fixed order: a link to a host of the
- * service, or a link or control that names it ("Inloggen met DigiD"). A site with none of them
+ * service, or a link or control that names it to log in ("Inloggen met DigiD", a button "DigiD",
+ * a link "Inloggen" to /auth/digid). A link that only mentions it ("Wat is DigiD?") does not count. A site with none of them
  * gets no word about them in its scope, so the scope does not suggest a login the site lacks.
  */
 export function loginServicesLinked(elements: readonly NamedElement[]): string[] {
@@ -200,8 +204,12 @@ export function loginServicesLinked(elements: readonly NamedElement[]): string[]
       // An address that does not parse names no host.
     }
     const name = `${element.ax?.name ?? ""} ${element.text}`;
+    // A name counts when it is the service alone ("DigiD") or speaks of logging in, so a news item or a page that explains DigiD does not.
+    const words = `${name} ${element.href ?? ""}`;
     for (const service of LOGIN_SERVICES) {
-      if (service.hosts.some((own) => host === own || host.endsWith(`.${own}`)) || service.word.test(name)) found.add(service.name);
+      const alone = (part: string): boolean => service.word.test(part) && part.replace(service.word, "").replace(/[\s\p{P}]/gu, "") === "";
+      const named = service.word.test(words) && (LOGIN_WORD.test(words) || alone(element.ax?.name ?? "") || alone(element.text));
+      if (service.hosts.some((own) => host === own || host.endsWith(`.${own}`)) || named) found.add(service.name);
     }
   }
   return LOGIN_SERVICES.map((service) => service.name).filter((name) => found.has(name));

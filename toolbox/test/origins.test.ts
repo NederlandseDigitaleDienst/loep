@@ -166,6 +166,9 @@ test("the scope names a login service only when the site sends a visitor to it",
   assert.deepEqual(loginServicesLinked([link("Inloggen met eHerkenning")]), ["eHerkenning"]);
   assert.deepEqual(loginServicesLinked([link("", `${main}/login`, "Log in met eIDAS")]), ["eIDAS"]);
   assert.deepEqual(loginServicesLinked([link("Inloggen", "https://nietdigid.nl/"), link("kapot", "geen adres")]), [], "another host that ends the same, and an address that does not parse");
+  assert.deepEqual(loginServicesLinked([link("Wat is DigiD?", `${main}/wat-is-digid`), link("Kabinet investeert in eHerkenning", `${main}/nieuws/1`)]), [], "a link that only mentions a service on the site itself");
+  assert.deepEqual(loginServicesLinked([link("DigiD", `${main}/auth`), link("Inloggen", `${main}/auth/eherkenning`), link("Log in with eRecognition", `${main}/en/login`)]), ["DigiD", "eHerkenning"], "the name alone, the service in the address, an English name");
+  assert.deepEqual(loginServicesLinked([link("Inloggen", "https://was.digid.nl/"), link("Info", "https://www.eherkenning.nl/")]), ["DigiD", "eHerkenning"], "a subdomain, and www");
   assert.equal(thirdPartiesOutOfScopeNl(["DigiD"]), "Websites van derden waarnaar wordt gelinkt, ook inloggen bij DigiD: die dienst heeft een eigen toegankelijkheidsverklaring");
 
   // More than one, in a fixed order whatever the order on the site.
