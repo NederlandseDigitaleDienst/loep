@@ -4,7 +4,7 @@
     {
       "id": "testsite-vragenlijst-start",
       "method": "POST",
-      "origin": "http://127.0.0.1:4712",
+      "origin": "http://localhost:4712",
       "path": "/vragenlijst/start",
       "reasonNl": "De ingesloten vragenlijst van Kijkpunt haalt hiermee bij het laden haar vragen op. Het verzoek stuurt alleen de naam van de vragenlijst en het adres van de pagina mee, en verstuurt geen antwoorden."
     }

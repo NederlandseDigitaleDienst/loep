@@ -67,8 +67,8 @@ test("an extra fixed rule names a test server on this machine only, and comes ne
   setFixedReads(null);
   try {
     assert.equal(fixedReads().length, shipped + 1);
-    assert.equal(fixedReadFor("POST", "http://127.0.0.1:4712/vragenlijst/start")?.id, "testsite-vragenlijst-start");
-    assert.equal(fixedReadFor("POST", "http://127.0.0.1:4712/vragenlijst/bezoek"), null);
+    assert.equal(fixedReadFor("POST", "http://localhost:4712/vragenlijst/start")?.id, "testsite-vragenlijst-start");
+    assert.equal(fixedReadFor("POST", "http://localhost:4712/vragenlijst/bezoek"), null);
   } finally {
     delete process.env[EXTRA_FIXED_READS_ENV];
     setFixedReads(null);
@@ -80,9 +80,9 @@ test("a run that carries the extra rules uses them without the variable, and the
   copyFileSync(new URL("../fixtures/fixed-reads.json", import.meta.url), join(carrying, EXTRA_FIXED_READS_FILE));
   try {
     useRunFixedReads(mkdtempSync(join(dir, "run-")));
-    assert.equal(fixedReadFor("POST", "http://127.0.0.1:4712/vragenlijst/start"), null, "a run without the file has only the rules of loep");
+    assert.equal(fixedReadFor("POST", "http://localhost:4712/vragenlijst/start"), null, "a run without the file has only the rules of loep");
     useRunFixedReads(carrying);
-    const rule = fixedReadFor("POST", "http://127.0.0.1:4712/vragenlijst/start");
+    const rule = fixedReadFor("POST", "http://localhost:4712/vragenlijst/start");
     assert.equal(rule?.extra, true);
     const used = fixedReadsUsed([{ reads: [{ rule: rule!.id, fixed: true }] }]).map((entry) => ({ ...entry, fixed: true as const }));
     assert.match(readsAllowedNl(used) ?? "", /^één extra vaste leesregel voor een testserver op deze machine liet verzoeken door/);

@@ -1561,7 +1561,7 @@
     {
       "id": "1.3.1-afvalwijzer-extern",
       "criterion": "1.3.1",
-      "document": "http://127.0.0.1:4712/documenten/afvalwijzer-2027-lindewaard.pdf",
+      "document": "http://localhost:4712/documenten/afvalwijzer-2027-lindewaard.pdf",
       "pages": [
         "/afval.html"
       ],

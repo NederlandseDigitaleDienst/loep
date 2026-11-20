@@ -17,10 +17,14 @@ import { DOCUMENTS } from "./documents.ts";
 const ROOT = dirname(fileURLToPath(import.meta.url));
 const SRC = join(ROOT, "src");
 
+/**
+ * The sites and where the generated files place them. Kijkpunt has a host of its own, as another party always has on the web:
+ * a cookie does not look at the port, so on 127.0.0.1 the browser would hold the login cookie of the site for Kijkpunt too.
+ */
 export const SITES = {
-  defect: { dir: "lindewaard", name: "Lindewaard", port: 4710 },
-  clean: { dir: "berkenveen", name: "Berkenveen", port: 4711 },
-  thirdParty: { dir: "kijkpunt", name: "Kijkpunt", port: 4712 },
+  defect: { dir: "lindewaard", name: "Lindewaard", host: "127.0.0.1", port: 4710 },
+  clean: { dir: "berkenveen", name: "Berkenveen", host: "127.0.0.1", port: 4711 },
+  thirdParty: { dir: "kijkpunt", name: "Kijkpunt", host: "localhost", port: 4712 },
 } as const;
 
 type Variant = "defect" | "clean";
@@ -91,7 +95,7 @@ function resolveMarkers(text: string, variant: Variant, origin: string): string 
 function layout(page: PageSource, body: string, variant: Variant): string {
   const bad = variant === "defect";
   const site = SITES[variant];
-  const third = `http://127.0.0.1:${SITES.thirdParty.port}`;
+  const third = `http://${SITES.thirdParty.host}:${SITES.thirdParty.port}`;
   const pick = <T,>(id: string, defect: T, clean: T): T => {
     usedSwitches.add(id);
     return bad ? defect : clean;
@@ -254,8 +258,8 @@ function walk(dir: string): string[] {
 /** All files of one site as a map from relative path to content. */
 function buildSite(variant: Variant): Map<string, string | Buffer> {
   const site = SITES[variant];
-  const origin = `http://127.0.0.1:${site.port}`;
-  const third = `http://127.0.0.1:${SITES.thirdParty.port}`;
+  const origin = `http://${site.host}:${site.port}`;
+  const third = `http://${SITES.thirdParty.host}:${SITES.thirdParty.port}`;
   const files = new Map<string, string | Buffer>();
   const fill = (text: string): string => text.replaceAll("{{naam}}", site.name).replaceAll("{{derde}}", third);
 

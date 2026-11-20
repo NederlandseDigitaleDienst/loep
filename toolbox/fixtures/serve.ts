@@ -5,7 +5,8 @@
  *
  *   node fixtures/serve.ts [--defect 4710] [--clean 4711] [--third 4712] [--log <file>] [--session-seconds 1800] [--disruptions]
  *
- * Everything binds to 127.0.0.1. Every request that is not a GET or HEAD and every WebSocket
+ * Everything binds to 127.0.0.1. Kijkpunt is addressed as localhost, so it has a host of its own: a cookie
+ * does not look at the port, and the login cookie of a site on 127.0.0.1 would otherwise go to Kijkpunt too. Every request that is not a GET or HEAD and every WebSocket
  * message is appended to the log as one JSON object per line, so a test can prove that an
  * evaluation run sent nothing to the site. The log is never truncated: compare line counts
  * before and after a run, or pass a fresh file.
@@ -35,6 +36,10 @@ const ROOT = dirname(fileURLToPath(import.meta.url));
 
 /** The ports the generated files were written for; the server rewrites them when it listens elsewhere. */
 export const DEFAULT_PORTS = { defect: 4710, clean: 4711, thirdParty: 4712 } as const;
+/** The host each site is addressed by. Another party never shares a host with the site, as on the web. */
+export const HOSTS = { defect: "127.0.0.1", clean: "127.0.0.1", thirdParty: "localhost" } as const;
+/** The origin the generated files name for a site. */
+export const defaultOrigin = (key: SiteKey): string => `http://${HOSTS[key]}:${DEFAULT_PORTS[key]}`;
 const DIRECTORIES = { defect: "lindewaard", clean: "berkenveen", thirdParty: "kijkpunt" } as const;
 export type SiteKey = keyof typeof DEFAULT_PORTS;
 
@@ -131,7 +136,7 @@ export async function startFixture(options: { ports?: Partial<Record<SiteKey, nu
   const keys = Object.keys(DEFAULT_PORTS) as SiteKey[];
 
   /** The files name the default ports; replace them with the ports in use. */
-  const rewrite = (text: string): string => keys.reduce((result, key) => result.replaceAll(`http://127.0.0.1:${DEFAULT_PORTS[key]}`, origins[key]), text);
+  const rewrite = (text: string): string => keys.reduce((result, key) => result.replaceAll(defaultOrigin(key), origins[key]), text);
 
   const sendFile = (response: ServerResponse, path: string, status: number, head: boolean): void => {
     const extension = extname(path);
@@ -267,7 +272,7 @@ export async function startFixture(options: { ports?: Partial<Record<SiteKey, nu
       server.listen(options.ports?.[key] ?? DEFAULT_PORTS[key], "127.0.0.1", resolve);
     });
     servers[key] = server;
-    origins[key] = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+    origins[key] = `http://${HOSTS[key]}:${(server.address() as AddressInfo).port}`;
   }
 
   return {

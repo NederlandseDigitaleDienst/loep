@@ -30,7 +30,7 @@ import type { Browser } from "playwright";
 import { DEFECTS, type Defect } from "../fixtures/defects.ts";
 import { entriesIn, logInOn, typeAccountKeepNotice } from "../fixtures/login.ts";
 import { EVIDENCE, isAgentOnly, type Look, type ScriptEvidence } from "../fixtures/evidence.ts";
-import { DEFAULT_PORTS, type SiteKey, startFixture } from "../fixtures/serve.ts";
+import { DEFAULT_PORTS, defaultOrigin, type SiteKey, startFixture } from "../fixtures/serve.ts";
 import { DISRUPTED_PAGES, DISRUPTIONS, GATE_CHECKS } from "../fixtures/disruptions.ts";
 import { readBlockades, setRunBlockade } from "../src/session/blockade.ts";
 import { setRunScope } from "../src/session/safety.ts";
@@ -111,7 +111,7 @@ export const CHECK_SESSION_SECONDS = 6 * 3600;
  */
 export function useFixtureReads(dir: string, thirdParty: string): string {
   const path = join(dir, "fixed-reads.json");
-  writeFileSync(path, readFileSync(join(TOOLBOX, "fixtures", "fixed-reads.json"), "utf8").replaceAll(`http://127.0.0.1:${DEFAULT_PORTS.thirdParty}`, thirdParty));
+  writeFileSync(path, readFileSync(join(TOOLBOX, "fixtures", "fixed-reads.json"), "utf8").replaceAll(defaultOrigin("thirdParty"), thirdParty));
   process.env[EXTRA_FIXED_READS_ENV] = path;
   setFixedReads(null);
   return path;
