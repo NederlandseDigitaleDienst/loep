@@ -356,17 +356,33 @@ export interface RefusedRead {
 
 export const READS_REFUSED_LOG = "reads-refused.jsonl";
 
+/** A request of the sweep that a fixed read rule of loep let through: noted without its query or body, for the report. */
+export interface FixedReadPassed {
+  at: string;
+  /** The command that was running. */
+  source: string;
+  method: string;
+  /** Origin and path, without query. */
+  address: string;
+  rule: string;
+}
+
+export const READS_FIXED_LOG = "reads-fixed.jsonl";
+
 let current: ReadRequest[] = [];
 let refusedLog: ((entry: Omit<RefusedRead, "at" | "source">) => void) | null = null;
+let fixedLog: ((entry: Omit<FixedReadPassed, "at" | "source">) => void) | null = null;
 
 /**
- * Give every browser context this process opens from here on the read requests of the run, and
- * where to note a request a rule covered but whose body was no search. Set by the command line
- * before a command starts, and by a session when it opens a page.
+ * Give every browser context this process opens from here on the read requests of the run, where
+ * to note a request a rule covered but whose body was no search, and where to note a request a
+ * fixed read rule let through. Set by the command line before a command starts, and by a session
+ * when it opens a page.
  */
-export function setRunReads(rules: readonly ReadRequest[], log?: ((entry: Omit<RefusedRead, "at" | "source">) => void) | null): void {
+export function setRunReads(rules: readonly ReadRequest[], log?: ((entry: Omit<RefusedRead, "at" | "source">) => void) | null, passed?: ((entry: Omit<FixedReadPassed, "at" | "source">) => void) | null): void {
   current = [...rules];
   if (log !== undefined) refusedLog = log;
+  if (passed !== undefined) fixedLog = passed;
 }
 
 export const runReads = (): ReadRequest[] => current;
@@ -382,6 +398,27 @@ export function refusedReadsLog(runDir: string, source: string): (entry: Omit<Re
     mkdirSync(runDir, { recursive: true });
     appendRunLine(join(runDir, READS_REFUSED_LOG), `${JSON.stringify({ at: new Date().toISOString(), source, ...entry })}\n`);
   };
+}
+
+/** Note a request a fixed read rule let through with the log of the run, when there is one. */
+export function noteFixedRead(entry: Omit<FixedReadPassed, "at" | "source">): void {
+  fixedLog?.(entry);
+}
+
+/** A log of the requests of the sweep that a fixed read rule let through: one line per request, never the query or the body. */
+export function fixedReadsLog(runDir: string, source: string): (entry: Omit<FixedReadPassed, "at" | "source">) => void {
+  return (entry) => {
+    mkdirSync(runDir, { recursive: true });
+    appendRunLine(join(runDir, READS_FIXED_LOG), `${JSON.stringify({ at: new Date().toISOString(), source, ...entry })}\n`);
+  };
+}
+
+/** The requests of the sweep of this run that a fixed read rule let through, as the reads of one observation, for `fixedReadsUsed`. */
+export function fixedReadsOfSweep(runDir: string): { reads: { rule: string; fixed: true }[] } {
+  const path = join(runDir, READS_FIXED_LOG);
+  if (!existsSync(path)) return { reads: [] };
+  const lines = readFileSync(path, "utf8").split("\n").filter((line) => line.trim() !== "");
+  return { reads: lines.map((line) => ({ rule: (JSON.parse(line) as FixedReadPassed).rule, fixed: true as const })) };
 }
 
 /** Origin and path of an address, for a record that must not carry what was typed. */
@@ -493,7 +530,7 @@ export const readsAllowedNl = (rules: readonly ReadText[]): string | null => {
   return parts.length === 0 ? null : parts.map((part, index) => (index > 0 ? part.replace(/^één/, "Eén") : part)).join(". ");
 };
 
-/** The fixed rules that let a request through in these observations of a session, in the order of the file. */
+/** The fixed rules that let a request through in these observations of a session (or the sweep, see `fixedReadsOfSweep`), in the order of the file. */
 export function fixedReadsUsed(observations: Iterable<{ reads?: readonly { rule: string; fixed?: true }[] }>, rules: readonly FixedRead[] = fixedReads()): FixedRead[] {
   const used = new Set<string>();
   for (const observation of observations) for (const entry of observation.reads ?? []) if (entry.fixed) used.add(entry.rule);

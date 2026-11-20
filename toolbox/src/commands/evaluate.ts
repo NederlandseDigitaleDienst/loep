@@ -9,7 +9,7 @@ import { readJson, sha256File } from "../lib/canonical.ts";
 import { aiGeneratedMark, allCriteriaSorted, carryFindingIds, ESTABLISHED_BY_NL, evaluationHash, idsAcrossVersionsNl, knownCommit, OUTCOME_LABEL, markVendor, openCriteria, resolveCriterion, summarise, versionAccuracyProblems, type BrowserUse, type CriterionResult, type Evaluation, type PointAnswer, type RoundVerdicts, type VersionAccuracy } from "../lib/evaluation.ts";
 import { matchFindings, sideOf } from "../lib/difference.ts";
 import { documentScopeNl, evaluationDocuments, omittedByPageLimit, siteDocuments } from "../lib/documents.ts";
-import { pagesInScopeNl, siteOrigins } from "../lib/origins.ts";
+import { loginServicesLinked, pagesInScopeNl, siteOrigins, thirdPartiesOutOfScopeNl } from "../lib/origins.ts";
 import { type Manifest, stepStart, sweepToolchain, writeManifest } from "../lib/manifest.ts";
 import { agentPhaseTimings } from "../lib/timing.ts";
 import { sessionWatchAnswers } from "../lib/timelimits.ts";
@@ -22,7 +22,7 @@ import { openPoint, sessionOfObservation, UNREACHABLE, waitsOnlyOnSending, type 
 import { loginNl, NOT_LOGGED_IN_NL } from "../lib/login.ts";
 import { mailboxLimitationsNl } from "../lib/mailbox.ts";
 import { secretLimitationsNl } from "../lib/secrets.ts";
-import { fixedReadsUsed, heldBackSearches, heldBackSearchNl, readsAllowedNl, refusedCoveredReads } from "../lib/reads.ts";
+import { fixedReadsOfSweep, fixedReadsUsed, heldBackSearches, heldBackSearchNl, readsAllowedNl, refusedCoveredReads } from "../lib/reads.ts";
 import { WRITES_BLOCKED_NL, writesAllowedNl } from "../lib/writes.ts";
 import { blockadesNl } from "../session/blockade.ts";
 import { METHODS } from "../instruments/methods/registry.ts";
@@ -243,10 +243,10 @@ export async function evaluate(options: EvaluateOptions): Promise<Evaluation> {
   const documents = population ? evaluationDocuments(run.documents ?? [], population, procedures.filter((procedure) => procedure.evidence.includes("documents")).map((procedure) => procedure.id)) : null;
   const documentScope = searchedForDocuments ? documentScopeNl(documents, origins, siteDocuments(run.inventory).elsewhere, omittedByPageLimit(run.inventory.skipped ?? [])) : null;
 
-  // The read rules of the site model, and the fixed rules of loep that let a request through in a session of this run.
+  // The read rules of the site model, and the fixed rules of loep that let a request through in a session or the sweep of this run.
   const readsOfRun = [
     ...(run.reads ?? []).map((rule) => ({ method: rule.method, origin: rule.origin, path: rule.path, service: rule.service, reasonNl: rule.reasonNl })),
-    ...fixedReadsUsed(observations.records.values() as Iterable<{ reads?: { rule: string; fixed?: true }[] }>).map((rule) => ({ method: rule.method, origin: rule.origin, path: rule.path, ...(rule.query ? { query: rule.query } : {}), reasonNl: rule.reasonNl, fixed: true as const, ...(rule.extra ? { extra: true as const } : {}) })),
+    ...fixedReadsUsed([...(observations.records.values() as Iterable<{ reads?: { rule: string; fixed?: true }[] }>), fixedReadsOfSweep(options.run)]).map((rule) => ({ method: rule.method, origin: rule.origin, path: rule.path, ...(rule.query ? { query: rule.query } : {}), reasonNl: rule.reasonNl, fixed: true as const, ...(rule.extra ? { extra: true as const } : {}) })),
   ];
   const limitations = [
     browsersNl,
@@ -323,7 +323,7 @@ export async function evaluate(options: EvaluateOptions): Promise<Evaluation> {
     standards: { wcag: ["WCAG 2.2 niveau A en AA", "WCAG 2.1 niveau A en AA"], en301549: documents ? "EN 301 549 v3.2.1, hoofdstuk 9 (webpagina's) en hoofdstuk 10 (documenten)" : "EN 301 549 v3.2.1, hoofdstuk 9" },
     scope: {
       includedNl: [pagesInScopeNl(origins, run.inventory.baseUrl), ...(documentScope?.includedNl ?? [])],
-      excludedNl: ["Websites van derden waarnaar wordt gelinkt, ook inloggen bij DigiD, eHerkenning of eIDAS: die diensten hebben een eigen toegankelijkheidsverklaring", ...(documentScope ? documentScope.excludedNl : ["Pdf-bestanden en andere documenten die geen webpagina zijn, ook als ze op de site zelf staan"])],
+      excludedNl: [thirdPartiesOutOfScopeNl(loginServicesLinked(run.pages.flatMap((page) => [...page.facts.links, ...page.facts.controls]))), ...(documentScope ? documentScope.excludedNl : ["Pdf-bestanden en andere documenten die geen webpagina zijn, ook als ze op de site zelf staan"])],
       ...(scopeFrames.length > 0 ? { frames: scopeFrames } : {}),
     },
     sample: run.sample,

@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, test } from "node:test";
 import type { Page } from "playwright";
 import { launchBrowser, loadPage, newContext, settlePage } from "../src/browser/session.ts";
-import { setFixedReads, type FixedRead } from "../src/lib/reads.ts";
+import { fixedReadsLog, fixedReadsOfSweep, fixedReadsUsed, READS_FIXED_LOG, setFixedReads, setRunReads, type FixedRead, type FixedReadPassed } from "../src/lib/reads.ts";
 import { Daemon } from "../src/session/daemon.ts";
 import { guardContext, scopeForRun, setRunScope, type Guard } from "../src/session/safety.ts";
 import { startServer, type FixtureServer } from "./fixtures/session-site/server.ts";
@@ -64,11 +64,18 @@ test("the sweep lets a GET of the page to a host outside the run through, and a 
     assert.deepEqual([without.player, without.other], ["", ""], "without a rule no POST of the player leaves");
     assert.equal(outside("POST", "/player-data/player"), 0);
 
+    assert.ok(!existsSync(join(run, READS_FIXED_LOG)), "nothing passed, so nothing is noted");
+
     setFixedReads([playerRule()]);
+    setRunReads([], undefined, fixedReadsLog(run, "collect"));
     const withRule = await shown(await (await newContext(browser, { writes: null })).newPage(), PLAYER);
     assert.equal(withRule.player, "Antwoord op /player-data/player", "the POST the rule covers passes");
     assert.equal(withRule.other, "", "a POST to another path of the same host stays held back");
     assert.equal(outside("POST", "/player-data/other"), 0);
+    // The sweep notes what the fixed rule let through, without the query, so the report names the rule also when no session used it.
+    const noted = readFileSync(join(run, READS_FIXED_LOG), "utf8").trim().split("\n").map((line) => JSON.parse(line) as FixedReadPassed);
+    assert.deepEqual([...new Set(noted.map((entry) => `${entry.source} ${entry.method} ${entry.address} ${entry.rule}`))], [`collect POST ${site.otherOrigin}/player-data/player testspeler`]);
+    assert.deepEqual(fixedReadsUsed([fixedReadsOfSweep(run)], [playerRule()]).map((rule) => rule.id), ["testspeler"]);
 
     const covered = outside("POST", "/player-data/player");
     await shown(await (await newContext(browser, { writes: null })).newPage(), PLAYER_FORM);
@@ -76,6 +83,8 @@ test("the sweep lets a GET of the page to a host outside the run through, and a 
   } finally {
     setRunScope(null);
     setFixedReads(null);
+    setRunReads([], undefined, null);
+    rmSync(join(run, READS_FIXED_LOG), { force: true });
     await browser.close();
   }
 });

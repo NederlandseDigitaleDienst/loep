@@ -443,7 +443,11 @@ export async function guardContext(context: BrowserContext, scope: Scope, guard:
         guard.blocked.push({ at: new Date().toISOString(), kind: "method", method, url: url.slice(0, MAX_URL), resourceType: type, reasonNl: read.reasonNl });
         return refuse();
       }
-      if (isWriteOrigin(scope.writes, url)) {
+      // Whether the body has the form of a search: what the explorer needs to record a read request, never the body itself.
+      const search = method === "POST" ? searchServicesOf(body, pathOf(url), terms) : [];
+      // A search no rule covers is held back as a search, also to an origin that may be written to: searching costs nothing from the budget, and the explorer records the read request.
+      // Not a filter form: it is known only by the names of its fields, and a form that records something, such as a consent or a choice in a form in steps, can be named the same. Where sending is allowed it is sent.
+      if (search.every((service) => service === "filterform") && isWriteOrigin(scope.writes, url)) {
         // Every write takes one from the budget of the whole run; when it is used up the write is held back as without permission. When the previous one was too recent,
         // it waits for its turn within the time of the command, and is held back when that turn does not come in time.
         // The same request as one sent before is answered from its recording. Where the server sends the browser next is not asked here again: it has to be inside the scope.
@@ -453,8 +457,6 @@ export async function guardContext(context: BrowserContext, scope: Scope, guard:
           else (guard.passed ??= []).push(outcome.entry, ...(outcome.repeated ? [outcome.repeated] : []));
         });
       }
-      // Whether the body has the form of a search: what the explorer needs to record a read request, never the body itself.
-      const search = method === "POST" ? searchServicesOf(body, pathOf(url), terms) : [];
       guard.blocked.push({ at: new Date().toISOString(), kind: "method", method, url: url.slice(0, MAX_URL), resourceType: type, ...(search.length > 0 ? { search } : {}) });
       return refuse();
     }

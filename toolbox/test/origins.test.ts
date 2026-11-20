@@ -5,7 +5,7 @@ import { redactor } from "../src/commands/feedback.ts";
 import { formPagesNl, pageLimitNl, pageLimitReason, type Inventory, type InventoryPage } from "../src/commands/inventory.ts";
 import { buildSample } from "../src/commands/sample.ts";
 import { documentScopeNl } from "../src/lib/documents.ts";
-import { isPrivateHost, notFoundProbes, originsNl, originsOfRun, pagesInScopeNl, parseOrigin, isInScope, scopePrefix, privateFromPublicSite, scopeHost, scopeHostOf, siteHosts, siteLabel, siteOrigins } from "../src/lib/origins.ts";
+import { isPrivateHost, loginServicesLinked, thirdPartiesOutOfScopeNl, notFoundProbes, originsNl, originsOfRun, pagesInScopeNl, parseOrigin, isInScope, scopePrefix, privateFromPublicSite, scopeHost, scopeHostOf, siteHosts, siteLabel, siteOrigins } from "../src/lib/origins.ts";
 import { otherDomains } from "../src/lib/statement.ts";
 import { urlInScope } from "../src/session/safety.ts";
 
@@ -152,4 +152,27 @@ test("a start address under a path bounds the run to that path on its own origin
   assert.ok(!isInScope(`${main}/`, [main, docs], prefix));
   assert.ok(isInScope(`${docs}/anything`, [main, docs], prefix), "a further origin is whole");
   assert.ok(!isInScope("https://other.example/team/site/", [main, docs], prefix));
+});
+
+test("the scope names a login service only when the site sends a visitor to it", () => {
+  const link = (text: string, href: string | null = null, name?: string) => ({ text, href, ax: name === undefined ? null : { name } });
+  // A site without a login: the line is about other websites and says nothing of a login.
+  const none = loginServicesLinked([link("Contact", `${main}/contact`), link("Rijksoverheid", "https://www.rijksoverheid.nl/")]);
+  assert.deepEqual(none, []);
+  assert.equal(thirdPartiesOutOfScopeNl(none), "Websites van derden waarnaar wordt gelinkt");
+
+  // A link to the host of the service, a button that names it, and a name only the accessibility tree has.
+  assert.deepEqual(loginServicesLinked([link("Inloggen", "https://mijn.digid.nl/")]), ["DigiD"]);
+  assert.deepEqual(loginServicesLinked([link("Inloggen met eHerkenning")]), ["eHerkenning"]);
+  assert.deepEqual(loginServicesLinked([link("", `${main}/login`, "Log in met eIDAS")]), ["eIDAS"]);
+  assert.deepEqual(loginServicesLinked([link("Inloggen", "https://nietdigid.nl/"), link("kapot", "geen adres")]), [], "another host that ends the same, and an address that does not parse");
+  assert.deepEqual(loginServicesLinked([link("Wat is DigiD?", `${main}/wat-is-digid`), link("Kabinet investeert in eHerkenning", `${main}/nieuws/1`)]), [], "a link that only mentions a service on the site itself");
+  assert.deepEqual(loginServicesLinked([link("DigiD", `${main}/auth`), link("Inloggen", `${main}/auth/eherkenning`), link("Log in with eRecognition", `${main}/en/login`)]), ["DigiD", "eHerkenning"], "the name alone, the service in the address, an English name");
+  assert.deepEqual(loginServicesLinked([link("Inloggen", "https://was.digid.nl/"), link("Info", "https://www.eherkenning.nl/")]), ["DigiD", "eHerkenning"], "a subdomain, and www");
+  assert.equal(thirdPartiesOutOfScopeNl(["DigiD"]), "Websites van derden waarnaar wordt gelinkt, ook inloggen bij DigiD: die dienst heeft een eigen toegankelijkheidsverklaring");
+
+  // More than one, in a fixed order whatever the order on the site.
+  const both = loginServicesLinked([link("Inloggen met eHerkenning"), link("Inloggen met DigiD")]);
+  assert.deepEqual(both, ["DigiD", "eHerkenning"]);
+  assert.equal(thirdPartiesOutOfScopeNl(both), "Websites van derden waarnaar wordt gelinkt, ook inloggen bij DigiD en eHerkenning: die diensten hebben een eigen toegankelijkheidsverklaring");
 });

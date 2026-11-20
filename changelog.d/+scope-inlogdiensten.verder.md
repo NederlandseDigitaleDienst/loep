@@ -1,0 +1,1 @@
+De scope van een onderzoek noemt inloggen bij DigiD, eHerkenning of eIDAS alleen nog als de site een link of knop naar zo'n dienst heeft, en dan alleen de dienst die er staat. Eerder stond de zin in elk rapport en op elk invulblad, ook bij een site zonder inlog, en dat las alsof de site een inlog had.

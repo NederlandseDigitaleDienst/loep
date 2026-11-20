@@ -170,3 +170,54 @@ export function isPrivateHost(hostname: string): boolean {
 export function privateFromPublicSite(url: string, origins: readonly string[]): boolean {
   return isPrivateHost(new URL(url).hostname) && !origins.some((origin) => isPrivateHost(new URL(origin).hostname));
 }
+
+/** The national login services a site can send a visitor to, with the hosts they live on and the word a link or button names them by. */
+const LOGIN_SERVICES: readonly { name: string; hosts: readonly string[]; word: RegExp }[] = [
+  { name: "DigiD", hosts: ["digid.nl"], word: /\bdigid\b/i },
+  { name: "eHerkenning", hosts: ["eherkenning.nl"], word: /\b(e-?herkenning|erecognition)\b/i },
+  { name: "eIDAS", hosts: [], word: /\beidas\b/i },
+];
+
+/** Words that say a link or control logs the visitor in, in Dutch and in English. */
+const LOGIN_WORD = /\b(inlog\w*|in te loggen|log ?in|login|aanmelden|meld (u|je) aan|sign ?in|log ?on)\b/i;
+
+/** A link or a control as the scope reads it: where it goes and what it is called. */
+export interface NamedElement {
+  href?: string | null;
+  text: string;
+  ax?: { name?: string | null } | null;
+}
+
+/**
+ * The login services the site sends a visitor to, in a fixed order: a link to a host of the
+ * service, or a link or control that names it to log in ("Inloggen met DigiD", a button "DigiD",
+ * a link "Inloggen" to /auth/digid). A link that only mentions it ("Wat is DigiD?") does not count. A site with none of them
+ * gets no word about them in its scope, so the scope does not suggest a login the site lacks.
+ */
+export function loginServicesLinked(elements: readonly NamedElement[]): string[] {
+  const found = new Set<string>();
+  for (const element of elements) {
+    let host = "";
+    try {
+      if (element.href) host = new URL(element.href).hostname.toLowerCase();
+    } catch {
+      // An address that does not parse names no host.
+    }
+    const name = `${element.ax?.name ?? ""} ${element.text}`;
+    // A name counts when it is the service alone ("DigiD") or speaks of logging in, so a news item or a page that explains DigiD does not.
+    const words = `${name} ${element.href ?? ""}`;
+    for (const service of LOGIN_SERVICES) {
+      const alone = (part: string): boolean => service.word.test(part) && part.replace(service.word, "").replace(/[\s\p{P}]/gu, "") === "";
+      const named = service.word.test(words) && (LOGIN_WORD.test(words) || alone(element.ax?.name ?? "") || alone(element.text));
+      if (service.hosts.some((own) => host === own || host.endsWith(`.${own}`)) || named) found.add(service.name);
+    }
+  }
+  return LOGIN_SERVICES.map((service) => service.name).filter((name) => found.has(name));
+}
+
+/** The line of the scope about other parties' websites, with the login services the site links to when it has any. */
+export function thirdPartiesOutOfScopeNl(services: readonly string[]): string {
+  const base = "Websites van derden waarnaar wordt gelinkt";
+  if (services.length === 0) return base;
+  return `${base}, ook inloggen bij ${originsNl(services)}: ${services.length === 1 ? "die dienst heeft" : "die diensten hebben"} een eigen toegankelijkheidsverklaring`;
+}
