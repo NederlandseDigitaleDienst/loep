@@ -270,7 +270,7 @@ jobs:
 
       - name: Regressietoets van de veegronde
         if: env.MEASURE == 'true'
-        run: just sweep-check --variant ${{ matrix.variant }} --out "$RUNNER_TEMP/veegronde" --at-once 3
+        run: just sweep-check --variant ${{ matrix.variant }} --out "$RUNNER_TEMP/veegronde" --at-once 6
 
       - name: Tabel in de samenvatting
         if: always() && env.MEASURE == 'true'
