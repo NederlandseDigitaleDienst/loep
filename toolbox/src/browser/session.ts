@@ -790,6 +790,30 @@ export async function loadSampled(tab: Page, item: { url: string; embeddedOn?: s
   return { page: tab, placement: { inPlaceOn: null, apartNl: frame ? `het venster op ${on} was niet te lezen` : `op ${on} stond bij het meten geen venster met dit adres, of het laadde daar niet` } };
 }
 
+/** What a call into a page says when the document it ran in went away: the page navigated, or reloaded itself. */
+const NAVIGATED_AWAY = /Execution context was destroyed|Cannot find context with specified id/;
+
+/** How often a page is loaded and measured in all when it keeps navigating by itself. */
+export const SELF_NAVIGATION_TRIES = 3;
+
+/**
+ * Load a page and measure it. A page that navigates by itself just after loading, such as a check
+ * against robots that was passed and then reloads its window, takes away the document that was being
+ * measured. It is then loaded again, in the same browser context, which keeps the cookie the check
+ * gave, and measured again. A page that is still navigating by itself the last time is not measured.
+ */
+export async function measureLoaded<L, T>(url: string, load: () => Promise<L>, work: (loaded: L) => Promise<T>): Promise<T> {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await work(await load());
+    } catch (error) {
+      if (!NAVIGATED_AWAY.test(firstLineOf(error))) throw error;
+      if (attempt >= SELF_NAVIGATION_TRIES) throw new Error(`de pagina laadde zichzelf tijdens het meten steeds opnieuw, ${attempt} keer: ${firstLineOf(error)}`);
+      process.stderr.write(`${url} laadde zichzelf opnieuw tijdens het meten en wordt opnieuw gemeten: ${firstLineOf(error)}\n`);
+    }
+  }
+}
+
 /**
  * How long a page may take to answer after it loaded, counted by Node. The wait inside the page runs on
  * the timers of the page, and a script that keeps the browser busy stops those timers and every answer.

@@ -5,7 +5,7 @@ import { join } from "node:path";
 import type { Browser, BrowserContext, Page } from "playwright";
 import { call } from "../browser/call.ts";
 import { wholePageScreenshot, type ScreenshotClip } from "../browser/screenshot.ts";
-import { confirmLogin, firstLineOf, INPAGE_PATH, launchBrowser, loadSampled, newContext, PageContexts, RENDERING, retryOnce, withinPageTime, type ColorScheme, type ContextOptions } from "../browser/session.ts";
+import { confirmLogin, firstLineOf, INPAGE_PATH, launchBrowser, loadSampled, measureLoaded, newContext, PageContexts, RENDERING, retryOnce, withinPageTime, type ColorScheme, type ContextOptions } from "../browser/session.ts";
 import { LoginExpired } from "../lib/login.ts";
 import { readJson, sha256, writeFileAtomic, writeJson } from "../lib/canonical.ts";
 import { enginesToRetry, runEngines, type EngineRun } from "../lib/engines.ts";
@@ -127,6 +127,8 @@ async function collectPage(browser: Browser, entry: SampleItem, runDir: string, 
     await sweep.install(context);
     return context;
   };
+  // A load of the page in a new tab of `context`; a retry after the page navigated by itself loads it again in the same context.
+  const sampledIn = (context: BrowserContext, where: string, scheme?: ColorScheme) => async () => loadSampled(await context.newPage(), entry, (tab) => sweep.dismiss(context, tab, where, scheme));
   const dir = join(runDir, "pages", entry.slug);
   const summary: Record<string, unknown> = { url: entry.url, slug: entry.slug };
   let clippedAt: ScreenshotClip | null = null;
@@ -150,71 +152,75 @@ async function collectPage(browser: Browser, entry: SampleItem, runDir: string, 
     };
     let context = await openScheme();
     try {
-      let loaded = await loadSampled(await context.newPage(), entry, (tab) => sweep.dismiss(context, tab, `collect:${scheme}`, scheme));
-      // A stylesheet or script of the site itself that failed on the first load: the page is loaded once more, before anything is measured.
-      if (scheme === "light" && missed.length > 0) {
-        await context.close().catch(() => undefined);
-        process.stderr.write(`collect: ${entry.url} nog een keer geladen: ${missedNl(missedResources(missed.splice(0)))}\n`);
-        requested.clear();
-        context = await openScheme();
-        loaded = await loadSampled(await context.newPage(), entry, (tab) => sweep.dismiss(context, tab, `collect:${scheme}`, scheme));
-      }
-      const { page, placement } = loaded;
-      if (scheme === "light") noted.content = await contentOf(page);
-      // Where an embedded window was measured: on the page it stands on, or on its own and why.
-      if (scheme === "light" && placement) {
-        await writeJson(join(dir, "probes", "placement.json"), placement);
-        summary.placement = placement;
-      }
-      if (scheme === "light") await writeJson(join(dir, "probes", "overlays.json"), await sweep.overlays(page));
-      // A very tall page is pictured down to a limit; the facts say where the picture stops.
-      const shot = await wholePageScreenshot(page, { path: join(dir, `screenshot-${scheme}.png`) });
-      if (scheme === "light") clippedAt = shot.clippedAt;
-      const engines = await runEngines(page);
-      await writeJson(join(dir, `engines-${scheme}.json`), retriedAfterTimeout ? { ...engines, retriedAfterTimeout: true } : engines);
-      summary[`engines-${scheme}`] = engines.summary;
-      if (scheme === "light") {
-        const facts = await collectFacts(page);
-        if (clippedAt) {
-          facts.screenshotClippedAt = clippedAt;
-          summary.screenshotClippedAt = clippedAt;
+      const load = async (): Promise<Awaited<ReturnType<typeof loadSampled>>> => {
+        let loaded = await sampledIn(context, `collect:${scheme}`, scheme)();
+        // A stylesheet or script of the site itself that failed on the first load: the page is loaded once more, before anything is measured.
+        if (scheme === "light" && missed.length > 0) {
+          await context.close().catch(() => undefined);
+          process.stderr.write(`collect: ${entry.url} nog een keer geladen: ${missedNl(missedResources(missed.splice(0)))}\n`);
+          requested.clear();
+          context = await openScheme();
+          loaded = await sampledIn(context, `collect:${scheme}`, scheme)();
         }
-        await writeJson(join(dir, "facts.json"), facts);
-        await writeFileAtomic(join(dir, "aria.yaml"), `${await page.locator("body").ariaSnapshot()}\n`);
-        await writeJson(join(dir, "probes", "targetsize.json"), await call(page, "targetSizes"));
-        // What there is to operate, for the gate to lay next to the site model.
-        await writeJson(join(dir, "probes", "operables.json"), await pageOperables(page));
-        await writeJson(join(dir, "probes", "scrollregions.json"), await call(page, "scrollRegions"));
-        await writeFileAtomic(join(dir, "text.txt"), `${await call<string>(page, "bodyText")}\n`);
-        // Headings, images and blocks of text in the default window: what each other size is compared with.
-        await writeJson(join(dir, "probes", "content.json"), await call(page, "contentInventory"));
-        // The order of the code against the order on screen, and text laid out with spaces or line breaks (1.3.2).
-        await writeJson(join(dir, "probes", "order.json"), await visualOrder(page));
-        await writeJson(join(dir, "probes", "spacedtext.json"), { candidates: await call(page, "spacedText") });
-        // The language of text alternatives and names, which the text of the page does not hold (3.1.2).
-        await writeJson(join(dir, "probes", "languages.json"), await languagesOf(page, { blocks: false }));
-        // The walk draws its numbered picture itself, before any other key is pressed.
-        const walk = await tabWalk(page, { continueAfterFocusLoss: true, fromTop: true, focusDir: join(dir, "probes", "focus"), focusPath: "probes/focus", orderPicture: join(dir, "probes", "tabwalk.png") });
-        summary.tabwalk = { outcome: walk.outcome, stops: walk.stopCount };
-        // Every picture cut out and read with text recognition (1.4.5); this scrolls, so it comes after what is measured in place.
-        const pictures = await picturesWithText(page, join(dir, "probes", "pictures"), "probes/pictures", sweep.pictureCache);
-        await writeJson(join(dir, "probes", "pictures.json"), pictures);
-        noted.pictures = pictures;
-        summary.pictures = { found: pictures.pictures.length, recognised: pictures.recognised };
-        // Taken before the arrow keys and the timers change the page: what the page asked for as it loaded, was scrolled and walked.
-        await writeJson(join(dir, "probes", "hosts.json"), { hosts: [...requested].sort() });
-        // The arrow keys can change the page itself: a slide deck turns to the next slide on every
-        // stop. So they come after everything that shows the page as it loaded.
-        walk.arrowReach = await arrowReach(page, walk.stops as { path: string[]; tag: string; inputType?: string | null }[]);
-        await writeJson(join(dir, "probes", "tabwalk.json"), walk);
-        // What can be a time limit (2.2.1): every timer with what it did, waiting timers set off now. This changes the page, so it is last.
-        const limits = await timeLimits(page, sweep.seededCookies);
-        await writeJson(join(dir, "probes", "timelimits.json"), limits);
-        summary.timeLimits = { timers: limits.timers.length, forced: limits.timers.filter((timer) => timer.forced).length };
-      } else {
-        // The focus indicator is measured again on the dark scheme: its colours differ.
-        await writeJson(join(dir, "probes", "tabwalk-dark.json"), await tabWalk(page, { continueAfterFocusLoss: true, fromTop: true, focusDir: join(dir, "probes", "focus-dark"), focusPath: "probes/focus-dark" }));
-      }
+        return loaded;
+      };
+      await measureLoaded(entry.url, load, async ({ page, placement }) => {
+        if (scheme === "light") noted.content = await contentOf(page);
+        // Where an embedded window was measured: on the page it stands on, or on its own and why.
+        if (scheme === "light" && placement) {
+          await writeJson(join(dir, "probes", "placement.json"), placement);
+          summary.placement = placement;
+        }
+        if (scheme === "light") await writeJson(join(dir, "probes", "overlays.json"), await sweep.overlays(page));
+        // A very tall page is pictured down to a limit; the facts say where the picture stops.
+        const shot = await wholePageScreenshot(page, { path: join(dir, `screenshot-${scheme}.png`) });
+        if (scheme === "light") clippedAt = shot.clippedAt;
+        const engines = await runEngines(page);
+        await writeJson(join(dir, `engines-${scheme}.json`), retriedAfterTimeout ? { ...engines, retriedAfterTimeout: true } : engines);
+        summary[`engines-${scheme}`] = engines.summary;
+        if (scheme === "light") {
+          const facts = await collectFacts(page);
+          if (clippedAt) {
+            facts.screenshotClippedAt = clippedAt;
+            summary.screenshotClippedAt = clippedAt;
+          }
+          await writeJson(join(dir, "facts.json"), facts);
+          await writeFileAtomic(join(dir, "aria.yaml"), `${await page.locator("body").ariaSnapshot()}\n`);
+          await writeJson(join(dir, "probes", "targetsize.json"), await call(page, "targetSizes"));
+          // What there is to operate, for the gate to lay next to the site model.
+          await writeJson(join(dir, "probes", "operables.json"), await pageOperables(page));
+          await writeJson(join(dir, "probes", "scrollregions.json"), await call(page, "scrollRegions"));
+          await writeFileAtomic(join(dir, "text.txt"), `${await call<string>(page, "bodyText")}\n`);
+          // Headings, images and blocks of text in the default window: what each other size is compared with.
+          await writeJson(join(dir, "probes", "content.json"), await call(page, "contentInventory"));
+          // The order of the code against the order on screen, and text laid out with spaces or line breaks (1.3.2).
+          await writeJson(join(dir, "probes", "order.json"), await visualOrder(page));
+          await writeJson(join(dir, "probes", "spacedtext.json"), { candidates: await call(page, "spacedText") });
+          // The language of text alternatives and names, which the text of the page does not hold (3.1.2).
+          await writeJson(join(dir, "probes", "languages.json"), await languagesOf(page, { blocks: false }));
+          // The walk draws its numbered picture itself, before any other key is pressed.
+          const walk = await tabWalk(page, { continueAfterFocusLoss: true, fromTop: true, focusDir: join(dir, "probes", "focus"), focusPath: "probes/focus", orderPicture: join(dir, "probes", "tabwalk.png") });
+          summary.tabwalk = { outcome: walk.outcome, stops: walk.stopCount };
+          // Every picture cut out and read with text recognition (1.4.5); this scrolls, so it comes after what is measured in place.
+          const pictures = await picturesWithText(page, join(dir, "probes", "pictures"), "probes/pictures", sweep.pictureCache);
+          await writeJson(join(dir, "probes", "pictures.json"), pictures);
+          noted.pictures = pictures;
+          summary.pictures = { found: pictures.pictures.length, recognised: pictures.recognised };
+          // Taken before the arrow keys and the timers change the page: what the page asked for as it loaded, was scrolled and walked.
+          await writeJson(join(dir, "probes", "hosts.json"), { hosts: [...requested].sort() });
+          // The arrow keys can change the page itself: a slide deck turns to the next slide on every
+          // stop. So they come after everything that shows the page as it loaded.
+          walk.arrowReach = await arrowReach(page, walk.stops as { path: string[]; tag: string; inputType?: string | null }[]);
+          await writeJson(join(dir, "probes", "tabwalk.json"), walk);
+          // What can be a time limit (2.2.1): every timer with what it did, waiting timers set off now. This changes the page, so it is last.
+          const limits = await timeLimits(page, sweep.seededCookies);
+          await writeJson(join(dir, "probes", "timelimits.json"), limits);
+          summary.timeLimits = { timers: limits.timers.length, forced: limits.timers.filter((timer) => timer.forced).length };
+        } else {
+          // The focus indicator is measured again on the dark scheme: its colours differ.
+          await writeJson(join(dir, "probes", "tabwalk-dark.json"), await tabWalk(page, { continueAfterFocusLoss: true, fromTop: true, focusDir: join(dir, "probes", "focus-dark"), focusPath: "probes/focus-dark" }));
+        }
+      });
     } finally {
       await context.close().catch(() => undefined);
     }
@@ -223,10 +229,11 @@ async function collectPage(browser: Browser, entry: SampleItem, runDir: string, 
   for (const probe of VIEWPORT_PROBES) {
     const context = await open({ viewport: probe.viewport, deviceScaleFactor: probe.deviceScaleFactor });
     try {
-      const { page } = await loadSampled(await context.newPage(), entry, (tab) => sweep.dismiss(context, tab, `collect:${probe.name}`));
-      const { report, visibleControls, clickables, content } = await overflowProbe(page, join(dir, "probes", `${probe.name}.png`));
-      await writeJson(join(dir, "probes", `${probe.name}.json`), { ...probe, ...report, visibleControls, clickables, content });
-      summary[probe.name] = { horizontalScroll: report.horizontalScroll, offenders: (report.offenders as unknown[]).length, clipped: (report.clipped as unknown[]).length };
+      await measureLoaded(entry.url, sampledIn(context, `collect:${probe.name}`), async ({ page }) => {
+        const { report, visibleControls, clickables, content } = await overflowProbe(page, join(dir, "probes", `${probe.name}.png`));
+        await writeJson(join(dir, "probes", `${probe.name}.json`), { ...probe, ...report, visibleControls, clickables, content });
+        summary[probe.name] = { horizontalScroll: report.horizontalScroll, offenders: (report.offenders as unknown[]).length, clipped: (report.clipped as unknown[]).length };
+      });
     } finally {
       await context.close().catch(() => undefined);
     }
@@ -236,17 +243,18 @@ async function collectPage(browser: Browser, entry: SampleItem, runDir: string, 
   {
     const context = await open({ viewport: SMALLEST });
     try {
-      const { page } = await loadSampled(await context.newPage(), entry, (tab) => sweep.dismiss(context, tab, "collect:smallest"));
-      const targets = await call(page, "targetSizes");
-      const named = await collectNamed(page);
-      // The order of the code against the order on screen at this width, where blocks can change places (1.3.2).
-      await writeJson(join(dir, "probes", "order-320.json"), await visualOrder(page));
-      const before = await visibleControlKeys(page);
-      const spacing = await textSpacing(page, join(dir, "probes", "smallest-textspacing.png"));
-      // A button that only exists with the wider spacing is opened while the spacing is in force.
-      const controls = await controlsOnlyWithSpacing(page, before, (index) => ({ path: join(dir, "probes", `smallest-textspacing-opened-${index}.png`), relative: `probes/smallest-textspacing-opened-${index}.png` }));
-      await writeJson(join(dir, "probes", "smallest.json"), { viewport: SMALLEST, targets, ...named, textspacing: { ...spacing, controls } });
-      summary.smallest = { targets: (targets as unknown[]).length, newlyClipped: spacing.newlyClipped.length };
+      await measureLoaded(entry.url, sampledIn(context, "collect:smallest"), async ({ page }) => {
+        const targets = await call(page, "targetSizes");
+        const named = await collectNamed(page);
+        // The order of the code against the order on screen at this width, where blocks can change places (1.3.2).
+        await writeJson(join(dir, "probes", "order-320.json"), await visualOrder(page));
+        const before = await visibleControlKeys(page);
+        const spacing = await textSpacing(page, join(dir, "probes", "smallest-textspacing.png"));
+        // A button that only exists with the wider spacing is opened while the spacing is in force.
+        const controls = await controlsOnlyWithSpacing(page, before, (index) => ({ path: join(dir, "probes", `smallest-textspacing-opened-${index}.png`), relative: `probes/smallest-textspacing-opened-${index}.png` }));
+        await writeJson(join(dir, "probes", "smallest.json"), { viewport: SMALLEST, targets, ...named, textspacing: { ...spacing, controls } });
+        summary.smallest = { targets: (targets as unknown[]).length, newlyClipped: spacing.newlyClipped.length };
+      });
     } finally {
       await context.close().catch(() => undefined);
     }
@@ -256,15 +264,16 @@ async function collectPage(browser: Browser, entry: SampleItem, runDir: string, 
   {
     const context = await open({ viewport: NARROW });
     try {
-      const { page } = await loadSampled(await context.newPage(), entry, (tab) => sweep.dismiss(context, tab, "collect:narrow"));
-      const narrowShot = await wholePageScreenshot(page, { path: join(dir, "screenshot-narrow.png") });
-      await writeJson(join(dir, "probes", "overlays-narrow.json"), await sweep.overlays(page));
-      await writeJson(join(dir, "probes", "operables-narrow.json"), await pageOperables(page));
-      // What there is to reach with Tab in this window: the walk below is laid next to it.
-      await writeJson(join(dir, "probes", "named-narrow.json"), { ...(await collectNamed(page)), ...(narrowShot.clippedAt ? { screenshotClippedAt: narrowShot.clippedAt } : {}) });
-      const walk = await tabWalk(page, { continueAfterFocusLoss: true, fromTop: true, focusDir: join(dir, "probes", "focus-narrow"), focusPath: "probes/focus-narrow", orderPicture: join(dir, "probes", "tabwalk-narrow.png") });
-      await writeJson(join(dir, "probes", "tabwalk-narrow.json"), walk);
-      summary["tabwalk-narrow"] = { outcome: walk.outcome, stops: walk.stopCount };
+      await measureLoaded(entry.url, sampledIn(context, "collect:narrow"), async ({ page }) => {
+        const narrowShot = await wholePageScreenshot(page, { path: join(dir, "screenshot-narrow.png") });
+        await writeJson(join(dir, "probes", "overlays-narrow.json"), await sweep.overlays(page));
+        await writeJson(join(dir, "probes", "operables-narrow.json"), await pageOperables(page));
+        // What there is to reach with Tab in this window: the walk below is laid next to it.
+        await writeJson(join(dir, "probes", "named-narrow.json"), { ...(await collectNamed(page)), ...(narrowShot.clippedAt ? { screenshotClippedAt: narrowShot.clippedAt } : {}) });
+        const walk = await tabWalk(page, { continueAfterFocusLoss: true, fromTop: true, focusDir: join(dir, "probes", "focus-narrow"), focusPath: "probes/focus-narrow", orderPicture: join(dir, "probes", "tabwalk-narrow.png") });
+        await writeJson(join(dir, "probes", "tabwalk-narrow.json"), walk);
+        summary["tabwalk-narrow"] = { outcome: walk.outcome, stops: walk.stopCount };
+      });
     } finally {
       await context.close().catch(() => undefined);
     }
@@ -274,11 +283,12 @@ async function collectPage(browser: Browser, entry: SampleItem, runDir: string, 
   {
     const context = await open({});
     try {
-      const { page } = await loadSampled(await context.newPage(), entry, (tab) => sweep.dismiss(context, tab, "collect:widths"));
-      // A page that cannot be laid out again, such as an embedded window measured in its place, says why.
-      const found = await betweenWidths(page, join(dir, "probes"), "probes").catch((error: Error) => ({ widthsTried: [], breakpoints: [], controls: [], measuredAt: [], failedNl: error.message.split("\n")[0]! }));
-      await writeJson(join(dir, "probes", "widths.json"), found);
-      summary.widths = { tried: found.widthsTried.length, onlyBetween: found.controls.length, measuredAt: found.measuredAt.map((entry) => entry.width) };
+      await measureLoaded(entry.url, sampledIn(context, "collect:widths"), async ({ page }) => {
+        // A page that cannot be laid out again, such as an embedded window measured in its place, says why.
+        const found = await betweenWidths(page, join(dir, "probes"), "probes").catch((error: Error) => ({ widthsTried: [], breakpoints: [], controls: [], measuredAt: [], failedNl: error.message.split("\n")[0]! }));
+        await writeJson(join(dir, "probes", "widths.json"), found);
+        summary.widths = { tried: found.widthsTried.length, onlyBetween: found.controls.length, measuredAt: found.measuredAt.map((entry) => entry.width) };
+      });
     } finally {
       await context.close().catch(() => undefined);
     }
@@ -288,15 +298,16 @@ async function collectPage(browser: Browser, entry: SampleItem, runDir: string, 
   for (const [name, reducedMotion] of [["skiplink", "reduce"], ["motion", "no-preference"]] as const) {
     const context = await open({ reducedMotion });
     try {
-      const { page } = await loadSampled(await context.newPage(), entry, (tab) => sweep.dismiss(context, tab, `collect:${name}`));
-      if (name === "skiplink") await writeJson(join(dir, "probes", "skiplink.json"), await skipLinkProbe(page));
-      else {
-        await page.waitForTimeout(1500);
-        await writeJson(join(dir, "probes", "motion.json"), await call(page, "motionReport"));
-        // This page is thrown away, so the controls that may stop a sound can be tried here.
-        const media = await withinTime(MEDIA_LIMIT_MS, () => mediaReport(page, { tryControls: true }));
-        await writeJson(join(dir, "probes", "media.json"), media.ok ? media.value : { note: "Niet gemeten: de meting van audio en video kwam niet terug.", elements: [], framesNotInspected: [{ address: page.url(), reason: media.reason }] });
-      }
+      await measureLoaded(entry.url, sampledIn(context, `collect:${name}`), async ({ page }) => {
+        if (name === "skiplink") await writeJson(join(dir, "probes", "skiplink.json"), await skipLinkProbe(page));
+        else {
+          await page.waitForTimeout(1500);
+          await writeJson(join(dir, "probes", "motion.json"), await call(page, "motionReport"));
+          // This page is thrown away, so the controls that may stop a sound can be tried here.
+          const media = await withinTime(MEDIA_LIMIT_MS, () => mediaReport(page, { tryControls: true }));
+          await writeJson(join(dir, "probes", "media.json"), media.ok ? media.value : { note: "Niet gemeten: de meting van audio en video kwam niet terug.", elements: [], framesNotInspected: [{ address: page.url(), reason: media.reason }] });
+        }
+      });
     } finally {
       await context.close().catch(() => undefined);
     }
@@ -305,12 +316,13 @@ async function collectPage(browser: Browser, entry: SampleItem, runDir: string, 
   // Text spacing: measure clipping before and after, on a page that is then thrown away.
   const context = await open({});
   try {
-    const { page } = await loadSampled(await context.newPage(), entry, (tab) => sweep.dismiss(context, tab, "collect:textspacing"));
-    const before = await visibleControlKeys(page);
-    const spacing = await textSpacing(page, join(dir, "probes", "textspacing.png"));
-    const controls = await controlsOnlyWithSpacing(page, before, (index) => ({ path: join(dir, "probes", `textspacing-opened-${index}.png`), relative: `probes/textspacing-opened-${index}.png` }));
-    await writeJson(join(dir, "probes", "textspacing.json"), { ...spacing, controls });
-    summary.textspacing = { newlyClipped: spacing.newlyClipped.length };
+    await measureLoaded(entry.url, sampledIn(context, "collect:textspacing"), async ({ page }) => {
+      const before = await visibleControlKeys(page);
+      const spacing = await textSpacing(page, join(dir, "probes", "textspacing.png"));
+      const controls = await controlsOnlyWithSpacing(page, before, (index) => ({ path: join(dir, "probes", `textspacing-opened-${index}.png`), relative: `probes/textspacing-opened-${index}.png` }));
+      await writeJson(join(dir, "probes", "textspacing.json"), { ...spacing, controls });
+      summary.textspacing = { newlyClipped: spacing.newlyClipped.length };
+    });
   } finally {
     await context.close().catch(() => undefined);
   }
