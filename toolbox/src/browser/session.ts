@@ -794,7 +794,7 @@ export async function loadSampled(tab: Page, item: { url: string; embeddedOn?: s
 const NAVIGATED_AWAY = /Execution context was destroyed|Cannot find context with specified id/;
 
 /** How often a page is loaded and measured in all when it keeps navigating by itself. */
-export const SELF_NAVIGATION_TRIES = 3;
+export const SELF_NAVIGATION_TRIES = 2;
 
 /**
  * Load a page and measure it. A page that navigates by itself just after loading, such as a check

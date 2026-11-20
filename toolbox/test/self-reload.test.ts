@@ -26,6 +26,13 @@ const host = (window: string): string => `<!doctype html>
 <body><main><h1>Pagina</h1><iframe src="${window}" title="Venster" width="400" height="300"></iframe></main></body></html>
 `;
 
+// A window that reloads itself on its own without end, as a check against robots does whose cookie never comes back.
+const ENDLESS = `<!doctype html>
+<html lang="nl"><head><meta charset="utf-8"><title>Een ogenblik geduld</title></head>
+<body><main><h1>Een ogenblik geduld</h1><a href="#verder">Verder</a></main>
+<script>setTimeout(() => location.reload(), 20);</script></body></html>
+`;
+
 let server: Server;
 let origin: string;
 let browser: Browser;
@@ -35,7 +42,7 @@ before(async () => {
   server = createServer((request, response) => {
     const path = new URL(request.url ?? "/", "http://127.0.0.1").pathname;
     loads.set(path, (loads.get(path) ?? 0) + 1);
-    const body = path === "/once.html" ? reloading(true) : path === "/always.html" ? reloading(false) : path === "/host-once.html" ? host("/once.html") : path === "/host-always.html" ? host("/always.html") : null;
+    const body = path === "/once.html" ? reloading(true) : path === "/always.html" ? reloading(false) : path === "/host-once.html" ? host("/once.html") : path === "/host-always.html" ? host("/always.html") : path === "/endless.html" ? ENDLESS : path === "/host-endless.html" ? host("/endless.html") : null;
     response.writeHead(body ? 200 : 404, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" });
     response.end(body ?? "");
   });
@@ -101,6 +108,25 @@ test("a window that keeps reloading itself is not measured, and says so in Dutch
       new RegExp(`^Error: de pagina laadde zichzelf tijdens het meten steeds opnieuw, ${SELF_NAVIGATION_TRIES} keer: `),
     );
     assert.equal(loads.get("/host-always.html"), SELF_NAVIGATION_TRIES);
+  } finally {
+    process.stderr.write = write;
+    await context.close();
+  }
+});
+
+test("a window that reloads itself without end gives the reason in Dutch, within a limited time", async () => {
+  const item = { url: `${origin}/endless.html`, embeddedOn: [`${origin}/host-endless.html`] };
+  const context = await newContext(browser);
+  const write = process.stderr.write.bind(process.stderr);
+  process.stderr.write = (() => true) as typeof process.stderr.write;
+  const began = Date.now();
+  try {
+    await context.addInitScript({ path: INPAGE_PATH });
+    await assert.rejects(
+      measureLoaded(item.url, async () => loadSampled(await context.newPage(), item), ({ page }) => measure(page)),
+      new RegExp(`^Error: de pagina laadde zichzelf tijdens het meten steeds opnieuw, ${SELF_NAVIGATION_TRIES} keer: `),
+    );
+    assert.ok(Date.now() - began < 60_000, `took ${Date.now() - began} ms`);
   } finally {
     process.stderr.write = write;
     await context.close();
