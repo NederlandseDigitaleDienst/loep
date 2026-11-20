@@ -3,10 +3,10 @@ import { chromium, type APIResponse, type Browser, type BrowserContext, type Pag
 import type { Crowd } from "../lib/atonce.ts";
 import { CLOUDFLARE_HEADER, isChallenge } from "../lib/challenge.ts";
 import { confirmLoginOn, LoginExpired, logsOut, registerSessionSecrets, runLoginMark, runLoginState, runOfLogin, sessionWithAliases, throwIfLoginExpired, watchLogin } from "../lib/login.ts";
-import { addressOf, noteRefusedRead, readDecision, readRuleFor, runReads, type ReadRequest } from "../lib/reads.ts";
+import { addressOf, fixedReadFor, noteRefusedRead, readDecision, readRuleFor, runReads, type ReadRequest } from "../lib/reads.ts";
 import { claimLink, isThisMachine, isWriteOrigin, runWrites, SocketFrames, type PassedWrite, type WriteAccess } from "../lib/writes.ts";
 import { LONGEST_FAILURE_PAUSE_SECONDS, OriginBlocked, runBlockade } from "../session/blockade.ts";
-import { MESSAGE_VALUES, runScope, sweepRefusesOutsideScope } from "../session/safety.ts";
+import { MESSAGE_VALUES } from "../session/safety.ts";
 import { answerRefusalNl, httpRecordings, httpReplayNl, httpSendOf, keptHeaders, playRecording, socketRecordings, type HttpRecordings, type PassedReplay, type Recorder } from "../lib/recordings.ts";
 import { shieldForRun, type Shield } from "../lib/secrets.ts";
 import { readableFrame } from "./call.ts";
@@ -462,8 +462,6 @@ export async function newContext(browser: Browser, options: ContextOptions = {},
   if (hasClipboardPermission(browser)) await context.grantPermissions(["clipboard-write"]);
   const writes = options.writes === undefined ? runWrites() : options.writes;
   const reads = options.reads ?? runReads();
-  // In a command of the sweep, the scope of the run as a session has it: what a session refuses there, the sweep refuses too.
-  const scope = runScope();
   // An evaluation must never change the site under test: only safe requests pass. The
   // exceptions are the origin of a test environment that the run was given at inventory, and
   // the read requests of a checked site model: a question to a search service, by method, origin and path.
@@ -473,8 +471,6 @@ export async function newContext(browser: Browser, options: ContextOptions = {},
     const personal = writes?.runDir !== undefined && shieldForRun(writes.runDir)?.touchesGuarded(route.request().url());
     if ((logsOut(route.request().url()) && !personal) || blockade?.blockade.refuses(route.request().url())) return route.request().isNavigationRequest() ? route.fulfill({ status: 204, body: "" }) : route.abort("blockedbyclient");
     if (method === "GET" || method === "HEAD") {
-      // A read of data from a host outside the run: a session refuses it, so what it would fill stays empty in every measurement.
-      if (scope && sweepRefusesOutsideScope(scope, route.request())) return route.abort("blockedbyclient");
       const spaced = spacing;
       const shield = shieldOf(writes?.runDir, route.request().url());
       if (shield) return openShielded(route, context, shield, writes!, spaced);
@@ -483,6 +479,9 @@ export async function newContext(browser: Browser, options: ContextOptions = {},
     }
     // Cloudflare's check whether the browser is a robot is answered by Cloudflare and never reaches the site.
     if (isChallenge(route.request().url(), (host) => viaCloudflare.has(host))) return proceed(route, context).catch(() => undefined);
+    // A fixed read rule of loep, as in a session without --strict: an embedded player fetching what it shows. It takes nothing from the budget for sending.
+    const fixed = fixedReadFor(method, route.request().url(), route.request().headers());
+    if (fixed) return passOn(route, context, (target) => fixedReadFor(method, target)?.id === fixed.id).then(() => undefined);
     // A read request passes only when a rule covers it and its body is a question to the service of that rule; a covered request with another body is noted.
     const read = readDecision(reads, method, route.request().url(), route.request().headers(), bodyOf(route.request()));
     if (read?.pass) return passOn(route, context, (target) => readRuleFor(reads, method, target)?.service === read.rule.service).then(() => undefined);

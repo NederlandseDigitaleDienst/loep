@@ -1,0 +1,12 @@
+{
+  "cases": [
+    { "rule": "youtube-player", "method": "POST", "url": "https://www.youtube.com/youtubei/v1/player?prettyPrint=false", "passes": true },
+    { "rule": "youtube-player", "method": "OPTIONS", "url": "https://www.youtube.com/youtubei/v1/player", "headers": { "access-control-request-method": "POST" }, "passes": true },
+    { "rule": "youtube-player", "method": "POST", "url": "https://www.youtube.com/youtubei/v1/log_event?alt=json", "passes": false },
+    { "rule": "youtube-player", "method": "POST", "url": "https://youtube.com/youtubei/v1/player", "passes": false },
+    { "rule": "youtube-player", "method": "PUT", "url": "https://www.youtube.com/youtubei/v1/player", "passes": false },
+    { "rule": "youtube-nocookie-player", "method": "POST", "url": "https://www.youtube-nocookie.com/youtubei/v1/player?prettyPrint=false", "passes": true },
+    { "rule": "youtube-nocookie-player", "method": "POST", "url": "https://www.youtube-nocookie.com/youtubei/v1/player/heartbeat", "passes": false },
+    { "rule": "youtube-nocookie-player", "method": "POST", "url": "http://www.youtube-nocookie.com/youtubei/v1/player", "passes": false }
+  ]
+}

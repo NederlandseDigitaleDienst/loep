@@ -1,5 +1,6 @@
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { appendRunLine, readJson, writeJson } from "./canonical.ts";
 import { recogniseSearch, SEARCH_SERVICE_IDS, SEARCH_SERVICES, type SearchServiceId } from "./searchbody.ts";
 
@@ -180,6 +181,87 @@ export function readRuleFor(rules: readonly ReadRequest[], method: string, url: 
   return rules.find((rule) => readMatches(rule, asked, url)) ?? null;
 }
 
+/**
+ * A read rule of loep itself, the same in every run: a POST that an embedded player or window of another party makes
+ * to fetch what it shows, such as the player of a video asking for that video. Unlike a rule of the site model it
+ * does not look at the body: the address alone is the question. So a rule names one exact origin and one exact path,
+ * without a wildcard, and never a path with a word that points at writing (`WRITE_WORDS`). The rules are data, in
+ * `toolbox/data/fixed-reads.json`, with a case that passes and one that does not per rule in
+ * `test/fixtures/fixed-reads-corpus.json`. A strict scope lets none of them through.
+ */
+export interface FixedRead {
+  id: string;
+  method: "POST";
+  /** Scheme, host and port, exactly. */
+  origin: string;
+  /** The path, without query, exactly. */
+  path: string;
+  /** What the request asks for and why it changes nothing, for whoever signs the report. */
+  reasonNl: string;
+}
+
+export const FIXED_READ_FIELDS = ["id", "method", "origin", "path", "reasonNl"] as const;
+
+/** The problems of one fixed read rule, in Dutch: the checks of a rule of the site model, and narrower (no wildcard, https only). */
+export function fixedReadProblems(value: unknown, where: string): string[] {
+  if (!isRecord(value)) return [`${where} is geen object`];
+  const problems: string[] = [];
+  for (const key of Object.keys(value)) if (!(FIXED_READ_FIELDS as readonly string[]).includes(key)) problems.push(`${where}: een vaste leesregel kent geen veld "${key}"`);
+  if (!isText(value.id)) problems.push(`${where}: id ontbreekt`);
+  if (value.method !== "POST") problems.push(`${where}: method moet "POST" zijn`);
+  let parsed: URL | null = null;
+  try {
+    parsed = isText(value.origin) ? new URL(value.origin) : null;
+  } catch {
+    parsed = null;
+  }
+  if (!parsed || parsed.protocol !== "https:" || parsed.origin !== value.origin) problems.push(`${where}: origin is precies schema, host en poort, met https://`);
+  if (!isText(value.path)) problems.push(`${where}: path ontbreekt`);
+  else {
+    if (value.path.split("/").includes("*")) problems.push(`${where}: een vaste leesregel noemt een exact pad, zonder jokerteken`);
+    problems.push(...pathProblems(value.path, where));
+  }
+  if (!isText(value.reasonNl) || value.reasonNl.trim().split(/\s+/).length < 6) problems.push(`${where}: reasonNl ontbreekt of is te kort`);
+  return problems;
+}
+
+/** Read and check the fixed rules: a rule that does not pass its own checks stops loep, it never passes anything. */
+export function loadFixedReads(path = fileURLToPath(new URL("../../data/fixed-reads.json", import.meta.url))): FixedRead[] {
+  const data = JSON.parse(readFileSync(path, "utf8")) as { rules?: unknown };
+  const rules = Array.isArray(data.rules) ? data.rules : [];
+  const problems = rules.flatMap((rule, index) => fixedReadProblems(rule, `vaste leesregel ${index + 1}`));
+  const ids = rules.map((rule) => (rule as { id?: unknown }).id);
+  if (new Set(ids).size !== ids.length) problems.push("twee vaste leesregels hebben hetzelfde id");
+  if (problems.length > 0) throw new Error(`${path}: ${problems.join("; ")}`);
+  return rules as FixedRead[];
+}
+
+let fixedRules: FixedRead[] | null = null;
+
+/** The fixed read rules of loep, read once per process. */
+export const fixedReads = (): readonly FixedRead[] => (fixedRules ??= loadFixedReads());
+
+/** Replace the fixed rules in this process, for a test on the fixture site; null reads the file again. */
+export function setFixedReads(rules: readonly FixedRead[] | null): void {
+  fixedRules = rules === null ? null : [...rules];
+}
+
+/**
+ * The fixed rule that covers this request, or null: POST to exactly its origin and path, whatever the query. A
+ * preflight of a browser (OPTIONS, asking whether a POST may follow) is covered too, as for a rule of the site model.
+ */
+export function fixedReadFor(method: string, url: string, headers: Record<string, string> = {}, rules: readonly FixedRead[] = fixedReads()): FixedRead | null {
+  const upper = method.toUpperCase();
+  const asked = upper === "OPTIONS" ? (headers["access-control-request-method"] ?? "").toUpperCase() : upper;
+  if (asked !== "POST") return null;
+  try {
+    const parsed = new URL(url);
+    return rules.find((rule) => rule.origin === parsed.origin && rule.path === parsed.pathname) ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export type ReadDecision = { rule: ReadRequest; pass: true } | { rule: ReadRequest; pass: false; reasonNl: string };
 
 /**
@@ -330,7 +412,7 @@ export const heldBackSearchNl = (entry: HeldBackSearch): string =>
 export const SEARCH_HELD_BACK_NL =
   "loep herkende de body als zoekvraag, maar geen leesverzoek van het sitemodel dekt dit adres: daarom is ze tegengehouden. De verkenner legt het adres vast in readRequests van site.json; na check-site gaat de zoekvraag door. Blijft daardoor iets open, noem dit adres dan in het punt `proef werkte niet:`";
 
-type ReadText = { method: string; origin: string; path: string; service?: string; reasonNl: string };
+type ReadText = { method: string; origin: string; path: string; service?: string; reasonNl: string; /** A fixed rule of loep (`FixedRead`), not one of the site model. */ fixed?: true };
 
 /** One rule in the words of a report: method, address, service and why it may pass. */
 export const readNl = (rule: ReadText): string =>
@@ -338,12 +420,27 @@ export const readNl = (rule: ReadText): string =>
 
 /**
  * The sentence for the report and the dossier. Null without rules: then the report says what it
- * always said.
+ * always said. The rules of the site model and the fixed rules of loep that let a request through each get their own part.
  */
-export const readsAllowedNl = (rules: readonly ReadText[]): string | null =>
-  rules.length === 0
-    ? null
-    : `${rules.length === 1 ? "één adres is" : `${rules.length} adressen zijn`} toegelaten voor leesverzoeken: ${rules.map(readNl).join("; ")}. Een verzoek daarheen ging alleen door als loep de body herkende als zoekvraag aan die dienst; elk ander verzoek dat iets kan wijzigen is tegengehouden`;
+export const readsAllowedNl = (rules: readonly ReadText[]): string | null => {
+  const model = rules.filter((rule) => !rule.fixed);
+  const fixed = rules.filter((rule) => rule.fixed);
+  const parts = [
+    ...(model.length > 0
+      ? [`${model.length === 1 ? "één adres is" : `${model.length} adressen zijn`} toegelaten voor leesverzoeken: ${model.map(readNl).join("; ")}. Een verzoek daarheen ging alleen door als loep de body herkende als zoekvraag aan die dienst; elk ander verzoek dat iets kan wijzigen is tegengehouden`]
+      : []),
+    ...(fixed.length > 0 ? [`${fixed.length === 1 ? "één vaste leesregel van loep liet" : `${fixed.length} vaste leesregels van loep lieten`} verzoeken door van een ingesloten speler of venster: ${fixed.map(readNl).join("; ")}`] : []),
+  ];
+  // A part after a full stop starts a sentence: "één" then is "Eén".
+  return parts.length === 0 ? null : parts.map((part, index) => (index > 0 ? part.replace(/^één/, "Eén") : part)).join(". ");
+};
+
+/** The fixed rules that let a request through in these observations of a session, in the order of the file. */
+export function fixedReadsUsed(observations: Iterable<{ reads?: readonly { rule: string; fixed?: true }[] }>, rules: readonly FixedRead[] = fixedReads()): FixedRead[] {
+  const used = new Set<string>();
+  for (const observation of observations) for (const entry of observation.reads ?? []) if (entry.fixed) used.add(entry.rule);
+  return rules.filter((rule) => used.has(rule.id));
+}
 
 /** The read requests that `check-site` let through for this run, from its manifest. Empty when there are none. */
 export function readsForRun(runDir: string): ReadRequest[] {

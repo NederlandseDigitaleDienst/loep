@@ -1,0 +1,18 @@
+{
+  "rules": [
+    {
+      "id": "youtube-player",
+      "method": "POST",
+      "origin": "https://www.youtube.com",
+      "path": "/youtubei/v1/player",
+      "reasonNl": "De ingesloten YouTube-speler vraagt hiermee de gegevens op van de video die hij gaat afspelen, zoals de adressen van beeld en geluid en de ondertitels. Het verzoek vraagt alleen op en wijzigt niets op de site."
+    },
+    {
+      "id": "youtube-nocookie-player",
+      "method": "POST",
+      "origin": "https://www.youtube-nocookie.com",
+      "path": "/youtubei/v1/player",
+      "reasonNl": "De ingesloten YouTube-speler zonder cookies vraagt hiermee de gegevens op van de video die hij gaat afspelen, zoals de adressen van beeld en geluid en de ondertitels. Het verzoek vraagt alleen op en wijzigt niets op de site."
+    }
+  ]
+}

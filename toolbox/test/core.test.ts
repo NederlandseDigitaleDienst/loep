@@ -99,8 +99,9 @@ test("inventory says which origins outside the run pages read content from, and 
     { origin: "https://api.b.nl", pages: ["https://a.nl/"], requests: 1 },
   ])!;
   assert.match(two, /^let op: 2 pagina's halen met GET inhoud op van een adres buiten de run: https:\/\/agenda\.a\.nl \(https:\/\/a\.nl\/ en 1 meer\), https:\/\/api\.b\.nl \(https:\/\/a\.nl\/\)\./, "pages are counted once, whatever they read from");
-  assert.match(two, /blijft in elke meting leeg/);
-  assert.match(two, /met --also-origin https:\/\/agenda\.a\.nl --also-origin https:\/\/api\.b\.nl\. Zo niet, dan valt ze buiten de afbakening$/);
+  assert.match(two, /laten die verzoeken door, dus wat zo in de pagina komt, wordt mee gemeten/);
+  assert.match(two, /loep opent er geen pagina, verstuurt er niets heen en neemt het niet op in de steekproef/);
+  assert.match(two, /met --also-origin https:\/\/agenda\.a\.nl --also-origin https:\/\/api\.b\.nl\. Zo niet, dan valt ze verder buiten de afbakening$/);
   const many = readsOutsideRunNl(["a", "b", "c", "d", "e", "f"].map((name) => ({ origin: `https://${name}.c.nl`, pages: ["https://a.nl/"], requests: 1 })))!;
   assert.match(many, /https:\/\/e\.c\.nl \(https:\/\/a\.nl\/\), en 1 meer\./);
   assert.match(many, /--also-origin <origin> voor elk adres dat erbij hoort/);
