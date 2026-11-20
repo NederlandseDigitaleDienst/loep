@@ -12,11 +12,12 @@
  * clean twin) it runs inventory, installs the fixed site model of fixtures/sweep/, runs check-site,
  * sample, collect, contrast, states and documents, and then looks per defect of the key whether the evidence
  * a script can see is in the dossier, at the place fixtures/evidence.ts names. On the twin the same
- * places must hold no such evidence.
+ * places must hold no such evidence. Each variant is measured logged in with the account of the
+ * fixture (fixtures/login.ts), one after the other: a process holds the login of one run at a time.
  *
  * Writes sweep-check.md and sweep-check.json to --out, and fails when a defect the baseline found is
- * now missing, when the twin shows evidence the baseline did not have, or when the sweep sent
- * anything to the fixture site (a write request or a chat message).
+ * now missing, when the twin shows evidence the baseline did not have, when the sweep sent
+ * anything to the fixture site (a write request or a chat message), or when it logged out.
  */
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -25,6 +26,7 @@ import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import type { Browser } from "playwright";
 import { DEFECTS, type Defect } from "../fixtures/defects.ts";
+import { entriesIn, logInOn, typeAccountKeepNotice } from "../fixtures/login.ts";
 import { EVIDENCE, isAgentOnly, type Look, type ScriptEvidence } from "../fixtures/evidence.ts";
 import { DEFAULT_PORTS, type SiteKey, startFixture } from "../fixtures/serve.ts";
 import { launchBrowser } from "../src/browser/session.ts";
@@ -36,6 +38,7 @@ import { inventory } from "../src/commands/inventory.ts";
 import { sample } from "../src/commands/sample.ts";
 import { states } from "../src/commands/states.ts";
 import { canonicalJson, pageLabels, sha256 } from "../src/lib/canonical.ts";
+import { setRunLogin } from "../src/lib/login.ts";
 
 const TOOLBOX = join(dirname(fileURLToPath(import.meta.url)), "..");
 const MODEL_DIR = join(TOOLBOX, "fixtures", "sweep");
@@ -45,7 +48,7 @@ const MODEL_DIR = join(TOOLBOX, "fixtures", "sweep");
  * site, so the check stays short; the frames on them come along by themselves. The site model in
  * fixtures/sweep/site.json names exactly these.
  */
-export const SWEEP_PAGES = ["/", "/afval.html", "/contact.html", "/inloggen.html", "/nieuws/", "/nieuws/nieuwe-fietsenstalling.html", "/openingstijden.html", "/producten.html", "/raadsvergadering.html", "/veelgestelde-vragen.html", "/vergunning.html", "/zoeken.html", "/deze-pagina-bestaat-niet-toegankelijkheidsonderzoek"];
+export const SWEEP_PAGES = ["/", "/afval.html", "/contact.html", "/inloggen.html", "/nieuws/", "/nieuws/nieuwe-fietsenstalling.html", "/openingstijden.html", "/producten.html", "/raadsvergadering.html", "/veelgestelde-vragen.html", "/vergunning.html", "/zoeken.html", "/deze-pagina-bestaat-niet-toegankelijkheidsonderzoek", "/mijn/", "/mijn/aanvragen.html", "/mijn/gegevens.html"];
 
 export type Variant = "defect" | "clean";
 export const VARIANTS: Variant[] = ["defect", "clean"];
@@ -89,7 +92,7 @@ export const fixturePorts = (fixed: boolean): Record<SiteKey, number> => (fixed 
 
 export type SweepTimes = Record<string, number>;
 
-/** inventory, the fixed model, check-site, sample, the three steps of the sweep and documents, on one variant. */
+/** A login with the account of the fixture, inventory, the fixed model, check-site, sample, the three steps of the sweep and documents, on one variant. */
 export async function sweepVariant(run: string, variant: Variant, origins: { site: string; thirdParty: string }, atOnce: number): Promise<{ seconds: SweepTimes; checkProblems: string[] }> {
   const seconds: SweepTimes = {};
   const timed = async <T>(name: string, step: () => Promise<T>): Promise<T> => {
@@ -100,16 +103,22 @@ export async function sweepVariant(run: string, variant: Variant, origins: { sit
       seconds[name] = Math.round((Date.now() - started) / 1000);
     }
   };
-  await timed("inventory", () => inventory({ baseUrl: `${origins.site}/`, out: run, maxPages: 50, fixedUrls: SWEEP_PAGES.map((path) => `${origins.site}${path}`) }));
-  installModel(run, variant, origins);
-  const check = await timed("check-site", () => checkSite(run, { navigationDelayMs: 50 }));
-  if (!check.ok) return { seconds, checkProblems: check.problems };
-  await timed("sample", () => sample(run, "toegankelijk"));
-  await timed("collect", () => collect({ run, atOnce }));
-  await timed("contrast", () => contrast(run, { atOnce }));
-  await timed("states", () => states(run, { atOnce }));
-  await timed("documents", () => documents(run));
-  return { seconds, checkProblems: [] };
+  await timed("login", () => logInOn(origins.site, { run }, typeAccountKeepNotice));
+  setRunLogin(run);
+  try {
+    await timed("inventory", () => inventory({ baseUrl: `${origins.site}/`, out: run, maxPages: 50, fixedUrls: SWEEP_PAGES.map((path) => `${origins.site}${path}`) }));
+    installModel(run, variant, origins);
+    const check = await timed("check-site", () => checkSite(run, { navigationDelayMs: 50 }));
+    if (!check.ok) return { seconds, checkProblems: check.problems };
+    await timed("sample", () => sample(run, "toegankelijk"));
+    await timed("collect", () => collect({ run, atOnce }));
+    await timed("contrast", () => contrast(run, { atOnce }));
+    await timed("states", () => states(run, { atOnce }));
+    await timed("documents", () => documents(run));
+    return { seconds, checkProblems: [] };
+  } finally {
+    setRunLogin(null);
+  }
 }
 
 /** Where one defect stands after the sweep on both variants. */
@@ -328,19 +337,23 @@ async function main(): Promise<void> {
       throw error;
     });
     try {
-      // The two variants at the same time: each its own browser and run.
-      await Promise.all(
-        measured.map(async (variant) => {
-          try {
-            const result = await sweepVariant(runs[variant]!, variant, { site: fixture.origins[variant], thirdParty: fixture.origins.thirdParty }, atOnce);
-            seconds[variant] = result.seconds;
-            problems.push(...result.checkProblems.map((problem) => `${VARIANT_NL[variant]}: check-site: ${problem}`));
-          } catch (error) {
-            problems.push(`${VARIANT_NL[variant]}: ${(error as Error).message.split("\n")[0]}`);
-          }
-        }),
-      );
+      // One variant after the other: the login of a run holds for the whole process.
+      for (const variant of measured) {
+        try {
+          const result = await sweepVariant(runs[variant]!, variant, { site: fixture.origins[variant], thirdParty: fixture.origins.thirdParty }, atOnce);
+          seconds[variant] = result.seconds;
+          problems.push(...result.checkProblems.map((problem) => `${VARIANT_NL[variant]}: check-site: ${problem}`));
+        } catch (error) {
+          problems.push(`${VARIANT_NL[variant]}: ${(error as Error).message.split("\n")[0]}`);
+        }
+      }
       // The sweep only reads: a write request or a message over the chat socket is a failure in itself.
+      // A login is not counted as sent: the check logs in once per variant, so any further one is the sweep sending the account.
+      for (const variant of measured) {
+        const logins = entriesIn(fixture.logFile, "login").filter((entry) => entry.site === variant).length;
+        if (logins > 1) problems.push(`${VARIANT_NL[variant]}: er is ${logins} keer ingelogd op de testsite; alleen de toets logt in, één keer per variant`);
+      }
+      if (fixture.logouts() > 0) problems.push(`de veegronde logde ${fixture.logouts()} keer uit op de testsite; de drempel is 0`);
       for (const write of fixture.writes()) problems.push(`${{ ...VARIANT_NL, thirdParty: "Kijkpunt" }[write.site]}: de veegronde verstuurde iets naar de testsite (${write.kind} ${write.method ?? ""} ${write.path})`);
     } finally {
       await fixture.close();

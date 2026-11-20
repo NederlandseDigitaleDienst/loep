@@ -208,6 +208,14 @@ testsite *args:
 sweep-check *flags:
     node {{toolbox}}/scripts/sweep-check.ts {{flags}}
 
+# Log een run in op de testsite met het testaccount van de testsite, voor een meting met agents: de code vult het inlogformulier, alleen op 127.0.0.1. Het wachtwoord blijft in toolbox/fixtures/account.ts
+testsite-login run:
+    node {{toolbox}}/fixtures/login.ts --run {{run}}
+
+# Hoe vaak de testsite iemand uitlogde, uit het log van just testsite (standaard toolbox/runs/fixture-server.log). Faalt boven nul
+testsite-logouts log=(toolbox / "runs/fixture-server.log"):
+    node {{toolbox}}/fixtures/login.ts --logouts {{log}}
+
 # Bouw de testsite opnieuw uit de bronnen in toolbox/fixtures/src
 testsite-build:
     node {{toolbox}}/fixtures/build.ts
