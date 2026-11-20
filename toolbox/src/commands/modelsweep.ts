@@ -486,7 +486,11 @@ export class ModelSweep {
 
   /** What was noted since a mark: what one page added. */
   since(mark: ReturnType<ModelSweep["mark"]>): { dismissals: Dismissal[]; refusedWrites: NonNullable<SiteStates["refusedWrites"]> } {
-    const refusedWrites = [...this.refusedWrites].filter(([key, entry]) => entry.count > (mark.refused.get(key) ?? 0)).map(([key, entry]) => ({ ...entry, count: entry.count - (mark.refused.get(key) ?? 0) }));
+    // Sorted as in site-states.json: two requests a page sends at the same time may be refused in either order.
+    const refusedWrites = [...this.refusedWrites]
+      .filter(([key, entry]) => entry.count > (mark.refused.get(key) ?? 0))
+      .map(([key, entry]) => ({ ...entry, count: entry.count - (mark.refused.get(key) ?? 0) }))
+      .sort((a, b) => a.url.localeCompare(b.url) || a.address.localeCompare(b.address) || a.method.localeCompare(b.method));
     return { dismissals: this.dismissals.slice(mark.dismissals), refusedWrites };
   }
 

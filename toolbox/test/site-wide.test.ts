@@ -77,8 +77,8 @@ test("reading the model gives a component on every page the list of every page t
 test("check-site opens a component on every page on a few page types, spread over the list; one with a list on all of them", () => {
   const expanded = expandSiteWide(written());
   const menu = expanded.components.find((entry) => entry.id === "menu-smal")!;
-  assert.equal(menu.pageTypes.length, 13);
-  assert.deepEqual(pageTypesToCheck(menu), ["start", "nieuwsbericht-media", "zoeken"]);
+  assert.equal(menu.pageTypes.length, 16);
+  assert.deepEqual(pageTypesToCheck(menu), ["start", "producten", "mijn-gegevens"]);
   assert.deepEqual(pageTypesToCheck({ pageTypes: ["start", "afval"], siteWide: true }), ["start", "afval"], "with few page types, all of them");
   const forms = expanded.components.find((entry) => entry.id === "formulieren")!;
   assert.deepEqual(pageTypesToCheck(forms), forms.pageTypes, "a component with a list is tried on each page type it names");
