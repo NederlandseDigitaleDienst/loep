@@ -139,7 +139,7 @@ const hasLogin = (runDir: string): boolean => existsSync(join(runDir, LOGIN_SESS
  * `url`: where the request goes when that is not its own address, as for the next step of a redirect that is fetched
  * or repeated with the headers, the body and the cookies the browser has for that address.
  */
-export async function secretLeavesRunNl(context: BrowserContext, scope: Pick<Scope, "hosts" | "runDir">, request: Request, url: string = request.url()): Promise<string | null> {
+export async function secretLeavesRunNl(context: BrowserContext, scope: Pick<Scope, "hosts" | "siteHosts" | "runDir">, request: Request, url: string = request.url()): Promise<string | null> {
   const headers = request.headers();
   // A preflight asks whether the request with that header may follow: it is held back as that request would be.
   const preflight = (headers["access-control-request-headers"] ?? "").toLowerCase().split(",").map((name) => name.trim());
@@ -155,7 +155,8 @@ export async function secretLeavesRunNl(context: BrowserContext, scope: Pick<Sco
   if (!shield) return null;
   // The browser adds its cookies after the route, so they are asked of the context: a cookie of the site on its whole domain also reaches a host of that domain outside the run.
   const cookies = await context.cookies(url).catch(() => []);
-  const site = scope.hosts.flatMap((host) => [`https://${host}/`, `http://${host}/`]);
+  // A window of another party is in the scope, but it is that party: there a value only it may have stays its own.
+  const site = scope.hosts.filter((host) => scope.siteHosts?.includes(host) || !inScope({ hosts: [host] }, url)).flatMap((host) => [`https://${host}/`, `http://${host}/`]);
   return shield.carriedTo(url, [...sent, ...cookies.map((cookie) => `${cookie.name}=${cookie.value}`)], site).length > 0 ? SECRET_OUTSIDE_NL : null;
 }
 

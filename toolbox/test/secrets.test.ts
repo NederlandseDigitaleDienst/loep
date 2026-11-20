@@ -1405,6 +1405,38 @@ test("a GET to a window of another party that the inventory found is that other 
   }
 });
 
+test("a value that may go only to a window of another party is that party's own: a GET to that window passes with it, in a session and in the sweep", async () => {
+  const frame = await siteWith((_request, response) => void response.writeHead(200, { "access-control-allow-origin": "*" }).end("{}"));
+  const site = await siteWith((_request, response) => html(response, "<h1>App</h1>"));
+  const run = mkdtempSync(join(tmpdir(), "loep-geheimen-"));
+  writeFileSync(join(run, "inventory.json"), JSON.stringify({ baseUrl: `${site.origin}/`, origin: site.origin, pages: [{ url: `${site.origin}/` }, { url: `${frame.origin}/venster.html` }] }));
+  registerSecret(run, COOKIE, { source: SESSION_COOKIE_SOURCE, origins: [frame.origin] });
+  const alias = shieldForRun(run)!.secrets[0]!.alias;
+  const get = (page: Page, query: string): Promise<unknown> => page.evaluate((url) => fetch(url).catch(() => undefined), `${frame.origin}/speler${query}`);
+  const session = await sessionOn(run, await launched("chromium"));
+  try {
+    await loadPage(session.page, `${site.origin}/`);
+    await get(session.page, `?id=${alias}`);
+    assert.equal(frame.heard.length, 1, JSON.stringify(session.guard.blocked));
+    setRunScope(run);
+    const sweep = await newContext(await launched("chromium"), { runDir: run });
+    try {
+      const swept = await sweep.newPage();
+      await loadPage(swept, `${site.origin}/`);
+      await get(swept, `?id=${alias}`);
+    } finally {
+      await sweep.close();
+    }
+    assert.equal(frame.heard.length, 2, "the sweep sent it too");
+  } finally {
+    setRunScope(null);
+    await session.close();
+    await frame.close();
+    await site.close();
+    rmSync(run, { recursive: true, force: true });
+  }
+});
+
 test("WebKit: a redirect of the site to a window of another party is asked again whether it carries a secret, in a session and in the sweep", WEBKIT_HERE, async () => {
   const frame = await siteWith((_request, response) => void response.writeHead(200, { "content-type": "application/json" }).end("{}"));
   const site = await siteWith((request, response) => {
