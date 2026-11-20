@@ -49,19 +49,22 @@ export function logInOn(origin: string, target: { run?: string; out?: string }, 
   return login({ ...target, url: `${new URL(origin).origin}${LOGIN_PAGE}`, role: ROLE, headless: true, say, act });
 }
 
-/** How often the server of the fixture ended a session, read from its log. */
-export const logoutsIn = (logFile: string): LogEntry[] =>
+/** The entries of one kind in the log of the server of the fixture. */
+export const entriesIn = (logFile: string, kind: LogEntry["kind"]): LogEntry[] =>
   readFileSync(logFile, "utf8")
     .split("\n")
     .filter(Boolean)
     .map((line) => JSON.parse(line) as LogEntry)
-    .filter((entry) => entry.kind === "logout");
+    .filter((entry) => entry.kind === kind);
+
+/** How often the server of the fixture ended a session, read from its log. */
+export const logoutsIn = (logFile: string): LogEntry[] => entriesIn(logFile, "logout");
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const { values } = parseArgs({ options: { run: { type: "string" }, url: { type: "string" }, logouts: { type: "string" } } });
   if (values.logouts) {
     const logouts = logoutsIn(values.logouts);
-    process.stdout.write(`${logouts.length === 0 ? "Niemand is uitgelogd" : `${logouts.length} keer uitgelogd: ${logouts.map((entry) => `${entry.time} ${entry.path}`).join(", ")}`} (drempel: 0).\n`);
+    process.stdout.write(`${logouts.length === 0 ? "Niemand is uitgelogd" : `${logouts.length} keer uitgelogd: ${logouts.map((entry) => `${entry.time} ${entry.path}`).join(", ")}`} (drempel: 0). Ingelogd met het testaccount: ${entriesIn(values.logouts, "login").length} keer.\n`);
     if (logouts.length > 0) process.exitCode = 1;
   } else {
     if (!values.run) throw new Error("geef --run <run>, of --logouts <log>");

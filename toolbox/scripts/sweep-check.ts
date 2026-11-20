@@ -26,7 +26,7 @@ import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import type { Browser } from "playwright";
 import { DEFECTS, type Defect } from "../fixtures/defects.ts";
-import { logInOn, typeAccountKeepNotice } from "../fixtures/login.ts";
+import { entriesIn, logInOn, typeAccountKeepNotice } from "../fixtures/login.ts";
 import { EVIDENCE, isAgentOnly, type Look, type ScriptEvidence } from "../fixtures/evidence.ts";
 import { DEFAULT_PORTS, type SiteKey, startFixture } from "../fixtures/serve.ts";
 import { launchBrowser } from "../src/browser/session.ts";
@@ -346,6 +346,11 @@ async function main(): Promise<void> {
         }
       }
       // The sweep only reads: a write request or a message over the chat socket is a failure in itself.
+      // A login is not counted as sent: the check logs in once per variant, so any further one is the sweep sending the account.
+      for (const variant of measured) {
+        const logins = entriesIn(fixture.logFile, "login").filter((entry) => entry.site === variant).length;
+        if (logins > 1) problems.push(`${VARIANT_NL[variant]}: er is ${logins} keer ingelogd op de testsite; alleen de toets logt in, één keer per variant`);
+      }
       if (fixture.logouts() > 0) problems.push(`de veegronde logde ${fixture.logouts()} keer uit op de testsite; de drempel is 0`);
       for (const write of fixture.writes()) problems.push(`${{ ...VARIANT_NL, thirdParty: "Kijkpunt" }[write.site]}: de veegronde verstuurde iets naar de testsite (${write.kind} ${write.method ?? ""} ${write.path})`);
     } finally {
