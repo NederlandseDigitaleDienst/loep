@@ -3,7 +3,7 @@ import { chromium, type APIResponse, type Browser, type BrowserContext, type Pag
 import type { Crowd } from "../lib/atonce.ts";
 import { CLOUDFLARE_HEADER, isChallenge } from "../lib/challenge.ts";
 import { confirmLoginOn, LoginExpired, logsOut, registerSessionSecrets, runLoginMark, runLoginState, runOfLogin, sessionWithAliases, throwIfLoginExpired, watchLogin } from "../lib/login.ts";
-import { addressOf, fixedReadFor, noteRefusedRead, readDecision, readRuleFor, runReads, type ReadRequest } from "../lib/reads.ts";
+import { addressOf, fixedReadFor, noteFixedRead, noteRefusedRead, readDecision, readRuleFor, runReads, type ReadRequest } from "../lib/reads.ts";
 import { claimInTurn, claimLink, isThisMachine, isWriteOrigin, runWrites, SocketFrames, type PassedWrite, type SendDeadline, type WriteAccess } from "../lib/writes.ts";
 import { LONGEST_FAILURE_PAUSE_SECONDS, OriginBlocked, runBlockade } from "../session/blockade.ts";
 import { inScope, MESSAGE_VALUES, runScope, secretLeavesRunNl } from "../session/safety.ts";
@@ -495,7 +495,13 @@ export async function newContext(browser: Browser, options: ContextOptions = {},
     if (isChallenge(route.request().url(), (host) => viaCloudflare.has(host))) return proceed(route, context).catch(() => undefined);
     // A fixed read rule of loep, as in a session without --strict: an embedded player fetching what it shows. It takes nothing from the budget for sending.
     const fixed = route.request().isNavigationRequest() ? null : fixedReadFor(method, route.request().url(), route.request().headers());
-    if (fixed) return refuseLeaving(route, context, scope ?? { hosts: [], runDir: writes?.runDir }).then((refused) => (refused ? undefined : passOn(route, context, (target) => fixedReadFor(method, target)?.id === fixed.id).then(() => undefined)));
+    // What passed is noted for the report, which names every fixed rule that let something through.
+    if (fixed)
+      return refuseLeaving(route, context, scope ?? { hosts: [], runDir: writes?.runDir }).then((refused) => {
+        if (refused) return undefined;
+        noteFixedRead({ method, address: addressOf(route.request().url()), rule: fixed.id });
+        return passOn(route, context, (target) => fixedReadFor(method, target)?.id === fixed.id).then(() => undefined);
+      });
     // A read request passes only when a rule covers it and its body is a question to the service of that rule; a covered request with another body is noted.
     const read = readDecision(reads, method, route.request().url(), route.request().headers(), bodyOf(route.request()));
     if (read?.pass) return passOn(route, context, (target) => readRuleFor(reads, method, target)?.service === read.rule.service).then(() => undefined);

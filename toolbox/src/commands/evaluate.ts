@@ -22,7 +22,7 @@ import { openPoint, sessionOfObservation, UNREACHABLE, waitsOnlyOnSending, type 
 import { loginNl, NOT_LOGGED_IN_NL } from "../lib/login.ts";
 import { mailboxLimitationsNl } from "../lib/mailbox.ts";
 import { secretLimitationsNl } from "../lib/secrets.ts";
-import { fixedReadsUsed, heldBackSearches, heldBackSearchNl, readsAllowedNl, refusedCoveredReads } from "../lib/reads.ts";
+import { fixedReadsOfSweep, fixedReadsUsed, heldBackSearches, heldBackSearchNl, readsAllowedNl, refusedCoveredReads } from "../lib/reads.ts";
 import { WRITES_BLOCKED_NL, writesAllowedNl } from "../lib/writes.ts";
 import { blockadesNl } from "../session/blockade.ts";
 import { METHODS } from "../instruments/methods/registry.ts";
@@ -243,10 +243,10 @@ export async function evaluate(options: EvaluateOptions): Promise<Evaluation> {
   const documents = population ? evaluationDocuments(run.documents ?? [], population, procedures.filter((procedure) => procedure.evidence.includes("documents")).map((procedure) => procedure.id)) : null;
   const documentScope = searchedForDocuments ? documentScopeNl(documents, origins, siteDocuments(run.inventory).elsewhere, omittedByPageLimit(run.inventory.skipped ?? [])) : null;
 
-  // The read rules of the site model, and the fixed rules of loep that let a request through in a session of this run.
+  // The read rules of the site model, and the fixed rules of loep that let a request through in a session or the sweep of this run.
   const readsOfRun = [
     ...(run.reads ?? []).map((rule) => ({ method: rule.method, origin: rule.origin, path: rule.path, service: rule.service, reasonNl: rule.reasonNl })),
-    ...fixedReadsUsed(observations.records.values() as Iterable<{ reads?: { rule: string; fixed?: true }[] }>).map((rule) => ({ method: rule.method, origin: rule.origin, path: rule.path, ...(rule.query ? { query: rule.query } : {}), reasonNl: rule.reasonNl, fixed: true as const })),
+    ...fixedReadsUsed([...(observations.records.values() as Iterable<{ reads?: { rule: string; fixed?: true }[] }>), fixedReadsOfSweep(options.run)]).map((rule) => ({ method: rule.method, origin: rule.origin, path: rule.path, ...(rule.query ? { query: rule.query } : {}), reasonNl: rule.reasonNl, fixed: true as const })),
   ];
   const limitations = [
     browsersNl,
