@@ -9,7 +9,7 @@ import { readJson, sha256File } from "../lib/canonical.ts";
 import { aiGeneratedMark, allCriteriaSorted, carryFindingIds, ESTABLISHED_BY_NL, evaluationHash, idsAcrossVersionsNl, knownCommit, OUTCOME_LABEL, markVendor, openCriteria, resolveCriterion, summarise, versionAccuracyProblems, type BrowserUse, type CriterionResult, type Evaluation, type PointAnswer, type RoundVerdicts, type VersionAccuracy } from "../lib/evaluation.ts";
 import { matchFindings, sideOf } from "../lib/difference.ts";
 import { documentScopeNl, evaluationDocuments, omittedByPageLimit, siteDocuments } from "../lib/documents.ts";
-import { pagesInScopeNl, siteOrigins } from "../lib/origins.ts";
+import { loginServicesLinked, pagesInScopeNl, siteOrigins, thirdPartiesOutOfScopeNl } from "../lib/origins.ts";
 import { type Manifest, stepStart, sweepToolchain, writeManifest } from "../lib/manifest.ts";
 import { agentPhaseTimings } from "../lib/timing.ts";
 import { sessionWatchAnswers } from "../lib/timelimits.ts";
@@ -323,7 +323,7 @@ export async function evaluate(options: EvaluateOptions): Promise<Evaluation> {
     standards: { wcag: ["WCAG 2.2 niveau A en AA", "WCAG 2.1 niveau A en AA"], en301549: documents ? "EN 301 549 v3.2.1, hoofdstuk 9 (webpagina's) en hoofdstuk 10 (documenten)" : "EN 301 549 v3.2.1, hoofdstuk 9" },
     scope: {
       includedNl: [pagesInScopeNl(origins, run.inventory.baseUrl), ...(documentScope?.includedNl ?? [])],
-      excludedNl: ["Websites van derden waarnaar wordt gelinkt, ook inloggen bij DigiD, eHerkenning of eIDAS: die diensten hebben een eigen toegankelijkheidsverklaring", ...(documentScope ? documentScope.excludedNl : ["Pdf-bestanden en andere documenten die geen webpagina zijn, ook als ze op de site zelf staan"])],
+      excludedNl: [thirdPartiesOutOfScopeNl(loginServicesLinked(run.pages.flatMap((page) => [...page.facts.links, ...page.facts.controls]))), ...(documentScope ? documentScope.excludedNl : ["Pdf-bestanden en andere documenten die geen webpagina zijn, ook als ze op de site zelf staan"])],
       ...(scopeFrames.length > 0 ? { frames: scopeFrames } : {}),
     },
     sample: run.sample,
