@@ -1,0 +1,1 @@
+De basislijn van de regressietoets kent de vier gebreken die de testsite sinds de inlog, de andere partijen en de vragenlijst heeft: 1.1.1-pictogram, 1.1.1-regioblok, 3.3.8-wachtwoord-wijzigen en 4.1.2-vragenlijst. Ontbreekt een van die vier later, dan faalt de toets.
