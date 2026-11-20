@@ -204,9 +204,21 @@ verify run:
 testsite *args:
     node {{toolbox}}/fixtures/serve.ts {{args}}
 
-# Regressietoets van de veegronde op de testsite, zonder taalmodel: inventory, het vaste sitemodel uit toolbox/fixtures/sweep, collect, contrast, states en documents op beide varianten, en per gebrek uit de sleutel of het bewijs in het dossier staat (toolbox/fixtures/evidence.ts). Faalt als iets uit de basislijn ontbreekt of de tweeling bewijs krijgt. Met --out <map>, --at-once <n>, --variant defect of clean, --fixed-ports om de testsite op 4710 tot en met 4712 te serveren zodat de runs in <out>/runs een bevroren veegronde voor een meting kunnen zijn, --disruptions om ook de storingen uit toolbox/fixtures/disruptions.ts te meten en te toetsen, --runs <map> om bestaande runs opnieuw te lezen, --from-report <sweep-check.json> (twee keer, de artefacten van de CI) en --update-baseline om de basislijn bij te werken
+# Regressietoets van de veegronde op de testsite, zonder taalmodel: inventory, het vaste sitemodel uit toolbox/fixtures/sweep, collect, contrast, states en documents op beide varianten, en per gebrek uit de sleutel of het bewijs in het dossier staat (toolbox/fixtures/evidence.ts). Faalt als iets uit de basislijn ontbreekt of de tweeling bewijs krijgt. Met --out <map>, --at-once <n>, --variant defect of clean, --fixed-ports om de testsite op 4710 tot en met 4712 te serveren zodat de runs in <out>/runs een bevroren veegronde voor een meting kunnen zijn, --disruptions om ook de storingen uit toolbox/fixtures/disruptions.ts te meten en te toetsen, --only-disruptions om hetzelfde alleen op de pagina's van de storingen en de pagina met de vragenlijst te doen en de sleutel alleen daar te toetsen (zo draait de merge queue ze), --runs <map> om bestaande runs opnieuw te lezen, --from-report <sweep-check.json> (twee keer, de artefacten van de CI) en --update-baseline om de basislijn bij te werken
 sweep-check *flags:
     node {{toolbox}}/scripts/sweep-check.ts {{flags}}
+
+# De regressietoets zoals de CI hem draait: Lindewaard en Berkenveen elk in een eigen proces tegelijk, met --at-once 3, in <out>/lindewaard en <out>/berkenveen. Ongeveer 17 minuten in plaats van ruim een half uur. Extra vlaggen gaan naar beide mee. Faalt als een van de twee faalt
+sweep-check-fast out *flags:
+    #!/usr/bin/env bash
+    set -uo pipefail
+    mkdir -p "{{out}}"
+    node {{toolbox}}/scripts/sweep-check.ts --variant defect --at-once 3 --out "{{out}}/lindewaard" {{flags}} > "{{out}}/lindewaard.log" 2>&1 & defect=$!
+    node {{toolbox}}/scripts/sweep-check.ts --variant clean --at-once 3 --out "{{out}}/berkenveen" {{flags}} > "{{out}}/berkenveen.log" 2>&1 & clean=$!
+    wait $defect; a=$?
+    wait $clean; b=$?
+    tail -n 2 "{{out}}/lindewaard.log" "{{out}}/berkenveen.log"
+    exit $(( a || b ))
 
 # Log een run in op de testsite met het testaccount van de testsite, voor een meting met agents: de code vult het inlogformulier, alleen op 127.0.0.1. Het wachtwoord blijft in toolbox/fixtures/account.ts
 testsite-login run:

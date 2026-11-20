@@ -4,7 +4,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, test } from "node:test";
 import { DISRUPTED_PAGES, DISRUPTIONS, RETRY_AFTER_SECONDS } from "../fixtures/disruptions.ts";
+import { entriesIn } from "../fixtures/login.ts";
 import { startFixture, type FixtureServer } from "../fixtures/serve.ts";
+import { launchBrowser, newContext } from "../src/browser/session.ts";
 import { isChallenge } from "../src/lib/challenge.ts";
 import { SHORT_RETRY_AFTER_SECONDS } from "../src/session/blockade.ts";
 
@@ -96,4 +98,19 @@ test("with disruptions Kijkpunt answers as a site behind Cloudflare, and the win
   assert.match(await after.text(), /Ik ben geen robot/);
   // The other windows of Kijkpunt are there without a check.
   assert.equal(await status(`${origin}/speler.html`), 200);
+});
+
+test("in a browser the window of Kijkpunt on a page of the site gets past the robot check once, and shows the check box", async () => {
+  const browser = await launchBrowser();
+  try {
+    const tab = await (await newContext(browser)).newPage();
+    const before = entriesIn(disrupted.logFile, "challenge").length;
+    await tab.goto(`${disrupted.origins.defect}/`);
+    // The site is on 127.0.0.1 and Kijkpunt on localhost: the cookie of the check has to reach a window of another site.
+    await tab.frameLocator("iframe.controlekader").getByText("Ik ben geen robot").waitFor({ timeout: 15_000 });
+    await tab.waitForTimeout(1000);
+    assert.equal(entriesIn(disrupted.logFile, "challenge").length - before, 1, "one POST of the check, not one per reload");
+  } finally {
+    await browser.close();
+  }
 });

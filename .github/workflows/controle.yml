@@ -26,8 +26,13 @@
 #   de regressietoets `just sweep-check`: inventory, een vast sitemodel, collect, contrast en
 #   states op de testsite, en per gebrek uit de sleutel of het bewijs in het dossier staat. Twee
 #   jobs naast elkaar: Lindewaard (de gebreken) en Berkenveen (de tweeling), en dezelfde twee
-#   nog eens met --disruptions (een 429, een ontbrekende stylesheet, een 503-pagina). De tabel komt als
-#   artefact mee. Raakt het voorstel niets daarvan, dan slaagt de job meteen.
+#   nog eens met storingen (een 429, een ontbrekende stylesheet, een 503-pagina). In de merge queue
+#   draaien die twee --only-disruptions: alleen de pagina's van de gevallen en die met de
+#   vragenlijst, met alle stappen, en ze toetsen de gevallen en de sleutel op die pagina's. Zo
+#   duren ze minuten; de volledige --disruptions duurde langer dan de 45 minuten van een job. 's
+#   Nachts en met de hand draait de volledige --disruptions, met 75 minuten, omdat een fout
+#   door de scope van een run met storingen ook op een pagina buiten de gevallen kan zitten. Met
+#   de hand kiest `storingen: snel` de korte. De tabel komt als artefact mee. Raakt het voorstel niets daarvan, dan slaagt de job meteen.
 # - ijkmeting: raakt het voorstel de contrastmeting, toolbox/src/lib/, de pakketten of deze
 #   workflow, dan draait `just calibrate` en komt de uitkomst naast de vorige uit
 #   validatie/ijkset/. Een eigen job naast de veegronde, niet erna: samen duurden ze 18 tot 23
@@ -43,6 +48,9 @@
 #
 # De veegronde van Lindewaard bepaalt de duur: ongeveer 14 minuten. Zonder de veegronde duurt
 # alles samen ongeveer 11 minuten.
+#
+# Een voorstel dat de veegronde raakt, kan de volledige controle vóór de queue krijgen zonder
+# eigen machine: `gh workflow run Controle --ref <branch>`. Met de hand meet ze altijd alles.
 name: Controle
 
 on:
@@ -54,6 +62,12 @@ on:
   schedule:
     - cron: "17 2 * * *"
   workflow_dispatch:
+    inputs:
+      storingen:
+        description: "De veegronde met storingen: volledig, of snel zoals in de merge queue"
+        type: choice
+        options: [volledig, snel]
+        default: volledig
 
 permissions:
   contents: read
@@ -233,11 +247,14 @@ jobs:
     if: needs.wijziging.outputs.ja == 'true'
     name: veegronde op de testsite (${{ matrix.site }}${{ matrix.label }})
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    # The full run with disruptions (at night and by hand) takes longer than the 45 minutes of the others.
+    # The env of the job is not there yet at this point: the same test as FULL_DISRUPTIONS below.
+    timeout-minutes: ${{ matrix.disruptions && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.storingen != 'snel')) && 75 || 45 }}
     strategy:
       fail-fast: false
       # The two variants on two machines at the same time: each takes about as long as the other.
       # The same two again with the disruptions of toolbox/fixtures/disruptions.ts, on two more machines: no extra wait.
+      # In the merge queue those measure only the pages of the cases and of the questionnaire; see FULL_DISRUPTIONS.
       matrix:
         include:
           - variant: defect
@@ -246,16 +263,18 @@ jobs:
             site: Berkenveen
           - variant: defect
             site: Lindewaard
-            flags: --disruptions
+            disruptions: true
             label: ", met storingen"
             artifact: -storingen
           - variant: clean
             site: Berkenveen
-            flags: --disruptions
+            disruptions: true
             label: ", met storingen"
             artifact: -storingen
     env:
       MEASURE: ${{ needs.wijziging.outputs.src }}
+      # The merge queue (and a run by hand with storingen: snel) measures only the pages of the cases; the night and a run by hand the full set.
+      FULL_DISRUPTIONS: ${{ (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.storingen != 'snel')) && 'true' || 'false' }}
     steps:
       - name: Niets te meten
         if: env.MEASURE != 'true'
@@ -282,7 +301,7 @@ jobs:
 
       - name: Regressietoets van de veegronde
         if: env.MEASURE == 'true'
-        run: just sweep-check --variant ${{ matrix.variant }} --out "$RUNNER_TEMP/veegronde" --at-once 3 ${{ matrix.flags }}
+        run: just sweep-check --variant ${{ matrix.variant }} --out "$RUNNER_TEMP/veegronde" --at-once 3 ${{ matrix.disruptions && (env.FULL_DISRUPTIONS == 'true' && '--disruptions' || '--only-disruptions') || '' }}
 
       - name: Tabel in de samenvatting
         if: always() && env.MEASURE == 'true'
