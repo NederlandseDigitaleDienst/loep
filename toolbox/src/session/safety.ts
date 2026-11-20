@@ -16,7 +16,7 @@ import { SEARCH_FALLBACK, SEARCH_NONE } from "../lib/searchterm.ts";
 import { searchTermForRun, searchTermsForRun } from "../lib/sitemodel.ts";
 import { OriginBlocked, refusalNl, type Blockade } from "./blockade.ts";
 import { playRecording, replayNl, socketRecordings, type PassedReplay, type Recorder } from "../lib/recordings.ts";
-import { claimLink, isLocalHost, isThisMachine, isWriteOrigin, runWrites, SocketFrames, writeAccess, writesForRun, type PassedWrite, type WriteAccess } from "../lib/writes.ts";
+import { claimLinkInTurn, isLocalHost, isThisMachine, isWriteOrigin, runWrites, sendDeadlineOf, SocketFrames, writeAccess, writesForRun, type PassedWrite, type WriteAccess } from "../lib/writes.ts";
 
 /** Limits of the process that holds the browser; set once, when it starts. */
 export interface DaemonLimits {
@@ -372,7 +372,7 @@ export async function guardContext(context: BrowserContext, scope: Scope, guard:
   }
   // A personal link from a mail can say `afmelden`, and then it is about the mail and not about the session.
   const loggingOut = (url: string): boolean => logsOut(url) && !(runDir !== undefined && shieldForRun(runDir)?.touchesGuarded(url));
-  await context.route("**/*", (route) => {
+  await context.route("**/*", async (route) => {
     const request = route.request();
     const method = request.method();
     const url = request.url();
@@ -407,9 +407,10 @@ export async function guardContext(context: BrowserContext, scope: Scope, guard:
         return refuse();
       }
       if (isWriteOrigin(scope.writes, url)) {
-        // Every write takes one from the budget of the whole run; when it is used up, or the previous one was too recent, the write is held back as without permission.
+        // Every write takes one from the budget of the whole run; when it is used up the write is held back as without permission. When the previous one was too recent,
+        // it waits for its turn within the time of the command, and is held back when that turn does not come in time.
         // The same request as one sent before is answered from its recording. Where the server sends the browser next is not asked here again: it has to be inside the scope.
-        return sendOrReplay(context, route, scope.writes!, { sender: guard.sender, mayFollow: (target) => inScope(scope, target) }).then((outcome) => {
+        return sendOrReplay(context, route, scope.writes!, { sender: guard.sender, mayFollow: (target) => inScope(scope, target), until: sendDeadlineOf(guard.sender, request.isNavigationRequest()) }).then((outcome) => {
           if (outcome.kind === "refused") guard.blocked.push({ at: new Date().toISOString(), kind: "method", method, url: url.slice(0, MAX_URL), resourceType: type, reasonNl: outcome.reasonNl, writeBudget: outcome.budget });
           else if (outcome.kind === "replayed") (guard.replays ??= []).push({ ...outcome.replay, noteNl: outcome.noteNl });
           else (guard.passed ??= []).push(outcome.entry, ...(outcome.repeated ? [outcome.repeated] : []));
@@ -426,7 +427,7 @@ export async function guardContext(context: BrowserContext, scope: Scope, guard:
       return refuse();
     }
     if (inScope(scope, url) || throughParty(scope, request)) {
-      if (linkRefused(scope, guard, request)) return refuse();
+      if (await linkRefused(scope, guard, request)) return refuse();
       return proceed(route, context, (target) => inScope(scope, target));
     }
     // What the page already holds (data:, blob:) sends nothing anywhere; as the address of a page it is never in the scope.
@@ -619,9 +620,10 @@ function throughParty(scope: Scope, request: Request): boolean {
 /**
  * A navigation to a guarded address takes from the budget like any write, and a session that may
  * not send may not open one at all: whether it is refused, and noted as refused. Asked once per
- * navigation, by the guard that passes it on.
+ * navigation, by the guard that passes it on. Held back only for the spacing, it waits for its turn
+ * within the time of the command (see `claimInTurn`).
  */
-function linkRefused(scope: Scope, guard: Guard, request: Request): boolean {
+async function linkRefused(scope: Scope, guard: Guard, request: Request): Promise<boolean> {
   const url = request.url();
   const shield = request.isNavigationRequest() ? shieldOf(runOf(scope), url) : null;
   if (!shield) return false;
@@ -631,7 +633,7 @@ function linkRefused(scope: Scope, guard: Guard, request: Request): boolean {
     return true;
   }
   const link = shield.guardedId(url);
-  const refused = link ? claimLink(scope.writes, url, link, guard.sender) : null;
+  const refused = link ? await claimLinkInTurn(scope.writes, url, link, guard.sender, sendDeadlineOf(guard.sender, true)) : null;
   if (refused) guard.blocked.push({ at: new Date().toISOString(), kind: "method", method: request.method(), url: url.slice(0, MAX_URL), resourceType: request.resourceType(), reasonNl: refused.reasonNl, writeBudget: refused.budget });
   return refused !== null;
 }
@@ -685,7 +687,7 @@ export async function guardRedirectsByRoute(context: BrowserContext, scope: Scop
   await context.route("**/*", async (route) => {
     const request = route.request();
     if (!request.isNavigationRequest() || request.method() !== "GET" || !/^https?:/.test(request.url()) || !inScope(scope, request.url()) || logsOut(request.url())) return route.fallback();
-    if (linkRefused(scope, guard, request)) return route.fulfill(REFUSED_ANSWER);
+    if (await linkRefused(scope, guard, request)) return route.fulfill(REFUSED_ANSWER);
     try {
       const response = await route.fetch({ maxRedirects: 0 });
       const location = response.headers()["location"];

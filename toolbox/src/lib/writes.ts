@@ -1,4 +1,4 @@
-import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, utimesSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { readJson, writeJson } from "./canonical.ts";
 import { confirmByTyping, processTerminal, recordedNl, recordStatement, type RecordedVia, type Recording, type RecordingFlags, type Terminal } from "./recorded.ts";
@@ -327,6 +327,27 @@ export interface PassedWrite {
 
 export const WRITES_LOG = "writes.jsonl";
 
+/**
+ * Who waits for a turn to send, first come first: one ticket per sender and grant, in the order they
+ * came. Kept next to the log of writes and changed under the same lock, so every session and every
+ * command of the sweep sees the same queue.
+ */
+export const WRITES_QUEUE = "writes-queue.json";
+
+/** A place in the queue for sending (see `WRITES_QUEUE`). */
+interface Ticket {
+  sender: string;
+  /** The grant it waits for, by its first origin. */
+  origin: string;
+}
+
+/**
+ * How long a turn stays kept for a sender that does not come to take it: a session that could not wait
+ * within its command hears when its turn is, and has this long after that to do the action again.
+ * After it, the ones behind it go on.
+ */
+export const TURN_KEPT_MS = 60_000;
+
 /** The sender of `mail cleanup`. Only that command sets it. */
 export const CLEANUP_SENDER = "mail cleanup";
 
@@ -354,8 +375,10 @@ export interface WriteBudget {
   /** The last writes of the budget, kept for senders that have sent nothing yet. */
   reserved: number;
   spacingSeconds: number;
-  /** Seconds until the next write may pass; 0 when it may pass now. */
+  /** Seconds until the next write may pass; 0 when it may pass now. With a sender: until its turn, after whoever waited before it. */
   waitSeconds: number;
+  /** How many senders wait for their turn before this one; absent when none. */
+  ahead?: number;
 }
 
 /**
@@ -483,6 +506,58 @@ function readLog(runDir: string): PassedWrite[] {
     });
 }
 
+function readQueue(runDir: string): Ticket[] {
+  const path = join(runDir, WRITES_QUEUE);
+  if (!existsSync(path)) return [];
+  try {
+    const parsed = JSON.parse(readFileSync(path, "utf8")) as unknown;
+    return Array.isArray(parsed) ? parsed.filter((ticket): ticket is Ticket => typeof ticket?.sender === "string" && typeof ticket?.origin === "string") : [];
+  } catch {
+    // Cut off by a process that stopped halfway: nobody waits any more.
+    return [];
+  }
+}
+
+/** Where a sender is in the queue of one grant, and when its turn is. */
+interface Turn {
+  /** The moment the sender may send, in ms; at or before `now` it may send now. */
+  at: number;
+  /** Whether the sender holds a ticket. */
+  holds: boolean;
+  /** How many wait before it. */
+  ahead: number;
+  /** The tickets that still count, in order: a ticket whose turn passed more than `TURN_KEPT_MS` ago is gone. */
+  kept: Ticket[];
+}
+
+/**
+ * When a sender may send: after the spacing from the last write, and after every sender that waited
+ * before it, each the spacing after the one before. Without a ticket a sender comes after the whole queue.
+ */
+function turnOf(queue: readonly Ticket[], origin: string, sender: string | undefined, last: number, spacingMs: number, now: number): Turn {
+  const kept: Ticket[] = [];
+  let at = Number.isFinite(last) ? last + spacingMs : now;
+  let ahead = 0;
+  let own: number | null = null;
+  for (const ticket of queue) {
+    if (ticket.origin !== origin) {
+      kept.push(ticket);
+      continue;
+    }
+    if (own === null && now > at + TURN_KEPT_MS) continue;
+    kept.push(ticket);
+    if (own !== null) continue;
+    if (sender !== undefined && ticket.sender === sender) {
+      own = at;
+      continue;
+    }
+    // Who is before it has not sent yet: it sends at its turn at the earliest, or now when that turn has passed.
+    at = Math.max(at, now) + spacingMs;
+    ahead++;
+  }
+  return { at: own ?? at, holds: own !== null, ahead, kept };
+}
+
 /**
  * The budget for sending of a run, from its permission and its log of writes. The log is in the run,
  * so a new process goes on with what was sent. With a sender, `left` is what that sender may still
@@ -490,6 +565,11 @@ function readLog(runDir: string): PassedWrite[] {
  * grant each has a budget of its own: `origin` says which, absent the first.
  */
 export function writeBudget(runDir: string, permission: WritePermission, now = Date.now(), sender?: string, origin?: string): WriteBudget {
+  return budgetAndQueue(runDir, permission, now, sender, origin).budget;
+}
+
+/** The budget, with the tickets of the queue that still count. */
+function budgetAndQueue(runDir: string, permission: WritePermission, now: number, sender?: string, origin?: string): { budget: WriteBudget; turn: Turn; grant: string } {
   const grant = origin === undefined ? grantsOf(permission)[0]! : grantFor(permission, origin);
   // A person can raise the budget while sessions run: what the manifest says now counts.
   const stored = writesForRun(runDir);
@@ -501,13 +581,23 @@ export function writeBudget(runDir: string, permission: WritePermission, now = D
   // What cleanup sends costs nothing, but the service on the other side still sees it.
   const spaced = log.filter((entry) => counts(entry) || entry.cleanup);
   const last = spaced.length > 0 ? Date.parse(spaced.at(-1)!.at) : Number.NEGATIVE_INFINITY;
-  const waitSeconds = Math.max(0, Math.ceil((last + spacingSeconds * 1000 - now) / 1000));
+  // Who waited before this sender goes first (see `WRITES_QUEUE`).
+  const turn = turnOf(readQueue(runDir), grant.origin, sender, last, spacingSeconds * 1000, now);
+  const waitSeconds = Math.max(0, Math.ceil((turn.at - now) / 1000));
   const reserved = reservedWrites(grant);
   const isSender = (entry: PassedWrite): boolean => sender !== undefined && senderOf(entry.source) === senderOf(sender);
   const sentBefore = counted.some(isSender);
   // A registration of its own has a route that takes several writes, so its sender may go on into what is kept, as far as that route goes.
   const paidFor = log.filter((entry) => entry.registration && isSender(entry)).length * REGISTRATION_WRITES;
-  return { origin: grantOriginsOf(grant).join(" en "), max, sent: counted.length, left: Math.max(0, max - counted.length - (sentBefore ? Math.max(0, reserved - paidFor) : 0)), reserved, spacingSeconds, waitSeconds };
+  const budget: WriteBudget = { origin: grantOriginsOf(grant).join(" en "), max, sent: counted.length, left: Math.max(0, max - counted.length - (sentBefore ? Math.max(0, reserved - paidFor) : 0)), reserved, spacingSeconds, waitSeconds };
+  if (turn.ahead > 0) budget.ahead = turn.ahead;
+  return { budget, turn, grant: grant.origin };
+}
+
+function writeQueue(runDir: string, queue: readonly Ticket[]): void {
+  const path = join(runDir, WRITES_QUEUE);
+  if (queue.length === 0) rmSync(path, { force: true });
+  else writeFileSync(path, `${JSON.stringify(queue)}\n`);
 }
 
 /** The budget of each grant of a run, the first one first. */
@@ -562,7 +652,7 @@ export const budgetOutPointNl = (budget: Pick<WriteBudget, "sent" | "max">): str
     ? `versturen niet toegestaan: het budget voor versturen van deze run is op voor dit criterium (${budget.sent} van ${budget.max} verstuurd; de rest is voor criteria die nog niets verstuurden)`
     : `versturen niet toegestaan: het budget voor versturen van deze run is op (${budget.sent} van ${budget.max} verstuurd)`;
 
-export type WriteClaim = { ok: true; entry: PassedWrite } | { ok: false; budget: "out" | "share" | "spacing"; reasonNl: string };
+export type WriteClaim = { ok: true; entry: PassedWrite } | { ok: false; budget: "out" | "share" | "spacing"; reasonNl: string; turnAt?: number; waitMs?: number };
 
 /**
  * What a browser context needs to let writes through: the origin, and where to note each one.
@@ -577,12 +667,13 @@ export interface WriteAccess {
   source: string;
   /**
    * Take one write from the budget of the run and note it, or refuse it: when the budget is used
-   * up, or when the previous write is less than the spacing ago. A refused write is not sent, and
-   * not waited for either: an agent that waits inside a command runs into its time limit. A sender
+   * up, or when the previous write is less than the spacing ago, or another sender waits for its turn
+   * before this one. A refused write is not sent, and not waited for here: `claimInTurn` waits. A sender
    * that has sent before is refused the reserved writes. `sender`: the session that sends, when one
-   * access serves several; absent, the one the access was made for.
+   * access serves several; absent, the one the access was made for. `queue`: a sender that is refused
+   * only for the spacing takes a place in the queue, so nobody who comes later sends before it.
    */
-  claim: (method: string, url: string, options?: { message?: boolean; sender?: string | undefined; link?: string }) => WriteClaim;
+  claim: (method: string, url: string, options?: { message?: boolean; sender?: string | undefined; link?: string; queue?: boolean }) => WriteClaim;
   /** Note a write that does not count against the budget: a frame over a socket without a test value in it, or the repeat of a request after a redirect. */
   record: (method: string, url: string, options?: { repeat?: boolean; sender?: string | undefined }) => PassedWrite;
 }
@@ -593,12 +684,72 @@ export interface WriteAccess {
  * when the link may be opened; the reason when the budget says no.
  */
 export function claimLink(access: WriteAccess, url: string, link: string, sender: string | undefined): Extract<WriteClaim, { ok: false }> | null {
-  if (readLog(access.runDir).some((entry) => entry.link === link)) {
-    access.record("GET", url, { repeat: true, sender });
-    return null;
-  }
+  if (linkOpenedBefore(access, url, link, sender)) return null;
   const claim = access.claim("GET", url, { sender, link });
   return claim.ok ? null : claim;
+}
+
+/** The same as `claimLink`, but a link held back only for the spacing waits for its turn until `until` (see `claimInTurn`). */
+export async function claimLinkInTurn(access: WriteAccess, url: string, link: string, sender: string | undefined, until: number | null): Promise<Extract<WriteClaim, { ok: false }> | null> {
+  if (linkOpenedBefore(access, url, link, sender)) return null;
+  const claim = await claimInTurn(access, "GET", url, { sender, link }, until);
+  return claim.ok ? null : claim;
+}
+
+/** A personal link opened before in the run is the same request again: only noted. */
+function linkOpenedBefore(access: WriteAccess, url: string, link: string, sender: string | undefined): boolean {
+  if (!readLog(access.runDir).some((entry) => entry.link === link)) return false;
+  access.record("GET", url, { repeat: true, sender });
+  return true;
+}
+
+/** How long before its turn a waiting sender asks again: the clocks of two processes are the same clock, but a timer may fire early. */
+const TURN_MARGIN_MS = 50;
+
+/** A clock time for in a sentence, such as 14:03:20. */
+const clockNl = (at: number): string => new Date(at).toTimeString().slice(0, 8);
+
+/**
+ * Take one write, and when only the spacing holds it back, wait for the turn of this sender instead of
+ * losing the write. Senders that wait go in the order they came (see `WRITES_QUEUE`): with several
+ * sessions that send, retrying later lets another one take every free moment, and waiting in a queue does
+ * not. The budget itself is as strict as in `claim`: "out" and "share" are refused at once. Without
+ * `until` nothing waits, as in `claim`. A turn that does not come before `until` is refused, but stays kept
+ * for `TURN_KEPT_MS` after it, and the reason says when to do the action again.
+ */
+export async function claimInTurn(access: WriteAccess, method: string, url: string, options: { message?: boolean; sender?: string | undefined; link?: string }, until: number | null): Promise<WriteClaim> {
+  if (until === null) return access.claim(method, url, options);
+  for (;;) {
+    const claim = access.claim(method, url, { ...options, queue: true });
+    if (claim.ok || claim.budget !== "spacing" || claim.waitMs === undefined) return claim;
+    const wake = Date.now() + claim.waitMs + TURN_MARGIN_MS;
+    if (wake > until) {
+      const seconds = Math.max(1, Math.ceil(claim.waitMs / 1000));
+      return { ...claim, reasonNl: `${claim.reasonNl}. Binnen de tijd van dit commando kwam deze verzending niet aan de beurt. De beurt is vastgehouden: over ${seconds} s (om ${clockNl(Date.now() + claim.waitMs)}) kan het, en tot ${TURN_KEPT_MS / 1000} s daarna gaat niemand anders voor` };
+    }
+    await new Promise((resolve) => setTimeout(resolve, wake - Date.now()));
+  }
+}
+
+/**
+ * Until when a sender may wait for its turn to send, by the command it runs: set by the session process
+ * at the start of a command, so a wait stays inside the time limit of that command. Absent: it does not wait.
+ */
+const sendDeadlines = new Map<string, number>();
+
+export function setSendDeadline(sender: string, until: number | null): void {
+  if (until === null) sendDeadlines.delete(sender);
+  else sendDeadlines.set(sender, until);
+}
+
+/** A navigation also has the time limit of the browser to load the page in (45 s): it waits for its turn this long at most, so the page still has time to come. */
+export const NAVIGATION_TURN_WAIT_MS = 25_000;
+
+/** Until when a write of this sender may wait for its turn, or null when it does not wait. */
+export function sendDeadlineOf(sender: string | undefined, navigation = false): number | null {
+  const until = sender === undefined ? undefined : sendDeadlines.get(sender);
+  if (until === undefined) return null;
+  return navigation ? Math.min(until, Date.now() + NAVIGATION_TURN_WAIT_MS) : until;
 }
 
 /** The guarded addresses this run opened, by their id. With `besides`, what that sender opened does not count. */
@@ -685,11 +836,20 @@ export function writeAccess(runDir: string, permission: WritePermission, source:
       const sender = options?.sender ?? source;
       return withLock(runDir, (): WriteClaim => {
         // Each grant has a budget and a pause of its own: a form on this machine does not wait for the chat that was declared next to it.
-        const budget = writeBudget(runDir, permission, now(), sender, grantFor(permission, url).origin);
+        const { budget, turn, grant } = budgetAndQueue(runDir, permission, now(), sender, grantFor(permission, url).origin);
         const free = sender === CLEANUP_SENDER;
+        const ticket = (entry: Ticket): boolean => entry.sender === sender && entry.origin === grant;
+        // A sender the budget refuses has nothing to wait for any more: whoever waits behind it goes on.
+        if (!free && budget.left === 0 && turn.holds) writeQueue(runDir, turn.kept.filter((entry) => !ticket(entry)));
         if (!free && budget.left === 0 && budget.sent < budget.max) return { ok: false, budget: "share", reasonNl: `${senderOf(sender) === sender ? sender : "dit criterium"} heeft al verstuurd, en er zijn nog ${budget.max - budget.sent} van ${budget.max} verzendingen naar ${budget.origin} over: ${reservedNl(budget.reserved)}` };
         if (!free && budget.left === 0) return { ok: false, budget: "out", reasonNl: `het budget voor versturen van deze run is op: ${budget.sent} van ${budget.max} verzendingen naar ${budget.origin} zijn gedaan, door alle sessies en de veegronde samen` };
-        if (budget.waitSeconds > 0) return { ok: false, budget: "spacing", reasonNl: `te kort na de vorige verzending: tussen twee verzendingen zit minstens ${budget.spacingSeconds} s; versturen kan weer over ${budget.waitSeconds} s (nog ${budget.left} van ${budget.max} over)` };
+        if (budget.waitSeconds > 0) {
+          if (options?.queue && !turn.holds) writeQueue(runDir, [...turn.kept, { sender, origin: grant }]);
+          const waitMs = Math.max(0, turn.at - now());
+          const after = budget.ahead ? `, na ${budget.ahead === 1 ? "een verzending die" : `${budget.ahead} verzendingen die`} al eerder ${budget.ahead === 1 ? "wachtte" : "wachtten"}` : "";
+          return { ok: false, budget: "spacing", reasonNl: `te kort na de vorige verzending: tussen twee verzendingen zit minstens ${budget.spacingSeconds} s; versturen kan weer over ${budget.waitSeconds} s${after} (nog ${budget.left} van ${budget.max} over)`, turnAt: turn.at, waitMs };
+        }
+        if (existsSync(join(runDir, WRITES_QUEUE))) writeQueue(runDir, turn.kept.filter((entry) => !ticket(entry)));
         return { ok: true, entry: append(method, url, false, options?.message === true, sender, options?.link) };
       });
     },

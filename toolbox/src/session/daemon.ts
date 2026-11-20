@@ -14,7 +14,7 @@ import { Jobs } from "./jobs.ts";
 import { cleanModel } from "../lib/models.ts";
 import { refuseUnderSeal, underSeal } from "../lib/seal.ts";
 import { toolchain } from "../lib/manifest.ts";
-import { budgetOutPointNl, writeBudget, writeBudgets, writeBudgetsNl, writesForRun, type WriteBudget } from "../lib/writes.ts";
+import { budgetOutPointNl, setSendDeadline, writeBudget, writeBudgets, writeBudgetsNl, writesForRun, type WriteBudget } from "../lib/writes.ts";
 import { SEARCH_HELD_BACK_NL } from "../lib/reads.ts";
 import { loadSiteModel, STEP_NOT_FOUND_NL, type Postcondition, type SiteModel } from "../lib/sitemodel.ts";
 import { Images, ObservationLog, observationId, readObservation, type Locators, type Observation, type StartState, type StateRecord, type Step, type TargetRecord } from "./observations.ts";
@@ -131,6 +131,8 @@ const SESSION_NAME = /^[a-z0-9][a-z0-9_-]{0,30}$/;
 const RECIPE_NAME = /^[a-z0-9][a-z0-9_-]{0,60}$/;
 const DEFAULT_START = { width: 1280, height: 800, scheme: "light" } as const;
 const MAX_BLOCKED_PRINTED = 3;
+/** What a command keeps of its time limit after a write that waited for its turn: for the page to load and be looked at. */
+const SEND_MARGIN_MS = 20_000;
 const MAX_DIFFERENCES = 10;
 /** Keys that differ between two runs of the same instrument on the same page without the page being different. */
 const NOT_COMPARED = new Set(["ref", "reg", "doc", "focusRef", "modalRef", "focusScreenshot", "ms", "cached"]);
@@ -459,10 +461,12 @@ export class Daemon {
     const multiplier = command === "replay" || (command === "open" && options.state) ? 4 : 1;
     // A reading by VoiceOver can wait for the one virtual Mac, and then takes most of a minute itself.
     const limitMs = command === "voiceover" ? Math.max(this.limits.commandTimeoutMs, VOICEOVER_COMMAND_MS) : this.limits.commandTimeoutMs * multiplier;
+    // A write that has to wait for its turn waits within this command, and leaves it time to show what came of it.
+    setSendDeadline(session.name, started + limitMs - SEND_MARGIN_MS);
     const limited = await withinTime(limitMs, () => this.work(session, command, rawArgs, options, turn, before, images, id).catch((error: Error) => {
       if (error instanceof UsageError) turn.usage = true;
       throw error;
-    }));
+    })).finally(() => setSendDeadline(session.name, null));
     // A command that was given wrongly did nothing; it is not charged.
     if (turn.usage && !free) session.commands--;
 
@@ -542,7 +546,7 @@ export class Daemon {
           ? `het budget voor versturen van deze run is op: ${sending.sent} van ${sending.max} verstuurd, door alle sessies en de veegronde samen. Er gaat niets meer weg. Wat daardoor niet te zien is, schrijf je als open punt: "${budgetOutPointNl(sending)}: <wat er pas na versturen te zien was>"`
           : heldBack.writeBudget === "share" && sending
             ? `${heldBack.reasonNl}. Er is niets verstuurd: haal de waarneming aan van de verzending die er al was (de veegronde of een eerdere sessie van dit criterium). Is wat je zoekt daar niet te zien, schrijf het dan als open punt: "${budgetOutPointNl(sending)}: <wat er pas na versturen te zien was>"`
-            : `${heldBack.reasonNl ?? "te kort na de vorige verzending"}. Er is niets verstuurd: kijk of een eerdere waarneming of de veegronde laat zien wat je zoekt, en doe de handeling anders na die tijd opnieuw`;
+            : `${heldBack.reasonNl ?? "te kort na de vorige verzending"}. Er is niets verstuurd: kijk of een eerdere waarneming of de veegronde laat zien wat je zoekt, en doe de handeling anders op dat moment opnieuw`;
     }
     const refusedByBlockade = blocked.find((entry) => entry.kind === "blockade");
     if (blockades.length > 0 || refusedByBlockade) print.blockade = blockades.length > 0 ? blockades.map(refusalNl).join(". ") : refusedByBlockade!.reasonNl;

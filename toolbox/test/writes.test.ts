@@ -12,7 +12,7 @@ import { INPAGE_PATH, launchBrowser, loadPage, newContext } from "../src/browser
 import { probeForms } from "../src/instruments/forms.ts";
 import { formErrors } from "../src/lib/extractors.ts";
 import { REGULAR_PATH, type RunData } from "../src/lib/rundata.ts";
-import { budgetOutPointNl, confirmDeclaration, raiseWrites, writesLow, criterionSender, decideWrites, isOurMessage, isWriteOrigin, isProtocolFrame, reservedWrites, senderOf, SocketFrames, DEFAULT_MAX_WRITES, DEFAULT_WRITE_SPACING_SECONDS, recordWrites, WRITES_BLOCKED_NL, writeAccess, writeBudget, writeBudgetNl, writeOriginsOf, writesAllowedNl, writesForRun, type PassedWrite, type WritePermission } from "../src/lib/writes.ts";
+import { budgetOutPointNl, claimInTurn, claimLinkInTurn, confirmDeclaration, raiseWrites, writesLow, criterionSender, decideWrites, isOurMessage, isWriteOrigin, isProtocolFrame, reservedWrites, senderOf, SocketFrames, DEFAULT_MAX_WRITES, DEFAULT_WRITE_SPACING_SECONDS, recordWrites, WRITES_BLOCKED_NL, writeAccess, writeBudget, writeBudgetNl, writeOriginsOf, writesAllowedNl, writesForRun, type PassedWrite, type WritePermission } from "../src/lib/writes.ts";
 import { answerRefusalNl, DECLARED_ORIGIN, httpSendOf, RECORD_QUIET_MS, readHttpRecordings, readRecordings, readReplays, recordingKey, replayNl, replaysNl, socketRecordings, type HttpRecording } from "../src/lib/recordings.ts";
 import { notSentPointProblems } from "../src/lib/verdict.ts";
 import { approvedSendsTo, sendsToMatches, sendsToProblems, sendsToReplayProblem } from "../src/lib/sitemodel.ts";
@@ -1193,6 +1193,69 @@ test("a sendsTo pattern is narrow, falls under the same kind of connection, and 
     assert.deepEqual(approvedSendsTo(dir), [pattern, http]);
     writeFileSync(join(dir, "site.json"), `${model} `);
     assert.deepEqual(approvedSendsTo(dir), [], "changed after the check");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("in the session process a write held back only for the spacing waits for its turn and is sent, instead of being lost", async () => {
+  reset();
+  const dir = mkdtempSync(join(tmpdir(), "loep-writes-turn-session-"));
+  await recordWrites(dir, { ...declared(10), spacingSeconds: 2 });
+  const daemon = await Daemon.create(dir, await scopeForRun(dir, { scopeUrl: `${site.origin}/` }), { navigationDelayMs: 0, secondBrowsers: false });
+  const loep = async (session: string, command: string, ...args: string[]): Promise<Record<string, unknown>> => (await daemon.handle({ op: "command", session, command, args, options: {} })).print;
+  const ref = async (session: string, query: string): Promise<string> => ((await loep(session, "find", query)).found as string[])[0]!.split(" ")[0]!;
+  try {
+    for (const session of ["b-111", "b-412"]) {
+      await daemon.handle({ op: "start", session });
+      await loep(session, "open", "/callback.html");
+    }
+    const first = await ref("b-111", "css:#call");
+    const second = await ref("b-412", "css:#call");
+    assert.deepEqual((await loep("b-111", "click", first)).written, ["POST /callback"]);
+    // Right after it another session sends: it waits the spacing out within its command, and its write goes.
+    const waited = await loep("b-412", "click", second);
+    assert.equal(waited.sending, undefined, "nothing was held back");
+    assert.deepEqual(waited.written, ["POST /callback"]);
+    await settle();
+    assert.equal(writesReceived().filter((line) => line.endsWith("/callback")).length, 2);
+    const sent = logged(dir);
+    assert.deepEqual(sent.map((line) => line.source), ["b-111", "b-412"]);
+    assert.ok(Date.parse(sent[1]!.at) - Date.parse(sent[0]!.at) >= 2000, "the spacing between the two writes holds");
+    assert.equal(existsSync(join(dir, "writes-queue.json")), false, "nobody waits any more");
+  } finally {
+    await daemon.close();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("senders that wait for their turn go in the order they came; one that cannot wait in time keeps its turn and hears when it is", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "loep-writes-turn-"));
+  try {
+    const spaced: WritePermission = { ...declared(10), spacingSeconds: 1 };
+    const access = writeAccess(dir, spaced, "test");
+    assert.equal(access.claim("POST", `${site.origin}/callback`, { sender: "b-111" }).ok, true);
+    // A personal link from a mail, opened right after: it waits for its turn instead of being refused.
+    const link = claimLinkInTurn(access, `${site.origin}/bevestig?code=x`, "link-1", "b-412", Date.now() + 5000);
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    // Who comes later does not go before it, not even when the spacing has passed by then.
+    const later = access.claim("POST", `${site.origin}/callback`, { sender: "b-500" });
+    assert.match(later.ok ? "" : later.reasonNl, /^te kort na de vorige verzending: tussen twee verzendingen zit minstens 1 s; versturen kan weer over \d s, na een verzending die al eerder wachtte \(nog \d+ van 10 over\)$/);
+    assert.equal(await link, null, "the link was opened");
+    assert.deepEqual(logged(dir).map((line) => [line.source, line.link ?? null]), [["b-111", null], ["b-412", "link-1"]]);
+    assert.ok(Date.parse(logged(dir)[1]!.at) - Date.parse(logged(dir)[0]!.at) >= 1000);
+    // A sender whose turn does not come within its time is refused, but its turn is kept: the next one waits behind it.
+    const short = await claimInTurn(access, "POST", `${site.origin}/callback`, { sender: "b-600" }, Date.now());
+    assert.equal(short.ok ? null : short.budget, "spacing");
+    assert.match(short.ok ? "" : short.reasonNl, /\. Binnen de tijd van dit commando kwam deze verzending niet aan de beurt\. De beurt is vastgehouden: over 1 s \(om \d\d:\d\d:\d\d\) kan het, en tot 60 s daarna gaat niemand anders voor$/);
+    await new Promise((resolve) => setTimeout(resolve, 1200));
+    assert.equal(access.claim("POST", `${site.origin}/callback`, { sender: "b-500" }).ok, false, "the kept turn is not taken by another");
+    assert.equal(access.claim("POST", `${site.origin}/callback`, { sender: "b-600" }).ok, true, "the sender takes its kept turn");
+    assert.equal(existsSync(join(dir, "writes-queue.json")), false);
+    // Without a time to wait in nothing waits, and the budget stays as strict as it was.
+    const now = await claimInTurn(access, "POST", `${site.origin}/callback`, { sender: "b-500" }, null);
+    assert.equal(now.ok ? null : now.budget, "spacing");
+    assert.equal(existsSync(join(dir, "writes-queue.json")), false, "a sender that does not wait takes no place in the queue");
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
