@@ -32,6 +32,15 @@ const SITE_PAUSED_NL = 'storing van de site, run gepauzeerd; start de werkstroom
 // The budget for sending is about to run out: only a person can raise it, and what is sent after it is gone stays open.
 const SENDING_PAUSED_NL = 'budget voor versturen bijna op, run gepauzeerd; vraag de gebruiker of het omhoog mag, leg dat vast met writes --max-writes en start de werkstroom opnieuw, of start opnieuw met sendingAccepted: true'
 const SITE_DOWN = /^\W*storing van de site(?::|\W*$)/i
+// The stand is an agent, and it may fill a field that `pending` left out, with "niet van toepassing" or "geen" (#710).
+// A field counts only in the words `pending` itself uses for it; a test holds these to the toolbox.
+const FROM_PENDING = {
+  siteOutage: /^storing van de site: /,
+  sendingLow: /^nog \d+ van \d+ verzendingen naar /,
+  voiceover: /^LET OP: de virtuele Mac met VoiceOver /,
+}
+const fromPending = (state, field) => (typeof state[field] === 'string' && FROM_PENDING[field].test(state[field].trim()) ? state[field].trim() : null)
+const CRITERION = /^\d+\.\d+\.\d+$/
 // Sites that no agent of this run may open, for example a set that is held back for a final test. Empty when the caller gives none.
 const NEVER_OPEN =
   Array.isArray(neverOpen) && neverOpen.length > 0
@@ -176,15 +185,19 @@ for (let round = 1; round <= MAX_ROUNDS; round++) {
   attempted = []
   again = []
   const state = asked.result
+  const siteOutage = fromPending(state, 'siteOutage')
+  const sendingLow = fromPending(state, 'sendingLow')
+  const voiceoverNow = fromPending(state, 'voiceover')
+  const againNow = Array.isArray(state.again) ? state.again.filter((id) => typeof id === 'string' && CRITERION.test(id)) : []
   last = state.phase
   if (state.phase === 'error') {
     log(`stand ${round}: fout ${state.note}`)
     history.push({ round, phase: 'error', note: state.note || null })
     break
   }
-  if (state.phase === 'done' && Array.isArray(state.again) && state.again.length > 0 && !askedAgain) {
+  if (state.phase === 'done' && againNow.length > 0 && !askedAgain) {
     askedAgain = true
-    again = state.again
+    again = againNow
     log(`ronde ${round}: nieuwe afmaakronde voor ${again.join(', ')}`)
     history.push({ round, phase: 'done', again })
     continue
@@ -193,20 +206,20 @@ for (let round = 1; round <= MAX_ROUNDS; round++) {
     history.push({ round, phase: 'done' })
     break
   }
-  if (state.siteOutage) {
-    paused = `${SITE_PAUSED_NL} (stand ${round}: ${state.siteOutage})`
-    history.push({ round, phase: 'storing van de site', note: state.siteOutage })
+  if (siteOutage) {
+    paused = `${SITE_PAUSED_NL} (stand ${round}: ${siteOutage})`
+    history.push({ round, phase: 'storing van de site', note: siteOutage })
     break
   }
   // The virtual Mac is set up but VoiceOver does not read: the run goes on as without, and whoever leads hears it once (#565).
-  if (state.voiceover && state.voiceover !== voiceover) {
-    voiceover = state.voiceover
+  if (voiceoverNow && voiceoverNow !== voiceover) {
+    voiceover = voiceoverNow
     log(`ronde ${round}: ${voiceover}`)
     history.push({ round, phase: state.phase, note: voiceover })
   }
-  if (state.sendingLow && !sendingAccepted) {
-    paused = `${SENDING_PAUSED_NL} (stand ${round}: ${state.sendingLow})`
-    history.push({ round, phase: 'budget voor versturen', note: state.sendingLow })
+  if (sendingLow && !sendingAccepted) {
+    paused = `${SENDING_PAUSED_NL} (stand ${round}: ${sendingLow})`
+    history.push({ round, phase: 'budget voor versturen', note: sendingLow })
     break
   }
   const kind = PHASES[state.phase]
