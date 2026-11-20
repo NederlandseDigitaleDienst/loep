@@ -1365,6 +1365,85 @@ test("a fixed read to a window of another party that the inventory found is that
   }
 });
 
+test("a GET to a window of another party that the inventory found is that other party: a cookie or a token of the site stays off it, in a session and in the sweep", async () => {
+  const frame = await siteWith((_request, response) => void response.writeHead(200, { "access-control-allow-origin": "*" }).end("{}"));
+  const site = await siteWith((_request, response) => html(response, "<h1>App</h1>"));
+  const run = mkdtempSync(join(tmpdir(), "loep-geheimen-"));
+  writeFileSync(join(run, "inventory.json"), JSON.stringify({ baseUrl: `${site.origin}/`, origin: site.origin, pages: [{ url: `${site.origin}/` }, { url: `${frame.origin}/venster.html` }] }));
+  registerSecret(run, COOKIE, { source: SESSION_COOKIE_SOURCE, origins: [], domains: ["127.0.0.1"] });
+  const alias = shieldForRun(run)!.secrets[0]!.alias;
+  const get = (page: Page, query: string): Promise<unknown> => page.evaluate((url) => fetch(url).catch(() => undefined), `${frame.origin}/speler${query}`);
+  const session = await sessionOn(run, await launched("chromium"));
+  try {
+    await loadPage(session.page, `${site.origin}/`);
+    await get(session.page, "?video=abc");
+    await get(session.page, `?t=${alias}`);
+    assert.deepEqual(frame.heard.map((request) => request.url), ["/speler?video=abc"], "only the read without a secret reached the window");
+    await session.page.context().addCookies([{ name: "sessie", value: alias, domain: "127.0.0.1", path: "/" }]);
+    await get(session.page, "?video=def");
+    assert.equal(frame.heard.length, 1, "the read with the cookie of the site in reach was held back");
+    assert.equal(session.guard.blocked.filter((entry) => entry.kind === "scope" && entry.url.startsWith(frame.origin) && /geheim/.test(entry.reasonNl ?? "")).length, 2, JSON.stringify(session.guard.blocked));
+
+    setRunScope(run);
+    const sweep = await newContext(await launched("chromium"), { runDir: run });
+    try {
+      const swept = await sweep.newPage();
+      await loadPage(swept, `${site.origin}/`);
+      await get(swept, `?t=${alias}`);
+      await sweep.addCookies([{ name: "sessie", value: alias, domain: "127.0.0.1", path: "/" }]);
+      await get(swept, "?video=ghi");
+    } finally {
+      await sweep.close();
+    }
+    assert.equal(frame.heard.length, 1, "the sweep sent nothing to the window");
+  } finally {
+    setRunScope(null);
+    await session.close();
+    await frame.close();
+    await site.close();
+    rmSync(run, { recursive: true, force: true });
+  }
+});
+
+test("WebKit: a redirect of the site to a window of another party is asked again whether it carries a secret, in a session and in the sweep", WEBKIT_HERE, async () => {
+  const frame = await siteWith((_request, response) => void response.writeHead(200, { "content-type": "application/json" }).end("{}"));
+  const site = await siteWith((request, response) => {
+    if (request.url!.startsWith("/door")) return void response.writeHead(307, { location: `${frame.origin}/speler` }).end();
+    html(response, "<h1>App</h1>");
+  });
+  const run = mkdtempSync(join(tmpdir(), "loep-geheimen-"));
+  writeFileSync(join(run, "inventory.json"), JSON.stringify({ baseUrl: `${site.origin}/`, origin: site.origin, pages: [{ url: `${site.origin}/` }, { url: `${frame.origin}/venster.html` }] }));
+  registerSecret(run, TOKEN, { source: "test" });
+  const alias = shieldForRun(run)!.secrets[0]!.alias;
+  // The site's own address is not asked; the step to the window carries the same header.
+  const viaSite = (page: Page, header: string): Promise<unknown> => page.evaluate((sent) => fetch("/door", { headers: { "x-sleutel": sent } }).catch(() => undefined), header);
+  const session = await sessionOn(run, await launched("webkit"));
+  try {
+    await loadPage(session.page, `${site.origin}/`);
+    await viaSite(session.page, "gewoon");
+    await viaSite(session.page, alias);
+    assert.deepEqual(frame.heard.map((request) => request.headers["x-sleutel"]), ["gewoon"], "only the redirect without a secret reached the window");
+    assert.ok(session.guard.blocked.some((entry) => entry.kind === "scope" && entry.url.startsWith(frame.origin) && /geheim/.test(entry.reasonNl ?? "")), JSON.stringify(session.guard.blocked));
+
+    setRunScope(run);
+    const sweep = await newContext(await launched("webkit"), { runDir: run });
+    try {
+      const swept = await sweep.newPage();
+      await loadPage(swept, `${site.origin}/`);
+      await viaSite(swept, alias);
+    } finally {
+      await sweep.close();
+    }
+    assert.equal(frame.heard.length, 1, "the sweep sent nothing to the window");
+  } finally {
+    setRunScope(null);
+    await session.close();
+    await frame.close();
+    await site.close();
+    rmSync(run, { recursive: true, force: true });
+  }
+});
+
 test("a value of another party that may go only to that party is its own: a read there passes with it", () => {
   const run = runOn("http://127.0.0.1:1");
   try {

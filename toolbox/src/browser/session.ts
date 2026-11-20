@@ -6,7 +6,7 @@ import { confirmLoginOn, LoginExpired, logsOut, registerSessionSecrets, runLogin
 import { addressOf, fixedReadFor, noteFixedRead, noteRefusedRead, readDecision, readRuleFor, runReads, type ReadRequest } from "../lib/reads.ts";
 import { claimInTurn, claimLink, isThisMachine, isWriteOrigin, runWrites, SocketFrames, type PassedWrite, type SendDeadline, type WriteAccess } from "../lib/writes.ts";
 import { LONGEST_FAILURE_PAUSE_SECONDS, OriginBlocked, runBlockade } from "../session/blockade.ts";
-import { inScope, MESSAGE_VALUES, runScope, secretLeavesRunNl } from "../session/safety.ts";
+import { MESSAGE_VALUES, onSite, runScope, secretLeavesRunNl } from "../session/safety.ts";
 import { answerRefusalNl, httpRecordings, httpReplayNl, httpSendOf, keptHeaders, playRecording, socketRecordings, type HttpRecordings, type PassedReplay, type Recorder } from "../lib/recordings.ts";
 import { shieldForRun, type Shield } from "../lib/secrets.ts";
 import { readableFrame } from "./call.ts";
@@ -60,9 +60,12 @@ export interface ContextOptions {
  * to an address `mayRepeat` allows; any other redirect only where `mayFollow` allows. Returns the
  * address of a request the browser will repeat.
  */
-export async function passOn(route: Route, context: BrowserContext, mayRepeat: (url: string) => boolean, mayFollow: (url: string) => boolean = () => true): Promise<string | null> {
+export async function passOn(route: Route, context: BrowserContext, mayRepeat: MayGo, mayFollow: MayGo = () => true): Promise<string | null> {
   return (await forward(route, context, mayRepeat, mayFollow)).repeated;
 }
+
+/** Whether a redirect may go on to an address: asked before the browser is sent there, or before it is fetched here. */
+export type MayGo = (url: string) => boolean | Promise<boolean>;
 
 /** How many steps of a redirect are followed here for what is no navigation, and how many pages that send a browser on come after each other. A browser gives up at about this many. */
 const MAX_FOLLOWED_REDIRECTS = 5;
@@ -102,7 +105,7 @@ async function inTurn(context: BrowserContext, origin: string, work: () => Promi
 }
 
 /** Let a request go on: to the network, or in a context that opens no connection, through the proxy from here. The one way a request of a browser leaves, other than what a page holds already. */
-export async function proceed(route: Route, context: BrowserContext, mayFollow: (url: string) => boolean = () => true): Promise<void> {
+export async function proceed(route: Route, context: BrowserContext, mayFollow: MayGo = () => true): Promise<void> {
   const url = route.request().url();
   if (!withoutConnections.has(context) || !/^https?:/i.test(url)) return route.continue();
   await inTurn(context, new URL(url).origin, async () => {
@@ -131,7 +134,7 @@ const noAnswer = (route: Route, whyNl: string): Promise<void> => route.fulfill({
  * watched at each step by its protocol session. A write that
  * keeps its method is repeated here too, once.
  */
-export async function fulfillAnswer(route: Route, response: APIResponse, context: BrowserContext, mayFollow: (url: string) => boolean = () => true): Promise<void> {
+export async function fulfillAnswer(route: Route, response: APIResponse, context: BrowserContext, mayFollow: MayGo = () => true): Promise<void> {
   if (context.browser()?.browserType().name() === "chromium") return route.fulfill({ response });
   const request = route.request();
   const status = response.status();
@@ -164,7 +167,7 @@ export async function fulfillAnswer(route: Route, response: APIResponse, context
   }
   let next = target.href;
   for (let hop = 0; hop < MAX_FOLLOWED_REDIRECTS; hop++) {
-    if (!mayFollow(next)) return route.abort("blockedbyclient");
+    if (!(await mayFollow(next))) return route.abort("blockedbyclient");
     const answer = await route.fetch({ url: next, maxRedirects: 0, timeout: RENDERING.navigationTimeoutMs, ...(repeats && hop === 0 ? {} : { method: request.method() === "HEAD" ? "HEAD" : "GET", postData: "" }) });
     const onward = answer.headers()["location"];
     if (!REDIRECTS.has(answer.status()) || onward === undefined) return answer.status() >= 300 && answer.status() < 400 ? noAnswer(route, `de site antwoordde met ${answer.status()}, en dat kan WebKit via de route niet krijgen`) : route.fulfill({ response: answer });
@@ -177,7 +180,7 @@ export async function fulfillAnswer(route: Route, response: APIResponse, context
 }
 
 /** `passOn`, with the answer the browser was given: null when it was refused or nobody was left to answer. */
-async function forward(route: Route, context: BrowserContext, mayRepeat: (url: string) => boolean, mayFollow: (url: string) => boolean = () => true): Promise<{ repeated: string | null; response: APIResponse | null }> {
+async function forward(route: Route, context: BrowserContext, mayRepeat: MayGo, mayFollow: MayGo = () => true): Promise<{ repeated: string | null; response: APIResponse | null }> {
   const request = route.request();
   const refuse = (): Promise<void> => (request.isNavigationRequest() ? route.fulfill(REFUSED_ANSWER) : route.abort("blockedbyclient"));
   try {
@@ -187,7 +190,7 @@ async function forward(route: Route, context: BrowserContext, mayRepeat: (url: s
     if (response.status() >= 300 && response.status() < 400 && location) {
       const target = new URL(location, request.url()).href;
       const keepsMethod = response.status() === 307 || response.status() === 308;
-      if (keepsMethod ? !mayRepeat(target) : !mayFollow(target)) {
+      if (!(await (keepsMethod ? mayRepeat(target) : mayFollow(target)))) {
         await refuse();
         return { repeated: null, response: null };
       }
@@ -245,6 +248,13 @@ export async function sendOrReplay(context: BrowserContext, route: Route, writes
   return { kind: "sent", entry: claim.entry, repeated: repeatedEntry };
 }
 
+/**
+ * Whether a redirect in the sweep may go on to an address: where `allowed` says so and, off the hosts of the site, only
+ * when the next step carries no secret of the run with the headers, and a repeat with the body, of this request.
+ */
+const keepsSecrets = (context: BrowserContext, scope: { hosts: string[]; siteHosts?: string[]; runDir?: string | undefined }, request: Request, allowed: MayGo = () => true): MayGo => async (target) =>
+  (await allowed(target)) && (onSite(scope, target) || (await secretLeavesRunNl(context, scope, request, target)) === null);
+
 /** In the sweep, a request to a host outside the run that carries a secret of the run, or an authorization header, does not go (see `secretLeavesRunNl`): whether it was refused. */
 async function refuseLeaving(route: Route, context: BrowserContext, scope: { hosts: string[]; runDir?: string | undefined }): Promise<boolean> {
   if (!(await secretLeavesRunNl(context, scope, route.request()))) return false;
@@ -253,11 +263,11 @@ async function refuseLeaving(route: Route, context: BrowserContext, scope: { hos
 }
 
 /** A GET or HEAD of the sweep in a run with secrets: a guarded address takes from the budget like any write. */
-async function openShielded(route: Route, context: BrowserContext, shield: Shield, writes: WriteAccess, spaced: NavigationSpacing | null): Promise<void> {
+async function openShielded(route: Route, context: BrowserContext, shield: Shield, writes: WriteAccess, spaced: NavigationSpacing | null, mayFollow: MayGo): Promise<void> {
   const link = route.request().isNavigationRequest() ? shield.guardedId(route.request().url()) : null;
   if (link && claimLink(writes, route.request().url(), link, undefined)) return void (await route.fulfill({ status: 204, body: "" }).catch(() => undefined));
   if (spaced && loadsTab(route)) await spaced.before(route.request().url());
-  await proceed(route, context).catch(() => undefined);
+  await proceed(route, context, mayFollow).catch(() => undefined);
 }
 
 /** The body of a request as bytes, or null when it has none. */
@@ -475,12 +485,14 @@ export async function newContext(browser: Browser, options: ContextOptions = {},
   // An evaluation must never change the site under test: only safe requests pass. The
   // exceptions are the origin of a test environment that the run was given at inventory, and
   // the read requests of a checked site model: a question to a search service, by method, origin and path.
+  // A redirect off the hosts of the site is asked again whether a secret of the run goes with it, as the read itself was.
   const openRead = (route: Route): Promise<void> => {
     const spaced = spacing;
+    const follow = scope ? keepsSecrets(context, scope, route.request()) : undefined;
     const shield = shieldOf(writes?.runDir, route.request().url());
-    if (shield) return openShielded(route, context, shield, writes!, spaced);
-    if (spaced && loadsTab(route)) return spaced.before(route.request().url()).then(() => proceed(route, context).catch(() => undefined));
-    return proceed(route, context);
+    if (shield) return openShielded(route, context, shield, writes!, spaced, follow ?? (() => true));
+    if (spaced && loadsTab(route)) return spaced.before(route.request().url()).then(() => proceed(route, context, follow).catch(() => undefined));
+    return proceed(route, context, follow);
   };
   await context.route("**/*", (route) => {
     const method = route.request().method();
@@ -488,7 +500,8 @@ export async function newContext(browser: Browser, options: ContextOptions = {},
     const personal = writes?.runDir !== undefined && shieldForRun(writes.runDir)?.touchesGuarded(route.request().url());
     if ((logsOut(route.request().url()) && !personal) || blockade?.blockade.refuses(route.request().url())) return route.request().isNavigationRequest() ? route.fulfill({ status: 204, body: "" }) : route.abort("blockedbyclient");
     if (method === "GET" || method === "HEAD") {
-      if (scope && !inScope(scope, route.request().url())) return refuseLeaving(route, context, scope).then((refused) => (refused ? undefined : openRead(route)));
+      // A window of another party is in the scope, but is that other party: only a read of the site itself goes without asking whether it carries a secret of the run.
+      if (scope && !onSite(scope, route.request().url())) return refuseLeaving(route, context, scope).then((refused) => (refused ? undefined : openRead(route)));
       return openRead(route);
     }
     // Cloudflare's check whether the browser is a robot is answered by Cloudflare and never reaches the site.
@@ -496,12 +509,15 @@ export async function newContext(browser: Browser, options: ContextOptions = {},
     // A fixed read rule of loep, as in a session without --strict: an embedded player fetching what it shows. It takes nothing from the budget for sending.
     const fixed = route.request().isNavigationRequest() ? null : fixedReadFor(method, route.request().url(), route.request().headers());
     // What passed is noted for the report, which names every fixed rule that let something through.
-    if (fixed)
-      return refuseLeaving(route, context, scope ?? { hosts: [], runDir: writes?.runDir }).then((refused) => {
+    if (fixed) {
+      const fixedScope = scope ?? { hosts: [], runDir: writes?.runDir };
+      return refuseLeaving(route, context, fixedScope).then((refused) => {
         if (refused) return undefined;
         noteFixedRead({ method, address: addressOf(route.request().url()), rule: fixed.id });
-        return passOn(route, context, (target) => fixedReadFor(method, target)?.id === fixed.id).then(() => undefined);
+        // A repeat or a step on is asked again, as the read itself was: it carries the headers, and a repeat the body, of the read.
+        return passOn(route, context, keepsSecrets(context, fixedScope, route.request(), (target) => fixedReadFor(method, target)?.id === fixed.id), keepsSecrets(context, fixedScope, route.request())).then(() => undefined);
       });
+    }
     // A read request passes only when a rule covers it and its body is a question to the service of that rule; a covered request with another body is noted.
     const read = readDecision(reads, method, route.request().url(), route.request().headers(), bodyOf(route.request()));
     if (read?.pass) return passOn(route, context, (target) => readRuleFor(reads, method, target)?.service === read.rule.service).then(() => undefined);
