@@ -13,6 +13,9 @@
     { "rule": "kcm-survey-start", "method": "POST", "url": "http://viewerapi.kcmg.nl/StartSurvey", "passes": false },
     { "rule": "readspeaker-simple-text", "method": "POST", "url": "https://wrapi-eu.readspeaker.com/v1/?cat=Summary", "passes": true },
     { "rule": "readspeaker-simple-text", "method": "POST", "url": "https://wrapi-eu.readspeaker.com/v1/log", "passes": false },
+    { "rule": "readspeaker-simple-text", "method": "POST", "url": "https://wrapi-eu.readspeaker.com/v1/", "passes": false },
+    { "rule": "readspeaker-simple-text", "method": "POST", "url": "https://wrapi-eu.readspeaker.com/v1/?cat=Translate", "passes": false },
+    { "rule": "readspeaker-simple-text", "method": "POST", "url": "https://wrapi-eu.readspeaker.com/v1/?cat=Summary&cat=Translate", "passes": false },
     { "rule": "google-waa-integrity", "method": "POST", "url": "https://jnn-pa.googleapis.com/$rpc/google.internal.waa.v1.Waa/GenerateIT", "passes": true },
     { "rule": "google-waa-integrity", "method": "POST", "url": "https://jnn-pa.googleapis.com/$rpc/google.internal.waa.v1.Waa/Create", "passes": false }
   ]

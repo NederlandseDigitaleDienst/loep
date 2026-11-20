@@ -85,20 +85,45 @@ function inventoryHosts(inventory: ScopeInventory): string[] {
 }
 
 /** The scope of the run for the commands of the sweep in this process (see `setRunScope`); null outside a run. */
-let sweepScope: Pick<Scope, "hosts"> | null = null;
+let sweepScope: Pick<Scope, "hosts" | "runDir"> | null = null;
 
 /**
  * Give the commands of the sweep in this process the scope of the run, as a session without
  * `--strict` has it: the hosts the inventory set, without the ones a session adds with `--allow-host`.
- * The sweep uses it to tell a stylesheet or script of the site that did not arrive (see `watchNotLoaded`).
+ * The sweep uses it to tell a stylesheet or script of the site that did not arrive (see `watchNotLoaded`),
+ * and to keep a secret of the run off a host outside it (see `secretLeavesRunNl`).
  * Without an inventory there is no scope; null takes it away.
  */
 export function setRunScope(runDir: string | null): void {
   const path = runDir === null ? null : join(runDir, "inventory.json");
-  sweepScope = path !== null && existsSync(path) ? { hosts: inventoryHosts(JSON.parse(readFileSync(path, "utf8")) as ScopeInventory) } : null;
+  sweepScope = path !== null && existsSync(path) ? { hosts: inventoryHosts(JSON.parse(readFileSync(path, "utf8")) as ScopeInventory), runDir: runDir! } : null;
 }
 
-export const runScope = (): Pick<Scope, "hosts"> | null => sweepScope;
+export const runScope = (): Pick<Scope, "hosts" | "runDir"> | null => sweepScope;
+
+const AUTHORIZATION_OUTSIDE_NL = "het verzoek naar een host buiten de run droeg een authorization-header, zoals een inlogtoken; zoiets gaat nooit naar een andere partij";
+const SECRET_OUTSIDE_NL = "het adres of een header van het verzoek naar een host buiten de run bevatte een geheim van de run, zoals een inlogtoken of een cookie van de site; zoiets gaat nooit naar een andere partij";
+
+/**
+ * Why a request to a host outside the run may not go, or null when it may: it carries an `authorization` header, or
+ * its address, a header or a cookie the browser holds for that address has a secret of the run in it, as alias or as
+ * the value itself. A cookie the other party set itself stays its own (see `Shield.carriedTo`). Asked for every
+ * request that leaves the run: a read with GET, a rendering resource and a fixed read rule alike.
+ */
+export async function secretLeavesRunNl(context: BrowserContext, scope: Pick<Scope, "hosts" | "runDir">, request: Request): Promise<string | null> {
+  const url = request.url();
+  const headers = request.headers();
+  // A preflight asks whether the request with that header may follow: it is held back as that request would be.
+  const preflight = (headers["access-control-request-headers"] ?? "").toLowerCase().split(",").map((name) => name.trim());
+  if (Object.keys(headers).some((name) => name.toLowerCase() === "authorization") || preflight.includes("authorization")) return AUTHORIZATION_OUTSIDE_NL;
+  const shield = scope.runDir !== undefined ? shieldForRun(scope.runDir) : null;
+  if (!shield) return null;
+  // The browser adds its cookies after the route, so they are asked of the context: a cookie of the site on its whole domain also reaches a host of that domain outside the run.
+  const cookies = await context.cookies(url).catch(() => []);
+  const parts = [url, ...Object.entries(headers).map(([name, value]) => `${name}: ${value}`), ...cookies.map((cookie) => `${cookie.name}=${cookie.value}`)];
+  const site = scope.hosts.flatMap((host) => [`https://${host}/`, `http://${host}/`]);
+  return shield.carriedTo(url, parts, site).length > 0 ? SECRET_OUTSIDE_NL : null;
+}
 
 /**
  * The hosts in scope for a run, each with its port when that is not 80 or 443 (`scopeHost`):
@@ -378,6 +403,11 @@ export async function guardContext(context: BrowserContext, scope: Scope, guard:
       // A navigation, such as a form posting to that address, is no fetch of a player and is never covered.
       const fixed = scope.strict || request.isNavigationRequest() ? null : fixedReadFor(method, url, request.headers());
       if (fixed) {
+        const leaves = inScope(scope, url) ? null : await secretLeavesRunNl(context, { hosts: scope.hosts, runDir }, request);
+        if (leaves) {
+          guard.blocked.push({ at: new Date().toISOString(), kind: "scope", method, url: url.slice(0, MAX_URL), resourceType: type, reasonNl: leaves });
+          return refuse();
+        }
         (guard.reads ??= []).push({ at: new Date().toISOString(), method, url: url.slice(0, MAX_URL), rule: fixed.id, fixed: true });
         // Repeated only to the address of the same rule; followed only inside the scope or on the origin of the rule.
         return passOn(route, context, (target) => fixedReadFor(method, target)?.id === fixed.id, (target) => inScope(scope, target) || target.startsWith(`${fixed.origin}/`)).then(() => undefined);
@@ -420,6 +450,11 @@ export async function guardContext(context: BrowserContext, scope: Scope, guard:
     // What the page already holds (data:, blob:) sends nothing anywhere; as the address of a page it is never in the scope.
     if (!request.isNavigationRequest() && /^(data|blob):/.test(url)) return route.continue();
     if (!scope.strict && !request.isNavigationRequest() && (RENDERING_TYPES.has(type) || READ_TYPES.has(type))) {
+      const leaves = await secretLeavesRunNl(context, { hosts: scope.hosts, runDir }, request);
+      if (leaves) {
+        guard.blocked.push({ at: new Date().toISOString(), kind: "scope", method, url: url.slice(0, MAX_URL), resourceType: type, reasonNl: leaves });
+        return refuse();
+      }
       const host = new URL(url).hostname;
       guard.outsideScopeLoaded[host] = (guard.outsideScopeLoaded[host] ?? 0) + 1;
       return proceed(route, context, (target) => inScope(scope, target));

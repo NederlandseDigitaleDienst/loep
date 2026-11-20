@@ -7,7 +7,7 @@ import type { Page } from "playwright";
 import { launchBrowser, loadPage, newContext, settlePage } from "../src/browser/session.ts";
 import { setFixedReads, type FixedRead } from "../src/lib/reads.ts";
 import { Daemon } from "../src/session/daemon.ts";
-import { scopeForRun, setRunScope } from "../src/session/safety.ts";
+import { guardContext, scopeForRun, setRunScope, type Guard } from "../src/session/safety.ts";
 import { startServer, type FixtureServer } from "./fixtures/session-site/server.ts";
 
 // A feedback window of another party: its script fetches its settings with a GET from a host outside the run, and only then
@@ -125,5 +125,45 @@ test("a strict session holds back the read of the window and the POST of the pla
   } finally {
     await daemon.close();
     setFixedReads(null);
+  }
+});
+
+test("a request to a host outside the run with an authorization header is held back, also without a login and also where a fixed read rule covers it", async () => {
+  setFixedReads([playerRule()]);
+  const browser = await launchBrowser();
+  const send = (page: Page, url: string, method: string): Promise<void> => page.evaluate(([to, how]) => fetch(to!, { method: how, headers: { authorization: "Bearer los-token-zonder-inlog" } }).then(() => undefined, () => undefined), [url, method]);
+  try {
+    const guard: Guard = { blocked: [], outsideScopeLoaded: {}, sender: "test" };
+    const context = await newContext(browser, { writes: null });
+    await guardContext(context, await scopeForRun(run, {}), guard);
+    const page = await context.newPage();
+    await loadPage(page, `${site.origin}${SURVEY}`);
+    const asked = outside("GET", "/survey-config");
+    const posted = outside("POST", "/player-data/player");
+    await send(page, `${site.otherOrigin}/survey-config`, "GET");
+    await send(page, `${site.otherOrigin}/player-data/player`, "POST");
+    assert.equal(outside("GET", "/survey-config"), asked, "the GET with the header was not sent");
+    assert.equal(outside("POST", "/player-data/player"), posted, "nor the POST the fixed rule covers");
+    for (const [method, path] of [["GET", "/survey-config"], ["POST", "/player-data/player"]]) {
+      assert.ok(guard.blocked.some((entry) => entry.kind === "scope" && entry.method === method && entry.url === `${site.otherOrigin}${path}` && /authorization/.test(entry.reasonNl ?? "")), JSON.stringify(guard.blocked));
+    }
+    assert.equal((guard.reads ?? []).length, 0, "no read was recorded for it");
+    await context.close();
+
+    // The sweep holds them back the same way.
+    setRunScope(run);
+    const sweep = await newContext(browser, { writes: null });
+    const swept = await sweep.newPage();
+    await loadPage(swept, `${site.origin}${SURVEY}`);
+    const before = outside("GET", "/survey-config");
+    await send(swept, `${site.otherOrigin}/survey-config`, "GET");
+    await send(swept, `${site.otherOrigin}/player-data/player`, "POST");
+    assert.equal(outside("GET", "/survey-config"), before);
+    assert.equal(outside("POST", "/player-data/player"), posted);
+    await sweep.close();
+  } finally {
+    setRunScope(null);
+    setFixedReads(null);
+    await browser.close();
   }
 });

@@ -450,6 +450,21 @@ export class Shield {
     return parts.some((part) => this.guardedAliases.some((alias) => part.includes(alias)));
   }
 
+  /**
+   * The values of the run that stand in these parts of a request to `url`, as their alias or as the value itself in
+   * any spelling this file knows. A value of the party at that address is left out: one that may go there and to none
+   * of `siteUrls`, such as a cookie that party set itself. A value that may go to the site is the site's, wherever else it may go.
+   */
+  carriedTo(url: string, parts: readonly string[], siteUrls: readonly string[]): RunSecret[] {
+    const texts = parts.map(asBytes);
+    return this.secrets.filter((secret) => {
+      if (reachOf(secret, url) && !siteUrls.some((site) => reachOf(secret, site))) return false;
+      if (texts.some((text) => text.includes(secret.alias))) return true;
+      const asWord = standsByChance(secret.real);
+      return formsOf(secret).some((value) => texts.some((text) => valuePattern(value, asWord).found(text)));
+    });
+  }
+
   /** Whether an address has an alias in it. */
   carriesAlias(url: string): boolean {
     return this.tokens.some((alias) => url.includes(alias));

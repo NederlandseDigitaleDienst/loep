@@ -34,6 +34,8 @@ test("a fixed rule names one exact https origin and one exact path, without a wo
   assert.match(fixedReadProblems({ ...rule, method: "PUT" }, "regel").join(" "), /POST/);
   assert.match(fixedReadProblems({ ...rule, service: "algolia" }, "regel").join(" "), /geen veld "service"/);
   assert.match(fixedReadProblems({ ...rule, reasonNl: "leest" }, "regel").join(" "), /te kort/);
+  assert.deepEqual(fixedReadProblems({ ...rule, query: { cat: "Summary" } }, "regel"), []);
+  for (const query of [{}, { cat: "" }, { cat: 1 }, "cat=Summary"]) assert.match(fixedReadProblems({ ...rule, query }, "regel").join(" "), /query noemt/, JSON.stringify(query));
   // A file with a rule that does not pass its checks stops loep: it never lets a request through.
   const dir = mkdtempSync(join(tmpdir(), "loep-fixed-reads-"));
   try {
@@ -54,4 +56,6 @@ test("the report names the fixed rules that let a request through, apart from th
   assert.match(said, /^één adres is toegelaten voor leesverzoeken: POST https:\/\/zoek\.example\.nl\/multi_search, zoekvraag aan Typesense/);
   assert.match(said, /\. Eén vaste leesregel van loep liet verzoeken door van een ingesloten speler of venster: POST https:\/\/www\.youtube-nocookie\.com\/youtubei\/v1\/player \(De ingesloten YouTube-speler zonder cookies/);
   assert.equal(readsAllowedNl([]), null);
+  const summary = fixedReads().find((rule) => rule.id === "readspeaker-simple-text")!;
+  assert.match(readsAllowedNl([{ ...summary, fixed: true }])!, /POST https:\/\/wrapi-eu\.readspeaker\.com\/v1\/\?cat=Summary \(/, "a rule with a query names it");
 });

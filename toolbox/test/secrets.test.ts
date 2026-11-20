@@ -1263,12 +1263,71 @@ test("a stored token stays off an address that is no part of the run: the scope 
     await loadPage(session.page, `${site.origin}/`);
     await session.page.evaluate((url) => fetch(url, { headers: { authorization: `Bearer ${localStorage.getItem("token")}` } }).catch(() => undefined), `${api.origin}/ik`);
     assert.deepEqual(api.heard, []);
-    assert.ok(session.guard.blocked.some((entry) => entry.kind === "scope" && entry.url.startsWith(api.origin)));
+    assert.ok(session.guard.blocked.some((entry) => entry.kind === "scope" && entry.url.startsWith(api.origin) && /authorization/.test(entry.reasonNl ?? "")), JSON.stringify(session.guard.blocked));
   } finally {
     setRunLogin(null);
     await session.close();
     await api.close();
     await site.close();
+    rmSync(run, { recursive: true, force: true });
+  }
+});
+
+test("a stored token in the query of a read to a host outside the run is held back, while the same read without it passes", async () => {
+  const api = await siteWith((_request, response) => void response.writeHead(200, { "access-control-allow-origin": "*" }).end("api"));
+  const site = await siteWith((_request, response) => html(response, "<h1>App</h1>"));
+  const run = runOn(site.origin);
+  writeLoginFile(join(run, LOGIN_SESSION_FILE), { ...loginSession(site.origin), storageState: { cookies: [], origins: [{ origin: site.origin, localStorage: [{ name: "token", value: STORED }] }] } });
+  setRunLogin(run);
+  const session = await sessionOn(run, await launched("chromium"));
+  try {
+    await loadPage(session.page, `${site.origin}/`);
+    await session.page.evaluate((url) => fetch(`${url}?token=${encodeURIComponent(localStorage.getItem("token")!)}`).catch(() => undefined), `${api.origin}/ik`);
+    assert.equal(api.heard.length, 0, "the token stays off the other host");
+    assert.ok(session.guard.blocked.some((entry) => entry.kind === "scope" && entry.url.startsWith(`${api.origin}/ik?token=`) && /geheim/.test(entry.reasonNl ?? "")), JSON.stringify(session.guard.blocked));
+    await session.page.evaluate((url) => fetch(url).catch(() => undefined), `${api.origin}/openbaar`);
+    assert.deepEqual(api.heard.map((request) => request.url), ["/openbaar"], "a read without a secret still goes out");
+  } finally {
+    setRunLogin(null);
+    await session.close();
+    await api.close();
+    await site.close();
+    rmSync(run, { recursive: true, force: true });
+  }
+});
+
+test("a cookie of the site that the browser would send to a host outside the run holds the request back", async () => {
+  const api = await siteWith((_request, response) => void response.writeHead(200, { "content-type": "image/gif" }).end("GIF89a"));
+  const site = await siteWith((_request, response) => html(response, "<h1>App</h1>"));
+  const run = runOn(site.origin);
+  // Cookies do not look at the port: the cookie of the site on 127.0.0.1 also reaches the other server on that address.
+  registerSecret(run, COOKIE, { source: SESSION_COOKIE_SOURCE, origins: [], domains: ["127.0.0.1"] });
+  const session = await sessionOn(run, await launched("chromium"));
+  try {
+    const alias = shieldForRun(run)!.secrets[0]!.alias;
+    await session.page.context().addCookies([{ name: "sessie", value: alias, domain: "127.0.0.1", path: "/" }]);
+    await loadPage(session.page, `${site.origin}/`);
+    await session.page.evaluate((url) => fetch(url).catch(() => undefined), `${api.origin}/pixel.gif`);
+    assert.deepEqual(api.heard, [], "the cookie of the site does not reach the other host");
+    assert.ok(session.guard.blocked.some((entry) => entry.kind === "scope" && entry.url === `${api.origin}/pixel.gif` && /geheim/.test(entry.reasonNl ?? "")), JSON.stringify(session.guard.blocked));
+  } finally {
+    await session.close();
+    await api.close();
+    await site.close();
+    rmSync(run, { recursive: true, force: true });
+  }
+});
+
+test("a value of another party that may go only to that party is its own: a read there passes with it", () => {
+  const run = runOn("http://127.0.0.1:1");
+  try {
+    registerSecret(run, COOKIE, { source: SESSION_COOKIE_SOURCE, origins: ["http://elders.test"] });
+    const shield = shieldForRun(run)!;
+    const alias = shield.secrets[0]!.alias;
+    assert.deepEqual(shield.carriedTo("http://elders.test/a", [`cookie: id=${alias}`], ["http://127.0.0.1:1/"]), [], "its own cookie goes to that party");
+    assert.equal(shield.carriedTo("http://ander.test/a", [`http://ander.test/a?id=${alias}`], ["http://127.0.0.1:1/"]).length, 1, "and to no other");
+    assert.equal(shield.carriedTo("http://ander.test/a", [`http://ander.test/a?id=${encodeURIComponent(COOKIE)}`], ["http://127.0.0.1:1/"]).length, 1, "the value itself counts as its alias");
+  } finally {
     rmSync(run, { recursive: true, force: true });
   }
 });

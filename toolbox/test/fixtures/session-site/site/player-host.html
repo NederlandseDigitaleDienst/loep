@@ -9,7 +9,7 @@
 <h1>Speler</h1>
 <iframe title="Speler" src="/stream-player.html" width="400" height="200"></iframe>
 <script>
-  // The page itself reads from another host as well; only the player may.
+  // The page itself reads from another host as well: without --strict that passes, as the read of the player does; with --strict neither does.
   fetch("__OTHER_ORIGIN__/stream-page.txt").catch(() => undefined);
 </script>
 </main>

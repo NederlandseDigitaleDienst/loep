@@ -197,11 +197,16 @@ export interface FixedRead {
   origin: string;
   /** The path, without query, exactly. */
   path: string;
+  /**
+   * Parameters of the query that have to stand exactly so, each once, for a service that names what it is asked to do
+   * there (`{ "cat": "Summary" }`). Other parameters may stand next to them. Without it the query is not looked at.
+   */
+  query?: Record<string, string>;
   /** What the request asks for and why it changes nothing, for whoever signs the report. */
   reasonNl: string;
 }
 
-export const FIXED_READ_FIELDS = ["id", "method", "origin", "path", "reasonNl"] as const;
+export const FIXED_READ_FIELDS = ["id", "method", "origin", "path", "query", "reasonNl"] as const;
 
 /** The problems of one fixed read rule, in Dutch: the checks of a rule of the site model, and narrower (no wildcard, https only). */
 export function fixedReadProblems(value: unknown, where: string): string[] {
@@ -221,6 +226,10 @@ export function fixedReadProblems(value: unknown, where: string): string[] {
   else {
     if (value.path.split("/").includes("*")) problems.push(`${where}: een vaste leesregel noemt een exact pad, zonder jokerteken`);
     problems.push(...pathProblems(value.path, where, true));
+  }
+  if (value.query !== undefined) {
+    const entries = isRecord(value.query) ? Object.entries(value.query) : [];
+    if (entries.length === 0 || entries.some(([name, wanted]) => name.trim() === "" || !isText(wanted))) problems.push(`${where}: query noemt een of meer parameters, elk met de tekst die er precies moet staan, zoals { "cat": "Summary" }`);
   }
   if (!isText(value.reasonNl) || value.reasonNl.trim().split(/\s+/).length < 6) problems.push(`${where}: reasonNl ontbreekt of is te kort`);
   return problems;
@@ -248,7 +257,8 @@ export function setFixedReads(rules: readonly FixedRead[] | null): void {
 }
 
 /**
- * The fixed rule that covers this request, or null: POST to exactly its origin and path, whatever the query. A
+ * The fixed rule that covers this request, or null: POST to exactly its origin and path, with each parameter its
+ * `query` names standing there once and exactly so; any other parameter of the query is not looked at. A
  * preflight of a browser (OPTIONS, asking whether a POST may follow) is covered too, as for a rule of the site model.
  */
 export function fixedReadFor(method: string, url: string, headers: Record<string, string> = {}, rules: readonly FixedRead[] = fixedReads()): FixedRead | null {
@@ -257,7 +267,8 @@ export function fixedReadFor(method: string, url: string, headers: Record<string
   if (asked !== "POST") return null;
   try {
     const parsed = new URL(url);
-    return rules.find((rule) => rule.origin === parsed.origin && rule.path === parsed.pathname) ?? null;
+    const queryFits = (query: Record<string, string> | undefined): boolean => Object.entries(query ?? {}).every(([name, wanted]) => parsed.searchParams.getAll(name).length === 1 && parsed.searchParams.get(name) === wanted);
+    return rules.find((rule) => rule.origin === parsed.origin && rule.path === parsed.pathname && queryFits(rule.query)) ?? null;
   } catch {
     return null;
   }
@@ -413,11 +424,11 @@ export const heldBackSearchNl = (entry: HeldBackSearch): string =>
 export const SEARCH_HELD_BACK_NL =
   "loep herkende de body als zoekvraag, maar geen leesverzoek van het sitemodel dekt dit adres: daarom is ze tegengehouden. De verkenner legt het adres vast in readRequests van site.json; na check-site gaat de zoekvraag door. Blijft daardoor iets open, noem dit adres dan in het punt `proef werkte niet:`";
 
-type ReadText = { method: string; origin: string; path: string; service?: string; reasonNl: string; /** A fixed rule of loep (`FixedRead`), not one of the site model. */ fixed?: true };
+type ReadText = { method: string; origin: string; path: string; query?: Record<string, string>; service?: string; reasonNl: string; /** A fixed rule of loep (`FixedRead`), not one of the site model. */ fixed?: true };
 
 /** One rule in the words of a report: method, address, service and why it may pass. */
 export const readNl = (rule: ReadText): string =>
-  `${rule.method} ${rule.origin}${rule.path}${rule.service && rule.service in SEARCH_SERVICES ? `, zoekvraag aan ${SEARCH_SERVICES[rule.service as SearchServiceId].nameNl}` : ""} (${rule.reasonNl.trim().replace(/\.$/, "")})`;
+  `${rule.method} ${rule.origin}${rule.path}${rule.query ? `?${new URLSearchParams(rule.query).toString()}` : ""}${rule.service && rule.service in SEARCH_SERVICES ? `, zoekvraag aan ${SEARCH_SERVICES[rule.service as SearchServiceId].nameNl}` : ""} (${rule.reasonNl.trim().replace(/\.$/, "")})`;
 
 /**
  * The sentence for the report and the dossier. Null without rules: then the report says what it

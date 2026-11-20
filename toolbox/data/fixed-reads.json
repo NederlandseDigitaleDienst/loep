@@ -26,6 +26,7 @@
       "method": "POST",
       "origin": "https://wrapi-eu.readspeaker.com",
       "path": "/v1/",
+      "query": { "cat": "Summary" },
       "reasonNl": "De voorleesspeler maakt hiermee een eenvoudige versie van de tekst van de pagina. Het verzoek stuurt die tekst mee en krijgt de eenvoudige tekst terug; er wordt niets op de site of bij de dienst vastgelegd."
     },
     {
