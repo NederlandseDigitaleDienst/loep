@@ -348,6 +348,28 @@ test("the sweep asks a blocked origin nothing, notes a 429 it gets itself, and s
   }
 });
 
+test("the sweep waits out a short pause for what a page that is already open asks: a 429 of another page does not take its stylesheet or script away", async () => {
+  const run = newRun();
+  writeFileSync(join(run, "inventory.json"), JSON.stringify({ baseUrl: `${site.origin}/`, origin: site.origin, pages: [] }));
+  setRunBlockade(run);
+  const browser = await launchBrowser();
+  try {
+    const page = await (await newContext(browser, { writes: null })).newPage();
+    await loadPage(page, `${site.origin}/`);
+    // Another page of the sweep gets a 429 with Retry-After: 1 while this one is open.
+    new Blockade(run).tooMany(`${site.origin}/too-many`, "1");
+    const until = endOf(readBlockades(run)[0]!)!;
+    const count = reached("/form.html");
+    const status = await page.evaluate((url) => fetch(url).then((response) => response.status, () => null), `${site.origin}/form.html`);
+    assert.equal(status, 200, "the request arrived after the pause, not refused");
+    assert.equal(reached("/form.html"), count + 1);
+    assert.ok(Date.now() >= until, "it did not go before the pause was over");
+  } finally {
+    setRunBlockade(null);
+    await browser.close();
+  }
+});
+
 test("an embedded frame of another party that keeps failing is paused, never an outage of the site, and pending does not stop the run for it", async () => {
   const run = newRun();
   writeFileSync(join(run, "inventory.json"), JSON.stringify({ baseUrl: "https://www.example.nl/", origins: ["https://www.example.nl"], pages: [{ url: "https://www.example.nl/" }, { url: "https://video.example.com/embed/1" }] }));

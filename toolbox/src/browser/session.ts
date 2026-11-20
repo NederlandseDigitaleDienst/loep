@@ -482,11 +482,15 @@ export async function newContext(browser: Browser, options: ContextOptions = {},
     if (spaced && loadsTab(route)) return spaced.before(route.request().url()).then(() => proceed(route, context).catch(() => undefined));
     return proceed(route, context);
   };
-  await context.route("**/*", (route) => {
+  await context.route("**/*", async (route) => {
     const method = route.request().method();
-    // Logging out ends the session for everything that comes after: such a request never leaves, whatever its method. Nor does one to an origin that refused the evaluation.
+    const refuse = (): Promise<void> => (route.request().isNavigationRequest() ? route.fulfill({ status: 204, body: "" }) : route.abort("blockedbyclient"));
+    // Logging out ends the session for everything that comes after: such a request never leaves, whatever its method.
     const personal = writes?.runDir !== undefined && shieldForRun(writes.runDir)?.touchesGuarded(route.request().url());
-    if ((logsOut(route.request().url()) && !personal) || blockade?.blockade.refuses(route.request().url())) return route.request().isNavigationRequest() ? route.fulfill({ status: 204, body: "" }) : route.abort("blockedbyclient");
+    if (logsOut(route.request().url()) && !personal) return refuse();
+    // Nor does one to an origin that refused the evaluation. A short pause the site asked for is waited out, as before a navigation:
+    // a page that was loading when another page got the 429 would otherwise lose its stylesheet or script without any notice.
+    if (blockade?.blockade.refuses(route.request().url()) && (await blockade.blockade.pause(route.request().url()))) return refuse().catch(() => undefined);
     if (method === "GET" || method === "HEAD") {
       if (scope && !inScope(scope, route.request().url())) return refuseLeaving(route, context, scope).then((refused) => (refused ? undefined : openRead(route)));
       return openRead(route);
