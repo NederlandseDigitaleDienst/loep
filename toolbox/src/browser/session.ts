@@ -494,17 +494,14 @@ export async function newContext(browser: Browser, options: ContextOptions = {},
     // Cloudflare's check whether the browser is a robot is answered by Cloudflare and never reaches the site.
     if (isChallenge(route.request().url(), (host) => viaCloudflare.has(host))) return proceed(route, context).catch(() => undefined);
     // A fixed read rule of loep, as in a session without --strict: an embedded player fetching what it shows. It takes nothing from the budget for sending.
-    // As in a session, only a read to a host outside the run is asked whether it carries a secret of the run: a host in the scope is part of the run.
     const fixed = route.request().isNavigationRequest() ? null : fixedReadFor(method, route.request().url(), route.request().headers());
     // What passed is noted for the report, which names every fixed rule that let something through.
-    if (fixed) {
-      const leaving = scope && inScope(scope, route.request().url()) ? Promise.resolve(false) : refuseLeaving(route, context, scope ?? { hosts: [], runDir: writes?.runDir });
-      return leaving.then((refused) => {
+    if (fixed)
+      return refuseLeaving(route, context, scope ?? { hosts: [], runDir: writes?.runDir }).then((refused) => {
         if (refused) return undefined;
         noteFixedRead({ method, address: addressOf(route.request().url()), rule: fixed.id });
         return passOn(route, context, (target) => fixedReadFor(method, target)?.id === fixed.id).then(() => undefined);
       });
-    }
     // A read request passes only when a rule covers it and its body is a question to the service of that rule; a covered request with another body is noted.
     const read = readDecision(reads, method, route.request().url(), route.request().headers(), bodyOf(route.request()));
     if (read?.pass) return passOn(route, context, (target) => readRuleFor(reads, method, target)?.service === read.rule.service).then(() => undefined);

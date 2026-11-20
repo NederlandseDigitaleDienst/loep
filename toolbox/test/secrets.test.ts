@@ -1319,36 +1319,6 @@ test("a cookie of the site that the browser would send to a host outside the run
   }
 });
 
-test("the sweep asks a fixed read only outside the run whether it carries a secret, as a session does: a host in the scope gets it, another host does not", async () => {
-  const inside = await siteWith((_request, response) => void response.writeHead(200, { "access-control-allow-origin": "*" }).end("{}"));
-  const outside = await siteWith((_request, response) => void response.writeHead(200, { "access-control-allow-origin": "*" }).end("{}"));
-  const site = await siteWith((_request, response) => html(response, "<h1>App</h1>"));
-  const run = mkdtempSync(join(tmpdir(), "loep-geheimen-"));
-  // The inventory found a window of the other host on a page, so that host is part of the run.
-  writeFileSync(join(run, "inventory.json"), JSON.stringify({ baseUrl: `${site.origin}/`, origin: site.origin, pages: [{ url: `${site.origin}/` }, { url: `${inside.origin}/venster.html` }] }));
-  // Cookies do not look at the port: the cookie of the site on 127.0.0.1 is one the browser holds for both other servers too.
-  registerSecret(run, COOKIE, { source: SESSION_COOKIE_SOURCE, origins: [], domains: ["127.0.0.1"] });
-  setFixedReads([inside, outside].map((party, index) => ({ id: `test-speler-${index}`, method: "POST", origin: party.origin, path: "/speler", reasonNl: "Een speler in de test vraagt hiermee zijn gegevens op en wijzigt niets." })));
-  setRunScope(run);
-  const sweep = await newContext(await launched("chromium"), { runDir: run });
-  try {
-    await sweep.addCookies([{ name: "sessie", value: shieldForRun(run)!.secrets[0]!.alias, domain: "127.0.0.1", path: "/" }]);
-    const page = await sweep.newPage();
-    await loadPage(page, `${site.origin}/`);
-    await page.evaluate((urls) => Promise.all(urls.map((url) => fetch(`${url}/speler`, { method: "POST", body: "video=abc" }).catch(() => undefined))), [inside.origin, outside.origin]);
-    assert.deepEqual(inside.heard.map((request) => request.url), ["/speler"], "the fixed read to the host in the scope went");
-    assert.deepEqual(outside.heard, [], "the fixed read to the host outside the run was held back");
-  } finally {
-    setRunScope(null);
-    setFixedReads(null);
-    await sweep.close();
-    await inside.close();
-    await outside.close();
-    await site.close();
-    rmSync(run, { recursive: true, force: true });
-  }
-});
-
 test("a value of another party that may go only to that party is its own: a read there passes with it", () => {
   const run = runOn("http://127.0.0.1:1");
   try {
