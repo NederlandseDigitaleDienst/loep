@@ -33,6 +33,7 @@ after(async () => {
 
 const SURVEY = "/survey-elsewhere.html";
 const PLAYER = "/player-elsewhere.html";
+const PLAYER_FORM = "/player-form-elsewhere.html";
 const outside = (method: string, path: string): number => site.requests.filter((request) => request.host === "localhost" && request.method === method && request.path === path).length;
 // A fixed rule for the player on the other name of the fixture server; the real rules name hosts no test may reach.
 const playerRule = (): FixedRead => ({ id: "testspeler", method: "POST", origin: site.otherOrigin, path: "/player-data/player", reasonNl: "De speler van de testsite vraagt hiermee op wat hij gaat afspelen." });
@@ -68,6 +69,10 @@ test("the sweep lets a GET of the page to a host outside the run through, and a 
     assert.equal(withRule.player, "Antwoord op /player-data/player", "the POST the rule covers passes");
     assert.equal(withRule.other, "", "a POST to another path of the same host stays held back");
     assert.equal(outside("POST", "/player-data/other"), 0);
+
+    const covered = outside("POST", "/player-data/player");
+    await shown(await (await newContext(browser, { writes: null })).newPage(), PLAYER_FORM);
+    assert.equal(outside("POST", "/player-data/player"), covered, "a form that posts to the covered address is a navigation, and stays held back");
   } finally {
     setRunScope(null);
     setFixedReads(null);
@@ -93,6 +98,12 @@ test("a session on the same run shows the window too, passes the covered POST as
     assert.ok((player.print.blocked as string[]).some((line) => line.includes(`POST ${site.otherOrigin}/player-data/other`)), JSON.stringify(player.print.blocked));
     assert.equal(((await loep("find", "Antwoord op /player-data/player")).print as { found?: string[] }).found?.length, 1, "the player got its answer");
     assert.equal(outside("POST", "/player-data/other"), 0, "the other path of that host was sent nothing");
+
+    const covered = outside("POST", "/player-data/player");
+    const form = await loep("open", PLAYER_FORM);
+    assert.equal(form.print.read, undefined, "a form that posts to the covered address is no read");
+    assert.ok((form.print.blocked as string[]).some((line) => line.includes(`POST ${site.otherOrigin}/player-data/player`)), JSON.stringify(form.print.blocked));
+    assert.equal(outside("POST", "/player-data/player"), covered, "the form was sent nothing");
   } finally {
     await daemon.close();
     setFixedReads(null);

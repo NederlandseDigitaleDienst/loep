@@ -480,7 +480,7 @@ export async function newContext(browser: Browser, options: ContextOptions = {},
     // Cloudflare's check whether the browser is a robot is answered by Cloudflare and never reaches the site.
     if (isChallenge(route.request().url(), (host) => viaCloudflare.has(host))) return proceed(route, context).catch(() => undefined);
     // A fixed read rule of loep, as in a session without --strict: an embedded player fetching what it shows. It takes nothing from the budget for sending.
-    const fixed = fixedReadFor(method, route.request().url(), route.request().headers());
+    const fixed = route.request().isNavigationRequest() ? null : fixedReadFor(method, route.request().url(), route.request().headers());
     if (fixed) return passOn(route, context, (target) => fixedReadFor(method, target)?.id === fixed.id).then(() => undefined);
     // A read request passes only when a rule covers it and its body is a question to the service of that rule; a covered request with another body is noted.
     const read = readDecision(reads, method, route.request().url(), route.request().headers(), bodyOf(route.request()));

@@ -303,7 +303,7 @@ const opensPage = (request: Request): boolean => {
  * that the run was given at inventory: writes and socket messages to it pass, and each is
  * recorded too. The other is a read request of a checked site model: the method, origin and
  * path a rule covers (see `readMatches`), also on a host outside the scope, recorded as a read, and so is a POST a fixed
- * read rule of loep covers (see `fixedReadFor`) unless the scope is strict. Cloudflare's check
+ * read rule of loep covers (see `fixedReadFor`) unless the scope is strict or it is a navigation. Cloudflare's check
  * whether the browser is a robot passes as well, because Cloudflare answers it and the site never
  * gets it (see `isChallenge`); what would otherwise have been refused is recorded. An origin of
  * the site that blocked the run (see `Blockade`) is asked nothing at all; what the site answers
@@ -375,7 +375,8 @@ export async function guardContext(context: BrowserContext, scope: Scope, guard:
     }
     if (method !== "GET" && method !== "HEAD") {
       // A fixed read rule of loep: an embedded player fetching what it shows. Recorded as a read, never counted as sending; a strict scope keeps it out.
-      const fixed = scope.strict ? null : fixedReadFor(method, url, request.headers());
+      // A navigation, such as a form posting to that address, is no fetch of a player and is never covered.
+      const fixed = scope.strict || request.isNavigationRequest() ? null : fixedReadFor(method, url, request.headers());
       if (fixed) {
         (guard.reads ??= []).push({ at: new Date().toISOString(), method, url: url.slice(0, MAX_URL), rule: fixed.id, fixed: true });
         // Repeated only to the address of the same rule; followed only inside the scope or on the origin of the rule.

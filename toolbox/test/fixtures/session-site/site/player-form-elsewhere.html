@@ -1,0 +1,13 @@
+<!doctype html>
+<html lang="nl">
+<head><meta charset="utf-8"><title>Formulier naar een speler van elders - Testsite sessie</title><link rel="stylesheet" href="/site.css"></head>
+<body>
+<main id="inhoud"><h1>Een formulier dat naar het adres van een speler van een andere partij gaat</h1>
+<iframe name="doel" title="Antwoord van het formulier"></iframe>
+<form method="post" action="__OTHER_ORIGIN__/player-data/player" target="doel"><input type="hidden" name="videoId" value="XXXXXXXXXXX"></form></main>
+<script>
+// A form that posts to the address a fixed read rule covers: that is a navigation, and a fixed rule only covers a fetch or XHR.
+document.forms[0].submit();
+</script>
+</body>
+</html>
