@@ -42,6 +42,9 @@
 #
 # De veegronde van Lindewaard bepaalt de duur: ongeveer 14 minuten. Zonder de veegronde duurt
 # alles samen ongeveer 11 minuten.
+#
+# Een voorstel dat de veegronde raakt, kan de volledige controle vóór de queue krijgen zonder
+# eigen machine: `gh workflow run Controle --ref <branch>`. Met de hand meet ze altijd alles.
 name: Controle
 
 on:

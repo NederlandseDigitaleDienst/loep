@@ -208,6 +208,18 @@ testsite *args:
 sweep-check *flags:
     node {{toolbox}}/scripts/sweep-check.ts {{flags}}
 
+# De regressietoets zoals de CI hem draait: Lindewaard en Berkenveen elk in een eigen proces tegelijk, met --at-once 3, in <out>/lindewaard en <out>/berkenveen. Ongeveer 17 minuten in plaats van ruim een half uur. Extra vlaggen gaan naar beide mee. Faalt als een van de twee faalt
+sweep-check-fast out *flags:
+    #!/usr/bin/env bash
+    set -uo pipefail
+    mkdir -p "{{out}}"
+    node {{toolbox}}/scripts/sweep-check.ts --variant defect --at-once 3 --out "{{out}}/lindewaard" {{flags}} > "{{out}}/lindewaard.log" 2>&1 & defect=$!
+    node {{toolbox}}/scripts/sweep-check.ts --variant clean --at-once 3 --out "{{out}}/berkenveen" {{flags}} > "{{out}}/berkenveen.log" 2>&1 & clean=$!
+    wait $defect; a=$?
+    wait $clean; b=$?
+    tail -n 2 "{{out}}/lindewaard.log" "{{out}}/berkenveen.log"
+    exit $(( a || b ))
+
 # Bouw de testsite opnieuw uit de bronnen in toolbox/fixtures/src
 testsite-build:
     node {{toolbox}}/fixtures/build.ts
