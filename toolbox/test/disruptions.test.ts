@@ -66,8 +66,10 @@ test("with disruptions each case answers as fixtures/disruptions.ts says, determ
     assert.equal(await stylesheetFor(origin, page("stylesheet-once")), 502);
     assert.equal(await stylesheetFor(origin, page("stylesheet-once")), 200, "once");
   }
-  // Armed again, they happen once more.
-  disrupted.disruptions!.arm();
+  // Armed again, they happen once more; armed for one variant, the other answers as usual.
+  disrupted.disruptions!.arm("defect");
+  assert.equal(await status(`${disrupted.origins.clean}${page("too-many-requests")}`), 200, "arming one variant leaves the other alone");
+  assert.equal(await stylesheetFor(disrupted.origins.clean, page("stylesheet-once")), 200);
   assert.equal(await status(`${disrupted.origins.defect}${page("too-many-requests")}`), 429);
   assert.equal(await stylesheetFor(disrupted.origins.defect, page("stylesheet-once")), 502);
 });

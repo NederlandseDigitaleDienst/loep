@@ -114,7 +114,7 @@ export function useFixtureReads(dir: string, thirdParty: string): string {
 export type SweepTimes = Record<string, number>;
 
 /** A login with the account of the fixture, inventory, the fixed model, check-site, sample, the three steps of the sweep and documents, on one variant. */
-export async function sweepVariant(run: string, variant: Variant, origins: { site: string; thirdParty: string }, atOnce: number, disruptions?: { arm: () => void }): Promise<{ seconds: SweepTimes; checkProblems: string[] }> {
+export async function sweepVariant(run: string, variant: Variant, origins: { site: string; thirdParty: string }, atOnce: number, disruptions?: { arm: (variant: Variant) => void }): Promise<{ seconds: SweepTimes; checkProblems: string[] }> {
   const seconds: SweepTimes = {};
   const timed = async <T>(name: string, step: () => Promise<T>): Promise<T> => {
     const started = Date.now();
@@ -138,7 +138,7 @@ export async function sweepVariant(run: string, variant: Variant, origins: { sit
     const check = await timed("check-site", () => checkSite(run, { navigationDelayMs: 50 }));
     if (!check.ok) return { seconds, checkProblems: check.problems };
     await timed("sample", () => sample(run, "toegankelijk"));
-    disruptions?.arm();
+    disruptions?.arm(variant);
     await timed("collect", () => collect({ run, atOnce }));
     // The one more try for a page that missed a stylesheet, as the gate sends a run back to the sweep for it.
     if (disruptions) await timed("collect-again", () => collect({ run, atOnce }));
@@ -148,6 +148,11 @@ export async function sweepVariant(run: string, variant: Variant, origins: { sit
     return { seconds, checkProblems: [] };
   } finally {
     setRunLogin(null);
+    // The next variant starts with its inventory: a 429 there belongs to its own run, not to this one.
+    if (disruptions) {
+      setRunScope(null);
+      setRunBlockade(null);
+    }
   }
 }
 

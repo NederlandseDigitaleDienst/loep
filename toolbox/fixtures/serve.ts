@@ -299,7 +299,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   if (port(values.defect) !== undefined) ports.defect = port(values.defect)!;
   if (port(values.clean) !== undefined) ports.clean = port(values.clean)!;
   if (port(values.third) !== undefined) ports.thirdParty = port(values.third)!;
-  const fixture = await startFixture({ ports, ...(values.log ? { logFile: values.log } : {}), ...(values["session-seconds"] ? { sessionSeconds: Number(values["session-seconds"]) } : {}), ...(values.disruptions ? { disruptions: { armed: true } } : {}) });
+  const fixture = await startFixture({ ports, ...(values.log ? { logFile: values.log } : {}), ...(values["session-seconds"] ? { sessionSeconds: Number(values["session-seconds"]) } : {}), ...(values.disruptions ? { disruptions: { armed: false } } : {}) });
   process.stdout.write(`Lindewaard  ${fixture.origins.defect}\nBerkenveen  ${fixture.origins.clean}\nKijkpunt    ${fixture.origins.thirdParty}\nlog         ${fixture.logFile}\n${fixture.disruptions ? "storingen   aan, zie fixtures/disruptions.ts\n" : ""}`);
   process.on("SIGINT", () => void fixture.close().then(() => process.exit(0)));
 }
