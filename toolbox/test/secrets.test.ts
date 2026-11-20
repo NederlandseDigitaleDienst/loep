@@ -95,8 +95,8 @@ interface Session {
   close: () => Promise<void>;
 }
 
-async function sessionOn(run: string, browser: Browser): Promise<Session> {
-  const scope = await scopeForRun(run, {});
+async function sessionOn(run: string, browser: Browser, allowHosts: string[] = []): Promise<Session> {
+  const scope = await scopeForRun(run, { allowHosts });
   const guard: Guard = { blocked: [], outsideScopeLoaded: {}, sender: "test" };
   const context = await newContext(browser, { runDir: run });
   await guardContext(context, scope, guard);
@@ -1431,6 +1431,32 @@ test("a value that may go only to a window of another party is that party's own:
   } finally {
     setRunScope(null);
     await session.close();
+    await frame.close();
+    await site.close();
+    rmSync(run, { recursive: true, force: true });
+  }
+});
+
+test("a host of --allow-host is one the run added on purpose, as the API of the site: a GET there with the token or a cookie of the site goes, a window of the inventory still is another party", async () => {
+  const api = await siteWith((_request, response) => void response.writeHead(200, { "access-control-allow-origin": "*", "access-control-allow-headers": "*" }).end("{}"));
+  const frame = await siteWith((_request, response) => void response.writeHead(200, { "access-control-allow-origin": "*" }).end("{}"));
+  const site = await siteWith((_request, response) => html(response, "<h1>App</h1>"));
+  const run = mkdtempSync(join(tmpdir(), "loep-geheimen-"));
+  writeFileSync(join(run, "inventory.json"), JSON.stringify({ baseUrl: `${site.origin}/`, origin: site.origin, pages: [{ url: `${site.origin}/` }, { url: `${frame.origin}/venster.html` }] }));
+  registerSecret(run, COOKIE, { source: SESSION_COOKIE_SOURCE, origins: [], domains: ["127.0.0.1"] });
+  const alias = shieldForRun(run)!.secrets[0]!.alias;
+  const get = (page: Page, url: string, headers: Record<string, string> = {}): Promise<unknown> => page.evaluate(([address, sent]) => fetch(address!, { headers: sent as Record<string, string> }).catch(() => undefined), [url, headers] as const);
+  const session = await sessionOn(run, await launched("chromium"), [new URL(api.origin).host]);
+  try {
+    await loadPage(session.page, `${site.origin}/`);
+    await get(session.page, `${api.origin}/gegevens?t=${alias}`);
+    await get(session.page, `${api.origin}/gegevens`, { authorization: `Bearer ${alias}` });
+    assert.equal(api.heard.length, 2, JSON.stringify(session.guard.blocked));
+    await get(session.page, `${frame.origin}/speler?t=${alias}`);
+    assert.equal(frame.heard.length, 0, "the window of another party still gets no secret of the site");
+  } finally {
+    await session.close();
+    await api.close();
     await frame.close();
     await site.close();
     rmSync(run, { recursive: true, force: true });

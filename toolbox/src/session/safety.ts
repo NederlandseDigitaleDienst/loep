@@ -46,9 +46,9 @@ export interface Scope {
   /** Hosts a session may navigate to and send requests to. */
   hosts: string[];
   /**
-   * The hosts of the site itself: its origins, and the address of `--scope`. Not a window of another party that the
-   * inventory found, nor a host of `--allow-host`, though both are in `hosts`. Only a fixed read to one of these
-   * goes without asking whether it carries a secret of the run (see `onSite`). Absent: no host is.
+   * The hosts of the site itself: its origins, the address of `--scope` and the hosts of `--allow-host`, which the run
+   * added on purpose. Not a window of another party that the inventory found, though it is in `hosts`. Only a request
+   * to one of these goes without asking whether it carries a secret of the run (see `onSite`). Absent: no host is.
    */
   siteHosts?: string[];
   /** Start URL of the run; relative page addresses are resolved against it. */
@@ -168,7 +168,8 @@ export async function secretLeavesRunNl(context: BrowserContext, scope: Pick<Sco
  */
 export async function scopeForRun(runDir: string, extra: { scopeUrl?: string | undefined; allowHosts?: string[]; strict?: boolean }): Promise<Scope> {
   const hosts = new Set<string>((extra.allowHosts ?? []).map(scopeHostOf));
-  const own = new Set<string>();
+  // A host of `--allow-host` was added to the run on purpose, as the API of the site on a host of its own: it is the site's.
+  const own = new Set<string>(hosts);
   let baseUrl: string | null = null;
   let sitePath: string | undefined;
   let probes: string[] = [];
