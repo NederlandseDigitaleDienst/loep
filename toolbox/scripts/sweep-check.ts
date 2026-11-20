@@ -67,9 +67,9 @@ export const DISRUPTION_CASE_PAGES = [...new Set(DISRUPTIONS.map((entry) => (ent
 /**
  * Pages of the key that --only-disruptions measures as well. The questionnaire on the page with questions comes with a
  * POST that only the fixed read rule lets through, and the scope of a run with disruptions once kept it out: the fast
- * check has to see that.
+ * check has to see that. The regional block on the page with opening hours is a GET to the other party that the same scope decides.
  */
-export const KEY_PAGES_WITH_DISRUPTIONS = ["/veelgestelde-vragen.html"];
+export const KEY_PAGES_WITH_DISRUPTIONS = ["/veelgestelde-vragen.html", "/openingstijden.html"];
 
 export type SweepStep = "login" | "inventory" | "check-site" | "sample" | "collect" | "collect-again" | "contrast" | "states" | "documents";
 export type SweepMode = "plain" | "disruptions" | "only-disruptions";
@@ -348,7 +348,8 @@ export async function evaluate(runs: Partial<Record<Variant, string>>, measuredP
   const missing = DEFECTS.filter((defect) => !byId.has(defect.id)).map((defect) => defect.id);
   if (missing.length > 0) throw new Error(`fixtures/evidence.ts noemt deze gebreken niet: ${missing.join(", ")}`);
   const scripted = DEFECTS.map((defect) => [defect, byId.get(defect.id)!] as const).filter((pair): pair is readonly [Defect, ScriptEvidence] => !isAgentOnly(pair[1]));
-  const browser = await launchBrowser();
+  // Started for the first page with a dossier: runs without pages (as in a test) need no browser.
+  let browser: Browser | null = null;
   const marks = new Map<string, PageMarks>();
   const found: Record<Variant, Map<string, string[]>> = { defect: new Map(), clean: new Map() };
   try {
@@ -367,7 +368,7 @@ export async function evaluate(runs: Partial<Record<Variant, string>>, measuredP
           const key = `${variant} ${item.slug}`;
           if (!marks.has(key)) {
             const selectors = [...new Set(DEFECTS.flatMap((each) => [each.selector, placeOf(each.selector)]))];
-            marks.set(key, existsSync(join(dir, "page.html")) ? await marksOf(browser, dir, selectors) : { chains: {}, around: {}, failures: {} });
+            marks.set(key, existsSync(join(dir, "page.html")) ? await marksOf((browser ??= await launchBrowser()), dir, selectors) : { chains: {}, around: {}, failures: {} });
           }
           const mark = marks.get(key)!;
           // On the twin the defect element itself is often absent: there the test looks at the same place.
@@ -396,7 +397,7 @@ export async function evaluate(runs: Partial<Record<Variant, string>>, measuredP
       }
     }
   } finally {
-    await browser.close();
+    await browser?.close();
   }
   return DEFECTS.map((defect) => {
     const entry = byId.get(defect.id)!;
