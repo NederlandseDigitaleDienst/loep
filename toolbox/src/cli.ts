@@ -432,7 +432,7 @@ async function main(): Promise<void> {
   if (command !== "inventory" && command !== "login" && !readsOnly && values.run) setRunLogin(values.run);
   // A site that refused the evaluation (blockades.json in the run) is asked nothing by the sweep either, and a 429 it gives the sweep ends the asking for the sessions too.
   if (command !== "inventory" && !readsOnly && values.run) (await import("./session/blockade.ts")).setRunBlockade(values.run);
-  // The commands of the sweep refuse what a session refuses on the ground of the scope of the run: a read of data from a host outside it.
+  // The commands of the sweep know the scope of the run, to tell a stylesheet or script of the site that did not arrive.
   if (SWEEP_COMMANDS.includes(command) && values.run) (await import("./session/safety.ts")).setRunScope(values.run);
   if (NEEDS_SITE_MODEL.includes(command) && values.run && !existsSync(join(values.run, "site.json"))) throw new Error(NOT_EXPLORED_NL);
   switch (command) {

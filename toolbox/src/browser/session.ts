@@ -3,10 +3,10 @@ import { chromium, type APIResponse, type Browser, type BrowserContext, type Pag
 import type { Crowd } from "../lib/atonce.ts";
 import { CLOUDFLARE_HEADER, isChallenge } from "../lib/challenge.ts";
 import { confirmLoginOn, LoginExpired, logsOut, registerSessionSecrets, runLoginMark, runLoginState, runOfLogin, sessionWithAliases, throwIfLoginExpired, watchLogin } from "../lib/login.ts";
-import { addressOf, noteRefusedRead, readDecision, readRuleFor, runReads, type ReadRequest } from "../lib/reads.ts";
+import { addressOf, fixedReadFor, noteRefusedRead, readDecision, readRuleFor, runReads, type ReadRequest } from "../lib/reads.ts";
 import { claimInTurn, claimLink, isThisMachine, isWriteOrigin, runWrites, SocketFrames, type PassedWrite, type SendDeadline, type WriteAccess } from "../lib/writes.ts";
 import { LONGEST_FAILURE_PAUSE_SECONDS, OriginBlocked, runBlockade } from "../session/blockade.ts";
-import { MESSAGE_VALUES, runScope, sweepRefusesOutsideScope } from "../session/safety.ts";
+import { inScope, MESSAGE_VALUES, runScope, secretLeavesRunNl } from "../session/safety.ts";
 import { answerRefusalNl, httpRecordings, httpReplayNl, httpSendOf, keptHeaders, playRecording, socketRecordings, type HttpRecordings, type PassedReplay, type Recorder } from "../lib/recordings.ts";
 import { shieldForRun, type Shield } from "../lib/secrets.ts";
 import { readableFrame } from "./call.ts";
@@ -245,6 +245,13 @@ export async function sendOrReplay(context: BrowserContext, route: Route, writes
   return { kind: "sent", entry: claim.entry, repeated: repeatedEntry };
 }
 
+/** In the sweep, a request to a host outside the run that carries a secret of the run, or an authorization header, does not go (see `secretLeavesRunNl`): whether it was refused. */
+async function refuseLeaving(route: Route, context: BrowserContext, scope: { hosts: string[]; runDir?: string | undefined }): Promise<boolean> {
+  if (!(await secretLeavesRunNl(context, scope, route.request()))) return false;
+  await (route.request().isNavigationRequest() ? route.fulfill({ status: 204, body: "" }) : route.abort("blockedbyclient")).catch(() => undefined);
+  return true;
+}
+
 /** A GET or HEAD of the sweep in a run with secrets: a guarded address takes from the budget like any write. */
 async function openShielded(route: Route, context: BrowserContext, shield: Shield, writes: WriteAccess, spaced: NavigationSpacing | null): Promise<void> {
   const link = route.request().isNavigationRequest() ? shield.guardedId(route.request().url()) : null;
@@ -463,27 +470,32 @@ export async function newContext(browser: Browser, options: ContextOptions = {},
   if (hasClipboardPermission(browser)) await context.grantPermissions(["clipboard-write"]);
   const writes = options.writes === undefined ? runWrites() : options.writes;
   const reads = options.reads ?? runReads();
-  // In a command of the sweep, the scope of the run as a session has it: what a session refuses there, the sweep refuses too.
+  // In a command of the sweep, the scope of the run as a session has it: a secret of the run stays off a host outside it, as in a session.
   const scope = runScope();
   // An evaluation must never change the site under test: only safe requests pass. The
   // exceptions are the origin of a test environment that the run was given at inventory, and
   // the read requests of a checked site model: a question to a search service, by method, origin and path.
+  const openRead = (route: Route): Promise<void> => {
+    const spaced = spacing;
+    const shield = shieldOf(writes?.runDir, route.request().url());
+    if (shield) return openShielded(route, context, shield, writes!, spaced);
+    if (spaced && loadsTab(route)) return spaced.before(route.request().url()).then(() => proceed(route, context).catch(() => undefined));
+    return proceed(route, context);
+  };
   await context.route("**/*", (route) => {
     const method = route.request().method();
     // Logging out ends the session for everything that comes after: such a request never leaves, whatever its method. Nor does one to an origin that refused the evaluation.
     const personal = writes?.runDir !== undefined && shieldForRun(writes.runDir)?.touchesGuarded(route.request().url());
     if ((logsOut(route.request().url()) && !personal) || blockade?.blockade.refuses(route.request().url())) return route.request().isNavigationRequest() ? route.fulfill({ status: 204, body: "" }) : route.abort("blockedbyclient");
     if (method === "GET" || method === "HEAD") {
-      // A read of data from a host outside the run: a session refuses it, so what it would fill stays empty in every measurement.
-      if (scope && sweepRefusesOutsideScope(scope, route.request())) return route.abort("blockedbyclient");
-      const spaced = spacing;
-      const shield = shieldOf(writes?.runDir, route.request().url());
-      if (shield) return openShielded(route, context, shield, writes!, spaced);
-      if (spaced && loadsTab(route)) return spaced.before(route.request().url()).then(() => proceed(route, context).catch(() => undefined));
-      return proceed(route, context);
+      if (scope && !inScope(scope, route.request().url())) return refuseLeaving(route, context, scope).then((refused) => (refused ? undefined : openRead(route)));
+      return openRead(route);
     }
     // Cloudflare's check whether the browser is a robot is answered by Cloudflare and never reaches the site.
     if (isChallenge(route.request().url(), (host) => viaCloudflare.has(host))) return proceed(route, context).catch(() => undefined);
+    // A fixed read rule of loep, as in a session without --strict: an embedded player fetching what it shows. It takes nothing from the budget for sending.
+    const fixed = route.request().isNavigationRequest() ? null : fixedReadFor(method, route.request().url(), route.request().headers());
+    if (fixed) return refuseLeaving(route, context, scope ?? { hosts: [], runDir: writes?.runDir }).then((refused) => (refused ? undefined : passOn(route, context, (target) => fixedReadFor(method, target)?.id === fixed.id).then(() => undefined)));
     // A read request passes only when a rule covers it and its body is a question to the service of that rule; a covered request with another body is noted.
     const read = readDecision(reads, method, route.request().url(), route.request().headers(), bodyOf(route.request()));
     if (read?.pass) return passOn(route, context, (target) => readRuleFor(reads, method, target)?.service === read.rule.service).then(() => undefined);

@@ -9,8 +9,8 @@ import { mailboxForRun, ownRegistration, readMailboxState } from "../lib/mailbox
 import { maskFile, shieldForRun } from "../lib/secrets.ts";
 import { isChallenge } from "../lib/challenge.ts";
 import { notFoundProbes, privateFromPublicSite, scopeHost, scopeHostOf, scopePrefix, siteOrigins, WEB_SCHEMES } from "../lib/origins.ts";
-import { loginCookieHeader, logsOut } from "../lib/login.ts";
-import { onReadOrigin, pathOf, readDecision, readRuleFor, type ReadRequest } from "../lib/reads.ts";
+import { IDLE_SESSION_FILE, LOGIN_SESSION_FILE, loginCookieHeader, logsOut } from "../lib/login.ts";
+import { fixedReadFor, onReadOrigin, pathOf, readDecision, readRuleFor, type ReadRequest } from "../lib/reads.ts";
 import { searchServicesOf, type SearchServiceId } from "../lib/searchbody.ts";
 import { SEARCH_FALLBACK, SEARCH_NONE } from "../lib/searchterm.ts";
 import { searchTermForRun, searchTermsForRun } from "../lib/sitemodel.ts";
@@ -85,32 +85,64 @@ function inventoryHosts(inventory: ScopeInventory): string[] {
 }
 
 /** The scope of the run for the commands of the sweep in this process (see `setRunScope`); null outside a run. */
-let sweepScope: Pick<Scope, "hosts"> | null = null;
+let sweepScope: Pick<Scope, "hosts" | "runDir"> | null = null;
 
 /**
  * Give the commands of the sweep in this process the scope of the run, as a session without
  * `--strict` has it: the hosts the inventory set, without the ones a session adds with `--allow-host`.
- * A browser of the sweep then refuses what a session refuses on the ground of that scope (see
- * `sweepRefusesOutsideScope`), so content that only a host outside the run delivers stays empty in
- * every measurement. Without an inventory there is no scope and nothing is refused; null takes it away.
+ * The sweep uses it to tell a stylesheet or script of the site that did not arrive (see `watchNotLoaded`),
+ * and to keep a secret of the run off a host outside it (see `secretLeavesRunNl`).
+ * Without an inventory there is no scope; null takes it away.
  */
 export function setRunScope(runDir: string | null): void {
   const path = runDir === null ? null : join(runDir, "inventory.json");
-  sweepScope = path !== null && existsSync(path) ? { hosts: inventoryHosts(JSON.parse(readFileSync(path, "utf8")) as ScopeInventory) } : null;
+  sweepScope = path !== null && existsSync(path) ? { hosts: inventoryHosts(JSON.parse(readFileSync(path, "utf8")) as ScopeInventory), runDir: runDir! } : null;
 }
 
-export const runScope = (): Pick<Scope, "hosts"> | null => sweepScope;
+export const runScope = (): Pick<Scope, "hosts" | "runDir"> | null => sweepScope;
+
+const AUTHORIZATION_OUTSIDE_NL = "het verzoek naar een host buiten de run droeg een authorization-header, zoals een inlogtoken; zoiets gaat nooit naar een andere partij";
+const SECRET_OUTSIDE_NL = "het adres, een header, de body of een cookie van het verzoek naar een host buiten de run bevatte een geheim van de run, zoals een inlogtoken of een cookie van de site; zoiets gaat nooit naar een andere partij";
+const TOKEN_OUTSIDE_NL = "in deze run is ingelogd, en het verzoek naar een host buiten de run droeg iets wat een inlogtoken kan zijn (een JWT, of een header met een naam als token of session); zoiets gaat nooit naar een andere partij";
 
 /**
- * Whether a GET or HEAD of the sweep goes where a session without `--strict` refuses it: a read of
- * data (fetch, XHR) by the page from a host outside the scope. A read by an embedded window in the
- * scope passes, as in a session: a player fetches its stream from its own servers. Stylesheets,
- * scripts, images, fonts and media from elsewhere pass in both.
+ * The name of a header that holds a token of a session, as sites name it (`x-auth-token`, `x-csrftoken`, `x-session-id`).
+ * Not the name of a parameter of the query: a map service asks for its tiles with `token=` too.
  */
-export function sweepRefusesOutsideScope(scope: Pick<Scope, "hosts">, request: Request): boolean {
-  if (!READ_TYPES.has(request.resourceType())) return false;
-  if (!/^https?:/.test(request.url()) || inScope(scope, request.url())) return false;
-  return !fromEmbeddedInScope(scope, request);
+const TOKEN_NAME = /token|session|jwt|csrf|xsrf|(?:^|[-_])auth(?:$|[-_])/i;
+/** A JSON Web Token: two parts in base64url that each start with `{"`, and a signature. */
+const JWT = /eyJ[\w-]{8,}\.eyJ[\w-]{8,}\.[\w-]*/;
+
+/** Whether a run has a login: then the page can hold a token the site gave it after the login, which is in no register. */
+const hasLogin = (runDir: string): boolean => existsSync(join(runDir, LOGIN_SESSION_FILE)) || existsSync(join(runDir, IDLE_SESSION_FILE));
+
+/**
+ * Why a request to a host outside the run may not go, or null when it may: it carries an `authorization` header, or
+ * its address, a header, its body or a cookie the browser holds for that address has a secret of the run in it, as
+ * alias or as the value itself. A cookie the other party set itself stays its own (see `Shield.carriedTo`). In a run
+ * with a login a token the page got from the site after it is in no register, so there a JWT anywhere, and a header
+ * named for a token, count as well; a token of another shape in the query or the path is not recognized. Asked for
+ * every request that leaves the run: a read with GET, a rendering resource and a fixed read rule alike.
+ */
+export async function secretLeavesRunNl(context: BrowserContext, scope: Pick<Scope, "hosts" | "runDir">, request: Request): Promise<string | null> {
+  const url = request.url();
+  const headers = request.headers();
+  // A preflight asks whether the request with that header may follow: it is held back as that request would be.
+  const preflight = (headers["access-control-request-headers"] ?? "").toLowerCase().split(",").map((name) => name.trim());
+  if (Object.keys(headers).some((name) => name.toLowerCase() === "authorization") || preflight.includes("authorization")) return AUTHORIZATION_OUTSIDE_NL;
+  if (scope.runDir === undefined) return null;
+  const body = request.method() === "GET" || request.method() === "HEAD" ? null : bodyOf(request);
+  const sent = [url, ...Object.entries(headers).map(([name, value]) => `${name}: ${value}`), ...(body ? [body] : [])];
+  if (hasLogin(scope.runDir)) {
+    const names = [...Object.keys(headers), ...preflight];
+    if (names.some((name) => TOKEN_NAME.test(name)) || sent.some((part) => JWT.test(part))) return TOKEN_OUTSIDE_NL;
+  }
+  const shield = shieldForRun(scope.runDir);
+  if (!shield) return null;
+  // The browser adds its cookies after the route, so they are asked of the context: a cookie of the site on its whole domain also reaches a host of that domain outside the run.
+  const cookies = await context.cookies(url).catch(() => []);
+  const site = scope.hosts.flatMap((host) => [`https://${host}/`, `http://${host}/`]);
+  return shield.carriedTo(url, [...sent, ...cookies.map((cookie) => `${cookie.name}=${cookie.value}`)], site).length > 0 ? SECRET_OUTSIDE_NL : null;
 }
 
 /**
@@ -185,9 +217,11 @@ const SOCKET_REFUSED_NL = "WebKit opent een socket op deze machine buiten de gre
 /** Resource types a page needs to look the way it does. Fetched with GET only, also from hosts outside the scope unless the scope is strict. */
 const RENDERING_TYPES = new Set(["stylesheet", "script", "image", "font", "media"]);
 /**
- * Requests a script makes to read data. From an embedded window in the scope, such as a video
- * player, they may go to a host outside the scope with GET, unless the scope is strict: a player
- * fetches its stream from its own servers, the way it does for any visitor.
+ * Requests a script makes to read data. With GET or HEAD they may go to a host outside the scope,
+ * unless the scope is strict, from the page as from an embedded window: a player fetches its stream
+ * from its own servers, and a survey of another party its settings, the way they do for any visitor.
+ * That host does not join the run: a session does not navigate there and sends it nothing that
+ * can change something. The sweep lets the same reads through.
  */
 const READ_TYPES = new Set(["fetch", "xhr"]);
 const MAX_URL = 300;
@@ -202,22 +236,9 @@ const CONNECTION_LOST = /ERR_(CONNECTION_(RESET|CLOSED|ABORTED|TIMED_OUT)|EMPTY_
 /** What a server, or the gateway in front of it, answers while it has too much to do. Any other error status is taken as what the site answers every visitor. */
 const BUSY_STATUS = new Set([429, 502, 503, 504]);
 
-/** Whether a request comes from an embedded window whose address is in the scope. A request of a worker has no frame and does not count. */
-function fromEmbeddedInScope(scope: Pick<Scope, "hosts">, request: Request): boolean {
-  try {
-    let frame: Frame | null = request.frame();
-    if (frame.parentFrame() === null) return false;
-    // A frame without an address of its own (about:blank, about:srcdoc) belongs to the page that made it.
-    while (frame && frame.url().startsWith("about:")) frame = frame.parentFrame();
-    return frame !== null && inScope(scope, frame.url());
-  } catch {
-    return false;
-  }
-}
-
 export interface Guard {
   blocked: Blocked[];
-  /** Requests for rendering resources, and reads of an embedded window in the scope, that went to a host outside the scope, per host. */
+  /** Requests for rendering resources, and reads of data with GET or HEAD, that went to a host outside the scope, per host. */
   outsideScopeLoaded: Record<string, number>;
   /** Writes that were let through to the test environment; absent until the first one. */
   passed?: PassedWrite[];
@@ -278,10 +299,12 @@ export interface PassedRead {
   at: string;
   method: string;
   url: string;
-  /** Id of the rule in the site model that let it through. */
+  /** Id of the rule in the site model, or of the fixed rule of loep (`FixedRead`), that let it through. */
   rule: string;
-  /** The search service the body was recognised as. */
-  service: SearchServiceId;
+  /** The search service the body was recognised as; absent for a fixed rule, which does not look at the body. */
+  service?: SearchServiceId;
+  /** A fixed rule of loep let it through, not one of the site model. */
+  fixed?: true;
 }
 
 /** Whether an address is in the scope: http, https, ws or wss, on a host of the run with the same port. Any other scheme never is. */
@@ -324,7 +347,8 @@ const opensPage = (request: Request): boolean => {
  * a WebSocket. Each refusal is recorded. One exception is the origin of a test environment
  * that the run was given at inventory: writes and socket messages to it pass, and each is
  * recorded too. The other is a read request of a checked site model: the method, origin and
- * path a rule covers (see `readMatches`), also on a host outside the scope, recorded as a read. Cloudflare's check
+ * path a rule covers (see `readMatches`), also on a host outside the scope, recorded as a read, and so is a POST a fixed
+ * read rule of loep covers (see `fixedReadFor`) unless the scope is strict or it is a navigation. Cloudflare's check
  * whether the browser is a robot passes as well, because Cloudflare answers it and the site never
  * gets it (see `isChallenge`); what would otherwise have been refused is recorded. An origin of
  * the site that blocked the run (see `Blockade`) is asked nothing at all; what the site answers
@@ -395,6 +419,19 @@ export async function guardContext(context: BrowserContext, scope: Scope, guard:
       return proceed(route, context, (target) => inScope(scope, target));
     }
     if (method !== "GET" && method !== "HEAD") {
+      // A fixed read rule of loep: an embedded player fetching what it shows. Recorded as a read, never counted as sending; a strict scope keeps it out.
+      // A navigation, such as a form posting to that address, is no fetch of a player and is never covered.
+      const fixed = scope.strict || request.isNavigationRequest() ? null : fixedReadFor(method, url, request.headers());
+      if (fixed) {
+        const leaves = inScope(scope, url) ? null : await secretLeavesRunNl(context, { hosts: scope.hosts, runDir }, request);
+        if (leaves) {
+          guard.blocked.push({ at: new Date().toISOString(), kind: "scope", method, url: url.slice(0, MAX_URL), resourceType: type, reasonNl: leaves });
+          return refuse();
+        }
+        (guard.reads ??= []).push({ at: new Date().toISOString(), method, url: url.slice(0, MAX_URL), rule: fixed.id, fixed: true });
+        // Repeated only to the address of the same rule; followed only inside the scope or on the origin of the rule.
+        return passOn(route, context, (target) => fixedReadFor(method, target)?.id === fixed.id, (target) => inScope(scope, target) || target.startsWith(`${fixed.origin}/`)).then(() => undefined);
+      }
       const body = bodyOf(request);
       const read = readDecision(reads, method, url, request.headers(), body);
       if (read?.pass) {
@@ -432,7 +469,12 @@ export async function guardContext(context: BrowserContext, scope: Scope, guard:
     }
     // What the page already holds (data:, blob:) sends nothing anywhere; as the address of a page it is never in the scope.
     if (!request.isNavigationRequest() && /^(data|blob):/.test(url)) return route.continue();
-    if (!scope.strict && !request.isNavigationRequest() && (RENDERING_TYPES.has(type) || (READ_TYPES.has(type) && fromEmbeddedInScope(scope, request)))) {
+    if (!scope.strict && !request.isNavigationRequest() && (RENDERING_TYPES.has(type) || READ_TYPES.has(type))) {
+      const leaves = await secretLeavesRunNl(context, { hosts: scope.hosts, runDir }, request);
+      if (leaves) {
+        guard.blocked.push({ at: new Date().toISOString(), kind: "scope", method, url: url.slice(0, MAX_URL), resourceType: type, reasonNl: leaves });
+        return refuse();
+      }
       const host = new URL(url).hostname;
       guard.outsideScopeLoaded[host] = (guard.outsideScopeLoaded[host] ?? 0) + 1;
       return proceed(route, context, (target) => inScope(scope, target));

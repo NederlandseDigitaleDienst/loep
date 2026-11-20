@@ -1,0 +1,22 @@
+{
+  "cases": [
+    { "rule": "youtube-player", "method": "POST", "url": "https://www.youtube.com/youtubei/v1/player?prettyPrint=false", "passes": true },
+    { "rule": "youtube-player", "method": "OPTIONS", "url": "https://www.youtube.com/youtubei/v1/player", "headers": { "access-control-request-method": "POST" }, "passes": true },
+    { "rule": "youtube-player", "method": "POST", "url": "https://www.youtube.com/youtubei/v1/log_event?alt=json", "passes": false },
+    { "rule": "youtube-player", "method": "POST", "url": "https://youtube.com/youtubei/v1/player", "passes": false },
+    { "rule": "youtube-player", "method": "PUT", "url": "https://www.youtube.com/youtubei/v1/player", "passes": false },
+    { "rule": "youtube-nocookie-player", "method": "POST", "url": "https://www.youtube-nocookie.com/youtubei/v1/player?prettyPrint=false", "passes": true },
+    { "rule": "youtube-nocookie-player", "method": "POST", "url": "https://www.youtube-nocookie.com/youtubei/v1/player/heartbeat", "passes": false },
+    { "rule": "youtube-nocookie-player", "method": "POST", "url": "http://www.youtube-nocookie.com/youtubei/v1/player", "passes": false },
+    { "rule": "kcm-survey-start", "method": "POST", "url": "https://viewerapi.kcmg.nl/StartSurvey", "passes": true },
+    { "rule": "kcm-survey-start", "method": "POST", "url": "https://viewerapi.kcmg.nl/SaveSurveyResult", "passes": false },
+    { "rule": "kcm-survey-start", "method": "POST", "url": "http://viewerapi.kcmg.nl/StartSurvey", "passes": false },
+    { "rule": "readspeaker-simple-text", "method": "POST", "url": "https://wrapi-eu.readspeaker.com/v1/?cat=Summary", "passes": true },
+    { "rule": "readspeaker-simple-text", "method": "POST", "url": "https://wrapi-eu.readspeaker.com/v1/log", "passes": false },
+    { "rule": "readspeaker-simple-text", "method": "POST", "url": "https://wrapi-eu.readspeaker.com/v1/", "passes": false },
+    { "rule": "readspeaker-simple-text", "method": "POST", "url": "https://wrapi-eu.readspeaker.com/v1/?cat=Translate", "passes": false },
+    { "rule": "readspeaker-simple-text", "method": "POST", "url": "https://wrapi-eu.readspeaker.com/v1/?cat=Summary&cat=Translate", "passes": false },
+    { "rule": "google-waa-integrity", "method": "POST", "url": "https://jnn-pa.googleapis.com/$rpc/google.internal.waa.v1.Waa/GenerateIT", "passes": true },
+    { "rule": "google-waa-integrity", "method": "POST", "url": "https://jnn-pa.googleapis.com/$rpc/google.internal.waa.v1.Waa/Create", "passes": false }
+  ]
+}

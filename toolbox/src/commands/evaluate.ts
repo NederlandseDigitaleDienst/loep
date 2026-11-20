@@ -22,7 +22,7 @@ import { openPoint, sessionOfObservation, UNREACHABLE, waitsOnlyOnSending, type 
 import { loginNl, NOT_LOGGED_IN_NL } from "../lib/login.ts";
 import { mailboxLimitationsNl } from "../lib/mailbox.ts";
 import { secretLimitationsNl } from "../lib/secrets.ts";
-import { heldBackSearches, heldBackSearchNl, readsAllowedNl, refusedCoveredReads } from "../lib/reads.ts";
+import { fixedReadsUsed, heldBackSearches, heldBackSearchNl, readsAllowedNl, refusedCoveredReads } from "../lib/reads.ts";
 import { WRITES_BLOCKED_NL, writesAllowedNl } from "../lib/writes.ts";
 import { blockadesNl } from "../session/blockade.ts";
 import { METHODS } from "../instruments/methods/registry.ts";
@@ -243,11 +243,16 @@ export async function evaluate(options: EvaluateOptions): Promise<Evaluation> {
   const documents = population ? evaluationDocuments(run.documents ?? [], population, procedures.filter((procedure) => procedure.evidence.includes("documents")).map((procedure) => procedure.id)) : null;
   const documentScope = searchedForDocuments ? documentScopeNl(documents, origins, siteDocuments(run.inventory).elsewhere, omittedByPageLimit(run.inventory.skipped ?? [])) : null;
 
+  // The read rules of the site model, and the fixed rules of loep that let a request through in a session of this run.
+  const readsOfRun = [
+    ...(run.reads ?? []).map((rule) => ({ method: rule.method, origin: rule.origin, path: rule.path, service: rule.service, reasonNl: rule.reasonNl })),
+    ...fixedReadsUsed(observations.records.values() as Iterable<{ reads?: { rule: string; fixed?: true }[] }>).map((rule) => ({ method: rule.method, origin: rule.origin, path: rule.path, ...(rule.query ? { query: rule.query } : {}), reasonNl: rule.reasonNl, fixed: true as const })),
+  ];
   const limitations = [
     browsersNl,
     screenReader.limitationNl,
     `Versturen van formulieren: ${run.writes ? writesAllowedNl(run.writes) : WRITES_BLOCKED_NL}.`,
-    ...(readsAllowedNl(run.reads ?? []) ? [`Leesverzoeken: ${readsAllowedNl(run.reads ?? [])}.`] : []),
+    ...(readsAllowedNl(readsOfRun) ? [`Leesverzoeken: ${readsAllowedNl(readsOfRun)}.`] : []),
     // A site that blocked the run: what the sessions could not ask any more is missing.
     ...blockadesNl(options.run),
     "De beoordeling per criterium is gedaan door een taalmodel, op basis van bewijs dat scripts hebben verzameld en van eigen waarnemingen met meetinstrumenten. Elke handeling en meting van het model is vastgelegd als waarneming en kan worden nagespeeld.",
@@ -344,7 +349,7 @@ export async function evaluate(options: EvaluateOptions): Promise<Evaluation> {
     limitationsNl: limitations,
     ...(measuredStates ? { measuredStates } : {}),
     ...(documents ? { documents } : {}),
-    chain: { kind: "instruments", gate: gateSummary, writes: { allowed: Boolean(run.writes), noteNl: run.writes ? [writesAllowedNl(run.writes), replaysNl(options.run)].filter(Boolean).join(". ") : WRITES_BLOCKED_NL, ...(run.writes?.local ? { local: true as const } : {}) }, ...((run.reads ?? []).length > 0 ? { reads: run.reads!.map((rule) => ({ method: rule.method, origin: rule.origin, path: rule.path, service: rule.service, reasonNl: rule.reasonNl })) } : {}) },
+    chain: { kind: "instruments", gate: gateSummary, writes: { allowed: Boolean(run.writes), noteNl: run.writes ? [writesAllowedNl(run.writes), replaysNl(options.run)].filter(Boolean).join(". ") : WRITES_BLOCKED_NL, ...(run.writes?.local ? { local: true as const } : {}) }, ...(readsOfRun.length > 0 ? { reads: readsOfRun } : {}) },
     signature: null,
   };
   if (earlier) {

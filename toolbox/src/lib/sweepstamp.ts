@@ -34,8 +34,10 @@ import type { Blocker, Postcondition } from "./sitemodel.ts";
  * request: a long-poll or a hanging beacon no longer holds every page until the cap of 10 s. 18: after loading, the page is
  * scrolled through once and back to the top, so content that only shows when it comes into view is measured as shown. 19: text
  * that an animation on scroll hides again once it is out of view keeps its shown state when the page is back at the top.
+ * 20: a read of data (fetch, XHR) with GET or HEAD from a host outside the scope of the run passes again, as it now does in a
+ * session, so what it fills is measured; the POST of an embedded player that a fixed read rule covers passes too (`FIXED_READS`).
  */
-export const SWEEP_STAMP_VERSION = 19;
+export const SWEEP_STAMP_VERSION = 20;
 
 /**
  * How the content of a page is read for its stamp. Raise when that changes: an older hash can then never match,

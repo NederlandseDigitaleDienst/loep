@@ -398,8 +398,8 @@ export interface EvaluationChain {
     /** The site was on this machine and could send with --allow-writes: a new evaluation that declares a chat next to it keeps that flag. Absent otherwise, and in older evaluations. */
     local?: true;
   };
-  /** POST requests that only read and were let through, such as a question to a search service. Absent when there were none, and in older evaluations. */
-  reads?: { method: string; origin: string; path: string; /** The search service whose form a body had to have; absent in evaluations from before it was asked. */ service?: string; reasonNl: string }[];
+  /** POST requests that only read and were let through, such as a question to a search service or the request of an embedded player. Absent when there were none, and in older evaluations. */
+  reads?: { method: string; origin: string; path: string; /** The search service whose form a body had to have; absent in evaluations from before it was asked. */ service?: string; reasonNl: string; /** A fixed read rule of loep, such as the POST of an embedded video player; absent for a rule of the site model. */ fixed?: true }[];
 }
 
 /** The verdict of the judge (`a`), that of the verifier (`final`) and that of the finishing round, for a criterion that had one. */

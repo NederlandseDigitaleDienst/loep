@@ -118,12 +118,31 @@ test("the sweep passes the socket of Cloudflare's check on the same terms, and c
   assert.deepEqual(site.socketMessages, ["controle"]);
 });
 
-test("an embedded window in the scope may read from a host outside it, as a player fetches its stream; the page itself may not", async () => {
+test("without --strict a read with GET to a host outside the scope passes from the page and from an embedded window alike, as a player fetches its stream", async () => {
   site.requests.length = 0;
   const opened = await open("stream", "/player-host.html");
-  const reads = site.requests.filter((request) => request.host === "localhost").map((request) => `${request.method} ${request.path}`);
-  assert.deepEqual(reads, ["GET /stream-frame.txt"]);
-  assert.ok(opened.record.blocked.some((entry) => entry.kind === "scope" && entry.url === `${site.otherOrigin}/stream-page.txt`), JSON.stringify(opened.record.blocked));
+  const reads = site.requests.filter((request) => request.host === "localhost").map((request) => `${request.method} ${request.path}`).sort();
+  assert.deepEqual(reads, ["GET /stream-frame.txt", "GET /stream-page.txt"]);
+  assert.equal(opened.record.blocked.some((entry) => entry.url.startsWith(site.otherOrigin)), false, JSON.stringify(opened.record.blocked));
+});
+
+test("with --strict neither the page nor an embedded window reads from a host outside the scope, and both are noted as held back", async () => {
+  const strictRun = mkdtempSync(join(tmpdir(), "loep-challenge-strict-"));
+  writeFileSync(join(strictRun, "inventory.json"), JSON.stringify({ baseUrl: `${site.origin}/`, origin: site.origin, pages: [{ url: `${site.origin}/`, foundVia: [] }] }));
+  const strict = await Daemon.create(strictRun, { hosts: [new URL(site.origin).host], baseUrl: `${site.origin}/`, strict: true }, { navigationDelayMs: 50, maxSessions: 2, secondBrowsers: false });
+  try {
+    site.requests.length = 0;
+    assert.equal((await strict.handle({ op: "start", session: "streng" })).ok, true);
+    const response = await strict.handle({ op: "command", session: "streng", command: "open", args: ["/player-host.html"], options: {} });
+    assert.equal(response.ok, true, JSON.stringify(response.print));
+    assert.deepEqual(site.requests.filter((request) => request.host === "localhost"), [], "the host outside the scope was asked nothing");
+    assert.ok(site.requests.some((request) => request.path === "/stream-player.html"), "the embedded window in the scope itself loads");
+    const blocked = (response.print.blocked as string[] | undefined) ?? [];
+    for (const path of ["/stream-page.txt", "/stream-frame.txt"]) assert.ok(blocked.includes(`scope: GET ${site.otherOrigin}${path}`), JSON.stringify(blocked));
+  } finally {
+    await strict.close();
+    rmSync(strictRun, { recursive: true, force: true });
+  }
 });
 
 test("a window that the inventory found only embedded is opened with the page around it as referer", async () => {

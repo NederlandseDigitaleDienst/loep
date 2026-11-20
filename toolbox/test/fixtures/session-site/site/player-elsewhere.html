@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="nl">
+<head><meta charset="utf-8"><title>Speler van elders - Testsite sessie</title><link rel="stylesheet" href="/site.css"></head>
+<body>
+<main id="inhoud"><h1>Een pagina met een speler van een andere partij</h1>
+<p id="speler"></p>
+<p id="ander"></p></main>
+<script>
+// The script of a player of another party: it asks its own host with a POST what to play (a fixed read rule covers that path),
+// and posts to another path of the same host as well (no rule covers that one). A text body keeps both free of a preflight.
+const ask = (path, into) =>
+  fetch(`__OTHER_ORIGIN__${path}`, { method: "POST", headers: { "content-type": "text/plain" }, body: '{"videoId":"XXXXXXXXXXX"}' })
+    .then((answer) => answer.json())
+    .then((data) => { document.getElementById(into).textContent = data.title; })
+    .catch(() => undefined);
+ask("/player-data/player?prettyPrint=false", "speler");
+ask("/player-data/other", "ander");
+</script>
+</body>
+</html>

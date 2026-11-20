@@ -95,6 +95,11 @@ export async function startServer(port = 0): Promise<FixtureServer> {
         response.writeHead(204, { "access-control-allow-origin": "*", "access-control-allow-methods": "POST", "access-control-allow-headers": "content-type" }).end();
         return;
       }
+      // What an embedded player of another party asks for with a POST before it plays: what it shows, under /player-data/.
+      if (path.startsWith("/player-data/")) {
+        response.writeHead(200, { "content-type": "application/json", "access-control-allow-origin": "*", "cache-control": "no-store" }).end(JSON.stringify({ title: `Antwoord op ${path}` }));
+        return;
+      }
       if (path.endsWith("/queries")) {
         response.writeHead(200, { "content-type": "application/json", "access-control-allow-origin": "*" }).end(JSON.stringify({ results: [{ hits: [{ title: "Afvalkalender" }, { title: "Afval scheiden" }, { title: "Grofvuil" }] }] }));
         return;

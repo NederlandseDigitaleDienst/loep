@@ -85,8 +85,9 @@ export interface Inventory {
   searchTermAlternatives?: string[];
   /**
    * Origins outside the run that a page of the site read content from with GET (fetch or XHR), with the
-   * pages that did and how many such answers came. A session and the sweep refuse those requests, so what they load
-   * stays empty in every measurement unless the origin is given with `--also-origin`. Absent in older runs.
+   * pages that did and how many such answers came. A session without `--strict` and the sweep let those requests
+   * through, so what they load is measured; only with `--also-origin` does the origin join the run, to be opened,
+   * sent to and sampled. Absent in older runs.
    */
   readsOutsideRun?: ReadOutsideRun[];
 }
@@ -195,7 +196,8 @@ export function formPagesNl(pages: Pick<InventoryPage, "url" | "counts" | "found
 
 /**
  * The pages that read content from an origin outside the run, said right after the inventory. A
- * session and the sweep refuse such a request, so a block filled by it stays empty in every measurement; which
+ * session without `--strict` and the sweep let such a request through, so a block filled by it is measured, but
+ * the origin does not join the run: no navigation there, nothing sent there, no page of it in the sample. Which
  * origins belong to the run is decided here and cannot change later. Null when there is nothing to say.
  */
 export function readsOutsideRunNl(reads: readonly ReadOutsideRun[] | undefined): string | null {
@@ -206,8 +208,9 @@ export function readsOutsideRunNl(reads: readonly ReadOutsideRun[] | undefined):
   const flags = reads.length <= 3 ? reads.map((entry) => `--also-origin ${entry.origin}`).join(" ") : "--also-origin <origin> voor elk adres dat erbij hoort";
   return (
     `let op: ${pages === 1 ? "één pagina haalt" : `${pages} pagina's halen`} met GET inhoud op van een adres buiten de run: ${listed.join(", ")}. ` +
-    `Een sessie en de veegronde houden die verzoeken tegen, dus wat zo in de pagina komt, blijft in elke meting leeg. ` +
-    `Hoort die inhoud bij het onderzoek, begin dan opnieuw met inventory, in een nieuwe map, met ${flags}. Zo niet, dan valt ze buiten de afbakening`
+    `Een sessie zonder --strict en de veegronde laten die verzoeken door, dus wat zo in de pagina komt, wordt mee gemeten. ` +
+    `Dat adres hoort daarmee niet bij de run: loep opent er geen pagina, verstuurt er niets heen en neemt het niet op in de steekproef. ` +
+    `Hoort die partij bij het onderzoek, zodat loep er pagina's opent of iets heen verstuurt, begin dan opnieuw met inventory, in een nieuwe map, met ${flags}. Zo niet, dan valt ze verder buiten de afbakening`
   );
 }
 
