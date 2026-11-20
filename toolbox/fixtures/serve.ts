@@ -11,7 +11,9 @@
  * before and after a run, or pass a fresh file.
  *
  * The two sites have a part behind a login (/mijn/). The account is in account.ts; a session
- * is a cookie that lasts --session-seconds from the moment of logging in.
+ * is a cookie that lasts --session-seconds from the moment of logging in. A login with the right
+ * password is logged as a "login" without its body, so the password never reaches the log, and
+ * every visit that ends a session as a "logout": a run with a login has to leave zero of those.
  */
 import { createHash, randomBytes } from "node:crypto";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, statSync } from "node:fs";
@@ -47,7 +49,7 @@ const TEXT = new Set([".html", ".css", ".js", ".xml", ".txt"]);
 export interface LogEntry {
   time: string;
   site: SiteKey;
-  kind: "request" | "ws-open" | "ws-message";
+  kind: "request" | "ws-open" | "ws-message" | "login" | "logout";
   method?: string;
   path: string;
   body?: string;
@@ -56,7 +58,7 @@ export interface LogEntry {
 export interface FixtureServer {
   origins: Record<SiteKey, string>;
   logFile: string;
-  /** Entries that mean something was sent to a site: non-GET requests and socket messages. */
+  /** Entries that mean something was sent to a site: non-GET requests and socket messages, apart from a login with the account. */
   writes(): LogEntry[];
   /** How often a visitor with a session asked for an address that ends it. */
   logouts(): number;
@@ -147,7 +149,10 @@ export async function startFixture(options: { ports?: Partial<Record<SiteKey, nu
     const method = request.method ?? "GET";
     // An address that ends the session does so whatever the method, as a link on a real site would.
     if (LOGOUT_PATHS.includes(url.pathname)) {
-      if (loggedIn(site, request)) logouts++;
+      if (loggedIn(site, request)) {
+        logouts++;
+        log({ site, kind: "logout", method, path: url.pathname });
+      }
       sessions.delete(tokenOf(request) ?? "");
       return redirect(response, 302, LOGIN_PAGE, `${SESSION_COOKIE}=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax`);
     }
@@ -156,10 +161,11 @@ export async function startFixture(options: { ports?: Partial<Record<SiteKey, nu
       request.on("data", (chunk: Buffer) => chunks.push(chunk));
       request.on("end", () => {
         const body = Buffer.concat(chunks).toString("utf8");
-        log({ site, kind: "request", method, path: url.pathname + url.search, body: body.slice(0, 2000) });
         // The right name and password open a session. Anything else is answered the way every form here is answered.
         const sent = new URLSearchParams(body);
-        if (method === "POST" && url.pathname === "/inloggen" && sent.get("gebruikersnaam") === ACCOUNT.username && sent.get("wachtwoord") === ACCOUNT.password) {
+        const rightLogin = method === "POST" && url.pathname === "/inloggen" && sent.get("gebruikersnaam") === ACCOUNT.username && sent.get("wachtwoord") === ACCOUNT.password;
+        log({ site, kind: rightLogin ? "login" : "request", method, path: url.pathname + url.search, ...(rightLogin ? {} : { body: body.slice(0, 2000) }) });
+        if (rightLogin) {
           const token = randomBytes(16).toString("hex");
           sessions.set(token, { site, until: Date.now() + sessionMs });
           return redirect(response, 303, ACCOUNT_HOME, `${SESSION_COOKIE}=${token}; Path=/; HttpOnly; SameSite=Lax`);
@@ -235,7 +241,7 @@ export async function startFixture(options: { ports?: Partial<Record<SiteKey, nu
         .split("\n")
         .filter(Boolean)
         .map((line) => JSON.parse(line) as LogEntry)
-        .filter((entry) => entry.kind !== "ws-open"),
+        .filter((entry) => entry.kind === "request" || entry.kind === "ws-message"),
     logouts: () => logouts,
     expireSessions: () => sessions.clear(),
     mailRoute,

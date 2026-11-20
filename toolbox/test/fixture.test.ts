@@ -8,6 +8,7 @@ import { chromium, type Browser } from "playwright";
 import { ACCOUNT, SESSION_COOKIE } from "../fixtures/account.ts";
 import { ACCOUNT_PAGES, PAGES, SITES, staleOutput } from "../fixtures/build.ts";
 import { CRITERIA_EXPECTED, DEFECTS, TRAPS } from "../fixtures/defects.ts";
+import { logoutsIn } from "../fixtures/login.ts";
 import { startFixture, type FixtureServer } from "../fixtures/serve.ts";
 import type { ReferenceAudit } from "../src/commands/compare.ts";
 import { DECLARED_ORIGIN, readHttpRecordings, RECORD_QUIET_MS } from "../src/lib/recordings.ts";
@@ -80,7 +81,7 @@ describe("fixture site", () => {
     // A page that carries a defect must differ from its twin.
     for (const defect of DEFECTS) {
       for (const path of defect.pages) {
-        const page = PAGES.find((entry) => entry.path === path.split("?")[0]);
+        const page = [...PAGES, ...ACCOUNT_PAGES].find((entry) => entry.path === path.split("?")[0]);
         if (!page) continue;
         const read = (dir: string): string => readFileSync(join(SERVED, dir, page.file), "utf8").replaceAll(SITES.defect.name, "X").replaceAll(SITES.clean.name, "X");
         const sameHtml = read(SITES.defect.dir) === read(SITES.clean.dir);
@@ -159,7 +160,11 @@ describe("fixture server", () => {
     }
     const problems: string[] = [];
     for (const key of ["defect", "clean"] as const) {
-      const page = await browser.newPage();
+      // The pages behind the login need a session: the browser gets the cookie a login gives.
+      const loggedIn = await fetch(`${fixture.origins[key]}/inloggen`, { method: "POST", redirect: "manual", headers: { "content-type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ gebruikersnaam: ACCOUNT.username, wachtwoord: ACCOUNT.password }) });
+      const context = await browser.newContext();
+      await context.addCookies([{ name: SESSION_COOKIE, value: /=([a-f0-9]+)/.exec(loggedIn.headers.get("set-cookie") ?? "")![1]!, url: fixture.origins[key] }]);
+      const page = await context.newPage();
       for (const [path, defects] of byPath) {
         await page.goto(`${fixture.origins[key]}${path}`, { waitUntil: "load" });
         const counts = await page.evaluate((selectors) => selectors.map((selector) => document.querySelectorAll(selector).length), defects.map((defect) => defect.selector));
@@ -169,7 +174,7 @@ describe("fixture server", () => {
           if (found !== expected) problems.push(`${key} ${path} ${defect.id}: "${defect.selector}" ${found ? "matches" : "does not match"}`);
         });
       }
-      await page.close();
+      await context.close();
     }
     assert.deepEqual(problems, []);
     assert.deepEqual(fixture.writes(), [], "loading pages must not send anything");
@@ -201,10 +206,15 @@ describe("fixture server", () => {
       assert.equal(own.logouts(), 0);
       assert.equal((await get("/mijn/sessie-sluiten", cookie)).status, 302);
       assert.equal(own.logouts(), 1);
+      // The log has the logout and the login, never the password; only the wrong login is a write.
+      assert.deepEqual(logoutsIn(own.logFile).map((entry) => [entry.site, entry.path]), [["clean", "/mijn/sessie-sluiten"]]);
+      assert.ok(!readFileSync(own.logFile, "utf8").includes(ACCOUNT.password));
+      assert.deepEqual(own.writes().map((entry) => entry.body), [new URLSearchParams({ gebruikersnaam: ACCOUNT.username, wachtwoord: "iets-anders" }).toString()]);
       assert.equal((await get("/mijn/", cookie)).status, 302);
       const again = (await logIn(ACCOUNT.password)).headers.get("set-cookie")!.split(";")[0]!;
       assert.equal((await get("/uitloggen", again)).status, 302);
       assert.equal(own.logouts(), 2);
+      assert.equal(logoutsIn(own.logFile).length, 2);
       // And time ends it.
       const short = (await logIn(ACCOUNT.password)).headers.get("set-cookie")!.split(";")[0]!;
       assert.equal((await get("/mijn/", short)).status, 200);

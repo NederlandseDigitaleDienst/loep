@@ -11,4 +11,11 @@
     <tr><th scope="row">Uittreksel basisregistratie</th><td>9 januari</td><td>Afgehandeld</td></tr>
   </tbody>
 </table>
+<h2>Een aanvraag intrekken</h2>
+<p>Hebt u de parkeervergunning niet meer nodig? Dan kunt u de aanvraag intrekken. Een ingetrokken aanvraag kunt u niet terugzetten, en de leges van 45 euro krijgt u niet terug.</p>
+<form class="formulier" id="intrekformulier" action="/mijn/intrekken" method="post">
+  <input type="hidden" name="aanvraag" value="parkeervergunning">
+  <!--@bad 3.3.4-intrekken--><!--@good--><p><input type="checkbox" id="intrekken-zeker" name="zeker" required> <label for="intrekken-zeker">Ik weet dat ik de aanvraag hierna niet kan terugzetten</label></p>
+  <!--@end--><div class="verzendrij"><button type="submit">Parkeervergunning intrekken</button></div>
+</form>
 <p><a href="/mijn/">Terug naar het overzicht</a></p>

@@ -19,7 +19,7 @@ node src/cli.ts compare --findings tasks --run runs/<naam> --reference fixtures/
 
 Voor Berkenveen is `reference-berkenveen.json` de referentie: geen enkel criterium hoort daar te worden afgekeurd, dus alles onder "alleen wij" is een valse melding of een gebrek dat er per ongeluk in zit.
 
-De server schrijft elk verzoek dat geen GET of HEAD is en elk bericht over de WebSocket van de chat naar het logbestand (standaard `runs/fixture-server.log`), één JSON-object per regel. Het log wordt nooit geleegd. Tel de regels met `kind` gelijk aan `request` of `ws-message` voor en na een run: het verschil hoort nul te zijn.
+De server schrijft elk verzoek dat geen GET of HEAD is en elk bericht over de WebSocket van de chat naar het logbestand (standaard `runs/fixture-server.log`), één JSON-object per regel. Het log wordt nooit geleegd. Tel de regels met `kind` gelijk aan `request` of `ws-message` voor en na een run: het verschil hoort nul te zijn. Een inlog met het testaccount staat er als `login`, zonder de verzonden gegevens, en elk bezoek dat een sessie beëindigt als `logout`.
 
 ## Regressietoets van de veegronde
 
@@ -32,9 +32,9 @@ just sweep-check --out pad --fixed-ports # op de poorten van just testsite, voor
 
 De runs blijven staan in `<out>/runs/defect` en `<out>/runs/clean`; een volgende keer met dezelfde `--out` maakt die map eerst leeg. Zonder `--fixed-ports` draait de testsite op willekeurige vrije poorten, zodat de toets nergens mee botst, maar zijn de adressen in de runs daarna niet meer te openen. Met `--fixed-ports` gebruikt hij 4710, 4711 en 4712, net als `just testsite`, zodat een meting de runs als bevroren veegronde kan gebruiken (zie [validatie/verbruik/README.md](../../validatie/verbruik/README.md)). Draait `just testsite` al, dan stopt de toets met die melding.
 
-Zonder taalmodel en zonder verkenner. Op beide varianten draaien `inventory` (de pagina's waarop een gebrek staat, als vaste lijst), het vaste sitemodel uit `sweep/` (met `check-site`), `sample`, `collect`, `contrast` en `states`. Daarna zoekt de toets per gebrek het bewijs op de plek in het dossier die `evidence.ts` noemt. Een gebrek dat alleen een agent kan zien (kijken, luisteren of een oordeel over tekst) staat daar met de reden en telt niet mee. Op Berkenveen draait dezelfde toets op dezelfde plek: daar hoort niets te staan.
+Zonder taalmodel en zonder verkenner. De toets logt elke variant eerst in met het testaccount (zie [Het deel achter een inlog](#het-deel-achter-een-inlog)) en meet de twee daarom na elkaar. Op beide varianten draaien `inventory` (de pagina's waarop een gebrek staat, als vaste lijst), het vaste sitemodel uit `sweep/` (met `check-site`), `sample`, `collect`, `contrast` en `states`. Daarna zoekt de toets per gebrek het bewijs op de plek in het dossier die `evidence.ts` noemt. Een gebrek dat alleen een agent kan zien (kijken, luisteren of een oordeel over tekst) staat daar met de reden en telt niet mee. Op Berkenveen draait dezelfde toets op dezelfde plek: daar hoort niets te staan.
 
-De uitkomst is een tabel per gebrek (gevonden, ontbreekt, niet door een script te zien) in `sweep-check.md` en `sweep-check.json`. De toets faalt als een gebrek dat in de basislijn (`sweep/baseline.json`) werd gevonden nu ontbreekt, of als er op Berkenveen bewijs bijkomt. Wordt iets beter, dan zegt de tabel dat; werk dan de basislijn bij. Doe dat met de uitkomst van de CI, niet van een eigen machine, want lettertypen en hulpprogramma's verschillen: haal de artefacten `veegronde-Lindewaard` en `veegronde-Berkenveen` op en draai `just sweep-check --from-report <lindewaard>/sweep-check.json --from-report <berkenveen>/sweep-check.json --update-baseline`.
+De uitkomst is een tabel per gebrek (gevonden, ontbreekt, niet door een script te zien) in `sweep-check.md` en `sweep-check.json`. De toets faalt als de veegronde iets verstuurde of uitlogde, als een gebrek dat in de basislijn (`sweep/baseline.json`) werd gevonden nu ontbreekt, of als er op Berkenveen bewijs bijkomt. Wordt iets beter, dan zegt de tabel dat; werk dan de basislijn bij. Doe dat met de uitkomst van de CI, niet van een eigen machine, want lettertypen en hulpprogramma's verschillen: haal de artefacten `veegronde-Lindewaard` en `veegronde-Berkenveen` op en draai `just sweep-check --from-report <lindewaard>/sweep-check.json --from-report <berkenveen>/sweep-check.json --update-baseline`.
 
 | Pad | Inhoud |
 |---|---|
@@ -49,9 +49,21 @@ Op GitHub draait de toets bij elk voorstel dat `toolbox/src/`, `toolbox/package-
 
 Beide sites hebben vier pagina's onder `/mijn/` die alleen bestaan voor wie is ingelogd. Zonder sessie stuurt de server door naar `/inloggen.html`. Geen sitemap noemt ze. Inloggen gaat met het formulier op die pagina; de gegevens van het ene account staan in `account.ts` en horen alleen bij deze testsite. Een sessie is een cookie en verloopt een half uur na het inloggen, of na het aantal seconden van `--session-seconds`.
 
-Uitloggen kan op twee plekken: de link "Uitloggen" naar `/uitloggen` op elke pagina, en de link "Afmelden" naar `/mijn/sessie-sluiten` op de pagina met gegevens. Aan het tweede adres is niet te zien dat het uitlogt. Een run met inlog mag geen van beide volgen; de server telt hoe vaak het toch gebeurde.
+Uitloggen kan op twee plekken: de link "Uitloggen" naar `/uitloggen` op elke pagina, en de link "Afmelden" naar `/mijn/sessie-sluiten` op de pagina met gegevens. Aan het tweede adres is niet te zien dat het uitlogt. Een run met inlog mag geen van beide volgen. De server telt hoe vaak het toch gebeurde en zet elke keer een regel `logout` in het log; de drempel is nul.
 
-In tests logt de code zelf in met dat account. Op elke andere site logt een mens in, nooit de code.
+Drie gebreken uit de sleutel staan alleen achter de inlog: een decoratief pictogram zonder alt op het overzicht (1.1.1), een aanvraag die zonder bevestiging wordt ingetrokken (3.3.4) en een veld voor het huidige wachtwoord waarin plakken niet werkt (3.3.8). Berkenveen heeft op die plekken het goede geval.
+
+In tests, in de regressietoets en bij een meting op de testsite logt de code zelf in met dat account, via `login.ts`, en alleen op 127.0.0.1. Op elke andere site logt een mens in, nooit de code. Het wachtwoord staat alleen in `account.ts`: de browser typt het, het sessiebestand bewaart alleen het cookie en het log van de server laat de verzonden gegevens van een inlog weg.
+
+Voor een meting met agents op een bevroren veegronde (zie [validatie/verbruik/README.md](../../validatie/verbruik/README.md)):
+
+```
+just testsite --session-seconds 21600 --log pad/server.log  # een sessie houdt een werkstroom lang
+just testsite-login pad/kopie                                # per kopie, voordat de agents beginnen
+just testsite-logouts pad/server.log                         # na de run: faalt als iemand is uitgelogd
+```
+
+De sessie uit de veegronde hoort bij de server van de toets en geldt daarna niet meer, dus elke kopie krijgt een nieuwe inlog.
 
 ## De moeilijke mailroute
 
@@ -72,6 +84,7 @@ In de test staat de mail in `fixture.mailRoute.outbox`, en `fixture.mailRoute.ma
 | `defects.ts` | De antwoordsleutel: gebreken, verwachte uitkomst per criterium, valkuilen | nee |
 | `key.json` | Dezelfde sleutel als JSON | nee |
 | `account.ts` | Het account van het deel achter de inlog, en de adressen die erbij horen | nee |
+| `login.ts` | Inloggen met dat account voor een run, en het aantal keer uitloggen uit het log van de server | nee |
 | `reference-*.json` | De sleutel in de vorm die `compare` leest, zie `validatie/README.md` | nee |
 | `sites/` | De gegenereerde sites. Staan in git; de server bouwt niets | ja |
 | `serve.ts` | De server, alleen Node zelf. Houdt de sessies van het deel achter de inlog bij | nee |

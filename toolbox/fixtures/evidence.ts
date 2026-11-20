@@ -80,6 +80,7 @@ export const EVIDENCE: Evidence[] = [
     whereNl: "site-states/component-faq/pictures.json: met de vraag open is in de afbeelding met een leeg alt tekst gelezen",
     found: (look) => list(look.run("site-states/component-faq/pictures.json")?.pictures).some((picture) => look.at(picture.where) && picture.alt === "" && picture.ocr?.hasText === true),
   },
+  { defect: "1.1.1-pictogram", whereNl: ENGINES_NL, found: engines(["1.1.1"]) },
   // 1.2.x
   { defect: "1.2.1-gesprek", agentNl: "Of er een uitgeschreven tekst bij het gesprek staat, vraagt luisteren en lezen." },
   { defect: "1.2.2-ondertitels", agentNl: "Of de video gesproken tekst heeft die ondertitels nodig heeft, vraagt luisteren." },
@@ -207,8 +208,10 @@ export const EVIDENCE: Evidence[] = [
     }),
   },
   { defect: "3.3.4-controle", agentNl: "Of er een stap is om de aanvraag te controleren, vraagt het formulier doorlopen tot het versturen." },
+  { defect: "3.3.4-intrekken", agentNl: "Of intrekken een gevolg heeft dat een bevestiging vraagt, is een oordeel over de tekst; dat er geen stap volgt, laat pas het versturen zien." },
   { defect: "3.3.7-adres", agentNl: "Of in stap 2 opnieuw om het adres wordt gevraagd, vraagt het formulier in stappen doorlopen en de velden vergelijken." },
   { defect: "3.3.8-wachtwoord", whereNl: "facts.json, controls: het wachtwoordveld zet automatisch invullen uit", found: (look) => control(look).some((entry) => entry.autocomplete === "off") },
+  { defect: "3.3.8-wachtwoord-wijzigen", whereNl: "facts.json, controls: het veld voor het huidige wachtwoord zet automatisch invullen uit", found: (look) => control(look).some((entry) => entry.autocomplete === "off") },
   // 4.1.x
   { defect: "4.1.2-tabs", whereNl: "facts.json, clickables: de tabbladen zijn divs met een klik", found: (look) => list(look.page("facts.json")?.clickables).some((entry) => look.at(entry.path) && !entry.roleAttr) },
   { defect: "4.1.2-uitklapper", whereNl: "facts.json, controls: de knop zegt niet of hij open is", found: (look) => control(look).some((entry) => entry.tag === "button" && !("expanded" in (entry.ax?.properties ?? {}))) },
