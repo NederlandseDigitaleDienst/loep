@@ -7,7 +7,7 @@ import { DEFECTS } from "../fixtures/defects.ts";
 import { EVIDENCE, isAgentOnly } from "../fixtures/evidence.ts";
 import { DISRUPTED_PAGES, DISRUPTIONS, GATE_CHECKS } from "../fixtures/disruptions.ts";
 import { DEFAULT_PORTS } from "../fixtures/serve.ts";
-import { baselineOf, compareWithBaseline, fixturePorts, installModel, mergeRows, placeOf, reportMarkdown, summaryLine, SWEEP_PAGES, sweepPlan, type Report, type Row } from "../scripts/sweep-check.ts";
+import { baselineOf, compareWithBaseline, evaluate, fixturePorts, installModel, KEY_PAGES_WITH_DISRUPTIONS, mergeRows, placeOf, reportMarkdown, summaryLine, SWEEP_PAGES, sweepPlan, type Report, type Row } from "../scripts/sweep-check.ts";
 
 const row = (defect: string, found: boolean | null, twin: boolean | null): Row => ({ defect, criterion: defect.split("-")[0]!, kind: found === null ? "agent" : "script", whereNl: "probes/x.json", found, missingOn: found === false ? ["/"] : [], twin, twinOn: twin ? ["/"] : [] });
 
@@ -90,16 +90,17 @@ test("the check serves the fixture on free ports, and with --fixed-ports on thos
   assert.deepEqual(fixturePorts(true), DEFAULT_PORTS);
 });
 
-test("--only-disruptions measures the pages of every case and the steps the gate checks of the cases read, and leaves the key to the plain run", () => {
+test("--only-disruptions measures the pages of every case and of the questionnaire, with every step of the full run", () => {
   const only = sweepPlan("only-disruptions");
   const full = sweepPlan("disruptions");
-  assert.deepEqual(sweepPlan("plain"), { pages: SWEEP_PAGES, steps: ["login", "inventory", "check-site", "sample", "collect", "contrast", "states", "documents"], disruptions: false, key: true });
+  assert.deepEqual(sweepPlan("plain"), { pages: SWEEP_PAGES, steps: ["login", "inventory", "check-site", "sample", "collect", "contrast", "states", "documents"], disruptions: false, partial: false });
   assert.deepEqual(full.steps, ["login", "inventory", "check-site", "sample", "collect", "collect-again", "contrast", "states", "documents"]);
   assert.deepEqual([...full.pages].sort(), [...new Set([...SWEEP_PAGES, ...DISRUPTED_PAGES])].sort());
-  assert.ok(full.key && full.disruptions);
-  // The gate reads the sample, the facts of the two collects and blockades.json; nothing of contrast, states or documents.
-  assert.deepEqual(only.steps, ["login", "inventory", "check-site", "sample", "collect", "collect-again"]);
-  assert.equal(only.key, false);
+  assert.ok(!full.partial && full.disruptions);
+  // The same steps as the full run, so that the evidence of the key on these pages is made the same way.
+  assert.deepEqual(only.steps, full.steps);
+  assert.equal(only.partial, true);
+  assert.ok(only.pages.includes("/veelgestelde-vragen.html"), "the questionnaire of 4.1.2, which the scope of a run with disruptions once kept out");
   assert.equal(only.disruptions, true, "the cases are served, armed and checked");
   for (const disruption of DISRUPTIONS) {
     if (disruption.expected.gate) assert.ok((GATE_CHECKS as readonly string[]).includes(disruption.expected.gate.check), disruption.id);
@@ -114,7 +115,7 @@ test("--only-disruptions measures the pages of every case and the steps the gate
       assert.match(readFileSync(join(import.meta.dirname, "..", "fixtures", "sites", site, file), "utf8"), new RegExp(`<iframe[^>]+src="[^"]*${disruption.page}"`), `${disruption.id}: ${site}${disruption.via} embeds the window`);
     }
   }
-  assert.deepEqual(only.pages.filter((page) => !DISRUPTED_PAGES.includes(page)), ["/"], "of the pages of the key only the start page, for the window");
+  assert.deepEqual(only.pages.filter((page) => !DISRUPTED_PAGES.includes(page)).sort(), ["/", ...KEY_PAGES_WITH_DISRUPTIONS].sort(), "of the pages of the key the start page, for the window, and the questionnaire");
   const dir = mkdtempSync(join(tmpdir(), "loep-sweep-check-"));
   try {
     for (const variant of ["defect", "clean"] as const) {
@@ -129,6 +130,34 @@ test("--only-disruptions measures the pages of every case and the steps the gate
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
-  const report: Report = { ok: true, problems: [], regressions: [], improvements: [], seconds: { defect: {}, clean: {} }, rows: [], onlyDisruptions: true };
-  assert.match(summaryLine(report), new RegExp(`elk van de ${DISRUPTIONS.length} gevallen`));
+  const report: Report = { ok: true, problems: [], regressions: [], improvements: [], seconds: { defect: {}, clean: {} }, rows: [row("4.1.2-vragenlijst", true, false), { ...row("1.1.1-a", null, null), kind: "script" }, row("1.2.1-d", null, null)], onlyDisruptions: true };
+  assert.match(summaryLine(report), new RegExp(`elk van de ${DISRUPTIONS.length} gevallen.*Lindewaard: 1 van de 1 gebreken die een script kan zien op die pagina's staan in het dossier; 1 kan alleen een agent zien`));
+});
+
+test("with fewer pages measured the key is checked on those pages only, and a defect on none of them is not measured", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "loep-sweep-check-"));
+  try {
+    // Two empty runs: every defect on a measured page is missing, every other one is not measured.
+    const only = sweepPlan("only-disruptions");
+    const rows = await evaluate({ defect: join(dir, "defect"), clean: join(dir, "clean") }, only.pages);
+    const byId = new Map(EVIDENCE.map((entry) => [entry.defect, entry]));
+    const onMeasured = (id: string): boolean => {
+      const defect = DEFECTS.find((each) => each.id === id)!;
+      const entry = byId.get(id)!;
+      // As in the full run: the pages of the key, not the pages of the cases.
+      const pages = (!isAgentOnly(entry) && entry.pages) || (defect.pages[0] === "*" ? ["/"] : defect.pages.filter((page) => SWEEP_PAGES.includes(page)));
+      return pages.some((page) => only.pages.includes(page));
+    };
+    for (const each of rows.filter((entry) => entry.kind === "script")) {
+      if (onMeasured(each.defect)) assert.deepEqual([each.found, each.twin], [false, false], each.defect);
+      else assert.deepEqual([each.found, each.twin], [null, null], each.defect);
+    }
+    assert.equal(rows.find((entry) => entry.defect === "4.1.2-vragenlijst")?.found, false, "the questionnaire is looked for");
+    // A defect that is not measured never counts as a regression, one on a measured page does.
+    const baseline = baselineOf(rows.map((entry) => ({ ...entry, found: entry.kind === "script" ? true : null })));
+    const regressions = compareWithBaseline(rows, baseline).regressions;
+    assert.deepEqual(regressions.map((line) => line.split(":")[0]).sort(), rows.filter((entry) => entry.found === false).map((entry) => entry.defect).sort());
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });

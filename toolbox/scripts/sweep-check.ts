@@ -9,8 +9,8 @@
  * earlier reports (the artefacts of the two CI jobs), --update-baseline writes what was found to the baseline.
  * --disruptions serves the disruptions of fixtures/disruptions.ts, measures their pages too, as the command
  * line does (with the scope and the blockade of the run), and checks the outcome each case should have.
- * --only-disruptions measures only what the cases need (see sweepPlan) and checks only the cases, not the key:
- * the CI checks the key in its runs without disruptions.
+ * --only-disruptions measures only the pages the cases need (see sweepPlan), with every step and the same scope,
+ * login and blockade as --disruptions, and checks the cases and the key on those pages only.
  *
  * On both variants of the fixture site (Lindewaard with the planted defects, Berkenveen as the
  * clean twin) it runs inventory, installs the fixed site model of fixtures/sweep/, runs check-site,
@@ -64,6 +64,13 @@ export const VARIANTS: Variant[] = ["defect", "clean"];
 /** The pages of the site the cases of fixtures/disruptions.ts are on: their own, and for a window of Kijkpunt the page it is embedded in. */
 export const DISRUPTION_CASE_PAGES = [...new Set(DISRUPTIONS.map((entry) => (entry.on === "site" ? entry.page : entry.via!)))];
 
+/**
+ * Pages of the key that --only-disruptions measures as well. The questionnaire on the page with questions comes with a
+ * POST that only the fixed read rule lets through, and the scope of a run with disruptions once kept it out: the fast
+ * check has to see that.
+ */
+export const KEY_PAGES_WITH_DISRUPTIONS = ["/veelgestelde-vragen.html"];
+
 export type SweepStep = "login" | "inventory" | "check-site" | "sample" | "collect" | "collect-again" | "contrast" | "states" | "documents";
 export type SweepMode = "plain" | "disruptions" | "only-disruptions";
 
@@ -74,24 +81,22 @@ export interface SweepPlan {
   steps: SweepStep[];
   /** Serve and arm the disruptions, measure with the scope and the blockade of the run, and check each case. */
   disruptions: boolean;
-  /** Look for the evidence of every defect of the key and compare it with the baseline. */
-  key: boolean;
+  /** Look for the evidence of the key on `pages` and compare it with the baseline; false: on every page, and the baseline can be written. */
+  partial: boolean;
 }
 
 const STEPS: SweepStep[] = ["login", "inventory", "check-site", "sample", "collect", "contrast", "states", "documents"];
 
 /**
  * The plan of a mode. Without disruptions the pages of the key and every step. With --disruptions their pages
- * as well, and collect twice. With --only-disruptions only the pages of the cases and the steps up to the second
- * collect: the gate checks of the cases read the sample, the facts of collect and blockades.json, nothing of
- * contrast, states or documents. The login stays, so that the check that nothing logged out or sent anything
- * means the same as in the full check; it costs a few seconds.
+ * as well, and collect twice. With --only-disruptions the same steps on the pages of the cases and of
+ * KEY_PAGES_WITH_DISRUPTIONS only: every step, so that the evidence of the key on those pages is there as in the full run.
  */
 export function sweepPlan(mode: SweepMode = "plain"): SweepPlan {
   const again = (steps: SweepStep[]): SweepStep[] => steps.flatMap((step) => (step === "collect" ? ["collect", "collect-again"] : [step]));
-  if (mode === "plain") return { pages: SWEEP_PAGES, steps: STEPS, disruptions: false, key: true };
-  if (mode === "disruptions") return { pages: [...new Set([...SWEEP_PAGES, ...DISRUPTED_PAGES])], steps: again(STEPS), disruptions: true, key: true };
-  return { pages: DISRUPTION_CASE_PAGES, steps: again(STEPS.slice(0, STEPS.indexOf("collect") + 1)), disruptions: true, key: false };
+  if (mode === "plain") return { pages: SWEEP_PAGES, steps: STEPS, disruptions: false, partial: false };
+  if (mode === "disruptions") return { pages: [...new Set([...SWEEP_PAGES, ...DISRUPTED_PAGES])], steps: again(STEPS), disruptions: true, partial: false };
+  return { pages: [...new Set([...DISRUPTION_CASE_PAGES, ...KEY_PAGES_WITH_DISRUPTIONS])], steps: again(STEPS), disruptions: true, partial: true };
 }
 
 /**
@@ -325,8 +330,8 @@ async function marksOf(browser: Browser, dir: string, selectors: string[]): Prom
  */
 export const placeOf = (selector: string): string => selector.replace(/:not\((?:[^()]|\((?:[^()]|\([^()]*\))*\))*\)/g, "").trim() || selector;
 
-/** The pages a defect is looked for on: what the table says, else the pages of the defect, with the start page for every page. */
-const pagesFor = (defect: Defect, entry: ScriptEvidence): string[] => entry.pages ?? (defect.pages[0] === "*" ? ["/"] : defect.pages.filter((page) => SWEEP_PAGES.includes(page)));
+/** The pages a defect is looked for on: what the table says, else the pages of the defect, with the start page for every page; of those, the ones measured. */
+const pagesFor = (defect: Defect, entry: ScriptEvidence, measured: string[] = SWEEP_PAGES): string[] => (entry.pages ?? (defect.pages[0] === "*" ? ["/"] : defect.pages.filter((page) => SWEEP_PAGES.includes(page)))).filter((page) => measured.includes(page));
 
 /** Path and query of an address, as defects.ts writes pages. */
 const pathOf = (url: string): string => {
@@ -334,8 +339,11 @@ const pathOf = (url: string): string => {
   return `${parsed.pathname}${parsed.search}`;
 };
 
-/** Look in both runs for the evidence of every defect, as fixtures/evidence.ts says where. */
-export async function evaluate(runs: Partial<Record<Variant, string>>): Promise<Row[]> {
+/**
+ * Look in both runs for the evidence of every defect, as fixtures/evidence.ts says where. With fewer pages measured
+ * a defect is looked for on those of its pages only, and a defect on none of them is not measured (null).
+ */
+export async function evaluate(runs: Partial<Record<Variant, string>>, measuredPages: string[] = SWEEP_PAGES): Promise<Row[]> {
   const byId = new Map(EVIDENCE.map((entry) => [entry.defect, entry]));
   const missing = DEFECTS.filter((defect) => !byId.has(defect.id)).map((defect) => defect.id);
   if (missing.length > 0) throw new Error(`fixtures/evidence.ts noemt deze gebreken niet: ${missing.join(", ")}`);
@@ -352,7 +360,7 @@ export async function evaluate(runs: Partial<Record<Variant, string>>): Promise<
       const itemFor = (path: string) => items.find((item) => [item.url, ...(item.aliases ?? [])].some((url) => pathOf(url) === path));
       for (const [defect, entry] of scripted) {
         const hits: string[] = [];
-        for (const path of pagesFor(defect, entry)) {
+        for (const path of pagesFor(defect, entry, measuredPages)) {
           const item = itemFor(path);
           if (!item) continue;
           const dir = join(run, "pages", item.slug);
@@ -393,10 +401,10 @@ export async function evaluate(runs: Partial<Record<Variant, string>>): Promise<
   return DEFECTS.map((defect) => {
     const entry = byId.get(defect.id)!;
     if (isAgentOnly(entry)) return { defect: defect.id, criterion: defect.criterion, kind: "agent", whereNl: entry.agentNl, found: null, missingOn: [], twin: null, twinOn: [] };
-    const pages = pagesFor(defect, entry);
+    const pages = pagesFor(defect, entry, measuredPages);
     const onDefect = found.defect.get(defect.id) ?? [];
     const onTwin = found.clean.get(defect.id) ?? [];
-    const measured = runs.defect !== undefined;
+    const measured = runs.defect !== undefined && pages.length > 0;
     return {
       defect: defect.id,
       criterion: defect.criterion,
@@ -404,7 +412,7 @@ export async function evaluate(runs: Partial<Record<Variant, string>>): Promise<
       whereNl: entry.whereNl,
       found: measured ? pages.every((page) => onDefect.includes(page)) : null,
       missingOn: measured ? pages.filter((page) => !onDefect.includes(page)) : [],
-      twin: runs.clean !== undefined ? onTwin.length > 0 : null,
+      twin: runs.clean !== undefined && pages.length > 0 ? onTwin.length > 0 : null,
       twinOn: onTwin,
     };
   });
@@ -416,7 +424,7 @@ async function main(): Promise<void> {
   const atOnce = Number(values["at-once"]);
   if (!Number.isInteger(atOnce) || atOnce < 1) throw new Error("--at-once is een geheel aantal pagina's, 1 of meer");
   const plan = sweepPlan(values["only-disruptions"] ? "only-disruptions" : values.disruptions ? "disruptions" : "plain");
-  if (!plan.key && (values["update-baseline"] || values["from-report"])) throw new Error("--only-disruptions toetst de sleutel niet en kan de basislijn dus niet bijwerken; laat --update-baseline en --from-report weg");
+  if (plan.partial && (values["update-baseline"] || values["from-report"])) throw new Error("--only-disruptions meet maar een deel van de pagina's en kan de basislijn dus niet bijwerken; laat --update-baseline en --from-report weg");
   mkdirSync(out, { recursive: true });
   const runsDir = values.runs ? resolve(values.runs) : join(out, "runs");
   if (values.variant !== undefined && !VARIANTS.includes(values.variant as Variant)) throw new Error(`--variant is ${VARIANTS.join(" of ")}`);
@@ -460,10 +468,10 @@ async function main(): Promise<void> {
   }
   // With disruptions every case has to come out as fixtures/disruptions.ts says, also in runs that are read again.
   if (plan.disruptions && reports.length === 0 && problems.length === 0) for (const variant of measured) problems.push(...(await disruptionProblems(runs[variant]!)).map((problem) => `${VARIANT_NL[variant]}: ${problem}`));
-  const rows = problems.length > 0 || !plan.key ? [] : reports.length > 0 ? mergeRows(reports.map((file) => (readJsonOrNull(resolve(file)) as Report | null)?.rows ?? [])) : await evaluate(runs);
+  const rows = problems.length > 0 ? [] : reports.length > 0 ? mergeRows(reports.map((file) => (readJsonOrNull(resolve(file)) as Report | null)?.rows ?? [])) : await evaluate(runs, plan.pages);
   const baseline = readJsonOrNull(BASELINE) as Baseline | null;
   const outcome = compareWithBaseline(rows, baseline);
-  const report: Report = { ok: problems.length === 0 && outcome.regressions.length === 0, problems, ...outcome, seconds, rows, ...(plan.key ? {} : { onlyDisruptions: true }) };
+  const report: Report = { ok: problems.length === 0 && outcome.regressions.length === 0, problems, ...outcome, seconds, rows, ...(plan.partial ? { onlyDisruptions: true } : {}) };
   writeFileSync(join(out, "sweep-check.json"), `${JSON.stringify(report, null, 2)}\n`);
   writeFileSync(join(out, "sweep-check.md"), reportMarkdown(report));
   if (values["update-baseline"] && problems.length === 0) {
@@ -535,7 +543,7 @@ export interface Report {
   improvements: string[];
   seconds: Record<Variant, SweepTimes>;
   rows: Row[];
-  /** Measured with --only-disruptions: the cases were checked, the key was not. */
+  /** Measured with --only-disruptions: the cases were checked, and the key on their pages only. */
   onlyDisruptions?: true;
 }
 
@@ -586,13 +594,14 @@ export function compareWithBaseline(rows: Row[], baseline: Baseline | null): Pic
 
 export function summaryLine(report: Report): string {
   if (report.problems.length > 0) return `De veegronde op de testsite kon niet worden vergeleken: ${report.problems.length} ${report.problems.length === 1 ? "probleem" : "problemen"}.`;
-  if (report.onlyDisruptions) return `Alleen de storingen zijn gemeten, en elk van de ${DISRUPTIONS.length} gevallen kwam uit zoals toolbox/fixtures/disruptions.ts zegt. De sleutel toetst de veegronde zonder storingen.`;
-  const scripted = report.rows.filter((row) => row.kind === "script");
+  // With --only-disruptions every case came out as it should, or there would be a problem; the key counts on the pages measured.
+  const only = report.onlyDisruptions ? `Alleen de pagina's van de storingen zijn gemeten, en elk van de ${DISRUPTIONS.length} gevallen kwam uit zoals toolbox/fixtures/disruptions.ts zegt. ` : "";
+  const scripted = report.rows.filter((row) => row.kind === "script" && (!report.onlyDisruptions || row.found !== null || row.twin !== null));
   const found = scripted.filter((row) => row.found).length;
   const twin = scripted.filter((row) => row.twin).length;
-  const defect = scripted.some((row) => row.found !== null) ? `Lindewaard: ${found} van de ${scripted.length} gebreken die een script kan zien staan in het dossier; ${report.rows.length - scripted.length} kan alleen een agent zien.` : "Lindewaard is niet gemeten.";
+  const defect = scripted.some((row) => row.found !== null) ? `Lindewaard: ${found} van de ${scripted.length} gebreken die een script kan zien${report.onlyDisruptions ? " op die pagina's" : ""} staan in het dossier; ${report.rows.filter((row) => row.kind === "agent").length} kan alleen een agent zien.` : "Lindewaard is niet gemeten.";
   const clean = scripted.some((row) => row.twin !== null) ? `Berkenveen: ${twin === 0 ? "geen bewijs op de plekken van de gebreken" : `bewijs bij ${twin} gebreken`}.` : "Berkenveen is niet gemeten.";
-  return `${defect} ${clean} ${report.regressions.length === 0 ? "Geen achteruitgang tegenover de basislijn." : `${report.regressions.length} keer achteruit tegenover de basislijn.`}`;
+  return `${only}${defect} ${clean} ${report.regressions.length === 0 ? "Geen achteruitgang tegenover de basislijn." : `${report.regressions.length} keer achteruit tegenover de basislijn.`}`;
 }
 
 const cell = (text: string): string => text.replaceAll("|", "\\|").replaceAll("\n", " ");
