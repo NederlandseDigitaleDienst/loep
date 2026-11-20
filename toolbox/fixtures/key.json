@@ -1474,10 +1474,10 @@
       "class": "looking"
     },
     {
-      "id": "1.4.5-plattegrond",
-      "criterion": "1.4.5",
+      "id": "1.1.1-plattegrond",
+      "criterion": "1.1.1",
       "alsoCriteria": [
-        "1.1.1"
+        "1.4.5"
       ],
       "document": "/documenten/plattegrond-gemeentehuis.png",
       "pages": [

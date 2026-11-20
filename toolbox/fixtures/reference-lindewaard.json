@@ -877,15 +877,15 @@
       "medium": "document"
     },
     {
-      "id": "1.4.5-plattegrond",
-      "criterion": "1.4.5",
+      "id": "1.1.1-plattegrond",
+      "criterion": "1.1.1",
       "page": "/documenten/plattegrond-gemeentehuis.png",
       "descriptionNl": "De namen van de ruimtes staan alleen als tekst in de afbeelding. De pagina noemt ze niet.",
       "where": "De plattegrond van het gemeentehuis, een png-bestand onder \"Bezoeken\". De link staat op /contact.html (a[href=\"/documenten/plattegrond-gemeentehuis.png\"]).",
       "state": "In het document.",
       "medium": "document",
       "alsoCriteria": [
-        "1.1.1"
+        "1.4.5"
       ]
     },
     {

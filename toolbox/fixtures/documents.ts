@@ -22,7 +22,7 @@ export const DOCUMENTS: FixtureDocument[] = [
   { path: "documenten/besluitenlijst-2026-03-12.pdf", on: "site", defect: "besluitenlijst.a.pdf", clean: "besluitenlijst.b.pdf", plants: "2.4.2-besluitenlijst-pdf" },
   { path: "documenten/begroting-2027.pdf", on: "site", defect: "begroting.a.pdf", clean: "begroting.b.pdf", plants: "1.3.1-begroting-pdf" },
   { path: "documenten/ontheffing-parkeren.docx", on: "site", defect: "ontheffing.a.docx", clean: "ontheffing.b.docx", plants: "1.3.1-ontheffing-docx" },
-  { path: "documenten/plattegrond-gemeentehuis.png", on: "site", defect: "plattegrond.a.png", clean: "plattegrond.b.png", plants: "1.4.5-plattegrond" },
+  { path: "documenten/plattegrond-gemeentehuis.png", on: "site", defect: "plattegrond.a.png", clean: "plattegrond.b.png", plants: "1.1.1-plattegrond" },
   { path: "documenten/afvalwijzer-2027-lindewaard.pdf", on: "thirdParty", defect: "afvalwijzer.a.pdf", clean: "afvalwijzer.a.pdf", plants: "1.3.1-afvalwijzer-extern" },
   { path: "documenten/afvalwijzer-2027-berkenveen.pdf", on: "thirdParty", defect: "afvalwijzer.b.pdf", clean: "afvalwijzer.b.pdf", plants: "1.3.1-afvalwijzer-extern" },
 ];

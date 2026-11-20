@@ -243,6 +243,6 @@ export const EVIDENCE: Evidence[] = [
   { defect: "1.3.1-begroting-pdf", agentNl: "Het bestand is groter dan de 250 MB die de toolbox ophaalt. Dat het geen tags heeft, ziet alleen wie het zelf opent." },
   { defect: "1.3.1-ontheffing-docx", whereNl: "documents/<document>/facts.json: office.fakeHeadings noemt de vette alinea's", found: (look) => list(documentFacts(look, "/documenten/ontheffing-parkeren.docx")?.office?.fakeHeadings).length > 0 },
   { defect: "1.3.1-afvalwijzer-extern", agentNl: "Het document staat op een ander domein. De toolbox telt het en haalt het niet op." },
-  { defect: "1.4.5-plattegrond", whereNl: "documents/<document>/facts.json: tekstherkenning leest woorden in de afbeelding", found: (look) => (documentFacts(look, "/documenten/plattegrond-gemeentehuis.png")?.image?.recognisedWords ?? 0) > 0 },
+  { defect: "1.1.1-plattegrond", whereNl: "documents/<document>/facts.json: tekstherkenning leest woorden in de afbeelding", found: (look) => (documentFacts(look, "/documenten/plattegrond-gemeentehuis.png")?.image?.recognisedWords ?? 0) > 0 },
   { defect: "2.4.2-besluitenlijst-pdf", whereNl: "documents/<document>/facts.json: de pdf heeft tags en geen titel", found: (look) => { const facts = documentFacts(look, "/documenten/besluitenlijst-2026-03-12.pdf"); return facts?.status === "read" && facts.pdf?.tagged === true && !facts.title; } },
 ];
