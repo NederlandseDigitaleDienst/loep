@@ -1,7 +1,7 @@
 /**
  * The regression check of the sweep on the fixture site, without a language model.
  *
- *   node scripts/sweep-check.ts [--out <dir>] [--at-once <n>] [--variant defect|clean] [--fixed-ports] [--disruptions] [--runs <dir>] [--update-baseline]
+ *   node scripts/sweep-check.ts [--out <dir>] [--at-once <n>] [--variant defect|clean] [--fixed-ports] [--disruptions | --only-disruptions] [--runs <dir>] [--update-baseline]
  *
  * --variant measures one variant only (the CI runs the two on two machines), --fixed-ports serves the
  * fixture on the ports of `just testsite` so the runs in <out>/runs stay usable as a frozen sweep,
@@ -9,6 +9,8 @@
  * earlier reports (the artefacts of the two CI jobs), --update-baseline writes what was found to the baseline.
  * --disruptions serves the disruptions of fixtures/disruptions.ts, measures their pages too, as the command
  * line does (with the scope and the blockade of the run), and checks the outcome each case should have.
+ * --only-disruptions measures only what the cases need (see sweepPlan) and checks only the cases, not the key:
+ * the CI checks the key in its runs without disruptions.
  *
  * On both variants of the fixture site (Lindewaard with the planted defects, Berkenveen as the
  * clean twin) it runs inventory, installs the fixed site model of fixtures/sweep/, runs check-site,
@@ -59,17 +61,65 @@ export const SWEEP_PAGES = ["/", "/afval.html", "/contact.html", "/inloggen.html
 export type Variant = "defect" | "clean";
 export const VARIANTS: Variant[] = ["defect", "clean"];
 
+/** The pages of the site the cases of fixtures/disruptions.ts are on: their own, and for a window of Kijkpunt the page it is embedded in. */
+export const DISRUPTION_CASE_PAGES = [...new Set(DISRUPTIONS.map((entry) => (entry.on === "site" ? entry.page : entry.via!)))];
+
+export type SweepStep = "login" | "inventory" | "check-site" | "sample" | "collect" | "collect-again" | "contrast" | "states" | "documents";
+export type SweepMode = "plain" | "disruptions" | "only-disruptions";
+
+/** What one variant measures and what the check then looks at. */
+export interface SweepPlan {
+  /** The fixed list of the inventory, and the pages the site model keeps. */
+  pages: string[];
+  steps: SweepStep[];
+  /** Serve and arm the disruptions, measure with the scope and the blockade of the run, and check each case. */
+  disruptions: boolean;
+  /** Look for the evidence of every defect of the key and compare it with the baseline. */
+  key: boolean;
+}
+
+const STEPS: SweepStep[] = ["login", "inventory", "check-site", "sample", "collect", "contrast", "states", "documents"];
+
+/**
+ * The plan of a mode. Without disruptions the pages of the key and every step. With --disruptions their pages
+ * as well, and collect twice. With --only-disruptions only the pages of the cases and the steps up to the second
+ * collect: the gate checks of the cases read the sample, the facts of collect and blockades.json, nothing of
+ * contrast, states or documents. The login stays, so that the check that nothing logged out or sent anything
+ * means the same as in the full check; it costs a few seconds.
+ */
+export function sweepPlan(mode: SweepMode = "plain"): SweepPlan {
+  const again = (steps: SweepStep[]): SweepStep[] => steps.flatMap((step) => (step === "collect" ? ["collect", "collect-again"] : [step]));
+  if (mode === "plain") return { pages: SWEEP_PAGES, steps: STEPS, disruptions: false, key: true };
+  if (mode === "disruptions") return { pages: [...new Set([...SWEEP_PAGES, ...DISRUPTED_PAGES])], steps: again(STEPS), disruptions: true, key: true };
+  return { pages: DISRUPTION_CASE_PAGES, steps: again(STEPS.slice(0, STEPS.indexOf("collect") + 1)), disruptions: true, key: false };
+}
+
 /**
  * The fixed site model and its recipes for one variant, with the addresses of the fixture as it
  * runs now. The two variants share the model; where they differ, an entry of the model names the
  * variants it holds for (`variants`), and a step names its element per variant (`target.defect`
  * and `target.clean`), because the clean twin is built differently around the same controls.
  */
-export function installModel(run: string, variant: Variant, origins: { site: string; thirdParty: string }, disruptions = false): void {
+export function installModel(run: string, variant: Variant, origins: { site: string; thirdParty: string }, disruptions = false, only?: string[]): void {
   const fill = (text: string): string => text.replaceAll("{wsOrigin}", origins.site.replace(/^http/, "ws")).replaceAll("{origin}", origins.site).replaceAll("{thirdParty}", origins.thirdParty);
   const model = JSON.parse(fill(readFileSync(join(MODEL_DIR, "site.json"), "utf8"))) as Record<string, unknown>;
   // With disruptions the model has the page types of their pages as well.
   if (disruptions) (model.pageTypes as unknown[]).push(...(JSON.parse(fill(readFileSync(join(MODEL_DIR, "disruptions.json"), "utf8"))) as { pageTypes: unknown[] }).pageTypes);
+  // With fewer pages the model keeps only those, and the parts on the page types that are left: check-site wants every page of the model in the inventory.
+  if (only) {
+    const keep = new Set(only.map((path) => `${origins.site}${path}`));
+    const types = (model.pageTypes as { id: string; representative: string; pages: string[] }[])
+      .map((type) => ({ ...type, pages: type.pages.filter((page) => keep.has(page)) }))
+      .filter((type) => type.pages.length > 0)
+      .map((type) => (type.pages.includes(type.representative) ? type : { ...type, representative: type.pages[0]! }));
+    const ids = new Set(types.map((type) => type.id));
+    model.pageTypes = types;
+    for (const key of ["components", "content"]) {
+      model[key] = (model[key] as { pageTypes: string[] | string }[])
+        .filter((entry) => !Array.isArray(entry.pageTypes) || entry.pageTypes.some((id) => ids.has(id)))
+        .map((entry) => (Array.isArray(entry.pageTypes) ? { ...entry, pageTypes: entry.pageTypes.filter((id) => ids.has(id)) } : entry));
+    }
+  }
   for (const [key, entries] of Object.entries(model)) {
     if (!Array.isArray(entries)) continue;
     model[key] = entries
@@ -119,13 +169,14 @@ export function useFixtureReads(dir: string, thirdParty: string): string {
 
 export type SweepTimes = Record<string, number>;
 
-/** A login with the account of the fixture, inventory, the fixed model, check-site, sample, the three steps of the sweep and documents, on one variant. */
-export async function sweepVariant(run: string, variant: Variant, origins: { site: string; thirdParty: string }, atOnce: number, disruptions?: { arm: (variant: Variant) => void }): Promise<{ seconds: SweepTimes; checkProblems: string[] }> {
+/** The steps of the plan on one variant: a login with the account of the fixture, inventory, the fixed model, check-site, sample, the steps of the sweep and documents. */
+export async function sweepVariant(run: string, variant: Variant, origins: { site: string; thirdParty: string }, atOnce: number, plan: SweepPlan, disruptions?: { arm: (variant: Variant) => void }): Promise<{ seconds: SweepTimes; checkProblems: string[] }> {
   const seconds: SweepTimes = {};
-  const timed = async <T>(name: string, step: () => Promise<T>): Promise<T> => {
+  const timed = async (name: SweepStep, step: () => Promise<unknown>): Promise<void> => {
+    if (!plan.steps.includes(name)) return;
     const started = Date.now();
     try {
-      return await step();
+      await step();
     } finally {
       seconds[name] = Math.round((Date.now() - started) / 1000);
     }
@@ -133,21 +184,24 @@ export async function sweepVariant(run: string, variant: Variant, origins: { sit
   await timed("login", () => logInOn(origins.site, { run }, typeAccountKeepNotice));
   setRunLogin(run);
   try {
-    const pages = disruptions ? [...SWEEP_PAGES, ...DISRUPTED_PAGES] : SWEEP_PAGES;
-    await timed("inventory", () => inventory({ baseUrl: `${origins.site}/`, out: run, maxPages: 50, fixedUrls: pages.map((path) => `${origins.site}${path}`) }));
-    installModel(run, variant, origins, disruptions !== undefined);
+    await timed("inventory", () => inventory({ baseUrl: `${origins.site}/`, out: run, maxPages: 50, fixedUrls: plan.pages.map((path) => `${origins.site}${path}`) }));
+    installModel(run, variant, origins, disruptions !== undefined, plan.pages);
     // As the command line has it for a command of the sweep: what did not arrive is noted, and a 429 is waited out.
     if (disruptions) {
       setRunScope(run);
       setRunBlockade(run);
     }
-    const check = await timed("check-site", () => checkSite(run, { navigationDelayMs: 50 }));
-    if (!check.ok) return { seconds, checkProblems: check.problems };
+    let checkProblems: string[] = [];
+    await timed("check-site", async () => {
+      const check = await checkSite(run, { navigationDelayMs: 50 });
+      if (!check.ok) checkProblems = check.problems;
+    });
+    if (checkProblems.length > 0) return { seconds, checkProblems };
     await timed("sample", () => sample(run, "toegankelijk"));
     disruptions?.arm(variant);
     await timed("collect", () => collect({ run, atOnce }));
     // The one more try for a page that missed a stylesheet, as the gate sends a run back to the sweep for it.
-    if (disruptions) await timed("collect-again", () => collect({ run, atOnce }));
+    await timed("collect-again", () => collect({ run, atOnce }));
     await timed("contrast", () => contrast(run, { atOnce }));
     await timed("states", () => states(run, { atOnce }));
     await timed("documents", () => documents(run));
@@ -357,10 +411,12 @@ export async function evaluate(runs: Partial<Record<Variant, string>>): Promise<
 }
 
 async function main(): Promise<void> {
-  const { values } = parseArgs({ options: { out: { type: "string" }, runs: { type: "string" }, variant: { type: "string" }, "from-report": { type: "string", multiple: true }, "at-once": { type: "string", default: "1" }, "fixed-ports": { type: "boolean", default: false }, disruptions: { type: "boolean", default: false }, "update-baseline": { type: "boolean", default: false } } });
+  const { values } = parseArgs({ options: { out: { type: "string" }, runs: { type: "string" }, variant: { type: "string" }, "from-report": { type: "string", multiple: true }, "at-once": { type: "string", default: "1" }, "fixed-ports": { type: "boolean", default: false }, disruptions: { type: "boolean", default: false }, "only-disruptions": { type: "boolean", default: false }, "update-baseline": { type: "boolean", default: false } } });
   const out = resolve(values.out ?? join(tmpdir(), `loep-sweep-check-${process.pid}`));
   const atOnce = Number(values["at-once"]);
   if (!Number.isInteger(atOnce) || atOnce < 1) throw new Error("--at-once is een geheel aantal pagina's, 1 of meer");
+  const plan = sweepPlan(values["only-disruptions"] ? "only-disruptions" : values.disruptions ? "disruptions" : "plain");
+  if (!plan.key && (values["update-baseline"] || values["from-report"])) throw new Error("--only-disruptions toetst de sleutel niet en kan de basislijn dus niet bijwerken; laat --update-baseline en --from-report weg");
   mkdirSync(out, { recursive: true });
   const runsDir = values.runs ? resolve(values.runs) : join(out, "runs");
   if (values.variant !== undefined && !VARIANTS.includes(values.variant as Variant)) throw new Error(`--variant is ${VARIANTS.join(" of ")}`);
@@ -373,7 +429,7 @@ async function main(): Promise<void> {
   if (!values.runs && reports.length === 0) {
     rmSync(runsDir, { recursive: true, force: true });
     mkdirSync(runsDir, { recursive: true });
-    const fixture = await startFixture({ ports: fixturePorts(values["fixed-ports"]), logFile: join(out, "fixture-server.log"), sessionSeconds: CHECK_SESSION_SECONDS, ...(values.disruptions ? { disruptions: { armed: false } } : {}) }).catch((error: NodeJS.ErrnoException) => {
+    const fixture = await startFixture({ ports: fixturePorts(values["fixed-ports"]), logFile: join(out, "fixture-server.log"), sessionSeconds: CHECK_SESSION_SECONDS, ...(plan.disruptions ? { disruptions: { armed: false } } : {}) }).catch((error: NodeJS.ErrnoException) => {
       if (error.code === "EADDRINUSE") throw new Error(`--fixed-ports: een van de poorten ${Object.values(DEFAULT_PORTS).join(", ")} is al in gebruik, bijvoorbeeld door just testsite; stop die eerst`);
       throw error;
     });
@@ -382,7 +438,7 @@ async function main(): Promise<void> {
       const extraReads = useFixtureReads(out, fixture.origins.thirdParty);
       for (const variant of measured) {
         try {
-          const result = await sweepVariant(runs[variant]!, variant, { site: fixture.origins[variant], thirdParty: fixture.origins.thirdParty }, atOnce, fixture.disruptions ?? undefined);
+          const result = await sweepVariant(runs[variant]!, variant, { site: fixture.origins[variant], thirdParty: fixture.origins.thirdParty }, atOnce, plan, fixture.disruptions ?? undefined);
           copyFileSync(extraReads, join(runs[variant]!, EXTRA_FIXED_READS_FILE));
           seconds[variant] = result.seconds;
           problems.push(...result.checkProblems.map((problem) => `${VARIANT_NL[variant]}: check-site: ${problem}`));
@@ -403,11 +459,11 @@ async function main(): Promise<void> {
     }
   }
   // With disruptions every case has to come out as fixtures/disruptions.ts says, also in runs that are read again.
-  if (values.disruptions && reports.length === 0 && problems.length === 0) for (const variant of measured) problems.push(...(await disruptionProblems(runs[variant]!)).map((problem) => `${VARIANT_NL[variant]}: ${problem}`));
-  const rows = problems.length > 0 ? [] : reports.length > 0 ? mergeRows(reports.map((file) => (readJsonOrNull(resolve(file)) as Report | null)?.rows ?? [])) : await evaluate(runs);
+  if (plan.disruptions && reports.length === 0 && problems.length === 0) for (const variant of measured) problems.push(...(await disruptionProblems(runs[variant]!)).map((problem) => `${VARIANT_NL[variant]}: ${problem}`));
+  const rows = problems.length > 0 || !plan.key ? [] : reports.length > 0 ? mergeRows(reports.map((file) => (readJsonOrNull(resolve(file)) as Report | null)?.rows ?? [])) : await evaluate(runs);
   const baseline = readJsonOrNull(BASELINE) as Baseline | null;
   const outcome = compareWithBaseline(rows, baseline);
-  const report: Report = { ok: problems.length === 0 && outcome.regressions.length === 0, problems, ...outcome, seconds, rows };
+  const report: Report = { ok: problems.length === 0 && outcome.regressions.length === 0, problems, ...outcome, seconds, rows, ...(plan.key ? {} : { onlyDisruptions: true }) };
   writeFileSync(join(out, "sweep-check.json"), `${JSON.stringify(report, null, 2)}\n`);
   writeFileSync(join(out, "sweep-check.md"), reportMarkdown(report));
   if (values["update-baseline"] && problems.length === 0) {
@@ -479,6 +535,8 @@ export interface Report {
   improvements: string[];
   seconds: Record<Variant, SweepTimes>;
   rows: Row[];
+  /** Measured with --only-disruptions: the cases were checked, the key was not. */
+  onlyDisruptions?: true;
 }
 
 /**
@@ -528,6 +586,7 @@ export function compareWithBaseline(rows: Row[], baseline: Baseline | null): Pic
 
 export function summaryLine(report: Report): string {
   if (report.problems.length > 0) return `De veegronde op de testsite kon niet worden vergeleken: ${report.problems.length} ${report.problems.length === 1 ? "probleem" : "problemen"}.`;
+  if (report.onlyDisruptions) return `Alleen de storingen zijn gemeten, en elk van de ${DISRUPTIONS.length} gevallen kwam uit zoals toolbox/fixtures/disruptions.ts zegt. De sleutel toetst de veegronde zonder storingen.`;
   const scripted = report.rows.filter((row) => row.kind === "script");
   const found = scripted.filter((row) => row.found).length;
   const twin = scripted.filter((row) => row.twin).length;

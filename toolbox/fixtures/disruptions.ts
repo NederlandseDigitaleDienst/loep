@@ -21,6 +21,8 @@ export interface Disruption {
   page: string;
   /** Which origin: both variants of the site, or Kijkpunt. */
   on: "site" | "thirdParty";
+  /** For a window of Kijkpunt: the path of the page of the site it is embedded in, which a measurement loads to reach it. */
+  via?: string;
   descriptionNl: string;
   /** What a measurement has to come to: the threshold a measurement on the fixture with disruptions looks at. */
   expectedNl: string;
@@ -80,6 +82,7 @@ export const DISRUPTIONS: Disruption[] = [
     id: "robot-check",
     page: "/controle.html",
     on: "thirdParty",
+    via: "/",
     descriptionNl: "Kijkpunt antwoordt als een site achter Cloudflare (een kop cf-ray). Het venster met het vinkje toont zonder cookie eerst een controlepagina tegen robots (403, cf-mitigated: challenge), die een script van /cdn-cgi/challenge-platform/ laadt, daar een POST doet en met de cookie die terugkomt het venster opnieuw laadt.",
     expectedNl: "De veegronde en een sessie laten de POST naar /cdn-cgi/challenge-platform/ door, en het log van de server telt die niet als iets wat naar de site is verstuurd. Het venster toont daarna het vinkje, zoals zonder storingen.",
     // The window is measured on its own as well, as an embedded page of the sample.
@@ -132,7 +135,11 @@ const CHALLENGE_HTML = `<!doctype html>
 </html>
 `;
 
-const CHECK_JS = `fetch(${JSON.stringify(CHECK_FLOW)} + Date.now().toString(16), { method: "POST", body: "r=1" }).then((response) => { if (response.ok) location.reload(); });\n`;
+/**
+ * The check reloads the window once, marked in window.name, which a reload keeps: a browser that drops the cookie
+ * stays at the check instead of asking again and again. The address stays the same, so the window is the same page.
+ */
+const CHECK_JS = `if (window.name !== "cf-checked") fetch(${JSON.stringify(CHECK_FLOW)} + Date.now().toString(16), { method: "POST", body: "r=1" }).then((response) => { if (response.ok) { window.name = "cf-checked"; location.reload(); } });\n`;
 
 /** The state of the disruptions of one server: which once-only cases are still to come. */
 export interface Disruptions {
@@ -179,7 +186,8 @@ export function createDisruptions(options: { armed: boolean }): Disruptions {
         if (path.startsWith(CHECK_FLOW) && request.method === "POST") {
           request.resume();
           log(path);
-          return send(response, 200, { "content-type": "text/plain; charset=utf-8", "set-cookie": `${CLEARANCE}=${Date.now().toString(16)}; Path=${byId("robot-check").page}; HttpOnly; SameSite=Lax` }, "ok");
+          // As Cloudflare sets it: the window is on a page of another site, and a cookie with SameSite=Lax never reaches it there.
+          return send(response, 200, { "content-type": "text/plain; charset=utf-8", "set-cookie": `${CLEARANCE}=${Date.now().toString(16)}; Path=${byId("robot-check").page}; HttpOnly; Secure; SameSite=None` }, "ok");
         }
         if (path === CHECK_SCRIPT) return send(response, 200, { "content-type": "text/javascript; charset=utf-8" }, CHECK_JS);
         if (path === byId("robot-check").page && !new RegExp(`(?:^|;\\s*)${CLEARANCE}=`).test(request.headers.cookie ?? "")) {

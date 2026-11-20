@@ -26,7 +26,9 @@
 #   de regressietoets `just sweep-check`: inventory, een vast sitemodel, collect, contrast en
 #   states op de testsite, en per gebrek uit de sleutel of het bewijs in het dossier staat. Twee
 #   jobs naast elkaar: Lindewaard (de gebreken) en Berkenveen (de tweeling), en dezelfde twee
-#   nog eens met --disruptions (een 429, een ontbrekende stylesheet, een 503-pagina). De tabel komt als
+#   nog eens met storingen (een 429, een ontbrekende stylesheet, een 503-pagina). Die twee draaien
+#   --only-disruptions: alleen de pagina's en stappen die de gevallen nodig hebben, en ze toetsen
+#   alleen de gevallen, want de sleutel toetsen de jobs zonder storingen al. De tabel komt als
 #   artefact mee. Raakt het voorstel niets daarvan, dan slaagt de job meteen.
 # - ijkmeting: raakt het voorstel de contrastmeting, toolbox/src/lib/, de pakketten of deze
 #   workflow, dan draait `just calibrate` en komt de uitkomst naast de vorige uit
@@ -238,6 +240,7 @@ jobs:
       fail-fast: false
       # The two variants on two machines at the same time: each takes about as long as the other.
       # The same two again with the disruptions of toolbox/fixtures/disruptions.ts, on two more machines: no extra wait.
+      # Those measure and check only the cases; the key is checked by the two above.
       matrix:
         include:
           - variant: defect
@@ -246,12 +249,12 @@ jobs:
             site: Berkenveen
           - variant: defect
             site: Lindewaard
-            flags: --disruptions
+            flags: --only-disruptions
             label: ", met storingen"
             artifact: -storingen
           - variant: clean
             site: Berkenveen
-            flags: --disruptions
+            flags: --only-disruptions
             label: ", met storingen"
             artifact: -storingen
     env:
