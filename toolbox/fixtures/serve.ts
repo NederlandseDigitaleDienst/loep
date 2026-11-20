@@ -3,7 +3,7 @@
  * Serves the fixture: two variants of a small municipal site and a third origin that plays
  * the role of an external video and form service. Node built-ins only.
  *
- *   node fixtures/serve.ts [--defect 4710] [--clean 4711] [--third 4712] [--log <file>] [--session-seconds 1800]
+ *   node fixtures/serve.ts [--defect 4710] [--clean 4711] [--third 4712] [--log <file>] [--session-seconds 1800] [--disruptions]
  *
  * Everything binds to 127.0.0.1. Every request that is not a GET or HEAD and every WebSocket
  * message is appended to the log as one JSON object per line, so a test can prove that an
@@ -14,6 +14,8 @@
  * is a cookie that lasts --session-seconds from the moment of logging in. A login with the right
  * password is logged as a "login" without its body, so the password never reaches the log, and
  * every visit that ends a session as a "logout": a run with a login has to leave zero of those.
+ *
+ * With --disruptions a few fixed pages fail the way a real site sometimes does: see disruptions.ts.
  */
 import { createHash, randomBytes } from "node:crypto";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, statSync } from "node:fs";
@@ -25,6 +27,7 @@ import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import { ACCOUNT, ACCOUNT_HOME, DEFAULT_SESSION_SECONDS, LOGIN_PAGE, LOGOUT_PATHS, SESSION_COOKIE } from "./account.ts";
 import { LARGE_DOCUMENTS, paddedPdf } from "./documents.ts";
+import { createDisruptions, type Disruptions } from "./disruptions.ts";
 import { createMailRoute, type MailRoute } from "./mailroute.ts";
 
 const ROOT = dirname(fileURLToPath(import.meta.url));
@@ -53,7 +56,7 @@ const TEXT = new Set([".html", ".css", ".js", ".xml", ".txt"]);
 export interface LogEntry {
   time: string;
   site: SiteKey;
-  kind: "request" | "ws-open" | "ws-message" | "login" | "logout";
+  kind: "request" | "ws-open" | "ws-message" | "login" | "logout" | "challenge";
   method?: string;
   path: string;
   body?: string;
@@ -70,6 +73,8 @@ export interface FixtureServer {
   expireSessions(): void;
   /** The hard mail route on the sites, with the mailing service on the third party. */
   mailRoute: MailRoute;
+  /** The disruptions of disruptions.ts, when the server was started with them. */
+  disruptions: Disruptions | null;
   close(): Promise<void>;
 }
 
@@ -112,7 +117,7 @@ function readFrames(buffer: Buffer, onText: (text: string) => void, onClose: () 
   }
 }
 
-export async function startFixture(options: { ports?: Partial<Record<SiteKey, number>>; logFile?: string; sessionSeconds?: number } = {}): Promise<FixtureServer> {
+export async function startFixture(options: { ports?: Partial<Record<SiteKey, number>>; logFile?: string; sessionSeconds?: number; disruptions?: { armed: boolean } } = {}): Promise<FixtureServer> {
   const logFile = options.logFile ?? join(ROOT, "..", "runs", "fixture-server.log");
   mkdirSync(dirname(logFile), { recursive: true });
   // Append only: a second server that fails to bind must not wipe the log of the one that is running.
@@ -165,7 +170,12 @@ export async function startFixture(options: { ports?: Partial<Record<SiteKey, nu
 
   const mailRoute = createMailRoute((path, body) => log({ site: "clean", kind: "request", method: "POST", path, body: body.slice(0, 2000) }));
 
+  const disruptions = options.disruptions ? createDisruptions(options.disruptions) : null;
+  // A POST of the robot check is answered by Cloudflare and never reaches a site: noted, but not as something sent.
+  const challenge = (site: SiteKey) => (path: string): void => log({ site, kind: "challenge", method: "POST", path });
+
   const handler = (site: SiteKey) => (request: IncomingMessage, response: ServerResponse): void => {
+    if (disruptions?.answer(site, request, response, challenge(site))) return;
     if (site === "thirdParty" ? mailRoute.service(request, response) : site === "clean" && mailRoute.site(request, response, origins.clean, origins.thirdParty)) return;
     const root = join(ROOT, "sites", DIRECTORIES[site]);
     const url = new URL(request.url ?? "/", "http://127.0.0.1");
@@ -269,6 +279,7 @@ export async function startFixture(options: { ports?: Partial<Record<SiteKey, nu
     logouts: () => logouts,
     expireSessions: () => sessions.clear(),
     mailRoute,
+    disruptions,
     close: async () => {
       for (const server of Object.values(servers)) {
         server.closeAllConnections();
@@ -279,13 +290,13 @@ export async function startFixture(options: { ports?: Partial<Record<SiteKey, nu
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const { values } = parseArgs({ options: { defect: { type: "string" }, clean: { type: "string" }, third: { type: "string" }, log: { type: "string" }, "session-seconds": { type: "string" } } });
+  const { values } = parseArgs({ options: { defect: { type: "string" }, clean: { type: "string" }, third: { type: "string" }, log: { type: "string" }, "session-seconds": { type: "string" }, disruptions: { type: "boolean", default: false } } });
   const port = (value: string | undefined): number | undefined => (value === undefined ? undefined : Number(value));
   const ports: Partial<Record<SiteKey, number>> = {};
   if (port(values.defect) !== undefined) ports.defect = port(values.defect)!;
   if (port(values.clean) !== undefined) ports.clean = port(values.clean)!;
   if (port(values.third) !== undefined) ports.thirdParty = port(values.third)!;
-  const fixture = await startFixture({ ports, ...(values.log ? { logFile: values.log } : {}), ...(values["session-seconds"] ? { sessionSeconds: Number(values["session-seconds"]) } : {}) });
-  process.stdout.write(`Lindewaard  ${fixture.origins.defect}\nBerkenveen  ${fixture.origins.clean}\nKijkpunt    ${fixture.origins.thirdParty}\nlog         ${fixture.logFile}\n`);
+  const fixture = await startFixture({ ports, ...(values.log ? { logFile: values.log } : {}), ...(values["session-seconds"] ? { sessionSeconds: Number(values["session-seconds"]) } : {}), ...(values.disruptions ? { disruptions: { armed: true } } : {}) });
+  process.stdout.write(`Lindewaard  ${fixture.origins.defect}\nBerkenveen  ${fixture.origins.clean}\nKijkpunt    ${fixture.origins.thirdParty}\nlog         ${fixture.logFile}\n${fixture.disruptions ? "storingen   aan, zie fixtures/disruptions.ts\n" : ""}`);
   process.on("SIGINT", () => void fixture.close().then(() => process.exit(0)));
 }

@@ -1,12 +1,14 @@
 /**
  * The regression check of the sweep on the fixture site, without a language model.
  *
- *   node scripts/sweep-check.ts [--out <dir>] [--at-once <n>] [--variant defect|clean] [--fixed-ports] [--runs <dir>] [--update-baseline]
+ *   node scripts/sweep-check.ts [--out <dir>] [--at-once <n>] [--variant defect|clean] [--fixed-ports] [--disruptions] [--runs <dir>] [--update-baseline]
  *
  * --variant measures one variant only (the CI runs the two on two machines), --fixed-ports serves the
  * fixture on the ports of `just testsite` so the runs in <out>/runs stay usable as a frozen sweep,
  * --runs reads runs that were measured before instead of measuring, --from-report takes the rows of
  * earlier reports (the artefacts of the two CI jobs), --update-baseline writes what was found to the baseline.
+ * --disruptions serves the disruptions of fixtures/disruptions.ts, measures their pages too, as the command
+ * line does (with the scope and the blockade of the run), and checks the outcome each case should have.
  *
  * On both variants of the fixture site (Lindewaard with the planted defects, Berkenveen as the
  * clean twin) it runs inventory, installs the fixed site model of fixtures/sweep/, runs check-site,
@@ -29,6 +31,9 @@ import { DEFECTS, type Defect } from "../fixtures/defects.ts";
 import { entriesIn, logInOn, typeAccountKeepNotice } from "../fixtures/login.ts";
 import { EVIDENCE, isAgentOnly, type Look, type ScriptEvidence } from "../fixtures/evidence.ts";
 import { DEFAULT_PORTS, type SiteKey, startFixture } from "../fixtures/serve.ts";
+import { DISRUPTED_PAGES, DISRUPTIONS, GATE_CHECKS } from "../fixtures/disruptions.ts";
+import { readBlockades, setRunBlockade } from "../src/session/blockade.ts";
+import { setRunScope } from "../src/session/safety.ts";
 import { launchBrowser } from "../src/browser/session.ts";
 import { collect } from "../src/commands/collect.ts";
 import { contrast } from "../src/commands/contrast.ts";
@@ -59,9 +64,11 @@ export const VARIANTS: Variant[] = ["defect", "clean"];
  * variants it holds for (`variants`), and a step names its element per variant (`target.defect`
  * and `target.clean`), because the clean twin is built differently around the same controls.
  */
-export function installModel(run: string, variant: Variant, origins: { site: string; thirdParty: string }): void {
+export function installModel(run: string, variant: Variant, origins: { site: string; thirdParty: string }, disruptions = false): void {
   const fill = (text: string): string => text.replaceAll("{wsOrigin}", origins.site.replace(/^http/, "ws")).replaceAll("{origin}", origins.site).replaceAll("{thirdParty}", origins.thirdParty);
   const model = JSON.parse(fill(readFileSync(join(MODEL_DIR, "site.json"), "utf8"))) as Record<string, unknown>;
+  // With disruptions the model has the page types of their pages as well.
+  if (disruptions) (model.pageTypes as unknown[]).push(...(JSON.parse(fill(readFileSync(join(MODEL_DIR, "disruptions.json"), "utf8"))) as { pageTypes: unknown[] }).pageTypes);
   for (const [key, entries] of Object.entries(model)) {
     if (!Array.isArray(entries)) continue;
     model[key] = entries
@@ -93,7 +100,7 @@ export const fixturePorts = (fixed: boolean): Record<SiteKey, number> => (fixed 
 export type SweepTimes = Record<string, number>;
 
 /** A login with the account of the fixture, inventory, the fixed model, check-site, sample, the three steps of the sweep and documents, on one variant. */
-export async function sweepVariant(run: string, variant: Variant, origins: { site: string; thirdParty: string }, atOnce: number): Promise<{ seconds: SweepTimes; checkProblems: string[] }> {
+export async function sweepVariant(run: string, variant: Variant, origins: { site: string; thirdParty: string }, atOnce: number, disruptions?: { arm: () => void }): Promise<{ seconds: SweepTimes; checkProblems: string[] }> {
   const seconds: SweepTimes = {};
   const timed = async <T>(name: string, step: () => Promise<T>): Promise<T> => {
     const started = Date.now();
@@ -106,12 +113,21 @@ export async function sweepVariant(run: string, variant: Variant, origins: { sit
   await timed("login", () => logInOn(origins.site, { run }, typeAccountKeepNotice));
   setRunLogin(run);
   try {
-    await timed("inventory", () => inventory({ baseUrl: `${origins.site}/`, out: run, maxPages: 50, fixedUrls: SWEEP_PAGES.map((path) => `${origins.site}${path}`) }));
-    installModel(run, variant, origins);
+    const pages = disruptions ? [...SWEEP_PAGES, ...DISRUPTED_PAGES] : SWEEP_PAGES;
+    await timed("inventory", () => inventory({ baseUrl: `${origins.site}/`, out: run, maxPages: 50, fixedUrls: pages.map((path) => `${origins.site}${path}`) }));
+    installModel(run, variant, origins, disruptions !== undefined);
+    // As the command line has it for a command of the sweep: what did not arrive is noted, and a 429 is waited out.
+    if (disruptions) {
+      setRunScope(run);
+      setRunBlockade(run);
+    }
     const check = await timed("check-site", () => checkSite(run, { navigationDelayMs: 50 }));
     if (!check.ok) return { seconds, checkProblems: check.problems };
     await timed("sample", () => sample(run, "toegankelijk"));
+    disruptions?.arm();
     await timed("collect", () => collect({ run, atOnce }));
+    // The one more try for a page that missed a stylesheet, as the gate sends a run back to the sweep for it.
+    if (disruptions) await timed("collect-again", () => collect({ run, atOnce }));
     await timed("contrast", () => contrast(run, { atOnce }));
     await timed("states", () => states(run, { atOnce }));
     await timed("documents", () => documents(run));
@@ -316,7 +332,7 @@ export async function evaluate(runs: Partial<Record<Variant, string>>): Promise<
 }
 
 async function main(): Promise<void> {
-  const { values } = parseArgs({ options: { out: { type: "string" }, runs: { type: "string" }, variant: { type: "string" }, "from-report": { type: "string", multiple: true }, "at-once": { type: "string", default: "1" }, "fixed-ports": { type: "boolean", default: false }, "update-baseline": { type: "boolean", default: false } } });
+  const { values } = parseArgs({ options: { out: { type: "string" }, runs: { type: "string" }, variant: { type: "string" }, "from-report": { type: "string", multiple: true }, "at-once": { type: "string", default: "1" }, "fixed-ports": { type: "boolean", default: false }, disruptions: { type: "boolean", default: false }, "update-baseline": { type: "boolean", default: false } } });
   const out = resolve(values.out ?? join(tmpdir(), `loep-sweep-check-${process.pid}`));
   const atOnce = Number(values["at-once"]);
   if (!Number.isInteger(atOnce) || atOnce < 1) throw new Error("--at-once is een geheel aantal pagina's, 1 of meer");
@@ -332,7 +348,7 @@ async function main(): Promise<void> {
   if (!values.runs && reports.length === 0) {
     rmSync(runsDir, { recursive: true, force: true });
     mkdirSync(runsDir, { recursive: true });
-    const fixture = await startFixture({ ports: fixturePorts(values["fixed-ports"]), logFile: join(out, "fixture-server.log") }).catch((error: NodeJS.ErrnoException) => {
+    const fixture = await startFixture({ ports: fixturePorts(values["fixed-ports"]), logFile: join(out, "fixture-server.log"), ...(values.disruptions ? { disruptions: { armed: false } } : {}) }).catch((error: NodeJS.ErrnoException) => {
       if (error.code === "EADDRINUSE") throw new Error(`--fixed-ports: een van de poorten ${Object.values(DEFAULT_PORTS).join(", ")} is al in gebruik, bijvoorbeeld door just testsite; stop die eerst`);
       throw error;
     });
@@ -340,7 +356,7 @@ async function main(): Promise<void> {
       // One variant after the other: the login of a run holds for the whole process.
       for (const variant of measured) {
         try {
-          const result = await sweepVariant(runs[variant]!, variant, { site: fixture.origins[variant], thirdParty: fixture.origins.thirdParty }, atOnce);
+          const result = await sweepVariant(runs[variant]!, variant, { site: fixture.origins[variant], thirdParty: fixture.origins.thirdParty }, atOnce, fixture.disruptions ?? undefined);
           seconds[variant] = result.seconds;
           problems.push(...result.checkProblems.map((problem) => `${VARIANT_NL[variant]}: check-site: ${problem}`));
         } catch (error) {
@@ -359,6 +375,8 @@ async function main(): Promise<void> {
       await fixture.close();
     }
   }
+  // With disruptions every case has to come out as fixtures/disruptions.ts says, also in runs that are read again.
+  if (values.disruptions && reports.length === 0 && problems.length === 0) for (const variant of measured) problems.push(...(await disruptionProblems(runs[variant]!)).map((problem) => `${VARIANT_NL[variant]}: ${problem}`));
   const rows = problems.length > 0 ? [] : reports.length > 0 ? mergeRows(reports.map((file) => (readJsonOrNull(resolve(file)) as Report | null)?.rows ?? [])) : await evaluate(runs);
   const baseline = readJsonOrNull(BASELINE) as Baseline | null;
   const outcome = compareWithBaseline(rows, baseline);
@@ -371,6 +389,48 @@ async function main(): Promise<void> {
   }
   process.stdout.write(`${summaryLine(report)}\nTabel: ${join(out, "sweep-check.md")}\n`);
   if (!report.ok && !values["update-baseline"]) process.exitCode = 1;
+}
+
+/**
+ * Where a run with disruptions differs from what fixtures/disruptions.ts says each case should come to:
+ * whether the page was measured, what its facts say about the stylesheet, what the gate makes of it, and
+ * what blockades.json holds. Empty when every case came out as it should.
+ */
+export async function disruptionProblems(run: string): Promise<string[]> {
+  const { gateChecks } = await import("../src/commands/gate.ts");
+  const { loadRun } = await import("../src/lib/rundata.ts");
+  const items = (readJsonOrNull(join(run, "sample.json"))?.items ?? []) as { id: string; url: string; slug: string }[];
+  const checked = gateChecks(await loadRun(run));
+  const blockades = readBlockades(run);
+  const problems: string[] = [];
+  if (blockades.some((entry) => entry.until === null || entry.reason !== "429")) problems.push(`blockades.json heeft een vermelding die de veegronde laat stoppen of pauzeren na storingen: ${JSON.stringify(blockades)}`);
+  for (const disruption of DISRUPTIONS) {
+    const say = (text: string): number => problems.push(`${disruption.id} (${disruption.page}): ${text}`);
+    const thirdParty = disruption.on === "thirdParty";
+    const item = items.find((entry) => pathOf(entry.url) === disruption.page && (new URL(entry.url).origin === new URL(items[0]!.url).origin) !== thirdParty);
+    if (!item) {
+      say("niet in de steekproef");
+      continue;
+    }
+    const facts = readJsonOrNull(join(run, "pages", item.slug, "facts.json")) as { collectError?: string; notLoaded?: unknown[]; notLoadedAgain?: boolean } | null;
+    if (disruption.expected.measured && (!facts || facts.collectError)) say(`niet gemeten${facts?.collectError ? `: ${facts.collectError}` : ""}`);
+    const notLoaded = !facts?.notLoaded ? "none" : facts.notLoadedAgain ? "again" : "once";
+    if (notLoaded !== disruption.expected.notLoaded) say(`facts.json zegt over de stylesheet "${notLoaded}", verwacht "${disruption.expected.notLoaded}"`);
+    const said = [...checked.gaps.map((gap) => ({ gap, as: "gap" })), ...checked.limitations.map((gap) => ({ gap, as: "limitation" }))]
+      .filter(({ gap }) => gap.url === item.url && (GATE_CHECKS as readonly string[]).includes(gap.check))
+      .map(({ gap, as }) => `${gap.check} ${as}`);
+    const expectedGate = disruption.expected.gate ? [`${disruption.expected.gate.check} ${disruption.expected.gate.as}`] : [];
+    if (said.join(", ") !== expectedGate.join(", ")) say(`de poort zegt "${said.join(", ") || "niets"}", verwacht "${expectedGate.join(", ") || "niets"}"`);
+    const own = blockades.filter((entry) => pathOf(entry.url) === disruption.page);
+    const blockade = own.length === 0 ? "none" : own.length === 1 && own[0]!.reason === "429" && own[0]!.until !== null ? "429-paused" : JSON.stringify(own);
+    if (blockade !== disruption.expected.blockade) say(`blockades.json geeft "${blockade}", verwacht "${disruption.expected.blockade}"`);
+    // Past the robot check the window shows what it shows without it.
+    if (thirdParty) {
+      const tree = readDossierFile(join(run, "pages", item.slug, "aria.yaml")) as string | null;
+      if (!tree?.includes("Ik ben geen robot")) say("het venster toont na de controle niet het vinkje");
+    }
+  }
+  return problems;
 }
 
 const VARIANT_NL: Record<Variant, string> = { defect: "Lindewaard", clean: "Berkenveen" };

@@ -7,6 +7,7 @@ Twee keer dezelfde kleine gemeentesite, lokaal en statisch. Lindewaard bevat de 
 ```
 just testsite                 # Lindewaard op 4710, Berkenveen op 4711, Kijkpunt op 4712
 just testsite --log pad.log   # eigen logbestand
+just testsite --disruptions   # met storingen, zie "Storingen en blokkades"
 ```
 
 Daarna vanuit `toolbox/`:
@@ -42,6 +43,7 @@ De uitkomst is een tabel per gebrek (gevonden, ontbreekt, niet door een script t
 | `sweep/site.json` | Het vaste sitemodel voor beide varianten. `{origin}` en `{thirdParty}` worden bij het draaien ingevuld; een onderdeel met `variants` geldt alleen voor die variant |
 | `sweep/recipes/` | De recepten van het sitemodel. Een stap noemt zijn element per variant als de twee sites daar anders zijn gebouwd |
 | `sweep/baseline.json` | Wat de toets vond toen de basislijn werd vastgelegd |
+| `sweep/disruptions.json` | De paginatypen die het sitemodel erbij krijgt met `--disruptions` |
 
 Op GitHub draait de toets bij elk voorstel dat `toolbox/src/`, `toolbox/package-lock.json`, de testsite of de toets zelf raakt, Lindewaard en Berkenveen in twee jobs naast elkaar, met de tabel als artefact.
 
@@ -75,6 +77,22 @@ Berkenveen heeft een aanmelding per mail die op geen enkele pagina staat: de vee
 
 In de test staat de mail in `fixture.mailRoute.outbox`, en `fixture.mailRoute.mailbox()` is de nepmailbox: Mailpit is er in de CI niet. Met `options.viaService = false` staan de links rechtstreeks in de mail, en met `options.linkText = false` zegt de tekst van de links niets meer. De tests staan in `test/mailroute.test.ts`.
 
+## Storingen en blokkades
+
+Met `--disruptions` (voor `just testsite` en `just sweep-check`) doen een paar vaste pagina's wat een echte site soms doet. Zonder die vlag is alles zoals hiervoor. Elk geval staat in `disruptions.ts`, met de uitkomst die een meting moet halen; dat is de drempel.
+
+| Geval | Pagina | Wat de server doet | Drempel |
+|---|---|---|---|
+| Stylesheet één keer weg | `/nieuws/zomerfeest.html` | De eerste keer na het inschakelen krijgt `stijl.css` voor deze pagina 502, daarna komt hij | De veegronde laadt de pagina opnieuw en meet haar met de stylesheet. Geen gat, geen beperking |
+| Stylesheet altijd weg | `/nieuws/werkzaamheden-dorpsstraat.html` | `stijl.css` krijgt voor deze pagina altijd 503 | Na de tweede collect `notLoadedAgain` en een beperking van de poort. Geen criterium afgekeurd of goedgekeurd op wat zonder stylesheet te zien is |
+| Te veel verzoeken | `/sitemap.html` | Eén keer 429 met `Retry-After: 2`, daarna gewoon | Eén vermelding 429 met een einde in `blockades.json`. De veegronde wacht en meet de pagina. Geen criterium open |
+| Niet beschikbaar | `/afspraak-maken.html` | Altijd 503 met een korte foutpagina. Geen pagina linkt ernaar | De veegronde stopt niet en `blockades.json` blijft leeg. De poort geeft voor deze pagina alleen het gat `pages-loaded`, voor de verkenner. Een agent beoordeelt de foutpagina niet als de pagina om een afspraak te maken |
+| Controle tegen robots | `/controle.html` op Kijkpunt | Kijkpunt antwoordt als een site achter Cloudflare (`cf-ray`). Zonder cookie eerst een controlepagina (403, `cf-mitigated: challenge`) die een POST doet naar `/cdn-cgi/challenge-platform/` en dan opnieuw laadt | De POST gaat door en telt niet als iets wat naar de site is verstuurd (het log heeft er `kind` `challenge` voor). Het venster toont daarna het vinkje |
+
+De gevallen die één keer gebeuren, gebeuren één keer per variant nadat ze zijn ingeschakeld. `just testsite --disruptions` schakelt ze in bij het starten: wie de pagina als eerste vraagt, krijgt de storing. `just sweep-check --disruptions` schakelt ze pas in vlak voor collect, zodat inventory en check-site ze niet opmaken, en voegt de vier pagina's van de site toe aan de vaste lijst en hun paginatypen (`sweep/disruptions.json`) aan het sitemodel. Hij meet dan zoals de commandoregel: met de scope en de blokkade van de run, de varianten na elkaar, en collect twee keer. Daarna toetst hij per geval de drempel uit `disruptions.ts` en faalt als een geval anders uitkomt. De test van de server staat in `test/disruptions.test.ts`.
+
+Voor een meting met agents: maak de bevroren veegronde met `just sweep-check --out pad --fixed-ports --disruptions` en draai de agents tegen `just testsite --disruptions`.
+
 ## Wat waar staat
 
 | Pad | Inhoud | Geserveerd |
@@ -91,6 +109,7 @@ In de test staat de mail in `fixture.mailRoute.outbox`, en `fixture.mailRoute.ma
 | `mailroute.ts` | De moeilijke mailroute: formulier, mail, mailingdienst en afmelden | nee |
 | `documents.ts` | Welk document elke site op welk adres serveert, en welk document de server groter maakt | nee |
 | `src/documenten/` | De documenten, per site een bestand (`.a` voor Lindewaard, `.b` voor Berkenveen), met in `bron/` de bronnen en `make.sh` | ja, via `sites/` |
+| `disruptions.ts` | Storingen en blokkades met `--disruptions`, en de drempel per geval | nee |
 
 In wat wordt geserveerd staat niets dat het antwoord verraadt: geen aanwijzing in adressen, klassenamen, commentaar of tekst. Een test bewaakt dat.
 
