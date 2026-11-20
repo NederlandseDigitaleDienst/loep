@@ -160,6 +160,8 @@ describe("fixture server", () => {
     const problems: string[] = [];
     for (const key of ["defect", "clean"] as const) {
       const page = await browser.newPage();
+      // A browser without loep reports the visit to the survey of the third party; loep holds that back (sweep-check).
+      await page.route("**/vragenlijst/bezoek", (route) => route.abort());
       for (const [path, defects] of byPath) {
         await page.goto(`${fixture.origins[key]}${path}`, { waitUntil: "load" });
         const counts = await page.evaluate((selectors) => selectors.map((selector) => document.querySelectorAll(selector).length), defects.map((defect) => defect.selector));

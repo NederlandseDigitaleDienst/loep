@@ -215,6 +215,47 @@
     
   }
 
+  // Blocks of another party: the element names the address, the markup comes from there
+  all('[data-bron]').forEach(function (block) {
+    fetch(block.getAttribute('data-bron'))
+      .then(function (response) { return response.ok ? response.text() : ''; })
+      .then(function (html) { block.innerHTML = html; })
+      .catch(function () { /* the block stays empty */ });
+  });
+
+  // Waste guide: a question in JSON to the search service of the site
+  var guide = one('#afvalzoeker');
+  if (guide) {
+    var guideList = one('.afvalwijzer-resultaten');
+    var guideCount = one('.afvalwijzer-aantal');
+    var guideTimer = 0;
+    var showGuide = function (term, result) {
+      guideList.innerHTML = '';
+      guideCount.textContent = result.found > 0 ? result.found + (result.found === 1 ? ' afvalsoort gevonden' : ' afvalsoorten gevonden') : 'Niets gevonden voor ' + term + '. Dit wordt vaak gezocht:';
+      result.hits.forEach(function (hit) {
+        var item = doc.createElement('li');
+        item.innerHTML = '<span class="afval-naam"></span> <img class="afval-bak" width="32" height="32">';
+        one('.afval-naam', item).textContent = hit.document.naam;
+        one('.afval-bak', item).src = '/beeld/bak-' + hit.document.bak + '.svg';
+        
+        one('.afval-bak', item).alt = hit.document.waar;
+        
+        guideList.appendChild(item);
+      });
+    };
+    guide.addEventListener('input', function () {
+      clearTimeout(guideTimer);
+      var term = guide.value.trim();
+      guideTimer = setTimeout(function () {
+        if (term.length < 2) { guideList.innerHTML = ''; guideCount.textContent = ''; return; }
+        fetch('/zoekdienst/multi_search', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ searches: [{ collection: 'afvalwijzer', q: term, query_by: 'naam' }] }) })
+          .then(function (response) { return response.ok ? response.json() : null; })
+          .then(function (answer) { if (answer) showGuide(term, answer.results[0]); })
+          .catch(function () { guideCount.textContent = 'Zoeken lukt nu niet.'; });
+      }, 300);
+    });
+  }
+
   // Products
   var grid = one('.kaartrooster');
   if (grid) {

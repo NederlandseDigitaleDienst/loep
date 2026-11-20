@@ -1,0 +1,12 @@
+{
+  "noteNl": "Vaste leesregels voor de testsite, naast die van loep zelf. Een meting of test geeft dit bestand mee met LOEP_EXTRA_FIXED_READS; just sweep-check doet dat zelf, met de poort van Kijkpunt zoals die dan draait. Een regel hier noemt alleen een adres op deze machine.",
+  "rules": [
+    {
+      "id": "testsite-vragenlijst-start",
+      "method": "POST",
+      "origin": "http://127.0.0.1:4712",
+      "path": "/vragenlijst/start",
+      "reasonNl": "De ingesloten vragenlijst van Kijkpunt haalt hiermee bij het laden haar vragen op. Het verzoek stuurt alleen de naam van de vragenlijst en het adres van de pagina mee, en verstuurt geen antwoorden."
+    }
+  ]
+}

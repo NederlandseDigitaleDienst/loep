@@ -1,6 +1,6 @@
 # Testsite met ingebouwde gebreken
 
-Twee keer dezelfde kleine gemeentesite, lokaal en statisch. Lindewaard bevat de gebreken, Berkenveen is de tweeling waarin dezelfde plekken goed zijn gedaan. Een derde adres (Kijkpunt) speelt een externe videodienst en formulierdienst. Hiermee tellen we wat een vergelijking met een bestaand rapport niet kan tellen: gemiste gebreken, valse meldingen en onterechte goedkeuringen.
+Twee keer dezelfde kleine gemeentesite, lokaal en statisch. Lindewaard bevat de gebreken, Berkenveen is de tweeling waarin dezelfde plekken goed zijn gedaan. Een derde adres (Kijkpunt) speelt een externe videodienst en formulierdienst, en levert een blok met berichten en een vragenlijst. Hiermee tellen we wat een vergelijking met een bestaand rapport niet kan tellen: gemiste gebreken, valse meldingen en onterechte goedkeuringen.
 
 ## Gebruiken
 
@@ -19,7 +19,7 @@ node src/cli.ts compare --findings tasks --run runs/<naam> --reference fixtures/
 
 Voor Berkenveen is `reference-berkenveen.json` de referentie: geen enkel criterium hoort daar te worden afgekeurd, dus alles onder "alleen wij" is een valse melding of een gebrek dat er per ongeluk in zit.
 
-De server schrijft elk verzoek dat geen GET of HEAD is en elk bericht over de WebSocket van de chat naar het logbestand (standaard `runs/fixture-server.log`), één JSON-object per regel. Het log wordt nooit geleegd. Tel de regels met `kind` gelijk aan `request` of `ws-message` voor en na een run: het verschil hoort nul te zijn.
+De server schrijft elk verzoek dat geen GET of HEAD is en elk bericht over de WebSocket van de chat naar het logbestand (standaard `runs/fixture-server.log`), één JSON-object per regel. Het log wordt nooit geleegd. Tel de regels met `kind` gelijk aan `request` of `ws-message` voor en na een run: het verschil hoort nul te zijn. Een verzoek dat alleen leest (zie [Lezen bij een andere partij](#lezen-bij-een-andere-partij)) staat er met `kind` gelijk aan `read` en telt niet mee.
 
 ## Regressietoets van de veegronde
 
@@ -44,6 +44,26 @@ De uitkomst is een tabel per gebrek (gevonden, ontbreekt, niet door een script t
 | `sweep/baseline.json` | Wat de toets vond toen de basislijn werd vastgelegd |
 
 Op GitHub draait de toets bij elk voorstel dat `toolbox/src/`, `toolbox/package-lock.json`, de testsite of de toets zelf raakt, Lindewaard en Berkenveen in twee jobs naast elkaar, met de tabel als artefact.
+
+## Lezen bij een andere partij
+
+Drie stukken inhoud verschijnen pas na een verzoek, elk met een sleutelgebrek op Lindewaard en het goede geval op Berkenveen:
+
+| Pagina | Verzoek | Gaat door | Gebrek |
+|---|---|---|---|
+| `/openingstijden.html` | GET van een blok bij Kijkpunt (`/blok/regio-1.html` of `-2`) | altijd, ook in de veegronde | `1.1.1-regioblok` |
+| `/veelgestelde-vragen.html` | POST naar Kijkpunt `/vragenlijst/start`, na een preflight | alleen met de vaste leesregel voor de testserver | `4.1.2-vragenlijst` |
+| `/afval.html` | POST in JSON (de vorm van Typesense) naar `/zoekdienst/multi_search` op de site | alleen met een leesverzoek in het sitemodel | `1.1.1-afvalwijzer` |
+
+De vragenlijst meldt daarnaast elk bezoek met een POST naar Kijkpunt `/vragenlijst/bezoek`. Dat verzoek legt iets vast en moet tegengehouden blijven: de server logt het als `request`, dus een run die het doorlaat, faalt op de telling hierboven. Een browser zonder loep verstuurt het wel; de test van de selectors houdt het daarom zelf tegen.
+
+De vaste leesregel voor de testserver staat in `fixed-reads.json`, niet in de regels van loep zelf (`toolbox/data/fixed-reads.json`). Loep leest zo'n extra bestand als de omgevingsvariabele `LOEP_EXTRA_FIXED_READS` het pad noemt, en weigert daarin een regel voor een adres dat niet op deze machine is (127.0.0.1, localhost of [::1]). Geef de variabele mee aan elk proces van een meting op de testsite, ook aan de agents:
+
+```
+export LOEP_EXTRA_FIXED_READS="$PWD/toolbox/fixtures/fixed-reads.json"
+```
+
+Het bestand noemt Kijkpunt op poort 4712, zoals bij `just testsite` en `just sweep-check --fixed-ports`. `just sweep-check` schrijft zelf een kopie met de poort waarop Kijkpunt dan draait en gebruikt die. Het leesverzoek voor de afvalwijzer staat niet in het vaste model van de toets: check-site wil daarvoor een waarneming uit een sessie, waarin loep de zoekvraag tegenhield. In een meting legt de verkenner het vast; in de toets telt het gebrek als iets wat alleen een agent ziet.
 
 ## Het deel achter een inlog
 
@@ -76,6 +96,8 @@ In de test staat de mail in `fixture.mailRoute.outbox`, en `fixture.mailRoute.ma
 | `sites/` | De gegenereerde sites. Staan in git; de server bouwt niets | ja |
 | `serve.ts` | De server, alleen Node zelf. Houdt de sessies van het deel achter de inlog bij | nee |
 | `mailroute.ts` | De moeilijke mailroute: formulier, mail, mailingdienst en afmelden | nee |
+| `readroute.ts` | De verzoeken die alleen lezen: de start van de vragenlijst, de preflight ervoor en de zoekvraag van de afvalwijzer | nee |
+| `fixed-reads.json` | De vaste leesregel voor de testserver, voor `LOEP_EXTRA_FIXED_READS` | nee |
 
 In wat wordt geserveerd staat niets dat het antwoord verraadt: geen aanwijzing in adressen, klassenamen, commentaar of tekst. Een test bewaakt dat.
 

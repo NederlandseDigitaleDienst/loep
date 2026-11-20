@@ -35,6 +35,7 @@ import { inventory } from "../src/commands/inventory.ts";
 import { sample } from "../src/commands/sample.ts";
 import { states } from "../src/commands/states.ts";
 import { canonicalJson, pageLabels, sha256 } from "../src/lib/canonical.ts";
+import { EXTRA_FIXED_READS_ENV, setFixedReads } from "../src/lib/reads.ts";
 
 const TOOLBOX = join(dirname(fileURLToPath(import.meta.url)), "..");
 const MODEL_DIR = join(TOOLBOX, "fixtures", "sweep");
@@ -85,6 +86,18 @@ export function installModel(run: string, variant: Variant, origins: { site: str
  * with fixed ports those of `just testsite`, so the addresses in the runs open again afterwards.
  */
 export const fixturePorts = (fixed: boolean): Record<SiteKey, number> => (fixed ? { ...DEFAULT_PORTS } : { defect: 0, clean: 0, thirdParty: 0 });
+
+/**
+ * The fixed read rules of the test server (fixtures/fixed-reads.json) with the address of the third party as it runs
+ * now, written to `dir` and given to this process, the way a measurement gives them with LOEP_EXTRA_FIXED_READS.
+ */
+export function useFixtureReads(dir: string, thirdParty: string): string {
+  const path = join(dir, "fixed-reads.json");
+  writeFileSync(path, readFileSync(join(TOOLBOX, "fixtures", "fixed-reads.json"), "utf8").replaceAll(`http://127.0.0.1:${DEFAULT_PORTS.thirdParty}`, thirdParty));
+  process.env[EXTRA_FIXED_READS_ENV] = path;
+  setFixedReads(null);
+  return path;
+}
 
 export type SweepTimes = Record<string, number>;
 
@@ -326,6 +339,7 @@ async function main(): Promise<void> {
       throw error;
     });
     try {
+      useFixtureReads(out, fixture.origins.thirdParty);
       // The two variants at the same time: each its own browser and run.
       await Promise.all(
         measured.map(async (variant) => {

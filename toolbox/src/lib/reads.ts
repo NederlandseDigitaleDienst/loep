@@ -227,20 +227,48 @@ export function fixedReadProblems(value: unknown, where: string): string[] {
 }
 
 /** Read and check the fixed rules: a rule that does not pass its own checks stops loep, it never passes anything. */
-export function loadFixedReads(path = fileURLToPath(new URL("../../data/fixed-reads.json", import.meta.url))): FixedRead[] {
+export function loadFixedReads(path = fileURLToPath(new URL("../../data/fixed-reads.json", import.meta.url)), problemsOf = fixedReadProblems): FixedRead[] {
   const data = JSON.parse(readFileSync(path, "utf8")) as { rules?: unknown };
   const rules = Array.isArray(data.rules) ? data.rules : [];
-  const problems = rules.flatMap((rule, index) => fixedReadProblems(rule, `vaste leesregel ${index + 1}`));
+  const problems = rules.flatMap((rule, index) => problemsOf(rule, `vaste leesregel ${index + 1}`));
   const ids = rules.map((rule) => (rule as { id?: unknown }).id);
   if (new Set(ids).size !== ids.length) problems.push("twee vaste leesregels hebben hetzelfde id");
   if (problems.length > 0) throw new Error(`${path}: ${problems.join("; ")}`);
   return rules as FixedRead[];
 }
 
+/**
+ * A file with fixed rules for a test server on this machine, next to the rules of loep: for a test or a measurement
+ * on the fixture site, whose players and windows of another party are served from 127.0.0.1. The rules of loep itself
+ * are not touched.
+ */
+export const EXTRA_FIXED_READS_ENV = "LOEP_EXTRA_FIXED_READS";
+const LOOPBACK_HOSTS = new Set(["127.0.0.1", "localhost", "[::1]"]);
+
+/** The problems of a rule of that file: the checks of a fixed rule, with http allowed, and only for a host on this machine. */
+export function extraFixedReadProblems(value: unknown, where: string): string[] {
+  if (!isRecord(value) || !isText(value.origin)) return fixedReadProblems(value, where);
+  let host: string | null = null;
+  try {
+    host = new URL(value.origin).hostname;
+  } catch {
+    host = null;
+  }
+  const problems = fixedReadProblems({ ...value, origin: value.origin.replace(/^http:\/\//, "https://") }, where);
+  if (host !== null && !LOOPBACK_HOSTS.has(host)) problems.push(`${where}: een extra vaste leesregel noemt alleen een testserver op deze machine (127.0.0.1, localhost of [::1]), niet ${host}`);
+  return problems;
+}
+
 let fixedRules: FixedRead[] | null = null;
 
-/** The fixed read rules of loep, read once per process. */
-export const fixedReads = (): readonly FixedRead[] => (fixedRules ??= loadFixedReads());
+/** The fixed read rules of loep, read once per process, with those of the file in LOEP_EXTRA_FIXED_READS when it is set. */
+export const fixedReads = (): readonly FixedRead[] => {
+  if (fixedRules) return fixedRules;
+  const extraPath = process.env[EXTRA_FIXED_READS_ENV];
+  const rules = [...loadFixedReads(), ...(extraPath ? loadFixedReads(extraPath, extraFixedReadProblems) : [])];
+  if (new Set(rules.map((rule) => rule.id)).size !== rules.length) throw new Error(`${extraPath}: een extra vaste leesregel heeft het id van een vaste leesregel van loep`);
+  return (fixedRules = rules);
+};
 
 /** Replace the fixed rules in this process, for a test on the fixture site; null reads the file again. */
 export function setFixedReads(rules: readonly FixedRead[] | null): void {

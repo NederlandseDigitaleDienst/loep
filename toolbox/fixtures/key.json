@@ -126,9 +126,9 @@
     }
   ],
   "totals": {
-    "defects": 79,
-    "measurable": 41,
-    "interaction": 20,
+    "defects": 82,
+    "measurable": 43,
+    "interaction": 21,
     "looking": 18
   },
   "defects": [
@@ -194,6 +194,36 @@
       "cleanNl": "De tarieven staan in een echte tabel.",
       "state": "opened",
       "stateNl": "Na het openen van de tweede vraag.",
+      "class": "interaction"
+    },
+    {
+      "id": "1.1.1-regioblok",
+      "criterion": "1.1.1",
+      "pages": [
+        "/openingstijden.html"
+      ],
+      "selector": ".regioblok",
+      "selectorInClean": true,
+      "whereNl": "De pictogrammen in het blok \"Werkzaamheden aan wegen in de regio\", dat een script bij het laden met GET ophaalt bij een andere partij.",
+      "wrongNl": "Alleen het pictogram zegt of een weg is afgesloten of dat er een omleiding is, en de pictogrammen hebben geen alt-attribuut.",
+      "cleanNl": "De pictogrammen hebben als alt \"Afgesloten:\" en \"Omleiding:\".",
+      "state": "initial",
+      "stateNl": "Na het laden, zodra het blok van de andere partij is opgehaald.",
+      "class": "measurable"
+    },
+    {
+      "id": "1.1.1-afvalwijzer",
+      "criterion": "1.1.1",
+      "pages": [
+        "/afval.html"
+      ],
+      "selector": ".afvalwijzer-resultaten",
+      "selectorInClean": true,
+      "whereNl": "De resultaten van de afvalwijzer onder \"Waar moet het heen?\". De zoekvraag gaat met een POST in JSON naar de zoekdienst van de site.",
+      "wrongNl": "Waar een afvalsoort heen moet, staat alleen in het pictogram van de bak, en dat pictogram heeft geen alt-attribuut.",
+      "cleanNl": "Het alt van het pictogram zegt waar de afvalsoort heen moet.",
+      "state": "typed",
+      "stateNl": "Na typen in \"Waar moet het heen?\"; alleen met een leesverzoek voor de zoekdienst in het sitemodel komen er resultaten.",
       "class": "interaction"
     },
     {
@@ -609,7 +639,8 @@
         "/zoeken.html",
         "/vergunning.html",
         "/inloggen.html",
-        "/producten.html"
+        "/producten.html",
+        "/afval.html"
       ],
       "selector": "main input",
       "selectorInClean": true,
@@ -1359,6 +1390,25 @@
       "plantedWith": "2.1.1-productkaart"
     },
     {
+      "id": "4.1.2-vragenlijst",
+      "criterion": "4.1.2",
+      "alsoCriteria": [
+        "1.3.1",
+        "3.3.2"
+      ],
+      "pages": [
+        "/veelgestelde-vragen.html"
+      ],
+      "selector": ".vragenlijst",
+      "selectorInClean": true,
+      "whereNl": "De vragenlijst \"Wat vindt u van deze website?\" onderaan de pagina met vragen. Een script van een andere partij haalt de vragen bij het laden op met een POST.",
+      "wrongNl": "De vijf keuzerondjes hebben geen label: het cijfer staat er los naast.",
+      "cleanNl": "Elk keuzerondje staat met zijn cijfer in een label.",
+      "state": "initial",
+      "stateNl": "Na het laden, zodra de vragenlijst haar vragen heeft opgehaald; alleen met de vaste leesregel voor de testserver.",
+      "class": "measurable"
+    },
+    {
       "id": "4.1.3-bedankt",
       "criterion": "4.1.3",
       "pages": [
@@ -1915,6 +1965,20 @@
       ],
       "descriptionNl": "Het blok \"Uitgelicht\" op de startpagina wisselt elke vier seconden. De contactpagina stuurt na tien minuten door naar de startpagina en telt zichtbaar af.",
       "testsNl": "De inhoud van de pagina is niet bij elke lading gelijk, en een proef die lang op de contactpagina blijft, staat daarna op een andere pagina."
+    },
+    {
+      "id": "lezen-bij-een-andere-partij",
+      "variants": [
+        "defect",
+        "clean"
+      ],
+      "pages": [
+        "/openingstijden.html",
+        "/veelgestelde-vragen.html",
+        "/afval.html"
+      ],
+      "descriptionNl": "Drie stukken inhoud verschijnen pas na een verzoek. Op de pagina met openingstijden haalt een script met GET een blok op bij Kijkpunt. Op de pagina met vragen haalt een script van Kijkpunt de vragenlijst op met een POST naar /vragenlijst/start, en meldt het elk bezoek met een POST naar /vragenlijst/bezoek. De afvalwijzer stuurt elke zoekvraag met een POST in JSON (de vorm van Typesense) naar /zoekdienst/multi_search op de site zelf.",
+      "testsNl": "Zonder het blok en de vragenlijst ontbreken twee gebreken op Lindewaard. De start van de vragenlijst gaat alleen door met de vaste leesregel voor de testserver (fixtures/fixed-reads.json), het melden van een bezoek nooit: de server legt het vast als iets dat is verstuurd. De zoekvraag gaat alleen door met een leesverzoek in het sitemodel, dat de verkenner vastlegt nadat loep haar tegenhield."
     },
     {
       "id": "zelfde-inhoud-ander-adres",

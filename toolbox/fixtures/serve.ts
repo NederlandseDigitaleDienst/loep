@@ -23,6 +23,7 @@ import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import { ACCOUNT, ACCOUNT_HOME, DEFAULT_SESSION_SECONDS, LOGIN_PAGE, LOGOUT_PATHS, SESSION_COOKIE } from "./account.ts";
 import { createMailRoute, type MailRoute } from "./mailroute.ts";
+import { answerRead } from "./readroute.ts";
 
 const ROOT = dirname(fileURLToPath(import.meta.url));
 
@@ -47,7 +48,8 @@ const TEXT = new Set([".html", ".css", ".js", ".xml", ".txt"]);
 export interface LogEntry {
   time: string;
   site: SiteKey;
-  kind: "request" | "ws-open" | "ws-message";
+  /** read: a POST or preflight that only asks (readroute.ts), never a write. */
+  kind: "request" | "ws-open" | "ws-message" | "read";
   method?: string;
   path: string;
   body?: string;
@@ -143,6 +145,7 @@ export async function startFixture(options: { ports?: Partial<Record<SiteKey, nu
   const handler = (site: SiteKey) => (request: IncomingMessage, response: ServerResponse): void => {
     if (site === "thirdParty" ? mailRoute.service(request, response) : site === "clean" && mailRoute.site(request, response, origins.clean, origins.thirdParty)) return;
     const root = join(ROOT, "sites", DIRECTORIES[site]);
+    if (answerRead(site, request, response, root, log)) return;
     const url = new URL(request.url ?? "/", "http://127.0.0.1");
     const method = request.method ?? "GET";
     // An address that ends the session does so whatever the method, as a link on a real site would.
@@ -235,7 +238,7 @@ export async function startFixture(options: { ports?: Partial<Record<SiteKey, nu
         .split("\n")
         .filter(Boolean)
         .map((line) => JSON.parse(line) as LogEntry)
-        .filter((entry) => entry.kind !== "ws-open"),
+        .filter((entry) => entry.kind !== "ws-open" && entry.kind !== "read"),
     logouts: () => logouts,
     expireSessions: () => sessions.clear(),
     mailRoute,
