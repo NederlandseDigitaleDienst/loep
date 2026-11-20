@@ -57,7 +57,7 @@ description:
       - Onderzoek volgens WCAG-EM op WCAG 2.2 en 2.1, niveau A en AA
       - Alle pagina's van een kleine site, ook de documenten waar ze naar linken
       - Een regel bewijs bij elke goedkeuring
-      - Rapport in Markdown en pdf, en een conceptverklaring met het invulblad voor het register
+      - Rapport in Markdown, HTML en pdf, en een conceptverklaring met het invulblad voor het register
       - Een tweede onderzoek meet alleen wat veranderd is
       - Verzegeld en afgetekend door een mens
       - Plugin voor Claude Code
@@ -90,7 +90,7 @@ description:
       - WCAG-EM evaluation against WCAG 2.2 and 2.1, levels A and AA
       - Every page of a small site, including linked documents
       - A line of evidence with every pass
-      - Report in Markdown and PDF, plus a draft accessibility statement
+      - Report in Markdown, HTML and PDF, plus a draft accessibility statement
       - A repeat evaluation only measures what changed
       - Sealed and signed by a person
       - Claude Code plugin
@@ -117,10 +117,26 @@ dependsOn:
     - name: just
     - name: Chromium
       optional: false
+    - name: Firefox
+      optional: false
+    - name: WebKit
+      optional: false
     - name: typst
       versionMin: '0.14'
       optional: true
     - name: veraPDF
+      optional: true
+    - name: poppler
+      optional: true
+    - name: qpdf
+      versionMin: '11'
+      optional: true
+    - name: Java
+      versionMin: '11'
+      optional: true
+    - name: Tesseract
+      optional: true
+    - name: FFmpeg
       optional: true
     - name: whisper.cpp
       optional: true

@@ -39,6 +39,6 @@ Guidepup, `@guidepup/virtual-screen-reader` 0.33.0 (MIT), is op 13 oktober 2026 
 
 ## Niet geprobeerd
 
-- NVDA en JAWS draaien op Windows en zijn niet geprobeerd. VoiceOver stond hier tot 13 oktober 2026 ook: een echte schermlezer vraagt een scherm en systeemrechten. Sindsdien is VoiceOver er als optioneel onderdeel buiten een run, in een virtuele Mac met een eigen scherm (het commando `voiceover`, zie [voiceover.md](voiceover.md)). Safari via `safaridriver` vraagt een handmatige instelling.
+- NVDA en JAWS draaien op Windows en zijn niet geprobeerd. VoiceOver stond hier tot 13 oktober 2026 ook: een echte schermlezer vraagt een scherm en systeemrechten. Sindsdien is VoiceOver er als optioneel onderdeel, in een virtuele Mac met een eigen scherm (het commando `voiceover`, zie [voiceover.md](voiceover.md)); is die ingericht en gestart, dan laten de agents van een onderzoek er zelf mee voorlezen. Safari via `safaridriver` vraagt een handmatige instelling.
 - IRIS van Electronic Arts voor flitsen (BSD-3-Clause) moet uit C++ worden gebouwd. Het meet ook rode flitsen en patronen; de eigen flitsmeting doet dat niet.
 - EPUBCheck en Ace van DAISY voor epub: epub wordt geteld en niet ingelezen.

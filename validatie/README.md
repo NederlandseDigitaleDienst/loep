@@ -19,7 +19,7 @@ De map `versies/` zegt per versie van loep wanneer die het laatst als geheel is 
 
 `evaluate` leest het bestand van zijn eigen versie, en het rapport zet de zin onder "Betrouwbaarheid en beperkingen". Is er voor een versie geen bestand, dan staat er dat deze versie niet is vergeleken met het oordeel van een menselijke deskundige en niet als geheel is gemeten op de testsite. Schrijf het bestand alleen na een meting van de hele versie, niet na een meting van een paar criteria (`tasks --only`). `just release-prepare` weigert een versie zonder dit bestand, tenzij met `--unmeasured "<reden>"`; zie [CONTRIBUTING.md](../CONTRIBUTING.md#versies).
 
-De toolbox heet nu loep. De verslagen in deze map zijn geschreven toen ze nog opendeur heette en een commando in een sessie met `tg` begon; ze blijven staan zoals ze zijn.
+De toolbox heet nu loep. De oudste verslagen in deze map zijn geschreven toen ze nog opendeur heette en een commando in een sessie met `tg` begon; ze blijven staan zoals ze zijn.
 
 De verslagen noemen de commit waarmee is gemeten. Tot en met 11 oktober 2026 is dat een commit uit de ontwikkelgeschiedenis van vóór deze repository, die met één commit (`76495d6`) openbaar is gemaakt; zo'n commit is hier niet op te vragen. De code van toen is daarmee niet meer precies na te gaan, alleen wat het verslag erover zegt.
 

@@ -16,7 +16,7 @@ Hoe je de skills gebruikt, staat in [gebruik.md](gebruik.md). De skills roepen d
 
 ## In de marketplace van de Nederlandse Digitale Dienst
 
-De plugin staat in de marketplace `NederlandseDigitaleDienst/ai-plugins` (naam `nldd`). Die verwijst per plugin naar de repository waar hij staat, met één blok in `marketplace.json` in de root. Dat bestand is de bron. De bestanden die elke tool leest, `.claude-plugin/marketplace.json`, `.cursor-plugin/marketplace.json` en `.agents/plugins/marketplace.json`, maakt een script daaruit; die pas je niet met de hand aan. Het blok in de bron:
+De plugin staat in de marketplace `NederlandseDigitaleDienst/ai-plugins` (naam `nldd`). Die verwijst per plugin naar de repository waar hij staat, met één blok in `marketplace.json` in de root. Dat bestand is de bron. De bestanden die elke tool leest, `.claude-plugin/marketplace.json`, `.cursor-plugin/marketplace.json` en `.agents/plugins/marketplace.json`, maakt een script daaruit; die pas je niet met de hand aan. Het blok in de bron, met in `ref` de tag van de laatste versie:
 
 ```json
 {
@@ -24,7 +24,7 @@ De plugin staat in de marketplace `NederlandseDigitaleDienst/ai-plugins` (naam `
   "displayName": "NLDD loep",
   "description": "Experimenteel. loep maakt een toegankelijkheidsonderzoek van een website (WCAG 2.2 en 2.1, niveau A en AA, WCAG-EM) en de toegankelijkheidsverklaring die erop steunt. Vijf skills: nldd-a11y wijst de weg, nldd-a11y-audit maakt het onderzoek (scripts meten, agents beoordelen elk criterium met meetinstrumenten en maken elke bevinding opnieuw vanaf een verse pagina, een mens tekent), nldd-a11y-statement maakt van een getekend onderzoek de verklaring, nldd-a11y-quick bewaakt in een pipeline zonder taalmodel dat een site niet slechter wordt, en nldd-a11y-contribute stuurt van een onderzoek een meetblad zonder de site in naar een gedeelde verzameling. Het register van toegankelijkheidsverklaringen heeft een onderzoek met loep niet bevestigd als onderbouwing van status A of B. Vereist Node en just; zie de README.",
   "author": { "name": "Nederlandse Digitale Dienst" },
-  "source": { "source": "github", "repo": "NederlandseDigitaleDienst/loep", "ref": "v0.24.1" },
+  "source": { "source": "github", "repo": "NederlandseDigitaleDienst/loep", "ref": "v<versie>" },
   "category": "productivity",
   "tags": ["experimental", "overheid", "toegankelijkheid", "wcag", "wcag-em", "toegankelijkheidsverklaring", "rijksoverheid"]
 }

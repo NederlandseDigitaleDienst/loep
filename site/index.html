@@ -346,8 +346,8 @@
       <nldd-title slot="left" size="display-3" text="De bewijspoort" heading-level="3"></nldd-title>
       <nldd-spacer slot="left" size="12"></nldd-spacer>
       <nldd-rich-text slot="left">
-          <p>Twaalf vaste controles toetsen of het bewijs compleet is. Daarna bekijkt een agent per paginatype een overzichtsblad met de pagina breed, op 320 pixels en met genummerde elementen.</p>
-          <p><code>check-gate</code> controleert zijn antwoorden. Is het bewijs onvoldoende, dan gaat de run terug naar de verkenner. Blijft het onvoldoende, dan komt er geen oordeel.</p>
+          <p>Vaste controles toetsen of het bewijs compleet is. Daarna bekijkt een agent per paginatype een overzichtsblad met de pagina breed, op 320 pixels en met genummerde elementen.</p>
+          <p><code>check-gate</code> controleert zijn antwoorden. Is het bewijs onvoldoende, dan gaat de run terug naar de verkenner, hooguit twee keer. Wat daarna nog ontbreekt, wordt een beperking die de beoordelaars zelf bekijken.</p>
       </nldd-rich-text>
       <nldd-spacer slot="left" size="12"></nldd-spacer>
       <nldd-card slot="left">
@@ -534,7 +534,7 @@
       <nldd-title slot="left" size="display-3" text="Rapport en zegel" heading-level="3"></nldd-title>
       <nldd-spacer slot="left" size="12"></nldd-spacer>
       <nldd-rich-text slot="left">
-          <p><code>evaluate</code> en <code>render</code> maken het rapport, een korte versie zonder bijlage en de werklijst. In een nieuw rapport zegt de samenvatting eerst wie vastloopt, per kerntaak van de site. <code>seal</code> legt de hash van elk bestand van het onderzoek vast.</p>
+          <p><code>evaluate</code> en <code>render</code> maken het rapport, een korte versie zonder bijlage en de werklijst. Een nieuw rapport opent met een samenvatting voor de leiding, die een agent uit het rapport schrijft en een tweede agent zin voor zin naast het rapport legt. <code>seal</code> legt de hash van elk bestand van het onderzoek vast.</p>
           <p>Een mens leest het rapport en tekent in een terminal door de eerste acht tekens van het zegel over te typen. Dat doet nooit de assistent. <code>verify</code> toont elke latere wijziging.</p>
       </nldd-rich-text>
       <nldd-spacer slot="left" size="12"></nldd-spacer>
