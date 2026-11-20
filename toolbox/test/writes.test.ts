@@ -15,6 +15,7 @@ import { REGULAR_PATH, type RunData } from "../src/lib/rundata.ts";
 import { budgetOutPointNl, claimInTurn, claimLinkInTurn, confirmDeclaration, sendDeadlineOf, setSendDeadline, raiseWrites, writesLow, criterionSender, decideWrites, isOurMessage, isWriteOrigin, isProtocolFrame, reservedWrites, senderOf, SocketFrames, DEFAULT_MAX_WRITES, DEFAULT_WRITE_SPACING_SECONDS, recordWrites, WRITES_BLOCKED_NL, writeAccess, writeBudget, writeBudgetNl, writeOriginsOf, writesAllowedNl, writesForRun, type PassedWrite, type WritePermission } from "../src/lib/writes.ts";
 import { answerRefusalNl, DECLARED_ORIGIN, httpSendOf, RECORD_QUIET_MS, readHttpRecordings, readRecordings, readReplays, recordingKey, replayNl, replaysNl, socketRecordings, type HttpRecording } from "../src/lib/recordings.ts";
 import { notSentPointProblems } from "../src/lib/verdict.ts";
+import type { ReadRequest } from "../src/lib/reads.ts";
 import { approvedSendsTo, sendsToMatches, sendsToProblems, sendsToReplayProblem } from "../src/lib/sitemodel.ts";
 import { Daemon } from "../src/session/daemon.ts";
 import type { Observation } from "../src/session/observations.ts";
@@ -624,6 +625,34 @@ test("a frame without a test value is played from a recording after the greeting
     assert.equal(site.socketMessages.length, 1, "the service hears it once");
     assert.equal(writeBudget(dir, limited).sent, 1);
     assert.equal(readReplays(dir).length, 1);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("a search to an origin that may be written to goes the way of a read request: held back as a search without a rule, let through as a read with one, and never sent", async () => {
+  reset();
+  const dir = mkdtempSync(join(tmpdir(), "loep-writes-search-"));
+  await recordWrites(dir, { ...permission, maxWrites: 10, spacingSeconds: 0 });
+  const at = `${site.origin}/1/indexes/*/queries`;
+  const question = JSON.stringify({ requests: [{ indexName: "gemeente", params: "query=afval" }] });
+  const rule: ReadRequest = { id: "zoekdienst", method: "POST", origin: site.origin, path: "/1/indexes/*/queries", service: "algolia", reasonNl: "De zoekvraag gaat naar de zoekdienst, die alleen resultaten teruggeeft.", observation: "verken-0001" };
+  try {
+    const scope = await scopeForRun(dir, { scopeUrl: `${site.origin}/` });
+    const search = async (reads: ReadRequest[]): Promise<Guard> => {
+      const { surface } = await openSurface({ browser, runDir: dir, scope, limits: DEFAULT_DAEMON_LIMITS, politeness: new Politeness(0), reads }, { url: `${site.origin}/callback.html`, width: 1280, height: 800, scheme: "light" });
+      await surface.page.evaluate(([url, body]) => fetch(url!, { method: "POST", headers: { "content-type": "application/json" }, body }).catch(() => undefined), [at, question] as const);
+      await settle();
+      await surface.context.close();
+      return surface.guard;
+    };
+    const held = await search([]);
+    assert.deepEqual(held.blocked.filter((entry) => entry.kind === "method").map((entry) => `${entry.method} ${entry.url} ${entry.search?.join(",")}`), [`POST ${at} algolia`], "held back and named a search, so the explorer records the read request");
+    assert.deepEqual(writesReceived(), [], "nothing reached the site");
+    const read = await search([rule]);
+    assert.deepEqual(read.reads?.map((entry) => `${entry.rule} ${entry.url}`), [`zoekdienst ${at}`]);
+    assert.deepEqual(writesReceived(), [`POST ${new URL(site.origin).hostname}/1/indexes/*/queries`]);
+    assert.deepEqual(logged(dir), [], "searching takes nothing from the budget");
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
