@@ -25,7 +25,8 @@
 #   (toolbox/fixtures/) of de toets zelf (en elke nacht en met de hand),
 #   de regressietoets `just sweep-check`: inventory, een vast sitemodel, collect, contrast en
 #   states op de testsite, en per gebrek uit de sleutel of het bewijs in het dossier staat. Twee
-#   jobs naast elkaar: Lindewaard (de gebreken) en Berkenveen (de tweeling). De tabel komt als
+#   jobs naast elkaar: Lindewaard (de gebreken) en Berkenveen (de tweeling), en dezelfde twee
+#   nog eens met --disruptions (een 429, een ontbrekende stylesheet, een 503-pagina). De tabel komt als
 #   artefact mee. Raakt het voorstel niets daarvan, dan slaagt de job meteen.
 # - ijkmeting: raakt het voorstel de contrastmeting, toolbox/src/lib/, de pakketten of deze
 #   workflow, dan draait `just calibrate` en komt de uitkomst naast de vorige uit
@@ -230,18 +231,29 @@ jobs:
   veegronde:
     needs: wijziging
     if: needs.wijziging.outputs.ja == 'true'
-    name: veegronde op de testsite (${{ matrix.site }})
+    name: veegronde op de testsite (${{ matrix.site }}${{ matrix.label }})
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     strategy:
       fail-fast: false
       # The two variants on two machines at the same time: each takes about as long as the other.
+      # The same two again with the disruptions of toolbox/fixtures/disruptions.ts, on two more machines: no extra wait.
       matrix:
         include:
           - variant: defect
             site: Lindewaard
           - variant: clean
             site: Berkenveen
+          - variant: defect
+            site: Lindewaard
+            flags: --disruptions
+            label: ", met storingen"
+            artifact: -storingen
+          - variant: clean
+            site: Berkenveen
+            flags: --disruptions
+            label: ", met storingen"
+            artifact: -storingen
     env:
       MEASURE: ${{ needs.wijziging.outputs.src }}
     steps:
@@ -270,7 +282,7 @@ jobs:
 
       - name: Regressietoets van de veegronde
         if: env.MEASURE == 'true'
-        run: just sweep-check --variant ${{ matrix.variant }} --out "$RUNNER_TEMP/veegronde" --at-once 3
+        run: just sweep-check --variant ${{ matrix.variant }} --out "$RUNNER_TEMP/veegronde" --at-once 3 ${{ matrix.flags }}
 
       - name: Tabel in de samenvatting
         if: always() && env.MEASURE == 'true'
@@ -280,7 +292,7 @@ jobs:
         if: always() && env.MEASURE == 'true'
         uses: actions/upload-artifact@v7
         with:
-          name: veegronde-${{ matrix.site }}
+          name: veegronde-${{ matrix.site }}${{ matrix.artifact }}
           path: |
             ${{ runner.temp }}/veegronde/sweep-check.md
             ${{ runner.temp }}/veegronde/sweep-check.json
