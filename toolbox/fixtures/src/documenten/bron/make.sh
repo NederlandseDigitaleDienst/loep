@@ -13,9 +13,20 @@ export SOURCE_DATE_EPOCH=1772409600
 pdf() { # source, output, extra typst arguments
   source=$1; target=$2; shift 2
   typst compile --root "$here" "$@" "$here/$source" "$out/tmp-$target"
+  # Every PDF asks the viewer to show its title instead of the file name (DisplayDocTitle, which typst
+  # does not write without PDF/UA), so on 2.4.2 the twins differ only in whether there is a title.
+  qpdf --json=2 --json-key=qpdf "$out/tmp-$target" | node -e '
+    let input = "";
+    process.stdin.on("data", (chunk) => (input += chunk)).on("end", () => {
+      const [header, objects] = JSON.parse(input).qpdf;
+      const root = `obj:${objects.trailer.value["/Root"]}`;
+      const catalog = objects[root].value;
+      catalog["/ViewerPreferences"] = { ...catalog["/ViewerPreferences"], "/DisplayDocTitle": true };
+      process.stdout.write(JSON.stringify({ qpdf: [header, { [root]: { value: catalog } }] }));
+    });' > "$out/tmp-$target.json"
   # A cross-reference table instead of a stream: the server appends to the budget in place (see fixtures/documents.ts).
-  qpdf --object-streams=disable --deterministic-id "$out/tmp-$target" "$out/$target"
-  rm "$out/tmp-$target"
+  qpdf --object-streams=disable --deterministic-id --update-from-json="$out/tmp-$target.json" "$out/tmp-$target" "$out/$target"
+  rm "$out/tmp-$target" "$out/tmp-$target.json"
 }
 pdf agenda.typ agenda.a.pdf --no-pdf-tags --input naam=Lindewaard
 pdf agenda.typ agenda.b.pdf --input naam=Berkenveen

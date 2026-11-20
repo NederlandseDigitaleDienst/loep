@@ -137,6 +137,10 @@ describe("fixture site", () => {
       const read = (key: "defect" | "clean"): Buffer => readFileSync(join(SERVED, SITES[key].dir, served.path));
       assert.notDeepEqual(read("defect"), read("clean"), served.path);
     }
+    // Every PDF asks the viewer to show its title, so on 2.4.2 the twins differ only in whether there is one.
+    for (const served of DOCUMENTS.filter((each) => each.path.endsWith(".pdf"))) {
+      for (const file of new Set([served.defect, served.clean])) assert.match(readFileSync(join(FIXTURES, "src", "documenten", file), "latin1"), /\/DisplayDocTitle true/, file);
+    }
     for (const size of Object.values(LARGE_DOCUMENTS)) assert.ok(size > MAX_DOCUMENT_BYTES, "a large document stays above the limit of the toolbox");
   });
 
