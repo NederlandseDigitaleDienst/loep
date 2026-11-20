@@ -469,6 +469,20 @@ test("the workflow pauses only on what pending itself says: a field the stand fi
   assert.ok(mute);
   const heard = await runWorkflow(3, [{ phase: "judges", judges, voiceover: mute }, { phase: "done" }]);
   assert.equal(heard.result.voiceover, mute);
+  const warming = voiceoverWarningNl({ state: "running" }, true);
+  assert.ok(warming);
+  assert.equal((await runWorkflow(3, [{ phase: "judges", judges, voiceover: warming }, { phase: "done" }])).result.voiceover, warming);
+  // Every variant of the budget: one that ran out, one origin among several, and the warning as a stand may hand it back, quoted or with a capital.
+  const out = writeBudgetsNl([{ origin: "https://www.example.nl", max: 30, sent: 30, left: 0, reserved: 0, spacingSeconds: 0, waitSeconds: 0 }]);
+  const two = writeBudgetsNl([
+    { origin: "https://www.example.nl", max: 30, sent: 28, left: 2, reserved: 2, spacingSeconds: 5, waitSeconds: 3 },
+    { origin: "https://chat.example.nl", max: 10, sent: 9, left: 1, reserved: 0, spacingSeconds: 0, waitSeconds: 0 },
+  ]);
+  for (const said of [out, two, `"${low}"`, low[0]!.toUpperCase() + low.slice(1)]) {
+    const flow = await runWorkflow(3, [{ phase: "judges", judges, sendingLow: said }]);
+    assert.equal(flow.events.length, 0, `${JSON.stringify(said)} pauses the run`);
+    assert.match(flow.result.paused!, /^budget voor versturen bijna op, run gepauzeerd; /);
+  }
 
   // A stand that fills in the fields with words of its own: the run goes on, and nothing is said about it.
   for (const filler of ["niet van toepassing", "geen", "n.v.t.", "", " "]) {

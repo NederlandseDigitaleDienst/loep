@@ -34,10 +34,11 @@ const SENDING_PAUSED_NL = 'budget voor versturen bijna op, run gepauzeerd; vraag
 const SITE_DOWN = /^\W*storing van de site(?::|\W*$)/i
 // The stand is an agent, and it may fill a field that `pending` left out, with "niet van toepassing" or "geen" (#710).
 // A field counts only in the words `pending` itself uses for it; a test holds these to the toolbox.
+// A quote or a capital the stand puts around those words still counts: a warning missed is worse than a pause too many.
 const FROM_PENDING = {
-  siteOutage: /^storing van de site: /,
-  sendingLow: /^nog \d+ van \d+ verzendingen naar /,
-  voiceover: /^LET OP: de virtuele Mac met VoiceOver /,
+  siteOutage: /^\W*storing van de site: /i,
+  sendingLow: /^\W*nog \d+ van \d+ verzendingen naar /i,
+  voiceover: /^\W*LET OP: de virtuele Mac met VoiceOver /i,
 }
 const fromPending = (state, field) => (typeof state[field] === 'string' && FROM_PENDING[field].test(state[field].trim()) ? state[field].trim() : null)
 const CRITERION = /^\d+\.\d+\.\d+$/
