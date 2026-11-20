@@ -99,6 +99,12 @@ export function installModel(run: string, variant: Variant, origins: { site: str
 export const fixturePorts = (fixed: boolean): Record<SiteKey, number> => (fixed ? { ...DEFAULT_PORTS } : { defect: 0, clean: 0, thirdParty: 0 });
 
 /**
+ * How long the login of the check lasts on its server. Far longer than the half hour of the fixture: at one page
+ * at a time a variant takes more than that, and the check is about the sweep, not about a session that ran out.
+ */
+export const CHECK_SESSION_SECONDS = 6 * 3600;
+
+/**
  * The fixed read rules of the test server (fixtures/fixed-reads.json) with the address of the third party as it runs
  * now, written to `dir` and given to this process with LOEP_EXTRA_FIXED_READS. Each run gets a copy as well
  * (EXTRA_FIXED_READS_FILE), so a measurement on it uses them without the variable.
@@ -367,7 +373,7 @@ async function main(): Promise<void> {
   if (!values.runs && reports.length === 0) {
     rmSync(runsDir, { recursive: true, force: true });
     mkdirSync(runsDir, { recursive: true });
-    const fixture = await startFixture({ ports: fixturePorts(values["fixed-ports"]), logFile: join(out, "fixture-server.log"), ...(values.disruptions ? { disruptions: { armed: false } } : {}) }).catch((error: NodeJS.ErrnoException) => {
+    const fixture = await startFixture({ ports: fixturePorts(values["fixed-ports"]), logFile: join(out, "fixture-server.log"), sessionSeconds: CHECK_SESSION_SECONDS, ...(values.disruptions ? { disruptions: { armed: false } } : {}) }).catch((error: NodeJS.ErrnoException) => {
       if (error.code === "EADDRINUSE") throw new Error(`--fixed-ports: een van de poorten ${Object.values(DEFAULT_PORTS).join(", ")} is al in gebruik, bijvoorbeeld door just testsite; stop die eerst`);
       throw error;
     });
