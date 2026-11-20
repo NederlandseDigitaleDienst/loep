@@ -12,14 +12,19 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, wri
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { CRITERIA_EXPECTED, DEFECTS, TRAPS, type Defect } from "./defects.ts";
+import { DOCUMENTS } from "./documents.ts";
 
 const ROOT = dirname(fileURLToPath(import.meta.url));
 const SRC = join(ROOT, "src");
 
+/**
+ * The sites and where the generated files place them. Kijkpunt has a host of its own, as another party always has on the web:
+ * a cookie does not look at the port, so on 127.0.0.1 the browser would hold the login cookie of the site for Kijkpunt too.
+ */
 export const SITES = {
-  defect: { dir: "lindewaard", name: "Lindewaard", port: 4710 },
-  clean: { dir: "berkenveen", name: "Berkenveen", port: 4711 },
-  thirdParty: { dir: "kijkpunt", name: "Kijkpunt", port: 4712 },
+  defect: { dir: "lindewaard", name: "Lindewaard", host: "127.0.0.1", port: 4710 },
+  clean: { dir: "berkenveen", name: "Berkenveen", host: "127.0.0.1", port: 4711 },
+  thirdParty: { dir: "kijkpunt", name: "Kijkpunt", host: "localhost", port: 4712 },
 } as const;
 
 type Variant = "defect" | "clean";
@@ -90,7 +95,7 @@ function resolveMarkers(text: string, variant: Variant, origin: string): string 
 function layout(page: PageSource, body: string, variant: Variant): string {
   const bad = variant === "defect";
   const site = SITES[variant];
-  const third = `http://127.0.0.1:${SITES.thirdParty.port}`;
+  const third = `http://${SITES.thirdParty.host}:${SITES.thirdParty.port}`;
   const pick = <T,>(id: string, defect: T, clean: T): T => {
     usedSwitches.add(id);
     return bad ? defect : clean;
@@ -253,8 +258,8 @@ function walk(dir: string): string[] {
 /** All files of one site as a map from relative path to content. */
 function buildSite(variant: Variant): Map<string, string | Buffer> {
   const site = SITES[variant];
-  const origin = `http://127.0.0.1:${site.port}`;
-  const third = `http://127.0.0.1:${SITES.thirdParty.port}`;
+  const origin = `http://${site.host}:${site.port}`;
+  const third = `http://${SITES.thirdParty.host}:${SITES.thirdParty.port}`;
   const files = new Map<string, string | Buffer>();
   const fill = (text: string): string => text.replaceAll("{{naam}}", site.name).replaceAll("{{derde}}", third);
 
@@ -271,6 +276,10 @@ function buildSite(variant: Variant): Map<string, string | Buffer> {
   files.set("media/gesprek.ogg", readFileSync(join(SRC, "media", "gesprek.ogg")));
   if (variant === "defect") files.set("media/melodie.ogg", readFileSync(join(SRC, "media", "melodie.ogg")));
   else files.set("media/raadsvergadering.vtt", readFileSync(join(SRC, "media", "raadsvergadering.vtt"), "utf8"));
+  for (const document of DOCUMENTS.filter((entry) => entry.on === "site")) {
+    usedSwitches.add(document.plants);
+    files.set(document.path, readFileSync(join(SRC, "documenten", document[variant])));
+  }
 
   const listed = PAGES.filter((page) => !page.kind || page.kind === "article").map((page) => `  <url><loc>${origin}${page.path}</loc></url>`);
   files.set("sitemap.xml", `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${listed.join("\n")}\n</urlset>\n`);
@@ -281,6 +290,7 @@ function buildSite(variant: Variant): Map<string, string | Buffer> {
 function buildThirdParty(): Map<string, string | Buffer> {
   const files = new Map<string, string | Buffer>();
   for (const path of walk(join(SRC, "kijkpunt"))) files.set(relative(join(SRC, "kijkpunt"), path), readFileSync(path, "utf8"));
+  for (const document of DOCUMENTS.filter((entry) => entry.on === "thirdParty")) files.set(document.path, readFileSync(join(SRC, "documenten", document.defect)));
   return files;
 }
 
@@ -308,11 +318,11 @@ function referenceDocument(variant: Variant): unknown {
   const findings = variant === "clean" ? [] : DEFECTS.map((defect) => ({
     id: defect.id,
     criterion: defect.criterion,
-    page: defect.pages.length > 3 || defect.pages[0] === "*" ? "alle" : defect.pages.join(", "),
+    page: defect.document ?? (defect.pages.length > 3 || defect.pages[0] === "*" ? "alle" : defect.pages.join(", ")),
     descriptionNl: defect.wrongNl,
-    where: `${defect.selector} (${defect.whereNl})`,
+    where: defect.document ? `${defect.whereNl} De link staat op ${defect.pages.join(", ")} (${defect.selector}).` : `${defect.selector} (${defect.whereNl})`,
     state: defect.stateNl,
-    medium: "web",
+    medium: defect.document ? "document" : "web",
     ...(defect.alsoCriteria ? { alsoCriteria: defect.alsoCriteria } : {}),
   }));
   return {
@@ -320,7 +330,7 @@ function referenceDocument(variant: Variant): unknown {
     wcagVersion: "2.2",
     sampleNote: `De testsite ${site.name} heeft ${PAGES.length} paginatypen. De sleutel noemt per gebrek de pagina's waarop het zit.`,
     outcomeNote: variant === "defect"
-      ? `De sleutel bevat ${DEFECTS.length} ingebouwde gebreken onder ${failed.length} criteria. Wat de sleutel niet noemt, is niet met opzet fout gemaakt.`
+      ? `De sleutel bevat ${DEFECTS.length} ingebouwde gebreken onder ${failed.length} criteria, waarvan ${DEFECTS.filter((defect) => defect.document).length} in een document. Wat de sleutel niet noemt, is niet met opzet fout gemaakt.`
       : "In deze tweeling zijn dezelfde plekken goed gedaan. Geen enkel criterium hoort te worden afgekeurd.",
     failed,
     failedOnlyInDocuments: [],

@@ -53,6 +53,14 @@
   <dt>Berichten ontvangen via</dt>
   <dd>Mijn Lindewaard en per post</dd>
 </dl>
+<h2>Wachtwoord wijzigen</h2>
+<form class="formulier" id="wachtwoordformulier" action="/mijn/wachtwoord" method="post">
+  <label for="huidig-wachtwoord">Huidig wachtwoord</label>
+  <input type="password" id="huidig-wachtwoord" name="huidig" autocomplete="off" onpaste="return false">
+  <label for="nieuw-wachtwoord">Nieuw wachtwoord</label>
+  <input type="password" id="nieuw-wachtwoord" name="nieuw" autocomplete="new-password">
+  <div class="verzendrij"><button type="submit">Wachtwoord wijzigen</button></div>
+</form>
 <p>Klaar op deze computer? <a href="/mijn/sessie-sluiten">Afmelden</a></p>
 <p><a href="/mijn/">Terug naar het overzicht</a></p>
   </main>
@@ -131,7 +139,7 @@
       <button type="button" data-keuze="eigen">Keuze opslaan</button>
     </div>
   </div>
-  <iframe class="stil-kader" src="http://127.0.0.1:4712/leeg.html" title="Blank" tabindex="-1" aria-hidden="true"></iframe>
+  <iframe class="stil-kader" src="http://localhost:4712/leeg.html" title="Blank" tabindex="-1" aria-hidden="true"></iframe>
   <script src="/site.js"></script>
 </body>
 </html>

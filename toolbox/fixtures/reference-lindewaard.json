@@ -2,7 +2,7 @@
   "kind": "answer-key",
   "wcagVersion": "2.2",
   "sampleNote": "De testsite Lindewaard heeft 17 paginatypen. De sleutel noemt per gebrek de pagina's waarop het zit.",
-  "outcomeNote": "De sleutel bevat 79 ingebouwde gebreken onder 51 criteria. Wat de sleutel niet noemt, is niet met opzet fout gemaakt.",
+  "outcomeNote": "De sleutel bevat 91 ingebouwde gebreken onder 51 criteria, waarvan 6 in een document. Wat de sleutel niet noemt, is niet met opzet fout gemaakt.",
   "failed": [
     "1.1.1",
     "1.2.1",
@@ -57,7 +57,7 @@
     "4.1.3"
   ],
   "failedOnlyInDocuments": [],
-  "problemCount": 79,
+  "problemCount": 91,
   "findings": [
     {
       "id": "1.1.1-logo-melding",
@@ -98,6 +98,33 @@
         "1.3.1",
         "1.4.5"
       ]
+    },
+    {
+      "id": "1.1.1-pictogram",
+      "criterion": "1.1.1",
+      "page": "/mijn/",
+      "descriptionNl": "Het envelopje is decoratief maar heeft geen alt-attribuut, dus een schermlezer leest de bestandsnaam voor.",
+      "where": "img.pictogram:not([alt]) (Het envelopje voor \"Uw berichten\" op het overzicht na het inloggen.)",
+      "state": "Direct na het laden, ingelogd.",
+      "medium": "web"
+    },
+    {
+      "id": "1.1.1-regioblok",
+      "criterion": "1.1.1",
+      "page": "/openingstijden.html",
+      "descriptionNl": "Alleen het pictogram zegt of een weg is afgesloten of dat er een omleiding is, en de pictogrammen hebben geen alt-attribuut.",
+      "where": ".regioblok (De pictogrammen in het blok \"Werkzaamheden aan wegen in de regio\", dat een script bij het laden met GET ophaalt bij een andere partij.)",
+      "state": "Na het laden, zodra het blok van de andere partij is opgehaald.",
+      "medium": "web"
+    },
+    {
+      "id": "1.1.1-afvalwijzer",
+      "criterion": "1.1.1",
+      "page": "/afval.html",
+      "descriptionNl": "Waar een afvalsoort heen moet, staat alleen in het pictogram van de bak, en dat pictogram heeft geen alt-attribuut.",
+      "where": ".afvalwijzer-resultaten (De resultaten van de afvalwijzer onder \"Waar moet het heen?\". De zoekvraag gaat met een POST in JSON naar de zoekdienst van de site.)",
+      "state": "Na typen in \"Waar moet het heen?\"; alleen met een leesverzoek voor de zoekdienst in het sitemodel komen er resultaten.",
+      "medium": "web"
     },
     {
       "id": "1.2.1-gesprek",
@@ -726,6 +753,15 @@
       "medium": "web"
     },
     {
+      "id": "3.3.4-intrekken",
+      "criterion": "3.3.4",
+      "page": "/mijn/aanvragen.html",
+      "descriptionNl": "De knop trekt de aanvraag van de parkeervergunning meteen in, terwijl dat niet terug te draaien is en de leges vervallen. Er is geen bevestiging, controle of manier om het ongedaan te maken.",
+      "where": "#intrekformulier:not(:has(input[type=\"checkbox\"])) (Het formulier \"Een aanvraag intrekken\" op de pagina met aanvragen, na het inloggen.)",
+      "state": "Direct na het laden, ingelogd. Versturen laat zien dat er geen stap volgt.",
+      "medium": "web"
+    },
+    {
       "id": "3.3.7-adres",
       "criterion": "3.3.7",
       "page": "/vergunning.html",
@@ -741,7 +777,22 @@
       "descriptionNl": "Plakken in het wachtwoordveld is geblokkeerd en automatisch invullen staat uit. Daarnaast moet de bezoeker twee letters van een geheim woord uit het hoofd typen.",
       "where": "#wachtwoord[onpaste] (Het inlogformulier.)",
       "state": "Direct na het laden.",
-      "medium": "web"
+      "medium": "web",
+      "alsoCriteria": [
+        "1.3.5"
+      ]
+    },
+    {
+      "id": "3.3.8-wachtwoord-wijzigen",
+      "criterion": "3.3.8",
+      "page": "/mijn/gegevens.html",
+      "descriptionNl": "Plakken in het veld voor het huidige wachtwoord is geblokkeerd en automatisch invullen staat uit, dus de bezoeker moet het wachtwoord uit het hoofd typen.",
+      "where": "#huidig-wachtwoord[onpaste] (Het veld \"Huidig wachtwoord\" onder \"Wachtwoord wijzigen\", na het inloggen.)",
+      "state": "Direct na het laden, ingelogd.",
+      "medium": "web",
+      "alsoCriteria": [
+        "1.3.5"
+      ]
     },
     {
       "id": "4.1.2-tabs",
@@ -808,6 +859,19 @@
       ]
     },
     {
+      "id": "4.1.2-vragenlijst",
+      "criterion": "4.1.2",
+      "page": "/veelgestelde-vragen.html",
+      "descriptionNl": "De vijf keuzerondjes hebben geen label: het cijfer staat er los naast.",
+      "where": ".vragenlijst (De vragenlijst \"Wat vindt u van deze website?\" onderaan de pagina met vragen. Een script van een andere partij haalt de vragen bij het laden op met een POST.)",
+      "state": "Na het laden, zodra de vragenlijst haar vragen heeft opgehaald; alleen met de vaste leesregel voor de testserver.",
+      "medium": "web",
+      "alsoCriteria": [
+        "1.3.1",
+        "3.3.2"
+      ]
+    },
+    {
       "id": "4.1.3-bedankt",
       "criterion": "4.1.3",
       "page": "/veelgestelde-vragen.html",
@@ -833,6 +897,69 @@
       "where": ".chat-berichten:not([role]) (De berichten in het chatvenster.)",
       "state": "Na het openen van de chat.",
       "medium": "web"
+    },
+    {
+      "id": "1.3.1-agenda-pdf",
+      "criterion": "1.3.1",
+      "page": "/documenten/agenda-raadsvergadering-2026-03-12.pdf",
+      "descriptionNl": "De pdf heeft geen tags: de koppen, de tabel met tijden en de lijst zijn voor hulpsoftware platte tekst.",
+      "where": "De agenda van de raadsvergadering, een pdf onder \"Stukken bij de vergadering\". De link staat op /raadsvergadering.html (a[href=\"/documenten/agenda-raadsvergadering-2026-03-12.pdf\"]).",
+      "state": "In het document.",
+      "medium": "document",
+      "alsoCriteria": [
+        "1.3.2"
+      ]
+    },
+    {
+      "id": "1.3.1-begroting-pdf",
+      "criterion": "1.3.1",
+      "page": "/documenten/begroting-2027.pdf",
+      "descriptionNl": "De pdf heeft geen tags: de koppen, de tabel met lasten en de lijst zijn voor hulpsoftware platte tekst. Het bestand is groter dan de toolbox ophaalt.",
+      "where": "De begroting, een pdf van 262 MB onder \"Stukken bij de vergadering\". De link staat op /raadsvergadering.html (a[href=\"/documenten/begroting-2027.pdf\"]).",
+      "state": "In het document.",
+      "medium": "document",
+      "alsoCriteria": [
+        "1.3.2"
+      ]
+    },
+    {
+      "id": "1.3.1-ontheffing-docx",
+      "criterion": "1.3.1",
+      "page": "/documenten/ontheffing-parkeren.docx",
+      "descriptionNl": "De tussenkoppen van het formulier zijn vette alinea's zonder kopstijl.",
+      "where": "Het aanvraagformulier voor een ontheffing, een Word-bestand onder \"Ontheffing\". De link staat op /vergunning.html (a[href=\"/documenten/ontheffing-parkeren.docx\"]).",
+      "state": "In het document.",
+      "medium": "document"
+    },
+    {
+      "id": "1.3.1-afvalwijzer-extern",
+      "criterion": "1.3.1",
+      "page": "http://localhost:4712/documenten/afvalwijzer-2027-lindewaard.pdf",
+      "descriptionNl": "De pdf heeft geen tags: de tabel met ophaaldagen en de lijst zijn voor hulpsoftware platte tekst.",
+      "where": "De afvalwijzer, een pdf bij de afvaldienst op een ander domein. De link staat op /afval.html (a[href$=\"/documenten/afvalwijzer-2027-lindewaard.pdf\"]).",
+      "state": "In het document.",
+      "medium": "document"
+    },
+    {
+      "id": "1.1.1-plattegrond",
+      "criterion": "1.1.1",
+      "page": "/documenten/plattegrond-gemeentehuis.png",
+      "descriptionNl": "De namen van de ruimtes staan alleen als tekst in de afbeelding. De pagina noemt ze niet.",
+      "where": "De plattegrond van het gemeentehuis, een png-bestand onder \"Bezoeken\". De link staat op /contact.html (a[href=\"/documenten/plattegrond-gemeentehuis.png\"]).",
+      "state": "In het document.",
+      "medium": "document",
+      "alsoCriteria": [
+        "1.4.5"
+      ]
+    },
+    {
+      "id": "2.4.2-besluitenlijst-pdf",
+      "criterion": "2.4.2",
+      "page": "/documenten/besluitenlijst-2026-03-12.pdf",
+      "descriptionNl": "De pdf heeft tags maar geen titel in de documenteigenschappen. Een pdf-lezer toont de bestandsnaam.",
+      "where": "De besluitenlijst, een pdf met tags onder \"Stukken bij de vergadering\". De link staat op /raadsvergadering.html (a[href=\"/documenten/besluitenlijst-2026-03-12.pdf\"]).",
+      "state": "In het document.",
+      "medium": "document"
     }
   ]
 }

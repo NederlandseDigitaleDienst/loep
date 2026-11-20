@@ -45,6 +45,12 @@ export const DEFAULT_SESSION_LIMITS: SessionLimits = { maxCommands: 300, maxMinu
 export interface Scope {
   /** Hosts a session may navigate to and send requests to. */
   hosts: string[];
+  /**
+   * The hosts of the site itself: its origins, and the address of `--scope`. Not a window of another party that the
+   * inventory found, nor a host of `--allow-host`, though both are in `hosts`. Only a fixed read to one of these
+   * goes without asking whether it carries a secret of the run (see `onSite`). Absent: no host is.
+   */
+  siteHosts?: string[];
   /** Start URL of the run; relative page addresses are resolved against it. */
   baseUrl: string | null;
   /** The run, when there is one: a run with secrets has a boundary around every context. */
@@ -76,13 +82,19 @@ type ScopeInventory = { origin: string; origins?: string[]; pages: { url: string
 /** The hosts of the scope that the inventory sets: every origin of the site, also one where no page was found, and every host of a page it recorded. */
 function inventoryHosts(inventory: ScopeInventory): string[] {
   const origins = siteOrigins(inventory);
-  const hosts = new Set(origins.map((origin) => scopeHost(new URL(origin))));
+  const hosts = new Set(originHosts(inventory));
   for (const page of inventory.pages) {
     const url = new URL(page.url);
     if (WEB_SCHEMES.includes(url.protocol) && !privateFromPublicSite(page.url, origins)) hosts.add(scopeHost(url));
   }
   return [...hosts].sort();
 }
+
+/** The hosts of the origins of the site, as the scope writes them: no host of a page that is a window of another party. */
+const originHosts = (inventory: ScopeInventory): string[] => siteOrigins(inventory).map((origin) => scopeHost(new URL(origin)));
+
+/** Whether an address is on a host of the site itself (`Scope.siteHosts`), not merely in the scope as a window of another party is. */
+export const onSite = (scope: Pick<Scope, "siteHosts">, url: string): boolean => inScope({ hosts: scope.siteHosts ?? [] }, url);
 
 /** The scope of the run for the commands of the sweep in this process (see `setRunScope`); null outside a run. */
 let sweepScope: Pick<Scope, "hosts" | "runDir"> | null = null;
@@ -153,6 +165,7 @@ export async function secretLeavesRunNl(context: BrowserContext, scope: Pick<Sco
  */
 export async function scopeForRun(runDir: string, extra: { scopeUrl?: string | undefined; allowHosts?: string[]; strict?: boolean }): Promise<Scope> {
   const hosts = new Set<string>((extra.allowHosts ?? []).map(scopeHostOf));
+  const own = new Set<string>();
   let baseUrl: string | null = null;
   let sitePath: string | undefined;
   let probes: string[] = [];
@@ -166,12 +179,14 @@ export async function scopeForRun(runDir: string, extra: { scopeUrl?: string | u
       probes = notFoundProbes(inventory);
     }
     for (const host of inventoryHosts(inventory)) hosts.add(host);
+    for (const host of originHosts(inventory)) own.add(host);
   }
   if (extra.scopeUrl) {
     const url = new URL(extra.scopeUrl);
     if (url.protocol !== "http:" && url.protocol !== "https:") throw new Error(`--scope "${extra.scopeUrl}" is geen adres met http:// of https://`);
     baseUrl ??= extra.scopeUrl;
     hosts.add(scopeHost(url));
+    own.add(scopeHost(url));
   }
   if (hosts.size === 0) throw new Error("geen inventory.json in de run en geen --scope <url> opgegeven: onbekend welke site in scope is");
   const permission = writesForRun(runDir);
@@ -179,7 +194,7 @@ export async function scopeForRun(runDir: string, extra: { scopeUrl?: string | u
   // Inside a command of the sweep the log names that command; a session names itself.
   const ambient = runWrites();
   const writes = permission ? (ambient?.origin === permission.origin ? ambient : writeAccess(runDir, permission, "session")) : null;
-  return { hosts: [...hosts].sort(), baseUrl, runDir, strict: extra.strict ?? false, ...(sitePath ? { sitePath, notFoundProbes: probes } : {}), ...(writes ? { writes } : {}), ...(linkOrigins ? { linkOrigins } : {}) };
+  return { hosts: [...hosts].sort(), siteHosts: [...own].sort(), baseUrl, runDir, strict: extra.strict ?? false, ...(sitePath ? { sitePath, notFoundProbes: probes } : {}), ...(writes ? { writes } : {}), ...(linkOrigins ? { linkOrigins } : {}) };
 }
 
 /**
@@ -421,9 +436,10 @@ export async function guardContext(context: BrowserContext, scope: Scope, guard:
     if (method !== "GET" && method !== "HEAD") {
       // A fixed read rule of loep: an embedded player fetching what it shows. Recorded as a read, never counted as sending; a strict scope keeps it out.
       // A navigation, such as a form posting to that address, is no fetch of a player and is never covered.
+      // Only a fixed read to the site itself goes without asking whether it carries a secret of the run: a window of another party is in the scope, but is that other party.
       const fixed = scope.strict || request.isNavigationRequest() ? null : fixedReadFor(method, url, request.headers());
       if (fixed) {
-        const leaves = inScope(scope, url) ? null : await secretLeavesRunNl(context, { hosts: scope.hosts, runDir }, request);
+        const leaves = onSite(scope, url) ? null : await secretLeavesRunNl(context, { hosts: scope.hosts, runDir }, request);
         if (leaves) {
           guard.blocked.push({ at: new Date().toISOString(), kind: "scope", method, url: url.slice(0, MAX_URL), resourceType: type, reasonNl: leaves });
           return refuse();

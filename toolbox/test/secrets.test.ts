@@ -1319,6 +1319,52 @@ test("a cookie of the site that the browser would send to a host outside the run
   }
 });
 
+test("a fixed read to a window of another party that the inventory found is that other party: a cookie of the site or an authorization header stays off it, in a session and in the sweep", async () => {
+  const frame = await siteWith((_request, response) => void response.writeHead(200, { "access-control-allow-origin": "*", "access-control-allow-headers": "*" }).end("{}"));
+  const site = await siteWith((_request, response) => html(response, "<h1>App</h1>"));
+  const run = mkdtempSync(join(tmpdir(), "loep-geheimen-"));
+  // The inventory found the window on a page, so its host is in the scope of the run. It is still not the site.
+  writeFileSync(join(run, "inventory.json"), JSON.stringify({ baseUrl: `${site.origin}/`, origin: site.origin, pages: [{ url: `${site.origin}/` }, { url: `${frame.origin}/venster.html` }] }));
+  // Cookies do not look at the port: the cookie of the site on 127.0.0.1 is one the browser holds for the window too, as a cookie on a whole domain reaches every host of it.
+  registerSecret(run, COOKIE, { source: SESSION_COOKIE_SOURCE, origins: [], domains: ["127.0.0.1"] });
+  setFixedReads([{ id: "test-venster", method: "POST", origin: frame.origin, path: "/speler", reasonNl: "Een speler in de test vraagt hiermee zijn gegevens op en wijzigt niets." }]);
+  const session = await sessionOn(run, await launched("chromium"));
+  const post = (page: Page, headers: Record<string, string>): Promise<unknown> => page.evaluate(([url, sent]) => fetch(`${url}/speler`, { method: "POST", headers: sent, body: "video=abc" }).catch(() => undefined), [frame.origin, headers] as const);
+  try {
+    assert.ok((await scopeForRun(run, {})).hosts.includes(new URL(frame.origin).host), "the window is in the scope");
+    await loadPage(session.page, `${site.origin}/`);
+    await post(session.page, { authorization: "Bearer abc" });
+    await post(session.page, {});
+    assert.deepEqual(frame.heard.map((request) => `${request.method} ${request.url}`), ["POST /speler"], "only the fixed read without a secret reached the window");
+    await session.page.context().addCookies([{ name: "sessie", value: shieldForRun(run)!.secrets[0]!.alias, domain: "127.0.0.1", path: "/" }]);
+    await post(session.page, {});
+    assert.equal(frame.heard.length, 1, "the fixed read with the cookie of the site was held back");
+    const held = session.guard.blocked.filter((entry) => entry.kind === "scope" && entry.url.startsWith(frame.origin));
+    assert.ok(held.some((entry) => /authorization/.test(entry.reasonNl ?? "")) && held.some((entry) => /geheim/.test(entry.reasonNl ?? "")), JSON.stringify(held));
+
+    // The sweep holds them back the same way.
+    setRunScope(run);
+    const sweep = await newContext(await launched("chromium"), { runDir: run });
+    try {
+      const swept = await sweep.newPage();
+      await loadPage(swept, `${site.origin}/`);
+      await post(swept, { authorization: "Bearer abc" });
+      await sweep.addCookies([{ name: "sessie", value: shieldForRun(run)!.secrets[0]!.alias, domain: "127.0.0.1", path: "/" }]);
+      await post(swept, {});
+    } finally {
+      await sweep.close();
+    }
+    assert.equal(frame.heard.length, 1, "the sweep sent nothing to the window");
+  } finally {
+    setRunScope(null);
+    setFixedReads(null);
+    await session.close();
+    await frame.close();
+    await site.close();
+    rmSync(run, { recursive: true, force: true });
+  }
+});
+
 test("a value of another party that may go only to that party is its own: a read there passes with it", () => {
   const run = runOn("http://127.0.0.1:1");
   try {

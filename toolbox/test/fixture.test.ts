@@ -8,6 +8,9 @@ import { chromium, type Browser } from "playwright";
 import { ACCOUNT, SESSION_COOKIE } from "../fixtures/account.ts";
 import { ACCOUNT_PAGES, PAGES, SITES, staleOutput } from "../fixtures/build.ts";
 import { CRITERIA_EXPECTED, DEFECTS, TRAPS } from "../fixtures/defects.ts";
+import { DOCUMENTS, LARGE_DOCUMENTS, paddedPdf } from "../fixtures/documents.ts";
+import { MAX_DOCUMENT_BYTES } from "../src/commands/documents.ts";
+import { logoutsIn } from "../fixtures/login.ts";
 import { startFixture, type FixtureServer } from "../fixtures/serve.ts";
 import type { ReferenceAudit } from "../src/commands/compare.ts";
 import { DECLARED_ORIGIN, readHttpRecordings, RECORD_QUIET_MS } from "../src/lib/recordings.ts";
@@ -80,7 +83,7 @@ describe("fixture site", () => {
     // A page that carries a defect must differ from its twin.
     for (const defect of DEFECTS) {
       for (const path of defect.pages) {
-        const page = PAGES.find((entry) => entry.path === path.split("?")[0]);
+        const page = [...PAGES, ...ACCOUNT_PAGES].find((entry) => entry.path === path.split("?")[0]);
         if (!page) continue;
         const read = (dir: string): string => readFileSync(join(SERVED, dir, page.file), "utf8").replaceAll(SITES.defect.name, "X").replaceAll(SITES.clean.name, "X");
         const sameHtml = read(SITES.defect.dir) === read(SITES.clean.dir);
@@ -116,6 +119,45 @@ describe("fixture site", () => {
     assert.deepEqual(clean.failed, []);
     assert.deepEqual(clean.findings, []);
   });
+
+  test("every document defect names a document that both twins link to, and its finding has the address of the document", () => {
+    const defect = JSON.parse(readFileSync(join(FIXTURES, `reference-${SITES.defect.dir}.json`), "utf8")) as ReferenceAudit;
+    const documents = DEFECTS.filter((entry) => entry.document);
+    assert.ok(documents.length >= 6);
+    for (const entry of documents) {
+      const finding = defect.findings!.find((each) => each.id === entry.id)!;
+      assert.deepEqual([finding.medium, finding.page], ["document", entry.document], entry.id);
+      const served = DOCUMENTS.find((each) => `/${each.path}` === new URL(entry.document!, "http://127.0.0.1:4710").pathname)!;
+      assert.ok(served, `${entry.id}: no document is served at ${entry.document}`);
+      assert.ok(DOCUMENTS.some((each) => each.plants === entry.id), entry.id);
+      if (served.on === "site") for (const key of ["defect", "clean"] as const) assert.ok(existsSync(join(SERVED, SITES[key].dir, served.path)), `${key} ${served.path}`);
+      else assert.ok(existsSync(join(SERVED, SITES.thirdParty.dir, served.path)), served.path);
+    }
+    // The documents differ between the twins where the defect is in the file itself.
+    for (const served of DOCUMENTS.filter((each) => each.on === "site")) {
+      const read = (key: "defect" | "clean"): Buffer => readFileSync(join(SERVED, SITES[key].dir, served.path));
+      assert.notDeepEqual(read("defect"), read("clean"), served.path);
+    }
+    // Every PDF asks the viewer to show its title, so on 2.4.2 the twins differ only in whether there is one.
+    for (const served of DOCUMENTS.filter((each) => each.path.endsWith(".pdf"))) {
+      for (const file of new Set([served.defect, served.clean])) assert.match(readFileSync(join(FIXTURES, "src", "documenten", file), "latin1"), /\/DisplayDocTitle true/, file);
+    }
+    for (const size of Object.values(LARGE_DOCUMENTS)) assert.ok(size > MAX_DOCUMENT_BYTES, "a large document stays above the limit of the toolbox");
+  });
+
+  test("a padded PDF has the size asked for and a cross-reference section that points at the object and back at the original", () => {
+    const original = readFileSync(join(FIXTURES, "src", "documenten", "begroting.b.pdf"));
+    const { head, zeros, tail } = paddedPdf(original, 200_000);
+    assert.equal(head.length + zeros + tail.length, 200_000);
+    const whole = Buffer.concat([head, Buffer.alloc(zeros), tail]).toString("latin1");
+    const xref = Number(/startxref\n(\d+)\n%%EOF\n$/.exec(whole)![1]);
+    assert.ok(whole.startsWith("xref\n", xref));
+    const [, number, offset] = /^xref\n(\d+) 1\n(\d{10}) 00000 n \n/.exec(whole.slice(xref))!;
+    assert.ok(whole.startsWith(`${number} 0 obj\n<< /Length ${String(zeros).padStart(12, "0")} >>\nstream\n`, Number(offset)));
+    const previous = Number(/\/Prev (\d+)/.exec(whole.slice(xref))![1]);
+    assert.ok(whole.startsWith("xref", previous), "the trailer points back at the table of the original");
+    assert.match(whole.slice(xref), /\/Root \d+ 0 R/);
+  });
 });
 
 describe("fixture server", () => {
@@ -150,6 +192,26 @@ describe("fixture server", () => {
     assert.deepEqual(fixture.writes(), []);
   });
 
+  test("serves the documents with their type, and the large one with its full size on HEAD and the start of a PDF on GET", async () => {
+    for (const served of DOCUMENTS) {
+      const origin = served.on === "site" ? fixture.origins.defect : fixture.origins.thirdParty;
+      const answer = await fetch(`${origin}/${served.path}`, { method: "HEAD" });
+      assert.equal(answer.status, 200, served.path);
+      assert.notEqual(answer.headers.get("content-type"), "application/octet-stream", served.path);
+    }
+    for (const [path, size] of Object.entries(LARGE_DOCUMENTS)) {
+      for (const key of ["defect", "clean"] as const) {
+        const head = await fetch(`${fixture.origins[key]}${path}`, { method: "HEAD" });
+        assert.deepEqual([head.status, head.headers.get("content-type"), Number(head.headers.get("content-length"))], [200, "application/pdf", size]);
+        const get = await fetch(`${fixture.origins[key]}${path}`);
+        const reader = get.body!.getReader();
+        const { value } = await reader.read();
+        await reader.cancel();
+        assert.equal(Buffer.from(value!).subarray(0, 5).toString("latin1"), "%PDF-");
+      }
+    }
+  });
+
   test("every selector in the key resolves in the defect variant, and in the clean twin only where the key says so", async (context) => {
     if (!browser) return context.skip("no browser available");
     const allPaths = PAGES.map((page) => page.path);
@@ -159,7 +221,13 @@ describe("fixture server", () => {
     }
     const problems: string[] = [];
     for (const key of ["defect", "clean"] as const) {
-      const page = await browser.newPage();
+      // The pages behind the login need a session: the browser gets the cookie a login gives.
+      const loggedIn = await fetch(`${fixture.origins[key]}/inloggen`, { method: "POST", redirect: "manual", headers: { "content-type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ gebruikersnaam: ACCOUNT.username, wachtwoord: ACCOUNT.password }) });
+      const context = await browser.newContext();
+      await context.addCookies([{ name: SESSION_COOKIE, value: /=([a-f0-9]+)/.exec(loggedIn.headers.get("set-cookie") ?? "")![1]!, url: fixture.origins[key] }]);
+      const page = await context.newPage();
+      // A browser without loep reports the visit to the survey of the third party; loep holds that back (sweep-check).
+      await page.route("**/vragenlijst/bezoek", (route) => route.abort());
       for (const [path, defects] of byPath) {
         await page.goto(`${fixture.origins[key]}${path}`, { waitUntil: "load" });
         const counts = await page.evaluate((selectors) => selectors.map((selector) => document.querySelectorAll(selector).length), defects.map((defect) => defect.selector));
@@ -169,7 +237,7 @@ describe("fixture server", () => {
           if (found !== expected) problems.push(`${key} ${path} ${defect.id}: "${defect.selector}" ${found ? "matches" : "does not match"}`);
         });
       }
-      await page.close();
+      await context.close();
     }
     assert.deepEqual(problems, []);
     assert.deepEqual(fixture.writes(), [], "loading pages must not send anything");
@@ -201,10 +269,15 @@ describe("fixture server", () => {
       assert.equal(own.logouts(), 0);
       assert.equal((await get("/mijn/sessie-sluiten", cookie)).status, 302);
       assert.equal(own.logouts(), 1);
+      // The log has the logout and the login, never the password; only the wrong login is a write.
+      assert.deepEqual(logoutsIn(own.logFile).map((entry) => [entry.site, entry.path]), [["clean", "/mijn/sessie-sluiten"]]);
+      assert.ok(!readFileSync(own.logFile, "utf8").includes(ACCOUNT.password));
+      assert.deepEqual(own.writes().map((entry) => entry.body), [new URLSearchParams({ gebruikersnaam: ACCOUNT.username, wachtwoord: "iets-anders" }).toString()]);
       assert.equal((await get("/mijn/", cookie)).status, 302);
       const again = (await logIn(ACCOUNT.password)).headers.get("set-cookie")!.split(";")[0]!;
       assert.equal((await get("/uitloggen", again)).status, 302);
       assert.equal(own.logouts(), 2);
+      assert.equal(logoutsIn(own.logFile).length, 2);
       // And time ends it.
       const short = (await logIn(ACCOUNT.password)).headers.get("set-cookie")!.split(";")[0]!;
       assert.equal((await get("/mijn/", short)).status, 200);

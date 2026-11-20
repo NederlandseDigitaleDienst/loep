@@ -68,6 +68,11 @@ const formAttempt = (look: Look, input: string): Entry[] =>
     .flatMap((form) => list(form.attempts).filter((attempt) => attempt.input === input));
 /** What contrast.json measured on this page, in every window and scheme. */
 const contrastOf = (look: Look): Entry[] => list(look.run("contrast.json")).filter((page) => page.url === look.url);
+/** What `documents` measured in the document of the sample at this path or address; null when it is not in the sample. */
+const documentFacts = (look: Look, path: string): Entry | null => {
+  const item = list(look.run("sample.json")?.documents).find((entry) => new URL(entry.url).pathname === new URL(path, look.url).pathname);
+  return item ? (look.run(`documents/${item.slug}/facts.json`) as Entry | null) : null;
+};
 const control = (look: Look): Entry[] => list(look.page("facts.json")?.controls).filter((entry) => look.at(entry.path));
 
 export const EVIDENCE: Evidence[] = [
@@ -80,6 +85,9 @@ export const EVIDENCE: Evidence[] = [
     whereNl: "site-states/component-faq/pictures.json: met de vraag open is in de afbeelding met een leeg alt tekst gelezen",
     found: (look) => list(look.run("site-states/component-faq/pictures.json")?.pictures).some((picture) => look.at(picture.where) && picture.alt === "" && picture.ocr?.hasText === true),
   },
+  { defect: "1.1.1-pictogram", whereNl: ENGINES_NL, found: engines(["1.1.1"]) },
+  { defect: "1.1.1-regioblok", whereNl: `${ENGINES_NL}; het blok is met GET bij een andere partij opgehaald`, found: engines(["1.1.1"]) },
+  { defect: "1.1.1-afvalwijzer", agentNl: "Alleen na een zoekvraag te zien, en die POST gaat pas door met een leesverzoek dat de verkenner in een sessie vastlegt; het vaste sitemodel van de toets heeft geen sessie om dat leesverzoek op te baseren." },
   // 1.2.x
   { defect: "1.2.1-gesprek", agentNl: "Of er een uitgeschreven tekst bij het gesprek staat, vraagt luisteren en lezen." },
   { defect: "1.2.2-ondertitels", agentNl: "Of de video gesproken tekst heeft die ondertitels nodig heeft, vraagt luisteren." },
@@ -207,8 +215,10 @@ export const EVIDENCE: Evidence[] = [
     }),
   },
   { defect: "3.3.4-controle", agentNl: "Of er een stap is om de aanvraag te controleren, vraagt het formulier doorlopen tot het versturen." },
+  { defect: "3.3.4-intrekken", agentNl: "Of intrekken een gevolg heeft dat een bevestiging vraagt, is een oordeel over de tekst; dat er geen stap volgt, laat pas het versturen zien." },
   { defect: "3.3.7-adres", agentNl: "Of in stap 2 opnieuw om het adres wordt gevraagd, vraagt het formulier in stappen doorlopen en de velden vergelijken." },
   { defect: "3.3.8-wachtwoord", whereNl: "facts.json, controls: het wachtwoordveld zet automatisch invullen uit", found: (look) => control(look).some((entry) => entry.autocomplete === "off") },
+  { defect: "3.3.8-wachtwoord-wijzigen", whereNl: "facts.json, controls: het veld voor het huidige wachtwoord zet automatisch invullen uit", found: (look) => control(look).some((entry) => entry.autocomplete === "off") },
   // 4.1.x
   { defect: "4.1.2-tabs", whereNl: "facts.json, clickables: de tabbladen zijn divs met een klik", found: (look) => list(look.page("facts.json")?.clickables).some((entry) => look.at(entry.path) && !entry.roleAttr) },
   { defect: "4.1.2-uitklapper", whereNl: "facts.json, controls: de knop zegt niet of hij open is", found: (look) => control(look).some((entry) => entry.tag === "button" && !("expanded" in (entry.ax?.properties ?? {}))) },
@@ -223,6 +233,7 @@ export const EVIDENCE: Evidence[] = [
       return tree.includes("Neem een pasfoto") && !/^\s*- dialog\b/m.test(tree);
     },
   },
+  { defect: "4.1.2-vragenlijst", whereNl: `${ENGINES_NL}; de vragen kwamen met een POST die de vaste leesregel voor de testserver doorlaat`, found: engines(["4.1.2"]) },
   { defect: "4.1.3-bedankt", whereNl: "site-states/component-faq-oordeel/aria.yaml: het bedankje is een gewone alinea, geen status", found: (look) => /- (?!status)\w+: Bedankt voor uw reactie/.test(String(look.run("site-states/component-faq-oordeel/aria.yaml") ?? "")) },
   { defect: "4.1.3-aantal", whereNl: "site-states/component-producten-filter/aria.yaml: het aantal is een gewone alinea, geen status", found: (look) => /- (?!status)\w+: \d+ producten gevonden/.test(String(look.run("site-states/component-producten-filter/aria.yaml") ?? "")) },
   {
@@ -233,4 +244,11 @@ export const EVIDENCE: Evidence[] = [
       return tree.includes("Chat met de gemeente") && !/^\s*- log\b/m.test(tree);
     },
   },
+  // Documents: the facts that `documents` writes per document of the sample.
+  { defect: "1.3.1-agenda-pdf", whereNl: "documents/<document>/facts.json: de pdf is gelezen en heeft geen tags", found: (look) => { const facts = documentFacts(look, "/documenten/agenda-raadsvergadering-2026-03-12.pdf"); return facts?.status === "read" && facts.pdf?.tagged === false; } },
+  { defect: "1.3.1-begroting-pdf", agentNl: "Het bestand is groter dan de 250 MB die de toolbox ophaalt. Dat het geen tags heeft, ziet alleen wie het zelf opent." },
+  { defect: "1.3.1-ontheffing-docx", whereNl: "documents/<document>/facts.json: office.fakeHeadings noemt de vette alinea's", found: (look) => list(documentFacts(look, "/documenten/ontheffing-parkeren.docx")?.office?.fakeHeadings).length > 0 },
+  { defect: "1.3.1-afvalwijzer-extern", agentNl: "Het document staat op een ander domein. De toolbox telt het en haalt het niet op." },
+  { defect: "1.1.1-plattegrond", whereNl: "documents/<document>/facts.json: tekstherkenning leest woorden in de afbeelding", found: (look) => (documentFacts(look, "/documenten/plattegrond-gemeentehuis.png")?.image?.recognisedWords ?? 0) > 0 },
+  { defect: "2.4.2-besluitenlijst-pdf", whereNl: "documents/<document>/facts.json: de pdf heeft tags en geen titel", found: (look) => { const facts = documentFacts(look, "/documenten/besluitenlijst-2026-03-12.pdf"); return facts?.status === "read" && facts.pdf?.tagged === true && !facts.title; } },
 ];

@@ -156,7 +156,7 @@ test("a file is fetched under the rules of the session, or not at all", async ()
   // A host outside the scope: a text track is refused as the browser refuses it, and so is everything under a strict scope. Nothing is sent.
   const elsewhere: Scope = { hosts: ["voorbeeld.invalid"], baseUrl: null, strict: false };
   const track = await guardedDownload(elsewhere, guard, `${fixture.origins.thirdParty}/media/x.vtt`, to, { resourceType: "texttrack", maxBytes: 1000, timeoutMs: 5000, blockade: undefined });
-  assert.deepEqual(track, { ok: false, reason: "127.0.0.1 ligt buiten de scope van de run" });
+  assert.deepEqual(track, { ok: false, reason: "localhost ligt buiten de scope van de run" });
   const strict = await guardedDownload({ ...elsewhere, strict: true }, guard, `${fixture.origins.clean}/media/raadsvergadering.webm`, to, { resourceType: "media", maxBytes: 1000, timeoutMs: 5000, blockade: undefined });
   assert.equal(strict.ok, false);
   assert.deepEqual((guard.blocked as Blocked[]).map((entry) => [entry.kind, entry.method, entry.resourceType]), [["scope", "GET", "texttrack"], ["scope", "GET", "media"]]);

@@ -1,0 +1,8 @@
+{
+  "noteNl": "Paginatypen die het vaste sitemodel erbij krijgt in een veegronde met storingen (just sweep-check --disruptions). Zie toolbox/fixtures/disruptions.ts.",
+  "pageTypes": [
+    { "id": "nieuwsbericht", "descriptionNl": "Nieuwsbericht met tekst en een foto", "representative": "{origin}/nieuws/zomerfeest.html", "pages": ["{origin}/nieuws/zomerfeest.html", "{origin}/nieuws/werkzaamheden-dorpsstraat.html"] },
+    { "id": "sitemap", "descriptionNl": "Overzicht van alle pagina's van de site", "representative": "{origin}/sitemap.html", "pages": ["{origin}/sitemap.html"] },
+    { "id": "afspraak", "descriptionNl": "Pagina om een afspraak te maken", "representative": "{origin}/afspraak-maken.html", "pages": ["{origin}/afspraak-maken.html"] }
+  ]
+}

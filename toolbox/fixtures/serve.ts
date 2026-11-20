@@ -3,15 +3,20 @@
  * Serves the fixture: two variants of a small municipal site and a third origin that plays
  * the role of an external video and form service. Node built-ins only.
  *
- *   node fixtures/serve.ts [--defect 4710] [--clean 4711] [--third 4712] [--log <file>] [--session-seconds 1800]
+ *   node fixtures/serve.ts [--defect 4710] [--clean 4711] [--third 4712] [--log <file>] [--session-seconds 1800] [--disruptions]
  *
- * Everything binds to 127.0.0.1. Every request that is not a GET or HEAD and every WebSocket
+ * Everything binds to 127.0.0.1. Kijkpunt is addressed as localhost, so it has a host of its own: a cookie
+ * does not look at the port, and the login cookie of a site on 127.0.0.1 would otherwise go to Kijkpunt too. Every request that is not a GET or HEAD and every WebSocket
  * message is appended to the log as one JSON object per line, so a test can prove that an
  * evaluation run sent nothing to the site. The log is never truncated: compare line counts
  * before and after a run, or pass a fresh file.
  *
  * The two sites have a part behind a login (/mijn/). The account is in account.ts; a session
- * is a cookie that lasts --session-seconds from the moment of logging in.
+ * is a cookie that lasts --session-seconds from the moment of logging in. A login with the right
+ * password is logged as a "login" without its body, so the password never reaches the log, and
+ * every visit that ends a session as a "logout": a run with a login has to leave zero of those.
+ *
+ * With --disruptions a few fixed pages fail the way a real site sometimes does: see disruptions.ts.
  */
 import { createHash, randomBytes } from "node:crypto";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, statSync } from "node:fs";
@@ -22,12 +27,19 @@ import type { Duplex } from "node:stream";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import { ACCOUNT, ACCOUNT_HOME, DEFAULT_SESSION_SECONDS, LOGIN_PAGE, LOGOUT_PATHS, SESSION_COOKIE } from "./account.ts";
+import { LARGE_DOCUMENTS, paddedPdf } from "./documents.ts";
+import { createDisruptions, type Disruptions } from "./disruptions.ts";
 import { createMailRoute, type MailRoute } from "./mailroute.ts";
+import { answerRead } from "./readroute.ts";
 
 const ROOT = dirname(fileURLToPath(import.meta.url));
 
 /** The ports the generated files were written for; the server rewrites them when it listens elsewhere. */
 export const DEFAULT_PORTS = { defect: 4710, clean: 4711, thirdParty: 4712 } as const;
+/** The host each site is addressed by. Another party never shares a host with the site, as on the web. */
+export const HOSTS = { defect: "127.0.0.1", clean: "127.0.0.1", thirdParty: "localhost" } as const;
+/** The origin the generated files name for a site. */
+export const defaultOrigin = (key: SiteKey): string => `http://${HOSTS[key]}:${DEFAULT_PORTS[key]}`;
 const DIRECTORIES = { defect: "lindewaard", clean: "berkenveen", thirdParty: "kijkpunt" } as const;
 export type SiteKey = keyof typeof DEFAULT_PORTS;
 
@@ -41,13 +53,17 @@ const TYPES: Record<string, string> = {
   ".vtt": "text/vtt; charset=utf-8",
   ".webm": "video/webm",
   ".ogg": "audio/ogg",
+  ".pdf": "application/pdf",
+  ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  ".png": "image/png",
 };
 const TEXT = new Set([".html", ".css", ".js", ".xml", ".txt"]);
 
 export interface LogEntry {
   time: string;
   site: SiteKey;
-  kind: "request" | "ws-open" | "ws-message";
+  /** read: a POST or preflight that only asks (readroute.ts), never a write. */
+  kind: "request" | "ws-open" | "ws-message" | "login" | "logout" | "challenge" | "read";
   method?: string;
   path: string;
   body?: string;
@@ -56,7 +72,7 @@ export interface LogEntry {
 export interface FixtureServer {
   origins: Record<SiteKey, string>;
   logFile: string;
-  /** Entries that mean something was sent to a site: non-GET requests and socket messages. */
+  /** Entries that mean something was sent to a site: non-GET requests and socket messages, apart from a login with the account. */
   writes(): LogEntry[];
   /** How often a visitor with a session asked for an address that ends it. */
   logouts(): number;
@@ -64,6 +80,8 @@ export interface FixtureServer {
   expireSessions(): void;
   /** The hard mail route on the sites, with the mailing service on the third party. */
   mailRoute: MailRoute;
+  /** The disruptions of disruptions.ts, when the server was started with them. */
+  disruptions: Disruptions | null;
   close(): Promise<void>;
 }
 
@@ -106,7 +124,7 @@ function readFrames(buffer: Buffer, onText: (text: string) => void, onClose: () 
   }
 }
 
-export async function startFixture(options: { ports?: Partial<Record<SiteKey, number>>; logFile?: string; sessionSeconds?: number } = {}): Promise<FixtureServer> {
+export async function startFixture(options: { ports?: Partial<Record<SiteKey, number>>; logFile?: string; sessionSeconds?: number; disruptions?: { armed: boolean } } = {}): Promise<FixtureServer> {
   const logFile = options.logFile ?? join(ROOT, "..", "runs", "fixture-server.log");
   mkdirSync(dirname(logFile), { recursive: true });
   // Append only: a second server that fails to bind must not wipe the log of the one that is running.
@@ -118,13 +136,32 @@ export async function startFixture(options: { ports?: Partial<Record<SiteKey, nu
   const keys = Object.keys(DEFAULT_PORTS) as SiteKey[];
 
   /** The files name the default ports; replace them with the ports in use. */
-  const rewrite = (text: string): string => keys.reduce((result, key) => result.replaceAll(`http://127.0.0.1:${DEFAULT_PORTS[key]}`, origins[key]), text);
+  const rewrite = (text: string): string => keys.reduce((result, key) => result.replaceAll(defaultOrigin(key), origins[key]), text);
 
   const sendFile = (response: ServerResponse, path: string, status: number, head: boolean): void => {
     const extension = extname(path);
     const body = TEXT.has(extension) ? Buffer.from(rewrite(readFileSync(path, "utf8"))) : readFileSync(path);
     response.writeHead(status, { "content-type": TYPES[extension] ?? "application/octet-stream", "content-length": body.length, "cache-control": "no-store" });
     response.end(head ? undefined : body);
+  };
+
+  /** A document larger than the file in the repository: the original, a run of zeros, and a tail that makes it a valid PDF again. Streamed, never held whole. */
+  const sendLarge = (response: ServerResponse, path: string, size: number, head: boolean): void => {
+    const { head: start, zeros, tail } = paddedPdf(readFileSync(path), size);
+    response.writeHead(200, { "content-type": TYPES[extname(path)] ?? "application/octet-stream", "content-length": size, "cache-control": "no-store" });
+    if (head) return void response.end();
+    const block = Buffer.alloc(1024 * 1024);
+    let left = zeros;
+    const pump = (): void => {
+      while (left > 0) {
+        const part = Math.min(left, block.length);
+        left -= part;
+        if (!response.write(part === block.length ? block : block.subarray(0, part))) return void response.once("drain", pump);
+      }
+      response.end(tail);
+    };
+    response.write(start);
+    pump();
   };
 
   /** Sessions of the part behind the login: per token the site it is for and the moment it ends. */
@@ -140,14 +177,23 @@ export async function startFixture(options: { ports?: Partial<Record<SiteKey, nu
 
   const mailRoute = createMailRoute((path, body) => log({ site: "clean", kind: "request", method: "POST", path, body: body.slice(0, 2000) }));
 
+  const disruptions = options.disruptions ? createDisruptions(options.disruptions) : null;
+  // A POST of the robot check is answered by Cloudflare and never reaches a site: noted, but not as something sent.
+  const challenge = (site: SiteKey) => (path: string): void => log({ site, kind: "challenge", method: "POST", path });
+
   const handler = (site: SiteKey) => (request: IncomingMessage, response: ServerResponse): void => {
+    if (disruptions?.answer(site, request, response, challenge(site))) return;
     if (site === "thirdParty" ? mailRoute.service(request, response) : site === "clean" && mailRoute.site(request, response, origins.clean, origins.thirdParty)) return;
     const root = join(ROOT, "sites", DIRECTORIES[site]);
+    if (answerRead(site, request, response, root, log)) return;
     const url = new URL(request.url ?? "/", "http://127.0.0.1");
     const method = request.method ?? "GET";
     // An address that ends the session does so whatever the method, as a link on a real site would.
     if (LOGOUT_PATHS.includes(url.pathname)) {
-      if (loggedIn(site, request)) logouts++;
+      if (loggedIn(site, request)) {
+        logouts++;
+        log({ site, kind: "logout", method, path: url.pathname });
+      }
       sessions.delete(tokenOf(request) ?? "");
       return redirect(response, 302, LOGIN_PAGE, `${SESSION_COOKIE}=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax`);
     }
@@ -156,10 +202,11 @@ export async function startFixture(options: { ports?: Partial<Record<SiteKey, nu
       request.on("data", (chunk: Buffer) => chunks.push(chunk));
       request.on("end", () => {
         const body = Buffer.concat(chunks).toString("utf8");
-        log({ site, kind: "request", method, path: url.pathname + url.search, body: body.slice(0, 2000) });
         // The right name and password open a session. Anything else is answered the way every form here is answered.
         const sent = new URLSearchParams(body);
-        if (method === "POST" && url.pathname === "/inloggen" && sent.get("gebruikersnaam") === ACCOUNT.username && sent.get("wachtwoord") === ACCOUNT.password) {
+        const rightLogin = method === "POST" && url.pathname === "/inloggen" && sent.get("gebruikersnaam") === ACCOUNT.username && sent.get("wachtwoord") === ACCOUNT.password;
+        log({ site, kind: rightLogin ? "login" : "request", method, path: url.pathname + url.search, ...(rightLogin ? {} : { body: body.slice(0, 2000) }) });
+        if (rightLogin) {
           const token = randomBytes(16).toString("hex");
           sessions.set(token, { site, until: Date.now() + sessionMs });
           return redirect(response, 303, ACCOUNT_HOME, `${SESSION_COOKIE}=${token}; Path=/; HttpOnly; SameSite=Lax`);
@@ -182,6 +229,7 @@ export async function startFixture(options: { ports?: Partial<Record<SiteKey, nu
     const path = normalize(join(root, pathname));
     const inside = path.startsWith(root + sep);
     if (inside && existsSync(path) && statSync(path).isFile() && pathname !== "/404.html") {
+      if (site !== "thirdParty" && LARGE_DOCUMENTS[pathname]) return sendLarge(response, path, LARGE_DOCUMENTS[pathname]!, method === "HEAD");
       sendFile(response, path, 200, method === "HEAD");
       return;
     }
@@ -224,7 +272,7 @@ export async function startFixture(options: { ports?: Partial<Record<SiteKey, nu
       server.listen(options.ports?.[key] ?? DEFAULT_PORTS[key], "127.0.0.1", resolve);
     });
     servers[key] = server;
-    origins[key] = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+    origins[key] = `http://${HOSTS[key]}:${(server.address() as AddressInfo).port}`;
   }
 
   return {
@@ -235,10 +283,11 @@ export async function startFixture(options: { ports?: Partial<Record<SiteKey, nu
         .split("\n")
         .filter(Boolean)
         .map((line) => JSON.parse(line) as LogEntry)
-        .filter((entry) => entry.kind !== "ws-open"),
+        .filter((entry) => entry.kind === "request" || entry.kind === "ws-message"),
     logouts: () => logouts,
     expireSessions: () => sessions.clear(),
     mailRoute,
+    disruptions,
     close: async () => {
       for (const server of Object.values(servers)) {
         server.closeAllConnections();
@@ -249,13 +298,13 @@ export async function startFixture(options: { ports?: Partial<Record<SiteKey, nu
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const { values } = parseArgs({ options: { defect: { type: "string" }, clean: { type: "string" }, third: { type: "string" }, log: { type: "string" }, "session-seconds": { type: "string" } } });
+  const { values } = parseArgs({ options: { defect: { type: "string" }, clean: { type: "string" }, third: { type: "string" }, log: { type: "string" }, "session-seconds": { type: "string" }, disruptions: { type: "boolean", default: false } } });
   const port = (value: string | undefined): number | undefined => (value === undefined ? undefined : Number(value));
   const ports: Partial<Record<SiteKey, number>> = {};
   if (port(values.defect) !== undefined) ports.defect = port(values.defect)!;
   if (port(values.clean) !== undefined) ports.clean = port(values.clean)!;
   if (port(values.third) !== undefined) ports.thirdParty = port(values.third)!;
-  const fixture = await startFixture({ ports, ...(values.log ? { logFile: values.log } : {}), ...(values["session-seconds"] ? { sessionSeconds: Number(values["session-seconds"]) } : {}) });
-  process.stdout.write(`Lindewaard  ${fixture.origins.defect}\nBerkenveen  ${fixture.origins.clean}\nKijkpunt    ${fixture.origins.thirdParty}\nlog         ${fixture.logFile}\n`);
+  const fixture = await startFixture({ ports, ...(values.log ? { logFile: values.log } : {}), ...(values["session-seconds"] ? { sessionSeconds: Number(values["session-seconds"]) } : {}), ...(values.disruptions ? { disruptions: { armed: false } } : {}) });
+  process.stdout.write(`Lindewaard  ${fixture.origins.defect}\nBerkenveen  ${fixture.origins.clean}\nKijkpunt    ${fixture.origins.thirdParty}\nlog         ${fixture.logFile}\n${fixture.disruptions ? "storingen   aan, zie fixtures/disruptions.ts\n" : ""}`);
   process.on("SIGINT", () => void fixture.close().then(() => process.exit(0)));
 }

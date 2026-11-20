@@ -81,6 +81,8 @@
 </form>
 <p class="ophaaldag"></p>
 
+<p>De ophaaldagen van het hele jaar staan in de <a href="http://localhost:4712/documenten/afvalwijzer-2027-berkenveen.pdf">afvalwijzer 2027 van onze afvaldienst (pdf)</a>.</p>
+
 <h2>Wat hoort waar?</h2>
 <div class="tabs" role="tablist" aria-label="Soorten afval">
   <button type="button" class="tab actief" role="tab" id="tab-rest" aria-selected="true" aria-controls="paneel-rest" data-paneel="paneel-rest">Restafval</button>
@@ -98,6 +100,14 @@
 <div class="tabpaneel" id="paneel-gft" role="tabpanel" aria-labelledby="tab-gft" tabindex="0" hidden>
   <p>In de groene container horen schillen, etensresten, gras en bladeren.</p>
   <p>De groene container legen wij elke week.</p>
+</div>
+
+<h2>Afvalwijzer</h2>
+<div class="afvalwijzer">
+  <label for="afvalzoeker">Waar moet het heen?</label>
+  <input type="search" id="afvalzoeker" autocomplete="off">
+  <p class="afvalwijzer-aantal" role="status"></p>
+  <ul class="afvalwijzer-resultaten"></ul>
 </div>
   </main>
   <footer class="voet">
@@ -146,7 +156,7 @@
   </div>
   
   
-  <iframe class="stil-kader" src="http://127.0.0.1:4712/leeg.html" title="Blank" tabindex="-1" aria-hidden="true"></iframe>
+  <iframe class="stil-kader" src="http://localhost:4712/leeg.html" title="Blank" tabindex="-1" aria-hidden="true"></iframe>
   <script src="/site.js"></script>
 </body>
 </html>

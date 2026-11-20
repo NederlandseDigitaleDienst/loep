@@ -94,7 +94,7 @@ test("the form has a hidden field that changes with every page load, and is refu
   assert.equal((await post("verzonnen")).status, 403);
   const [mail] = fixture.mailRoute.outbox;
   const raw = mail!.raw.toString();
-  assert.match(raw, /<a href="http:\/\/127\.0\.0\.1:\d+\/k\/[0-9a-f]+">Afmelden<\/a>/);
+  assert.match(raw, /<a href="http:\/\/localhost:\d+\/k\/[0-9a-f]+">Afmelden<\/a>/);
   assert.ok(!/list-unsubscribe/i.test(raw));
 });
 
