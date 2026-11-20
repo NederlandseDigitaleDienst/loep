@@ -246,7 +246,7 @@ export async function evaluate(options: EvaluateOptions): Promise<Evaluation> {
   // The read rules of the site model, and the fixed rules of loep that let a request through in a session of this run.
   const readsOfRun = [
     ...(run.reads ?? []).map((rule) => ({ method: rule.method, origin: rule.origin, path: rule.path, service: rule.service, reasonNl: rule.reasonNl })),
-    ...fixedReadsUsed(observations.records.values() as Iterable<{ reads?: { rule: string; fixed?: true }[] }>).map((rule) => ({ method: rule.method, origin: rule.origin, path: rule.path, reasonNl: rule.reasonNl, fixed: true as const })),
+    ...fixedReadsUsed(observations.records.values() as Iterable<{ reads?: { rule: string; fixed?: true }[] }>).map((rule) => ({ method: rule.method, origin: rule.origin, path: rule.path, reasonNl: rule.reasonNl, fixed: true as const, ...(rule.extra ? { extra: true as const } : {}) })),
   ];
   const limitations = [
     browsersNl,

@@ -18,7 +18,7 @@
  * now missing, when the twin shows evidence the baseline did not have, or when the sweep sent
  * anything to the fixture site (a write request or a chat message).
  */
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -35,7 +35,7 @@ import { inventory } from "../src/commands/inventory.ts";
 import { sample } from "../src/commands/sample.ts";
 import { states } from "../src/commands/states.ts";
 import { canonicalJson, pageLabels, sha256 } from "../src/lib/canonical.ts";
-import { EXTRA_FIXED_READS_ENV, setFixedReads } from "../src/lib/reads.ts";
+import { EXTRA_FIXED_READS_ENV, EXTRA_FIXED_READS_FILE, setFixedReads } from "../src/lib/reads.ts";
 
 const TOOLBOX = join(dirname(fileURLToPath(import.meta.url)), "..");
 const MODEL_DIR = join(TOOLBOX, "fixtures", "sweep");
@@ -89,7 +89,8 @@ export const fixturePorts = (fixed: boolean): Record<SiteKey, number> => (fixed 
 
 /**
  * The fixed read rules of the test server (fixtures/fixed-reads.json) with the address of the third party as it runs
- * now, written to `dir` and given to this process, the way a measurement gives them with LOEP_EXTRA_FIXED_READS.
+ * now, written to `dir` and given to this process with LOEP_EXTRA_FIXED_READS. Each run gets a copy as well
+ * (EXTRA_FIXED_READS_FILE), so a measurement on it uses them without the variable.
  */
 export function useFixtureReads(dir: string, thirdParty: string): string {
   const path = join(dir, "fixed-reads.json");
@@ -339,12 +340,13 @@ async function main(): Promise<void> {
       throw error;
     });
     try {
-      useFixtureReads(out, fixture.origins.thirdParty);
+      const extraReads = useFixtureReads(out, fixture.origins.thirdParty);
       // The two variants at the same time: each its own browser and run.
       await Promise.all(
         measured.map(async (variant) => {
           try {
             const result = await sweepVariant(runs[variant]!, variant, { site: fixture.origins[variant], thirdParty: fixture.origins.thirdParty }, atOnce);
+            copyFileSync(extraReads, join(runs[variant]!, EXTRA_FIXED_READS_FILE));
             seconds[variant] = result.seconds;
             problems.push(...result.checkProblems.map((problem) => `${VARIANT_NL[variant]}: check-site: ${problem}`));
           } catch (error) {

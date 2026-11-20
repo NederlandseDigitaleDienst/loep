@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, test } from "node:test";
@@ -7,7 +7,7 @@ import type { Browser, Page } from "playwright";
 import { startFixture, type FixtureServer } from "../fixtures/serve.ts";
 import { useFixtureReads } from "../scripts/sweep-check.ts";
 import { launchBrowser, loadPage, newContext, settlePage } from "../src/browser/session.ts";
-import { EXTRA_FIXED_READS_ENV, extraFixedReadProblems, fixedReadFor, fixedReads, loadFixedReads, setFixedReads } from "../src/lib/reads.ts";
+import { EXTRA_FIXED_READS_ENV, EXTRA_FIXED_READS_FILE, extraFixedReadProblems, fixedReadFor, fixedReads, fixedReadsUsed, loadFixedReads, readsAllowedNl, setFixedReads, useRunFixedReads } from "../src/lib/reads.ts";
 import { setRunScope } from "../src/session/safety.ts";
 
 // The fixture site reads three things that are no plain page: a block of the third party with a GET, a survey of the
@@ -71,6 +71,24 @@ test("an extra fixed rule names a test server on this machine only, and comes ne
     assert.equal(fixedReadFor("POST", "http://127.0.0.1:4712/vragenlijst/bezoek"), null);
   } finally {
     delete process.env[EXTRA_FIXED_READS_ENV];
+    setFixedReads(null);
+  }
+});
+
+test("a run that carries the extra rules uses them without the variable, and the report names them apart from the rules of loep", () => {
+  const carrying = mkdtempSync(join(dir, "run-"));
+  copyFileSync(new URL("../fixtures/fixed-reads.json", import.meta.url), join(carrying, EXTRA_FIXED_READS_FILE));
+  try {
+    useRunFixedReads(mkdtempSync(join(dir, "run-")));
+    assert.equal(fixedReadFor("POST", "http://127.0.0.1:4712/vragenlijst/start"), null, "a run without the file has only the rules of loep");
+    useRunFixedReads(carrying);
+    const rule = fixedReadFor("POST", "http://127.0.0.1:4712/vragenlijst/start");
+    assert.equal(rule?.extra, true);
+    const used = fixedReadsUsed([{ reads: [{ rule: rule!.id, fixed: true }] }]).map((entry) => ({ ...entry, fixed: true as const }));
+    assert.match(readsAllowedNl(used) ?? "", /^één extra vaste leesregel voor een testserver op deze machine liet verzoeken door/);
+    assert.doesNotMatch(readsAllowedNl(used) ?? "", /van loep liet/);
+  } finally {
+    useRunFixedReads(mkdtempSync(join(dir, "run-")));
     setFixedReads(null);
   }
 });

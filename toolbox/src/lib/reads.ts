@@ -199,6 +199,8 @@ export interface FixedRead {
   path: string;
   /** What the request asks for and why it changes nothing, for whoever signs the report. */
   reasonNl: string;
+  /** Set by loep, never in a file: the rule came from an extra file for a test server on this machine, not from the rules of loep. */
+  extra?: true;
 }
 
 export const FIXED_READ_FIELDS = ["id", "method", "origin", "path", "reasonNl"] as const;
@@ -259,13 +261,27 @@ export function extraFixedReadProblems(value: unknown, where: string): string[] 
   return problems;
 }
 
-let fixedRules: FixedRead[] | null = null;
+/**
+ * The same file inside a run. sweep-check writes it there, so every command on that run reads the extra rules without
+ * the variable, a session an agent starts too; a forgotten variable would hold back the start of the survey unseen.
+ */
+export const EXTRA_FIXED_READS_FILE = "fixed-reads-extra.json";
 
-/** The fixed read rules of loep, read once per process, with those of the file in LOEP_EXTRA_FIXED_READS when it is set. */
+let fixedRules: FixedRead[] | null = null;
+let runExtraPath: string | undefined;
+
+/** Read the extra fixed rules of this run (EXTRA_FIXED_READS_FILE) from here on, when it has them. Set by the command line for every command with --run. */
+export function useRunFixedReads(runDir: string): void {
+  const path = join(runDir, EXTRA_FIXED_READS_FILE);
+  runExtraPath = existsSync(path) ? path : undefined;
+  fixedRules = null;
+}
+
+/** The fixed read rules of loep, read once per process, with the extra rules of LOEP_EXTRA_FIXED_READS or else of the run. */
 export const fixedReads = (): readonly FixedRead[] => {
   if (fixedRules) return fixedRules;
-  const extraPath = process.env[EXTRA_FIXED_READS_ENV];
-  const rules = [...loadFixedReads(), ...(extraPath ? loadFixedReads(extraPath, extraFixedReadProblems) : [])];
+  const extraPath = process.env[EXTRA_FIXED_READS_ENV] || runExtraPath;
+  const rules = [...loadFixedReads(), ...(extraPath ? loadFixedReads(extraPath, extraFixedReadProblems).map((rule) => ({ ...rule, extra: true as const })) : [])];
   if (new Set(rules.map((rule) => rule.id)).size !== rules.length) throw new Error(`${extraPath}: een extra vaste leesregel heeft het id van een vaste leesregel van loep`);
   return (fixedRules = rules);
 };
@@ -441,7 +457,7 @@ export const heldBackSearchNl = (entry: HeldBackSearch): string =>
 export const SEARCH_HELD_BACK_NL =
   "loep herkende de body als zoekvraag, maar geen leesverzoek van het sitemodel dekt dit adres: daarom is ze tegengehouden. De verkenner legt het adres vast in readRequests van site.json; na check-site gaat de zoekvraag door. Blijft daardoor iets open, noem dit adres dan in het punt `proef werkte niet:`";
 
-type ReadText = { method: string; origin: string; path: string; service?: string; reasonNl: string; /** A fixed rule of loep (`FixedRead`), not one of the site model. */ fixed?: true };
+type ReadText = { method: string; origin: string; path: string; service?: string; reasonNl: string; /** A fixed rule of loep (`FixedRead`), not one of the site model. */ fixed?: true; /** A fixed rule for a test server on this machine (`FixedRead.extra`). */ extra?: true };
 
 /** One rule in the words of a report: method, address, service and why it may pass. */
 export const readNl = (rule: ReadText): string =>
@@ -453,12 +469,14 @@ export const readNl = (rule: ReadText): string =>
  */
 export const readsAllowedNl = (rules: readonly ReadText[]): string | null => {
   const model = rules.filter((rule) => !rule.fixed);
-  const fixed = rules.filter((rule) => rule.fixed);
+  const fixed = rules.filter((rule) => rule.fixed && !rule.extra);
+  const extra = rules.filter((rule) => rule.fixed && rule.extra);
   const parts = [
     ...(model.length > 0
       ? [`${model.length === 1 ? "één adres is" : `${model.length} adressen zijn`} toegelaten voor leesverzoeken: ${model.map(readNl).join("; ")}. Een verzoek daarheen ging alleen door als loep de body herkende als zoekvraag aan die dienst; elk ander verzoek dat iets kan wijzigen is tegengehouden`]
       : []),
     ...(fixed.length > 0 ? [`${fixed.length === 1 ? "één vaste leesregel van loep liet" : `${fixed.length} vaste leesregels van loep lieten`} verzoeken door van een ingesloten speler of venster: ${fixed.map(readNl).join("; ")}`] : []),
+    ...(extra.length > 0 ? [`${extra.length === 1 ? "één extra vaste leesregel voor een testserver op deze machine liet" : `${extra.length} extra vaste leesregels voor een testserver op deze machine lieten`} verzoeken door, uit een bestand naast de regels van loep (LOEP_EXTRA_FIXED_READS of ${EXTRA_FIXED_READS_FILE} in de run): ${extra.map(readNl).join("; ")}`] : []),
   ];
   // A part after a full stop starts a sentence: "één" then is "Eén".
   return parts.length === 0 ? null : parts.map((part, index) => (index > 0 ? part.replace(/^één/, "Eén") : part)).join(". ");

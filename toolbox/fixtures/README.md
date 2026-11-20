@@ -57,13 +57,15 @@ Drie stukken inhoud verschijnen pas na een verzoek, elk met een sleutelgebrek op
 
 De vragenlijst meldt daarnaast elk bezoek met een POST naar Kijkpunt `/vragenlijst/bezoek`. Dat verzoek legt iets vast en moet tegengehouden blijven: de server logt het als `request`, dus een run die het doorlaat, faalt op de telling hierboven. Een browser zonder loep verstuurt het wel; de test van de selectors houdt het daarom zelf tegen.
 
-De vaste leesregel voor de testserver staat in `fixed-reads.json`, niet in de regels van loep zelf (`toolbox/data/fixed-reads.json`). Loep leest zo'n extra bestand als de omgevingsvariabele `LOEP_EXTRA_FIXED_READS` het pad noemt, en weigert daarin een regel voor een adres dat niet op deze machine is (127.0.0.1, localhost of [::1]). Geef de variabele mee aan elk proces van een meting op de testsite, ook aan de agents:
+De vaste leesregel voor de testserver staat in `fixed-reads.json`, niet in de regels van loep zelf (`toolbox/data/fixed-reads.json`). Loep leest zo'n extra bestand uit `fixed-reads-extra.json` in de run, of uit het pad in de omgevingsvariabele `LOEP_EXTRA_FIXED_READS`, en weigert daarin een regel voor een adres dat niet op deze machine is (127.0.0.1, localhost of [::1]). `just sweep-check` schrijft een kopie met de poort waarop Kijkpunt dan draait in elke run. Een meting op die runs, en op kopieën ervan, gebruikt de regel dus vanzelf, ook in de sessies van de agents. Het rapport noemt een extra regel die iets doorliet apart van de vaste regels van loep.
+
+Maak je een run op de testsite op een andere manier, zet dan de variabele voor elk proces, of leg het bestand zelf in de run:
 
 ```
-export LOEP_EXTRA_FIXED_READS="$PWD/toolbox/fixtures/fixed-reads.json"
+cp toolbox/fixtures/fixed-reads.json <run>/fixed-reads-extra.json
 ```
 
-Het bestand noemt Kijkpunt op poort 4712, zoals bij `just testsite` en `just sweep-check --fixed-ports`. `just sweep-check` schrijft zelf een kopie met de poort waarop Kijkpunt dan draait en gebruikt die. Het leesverzoek voor de afvalwijzer staat niet in het vaste model van de toets: check-site wil daarvoor een waarneming uit een sessie, waarin loep de zoekvraag tegenhield. In een meting legt de verkenner het vast; in de toets telt het gebrek als iets wat alleen een agent ziet.
+Het bestand noemt Kijkpunt op poort 4712, zoals bij `just testsite` en `just sweep-check --fixed-ports`. Het leesverzoek voor de afvalwijzer staat niet in het vaste model van de toets: check-site wil daarvoor een waarneming uit een sessie, waarin loep de zoekvraag tegenhield. In een meting legt de verkenner het vast; in de toets telt het gebrek als iets wat alleen een agent ziet.
 
 ## Het deel achter een inlog
 
