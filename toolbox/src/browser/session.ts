@@ -796,18 +796,27 @@ const NAVIGATED_AWAY = /Execution context was destroyed|Cannot find context with
 /** How often a page is loaded and measured in all when it keeps navigating by itself. */
 export const SELF_NAVIGATION_TRIES = 2;
 
+/** When the document of a page began: a page that reloaded itself has a new one. Null when the page does not answer. */
+const documentBeganAt = async (page: Page): Promise<number | null> => answerWithin(2000, page.evaluate(() => performance.timeOrigin), "").catch(() => null);
+
 /**
  * Load a page and measure it. A page that navigates by itself just after loading, such as a check
  * against robots that was passed and then reloads its window, takes away the document that was being
- * measured. It is then loaded again, in the same browser context, which keeps the cookie the check
- * gave, and measured again. A page that is still navigating by itself the last time is not measured.
+ * measured. A call then fails because its document went away, or because it ran in the new document
+ * before that was there. It is then loaded again, in the same browser context, which keeps the cookie
+ * the check gave, and measured again. A page that is still navigating by itself the last time is not measured.
  */
-export async function measureLoaded<L, T>(url: string, load: () => Promise<L>, work: (loaded: L) => Promise<T>): Promise<T> {
+export async function measureLoaded<L extends { page: Page }, T>(url: string, load: () => Promise<L>, work: (loaded: L) => Promise<T>): Promise<T> {
   for (let attempt = 1; ; attempt++) {
+    let loaded: L | null = null;
+    let began: number | null = null;
     try {
-      return await work(await load());
+      loaded = await load();
+      began = await documentBeganAt(loaded.page);
+      return await work(loaded);
     } catch (error) {
-      if (!NAVIGATED_AWAY.test(firstLineOf(error))) throw error;
+      const now = loaded && began !== null ? await documentBeganAt(loaded.page) : null;
+      if (!NAVIGATED_AWAY.test(firstLineOf(error)) && (now === null || now === began)) throw error;
       if (attempt >= SELF_NAVIGATION_TRIES) throw new Error(`de pagina laadde zichzelf tijdens het meten steeds opnieuw, ${attempt} keer: ${firstLineOf(error)}`);
       process.stderr.write(`${url} laadde zichzelf opnieuw tijdens het meten en wordt opnieuw gemeten: ${firstLineOf(error)}\n`);
     }

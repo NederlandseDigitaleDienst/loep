@@ -128,7 +128,11 @@ async function collectPage(browser: Browser, entry: SampleItem, runDir: string, 
     return context;
   };
   // A load of the page in a new tab of `context`; a retry after the page navigated by itself loads it again in the same context.
-  const sampledIn = (context: BrowserContext, where: string, scheme?: ColorScheme) => async () => loadSampled(await context.newPage(), entry, (tab) => sweep.dismiss(context, tab, where, scheme));
+  // The tab of the try before is closed first: it would go on asking and sending next to the one that is measured.
+  const sampledIn = (context: BrowserContext, where: string, scheme?: ColorScheme) => async () => {
+    await Promise.all(context.pages().map((tab) => tab.close().catch(() => undefined)));
+    return loadSampled(await context.newPage(), entry, (tab) => sweep.dismiss(context, tab, where, scheme));
+  };
   const dir = join(runDir, "pages", entry.slug);
   const summary: Record<string, unknown> = { url: entry.url, slug: entry.slug };
   let clippedAt: ScreenshotClip | null = null;
@@ -153,6 +157,8 @@ async function collectPage(browser: Browser, entry: SampleItem, runDir: string, 
     let context = await openScheme();
     try {
       const load = async (): Promise<Awaited<ReturnType<typeof loadSampled>>> => {
+        // What a try before asked for is not what the page that is measured asks for.
+        requested.clear();
         let loaded = await sampledIn(context, `collect:${scheme}`, scheme)();
         // A stylesheet or script of the site itself that failed on the first load: the page is loaded once more, before anything is measured.
         if (scheme === "light" && missed.length > 0) {

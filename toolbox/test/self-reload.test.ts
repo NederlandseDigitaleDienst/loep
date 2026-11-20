@@ -1,9 +1,15 @@
 import assert from "node:assert/strict";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { after, before, test } from "node:test";
 import type { Browser, Page } from "playwright";
 import { INPAGE_PATH, launchBrowser, loadSampled, measureLoaded, newContext, SELF_NAVIGATION_TRIES } from "../src/browser/session.ts";
+import { collect } from "../src/commands/collect.ts";
+import { readJson, sha256File, writeJson } from "../src/lib/canonical.ts";
+import { setRunScope } from "../src/session/safety.ts";
 
 // A window that reloads itself as soon as something in it gets focus, as a check against robots reloads
 // its window once it is passed. `once` remembers in a cookie that it did, so a second load in the same
@@ -138,10 +144,32 @@ test("an error that is not a navigation is not measured again", async () => {
   await assert.rejects(
     measureLoaded(
       "http://127.0.0.1/",
-      async () => void loaded++,
+      // The same document before and after: nothing navigated.
+      async () => (loaded++, { page: { evaluate: async () => 1 } as unknown as Page }),
       () => Promise.reject(new Error("iets anders")),
     ),
     /iets anders/,
   );
   assert.equal(loaded, 1);
+});
+
+test("collect measures an embedded window that reloads itself once as the walk with Tab gives it focus", { timeout: 600_000 }, async () => {
+  // The reload lands between two calls of the walk: the next call runs in the new document before it has a body.
+  const run = mkdtempSync(join(tmpdir(), "loep-self-reload-"));
+  const host = `${origin}/host-once.html`;
+  const window = `${origin}/once.html`;
+  try {
+    await writeJson(join(run, "inventory.json"), { baseUrl: host, origin, sitemapUrls: 0, notFoundProbe: `${origin}/404`, pages: [{ url: host }], skipped: [], totals: {} });
+    writeFileSync(join(run, "site.json"), JSON.stringify({ version: 1, baseUrl: host, descriptionNl: "Een proefsite.", pageTypes: [{ id: "start", descriptionNl: "Startpagina", representative: host, pages: [host] }], blockers: [], components: [], processes: [], frames: [], notesNl: [] }, null, 2));
+    await writeJson(join(run, "site-check.json"), { ok: true, siteSha256: await sha256File(join(run, "site.json")), checkedAt: new Date().toISOString(), problems: [], replays: [], unusedRecipes: [] });
+    await writeJson(join(run, "sample.json"), { method: "fixed-list", seed: "seed", populationSize: 1, note: "", items: [{ id: "P1", url: window, embeddedOn: [host], slug: "venster", kind: "embedded", reason: "test", templateHash: "t", contentHash: "c", title: "Venster", status: 200, aliases: [] }] });
+    setRunScope(run);
+    await collect({ run });
+    const facts = await readJson<Record<string, unknown>>(join(run, "pages", "venster", "facts.json"));
+    assert.equal(facts.collectError, undefined);
+    assert.equal((await readJson<{ inPlaceOn: string | null }>(join(run, "pages", "venster", "probes", "placement.json"))).inPlaceOn, host);
+  } finally {
+    setRunScope(null);
+    rmSync(run, { recursive: true, force: true });
+  }
 });
