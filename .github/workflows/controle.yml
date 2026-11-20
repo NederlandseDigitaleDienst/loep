@@ -317,6 +317,21 @@ jobs:
             ${{ runner.temp }}/veegronde/sweep-check.json
           if-no-files-found: warn
 
+      # A missing defect says where the evidence should have been, not why it is not there. The JSON of the run
+      # usually does: facts.json per page, states.json and the rest. Without the login of the test account.
+      - name: Meetgegevens bij een fout
+        if: failure() && env.MEASURE == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: veegronde-meetgegevens-${{ matrix.site }}${{ matrix.artifact }}
+          path: |
+            ${{ runner.temp }}/veegronde/runs/*/*.json
+            ${{ runner.temp }}/veegronde/runs/*/pages/*/facts.json
+            !${{ runner.temp }}/veegronde/runs/*/secrets.json
+            !${{ runner.temp }}/veegronde/runs/*/login-session.json
+          if-no-files-found: warn
+          retention-days: 7
+
   ijkmeting:
     needs: wijziging
     if: needs.wijziging.outputs.ja == 'true'
