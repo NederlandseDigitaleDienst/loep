@@ -9,6 +9,7 @@ import { measuredPages, pageKey, readStamp, STATES_STAMP } from "../lib/sweepsta
 import { inOrder, Slots, sweepAtOnce, Turns, withSpacing } from "../lib/atonce.ts";
 import { stepStart, writeManifest } from "../lib/manifest.ts";
 import { loadRun, type FormErrorState, type PageData, type States } from "../lib/rundata.ts";
+import { writeOriginsOf, writesForRun, type WritePermission } from "../lib/writes.ts";
 import type { Described } from "../instruments/activate.ts";
 import { DESKTOP, probeTrigger } from "../instruments/dialog.ts";
 import { probeForms } from "../instruments/forms.ts";
@@ -897,7 +898,16 @@ interface StatesStamp {
   pages: string | null;
   /** Per state of the model the key its keys were pressed against. */
   states: Record<string, string>;
+  /** The origins the run may send to: the form probe submits there for real, and holds back everywhere else. Absent in an older stamp, which then counts as made without permission. */
+  writes?: string[];
 }
+
+/** The origins a run may send to, sorted, as the stamp of `states` keeps them. */
+export const stampWrites = (permission: WritePermission | null): string[] => (permission ? [...new Set(writeOriginsOf(permission))].sort() : []);
+
+/** Whether what an earlier `states` found on the pages stands: no page changed, and the run may send to the same origins as then. */
+export const statesStampStands = (stamp: StatesStamp | null, pagesNow: string | null, writesNow: string[]): stamp is StatesStamp =>
+  stamp !== null && pagesNow !== null && stamp.pages === pagesNow && canonicalJson(stamp.writes ?? []) === canonicalJson(writesNow);
 
 /**
  * Everything that only shows after interaction: dialogs, form errors, key shortcuts and hover content.
@@ -933,7 +943,8 @@ export async function states(runDir: string, options: { fresh?: boolean; atOnce?
   const stateKeys = Object.fromEntries(sweep.openers().filter((opener) => opener.primary).map((opener) => [opener.base.id, opener.key]));
   const stamp = options.fresh ? null : await readStamp<StatesStamp>(join(runDir, STATES_STAMP));
   // A states.json from before the non-text contrast under the pointer was measured is not taken over: its pages would count as measured with nothing found.
-  if (stamp && run.states && run.states.hoverNonText !== undefined && pagesNow !== null && stamp.pages === pagesNow) {
+  const writesNow = stampWrites(writesForRun(runDir));
+  if (run.states && run.states.hoverNonText !== undefined && statesStampStands(stamp, pagesNow, writesNow)) {
     try {
       const before = run.states.singleKeys.states ?? [];
       let pressedAgain = 0;
@@ -960,7 +971,7 @@ export async function states(runDir: string, options: { fresh?: boolean; atOnce?
       }
       process.stderr.write(`states: geen pagina is veranderd; overgenomen wat op de pagina's is gevonden, en in ${pressedAgain} toestanden de toetsen opnieuw ingedrukt\n`);
       await writeJson(join(runDir, "states.json"), run.states);
-      await writeJson(join(runDir, STATES_STAMP), { pages: pagesNow, states: stateKeys } satisfies StatesStamp);
+      await writeJson(join(runDir, STATES_STAMP), { pages: pagesNow, states: stateKeys, writes: writesNow } satisfies StatesStamp);
       await writeManifest(runDir, { command: "states", startedAt, ...run.states.examined, reused: true, statesProbedAgain: pressedAgain }, browser.version());
       return run.states;
     } finally {
@@ -1129,7 +1140,7 @@ export async function states(runDir: string, options: { fresh?: boolean; atOnce?
     await confirmLogin(browser);
     result.blockers = { closedOnPage: sweep.dismissals.filter((entry) => entry.dismissed).length, notClosed: sweep.dismissals.filter((entry) => !entry.dismissed).map((entry) => ({ url: entry.url, blocker: entry.blocker, reasonNl: entry.reasonNl })) };
     await writeJson(join(runDir, "states.json"), result);
-    await writeJson(join(runDir, STATES_STAMP), { pages: pagesNow, states: stateKeys } satisfies StatesStamp);
+    await writeJson(join(runDir, STATES_STAMP), { pages: pagesNow, states: stateKeys, writes: writesNow } satisfies StatesStamp);
     await writeManifest(runDir, { command: "states", startedAt, ...result.examined, ...(atOnce > 1 ? { atOnce } : {}), laneSeconds: tracked.finish() }, browser.version());
   } finally {
     progress = null;
