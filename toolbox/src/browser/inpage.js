@@ -1814,8 +1814,24 @@
         buttons.find((button) => /verstu|verzend|zoek|opslaan|aanmaken|bewaar|indienen|submit|send|search/i.test(text(button))) ??
         buttons.at(-1) ??
         null;
-      return { ...describe(form), fields: fieldsWithin(form).map(describeField), submit: submit ? describe(submit) : null };
+      return { ...describe(form), fields: fieldsWithin(form).map(describeField), submit: submit ? describe(submit) : null, action: formAction(form, submit) };
     });
+  }
+
+  /**
+   * Where a form sends to, as its method and the path of its action without the query, such as
+   * "post /contact/verzenden". Null when the form names no action: it is handled by a script or
+   * sends to the page it is on, which is no address of its own.
+   */
+  function formAction(form, submit) {
+    const named = submit?.getAttribute("formaction") || form.getAttribute("action");
+    if (!named) return null;
+    const method = (submit?.getAttribute("formmethod") || form.getAttribute("method") || "get").toLowerCase();
+    try {
+      return `${method} ${new URL(named, document.baseURI).pathname}`;
+    } catch {
+      return `${method} ${named.split(/[?#]/)[0]}`;
+    }
   }
 
   /**

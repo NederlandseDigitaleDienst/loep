@@ -26,6 +26,7 @@ interface Field extends Described {
 interface FormReport extends Described {
   fields: Field[];
   submit: Described | null;
+  action: string | null;
 }
 
 export interface FormProbeOptions {
@@ -324,6 +325,7 @@ export async function probeForms(page: Page, options: FormProbeOptions): Promise
     const state: FormErrorState = {
       page: label,
       form: where(initial),
+      action: initial.action,
       openedVia,
       fields,
       submitControl: initial.submit ? `${initial.submit.tag} "${initial.submit.text.slice(0, 40)}"` : null,
