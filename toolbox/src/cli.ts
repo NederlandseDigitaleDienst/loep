@@ -225,8 +225,9 @@ Options:
   --max-writes <n>  With --allow-writes or --test-environment: the most requests that change something the whole run
                     may send to that origin, over every session and the sweep together: default 5, at least 120 s
                     apart; on a local address default 50, without a pause. With both flags it is the budget of the
-                    declared origins; the local one keeps 50. With a local --test-environment it is the budget of each of the two. Past it every write is held back as in a run without
-                    permission. Kept in the manifest
+                    declared origins; the local one keeps 50. With a local --test-environment it is the budget of
+                    each of the two local grants. Past it every write is held back as in a run without permission.
+                    Kept in the manifest
   --mailbox <m>     With inventory, for a run that may send: imap://<host>:993 (any real mailbox) or mailpit://localhost:8025 (a site
                     on this machine). The user name and password never go here: they come from the environment
                     (LOEP_IMAP_USER, LOEP_IMAP_PASSWORD) or the keychain. A mailbox on another machine is confirmed at an

@@ -550,8 +550,9 @@ const VARIANT_NL: Record<Variant, string> = { defect: "Lindewaard", clean: "Berk
 
 /**
  * What the fixture received that no run may account for. A run without permission accounts for nothing; a run
- * made with --allow-writes accounts for what its boundary let through, by origin, as writes.jsonl logs it. Each
- * line there is one request or frame that reached the fixture, so more received than logged was sent past the permission.
+ * made with --allow-writes accounts for what its boundary let through, by origin, method and path, as writes.jsonl
+ * logs it. Each line there is one request or frame that reached the fixture, so more received than logged was sent
+ * past the permission. Matched by path too: a logged write that never arrived does not hide one that went elsewhere.
  */
 export function writesOutsidePermission(received: LogEntry[], origins: Record<SiteKey, string>, runs: string[]): string[] {
   const logged = new Map<string, number>();
@@ -563,15 +564,17 @@ export function writesOutsidePermission(received: LogEntry[], origins: Record<Si
     for (const line of lines.filter((entry) => entry.method !== "REGISTER")) {
       const origin = (line.origin ?? permission.origin).replace(/^ws(s?):/, "http$1:");
       if (!writeOriginsOf(permission).includes(origin)) continue;
-      logged.set(origin, (logged.get(origin) ?? 0) + 1);
+      const key = `${origin} ${line.method} ${line.path}`;
+      logged.set(key, (logged.get(key) ?? 0) + 1);
     }
   }
   const problems: string[] = [];
   for (const write of received) {
-    const origin = origins[write.site];
-    const left = logged.get(origin) ?? 0;
+    // The log has the path without its query, and "SEND" for a frame over a socket.
+    const key = `${origins[write.site]} ${write.kind === "ws-message" ? "SEND" : write.method} ${write.path.split("?")[0]}`;
+    const left = logged.get(key) ?? 0;
     if (left > 0) {
-      logged.set(origin, left - 1);
+      logged.set(key, left - 1);
       continue;
     }
     problems.push(`${{ ...VARIANT_NL, thirdParty: "Kijkpunt" }[write.site]}: de veegronde verstuurde iets naar de testsite${runs.some((run) => readJsonOrNull(join(run, "manifest.json"))?.writes) ? " buiten de toestemming van de run" : ""} (${write.kind} ${write.method ?? ""} ${write.path})`);

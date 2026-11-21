@@ -159,6 +159,11 @@ test("what the fixture received counts against what the permission of each run l
     assert.deepEqual(writesOutsidePermission(received, origins, [run]), ["Berkenveen: de veegronde verstuurde iets naar de testsite buiten de toestemming van de run (request POST /contact.html)"]);
     // One more than the log holds is outside the permission too.
     assert.equal(writesOutsidePermission([...received, received[0]!], origins, [run]).length, 2);
+    // A logged write that did not arrive does not account for one on another path, or with another method.
+    assert.deepEqual(writesOutsidePermission([{ ...received[0]!, path: "/ergens.html?x=1" }, received[1]!], origins, [run]), ["Lindewaard: de veegronde verstuurde iets naar de testsite buiten de toestemming van de run (request POST /ergens.html?x=1)"]);
+    assert.equal(writesOutsidePermission([{ ...received[0]!, method: "PUT" }, received[1]!], origins, [run]).length, 1);
+    // The fixture logs the query, the boundary does not.
+    assert.equal(writesOutsidePermission([{ ...received[0]!, path: "/contact.html?stap=2" }, received[1]!], origins, [run]).length, 0);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
