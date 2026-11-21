@@ -298,7 +298,7 @@
       "id": "1.4.1-afvalbak-kleur",
       "criterion": "1.4.1",
       "page": "/afval.html",
-      "descriptionNl": "Welke bak het is, staat alleen in de kleur van het pictogram. De bakken voor glas en voor tuinafval zijn allebei groen (onderling ongeveer 1,1 op 1).",
+      "descriptionNl": "Welke bak het is, staat alleen in de kleur van het pictogram. De bakken voor glas en voor tuinafval zijn allebei groen (onderling ongeveer 1,2 op 1).",
       "where": ".afvalwijzer-resultaten (De resultaten van de afvalwijzer onder \"Waar moet het heen?\".)",
       "state": "Na typen in \"Waar moet het heen?\"; alleen met een leesverzoek voor de zoekdienst in het sitemodel komen er resultaten.",
       "medium": "web"

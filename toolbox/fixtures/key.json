@@ -532,7 +532,7 @@
       "selector": ".afvalwijzer-resultaten",
       "selectorInClean": true,
       "whereNl": "De resultaten van de afvalwijzer onder \"Waar moet het heen?\".",
-      "wrongNl": "Welke bak het is, staat alleen in de kleur van het pictogram. De bakken voor glas en voor tuinafval zijn allebei groen (onderling ongeveer 1,1 op 1).",
+      "wrongNl": "Welke bak het is, staat alleen in de kleur van het pictogram. De bakken voor glas en voor tuinafval zijn allebei groen (onderling ongeveer 1,2 op 1).",
       "cleanNl": "Naast het pictogram staat de naam van de bak in tekst.",
       "state": "typed",
       "stateNl": "Na typen in \"Waar moet het heen?\"; alleen met een leesverzoek voor de zoekdienst in het sitemodel komen er resultaten.",
