@@ -55,7 +55,7 @@ Drie stukken inhoud verschijnen pas na een verzoek, elk met een sleutelgebrek op
 |---|---|---|---|
 | `/openingstijden.html` | GET van een blok bij Kijkpunt (`/blok/regio-1.html` of `-2`) | altijd, ook in de veegronde | `1.1.1-regioblok` |
 | `/veelgestelde-vragen.html` | POST naar Kijkpunt `/vragenlijst/start`, na een preflight | alleen met de vaste leesregel voor de testserver | `4.1.2-vragenlijst` |
-| `/afval.html` | POST in JSON (de vorm van Typesense) naar `/zoekdienst/multi_search` op de site | alleen met een leesverzoek in het sitemodel | `1.1.1-afvalwijzer` |
+| `/afval.html` | POST in JSON (de vorm van Typesense) naar `/zoekdienst/multi_search` op de site | alleen met een leesverzoek in het sitemodel | `1.1.1-afvalwijzer`, `1.4.1-afvalbak-kleur` |
 
 De vragenlijst meldt daarnaast elk bezoek met een POST naar Kijkpunt `/vragenlijst/bezoek`. Dat verzoek legt iets vast en moet tegengehouden blijven: de server logt het als `request`, dus een run die het doorlaat, faalt op de telling hierboven. Een browser zonder loep verstuurt het wel; de test van de selectors houdt het daarom zelf tegen.
 

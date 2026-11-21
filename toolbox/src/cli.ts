@@ -415,7 +415,7 @@ async function main(): Promise<void> {
     if (refusal) throw new Error(refusal);
     const frozen = frozenSweepNl(values.run, command);
     if (frozen) process.stderr.write(`loep: ${frozen}\n`);
-    // Extra fixed read rules the run carries for a test server on this machine (sweep-check writes them): a session of an agent on the run uses them too.
+    // Extra fixed read rules the run carries for a test server on this machine (sweep-check writes them). A session has returned above: its process loads them in `serve`.
     (await import("./lib/reads.ts")).useRunFixedReads(values.run);
   }
   // `gaps` and `feedback` read the verdicts and the evaluation of finished runs and nothing else of them: they need no permission to write and no login.

@@ -6,7 +6,7 @@ import { confirmLoginOn, LoginExpired, logsOut, registerSessionSecrets, runLogin
 import { addressOf, fixedReadFor, noteFixedRead, noteRefusedRead, readDecision, readRuleFor, runReads, type ReadRequest } from "../lib/reads.ts";
 import { claimInTurn, claimLink, isThisMachine, isWriteOrigin, runWrites, SocketFrames, type PassedWrite, type SendDeadline, type WriteAccess } from "../lib/writes.ts";
 import { LONGEST_FAILURE_PAUSE_SECONDS, OriginBlocked, runBlockade } from "../session/blockade.ts";
-import { MESSAGE_VALUES, onSite, runScope, secretLeavesRunNl } from "../session/safety.ts";
+import { MESSAGE_VALUES, noteRefusedByBlockade, onSite, runScope, secretLeavesRunNl } from "../session/safety.ts";
 import { answerRefusalNl, httpRecordings, httpReplayNl, httpSendOf, keptHeaders, playRecording, socketRecordings, type HttpRecordings, type PassedReplay, type Recorder } from "../lib/recordings.ts";
 import { shieldForRun, type Shield } from "../lib/secrets.ts";
 import { readableFrame } from "./call.ts";
@@ -35,6 +35,12 @@ export const RENDERING = {
   navigationTimeoutMs: 45_000,
   settleTimeoutMs: 10_000,
 } as const;
+
+/**
+ * The longest pause the site asked for that a request of a page waits out in the route: well within the time a navigation
+ * has, so the page that asked still loads. A longer one refuses the request, and the page notes it as not arrived.
+ */
+export const PAUSE_IN_PAGE_SECONDS = RENDERING.navigationTimeoutMs / 3000;
 
 export interface ContextOptions {
   colorScheme?: ColorScheme;
@@ -494,11 +500,19 @@ export async function newContext(browser: Browser, options: ContextOptions = {},
     if (spaced && loadsTab(route)) return spaced.before(route.request().url()).then(() => proceed(route, context, follow).catch(() => undefined));
     return proceed(route, context, follow);
   };
-  await context.route("**/*", (route) => {
+  await context.route("**/*", async (route) => {
     const method = route.request().method();
-    // Logging out ends the session for everything that comes after: such a request never leaves, whatever its method. Nor does one to an origin that refused the evaluation.
+    const refuse = (): Promise<void> => (route.request().isNavigationRequest() ? route.fulfill({ status: 204, body: "" }) : route.abort("blockedbyclient"));
+    // Logging out ends the session for everything that comes after: such a request never leaves, whatever its method.
     const personal = writes?.runDir !== undefined && shieldForRun(writes.runDir)?.touchesGuarded(route.request().url());
-    if ((logsOut(route.request().url()) && !personal) || blockade?.blockade.refuses(route.request().url())) return route.request().isNavigationRequest() ? route.fulfill({ status: 204, body: "" }) : route.abort("blockedbyclient");
+    if (logsOut(route.request().url()) && !personal) return refuse();
+    // Nor does one to an origin that refused the evaluation. A short pause the site asked for is waited out, as before a navigation:
+    // a page that was loading when another page got the 429 would otherwise lose its stylesheet or script. What is still refused, the page notes as not arrived.
+    const refusedBy = blockade?.blockade.refuses(route.request().url()) ? await blockade.blockade.pause(route.request().url(), PAUSE_IN_PAGE_SECONDS) : null;
+    if (refusedBy) {
+      noteRefusedByBlockade(route.request(), refusedBy);
+      return refuse().catch(() => undefined);
+    }
     if (method === "GET" || method === "HEAD") {
       // A window of another party is in the scope, but is that other party: only a read of the site itself goes without asking whether it carries a secret of the run.
       if (scope && !onSite(scope, route.request().url())) return refuseLeaving(route, context, scope).then((refused) => (refused ? undefined : openRead(route)));

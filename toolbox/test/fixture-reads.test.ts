@@ -1,8 +1,11 @@
 import assert from "node:assert/strict";
+import { execFile } from "node:child_process";
 import { copyFileSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, test } from "node:test";
+import { fileURLToPath } from "node:url";
+import { promisify } from "node:util";
 import type { Browser, Page } from "playwright";
 import { startFixture, type FixtureServer } from "../fixtures/serve.ts";
 import { useFixtureReads } from "../scripts/sweep-check.ts";
@@ -144,4 +147,33 @@ test("the server answers the search of the waste guide and the start of the surv
   assert.equal(fixture.writes().length, before, "a read is no write");
   await fetch(`${fixture.origins.thirdParty}/vragenlijst/bezoek`, { method: "POST", body: "{}" });
   assert.deepEqual(fixture.writes().slice(before).map((entry) => entry.path), ["/vragenlijst/bezoek"]);
+});
+
+test("a session an agent starts on a run with the extra rules starts the survey, and one on a run without them does not", async () => {
+  const cli = fileURLToPath(new URL("../src/cli.ts", import.meta.url));
+  // The session process inherits the environment: without the variable it can only find the rules in the run.
+  const env = Object.fromEntries(Object.entries(process.env).filter(([name]) => name !== EXTRA_FIXED_READS_ENV));
+  const loep = async (runDir: string, ...args: string[]): Promise<Record<string, unknown>> => {
+    const output = await promisify(execFile)(process.execPath, [cli, "session", ...args, "--run", runDir], { env }).catch((error: { stdout: string }) => ({ stdout: error.stdout }));
+    return JSON.parse(output.stdout) as Record<string, unknown>;
+  };
+  const survey = async (runDir: string): Promise<number> => {
+    const started = reads("/vragenlijst/start");
+    try {
+      assert.equal((await loep(runDir, "start", "--single-browser")).error, undefined);
+      await loep(runDir, "open", "/veelgestelde-vragen.html");
+      return reads("/vragenlijst/start") - started;
+    } finally {
+      await loep(runDir, "stop");
+    }
+  };
+  const origin = fixture.origins.defect;
+  const carrying = run(origin);
+  copyFileSync(useFixtureReads(dir, fixture.origins.thirdParty), join(carrying, EXTRA_FIXED_READS_FILE));
+  delete process.env[EXTRA_FIXED_READS_ENV];
+  setFixedReads(null);
+  const writes = fixture.writes().length;
+  assert.equal(await survey(run(origin)), 0, "without the rules the session holds the start of the survey back");
+  assert.ok((await survey(carrying)) > 0, "with the rules in the run the session lets the start of the survey through");
+  assert.deepEqual(fixture.writes().slice(writes).map((entry) => entry.path), [], "the visit the survey reports stays held back");
 });

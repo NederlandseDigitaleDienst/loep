@@ -9,6 +9,8 @@ import { MAX_RESWEEPS, MAX_RETURNS_TO_EXPLORER, SHEETS_PER_TASK } from "../src/c
 import { briefPending, BUDGETS, INSTRUMENT_FLOW, loadInstrumentIndex, PHASES, pointsToFinish, recordAttempts, skip, skipKindOf, skipped, skippedForOutage, TASK_FILES, unskip } from "../src/commands/instrument-tasks.ts";
 import { CEILINGS, EXTENSION, MEASURED_USE, REFERENCE_SITE_SIZE, WALK_STATES } from "../src/lib/budget.ts";
 import { FINISH_FACTOR, LOOK_COMMANDS, MEASURE_COMMANDS, NOT_SENT, openPoint, SESSION_COMMANDS } from "../src/lib/verdict.ts";
+import { voiceoverWarningNl } from "../src/lib/voiceover.ts";
+import { writeBudgetsNl } from "../src/lib/writes.ts";
 import { SESSION_MANAGEMENT } from "../src/session/client.ts";
 import { DEFAULT_DAEMON_LIMITS } from "../src/session/safety.ts";
 
@@ -262,6 +264,10 @@ interface WorkflowState {
   siteOutage?: string;
   /** At done: criteria that can get a new finishing round now that the site answers again. */
   again?: string[];
+  /** What pending says when the budget for sending is about to run out, or what a stand made up in its place. */
+  sendingLow?: string;
+  /** What pending says when the virtual Mac is set up but VoiceOver does not read. */
+  voiceover?: string;
 }
 
 /** The part of a run the workflow writes through the toolbox: the attempts it records with `tasks --attempted`, and what it skips. It outlives one run of the workflow. */
@@ -279,6 +285,7 @@ interface WorkflowResult {
   skipped: string[];
   last: string | null;
   paused: string | null;
+  voiceover: string | null;
   models: Record<string, string | null>;
 }
 
@@ -318,7 +325,7 @@ async function runWorkflow(atOnce: number | undefined, states: WorkflowState[], 
       for (const key of /tasks --run RUN --attempted (\S+)/.exec(prompt)?.[1]?.split(",") ?? []) toolbox.attempts[key] = (toolbox.attempts[key] ?? 0) + 1;
       const state = states[round++] ?? { phase: "done" };
       const open = (phase: WorkflowPhase) => (state[phase] ?? []).filter((id) => !toolbox.skips.includes(`${phase}:${id}`)).map((id) => ({ id, attempts: toolbox.attempts[`${phase}:${id}`] ?? 0 }));
-      return { phase: state.phase, walks: open("walks"), judges: open("judges"), verifiers: open("verifiers"), finishers: open("finishers"), ...(state.siteOutage ? { siteOutage: state.siteOutage } : {}), ...(state.again ? { again: state.again } : {}) };
+      return { phase: state.phase, walks: open("walks"), judges: open("judges"), verifiers: open("verifiers"), finishers: open("finishers"), ...(state.siteOutage ? { siteOutage: state.siteOutage } : {}), ...(state.again ? { again: state.again } : {}), ...(state.sendingLow ? { sendingLow: state.sendingLow } : {}), ...(state.voiceover ? { voiceover: state.voiceover } : {}) };
     }
     const task = /Lees het bestand (\S+)/.exec(prompt)![1]!;
     events.push({ task, what: "start" });
@@ -447,6 +454,45 @@ test("a limit or a failure of the model pauses the workflow: it skips nothing an
   assert.equal(once.started(taskOf("judges", "1.1.2")), 2);
   assert.deepEqual(once.toolbox.attempts, { "judges:1.1.1": 1, "judges:1.1.3": 1, "judges:1.1.2": 1 });
   assert.equal(once.result.last, "done");
+});
+
+test("the workflow pauses only on what pending itself says: a field the stand fills in on its own does not pause (#710)", async () => {
+  const judges = ["1.1.1", "1.4.3"];
+  // What pending prints, from the toolbox itself: the budget for sending about to run out, an outage, a VoiceOver that does not read.
+  const low = writeBudgetsNl([{ origin: "https://www.example.nl", max: 30, sent: 28, left: 2, reserved: 0, spacingSeconds: 0, waitSeconds: 0 }]);
+  const paused = await runWorkflow(3, [{ phase: "judges", judges, sendingLow: low }]);
+  assert.equal(paused.events.length, 0, "no agent starts on a budget that is about to run out");
+  assert.match(paused.result.paused!, /^budget voor versturen bijna op, run gepauzeerd; /);
+  assert.ok(paused.result.paused!.endsWith(`(stand 1: ${low})`));
+  assert.match(read("toolbox/src/session/blockade.ts"), /return `storing van de site: \$\{/, "the outage of pending starts as the workflow expects");
+  const mute = voiceoverWarningNl({ state: "stopped" });
+  assert.ok(mute);
+  const heard = await runWorkflow(3, [{ phase: "judges", judges, voiceover: mute }, { phase: "done" }]);
+  assert.equal(heard.result.voiceover, mute);
+  const warming = voiceoverWarningNl({ state: "running" }, true);
+  assert.ok(warming);
+  assert.equal((await runWorkflow(3, [{ phase: "judges", judges, voiceover: warming }, { phase: "done" }])).result.voiceover, warming);
+  // Every variant of the budget: one that ran out, one origin among several, and the warning as a stand may hand it back, quoted or with a capital.
+  const out = writeBudgetsNl([{ origin: "https://www.example.nl", max: 30, sent: 30, left: 0, reserved: 0, spacingSeconds: 0, waitSeconds: 0 }]);
+  const two = writeBudgetsNl([
+    { origin: "https://www.example.nl", max: 30, sent: 28, left: 2, reserved: 2, spacingSeconds: 5, waitSeconds: 3 },
+    { origin: "https://chat.example.nl", max: 10, sent: 9, left: 1, reserved: 0, spacingSeconds: 0, waitSeconds: 0 },
+  ]);
+  for (const said of [out, two, `"${low}"`, low[0]!.toUpperCase() + low.slice(1)]) {
+    const flow = await runWorkflow(3, [{ phase: "judges", judges, sendingLow: said }]);
+    assert.equal(flow.events.length, 0, `${JSON.stringify(said)} pauses the run`);
+    assert.match(flow.result.paused!, /^budget voor versturen bijna op, run gepauzeerd; /);
+  }
+
+  // A stand that fills in the fields with words of its own: the run goes on, and nothing is said about it.
+  for (const filler of ["niet van toepassing", "geen", "n.v.t.", "", " "]) {
+    const flow = await runWorkflow(3, [{ phase: "judges", judges, sendingLow: filler, siteOutage: filler, voiceover: filler }, { phase: "done", again: [filler, "geen"] }]);
+    assert.equal(flow.result.paused, null, `${JSON.stringify(filler)} pauses nothing`);
+    assert.equal(flow.result.voiceover, null, `${JSON.stringify(filler)} is no warning about VoiceOver`);
+    for (const id of judges) assert.equal(flow.started(taskOf("judges", id)), 1);
+    assert.equal(flow.stands.length, 2, "no new finishing round for criteria that are not there");
+    assert.equal(flow.result.last, "done");
+  }
 });
 
 test("an outage of the site pauses the workflow like one of the model: no agent starts while pending says so, and an agent that stopped for it is no attempt", async () => {

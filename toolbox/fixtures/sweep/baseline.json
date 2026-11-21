@@ -17,6 +17,18 @@
       "found": true,
       "twin": false
     },
+    "1.1.1-pictogram": {
+      "found": true,
+      "twin": false
+    },
+    "1.1.1-regioblok": {
+      "found": true,
+      "twin": false
+    },
+    "1.1.1-afvalwijzer": {
+      "found": null,
+      "twin": null
+    },
     "1.2.1-gesprek": {
       "found": null,
       "twin": null
@@ -77,11 +89,19 @@
       "found": true,
       "twin": false
     },
+    "1.3.5-factuuradres": {
+      "found": true,
+      "twin": false
+    },
     "1.4.1-tekstlink": {
       "found": true,
       "twin": false
     },
     "1.4.1-verplicht": {
+      "found": null,
+      "twin": null
+    },
+    "1.4.1-afvalbak-kleur": {
       "found": null,
       "twin": null
     },
@@ -273,11 +293,19 @@
       "found": null,
       "twin": null
     },
+    "3.3.4-intrekken": {
+      "found": null,
+      "twin": null
+    },
     "3.3.7-adres": {
       "found": null,
       "twin": null
     },
     "3.3.8-wachtwoord": {
+      "found": true,
+      "twin": false
+    },
+    "3.3.8-wachtwoord-wijzigen": {
       "found": true,
       "twin": false
     },
@@ -302,6 +330,10 @@
       "twin": false
     },
     "4.1.2-venster": {
+      "found": true,
+      "twin": false
+    },
+    "4.1.2-vragenlijst": {
       "found": true,
       "twin": false
     },

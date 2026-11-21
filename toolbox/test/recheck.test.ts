@@ -12,6 +12,7 @@ import { writeEvaluation } from "../src/commands/sign.ts";
 import { instrumentTasks, recordAttempts } from "../src/commands/instrument-tasks.ts";
 import { checkSeal, openSeal, seal, sealHash, verify } from "../src/commands/verify.ts";
 import { canonicalJson } from "../src/lib/canonical.ts";
+import { EXTRA_FIXED_READS_FILE } from "../src/lib/reads.ts";
 import { otherToolboxNl, writeManifest, writeManifestTools } from "../src/lib/manifest.ts";
 import { underSeal } from "../src/lib/seal.ts";
 import { Daemon } from "../src/session/daemon.ts";
@@ -309,5 +310,14 @@ test("seal --open voids the seal and a signature on purpose; then a session meas
   assert.notEqual(resealed.sha256, hash, "the new seal covers the new observations");
   assert.equal(resealed.signatureVoided, false, "there was no signature left to void");
   assert.equal(await verify(run), true);
+  rmSync(run, { recursive: true, force: true });
+});
+
+test("a recheck carries the extra fixed read rules of the run, so its session on the test site starts the survey as the evaluation did", async () => {
+  const run = await sealedRun(fixture.origins.defect, false);
+  const rules = JSON.stringify({ rules: [{ id: "vragenlijst-hier", method: "POST", origin: fixture.origins.thirdParty, path: "/vragenlijst/start", reasonNl: "De vragenlijst van de testsite haalt hiermee haar vragen op." }] });
+  writeFileSync(join(run, EXTRA_FIXED_READS_FILE), rules);
+  const written = await recheck(run, { finding: FINDING });
+  assert.equal(readFileSync(join(run, written.dir, EXTRA_FIXED_READS_FILE), "utf8"), rules);
   rmSync(run, { recursive: true, force: true });
 });
