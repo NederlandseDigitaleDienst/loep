@@ -6,7 +6,7 @@ import { confirmLoginOn, LoginExpired, logsOut, registerSessionSecrets, runLogin
 import { addressOf, fixedReadFor, noteFixedRead, noteRefusedRead, readDecision, readRuleFor, runReads, type ReadRequest } from "../lib/reads.ts";
 import { claimInTurn, claimLink, isThisMachine, isWriteOrigin, runWrites, SocketFrames, type PassedWrite, type SendDeadline, type WriteAccess } from "../lib/writes.ts";
 import { LONGEST_FAILURE_PAUSE_SECONDS, OriginBlocked, runBlockade } from "../session/blockade.ts";
-import { inScope, MESSAGE_VALUES, runScope, secretLeavesRunNl } from "../session/safety.ts";
+import { inScope, MESSAGE_VALUES, noteRefusedByBlockade, runScope, secretLeavesRunNl } from "../session/safety.ts";
 import { answerRefusalNl, httpRecordings, httpReplayNl, httpSendOf, keptHeaders, playRecording, socketRecordings, type HttpRecordings, type PassedReplay, type Recorder } from "../lib/recordings.ts";
 import { shieldForRun, type Shield } from "../lib/secrets.ts";
 import { readableFrame } from "./call.ts";
@@ -35,6 +35,12 @@ export const RENDERING = {
   navigationTimeoutMs: 45_000,
   settleTimeoutMs: 10_000,
 } as const;
+
+/**
+ * The longest pause the site asked for that a request of a page waits out in the route: well within the time a navigation
+ * has, so the page that asked still loads. A longer one refuses the request, and the page notes it as not arrived.
+ */
+export const PAUSE_IN_PAGE_SECONDS = RENDERING.navigationTimeoutMs / 3000;
 
 export interface ContextOptions {
   colorScheme?: ColorScheme;
@@ -489,8 +495,12 @@ export async function newContext(browser: Browser, options: ContextOptions = {},
     const personal = writes?.runDir !== undefined && shieldForRun(writes.runDir)?.touchesGuarded(route.request().url());
     if (logsOut(route.request().url()) && !personal) return refuse();
     // Nor does one to an origin that refused the evaluation. A short pause the site asked for is waited out, as before a navigation:
-    // a page that was loading when another page got the 429 would otherwise lose its stylesheet or script without any notice.
-    if (blockade?.blockade.refuses(route.request().url()) && (await blockade.blockade.pause(route.request().url()))) return refuse().catch(() => undefined);
+    // a page that was loading when another page got the 429 would otherwise lose its stylesheet or script. What is still refused, the page notes as not arrived.
+    const refusedBy = blockade?.blockade.refuses(route.request().url()) ? await blockade.blockade.pause(route.request().url(), PAUSE_IN_PAGE_SECONDS) : null;
+    if (refusedBy) {
+      noteRefusedByBlockade(route.request(), refusedBy);
+      return refuse().catch(() => undefined);
+    }
     if (method === "GET" || method === "HEAD") {
       if (scope && !inScope(scope, route.request().url())) return refuseLeaving(route, context, scope).then((refused) => (refused ? undefined : openRead(route)));
       return openRead(route);

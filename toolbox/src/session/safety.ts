@@ -14,7 +14,7 @@ import { fixedReadFor, onReadOrigin, pathOf, readDecision, readRuleFor, type Rea
 import { searchServicesOf, type SearchServiceId } from "../lib/searchbody.ts";
 import { SEARCH_FALLBACK, SEARCH_NONE } from "../lib/searchterm.ts";
 import { searchTermForRun, searchTermsForRun } from "../lib/sitemodel.ts";
-import { OriginBlocked, refusalNl, type Blockade } from "./blockade.ts";
+import { OriginBlocked, refusalNl, type Blockade, type BlockadeEntry } from "./blockade.ts";
 import { playRecording, replayNl, socketRecordings, type PassedReplay, type Recorder } from "../lib/recordings.ts";
 import { claimLinkInTurn, isLocalHost, isThisMachine, isWriteOrigin, runWrites, sendDeadlineOf, SocketFrames, writeAccess, writesForRun, type PassedWrite, type WriteAccess } from "../lib/writes.ts";
 
@@ -283,9 +283,17 @@ export interface NotLoaded {
   error: string;
 }
 
+/** The requests the blockade of the run refused, with why: no failure of the connection, but the page does not get them all the same. */
+const refusedByBlockade = new WeakMap<Request, string>();
+
+/** A request the blockade refuses: a stylesheet or script among them is noted by `watchNotLoaded` as not arrived. Call before the route aborts it. */
+export function noteRefusedByBlockade(request: Request, entry: BlockadeEntry): void {
+  refusedByBlockade.set(request, entry.reason === "outage" ? "niet opgevraagd tijdens een storing van de site" : entry.reason === "429" ? "niet opgevraagd tijdens de pauze na een 429 van de site" : "niet opgevraagd tijdens de pauze na mislukte navigaties");
+}
+
 /**
  * Note every stylesheet and script on a host of the scope that does not arrive in a context because the connection broke off or
- * gave no answer, or because the server was too busy (`BUSY_STATUS`). A stylesheet or script of the site itself that did not
+ * gave no answer, because the server was too busy (`BUSY_STATUS`), or because the blockade of the run did not ask for it (`noteRefusedByBlockade`). A stylesheet or script of the site itself that did not
  * arrive says the page is not the page a visitor gets: a failure of the connection, not of the site. The sweep watches its own
  * contexts with this too.
  */
@@ -297,7 +305,9 @@ export function watchNotLoaded(context: BrowserContext, scope: Pick<Scope, "host
   };
   context.on("requestfailed", (request) => {
     const error = request.failure()?.errorText ?? "";
-    if (CONNECTION_LOST.test(error)) notLoaded(request, error);
+    const refused = refusedByBlockade.get(request);
+    if (refused) notLoaded(request, refused);
+    else if (CONNECTION_LOST.test(error)) notLoaded(request, error);
   });
   context.on("response", (response) => {
     if (BUSY_STATUS.has(response.status())) notLoaded(response.request(), `HTTP ${response.status()}`);
@@ -421,6 +431,7 @@ export async function guardContext(context: BrowserContext, scope: Scope, guard:
     const refusedBy = blockade?.refuses(url);
     if (refusedBy) {
       guard.blocked.push({ at: new Date().toISOString(), kind: "blockade", method, url: url.slice(0, MAX_URL), resourceType: type, reasonNl: refusalNl(refusedBy) });
+      noteRefusedByBlockade(request, refusedBy);
       return refuse();
     }
     // In a run with a login nothing logs out: the session has to last for everything that comes after.
