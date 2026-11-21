@@ -325,6 +325,8 @@ export const REGULAR_PATH = "verplichte velden gevuld, optionele leeg";
 export interface FormErrorState {
   page: string;
   form: string;
+  /** Where the form sends to: its method and the path of its action without the query. Null when it names no action; absent in an older run. */
+  action?: string | null;
   openedVia: string | null;
   fields: { role: string | null; name: string | null; required: boolean; type: string | null; invalidBeforeInput: boolean }[];
   submitControl: string | null;

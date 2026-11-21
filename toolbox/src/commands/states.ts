@@ -888,10 +888,12 @@ async function listenersOnEmptyPage(context: BrowserContext): Promise<Record<str
 }
 
 /**
- * What makes a form the same form on another page: the names of its fields. A field without a name
- * counts by its type and place, so that two forms whose fields have no name are not taken for one.
+ * What makes a form the same form on another page: where it sends to and the names of its fields. Two
+ * forms that send to different addresses are never one form. A field without a name counts by its type
+ * and place, so that two forms whose fields have no name are not taken for one.
  */
-export const formKey = (form: Pick<FormErrorState, "fields">): string => form.fields.map((field, index) => field.name ?? `${index}:${field.type ?? field.role ?? "?"}`).join("|");
+export const formKey = (form: Pick<FormErrorState, "fields" | "action">): string =>
+  [form.action ?? "", ...form.fields.map((field, index) => field.name ?? `${index}:${field.type ?? field.role ?? "?"}`)].join("|");
 
 interface StatesStamp {
   /** Hash over every page of the sample as `collect` measured it: the probe goes over all pages and keeps what it saw first, so one changed page makes the whole of it stale. */

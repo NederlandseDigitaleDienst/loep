@@ -270,6 +270,8 @@ test("the form probe names the fields of a form after one whose submission loade
   const page = await pageWith(false, "/forms-reload.html");
   const forms = await probeForms(page, { label: "P1", url: `${site.origin}/forms-reload.html`, outDir: run, openedVia: null, socketMessagesBlocked: () => 0 });
   assert.deepEqual(forms.map((form) => form.form), ["#search", "#login"]);
+  // Where each form sends to, without the query that the search put in the address.
+  assert.deepEqual(forms.map((form) => form.action), ["get /forms-reload.html", "post /submit"]);
   // The search form goes to a new page, so the page is loaded again before the login form is tried.
   assert.ok(forms[0]!.attempts.every((attempt) => attempt.navigated));
   assert.deepEqual(forms.map((form) => form.fields.map((field) => [field.name, field.type])), [[["Zoekterm", "search"]], [["Gebruikersnaam", null], ["Wachtwoord", "password"]]]);
