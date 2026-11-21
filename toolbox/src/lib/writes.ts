@@ -6,7 +6,8 @@ import { confirmByTyping, processTerminal, recordedNl, recordStatement, type Rec
 /**
  * Where a run may send, with a budget of its own: one origin, or origins a person declared together.
  * A run on this machine that also has a declared chat has two: the site with the local rules, and the
- * chat with a declaration, the normal budget and the pause (see `WritePermission.alsoGrants`).
+ * chat with a declaration, the normal budget and the pause (see `WritePermission.alsoGrants`). A window on another
+ * address on this machine, such as a test server of another party, is a second grant with the local rules.
  */
 export interface WriteGrant {
   /** The first origin that may be written to, e.g. "https://test.example.nl". */
@@ -39,7 +40,7 @@ export type WriteRaise = { from: number; to: number; at: string; origin?: string
  * the others, so a manifest from before there could be more than one reads as it did.
  */
 export interface WritePermission extends WriteGrant {
-  /** Grants next to the first, each with its own budget, pause and declaration: a chat a person declared next to a site on this machine. */
+  /** Grants next to the first, each with its own budget, pause and declaration: a chat a person declared next to a site on this machine, or a window on another address on this machine. */
   alsoGrants?: WriteGrant[];
   /** Each time a person raised `maxWrites` of a grant after inventory (see `raiseWrites`), oldest first. */
   raised?: WriteRaise[];
@@ -110,6 +111,9 @@ export interface WriteFlags {
   /** `--max-writes`: the budget for sending of the whole run. */
   maxWrites?: string | undefined;
 }
+
+/** The advice to measure what waits on sending, for a site on this machine: no declaration, and a window on this machine with an address of its own. */
+export const LOCAL_TEST_ENVIRONMENT_NL = "Draait de site op deze machine, geef dan --allow-writes, en voor een venster op deze machine --test-environment <origin> zonder --declared-by.";
 
 /** What is left out of an evaluation when nothing may be sent; for a report that has no permission to mention. */
 export const WRITES_BLOCKED_NL = "verzoeken die iets kunnen wijzigen zijn tegengehouden; wat pas na versturen verschijnt is niet onderzocht";
@@ -188,13 +192,20 @@ export function decideWrites(baseUrl: string, flags: WriteFlags, now = new Date(
   const declared = [...new Set([flags.testEnvironment ?? []].flat().map((address) => originOf(address, "--test-environment")))];
   const site = originOf(baseUrl, "het adres van de site");
   const isLocal = (address: string): boolean => isLocalHost(new URL(address).hostname);
-  const localRefusedNl = "een lokaal adres verklaar je niet naast een ander adres: een lokaal adres krijgt --allow-writes";
-  if (declared.length > 1 && declared.some(isLocal)) throw new Error(localRefusedNl);
-  // A site on this machine with a chat of another party on an address of its own: the site keeps the local rules, the chat gets a declaration.
-  if (flags.allowWrites && isLocal(site) && declared.length > 0 && declared.some((address) => address !== site)) {
-    if (declared.some(isLocal)) throw new Error(localRefusedNl);
-    const grant = declaredGrant(declared, flags, now);
-    return { origin: site, local: true, declaredBy: null, declaredAt: now.toISOString(), maxWrites: LOCAL_MAX_WRITES, spacingSeconds: LOCAL_WRITE_SPACING_SECONDS, alsoGrants: [grant] };
+  const localRefusedNl = "een lokaal adres verklaar je niet naast een adres dat niet lokaal is: een lokaal adres krijgt --allow-writes";
+  // Local and not local never share --test-environment: a local address is not declared, and a declaration does not reach this machine.
+  if (declared.some(isLocal) && (declared.some((address) => !isLocal(address)) || (declared.length > 1 && !isLocal(site)))) throw new Error(localRefusedNl);
+  const others = declared.filter((address) => address !== site);
+  // A site on this machine with a window on an address of its own: the site keeps the local rules, the window gets a grant of its own.
+  if (flags.allowWrites && isLocal(site) && others.length > 0) {
+    const first = { origin: site, local: true, declaredBy: null, declaredAt: now.toISOString(), spacingSeconds: LOCAL_WRITE_SPACING_SECONDS };
+    // Another address on this machine, such as a test server of another party: local rules too, and --max-writes for each of the two.
+    if (others.every(isLocal)) {
+      const maxWrites = maxWritesOf(flags.maxWrites, LOCAL_MAX_WRITES);
+      return { ...first, maxWrites, alsoGrants: [{ origin: others[0]!, ...(others.length > 1 ? { alsoOrigins: others.slice(1) } : {}), local: true, declaredBy: null, declaredAt: now.toISOString(), maxWrites, spacingSeconds: LOCAL_WRITE_SPACING_SECONDS }] };
+    }
+    // A chat of another party on the internet gets a declaration, and --max-writes is its budget.
+    return { ...first, maxWrites: LOCAL_MAX_WRITES, alsoGrants: [declaredGrant(others, flags, now)] };
   }
   const origin = declared[0] ?? site;
   if (isLocal(origin)) {

@@ -1,10 +1,13 @@
 /**
  * The regression check of the sweep on the fixture site, without a language model.
  *
- *   node scripts/sweep-check.ts [--out <dir>] [--at-once <n>] [--variant defect|clean] [--fixed-ports] [--disruptions | --only-disruptions] [--runs <dir>] [--update-baseline]
+ *   node scripts/sweep-check.ts [--out <dir>] [--at-once <n>] [--variant defect|clean] [--fixed-ports] [--allow-writes [--max-writes <n>]] [--disruptions | --only-disruptions] [--runs <dir>] [--update-baseline]
  *
  * --variant measures one variant only (the CI runs the two on two machines), --fixed-ports serves the
  * fixture on the ports of `just testsite` so the runs in <out>/runs stay usable as a frozen sweep,
+ * --allow-writes makes each inventory as a measurement with permission to send makes it: to the site of the variant
+ * and to Kijkpunt as a local test environment, each with a budget of its own (--max-writes, default 50 each), so the
+ * form probe of the sweep really sends,
  * --runs reads runs that were measured before instead of measuring, --from-report takes the rows of
  * earlier reports (the artefacts of the two CI jobs), --update-baseline writes what was found to the baseline.
  * --disruptions serves the disruptions of fixtures/disruptions.ts, measures their pages too, as the command
@@ -21,7 +24,8 @@
  *
  * Writes sweep-check.md and sweep-check.json to --out, and fails when a defect the baseline found is
  * now missing, when the twin shows evidence the baseline did not have, when the sweep sent
- * anything to the fixture site (a write request or a chat message), or when it logged out.
+ * anything to the fixture site (a write request or a chat message) that the permission of the run does not account for
+ * (without --allow-writes: anything at all), or when it logged out.
  */
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -32,7 +36,7 @@ import type { Browser } from "playwright";
 import { DEFECTS, type Defect } from "../fixtures/defects.ts";
 import { entriesIn, logInOn, typeAccountKeepNotice } from "../fixtures/login.ts";
 import { EVIDENCE, isAgentOnly, type Look, type ScriptEvidence } from "../fixtures/evidence.ts";
-import { DEFAULT_PORTS, defaultOrigin, type SiteKey, startFixture } from "../fixtures/serve.ts";
+import { DEFAULT_PORTS, defaultOrigin, type LogEntry, type SiteKey, startFixture } from "../fixtures/serve.ts";
 import { DISRUPTED_PAGES, DISRUPTIONS, GATE_CHECKS } from "../fixtures/disruptions.ts";
 import { readBlockades, setRunBlockade } from "../src/session/blockade.ts";
 import { setRunScope } from "../src/session/safety.ts";
@@ -47,6 +51,7 @@ import { states } from "../src/commands/states.ts";
 import { canonicalJson, pageLabels, sha256 } from "../src/lib/canonical.ts";
 import { setRunLogin } from "../src/lib/login.ts";
 import { EXTRA_FIXED_READS_ENV, EXTRA_FIXED_READS_FILE, setFixedReads } from "../src/lib/reads.ts";
+import { decideWrites, recordWrites, setRunWrites, WRITES_LOG, writeAccess, writeOriginsOf, type PassedWrite, type WritePermission } from "../src/lib/writes.ts";
 
 const TOOLBOX = join(dirname(fileURLToPath(import.meta.url)), "..");
 const MODEL_DIR = join(TOOLBOX, "fixtures", "sweep");
@@ -174,11 +179,23 @@ export function useFixtureReads(dir: string, thirdParty: string): string {
 
 export type SweepTimes = Record<string, number>;
 
-/** The steps of the plan on one variant: a login with the account of the fixture, inventory, the fixed model, check-site, sample, the steps of the sweep and documents. */
-export async function sweepVariant(run: string, variant: Variant, origins: { site: string; thirdParty: string }, atOnce: number, plan: SweepPlan, disruptions?: { arm: (variant: Variant) => void }): Promise<{ seconds: SweepTimes; checkProblems: string[] }> {
+/**
+ * The permission of a run of the sweep made for a measurement (--allow-writes): the site of the variant and
+ * Kijkpunt, both on this machine, each with the local rules and a budget of its own, as
+ * `inventory <site> --allow-writes --test-environment <kijkpunt> [--max-writes <n>]` gives it.
+ */
+export const sweepWrites = (origins: { site: string; thirdParty: string }, maxWrites?: string): WritePermission => decideWrites(`${origins.site}/`, { allowWrites: true, testEnvironment: origins.thirdParty, maxWrites })!;
+
+/**
+ * The steps of the plan on one variant: a login with the account of the fixture, inventory, the fixed model, check-site, sample, the steps of the sweep and documents.
+ * With `writes` each step may send as the command line lets it in a run with that permission, and the manifest holds it.
+ */
+export async function sweepVariant(run: string, variant: Variant, origins: { site: string; thirdParty: string }, atOnce: number, plan: SweepPlan, disruptions?: { arm: (variant: Variant) => void }, writes: WritePermission | null = null): Promise<{ seconds: SweepTimes; checkProblems: string[] }> {
   const seconds: SweepTimes = {};
   const timed = async (name: SweepStep, step: () => Promise<unknown>): Promise<void> => {
     if (!plan.steps.includes(name)) return;
+    // As the command line does per command: the writes of a step are logged under its name.
+    if (writes) setRunWrites(writeAccess(run, writes, name));
     const started = Date.now();
     try {
       await step();
@@ -187,9 +204,10 @@ export async function sweepVariant(run: string, variant: Variant, origins: { sit
     }
   };
   await timed("login", () => logInOn(origins.site, { run }, typeAccountKeepNotice));
-  setRunLogin(run);
+  setRunLogin(run, writes ? { writes } : undefined);
   try {
     await timed("inventory", () => inventory({ baseUrl: `${origins.site}/`, out: run, maxPages: 50, fixedUrls: plan.pages.map((path) => `${origins.site}${path}`) }));
+    if (writes) await recordWrites(run, writes);
     installModel(run, variant, origins, disruptions !== undefined, plan.pages);
     // As the command line has it for a command of the sweep: what did not arrive is noted, and a 429 is waited out.
     if (disruptions) {
@@ -213,6 +231,7 @@ export async function sweepVariant(run: string, variant: Variant, origins: { sit
     return { seconds, checkProblems: [] };
   } finally {
     setRunLogin(null);
+    setRunWrites(null);
     // The next variant starts with its inventory: a 429 there belongs to its own run, not to this one.
     if (disruptions) {
       setRunScope(null);
@@ -420,11 +439,12 @@ export async function evaluate(runs: Partial<Record<Variant, string>>, measuredP
 }
 
 async function main(): Promise<void> {
-  const { values } = parseArgs({ options: { out: { type: "string" }, runs: { type: "string" }, variant: { type: "string" }, "from-report": { type: "string", multiple: true }, "at-once": { type: "string", default: "1" }, "fixed-ports": { type: "boolean", default: false }, disruptions: { type: "boolean", default: false }, "only-disruptions": { type: "boolean", default: false }, "update-baseline": { type: "boolean", default: false } } });
+  const { values } = parseArgs({ options: { out: { type: "string" }, runs: { type: "string" }, variant: { type: "string" }, "from-report": { type: "string", multiple: true }, "at-once": { type: "string", default: "1" }, "fixed-ports": { type: "boolean", default: false }, "allow-writes": { type: "boolean", default: false }, "max-writes": { type: "string" }, disruptions: { type: "boolean", default: false }, "only-disruptions": { type: "boolean", default: false }, "update-baseline": { type: "boolean", default: false } } });
   const out = resolve(values.out ?? join(tmpdir(), `loep-sweep-check-${process.pid}`));
   const atOnce = Number(values["at-once"]);
   if (!Number.isInteger(atOnce) || atOnce < 1) throw new Error("--at-once is een geheel aantal pagina's, 1 of meer");
   const plan = sweepPlan(values["only-disruptions"] ? "only-disruptions" : values.disruptions ? "disruptions" : "plain");
+  if (values["max-writes"] !== undefined && !values["allow-writes"]) throw new Error("--max-writes hoort bij --allow-writes");
   if (plan.partial && (values["update-baseline"] || values["from-report"])) throw new Error("--only-disruptions meet maar een deel van de pagina's en kan de basislijn dus niet bijwerken; laat --update-baseline en --from-report weg");
   mkdirSync(out, { recursive: true });
   const runsDir = values.runs ? resolve(values.runs) : join(out, "runs");
@@ -447,7 +467,8 @@ async function main(): Promise<void> {
       const extraReads = useFixtureReads(out, fixture.origins.thirdParty);
       for (const variant of measured) {
         try {
-          const result = await sweepVariant(runs[variant]!, variant, { site: fixture.origins[variant], thirdParty: fixture.origins.thirdParty }, atOnce, plan, fixture.disruptions ?? undefined);
+          const origins = { site: fixture.origins[variant], thirdParty: fixture.origins.thirdParty };
+          const result = await sweepVariant(runs[variant]!, variant, origins, atOnce, plan, fixture.disruptions ?? undefined, values["allow-writes"] ? sweepWrites(origins, values["max-writes"]) : null);
           copyFileSync(extraReads, join(runs[variant]!, EXTRA_FIXED_READS_FILE));
           seconds[variant] = result.seconds;
           problems.push(...result.checkProblems.map((problem) => `${VARIANT_NL[variant]}: check-site: ${problem}`));
@@ -462,7 +483,7 @@ async function main(): Promise<void> {
         if (logins > 1) problems.push(`${VARIANT_NL[variant]}: er is ${logins} keer ingelogd op de testsite; alleen de toets logt in, één keer per variant`);
       }
       if (fixture.logouts() > 0) problems.push(`de veegronde logde ${fixture.logouts()} keer uit op de testsite; de drempel is 0`);
-      for (const write of fixture.writes()) problems.push(`${{ ...VARIANT_NL, thirdParty: "Kijkpunt" }[write.site]}: de veegronde verstuurde iets naar de testsite (${write.kind} ${write.method ?? ""} ${write.path})`);
+      problems.push(...writesOutsidePermission(fixture.writes(), fixture.origins, Object.values(runs)));
     } finally {
       await fixture.close();
     }
@@ -526,6 +547,37 @@ export async function disruptionProblems(run: string): Promise<string[]> {
 }
 
 const VARIANT_NL: Record<Variant, string> = { defect: "Lindewaard", clean: "Berkenveen" };
+
+/**
+ * What the fixture received that no run may account for. A run without permission accounts for nothing; a run
+ * made with --allow-writes accounts for what its boundary let through, by origin, as writes.jsonl logs it. Each
+ * line there is one request or frame that reached the fixture, so more received than logged was sent past the permission.
+ */
+export function writesOutsidePermission(received: LogEntry[], origins: Record<SiteKey, string>, runs: string[]): string[] {
+  const logged = new Map<string, number>();
+  for (const run of runs) {
+    const permission = readJsonOrNull(join(run, "manifest.json"))?.writes as WritePermission | undefined;
+    if (!permission || !existsSync(join(run, WRITES_LOG))) continue;
+    const lines = readFileSync(join(run, WRITES_LOG), "utf8").split("\n").filter(Boolean).map((line) => JSON.parse(line) as PassedWrite);
+    // A registration of its own is no request; a frame over a socket is counted by the http(s) twin of its address.
+    for (const line of lines.filter((entry) => entry.method !== "REGISTER")) {
+      const origin = (line.origin ?? permission.origin).replace(/^ws(s?):/, "http$1:");
+      if (!writeOriginsOf(permission).includes(origin)) continue;
+      logged.set(origin, (logged.get(origin) ?? 0) + 1);
+    }
+  }
+  const problems: string[] = [];
+  for (const write of received) {
+    const origin = origins[write.site];
+    const left = logged.get(origin) ?? 0;
+    if (left > 0) {
+      logged.set(origin, left - 1);
+      continue;
+    }
+    problems.push(`${{ ...VARIANT_NL, thirdParty: "Kijkpunt" }[write.site]}: de veegronde verstuurde iets naar de testsite${runs.some((run) => readJsonOrNull(join(run, "manifest.json"))?.writes) ? " buiten de toestemming van de run" : ""} (${write.kind} ${write.method ?? ""} ${write.path})`);
+  }
+  return problems;
+}
 const BASELINE = join(MODEL_DIR, "baseline.json");
 
 /** What the check found the last time it was accepted: per defect whether its evidence was there, and whether the twin showed evidence. */

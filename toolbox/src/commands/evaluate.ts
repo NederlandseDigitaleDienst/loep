@@ -23,7 +23,7 @@ import { loginNl, NOT_LOGGED_IN_NL } from "../lib/login.ts";
 import { mailboxLimitationsNl } from "../lib/mailbox.ts";
 import { secretLimitationsNl } from "../lib/secrets.ts";
 import { fixedReadsOfSweep, fixedReadsUsed, heldBackSearches, heldBackSearchNl, readsAllowedNl, refusedCoveredReads } from "../lib/reads.ts";
-import { WRITES_BLOCKED_NL, writesAllowedNl } from "../lib/writes.ts";
+import { LOCAL_TEST_ENVIRONMENT_NL, WRITES_BLOCKED_NL, writesAllowedNl } from "../lib/writes.ts";
 import { blockadesNl } from "../session/blockade.ts";
 import { METHODS } from "../instruments/methods/registry.ts";
 import type { Gate } from "./gate.ts";
@@ -392,7 +392,7 @@ export async function evaluate(options: EvaluateOptions): Promise<Evaluation> {
   const notSent = open.owner.filter((id) => waitsOnlyOnSending(criteria.find((criterion) => criterion.id === id)!.missingNl));
   const person = open.owner.filter((id) => !notSent.includes(id));
   if (person.length > 0) process.stderr.write(`open, vraagt een mens of een keuze: ${idsAcrossVersionsNl(person, criteria)}. Een persoon legt het antwoord vast met answer; daarna opnieuw evaluate.\n`);
-  if (notSent.length > 0) process.stderr.write(`open, alleen omdat het onderzoek niet mocht versturen: ${idsAcrossVersionsNl(notSent, criteria)}. Geen persoon nodig: een nieuw onderzoek met een testomgeving, verklaard bij inventory (--test-environment <origin> --declared-by "<naam>, <functie>"), meet het met een instrument. Die origin mag die van alleen het ingesloten venster zijn.\n`);
+  if (notSent.length > 0) process.stderr.write(`open, alleen omdat het onderzoek niet mocht versturen: ${idsAcrossVersionsNl(notSent, criteria)}. Geen persoon nodig: een nieuw onderzoek met een testomgeving, verklaard bij inventory (--test-environment <origin> --declared-by "<naam>, <functie>"), meet het met een instrument. Die origin mag die van alleen het ingesloten venster zijn. ${LOCAL_TEST_ENVIRONMENT_NL}\n`);
   if (open.evaluation.length > 0) process.stderr.write(`LET OP: het onderzoek is niet af. Door dit onderzoek niet vastgesteld: ${idsAcrossVersionsNl(open.evaluation, criteria)}. Draai tasks en pending: de afmaakronde meet wat ontbrak. Is die al geweest, dan kan alleen een persoon het punt nog sluiten, met answer, behalve een punt "${UNREACHABLE}" of "proef werkte niet", of iets wat een andere afmaakronde doorgaf en nog niemand beoordeelde: dat doet een nieuwe afmaakronde met tasks --again <criteria>.\n`);
   // A part of the site that did not load is no fault of loep and no work for the owner: said apart, with the way to measure it once it loads.
   const unreachable = open.evaluation.filter((id) => criteria.find((criterion) => criterion.id === id)!.missingNl.some((point) => openPoint(point).kind?.prefix === UNREACHABLE));

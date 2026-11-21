@@ -219,11 +219,13 @@ Options:
                     The name is kept in the manifest of the run; the report shows only the role. The declaration
                     is confirmed at an interactive terminal by typing the origin; an agent never records it.
                     On a site on this machine both may go together, for a chat on an address that is not local:
-                    each keeps its own rules and its own budget. A local address is never declared
+                    each keeps its own rules and its own budget. A local address is never declared. A window on
+                    another address on this machine takes --allow-writes --test-environment <origin>, without
+                    --declared-by: it gets local rules and a budget of its own
   --max-writes <n>  With --allow-writes or --test-environment: the most requests that change something the whole run
                     may send to that origin, over every session and the sweep together: default 5, at least 120 s
                     apart; on a local address default 50, without a pause. With both flags it is the budget of the
-                    declared origins; the local one keeps 50. Past it every write is held back as in a run without
+                    declared origins; the local one keeps 50. With a local --test-environment it is the budget of each of the two. Past it every write is held back as in a run without
                     permission. Kept in the manifest
   --mailbox <m>     With inventory, for a run that may send: imap://<host>:993 (any real mailbox) or mailpit://localhost:8025 (a site
                     on this machine). The user name and password never go here: they come from the environment
@@ -392,7 +394,7 @@ async function main(): Promise<void> {
     return;
   }
   // A run that was given a test environment at inventory may write there; every other run holds all writes back.
-  const { confirmDeclaration, decideWrites, DEFAULT_WRITE_SPACING_SECONDS, grantOriginsOf, grantsOf, recordWrites, setRunWrites, raiseWrites, spacingNl, writeAccess, writesForRun } = await import("./lib/writes.ts");
+  const { confirmDeclaration, decideWrites, DEFAULT_WRITE_SPACING_SECONDS, grantOriginsOf, grantsOf, LOCAL_TEST_ENVIRONMENT_NL, recordWrites, setRunWrites, raiseWrites, spacingNl, writeAccess, writesForRun } = await import("./lib/writes.ts");
   if (command !== "inventory" && (values["allow-writes"] || values["test-environment"] !== undefined || values["declared-by"] !== undefined || (values["max-writes"] !== undefined && command !== "writes"))) {
     throw new Error("--allow-writes, --test-environment, --declared-by en --max-writes horen bij inventory: daar wordt voor de hele run vastgelegd of er verstuurd mag worden, en hoe vaak");
   }
@@ -783,7 +785,7 @@ async function main(): Promise<void> {
       const result = await answer({ run: values.run, criterion: values.criterion, point: values.point === undefined ? undefined : Number(values.point), did: values.did, outcome: values.outcome, name: values.name, role: values.role, ...recording });
       for (const point of result.points) process.stdout.write(`${point.number}. [${point.kindNl}] ${point.textNl}${point.answered ? ` (beantwoord: ${point.answered})` : ""}\n`);
       const { NOT_SENT } = await import("./lib/verdict.ts");
-      if (result.written === null && result.points.some((point) => point.kindNl === NOT_SENT && point.answered === null)) process.stdout.write(`Een punt [${NOT_SENT}] heeft geen persoon nodig: een nieuw onderzoek met een testomgeving, verklaard bij inventory (--test-environment <origin> --declared-by "<naam>, <functie>"), meet het met een instrument. Die origin mag die van alleen het ingesloten venster zijn. Legt een persoon het toch vast, dan zegt --did wat er is verstuurd en waar.\n`);
+      if (result.written === null && result.points.some((point) => point.kindNl === NOT_SENT && point.answered === null)) process.stdout.write(`Een punt [${NOT_SENT}] heeft geen persoon nodig: een nieuw onderzoek met een testomgeving, verklaard bij inventory (--test-environment <origin> --declared-by "<naam>, <functie>"), meet het met een instrument. Die origin mag die van alleen het ingesloten venster zijn. ${LOCAL_TEST_ENVIRONMENT_NL} Legt een persoon het toch vast, dan zegt --did wat er is verstuurd en waar.\n`);
       if (result.written === null) process.stdout.write(`${result.left} van de ${result.points.length} open punten zonder antwoord. Een antwoord vastleggen: --point <nummer> --did "<wat is gedaan of besloten>" --outcome passed|failed|inapplicable --name "<naam>" --role "<functie>". Let op: ${ANSWER_PRIVACY_NL}.\n`);
       else process.stdout.write(`antwoord vastgelegd in ${result.written}; nog ${result.left} open ${result.left === 1 ? "punt" : "punten"} bij dit criterium. Draai evaluate, render en seal opnieuw: dan telt het antwoord mee. Let op: ${ANSWER_PRIVACY_NL}.\n`);
       return;

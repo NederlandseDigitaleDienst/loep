@@ -61,10 +61,32 @@ test("a site on this machine and a declared chat go in one run, each with the ru
   await assert.rejects(confirmDeclaration(permission, { interactive: false, ask: async () => CHAT }), /interactieve terminal/);
 });
 
-test("a local address is never declared next to the local site or next to anything else", () => {
-  assert.throws(() => decideWrites(`${SITE}/`, { allowWrites: true, testEnvironment: "http://127.0.0.1:4711", declaredBy: "Een Beheerder, beheer" }), /lokaal adres verklaar je niet naast een ander adres/);
-  assert.throws(() => decideWrites(`${SITE}/`, { allowWrites: true, testEnvironment: [SITE, CHAT], declaredBy: "Een Beheerder, beheer" }), /lokaal adres verklaar je niet naast een ander adres/);
-  assert.throws(() => decideWrites(`${SITE}/`, { allowWrites: true, testEnvironment: [CHAT, "http://chat.localhost"], declaredBy: "Een Beheerder, beheer" }), /lokaal adres verklaar je niet naast een ander adres/);
+test("a window on another address on this machine is a second local grant next to the local site, with a budget of its own", () => {
+  const WINDOW = "http://localhost:4712";
+  const permission = decideWrites(`${SITE}/`, { allowWrites: true, testEnvironment: `${WINDOW}/venster` }, now)!;
+  assert.deepEqual(permission, {
+    origin: SITE,
+    local: true,
+    declaredBy: null,
+    declaredAt: "2026-01-02T03:04:05.000Z",
+    maxWrites: 50,
+    spacingSeconds: 0,
+    alsoGrants: [{ origin: WINDOW, local: true, declaredBy: null, declaredAt: "2026-01-02T03:04:05.000Z", maxWrites: 50, spacingSeconds: 0 }],
+  });
+  assert.equal(writesAllowedNl(permission), `onderzocht op een testomgeving waar versturen is toegestaan: ${SITE} (lokaal adres); ${WINDOW} (lokaal adres)`);
+  // --max-writes is the budget of each of the two; the site itself next to the window changes nothing; a declaration is not asked for.
+  const raised = decideWrites(`${SITE}/`, { allowWrites: true, testEnvironment: [SITE, WINDOW], declaredBy: "Een Beheerder, beheer", maxWrites: "80" }, now)!;
+  assert.deepEqual(grantsOf(raised).map((grant) => [grant.origin, grant.maxWrites, grant.declaredBy]), [[SITE, 80, null], [WINDOW, 80, null]]);
+  // Without --allow-writes nothing local is sent to.
+  assert.throws(() => decideWrites(`${SITE}/`, { testEnvironment: WINDOW }), /alleen toegestaan met --allow-writes/);
+});
+
+test("a local address is never declared next to an address that is not local, and next to a site elsewhere it stays refused", () => {
+  assert.throws(() => decideWrites(`${SITE}/`, { allowWrites: true, testEnvironment: [SITE, CHAT], declaredBy: "Een Beheerder, beheer" }), /lokaal adres verklaar je niet naast een adres dat niet lokaal is/);
+  assert.throws(() => decideWrites(`${SITE}/`, { allowWrites: true, testEnvironment: [CHAT, "http://chat.localhost"], declaredBy: "Een Beheerder, beheer" }), /lokaal adres verklaar je niet naast/);
+  // A site on the internet with a local test environment next to it: refused, with and without --allow-writes.
+  assert.throws(() => decideWrites("https://www.example.nl/", { allowWrites: true, testEnvironment: ["https://www.example.nl", "http://localhost:4712"], declaredBy: "Een Beheerder, beheer" }), /lokaal adres verklaar je niet naast/);
+  assert.throws(() => decideWrites("https://www.example.nl/", { allowWrites: true, testEnvironment: ["http://localhost:4712", "http://127.0.0.1:4711"] }), /lokaal adres verklaar je niet naast/);
   // The local site itself as test environment stays what it was: one local grant.
   assert.equal(decideWrites(`${SITE}/`, { allowWrites: true, testEnvironment: SITE })?.alsoGrants, undefined);
 });

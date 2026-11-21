@@ -89,6 +89,12 @@ test("inventory says when pages have a form or a frame on another origin has one
   // A frame on the site's own origin is a page like any other.
   assert.equal(formPagesNl([search(1), { ...chat, url: "https://a.nl/chat" }], "https://a.nl", false), null);
   assert.match(formPagesNl([page(1), contact, { ...page(5), counts: { forms: 3 } }], "https://a.nl", false)!, /2 pagina's hebben een formulier dat niet op elke pagina staat \(https:\/\/a\.nl\/p003 en 1 meer\)/);
+  // A site on this machine needs no declaration: --allow-writes, and a window on this machine with --test-environment next to it.
+  const local = (entry: InventoryPage): InventoryPage => ({ ...entry, url: entry.url.replace("https://a.nl", "http://127.0.0.1:4710"), foundVia: entry.foundVia.map((via) => via.replace("https://a.nl", "http://127.0.0.1:4710")) });
+  const window: InventoryPage = { ...chat, url: "http://localhost:4712/venster", foundVia: ["iframe:http://127.0.0.1:4710/p003"] };
+  assert.match(formPagesNl([local(search(1)), local(search(2)), local(contact), window], "http://127.0.0.1:4710", false)!, /met --allow-writes --test-environment http:\/\/localhost:4712$/);
+  assert.match(formPagesNl([local(search(1)), local(search(2)), local(contact)], "http://127.0.0.1:4710", false)!, /met --allow-writes$/);
+  assert.match(formPagesNl([local(search(1)), local(search(2)), local(chat)], "http://127.0.0.1:4710", false)!, /met --allow-writes --test-environment https:\/\/chat\.b\.nl --declared-by "<naam>, <functie>"$/);
 });
 
 test("inventory says which origins outside the run pages read content from, and how to take them in", () => {
