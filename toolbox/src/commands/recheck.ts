@@ -5,7 +5,7 @@ import type { Evaluation, ReportFinding } from "../lib/evaluation.ts";
 import { agentLoginNl, LOGIN_SESSION_FILE, loginForRun, RUN_SECRETS_FILE } from "../lib/login.ts";
 import { stepStart, toolboxVersion, writeManifest } from "../lib/manifest.ts";
 import { loadAllProcedures } from "../lib/procedures.ts";
-import { readsForRun } from "../lib/reads.ts";
+import { EXTRA_FIXED_READS_FILE, readsForRun } from "../lib/reads.ts";
 import { dateNl, deriveRechecks, rechecksMarkdownLines, REPORT_TEXT } from "../lib/report-markdown.ts";
 import { SITE_CHECK_FILE, SITE_MODEL_FILE } from "../lib/sitemodel.ts";
 import { readTemplate } from "../lib/templates.ts";
@@ -35,8 +35,8 @@ const ORDER = "opdracht.json";
 const TASK = "opdracht.md";
 const OUTPUT = "uitkomst.json";
 const STAMP = "uitkomst.stamp.json";
-/** What a session needs of the run to find the site, its pages by label and its saved states. */
-const COPIED_FILES = ["inventory.json", "sample.json", SITE_MODEL_FILE, SITE_CHECK_FILE];
+/** What a session needs of the run to find the site, its pages by label and its saved states, and the extra fixed read rules of a test server on this machine. */
+const COPIED_FILES = ["inventory.json", "sample.json", SITE_MODEL_FILE, SITE_CHECK_FILE, EXTRA_FIXED_READS_FILE];
 const SHOWING = new Set<string>([...LOOK_COMMANDS, ...MEASURE_COMMANDS]);
 
 /** Where the defect was seen during the evaluation: the page, the window and whether a state had to be made first. */

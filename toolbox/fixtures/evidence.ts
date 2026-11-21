@@ -105,9 +105,11 @@ export const EVIDENCE: Evidence[] = [
   { defect: "1.3.3-ronde-knop", agentNl: "Of een instructie alleen op vorm en plek steunt, is een oordeel over de tekst." },
   { defect: "1.3.4-draai", whereNl: "probes/portrait.json: een regel op de stand van het scherm verbergt inhoud", found: (look) => (look.page("probes/portrait.json")?.content?.orientationRules ?? 0) > 0 },
   { defect: "1.3.5-autocomplete", whereNl: "facts.json, controls: het veld voor de naam heeft geen autocomplete", found: (look) => control(look).some((entry) => !entry.autocomplete) },
+  { defect: "1.3.5-factuuradres", whereNl: "facts.json, controls: het veld voor de postcode van het factuuradres heeft geen autocomplete", found: (look) => control(look).some((entry) => !entry.autocomplete) },
   // 1.4.x
   { defect: "1.4.1-tekstlink", whereNl: ENGINES_NL, found: engines(["1.4.1"]) },
   { defect: "1.4.1-verplicht", agentNl: "Dat alleen de kleur zegt welke velden verplicht zijn, vraagt kijken naar het formulier." },
+  { defect: "1.4.1-afvalbak-kleur", agentNl: "De bakken staan alleen in de resultaten van een zoekvraag, en die POST gaat pas door met een leesverzoek dat de verkenner in een sessie vastlegt. Dat de kleur het enige teken is, vraagt daarna nog kijken naar de pictogrammen." },
   { defect: "1.4.2-melodie", whereNl: "facts.json, media: geluid met autoplay en loop dat niet te pauzeren is", found: (look) => list(look.page("facts.json")?.media?.elements).some((element) => look.at(element.path) && element.attributes?.autoplay === true && element.canBePausedOrMuted === false) },
   { defect: "1.4.3-datum", whereNl: ENGINES_NL, found: engines(["1.4.3"]) },
   { defect: "1.4.3-tekst-op-foto", whereNl: "contrast.json, measurements: de tekst over de foto haalt de drempel niet", found: (look) => contrastOf(look).some((page) => list(page.measurements).some((text) => look.at(text.where) && text.outcome === "failed")) },

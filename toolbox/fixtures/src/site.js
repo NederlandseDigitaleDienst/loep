@@ -276,11 +276,16 @@
       guideCount.textContent = result.found > 0 ? result.found + (result.found === 1 ? ' afvalsoort gevonden' : ' afvalsoorten gevonden') : 'Niets gevonden voor ' + term + '. Dit wordt vaak gezocht:';
       result.hits.forEach(function (hit) {
         var item = doc.createElement('li');
-        item.innerHTML = '<span class="afval-naam"></span> <img class="afval-bak" width="32" height="32">';
+        item.innerHTML = '<span class="afval-naam"></span> <img class="afval-bak" width="32" height="32">'/*@bad 1.4.1-afvalbak-kleur*//*@good*/ + ' <span class="afval-waar"></span>'/*@end*/;
         one('.afval-naam', item).textContent = hit.document.naam;
         one('.afval-bak', item).src = '/beeld/bak-' + hit.document.bak + '.svg';
+        /*@bad 1.4.1-afvalbak-kleur*//*@good*/
+        // The name of the bin stands in text next to the icon, so the colour is not the only sign
+        one('.afval-waar', item).textContent = hit.document.waar;
+        /*@end*/
         /*@bad 1.1.1-afvalwijzer*//*@good*/
-        one('.afval-bak', item).alt = hit.document.waar;
+        // The text next to it already says where it goes: the icon is decorative
+        one('.afval-bak', item).alt = '';
         /*@end*/
         guideList.appendChild(item);
       });

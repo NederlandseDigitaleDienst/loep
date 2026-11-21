@@ -279,7 +279,7 @@ export const EXTRA_FIXED_READS_FILE = "fixed-reads-extra.json";
 let fixedRules: FixedRead[] | null = null;
 let runExtraPath: string | undefined;
 
-/** Read the extra fixed rules of this run (EXTRA_FIXED_READS_FILE) from here on, when it has them. Set by the command line for every command with --run. */
+/** Read the extra fixed rules of this run (EXTRA_FIXED_READS_FILE) from here on, when it has them. Set by the command line for every command with --run, and by the process of a session in `serve`. */
 export function useRunFixedReads(runDir: string): void {
   const path = join(runDir, EXTRA_FIXED_READS_FILE);
   runExtraPath = existsSync(path) ? path : undefined;

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -7,7 +7,7 @@ import { DEFECTS } from "../fixtures/defects.ts";
 import { EVIDENCE, isAgentOnly } from "../fixtures/evidence.ts";
 import { DISRUPTED_PAGES, DISRUPTIONS, GATE_CHECKS } from "../fixtures/disruptions.ts";
 import { DEFAULT_PORTS } from "../fixtures/serve.ts";
-import { baselineOf, compareWithBaseline, evaluate, fixturePorts, installModel, KEY_PAGES_WITH_DISRUPTIONS, mergeRows, placeOf, reportMarkdown, summaryLine, SWEEP_PAGES, sweepPlan, type Report, type Row } from "../scripts/sweep-check.ts";
+import { baselineOf, compareWithBaseline, evaluate, fixturePorts, installModel, sweepWrites, writesOutsidePermission, KEY_PAGES_WITH_DISRUPTIONS, mergeRows, placeOf, reportMarkdown, summaryLine, SWEEP_PAGES, sweepPlan, type Report, type Row } from "../scripts/sweep-check.ts";
 
 const row = (defect: string, found: boolean | null, twin: boolean | null): Row => ({ defect, criterion: defect.split("-")[0]!, kind: found === null ? "agent" : "script", whereNl: "probes/x.json", found, missingOn: found === false ? ["/"] : [], twin, twinOn: twin ? ["/"] : [] });
 
@@ -134,3 +134,37 @@ test("--only-disruptions measures the pages of every case and of the questionnai
   assert.match(summaryLine(report), new RegExp(`elk van de ${DISRUPTIONS.length} gevallen.*Lindewaard: 1 van de 1 gebreken die een script kan zien op die pagina's staan in het dossier; 1 kan alleen een agent zien`));
 });
 
+
+test("what the fixture received counts against what the permission of each run let through, and without permission everything counts", () => {
+  const dir = mkdtempSync(join(tmpdir(), "loep-sweep-check-"));
+  try {
+    const origins = { defect: "http://127.0.0.1:1", clean: "http://127.0.0.1:2", thirdParty: "http://localhost:3" };
+    const received = [
+      { time: "", site: "defect" as const, kind: "request" as const, method: "POST", path: "/contact.html" },
+      { time: "", site: "thirdParty" as const, kind: "ws-message" as const, path: "/ws/chat/abc" },
+      { time: "", site: "clean" as const, kind: "request" as const, method: "POST", path: "/contact.html" },
+    ];
+    const run = join(dir, "defect");
+    mkdirSync(run, { recursive: true });
+    // Without permission every write is a failure, as in the CI.
+    assert.equal(writesOutsidePermission(received, origins, [run]).length, 3);
+    assert.match(writesOutsidePermission(received, origins, [run])[0]!, /^Lindewaard: de veegronde verstuurde iets naar de testsite \(request POST \/contact\.html\)$/);
+    // With permission for Lindewaard and Kijkpunt, what its log holds is accounted for; Berkenveen is outside it.
+    writeFileSync(join(run, "manifest.json"), JSON.stringify({ writes: sweepWrites({ site: origins.defect, thirdParty: origins.thirdParty }) }));
+    const lines = [
+      { at: "", source: "states", method: "POST", path: "/contact.html", origin: origins.defect },
+      { at: "", source: "states", method: "SEND", path: "/ws/chat/abc", origin: "ws://localhost:3", message: true },
+    ];
+    writeFileSync(join(run, "writes.jsonl"), lines.map((line) => JSON.stringify(line)).join("\n") + "\n");
+    assert.deepEqual(writesOutsidePermission(received, origins, [run]), ["Berkenveen: de veegronde verstuurde iets naar de testsite buiten de toestemming van de run (request POST /contact.html)"]);
+    // One more than the log holds is outside the permission too.
+    assert.equal(writesOutsidePermission([...received, received[0]!], origins, [run]).length, 2);
+    // A logged write that did not arrive does not account for one on another path, or with another method.
+    assert.deepEqual(writesOutsidePermission([{ ...received[0]!, path: "/ergens.html?x=1" }, received[1]!], origins, [run]), ["Lindewaard: de veegronde verstuurde iets naar de testsite buiten de toestemming van de run (request POST /ergens.html?x=1)"]);
+    assert.equal(writesOutsidePermission([{ ...received[0]!, method: "PUT" }, received[1]!], origins, [run]).length, 1);
+    // The fixture logs the query, the boundary does not.
+    assert.equal(writesOutsidePermission([{ ...received[0]!, path: "/contact.html?stap=2" }, received[1]!], origins, [run]).length, 0);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

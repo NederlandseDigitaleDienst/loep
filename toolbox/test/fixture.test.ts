@@ -243,6 +243,24 @@ describe("fixture server", () => {
     assert.deepEqual(fixture.writes(), [], "loading pages must not send anything");
   });
 
+  test("the waste guide names the bin in text on the twin, and on the defect variant only by the colour of the icon", async (context) => {
+    if (!browser) return context.skip("no browser available");
+    const shown: Record<string, { text: string; alt: string | null }> = {};
+    for (const key of ["defect", "clean"] as const) {
+      const page = await browser.newPage();
+      await page.route("**/vragenlijst/bezoek", (route) => route.abort());
+      await page.goto(`${fixture.origins[key]}/afval.html`, { waitUntil: "load" });
+      await page.getByRole("button", { name: "Weigeren" }).click();
+      await page.locator("#afvalzoeker").fill("glazen");
+      const item = page.locator(".afvalwijzer-resultaten li").first();
+      await item.waitFor();
+      shown[key] = { text: (await item.innerText()).replace(/\s+/g, " ").trim(), alt: await item.locator("img.afval-bak").getAttribute("alt") };
+      await page.close();
+    }
+    assert.deepEqual(shown.clean, { text: "Glazen potten Glasbak", alt: "" });
+    assert.deepEqual(shown.defect, { text: "Glazen potten", alt: null });
+  });
+
   test("the part behind the login is there only with a session, which a link ends and time ends", async () => {
     const own = await startFixture({ ports: { defect: 0, clean: 0, thirdParty: 0 }, logFile: join(mkdtempSync(join(tmpdir(), "fixture-")), "server.log"), sessionSeconds: 1 });
     try {

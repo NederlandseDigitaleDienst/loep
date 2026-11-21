@@ -5,7 +5,7 @@ import type { SettleNote } from "../browser/settle.ts";
 import { sha256, slugForUrl, writeFileAtomic, writeJson } from "../lib/canonical.ts";
 import { countByKind, documentKind, isImageFile, kindOfContentType, REDIRECTS_ELSEWHERE_NL, startedDownload, type DocumentKind, type DocumentTotals, type InventoryDocument } from "../lib/documents.ts";
 import type { Vendor } from "../lib/evaluation.ts";
-import { trialFetch } from "../lib/writes.ts";
+import { isLocalHost, trialFetch } from "../lib/writes.ts";
 import { ignoreSecrets, isLogout, loginCookieHeader, LoginExpired, noteLogoutUrl, runLoginMark } from "../lib/login.ts";
 import { stepStart, writeManifest } from "../lib/manifest.ts";
 import { isInScope, isOwnAddress, notFoundProbes, originsOfRun, privateFromPublicSite, scopePrefix, siteOrigins } from "../lib/origins.ts";
@@ -187,11 +187,16 @@ export function formPagesNl(pages: Pick<InventoryPage, "url" | "counts" | "found
     frames.length > 0 ? `${frames.length === 1 ? "één ingesloten venster op een ander adres heeft" : `${frames.length} ingesloten vensters op een ander adres hebben`} een formulier (${named(frames)})` : null,
   ].filter(Boolean);
   const frameOrigins = [...new Set(frames.map((url) => new URL(url).origin))];
+  const lead = `let op: dit onderzoek mag niet versturen, en ${parts.join(", en ")}. Wat pas na versturen verschijnt (een melding van de server, een bevestiging, het antwoord van een chat), blijft open als "versturen niet toegestaan". `;
+  // A site on this machine is no declaration: it gets --allow-writes, and a window on this machine gets a grant of its own next to it.
+  if (ownOrigins.length > 0 && isLocalHost(new URL(ownOrigins[0]!).hostname)) {
+    const localFrames = frameOrigins.filter((origin) => isLocalHost(new URL(origin).hostname));
+    const remoteFrames = frameOrigins.filter((origin) => !localFrames.includes(origin));
+    const windows = localFrames.length > 0 ? localFrames.map((origin) => ` --test-environment ${origin}`).join("") : remoteFrames.length > 0 ? ` --test-environment ${remoteFrames.length === 1 ? remoteFrames[0] : "<origin>"} --declared-by "<naam>, <functie>"` : "";
+    return `${lead}Begin dan opnieuw met inventory, in een nieuwe map, met --allow-writes${windows}`;
+  }
   const declare = `--test-environment ${withForm.length === 0 && frameOrigins.length === 1 ? frameOrigins[0] : "<origin>"} --declared-by "<naam>, <functie>"`;
-  return (
-    `let op: dit onderzoek mag niet versturen, en ${parts.join(", en ")}. Wat pas na versturen verschijnt (een melding van de server, een bevestiging, het antwoord van een chat), blijft open als "versturen niet toegestaan". ` +
-    `Is er een testomgeving, begin dan opnieuw met inventory, in een nieuwe map, met ${declare}${frames.length > 0 ? "; voor een venster op een ander adres kan dat de origin van alleen dat venster zijn, en moeten er meer adressen bij, herhaal dan --test-environment" : ""}`
-  );
+  return `${lead}Is er een testomgeving, begin dan opnieuw met inventory, in een nieuwe map, met ${declare}${frames.length > 0 ? "; voor een venster op een ander adres kan dat de origin van alleen dat venster zijn, en moeten er meer adressen bij, herhaal dan --test-environment" : ""}`;
 }
 
 /**

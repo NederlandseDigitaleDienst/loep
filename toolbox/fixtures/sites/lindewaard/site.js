@@ -241,6 +241,7 @@
         one('.afval-naam', item).textContent = hit.document.naam;
         one('.afval-bak', item).src = '/beeld/bak-' + hit.document.bak + '.svg';
         
+        
         guideList.appendChild(item);
       });
     };

@@ -127,5 +127,5 @@ test("gaps counts what stayed open only because the run may not send apart, betw
   ]);
   const text = gapsTextNl(result);
   assert.match(text, /^versturen niet toegestaan +3 +3 +3 +3$/m);
-  assert.match(text, /^## versturen niet toegestaan: pas te meten als het onderzoek mag versturen \(3 punten, 3 verschillend, 3 criteria\)\nElk punt is iets wat pas na versturen te zien is, in een run die niet mocht versturen\. Geen persoon nodig: .*--test-environment.*ingesloten venster zijn\.$/m);
+  assert.match(text, /^## versturen niet toegestaan: pas te meten als het onderzoek mag versturen \(3 punten, 3 verschillend, 3 criteria\)\nElk punt is iets wat pas na versturen te zien is, in een run die niet mocht versturen\. Geen persoon nodig: .*--test-environment.*ingesloten venster zijn\. Draait de site op deze machine, geef dan --allow-writes, en voor een venster op deze machine --test-environment <origin> zonder --declared-by\.$/m);
 });

@@ -1,6 +1,8 @@
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import { createServer, type IncomingHttpHeaders, type Server } from "node:http";
+import { createRequire } from "node:module";
 import { connect, createServer as createTcpServer, Server as NetServer, type AddressInfo, type Socket } from "node:net";
+import { dirname, join } from "node:path";
 import { format } from "node:util";
 import type { CompletedRequest, Mockttp } from "mockttp";
 import type { Browser, BrowserContext, BrowserContextOptions } from "playwright";
@@ -132,6 +134,62 @@ function onLoopback(start: () => Promise<void>): Promise<void> {
   return turn;
 }
 
+// ---- When mockttp takes a connection for a loop --------------------------------------------------------------------------
+
+/** The two ends of a connection, as a socket of Node has them. */
+export interface SocketEnds {
+  localAddress?: string;
+  localPort?: number;
+  remoteAddress?: string;
+  remotePort?: number;
+}
+
+const plainIp = (address: string | undefined): string | undefined => address?.replace(/^::ffff:/i, "");
+
+/**
+ * Whether a connection that comes in is the other end of one that mockttp opened: a request it passes on that comes back to
+ * itself. mockttp 4.6.5 only compares the port it sent from with the port the request came from. Linux gives connections to
+ * different addresses the same port, so the connection of the gate to mockttp and one from mockttp to a site on this machine
+ * can share a port, the more often the more connections are open at once. mockttp then answers 500 in place of the page, a
+ * stylesheet or a script, and what is measured is not the page. Both ends together tell a real loop apart.
+ */
+export function isSocketLoop(outgoing: Iterable<SocketEnds>, incoming: SocketEnds): boolean {
+  for (const socket of outgoing) {
+    if (!socket.localAddress || !socket.localPort || !socket.remoteAddress || !socket.remotePort) continue;
+    if (plainIp(socket.localAddress) === plainIp(incoming.remoteAddress) && socket.localPort === incoming.remotePort && plainIp(socket.remoteAddress) === plainIp(incoming.localAddress) && socket.remotePort === incoming.localPort) return true;
+  }
+  return false;
+}
+
+/** The status mockttp answers with when it fails itself: a proxy that did not get the answer, which the watch of `session/safety.ts` notes as not loaded. */
+export const PROXY_FAILED_STATUS = 502;
+
+let mockttpFixed = false;
+
+/**
+ * Put `isSocketLoop` in the place of the one of mockttp, and let a failure of mockttp itself answer `PROXY_FAILED_STATUS` instead
+ * of 500, which a site can answer as well. Leans on the inside of the version pinned in package.json: `test/boundary-loop.test.ts` holds it.
+ */
+function fixMockttp(): void {
+  if (mockttpFixed) return;
+  const require = createRequire(import.meta.url);
+  const dist = dirname(require.resolve("mockttp"));
+  const sockets = require(join(dist, "util", "socket-util.js")) as { isSocketLoop?: unknown };
+  const steps = require(join(dist, "rules", "requests", "request-step-impls.js")) as { PassThroughStepImpl?: { prototype: { handle?: (...args: unknown[]) => Promise<unknown> } } };
+  const handle = steps.PassThroughStepImpl?.prototype.handle;
+  if (typeof sockets.isSocketLoop !== "function" || typeof handle !== "function") throw new Error("mockttp heeft een andere opbouw dan de vastgezette versie: de grens kan niet worden opgezet");
+  sockets.isSocketLoop = isSocketLoop;
+  steps.PassThroughStepImpl!.prototype.handle = async function (this: unknown, ...args: unknown[]): Promise<unknown> {
+    try {
+      return await handle.apply(this, args);
+    } catch (error) {
+      if (error instanceof Error && (error as { statusCode?: number }).statusCode === undefined) Object.assign(error, { statusCode: PROXY_FAILED_STATUS });
+      throw error;
+    }
+  };
+  mockttpFixed = true;
+}
+
 // ---- What mockttp says on the console -----------------------------------------------------------------------------------
 
 let consoleMasked = false;
@@ -213,6 +271,7 @@ class Boundary {
   async start(): Promise<void> {
     // Loaded here: a run without secrets does not load a line of it.
     const { generateCACertificate, getLocal, webSocketSteps, matchers } = await import("mockttp");
+    fixMockttp();
     const ca = await generateCACertificate({ subject: { commonName: "loep", organizationName: "loep, alleen voor deze run" } });
     this.mock = getLocal({ https: { ...ca, tlsServerOptions: { minVersion: "TLSv1.2" } }, http2: false, recordTraffic: false, suggestChanges: false, cors: false });
     await onLoopback(() => this.mock.start());

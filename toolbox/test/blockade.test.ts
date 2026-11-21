@@ -6,6 +6,7 @@ import { after, before, test } from "node:test";
 import { launchBrowser, loadPage, newContext } from "../src/browser/session.ts";
 import { Blockade, BLOCKADES_FILE, blockadesNl, endOf, FAILURE_PAUSE_SECONDS, isLasting, LONGEST_FAILURE_PAUSE_SECONDS, MAX_FAILED_NAVIGATIONS, OriginBlocked, readBlockades, retryAfterSeconds, setRunBlockade, type BlockadeEntry } from "../src/session/blockade.ts";
 import { Daemon } from "../src/session/daemon.ts";
+import { watchNotLoaded, type NotLoaded } from "../src/session/safety.ts";
 import type { Observation } from "../src/session/observations.ts";
 import { VOICEOVER_FOR_TESTS } from "../src/session/voiceover-command.ts";
 import { startServer, type FixtureServer } from "./fixtures/session-site/server.ts";
@@ -342,6 +343,54 @@ test("the sweep asks a blocked origin nothing, notes a 429 it gets itself, and s
     await assert.rejects(loadPage(page, `${site.origin}/`), OriginBlocked);
     await page.evaluate((url) => fetch(url).catch(() => null), `${site.origin}/form.html`);
     assert.equal(site.requests.length, count, "nothing more reached the site");
+  } finally {
+    setRunBlockade(null);
+    await browser.close();
+  }
+});
+
+test("the sweep waits out a short pause for what a page that is already open asks: a 429 of another page does not take its stylesheet or script away", async () => {
+  const run = newRun();
+  writeFileSync(join(run, "inventory.json"), JSON.stringify({ baseUrl: `${site.origin}/`, origin: site.origin, pages: [] }));
+  setRunBlockade(run);
+  const browser = await launchBrowser();
+  try {
+    const page = await (await newContext(browser, { writes: null })).newPage();
+    await loadPage(page, `${site.origin}/`);
+    // Another page of the sweep gets a 429 with Retry-After: 1 while this one is open.
+    new Blockade(run).tooMany(`${site.origin}/too-many`, "1");
+    const until = endOf(readBlockades(run)[0]!)!;
+    const count = reached("/form.html");
+    const status = await page.evaluate((url) => fetch(url).then((response) => response.status, () => null), `${site.origin}/form.html`);
+    assert.equal(status, 200, "the request arrived after the pause, not refused");
+    assert.equal(reached("/form.html"), count + 1);
+    assert.ok(Date.now() >= until, "it did not go before the pause was over");
+  } finally {
+    setRunBlockade(null);
+    await browser.close();
+  }
+});
+
+test("a script that a longer pause still refuses is noted as not arrived, not dropped without a word", async () => {
+  const run = newRun();
+  writeFileSync(join(run, "inventory.json"), JSON.stringify({ baseUrl: `${site.origin}/`, origin: site.origin, pages: [] }));
+  setRunBlockade(run);
+  const browser = await launchBrowser();
+  try {
+    const context = await newContext(browser, { writes: null });
+    const missed: NotLoaded[] = [];
+    watchNotLoaded(context, { hosts: [new URL(site.origin).host] }, (entry) => missed.push(entry));
+    const page = await context.newPage();
+    await loadPage(page, `${site.origin}/`);
+    // Short enough to wait out before a navigation, too long for a page that is loading.
+    new Blockade(run).tooMany(`${site.origin}/too-many`, "50");
+    const started = Date.now();
+    const loaded = await page.evaluate((src) => new Promise<boolean>((resolve) => document.head.append(Object.assign(document.createElement("script"), { src, onload: () => resolve(true), onerror: () => resolve(false) }))), `${site.origin}/voiceover.js`);
+    assert.equal(loaded, false);
+    assert.ok(Date.now() - started < 30_000, "it did not wait the long pause out");
+    assert.equal(missed.length, 1);
+    assert.equal(missed[0]!.resourceType, "script");
+    assert.match(missed[0]!.error, /pauze na een 429/);
   } finally {
     setRunBlockade(null);
     await browser.close();

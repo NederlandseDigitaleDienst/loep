@@ -2,6 +2,7 @@ import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
 import { OPEN_POINT_KINDS, openPoint } from "../lib/verdict.ts";
 import { criterionById } from "../lib/wcag.ts";
+import { LOCAL_TEST_ENVIRONMENT_NL } from "../lib/writes.ts";
 
 /*
  * Every open point of one or more runs, per kind and per criterion: the work list of whoever
@@ -27,7 +28,7 @@ const WHAT_NL: Record<string, string> = {
   "geen geldig resultaat": "Elk punt is een agent die na twee pogingen geen geldig oordeel gaf, zodat de afmaakronde het criterium kreeg.",
   "proef werkte niet": "Elk punt is een instrument dat geen bruikbaar antwoord gaf, of een onderdeel dat niet openging.",
   "niet bereikbaar": "Elk punt is een deel van de site, een pagina of een ingesloten venster, dat bij herhaalde pogingen niet laadde terwijl de rest wel laadde. Geen fout in loep: laadt het weer, dan meet een nieuwe afmaakronde het (tasks --again).",
-  "versturen niet toegestaan": "Elk punt is iets wat pas na versturen te zien is, in een run die niet mocht versturen. Geen persoon nodig: een testomgeving, verklaard bij inventory met --test-environment, laat een instrument het meten. Dat kan de origin van alleen het ingesloten venster zijn.",
+  "versturen niet toegestaan": `Elk punt is iets wat pas na versturen te zien is, in een run die niet mocht versturen. Geen persoon nodig: een testomgeving, verklaard bij inventory met --test-environment, laat een instrument het meten. Dat kan de origin van alleen het ingesloten venster zijn. ${LOCAL_TEST_ENVIRONMENT_NL}`,
   "buiten de afbakening": "Elk punt is inhoud die een pagina ophaalt van een adres buiten de run. Geen fout in loep: wie de afbakening koos, kan dat adres erbij nemen in een nieuwe run (inventory --also-origin).",
   "mens nodig": "Elk punt vraagt iets wat geen instrument kan vaststellen.",
   "keuze nodig": "Elk punt vraagt een besluit van de eigenaar van de site.",

@@ -164,6 +164,8 @@ export async function serve(runDir: string, options: ServeOptions): Promise<void
   }
   // A run for which a person logged in: every session starts with it, and a new login is picked up without a restart.
   setRunLogin(runDir);
+  // The extra fixed read rules the run carries for a test server on this machine: the command line loads them only after a session has returned.
+  (await import("../lib/reads.ts")).useRunFixedReads(runDir);
   const scope = await scopeForRun(runDir, options);
   const limits = Object.fromEntries(Object.entries({ maxSessions: options.maxSessions, navigationDelayMs: options.navigationDelayMs, commandTimeoutMs: options.commandTimeoutMs, idleTimeoutMs: options.idleTimeoutMs, secondBrowsers: options.secondBrowsers }).filter(([, value]) => value !== undefined));
   // Everything a session can do is loaded here, once, when the process starts.

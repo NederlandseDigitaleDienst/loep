@@ -29,9 +29,12 @@ just sweep-check                       # beide varianten, een tabel in een tijde
 just sweep-check --out pad --at-once 3 # eigen map, drie pagina's tegelijk per variant
 just sweep-check --runs pad/runs       # bestaande runs opnieuw lezen, zonder te meten
 just sweep-check --out pad --fixed-ports # op de poorten van just testsite, voor een bevroren veegronde
+just sweep-check --out pad --fixed-ports --allow-writes --max-writes 80 # bevroren veegronde voor een meting die mag versturen
 ```
 
 De runs blijven staan in `<out>/runs/defect` en `<out>/runs/clean`; een volgende keer met dezelfde `--out` maakt die map eerst leeg. Zonder `--fixed-ports` draait de testsite op willekeurige vrije poorten, zodat de toets nergens mee botst, maar zijn de adressen in de runs daarna niet meer te openen. Met `--fixed-ports` gebruikt hij 4710, 4711 en 4712, net als `just testsite`, zodat een meting de runs als bevroren veegronde kan gebruiken (zie [validatie/verbruik/README.md](../../validatie/verbruik/README.md)). Draait `just testsite` al, dan stopt de toets met die melding. De toets start de server met een sessie van zes uur, zodat de inlog ook bij één pagina tegelijk een hele variant meegaat.
+
+Mag de meting op die runs versturen, maak de bevroren veegronde dan met `just sweep-check --out pad --fixed-ports --allow-writes --max-writes 80`. Elke inventaris krijgt dan dezelfde toestemming als `inventory <site> --allow-writes --test-environment http://localhost:4712 --max-writes 80`: de site van de variant en Kijkpunt, elk met de lokale regels en een eigen budget van 80. Die staat in `manifest.json` van beide runs, en de proef met formulieren in de veegronde verstuurt echt, zoals in een meting. De toets telt dan alleen wat de server ontving en niet in `writes.jsonl` van een run staat. Zonder `--allow-writes` blijft alles zoals het was: de CI mag niet versturen en elke verzending laat de toets falen.
 
 Zonder taalmodel en zonder verkenner. De toets logt elke variant eerst in met het testaccount (zie [Het deel achter een inlog](#het-deel-achter-een-inlog)) en meet de twee daarom na elkaar. Op beide varianten draaien `inventory` (de pagina's waarop een gebrek staat, als vaste lijst), het vaste sitemodel uit `sweep/` (met `check-site`), `sample`, `collect`, `contrast`, `states` en `documents`. Daarna zoekt de toets per gebrek het bewijs op de plek in het dossier die `evidence.ts` noemt. Een gebrek dat alleen een agent kan zien (kijken, luisteren of een oordeel over tekst) staat daar met de reden en telt niet mee. Op Berkenveen draait dezelfde toets op dezelfde plek: daar hoort niets te staan.
 
@@ -55,7 +58,7 @@ Drie stukken inhoud verschijnen pas na een verzoek, elk met een sleutelgebrek op
 |---|---|---|---|
 | `/openingstijden.html` | GET van een blok bij Kijkpunt (`/blok/regio-1.html` of `-2`) | altijd, ook in de veegronde | `1.1.1-regioblok` |
 | `/veelgestelde-vragen.html` | POST naar Kijkpunt `/vragenlijst/start`, na een preflight | alleen met de vaste leesregel voor de testserver | `4.1.2-vragenlijst` |
-| `/afval.html` | POST in JSON (de vorm van Typesense) naar `/zoekdienst/multi_search` op de site | alleen met een leesverzoek in het sitemodel | `1.1.1-afvalwijzer` |
+| `/afval.html` | POST in JSON (de vorm van Typesense) naar `/zoekdienst/multi_search` op de site | alleen met een leesverzoek in het sitemodel | `1.1.1-afvalwijzer`, `1.4.1-afvalbak-kleur` |
 
 De vragenlijst meldt daarnaast elk bezoek met een POST naar Kijkpunt `/vragenlijst/bezoek`. Dat verzoek legt iets vast en moet tegengehouden blijven: de server logt het als `request`, dus een run die het doorlaat, faalt op de telling hierboven. Een browser zonder loep verstuurt het wel; de test van de selectors houdt het daarom zelf tegen.
 
