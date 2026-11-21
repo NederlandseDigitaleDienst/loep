@@ -886,6 +886,12 @@ async function listenersOnEmptyPage(context: BrowserContext): Promise<Record<str
   }
 }
 
+/**
+ * What makes a form the same form on another page: the names of its fields. A field without a name
+ * counts by its type and place, so that two forms whose fields have no name are not taken for one.
+ */
+export const formKey = (form: Pick<FormErrorState, "fields">): string => form.fields.map((field, index) => field.name ?? `${index}:${field.type ?? field.role ?? "?"}`).join("|");
+
 interface StatesStamp {
   /** Hash over every page of the sample as `collect` measured it: the probe goes over all pages and keeps what it saw first, so one changed page makes the whole of it stale. */
   pages: string | null;
@@ -999,7 +1005,7 @@ export async function states(runDir: string, options: { fresh?: boolean; atOnce?
             })),
           );
           for (const form of inPageForms) {
-            const key = `${form.fields.map((field) => field.name).join("|")}`;
+            const key = formKey(form);
             if (seenForms.has(key)) continue;
             seenForms.add(key);
             formErrors.push(form);
@@ -1014,9 +1020,9 @@ export async function states(runDir: string, options: { fresh?: boolean; atOnce?
             dialogs.push(probed.dialog);
             allSettings.push(...probed.settings);
             for (const form of probed.forms) {
-              const formKey = `${form.fields.map((field) => field.name).join("|")}`;
-              if (seenForms.has(formKey)) continue;
-              seenForms.add(formKey);
+              const key = formKey(form);
+              if (seenForms.has(key)) continue;
+              seenForms.add(key);
               formErrors.push(form);
             }
             process.stderr.write(`states ${data.label} "${probed.dialog.trigger}" -> ${probed.dialog.kind ?? "geen reactie"}\n`);
