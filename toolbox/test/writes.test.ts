@@ -265,6 +265,17 @@ test("the form probe survives a submission that navigates, records where it went
   await page.context().close();
 });
 
+test("the form probe names the fields of a form after one whose submission loaded the page again", async () => {
+  reset();
+  const page = await pageWith(false, "/forms-reload.html");
+  const forms = await probeForms(page, { label: "P1", url: `${site.origin}/forms-reload.html`, outDir: run, openedVia: null, socketMessagesBlocked: () => 0 });
+  assert.deepEqual(forms.map((form) => form.form), ["#search", "#login"]);
+  // The search form goes to a new page, so the page is loaded again before the login form is tried.
+  assert.ok(forms[0]!.attempts.every((attempt) => attempt.navigated));
+  assert.deepEqual(forms.map((form) => form.fields.map((field) => [field.name, field.type])), [[["Zoekterm", "search"]], [["Gebruikersnaam", null], ["Wachtwoord", "password"]]]);
+  await page.context().close();
+});
+
 test("the form probe tries what a visitor does and says so when nothing at all follows", async () => {
   for (const writes of [false, true]) {
     reset();

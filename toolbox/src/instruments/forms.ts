@@ -301,14 +301,20 @@ export async function probeForms(page: Page, options: FormProbeOptions): Promise
   const real = options.writes ?? isWriteOrigin(runWrites(), page.url());
   const allInputs = ["leeg verstuurd", "ongeldige invoer", REGULAR_PATH, ...(real ? ["geldige testwaarden"] : [])] as Input[];
   const reports = await call<FormReport[]>(page, "formsReport");
-  for (const [formIndex, initial] of reports.entries()) {
-    const cdp = await page.context().newCDPSession(page);
+  // The fields of every form are read before the first attempt: an attempt can load the page again, and the references of the forms after it then point into a page that is gone.
+  const cdp = await page.context().newCDPSession(page);
+  const fieldsPerForm: FormErrorState["fields"][] = [];
+  for (const report of reports) {
     const fields: FormErrorState["fields"] = [];
-    for (const field of initial.fields) {
+    for (const field of report.fields) {
       const info = await axInfo(cdp, field.ref);
       fields.push({ role: info?.role ?? field.tag, name: info?.name ?? null, required: field.required, type: field.type, invalidBeforeInput: field.ariaInvalid });
     }
-    await cdp.detach();
+    fieldsPerForm.push(fields);
+  }
+  await cdp.detach();
+  for (const [formIndex, initial] of reports.entries()) {
+    const fields = fieldsPerForm[formIndex]!;
     const state: FormErrorState = {
       page: label,
       form: where(initial),

@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="nl">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Twee formulieren - Testsite sessie</title><link rel="stylesheet" href="/site.css"></head>
+<body>
+<main id="inhoud" tabindex="-1">
+<h1>Twee formulieren</h1>
+<form id="search" role="search" method="get" action="/forms-reload.html">
+<label for="q">Zoekterm</label><input id="q" name="q" type="search">
+<button type="submit">Zoek</button>
+</form>
+<h2>Inloggen</h2>
+<form id="login" method="post" action="/submit" novalidate>
+<label for="user">Gebruikersnaam</label><input id="user" name="user" required>
+<label for="password">Wachtwoord</label><input id="password" name="password" type="password" required>
+<p><button type="submit">Inloggen</button></p>
+</form>
+</main>
+</body>
+</html>
