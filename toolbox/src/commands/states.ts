@@ -898,16 +898,22 @@ interface StatesStamp {
   pages: string | null;
   /** Per state of the model the key its keys were pressed against. */
   states: Record<string, string>;
-  /** The origins the run may send to: the form probe submits there for real, and holds back everywhere else. Absent in an older stamp, which then counts as made without permission. */
+  /** The origins the run may send to: the form probe submits there for real, and holds back everywhere else. Absent in an older stamp: see `statesStampStands`. */
   writes?: string[];
 }
 
 /** The origins a run may send to, sorted, as the stamp of `states` keeps them. */
 export const stampWrites = (permission: WritePermission | null): string[] => (permission ? [...new Set(writeOriginsOf(permission))].sort() : []);
 
-/** Whether what an earlier `states` found on the pages stands: no page changed, and the run may send to the same origins as then. */
-export const statesStampStands = (stamp: StatesStamp | null, pagesNow: string | null, writesNow: string[]): stamp is StatesStamp =>
-  stamp !== null && pagesNow !== null && stamp.pages === pagesNow && canonicalJson(stamp.writes ?? []) === canonicalJson(writesNow);
+/** Whether an earlier form probe really sent: only a probe that may send tries a form with valid test values. */
+export const formsSent = (before: Pick<States, "formErrors"> | undefined): boolean => (before?.formErrors ?? []).some((form) => form.attempts.some((attempt) => attempt.input === "geldige testwaarden"));
+
+/**
+ * Whether what an earlier `states` found on the pages stands: no page changed, and the run may send to the same origins as then.
+ * A stamp from before the origins were kept counts as made with the permission of now when its form probe really sent, and as made without permission when it did not.
+ */
+export const statesStampStands = (stamp: StatesStamp | null, pagesNow: string | null, writesNow: string[], sentBefore: boolean): stamp is StatesStamp =>
+  stamp !== null && pagesNow !== null && stamp.pages === pagesNow && (stamp.writes === undefined ? sentBefore === writesNow.length > 0 : canonicalJson(stamp.writes) === canonicalJson(writesNow));
 
 /**
  * Everything that only shows after interaction: dialogs, form errors, key shortcuts and hover content.
@@ -944,7 +950,7 @@ export async function states(runDir: string, options: { fresh?: boolean; atOnce?
   const stamp = options.fresh ? null : await readStamp<StatesStamp>(join(runDir, STATES_STAMP));
   // A states.json from before the non-text contrast under the pointer was measured is not taken over: its pages would count as measured with nothing found.
   const writesNow = stampWrites(writesForRun(runDir));
-  if (run.states && run.states.hoverNonText !== undefined && statesStampStands(stamp, pagesNow, writesNow)) {
+  if (run.states && run.states.hoverNonText !== undefined && statesStampStands(stamp, pagesNow, writesNow, formsSent(run.states))) {
     try {
       const before = run.states.singleKeys.states ?? [];
       let pressedAgain = 0;
