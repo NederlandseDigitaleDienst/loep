@@ -2,7 +2,7 @@
   "kind": "answer-key",
   "wcagVersion": "2.2",
   "sampleNote": "De testsite Lindewaard heeft 17 paginatypen. De sleutel noemt per gebrek de pagina's waarop het zit.",
-  "outcomeNote": "De sleutel bevat 91 ingebouwde gebreken onder 51 criteria, waarvan 6 in een document. Wat de sleutel niet noemt, is niet met opzet fout gemaakt.",
+  "outcomeNote": "De sleutel bevat 93 ingebouwde gebreken onder 51 criteria, waarvan 6 in een document. Wat de sleutel niet noemt, is niet met opzet fout gemaakt.",
   "failed": [
     "1.1.1",
     "1.2.1",
@@ -57,7 +57,7 @@
     "4.1.3"
   ],
   "failedOnlyInDocuments": [],
-  "problemCount": 91,
+  "problemCount": 93,
   "findings": [
     {
       "id": "1.1.1-logo-melding",
@@ -265,6 +265,15 @@
       "medium": "web"
     },
     {
+      "id": "1.3.5-factuuradres",
+      "criterion": "1.3.5",
+      "page": "/vergunning.html",
+      "descriptionNl": "De velden voor het adres van de rekening hebben geen autocomplete-attribuut.",
+      "where": "#factuurpostcode:not([autocomplete]) (De velden voor straat en postcode van het factuuradres in stap 2 van de aanvraag van een parkeervergunning.)",
+      "state": "Na doorgaan naar stap 2.",
+      "medium": "web"
+    },
+    {
       "id": "1.4.1-tekstlink",
       "criterion": "1.4.1",
       "page": "alle",
@@ -284,6 +293,15 @@
       "alsoCriteria": [
         "3.3.2"
       ]
+    },
+    {
+      "id": "1.4.1-afvalbak-kleur",
+      "criterion": "1.4.1",
+      "page": "/afval.html",
+      "descriptionNl": "Welke bak het is, staat alleen in de kleur van het pictogram. De bakken voor glas en voor tuinafval zijn allebei groen (onderling ongeveer 1,1 op 1).",
+      "where": ".afvalwijzer-resultaten (De resultaten van de afvalwijzer onder \"Waar moet het heen?\".)",
+      "state": "Na typen in \"Waar moet het heen?\"; alleen met een leesverzoek voor de zoekdienst in het sitemodel komen er resultaten.",
+      "medium": "web"
     },
     {
       "id": "1.4.2-melodie",

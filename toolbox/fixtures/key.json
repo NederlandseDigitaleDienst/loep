@@ -126,9 +126,9 @@
     }
   ],
   "totals": {
-    "defects": 91,
+    "defects": 93,
     "measurable": 49,
-    "interaction": 22,
+    "interaction": 24,
     "looking": 20
   },
   "defects": [
@@ -236,7 +236,7 @@
       "selectorInClean": true,
       "whereNl": "De resultaten van de afvalwijzer onder \"Waar moet het heen?\". De zoekvraag gaat met een POST in JSON naar de zoekdienst van de site.",
       "wrongNl": "Waar een afvalsoort heen moet, staat alleen in het pictogram van de bak, en dat pictogram heeft geen alt-attribuut.",
-      "cleanNl": "Het alt van het pictogram zegt waar de afvalsoort heen moet.",
+      "cleanNl": "Naast het pictogram staat in tekst waar de afvalsoort heen moet, en het pictogram heeft een leeg alt.",
       "state": "typed",
       "stateNl": "Na typen in \"Waar moet het heen?\"; alleen met een leesverzoek voor de zoekdienst in het sitemodel komen er resultaten.",
       "class": "interaction"
@@ -471,6 +471,22 @@
       "class": "measurable"
     },
     {
+      "id": "1.3.5-factuuradres",
+      "criterion": "1.3.5",
+      "pages": [
+        "/vergunning.html"
+      ],
+      "selector": "#factuurpostcode:not([autocomplete])",
+      "selectorInClean": false,
+      "whereNl": "De velden voor straat en postcode van het factuuradres in stap 2 van de aanvraag van een parkeervergunning.",
+      "wrongNl": "De velden voor het adres van de rekening hebben geen autocomplete-attribuut.",
+      "cleanNl": "De velden hebben address-line1 en postal-code.",
+      "state": "opened",
+      "stateNl": "Na doorgaan naar stap 2.",
+      "class": "interaction",
+      "plantedWith": "3.3.7-adres"
+    },
+    {
       "id": "1.4.1-tekstlink",
       "criterion": "1.4.1",
       "pages": [
@@ -506,6 +522,21 @@
       "state": "initial",
       "stateNl": "Direct na het laden.",
       "class": "looking"
+    },
+    {
+      "id": "1.4.1-afvalbak-kleur",
+      "criterion": "1.4.1",
+      "pages": [
+        "/afval.html"
+      ],
+      "selector": ".afvalwijzer-resultaten",
+      "selectorInClean": true,
+      "whereNl": "De resultaten van de afvalwijzer onder \"Waar moet het heen?\".",
+      "wrongNl": "Welke bak het is, staat alleen in de kleur van het pictogram. De bakken voor glas en voor tuinafval zijn allebei groen (onderling ongeveer 1,1 op 1).",
+      "cleanNl": "Naast het pictogram staat de naam van de bak in tekst.",
+      "state": "typed",
+      "stateNl": "Na typen in \"Waar moet het heen?\"; alleen met een leesverzoek voor de zoekdienst in het sitemodel komen er resultaten.",
+      "class": "interaction"
     },
     {
       "id": "1.4.2-melodie",
