@@ -1,0 +1,6 @@
+{
+  "version": "0.38.0",
+  "measuredAt": "2026-11-21",
+  "againstNl": "De sleutel van de eigen testsite, met 93 ingebouwde gebreken, en de schone tweeling zonder gebreken, niet het oordeel van een menselijke deskundige. Gemeten is de kandidaat voor deze versie (commit ae82212), op alle 56 criteria (#709), ingelogd met het testaccount van de testsite, nadat een eerste ronde op een eerdere kandidaat de lat op de tweeling niet haalde.",
+  "resultNl": "In twee volledige runs op hetzelfde vastgelegde bewijs vond loep 91 van de 92 gebreken die meetellen, en kreeg elk van de 56 criteria in beide runs dezelfde uitkomst. Het ene gemiste gebrek staat in een document van 262 MB, boven de grens van 250 MB, en loep meldt dat zelf. Geen eigen bevinding was volgens een van beide vergelijkers onterecht. Op de schone tweeling noemen beide vergelijkers de vier afkeuringen discutabel, en bleven alleen 1.2.3, 1.2.5, 2.2.1 en 3.3.8 open, die een bestand van een externe speler of kennis van de eigenaar vragen. De eerste ronde vond fouten in loep, onder meer in de formulierproef en in het schrijfrecht voor een ingesloten venster; die zijn vóór deze meting hersteld. De testsite is makkelijker dan een echte site, dus deze cijfers zeggen niet hoe loep op een echte site presteert."
+}

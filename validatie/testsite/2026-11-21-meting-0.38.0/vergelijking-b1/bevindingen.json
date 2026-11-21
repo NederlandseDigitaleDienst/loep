@@ -1,0 +1,238 @@
+{
+  "criteria": {
+    "bothFailed": [],
+    "criteria": 55,
+    "falsePassRate": null,
+    "missed": [],
+    "neitherFailed": {
+      "cantTell": 4,
+      "inapplicable": 5,
+      "passed": 42
+    },
+    "onlyOurs": [
+      "1.2.2",
+      "2.4.3",
+      "3.3.2",
+      "3.3.4"
+    ],
+    "recall": null,
+    "site": "Berkenveen",
+    "undecidedRate": null,
+    "wcagVersion": "2.2"
+  },
+  "findings": [],
+  "ours": {
+    "agreement": 1,
+    "classes": {
+      "discutabel": {
+        "a": 4,
+        "agreed": 4,
+        "b": 4
+      },
+      "onterecht": {
+        "a": 0,
+        "agreed": 0,
+        "b": 0
+      },
+      "tegenhanger": {
+        "a": 0,
+        "agreed": 0,
+        "b": 0
+      },
+      "terecht": {
+        "a": 0,
+        "agreed": 0,
+        "b": 0
+      }
+    },
+    "disagreed": 0,
+    "duplicates": {
+      "a": {
+        "referenceFindings": 0,
+        "surplus": 0
+      },
+      "agreed": {
+        "referenceFindings": 0,
+        "surplus": 0
+      },
+      "b": {
+        "referenceFindings": 0,
+        "surplus": 0
+      }
+    },
+    "shareWithoutCounterpart": {
+      "discutabel": {
+        "a": 1,
+        "agreed": 1,
+        "b": 1
+      },
+      "onterecht": {
+        "a": 0,
+        "agreed": 0,
+        "b": 0
+      },
+      "terecht": {
+        "a": 0,
+        "agreed": 0,
+        "b": 0
+      }
+    },
+    "total": 4
+  },
+  "ownFindings": [
+    {
+      "a": "discutabel",
+      "agreed": "discutabel",
+      "b": "discutabel",
+      "criterion": "1.2.2",
+      "id": "BERK-1.2.2-1a75",
+      "reasonNl": {
+        "a": "Klopt: de drie ondertitels noemen geen spreker. Maar er spreekt maar één persoon en alle woorden staan erin. Een onderzoeker keurt daar waarschijnlijk niet op af.",
+        "b": "De ondertitels op P13 geven alle 36 woorden. Er spreekt maar een stem en het beeld is een dia. Dan hoeft de naam van de spreker er niet bij. De uitgeschreven tekst noemt de voorzitter wel."
+      },
+      "titleNl": "Ondertitels noemen de spreker niet, die niet in beeld is"
+    },
+    {
+      "a": "discutabel",
+      "agreed": "discutabel",
+      "b": "discutabel",
+      "criterion": "2.4.3",
+      "id": "BERK-2.4.3-12cb",
+      "reasonNl": {
+        "a": "Klopt: met de chat open gaat Tab rond langs 5 stops. De sluitknop zit in die ronde, de volgorde in de chat is logisch. Dat de pagina even niet bereikbaar is, is eerder een keuze dan een fout in de volgorde.",
+        "b": "Klopt: met de chat open gaat Tab op P07 en P14 alleen rond in de chat. Maar de knop Chat sluiten zit in die ronde, dus de pagina blijft te bereiken. Strenge lezing van de focusvolgorde."
+      },
+      "titleNl": "Tab blijft rondgaan in het chatvenster dat de pagina niet afsluit"
+    },
+    {
+      "a": "discutabel",
+      "agreed": "discutabel",
+      "b": "discutabel",
+      "criterion": "3.3.2",
+      "id": "BERK-3.3.2-5829",
+      "reasonNl": {
+        "a": "Klopt: het vinkje heeft required zonder teken. Maar het is het enige veld en het label is zelf de bevestiging voor het intrekken. Dat het aangevinkt moet, blijkt uit de tekst.",
+        "b": "Het formulier op P07 heeft een vinkje als enige veld, met een duidelijk label ter bevestiging. Dat dit vinkje nodig is om in te trekken, blijkt uit de tekst. Een sterretje ontbreekt, maar daar keurt men zelden op af."
+      },
+      "titleNl": "Verplicht vinkje bij intrekken niet aangegeven"
+    },
+    {
+      "a": "discutabel",
+      "agreed": "discutabel",
+      "b": "discutabel",
+      "criterion": "3.3.4",
+      "id": "BERK-3.3.4-f0aa",
+      "reasonNl": {
+        "a": "Klopt: lege velden gaven de pagina Bedankt. Maar het formulier vraagt het huidige wachtwoord, de gewone beveiliging. Dat de testserver alles aanneemt, zegt weinig. Een onderzoeker keurt hier waarschijnlijk niet op af.",
+        "b": "Het formulier op P08 vraagt het huidige wachtwoord en een nieuw wachtwoord. Een nieuw wachtwoord kunt u daarna weer wijzigen, dus de wijziging is terug te draaien. Een onderzoeker keurt hier zelden op af."
+      },
+      "titleNl": "Wachtwoord wijzigen zonder controle of bevestiging"
+    }
+  ],
+  "provenance": {
+    "classificationSha256": {
+      "a": "0c9e08953dcbfa80e6b9232fe08b10969dbe79081bf1e386a5a37d284cb7fbe2",
+      "b": "5968b5b2b4aa537966395af2f2ee4ec6879a7db2605a35aa10852c110113371a"
+    },
+    "evaluationSha256": "7f70296467942324e60120865162faab9c72e272a92b3dfceb92cbc0a4c7161d",
+    "inputSha256": "83a03cc9b83b2f0f266b6bfcd59a54f45d20d3cd8ea517497f92b8e742277b0d",
+    "promptSha256": "f1f5e55792880bceff07e783347360c72ec2346c22a84f5886948346abf1e8fe"
+  },
+  "reference": {
+    "agreement": null,
+    "agreementCoarse": null,
+    "classes": {
+      "buiten-bereik": {
+        "a": 0,
+        "agreed": 0,
+        "b": 0
+      },
+      "deels": {
+        "a": 0,
+        "agreed": 0,
+        "b": 0
+      },
+      "gemist-bewijs-beoordeling": {
+        "a": 0,
+        "agreed": 0,
+        "b": 0
+      },
+      "gemist-bewijs-dossier": {
+        "a": 0,
+        "agreed": 0,
+        "b": 0
+      },
+      "gemist-geen-bewijs": {
+        "a": 0,
+        "agreed": 0,
+        "b": 0
+      },
+      "gevonden": {
+        "a": 0,
+        "agreed": 0,
+        "b": 0
+      },
+      "niet-meer-aanwezig": {
+        "a": 0,
+        "agreed": 0,
+        "b": 0
+      }
+    },
+    "coarse": {
+      "buiten-bereik": {
+        "a": 0,
+        "agreed": 0,
+        "b": 0
+      },
+      "deels": {
+        "a": 0,
+        "agreed": 0,
+        "b": 0
+      },
+      "gemist": {
+        "a": 0,
+        "agreed": 0,
+        "b": 0
+      },
+      "gevonden": {
+        "a": 0,
+        "agreed": 0,
+        "b": 0
+      },
+      "niet-meer-aanwezig": {
+        "a": 0,
+        "agreed": 0,
+        "b": 0
+      }
+    },
+    "counted": 0,
+    "disagreed": 0,
+    "disagreedCoarse": 0,
+    "documents": 0,
+    "documentsOutOfReach": 0,
+    "foundShare": {
+      "a": {
+        "ofCounted": null,
+        "ofStillPresent": null
+      },
+      "agreed": {
+        "ofCounted": null,
+        "ofStillPresent": null
+      },
+      "b": {
+        "ofCounted": null,
+        "ofStillPresent": null
+      }
+    },
+    "leftOut": 0,
+    "stillPresent": {
+      "a": 0,
+      "agreed": 0,
+      "b": 0
+    },
+    "total": 0
+  },
+  "referenceKind": "answer-key",
+  "schema": "loep/compare-findings-summary/2",
+  "site": "Berkenveen"
+}
