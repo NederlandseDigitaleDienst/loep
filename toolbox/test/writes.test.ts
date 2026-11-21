@@ -9,6 +9,7 @@ import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { firefox, webkit, type Browser, type Page } from "playwright";
 import { INPAGE_PATH, launchBrowser, loadPage, newContext } from "../src/browser/session.ts";
+import { FormClaims } from "../src/commands/states.ts";
 import { probeForms } from "../src/instruments/forms.ts";
 import { formErrors } from "../src/lib/extractors.ts";
 import { REGULAR_PATH, type RunData } from "../src/lib/rundata.ts";
@@ -205,6 +206,34 @@ test("the form probe really submits on a test environment and records what the s
   assert.ok(existsSync(join(run, valid!.screenshot!)));
   assert.equal(writesReceived().filter((line) => line === "POST 127.0.0.1/callback").length, 3);
   await page.context().close();
+});
+
+test("a form on three pages that run at the same time is sent once per attempt, and one that was not delivered may be tried again", async () => {
+  reset();
+  const claims = new FormClaims();
+  const pages = await Promise.all([pageWith(true, "/callback.html"), pageWith(true, "/callback.html"), pageWith(true, "/callback.html")]);
+  const probes = pages.map(() => claims.probe());
+  const found = await Promise.all(pages.map((page, index) => probeForms(page, { label: `P${index + 1}`, url: `${site.origin}/callback.html`, outDir: run, openedVia: null, socketMessagesBlocked: () => 0, writes: true, claim: probes[index]!.claim })));
+  found.forEach((forms, index) => probes[index]!.settle(forms));
+  // Each of the three forms of the page was taken on by one page before its first attempt; the other pages left it alone.
+  assert.deepEqual(found.flat().map((form) => form.form).sort(), ["#abroad", "#callback", "#detour"]);
+  const form = found.flat().find((entry) => entry.form === "#callback")!;
+  assert.deepEqual(form.attempts.map((attempt) => attempt.input), ["leeg verstuurd", "ongeldige invoer", "geldige testwaarden"]);
+  // Each attempt went out once over all three pages. A send an earlier test recorded may be played back instead of reaching the server, so the server counts at most that.
+  const sentToCallback = found.flat().flatMap((entry) => entry.attempts).filter((attempt) => attempt.sent?.some((sent) => sent.path === "/callback")).length;
+  assert.equal(sentToCallback, 3);
+  assert.ok(writesReceived().filter((line) => line === "POST 127.0.0.1/callback").length <= 3, writesReceived().join(", "));
+  // A probe that ran out of time delivers nothing: the form it claimed is given back, and a settled probe claims nothing more.
+  const other = new FormClaims();
+  const lost = other.probe();
+  assert.equal(lost.claim(form), true);
+  lost.settle([]);
+  assert.equal(lost.claim(form), false);
+  const next = other.probe();
+  assert.equal(next.claim(form), true);
+  next.settle([form]);
+  assert.equal(other.probe().claim(form), false);
+  await Promise.all(pages.map((page) => page.context().close()));
 });
 
 test("without the setting a refused submission leaves the page, so invalid input is tried too", async () => {

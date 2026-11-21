@@ -48,6 +48,12 @@ export interface FormProbeOptions {
    * state a probe expects (whatever covers the page closed). Left out, the page is loaded again.
    */
   restore?: (page: Page) => Promise<void>;
+  /**
+   * Take a form on before its first attempt: false when it was already tried elsewhere, on another
+   * page or in another window of the same run. Such a form is left alone, so it is not sent twice.
+   * Left out, every form is tried.
+   */
+  claim?: (form: FormErrorState) => boolean;
 }
 
 /** The kind of fixed test value a server will accept, by the type of the field: the fixed test values of a session, so that what reaches a person says it comes from loep. */
@@ -323,6 +329,7 @@ export async function probeForms(page: Page, options: FormProbeOptions): Promise
       submitControl: initial.submit ? `${initial.submit.tag} "${initial.submit.text.slice(0, 40)}"` : null,
       attempts: [],
     };
+    if (options.claim && !options.claim(state)) continue;
     // A form that marks nothing as required has no path of its own to try: submitting it empty is that path.
     const inputs = initial.fields.some((field) => field.required) ? allInputs : allInputs.filter((input) => input !== REGULAR_PATH);
     for (const input of inputs) {

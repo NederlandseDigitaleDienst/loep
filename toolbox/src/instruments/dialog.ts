@@ -23,6 +23,8 @@ export interface TriggerProbeOptions {
   viewport: string;
   socketMessagesBlocked: () => number;
   seenSettings: Set<string>;
+  /** Passed on to the form probe: a form already tried elsewhere is not tried again. */
+  claimForm?: (form: FormErrorState) => boolean;
 }
 
 /**
@@ -129,7 +131,7 @@ export async function probeTrigger(browserPage: Page, trigger: Described, option
   dialog.focusStaysInside = !left;
 
   // A form in the dialog is tried after focus was measured: submitting it can replace the page (a search form does).
-  forms.push(...(await probeForms(browserPage, { label: pageLabel, url, outDir, openedVia: label, socketMessagesBlocked: options.socketMessagesBlocked })));
+  forms.push(...(await probeForms(browserPage, { label: pageLabel, url, outDir, openedVia: label, socketMessagesBlocked: options.socketMessagesBlocked, claim: options.claimForm })));
   // The submission replaced the page or closed the dialog: there is nothing left to change or to close with Escape.
   const still = await call<unknown[]>(browserPage, "visibleDialogs").catch(() => []);
   if (still.length < dialogsAfter.length) return { dialog, forms, settings };

@@ -262,10 +262,10 @@ async function inWindow<T>(data: PageData, probeNl: string, fallback: T, work: (
   }
 }
 
-async function triggerOnFreshPage(context: BrowserContext, data: PageData, trigger: Described, runDir: string, viewport: string): ReturnType<typeof probeTrigger> {
+async function triggerOnFreshPage(context: BrowserContext, data: PageData, trigger: Described, runDir: string, viewport: string, claimForm: (form: FormErrorState) => boolean): ReturnType<typeof probeTrigger> {
   const page = await freshPage(context, data);
   try {
-    return await probeTrigger(page, trigger, { label: data.label, url: data.item.url, outDir: runDir, viewport, socketMessagesBlocked, seenSettings });
+    return await probeTrigger(page, trigger, { label: data.label, url: data.item.url, outDir: runDir, viewport, socketMessagesBlocked, seenSettings, claimForm });
   } finally {
     await page.close();
   }
@@ -893,6 +893,40 @@ async function listenersOnEmptyPage(context: BrowserContext): Promise<Record<str
  */
 export const formKey = (form: Pick<FormErrorState, "fields">): string => form.fields.map((field, index) => field.name ?? `${index}:${field.type ?? field.role ?? "?"}`).join("|");
 
+/**
+ * The forms the form probe of a run has taken on. A form with the same key is tried once, on the
+ * first page that has it: with permission to send, every other try would send the site the same
+ * submission again and spend the budget for sending on it. A form is claimed before its first
+ * attempt, so also pages that run at the same time never submit it twice.
+ */
+export class FormClaims {
+  private readonly claimed = new Set<string>();
+
+  /**
+   * A claimer for one probe on one page. What that probe claimed but did not deliver, because it
+   * ran out of time or failed, is given back when it is settled: another page may then try it.
+   * A settled probe claims nothing more.
+   */
+  probe(): { claim: (form: FormErrorState) => boolean; settle: (delivered: FormErrorState[]) => void } {
+    const taken = new Set<string>();
+    let open = true;
+    return {
+      claim: (form) => {
+        const key = formKey(form);
+        if (!open || this.claimed.has(key)) return false;
+        this.claimed.add(key);
+        taken.add(key);
+        return true;
+      },
+      settle: (delivered) => {
+        open = false;
+        const kept = new Set(delivered.map(formKey));
+        for (const key of taken) if (!kept.has(key)) this.claimed.delete(key);
+      },
+    };
+  }
+}
+
 interface StatesStamp {
   /** Hash over every page of the sample as `collect` measured it: the probe goes over all pages and keeps what it saw first, so one changed page makes the whole of it stale. */
   pages: string | null;
@@ -1001,15 +1035,16 @@ export async function states(runDir: string, options: { fresh?: boolean; atOnce?
       const dialogs: States["dialogs"] = [];
       const formErrors: States["formErrors"] = [];
       const seenTriggers = new Set<string>();
-      const seenForms = new Set<string>();
+      const formClaims = new FormClaims();
       const context = await contextOfLane();
       try {
         for (const [index, data] of run.pages.entries()) {
           say("formulieren en knoppen", index, run.pages.length, `${data.label} ${data.item.url}`);
+          const inPage = formClaims.probe();
           const { triggers, inPageForms } = await withinTime(data.label, "formulieren", { triggers: [] as Described[], inPageForms: [] as FormErrorState[] }, async () => {
             const page = await freshPage(context, data);
             const found = await call<Described[]>(page, "triggers");
-            const forms = await probeForms(page, { label: data.label, url: data.item.url, outDir: runDir, openedVia: null, socketMessagesBlocked, restore: restore(context, data) });
+            const forms = await probeForms(page, { label: data.label, url: data.item.url, outDir: runDir, openedVia: null, socketMessagesBlocked, restore: restore(context, data), claim: inPage.claim });
             await page.close();
             return { triggers: found, inPageForms: forms };
           });
@@ -1021,27 +1056,20 @@ export async function states(runDir: string, options: { fresh?: boolean; atOnce?
               return changed;
             })),
           );
-          for (const form of inPageForms) {
-            const key = formKey(form);
-            if (seenForms.has(key)) continue;
-            seenForms.add(key);
-            formErrors.push(form);
-          }
+          inPage.settle(inPageForms);
+          formErrors.push(...inPageForms);
           for (const trigger of triggers) {
             const key = `${trigger.tag}|${trigger.text.slice(0, 40)}|${trigger.ariaLabel}|${trigger.region}`;
             if (seenTriggers.has(key)) continue;
             seenTriggers.add(key);
             if (logsOut(data.label, trigger)) continue;
-            const probed = await withinTime(data.label, `knop "${trigger.text.slice(0, 30)}"`, null, () => triggerOnFreshPage(context, data, trigger, runDir, DESKTOP));
+            const inDialog = formClaims.probe();
+            const probed = await withinTime(data.label, `knop "${trigger.text.slice(0, 30)}"`, null, () => triggerOnFreshPage(context, data, trigger, runDir, DESKTOP, inDialog.claim));
+            inDialog.settle(probed?.forms ?? []);
             if (!probed) continue;
             dialogs.push(probed.dialog);
             allSettings.push(...probed.settings);
-            for (const form of probed.forms) {
-              const key = formKey(form);
-              if (seenForms.has(key)) continue;
-              seenForms.add(key);
-              formErrors.push(form);
-            }
+            formErrors.push(...probed.forms);
             process.stderr.write(`states ${data.label} "${probed.dialog.trigger}" -> ${probed.dialog.kind ?? "geen reactie"}\n`);
           }
         }
@@ -1064,7 +1092,10 @@ export async function states(runDir: string, options: { fresh?: boolean; atOnce?
             if (seenTriggers.has(key)) continue;
             seenTriggers.add(key);
             if (logsOut(data.label, trigger)) continue;
-            const probed = await withinTime(data.label, `knop "${trigger.text.slice(0, 30)}" (smal)`, null, () => triggerOnFreshPage(mobile, data, trigger, runDir, `${MOBILE.width}x${MOBILE.height}`));
+            // A form in a dialog that only opens here is not kept, but one the wide screen already tried is not sent again either.
+            const inDialog = formClaims.probe();
+            const probed = await withinTime(data.label, `knop "${trigger.text.slice(0, 30)}" (smal)`, null, () => triggerOnFreshPage(mobile, data, trigger, runDir, `${MOBILE.width}x${MOBILE.height}`, inDialog.claim));
+            inDialog.settle(probed?.forms ?? []);
             if (!probed) continue;
             dialogs.push(probed.dialog);
             process.stderr.write(`states ${data.label} smal "${probed.dialog.trigger}" -> ${probed.dialog.kind ?? "geen reactie"}\n`);
