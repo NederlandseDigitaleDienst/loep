@@ -77,6 +77,11 @@ test("a window on another address on this machine is a second local grant next t
   // --max-writes is the budget of each of the two; the site itself next to the window changes nothing; a declaration is not asked for.
   const raised = decideWrites(`${SITE}/`, { allowWrites: true, testEnvironment: [SITE, WINDOW], declaredBy: "Een Beheerder, beheer", maxWrites: "80" }, now)!;
   assert.deepEqual(grantsOf(raised).map((grant) => [grant.origin, grant.maxWrites, grant.declaredBy]), [[SITE, 80, null], [WINDOW, 80, null]]);
+  // Only a window on this machine itself: a name that ends in .test can be any machine.
+  assert.throws(() => decideWrites("http://site.test/", { allowWrites: true, testEnvironment: "http://venster.test" }), /alleen een eigen toestemming op deze machine zelf.*http:\/\/venster\.test/);
+  assert.throws(() => decideWrites(`${SITE}/`, { allowWrites: true, testEnvironment: [WINDOW, "http://venster.test"] }), /op deze machine zelf/);
+  assert.deepEqual(grantsOf(decideWrites(`${SITE}/`, { allowWrites: true, testEnvironment: "http://localhost:4713" }, now)!).map((grant) => grant.origin), [SITE, "http://localhost:4713"]);
+  assert.deepEqual(grantsOf(decideWrites(`${SITE}/`, { allowWrites: true, testEnvironment: "http://[::1]:4713" }, now)!).map((grant) => grant.origin), [SITE, "http://[::1]:4713"]);
   // Without --allow-writes nothing local is sent to.
   assert.throws(() => decideWrites(`${SITE}/`, { testEnvironment: WINDOW }), /alleen toegestaan met --allow-writes/);
 });

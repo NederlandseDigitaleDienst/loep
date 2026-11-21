@@ -200,7 +200,9 @@ export function decideWrites(baseUrl: string, flags: WriteFlags, now = new Date(
   if (flags.allowWrites && isLocal(site) && others.length > 0) {
     const first = { origin: site, local: true, declaredBy: null, declaredAt: now.toISOString(), spacingSeconds: LOCAL_WRITE_SPACING_SECONDS };
     // Another address on this machine, such as a test server of another party: local rules too, and --max-writes for each of the two.
+    // Only this machine itself: a name that ends in `.test` can be any machine, and gets no second grant without a declaration.
     if (others.every(isLocal)) {
+      if (!others.every((address) => isThisMachine(new URL(address).hostname))) throw new Error(`een venster naast een site op deze machine krijgt alleen een eigen toestemming op deze machine zelf (localhost, 127.0.0.1 of [::1]), niet op ${others.find((address) => !isThisMachine(new URL(address).hostname))}`);
       const maxWrites = maxWritesOf(flags.maxWrites, LOCAL_MAX_WRITES);
       return { ...first, maxWrites, alsoGrants: [{ origin: others[0]!, ...(others.length > 1 ? { alsoOrigins: others.slice(1) } : {}), local: true, declaredBy: null, declaredAt: now.toISOString(), maxWrites, spacingSeconds: LOCAL_WRITE_SPACING_SECONDS }] };
     }
