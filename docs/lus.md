@@ -1,5 +1,7 @@
 # lus
 
+Soort: beschrijving
+
 lus laat loep over een backlog van sites lopen zonder dat je bij elke stap achter een venster hoeft te zitten. Voor elke site start het één regie: een agent die de skill `nldd-a11y-audit` volgt en loep aanroept. Waar alleen een mens kan beslissen, stopt de regie en laat een vraag achter. Je draait dan het commando dat erbij staat, en lus gaat verder.
 
 lus schrijft nooit in de map van een run. Het zegel van loep dekt elk bestand daarin, dus alles wat lus bijhoudt staat ernaast, in `~/onderzoeken/.lus/`.
@@ -8,10 +10,9 @@ lus schrijft nooit in de map van een run. Het zegel van loep dekt elk bestand da
 
 ```
 cd lus && npm ci
-node src/cli.ts doctor
 ```
 
-`doctor` controleert wat een run nodig heeft: node, de toolbox, de werkstroom, de pluginversie, `vlam-claude`, de VLAM-routes, de vrije schijfruimte en de backlog. Onder 15 GB vrij begint lus niets nieuws, en met `--routes` proeft het de VLAM-routes vooraf.
+Daarna roep je lus aan vanuit de checkout, als `node lus/src/cli.ts <commando>`, of als `lus <commando>` wanneer de map van lus op je pad staat. Begin met `lus doctor`. Dat controleert wat een run nodig heeft: node, de toolbox, de werkstroom, de pluginversie, `vlam-claude`, de VLAM-routes, de vrije schijfruimte en de backlog. Onder 15 GB vrij begint lus niets nieuws, en met `--routes` proeft het de VLAM-routes vooraf.
 
 ## Een site erin zetten
 
@@ -93,4 +94,4 @@ Hervatten begint met `pending`, dus de run gaat verder waar hij staat. Vindt lus
 
 ## Wat lus niet doet
 
-lus meet niets zelf: elke meting en elk oordeel komt van loep, zodat het bewijs in de run staat en `loep verify` het kan nalopen. Het start geen agent buiten de werkstroom van loep om, en het schrijft geen antwoord, besluit of handtekening voor een mens op.
+lus meet niets zelf: elke meting en elk oordeel komt van loep, zodat het bewijs in de run staat en `node toolbox/src/cli.ts verify --run <run>` het kan nalopen. Het start geen agent buiten de werkstroom van loep om, en het schrijft geen antwoord, besluit of handtekening voor een mens op.
