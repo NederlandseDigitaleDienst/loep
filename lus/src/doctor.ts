@@ -42,6 +42,23 @@ export interface DoctorOptions {
   routes?: boolean | undefined;
 }
 
+/**
+ * Whether VLAM answers, asked with `vlam-routes`: one request and no model call. A tunnel that was
+ * logged out 24 hours ago stops every agent, and finding that out before a run of hours is cheaper.
+ */
+export function routesCheck(): Check {
+  const routes = which("vlam-routes");
+  if (routes === null) return { labelNl: "VLAM", ok: true, detailNl: "vlam-routes niet gevonden; de routes worden niet vooraf geproefd" };
+  try {
+    execFileSync(routes, [], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], timeout: 120_000 });
+    return { labelNl: "VLAM", ok: true, detailNl: "de routes antwoorden" };
+  } catch (error) {
+    const stderr = (error as { stderr?: unknown }).stderr;
+    const last = typeof stderr === "string" ? stderr.trim().split("\n").at(-1) : undefined;
+    return { labelNl: "VLAM", ok: false, detailNl: `vlam-routes faalt${last ? `: ${last}` : ""}; meld je zo nodig opnieuw aan bij de tunnel` };
+  }
+}
+
 export function doctor(options: DoctorOptions = {}): Check[] {
   const checks: Check[] = [];
   const node = process.versions.node;
@@ -53,21 +70,9 @@ export function doctor(options: DoctorOptions = {}): Check[] {
 
   const claude = which("vlam-claude");
   checks.push({ labelNl: "vlam-claude", ok: claude !== null, detailNl: claude ?? "niet gevonden; zonder dit script komt de regie niet bij VLAM" });
+  checks.push({ labelNl: "claude", ok: which("claude") !== null, detailNl: which("claude") ?? "niet gevonden; vlam-claude heeft het nodig" });
   const routes = which("vlam-routes");
-  if (options.routes && routes) {
-    let detail = "de routes antwoorden";
-    let ok = true;
-    try {
-      execFileSync(routes, [], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], timeout: 120_000 });
-    } catch (error) {
-      ok = false;
-      const stderr = (error as { stderr?: unknown }).stderr;
-      detail = `vlam-routes faalt${typeof stderr === "string" && stderr.trim() !== "" ? `: ${stderr.trim().split("\n").at(-1)}` : ""}`;
-    }
-    checks.push({ labelNl: "VLAM", ok, detailNl: detail });
-  } else {
-    checks.push({ labelNl: "VLAM", ok: routes !== null, detailNl: routes ?? "vlam-routes niet gevonden; het harnas proeft de routes dan niet vooraf" });
-  }
+  checks.push(options.routes === true ? routesCheck() : { labelNl: "VLAM", ok: routes !== null, detailNl: routes ?? "vlam-routes niet gevonden; de routes worden dan niet vooraf geproefd (lus run proeft ze)" });
 
   const free = freeGb(homeDir());
   checks.push({ labelNl: "schijf", ok: free === null ? false : free >= MIN_FREE_GB, detailNl: free === null ? `onbekend onder ${homeDir()}` : `${free} GB vrij (onder ${MIN_FREE_GB} GB begint lus niets nieuws)` });

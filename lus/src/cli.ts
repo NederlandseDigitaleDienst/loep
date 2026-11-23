@@ -3,7 +3,7 @@ import { spawnSync } from "node:child_process";
 import { createInterface } from "node:readline/promises";
 import { parseArgs } from "node:util";
 import { addSite, readBacklog, type Site } from "./backlog.ts";
-import { doctor, doctorTextNl } from "./doctor.ts";
+import { doctor, doctorTextNl, routesCheck } from "./doctor.ts";
 import { backlogPath, homeDir, reportsDir, siteDir, stateDir, toolboxCli } from "./paths.ts";
 import { lastWords, readTranscript } from "./run.ts";
 import { lockPath, pauseSite, runSite, statePath, transcriptPath } from "./runner.ts";
@@ -170,6 +170,13 @@ async function withLock<T>(slug: string | null, body: () => Promise<T>): Promise
 
 /** Work the backlog in the order of the file, skipping a site that waits for a person. */
 async function runBacklog(options: { sites?: string | undefined; only?: string | undefined }): Promise<void> {
+  // Een tunnel die 24 uur na het aanmelden dichtvalt kost een run van uren; dit kost een verzoek.
+  const vlam = routesCheck();
+  if (!vlam.ok) {
+    process.stdout.write(`${vlam.detailNl}\nEr is niets gestart.\n`);
+    process.exitCode = 1;
+    return;
+  }
   await withLock(null, async () => {
     const backlog = readBacklog(backlogPath());
     const state = readState(statePath());
