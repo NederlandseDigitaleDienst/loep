@@ -18,6 +18,14 @@ function fakeJust(home: string): { env: NodeJS.ProcessEnv; calls: () => string[]
   return { env: { ...process.env, LUS_HOME: home, PATH: `${bin}:${process.env["PATH"] ?? ""}`, JUST_FAILS: "" }, calls: () => (existsSync(calls) ? readFileSync(calls, "utf8").trim().split("\n") : []) };
 }
 
+test("elke meting is een taak die in de justfile staat", () => {
+  // lus schrijft geen controle zelf: een stap is de naam van een taak, en een tikfout moet hier stukgaan
+  // en niet pas in een meting van een half uur.
+  const justfile = readFileSync(join(import.meta.dirname, "..", "..", "justfile"), "utf8");
+  const tasks = [...justfile.matchAll(/^([a-z][a-z-]*)(?: [^:\n]*)?:(?!=)/gm)].map((match) => match[1]!);
+  for (const step of STEPS) assert.ok(tasks.includes(step.args[0]!), `${step.name}: "just ${step.args[0]}" is geen taak van de justfile`);
+});
+
 test("zonder --all de snelle metingen, met --all ook de lange, en een onbekende naam is een fout", () => {
   const fast = stepsFor({}).map((step) => step.name);
   assert.ok(fast.includes("test-quick"));
