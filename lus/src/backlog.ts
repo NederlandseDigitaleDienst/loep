@@ -22,6 +22,12 @@ export interface Sending {
   max: number;
 }
 
+/** The login of a test account: a person logs in, so the file needs the page and the role, never a password. */
+export interface Login {
+  page: string;
+  role: string;
+}
+
 export interface Site {
   url: string;
   /** The folder under the home of lus: the host without www, or what the person chose. */
@@ -34,8 +40,12 @@ export interface Site {
   alsoOrigins: string[];
   /** Hosts no agent may open, for example a set that is held back for a final test. */
   neverOpen: string[];
-  /** A session file made with `loep login --out`; the password is not in it. */
-  login: string | null;
+  /** Where the test account logs in and in which role; the password never comes near this file. */
+  login: Login | null;
+  /** Agents at the same time in the phases with agents; the session process of a run allows one more. */
+  atOnce: number;
+  /** A mailbox the site sends personal links to, as `imap://host:993`; a person runs the command that uses it. */
+  mailbox: string | null;
   /** The prefixes of the scripts and the CSS of the vendors of the site, for the rule engines. */
   vendorTags: string[];
   note: string;
@@ -96,6 +106,22 @@ function toSite(raw: unknown, index: number, problems: Problem[]): Site {
   for (const origin of words(entry["also-origins"])) {
     if (!/^https?:\/\//i.test(origin)) problems.push({ where, textNl: `also-origins: "${origin}" begint niet met http of https` });
   }
+  for (const host of words(entry["never-open"])) {
+    if (host.includes("/")) problems.push({ where, textNl: `never-open: "${host}" is een adres; zet er de host neer, zonder pad` });
+  }
+  const rawLogin = entry["login"];
+  let login: Login | null = null;
+  if (rawLogin !== null && typeof rawLogin === "object" && !Array.isArray(rawLogin)) {
+    const page = text((rawLogin as Record<string, unknown>)["page"]);
+    const role = text((rawLogin as Record<string, unknown>)["role"]);
+    if (page === "") problems.push({ where, textNl: "login.page ontbreekt: zonder de inlogpagina kan niemand inloggen" });
+    else login = { page, role };
+    if (role === "") problems.push({ where, textNl: "login.role ontbreekt: de rol komt in het manifest en in het rapport, dus geen naam" });
+  } else if (text(rawLogin) !== "") {
+    problems.push({ where, textNl: "login staat er als pad; dat is nu een blok met page en role, want het harnas drukt het inlogcommando voor een mens af" });
+  }
+  const atOnce = Number(entry["at-once"] ?? 3);
+  if (!Number.isInteger(atOnce) || atOnce < 1) problems.push({ where, textNl: `at-once is "${String(entry["at-once"])}"; dat moet een heel getal van 1 of meer zijn, standaard 3` });
   return {
     url,
     slug,
@@ -105,7 +131,9 @@ function toSite(raw: unknown, index: number, problems: Problem[]): Site {
     sending: { allow: sending["allow"] === true, max: Number.isInteger(max) && max >= 0 ? max : 20 },
     alsoOrigins: words(entry["also-origins"]),
     neverOpen: words(entry["never-open"]),
-    login: text(entry["login"]) || null,
+    login,
+    atOnce: Number.isInteger(atOnce) && atOnce >= 1 ? atOnce : 3,
+    mailbox: text(entry["mailbox"]) || null,
     vendorTags: words(entry["vendor-tags"]),
     note: text(entry["note"]),
   };
@@ -144,7 +172,9 @@ export interface AddInput {
   sending?: Sending | undefined;
   alsoOrigins?: string[] | undefined;
   neverOpen?: string[] | undefined;
-  login?: string | null | undefined;
+  login?: Login | null | undefined;
+  atOnce?: number | undefined;
+  mailbox?: string | null | undefined;
   vendorTags?: string[] | undefined;
   note?: string | undefined;
 }
@@ -169,6 +199,9 @@ export function addSite(path: string, input: AddInput): Site {
   if (!(PURPOSES as readonly string[]).includes(purpose)) throw new Error(`purpose is "${purpose}"; kies uit ${PURPOSES.join(", ")}`);
   const max = input.sending?.max ?? 20;
   if (!Number.isInteger(max) || max < 0) throw new Error(`--max-sends moet een heel getal van 0 of meer zijn`);
+  const atOnce = input.atOnce ?? 3;
+  if (!Number.isInteger(atOnce) || atOnce < 1) throw new Error(`--at-once moet een heel getal van 1 of meer zijn`);
+  if (input.login && input.login.page === "") throw new Error("een inlog heeft de pagina nodig waar de gebruiker inlogt (--login-page)");
   const site: Site = {
     url: input.url.trim(),
     slug,
@@ -179,6 +212,8 @@ export function addSite(path: string, input: AddInput): Site {
     alsoOrigins: input.alsoOrigins ?? [],
     neverOpen: input.neverOpen ?? [],
     login: input.login ?? null,
+    atOnce,
+    mailbox: input.mailbox ?? null,
     vendorTags: input.vendorTags ?? [],
     note: input.note ?? "",
   };
@@ -200,6 +235,8 @@ function toFileShape(site: Site): Record<string, unknown> {
     "also-origins": site.alsoOrigins,
     "never-open": site.neverOpen,
     login: site.login,
+    "at-once": site.atOnce,
+    mailbox: site.mailbox,
     "vendor-tags": site.vendorTags,
     note: site.note,
   };

@@ -62,19 +62,31 @@ test("een bestand dat geen lijst is zegt hoe het wel moet", () => {
   assert.throws(() => readBacklog(path), /geen lijst van sites/);
 });
 
-test("een sessiebestand en eigen origins komen mee de backlog in", () => {
+test("inlog, eigen origins, agents tegelijk en de mailbox komen mee de backlog in", () => {
   const path = backlogFile();
   addSite(path, {
     url: "https://www.example.org/",
     organisation: "Example",
-    login: "~/onderzoeken/secrets/example.json",
+    login: { page: "https://www.example.org/inloggen", role: "testgebruiker" },
+    atOnce: 5,
+    mailbox: "imap://mail.example.org:993",
     alsoOrigins: ["https://docs.example.org/"],
-    neverOpen: ["www.example.org/afgeschermd"],
+    neverOpen: ["www.example.org"],
     vendorTags: ["vendor-"],
   });
   const site = readBacklog(path).sites[0];
-  assert.equal(site?.login, "~/onderzoeken/secrets/example.json");
+  assert.deepEqual(site?.login, { page: "https://www.example.org/inloggen", role: "testgebruiker" });
+  assert.equal(site?.atOnce, 5);
+  assert.equal(site?.mailbox, "imap://mail.example.org:993");
   assert.deepEqual(site?.alsoOrigins, ["https://docs.example.org/"]);
-  assert.deepEqual(site?.neverOpen, ["www.example.org/afgeschermd"]);
+  assert.deepEqual(site?.neverOpen, ["www.example.org"]);
   assert.deepEqual(site?.vendorTags, ["vendor-"]);
+});
+
+test("een inlog zonder rol is een waarschuwing: de rol komt in het rapport, een naam niet", () => {
+  const path = backlogFile();
+  writeFileSync(path, "- url: https://www.example.org/\n  organisation: Example\n  login:\n    page: https://www.example.org/inloggen\n");
+  const backlog = readBacklog(path);
+  assert.deepEqual(backlog.sites[0]?.login, { page: "https://www.example.org/inloggen", role: "" });
+  assert.match(backlog.problems.map((problem) => problem.textNl).join("\n"), /login\.role ontbreekt/);
 });

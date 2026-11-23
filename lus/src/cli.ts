@@ -1,22 +1,33 @@
 #!/usr/bin/env node
+import { spawnSync } from "node:child_process";
 import { createInterface } from "node:readline/promises";
 import { parseArgs } from "node:util";
 import { addSite, readBacklog, type Site } from "./backlog.ts";
 import { doctor, doctorTextNl } from "./doctor.ts";
-import { backlogPath, homeDir, siteDir, stateDir } from "./paths.ts";
-import { PHASES_NL, readState, siteState, updateSite, type SiteState } from "./state.ts";
+import { backlogPath, homeDir, reportsDir, siteDir, stateDir, toolboxCli } from "./paths.ts";
+import { lastWords, readTranscript } from "./run.ts";
+import { lockPath, pauseSite, runSite, statePath, transcriptPath } from "./runner.ts";
+import { acquireLock, PHASES_NL, readState, releaseLock, siteState, type SiteState } from "./state.ts";
 import { versionNl } from "./version.ts";
 
 const USAGE = `lus: loep over een backlog van sites, met een mens erbij waar dat nodig is
 
   lus add <url> [--slug <naam>] [--name <naam>] [--organisation <naam>] [--purpose verbeteren|verantwoorden]
                 [--allow-sending] [--max-sends <n>] [--also-origin <url>]... [--never-open <host>]...
-                [--login <sessiebestand>] [--vendor-tag <prefix>]... [--note <tekst>]
+                [--login-page <url> --login-role <rol>] [--at-once <n>] [--mailbox <url>]
+                [--vendor-tag <prefix>]... [--note <tekst>]
                                          Zet een site in de backlog. Wat je weglaat vraagt lus als er een
                                          terminal is, en anders vult het de standaard in
+  lus run [--sites <n>] [--only <site>]  De backlog afwerken: één regie per site, in de orde van het
+                                         bestand. Een site die op een mens wacht slaat lus over
+  lus resume <site> [--what <tekst>]     Ga verder met een site die stopte, met wat de mens deed
+  lus log <site> [--follow]              Wat de regie deed, regel voor regel
   lus list [--json]                      De backlog met de stand van elke site
   lus status [<site>] [--json]           Wat er met een site gebeurde, en wat er nu moet
   lus pause <site>                       Zet een site stil; de run blijft staan
+  lus answer|sign|decide|statement <site> [-- <opties>]
+                                         Geef de terminal aan loep zelf, voor wat alleen een mens
+                                         kan: een antwoord, de handtekening, een besluit, de verklaring
   lus doctor [--routes]                  Controleer wat een run nodig heeft, en met --routes ook VLAM
 
 De backlog staat in ${backlogPath()} en de stand van lus in ${stateDir()}.
@@ -31,15 +42,20 @@ const OPTIONS = {
   "max-sends": { type: "string" },
   "also-origin": { type: "string", multiple: true },
   "never-open": { type: "string", multiple: true },
-  login: { type: "string" },
+  "login-page": { type: "string" },
+  "login-role": { type: "string" },
+  "at-once": { type: "string" },
+  mailbox: { type: "string" },
   "vendor-tag": { type: "string", multiple: true },
   note: { type: "string" },
   json: { type: "boolean" },
   routes: { type: "boolean" },
+  sites: { type: "string" },
+  only: { type: "string" },
+  what: { type: "string" },
+  follow: { type: "boolean", short: "f" },
   help: { type: "boolean", short: "h" },
 } as const;
-
-const statePath = (): string => `${stateDir()}/state.json`;
 
 /** "3 uur geleden", for a moment in the past; the state and the log are read by a person. */
 function agoNl(iso: string | null): string {
@@ -111,6 +127,31 @@ async function completeAdd(given: { name: string | undefined; organisation: stri
   }
 }
 
+/** The step as it comes in, on one line, while the regie runs. */
+function progress(step: string): void {
+  if (process.stdout.isTTY) process.stdout.write(`\r  ${step.padEnd(24)}`);
+}
+
+/** What became of a site, in the words of the next action. */
+function report(site: Site, state: SiteState): void {
+  if (process.stdout.isTTY) process.stdout.write(`\r${" ".repeat(28)}\r`);
+  switch (state.phase) {
+    case "vraagt":
+      process.stdout.write(`${site.slug} stopt en wacht op jou.\n\n${state.question?.textNl ?? ""}\n`);
+      if (state.question?.command) process.stdout.write(`\nCommando:\n${state.question.command}\n`);
+      process.stdout.write(`\nDaarna: lus resume ${site.slug}\n`);
+      return;
+    case "klaar":
+      process.stdout.write(`${site.slug} is verzegeld: de run staat in ${state.run}, het rapport komt in ${reportsDir()}.\n`);
+      return;
+    case "fout":
+      process.stdout.write(`${site.slug} stopte zonder vraag en zonder verzegelde run (laatste stap: ${state.step ?? "onbekend"}).\nBekijk: lus log ${site.slug}\n`);
+      return;
+    default:
+      process.stdout.write(`${site.slug}: ${PHASES_NL[state.phase]}\n`);
+  }
+}
+
 async function main(): Promise<void> {
   const { values, positionals } = parseArgs({ allowPositionals: true, options: OPTIONS });
   const command = positionals[0];
@@ -133,7 +174,9 @@ async function main(): Promise<void> {
         sending: { allow: values["allow-sending"] === true, max: values["max-sends"] === undefined ? 20 : Number(values["max-sends"]) },
         alsoOrigins: values["also-origin"] ?? [],
         neverOpen: values["never-open"] ?? [],
-        login: values.login ?? null,
+        login: values["login-page"] === undefined ? null : { page: values["login-page"], role: values["login-role"] ?? "" },
+        atOnce: values["at-once"] === undefined ? 3 : Number(values["at-once"]),
+        mailbox: values.mailbox ?? null,
         vendorTags: values["vendor-tag"] ?? [],
         note: values.note ?? "",
       });
@@ -175,8 +218,62 @@ async function main(): Promise<void> {
       if (target === undefined) throw new Error("lus pause heeft een site nodig");
       const backlog = readBacklog(backlogPath());
       const site = findSite(backlog.sites, target);
-      updateSite(statePath(), site.slug, { phase: "gepauzeerd" });
+      pauseSite(site.slug);
       process.stdout.write(`${site.slug} staat stil. Ga verder met: lus resume ${site.slug}\n`);
+      return;
+    }
+    case "run":
+    case "resume": {
+      const backlog = readBacklog(backlogPath());
+      const taken = acquireLock(lockPath(), target ?? null);
+      if (!taken.ok) throw new Error(`lus loopt al: proces ${taken.lock.pid} op ${taken.lock.host}${taken.lock.slug ? `, met ${taken.lock.slug}` : ""}, sinds ${taken.lock.since.slice(0, 16).replace("T", " ")}`);
+      try {
+        if (command === "resume") {
+          if (target === undefined) throw new Error("lus resume heeft een site nodig");
+          const site = findSite(backlog.sites, target);
+          const known = siteState(readState(statePath()), site.slug);
+          if (known.run === null) throw new Error(`${site.slug} is nog niet begonnen; start hem met: lus run --only ${site.slug}`);
+          const what = values.what ?? (known.question !== null ? `De mens voerde het commando uit dat in vraag.md stond${known.question.command ? ` (${known.question.command})` : ""}.` : "De vorige regie stopte zonder een vraag achter te laten.");
+          await report(site, await runSite({ site, resumeNl: what, onStep: progress }));
+          return;
+        }
+        const state = readState(statePath());
+        const waiting = new Set(["klaar", "vraagt", "gepauzeerd"]);
+        const limit = values.sites === undefined ? 1 : Number(values.sites);
+        if (!Number.isInteger(limit) || limit < 1) throw new Error("--sites moet een heel getal van 1 of meer zijn");
+        const todo = backlog.sites.filter((entry) => (values.only === undefined || entry.slug === values.only) && !waiting.has(siteState(state, entry.slug).phase));
+        if (todo.length === 0) {
+          process.stdout.write(`Niets te doen: elke site is klaar, wacht op een mens, of staat stil${values.only === undefined ? "" : ` (--only ${values.only})`}.\n`);
+          return;
+        }
+        for (const entry of todo.slice(0, limit)) await report(entry, await runSite({ site: entry, onStep: progress }));
+      } finally {
+        releaseLock(lockPath());
+      }
+      return;
+    }
+    case "log": {
+      if (target === undefined) throw new Error("lus log heeft een site nodig");
+      const site = findSite(readBacklog(backlogPath()).sites, target);
+      const path = transcriptPath(site);
+      process.stdout.write(`${readTranscript(path).join("\n")}\n`);
+      if (values.follow) spawnSync("tail", ["-f", path], { stdio: "inherit" });
+      return;
+    }
+    case "answer":
+    case "sign":
+    case "decide":
+    case "statement": {
+      if (target === undefined) throw new Error(`lus ${command} heeft een site nodig`);
+      const site = findSite(readBacklog(backlogPath()).sites, target);
+      const known = siteState(readState(statePath()), site.slug);
+      if (known.run === null) throw new Error(`${site.slug} heeft nog geen run; er is niets om te ${command === "sign" ? "tekenen" : "beantwoorden"}`);
+      const result = spawnSync("node", [toolboxCli, command, "--run", known.run, ...positionals.slice(2)], { stdio: "inherit" });
+      if (result.status !== 0) {
+        process.exitCode = result.status ?? 1;
+        return;
+      }
+      process.stdout.write(`\nDaarna: lus resume ${site.slug}\n`);
       return;
     }
     case "doctor": {
