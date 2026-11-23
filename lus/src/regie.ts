@@ -56,6 +56,15 @@ function mailboxNl(site: Site): string {
 }
 
 /** The prompt the regie gets: the site, what the person decided, and the rules of a headless session. */
+/**
+ * What lus says when a regie ended its turn with the run half done. It happens: the agent reports
+ * "the explorer is working on it" and stops, and nothing follows. The harness is the layer that can
+ * start the next turn, so it does, and this is what it says.
+ */
+export function continueNl(run: string): string {
+  return `De vorige beurt stopte zonder een vraag achter te laten en zonder de run te verzegelen, terwijl het onderzoek nog niet af was. Ga verder met de skill: draai eerst \`node ${toolboxCli} pending --run ${run} --brief\` en werk door tot de run verzegeld is. Geef de beurt pas terug als dat zo is, of als er echt een mens nodig is.`;
+}
+
 export function regiePrompt(options: RegieOptions): string {
   const { site, run } = options;
   const lines: string[] = [];

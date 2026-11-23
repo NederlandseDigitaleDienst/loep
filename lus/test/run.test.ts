@@ -115,3 +115,35 @@ test("een run met een zegel is klaar", () => {
   writeFileSync(join(run, "evidence-index.json"), "{}\n");
   assert.equal(isSealed(run), true);
 });
+
+test("een regie die haar beurt teruggeeft met een half af onderzoek wordt door lus verder gestuurd", async () => {
+  // Precies wat er in de praktijk gebeurde: de regie meldt dat de verkenner bezig is en stopt.
+  const home = fakeHome(`alles="$@"
+run=""
+while [ $# -gt 0 ]; do case "$1" in --add-dir) run="$2"; shift ;; esac; shift; done
+n=0; [ -f beurten ] && n=$(cat beurten); n=$((n + 1)); echo $n > beurten
+echo "$alles" > "args-$n.txt"
+if [ "$n" = "1" ]; then echo vooruitgang > "$run/vooruitgang.txt"; fi
+if [ "$n" = "2" ]; then echo '{}' > "$run/evidence-index.json"; fi
+echo '{"type":"result","result":"klaar"}'`);
+  const state = await runSite({ site: site() });
+  assert.equal(state.phase, "klaar");
+  assert.equal(state.continues, 0, "een afgemaakte run telt geen beurten meer");
+  const dir = join(home, ".lus", "voorbeeld.nl");
+  assert.equal(readFileSync(join(dir, "beurten"), "utf8").trim(), "2");
+  const tweede = readFileSync(join(dir, "args-2.txt"), "utf8");
+  assert.match(tweede, /De vorige beurt stopte zonder een vraag/);
+  assert.match(tweede, /pending --run .* --brief/);
+  assert.match(readFileSync(join(dir, "lus.log"), "utf8"), /beurt 1 van 20/);
+});
+
+test("een regie die de run niet laat groeien krijgt geen tweede beurt", async () => {
+  // Zonder deze grens kost een regie die vastloopt twintig keer dezelfde minuten.
+  const home = fakeHome(`n=0; [ -f beurten ] && n=$(cat beurten); n=$((n + 1)); echo $n > beurten
+echo '{"type":"result","result":"niets"}'`);
+  const state = await runSite({ site: site() });
+  assert.equal(state.phase, "fout");
+  const dir = join(home, ".lus", "voorbeeld.nl");
+  assert.equal(readFileSync(join(dir, "beurten"), "utf8").trim(), "1");
+  assert.match(readFileSync(join(dir, "lus.log"), "utf8"), /niet veranderd/);
+});

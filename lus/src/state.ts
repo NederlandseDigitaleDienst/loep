@@ -45,6 +45,8 @@ export interface SiteState {
   version: Version | null;
   /** The process of the regie, so a lock left by a killed process is recognised as stale. */
   pid: number | null;
+  /** How often lus continued this run after a regie stopped without a question and without a seal. */
+  continues: number;
 }
 
 export interface State {
@@ -52,7 +54,7 @@ export interface State {
 }
 
 export function emptySite(slug: string): SiteState {
-  return { slug, phase: "nieuw", run: null, startedAt: null, updatedAt: new Date().toISOString(), step: null, question: null, version: null, pid: null };
+  return { slug, phase: "nieuw", run: null, startedAt: null, updatedAt: new Date().toISOString(), step: null, question: null, version: null, pid: null, continues: 0 };
 }
 
 export function readState(path: string): State {
@@ -71,7 +73,8 @@ export function writeState(path: string, state: State): void {
 }
 
 export function siteState(state: State, slug: string): SiteState {
-  return state.sites[slug] ?? emptySite(slug);
+  // A state written by an older lus lacks the fields added since; the empty site says what they are.
+  return { ...emptySite(slug), ...state.sites[slug], slug };
 }
 
 /** Change what lus knows about one site and write it back. */

@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { appendFileSync, existsSync, readFileSync } from "node:fs";
+import { appendFileSync, existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import type { Question } from "./state.ts";
 
@@ -133,6 +133,30 @@ export function readQuestion(dir: string): Question | null {
 
 /** A run whose evidence is sealed: the report exists and nobody can have changed it since. */
 export const isSealed = (run: string): boolean => existsSync(join(run, "evidence-index.json"));
+
+/**
+ * What the run holds now: how many files and when the last one changed. A regie that ends its turn
+ * without a question or a seal is asked to go on, but not when it left the run exactly as it found it:
+ * that is a regie that is stuck, and a second turn would only cost the same minutes again.
+ */
+export function runSnapshot(run: string): string {
+  if (!existsSync(run)) return "leeg";
+  let files = 0;
+  let latest = 0;
+  const walk = (dir: string): void => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const path = join(dir, entry.name);
+      if (entry.isDirectory()) walk(path);
+      else {
+        files += 1;
+        const time = statSync(path).mtimeMs;
+        if (time > latest) latest = time;
+      }
+    }
+  };
+  walk(run);
+  return `${files}:${latest}`;
+}
 
 /** Shown as the last resort of `status`: the last lines of the transcript, without the JSON around them. */
 export function lastWords(transcript: string, lines: number = 8): string[] {
