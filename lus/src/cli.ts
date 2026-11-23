@@ -85,7 +85,7 @@ function listTextNl(sites: Site[], state: ReturnType<typeof readState>): string 
 }
 
 /** Everything about one site: the file, the run, the question, and what to do next. */
-function statusTextNl(site: Site, site_: SiteState): string {
+function statusTextNl(site: Site, site_: SiteState, words: string[] = []): string {
   const lines: string[] = [`${site.slug}  ${PHASES_NL[site_.phase]}`];
   const field = (label: string, value: string | null): void => {
     if (value !== null && value !== "") lines.push(`  ${label.padEnd(10)} ${value}`);
@@ -102,6 +102,11 @@ function statusTextNl(site: Site, site_: SiteState): string {
   if (site_.question) {
     lines.push("", `  Vraag: ${site_.question.textNl}`);
     if (site_.question.command) lines.push(`  Daarna: ${site_.question.command}`);
+  }
+  if (site_.phase === "fout" && !site_.question) {
+    lines.push("", "  De regie stopte zonder vraag en zonder verzegelde run. De laatste regels:");
+    for (const word of words) lines.push(`    ${word}`);
+    if (words.length === 0) lines.push("    (er staat nog niets in het transcript)");
   }
   return `${lines.join("\n")}\n`;
 }
@@ -305,7 +310,7 @@ async function main(): Promise<void> {
         process.stdout.write(`${JSON.stringify({ site, state: site_, question: site_.question, dir: siteDir(site.slug) }, null, 2)}\n`);
         return;
       }
-      process.stdout.write(statusTextNl(site, site_));
+      process.stdout.write(statusTextNl(site, site_, site_.phase === "fout" ? lastWords(transcriptPath(site), 8) : []));
       return;
     }
     case "pause": {
