@@ -80,20 +80,34 @@ lus resume <site> --what "de gebruiker bevestigde dat docs.voorbeeld.nl erbij ho
 
 Hervatten begint met `pending`, dus de run gaat verder waar hij staat. Vindt lus geen vraag en ook geen verzegelde run, dan zegt `status` dat de regie onduidelijk stopte, met de laatste regels van het transcript erbij.
 
-## De metingen van deze repository
+## Een meting voor een release
 
-lus draait ook de metingen van loep zelf, als dezelfde taken die de pijplijn draait:
+Voor een release wil je weten wat loep doet op zijn eigen testwebsites: Lindewaard, waar de gebreken met opzet in zitten, en Berkenveen, de schone tweeling. Dat zijn gewone runs van loep, dus lus draait ze als gewone runs: de regie volgt de skill, de verkenner en de werkstroom doen hun werk, en er komt een verzegeld rapport per site uit. Het enige verschil is de backlog: die van de meting staat apart, zodat de testwebsites nooit tussen de sites van echte eigenaren komen.
 
 ```
-lus meet                 # de snelle: reuse, de types, de procedures, de tests zonder browser en die van lus
-lus meet --all           # ook alle tests met browser, de veegronde op de testsite en de ijkmeting
-lus meet --only veegronde
-lus meet --fresh         # begin opnieuw in plaats van de meting van daarnet af te maken
+just testsite                 # in een ander venster: de twee testwebsites op 4710 en 4711
+lus meting                    # beide erdoor, met agents; de rapporten komen in ~/onderzoeken/meting/rapporten/
+lus meting --only lindewaard
 ```
 
-Vanuit de repository kan het ook met de justfile: `just meet` voor de snelle metingen en `just meet-all` voor alle. Die twee geven door aan lus, dat op zijn beurt de taken van de justfile draait.
+lus zet de twee testwebsites zelf in de backlog van de meting, met de aantekening waar elke site voor dient. Antwoordt een van de twee niet, dan stopt lus voordat er een agent begint, met de opdracht om de testsite te starten. Een meting heeft een eigen slot, dus ze houdt een run van echte sites niet tegen; draai ze wel niet tegelijk, want ze delen de machine en de browsers.
 
-Een meting stopt bij de eerste stap die niet in orde is, net als de pijplijn, en toont de laatste regels van dat logboek. Los je het op, dan gaat `lus meet` verder bij die stap; wat al in orde was draait niet nog eens. De logboeken staan in `~/onderzoeken/.lus/metingen/<moment>/`, en de veegronde schrijft daar ook wat hij meet. Onder 15 GB vrij begint lus geen meting, en een meting en een run gaan niet tegelijk: ze delen het slot.
+Naast deze meting met agents is er de regressietoets zonder taalmodel die de pijplijn zelf draait: `just sweep-check`. Die telt of elk ingebouwd gebrek in het dossier staat, en `lus toets --all` neemt hem mee.
+
+## De toetsen van deze repository
+
+lus draait ook de toetsen van loep zelf, als dezelfde taken die de pijplijn draait:
+
+```
+lus toets                # de snelle: reuse, de types, de procedures, de tests zonder browser en die van lus
+lus toets --all          # ook alle tests met browser, de veegronde op de testsite en de ijkmeting
+lus toets --only veegronde
+lus toets --fresh        # begin opnieuw in plaats van de toets van daarnet af te maken
+```
+
+Vanuit de repository kan het ook met de justfile: `just toets` voor de snelle toetsen en `just toets-all` voor alle. Die twee geven door aan lus, dat op zijn beurt de taken van de justfile draait.
+
+Een toets stopt bij de eerste stap die niet in orde is, net als de pijplijn, en toont de laatste regels van dat logboek. Los je het op, dan gaat `lus toets` verder bij die stap; wat al in orde was draait niet nog eens. De logboeken staan in `~/onderzoeken/.lus/toetsen/<moment>/`, en de veegronde schrijft daar ook wat hij meet. Onder 15 GB vrij begint lus geen toets, en een toets en een run gaan niet tegelijk: ze delen het slot.
 
 ## Waar alles staat
 
@@ -102,11 +116,12 @@ Een meting stopt bij de eerste stap die niet in orde is, net als de pijplijn, en
 | De backlog | `~/onderzoeken/backlog.yaml` |
 | De stand, per site | `~/onderzoeken/.lus/state.json` |
 | De vraag, het transcript, het log van lus | `~/onderzoeken/.lus/<slug>/` |
-| De metingen, met hun logboeken | `~/onderzoeken/.lus/metingen/<moment>/` |
+| De toetsen, met hun logboeken | `~/onderzoeken/.lus/toetsen/<moment>/` |
 | De run van loep | `~/onderzoeken/<slug>/<datum>/` |
 | De rapporten | `~/onderzoeken/rapporten/` |
+| Een meting: backlog, runs en rapporten | `~/onderzoeken/meting/` |
 
-`LUS_HOME` verzet de eerste vier naar een eigen map.
+`LUS_HOME` verzet de backlog, de stand, de vragen en de toetsen naar een eigen map. Een meting heeft er altijd een van zichzelf, zodat de testwebsites buiten de backlog van echte eigenaren blijven.
 
 ## Wat lus niet doet
 
