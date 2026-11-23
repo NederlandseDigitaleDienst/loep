@@ -103,6 +103,8 @@ test("een eigen configuratiemap houdt de instellingen van de gebruiker buiten de
   const home = mkdtempSync(join(tmpdir(), "lus-regie-"));
   process.env["LUS_HOME"] = home;
   assert.equal(regieEnv()["CLAUDE_CONFIG_DIR"], join(home, ".lus", "claude-home"));
+  // Zonder dit stopt claude -p een subagent die nog loopt na tien minuten, en is de run half af.
+  assert.equal(regieEnv()["CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS"], "21600000");
 });
 
 test("een site op deze machine herkent lus", () => {

@@ -64,6 +64,8 @@ lus run --only voorbeeld.nl --new
 
 lus pakt een slot, start de regie en leest de stream voor de voortgang: `inventory`, `gate`, `werkstroom`. Een site die op een mens wacht houdt de rest niet tegen. Elke site krijgt één map voor zijn run: `~/onderzoeken/<slug>/<datum>/`. Een tweede start op dezelfde dag gaat verder in dezelfde map, want de run zelf zegt waar hij staat.
 
+Een regie die een subagent start en haar beurt teruggeeft, wacht daarop; zonder ingrijpen stopt `claude -p` zo'n subagent na tien minuten en blijft er een half onderzoek achter. lus zet die grens op zes uur en start, als een beurt toch zonder vraag en zonder zegel eindigt, zelf de volgende beurt, tot twintig keer en alleen zolang de run groeit.
+
 Een run hoort bij één checkout. Hervat je hem in een andere versie, dan zegt lus welke twee dat zijn en stopt hij, in plaats van bewijs van twee versies te mengen. Wat er dan overblijft is een nieuwe run naast de oude: `--new` laat de bestaande map staan en begint in `<datum>-2`. Ook `lus meting` kent die vlag.
 
 ```

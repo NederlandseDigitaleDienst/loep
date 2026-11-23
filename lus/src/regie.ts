@@ -148,6 +148,13 @@ export function regieArgs(prompt: string, run: string): string[] {
  * CLAUDE.md of the person out of a run. `--safe-mode` cannot do that here, because it also switches
  * off the skill.
  */
+/**
+ * Six hours: `claude -p` waits that long for a subagent that is still running when the turn ends, and
+ * stops it after ten minutes by default. The explorer and a round of the workflow take longer than
+ * that, so the default kills them and ends the turn with a half-done run.
+ */
+export const BG_WAIT_CEILING_MS = "21600000";
+
 export function regieEnv(): NodeJS.ProcessEnv {
-  return { ...process.env, CLAUDE_CONFIG_DIR: join(stateDir(), "claude-home") };
+  return { ...process.env, CLAUDE_CONFIG_DIR: join(stateDir(), "claude-home"), CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS: BG_WAIT_CEILING_MS };
 }
