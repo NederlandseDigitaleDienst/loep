@@ -42,7 +42,16 @@ Wat je weglaat vraagt lus als je aan een terminal zit; zonder terminal vult het 
   note: ""
 ```
 
-Een wachtwoord hoort hier niet in. De gebruiker logt zelf in, in een browservenster, en loep bewaart de sessie.
+Een wachtwoord hoort hier niet in. Wat je met `--login-page` en `--login-role` vastlegt is waar de inlog staat en in welke rol je test, niet hoe je binnenkomt.
+
+Het inloggen zelf gebeurt aan het begin van de run, en twee keer: een keer voor de meting en een keer voor de proef op de sessie. loep opent daarvoor een browservenster op de machine waar je zit, jij typt de gegevens van het testaccount in dat venster, en loep bewaart alleen de sessie die overblijft. Het wachtwoord ziet loep nooit. De regie kan dat niet zelf, want een `claude -p` heeft geen venster: hij stopt en zet de twee commando's in `vraag.md`. Jij draait ze:
+
+```
+lus login <site>            # de meting
+lus login <site> --idle     # de proef op de sessie
+```
+
+Daarna gaat de run verder met `lus resume <site>`.
 
 ## Lopen
 
@@ -66,13 +75,14 @@ lus pause <site>
 De regie schrijft dan `vraag.md` in `~/onderzoeken/.lus/<slug>/`: de vraag, het exacte commando en wat er daarna moet bestaan. `lus run` en `lus status` tonen hetzelfde. Je draait het commando zelf:
 
 ```
+lus login <site>          # het testaccount, als de site achter een inlog zit
 lus answer <site> -- --criterion 1.4.3 ...
 lus sign <site>
 lus decide <site>
 lus statement <site>
 ```
 
-Die vier geven de terminal aan loep zelf. lus voert ze niet uit en typt niets voor je in, want loep wil dat een mens het bevestigt. Daarna:
+Die vijf geven de terminal aan loep zelf. lus voert ze niet uit en typt niets voor je in, want loep wil dat een mens het bevestigt. Daarna:
 
 ```
 lus resume <site> --what "de gebruiker bevestigde dat docs.voorbeeld.nl erbij hoort"

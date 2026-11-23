@@ -26,6 +26,8 @@ const USAGE = `lus: loep over een backlog van sites, met een mens erbij waar dat
   lus list [--json]                      De backlog met de stand van elke site
   lus status [<site>] [--json]           Wat er met een site gebeurde, en wat er nu moet
   lus pause <site>                       Zet een site stil; de run blijft staan
+  lus login <site> [--idle]              Open het venster waarin je zelf met het testaccount inlogt;
+                                         loep bewaart de sessie, niet het wachtwoord
   lus answer|sign|decide|statement <site> [-- <opties>]
                                          Geef de terminal aan loep zelf, voor wat alleen een mens
                                          kan: een antwoord, de handtekening, een besluit, de verklaring
@@ -357,6 +359,23 @@ async function main(): Promise<void> {
       const path = transcriptPath(site);
       process.stdout.write(`${readTranscript(path).join("\n")}\n`);
       if (values.follow) spawnSync("tail", ["-f", path], { stdio: "inherit" });
+      return;
+    }
+    case "login": {
+      // The login is the one human step that has to happen early: loep opens a window, the person types
+      // the test account in it, and only the session that is left over stays in the run.
+      if (target === undefined) throw new Error("lus login heeft een site nodig; het opent het venster van loep voor het testaccount");
+      const site = findSite(readBacklog(backlogPath()).sites, target);
+      if (site.login === null) throw new Error(`${site.slug} heeft geen inlog in de backlog; zet --login-page en --login-role bij de site, of laat dit achterwege`);
+      const known = siteState(readState(statePath()), site.slug);
+      if (known.run === null) throw new Error(`${site.slug} heeft nog geen run; een inlog hoort bij een run, en die begint met: lus run --only ${site.slug}`);
+      const args = [toolboxCli, "login", "--run", known.run, "--url", site.login.page, ...(site.login.role === "" ? [] : ["--role", site.login.role]), ...positionals.slice(2)];
+      const result = spawnSync("node", args, { stdio: "inherit" });
+      if (result.status !== 0) {
+        process.exitCode = result.status ?? 1;
+        return;
+      }
+      process.stdout.write(`\nDaarna: lus resume ${site.slug}\n`);
       return;
     }
     case "answer":
