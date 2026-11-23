@@ -1,6 +1,7 @@
 # Taken voor loep. Een onderzoek in volgorde: install, explore, (verkenner-agent), sweep, tasks, (agents), report, (weegagent), render. De namen volgen de commando's van de toolbox.
 
 toolbox := justfile_directory() / "toolbox"
+lus := justfile_directory() / "lus"
 cli := "node " + toolbox / "src/cli.ts"
 
 # Toon de beschikbare taken
@@ -103,6 +104,18 @@ test-quick:
 # Controleer de types
 check:
     cd {{toolbox}} && npx tsc --noEmit
+
+# Installeer de pakketten van lus
+lus-install:
+    cd {{lus}} && npm ci
+
+# De tests van lus: de backlog, de stand, het slot en de loper met een nep-regie
+lus-test:
+    cd {{lus}} && node --test 'test/**/*.test.ts'
+
+# Controleer de types van lus
+lus-check:
+    cd {{lus}} && npx tsc --noEmit
 
 # Controleer de procedurecatalogus
 procedures:
