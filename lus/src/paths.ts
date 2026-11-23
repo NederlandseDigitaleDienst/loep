@@ -1,5 +1,5 @@
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 /*
@@ -11,8 +11,8 @@ import { fileURLToPath } from "node:url";
  * (a test site, a customer that keeps its own list) is a folder and not a flag.
  */
 
-/** The checkout that holds the toolbox, the skill and lus. */
-export const repoRoot = fileURLToPath(new URL("../../", import.meta.url));
+/** The checkout that holds the toolbox, the skill and lus, without a slash at the end. */
+export const repoRoot = dirname(dirname(dirname(fileURLToPath(import.meta.url))));
 export const toolboxCli = join(repoRoot, "toolbox", "src", "cli.ts");
 export const workflowFile = join(repoRoot, "skills", "nldd-a11y-audit", "onderzoek.workflow.js");
 export const pluginFile = join(repoRoot, ".claude-plugin", "plugin.json");
