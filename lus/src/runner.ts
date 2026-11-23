@@ -5,7 +5,7 @@ import { runDirFor, siteDir, stateDir } from "./paths.ts";
 import { regieArgs, regieEnv, regiePrompt } from "./regie.ts";
 import { isSealed, readQuestion, startRegie } from "./run.ts";
 import { readState, siteState, updateSite, type SiteState } from "./state.ts";
-import { checkoutVersion } from "./version.ts";
+import { checkoutVersion, sameVersion, versionNl } from "./version.ts";
 
 /*
  * One site, one regie. The state is written before the regie starts, so a killed lus still says what
@@ -36,6 +36,12 @@ export async function runSite(options: SiteRunOptions): Promise<SiteState> {
   const dir = siteDir(site.slug);
   mkdirSync(dir, { recursive: true });
   const known = siteState(readState(statePath()), site.slug);
+  // Een run hoort bij één checkout: de skill, de toolbox en de werkstroom zijn samen één versie, en een
+  // tweede versie erover heen zou bewijs mengen dat bij verschillende code hoort.
+  const version = checkoutVersion();
+  if (known.version !== null && !sameVersion(known.version, version)) {
+    throw new Error(`${site.slug} is begonnen in ${versionNl(known.version)} en deze checkout is ${versionNl(version)}; maak de run af in de versie waarin hij begon, of begin een nieuwe run`);
+  }
   const run = known.run !== null && existsSync(known.run) ? known.run : runDirFor(site.slug);
   mkdirSync(run, { recursive: true });
   archiveQuestion(dir);
@@ -48,7 +54,7 @@ export async function runSite(options: SiteRunOptions): Promise<SiteState> {
     startedAt: known.startedAt ?? new Date().toISOString(),
     step: null,
     question: null,
-    version: checkoutVersion(),
+    version: known.version ?? version,
   });
   const log = (message: string): void => appendFileSync(join(dir, "lus.log"), `${new Date().toISOString()} ${message}\n`);
   log(`regie start${options.resumeNl ? " (hervat)" : ""}: ${run}`);
