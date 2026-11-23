@@ -87,7 +87,7 @@ export function regiePrompt(options: RegieOptions): string {
   lines.push(`1. Start een agent nooit zelf. Stap 6 draai je met de Workflow-tool op ${workflowFile}, met args {cli: "${toolboxCli}", run: "${run}", atOnce: ${options.atOnce}} en zonder models. Een losse agent start je met de Task-tool, met de inhoud van het taakbestand als opdracht. Een werkstroom met honderdvijftig agents over twintig rondes is hier de bedoeling.`);
   lines.push("2. Kan een stap alleen met een mens, of wijst loep je naar een terminal, dan stop je. Schrijf in vraag.md in je werkmap: de vraag in gewone zinnen, het exacte commando tussen drie backticks, en wat er daarna moet bestaan. Verzin geen antwoord, ga niet verder, en teken nooit en verklaar nooit een testomgeving.");
   lines.push("3. Houd lange uitvoer uit je context: schrijf wat lang is naar uitvoer.log in je werkmap en lees daar de laatste veertig regels van.");
-  lines.push("4. Meet de site nooit buiten loep om: geen eigen browsers, geen eigen verzoeken naar de site, geen WebFetch.");
+  lines.push("4. Meet de site nooit buiten loep om: geen eigen browsers, geen eigen verzoeken naar de site, geen WebFetch. Bash staat open voor gereedschap en voor de commando's uit de skill, maar een verzoek aan de site gaat altijd via loep; curl en wget zijn geweigerd en een eigen scriptje met fetch mag niet.");
   lines.push("");
   lines.push(`Je werkmap is ${join(stateDir(), site.slug)}; de run staat daar met --add-dir open. Alles wat je in de run schrijft, moet loep zelf geschreven hebben: het zegel dekt elk bestand in de run.`);
   return lines.join("\n");
@@ -107,8 +107,11 @@ export function regieArgs(prompt: string, run: string): string[] {
     "acceptEdits",
     "--tools",
     "Bash,Read,Write,Edit,Glob,Grep,Workflow,Task",
+    // Bash staat open: de skill schrijft commando's als `cd … && just doctor | tail -60`, en een
+    // toelating per commando weigert die samengestelde vormen. Wat de site raakt, houdt de lijst
+    // hieronder tegen, en die erft elke agent van de werkstroom.
     "--allowedTools",
-    `Bash(node ${toolboxCli}:*)`,
+    "Bash",
     "Read",
     "Write",
     "Edit",

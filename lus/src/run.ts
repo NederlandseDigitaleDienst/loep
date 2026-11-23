@@ -23,6 +23,19 @@ interface ContentBlock {
   input?: Record<string, unknown>;
 }
 
+/**
+ * What goes into the transcript. The stream counts thinking tokens a few times a second; a transcript
+ * of hours of a run would be mostly those counters, and `lus log` has to stay readable.
+ */
+export function keepInTranscript(line: string): boolean {
+  try {
+    const parsed = JSON.parse(line) as { type?: unknown; subtype?: unknown };
+    return !(parsed.type === "system" && parsed.subtype === "thinking_tokens");
+  } catch {
+    return true;
+  }
+}
+
 /** The step a stream line stands for: the loep command, the workflow, or a single subagent. */
 export function stepOf(line: string): string | null {
   let parsed: unknown;
@@ -83,7 +96,7 @@ export function startRegie(options: StartOptions): Promise<RegieResult> {
       while (index >= 0) {
         const line = pending.slice(0, index);
         pending = pending.slice(index + 1);
-        if (line.trim() !== "") {
+        if (line.trim() !== "" && keepInTranscript(line)) {
           appendFileSync(options.transcript, `${line}\n`);
           const found = stepOf(line);
           if (found !== null) {
