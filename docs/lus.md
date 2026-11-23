@@ -80,6 +80,19 @@ lus resume <site> --what "de gebruiker bevestigde dat docs.voorbeeld.nl erbij ho
 
 Hervatten begint met `pending`, dus de run gaat verder waar hij staat. Vindt lus geen vraag en ook geen verzegelde run, dan zegt `status` dat de regie onduidelijk stopte, met de laatste regels van het transcript erbij.
 
+## De metingen van deze repository
+
+lus draait ook de metingen van loep zelf, als dezelfde taken die de pijplijn draait:
+
+```
+lus meet                 # de snelle: reuse, de types, de procedures, de tests zonder browser en die van lus
+lus meet --all           # ook alle tests met browser, de veegronde op de testsite en de ijkmeting
+lus meet --only veegronde
+lus meet --fresh         # begin opnieuw in plaats van de meting van daarnet af te maken
+```
+
+Een meting stopt bij de eerste stap die niet in orde is, net als de pijplijn, en toont de laatste regels van dat logboek. Los je het op, dan gaat `lus meet` verder bij die stap; wat al in orde was draait niet nog eens. De logboeken staan in `~/onderzoeken/.lus/metingen/<moment>/`, en de veegronde schrijft daar ook wat hij meet. Onder 15 GB vrij begint lus geen meting, en een meting en een run gaan niet tegelijk: ze delen het slot.
+
 ## Waar alles staat
 
 | Wat | Waar |
@@ -87,6 +100,7 @@ Hervatten begint met `pending`, dus de run gaat verder waar hij staat. Vindt lus
 | De backlog | `~/onderzoeken/backlog.yaml` |
 | De stand, per site | `~/onderzoeken/.lus/state.json` |
 | De vraag, het transcript, het log van lus | `~/onderzoeken/.lus/<slug>/` |
+| De metingen, met hun logboeken | `~/onderzoeken/.lus/metingen/<moment>/` |
 | De run van loep | `~/onderzoeken/<slug>/<datum>/` |
 | De rapporten | `~/onderzoeken/rapporten/` |
 

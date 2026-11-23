@@ -91,7 +91,7 @@ export interface RunnerLock {
 }
 
 /** Whether a process of this machine still runs. A process of another user answers EPERM, and that is alive too. */
-function alive(pid: number): boolean {
+export function alive(pid: number): boolean {
   try {
     process.kill(pid, 0);
     return true;
