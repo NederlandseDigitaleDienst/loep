@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import type { Site } from "../src/backlog.ts";
 import { isSealed, readQuestion, stepOf } from "../src/run.ts";
-import { runSite } from "../src/runner.ts";
-import { readState } from "../src/state.ts";
+import { handOutMissing, runSite } from "../src/runner.ts";
+import { readState, siteState } from "../src/state.ts";
 
 const site = (overrides: Partial<Site> = {}): Site => ({
   url: "https://www.voorbeeld.nl/",
@@ -205,4 +205,26 @@ echo '{"type":"result","result":"klaar"}'`);
   assert.deepEqual(state.handouts.map((file) => file.slice(file.lastIndexOf("/") + 1)), ["rapport-voorbeeld.nl-2026-11-23-concept.pdf"]);
   assert.ok(existsSync(join(home, "rapporten", "rapport-voorbeeld.nl-2026-11-23-concept.pdf")));
   assert.equal(readFileSync(join(home, "rapporten", "rapport-voorbeeld.nl-2026-11-23-concept.pdf"), "utf8"), "pdf\n");
+});
+
+test("een run die klaar was voordat lus rapporten uitgaf, krijgt ze alsnog", async () => {
+  const home = fakeHome(`run=""
+while [ $# -gt 0 ]; do case "$1" in --add-dir) run="$2"; shift ;; esac; shift; done
+echo '{}' > "$run/evidence-index.json"
+mkdir -p "$run/report"
+echo '{"site":{"baseUrl":"https://www.voorbeeld.nl/","name":"Voorbeeld"},"evaluatedAt":"2026-11-23T10:00:00.000Z","criteria":[]}' > "$run/evaluation.json"
+echo pdf > "$run/report/rapport.pdf"
+echo '{"type":"result","result":"klaar"}'`);
+  const state = await runSite({ site: site() });
+  assert.equal(state.handouts.length, 1);
+  // De stand van toen: klaar, maar zonder de kopie.
+  const path = join(home, ".lus", "state.json");
+  const older = readState(path);
+  older.sites["voorbeeld.nl"]!.handouts = [];
+  writeFileSync(path, JSON.stringify(older));
+  rmSync(join(home, "rapporten"), { recursive: true, force: true });
+  const again = handOutMissing("voorbeeld.nl", siteState(readState(path), "voorbeeld.nl"));
+  assert.equal(again.length, 1);
+  assert.deepEqual(readState(path).sites["voorbeeld.nl"]!.handouts, again);
+  assert.ok(existsSync(again[0]!));
 });

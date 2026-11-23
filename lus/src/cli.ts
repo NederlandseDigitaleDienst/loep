@@ -7,7 +7,7 @@ import { doctor, doctorTextNl, routesCheck } from "./doctor.ts";
 import { FIXTURES, metingHome, prepareBacklog, silent } from "./meting.ts";
 import { backlogPath, homeDir, reportsDir, siteDir, stateDir, toolboxCli } from "./paths.ts";
 import { lastWords, readTranscript } from "./run.ts";
-import { lockPath, pauseSite, runSite, statePath, transcriptPath } from "./runner.ts";
+import { handOutMissing, lockPath, pauseSite, runSite, statePath, transcriptPath } from "./runner.ts";
 import { acquireLock, isGone, PHASES_NL, readState, releaseLock, siteState, type SiteState } from "./state.ts";
 import { versionNl } from "./version.ts";
 
@@ -224,6 +224,12 @@ async function runBacklog(options: { sites?: string | undefined; only?: string |
     const limit = options.sites === undefined ? 1 : Number(options.sites);
     if (!Number.isInteger(limit) || limit < 1) throw new Error("--sites moet een heel getal van 1 of meer zijn");
     const todo = backlog.sites.filter((entry) => (options.only === undefined || entry.slug === options.only) && !waiting.has(siteState(state, entry.slug).phase));
+    // Een run die klaar was voordat lus rapporten uitgaf, krijgt ze alsnog: geen regie, alleen de kopie.
+    for (const entry of backlog.sites) {
+      if (options.only !== undefined && entry.slug !== options.only) continue;
+      const known = siteState(readState(statePath()), entry.slug);
+      for (const file of handOutMissing(entry.slug, known)) process.stdout.write(`rapport: ${file}\n`);
+    }
     if (todo.length === 0) {
       process.stdout.write(`Niets te doen: elke site is klaar, wacht op een mens, of staat stil${options.only === undefined ? "" : ` (--only ${options.only})`}.\n`);
       return;

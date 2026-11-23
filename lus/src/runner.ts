@@ -52,7 +52,7 @@ function freeRunDir(slug: string): string {
  * run without an evaluation has nothing to hand out, and a handout that fails is said in the log and
  * not a reason to call a sealed run a failure.
  */
-function handOut(slug: string, run: string): string[] {
+export function handOut(slug: string, run: string): string[] {
   if (!existsSync(join(run, "evaluation.json"))) return [];
   const result = spawnSync("node", [toolboxCli, "handout", "--run", run, "--out", reportsDir(), "--name", slug], { encoding: "utf8" });
   if (result.status !== 0) return [];
@@ -136,6 +136,17 @@ export async function runSite(options: SiteRunOptions): Promise<SiteState> {
     log(`stand: ${phase}`);
     return updateSite(statePath(), site.slug, { phase, pid: null, step, question, handouts, continues: phase === "klaar" || phase === "vraagt" ? 0 : continues });
   }
+}
+
+/**
+ * A run that finished before lus handed reports out has none in its state; `run` and `meting` fill that
+ * in without starting a regie. The copy is a second copy of the same report, and the state then knows it.
+ */
+export function handOutMissing(slug: string, known: SiteState): string[] {
+  if (known.phase !== "klaar" || known.run === null || known.handouts.length > 0) return [];
+  const handouts = handOut(slug, known.run);
+  if (handouts.length > 0) updateSite(statePath(), slug, { handouts });
+  return handouts;
 }
 
 /** Standing still on purpose: the run is kept, and `resume` goes on from it. */
