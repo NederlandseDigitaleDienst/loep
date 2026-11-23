@@ -147,3 +147,35 @@ echo '{"type":"result","result":"niets"}'`);
   assert.equal(readFileSync(join(dir, "beurten"), "utf8").trim(), "1");
   assert.match(readFileSync(join(dir, "lus.log"), "utf8"), /niet veranderd/);
 });
+
+test("een tweede run van dezelfde dag komt naast de eerste, niet erover heen", async () => {
+  // Een run hoort bij één checkout; na een nieuwe versie is er geen doorgaan maar een nieuwe run.
+  const home = fakeHome(`run=""
+while [ $# -gt 0 ]; do case "$1" in --add-dir) run="$2"; shift ;; esac; shift; done
+echo '{}' > "$run/evidence-index.json"
+echo '{"type":"result","result":"klaar"}'`);
+  const first = await runSite({ site: site() });
+  assert.equal(first.phase, "klaar");
+  const second = await runSite({ site: site(), newRun: true });
+  assert.equal(second.phase, "klaar");
+  assert.notEqual(first.run, second.run);
+  assert.match(second.run ?? "", /-\d+$/);
+  assert.ok(existsSync(first.run ?? ""));
+  assert.ok(existsSync(second.run ?? ""));
+});
+
+test("een run uit een andere checkout hervat niet, en --new zegt wat dan wel kan", async () => {
+  const home = fakeHome(`run=""
+while [ $# -gt 0 ]; do case "$1" in --add-dir) run="$2"; shift ;; esac; shift; done
+echo '{}' > "$run/evidence-index.json"
+echo '{"type":"result","result":"klaar"}'`);
+  await runSite({ site: site() });
+  const path = join(home, ".lus", "state.json");
+  const state = readState(path);
+  state.sites["voorbeeld.nl"]!.version = { plugin: "0.1.0", describe: "v0.1.0-1-g0000000", sha: "0000000" };
+  writeFileSync(path, JSON.stringify(state));
+  await assert.rejects(() => runSite({ site: site() }), /--new/);
+  const fresh = await runSite({ site: site(), newRun: true });
+  assert.equal(fresh.phase, "klaar");
+  assert.notEqual(readState(path).sites["voorbeeld.nl"]!.version?.sha, "0000000");
+});

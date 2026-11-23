@@ -23,12 +23,27 @@ export interface SiteRunOptions {
   site: Site;
   /** What a person did since the last stop; null on a first start. */
   resumeNl?: string | null | undefined;
+  /**
+   * Leave the run that is there and start another one next to it. A run belongs to one checkout, so a
+   * site that began in another version can only go on in that version; what is left is a new run.
+   */
+  newRun?: boolean | undefined;
   onStep?: ((step: string) => void) | undefined;
 }
 
 export const statePath = (): string => join(stateDir(), "state.json");
 export const transcriptPath = (site: { slug: string }): string => join(siteDir(site.slug), "transcript.jsonl");
 export const lockPath = (): string => join(stateDir(), "run.lock");
+
+/** The run folder of today, or the next one when today already has one: a second run is not the first. */
+function freeRunDir(slug: string): string {
+  const base = runDirFor(slug);
+  if (!existsSync(base)) return base;
+  for (let attempt = 2; ; attempt += 1) {
+    const candidate = `${base}-${attempt}`;
+    if (!existsSync(candidate)) return candidate;
+  }
+}
 
 /** Keep the question of an earlier stop next to the new one: it says what a person answered. */
 function archiveQuestion(dir: string): void {
@@ -41,14 +56,14 @@ export async function runSite(options: SiteRunOptions): Promise<SiteState> {
   const { site } = options;
   const dir = siteDir(site.slug);
   mkdirSync(dir, { recursive: true });
-  const known = siteState(readState(statePath()), site.slug);
+  const known = options.newRun === true ? siteState({ sites: {} }, site.slug) : siteState(readState(statePath()), site.slug);
   // Een run hoort bij één checkout: de skill, de toolbox en de werkstroom zijn samen één versie, en een
   // tweede versie erover heen zou bewijs mengen dat bij verschillende code hoort.
   const version = checkoutVersion();
   if (known.version !== null && !sameVersion(known.version, version)) {
-    throw new Error(`${site.slug} is begonnen in ${versionNl(known.version)} en deze checkout is ${versionNl(version)}; maak de run af in de versie waarin hij begon, of begin een nieuwe run`);
+    throw new Error(`${site.slug} is begonnen in ${versionNl(known.version)} en deze checkout is ${versionNl(version)}; maak de run af in de versie waarin hij begon, of begin een nieuwe run: lus run --only ${site.slug} --new`);
   }
-  const run = known.run !== null && existsSync(known.run) ? known.run : runDirFor(site.slug);
+  const run = known.run !== null && existsSync(known.run) ? known.run : freeRunDir(site.slug);
   mkdirSync(run, { recursive: true });
   archiveQuestion(dir);
 

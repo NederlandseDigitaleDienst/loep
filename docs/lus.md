@@ -59,9 +59,12 @@ Daarna gaat de run verder met `lus resume <site>`. Typ je de inlog liever niet b
 lus run                  # één site, in de orde van het bestand
 lus run --sites 3        # drie na elkaar
 lus run --only voorbeeld.nl
+lus run --only voorbeeld.nl --new
 ```
 
 lus pakt een slot, start de regie en leest de stream voor de voortgang: `inventory`, `gate`, `werkstroom`. Een site die op een mens wacht houdt de rest niet tegen. Elke site krijgt één map voor zijn run: `~/onderzoeken/<slug>/<datum>/`. Een tweede start op dezelfde dag gaat verder in dezelfde map, want de run zelf zegt waar hij staat.
+
+Een run hoort bij één checkout. Hervat je hem in een andere versie, dan zegt lus welke twee dat zijn en stopt hij, in plaats van bewijs van twee versies te mengen. Wat er dan overblijft is een nieuwe run naast de oude: `--new` laat de bestaande map staan en begint in `<datum>-2`. Ook `lus meting` kent die vlag.
 
 ```
 lus list                 # de backlog met de stand van elke site

@@ -19,8 +19,10 @@ const USAGE = `lus: loep over een backlog van sites, met een mens erbij waar dat
                 [--vendor-tag <prefix>]... [--note <tekst>]
                                          Zet een site in de backlog. Wat je weglaat vraagt lus als er een
                                          terminal is, en anders vult het de standaard in
-  lus run [--sites <n>] [--only <site>]  De backlog afwerken: één regie per site, in de orde van het
-                                         bestand. Een site die op een mens wacht slaat lus over
+  lus run [--sites <n>] [--only <site>] [--new]
+                                         De backlog afwerken: één regie per site, in de orde van het
+                                         bestand. Een site die op een mens wacht slaat lus over.
+                                         --new begint naast de run die er al staat, met een nieuwe map
   lus resume <site> [--what <tekst>]     Ga verder met een site die stopte, met wat de mens deed
   lus log <site> [--follow]              Wat de regie deed, regel voor regel
   lus list [--json]                      De backlog met de stand van elke site
@@ -60,6 +62,7 @@ const OPTIONS = {
   sites: { type: "string" },
   only: { type: "string" },
   what: { type: "string" },
+  new: { type: "boolean" },
   follow: { type: "boolean", short: "f" },
   help: { type: "boolean", short: "h" },
 } as const;
@@ -205,7 +208,7 @@ async function withLock<T>(slug: string | null, body: () => Promise<T>): Promise
 }
 
 /** Work the backlog in the order of the file, skipping a site that waits for a person. */
-async function runBacklog(options: { sites?: string | undefined; only?: string | undefined }): Promise<void> {
+async function runBacklog(options: { sites?: string | undefined; only?: string | undefined; newRun?: boolean | undefined }): Promise<void> {
   // Een tunnel die 24 uur na het aanmelden dichtvalt kost een run van uren; dit kost een verzoek.
   const vlam = routesCheck();
   if (!vlam.ok) {
@@ -224,7 +227,7 @@ async function runBacklog(options: { sites?: string | undefined; only?: string |
       process.stdout.write(`Niets te doen: elke site is klaar, wacht op een mens, of staat stil${options.only === undefined ? "" : ` (--only ${options.only})`}.\n`);
       return;
     }
-    for (const entry of todo.slice(0, limit)) await report(entry, await runSite({ site: entry, onStep: progress }));
+    for (const entry of todo.slice(0, limit)) await report(entry, await runSite({ site: entry, newRun: options.newRun, onStep: progress }));
   });
 }
 
@@ -371,7 +374,7 @@ async function main(): Promise<void> {
       return;
     }
     case "run":
-      await runBacklog({ sites: values.sites, only: values.only });
+      await runBacklog({ sites: values.sites, only: values.only, newRun: values.new === true });
       return;
     case "resume": {
       if (target === undefined) throw new Error("lus resume heeft een site nodig");
@@ -435,7 +438,7 @@ async function main(): Promise<void> {
       const prepared = prepareBacklog(backlogPath());
       for (const fixture of prepared.added) process.stdout.write(`${fixture.slug} staat vanaf nu in de backlog van de meting.\n`);
       process.stdout.write(`De meting van ${FIXTURES.map((fixture) => fixture.name).join(" en ")} staat in ${metingHome()}.\n`);
-      await runBacklog({ sites: values.sites ?? String(FIXTURES.length), only: values.only });
+      await runBacklog({ sites: values.sites ?? String(FIXTURES.length), only: values.only, newRun: values.new === true });
       return;
     }
     default:

@@ -71,7 +71,7 @@ export function doctor(options: DoctorOptions = {}): Check[] {
   const claude = which("vlam-claude");
   checks.push({ labelNl: "vlam-claude", ok: claude !== null, detailNl: claude ?? "niet gevonden; zonder dit script komt de regie niet bij VLAM" });
   checks.push({ labelNl: "claude", ok: which("claude") !== null, detailNl: which("claude") ?? "niet gevonden; vlam-claude heeft het nodig" });
-  checks.push({ labelNl: "just", ok: which("just") !== null, detailNl: which("just") ?? "niet gevonden; lus meet draait de metingen als taken van de justfile" });
+  checks.push({ labelNl: "just", ok: which("just") !== null, detailNl: which("just") ?? "niet gevonden; lus meting start de testsites en de taken van de justfile" });
   const routes = which("vlam-routes");
   checks.push(options.routes === true ? routesCheck() : { labelNl: "VLAM", ok: routes !== null, detailNl: routes ?? "vlam-routes niet gevonden; de routes worden dan niet vooraf geproefd (lus run proeft ze)" });
 
