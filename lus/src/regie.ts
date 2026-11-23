@@ -81,6 +81,7 @@ export function regiePrompt(options: RegieOptions): string {
   lines.push(`- Versturen: ${sendingNl(site)}`);
   lines.push(`- Inlog: ${loginNl(site, run)}`);
   lines.push(`- Mailbox: ${mailboxNl(site)}`);
+  if (site.navigationDelay !== null) lines.push(`- Tempo: zet ${site.navigationDelay} seconde tussen twee navigaties naar de site, met --navigation-delay ${site.navigationDelay} bij inventory; dat geldt daarna voor de hele run, ook voor de veegronde en de sessies van de agents. De eigenaar vroeg om dat tempo.`);
   lines.push(`- Agents tegelijk: ${options.atOnce}. Geef dat aan estimate mee als --at-once ${options.atOnce} en aan de werkstroom als atOnce ${options.atOnce}. Start de sessie van de run met ruimte voor ${options.atOnce + 1} sessies als de skill dat vraagt.`);
   if (site.vendorTags.length > 0) lines.push(`- Leverancier: de namen van de elementen beginnen met ${quip(site.vendorTags)}; geef ze aan inventory mee met --vendor-tags ${site.vendorTags.join(",")}.`);
   else lines.push("- Leverancier: onbekend; ga zonder door.");

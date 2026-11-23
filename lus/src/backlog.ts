@@ -44,6 +44,8 @@ export interface Site {
   login: Login | null;
   /** Agents at the same time in the phases with agents; the session process of a run allows one more. */
   atOnce: number;
+  /** Seconds between two navigations to the site, or null for whatever loep does by itself. */
+  navigationDelay: number | null;
   /** A mailbox the site sends personal links to, as `imap://host:993`; a person runs the command that uses it. */
   mailbox: string | null;
   /** The prefixes of the scripts and the CSS of the vendors of the site, for the rule engines. */
@@ -120,6 +122,9 @@ function toSite(raw: unknown, index: number, problems: Problem[]): Site {
   } else if (text(rawLogin) !== "") {
     problems.push({ where, textNl: "login staat er als pad; dat is nu een blok met page en role, want het harnas drukt het inlogcommando voor een mens af" });
   }
+  const rawDelay = entry["navigation-delay"];
+  const navigationDelay = rawDelay === undefined || rawDelay === null ? null : Number(rawDelay);
+  if (navigationDelay !== null && (!Number.isInteger(navigationDelay) || navigationDelay < 0)) problems.push({ where, textNl: `navigation-delay is "${String(rawDelay)}"; dat moet een heel getal van 0 of meer zijn, in seconden` });
   const atOnce = Number(entry["at-once"] ?? 2);
   if (!Number.isInteger(atOnce) || atOnce < 1) problems.push({ where, textNl: `at-once is "${String(entry["at-once"])}"; dat moet een heel getal van 1 of meer zijn, standaard 2` });
   return {
@@ -133,6 +138,7 @@ function toSite(raw: unknown, index: number, problems: Problem[]): Site {
     neverOpen: words(entry["never-open"]),
     login,
     atOnce: Number.isInteger(atOnce) && atOnce >= 1 ? atOnce : 2,
+    navigationDelay: navigationDelay !== null && Number.isInteger(navigationDelay) && navigationDelay >= 0 ? navigationDelay : null,
     mailbox: text(entry["mailbox"]) || null,
     vendorTags: words(entry["vendor-tags"]),
     note: text(entry["note"]),
@@ -174,6 +180,7 @@ export interface AddInput {
   neverOpen?: string[] | undefined;
   login?: Login | null | undefined;
   atOnce?: number | undefined;
+  navigationDelay?: number | null | undefined;
   mailbox?: string | null | undefined;
   vendorTags?: string[] | undefined;
   note?: string | undefined;
@@ -213,6 +220,7 @@ export function addSite(path: string, input: AddInput): Site {
     neverOpen: input.neverOpen ?? [],
     login: input.login ?? null,
     atOnce,
+    navigationDelay: input.navigationDelay ?? null,
     mailbox: input.mailbox ?? null,
     vendorTags: input.vendorTags ?? [],
     note: input.note ?? "",
@@ -236,6 +244,7 @@ function toFileShape(site: Site): Record<string, unknown> {
     "never-open": site.neverOpen,
     login: site.login,
     "at-once": site.atOnce,
+    "navigation-delay": site.navigationDelay,
     mailbox: site.mailbox,
     "vendor-tags": site.vendorTags,
     note: site.note,

@@ -17,6 +17,7 @@ const site = (overrides: Partial<Site> = {}): Site => ({
   neverOpen: [],
   login: null,
   atOnce: 3,
+  navigationDelay: null,
   mailbox: null,
   vendorTags: [],
   note: "",

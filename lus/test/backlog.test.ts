@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { addSite, readBacklog, slugFor } from "../src/backlog.ts";
+import { regiePrompt } from "../src/regie.ts";
 
 const backlogFile = (): string => join(mkdtempSync(join(tmpdir(), "lus-backlog-")), "backlog.yaml");
 
@@ -90,4 +91,24 @@ test("een inlog zonder rol is een waarschuwing: de rol komt in het rapport, een 
   const backlog = readBacklog(path);
   assert.deepEqual(backlog.sites[0]?.login, { page: "https://www.example.org/inloggen", role: "" });
   assert.match(backlog.problems.map((problem) => problem.textNl).join("\n"), /login\.role ontbreekt/);
+});
+
+test("een tempo voor de site komt uit de backlog en gaat mee in de opdracht", () => {
+  const home = mkdtempSync(join(tmpdir(), "lus-tempo-"));
+  try {
+    const path = join(home, "backlog.yaml");
+    addSite(path, { url: "https://www.voorbeeld.nl/", organisation: "A", navigationDelay: 1 });
+    const site = readBacklog(path).sites[0]!;
+    assert.equal(site.navigationDelay, 1);
+    assert.match(readFileSync(path, "utf8"), /navigation-delay: 1/);
+    assert.match(regiePrompt({ site, run: "/runs/v", atOnce: 2, resumeNl: null }), /--navigation-delay 1/);
+    // Zonder waarde doet loep wat het zelf doet, en zegt de opdracht er niets over.
+    const second = join(home, "zonder.yaml");
+    addSite(second, { url: "https://www.ander.nl/", organisation: "B" });
+    const plain = readBacklog(second).sites[0]!;
+    assert.equal(plain.navigationDelay, null);
+    assert.doesNotMatch(regiePrompt({ site: plain, run: "/runs/v", atOnce: 2, resumeNl: null }), /navigation-delay/);
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
 });
