@@ -3,7 +3,7 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { hostname, tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { acquireLock, readLock, readState, releaseLock, siteState, updateSite } from "../src/state.ts";
+import { acquireLock, isGone, readLock, readState, releaseLock, siteState, updateSite } from "../src/state.ts";
 
 const stateFile = (): string => join(mkdtempSync(join(tmpdir(), "lus-state-")), "state.json");
 const lockFile = (): string => join(mkdtempSync(join(tmpdir(), "lus-lock-")), "run.lock");
@@ -37,6 +37,15 @@ test("een state die niet leest kost een regel, geen run", () => {
   updateSite(path, "voorbeeld.nl", { phase: "loopt" });
   writeFileSync(path, "{niet json");
   assert.deepEqual(readState(path).sites, {});
+});
+
+test("een run waarvan het proces weg is leest niet als lopend", () => {
+  const gone = siteState(readState(stateFile()), "voorbeeld.nl");
+  assert.equal(isGone(gone), false, "een site die nog niet begon is niet weg");
+  assert.equal(isGone({ ...gone, phase: "loopt", pid: 999_999 }), true);
+  assert.equal(isGone({ ...gone, phase: "loopt", pid: process.pid }), false);
+  assert.equal(isGone({ ...gone, phase: "loopt", pid: null }), true);
+  assert.equal(isGone({ ...gone, phase: "vraagt", pid: 999_999 }), false);
 });
 
 test("de loper pakt het slot en laat het weer los", () => {

@@ -100,6 +100,15 @@ function alive(pid: number): boolean {
   }
 }
 
+/**
+ * Whether the process that was running this site is gone while the state still says it runs. A kill
+ * leaves nothing behind to write "gestopt", so the state has to be read against the process list;
+ * otherwise `status` claims a run of hours is still going.
+ */
+export function isGone(site: SiteState): boolean {
+  return site.phase === "loopt" && (site.pid === null || !alive(site.pid));
+}
+
 export function readLock(path: string): RunnerLock | null {
   if (!existsSync(path)) return null;
   try {
