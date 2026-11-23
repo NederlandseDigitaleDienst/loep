@@ -36,7 +36,7 @@ Wat je weglaat vraagt lus als je aan een terminal zit, ook of de site achter een
   login:                         # null, of waar en in welke rol een testaccount inlogt
     page: https://www.voorbeeld.nl/inloggen
     role: testgebruiker
-  at-once: 3                     # agents tegelijk in de fasen met agents
+  at-once: 2                     # agents tegelijk in de fasen met agents; lus zet het op 2, de machine draait er niet meer dan dat
   mailbox: null                  # imap://host:993 als de site links per mail stuurt
   vendor-tags: []
   note: ""

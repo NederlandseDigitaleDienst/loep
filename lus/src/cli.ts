@@ -332,7 +332,7 @@ async function main(): Promise<void> {
         alsoOrigins: values["also-origin"] ?? [],
         neverOpen: values["never-open"] ?? [],
         login: filled.login,
-        atOnce: values["at-once"] === undefined ? 3 : Number(values["at-once"]),
+        atOnce: values["at-once"] === undefined ? 2 : Number(values["at-once"]),
         mailbox: values.mailbox ?? null,
         vendorTags: values["vendor-tag"] ?? [],
         note: values.note ?? "",

@@ -120,8 +120,8 @@ function toSite(raw: unknown, index: number, problems: Problem[]): Site {
   } else if (text(rawLogin) !== "") {
     problems.push({ where, textNl: "login staat er als pad; dat is nu een blok met page en role, want het harnas drukt het inlogcommando voor een mens af" });
   }
-  const atOnce = Number(entry["at-once"] ?? 3);
-  if (!Number.isInteger(atOnce) || atOnce < 1) problems.push({ where, textNl: `at-once is "${String(entry["at-once"])}"; dat moet een heel getal van 1 of meer zijn, standaard 3` });
+  const atOnce = Number(entry["at-once"] ?? 2);
+  if (!Number.isInteger(atOnce) || atOnce < 1) problems.push({ where, textNl: `at-once is "${String(entry["at-once"])}"; dat moet een heel getal van 1 of meer zijn, standaard 2` });
   return {
     url,
     slug,
@@ -132,7 +132,7 @@ function toSite(raw: unknown, index: number, problems: Problem[]): Site {
     alsoOrigins: words(entry["also-origins"]),
     neverOpen: words(entry["never-open"]),
     login,
-    atOnce: Number.isInteger(atOnce) && atOnce >= 1 ? atOnce : 3,
+    atOnce: Number.isInteger(atOnce) && atOnce >= 1 ? atOnce : 2,
     mailbox: text(entry["mailbox"]) || null,
     vendorTags: words(entry["vendor-tags"]),
     note: text(entry["note"]),
@@ -199,7 +199,7 @@ export function addSite(path: string, input: AddInput): Site {
   if (!(PURPOSES as readonly string[]).includes(purpose)) throw new Error(`purpose is "${purpose}"; kies uit ${PURPOSES.join(", ")}`);
   const max = input.sending?.max ?? 20;
   if (!Number.isInteger(max) || max < 0) throw new Error(`--max-sends moet een heel getal van 0 of meer zijn`);
-  const atOnce = input.atOnce ?? 3;
+  const atOnce = input.atOnce ?? 2;
   if (!Number.isInteger(atOnce) || atOnce < 1) throw new Error(`--at-once moet een heel getal van 1 of meer zijn`);
   if (input.login && input.login.page === "") throw new Error("een inlog heeft de pagina nodig waar de gebruiker inlogt (--login-page)");
   const site: Site = {

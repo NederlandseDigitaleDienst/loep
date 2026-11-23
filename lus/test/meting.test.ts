@@ -33,6 +33,8 @@ test("beide testwebsites komen één keer in de backlog van de meting, met hun e
   assert.equal(backlog.sites[0]?.organisation, "Testsite");
   assert.match(backlog.sites[0]?.note ?? "", /gebreken/);
   assert.match(backlog.sites[1]?.note ?? "", /schone tweeling/);
+  // Twee agents tegelijk: de machine draait er niet meer dan dat naast elkaar.
+  for (const site of backlog.sites) assert.equal(site.atOnce, 2, site.slug);
   // Een tweede keer voegt niets toe: wat er staat blijft zoals het staat.
   assert.deepEqual(prepareBacklog(path).added, []);
   assert.equal(readBacklog(path).sites.length, 2);

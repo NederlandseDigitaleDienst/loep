@@ -64,7 +64,7 @@ export function prepareBacklog(path: string): { added: Fixture[] } {
       alsoOrigins: [],
       neverOpen: [],
       login: null,
-      atOnce: 3,
+      atOnce: 2,
       mailbox: null,
       vendorTags: [],
       note: fixture.noteNl,

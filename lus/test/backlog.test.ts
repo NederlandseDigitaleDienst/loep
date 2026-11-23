@@ -16,6 +16,7 @@ test("de slug is de host zonder www, zodat de runs van een site bij elkaar staan
 test("add schrijft een blok dat read terugleest, met de lege velden erbij", () => {
   const path = backlogFile();
   const site = addSite(path, { url: "https://www.voorbeeld.nl/", name: "Voorbeeld", organisation: "Ministerie van Voorbeeld" });
+  assert.equal(site.atOnce, 2, "zonder opgave twee agents tegelijk");
   assert.equal(site.slug, "voorbeeld.nl");
   const file = readFileSync(path, "utf8");
   assert.match(file, /# Sites die onder de loep gaan/);
