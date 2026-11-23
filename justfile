@@ -117,14 +117,6 @@ lus-test:
 lus-check:
     cd {{lus}} && npx tsc --noEmit
 
-# Draai de toetsen van deze repository zoals de pijplijn ze draait, met een logboek per stap en de mogelijkheid om verder te gaan waar een toets stopte: de snelle taken van deze justfile
-toets:
-    cd {{lus}} && node src/cli.ts toets
-
-# Hetzelfde, met de lange toetsen erbij: alle tests met browser, de veegronde en de ijkmeting
-toets-all:
-    cd {{lus}} && node src/cli.ts toets --all
-
 # Controleer de procedurecatalogus
 procedures:
     {{cli}} procedures

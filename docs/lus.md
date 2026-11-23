@@ -92,22 +92,7 @@ lus meting --only lindewaard
 
 lus zet de twee testwebsites zelf in de backlog van de meting, met de aantekening waar elke site voor dient. Antwoordt een van de twee niet, dan stopt lus voordat er een agent begint, met de opdracht om de testsite te starten. Een meting heeft een eigen slot, dus ze houdt een run van echte sites niet tegen; draai ze wel niet tegelijk, want ze delen de machine en de browsers.
 
-Naast deze meting met agents is er de regressietoets zonder taalmodel die de pijplijn zelf draait: `just sweep-check`. Die telt of elk ingebouwd gebrek in het dossier staat, en `lus toets --all` neemt hem mee.
-
-## De toetsen van deze repository
-
-lus draait ook de toetsen van loep zelf, als dezelfde taken die de pijplijn draait:
-
-```
-lus toets                # de snelle: reuse, de types, de procedures, de tests zonder browser en die van lus
-lus toets --all          # ook alle tests met browser, de veegronde op de testsite en de ijkmeting
-lus toets --only veegronde
-lus toets --fresh        # begin opnieuw in plaats van de toets van daarnet af te maken
-```
-
-Vanuit de repository kan het ook met de justfile: `just toets` voor de snelle toetsen en `just toets-all` voor alle. Die twee geven door aan lus, dat op zijn beurt de taken van de justfile draait.
-
-Een toets stopt bij de eerste stap die niet in orde is, net als de pijplijn, en toont de laatste regels van dat logboek. Los je het op, dan gaat `lus toets` verder bij die stap; wat al in orde was draait niet nog eens. De logboeken staan in `~/onderzoeken/.lus/toetsen/<moment>/`, en de veegronde schrijft daar ook wat hij meet. Onder 15 GB vrij begint lus geen toets, en een toets en een run gaan niet tegelijk: ze delen het slot.
+Naast deze meting met agents is er de regressietoets zonder taalmodel die de pijplijn zelf draait: `just sweep-check`. Die telt of elk ingebouwd gebrek in het dossier staat, zonder taalmodel en zonder een agent.
 
 ## Waar alles staat
 
@@ -116,12 +101,11 @@ Een toets stopt bij de eerste stap die niet in orde is, net als de pijplijn, en 
 | De backlog | `~/onderzoeken/backlog.yaml` |
 | De stand, per site | `~/onderzoeken/.lus/state.json` |
 | De vraag, het transcript, het log van lus | `~/onderzoeken/.lus/<slug>/` |
-| De toetsen, met hun logboeken | `~/onderzoeken/.lus/toetsen/<moment>/` |
 | De run van loep | `~/onderzoeken/<slug>/<datum>/` |
 | De rapporten | `~/onderzoeken/rapporten/` |
 | Een meting: backlog, runs en rapporten | `~/onderzoeken/meting/` |
 
-`LUS_HOME` verzet de backlog, de stand, de vragen en de toetsen naar een eigen map. Een meting heeft er altijd een van zichzelf, zodat de testwebsites buiten de backlog van echte eigenaren blijven.
+`LUS_HOME` verzet de backlog, de stand en de vragen naar een eigen map. Een meting heeft er altijd een van zichzelf, zodat de testwebsites buiten de backlog van echte eigenaren blijven.
 
 ## Wat lus niet doet
 

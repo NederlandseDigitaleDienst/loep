@@ -3,9 +3,8 @@ import { spawnSync } from "node:child_process";
 import { createInterface } from "node:readline/promises";
 import { parseArgs } from "node:util";
 import { addSite, readBacklog, type Site } from "./backlog.ts";
-import { doctor, doctorTextNl, freeGb, routesCheck } from "./doctor.ts";
+import { doctor, doctorTextNl, routesCheck } from "./doctor.ts";
 import { FIXTURES, metingHome, prepareBacklog, silent } from "./meting.ts";
-import { lastLines, logPathFor, runToets, stepsFor, toetsTextNl } from "./toets.ts";
 import { backlogPath, homeDir, reportsDir, siteDir, stateDir, toolboxCli } from "./paths.ts";
 import { lastWords, readTranscript } from "./run.ts";
 import { lockPath, pauseSite, runSite, statePath, transcriptPath } from "./runner.ts";
@@ -35,11 +34,6 @@ const USAGE = `lus: loep over een backlog van sites, met een mens erbij waar dat
                                          Meet loep op zijn eigen testwebsites, met de regie en de
                                          skill, in een backlog apart van die van echte eigenaren.
                                          Vereist een draaiende testsite: just testsite
-  lus toets [--all] [--only <toets>] [--fresh]
-                                         Draai de toetsen van deze repository zoals de pijplijn ze
-                                         draait. Zonder --all de snelle, met --all ook alle tests met
-                                         browser, de veegronde en de ijkmeting. Een toets die stopte
-                                         gaat verder waar hij stopte; --fresh begint opnieuw
 
 De backlog staat in ${backlogPath()} en de stand van lus in ${stateDir()}.
 `;
@@ -65,8 +59,6 @@ const OPTIONS = {
   only: { type: "string" },
   what: { type: "string" },
   follow: { type: "boolean", short: "f" },
-  all: { type: "boolean" },
-  fresh: { type: "boolean" },
   help: { type: "boolean", short: "h" },
 } as const;
 
@@ -180,32 +172,6 @@ function report(site: Site, state: SiteState): void {
   }
 }
 
-/**
- * The measurements of this repository, through the same lock as a run: they start browsers and a
- * testsite, and a site run next to them would measure on a machine that is busy with something else.
- */
-async function toets(options: { all: boolean; only?: string | undefined; fresh?: boolean | undefined }): Promise<void> {
-  const free = freeGb(homeDir());
-  if (free !== null && free < 15) throw new Error(`er is ${free} GB vrij; onder 15 GB begint lus geen toets, want de veegronde en de tests met browser schrijven veel`);
-  await withLock("meten", async () => {
-    const result = await runToets({
-      all: options.all,
-      only: options.only,
-      fresh: options.fresh === true,
-      onStep: (line) => process.stdout.write(`${line}\n`),
-    });
-    process.stdout.write(`\n${toetsTextNl(result.toets, stepsFor({ all: options.all, only: options.only }))}`);
-    if (result.failed !== null) {
-      process.stdout.write(`\n${result.failed.step.name} is niet in orde${result.failed.noteNl === "" ? "" : ` (${result.failed.noteNl})`}. De laatste regels:\n`);
-      for (const line of lastLines(logPathFor(result.toets.dir, result.failed.step.name), 20)) process.stdout.write(`  ${line}\n`);
-      process.stdout.write(`\nLos het op en ga verder met: lus toets${options.all ? " --all" : ""}\n`);
-      process.exitCode = 1;
-      return;
-    }
-    process.stdout.write("\nElke toets is in orde.\n");
-  });
-}
-
 /** One lus at a time: a second one would start a second regie in the same run. */
 async function withLock<T>(slug: string | null, body: () => Promise<T>): Promise<T> {
   const taken = acquireLock(lockPath(), slug);
@@ -254,7 +220,7 @@ async function resumeSite(site: Site, what: string | undefined): Promise<void> {
 /** The menu of a lus without a command: everything a person does with the backlog, one key each. */
 async function menu(): Promise<void> {
   const terminal = createInterface({ input: process.stdin, output: process.stdout });
-  const options = "  1 de backlog tonen    2 een site toevoegen    3 de backlog afwerken\n  4 een site hervatten  5 de controle          6 de toetsen\n  7 de lange toetsen   q stoppen";
+  const options = "  1 de backlog tonen    2 een site toevoegen    3 de backlog afwerken\n  4 een site hervatten  5 de controle          q stoppen";
   try {
     for (;;) {
       process.stdout.write(`\n${listTextNl(readBacklog(backlogPath()).sites, readState(statePath()))}\n${options}\n> `);
@@ -287,11 +253,7 @@ async function menu(): Promise<void> {
           process.stdout.write(doctorTextNl(doctor()));
           continue;
         }
-        if (choice === "6" || choice === "7") {
-          await toets({ all: choice === "7" });
-          continue;
-        }
-        process.stdout.write("Dat ken ik niet; kies 1 tot en met 7, of q.\n");
+        process.stdout.write("Dat ken ik niet; kies 1 tot en met 5, of q.\n");
       } catch (error) {
         process.stdout.write(`${error instanceof Error ? error.message : String(error)}\n`);
       }
@@ -430,10 +392,6 @@ async function main(): Promise<void> {
       for (const fixture of prepared.added) process.stdout.write(`${fixture.slug} staat vanaf nu in de backlog van de meting.\n`);
       process.stdout.write(`De meting van ${FIXTURES.map((fixture) => fixture.name).join(" en ")} staat in ${metingHome()}.\n`);
       await runBacklog({ sites: values.sites ?? String(FIXTURES.length), only: values.only });
-      return;
-    }
-    case "toets": {
-      await toets({ all: values.all === true, only: values.only, fresh: values.fresh === true });
       return;
     }
     default:
