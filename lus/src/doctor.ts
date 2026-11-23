@@ -17,7 +17,7 @@ export interface Check {
   detailNl: string;
 }
 
-const MIN_FREE_GB = 15;
+export const MIN_FREE_GB = 15;
 
 const which = (name: string): string | null => {
   try {

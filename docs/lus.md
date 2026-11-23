@@ -12,7 +12,7 @@ lus schrijft nooit in de map van een run. Het zegel van loep dekt elk bestand da
 cd lus && npm ci
 ```
 
-Daarna roep je lus aan vanuit de checkout, als `node lus/src/cli.ts <commando>`, of als `lus <commando>` wanneer de map van lus op je pad staat. Begin met `lus doctor`. Dat controleert wat een run nodig heeft: node, de toolbox, de werkstroom, de pluginversie, `vlam-claude`, de VLAM-routes, de vrije schijfruimte en de backlog. Onder 15 GB vrij begint lus niets nieuws, en met `--routes` proeft het de VLAM-routes vooraf.
+Daarna roep je lus aan vanuit de checkout, als `node lus/src/cli.ts <commando>`, of als `lus <commando>` wanneer de map van lus op je pad staat. Begin met `lus doctor`. Dat controleert wat een run nodig heeft: node, de toolbox, de werkstroom, de pluginversie, `vlam-claude`, de VLAM-routes, de vrije schijfruimte en de backlog. Onder 15 GB vrij begint lus geen run: `lus run` weigert dan met de vrije ruimte erbij, en `LUS_MIN_FREE_GB` verzet die grens voor een machine waar je zelf oplet. Met `--routes` proeft `lus doctor` de VLAM-routes vooraf.
 
 ## Een site erin zetten
 

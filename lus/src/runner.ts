@@ -2,7 +2,8 @@ import { spawnSync } from "node:child_process";
 import { appendFileSync, mkdirSync, renameSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import type { Site } from "./backlog.ts";
-import { reportsDir, runDirFor, siteDir, stateDir, toolboxCli } from "./paths.ts";
+import { freeGb, MIN_FREE_GB } from "./doctor.ts";
+import { homeDir, reportsDir, runDirFor, siteDir, stateDir, toolboxCli } from "./paths.ts";
 import { continueNl, regieArgs, regieEnv, regiePrompt } from "./regie.ts";
 import { isSealed, readQuestion, runSnapshot, startRegie } from "./run.ts";
 import { readState, siteState, updateSite, type SiteState } from "./state.ts";
@@ -36,6 +37,13 @@ export const statePath = (): string => join(stateDir(), "state.json");
 export const transcriptPath = (site: { slug: string }): string => join(siteDir(site.slug), "transcript.jsonl");
 export const lockPath = (): string => join(stateDir(), "run.lock");
 
+/** What is wrong with the free space, or null when a run may begin. */
+export function spaceProblemNl(free: number | null): string | null {
+  // De grens is te verzetten voor een machine die krap is en waar de eigenaar zelf oplet; de proef zet hem op nul.
+  const floor = Number(process.env["LUS_MIN_FREE_GB"] ?? MIN_FREE_GB);
+  return free !== null && free < floor ? `er is ${free} GB vrij; onder ${floor} GB begint lus geen run. Maak ruimte, of zie lus doctor` : null;
+}
+
 /** The run folder of today, or the next one when today already has one: a second run is not the first. */
 function freeRunDir(slug: string): string {
   const base = runDirFor(slug);
@@ -68,6 +76,9 @@ function archiveQuestion(dir: string): void {
 
 export async function runSite(options: SiteRunOptions): Promise<SiteState> {
   const { site } = options;
+  // Een run van uren schrijft gigabytes; een schijf die volloopt kost de run en de rapporten.
+  const problem = spaceProblemNl(freeGb(homeDir()));
+  if (problem !== null) throw new Error(problem);
   const dir = siteDir(site.slug);
   mkdirSync(dir, { recursive: true });
   const known = options.newRun === true ? siteState({ sites: {} }, site.slug) : siteState(readState(statePath()), site.slug);

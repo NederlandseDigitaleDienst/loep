@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 import type { Site } from "../src/backlog.ts";
 import { isSealed, readQuestion, stepOf } from "../src/run.ts";
-import { handOutMissing, runSite } from "../src/runner.ts";
+import { handOutMissing, runSite, spaceProblemNl } from "../src/runner.ts";
 import { readState, siteState } from "../src/state.ts";
 
 const site = (overrides: Partial<Site> = {}): Site => ({
@@ -32,6 +32,8 @@ function fakeHome(body: string): string {
   mkdirSync(bin, { recursive: true });
   writeFileSync(join(bin, "vlam-claude"), `#!/bin/sh\n${body}\n`, { mode: 0o755 });
   process.env["LUS_HOME"] = home;
+  // De schijf van de machine waar de proef draait zegt niets over wat hier getest wordt.
+  process.env["LUS_MIN_FREE_GB"] = "0";
   process.env["PATH"] = `${bin}:${process.env["PATH"]}`;
   return home;
 }
@@ -227,4 +229,12 @@ echo '{"type":"result","result":"klaar"}'`);
   assert.equal(again.length, 1);
   assert.deepEqual(readState(path).sites["voorbeeld.nl"]!.handouts, again);
   assert.ok(existsSync(again[0]!));
+});
+
+test("onder de vijftien gigabyte begint lus geen run", () => {
+  // Een run van uren schrijft gigabytes; loopt de schijf vol, dan is de run weg en het rapport ook.
+  delete process.env["LUS_MIN_FREE_GB"];
+  assert.match(spaceProblemNl(9) ?? "", /9 GB vrij; onder 15 GB/);
+  assert.equal(spaceProblemNl(15), null);
+  assert.equal(spaceProblemNl(null), null, "een schijf die niet te lezen is, is geen reden om te weigeren");
 });
