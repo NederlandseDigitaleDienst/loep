@@ -117,6 +117,14 @@ lus-test:
 lus-check:
     cd {{lus}} && npx tsc --noEmit
 
+# Draai de metingen van deze repository zoals de pijplijn ze draait, met een logboek per stap en de mogelijkheid om verder te gaan waar een meting stopte: de snelle taken van deze justfile
+meet:
+    cd {{lus}} && node src/cli.ts meet
+
+# Hetzelfde, met de lange metingen erbij: alle tests met browser, de veegronde en de ijkmeting
+meet-all:
+    cd {{lus}} && node src/cli.ts meet --all
+
 # Controleer de procedurecatalogus
 procedures:
     {{cli}} procedures

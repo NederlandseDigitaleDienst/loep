@@ -91,6 +91,8 @@ lus meet --only veegronde
 lus meet --fresh         # begin opnieuw in plaats van de meting van daarnet af te maken
 ```
 
+Vanuit de repository kan het ook met de justfile: `just meet` voor de snelle metingen en `just meet-all` voor alle. Die twee geven door aan lus, dat op zijn beurt de taken van de justfile draait.
+
 Een meting stopt bij de eerste stap die niet in orde is, net als de pijplijn, en toont de laatste regels van dat logboek. Los je het op, dan gaat `lus meet` verder bij die stap; wat al in orde was draait niet nog eens. De logboeken staan in `~/onderzoeken/.lus/metingen/<moment>/`, en de veegronde schrijft daar ook wat hij meet. Onder 15 GB vrij begint lus geen meting, en een meting en een run gaan niet tegelijk: ze delen het slot.
 
 ## Waar alles staat
