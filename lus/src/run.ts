@@ -77,7 +77,8 @@ export function startRegie(options: StartOptions): Promise<RegieResult> {
     let step: string | null = null;
     let pending = "";
     const forward = (): void => {
-      process.kill(child.pid ?? 0, "SIGTERM");
+      // Zonder pid is er niets om te stoppen, en pid 0 zou de hele procesgroep raken.
+      if (child.pid !== undefined) process.kill(child.pid, "SIGTERM");
     };
     process.once("SIGINT", forward);
     process.once("SIGTERM", forward);
