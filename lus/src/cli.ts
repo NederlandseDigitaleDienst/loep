@@ -136,14 +136,33 @@ function findSite(sites: Site[], wanted: string): Site {
 }
 
 /** Ask what the flags left open, but only when a person is at a terminal: a script gets the defaults. */
-async function completeAdd(given: { name: string | undefined; organisation: string | undefined; purpose: string | undefined }): Promise<{ name: string | undefined; organisation: string | undefined; purpose: string | undefined }> {
-  if (!process.stdin.isTTY || (given.name !== undefined && given.organisation !== undefined && given.purpose !== undefined)) return given;
+interface Added {
+  name: string | undefined;
+  organisation: string | undefined;
+  purpose: string | undefined;
+  login: { page: string; role: string } | null;
+}
+
+/**
+ * Ask what the flags left open, but only when a person is at a terminal: a script gets the defaults.
+ * The login is asked here and not thirty minutes into a run, but never the password: loep opens a
+ * window for that when the run needs it, so the secret stays out of the backlog and out of lus.
+ */
+async function completeAdd(given: Added): Promise<Added> {
+  if (!process.stdin.isTTY || (given.name !== undefined && given.organisation !== undefined && given.purpose !== undefined && given.login !== null)) return given;
   const terminal = createInterface({ input: process.stdin, output: process.stdout });
   try {
     const name = given.name ?? ((await terminal.question(`Naam van de site (leeg: de host): `)).trim() || undefined);
     const organisation = given.organisation ?? (await terminal.question("Wie is de eigenaar van de site? ")).trim();
     const purpose = given.purpose ?? ((await terminal.question("Waarvoor is het onderzoek: verbeteren of verantwoorden? (leeg: verbeteren) ")).trim() || "verbeteren");
-    return { name, organisation, purpose };
+    let login = given.login;
+    if (login === null) {
+      const page = (await terminal.question("Staat de site achter een inlog? Zo ja, het adres van de inlogpagina (leeg: nee): ")).trim();
+      const role = page === "" ? "" : (await terminal.question("In welke rol test je, bijvoorbeeld aanvrager of beheerder? Geen naam van een persoon: ")).trim();
+      login = page === "" ? null : { page, role };
+      if (login !== null) process.stdout.write("Het wachtwoord vraagt lus nooit: loep opent aan het begin van de run een venster waarin je zelf inlogt, en bewaart alleen de sessie.\n");
+    }
+    return { name, organisation, purpose, login };
   } finally {
     terminal.close();
   }
@@ -287,7 +306,12 @@ async function main(): Promise<void> {
   switch (command) {
     case "add": {
       if (target === undefined) throw new Error("lus add heeft een url nodig: lus add https://www.voorbeeld.nl/");
-      const filled = await completeAdd({ name: values.name, organisation: values.organisation, purpose: values.purpose });
+      const filled = await completeAdd({
+        name: values.name,
+        organisation: values.organisation,
+        purpose: values.purpose,
+        login: values["login-page"] === undefined ? null : { page: values["login-page"], role: values["login-role"] ?? "" },
+      });
       const site = addSite(backlogPath(), {
         url: target,
         slug: values.slug,
@@ -297,13 +321,14 @@ async function main(): Promise<void> {
         sending: { allow: values["allow-sending"] === true, max: values["max-sends"] === undefined ? 20 : Number(values["max-sends"]) },
         alsoOrigins: values["also-origin"] ?? [],
         neverOpen: values["never-open"] ?? [],
-        login: values["login-page"] === undefined ? null : { page: values["login-page"], role: values["login-role"] ?? "" },
+        login: filled.login,
         atOnce: values["at-once"] === undefined ? 3 : Number(values["at-once"]),
         mailbox: values.mailbox ?? null,
         vendorTags: values["vendor-tag"] ?? [],
         note: values.note ?? "",
       });
       process.stdout.write(`${site.slug} staat in de backlog.\nStart hem met: lus run\n`);
+      if (site.login !== null) process.stdout.write(`Deze site zit achter een inlog: aan het begin van de run stopt lus daarvoor, en lus login ${site.slug} opent het venster.\n`);
       return;
     }
     case "list": {

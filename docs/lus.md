@@ -20,7 +20,7 @@ Daarna roep je lus aan vanuit de checkout, als `node lus/src/cli.ts <commando>`,
 lus add https://www.voorbeeld.nl/ --organisation "Ministerie van Voorbeeld" --name Voorbeeld
 ```
 
-Wat je weglaat vraagt lus als je aan een terminal zit; zonder terminal vult het de standaard in. De backlog staat in `~/onderzoeken/backlog.yaml` en is met de hand te lezen en bij te werken. Wat de skill vooraf vraagt, staat in datzelfde blok, zodat de regie het niet hoeft te vragen:
+Wat je weglaat vraagt lus als je aan een terminal zit, ook of de site achter een inlog staat, en in welke rol je daar test; zonder terminal vult het de standaard in. Een wachtwoord vraagt het nooit. De backlog staat in `~/onderzoeken/backlog.yaml` en is met de hand te lezen en bij te werken. Wat de skill vooraf vraagt, staat in datzelfde blok, zodat de regie het niet hoeft te vragen:
 
 ```yaml
 - url: https://www.voorbeeld.nl/
@@ -51,7 +51,7 @@ lus login <site>            # de meting
 lus login <site> --idle     # de proef op de sessie
 ```
 
-Daarna gaat de run verder met `lus resume <site>`.
+Daarna gaat de run verder met `lus resume <site>`. Typ je de inlog liever niet bij elke run opnieuw, bewaar de sessie dan buiten de run: `lus login <site> --out ~/onderzoeken/secrets/<site>-sessie.json`, en daarna `lus login <site> --from ~/onderzoeken/secrets/<site>-sessie.json`.
 
 ## Lopen
 
