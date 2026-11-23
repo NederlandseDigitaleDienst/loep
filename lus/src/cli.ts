@@ -57,6 +57,13 @@ const OPTIONS = {
   help: { type: "boolean", short: "h" },
 } as const;
 
+/** A moment in the time zone of the person, the way a calendar app writes it. */
+function momentNl(iso: string): string {
+  const date = new Date(iso);
+  const pad = (value: number): string => String(value).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
 /** "3 uur geleden", for a moment in the past; the state and the log are read by a person. */
 function agoNl(iso: string | null): string {
   if (iso === null) return "nooit";
@@ -96,7 +103,7 @@ function statusTextNl(site: Site, site_: SiteState, words: string[] = []): strin
   field("doel", site.purpose === "verantwoorden" ? "verantwoorden hoe de site ervoor staat" : "de site beter maken");
   field("run", site_.run);
   field("stap", site_.step);
-  field("sinds", site_.startedAt === null ? null : `${site_.startedAt.slice(0, 16).replace("T", " ")} (${agoNl(site_.startedAt)})`);
+  field("sinds", site_.startedAt === null ? null : `${momentNl(site_.startedAt)} (${agoNl(site_.startedAt)})`);
   field("versie", site_.version === null ? null : versionNl(site_.version));
   if (site.sending.allow) field("versturen", `ja, hooguit ${site.sending.max}`);
   if (site_.question) {
@@ -160,7 +167,7 @@ function report(site: Site, state: SiteState): void {
 /** One lus at a time: a second one would start a second regie in the same run. */
 async function withLock<T>(slug: string | null, body: () => Promise<T>): Promise<T> {
   const taken = acquireLock(lockPath(), slug);
-  if (!taken.ok) throw new Error(`lus loopt al: proces ${taken.lock.pid} op ${taken.lock.host}${taken.lock.slug ? `, met ${taken.lock.slug}` : ""}, sinds ${taken.lock.since.slice(0, 16).replace("T", " ")}`);
+  if (!taken.ok) throw new Error(`lus loopt al: proces ${taken.lock.pid} op ${taken.lock.host}${taken.lock.slug ? `, met ${taken.lock.slug}` : ""}, sinds ${momentNl(taken.lock.since)}`);
   try {
     return await body();
   } finally {
