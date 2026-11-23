@@ -179,3 +179,30 @@ echo '{"type":"result","result":"klaar"}'`);
   assert.equal(fresh.phase, "klaar");
   assert.notEqual(readState(path).sites["voorbeeld.nl"]!.version?.sha, "0000000");
 });
+
+test("een verzegelde run zonder evaluatie geeft geen rapport uit, en zegt dat", async () => {
+  const home = fakeHome(`run=""
+while [ $# -gt 0 ]; do case "$1" in --add-dir) run="$2"; shift ;; esac; shift; done
+echo '{}' > "$run/evidence-index.json"
+echo '{"type":"result","result":"klaar"}'`);
+  const state = await runSite({ site: site() });
+  assert.equal(state.phase, "klaar");
+  assert.deepEqual(state.handouts, []);
+  assert.match(readFileSync(join(home, ".lus", "voorbeeld.nl", "lus.log"), "utf8"), /geen rapport om uit te geven/);
+});
+
+test("een verzegelde run met een evaluatie geeft het rapport uit onder de naam van de site", async () => {
+  // De hele keten: lus roept loep handout aan, en de naam zegt de slug en niet de host van de url.
+  const home = fakeHome(`run=""
+while [ $# -gt 0 ]; do case "$1" in --add-dir) run="$2"; shift ;; esac; shift; done
+echo '{}' > "$run/evidence-index.json"
+mkdir -p "$run/report"
+echo '{"site":{"baseUrl":"https://www.voorbeeld.nl/","name":"Voorbeeld"},"evaluatedAt":"2026-11-23T10:00:00.000Z","criteria":[]}' > "$run/evaluation.json"
+echo pdf > "$run/report/rapport.pdf"
+echo '{"type":"result","result":"klaar"}'`);
+  const state = await runSite({ site: site() });
+  assert.equal(state.phase, "klaar");
+  assert.deepEqual(state.handouts.map((file) => file.slice(file.lastIndexOf("/") + 1)), ["rapport-voorbeeld.nl-2026-11-23-concept.pdf"]);
+  assert.ok(existsSync(join(home, "rapporten", "rapport-voorbeeld.nl-2026-11-23-concept.pdf")));
+  assert.equal(readFileSync(join(home, "rapporten", "rapport-voorbeeld.nl-2026-11-23-concept.pdf"), "utf8"), "pdf\n");
+});

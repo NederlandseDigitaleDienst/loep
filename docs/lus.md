@@ -105,6 +105,8 @@ lus meting                    # beide erdoor, met agents; de rapporten komen in 
 lus meting --only lindewaard
 ```
 
+Na een verzegelde run zet lus het rapport zelf buiten de run, met de opdracht `handout` van de toolbox: `~/onderzoeken/meting/rapporten/rapport-lindewaard-2026-11-23-concept.pdf` en de korte versie en de html ernaast. De naam zegt de site zoals lus die kent, niet de host van de url, want `rapport-127.0.0.1-4710` leest niet.
+
 lus zet de twee testwebsites zelf in de backlog van de meting, met de aantekening waar elke site voor dient. Antwoordt een van de twee niet, dan stopt lus voordat er een agent begint, met de opdracht om de testsite te starten. Een meting heeft een eigen slot, dus ze houdt een run van echte sites niet tegen; draai ze wel niet tegelijk, want ze delen de machine en de browsers.
 
 Naast deze meting met agents is er de regressietoets zonder taalmodel die de pijplijn zelf draait: `just sweep-check`. Die telt of elk ingebouwd gebrek in het dossier staat, zonder taalmodel en zonder een agent.

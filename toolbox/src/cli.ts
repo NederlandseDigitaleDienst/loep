@@ -161,9 +161,11 @@ const USAGE = `loep <command> [options]
   check-recheck --run <run> (--finding <id> | --criterion <id>) [--at <moment>]
                                          Validate the outcome of a recheck (the latest, or the one at that moment); non-zero
                                          exit on problems
-  handout --run <run> --out <dir>        Copy the report to a folder outside the run under a name that says which site and
+  handout --run <run> --out <dir> [--name <site>]
+                                         Copy the report to a folder outside the run under a name that says which site and
                                          which day: rapport-<site>-<date>.pdf, rapport-kort-..., rapport-....html, with -concept
-                                         while it is not signed. The names in the run stay as they are
+                                         while it is not signed. The names in the run stay as they are. --name says the site
+                                         instead of the host of its url
   export --run <run> --format csv|issues [--out <file or dir>]
                                          The work list as CSV (one row per defect, with its criteria), or as one Markdown block
                                          per defect with a title and a body for an issue tracker. Without --out to standard
@@ -924,7 +926,7 @@ async function main(): Promise<void> {
     case "handout": {
       if (!values.run || !values.out) throw new Error("handout vraagt --run <run> en --out <map buiten de run>");
       const { handout } = await import("./commands/handout.ts");
-      const result = await handout(values.run, values.out);
+      const result = await handout(values.run, values.out, values.name);
       for (const file of result.written) process.stdout.write(`${file}\n`);
       if (!result.signed) process.stdout.write("Het rapport is niet afgetekend: de naam zegt concept.\n");
       if (result.missing.length > 0) process.stdout.write(`Niet in de run: ${result.missing.join(", ")}.\n`);

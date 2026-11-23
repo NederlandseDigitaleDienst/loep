@@ -1,7 +1,8 @@
+import { spawnSync } from "node:child_process";
 import { appendFileSync, mkdirSync, renameSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import type { Site } from "./backlog.ts";
-import { runDirFor, siteDir, stateDir } from "./paths.ts";
+import { reportsDir, runDirFor, siteDir, stateDir, toolboxCli } from "./paths.ts";
 import { continueNl, regieArgs, regieEnv, regiePrompt } from "./regie.ts";
 import { isSealed, readQuestion, runSnapshot, startRegie } from "./run.ts";
 import { readState, siteState, updateSite, type SiteState } from "./state.ts";
@@ -43,6 +44,19 @@ function freeRunDir(slug: string): string {
     const candidate = `${base}-${attempt}`;
     if (!existsSync(candidate)) return candidate;
   }
+}
+
+/**
+ * The report, out of the run: loep copies it to the reports folder under a name with the site and the
+ * day, and lus passes the slug, because a report of 127.0.0.1:4710 says less than one of lindewaard. A
+ * run without an evaluation has nothing to hand out, and a handout that fails is said in the log and
+ * not a reason to call a sealed run a failure.
+ */
+function handOut(slug: string, run: string): string[] {
+  if (!existsSync(join(run, "evaluation.json"))) return [];
+  const result = spawnSync("node", [toolboxCli, "handout", "--run", run, "--out", reportsDir(), "--name", slug], { encoding: "utf8" });
+  if (result.status !== 0) return [];
+  return result.stdout.split("\n").filter((line) => line.startsWith("/"));
 }
 
 /** Keep the question of an earlier stop next to the new one: it says what a person answered. */
@@ -116,8 +130,11 @@ export async function runSite(options: SiteRunOptions): Promise<SiteState> {
     }
     if (half && !grew) log("de run en de werkmap zijn niet veranderd; nog een beurt zou hetzelfde kosten");
     const phase = question !== null ? "vraagt" : sealed ? "klaar" : "fout";
+    const handouts = phase === "klaar" ? handOut(site.slug, run) : [];
+    for (const file of handouts) log(`rapport: ${file}`);
+    if (phase === "klaar" && handouts.length === 0) log("geen rapport om uit te geven: de run heeft geen evaluation.json, of handout faalde");
     log(`stand: ${phase}`);
-    return updateSite(statePath(), site.slug, { phase, pid: null, step, question, continues: phase === "klaar" || phase === "vraagt" ? 0 : continues });
+    return updateSite(statePath(), site.slug, { phase, pid: null, step, question, handouts, continues: phase === "klaar" || phase === "vraagt" ? 0 : continues });
   }
 }
 

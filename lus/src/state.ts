@@ -47,6 +47,8 @@ export interface SiteState {
   pid: number | null;
   /** How often lus continued this run after a regie stopped without a question and without a seal. */
   continues: number;
+  /** The report files that were copied out of the run, under a name with the site and the day. */
+  handouts: string[];
 }
 
 export interface State {
@@ -54,7 +56,7 @@ export interface State {
 }
 
 export function emptySite(slug: string): SiteState {
-  return { slug, phase: "nieuw", run: null, startedAt: null, updatedAt: new Date().toISOString(), step: null, question: null, version: null, pid: null, continues: 0 };
+  return { slug, phase: "nieuw", run: null, startedAt: null, updatedAt: new Date().toISOString(), step: null, question: null, version: null, pid: null, continues: 0, handouts: [] };
 }
 
 export function readState(path: string): State {

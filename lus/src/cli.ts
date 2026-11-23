@@ -116,6 +116,7 @@ function statusTextNl(site: Site, site_: SiteState, words: string[] = []): strin
   field("sinds", site_.startedAt === null ? null : `${momentNl(site_.startedAt)} (${agoNl(site_.startedAt)})`);
   field("versie", site_.version === null ? null : versionNl(site_.version));
   if (site.sending.allow) field("versturen", `ja, hooguit ${site.sending.max}`);
+  for (const file of site_.handouts) field("rapport", file);
   if (site_.question) {
     lines.push("", `  Vraag: ${site_.question.textNl}`);
     if (site_.question.command) lines.push(`  Daarna: ${site_.question.command}`);
