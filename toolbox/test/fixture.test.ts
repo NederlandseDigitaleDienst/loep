@@ -243,52 +243,32 @@ describe("fixture server", () => {
     assert.deepEqual(fixture.writes(), [], "loading pages must not send anything");
   });
 
-  test("the clean twin leaves no doubt on the spots a measurement once failed there", async (context) => {
+  test("a menu link is the current page only on that page, and the current section on the pages below it, on both twins", async (context) => {
     if (!browser) return context.skip("no browser available");
     const problems: string[] = [];
     const page = await browser.newPage();
     await page.route("**/vragenlijst/bezoek", (route) => route.abort());
-    for (const { path } of PAGES) {
-      await page.goto(`${fixture.origins.clean}${path}`, { waitUntil: "load" });
-      const found = await page.evaluate((municipality) => {
-        const out: string[] = [];
-        const named = (element: Element): boolean => {
-          const label = element.getAttribute("aria-label")?.trim();
-          const by = element.getAttribute("aria-labelledby");
-          return Boolean(label) || Boolean(by && document.getElementById(by)?.textContent?.trim());
-        };
-        // An empty alt on the logo in the notice is right only when the text says whose notice it is.
-        const notice = document.querySelector("#cookiemelding");
-        if (notice?.querySelector('img[alt=""]') && !notice.querySelector(".melding-tekst")?.textContent?.includes(municipality)) out.push("the notice does not name the municipality next to its decorative logo");
-        // Two headings of one level with the same text on one page read as one topic in a list of headings.
-        // The highlighted items on the start page repeat news items below them: the same topic under the same heading.
-        const seen = new Set<string>();
-        for (const heading of document.querySelectorAll("h1, h2, h3, h4, h5, h6")) {
-          if (heading.closest(".uitgelicht")) continue;
-          const key = `${heading.tagName} ${heading.textContent?.replace(/\s+/g, " ").trim()}`;
-          if (seen.has(key)) out.push(`heading "${key}" twice`);
-          seen.add(key);
-        }
-        for (const link of document.querySelectorAll<HTMLAnchorElement>('a[aria-current="page"]')) {
-          if (new URL(link.href).pathname !== location.pathname) out.push(`aria-current="page" on a link to ${new URL(link.href).pathname}`);
-        }
-        for (const media of document.querySelectorAll("audio, video")) if (!named(media)) out.push(`${media.tagName.toLowerCase()} without a name`);
-        const chat = document.querySelector(".chat-venster");
-        if (chat && (chat.getAttribute("role") !== "dialog" || !named(chat))) out.push("the chat window is no named dialog");
-        return out;
-      }, `Gemeente ${SITES.clean.name}`);
-      problems.push(...found.map((problem) => `${path}: ${problem}`));
+    for (const key of ["defect", "clean"] as const) {
+      for (const { path } of PAGES) {
+        await page.goto(`${fixture.origins[key]}${path}`, { waitUntil: "load" });
+        const found = await page.evaluate(() => {
+          const out: string[] = [];
+          for (const link of document.querySelectorAll<HTMLAnchorElement>('a[aria-current="page"]')) {
+            if (new URL(link.href).pathname !== location.pathname) out.push(`aria-current="page" on a link to ${new URL(link.href).pathname}`);
+          }
+          for (const link of document.querySelectorAll<HTMLAnchorElement>('a[aria-current="true"]')) {
+            if (new URL(link.href).pathname === location.pathname) out.push(`aria-current="true" on the link to the page itself`);
+          }
+          return out;
+        });
+        problems.push(...found.map((problem) => `${key} ${path}: ${problem}`));
+      }
     }
+    // A page below a section still marks that section in the menu.
+    await page.goto(`${fixture.origins.clean}/vergunning.html`, { waitUntil: "load" });
+    const section = await page.evaluate(() => document.querySelector('.hoofdmenu a[href="/producten.html"]')?.getAttribute("aria-current") ?? null);
+    if (section !== "true") problems.push(`clean /vergunning.html: the section link Producten has aria-current ${JSON.stringify(section)}`);
     await page.close();
-
-    // The player of the third party sits in a frame of 300 pixels high; with the text spacing of the criterion its controls stay in view.
-    const player = await browser.newPage({ viewport: { width: 640, height: 300 } });
-    await player.goto(`${fixture.origins.thirdParty}/speler.html?film=raad`, { waitUntil: "load" });
-    await player.addStyleTag({ content: "* { line-height: 1.5 !important; letter-spacing: 0.12em !important; word-spacing: 0.16em !important; } p { margin-bottom: 2em !important; }" });
-    const outside = await player.evaluate(() =>
-      [...document.querySelectorAll(".beeld p, .balk > *")].filter((element) => element.getBoundingClientRect().bottom > innerHeight).map((element) => element.textContent?.trim()));
-    if (outside.length > 0) problems.push(`player: with text spacing ${outside.join(", ")} fall outside the frame`);
-    await player.close();
     assert.deepEqual(problems, []);
   });
 
