@@ -243,6 +243,56 @@ describe("fixture server", () => {
     assert.deepEqual(fixture.writes(), [], "loading pages must not send anything");
   });
 
+  test("a menu link is the current page only on that page, and the current section on the pages below it, on both twins", async (context) => {
+    if (!browser) return context.skip("no browser available");
+    const problems: string[] = [];
+    const page = await browser.newPage();
+    await page.route("**/vragenlijst/bezoek", (route) => route.abort());
+    for (const key of ["defect", "clean"] as const) {
+      for (const { path } of PAGES) {
+        await page.goto(`${fixture.origins[key]}${path}`, { waitUntil: "load" });
+        const found = await page.evaluate(() => {
+          const out: string[] = [];
+          for (const link of document.querySelectorAll<HTMLAnchorElement>('a[aria-current="page"]')) {
+            if (new URL(link.href).pathname !== location.pathname) out.push(`aria-current="page" on a link to ${new URL(link.href).pathname}`);
+          }
+          for (const link of document.querySelectorAll<HTMLAnchorElement>('a[aria-current="true"]')) {
+            if (new URL(link.href).pathname === location.pathname) out.push(`aria-current="true" on the link to the page itself`);
+          }
+          return out;
+        });
+        problems.push(...found.map((problem) => `${key} ${path}: ${problem}`));
+      }
+    }
+    // A page below a section still marks that section in the menu.
+    await page.goto(`${fixture.origins.clean}/vergunning.html`, { waitUntil: "load" });
+    const section = await page.evaluate(() => document.querySelector('.hoofdmenu a[href="/producten.html"]')?.getAttribute("aria-current") ?? null);
+    if (section !== "true") problems.push(`clean /vergunning.html: the section link Producten has aria-current ${JSON.stringify(section)}`);
+    await page.close();
+    assert.deepEqual(problems, []);
+  });
+
+  test("the chat on the twin keeps Tab inside, so it is a modal dialog with a name, takes the focus and gives it back", async (context) => {
+    if (!browser) return context.skip("no browser available");
+    const browserContext = await browser.newContext();
+    // A stored choice keeps the cookie notice closed, so the page is not inert behind it.
+    await browserContext.addCookies([{ name: "cookiekeuze", value: "weigeren", url: fixture.origins.clean }]);
+    const page = await browserContext.newPage();
+    await page.route("**/vragenlijst/bezoek", (route) => route.abort());
+    await page.goto(`${fixture.origins.clean}/`, { waitUntil: "load" });
+    await page.click(".chat-knop");
+    const panel = page.locator(".chat-venster");
+    assert.equal(await panel.getAttribute("role"), "dialog");
+    assert.equal(await panel.getAttribute("aria-modal"), "true");
+    // getByRole computes the accessible name the way assistive technology does.
+    const dialog = page.getByRole("dialog", { name: /\S/ });
+    assert.equal(await dialog.count(), 1, "the open chat has a role dialog with a non-empty name");
+    assert.equal(await page.evaluate(() => document.querySelector(".chat-venster")!.contains(document.activeElement)), true, "opening the chat moves the focus into it");
+    await page.keyboard.press("Escape");
+    assert.equal(await page.evaluate(() => document.activeElement?.classList.contains("chat-knop") ?? false), true, "closing the chat puts the focus back on the button");
+    await browserContext.close();
+  });
+
   test("the waste guide names the bin in text on the twin, and on the defect variant only by the colour of the icon", async (context) => {
     if (!browser) return context.skip("no browser available");
     const shown: Record<string, { text: string; alt: string | null }> = {};

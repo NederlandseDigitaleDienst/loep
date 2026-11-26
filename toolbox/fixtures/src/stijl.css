@@ -25,7 +25,7 @@ a { color: #154273; }
 .hoofdmenu ul { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 0.25rem 0.5rem; }
 .hoofdmenu a { display: block; padding: 0.5rem 0.75rem; text-decoration: none; border-radius: 4px; }
 /*@bad 1.4.3-menu-aanwijzen*/.hoofdmenu a:hover { background: #e8e8e8; color: #a3a3a3; }/*@good*/.hoofdmenu a:hover { background: #0c2a4a; color: #ffffff; text-decoration: underline; }/*@end*/
-.hoofdmenu a[aria-current="page"] { text-decoration: underline; text-underline-offset: 0.3em; }
+.hoofdmenu a[aria-current] { text-decoration: underline; text-underline-offset: 0.3em; }
 .menuknop { display: none; align-items: center; justify-content: center; gap: 0.5rem; min-width: 44px; min-height: 44px; background: #ffffff; color: #154273; border: 0; border-radius: 4px; padding: 0.5rem 0.75rem; font: inherit; }
 .streepjes, .streepjes::before, .streepjes::after { display: block; width: 22px; height: 3px; background: #154273; content: ""; position: relative; }
 .streepjes::before { position: absolute; top: -7px; }
