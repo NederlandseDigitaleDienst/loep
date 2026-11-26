@@ -115,7 +115,7 @@ De overige commando's:
 | `procedures` | Controleert de procedures |
 | `session` | De browsersessie van een agent: `session start`, `session stop`, `session list`, `session extend` (de agent verlengt zijn eigen budget, hooguit twee keer), en elk commando daarin als `session <commando>` (`session open P01`, `session look`, `session contrast 3`) |
 
-`node toolbox/src/cli.ts --help` toont de commando's van een onderzoek met hun opties; `session`, `voiceover`, `mail` en `compare --findings` hebben een eigen `--help`. Buiten een onderzoek ijkt `just calibrate` de instrumenten, en `voiceover` beheert de virtuele Mac met VoiceOver (zie [docs/voiceover.md](docs/voiceover.md)).
+`node toolbox/src/cli.ts --help` toont de commando's van een onderzoek met hun opties; `session`, `voiceover`, `mail` en `compare --findings` hebben een eigen `--help`. Wie meerdere sites achter elkaar wil laten onderzoeken zonder erbij te zitten, gebruikt [lus](docs/lus.md): een backlog van sites, één regie per site, en een vraag aan een mens waar alleen een mens kan beslissen. Buiten een onderzoek ijkt `just calibrate` de instrumenten, en `voiceover` beheert de virtuele Mac met VoiceOver (zie [docs/voiceover.md](docs/voiceover.md)).
 
 ## Zonder assistent
 

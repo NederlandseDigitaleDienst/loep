@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -13,6 +14,8 @@ test("the name of a report outside its run says what it is, which site, which da
   assert.equal(handoutName("rapport.html", evaluation("https://apps.example.nl/Mijn Loket/v2/"), true), "rapport-apps.example.nl-mijn-loket-v2-2026-11-15.html");
   // A site on this machine has a port: no colon in a file name.
   assert.equal(handoutSite("http://localhost:4710/"), "localhost-4710");
+  // A site that is known by a name of its own says that name instead of the host of its url.
+  assert.equal(handoutName("rapport.pdf", evaluation("http://127.0.0.1:4710/"), false, "lindewaard"), "rapport-lindewaard-2026-11-15-concept.pdf");
   assert.equal(handoutSite("https://WWW.Example.NL"), "example.nl");
 });
 
@@ -33,6 +36,10 @@ test("handout copies the report that is there to a folder outside the run and le
     assert.deepEqual(result.written.map((file) => file.slice(out.length + 1)).sort(), readdirSync(out).sort());
     assert.equal(readFileSync(join(out, "rapport-example.nl-2026-11-15-concept.pdf"), "utf8"), "pdf");
     assert.deepEqual(result.missing, ["rapport-kort.pdf"]);
+
+    const named = join(folder, "met-naam");
+    await handout(run, named, "lindewaard");
+    assert.deepEqual(readdirSync(named).sort(), ["rapport-lindewaard-2026-11-15-concept.html", "rapport-lindewaard-2026-11-15-concept.pdf"]);
     assert.deepEqual(readdirSync(run, { recursive: true }).sort(), before);
 
     // Not into the run: what comes after the seal counts as a deviation there.
@@ -43,4 +50,13 @@ test("handout copies the report that is there to a folder outside the run and le
   } finally {
     rmSync(folder, { recursive: true, force: true });
   }
+});
+
+test("handout refuses a --name that would put the report outside --out", () => {
+  const folder = mkdtempSync(join(tmpdir(), "handout-name-"));
+  const cli = join(import.meta.dirname, "..", "src", "cli.ts");
+  const result = spawnSync("node", [cli, "handout", "--run", folder, "--out", join(folder, "uit"), "--name", "../elders"], { encoding: "utf8" });
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /zonder schuine streep/);
+  rmSync(folder, { recursive: true, force: true });
 });

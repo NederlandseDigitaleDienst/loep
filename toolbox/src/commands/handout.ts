@@ -30,11 +30,13 @@ export function handoutSite(baseUrl: string): string {
 /**
  * The name of a report file outside its run: what it is, the site, the day of the evaluation, and
  * "concept" as long as nobody signed it. `rapport-kort.pdf` of www.example.nl becomes
- * `rapport-kort-example.nl-2026-11-15-concept.pdf`.
+ * `rapport-kort-example.nl-2026-11-15-concept.pdf`. A name that is given says it instead of the host:
+ * a test site on an IP address, or a site the caller knows by the name it uses itself.
  */
-export function handoutName(file: string, evaluation: Pick<Evaluation, "site" | "evaluatedAt">, signed: boolean): string {
+export function handoutName(file: string, evaluation: Pick<Evaluation, "site" | "evaluatedAt">, signed: boolean, name?: string): string {
   const dot = file.lastIndexOf(".");
-  return `${file.slice(0, dot)}-${handoutSite(evaluation.site.baseUrl)}-${evaluation.evaluatedAt.slice(0, 10)}${signed ? "" : "-concept"}${file.slice(dot)}`;
+  const site = name ?? handoutSite(evaluation.site.baseUrl);
+  return `${file.slice(0, dot)}-${site}-${evaluation.evaluatedAt.slice(0, 10)}${signed ? "" : "-concept"}${file.slice(dot)}`;
 }
 
 export interface Handout {
@@ -46,7 +48,7 @@ export interface Handout {
 }
 
 /** Copy the report of a run to `outDir`: the signed one after signing, the concept before. Nothing in the run changes. */
-export async function handout(runDir: string, outDir: string): Promise<Handout> {
+export async function handout(runDir: string, outDir: string, name?: string): Promise<Handout> {
   const evaluation = await readEvaluation(join(runDir, "evaluation.json"));
   const signed = signatureIsCurrent(evaluation);
   const source = join(runDir, signed ? SIGNED_DIR : "report");
@@ -57,7 +59,7 @@ export async function handout(runDir: string, outDir: string): Promise<Handout> 
   await mkdir(out, { recursive: true });
   const written: string[] = [];
   for (const file of present) {
-    const target = join(out, handoutName(file, evaluation, signed));
+    const target = join(out, handoutName(file, evaluation, signed, name));
     await copyFile(join(source, file), target);
     written.push(target);
   }

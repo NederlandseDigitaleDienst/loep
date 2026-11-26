@@ -12,6 +12,7 @@ De afspraak dat een wijziging in gedrag in dezelfde commit de beschrijving bijwe
 | [plugin.md](plugin.md) | beschrijving | Hoe de repository als plugin met vijf skills is opgezet |
 | [meetblad.md](meetblad.md) | naslag | Elk veld van het meetblad dat een onderzoek afgeeft aan de gedeelde verzameling, wat er nooit op staat en hoe dat is geborgd |
 | [voiceover.md](voiceover.md) | beschrijving | Het optionele onderdeel dat een echte schermlezer laat voorlezen: VoiceOver in een virtuele Mac, wat het kost en wat het niet kan |
+| [lus.md](lus.md) | beschrijving | lus: het harnas dat loep over een backlog van sites laat lopen, met een vraag aan een mens waar alleen een mens kan beslissen, en dat de testwebsites voor een release meet |
 | [niet-ingebouwd.md](niet-ingebouwd.md) | lijst van keuzes van 10 oktober 2026 | Gereedschap dat is bekeken en bewust niet is opgenomen, met de reden |
 
 Een beschrijving hoort te kloppen met de code van dezelfde commit. Een lijst van keuzes verandert alleen als een keuze verandert.

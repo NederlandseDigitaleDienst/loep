@@ -409,7 +409,7 @@ Bij elke bevinding staat in het rapport een uitsnede: het element met wat marge,
 
 `export` zet de werklijst om voor wie ermee verder werkt: `export --run <run> --format csv` geeft een rij per gebrek, `--format issues` een Markdown-blok per gebrek met titel en body, klaar voor `gh issue create`. Het maakt zelf geen issues aan.
 
-`handout` kopieert het rapport naar een map buiten de run, onder een naam die de site en de dag noemt: `handout --run <run> --out <map>` geeft `rapport-<site>-<datum>.pdf`, `rapport-kort-<site>-<datum>.pdf` en `rapport-<site>-<datum>.html`, met `-concept` zolang het rapport niet is afgetekend. In de run heten de bestanden voor elke site gelijk, en dat blijft zo: het zegel, een publicatie en de verwijzingen in het rapport rusten op die namen. Na het tekenen kopieert het de afgetekende versie.
+`handout` kopieert het rapport naar een map buiten de run, onder een naam die de site en de dag noemt: `handout --run <run> --out <map>` geeft `rapport-<site>-<datum>.pdf`, `rapport-kort-<site>-<datum>.pdf` en `rapport-<site>-<datum>.html`, met `-concept` zolang het rapport niet is afgetekend. In de run heten de bestanden voor elke site gelijk, en dat blijft zo: het zegel, een publicatie en de verwijzingen in het rapport rusten op die namen. Na het tekenen kopieert het de afgetekende versie. Met `--name <naam>` zegt de naam die opgave in plaats van de host van de url, voor een site die op een IP-adres staat of die de opdrachtgever bij een eigen naam kent.
 
 ## Aanbevelingen
 
