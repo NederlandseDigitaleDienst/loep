@@ -8,7 +8,7 @@ import { enginesToRetry, enginesWithoutResult, type EngineRun } from "../lib/eng
 import { expectedFocusable, pageCoverage, reachedByKeyboard, representativePages, stateCoverage } from "../lib/extractors.ts";
 import { type Manifest, type ManifestStep, stepStart, writeManifest } from "../lib/manifest.ts";
 import { readTemplate } from "../lib/templates.ts";
-import { exploreMinutesUsed, exploreRoundBudget, exploreTotalMinutes } from "../lib/explore-budget.ts";
+import { exploreMinutesUsed, exploreRoundBudget, exploreTotalMinutes, sweepMinutes } from "../lib/explore-budget.ts";
 import { makeWorkDir } from "../lib/workdir.ts";
 import { notFoundProbes, siteHosts, siteLabel } from "../lib/origins.ts";
 import { uncoveredOperables, type CountedPage } from "../lib/operables.ts";
@@ -121,8 +121,11 @@ export interface Gate {
   /** How many times the explorer has been given a task for this run, and how often the run may still go back. */
   exploreRound: number;
   returnsLeft: number;
-  /** The minutes of every round of the explorer together, what the rounds used, and whether too little is left for another round. Absent in a run from before the total (#730). */
-  exploreTime?: { totalMinutes: number; usedMinutes: number; spent: boolean };
+  /**
+   * The wall minutes of every round of the exploration together, from `explore` to the verdict of the gate, what the rounds used up to
+   * this verdict, what a sweep of this run takes, and whether that sweep no longer fits for another round. Absent in a run from before the total (#730).
+   */
+  exploreTime?: { totalMinutes: number; usedMinutes: number; sweepMinutes: number; spent: boolean };
   /** How many times collect ran again since the last task for the explorer, and how often a gap the sweep can close may still send the run back to the sweep. */
   resweeps?: number;
   resweepsLeft?: number;
@@ -1103,12 +1106,13 @@ async function currentAnswers(runDir: string, sheets: Sheet[]): Promise<Answers 
  * Where the run goes from the gate. Pure: the gaps of the fixed checks and of the review, whether the review is answered for
  * the current sheets, the steps of the manifest and which gaps the site model accepts. Every gap it returns says who can close it.
  */
-export function route(fixedGaps: Gap[], reviewedGaps: Gap[], answered: boolean, steps: (Pick<ManifestStep, "command"> & { at?: string; totalMinutes?: unknown })[], isAccepted: (gap: Gap) => boolean): Pick<Gate, "sufficient" | "stage" | "exploreRound" | "returnsLeft" | "gaps" | "limitations" | "exploreTime"> & Required<Pick<Gate, "next" | "resweeps" | "resweepsLeft">> & { all: Gap[] } {
+export function route(fixedGaps: Gap[], reviewedGaps: Gap[], answered: boolean, steps: (Pick<ManifestStep, "command"> & { at?: string; totalMinutes?: unknown })[], isAccepted: (gap: Gap) => boolean, now?: string): Pick<Gate, "sufficient" | "stage" | "exploreRound" | "returnsLeft" | "gaps" | "limitations" | "exploreTime"> & Required<Pick<Gate, "next" | "resweeps" | "resweepsLeft">> & { all: Gap[] } {
   const exploreRound = steps.filter((step) => step.command === "explore").length;
-  // The rounds of the explorer share one total of minutes: once no round fits in what is left, no return is left either (#730).
+  // The rounds of the exploration share one total of wall minutes, up to this verdict (`now`): once not even a sweep fits in what is left, no return is left either (#730).
   const totalMinutes = exploreTotalMinutes(steps);
-  const usedMinutes = exploreMinutesUsed(steps);
-  const exploreTime = totalMinutes === null ? undefined : { totalMinutes, usedMinutes, spent: exploreRoundBudget(totalMinutes, usedMinutes) === null };
+  const usedMinutes = exploreMinutesUsed(steps, now);
+  const sweep = sweepMinutes(steps);
+  const exploreTime = totalMinutes === null ? undefined : { totalMinutes, usedMinutes, sweepMinutes: sweep, spent: exploreRoundBudget(totalMinutes, usedMinutes, sweep) === null };
   const returnsLeft = exploreTime?.spent ? 0 : Math.max(0, MAX_RETURNS_TO_EXPLORER - Math.max(0, exploreRound - 1));
   const resweeps = Math.max(0, steps.slice(steps.findLastIndex((step) => step.command === "explore") + 1).filter((step) => step.command === "collect").length - 1);
   const resweepsLeft = Math.max(0, MAX_RESWEEPS - resweeps);
@@ -1154,7 +1158,7 @@ export function afterEveryReturn(next: NonNullable<Gate["next"]>, stage: Gate["s
   if (next === "stop" && stage !== "complete" && !nothingToJudge(gaps, pages)) return { gaps, degradedLimitations: [], next: "review", afterRetries: false };
   const afterRetries = next === "stop" && !nothingToJudge(gaps, pages);
   if (!afterRetries) return { gaps, degradedLimitations: [], next, afterRetries };
-  const why = exploreTime?.spent ? `Dit bleef open toen de ${exploreTime.totalMinutes} minuten voor het verkennen van de site op waren` : `Na ${MAX_RETURNS_TO_EXPLORER} keer terug naar de verkenner nog open`;
+  const why = exploreTime?.spent ? `Dit bleef open omdat de ${exploreTime.totalMinutes} minuten voor het verkennen van de site op waren voordat het opnieuw bekeken kon worden` : `Na ${MAX_RETURNS_TO_EXPLORER} keer terug naar de verkenner nog open`;
   const degradedLimitations = gaps.map((gap) => ({ ...gap, missingNl: `${why}: ${gap.missingNl} Wat hier niet in het bewijs staat, bekijkt de beoordelaar zelf in de sessie.` }));
   return { gaps: [], degradedLimitations, next: "proceed", afterRetries };
 }
@@ -1222,7 +1226,7 @@ export async function gate(runDir: string, outDir: string = runDir): Promise<Gat
   // A gap the explorer confirmed as a property of the site does not hold the run back.
   const acceptedBy = (gap: Gap) => acceptedGapFor(run.siteModel, { check: gap.check, page: gap.url, component: gap.component, state: gap.state });
   const manifestPath = join(runDir, "manifest.json");
-  const routed = route(fixed.gaps, reviewed.gaps, answers !== null, existsSync(manifestPath) ? (await readJson<Manifest>(manifestPath)).steps : [], (gap) => acceptedBy(gap) !== undefined);
+  const routed = route(fixed.gaps, reviewed.gaps, answers !== null, existsSync(manifestPath) ? (await readJson<Manifest>(manifestPath)).steps : [], (gap) => acceptedBy(gap) !== undefined, startedAt);
   const accepted = routed.all.filter((gap) => acceptedBy(gap)).map((gap) => ({ ...gap, reasonNl: acceptedBy(gap)!.reasonNl, observation: acceptedBy(gap)!.observation, decidedBy: acceptedBy(gap)!.decidedBy }));
   // After every return to the explorer the run goes on with what there is: each gap left becomes a limitation that the judges look at
   // themselves (#318). It stops only where nothing is left to judge.

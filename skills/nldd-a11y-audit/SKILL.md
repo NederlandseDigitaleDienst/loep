@@ -96,7 +96,7 @@ Een agent starten betekent steeds: een aparte agent die alleen dit krijgt: "Lees
    ```
    LOEP explore --run RUN
    ```
-   Start één agent met `RUN/explore/verken.md`. Alle rondes van de verkenner samen, ook de vervolgrondes van stap 5, krijgen standaard 120 minuten; een ronde krijgt hooguit wat er daarvan over is. Vraagt de gebruiker om meer of minder tijd voor de verkenning, geef dan `--explore-minutes <minuten>` mee aan `explore`. Daarna:
+   Start één agent met `RUN/explore/verken.md`. Alle rondes samen, ook de vervolgrondes van stap 5, krijgen standaard 240 minuten, gerekend van `explore` tot de uitspraak van de poort; een nieuwe ronde begint alleen als er daarvan nog een veegronde over is. Vraagt de gebruiker om meer of minder tijd voor de verkenning, geef dan `--explore-minutes <minuten>` mee aan `explore`. Daarna:
    ```
    LOEP check-site --run RUN
    ```

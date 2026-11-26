@@ -2,28 +2,35 @@ import { EXTENSION, type Budget } from "./budget.ts";
 import type { ManifestStep } from "./manifest.ts";
 
 /*
- * The time of the exploration as a whole. Every round of the explorer has a session of its own,
- * with its own budget and two extensions it can ask for itself, and the gate sends the run back to
- * the explorer at most twice. On a site with many kinds of pages that came to three full sessions
- * and half of a run (#730), while the report was about the same sample. So the rounds share one
- * total: a round gets what is left of it, and once too little is left the gate goes on with
- * limitations, as it does after the last return.
+ * The time of the exploration as a whole. Every round of the explorer is followed by a full sweep
+ * and the gate, and the gate sends the run back to the explorer at most twice. On a site with many
+ * kinds of pages that came to three rounds of 191, 60 and 63 minutes from the task of the explorer
+ * to the verdict of the gate, half of a run, for a report about the same sample (#730). The explorer
+ * itself worked 93 of those minutes: the time is in the sweep and the gate after each round. So the
+ * budget is on the wall time of the rounds together, and before a new round starts the gate and
+ * `explore` check that a sweep still fits in what is left.
  */
 
 /** Budget of one session of the exploring agent, the first round at least. */
 export const EXPLORE_MAX_COMMANDS = 200;
 export const EXPLORE_MAX_MINUTES = 40;
 
-/** Minutes for every round of the explorer together, unless `explore --explore-minutes` says otherwise: a first round with both extensions, and a follow-up round of half that. */
-export const EXPLORE_TOTAL_MINUTES = 120;
+/** Wall minutes of every round of the exploration together, from `explore` to the verdict of the gate, unless `explore --explore-minutes` says otherwise. */
+export const EXPLORE_TOTAL_MINUTES = 240;
 
 /** A round shorter than this is no round: the explorer reads the model and the gaps before it measures anything. */
 export const EXPLORE_MIN_ROUND_MINUTES = 10;
 
+/** A sweep when the run has none with its own time recorded: what one over a sample of 16 pages and 20 documents took (#730). */
+export const SWEEP_MINUTES = 45;
+
+/** The commands of one sweep, each with its own step in the manifest. */
+const SWEEP_COMMANDS = ["collect", "contrast", "states", "documents"];
+
 /** What a session can grow to with every extension, as a multiple of what it starts with. */
 const WITH_EXTENSIONS = 1 + EXTENSION.share * EXTENSION.max;
 
-type Step = Pick<ManifestStep, "command"> & { at?: string; totalMinutes?: unknown; maxMinutes?: unknown };
+type Step = Pick<ManifestStep, "command"> & { at?: string; startedAt?: string; seconds?: unknown; only?: unknown; totalMinutes?: unknown; maxMinutes?: unknown };
 
 /**
  * The total of this run: what the last `explore` recorded. Null for a run whose explorer had no
@@ -34,49 +41,72 @@ export function exploreTotalMinutes(steps: Step[]): number | null {
   return recorded ? (recorded.totalMinutes as number) : null;
 }
 
+const time = (value: string | undefined): number => (value ? Date.parse(value) : NaN);
+
 /**
- * Minutes the explorer worked so far: per round, from its task (`explore`) to the last
- * `check-site` before the next round. The same reading as the estimate. A round without a
- * `check-site` yet counts nothing. A round counts at most what its session could grow to with
- * both extensions: a run that waited overnight, or a clock that jumped, does not use up the time
- * of the rounds after it.
+ * Wall minutes of the exploration so far: per round, from its `explore` to the last `gate` before
+ * the next round, or to `now` for the round the gate is judging. Only time in which the run works
+ * counts. A command counts from its own start to its end, as the manifest records it. The time
+ * between two commands is an agent at work, the explorer or the one that looks at the pictures, or
+ * else a pause: a question to a person, a limit that stopped the run until the next morning. The
+ * manifest cannot tell them apart, so such a stretch counts at most as long as the session of the
+ * explorer can grow to with both extensions; so does a command, in case the machine slept while it
+ * ran or the clock jumped. A clock that went back counts nothing. Without pauses this is the wall
+ * time; the time between the verdict of the gate and the next `explore` is never counted.
  */
-export function exploreMinutesUsed(steps: Step[]): number {
+export function exploreMinutesUsed(steps: Step[], now?: string): number {
+  const starts = steps.flatMap((step, index) => (step.command === "explore" ? [index] : []));
   let used = 0;
-  let begin: number | null = null;
-  let end: number | null = null;
-  let most = EXPLORE_MAX_MINUTES * WITH_EXTENSIONS;
-  const close = (): void => {
-    if (begin !== null && end !== null) used += Math.min(most, Math.max(0, end - begin) / 60_000);
-  };
-  for (const step of steps) {
-    const at = step.at ? Date.parse(step.at) : NaN;
-    if (step.command === "explore") {
-      close();
-      begin = Number.isFinite(at) ? at : null;
-      end = null;
-      most = (typeof step.maxMinutes === "number" ? step.maxMinutes : EXPLORE_MAX_MINUTES) * WITH_EXTENSIONS;
-    } else if (step.command === "check-site" && begin !== null && Number.isFinite(at)) end = at;
-  }
-  close();
-  return Math.round(used * 10) / 10;
+  starts.forEach((start, n) => {
+    const round = steps.slice(start, starts[n + 1] ?? steps.length);
+    if (n === starts.length - 1 && now) round.push({ command: "gate", startedAt: now, at: now });
+    const verdict = round.findLastIndex((step) => step.command === "gate");
+    const counted = round.slice(0, verdict >= 0 ? verdict + 1 : round.length);
+    const most = (typeof round[0]!.maxMinutes === "number" ? round[0]!.maxMinutes : EXPLORE_MAX_MINUTES) * WITH_EXTENSIONS * 60_000;
+    const stretch = (from: number, to: number): number => (Number.isFinite(from) && Number.isFinite(to) ? Math.min(most, Math.max(0, to - from)) : 0);
+    let cursor = time(counted[0]!.startedAt ?? counted[0]!.at);
+    for (const step of counted) {
+      const end = time(step.at);
+      const begin = Number.isFinite(time(step.startedAt)) ? time(step.startedAt) : end;
+      used += stretch(cursor, begin) + stretch(begin, end);
+      if (Number.isFinite(end)) cursor = end;
+    }
+  });
+  return Math.round(used / 6_000) / 10;
 }
 
 /**
- * The session of the next round: the usual budget, or less when what is left of the total is
- * smaller, so that the round fits with both its extensions. Null when not even a short round fits.
- * Without a total (a run from before it), always the usual budget.
+ * Minutes of one sweep in this run: the last `collect` of the whole sample with the `contrast`,
+ * `states` and `documents` after it, by their own time. Without one, `SWEEP_MINUTES`.
  */
-export function exploreRoundBudget(total: number | null, used: number): Budget | null {
+export function sweepMinutes(steps: Step[]): number {
+  const last = steps.findLastIndex((step) => step.command === "collect" && !step.only && typeof step.seconds === "number");
+  if (last < 0) return SWEEP_MINUTES;
+  const seconds = SWEEP_COMMANDS.reduce((sum, command) => {
+    const step = steps.slice(last).find((each) => each.command === command && typeof each.seconds === "number");
+    return sum + (step ? (step.seconds as number) : 0);
+  }, 0);
+  return Math.round(seconds / 6) / 10;
+}
+
+/**
+ * The session of the next round: the usual budget, or less when what is left of the total after a
+ * sweep is smaller, so that the round with its sweep ends close to the total. Null when not even the
+ * sweep fits: then there is no round, so that none stops halfway. A round that does start gets at
+ * least a short session, and may go past the total by that much. Without a total (a run from before
+ * it), always the usual budget.
+ */
+export function exploreRoundBudget(total: number | null, used: number, sweep: number): Budget | null {
   if (total === null) return { commands: EXPLORE_MAX_COMMANDS, minutes: EXPLORE_MAX_MINUTES };
-  const minutes = Math.min(EXPLORE_MAX_MINUTES, Math.floor((total - used) / WITH_EXTENSIONS));
-  if (minutes < EXPLORE_MIN_ROUND_MINUTES) return null;
+  const left = total - used;
+  if (left < sweep) return null;
+  const minutes = Math.min(EXPLORE_MAX_MINUTES, Math.max(EXPLORE_MIN_ROUND_MINUTES, Math.floor((left - sweep) / WITH_EXTENSIONS)));
   return { commands: Math.round((EXPLORE_MAX_COMMANDS * minutes) / EXPLORE_MAX_MINUTES), minutes };
 }
 
 /** What the gate and `explore` say when the time for the exploration is used up. */
-export function exploreTimeSpentNl(total: number, used: number): string {
-  return `de tijd voor de verkenning is op: ${Math.round(used)} van ${total} minuten voor alle rondes samen`;
+export function exploreTimeSpentNl(total: number, used: number, sweep: number): string {
+  return `de tijd voor de verkenning is op: ${Math.round(used)} van ${total} minuten voor alle rondes samen, van explore tot de uitspraak van de poort, en een nieuwe ronde met een veegronde van ongeveer ${Math.round(sweep)} minuten past er niet meer in`;
 }
 
 /** Read `--explore-minutes`: a whole number of minutes, enough for at least one short round. */

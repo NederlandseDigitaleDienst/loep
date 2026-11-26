@@ -32,8 +32,9 @@ const USAGE = `loep <command> [options]
                                          measures a sample that is already there
   explore --run <run> [--explore-minutes <n>]
                                          Write the task for the agent that maps the site before it is measured. All rounds
-                                         of the explorer share one total of minutes (default 120); a round gets what is left
-                                         of it, and once no round fits the gate goes on with limitations
+                                         share one total of wall minutes, from explore to the verdict of the gate (default
+                                         240); a new round starts only while a sweep still fits in what is left, and once
+                                         none does the gate goes on with limitations
   check-site --run <run>                 Validate site.json, replay every recipe in it and open every component on each of its
                                          page types as the sweep does; non-zero exit on problems
   sample --run <run> [--seed <text>]     Choose the pages to evaluate (all of them on a small site). Without --seed the random
@@ -586,7 +587,7 @@ async function main(): Promise<void> {
       const { explore } = await import("./commands/explore.ts");
       const { parseExploreMinutes } = await import("./lib/explore-budget.ts");
       const result = await explore(values.run, { totalMinutes: parseExploreMinutes(values["explore-minutes"]) });
-      const timeNl = result.totalMinutes === null ? "" : `; deze ronde ${result.minutes} minuten, van de ${result.totalMinutes} voor alle rondes samen is ${Math.round(result.usedMinutes)} gebruikt`;
+      const timeNl = result.totalMinutes === null ? "" : `; deze ronde ${result.minutes} minuten voor de verkenner, van de ${result.totalMinutes} minuten voor alle rondes samen, van explore tot de uitspraak van de poort, zijn er ${Math.round(result.usedMinutes)} gebruikt`;
       process.stdout.write(`${result.task}\nronde ${result.round}: ${result.pages} pagina's, ${result.frames} ingesloten vensters${timeNl}\n`);
       await repeatReadsOutsideRun(values.run);
       return;

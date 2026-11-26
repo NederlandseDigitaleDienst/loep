@@ -5,7 +5,7 @@ import { confirmLogin, launchBrowser } from "../browser/session.ts";
 import { readJson, sha256, sha256File, writeFileAtomic, writeJson } from "../lib/canonical.ts";
 import { type Manifest, stepStart, writeManifest } from "../lib/manifest.ts";
 import { readTemplate } from "../lib/templates.ts";
-import { EXPLORE_TOTAL_MINUTES, exploreMinutesUsed, exploreRoundBudget, exploreTimeSpentNl, exploreTotalMinutes } from "../lib/explore-budget.ts";
+import { EXPLORE_TOTAL_MINUTES, exploreMinutesUsed, exploreRoundBudget, exploreTimeSpentNl, exploreTotalMinutes, sweepMinutes } from "../lib/explore-budget.ts";
 import { agentLoginNl, loginForRun } from "../lib/login.ts";
 import { heldBackSearches, heldBackSearchNl, recordReads, type HeldBackSearch } from "../lib/reads.ts";
 import { makeWorkDir } from "../lib/workdir.ts";
@@ -74,7 +74,8 @@ export interface ExploreOptions {
 
 /**
  * Write the task for the exploring agent: a fixed prompt, filled in with what the inventory found and, in a later round, the gaps of the evidence gate.
- * The rounds share one total of minutes; a round gets what is left of it, and once too little is left there is no round more.
+ * The rounds share one total of wall minutes, from `explore` to the verdict of the gate. The first round always gets its usual session;
+ * a later one only when a sweep still fits in what is left, with a session of what is left after that sweep.
  */
 export async function explore(runDir: string, options: ExploreOptions = {}): Promise<{ task: string; pages: number; frames: number; round: number; minutes: number; totalMinutes: number | null; usedMinutes: number }> {
   const startedAt = stepStart();
@@ -84,8 +85,9 @@ export async function explore(runDir: string, options: ExploreOptions = {}): Pro
   // A run whose first round had no total keeps going without one, unless somebody gives one now.
   const totalMinutes = options.totalMinutes ?? (round === 1 ? EXPLORE_TOTAL_MINUTES : exploreTotalMinutes(steps));
   const usedMinutes = exploreMinutesUsed(steps);
-  const budget = exploreRoundBudget(totalMinutes, usedMinutes);
-  if (!budget) throw new Error(`geen nieuwe ronde voor de verkenner: ${exploreTimeSpentNl(totalMinutes!, usedMinutes)}. Draai gate: wat nog open is, wordt een beperking. Moet er toch nog verkend worden, geef dan meer tijd met explore --explore-minutes <minuten voor alle rondes samen>`);
+  const sweep = sweepMinutes(steps);
+  const budget = round === 1 ? exploreRoundBudget(null, 0, 0) : exploreRoundBudget(totalMinutes, usedMinutes, sweep);
+  if (!budget) throw new Error(`geen nieuwe ronde voor de verkenner: ${exploreTimeSpentNl(totalMinutes!, usedMinutes, sweep)}. Draai gate: wat nog open is, wordt een beperking. Moet er toch nog verkend worden, geef dan meer tijd met explore --explore-minutes <minuten voor alle rondes samen>`);
   const inventory = await readJson<Inventory>(join(runDir, "inventory.json"));
   const context = exploreContext(inventory);
   const absoluteRun = resolve(runDir);
