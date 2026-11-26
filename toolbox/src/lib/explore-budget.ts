@@ -30,7 +30,13 @@ const SWEEP_COMMANDS = ["collect", "contrast", "states", "documents"];
 /** What a session can grow to with every extension, as a multiple of what it starts with. */
 const WITH_EXTENSIONS = 1 + EXTENSION.share * EXTENSION.max;
 
-type Step = Pick<ManifestStep, "command"> & { at?: string; startedAt?: string; seconds?: unknown; only?: unknown; totalMinutes?: unknown; maxMinutes?: unknown };
+/**
+ * The most one command, or the time between two, counts: the longest a usual session of the explorer can grow to, 80 minutes.
+ * The same in every round: a later round with a shorter session still has a sweep of full length, and a look at the pictures.
+ */
+const MOST_PER_STRETCH = EXPLORE_MAX_MINUTES * WITH_EXTENSIONS * 60_000;
+
+type Step = Pick<ManifestStep, "command"> & { at?: string; startedAt?: string; seconds?: unknown; only?: unknown; totalMinutes?: unknown };
 
 /**
  * The total of this run: what the last `explore` recorded. Null for a run whose explorer had no
@@ -46,29 +52,29 @@ const time = (value: string | undefined): number => (value ? Date.parse(value) :
 /**
  * Wall minutes of the exploration so far: per round, from its `explore` to the last `gate` before
  * the next round, or to `now` for the round the gate is judging. Only time in which the run works
- * counts. A command counts from its own start to its end, as the manifest records it. The time
- * between two commands is an agent at work, the explorer or the one that looks at the pictures, or
- * else a pause: a question to a person, a limit that stopped the run until the next morning. The
- * manifest cannot tell them apart, so such a stretch counts at most as long as the session of the
- * explorer can grow to with both extensions; so does a command, in case the machine slept while it
+ * counts. A command counts from its own start to its end, as the manifest records it, and two
+ * commands that ran at the same time count once. The time between two commands is an agent at work,
+ * the explorer or the one that looks at the pictures, or else a pause: a question to a person, a
+ * limit that stopped the run until the next morning. The manifest cannot tell them apart, so such a
+ * stretch counts at most `MOST_PER_STRETCH`; so does a command, in case the machine slept while it
  * ran or the clock jumped. A clock that went back counts nothing. Without pauses this is the wall
  * time; the time between the verdict of the gate and the next `explore` is never counted.
  */
 export function exploreMinutesUsed(steps: Step[], now?: string): number {
   const starts = steps.flatMap((step, index) => (step.command === "explore" ? [index] : []));
+  const stretch = (from: number, to: number): number => (Number.isFinite(from) && Number.isFinite(to) ? Math.min(MOST_PER_STRETCH, Math.max(0, to - from)) : 0);
   let used = 0;
   starts.forEach((start, n) => {
     const round = steps.slice(start, starts[n + 1] ?? steps.length);
     if (n === starts.length - 1 && now) round.push({ command: "gate", startedAt: now, at: now });
     const verdict = round.findLastIndex((step) => step.command === "gate");
     const counted = round.slice(0, verdict >= 0 ? verdict + 1 : round.length);
-    const most = (typeof round[0]!.maxMinutes === "number" ? round[0]!.maxMinutes : EXPLORE_MAX_MINUTES) * WITH_EXTENSIONS * 60_000;
-    const stretch = (from: number, to: number): number => (Number.isFinite(from) && Number.isFinite(to) ? Math.min(most, Math.max(0, to - from)) : 0);
     let cursor = time(counted[0]!.startedAt ?? counted[0]!.at);
     for (const step of counted) {
       const end = time(step.at);
       const begin = Number.isFinite(time(step.startedAt)) ? time(step.startedAt) : end;
-      used += stretch(cursor, begin) + stretch(begin, end);
+      // A step that began before the one before it ended ran beside it: only what comes after counts. One that also ended before it is a clock that went back.
+      used += stretch(cursor, begin) + stretch(end >= cursor ? Math.max(cursor, begin) : begin, end);
       if (Number.isFinite(end)) cursor = end;
     }
   });
@@ -77,16 +83,17 @@ export function exploreMinutesUsed(steps: Step[], now?: string): number {
 
 /**
  * Minutes of one sweep in this run: the last `collect` of the whole sample with the `contrast`,
- * `states` and `documents` after it, by their own time. Without one, `SWEEP_MINUTES`.
+ * `states` and `documents` after it, before the next such `collect`, by their own time. A sweep that
+ * is still running or stopped halfway does not count; then the one before it. Without one, `SWEEP_MINUTES`.
  */
 export function sweepMinutes(steps: Step[]): number {
-  const last = steps.findLastIndex((step) => step.command === "collect" && !step.only && typeof step.seconds === "number");
-  if (last < 0) return SWEEP_MINUTES;
-  const seconds = SWEEP_COMMANDS.reduce((sum, command) => {
-    const step = steps.slice(last).find((each) => each.command === command && typeof each.seconds === "number");
-    return sum + (step ? (step.seconds as number) : 0);
-  }, 0);
-  return Math.round(seconds / 6) / 10;
+  const whole = steps.flatMap((step, index) => (step.command === "collect" && !step.only && typeof step.seconds === "number" ? [index] : []));
+  for (let n = whole.length - 1; n >= 0; n--) {
+    const sweep = steps.slice(whole[n], whole[n + 1] ?? steps.length);
+    const seconds = SWEEP_COMMANDS.map((command) => sweep.find((each) => each.command === command && typeof each.seconds === "number")?.seconds as number | undefined);
+    if (seconds.every((each) => each !== undefined)) return Math.round(seconds.reduce((sum, each) => sum + each, 0) / 6) / 10;
+  }
+  return SWEEP_MINUTES;
 }
 
 /**

@@ -1158,7 +1158,7 @@ export function afterEveryReturn(next: NonNullable<Gate["next"]>, stage: Gate["s
   if (next === "stop" && stage !== "complete" && !nothingToJudge(gaps, pages)) return { gaps, degradedLimitations: [], next: "review", afterRetries: false };
   const afterRetries = next === "stop" && !nothingToJudge(gaps, pages);
   if (!afterRetries) return { gaps, degradedLimitations: [], next, afterRetries };
-  const why = exploreTime?.spent ? `Dit bleef open omdat de ${exploreTime.totalMinutes} minuten voor het verkennen van de site op waren voordat het opnieuw bekeken kon worden` : `Na ${MAX_RETURNS_TO_EXPLORER} keer terug naar de verkenner nog open`;
+  const why = exploreTime?.spent ? `De ${exploreTime.totalMinutes} minuten voor het verkennen van de site waren op voordat dit opnieuw bekeken kon worden` : `Na ${MAX_RETURNS_TO_EXPLORER} keer terug naar de verkenner nog open`;
   const degradedLimitations = gaps.map((gap) => ({ ...gap, missingNl: `${why}: ${gap.missingNl} Wat hier niet in het bewijs staat, bekijkt de beoordelaar zelf in de sessie.` }));
   return { gaps: [], degradedLimitations, next: "proceed", afterRetries };
 }

@@ -72,7 +72,7 @@ test("the run of the issue: the second round gets what is left after a sweep, th
   assert.deepEqual([afterSecond.next, afterSecond.returnsLeft, afterSecond.exploreTime?.usedMinutes, afterSecond.exploreTime?.spent], ["stop", 0, 251, true]);
   const limited = afterEveryReturn(afterSecond.next, afterSecond.stage, afterSecond.gaps, pages as never, afterSecond.exploreTime);
   assert.deepEqual([limited.next, limited.gaps.length, limited.degradedLimitations.length], ["proceed", 0, 1]);
-  assert.match(limited.degradedLimitations[0]!.missingNl, /^Dit bleef open omdat de 240 minuten voor het verkennen van de site op waren voordat het opnieuw bekeken kon worden: tab-reach ontbreekt\./);
+  assert.match(limited.degradedLimitations[0]!.missingNl, /^De 240 minuten voor het verkennen van de site waren op voordat dit opnieuw bekeken kon worden: tab-reach ontbreekt\./);
 
   // explore gives no third round either, unless somebody gives more time.
   await assert.rejects(explore(run), /geen nieuwe ronde voor de verkenner: de tijd voor de verkenning is op: 251 van 240 minuten.*veegronde van ongeveer 40 minuten.*Draai gate/);
@@ -146,4 +146,23 @@ test("--explore-minutes takes whole minutes, enough for one short round", () => 
   assert.throws(() => parseExploreMinutes("twee uur"), /heel aantal minuten/);
   assert.equal(exploreRoundBudget(100, 50, 45)?.minutes, 10, "a round that starts gets at least a short session");
   assert.equal(exploreRoundBudget(100, 60, 45), null, "no round when its sweep does not fit");
+});
+
+test("a short later round still counts a sweep of full length, and commands that ran at the same time count once", () => {
+  const begin = Date.UTC(2026, 10, 1);
+  // A round with a session of 10 minutes, and a states of 50 minutes on a large sample: the sweep is no shorter for the short session.
+  const short = [command("explore", begin, 0, 0, { totalMinutes: 240, maxMinutes: 10 }), command("check-site", begin, 9, 10), command("states", begin, 10, 60), command("gate", begin, 60, 61)];
+  assert.equal(exploreMinutesUsed(short), 61);
+  // Two commands of the sweep at the same time: the twenty minutes they share count once.
+  const overlap = [command("explore", begin, 0, 0, { totalMinutes: 240, maxMinutes: 40 }), command("collect", begin, 0, 30), command("contrast", begin, 10, 35), command("gate", begin, 35, 36)];
+  assert.equal(exploreMinutesUsed(overlap), 36);
+});
+
+test("a sweep that is still running or stopped halfway is not the estimate of a sweep", () => {
+  const begin = Date.UTC(2026, 10, 1);
+  const full = [command("collect", begin, 0, 10, { only: null }), command("contrast", begin, 10, 12), command("states", begin, 12, 32), command("documents", begin, 32, 35)];
+  // The next sweep has its collect and contrast in the manifest, its states not yet: the full one before it counts.
+  const halfway = [...full, command("collect", begin, 40, 43, { only: null }), command("contrast", begin, 43, 44)];
+  assert.equal(sweepMinutes(halfway), 35);
+  assert.equal(sweepMinutes(halfway.slice(4)), SWEEP_MINUTES);
 });
