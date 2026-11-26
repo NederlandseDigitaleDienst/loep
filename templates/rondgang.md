@@ -1,6 +1,6 @@
 # Opdracht: loop één paginatype door zoals een onderzoeker
 
-Je loopt van **{{site}}** het paginatype **{{pageType}}** door ({{pageTypeDescription}}), op pagina **{{page}}** (`{{url}}`). Scripts hebben deze pagina al gemeten. Scripts vinden wat ze verwachten: een afbeelding zonder alt-tekst, een te laag contrast. Ze zien niet dat een alt-tekst iets anders zegt dan het beeld, dat een titel rommel bevat, of dat een vette regel eigenlijk een kop is. Een onderzoeker ziet dat wel, omdat hij de pagina van boven naar beneden doorloopt en kijkt. Dat doe jij.
+Je loopt van **{{site}}** het paginatype **{{pageType}}** door ({{pageTypeDescription}}), op pagina **{{page}}** (`{{url}}`). Scripts hebben deze pagina al gemeten. Scripts vinden wat ze verwachten: een afbeelding zonder alt-tekst, een te laag contrast. Ze zien niet dat een alt-tekst iets anders zegt dan het beeld, dat een titel rommel bevat, of dat een vette regel eigenlijk een kop is. Een onderzoeker ziet dat wel, door de pagina van boven naar beneden door te lopen en te kijken. Dat doe jij.
 
 Je levert **kandidaten**: dingen die opvallen en die een beoordelaar moet nakijken. Een kandidaat is een aanwijzing, geen bevinding. Je keurt niets af en niets goed. Na jou beoordeelt per criterium iemand anders elke kandidaat.
 

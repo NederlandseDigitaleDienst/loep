@@ -137,7 +137,7 @@ Stop je sessie als je klaar bent: `node {{cli}} session stop --run {{run}} --ses
 - `findings`: sleutels `F1`, `F2`. Laat `verification` en `nothingFound` weg.
 - `recommendations`: alleen onder een regel uit de sectie "Aanbevelingen" van de procedure, met die regel in `rule` (`A1`). Verder `titleNl`, `observedNl`, `recommendationNl` (wat de site kan doen), de plekken in `locations` zoals bij een bevinding, en in `evidence` minstens één waarneming van een kijk- of meetcommando uit je eigen sessie. Laat het veld weg als er niets is, of als de procedure geen aanbevelingen kent.
 {{findingRules}}
-- Wees kort: `summaryNl` hooguit 40 woorden, hooguit acht waarnemingen van elk hooguit 70 woorden, en per bevinding hooguit 50 woorden voor `observedNl`, `impactNl` en `fixNl`. Nederlands op B1-niveau in de velden voor lezers; vaktermen alleen in `fixNl`.
+- Wees kort: `summaryNl` hooguit 40 woorden, hooguit acht waarnemingen van elk hooguit 70 woorden, en per bevinding hooguit 50 woorden voor `observedNl`, `impactNl` en `fixNl`. Nederlands op B1-niveau in de velden voor lezers; vaktermen alleen in `fixNl`. Geef een bezoeker, lezer, gebruiker of eigenaar nooit een voornaamwoord dat een geslacht kiest: herhaal het woord, of schrijf in het meervoud ("bezoekers ... ze").
 
 ## Procedure voor dit criterium
 

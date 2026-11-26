@@ -71,7 +71,7 @@ Stop je sessie als je klaar bent: `node {{cli}} session stop --run {{run}} --ses
 
 - `findings`: één regel per bevinding hierboven, met haar nummer in `finding`.
 - `evidence`: alleen waarnemingen uit je eigen sessie `{{session}}`. Bij `nog aanwezig` en `opgelost` minstens één van een kijk- of meetcommando dat niet faalde; bij `opgelost` minstens één op dezelfde pagina, breedte en kleurschema als een waarneming van de bevinding, en in een toestand als die er een had.
-- Wees kort: `observedNl` en `reasonNl` elk hooguit 60 woorden, in Nederlands op B1-niveau.
+- Wees kort: `observedNl` en `reasonNl` elk hooguit 60 woorden, in Nederlands op B1-niveau. Geef een bezoeker, lezer, gebruiker of eigenaar nooit een voornaamwoord dat een geslacht kiest: herhaal het woord, of schrijf in het meervoud ("bezoekers ... ze").
 
 ## Procedure voor dit criterium
 

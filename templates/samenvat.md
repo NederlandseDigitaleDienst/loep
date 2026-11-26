@@ -22,6 +22,7 @@ Lees het helemaal, in delen als het groot is. Gebruik niets van buiten het rappo
 
 - Hooguit {{wordsMax}} woorden, geteld als stukken tekst tussen spaties, in {{paragraphsMin}} tot {{paragraphsMax}} alinea's. Dat is weinig: kies, en laat weg wat de lezers niet nodig hebben om te beslissen. Schrap eerder een gebrek dan de groep bij een gebrek.
 - Lopende zinnen. Geen opsommingstekens, geen kopjes, geen vet, geen haakjes, geen webadressen. De naam van de site mag.
+- Geef een bezoeker, lezer, gebruiker of eigenaar nooit een voornaamwoord dat een geslacht kiest: herhaal het woord, of schrijf in het meervoud ("bezoekers ... ze").
 - Nederlands, voor iemand die WCAG niet kent. Noem de norm één keer bij naam, als "WCAG 2.2 niveau A en AA", en leg er verder niets van uit. Een criterium noem je in woorden, zoals "contrast van tekst", nooit met een nummer.
 - Begin niet met de zin waarmee het rapport zelf opent. Zeg de uitkomst in je eigen woorden.
 - De tekst spreekt het rapport nergens tegen en verzacht niets. Keurt het rapport criteria af, dan staan de woorden "voldoet niet" in je tekst, aaneen en in die volgorde: "de site voldoet niet aan", niet "niet voldoet".
