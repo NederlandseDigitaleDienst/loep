@@ -1,5 +1,7 @@
-import { existsSync, readFileSync, unlinkSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { closeSync, existsSync, mkdirSync, openSync, readFileSync, unlinkSync, writeSync } from "node:fs";
 import { hostname } from "node:os";
+import { dirname } from "node:path";
 import { writeAtomic } from "./atomic.ts";
 
 /*
@@ -31,6 +33,8 @@ export interface Version {
   plugin: string;
   describe: string;
   sha: string;
+  /** A short hash of the changes that were not committed, empty for a clean checkout; absent in a state of an older lus. */
+  changes?: string;
 }
 
 export interface SiteState {
@@ -49,6 +53,8 @@ export interface SiteState {
   continues: number;
   /** The report files that were copied out of the run, under a name with the site and the day. */
   handouts: string[];
+  /** What a person did through lus (answer, sign, decide, statement) since the regie stopped, for the next resume. */
+  humanNl: string | null;
 }
 
 export interface State {
@@ -56,7 +62,7 @@ export interface State {
 }
 
 export function emptySite(slug: string): SiteState {
-  return { slug, phase: "nieuw", run: null, startedAt: null, updatedAt: new Date().toISOString(), step: null, question: null, version: null, pid: null, continues: 0, handouts: [] };
+  return { slug, phase: "nieuw", run: null, startedAt: null, updatedAt: new Date().toISOString(), step: null, question: null, version: null, pid: null, continues: 0, handouts: [], humanNl: null };
 }
 
 export function readState(path: string): State {
@@ -105,13 +111,37 @@ export function alive(pid: number): boolean {
   }
 }
 
+/** When a process started, as `ps` says it; null when `ps` cannot say. */
+export function processStart(pid: number): Date | null {
+  try {
+    const text = execFileSync("ps", ["-o", "lstart=", "-p", String(pid)], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], env: { ...process.env, LC_ALL: "C" } }).trim();
+    const start = new Date(text);
+    return text === "" || Number.isNaN(start.getTime()) ? null : start;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Whether the process that wrote something at `since` still runs. A pid alone is not enough: after a
+ * reboot or a long time the number comes back for another process, and a lock or a state of a lus
+ * that is long gone would then hold everything up. A process that started after it wrote cannot be
+ * the one that wrote; `ps` gives the start to the second, hence the second of slack.
+ */
+export function stillRuns(pid: number, since: string): boolean {
+  if (!alive(pid)) return false;
+  const start = processStart(pid);
+  const written = new Date(since).getTime();
+  return start === null || Number.isNaN(written) || start.getTime() <= written + 1000;
+}
+
 /**
  * Whether the process that was running this site is gone while the state still says it runs. A kill
  * leaves nothing behind to write "gestopt", so the state has to be read against the process list;
  * otherwise `status` claims a run of hours is still going.
  */
 export function isGone(site: SiteState): boolean {
-  return site.phase === "loopt" && (site.pid === null || !alive(site.pid));
+  return site.phase === "loopt" && (site.pid === null || !stillRuns(site.pid, site.updatedAt));
 }
 
 export function readLock(path: string): RunnerLock | null {
@@ -125,13 +155,41 @@ export function readLock(path: string): RunnerLock | null {
   }
 }
 
-/** Take the lock of the runner. One lus runs sites at a time; a lock of a process that is gone is taken over. */
+/**
+ * Take the lock of the runner. One lus runs sites at a time; a lock of a process that is gone is taken
+ * over. The file is created exclusively, so two lus that start at the same moment cannot both get it.
+ * The host is said in the message but decides nothing: macOS changes its host name with the network,
+ * and a live lus on this machine then still holds the lock.
+ */
 export function acquireLock(path: string, slug: string | null): { ok: true; stale: RunnerLock | null } | { ok: false; lock: RunnerLock } {
+  const content = `${JSON.stringify({ pid: process.pid, host: hostname(), since: new Date().toISOString(), slug } satisfies RunnerLock, null, 2)}\n`;
+  mkdirSync(dirname(path), { recursive: true });
+  let stale: RunnerLock | null = null;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      const handle = openSync(path, "wx", 0o600);
+      try {
+        writeSync(handle, content);
+      } finally {
+        closeSync(handle);
+      }
+      return { ok: true, stale };
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+    }
+    const current = readLock(path);
+    if (current && current.pid !== process.pid && stillRuns(current.pid, current.since)) return { ok: false, lock: current };
+    // A lock of a process that is gone, or one that does not read (a lus killed while writing it).
+    stale = current;
+    try {
+      unlinkSync(path);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    }
+  }
   const current = readLock(path);
-  const mine = hostname();
-  if (current && current.host === mine && current.pid !== process.pid && alive(current.pid)) return { ok: false, lock: current };
-  writeAtomic(path, `${JSON.stringify({ pid: process.pid, host: mine, since: new Date().toISOString(), slug } satisfies RunnerLock, null, 2)}\n`);
-  return { ok: true, stale: current && (current.host !== mine || !alive(current.pid)) ? current : null };
+  if (current) return { ok: false, lock: current };
+  throw new Error(`het slot ${path} is niet te pakken`);
 }
 
 export function releaseLock(path: string): void {

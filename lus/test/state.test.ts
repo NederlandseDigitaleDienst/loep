@@ -73,3 +73,27 @@ test("een slot van een proces dat weg is wordt overgenomen", () => {
   assert.equal(result.ok, true);
   assert.equal(readLock(path)?.pid, process.pid);
 });
+
+test("een slot met een pid die intussen bij een ander proces hoort, wordt overgenomen", () => {
+  // Na een herstart komt het nummer terug voor een ander proces; dat proces begon na het slot.
+  const path = lockFile();
+  writeFileSync(path, JSON.stringify({ pid: process.ppid, host: hostname(), since: "2000-01-01T00:00:00.000Z", slug: "voorbeeld.nl" }));
+  const result = acquireLock(path, "voorbeeld.nl");
+  assert.equal(result.ok, true);
+  assert.equal(readLock(path)?.pid, process.pid);
+  assert.equal(isGone({ ...siteState(readState(stateFile()), "x"), phase: "loopt", pid: process.ppid, updatedAt: "2000-01-01T00:00:00.000Z" }), true);
+});
+
+test("een slot van een levend proces houdt de loper tegen, ook als de hostnaam intussen anders is", () => {
+  // macOS verandert de hostnaam met het netwerk; dezelfde lus loopt dan nog steeds.
+  const path = lockFile();
+  writeFileSync(path, JSON.stringify({ pid: process.ppid, host: "andere-naam.local", since: new Date().toISOString(), slug: null }));
+  assert.equal(acquireLock(path, null).ok, false);
+});
+
+test("een slot dat niet leest, is van een lus die halverwege het schrijven stopte en wordt overgenomen", () => {
+  const path = lockFile();
+  writeFileSync(path, "");
+  assert.equal(acquireLock(path, null).ok, true);
+  assert.equal(readLock(path)?.pid, process.pid);
+});
