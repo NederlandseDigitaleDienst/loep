@@ -30,7 +30,10 @@ const USAGE = `loep <command> [options]
                                          --dismiss it first clicks that selector on every page, to close a cookie banner. It
                                          predicts part of what an evaluation fails; it judges nothing. With --run <run> it
                                          measures a sample that is already there
-  explore --run <run>                    Write the task for the agent that maps the site before it is measured
+  explore --run <run> [--explore-minutes <n>]
+                                         Write the task for the agent that maps the site before it is measured. All rounds
+                                         of the explorer share one total of minutes (default 120); a round gets what is left
+                                         of it, and once no round fits the gate goes on with limitations
   check-site --run <run>                 Validate site.json, replay every recipe in it and open every component on each of its
                                          page types as the sweep does; non-zero exit on problems
   sample --run <run> [--seed <text>]     Choose the pages to evaluate (all of them on a small site). Without --seed the random
@@ -364,6 +367,7 @@ async function main(): Promise<void> {
       steps: { type: "string" },
       press: { type: "string" },
       "at-once": { type: "string" },
+      "explore-minutes": { type: "string" },
       groups: { type: "boolean", default: false },
       json: { type: "boolean", default: false },
       finding: { type: "string" },
@@ -580,8 +584,10 @@ async function main(): Promise<void> {
       if (!values.run) throw new Error("explore needs --run <run>");
       if (existsSync(join(values.run, "quick.json"))) throw new Error((await import("./lib/quick.ts")).QUICK_EXPLORE_REFUSAL_NL);
       const { explore } = await import("./commands/explore.ts");
-      const result = await explore(values.run);
-      process.stdout.write(`${result.task}\nronde ${result.round}: ${result.pages} pagina's, ${result.frames} ingesloten vensters\n`);
+      const { parseExploreMinutes } = await import("./lib/explore-budget.ts");
+      const result = await explore(values.run, { totalMinutes: parseExploreMinutes(values["explore-minutes"]) });
+      const timeNl = result.totalMinutes === null ? "" : `; deze ronde ${result.minutes} minuten, van de ${result.totalMinutes} voor alle rondes samen is ${Math.round(result.usedMinutes)} gebruikt`;
+      process.stdout.write(`${result.task}\nronde ${result.round}: ${result.pages} pagina's, ${result.frames} ingesloten vensters${timeNl}\n`);
       await repeatReadsOutsideRun(values.run);
       return;
     }
@@ -613,10 +619,11 @@ async function main(): Promise<void> {
         review: result.gaps.length === 0 ? `vaste controles voldoende; de beelden zijn nog niet bekeken: ${tasksNl}` : `${counted(result.gaps.length)} in de vaste controles voor de verkenner; eerst de beelden bekijken, zodat de verkenner alle gaten in één keer krijgt: ${tasksNl}`,
         sweep: `bewijs onvoldoende: een nieuwe veegronde kan ${forSweep} van de ${counted(result.gaps.length)} sluiten, want daar mislukte of ontbreekt een meting. Draai sweep opnieuw (collect, contrast, states en documents) en daarna gate; dat kost geen terugkeer naar de verkenner (nog ${result.resweepsLeft} keer opnieuw meten na deze verkenning)`,
         explore: `bewijs onvoldoende: ${counted(result.gaps.length)}${result.stage === "deterministic" ? " in de vaste controles" : ""}; nog ${result.returnsLeft} keer terug naar de verkenner`,
-        stop: `bewijs onvoldoende: ${counted(result.gaps.length)}${result.stage === "deterministic" ? " in de vaste controles" : ""}; de run is ${MAX_RETURNS_TO_EXPLORER} keer terug geweest naar de verkenner, en er valt niets te beoordelen: de site weigert de run, of meer dan de helft van de steekproef laadde niet. Er komt geen beoordeling`,
+        stop: `bewijs onvoldoende: ${counted(result.gaps.length)}${result.stage === "deterministic" ? " in de vaste controles" : ""}; ${result.exploreTime?.spent ? "de tijd voor de verkenning is op" : `de run is ${MAX_RETURNS_TO_EXPLORER} keer terug geweest naar de verkenner`}, en er valt niets te beoordelen: de site weigert de run, of meer dan de helft van de steekproef laadde niet. Er komt geen beoordeling`,
       }[result.next!];
       // After every return the gaps left are limitations, and the run goes on (#318).
-      const degradedNl = result.degraded ? ` ${result.degraded === 1 ? "Eén gat bleef" : `${result.degraded} gaten bleven`} na ${MAX_RETURNS_TO_EXPLORER} keer terug naar de verkenner open en ${result.degraded === 1 ? "is een beperking" : "zijn beperkingen"} geworden: de beoordelaars bekijken die plekken zelf, en het rapport noemt ze.` : "";
+      const afterNl = result.exploreTime?.spent ? `open toen de tijd voor de verkenning op was (${Math.round(result.exploreTime.usedMinutes)} van ${result.exploreTime.totalMinutes} minuten)` : `na ${MAX_RETURNS_TO_EXPLORER} keer terug naar de verkenner open`;
+      const degradedNl = result.degraded ? ` ${result.degraded === 1 ? "Eén gat bleef" : `${result.degraded} gaten bleven`} ${afterNl} en ${result.degraded === 1 ? "is een beperking" : "zijn beperkingen"} geworden: de beoordelaars bekijken die plekken zelf, en het rapport noemt ze.` : "";
       process.stdout.write(`${result.degraded ? "bewijs niet volledig, verder met beperkingen." : verdict}${degradedNl}\n${result.warnings.length} waarschuwingen\n`);
       process.exitCode = { proceed: 0, review: 2, sweep: 3, explore: 1, stop: 4 }[result.next!];
       return;

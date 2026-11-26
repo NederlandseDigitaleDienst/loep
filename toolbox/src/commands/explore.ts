@@ -5,6 +5,7 @@ import { confirmLogin, launchBrowser } from "../browser/session.ts";
 import { readJson, sha256, sha256File, writeFileAtomic, writeJson } from "../lib/canonical.ts";
 import { type Manifest, stepStart, writeManifest } from "../lib/manifest.ts";
 import { readTemplate } from "../lib/templates.ts";
+import { EXPLORE_TOTAL_MINUTES, exploreMinutesUsed, exploreRoundBudget, exploreTimeSpentNl, exploreTotalMinutes } from "../lib/explore-budget.ts";
 import { agentLoginNl, loginForRun } from "../lib/login.ts";
 import { heldBackSearches, heldBackSearchNl, recordReads, type HeldBackSearch } from "../lib/reads.ts";
 import { makeWorkDir } from "../lib/workdir.ts";
@@ -25,9 +26,8 @@ import type { Inventory, InventoryPage } from "./inventory.ts";
 import { openComponentOn, windowOnPageTypes } from "./modelsweep.ts";
 import { applyFrameClasses, mainAddresses } from "./sample.ts";
 
-/** Budget of the exploring agent's session. */
-export const EXPLORE_MAX_COMMANDS = 200;
-export const EXPLORE_MAX_MINUTES = 40;
+/** Budget of the exploring agent's session; a later round can get less, from what is left of the total (`lib/explore-budget.ts`). */
+export { EXPLORE_MAX_COMMANDS, EXPLORE_MAX_MINUTES, EXPLORE_TOTAL_MINUTES } from "../lib/explore-budget.ts";
 export const EXPLORE_SESSION = "verken";
 
 const isFrame = (page: InventoryPage): boolean => page.foundVia.length > 0 && page.foundVia.every((via) => via.startsWith("iframe:"));
@@ -67,9 +67,25 @@ export function exploreContext(inventory: Inventory): ExploreContext {
   return { baseUrl: inventory.baseUrl, proposedPageTypes, ...(breakpoints.length > 0 ? { breakpoints } : {}), frames: [...frames.values()].map((frame) => ({ ...frame, embeddedOn: frame.embeddedOn.sort() })).sort((a, b) => a.address.localeCompare(b.address)) };
 }
 
-/** Write the task for the exploring agent: a fixed prompt, filled in with what the inventory found and, in a later round, the gaps of the evidence gate. */
-export async function explore(runDir: string): Promise<{ task: string; pages: number; frames: number; round: number }> {
+export interface ExploreOptions {
+  /** Minutes for every round of the explorer together; without it what an earlier round recorded, or `EXPLORE_TOTAL_MINUTES` in the first. */
+  totalMinutes?: number | undefined;
+}
+
+/**
+ * Write the task for the exploring agent: a fixed prompt, filled in with what the inventory found and, in a later round, the gaps of the evidence gate.
+ * The rounds share one total of minutes; a round gets what is left of it, and once too little is left there is no round more.
+ */
+export async function explore(runDir: string, options: ExploreOptions = {}): Promise<{ task: string; pages: number; frames: number; round: number; minutes: number; totalMinutes: number | null; usedMinutes: number }> {
   const startedAt = stepStart();
+  const manifestPath = join(runDir, "manifest.json");
+  const steps = existsSync(manifestPath) ? (await readJson<Manifest>(manifestPath)).steps : [];
+  const round = steps.filter((step) => step.command === "explore").length + 1;
+  // A run whose first round had no total keeps going without one, unless somebody gives one now.
+  const totalMinutes = options.totalMinutes ?? (round === 1 ? EXPLORE_TOTAL_MINUTES : exploreTotalMinutes(steps));
+  const usedMinutes = exploreMinutesUsed(steps);
+  const budget = exploreRoundBudget(totalMinutes, usedMinutes);
+  if (!budget) throw new Error(`geen nieuwe ronde voor de verkenner: ${exploreTimeSpentNl(totalMinutes!, usedMinutes)}. Draai gate: wat nog open is, wordt een beperking. Moet er toch nog verkend worden, geef dan meer tijd met explore --explore-minutes <minuten voor alle rondes samen>`);
   const inventory = await readJson<Inventory>(join(runDir, "inventory.json"));
   const context = exploreContext(inventory);
   const absoluteRun = resolve(runDir);
@@ -96,8 +112,6 @@ export async function explore(runDir: string): Promise<{ task: string; pages: nu
   // A later round: the gate said what is missing. The explorer improves the model it made, it does not start over.
   const gatePath = join(runDir, "gate.json");
   const gate = existsSync(gatePath) && existsSync(join(runDir, SITE_MODEL_FILE)) ? await readJson<Gate>(gatePath) : null;
-  const manifestPath = join(runDir, "manifest.json");
-  const round = (existsSync(manifestPath) ? (await readJson<Manifest>(manifestPath)).steps.filter((step) => step.command === "explore").length : 0) + 1;
   // What the gate found that an explorer can do something about; a measurement the sweep still owes is not his to fix.
   const forExplorer = (gate && !gate.sufficient ? gate.gaps : []).filter((gap) => gap.fixedBy !== "sweep");
   // And what the model itself lacks by today's rules, without replaying anything.
@@ -136,8 +150,8 @@ export async function explore(runDir: string): Promise<{ task: string; pages: nu
     session,
     workDir: await makeWorkDir(runDir, session),
     workName: session,
-    maxCommands: String(EXPLORE_MAX_COMMANDS),
-    maxMinutes: String(EXPLORE_MAX_MINUTES),
+    maxCommands: String(budget.commands),
+    maxMinutes: String(budget.minutes),
     pageCount: String(pageCount),
     frameCount: String(context.frames.length),
     pageTypesSummary,
@@ -151,8 +165,8 @@ export async function explore(runDir: string): Promise<{ task: string; pages: nu
     searchTermAlternatives: inventory.searchTermAlternatives?.length ? inventory.searchTermAlternatives.map((word) => `\`${word}\``).join(", ") : "geen",
   });
   await writeFileAtomic(join(runDir, taskPath), prompt);
-  await writeManifest(runDir, { command: "explore", startedAt, round, pages: pageCount, frames: context.frames.length, templateSha256: sha256(template) });
-  return { task: join(absoluteRun, taskPath), pages: pageCount, frames: context.frames.length, round };
+  await writeManifest(runDir, { command: "explore", startedAt, round, pages: pageCount, frames: context.frames.length, ...(totalMinutes !== null ? { totalMinutes, usedMinutes } : {}), maxMinutes: budget.minutes, templateSha256: sha256(template) });
+  return { task: join(absoluteRun, taskPath), pages: pageCount, frames: context.frames.length, round, minutes: budget.minutes, totalMinutes, usedMinutes };
 }
 
 /**
