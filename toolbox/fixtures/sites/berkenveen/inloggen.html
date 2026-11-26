@@ -106,8 +106,8 @@
     </div>
   </footer>
   <div class="chat">
-    <div class="chat-venster" id="chatvenster" hidden>
-      <h2>Chat met de gemeente</h2>
+    <div class="chat-venster" id="chatvenster" role="dialog" aria-modal="true" aria-labelledby="chat-kop" hidden>
+      <h2 id="chat-kop">Chat met de gemeente</h2>
       <button type="button" class="chat-sluit knop-rustig" aria-label="Chat sluiten">×</button>
       <div class="chat-berichten" role="log" aria-live="polite" aria-label="Berichten in de chat" tabindex="0"></div>
       <form class="chat-formulier">
