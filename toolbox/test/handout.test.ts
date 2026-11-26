@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -49,4 +50,13 @@ test("handout copies the report that is there to a folder outside the run and le
   } finally {
     rmSync(folder, { recursive: true, force: true });
   }
+});
+
+test("handout refuses a --name that would put the report outside --out", () => {
+  const folder = mkdtempSync(join(tmpdir(), "handout-name-"));
+  const cli = join(import.meta.dirname, "..", "src", "cli.ts");
+  const result = spawnSync("node", [cli, "handout", "--run", folder, "--out", join(folder, "uit"), "--name", "../elders"], { encoding: "utf8" });
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /zonder schuine streep/);
+  rmSync(folder, { recursive: true, force: true });
 });

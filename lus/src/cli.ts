@@ -8,29 +8,30 @@ import { FIXTURES, metingHome, prepareBacklog, silent } from "./meting.ts";
 import { backlogPath, homeDir, reportsDir, siteDir, stateDir, toolboxCli } from "./paths.ts";
 import { lastWords, readTranscript } from "./run.ts";
 import { handOutMissing, lockPath, pauseSite, runSite, statePath, transcriptPath } from "./runner.ts";
-import { acquireLock, isGone, PHASES_NL, readState, releaseLock, siteState, type SiteState } from "./state.ts";
+import { acquireLock, isGone, PHASES_NL, readState, releaseLock, siteState, updateSite, type SiteState } from "./state.ts";
 import { versionNl } from "./version.ts";
 
 const USAGE = `lus: loep over een backlog van sites, met een mens erbij waar dat nodig is
 
   lus add <url> [--slug <naam>] [--name <naam>] [--organisation <naam>] [--purpose verbeteren|verantwoorden]
                 [--allow-sending] [--max-sends <n>] [--also-origin <url>]... [--never-open <host>]...
-                [--login-page <url> --login-role <rol>] [--at-once <n>] [--mailbox <url>]
+                [--login-page <url> --login-role <rol>] [--at-once <n>] [--navigation-delay <s>] [--mailbox <url>]
                 [--vendor-tag <prefix>]... [--note <tekst>]
                                          Zet een site in de backlog. Wat je weglaat vraagt lus als er een
                                          terminal is, en anders vult het de standaard in
   lus run [--sites <n>] [--only <site>] [--new]
                                          De backlog afwerken: één regie per site, in de orde van het
                                          bestand. Een site die op een mens wacht slaat lus over.
-                                         --new begint naast de run die er al staat, met een nieuwe map
+                                         --new begint naast de run die er al staat, met een nieuwe map,
+                                         ook voor een site die klaar is of wacht
   lus resume <site> [--what <tekst>]     Ga verder met een site die stopte, met wat de mens deed
   lus log <site> [--follow]              Wat de regie deed, regel voor regel
   lus list [--json]                      De backlog met de stand van elke site
   lus status [<site>] [--json]           Wat er met een site gebeurde, en wat er nu moet
   lus pause <site>                       Zet een site stil; de run blijft staan
-  lus login <site> [--idle]              Open het venster waarin je zelf met het testaccount inlogt;
+  lus login <site> [<opties van login>]  Open het venster waarin je zelf met het testaccount inlogt;
                                          loep bewaart de sessie, niet het wachtwoord
-  lus answer|sign|decide|statement <site> [-- <opties>]
+  lus answer|sign|decide|statement <site> [<opties>]
                                          Geef de terminal aan loep zelf, voor wat alleen een mens
                                          kan: een antwoord, de handtekening, een besluit, de verklaring
   lus doctor [--routes]                  Controleer wat een run nodig heeft, en met --routes ook VLAM
@@ -54,6 +55,7 @@ const OPTIONS = {
   "login-page": { type: "string" },
   "login-role": { type: "string" },
   "at-once": { type: "string" },
+  "navigation-delay": { type: "string" },
   mailbox: { type: "string" },
   "vendor-tag": { type: "string", multiple: true },
   note: { type: "string" },
@@ -115,7 +117,7 @@ function statusTextNl(site: Site, site_: SiteState, words: string[] = []): strin
   field("stap", site_.step);
   field("sinds", site_.startedAt === null ? null : `${momentNl(site_.startedAt)} (${agoNl(site_.startedAt)})`);
   field("versie", site_.version === null ? null : versionNl(site_.version));
-  if (site.sending.allow) field("versturen", `ja, hooguit ${site.sending.max}`);
+  if (site.sending.allow) field("versturen", site.sending.max === null ? "ja, met het budget van loep" : `ja, hooguit ${site.sending.max}`);
   for (const file of site_.handouts) field("rapport", file);
   if (site_.question) {
     lines.push("", `  Vraag: ${site_.question.textNl}`);
@@ -197,6 +199,14 @@ function report(site: Site, state: SiteState): void {
   }
 }
 
+/** Keep what a person did, so the next resume tells the regie what loep needs now. */
+function afterPerson(slug: string, command: string): void {
+  const known = siteState(readState(statePath()), slug);
+  const said = AFTER_NL[command];
+  if (said === undefined || known.humanNl?.includes(said)) return;
+  updateSite(statePath(), slug, { humanNl: known.humanNl === null ? said : `${known.humanNl} ${said}` });
+}
+
 /** One lus at a time: a second one would start a second regie in the same run. */
 async function withLock<T>(slug: string | null, body: () => Promise<T>): Promise<T> {
   const taken = acquireLock(lockPath(), slug);
@@ -210,7 +220,7 @@ async function withLock<T>(slug: string | null, body: () => Promise<T>): Promise
 
 /** Work the backlog in the order of the file, skipping a site that waits for a person. */
 async function runBacklog(options: { sites?: string | undefined; only?: string | undefined; newRun?: boolean | undefined }): Promise<void> {
-  // Een tunnel die 24 uur na het aanmelden dichtvalt kost een run van uren; dit kost een verzoek.
+  // A tunnel that closes 24 hours after logging in costs a run of hours; this costs one request.
   const vlam = routesCheck();
   if (!vlam.ok) {
     process.stdout.write(`${vlam.detailNl}\nEr is niets gestart.\n`);
@@ -223,8 +233,10 @@ async function runBacklog(options: { sites?: string | undefined; only?: string |
     const waiting = new Set(["klaar", "vraagt", "gepauzeerd"]);
     const limit = options.sites === undefined ? 1 : Number(options.sites);
     if (!Number.isInteger(limit) || limit < 1) throw new Error("--sites moet een heel getal van 1 of meer zijn");
-    const todo = backlog.sites.filter((entry) => (options.only === undefined || entry.slug === options.only) && !waiting.has(siteState(state, entry.slug).phase));
-    // Een run die klaar was voordat lus rapporten uitgaf, krijgt ze alsnog: geen regie, alleen de kopie.
+    // --new starts a new run, so also for a site that is done or waits for a person: after a new
+    // version that is exactly the site that needs it.
+    const todo = backlog.sites.filter((entry) => (options.only === undefined || entry.slug === options.only) && (options.newRun === true || !waiting.has(siteState(state, entry.slug).phase)));
+    // A run that was done before lus handed reports out still gets them: no regie, only the copy.
     for (const entry of backlog.sites) {
       if (options.only !== undefined && entry.slug !== options.only) continue;
       const known = siteState(readState(statePath()), entry.slug);
@@ -234,7 +246,15 @@ async function runBacklog(options: { sites?: string | undefined; only?: string |
       process.stdout.write(`Niets te doen: elke site is klaar, wacht op een mens, of staat stil${options.only === undefined ? "" : ` (--only ${options.only})`}.\n`);
       return;
     }
-    for (const entry of todo.slice(0, limit)) await report(entry, await runSite({ site: entry, newRun: options.newRun, onStep: progress }));
+    for (const entry of todo.slice(0, limit)) {
+      const result = await runSite({ site: entry, newRun: options.newRun, onStep: progress });
+      report(entry, result);
+      // A regie that stopped because somebody stopped lus is no reason to begin the next site.
+      if (result.phase === "gepauzeerd") {
+        process.exitCode = 130;
+        return;
+      }
+    }
   });
 }
 
@@ -243,14 +263,28 @@ async function resumeSite(site: Site, what: string | undefined): Promise<void> {
   await withLock(site.slug, async () => {
     const known = siteState(readState(statePath()), site.slug);
     if (known.run === null) throw new Error(`${site.slug} is nog niet begonnen; start hem met: lus run --only ${site.slug}`);
-    const text = what ?? (known.question !== null ? `De mens voerde het commando uit dat in vraag.md stond${known.question.command ? ` (${known.question.command})` : ""}.` : "De vorige regie stopte zonder een vraag achter te laten.");
-    await report(site, await runSite({ site, resumeNl: text, onStep: progress }));
+    const asked = known.question !== null ? `De mens voerde het commando uit dat in vraag.md stond${known.question.command ? ` (${known.question.command})` : ""}.` : null;
+    const text = what ?? ([known.humanNl, asked].filter((part) => part !== null).join(" ") || "De vorige regie stopte zonder een vraag achter te laten.");
+    const result = await runSite({ site, resumeNl: text, byPerson: true, onStep: progress });
+    report(site, result);
+    if (result.phase === "gepauzeerd") process.exitCode = 130;
   });
 }
 
 /** The menu of a lus without a command: everything a person does with the backlog, one key each. */
 async function menu(): Promise<void> {
-  const terminal = createInterface({ input: process.stdin, output: process.stdout });
+  const open = () => createInterface({ input: process.stdin, output: process.stdout });
+  let terminal = open();
+  // While readline holds the terminal, Ctrl-C reaches readline and not lus or the regie: a run of
+  // hours could then not be stopped. The menu lets go of the terminal while a regie runs.
+  const withoutTerminal = async (body: () => Promise<void>): Promise<void> => {
+    terminal.close();
+    try {
+      await body();
+    } finally {
+      terminal = open();
+    }
+  };
   const options = "  1 de backlog tonen    2 een site toevoegen    3 de backlog afwerken\n  4 een site hervatten  5 de controle          q stoppen";
   try {
     for (;;) {
@@ -269,7 +303,8 @@ async function menu(): Promise<void> {
           continue;
         }
         if (choice === "3") {
-          await runBacklog({});
+          await withoutTerminal(() => runBacklog({}));
+          if (process.exitCode === 130) return;
           continue;
         }
         if (choice === "4") {
@@ -277,7 +312,8 @@ async function menu(): Promise<void> {
           if (slug === "") continue;
           const site = findSite(readBacklog(backlogPath()).sites, slug);
           const what = (await terminal.question("wat deed je? (leeg: het commando uit vraag.md)\n")).trim();
-          await resumeSite(site, what === "" ? undefined : what);
+          await withoutTerminal(() => resumeSite(site, what === "" ? undefined : what));
+          if (process.exitCode === 130) return;
           continue;
         }
         if (choice === "5") {
@@ -294,8 +330,26 @@ async function menu(): Promise<void> {
   }
 }
 
+/** What a person does through lus in loep itself: lus passes the options on as they are, without reading them. */
+const HANDED_OVER = new Set(["login", "answer", "sign", "decide", "statement"]);
+
+/** What loep needs after a person did something, said to the regie at the next resume. */
+const AFTER_NL: Record<string, string> = {
+  login: "De mens logde in met lus login; loep bewaarde de sessie in de run.",
+  answer: "De mens legde met answer een antwoord vast. Draai daarna stap 7 opnieuw, in deze volgorde: evaluate, render en seal, zoals de skill bij stap 9 zegt.",
+  sign: "De mens tekende met sign. Draai render en verify zoals de skill bij stap 10 zegt.",
+  decide: "De mens legde met decide besluiten over gebreken vast. Draai render zoals de skill zegt.",
+  statement: "De mens maakte met statement de toegankelijkheidsverklaring. Ga verder met de skill.",
+};
+
 async function main(): Promise<void> {
-  const { values, positionals } = parseArgs({ allowPositionals: true, options: OPTIONS });
+  const argv = process.argv.slice(2);
+  // `lus login <site> --idle` and `lus answer <site> --criterion 1.4.3` belong to loep: parsing them
+  // here would refuse every option lus does not know. A `--` in front still works.
+  const handedOver = argv[0] !== undefined && HANDED_OVER.has(argv[0]) && argv[1] !== undefined && !argv[1].startsWith("-");
+  const parsed = parseArgs({ args: handedOver ? [] : argv, allowPositionals: true, options: OPTIONS });
+  const values = parsed.values;
+  const positionals = handedOver ? [argv[0]!, argv[1]!, ...argv.slice(2).filter((arg, index) => !(index === 0 && arg === "--"))] : parsed.positionals;
   const command = positionals[0];
   const target = positionals[1];
   if (values.help || command === "help") {
@@ -328,11 +382,12 @@ async function main(): Promise<void> {
         name: filled.name,
         organisation: filled.organisation,
         purpose: filled.purpose,
-        sending: { allow: values["allow-sending"] === true, max: values["max-sends"] === undefined ? 20 : Number(values["max-sends"]) },
+        sending: { allow: values["allow-sending"] === true, max: values["max-sends"] === undefined ? null : Number(values["max-sends"]) },
         alsoOrigins: values["also-origin"] ?? [],
         neverOpen: values["never-open"] ?? [],
         login: filled.login,
         atOnce: values["at-once"] === undefined ? 2 : Number(values["at-once"]),
+        navigationDelay: values["navigation-delay"] === undefined ? null : Number(values["navigation-delay"]),
         mailbox: values.mailbox ?? null,
         vendorTags: values["vendor-tag"] ?? [],
         note: values.note ?? "",
@@ -376,6 +431,11 @@ async function main(): Promise<void> {
       if (target === undefined) throw new Error("lus pause heeft een site nodig");
       const backlog = readBacklog(backlogPath());
       const site = findSite(backlog.sites, target);
+      const known = siteState(readState(statePath()), site.slug);
+      // A regie that still runs does not stop because the state says so; the state and the run would drift apart.
+      if (known.phase === "loopt" && !isGone(known)) {
+        throw new Error(`${site.slug} loopt nu, in proces ${known.pid}. Stop lus in dat venster met Ctrl-C, of met: kill ${known.pid}. De run blijft staan en gaat verder met: lus resume ${site.slug}`);
+      }
       pauseSite(site.slug);
       process.stdout.write(`${site.slug} staat stil. Ga verder met: lus resume ${site.slug}\n`);
       return;
@@ -410,6 +470,7 @@ async function main(): Promise<void> {
         process.exitCode = result.status ?? 1;
         return;
       }
+      afterPerson(site.slug, command);
       process.stdout.write(`\nDaarna: lus resume ${site.slug}\n`);
       return;
     }
@@ -421,11 +482,14 @@ async function main(): Promise<void> {
       const site = findSite(readBacklog(backlogPath()).sites, target);
       const known = siteState(readState(statePath()), site.slug);
       if (known.run === null) throw new Error(`${site.slug} heeft nog geen run; er is niets om te ${command === "sign" ? "tekenen" : "beantwoorden"}`);
-      const result = spawnSync("node", [toolboxCli, command, "--run", known.run, ...positionals.slice(2)], { stdio: "inherit" });
+      const args = positionals.slice(2);
+      const result = spawnSync("node", [toolboxCli, command, "--run", known.run, ...args], { stdio: "inherit" });
       if (result.status !== 0) {
         process.exitCode = result.status ?? 1;
         return;
       }
+      // `answer --criterion x` without --point only shows the open points; the regie has nothing to do after it.
+      if (command !== "answer" || args.includes("--point")) afterPerson(site.slug, command);
       process.stdout.write(`\nDaarna: lus resume ${site.slug}\n`);
       return;
     }

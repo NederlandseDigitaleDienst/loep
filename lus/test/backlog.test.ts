@@ -22,7 +22,8 @@ test("add schrijft een blok dat read terugleest, met de lege velden erbij", () =
   const file = readFileSync(path, "utf8");
   assert.match(file, /# Sites die onder de loep gaan/);
   assert.match(file, /- url: https:\/\/www\.voorbeeld\.nl\//);
-  assert.match(file, /  sending:\n    allow: false\n    max: 20/);
+  // Zonder opgave geen eigen getal: dan geldt het budget van loep (5 op een testomgeving), niet een van lus.
+  assert.match(file, /  sending:\n    allow: false\n    max: null/);
   const backlog = readBacklog(path);
   assert.equal(backlog.problems.length, 0);
   assert.deepEqual(backlog.sites, [site]);
@@ -45,6 +46,15 @@ test("commentaar en volgorde in een met de hand bewerkt bestand blijven staan", 
   const file = readFileSync(path, "utf8");
   assert.match(file, /# nog eentje hieronder/);
   assert.ok(file.indexOf("een.example") < file.indexOf("twee.example"));
+});
+
+test("een slug die geen mapnaam is, of een map van lus zelf, wordt geweigerd", () => {
+  const path = backlogFile();
+  assert.throws(() => addSite(path, { url: "https://www.voorbeeld.nl/", slug: "rapporten", organisation: "A" }), /map van lus zelf/);
+  // Met de hand in het bestand gezet: de run zou anders buiten de home van lus komen.
+  writeFileSync(path, "- url: https://www.example.org/\n  slug: ../elders\n  organisation: A\n");
+  assert.throws(() => readBacklog(path), /regel 1 van de backlog: de slug "..\/elders"/);
+  assert.throws(() => addSite(backlogFile(), { url: "https://www.voorbeeld.nl/", organisation: "A", navigationDelay: Number("twee") }), /--navigation-delay/);
 });
 
 test("een verkeerd doel en een ontbrekende eigenaar zijn een waarschuwing, geen fout", () => {

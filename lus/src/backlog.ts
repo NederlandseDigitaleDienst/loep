@@ -16,10 +16,14 @@ export const PURPOSES_NL: Record<Purpose, string> = {
   verantwoorden: "verantwoorden hoe de site ervoor staat",
 };
 
-/** How much an agent may send to the site. A site that is not a test environment allows nothing. */
+/**
+ * How much an agent may send to the site. A site that is not a test environment allows nothing. Without
+ * a max loep sets its own budget: 5 for a declared test environment, 50 on this machine. A message that
+ * is sent reaches a real person, and a service that gets too many blocks the machine.
+ */
 export interface Sending {
   allow: boolean;
-  max: number;
+  max: number | null;
 }
 
 /** The login of a test account: a person logs in, so the file needs the page and the role, never a password. */
@@ -74,6 +78,16 @@ export function slugFor(url: string): string {
   return host.replace(/^www\./, "");
 }
 
+/** Folders under the home of lus that are no site: a site with that slug would put its runs among them. */
+const RESERVED_SLUGS = ["rapporten", "meting", "secrets"];
+
+/** What is wrong with a slug as the name of a folder, or null. */
+export function slugProblemNl(slug: string): string | null {
+  if (!/^[a-z0-9][a-z0-9.-]*$/.test(slug) || slug.includes("..")) return `de slug "${slug}" mag alleen kleine letters, cijfers, punten en streepjes hebben`;
+  if (RESERVED_SLUGS.includes(slug)) return `de slug "${slug}" is de naam van een map van lus zelf; kies een andere met --slug`;
+  return null;
+}
+
 const parseUrl = (url: string): URL => {
   let parsed: URL;
   try {
@@ -93,6 +107,9 @@ function toSite(raw: unknown, index: number, problems: Problem[]): Site {
   if (url === "") throw new Error(`regel ${index + 1} van de backlog heeft geen url`);
   const parsed = parseUrl(url);
   const slug = text(entry["slug"]) || slugFor(url);
+  // The slug is a folder name: one with a slash or a reserved name would put the run somewhere else.
+  const refused = slugProblemNl(slug);
+  if (refused !== null) throw new Error(`regel ${index + 1} van de backlog: ${refused}`);
   const where = `site ${slug}`;
   const purposeText = text(entry["purpose"]) || "verbeteren";
   if (!(PURPOSES as readonly string[]).includes(purposeText)) {
@@ -101,8 +118,8 @@ function toSite(raw: unknown, index: number, problems: Problem[]): Site {
   const purpose: Purpose = (PURPOSES as readonly string[]).includes(purposeText) ? (purposeText as Purpose) : "verbeteren";
   const rawSending = entry["sending"];
   const sending = rawSending !== null && typeof rawSending === "object" && !Array.isArray(rawSending) ? (rawSending as Record<string, unknown>) : {};
-  const max = Number(sending["max"] ?? 20);
-  if (!Number.isInteger(max) || max < 0) problems.push({ where, textNl: `sending.max is "${String(sending["max"])}"; dat moet een heel getal van 0 of meer zijn` });
+  const max = sending["max"] === undefined || sending["max"] === null ? null : Number(sending["max"]);
+  if (max !== null && (!Number.isInteger(max) || max < 0)) problems.push({ where, textNl: `sending.max is "${String(sending["max"])}"; dat moet een heel getal van 0 of meer zijn, of null voor het budget van loep zelf` });
   const organisation = text(entry["organisation"]);
   if (organisation === "") problems.push({ where, textNl: "organisation ontbreekt; het rapport en de verklaring noemen de eigenaar van de site" });
   for (const origin of words(entry["also-origins"])) {
@@ -133,7 +150,7 @@ function toSite(raw: unknown, index: number, problems: Problem[]): Site {
     name: text(entry["name"]) || slug,
     organisation,
     purpose,
-    sending: { allow: sending["allow"] === true, max: Number.isInteger(max) && max >= 0 ? max : 20 },
+    sending: { allow: sending["allow"] === true, max: max !== null && Number.isInteger(max) && max >= 0 ? max : null },
     alsoOrigins: words(entry["also-origins"]),
     neverOpen: words(entry["never-open"]),
     login,
@@ -199,15 +216,18 @@ const HEADER_NL = `# Sites die onder de loep gaan. Voeg er een toe met \`lus add
 export function addSite(path: string, input: AddInput): Site {
   parseUrl(input.url);
   const slug = input.slug?.trim() || slugFor(input.url);
-  if (!/^[a-z0-9][a-z0-9.-]*$/.test(slug)) throw new Error(`de slug "${slug}" mag alleen kleine letters, cijfers, punten en streepjes hebben`);
+  const refused = slugProblemNl(slug);
+  if (refused !== null) throw new Error(refused);
   const existing = readBacklog(path);
   if (existing.sites.some((site) => site.slug === slug)) throw new Error(`er staat al een site met de slug ${slug} in de backlog; geef met --slug een eigen naam als het een andere site is`);
   const purpose = input.purpose ?? "verbeteren";
   if (!(PURPOSES as readonly string[]).includes(purpose)) throw new Error(`purpose is "${purpose}"; kies uit ${PURPOSES.join(", ")}`);
-  const max = input.sending?.max ?? 20;
-  if (!Number.isInteger(max) || max < 0) throw new Error(`--max-sends moet een heel getal van 0 of meer zijn`);
+  const max = input.sending?.max ?? null;
+  if (max !== null && (!Number.isInteger(max) || max < 0)) throw new Error(`--max-sends moet een heel getal van 0 of meer zijn`);
   const atOnce = input.atOnce ?? 2;
   if (!Number.isInteger(atOnce) || atOnce < 1) throw new Error(`--at-once moet een heel getal van 1 of meer zijn`);
+  const delay = input.navigationDelay ?? null;
+  if (delay !== null && (!Number.isInteger(delay) || delay < 0)) throw new Error(`--navigation-delay moet een heel getal van 0 of meer zijn, in seconden`);
   if (input.login && input.login.page === "") throw new Error("een inlog heeft de pagina nodig waar de gebruiker inlogt (--login-page)");
   const site: Site = {
     url: input.url.trim(),

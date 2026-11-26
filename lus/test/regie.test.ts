@@ -12,7 +12,7 @@ const site = (overrides: Partial<Site> = {}): Site => ({
   name: "Voorbeeld",
   organisation: "Ministerie van Voorbeeld",
   purpose: "verbeteren",
-  sending: { allow: false, max: 20 },
+  sending: { allow: false, max: null },
   alsoOrigins: [],
   neverOpen: [],
   login: null,
@@ -64,6 +64,10 @@ test("versturen op een site op deze machine gaat met --allow-writes, elders vraa
   assert.match(real, /stop daarvoor/);
   const none = prompt();
   assert.match(none, /niet toegestaan/);
+  // Zonder opgegeven aantal krijgt inventory geen --max-writes: dan geldt het budget van loep, niet een getal van lus.
+  const standard = prompt({ sending: { allow: true, max: null } });
+  assert.doesNotMatch(standard, /--max-writes/);
+  assert.match(standard, /standaardbudget van loep/);
 });
 
 test("een hervatting zegt wat de mens deed en begint bij pending", () => {

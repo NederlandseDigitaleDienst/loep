@@ -926,6 +926,8 @@ async function main(): Promise<void> {
     case "handout": {
       if (!values.run || !values.out) throw new Error("handout vraagt --run <run> en --out <map buiten de run>");
       const { handout } = await import("./commands/handout.ts");
+      // De naam komt in een bestandsnaam: een schuine streep of een punt vooraan zou het rapport buiten --out zetten.
+      if (values.name !== undefined && !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(values.name)) throw new Error(`handout --name "${values.name}": alleen letters, cijfers, punten, streepjes en lage streepjes, zonder schuine streep`);
       const result = await handout(values.run, values.out, values.name);
       for (const file of result.written) process.stdout.write(`${file}\n`);
       if (!result.signed) process.stdout.write("Het rapport is niet afgetekend: de naam zegt concept.\n");

@@ -1,6 +1,7 @@
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { appendFileSync, existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
+import { toolboxCli } from "./paths.ts";
 import type { Question } from "./state.ts";
 
 /*
@@ -15,6 +16,8 @@ export interface RegieResult {
   signal: NodeJS.Signals | null;
   /** The last step the stream showed, for `status`. */
   step: string | null;
+  /** A person stopped lus (Ctrl-C, a kill, a closed terminal): no next turn, no next site. */
+  interrupted: boolean;
 }
 
 interface ContentBlock {
@@ -76,15 +79,25 @@ export function startRegie(options: StartOptions): Promise<RegieResult> {
     const child = spawn("vlam-claude", options.args, { cwd: options.cwd, env: options.env, stdio: ["ignore", "pipe", "pipe"] });
     let step: string | null = null;
     let pending = "";
+    let interrupted = false;
+    // A handler on a signal means node no longer stops by itself, so the runner has to say that the
+    // regie stopped because a person wanted it to; without that it reads as a half-done turn and the
+    // next turn starts. Every signal counts, also a second Ctrl-C.
     const forward = (): void => {
-      // Zonder pid is er niets om te stoppen, en pid 0 zou de hele procesgroep raken.
-      if (child.pid !== undefined) process.kill(child.pid, "SIGTERM");
+      interrupted = true;
+      // Without a pid there is nothing to stop, and pid 0 would hit the whole process group.
+      if (child.pid !== undefined) {
+        try {
+          process.kill(child.pid, "SIGTERM");
+        } catch {
+          // The regie is already gone.
+        }
+      }
     };
-    process.once("SIGINT", forward);
-    process.once("SIGTERM", forward);
+    const signals: NodeJS.Signals[] = ["SIGINT", "SIGTERM", "SIGHUP"];
+    for (const signal of signals) process.on(signal, forward);
     const finish = (): void => {
-      process.off("SIGINT", forward);
-      process.off("SIGTERM", forward);
+      for (const signal of signals) process.off(signal, forward);
     };
     child.on("error", (error) => {
       finish();
@@ -98,7 +111,7 @@ export function startRegie(options: StartOptions): Promise<RegieResult> {
         const line = pending.slice(0, index);
         pending = pending.slice(index + 1);
         if (line.trim() !== "" && keepInTranscript(line)) {
-          appendFileSync(options.transcript, `${line}\n`);
+          appendFileSync(options.transcript, `${line}\n`, { mode: 0o600 });
           const found = stepOf(line);
           if (found !== null) {
             step = found;
@@ -110,12 +123,12 @@ export function startRegie(options: StartOptions): Promise<RegieResult> {
     });
     child.stderr.setEncoding("utf8");
     child.stderr.on("data", (chunk: string) => {
-      for (const line of chunk.split("\n")) if (line.trim() !== "") appendFileSync(options.transcript, `# ${line}\n`);
+      for (const line of chunk.split("\n")) if (line.trim() !== "") appendFileSync(options.transcript, `# ${line}\n`, { mode: 0o600 });
     });
     child.on("close", (code, signal) => {
       finish();
-      if (pending.trim() !== "") appendFileSync(options.transcript, `${pending}\n`);
-      resolve({ code, signal, step });
+      if (pending.trim() !== "") appendFileSync(options.transcript, `${pending}\n`, { mode: 0o600 });
+      resolve({ code, signal, step, interrupted });
     });
   });
 }
@@ -131,8 +144,16 @@ export function readQuestion(dir: string): Question | null {
   return { textNl, command };
 }
 
-/** A run whose evidence is sealed: the report exists and nobody can have changed it since. */
-export const isSealed = (run: string): boolean => existsSync(join(run, "evidence-index.json"));
+/**
+ * A run whose evidence is sealed and still matches its seal. The index alone is not enough: after an
+ * answer of a person the run has to go through evaluate, render and seal again, and a regie that stops
+ * halfway leaves the old index behind. `verify` recomputes every hash, which costs seconds on a run of
+ * hours, and says whether the seal still covers what is there.
+ */
+export function isSealed(run: string): boolean {
+  if (!existsSync(join(run, "evidence-index.json"))) return false;
+  return spawnSync("node", [toolboxCli, "verify", "--run", run], { stdio: "ignore" }).status === 0;
+}
 
 /**
  * What the run holds now: how many files and when the last one changed. A regie that ends its turn

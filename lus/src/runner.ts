@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { appendFileSync, mkdirSync, renameSync, existsSync } from "node:fs";
+import { appendFileSync, chmodSync, existsSync, mkdirSync, renameSync } from "node:fs";
 import { join } from "node:path";
 import type { Site } from "./backlog.ts";
 import { freeGb, MIN_FREE_GB } from "./doctor.ts";
@@ -30,6 +30,11 @@ export interface SiteRunOptions {
    * site that began in another version can only go on in that version; what is left is a new run.
    */
   newRun?: boolean | undefined;
+  /**
+   * A person resumes the site: the count of turns starts again. A run that used up its turns ends as
+   * "fout", and once somebody looked at it and resumed, it deserves the same twenty turns again.
+   */
+  byPerson?: boolean | undefined;
   onStep?: ((step: string) => void) | undefined;
 }
 
@@ -39,8 +44,10 @@ export const lockPath = (): string => join(stateDir(), "run.lock");
 
 /** What is wrong with the free space, or null when a run may begin. */
 export function spaceProblemNl(free: number | null): string | null {
-  // De grens is te verzetten voor een machine die krap is en waar de eigenaar zelf oplet; de proef zet hem op nul.
-  const floor = Number(process.env["LUS_MIN_FREE_GB"] ?? MIN_FREE_GB);
+  // The floor can be moved for a machine that is tight and whose owner watches it; the tests set it to zero.
+  const given = Number(process.env["LUS_MIN_FREE_GB"] ?? MIN_FREE_GB);
+  // A floor that is no number would make every comparison false, and so be no floor.
+  const floor = Number.isFinite(given) ? given : MIN_FREE_GB;
   return free !== null && free < floor ? `er is ${free} GB vrij; onder ${floor} GB begint lus geen run. Maak ruimte, of zie lus doctor` : null;
 }
 
@@ -76,19 +83,24 @@ function archiveQuestion(dir: string): void {
 
 export async function runSite(options: SiteRunOptions): Promise<SiteState> {
   const { site } = options;
-  // Een run van uren schrijft gigabytes; een schijf die volloopt kost de run en de rapporten.
+  // A run of hours writes gigabytes; a disk that fills up costs the run and the reports.
   const problem = spaceProblemNl(freeGb(homeDir()));
   if (problem !== null) throw new Error(problem);
   const dir = siteDir(site.slug);
-  mkdirSync(dir, { recursive: true });
-  const known = options.newRun === true ? siteState({ sites: {} }, site.slug) : siteState(readState(statePath()), site.slug);
-  // Een run hoort bij één checkout: de skill, de toolbox en de werkstroom zijn samen één versie, en een
-  // tweede versie erover heen zou bewijs mengen dat bij verschillende code hoort.
+  mkdirSync(dir, { recursive: true, mode: 0o700 });
+  // The transcript holds everything the regie saw, also what a command printed; nobody else on the machine reads it.
+  chmodSync(stateDir(), 0o700);
+  const recorded = siteState(readState(statePath()), site.slug);
+  // A run that is gone from disk is no run to go on with: what is left is a new one, in this version.
+  const fresh = options.newRun === true || recorded.run === null || !existsSync(recorded.run);
+  const known = fresh ? siteState({ sites: {} }, site.slug) : recorded;
+  // A run belongs to one checkout: the skill, the toolbox and the workflow are one version together, and
+  // a second version on top would mix evidence that belongs to different code.
   const version = checkoutVersion();
   if (known.version !== null && !sameVersion(known.version, version)) {
     throw new Error(`${site.slug} is begonnen in ${versionNl(known.version)} en deze checkout is ${versionNl(version)}; maak de run af in de versie waarin hij begon, of begin een nieuwe run: lus run --only ${site.slug} --new`);
   }
-  const run = known.run !== null && existsSync(known.run) ? known.run : freeRunDir(site.slug);
+  const run = fresh ? freeRunDir(site.slug) : known.run!;
   mkdirSync(run, { recursive: true });
   archiveQuestion(dir);
 
@@ -101,12 +113,17 @@ export async function runSite(options: SiteRunOptions): Promise<SiteState> {
     step: null,
     question: null,
     version: known.version ?? version,
+    humanNl: null,
+    ...(fresh ? { continues: 0, handouts: [] } : {}),
   });
-  const log = (message: string): void => appendFileSync(join(dir, "lus.log"), `${new Date().toISOString()} ${message}\n`);
-  log(`regie start${options.resumeNl ? " (hervat)" : ""}: ${run}`);
+  const log = (message: string): void => appendFileSync(join(dir, "lus.log"), `${new Date().toISOString()} ${message}\n`, { mode: 0o600 });
+  // A run that is already there goes on from where it stands, also when nobody says what happened: a
+  // lus that was killed, or a regie that stopped with an error. Without this the regie would begin the
+  // skill at the first step, in a run that has one behind it.
+  let resumeNl = options.resumeNl ?? (fresh ? null : continueNl(run));
+  log(`regie start${resumeNl ? " (hervat)" : ""}: ${run}`);
 
-  let continues = known.continues;
-  let resumeNl = options.resumeNl ?? null;
+  let continues = options.byPerson === true ? 0 : known.continues;
   for (;;) {
     const before = runSnapshot(run);
     let result: Awaited<ReturnType<typeof startRegie>>;
@@ -126,20 +143,27 @@ export async function runSite(options: SiteRunOptions): Promise<SiteState> {
       log(`de regie startte niet: ${error instanceof Error ? error.message : String(error)}`);
       return updateSite(statePath(), site.slug, { phase: "fout", pid: null, step: "start" });
     }
+    if (result.interrupted) {
+      // Somebody stopped lus: no next turn and no next site. The run stays for resume.
+      log(`regie onderbroken (code ${String(result.code)}${result.signal ? `, signaal ${result.signal}` : ""}, laatste stap ${step ?? "geen"}); de run blijft staan`);
+      return updateSite(statePath(), site.slug, { phase: "gepauzeerd", pid: null, step, continues });
+    }
 
     const question = readQuestion(dir);
     const sealed = isSealed(run);
     const grew = runSnapshot(run) !== before;
     log(`regie stopt (code ${String(result.code)}${result.signal ? `, signaal ${result.signal}` : ""}, laatste stap ${step ?? "geen"})`);
     const half = question === null && !sealed;
-    if (half && grew && continues < MAX_CONTINUES) {
+    const space = half && grew ? spaceProblemNl(freeGb(homeDir())) : null;
+    if (space !== null) log(`geen volgende beurt: ${space}`);
+    if (half && grew && space === null && continues < MAX_CONTINUES) {
       continues += 1;
       resumeNl = continueNl(run);
       log(`de run is niet af en er is geen vraag: beurt ${continues} van ${MAX_CONTINUES}`);
       updateSite(statePath(), site.slug, { continues, step });
       continue;
     }
-    if (half && !grew) log("de run en de werkmap zijn niet veranderd; nog een beurt zou hetzelfde kosten");
+    if (half && !grew) log("de run is niet veranderd; nog een beurt zou hetzelfde kosten");
     const phase = question !== null ? "vraagt" : sealed ? "klaar" : "fout";
     const handouts = phase === "klaar" ? handOut(site.slug, run) : [];
     for (const file of handouts) log(`rapport: ${file}`);

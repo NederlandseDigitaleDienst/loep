@@ -1,12 +1,17 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import type { Site } from "../src/backlog.ts";
+import { toolboxCli } from "../src/paths.ts";
 import { isSealed, readQuestion, stepOf } from "../src/run.ts";
 import { handOutMissing, runSite, spaceProblemNl } from "../src/runner.ts";
 import { readState, siteState } from "../src/state.ts";
+
+/** The fake regie seals the way the regie does: with loep, so that `verify` agrees. */
+const SEAL = `node ${toolboxCli} seal --run "$run" >/dev/null`;
 
 const site = (overrides: Partial<Site> = {}): Site => ({
   url: "https://www.voorbeeld.nl/",
@@ -14,7 +19,7 @@ const site = (overrides: Partial<Site> = {}): Site => ({
   name: "Voorbeeld",
   organisation: "Ministerie van Voorbeeld",
   purpose: "verbeteren",
-  sending: { allow: false, max: 20 },
+  sending: { allow: false, max: null },
   alsoOrigins: [],
   neverOpen: [],
   login: null,
@@ -115,8 +120,13 @@ test("een run met een zegel is klaar", () => {
   const run = join(home, "run");
   mkdirSync(run, { recursive: true });
   assert.equal(isSealed(run), false);
-  writeFileSync(join(run, "evidence-index.json"), "{}\n");
+  writeFileSync(join(run, "inventory.json"), "{}\n");
+  spawnSync("node", [toolboxCli, "seal", "--run", run]);
   assert.equal(isSealed(run), true);
+  // Na een antwoord van een mens hoort de run opnieuw door evaluate, render en seal; het oude zegel telt dan niet.
+  mkdirSync(join(run, "antwoorden"));
+  writeFileSync(join(run, "antwoorden", "1.4.3.json"), "{}\n");
+  assert.equal(isSealed(run), false);
 });
 
 test("een regie die haar beurt teruggeeft met een half af onderzoek wordt door lus verder gestuurd", async () => {
@@ -127,7 +137,7 @@ while [ $# -gt 0 ]; do case "$1" in --add-dir) run="$2"; shift ;; esac; shift; d
 n=0; [ -f beurten ] && n=$(cat beurten); n=$((n + 1)); echo $n > beurten
 echo "$alles" > "args-$n.txt"
 if [ "$n" = "1" ]; then echo vooruitgang > "$run/vooruitgang.txt"; fi
-if [ "$n" = "2" ]; then echo '{}' > "$run/evidence-index.json"; fi
+if [ "$n" = "2" ]; then ${SEAL}; fi
 echo '{"type":"result","result":"klaar"}'`);
   const state = await runSite({ site: site() });
   assert.equal(state.phase, "klaar");
@@ -155,7 +165,7 @@ test("een tweede run van dezelfde dag komt naast de eerste, niet erover heen", a
   // Een run hoort bij één checkout; na een nieuwe versie is er geen doorgaan maar een nieuwe run.
   const home = fakeHome(`run=""
 while [ $# -gt 0 ]; do case "$1" in --add-dir) run="$2"; shift ;; esac; shift; done
-echo '{}' > "$run/evidence-index.json"
+${SEAL}
 echo '{"type":"result","result":"klaar"}'`);
   const first = await runSite({ site: site() });
   assert.equal(first.phase, "klaar");
@@ -170,7 +180,7 @@ echo '{"type":"result","result":"klaar"}'`);
 test("een run uit een andere checkout hervat niet, en --new zegt wat dan wel kan", async () => {
   const home = fakeHome(`run=""
 while [ $# -gt 0 ]; do case "$1" in --add-dir) run="$2"; shift ;; esac; shift; done
-echo '{}' > "$run/evidence-index.json"
+${SEAL}
 echo '{"type":"result","result":"klaar"}'`);
   await runSite({ site: site() });
   const path = join(home, ".lus", "state.json");
@@ -186,7 +196,7 @@ echo '{"type":"result","result":"klaar"}'`);
 test("een verzegelde run zonder evaluatie geeft geen rapport uit, en zegt dat", async () => {
   const home = fakeHome(`run=""
 while [ $# -gt 0 ]; do case "$1" in --add-dir) run="$2"; shift ;; esac; shift; done
-echo '{}' > "$run/evidence-index.json"
+${SEAL}
 echo '{"type":"result","result":"klaar"}'`);
   const state = await runSite({ site: site() });
   assert.equal(state.phase, "klaar");
@@ -198,10 +208,10 @@ test("een verzegelde run met een evaluatie geeft het rapport uit onder de naam v
   // De hele keten: lus roept loep handout aan, en de naam zegt de slug en niet de host van de url.
   const home = fakeHome(`run=""
 while [ $# -gt 0 ]; do case "$1" in --add-dir) run="$2"; shift ;; esac; shift; done
-echo '{}' > "$run/evidence-index.json"
 mkdir -p "$run/report"
 echo '{"site":{"baseUrl":"https://www.voorbeeld.nl/","name":"Voorbeeld"},"evaluatedAt":"2026-11-23T10:00:00.000Z","criteria":[]}' > "$run/evaluation.json"
 echo pdf > "$run/report/rapport.pdf"
+${SEAL}
 echo '{"type":"result","result":"klaar"}'`);
   const state = await runSite({ site: site() });
   assert.equal(state.phase, "klaar");
@@ -213,10 +223,10 @@ echo '{"type":"result","result":"klaar"}'`);
 test("een run die klaar was voordat lus rapporten uitgaf, krijgt ze alsnog", async () => {
   const home = fakeHome(`run=""
 while [ $# -gt 0 ]; do case "$1" in --add-dir) run="$2"; shift ;; esac; shift; done
-echo '{}' > "$run/evidence-index.json"
 mkdir -p "$run/report"
 echo '{"site":{"baseUrl":"https://www.voorbeeld.nl/","name":"Voorbeeld"},"evaluatedAt":"2026-11-23T10:00:00.000Z","criteria":[]}' > "$run/evaluation.json"
 echo pdf > "$run/report/rapport.pdf"
+${SEAL}
 echo '{"type":"result","result":"klaar"}'`);
   const state = await runSite({ site: site() });
   assert.equal(state.handouts.length, 1);
@@ -238,4 +248,78 @@ test("onder de vijftien gigabyte begint lus geen run", () => {
   assert.match(spaceProblemNl(9) ?? "", /9 GB vrij; onder 15 GB/);
   assert.equal(spaceProblemNl(15), null);
   assert.equal(spaceProblemNl(null), null, "een schijf die niet te lezen is, is geen reden om te weigeren");
+});
+
+test("een regie die iemand stopt, krijgt geen volgende beurt, ook niet als de run groeide", async () => {
+  // Ctrl-C in het venster van lus: zonder deze grens begon lus meteen aan de volgende beurt.
+  const home = fakeHome(`run=""
+while [ $# -gt 0 ]; do case "$1" in --add-dir) run="$2"; shift ;; esac; shift; done
+n=0; [ -f beurten ] && n=$(cat beurten); n=$((n + 1)); echo $n > beurten
+echo vooruitgang > "$run/vooruitgang-$n.txt"
+echo '{"type":"system","subtype":"init"}'
+exec sleep 30`);
+  const running = runSite({ site: site() });
+  const dir = join(home, ".lus", "voorbeeld.nl");
+  for (let wait = 0; wait < 100 && !existsSync(join(dir, "beurten")); wait += 1) await new Promise((resolve) => setTimeout(resolve, 50));
+  await new Promise((resolve) => setTimeout(resolve, 200));
+  process.emit("SIGINT");
+  const state = await running;
+  assert.equal(state.phase, "gepauzeerd");
+  assert.equal(readFileSync(join(dir, "beurten"), "utf8").trim(), "1");
+  assert.match(readFileSync(join(dir, "lus.log"), "utf8"), /onderbroken/);
+});
+
+test("een run waarvan lus werd gekild, gaat verder bij pending en begint niet opnieuw", async () => {
+  const home = fakeHome(`echo "$@" > args.txt
+echo '{"type":"result","result":"niets"}'`);
+  const first = await runSite({ site: site() });
+  // Zo laat een kill de stand achter: loopt, met een proces dat er niet meer is.
+  const path = join(home, ".lus", "state.json");
+  const state = readState(path);
+  state.sites["voorbeeld.nl"] = { ...state.sites["voorbeeld.nl"]!, phase: "loopt", pid: 999_999 };
+  writeFileSync(path, JSON.stringify(state));
+  const again = await runSite({ site: site() });
+  assert.equal(again.run, first.run);
+  const args = readFileSync(join(home, ".lus", "voorbeeld.nl", "args.txt"), "utf8");
+  assert.match(args, /Deze run loopt al/);
+  assert.match(args, /pending --run .* --brief/);
+});
+
+test("een oud zegel na een antwoord is geen afgemaakte run: de regie moet opnieuw verzegelen", async () => {
+  // Na het antwoord draait beurt 1 evaluate en render maar stopt voor seal; beurt 2 verzegelt.
+  const home = fakeHome(`run=""
+while [ $# -gt 0 ]; do case "$1" in --add-dir) run="$2"; shift ;; esac; shift; done
+if [ -f hervat ]; then
+  n=0; [ -f beurten ] && n=$(cat beurten); n=$((n + 1)); echo $n > beurten
+  if [ "$n" = "1" ]; then echo nieuw > "$run/evaluation-nieuw.txt"; fi
+  if [ "$n" = "2" ]; then ${SEAL}; fi
+fi
+echo '{"type":"result","result":"klaar"}'`);
+  const first = await runSite({ site: site() });
+  const run = first.run!;
+  writeFileSync(join(run, "inventory.json"), "{}\n");
+  spawnSync("node", [toolboxCli, "seal", "--run", run]);
+  mkdirSync(join(run, "antwoorden"));
+  writeFileSync(join(run, "antwoorden", "1.4.3.json"), "{}\n");
+  writeFileSync(join(home, ".lus", "voorbeeld.nl", "hervat"), "");
+  const state = await runSite({ site: site(), resumeNl: "De mens legde een antwoord vast.", byPerson: true });
+  assert.equal(state.phase, "klaar");
+  assert.equal(readFileSync(join(home, ".lus", "voorbeeld.nl", "beurten"), "utf8").trim(), "2");
+});
+
+test("een mens die hervat, geeft de run zijn beurten terug", async () => {
+  const home = fakeHome(`run=""
+while [ $# -gt 0 ]; do case "$1" in --add-dir) run="$2"; shift ;; esac; shift; done
+n=0; [ -f beurten ] && n=$(cat beurten); n=$((n + 1)); echo $n > beurten
+if [ "$n" = "2" ]; then echo meer > "$run/meer.txt"; fi
+if [ "$n" = "3" ]; then ${SEAL}; fi
+echo '{"type":"result","result":"klaar"}'`);
+  const first = await runSite({ site: site() });
+  const path = join(home, ".lus", "state.json");
+  const state = readState(path);
+  state.sites["voorbeeld.nl"] = { ...state.sites["voorbeeld.nl"]!, continues: 20 };
+  writeFileSync(path, JSON.stringify(state));
+  assert.equal(first.phase, "fout");
+  const again = await runSite({ site: site(), resumeNl: "De mens keek ernaar.", byPerson: true });
+  assert.equal(again.phase, "klaar");
 });

@@ -40,8 +40,10 @@ const quip = (items: string[]): string => items.map((item) => `"${item}"`).join(
 /** What the person answered about sending, in the words the regie needs to run inventory the right way. */
 function sendingNl(site: Site): string {
   if (!site.sending.allow) return "niet toegestaan: agents drukken wel op een verzendknop met de vaste testwaarden, maar inventory krijgt geen --allow-writes en geen --test-environment.";
-  if (isLocalHost(site.url)) return `op deze machine toegestaan met --allow-writes, hooguit ${site.sending.max} verzendingen voor de hele run (inventory --max-writes ${site.sending.max}).`;
-  return `alleen op een verklaarde testomgeving, hooguit ${site.sending.max} verzendingen. De gebruiker verklaart die omgeving zelf en draait inventory daarom zelf in een terminal: stop daarvoor (zie de spelregels) en zet in vraag.md het hele inventory-commando met --test-environment <origin> --declared-by "<naam>, <functie>" --max-writes ${site.sending.max}.`;
+  const { max } = site.sending;
+  // Without a max the budget of loep holds, and inventory gets no --max-writes: a number lus made up would replace it.
+  if (isLocalHost(site.url)) return `op deze machine toegestaan met --allow-writes, ${max === null ? "met het budget dat loep daar zelf zet" : `hooguit ${max} verzendingen voor de hele run (inventory --max-writes ${max})`}.`;
+  return `alleen op een verklaarde testomgeving, ${max === null ? "met het standaardbudget van loep" : `hooguit ${max} verzendingen`}. De gebruiker verklaart die omgeving zelf en draait inventory daarom zelf in een terminal: stop daarvoor (zie de spelregels) en zet in vraag.md het hele inventory-commando met --test-environment <origin> --declared-by "<naam>, <functie>"${max === null ? "" : ` --max-writes ${max}`}.`;
 }
 
 function loginNl(site: Site, run: string): string {
@@ -117,9 +119,11 @@ export function regieArgs(prompt: string, run: string): string[] {
     "acceptEdits",
     "--tools",
     "Bash,Read,Write,Edit,Glob,Grep,Workflow,Task",
-    // Bash staat open: de skill schrijft commando's als `cd … && just doctor | tail -60`, en een
-    // toelating per commando weigert die samengestelde vormen. Wat de site raakt, houdt de lijst
-    // hieronder tegen, en die erft elke agent van de werkstroom.
+    // Bash is open: the skill writes commands like `cd … && just doctor | tail -60`, and a permission
+    // per command refuses those compound forms. The list below stops the common forms and is inherited
+    // by every agent of the workflow, but it is no boundary: `node -e`, `python3` or `/usr/bin/curl`
+    // get past it, and Bash writes wherever the user may write. Whether the site is reached outside loep
+    // and where the regie writes rests on rule 4 of the prompt and on the seal.
     "--allowedTools",
     "Bash",
     "Read",

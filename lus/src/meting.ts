@@ -60,7 +60,7 @@ export function prepareBacklog(path: string): { added: Fixture[] } {
       name: fixture.name,
       organisation: "Testsite",
       purpose: "verbeteren",
-      sending: { allow: false, max: 20 },
+      sending: { allow: false, max: null },
       alsoOrigins: [],
       neverOpen: [],
       login: null,
