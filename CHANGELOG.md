@@ -6,6 +6,21 @@ Wat er per versie van loep is veranderd. De versie staat op het voorblad en onde
 
 <!-- towncrier: een nieuwe versie komt hieronder -->
 
+## 0.39.0 (2026-11-26)
+
+Deze versie is uitgebracht zonder meting: de procedures en de oordeelregels zijn niet veranderd, en 0.38.0 is gemeten; de opdrachten van weger, beoordelaar en verifieerder veranderen alleen in hoe ze een persoon in het algemeen noemen, wat niets verandert aan wat een agent beoordeelt; de testsite verandert op 4.1.2 op twee plekken, en de regressietoets van de veegronde op de testsite gaf geen achteruitgang; --exclude-path en het totaal aan tijd voor de verkenner zijn met tests gedekt en herrekend op de manifesten van drie eerdere runs, waarbij de testsites binnen het budget blijven; lus is nieuw en raakt geen onderzoek; een meting van alle criteria op de testsite is niet gedaan.
+
+### Wat een uitkomst kan veranderen
+
+- De testsite verandert op twee punten, zodat een meting daar op 4.1.2 niet één op één vergelijkbaar is met eerdere metingen: op beide tweelingen draagt de menulink van een sectie op de pagina's eronder nu `aria-current="true"` in plaats van `aria-current="page"`, en op de tweeling zonder gebreken is het chatvenster, dat Tab binnen houdt, nu een modale dialoog met `role="dialog"`, `aria-modal="true"` en een naam. ([#729](https://github.com/NederlandseDigitaleDienst/loep/issues/729))
+- Alle rondes van de verkenning krijgen samen standaard 240 minuten, gerekend van de opdracht aan de verkenner tot de uitspraak van de poort en te verzetten met `explore --explore-minutes`. Past er daarna geen ronde met haar veegronde meer in, dan gaat de poort verder met beperkingen, zoals na de laatste terugkeer; een run die zonder dat totaal begon, merkt er niets van. ([#730](https://github.com/NederlandseDigitaleDienst/loep/issues/730))
+
+### Verder
+
+- Het rapport noemt een bezoeker, lezer, gebruiker of eigenaar niet meer "hij" of "hem": de opdrachten voor de agents schrijven zelf zonder die woorden en vragen het woord te herhalen of het meervoud te gebruiken. ([#727](https://github.com/NederlandseDigitaleDienst/loep/issues/727))
+- `inventory --exclude-path <pad>` houdt een deel van de site buiten het onderzoek, zoals de pagina's die bezoekers zelf maken op een platform. Geen stap van de run opent daar een pagina, `inventory.json` telt de gevonden adressen per pad en het rapport noemt het pad onder "Buiten de scope". ([#728](https://github.com/NederlandseDigitaleDienst/loep/issues/728))
+- lus: een harnas dat loep over een backlog van sites laat lopen, met een vraag aan een mens waar alleen een mens kan beslissen, dat met `lus meting` de testwebsites voor een release meet, en dat het rapport van een verzegelde run zelf buiten de run zet.
+
 ## 0.38.0 (2026-11-21)
 
 ### Wat een uitkomst kan veranderen
