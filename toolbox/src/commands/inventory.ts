@@ -749,6 +749,13 @@ export async function inventory(options: InventoryOptions): Promise<Inventory> {
   const browserVersion = browser.version();
   const context: BrowserContext = await newContext(browser);
   await context.addInitScript({ path: INPAGE_PATH });
+  // A frame below an excluded path is not loaded with the page that embeds it: the loop counts its address.
+  if (excludedPaths.length > 0) {
+    await context.route("**/*", (route) => {
+      const url = route.request().url();
+      return route.request().isNavigationRequest() && !missingPages.includes(url) && excludedBy(url, excludedPaths) !== null ? route.fulfill({ status: 204, body: "" }) : route.fallback();
+    });
+  }
   // Reads of content from an origin outside the site by the page being inspected, per origin; null between pages.
   let readsOfPage: Map<string, number> | null = null;
   // A tab that counts those reads. A page that failed gets a fresh tab, which counts them too.
@@ -856,6 +863,12 @@ export async function inventory(options: InventoryOptions): Promise<Inventory> {
         });
         if ("document" in result) {
           noteDocument(next, result.document);
+          continue;
+        }
+        // A redirect that lands below an excluded path: what is there stays out of the run, as the address itself would have.
+        const landedIn = result.finalUrl === undefined ? null : excludedBy(result.finalUrl, excludedPaths);
+        if (landedIn !== null) {
+          excludedFound.get(landedIn)!.add(normaliseUrl(result.finalUrl!));
           continue;
         }
         const slug = slugForUrl(next);

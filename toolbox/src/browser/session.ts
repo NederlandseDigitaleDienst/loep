@@ -6,8 +6,7 @@ import { confirmLoginOn, LoginExpired, logsOut, registerSessionSecrets, runLogin
 import { addressOf, fixedReadFor, noteFixedRead, noteRefusedRead, readDecision, readRuleFor, runReads, type ReadRequest } from "../lib/reads.ts";
 import { claimInTurn, claimLink, isThisMachine, isWriteOrigin, runWrites, SocketFrames, type PassedWrite, type SendDeadline, type WriteAccess } from "../lib/writes.ts";
 import { LONGEST_FAILURE_PAUSE_SECONDS, OriginBlocked, runBlockade } from "../session/blockade.ts";
-import { excludedBy } from "../lib/origins.ts";
-import { MESSAGE_VALUES, noteRefusedByBlockade, onSite, runScope, secretLeavesRunNl } from "../session/safety.ts";
+import { excludedPageNl, MESSAGE_VALUES, noteRefusedByBlockade, onSite, runScope, secretLeavesRunNl } from "../session/safety.ts";
 import { answerRefusalNl, httpRecordings, httpReplayNl, httpSendOf, keptHeaders, playRecording, socketRecordings, type HttpRecordings, type PassedReplay, type Recorder } from "../lib/recordings.ts";
 import { shieldForRun, type Shield } from "../lib/secrets.ts";
 import { readableFrame } from "./call.ts";
@@ -516,7 +515,7 @@ export async function newContext(browser: Browser, options: ContextOptions = {},
     }
     if (method === "GET" || method === "HEAD") {
       // A part of the site the run leaves out (inventory --exclude-path): the sweep opens no page there, as a session does not.
-      if (scope && route.request().isNavigationRequest() && excludedBy(route.request().url(), scope.excludedPaths ?? []) !== null) return refuse();
+      if (scope && route.request().isNavigationRequest() && excludedPageNl(scope, route.request().url()) !== null) return refuse();
       // A window of another party is in the scope, but is that other party: only a read of the site itself goes without asking whether it carries a secret of the run.
       if (scope && !onSite(scope, route.request().url())) return refuseLeaving(route, context, scope).then((refused) => (refused ? undefined : openRead(route)));
       return openRead(route);

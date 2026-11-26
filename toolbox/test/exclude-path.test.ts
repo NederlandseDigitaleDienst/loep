@@ -8,7 +8,7 @@ import { startFixture, type FixtureServer } from "../fixtures/serve.ts";
 import { launchBrowser, newContext } from "../src/browser/session.ts";
 import { inventory, type Inventory } from "../src/commands/inventory.ts";
 import { excludedBy, excludedPathNl, excludedPathsOfRun, parseExcludedPath } from "../src/lib/origins.ts";
-import { excludedPageNl, guardContext, scopeForRun, setRunScope, type Guard } from "../src/session/safety.ts";
+import { excludedPageNl, guardContext, guardRedirects, scopeForRun, setRunScope, type Guard } from "../src/session/safety.ts";
 
 const site = "https://platform.example";
 
@@ -32,10 +32,14 @@ test("an excluded path is an origin of the site and a path, and a page is below 
   assert.equal(excludedBy(`${site}/over`, excluded), null);
   assert.equal(excludedBy("https://elders.example/gebruikers", excluded), null, "another origin has its own paths");
   assert.equal(excludedBy(`${site}/gebruikers`, []), null, "a run without excluded paths leaves everything in");
+  // A server reads these as /gebruikers/iemand: a link written so is below the path all the same.
+  assert.equal(excludedBy(`${site}/gebr%75ikers/iemand`, excluded), `${site}/gebruikers`, "percent-encoded");
+  assert.equal(excludedBy(`${site}/Gebruikers/iemand`, excluded), `${site}/gebruikers`, "in other case");
+  assert.equal(excludedBy(`${site}/a/%2e%2e/gebruikers`, excluded), `${site}/gebruikers`, "with a dot segment");
 });
 
 test("the scope of the report names an excluded path as a choice of scope, with what the inventory found there", () => {
-  assert.equal(excludedPathNl(`${site}/gebruikers`, 12), `Pagina's onder ${site}/gebruikers, die bij het begin van het onderzoek buiten de afbakening zijn gehouden. De inventarisatie vond er 12 adressen en opende er geen.`);
+  assert.equal(excludedPathNl(`${site}/gebruikers`, 12), `Pagina's onder ${site}/gebruikers, die bij het begin van het onderzoek buiten de afbakening zijn gehouden. De inventarisatie vond er 12 adressen en nam er geen op.`);
   assert.match(excludedPathNl(`${site}/*/*`, 1), /Een \* staat voor één deel van het pad\. De inventarisatie vond er 1 adres en/);
   assert.match(excludedPathNl(`${site}/leeg`, 0), /vond er geen adres\.$/);
 });
@@ -142,4 +146,54 @@ test("a run without excluded paths has none in its inventory, its scope or its s
 
 test("the start address may not lie below an excluded path", async () => {
   await assert.rejects(inventory({ baseUrl: `${origin}/nieuws/`, out: join(scratch, "start"), maxPages: 5, excludePaths: ["/nieuws"] }), /startadres .* ligt onder --exclude-path/);
+});
+
+test("a redirect into an excluded path or a frame below one stays out of the inventory, and a session does not follow it", async (context) => {
+  const seen: string[] = [];
+  const page = (body: string): string => `<!doctype html><html lang="nl"><head><title>Pagina</title></head><body><main><h1>Pagina</h1>${body}</main></body></html>`;
+  const server = createServer((incoming, outgoing) => {
+    const path = new URL(incoming.url ?? "/", "http://x").pathname;
+    seen.push(path);
+    if (path === "/omweg") return void outgoing.writeHead(302, { location: "/gebruikers/iemand" }).end();
+    const body = path === "/" ? `<a href="/omweg">Omweg</a> <a href="/raam">Raam</a> <a href="/gebr%75ikers/twee">Twee</a>` : path === "/raam" ? `<iframe title="Profiel" src="/gebruikers/drie"></iframe>` : `<p>${path}</p>`;
+    outgoing.writeHead(200, { "content-type": "text/html; charset=utf-8" }).end(page(body));
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const own = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
+  const below = (path: string): boolean => /^\/gebr(u|%75)ikers\//i.test(path);
+  try {
+    const run = join(scratch, "redirect");
+    let found: Inventory;
+    try {
+      found = await inventory({ baseUrl: `${own}/`, out: run, maxPages: 10, excludePaths: ["/gebruikers"] });
+    } catch (error) {
+      if (/Executable doesn't exist|browserType.launch/.test((error as Error).message)) return context.skip("no browser available");
+      throw error;
+    }
+    const kept = found.pages.map((each) => new URL(each.finalUrl ?? each.url).pathname);
+    assert.ok(kept.includes("/raam"), JSON.stringify(kept));
+    assert.deepEqual(kept.filter(below), [], "no page that lands below the path, nor one written with a percent sign");
+    assert.ok(!kept.includes("/omweg"), "the address that redirects there is left out with it");
+    assert.deepEqual(seen.filter(below), ["/gebruikers/iemand"], "only the one step of the redirect was asked for: the frame was not loaded");
+    assert.equal(found.excludedPaths![0]!.found, 3, JSON.stringify(found.excludedPaths));
+
+    const scope = await scopeForRun(run, {});
+    const browser = await launchBrowser();
+    try {
+      const guard: Guard = { blocked: [], outsideScopeLoaded: {}, sender: "test" };
+      const session = await newContext(browser, { writes: null });
+      await guardContext(session, scope, guard);
+      const tab = await session.newPage();
+      await guardRedirects(tab, scope, guard);
+      seen.length = 0;
+      await tab.goto(`${own}/omweg`).catch(() => null);
+      assert.deepEqual(seen.filter(below), [], "the session does not follow the redirect");
+      assert.ok(guard.blocked.some((entry) => entry.redirect && /buiten de afbakening/.test(entry.reasonNl ?? "")), JSON.stringify(guard.blocked));
+      await session.close();
+    } finally {
+      await browser.close();
+    }
+  } finally {
+    await new Promise<void>((resolve) => void server.close(() => resolve()));
+  }
 });

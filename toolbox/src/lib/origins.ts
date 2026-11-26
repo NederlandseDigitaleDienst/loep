@@ -139,15 +139,31 @@ export function excludedBy(url: string, excluded: readonly string[]): string | n
   } catch {
     return null;
   }
-  const segments = parsed.pathname.split("/").slice(1);
+  const segments = pathSegments(parsed.pathname);
   for (const each of excluded) {
     const at = new URL(each);
     if (at.origin !== parsed.origin) continue;
-    const wanted = at.pathname.replace(/%2A/gi, "*").split("/").slice(1);
-    if (segments.length >= wanted.length && wanted.every((segment, index) => segment === "*" ? segments[index] !== "" : segment === segments[index])) return each;
+    const wanted = pathSegments(at.pathname);
+    if (segments.length >= wanted.length && wanted.every((segment, index) => segment === "*" || segment === segments[index])) return each;
   }
   return null;
 }
+
+/**
+ * The segments of a path as a server reads them: decoded, without empty ones, in lower case. A server answers
+ * `/gebr%75ikers/a` and `//gebruikers/a` as `/gebruikers/a`, and a platform often `/Gebruikers/a` too; leaving out a little more is the safe side.
+ */
+const pathSegments = (pathname: string): string[] =>
+  pathname
+    .split("/")
+    .filter(Boolean)
+    .map((segment) => {
+      try {
+        return decodeURIComponent(segment).toLowerCase();
+      } catch {
+        return segment.toLowerCase();
+      }
+    });
 
 /** The excluded paths of a new inventory, each once, in the order given. */
 export function excludedPathsOfRun(origins: readonly string[], given: readonly string[] = []): string[] {
@@ -157,7 +173,7 @@ export function excludedPathsOfRun(origins: readonly string[], given: readonly s
 /** The line in the scope of an evaluation for one excluded path: what was left out, that it was a choice, and how many addresses the inventory found there. */
 export function excludedPathNl(path: string, found: number): string {
   const star = path.includes("*") ? " Een * staat voor één deel van het pad." : "";
-  const counted = found === 0 ? "De inventarisatie vond er geen adres." : `De inventarisatie vond er ${found === 1 ? "1 adres" : `${found} adressen`} en opende er geen.`;
+  const counted = found === 0 ? "De inventarisatie vond er geen adres." : `De inventarisatie vond er ${found === 1 ? "1 adres" : `${found} adressen`} en nam er geen op.`;
   return `Pagina's onder ${path}, die bij het begin van het onderzoek buiten de afbakening zijn gehouden.${star} ${counted}`;
 }
 
