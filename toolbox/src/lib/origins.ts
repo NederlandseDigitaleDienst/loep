@@ -107,6 +107,76 @@ export function originsOfRun(baseUrl: string, also: readonly string[] = []): str
   return [...new Set([main, ...also.map(parseOrigin)])];
 }
 
+/**
+ * A part of the site that the run leaves out (`inventory --exclude-path`): an origin of the site and a path below it,
+ * as `https://example.nl/gebruikers`. A `*` in the path stands for one whole segment, so two of them, one per
+ * segment, leave out every page two segments deep, such as the repositories of the visitors of a platform. A page is under
+ * the path when its segments start with the segments of the path: `/gebruikers` and `/gebruikers/a`, not `/gebruikersvoorwaarden`.
+ */
+export function parseExcludedPath(text: string, origins: readonly string[]): string {
+  const trimmed = text.trim();
+  const usage = "geef een pad zoals /gebruikers, of een adres met het pad zoals https://docs.example.nl/archief";
+  let parsed: URL;
+  try {
+    parsed = new URL(trimmed, `${origins[0]}/`);
+  } catch {
+    throw new Error(`--exclude-path "${text}" is geen pad; ${usage}`);
+  }
+  if (!trimmed.startsWith("/") && !/^https?:\/\//i.test(trimmed)) throw new Error(`--exclude-path "${text}" begint niet met / of met http:// of https://; ${usage}`);
+  if (!origins.includes(parsed.origin)) throw new Error(`--exclude-path "${text}" ligt niet op een origin van de site (${originsNl(origins)})`);
+  if (parsed.search || parsed.hash) throw new Error(`--exclude-path "${text}" heeft een vraag of anker; alleen een pad kan worden uitgesloten`);
+  const path = parsed.pathname.replace(/%2A/gi, "*").replace(/\/+$/, "");
+  if (path === "") throw new Error(`--exclude-path "${text}" sluit de hele origin uit; laat die origin dan weg`);
+  return `${parsed.origin}${path}`;
+}
+
+/** The excluded path an address lies under, or null when none (see `parseExcludedPath`). */
+export function excludedBy(url: string, excluded: readonly string[]): string | null {
+  if (excluded.length === 0) return null;
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return null;
+  }
+  const segments = pathSegments(parsed.pathname);
+  for (const each of excluded) {
+    const at = new URL(each);
+    if (at.origin !== parsed.origin) continue;
+    const wanted = pathSegments(at.pathname);
+    if (segments.length >= wanted.length && wanted.every((segment, index) => segment === "*" || segment === segments[index])) return each;
+  }
+  return null;
+}
+
+/**
+ * The segments of a path as a server reads them: decoded, without empty ones, in lower case. A server answers
+ * `/gebr%75ikers/a` and `//gebruikers/a` as `/gebruikers/a`, and a platform often `/Gebruikers/a` too; leaving out a little more is the safe side.
+ */
+const pathSegments = (pathname: string): string[] =>
+  pathname
+    .split("/")
+    .filter(Boolean)
+    .map((segment) => {
+      try {
+        return decodeURIComponent(segment).toLowerCase();
+      } catch {
+        return segment.toLowerCase();
+      }
+    });
+
+/** The excluded paths of a new inventory, each once, in the order given. */
+export function excludedPathsOfRun(origins: readonly string[], given: readonly string[] = []): string[] {
+  return [...new Set(given.map((text) => parseExcludedPath(text, origins)))];
+}
+
+/** The line in the scope of an evaluation for one excluded path: what was left out, that it was a choice, and how many addresses the inventory found there. */
+export function excludedPathNl(path: string, found: number): string {
+  const star = path.includes("*") ? " Een * staat voor één deel van het pad." : "";
+  const counted = found === 0 ? "De inventarisatie vond er geen adres." : `De inventarisatie vond er ${found === 1 ? "1 adres" : `${found} adressen`} en nam er geen op.`;
+  return `Pagina's onder ${path}, die bij het begin van het onderzoek buiten de afbakening zijn gehouden.${star} ${counted}`;
+}
+
 /** The schemes a run talks to a site over. Every other scheme (file:, data:, blob:, javascript: and the like) is never in the scope of a run. */
 export const WEB_SCHEMES: readonly string[] = ["http:", "https:", "ws:", "wss:"];
 

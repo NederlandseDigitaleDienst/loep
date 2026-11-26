@@ -8,7 +8,7 @@ import { readJson } from "../lib/canonical.ts";
 import { mailboxForRun, ownRegistration, readMailboxState } from "../lib/mailbox.ts";
 import { maskFile, shieldForRun } from "../lib/secrets.ts";
 import { isChallenge } from "../lib/challenge.ts";
-import { notFoundProbes, privateFromPublicSite, scopeHost, scopeHostOf, scopePrefix, siteOrigins, WEB_SCHEMES } from "../lib/origins.ts";
+import { excludedBy, notFoundProbes, privateFromPublicSite, scopeHost, scopeHostOf, scopePrefix, siteOrigins, WEB_SCHEMES } from "../lib/origins.ts";
 import { IDLE_SESSION_FILE, LOGIN_SESSION_FILE, loginCookieHeader, logsOut } from "../lib/login.ts";
 import { fixedReadFor, onReadOrigin, pathOf, readDecision, readRuleFor, type ReadRequest } from "../lib/reads.ts";
 import { searchServicesOf, type SearchServiceId } from "../lib/searchbody.ts";
@@ -69,6 +69,8 @@ export interface Scope {
   sitePath?: string;
   /** The addresses the inventory asked for to see the page for a missing address: an older run asked for it on the root, outside `sitePath`. */
   notFoundProbes?: string[];
+  /** The parts of the site the run leaves out (`inventory --exclude-path`): a session opens no page below one. Absent: none. */
+  excludedPaths?: string[];
   /**
    * The origins of a test environment that may be written to, when the run was given
    * that at inventory. Absent or null: every write is refused, as on any live site.
@@ -77,7 +79,10 @@ export interface Scope {
 }
 
 /** What of an inventory decides the hosts of the scope. */
-type ScopeInventory = { origin: string; origins?: string[]; pages: { url: string }[] };
+type ScopeInventory = { origin: string; origins?: string[]; pages: { url: string }[]; excludedPaths?: { path: string }[] };
+
+/** The excluded paths of the run, as the scope holds them; none in a run without them. */
+const excludedPathsOf = (inventory: ScopeInventory): string[] => (inventory.excludedPaths ?? []).map((each) => each.path);
 
 /** The hosts of the scope that the inventory sets: every origin of the site, also one where no page was found, and every host of a page it recorded. */
 function inventoryHosts(inventory: ScopeInventory): string[] {
@@ -97,7 +102,7 @@ const originHosts = (inventory: ScopeInventory): string[] => siteOrigins(invento
 export const onSite = (scope: Pick<Scope, "siteHosts">, url: string): boolean => inScope({ hosts: scope.siteHosts ?? [] }, url);
 
 /** The scope of the run for the commands of the sweep in this process (see `setRunScope`); null outside a run. */
-let sweepScope: Pick<Scope, "hosts" | "siteHosts" | "runDir"> | null = null;
+let sweepScope: Pick<Scope, "hosts" | "siteHosts" | "runDir" | "excludedPaths" | "notFoundProbes"> | null = null;
 
 /**
  * Give the commands of the sweep in this process the scope of the run, as a session without
@@ -109,10 +114,11 @@ let sweepScope: Pick<Scope, "hosts" | "siteHosts" | "runDir"> | null = null;
 export function setRunScope(runDir: string | null): void {
   const path = runDir === null ? null : join(runDir, "inventory.json");
   const inventory = path !== null && existsSync(path) ? (JSON.parse(readFileSync(path, "utf8")) as ScopeInventory) : null;
-  sweepScope = inventory ? { hosts: inventoryHosts(inventory), siteHosts: originHosts(inventory), runDir: runDir! } : null;
+  const excludedPaths = inventory ? excludedPathsOf(inventory) : [];
+  sweepScope = inventory ? { hosts: inventoryHosts(inventory), siteHosts: originHosts(inventory), runDir: runDir!, ...(excludedPaths.length > 0 ? { excludedPaths, notFoundProbes: notFoundProbes(inventory as ScopeInventory & { notFoundProbe: string }) } : {}) } : null;
 }
 
-export const runScope = (): Pick<Scope, "hosts" | "siteHosts" | "runDir"> | null => sweepScope;
+export const runScope = (): Pick<Scope, "hosts" | "siteHosts" | "runDir" | "excludedPaths" | "notFoundProbes"> | null => sweepScope;
 
 const AUTHORIZATION_OUTSIDE_NL = "het verzoek naar een host buiten de run droeg een authorization-header, zoals een inlogtoken; zoiets gaat nooit naar een andere partij";
 const SECRET_OUTSIDE_NL = "het adres, een header, de body of een cookie van het verzoek naar een host buiten de run bevatte een geheim van de run, zoals een inlogtoken of een cookie van de site; zoiets gaat nooit naar een andere partij";
@@ -173,6 +179,7 @@ export async function scopeForRun(runDir: string, extra: { scopeUrl?: string | u
   let baseUrl: string | null = null;
   let sitePath: string | undefined;
   let probes: string[] = [];
+  let excludedPaths: string[] = [];
   const inventoryPath = join(runDir, "inventory.json");
   if (existsSync(inventoryPath)) {
     const inventory = await readJson<ScopeInventory & { baseUrl: string; notFoundProbe: string; notFoundProbes?: string[] }>(inventoryPath);
@@ -184,6 +191,9 @@ export async function scopeForRun(runDir: string, extra: { scopeUrl?: string | u
     }
     for (const host of inventoryHosts(inventory)) hosts.add(host);
     for (const host of originHosts(inventory)) own.add(host);
+    excludedPaths = excludedPathsOf(inventory);
+    // The page for a missing address is opened wherever it falls, as the inventory asked for it.
+    if (excludedPaths.length > 0) probes = notFoundProbes(inventory);
   }
   if (extra.scopeUrl) {
     const url = new URL(extra.scopeUrl);
@@ -198,7 +208,7 @@ export async function scopeForRun(runDir: string, extra: { scopeUrl?: string | u
   // Inside a command of the sweep the log names that command; a session names itself.
   const ambient = runWrites();
   const writes = permission ? (ambient?.origin === permission.origin ? ambient : writeAccess(runDir, permission, "session")) : null;
-  return { hosts: [...hosts].sort(), siteHosts: [...own].sort(), baseUrl, runDir, strict: extra.strict ?? false, ...(sitePath ? { sitePath, notFoundProbes: probes } : {}), ...(writes ? { writes } : {}), ...(linkOrigins ? { linkOrigins } : {}) };
+  return { hosts: [...hosts].sort(), siteHosts: [...own].sort(), baseUrl, runDir, strict: extra.strict ?? false, ...(sitePath ? { sitePath } : {}), ...(sitePath || excludedPaths.length > 0 ? { notFoundProbes: probes } : {}), ...(excludedPaths.length > 0 ? { excludedPaths } : {}), ...(writes ? { writes } : {}), ...(linkOrigins ? { linkOrigins } : {}) };
 }
 
 /**
@@ -361,6 +371,12 @@ export const outsideSitePath = (scope: Pick<Scope, "sitePath" | "notFoundProbes"
   }
 };
 
+/** Why a page may not be opened because it lies below a part of the site the run leaves out, or null when it may (see `Scope.excludedPaths`). */
+export const excludedPageNl = (scope: Pick<Scope, "excludedPaths" | "notFoundProbes">, url: string): string | null => {
+  const path = scope.notFoundProbes?.includes(url) ? null : excludedBy(url, scope.excludedPaths ?? []);
+  return path === null ? null : `buiten de afbakening: dit adres ligt onder ${path}, dat bij het begin van het onderzoek is uitgesloten (inventory --exclude-path); de pagina wordt niet geopend en hoort niet bij het onderzoek`;
+};
+
 /** Whether a request opens a page in the tab itself, not in an embedded frame. */
 const opensPage = (request: Request): boolean => {
   try {
@@ -502,6 +518,12 @@ export async function guardContext(context: BrowserContext, scope: Scope, guard:
     // Another site on the same host: the session does not open it, as it would not open any site outside the run.
     if (opensPage(request) && outsideSitePath(scope, url)) {
       note("scope", method, url, type);
+      return refuse();
+    }
+    // A part of the site the run leaves out: no page there is opened, not in the tab and not in a frame.
+    const excluded = request.isNavigationRequest() ? excludedPageNl(scope, url) : null;
+    if (excluded) {
+      guard.blocked.push({ at: new Date().toISOString(), kind: "scope", method, url: url.slice(0, MAX_URL), resourceType: type, reasonNl: excluded });
       return refuse();
     }
     const viaParty = throughParty(scope, request);
@@ -742,8 +764,9 @@ export async function guardRedirects(page: Page, scope: Scope, guard: Guard): Pr
       let leaves = false;
       if (status >= 300 && status < 400 && location) {
         const target = new URL(location, event.request.url).href;
-        leaves = !inScope(scope, target);
-        if (leaves) guard.blocked.push({ at: new Date().toISOString(), kind: "scope", method: "GET", url: `${target.slice(0, MAX_URL)} (doorverwijzing vanaf ${event.request.url.slice(0, 120)})`, resourceType: "document", redirect: true });
+        const excluded = excludedPageNl(scope, target);
+        leaves = !inScope(scope, target) || excluded !== null;
+        if (leaves) guard.blocked.push({ at: new Date().toISOString(), kind: "scope", method: "GET", url: `${target.slice(0, MAX_URL)} (doorverwijzing vanaf ${event.request.url.slice(0, 120)})`, resourceType: "document", redirect: true, ...(excluded ? { reasonNl: excluded } : {}) });
       }
       const done = leaves ? cdp.send("Fetch.failRequest", { requestId: event.requestId, errorReason: "BlockedByClient" }) : cdp.send("Fetch.continueRequest", { requestId: event.requestId });
       done.catch(() => undefined);
@@ -784,8 +807,9 @@ export async function guardRedirectsByRoute(context: BrowserContext, scope: Scop
       const location = response.headers()["location"];
       if (response.status() >= 300 && response.status() < 400 && location) {
         const target = new URL(location, request.url()).href;
-        if (!inScope(scope, target)) {
-          guard.blocked.push({ at: new Date().toISOString(), kind: "scope", method: "GET", url: `${target.slice(0, MAX_URL)} (doorverwijzing vanaf ${request.url().slice(0, 120)})`, resourceType: "document", redirect: true });
+        const excluded = excludedPageNl(scope, target);
+        if (!inScope(scope, target) || excluded !== null) {
+          guard.blocked.push({ at: new Date().toISOString(), kind: "scope", method: "GET", url: `${target.slice(0, MAX_URL)} (doorverwijzing vanaf ${request.url().slice(0, 120)})`, resourceType: "document", redirect: true, ...(excluded ? { reasonNl: excluded } : {}) });
           return await route.fulfill(REFUSED_ANSWER);
         }
       }
