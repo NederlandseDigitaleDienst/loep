@@ -129,7 +129,7 @@ function layout(page: PageSource, body: string, variant: Variant): string {
   const noticeBody = `<img class="melding-logo" src="/beeld/logo.svg" width="56" height="56" alt="${pick("1.1.1-logo-melding", "logo", "")}">
     <div class="melding-tekst">
       ${pick("2.4.11-melding", '<p class="melding-titel">Cookies op deze website</p>', '<h2 class="melding-titel" id="melding-titel">Cookies op deze website</h2>')}
-      <p>${municipality} gebruikt cookies om de website te laten werken en om bezoeken te tellen. U kiest zelf welke cookies u toestaat.</p>
+      <p>Wij gebruiken cookies om de website te laten werken en om bezoeken te tellen. U kiest zelf welke cookies u toestaat.</p>
     </div>
     <div class="melding-knoppen">
       <button type="button" data-keuze="alles">Alles toestaan</button>
@@ -214,8 +214,8 @@ ${page.kind === "account" ? accountBar(page, site.name) : ""}${body.trimEnd()}
     </div>
   </footer>
   <div class="chat">
-    <div class="chat-venster" id="chatvenster" role="dialog" aria-labelledby="chat-titel" hidden>
-      <h2 id="chat-titel">Chat met de gemeente</h2>
+    <div class="chat-venster" id="chatvenster" hidden>
+      <h2>Chat met de gemeente</h2>
       ${pick("2.1.1-chat-sluit", '<div class="chat-sluit">×</div>', '<button type="button" class="chat-sluit knop-rustig" aria-label="Chat sluiten">×</button>')}
       <div class="chat-berichten"${pick("4.1.3-chat", "", ' role="log" aria-live="polite" aria-label="Berichten in de chat" tabindex="0"')}></div>
       <form class="chat-formulier">
