@@ -30,7 +30,7 @@ Wat je weglaat vraagt lus als je aan een terminal zit, ook of de site achter een
   purpose: verbeteren            # of verantwoorden
   sending:
     allow: false                 # mag een agent naar de site versturen?
-    max: 20
+    max: null                    # null: het budget van loep zelf, 5 op een testomgeving en 50 op deze machine
   also-origins: []               # subdomein of documentatie die erbij hoort
   never-open: []                 # hosts die geen agent mag openen
   login:                         # null, of waar en in welke rol een testaccount inlogt
@@ -63,11 +63,15 @@ lus run --only voorbeeld.nl
 lus run --only voorbeeld.nl --new
 ```
 
+Een tempo zet je ook bij het toevoegen: `lus add <url> --navigation-delay 2`.
+
 lus pakt een slot, start de regie en leest de stream voor de voortgang: `inventory`, `gate`, `werkstroom`. Een site die op een mens wacht houdt de rest niet tegen. Elke site krijgt één map voor zijn run: `~/onderzoeken/<slug>/<datum>/`. Een tweede start op dezelfde dag gaat verder in dezelfde map, want de run zelf zegt waar hij staat.
 
-Een regie die een subagent start en haar beurt teruggeeft, wacht daarop; zonder ingrijpen stopt `claude -p` zo'n subagent na tien minuten en blijft er een half onderzoek achter. lus zet die grens op zes uur en start, als een beurt toch zonder vraag en zonder zegel eindigt, zelf de volgende beurt, tot twintig keer en alleen zolang de run groeit.
+Een regie die een subagent start en haar beurt teruggeeft, wacht daarop; zonder ingrijpen stopt `claude -p` zo'n subagent na tien minuten en blijft er een half onderzoek achter. lus zet die grens op zes uur en start, als een beurt toch zonder vraag en zonder zegel eindigt, zelf de volgende beurt, tot twintig keer, alleen zolang de run groeit en alleen zolang er 15 GB vrij is. Hervat je zelf, dan begint die telling opnieuw. Een run telt pas als klaar wanneer `verify` zegt dat het zegel klopt met wat er staat: een zegel van voor een antwoord telt niet.
 
-Een run hoort bij één checkout. Hervat je hem in een andere versie, dan zegt lus welke twee dat zijn en stopt hij, in plaats van bewijs van twee versies te mengen. Wat er dan overblijft is een nieuwe run naast de oude: `--new` laat de bestaande map staan en begint in `<datum>-2`. Ook `lus meting` kent die vlag.
+Stop je lus met Ctrl-C, dan stopt de regie, staat de site op gepauzeerd en begint lus niet aan een volgende beurt of een volgende site. `lus resume <site>` gaat verder in dezelfde run. `lus pause` op een site die nog loopt, zegt hoe je hem zo stopt. Werd lus zelf gestopt zonder dat het iets kon schrijven, bijvoorbeeld met `kill -9`, dan zegt `lus status` dat het proces weg is, en `lus run --only <site>` gaat verder waar de run staat, met `pending`.
+
+Een run hoort bij één checkout. Hervat je hem in een andere versie, dan zegt lus welke twee dat zijn en stopt hij, in plaats van bewijs van twee versies te mengen. Wat er dan overblijft is een nieuwe run naast de oude: `--new` laat de bestaande map staan en begint in `<datum>-2`, ook voor een site die klaar is of op een mens wacht. Ook `lus meting` kent die vlag. Een tag die later op dezelfde commit komt, maakt geen andere versie; wijzigingen die niet zijn gecommit wel, want lus legt er een hash van vast.
 
 ```
 lus list                 # de backlog met de stand van elke site
@@ -88,7 +92,7 @@ lus decide <site>
 lus statement <site>
 ```
 
-Die vijf geven de terminal aan loep zelf. lus voert ze niet uit en typt niets voor je in, want loep wil dat een mens het bevestigt. Daarna:
+Die vijf geven de terminal aan loep zelf, met de opties die je erachter zet. lus typt niets voor je in, want loep wil dat een mens het bevestigt. lus onthoudt wel wat je deed en zegt het de regie bij de volgende `resume`: na een antwoord draait die stap 7 opnieuw (`evaluate`, `render`, `seal`), na een handtekening `render` en `verify`. Daarna:
 
 ```
 lus resume <site> --what "de gebruiker bevestigde dat docs.voorbeeld.nl erbij hoort"
@@ -128,3 +132,5 @@ Naast deze meting met agents is er de regressietoets zonder taalmodel die de pij
 ## Wat lus niet doet
 
 lus meet niets zelf: elke meting en elk oordeel komt van loep, zodat het bewijs in de run staat en `node toolbox/src/cli.ts verify --run <run>` het kan nalopen. Het start geen agent buiten de werkstroom van loep om, en het schrijft geen antwoord, besluit of handtekening voor een mens op.
+
+De regie mag Bash gebruiken, want de skill schrijft samengestelde commando's. `curl`, `wget`, `nc`, `ssh` en WebFetch zijn geweigerd, maar dat is geen harde grens: een regie kan via `node -e` de site bereiken of buiten de run schrijven. Dat ze het niet doet, hangt aan de spelregels in haar opdracht, en wat er toch in de run komt, ziet `verify`. De regie erft de omgeving van wie lus start; zet daar geen geheimen in die een run niet nodig heeft. Het transcript in `~/onderzoeken/.lus/` is alleen voor jou leesbaar.
