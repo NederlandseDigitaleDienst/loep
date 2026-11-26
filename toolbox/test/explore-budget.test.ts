@@ -32,26 +32,26 @@ test("the rounds of the explorer share one total of minutes, and a round gets wh
   assert.match(readFileSync(first.task, "utf8"), new RegExp(`hooguit ${EXPLORE_MAX_COMMANDS} commando's en ${EXPLORE_MAX_MINUTES} minuten`));
   assert.equal(exploreTotalMinutes(steps()), EXPLORE_TOTAL_MINUTES, "the total is kept in the run");
 
-  // The first round took 100 of the 120 minutes, with its extensions: 20 are left, so a round of 10 that fits with both of its own.
-  checkedAfter(100);
+  // The first round took 80 of the 120 minutes, its session with both extensions: 40 are left, so a round of 20 that fits with both of its own.
+  checkedAfter(80);
   const second = await explore(run);
-  assert.deepEqual([second.round, second.minutes, second.usedMinutes], [2, 10, 100]);
+  assert.deepEqual([second.round, second.minutes, second.usedMinutes], [2, 20, 80]);
   const task = readFileSync(second.task, "utf8");
-  assert.match(task, /hooguit 50 commando's en 10 minuten/);
-  assert.match(task, /--max-commands 50 --max-minutes 10 /);
+  assert.match(task, /hooguit 100 commando's en 20 minuten/);
+  assert.match(task, /--max-commands 100 --max-minutes 20 /);
 
   // The gate sees it too: a return is left by count, but no round fits any more.
-  checkedAfter(15);
-  assert.equal(exploreMinutesUsed(steps()), 115);
+  checkedAfter(25);
+  assert.equal(exploreMinutesUsed(steps()), 105);
   const routed = route([gap], [], true, steps(), () => false);
-  assert.deepEqual([routed.next, routed.returnsLeft, routed.exploreTime], ["stop", 0, { totalMinutes: 120, usedMinutes: 115, spent: true }]);
+  assert.deepEqual([routed.next, routed.returnsLeft, routed.exploreTime], ["stop", 0, { totalMinutes: 120, usedMinutes: 105, spent: true }]);
   // And goes on with limitations, the way it does after the last return, saying why.
   const after = afterEveryReturn(routed.next, routed.stage, routed.gaps, pages as never, routed.exploreTime);
   assert.deepEqual([after.next, after.gaps.length, after.degradedLimitations.length], ["proceed", 0, 1]);
-  assert.match(after.degradedLimitations[0]!.missingNl, /^Nog open toen de tijd voor de verkenning op was \(115 van 120 minuten voor alle rondes samen\): tab-reach ontbreekt\./);
+  assert.match(after.degradedLimitations[0]!.missingNl, /^Dit bleef open toen de 120 minuten voor het verkennen van de site op waren: tab-reach ontbreekt\./);
 
   // explore itself gives no round either, unless somebody gives more time.
-  await assert.rejects(explore(run), /geen nieuwe ronde voor de verkenner: de tijd voor de verkenning is op: 115 van 120 minuten.*Draai gate/);
+  await assert.rejects(explore(run), /geen nieuwe ronde voor de verkenner: de tijd voor de verkenning is op: 105 van 120 minuten.*Draai gate/);
   const more = await explore(run, { totalMinutes: 240 });
   assert.deepEqual([more.round, more.minutes, more.totalMinutes], [3, EXPLORE_MAX_MINUTES, 240]);
 });
@@ -72,6 +72,21 @@ test("a run from before the total keeps every round it had, with the usual budge
   const routed = route([gap], [], true, old, () => false);
   assert.deepEqual([routed.next, routed.returnsLeft, "exploreTime" in routed], ["explore", MAX_RETURNS_TO_EXPLORER - 1, false]);
   assert.match(afterEveryReturn("stop", "complete", [gap], pages as never, routed.exploreTime).degradedLimitations[0]!.missingNl, /^Na 2 keer terug naar de verkenner nog open: /);
+});
+
+test("a round counts at most what its session could grow to, so a night of waiting does not use up the rounds after it", () => {
+  const minute = (offset: number): string => new Date(Date.UTC(2026, 10, 1) + offset * 60_000).toISOString();
+  // The run stopped on a limit during the first round and went on the next morning: ten hours from task to check.
+  const paused = [
+    { command: "explore", at: minute(0), totalMinutes: 120, maxMinutes: 40 },
+    { command: "check-site", at: minute(600) },
+    { command: "gate", at: minute(640) },
+  ];
+  assert.equal(exploreMinutesUsed(paused), 80, "no more than 40 minutes with both extensions");
+  assert.equal(route([gap], [], true, paused, () => false).next, "explore", "a return is left, with what is left of the total");
+  assert.equal(exploreRoundBudget(120, exploreMinutesUsed(paused))?.minutes, 20);
+  // A clock that went back counts nothing for that round.
+  assert.equal(exploreMinutesUsed([{ command: "explore", at: minute(60), totalMinutes: 120, maxMinutes: 40 }, { command: "check-site", at: minute(30) }]), 0);
 });
 
 test("--explore-minutes takes whole minutes, enough for one short round", () => {

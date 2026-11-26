@@ -23,7 +23,7 @@ export const EXPLORE_MIN_ROUND_MINUTES = 10;
 /** What a session can grow to with every extension, as a multiple of what it starts with. */
 const WITH_EXTENSIONS = 1 + EXTENSION.share * EXTENSION.max;
 
-type Step = Pick<ManifestStep, "command"> & { at?: string; totalMinutes?: unknown };
+type Step = Pick<ManifestStep, "command"> & { at?: string; totalMinutes?: unknown; maxMinutes?: unknown };
 
 /**
  * The total of this run: what the last `explore` recorded. Null for a run whose explorer had no
@@ -37,14 +37,17 @@ export function exploreTotalMinutes(steps: Step[]): number | null {
 /**
  * Minutes the explorer worked so far: per round, from its task (`explore`) to the last
  * `check-site` before the next round. The same reading as the estimate. A round without a
- * `check-site` yet counts nothing.
+ * `check-site` yet counts nothing. A round counts at most what its session could grow to with
+ * both extensions: a run that waited overnight, or a clock that jumped, does not use up the time
+ * of the rounds after it.
  */
 export function exploreMinutesUsed(steps: Step[]): number {
   let used = 0;
   let begin: number | null = null;
   let end: number | null = null;
+  let most = EXPLORE_MAX_MINUTES * WITH_EXTENSIONS;
   const close = (): void => {
-    if (begin !== null && end !== null) used += Math.max(0, end - begin) / 60_000;
+    if (begin !== null && end !== null) used += Math.min(most, Math.max(0, end - begin) / 60_000);
   };
   for (const step of steps) {
     const at = step.at ? Date.parse(step.at) : NaN;
@@ -52,6 +55,7 @@ export function exploreMinutesUsed(steps: Step[]): number {
       close();
       begin = Number.isFinite(at) ? at : null;
       end = null;
+      most = (typeof step.maxMinutes === "number" ? step.maxMinutes : EXPLORE_MAX_MINUTES) * WITH_EXTENSIONS;
     } else if (step.command === "check-site" && begin !== null && Number.isFinite(at)) end = at;
   }
   close();
