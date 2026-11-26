@@ -633,3 +633,45 @@ test("the example verdict in the tasks of judge, verifier and finisher is valid 
     }
   }
 });
+
+/** A person in general: the reader, the visitor, the user, the owner, and "wie" or "iemand" for any of them. */
+const GENERIC_PERSON = /\b(bezoekers?|lezers?|gebruikers?|eigenaars?|onderzoekers?|iemand|wie)\b/i;
+/** The pronouns that give such a person a gender. "zijn" is also a verb, so only its possessive forms count. */
+const GENDERED = /\b(hij|hem)\b|\bzijn (eigen|handen)\b|\bwie zijn\b/i;
+/** Sentences where the pronoun is about a thing, not a person: they may stay. */
+const ABOUT_A_THING = [
+  { file: "templates/bevinding.md", sentence: "bekijk hem in de pagina waar hij staat" },
+  { file: "toolbox/src/lib/extractors.ts", sentence: "wanneer hij afging" },
+  { file: "toolbox/src/lib/extractors.ts", sentence: "verzoek hem wel had bereikt" },
+  { file: "toolbox/src/session/daemon.ts", sentence: "wil je hem voortzetten" },
+];
+
+/** The sentences of a text that call a person in general "hij", "hem" or "zijn": within one line, a pronoun after a person in the same or an earlier sentence. */
+function genderedPersons(file: string, text: string): string[] {
+  const found: string[] = [];
+  text.split("\n").forEach((line, index) => {
+    const sentences = line.split(/(?<=[.!?])\s+/);
+    sentences.forEach((sentence, at) => {
+      if (!GENDERED.test(sentence) || !sentences.slice(0, at + 1).some((before) => GENERIC_PERSON.test(before))) return;
+      if (ABOUT_A_THING.some((thing) => thing.file === file && sentence.includes(thing.sentence))) return;
+      found.push(`${file}:${index + 1}: ${sentence.trim().slice(0, 160)}`);
+    });
+  });
+  return found;
+}
+
+test("no fixed text and no task calls a reader, visitor, user or owner hij, hem or zijn (#727)", () => {
+  const files = (dir: string, extension: RegExp): string[] =>
+    readdirSync(join(ROOT, dir), { recursive: true, withFileTypes: true }).filter((entry) => entry.isFile() && extension.test(entry.name)).map((entry) => join(entry.parentPath, entry.name).slice(ROOT.length));
+  const texts = [...files("templates", /\.(md|typ)$/), ...files("toolbox/src", /\.ts$/), ...files("toolbox/data", /\.json$/)];
+  for (const thing of ABOUT_A_THING) assert.ok(read(thing.file).includes(thing.sentence), `${thing.file} still has "${thing.sentence}"; drop it from ABOUT_A_THING`);
+  assert.ok(texts.includes("templates/weeg.md") && texts.includes("toolbox/src/lib/report-markdown.ts"), "the check reads the tasks and the code");
+  assert.deepEqual(texts.flatMap((file) => genderedPersons(file, read(file))), []);
+  // Every task whose text lands in the report says so to the agent, since an agent writes like its task.
+  for (const name of ["weeg", "samenvat", "beoordeel", "verifieer", "afmaak", "natoets"]) assert.match(read(`templates/${name}.md`), /nooit een voornaamwoord dat een geslacht kiest/, `templates/${name}.md names the rule`);
+  // The check itself: it finds the pronoun for a visitor, also a sentence later, and leaves one for a thing alone.
+  assert.equal(genderedPersons("x.md", "Wie niet ziet `detour`. Hij moet de knop proberen.").length, 1);
+  assert.equal(genderedPersons("x.md", "de bezoeker verliest wat hij deed").length, 1);
+  assert.equal(genderedPersons("x.md", "wie zijn handen moeilijk gebruikt").length, 1);
+  assert.equal(genderedPersons("x.md", "Een knop die hij niet kan bereiken.").length, 0);
+});

@@ -43,7 +43,7 @@ Je beoordeelt succescriterium **{{id}} {{title}}** (niveau {{level}}) voor één
 14. **Elke kandidaat krijgt een uitspraak.** Vóór jou heeft iemand de pagina's doorgelopen zoals een onderzoeker en opgeschreven wat opviel. Dat zijn aanwijzingen, geen bevindingen. Zoek elke kandidaat voor dit criterium zelf op en beslis. Bij een kandidaat staat hoe sterk de steun is (`support`): een kandidaat met `afgeleid` of `alleen beeld` meet je altijd zelf na.
 15. **Een melding over de pagina is ook inhoud.** Een cookiemelding beoordeel je onder dit criterium net als de rest: naam, contrast, toetsenbord, focus, smal scherm. Het dossier heeft haar in een eigen toestand vastgelegd, en met `open <label> --with-blockers` open je de pagina met de melding erop. Een gewone `open <label>` sluit de meldingen vanzelf: zo open je de pagina voor al het andere.
 16. **`passed` met open punten kan alleen** als die punten in de beperkingen van de procedure staan (wat geen instrument kan vaststellen). Staat er iets anders in `missingNl`, dan is de uitkomst `cantTell`.
-17. **Schrijf Nederlands op B1-niveau** in de velden voor lezers (`summaryNl`, `observedNl`, `impactNl`). Vaktermen mogen alleen in `fixNl`.
+17. **Schrijf Nederlands op B1-niveau** in de velden voor lezers (`summaryNl`, `observedNl`, `impactNl`). Vaktermen mogen alleen in `fixNl`. Geef een bezoeker, lezer, gebruiker of eigenaar nooit een voornaamwoord dat een geslacht kiest: herhaal het woord, of schrijf in het meervoud ("bezoekers ... ze").
 
 ## Je bestanden
 
