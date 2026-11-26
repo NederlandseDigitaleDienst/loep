@@ -8,7 +8,7 @@ import type { Vendor } from "../lib/evaluation.ts";
 import { isLocalHost, trialFetch } from "../lib/writes.ts";
 import { ignoreSecrets, isLogout, loginCookieHeader, LoginExpired, noteLogoutUrl, runLoginMark } from "../lib/login.ts";
 import { stepStart, writeManifest } from "../lib/manifest.ts";
-import { isInScope, isOwnAddress, notFoundProbes, originsOfRun, privateFromPublicSite, scopePrefix, siteOrigins } from "../lib/origins.ts";
+import { excludedBy, excludedPathsOfRun, isInScope, isOwnAddress, notFoundProbes, originsOfRun, privateFromPublicSite, scopePrefix, siteOrigins } from "../lib/origins.ts";
 import { rankSearchTerms, type SearchTermPage } from "../lib/searchterm.ts";
 
 export interface InventoryPage {
@@ -90,6 +90,18 @@ export interface Inventory {
    * sent to and sampled. Absent in older runs.
    */
   readsOutsideRun?: ReadOutsideRun[];
+  /**
+   * The parts of the site the run leaves out (`--exclude-path`), each with how many addresses below it the inventory
+   * found and did not open. No later step opens a page below one. Absent when none was given, as in every older run.
+   */
+  excludedPaths?: ExcludedPath[];
+}
+
+export interface ExcludedPath {
+  /** The origin and the path, as `parseExcludedPath` gives it. */
+  path: string;
+  /** Different addresses below it that a link, the sitemap or a frame led to. */
+  found: number;
 }
 
 export interface ReadOutsideRun {
@@ -104,6 +116,8 @@ export interface InventoryOptions {
   maxPages: number;
   /** Further origins of the same site, such as its documentation on a subdomain (`--also-origin`). */
   alsoOrigins?: string[] | undefined;
+  /** Parts of the site that are not part of the evaluation, such as the pages visitors make on a platform (`--exclude-path`). */
+  excludePaths?: string[] | undefined;
   /** Evaluate exactly these URLs and follow no links: used to repeat the sample of an existing audit. */
   fixedUrls?: string[] | undefined;
   vendor?: Vendor | undefined;
@@ -697,6 +711,11 @@ export async function inventory(options: InventoryOptions): Promise<Inventory> {
   const start = normaliseUrl(options.baseUrl);
   // A site under a path of a shared host is that path: the inventory stays below it.
   const prefix = scopePrefix(start);
+  // Parts of the site left out on purpose: never opened, only counted.
+  const excludedPaths = excludedPathsOfRun(origins, options.excludePaths);
+  const excludedFound = new Map<string, Set<string>>(excludedPaths.map((path) => [path, new Set<string>()]));
+  const under = excludedBy(start, excludedPaths);
+  if (under !== null) throw new Error(`het startadres ${start} ligt onder --exclude-path ${under}; kies een startadres dat bij het onderzoek hoort`);
   const fixed = options.fixedUrls?.map(normaliseUrl);
   // A run with a login: the session a person left behind, and the page that person pointed at.
   const login = runLoginMark();
@@ -789,6 +808,12 @@ export async function inventory(options: InventoryOptions): Promise<Inventory> {
       const next = pages.length >= options.maxPages ? open.sort()[0] : nextAddress(open, visited, origins);
       if (next === undefined) break;
       done.add(next);
+      // Below an excluded path: counted, never asked for. The page for a missing address is asked for wherever it falls.
+      const excluded = missingPages.includes(next) ? null : excludedBy(next, excludedPaths);
+      if (excluded !== null) {
+        excludedFound.get(excluded)!.add(next);
+        continue;
+      }
       // A link that logs out is never followed: it would end the session for every page after it.
       if (login && (logoutLinks.has(next) || isLogout({ href: next }))) {
         logoutLinks.add(next);
@@ -849,6 +874,8 @@ export async function inventory(options: InventoryOptions): Promise<Inventory> {
             continue;
           }
           const target = normaliseUrl(anchor.href);
+          // A link below an excluded path is no document of the run either: the loop counts it when the link is followed.
+          if (excludedBy(target, excludedPaths) !== null) continue;
           if (linked) noteDocument(target, linked);
           // A browser honours `download` only on its own origin; there it makes the target a file to save, not a page.
           if (anchor.download !== null) downloads.add(target);
@@ -954,11 +981,13 @@ export async function inventory(options: InventoryOptions): Promise<Inventory> {
     documentTotals,
     ...(login ? { logoutLinks: [...logoutLinks].sort() } : {}),
     readsOutsideRun,
+    ...(excludedPaths.length > 0 ? { excludedPaths: excludedPaths.map((path) => ({ path, found: excludedFound.get(path)!.size })) } : {}),
   };
+  for (const each of result.excludedPaths ?? []) process.stderr.write(`inventory: ${each.found} ${each.found === 1 ? "adres" : "adressen"} onder ${each.path} (--exclude-path) niet geopend\n`);
   const [searchTerm, ...alternatives] = rankSearchTerms(searchTexts, origins.map((each) => new URL(each).hostname));
   if (searchTerm !== undefined) result.searchTerm = searchTerm;
   if (alternatives.length > 0) result.searchTermAlternatives = alternatives;
   await writeJson(join(options.out, "inventory.json"), result);
-  await writeManifest(options.out, { command: "inventory", startedAt, baseUrl: start, maxPages: options.maxPages, fixedUrls: fixed?.length ?? null, ...(origins.length > 1 ? { alsoOrigins: origins.slice(1) } : {}), ...(login ? { loggedIn: true } : {}) }, browserVersion);
+  await writeManifest(options.out, { command: "inventory", startedAt, baseUrl: start, maxPages: options.maxPages, fixedUrls: fixed?.length ?? null, ...(origins.length > 1 ? { alsoOrigins: origins.slice(1) } : {}), ...(excludedPaths.length > 0 ? { excludedPaths } : {}), ...(login ? { loggedIn: true } : {}) }, browserVersion);
   return result;
 }

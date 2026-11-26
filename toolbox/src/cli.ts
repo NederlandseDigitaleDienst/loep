@@ -14,7 +14,7 @@ const USAGE = `loep <command> [options]
   watch-session --run <run> [--gaps 5,10,20,40,80] [--max-hours 8]
                                          The watch on the session of a run with a login. collect starts it in the background
                                          and evaluate stops it; a second start on the same run leaves the running one alone
-  inventory <url> --out <run> [--also-origin <url>]... [--navigation-delay <s>] [--allow-writes] [--test-environment <origin>... --declared-by "<name>, <role>"] [--max-writes <n>] [--mailbox <mailbox> [--mail-link-origin <origin>]...]
+  inventory <url> --out <run> [--also-origin <url>]... [--exclude-path <path>]... [--navigation-delay <s>] [--allow-writes] [--test-environment <origin>... --declared-by "<name>, <role>"] [--max-writes <n>] [--mailbox <mailbox> [--mail-link-origin <origin>]...]
                                          Find every page and count what is on it. In a run with a login the pages are found
                                          by following links from the page the person pointed at; a link that logs out is never followed
   quick <url> --out <run> [--urls <file>] [--max-pages <n>] [--baseline <summary.json>] [--strict] [--dismiss <selector>]...
@@ -213,6 +213,10 @@ Options:
   --also-origin <u> With inventory, repeatable: a further origin of the same site, such as its documentation on
                     https://docs.example.nl. Its sitemap, start page, links, page for a missing address and documents
                     count as the site's own; one report covers all origins. An origin not given stays outside
+  --exclude-path <p> With inventory, repeatable: a part of the site that is not part of the evaluation, such as the
+                    pages visitors make on a platform: /gebruikers, or with its origin https://docs.example.nl/archief.
+                    A * stands for one segment of the path (/*/* is every page two segments deep). No step of the run
+                    opens a page below it; the inventory counts the addresses it found there and the report names it
   --allow-writes    With inventory, for a site on this machine or a .test or .localhost name only: let the run
                     submit forms and send other requests that change something. On any other site, name the test
                     environment and who declares it to be one: --test-environment <origin> --declared-by "<name>, <role>"
@@ -315,6 +319,7 @@ async function main(): Promise<void> {
       only: { type: "string" },
       urls: { type: "string" },
       "also-origin": { type: "string", multiple: true },
+      "exclude-path": { type: "string", multiple: true },
       "navigation-delay": { type: "string" },
       seed: { type: "string" },
       criterion: { type: "string" },
@@ -410,6 +415,7 @@ async function main(): Promise<void> {
   if (command !== "inventory" && values.mailbox !== undefined) throw new Error("--mailbox hoort bij inventory: daar wordt voor de hele run vastgelegd welke mailbox er is");
   if (values["mail-link-origin"] !== undefined && (command !== "inventory" || values.mailbox === undefined)) throw new Error("--mail-link-origin hoort bij inventory, samen met --mailbox: daar wordt voor de hele run vastgelegd via welke partij links mogen lopen");
   if (command !== "inventory" && values["navigation-delay"] !== undefined) throw new Error("--navigation-delay hoort bij inventory: daar wordt voor de hele run vastgelegd hoeveel tijd er tussen twee navigaties naar de site zit");
+  if (command !== "inventory" && values["exclude-path"] !== undefined) throw new Error("--exclude-path hoort bij inventory: daar wordt voor de hele run vastgelegd welke delen van de site er niet bij horen");
   if (command !== "inventory" && values["also-origin"] !== undefined) throw new Error("--also-origin hoort bij inventory: daar wordt vastgelegd welke origins samen de site zijn");
   // A run goes on with the version of loep it was made with; another version would quietly write other tasks over it.
   if (values.run) {
@@ -471,10 +477,11 @@ async function main(): Promise<void> {
       // What this command was given decides whether a session may be used: the manifest only holds it afterwards.
       setRunLogin(values.out, { writes: permission });
       const { formPagesNl, inventory, pageLimitNl, passwordPagesNl, readsOutsideRunNl, refusedPagesNl } = await import("./commands/inventory.ts");
-      const { originsNl, originsOfRun, siteOrigins } = await import("./lib/origins.ts");
+      const { excludedPathsOfRun, originsNl, originsOfRun, siteOrigins } = await import("./lib/origins.ts");
       // Checked before the browser starts: a mistyped origin should not cost a whole inventory.
       const origins = originsOfRun(target, values["also-origin"]);
       if ((values["also-origin"]?.length ?? 0) > 0 && origins.length === 1) throw new Error(`--also-origin noemt alleen de origin van het startadres (${origins[0]}); een tweede origin is bijvoorbeeld https://docs.example.nl`);
+      excludedPathsOfRun(origins, values["exclude-path"]);
       const fixedUrls = values.urls ? (await import("node:fs")).readFileSync(values.urls, "utf8").split("\n").map((line) => line.trim()).filter(Boolean) : undefined;
       const tagPrefixes = (values["vendor-tags"] ?? "").split(",").map((prefix) => prefix.trim().toLowerCase()).filter(Boolean);
       if (tagPrefixes.some((prefix) => !/^[a-z][a-z0-9]*-[a-z0-9-]*$/.test(prefix))) throw new Error('--vendor-tags: elke prefix is het begin van een elementnaam met een streepje, zoals "nldd-"');
@@ -486,7 +493,7 @@ async function main(): Promise<void> {
       const { Politeness } = await import("./session/safety.ts");
       // The inventory itself keeps the pace the run was given, as everything after it does.
       if (navigationDelayMs !== null) spaceNavigations(new Politeness(navigationDelayMs));
-      const result = await inventory({ baseUrl: target, out: values.out, maxPages: Number(values["max-pages"]), fixedUrls, vendor, alsoOrigins: values["also-origin"] }).finally(() => spaceNavigations(null));
+      const result = await inventory({ baseUrl: target, out: values.out, maxPages: Number(values["max-pages"]), fixedUrls, vendor, alsoOrigins: values["also-origin"], excludePaths: values["exclude-path"] }).finally(() => spaceNavigations(null));
       await recordWrites(values.out, permission);
       await recordNavigationDelay(values.out, navigationDelayMs);
       if (navigationDelayMs !== null) process.stdout.write(`tempo: ${navigationDelayMs / 1000} s tussen twee navigaties naar dezelfde site, voor de hele run: check-site, de veegronde en de sessies van de agents\n`);
