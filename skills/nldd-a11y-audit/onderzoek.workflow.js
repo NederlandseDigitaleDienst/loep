@@ -171,9 +171,9 @@ let askedAgain = false
 for (let round = 1; round <= MAX_ROUNDS; round++) {
   rounds = round
   const commands = [
-    ...pendingSkips.map((entry) => `node ${cli} skip --run ${run} ${entry} --kind "geen geldig resultaat" --reason "de agent leverde na ${MAX_ATTEMPTS} pogingen geen geldig resultaat"`),
-    `node ${cli} tasks --run ${run}${attempted.length > 0 ? ` --attempted ${attempted.join(',')}` : ''}${again.length > 0 ? ` --again ${again.join(',')}` : ''}`,
-    `node ${cli} pending --run ${run} --brief`,
+    ...pendingSkips.map((entry) => `node ${cli} audit skip --run ${run} ${entry} --kind "geen geldig resultaat" --reason "de agent leverde na ${MAX_ATTEMPTS} pogingen geen geldig resultaat"`),
+    `node ${cli} audit tasks --run ${run}${attempted.length > 0 ? ` --attempted ${attempted.join(',')}` : ''}${again.length > 0 ? ` --again ${again.join(',')}` : ''}`,
+    `node ${cli} audit pending --run ${run} --brief`,
   ]
   const asked = await shell(commands, round)
   if (asked.error) {

@@ -5,25 +5,25 @@ import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { readBacklog } from "../src/backlog.ts";
-import { answering, FIXTURES, metingHome, prepareBacklog, silent } from "../src/meting.ts";
+import { readBacklog } from "../../src/harness/backlog.ts";
+import { answering, FIXTURES, metingHome, prepareBacklog, silent } from "../../src/harness/meting.ts";
 
 test("een meting heeft een eigen home, los van de sites van echte eigenaren", () => {
-  const home = mkdtempSync(join(tmpdir(), "lus-meting-"));
-  const before = process.env["LUS_HOME"];
+  const home = mkdtempSync(join(tmpdir(), "backlog-meting-"));
+  const before = process.env["LOEP_HOME"];
   try {
-    process.env["LUS_HOME"] = home;
-    assert.equal(metingHome(), home);
-    delete process.env["LUS_HOME"];
-    assert.match(metingHome(), /onderzoeken\/meting$/, "zonder LUS_HOME staan de metingen naast de runs, in een eigen map");
+    process.env["LOEP_HOME"] = home;
+    assert.equal(metingHome(), join(home, "meting"), "ook met LOEP_HOME houdt de meting een eigen map: de testwebsites komen niet tussen de sites van echte eigenaren");
+    delete process.env["LOEP_HOME"];
+    assert.match(metingHome(), /onderzoeken\/meting$/, "zonder LOEP_HOME staan de metingen naast de runs, in een eigen map");
   } finally {
-    if (before === undefined) delete process.env["LUS_HOME"];
-    else process.env["LUS_HOME"] = before;
+    if (before === undefined) delete process.env["LOEP_HOME"];
+    else process.env["LOEP_HOME"] = before;
   }
 });
 
 test("beide testwebsites komen één keer in de backlog van de meting, met hun eigen slug", () => {
-  const path = join(mkdtempSync(join(tmpdir(), "lus-meting-")), "backlog.yaml");
+  const path = join(mkdtempSync(join(tmpdir(), "backlog-meting-")), "backlog.yaml");
   const first = prepareBacklog(path);
   assert.deepEqual(first.added.map((fixture) => fixture.slug), ["lindewaard", "berkenveen"]);
   const backlog = readBacklog(path);
@@ -40,7 +40,7 @@ test("beide testwebsites komen één keer in de backlog van de meting, met hun e
   assert.equal(readBacklog(path).sites.length, 2);
 });
 
-test("lus weet of de testsite antwoordt, voordat er een agent begint", async () => {
+test("loep weet of de testsite antwoordt, voordat er een agent begint", async () => {
   const server = createServer((request, response) => response.writeHead(200, { "content-type": "text/html" }).end("<h1>Lindewaard</h1>"));
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   const { port } = server.address() as AddressInfo;

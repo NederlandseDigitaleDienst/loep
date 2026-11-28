@@ -485,7 +485,7 @@ test("a weighing that is not applied says why, and a run that was moved keeps it
   // Another installation wrote the task, and check-weigh stamped that text: the same task.
   const task = join(moved, "tasks", "weeg", "taak.md");
   const elsewhere = readFileSync(task, "utf8").replace(/node \S+?[\\/]src[\\/]cli\.ts/, "node /opt/other install/loep/toolbox/src/cli.ts");
-  assert.match(elsewhere, /node \/opt\/other install\/loep\/toolbox\/src\/cli\.ts check-weigh/);
+  assert.match(elsewhere, /node \/opt\/other install\/loep\/toolbox\/src\/cli\.ts audit check-weigh/);
   writeFileSync(task, elsewhere);
   assert.deepEqual(await checkWeigh(moved), []);
   assert.equal((await weigh(moved)).weighing, "applied", "a task from another installation still counts");

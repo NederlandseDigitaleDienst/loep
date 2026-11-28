@@ -1,7 +1,7 @@
 import { spawn, spawnSync } from "node:child_process";
 import { appendFileSync, existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
-import { toolboxCli } from "./paths.ts";
+import { cliArgs, toolboxCli } from "./paths.ts";
 import type { Question } from "./state.ts";
 
 /*
@@ -16,7 +16,7 @@ export interface RegieResult {
   signal: NodeJS.Signals | null;
   /** The last step the stream showed, for `status`. */
   step: string | null;
-  /** A person stopped lus (Ctrl-C, a kill, a closed terminal): no next turn, no next site. */
+  /** A person stopped loep (Ctrl-C, a kill, a closed terminal): no next turn, no next site. */
   interrupted: boolean;
 }
 
@@ -28,7 +28,7 @@ interface ContentBlock {
 
 /**
  * What goes into the transcript. The stream counts thinking tokens a few times a second; a transcript
- * of hours of a run would be mostly those counters, and `lus log` has to stay readable.
+ * of hours of a run would be mostly those counters, and `loep log` has to stay readable.
  */
 export function keepInTranscript(line: string): boolean {
   try {
@@ -58,8 +58,9 @@ export function stepOf(line: string): string | null {
     if (block.name === "Task") return "subagent";
     if (block.name === "Bash") {
       const command = typeof block.input?.["command"] === "string" ? block.input["command"] : "";
-      const loep = /cli\.ts\s+([a-z][a-z-]*)/.exec(command);
-      if (loep?.[1]) return loep[1];
+      // A step is written `cli.ts audit check-gate`: the namespace says where it sits, not what it is.
+      const loep = /cli\.ts\s+([a-z][a-z-]*)(?:\s+([a-z][a-z-]*))?/.exec(command);
+      if (loep?.[1]) return loep[1] === "audit" || loep[1] === "dev" ? (loep[2] ?? loep[1]) : loep[1];
     }
   }
   return null;
@@ -72,7 +73,7 @@ export interface StartOptions {
   /** Every line of the stream, as it came in: the transcript of a run is the only way back into what happened. */
   transcript: string;
   onStep: (step: string) => void;
-  /** The pid of the regie as soon as it runs: a lus that is killed leaves the regie behind. */
+  /** The pid of the regie as soon as it runs: a loep that is killed leaves the regie behind. */
   onStart?: ((pid: number) => void) | undefined;
 }
 
@@ -168,7 +169,7 @@ export function readQuestion(dir: string): Question | null {
  */
 export function isSealed(run: string): boolean {
   if (!existsSync(join(run, "evidence-index.json"))) return false;
-  return spawnSync("node", [toolboxCli, "verify", "--run", run], { stdio: "ignore" }).status === 0;
+  return spawnSync("node", cliArgs(toolboxCli, "verify", "--run", run), { stdio: "ignore" }).status === 0;
 }
 
 /**

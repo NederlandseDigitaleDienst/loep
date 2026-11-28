@@ -3,8 +3,8 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import type { Site } from "../src/backlog.ts";
-import { isLocalHost, regieArgs, regieEnv, regiePrompt } from "../src/regie.ts";
+import type { Site } from "../../src/harness/backlog.ts";
+import { isLocalHost, regieArgs, regieEnv, regiePrompt } from "../../src/harness/regie.ts";
 
 const site = (overrides: Partial<Site> = {}): Site => ({
   url: "https://www.voorbeeld.nl/",
@@ -64,7 +64,7 @@ test("versturen op een site op deze machine gaat met --allow-writes, elders vraa
   assert.match(real, /stop daarvoor/);
   const none = prompt();
   assert.match(none, /niet toegestaan/);
-  // Zonder opgegeven aantal krijgt inventory geen --max-writes: dan geldt het budget van loep, niet een getal van lus.
+  // Zonder opgegeven aantal krijgt inventory geen --max-writes: dan geldt het budget van loep, niet een getal van de backlog.
   const standard = prompt({ sending: { allow: true, max: null } });
   assert.doesNotMatch(standard, /--max-writes/);
   assert.match(standard, /standaardbudget van loep/);
@@ -94,7 +94,7 @@ test("de commandoregel heeft de plugin, de tools en de weigeringen die een run n
   };
   assert.equal(args[0], "-p");
   assert.equal(args[1], "prompt");
-  assert.equal(value("--plugin-dir"), join(import.meta.dirname, "..", ".."));
+  assert.equal(value("--plugin-dir"), join(import.meta.dirname, "..", "..", ".."));
   assert.match(value("--tools") ?? "", /Workflow/);
   assert.match(value("--tools") ?? "", /Task/);
   assert.ok(args.includes("--no-session-persistence"));
@@ -105,14 +105,14 @@ test("de commandoregel heeft de plugin, de tools en de weigeringen die een run n
 });
 
 test("een eigen configuratiemap houdt de instellingen van de gebruiker buiten de run", () => {
-  const home = mkdtempSync(join(tmpdir(), "lus-regie-"));
-  process.env["LUS_HOME"] = home;
-  assert.equal(regieEnv()["CLAUDE_CONFIG_DIR"], join(home, ".lus", "claude-home"));
+  const home = mkdtempSync(join(tmpdir(), "backlog-regie-"));
+  process.env["LOEP_HOME"] = home;
+  assert.equal(regieEnv()["CLAUDE_CONFIG_DIR"], join(home, ".loep", "claude-home"));
   // Zonder dit stopt claude -p een subagent die nog loopt na tien minuten, en is de run half af.
   assert.equal(regieEnv()["CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS"], "21600000");
 });
 
-test("een site op deze machine herkent lus", () => {
+test("een site op deze machine herkent loep", () => {
   assert.equal(isLocalHost("http://127.0.0.1:4710/"), true);
   assert.equal(isLocalHost("http://localhost:4712/"), true);
   assert.equal(isLocalHost("http://192.168.1.5/"), true);

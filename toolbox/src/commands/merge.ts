@@ -11,6 +11,7 @@ import { makeWorkDir } from "../lib/workdir.ts";
 import { readEvaluation, signatureIsCurrent, writeEvaluation } from "./sign.ts";
 import { summaryInto, summaryLineNl } from "./summarize.ts";
 import { weighInto, type WeighResult } from "./weigh.ts";
+import { cliCall } from "../lib/commands.ts";
 
 const TASK = join("tasks", "samenvoeg", "taak.md");
 const INPUT = join("tasks", "samenvoeg", "invoer.json");
@@ -65,7 +66,7 @@ async function writeTask(runDir: string, evaluation: Evaluation, byRules: Defect
     site: evaluation.site.name,
     input: join(absoluteRun, INPUT),
     output: join(absoluteRun, PROPOSAL),
-    check: `node ${cli} check-merge --run ${absoluteRun}`,
+    check: cliCall(cli, "check-merge", "--run", absoluteRun),
     findings: String(evaluation.criteria.reduce((total, criterion) => total + criterion.findings.length, 0)),
     defects: String(byRules.length),
     workDir: await makeWorkDir(runDir, MERGE_WORK),

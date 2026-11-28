@@ -2,8 +2,37 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
+import { AUDIT_COMMANDS, HARNESS_COMMANDS, DEV_COMMANDS, HANDED_OVER_COMMANDS, NAMESPACES, STANDALONE_COMMANDS, STEPS_WITHOUT_A_SITE } from "./lib/commands.ts";
+import { positionalsOf } from "./lib/site-args.ts";
 
 const USAGE = `loep <command> [options]
+
+  audit <stap> [opties]                  The investigation of one site: the site mapped, measured, judged and sealed.
+                                         loep audit --help names every step, from inventory to verify
+  quick <url> --out <run> [--urls <file>] [--max-pages <n>] [--baseline <summary.json>] [--strict] [--dismiss <selector>]...
+                                         A measurement of minutes without a language model, for a pipeline: the rule
+                                         engines in light and dark and reflow and zoom, on the pages of --urls or on a
+                                         sample of at most 15 pages it finds, with what they point at per criterion
+                                         (quick/samenvatting.md). With --baseline it holds the outcome against the
+                                         summary.json of an earlier measurement and exits 1 when a page got worse or was
+                                         not measured; 2 means the measurement itself failed. It judges nothing
+                                         With --run <run> it measures a sample that is already there and needs no URL
+  statement --run <run> [--concept]      The accessibility statement and the answer sheet for the register, from an
+                                         investigation that was signed
+  contribute --run <run> | --under <folder> [--out <dir>] [--json] [--key <file>]
+                                         The sheet of a finished run: what it says about loep and nothing about the site.
+                                         It reads a run of any version, writes nothing in it and sends nothing
+  session <commando>                     What an agent does in a browser window during the investigation:
+                                         open, look, click, speak. loep session --help
+  add|run|status|pause|resume|log|doctor The harness: loep over a list of sites, a regie per site, with a person
+                                         where only a person can decide. loep status says how every site stands
+  dev <verb>                             The tool for whoever works on loep itself: procedures, compare, diff,
+                                         calibrate, variant, compare-variants, usage, meting. loep dev --help
+
+Every step of audit takes its own options; loep audit <stap> --help says which.
+`;
+
+const AUDIT_USAGE = `loep audit <stap> [options]
 
   login --run <run> [--url <login page>] [--role <role>] [--out <file>]
                                          For a site behind a login: open a browser window in which a person logs in with a
@@ -17,19 +46,6 @@ const USAGE = `loep <command> [options]
   inventory <url> --out <run> [--also-origin <url>]... [--exclude-path <path>]... [--navigation-delay <s>] [--allow-writes] [--test-environment <origin>... --declared-by "<name>, <role>"] [--max-writes <n>] [--mailbox <mailbox> [--mail-link-origin <origin>]...]
                                          Find every page and count what is on it. In a run with a login the pages are found
                                          by following links from the page the person pointed at; a link that logs out is never followed
-  quick <url> --out <run> [--urls <file>] [--max-pages <n>] [--baseline <summary.json>] [--strict] [--dismiss <selector>]...
-                                         A measurement of minutes without a language model, apart from an evaluation, for a
-                                         pipeline: runs the rule engines in light and dark, and reflow and zoom, on the pages
-                                         in --urls (one address per line) or on a sample of at most 15 pages it finds, and
-                                         writes per criterion what they point at (quick/samenvatting.md and summary.json).
-                                         With --baseline it holds the outcome against the summary.json of an earlier
-                                         measurement, by path, and exits 1 when a page has more places that two or more
-                                         engines fail or a probe of loep sees, or was not measured (quick/verschil.md); what
-                                         one engine alone reports is listed and counts only with --strict. 2 means the
-                                         measurement itself failed. With
-                                         --dismiss it first clicks that selector on every page, to close a cookie banner. It
-                                         predicts part of what an evaluation fails; it judges nothing. With --run <run> it
-                                         measures a sample that is already there
   explore --run <run> [--explore-minutes <n>]
                                          Write the task for the agent that maps the site before it is measured. All rounds
                                          share one total of wall minutes, from explore to the verdict of the gate (default
@@ -96,19 +112,11 @@ const USAGE = `loep <command> [options]
                                          werkte niet, niet bereikbaar, versturen niet toegestaan, buiten de afbakening, mens
                                          nodig, keuze nodig) and per criterion, equal points taken together and counted: the
                                          work list for whoever improves the sweep. Writes nothing
-  contribute --run <run> | --under <folder> [--out <dir>] [--json] [--key <file>]
-                                         The sheet of a finished run (a meetblad): what it says about loep and nothing about
-                                         the site. Rule ids, criteria, outcomes and counts; no address, selector or sentence.
-                                         With --under the sheet of every finished run under a folder, for the runs made before.
-                                         Without --out it only says what is on the sheet. It reads a run of any version, writes
-                                         nothing in it and sends nothing. The site is on it as a key made with a key file that
-                                         stays on this machine
   feedback --run <run> [--out <dir>] [--json]
                                          Draft issues for the makers of loep: one per criterion and kind that stayed open
                                          because of loep itself, without the address or name of the site. Criteria open
                                          because the run could not send, or because a part of the site did not load, get no
                                          draft and are named apart. Sends nothing
-  procedures                             Validate the procedure catalogue
   evaluate --run <run> --name <site> [--organisation <name>] [--model <id>] [--previous <evaluation.json>]
                                          Combine the verdicts into evaluation.json; --model is the model the operator names,
                                          next to what each agent gave itself with session start --model
@@ -184,11 +192,6 @@ const USAGE = `loep <command> [options]
                                          report proposes. Kept in besluiten/<defect>.json, outside the seal, as a layer with a
                                          hash of its own; a changed decision keeps the earlier one. The report names the function.
                                          Confirmed at an interactive terminal, or --recorded-via gesprek (see below)
-  statement --run <run> [--concept]      Write the accessibility statement and the answer sheet for the register
-  diff --previous <evaluation.json> --current <evaluation.json> --out <dir>
-                                         Write verschil.md: solved, stayed and new between two evaluations of one site
-  compare --run <run> --reference <file> --out <dir>
-                                         Compare the evaluation with an existing audit of the same site
   purpose --run <run> [verbeteren|verantwoorden]
   writes --run <run> --max-writes <n> [--origin <origin>]
                                          Raise the budget for sending. Confirmed at an interactive terminal, or --recorded-via gesprek (see below).
@@ -197,14 +200,14 @@ const USAGE = `loep <command> [options]
                                          to fix, and the report is not signed. Verantwoorden: the report backs a statement,
                                          says what is still missing for status B, and is signed. Choose or change it at the
                                          end of a run, then run evaluate, render and seal again. Without a value: say it
-  mail wait|links|register|cleanup|status --run <run>   The fixed flow around a mailbox; loep mail --help
+  mail wait|links|register|cleanup|status --run <run>   The fixed flow around a mailbox; loep audit mail --help
   secrets --run <run>                    What a run knows about its secrets, per source, and what happened around them: never a value
   seal --run <run>                       Record the hash of every file in the run; what is signed afterwards is this seal
   seal --run <run> --open                Open the seal on purpose, to measure in the run itself again (tasks --again): the seal
                                          and a signature lapse; seal again afterwards, and read and sign again
   verify --run <run>                     Recompute every hash in the run
   voiceover start|status|read|stop|setup Optional, outside an evaluation: a real screen reader (VoiceOver in a virtual Mac) as a
-                                         second source next to session speak; loep voiceover --help
+                                         second source next to session speak; loep audit voiceover --help
 
 Options:
   --max-pages <n>   Upper bound on pages to visit (default 200)
@@ -242,7 +245,7 @@ Options:
                     on this machine). The user name and password never go here: they come from the environment
                     (LOEP_IMAP_USER, LOEP_IMAP_PASSWORD) or the keychain. A mailbox on another machine is confirmed at an
                     interactive terminal by typing its host; an agent never records it. Opening a link from a mail counts
-                    as sending. See loep mail --help
+                    as sending. See loep audit mail --help
   --mail-link-origin <origin>   With --mailbox, repeatable: another party that links in a mail may lead through, such as a
                     mailing service. Only a GET goes there, and only a redirect that ends on an origin of the run is followed
   --other-toolbox   Go on with a run that was made with another version of loep. Without it every command that
@@ -259,10 +262,27 @@ Options:
                     --summary the summary they confirmed. Both are kept with the record. Without the flag a person
                     confirms at an interactive terminal (--recorded-via terminal); without one the command refuses
 
-Comparing per finding has its own steps: loep compare --findings --help
-Measuring a variant of the code on a frozen sweep: loep variant --help (variant, compare-variants)
-Tokens per agent from the transcripts of a workflow, for compare-variants --usage: loep usage --help
-A browser session for an agent has its own commands: loep session --help
+Comparing per finding has its own steps: loep dev compare --findings --help
+Measuring a variant of the code on a frozen sweep: loep dev variant --help (variant, compare-variants)
+Tokens per agent from the transcripts of a workflow, for compare-variants --usage: loep dev usage --help
+`;
+
+const DEV_USAGE = `loep dev <verb> [options]
+
+  procedures                             Validate the procedure catalogue
+  compare --run <run> --reference <file> --out <dir>
+                                         Compare the evaluation with an existing audit of the same site
+  compare --findings                     Compare two runs per finding; its own steps and options: loep dev compare --findings --help
+  diff --previous <evaluation.json> --current <evaluation.json> --out <dir>
+                                         Write verschil.md: solved, stayed and new between two evaluations of one site
+  calibrate                              Outside an evaluation: measure the instruments against the ACT test cases
+  variant, compare-variants              Outside an evaluation: measure a variant of the code on a frozen sweep;
+                                         loep dev variant --help
+  usage                                  Outside an evaluation: tokens per agent from the transcripts of a workflow,
+                                         for compare-variants --usage; loep dev usage --help
+  meting [--sites <n>] [--only <site>] [--new]
+                                         Outside an evaluation: measure loep on its own test sites, with a regie and the skill,
+                                         in a backlog of its own. Needs a running test site: just testsite
 `;
 
 /** The number after `--at-once`: a whole number of 1 or more, of what the command does at the same time. */
@@ -292,106 +312,175 @@ const NEEDS_SITE_MODEL = ["sweep", "collect", "contrast", "states", "gate", "tas
 /** The commands of the sweep that load pages of the site in a browser. */
 const SWEEP_COMMANDS = ["sweep", "collect", "contrast", "states"];
 
+/** Every option of the steps of `audit`, `dev` and the standalone commands; `parseArgs` reads them in `main`. */
+const OPTIONS = {
+  out: { type: "string" },
+  run: { type: "string" },
+  force: { type: "boolean" },
+  baseline: { type: "string" },
+  key: { type: "string" },
+  under: { type: "string" },
+  dismiss: { type: "string", multiple: true },
+  strict: { type: "boolean", default: false },
+  "max-pages": { type: "string", default: "200" },
+  idle: { type: "boolean", default: false },
+  gaps: { type: "string" },
+  "max-hours": { type: "string" },
+  "vendor-tags": { type: "string" },
+  "vendor-name": { type: "string" },
+  only: { type: "string" },
+  urls: { type: "string" },
+  "also-origin": { type: "string", multiple: true },
+  "exclude-path": { type: "string", multiple: true },
+  "navigation-delay": { type: "string" },
+  seed: { type: "string" },
+  criterion: { type: "string" },
+  name: { type: "string" },
+  organisation: { type: "string" },
+  model: { type: "string", default: "niet opgegeven" },
+  role: { type: "string" },
+  reference: { type: "string" },
+  previous: { type: "string" },
+  current: { type: "string" },
+  checked: { type: "string" },
+  round: { type: "string" },
+  "page-type": { type: "string" },
+  "page-types": { type: "string" },
+  again: { type: "string" },
+  reopen: { type: "boolean", default: false },
+  point: { type: "string" },
+  did: { type: "string" },
+  outcome: { type: "string" },
+  reason: { type: "string" },
+  defect: { type: "string" },
+  decision: { type: "string" },
+  what: { type: "string" },
+  date: { type: "string" },
+  alternative: { type: "string" },
+  "recorded-via": { type: "string" },
+  confirmation: { type: "string" },
+  summary: { type: "string" },
+  kind: { type: "string" },
+  attempted: { type: "string" },
+  brief: { type: "boolean", default: false },
+  concept: { type: "boolean", default: false },
+  fresh: { type: "boolean", default: false },
+  open: { type: "boolean", default: false },
+  "other-toolbox": { type: "boolean", default: false },
+  "allow-writes": { type: "boolean", default: false },
+  "test-environment": { type: "string", multiple: true },
+  "declared-by": { type: "string" },
+  "max-writes": { type: "string" },
+  origin: { type: "string" },
+  mailbox: { type: "string" },
+  "mail-link-origin": { type: "string", multiple: true },
+  session: { type: "string" },
+  timeout: { type: "string" },
+  url: { type: "string" },
+  from: { type: "string" },
+  steps: { type: "string" },
+  press: { type: "string" },
+  "at-once": { type: "string" },
+  "explore-minutes": { type: "string" },
+  groups: { type: "boolean", default: false },
+  json: { type: "boolean", default: false },
+  finding: { type: "string" },
+  at: { type: "string" },
+  rechecks: { type: "boolean", default: false },
+  embedded: { type: "boolean" },
+  site: { type: "string" },
+  toon: { type: "string" },
+  "toon-host": { type: "string" },
+  "toon-url": { type: "string" },
+  live: { type: "boolean", default: false },
+  preview: { type: "string" },
+  "replace-unseen": { type: "boolean", default: false },
+  format: { type: "string" },
+  help: { type: "boolean", short: "h" },
+} as const;
+
+/** The options that take a value: the word after one is a value, not a site of the backlog. */
+const VALUE_FLAGS = new Set(Object.entries(OPTIONS).filter(([, spec]) => spec.type === "string").map(([name]) => name));
+
+/**
+ * `loep audit <stap>` and `loep dev <verb>` are how the commands are written now. A command without its
+ * namespace still runs for one release: the task files of a run that is already on disk name it that way,
+ * and an agent halfway through an investigation should not stop on a rename.
+ */
+function withNamespace(argv: string[]): string[] {
+  const top = argv[2];
+  if (top !== "audit" && top !== "dev") return argv;
+  const inner = argv[3];
+  if (inner === undefined || inner === "--help" || inner === "-h") return [...argv.slice(0, 2), `help:${top}`];
+  if (!(NAMESPACES[top] as readonly string[]).includes(inner)) {
+    const said = inner.startsWith("-") ? `de optie "${inner}"` : `"${inner}"`;
+    // A command of the other layer is not a typo: say where it does live.
+    const elsewhere = (Object.keys(NAMESPACES) as (keyof typeof NAMESPACES)[]).find((floor) => floor !== top && (NAMESPACES[floor] as readonly string[]).includes(inner));
+    if (elsewhere) throw new Error(`loep ${top} kent ${said} niet: dat staat onder loep ${elsewhere} (loep ${elsewhere} ${inner})\n\n${top === "audit" ? AUDIT_USAGE : DEV_USAGE}`);
+    // A command that keeps its own name is not a typo either.
+    if ((STANDALONE_COMMANDS as readonly string[]).includes(inner)) throw new Error(`loep ${top} kent ${said} niet: dat staat op zichzelf (loep ${inner})\n\n${top === "audit" ? AUDIT_USAGE : DEV_USAGE}`);
+    throw new Error(`loep ${top} kent ${said} niet\n\n${top === "audit" ? AUDIT_USAGE : DEV_USAGE}`);
+  }
+  return [...argv.slice(0, 2), inner, ...argv.slice(4)];
+}
+
 async function main(): Promise<void> {
+  const argv = withNamespace(process.argv);
+  const named = /^help:(audit|dev)$/.exec(argv[2] ?? "")?.[1];
+  if (named === "audit") {
+    process.stdout.write(AUDIT_USAGE);
+    return;
+  }
+  if (named === "dev") {
+    process.stdout.write(DEV_USAGE);
+    return;
+  }
   // Comparing per finding has its own steps and options; it parses them itself.
-  if (process.argv[2] === "compare" && process.argv.includes("--findings")) return (await import("./commands/compare-findings.ts")).cli(process.argv.slice(3));
-  if (process.argv[2] === "calibrate") return (await import("./commands/calibrate.ts")).cli(process.argv.slice(3)); // outside an evaluation: measures the instruments against the ACT test cases
-  if (process.argv[2] === "variant" || process.argv[2] === "compare-variants") return (await import("./commands/variants.ts")).cli(process.argv.slice(2)); // outside an evaluation: measures a variant of the code on a frozen sweep
-  if (process.argv[2] === "usage") return (await import("./commands/usage.ts")).cli(process.argv.slice(3)); // outside an evaluation: tokens per agent from the transcripts, for compare-variants --usage
+  if (argv[2] === "compare" && argv.includes("--findings")) return (await import("./commands/compare-findings.ts")).cli(argv.slice(3));
+  if (argv[2] === "calibrate") return (await import("./commands/calibrate.ts")).cli(argv.slice(3)); // outside an evaluation: measures the instruments against the ACT test cases
+  if (argv[2] === "variant" || argv[2] === "compare-variants") return (await import("./commands/variants.ts")).cli(argv.slice(2)); // outside an evaluation: measures a variant of the code on a frozen sweep
+  if (argv[2] === "usage") return (await import("./commands/usage.ts")).cli(argv.slice(3)); // outside an evaluation: tokens per agent from the transcripts, for compare-variants --usage
+  // A step of an investigation takes the site of the backlog where it takes a run: `loep audit answer
+  // voorbeeld.nl` does what `loep audit answer --run <run>` does, with the run of that site at this moment.
+  // `loep statement voorbeeld.nl` is the same for the statement, which takes a run without a layer.
+  const step = argv[2];
+  const runGiven = argv.some((arg) => arg === "--run" || arg.startsWith("--run="));
+  const helpWanted = argv.includes("--help") || argv.includes("-h");
+  if (step !== undefined && !runGiven && !helpWanted && !(STEPS_WITHOUT_A_SITE as readonly string[]).includes(step) && (step === "statement" || (AUDIT_COMMANDS as readonly string[]).includes(step))) {
+    const word = positionalsOf(argv.slice(3), VALUE_FLAGS)[0];
+    if (word !== undefined) {
+      const { siteForWord } = await import("./harness/lookup.ts");
+      const onTheLine = siteForWord(word.word);
+      if (onTheLine !== null) {
+        // A step a person does goes to the harness, which knows the login of the site and says what follows.
+        // Reading its options here would refuse every option the harness takes and loep does not.
+        if ((HANDED_OVER_COMMANDS as readonly string[]).includes(step)) {
+          const rest = [...argv.slice(3)];
+          rest.splice(word.at, 1);
+          process.exitCode = await (await import("./harness/cli.ts")).harnessCli([step, onTheLine.site.slug, ...rest]);
+          return;
+        }
+        if (onTheLine.run === null) throw new Error(`${onTheLine.site.slug} is nog niet begonnen; start hem met: loep run --only ${onTheLine.site.slug}`);
+        argv.splice(word.at + 3, 0, "--run", onTheLine.run);
+      }
+    }
+  }
+  // The harness takes its verbs and options as they come; it parses them itself.
+  if (argv[2] !== undefined && ((HARNESS_COMMANDS as readonly string[]).includes(argv[2]) || argv[2] === "meting")) {
+    process.exitCode = await (await import("./harness/cli.ts")).harnessCli(argv.slice(2));
+    return;
+  }
   // A session takes its commands and options as they come; it parses them itself.
-  if (process.argv[2] === "session") {
+  if (argv[2] === "session") {
     const { sessionCli, SESSION_USAGE } = await import("./session/client.ts");
-    if (process.argv.length === 3 || process.argv.includes("--help")) process.stdout.write(SESSION_USAGE);
-    else process.exitCode = await sessionCli(process.argv.slice(2));
+    if (argv.length === 3 || argv.includes("--help")) process.stdout.write(SESSION_USAGE);
+    else process.exitCode = await sessionCli(argv.slice(2));
     return;
   }
   const { positionals, values } = parseArgs({
+    args: argv.slice(2),
     allowPositionals: true,
-    options: {
-      out: { type: "string" },
-      run: { type: "string" },
-      force: { type: "boolean" },
-      baseline: { type: "string" },
-      key: { type: "string" },
-      under: { type: "string" },
-      dismiss: { type: "string", multiple: true },
-      strict: { type: "boolean", default: false },
-      "max-pages": { type: "string", default: "200" },
-      idle: { type: "boolean", default: false },
-      gaps: { type: "string" },
-      "max-hours": { type: "string" },
-      "vendor-tags": { type: "string" },
-      "vendor-name": { type: "string" },
-      only: { type: "string" },
-      urls: { type: "string" },
-      "also-origin": { type: "string", multiple: true },
-      "exclude-path": { type: "string", multiple: true },
-      "navigation-delay": { type: "string" },
-      seed: { type: "string" },
-      criterion: { type: "string" },
-      name: { type: "string" },
-      organisation: { type: "string" },
-      model: { type: "string", default: "niet opgegeven" },
-      role: { type: "string" },
-      reference: { type: "string" },
-      previous: { type: "string" },
-      current: { type: "string" },
-      checked: { type: "string" },
-      round: { type: "string" },
-      "page-type": { type: "string" },
-      "page-types": { type: "string" },
-      again: { type: "string" },
-      reopen: { type: "boolean", default: false },
-      point: { type: "string" },
-      did: { type: "string" },
-      outcome: { type: "string" },
-      reason: { type: "string" },
-      defect: { type: "string" },
-      decision: { type: "string" },
-      what: { type: "string" },
-      date: { type: "string" },
-      alternative: { type: "string" },
-      "recorded-via": { type: "string" },
-      confirmation: { type: "string" },
-      summary: { type: "string" },
-      kind: { type: "string" },
-      attempted: { type: "string" },
-      brief: { type: "boolean", default: false },
-      concept: { type: "boolean", default: false },
-      fresh: { type: "boolean", default: false },
-      open: { type: "boolean", default: false },
-      "other-toolbox": { type: "boolean", default: false },
-      "allow-writes": { type: "boolean", default: false },
-      "test-environment": { type: "string", multiple: true },
-      "declared-by": { type: "string" },
-      "max-writes": { type: "string" },
-      origin: { type: "string" },
-      mailbox: { type: "string" },
-      "mail-link-origin": { type: "string", multiple: true },
-      session: { type: "string" },
-      timeout: { type: "string" },
-      url: { type: "string" },
-      from: { type: "string" },
-      steps: { type: "string" },
-      press: { type: "string" },
-      "at-once": { type: "string" },
-      "explore-minutes": { type: "string" },
-      groups: { type: "boolean", default: false },
-      json: { type: "boolean", default: false },
-      finding: { type: "string" },
-      at: { type: "string" },
-      rechecks: { type: "boolean", default: false },
-      embedded: { type: "boolean" },
-      site: { type: "string" },
-      toon: { type: "string" },
-      "toon-host": { type: "string" },
-      "toon-url": { type: "string" },
-      live: { type: "boolean", default: false },
-      preview: { type: "string" },
-      "replace-unseen": { type: "boolean", default: false },
-      format: { type: "string" },
-      help: { type: "boolean", short: "h" },
-    },
+    options: OPTIONS,
   });
   const [command, target] = positionals;
   if (command === "voiceover" && (values.help || !target)) {
@@ -403,7 +492,9 @@ async function main(): Promise<void> {
     return;
   }
   if (values.help || !command) {
-    process.stdout.write(USAGE);
+    // The help of the layer a command sits in: `loep audit gate --help` lists the steps of the investigation.
+    const layer = command === undefined ? null : (AUDIT_COMMANDS as readonly string[]).includes(command) ? AUDIT_USAGE : (DEV_COMMANDS as readonly string[]).includes(command) ? DEV_USAGE : null;
+    process.stdout.write(layer ?? USAGE);
     return;
   }
   // A run that was given a test environment at inventory may write there; every other run holds all writes back.
@@ -578,7 +669,7 @@ async function main(): Promise<void> {
       const { quick, quickDoneNl } = await import("./commands/quick.ts");
       const { QUICK_DEFAULT_PAGES } = await import("./lib/quick.ts");
       // --max-pages has the default of inventory; a quick measurement has a smaller one of its own.
-      const given = process.argv.includes("--max-pages") || process.argv.some((token) => token.startsWith("--max-pages="));
+      const given = argv.includes("--max-pages") || argv.some((token) => token.startsWith("--max-pages="));
       // For a pipeline the exit code says which of two things went wrong: 1 is the site (worse than the baseline, or a page of it not measured), 2 is the measurement itself.
       try {
         const { summary, comparison } = await quick({ url: target, run: quickRun, maxPages: given ? Number(values["max-pages"]) : QUICK_DEFAULT_PAGES, urlsFile: values.urls, baseline: values.baseline, dismiss: values.dismiss, strict: values.strict });
@@ -1058,6 +1149,8 @@ async function main(): Promise<void> {
 }
 
 main().catch((error: Error) => {
-  process.stderr.write(`loep: ${error.message}\n`);
+  // A refusal of a layer already says "loep audit kent ...", with the help under it: the prefix would repeat it.
+  const already = error.message.startsWith("loep ");
+  process.stderr.write(already ? `${error.message}\n` : `loep: ${error.message}\n`);
   process.exitCode = 1;
 });

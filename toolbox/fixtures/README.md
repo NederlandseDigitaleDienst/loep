@@ -13,9 +13,9 @@ just testsite --disruptions   # met storingen, zie "Storingen en blokkades"
 Daarna vanuit `toolbox/`:
 
 ```
-node src/cli.ts inventory http://127.0.0.1:4710/ --out runs/<naam>
-node src/cli.ts compare --run runs/<naam> --reference fixtures/reference-lindewaard.json --out <map>
-node src/cli.ts compare --findings tasks --run runs/<naam> --reference fixtures/reference-lindewaard.json
+node src/cli.ts audit inventory http://127.0.0.1:4710/ --out runs/<naam>
+node src/cli.ts dev compare --run runs/<naam> --reference fixtures/reference-lindewaard.json --out <map>
+node src/cli.ts dev compare --findings tasks --run runs/<naam> --reference fixtures/reference-lindewaard.json
 ```
 
 Voor Berkenveen is `reference-berkenveen.json` de referentie: geen enkel criterium hoort daar te worden afgekeurd, dus alles onder "alleen wij" is een valse melding of een gebrek dat er per ongeluk in zit.

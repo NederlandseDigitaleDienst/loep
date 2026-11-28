@@ -353,7 +353,7 @@ export async function toolStatus(browsers: BrowserVersions, browserInstalled: (n
       if (!available) hint = `installeer de browser: npx playwright install ${source.browser}`;
     } else if (source !== "toolbox" && "guest" in source) {
       available = await guestRunning();
-      if (!available) hint = "de virtuele Mac draait niet (loep voiceover start); zonder werkt de rest";
+      if (!available) hint = "de virtuele Mac draait niet (loep audit voiceover start); zonder werkt de rest";
     } else if (source !== "toolbox" && packageVersion(source.package) === "not installed") {
       available = false;
       hint = "draai npm ci in de toolbox";

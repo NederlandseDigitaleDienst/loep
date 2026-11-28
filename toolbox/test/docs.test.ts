@@ -5,6 +5,7 @@ import { dirname, join, normalize } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { EXPLORE_MAX_COMMANDS, EXPLORE_MAX_MINUTES } from "../src/commands/explore.ts";
+import { AUDIT_COMMANDS, HARNESS_COMMANDS, callName, cliCall, DEV_COMMANDS, NAMESPACES, STANDALONE_COMMANDS } from "../src/lib/commands.ts";
 import { MAX_RESWEEPS, MAX_RETURNS_TO_EXPLORER, SHEETS_PER_TASK } from "../src/commands/gate.ts";
 import { briefPending, BUDGETS, INSTRUMENT_FLOW, loadInstrumentIndex, PHASES, pointsToFinish, recordAttempts, skip, skipKindOf, skipped, skippedForOutage, TASK_FILES, unskip } from "../src/commands/instrument-tasks.ts";
 import { CEILINGS, EXTENSION, MEASURED_USE, REFERENCE_SITE_SIZE, WALK_STATES } from "../src/lib/budget.ts";
@@ -31,11 +32,11 @@ const LOGS = ["validatie/iteraties.md", "validatie/lessen.md"];
 /** The two texts that together have to name every command. */
 const COMMAND_REFERENCE = ["README.md", "docs/methode.md"];
 
-/** The commands of the toolbox: every case of the switch in cli.ts, and the one that is handled before it. */
-function cliCommands(source: string): string[] {
-  const cases = [...source.matchAll(/^\s+case "([a-z-]+)":/gm)].map((match) => match[1]!);
-  return [...new Set([...cases, "session"])];
-}
+/** The commands of the toolbox, wherever they sit: a step of an investigation, the tool for whoever works on loep, or one that stands alone. */
+const COMMANDS: string[] = [...AUDIT_COMMANDS, ...DEV_COMMANDS, ...HARNESS_COMMANDS, ...STANDALONE_COMMANDS];
+
+/** The commands cli.ts handles before it reads the rest of the line, or in a module of its own. */
+const HANDLED_ELSEWHERE = ["session", "calibrate", "variant", "compare-variants", "usage", ...HARNESS_COMMANDS, "meting"];
 
 /** The words that can follow `session`: the three that manage a session, and every command in one. `serve` is how the process starts itself and is no command for a reader. */
 const AFTER_SESSION = [...SESSION_MANAGEMENT.filter((word) => word !== "serve"), ...SESSION_COMMANDS];
@@ -47,14 +48,65 @@ const PROCEDURES = readdirSync(join(ROOT, "procedures")).filter((file) => file.e
  * What is wrong with the calls of the toolbox in one piece of code. The toolbox is called as
  * `cli.ts`, as the variable LOEP of a skill, as `{{cli}}` in a task, or as `loep` at the start
  * of a line: the installed name, or the short form a procedure writes for `session <command>`.
+ * A step is written with its layer in front: `audit tasks`, `dev compare`.
  */
 function wrongCalls(code: string): string[] {
   const problems: string[] = [];
-  for (const match of code.matchAll(/(?:\bLOEP|cli\.ts|\{\{cli\}\}) ([a-z][a-z-]*)/g)) if (!COMMANDS.includes(match[1]!)) problems.push(`"${match[0]}" is geen commando van de toolbox`);
+  for (const match of code.matchAll(/(?:\bLOEP|cli\.ts|\{\{cli\}\}) ([a-z][a-z-]*)(?: ([a-z][a-z-]*))?/g)) {
+    const first = match[1]!;
+    const second = match[2];
+    if (first === "session") continue;
+    if (first === "audit" || first === "dev") {
+      // A layer on its own asks for its help: `loep audit --help`. Anything else needs a command under it.
+      const after = code.slice(match.index + match[0].length);
+      if (second === undefined && /^\s*--help\b/.test(after)) continue;
+      if (second === undefined || !(NAMESPACES[first] as readonly string[]).includes(second)) problems.push(`"${match[0]}" is geen commando onder loep ${first}`);
+      continue;
+    }
+    if ((AUDIT_COMMANDS as readonly string[]).includes(first) || (DEV_COMMANDS as readonly string[]).includes(first)) problems.push(`"${match[0]}" heet nu loep ${callName(first)}: schrijf de laag ervoor`);
+    else if (!(STANDALONE_COMMANDS as readonly string[]).includes(first)) problems.push(`"${match[0]}" is geen commando van de toolbox`);
+  }
   // A command in a session is `session <command>`; the word after `session` has to be one that exists.
   for (const match of code.matchAll(/(?:\bLOEP|cli\.ts|\{\{cli\}\}|^\s*loep) session ([a-z][a-z-]*)/gm)) if (!AFTER_SESSION.includes(match[1]!)) problems.push(`"${match[0].trim()}" is geen commando in een sessie en niet start, stop of list`);
-  // Written small and at the start of a line it is a command in a session; elsewhere "loep" is the name of the toolbox in a sentence.
-  for (const match of code.matchAll(/^\s*loep ([a-z][a-z-]*)/gm)) if (match[1] !== "session" && !SESSION_COMMANDS.includes(match[1]!)) problems.push(`"${match[0].trim()}" is geen commando in een sessie`);
+  // Written small and at the start of a line it is a command in a session, or one of the few that stand alone; elsewhere "loep" is the name of the toolbox in a sentence.
+  for (const match of code.matchAll(/^\s*loep ([a-z][a-z-]*)/gm)) {
+    const word = match[1]!;
+    if (word === "audit" || word === "dev") {
+      // A layer on a line of its own names a command under it, or asks for its help.
+      const next = /^\s+([a-z][a-z-]*)/.exec(code.slice(match.index + match[0].length))?.[1];
+      if (next !== undefined && !(NAMESPACES[word] as readonly string[]).includes(next)) problems.push(`"${match[0].trim()} ${next}" is geen commando onder loep ${word}`);
+      continue;
+    }
+    // A word that is a step and a command in a session means two things: the short form has to choose.
+    if ((AUDIT_COMMANDS as readonly string[]).includes(word) && SESSION_COMMANDS.includes(word)) {
+      problems.push(`"${match[0].trim()}" is een stap van het onderzoek en een commando in een sessie: schrijf loep ${callName(word)} of loep session ${word}`);
+      continue;
+    }
+    // A word of the backlog stands at the top of the command line too: `loep run` is `loep run`.
+    const stands = word === "session" || (STANDALONE_COMMANDS as readonly string[]).includes(word) || (HARNESS_COMMANDS as readonly string[]).includes(word);
+    if (!stands && !SESSION_COMMANDS.includes(word)) problems.push(`"${match[0].trim()}" is geen commando in een sessie`);
+  }
+  // Inside a sentence too, `loep <word>` is a call of the toolbox when the word is a command. A step that
+  // is also a command in a session may stay short (`loep find`, `loep voiceover`); any other step carries
+  // its layer, also when the sentence runs on before it.
+  for (const match of code.matchAll(/\bloep ([a-z][a-z-]*)/g)) {
+    const word = match[1]!;
+    // A line that starts with it is the other rule's: one problem per call.
+    if (/^[ \t]*$/.test(code.slice(code.lastIndexOf("\n", match.index) + 1, match.index))) continue;
+    const step = (AUDIT_COMMANDS as readonly string[]).includes(word) || (DEV_COMMANDS as readonly string[]).includes(word);
+    if ((AUDIT_COMMANDS as readonly string[]).includes(word) && SESSION_COMMANDS.includes(word)) problems.push(`"${match[0]}" is een stap van het onderzoek en een commando in een sessie: schrijf loep ${callName(word)} of loep session ${word}`);
+    else if (step && !SESSION_COMMANDS.includes(word)) problems.push(`"${match[0]}" heet nu loep ${callName(word)}: schrijf de laag ervoor`);
+  }
+  return problems;
+}
+
+/** A call the code itself makes to the toolbox, outside a description: `cli.ts <command>`, `${cli} <command}`, `{{cli}} <command>`. It needs the layer too. */
+function unlayeredCalls(code: string): string[] {
+  const problems: string[] = [];
+  for (const match of code.matchAll(/(?:cli\.ts|\$\{cli\}|\{\{cli\}\})["'` ]+([a-z][a-z-]*)/g)) {
+    const word = match[1]!;
+    if ((AUDIT_COMMANDS as readonly string[]).includes(word) || (DEV_COMMANDS as readonly string[]).includes(word)) problems.push(`"${match[0].replace(/\s+/g, " ")}" mist de laag: ${callName(word)}`);
+  }
   return problems;
 }
 
@@ -79,11 +131,23 @@ function section(text: string, heading: string): string {
   return end === -1 ? rest : rest.slice(0, end);
 }
 
-const COMMANDS = cliCommands(read("toolbox/src/cli.ts"));
 const TASKS = justTasks(read("justfile"));
 
-test("the reading of cli.ts and the justfile finds the commands and the tasks", () => {
-  for (const command of ["inventory", "check-site", "documents", "diff", "verify", "session"]) assert.ok(COMMANDS.includes(command), `commando ${command} niet gevonden in cli.ts`);
+test("the code that calls the toolbox itself carries the layer, like the task files do", () => {
+  // The descriptions were the visible half. The backlog, the workflow of a run and the recipes write their own command lines, and those went stale unseen.
+  const callers = ["skills/nldd-a11y-audit/onderzoek.workflow.js", ...readdirSync(join(ROOT, "toolbox/src/harness")).filter((file) => file.endsWith(".ts")).map((file) => `toolbox/src/harness/${file}`), "justfile"];
+  for (const file of callers) assert.deepEqual(unlayeredCalls(read(file)), [], file);
+});
+
+test("the table says where every command sits, and the switch of cli.ts handles exactly those and no others", () => {
+  const cases = [...read("toolbox/src/cli.ts").matchAll(/^\s+case "([a-z-]+)":/gm)].map((match) => match[1]!);
+  assert.deepEqual([...new Set(cases)].sort(), [...COMMANDS].filter((command) => !HANDLED_ELSEWHERE.includes(command)).sort(), "de tabel in lib/commands.ts en de switch in cli.ts noemen niet dezelfde commando's");
+  for (const command of HANDLED_ELSEWHERE) assert.ok(COMMANDS.includes(command), `${command} wordt vóór de switch afgehandeld en staat niet in de tabel`);
+  for (const command of ["inventory", "check-site", "documents", "diff", "verify", "session"]) assert.ok(COMMANDS.includes(command), `commando ${command} niet gevonden in de tabel`);
+  assert.equal(callName("inventory"), "audit inventory");
+  assert.equal(callName("diff"), "dev diff");
+  assert.equal(callName("quick"), "quick");
+  assert.equal(cliCall("/x/cli.ts", "check-gate", "--run", "/r"), "node /x/cli.ts audit check-gate --run /r");
   for (const task of ["install", "sweep", "report", "testsite-build"]) assert.ok(TASKS.includes(task), `taak ${task} niet gevonden in de justfile`);
   assert.ok(!TASKS.includes("toolbox"), "een variabele van de justfile is als taak gelezen");
   assert.deepEqual(justTasks("a := 1\nrun x *flags:\n    echo\n\nb-c:\n"), ["run", "b-c"]);
@@ -96,8 +160,10 @@ test("a command in a session is session <command>, and no such command is called
   assert.ok(!COMMANDS.includes("loep"), "loep is de naam van de toolbox en geen commando ervan");
   // The old form is gone, and the reading of calls sees it, in each way the toolbox is called.
   for (const old of ["node toolbox/src/cli.ts loep look", "LOEP loep open P01", "node {{cli}} loep <commando>", "loep loep look"]) assert.equal(wrongCalls(old).length, 1, old);
-  for (const wrong of ["LOEP session klik 1", "loep session serve", "node {{cli}} session begin", "loep inventory", "  loep klik 3"]) assert.equal(wrongCalls(wrong).length, 1, wrong);
-  for (const right of ["LOEP session open P01", "loep session look", "loep session contrast 3", "node {{cli}} session start --run x", "LOEP session list --run RUN", "loep contrast 3", 'loep() { node {{cli}} session "$@" --run x; }', "LOEP inventory <url>"]) assert.deepEqual(wrongCalls(right), [], right);
+  // A step is written with its layer in front; without one it is an old name the description still has to change.
+  for (const flat of ["LOEP inventory <url>", "node {{cli}} gate --run x", "cli.ts procedures"]) assert.equal(wrongCalls(flat).length, 1, flat);
+  for (const wrong of ["LOEP session klik 1", "loep session serve", "node {{cli}} session begin", "LOEP audit klik", "LOEP audit quick", "LOEP dev inventory", "loep inventory", "  loep klik 3", "loep contrast 3"]) assert.equal(wrongCalls(wrong).length, 1, wrong);
+  for (const right of ["LOEP audit inventory <url>", "LOEP dev procedures", "node {{cli}} audit gate --run x", "LOEP quick <url>", "loep audit tasks", "LOEP session open P01", "loep session look", "loep session contrast 3", "node {{cli}} session start --run x", "LOEP session list --run RUN", 'loep() { node {{cli}} session "$@" --run x; }']) assert.deepEqual(wrongCalls(right), [], right);
 });
 
 test("every task and every command a description calls exists", () => {
@@ -132,8 +198,11 @@ test("where the README and the method list the steps, every name written as code
   const problems: string[] = [];
   for (const [file, heading] of [["README.md", "Hoe het werkt"], ["docs/methode.md", "De keten"], ["docs/architectuur.md", "2. De keten"]] as const) {
     for (const code of codeOf(section(read(file), heading))) {
-      const word = /^([a-z][a-z-]*)(?: --[a-z-]+)*$/.exec(code.trim())?.[1];
-      if (word && !COMMANDS.includes(word)) problems.push(`${file}, sectie "${heading}": \`${code}\` is geen commando van de toolbox; bestaat het niet meer, haal het weg, en is het iets anders, schrijf het dan zonder code-opmaak`);
+      const trimmed = code.trim();
+      const alone = /^([a-z][a-z-]*)(?: --[a-z-]+)*$/.exec(trimmed);
+      const layered = /^(audit|dev) ([a-z][a-z-]*)(?: --[a-z-]+)*$/.exec(trimmed);
+      const wrong = alone !== null ? !COMMANDS.includes(alone[1]!) : layered !== null && !(NAMESPACES[layered[1] as keyof typeof NAMESPACES] as readonly string[]).includes(layered[2]!);
+      if (wrong) problems.push(`${file}, sectie "${heading}": \`${code}\` is geen commando van de toolbox; bestaat het niet meer, haal het weg, en is het iets anders, schrijf het dan zonder code-opmaak`);
     }
   }
   assert.deepEqual(problems, []);
@@ -319,10 +388,10 @@ async function runWorkflow(atOnce: number | undefined, states: WorkflowState[], 
       if (trouble === "throw") throw new Error(QUOTA);
       if (trouble === "null") return null;
       // The toolbox as the commands of the stand change it: a skip, and the attempts of the agents that came back.
-      for (const match of prompt.matchAll(/ skip --run RUN (--page-type (\S+)|--criterion (\S+)(?: --round (final|finish))?) --kind "geen geldig resultaat"/g)) {
+      for (const match of prompt.matchAll(/ audit skip --run RUN (--page-type (\S+)|--criterion (\S+)(?: --round (final|finish))?) --kind "geen geldig resultaat"/g)) {
         toolbox.skips.push(match[2] ? `walks:${match[2]}` : `${match[4] === "final" ? "verifiers" : match[4] === "finish" ? "finishers" : "judges"}:${match[3]}`);
       }
-      for (const key of /tasks --run RUN --attempted (\S+)/.exec(prompt)?.[1]?.split(",") ?? []) toolbox.attempts[key] = (toolbox.attempts[key] ?? 0) + 1;
+      for (const key of /audit tasks --run RUN --attempted (\S+)/.exec(prompt)?.[1]?.split(",") ?? []) toolbox.attempts[key] = (toolbox.attempts[key] ?? 0) + 1;
       const state = states[round++] ?? { phase: "done" };
       const open = (phase: WorkflowPhase) => (state[phase] ?? []).filter((id) => !toolbox.skips.includes(`${phase}:${id}`)).map((id) => ({ id, attempts: toolbox.attempts[`${phase}:${id}`] ?? 0 }));
       return { phase: state.phase, walks: open("walks"), judges: open("judges"), verifiers: open("verifiers"), finishers: open("finishers"), ...(state.siteOutage ? { siteOutage: state.siteOutage } : {}), ...(state.again ? { again: state.again } : {}), ...(state.sendingLow ? { sendingLow: state.sendingLow } : {}), ...(state.voiceover ? { voiceover: state.voiceover } : {}) };
@@ -365,8 +434,8 @@ test("the workflow keeps atOnce agents running: a new one starts as soon as one 
   // The phases stay apart: no judge starts before the last walk is done.
   assert.ok(flow.position(taskOf("walks", "t0"), "end") < flow.position(taskOf("judges", "1.1.0"), "start"));
   // The stand reads out ids only, and records the attempts of the agents that came back: the toolbox counts them.
-  assert.match(flow.stands[0]!, /pending --run RUN --brief/);
-  assert.match(flow.stands[1]!, /tasks --run RUN --attempted walks:t\d/);
+  assert.match(flow.stands[0]!, /audit pending --run RUN --brief/);
+  assert.match(flow.stands[1]!, /audit tasks --run RUN --attempted walks:t\d/);
   for (const id of walks) assert.equal(flow.toolbox.attempts[`walks:${id}`], 1);
   assert.deepEqual(flow.result.skipped, []);
   assert.equal(flow.result.paused, null);
@@ -399,7 +468,7 @@ test("the workflow runs the finishing round as a fourth phase, and goes straight
   const stuck = await runWorkflow(2, [{ phase: "finishers", finishers: ["1.3.4"] }, { phase: "finishers", finishers: ["1.3.4"] }, { phase: "finishers", finishers: ["1.3.4"] }, { phase: "done" }]);
   assert.equal(stuck.started(taskOf("finishers", "1.3.4")), 2);
   assert.deepEqual(stuck.result.skipped, ["finishers:1.3.4"]);
-  assert.match(stuck.stands[3]!, /1\. node CLI skip --run RUN --criterion 1\.3\.4 --round finish --kind "geen geldig resultaat" --reason /);
+  assert.match(stuck.stands[3]!, /1\. node CLI audit skip --run RUN --criterion 1\.3\.4 --round finish --kind "geen geldig resultaat" --reason /);
   // No criterion was left open by the evaluation itself: the toolbox says done after the verifiers, and no agent of the round starts.
   const without = await runWorkflow(2, [{ phase: "verifiers", verifiers: ["1.3.4", "1.4.4"] }, { phase: "done" }]);
   assert.deepEqual(without.result.history.map((entry) => entry.phase), ["verifiers", "done"]);
@@ -416,7 +485,7 @@ test("the workflow tries a task twice and then has it skipped, as before the poo
   assert.deepEqual(flow.result.skipped, ["walks:zoek"]);
   assert.deepEqual(flow.toolbox.attempts, { "walks:zoek": 2, "walks:start": 1 }, "the run holds the attempts");
   assert.ok(!flow.stands[2]!.includes(" skip "), "the round that finds it open for the third time does not skip yet");
-  assert.match(flow.stands[3]!, /1\. node CLI skip --run RUN --page-type zoek --kind "geen geldig resultaat" --reason /, "the next round begins with the skip");
+  assert.match(flow.stands[3]!, /1\. node CLI audit skip --run RUN --page-type zoek --kind "geen geldig resultaat" --reason /, "the next round begins with the skip");
   assert.equal(flow.result.last, "done");
 });
 
@@ -531,7 +600,7 @@ test("an outage of the site pauses the workflow like one of the model: no agent 
 
   // Started again once the site answers: what got "niet bereikbaar" before gets a new finishing round, once per start.
   const back = await runWorkflow(2, [{ phase: "done", again: ["2.4.3", "3.3.1"] }, { phase: "finishers", finishers: ["2.4.3", "3.3.1"] }, { phase: "done", again: ["2.4.3"] }]);
-  assert.match(back.stands[1]!, /tasks --run RUN --again 2\.4\.3,3\.3\.1\n/);
+  assert.match(back.stands[1]!, /audit tasks --run RUN --again 2\.4\.3,3\.3\.1\n/);
   assert.ok(!back.stands[0]!.includes("--again") && !back.stands[2]!.includes("--again"));
   for (const id of ["2.4.3", "3.3.1"]) assert.equal(back.started(taskOf("finishers", id)), 1);
   assert.deepEqual(back.result.history.map((entry) => entry.phase), ["done", "finishers", "done"]);

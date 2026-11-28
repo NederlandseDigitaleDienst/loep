@@ -1,7 +1,6 @@
 # Taken voor loep. Een onderzoek in volgorde: install, explore, (verkenner-agent), sweep, tasks, (agents), report, (weegagent), render. De namen volgen de commando's van de toolbox.
 
 toolbox := justfile_directory() / "toolbox"
-lus := justfile_directory() / "lus"
 cli := "node " + toolbox / "src/cli.ts"
 
 # Toon de beschikbare taken
@@ -76,18 +75,18 @@ doctor:
     echo "Optioneel:"
     # A real screen reader in a virtual Mac: never missing, a run works the same without it.
     vm="${LOEP_VOICEOVER_VM:-loep-voiceover}"
-    if ! command -v lume >/dev/null; then printf '  niet ingericht  %s\n                  %s\n' "virtuele Mac met VoiceOver (loep voiceover): lume staat niet op deze machine" "alleen nodig voor een echte schermlezer naast de nagebootste; zie docs/voiceover.md en just voiceover-setup"
-    elif ! lume get "$vm" >/dev/null 2>&1; then printf '  niet ingericht  %s\n                  %s\n' "virtuele Mac met VoiceOver (loep voiceover): lume $(eerste lume --version) is er, de virtuele Mac $vm niet" "just voiceover-setup"
+    if ! command -v lume >/dev/null; then printf '  niet ingericht  %s\n                  %s\n' "virtuele Mac met VoiceOver (loep audit voiceover): lume staat niet op deze machine" "alleen nodig voor een echte schermlezer naast de nagebootste; zie docs/voiceover.md en just voiceover-setup"
+    elif ! lume get "$vm" >/dev/null 2>&1; then printf '  niet ingericht  %s\n                  %s\n' "virtuele Mac met VoiceOver (loep audit voiceover): lume $(eerste lume --version) is er, de virtuele Mac $vm niet" "just voiceover-setup"
     else
-      ok "virtuele Mac met VoiceOver (loep voiceover): $vm, lume $(eerste lume --version)"
+      ok "virtuele Mac met VoiceOver (loep audit voiceover): $vm, lume $(eerste lume --version)"
       # A running guest the host keeps this process from: said here, before a start waits for it.
-      if {{cli}} voiceover status 2>/dev/null | grep -q '"refused":'; then printf '  LET OP     %s\n             %s\n' "de virtuele Mac $vm draait, maar is vanuit dit proces niet bereikbaar: de host weigert het verkeer (No route to host)" "kijk onder Systeeminstellingen > Privacy en beveiliging > Lokaal netwerk of het programma waarin je dit draait daar aan staat"; fi
+      if {{cli}} audit voiceover status 2>/dev/null | grep -q '"refused":'; then printf '  LET OP     %s\n             %s\n' "de virtuele Mac $vm draait, maar is vanuit dit proces niet bereikbaar: de host weigert het verkeer (No route to host)" "kijk onder Systeeminstellingen > Privacy en beveiliging > Lokaal netwerk of het programma waarin je dit draait daar aan staat"; fi
     fi
     echo "Een run legt zelf vast waarmee is gemeten; zie het rapport onder Gereedschap en Herleidbaarheid. TE OUD staat er alleen waar de toolbox aantoonbaar een versie nodig heeft; van de andere hulpprogramma's is geen laagste versie bekend."
 
-# Richt de optionele virtuele Mac met VoiceOver in (loep voiceover): controleert lume en de virtuele Mac, zet in de virtuele Mac wat zonder mens kan en zegt per stap wat je zelf moet doen. Installeert niets op deze machine; zie docs/voiceover.md
+# Richt de optionele virtuele Mac met VoiceOver in (loep audit voiceover): controleert lume en de virtuele Mac, zet in de virtuele Mac wat zonder mens kan en zegt per stap wat je zelf moet doen. Installeert niets op deze machine; zie docs/voiceover.md
 voiceover-setup:
-    {{cli}} voiceover setup
+    {{cli}} audit voiceover setup
 
 # Draai de unittests
 test *flags:
@@ -99,33 +98,21 @@ test-shard i n:
 
 # Draai alleen de tests die geen browser starten: een paar seconden, voor tussendoor en voor de snelle controle bij een push
 test-quick:
-    cd {{toolbox}} && node --test test/compare-findings.test.ts test/contrast.test.ts test/core.test.ts test/defects.test.ts test/docs.test.ts test/estimate.test.ts test/release.test.ts test/seal-os-metadata.test.ts test/searchbody.test.ts test/extractors.test.ts test/feedback.test.ts test/instrument-tasks.test.ts test/origins.test.ts test/portrait.test.ts test/render.test.ts test/sequence.test.ts test/statement.test.ts test/sweepstamp.test.ts test/timing.test.ts test/atonce.test.ts test/verdict.test.ts test/voiceover.test.ts test/again.test.ts test/raise-budget.test.ts test/sweep-check.test.ts test/test-shard.test.ts test/answer-to-file.test.ts test/report-html.test.ts test/weighing.test.ts test/export.test.ts test/quick.test.ts test/rule-register.test.ts test/run-sheet.test.ts test/write-grants.test.ts test/executive-summary.test.ts
+    cd {{toolbox}} && node --test test/compare-findings.test.ts test/contrast.test.ts test/core.test.ts test/defects.test.ts test/docs.test.ts test/estimate.test.ts test/release.test.ts test/seal-os-metadata.test.ts test/searchbody.test.ts test/extractors.test.ts test/feedback.test.ts test/instrument-tasks.test.ts test/origins.test.ts test/portrait.test.ts test/render.test.ts test/sequence.test.ts test/statement.test.ts test/sweepstamp.test.ts test/timing.test.ts test/atonce.test.ts test/verdict.test.ts test/voiceover.test.ts test/again.test.ts test/raise-budget.test.ts test/sweep-check.test.ts test/test-shard.test.ts test/answer-to-file.test.ts test/report-html.test.ts test/weighing.test.ts test/export.test.ts test/quick.test.ts test/rule-register.test.ts test/run-sheet.test.ts test/write-grants.test.ts test/executive-summary.test.ts test/site-args.test.ts test/harness/dispatch.test.ts test/harness/backlog.test.ts test/harness/meting.test.ts test/harness/regie.test.ts test/harness/state.test.ts test/harness/version.test.ts
 
 # Controleer de types
 check:
     cd {{toolbox}} && npx tsc --noEmit
 
-# Installeer de pakketten van lus
-lus-install:
-    cd {{lus}} && npm ci
-
-# De tests van lus: de backlog, de stand, het slot en de loper met een nep-regie
-lus-test:
-    cd {{lus}} && node --test 'test/**/*.test.ts'
-
-# Controleer de types van lus
-lus-check:
-    cd {{lus}} && npx tsc --noEmit
-
 # Controleer de procedurecatalogus
 procedures:
-    {{cli}} procedures
+    {{cli}} dev procedures
 
 # Vind de pagina's van een site en schrijf de opdracht voor de verkenner; start daarna één agent met <run>/explore/verken.md
 explore url run:
-    {{cli}} inventory {{url}} --out {{run}}
-    {{cli}} sample --run {{run}}
-    {{cli}} explore --run {{run}}
+    {{cli}} audit inventory {{url}} --out {{run}}
+    {{cli}} audit sample --run {{run}}
+    {{cli}} audit explore --run {{run}}
 
 # Een snelle meting zonder taalmodel, voor een pipeline: de regelsets in licht en donker, reflow en zoom, op de pagina's in --urls <bestand> of op een kleine steekproef. Met --baseline <summary.json> vergelijkt het met een eerdere meting en faalt het als iets slechter is. Los van een onderzoek: explore weigert zo'n run
 quick url run *flags:
@@ -137,45 +124,45 @@ quick-key run:
 
 # Na de verkenner: controleer het sitemodel, trek de steekproef opnieuw (vensters van derden vallen eruit), meet alles, ook de documenten, en vraag de poort. Een tweede keer meet alleen wat veranderd is; met --fresh alles opnieuw. Met --at-once <n> meet de veegronde n pagina's tegelijk, als de eigenaar van de site meer agents toestaat: nooit meer dan het sessieproces van de run toelaat, met dezelfde tijd tussen twee navigaties
 sweep run *flags:
-    {{cli}} check-site --run {{run}}
-    {{cli}} sample --run {{run}}
-    {{cli}} sweep --run {{run}} {{flags}}
-    -{{cli}} gate --run {{run}}
+    {{cli}} audit check-site --run {{run}}
+    {{cli}} audit sample --run {{run}}
+    {{cli}} audit sweep --run {{run}} {{flags}}
+    -{{cli}} audit gate --run {{run}}
 
 # Zet de opdrachten voor de agents klaar en zeg welke nog open staan (rondgangen, beoordelingen, verificaties)
 tasks run:
-    {{cli}} tasks --run {{run}}
-    {{cli}} pending --run {{run}}
+    {{cli}} audit tasks --run {{run}}
+    {{cli}} audit pending --run {{run}}
 
 # Zeg in welke fase een run is, zonder iets te schrijven
 status run:
-    {{cli}} pending --run {{run}}
+    {{cli}} audit pending --run {{run}}
 
 # Reken de verwachte duur per onderdeel en in totaal uit, naast wat de run al heeft gemeten. Kan vanaf de inventaris en zegt halverwege wat er nog komt; schrijft niets. Met --at-once <n> voor het aantal agents tegelijk en de pagina's tegelijk in de veegronde, --json voor wie verder rekent
 estimate run *flags:
-    {{cli}} estimate --run {{run}} {{flags}}
+    {{cli}} audit estimate --run {{run}} {{flags}}
 
 # Verzamel de open punten van een of meer runs per soort en per criterium: de werklijst voor wie de veegronde verbetert. Schrijft niets; met --json voor wie verder rekent
 gaps run *meer:
-    {{cli}} gaps --run {{run}} {{meer}}
+    {{cli}} audit gaps --run {{run}} {{meer}}
 
 # Schrijf voor elk criterium dat open bleef door loep zelf een tekst voor een issue op de repository van loep, zonder adres of naam van de site. Verstuurt niets; met --out <map> een bestand per tekst, --json voor wie verder rekent
 feedback run *flags:
-    {{cli}} feedback --run {{run}} {{flags}}
+    {{cli}} audit feedback --run {{run}} {{flags}}
 
 # Zet het rapport van een run als voorbeeld op de site van loep: het fragment komt tussen <!-- rapport --> en <!-- /rapport --> in site/rapport/index.html, in de kop en voet van de site
 site-rapport run:
     #!/usr/bin/env sh
     set -e
     fragment="$(mktemp)"
-    {{cli}} render --run "{{run}}" --embedded > "$fragment"
+    {{cli}} audit render --run "{{run}}" --embedded > "$fragment"
     node -e 'const fs = require("node:fs"); const [page, fragment] = process.argv.slice(1); const html = fs.readFileSync(page, "utf8"); const start = "<!-- rapport -->\n", end = "<!-- /rapport -->"; const from = html.indexOf(start), to = html.indexOf(end); if (from < 0 || to < from) throw new Error(page + " heeft geen <!-- rapport --> en <!-- /rapport -->"); fs.writeFileSync(page, html.slice(0, from + start.length) + fs.readFileSync(fragment, "utf8") + html.slice(to));' "{{justfile_directory()}}/site/rapport/index.html" "$fragment"
     rm -f "$fragment"
     echo "site/rapport/index.html bijgewerkt"
 
 # Maak de evaluatie van een run waarvan alle opdrachten klaar zijn, en de opdracht voor de agent die de bevindingen weegt. Het rapport maakt daarna just render
 report run naam organisatie model:
-    {{cli}} evaluate --run {{run}} --name "{{naam}}" --organisation "{{organisatie}}" --model "{{model}}"
+    {{cli}} audit evaluate --run {{run}} --name "{{naam}}" --organisation "{{organisatie}}" --model "{{model}}"
     @echo "Start nu één agent met {{run}}/tasks/weeg/taak.md: hij legt per bevinding vast wie ze hindert, en daaruit volgt de ernst. Draai daarna just render {{run}}. Zonder weging houdt elke bevinding de ernst van haar beoordelaar, en het rapport zegt dat."
 
 # Pas de weging toe als de weegagent een antwoord schreef, maak het rapport en verzegel de run. Is de run al afgetekend, dan maakt het alleen het afgetekende rapport opnieuw: wegen en verzegelen zou de handtekening laten vervallen
@@ -183,23 +170,23 @@ render run:
     #!/usr/bin/env sh
     set -e
     if [ -f "{{run}}/signed/signature.json" ]; then
-      {{cli}} render --run "{{run}}"
+      {{cli}} audit render --run "{{run}}"
       echo "De run is afgetekend: alleen het afgetekende rapport in {{run}}/signed/ is opnieuw gemaakt. Er is niet gewogen en niet verzegeld."
       exit 0
     fi
-    if [ -f "{{run}}/verdicts/weging.json" ]; then {{cli}} check-weigh --run "{{run}}"; fi
-    {{cli}} weigh --run "{{run}}"
-    {{cli}} render --run "{{run}}"
-    {{cli}} seal --run "{{run}}"
-    echo "Rapport: {{run}}/report/rapport.pdf, rapport-kort.pdf (zonder bijlage A) en rapport.md. Het is een verzegeld concept tot iemand het leest en tekent met: {{cli}} sign --run {{run}} --name ... --role ... --organisation ... Daarna maakt just render {{run}} het afgetekende rapport in {{run}}/signed/"
+    if [ -f "{{run}}/verdicts/weging.json" ]; then {{cli}} audit check-weigh --run "{{run}}"; fi
+    {{cli}} audit weigh --run "{{run}}"
+    {{cli}} audit render --run "{{run}}"
+    {{cli}} audit seal --run "{{run}}"
+    echo "Rapport: {{run}}/report/rapport.pdf, rapport-kort.pdf (zonder bijlage A) en rapport.md. Het is een verzegeld concept tot iemand het leest en tekent met: {{cli}} audit sign --run {{run}} --name ... --role ... --organisation ... Daarna maakt just render {{run}} het afgetekende rapport in {{run}}/signed/"
 
 # Leg twee evaluaties van dezelfde site naast elkaar (opgelost, gebleven, nieuw) en schrijf het werkdocument verschil.md in de map uit
 diff vorige nieuwe uit:
-    {{cli}} diff --previous {{vorige}} --current {{nieuwe}} --out {{uit}}
+    {{cli}} dev diff --previous {{vorige}} --current {{nieuwe}} --out {{uit}}
 
 # IJk de instrumenten op de testgevallen van de ACT-regels van W3C: per instrument en per regel terecht gevonden, gemist en onterecht gemeld. Geen stap van een onderzoek. Haalt de gevallen één keer op naar een map buiten de repository en serveert ze lokaal; de uitkomst komt in validatie/ijkset/<datum>
 calibrate *flags:
-    {{cli}} calibrate {{flags}}
+    {{cli}} dev calibrate {{flags}}
 
 # Maak het regelregister: per regel van elke regelset wat de ijkmeting en afgeronde onderzoeken erover zeggen. Met --runs <bestand> een lijst mappen van afgeronde onderzoeken, één per regel; zonder alleen de ijkmeting. Geen stap van een onderzoek en niets leest het; de uitkomst komt in validatie/regelregister/<datum>
 rule-register *flags:
@@ -211,7 +198,7 @@ reuse:
 
 # Reken alle hashes van een run na
 verify run:
-    {{cli}} verify --run {{run}}
+    {{cli}} audit verify --run {{run}}
 
 # Serveer de testsite met ingebouwde gebreken en de schone tweeling (poorten 4710, 4711 en 4712)
 testsite *args:

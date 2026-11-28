@@ -12,6 +12,7 @@ import { makeWorkDir } from "../lib/workdir.ts";
 import { siteLabel } from "../lib/origins.ts";
 import { textHasTerm } from "../lib/searchterm.ts";
 import { acceptedGapFor, approvedReads, frameAddress, literalSearchTermNl, NOT_OPENED_ON_PAGE_TYPE, POSTCONDITION_NOT_HELD_NL, SEARCH_TERM_PLACEHOLDER, notOpenedAdviceNl, pageTypesToCheck, readSiteModel, REVIEW_MISSING, searchTermForRun, sendsToCandidates, sendsToReplayProblem, SITE_CHECK_FILE, SITE_MODEL_FILE, validateSiteModel, withRunTerms, type ModelContext, type PageType, type Postcondition, type SiteCheck, type SiteModel } from "../lib/sitemodel.ts";
+import { cliCall } from "../lib/commands.ts";
 import { LOOK_COMMANDS } from "../lib/verdict.ts";
 import { readObservation } from "../session/observations.ts";
 import { holds, loadRecipes, MAX_RECIPE_STEPS, replayEnv, replayFromClean, replaySteps } from "../session/recipe.ts";
@@ -148,7 +149,7 @@ export async function explore(runDir: string, options: ExploreOptions = {}): Pro
     cli,
     context: join(absoluteRun, contextPath),
     output: join(absoluteRun, SITE_MODEL_FILE),
-    check: `node ${cli} check-site --run ${absoluteRun}`,
+    check: cliCall(cli, "check-site", "--run", absoluteRun),
     session,
     workDir: await makeWorkDir(runDir, session),
     workName: session,

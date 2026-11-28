@@ -3,19 +3,19 @@ import { appendFileSync, chmodSync, existsSync, mkdirSync, renameSync } from "no
 import { join } from "node:path";
 import type { Site } from "./backlog.ts";
 import { freeGb, MIN_FREE_GB } from "./doctor.ts";
-import { homeDir, reportsDir, runDirFor, siteDir, stateDir, toolboxCli } from "./paths.ts";
+import { cliArgs, homeDir, reportsDir, runDirFor, siteDir, stateDir, toolboxCli } from "./paths.ts";
 import { continueNl, regieArgs, regieEnv, regiePrompt } from "./regie.ts";
 import { isSealed, readQuestion, runSnapshot, startRegie } from "./run.ts";
 import { readState, regieRuns, siteState, updateSite, type SiteState } from "./state.ts";
 import { checkoutVersion, sameVersion, versionNl } from "./version.ts";
 
 /*
- * One site, one regie. The state is written before the regie starts, so a killed lus still says what
+ * One site, one regie. The state is written before the regie starts, so a killed loep still says what
  * was running, and again when it stops, with what it left behind. What the run holds decides the
  * phase, not the exit code of the regie: a regie can stop cleanly with a question or a report.
  *
  * A regie can also stop with nothing: it reports that the explorer is at work and ends its turn. A
- * `claude -p` then simply ends. That is a half-done run and not a failure of loep, so lus starts the
+ * `claude -p` then simply ends. That is a half-done run and not a failure of loep, so loep starts the
  * next turn itself, as long as the run grew and the count stays under MAX_CONTINUES.
  */
 
@@ -45,10 +45,10 @@ export const lockPath = (): string => join(stateDir(), "run.lock");
 /** What is wrong with the free space, or null when a run may begin. */
 export function spaceProblemNl(free: number | null): string | null {
   // The floor can be moved for a machine that is tight and whose owner watches it; the tests set it to zero.
-  const given = Number(process.env["LUS_MIN_FREE_GB"] ?? MIN_FREE_GB);
+  const given = Number(process.env["LOEP_MIN_FREE_GB"] ?? MIN_FREE_GB);
   // A floor that is no number would make every comparison false, and so be no floor.
   const floor = Number.isFinite(given) ? given : MIN_FREE_GB;
-  return free !== null && free < floor ? `er is ${free} GB vrij; onder ${floor} GB begint lus geen run. Maak ruimte, of zie lus doctor` : null;
+  return free !== null && free < floor ? `er is ${free} GB vrij; onder ${floor} GB begint loep geen run. Maak ruimte, of zie loep doctor` : null;
 }
 
 /** The run folder of today, or the next one when today already has one: a second run is not the first. */
@@ -63,13 +63,13 @@ function freeRunDir(slug: string): string {
 
 /**
  * The report, out of the run: loep copies it to the reports folder under a name with the site and the
- * day, and lus passes the slug, because a report of 127.0.0.1:4710 says less than one of lindewaard. A
+ * day, and loep passes the slug, because a report of 127.0.0.1:4710 says less than one of lindewaard. A
  * run without an evaluation has nothing to hand out, and a handout that fails is said in the log and
  * not a reason to call a sealed run a failure.
  */
 export function handOut(slug: string, run: string): string[] {
   if (!existsSync(join(run, "evaluation.json"))) return [];
-  const result = spawnSync("node", [toolboxCli, "handout", "--run", run, "--out", reportsDir(), "--name", slug], { encoding: "utf8" });
+  const result = spawnSync("node", cliArgs(toolboxCli, "handout", "--run", run, "--out", reportsDir(), "--name", slug), { encoding: "utf8" });
   if (result.status !== 0) return [];
   return result.stdout.split("\n").filter((line) => line.startsWith("/"));
 }
@@ -91,11 +91,11 @@ export async function runSite(options: SiteRunOptions): Promise<SiteState> {
   // The transcript holds everything the regie saw, also what a command printed; nobody else on the machine reads it.
   chmodSync(stateDir(), 0o700);
   const recorded = siteState(readState(statePath()), site.slug);
-  // A lus that was killed with a signal it cannot catch leaves its regie running. A second start would
+  // A loep that was killed with a signal it cannot catch leaves its regie running. A second start would
   // put a second regie in the same run, and both would write the same evidence.
   if (regieRuns(recorded)) {
     throw new Error(
-      `de regie van ${site.slug} loopt nog (proces ${String(recorded.regiePid)}), ook al is lus zelf weg. Wacht tot die stopt, of stop hem met: kill ${String(recorded.regiePid)}. Daarna gaat lus run --only ${site.slug} verder in dezelfde run`,
+      `de regie van ${site.slug} loopt nog (proces ${String(recorded.regiePid)}), ook al is loep zelf weg. Wacht tot die stopt, of stop hem met: kill ${String(recorded.regiePid)}. Daarna gaat loep run --only ${site.slug} verder in dezelfde run`,
     );
   }
   // A run that is gone from disk is no run to go on with: what is left is a new one, in this version.
@@ -105,7 +105,7 @@ export async function runSite(options: SiteRunOptions): Promise<SiteState> {
   // a second version on top would mix evidence that belongs to different code.
   const version = checkoutVersion();
   if (known.version !== null && !sameVersion(known.version, version)) {
-    throw new Error(`${site.slug} is begonnen in ${versionNl(known.version)} en deze checkout is ${versionNl(version)}; maak de run af in de versie waarin hij begon, of begin een nieuwe run: lus run --only ${site.slug} --new`);
+    throw new Error(`${site.slug} is begonnen in ${versionNl(known.version)} en deze checkout is ${versionNl(version)}; maak de run af in de versie waarin hij begon, of begin een nieuwe run: loep run --only ${site.slug} --new`);
   }
   const run = fresh ? freeRunDir(site.slug) : known.run!;
   mkdirSync(run, { recursive: true });
@@ -123,9 +123,10 @@ export async function runSite(options: SiteRunOptions): Promise<SiteState> {
     humanNl: null,
     ...(fresh ? { continues: 0, handouts: [] } : {}),
   });
-  const log = (message: string): void => appendFileSync(join(dir, "lus.log"), `${new Date().toISOString()} ${message}\n`, { mode: 0o600 });
+  // The log is appended to, never restarted: it is the history of the site, not of one start.
+  const log = (message: string): void => appendFileSync(join(dir, "loep.log"), `${new Date().toISOString()} ${message}\n`, { mode: 0o600 });
   // A run that is already there goes on from where it stands, also when nobody says what happened: a
-  // lus that was killed, or a regie that stopped with an error. Without this the regie would begin the
+  // loep that was killed, or a regie that stopped with an error. Without this the regie would begin the
   // skill at the first step, in a run that has one behind it.
   let resumeNl = options.resumeNl ?? (fresh ? null : continueNl(run));
   log(`regie start${resumeNl ? " (hervat)" : ""}: ${run}`);
@@ -156,7 +157,7 @@ export async function runSite(options: SiteRunOptions): Promise<SiteState> {
     // The regie is gone when its stream closes; what it left behind decides the rest.
     updateSite(statePath(), site.slug, { regiePid: null, regieSince: null });
     if (result.interrupted) {
-      // Somebody stopped lus: no next turn and no next site. The run stays for resume.
+      // Somebody stopped loep: no next turn and no next site. The run stays for resume.
       log(`regie onderbroken (code ${String(result.code)}${result.signal ? `, signaal ${result.signal}` : ""}, laatste stap ${step ?? "geen"}); de run blijft staan`);
       return updateSite(statePath(), site.slug, { phase: "gepauzeerd", pid: null, step, continues });
     }
@@ -186,7 +187,7 @@ export async function runSite(options: SiteRunOptions): Promise<SiteState> {
 }
 
 /**
- * A run that finished before lus handed reports out has none in its state; `run` and `meting` fill that
+ * A run that finished before loep handed reports out has none in its state; `run` and `meting` fill that
  * in without starting a regie. The copy is a second copy of the same report, and the state then knows it.
  */
 export function handOutMissing(slug: string, known: SiteState): string[] {

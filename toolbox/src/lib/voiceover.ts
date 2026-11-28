@@ -346,14 +346,14 @@ const refusedNl = (reach: Reach): string =>
 /** What the port of ssh said for a guest that gave no answer, after "geen antwoord over ssh binnen ... seconden". */
 const reachNl = (reach: Reach | undefined): string =>
   !reach ? "" : reach.address === null ? "; lume geeft geen adres voor de virtuele Mac" : reach.port22 === "open" ? `; poort 22 van ${reach.address} neemt wel een verbinding aan` : reach.port22 === "timeout" ? `; poort 22 van ${reach.address} neemt binnen 5 seconden geen verbinding aan` : `; een verbinding naar poort 22 van ${reach.address} geeft ${reach.port22}`;
-const START_HINT = "loep voiceover start, op de achtergrond: 9 minuten, of 20 tot 30 met een herstart";
+const START_HINT = "loep audit voiceover start, op de achtergrond: 9 minuten, of 20 tot 30 met een herstart";
 
 /** The state in one sentence that follows "de virtuele Mac met VoiceOver". */
 export function statusNl(status: VoiceoverStatus): string {
   if (status.state === "no-lume") return "is er niet: lume staat niet op deze machine (zie docs/voiceover.md)";
   if (status.state === "absent") return "is er niet op deze machine (just voiceover-setup richt hem in)";
   if (isReady(status)) return `draait sinds ${hhmm(status.bootedAt!)} en is opgewarmd: VoiceOver leest voor`;
-  if (status.starting) return `wordt gestart sinds ${hhmm(status.starting.since)} (loep voiceover start, proces ${status.starting.pid}): dat duurt 9 minuten, of 20 tot 30 met een herstart`;
+  if (status.starting) return `wordt gestart sinds ${hhmm(status.starting.since)} (loep audit voiceover start, proces ${status.starting.pid}): dat duurt 9 minuten, of 20 tot 30 met een herstart`;
   const failed = status.lastStart && !status.lastStart.ok ? `; de laatste start, om ${hhmm(status.lastStart.at)}, mislukte: ${status.lastStart.error ?? "onbekende reden"}` : "";
   if (status.state === "stopped") return `is ingericht maar draait niet${failed}. Start hem met ${START_HINT}`;
   if (status.refused) return `draait maar is vanuit dit proces niet bereikbaar: ${refusedNl(status.refused)}`;
@@ -451,7 +451,7 @@ export async function start(guest: Guest, progress: (line: string) => void, cloc
     const desktop = await awaitDesktop(guest, clock, bootedHere);
     if (desktop.found === "refused") {
       // Not a matter of this boot: the guest is left as it is, and no other boot is tried.
-      const error = `de virtuele Mac is vanuit dit proces niet bereikbaar: ${refusedNl(desktop.reach!)}. De virtuele Mac draait nog, want opnieuw starten lost dit niet op. Staat het programma daar al aan, sluit hem dan af met loep voiceover stop en start opnieuw`;
+      const error = `de virtuele Mac is vanuit dit proces niet bereikbaar: ${refusedNl(desktop.reach!)}. De virtuele Mac draait nog, want opnieuw starten lost dit niet op. Staat het programma daar al aan, sluit hem dan af met loep audit voiceover stop en start opnieuw`;
       attempts.push(`start ${boot}: de host weigert het verkeer naar de virtuele Mac`);
       say(error);
       return { ok: false, boots: boot, seconds: elapsed(), attempts, error };
@@ -570,7 +570,7 @@ export async function addressFor(guest: Guest, url: string, readLocal: (path: st
 /** Let VoiceOver in the running, warmed-up virtual Mac read a page: into the web content, and step by step what it says. */
 export async function read(guest: Guest, options: ReadOptions, clock: Clock = realClock, readLocal?: (path: string) => Buffer, files: (name: string) => Buffer = guestFile): Promise<Reading> {
   const state = await guest.state();
-  if (state !== "running") throw new Error(state === "stopped" ? "de virtuele Mac draait niet: draai eerst loep voiceover start" : "er is geen virtuele Mac voor VoiceOver: zie docs/voiceover.md");
+  if (state !== "running") throw new Error(state === "stopped" ? "de virtuele Mac draait niet: draai eerst loep audit voiceover start" : "er is geen virtuele Mac voor VoiceOver: zie docs/voiceover.md");
   const address = await addressFor(guest, options.url, readLocal);
   // The reader of this version of the toolbox, also when the virtual Mac was started by another.
   for (const name of COPIED_FILES) if (!(await putFile(guest, name, files(name)))) throw new Error("de bestanden konden niet naar de virtuele Mac worden gekopieerd");
@@ -600,7 +600,7 @@ export const alive = (pid: number): boolean => {
 /**
  * There is one virtual Mac and VoiceOver reads one page at a time. Readings of the agents of a
  * session process go one after another, in the order they came; a lock file keeps a reading of
- * another process (a second run, or `loep voiceover read` by hand) out at the same time. Each
+ * another process (a second run, or `loep audit voiceover read` by hand) out at the same time. Each
  * reading hears how long it waited and how many went before it.
  */
 export class GuestQueue {

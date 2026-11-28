@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import type { Browser, BrowserContext, Page } from "playwright";
 import { call } from "../browser/call.ts";
 import { INPAGE_PATH, launchBrowser, newContext } from "../browser/session.ts";
+import { cliArgs } from "../lib/commands.ts";
 import { IDLE_SESSION_FILE, landingFellBack, LOGIN_SESSION_FILE, loggedOutReasonNl, markOf, passwordFieldShows, readLoginFile, siteOriginOfRun, type LoginMark, type LoginSession } from "../lib/login.ts";
 
 /**
@@ -124,7 +125,7 @@ const emptyWatch = (status: SessionWatch["status"], reasonNl: string | null, opt
   updatedAt: new Date().toISOString(),
 });
 
-export const NO_IDLE_LOGIN_NL = `er is geen tweede inlog voor de sessieproef (${IDLE_SESSION_FILE}); een mens maakt die met loep login --run <run> --idle, met hetzelfde testaccount mag`;
+export const NO_IDLE_LOGIN_NL = `er is geen tweede inlog voor de sessieproef (${IDLE_SESSION_FILE}); een mens maakt die met loep audit login --run <run> --idle, met hetzelfde testaccount mag`;
 
 /**
  * Start the watch in the background for a run with a login, unless it runs already: a second
@@ -143,8 +144,9 @@ export function startSessionWatch(runDir: string, forwarded: string[] = []): Ses
     return watch;
   }
   rmSync(join(runDir, SESSION_WATCH_STOP), { force: true });
+  const cli = fileURLToPath(new URL("../cli.ts", import.meta.url));
   const output = openSync(join(runDir, LOG_FILE), "a");
-  const child = spawn(process.execPath, [fileURLToPath(new URL("../cli.ts", import.meta.url)), "watch-session", "--run", runDir, ...forwarded], { detached: true, stdio: ["ignore", output, output] });
+  const child = spawn(process.execPath, cliArgs(cli, "watch-session", "--run", runDir, ...forwarded), { detached: true, stdio: ["ignore", output, output] });
   child.unref();
   const watch = { ...emptyWatch("running", null), pid: child.pid ?? null, startedAt: new Date().toISOString() };
   writeWatch(runDir, watch);
@@ -224,7 +226,7 @@ export async function watchSession(runDir: string, options: WatchOptions = {}): 
     const page = await tab.newPage();
     const opened = await landingFellBack(page, mark);
     if (opened) {
-      watch = { ...watch, status: "failed", reasonNl: `de tweede sessie was bij de start al niet geldig: ${opened}. Laat een mens opnieuw inloggen met loep login --run <run> --idle` };
+      watch = { ...watch, status: "failed", reasonNl: `de tweede sessie was bij de start al niet geldig: ${opened}. Laat een mens opnieuw inloggen met loep audit login --run <run> --idle` };
       writeWatch(runDir, watch);
       return watch;
     }
@@ -282,7 +284,7 @@ export async function watchSession(runDir: string, options: WatchOptions = {}): 
         ...(mainAlive === false && !watch.mainSessionExpiredAt ? { mainSessionExpiredAt: check.at } : {}),
         ...(reason === null ? { longestQuietAliveMinutes: Math.max(watch.longestQuietAliveMinutes ?? 0, quiet) } : {}),
       };
-      if (mainAlive === false) process.stderr.write(`${check.at} de sessie van de meting is verlopen; een stap die nu mislukt, mislukt daardoor. Laat een mens opnieuw inloggen met loep login --run ${runDir}\n`);
+      if (mainAlive === false) process.stderr.write(`${check.at} de sessie van de meting is verlopen; een stap die nu mislukt, mislukt daardoor. Laat een mens opnieuw inloggen met loep audit login --run ${runDir}\n`);
       if (reason !== null) {
         const loggedIn = Date.parse(idle.loggedInAt);
         watch = { ...watch, status: "expired", beforeExpiry: lastLook, expired: { at: check.at, quietMinutes: quiet, minutesAfterLogin: Number.isFinite(loggedIn) ? minutes(Date.now() - loggedIn) : null, reasonNl: reason } };

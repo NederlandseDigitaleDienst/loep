@@ -149,7 +149,7 @@ export async function variant(options: { run: string; out: string; name: string;
 
 /**
  * What the agents of one run used, counted outside the run: a run records no tokens and no
- * turns, only the transcripts of the agents do (`loep usage` counts them). One row per agent and
+ * turns, only the transcripts of the agents do (`loep dev usage` counts them). One row per agent and
  * model. A row names the session the agent ran in (b-111, v-111, r-start, a-132), or its `role`
  * (walk, judge, verifier, finisher, stand) with the `criterion` of a judge, verifier or finishing
  * round and the `pageType` of a walk.
@@ -816,7 +816,7 @@ export function comparisonMarkdown(result: VariantComparison): string {
     lines.push(`| samen | ${ordered.map((run) => String(sumPoints(run))).join(" | ")} |`);
   }
 
-  lines.push("", "## Verbruik per rol", "", "Sessies, commando's en tijd uit de run. Tokens, beurten en kosten alleen uit een verbruiksbestand (--usage, te maken met `loep usage`), want de run telt die niet. Beoordelaars, verifieerders en de afmaakronde tellen alleen over de criteria hierboven; rondgangen en de stand-agent werken voor de hele run.", "");
+  lines.push("", "## Verbruik per rol", "", "Sessies, commando's en tijd uit de run. Tokens, beurten en kosten alleen uit een verbruiksbestand (--usage, te maken met `loep dev usage`), want de run telt die niet. Beoordelaars, verifieerders en de afmaakronde tellen alleen over de criteria hierboven; rondgangen en de stand-agent werken voor de hele run.", "");
   lines.push("| Run | Rol | Agents | Commando's | Tijd in sessies | Invoer | Naar de cache | Uit de cache | Uitvoer | Beurten | Kosten |", "|---|---|---|---|---|---|---|---|---|---|---|");
   for (const run of ordered) {
     for (const use of run.roles) {
@@ -838,8 +838,8 @@ export async function writeComparison(result: VariantComparison, outDir: string)
 
 /* ------------------------------------------------------------------------------------------ */
 
-export const VARIANT_USAGE = `loep variant --run <run> --out <copy> --name <variant> [--note <text>]
-loep compare-variants --baseline <run>... [--variant <run>...] --reference <file> [--usage <file>...]
+export const VARIANT_USAGE = `loep dev variant --run <run> --out <copy> --name <variant> [--note <text>]
+loep dev compare-variants --baseline <run>... [--variant <run>...] --reference <file> [--usage <file>...]
                       [--criteria <ids>] [--margin <share>] [--margin-reports <count>] [--seed <n>] [--out <dir>] [--json]
 
 Measuring a variant of the code on frozen evidence (validatie/verbruik/README.md, "Hoe we meten").
@@ -870,7 +870,7 @@ Not a step of an evaluation.
   --baseline, --variant  Repeatable: one run each. Without --variant: only the spread of the baseline
   --reference <file>     The answer key in the form compare reads (toolbox/fixtures/reference-*.json)
   --usage <file>         Repeatable: tokens and turns per agent of one run, counted from the transcripts
-                         outside the run with loep usage (schema loep/verbruik/1, see
+                         outside the run with loep dev usage (schema loep/verbruik/1, see
                          toolbox/test/fixtures/verbruik.json). Opus and Sonnet have a price; another
                          model needs one in the file
   --criteria <ids>       Count only these criteria, comma-separated as with tasks --only: in the outcomes,

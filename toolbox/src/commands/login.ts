@@ -110,7 +110,7 @@ export async function login(options: LoginOptions): Promise<LoggedIn> {
   const browser = await chromium.launch({ headless: options.headless ?? false }).catch((error: Error) => {
     throw new Error(
       `er is geen browservenster te openen op deze machine (${error.message.split("\n")[0]}). Log in op een machine met een scherm en neem het bestand over: ` +
-        `daar "loep login --url ${start} --out <bestand>", hier "loep login --run <run> --from <bestand>"`,
+        `daar "loep audit login --url ${start} --out <bestand>", hier "loep audit login --run <run> --from <bestand>"`,
     );
   });
   try {
@@ -175,7 +175,7 @@ export async function login(options: LoginOptions): Promise<LoggedIn> {
     say(`ingelogd op ${origin}${role ? ` als ${role}` : ""}; de sessie staat in ${files.join(" en ")} (alleen voor jou leesbaar)`);
     say(`inlogpagina: ${mark.loginUrl}`);
     say(`aangewezen pagina: ${landingUrl}`);
-    if (options.out && !options.run) say(`zet het bestand op de machine die onderzoekt in de run met: loep login --run <run> --from ${options.out}`);
+    if (options.out && !options.run) say(`zet het bestand op de machine die onderzoekt in de run met: loep audit login --run <run> --from ${options.out}`);
     return { mark, files };
   } finally {
     await browser.close().catch(() => undefined);

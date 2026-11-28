@@ -150,7 +150,7 @@ export function usageFromTranscripts(options: { transcripts: string; run: string
   };
 }
 
-export const USAGE_USAGE = `loep usage --transcripts <dir> --run <run> [--out <file>]
+export const USAGE_USAGE = `loep dev usage --transcripts <dir> --run <run> [--out <file>]
 
 Count what the agents of one workflow used, from their transcripts, as the usage file of
 compare-variants --usage (schema loep/verbruik/1; validatie/verbruik/README.md). Not a step of an evaluation.

@@ -22,7 +22,7 @@ Kort:
 
 ### Zeven onderzoeken
 
-Zeven onderzoeken van echte sites in oktober 2026, met alle 56 criteria van WCAG 2.2 A en AA, op loep 0.1 tot 0.18. Drie sites: digitaledienst.overheid.nl (vier runs), nerds.digitaledienst.overheid.nl (twee) en developer.overheid.nl (één). Geteld uit de transcripts van de agents met `loep usage`, met de prijzen van de API voor Opus 5.5 zoals in [README.md](README.md). De uitvoer is daar te laag geteld ([modelkeuze.md](modelkeuze.md)); de verhoudingen hieronder veranderen daar weinig door.
+Zeven onderzoeken van echte sites in oktober 2026, met alle 56 criteria van WCAG 2.2 A en AA, op loep 0.1 tot 0.18. Drie sites: digitaledienst.overheid.nl (vier runs), nerds.digitaledienst.overheid.nl (twee) en developer.overheid.nl (één). Geteld uit de transcripts van de agents met `loep dev usage`, met de prijzen van de API voor Opus 5.5 zoals in [README.md](README.md). De uitvoer is daar te laag geteld ([modelkeuze.md](modelkeuze.md)); de verhoudingen hieronder veranderen daar weinig door.
 
 | Rol | Agents | Beurten | Kosten | Aandeel |
 |---|---|---|---|---|
@@ -203,7 +203,7 @@ Voor dezelfde kosten ligt een andere route klaar: de verifieerders op Sonnet, zo
 
 ## Hoe de cijfers zijn gemaakt
 
-- Kosten per agent komen uit `loep usage` op de transcripts van de werkstroom van elk onderzoek, met de prijzen uit [README.md](README.md). De toerekening per beurt verdeelt de kosten van een beurt gelijk over de aanroepen in die beurt.
+- Kosten per agent komen uit `loep dev usage` op de transcripts van de werkstroom van elk onderzoek, met de prijzen uit [README.md](README.md). De toerekening per beurt verdeelt de kosten van een beurt gelijk over de aanroepen in die beurt.
 - Labels komen uit `evaluation.json` en `verdicts/<criterium>/oordeel.json` en `final.json` van elke run; op de testsite uit `toolbox/fixtures/reference-lindewaard.json` en `reference-berkenveen.json`.
 - "Drempel van de andere sites": voor elke site wordt de drempel gekozen op de twee andere, en toegepast op de site zelf. Drie sites is weinig.
 - De scripts staan in [gate/](gate/). Ze lezen de runs uit `toolbox/runs`, die niet in de repository staan.

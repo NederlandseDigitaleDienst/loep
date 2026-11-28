@@ -174,7 +174,7 @@ export function passwordPagesNl(pages: Pick<InventoryPage, "url" | "counts">[], 
   const found = pages.filter((entry) => typeof entry.counts.passwordFields === "number" && entry.counts.passwordFields > 0).map((entry) => entry.url);
   if (found.length === 0) return null;
   const named = found.length === 1 ? found[0] : `${found[0]} en ${found.length - 1} meer`;
-  return `let op: ${found.length === 1 ? "één pagina toont" : `${found.length} pagina's tonen`} een wachtwoordveld (${named}), en er is niet ingelogd. Staat een deel van de site achter een inlog, dan wordt dat deel niet onderzocht. Hoort het erbij, laat dan een mens inloggen met loep login en begin opnieuw met inventory, in een nieuwe map`;
+  return `let op: ${found.length === 1 ? "één pagina toont" : `${found.length} pagina's tonen`} een wachtwoordveld (${named}), en er is niet ingelogd. Staat een deel van de site achter een inlog, dan wordt dat deel niet onderzocht. Hoort het erbij, laat dan een mens inloggen met loep audit login en begin opnieuw met inventory, in een nieuwe map`;
 }
 
 /**

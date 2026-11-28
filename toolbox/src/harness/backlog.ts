@@ -34,7 +34,7 @@ export interface Login {
 
 export interface Site {
   url: string;
-  /** The folder under the home of lus: the host without www, or what the person chose. */
+  /** The folder under the home of loep: the host without www, or what the person chose. */
   slug: string;
   name: string;
   organisation: string;
@@ -78,13 +78,13 @@ export function slugFor(url: string): string {
   return host.replace(/^www\./, "");
 }
 
-/** Folders under the home of lus that are no site: a site with that slug would put its runs among them. */
+/** Folders under the home of loep that are no site: a site with that slug would put its runs among them. */
 const RESERVED_SLUGS = ["rapporten", "meting", "secrets"];
 
 /** What is wrong with a slug as the name of a folder, or null. */
 export function slugProblemNl(slug: string): string | null {
   if (!/^[a-z0-9][a-z0-9.-]*$/.test(slug) || slug.includes("..")) return `de slug "${slug}" mag alleen kleine letters, cijfers, punten en streepjes hebben`;
-  if (RESERVED_SLUGS.includes(slug)) return `de slug "${slug}" is de naam van een map van lus zelf; kies een andere met --slug`;
+  if (RESERVED_SLUGS.includes(slug)) return `de slug "${slug}" is de naam van een map van loep zelf; kies een andere met --slug`;
   return null;
 }
 
@@ -203,9 +203,9 @@ export interface AddInput {
   note?: string | undefined;
 }
 
-const HEADER_NL = `# Sites die onder de loep gaan. Voeg er een toe met \`lus add\`, of met de hand:
+const HEADER_NL = `# Sites die onder de loep gaan. Voeg er een toe met \`loep add\`, of met de hand:
 # één blok per site, met dezelfde sleutels als hieronder. Wat er met een site gebeurde
-# staat niet hier maar in .lus/state.json.
+# staat niet hier maar in .loep/state.json.
 `;
 
 /**

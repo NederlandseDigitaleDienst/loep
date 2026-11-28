@@ -61,7 +61,7 @@ test("inventory says when pages show a password field and nobody logged in", () 
   assert.equal(passwordPagesNl([page(1), withField], true), null, "a run with a login has password fields on purpose");
   const one = passwordPagesNl([page(1), withField], false);
   assert.match(one!, /één pagina toont een wachtwoordveld \(https:\/\/a\.nl\/p002\)/);
-  assert.match(one!, /loep login/);
+  assert.match(one!, /loep audit login/);
   assert.match(passwordPagesNl([withField, { ...page(3), counts: { passwordFields: 2 } }], false)!, /2 pagina's tonen een wachtwoordveld \(https:\/\/a\.nl\/p002 en 1 meer\)/);
 });
 

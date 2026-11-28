@@ -74,7 +74,7 @@ export const cookieFits = (domain: string, hostname: string): boolean => {
  * `origin` the session must be for that site: a file made for another site is refused.
  */
 export function loginSessionProblems(value: unknown, origin?: string | null): string[] {
-  if (!isRecord(value) || value.schema !== SCHEMA) return [`dit is geen sessiebestand van loep (verwacht "schema": "${SCHEMA}"); maak het met loep login`];
+  if (!isRecord(value) || value.schema !== SCHEMA) return [`dit is geen sessiebestand van loep (verwacht "schema": "${SCHEMA}"); maak het met loep audit login`];
   const problems: string[] = [];
   const own = originOf(value.origin);
   if (!own) problems.push("origin ontbreekt of is geen adres met http:// of https://");
@@ -136,7 +136,7 @@ export function readLoginFile(path: string, origin?: string | null): LoginSessio
   try {
     parsed = JSON.parse(readFileSync(path, "utf8"));
   } catch {
-    throw new Error(`${path} is niet te lezen als JSON; maak het sessiebestand opnieuw met loep login`);
+    throw new Error(`${path} is niet te lezen als JSON; maak het sessiebestand opnieuw met loep audit login`);
   }
   const problems = loginSessionProblems(parsed, origin);
   if (problems.length > 0) throw new Error(`${path} is geen bruikbaar sessiebestand: ${problems.join("; ")}`);
@@ -360,7 +360,7 @@ function runSession(): LoginSession | null {
   if (!existsSync(path)) {
     // Asked of the manifest once: a run without a login stays one for as long as no session file appears.
     current.madeWithLogin ??= loginForRun(current.runDir) !== null;
-    if (current.madeWithLogin) throw new Error(`deze run is met een inlog gemaakt, maar het sessiebestand ${LOGIN_SESSION_FILE} ontbreekt. Laat een mens opnieuw inloggen: loep login --run ${current.runDir}`);
+    if (current.madeWithLogin) throw new Error(`deze run is met een inlog gemaakt, maar het sessiebestand ${LOGIN_SESSION_FILE} ontbreekt. Laat een mens opnieuw inloggen: loep audit login --run ${current.runDir}`);
     return null;
   }
   const mtimeMs = statSync(path).mtimeMs;
@@ -451,7 +451,7 @@ export const passwordFieldShows = (page: Page): Promise<boolean> =>
 
 function expire(address: string, reasonNl: string): never {
   const path = sessionPath(current!.runDir);
-  const message = `de inlogsessie is verlopen: ${address} viel terug op het inlogscherm (${reasonNl}). Wat al gemeten is, blijft staan. Laat een mens opnieuw inloggen met loep login --run ${current!.runDir} en geef dit commando daarna opnieuw`;
+  const message = `de inlogsessie is verlopen: ${address} viel terug op het inlogscherm (${reasonNl}). Wat al gemeten is, blijft staan. Laat een mens opnieuw inloggen met loep audit login --run ${current!.runDir} en geef dit commando daarna opnieuw`;
   current!.expired = { mtimeMs: existsSync(path) ? statSync(path).mtimeMs : -1, message };
   throw new LoginExpired(message);
 }
