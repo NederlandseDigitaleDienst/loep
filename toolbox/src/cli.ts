@@ -2,7 +2,7 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
-import { AUDIT_COMMANDS, HARNESS_COMMANDS, DEV_COMMANDS, HANDED_OVER_COMMANDS, NAMESPACES, STANDALONE_COMMANDS } from "./lib/commands.ts";
+import { AUDIT_COMMANDS, HARNESS_COMMANDS, DEV_COMMANDS, HANDED_OVER_COMMANDS, NAMESPACES, STANDALONE_COMMANDS, STEPS_WITHOUT_A_SITE } from "./lib/commands.ts";
 import { positionalsOf } from "./lib/site-args.ts";
 
 const USAGE = `loep <command> [options]
@@ -402,9 +402,6 @@ const OPTIONS = {
 /** The options that take a value: the word after one is a value, not a site of the backlog. */
 const VALUE_FLAGS = new Set(Object.entries(OPTIONS).filter(([, spec]) => spec.type === "string").map(([name]) => name));
 
-/** The steps whose first word after them is no site: the URL of a new run, a subcommand, a purpose, a list of runs. */
-const WORD_IS_NOT_A_SITE = new Set(["inventory", "mail", "voiceover", "gaps", "purpose"]);
-
 /**
  * `loep audit <stap>` and `loep dev <verb>` are how the commands are written now. A command without its
  * namespace still runs for one release: the task files of a run that is already on disk name it that way,
@@ -449,7 +446,7 @@ async function main(): Promise<void> {
   const step = argv[2];
   const runGiven = argv.some((arg) => arg === "--run" || arg.startsWith("--run="));
   const helpWanted = argv.includes("--help") || argv.includes("-h");
-  if (step !== undefined && !runGiven && !helpWanted && !WORD_IS_NOT_A_SITE.has(step) && (step === "statement" || (AUDIT_COMMANDS as readonly string[]).includes(step))) {
+  if (step !== undefined && !runGiven && !helpWanted && !(STEPS_WITHOUT_A_SITE as readonly string[]).includes(step) && (step === "statement" || (AUDIT_COMMANDS as readonly string[]).includes(step))) {
     const word = positionalsOf(argv.slice(3), VALUE_FLAGS)[0];
     if (word !== undefined) {
       const { siteForWord } = await import("./harness/lookup.ts");

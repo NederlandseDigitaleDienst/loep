@@ -62,6 +62,13 @@ export const HARNESS_COMMANDS = ["add", "run", "status", "pause", "resume", "log
 export const STANDALONE_COMMANDS = ["quick", "statement", "contribute", "session"] as const;
 
 /**
+ * The steps whose first word after them is no site of the backlog: `inventory` takes the address of a new
+ * run, `mail` and `voiceover` their own subject, `purpose` the purpose, `gaps` a list of runs. The rest of
+ * `audit` takes the site where it takes `--run`: `loep audit tasks voorbeeld.nl`.
+ */
+export const STEPS_WITHOUT_A_SITE = ["inventory", "mail", "voiceover", "gaps", "purpose"] as const;
+
+/**
  * The steps a person does, from the backlog: `loep audit login <site>` opens the window of the test
  * account, and the harness knows the login of that site and what to resume afterwards.
  */
