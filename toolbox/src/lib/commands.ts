@@ -55,8 +55,8 @@ export const AUDIT_COMMANDS = [
 /** The tool for whoever works on loep itself: no run to measure, or a run measured twice to compare. */
 export const DEV_COMMANDS = ["procedures", "compare", "calibrate", "diff", "variant", "compare-variants", "usage", "meting"] as const;
 
-/** The verbs of the backlog: loep over a list of sites, a regie per site. They take their own options. */
-export const BACKLOG_COMMANDS = ["add", "run", "status", "pause", "resume", "log", "doctor"] as const;
+/** The verbs of the harness: loep over a list of sites, a regie per site. They take their own options. */
+export const HARNESS_COMMANDS = ["add", "run", "status", "pause", "resume", "log", "doctor"] as const;
 
 /** The commands that keep their own name, because they are one thing and not a step of a chain. */
 export const STANDALONE_COMMANDS = ["quick", "statement", "contribute", "session"] as const;

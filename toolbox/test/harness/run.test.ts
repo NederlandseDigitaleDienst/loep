@@ -4,11 +4,11 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpath
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import type { Site } from "../../src/backlog/backlog.ts";
-import { toolboxCli } from "../../src/backlog/paths.ts";
-import { isSealed, readQuestion, stepOf } from "../../src/backlog/run.ts";
-import { handOutMissing, runSite, spaceProblemNl } from "../../src/backlog/runner.ts";
-import { readState, siteState, updateSite } from "../../src/backlog/state.ts";
+import type { Site } from "../../src/harness/backlog.ts";
+import { toolboxCli } from "../../src/harness/paths.ts";
+import { isSealed, readQuestion, stepOf } from "../../src/harness/run.ts";
+import { handOutMissing, runSite, spaceProblemNl } from "../../src/harness/runner.ts";
+import { readState, siteState, updateSite } from "../../src/harness/state.ts";
 
 /** The fake regie seals the way the regie does: with loep, so that `verify` agrees. */
 const SEAL = `node ${toolboxCli} seal --run "$run" >/dev/null`;

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { sameVersion } from "../../src/backlog/version.ts";
+import { sameVersion } from "../../src/harness/version.ts";
 
 const base = { plugin: "0.38.0", describe: "v0.38.0-4-gabc1234", sha: "abc1234", changes: "" };
 

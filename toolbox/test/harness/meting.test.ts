@@ -5,8 +5,8 @@ import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { readBacklog } from "../../src/backlog/backlog.ts";
-import { answering, FIXTURES, metingHome, prepareBacklog, silent } from "../../src/backlog/meting.ts";
+import { readBacklog } from "../../src/harness/backlog.ts";
+import { answering, FIXTURES, metingHome, prepareBacklog, silent } from "../../src/harness/meting.ts";
 
 test("een meting heeft een eigen home, los van de sites van echte eigenaren", () => {
   const home = mkdtempSync(join(tmpdir(), "backlog-meting-"));

@@ -3,7 +3,7 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { hostname, tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { acquireLock, isGone, readLock, readState, regieRuns, releaseLock, siteState, standNl, updateSite } from "../../src/backlog/state.ts";
+import { acquireLock, isGone, readLock, readState, regieRuns, releaseLock, siteState, standNl, updateSite } from "../../src/harness/state.ts";
 
 const stateFile = (): string => join(mkdtempSync(join(tmpdir(), "backlog-state-")), "state.json");
 const lockFile = (): string => join(mkdtempSync(join(tmpdir(), "backlog-lock-")), "run.lock");

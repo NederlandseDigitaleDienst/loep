@@ -2,7 +2,7 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
-import { AUDIT_COMMANDS, BACKLOG_COMMANDS, DEV_COMMANDS, NAMESPACES, STANDALONE_COMMANDS } from "./lib/commands.ts";
+import { AUDIT_COMMANDS, HARNESS_COMMANDS, DEV_COMMANDS, NAMESPACES, STANDALONE_COMMANDS } from "./lib/commands.ts";
 
 const USAGE = `loep <command> [options]
 
@@ -23,7 +23,7 @@ const USAGE = `loep <command> [options]
                                          It reads a run of any version, writes nothing in it and sends nothing
   session <commando>                     What an agent does in a browser window during the investigation:
                                          open, look, click, speak. loep session --help
-  add|run|status|pause|resume|log|doctor The backlog: loep over a list of sites, a regie per site, with a person
+  add|run|status|pause|resume|log|doctor The harness: loep over a list of sites, a regie per site, with a person
                                          where only a person can decide. loep status says how every site stands
   dev <verb>                             The tool for whoever works on loep itself: procedures, compare, diff,
                                          calibrate, variant, compare-variants, usage. loep dev --help
@@ -354,13 +354,13 @@ async function main(): Promise<void> {
   if (!argv.includes("--run") && argv[2] !== undefined && (argv[2] === "statement" || (AUDIT_COMMANDS as readonly string[]).includes(argv[2]))) {
     const at = argv.findIndex((arg, index) => index >= 3 && !arg.startsWith("-"));
     if (at !== -1) {
-      const run = (await import("./backlog/lookup.ts")).runForSite(argv[at]!);
+      const run = (await import("./harness/lookup.ts")).runForSite(argv[at]!);
       if (run !== null) argv.splice(at, 0, "--run", run);
     }
   }
-  // The backlog takes its verbs and options as they come; it parses them itself.
-  if (argv[2] !== undefined && ((BACKLOG_COMMANDS as readonly string[]).includes(argv[2]) || argv[2] === "meting")) {
-    process.exitCode = await (await import("./backlog/cli.ts")).backlogCli(argv.slice(2));
+  // The harness takes its verbs and options as they come; it parses them itself.
+  if (argv[2] !== undefined && ((HARNESS_COMMANDS as readonly string[]).includes(argv[2]) || argv[2] === "meting")) {
+    process.exitCode = await (await import("./harness/cli.ts")).harnessCli(argv.slice(2));
     return;
   }
   // A session takes its commands and options as they come; it parses them itself.

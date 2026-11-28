@@ -3,8 +3,8 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { addSite, readBacklog, slugFor } from "../../src/backlog/backlog.ts";
-import { regiePrompt } from "../../src/backlog/regie.ts";
+import { addSite, readBacklog, slugFor } from "../../src/harness/backlog.ts";
+import { regiePrompt } from "../../src/harness/regie.ts";
 
 const backlogFile = (): string => join(mkdtempSync(join(tmpdir(), "backlog-home-")), "backlog.yaml");
 

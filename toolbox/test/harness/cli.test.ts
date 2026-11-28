@@ -5,9 +5,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
-import { readState, updateSite } from "../../src/backlog/state.ts";
+import { readState, updateSite } from "../../src/harness/state.ts";
 
-const cli = fileURLToPath(new URL("../../src/backlog/cli.ts", import.meta.url));
+const cli = fileURLToPath(new URL("../../src/harness/cli.ts", import.meta.url));
 
 /** A home of loep with one site and a fake regie that writes its arguments and seals. */
 function home(): { home: string; call: (...args: string[]) => ReturnType<typeof spawnSync> } {

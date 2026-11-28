@@ -1,14 +1,14 @@
-# De backlog
+# Het harnas
 
 Soort: beschrijving
 
-loep werkt een backlog van sites af zonder dat je bij elke stap achter een venster hoeft te zitten. Voor elke site start het één regie: een agent die de skill `nldd-a11y-audit` volgt en loep aanroept. Waar alleen een mens kan beslissen, stopt de regie en laat een vraag achter. Je draait dan het commando dat erbij staat, en `resume` gaat verder.
+Het harnas laat loep een backlog van sites afwerken zonder dat je bij elke stap achter een venster hoeft te zitten. Voor elke site start het één regie: een agent die de skill `nldd-a11y-audit` volgt en loep aanroept. Waar alleen een mens kan beslissen, stopt de regie en laat een vraag achter. Je draait dan het commando dat erbij staat, en `resume` gaat verder.
 
-loep schrijft nooit in de map van een run. Het zegel van loep dekt elk bestand daarin, dus alles wat de backlog bijhoudt staat ernaast, in `~/onderzoeken/.loep/`.
+loep schrijft nooit in de map van een run. Het zegel van loep dekt elk bestand daarin, dus alles wat het harnas bijhoudt staat ernaast, in `~/onderzoeken/.loep/`.
 
 ## Installeren
 
-De backlog zit in de toolbox; er is niets extra's te installeren. Begin met `loep doctor`. Dat controleert wat een run nodig heeft: node, de toolbox, de werkstroom, de pluginversie, `vlam-claude`, de VLAM-routes, de vrije schijfruimte en de backlog. Onder 15 GB vrij begint loep geen run: `run` weigert dan met de vrije ruimte erbij, en `LOEP_MIN_FREE_GB` verzet die grens voor een machine waar je zelf oplet. Met `--routes` proeft `doctor` de VLAM-routes vooraf.
+Het harnas zit in de toolbox; er is niets extra's te installeren. Begin met `loep doctor`. Dat controleert wat een run nodig heeft: node, de toolbox, de werkstroom, de pluginversie, `vlam-claude`, de VLAM-routes, de vrije schijfruimte en de backlog. Onder 15 GB vrij begint loep geen run: `run` weigert dan met de vrije ruimte erbij, en `LOEP_MIN_FREE_GB` verzet die grens voor een machine waar je zelf oplet. Met `--routes` proeft `doctor` de VLAM-routes vooraf.
 
 ## Een site erin zetten
 
@@ -127,8 +127,8 @@ Naast deze meting met agents is er de regressietoets zonder taalmodel die de pij
 
 `LOEP_HOME` verzet de backlog, de stand en de vragen naar een eigen map. Een meting heeft er altijd een van zichzelf, zodat de testwebsites buiten de backlog van echte eigenaren blijven.
 
-## Wat loep met een backlog niet doet
+## Wat het harnas niet doet
 
-Een backlog meet niets zelf: elke meting en elk oordeel komt van een stap van het onderzoek, zodat het bewijs in de run staat en `loep audit verify --run <run>` het kan nalopen. loep start geen agent buiten de werkstroom om, en schrijft geen antwoord, besluit of handtekening voor een mens op.
+Het harnas meet niets zelf: elke meting en elk oordeel komt van een stap van het onderzoek, zodat het bewijs in de run staat en `loep audit verify --run <run>` het kan nalopen. Het start geen agent buiten de werkstroom om, en schrijft geen antwoord, besluit of handtekening voor een mens op.
 
 De regie mag Bash gebruiken, want de skill schrijft samengestelde commando's. `curl`, `wget`, `nc`, `ssh` en WebFetch zijn geweigerd, maar dat is geen harde grens: een regie kan via `node -e` de site bereiken of buiten de run schrijven. Dat ze het niet doet, hangt aan de spelregels in haar opdracht, en wat er toch in de run komt, ziet `audit verify`. De regie erft de omgeving van wie loep start; zet daar geen geheimen in die een run niet nodig heeft. Het transcript in `~/onderzoeken/.loep/` is alleen voor jou leesbaar.

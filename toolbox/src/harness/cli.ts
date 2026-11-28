@@ -12,7 +12,7 @@ import { handOutMissing, lockPath, pauseSite, runSite, statePath, transcriptPath
 import { acquireLock, isGone, PHASES_NL, readState, regieRuns, releaseLock, siteState, standNl, updateSite, type SiteState } from "./state.ts";
 import { versionNl } from "./version.ts";
 
-const USAGE = `loep add|run|status|pause|resume|log|doctor: loep over een backlog van sites, met een mens erbij waar dat nodig is
+const USAGE = `loep add|run|status|pause|resume|log|doctor: het harnas, loep over een backlog van sites, met een mens erbij waar dat nodig is
 
   add <url> [--slug <naam>] [--name <naam>] [--organisation <naam>] [--purpose verbeteren|verantwoorden]
             [--allow-sending] [--max-sends <n>] [--also-origin <url>]... [--never-open <host>]...
@@ -39,7 +39,7 @@ terminal aan loep zelf. Waar een stap een run vraagt, mag ook de site staan.
 De backlog staat in ${backlogPath()} en de stand van de backlog in ${stateDir()}.
 `;
 
-/** The help of `loep dev meting`: the one verb of the backlog that lives under `dev`. */
+/** The help of `loep dev meting`: the one verb of the harness that lives under `dev`. */
 const METING_USAGE = `loep dev meting [--sites <n>] [--only <site>] [--new]
 
 Meet loep op zijn eigen testwebsites, met de regie en de skill, in een backlog apart van die van echte
@@ -304,7 +304,7 @@ const AFTER_NL: Record<string, string> = {
 };
 
 /** The command line of the backlog, called by loep with the verbs it took off the front: `add`, `run`, `status`. */
-export async function backlogCli(argv: string[]): Promise<number> {
+export async function harnessCli(argv: string[]): Promise<number> {
   try {
     await main(argv);
     return typeof process.exitCode === "number" ? process.exitCode : 0;
@@ -489,4 +489,4 @@ async function main(argv: string[]): Promise<void> {
 }
 
 // Started on its own, so a test can call it as a program and a run in flight is not the only way in.
-if (process.argv[1] !== undefined && fileURLToPath(import.meta.url) === process.argv[1]) process.exitCode = await backlogCli(process.argv.slice(2));
+if (process.argv[1] !== undefined && fileURLToPath(import.meta.url) === process.argv[1]) process.exitCode = await harnessCli(process.argv.slice(2));

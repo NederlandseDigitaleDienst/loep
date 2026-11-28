@@ -3,8 +3,8 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import type { Site } from "../../src/backlog/backlog.ts";
-import { isLocalHost, regieArgs, regieEnv, regiePrompt } from "../../src/backlog/regie.ts";
+import type { Site } from "../../src/harness/backlog.ts";
+import { isLocalHost, regieArgs, regieEnv, regiePrompt } from "../../src/harness/regie.ts";
 
 const site = (overrides: Partial<Site> = {}): Site => ({
   url: "https://www.voorbeeld.nl/",

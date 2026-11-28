@@ -116,11 +116,11 @@ De overige commando's:
 | `doctor` | Controleert wat een run nodig heeft: node, de toolbox, de werkstroom, de pluginversie, vlam-claude, de VLAM-routes, de vrije schijfruimte en de backlog |
 | `dev diff` | Legt twee evaluaties van dezelfde site naast elkaar: opgelost, gebleven en nieuw, als werkdocument `verschil.md` |
 | `dev compare` | Legt een onderzoek naast een bestaand onderzoek van dezelfde site; zie [validatie/README.md](validatie/README.md) |
-| `dev meting` | Meet de twee testwebsites van loep door, met agents, en zet de rapporten in `~/onderzoeken/meting/`; zie [docs/backlog.md](docs/backlog.md) |
+| `dev meting` | Meet de twee testwebsites van loep door, met agents, en zet de rapporten in `~/onderzoeken/meting/`; zie [docs/harnas.md](docs/harnas.md) |
 | `dev procedures` | Controleert de procedures |
 | `session` | De browsersessie van een agent: `session start`, `session stop`, `session list`, `session extend` (de agent verlengt zijn eigen budget, hooguit twee keer), en elk commando daarin als `session <commando>` (`session open P01`, `session look`, `session contrast 3`) |
 
-`node toolbox/src/cli.ts --help` noemt de lagen van de toolbox. `node toolbox/src/cli.ts audit --help` geeft de stappen van een onderzoek met hun opties, `node toolbox/src/cli.ts dev --help` het gereedschap voor wie aan loep werkt. `session`, `audit voiceover`, `audit mail` en `dev compare --findings` hebben een eigen `--help`. Wie meerdere sites achter elkaar wil laten onderzoeken zonder erbij te zitten, zet ze in de backlog met `add` en laat `run` ze afwerken: één regie per site, en een vraag aan een mens waar alleen een mens kan beslissen. Zie [docs/backlog.md](docs/backlog.md). Buiten een onderzoek ijkt `just calibrate` de instrumenten, en `audit voiceover` beheert de virtuele Mac met VoiceOver (zie [docs/voiceover.md](docs/voiceover.md)).
+`node toolbox/src/cli.ts --help` noemt de lagen van de toolbox. `node toolbox/src/cli.ts audit --help` geeft de stappen van een onderzoek met hun opties, `node toolbox/src/cli.ts dev --help` het gereedschap voor wie aan loep werkt. `session`, `audit voiceover`, `audit mail` en `dev compare --findings` hebben een eigen `--help`. Wie meerdere sites achter elkaar wil laten onderzoeken zonder erbij te zitten, zet ze in de backlog met `add` en laat het harnas ze afwerken met `run`: één regie per site, en een vraag aan een mens waar alleen een mens kan beslissen. Zie [docs/harnas.md](docs/harnas.md). Buiten een onderzoek ijkt `just calibrate` de instrumenten, en `audit voiceover` beheert de virtuele Mac met VoiceOver (zie [docs/voiceover.md](docs/voiceover.md)).
 
 ## Zonder assistent
 
