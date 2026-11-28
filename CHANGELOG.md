@@ -8,7 +8,7 @@ Wat er per versie van loep is veranderd. De versie staat op het voorblad en onde
 
 ## 0.39.2 (2026-11-28)
 
-Deze versie is uitgebracht zonder meting: de opdrachtregel en het harnas zijn veranderd, en niet de procedure, de regel-engines of de instrumenten: een run op een andere agent krijgt dezelfde opdrachten en dezelfde beoordelingen, want de golven zijn hetzelfde script.
+Deze versie is uitgebracht zonder meting: de opdrachtregel en het harnas zijn veranderd, niet de procedure, de regel-engines of de instrumenten; een run op een andere agent krijgt dezelfde opdrachten en dezelfde beoordelingen, want de golven zijn hetzelfde script.
 
 ### Verder
 
