@@ -1,6 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { existsSync, statfsSync } from "node:fs";
 import { homedir } from "node:os";
+import { chooseBackend } from "./backend.ts";
 import { backlogPath, homeDir, pluginFile, toolboxCli, workflowFile } from "./paths.ts";
 import { readBacklog } from "./backlog.ts";
 import { checkoutVersion, versionNl } from "./version.ts";
@@ -68,9 +69,22 @@ export function doctor(options: DoctorOptions = {}): Check[] {
   checks.push({ labelNl: "werkstroom", ok: existsSync(workflowFile), detailNl: workflowFile });
   checks.push({ labelNl: "plugin", ok: existsSync(pluginFile), detailNl: `versie ${versionNl(checkoutVersion())}` });
 
-  const claude = which("vlam-claude");
-  checks.push({ labelNl: "vlam-claude", ok: claude !== null, detailNl: claude ?? "niet gevonden; zonder dit script komt de regie niet bij VLAM" });
-  checks.push({ labelNl: "claude", ok: which("claude") !== null, detailNl: which("claude") ?? "niet gevonden; vlam-claude heeft het nodig" });
+  // Which agent runs the regie: LOEP_REGIE, or the first that is installed. loep ships none of them.
+  let chosen: ReturnType<typeof chooseBackend> | null = null;
+  try {
+    chosen = chooseBackend();
+  } catch {
+    chosen = null;
+  }
+  checks.push({
+    labelNl: "regie",
+    ok: chosen !== null,
+    detailNl: chosen === null ? "geen agent gevonden; installeer Claude Code of opencode, of zet LOEP_REGIE" : `${chosen.backend} (${chosen.whyNl})`,
+  });
+  // The wrapper starts claude itself, so a vlam-claude without claude beside it starts nothing.
+  if (chosen?.backend === "vlam-claude") {
+    checks.push({ labelNl: "claude", ok: which("claude") !== null, detailNl: which("claude") ?? "niet gevonden; vlam-claude heeft het nodig" });
+  }
   checks.push({ labelNl: "just", ok: which("just") !== null, detailNl: which("just") ?? "niet gevonden; loep dev meting start de testsites en de taken van de justfile" });
   const routes = which("vlam-routes");
   checks.push(options.routes === true ? routesCheck() : { labelNl: "VLAM", ok: routes !== null, detailNl: routes ?? "vlam-routes niet gevonden; de routes worden dan niet vooraf geproefd (loep run proeft ze)" });

@@ -2,9 +2,10 @@ import { spawnSync } from "node:child_process";
 import { appendFileSync, chmodSync, existsSync, mkdirSync, renameSync } from "node:fs";
 import { join } from "node:path";
 import type { Site } from "./backlog.ts";
+import { chooseBackend, regieArgs, regieEnvOf } from "./backend.ts";
 import { freeGb, MIN_FREE_GB } from "./doctor.ts";
 import { cliArgs, homeDir, reportsDir, runDirFor, siteDir, stateDir, toolboxCli } from "./paths.ts";
-import { continueNl, regieArgs, regieEnv, regiePrompt } from "./regie.ts";
+import { continueNl, regiePrompt } from "./regie.ts";
 import { isSealed, readQuestion, runSnapshot, startRegie } from "./run.ts";
 import { readState, regieRuns, siteState, updateSite, type SiteState } from "./state.ts";
 import { checkoutVersion, sameVersion, versionNl } from "./version.ts";
@@ -125,6 +126,16 @@ export async function runSite(options: SiteRunOptions): Promise<SiteState> {
   });
   // The log is appended to, never restarted: it is the history of the site, not of one start.
   const log = (message: string): void => appendFileSync(join(dir, "loep.log"), `${new Date().toISOString()} ${message}\n`, { mode: 0o600 });
+  // Which agent runs this site: LOEP_REGIE, or the first that is installed. It is said in the log, so a
+  // run of hours can be read back without guessing what answered.
+  let backend: ReturnType<typeof chooseBackend>;
+  try {
+    backend = chooseBackend();
+  } catch (error) {
+    log(`geen agent: ${error instanceof Error ? error.message : String(error)}`);
+    return updateSite(statePath(), site.slug, { phase: "fout", pid: null, regiePid: null, regieSince: null, step: "start" });
+  }
+  log(`regie: ${backend.backend} (${backend.whyNl})`);
   // A run that is already there goes on from where it stands, also when nobody says what happened: a
   // loep that was killed, or a regie that stopped with an error. Without this the regie would begin the
   // skill at the first step, in a run that has one behind it.
@@ -137,8 +148,9 @@ export async function runSite(options: SiteRunOptions): Promise<SiteState> {
     let result: Awaited<ReturnType<typeof startRegie>>;
     try {
       result = await startRegie({
-        args: regieArgs(regiePrompt({ site, run, atOnce: site.atOnce, resumeNl }), run),
-        env: regieEnv(),
+        backend: backend.backend,
+        args: regieArgs(backend.backend, regiePrompt({ site, run, atOnce: site.atOnce, resumeNl }), run),
+        env: regieEnvOf(backend.backend),
         cwd: dir,
         transcript: transcriptPath(site),
         onStep: (found) => {

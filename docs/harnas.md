@@ -8,7 +8,20 @@ loep schrijft nooit in de map van een run. Het zegel van loep dekt elk bestand d
 
 ## Installeren
 
-Het harnas zit in de toolbox; er is niets extra's te installeren. Begin met `loep doctor`. Dat controleert wat een run nodig heeft: node, de toolbox, de werkstroom, de pluginversie, `vlam-claude`, de VLAM-routes, de vrije schijfruimte en de backlog. Onder 15 GB vrij begint loep geen run: `run` weigert dan met de vrije ruimte erbij, en `LOEP_MIN_FREE_GB` verzet die grens voor een machine waar je zelf oplet. Met `--routes` proeft `doctor` de VLAM-routes vooraf.
+Het harnas zit in de toolbox; er is niets extra's te installeren. Begin met `loep doctor`. Dat controleert wat een run nodig heeft: node, de toolbox, de werkstroom, de pluginversie, welke agent de regie wordt en waarom, de VLAM-routes, de vrije schijfruimte en de backlog. Onder 15 GB vrij begint loep geen run: `run` weigert dan met de vrije ruimte erbij, en `LOEP_MIN_FREE_GB` verzet die grens voor een machine waar je zelf oplet. Met `--routes` proeft `doctor` de VLAM-routes vooraf.
+
+## Welke agent
+
+loep levert zelf geen agent. De machine heeft er een van de gebruiker: `vlam-claude` (Claude Code tegen VLAM), `claude` (Claude Code met een eigen abonnement) of `opencode`. `loep doctor` zegt welke het wordt. Zonder keuze is dat de eerste die geïnstalleerd is, in die orde; `LOEP_REGIE` zet de keuze vast, bijvoorbeeld `LOEP_REGIE=opencode loep run`.
+
+De regie en elke agent van de golven draaien op dezelfde agent. Op Claude Code komt de skill uit deze checkout (`--plugin-dir`) en staan de instellingen en de pluginlijst van de gebruiker buiten de run, met een eigen configuratiemap. Op opencode komt de skill uit `skills/` van deze checkout en staat er een laag over de configuratie van de gebruiker, in `~/onderzoeken/.loep/opencode/opencode.json`: de provider, de sleutel en het model blijven die van de gebruiker, en de laag zet de tools die een run niet mag gebruiken op deny (`webfetch`, `websearch`, `curl`, `wget`).
+
+Twee verschillen die je merkt:
+
+- Een model per rol (`--models walks=sonnet`) bestaat alleen bij Claude Code; op opencode draait elke agent op het model uit de configuratie.
+- Op opencode is de sessie van een agent een eigen proces zonder sessiegeschiedenis; `-c` van opencode gebruikt loep niet.
+
+De golven zelf (`loep audit waves`) zijn van loep, niet van de agent: dezelfde ronde, dezelfde opdrachten, dezelfde pauzes. Daarom maakt de keuze van de agent niet uit voor wat een run oplevert.
 
 ## Een site erin zetten
 
@@ -63,7 +76,7 @@ loep run --only voorbeeld.nl --new
 
 Een tempo zet je ook bij het toevoegen: `loep add <url> --navigation-delay 2`.
 
-loep pakt een slot, start de regie en leest de stream voor de voortgang: `inventory`, `gate`, `werkstroom`. Een site die op een mens wacht houdt de rest niet tegen. Elke site krijgt één map voor zijn run: `~/onderzoeken/<slug>/<datum>/`. Een tweede start op dezelfde dag gaat verder in dezelfde map, want de run zelf zegt waar hij staat.
+loep pakt een slot, start de regie op de gekozen agent en leest de stream voor de voortgang: `inventory`, `gate`, `waves`. Een site die op een mens wacht houdt de rest niet tegen. Elke site krijgt één map voor zijn run: `~/onderzoeken/<slug>/<datum>/`. Een tweede start op dezelfde dag gaat verder in dezelfde map, want de run zelf zegt waar hij staat.
 
 Een regie die een subagent start en haar beurt teruggeeft, wacht daarop; zonder ingrijpen stopt `claude -p` zo'n subagent na tien minuten en blijft er een half onderzoek achter. loep zet die grens op zes uur en start, als een beurt toch zonder vraag en zonder zegel eindigt, zelf de volgende beurt, tot twintig keer, alleen zolang de run groeit en alleen zolang er 15 GB vrij is. Hervat je zelf, dan begint die telling opnieuw. Een run telt pas als klaar wanneer `audit verify` zegt dat het zegel klopt met wat er staat: een zegel van voor een antwoord telt niet.
 

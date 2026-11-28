@@ -318,7 +318,7 @@ test("the workflow starts no more agents at a time than the session process has 
   assert.equal(Number(atOnce[1]), max - 1, `de werkstroom start standaard ${atOnce[1]} agents tegelijk, het sessieproces laat standaard ${max} sessies toe: dat moet het maximum min één zijn`);
   const skill = read("skills/nldd-a11y-audit/SKILL.md");
   assert.ok(skill.includes(`session start --run RUN --session regie --max-sessions ${max}`), `de skill start het sessieproces niet met --max-sessions ${max}`);
-  assert.ok(skill.includes(`\`atOnce: ${max - 1}\` bij \`--max-sessions ${max}\``), `de skill geeft de werkstroom niet atOnce ${max - 1} bij --max-sessions ${max}`);
+  assert.ok(skill.includes(`dus ${max - 1} bij \`--max-sessions ${max}\``), `de skill geeft de golven niet ${max - 1} agents bij --max-sessions ${max}`);
 });
 
 type WorkflowPhase = (typeof PHASES)[number];
