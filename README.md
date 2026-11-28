@@ -110,12 +110,17 @@ De overige commando's:
 | `audit merge`, `audit check-merge` | De stap naar keuze die voorstelt welke bevindingen nog meer bij elkaar horen |
 | `audit weigh`, `audit check-weigh` | De stap die per bevinding vastlegt welke groepen bezoekers ze hindert, waarna de ernst daaruit volgt |
 | `audit summarize`, `audit check-summary`, `audit check-reading` | De samenvatting voor de leiding waarmee het rapport opent: één agent schrijft haar uit de tekst van het rapport, een controle houdt haar aan het rapport, en een tweede agent legt elke zin naast het rapport |
+| `add` | Zet een site in de backlog: url, organisatie, naam, en wat de skill anders zou moeten vragen. Een wachtwoord vraagt het nooit |
+| `run` | Werkt de backlog af, één site per keer, met één regie per site. `--sites <n>`, `--only <site>`, `--new` |
+| `status`, `log`, `pause`, `resume` | `status` zegt van elke site in welke stand ze staat, of van één site met de vraag die er ligt; `log` toont wat de regie deed; `pause` zet een site stil en `resume` gaat verder waar een mens iets deed |
+| `doctor` | Controleert wat een run nodig heeft: node, de toolbox, de werkstroom, de pluginversie, vlam-claude, de VLAM-routes, de vrije schijfruimte en de backlog |
 | `dev diff` | Legt twee evaluaties van dezelfde site naast elkaar: opgelost, gebleven en nieuw, als werkdocument `verschil.md` |
 | `dev compare` | Legt een onderzoek naast een bestaand onderzoek van dezelfde site; zie [validatie/README.md](validatie/README.md) |
+| `dev meting` | Meet de twee testwebsites van loep door, met agents, en zet de rapporten in `~/onderzoeken/meting/`; zie [docs/backlog.md](docs/backlog.md) |
 | `dev procedures` | Controleert de procedures |
 | `session` | De browsersessie van een agent: `session start`, `session stop`, `session list`, `session extend` (de agent verlengt zijn eigen budget, hooguit twee keer), en elk commando daarin als `session <commando>` (`session open P01`, `session look`, `session contrast 3`) |
 
-`node toolbox/src/cli.ts --help` noemt de lagen van de toolbox. `node toolbox/src/cli.ts audit --help` geeft de stappen van een onderzoek met hun opties, `node toolbox/src/cli.ts dev --help` het gereedschap voor wie aan loep werkt. `session`, `audit voiceover`, `audit mail` en `dev compare --findings` hebben een eigen `--help`. Wie meerdere sites achter elkaar wil laten onderzoeken zonder erbij te zitten, gebruikt [lus](docs/lus.md): een backlog van sites, één regie per site, en een vraag aan een mens waar alleen een mens kan beslissen. Buiten een onderzoek ijkt `just calibrate` de instrumenten, en `audit voiceover` beheert de virtuele Mac met VoiceOver (zie [docs/voiceover.md](docs/voiceover.md)).
+`node toolbox/src/cli.ts --help` noemt de lagen van de toolbox. `node toolbox/src/cli.ts audit --help` geeft de stappen van een onderzoek met hun opties, `node toolbox/src/cli.ts dev --help` het gereedschap voor wie aan loep werkt. `session`, `audit voiceover`, `audit mail` en `dev compare --findings` hebben een eigen `--help`. Wie meerdere sites achter elkaar wil laten onderzoeken zonder erbij te zitten, zet ze in de backlog met `add` en laat `run` ze afwerken: één regie per site, en een vraag aan een mens waar alleen een mens kan beslissen. Zie [docs/backlog.md](docs/backlog.md). Buiten een onderzoek ijkt `just calibrate` de instrumenten, en `audit voiceover` beheert de virtuele Mac met VoiceOver (zie [docs/voiceover.md](docs/voiceover.md)).
 
 ## Zonder assistent
 

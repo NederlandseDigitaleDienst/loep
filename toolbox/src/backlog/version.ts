@@ -43,7 +43,7 @@ export function checkoutVersion(repo: string = repoRoot): Version {
  * describe does not, because a tag set later on the same commit changes it without changing a line.
  */
 export function sameVersion(a: Version, b: Version): boolean {
-  // A version recorded before lus kept the changes has only the -dirty of describe to go on.
+  // A version recorded before loep kept the changes has only the -dirty of describe to go on.
   const changes = (version: Version): string => version.changes ?? (version.describe.endsWith("-dirty") ? "onbekend" : "");
   return a.sha === b.sha && a.plugin === b.plugin && changes(a) === changes(b) && changes(a) !== "onbekend";
 }

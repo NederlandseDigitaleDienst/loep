@@ -16,7 +16,7 @@ export interface RegieResult {
   signal: NodeJS.Signals | null;
   /** The last step the stream showed, for `status`. */
   step: string | null;
-  /** A person stopped lus (Ctrl-C, a kill, a closed terminal): no next turn, no next site. */
+  /** A person stopped loep (Ctrl-C, a kill, a closed terminal): no next turn, no next site. */
   interrupted: boolean;
 }
 
@@ -28,7 +28,7 @@ interface ContentBlock {
 
 /**
  * What goes into the transcript. The stream counts thinking tokens a few times a second; a transcript
- * of hours of a run would be mostly those counters, and `lus log` has to stay readable.
+ * of hours of a run would be mostly those counters, and `loep log` has to stay readable.
  */
 export function keepInTranscript(line: string): boolean {
   try {
@@ -73,7 +73,7 @@ export interface StartOptions {
   /** Every line of the stream, as it came in: the transcript of a run is the only way back into what happened. */
   transcript: string;
   onStep: (step: string) => void;
-  /** The pid of the regie as soon as it runs: a lus that is killed leaves the regie behind. */
+  /** The pid of the regie as soon as it runs: a loep that is killed leaves the regie behind. */
   onStart?: ((pid: number) => void) | undefined;
 }
 

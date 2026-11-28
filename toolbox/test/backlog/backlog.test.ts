@@ -3,10 +3,10 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { addSite, readBacklog, slugFor } from "../src/backlog.ts";
-import { regiePrompt } from "../src/regie.ts";
+import { addSite, readBacklog, slugFor } from "../../src/backlog/backlog.ts";
+import { regiePrompt } from "../../src/backlog/regie.ts";
 
-const backlogFile = (): string => join(mkdtempSync(join(tmpdir(), "lus-backlog-")), "backlog.yaml");
+const backlogFile = (): string => join(mkdtempSync(join(tmpdir(), "backlog-home-")), "backlog.yaml");
 
 test("de slug is de host zonder www, zodat de runs van een site bij elkaar staan", () => {
   assert.equal(slugFor("https://www.voorbeeld.nl/"), "voorbeeld.nl");
@@ -22,7 +22,7 @@ test("add schrijft een blok dat read terugleest, met de lege velden erbij", () =
   const file = readFileSync(path, "utf8");
   assert.match(file, /# Sites die onder de loep gaan/);
   assert.match(file, /- url: https:\/\/www\.voorbeeld\.nl\//);
-  // Zonder opgave geen eigen getal: dan geldt het budget van loep (5 op een testomgeving), niet een van lus.
+  // Zonder opgave geen eigen getal: dan geldt het budget van loep (5 op een testomgeving), niet een van de backlog.
   assert.match(file, /  sending:\n    allow: false\n    max: null/);
   const backlog = readBacklog(path);
   assert.equal(backlog.problems.length, 0);
@@ -48,10 +48,10 @@ test("commentaar en volgorde in een met de hand bewerkt bestand blijven staan", 
   assert.ok(file.indexOf("een.example") < file.indexOf("twee.example"));
 });
 
-test("een slug die geen mapnaam is, of een map van lus zelf, wordt geweigerd", () => {
+test("een slug die geen mapnaam is, of een map van loep zelf, wordt geweigerd", () => {
   const path = backlogFile();
-  assert.throws(() => addSite(path, { url: "https://www.voorbeeld.nl/", slug: "rapporten", organisation: "A" }), /map van lus zelf/);
-  // Met de hand in het bestand gezet: de run zou anders buiten de home van lus komen.
+  assert.throws(() => addSite(path, { url: "https://www.voorbeeld.nl/", slug: "rapporten", organisation: "A" }), /map van loep zelf/);
+  // Met de hand in het bestand gezet: de run zou anders buiten de home van loep komen.
   writeFileSync(path, "- url: https://www.example.org/\n  slug: ../elders\n  organisation: A\n");
   assert.throws(() => readBacklog(path), /regel 1 van de backlog: de slug "..\/elders"/);
   assert.throws(() => addSite(backlogFile(), { url: "https://www.voorbeeld.nl/", organisation: "A", navigationDelay: Number("twee") }), /--navigation-delay/);
@@ -104,7 +104,7 @@ test("een inlog zonder rol is een waarschuwing: de rol komt in het rapport, een 
 });
 
 test("een tempo voor de site komt uit de backlog en gaat mee in de opdracht", () => {
-  const home = mkdtempSync(join(tmpdir(), "lus-tempo-"));
+  const home = mkdtempSync(join(tmpdir(), "backlog-tempo-"));
   try {
     const path = join(home, "backlog.yaml");
     addSite(path, { url: "https://www.voorbeeld.nl/", organisation: "A", navigationDelay: 1 });

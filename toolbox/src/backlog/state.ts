@@ -5,9 +5,9 @@ import { dirname } from "node:path";
 import { writeAtomic } from "./atomic.ts";
 
 /*
- * What lus knows about each site, kept outside the run. `loep audit seal` hashes every file in a run folder and
- * `loep audit verify` fails on a file nobody wrote there, so lus never writes in a run: progress, questions and
- * transcripts live in .lus/, next to the backlog. The state is a convenience for `status` and for the next
+ * What loep knows about each site, kept outside the run. `loep audit seal` hashes every file in a run folder and
+ * `loep audit verify` fails on a file nobody wrote there, so loep never writes in a run: progress, questions and
+ * transcripts live in .loep/, next to the backlog. The state is a convenience for `status` and for the next
  * start; the run and vraag.md are the truth, and a state that disagrees with them loses.
  */
 
@@ -33,7 +33,7 @@ export interface Version {
   plugin: string;
   describe: string;
   sha: string;
-  /** A short hash of the changes that were not committed, empty for a clean checkout; absent in a state of an older lus. */
+  /** A short hash of the changes that were not committed, empty for a clean checkout; absent in a state of an older loep. */
   changes?: string;
 }
 
@@ -47,20 +47,20 @@ export interface SiteState {
   step: string | null;
   question: Question | null;
   version: Version | null;
-  /** The process of lus that runs this site, so a lock left by a killed process is recognised as stale. */
+  /** The process of loep that runs this site, so a lock left by a killed process is recognised as stale. */
   pid: number | null;
   /**
-   * The process of the regie itself. A `kill -9` on lus leaves the regie running, and the state would
+   * The process of the regie itself. A `kill -9` on loep leaves the regie running, and the state would
    * then say the work stopped while a second start would put a second regie in the same run.
    */
   regiePid: number | null;
   /** When that regie started, so a pid that came back for another process is not mistaken for it. */
   regieSince: string | null;
-  /** How often lus continued this run after a regie stopped without a question and without a seal. */
+  /** How often loep continued this run after a regie stopped without a question and without a seal. */
   continues: number;
   /** The report files that were copied out of the run, under a name with the site and the day. */
   handouts: string[];
-  /** What a person did through lus (answer, sign, decide, statement) since the regie stopped, for the next resume. */
+  /** What a person did through loep (answer, sign, decide, statement) since the regie stopped, for the next resume. */
   humanNl: string | null;
 }
 
@@ -88,11 +88,11 @@ export function writeState(path: string, state: State): void {
 }
 
 export function siteState(state: State, slug: string): SiteState {
-  // A state written by an older lus lacks the fields added since; the empty site says what they are.
+  // A state written by an older loep lacks the fields added since; the empty site says what they are.
   return { ...emptySite(slug), ...state.sites[slug], slug };
 }
 
-/** Change what lus knows about one site and write it back. */
+/** Change what loep knows about one site and write it back. */
 export function updateSite(path: string, slug: string, patch: Partial<SiteState>): SiteState {
   const state = readState(path);
   const next: SiteState = { ...siteState(state, slug), ...patch, slug, updatedAt: new Date().toISOString() };
@@ -131,7 +131,7 @@ export function processStart(pid: number): Date | null {
 
 /**
  * Whether the process that wrote something at `since` still runs. A pid alone is not enough: after a
- * reboot or a long time the number comes back for another process, and a lock or a state of a lus
+ * reboot or a long time the number comes back for another process, and a lock or a state of a loep
  * that is long gone would then hold everything up. A process that started after it wrote cannot be
  * the one that wrote; `ps` gives the start to the second, hence the second of slack.
  */
@@ -152,7 +152,7 @@ export function isGone(site: SiteState): boolean {
 }
 
 /**
- * Whether the regie of this site still runs. It outlives a lus that was killed with a signal it cannot
+ * Whether the regie of this site still runs. It outlives a loep that was killed with a signal it cannot
  * catch, and a run that still has a regie must not get a second one: two regies in one run write the
  * same evidence.
  */
@@ -162,7 +162,7 @@ export function regieRuns(site: SiteState): boolean {
 
 /** The stand of a site in one phrase, for `list` and `status`. */
 export function standNl(site: SiteState): string {
-  if (isGone(site)) return regieRuns(site) ? "loopt zonder lus" : "proces weg";
+  if (isGone(site)) return regieRuns(site) ? "loopt zonder loep" : "proces weg";
   return PHASES_NL[site.phase];
 }
 
@@ -178,10 +178,10 @@ export function readLock(path: string): RunnerLock | null {
 }
 
 /**
- * Take the lock of the runner. One lus runs sites at a time; a lock of a process that is gone is taken
- * over. The file is created exclusively, so two lus that start at the same moment cannot both get it.
+ * Take the lock of the runner. One loep runs sites at a time; a lock of a process that is gone is taken
+ * over. The file is created exclusively, so two loep that start at the same moment cannot both get it.
  * The host is said in the message but decides nothing: macOS changes its host name with the network,
- * and a live lus on this machine then still holds the lock.
+ * and a live loep on this machine then still holds the lock.
  */
 export function acquireLock(path: string, slug: string | null): { ok: true; stale: RunnerLock | null } | { ok: false; lock: RunnerLock } {
   const content = `${JSON.stringify({ pid: process.pid, host: hostname(), since: new Date().toISOString(), slug } satisfies RunnerLock, null, 2)}\n`;
@@ -201,7 +201,7 @@ export function acquireLock(path: string, slug: string | null): { ok: true; stal
     }
     const current = readLock(path);
     if (current && current.pid !== process.pid && stillRuns(current.pid, current.since)) return { ok: false, lock: current };
-    // A lock of a process that is gone, or one that does not read (a lus killed while writing it).
+    // A lock of a process that is gone, or one that does not read (a loep killed while writing it).
     stale = current;
     try {
       unlinkSync(path);

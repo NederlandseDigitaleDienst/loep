@@ -169,7 +169,13 @@ De paden in het schema zijn mappen onder `toolbox/`, tenzij er iets anders staat
 ```mermaid
 flowchart TD
   subgraph regel["Opdrachtregel"]
-    cli["src/cli.ts<br/>een switch met elk commando"]
+    cli["src/cli.ts<br/>de lagen, en een switch per stap"]
+    tabel["src/lib/commands.ts<br/>de tabel met elke naam"]
+  end
+  subgraph backlog["Backlog, src/backlog"]
+    lijst["backlog.ts, state.ts<br/>de lijst en de stand per site"]
+    loper["runner.ts, regie.ts<br/>een site, een regie"]
+    poort["cli.ts<br/>add, run, status,<br/>pause, resume, log, doctor"]
   end
   subgraph commandos["Commando's van de keten, src/commands"]
     meten["inventory, sample, collect,<br/>contrast, states, documents"]
@@ -198,10 +204,16 @@ flowchart TD
   browser["Browserlaag, src/browser<br/>Playwright en inpage.js"]
   teksten["Vaste teksten buiten de toolbox<br/>sjablonen en procedures"]
 
+  cli --> tabel
   cli --> meten
   cli --> sturen
   cli --> afmaken
+  cli --> poort
   cli --> client
+  poort --> lijst
+  poort --> loper
+  loper --> sturen
+  loper --> afmaken
   client -->|"Unix-socket"| daemon
   daemon --> cmds
   daemon --> veilig
@@ -224,7 +236,13 @@ flowchart TD
   evaluatie --> vast
 ```
 
-**Opdrachtregel.** `toolbox/src/cli.ts` is één bestand: een gebruikstekst en een `switch` met een tak per commando. Elke tak laadt zijn module pas als hij nodig is. Een paar commando's ontleden hun argumenten zelf en worden vóór de `switch` afgehandeld: `session`, `dev calibrate`, `dev variant`, `dev compare-variants` en `dev usage`, en `dev compare` met `--findings`.
+**Opdrachtregel.** `toolbox/src/cli.ts` is één bestand: de gebruiksteksten, de afhandeling vóór de `switch`, en een `switch` met een tak per stap van het onderzoek. Elke tak laadt zijn module pas als hij nodig is. Welke namen er zijn staat op één plek, in `toolbox/src/lib/commands.ts`: de stappen onder `audit`, het gereedschap onder `dev`, de werkwoorden van de backlog bovenaan, en de vier namen die op zichzelf staan (`quick`, `statement`, `contribute`, `session`). De help en de docs-test lezen die tabel, zodat een nieuwe naam niet op drie plekken hoeft.
+
+Een laag is een voorvoegsel: `loep audit contrast` wordt binnen `cli.ts` hetzelfde als wat eerst `loep contrast` heette. De platte namen werken nog één release, zodat een opdrachtbestand dat al op schijf staat niet breekt; de docs-test verbiedt ze in tekst, en een tweede test leest de code die loep zelf aanroept (de werkstroom, de backlog en de justfile) en eist daar de laag.
+
+Een paar commando's ontleden hun argumenten zelf en worden vóór de `switch` afgehandeld: `session`, de werkwoorden van de backlog en `dev meting` (die gaan naar `toolbox/src/backlog/cli.ts`), en `dev calibrate`, `dev variant`, `dev compare-variants` en `dev usage`, en `dev compare` met `--findings`. Een stap van het onderzoek neemt naast `--run <run>` ook de site van de backlog: `loep audit answer voorbeeld.nl` zoekt de run van die site op (`lookup.ts`) en zet er `--run` voor in de plaats, zodat de stap zelf niets van de backlog hoeft te weten.
+
+**Backlog** (`toolbox/src/backlog/`). De lijst van sites en de stand per site staan in `backlog.ts` en `state.ts`, in `~/onderzoeken/` naast de runs en nooit erin: het zegel dekt elk bestand van een run. `runner.ts` start per site één regie en leest wat die achterliet; `regie.ts` bouwt haar opdracht en omgeving. `cli.ts` is de opdrachtregel van de backlog, met `add`, `run`, `status`, `pause`, `resume`, `log` en `doctor`; `meting.ts` zet de twee testwebsites klaar voor `dev meting`, in een eigen map zodat ze nooit tussen de sites van echte eigenaren komen. Waarom het zo werkt staat in [backlog.md](backlog.md).
 
 **Commando's** (`toolbox/src/commands/`). De meeste bestanden zijn een stap van de keten. Daarnaast staan hulpcommando's: `audit gaps` en `audit feedback` lezen een afgeronde run (`audit feedback` schrijft een tekst voor een issue voor elk criterium dat open bleef door loep zelf, en voor een criterium met een oordeel waarbij een proef niet werkte; het verstuurt niets), `audit estimate` schat de duur, `dev compare` en `compare-findings` vergelijken met een bestaand onderzoek, `dev calibrate` ijkt de instrumenten, `dev variant` en `dev compare-variants` meten een variant van de code op een bevroren veegronde, met `dev usage` voor de tokens per agent uit de transcripts (zie [validatie/verbruik/README.md](../validatie/verbruik/README.md)), `audit voiceover` beheert de virtuele Mac, `contribute` maakt het meetblad van een afgeronde run, en `quick` is de snelle meting voor een pipeline. `contribute.ts` leest een run en schrijft er niets in; wat op een meetblad komt en de controle dat er geen woord van de site op staat, staan als pure functies in `toolbox/src/lib/run-sheet.ts` ([meetblad.md](meetblad.md)). `toolbox/scripts/rule-register.ts` maakt uit de ijkmeting en uit meetbladen het regelregister (`toolbox/src/lib/rule-register.ts`); het is geen commando van de keten en niets in een onderzoek leest de uitkomst. `quick.ts` staat naast de keten: het start `audit inventory`, `audit sample` en de commando's van één sessie als eigen processen en verandert niets aan een stap. Wat het uit de waarnemingen afleidt en hoe het met een basislijn vergelijkt, staat als pure functies in `toolbox/src/lib/quick.ts`. `modelsweep.ts` hoort bij de veegronde: het sluit wat over een pagina ligt en opent de toestanden uit het sitemodel. `instrument-tasks.ts` bevat de vier fasen met agents (rondgang, beoordelaar, verifieerder, afmaakronde), de stempels en de controles `audit check-walk` en `audit check-verdict`.
 

@@ -9,7 +9,7 @@ import { cliCall, repoRoot, stateDir, toolboxCli, workflowFile } from "./paths.t
  * procedure: it names the skill and adds only the rules a headless session needs.
  *
  * The skill comes from this checkout (`--plugin-dir`), never from a global install, so the skill, the
- * toolbox and the workflow of a run are the same version as lus.
+ * toolbox and the workflow of a run are the same version as loep.
  */
 
 export interface RegieOptions {
@@ -41,7 +41,7 @@ const quip = (items: string[]): string => items.map((item) => `"${item}"`).join(
 function sendingNl(site: Site): string {
   if (!site.sending.allow) return "niet toegestaan: agents drukken wel op een verzendknop met de vaste testwaarden, maar inventory krijgt geen --allow-writes en geen --test-environment.";
   const { max } = site.sending;
-  // Without a max the budget of loep holds, and inventory gets no --max-writes: a number lus made up would replace it.
+  // Without a max the budget of loep holds, and inventory gets no --max-writes: a number loep made up would replace it.
   if (isLocalHost(site.url)) return `op deze machine toegestaan met --allow-writes, ${max === null ? "met het budget dat loep daar zelf zet" : `hooguit ${max} verzendingen voor de hele run (inventory --max-writes ${max})`}.`;
   return `alleen op een verklaarde testomgeving, ${max === null ? "met het standaardbudget van loep" : `hooguit ${max} verzendingen`}. De gebruiker verklaart die omgeving zelf en draait inventory daarom zelf in een terminal: stop daarvoor (zie de spelregels) en zet in vraag.md het hele inventory-commando met --test-environment <origin> --declared-by "<naam>, <functie>"${max === null ? "" : ` --max-writes ${max}`}.`;
 }
@@ -59,7 +59,7 @@ function mailboxNl(site: Site): string {
 
 /** The prompt the regie gets: the site, what the person decided, and the rules of a headless session. */
 /**
- * What lus says when a regie ended its turn with the run half done. It happens: the agent reports
+ * What loep says when a regie ended its turn with the run half done. It happens: the agent reports
  * "the explorer is working on it" and stops, and nothing follows. The harness is the layer that can
  * start the next turn, so it does, and this is what it says.
  */

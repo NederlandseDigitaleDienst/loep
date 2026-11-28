@@ -2,7 +2,7 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
-import { AUDIT_COMMANDS, DEV_COMMANDS, NAMESPACES, STANDALONE_COMMANDS } from "./lib/commands.ts";
+import { AUDIT_COMMANDS, BACKLOG_COMMANDS, DEV_COMMANDS, NAMESPACES, STANDALONE_COMMANDS } from "./lib/commands.ts";
 
 const USAGE = `loep <command> [options]
 
@@ -23,6 +23,8 @@ const USAGE = `loep <command> [options]
                                          It reads a run of any version, writes nothing in it and sends nothing
   session <commando>                     What an agent does in a browser window during the investigation:
                                          open, look, click, speak. loep session --help
+  add|run|status|pause|resume|log|doctor The backlog: loep over a list of sites, a regie per site, with a person
+                                         where only a person can decide. loep status says how every site stands
   dev <verb>                             The tool for whoever works on loep itself: procedures, compare, diff,
                                          calibrate, variant, compare-variants, usage. loep dev --help
 
@@ -277,6 +279,9 @@ const DEV_USAGE = `loep dev <verb> [options]
                                          loep dev variant --help
   usage                                  Outside an evaluation: tokens per agent from the transcripts of a workflow,
                                          for compare-variants --usage; loep dev usage --help
+  meting [--sites <n>] [--only <site>] [--new]
+                                         Outside an evaluation: measure loep on its own test sites, with a regie and the skill,
+                                         in a backlog of its own. Needs a running test site: just testsite
 `;
 
 /** The number after `--at-once`: a whole number of 1 or more, of what the command does at the same time. */
@@ -344,6 +349,20 @@ async function main(): Promise<void> {
   if (argv[2] === "calibrate") return (await import("./commands/calibrate.ts")).cli(argv.slice(3)); // outside an evaluation: measures the instruments against the ACT test cases
   if (argv[2] === "variant" || argv[2] === "compare-variants") return (await import("./commands/variants.ts")).cli(argv.slice(2)); // outside an evaluation: measures a variant of the code on a frozen sweep
   if (argv[2] === "usage") return (await import("./commands/usage.ts")).cli(argv.slice(3)); // outside an evaluation: tokens per agent from the transcripts, for compare-variants --usage
+  // A step of an investigation takes a site of the backlog where it takes a run: `loep audit answer voorbeeld.nl`.
+  // `loep statement voorbeeld.nl` is the same for the statement, which takes a run without a layer.
+  if (!argv.includes("--run") && argv[2] !== undefined && (argv[2] === "statement" || (AUDIT_COMMANDS as readonly string[]).includes(argv[2]))) {
+    const at = argv.findIndex((arg, index) => index >= 3 && !arg.startsWith("-"));
+    if (at !== -1) {
+      const run = (await import("./backlog/lookup.ts")).runForSite(argv[at]!);
+      if (run !== null) argv.splice(at, 0, "--run", run);
+    }
+  }
+  // The backlog takes its verbs and options as they come; it parses them itself.
+  if (argv[2] !== undefined && ((BACKLOG_COMMANDS as readonly string[]).includes(argv[2]) || argv[2] === "meting")) {
+    process.exitCode = await (await import("./backlog/cli.ts")).backlogCli(argv.slice(2));
+    return;
+  }
   // A session takes its commands and options as they come; it parses them itself.
   if (argv[2] === "session") {
     const { sessionCli, SESSION_USAGE } = await import("./session/client.ts");

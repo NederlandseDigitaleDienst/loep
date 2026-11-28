@@ -51,7 +51,7 @@ function passThroughStep(): { prototype: { handle: Handle } } {
  */
 async function loadWith(sharing: (incoming: SocketEnds, siteOrigin: string) => SocketEnds): Promise<{ hidden: boolean; status: number | null; missed: NotLoaded[] }> {
   const { origin, server } = await site();
-  const run = mkdtempSync(join(tmpdir(), "loep-lus-"));
+  const run = mkdtempSync(join(tmpdir(), "loep-backlog-"));
   writeFileSync(join(run, "inventory.json"), JSON.stringify({ baseUrl: `${origin}/`, origin, pages: [] }));
   registerSecret(run, SECRET, { source: "test" });
   browser ??= await chromium.launch();

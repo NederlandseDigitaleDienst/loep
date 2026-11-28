@@ -1,7 +1,6 @@
 # Taken voor loep. Een onderzoek in volgorde: install, explore, (verkenner-agent), sweep, tasks, (agents), report, (weegagent), render. De namen volgen de commando's van de toolbox.
 
 toolbox := justfile_directory() / "toolbox"
-lus := justfile_directory() / "lus"
 cli := "node " + toolbox / "src/cli.ts"
 
 # Toon de beschikbare taken
@@ -99,23 +98,11 @@ test-shard i n:
 
 # Draai alleen de tests die geen browser starten: een paar seconden, voor tussendoor en voor de snelle controle bij een push
 test-quick:
-    cd {{toolbox}} && node --test test/compare-findings.test.ts test/contrast.test.ts test/core.test.ts test/defects.test.ts test/docs.test.ts test/estimate.test.ts test/release.test.ts test/seal-os-metadata.test.ts test/searchbody.test.ts test/extractors.test.ts test/feedback.test.ts test/instrument-tasks.test.ts test/origins.test.ts test/portrait.test.ts test/render.test.ts test/sequence.test.ts test/statement.test.ts test/sweepstamp.test.ts test/timing.test.ts test/atonce.test.ts test/verdict.test.ts test/voiceover.test.ts test/again.test.ts test/raise-budget.test.ts test/sweep-check.test.ts test/test-shard.test.ts test/answer-to-file.test.ts test/report-html.test.ts test/weighing.test.ts test/export.test.ts test/quick.test.ts test/rule-register.test.ts test/run-sheet.test.ts test/write-grants.test.ts test/executive-summary.test.ts
+    cd {{toolbox}} && node --test test/compare-findings.test.ts test/contrast.test.ts test/core.test.ts test/defects.test.ts test/docs.test.ts test/estimate.test.ts test/release.test.ts test/seal-os-metadata.test.ts test/searchbody.test.ts test/extractors.test.ts test/feedback.test.ts test/instrument-tasks.test.ts test/origins.test.ts test/portrait.test.ts test/render.test.ts test/sequence.test.ts test/statement.test.ts test/sweepstamp.test.ts test/timing.test.ts test/atonce.test.ts test/verdict.test.ts test/voiceover.test.ts test/again.test.ts test/raise-budget.test.ts test/sweep-check.test.ts test/test-shard.test.ts test/answer-to-file.test.ts test/report-html.test.ts test/weighing.test.ts test/export.test.ts test/quick.test.ts test/rule-register.test.ts test/run-sheet.test.ts test/write-grants.test.ts test/executive-summary.test.ts test/backlog/backlog.test.ts test/backlog/meting.test.ts test/backlog/regie.test.ts test/backlog/state.test.ts test/backlog/version.test.ts
 
 # Controleer de types
 check:
     cd {{toolbox}} && npx tsc --noEmit
-
-# Installeer de pakketten van lus
-lus-install:
-    cd {{lus}} && npm ci
-
-# De tests van lus: de backlog, de stand, het slot en de loper met een nep-regie
-lus-test:
-    cd {{lus}} && node --test 'test/**/*.test.ts'
-
-# Controleer de types van lus
-lus-check:
-    cd {{lus}} && npx tsc --noEmit
 
 # Controleer de procedurecatalogus
 procedures:

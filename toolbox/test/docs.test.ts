@@ -5,7 +5,7 @@ import { dirname, join, normalize } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { EXPLORE_MAX_COMMANDS, EXPLORE_MAX_MINUTES } from "../src/commands/explore.ts";
-import { AUDIT_COMMANDS, callName, cliCall, DEV_COMMANDS, NAMESPACES, STANDALONE_COMMANDS } from "../src/lib/commands.ts";
+import { AUDIT_COMMANDS, BACKLOG_COMMANDS, callName, cliCall, DEV_COMMANDS, NAMESPACES, STANDALONE_COMMANDS } from "../src/lib/commands.ts";
 import { MAX_RESWEEPS, MAX_RETURNS_TO_EXPLORER, SHEETS_PER_TASK } from "../src/commands/gate.ts";
 import { briefPending, BUDGETS, INSTRUMENT_FLOW, loadInstrumentIndex, PHASES, pointsToFinish, recordAttempts, skip, skipKindOf, skipped, skippedForOutage, TASK_FILES, unskip } from "../src/commands/instrument-tasks.ts";
 import { CEILINGS, EXTENSION, MEASURED_USE, REFERENCE_SITE_SIZE, WALK_STATES } from "../src/lib/budget.ts";
@@ -33,10 +33,10 @@ const LOGS = ["validatie/iteraties.md", "validatie/lessen.md"];
 const COMMAND_REFERENCE = ["README.md", "docs/methode.md"];
 
 /** The commands of the toolbox, wherever they sit: a step of an investigation, the tool for whoever works on loep, or one that stands alone. */
-const COMMANDS: string[] = [...AUDIT_COMMANDS, ...DEV_COMMANDS, ...STANDALONE_COMMANDS];
+const COMMANDS: string[] = [...AUDIT_COMMANDS, ...DEV_COMMANDS, ...BACKLOG_COMMANDS, ...STANDALONE_COMMANDS];
 
 /** The commands cli.ts handles before it reads the rest of the line, or in a module of its own. */
-const HANDLED_ELSEWHERE = ["session", "calibrate", "variant", "compare-variants", "usage"];
+const HANDLED_ELSEWHERE = ["session", "calibrate", "variant", "compare-variants", "usage", ...BACKLOG_COMMANDS, "meting"];
 
 /** The words that can follow `session`: the three that manage a session, and every command in one. `serve` is how the process starts itself and is no command for a reader. */
 const AFTER_SESSION = [...SESSION_MANAGEMENT.filter((word) => word !== "serve"), ...SESSION_COMMANDS];
@@ -77,7 +77,8 @@ function wrongCalls(code: string): string[] {
       if (next !== undefined && !(NAMESPACES[word] as readonly string[]).includes(next)) problems.push(`"${match[0].trim()} ${next}" is geen commando onder loep ${word}`);
       continue;
     }
-    const stands = word === "session" || (STANDALONE_COMMANDS as readonly string[]).includes(word);
+    // A word of the backlog stands at the top of the command line too: `loep run` is `loep run`.
+    const stands = word === "session" || (STANDALONE_COMMANDS as readonly string[]).includes(word) || (BACKLOG_COMMANDS as readonly string[]).includes(word);
     if (!stands && !SESSION_COMMANDS.includes(word)) problems.push(`"${match[0].trim()}" is geen commando in een sessie`);
   }
   return problems;
@@ -117,8 +118,8 @@ function section(text: string, heading: string): string {
 const TASKS = justTasks(read("justfile"));
 
 test("the code that calls the toolbox itself carries the layer, like the task files do", () => {
-  // The descriptions were the visible half. lus, the workflow of a run and the recipes write their own command lines, and those went stale unseen.
-  const callers = ["skills/nldd-a11y-audit/onderzoek.workflow.js", ...readdirSync(join(ROOT, "lus/src")).filter((file) => file.endsWith(".ts")).map((file) => `lus/src/${file}`), "justfile"];
+  // The descriptions were the visible half. The backlog, the workflow of a run and the recipes write their own command lines, and those went stale unseen.
+  const callers = ["skills/nldd-a11y-audit/onderzoek.workflow.js", ...readdirSync(join(ROOT, "toolbox/src/backlog")).filter((file) => file.endsWith(".ts")).map((file) => `toolbox/src/backlog/${file}`), "justfile"];
   for (const file of callers) assert.deepEqual(unlayeredCalls(read(file)), [], file);
 });
 

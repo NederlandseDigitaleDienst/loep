@@ -4,11 +4,11 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpath
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import type { Site } from "../src/backlog.ts";
-import { toolboxCli } from "../src/paths.ts";
-import { isSealed, readQuestion, stepOf } from "../src/run.ts";
-import { handOutMissing, runSite, spaceProblemNl } from "../src/runner.ts";
-import { readState, siteState, updateSite } from "../src/state.ts";
+import type { Site } from "../../src/backlog/backlog.ts";
+import { toolboxCli } from "../../src/backlog/paths.ts";
+import { isSealed, readQuestion, stepOf } from "../../src/backlog/run.ts";
+import { handOutMissing, runSite, spaceProblemNl } from "../../src/backlog/runner.ts";
+import { readState, siteState, updateSite } from "../../src/backlog/state.ts";
 
 /** The fake regie seals the way the regie does: with loep, so that `verify` agrees. */
 const SEAL = `node ${toolboxCli} seal --run "$run" >/dev/null`;
@@ -31,15 +31,15 @@ const site = (overrides: Partial<Site> = {}): Site => ({
   ...overrides,
 });
 
-/** A home of lus in a temporary folder, with a `vlam-claude` on the path that does what the body says. */
+/** A home of loep in a temporary folder, with a `vlam-claude` on the path that does what the body says. */
 function fakeHome(body: string): string {
-  const home = mkdtempSync(join(tmpdir(), "lus-home-"));
+  const home = mkdtempSync(join(tmpdir(), "backlog-home-"));
   const bin = join(home, "bin");
   mkdirSync(bin, { recursive: true });
   writeFileSync(join(bin, "vlam-claude"), `#!/bin/sh\n${body}\n`, { mode: 0o755 });
-  process.env["LUS_HOME"] = home;
+  process.env["LOEP_HOME"] = home;
   // De schijf van de machine waar de proef draait zegt niets over wat hier getest wordt.
-  process.env["LUS_MIN_FREE_GB"] = "0";
+  process.env["LOEP_MIN_FREE_GB"] = "0";
   process.env["PATH"] = `${bin}:${process.env["PATH"]}`;
   return home;
 }
@@ -87,13 +87,13 @@ echo '{"type":"result","result":"klaar"}'`);
   assert.match(state.question?.textNl ?? "", /inloggen/);
   assert.equal(state.question?.command, "node /x/cli.ts login --run /r --url https://www.voorbeeld.nl/inloggen");
   assert.equal(state.step, "gate");
-  const dir = join(home, ".lus", "voorbeeld.nl");
-  assert.equal((readFileSync(join(dir, "config.txt"), "utf8")).trim(), join(home, ".lus", "claude-home"));
+  const dir = join(home, ".loep", "voorbeeld.nl");
+  assert.equal((readFileSync(join(dir, "config.txt"), "utf8")).trim(), join(home, ".loep", "claude-home"));
   const args = readFileSync(join(dir, "args.txt"), "utf8");
   assert.match(args, /--plugin-dir/);
   assert.match(args, /Workflow,Task/);
   assert.match(args, /--add-dir/);
-  assert.equal(readState(join(home, ".lus", "state.json")).sites["voorbeeld.nl"]?.phase, "vraagt");
+  assert.equal(readState(join(home, ".loep", "state.json")).sites["voorbeeld.nl"]?.phase, "vraagt");
 });
 
 test("de regie begint in de map van de site en de run staat in de state", async () => {
@@ -101,7 +101,7 @@ test("de regie begint in de map van de site en de run staat in de state", async 
   const state = await runSite({ site: site({ slug: "tweede.example" }) });
   assert.equal(state.phase, "fout");
   assert.equal(state.step, null);
-  const dir = join(home, ".lus", "tweede.example");
+  const dir = join(home, ".loep", "tweede.example");
   // macOS geeft /tmp als /private/var/... terug: de werkmap van de regie moet dezelfde map zijn, niet dezelfde letters.
   assert.equal(realpathSync(readFileSync(join(dir, "cwd.txt"), "utf8").trim()), realpathSync(dir));
   assert.ok(state.run?.startsWith(join(home, "tweede.example")));
@@ -109,7 +109,7 @@ test("de regie begint in de map van de site en de run staat in de state", async 
 
 test("de vraag van een vorige stop wordt bewaard, niet overschreven", async () => {
   const home = fakeHome("echo '{\"type\":\"result\",\"result\":\"niets\"}'");
-  const dir = join(home, ".lus", "voorbeeld.nl");
+  const dir = join(home, ".loep", "voorbeeld.nl");
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, "vraag.md"), "# Vraag\n\neerder\n");
   await runSite({ site: site() });
@@ -133,7 +133,7 @@ test("een run met een zegel is klaar", () => {
   assert.equal(isSealed(run), false);
 });
 
-test("een regie die haar beurt teruggeeft met een half af onderzoek wordt door lus verder gestuurd", async () => {
+test("een regie die haar beurt teruggeeft met een half af onderzoek wordt door loep verder gestuurd", async () => {
   // Precies wat er in de praktijk gebeurde: de regie meldt dat de verkenner bezig is en stopt.
   const home = fakeHome(`alles="$@"
 run=""
@@ -146,12 +146,12 @@ echo '{"type":"result","result":"klaar"}'`);
   const state = await runSite({ site: site() });
   assert.equal(state.phase, "klaar");
   assert.equal(state.continues, 0, "een afgemaakte run telt geen beurten meer");
-  const dir = join(home, ".lus", "voorbeeld.nl");
+  const dir = join(home, ".loep", "voorbeeld.nl");
   assert.equal(readFileSync(join(dir, "beurten"), "utf8").trim(), "2");
   const tweede = readFileSync(join(dir, "args-2.txt"), "utf8");
   assert.match(tweede, /De vorige beurt stopte zonder een vraag/);
   assert.match(tweede, /pending --run .* --brief/);
-  assert.match(readFileSync(join(dir, "lus.log"), "utf8"), /beurt 1 van 20/);
+  assert.match(readFileSync(join(dir, "loep.log"), "utf8"), /beurt 1 van 20/);
 });
 
 test("een regie die de run niet laat groeien krijgt geen tweede beurt", async () => {
@@ -160,9 +160,9 @@ test("een regie die de run niet laat groeien krijgt geen tweede beurt", async ()
 echo '{"type":"result","result":"niets"}'`);
   const state = await runSite({ site: site() });
   assert.equal(state.phase, "fout");
-  const dir = join(home, ".lus", "voorbeeld.nl");
+  const dir = join(home, ".loep", "voorbeeld.nl");
   assert.equal(readFileSync(join(dir, "beurten"), "utf8").trim(), "1");
-  assert.match(readFileSync(join(dir, "lus.log"), "utf8"), /niet veranderd/);
+  assert.match(readFileSync(join(dir, "loep.log"), "utf8"), /niet veranderd/);
 });
 
 test("een tweede run van dezelfde dag komt naast de eerste, niet erover heen", async () => {
@@ -187,7 +187,7 @@ while [ $# -gt 0 ]; do case "$1" in --add-dir) run="$2"; shift ;; esac; shift; d
 ${SEAL}
 echo '{"type":"result","result":"klaar"}'`);
   await runSite({ site: site() });
-  const path = join(home, ".lus", "state.json");
+  const path = join(home, ".loep", "state.json");
   const state = readState(path);
   state.sites["voorbeeld.nl"]!.version = { plugin: "0.1.0", describe: "v0.1.0-1-g0000000", sha: "0000000" };
   writeFileSync(path, JSON.stringify(state));
@@ -205,11 +205,11 @@ echo '{"type":"result","result":"klaar"}'`);
   const state = await runSite({ site: site() });
   assert.equal(state.phase, "klaar");
   assert.deepEqual(state.handouts, []);
-  assert.match(readFileSync(join(home, ".lus", "voorbeeld.nl", "lus.log"), "utf8"), /geen rapport om uit te geven/);
+  assert.match(readFileSync(join(home, ".loep", "voorbeeld.nl", "loep.log"), "utf8"), /geen rapport om uit te geven/);
 });
 
 test("een verzegelde run met een evaluatie geeft het rapport uit onder de naam van de site", async () => {
-  // De hele keten: lus roept loep handout aan, en de naam zegt de slug en niet de host van de url.
+  // De hele keten: loep roept loep handout aan, en de naam zegt de slug en niet de host van de url.
   const home = fakeHome(`run=""
 while [ $# -gt 0 ]; do case "$1" in --add-dir) run="$2"; shift ;; esac; shift; done
 mkdir -p "$run/report"
@@ -224,7 +224,7 @@ echo '{"type":"result","result":"klaar"}'`);
   assert.equal(readFileSync(join(home, "rapporten", "rapport-voorbeeld.nl-2026-11-23-concept.pdf"), "utf8"), "pdf\n");
 });
 
-test("een run die klaar was voordat lus rapporten uitgaf, krijgt ze alsnog", async () => {
+test("een run die klaar was voordat loep rapporten uitgaf, krijgt ze alsnog", async () => {
   const home = fakeHome(`run=""
 while [ $# -gt 0 ]; do case "$1" in --add-dir) run="$2"; shift ;; esac; shift; done
 mkdir -p "$run/report"
@@ -235,7 +235,7 @@ echo '{"type":"result","result":"klaar"}'`);
   const state = await runSite({ site: site() });
   assert.equal(state.handouts.length, 1);
   // De stand van toen: klaar, maar zonder de kopie.
-  const path = join(home, ".lus", "state.json");
+  const path = join(home, ".loep", "state.json");
   const older = readState(path);
   older.sites["voorbeeld.nl"]!.handouts = [];
   writeFileSync(path, JSON.stringify(older));
@@ -246,16 +246,16 @@ echo '{"type":"result","result":"klaar"}'`);
   assert.ok(existsSync(again[0]!));
 });
 
-test("onder de vijftien gigabyte begint lus geen run", () => {
+test("onder de vijftien gigabyte begint loep geen run", () => {
   // Een run van uren schrijft gigabytes; loopt de schijf vol, dan is de run weg en het rapport ook.
-  delete process.env["LUS_MIN_FREE_GB"];
+  delete process.env["LOEP_MIN_FREE_GB"];
   assert.match(spaceProblemNl(9) ?? "", /9 GB vrij; onder 15 GB/);
   assert.equal(spaceProblemNl(15), null);
   assert.equal(spaceProblemNl(null), null, "een schijf die niet te lezen is, is geen reden om te weigeren");
 });
 
 test("een regie die iemand stopt, krijgt geen volgende beurt, ook niet als de run groeide", async () => {
-  // Ctrl-C in het venster van lus: zonder deze grens begon lus meteen aan de volgende beurt.
+  // Ctrl-C in het venster van loep: zonder deze grens begon loep meteen aan de volgende beurt.
   const home = fakeHome(`run=""
 while [ $# -gt 0 ]; do case "$1" in --add-dir) run="$2"; shift ;; esac; shift; done
 n=0; [ -f beurten ] && n=$(cat beurten); n=$((n + 1)); echo $n > beurten
@@ -263,28 +263,28 @@ echo vooruitgang > "$run/vooruitgang-$n.txt"
 echo '{"type":"system","subtype":"init"}'
 exec sleep 30`);
   const running = runSite({ site: site() });
-  const dir = join(home, ".lus", "voorbeeld.nl");
+  const dir = join(home, ".loep", "voorbeeld.nl");
   for (let wait = 0; wait < 100 && !existsSync(join(dir, "beurten")); wait += 1) await new Promise((resolve) => setTimeout(resolve, 50));
   await new Promise((resolve) => setTimeout(resolve, 200));
   process.emit("SIGINT");
   const state = await running;
   assert.equal(state.phase, "gepauzeerd");
   assert.equal(readFileSync(join(dir, "beurten"), "utf8").trim(), "1");
-  assert.match(readFileSync(join(dir, "lus.log"), "utf8"), /onderbroken/);
+  assert.match(readFileSync(join(dir, "loep.log"), "utf8"), /onderbroken/);
 });
 
-test("een run waarvan lus werd gekild, gaat verder bij pending en begint niet opnieuw", async () => {
+test("een run waarvan loep werd gekild, gaat verder bij pending en begint niet opnieuw", async () => {
   const home = fakeHome(`echo "$@" > args.txt
 echo '{"type":"result","result":"niets"}'`);
   const first = await runSite({ site: site() });
   // Zo laat een kill de stand achter: loopt, met een proces dat er niet meer is.
-  const path = join(home, ".lus", "state.json");
+  const path = join(home, ".loep", "state.json");
   const state = readState(path);
   state.sites["voorbeeld.nl"] = { ...state.sites["voorbeeld.nl"]!, phase: "loopt", pid: 999_999 };
   writeFileSync(path, JSON.stringify(state));
   const again = await runSite({ site: site() });
   assert.equal(again.run, first.run);
-  const args = readFileSync(join(home, ".lus", "voorbeeld.nl", "args.txt"), "utf8");
+  const args = readFileSync(join(home, ".loep", "voorbeeld.nl", "args.txt"), "utf8");
   assert.match(args, /Deze run loopt al/);
   assert.match(args, /pending --run .* --brief/);
 });
@@ -294,8 +294,8 @@ test("de pid van de regie staat in de state zolang die loopt", async () => {
 sleep 1
 echo '{"type":"result","result":"niets"}'`);
   const running = runSite({ site: site() });
-  const dir = join(home, ".lus", "voorbeeld.nl");
-  const path = join(home, ".lus", "state.json");
+  const dir = join(home, ".loep", "voorbeeld.nl");
+  const path = join(home, ".loep", "state.json");
   const pidFile = join(dir, "regie.pid");
   let seen: number | null = null;
   for (let wait = 0; wait < 100 && (seen === null || !existsSync(pidFile)); wait += 1) {
@@ -309,13 +309,13 @@ echo '{"type":"result","result":"niets"}'`);
   assert.equal(readState(path).sites["voorbeeld.nl"]?.regiePid, null);
 });
 
-test("een lus die weg is maar wiens regie nog loopt, begint geen tweede regie", async () => {
-  // kill -9 op lus: de regie leeft door, en een tweede start zou in dezelfde run schrijven.
+test("een loep die weg is maar wiens regie nog loopt, begint geen tweede regie", async () => {
+  // kill -9 op loep: de regie leeft door, en een tweede start zou in dezelfde run schrijven.
   const home = fakeHome("echo '{\"type\":\"result\",\"result\":\"niets\"}'");
-  const path = join(home, ".lus", "state.json");
+  const path = join(home, ".loep", "state.json");
   updateSite(path, "voorbeeld.nl", { phase: "loopt", pid: 999_999, regiePid: process.pid, regieSince: new Date().toISOString() });
   await assert.rejects(runSite({ site: site() }), /de regie van voorbeeld.nl loopt nog/);
-  assert.equal(existsSync(join(home, ".lus", "voorbeeld.nl", "lus.log")), false, "er is niets gestart");
+  assert.equal(existsSync(join(home, ".loep", "voorbeeld.nl", "loep.log")), false, "er is niets gestart");
   assert.equal(siteState(readState(path), "voorbeeld.nl").phase, "loopt", "de stand blijft die van de lopende regie");
 });
 
@@ -335,10 +335,10 @@ echo '{"type":"result","result":"klaar"}'`);
   spawnSync("node", [toolboxCli, "seal", "--run", run]);
   mkdirSync(join(run, "antwoorden"));
   writeFileSync(join(run, "antwoorden", "1.4.3.json"), "{}\n");
-  writeFileSync(join(home, ".lus", "voorbeeld.nl", "hervat"), "");
+  writeFileSync(join(home, ".loep", "voorbeeld.nl", "hervat"), "");
   const state = await runSite({ site: site(), resumeNl: "De mens legde een antwoord vast.", byPerson: true });
   assert.equal(state.phase, "klaar");
-  assert.equal(readFileSync(join(home, ".lus", "voorbeeld.nl", "beurten"), "utf8").trim(), "2");
+  assert.equal(readFileSync(join(home, ".loep", "voorbeeld.nl", "beurten"), "utf8").trim(), "2");
 });
 
 test("een mens die hervat, geeft de run zijn beurten terug", async () => {
@@ -349,7 +349,7 @@ if [ "$n" = "2" ]; then echo meer > "$run/meer.txt"; fi
 if [ "$n" = "3" ]; then ${SEAL}; fi
 echo '{"type":"result","result":"klaar"}'`);
   const first = await runSite({ site: site() });
-  const path = join(home, ".lus", "state.json");
+  const path = join(home, ".loep", "state.json");
   const state = readState(path);
   state.sites["voorbeeld.nl"] = { ...state.sites["voorbeeld.nl"]!, continues: 20 };
   writeFileSync(path, JSON.stringify(state));

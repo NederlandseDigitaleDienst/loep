@@ -5,11 +5,11 @@ import { addSite, readBacklog } from "./backlog.ts";
 /*
  * The measurement before a release: loep on its own test sites, one with built-in defects and one that
  * should stay clean. Those are runs like any other, so they go through the regie and the skill, and a
- * person reads the reports that come out. What lus adds is a backlog of their own: a real owner's site
- * and a test site in one file would end up in one `lus run`, and the fixtures would turn up in the
+ * person reads the reports that come out. What loep adds is a backlog of their own: a real owner's site
+ * and a test site in one file would end up in one `loep run`, and the fixtures would turn up in the
  * overview of the sites under audit.
  *
- * The testsite has to be running. lus checks that before an agent starts: a regie of hours against a
+ * The testsite has to be running. loep checks that before an agent starts: a regie of hours against a
  * server nobody started fails on its first page and reads like a broken site.
  */
 
@@ -28,7 +28,7 @@ export const FIXTURES: Fixture[] = [
 
 /** Where a meting keeps its backlog, runs and state: never next to the sites of real owners. */
 export function metingHome(): string {
-  return process.env["LUS_HOME"] ?? join(homedir(), "onderzoeken", "meting");
+  return process.env["LOEP_HOME"] ?? join(homedir(), "onderzoeken", "meting");
 }
 
 /** Whether the testsite answers, so that no agent starts against a server nobody started. */

@@ -91,25 +91,18 @@ jobs:
           cache: npm
           cache-dependency-path: |
             toolbox/package-lock.json
-            lus/package-lock.json
       - uses: ./.github/actions/just-and-typst
       - uses: astral-sh/setup-uv@v7
       - name: Elk bestand heeft een rechthebbende en een licentie
         run: just reuse
       - name: Pakketten, zonder browsers
         run: cd toolbox && npm ci
-      - name: Pakketten van lus
-        run: cd lus && npm ci
       - name: Types
         run: just check
-      - name: Types van lus
-        run: just lus-check
       - name: Procedures
         run: just procedures
       - name: Tests zonder browser
         run: just test-quick
-      - name: Tests van lus
-        run: just lus-test
 
   wijziging:
     if: github.event_name != 'push'
@@ -166,7 +159,6 @@ jobs:
           cache: npm
           cache-dependency-path: |
             toolbox/package-lock.json
-            lus/package-lock.json
       - uses: ./.github/actions/just-and-typst
         with:
           typst: true
@@ -212,7 +204,6 @@ jobs:
           cache: npm
           cache-dependency-path: |
             toolbox/package-lock.json
-            lus/package-lock.json
       - uses: ./.github/actions/just-and-typst
         with:
           typst: true
@@ -245,22 +236,15 @@ jobs:
           cache: npm
           cache-dependency-path: |
             toolbox/package-lock.json
-            lus/package-lock.json
       - uses: ./.github/actions/just-and-typst
       # release.test.ts runs towncrier with uvx.
       - uses: astral-sh/setup-uv@v7
       - name: Pakketten, zonder browsers
         run: cd toolbox && npm ci
-      - name: Pakketten van lus
-        run: cd lus && npm ci
       - name: Types
         run: just check
-      - name: Types van lus
-        run: just lus-check
       - name: Tests zonder browser
         run: just test-quick
-      - name: Tests van lus
-        run: just lus-test
 
   veegronde:
     needs: wijziging
@@ -309,7 +293,6 @@ jobs:
           cache: npm
           cache-dependency-path: |
             toolbox/package-lock.json
-            lus/package-lock.json
       - uses: ./.github/actions/just-and-typst
         if: env.MEASURE == 'true'
 
@@ -376,7 +359,6 @@ jobs:
           cache: npm
           cache-dependency-path: |
             toolbox/package-lock.json
-            lus/package-lock.json
       - uses: ./.github/actions/just-and-typst
         if: env.MEASURE == 'true'
 

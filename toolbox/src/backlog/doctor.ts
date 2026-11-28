@@ -27,7 +27,7 @@ const which = (name: string): string | null => {
   }
 };
 
-/** The free space of the disk under the home of lus, in whole GB, or null when it cannot be read. */
+/** The free space of the disk under the home of loep, in whole GB, or null when it cannot be read. */
 export function freeGb(path: string): number | null {
   try {
     const stats = statfsSync(existsSync(path) ? path : homedir());
@@ -71,12 +71,12 @@ export function doctor(options: DoctorOptions = {}): Check[] {
   const claude = which("vlam-claude");
   checks.push({ labelNl: "vlam-claude", ok: claude !== null, detailNl: claude ?? "niet gevonden; zonder dit script komt de regie niet bij VLAM" });
   checks.push({ labelNl: "claude", ok: which("claude") !== null, detailNl: which("claude") ?? "niet gevonden; vlam-claude heeft het nodig" });
-  checks.push({ labelNl: "just", ok: which("just") !== null, detailNl: which("just") ?? "niet gevonden; lus meting start de testsites en de taken van de justfile" });
+  checks.push({ labelNl: "just", ok: which("just") !== null, detailNl: which("just") ?? "niet gevonden; loep dev meting start de testsites en de taken van de justfile" });
   const routes = which("vlam-routes");
-  checks.push(options.routes === true ? routesCheck() : { labelNl: "VLAM", ok: routes !== null, detailNl: routes ?? "vlam-routes niet gevonden; de routes worden dan niet vooraf geproefd (lus run proeft ze)" });
+  checks.push(options.routes === true ? routesCheck() : { labelNl: "VLAM", ok: routes !== null, detailNl: routes ?? "vlam-routes niet gevonden; de routes worden dan niet vooraf geproefd (loep run proeft ze)" });
 
   const free = freeGb(homeDir());
-  checks.push({ labelNl: "schijf", ok: free === null ? false : free >= MIN_FREE_GB, detailNl: free === null ? `onbekend onder ${homeDir()}` : `${free} GB vrij (onder ${MIN_FREE_GB} GB begint lus niets nieuws)` });
+  checks.push({ labelNl: "schijf", ok: free === null ? false : free >= MIN_FREE_GB, detailNl: free === null ? `onbekend onder ${homeDir()}` : `${free} GB vrij (onder ${MIN_FREE_GB} GB begint loep niets nieuws)` });
 
   let backlogDetail: string;
   let backlogOk = true;
