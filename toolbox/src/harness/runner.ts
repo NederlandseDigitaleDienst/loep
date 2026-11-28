@@ -150,7 +150,9 @@ export async function runSite(options: SiteRunOptions): Promise<SiteState> {
       result = await startRegie({
         backend: backend.backend,
         args: regieArgs(backend.backend, regiePrompt({ site, run, atOnce: site.atOnce, resumeNl }), run),
-        env: regieEnvOf(backend.backend),
+        // The choice travels with the regie, so `audit waves` starts the agents on the same backend. Without it
+        // a machine with two of them could run the regie on one and the waves on the other.
+        env: { ...regieEnvOf(backend.backend), LOEP_REGIE: backend.backend },
         cwd: dir,
         transcript: transcriptPath(site),
         onStep: (found) => {

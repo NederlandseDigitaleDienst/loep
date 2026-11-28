@@ -3,7 +3,7 @@ import { chmodSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { agentArgs, chooseBackend, finalTextOf, regieArgs, regieEnvOf, stepOf, transcriptText } from "../../src/harness/backend.ts";
+import { agentArgs, backendOfLine, chooseBackend, finalTextOf, regieArgs, regieEnvOf, stepOf, transcriptText } from "../../src/harness/backend.ts";
 
 /*
  * The agent is a fact of the machine, not part of loep: `LOEP_REGIE` picks one, otherwise the first that
@@ -131,4 +131,16 @@ test("de overlay staat op een map die alleen de gebruiker leest", () => {
     if (before === undefined) delete process.env["LOEP_HOME"];
     else process.env["LOEP_HOME"] = before;
   }
+});
+
+test("een fout van het model is geen antwoord, bij beide agents", () => {
+  // claude meldt een fout van het model als resultaat; de boodschap staat in `result`, en het is geen antwoord.
+  assert.equal(finalTextOf("claude", JSON.stringify({ type: "result", is_error: true, result: "API Error: limiet bereikt" })), null);
+  assert.equal(finalTextOf("opencode", JSON.stringify({ type: "error", error: "limiet bereikt" })), null);
+});
+
+test("een transcript leest ook als niemand zegt welke agent het schreef", () => {
+  assert.equal(backendOfLine(JSON.stringify({ type: "tool_use", part: { tool: "bash" } })), "opencode");
+  assert.equal(backendOfLine(JSON.stringify({ type: "assistant", message: { content: [] } })), "vlam-claude");
+  assert.equal(backendOfLine("geen json"), "vlam-claude");
 });

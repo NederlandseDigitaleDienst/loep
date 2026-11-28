@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { existsSync } from "node:fs";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { AUDIT_COMMANDS, HARNESS_COMMANDS, DEV_COMMANDS, HANDED_OVER_COMMANDS, NAMESPACES, STANDALONE_COMMANDS, STEPS_WITHOUT_A_SITE } from "./lib/commands.ts";
 import { positionalsOf } from "./lib/site-args.ts";
@@ -873,7 +873,9 @@ async function main(): Promise<void> {
       }
       const neverOpen = values["never-open"] ?? [];
       const { runWaves } = await import("./harness/waves.ts");
-      const result = await runWaves({ run: values.run, atOnce, models, neverOpen, sendingAccepted: values["sending-accepted"] === true });
+      // An absolute run, as every other command resolves it: the agents work in a folder beside the run, and a
+      // relative path would point from there and not from where the person stands.
+      const result = await runWaves({ run: resolve(values.run), atOnce, models, neverOpen, sendingAccepted: values["sending-accepted"] === true });
       process.stdout.write(`${JSON.stringify(result)}\n`);
       return;
     }

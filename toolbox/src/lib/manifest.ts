@@ -116,7 +116,7 @@ export const MEASURES_NOTHING = ["pending", "estimate", "gaps", "feedback", "con
  * code is measured on a frozen sweep. The sweep itself (`inventory`, `collect`, `contrast`, `states`, `documents` and the
  * rest) is never measured again by another version.
  */
-export const AGENT_PHASES = ["tasks", "skip", "unskip", "check-walk", "check-verdict", "evaluate", "answer", "merge", "check-merge"];
+export const AGENT_PHASES = ["tasks", "skip", "unskip", "check-walk", "check-verdict", "evaluate", "answer", "merge", "check-merge", "waves"];
 
 /** What variant.json of a copy holds of the version of the sweep; see VariantRecord in commands/variants.ts. */
 interface VariantVersions {

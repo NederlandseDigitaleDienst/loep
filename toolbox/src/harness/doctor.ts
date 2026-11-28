@@ -71,15 +71,18 @@ export function doctor(options: DoctorOptions = {}): Check[] {
 
   // Which agent runs the regie: LOEP_REGIE, or the first that is installed. loep ships none of them.
   let chosen: ReturnType<typeof chooseBackend> | null = null;
+  let noAgentNl: string = "geen agent gevonden; installeer Claude Code of opencode, of zet LOEP_REGIE";
   try {
     chosen = chooseBackend();
-  } catch {
+  } catch (error) {
+    // LOEP_REGIE with a typo or an agent that is not on the path says exactly that, and not "install one".
     chosen = null;
+    noAgentNl = error instanceof Error ? error.message : String(error);
   }
   checks.push({
     labelNl: "regie",
     ok: chosen !== null,
-    detailNl: chosen === null ? "geen agent gevonden; installeer Claude Code of opencode, of zet LOEP_REGIE" : `${chosen.backend} (${chosen.whyNl})`,
+    detailNl: chosen === null ? noAgentNl : `${chosen.backend} (${chosen.whyNl})`,
   });
   // The wrapper starts claude itself, so a vlam-claude without claude beside it starts nothing.
   if (chosen?.backend === "vlam-claude") {

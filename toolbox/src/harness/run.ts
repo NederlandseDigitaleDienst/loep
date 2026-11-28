@@ -1,7 +1,7 @@
 import { spawn, spawnSync } from "node:child_process";
 import { appendFileSync, existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
-import { backendCommand, keepInTranscript, stepOf, transcriptText, type Backend } from "./backend.ts";
+import { backendCommand, backendOfLine, keepInTranscript, stepOf, transcriptText, type Backend } from "./backend.ts";
 import { cliArgs, toolboxCli } from "./paths.ts";
 import type { Question } from "./state.ts";
 
@@ -162,15 +162,18 @@ export function runSnapshot(run: string): string {
 }
 
 /** Shown as the last resort of `status`: the last lines of the transcript, without the JSON around them. */
-export function lastWords(transcript: string, lines: number = 8, backend: Backend = "vlam-claude"): string[] {
-  return readTranscript(transcript, backend).slice(-lines);
+export function lastWords(transcript: string, lines: number = 8): string[] {
+  return readTranscript(transcript).slice(-lines);
 }
 
-/** The whole transcript as lines a person can read. */
-export function readTranscript(transcript: string, backend: Backend = "vlam-claude"): string[] {
+/**
+ * The whole transcript as lines a person can read. The agent that wrote a line is read from the line itself, so
+ * `loep log` and `loep status` work on a run of any backend, also one whose state was written before the choice.
+ */
+export function readTranscript(transcript: string): string[] {
   if (!existsSync(transcript)) return [];
   return readFileSync(transcript, "utf8")
     .split("\n")
     .filter((line) => line.trim() !== "")
-    .map((line) => (line.startsWith("# ") ? line.slice(2) : transcriptText(backend, line)));
+    .map((line) => (line.startsWith("# ") ? line.slice(2) : transcriptText(backendOfLine(line), line)));
 }

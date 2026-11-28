@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { jsonIn, workDirFor, workflowFunction } from "../../src/harness/waves.ts";
+import { jsonIn, runAgent, workDirFor, workflowFunction } from "../../src/harness/waves.ts";
 
 /*
  * The waves run the workflow file that the audit already had, with the three globals the Workflow tool
@@ -59,4 +59,42 @@ test("de werkmap van een agent is die van de site, ook buiten de vaste map", () 
     if (before === undefined) delete process.env["LOEP_HOME"];
     else process.env["LOEP_HOME"] = before;
   }
+});
+
+/*
+ * An agent of a wave is a process that can stop with an error of the model: a limit of the subscription, a
+ * failure of the service. That is no attempt of its task, so the promise rejects and the workflow gives the
+ * task back in the next round instead of counting it.
+ */
+function fakeClaude(script: string): string {
+  const dir = mkdtempSync(join(tmpdir(), "waves-agent-"));
+  writeFileSync(join(dir, "claude"), `#!/bin/sh\n${script}\n`, { mode: 0o755 });
+  return dir;
+}
+
+async function withPath<T>(dir: string, body: () => Promise<T>): Promise<T> {
+  const before = process.env["PATH"];
+  process.env["PATH"] = `${dir}:${before ?? "/usr/bin:/bin"}`;
+  try {
+    return await body();
+  } finally {
+    if (before === undefined) delete process.env["PATH"];
+    else process.env["PATH"] = before;
+  }
+}
+
+test("een agent die een antwoord geeft levert het antwoord", async () => {
+  const dir = fakeClaude(`printf '%s\\n' '{"type":"result","result":"klaar"}'`);
+  const answer = await withPath(dir, async () => runAgent("claude", "vraag", {}, dir, "/x/run"));
+  assert.equal(answer, "klaar");
+});
+
+test("een fout van het model telt als geen antwoord, ook met code 0", async () => {
+  const dir = fakeClaude(`printf '%s\\n' '{"type":"result","is_error":true,"result":"API Error: limiet"}'`);
+  await assert.rejects(withPath(dir, async () => runAgent("claude", "vraag", {}, dir, "/x/run")), /geen antwoord \(code 0\)/);
+});
+
+test("een agent die met een foutcode stopt telt als geen antwoord", async () => {
+  const dir = fakeClaude(`printf '%s\\n' '{"type":"result","result":"klaar"}'\nexit 1`);
+  await assert.rejects(withPath(dir, async () => runAgent("claude", "vraag", {}, dir, "/x/run")), /geen antwoord \(code 1\)/);
 });

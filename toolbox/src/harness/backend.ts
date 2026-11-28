@@ -172,6 +172,7 @@ interface Line {
   subtype?: unknown;
   message?: { content?: unknown };
   result?: unknown;
+  is_error?: unknown;
   part?: { tool?: unknown; text?: unknown; state?: { input?: Record<string, unknown> } };
 }
 
@@ -219,6 +220,16 @@ export function stepOf(backend: Backend, line: string): string | null {
   return null;
 }
 
+/**
+ * The backend that wrote a line of a transcript, for reading a transcript of a run whose state does not say it
+ * (a run from before the choice existed, or one read back without the log). opencode puts every event in a
+ * `part`; claude speaks of `message`, `result` and `system`.
+ */
+export function backendOfLine(line: string): Backend {
+  const event = parseLine(line);
+  return event !== null && event.part !== undefined ? "opencode" : "vlam-claude";
+}
+
 /** A line of the transcript a person can read, without the JSON around it. */
 export function transcriptText(backend: Backend, line: string): string {
   const event = parseLine(line);
@@ -252,9 +263,13 @@ export function finalTextOf(backend: Backend, output: string): string | null {
     const event = parseLine(line);
     if (event === null) continue;
     if (isClaude(backend)) {
+      // An error of the model (a limit of the subscription, a failure of the service) also comes as a result,
+      // with the message in `result`. That is no answer of an agent, and the workflow counts it as no attempt.
+      if (event.is_error === true) return null;
       if (typeof event.result === "string") answer = event.result;
       continue;
     }
+    if (event.type === "error") return null;
     if (event.type === "text" && typeof event.part?.text === "string") answer = event.part.text;
   }
   return answer === null || answer.trim() === "" ? null : answer.trim();

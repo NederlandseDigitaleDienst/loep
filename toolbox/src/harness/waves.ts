@@ -1,5 +1,5 @@
-import { spawn } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { spawn, type ChildProcess } from "node:child_process";
+import { mkdirSync, readFileSync } from "node:fs";
 import { dirname, join, relative, isAbsolute } from "node:path";
 import { agentArgs, chooseBackend, finalTextOf, regieEnvOf, type Backend } from "./backend.ts";
 import { homeDir, stateDir, toolboxCli, workflowFile } from "./paths.ts";
@@ -65,14 +65,25 @@ export function jsonIn(answer: string): unknown {
   return null;
 }
 
-/** One agent: one question, one answer, nothing kept. */
-function runAgent(backend: Backend, prompt: string, options: AgentOptions, cwd: string, run: string): Promise<string> {
+/**
+ * The agents that are running, so a person who stops the waves stops them too: without that they keep
+ * measuring the site, hold their sessions and write into the run after the person believes it stopped.
+ */
+const live = new Set<ChildProcess>();
+
+/**
+ * One agent: one question, one answer, nothing kept. An agent that exited with a non-zero code, or whose
+ * stream holds an error of the model, has no answer: the promise rejects, and the workflow counts it as
+ * no attempt instead of a failed one, so its task comes back in the next round.
+ */
+export function runAgent(backend: Backend, prompt: string, options: AgentOptions, cwd: string, run: string): Promise<string> {
   return new Promise((resolve, reject) => {
     const child = spawn(backend, agentArgs(backend, prompt, run, typeof options.model === "string" ? options.model : null), {
       cwd,
       env: regieEnvOf(backend),
       stdio: ["ignore", "pipe", "pipe"],
     });
+    live.add(child);
     let out = "";
     let err = "";
     child.stdout.setEncoding("utf8");
@@ -83,12 +94,17 @@ function runAgent(backend: Backend, prompt: string, options: AgentOptions, cwd: 
     child.stderr.on("data", (chunk: string) => {
       err += chunk;
     });
-    child.on("error", (error) => reject(new Error(`${backend} start niet: ${error.message}`)));
+    child.on("error", (error) => {
+      live.delete(child);
+      reject(new Error(`${backend} start niet: ${error.message}`));
+    });
     child.on("close", (code) => {
+      live.delete(child);
       const answer = finalTextOf(backend, out);
-      if (answer === null) {
-        const last = err.trim().split("\n").at(-1) ?? "";
-        reject(new Error(`${backend} gaf geen antwoord (code ${String(code)})${last === "" ? "" : `: ${last}`}`));
+      const last = err.trim().split("\n").at(-1) ?? "";
+      if (answer === null || code !== 0) {
+        const why = last === "" ? "" : `: ${last}`;
+        reject(new Error(`${backend} gaf geen antwoord (code ${String(code)})${why}`));
         return;
       }
       resolve(answer);
@@ -139,7 +155,9 @@ function agentFactory(backend: Backend, cwd: string, run: string, log: (line: st
  * four as parameters runs it anywhere, without a copy of the rounds in a second language.
  */
 export async function runWaves(options: WavesOptions): Promise<Record<string, unknown>> {
-  const log = options.log ?? ((line: string): void => console.log(line));
+  // stderr, because the answer of the command is the history on stdout: a person reading along sees the
+  // same lines, and whoever pipes the answer gets JSON and nothing else.
+  const log = options.log ?? ((line: string): void => console.error(line));
   let backend = options.backend ?? null;
   if (backend === null) {
     const chosen = chooseBackend();
@@ -147,6 +165,23 @@ export async function runWaves(options: WavesOptions): Promise<Record<string, un
     log(`golven op ${backend} (${chosen.whyNl})`);
   }
   const cwd = workDirFor(options.run);
+  // A run of the harness always has its work folder; one started by hand may not.
+  mkdirSync(cwd, { recursive: true, mode: 0o700 });
+  // A person stops the waves with a signal: the agents it started stop with it. Without this they are
+  // reparented and keep measuring the site after the person believes the run stopped.
+  const signals: NodeJS.Signals[] = ["SIGINT", "SIGTERM", "SIGHUP"];
+  const forward = (signal: NodeJS.Signals): void => {
+    for (const child of live) {
+      try {
+        child.kill("SIGTERM");
+      } catch {
+        // The agent is already gone.
+      }
+    }
+    process.off(signal, forward);
+    process.kill(process.pid, signal);
+  };
+  for (const signal of signals) process.on(signal, forward);
   const workflow = workflowFunction();
   const args = {
     cli: toolboxCli,
