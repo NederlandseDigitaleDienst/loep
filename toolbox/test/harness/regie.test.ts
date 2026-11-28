@@ -4,7 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import type { Site } from "../../src/harness/backlog.ts";
-import { isLocalHost, regieArgs, regieEnv, regiePrompt } from "../../src/harness/regie.ts";
+import { regieArgs, regieEnvOf } from "../../src/harness/backend.ts";
+import { isLocalHost, regiePrompt } from "../../src/harness/regie.ts";
 
 const site = (overrides: Partial<Site> = {}): Site => ({
   url: "https://www.voorbeeld.nl/",
@@ -78,8 +79,8 @@ test("een hervatting zegt wat de mens deed en begint bij pending", () => {
 
 test("de spelregels noemen de werkstroom, de tool en de stop bij een mens", () => {
   const text = prompt();
-  assert.match(text, /Workflow-tool op .*onderzoek\.workflow\.js/);
-  assert.match(text, /atOnce: 3/);
+  assert.match(text, /audit waves --run \/runs\/voorbeeld --at-once 3/);
+  assert.match(text, /onderzoek\.workflow\.js/);
   assert.match(text, /subagent-tool/);
   assert.match(text, /vraag\.md/);
   assert.match(text, /uitvoer\.log/);
@@ -87,7 +88,7 @@ test("de spelregels noemen de werkstroom, de tool en de stop bij een mens", () =
 });
 
 test("de commandoregel heeft de plugin, de tools en de weigeringen die een run nodig heeft", () => {
-  const args = regieArgs("prompt", "/runs/voorbeeld");
+  const args = regieArgs("vlam-claude", "prompt", "/runs/voorbeeld");
   const value = (flag: string): string | undefined => {
     const index = args.indexOf(flag);
     return index < 0 ? undefined : args[index + 1];
@@ -107,9 +108,9 @@ test("de commandoregel heeft de plugin, de tools en de weigeringen die een run n
 test("een eigen configuratiemap houdt de instellingen van de gebruiker buiten de run", () => {
   const home = mkdtempSync(join(tmpdir(), "backlog-regie-"));
   process.env["LOEP_HOME"] = home;
-  assert.equal(regieEnv()["CLAUDE_CONFIG_DIR"], join(home, ".loep", "claude-home"));
+  assert.equal(regieEnvOf("vlam-claude")["CLAUDE_CONFIG_DIR"], join(home, ".loep", "claude-home"));
   // Zonder dit stopt claude -p een subagent die nog loopt na tien minuten, en is de run half af.
-  assert.equal(regieEnv()["CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS"], "21600000");
+  assert.equal(regieEnvOf("vlam-claude")["CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS"], "21600000");
 });
 
 test("een site op deze machine herkent loep", () => {

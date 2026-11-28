@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { existsSync } from "node:fs";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { AUDIT_COMMANDS, HARNESS_COMMANDS, DEV_COMMANDS, HANDED_OVER_COMMANDS, NAMESPACES, STANDALONE_COMMANDS, STEPS_WITHOUT_A_SITE } from "./lib/commands.ts";
 import { positionalsOf } from "./lib/site-args.ts";
@@ -104,6 +104,12 @@ const AUDIT_USAGE = `loep audit <stap> [options]
                                          of the finishing round; non-zero exit on problems
   pending --run <run> [--brief]          The phase the run is in and the tasks that are still open, as JSON, each with
                                          its attempts. --brief gives only the ids and attempts, for the workflow
+  waves --run <run> [--at-once <n>] [--never-open <host>]... [--models <role>=<model>,...] [--sending-accepted]
+                                         The rounds of the workflow, started by loep itself: one agent per task, the
+                                         next phase when one is ready, a task skipped after two attempts without a result,
+                                         and a pause when the model or the site is down. It answers with the history of
+                                         the rounds. This is how step 6 runs, on any agent loep has: the same
+                                         onderzoek.workflow.js, with the agents that the machine has
   estimate --run <run> [--at-once <n>] [--groups] [--json]
                                          The expected time per part and in total, computed from the inventory (sharper after
                                          sample, explore and the sweep), next to what the run measured so far. --at-once is the
@@ -381,6 +387,9 @@ const OPTIONS = {
   steps: { type: "string" },
   press: { type: "string" },
   "at-once": { type: "string" },
+  "never-open": { type: "string", multiple: true },
+  models: { type: "string" },
+  "sending-accepted": { type: "boolean", default: false },
   "explore-minutes": { type: "string" },
   groups: { type: "boolean", default: false },
   json: { type: "boolean", default: false },
@@ -848,6 +857,26 @@ async function main(): Promise<void> {
       if (warming) (await import("./commands/voiceover.ts")).startInBackground(values.run);
       const voiceover = status === null ? null : voiceoverWarningNl(status, warming);
       process.stdout.write(`${JSON.stringify({ ...(values.brief ? briefPending(pending) : pending), ...(voiceover ? { voiceover } : {}) })}\n`);
+      return;
+    }
+    case "waves": {
+      if (!values.run) throw new Error("waves needs --run <run>");
+      const atOnce = parseAtOnce(values["at-once"], "agents");
+      // `--models walks=sonnet,judges=opus`: the script checks the roles and the names and stops on a typo.
+      const models: Record<string, string> = {};
+      if (values.models) {
+        for (const pair of values.models.split(",")) {
+          const [role, model] = pair.split("=").map((part) => part.trim());
+          if (role === undefined || model === undefined || role === "" || model === "") throw new Error(`--models leest rollen als walks=sonnet, niet "${pair}"`);
+          models[role] = model;
+        }
+      }
+      const neverOpen = values["never-open"] ?? [];
+      const { runWaves } = await import("./harness/waves.ts");
+      // An absolute run, as every other command resolves it: the agents work in a folder beside the run, and a
+      // relative path would point from there and not from where the person stands.
+      const result = await runWaves({ run: resolve(values.run), atOnce, models, neverOpen, sendingAccepted: values["sending-accepted"] === true });
+      process.stdout.write(`${JSON.stringify(result)}\n`);
       return;
     }
     case "estimate": {

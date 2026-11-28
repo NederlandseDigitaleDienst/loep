@@ -1,6 +1,7 @@
 import { spawn, spawnSync } from "node:child_process";
 import { appendFileSync, existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
+import { backendCommand, backendOfLine, keepInTranscript, stepOf, transcriptText, type Backend } from "./backend.ts";
 import { cliArgs, toolboxCli } from "./paths.ts";
 import type { Question } from "./state.ts";
 
@@ -26,47 +27,9 @@ interface ContentBlock {
   input?: Record<string, unknown>;
 }
 
-/**
- * What goes into the transcript. The stream counts thinking tokens a few times a second; a transcript
- * of hours of a run would be mostly those counters, and `loep log` has to stay readable.
- */
-export function keepInTranscript(line: string): boolean {
-  try {
-    const parsed = JSON.parse(line) as { type?: unknown; subtype?: unknown };
-    return !(parsed.type === "system" && parsed.subtype === "thinking_tokens");
-  } catch {
-    return true;
-  }
-}
-
-/** The step a stream line stands for: the loep command, the workflow, or a single subagent. */
-export function stepOf(line: string): string | null {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(line);
-  } catch {
-    return null;
-  }
-  if (parsed === null || typeof parsed !== "object") return null;
-  const event = parsed as { type?: unknown; subtype?: unknown; message?: { content?: unknown } };
-  if (event.type === "system" && event.subtype === "init") return "gestart";
-  const content = event.message?.content;
-  if (!Array.isArray(content)) return null;
-  for (const block of content as ContentBlock[]) {
-    if (block.type !== "tool_use") continue;
-    if (block.name === "Workflow") return "werkstroom";
-    if (block.name === "Task") return "subagent";
-    if (block.name === "Bash") {
-      const command = typeof block.input?.["command"] === "string" ? block.input["command"] : "";
-      // A step is written `cli.ts audit check-gate`: the namespace says where it sits, not what it is.
-      const loep = /cli\.ts\s+([a-z][a-z-]*)(?:\s+([a-z][a-z-]*))?/.exec(command);
-      if (loep?.[1]) return loep[1] === "audit" || loep[1] === "dev" ? (loep[2] ?? loep[1]) : loep[1];
-    }
-  }
-  return null;
-}
-
 export interface StartOptions {
+  /** Which agent runs the regie: its stream is read in the words of that backend. */
+  backend: Backend;
   args: string[];
   env: NodeJS.ProcessEnv;
   cwd: string;
@@ -79,7 +42,8 @@ export interface StartOptions {
 
 export function startRegie(options: StartOptions): Promise<RegieResult> {
   return new Promise((resolve, reject) => {
-    const child = spawn("vlam-claude", options.args, { cwd: options.cwd, env: options.env, stdio: ["ignore", "pipe", "pipe"] });
+    const command = backendCommand(options.backend);
+    const child = spawn(command, options.args, { cwd: options.cwd, env: options.env, stdio: ["ignore", "pipe", "pipe"] });
     let step: string | null = null;
     let pending = "";
     let interrupted = false;
@@ -104,7 +68,7 @@ export function startRegie(options: StartOptions): Promise<RegieResult> {
     };
     child.on("error", (error) => {
       finish();
-      reject(new Error(`vlam-claude start niet: ${error.message}`));
+      reject(new Error(`${command} start niet: ${error.message}`));
     });
     child.stdout.setEncoding("utf8");
     child.stdout.on("data", (chunk: string) => {
@@ -113,10 +77,11 @@ export function startRegie(options: StartOptions): Promise<RegieResult> {
       while (index >= 0) {
         const line = pending.slice(0, index);
         pending = pending.slice(index + 1);
-        if (line.trim() !== "" && keepInTranscript(line)) {
+        if (line.trim() !== "" && keepInTranscript(options.backend, line)) {
           appendFileSync(options.transcript, `${line}\n`, { mode: 0o600 });
-          const found = stepOf(line);
-          if (found !== null) {
+          const found = stepOf(options.backend, line);
+          // opencode says "started" at every step; a second one must not erase the step before it.
+          if (found !== null && !(found === "gestart" && step !== null)) {
             step = found;
             options.onStep(found);
           }
@@ -201,27 +166,14 @@ export function lastWords(transcript: string, lines: number = 8): string[] {
   return readTranscript(transcript).slice(-lines);
 }
 
-/** The whole transcript as lines a person can read. */
+/**
+ * The whole transcript as lines a person can read. The agent that wrote a line is read from the line itself, so
+ * `loep log` and `loep status` work on a run of any backend, also one whose state was written before the choice.
+ */
 export function readTranscript(transcript: string): string[] {
   if (!existsSync(transcript)) return [];
   return readFileSync(transcript, "utf8")
     .split("\n")
     .filter((line) => line.trim() !== "")
-    .map((line) => (line.startsWith("# ") ? line.slice(2) : extractText(line)));
-}
-
-function extractText(line: string): string {
-  try {
-    const parsed = JSON.parse(line) as { type?: unknown; subtype?: unknown; message?: { content?: unknown }; result?: unknown };
-    if (parsed.type === "system" && parsed.subtype === "init") return "gestart";
-    if (typeof parsed.result === "string") return parsed.result.slice(0, 300);
-    const content = parsed.message?.content;
-    if (Array.isArray(content)) {
-      const texts = (content as ContentBlock[]).map((block) => (block.type === "text" ? String((block as { text?: unknown }).text ?? "") : block.type === "tool_use" ? `[${block.name}]` : "")).filter((text) => text !== "");
-      if (texts.length > 0) return texts.join(" ").slice(0, 300);
-    }
-    return line.slice(0, 200);
-  } catch {
-    return line.slice(0, 200);
-  }
+    .map((line) => (line.startsWith("# ") ? line.slice(2) : transcriptText(backendOfLine(line), line)));
 }

@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import type { Site } from "./backlog.ts";
-import { cliCall, repoRoot, stateDir, toolboxCli, workflowFile } from "./paths.ts";
+import { cliCall, stateDir, toolboxCli, workflowFile } from "./paths.ts";
 
 /*
  * The prompt of the regie, and the command line it runs with. Everything the skill asks a person
@@ -84,7 +84,7 @@ export function regiePrompt(options: RegieOptions): string {
   lines.push(`- Inlog: ${loginNl(site, run)}`);
   lines.push(`- Mailbox: ${mailboxNl(site)}`);
   if (site.navigationDelay !== null) lines.push(`- Tempo: zet ${site.navigationDelay} seconde tussen twee navigaties naar de site, met --navigation-delay ${site.navigationDelay} bij inventory; dat geldt daarna voor de hele run, ook voor de veegronde en de sessies van de agents. De eigenaar vroeg om dat tempo.`);
-  lines.push(`- Agents tegelijk: ${options.atOnce}. Geef dat aan estimate mee als --at-once ${options.atOnce} en aan de werkstroom als atOnce ${options.atOnce}. Start de sessie van de run met ruimte voor ${options.atOnce + 1} sessies als de skill dat vraagt.`);
+  lines.push(`- Agents tegelijk: ${options.atOnce}. Geef dat aan estimate mee als --at-once ${options.atOnce} en aan de golven als --at-once ${options.atOnce}. Start de sessie van de run met ruimte voor ${options.atOnce + 1} sessies als de skill dat vraagt.`);
   if (site.vendorTags.length > 0) lines.push(`- Leverancier: de namen van de elementen beginnen met ${quip(site.vendorTags)}; geef ze aan inventory mee met --vendor-tags ${site.vendorTags.join(",")}.`);
   else lines.push("- Leverancier: onbekend; ga zonder door.");
   if (site.note !== "") lines.push(`- Wat de gebruiker verder meegaf: ${site.note}`);
@@ -96,70 +96,12 @@ export function regiePrompt(options: RegieOptions): string {
   lines.push("");
   lines.push("Spelregels die boven de skill gaan:");
   lines.push("");
-  lines.push(`1. Start een agent nooit zelf. Stap 6 draai je met de Workflow-tool op ${workflowFile}, met args {cli: "${toolboxCli}", run: "${run}", atOnce: ${options.atOnce}} en zonder models. Een losse agent start je met de subagent-tool (Task, in sommige versies Agent), met de inhoud van het taakbestand als opdracht. Een werkstroom met honderdvijftig agents over twintig ronden is hier de bedoeling.`);
+  const neverOpenArgs = site.neverOpen.flatMap((host) => ["--never-open", host]);
+  lines.push(`1. Start een agent nooit zelf. Stap 6 draai je met \`${cliCall(toolboxCli, "waves", "--run", run, "--at-once", String(options.atOnce), ...neverOpenArgs)}\`: dat ene commando zet de golven van ${workflowFile} in gang, start de agents en zegt zelf wanneer de run klaar is. Laat het uitvoeren en lees de laatste veertig regels; een golf met honderdvijftig agents over twintig ronden is hier de bedoeling. Een losse agent start je met de subagent-tool (Task, in sommige versies Agent), met de inhoud van het taakbestand als opdracht.`);
   lines.push("2. Kan een stap alleen met een mens, of wijst loep je naar een terminal, dan stop je. Schrijf in vraag.md in je werkmap: de vraag in gewone zinnen, het exacte commando tussen drie backticks, en wat er daarna moet bestaan. Verzin geen antwoord, ga niet verder, en teken nooit en verklaar nooit een testomgeving.");
   lines.push("3. Houd lange uitvoer uit je context: schrijf wat lang is naar uitvoer.log in je werkmap en lees daar de laatste veertig regels van.");
   lines.push("4. Meet de site nooit buiten loep om: geen eigen browsers, geen eigen verzoeken naar de site, geen WebFetch. Bash staat open voor gereedschap en voor de commando's uit de skill, maar een verzoek aan de site gaat altijd via loep; curl en wget zijn geweigerd en een eigen scriptje met fetch mag niet.");
   lines.push("");
   lines.push(`Je werkmap is ${join(stateDir(), site.slug)}; de run staat daar met --add-dir open. Alles wat je in de run schrijft, moet loep zelf geschreven hebben: het zegel dekt elk bestand in de run.`);
   return lines.join("\n");
-}
-
-/** The command line of the regie. `--tools` has to name Workflow and Task, or those do not exist in a headless session. */
-export function regieArgs(prompt: string, run: string): string[] {
-  return [
-    "-p",
-    prompt,
-    "--plugin-dir",
-    repoRoot,
-    "--no-session-persistence",
-    "--permission-prompts",
-    "none",
-    "--permission-mode",
-    "acceptEdits",
-    "--tools",
-    "Bash,Read,Write,Edit,Glob,Grep,Workflow,Task",
-    // Bash is open: the skill writes commands like `cd … && just doctor | tail -60`, and a permission
-    // per command refuses those compound forms. The list below stops the common forms and is inherited
-    // by every agent of the workflow, but it is no boundary: `node -e`, `python3` or `/usr/bin/curl`
-    // get past it, and Bash writes wherever the user may write. Whether the site is reached outside loep
-    // and where the regie writes rests on rule 4 of the prompt and on the seal.
-    "--allowedTools",
-    "Bash",
-    "Read",
-    "Write",
-    "Edit",
-    "Glob",
-    "Grep",
-    "Workflow",
-    "Task",
-    "--disallowedTools",
-    "WebFetch",
-    "WebSearch",
-    "Bash(curl:*)",
-    "Bash(wget:*)",
-    "Bash(nc:*)",
-    "Bash(ssh:*)",
-    "--add-dir",
-    run,
-    "--output-format",
-    "stream-json",
-    "--verbose",
-  ];
-}
-
-/**
- * The environment of the regie: an empty config folder keeps the settings, the plugins and the
- * CLAUDE.md of the person out of a run. `--safe-mode` cannot do that here, because it also switches
- * off the skill.
- */
-/**
- * Six hours: `claude -p` waits that long for a subagent that is still running when the turn ends, and
- * stops it after ten minutes by default. The explorer and a round of the workflow take longer than
- * that, so the default kills them and ends the turn with a half-done run.
- */
-export const BG_WAIT_CEILING_MS = "21600000";
-
-export function regieEnv(): NodeJS.ProcessEnv {
-  return { ...process.env, CLAUDE_CONFIG_DIR: join(stateDir(), "claude-home"), CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS: BG_WAIT_CEILING_MS };
 }

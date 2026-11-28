@@ -6,7 +6,8 @@ import { join } from "node:path";
 import { test } from "node:test";
 import type { Site } from "../../src/harness/backlog.ts";
 import { toolboxCli } from "../../src/harness/paths.ts";
-import { isSealed, readQuestion, stepOf } from "../../src/harness/run.ts";
+import { stepOf } from "../../src/harness/backend.ts";
+import { isSealed, readQuestion } from "../../src/harness/run.ts";
 import { handOutMissing, runSite, spaceProblemNl } from "../../src/harness/runner.ts";
 import { readState, siteState, updateSite } from "../../src/harness/state.ts";
 
@@ -46,17 +47,17 @@ function fakeHome(body: string): string {
 
 test("een regel van de stream zegt welke stap de regie doet", () => {
   const bash = (command: string): string => JSON.stringify({ type: "assistant", message: { content: [{ type: "tool_use", name: "Bash", input: { command } }] } });
-  assert.equal(stepOf(bash("node /x/toolbox/src/cli.ts gate --run /r")), "gate");
-  assert.equal(stepOf(bash("node /x/toolbox/src/cli.ts pending --run /r --brief")), "pending");
+  assert.equal(stepOf("claude", bash("node /x/toolbox/src/cli.ts gate --run /r")), "gate");
+  assert.equal(stepOf("claude", bash("node /x/toolbox/src/cli.ts pending --run /r --brief")), "pending");
   // Een stap van het onderzoek staat onder audit: de laag zegt waar hij zit, niet wat hij is.
-  assert.equal(stepOf(bash("node /x/toolbox/src/cli.ts audit check-gate --run /r")), "check-gate");
-  assert.equal(stepOf(bash("node /x/toolbox/src/cli.ts audit sweep --run /r")), "sweep");
-  assert.equal(stepOf(bash("node /x/toolbox/src/cli.ts dev procedures")), "procedures");
-  assert.equal(stepOf(bash("ls /r")), null);
-  assert.equal(stepOf(JSON.stringify({ type: "assistant", message: { content: [{ type: "tool_use", name: "Workflow", input: {} }] } })), "werkstroom");
-  assert.equal(stepOf(JSON.stringify({ type: "assistant", message: { content: [{ type: "tool_use", name: "Task", input: {} }] } })), "subagent");
-  assert.equal(stepOf('{"type":"system","subtype":"init"}'), "gestart");
-  assert.equal(stepOf("geen json"), null);
+  assert.equal(stepOf("claude", bash("node /x/toolbox/src/cli.ts audit check-gate --run /r")), "check-gate");
+  assert.equal(stepOf("claude", bash("node /x/toolbox/src/cli.ts audit sweep --run /r")), "sweep");
+  assert.equal(stepOf("claude", bash("node /x/toolbox/src/cli.ts dev procedures")), "procedures");
+  assert.equal(stepOf("claude", bash("ls /r")), null);
+  assert.equal(stepOf("claude", JSON.stringify({ type: "assistant", message: { content: [{ type: "tool_use", name: "Workflow", input: {} }] } })), "werkstroom");
+  assert.equal(stepOf("claude", JSON.stringify({ type: "assistant", message: { content: [{ type: "tool_use", name: "Task", input: {} }] } })), "subagent");
+  assert.equal(stepOf("claude", '{"type":"system","subtype":"init"}'), "gestart");
+  assert.equal(stepOf("claude", "geen json"), null);
 });
 
 test("een vraag met een commando wordt uit elkaar gehouden", () => {

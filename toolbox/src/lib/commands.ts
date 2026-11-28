@@ -21,6 +21,7 @@ export const AUDIT_COMMANDS = [
   "unskip",
   "check-verdict",
   "pending",
+  "waves",
   "estimate",
   "gaps",
   "feedback",
