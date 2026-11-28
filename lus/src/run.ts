@@ -79,7 +79,6 @@ export interface StartOptions {
 export function startRegie(options: StartOptions): Promise<RegieResult> {
   return new Promise((resolve, reject) => {
     const child = spawn("vlam-claude", options.args, { cwd: options.cwd, env: options.env, stdio: ["ignore", "pipe", "pipe"] });
-    if (child.pid !== undefined) options.onStart?.(child.pid);
     let step: string | null = null;
     let pending = "";
     let interrupted = false;
@@ -133,6 +132,20 @@ export function startRegie(options: StartOptions): Promise<RegieResult> {
       if (pending.trim() !== "") appendFileSync(options.transcript, `${pending}\n`, { mode: 0o600 });
       resolve({ code, signal, step, interrupted });
     });
+    // Only now, with every handler in place: a state that cannot be written must not take the handlers
+    // down with it. That would leave a regie nobody reads and nobody can stop, which is the orphan this
+    // pid is meant to make visible.
+    if (child.pid !== undefined) {
+      try {
+        options.onStart?.(child.pid);
+      } catch (error) {
+        try {
+          appendFileSync(options.transcript, `# de pid van de regie niet bewaard: ${error instanceof Error ? error.message : String(error)}\n`, { mode: 0o600 });
+        } catch {
+          // There is nothing left to write the note to; the run goes on without it.
+        }
+      }
+    }
   });
 }
 

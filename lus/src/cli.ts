@@ -247,11 +247,19 @@ async function runBacklog(options: { sites?: string | undefined; only?: string |
       const known = siteState(readState(statePath()), entry.slug);
       for (const file of handOutMissing(entry.slug, known)) process.stdout.write(`rapport: ${file}\n`);
     }
-    if (todo.length === 0) {
+    // A site whose regie still runs cannot get a second one, but that is no reason to hold up the rest:
+    // every site has its own run and its own folder, and a sweep of hours would wait hours.
+    const busy = todo.filter((entry) => regieRuns(siteState(state, entry.slug)));
+    for (const entry of busy) {
+      const known = siteState(state, entry.slug);
+      process.stdout.write(`${entry.slug}: de regie loopt nog in proces ${String(known.regiePid)}, ook al is lus zelf weg. Stop hem met: kill ${String(known.regiePid)}, en ga daarna verder met: lus run --only ${entry.slug}\n`);
+    }
+    const runnable = todo.filter((entry) => !busy.includes(entry));
+    if (runnable.length === 0) {
       process.stdout.write(`Niets te doen: elke site is klaar, wacht op een mens, of staat stil${options.only === undefined ? "" : ` (--only ${options.only})`}.\n`);
       return;
     }
-    for (const entry of todo.slice(0, limit)) {
+    for (const entry of runnable.slice(0, limit)) {
       const result = await runSite({ site: entry, newRun: options.newRun, onStep: progress });
       report(entry, result);
       // A regie that stopped because somebody stopped lus is no reason to begin the next site.

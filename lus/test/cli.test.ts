@@ -62,6 +62,19 @@ test("pause zet een site die nog loopt niet op stil, maar zegt hoe je de regie s
   assert.equal(readState(join(dir, ".lus", "state.json")).sites["voorbeeld.nl"]?.phase, "loopt");
 });
 
+test("een site met een levende regie houdt de rest van de backlog niet tegen", () => {
+  const { home: dir, lus } = home();
+  lus("add", "https://www.tweede.nl/", "--organisation", "Ministerie van Voorbeeld", "--name", "Tweede");
+  const state = join(dir, ".lus", "state.json");
+  // De eerste site heeft een regie die lus overleefde; die mag geen tweede krijgen, de tweede site moet door.
+  updateSite(state, "voorbeeld.nl", { phase: "loopt", pid: 999_999, regiePid: process.pid, regieSince: new Date().toISOString() });
+  const run = lus("run", "--sites", "2");
+  assert.match(String(run.stdout), /voorbeeld\.nl: de regie loopt nog in proces \d+/);
+  assert.equal(run.status, 0, String(run.stderr));
+  assert.equal(readState(state).sites["voorbeeld.nl"]?.phase, "loopt", "de bezette site blijft staan");
+  assert.equal(readState(state).sites["tweede.nl"]?.phase, "klaar", "de volgende site liep door");
+});
+
 test("resume zegt de regie wat een mens via lus deed", () => {
   const { home: dir, lus } = home();
   lus("run");
