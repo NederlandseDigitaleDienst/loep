@@ -26,11 +26,11 @@
     "@siteimprove/alfa-act": "0.120.0",
     "@siteimprove/alfa-aria": "0.120.0",
     "@siteimprove/alfa-dom": "0.120.0",
-    "@siteimprove/alfa-playwright": "0.84.3",
+    "@siteimprove/alfa-playwright": "0.84.4",
     "@siteimprove/alfa-rules": "0.120.0",
     "@types/pngjs": "6.0.5",
     "accessibility-checker-engine": "4.0.35",
-    "axe-core": "4.14.0",
+    "axe-core": "4.14.1",
     "cld3-asm": "4.0.0",
     "dom-accessibility-api": "0.7.1",
     "eld": "2.1.1",
@@ -41,7 +41,7 @@
     "playwright": "1.65.1",
     "pngjs": "7.0.0",
     "tabbable": "6.5.2",
-    "vnu-jar": "26.11.14",
+    "vnu-jar": "26.11.20",
     "yaml": "2.9.1"
   },
   "devDependencies": {
