@@ -454,16 +454,18 @@ async function main(): Promise<void> {
     if (word !== undefined) {
       const { siteForWord } = await import("./harness/lookup.ts");
       const onTheLine = siteForWord(word.word);
-      // The step with a person in it goes to the harness, which knows the login of the site and says what
-      // comes after: parse it here and every option loep does not know would be refused.
-      if (onTheLine !== null && (HANDED_OVER_COMMANDS as readonly string[]).includes(step)) {
-        const rest = [...argv.slice(3)];
-        rest.splice(word.at, 1);
-        process.exitCode = await (await import("./harness/cli.ts")).harnessCli([step, onTheLine.site.slug, ...rest]);
-        return;
+      if (onTheLine !== null) {
+        // A step a person does goes to the harness, which knows the login of the site and says what follows.
+        // Reading its options here would refuse every option the harness takes and loep does not.
+        if ((HANDED_OVER_COMMANDS as readonly string[]).includes(step)) {
+          const rest = [...argv.slice(3)];
+          rest.splice(word.at, 1);
+          process.exitCode = await (await import("./harness/cli.ts")).harnessCli([step, onTheLine.site.slug, ...rest]);
+          return;
+        }
+        if (onTheLine.run === null) throw new Error(`${onTheLine.site.slug} is nog niet begonnen; start hem met: loep run --only ${onTheLine.site.slug}`);
+        argv.splice(word.at + 3, 0, "--run", onTheLine.run);
       }
-      if (onTheLine !== null && onTheLine.run === null) throw new Error(`${onTheLine.site.slug} is nog niet begonnen; start hem met: loep run --only ${onTheLine.site.slug}`);
-      if (onTheLine?.run != null) argv.splice(word.at + 3, 0, "--run", onTheLine.run);
     }
   }
   // The harness takes its verbs and options as they come; it parses them itself.
