@@ -49,6 +49,8 @@ test("a command that prints its own help names its layer, not the bare name it h
     assert.match(first ?? "", /^loep dev /, `${command} noemt zichzelf zonder laag: ${first}`);
   }
   assert.match(String(run("audit", "voiceover", "--help").stdout), /^loep audit voiceover/);
+  // The hardest case of the layer: the command parses its own options, and only the layer is stripped for it.
+  assert.match(String(run("dev", "compare", "--findings", "--help").stdout), /^loep dev compare --findings/);
 });
 
 test("the help of the top level names the layers and not the fifty commands", () => {

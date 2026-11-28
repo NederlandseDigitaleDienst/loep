@@ -71,8 +71,24 @@ function wrongCalls(code: string): string[] {
   // Written small and at the start of a line it is a command in a session, or one of the few that stand alone; elsewhere "loep" is the name of the toolbox in a sentence.
   for (const match of code.matchAll(/^\s*loep ([a-z][a-z-]*)/gm)) {
     const word = match[1]!;
-    const stands = word === "session" || word === "audit" || word === "dev" || (STANDALONE_COMMANDS as readonly string[]).includes(word);
+    if (word === "audit" || word === "dev") {
+      // A layer on a line of its own names a command under it, or asks for its help.
+      const next = /^\s+([a-z][a-z-]*)/.exec(code.slice(match.index + match[0].length))?.[1];
+      if (next !== undefined && !(NAMESPACES[word] as readonly string[]).includes(next)) problems.push(`"${match[0].trim()} ${next}" is geen commando onder loep ${word}`);
+      continue;
+    }
+    const stands = word === "session" || (STANDALONE_COMMANDS as readonly string[]).includes(word);
     if (!stands && !SESSION_COMMANDS.includes(word)) problems.push(`"${match[0].trim()}" is geen commando in een sessie`);
+  }
+  return problems;
+}
+
+/** A call the code itself makes to the toolbox, outside a description: `cli.ts <command>`, `${cli} <command}`, `{{cli}} <command>`. It needs the layer too. */
+function unlayeredCalls(code: string): string[] {
+  const problems: string[] = [];
+  for (const match of code.matchAll(/(?:cli\.ts|\$\{cli\}|\{\{cli\}\})["'` ]+([a-z][a-z-]*)/g)) {
+    const word = match[1]!;
+    if ((AUDIT_COMMANDS as readonly string[]).includes(word) || (DEV_COMMANDS as readonly string[]).includes(word)) problems.push(`"${match[0].replace(/\s+/g, " ")}" mist de laag: ${callName(word)}`);
   }
   return problems;
 }
@@ -99,6 +115,12 @@ function section(text: string, heading: string): string {
 }
 
 const TASKS = justTasks(read("justfile"));
+
+test("the code that calls the toolbox itself carries the layer, like the task files do", () => {
+  // The descriptions were the visible half. lus, the workflow of a run and the recipes write their own command lines, and those went stale unseen.
+  const callers = ["skills/nldd-a11y-audit/onderzoek.workflow.js", ...readdirSync(join(ROOT, "lus/src")).filter((file) => file.endsWith(".ts")).map((file) => `lus/src/${file}`), "justfile"];
+  for (const file of callers) assert.deepEqual(unlayeredCalls(read(file)), [], file);
+});
 
 test("the table says where every command sits, and the switch of cli.ts handles exactly those and no others", () => {
   const cases = [...read("toolbox/src/cli.ts").matchAll(/^\s+case "([a-z-]+)":/gm)].map((match) => match[1]!);

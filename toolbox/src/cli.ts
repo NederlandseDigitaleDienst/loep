@@ -2,7 +2,7 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
-import { AUDIT_COMMANDS, DEV_COMMANDS, NAMESPACES } from "./lib/commands.ts";
+import { AUDIT_COMMANDS, DEV_COMMANDS, NAMESPACES, STANDALONE_COMMANDS } from "./lib/commands.ts";
 
 const USAGE = `loep <command> [options]
 
@@ -15,6 +15,7 @@ const USAGE = `loep <command> [options]
                                          (quick/samenvatting.md). With --baseline it holds the outcome against the
                                          summary.json of an earlier measurement and exits 1 when a page got worse or was
                                          not measured; 2 means the measurement itself failed. It judges nothing
+                                         With --run <run> it measures a sample that is already there and needs no URL
   statement --run <run> [--concept]      The accessibility statement and the answer sheet for the register, from an
                                          investigation that was signed
   contribute --run <run> | --under <folder> [--out <dir>] [--json] [--key <file>]
@@ -23,7 +24,7 @@ const USAGE = `loep <command> [options]
   session <commando>                     What an agent does in a browser window during the investigation:
                                          open, look, click, speak. loep session --help
   dev <verb>                             The tool for whoever works on loep itself: procedures, compare, diff,
-                                         calibrate, variant, usage. loep dev --help
+                                         calibrate, variant, compare-variants, usage. loep dev --help
 
 Every step of audit takes its own options; loep audit <stap> --help says which.
 `;
@@ -320,6 +321,8 @@ function withNamespace(argv: string[]): string[] {
     // A command of the other layer is not a typo: say where it does live.
     const elsewhere = (Object.keys(NAMESPACES) as (keyof typeof NAMESPACES)[]).find((floor) => floor !== top && (NAMESPACES[floor] as readonly string[]).includes(inner));
     if (elsewhere) throw new Error(`loep ${top} kent ${said} niet: dat staat onder loep ${elsewhere} (loep ${elsewhere} ${inner})\n\n${top === "audit" ? AUDIT_USAGE : DEV_USAGE}`);
+    // A command that keeps its own name is not a typo either.
+    if ((STANDALONE_COMMANDS as readonly string[]).includes(inner)) throw new Error(`loep ${top} kent ${said} niet: dat staat op zichzelf (loep ${inner})\n\n${top === "audit" ? AUDIT_USAGE : DEV_USAGE}`);
     throw new Error(`loep ${top} kent ${said} niet\n\n${top === "audit" ? AUDIT_USAGE : DEV_USAGE}`);
   }
   return [...argv.slice(0, 2), inner, ...argv.slice(4)];
@@ -1104,6 +1107,8 @@ async function main(): Promise<void> {
 }
 
 main().catch((error: Error) => {
-  process.stderr.write(`loep: ${error.message}\n`);
+  // A refusal of a layer already says "loep audit kent ...", with the help under it: the prefix would repeat it.
+  const already = error.message.startsWith("loep ");
+  process.stderr.write(already ? `${error.message}\n` : `loep: ${error.message}\n`);
   process.exitCode = 1;
 });
