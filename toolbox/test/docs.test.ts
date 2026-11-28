@@ -81,6 +81,16 @@ function wrongCalls(code: string): string[] {
     const stands = word === "session" || (STANDALONE_COMMANDS as readonly string[]).includes(word) || (BACKLOG_COMMANDS as readonly string[]).includes(word);
     if (!stands && !SESSION_COMMANDS.includes(word)) problems.push(`"${match[0].trim()}" is geen commando in een sessie`);
   }
+  // Inside a sentence too, `loep <word>` is a call of the toolbox when the word is a command. A step that
+  // is also a command in a session may stay short (`loep find`, `loep voiceover`); any other step carries
+  // its layer, also when the sentence runs on before it.
+  for (const match of code.matchAll(/\bloep ([a-z][a-z-]*)/g)) {
+    const word = match[1]!;
+    // A line that starts with it is the other rule's: one problem per call.
+    if (/^[ \t]*$/.test(code.slice(code.lastIndexOf("\n", match.index) + 1, match.index))) continue;
+    const step = (AUDIT_COMMANDS as readonly string[]).includes(word) || (DEV_COMMANDS as readonly string[]).includes(word);
+    if (step && !SESSION_COMMANDS.includes(word)) problems.push(`"${match[0]}" heet nu loep ${callName(word)}: schrijf de laag ervoor`);
+  }
   return problems;
 }
 

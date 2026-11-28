@@ -4,7 +4,7 @@ Losse scripts voor [../gate.md](../gate.md). Ze zijn geen deel van loep en lezen
 
 | Stap | Script | Wat het doet |
 |---|---|---|
-| 1 | `loep usage` per run, dan `fase1.mjs` | Kosten per rol, per uitkomst en per soort aanroep. Het laatste argument is een JSON-bestand met per run de map van de werkstroom onder de map met projecten van Claude Code; dat bestand hoort niet in de repository. |
+| 1 | `loep dev usage` per run, dan `fase1.mjs` | Kosten per rol, per uitkomst en per soort aanroep. Het laatste argument is een JSON-bestand met per run de map van de werkstroom onder de map met projecten van Claude Code; dat bestand hoort niet in de repository. |
 | 2 | `dataset.py`, `testsite.py` | Eén rij per run en criterium (`gate.jsonl`), en dezelfde rijen voor de testsite met de sleutel als label (`testsite.jsonl`). |
 | 3 | `baselines.py` | Poortwachters zonder taalmodel, met een drempel van de andere sites. |
 | 4 | `jevlike.py`, `evaljl.py` | Jev-vorm op het hele criterium: toestand één keer ingelezen, drie getypeerde vragen. |
