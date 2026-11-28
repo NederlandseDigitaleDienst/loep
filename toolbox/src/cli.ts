@@ -2,7 +2,8 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
-import { AUDIT_COMMANDS, HARNESS_COMMANDS, DEV_COMMANDS, NAMESPACES, STANDALONE_COMMANDS } from "./lib/commands.ts";
+import { AUDIT_COMMANDS, HARNESS_COMMANDS, DEV_COMMANDS, HANDED_OVER_COMMANDS, NAMESPACES, STANDALONE_COMMANDS } from "./lib/commands.ts";
+import { positionalsOf } from "./lib/site-args.ts";
 
 const USAGE = `loep <command> [options]
 
@@ -311,6 +312,99 @@ const NEEDS_SITE_MODEL = ["sweep", "collect", "contrast", "states", "gate", "tas
 /** The commands of the sweep that load pages of the site in a browser. */
 const SWEEP_COMMANDS = ["sweep", "collect", "contrast", "states"];
 
+/** Every option of the steps of `audit`, `dev` and the standalone commands; `parseArgs` reads them in `main`. */
+const OPTIONS = {
+  out: { type: "string" },
+  run: { type: "string" },
+  force: { type: "boolean" },
+  baseline: { type: "string" },
+  key: { type: "string" },
+  under: { type: "string" },
+  dismiss: { type: "string", multiple: true },
+  strict: { type: "boolean", default: false },
+  "max-pages": { type: "string", default: "200" },
+  idle: { type: "boolean", default: false },
+  gaps: { type: "string" },
+  "max-hours": { type: "string" },
+  "vendor-tags": { type: "string" },
+  "vendor-name": { type: "string" },
+  only: { type: "string" },
+  urls: { type: "string" },
+  "also-origin": { type: "string", multiple: true },
+  "exclude-path": { type: "string", multiple: true },
+  "navigation-delay": { type: "string" },
+  seed: { type: "string" },
+  criterion: { type: "string" },
+  name: { type: "string" },
+  organisation: { type: "string" },
+  model: { type: "string", default: "niet opgegeven" },
+  role: { type: "string" },
+  reference: { type: "string" },
+  previous: { type: "string" },
+  current: { type: "string" },
+  checked: { type: "string" },
+  round: { type: "string" },
+  "page-type": { type: "string" },
+  "page-types": { type: "string" },
+  again: { type: "string" },
+  reopen: { type: "boolean", default: false },
+  point: { type: "string" },
+  did: { type: "string" },
+  outcome: { type: "string" },
+  reason: { type: "string" },
+  defect: { type: "string" },
+  decision: { type: "string" },
+  what: { type: "string" },
+  date: { type: "string" },
+  alternative: { type: "string" },
+  "recorded-via": { type: "string" },
+  confirmation: { type: "string" },
+  summary: { type: "string" },
+  kind: { type: "string" },
+  attempted: { type: "string" },
+  brief: { type: "boolean", default: false },
+  concept: { type: "boolean", default: false },
+  fresh: { type: "boolean", default: false },
+  open: { type: "boolean", default: false },
+  "other-toolbox": { type: "boolean", default: false },
+  "allow-writes": { type: "boolean", default: false },
+  "test-environment": { type: "string", multiple: true },
+  "declared-by": { type: "string" },
+  "max-writes": { type: "string" },
+  origin: { type: "string" },
+  mailbox: { type: "string" },
+  "mail-link-origin": { type: "string", multiple: true },
+  session: { type: "string" },
+  timeout: { type: "string" },
+  url: { type: "string" },
+  from: { type: "string" },
+  steps: { type: "string" },
+  press: { type: "string" },
+  "at-once": { type: "string" },
+  "explore-minutes": { type: "string" },
+  groups: { type: "boolean", default: false },
+  json: { type: "boolean", default: false },
+  finding: { type: "string" },
+  at: { type: "string" },
+  rechecks: { type: "boolean", default: false },
+  embedded: { type: "boolean" },
+  site: { type: "string" },
+  toon: { type: "string" },
+  "toon-host": { type: "string" },
+  "toon-url": { type: "string" },
+  live: { type: "boolean", default: false },
+  preview: { type: "string" },
+  "replace-unseen": { type: "boolean", default: false },
+  format: { type: "string" },
+  help: { type: "boolean", short: "h" },
+} as const;
+
+/** The options that take a value: the word after one is a value, not a site of the backlog. */
+const VALUE_FLAGS = new Set(Object.entries(OPTIONS).filter(([, spec]) => spec.type === "string").map(([name]) => name));
+
+/** The steps whose first word after them is no site: the URL of a new run, a subcommand, a purpose, a list of runs. */
+const WORD_IS_NOT_A_SITE = new Set(["inventory", "mail", "voiceover", "gaps", "purpose"]);
+
 /**
  * `loep audit <stap>` and `loep dev <verb>` are how the commands are written now. A command without its
  * namespace still runs for one release: the task files of a run that is already on disk name it that way,
@@ -349,13 +443,27 @@ async function main(): Promise<void> {
   if (argv[2] === "calibrate") return (await import("./commands/calibrate.ts")).cli(argv.slice(3)); // outside an evaluation: measures the instruments against the ACT test cases
   if (argv[2] === "variant" || argv[2] === "compare-variants") return (await import("./commands/variants.ts")).cli(argv.slice(2)); // outside an evaluation: measures a variant of the code on a frozen sweep
   if (argv[2] === "usage") return (await import("./commands/usage.ts")).cli(argv.slice(3)); // outside an evaluation: tokens per agent from the transcripts, for compare-variants --usage
-  // A step of an investigation takes a site of the backlog where it takes a run: `loep audit answer voorbeeld.nl`.
+  // A step of an investigation takes the site of the backlog where it takes a run: `loep audit answer
+  // voorbeeld.nl` does what `loep audit answer --run <run>` does, with the run of that site at this moment.
   // `loep statement voorbeeld.nl` is the same for the statement, which takes a run without a layer.
-  if (!argv.includes("--run") && argv[2] !== undefined && (argv[2] === "statement" || (AUDIT_COMMANDS as readonly string[]).includes(argv[2]))) {
-    const at = argv.findIndex((arg, index) => index >= 3 && !arg.startsWith("-"));
-    if (at !== -1) {
-      const run = (await import("./harness/lookup.ts")).runForSite(argv[at]!);
-      if (run !== null) argv.splice(at, 0, "--run", run);
+  const step = argv[2];
+  const runGiven = argv.some((arg) => arg === "--run" || arg.startsWith("--run="));
+  const helpWanted = argv.includes("--help") || argv.includes("-h");
+  if (step !== undefined && !runGiven && !helpWanted && !WORD_IS_NOT_A_SITE.has(step) && (step === "statement" || (AUDIT_COMMANDS as readonly string[]).includes(step))) {
+    const word = positionalsOf(argv.slice(3), VALUE_FLAGS)[0];
+    if (word !== undefined) {
+      const { siteForWord } = await import("./harness/lookup.ts");
+      const onTheLine = siteForWord(word.word);
+      // The step with a person in it goes to the harness, which knows the login of the site and says what
+      // comes after: parse it here and every option loep does not know would be refused.
+      if (onTheLine !== null && (HANDED_OVER_COMMANDS as readonly string[]).includes(step)) {
+        const rest = [...argv.slice(3)];
+        rest.splice(word.at, 1);
+        process.exitCode = await (await import("./harness/cli.ts")).harnessCli([step, onTheLine.site.slug, ...rest]);
+        return;
+      }
+      if (onTheLine !== null && onTheLine.run === null) throw new Error(`${onTheLine.site.slug} is nog niet begonnen; start hem met: loep run --only ${onTheLine.site.slug}`);
+      if (onTheLine?.run != null) argv.splice(word.at + 3, 0, "--run", onTheLine.run);
     }
   }
   // The harness takes its verbs and options as they come; it parses them itself.
@@ -373,91 +481,7 @@ async function main(): Promise<void> {
   const { positionals, values } = parseArgs({
     args: argv.slice(2),
     allowPositionals: true,
-    options: {
-      out: { type: "string" },
-      run: { type: "string" },
-      force: { type: "boolean" },
-      baseline: { type: "string" },
-      key: { type: "string" },
-      under: { type: "string" },
-      dismiss: { type: "string", multiple: true },
-      strict: { type: "boolean", default: false },
-      "max-pages": { type: "string", default: "200" },
-      idle: { type: "boolean", default: false },
-      gaps: { type: "string" },
-      "max-hours": { type: "string" },
-      "vendor-tags": { type: "string" },
-      "vendor-name": { type: "string" },
-      only: { type: "string" },
-      urls: { type: "string" },
-      "also-origin": { type: "string", multiple: true },
-      "exclude-path": { type: "string", multiple: true },
-      "navigation-delay": { type: "string" },
-      seed: { type: "string" },
-      criterion: { type: "string" },
-      name: { type: "string" },
-      organisation: { type: "string" },
-      model: { type: "string", default: "niet opgegeven" },
-      role: { type: "string" },
-      reference: { type: "string" },
-      previous: { type: "string" },
-      current: { type: "string" },
-      checked: { type: "string" },
-      round: { type: "string" },
-      "page-type": { type: "string" },
-      "page-types": { type: "string" },
-      again: { type: "string" },
-      reopen: { type: "boolean", default: false },
-      point: { type: "string" },
-      did: { type: "string" },
-      outcome: { type: "string" },
-      reason: { type: "string" },
-      defect: { type: "string" },
-      decision: { type: "string" },
-      what: { type: "string" },
-      date: { type: "string" },
-      alternative: { type: "string" },
-      "recorded-via": { type: "string" },
-      confirmation: { type: "string" },
-      summary: { type: "string" },
-      kind: { type: "string" },
-      attempted: { type: "string" },
-      brief: { type: "boolean", default: false },
-      concept: { type: "boolean", default: false },
-      fresh: { type: "boolean", default: false },
-      open: { type: "boolean", default: false },
-      "other-toolbox": { type: "boolean", default: false },
-      "allow-writes": { type: "boolean", default: false },
-      "test-environment": { type: "string", multiple: true },
-      "declared-by": { type: "string" },
-      "max-writes": { type: "string" },
-      origin: { type: "string" },
-      mailbox: { type: "string" },
-      "mail-link-origin": { type: "string", multiple: true },
-      session: { type: "string" },
-      timeout: { type: "string" },
-      url: { type: "string" },
-      from: { type: "string" },
-      steps: { type: "string" },
-      press: { type: "string" },
-      "at-once": { type: "string" },
-      "explore-minutes": { type: "string" },
-      groups: { type: "boolean", default: false },
-      json: { type: "boolean", default: false },
-      finding: { type: "string" },
-      at: { type: "string" },
-      rechecks: { type: "boolean", default: false },
-      embedded: { type: "boolean" },
-      site: { type: "string" },
-      toon: { type: "string" },
-      "toon-host": { type: "string" },
-      "toon-url": { type: "string" },
-      live: { type: "boolean", default: false },
-      preview: { type: "string" },
-      "replace-unseen": { type: "boolean", default: false },
-      format: { type: "string" },
-      help: { type: "boolean", short: "h" },
-    },
+    options: OPTIONS,
   });
   const [command, target] = positionals;
   if (command === "voiceover" && (values.help || !target)) {

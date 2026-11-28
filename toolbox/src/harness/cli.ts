@@ -3,6 +3,7 @@ import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { createInterface } from "node:readline/promises";
 import { parseArgs } from "node:util";
+import { HANDED_OVER_COMMANDS } from "../lib/commands.ts";
 import { addSite, readBacklog, type Site } from "./backlog.ts";
 import { doctor, doctorTextNl, routesCheck } from "./doctor.ts";
 import { FIXTURES, metingHome, prepareBacklog, silent } from "./meting.ts";
@@ -291,9 +292,6 @@ async function resumeSite(site: Site, what: string | undefined): Promise<void> {
   });
 }
 
-/** What a person does through loep itself, from the backlog: the options go on as they are, without being read. */
-const HANDED_OVER = new Set(["login", "answer", "sign", "decide", "statement"]);
-
 /** What loep needs after a person did something, said to the regie at the next resume. */
 const AFTER_NL: Record<string, string> = {
   login: "De mens logde in met loep audit login; loep bewaarde de sessie in de run.",
@@ -317,7 +315,7 @@ export async function harnessCli(argv: string[]): Promise<number> {
 async function main(argv: string[]): Promise<void> {
   // `loep audit login <site> --idle` and `loep audit answer <site> --criterion 1.4.3` belong to loep: parsing them
   // here would refuse every option loep does not know. A `--` in front still works.
-  const handedOver = argv[0] !== undefined && HANDED_OVER.has(argv[0]) && argv[1] !== undefined && !argv[1].startsWith("-");
+  const handedOver = argv[0] !== undefined && (HANDED_OVER_COMMANDS as readonly string[]).includes(argv[0]) && argv[1] !== undefined && !argv[1].startsWith("-");
   const parsed = parseArgs({ args: handedOver ? [] : argv, allowPositionals: true, options: OPTIONS });
   const values = parsed.values;
   const positionals = handedOver ? [argv[0]!, argv[1]!, ...argv.slice(2).filter((arg, index) => !(index === 0 && arg === "--"))] : parsed.positionals;

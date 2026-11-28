@@ -61,6 +61,12 @@ export const HARNESS_COMMANDS = ["add", "run", "status", "pause", "resume", "log
 /** The commands that keep their own name, because they are one thing and not a step of a chain. */
 export const STANDALONE_COMMANDS = ["quick", "statement", "contribute", "session"] as const;
 
+/**
+ * The steps a person does, from the backlog: `loep audit login <site>` opens the window of the test
+ * account, and the harness knows the login of that site and what to resume afterwards.
+ */
+export const HANDED_OVER_COMMANDS = ["login", "answer", "sign", "decide", "statement"] as const;
+
 export const NAMESPACES = { audit: AUDIT_COMMANDS, dev: DEV_COMMANDS } as const;
 export type Namespace = keyof typeof NAMESPACES;
 
