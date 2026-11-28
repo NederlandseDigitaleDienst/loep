@@ -6,6 +6,16 @@ Wat er per versie van loep is veranderd. De versie staat op het voorblad en onde
 
 <!-- towncrier: een nieuwe versie komt hieronder -->
 
+## 0.39.2 (2026-11-28)
+
+Deze versie is uitgebracht zonder meting: de opdrachtregel en het harnas zijn veranderd, en niet de procedure, de regel-engines of de instrumenten: een run op een andere agent krijgt dezelfde opdrachten en dezelfde beoordelingen, want de golven zijn hetzelfde script.
+
+### Verder
+
+- De commando's van de toolbox staan in lagen: de stappen van een onderzoek onder `audit`, het gereedschap voor wie aan loep werkt onder `dev`, en `quick`, `statement`, `contribute` en `session` op zichzelf. `loep --help` noemt nu die lagen in plaats van alle vijftig commando's door elkaar, en `loep audit --help` en `loep dev --help` noemen wat eronder valt. Ook wat loep zelf aanroept draagt de laag: de opdrachten die de backlog en de stand van de werkstroom geven, de meldingen en de procedures. De oude schrijfwijze zonder laag blijft werken zolang er runs lopen die hem in hun opdrachtbestanden hebben staan.
+- Het harnas dat loep een backlog van sites laat afwerken is onderdeel van loep geworden. De werkwoorden staan bovenaan de commandoregel, als `loep add`, `loep run`, `loep status`, `loep pause`, `loep resume`, `loep log` en `loep doctor`, en de meting van de testwebsites heet `loep dev meting`. Er is niets extra's te installeren: de backlog zit in de toolbox, met de gegevens op dezelfde plek als voorheen en de stand in `~/onderzoeken/.loep`. Elke stap van het onderzoek neemt naast `--run <run>` ook de site van de backlog, zoals `loep audit answer voorbeeld.nl`, zodat de commando's in `vraag.md` kort blijven.
+- loep kiest zelf welke agent een run doet, of je zegt het met `LOEP_REGIE`: `vlam-claude`, `claude` of `opencode`, en `loep doctor` noemt de keuze en waarom. De golven van stap 6 zijn van loep geworden: `loep audit waves` leest de werkstroom van de skill en start de agents op die agent, dus een onderzoek kan ook op opencode lopen. Op opencode komt de skill uit deze checkout en staat er een laag over de configuratie van de gebruiker, met de tools die een run niet mag gebruiken op deny; een model per rol kent loep daar niet.
+
 ## 0.39.1 (2026-11-28)
 
 Deze versie is uitgebracht zonder meting: de enige wijziging is in lus, dat geen onderzoek raakt.
