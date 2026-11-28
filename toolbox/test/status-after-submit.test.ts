@@ -68,7 +68,7 @@ test("4.1.3: a thank-you in a status region that was hidden until sending is rec
   assert.equal(candidate.criterion, "4.1.3");
   assert.equal(candidate.page, "P01");
   assert.match(candidate.where, /process-verborgen/);
-  assert.match(candidate.noteNl, /verborgen \(hidden op het gebied\).*loep voiceover/);
+  assert.match(candidate.noteNl, /verborgen \(hidden op het gebied\).*loep audit voiceover/);
   assert.ok(candidate.noteNl.split(/\s+/).length <= 40, candidate.noteNl);
   assert.deepEqual(candidate.evidence, ["site-states/process-verborgen/timelimits-after-submit.json"]);
 });
