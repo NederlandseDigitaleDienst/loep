@@ -1,6 +1,6 @@
-import { homedir } from "node:os";
 import { join } from "node:path";
 import { addSite, readBacklog } from "./backlog.ts";
+import { homeDir } from "./paths.ts";
 
 /*
  * The measurement before a release: loep on its own test sites, one with built-in defects and one that
@@ -28,7 +28,7 @@ export const FIXTURES: Fixture[] = [
 
 /** Where a meting keeps its backlog, runs and state: never next to the sites of real owners. */
 export function metingHome(): string {
-  return process.env["LOEP_HOME"] ?? join(homedir(), "onderzoeken", "meting");
+  return join(homeDir(), "meting");
 }
 
 /** Whether the testsite answers, so that no agent starts against a server nobody started. */

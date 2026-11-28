@@ -27,7 +27,7 @@ const USAGE = `loep <command> [options]
   add|run|status|pause|resume|log|doctor The harness: loep over a list of sites, a regie per site, with a person
                                          where only a person can decide. loep status says how every site stands
   dev <verb>                             The tool for whoever works on loep itself: procedures, compare, diff,
-                                         calibrate, variant, compare-variants, usage. loep dev --help
+                                         calibrate, variant, compare-variants, usage, meting. loep dev --help
 
 Every step of audit takes its own options; loep audit <stap> --help says which.
 `;

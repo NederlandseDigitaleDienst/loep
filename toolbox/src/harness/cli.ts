@@ -7,7 +7,7 @@ import { HANDED_OVER_COMMANDS } from "../lib/commands.ts";
 import { addSite, readBacklog, type Site } from "./backlog.ts";
 import { doctor, doctorTextNl, routesCheck } from "./doctor.ts";
 import { FIXTURES, metingHome, prepareBacklog, silent } from "./meting.ts";
-import { backlogPath, cliArgs, homeDir, reportsDir, siteDir, stateDir, toolboxCli } from "./paths.ts";
+import { backlogPath, cliArgs, reportsDir, siteDir, stateDir, toolboxCli } from "./paths.ts";
 import { lastWords, readTranscript } from "./run.ts";
 import { handOutMissing, lockPath, pauseSite, runSite, statePath, transcriptPath } from "./runner.ts";
 import { acquireLock, isGone, PHASES_NL, readState, regieRuns, releaseLock, siteState, standNl, updateSite, type SiteState } from "./state.ts";
@@ -34,8 +34,9 @@ const USAGE = `loep add|run|status|pause|resume|log|doctor: het harnas, loep ove
   doctor [--routes]                      Controleer wat een run nodig heeft, en met --routes ook VLAM
 
 De menselijke stappen van een run staan onder \`audit\`: \`loep audit login <site>\` opent het venster
-waarin je zelf met het testaccount inlogt, en \`loep audit answer|sign|decide|statement <site>\` geven de
-terminal aan loep zelf. Waar een stap een run vraagt, mag ook de site staan.
+waarin je zelf met het testaccount inlogt, en \`loep audit answer|sign|decide <site>\` geven de terminal aan
+loep zelf; de verklaring is \`loep statement <site>\`, want die staat op zichzelf. Waar een stap een
+run vraagt, mag ook de site staan.
 
 De backlog staat in ${backlogPath()} en de stand van de backlog in ${stateDir()}.
 `;
@@ -359,17 +360,6 @@ async function main(argv: string[]): Promise<void> {
       });
       process.stdout.write(`${site.slug} staat in de backlog.\nStart hem met: loep run\n`);
       if (site.login !== null) process.stdout.write(`Deze site zit achter een inlog: aan het begin van de run stopt loep daarvoor, en loep audit login ${site.slug} opent het venster.\n`);
-      return;
-    }
-    case "list": {
-      const backlog = readBacklog(backlogPath());
-      const state = readState(statePath());
-      if (values.json) {
-        process.stdout.write(`${JSON.stringify({ home: homeDir(), sites: backlog.sites.map((site) => ({ ...site, state: siteState(state, site.slug) })), problems: backlog.problems }, null, 2)}\n`);
-        return;
-      }
-      process.stdout.write(listTextNl(backlog.sites, state));
-      for (const problem of backlog.problems) process.stderr.write(`LET OP ${problem.where}: ${problem.textNl}\n`);
       return;
     }
     case "status": {

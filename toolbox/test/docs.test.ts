@@ -77,6 +77,11 @@ function wrongCalls(code: string): string[] {
       if (next !== undefined && !(NAMESPACES[word] as readonly string[]).includes(next)) problems.push(`"${match[0].trim()} ${next}" is geen commando onder loep ${word}`);
       continue;
     }
+    // A word that is a step and a command in a session means two things: the short form has to choose.
+    if ((AUDIT_COMMANDS as readonly string[]).includes(word) && SESSION_COMMANDS.includes(word)) {
+      problems.push(`"${match[0].trim()}" is een stap van het onderzoek en een commando in een sessie: schrijf loep ${callName(word)} of loep session ${word}`);
+      continue;
+    }
     // A word of the backlog stands at the top of the command line too: `loep run` is `loep run`.
     const stands = word === "session" || (STANDALONE_COMMANDS as readonly string[]).includes(word) || (HARNESS_COMMANDS as readonly string[]).includes(word);
     if (!stands && !SESSION_COMMANDS.includes(word)) problems.push(`"${match[0].trim()}" is geen commando in een sessie`);
@@ -89,7 +94,8 @@ function wrongCalls(code: string): string[] {
     // A line that starts with it is the other rule's: one problem per call.
     if (/^[ \t]*$/.test(code.slice(code.lastIndexOf("\n", match.index) + 1, match.index))) continue;
     const step = (AUDIT_COMMANDS as readonly string[]).includes(word) || (DEV_COMMANDS as readonly string[]).includes(word);
-    if (step && !SESSION_COMMANDS.includes(word)) problems.push(`"${match[0]}" heet nu loep ${callName(word)}: schrijf de laag ervoor`);
+    if ((AUDIT_COMMANDS as readonly string[]).includes(word) && SESSION_COMMANDS.includes(word)) problems.push(`"${match[0]}" is een stap van het onderzoek en een commando in een sessie: schrijf loep ${callName(word)} of loep session ${word}`);
+    else if (step && !SESSION_COMMANDS.includes(word)) problems.push(`"${match[0]}" heet nu loep ${callName(word)}: schrijf de laag ervoor`);
   }
   return problems;
 }
@@ -156,8 +162,8 @@ test("a command in a session is session <command>, and no such command is called
   for (const old of ["node toolbox/src/cli.ts loep look", "LOEP loep open P01", "node {{cli}} loep <commando>", "loep loep look"]) assert.equal(wrongCalls(old).length, 1, old);
   // A step is written with its layer in front; without one it is an old name the description still has to change.
   for (const flat of ["LOEP inventory <url>", "node {{cli}} gate --run x", "cli.ts procedures"]) assert.equal(wrongCalls(flat).length, 1, flat);
-  for (const wrong of ["LOEP session klik 1", "loep session serve", "node {{cli}} session begin", "LOEP audit klik", "LOEP audit quick", "LOEP dev inventory", "loep inventory", "  loep klik 3"]) assert.equal(wrongCalls(wrong).length, 1, wrong);
-  for (const right of ["LOEP audit inventory <url>", "LOEP dev procedures", "node {{cli}} audit gate --run x", "LOEP quick <url>", "loep audit tasks", "LOEP session open P01", "loep session look", "loep session contrast 3", "node {{cli}} session start --run x", "LOEP session list --run RUN", "loep contrast 3", 'loep() { node {{cli}} session "$@" --run x; }']) assert.deepEqual(wrongCalls(right), [], right);
+  for (const wrong of ["LOEP session klik 1", "loep session serve", "node {{cli}} session begin", "LOEP audit klik", "LOEP audit quick", "LOEP dev inventory", "loep inventory", "  loep klik 3", "loep contrast 3"]) assert.equal(wrongCalls(wrong).length, 1, wrong);
+  for (const right of ["LOEP audit inventory <url>", "LOEP dev procedures", "node {{cli}} audit gate --run x", "LOEP quick <url>", "loep audit tasks", "LOEP session open P01", "loep session look", "loep session contrast 3", "node {{cli}} session start --run x", "LOEP session list --run RUN", 'loep() { node {{cli}} session "$@" --run x; }']) assert.deepEqual(wrongCalls(right), [], right);
 });
 
 test("every task and every command a description calls exists", () => {

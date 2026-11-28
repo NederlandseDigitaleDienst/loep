@@ -13,7 +13,7 @@ test("een meting heeft een eigen home, los van de sites van echte eigenaren", ()
   const before = process.env["LOEP_HOME"];
   try {
     process.env["LOEP_HOME"] = home;
-    assert.equal(metingHome(), home);
+    assert.equal(metingHome(), join(home, "meting"), "ook met LOEP_HOME houdt de meting een eigen map: de testwebsites komen niet tussen de sites van echte eigenaren");
     delete process.env["LOEP_HOME"];
     assert.match(metingHome(), /onderzoeken\/meting$/, "zonder LOEP_HOME staan de metingen naast de runs, in een eigen map");
   } finally {

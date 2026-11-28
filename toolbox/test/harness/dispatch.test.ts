@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync } from "node:fs";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -52,6 +52,24 @@ test("een stap met een mens erin gaat naar het harnas", () => {
   const result = call("audit", "login", "voorbeeld.nl");
   assert.match(String(result.stderr), /geen inlog in de backlog/);
   assert.notEqual(result.status, 0);
+});
+
+test("de verklaring staat op zichzelf, en met een site gaat ze naar het harnas", () => {
+  // De help van het harnas belooft de korte vorm, en die moet er ook zijn: `statement` staat niet onder `audit`.
+  const { call } = home(false);
+  assert.match(String(call("audit", "statement", "voorbeeld.nl").stderr), /dat staat op zichzelf \(loep statement\)/);
+  assert.match(String(call("statement", "voorbeeld.nl").stderr), /heeft nog geen run/);
+});
+
+test("een kapotte backlog laat de stap zijn eigen werk doen", () => {
+  // Een typefout in de backlog is een probleem van de backlog: `loep doctor` noemt het, de stap gaat door.
+  const dir = mkdtempSync(join(tmpdir(), "dispatch-"));
+  writeFileSync(join(dir, "backlog.yaml"), "- url: https://voorbeeld.nl/\n- url: https://www.voorbeeld.nl/\n");
+  const env = { ...process.env, LOEP_HOME: dir, LOEP_MIN_FREE_GB: "0" };
+  const call = (...args: string[]) => spawnSync("node", [cli, ...args], { env, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+  const result = call("audit", "tasks", "voorbeeld.nl");
+  assert.doesNotMatch(String(result.stderr), /staat 2 keer in de backlog/);
+  assert.match(String(result.stderr), /tasks needs --run/);
 });
 
 test("een site die nog niet begonnen is zegt hoe je hem start", () => {

@@ -50,7 +50,7 @@ loep audit login <site> --idle     # de proef op de sessie
 
 Daarna gaat de run verder met `loep resume <site>`. Typ je de inlog liever niet bij elke run opnieuw, bewaar de sessie dan buiten de run: `loep audit login <site> --out ~/onderzoeken/secrets/<site>-sessie.json`, en daarna `loep audit login <site> --from ~/onderzoeken/secrets/<site>-sessie.json`.
 
-Elke stap van het onderzoek neemt naast `--run <run>` ook de site zelf: `loep audit login voorbeeld.nl` zoekt de run van die site op. Zo staan de commando's in `vraag.md`.
+Elke stap die een run vraagt neemt in plaats van `--run <run>` ook de site zelf: `loep audit login voorbeeld.nl` zoekt de run van die site op. Dat is wat je typt als de regie om een mens stopt; in `vraag.md` staat dezelfde stap voluit, met de run erin.
 
 ## Lopen
 
