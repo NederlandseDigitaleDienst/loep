@@ -6,7 +6,7 @@ import { freeGb, MIN_FREE_GB } from "./doctor.ts";
 import { homeDir, reportsDir, runDirFor, siteDir, stateDir, toolboxCli } from "./paths.ts";
 import { continueNl, regieArgs, regieEnv, regiePrompt } from "./regie.ts";
 import { isSealed, readQuestion, runSnapshot, startRegie } from "./run.ts";
-import { readState, siteState, updateSite, type SiteState } from "./state.ts";
+import { readState, regieRuns, siteState, updateSite, type SiteState } from "./state.ts";
 import { checkoutVersion, sameVersion, versionNl } from "./version.ts";
 
 /*
@@ -91,6 +91,13 @@ export async function runSite(options: SiteRunOptions): Promise<SiteState> {
   // The transcript holds everything the regie saw, also what a command printed; nobody else on the machine reads it.
   chmodSync(stateDir(), 0o700);
   const recorded = siteState(readState(statePath()), site.slug);
+  // A lus that was killed with a signal it cannot catch leaves its regie running. A second start would
+  // put a second regie in the same run, and both would write the same evidence.
+  if (regieRuns(recorded)) {
+    throw new Error(
+      `de regie van ${site.slug} loopt nog (proces ${String(recorded.regiePid)}), ook al is lus zelf weg. Wacht tot die stopt, of stop hem met: kill ${String(recorded.regiePid)}. Daarna gaat lus run --only ${site.slug} verder in dezelfde run`,
+    );
+  }
   // A run that is gone from disk is no run to go on with: what is left is a new one, in this version.
   const fresh = options.newRun === true || recorded.run === null || !existsSync(recorded.run);
   const known = fresh ? siteState({ sites: {} }, site.slug) : recorded;
@@ -138,11 +145,16 @@ export async function runSite(options: SiteRunOptions): Promise<SiteState> {
           step = found;
           options.onStep?.(found);
         },
+        onStart: (pid) => {
+          updateSite(statePath(), site.slug, { regiePid: pid, regieSince: new Date().toISOString() });
+        },
       });
     } catch (error) {
       log(`de regie startte niet: ${error instanceof Error ? error.message : String(error)}`);
-      return updateSite(statePath(), site.slug, { phase: "fout", pid: null, step: "start" });
+      return updateSite(statePath(), site.slug, { phase: "fout", pid: null, regiePid: null, regieSince: null, step: "start" });
     }
+    // The regie is gone when its stream closes; what it left behind decides the rest.
+    updateSite(statePath(), site.slug, { regiePid: null, regieSince: null });
     if (result.interrupted) {
       // Somebody stopped lus: no next turn and no next site. The run stays for resume.
       log(`regie onderbroken (code ${String(result.code)}${result.signal ? `, signaal ${result.signal}` : ""}, laatste stap ${step ?? "geen"}); de run blijft staan`);

@@ -47,8 +47,15 @@ export interface SiteState {
   step: string | null;
   question: Question | null;
   version: Version | null;
-  /** The process of the regie, so a lock left by a killed process is recognised as stale. */
+  /** The process of lus that runs this site, so a lock left by a killed process is recognised as stale. */
   pid: number | null;
+  /**
+   * The process of the regie itself. A `kill -9` on lus leaves the regie running, and the state would
+   * then say the work stopped while a second start would put a second regie in the same run.
+   */
+  regiePid: number | null;
+  /** When that regie started, so a pid that came back for another process is not mistaken for it. */
+  regieSince: string | null;
   /** How often lus continued this run after a regie stopped without a question and without a seal. */
   continues: number;
   /** The report files that were copied out of the run, under a name with the site and the day. */
@@ -62,7 +69,7 @@ export interface State {
 }
 
 export function emptySite(slug: string): SiteState {
-  return { slug, phase: "nieuw", run: null, startedAt: null, updatedAt: new Date().toISOString(), step: null, question: null, version: null, pid: null, continues: 0, handouts: [], humanNl: null };
+  return { slug, phase: "nieuw", run: null, startedAt: null, updatedAt: new Date().toISOString(), step: null, question: null, version: null, pid: null, regiePid: null, regieSince: null, continues: 0, handouts: [], humanNl: null };
 }
 
 export function readState(path: string): State {
@@ -142,6 +149,21 @@ export function stillRuns(pid: number, since: string): boolean {
  */
 export function isGone(site: SiteState): boolean {
   return site.phase === "loopt" && (site.pid === null || !stillRuns(site.pid, site.updatedAt));
+}
+
+/**
+ * Whether the regie of this site still runs. It outlives a lus that was killed with a signal it cannot
+ * catch, and a run that still has a regie must not get a second one: two regies in one run write the
+ * same evidence.
+ */
+export function regieRuns(site: SiteState): boolean {
+  return site.regiePid !== null && site.regieSince !== null && stillRuns(site.regiePid, site.regieSince);
+}
+
+/** The stand of a site in one phrase, for `list` and `status`. */
+export function standNl(site: SiteState): string {
+  if (isGone(site)) return regieRuns(site) ? "loopt zonder lus" : "proces weg";
+  return PHASES_NL[site.phase];
 }
 
 export function readLock(path: string): RunnerLock | null {

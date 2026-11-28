@@ -72,6 +72,8 @@ export interface StartOptions {
   /** Every line of the stream, as it came in: the transcript of a run is the only way back into what happened. */
   transcript: string;
   onStep: (step: string) => void;
+  /** The pid of the regie as soon as it runs: a lus that is killed leaves the regie behind. */
+  onStart?: ((pid: number) => void) | undefined;
 }
 
 export function startRegie(options: StartOptions): Promise<RegieResult> {
@@ -130,6 +132,20 @@ export function startRegie(options: StartOptions): Promise<RegieResult> {
       if (pending.trim() !== "") appendFileSync(options.transcript, `${pending}\n`, { mode: 0o600 });
       resolve({ code, signal, step, interrupted });
     });
+    // Only now, with every handler in place: a state that cannot be written must not take the handlers
+    // down with it. That would leave a regie nobody reads and nobody can stop, which is the orphan this
+    // pid is meant to make visible.
+    if (child.pid !== undefined) {
+      try {
+        options.onStart?.(child.pid);
+      } catch (error) {
+        try {
+          appendFileSync(options.transcript, `# de pid van de regie niet bewaard: ${error instanceof Error ? error.message : String(error)}\n`, { mode: 0o600 });
+        } catch {
+          // There is nothing left to write the note to; the run goes on without it.
+        }
+      }
+    }
   });
 }
 
