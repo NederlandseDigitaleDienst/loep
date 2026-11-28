@@ -69,7 +69,12 @@ export function callName(command: string): string {
   return command;
 }
 
+/** The arguments of a command line, for a caller that spawns the toolbox itself: `<cli> audit check-gate --run <run>`. */
+export function cliArgs(cli: string, command: string, ...args: string[]): string[] {
+  return [cli, ...callName(command).split(" "), ...args];
+}
+
 /** A command line as the task files write it: `node <cli> audit check-gate --run <run>`. */
 export function cliCall(cli: string, command: string, ...args: string[]): string {
-  return ["node", cli, ...callName(command).split(" "), ...args].join(" ");
+  return ["node", ...cliArgs(cli, command, ...args)].join(" ");
 }

@@ -5,8 +5,8 @@ import { dirname } from "node:path";
 import { writeAtomic } from "./atomic.ts";
 
 /*
- * What lus knows about each site, kept outside the run. `loep seal` hashes every file in a run folder and
- * `loep verify` fails on a file nobody wrote there, so lus never writes in a run: progress, questions and
+ * What lus knows about each site, kept outside the run. `loep audit seal` hashes every file in a run folder and
+ * `loep audit verify` fails on a file nobody wrote there, so lus never writes in a run: progress, questions and
  * transcripts live in .lus/, next to the backlog. The state is a convenience for `status` and for the next
  * start; the run and vraag.md are the truth, and a state that disagrees with them loses.
  */

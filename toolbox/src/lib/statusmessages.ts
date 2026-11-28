@@ -43,7 +43,7 @@ export function whyCandidateNl(message: StatusMessage): string | null {
 /**
  * Candidates for 4.1.3 from the sweep: each message after sending a filled-in form whose region
  * was hidden or not in the page before, with the focus elsewhere. The judge listens to them with
- * `loep voiceover`: the role alone is no proof that the message is read. Ids start with "S" for
+ * `loep audit voiceover`: the role alone is no proof that the message is read. Ids start with "S" for
  * the sweep and are unique in the run.
  */
 export function sweepCandidates(run: RunData): Candidate[] {
@@ -63,7 +63,7 @@ export function sweepCandidates(run: RunData): Candidate[] {
         page,
         where: `"${message.text.slice(0, 80)}" in ${message.where}, na versturen van het ingevulde formulier in toestand ${state.id} (${after.submitControl ?? "verzonden zonder knop"})`,
         evidence: state.files["timeLimitsAfterSubmit"] ? [state.files["timeLimitsAfterSubmit"]] : [],
-        noteNl: `De melding verschijnt na versturen, maar ${why}; beluister haar met loep voiceover.`,
+        noteNl: `De melding verschijnt na versturen, maar ${why}; beluister haar met loep audit voiceover.`,
         support: "gemeten",
       });
     }

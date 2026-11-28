@@ -195,7 +195,7 @@ test("with the virtual Mac for VoiceOver set up, the estimate says to start it w
   assert.deepEqual(estimateRun(run, { voiceover: { state: "absent" } }).notesNl, []);
   const stopped = estimateRun(run, { voiceover: { state: "stopped" } }).notesNl;
   assert.equal(stopped.length, 1);
-  assert.match(stopped[0]!, /start hem tegelijk met de veegronde \(loep voiceover start --run <run>, 9 minuten, of 20 tot 30 met een herstart\).*loep voiceover status.*loep voiceover stop --run <run>\)/);
+  assert.match(stopped[0]!, /start hem tegelijk met de veegronde \(loep audit voiceover start --run <run>, 9 minuten, of 20 tot 30 met een herstart\).*loep audit voiceover status.*loep audit voiceover stop --run <run>\)/);
   const ready = { state: "running", warm: true, bootedAt: "2026-11-15T08:00:00Z" } as const;
   assert.match(estimateRun(run, { voiceover: ready }).notesNl[0]!, /draait en is opgewarmd: beoordelaars, verifieerders en de afmaakronde/);
   // Running but not warmed up, or a start that failed: the estimate says so, and what to do.
@@ -680,7 +680,7 @@ test("the method names the numbers of the sweep as the code has them", () => {
   const c = SWEEP_COEFFICIENTS;
   const collect = `${c.collect.loads} × de laadtijd + ${nl(c.collect.perPage)} + ${nl(c.collect.perLink)} per link + ${nl(c.collect.perControl)} per ander bedieningselement; daarna per toestand uit het sitemodel ${nl(c.collect.capturedStateShare)} × een gemiddelde pagina`;
   assert.ok(method.includes(collect), `docs/methode.md noemt collect niet als: ${collect}`);
-  assert.ok(method.includes(`1 + (n − 1) × ${nl(c.slowdown.collect)} voor \`collect\`, × ${nl(c.slowdown.contrast)} voor \`contrast\` en × ${nl(c.slowdown.states)} voor \`states\``), "docs/methode.md noemt de vertraging met meer tegelijk niet zoals de code");
+  assert.ok(method.includes(`1 + (n − 1) × ${nl(c.slowdown.collect)} voor \`audit collect\`, × ${nl(c.slowdown.contrast)} voor \`audit contrast\` en × ${nl(c.slowdown.states)} voor \`audit states\``), "docs/methode.md noemt de vertraging met meer tegelijk niet zoals de code");
   assert.ok(method.includes(`Indrukken stopt bij ${MAX_DOWN_TARGETS} soorten en aanwijzen bij ${MAX_HOVER_TARGETS}`), "docs/methode.md noemt de grenzen van states niet zoals de code");
   assert.ok(method.includes(`1,2 per aangewezen element en ${nl(c.states.pointer.perPress)} + ${nl(c.states.pointer.freshAfterPress)} × de laadtijd per ingedrukt element`) && c.states.pointer.perHover === 1.2, "docs/methode.md noemt aanwijzen en indrukken niet zoals de code");
 });

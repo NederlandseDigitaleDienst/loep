@@ -492,7 +492,7 @@ export async function runCalibration(options: CalibrateOptions): Promise<{ repor
   return { report, cases, rules };
 }
 
-const USAGE = `loep calibrate [--out <dir>] [--only <ACT rule ids>] [--concurrency <n>] [--commit <sha>]
+const USAGE = `loep dev calibrate [--out <dir>] [--only <ACT rule ids>] [--concurrency <n>] [--commit <sha>]
 
 Measures every instrument of the toolbox against the test cases of the ACT rules of W3C and
 writes uitkomst.json, uitkomst.md, gevallen.json and regels.json. Not a step of an evaluation.

@@ -628,7 +628,7 @@ export async function mergeRun(runDir: string, outDir: string): Promise<Findings
   return summary;
 }
 
-const USAGE = `loep compare --findings <step> [options]
+const USAGE = `loep dev compare --findings <step> [options]
 
   tasks --run <run> --reference <file>   Write <run>/compare/invoer.json and the two fixed prompts (opdracht-a.md, opdracht-b.md).
                                          A run with tasks for part of the criteria (tasks --only) gets only the

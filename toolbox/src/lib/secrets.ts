@@ -958,10 +958,10 @@ export function secretLimitationsNl(runDir: string): string[] {
     count("refused") > 0 ? `${count("refused")} keer weigerde de grens iets` : null,
     count("unreachable") > 0 ? `${count("unreachable")} keer was een site niet te bereiken of hield haar certificaat geen stand` : null,
   ].filter(Boolean);
-  return [base, `Voor wie het onderzoek leidt: ${parts.join("; ")}. De plekken staan in ${SECRET_EVENTS_FILE}; loep secrets --run <run> toont ze.`];
+  return [base, `Voor wie het onderzoek leidt: ${parts.join("; ")}. De plekken staan in ${SECRET_EVENTS_FILE}; loep audit secrets --run <run> toont ze.`];
 }
 
-/** What `loep secrets` prints: counts per source and what happened, without a single value. */
+/** What `loep audit secrets` prints: counts per source and what happened, without a single value. */
 export function secretsLinesNl(runDir: string): string[] {
   const file = readSecretsFile(runDir);
   if (!file || file.secrets.length === 0) return ["deze run kent geen geheimen, en heeft dus geen grens"];

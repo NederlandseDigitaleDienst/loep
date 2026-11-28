@@ -14,6 +14,13 @@ import { fileURLToPath } from "node:url";
 /** The checkout that holds the toolbox, the skill and lus, without a slash at the end. */
 export const repoRoot = dirname(dirname(dirname(fileURLToPath(import.meta.url))));
 export const toolboxCli = join(repoRoot, "toolbox", "src", "cli.ts");
+
+/*
+ * A command of the toolbox as lus calls it: `cliArgs` for a process lus starts, `cliCall` for a line a
+ * person copies. The layers (audit, dev) come from the toolbox, so a command lus names cannot drift
+ * from the one the toolbox has.
+ */
+export { cliArgs, cliCall } from "../../toolbox/src/lib/commands.ts";
 export const workflowFile = join(repoRoot, "skills", "nldd-a11y-audit", "onderzoek.workflow.js");
 export const pluginFile = join(repoRoot, ".claude-plugin", "plugin.json");
 

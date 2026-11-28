@@ -58,7 +58,7 @@ test("without --live it is a preview, and nothing on the live site changes", asy
 test("live never replaces a site with content loep did not publish", async () => {
   const { dir, site } = await siteDir();
   const { runner, published } = toon();
-  await assert.rejects(publishToToon(dir, site, { site: "team/rapporten", live: true }, runner, online({ [LIVE]: "<h1>Een landingspagina</h1>" })), /niet met loep publish/);
+  await assert.rejects(publishToToon(dir, site, { site: "team/rapporten", live: true }, runner, online({ [LIVE]: "<h1>Een landingspagina</h1>" })), /niet met loep audit publish/);
   assert.deepEqual(published, []);
 });
 

@@ -70,7 +70,7 @@ async function reconcile(siteDir: string, url: string, live: boolean, replaceUns
     if (list.status !== 404 && list.status !== 401 && list.status !== 403) throw new Error(`${url} gaf ${list.status} op ${ROUNDS_FILE}: probeer het later opnieuw`);
     const page = await fetcher(url, { redirect: "follow" });
     if (page.ok) {
-      const foreign = `op ${url} staat iets wat niet met loep publish is gezet; dat zou verdwijnen. Kies een eigen site voor de rapporten`;
+      const foreign = `op ${url} staat iets wat niet met loep audit publish is gezet; dat zou verdwijnen. Kies een eigen site voor de rapporten`;
       if (live) throw new Error(foreign);
       notesNl.push(foreign);
     } else if (live && !replaceUnseen) {

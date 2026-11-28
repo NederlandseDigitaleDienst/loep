@@ -3,7 +3,7 @@ import { appendFileSync, chmodSync, existsSync, mkdirSync, renameSync } from "no
 import { join } from "node:path";
 import type { Site } from "./backlog.ts";
 import { freeGb, MIN_FREE_GB } from "./doctor.ts";
-import { homeDir, reportsDir, runDirFor, siteDir, stateDir, toolboxCli } from "./paths.ts";
+import { cliArgs, homeDir, reportsDir, runDirFor, siteDir, stateDir, toolboxCli } from "./paths.ts";
 import { continueNl, regieArgs, regieEnv, regiePrompt } from "./regie.ts";
 import { isSealed, readQuestion, runSnapshot, startRegie } from "./run.ts";
 import { readState, regieRuns, siteState, updateSite, type SiteState } from "./state.ts";
@@ -69,7 +69,7 @@ function freeRunDir(slug: string): string {
  */
 export function handOut(slug: string, run: string): string[] {
   if (!existsSync(join(run, "evaluation.json"))) return [];
-  const result = spawnSync("node", [toolboxCli, "handout", "--run", run, "--out", reportsDir(), "--name", slug], { encoding: "utf8" });
+  const result = spawnSync("node", cliArgs(toolboxCli, "handout", "--run", run, "--out", reportsDir(), "--name", slug), { encoding: "utf8" });
   if (result.status !== 0) return [];
   return result.stdout.split("\n").filter((line) => line.startsWith("/"));
 }

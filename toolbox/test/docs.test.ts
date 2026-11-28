@@ -349,10 +349,10 @@ async function runWorkflow(atOnce: number | undefined, states: WorkflowState[], 
       if (trouble === "throw") throw new Error(QUOTA);
       if (trouble === "null") return null;
       // The toolbox as the commands of the stand change it: a skip, and the attempts of the agents that came back.
-      for (const match of prompt.matchAll(/ skip --run RUN (--page-type (\S+)|--criterion (\S+)(?: --round (final|finish))?) --kind "geen geldig resultaat"/g)) {
+      for (const match of prompt.matchAll(/ audit skip --run RUN (--page-type (\S+)|--criterion (\S+)(?: --round (final|finish))?) --kind "geen geldig resultaat"/g)) {
         toolbox.skips.push(match[2] ? `walks:${match[2]}` : `${match[4] === "final" ? "verifiers" : match[4] === "finish" ? "finishers" : "judges"}:${match[3]}`);
       }
-      for (const key of /tasks --run RUN --attempted (\S+)/.exec(prompt)?.[1]?.split(",") ?? []) toolbox.attempts[key] = (toolbox.attempts[key] ?? 0) + 1;
+      for (const key of /audit tasks --run RUN --attempted (\S+)/.exec(prompt)?.[1]?.split(",") ?? []) toolbox.attempts[key] = (toolbox.attempts[key] ?? 0) + 1;
       const state = states[round++] ?? { phase: "done" };
       const open = (phase: WorkflowPhase) => (state[phase] ?? []).filter((id) => !toolbox.skips.includes(`${phase}:${id}`)).map((id) => ({ id, attempts: toolbox.attempts[`${phase}:${id}`] ?? 0 }));
       return { phase: state.phase, walks: open("walks"), judges: open("judges"), verifiers: open("verifiers"), finishers: open("finishers"), ...(state.siteOutage ? { siteOutage: state.siteOutage } : {}), ...(state.again ? { again: state.again } : {}), ...(state.sendingLow ? { sendingLow: state.sendingLow } : {}), ...(state.voiceover ? { voiceover: state.voiceover } : {}) };
@@ -395,8 +395,8 @@ test("the workflow keeps atOnce agents running: a new one starts as soon as one 
   // The phases stay apart: no judge starts before the last walk is done.
   assert.ok(flow.position(taskOf("walks", "t0"), "end") < flow.position(taskOf("judges", "1.1.0"), "start"));
   // The stand reads out ids only, and records the attempts of the agents that came back: the toolbox counts them.
-  assert.match(flow.stands[0]!, /pending --run RUN --brief/);
-  assert.match(flow.stands[1]!, /tasks --run RUN --attempted walks:t\d/);
+  assert.match(flow.stands[0]!, /audit pending --run RUN --brief/);
+  assert.match(flow.stands[1]!, /audit tasks --run RUN --attempted walks:t\d/);
   for (const id of walks) assert.equal(flow.toolbox.attempts[`walks:${id}`], 1);
   assert.deepEqual(flow.result.skipped, []);
   assert.equal(flow.result.paused, null);
@@ -429,7 +429,7 @@ test("the workflow runs the finishing round as a fourth phase, and goes straight
   const stuck = await runWorkflow(2, [{ phase: "finishers", finishers: ["1.3.4"] }, { phase: "finishers", finishers: ["1.3.4"] }, { phase: "finishers", finishers: ["1.3.4"] }, { phase: "done" }]);
   assert.equal(stuck.started(taskOf("finishers", "1.3.4")), 2);
   assert.deepEqual(stuck.result.skipped, ["finishers:1.3.4"]);
-  assert.match(stuck.stands[3]!, /1\. node CLI skip --run RUN --criterion 1\.3\.4 --round finish --kind "geen geldig resultaat" --reason /);
+  assert.match(stuck.stands[3]!, /1\. node CLI audit skip --run RUN --criterion 1\.3\.4 --round finish --kind "geen geldig resultaat" --reason /);
   // No criterion was left open by the evaluation itself: the toolbox says done after the verifiers, and no agent of the round starts.
   const without = await runWorkflow(2, [{ phase: "verifiers", verifiers: ["1.3.4", "1.4.4"] }, { phase: "done" }]);
   assert.deepEqual(without.result.history.map((entry) => entry.phase), ["verifiers", "done"]);
@@ -446,7 +446,7 @@ test("the workflow tries a task twice and then has it skipped, as before the poo
   assert.deepEqual(flow.result.skipped, ["walks:zoek"]);
   assert.deepEqual(flow.toolbox.attempts, { "walks:zoek": 2, "walks:start": 1 }, "the run holds the attempts");
   assert.ok(!flow.stands[2]!.includes(" skip "), "the round that finds it open for the third time does not skip yet");
-  assert.match(flow.stands[3]!, /1\. node CLI skip --run RUN --page-type zoek --kind "geen geldig resultaat" --reason /, "the next round begins with the skip");
+  assert.match(flow.stands[3]!, /1\. node CLI audit skip --run RUN --page-type zoek --kind "geen geldig resultaat" --reason /, "the next round begins with the skip");
   assert.equal(flow.result.last, "done");
 });
 
@@ -561,7 +561,7 @@ test("an outage of the site pauses the workflow like one of the model: no agent 
 
   // Started again once the site answers: what got "niet bereikbaar" before gets a new finishing round, once per start.
   const back = await runWorkflow(2, [{ phase: "done", again: ["2.4.3", "3.3.1"] }, { phase: "finishers", finishers: ["2.4.3", "3.3.1"] }, { phase: "done", again: ["2.4.3"] }]);
-  assert.match(back.stands[1]!, /tasks --run RUN --again 2\.4\.3,3\.3\.1\n/);
+  assert.match(back.stands[1]!, /audit tasks --run RUN --again 2\.4\.3,3\.3\.1\n/);
   assert.ok(!back.stands[0]!.includes("--again") && !back.stands[2]!.includes("--again"));
   for (const id of ["2.4.3", "3.3.1"]) assert.equal(back.started(taskOf("finishers", id)), 1);
   assert.deepEqual(back.result.history.map((entry) => entry.phase), ["done", "finishers", "done"]);

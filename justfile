@@ -76,16 +76,16 @@ doctor:
     echo "Optioneel:"
     # A real screen reader in a virtual Mac: never missing, a run works the same without it.
     vm="${LOEP_VOICEOVER_VM:-loep-voiceover}"
-    if ! command -v lume >/dev/null; then printf '  niet ingericht  %s\n                  %s\n' "virtuele Mac met VoiceOver (loep voiceover): lume staat niet op deze machine" "alleen nodig voor een echte schermlezer naast de nagebootste; zie docs/voiceover.md en just voiceover-setup"
-    elif ! lume get "$vm" >/dev/null 2>&1; then printf '  niet ingericht  %s\n                  %s\n' "virtuele Mac met VoiceOver (loep voiceover): lume $(eerste lume --version) is er, de virtuele Mac $vm niet" "just voiceover-setup"
+    if ! command -v lume >/dev/null; then printf '  niet ingericht  %s\n                  %s\n' "virtuele Mac met VoiceOver (loep audit voiceover): lume staat niet op deze machine" "alleen nodig voor een echte schermlezer naast de nagebootste; zie docs/voiceover.md en just voiceover-setup"
+    elif ! lume get "$vm" >/dev/null 2>&1; then printf '  niet ingericht  %s\n                  %s\n' "virtuele Mac met VoiceOver (loep audit voiceover): lume $(eerste lume --version) is er, de virtuele Mac $vm niet" "just voiceover-setup"
     else
-      ok "virtuele Mac met VoiceOver (loep voiceover): $vm, lume $(eerste lume --version)"
+      ok "virtuele Mac met VoiceOver (loep audit voiceover): $vm, lume $(eerste lume --version)"
       # A running guest the host keeps this process from: said here, before a start waits for it.
       if {{cli}} audit voiceover status 2>/dev/null | grep -q '"refused":'; then printf '  LET OP     %s\n             %s\n' "de virtuele Mac $vm draait, maar is vanuit dit proces niet bereikbaar: de host weigert het verkeer (No route to host)" "kijk onder Systeeminstellingen > Privacy en beveiliging > Lokaal netwerk of het programma waarin je dit draait daar aan staat"; fi
     fi
     echo "Een run legt zelf vast waarmee is gemeten; zie het rapport onder Gereedschap en Herleidbaarheid. TE OUD staat er alleen waar de toolbox aantoonbaar een versie nodig heeft; van de andere hulpprogramma's is geen laagste versie bekend."
 
-# Richt de optionele virtuele Mac met VoiceOver in (loep voiceover): controleert lume en de virtuele Mac, zet in de virtuele Mac wat zonder mens kan en zegt per stap wat je zelf moet doen. Installeert niets op deze machine; zie docs/voiceover.md
+# Richt de optionele virtuele Mac met VoiceOver in (loep audit voiceover): controleert lume en de virtuele Mac, zet in de virtuele Mac wat zonder mens kan en zegt per stap wat je zelf moet doen. Installeert niets op deze machine; zie docs/voiceover.md
 voiceover-setup:
     {{cli}} audit voiceover setup
 

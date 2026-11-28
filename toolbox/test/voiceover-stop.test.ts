@@ -69,7 +69,7 @@ test("voiceover stop leaves the virtual Mac up while another run on this machine
   assert.deepEqual(busy.guest.commands, [], "nothing is asked of the guest");
   assert.match(refused.printed.error!, /^geweigerd: de virtuele Mac blijft aan\. Op deze machine heeft een ander onderzoek nog sessies lopen/);
   assert.match(refused.printed.error!, /\/runs\/other \(3 sessies\)/);
-  assert.match(refused.printed.error!, /loep voiceover stop --run <run>.*loep voiceover stop --force$/);
+  assert.match(refused.printed.error!, /loep audit voiceover stop --run <run>.*loep audit voiceover stop --force$/);
 
   // With --force it shuts down anyway, without looking.
   const forced = await stop({ force: true }, busy.api, async () => assert.fail("--force does not look for other runs"));

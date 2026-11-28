@@ -280,7 +280,7 @@ test("read copies a local file into the guest, passes an address on, and refuses
 });
 
 test("read without a running virtual Mac says what to do first", async () => {
-  await assert.rejects(read(fakeGuest({ state: "stopped" }).api, { url: "https://example.test/", steps: 3 }, fakeClock()), /draai eerst loep voiceover start/);
+  await assert.rejects(read(fakeGuest({ state: "stopped" }).api, { url: "https://example.test/", steps: 3 }, fakeClock()), /draai eerst loep audit voiceover start/);
   await assert.rejects(read(fakeGuest({ state: "no-lume" }).api, { url: "https://example.test/", steps: 3 }, fakeClock()), /er is geen virtuele Mac voor VoiceOver/);
 });
 
@@ -488,7 +488,7 @@ test("status: VoiceOver reads only when the virtual Mac runs and was warmed up s
     // Warmed up before the last boot: the mark is of another boot, so it does not count. Why is kept, so the cause can be found.
     const cold = await voiceoverStatus(statusGuest("running", "1763193600 6AF54551-C4D8 11111111-AAAA"), "vm", dir);
     assert.deepEqual([isReady(cold), cold.notWarm], [false, "otherBoot"]);
-    assert.match(voiceoverWarningNl(cold) ?? "", /^LET OP: de virtuele Mac met VoiceOver draait sinds \d\d:\d\d maar is niet opgewarmd \(het merkteken van de opwarming is van een eerdere start\).*loep voiceover start/);
+    assert.match(voiceoverWarningNl(cold) ?? "", /^LET OP: de virtuele Mac met VoiceOver draait sinds \d\d:\d\d maar is niet opgewarmd \(het merkteken van de opwarming is van een eerdere start\).*loep audit voiceover start/);
     // Never warmed up: no mark at all.
     const unmarked = await voiceoverStatus(statusGuest("running", "1763193600 6AF54551-C4D8"), "vm", dir);
     assert.deepEqual([isReady(unmarked), unmarked.notWarm], [false, "noMark"]);
@@ -501,7 +501,7 @@ test("status: VoiceOver reads only when the virtual Mac runs and was warmed up s
     // Not set up: no warning, since a run without VoiceOver is as it was.
     assert.equal(voiceoverWarningNl(await voiceoverStatus(statusGuest("absent", null), "vm", dir)), null);
     assert.equal(voiceoverWarningNl(await voiceoverStatus(statusGuest("no-lume", null), "vm", dir)), null);
-    assert.match(voiceoverWarningNl(await voiceoverStatus(statusGuest("stopped", null), "vm", dir)) ?? "", /is ingericht maar draait niet\. Start hem met loep voiceover start/);
+    assert.match(voiceoverWarningNl(await voiceoverStatus(statusGuest("stopped", null), "vm", dir)) ?? "", /is ingericht maar draait niet\. Start hem met loep audit voiceover start/);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -517,7 +517,7 @@ test("status: a start in the background leaves word while it runs, and a failed 
     }, "vm", dir);
     assert.equal(failed.ok, false);
     assert.equal(during!.starting?.pid, process.pid);
-    assert.match(statusNl(during!), /wordt gestart sinds \d\d:\d\d \(loep voiceover start, proces \d+\)/);
+    assert.match(statusNl(during!), /wordt gestart sinds \d\d:\d\d \(loep audit voiceover start, proces \d+\)/);
     const after = await voiceoverStatus(statusGuest("stopped", null), "vm", dir);
     assert.equal(after.starting, undefined);
     assert.deepEqual([after.lastStart?.ok, after.lastStart?.error], [false, "opwarmen mislukt na drie starts"]);
@@ -598,7 +598,7 @@ test("start: a guest the host keeps this process from ends the start at once, wi
   assert.deepEqual(started.attempts, ["start 1: de host weigert het verkeer naar de virtuele Mac"]);
   assert.ok(lines.some((line) => line.includes("Lokaal netwerk")));
 
-  assert.match(started.error!, /loep voiceover stop/, "the way out when the setting is on and the guest hangs");
+  assert.match(started.error!, /loep audit voiceover stop/, "the way out when the setting is on and the guest hangs");
 
   // Booted here: a guest that boots has no network yet, so it gets the whole wait a boot may take.
   const booted = silentGuest(refused);

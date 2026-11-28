@@ -139,8 +139,8 @@ export function feedback(runDir: string, options: { out?: string | undefined } =
     for (const [kind, points] of byKind) {
       const lines = [
         isOwn
-          ? `Een onderzoek met loep liet dit criterium open door loep zelf, niet door de site. Gemaakt met \`loep feedback\`; het adres, de naam en de organisatie van de site zijn weggelaten.`
-          : `Een onderzoek met loep gaf dit criterium een uitkomst, maar een proef werkte niet: dat is een fout in loep, ook al is de uitkomst bepaald. Gemaakt met \`loep feedback\`; het adres, de naam en de organisatie van de site zijn weggelaten.`,
+          ? `Een onderzoek met loep liet dit criterium open door loep zelf, niet door de site. Gemaakt met \`loep audit feedback\`; het adres, de naam en de organisatie van de site zijn weggelaten.`
+          : `Een onderzoek met loep gaf dit criterium een uitkomst, maar een proef werkte niet: dat is een fout in loep, ook al is de uitkomst bepaald. Gemaakt met \`loep audit feedback\`; het adres, de naam en de organisatie van de site zijn weggelaten.`,
         "",
         `- Criterium: ${criterion.id} ${criterion.titleNl}, niveau ${criterion.level}, WCAG ${criterion.versions.join(" en ")}`,
         `- Soort: ${kind} (${KIND_LABEL_NL[kind] ?? kind})`,

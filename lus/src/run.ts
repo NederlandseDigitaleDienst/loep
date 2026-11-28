@@ -1,7 +1,7 @@
 import { spawn, spawnSync } from "node:child_process";
 import { appendFileSync, existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
-import { toolboxCli } from "./paths.ts";
+import { cliArgs, toolboxCli } from "./paths.ts";
 import type { Question } from "./state.ts";
 
 /*
@@ -169,7 +169,7 @@ export function readQuestion(dir: string): Question | null {
  */
 export function isSealed(run: string): boolean {
   if (!existsSync(join(run, "evidence-index.json"))) return false;
-  return spawnSync("node", [toolboxCli, "verify", "--run", run], { stdio: "ignore" }).status === 0;
+  return spawnSync("node", cliArgs(toolboxCli, "verify", "--run", run), { stdio: "ignore" }).status === 0;
 }
 
 /**

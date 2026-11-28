@@ -105,11 +105,11 @@ function runningSteps(runDir: string, steps: ManifestStep[]): Partial<Record<Swe
 
 /** What the estimate says about the virtual Mac for VoiceOver, when there is one. */
 export function voiceoverNoteNl(state: EstimateOptions["voiceover"]): string | null {
-  const reading = "elke voorlezing door VoiceOver duurt ongeveer een minuut en ze gaan één voor één; die tijd valt binnen het budget van de agents en is niet apart meegeteld. Stop de virtuele Mac na de laatste fase met agents (loep voiceover stop --run <run>)";
+  const reading = "elke voorlezing door VoiceOver duurt ongeveer een minuut en ze gaan één voor één; die tijd valt binnen het budget van de agents en is niet apart meegeteld. Stop de virtuele Mac na de laatste fase met agents (loep audit voiceover stop --run <run>)";
   if (!state || !isSetUp(state)) return null;
   if (isReady(state)) return `de virtuele Mac met VoiceOver draait en is opgewarmd: beoordelaars, verifieerders en de afmaakronde lezen er zelf mee voor; ${reading}`;
   const failed = state.lastStart && !state.lastStart.ok ? ` De laatste start mislukte: ${state.lastStart.error ?? "onbekende reden"}.` : "";
-  if (state.state === "stopped" && !state.starting) return `de virtuele Mac met VoiceOver is ingericht: start hem tegelijk met de veegronde (loep voiceover start --run <run>, 9 minuten, of 20 tot 30 met een herstart), dan kost het opstarten geen extra tijd. Kijk vóór de fase met agents met loep voiceover status of hij voorleest.${failed} ${reading}`;
+  if (state.state === "stopped" && !state.starting) return `de virtuele Mac met VoiceOver is ingericht: start hem tegelijk met de veegronde (loep audit voiceover start --run <run>, 9 minuten, of 20 tot 30 met een herstart), dan kost het opstarten geen extra tijd. Kijk vóór de fase met agents met loep audit voiceover status of hij voorleest.${failed} ${reading}`;
   return `de virtuele Mac met VoiceOver ${statusNl(state)}. ${reading}`;
 }
 

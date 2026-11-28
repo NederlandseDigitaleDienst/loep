@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Logging in on the fixture site with its own account. The code does here what a person does in
- * the window of `loep login`: that is allowed only because the site and the account are the
+ * the window of `loep audit login`: that is allowed only because the site and the account are the
  * fixture's own, on this machine. For any other site a person logs in, never the code.
  *
  *   node fixtures/login.ts --run <run> [--url <origin>]   put a session in a run; by default for the site of its inventory
@@ -45,7 +45,7 @@ export const typeAccountKeepNotice = async (page: Page): Promise<void> => {
 
 /** Log in on the fixture at `origin` for a run or a session file. Refuses every host but the one the fixture binds to. */
 export function logInOn(origin: string, target: { run?: string; out?: string }, act: (page: Page) => Promise<void> = typeAccount, say: (line: string) => void = () => undefined): Promise<LoggedIn> {
-  if (new URL(origin).hostname !== "127.0.0.1") throw new Error(`${origin} is niet de testsite: de code logt alleen in op 127.0.0.1, waar de testsite draait. Op elke andere site logt een mens in met loep login`);
+  if (new URL(origin).hostname !== "127.0.0.1") throw new Error(`${origin} is niet de testsite: de code logt alleen in op 127.0.0.1, waar de testsite draait. Op elke andere site logt een mens in met loep audit login`);
   return login({ ...target, url: `${new URL(origin).origin}${LOGIN_PAGE}`, role: ROLE, headless: true, say, act });
 }
 

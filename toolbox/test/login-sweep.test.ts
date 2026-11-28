@@ -98,7 +98,7 @@ test("a session of an agent starts logged in, refuses to log out and stops when 
     fixture.expireSessions();
     const late = await command("open", [`${origin}/mijn/aanvragen.html`]);
     assert.equal(late.ok, false);
-    assert.match(errorOf(late), /de inlogsessie is verlopen: .*\/mijn\/aanvragen\.html viel terug op het inlogscherm \(de site leidde om naar de inlogpagina\).*loep login --run/);
+    assert.match(errorOf(late), /de inlogsessie is verlopen: .*\/mijn\/aanvragen\.html viel terug op het inlogscherm \(de site leidde om naar de inlogpagina\).*loep audit login --run/);
     // A new login is picked up by the process that is running: no restart.
     await logIn({ run: dir });
     assert.equal((await command("open", [`${origin}/mijn/aanvragen.html`])).ok, true);
@@ -128,7 +128,7 @@ test("the sweep measures the pages behind the login, stops when the session runs
   try {
     await assert.rejects(collect({ run }), (error: Error) => {
       assert.ok(error instanceof LoginExpired);
-      assert.match(error.message, /de inlogsessie is verlopen: .* viel terug op het inlogscherm .*Wat al gemeten is, blijft staan\. Laat een mens opnieuw inloggen met loep login --run .* en geef dit commando daarna opnieuw/);
+      assert.match(error.message, /de inlogsessie is verlopen: .* viel terug op het inlogscherm .*Wat al gemeten is, blijft staan\. Laat een mens opnieuw inloggen met loep audit login --run .* en geef dit commando daarna opnieuw/);
       return true;
     });
   } finally {
@@ -184,6 +184,6 @@ test("the session is in no seal, no report, no dossier and no task; they name th
   // Nothing anywhere in the run holds the cookie, the user name or the password.
   for (const secret of [token, ACCOUNT.password, `"${ACCOUNT.username}"`, `=${ACCOUNT.username}`]) assert.deepEqual(filesHolding(run, secret), [], secret);
   // A run that was made with a login does not go on quietly without one.
-  assert.throws(() => runLoginState(), /het sessiebestand login-session\.json ontbreekt.*loep login --run/s);
+  assert.throws(() => runLoginState(), /het sessiebestand login-session\.json ontbreekt.*loep audit login --run/s);
   setRunLogin(null);
 });

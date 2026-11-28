@@ -5,7 +5,7 @@ import { parseArgs } from "node:util";
 import { addSite, readBacklog, type Site } from "./backlog.ts";
 import { doctor, doctorTextNl, routesCheck } from "./doctor.ts";
 import { FIXTURES, metingHome, prepareBacklog, silent } from "./meting.ts";
-import { backlogPath, homeDir, reportsDir, siteDir, stateDir, toolboxCli } from "./paths.ts";
+import { backlogPath, cliArgs, homeDir, reportsDir, siteDir, stateDir, toolboxCli } from "./paths.ts";
 import { lastWords, readTranscript } from "./run.ts";
 import { handOutMissing, lockPath, pauseSite, runSite, statePath, transcriptPath } from "./runner.ts";
 import { acquireLock, isGone, PHASES_NL, readState, regieRuns, releaseLock, siteState, standNl, updateSite, type SiteState } from "./state.ts";
@@ -481,7 +481,7 @@ async function main(): Promise<void> {
       if (site.login === null) throw new Error(`${site.slug} heeft geen inlog in de backlog; zet --login-page en --login-role bij de site, of laat dit achterwege`);
       const known = siteState(readState(statePath()), site.slug);
       if (known.run === null) throw new Error(`${site.slug} heeft nog geen run; een inlog hoort bij een run, en die begint met: lus run --only ${site.slug}`);
-      const args = [toolboxCli, "login", "--run", known.run, "--url", site.login.page, ...(site.login.role === "" ? [] : ["--role", site.login.role]), ...positionals.slice(2)];
+      const args = cliArgs(toolboxCli, "login", "--run", known.run, "--url", site.login.page, ...(site.login.role === "" ? [] : ["--role", site.login.role]), ...positionals.slice(2));
       const result = spawnSync("node", args, { stdio: "inherit" });
       if (result.status !== 0) {
         process.exitCode = result.status ?? 1;
@@ -500,7 +500,7 @@ async function main(): Promise<void> {
       const known = siteState(readState(statePath()), site.slug);
       if (known.run === null) throw new Error(`${site.slug} heeft nog geen run; er is niets om te ${command === "sign" ? "tekenen" : "beantwoorden"}`);
       const args = positionals.slice(2);
-      const result = spawnSync("node", [toolboxCli, command, "--run", known.run, ...args], { stdio: "inherit" });
+      const result = spawnSync("node", cliArgs(toolboxCli, command, "--run", known.run, ...args), { stdio: "inherit" });
       if (result.status !== 0) {
         process.exitCode = result.status ?? 1;
         return;

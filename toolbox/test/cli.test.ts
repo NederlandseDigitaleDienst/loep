@@ -43,6 +43,14 @@ test("the help of a layer names every command under it, with the options", () =>
   for (const command of DEV_COMMANDS) assert.match(help("dev"), new RegExp(`^  (?:[a-z-]+, )*${command}\\b`, "m"), `loep dev --help noemt ${command} niet`);
 });
 
+test("a command that prints its own help names its layer, not the bare name it had before", () => {
+  for (const command of DEV_COMMANDS) {
+    const first = String(run("dev", command, "--help").stdout).split("\n")[0];
+    assert.match(first ?? "", /^loep dev /, `${command} noemt zichzelf zonder laag: ${first}`);
+  }
+  assert.match(String(run("audit", "voiceover", "--help").stdout), /^loep audit voiceover/);
+});
+
 test("the help of the top level names the layers and not the fifty commands", () => {
   const help = String(run("--help").stdout);
   assert.match(help, /^loep <command>/);
