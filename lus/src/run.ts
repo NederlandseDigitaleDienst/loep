@@ -72,11 +72,14 @@ export interface StartOptions {
   /** Every line of the stream, as it came in: the transcript of a run is the only way back into what happened. */
   transcript: string;
   onStep: (step: string) => void;
+  /** The pid of the regie as soon as it runs: a lus that is killed leaves the regie behind. */
+  onStart?: ((pid: number) => void) | undefined;
 }
 
 export function startRegie(options: StartOptions): Promise<RegieResult> {
   return new Promise((resolve, reject) => {
     const child = spawn("vlam-claude", options.args, { cwd: options.cwd, env: options.env, stdio: ["ignore", "pipe", "pipe"] });
+    if (child.pid !== undefined) options.onStart?.(child.pid);
     let step: string | null = null;
     let pending = "";
     let interrupted = false;

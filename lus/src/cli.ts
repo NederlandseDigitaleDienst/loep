@@ -8,7 +8,7 @@ import { FIXTURES, metingHome, prepareBacklog, silent } from "./meting.ts";
 import { backlogPath, homeDir, reportsDir, siteDir, stateDir, toolboxCli } from "./paths.ts";
 import { lastWords, readTranscript } from "./run.ts";
 import { handOutMissing, lockPath, pauseSite, runSite, statePath, transcriptPath } from "./runner.ts";
-import { acquireLock, isGone, PHASES_NL, readState, releaseLock, siteState, updateSite, type SiteState } from "./state.ts";
+import { acquireLock, isGone, PHASES_NL, readState, regieRuns, releaseLock, siteState, standNl, updateSite, type SiteState } from "./state.ts";
 import { versionNl } from "./version.ts";
 
 const USAGE = `lus: loep over een backlog van sites, met een mens erbij waar dat nodig is
@@ -95,7 +95,7 @@ function listTextNl(sites: Site[], state: ReturnType<typeof readState>): string 
   if (sites.length === 0) return `De backlog is leeg. Zet er een site in met: lus add <url>\n`;
   const rows = sites.map((site) => {
     const site_ = siteState(state, site.slug);
-    return [site.slug, isGone(site_) ? "proces weg" : PHASES_NL[site_.phase], site_.step ?? "", agoNl(site_.updatedAt)];
+    return [site.slug, standNl(site_), site_.step ?? "", agoNl(site_.updatedAt)];
   });
   const header = ["site", "stand", "stap", "bijgewerkt"];
   const widths = header.map((title, column) => Math.max(title.length, ...rows.map((row) => row[column]!.length)));
@@ -105,7 +105,7 @@ function listTextNl(sites: Site[], state: ReturnType<typeof readState>): string 
 
 /** Everything about one site: the file, the run, the question, and what to do next. */
 function statusTextNl(site: Site, site_: SiteState, words: string[] = []): string {
-  const lines: string[] = [`${site.slug}  ${isGone(site_) ? "proces weg" : PHASES_NL[site_.phase]}`];
+  const lines: string[] = [`${site.slug}  ${standNl(site_)}`];
   const field = (label: string, value: string | null): void => {
     if (value !== null && value !== "") lines.push(`  ${label.padEnd(10)} ${value}`);
   };
@@ -124,7 +124,12 @@ function statusTextNl(site: Site, site_: SiteState, words: string[] = []): strin
     if (site_.question.command) lines.push(`  Daarna: ${site_.question.command}`);
   }
   if (isGone(site_)) {
-    lines.push("", `  Het proces van lus is weg terwijl de run nog liep. lus run --only ${site.slug} gaat verder in dezelfde run.`);
+    lines.push(
+      "",
+      regieRuns(site_)
+        ? `  Het proces van lus is weg, maar de regie loopt nog in proces ${String(site_.regiePid)}. Wacht tot die stopt, of stop hem met: kill ${String(site_.regiePid)}. Daarna gaat lus run --only ${site.slug} verder in dezelfde run.`
+        : `  Het proces van lus is weg terwijl de run nog liep. lus run --only ${site.slug} gaat verder in dezelfde run.`,
+    );
   }
   if (site_.phase === "fout" && !site_.question) {
     lines.push("", "  De regie stopte zonder vraag en zonder verzegelde run. De laatste regels:");
@@ -435,6 +440,10 @@ async function main(): Promise<void> {
       // A regie that still runs does not stop because the state says so; the state and the run would drift apart.
       if (known.phase === "loopt" && !isGone(known)) {
         throw new Error(`${site.slug} loopt nu, in proces ${known.pid}. Stop lus in dat venster met Ctrl-C, of met: kill ${known.pid}. De run blijft staan en gaat verder met: lus resume ${site.slug}`);
+      }
+      // A regie that outlived lus would go on writing in the run; the state would say it stands still.
+      if (regieRuns(known)) {
+        throw new Error(`de regie van ${site.slug} loopt nog in proces ${String(known.regiePid)}, ook al is lus zelf weg. Stop die eerst: kill ${String(known.regiePid)}. Daarna: lus pause ${site.slug}`);
       }
       pauseSite(site.slug);
       process.stdout.write(`${site.slug} staat stil. Ga verder met: lus resume ${site.slug}\n`);

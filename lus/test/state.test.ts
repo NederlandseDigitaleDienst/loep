@@ -3,7 +3,7 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { hostname, tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { acquireLock, isGone, readLock, readState, releaseLock, siteState, updateSite } from "../src/state.ts";
+import { acquireLock, isGone, readLock, readState, regieRuns, releaseLock, siteState, standNl, updateSite } from "../src/state.ts";
 
 const stateFile = (): string => join(mkdtempSync(join(tmpdir(), "lus-state-")), "state.json");
 const lockFile = (): string => join(mkdtempSync(join(tmpdir(), "lus-lock-")), "run.lock");
@@ -46,6 +46,20 @@ test("een run waarvan het proces weg is leest niet als lopend", () => {
   assert.equal(isGone({ ...gone, phase: "loopt", pid: process.pid }), false);
   assert.equal(isGone({ ...gone, phase: "loopt", pid: null }), true);
   assert.equal(isGone({ ...gone, phase: "vraagt", pid: 999_999 }), false);
+});
+
+test("een regie die lus overleeft telt als lopend werk", () => {
+  // Een kill -9 op lus laat de regie doorlopen; de state mag dat niet als stilstand lezen.
+  const gone = siteState(readState(stateFile()), "voorbeeld.nl");
+  const now = new Date().toISOString();
+  const lusWeg = { ...gone, phase: "loopt" as const, pid: 999_999 };
+  assert.equal(regieRuns({ ...lusWeg, regiePid: null, regieSince: null }), false);
+  assert.equal(regieRuns({ ...lusWeg, regiePid: 999_999, regieSince: now }), false, "een proces dat weg is, is de regie niet");
+  assert.equal(regieRuns({ ...lusWeg, regiePid: process.pid, regieSince: now }), true);
+  // Een pid die intussen bij een ander proces hoort, begon later dan de regie: dat is de regie niet.
+  assert.equal(regieRuns({ ...lusWeg, regiePid: process.pid, regieSince: "2000-01-01T00:00:00Z" }), false);
+  assert.equal(standNl({ ...lusWeg, regiePid: process.pid, regieSince: now }), "loopt zonder lus");
+  assert.equal(standNl({ ...lusWeg, regiePid: null, regieSince: null }), "proces weg");
 });
 
 test("de loper pakt het slot en laat het weer los", () => {

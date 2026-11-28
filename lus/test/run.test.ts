@@ -8,7 +8,7 @@ import type { Site } from "../src/backlog.ts";
 import { toolboxCli } from "../src/paths.ts";
 import { isSealed, readQuestion, stepOf } from "../src/run.ts";
 import { handOutMissing, runSite, spaceProblemNl } from "../src/runner.ts";
-import { readState, siteState } from "../src/state.ts";
+import { readState, siteState, updateSite } from "../src/state.ts";
 
 /** The fake regie seals the way the regie does: with loep, so that `verify` agrees. */
 const SEAL = `node ${toolboxCli} seal --run "$run" >/dev/null`;
@@ -283,6 +283,36 @@ echo '{"type":"result","result":"niets"}'`);
   const args = readFileSync(join(home, ".lus", "voorbeeld.nl", "args.txt"), "utf8");
   assert.match(args, /Deze run loopt al/);
   assert.match(args, /pending --run .* --brief/);
+});
+
+test("de pid van de regie staat in de state zolang die loopt", async () => {
+  const home = fakeHome(`echo $$ > regie.pid
+sleep 1
+echo '{"type":"result","result":"niets"}'`);
+  const running = runSite({ site: site() });
+  const dir = join(home, ".lus", "voorbeeld.nl");
+  const path = join(home, ".lus", "state.json");
+  const pidFile = join(dir, "regie.pid");
+  let seen: number | null = null;
+  for (let wait = 0; wait < 100 && (seen === null || !existsSync(pidFile)); wait += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    seen = siteState(readState(path), "voorbeeld.nl").regiePid;
+  }
+  assert.notEqual(seen, null, "de state kent de pid van de regie");
+  assert.equal(seen, Number(readFileSync(pidFile, "utf8").trim()));
+  const state = await running;
+  assert.equal(state.regiePid, null, "na de beurt is de regie weg en de pid ook");
+  assert.equal(readState(path).sites["voorbeeld.nl"]?.regiePid, null);
+});
+
+test("een lus die weg is maar wiens regie nog loopt, begint geen tweede regie", async () => {
+  // kill -9 op lus: de regie leeft door, en een tweede start zou in dezelfde run schrijven.
+  const home = fakeHome("echo '{\"type\":\"result\",\"result\":\"niets\"}'");
+  const path = join(home, ".lus", "state.json");
+  updateSite(path, "voorbeeld.nl", { phase: "loopt", pid: 999_999, regiePid: process.pid, regieSince: new Date().toISOString() });
+  await assert.rejects(runSite({ site: site() }), /de regie van voorbeeld.nl loopt nog/);
+  assert.equal(existsSync(join(home, ".lus", "voorbeeld.nl", "lus.log")), false, "er is niets gestart");
+  assert.equal(siteState(readState(path), "voorbeeld.nl").phase, "loopt", "de stand blijft die van de lopende regie");
 });
 
 test("een oud zegel na een antwoord is geen afgemaakte run: de regie moet opnieuw verzegelen", async () => {
