@@ -187,14 +187,14 @@ Beide vragen een wijziging in de werkstroom, met een eigen voorstel.
 
 ## Meting
 
-Elke meting draait op kopieën van de drie runs, gemaakt met `LOEP variant`, zoals onder "Hoe we meten" in [README.md](README.md). De veegronde blijft dus gelijk. Een meting gebruikt 15 criteria per site: 6 uit klasse C waar de verifieerder iets veranderde (1.3.1, 2.4.4, 2.4.6, 4.1.2, 4.1.3, 1.4.11), 3 uit B (2.1.2, 3.1.1, 3.3.1) en 6 uit A (1.2.4, 2.5.4, 2.4.1, 3.2.2, 3.2.6, 1.4.4). Daarin zitten 7 van de 12 wezenlijke wijzigingen van de verifieerder.
+Elke meting draait op kopieën van de drie runs, gemaakt met `LOEP dev variant`, zoals onder "Hoe we meten" in [README.md](README.md). De veegronde blijft dus gelijk. Een meting gebruikt 15 criteria per site: 6 uit klasse C waar de verifieerder iets veranderde (1.3.1, 2.4.4, 2.4.6, 4.1.2, 4.1.3, 1.4.11), 3 uit B (2.1.2, 3.1.1, 3.3.1) en 6 uit A (1.2.4, 2.5.4, 2.4.1, 3.2.2, 3.2.6, 1.4.4). Daarin zitten 7 van de 12 wezenlijke wijzigingen van de verifieerder.
 
 | Meting | Wat | Kosten | Nodig |
 |---|---|---|---|
 | M1 | Stand op Haiku | ongeveer 0 dollar | Loopt mee in elke kopie |
 | M2 | Rondgangen en verifieerders op Sonnet, naast een kopie op Opus | ongeveer 390 dollar (224 voor Opus, 166 voor de variant) | |
 | M3 | Beoordelaars van de 9 criteria uit A en B op Sonnet, de rest op Opus | ongeveer 110 dollar | De testsite komt er nog bij |
-| M4 | Verifieerders van klasse C op Sonnet, bij de oordelen van de beoordelaars van Opus | ongeveer 55 dollar | Een optie van `LOEP variant` die de oordelen van de beoordelaars bewaart, zoals `--keep-judges`. Die bestaat nog niet |
+| M4 | Verifieerders van klasse C op Sonnet, bij de oordelen van de beoordelaars van Opus | ongeveer 55 dollar | Een optie van `LOEP dev variant` die de oordelen van de beoordelaars bewaart, zoals `--keep-judges`. Die bestaat nog niet |
 
 Samen ongeveer 555 dollar, plus de testsite bij M3. Haalt alles de meting, dan is dat na ongeveer 13 onderzoeken terugverdiend. Halen alleen de rondgangen en de verifieerders A en B de meting, dan na ongeveer 25.
 
@@ -235,7 +235,7 @@ Een rol gaat over als op alle drie de sites geldt:
 
 De stand-agent op Haiku is al besloten, in een eigen voorstel.
 
-1. Budget voor de meting M2 tot en met M4: ongeveer 555 dollar, plus de testsite bij M3, en de optie van `LOEP variant` voor M4.
+1. Budget voor de meting M2 tot en met M4: ongeveer 555 dollar, plus de testsite bij M3, en de optie van `LOEP dev variant` voor M4.
 2. Welke regels na de meting gelden:
     1. De rondgangen en de verifieerders A en B gaan naar Sonnet als M2 aan de zes eisen hierboven voldoet.
     2. De beoordelaars A en B gaan alleen naar Sonnet als M3 dat doet, op de drie sites en op de testsite.

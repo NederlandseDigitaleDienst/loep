@@ -169,27 +169,27 @@ export function feedbackTextNl(result: Feedback): string {
   // Not sending is the owner's choice: said once, so nobody takes it for a fault of loep or for work for a person.
   const notSent =
     result.notSent.length > 0
-      ? `\nNiet terug te melden: ${result.notSent.length === 1 ? "criterium" : "criteria"} ${result.notSent.join(", ")} ${result.notSent.length === 1 ? "bleef" : "bleven"} ook open omdat het onderzoek niet mocht versturen. Dat is een keuze van de eigenaar van de site, geen fout in loep. Een testomgeving, verklaard bij inventory met --test-environment, laat een instrument het meten; LOEP gaps telt deze punten onder "${NOT_SENT}".\n`
+      ? `\nNiet terug te melden: ${result.notSent.length === 1 ? "criterium" : "criteria"} ${result.notSent.join(", ")} ${result.notSent.length === 1 ? "bleef" : "bleven"} ook open omdat het onderzoek niet mocht versturen. Dat is een keuze van de eigenaar van de site, geen fout in loep. Een testomgeving, verklaard bij audit inventory met --test-environment, laat een instrument het meten; LOEP audit gaps telt deze punten onder "${NOT_SENT}".\n`
       : "";
   // Allowed to send, and the budget ran out: no choice of the owner, and it can still be measured.
   const budgetOut =
     result.budgetOut.length > 0
-      ? `\nNiet terug te melden: ${result.budgetOut.length === 1 ? "criterium" : "criteria"} ${result.budgetOut.join(", ")} ${result.budgetOut.length === 1 ? "bleef" : "bleven"} ook open omdat het budget voor versturen op was. Wil de eigenaar dat, dan gaat het budget omhoog (LOEP writes --run <run> --max-writes <aantal>), en meet een nieuwe afmaakronde het: LOEP tasks --run <run> --again ${result.budgetOut.join(",")}.\n`
+      ? `\nNiet terug te melden: ${result.budgetOut.length === 1 ? "criterium" : "criteria"} ${result.budgetOut.join(", ")} ${result.budgetOut.length === 1 ? "bleef" : "bleven"} ook open omdat het budget voor versturen op was. Wil de eigenaar dat, dan gaat het budget omhoog (LOEP audit writes --run <run> --max-writes <aantal>), en meet een nieuwe afmaakronde het: LOEP audit tasks --run <run> --again ${result.budgetOut.join(",")}.\n`
       : "";
   // A part of the site that did not load is no fault of loep either; a new finishing round measures it once it loads.
   const unreachable =
     result.unreachable.length > 0
-      ? `\nNiet terug te melden: ${result.unreachable.length === 1 ? "criterium" : "criteria"} ${result.unreachable.join(", ")} ${result.unreachable.length === 1 ? "bleef" : "bleven"} ook open omdat een deel van de site tijdens het onderzoek niet bereikbaar was. Dat is geen fout in loep. Laadt het deel weer, dan meet een nieuwe afmaakronde het: LOEP tasks --run <run> --again ${result.unreachable.join(",")}; LOEP gaps telt deze punten onder "${UNREACHABLE}".\n`
+      ? `\nNiet terug te melden: ${result.unreachable.length === 1 ? "criterium" : "criteria"} ${result.unreachable.join(", ")} ${result.unreachable.length === 1 ? "bleef" : "bleven"} ook open omdat een deel van de site tijdens het onderzoek niet bereikbaar was. Dat is geen fout in loep. Laadt het deel weer, dan meet een nieuwe afmaakronde het: LOEP audit tasks --run <run> --again ${result.unreachable.join(",")}; LOEP audit gaps telt deze punten onder "${UNREACHABLE}".\n`
       : "";
   // Nor is content of an address outside the scope: the scope was chosen, and a run with that address measures it.
   const outsideScope =
     result.outsideScope.length > 0
-      ? `\nNiet terug te melden: ${result.outsideScope.length === 1 ? "criterium" : "criteria"} ${result.outsideScope.join(", ")} ${result.outsideScope.length === 1 ? "bleef" : "bleven"} ook open door inhoud van een adres buiten de afbakening. Dat is een keuze bij het begin van het onderzoek, geen fout in loep. Een nieuw onderzoek met dat adres erbij (inventory --also-origin <adres>) meet het; het adres staat bij het criterium in het rapport, en LOEP gaps telt deze punten onder "${OUTSIDE_SCOPE}".\n`
+      ? `\nNiet terug te melden: ${result.outsideScope.length === 1 ? "criterium" : "criteria"} ${result.outsideScope.join(", ")} ${result.outsideScope.length === 1 ? "bleef" : "bleven"} ook open door inhoud van een adres buiten de afbakening. Dat is een keuze bij het begin van het onderzoek, geen fout in loep. Een nieuw onderzoek met dat adres erbij (audit inventory --also-origin <adres>) meet het; het adres staat bij het criterium in het rapport, en LOEP audit gaps telt deze punten onder "${OUTSIDE_SCOPE}".\n`
       : "";
   // Nor is a model that was not there: the skip can be taken back and the round done again.
   const outage =
     result.outage.length > 0
-      ? `\nNiet terug te melden: ${result.outage.length === 1 ? "criterium" : "criteria"} ${result.outage.join(", ")} ${result.outage.length === 1 ? "is" : "zijn"} niet beoordeeld door een storing van het model (een limiet of een storing van de dienst). Dat is geen fout in loep. Zet de opdracht terug met LOEP unskip --run <run> --criterion <id> [--round final|finish] en start de werkstroom opnieuw.\n`
+      ? `\nNiet terug te melden: ${result.outage.length === 1 ? "criterium" : "criteria"} ${result.outage.join(", ")} ${result.outage.length === 1 ? "is" : "zijn"} niet beoordeeld door een storing van het model (een limiet of een storing van de dienst). Dat is geen fout in loep. Zet de opdracht terug met LOEP audit unskip --run <run> --criterion <id> [--round final|finish] en start de werkstroom opnieuw.\n`
       : "";
   const apart = `${notSent}${budgetOut}${unreachable}${outsideScope}${outage}`;
   if (result.drafts.length === 0) return `Niets terug te melden uit ${result.run}: geen criterium is open door loep zelf.\n${apart}`;

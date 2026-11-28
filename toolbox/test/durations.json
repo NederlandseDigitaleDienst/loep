@@ -8,6 +8,7 @@
   "test/calibration.test.ts": 10,
   "test/challenge.test.ts": 5,
   "test/check-site-page-types.test.ts": 151,
+  "test/cli.test.ts": 2,
   "test/compare-findings.test.ts": 1,
   "test/content-snapshot.test.ts": 4,
   "test/contrast-retry.test.ts": 8,

@@ -9,6 +9,7 @@ import { readTemplate } from "../lib/templates.ts";
 import { applyWeighing, clearWeighing, type StaleReason, TASK_WORDS_MAX, TASKS_MAX, TASKS_MIN, TEXT_WORDS_MAX, validateWeighing, weighingInput, WORDS_MAX, WORDS_MIN, type WeighingProposal } from "../lib/weighing.ts";
 import { makeWorkDir } from "../lib/workdir.ts";
 import { readEvaluation, signatureIsCurrent, writeEvaluation } from "./sign.ts";
+import { cliCall } from "../lib/commands.ts";
 
 const TASK = join("tasks", "weeg", "taak.md");
 const INPUT = join("tasks", "weeg", "invoer.json");
@@ -95,7 +96,7 @@ async function writeTask(runDir: string, evaluation: Evaluation): Promise<string
     site: evaluation.site.name,
     input: join(absoluteRun, INPUT),
     output: join(absoluteRun, PROPOSAL),
-    check: `node ${cli} check-weigh --run ${absoluteRun}`,
+    check: cliCall(cli, "check-weigh", "--run", absoluteRun),
     findings: String(evaluation.criteria.reduce((total, criterion) => total + criterion.findings.length, 0)),
     groups: GROUPS.map((group) => `- **${group.id}**: ${group.labelNl}. ${group.howNl}`).join("\n"),
     tasksMin: String(TASKS_MIN),

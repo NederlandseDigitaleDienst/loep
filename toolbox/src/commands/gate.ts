@@ -12,6 +12,7 @@ import { exploreMinutesUsed, exploreRoundBudget, exploreTotalMinutes, sweepMinut
 import { makeWorkDir } from "../lib/workdir.ts";
 import { notFoundProbes, siteHosts, siteLabel } from "../lib/origins.ts";
 import { uncoveredOperables, type CountedPage } from "../lib/operables.ts";
+import { cliCall } from "../lib/commands.ts";
 import { loadRun, type PageData, type RunData } from "../lib/rundata.ts";
 import { acceptedGapFor, frameAddress, frameEntry, frameStanding, NOT_OPENED_ON_PAGE_TYPE, notOpenedAdviceNl, pageTypeOf, REVIEW_STATE_CHECK, type AcceptedGapDecider, type Component } from "../lib/sitemodel.ts";
 import { isLasting, refusedRunNl } from "../session/blockade.ts";
@@ -1208,7 +1209,7 @@ export async function gate(runDir: string, outDir: string = runDir): Promise<Gat
         questions: [...QUESTIONS.map((question) => `- \`${question.id}\`: ${question.questionNl}`), `- \`stateTiles\`: ${STATE_QUESTION_NL}`].join("\n"),
         example: JSON.stringify(example, null, 2),
         output: join(absoluteOut, part.answers),
-        check: `node ${cli} check-gate --run ${absoluteOut}`,
+        check: cliCall(cli, "check-gate", "--run", absoluteOut),
         workDir: await makeWorkDir(outDir, basename(part.task, ".md")),
         workName: basename(part.task, ".md"),
       }),

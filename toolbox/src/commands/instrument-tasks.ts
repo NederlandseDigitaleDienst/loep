@@ -7,6 +7,7 @@ import { EXTENSION, extensionsOf, finishBudget, judgeBudget, verifyBudget, walkB
 import { canonicalJson, pageLabels, readJson, sha256, sha256File, writeFileAtomic, writeJson } from "../lib/canonical.ts";
 import { buildDossier } from "../lib/dossier.ts";
 import { dossierReads, nameOf, readsOfSession, requiredParts, unreadPartsProblems } from "../lib/dossier-view.ts";
+import { cliCall } from "../lib/commands.ts";
 
 /** The parts of a dossier the criterion counts on, as a task names them: `controls`, `images` en `siteStates`. */
 function dossierPartsNl(dossier: Record<string, unknown>): string {
@@ -796,7 +797,7 @@ async function writeTasks(runDir: string, options: TaskOptions, previous: Instru
   const absoluteRun = resolve(runDir);
   const cli = resolve(new URL("../cli.ts", import.meta.url).pathname);
   const templates = Object.fromEntries(["rondgang", "beoordeel", "verifieer", "afmaak"].map((name) => [name, readTemplate(name)])) as Record<"rondgang" | "beoordeel" | "verifieer" | "afmaak", string>;
-  const base = { run: absoluteRun, cli, siteModel: join(absoluteRun, "site.json"), login: `${agentLoginNl(run.login)}${agentMailboxNl(runDir, `node ${cli} mail`, absoluteRun)}` };
+  const base = { run: absoluteRun, cli, siteModel: join(absoluteRun, "site.json"), login: `${agentLoginNl(run.login)}${agentMailboxNl(runDir, cliCall(cli, "mail"), absoluteRun)}` };
   const readsNl = readsAllowedNl(run.reads ?? []);
   // The budget as it was set, not what is left of it: the task stays the same while agents send, and its hash with it.
   const grantBudgetNl = (grant: WriteGrant): string => `${grant.maxWrites ?? DEFAULT_MAX_WRITES} verzendingen voor de hele run${spacingNl(grant.spacingSeconds ?? DEFAULT_WRITE_SPACING_SECONDS)}, gedeeld door alle agents en de veegronde${reservedWrites(grant) > 0 ? `; ${reservedNl(reservedWrites(grant))}. De sessies van één criterium (beoordelaar, verifieerder, afmaker) tellen samen als één` : ""}`;
@@ -857,7 +858,7 @@ async function writeTasks(runDir: string, options: TaskOptions, previous: Instru
         idPrefix: page.label,
         criteria: criteriaList,
         output: join(absoluteRun, walk.output),
-        check: `node ${cli} check-walk --run ${absoluteRun} --page-type ${type.id}`,
+        check: cliCall(cli, "check-walk", "--run", absoluteRun, "--page-type", type.id),
       }),
     );
     await writeWalk();
@@ -906,7 +907,7 @@ async function writeTasks(runDir: string, options: TaskOptions, previous: Instru
     const shared = { ...base, id: criterion.id, title: criterion.titleNl, level: criterion.level, dossier: join(absoluteRun, dossierPath), dossierParts: dossierPartsNl(dossier), gate: join(absoluteRun, "gate.json"), procedure: procedure.body };
     const writeJudge = async (): Promise<void> => writeFileAtomic(
       join(runDir, judge.prompt),
-      fill(templates.beoordeel, { ...shared, writes: writesNlFor(judge), session: judge.session, workDir: await makeWorkDir(runDir, judge.session), workName: judge.session, maxCommands: String(judge.maxCommands), maxMinutes: String(judge.maxMinutes), candidates: join(absoluteRun, judge.candidates), notWalked: join(absoluteRun, NOT_WALKED), output: join(absoluteRun, judge.output), check: `node ${cli} check-verdict --run ${absoluteRun} --criterion ${criterion.id} --round judge` }),
+      fill(templates.beoordeel, { ...shared, writes: writesNlFor(judge), session: judge.session, workDir: await makeWorkDir(runDir, judge.session), workName: judge.session, maxCommands: String(judge.maxCommands), maxMinutes: String(judge.maxMinutes), candidates: join(absoluteRun, judge.candidates), notWalked: join(absoluteRun, NOT_WALKED), output: join(absoluteRun, judge.output), check: cliCall(cli, "check-verdict", "--run", absoluteRun, "--criterion", criterion.id, "--round", "judge") }),
     );
     const task: InstrumentTask = { criterion: criterion.id, titleNl: criterion.titleNl, procedureVersion: procedure.version, procedureSha256: procedure.sha256, dossier: dossierPath, dossierSha256, passCommands: procedure.passCommands, ...(Object.keys(procedure.failCommands).length > 0 ? { failCommands: procedure.failCommands } : {}), decisiveCommands: procedure.decisiveCommands, recommendationRules: procedure.recommendationRules, ...(procedure.passExplains.length > 0 ? { passExplains: procedure.passExplains } : {}), judge, verify: null };
     await writeJudge();
@@ -958,7 +959,7 @@ async function writeTasks(runDir: string, options: TaskOptions, previous: Instru
           verdict: join(absoluteRun, task.judge.output),
           candidates: join(absoluteRun, verify.candidates),
           output: join(absoluteRun, verify.output),
-          check: `node ${cli} check-verdict --run ${absoluteRun} --criterion ${criterion.id} --round final`,
+          check: cliCall(cli, "check-verdict", "--run", absoluteRun, "--criterion", criterion.id, "--round", "final"),
         }),
       );
       task.verify = verify;
@@ -1050,7 +1051,7 @@ async function writeTasks(runDir: string, options: TaskOptions, previous: Instru
           candidates: join(absoluteRun, finish.candidates),
           notWalked: join(absoluteRun, NOT_WALKED),
           output: join(absoluteRun, finish.output),
-          check: `node ${cli} check-verdict --run ${absoluteRun} --criterion ${criterion.id} --round finish`,
+          check: cliCall(cli, "check-verdict", "--run", absoluteRun, "--criterion", criterion.id, "--round", "finish"),
         }),
       );
       task.finish = finish;

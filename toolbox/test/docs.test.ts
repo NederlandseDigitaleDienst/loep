@@ -5,6 +5,7 @@ import { dirname, join, normalize } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { EXPLORE_MAX_COMMANDS, EXPLORE_MAX_MINUTES } from "../src/commands/explore.ts";
+import { AUDIT_COMMANDS, callName, cliCall, DEV_COMMANDS, NAMESPACES, STANDALONE_COMMANDS } from "../src/lib/commands.ts";
 import { MAX_RESWEEPS, MAX_RETURNS_TO_EXPLORER, SHEETS_PER_TASK } from "../src/commands/gate.ts";
 import { briefPending, BUDGETS, INSTRUMENT_FLOW, loadInstrumentIndex, PHASES, pointsToFinish, recordAttempts, skip, skipKindOf, skipped, skippedForOutage, TASK_FILES, unskip } from "../src/commands/instrument-tasks.ts";
 import { CEILINGS, EXTENSION, MEASURED_USE, REFERENCE_SITE_SIZE, WALK_STATES } from "../src/lib/budget.ts";
@@ -31,11 +32,11 @@ const LOGS = ["validatie/iteraties.md", "validatie/lessen.md"];
 /** The two texts that together have to name every command. */
 const COMMAND_REFERENCE = ["README.md", "docs/methode.md"];
 
-/** The commands of the toolbox: every case of the switch in cli.ts, and the one that is handled before it. */
-function cliCommands(source: string): string[] {
-  const cases = [...source.matchAll(/^\s+case "([a-z-]+)":/gm)].map((match) => match[1]!);
-  return [...new Set([...cases, "session"])];
-}
+/** The commands of the toolbox, wherever they sit: a step of an investigation, the tool for whoever works on loep, or one that stands alone. */
+const COMMANDS: string[] = [...AUDIT_COMMANDS, ...DEV_COMMANDS, ...STANDALONE_COMMANDS];
+
+/** The commands cli.ts handles before it reads the rest of the line, or in a module of its own. */
+const HANDLED_ELSEWHERE = ["session", "calibrate", "variant", "compare-variants", "usage"];
 
 /** The words that can follow `session`: the three that manage a session, and every command in one. `serve` is how the process starts itself and is no command for a reader. */
 const AFTER_SESSION = [...SESSION_MANAGEMENT.filter((word) => word !== "serve"), ...SESSION_COMMANDS];
@@ -47,14 +48,32 @@ const PROCEDURES = readdirSync(join(ROOT, "procedures")).filter((file) => file.e
  * What is wrong with the calls of the toolbox in one piece of code. The toolbox is called as
  * `cli.ts`, as the variable LOEP of a skill, as `{{cli}}` in a task, or as `loep` at the start
  * of a line: the installed name, or the short form a procedure writes for `session <command>`.
+ * A step is written with its layer in front: `audit tasks`, `dev compare`.
  */
 function wrongCalls(code: string): string[] {
   const problems: string[] = [];
-  for (const match of code.matchAll(/(?:\bLOEP|cli\.ts|\{\{cli\}\}) ([a-z][a-z-]*)/g)) if (!COMMANDS.includes(match[1]!)) problems.push(`"${match[0]}" is geen commando van de toolbox`);
+  for (const match of code.matchAll(/(?:\bLOEP|cli\.ts|\{\{cli\}\}) ([a-z][a-z-]*)(?: ([a-z][a-z-]*))?/g)) {
+    const first = match[1]!;
+    const second = match[2];
+    if (first === "session") continue;
+    if (first === "audit" || first === "dev") {
+      // A layer on its own asks for its help: `loep audit --help`. Anything else needs a command under it.
+      const after = code.slice(match.index + match[0].length);
+      if (second === undefined && /^\s*--help\b/.test(after)) continue;
+      if (second === undefined || !(NAMESPACES[first] as readonly string[]).includes(second)) problems.push(`"${match[0]}" is geen commando onder loep ${first}`);
+      continue;
+    }
+    if ((AUDIT_COMMANDS as readonly string[]).includes(first) || (DEV_COMMANDS as readonly string[]).includes(first)) problems.push(`"${match[0]}" heet nu loep ${callName(first)}: schrijf de laag ervoor`);
+    else if (!(STANDALONE_COMMANDS as readonly string[]).includes(first)) problems.push(`"${match[0]}" is geen commando van de toolbox`);
+  }
   // A command in a session is `session <command>`; the word after `session` has to be one that exists.
   for (const match of code.matchAll(/(?:\bLOEP|cli\.ts|\{\{cli\}\}|^\s*loep) session ([a-z][a-z-]*)/gm)) if (!AFTER_SESSION.includes(match[1]!)) problems.push(`"${match[0].trim()}" is geen commando in een sessie en niet start, stop of list`);
-  // Written small and at the start of a line it is a command in a session; elsewhere "loep" is the name of the toolbox in a sentence.
-  for (const match of code.matchAll(/^\s*loep ([a-z][a-z-]*)/gm)) if (match[1] !== "session" && !SESSION_COMMANDS.includes(match[1]!)) problems.push(`"${match[0].trim()}" is geen commando in een sessie`);
+  // Written small and at the start of a line it is a command in a session, or one of the few that stand alone; elsewhere "loep" is the name of the toolbox in a sentence.
+  for (const match of code.matchAll(/^\s*loep ([a-z][a-z-]*)/gm)) {
+    const word = match[1]!;
+    const stands = word === "session" || word === "audit" || word === "dev" || (STANDALONE_COMMANDS as readonly string[]).includes(word);
+    if (!stands && !SESSION_COMMANDS.includes(word)) problems.push(`"${match[0].trim()}" is geen commando in een sessie`);
+  }
   return problems;
 }
 
@@ -79,11 +98,17 @@ function section(text: string, heading: string): string {
   return end === -1 ? rest : rest.slice(0, end);
 }
 
-const COMMANDS = cliCommands(read("toolbox/src/cli.ts"));
 const TASKS = justTasks(read("justfile"));
 
-test("the reading of cli.ts and the justfile finds the commands and the tasks", () => {
-  for (const command of ["inventory", "check-site", "documents", "diff", "verify", "session"]) assert.ok(COMMANDS.includes(command), `commando ${command} niet gevonden in cli.ts`);
+test("the table says where every command sits, and the switch of cli.ts handles exactly those and no others", () => {
+  const cases = [...read("toolbox/src/cli.ts").matchAll(/^\s+case "([a-z-]+)":/gm)].map((match) => match[1]!);
+  assert.deepEqual([...new Set(cases)].sort(), [...COMMANDS].filter((command) => !HANDLED_ELSEWHERE.includes(command)).sort(), "de tabel in lib/commands.ts en de switch in cli.ts noemen niet dezelfde commando's");
+  for (const command of HANDLED_ELSEWHERE) assert.ok(COMMANDS.includes(command), `${command} wordt vóór de switch afgehandeld en staat niet in de tabel`);
+  for (const command of ["inventory", "check-site", "documents", "diff", "verify", "session"]) assert.ok(COMMANDS.includes(command), `commando ${command} niet gevonden in de tabel`);
+  assert.equal(callName("inventory"), "audit inventory");
+  assert.equal(callName("diff"), "dev diff");
+  assert.equal(callName("quick"), "quick");
+  assert.equal(cliCall("/x/cli.ts", "check-gate", "--run", "/r"), "node /x/cli.ts audit check-gate --run /r");
   for (const task of ["install", "sweep", "report", "testsite-build"]) assert.ok(TASKS.includes(task), `taak ${task} niet gevonden in de justfile`);
   assert.ok(!TASKS.includes("toolbox"), "een variabele van de justfile is als taak gelezen");
   assert.deepEqual(justTasks("a := 1\nrun x *flags:\n    echo\n\nb-c:\n"), ["run", "b-c"]);
@@ -96,8 +121,10 @@ test("a command in a session is session <command>, and no such command is called
   assert.ok(!COMMANDS.includes("loep"), "loep is de naam van de toolbox en geen commando ervan");
   // The old form is gone, and the reading of calls sees it, in each way the toolbox is called.
   for (const old of ["node toolbox/src/cli.ts loep look", "LOEP loep open P01", "node {{cli}} loep <commando>", "loep loep look"]) assert.equal(wrongCalls(old).length, 1, old);
-  for (const wrong of ["LOEP session klik 1", "loep session serve", "node {{cli}} session begin", "loep inventory", "  loep klik 3"]) assert.equal(wrongCalls(wrong).length, 1, wrong);
-  for (const right of ["LOEP session open P01", "loep session look", "loep session contrast 3", "node {{cli}} session start --run x", "LOEP session list --run RUN", "loep contrast 3", 'loep() { node {{cli}} session "$@" --run x; }', "LOEP inventory <url>"]) assert.deepEqual(wrongCalls(right), [], right);
+  // A step is written with its layer in front; without one it is an old name the description still has to change.
+  for (const flat of ["LOEP inventory <url>", "node {{cli}} gate --run x", "cli.ts procedures"]) assert.equal(wrongCalls(flat).length, 1, flat);
+  for (const wrong of ["LOEP session klik 1", "loep session serve", "node {{cli}} session begin", "LOEP audit klik", "LOEP audit quick", "LOEP dev inventory", "loep inventory", "  loep klik 3"]) assert.equal(wrongCalls(wrong).length, 1, wrong);
+  for (const right of ["LOEP audit inventory <url>", "LOEP dev procedures", "node {{cli}} audit gate --run x", "LOEP quick <url>", "loep audit tasks", "LOEP session open P01", "loep session look", "loep session contrast 3", "node {{cli}} session start --run x", "LOEP session list --run RUN", "loep contrast 3", 'loep() { node {{cli}} session "$@" --run x; }']) assert.deepEqual(wrongCalls(right), [], right);
 });
 
 test("every task and every command a description calls exists", () => {
@@ -132,8 +159,11 @@ test("where the README and the method list the steps, every name written as code
   const problems: string[] = [];
   for (const [file, heading] of [["README.md", "Hoe het werkt"], ["docs/methode.md", "De keten"], ["docs/architectuur.md", "2. De keten"]] as const) {
     for (const code of codeOf(section(read(file), heading))) {
-      const word = /^([a-z][a-z-]*)(?: --[a-z-]+)*$/.exec(code.trim())?.[1];
-      if (word && !COMMANDS.includes(word)) problems.push(`${file}, sectie "${heading}": \`${code}\` is geen commando van de toolbox; bestaat het niet meer, haal het weg, en is het iets anders, schrijf het dan zonder code-opmaak`);
+      const trimmed = code.trim();
+      const alone = /^([a-z][a-z-]*)(?: --[a-z-]+)*$/.exec(trimmed);
+      const layered = /^(audit|dev) ([a-z][a-z-]*)(?: --[a-z-]+)*$/.exec(trimmed);
+      const wrong = alone !== null ? !COMMANDS.includes(alone[1]!) : layered !== null && !(NAMESPACES[layered[1] as keyof typeof NAMESPACES] as readonly string[]).includes(layered[2]!);
+      if (wrong) problems.push(`${file}, sectie "${heading}": \`${code}\` is geen commando van de toolbox; bestaat het niet meer, haal het weg, en is het iets anders, schrijf het dan zonder code-opmaak`);
     }
   }
   assert.deepEqual(problems, []);

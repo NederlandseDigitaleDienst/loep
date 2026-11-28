@@ -160,7 +160,7 @@ test("a criterion without a verdict because the model was not there is no fault 
   const result = feedback(run("site-outage", [criterion("2.1.1", "untested", [], { outage: true }), criterion("2.1.2", "untested", [])]));
   assert.deepEqual(result.drafts.map((draft) => draft.title), [`${TITLE_PREFIX} 2.1.2 niet beoordeeld`], "only the criterion whose agent gave no valid result");
   assert.deepEqual(result.outage, ["2.1.1"]);
-  assert.match(feedbackTextNl(result), /Niet terug te melden: criterium 2\.1\.1 is niet beoordeeld door een storing van het model .*LOEP unskip --run <run> --criterion <id>/);
+  assert.match(feedbackTextNl(result), /Niet terug te melden: criterium 2\.1\.1 is niet beoordeeld door een storing van het model .*LOEP audit unskip --run <run> --criterion <id>/);
   assert.ok(!feedbackTextNl(result).includes("budget op"));
 });
 

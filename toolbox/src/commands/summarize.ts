@@ -12,6 +12,7 @@ import type { Evaluation } from "../lib/evaluation.ts";
 import { clearSummary, readingSentences, SUMMARY_PARAGRAPHS_MAX, SUMMARY_PARAGRAPHS_MIN, SUMMARY_PARTS, SUMMARY_WORDS_MAX, validateReading, validateSummary, type SummaryProposal, type SummaryReading, type SummaryStaleReason } from "../lib/executive-summary.ts";
 import { stepStart, writeManifest } from "../lib/manifest.ts";
 import { cleanModel } from "../lib/models.ts";
+import { cliCall } from "../lib/commands.ts";
 import { deriveReport, summarySourceText } from "../lib/report-markdown.ts";
 import { readTemplate } from "../lib/templates.ts";
 import { makeWorkDir } from "../lib/workdir.ts";
@@ -106,7 +107,7 @@ async function writeTask(runDir: string, evaluation: Evaluation): Promise<string
     reportSha256: sourceSha256,
     taskSha256: sha256(readTemplate("samenvat")),
     output: join(absoluteRun, PROPOSAL),
-    check: `node ${cli} check-summary --run ${absoluteRun}`,
+    check: cliCall(cli, "check-summary", "--run", absoluteRun),
     reading: join(absoluteRun, READING),
     wordsMax: String(SUMMARY_WORDS_MAX),
     paragraphsMin: String(SUMMARY_PARAGRAPHS_MIN),
@@ -139,7 +140,7 @@ async function writeReadTask(runDir: string, evaluation: Evaluation, proposal: S
     reportSha256: sourceSha256,
     proposalSha256: await sha256File(join(runDir, PROPOSAL)),
     taskSha256: sha256(readTemplate("samenvat-lees")),
-    check: `node ${cli} check-reading --run ${absoluteRun}`,
+    check: cliCall(cli, "check-reading", "--run", absoluteRun),
     // A work folder of its own for every text that is read: a reader must not find the verdict of an earlier reader there.
     workDir: await makeWorkDir(runDir, `${READ_WORK}-${(await sha256File(join(runDir, PROPOSAL))).slice(0, 8)}`),
   };

@@ -89,16 +89,16 @@ Neem geen tekst uit het rapport over en noem geen personen. Schrijf de kern van 
 Per criterium, zonder taalmodel:
 
 ```
-LOEP compare --run RUN --reference validatie/<site>/bestaand.json --out validatie/<site>/<datum>-<ronde>
+LOEP dev compare --run RUN --reference validatie/<site>/bestaand.json --out validatie/<site>/<datum>-<ronde>
 ```
 
 Per bevinding, in drie vaste stappen:
 
 ```
-LOEP compare --findings tasks --run RUN --reference validatie/<site>/bestaand.json
-LOEP compare --findings check --run RUN --round a
-LOEP compare --findings check --run RUN --round b
-LOEP compare --findings merge --run RUN --out validatie/<site>/<datum>-<ronde>
+LOEP dev compare --findings tasks --run RUN --reference validatie/<site>/bestaand.json
+LOEP dev compare --findings check --run RUN --round a
+LOEP dev compare --findings check --run RUN --round b
+LOEP dev compare --findings merge --run RUN --out validatie/<site>/<datum>-<ronde>
 ```
 
 1. `tasks` schrijft in `RUN/compare/` het invoerbestand `invoer.json` en twee opdrachten, `opdracht-a.md` en `opdracht-b.md`. De tekst komt uit `templates/vergelijk.md` en is voor beide gelijk. Heeft de run opdrachten voor een deel van de criteria (`tasks --only`), dan komen alleen de bevindingen van de referentie onder die criteria in de invoer, of onder een van hun `alsoCriteria`, en telt de vergelijking per criterium alleen die criteria. `tasks` zegt hoeveel bevindingen zijn weggelaten, en `bevindingen.md` ook.

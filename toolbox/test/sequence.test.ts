@@ -9,9 +9,9 @@ const ROOT = new URL("../../", import.meta.url);
 const read = (path: string): string => readFileSync(new URL(path, ROOT), "utf8");
 const upToGate = (commands: string[]): string[] => commands.slice(0, commands.indexOf("gate") + 1);
 
-/** The commands of the steps in the skill: every line of a code block that starts with `LOEP`. */
+/** The commands of the steps in the skill: every line of a code block that starts with `LOEP`, without the layer it sits in. */
 function skillSequence(text: string): string[] {
-  return text.split("\n").flatMap((line) => /^\s*LOEP ([a-z-]+)/.exec(line)?.[1] ?? []);
+  return text.split("\n").flatMap((line) => /^\s*LOEP (?:audit |dev )?([a-z-]+)/.exec(line)?.[1] ?? []);
 }
 
 /** The commands a task of the justfile runs: every line of its recipe that calls the toolbox. */
@@ -22,7 +22,7 @@ function justSequence(text: string, task: string): string[] {
   const commands: string[] = [];
   for (const line of lines.slice(start + 1)) {
     if (!/^\s/.test(line)) break;
-    const command = /^\s+[-@]*\{\{cli\}\} ([a-z-]+)/.exec(line)?.[1];
+    const command = /^\s+[-@]*\{\{cli\}\} (?:audit |dev )?([a-z-]+)/.exec(line)?.[1];
     if (command) commands.push(command);
   }
   return commands;

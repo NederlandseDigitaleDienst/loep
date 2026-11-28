@@ -2,6 +2,7 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { isAbsolute, join, normalize, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { canonicalJson, pageLabels, readJson, sha256, sha256File, writeFileAtomic, writeJson } from "../lib/canonical.ts";
+import { cliCall } from "../lib/commands.ts";
 import { documentDir, documentKind, KIND_NAME_NL, READ_KINDS, type DocumentKind } from "../lib/documents.ts";
 import { OUTCOME_LABEL, type CriterionOutcome, type Evaluation } from "../lib/evaluation.ts";
 import { siteOrigins } from "../lib/origins.ts";
@@ -250,7 +251,7 @@ export async function compareTasks(runDir: string, referencePath: string): Promi
         run: absoluteRun,
         input: join(absoluteRun, INPUT),
         output: join(absoluteRun, outputFile(round)),
-        check: `node ${cli} compare --findings check --run ${absoluteRun} --round ${round}`,
+        check: cliCall(cli, "compare", "--findings", "check", "--run", absoluteRun, "--round", round),
       }),
     );
     prompts.push(path);

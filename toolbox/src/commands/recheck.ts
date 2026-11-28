@@ -12,6 +12,7 @@ import { readTemplate } from "../lib/templates.ts";
 import { canonicalCommand, LOOK_COMMANDS, MEASURE_COMMANDS, OBSERVATION_ID, sessionOfObservation } from "../lib/verdict.ts";
 import { criterionById } from "../lib/wcag.ts";
 import { makeWorkDir } from "../lib/workdir.ts";
+import { cliCall } from "../lib/commands.ts";
 import { fill, loadObservations } from "./instrument-tasks.ts";
 import { RECHECKS_DIR } from "./verify.ts";
 
@@ -215,7 +216,7 @@ export async function recheck(runDir: string, what: { finding?: string | undefin
       maxCommands: String(maxCommands),
       maxMinutes: String(maxMinutes),
       output: join(workspace, OUTPUT),
-      check: `node ${cli} check-recheck --run ${resolve(runDir)} --${what.finding !== undefined ? "finding" : "criterion"} ${target} --at ${momentOf(now)}`,
+      check: cliCall(cli, "check-recheck", "--run", resolve(runDir), `--${what.finding !== undefined ? "finding" : "criterion"}`, target, "--at", momentOf(now)),
       procedure: procedure.body,
     }),
   );

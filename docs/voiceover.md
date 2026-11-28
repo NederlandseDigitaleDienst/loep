@@ -7,7 +7,7 @@ Het commando `voiceover` laat een echte schermlezer een pagina voorlezen: VoiceO
 Er zijn twee ingangen:
 
 - **In een onderzoek** gebruikt een agent het sessiecommando `loep voiceover`. Het leest de toestand van zijn sessie voor; zie "In een onderzoek" hieronder.
-- **Met de hand** leest `node toolbox/src/cli.ts voiceover read` een adres of een bestand voor, buiten een run.
+- **Met de hand** leest `node toolbox/src/cli.ts audit voiceover read` een adres of een bestand voor, buiten een run.
 
 In het register van methoden (`toolbox/src/instruments/methods/registry.ts`) staat VoiceOver als methode `voiceover` voor de vraag `speech`. Een run legt elke methode uit het register vast als gereedschap. Draait de virtuele Mac niet, dan staat VoiceOver daar als ontbrekend, met de reden; de andere methoden antwoorden gewoon.
 
@@ -40,11 +40,11 @@ Daarna richt `just voiceover-setup` de virtuele Mac in, zie "Gebruik".
 
 ```
 just voiceover-setup
-node toolbox/src/cli.ts voiceover start --run <run>
-node toolbox/src/cli.ts voiceover status
-node toolbox/src/cli.ts voiceover read --url <adres of bestand> --steps 10
-node toolbox/src/cli.ts voiceover read --url <adres of bestand> --steps 10 --press "Verstuur" --out antwoord.json
-node toolbox/src/cli.ts voiceover stop --run <run>
+node toolbox/src/cli.ts audit voiceover start --run <run>
+node toolbox/src/cli.ts audit voiceover status
+node toolbox/src/cli.ts audit voiceover read --url <adres of bestand> --steps 10
+node toolbox/src/cli.ts audit voiceover read --url <adres of bestand> --steps 10 --press "Verstuur" --out antwoord.json
+node toolbox/src/cli.ts audit voiceover stop --run <run>
 ```
 
 - `start` start de virtuele Mac, wacht tot hij rustig is en warmt hem op. Voortgang met tijden komt op stderr. Laat hem daarna draaien zolang het onderzoek duurt.

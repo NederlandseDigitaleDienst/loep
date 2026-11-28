@@ -58,8 +58,9 @@ export function stepOf(line: string): string | null {
     if (block.name === "Task") return "subagent";
     if (block.name === "Bash") {
       const command = typeof block.input?.["command"] === "string" ? block.input["command"] : "";
-      const loep = /cli\.ts\s+([a-z][a-z-]*)/.exec(command);
-      if (loep?.[1]) return loep[1];
+      // A step is written `cli.ts audit check-gate`: the namespace says where it sits, not what it is.
+      const loep = /cli\.ts\s+([a-z][a-z-]*)(?:\s+([a-z][a-z-]*))?/.exec(command);
+      if (loep?.[1]) return loep[1] === "audit" || loep[1] === "dev" ? (loep[2] ?? loep[1]) : loep[1];
     }
   }
   return null;

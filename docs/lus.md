@@ -131,6 +131,6 @@ Naast deze meting met agents is er de regressietoets zonder taalmodel die de pij
 
 ## Wat lus niet doet
 
-lus meet niets zelf: elke meting en elk oordeel komt van loep, zodat het bewijs in de run staat en `node toolbox/src/cli.ts verify --run <run>` het kan nalopen. Het start geen agent buiten de werkstroom van loep om, en het schrijft geen antwoord, besluit of handtekening voor een mens op.
+lus meet niets zelf: elke meting en elk oordeel komt van loep, zodat het bewijs in de run staat en `node toolbox/src/cli.ts audit verify --run <run>` het kan nalopen. Het start geen agent buiten de werkstroom van loep om, en het schrijft geen antwoord, besluit of handtekening voor een mens op.
 
 De regie mag Bash gebruiken, want de skill schrijft samengestelde commando's. `curl`, `wget`, `nc`, `ssh` en WebFetch zijn geweigerd, maar dat is geen harde grens: een regie kan via `node -e` de site bereiken of buiten de run schrijven. Dat ze het niet doet, hangt aan de spelregels in haar opdracht, en wat er toch in de run komt, ziet `verify`. De regie erft de omgeving van wie lus start; zet daar geen geheimen in die een run niet nodig heeft. Het transcript in `~/onderzoeken/.lus/` is alleen voor jou leesbaar.

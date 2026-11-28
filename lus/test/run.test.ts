@@ -48,6 +48,10 @@ test("een regel van de stream zegt welke stap de regie doet", () => {
   const bash = (command: string): string => JSON.stringify({ type: "assistant", message: { content: [{ type: "tool_use", name: "Bash", input: { command } }] } });
   assert.equal(stepOf(bash("node /x/toolbox/src/cli.ts gate --run /r")), "gate");
   assert.equal(stepOf(bash("node /x/toolbox/src/cli.ts pending --run /r --brief")), "pending");
+  // Een stap van het onderzoek staat onder audit: de laag zegt waar hij zit, niet wat hij is.
+  assert.equal(stepOf(bash("node /x/toolbox/src/cli.ts audit check-gate --run /r")), "check-gate");
+  assert.equal(stepOf(bash("node /x/toolbox/src/cli.ts audit sweep --run /r")), "sweep");
+  assert.equal(stepOf(bash("node /x/toolbox/src/cli.ts dev procedures")), "procedures");
   assert.equal(stepOf(bash("ls /r")), null);
   assert.equal(stepOf(JSON.stringify({ type: "assistant", message: { content: [{ type: "tool_use", name: "Workflow", input: {} }] } })), "werkstroom");
   assert.equal(stepOf(JSON.stringify({ type: "assistant", message: { content: [{ type: "tool_use", name: "Task", input: {} }] } })), "subagent");
