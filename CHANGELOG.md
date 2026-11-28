@@ -6,6 +6,14 @@ Wat er per versie van loep is veranderd. De versie staat op het voorblad en onde
 
 <!-- towncrier: een nieuwe versie komt hieronder -->
 
+## 0.39.1 (2026-11-28)
+
+Deze versie is uitgebracht zonder meting: de enige wijziging is in lus, dat geen onderzoek raakt.
+
+### Verder
+
+- lus legt de pid van de regie vast. Stop je lus hard, dan zegt `lus status` dat de regie nog loopt, en `lus run` en `lus pause` weigeren tot die stopt, in plaats van een tweede regie in dezelfde run te zetten.
+
 ## 0.39.0 (2026-11-26)
 
 Deze versie is uitgebracht zonder meting: de procedures en de oordeelregels zijn niet veranderd, en 0.38.0 is gemeten; de opdrachten van weger, beoordelaar en verifieerder veranderen alleen in hoe ze een persoon in het algemeen noemen, wat niets verandert aan wat een agent beoordeelt; de testsite verandert op 4.1.2 op twee plekken, en de regressietoets van de veegronde op de testsite gaf geen achteruitgang; --exclude-path en het totaal aan tijd voor de verkenner zijn met tests gedekt en herrekend op de manifesten van drie eerdere runs, waarbij de testsites binnen het budget blijven; lus is nieuw en raakt geen onderzoek; een meting van alle criteria op de testsite is niet gedaan.

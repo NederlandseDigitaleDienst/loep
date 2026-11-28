@@ -1,1 +1,0 @@
-lus legt de pid van de regie vast. Stop je lus hard, dan zegt `lus status` dat de regie nog loopt, en `lus run` en `lus pause` weigeren tot die stopt, in plaats van een tweede regie in dezelfde run te zetten.
