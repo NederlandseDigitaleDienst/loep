@@ -430,7 +430,7 @@ async function main(argv: string[]): Promise<void> {
       // the test account in it, and only the session that is left over stays in the run.
       if (target === undefined) throw new Error("loep audit login heeft een site nodig; het opent het venster van loep voor het testaccount");
       const site = findSite(readBacklog(backlogPath()).sites, target);
-      if (site.login === null) throw new Error(`${site.slug} heeft geen inlog in de backlog; zet --login-page en --login-role bij de site, of laat dit achterwege`);
+      if (site.login === null) throw new Error(`${site.slug} heeft geen inlog in de backlog; zet --login-page en --login-role bij de site, of geef de pagina zelf mee: loep audit login --run <run> --url <inlogpagina>`);
       const known = siteState(readState(statePath()), site.slug);
       if (known.run === null) throw new Error(`${site.slug} heeft nog geen run; een inlog hoort bij een run, en die begint met: loep run --only ${site.slug}`);
       const args = cliArgs(toolboxCli, "login", "--run", known.run, "--url", site.login.page, ...(site.login.role === "" ? [] : ["--role", site.login.role]), ...positionals.slice(2));
